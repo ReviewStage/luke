@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { useLinkAddress } from "../menu/link-address.js";
 import { ClippedLine, ONE_LINE_ELEMENT, ONE_LINE_END } from "../one-line/clipped-line.js";
 
 /**
@@ -16,7 +17,7 @@ import { ClippedLine, ONE_LINE_ELEMENT, ONE_LINE_END } from "../one-line/clipped
  * before what a card lists under it.
  *
  * A card's rows are set as a menu's rows are: a glyph on the head's glyph
- * column, words on one line cut short with an ellipsis, and what stands at
+ * column, words on one line fading out where cut short, and what stands at
  * the row's end, muted. A quieter row under the name (`DETAIL`) says where
  * the subject lives or who made it; a row of a list under a rule (`LINE`)
  * names one of the things the subject holds. Either is a button where a
@@ -126,6 +127,7 @@ export function HoverCardRow({
   label,
   end,
   onPress,
+  linkHref,
 }: {
   look?: HoverCardRowLook;
   glyph: ReactNode;
@@ -134,11 +136,20 @@ export function HoverCardRow({
   end?: ReactNode;
   /** Opens what the row names; a row without it is text. */
   onPress?: (() => void) | undefined;
+  /** The address its press opens, where it opens one, which a right-click offers as a link's (`useLinkAddress`). */
+  linkHref?: string | undefined;
 }): React.JSX.Element {
+  const linkAddress = useLinkAddress(linkHref);
   const row = (
     <>
       <span className="luke-hover-card-row-glyph">{glyph}</span>
-      <span className="luke-hover-card-row-label">{label}</span>
+      <ClippedLine
+        className="luke-hover-card-row-label"
+        as={ONE_LINE_ELEMENT.SPAN}
+        end={ONE_LINE_END.FADE}
+      >
+        {label}
+      </ClippedLine>
       {end === undefined ? null : <span className="luke-hover-card-row-end">{end}</span>}
     </>
   );
@@ -147,7 +158,13 @@ export function HoverCardRow({
       {row}
     </span>
   ) : (
-    <button type="button" className="luke-hover-card-row" data-look={look} onClick={onPress}>
+    <button
+      type="button"
+      className="luke-hover-card-row"
+      data-look={look}
+      ref={linkAddress}
+      onClick={onPress}
+    >
       {row}
     </button>
   );

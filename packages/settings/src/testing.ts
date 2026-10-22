@@ -28,7 +28,6 @@ export function settingsView(overrides: SettingsViewOverrides = {}): AppSettings
     {
       ...APP_SETTING_DEFAULTS,
       voice: LIVE_VOICE.CEDAR,
-      voiceCaptions: false,
       duckOtherMedia: true,
       voiceAvailable: false,
       preferBuiltInMicrophone: false,
@@ -52,7 +51,7 @@ export function appSettingsWire(settings: AppSettingsView): AppSettings {
 /**
  * The account's choice with exactly these experiments on and every other
  * off, for a case that draws a gated surface: `settingsView({ experiments:
- * experimentsOn(EXPERIMENT.FACTORY) })`.
+ * experimentsOn(EXPERIMENT.CHAT) })`.
  */
 export function experimentsOn(...experiments: readonly Experiment[]): ExperimentChoices {
   return Object.fromEntries(experiments.map((experiment) => [experiment, true]));

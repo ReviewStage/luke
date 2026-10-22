@@ -323,6 +323,8 @@ export const member = pgTable(
   (table) => [
     index("member_organizationId_idx").on(table.organizationId),
     index("member_userId_idx").on(table.userId),
+    // Not Better Auth's: every membership check of the service names both the account and the workspace.
+    index("member_userId_organizationId_idx").on(table.userId, table.organizationId),
   ],
 );
 

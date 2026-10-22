@@ -26,7 +26,8 @@ import {
  * equivalent declaration, key for key and in the same order. Effect's own
  * `JsonSchema` module is never called: its output is a different dialect with
  * different keys in a different order, and these bytes are prompt-cache bytes,
- * held still by the goldens under every package's `fixtures/json-schema/`.
+ * held still for every tool input a model is shown by the goldens under
+ * `fixtures/json-schema/`.
  *
  * Nothing here reads Effect's own `title` and `description` annotations,
  * because Effect writes them on every primitive and every built-in check

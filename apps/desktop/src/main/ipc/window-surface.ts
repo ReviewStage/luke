@@ -7,9 +7,11 @@ import {
   productEventFromWire,
   type RecordProductEvent,
 } from "@luke/features/analytics";
-import { ActRefused, type ActRows, type ActSender } from "@luke/host/act-router";
-import { ACT, ACT_KIND } from "@luke/host/acts";
+import type { FeedbackResult, FeedbackSubmission } from "@luke/features/feedback";
+import { actPortFor, type PlatformActProcedures } from "@luke/host/act-port";
+import { CONTACT_MAILTO, WINDOW_SURFACE_ACT_KIND } from "@luke/host/contract";
 import { MICROPHONE_STATUS, type MicrophoneRoute, type MicrophoneStatus } from "@luke/voice/audio";
+import { Effect } from "effect";
 import type { WebContents } from "electron";
 import type { ReportHandlers } from "../bridge-host";
 import type { MicrophoneRouteWatch } from "../native/microphone-route";
@@ -29,15 +31,8 @@ const MICROPHONE_STATUS_COUNTED_AS = {
   [MICROPHONE_STATUS.UNKNOWN]: undefined,
 } satisfies Record<MicrophoneStatus, ProductPermissionResult | undefined>;
 
-/**
- * Where Contact us > Email writes to: the address the site's footer, the
- * privacy policy, and the security policy all name. Held here rather than
- * sent by the panel, so the act can open no other address.
- */
-const CONTACT_MAILTO = "mailto:founders@stagereview.app";
-
 interface WindowSurfaceDependencies {
-  panels: PanelManager;
+  panels: Pick<PanelManager, "displayIdFor" | "focusIfExpanded">;
   requestMicrophone: () => Promise<MicrophoneStatus>;
   microphoneRoute: () => MicrophoneRoute | undefined;
   microphoneRouteWatcher: () => MicrophoneRouteWatch | undefined;
@@ -45,47 +40,56 @@ interface WindowSurfaceDependencies {
   openExternal: (url: string) => Promise<void>;
   /** Posts Settings' test notification now. */
   testNotification: () => void;
+  /** Writes words to the system's clipboard. */
+  copyText: (words: string) => void;
+  /** Writes a PNG, its bytes in base64, to the system's clipboard as a picture; answers false where the bytes draw no picture. */
+  copyImage: (png: string) => boolean;
   /** Asks where to save a file in the system's save dialog over the asking window and writes it there, answering whether it was saved. */
   saveFile: (sender: WebContents, name: string, text: string) => Promise<boolean>;
+  /** Carries a note to the people who make Luke, answering whether it arrived. */
+  deliverFeedback: (submission: FeedbackSubmission) => Effect.Effect<FeedbackResult>;
+  /** Takes a downscaled still of part of the asking window as a JPEG's data URL, none where nothing was drawn there. */
+  captureStill: (sender: WebContents, rect: CapturedRect) => Promise<string | null>;
 }
 
-type WindowSurfaceActKind =
-  | typeof ACT_KIND.WINDOW_FOCUS_PANEL
-  | typeof ACT_KIND.MICROPHONE_REQUEST
-  | typeof ACT_KIND.MICROPHONE_ROUTE
-  | typeof ACT_KIND.NOTIFICATIONS_OPEN_SETTINGS
-  | typeof ACT_KIND.NOTIFICATIONS_TEST
-  | typeof ACT_KIND.CONTACT_EMAIL
-  | typeof ACT_KIND.WINDOW_SAVE_FILE;
+/** The part of a window a still is asked of, in its CSS pixels. */
+interface CapturedRect {
+  readonly x: number;
+  readonly y: number;
+  readonly width: number;
+  readonly height: number;
+}
+
+type WindowSurfaceActKind = (typeof WINDOW_SURFACE_ACT_KIND)[keyof typeof WINDOW_SURFACE_ACT_KIND];
+
+const surfacePort = actPortFor<WebContents>();
 
 /**
- * What the panel asks of the window it is drawn in. The focus is a panel's
+ * What a window asks of the system it is drawn on. The focus is a panel's
  * own act and refused from anywhere else: it is about the display one panel
  * stands on, and no other surface has one. A save is a panel's too, since
  * only a panel draws a File tab, and its dialog hangs over the panel that
- * asked.
+ * asked, and so is a still, of the panel that asked and answered to it
+ * alone, since only a panel's ⌃Tab previews its tabs. An empty part is no
+ * still. The rest read no window.
  */
-export function windowSurfaceActRows(
+export function windowSurfaceProcedures(
   dependencies: WindowSurfaceDependencies,
-): Pick<ActRows<WebContents>, WindowSurfaceActKind> {
+): Pick<PlatformActProcedures<WebContents>, WindowSurfaceActKind> {
   const { panels } = dependencies;
-  /**
-   * The display the asking panel stands on: a window that is not a panel, and
-   * a panel on no display, are the same refusal.
-   */
-  const panelDisplay = (
-    sender: ActSender<WebContents>,
-    kind: typeof ACT_KIND.WINDOW_FOCUS_PANEL,
-  ): number => {
-    const displayId = sender.panel ? panels.displayIdFor(sender.sender) : undefined;
-    if (displayId === undefined) throw new ActRefused({ message: ACT[kind].refusal });
-    return displayId;
-  };
   return {
-    [ACT_KIND.WINDOW_FOCUS_PANEL]: (_payload, sender) => {
-      panels.focusIfExpanded(panelDisplay(sender, ACT_KIND.WINDOW_FOCUS_PANEL));
-    },
-    [ACT_KIND.MICROPHONE_REQUEST]: async () => {
+    // A window that is not a panel, and a panel on no display, are the same refusal.
+    [WINDOW_SURFACE_ACT_KIND.WINDOW_FOCUS_PANEL]: surfacePort[
+      WINDOW_SURFACE_ACT_KIND.WINDOW_FOCUS_PANEL
+    ].effect(function* ({ context, errors }) {
+      const { actor } = context;
+      const displayId = actor.panel ? panels.displayIdFor(actor.sender) : undefined;
+      if (displayId === undefined) return yield* Effect.fail(errors.REFUSED());
+      panels.focusIfExpanded(displayId);
+    }),
+    [WINDOW_SURFACE_ACT_KIND.MICROPHONE_REQUEST]: surfacePort[
+      WINDOW_SURFACE_ACT_KIND.MICROPHONE_REQUEST
+    ].handler(async () => {
       const status = await dependencies.requestMicrophone();
       const counted = MICROPHONE_STATUS_COUNTED_AS[status];
       if (counted) {
@@ -94,25 +98,56 @@ export function windowSurfaceActRows(
         });
       }
       return status;
-    },
+    }),
     // Probed rather than read from the document: the route decides which
     // device the press about to happen opens, and macOS moves the default
     // between presses.
-    [ACT_KIND.MICROPHONE_ROUTE]: () => {
+    [WINDOW_SURFACE_ACT_KIND.MICROPHONE_ROUTE]: surfacePort[
+      WINDOW_SURFACE_ACT_KIND.MICROPHONE_ROUTE
+    ].handler(() => {
       dependencies.microphoneRouteWatcher()?.probe();
       return dependencies.microphoneRoute();
-    },
+    }),
     // The pane that lists every app's notifications, Luke's among them.
-    [ACT_KIND.NOTIFICATIONS_OPEN_SETTINGS]: () =>
+    [WINDOW_SURFACE_ACT_KIND.NOTIFICATIONS_OPEN_SETTINGS]: surfacePort[
+      WINDOW_SURFACE_ACT_KIND.NOTIFICATIONS_OPEN_SETTINGS
+    ].handler(() =>
       dependencies.openExternal(
         "x-apple.systempreferences:com.apple.Notifications-Settings.extension",
       ),
-    [ACT_KIND.NOTIFICATIONS_TEST]: () => dependencies.testNotification(),
-    [ACT_KIND.CONTACT_EMAIL]: () => dependencies.openExternal(CONTACT_MAILTO),
-    [ACT_KIND.WINDOW_SAVE_FILE]: ({ name, text }, sender) => {
-      if (!sender.panel) throw new ActRefused({ message: ACT[ACT_KIND.WINDOW_SAVE_FILE].refusal });
-      return dependencies.saveFile(sender.sender, name, text);
-    },
+    ),
+    [WINDOW_SURFACE_ACT_KIND.NOTIFICATIONS_TEST]: surfacePort[
+      WINDOW_SURFACE_ACT_KIND.NOTIFICATIONS_TEST
+    ].handler(() => dependencies.testNotification()),
+    [WINDOW_SURFACE_ACT_KIND.CONTACT_EMAIL]: surfacePort[
+      WINDOW_SURFACE_ACT_KIND.CONTACT_EMAIL
+    ].handler(() => dependencies.openExternal(CONTACT_MAILTO)),
+    [WINDOW_SURFACE_ACT_KIND.WINDOW_COPY_TEXT]: surfacePort[
+      WINDOW_SURFACE_ACT_KIND.WINDOW_COPY_TEXT
+    ].handler(({ input }) => dependencies.copyText(input.words)),
+    [WINDOW_SURFACE_ACT_KIND.WINDOW_COPY_IMAGE]: surfacePort[
+      WINDOW_SURFACE_ACT_KIND.WINDOW_COPY_IMAGE
+    ].handler(({ input, errors }) => {
+      if (!dependencies.copyImage(input.png)) throw errors.REFUSED();
+    }),
+    [WINDOW_SURFACE_ACT_KIND.WINDOW_SAVE_FILE]: surfacePort[
+      WINDOW_SURFACE_ACT_KIND.WINDOW_SAVE_FILE
+    ].handler(async ({ input, context, errors }) => {
+      if (!context.actor.panel) throw errors.REFUSED();
+      return dependencies.saveFile(context.actor.sender, input.name, input.text);
+    }),
+    [WINDOW_SURFACE_ACT_KIND.WINDOW_CAPTURE]: surfacePort[
+      WINDOW_SURFACE_ACT_KIND.WINDOW_CAPTURE
+    ].handler(async ({ input, context, errors }) => {
+      if (!context.actor.panel) throw errors.REFUSED();
+      if (input.width === 0 || input.height === 0) return null;
+      return dependencies.captureStill(context.actor.sender, input);
+    }),
+    [WINDOW_SURFACE_ACT_KIND.FEEDBACK_SEND]: surfacePort[
+      WINDOW_SURFACE_ACT_KIND.FEEDBACK_SEND
+    ].effect(function* ({ input }) {
+      return yield* dependencies.deliverFeedback(input.submission);
+    }),
   };
 }
 

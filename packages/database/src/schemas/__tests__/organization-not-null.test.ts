@@ -19,6 +19,7 @@ import {
   getTestDB,
   migrationStatements,
   RENAME_PLAN_TO_TASK,
+  replayable,
   undoneRename,
 } from "../../testing/index.js";
 import { member, organization, user } from "../auth.js";
@@ -102,9 +103,10 @@ it.layer(getTestDB())("the contract step's organization migration", (it) => {
         yield* sql`UPDATE coding_agent SET organization_id = NULL WHERE id = ${started.agent.id}`;
 
         // Note that the migration names the plan's row by the names it held then, so the later rename is walked back around it.
-        const renames = yield* migrationStatements(RENAME_PLAN_TO_TASK);
+        const renames = replayable(yield* migrationStatements(RENAME_PLAN_TO_TASK));
         for (const statement of [...renames].reverse()) yield* sql.unsafe(undoneRename(statement));
-        for (const statement of yield* statements) yield* sql.unsafe(statement);
+        // Note that `inbox_attachment` has since been dropped, its rows moved into `attachment`, so the statements naming it are left out.
+        for (const statement of replayable(yield* statements)) yield* sql.unsafe(statement);
         for (const statement of renames) yield* sql.unsafe(statement);
 
         const [automationRow] = yield* sql<{ readonly organization_id: string | null }>`

@@ -1,6 +1,3 @@
-import { GITHUB_REPOSITORIES_QUERY } from "./github-repositories-wire.js";
-import type { IntegrationProvider } from "./integration-wire.js";
-
 /**
  * Where Luke's hosted service answers, rooted at the service origin. The
  * addresses alone: what each endpoint takes and answers with is declared in
@@ -17,11 +14,25 @@ export const HOSTED_SERVICE_PATH = {
    */
   ACCOUNT_PREFERENCES: "/api/account/preferences",
   /**
+   * Whether the signed-in account is an admin (GET), so a client can offer
+   * the admin dashboard; `account-wire.ts` declares the answer.
+   */
+  ACCOUNT_ACCESS: "/api/account/access",
+  /**
    * The account's own Anthropic and OpenAI API keys: read what they are
-   * (GET), save one (PUT), or remove one (DELETE). No answer carries a key.
+   * (GET), save one (PUT), remove one (DELETE), or turn a connected plan's
+   * default for coding agents (PATCH). No answer carries a key.
    * `provider-key-wire.ts` declares every body.
    */
   ACCOUNT_PROVIDER_KEYS: "/api/account/provider-keys",
+  /**
+   * The account's ChatGPT sign-in for Luke's hosted runtime, as the desktop
+   * hands it over (PUT); its removal is `ACCOUNT_PROVIDER_KEYS`'s DELETE with
+   * its kind. The answer is the provider keys' and never carries a token.
+   */
+  ACCOUNT_CHATGPT_CREDENTIALS: "/api/account/chatgpt/credentials",
+  /** The `ext_agent_host_id` the desktop signs in to ChatGPT for Luke's hosted runtime under (GET). */
+  ACCOUNT_CHATGPT_HOST: "/api/account/chatgpt/host",
   /**
    * The Markdown the account's new tasks start from: read it (GET), or keep
    * one verbatim or go back to the default (PUT).
@@ -43,6 +54,12 @@ export const HOSTED_SERVICE_PATH = {
   /** Where every one of the account's integrations stands (GET). `integration-wire.ts` declares the answer. */
   ACCOUNT_INTEGRATIONS: "/api/account/integrations",
   /**
+   * Where every one of the account's integrations stands, each sign-in
+   * still under way settled first (POST): the statuses read's own answer.
+   * The read settles only for a bearer, so a browser's cookie settles here.
+   */
+  ACCOUNT_INTEGRATIONS_SETTLE: "/api/account/integrations/settle",
+  /**
    * Where Vercel Connect returns the browser from an integration's sign-in
    * (GET), with the sign-in's own state, which names the provider too: the
    * route settles it and sends the browser on to the landing page
@@ -62,6 +79,47 @@ export const HOSTED_SERVICE_PATH = {
    */
   INBOX_READ: "/api/inbox/read",
   /**
+   * What waits on the developer across the account, sealed for following
+   * over Neon Realtime (GET): the address and one sealed statement per part
+   * of the account inbox, or `unavailable` where the deployment has no
+   * Realtime. `live-wire.ts` declares the answer.
+   */
+  LIVE_INBOX: "/api/live/inbox",
+  /** One task's whiteboard under `?id=`, sealed for following over Neon Realtime (GET): where it stands, or `not-found` or `unavailable`. */
+  LIVE_TASK_BOARD: "/api/live/task-board",
+  /** One task's pages and calls under `?id=`, each part's mark sealed for following over Neon Realtime (GET), or `not-found` or `unavailable`. */
+  LIVE_TASK_RECORD: "/api/live/task-record",
+  /** One task's pages under `?id=`, each at its newest version, sealed for following over Neon Realtime (GET), or with `?poll=true` their rows inline; or `not-found`. */
+  LIVE_TASK_PAGES: "/api/live/task-pages",
+  /** One coding agent's own pages, on no task, under `?id=`, on the terms a task's are. */
+  LIVE_AGENT_PAGES: "/api/live/agent-pages",
+  /** One task's newest page of plan history under `?id=`, sealed for following over Neon Realtime (GET), or with `?poll=true` its rows inline; or `not-found`. */
+  LIVE_TASK_HISTORY: "/api/live/task-history",
+  /** One task's Browser tabs under `?id=`, the agent's pointer on each among them, sealed for following over Neon Realtime (GET), or with `?poll=true` their rows inline; or `not-found`. */
+  LIVE_TASK_BROWSER_TABS: "/api/live/task-browser-tabs",
+  /** One agent's transcript under `?id=`, or one of its workers' under `&call=`, sealed for following over Neon Realtime (GET): what its pages are read from, or `not-found` or `unavailable`. */
+  LIVE_AGENT_TRANSCRIPT: "/api/live/agent-transcript",
+  /** One task's inbox under `?id=`, sealed for following over Neon Realtime (GET): its open and latest settled items, or `not-found` or `unavailable`. */
+  LIVE_TASK_INBOX: "/api/live/task-inbox",
+  /** One agent's inbox under `?id=`, sealed for following over Neon Realtime (GET), as a task's is. */
+  LIVE_AGENT_INBOX: "/api/live/agent-inbox",
+  /** A workspace's chat under `?workspaceId=`, sealed for following over Neon Realtime (GET) as the account's person reads it, once they have joined it; or `not-found` or `unavailable`. */
+  LIVE_WORKSPACE_CHAT: "/api/live/workspace-chat",
+  /** The task list sealed for following over Neon Realtime (GET): its tasks and every agent of them and with no task, or `unavailable`. `task-list-live.ts` declares the answer. */
+  LIVE_TASKS: "/api/live/tasks",
+  /** A workspace's automations under `?workspaceId=`, sealed for following over Neon Realtime (GET), or `unavailable`. `automation-live.ts` declares the answer. */
+  LIVE_AUTOMATIONS: "/api/live/automations",
+  /** One automation's runs under `?id=`, sealed for following over Neon Realtime (GET), or `not-found` or `unavailable`. */
+  LIVE_AUTOMATION_RUNS: "/api/live/automation-runs",
+  /** The account's workspaces, sealed for following over Neon Realtime (GET): the workspaces and their installations, or their rows inline where polled. */
+  LIVE_WORKSPACES: "/api/live/workspaces",
+  /** The account's sidebar sections, the tasks in them, and its pinned repositories, sealed for following over Neon Realtime (GET), or their rows inline where polled. */
+  LIVE_SIDEBAR: "/api/live/sidebar",
+  /** One workspace's people under `?workspaceId=`, sealed for following over Neon Realtime (GET): its members and who its work names but left, or `not-found`, or their rows inline where polled. */
+  LIVE_WORKSPACE_MEMBERS: "/api/live/workspace-members",
+  /** One workspace's pending invitations under `WORKSPACE_INVITATIONS_QUERY`, sealed for following over Neon Realtime (GET), to an owner or an admin: or `not-found`, `not-permitted`, or `unavailable`. */
+  LIVE_WORKSPACE_INVITATIONS: "/api/live/workspace-invitations",
+  /**
    * A workspace's agents, on a task or with none, newest started first and
    * the archived ones left out unless the query asks for them, narrowed to
    * one repository where the query names one (GET), what an automation's
@@ -76,23 +134,22 @@ export const HOSTED_SERVICE_PATH = {
    * declares the bodies.
    */
   MAC_COMMANDS: "/api/mac-commands",
+  /** One waiting command, named by its id, claimed for the Mac that heard of it live (POST). `mac-command-wire.ts` declares the bodies. */
+  MAC_COMMAND_CLAIM: "/api/mac-commands/claim",
+  /** That a Mac of the account listens now for the kinds it names (POST), which a Mac following its commands live says on a timer, since its read writes nothing. */
+  MAC_COMMANDS_LISTENING: "/api/mac-commands/listening",
+  /**
+   * The commands of the kinds named that no Mac of the account has claimed,
+   * sealed for following (GET), or with `?poll=true` their rows inline.
+   * `live-wire.ts` declares the answer.
+   */
+  LIVE_MAC_COMMANDS: "/api/live/mac-commands",
   /**
    * The account's automations: list them, newest first, or one task's where
    * `planId` names it (GET), or make one (POST). `automation-wire.ts`
    * declares the bodies.
    */
   AUTOMATIONS: "/api/automations",
-  /**
-   * A workspace's issues: list them, the most recently changed first, where
-   * `workspaceId` names it (GET), or file one (POST). `issue-wire.ts`
-   * declares the bodies.
-   */
-  ISSUES: "/api/issues",
-  /**
-   * One workspace's Factory world, read as it stands now, to a member of it
-   * (POST). `factory-world-wire.ts` declares the bodies.
-   */
-  FACTORY_WORLD: "/api/factory/world",
   /** The models a coding agent may run on, as the service offers them now (GET). `models-wire.ts` declares the answer. */
   MODELS: "/api/models",
   /**
@@ -153,6 +210,14 @@ export const HOSTED_SERVICE_PATH = {
    */
   GITHUB_REPOSITORY_ISSUE: "/api/github/repositories/issue",
   /**
+   * The issues of a repository a workspace's installation reaches, as New
+   * task's picker reads them (GET): named as `GITHUB_REPOSITORY_ISSUE` names
+   * one, with the words searched for or the number of the one asked; the
+   * answer is `github-repositories-wire.ts`'s, or why the installation
+   * reads none.
+   */
+  GITHUB_REPOSITORY_ISSUES: "/api/github/repositories/issues",
+  /**
    * Sends the browser to GitHub to install the Luke GitHub App, or to change
    * which repositories it reaches (GET). GitHub returns the browser to
    * `GITHUB_INSTALLED` afterwards.
@@ -185,6 +250,20 @@ export const HOSTED_SERVICE_PATH = {
    * `github-connection-wire.ts` declares both bodies.
    */
   GITHUB_CONNECT_CLAIM: "/api/github/connect/claim",
+  /**
+   * The member's own classic GitHub personal access token: read what it is
+   * (GET), save one (PUT), or remove it (DELETE), while the GitHub token
+   * experiment is on for them. No answer carries the token.
+   * `github-token-wire.ts` declares every body.
+   */
+  GITHUB_TOKEN: "/api/github/token",
+  /**
+   * The repositories members added to a workspace on their own GitHub
+   * tokens: read them for the workspace the query names (GET), or add or
+   * remove one (PUT), answered with them all as they then stand.
+   * `github-repositories-wire.ts` declares the answer.
+   */
+  GITHUB_TOKEN_REPOSITORIES: "/api/github/token-repositories",
   /** Whether the account has connected its GitHub (GET). `github-connection-wire.ts` declares the answer. */
   GITHUB_CONNECTION: "/api/github/connection",
   /**
@@ -232,6 +311,12 @@ export const HOSTED_SERVICE_PATH = {
    * `chat-wire.ts`'s `CHAT_QUERY`, which declares the answer.
    */
   WORKSPACES_CHAT: "/api/workspaces/chat",
+  /**
+   * One picture a chat message carries, served as its bytes to a person in
+   * the workspace (GET), the workspace, the message, and the attachment
+   * named in `chat-wire.ts`'s `CHAT_ATTACHMENT_QUERY`.
+   */
+  WORKSPACES_CHAT_ATTACHMENT: "/api/workspaces/chat/attachment",
   /** The owner removes an admin or a member, and an admin a member (POST), answered with those who remain. */
   WORKSPACES_MEMBERS_REMOVE: "/api/workspaces/members/remove",
   /** The owner makes another member an admin or an admin a member (POST), answered with the members as they then stand. */
@@ -262,39 +347,9 @@ export const VOICE_SERVICE_PATH = {
   SESSIONS: "/api/voice/sessions",
 } as const;
 
-/** Begins a browser sign-in to one provider for the account (POST), answering the address the browser opens. */
-export function integrationConnectPath(provider: IntegrationProvider): string {
-  return `${HOSTED_SERVICE_PATH.ACCOUNT_INTEGRATIONS}/${encodeURIComponent(provider)}/connect`;
-}
-
-/** The tools one provider's server offers the account's agents (GET), read from the server now or shortly before. */
-export function integrationToolsPath(provider: IntegrationProvider): string {
-  return `${HOSTED_SERVICE_PATH.ACCOUNT_INTEGRATIONS}/${encodeURIComponent(provider)}/tools`;
-}
-
-/** Ends the account's sign-in to one provider under way (POST), and nothing else: no grant is revoked. */
-export function integrationCancelPath(provider: IntegrationProvider): string {
-  return `${HOSTED_SERVICE_PATH.ACCOUNT_INTEGRATIONS}/${encodeURIComponent(provider)}/cancel`;
-}
-
-/** Ends the account's connection to one provider (POST); what agents already did there stands. */
-export function integrationDisconnectPath(provider: IntegrationProvider): string {
-  return `${HOSTED_SERVICE_PATH.ACCOUNT_INTEGRATIONS}/${encodeURIComponent(provider)}/disconnect`;
-}
-
-/** Names one of the account's accounts at a provider (POST), the label it then carries. */
-export function integrationRenamePath(provider: IntegrationProvider): string {
-  return `${HOSTED_SERVICE_PATH.ACCOUNT_INTEGRATIONS}/${encodeURIComponent(provider)}/rename`;
-}
-
 /** One of the account's automations: change it (PATCH) or delete it with its history (DELETE). */
 export function automationPath(automationId: string): string {
   return `${HOSTED_SERVICE_PATH.AUTOMATIONS}/${encodeURIComponent(automationId)}`;
-}
-
-/** An automation's "Run now" (POST), answered with the run as it came out. */
-export function automationRunPath(automationId: string): string {
-  return `${automationPath(automationId)}/run`;
 }
 
 /**
@@ -305,113 +360,9 @@ export function automationWebhookPath(automationId: string): string {
   return `${automationPath(automationId)}/webhook`;
 }
 
-/** An automation's runs, newest first (GET). */
-export function automationRunsPath(automationId: string): string {
-  return `${automationPath(automationId)}/runs`;
-}
-
-/** One issue of a workspace the account is a member of: read it (GET) or change it (PATCH). */
-export function issuePath(issueId: string): string {
-  return `${HOSTED_SERVICE_PATH.ISSUES}/${encodeURIComponent(issueId)}`;
-}
-
 /** One task the caller owns: open it with its saved document (GET), change its name or its repository (PATCH), or delete it (DELETE). */
-export function taskPath(taskId: string): string {
+function taskPath(taskId: string): string {
   return `${HOSTED_SERVICE_PATH.TASKS}/${encodeURIComponent(taskId)}`;
-}
-
-/** One task's whiteboard: read it with Luke's latest drawing (GET), or write its scene whole (PUT). */
-export function taskBoardPath(taskId: string): string {
-  return `${taskPath(taskId)}/board`;
-}
-
-/** The developer's edit of one task's document (POST). */
-export function planEditPath(taskId: string): string {
-  return `${taskPath(taskId)}/edit`;
-}
-
-/** What was said on one task's calls (GET). */
-export function taskTranscriptPath(taskId: string): string {
-  return `${taskPath(taskId)}/transcript`;
-}
-
-/**
- * One task's work (GET): a page of the brain turns of its calls, the
- * newest of all or, with `before`, the newest queued before that turn, and
- * on the newest page every code Luke showed on it.
- */
-export function taskWorkPath(taskId: string, before?: string): string {
-  const path = `${taskPath(taskId)}/work`;
-  if (before === undefined) return path;
-  const query = new URLSearchParams({ before });
-  return `${path}?${query}`;
-}
-
-/**
- * One task's conversation as a coding agent's transcript is read
- * (GET), the same answer as `agentMessagesPath`'s read: past a cursor, held
- * open while a turn runs; with no cursor, its newest turns; with `before`,
- * the turns queued before that one.
- */
-export function taskMessagesPath(
-  taskId: string,
-  page: { after?: string; before?: string },
-): string {
-  const path = `${taskPath(taskId)}/messages`;
-  const query = new URLSearchParams({
-    ...(page.after === undefined ? undefined : { after: page.after }),
-    ...(page.before === undefined ? undefined : { before: page.before }),
-  });
-  return query.size === 0 ? path : `${path}?${query}`;
-}
-
-/** One brain worker's transcript past a cursor (GET), under the task and the call that started it, held open while the worker runs; the same answer as `taskMessagesPath`'s read. */
-export function taskSubagentMessagesPath(taskId: string, callId: string, after: string): string {
-  const query = new URLSearchParams({ after });
-  return `${taskPath(taskId)}/subagents/${encodeURIComponent(callId)}/messages?${query}`;
-}
-
-/** Every code Luke showed on one task, oldest first (GET). */
-export function taskCodePath(taskId: string): string {
-  return `${taskPath(taskId)}/code`;
-}
-
-/** One window of a file of one task's repository, as GitHub holds it now (GET): the path, and its first and last line; `raw=1` for its whole text uncut. */
-export function taskFilePath(
-  taskId: string,
-  window: {
-    readonly path: string;
-    readonly firstLine: number;
-    readonly lastLine: number;
-    readonly raw?: boolean;
-    readonly ref?: string;
-  },
-): string {
-  const query = new URLSearchParams({
-    path: window.path,
-    first: String(window.firstLine),
-    last: String(window.lastLine),
-  });
-  if (window.raw === true) query.set("raw", "1");
-  if (window.ref !== undefined) query.set("ref", window.ref);
-  return `${taskPath(taskId)}/file?${query}`;
-}
-
-/** One folder of one task's repository, as GitHub holds it now (GET): its path from the root, the root itself for an empty one, and `recursive=1` for everything under it. */
-export function taskTreePath(
-  taskId: string,
-  folder: { readonly path: string; readonly recursive?: boolean },
-): string {
-  const path = `${taskPath(taskId)}/tree`;
-  const query = new URLSearchParams();
-  if (folder.path !== "") query.set("path", folder.path);
-  if (folder.recursive === true) query.set("recursive", "1");
-  return query.size === 0 ? path : `${path}?${query}`;
-}
-
-/** The skills a developer may choose of one task's repository, as GitHub holds it now (GET). */
-export function taskSkillsPath(taskId: string): string {
-  return `${taskPath(taskId)}/skills`;
 }
 
 /** A repository as a read with no plan names it: the workspace whose installation reaches it, and the repository, `owner/name`. */
@@ -420,64 +371,8 @@ export interface RepositoryPlace {
   readonly repository: string;
 }
 
-/** The query naming a repository place, which every read of one repository by its workspace opens with. */
-function repositoryPlaceQuery(place: RepositoryPlace): URLSearchParams {
-  return new URLSearchParams({
-    [GITHUB_REPOSITORIES_QUERY.WORKSPACE_ID]: place.workspaceId,
-    [GITHUB_REPOSITORIES_QUERY.REPOSITORY]: place.repository,
-  });
-}
-
-/** One folder of a repository a workspace reaches, as GitHub holds it now (GET), queried as `taskTreePath`'s folder is. */
-export function repositoryTreePath(
-  place: RepositoryPlace,
-  folder: { readonly path: string; readonly recursive?: boolean },
-): string {
-  const query = repositoryPlaceQuery(place);
-  if (folder.path !== "") query.set("path", folder.path);
-  if (folder.recursive === true) query.set("recursive", "1");
-  return `${HOSTED_SERVICE_PATH.GITHUB_REPOSITORY_TREE}?${query}`;
-}
-
-/** The skills a developer may choose of a repository a workspace reaches, as GitHub holds it now (GET). */
-export function repositorySkillsPath(place: RepositoryPlace): string {
-  return `${HOSTED_SERVICE_PATH.GITHUB_REPOSITORY_SKILLS}?${repositoryPlaceQuery(place)}`;
-}
-
-/** One pull request of a repository a workspace reaches, by its number, as GitHub holds it now (GET). */
-export function repositoryPullRequestPath(place: RepositoryPlace, number: number): string {
-  const query = repositoryPlaceQuery(place);
-  query.set(GITHUB_REPOSITORIES_QUERY.NUMBER, String(number));
-  return `${HOSTED_SERVICE_PATH.GITHUB_REPOSITORY_PULL_REQUEST}?${query}`;
-}
-
-/** One issue of a repository a workspace reaches, by its number, as GitHub holds it now (GET). */
-export function repositoryIssuePath(place: RepositoryPlace, number: number): string {
-  const query = repositoryPlaceQuery(place);
-  query.set(GITHUB_REPOSITORIES_QUERY.NUMBER, String(number));
-  return `${HOSTED_SERVICE_PATH.GITHUB_REPOSITORY_ISSUE}?${query}`;
-}
-
-/** One task's history (GET): a page of its revisions, the newest of all or, with `before`, the newest before that revision. */
-export function planRevisionsPath(taskId: string, before?: number): string {
-  const path = `${taskPath(taskId)}/revisions`;
-  if (before === undefined) return path;
-  const query = new URLSearchParams({ before: String(before) });
-  return `${path}?${query}`;
-}
-
-/** One revision of one plan: its content beside the content before it (GET). */
-export function planRevisionPath(taskId: string, seq: number): string {
-  return `${planRevisionsPath(taskId)}/${seq}`;
-}
-
-/** One revision of one plan put back as its content (POST). */
-export function taskRestorePath(taskId: string, seq: number): string {
-  return `${planRevisionPath(taskId, seq)}/restore`;
-}
-
-/** One plan's pictures: one kept on the plan (POST). */
-export function planAttachmentsPath(taskId: string): string {
+/** One plan's pictures, under which each is served as its bytes (`planAttachmentPath`). */
+function planAttachmentsPath(taskId: string): string {
   return `${taskPath(taskId)}/attachments`;
 }
 
@@ -486,62 +381,9 @@ export function planAttachmentPath(taskId: string, attachmentId: string): string
   return `${planAttachmentsPath(taskId)}/${encodeURIComponent(attachmentId)}`;
 }
 
-/** One plan's pages (GET): each page's newest version, the most recently written first. */
-export function taskPagesPath(taskId: string): string {
-  return `${taskPath(taskId)}/pages`;
-}
-
-/** One version of one page of one plan, with its HTML (GET). */
-export function planPageVersionPath(taskId: string, pageId: string, version: number): string {
-  return `${taskPagesPath(taskId)}/${encodeURIComponent(pageId)}/versions/${version}`;
-}
-
-/** One revision of the account's plan template: its text beside the text before it (GET). */
-export function planTemplateRevisionPath(seq: number): string {
-  return `${HOSTED_SERVICE_PATH.ACCOUNT_PLAN_TEMPLATE_REVISIONS}/${seq}`;
-}
-
-/** One revision of the account's plan template put back as the template (POST). */
-export function planTemplateRestorePath(seq: number): string {
-  return `${planTemplateRevisionPath(seq)}/restore`;
-}
-
-/** One task's coding agents: list them with their status (GET), or start one (POST). `coding-agent-wire.ts` declares both. */
-export function taskAgentsPath(taskId: string): string {
-  return `${taskPath(taskId)}/agents`;
-}
-
-/**
- * One task's inbox: every item its coding agents posted for the developer,
- * past a cursor (GET), held open while nothing changed, as an agent's
- * transcript is. `inbox-wire.ts` declares the answer.
- */
-export function taskInboxPath(taskId: string, after?: string): string {
-  const path = `${taskPath(taskId)}/inbox`;
-  if (after === undefined) return path;
-  const query = new URLSearchParams({ after });
-  return `${path}?${query}`;
-}
-
-/** One agent's inbox past a cursor (GET), held open while nothing changed as a task's is, an agent with no task as much as one on a task; the same answer as `taskInboxPath`'s read. */
-export function agentInboxPath(agentId: string, after: string): string {
-  const query = new URLSearchParams({ after });
-  return `/api/agents/${encodeURIComponent(agentId)}/inbox?${query}`;
-}
-
-/** One item of a task's inbox, answered by the developer (POST) against the revision they saw; `inbox-wire.ts` declares the request and the answer. */
-export function inboxItemPath(itemId: string): string {
+/** One item of a task's inbox, which its attachments are under. */
+function inboxItemPath(itemId: string): string {
   return `/api/inbox/${encodeURIComponent(itemId)}`;
-}
-
-/** One item's thread, a member's message written on it (POST), open or settled; `inbox-wire.ts` declares the request and the answer. */
-export function inboxMessagesPath(itemId: string): string {
-  return `${inboxItemPath(itemId)}/messages`;
-}
-
-/** One item's read state for the asking member: marked read (PUT), as opening it does, or unread (DELETE); `inbox-wire.ts` declares the answer. */
-export function inboxItemReadPath(itemId: string): string {
-  return `${inboxItemPath(itemId)}/read`;
 }
 
 /** One workspace's photo, as its bytes under its own media type (GET), served to the workspace's members alone. */
@@ -554,24 +396,6 @@ export function inboxAttachmentPath(itemId: string, attachmentId: string): strin
   return `${inboxItemPath(itemId)}/attachments/${encodeURIComponent(attachmentId)}`;
 }
 
-/**
- * One agent's messages: its transcript past a cursor (GET), held open while
- * the agent runs, or, with no cursor, a message sent to it (POST).
- * `coding-agent-wire.ts` declares the answer and the request.
- */
-export function agentMessagesPath(agentId: string, after?: string): string {
-  const path = `/api/agents/${encodeURIComponent(agentId)}/messages`;
-  if (after === undefined) return path;
-  const query = new URLSearchParams({ after });
-  return `${path}?${query}`;
-}
-
-/** One worker's transcript past a cursor (GET), under the agent and the delegation call that started it, held open while the worker runs as the agent's own is; the same answer as `agentMessagesPath`'s read. */
-export function agentSubagentMessagesPath(agentId: string, callId: string, after: string): string {
-  const query = new URLSearchParams({ after });
-  return `/api/agents/${encodeURIComponent(agentId)}/subagents/${encodeURIComponent(callId)}/messages?${query}`;
-}
-
 /** One picture a tool answered an agent, as its bytes under its own media type (GET), served to whoever may read the agent; one of its workers' where `callId` names the delegation call that started the worker. */
 export function agentPicturePath(agentId: string, pictureId: string, callId?: string): string {
   const agent = `/api/agents/${encodeURIComponent(agentId)}`;
@@ -579,72 +403,7 @@ export function agentPicturePath(agentId: string, pictureId: string, callId?: st
   return `${owner}/pictures/${encodeURIComponent(pictureId)}`;
 }
 
-/** One agent: its model and effort changed for its next step (PATCH), `models-wire.ts`'s choice as the body. */
-export function agentPath(agentId: string): string {
-  return `/api/agents/${encodeURIComponent(agentId)}`;
-}
-
-/** Stops one agent (POST): its turn is cancelled and its sandbox stopped; anything it pushed stays. */
-export function agentStopPath(agentId: string): string {
-  return `/api/agents/${encodeURIComponent(agentId)}/stop`;
-}
-
-/** What one agent published (GET): the branch it pushed and the pull request from it, as GitHub holds them; `coding-agent-wire.ts` declares the answer. */
-export function agentPullRequestPath(agentId: string): string {
-  return `/api/agents/${encodeURIComponent(agentId)}/pull-request`;
-}
-
-/** One agent's changes (GET): the files of its pull request as GitHub holds them; `coding-agent-wire.ts` declares the answer. */
-export function agentChangesPath(agentId: string): string {
-  return `/api/agents/${encodeURIComponent(agentId)}/changes`;
-}
-
-/** One agent's pull request itself as its overview draws it (GET): its description, branches, mergeability, author, and the reviewers it asks for; `coding-agent-wire.ts` declares the answer. */
-export function agentOverviewPullRequestPath(agentId: string): string {
-  return `/api/agents/${encodeURIComponent(agentId)}/overview/pull-request`;
-}
-
-/** The checks on one agent's pull request's head as its overview draws them (GET); `coding-agent-wire.ts` declares the answer. */
-export function agentOverviewChecksPath(agentId: string): string {
-  return `/api/agents/${encodeURIComponent(agentId)}/overview/checks`;
-}
-
-/** One agent's pull request's conversation as its overview draws it (GET): its comments, reviews, threads, and where its reviewers stand; `coding-agent-wire.ts` declares the answer. */
-export function agentOverviewConversationPath(agentId: string): string {
-  return `/api/agents/${encodeURIComponent(agentId)}/overview/conversation`;
-}
-
 /** One image its pull request's overview names (GET), by the address GitHub's rendering spelled; answered as bytes of one of `github-image.ts`'s types. */
 export function agentGitHubImagePath(agentId: string, src: string): string {
   return `/api/agents/${encodeURIComponent(agentId)}/github-image?${new URLSearchParams({ src })}`;
-}
-
-/** One change to an agent's pull request (POST), made on GitHub as the member who asks; `pull-request-write-wire.ts` declares the request and the answer. */
-export function agentPullRequestActionPath(agentId: string): string {
-  return `/api/agents/${encodeURIComponent(agentId)}/pull-request/action`;
-}
-
-/** Which of an agent's pull request's files the asking member marked viewed on GitHub (GET), read on their own sign-in; `pull-request-write-wire.ts` declares the answer. */
-export function agentPullRequestViewedPath(agentId: string): string {
-  return `/api/agents/${encodeURIComponent(agentId)}/pull-request/viewed`;
-}
-
-/** What the reviewer and label pickers of an agent's Pull request tab offer: its repository's labels, collaborators, and teams. */
-export function agentReviewOptionsPath(agentId: string): string {
-  return `/api/agents/${encodeURIComponent(agentId)}/review-options`;
-}
-
-/** One agent's shells: list them and where its sandbox stands (GET), or start one (POST); `terminal-wire.ts` declares both. */
-export function agentTerminalsPath(agentId: string): string {
-  return `/api/agents/${encodeURIComponent(agentId)}/terminals`;
-}
-
-/** One of an agent's shells: named anew (PATCH) or ended (DELETE), each answering the shells as they stand after. */
-export function agentTerminalPath(agentId: string, terminalId: string): string {
-  return `${agentTerminalsPath(agentId)}/${encodeURIComponent(terminalId)}`;
-}
-
-/** Resumes one agent's stopped sandbox (POST), on the developer's click and nothing else. */
-export function agentSandboxResumePath(agentId: string): string {
-  return `/api/agents/${encodeURIComponent(agentId)}/sandbox/resume`;
 }

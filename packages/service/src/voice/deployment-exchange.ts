@@ -3,14 +3,14 @@ import { storeWriter } from "@luke/database/models/writer";
 import { Data, Effect, type Layer, type Redacted } from "effect";
 import { FetchHttpClient } from "effect/http";
 import type * as HttpClient from "effect/http/HttpClient";
+import type { BRAIN_HOST_TURN } from "../agents/brain-host/bounds.js";
 import {
-  type EveSessions,
+  type AgentSessions,
+  type EveMount,
   type EveSessionsComposer,
   eveSessionsComposer,
 } from "../agents/brain-host/eve-sessions.js";
-import { openAiBrainModel } from "../agents/brain-host/model.js";
-import { HOSTED_TOOL_SET } from "../tasks/brain-tool-set.js";
-import { PLAN_SCRIBE } from "../tasks/plan-scribe.js";
+import { CALL_BACKEND } from "./call-backend.js";
 import { exchangeAttachment } from "./exchange-attachment.js";
 import type { ExchangeAttachment } from "./live-exchange.js";
 
@@ -26,18 +26,20 @@ import type { ExchangeAttachment } from "./live-exchange.js";
  * switch every hosted endpoint keeps, and the same outcome a store that
  * cannot be reached has. Nothing is read from the environment here; the
  * function hands the reads in, and a test hands in its own database and a
- * fake eve behind the same door.
+ * fake eve behind the same door. Its eve sends a spoken ask and nothing else
+ * by its type, under the coding agents' mount, into the agent the call names.
  */
 
+/** The one kind of turn the voice function asks an agent for. */
+type SpokenTurn = typeof BRAIN_HOST_TURN.SPOKEN;
+
 interface DeploymentExchangeSeams {
-  /** The secret the deployment acts for an account under at eve's door, the cron's own; nothing refuses every session. */
+  /** The secret the deployment acts for an account under at eve's door, its own (`EVE_DEPLOYMENT_SECRET`) and never the cron's; nothing refuses every session. */
   readonly deploymentSecret: () => Redacted.Redacted | undefined;
   /** The origin eve answers on; nothing refuses every session. */
   readonly eveOrigin: () => string | undefined;
-  /** The deployment's OpenAI key the plan's notetaker runs on; nothing means a call writes no plan. */
-  readonly openAiKey: () => Redacted.Redacted | undefined;
-  /** eve as the deployment reaches it for one account; a test hands in a fake, the function composes the real client below. */
-  readonly eve?: (accountId: string) => EveSessions;
+  /** eve as the deployment reaches it for one account under one mount; a test hands in a fake, the function composes the real client below. */
+  readonly eve?: (accountId: string, mount: EveMount) => AgentSessions<SpokenTurn>;
   /**
    * The `HttpClient` eve's client is composed over. The exchange stands inside
    * the voice service, whose effects ask for the store's client alone, so the
@@ -81,16 +83,17 @@ function configuredSeams(
   return Effect.succeed({ deploymentSecret, origin });
 }
 
-/** eve as the deployment reaches it for one account, under the deployment's own secret on the origin eve answers on. */
+/** eve as the deployment reaches it for one account under one mount, under the deployment's own secret on the origin eve answers on. */
 function deploymentEve(
   compose: EveSessionsComposer,
   origin: string,
   deploymentSecret: Redacted.Redacted,
-): (accountId: string) => EveSessions {
-  return (accountId) =>
-    compose({
+): (accountId: string, mount: EveMount) => AgentSessions<SpokenTurn> {
+  return (accountId, mount) =>
+    compose<SpokenTurn>({
       origin,
       caller: { secret: deploymentSecret, account: accountId },
+      mount,
     });
 }
 
@@ -103,10 +106,9 @@ export function deploymentExchange(seams: DeploymentExchangeSeams): ExchangeAtta
   const compose = Effect.gen(function* () {
     const { deploymentSecret, origin } = yield* configuredSeams(seams);
     // The writer's composition probes every declared output schema, so a warm
-    // instance pays that walk once rather than once per session.
-    // A call writes into a task conversation, whose rows name the brain's
-    // tools, so the writer holds rows to the hosted set as the brain's does.
-    const writer = yield* storeWriter({ tools: HOSTED_TOOL_SET });
+    // instance pays that walk once rather than once per session; its rows name
+    // the agent's tools, so it is held to the agent's set.
+    const writer = yield* storeWriter({ tools: CALL_BACKEND.tools });
     // eve's client is composed once per instance too, over the client the seam names; a test's
     // fake eve stands in its place and composes none.
     const eve =
@@ -119,10 +121,6 @@ export function deploymentExchange(seams: DeploymentExchangeSeams): ExchangeAtta
     return exchangeAttachment({
       writer,
       eve,
-      scribeModel: () => {
-        const key = seams.openAiKey();
-        return key === undefined ? undefined : openAiBrainModel(key, PLAN_SCRIBE.MODEL);
-      },
       createId: () => randomUUID(),
       report: seams.report,
     });

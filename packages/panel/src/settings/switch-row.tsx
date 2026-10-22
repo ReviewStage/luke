@@ -46,9 +46,11 @@ export function SwitchRow({
       description={detail}
       error={rejection}
       density={density}
+      labelsControl
     >
       {(control) => (
         <Switch
+          id={control.controlId}
           {...(anchor === undefined ? undefined : searchAnchorProps(anchor))}
           checked={checked}
           label={label}

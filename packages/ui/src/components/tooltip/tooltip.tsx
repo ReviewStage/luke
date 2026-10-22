@@ -1,5 +1,6 @@
 import { type ReactNode, useCallback, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { visibleViewport } from "../../visible-viewport.js";
 
 /**
  * tooltip.tsx -- a hover hint as it is drawn: a small dark pill naming a control and its shortcut, or a light card saying more, hung beside the control it names.
@@ -9,13 +10,13 @@ import { createPortal } from "react-dom";
  * control's start the same way, or beside it, past its end or before its
  * start where the window ends, as a list row's card hangs so it covers none
  * of the rows under it. Either is measured before it is painted, so it is
- * drawn once and where it fits, and placed again whenever it resizes.
+ * drawn once and where it fits, and placed again only when it resizes.
  *
  * What is drawn here is the hint alone. When it shows and when it goes, the
  * wait before it, the warm spell after it, and the linger that lets the
- * pointer cross onto a card, are the app's: it hands the hint the control
- * it stands for, whether it skipped the wait (`instant`), and how it is on
- * its way out (`leaving`), and is told when the pointer arrives on a card,
+ * pointer cross onto a card, are the app's: it mounts the hint once the
+ * wait is over, hands it the control it stands for and how it is on its
+ * way out (`leaving`), and is told when the pointer arrives on a card,
  * presses it, or chooses one of its buttons or links.
  *
  * A pill takes no presses, so it never stands between the pointer and the
@@ -24,7 +25,9 @@ import { createPortal } from "react-dom";
  * portal still bubbles them through the tree it was drawn from, and a card
  * hung from a mark inside a row's button would otherwise press the row. Its
  * words are the app's, so a card is left out of a session recording whole,
- * by the recorder's fixed `ph-no-capture` class.
+ * by the recorder's fixed `ph-no-capture` class. A finger has no hover, so
+ * its touch arriving on a card, or lifting off it, tells the app nothing of
+ * a pointer resting there; its press still does.
  */
 
 /** The gap between a control and its hint, and the hint's least distance from the window's edge, in CSS pixels. */
@@ -69,8 +72,6 @@ interface TooltipBase {
   id: string;
   /** The control it hangs from. */
   anchor: HTMLElement;
-  /** Whether it shows at once rather than after the wait. */
-  instant: boolean;
   /** How it is on its way out, while it is: inert, and fading or already hidden. */
   leaving?: TooltipLeaving | undefined;
   /** Its element, for the hold that draws it through its exit. */
@@ -83,8 +84,14 @@ interface TooltipPlace {
   side: TooltipSide;
 }
 
-function clampTo(value: number, size: number, room: number): number {
-  return Math.max(TOOLTIP_MARGIN, Math.min(value, room - size - TOOLTIP_MARGIN));
+/** Whether two places draw the hint alike, so a measure that moves nothing renders nothing. */
+function samePlace(a: TooltipPlace | undefined, b: TooltipPlace): boolean {
+  return a !== undefined && a.left === b.left && a.top === b.top && a.side === b.side;
+}
+
+/** `value` held a margin inside the edges `low` and `high`, for a hint `size` long. */
+function clampTo(value: number, size: number, low: number, high: number): number {
+  return Math.max(low + TOOLTIP_MARGIN, Math.min(value, high - size - TOOLTIP_MARGIN));
 }
 
 /**
@@ -100,26 +107,31 @@ function placeHint(anchor: HTMLElement, hint: HTMLElement, hang: TooltipHang): T
   // is still scaled short by the fade it waits to play.
   const width = hint.offsetWidth;
   const height = hint.offsetHeight;
+  const seen = visibleViewport();
   if (hang === TOOLTIP_HANG.CARD_BESIDE) {
-    const top = clampTo(at.top, height, window.innerHeight);
+    const top = clampTo(at.top, height, seen.top, seen.bottom);
     const past = at.right + TOOLTIP_GAP;
     const before = at.left - TOOLTIP_GAP - width;
-    if (past + width > window.innerWidth - TOOLTIP_MARGIN && before >= TOOLTIP_MARGIN) {
+    if (past + width > seen.right - TOOLTIP_MARGIN && before >= seen.left + TOOLTIP_MARGIN) {
       return { left: before, top, side: TOOLTIP_SIDE.START };
     }
-    return { left: clampTo(past, width, window.innerWidth), top, side: TOOLTIP_SIDE.END };
+    return { left: clampTo(past, width, seen.left, seen.right), top, side: TOOLTIP_SIDE.END };
   }
   const below = at.bottom + TOOLTIP_GAP;
-  const fits = below + height <= window.innerHeight - TOOLTIP_MARGIN;
+  const fits = below + height <= seen.bottom - TOOLTIP_MARGIN;
   const left = hang === TOOLTIP_HANG.PILL ? at.left + at.width / 2 - width / 2 : at.left;
   return {
-    left: clampTo(left, width, window.innerWidth),
+    left: clampTo(left, width, seen.left, seen.right),
     top: fits ? below : at.top - TOOLTIP_GAP - height,
     side: fits ? TOOLTIP_SIDE.BELOW : TOOLTIP_SIDE.ABOVE,
   };
 }
 
-/** The hint's element, placed for its control once measured and again whenever it resizes. */
+/**
+ * The hint's element, placed for its control once measured before it is
+ * painted, and again only when its size changes from the one it was placed
+ * at, never for the observer's first report of the size already measured.
+ */
 function useHintPlace(
   anchor: HTMLElement,
   hang: TooltipHang,
@@ -137,11 +149,18 @@ function useHintPlace(
   useLayoutEffect(() => {
     const hint = element.current;
     if (hint === null) return;
-    const measure = () => setAt(placeHint(anchor, hint, hang));
-    measure();
-    // Note that it is placed again whenever it resizes, because a card grows
-    // as a read it made lands, and must stay inside the window as it does.
-    const observer = new ResizeObserver(measure);
+    let size = { width: hint.offsetWidth, height: hint.offsetHeight };
+    const place = placeHint(anchor, hint, hang);
+    setAt((was) => (samePlace(was, place) ? was : place));
+    // Note that it is placed again as it resizes, because a card grows as a
+    // read it made lands, and must stay inside the window as it does.
+    const observer = new ResizeObserver(() => {
+      const now = { width: hint.offsetWidth, height: hint.offsetHeight };
+      if (now.width === size.width && now.height === size.height) return;
+      size = now;
+      const moved = placeHint(anchor, hint, hang);
+      setAt((was) => (samePlace(was, moved) ? was : moved));
+    });
     observer.observe(hint);
     return () => observer.disconnect();
   }, [anchor, hang]);
@@ -154,7 +173,6 @@ function hintMarks(base: TooltipBase, at: TooltipPlace | undefined) {
     id: base.id,
     "data-placed": String(at !== undefined),
     "data-side": at?.side ?? TOOLTIP_SIDE.BELOW,
-    "data-instant": String(base.instant),
     "data-leaving": base.leaving,
     inert: base.leaving !== undefined,
     style: at === undefined ? undefined : { left: at.left, top: at.top },
@@ -192,7 +210,7 @@ export function TooltipCard({
 }: TooltipBase & {
   /** Whether it hangs beside its control rather than under it. */
   beside?: boolean;
-  /** The pointer arriving on the card, or leaving it. */
+  /** The pointer arriving on the card, or leaving it; never a finger's touch. */
   onHover?: (over: boolean) => void;
   /** A press begun on the card. */
   onPress?: () => void;
@@ -209,8 +227,12 @@ export function TooltipCard({
       role="tooltip"
       className="luke-tooltip luke-tooltip-card ph-no-capture"
       {...hintMarks(base, at)}
-      onPointerEnter={() => onHover?.(true)}
-      onPointerLeave={() => onHover?.(false)}
+      onPointerEnter={(event) => {
+        if (event.pointerType !== "touch") onHover?.(true);
+      }}
+      onPointerLeave={(event) => {
+        if (event.pointerType !== "touch") onHover?.(false);
+      }}
       onPointerDown={(event) => {
         event.stopPropagation();
         onPress?.();

@@ -9,7 +9,7 @@ import {
   publishAppStateChanges,
 } from "@luke/host/client";
 import {
-  type ClientCapability,
+  ALL_CLIENT_CAPABILITIES,
   type DuplicateGatewayMethod,
   HostAssemblyTag,
   type HostTag,
@@ -19,7 +19,8 @@ import {
 } from "@luke/host/effect";
 import { confirmingHold, type DesktopQuit } from "@luke/host/quit";
 import { effectServiceLayer, serviceLayer } from "@luke/host/service-layer";
-import { HOST_CAPABILITY, NO_EXPERIMENTS } from "@luke/settings";
+import type { ColourCode } from "@luke/host/task-code-remote";
+import { NO_EXPERIMENTS } from "@luke/settings";
 import { callInProgress } from "@luke/voice/voice-view";
 import { Context, Effect, Layer } from "effect";
 import { net } from "electron";
@@ -32,6 +33,7 @@ import type { DesktopConfig } from "./desktop-config";
 import { hostAssemblyLayerFor } from "./host-layer";
 import { createKeychainService } from "./keychain-service";
 import { createNativeNode, type NativeNode } from "./native-node";
+import { colourCodeInUtilityProcess } from "./task-code-colouring";
 import {
   createTelemetryService,
   mainErrorReporting,
@@ -66,6 +68,12 @@ export interface DesktopServices {
   /** Luke's avatar as the host holds it, which the panel's acts reach. */
   readonly avatar: AvatarLink;
   /**
+   * A transcript's fenced block coloured in a process of its own, spawned the
+   * first time one is asked for and killed with the launch's scope, so the
+   * tokenizer never holds this process's event loop.
+   */
+  readonly colourCode: ColourCode;
+  /**
    * Every act's Effect, run here rather than under a context of its own: the
    * desktop's own `ManagedRuntime` is what `main.ts` disposes, and these are
    * that runtime's own services, read back out of the fiber that is building
@@ -73,15 +81,13 @@ export interface DesktopServices {
    * reported to Sentry, since many of them are begun and never awaited.
    */
   readonly run: <A>(effect: Effect.Effect<A>) => Promise<A>;
+  /**
+   * The same services as they stand, handed to the act port as oRPC's
+   * `effect/context`, so a procedure's effect runs on them as `run` would
+   * run it rather than on a runtime of oRPC's own.
+   */
+  readonly services: Context.Context<never>;
 }
-
-/** What the desktop offers of its own, beside the platform concerns its host runs: every one of them. */
-const DESKTOP_CLIENT_CAPABILITIES: readonly ClientCapability[] = [
-  HOST_CAPABILITY.VOICE,
-  HOST_CAPABILITY.UPDATES,
-  HOST_CAPABILITY.MICROPHONE,
-  HOST_CAPABILITY.NOTIFICATIONS,
-];
 
 /** The desktop client as it stands once every step of the launch has run. */
 export class DesktopTag extends Context.Service<DesktopTag, DesktopServices>()(
@@ -174,7 +180,7 @@ export function composeDesktop(
       const host = yield* HostAssemblyTag;
       // The services this launch stands on, read back out of the fiber
       // building it rather than assembled again: every act's Effect runs
-      // under them, never under a context of act-router's own.
+      // under them, never under a context of their own.
       const services: Context.Context<never> = yield* Effect.context();
       const run = <A>(effect: Effect.Effect<A>): Promise<A> =>
         Effect.runPromiseWith(services)(Effect.withErrorReporting(effect, { defectsOnly: true }));
@@ -189,7 +195,8 @@ export function composeDesktop(
         initialAppState(
           config,
           updateEngine !== undefined,
-          hostCapabilities(host.concerns, DESKTOP_CLIENT_CAPABILITIES),
+          // The desktop answers every capability a client can, beside the concerns its host runs.
+          hostCapabilities(host.concerns, ALL_CLIENT_CAPABILITIES),
         ),
         services,
       );
@@ -225,6 +232,7 @@ export function composeDesktop(
         panel: windows.panels,
         setVideo: (on) => operator.host.setVideo(on),
       });
+      const colourCode = yield* colourCodeInUtilityProcess(config.resourceDirectory);
       // A quit asked for while a call stands asks first, as a call app does,
       // and nothing else holds one.
       quit.holdWhile(
@@ -303,7 +311,6 @@ export function composeDesktop(
       // answering nothing.
       operator.link({
         sendToVoice: (channel, payload) => windows.sendToVoice(channel, payload),
-        reapplyTalkHotkey: () => windows.reapplyTalkHotkey(),
       });
 
       return {
@@ -317,7 +324,9 @@ export function composeDesktop(
         notices,
         testNotification: () => noticeDoors.postTest(() => windows.panels.focusExpanded()),
         avatar,
+        colourCode,
         run,
+        services,
       };
     }),
   );

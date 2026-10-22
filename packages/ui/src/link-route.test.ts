@@ -20,7 +20,7 @@ const ACME = {
   github: null,
 };
 
-const WINDOW = { workspaces: [ACME], factoryOn: false, automationsOn: true, issuesOn: true };
+const WINDOW = { workspaces: [ACME], chatOn: false, adminOn: false };
 
 test("a link to a page of Settings opens it on the workspace its slug names, where the account is in it", () => {
   assert.deepEqual(
@@ -42,42 +42,53 @@ test("a link to a page of Settings opens it on the workspace its slug names, whe
   );
 });
 
-test("a link to Settings with no page, or a page this window does not know, opens Settings on its first", () => {
+test("a link to Settings with no page, or a page this window does not know, opens Settings on its page list, at its first page", () => {
   for (const place of [
     { kind: LINK_PLACE.SETTINGS },
     { kind: LINK_PLACE.SETTINGS, page: "billing" },
   ] as const) {
     assert.deepEqual(linkRoute({ workspace: "acme", place }, WINDOW), {
       kind: LINK_ROUTE.SETTINGS,
-      settings: { page: SETTINGS_VIEW.ACCOUNT, workspaceId: ACME.id },
+      settings: { page: SETTINGS_VIEW.ACCOUNT, listed: true, workspaceId: ACME.id },
     });
   }
 });
 
-test("a place of an experiment the account has off opens nowhere, and one it has on opens on the Plans tab", () => {
+test("an automation, no experiment now, opens on the Plans tab", () => {
   const automation = { kind: LINK_PLACE.AUTOMATION, automationId: "a1" } as const;
 
-  assert.deepEqual(linkRoute({ workspace: "acme", place: { kind: LINK_PLACE.FACTORY } }, WINDOW), {
-    kind: LINK_ROUTE.EXPERIMENT_OFF,
-  });
   assert.deepEqual(linkRoute({ workspace: "acme", place: automation }, WINDOW), {
     kind: LINK_ROUTE.TASKS,
   });
-  assert.deepEqual(
-    linkRoute({ workspace: "acme", place: automation }, { ...WINDOW, automationsOn: false }),
-    { kind: LINK_ROUTE.EXPERIMENT_OFF },
-  );
 });
 
-test("an issue opens on the Plans tab while the Issues experiment is on, and nowhere while it is off", () => {
-  const issue = { kind: LINK_PLACE.ISSUE, issueId: "i1" } as const;
+test("a link to Chat or one of its channels opens nowhere while the account has Chat off, and on the Plans tab once it is on", () => {
+  for (const place of [
+    { kind: LINK_PLACE.CHAT },
+    { kind: LINK_PLACE.CHAT, channelId: "c1" },
+  ] as const) {
+    assert.deepEqual(linkRoute({ workspace: "acme", place }, WINDOW), {
+      kind: LINK_ROUTE.EXPERIMENT_OFF,
+    });
+    assert.deepEqual(linkRoute({ workspace: "acme", place }, { ...WINDOW, chatOn: true }), {
+      kind: LINK_ROUTE.TASKS,
+    });
+  }
+});
 
-  assert.deepEqual(linkRoute({ workspace: "acme", place: issue }, WINDOW), {
-    kind: LINK_ROUTE.TASKS,
-  });
-  assert.deepEqual(linkRoute({ workspace: "acme", place: issue }, { ...WINDOW, issuesOn: false }), {
-    kind: LINK_ROUTE.EXPERIMENT_OFF,
-  });
+test("a link to the Admin place or one of its views opens nowhere for a reader who is no admin, and on the Plans tab for an admin", () => {
+  for (const place of [
+    { kind: LINK_PLACE.ADMIN },
+    { kind: LINK_PLACE.ADMIN, section: "cost" },
+    { kind: LINK_PLACE.ADMIN, userId: "u1" },
+  ] as const) {
+    assert.deepEqual(linkRoute({ workspace: "acme", place }, WINDOW), {
+      kind: LINK_ROUTE.NOT_PERMITTED,
+    });
+    assert.deepEqual(linkRoute({ workspace: "acme", place }, { ...WINDOW, adminOn: true }), {
+      kind: LINK_ROUTE.TASKS,
+    });
+  }
 });
 
 test("a task, an agent, or an Inbox item opens on the Plans tab, whatever workspace its slug names", () => {

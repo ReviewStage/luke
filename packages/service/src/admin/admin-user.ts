@@ -1,23 +1,21 @@
 import type { DatabaseServices } from "@luke/database/core/query";
-import { Clock, Effect } from "effect";
-import { DAY_MS } from "../core.js";
+import { utcDayKey } from "@luke/database/models/quota";
+import type {
+  AdminUserAccount,
+  AdminUserAllTime,
+  AdminUserDetail,
+} from "@luke/features/admin-answer-wire";
 import {
-  ADMIN_TREND_DAYS,
-  type AdminDailyUsage,
-  type AdminTrend,
-  lastNDayKeys,
-  sum,
-  trailingTrend,
-} from "./admin-metrics.js";
-import {
-  ADMIN_ERROR,
-  ADMIN_HTTP_STATUS,
   type AdminMetricsWindow,
+  type AdminUserQuery,
   adminMetricsWindow,
   adminUserId,
-  errorResponse,
-  jsonResponse,
-} from "./http.js";
+} from "@luke/features/admin-wire";
+import { Clock, Effect } from "effect";
+import { DAY_MS } from "../core.js";
+import { type AdminAccountSource, buildAdminAccountSupport } from "./admin-account.js";
+import { ADMIN_TREND_DAYS, lastNDayKeys, sum, trailingTrend } from "./admin-metrics.js";
+import { ADMIN_REFUSAL, type AdminRefusal } from "./http-effect.js";
 import { type AdminSeamEffect, unavailableSeam } from "./seam.js";
 
 /**
@@ -48,28 +46,6 @@ export function calendarDayKeys(now: number): string[] {
   return lastNDayKeys(now, CALENDAR_COMPLETE_WEEKS * DAYS_PER_WEEK + daysIntoWeek);
 }
 
-/** The account the page names, from the service's own user row. */
-export interface AdminUserAccount {
-  id: string;
-  name: string;
-  email: string;
-  /** The avatar URL the sign-in provider gave the account, when it gave one. */
-  image: string | null;
-  admin: boolean;
-  /** When the account was created, in epoch milliseconds. */
-  createdAt: number;
-  /** Linked sign-in providers, as their account rows name them (e.g. "github"). */
-  signInMethods: string[];
-}
-
-/** The account's whole hosted-tier history, folded to counts and two dates. */
-interface AdminUserAllTime {
-  activeDays: number;
-  firstActiveDay: string | null;
-  lastActiveDay: string | null;
-  calls: number;
-}
-
 /**
  * The raw shape the queries produce for one account, before the pure builder
  * zero-fills the series and reads the streak off it — split out, like the
@@ -85,36 +61,10 @@ export interface AdminUserSource {
   };
 }
 
-export interface AdminUserDetail {
-  generatedAt: number;
-  windowDays: number;
-  account: AdminUserAccount;
-  activity: {
-    daily: AdminDailyUsage[];
-    /**
-     * The calendar's zero-filled trailing year, `calendarDayKeys`'s span,
-     * whatever window the rest of the page is read at.
-     */
-    calendarDaily: AdminDailyUsage[];
-    usageTrend: AdminTrend;
-    activeDaysWindow: number;
-    /** Active days in the trailing run beside the run before it. */
-    activeDaysTrend: AdminTrend;
-    /**
-     * Consecutive active days ending today or yesterday — today may simply not
-     * have started yet. Read off the window's own series, so a run older than
-     * the window reports the window's length and the page words it as "or
-     * longer" rather than posing a truncation as the exact count.
-     */
-    currentStreakDays: number;
-    callsWindow: number;
-    allTime: AdminUserAllTime;
-  };
-}
-
-/** Shapes one account's queried source into the page's answer. */
+/** Shapes one account's queried source, and its support rows, into the page's answer. */
 export function buildAdminUserDetail(
   source: AdminUserSource,
+  support: AdminAccountSource,
   now: number,
   windowDays: AdminMetricsWindow,
 ): AdminUserDetail {
@@ -159,11 +109,17 @@ export function buildAdminUserDetail(
       callsWindow: sum(daily.map((day) => day.calls)),
       allTime: source.usage.allTime,
     },
+    support: buildAdminAccountSupport(
+      support,
+      now,
+      Date.parse(`${dayKeys[0] ?? utcDayKey(now)}T00:00:00.000Z`),
+      source.usage.allTime.lastActiveDay,
+    ),
   };
 }
 
 export interface AdminUserOptions {
-  request: Request;
+  query: AdminUserQuery;
   /** The named account's detail, or nothing when no user row carries that id. */
   readUser: (
     userId: string,
@@ -182,29 +138,21 @@ export interface AdminUserOptions {
  */
 export function handleAdminUser(
   options: AdminUserOptions,
-): Effect.Effect<Response, never, DatabaseServices> {
-  const { request } = options;
+): Effect.Effect<AdminUserDetail, AdminRefusal, DatabaseServices> {
+  const { query } = options;
 
-  const userId = adminUserId(request.url);
-  if (userId === undefined) {
-    return Effect.succeed(
-      errorResponse(ADMIN_HTTP_STATUS.BAD_REQUEST, ADMIN_ERROR.MISSING_USER_ID),
-    );
-  }
+  const userId = adminUserId(query.id);
+  if (userId === undefined) return Effect.fail(ADMIN_REFUSAL.MISSING_USER_ID);
 
-  const windowDays = adminMetricsWindow(request.url);
-  if (windowDays === undefined) {
-    return Effect.succeed(errorResponse(ADMIN_HTTP_STATUS.BAD_REQUEST, ADMIN_ERROR.INVALID_WINDOW));
-  }
+  const windowDays = adminMetricsWindow(query.window);
+  if (windowDays === undefined) return Effect.fail(ADMIN_REFUSAL.INVALID_WINDOW);
 
   return Effect.flatMap(Clock.currentTimeMillis, (now) =>
     options.readUser(userId, now, windowDays).pipe(
-      Effect.map((detail) =>
-        detail === undefined
-          ? errorResponse(ADMIN_HTTP_STATUS.NOT_FOUND, ADMIN_ERROR.USER_NOT_FOUND)
-          : jsonResponse(ADMIN_HTTP_STATUS.OK, detail),
-      ),
       Effect.catchCause((cause) => unavailableSeam("admin user read failed", cause)),
+      Effect.flatMap((detail) =>
+        detail === undefined ? Effect.fail(ADMIN_REFUSAL.USER_NOT_FOUND) : Effect.succeed(detail),
+      ),
     ),
   );
 }

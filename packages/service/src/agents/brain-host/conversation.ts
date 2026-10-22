@@ -7,7 +7,7 @@ import { and, eq, isNull } from "drizzle-orm";
 import { Effect, Option, Result, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
 import type { SessionAuth } from "eve/context";
-import { actedForAccount, conversationIdOf } from "./auth.js";
+import { actedForAccount, conversationIdOf, timeZoneOf } from "./auth.js";
 import { BRAIN_HOST_REFUSAL, type BrainHostRefusal } from "./bounds.js";
 
 export {
@@ -45,6 +45,8 @@ export interface AdmittedConversation {
   readonly target: ConversationTarget;
   /** The eve session id the conversation row last recorded, where one has been. */
   readonly runtimeSessionId: string | undefined;
+  /** The time zone the current request named, which the turn reads the developer's day in; none reads UTC. */
+  readonly timeZone: string | undefined;
 }
 
 /** The conversation the session was admitted to, or the one word for why it was not. */
@@ -133,6 +135,7 @@ export function admitConversation(
       caller: account,
       target: { userId: row.userId, conversationId },
       runtimeSessionId: row.runtimeSessionId ?? undefined,
+      timeZone: timeZoneOf(current),
     });
   });
 }

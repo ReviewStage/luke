@@ -5,19 +5,14 @@ import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
 import type { GatewayHost, NodeRegistry } from "@luke/gateway";
 import type { AppSettings } from "@luke/settings/wire";
 import { Effect, Option, type Scope } from "effect";
-import { channels } from "../bridge.js";
+import { PUSH, type PushName, type PushPayload } from "../contract/pushes.js";
 import type { HostBootstrap, HostOperator } from "../host-operator.js";
 import { type AppStateStore, bootstrapPatch } from "./app-state-store.js";
 import { type GatewayWiringDependencies, wireGateway } from "./gateway-wiring.js";
 
 /** What the host's events reach in the windows that draw them. */
 interface OperatorClientLinks {
-  sendToVoice: <Payload>(channel: string, payload: Payload) => void;
-  /**
-   * A voice that came or went moves the talk key: claimed now that there is
-   * something to talk to, or given back to the machine now that there is not.
-   */
-  reapplyTalkHotkey: () => void;
+  sendToVoice: <Name extends PushName>(push: Name, payload: PushPayload<Name>) => void;
 }
 
 export interface OperatorClient {
@@ -30,7 +25,6 @@ export interface OperatorClient {
   /** The settings this launch decides its windows from, read from the host once and written down. */
   ensureSettings: () => Effect.Effect<AppSettings | undefined>;
   signedIn: () => boolean;
-  voiceAvailable: () => boolean;
   /** One host bootstrap, adopted into the document every window is answered from. */
   readBootstrap: () => Effect.Effect<HostBootstrap | undefined>;
   /** Stops recording now, ahead of an action that ends the account it is filed under; the host's next replay event re-answers. */
@@ -75,12 +69,6 @@ export const createOperatorClient = /* @__PURE__ */ Effect.fn("client/createOper
       return heldLinks;
     };
 
-    /**
-     * Whether a voice stands at all, which is the one thing this client decides
-     * for itself rather than draws: the keys ask it before claiming a chord.
-     * Everything else the host says goes into the document.
-     */
-    let voiceAvailable = false;
     const unsubscribers: (() => void)[] = [];
 
     const gateway = yield* wireGateway({
@@ -92,7 +80,6 @@ export const createOperatorClient = /* @__PURE__ */ Effect.fn("client/createOper
     });
 
     function adoptBootstrap(boot: HostBootstrap): void {
-      voiceAvailable = boot.voiceAvailable;
       state.update(bootstrapPatch(state.snapshot(), boot));
     }
 
@@ -100,17 +87,17 @@ export const createOperatorClient = /* @__PURE__ */ Effect.fn("client/createOper
     // change also reaches the voice window directly, as the event it is.
     unsubscribers.push(
       gateway.host.onSettingsChanged((change) => {
-        const stoodVoice = voiceAvailable;
-        voiceAvailable = change.settings.status.voiceAvailable;
         state.update({ settings: change.settings });
-        if (stoodVoice !== voiceAvailable) links().reapplyTalkHotkey();
       }),
       gateway.host.onAccountChanged((account) => {
         state.update({ account });
       }),
+      gateway.host.onAccountAccessChanged((access) => {
+        state.update({ access });
+      }),
       // The live session's phase is handed to the voice window as the event it is.
       gateway.host.onVoiceLiveSessionChanged((change) => {
-        links().sendToVoice(channels.onVoiceLiveSessionChanged, change);
+        links().sendToVoice(PUSH.VOICE_LIVE_SESSION_CHANGED, change);
       }),
       // The host's own answer about recording stands the halt down: it is the
       // account transition the halt was waiting on.
@@ -139,7 +126,6 @@ export const createOperatorClient = /* @__PURE__ */ Effect.fn("client/createOper
           return Option.getOrUndefined(settings);
         }),
       signedIn: () => state.snapshot().account.status === ACCOUNT_STATUS.SIGNED_IN,
-      voiceAvailable: () => voiceAvailable,
       readBootstrap: () =>
         Effect.gen(function* () {
           const boot = yield* gateway.host.bootstrap();

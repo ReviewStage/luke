@@ -1,11 +1,9 @@
 import {
   type AskStatus,
   CHANNEL_KIND,
-  CHAT_BOUNDS,
   type ChannelKind,
   type ChatAsk,
   type ChatBlock,
-  type ChatImageType,
   type ChatReply,
   MEMBER_KIND,
   type MemberKind,
@@ -14,7 +12,6 @@ import { sql } from "drizzle-orm";
 import {
   type AnyPgColumn,
   check,
-  customType,
   index,
   integer,
   jsonb,
@@ -35,21 +32,18 @@ const literal = (value: string) => sql.raw(`'${value}'`);
 /**
  * chat.ts -- a workspace's chat: its members and its channels.
  *
- * A member is one person, coding agent, or plan's planner of a workspace,
- * minted once and kept: its handle is written as it joins and never moves,
- * so a message names its author the same way for life. A person's handle is
- * a slug of their name, an agent's `agent-N` by its ordinal among the
- * workspace's agents, and every planner's `luke`, which is why the handle is
- * unique among the workspace's people and agents alone and a planner is told
- * apart by its plan. Exactly one of the three ids stands, by kind: a person
- * goes with their account, while an agent or a plan deleted leaves its
- * member standing with no id, so the messages it wrote still name it.
+ * A member is one person or coding agent of a workspace, minted once and
+ * kept, and named by what it stands for: a person by their account and an
+ * agent by its coding agent, each written as the app's mention link of it.
+ * Exactly one of the two ids stands, by kind: a person goes with their
+ * account, while an agent deleted leaves its member standing with no id, so
+ * the messages it wrote still name it.
  * `read_seq` is how far through the workspace's chat sequence the member
  * has read in every channel, the floor each channel's own cursor in
  * `chat_read` starts from, and `notice_seq` the sequence of the one notice
  * it was told and has not read past, in the channel `notice_channel_id`
  * names, null when none is outstanding. `left_at` is when an archived agent
- * or plan stopped hearing.
+ * stopped hearing.
  *
  * A channel is the workspace's general one, a plan's own, a topic one a
  * member opened, or a DM, which names its two members in uuid order so one
@@ -90,10 +84,6 @@ export const chatMember = pgTable(
     userId: text("user_id").references(() => user.id, { onDelete: "cascade" }),
     /** The coding agent, on an agent's member; null once the agent is deleted. */
     agentId: uuid("agent_id").references(() => codingAgent.id, { onDelete: "set null" }),
-    /** The task, on its Luke's member; null once the task is deleted. */
-    taskId: uuid("task_id").references(() => task.id, { onDelete: "set null" }),
-    /** The member's handle, without its `@`, minted once. */
-    handle: text("handle").notNull(),
     /** The member's place among its workspace's members of its kind, from one: an agent's `N`. */
     ordinal: integer("ordinal").notNull(),
     /** How far through the workspace's chat sequence the member has read in every channel. */
@@ -105,30 +95,24 @@ export const chatMember = pgTable(
       onDelete: "set null",
     }),
     joinedAt: timestamptz("joined_at").notNull(),
-    /** When the member stopped hearing, an archived agent or plan; null while it hears. */
+    /** When the member stopped hearing, an archived agent; null while it hears. */
     leftAt: timestamptz("left_at"),
   },
   (table) => [
-    // A handle names one person or agent of the workspace; every planner is `luke`.
-    uniqueIndex("chat_member_organization_handle")
-      .on(table.organizationId, table.handle)
-      .where(sql`${table.kind} <> ${literal(MEMBER_KIND.LUKE)}`),
     uniqueIndex("chat_member_organization_kind_ordinal").on(
       table.organizationId,
       table.kind,
       table.ordinal,
     ),
-    // One member per person per workspace, per agent, and per plan.
+    // One member per person per workspace, and per agent.
     uniqueIndex("chat_member_organization_user")
       .on(table.organizationId, table.userId)
       .where(sql`${table.userId} is not null`),
     uniqueIndex("chat_member_agent").on(table.agentId).where(sql`${table.agentId} is not null`),
-    uniqueIndex("chat_member_task").on(table.taskId).where(sql`${table.taskId} is not null`),
     check(
       "chat_member_id_of_kind",
       sql`(${table.kind} = ${literal(MEMBER_KIND.HUMAN)}) = (${table.userId} is not null)
-        and (${table.agentId} is null or ${table.kind} = ${literal(MEMBER_KIND.AGENT)})
-        and (${table.taskId} is null or ${table.kind} = ${literal(MEMBER_KIND.LUKE)})`,
+        and (${table.agentId} is null or ${table.kind} = ${literal(MEMBER_KIND.AGENT)})`,
     ),
   ],
 );
@@ -157,6 +141,8 @@ export const chatChannel = pgTable(
     createdByMemberId: uuid("created_by_member_id").references((): AnyPgColumn => chatMember.id, {
       onDelete: "set null",
     }),
+    /** What a topic channel says it is for, under its name and to every agent that reads it; null where it says nothing. */
+    purpose: text("purpose"),
     createdAt: timestamptz("created_at").notNull(),
     /** When the channel was archived, which a plan's archive does to its channel; null while it stands. */
     archivedAt: timestamptz("archived_at"),
@@ -208,12 +194,25 @@ export const chatRead = pgTable(
   ],
 );
 
-/** The next place a workspace's chat sequence hands out, from one; the row is made with the workspace's first post. */
+/**
+ * The next place a workspace's chat sequence hands out, from one, and the
+ * revision of who and where its chat is; the row is made with the
+ * workspace's first post or the first change to its roster.
+ */
 export const workspaceChat = pgTable("workspace_chat", {
   organizationId: text("organization_id")
     .primaryKey()
     .references(() => organization.id, { onDelete: "cascade" }),
   nextSeq: integer("next_seq").notNull().default(1),
+  /**
+   * Moved on in the same transaction as every change to what a reader's
+   * roster and channels read: a member joining, leaving, or going, a
+   * channel made, named, archived, moved, or gone, and an agent member
+   * renamed or moved to another plan, or a person member renamed. Kept by
+   * the triggers of `workspace_chat_add_revision`, so no write can miss it;
+   * a held read of the chat compares it, with `next_seq`, between reads.
+   */
+  revision: integer("revision").notNull().default(0),
 });
 
 export const chatMessage = pgTable(
@@ -288,48 +287,6 @@ export const chatMessage = pgTable(
       sql`(${table.askKey} is null) = (${table.ask} is null)
         and (${table.askKey} is null) = (${table.askRevision} is null)
         and (${table.askKey} is null) = (${table.askStatus} is null)`,
-    ),
-  ],
-);
-
-/** A column of raw bytes, read and written as they stand. */
-const bytea = customType<{ data: Uint8Array; driverData: Uint8Array }>({
-  dataType: () => "bytea",
-});
-
-/**
- * One picture of a chat message's: the bytes of an image block, kept beside
- * the message it belongs to, as an inbox item's are (`inbox-attachment.ts`).
- * An agent posts an image by the path of a file in its sandbox; the service
- * reads the file and keeps it here, so the message's block names a row of
- * this table rather than anything the agent wrote, and a reader fetches it
- * under the account. The bytes stand in the row, bounded by a check on the
- * column at the image bound, and the media type is what the service sniffed
- * them to be. The row goes with its message and its workspace.
- */
-export const chatAttachment = pgTable(
-  "chat_attachment",
-  {
-    id: uuid("id").primaryKey().defaultRandom(),
-    organizationId: text("organization_id")
-      .notNull()
-      .references(() => organization.id, { onDelete: "cascade" }),
-    messageId: uuid("message_id")
-      .notNull()
-      .references(() => chatMessage.id, { onDelete: "cascade" }),
-    /** The media type the bytes were sniffed to be, which they are served under. */
-    contentType: text("content_type").$type<ChatImageType>().notNull(),
-    /** How many bytes the picture is, read off the row without the bytes. */
-    byteCount: integer("byte_count").notNull(),
-    bytes: bytea("bytes").notNull(),
-    createdAt: timestamptz("created_at").notNull(),
-  },
-  (table) => [
-    // A message's attachments are read and deleted by the message.
-    index("chat_attachment_message").on(table.messageId),
-    check(
-      "chat_attachment_bytes_bound",
-      sql`octet_length(${table.bytes}) <= ${sql.raw(String(CHAT_BOUNDS.MAX_IMAGE_BYTES))}`,
     ),
   ],
 );

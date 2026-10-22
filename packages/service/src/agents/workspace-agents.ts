@@ -16,7 +16,7 @@ import type { StoreFailure } from "../http/store-failure.js";
  * The agent tools Luke on a call and every coding agent are offered
  * (`coding-agent-tools.ts`) list and find the agents here. A list names the archived
  * agents too, each marked, since an agent may need to know one stands, and
- * names each agent's task by its name and whether it is archived, read once
+ * names each agent's task by its name, read once
  * for the lot; it is narrowed to one task by the id a listed agent's task
  * answered, or to the caller's own. Every read is on the account's own
  * standing: a workspace it is not in has no agents, and an agent of another
@@ -55,7 +55,6 @@ const readFilter = Schema.decodeUnknownResult(AGENT_LIST_INPUT);
 export interface AgentTask {
   readonly id: string;
   readonly name: string;
-  readonly archived: boolean;
 }
 
 /** A list of a workspace's agents, and the task each stands on. */

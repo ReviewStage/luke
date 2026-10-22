@@ -1,18 +1,34 @@
 import type { BoardElement, DrawingElement } from "@luke/features/board-wire";
-import type { TaskLinearIssue } from "@luke/features/linear-wire";
+import { GITHUB_ACCESS, type GitHubAccess } from "@luke/features/github-repositories-wire";
 import type { PlanAgentEdit } from "@luke/features/plan-template";
+import {
+  PLAN_ACTOR,
+  TASK_PRIORITY,
+  TASK_STATUS,
+  type TaskCreatorActor,
+  type TaskPriority,
+  type TaskStatus,
+} from "@luke/features/task-wire";
 import { sql } from "drizzle-orm";
-import { index, integer, jsonb, pgTable, text, uuid } from "drizzle-orm/pg-core";
+import {
+  type AnyPgColumn,
+  index,
+  integer,
+  jsonb,
+  pgTable,
+  text,
+  uniqueIndex,
+  uuid,
+} from "drizzle-orm/pg-core";
 import { createdAt, timestamptz, updatedAt } from "./_helpers.js";
 import { organization, user } from "./auth.js";
-import { issue } from "./issue.js";
-import { conversations } from "./storage.js";
+import { codingAgent } from "./coding-agent.js";
 
 /**
  * task.ts -- a named task and its plan, its one current document.
  *
  * One row per task, keyed by a UUID of the service's own and owned by the
- * account that started it, in the workspace it was started in: its name, whether it is archived (a pin is each member's own, `plan-pin.ts`), its
+ * account that started it, in the workspace it was started in: its name, where it stands (a pin is each member's own, `plan-pin.ts`), its
  * one document, a free Markdown text, and the journal of the saves coding
  * agents made on it. A save replaces the
  * text in one statement, so none is left half-written: a save that failed
@@ -21,10 +37,8 @@ import { conversations } from "./storage.js";
  * like the conversation, readable by an operator and kept the developer's
  * own by the account it is keyed by.
  *
- * The conversation a task resumes in is the one row it names, attached once
- * the brain opens it, and a purged conversation leaves the task
- * standing with none. The row cascades with its account, so deleting an
- * account is still one statement, and with its workspace.
+ * The row cascades with its account, so deleting an account is still one
+ * statement, and with its workspace.
  */
 export const task = pgTable(
   "task",
@@ -38,6 +52,40 @@ export const task = pgTable(
       .notNull()
       .references(() => organization.id, { onDelete: "cascade" }),
     name: text("name").notNull(),
+    /**
+     * The task's number in its workspace, counted from one in the order its
+     * tasks were made and never reused (`task_number_counter`), which its key (`ACME-42`,
+     * `@luke/features/workspace-key`) is drawn from. A task moved to another
+     * workspace takes the next number there.
+     */
+    number: integer("number").notNull(),
+    /** Where the task stands (`TASK_STATUS`). */
+    status: text("status").$type<TaskStatus>().notNull().default(TASK_STATUS.TODO),
+    /** How much the task matters (`TASK_PRIORITY`); none until someone weighs it. */
+    priority: text("priority").$type<TaskPriority>().notNull().default(TASK_PRIORITY.NONE),
+    /**
+     * The member the task is assigned to, who is on it now, apart from the
+     * account that started it (`user_id`, its creator); a member of the
+     * task's workspace as it was written, and null for a task no one is on.
+     * Deleting that account, or that member leaving the workspace (the
+     * `task_assignee_leaves_with_member` trigger on `member`), lets the task
+     * go unassigned rather than taking it with them.
+     */
+    assigneeId: text("assignee_id").references(() => user.id, { onDelete: "set null" }),
+    /**
+     * Who made the task, apart from the member it was made for (`user_id`):
+     * that member by hand (`developer`, every task from before this column),
+     * Luke on their call (`notetaker`), or a coding agent acting for them
+     * (`agent`), as `create_task` names its caller.
+     */
+    creatorActor: text("creator_actor")
+      .$type<TaskCreatorActor>()
+      .notNull()
+      .default(PLAN_ACTOR.DEVELOPER),
+    /** The coding agent that made the task; null for any other maker, and once the agent's row is gone. */
+    creatorAgentId: uuid("creator_agent_id").references((): AnyPgColumn => codingAgent.id, {
+      onDelete: "set null",
+    }),
     /** The saves coding agents made on the document, oldest first, the last fifty kept; empty until an agent saves. */
     agentEdits: jsonb("agent_edits")
       .$type<readonly PlanAgentEdit[]>()
@@ -53,19 +101,10 @@ export const task = pgTable(
      */
     repository: text("repository"),
     /**
-     * The Linear issue the plan was started from, as the service read it
-     * through the workspace's Linear connection when it started: what every
-     * planning turn is told to research. Kept whatever becomes of the
-     * connection; null for a plan started from no issue.
+     * How the repository was reached as it was named: the workspace's GitHub
+     * App, or the naming member's own token; the App's for a task with none.
      */
-    linearIssue: jsonb("linear_issue").$type<TaskLinearIssue>(),
-    /**
-     * The workspace's own issue the task was started from (`issue.ts`), one
-     * of the same workspace, which a move to another workspace lets go;
-     * null for a task started from none, and once the issue is deleted. An
-     * issue may have many tasks, each an attempt at it.
-     */
-    issueId: uuid("issue_id").references(() => issue.id, { onDelete: "set null" }),
+    githubAccess: text("github_access").$type<GitHubAccess>().notNull().default(GITHUB_ACCESS.APP),
     /**
      * The developer's own words about the task as they started it, which
      * Luke is handed beside the plan to plan from; null for a task started
@@ -79,11 +118,20 @@ export const task = pgTable(
      * until no running build reads it, then a later migration drops it.
      */
     pinnedAt: timestamptz("pinned_at"),
-    /** When the task was archived, which the list leaves out unless asked for it; null while it is not. */
+    /**
+     * When the task was finished: the instant its status last moved to Done
+     * or Canceled, which the Tasks page windows its finished work by; null
+     * while it stands in any other status. A write that leaves the status as
+     * it stood leaves this as it stood too (`task-store.ts`).
+     */
+    completedAt: timestamptz("completed_at"),
+    /**
+     * @deprecated A task is archived no longer, it stands Done or Canceled
+     * instead (the `task_archive_settle` migration settled every archived
+     * one), and nothing writes or reads this. It stands until no running
+     * build reads it, then a later migration drops it.
+     */
     archivedAt: timestamptz("archived_at"),
-    conversationId: uuid("conversation_id").references(() => conversations.id, {
-      onDelete: "set null",
-    }),
     createdAt: createdAt(),
     /** The last save of the document; the start, before any. */
     updatedAt: updatedAt(),
@@ -93,10 +141,26 @@ export const task = pgTable(
     index("task_user_created").on(table.userId, table.createdAt),
     // A workspace's tasks, newest started first.
     index("task_organization_created").on(table.organizationId, table.createdAt),
-    // An issue's tasks, and the issue's deletion letting each of them go.
-    index("task_issue").on(table.issueId),
+    // The key names one task of its workspace, and a new task takes the next number.
+    uniqueIndex("task_organization_number").on(table.organizationId, table.number),
+    // A workspace's tasks assigned to one member, and that member leaving letting each of them go.
+    index("task_organization_assignee").on(table.organizationId, table.assigneeId),
   ],
 );
+
+/**
+ * The last number each workspace handed a task, so a task's number is
+ * never handed out again, whether the task that took it was deleted or moved
+ * to another workspace: a new task, or one moved in, takes one past it
+ * (`task-store.ts`). A workspace has no row until its first task, and the
+ * row goes with the workspace.
+ */
+export const taskNumberCounter = pgTable("task_number_counter", {
+  organizationId: text("organization_id")
+    .primaryKey()
+    .references(() => organization.id, { onDelete: "cascade" }),
+  lastNumber: integer("last_number").notNull(),
+});
 
 /**
  * A task's whiteboard: the Excalidraw scene the Tasks tab shows, with the

@@ -13,21 +13,29 @@
  * start: a second `init` would replace the client eve's integration hangs
  * off.
  *
- * One error is not sent: an agent's tool call that failed and was answered
- * to the model as the call's result, which the AI SDK integration would
- * capture as unhandled; it stays a breadcrumb and an errored span.
+ * One error is not sent: an agent's tool call refused and answered to the
+ * model as the call's result, which the AI SDK integration would capture as
+ * unhandled; it stays a breadcrumb and an errored span.
  *
- * Note that the options are Sentry's defaults: its `dataCollection` is left
- * as the SDK ships it, which `PRIVACY.md` describes. A deployment without
+ * Note that the options are Sentry's defaults but for that filter and one
+ * more: its `dataCollection` is left as the SDK ships it, which `PRIVACY.md`
+ * describes, while every address a span, an event, or a log line carries
+ * leaves with its query's values and its credential-shaped path segments
+ * redacted. A deployment without
  * `SENTRY_DSN` starts the SDK disabled, and every layer here then sends
  * nothing.
  */
 
+import {
+  scrubbedAttributes,
+  scrubbedQueryParams,
+  scrubbedUrl,
+} from "@luke/features/sentry-addresses";
 import * as Sentry from "@sentry/effect";
-import { addBreadcrumb, type ErrorEvent } from "@sentry/effect/server";
+import { addBreadcrumb, type ErrorEvent, type EventHint } from "@sentry/effect/server";
 import { Effect, ErrorReporter, Exit, Layer, type Logger, Tracer } from "effect";
 
-const SENTRY_ENVIRONMENT = {
+export const SENTRY_ENVIRONMENT = {
   /** The `luke-web` project's DSN; absent means nothing is sent. */
   DSN: "SENTRY_DSN",
   /** Vercel's own name for the deployment: `production`, `preview`, or `development`. */
@@ -76,8 +84,9 @@ const AI_TOOL_ERROR = {
  * An error event that is an agent's tool call failing, which the AI SDK
  * answered the model with as the call's result: the AI SDK integration
  * captures every one as unhandled (`captureToolError`), though the agent
- * reads it and carries on, so it is an outcome of the turn rather than an
- * error of the app.
+ * reads it and carries on. Only a refusal among them is an outcome of the
+ * turn rather than an error of the app (`isRefusal`); a failure beneath the
+ * tool is still reported.
  */
 function isAnsweredToolError(event: ErrorEvent): boolean {
   return (
@@ -88,14 +97,49 @@ function isAnsweredToolError(event: ErrorEvent): boolean {
   );
 }
 
+/** How deep a refusal's causes are read; a deeper chain, or one that loops, is reported rather than taken for a refusal. */
+const REFUSAL_CAUSE_DEPTH = 5;
+
 /**
- * Sends every error event but a tool call's failure answered to the model,
+ * Whether a failure is a refusal: a bare `Error`, carrying nothing but its
+ * words and, where it explains another, a cause that is a refusal too. That is
+ * how eve's own tools refuse a call (`You must read file … before overwriting
+ * it`, a patch that does not apply, a file not found), how this repository's
+ * file tools add what to do next to eve's words (`coder-host/files.ts`), and
+ * how a connection's tool answers an error.
+ *
+ * Note that a bare `Error` carrying a field of its own beside its cause (a
+ * sandbox API error's `response`, undici's `code`) is a failure beneath the
+ * tool dressed as one, and is reported.
+ */
+function isRefusal(failure: Error, depth = 0): boolean {
+  const { cause } = failure;
+  return (
+    Object.getPrototypeOf(failure) === Error.prototype &&
+    Object.keys(failure).every((key) => key === "cause") &&
+    depth < REFUSAL_CAUSE_DEPTH &&
+    (cause === undefined || (cause instanceof Error && isRefusal(cause, depth + 1)))
+  );
+}
+
+/**
+ * Sends every error event but a tool call's refusal answered to the model,
  * which is kept as a breadcrumb instead, so a real error later in the same
  * request still shows what the agent's tools met before it. The tool call's
  * span keeps its error status and message, so Agent Tracing still shows it.
+ *
+ * Note that the class is what tells a refusal from a defect, because what
+ * fails beneath a tool arrives as a class of its own (the sandbox client's
+ * API error, an MCP client's error, undici's `TypeError`), alone or as a
+ * refusal's cause, and still reports as an issue. A defect in this
+ * repository's own tools is thrown as a class of its own too, or reported
+ * apart from the channel by the eve root's runtime (`runAgent`'s
+ * `Effect.withErrorReporting`), under the reporter's own mechanism.
  */
-function dropAnsweredToolErrors(event: ErrorEvent): ErrorEvent | null {
-  if (!isAnsweredToolError(event)) return event;
+function dropAnsweredToolRefusals(event: ErrorEvent, hint: EventHint): ErrorEvent | null {
+  const failure = hint.originalException;
+  if (!isAnsweredToolError(event) || !(failure instanceof Error) || !isRefusal(failure))
+    return event;
   const exception = event.exception?.values?.at(-1);
   addBreadcrumb({
     category: "ai.tool",
@@ -107,6 +151,32 @@ function dropAnsweredToolErrors(event: ErrorEvent): ErrorEvent | null {
     },
   });
   return null;
+}
+
+/** An event with the addresses its request, its trace, and its breadcrumbs carry scrubbed. */
+function scrubbedEvent(event: Sentry.ErrorEvent): Sentry.ErrorEvent {
+  const { request, contexts, breadcrumbs } = event;
+  const trace = contexts?.trace;
+  return {
+    ...event,
+    ...(request && {
+      request: {
+        ...request,
+        ...(request.url !== undefined && { url: scrubbedUrl(request.url) }),
+        ...(request.query_string !== undefined && {
+          query_string: scrubbedQueryParams(request.query_string),
+        }),
+      },
+    }),
+    ...(trace?.data && {
+      contexts: { ...contexts, trace: { ...trace, data: scrubbedAttributes(trace.data) } },
+    }),
+    ...(breadcrumbs && {
+      breadcrumbs: breadcrumbs.map((crumb) =>
+        crumb.data ? { ...crumb, data: scrubbedAttributes(crumb.data) } : crumb,
+      ),
+    }),
+  };
 }
 
 /**
@@ -123,7 +193,19 @@ export function sentryOptions(): SentryOptions {
     // hour in production, which a plan's span quota does not hold. Errors,
     // logs, and check-ins are not sampled by this.
     tracesSampleRate: TRACES_SAMPLE_RATE,
-    beforeSend: dropAnsweredToolErrors,
+    beforeSend: (event, hint) => {
+      const kept = dropAnsweredToolRefusals(event, hint);
+      return kept && scrubbedEvent(kept);
+    },
+    // Note that a span is scrubbed as it streams, because Sentry streams spans by default
+    // and runs no `beforeSendTransaction` then, and its own credential filter runs only in
+    // its HTTP integrations, never over the spans Effect's HTTP client and server open.
+    beforeSendSpan: Sentry.withStreamedSpan((span) => ({
+      ...span,
+      attributes: scrubbedAttributes(span.attributes),
+    })),
+    beforeSendLog: (log) =>
+      log.attributes ? { ...log, attributes: scrubbedAttributes(log.attributes) } : log,
   };
 }
 

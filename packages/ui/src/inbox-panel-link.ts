@@ -1,6 +1,10 @@
 import { LINK_PLACE, readLink } from "@luke/features/luke-link";
 import { decodeMention, MENTION_KIND, type MentionLines } from "@luke/features/mention-link";
-import { type OpenedPullRequest, pullRequestAgentOf } from "./pull-request-link.js";
+import {
+  type OpenedPullRequest,
+  pullRequestAgentOf,
+  repositoryPullRequestOf,
+} from "./pull-request-link.js";
 
 /**
  * inbox-panel-link.ts -- which links pressed on an Inbox item open in the panel beside it, and as what.
@@ -13,15 +17,18 @@ import { type OpenedPullRequest, pullRequestAgentOf } from "./pull-request-link.
 
 /**
  * What the panel beside an Inbox item opens of a link pressed on the item:
- * a file of the task's repository, a page of the task, an agent's Pull
- * request tab as a Luke link names it, or that tab on its conversation as
- * the pull request's own page on GitHub names it.
+ * a file of the task's repository, a page of the task, an agent of the
+ * task's transcript, an agent's Pull request tab as a Luke link names it, or that tab on its conversation as
+ * the pull request's own page on GitHub names it, by its number where it is
+ * another pull request of the task's repository.
  */
 export const INBOX_PANEL_TARGET = {
   FILE: "file",
   PAGE: "page",
   CHANGES: "changes",
   PULL_REQUEST: "pull-request",
+  /** An agent of the item's task, whose transcript reads beside the item. */
+  AGENT: "agent",
 } as const;
 
 export type InboxPanelTarget =
@@ -32,13 +39,20 @@ export type InboxPanelTarget =
     }
   | { readonly kind: typeof INBOX_PANEL_TARGET.PAGE; readonly pageId: string }
   | { readonly kind: typeof INBOX_PANEL_TARGET.CHANGES; readonly agentId: string }
-  | { readonly kind: typeof INBOX_PANEL_TARGET.PULL_REQUEST; readonly agentId: string };
+  | { readonly kind: typeof INBOX_PANEL_TARGET.AGENT; readonly agentId: string }
+  | {
+      readonly kind: typeof INBOX_PANEL_TARGET.PULL_REQUEST;
+      readonly agentId: string;
+      /** The pull request's number, where it is one of the repository's none of the agents opened from the branch it stands on. */
+      readonly number?: number;
+    };
 
-/** What holds the item: its task, none for an agent with no task, the task's repository, and each of its agents' pull requests by its page on GitHub. */
+/** What holds the item: its task, none for an agent with no task, the task's repository, each of its agents' pull requests by its page on GitHub, and its agents, the first of which shows any other pull request of the repository. */
 export interface InboxPanelPlace {
   readonly taskId: string | undefined;
   readonly repository: string | null;
   readonly pullRequests: readonly OpenedPullRequest[];
+  readonly agentIds?: readonly string[] | undefined;
 }
 
 /**
@@ -56,11 +70,16 @@ export function inboxPanelTarget(
   const link = readLink(href);
   if (link !== undefined) {
     const at = link.place;
-    if (at.kind === LINK_PLACE.PAGE && at.planId === place.taskId) {
+    // A page of an agent on no task is opened on the agent's own page, by the window.
+    if (at.kind === LINK_PLACE.PAGE && "planId" in at && at.planId === place.taskId) {
       return { kind: INBOX_PANEL_TARGET.PAGE, pageId: at.pageId };
     }
     if (at.kind === LINK_PLACE.CHANGES && at.planId === place.taskId) {
       return { kind: INBOX_PANEL_TARGET.CHANGES, agentId: at.agentId };
+    }
+    // An agent of the item's own task reads beside it; one on no task, or another task's, is the window's to open.
+    if (at.kind === LINK_PLACE.AGENT && at.planId !== undefined && at.planId === place.taskId) {
+      return { kind: INBOX_PANEL_TARGET.AGENT, agentId: at.agentId };
     }
     return undefined;
   }
@@ -69,6 +88,13 @@ export function inboxPanelTarget(
     return { kind: INBOX_PANEL_TARGET.PULL_REQUEST, agentId };
   }
   if (place.taskId === undefined || place.repository === null) return undefined;
+  const number = repositoryPullRequestOf(href, place.repository);
+  const first = place.agentIds?.[0];
+  if (number !== undefined) {
+    return first === undefined
+      ? undefined
+      : { kind: INBOX_PANEL_TARGET.PULL_REQUEST, agentId: first, number };
+  }
   const mention = decodeMention(href, place.repository);
   return mention?.kind === MENTION_KIND.FILE
     ? { kind: INBOX_PANEL_TARGET.FILE, path: mention.path, lines: mention.lines }

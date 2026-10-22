@@ -1,4 +1,5 @@
 import { Schema as EffectSchema, Option } from "effect";
+import { isUtcDayKey } from "./admin-wire.js";
 import { inAppScheme, isLinkHome, LINK_ORIGIN } from "./link-home.js";
 import { decodeMention, encodeMention, MENTION_KIND } from "./mention-link.js";
 
@@ -17,25 +18,40 @@ import { decodeMention, encodeMention, MENTION_KIND } from "./mention-link.js";
  *
  * - a task, `/plan/<id>`, and its section, `#<anchor>`, its version,
  *   `/plan/<id>/version/<seq>`, a page an agent wrote for it,
- *   `/plan/<id>/page/<pageId>`, its Call tab or one call there,
- *   `/plan/<id>/call[/<callId>]`, and a turn of Luke's in its Work,
+ *   `/plan/<id>/page/<pageId>`, and a turn of Luke's own work on it,
  *   `/plan/<id>/work/<at>`;
  * - one of its agents, `/plan/<id>/agent/<agentId>`, and under it a worker,
- *   `/worker/<callId>`, its Changes, `/changes`, or a message,
+ *   `/worker/<callId>`, its Changes, `/changes`, one review thread of its
+ *   pull request in one of that tab's views,
+ *   `/changes/<conversation|files>/thread/<threadId>`, or a message,
  *   `/message/<messageId>`; a worker of Luke's own is `/plan/<id>/worker/<callId>`;
- * - an agent with no task, `/agent/<agentId>`, and a message of its own;
+ * - an agent with no task, `/agent/<agentId>`, a message of its own, and a
+ *   page it showed, which stands on it rather than a task,
+ *   `/agent/<agentId>/page/<pageId>`;
  * - the Inbox, `/inbox`, and an item in it under the task or the agent with
  *   no task that holds it, `/plan/<id>/inbox/<itemId>` or
  *   `/agent/<agentId>/inbox/<itemId>`, since the Inbox is read by its holders;
  * - the Automations page, `/automations`, an automation,
  *   `/automation/<id>`, and one of its runs, `/automation/<id>/run/<runId>`;
- * - Factory, `/factory`, and a page of Settings, `/settings[/<page>]`;
+ * - a page of Settings, `/settings[/<page>]`;
+ * - Chat, `/chat`, and one of its channels, `/chat/<channelId>`, a topic,
+ *   a task's channel, or a direct message alike;
  * - a person's page in the workspace, `/person/<userId>`, a member or
  *   someone who left, by the account id the service names them by;
- * - an issue's page, `/issue/<issueId>`, by the id the service minted it.
+ * - the Admin place, an admin's alone, which reads every workspace's
+ *   accounts, so its workspace is only the one the link was copied in:
+ *   `/admin`, a section of it, `/admin/<cost|reliability|workspaces|users>`,
+ *   an account's page, `/admin/user/<userId>`, and a day's,
+ *   `/admin/day/<YYYY-MM-DD>`.
+ *
+ * An issue's page, `/issue/<issueId>`, is no place now that Luke keeps no
+ * issues of its own, and Factory's, `/factory`, none now that Factory is
+ * gone, so an old link to either reads as a link it does not know.
  *
  * A picture in a plan, `/plan/<id>/files/<picture>` (`plan-attachment-link.ts`),
- * is read as its task, since nothing of a picture is opened by its link.
+ * is read as its task, and a picture in an Inbox item's words, the item's
+ * link with `/files/<picture>` after it (`inbox-attachment-link.ts`), as
+ * the item, since nothing of a picture is opened by its link.
  *
  * Note that a link carries ids and nothing else: never a name, a token, or
  * any of the thing's words, since a link is pasted where anyone may read it
@@ -50,24 +66,52 @@ import { decodeMention, encodeMention, MENTION_KIND } from "./mention-link.js";
 export const LINK_PLACE = {
   TASK: "task",
   SECTION: "section",
+  /** One comment thread of a task, written as the task's link with the thread in its `comment` query. */
+  COMMENT: "comment",
   VERSION: "version",
   PAGE: "page",
-  CALL: "call",
   TURN: "turn",
   AGENT: "agent",
   WORKER: "worker",
   CHANGES: "changes",
+  /** One review thread of an agent's pull request, in its Pull request tab's Conversation or Files changed, by GitHub's node id for the thread. */
+  PULL_REQUEST_THREAD: "pull-request-thread",
   MESSAGE: "message",
   INBOX: "inbox",
   INBOX_ITEM: "inbox-item",
   AUTOMATIONS: "automations",
   AUTOMATION: "automation",
   AUTOMATION_RUN: "automation-run",
-  FACTORY: "factory",
   SETTINGS: "settings",
   PERSON: "person",
-  ISSUE: "issue",
+  /** Chat, on For you, or on one of its channels by the id the service mints it. */
+  CHAT: "chat",
+  /** The Admin place: its Overview, a section, an account's page, or a day's. */
+  ADMIN: "admin",
 } as const;
+
+/** The Admin place's sections a link names past its Overview, which is the place's own link. */
+export const ADMIN_LINK_SECTION = {
+  COST: "cost",
+  RELIABILITY: "reliability",
+  WORKSPACES: "workspaces",
+  USERS: "users",
+} as const;
+
+export type AdminLinkSection = (typeof ADMIN_LINK_SECTION)[keyof typeof ADMIN_LINK_SECTION];
+
+const ADMIN_LINK_SECTIONS: ReadonlySet<string> = new Set(Object.values(ADMIN_LINK_SECTION));
+
+/** Which of a Pull request tab's views a review thread's link opens it in: its Conversation, or Files changed, on its line. */
+export const PULL_REQUEST_THREAD_VIEW = {
+  CONVERSATION: "conversation",
+  FILES: "files",
+} as const;
+
+export type PullRequestThreadView =
+  (typeof PULL_REQUEST_THREAD_VIEW)[keyof typeof PULL_REQUEST_THREAD_VIEW];
+
+const THREAD_VIEWS: ReadonlySet<string> = new Set(Object.values(PULL_REQUEST_THREAD_VIEW));
 
 /** The steps of a link's path, each naming what the step after it is. */
 const STEP = {
@@ -75,22 +119,27 @@ const STEP = {
   TASK: "task",
   VERSION: "version",
   PAGE: "page",
-  CALL: "call",
   WORK: "work",
   AGENT: "agent",
   WORKER: "worker",
   CHANGES: "changes",
+  THREAD: "thread",
   MESSAGE: "message",
   FILES: "files",
   INBOX: "inbox",
   AUTOMATIONS: "automations",
   AUTOMATION: "automation",
   RUN: "run",
-  FACTORY: "factory",
   SETTINGS: "settings",
   PERSON: "person",
-  ISSUE: "issue",
+  CHAT: "chat",
+  ADMIN: "admin",
+  USER: "user",
+  DAY: "day",
 } as const;
+
+/** The query a task's link names one of its comment threads under. */
+const COMMENT_QUERY = "comment";
 
 /** The steps a task is read under: the one written, and the name the unit of work is taking. */
 const TASK_STEPS: ReadonlySet<string> = new Set([STEP.PLAN, STEP.TASK]);
@@ -111,6 +160,9 @@ const SETTINGS_PAGE = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u;
 /** A picture's id as the service mints one, a UUID in lower case (`plan-attachment-link.ts`). */
 const PICTURE_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u;
 
+/** A UTC day as the Admin place's day page names it, `YYYY-MM-DD`; whether it is a real day is `isUtcDayKey`'s. */
+const DAY_KEY = /^\d{4}-\d{2}-\d{2}$/u;
+
 /** A number spelled whole: a version's, or a moment's in epoch milliseconds. */
 const WHOLE = /^\d{1,15}$/u;
 
@@ -129,6 +181,11 @@ const linkPlaceSchema = EffectSchema.Union([
     anchor: EffectSchema.String.check(EffectSchema.isNonEmpty()),
   }),
   EffectSchema.Struct({
+    kind: EffectSchema.Literal(LINK_PLACE.COMMENT),
+    planId: idSchema,
+    threadId: idSchema,
+  }),
+  EffectSchema.Struct({
     kind: EffectSchema.Literal(LINK_PLACE.VERSION),
     planId: idSchema,
     revision: wholeSchema,
@@ -139,9 +196,9 @@ const linkPlaceSchema = EffectSchema.Union([
     pageId: idSchema,
   }),
   EffectSchema.Struct({
-    kind: EffectSchema.Literal(LINK_PLACE.CALL),
-    planId: idSchema,
-    callId: EffectSchema.optionalKey(idSchema),
+    kind: EffectSchema.Literal(LINK_PLACE.PAGE),
+    agentId: idSchema,
+    pageId: idSchema,
   }),
   EffectSchema.Struct({
     kind: EffectSchema.Literal(LINK_PLACE.TURN),
@@ -163,6 +220,13 @@ const linkPlaceSchema = EffectSchema.Union([
     kind: EffectSchema.Literal(LINK_PLACE.CHANGES),
     planId: idSchema,
     agentId: idSchema,
+  }),
+  EffectSchema.Struct({
+    kind: EffectSchema.Literal(LINK_PLACE.PULL_REQUEST_THREAD),
+    planId: idSchema,
+    agentId: idSchema,
+    threadId: idSchema,
+    view: EffectSchema.Literals(Object.values(PULL_REQUEST_THREAD_VIEW)),
   }),
   EffectSchema.Struct({
     kind: EffectSchema.Literal(LINK_PLACE.MESSAGE),
@@ -191,13 +255,29 @@ const linkPlaceSchema = EffectSchema.Union([
     automationId: idSchema,
     runId: idSchema,
   }),
-  EffectSchema.Struct({ kind: EffectSchema.Literal(LINK_PLACE.FACTORY) }),
   EffectSchema.Struct({ kind: EffectSchema.Literal(LINK_PLACE.PERSON), userId: idSchema }),
-  EffectSchema.Struct({ kind: EffectSchema.Literal(LINK_PLACE.ISSUE), issueId: idSchema }),
+  EffectSchema.Struct({
+    kind: EffectSchema.Literal(LINK_PLACE.CHAT),
+    channelId: EffectSchema.optionalKey(idSchema),
+  }),
   EffectSchema.Struct({
     kind: EffectSchema.Literal(LINK_PLACE.SETTINGS),
     page: EffectSchema.optionalKey(
       EffectSchema.String.check(EffectSchema.isPattern(SETTINGS_PAGE)),
+    ),
+  }),
+  // One struct with every view optional, as Settings' and Chat's are, so a
+  // section the schema does not know is refused rather than read as the
+  // Overview by a struct naming none.
+  EffectSchema.Struct({
+    kind: EffectSchema.Literal(LINK_PLACE.ADMIN),
+    section: EffectSchema.optionalKey(EffectSchema.Literals(Object.values(ADMIN_LINK_SECTION))),
+    userId: EffectSchema.optionalKey(idSchema),
+    day: EffectSchema.optionalKey(
+      EffectSchema.String.check(
+        EffectSchema.isPattern(DAY_KEY),
+        EffectSchema.makeFilter((value: string) => isUtcDayKey(value)),
+      ),
     ),
   }),
 ]);
@@ -249,11 +329,20 @@ function parsedUrl(target: string): URL | undefined {
   }
 }
 
-/** The steps after a task's id: a version, a page, the Call tab or a call, a turn, an agent's, or a worker of Luke's. */
+/** Whether the steps after an Inbox item's id name one of its pictures, `files/<picture>`, which opens the item. */
+function namesItemPicture(more: readonly string[]): boolean {
+  const [step, id, ...after] = more;
+  return step === STEP.FILES && id !== undefined && PICTURE_ID.test(id) && after.length === 0;
+}
+
+/** The steps after a task's id: a version, a page, a turn, an agent's, or a worker of Luke's. */
 function taskFields(taskId: string, rest: readonly string[]) {
   const [step, id, ...more] = rest;
-  if (step === STEP.CALL && id === undefined) return { kind: LINK_PLACE.CALL, planId: taskId };
   if (step === STEP.AGENT && id !== undefined) return agentFields(taskId, id, more);
+  // A picture in an item's words opens the item, and nothing of the picture.
+  if (step === STEP.INBOX && id !== undefined && namesItemPicture(more)) {
+    return { kind: LINK_PLACE.INBOX_ITEM, planId: taskId, itemId: id };
+  }
   if (id === undefined || more.length > 0) return undefined;
   switch (step) {
     case STEP.VERSION:
@@ -262,8 +351,6 @@ function taskFields(taskId: string, rest: readonly string[]) {
         : undefined;
     case STEP.PAGE:
       return { kind: LINK_PLACE.PAGE, planId: taskId, pageId: id };
-    case STEP.CALL:
-      return { kind: LINK_PLACE.CALL, planId: taskId, callId: id };
     case STEP.WORK:
       return WHOLE.test(id) ? { kind: LINK_PLACE.TURN, planId: taskId, at: Number(id) } : undefined;
     case STEP.WORKER:
@@ -278,7 +365,7 @@ function taskFields(taskId: string, rest: readonly string[]) {
   }
 }
 
-/** The steps after an agent's id, under its task where it has one: the agent itself, a worker, its Changes, or a message. */
+/** The steps after an agent's id, under its task where it has one: the agent itself, a worker, its Changes, a message, or, on no task, a page of its own. */
 function agentFields(taskId: string | undefined, agentId: string, rest: readonly string[]) {
   const [step, id, ...more] = rest;
   const task = taskId === undefined ? {} : { planId: taskId };
@@ -286,8 +373,14 @@ function agentFields(taskId: string | undefined, agentId: string, rest: readonly
   if (step === STEP.CHANGES && id === undefined && taskId !== undefined) {
     return { kind: LINK_PLACE.CHANGES, planId: taskId, agentId };
   }
+  if (step === STEP.CHANGES && taskId !== undefined) return threadFields(taskId, agentId, rest);
+  if (step === STEP.INBOX && taskId === undefined && id !== undefined && namesItemPicture(more)) {
+    return { kind: LINK_PLACE.INBOX_ITEM, agentId, itemId: id };
+  }
   if (id === undefined || more.length > 0) return undefined;
   if (step === STEP.MESSAGE) return { kind: LINK_PLACE.MESSAGE, ...task, agentId, messageId: id };
+  if (step === STEP.PAGE && taskId === undefined)
+    return { kind: LINK_PLACE.PAGE, agentId, pageId: id };
   if (step === STEP.INBOX && taskId === undefined) {
     return { kind: LINK_PLACE.INBOX_ITEM, agentId, itemId: id };
   }
@@ -295,6 +388,14 @@ function agentFields(taskId: string | undefined, agentId: string, rest: readonly
     return { kind: LINK_PLACE.WORKER, planId: taskId, agentId, callId: id };
   }
   return undefined;
+}
+
+/** A review thread's steps after its agent's Changes, `<view>/thread/<threadId>`; nothing for any other. */
+function threadFields(taskId: string, agentId: string, rest: readonly string[]) {
+  const [, view, step, threadId, ...more] = rest;
+  if (view === undefined || !THREAD_VIEWS.has(view) || step !== STEP.THREAD) return undefined;
+  if (threadId === undefined || more.length > 0) return undefined;
+  return { kind: LINK_PLACE.PULL_REQUEST_THREAD, planId: taskId, agentId, threadId, view };
 }
 
 /** The fields a link's steps after its workspace spell, for the schema to read; nothing where they name no place. */
@@ -316,24 +417,38 @@ function placeFields(steps: readonly string[]) {
       return rest.length === 2 && rest[0] === STEP.RUN
         ? { kind: LINK_PLACE.AUTOMATION_RUN, automationId: id, runId: rest[1] }
         : undefined;
-    case STEP.FACTORY:
-      return id === undefined ? { kind: LINK_PLACE.FACTORY } : undefined;
     case STEP.PERSON:
       return id === undefined || rest.length > 0
         ? undefined
         : { kind: LINK_PLACE.PERSON, userId: id };
-    case STEP.ISSUE:
-      return id === undefined || rest.length > 0
-        ? undefined
-        : { kind: LINK_PLACE.ISSUE, issueId: id };
     case STEP.SETTINGS:
       if (rest.length > 0) return undefined;
       return id === undefined
         ? { kind: LINK_PLACE.SETTINGS }
         : { kind: LINK_PLACE.SETTINGS, page: id };
+    case STEP.CHAT:
+      if (rest.length > 0) return undefined;
+      return id === undefined
+        ? { kind: LINK_PLACE.CHAT }
+        : { kind: LINK_PLACE.CHAT, channelId: id };
+    case STEP.ADMIN:
+      return adminFields(id, rest);
     default:
       return undefined;
   }
+}
+
+/** The Admin place's fields past its step: its Overview, a section, an account's page, or a day's. */
+function adminFields(step: string | undefined, rest: readonly string[]) {
+  if (step === undefined) return { kind: LINK_PLACE.ADMIN };
+  const [id, ...more] = rest;
+  if (more.length > 0) return undefined;
+  if (step === STEP.USER)
+    return id === undefined ? undefined : { kind: LINK_PLACE.ADMIN, userId: id };
+  if (step === STEP.DAY) return id === undefined ? undefined : { kind: LINK_PLACE.ADMIN, day: id };
+  return id === undefined && ADMIN_LINK_SECTIONS.has(step)
+    ? { kind: LINK_PLACE.ADMIN, section: step }
+    : undefined;
 }
 
 /**
@@ -361,15 +476,14 @@ function placePath(place: LinkPlace): readonly string[] {
   switch (place.kind) {
     case LINK_PLACE.TASK:
     case LINK_PLACE.SECTION:
+    case LINK_PLACE.COMMENT:
       return [STEP.PLAN, place.planId];
     case LINK_PLACE.VERSION:
       return [STEP.PLAN, place.planId, STEP.VERSION, String(place.revision)];
     case LINK_PLACE.PAGE:
-      return [STEP.PLAN, place.planId, STEP.PAGE, place.pageId];
-    case LINK_PLACE.CALL:
-      return place.callId === undefined
-        ? [STEP.PLAN, place.planId, STEP.CALL]
-        : [STEP.PLAN, place.planId, STEP.CALL, place.callId];
+      return "planId" in place
+        ? [STEP.PLAN, place.planId, STEP.PAGE, place.pageId]
+        : [STEP.AGENT, place.agentId, STEP.PAGE, place.pageId];
     case LINK_PLACE.TURN:
       return [STEP.PLAN, place.planId, STEP.WORK, String(place.at)];
     case LINK_PLACE.AGENT:
@@ -380,6 +494,14 @@ function placePath(place: LinkPlace): readonly string[] {
         : [...agentPath(place.planId, place.agentId), STEP.WORKER, place.callId];
     case LINK_PLACE.CHANGES:
       return [...agentPath(place.planId, place.agentId), STEP.CHANGES];
+    case LINK_PLACE.PULL_REQUEST_THREAD:
+      return [
+        ...agentPath(place.planId, place.agentId),
+        STEP.CHANGES,
+        place.view,
+        STEP.THREAD,
+        place.threadId,
+      ];
     case LINK_PLACE.MESSAGE:
       return [...agentPath(place.planId, place.agentId), STEP.MESSAGE, place.messageId];
     case LINK_PLACE.INBOX:
@@ -394,14 +516,16 @@ function placePath(place: LinkPlace): readonly string[] {
       return [STEP.AUTOMATION, place.automationId];
     case LINK_PLACE.AUTOMATION_RUN:
       return [STEP.AUTOMATION, place.automationId, STEP.RUN, place.runId];
-    case LINK_PLACE.FACTORY:
-      return [STEP.FACTORY];
     case LINK_PLACE.PERSON:
       return [STEP.PERSON, place.userId];
-    case LINK_PLACE.ISSUE:
-      return [STEP.ISSUE, place.issueId];
     case LINK_PLACE.SETTINGS:
       return place.page === undefined ? [STEP.SETTINGS] : [STEP.SETTINGS, place.page];
+    case LINK_PLACE.CHAT:
+      return place.channelId === undefined ? [STEP.CHAT] : [STEP.CHAT, place.channelId];
+    case LINK_PLACE.ADMIN:
+      if (place.userId !== undefined) return [STEP.ADMIN, STEP.USER, place.userId];
+      if (place.day !== undefined) return [STEP.ADMIN, STEP.DAY, place.day];
+      return place.section === undefined ? [STEP.ADMIN] : [STEP.ADMIN, place.section];
   }
 }
 
@@ -426,6 +550,10 @@ export function linkOf(place: LinkPlace, workspace: string): string {
       where,
     );
   }
+  if (place.kind === LINK_PLACE.COMMENT) {
+    const task = encodeMention({ kind: MENTION_KIND.TASK, taskId: place.planId }, where);
+    return `${task}?${new URLSearchParams({ [COMMENT_QUERY]: place.threadId })}`;
+  }
   return [LINK_ORIGIN, workspace, ...placePath(place)]
     .map((step, index) => (index === 0 ? step : encodedStep(step)))
     .join("/");
@@ -448,10 +576,18 @@ export function readLink(target: string): ReadLink | undefined {
   if (!after.every((step): step is string => step !== undefined && step !== "")) return undefined;
   // A task's own link, or a section's, is read by the codec that writes a mention of either.
   const [step, taskId, ...rest] = after;
+  const taskOwn =
+    step !== undefined && TASK_STEPS.has(step) && taskId !== undefined && rest.length === 0;
+  // Note that a task's link naming one of its comment threads opens the thread; any other query is the address's own, which the place has no use for.
+  const thread = url.searchParams.getAll(COMMENT_QUERY);
   const place =
-    step !== undefined && TASK_STEPS.has(step) && taskId !== undefined && rest.length === 0
-      ? taskLink(workspace, taskId, url.hash)
-      : Option.getOrUndefined(readPlace(placeFields(after)));
+    taskOwn && thread.length === 1
+      ? Option.getOrUndefined(
+          readPlace({ kind: LINK_PLACE.COMMENT, planId: taskId, threadId: thread[0] }),
+        )
+      : taskOwn
+        ? taskLink(workspace, taskId, url.hash)
+        : Option.getOrUndefined(readPlace(placeFields(after)));
   return place === undefined ? undefined : { workspace, place };
 }
 

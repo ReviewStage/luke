@@ -2,29 +2,34 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
-import { user } from "@luke/database/schemas/auth";
+import { session, user } from "@luke/database/schemas/auth";
 import { HOSTED_SERVICE_PATH } from "@luke/features";
-import { repositoryPinsAnswerSchema } from "@luke/features/task-wire";
+import { repositoryPinsWrittenSchema } from "@luke/features/task-wire";
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import { makeSignature } from "better-auth/crypto";
-import { Clock, Effect, Layer, Option, Result } from "effect";
-import { HttpRouter } from "effect/http";
-import { SqlClient } from "effect/sql";
+import { eq } from "drizzle-orm";
+import { type Context, Effect, Option, Result } from "effect";
+import { TestClock } from "effect/testing";
 import { afterEach, vi } from "vitest";
-import { repositoryPinsApp } from "../github/repository-pins-app.js";
+import { repositoryPinsProcedures } from "../github/repository-pins-procedures.js";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import type { UserIdResolver } from "../http/http-effect.js";
+import { hostedFetch } from "../orpc/handler.js";
+import type { WebServices } from "../runtime.js";
 import { openWorkspacePlugin } from "../testing/workspace-plugin.js";
 import { auth } from "./auth.js";
+import { SESSION_COOKIE_CACHE } from "./auth-policy.js";
 import {
   hostedUserId,
+  relayUserId,
   requestUserId,
   resolveHostedBearerUserId,
   resolveHostedUserId,
   type SessionEndpoint,
   type UserInfoEndpoint,
 } from "./bearer.js";
+import { BEARER_CALLER_TTL, bearerCallersLayer } from "./bearer-callers.js";
 
 /**
  * The account a hosted request names: its OAuth bearer where it carries
@@ -46,16 +51,44 @@ const ADA_BEARER = "Bearer oauth-token-of-ada";
 /** A secret no deployment of this suite signs under. */
 const FOREIGN_SECRET = "another-deployment-secret-with-enough-length";
 
+/** Another account's OAuth token, for the faked auth service. */
+const GRACE_BEARER = "Bearer oauth-token-of-grace";
+
 /** A userinfo endpoint that knows no token. */
 const NO_TOKEN: UserInfoEndpoint = () => Effect.succeed(undefined);
 
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.useRealTimers();
 });
 
 function request(headers: Record<string, string> = {}): Request {
   return new Request("https://luke.test/api/voice/mint", { method: "POST", headers });
 }
+
+/**
+ * The deployment's auth service, faked at its boundary: Better Auth's own
+ * userinfo answers the subject each token it holds names, and refuses any
+ * other as it refuses an unknown or revoked one. A test issues and revokes
+ * tokens on `tokens` as it goes; with `revokeAsAnswered`, a token is revoked
+ * the moment it is answered, so only the first ask for it ever names anyone.
+ */
+function fakeAuthService(tokens: Map<string, string>, revokeAsAnswered = false) {
+  vi.spyOn(auth.api, "oauth2UserInfo").mockImplementation(
+    // SAFETY: `hostedUserInfo` reads `sub` alone, which the fake answers as the endpoint does.
+    (async (context: { headers: Headers }) => {
+      const authorization = context.headers.get("authorization") ?? "";
+      const sub = tokens.get(authorization);
+      if (sub === undefined) throw new Error("invalid_token");
+      if (revokeAsAnswered) tokens.delete(authorization);
+      return { sub };
+    }) as unknown as typeof auth.api.oauth2UserInfo,
+  );
+}
+
+/** The account a bearer names, resolved as the Mac's held read resolves it, on the instance's kept callers. */
+const bearerUserId = (authorization: string) =>
+  resolveHostedBearerUserId(request({ authorization }));
 
 /** A read of an account route carrying the headers given. */
 function read(headers: Record<string, string>): Request {
@@ -104,25 +137,18 @@ const openAccounts = Effect.gen(function* () {
   };
 });
 
-/** The repositories one request to the pins group answers as pinned, failing the test where it answers anything else. */
+/** The repositories one request to the pins resource answers as pinned, failing the test where it answers anything else. */
 const pinnedBy = (resolveUserId: UserIdResolver, request: Request) =>
   Effect.gen(function* () {
-    // The handler runs on the router's own fiber, so it is handed the test's clock: a pin's instant is read from it.
-    const services = Layer.mergeAll(
-      Layer.succeed(SqlClient.SqlClient, yield* SqlClient.SqlClient),
-      Layer.succeed(Database, yield* Database),
-      Layer.succeed(Clock.Clock, yield* Clock.Clock),
-    );
-    const { handler, dispose } = HttpRouter.toWebHandler(
-      repositoryPinsApp({ resolveUserId }).pipe(HttpRouter.provideRequest(services)),
-      { disableLogger: true },
-    );
-    const response = yield* Effect.promise(() => handler(request));
-    // SAFETY: the group answers JSON; the test reads it as the wire value it is.
+    // The procedure runs on the services handed to it, the test's clock among them: a pin's instant is read from it.
+    // SAFETY: the pins procedures yield the database and the clock alone, which the test's own context holds.
+    const services = (yield* Effect.context<never>()) as Context.Context<WebServices>;
+    const handle = hostedFetch({ repositoryPins: repositoryPinsProcedures({ resolveUserId }) });
+    const response = yield* Effect.promise(() => handle(request, services));
+    // SAFETY: the route answers JSON; the test reads it as the wire value it is.
     const body = (yield* Effect.promise(() => response.json())) as WireBoundaryInput;
-    yield* Effect.promise(() => dispose());
     assert.equal(response.status, HOSTED_HTTP_STATUS.OK, JSON.stringify(body));
-    const answered = readEither(repositoryPinsAnswerSchema)(unparsedWire(body));
+    const answered = readEither(repositoryPinsWrittenSchema)(unparsedWire(body));
     if (Result.isFailure(answered))
       return assert.fail(`not the wire's: ${answered.failure.refusal}`);
     return answered.success.pins.map((pin) => pin.repository);
@@ -185,6 +211,28 @@ it.effect("a request with no Authorization is the account its browser session co
       "Ada's own session, signed under a secret the deployment never held",
     );
   }),
+);
+
+it.effect(
+  "a relay's upgrade names the account the desktop's bearer names, or the one a page's cookie names",
+  () =>
+    Effect.gen(function* () {
+      const { ada, grace, graceCookie, userInfo, plugin } = yield* openAccounts;
+      const named = (credential: Parameters<typeof relayUserId>[0]) =>
+        relayUserId(credential, userInfo, plugin.resolveSessionUserId);
+
+      assert.deepEqual(yield* named({ bearer: ADA_BEARER }), Option.some(ada));
+      assert.deepEqual(yield* named({ bearer: GRACE_BEARER }), Option.none());
+      assert.deepEqual(
+        yield* named({ page: new Headers({ cookie: graceCookie }) }),
+        Option.some(grace),
+      );
+      assert.deepEqual(
+        yield* named({ page: new Headers({ cookie: yield* signedElsewhere(graceCookie) }) }),
+        Option.none(),
+        "Grace's own session, signed under a secret the deployment never held",
+      );
+    }),
 );
 
 it.effect("a request with no cookie, or a blank one, asks the auth service for no session", () =>
@@ -287,7 +335,7 @@ it.effect(
           resolveUserId,
           new Request(new URL(HOSTED_SERVICE_PATH.REPOSITORY_PINS, ORIGIN), {
             method: change === undefined ? "GET" : "PUT",
-            headers: { cookie },
+            headers: { cookie, "content-type": "application/json" },
             ...(change === undefined ? undefined : { body: JSON.stringify(change) }),
           }),
         ).pipe(Effect.provide(plugin.database));
@@ -298,5 +346,91 @@ it.effect(
       assert.deepEqual(yield* pins(graceCookie), [], "another account's cookie reads none");
       assert.deepEqual(yield* pins(graceCookie, { repository: "acme/relay", pinned: false }), []);
       assert.deepEqual(yield* pins(adaCookie), ["acme/relay"], "and unpins none of them");
+    }),
+);
+
+it.effect(
+  "a bearer resolved within the TTL is answered by the instance, and asked afresh after it",
+  () =>
+    Effect.gen(function* () {
+      const tokens = new Map([[ADA_BEARER, "user-ada"]]);
+      fakeAuthService(tokens, true);
+
+      assert.deepEqual(yield* bearerUserId(ADA_BEARER), Option.some("user-ada"));
+      // The trade-off: the token, revoked as it was answered, still resolves on this instance until its TTL runs out.
+      assert.deepEqual(yield* bearerUserId(ADA_BEARER), Option.some("user-ada"));
+      yield* TestClock.adjust(BEARER_CALLER_TTL);
+      assert.deepEqual(yield* bearerUserId(ADA_BEARER), Option.none());
+    }).pipe(Effect.provide(bearerCallersLayer)),
+);
+
+it.effect("requests for one bearer that miss together share the one ask", () =>
+  Effect.gen(function* () {
+    const tokens = new Map([[ADA_BEARER, "user-ada"]]);
+    fakeAuthService(tokens, true);
+
+    const resolved = yield* Effect.all(
+      Array.from({ length: 5 }, () => bearerUserId(ADA_BEARER)),
+      { concurrency: "unbounded" },
+    );
+    assert.deepEqual(
+      resolved,
+      Array.from({ length: 5 }, () => Option.some("user-ada")),
+    );
+  }).pipe(Effect.provide(bearerCallersLayer)),
+);
+
+it.effect("a refused bearer is asked again every time, so a token issued since works at once", () =>
+  Effect.gen(function* () {
+    const tokens = new Map<string, string>();
+    fakeAuthService(tokens);
+
+    assert.deepEqual(yield* bearerUserId(ADA_BEARER), Option.none());
+    tokens.set(ADA_BEARER, "user-ada");
+    assert.deepEqual(yield* bearerUserId(ADA_BEARER), Option.some("user-ada"));
+  }).pipe(Effect.provide(bearerCallersLayer)),
+);
+
+it.effect("two bearers never answer for each other on one instance", () =>
+  Effect.gen(function* () {
+    const tokens = new Map([
+      [ADA_BEARER, "user-ada"],
+      [GRACE_BEARER, "user-grace"],
+    ]);
+    fakeAuthService(tokens, true);
+
+    // The second round is answered from what the instance kept, the auth service having revoked both as it answered.
+    for (const _round of [1, 2]) {
+      assert.deepEqual(yield* bearerUserId(ADA_BEARER), Option.some("user-ada"));
+      assert.deepEqual(yield* bearerUserId(GRACE_BEARER), Option.some("user-grace"));
+      assert.deepEqual(yield* bearerUserId("Bearer oauth-token-of-nobody"), Option.none());
+    }
+  }).pipe(Effect.provide(bearerCallersLayer)),
+);
+
+it.effect(
+  "a browser's session reads from its cookie cache for at most the cache's age after it is revoked",
+  () =>
+    Effect.gen(function* () {
+      // Better Auth reads the instant off `Date`, so the test holds that clock alone.
+      vi.useFakeTimers({ toFake: ["Date"], now: Date.UTC(2026, 9, 20) });
+      const { plugin, ada, adaCookie, resolveUserId } = yield* openAccounts;
+      const minted = yield* Effect.promise(() =>
+        plugin.api.getSession({ headers: new Headers({ cookie: adaCookie }), returnHeaders: true }),
+      );
+      const cached = minted.headers
+        .getSetCookie()
+        .map((cookie) => cookie.slice(0, cookie.indexOf(";")))
+        .find((cookie) => cookie.includes("session_data="));
+      assert.ok(cached, "a session read hands the browser its cache cookie");
+      yield* Database.use((db) => db.delete(session).where(eq(session.userId, ada))).pipe(
+        Effect.provide(plugin.database),
+      );
+      const withCache = read({ cookie: `${adaCookie}; ${cached}` });
+
+      assert.deepEqual(yield* resolveUserId(read({ cookie: adaCookie })), Option.none());
+      assert.deepEqual(yield* resolveUserId(withCache), Option.some(ada));
+      vi.advanceTimersByTime(SESSION_COOKIE_CACHE.cookieCache.maxAge * 1000 + 1);
+      assert.deepEqual(yield* resolveUserId(withCache), Option.none());
     }),
 );

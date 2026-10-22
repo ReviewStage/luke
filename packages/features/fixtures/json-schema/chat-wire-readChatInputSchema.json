@@ -3,7 +3,7 @@
   "properties": {
     "channel": {
       "type": "string",
-      "maxLength": 81
+      "maxLength": 512
     },
     "thread": {
       "type": "number",

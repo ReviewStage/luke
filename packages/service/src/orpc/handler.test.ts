@@ -1,0 +1,383 @@
+/**
+ * handler.test.ts -- an oRPC procedure answers the bytes an old route group answered.
+ *
+ * The handler's proof that an oRPC procedure answers the bytes an old route
+ * group answered: the same request is put to a test-only router behind
+ * `hostedFetch` and to an `HttpRouter` group answering the same value the
+ * way the old groups did, and the two answers are compared whole: status,
+ * the two headers a caller reads, and the body's bytes. The cases are the
+ * ones a later resource copies: an answer whose wire schema transforms (a
+ * date the wire carries as text, an id folded to lower case), a refusal
+ * carrying more than its slug, an input its schema refuses, and a defect.
+ */
+
+import assert from "node:assert/strict";
+import "@orpc/experimental-effect/extensions/effect";
+import { it } from "@effect/vitest";
+import { bodyCap, HOSTED_ERRORS } from "@luke/features/contract";
+import { REPOSITORY_UNREACHED } from "@luke/features/repository-reach-wire";
+import { HTTP_METHOD } from "@luke/wire";
+import { oc } from "@orpc/contract";
+import { openapi } from "@orpc/openapi";
+import { implement } from "@orpc/server";
+import { Context, Effect, Layer, Schema, SchemaTransformation } from "effect";
+import { HttpRouter } from "effect/http";
+import { HOSTED_HTTP_STATUS } from "../http/http.js";
+import {
+  HOSTED_REFUSAL,
+  hostedJsonResponse,
+  hostedRefusing,
+  planLimitReached,
+  repositoryNotReachable,
+} from "../http/http-effect.js";
+import type { WebServices } from "../runtime.js";
+import type { HostedContext } from "./base.js";
+import { HOSTED_BODY_CEILING_BYTES, hostedFetch } from "./handler.js";
+
+const ORIGIN = "https://luke.test";
+const WHEN_PATH = "/api/test/{id}/when";
+const REACH_PATH = "/api/test/reach";
+const ITEMS_PATH = "/api/test/items";
+const DEFECT_PATH = "/api/test/defect";
+const CAPPED_PATH = "/api/test/capped";
+const LIMITED_PATH = "/api/test/limited";
+
+/** A small cap of the capped procedure's own, in bytes, well under the handler's ceiling. */
+const CAP = 64;
+
+/** A wire answer whose `Type` is not its `Encoded`: a date carried as ISO text, and an id read folded to lower case. */
+const whenSchema = Schema.Struct({
+  id: Schema.String.pipe(Schema.decodeTo(Schema.String, SchemaTransformation.toLowerCase())),
+  at: Schema.DateFromString,
+});
+
+const itemSchema = Schema.Struct({ name: Schema.String });
+
+const AT = new Date(Date.UTC(2026, 9, 18, 12, 30));
+const UNREACHED = {
+  reason: REPOSITORY_UNREACHED.OTHER_OWNER,
+  repository: "acme/app",
+  connectedTo: "someone-else",
+} as const;
+
+const RESETS_AT = Date.UTC(2026, 9, 21, 15, 40);
+
+const testContract = {
+  when: oc
+    .errors(HOSTED_ERRORS)
+    .meta(openapi({ method: HTTP_METHOD.GET, path: WHEN_PATH }))
+    .input(Schema.Struct({ id: Schema.String }))
+    .output(Schema.flip(whenSchema)),
+  reach: oc
+    .errors(HOSTED_ERRORS)
+    .meta(openapi({ method: HTTP_METHOD.GET, path: REACH_PATH }))
+    .output(Schema.flip(itemSchema)),
+  limited: oc
+    .errors(HOSTED_ERRORS)
+    .meta(openapi({ method: HTTP_METHOD.GET, path: LIMITED_PATH }))
+    .output(Schema.flip(itemSchema)),
+  create: oc
+    .errors(HOSTED_ERRORS)
+    .meta(openapi({ method: HTTP_METHOD.POST, path: ITEMS_PATH }))
+    .input(itemSchema)
+    .output(Schema.flip(itemSchema)),
+  defect: oc
+    .errors(HOSTED_ERRORS)
+    .meta(openapi({ method: HTTP_METHOD.GET, path: DEFECT_PATH }))
+    .output(Schema.flip(itemSchema)),
+  capped: oc
+    .errors(HOSTED_ERRORS)
+    .meta(openapi({ method: HTTP_METHOD.POST, path: CAPPED_PATH }), bodyCap(CAP))
+    .input(itemSchema)
+    .output(Schema.flip(itemSchema)),
+};
+
+const test = implement(testContract).$context<HostedContext>();
+
+const testRouter = test.router({
+  when: test.when.handler(({ input }) => ({ id: input.id.toLowerCase(), at: AT })),
+  reach: test.reach.effect(function* () {
+    return yield* Effect.fail(repositoryNotReachable(UNREACHED));
+  }),
+  limited: test.limited.effect(function* () {
+    return yield* Effect.fail(planLimitReached(RESETS_AT));
+  }),
+  create: test.create.handler(({ input }) => ({ name: input.name })),
+  defect: test.defect.effect(function* () {
+    return yield* Effect.die(new Error("a defect"));
+  }),
+  capped: test.capped.handler(({ input }) => ({ name: input.name })),
+});
+
+/** The route groups' way of answering the same values: `hostedJsonResponse`, `hostedRefusing`, and a defect left to the platform. */
+const oldGroup = Layer.mergeAll(
+  HttpRouter.add(
+    HTTP_METHOD.GET,
+    "/api/test/:id/when",
+    hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { id: "abc", at: AT }),
+  ),
+  HttpRouter.add(
+    HTTP_METHOD.GET,
+    REACH_PATH,
+    hostedRefusing(Effect.fail(repositoryNotReachable(UNREACHED))),
+  ),
+  HttpRouter.add(
+    HTTP_METHOD.GET,
+    LIMITED_PATH,
+    hostedRefusing(Effect.fail(planLimitReached(RESETS_AT))),
+  ),
+  HttpRouter.add(
+    HTTP_METHOD.POST,
+    ITEMS_PATH,
+    hostedRefusing(Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST)),
+  ),
+  HttpRouter.add(HTTP_METHOD.GET, DEFECT_PATH, Effect.die(new Error("a defect"))),
+);
+
+interface Bytes {
+  readonly status: number;
+  readonly contentType: string | null;
+  readonly cacheControl: string | null;
+  readonly text: string;
+}
+
+const read = (response: Response) =>
+  Effect.map(
+    Effect.promise(() => response.text()),
+    (text): Bytes => ({
+      status: response.status,
+      contentType: response.headers.get("content-type"),
+      cacheControl: response.headers.get("cache-control"),
+      text,
+    }),
+  );
+
+/** The same request answered by the oRPC router and by the old group. */
+const bothAnswer = (init: { path: string; method?: string; body?: string }) =>
+  Effect.gen(function* () {
+    const request = () => {
+      const requestInit: RequestInit = { method: init.method ?? HTTP_METHOD.GET };
+      if (init.body !== undefined) {
+        requestInit.body = init.body;
+        requestInit.headers = { "content-type": "application/json" };
+      }
+      return new Request(new URL(init.path, ORIGIN), requestInit);
+    };
+    // SAFETY: the test procedures yield no service, so an empty context stands in for the web runtime's.
+    const services = Context.empty() as Context.Context<WebServices>;
+    const handle = hostedFetch(testRouter);
+    const orpc = yield* read(yield* Effect.promise(() => handle(request(), services)));
+    const { handler, dispose } = HttpRouter.toWebHandler(oldGroup, { disableLogger: true });
+    const old = yield* read(yield* Effect.promise(() => handler(request())));
+    yield* Effect.promise(() => dispose());
+    return { orpc, old };
+  });
+
+it.effect(
+  "an answer whose wire schema transforms is written in its wire encoding, the bytes hostedJsonResponse wrote",
+  () =>
+    Effect.gen(function* () {
+      const { orpc, old } = yield* bothAnswer({ path: "/api/test/ABC/when" });
+      assert.deepEqual(orpc, old);
+      assert.equal(orpc.text, '{"id":"abc","at":"2026-10-18T12:30:00.000Z"}');
+    }),
+);
+
+it.effect(
+  "a repository out of reach is refused with why, beside the slug at the top level, as a route group refuses it",
+  () =>
+    Effect.gen(function* () {
+      const { orpc, old } = yield* bothAnswer({ path: REACH_PATH });
+      assert.deepEqual(orpc, old);
+      assert.equal(orpc.status, HOSTED_HTTP_STATUS.FORBIDDEN);
+      assert.deepEqual(JSON.parse(orpc.text), {
+        error: "repository-not-reachable",
+        unreached: UNREACHED,
+      });
+    }),
+);
+
+it.effect(
+  "a plan's reached limit is refused with when it resets, beside the slug at the top level, as a route group refuses it",
+  () =>
+    Effect.gen(function* () {
+      const { orpc, old } = yield* bothAnswer({ path: LIMITED_PATH });
+      assert.deepEqual(orpc, old);
+      assert.deepEqual(JSON.parse(orpc.text), {
+        error: "agent-plan-limit-reached",
+        resetsAt: RESETS_AT,
+      });
+    }),
+);
+
+it.effect("an input its schema refuses is the hosted vocabulary's invalid request", () =>
+  Effect.gen(function* () {
+    const { orpc, old } = yield* bothAnswer({
+      path: ITEMS_PATH,
+      method: HTTP_METHOD.POST,
+      body: JSON.stringify({ name: 7 }),
+    });
+    assert.deepEqual(orpc, old);
+    assert.equal(orpc.text, '{"error":"invalid-request"}');
+  }),
+);
+
+it.effect("a defect is a bare 500, as the platform's web handler answered one", () =>
+  Effect.gen(function* () {
+    const { orpc, old } = yield* bothAnswer({ path: DEFECT_PATH });
+    assert.deepEqual(orpc, old);
+    assert.equal(orpc.status, HOSTED_HTTP_STATUS.INTERNAL_ERROR);
+  }),
+);
+
+it.effect(
+  "every answer, a success, a refusal, a defect, a path under another method and a path no procedure serves alike, is never sniffed and is no other site's to load",
+  () =>
+    Effect.gen(function* () {
+      // SAFETY: the test procedures yield no service, so an empty context stands in for the web runtime's.
+      const services = Context.empty() as Context.Context<WebServices>;
+      const handle = hostedFetch(testRouter);
+      for (const [path, status] of [
+        ["/api/test/ABC/when", HOSTED_HTTP_STATUS.OK],
+        [REACH_PATH, HOSTED_HTTP_STATUS.FORBIDDEN],
+        [DEFECT_PATH, HOSTED_HTTP_STATUS.INTERNAL_ERROR],
+        [ITEMS_PATH, HOSTED_HTTP_STATUS.METHOD_NOT_ALLOWED],
+        ["/api/test/nowhere", HOSTED_HTTP_STATUS.NOT_FOUND],
+      ] as const) {
+        const request = new Request(new URL(path, ORIGIN), { method: HTTP_METHOD.GET });
+        const answered = yield* Effect.promise(() => handle(request, services));
+        assert.equal(answered.status, status, path);
+        assert.equal(answered.headers.get("x-content-type-options"), "nosniff", path);
+        assert.equal(answered.headers.get("cross-origin-resource-policy"), "same-origin", path);
+      }
+    }),
+);
+
+it.effect(
+  "a body past the handler's ceiling is refused as too large while it streams in, with no length stated, as readBodyBytesEffect refused one",
+  () =>
+    Effect.gen(function* () {
+      const past = new TextEncoder().encode(
+        JSON.stringify({ name: "x".repeat(HOSTED_BODY_CEILING_BYTES) }),
+      );
+      // SAFETY: Node's fetch takes a streamed body only half-duplex, which the DOM's RequestInit does not name.
+      const request = new Request(new URL(ITEMS_PATH, ORIGIN), {
+        method: HTTP_METHOD.POST,
+        headers: { "content-type": "application/json" },
+        body: new ReadableStream({
+          start(controller) {
+            controller.enqueue(past);
+            controller.close();
+          },
+        }),
+        duplex: "half",
+      } as RequestInit);
+      // SAFETY: the test procedures yield no service, so an empty context stands in for the web runtime's.
+      const services = Context.empty() as Context.Context<WebServices>;
+      const answered = yield* read(
+        yield* Effect.promise(() => hostedFetch(testRouter)(request, services)),
+      );
+      assert.deepEqual(answered, {
+        status: HOSTED_HTTP_STATUS.PAYLOAD_TOO_LARGE,
+        contentType: "application/json",
+        cacheControl: null,
+        text: '{"error":"request-too-large"}',
+      });
+    }),
+);
+
+/** A JSON body of exactly `bytes` bytes naming an item, its name padded to fit. */
+const itemBodyOf = (bytes: number): string => {
+  const frame = JSON.stringify({ name: "" }).length;
+  return JSON.stringify({ name: "x".repeat(bytes - frame) });
+};
+
+/** A body sent in chunks of at most `chunkBytes`, as a chunked upload arrives, with no length stated. */
+const chunkedBody = (text: string, chunkBytes: number): ReadableStream<Uint8Array> => {
+  const bytes = new TextEncoder().encode(text);
+  return new ReadableStream({
+    start(controller) {
+      for (let at = 0; at < bytes.length; at += chunkBytes) {
+        controller.enqueue(bytes.subarray(at, at + chunkBytes));
+      }
+      controller.close();
+    },
+  });
+};
+
+/** The capped procedure's answer to a POST of the body given, under the headers given beside its JSON type. */
+const cappedAnswer = (
+  body: string | ReadableStream<Uint8Array>,
+  headers: Record<string, string> = {},
+) =>
+  Effect.gen(function* () {
+    const init = {
+      method: HTTP_METHOD.POST,
+      headers: { "content-type": "application/json", ...headers },
+      body,
+      duplex: "half",
+    };
+    // SAFETY: Node's fetch takes a streamed body only half-duplex, which the DOM's RequestInit does not name.
+    const request = new Request(new URL(CAPPED_PATH, ORIGIN), init as RequestInit);
+    // SAFETY: the test procedures yield no service, so an empty context stands in for the web runtime's.
+    const services = Context.empty() as Context.Context<WebServices>;
+    return yield* read(yield* Effect.promise(() => hostedFetch(testRouter)(request, services)));
+  });
+
+const TOO_LARGE: Bytes = {
+  status: HOSTED_HTTP_STATUS.PAYLOAD_TOO_LARGE,
+  contentType: "application/json",
+  cacheControl: null,
+  text: '{"error":"request-too-large"}',
+};
+
+it.effect(
+  "a chunked body that states no length is counted against its procedure's own cap as it is read, and refused once past it",
+  () =>
+    Effect.gen(function* () {
+      const past = itemBodyOf(CAP + 1);
+      assert.deepEqual(yield* cappedAnswer(chunkedBody(past, 8)), TOO_LARGE);
+      const within = itemBodyOf(CAP);
+      const answered = yield* cappedAnswer(chunkedBody(within, 8));
+      assert.equal(answered.status, HOSTED_HTTP_STATUS.OK);
+      assert.equal(answered.text, within);
+    }),
+);
+
+it.effect(
+  "a body whose content-length understates it is held to the bytes it carries, not the length it states",
+  () =>
+    Effect.gen(function* () {
+      const past = itemBodyOf(CAP * 4);
+      assert.deepEqual(yield* cappedAnswer(past, { "content-length": "16" }), TOO_LARGE);
+    }),
+);
+
+it.effect(
+  "a body at its procedure's cap is answered, and one byte past it is refused as too large, its length stated or not",
+  () =>
+    Effect.gen(function* () {
+      const at = itemBodyOf(CAP);
+      const past = itemBodyOf(CAP + 1);
+      const answered = yield* cappedAnswer(at, { "content-length": String(CAP) });
+      assert.equal(answered.status, HOSTED_HTTP_STATUS.OK);
+      assert.equal(answered.text, at);
+      assert.deepEqual(yield* cappedAnswer(past, { "content-length": String(CAP + 1) }), TOO_LARGE);
+      assert.deepEqual(yield* cappedAnswer(chunkedBody(past, CAP)), TOO_LARGE);
+    }),
+);
+
+it.effect(
+  "a body past its cap is refused as too large before it is parsed, however malformed, as the old groups refused one",
+  () =>
+    Effect.gen(function* () {
+      const malformed = "{".repeat(CAP + 1);
+      assert.deepEqual(
+        yield* cappedAnswer(malformed, { "content-length": String(CAP + 1) }),
+        TOO_LARGE,
+      );
+      assert.deepEqual(yield* cappedAnswer(chunkedBody(malformed, 8)), TOO_LARGE);
+      const within = yield* cappedAnswer("{".repeat(CAP));
+      assert.equal(within.text, '{"error":"invalid-request"}');
+    }),
+);

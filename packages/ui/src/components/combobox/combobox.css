@@ -96,7 +96,8 @@
     color: var(--luke-color-text-muted);
   }
 
-  .luke-combobox-option-glyph svg {
+  /* A glyph or a picture, such as a repository owner's, stands at the slot's size. */
+  .luke-combobox-option-glyph :is(svg, img) {
     width: 16px;
     height: 16px;
   }

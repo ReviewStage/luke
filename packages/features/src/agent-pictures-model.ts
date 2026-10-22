@@ -6,31 +6,33 @@ import {
   type WireRecord,
   type WireValue,
 } from "@luke/wire";
+import { AGENT_TOOL } from "./agent-tools.js";
 import {
+  CONVERSATION_MEDIA_TYPE,
+  type ConversationMediaType,
   type KeptPicture,
   PICTURE_OMISSION,
   type PictureOmission,
 } from "./conversation-picture-wire.js";
-import { INBOX_IMAGE_TYPE, type InboxImageType } from "./inbox-wire.js";
 
 /**
- * agent-pictures-model.ts -- the pictures an agent's transcript names, read from its stored calls: the set a `show_image` call showed, and the pictures an integration's call answered, each by the id the service kept it under.
+ * agent-pictures-model.ts -- the pictures an agent's transcript names, read from its stored calls: the set a `show_image` call showed, the pictures an integration's call answered, and the screenshots a `browser` call took, each by the id the service kept it under.
  *
  * The service keeps a picture beside the transcript and writes its id in the
  * stored output in the bytes' place (`brain-host/relay-pictures.ts`,
- * `coder-host/show-image.ts`), so what is read here is ids, sizes, and
+ * `coder-host/show-image.ts`, `browser/browser-tool.ts`), so what is read here is ids, sizes, and
  * words; the bytes are read apart, through the window's picture cache. A
  * picture the service did not keep is named by why, with its size.
  */
 
-const PICTURE_TYPES: ReadonlySet<string> = new Set(Object.values(INBOX_IMAGE_TYPE));
+const PICTURE_TYPES: ReadonlySet<string> = new Set(Object.values(CONVERSATION_MEDIA_TYPE));
 
 const OMISSIONS: ReadonlySet<string> = new Set(Object.values(PICTURE_OMISSION));
 
 /** The kinds of block an MCP tool answers that can carry a picture. */
 const PICTURE_BLOCK = { IMAGE: "image", RESOURCE: "resource" } as const;
 
-function isPictureType(value: UnparsedWireValue): value is InboxImageType {
+function isPictureType(value: UnparsedWireValue): value is ConversationMediaType {
   return isWireString(value) && PICTURE_TYPES.has(value);
 }
 
@@ -92,29 +94,82 @@ function pictureHolder(block: WireRecord): WireRecord | undefined {
   return undefined;
 }
 
+/** What a browser call's screenshot is named by, before its place among the call's: `screenshot-1`. */
+const SCREENSHOT_NAME = "screenshot";
+
+/** The step a browser call's screenshot answers. */
+const SCREENSHOT_ACTION = "screenshot";
+
+/** A picture as a holder names it: kept, or not kept and why with its size; nothing where it names neither. */
+function calledPicture(holder: WireRecord, name: string): CalledPicture | undefined {
+  const picture = keptPictureOf(holder.picture);
+  if (picture !== undefined) return { kept: true, picture, name };
+  if (isOmission(holder.omitted) && isWireNumber(holder.byteCount)) {
+    return { kept: false, omitted: holder.omitted, byteCount: holder.byteCount, name };
+  }
+  return undefined;
+}
+
+/** The screenshots a browser call took that the transcript names, in the order its steps took them. */
+function screenshotsOf(output: UnparsedWireValue): readonly CalledPicture[] {
+  if (!isRecord(output) || !Array.isArray(output.steps)) return [];
+  const found: CalledPicture[] = [];
+  for (const step of output.steps) {
+    if (!isRecord(step) || step.action !== SCREENSHOT_ACTION) continue;
+    const called = calledPicture(step, `${SCREENSHOT_NAME}-${String(found.length + 1)}`);
+    if (called !== undefined) found.push(called);
+  }
+  return found;
+}
+
+/** The step a browser call's recording answers once stopped and kept. */
+const STOP_RECORDING_ACTION = "stop_recording";
+
+/** What a browser call's recording is named by where it has no caption, before its place among the call's: `recording-1`. */
+const RECORDING_NAME = "recording";
+
 /**
- * The pictures an integration's call answered, in order, each named after
- * the remote tool that answered it (`extract_images-1`), or the call's own
- * name where it names none; nothing for an output that is no list of
- * blocks, as every other call's is.
+ * The videos a browser call recorded and the transcript kept, in the order
+ * its steps stopped them, each with the caption it was stopped with; nothing
+ * for any other call, or a recording not kept.
+ */
+export function recordedVideosOf(
+  tool: string,
+  output: UnparsedWireValue,
+): readonly (ShownPicture & { readonly picture: KeptPicture })[] {
+  if (tool !== AGENT_TOOL.BROWSER || !isRecord(output) || !Array.isArray(output.steps)) return [];
+  const found: (ShownPicture & { readonly picture: KeptPicture })[] = [];
+  for (const step of output.steps) {
+    if (!isRecord(step) || step.action !== STOP_RECORDING_ACTION) continue;
+    const picture = keptPictureOf(step.picture);
+    if (picture === undefined) continue;
+    const caption = isWireString(step.caption) ? step.caption : "";
+    found.push({ picture, name: `${RECORDING_NAME}-${String(found.length + 1)}`, caption });
+  }
+  return found;
+}
+
+/**
+ * The pictures a call answered, in order: a browser call's screenshots,
+ * each named by its place (`screenshot-1`); an integration's pictures, each
+ * named after the remote tool that answered it (`extract_images-1`), or the
+ * call's own name where it names none; nothing for an output that is
+ * neither, as every other call's is.
  */
 export function calledPicturesOf(
   tool: string,
   input: UnparsedWireValue,
   output: UnparsedWireValue,
 ): readonly CalledPicture[] {
+  if (tool === AGENT_TOOL.BROWSER) return screenshotsOf(output);
   if (!Array.isArray(output)) return [];
   const named = isRecord(input) && isWireString(input.remoteTool) ? input.remoteTool : tool;
   const found: CalledPicture[] = [];
   for (const block of output) {
     const holder = isRecord(block) ? pictureHolder(block) : undefined;
     if (holder === undefined) continue;
-    const name = `${named}-${String(found.length + 1)}`;
-    const picture = keptPictureOf(holder.picture);
-    if (picture !== undefined) found.push({ kept: true, picture, name });
-    else if (isOmission(holder.omitted) && isWireNumber(holder.byteCount)) {
-      found.push({ kept: false, omitted: holder.omitted, byteCount: holder.byteCount, name });
-    }
+    const called = calledPicture(holder, `${named}-${String(found.length + 1)}`);
+    if (called !== undefined) found.push(called);
   }
   return found;
 }

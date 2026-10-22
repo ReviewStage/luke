@@ -5,11 +5,13 @@ import { ROOT_TASKS, TEST_TASKS, turboInvocation, WORKSPACE_TASKS } from "./lib/
 // The checks run through Turborepo (`turbo.json`), which hashes each task's
 // inputs and replays a task whose hash it has already seen pass, from the
 // local cache or, given a TURBO_TOKEN, from the remote one CI and every other
-// machine share. The checks are independent of one another and of the build,
-// so they run at once; the build follows because it is the one step that
-// reads what typecheck and the tests have vouched for. `discarded-effect`
-// builds a program of its own rather than reading typecheck's, which is why
-// it is a check beside it rather than a step after it.
+// machine share. The checks are independent of one another, so they run at
+// once. `discarded-effect` builds a program of its own rather than reading
+// typecheck's, which is why it is a check beside it rather than a step after
+// it. No build runs here: Vercel builds web and the eve services on every
+// deploy and the release workflow builds the desktop app, and knip and
+// biome's formatter are for running by hand (`pnpm knip`, `pnpm format`) or
+// on commit (lint-staged), never a check.
 //
 // Note that the tests run one task at a time beside the other checks rather
 // than as more tasks among them, because two vitest processes on one machine
@@ -131,7 +133,4 @@ const failed = runs.filter((_, index) => !results[index]);
 if (failed.length > 0) {
   process.stderr.write(`\nerror: ${failed.map((run) => run.label).join("; ")} failed\n`);
   process.exitCode = 1;
-} else if (anyWorkspace) {
-  const built = await runTurbo("build", ["build", ...scope], { held: false });
-  process.exitCode = built ? 0 : 1;
 }

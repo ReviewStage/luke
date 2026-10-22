@@ -1,16 +1,21 @@
 import { ACT_KIND } from "@luke/host/acts";
 import { RUN_PROFILE, type RunProfile } from "@luke/host/app-state";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
+import { AVATAR_OFF, type AvatarState } from "@luke/voice/avatar";
 import {
+  callInProgress,
   IDLE_VOICE_VIEW,
   VOICE_COMMAND,
+  type VoiceCallAbout,
+  type VoiceCallTranscript,
   type VoiceSpeakers,
   type VoiceView,
 } from "@luke/voice/voice-view";
+import * as Atom from "effect/reactivity/Atom";
 import { useCallback } from "react";
 import { useAct } from "./act.js";
 import { useCallCommands } from "./call-commands.js";
-import { useAppState } from "./use-app-state.js";
+import { APP_SLICE, appStateNow, useAppSlice } from "./use-app-state.js";
 
 /**
  * The conversation a capture run stages, since no voice window stands in one:
@@ -35,29 +40,47 @@ function isRunProfile(profile: string): profile is RunProfile {
   return RUN_PROFILES.has(profile);
 }
 
-/**
- * What the speaking evidence run captions the reply with. A capture run never
- * opens a call, so there are no words to draw unless the fixture supplies
- * them — and it must, or the caption strip ships unphotographed. Synthetic,
- * like every fixture, and shaped like a reply of several messages: the first
- * long enough to wrap, and two more behind it, so the strip reads them as one
- * run and its older lines leave through the faded top edge in the frame.
- */
-export const FIXTURE_SPEAKING_CAPTIONS: readonly string[] = [
-  "The plan now says the parser keeps its own cache, the migration runs once at launch, and the old reader stays until every install has moved over.",
-  "Two questions are still open in the plan.",
-  "Say the word and we can settle the first one now.",
-];
-
 /** What the profile stages, or nothing for the idle run and any word this build does not know. */
 export function fixtureVoice(profile: string): FixtureVoice | undefined {
   return isRunProfile(profile) ? FIXTURE_VOICES.get(profile) : undefined;
 }
 
 /**
- * The failure drawn in the same strip the captions use. A fault is worth
- * reading where the words it interrupted would have landed — just above the
- * call bar that asked — not on a settings page nobody is looking at. It yields to either speaker being heard, because words being
+ * The live conversation as the voice window last reported it, or an idle
+ * voice where none stands, which tells its readers only as the view moves,
+ * not as Luke's avatar or anything else beside it in the slice does.
+ */
+const voiceViewAtom: Atom.Atom<VoiceView> = Atom.map(
+  APP_SLICE.VOICE,
+  (voice) => voice?.view ?? IDLE_VOICE_VIEW,
+);
+
+/**
+ * What was said on the standing call so far, as the document holds it
+ * beside the view, which tells its one reader as a line grows and the view's
+ * readers not at all; none for no call.
+ */
+const callTranscriptAtom: Atom.Atom<VoiceCallTranscript | undefined> = Atom.map(
+  APP_SLICE.VOICE,
+  (voice) => voice?.callTranscript,
+);
+
+/** Luke's avatar on the call as main holds it, which tells its readers only as the avatar moves, not as the words do. */
+const voiceAvatarAtom: Atom.Atom<AvatarState> = Atom.map(
+  APP_SLICE.VOICE,
+  (voice) => voice?.avatar ?? AVATAR_OFF,
+);
+
+/** Whether the microphone is granted, which redraws its reader only as it turns. */
+const microphoneGrantedAtom: Atom.Atom<boolean> = Atom.map(
+  APP_SLICE.AUDIO,
+  (audio) => audio?.microphoneStatus === MICROPHONE_STATUS.GRANTED,
+);
+
+/**
+ * The failure drawn on the voice's notice line. A fault is worth reading
+ * where the call is steered from — just above the composer that holds the
+ * call — not on a settings page nobody is looking at. It yields to either speaker being heard, because words being
  * said are the thing to read over words that already failed, and a capture
  * run never draws one: a fixture has no call to fail.
  */
@@ -73,11 +96,10 @@ export function voiceErrorToShow(input: {
 }
 
 /**
- * The notice drawn in the same strip, yielding only to Luke's own voice — his
- * words own the box whether or not the captions draw them. The developer
- * being heard is no reason to hide it: an open microphone draws nothing on
- * the strip, and a refusal answered during it is exactly what the strip
- * should answer with.
+ * The notice drawn on the same line, yielding only to Luke's own voice, which
+ * is the thing to listen to while it lasts. The developer being heard is no
+ * reason to hide it: a refusal answered while they speak is exactly what the
+ * line should answer with.
  */
 export function voiceNoticeToShow(input: {
   fixtureSpeaking: boolean;
@@ -110,11 +132,10 @@ interface VoiceViewState {
  */
 export function useVoiceView(): VoiceViewState {
   const { tell } = useAct();
-  const state = useAppState();
   // A voice window that went away leaves no view behind, and an idle voice is
   // what every panel draws in its place.
-  const view = state?.voice.view ?? IDLE_VOICE_VIEW;
-  useCallCommands(view, state?.audio.microphoneStatus === MICROPHONE_STATUS.GRANTED, (command) =>
+  const view = useAppSlice(voiceViewAtom);
+  useCallCommands(view, useAppSlice(microphoneGrantedAtom), (command) =>
     tell(ACT_KIND.VOICE_COMMAND, { command }),
   );
 
@@ -131,4 +152,44 @@ export function useVoiceView(): VoiceViewState {
     stopSpeaking,
     requestMicrophoneAccess,
   };
+}
+
+/** The voice as the voice window last reported it, read alone: a surface that draws the call and offers none of its chords. */
+export function useStandingVoiceView(): VoiceView {
+  return useAppSlice(voiceViewAtom);
+}
+
+/** The voice as the document holds it now, for a press that cannot wait a render. */
+export function voiceViewNow(): VoiceView {
+  return appStateNow()?.voice?.view ?? IDLE_VOICE_VIEW;
+}
+
+/** The call in progress, which redraws its reader only as the call itself moves, not as who is heard on it does; none while no call stands. */
+const standingCallAtom: Atom.Atom<VoiceCallAbout | undefined> = Atom.map(voiceViewAtom, (view) =>
+  callInProgress(view) ? view.call : undefined,
+);
+
+/** The call in progress, its agent and task, read apart from who is heard on it; none while no call stands. */
+export function useStandingCall(): VoiceCallAbout | undefined {
+  return useAppSlice(standingCallAtom);
+}
+
+/** The agent a call is in progress into, which redraws its reader only as it moves; none while no call stands. */
+const callingAgentAtom: Atom.Atom<string | undefined> = Atom.map(voiceViewAtom, (view) =>
+  callInProgress(view) ? view.call?.agentId : undefined,
+);
+
+/** The agent a call is in progress into, whose tab wears the live mark and draws the call; none while no call stands. */
+export function useCallingAgent(): string | undefined {
+  return useAppSlice(callingAgentAtom);
+}
+
+/** Luke's avatar on the standing call, or none, as main holds it for every window. */
+export function useVoiceAvatar(): AvatarState {
+  return useAppSlice(voiceAvatarAtom);
+}
+
+/** What was said on the standing call so far, which its agent's tab's live transcript draws; none for no call. */
+export function useCallTranscript(): VoiceCallTranscript | undefined {
+  return useAppSlice(callTranscriptAtom);
 }

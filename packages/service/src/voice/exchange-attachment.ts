@@ -1,10 +1,13 @@
 import type { DatabaseServices, QueryError } from "@luke/database/core/query";
-import { openTaskConversation } from "@luke/database/models/task-store";
-import type { StoreWriter } from "@luke/database/models/writer";
-import type { LanguageModel } from "ai";
+import { readCodingAgent, readCodingAgentRouting } from "@luke/database/models/coding-agent-store";
+import type { ConversationTarget, StoreWriter } from "@luke/database/models/writer";
+import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
 import { Data, Effect, Option, type Schema, type Scope } from "effect";
-import type { EveSessions } from "../agents/brain-host/eve-sessions.js";
+import type { BRAIN_HOST_TURN } from "../agents/brain-host/bounds.js";
+import type { AgentSessions, EveMount } from "../agents/brain-host/eve-sessions.js";
+import { CALL_BACKEND } from "./call-backend.js";
 import {
+  type AttachedSession,
   type ExchangeAttachment,
   type HostedLiveExchange,
   hostedLiveExchange,
@@ -13,15 +16,15 @@ import { upstreamSideband } from "./live-sideband.js";
 
 /**
  * The hosted exchange as the voice service is offered it, one per signed-in
- * session: the conversation of the task the session is bound to resolved at
- * the session's start, the writer the function already holds, eve reached as the deployment for the calling account, and a notetaker
- * writing the plan as the call goes. This is the whole of what
- * `VoiceServiceOptions.exchange` takes, kept apart from the function's
- * composition, which passes it composed over the deployment's seams
- * (`deployment-exchange.ts`).
+ * session: the agent's conversation the session is bound to resolved at the
+ * session's start, the writer the function already holds for that
+ * conversation's tools, and eve reached as the deployment for the calling
+ * account under the mount the agent runs on. This is the whole of what `VoiceServiceOptions.exchange` takes,
+ * kept apart from the function's composition, which passes it composed over
+ * the deployment's seams (`deployment-exchange.ts`).
  *
  * One socket, one scope. The attachment builds the whole standing — the
- * task's conversation, the exchange, and its adoption of the sideband — as
+ * conversation, the exchange, and its adoption of the sideband — as
  * one effect in the scope the service provides, and that scope's close is
  * the exchange's stop. A standing that could not be reached
  * fails in that scope, so the service closing it gives back everything the
@@ -29,11 +32,13 @@ import { upstreamSideband } from "./live-sideband.js";
  */
 
 interface ExchangeAttachmentDeps {
+  /** The store writer an agent's rows are written through, holding them to the tools it may call. */
   readonly writer: StoreWriter;
-  /** eve as the deployment reaches it for one account, composed by the caller so no secret enters here. */
-  readonly eve: (accountId: string) => EveSessions;
-  /** The model a task call's notetaker runs on, composed by the caller so no key enters here; nothing where the deployment has none. */
-  readonly scribeModel: () => LanguageModel | undefined;
+  /** eve as the deployment reaches it for one account under one mount, for a spoken ask alone, composed by the caller so no secret enters here. */
+  readonly eve: (
+    accountId: string,
+    mount: EveMount,
+  ) => AgentSessions<typeof BRAIN_HOST_TURN.SPOKEN>;
   readonly createId: () => string;
   /** Where a standing exchange's own reports go. */
   readonly report: (message: string) => void;
@@ -46,23 +51,45 @@ class ExchangeCannotStand extends Data.TaggedError("ExchangeCannotStand")<{
 
 const EXCHANGE_CANNOT_STAND_MESSAGE = "the exchange could not stand on the session's sideband";
 
-const TASK_GONE_MESSAGE = "the task the session is bound to no longer stands";
+const AGENT_GONE_MESSAGE = "the agent the session is bound to no longer stands";
+
+const NATIVE_AGENT_MESSAGE = "the agent the session is bound to runs on a native harness, not eve";
+
+/** A conversation found, or the refusal that the session's binding names none. */
+function found(
+  conversation: Option.Option<ConversationTarget>,
+  gone: string,
+): Effect.Effect<ConversationTarget, ExchangeCannotStand> {
+  return Option.match(conversation, {
+    onNone: () => Effect.fail(new ExchangeCannotStand({ message: gone })),
+    onSome: (target) => Effect.succeed(target),
+  });
+}
 
 /**
- * The conversation a call lands in: its task's, opened and attached now
- * where the task has none yet, and answered under the member who opened it
- * where a teammate did. A task deleted since the session was created, or
- * one the account no longer reaches, has none to offer, and the session is
- * refused.
+ * The conversation a call lands in: the agent's, under the member who
+ * started it, whoever is calling. An agent deleted since the session was
+ * created, or one the account no longer reaches, has none to offer, and the
+ * session is refused. So is an agent whose conversation a native harness
+ * (Claude Code or Codex) answers, whenever the session was admitted: a
+ * call's asks reach eve alone, and eve must never answer a conversation
+ * beside its harness.
  */
-const taskConversation = (userId: string, taskId: string) =>
-  Effect.flatMap(
-    openTaskConversation(userId, taskId),
-    Option.match({
-      onNone: () => Effect.fail(new ExchangeCannotStand({ message: TASK_GONE_MESSAGE })),
-      onSome: (opened) => Effect.succeed(opened),
-    }),
-  );
+const sessionConversation = (session: AttachedSession) =>
+  Effect.gen(function* () {
+    const agent = yield* readCodingAgent(session.accountId, session.agentId);
+    const routing = yield* readCodingAgentRouting(session.accountId, session.agentId);
+    if (Option.isSome(routing) && routing.value.runtime !== CONVERSATION_RUNTIME.EVE) {
+      return yield* Effect.fail(new ExchangeCannotStand({ message: NATIVE_AGENT_MESSAGE }));
+    }
+    return yield* found(
+      Option.map(agent, (held) => ({
+        userId: held.userId,
+        conversationId: held.conversationId,
+      })),
+      AGENT_GONE_MESSAGE,
+    );
+  });
 
 export function exchangeAttachment(deps: ExchangeAttachmentDeps): ExchangeAttachment {
   return (
@@ -73,28 +100,19 @@ export function exchangeAttachment(deps: ExchangeAttachmentDeps): ExchangeAttach
     Scope.Scope | DatabaseServices
   > =>
     Effect.gen(function* () {
-      const opened = yield* taskConversation(session.accountId, session.taskId);
-      const scribeModel = deps.scribeModel();
+      const conversation = yield* sessionConversation(session);
       const exchange = yield* hostedLiveExchange({
         accountId: session.accountId,
         liveSessionId: session.sessionId,
-        conversation: { userId: opened.ownerId, conversationId: opened.conversationId },
-        ...(scribeModel === undefined
-          ? undefined
-          : {
-              scribe: {
-                taskId: session.taskId,
-                model: scribeModel,
-                ...(session.onPlanDraft ? { onDraft: session.onPlanDraft } : undefined),
-              },
-            }),
+        conversation,
+        backend: CALL_BACKEND,
+        timeZone: session.timeZone,
         writer: deps.writer,
-        eve: deps.eve(session.accountId),
+        eve: deps.eve(session.accountId, CALL_BACKEND.mount),
         createId: deps.createId,
         report: deps.report,
         ...(session.onActivity ? { onActivity: session.onActivity } : undefined),
         ...(session.onCode ? { onCode: session.onCode } : undefined),
-        ...(session.onWork ? { onWork: session.onWork } : undefined),
         ...(session.onCallEnding ? { onCallEnding: session.onCallEnding } : undefined),
         ...(session.onTrace ? { onTrace: session.onTrace } : undefined),
       });

@@ -1,0 +1,227 @@
+import assert from "node:assert/strict";
+import { NodeFileSystem, NodePath } from "@effect/platform-node";
+import { it } from "@effect/vitest";
+import { HOSTED_SERVICE_PATH, NO_CREDENTIAL } from "@luke/features";
+import {
+  GATEWAY_CLIENT_ROLE,
+  GATEWAY_EVENT,
+  GATEWAY_METHOD,
+  type GatewayEventKind,
+} from "@luke/gateway";
+import { LIVE_VOICE } from "@luke/live";
+import { temporaryDirectoryScoped } from "@luke/runtime/testing";
+import { SETTINGS_RESET_SCOPE, THEME } from "@luke/settings";
+import { isRecord, type WireValue } from "@luke/wire";
+import { ConfigProvider, Effect, Layer, Queue, Stream } from "effect";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import { composeSettings } from "./compose-settings.js";
+import { HostKernelTag } from "./effect/kernel.js";
+import { AppIdentity, Environment, SettingsChangedElsewhere } from "./effect/seams.js";
+import { hostKernelOver } from "./host-kernel.js";
+import { runModeFor } from "./run-mode.js";
+import { fixedAccountSource } from "./testing/fixed-account-source.js";
+
+/**
+ * The settings concern's own hosted clients, built before the account is and
+ * so linked to its credential late: a call goes out as the linked credential
+ * would, which for a cookie session is with no header at all.
+ */
+
+const SERVICE_BASE_URL = "https://luke.example.test";
+
+it.effect(
+  "a linked credential with no authorization reaches a settings client's request with no header",
+  () => {
+    const requests: { readonly url: string; readonly authorization: string | null }[] = [];
+    /** The service, answering every request and keeping what each carried. */
+    const service: typeof globalThis.fetch = async (input, init) => {
+      const request = new Request(input, init);
+      requests.push({ url: request.url, authorization: request.headers.get("authorization") });
+      return new Response(null, { status: 204 });
+    };
+    return Effect.gen(function* () {
+      const stateRoot = yield* temporaryDirectoryScoped("luke-settings-credential-");
+      const machine = Layer.mergeAll(
+        Layer.succeed(
+          HostKernelTag,
+          hostKernelOver({
+            stateRoot,
+            // A run that sends, so the counted events leave on a flush.
+            runMode: runModeFor({ capture: false, fixture: false }),
+            accountBaseUrl: `${SERVICE_BASE_URL}/api/auth`,
+            now: () => 0,
+            createId: () => "id",
+            report: () => undefined,
+            emit: () => undefined,
+          }),
+        ),
+        Layer.succeed(Environment, ConfigProvider.fromEnvRecord({})),
+        // A version the counted events allowlist reads, so the launch is counted.
+        Layer.succeed(AppIdentity, { appVersion: "1.0.0", packaged: false }),
+        fixedAccountSource(),
+        NodeFileSystem.layer,
+        NodePath.layer,
+      );
+      const settings = yield* Effect.provide(composeSettings(), machine);
+      yield* settings.link({
+        credential: NO_CREDENTIAL,
+        readAccountKey: () => Effect.succeed(undefined),
+        confirmAccount: () => Effect.void,
+        setVoice: () => Effect.void,
+        endLiveSession: Effect.void,
+      });
+      // The lifetime arms the counted events and counts this launch.
+      yield* settings.lifetime;
+
+      yield* settings.flushProductEvents;
+
+      const sent = requests.filter(
+        (request) => request.url === `${SERVICE_BASE_URL}${HOSTED_SERVICE_PATH.EVENTS}`,
+      );
+      assert.ok(sent.length > 0, "the launch's count was sent");
+      for (const request of sent) assert.equal(request.authorization, null);
+    }).pipe(
+      Effect.provideService(FetchHttpClient.Fetch, service),
+      Effect.provide([NodeFileSystem.layer, NodePath.layer]),
+    );
+  },
+);
+
+/** One browser tab's settings concern over the shared state root: what it sent its panel, and each voice it handed the live source. */
+const tabOver = Effect.fnUntraced(function* (
+  stateRoot: string,
+  changedElsewhere: Layer.Layer<never> | Layer.Layer<SettingsChangedElsewhere>,
+) {
+  const sent = yield* Queue.unbounded<{ kind: GatewayEventKind; payload: WireValue }>();
+  const voices = yield* Queue.unbounded<string | undefined>();
+  const machine = Layer.mergeAll(
+    Layer.succeed(
+      HostKernelTag,
+      hostKernelOver({
+        stateRoot,
+        // A run that sends nothing, so no count leaves for the service.
+        runMode: runModeFor({ capture: false, fixture: true }),
+        accountBaseUrl: `${SERVICE_BASE_URL}/api/auth`,
+        now: () => 0,
+        createId: () => "id",
+        report: () => undefined,
+        emit: (kind, payload) => {
+          Queue.offerUnsafe(sent, { kind, payload });
+        },
+      }),
+    ),
+    Layer.succeed(Environment, ConfigProvider.fromEnvRecord({})),
+    Layer.succeed(AppIdentity, { appVersion: "1.0.0", packaged: false }),
+    fixedAccountSource(),
+    changedElsewhere,
+    NodeFileSystem.layer,
+    NodePath.layer,
+  );
+  const settings = yield* Effect.provide(composeSettings(), machine);
+  yield* settings.link({
+    credential: NO_CREDENTIAL,
+    readAccountKey: () => Effect.succeed(undefined),
+    confirmAccount: () => Effect.void,
+    setVoice: (voice) => Queue.offer(voices, voice),
+    endLiveSession: Effect.void,
+  });
+  yield* settings.lifetime;
+  return { settings, sent, voices };
+});
+
+/** A writing tab, and a reading tab whose shell says the file changed each time `signal` is offered. */
+const twoTabs = Effect.fnUntraced(function* () {
+  const stateRoot = yield* temporaryDirectoryScoped("luke-settings-elsewhere-");
+  const signal = yield* Queue.unbounded<void>();
+  const writer = yield* tabOver(stateRoot, Layer.empty);
+  const reader = yield* tabOver(
+    stateRoot,
+    Layer.succeed(SettingsChangedElsewhere, Stream.fromQueue(signal)),
+  );
+  return { writer, reader, signal };
+});
+
+it.effect(
+  "another tab's settings write reaches this tab's panel when the shell says the file changed",
+  () =>
+    Effect.gen(function* () {
+      const { writer, reader, signal } = yield* twoTabs();
+      // The reader has read the file before the writer changes it.
+      assert.equal((yield* reader.settings.store.snapshot()).stored.theme, undefined);
+
+      yield* writer.settings.store.set("theme", THEME.DARK);
+      Queue.offerUnsafe(signal, undefined);
+
+      const event = yield* Queue.take(reader.sent);
+      assert.equal(event.kind, GATEWAY_EVENT.SETTINGS_CHANGED);
+      const { payload } = event;
+      const sentTheme =
+        isRecord(payload) && isRecord(payload.settings) && isRecord(payload.settings.stored)
+          ? payload.settings.stored.theme
+          : undefined;
+      assert.equal(sentTheme, THEME.DARK);
+      assert.equal((yield* reader.settings.store.snapshot()).stored.theme, THEME.DARK);
+    }).pipe(
+      Effect.provideService(FetchHttpClient.Fetch, async () => new Response(null, { status: 204 })),
+      Effect.provide([NodeFileSystem.layer, NodePath.layer]),
+    ),
+);
+
+it.effect("a voice another tab chose reaches this tab's live source", () =>
+  Effect.gen(function* () {
+    const { writer, reader, signal } = yield* twoTabs();
+    yield* reader.settings.store.snapshot();
+
+    yield* writer.settings.store.set("voice", LIVE_VOICE.CEDAR);
+    Queue.offerUnsafe(signal, undefined);
+
+    assert.equal(yield* Queue.take(reader.voices), LIVE_VOICE.CEDAR);
+  }).pipe(
+    Effect.provideService(FetchHttpClient.Fetch, async () => new Response(null, { status: 204 })),
+    Effect.provide([NodeFileSystem.layer, NodePath.layer]),
+  ),
+);
+
+it.effect(
+  "a voice another tab chose reaches this tab's live source after this tab wrote another setting",
+  () =>
+    Effect.gen(function* () {
+      const { writer, reader, signal } = yield* twoTabs();
+      yield* reader.settings.store.snapshot();
+
+      yield* writer.settings.store.set("voice", LIVE_VOICE.CEDAR);
+      // This tab's own write reads the file first, and so already holds the voice before the signal lands.
+      yield* reader.settings.store.set("theme", THEME.DARK);
+      Queue.offerUnsafe(signal, undefined);
+
+      assert.equal(yield* Queue.take(reader.voices), LIVE_VOICE.CEDAR);
+    }).pipe(
+      Effect.provideService(FetchHttpClient.Fetch, async () => new Response(null, { status: 204 })),
+      Effect.provide([NodeFileSystem.layer, NodePath.layer]),
+    ),
+);
+
+it.effect(
+  "a reset whose kept fields name anything but settings is refused, and the group stands as it was",
+  () =>
+    Effect.gen(function* () {
+      const stateRoot = yield* temporaryDirectoryScoped("luke-settings-reset-");
+      const { settings } = yield* tabOver(stateRoot, Layer.empty);
+      yield* settings.store.set("theme", THEME.DARK);
+      const reset = settings.methods[GATEWAY_METHOD.SETTINGS_RESET];
+      assert.ok(reset, "the concern answers a reset");
+      const context = { client: { clientId: "browser", role: GATEWAY_CLIENT_ROLE.OPERATOR } };
+
+      for (const kept of [["zoom", "teleport"], "zoom"]) {
+        const refused: { readonly message: string } = yield* Effect.flip(
+          reset({ scope: SETTINGS_RESET_SCOPE.APPEARANCE, kept }, context),
+        );
+        assert.equal(refused.message, "kept must name settings");
+      }
+
+      assert.equal((yield* settings.store.snapshot()).stored.theme, THEME.DARK);
+    }).pipe(
+      Effect.provideService(FetchHttpClient.Fetch, async () => new Response(null, { status: 204 })),
+      Effect.provide([NodeFileSystem.layer, NodePath.layer]),
+    ),
+);

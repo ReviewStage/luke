@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { followedAgent } from "./tab-strip-model.js";
+import { followedAgent, stampedViewed } from "./tab-strip-model.js";
 
 /**
  * tab-strip-model.test.ts -- the agent whose tab follows its run is the one
@@ -27,4 +27,16 @@ test("an agent's tab follows its run only while the plan's column shows it on sc
     undefined,
     "another tab is shown",
   );
+});
+
+test("a tab standing in its strip keeps its stamp past the bound, so stamping the strip again changes nothing and the tab still grows old", () => {
+  const strip = Array.from({ length: 51 }, (_, at) => ({ file: `file-${at}` }));
+  const gone = { file: "closed-elsewhere" };
+  const first = stampedViewed([{ tab: gone, at: 0 }], [], strip, 1, 50);
+  assert.deepEqual(
+    first,
+    strip.map((tab) => ({ tab, at: 1 })),
+    "every standing tab is stamped, and only the tab no longer standing is let go",
+  );
+  assert.equal(stampedViewed(first ?? [], [], strip, 2, 50), undefined);
 });

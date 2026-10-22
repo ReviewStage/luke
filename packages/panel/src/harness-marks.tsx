@@ -1,4 +1,5 @@
 import { MODEL_PROVIDER, type ModelProvider } from "@luke/features/models-wire";
+import { assetUrl } from "./app-platform.js";
 
 /**
  * harness-marks.tsx -- the marks of the two harnesses a coding agent's model runs in: Claude Code for Anthropic's models, Codex for OpenAI's.
@@ -10,7 +11,7 @@ import { MODEL_PROVIDER, type ModelProvider } from "@luke/features/models-wire";
  * where the provider marks are shared because the site draws them too.
  */
 
-/** Where the Codex mark's files are copied beside `panel.js` by the build (`scripts/build.mjs`). */
+/** The Codex mark's files under the shell's asset base, where the desktop's build copies them beside `panel.js` (`scripts/build.mjs`). */
 const CODEX_MARK_FILES = {
   ONE_X: "marks/codex-16.png",
   TWO_X: "marks/codex-32.png",
@@ -40,15 +41,16 @@ function ClaudeCodeMark(): React.JSX.Element {
  * OpenAI's own Codex extension for VS Code (publisher openai, version
  * 26.51007.21434), scaled down whole to the 16-pixel box a mark is drawn
  * in at one, two, and three device pixels to the pixel, and losslessly
- * recompressed (`marks/`). Files beside the bundle rather than inlined, so
+ * recompressed (the panel's `marks/`). Files beside the bundle rather than inlined, so
  * the renderer bundle carries none of their bytes.
  */
 function CodexMark(): React.JSX.Element {
+  const oneX = assetUrl(CODEX_MARK_FILES.ONE_X);
   return (
     <img
       className="harness-mark"
-      src={CODEX_MARK_FILES.ONE_X}
-      srcSet={`${CODEX_MARK_FILES.ONE_X} 1x, ${CODEX_MARK_FILES.TWO_X} 2x, ${CODEX_MARK_FILES.THREE_X} 3x`}
+      src={oneX}
+      srcSet={`${oneX} 1x, ${assetUrl(CODEX_MARK_FILES.TWO_X)} 2x, ${assetUrl(CODEX_MARK_FILES.THREE_X)} 3x`}
       width={16}
       height={16}
       alt=""

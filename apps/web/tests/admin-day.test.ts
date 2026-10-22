@@ -1,9 +1,11 @@
 // @vitest-environment jsdom
-import type { AdminDayAccount, AdminDayDetail } from "@luke/service/admin/admin-day";
+import "@luke/panel/testing/resize-observer";
+import type { AdminDayAccount, AdminDayDetail } from "@luke/features/admin-answer-wire";
+import { DayScreen } from "@luke/panel/admin/screens/day";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, test, vi } from "vitest";
-import { DayScreen } from "../src/admin/screens/day";
+import { underWebAdminDoors } from "./support/admin-doors";
 
 /**
  * admin-day.test.ts -- one day's page names the day it covers and whether it
@@ -84,16 +86,18 @@ async function openDay(body: AdminDayDetail | undefined): Promise<Opened> {
   root = createRoot(page);
   await act(async () => {
     root?.render(
-      createElement(DayScreen, {
-        day: DAY,
-        hideAdmins: false,
-        onHideAdminsChange: () => undefined,
-        account: undefined,
-        onSignOut: async () => undefined,
-        onBack: () => backs.push(backs.length),
-        onOpenAccount: (id) => opened.push(id),
-        frame: (content) => content,
-      }),
+      underWebAdminDoors(
+        createElement(DayScreen, {
+          day: DAY,
+          hideAdmins: false,
+          onHideAdminsChange: () => undefined,
+          account: undefined,
+          onSignOut: async () => undefined,
+          onBack: () => backs.push(backs.length),
+          onOpenAccount: (id) => opened.push(id),
+          frame: (content) => content,
+        }),
+      ),
     );
   });
   return { page, opened, backs };
@@ -108,6 +112,18 @@ function rows(page: HTMLElement): string[][] {
   return Array.from(page.querySelectorAll("tr"), (row) =>
     Array.from(row.querySelectorAll("th, td"), (cell) => cell.textContent ?? ""),
   );
+}
+
+/** The toolbar's way back, the button its path leads with. */
+function wayBack(page: HTMLElement): HTMLButtonElement {
+  const found = page.querySelector<HTMLButtonElement>('header nav[aria-label="Path"] button');
+  if (found === null) throw new Error("no way back");
+  return found;
+}
+
+/** The page the path says the reader stands on. */
+function current(page: HTMLElement): string | undefined {
+  return page.querySelector('header [aria-current="page"]')?.textContent ?? undefined;
 }
 
 function link(page: HTMLElement, words: string): HTMLAnchorElement {
@@ -130,9 +146,8 @@ function press(target: Element, init: MouseEventInit = {}): boolean {
 test("a loaded day names itself and states its totals and accounts under their headings", async () => {
   const { page } = await openDay(detail());
 
-  expect(headings(page, "h1")).toEqual(["October 12, 2026"]);
-  expect(page.textContent).toContain("One UTC day of hosted-tier calls");
-  expect(page.textContent).not.toContain("still filling");
+  expect(current(page)).toBe("October 12, 2026");
+  expect(page.textContent).not.toContain("so far today");
   expect(headings(page, "h2")).toEqual(["Hosted tier · this day", "Accounts active this day"]);
   expect(page.textContent).toContain("Active accounts3");
   expect(page.textContent).toContain("Hosted calls1,250");
@@ -151,10 +166,9 @@ test("the accounts read busiest first, an admin marked in words and an email sho
   );
 });
 
-test("today's page says it is still filling and counts its totals so far", async () => {
+test("today's page counts its totals so far", async () => {
   const { page } = await openDay(detail({ generatedAt: Date.UTC(2026, 9, 12, 15) }));
 
-  expect(page.textContent).toContain("One UTC day of hosted-tier calls — still filling");
   expect(page.textContent).toContain("Active accounts3so far today");
 });
 
@@ -182,16 +196,15 @@ test("a plain press on an account or its row opens it; a modified press is the b
   expect(opened).toEqual(["account-ada", "account-grace"]);
 });
 
-test("the way back to the dashboard moves in place on a plain press, loading or loaded", async () => {
+test("the toolbar leads with the way back to the overview, which moves in place, loading or loaded", async () => {
   const loading = await openDay(undefined);
-  expect(headings(loading.page, "h1")).toEqual(["October 12, 2026"]);
-  expect(press(link(loading.page, "Dashboard"))).toBe(true);
+  expect(current(loading.page)).toBe("October 12, 2026");
+  expect(wayBack(loading.page).textContent).toBe("Overview");
+  act(() => wayBack(loading.page).click());
   expect(loading.backs).toHaveLength(1);
   act(() => root?.unmount());
 
   const loaded = await openDay(detail());
-  const back = link(loaded.page, "Dashboard");
-  expect(press(back, { ctrlKey: true })).toBe(false);
-  expect(press(back)).toBe(true);
+  act(() => wayBack(loaded.page).click());
   expect(loaded.backs).toHaveLength(1);
 });

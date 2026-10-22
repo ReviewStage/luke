@@ -1,15 +1,15 @@
 import type { TasklessAgent } from "@luke/features/coding-agent-wire";
-import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import {
   LINEAR_BOUNDS,
   type LinearIssueSummary,
   linearIssueIdentifierIn,
 } from "@luke/features/linear-wire";
-import { MENTION_KIND, mentionMarkdown } from "@luke/features/mention-link";
 import {
   type RepositoryPin,
   TASK_BOUNDS,
+  TASK_STATUS,
   type Task,
+  type TaskStatus,
   type TaskSummary,
 } from "@luke/features/task-wire";
 import {
@@ -26,7 +26,7 @@ import type { LinearIssuesRequest, Workspace } from "@luke/features/workspace-wi
 import { LIVE_STATUS, type LiveStatus } from "@luke/live";
 import { MICROPHONE_STATUS, type MicrophoneStatus } from "@luke/voice/audio";
 import { microphoneAccessRow, VOICE_KEYLESS_NOTE } from "@luke/voice/microphone-access";
-import type { VoiceView } from "@luke/voice/voice-view";
+import type { VoiceCallAbout, VoiceView } from "@luke/voice/voice-view";
 import { matchesTokens, searchTokens } from "./search-tokens.js";
 
 /**
@@ -139,39 +139,38 @@ export function taskNameOfIssue(issue: Pick<LinearIssueSummary, "identifier" | "
   return title === "" ? issue.identifier : title;
 }
 
-/**
- * The name a task New task starts in Plan mode takes from the words in its
- * box: their first line, its ends trimmed and cut to a task name's bound;
- * nothing for a blank box, which starts the task as Untitled. Note that this
- * stands only until Plan mode hands the words to Luke as the task's brief.
- */
-export function taskNameOfWords(words: string): string {
-  const [first = ""] = words.trim().split("\n");
-  return first.trim().slice(0, TASK_BOUNDS.MAX_NAME_CHARS).trim();
+/** The characters a markdown link's label escapes to stay one label. */
+const LABEL_SPECIAL = /[[\]\\]/gu;
+
+/** The characters a markdown link's target encodes so it ends where it should. */
+const TARGET_SPECIAL = /[()]/gu;
+
+/** One issue as the app writes a link to it: its key and title over its own address. */
+function issueMention(issue: Pick<LinearIssueSummary, "identifier" | "title" | "url">): string {
+  const name = `${issue.identifier} ${issue.title.trim()}`.trim();
+  const label = `@${name}`.replace(LABEL_SPECIAL, (special) => `\\${special}`);
+  const target = issue.url.replace(TARGET_SPECIAL, (special) => (special === "(" ? "%28" : "%29"));
+  return `[${label}](${target})`;
 }
 
-/** Where an issue's mention is written; its target is the issue's own address, so neither part is read. */
-const ISSUE_MENTION_PLACE = { workspace: "", repository: null } as const;
-
 /**
- * The prompt a coding agent New task starts is handed: a mention of the
- * Linear issue picked, where one was, as the app writes a Linear issue's
- * link (`[@ENG-1 Title](https://linear.app/…)`), then a blank line and the
- * words, trimmed; the issue alone where no words were written, and the words
- * alone where no issue was picked.
+ * The prompt a coding agent New task starts is handed: a mention of each
+ * issue picked, in the order picked, one to a line, by its key and title
+ * over its own address, a Linear issue's as the app writes its link
+ * (`[@ENG-1 Title](https://linear.app/…)`), a GitHub issue's over its page
+ * (`[@acme/relay#7 Title](https://github.com/…)`), and one of the
+ * workspace's own over its Luke link (`[@ACME-7 Title](https://tryluke.dev/…/issue/…)`),
+ * then a blank line and the words, trimmed; the issues alone where no words
+ * were written, and the words alone where no issue was picked.
  */
 export function agentPromptOf(
-  issue: Pick<LinearIssueSummary, "identifier" | "title" | "url"> | undefined,
+  issues: readonly Pick<LinearIssueSummary, "identifier" | "title" | "url">[],
   words: string,
 ): string {
   const said = words.trim();
-  if (issue === undefined) return said;
-  const mention = mentionMarkdown(
-    { kind: MENTION_KIND.LINK, provider: INTEGRATION_PROVIDER.LINEAR, url: issue.url },
-    `${issue.identifier} ${issue.title.trim()}`.trim(),
-    ISSUE_MENTION_PLACE,
-  );
-  return said === "" ? mention : `${mention}\n\n${said}`;
+  const mentions = issues.map(issueMention).join("\n");
+  if (mentions === "") return said;
+  return said === "" ? mentions : `${mentions}\n\n${said}`;
 }
 
 /** How many of a workspace's Linear issues New task offers under its name field at once. */
@@ -293,7 +292,7 @@ export function repositoryOwnerPictureUrl(repository: string): string {
 }
 
 /** What the New task dialog says when the service answered no task. */
-const START_FAILED_NOTE = "Luke's service could not be reached. Try again.";
+const START_FAILED_NOTE = "Luke's service did not answer. Try again.";
 
 /** What a call that named a repository says when the service refused it, by its reason. */
 const REPOSITORY_FAILURE_NOTES = {
@@ -363,69 +362,104 @@ export function unsettledRenames(renames: PendingRenames, view: TasksView): Pend
   return unsettled.length === renames.size ? renames : new Map(unsettled);
 }
 
-/** What a press of the task menu does to a task's place: pins it or unpins it, archives it or brings it back. */
+/** What a press of the task menu does to a task's place: pins it or unpins it. */
 export const TASK_MARK = {
   PIN: "pin",
   UNPIN: "unpin",
-  ARCHIVE: "archive",
-  UNARCHIVE: "unarchive",
 } as const;
 
 export type TaskMark = (typeof TASK_MARK)[keyof typeof TASK_MARK];
 
-/** What the toast says when the service refused a pin or an archive, by what was asked. */
+/** What the toast says when the service refused a pin, by what was asked. */
 export const MARK_FAILED_NOTES = {
   [TASK_MARK.PIN]: "The task could not be pinned. Try again.",
   [TASK_MARK.UNPIN]: "The task could not be unpinned. Try again.",
-  [TASK_MARK.ARCHIVE]: "The task could not be archived. Try again.",
-  [TASK_MARK.UNARCHIVE]: "The task could not be unarchived. Try again.",
 } as const satisfies Record<TaskMark, string>;
 
-/**
- * What the toast says once an archive, or its undoing, landed, and the mark
- * its Undo asks for. A pin says nothing, since the row it moves is in sight.
- */
-export const MARK_UNDOS = {
-  [TASK_MARK.ARCHIVE]: { note: "Task archived", undo: TASK_MARK.UNARCHIVE },
-  [TASK_MARK.UNARCHIVE]: { note: "Task unarchived", undo: TASK_MARK.ARCHIVE },
-} as const satisfies Partial<Record<TaskMark, { note: string; undo: TaskMark }>>;
+/** The statuses a press of the task menu settles a task at: Mark done and Cancel task. */
+export const SETTLED_STATUS = {
+  DONE: TASK_STATUS.DONE,
+  CANCELED: TASK_STATUS.CANCELED,
+} as const;
+
+export type SettledStatus = (typeof SETTLED_STATUS)[keyof typeof SETTLED_STATUS];
+
+/** One task's status as a press asks for it, or as its Undo puts it back. */
+export interface StatusChange {
+  readonly taskId: string;
+  readonly status: TaskStatus;
+}
+
+/** A task's status, Todo for one from a service before statuses. */
+function standingStatus(task: Pick<TaskSummary, "status">): TaskStatus {
+  return task.status ?? TASK_STATUS.TODO;
+}
 
 /**
- * What the toast says once a repository's tasks were archived together, by
- * how many the service kept and how many it refused; one task says what an
- * archive of one says.
+ * What settling tasks at a status asks of each, and what its Undo asks: the
+ * status each stood at before. A task already there is left out of both,
+ * since the press changes nothing about it.
  */
-export function archivedTasksNote(landed: number, refused: number): string {
-  const kept = landed === 1 ? MARK_UNDOS[TASK_MARK.ARCHIVE].note : `${landed} tasks archived`;
+export function settleChanges(
+  tasks: readonly Pick<TaskSummary, "id" | "status">[],
+  status: SettledStatus,
+): { readonly asked: readonly StatusChange[]; readonly undo: readonly StatusChange[] } {
+  const moved = tasks.filter((task) => standingStatus(task) !== status);
+  return {
+    asked: moved.map((task) => ({ taskId: task.id, status })),
+    undo: moved.map((task) => ({ taskId: task.id, status: standingStatus(task) })),
+  };
+}
+
+/** Whether the task menu offers settling the task at a status: not where it already stands there. */
+export function settleOffered(task: Pick<TaskSummary, "status">, status: SettledStatus): boolean {
+  return standingStatus(task) !== status;
+}
+
+/** What the toasts say of tasks settled at each status: one, several, and the refusals. */
+const SETTLE_NOTES = {
+  [SETTLED_STATUS.DONE]: {
+    one: "Marked done",
+    many: "tasks marked done",
+    failedOne: "The task could not be marked done. Try again.",
+    failedMany: "The tasks could not be marked done. Try again.",
+  },
+  [SETTLED_STATUS.CANCELED]: {
+    one: "Task canceled",
+    many: "tasks canceled",
+    failedOne: "The task could not be canceled. Try again.",
+    failedMany: "The tasks could not be canceled. Try again.",
+  },
+} as const satisfies Record<SettledStatus, Record<string, string>>;
+
+/**
+ * What the toast says once tasks were settled at a status, by how many the
+ * service kept and how many it refused; one task says "Marked done".
+ */
+export function settledNote(status: SettledStatus, landed: number, refused: number): string {
+  const notes = SETTLE_NOTES[status];
+  const kept = landed === 1 ? notes.one : `${landed} ${notes.many}`;
   return refused === 0 ? kept : `${kept}, ${refused} could not be`;
 }
 
-/** What the toast says when the service refused every task of a repository's Archive tasks. */
-export function archiveTasksFailedNote(refused: number): string {
-  return refused === 1
-    ? MARK_FAILED_NOTES[TASK_MARK.ARCHIVE]
-    : "The tasks could not be archived. Try again.";
+/** What the toast says when the service refused every task a press settled. */
+export function settleFailedNote(status: SettledStatus, refused: number): string {
+  const notes = SETTLE_NOTES[status];
+  return refused === 1 ? notes.failedOne : notes.failedMany;
 }
 
-/**
- * Whether archiving the tasks asks first: any of them has a coding agent
- * not yet archived, which the archive stops and archives with it. A task
- * whose agents the list has yet to read asks nothing, as one with none.
- */
-export function archiveAsks(tasks: readonly Pick<TaskSummary, "agents">[]): boolean {
-  return tasks.some((task) => (task.agents?.total ?? 0) > 0);
-}
+/** What the toast says when the service refused an Undo putting a status back. */
+export const STATUS_RESTORE_FAILED_NOTE = "The task's status could not be put back. Try again.";
 
-/** A task's pin and archive as the list carries them, each only where it stands. */
-type MarkStamps = Pick<TaskSummary, "pinnedAt" | "archivedAt">;
+/** A task's pin as the list carries it, only where it stands. */
+type MarkStamps = Pick<TaskSummary, "pinnedAt">;
 
-/** A pin or an archive given to a task that main's view has yet to carry: the instant it was asked, or null for one taken away. */
+/** A pin given to a task that main's view has yet to carry: the instant it was asked, or null for one taken away. */
 export interface PendingMark {
   readonly pinnedAt?: number | null;
-  readonly archivedAt?: number | null;
 }
 
-/** The pins and archives given to tasks that main's view has yet to carry, by task id. */
+/** The pins given to tasks that main's view has yet to carry, by task id. */
 export type PendingMarks = ReadonlyMap<string, PendingMark>;
 
 /** The pending stamps a press asks for, made at `at`. */
@@ -435,10 +469,6 @@ export function pendingMark(mark: TaskMark, at: number): PendingMark {
       return { pinnedAt: at };
     case TASK_MARK.UNPIN:
       return { pinnedAt: null };
-    case TASK_MARK.ARCHIVE:
-      return { archivedAt: at };
-    case TASK_MARK.UNARCHIVE:
-      return { archivedAt: null };
   }
 }
 
@@ -453,23 +483,21 @@ function stampAfter(standing: number | undefined, asked: number | null | undefin
   return standing ?? asked;
 }
 
-/** A row or the open document with its pending pin and archive drawn in place of what it carries; an unpin takes the pin's place with it. */
+/** A row or the open document with its pending pin drawn in place of what it carries; an unpin takes the pin's place with it. */
 function marked<Row extends TaskSummary>(
   row: Row,
   mark: PendingMark | undefined,
 ): Omit<Row, keyof MarkStamps | "pinPosition"> & MarkStamps & Pick<TaskSummary, "pinPosition"> {
-  const { pinnedAt, pinPosition, archivedAt, ...rest } = row;
+  const { pinnedAt, pinPosition, ...rest } = row;
   const pinned = stampAfter(pinnedAt, mark?.pinnedAt);
-  const archived = stampAfter(archivedAt, mark?.archivedAt);
   return {
     ...rest,
     ...(pinned === undefined ? undefined : { pinnedAt: pinned }),
     ...(pinned === undefined || pinPosition === undefined ? undefined : { pinPosition }),
-    ...(archived === undefined ? undefined : { archivedAt: archived }),
   };
 }
 
-/** The view with each pending pin and archive drawn in place, in the list and on the open document alike. */
+/** The view with each pending pin drawn in place, in the list and on the open document alike. */
 export function markedView(view: TasksView, marks: PendingMarks): TasksView {
   if (marks.size === 0) return view;
   const held = view.document.task;
@@ -483,13 +511,9 @@ export function markedView(view: TasksView, marks: PendingMarks): TasksView {
   };
 }
 
-/** Whether the view carries every stamp a pending mark asks for: each standing where it is asked, and gone where it is taken away. */
+/** Whether the view carries the stamp a pending mark asks for: standing where it is asked, and gone where it is taken away. */
 function markLanded(row: MarkStamps, mark: PendingMark): boolean {
-  const pinLanded =
-    mark.pinnedAt === undefined || (mark.pinnedAt === null) === (row.pinnedAt === undefined);
-  const archiveLanded =
-    mark.archivedAt === undefined || (mark.archivedAt === null) === (row.archivedAt === undefined);
-  return pinLanded && archiveLanded;
+  return mark.pinnedAt === undefined || (mark.pinnedAt === null) === (row.pinnedAt === undefined);
 }
 
 /**
@@ -505,6 +529,60 @@ export function unsettledMarks(marks: PendingMarks, view: TasksView): PendingMar
     return viewed !== undefined && !markLanded(viewed, mark);
   });
   return unsettled.length === marks.size ? marks : new Map(unsettled);
+}
+
+/**
+ * A status a press gave a task that main's view has yet to carry. Each is an
+ * object of its own, so whoever set it lets go of it alone, and never of a
+ * later press's status for the same task.
+ */
+interface PendingStatus {
+  readonly status: TaskStatus;
+}
+
+/** The statuses given to tasks that main's view has yet to carry, by task id, apart from the pins, so each lands or is refused on its own. */
+export type PendingStatuses = ReadonlyMap<string, PendingStatus>;
+
+/** The view with each pending status drawn in place, in the list and on the open document alike. */
+export function statusedView(view: TasksView, statuses: PendingStatuses): TasksView {
+  if (statuses.size === 0) return view;
+  const statused = <Row extends TaskSummary>(row: Row): Row => {
+    const pending = statuses.get(row.id);
+    return pending === undefined ? row : { ...row, status: pending.status };
+  };
+  const held = view.document.task;
+  return {
+    ...view,
+    tasks: view.tasks.map(statused),
+    document: held === undefined ? view.document : { ...view.document, task: statused(held) },
+  };
+}
+
+/** The pending statuses the view still contradicts; one it now carries, or of a task it no longer holds, is let go. */
+export function unsettledStatuses(statuses: PendingStatuses, view: TasksView): PendingStatuses {
+  const unsettled = [...statuses].filter(([taskId, pending]) => {
+    const held = view.document.task;
+    const viewed =
+      view.tasks.find((task) => task.id === taskId) ?? (held?.id === taskId ? held : undefined);
+    return viewed !== undefined && standingStatus(viewed) !== pending.status;
+  });
+  return unsettled.length === statuses.size ? statuses : new Map(unsettled);
+}
+
+/**
+ * What an Undo of settling tasks at a status still puts back: only the tasks
+ * that still stand there, since one given another status since was chosen
+ * anew and an Undo must not take that choice back.
+ */
+export function undoStillDue(
+  undo: readonly StatusChange[],
+  settled: SettledStatus,
+  tasks: readonly Pick<TaskSummary, "id" | "status">[],
+): readonly StatusChange[] {
+  return undo.filter(({ taskId }) => {
+    const task = tasks.find((each) => each.id === taskId);
+    return task !== undefined && standingStatus(task) === settled;
+  });
 }
 
 /** What the toast says when the service refused a repository's pin, by whether it was a pin or an unpin. */
@@ -670,27 +748,19 @@ export interface SidebarTasks {
   readonly pinned: readonly TaskSummary[];
   /** The rest, as the service lists them: newest started first. */
   readonly rest: readonly TaskSummary[];
-  /** The archived tasks, newest archived first, whether or not they are pinned. */
-  readonly archived: readonly TaskSummary[];
 }
 
 /**
  * The account's tasks sorted into the sidebar's places, the pinned ones
  * newest pinned first until the Pinned section orders them with the rest of
- * its pins (`@luke/features/pin-order`). Note that an
- * archived task is drawn only among the archived, pinned or not, because its
- * pin is kept for when it is brought back rather than shown while it is away.
+ * its pins (`@luke/features/pin-order`).
  */
 export function sidebarTasks(tasks: readonly TaskSummary[]): SidebarTasks {
-  const archived = tasks
-    .filter((task) => task.archivedAt !== undefined)
-    .sort((a, b) => (b.archivedAt ?? 0) - (a.archivedAt ?? 0));
-  const standing = tasks.filter((task) => task.archivedAt === undefined);
-  const pinned = standing
+  const pinned = tasks
     .filter((task) => task.pinnedAt !== undefined)
     .sort((a, b) => (b.pinnedAt ?? 0) - (a.pinnedAt ?? 0));
-  const rest = standing.filter((task) => task.pinnedAt === undefined);
-  return { pinned, rest, archived };
+  const rest = tasks.filter((task) => task.pinnedAt === undefined);
+  return { pinned, rest };
 }
 
 /** The status word beside the microphone for a call, or nothing where none stands. */
@@ -718,9 +788,9 @@ const VOICE_PHASE_SHOWN: ReadonlySet<LiveStatus> = new Set([
 ]);
 
 /**
- * The open task's call as the microphone row draws it: the voice's word, and
- * the backend's line, which is the brain while it works, with its
- * pending command where it has one, and whether the notetaker is writing.
+ * An agent's call as its tab's call bar draws it: the voice's word, and the
+ * backend's line, which is the agent while it works, with its pending
+ * command where it has one.
  */
 export interface CallStatus {
   voiceWord: string;
@@ -728,8 +798,8 @@ export interface CallStatus {
 }
 
 /**
- * The microphone row's two lines while a call stands about the open task,
- * and nothing otherwise. A voice error or notice is not repeated here, since
+ * The call bar's two lines while a call into the agent stands, and nothing
+ * otherwise. A voice error or notice is not repeated here, since
  * the panel's own strip already carries it under the shape, exactly as it
  * does for any call. The voice line is the call's status, except that a
  * listening or muted call reads the wait the service says the voice is in;
@@ -738,18 +808,18 @@ export interface CallStatus {
  * for the voice.
  */
 export function callStatus(
-  view: Pick<VoiceView, "voiceStatus" | "callTaskId">,
-  tasks: Pick<TasksView, "activeTaskId" | "activity">,
+  view: Pick<VoiceView, "voiceStatus" | "call">,
+  activity: TaskActivity | undefined,
+  agentId: string,
 ): CallStatus | undefined {
-  const { activeTaskId, activity } = tasks;
-  if (activeTaskId === undefined || view.callTaskId !== activeTaskId) return undefined;
+  if (view.call?.agentId !== agentId) return undefined;
   return standingCallStatus(view, activity);
 }
 
 /**
- * The standing call's two lines whichever task it is about, read off that
- * call's own activity: the call bar's words, which the call card draws in
- * the same bar while the call's task is off screen.
+ * The standing call's two lines whichever agent it speaks into, read off
+ * that call's own activity: the call bar's words, which the call card draws
+ * in the same bar while the call's agent is off screen.
  */
 export function standingCallStatus(
   view: Pick<VoiceView, "voiceStatus">,
@@ -768,15 +838,15 @@ export function standingCallStatus(
   };
 }
 
-/** What the microphone button does when pressed. */
+/** What an agent's Call button does when pressed. */
 export const MICROPHONE_PRESS = {
-  /** Nothing: voice cannot run, or no task is open. */
+  /** Nothing: voice cannot run, or the agent is archived. */
   NONE: "none",
   /** Raises macOS's own microphone prompt. */
   ASK_ACCESS: "ask-access",
   /** Opens System Settings, the one place a denial can be changed. */
   OPEN_SETTINGS: "open-settings",
-  /** Talks to Luke about the open task: opens the task's call and hears it, or toggles its microphone. */
+  /** Talks to the agent: opens a call into it and hears it, or toggles its call's microphone. */
   TALK: "talk",
 } as const;
 
@@ -786,12 +856,15 @@ export interface MicrophoneButton {
   readonly press: MicrophonePress;
   /** The button's name for a reader and its hover. */
   readonly label: string;
-  /** Whether the open task's call stands with the developer not heard, which the button draws struck through. */
+  /** Whether the agent's call stands with the developer not heard, which the button draws struck through. */
   readonly muted: boolean;
 }
 
-/** What the microphone button says on an archived task, which no call is about. */
-const ARCHIVED_CALL_LABEL = "Unarchive the task to talk about it";
+/** What the Call button says on an archived agent, which no call speaks into. */
+const ARCHIVED_CALL_LABEL = "Unarchive the agent to call it";
+
+/** What the Call button says where a press opens a call into its agent. */
+export const CALL_LABEL = "Call";
 
 /** The statuses of a call that has a session, the ones whose microphone is either heard or muted. */
 const CALL_STANDING: ReadonlySet<LiveStatus> = new Set([
@@ -801,28 +874,28 @@ const CALL_STANDING: ReadonlySet<LiveStatus> = new Set([
 ]);
 
 /**
- * The microphone button, from what voice can run on and which task is open.
- * The microphone permission comes first, on the panel's own rules, because a
- * press that cannot be heard is no press; then the task, since a call is
- * always about the open task. The press toggles: while the developer is
- * heard on this task's own call it mutes, and otherwise it opens the task's
- * call or hears it again, hanging up another task's first,
- * which is also how a call that failed or was lost is tried again. Muted is
- * this task's own call standing with the developer not heard, so the button
- * says so rather than reading as a call not yet begun. An archived task
- * opens no call, so its press is none until it is brought back; a call of
- * its own still standing, which only a race leaves, is still muted and
- * heard again.
+ * An agent's Call button, and its call bar's microphone, from what voice can
+ * run on and which agent the call speaks into. The microphone permission
+ * comes first, on the panel's own rules, because a press that cannot be
+ * heard is no press. The press toggles: while the developer is heard on
+ * this agent's own call it mutes, and otherwise it opens a call into the
+ * agent or hears it again, hanging up another agent's first, which is also
+ * how a call that failed or was lost is tried again. Muted is this agent's
+ * own call standing with the developer not heard, so the button says so
+ * rather than reading as a call not yet begun. An archived agent takes no
+ * call, so its press is none until it is brought back; a call of its own
+ * still standing, which only a race leaves, is still muted and heard again.
  */
 export function microphoneButton(input: {
   voiceAvailable: boolean;
   microphoneStatus: MicrophoneStatus;
-  activeTaskId: string | undefined;
-  /** Whether the open task is archived. */
-  archived: boolean;
+  /** The agent whose tab the button stands in. */
+  agentId: string;
+  /** Whether the agent is archived; only its own page's press names it, since an archived agent draws no Call. */
+  archived?: boolean;
   listening: boolean;
-  /** The task the standing call is about, as the voice window reports it. */
-  callTaskId: string | undefined;
+  /** What the standing call speaks into, as the voice window reports it. */
+  call: VoiceCallAbout | undefined;
   voiceStatus: LiveStatus;
 }): MicrophoneButton {
   if (!input.voiceAvailable) {
@@ -842,18 +915,15 @@ export function microphoneButton(input: {
   if (!row.ready) {
     return { press: MICROPHONE_PRESS.NONE, label: row.detail ?? VOICE_KEYLESS_NOTE, muted: false };
   }
-  if (input.activeTaskId === undefined) {
-    return { press: MICROPHONE_PRESS.NONE, label: "Open a task to talk about it", muted: false };
-  }
-  const ownCall = input.callTaskId === input.activeTaskId;
+  const ownCall = input.call?.agentId === input.agentId;
   if (ownCall && input.listening) {
     return { press: MICROPHONE_PRESS.TALK, label: "Mute the microphone", muted: false };
   }
   if (ownCall && CALL_STANDING.has(input.voiceStatus)) {
     return { press: MICROPHONE_PRESS.TALK, label: "Unmute the microphone", muted: true };
   }
-  if (input.archived) {
+  if (input.archived === true) {
     return { press: MICROPHONE_PRESS.NONE, label: ARCHIVED_CALL_LABEL, muted: false };
   }
-  return { press: MICROPHONE_PRESS.TALK, label: "Talk about this task", muted: false };
+  return { press: MICROPHONE_PRESS.TALK, label: CALL_LABEL, muted: false };
 }

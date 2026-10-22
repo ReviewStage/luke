@@ -1,10 +1,4 @@
-import {
-  AVATAR_STOP_REASON,
-  type PlanDraftFrame,
-  type TaskActivityFrame,
-  type TaskCodeFrame,
-  type TaskWorkFrame,
-} from "@luke/features";
+import { AVATAR_STOP_REASON, type TaskActivityFrame, type TaskCodeFrame } from "@luke/features";
 import { PRODUCT_EVENT, PRODUCT_VOICE_SESSION_SOURCE } from "@luke/features/analytics";
 import type { VideoAvatar } from "@luke/features/video-avatar";
 import {
@@ -24,6 +18,7 @@ import { isAgentWireTrace } from "@luke/gateway/devtrace";
 import { APP_SETTING_SCHEMA, EXPERIMENT, experimentOn } from "@luke/settings";
 import { unavailableLiveDiagnostics } from "@luke/voice";
 import { LiveSessionHolder } from "@luke/voice/live-session";
+import type { VoiceCallAbout } from "@luke/voice/voice-view";
 import { readEither } from "@luke/wire/effect";
 import { Effect, Result, type Scope } from "effect";
 import type { AccountComposer } from "./compose-account.js";
@@ -44,18 +39,14 @@ export interface LiveDependencies {
   account: Pick<AccountComposer, "agentTrace"> & {
     readonly voiceCapabilities: Pick<AccountComposer["voiceCapabilities"], "liveSessions">;
   };
-  /** The task the panel has open, the one task a call may be created about; nothing while it has none. */
-  activeTaskId: () => string | undefined;
-  /** Where a draft of the open task goes as the service's notetaker writes it during a task's call. */
-  showPlanDraft: (draft: PlanDraftFrame) => void;
-  /** Where the service's word of what each part of Luke is doing on a task's call goes, and the call's end clearing it. */
+  /** The task an agent a call may go into is on, null for none, as the service reads it now; none for one no call goes into (`CodingAgentsComposer.callTaskOf`). */
+  callTaskOf: (agentId: string) => Effect.Effect<string | null | undefined>;
+  /** Where the service's word of what each part of Luke is doing on a call goes, and the call's end clearing it. */
   showTaskActivity: (activity: TaskActivityFrame) => void;
-  /** Where code Luke puts on screen during a task's call goes. */
+  /** Where code Luke puts on screen during a call goes. */
   showTaskCode: (code: TaskCodeFrame) => void;
-  /** Where each brain turn's work during a task's call goes. */
-  showTaskWork: (work: TaskWorkFrame) => void;
-  /** Where a task's call's end goes, so the code it put on screen is cleared with it. */
-  taskCallEnded: (taskId: string) => void;
+  /** Where a call's end goes, so what it was doing is cleared with it. */
+  taskCallEnded: (about: VoiceCallAbout) => void;
 }
 
 /**
@@ -65,8 +56,8 @@ export interface LiveDependencies {
  * service's: every spoken ask is answered by the hosted brain, every reply
  * is appended by the service's own exchange over the same socket, and the
  * record is the account's on the service. What this side still does is
- * create the session for the peer's offer about the open task, end it on the
- * peer's hang-up or the drain, and carry the peer's idle, the stop key, and
+ * create the session for the peer's offer into an agent the account
+ * reaches on eve, end it on the peer's hang-up or the drain, and carry the peer's idle, the stop key, and
  * the developer's video toggle to the service. The avatar's grant that toggle
  * draws is the holder's to hand on in process, through the assembly's
  * `avatar` to the desktop's main process, and no method or event here
@@ -107,13 +98,10 @@ export const composeLive = /* @__PURE__ */ Effect.fn("host/composeLive")(functio
         session_source: PRODUCT_VOICE_SESSION_SOURCE.HOSTED,
       });
     },
-    // The task a call is writing, as the service's notetaker drafts it.
-    onPlanDraft: (draft) => dependencies.showPlanDraft(draft),
     // What each part of Luke is doing on the call, as the service says it.
     onTaskActivity: (activity) => dependencies.showTaskActivity(activity),
     onTaskCode: (code) => dependencies.showTaskCode(code),
-    onTaskWork: (work) => dependencies.showTaskWork(work),
-    onTaskCallEnded: (taskId) => dependencies.taskCallEnded(taskId),
+    onTaskCallEnded: (about) => dependencies.taskCallEnded(about),
   });
 
   const methods: GatewayMethodTable = {
@@ -126,15 +114,26 @@ export const composeLive = /* @__PURE__ */ Effect.fn("host/composeLive")(functio
           readEither(voiceCreateLiveSessionParamsSchema)(params),
         );
         if (!request) return yield* invalid("sdp must be the peer's offer");
-        // An offer about a task the window no longer has open (another was
-        // opened, or the window closed, while the offer was out) is refused, so
-        // no call about one task is created while another is on screen.
-        if (request.taskId !== dependencies.activeTaskId()) {
+        // Note that the agent is read here as well as on the service, so an
+        // offer naming an agent archived, out of reach, or on a provider's
+        // own harness creates and bills no session at all. The call is keyed
+        // by the agent, whatever task the panel has open: one with no task
+        // names none, and one on a task names that task and no other.
+        const taskOf = yield* dependencies.callTaskOf(request.agentId);
+        if (taskOf === undefined) {
           return yield* Effect.fail(
-            new RefusedRefusal({ message: "the task is not the one the panel has open" }),
+            new RefusedRefusal({ message: "the agent is not one a call may go into" }),
           );
         }
-        const created = yield* service.createSession(request.sdp, request.taskId);
+        if ((request.taskId ?? null) !== taskOf) {
+          return yield* Effect.fail(
+            new RefusedRefusal({ message: "the agent is not on the task named" }),
+          );
+        }
+        const created = yield* service.createSession(request.sdp, {
+          agentId: request.agentId,
+          ...(taskOf === null ? undefined : { taskId: taskOf }),
+        });
         if (!created)
           return yield* Effect.fail(
             new RefusedRefusal({ message: "no live session could be created" }),

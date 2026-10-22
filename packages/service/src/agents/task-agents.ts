@@ -4,12 +4,15 @@ import {
   type CodingAgentStoreEffect,
   latestTurnsOfReached,
   listPublishedCodingAgents,
+  listPublishedCodingAgentsById,
   listTasklessCodingAgents,
-  type PublishedCodingAgent,
+  type PublishedCodingAgentLine,
 } from "@luke/database/models/coding-agent-store";
 import { readAccountNames } from "@luke/database/models/workspace-store";
 import {
+  CODING_AGENT_KIND,
   CODING_AGENT_STATUS,
+  type CodingAgentPullRequest,
   type CodingAgentStatus,
   PULL_REQUEST_STATE,
   type TasklessAgent,
@@ -24,9 +27,10 @@ import {
 import { Clock, Effect } from "effect";
 import {
   codingAgentActivityAt,
-  codingAgentPage,
   codingAgentRunStartedAt,
   codingAgentStatusOf,
+  codingAgentSummary,
+  startedBlank,
   summaryAccounts,
 } from "./coder-host/status.js";
 
@@ -56,12 +60,12 @@ interface ReadAgent {
   readonly createdAt: number;
   readonly activityAt: number;
   readonly archived: boolean;
-  readonly published: PublishedCodingAgent["published"];
+  readonly published: PublishedCodingAgentLine["published"];
 }
 
 /** One agent as its row names it, its status read at `now`: since its run began while it works, since its newest turn ended once it has; its starter named by `names`, and left unnamed once their account is gone. */
 function agentLine(
-  held: PublishedCodingAgent,
+  held: PublishedCodingAgentLine,
   turn: CodingAgentLatestTurn | undefined,
   awaitingLineAt: Date | undefined,
   now: number,
@@ -69,7 +73,7 @@ function agentLine(
 ): ReadAgent {
   const { agent } = held;
   const starter = names.get(agent.userId);
-  const standing = { createdAt: agent.createdAt, now, awaitingLineAt };
+  const standing = { createdAt: agent.createdAt, now, awaitingLineAt, blank: startedBlank(agent) };
   const status = codingAgentStatusOf(turn, standing);
   const at = WORKING_STATUSES.has(status)
     ? codingAgentRunStartedAt(turn, standing)
@@ -78,6 +82,8 @@ function agentLine(
     line: {
       id: agent.id,
       title: agent.title,
+      ...(agent.personaName === null ? undefined : { personaName: agent.personaName }),
+      ...(agent.kind === CODING_AGENT_KIND.OPERATOR ? { kind: agent.kind } : undefined),
       model: agent.model,
       effort: agent.effort,
       status,
@@ -131,6 +137,7 @@ function summaryOf(read: readonly ReadAgent[]): TaskAgentsSummary {
       deletions,
       url,
       agentId: line.id,
+      ...(published.queued === true ? { queued: true } : undefined),
     });
   }
   return {
@@ -146,6 +153,22 @@ function summaryOf(read: readonly ReadAgent[]): TaskAgentsSummary {
     pullRequests: [...pullRequests.values()]
       .sort((a, b) => PULL_REQUEST_RANK[a.state] - PULL_REQUEST_RANK[b.state])
       .slice(0, TASK_AGENTS_BOUNDS.MAX_PULL_REQUESTS),
+  };
+}
+
+/** An agent's pull request as its sidebar row carries it, where it opened one: as a task's row names its own. */
+function pullRequestOf(published: CodingAgentPullRequest | null | undefined) {
+  if (published == null) return undefined;
+  const { number, title, url, state, checks, queued } = published;
+  return {
+    pullRequest: {
+      number,
+      title,
+      url,
+      state,
+      checks,
+      ...(queued === true ? { queued } : undefined),
+    },
   };
 }
 
@@ -191,8 +214,8 @@ export function withTaskAgents(
 
 /**
  * The agents with no plan in the account's workspaces, whichever member
- * started each, newest started first, each read as its own page reads it,
- * with its automation's name, when it last moved, and when the account
+ * started each, newest started first, each read as its own page reads it
+ * but for the run that started it, with its automation's name, when it last moved, and when the account
  * pinned it where it did, the archived ones only where `includeArchived`
  * asks: the sidebar's rows beside the plans.
  */
@@ -202,6 +225,12 @@ export function listTasklessAgents(
 ): CodingAgentStoreEffect<readonly TasklessAgent[]> {
   return Effect.gen(function* () {
     const agents = yield* listTasklessCodingAgents(userId, options);
+    // What each published, as a task's row carries its agents' pull requests.
+    const held = yield* listPublishedCodingAgentsById(
+      userId,
+      agents.map((agent) => agent.id),
+    );
+    const published = new Map(held.map(({ agent, published }) => [agent.id, published]));
     const conversationIds = agents.map((agent) => agent.conversationId);
     // The agents were read through their workspaces' gate, and each conversation is its starter's.
     const turns = yield* latestTurnsOfReached(conversationIds);
@@ -212,17 +241,16 @@ export function listTasklessAgents(
     return agents.map((agent) => {
       const turn = turns.get(agent.conversationId);
       const awaitingLineAt = awaiting.get(agent.conversationId);
-      const { origin: _origin, ...page } = codingAgentPage(
-        agent,
-        { turn, awaitingLineAt },
-        now,
-        names,
-      );
       return {
-        ...page,
+        ...codingAgentSummary(agent, { turn, awaitingLineAt }, now, names),
+        // The fields its own page names beside the summary; the run that started it is that page's alone.
+        automationId: agent.automationId,
+        workspaceId: agent.organizationId,
+        repository: agent.repository,
         activityAt: codingAgentActivityAt(turn, { createdAt: agent.createdAt }),
         ...(agent.pinnedAt === null ? undefined : { pinnedAt: agent.pinnedAt.getTime() }),
         ...(agent.pinPosition === null ? undefined : { pinPosition: agent.pinPosition }),
+        ...pullRequestOf(published.get(agent.id)),
       };
     });
   });

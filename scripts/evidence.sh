@@ -22,7 +22,7 @@ fi
 # The captures below launch the packaged app, so they prove the bundle runs but
 # not that electron-builder carried everything into it: a helper or
 # the icon can be missing from a bundle whose panel still paints.
-for helper in mac-talk-key; do
+for helper in mac-output-volume; do
     if [[ ! -x "$PACKAGED_APP/Contents/Resources/$helper" ]]; then
         printf 'error: packaged app is missing the %s helper\n' "$helper" >&2
         exit 1
@@ -56,12 +56,10 @@ capture_evidence() {
 # The window opens on Plans: the fixture's synthetic plan list, with no plan
 # open.
 capture_evidence expanded --capture-evidence "$LUKE_EXPANDED_EVIDENCE_PATH"
-# Luke speaking: his meter beside his talking face in the sidebar, and his
-# words captioned over the work column.
+# Luke speaking: his meter beside his talking face in the sidebar.
 capture_evidence speaking --profile speaking --capture-evidence "$LUKE_SPEAKING_EVIDENCE_PATH"
-# The speaking run with the Mac's output off: the captions are forced on and
-# the volume hint stands in its own band below the caption block with its Got
-# it button. The state is the profile's own — a capture run reads no system
+# The speaking run with the Mac's output off: the volume hint stands on the
+# voice's notice line with its Got it button. The state is the profile's own — a capture run reads no system
 # volume — so the frame is deterministic like every other.
 capture_evidence muted --profile muted --capture-evidence "$LUKE_MUTED_EVIDENCE_PATH"
 # Both speakers heard at once, the full-duplex frame, both drawn from the

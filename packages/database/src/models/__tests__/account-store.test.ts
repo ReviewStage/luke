@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
+import { CHAPTERS_MODEL } from "@luke/features/chapters-model-choice";
+import { LINK_OPEN } from "@luke/features/link-open";
 import { EXPERIMENT } from "@luke/settings";
 import { eq, sql } from "drizzle-orm";
 import { Effect } from "effect";
@@ -12,6 +14,7 @@ import {
   accountExperimentOn,
   chatEnabledFor,
   readAccountPreferences,
+  readAccountRole,
   writeAccountPreferences,
 } from "../account-store.js";
 
@@ -20,10 +23,18 @@ import {
  * write merges its keys over what stood rather than replacing them, the
  * other parts' writes leave it standing, a key no build lists reads as
  * nothing, it never moves the preferences' instant a Mac reads as a
- * snapshot to take, and one account's choices are no other's.
+ * snapshot to take, and one account's choices are no other's. The link
+ * choice is a part of its own on the same terms: written alone, it moves no
+ * instant, and the shared part's write leaves it standing. So is the
+ * chapters model, which reads as Haiku until the account chooses and for a
+ * stored value no build lists any more. The role is read off the account's
+ * own row and no other's.
  *
  * Synthetic accounts throughout.
  */
+
+// SAFETY: a model a later build dropped, which the column's type no longer names, stored as an older build would have.
+const RETIRED_MODEL = "claude-retired-4-0" as typeof CHAPTERS_MODEL.HAIKU;
 
 const openAccount = Effect.gen(function* () {
   const db = yield* Database;
@@ -38,23 +49,23 @@ it.layer(getTestDB())("the account store's experiments", (it) => {
       const userId = yield* openAccount;
 
       const turnedOn = yield* writeAccountPreferences(userId, {
-        experiments: { [EXPERIMENT.FACTORY]: true },
+        experiments: { [EXPERIMENT.CODE_REVIEW]: true },
       });
-      assert.deepEqual(turnedOn.experiments, { [EXPERIMENT.FACTORY]: true });
+      assert.deepEqual(turnedOn.experiments, { [EXPERIMENT.CODE_REVIEW]: true });
 
       // An empty patch asks nothing of what stood.
       const untouched = yield* writeAccountPreferences(userId, { experiments: {} });
-      assert.deepEqual(untouched.experiments, { [EXPERIMENT.FACTORY]: true });
+      assert.deepEqual(untouched.experiments, { [EXPERIMENT.CODE_REVIEW]: true });
 
       yield* writeAccountPreferences(userId, { preferences: { voice: "cedar" } });
       const afterVoice = yield* readAccountPreferences(userId);
-      assert.deepEqual(afterVoice?.experiments, { [EXPERIMENT.FACTORY]: true });
+      assert.deepEqual(afterVoice?.experiments, { [EXPERIMENT.CODE_REVIEW]: true });
       assert.deepEqual(afterVoice?.preferences, { voice: "cedar" });
 
       const turnedOff = yield* writeAccountPreferences(userId, {
-        experiments: { [EXPERIMENT.FACTORY]: false },
+        experiments: { [EXPERIMENT.CODE_REVIEW]: false },
       });
-      assert.deepEqual(turnedOff.experiments, { [EXPERIMENT.FACTORY]: false });
+      assert.deepEqual(turnedOff.experiments, { [EXPERIMENT.CODE_REVIEW]: false });
       assert.deepEqual(turnedOff.preferences, { voice: "cedar" });
     }),
   );
@@ -62,18 +73,18 @@ it.layer(getTestDB())("the account store's experiments", (it) => {
   it.effect("a stored key no build lists any more reads as nothing, and the rest still reads", () =>
     Effect.gen(function* () {
       const userId = yield* openAccount;
-      yield* writeAccountPreferences(userId, { experiments: { [EXPERIMENT.FACTORY]: true } });
+      yield* writeAccountPreferences(userId, { experiments: { [EXPERIMENT.CODE_REVIEW]: true } });
       const db = yield* Database;
       yield* db
         .update(accountPreference)
         // A key written by a build that listed an experiment this one no longer does.
         .set({
-          experiments: sql`${JSON.stringify({ [EXPERIMENT.FACTORY]: true, graduated: true })}::jsonb`,
+          experiments: sql`${JSON.stringify({ [EXPERIMENT.CODE_REVIEW]: true, graduated: true })}::jsonb`,
         })
         .where(eq(accountPreference.userId, userId));
 
       const read = yield* readAccountPreferences(userId);
-      assert.deepEqual(read?.experiments, { [EXPERIMENT.FACTORY]: true });
+      assert.deepEqual(read?.experiments, { [EXPERIMENT.CODE_REVIEW]: true });
     }),
   );
 
@@ -81,7 +92,7 @@ it.layer(getTestDB())("the account store's experiments", (it) => {
     Effect.gen(function* () {
       const userId = yield* openAccount;
       const written = yield* writeAccountPreferences(userId, {
-        experiments: { [EXPERIMENT.FACTORY]: true },
+        experiments: { [EXPERIMENT.CODE_REVIEW]: true },
       });
       assert.equal(written.updatedAt, undefined);
       assert.deepEqual(written.preferences, {});
@@ -94,7 +105,7 @@ it.layer(getTestDB())("the account store's experiments", (it) => {
       Effect.gen(function* () {
         const userId = yield* openAccount;
         assert.equal(yield* accountExperimentOn(userId, EXPERIMENT.CHAT), false);
-        yield* writeAccountPreferences(userId, { experiments: { [EXPERIMENT.FACTORY]: true } });
+        yield* writeAccountPreferences(userId, { experiments: { [EXPERIMENT.CODE_REVIEW]: true } });
         assert.equal(yield* accountExperimentOn(userId, EXPERIMENT.CHAT), false);
         yield* writeAccountPreferences(userId, { experiments: { [EXPERIMENT.CHAT]: true } });
         assert.equal(yield* accountExperimentOn(userId, EXPERIMENT.CHAT), true);
@@ -108,7 +119,7 @@ it.layer(getTestDB())("the account store's experiments", (it) => {
     Effect.gen(function* () {
       const userId = yield* openAccount;
       assert.equal(yield* chatEnabledFor(userId), false);
-      yield* writeAccountPreferences(userId, { experiments: { [EXPERIMENT.FACTORY]: true } });
+      yield* writeAccountPreferences(userId, { experiments: { [EXPERIMENT.CODE_REVIEW]: true } });
       assert.equal(yield* chatEnabledFor(userId), false);
       yield* writeAccountPreferences(userId, { experiments: { [EXPERIMENT.CHAT]: true } });
       assert.equal(yield* chatEnabledFor(userId), true);
@@ -119,13 +130,92 @@ it.layer(getTestDB())("the account store's experiments", (it) => {
     Effect.gen(function* () {
       const owner = yield* openAccount;
       const other = yield* openAccount;
-      yield* writeAccountPreferences(owner, { experiments: { [EXPERIMENT.FACTORY]: true } });
+      yield* writeAccountPreferences(owner, { experiments: { [EXPERIMENT.CODE_REVIEW]: true } });
       yield* writeAccountPreferences(other, { preferences: { voice: "cedar" } });
 
       assert.deepEqual((yield* readAccountPreferences(other))?.experiments, {});
       assert.deepEqual((yield* readAccountPreferences(owner))?.experiments, {
-        [EXPERIMENT.FACTORY]: true,
+        [EXPERIMENT.CODE_REVIEW]: true,
       });
+    }),
+  );
+});
+
+it.layer(getTestDB())("the account store's link choice", (it) => {
+  it.effect("is written on its own, stands through a voice write, and moves no instant", () =>
+    Effect.gen(function* () {
+      const userId = yield* openAccount;
+      const chosen = yield* writeAccountPreferences(userId, { linkOpen: LINK_OPEN.MAC_APP });
+      assert.deepEqual(chosen.preferences, { linkOpen: LINK_OPEN.MAC_APP });
+      assert.equal(chosen.updatedAt, undefined);
+
+      yield* writeAccountPreferences(userId, { preferences: { voice: "cedar" } });
+      const read = yield* readAccountPreferences(userId);
+      assert.deepEqual(read?.preferences, { voice: "cedar", linkOpen: LINK_OPEN.MAC_APP });
+      assert.deepEqual((yield* readAccountPreferences(yield* openAccount))?.preferences, undefined);
+    }),
+  );
+});
+
+it.layer(getTestDB())("the account store's chapters model", (it) => {
+  it.effect(
+    "is written on its own, read back, stands through other writes, and moves no instant",
+    () =>
+      Effect.gen(function* () {
+        const userId = yield* openAccount;
+        const chosen = yield* writeAccountPreferences(userId, {
+          chaptersModel: CHAPTERS_MODEL.OPUS,
+        });
+        assert.equal(chosen.chaptersModel, CHAPTERS_MODEL.OPUS);
+        assert.equal(chosen.updatedAt, undefined);
+
+        yield* writeAccountPreferences(userId, { preferences: { voice: "cedar" } });
+        yield* writeAccountPreferences(userId, { experiments: { [EXPERIMENT.CODE_REVIEW]: true } });
+        assert.equal((yield* readAccountPreferences(userId))?.chaptersModel, CHAPTERS_MODEL.OPUS);
+
+        const other = yield* openAccount;
+        yield* writeAccountPreferences(other, { preferences: { voice: "cedar" } });
+        assert.equal((yield* readAccountPreferences(other))?.chaptersModel, CHAPTERS_MODEL.HAIKU);
+      }),
+  );
+
+  it.effect("a stored model no build lists any more reads as Haiku", () =>
+    Effect.gen(function* () {
+      const userId = yield* openAccount;
+      yield* writeAccountPreferences(userId, { chaptersModel: CHAPTERS_MODEL.SONNET });
+      const db = yield* Database;
+      yield* db
+        .update(accountPreference)
+        .set({ chaptersModel: RETIRED_MODEL })
+        .where(eq(accountPreference.userId, userId));
+
+      assert.equal((yield* readAccountPreferences(userId))?.chaptersModel, CHAPTERS_MODEL.HAIKU);
+    }),
+  );
+});
+
+it.layer(getTestDB())("the account store's role", (it) => {
+  it.effect("reads the role on the account's own row, and no other account's", () =>
+    Effect.gen(function* () {
+      const admin = yield* openAccount;
+      const member = yield* openAccount;
+      const db = yield* Database;
+      yield* db.update(user).set({ role: "admin" }).where(eq(user.id, admin));
+
+      assert.equal(yield* readAccountRole(admin), "admin");
+      // A new account holds the column's default, whatever another account was granted.
+      assert.equal(yield* readAccountRole(member), "user");
+    }),
+  );
+
+  it.effect("reads nothing where the row holds no role, or there is no such account", () =>
+    Effect.gen(function* () {
+      const userId = yield* openAccount;
+      const db = yield* Database;
+      yield* db.update(user).set({ role: null }).where(eq(user.id, userId));
+
+      assert.equal(yield* readAccountRole(userId), undefined);
+      assert.equal(yield* readAccountRole(`user-${randomUUID()}`), undefined);
     }),
   );
 });

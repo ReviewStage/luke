@@ -7,26 +7,34 @@ import { ACT_KIND } from "@luke/host/acts";
 import { askAct, tellAct } from "@luke/panel/act";
 import { appBridge } from "@luke/panel/app-bridge";
 import type { AppPlatform } from "@luke/panel/app-platform";
+import { openBrowserLiveOverPort } from "@luke/panel/browser-live-port";
 import { applySessionReplay } from "./session-replay";
 
 /**
  * The desktop's platform. The clipboard, the save dialog, the panel's focus,
- * and the browser are main's, reached over the act channel; the menu bar,
+ * and the browser are main's, reached over the act channel, and so is a
+ * cloud Browser tab's live view, which arrives on a port of its own; the menu bar,
  * the shortcut recording, and the counted events over the bridge's own
- * entries; a page is drawn from the `luke-page:` scheme main serves; and
- * the session recording is the desktop's own (`session-replay.ts`).
+ * entries; a page is drawn from the `luke-page:` scheme main serves; the
+ * static files are the build's copies beside the document; and the session
+ * recording is the desktop's own (`session-replay.ts`).
  * Each reads the bridge as it is called, so this is built before the bridge
  * is installed as safely as after.
  */
 export const DESKTOP_PLATFORM: AppPlatform = {
   copyText: (words) => askAct(ACT_KIND.WINDOW_COPY_TEXT, { words }),
+  copyImage: (png) => png.then((drawn) => askAct(ACT_KIND.WINDOW_COPY_IMAGE, { png: drawn })),
   saveFile: ({ name, text }) => askAct(ACT_KIND.WINDOW_SAVE_FILE, { name, text }),
   focusPanel: () => tellAct(ACT_KIND.WINDOW_FOCUS_PANEL),
   pageFrameUrl,
+  assetBase: () => new URL(".", document.baseURI).href,
   onMenuCommand: (listener) => appBridge().onMenuCommand(listener),
-  setShortcutCapturing: (capturing) => appBridge().setShortcutCapturing(capturing),
   recordSurfaceEvent: (name, properties) => appBridge().recordSurfaceEvent(name, properties),
   openGitHub: (url) => tellAct(ACT_KIND.GITHUB_OPEN, { url }),
   openWeb: (url) => tellAct(ACT_KIND.WEB_OPEN, { url }),
+  // The host names the dashboard's address on the service's origin, and main opens it in the default browser.
+  adminDashboard: () => ({ open: () => tellAct(ACT_KIND.ADMIN_OPEN) }),
+  // A cloud Browser tab's socket is the host's, under its bearer, and reaches this window on a port of its own.
+  openBrowserLive: openBrowserLiveOverPort,
   applySessionReplay,
 };

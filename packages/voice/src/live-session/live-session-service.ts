@@ -1,3 +1,4 @@
+import { linkLabels } from "@luke/features/mention-link";
 import type { CodeRef } from "@luke/features/task-wire";
 import { type TaskShownCode, VOICE_PHASE, type VoicePhase } from "@luke/features/tasks-view";
 import { LIVE_TRANSPORT_STATE, type LiveTransportState } from "@luke/gateway";
@@ -120,6 +121,33 @@ function missedWorkNote(missed: string, working: boolean): string {
   const still = working ? " He is still working, and will say more when he has it." : "";
   return `While the developer was away, Luke kept working. Catch them up in a sentence or two, in your own words rather than reading this out: ${missed}${still}`;
 }
+
+/**
+ * How the developer's words no ask carried are handed to the brain as the
+ * call ends: what they settle is still the plan's, and nothing Luke answers
+ * is heard on this call.
+ */
+const UNHEARD_ASK_NOTE =
+  "The call has ended, and no ask carried the developer's latest line above: write into the plan whatever it settles; nothing you answer is heard now. Their line:";
+
+/**
+ * What the voice is told, silently, of a line the developer typed into the
+ * call: the line itself, and that Luke has it, so the voice neither answers
+ * it from the conversation nor delegates it, and says Luke's reply when it
+ * comes. GPT-Live takes no user text item under client delegation, so the
+ * line reaches the voice as context and the agent as the ask.
+ */
+const TYPED_LINE_NOTE =
+  "The developer typed this line into the call instead of saying it. Luke has it and will answer it, so do not answer or delegate it yourself. Their line:";
+
+/**
+ * How a typed line is handed to the agent: what was said since the last ask,
+ * then the line under its own lead, so the agent reads it as the developer's
+ * ask and its words never stand alone as the whole of what eve is handed,
+ * which a turn would take for a line awaiting it.
+ */
+const TYPED_ASK_LEAD =
+  "The developer typed this line into the call rather than saying it; it is their ask:";
 
 /** What a call back is told, silently, where work an earlier call asked for is still under way and nothing of it is news yet. */
 const STILL_WORKING_NOTE =
@@ -335,6 +363,11 @@ interface StandingSession {
   ended: boolean;
   /** The graceful close under way, so a second ask to end the session waits on the first. */
   closing: Deferred.Deferred<void> | undefined;
+  /**
+   * Whether the session's end hands the developer's words no ask carried to
+   * the brain; not where it is let go of for its peer to attach to again.
+   */
+  handsOver: boolean;
   micLive: boolean;
   lastDelegationOffsetMs: number;
   readonly claimedDelegations: Set<string>;
@@ -353,6 +386,16 @@ interface StandingSession {
    * in the turn.
    */
   readonly askedRows: Set<string>;
+  /** The lines typed into the call so far, by the id the composer's send names each by, so a line sent again is taken once. */
+  readonly typedLines: Set<string>;
+  /**
+   * How much of each asked row's text its ask carried, as the row stood once
+   * the ask was handed over: a row's text only grows by appending, so the
+   * words it gains after that mark are new, and the call's end hands them on
+   * though the row is an ask's. A row of an ask still with the brain has no
+   * mark yet, and that ask takes whatever lands on it meanwhile.
+   */
+  readonly askedText: Map<string, number>;
   /**
    * The asks whose brain call is still out, by delegation: each keeps the span
    * it was composed over and the rows it has claimed, so a row a late delta
@@ -756,7 +799,8 @@ export class LiveSessionService {
       const recovery = yield* this.#brain.recoverRuns(session.sessionId);
       session.revisions = Math.max(session.revisions, recovery.revision);
       for (const run of recovery.runs) {
-        session.claimedDelegations.add(run.delegationId);
+        // A run a typed line asked for answers no delegation, and speaks session-wide.
+        if (run.delegationId !== null) session.claimedDelegations.add(run.delegationId);
         // Note that a run taken up never ends the call, because its goodbye was
         // said on the lost connection and how long ago is not on record.
         const exchange = newExchange(
@@ -822,6 +866,69 @@ export class LiveSessionService {
   }
 
   /**
+   * The developer's words no ask carried, handed to the brain as the call
+   * ends. Note that nothing reaches the plan but through an ask, so a
+   * correction said just before the hang-up, or one the voice answered from
+   * the conversation without delegating, would otherwise be lost. Nobody on
+   * this call hears its run: Luke works on it with no call up, and what he
+   * says of it is the next call's catch-up.
+   */
+  #askUnheard(session: StandingSession): Effect.Effect<void> {
+    return Effect.gen({ self: this }, function* () {
+      for (const open of session.openAsks.values()) this.#claimLate(session, open);
+      const context = session.ledger.askContext(session.lastDelegationOffsetMs);
+      const rows = askRowsOf(context, session.askedRows, Number.POSITIVE_INFINITY);
+      // An asked row is unheard only for the words it gained after its ask carried it, such as a
+      // correction that joined it in the last seconds of the call; it is read wherever it stands,
+      // since a late fragment joins the row its timing places it in, behind the context's span too.
+      const gainedOf = (row: TranscriptUtterance): string => {
+        const carried = session.askedText.get(row.rowId);
+        return carried === undefined ? "" : row.text.slice(carried);
+      };
+      const grown = session.ledger
+        .utterances(TRANSCRIPT_SPEAKER.USER)
+        .filter(
+          (row) =>
+            gainedOf(row).trim() !== "" && !context.turns.some((turn) => turn.rowId === row.rowId),
+        );
+      const turns = [...context.turns, ...grown].sort(
+        (left, right) => left.startMs - right.startMs,
+      );
+      // A row no ask claimed is unheard whole.
+      const unheard = turns.flatMap((turn) => {
+        if (turn.speaker !== TRANSCRIPT_SPEAKER.USER) return [];
+        if (!session.askedRows.has(turn.rowId)) return [turn.text];
+        const gained = gainedOf(turn);
+        return gained.trim() === "" ? [] : [gained];
+      });
+      const last = unheard.at(-1);
+      if (last === undefined) return;
+      this.#claim(session, rows, session.lastDelegationOffsetMs);
+      this.#markAsked(
+        session,
+        turns.map((turn) => turn.rowId),
+      );
+      session.revisions += 1;
+      const submissionId = this.#options.createId();
+      const submission = yield* this.#brain.submitAsk({
+        submissionId,
+        question: [
+          renderAskContext({ turns, ask: context.ask }),
+          `${UNHEARD_ASK_NOTE} ${last.trim()}`,
+        ].join("\n"),
+        sessionId: session.sessionId,
+        revision: session.revisions,
+      });
+      if (submission.outcome === LIVE_BRAIN_SUBMISSION.REFUSED || rows.length === 0) return;
+      yield* this.#attachAsk(
+        session,
+        submissionId,
+        rows.map((row) => row.rowId),
+      );
+    });
+  }
+
+  /**
    * The peer's transport as it saw it change. A failed transport is a lost
    * connection whatever the sideband still shows; a peer closed without a
    * hang-up asked of the host ends the session gracefully from here.
@@ -880,6 +987,81 @@ export class LiveSessionService {
   }
 
   /**
+   * A line the developer typed into the call rather than said, handed here
+   * by the host through the service's own frame, under the id the composer's
+   * send names it by. GPT-Live takes no user text item under client
+   * delegation, so the voice does not choose between answering and
+   * delegating it: it is written down once as the developer's typed row,
+   * handed to the agent as an ask of the session's own, its reply spoken
+   * session-wide as the run tells it, and the voice is told of it as quiet
+   * context. The ask takes the session's next revision, so it supersedes an
+   * older exchange and the next delegation supersedes it. The developer's
+   * words since the last ask ride it as its context and are its rows, as a
+   * delegation's are, so neither a later delegation nor the call's end hands
+   * them on again; the typed line is no row of the ledger's, so none carries
+   * it again either. A line sent again under the same id, as a Retry after a
+   * lost answer sends it, is the same line and is taken once. Answers whether
+   * a started session was there to take it.
+   */
+  typeLine(text: string, lineId: string): boolean {
+    const session = this.#speakable();
+    if (!session) return false;
+    if (session.typedLines.has(lineId)) return true;
+    session.typedLines.add(lineId);
+    // The words said so far are on record before the typed line is, as before a delegation's ask.
+    this.#flushRows(session);
+    this.#voiceIn(session, VOICE_PHASE.HANDING_OFF);
+    for (const open of session.openAsks.values()) this.#claimLate(session, open);
+    const atMs = session.ledger.lastActivityMs() ?? session.lastDelegationOffsetMs;
+    const context = session.ledger.askContext(session.lastDelegationOffsetMs);
+    const rows = askRowsOf(context, session.askedRows, atMs);
+    this.#claim(session, rows, atMs);
+    session.revisions += 1;
+    const asked = { revision: session.revisions, stops: session.stops, at: this.#now() };
+    const said = renderAskContext(context);
+    const question = [said, `${TYPED_ASK_LEAD} ${text}`].filter((part) => part !== "").join("\n");
+    // The voice reads mentions as the words a chip draws, never their addresses; the agent and the
+    // record keep the line as typed.
+    for (const chunk of chunkForAppend(`${TYPED_LINE_NOTE} ${linkLabels(text)}`)) {
+      this.#append(session, thinkingAppend(this.#input(null, chunk)));
+    }
+    this.#start(
+      Effect.gen({ self: this }, function* () {
+        const written = yield* this.#record.writeTypedRow({
+          rowId: lineId,
+          voiceSessionId: session.sessionId,
+          text,
+          atMs,
+        });
+        if (!written) this.#reportUnwritten();
+        // The line's id is the submission's, so the ask's turn takes the row in by it.
+        const submission = yield* this.#brain.submitAsk({
+          submissionId: lineId,
+          question,
+          sessionId: session.sessionId,
+          revision: asked.revision,
+        });
+        const rowIds = rows.map((row) => row.rowId);
+        this.#markAsked(session, rowIds);
+        if (submission.outcome === LIVE_BRAIN_SUBMISSION.REFUSED) {
+          // A refused line was never asked, so a Retry of it asks it again.
+          session.typedLines.delete(lineId);
+          this.#trace({ event: LIVE_SESSION_TRACE.DELEGATION_REFUSED, revision: asked.revision });
+          if (rowIds.length > 0) yield* this.#attachAsk(session, lineId, rowIds);
+          this.#speakInto(session, null, submission.refusal);
+          return;
+        }
+        this.#trace({ event: LIVE_SESSION_TRACE.DELEGATION_SENT, revision: asked.revision });
+        const exchange = this.#registerExchange(session, submission.runId, null, asked);
+        session.holdingQuestion = false;
+        if (!exchange.silenced) this.#handQuestion(session, null);
+        if (rowIds.length > 0) yield* this.#attachAsk(session, lineId, rowIds);
+      }),
+    );
+    return true;
+  }
+
+  /**
    * The drain: the session is closed gracefully inside the quit's own
    * deadline, and nothing is opened after. Run once, whether the composition
    * runs it as a drain step or as its own scope's finalizer.
@@ -908,6 +1090,7 @@ export class LiveSessionService {
       this.#stopRunEvents();
       const session = this.#standing;
       const releasing = this.#releasing;
+      if (session !== undefined) session.handsOver = false;
       if (session !== undefined) yield* this.#over(session);
       else if (releasing !== undefined) yield* Deferred.await(releasing);
     });
@@ -985,6 +1168,7 @@ export class LiveSessionService {
         started: false,
         ended: false,
         closing: undefined,
+        handsOver: true,
         micLive: false,
         lastDelegationOffsetMs: 0,
         claimedDelegations: new Set(),
@@ -1000,6 +1184,8 @@ export class LiveSessionService {
         idleReported: false,
         idleTimer: undefined,
         askedRows: new Set(),
+        typedLines: new Set(),
+        askedText: new Map(),
         settled: yield* Deferred.make<SidebandCloseResult>(),
         torn: yield* Deferred.make<void>(),
         released: yield* Deferred.make<void>(),
@@ -1048,6 +1234,9 @@ export class LiveSessionService {
   #arrivals(session: StandingSession): Effect.Effect<void> {
     return Stream.runForEach(session.sideband.arrivals, (arrival) => {
       if ("close" in arrival) {
+        // A socket gone with no close of the session's own, none asked for, may be a device that
+        // attaches again: what no ask carried is left for that call rather than handed on.
+        if (!session.closing) session.handsOver = false;
         this.#settle(session, {
           outcome: SIDEBAND_CLOSE_OUTCOME.CONNECTION_LOST,
           close: arrival.close,
@@ -1198,6 +1387,16 @@ export class LiveSessionService {
     open.rows.push(...late);
   }
 
+  /** Each row named is carried as it stands now: only words it gains from here are new to the brain. */
+  #markAsked(session: StandingSession, rowIds: readonly string[]): void {
+    for (const rowId of rowIds) {
+      const row = session.ledger.row(rowId);
+      if (row !== undefined && session.askedRows.has(rowId)) {
+        session.askedText.set(rowId, row.text.length);
+      }
+    }
+  }
+
   /** The rows are the delegation's from here: no later delegation is about them, and the session's span moves past them and the offset. */
   #claim(session: StandingSession, rows: readonly TranscriptUtterance[], offsetMs: number): void {
     for (const row of rows) session.askedRows.add(row.rowId);
@@ -1306,10 +1505,8 @@ export class LiveSessionService {
     // A follow-up with no row of its own, its words on a row already an ask's, moves the session
     // past that row's end as the row's own delegation did, so the next delegation does not read
     // the row again; one whose ask begins after the offset leaves the row the next delegation's.
-    const spanMs =
-      rows.length === 0 && session.askedRows.has(ask.rowId)
-        ? Math.max(offsetMs, ask.endMs)
-        : offsetMs;
+    const followUp = rows.length === 0 && session.askedRows.has(ask.rowId);
+    const spanMs = followUp ? Math.max(offsetMs, ask.endMs) : offsetMs;
     this.#claim(session, rows, spanMs);
     const open: OpenAsk = { sinceMs, offsetMs, rows: [...rows] };
     session.openAsks.set(delegationId, open);
@@ -1336,6 +1533,12 @@ export class LiveSessionService {
       // that starts by the offset, which is this delegation's and no one else's.
       this.#claimLate(session, open);
       session.openAsks.delete(delegationId);
+      // What the ask carried is its rows as they stand now, a follow-up's row among them: the words
+      // that landed while the brain was being asked are the ask's, and only later ones are new.
+      this.#markAsked(session, [
+        ...open.rows.map((row) => row.rowId),
+        ...(followUp ? [ask.rowId] : []),
+      ]);
       const rowIds = [...open.rows]
         .sort((left, right) => left.startMs - right.startMs)
         .map((row) => row.rowId);
@@ -1376,7 +1579,7 @@ export class LiveSessionService {
   #registerExchange(
     session: StandingSession,
     runId: string,
-    delegationId: string,
+    delegationId: LiveDelegationId,
     asked: { readonly revision: number; readonly stops: number; readonly at: number },
   ): Exchange {
     // The brain has the ask, so the hand-off is over; words already queued for Luke are still owed.
@@ -1795,7 +1998,8 @@ export class LiveSessionService {
    * sideband's transport released, and with it whatever the source left
    * standing under it. Then what the end owes and nothing inside it waits
    * on: every row with a write still put off written as it stands, so a
-   * socket closing mid-sentence leaves the words said so far on the row.
+   * socket closing mid-sentence leaves the words said so far on the row, and
+   * then the words no ask carried handed to the brain (`#askUnheard`).
    */
   #release(session: StandingSession): Effect.Effect<void> {
     return Effect.andThen(
@@ -1803,9 +2007,16 @@ export class LiveSessionService {
       Effect.suspend(() => {
         const rows = [...session.pendingRows.keys()];
         session.pendingRows.clear();
-        return Effect.all(
-          rows.map((rowId) => this.#upsertRow(session, rowId)),
-          { concurrency: "unbounded", discard: true },
+        return Effect.andThen(
+          Effect.all(
+            rows.map((rowId) => this.#upsertRow(session, rowId)),
+            { concurrency: "unbounded", discard: true },
+          ),
+          // Every end but a let-go hands on what no ask carried, once the session has said its
+          // last, however the end came: the developer's hang-up, the idle close, the session's own
+          // `session.closed`, or the socket gone. The service's stop waits on this release, so the
+          // brain is still standing when it runs.
+          session.handsOver ? this.#askUnheard(session) : Effect.void,
         );
       }),
     );

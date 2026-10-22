@@ -4,9 +4,9 @@ import { LINK_PLACE } from "./luke-link.js";
 import { openTargetOf } from "./open-address.js";
 
 /**
- * What the "Open in Luke" page hands the desktop app: the place its
+ * What a web page at a Luke link hands the desktop app: the place its
  * address names, spelled in the app's own scheme, on tryluke.dev or any
- * preview that serves the page, and nothing for an address that names no
+ * preview that serves the web app, and nothing for an address that names no
  * place. Synthetic ids.
  */
 
@@ -40,6 +40,15 @@ test("a task's address, or a section's, opens that task in the app, whichever ho
     appLinkFromAddress(`/acme/task/${TASK_ID}`, "#rollout"),
     `tryluke://tryluke.dev/acme/plan/${TASK_ID}#rollout`,
   );
+});
+
+test("a comment's address opens its thread, the query it names it by carried to the app", () => {
+  const thread = "0b6f6b52-2c1e-4f8e-9a4d-7f1c2e9d5a01";
+
+  const target = openTargetOf(`/acme/plan/${TASK_ID}`, "", `?comment=${thread}`);
+
+  assert.equal(target?.kind, LINK_PLACE.COMMENT);
+  assert.equal(target?.appLink, `tryluke://tryluke.dev/acme/plan/${TASK_ID}?comment=${thread}`);
 });
 
 test("a picture's address opens the plan it is of, and nothing else of it", () => {

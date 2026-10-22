@@ -1,12 +1,13 @@
 {
   "name": "@luke/catalog",
-  "version": "0.18.0",
+  "version": "0.19.0",
   "private": true,
   "type": "module",
   "description": "Every shared component of @luke/ui, drawn at both profiles in both themes on synthetic data; built, never deployed",
   "scripts": {
     "build": "vite build",
     "dev": "vite",
+    "test:vitest": "vitest run",
     "typecheck": "tsc --project tsconfig.json"
   },
   "dependencies": {
@@ -18,10 +19,13 @@
     "react-dom": "catalog:"
   },
   "devDependencies": {
+    "@types/node": "catalog:",
     "@types/react": "19.2.18",
     "@types/react-dom": "19.2.4",
     "@vitejs/plugin-react": "5.1.2",
+    "jsdom": "^30.0.1",
     "typescript": "catalog:",
-    "vite": "7.3.1"
+    "vite": "7.3.1",
+    "vitest": "catalog:"
   }
 }

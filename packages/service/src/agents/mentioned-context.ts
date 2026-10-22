@@ -1,5 +1,6 @@
 import { MENTIONED_HEADING } from "@luke/database/models/attached-file-parts";
 import { AGENT_TOOL, CONNECTION_TOOL } from "@luke/features/agent-tools";
+import { CHAT_TOOL } from "@luke/features/chat-wire";
 import { INTEGRATION_NAME } from "@luke/features/integration-wire";
 import {
   handedMentionsIn,
@@ -67,7 +68,7 @@ import { WORKSPACE_ROLE, type WorkspaceRole } from "@luke/features/workspace-wir
  * send did not find there, of another workspace or gone, is named as not
  * found. An agent is handed as its task and where its work stands on
  * GitHub, its branch and its pull request, which the agent reads with `gh`
- * and `git`, and as the id `message_agent` reaches it by, and never its
+ * and `git`, and as the link a direct message reaches it by, and never its
  * conversation, which is its starter's. A page is handed as its title, its
  * id, and its version, which `read_page` reads it by and `show_page` writes
  * its next version under, and never its HTML, which the agent reads when it
@@ -96,9 +97,10 @@ export interface MentionedAgent {
   readonly id: string;
   /** Its title, or its model's id where it has none yet. */
   readonly name: string;
-  /** The task it works on, and whether that task is archived, which takes its agents no message; null for an agent on none. */
-  readonly task: { readonly id: string; readonly name: string; readonly archived: boolean } | null;
-  readonly repository: string;
+  /** The task it works on; null for an agent on none. */
+  readonly task: { readonly id: string; readonly name: string } | null;
+  /** The repository it works in; null for an agent with none. */
+  readonly repository: string | null;
   /** The branch its last turn ended on; null before one ended, or where it stood detached. */
   readonly branch: string | null;
   /** The pull request from its branch as GitHub last answered; null where it has none. */
@@ -214,6 +216,8 @@ function pageNoteOf(pageId: string, name: string, reads: MentionedReads): string
 
 /** How the agent reads another agent's work: its pull request's diff, else its branch's, by the repository the agent shares with it or names. */
 function readingOf(agent: MentionedAgent, repository: string | null): string {
+  if (agent.repository === null)
+    return " It works in no repository, so there is no work of its to read.";
   const elsewhere = agent.repository.toLowerCase() !== repository?.toLowerCase();
   const repo = elsewhere ? ` --repo ${agent.repository}` : "";
   if (agent.pullRequest !== null) {
@@ -244,16 +248,15 @@ function agentNoteOf(
   if (agent === undefined) return `The coding agent "${name}": not found in your workspace.`;
   const archived = agent.archived ? ", archived," : "";
   const branch = agent.branch === null ? "" : ` on the branch \`${agent.branch}\``;
+  const working = agent.repository === null ? "" : ` working in \`${agent.repository}\``;
   const pullRequest =
     agent.pullRequest === null
       ? ""
       : `, whose pull request is #${agent.pullRequest.number} (${agent.pullRequest.url})`;
   const message = agent.archived
     ? ""
-    : agent.task?.archived === true
-      ? " Its task is archived, so it takes no message."
-      : ` To message it, call \`${AGENT_TOOL.MESSAGE_AGENT}\` with its id.`;
-  return `The developer pointed you at another coding agent of your workspace ${taskWords(agent, task)}, "${agent.name}" (id \`${agent.id}\`)${archived} working in \`${agent.repository}\`${branch}${pullRequest}.${readingOf(agent, task?.repository ?? null)}${message} Its conversation is not yours to read.`;
+    : ` To message it, send it a direct message: \`${CHAT_TOOL.POST}\` with \`to\` set to the link the developer pointed you at.`;
+  return `The developer pointed you at another coding agent of your workspace ${taskWords(agent, task)}, "${agent.name}" (id \`${agent.id}\`)${archived}${working}${branch}${pullRequest}.${readingOf(agent, task?.repository ?? null)}${message} Its conversation is not yours to read.`;
 }
 
 /** What a member's role is said as. */
@@ -302,8 +305,10 @@ function handedMention(mention: Mention, task: Task | undefined): Handed | undef
   switch (mention.kind) {
     case MENTION_KIND.TASK:
     case MENTION_KIND.SECTION:
-    case MENTION_KIND.PAGE:
       return mention.taskId === task?.id ? mention : undefined;
+    // A page of an agent on no task stands on no plan, so it is handed as another plan's is.
+    case MENTION_KIND.PAGE:
+      return "taskId" in mention && mention.taskId === task?.id ? mention : undefined;
     case MENTION_KIND.AGENT:
     case MENTION_KIND.PERSON:
     case MENTION_KIND.SERVER:
@@ -314,6 +319,10 @@ function handedMention(mention: Mention, task: Task | undefined): Handed | undef
     case MENTION_KIND.FILE:
       return mention.lines === undefined ? undefined : mention;
     case MENTION_KIND.FOLDER:
+    // Luke named in words is a comment's ask of him, which hands an agent nothing.
+    case MENTION_KIND.LUKE:
+    // A date's words are the date in full, which is all there is to hand.
+    case MENTION_KIND.DATE:
       return undefined;
   }
 }
@@ -398,7 +407,7 @@ export function mentionedIds(words: string, task: Task | undefined): MentionedId
   const agents = new Set<string>();
   const people = new Set<string>();
   for (const { mention } of handedMentionsIn(words, task?.repository ?? null)) {
-    if (mention.kind === MENTION_KIND.PAGE && mention.taskId === task?.id)
+    if (mention.kind === MENTION_KIND.PAGE && "taskId" in mention && mention.taskId === task?.id)
       pages.add(mention.pageId);
     if (mention.kind === MENTION_KIND.AGENT) agents.add(mention.agentId.toLowerCase());
     if (mention.kind === MENTION_KIND.PERSON) people.add(mention.userId);

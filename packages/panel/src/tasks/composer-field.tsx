@@ -1,5 +1,13 @@
-import { type ReactNode, type RefObject, useLayoutEffect, useRef, useState } from "react";
+import {
+  type ReactNode,
+  type RefObject,
+  useCallback,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import { createPortal } from "react-dom";
+import { useEditedLinksHost } from "../link-menu.js";
 import type {
   ComposerChip,
   ComposerEditorHandle,
@@ -7,6 +15,7 @@ import type {
   ComposerQuote,
   ComposerTrigger,
   MentionNode,
+  MentionNodeDoors,
   PlanEditorModule,
 } from "../plan-editor/contract.js";
 
@@ -53,7 +62,7 @@ interface DrawnChip {
   readonly element: HTMLElement;
   readonly chip:
     | ComposerChip
-    | { readonly mention: MentionNode }
+    | { readonly mention: MentionNode; readonly node: MentionNodeDoors }
     | { readonly quote: ComposerQuote };
   readonly key: number;
 }
@@ -61,9 +70,12 @@ interface DrawnChip {
 /** What the box's mentions are picked and drawn with: the `@` word's report, and each mention's look. */
 export interface ComposerFieldMentions {
   readonly onTrigger: (trigger: ComposerTrigger | undefined) => void;
-  readonly chip: (mention: MentionNode) => ReactNode;
+  /** A mention's chip, handed the doors to its node. */
+  readonly chip: (mention: MentionNode, node: MentionNodeDoors) => ReactNode;
   /** The mention words pasted whole stand for; nothing for words that paste as words. */
   readonly pasted: (words: string) => MentionNode | undefined;
+  /** The `#` word's report, where the box names channels; none where it names none, read as it mounts. */
+  readonly onChannelTrigger?: ((trigger: ComposerTrigger | undefined) => void) | undefined;
 }
 
 export function ComposerField({
@@ -86,6 +98,7 @@ export function ComposerField({
   quote,
   mentions,
   takesFocus = true,
+  focus,
   children,
 }: {
   /** The editor bundle; nothing until it has loaded, while the field stands inert. */
@@ -113,10 +126,21 @@ export function ComposerField({
   mentions?: ComposerFieldMentions | undefined;
   /** Whether the editor takes the caret as it mounts, unless the developer is typing elsewhere; a box that stands beside a list the keys step through takes none. */
   takesFocus?: boolean;
+  /** Whether the editor takes the caret as it mounts, over `takesFocus` and whoever is typing elsewhere; left out, those decide. Read as it mounts. */
+  focus?: boolean | undefined;
   /** What stands over the field, a list it opened. */
   children?: ReactNode;
 }): React.JSX.Element {
   const host = useRef<HTMLDivElement>(null);
+  // A link in the draft opens, from its right-click, where the box stands.
+  const editedLinks = useEditedLinksHost();
+  const roomHost = useCallback(
+    (element: HTMLDivElement | null) => {
+      room.current = element;
+      editedLinks(element);
+    },
+    [room, editedLinks],
+  );
   const [chips, setChips] = useState<readonly DrawnChip[]>([]);
   // The last words the editor handed back, which a draft from outside is told against.
   const emitted = useRef(draft);
@@ -131,6 +155,7 @@ export function ComposerField({
     onTrigger,
     mentions,
     takesFocus,
+    focus,
   });
   latest.current = {
     draft,
@@ -142,6 +167,7 @@ export function ComposerField({
     onTrigger,
     mentions,
     takesFocus,
+    focus,
   };
 
   /** A chip the editor asked for, drawn into its node's element until the node goes. */
@@ -161,7 +187,7 @@ export function ComposerField({
       maxLength,
       label,
       className: FIELD_CLASS,
-      focus: now.takesFocus && !typingElsewhere(),
+      focus: now.focus ?? (now.takesFocus && !typingElsewhere()),
       onDraft: (text) => {
         emitted.current = text;
         latest.current.setDraft(text);
@@ -177,8 +203,12 @@ export function ComposerField({
           ? undefined
           : {
               onTrigger: (trigger) => latest.current.mentions?.onTrigger(trigger),
-              drawMention: (element, mention) => draw(element, { mention }),
+              drawMention: (element, mention, node) => draw(element, { mention, node }),
               pasted: (words) => latest.current.mentions?.pasted(words),
+              onChannelTrigger:
+                now.mentions.onChannelTrigger === undefined
+                  ? undefined
+                  : (trigger) => latest.current.mentions?.onChannelTrigger?.(trigger),
             },
     });
     editor.current = mounted;
@@ -201,7 +231,7 @@ export function ComposerField({
   useLayoutEffect(() => editor.current?.setAria(aria));
 
   return (
-    <div ref={room} className="agent-composer-field">
+    <div ref={roomHost} className="agent-composer-field">
       {draft === "" ? (
         <span className="agent-composer-placeholder" aria-hidden="true">
           {placeholder}
@@ -211,7 +241,7 @@ export function ComposerField({
       {chips.map((each) =>
         createPortal(
           "mention" in each.chip
-            ? (mentions?.chip(each.chip.mention) ?? `@${each.chip.mention.name}`)
+            ? (mentions?.chip(each.chip.mention, each.chip.node) ?? `@${each.chip.mention.name}`)
             : "quote" in each.chip
               ? (quote?.(each.chip.quote) ?? each.chip.quote.words)
               : chip(each.chip),

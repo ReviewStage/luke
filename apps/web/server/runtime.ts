@@ -1,6 +1,11 @@
+import type { NativeAgentSessions } from "@luke/service/agents/coder-host/runtime-sessions";
+import { agentSandboxDoors } from "@luke/service/agents/luke-mcp/sandbox-door";
+import { deploymentOidcToken } from "@luke/service/agents/vercel-sandbox-api";
+import { AfterResponse } from "@luke/service/http/after-response";
 import { sentryLayer } from "@luke/service/observability/sentry";
 import { type WebServices, type WebServicesError, webServices } from "@luke/service/runtime";
-import { type Effect, Layer, ManagedRuntime } from "effect";
+import { waitUntil } from "@vercel/functions";
+import { type Context, Effect, Layer, ManagedRuntime } from "effect";
 
 /**
  * Module scope is the memoization: Vercel keeps a warm instance's module
@@ -12,12 +17,24 @@ import { type Effect, Layer, ManagedRuntime } from "effect";
 let standing: ManagedRuntime.ManagedRuntime<WebServices, WebServicesError> | undefined;
 
 /**
+ * Work a request hands on past its answer (`after-response.ts`), run as a
+ * root of its own on this runtime, so the request's end interrupts none of
+ * it, and handed to Vercel's `waitUntil`, so the instance is not frozen
+ * before it ends. The work never fails, and carries the request's services.
+ */
+const afterResponseLayer = Layer.succeed(AfterResponse, {
+  keep: (work) => Effect.sync(() => waitUntil(runWeb(work))),
+});
+
+/**
  * The one runtime a web function runs an effect on, with Sentry started
  * before the services it watches, as Sentry's Effect guide provides it to
- * the HTTP layer.
+ * the HTTP layer, and the after-response work beside them.
  */
 function webRuntime(): ManagedRuntime.ManagedRuntime<WebServices, WebServicesError> {
-  standing ??= ManagedRuntime.make(Layer.provideMerge(webServices, sentryLayer()));
+  standing ??= ManagedRuntime.make(
+    Layer.provideMerge(webServices, Layer.merge(sentryLayer(), afterResponseLayer)),
+  );
   return standing;
 }
 
@@ -25,6 +42,27 @@ function webRuntime(): ManagedRuntime.ManagedRuntime<WebServices, WebServicesErr
 export function runWeb<A, E>(effect: Effect.Effect<A, E, WebServices>): Promise<A> {
   return webRuntime().runPromise(effect);
 }
+
+/**
+ * The deployment's services as a route reads them once per instance, with
+ * the native harnesses beside them where its function provides them
+ * (`native-agents.ts`), built over this one runtime.
+ */
+export function webServicesWith(
+  beside?: Layer.Layer<NativeAgentSessions, never, WebServices>,
+): Promise<Context.Context<WebServices>> {
+  return beside === undefined
+    ? runWeb(Effect.context<WebServices>())
+    : runWeb(Effect.provide(Effect.context<WebServices | NativeAgentSessions>(), beside));
+}
+
+/**
+ * The doors to a native agent's sandbox, for Luke's MCP server's tools that
+ * read a file the agent names or run `show_code` in its checkout: their calls run on this runtime, under the
+ * function's own OIDC token, as every other call of Luke's to Vercel
+ * Sandbox is made.
+ */
+export const webAgentSandboxDoor = agentSandboxDoors(runWeb, deploymentOidcToken);
 
 /**
  * Releases what the layer acquired and leaves the next call to build it again.

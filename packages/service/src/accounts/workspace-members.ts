@@ -1,5 +1,13 @@
-import { Database } from "@luke/database/core/query";
-import { roleOf, type WorkspaceStoreEffect } from "@luke/database/models/workspace-store";
+import {
+  type LiveStatement,
+  liveSelection,
+  liveStatementOf,
+} from "@luke/database/core/live-statement";
+import { Database, queryBuilder } from "@luke/database/core/query";
+import {
+  type WorkspaceStoreEffect,
+  workspaceReachableBy,
+} from "@luke/database/models/workspace-store";
 import { member, user } from "@luke/database/schemas/auth";
 import { automation } from "@luke/database/schemas/automation";
 import { codingAgent } from "@luke/database/schemas/coding-agent";
@@ -9,8 +17,8 @@ import { task } from "@luke/database/schemas/task";
 import { pinnedPictureUrl } from "@luke/features/account-picture";
 import { AUTOMATION_SCOPE } from "@luke/features/automation-wire";
 import type { FormerMember, WorkspaceMember, WorkspaceRole } from "@luke/features/workspace-wire";
-import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
-import { and, asc, eq, inArray, isNotNull, notInArray, or } from "drizzle-orm";
+import { roleOf, WORKSPACE_ROLE } from "@luke/features/workspace-wire";
+import { and, asc, eq, inArray, isNotNull, notInArray, or, type SQL } from "drizzle-orm";
 import { Effect, Option, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
 
@@ -69,6 +77,74 @@ const findMembers = SqlSchema.findAll({
     ),
 });
 
+/**
+ * The condition that the account a statement reads is named by the
+ * workspace's work and is no longer a member of it: it created one of its
+ * tasks, started one of its agents, made one of its workspace automations,
+ * saved a version of one of its tasks, or answered one of its Inbox items.
+ */
+function formerOf(organizationId: string): SQL | undefined {
+  const tasks = queryBuilder
+    .select({ id: task.id })
+    .from(task)
+    .where(eq(task.organizationId, organizationId));
+  return and(
+    or(
+      inArray(
+        user.id,
+        queryBuilder
+          .select({ id: task.userId })
+          .from(task)
+          .where(eq(task.organizationId, organizationId)),
+      ),
+      inArray(
+        user.id,
+        queryBuilder
+          .select({ id: codingAgent.userId })
+          .from(codingAgent)
+          .where(eq(codingAgent.organizationId, organizationId)),
+      ),
+      // Note that only the workspace's own automations count, since a personal one is read by its maker alone.
+      inArray(
+        user.id,
+        queryBuilder
+          .select({ id: automation.userId })
+          .from(automation)
+          .where(
+            and(
+              eq(automation.organizationId, organizationId),
+              eq(automation.scope, AUTOMATION_SCOPE.WORKSPACE),
+            ),
+          ),
+      ),
+      inArray(
+        user.id,
+        queryBuilder
+          .select({ id: planRevision.userId })
+          .from(planRevision)
+          .where(and(inArray(planRevision.taskId, tasks), isNotNull(planRevision.userId))),
+      ),
+      inArray(
+        user.id,
+        queryBuilder
+          .select({ id: inboxItem.answeredBy })
+          .from(inboxItem)
+          // Note that an item is the workspace's by its own column, since an agent with no task holds items too.
+          .where(
+            and(eq(inboxItem.organizationId, organizationId), isNotNull(inboxItem.answeredBy)),
+          ),
+      ),
+    ),
+    notInArray(
+      user.id,
+      queryBuilder
+        .select({ id: member.userId })
+        .from(member)
+        .where(eq(member.organizationId, organizationId)),
+    ),
+  );
+}
+
 const findFormer = SqlSchema.findAll({
   Request: Schema.String,
   Result: Schema.Struct({
@@ -77,76 +153,13 @@ const findFormer = SqlSchema.findAll({
     image: Schema.NullOr(Schema.String),
   }),
   execute: (organizationId) =>
-    Database.use((db) => {
-      const tasks = db
-        .select({ id: task.id })
-        .from(task)
-        .where(eq(task.organizationId, organizationId));
-      return db
+    Database.use((db) =>
+      db
         .select({ userId: user.id, name: user.name, image: user.image })
         .from(user)
-        .where(
-          and(
-            or(
-              inArray(
-                user.id,
-                db
-                  .select({ id: task.userId })
-                  .from(task)
-                  .where(eq(task.organizationId, organizationId)),
-              ),
-              inArray(
-                user.id,
-                db
-                  .select({ id: codingAgent.userId })
-                  .from(codingAgent)
-                  .where(eq(codingAgent.organizationId, organizationId)),
-              ),
-              // Note that only the workspace's own automations count, since a personal one is read by its maker alone.
-              inArray(
-                user.id,
-                db
-                  .select({ id: automation.userId })
-                  .from(automation)
-                  .where(
-                    and(
-                      eq(automation.organizationId, organizationId),
-                      eq(automation.scope, AUTOMATION_SCOPE.WORKSPACE),
-                    ),
-                  ),
-              ),
-              inArray(
-                user.id,
-                db
-                  .select({ id: planRevision.userId })
-                  .from(planRevision)
-                  .where(and(inArray(planRevision.taskId, tasks), isNotNull(planRevision.userId))),
-              ),
-              inArray(
-                user.id,
-                db
-                  .select({ id: inboxItem.answeredBy })
-                  .from(inboxItem)
-                  // Note that an item is the workspace's by its own column, since an agent with no task holds items too.
-                  .where(
-                    and(
-                      eq(inboxItem.organizationId, organizationId),
-                      isNotNull(inboxItem.answeredBy),
-                    ),
-                  ),
-              ),
-            ),
-            notInArray(
-              user.id,
-              db
-                .select({ id: member.userId })
-                .from(member)
-                .where(eq(member.organizationId, organizationId)),
-            ),
-          ),
-        )
-        .orderBy(asc(user.name), asc(user.id));
-    }),
+        .where(formerOf(organizationId))
+        .orderBy(asc(user.name), asc(user.id)),
+    ),
 });
 
 const findMemberId = SqlSchema.findOneOption({
@@ -197,4 +210,40 @@ export function memberIdOf(
     findMemberId({ userId, organizationId }),
     Option.map((row) => row.id),
   );
+}
+
+/** The statements a workspace's people are followed by live: its members, and who its work names but left. */
+export type WorkspaceMembersLiveStatements = Readonly<Record<"members" | "former", LiveStatement>>;
+
+/**
+ * A workspace's people written for Neon Realtime, read for `readerId`: the
+ * same rows and columns as `listMembers` and `listFormerMembers`, each under
+ * the key `live-wire.ts` reads it by, and none at all once the reader is no
+ * longer a member, so a subscription stays bound to the rule its endpoint
+ * checked. The order is the reader's to keep, since Realtime keeps none.
+ * None where a statement names a value Realtime cannot carry.
+ */
+export function workspaceMembersLiveStatements(
+  readerId: string,
+  organizationId: string,
+): Option.Option<WorkspaceMembersLiveStatements> {
+  const reached = workspaceReachableBy(readerId, organizationId);
+  const members = queryBuilder
+    .select(
+      liveSelection({
+        userId: user.id,
+        name: user.name,
+        email: user.email,
+        role: member.role,
+        image: user.image,
+      }),
+    )
+    .from(member)
+    .innerJoin(user, eq(user.id, member.userId))
+    .where(and(eq(member.organizationId, organizationId), reached));
+  const former = queryBuilder
+    .select(liveSelection({ userId: user.id, name: user.name, image: user.image }))
+    .from(user)
+    .where(and(formerOf(organizationId), reached));
+  return Option.all({ members: liveStatementOf(members), former: liveStatementOf(former) });
 }

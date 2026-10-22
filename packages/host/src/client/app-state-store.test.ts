@@ -1,13 +1,12 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
-import { TASK_WORK_STATE } from "@luke/features/tasks-view";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
 import { AVATAR_END_REASON, AVATAR_OFF, AVATAR_STATUS } from "@luke/voice/avatar";
 import { IDLE_VOICE_VIEW } from "@luke/voice/voice-view";
-import { MESSAGE_ROLE } from "@luke/wire";
 import { Context, Effect, Fiber, Stream } from "effect";
-import { type AppState, sessionReplayBootstrap } from "../app-state.js";
+import { WindowPushes } from "../act-port/push-procedures.js";
+import { type AppState, type AppStateSnapshot, sessionReplayBootstrap } from "../app-state.js";
+import { PUSH, type PushEvent } from "../contract/index.js";
 import type { HostBootstrap } from "../host-operator.js";
 import { runModeFor } from "../run-mode.js";
 import { recordingReporter } from "../testing/recording-reporter.js";
@@ -17,8 +16,7 @@ import {
   initialAppState,
   publishAppStateChanges,
   voiceWindowGone,
-  voiceWindowState,
-  windowAppState,
+  WindowAppStates,
 } from "./app-state-store.js";
 
 /**
@@ -119,6 +117,48 @@ it("two slices in one patch are one version", () => {
   assert.equal(app.snapshot().voice.view, IDLE_VOICE_VIEW);
 });
 
+it("a slice that moved keeps every part of it that did not, so what a reader held of it is the object it still holds", () => {
+  const app = store();
+  const shown = (callId: string, lines: readonly string[]) => ({
+    callId,
+    turnId: "turn-1",
+    shownAt: 0,
+    code: {
+      ref: { path: "src/invites.ts", startLine: 1, endLine: 1 },
+      repository: "acme/relay",
+      firstLine: 1,
+      lineCount: lines.length,
+      lines: [...lines],
+    },
+  });
+  app.update({
+    tasks: {
+      ...app.snapshot().tasks,
+      activeTaskId: "plan-1",
+      shownCode: [shown("call-1", ["const a = 1;"]), shown("call-2", ["const b = 2;"])],
+    },
+  });
+  const held = app.snapshot().tasks;
+
+  // The host's next view: the same data, every object of it new, and the second code grown.
+  const next = {
+    ...structuredClone(held),
+    shownCode: [
+      shown("call-1", ["const a = 1;"]),
+      shown("call-2", ["const b = 2;", "const c = 3;"]),
+    ],
+  };
+  app.update({ tasks: next });
+  const now = app.snapshot().tasks;
+
+  assert.equal(app.snapshot().version, 2);
+  assert.deepEqual(now, next);
+  assert.equal(now.document, held.document);
+  assert.equal(now.shownCode?.[0], held.shownCode?.[0]);
+  assert.notEqual(now.shownCode?.[1], held.shownCode?.[1]);
+  assert.equal(now.shownCode?.[1]?.code.ref, held.shownCode?.[1]?.code.ref);
+});
+
 it.effect("a touch re-announces the document without numbering it again", () =>
   Effect.gen(function* () {
     const app = store();
@@ -148,6 +188,7 @@ const BOOT: HostBootstrap = {
   settings: SETTINGS,
   account: inert(),
   sessionReplay: { permitted: true, accountId: "person" },
+  access: { admin: true },
   voiceAvailable: true,
   agentTraceEnabled: true,
 };
@@ -158,6 +199,7 @@ it("a host bootstrap lands in the document as the host answered it", () => {
   const held = app.snapshot();
   assert.equal(held.run.agentTraceEnabled, true);
   assert.deepEqual(held.sessionReplay, { permitted: true, accountId: "person", halted: false });
+  assert.deepEqual(held.access, { admin: true });
 });
 
 it("a halt outlives every host read until the host's own event stands it down", () => {
@@ -178,67 +220,20 @@ it("recording is what the host permitted less what an account's end stood down",
   assert.deepEqual(sessionReplayBootstrap(app.snapshot()), {
     permitted: true,
     appVersion: "1.2.3",
+    packaged: true,
     accountId: "person",
   });
   app.update({ sessionReplay: { ...app.snapshot().sessionReplay, halted: true } });
   assert.equal(sessionReplayBootstrap(app.snapshot()).permitted, false);
 });
 
-it("the voice and call windows are sent the document, and answered their first read of it, without the planning turns' work or the plan's planning conversation, and the rest of the plan as held", () => {
-  const held = initialAppState(RUN, true, []);
-  const tasks = {
-    ...held.tasks,
-    activeTaskId: "plan-1",
-    work: [
-      {
-        turnId: "turn-1",
-        startedAt: 0,
-        state: TASK_WORK_STATE.DONE,
-        earlierOmitted: false,
-        journal: [{ type: "text", text: "Invites live in one file." }],
-        workers: [],
-      },
-    ],
-    conversation: {
-      messages: [
-        {
-          id: "turn-1",
-          role: MESSAGE_ROLE.ASSISTANT,
-          turnId: "turn-1",
-          parts: [
-            {
-              type: "tool-run_on_mac",
-              toolCallId: "call-1",
-              state: "output-available",
-              input: { command: "git status" },
-              output: { status: "ran", stdout: "On branch invite-expiry", stderr: "" },
-            },
-          ],
-        },
-      ],
-      cursor: "1:1",
-      status: CODING_AGENT_STATUS.COMPLETED,
-      title: null,
-    },
-  } as const;
-  const sent = voiceWindowState({ ...held, tasks: tasks });
-  assert.equal(sent.tasks.activeTaskId, "plan-1");
-  assert.equal("work" in sent.tasks, false);
-  assert.equal("conversation" in sent.tasks, false);
-  assert.doesNotMatch(JSON.stringify(sent), /invite-expiry/u);
-  // A window's first read of the document answers the same: the voice and call windows' without either, a panel's whole.
-  for (const window of [
-    { voice: true, call: false },
-    { voice: false, call: true },
-  ]) {
-    assert.doesNotMatch(
-      JSON.stringify(windowAppState({ ...held, tasks: tasks }, window)),
-      /invite-expiry/u,
-    );
-  }
-  const panel = windowAppState({ ...held, tasks: tasks }, { voice: false, call: false });
-  assert.equal(panel.tasks.conversation?.cursor, "1:1");
-  assert.deepEqual(sent.run, held.run);
+it("an unpackaged run never records, whatever the host permitted", () => {
+  const app = new AppStateStore(
+    initialAppState({ ...RUN, packaged: false }, true, []),
+    Context.empty(),
+  );
+  app.update({ sessionReplay: { permitted: true, accountId: "person", halted: false } });
+  assert.equal(sessionReplayBootstrap(app.snapshot()).permitted, false);
 });
 
 it.effect(
@@ -264,3 +259,45 @@ it.effect(
     }).pipe(Effect.scoped, Effect.provide(sentry.layer));
   },
 );
+
+it("the voice window is not handed back the view it reported, while a panel and the call window are, and it still hears what moved after", async () => {
+  const pushes = new WindowPushes<object>();
+  const voiceWindow = { handle: {}, role: { voice: true, call: false } };
+  const windows = [
+    voiceWindow,
+    { handle: {}, role: { voice: false, call: false } },
+    { handle: {}, role: { voice: false, call: true } },
+  ];
+  const [voice, panel, call] = windows.map(({ handle }) => pushes.stream(handle, undefined));
+  if (voice === undefined || panel === undefined || call === undefined) throw new Error("unopened");
+  const sent = new WindowAppStates<object>();
+  const app = store();
+  const publish = () => {
+    const held: AppStateSnapshot = { ...app.snapshot(), window: { fullScreen: false } };
+    for (const { handle, role } of windows) {
+      sent.offer(handle, role, held, (shown) => pushes.push(handle, PUSH.APP_STATE, shown));
+    }
+  };
+  const versionOf = (read: IteratorResult<PushEvent>) =>
+    !read.done && read.value.push === PUSH.APP_STATE ? read.value.payload.version : read.value;
+  publish();
+  for (const stream of [voice, panel, call]) assert.equal(versionOf(await stream.next()), 0);
+
+  // The voice window reports its view: every window but it is told.
+  app.update({ voice: { ...app.snapshot().voice, view: IDLE_VOICE_VIEW } });
+  publish();
+  assert.equal(versionOf(await panel.next()), 1);
+  assert.equal(versionOf(await call.next()), 1);
+  pushes.push(voiceWindow.handle, PUSH.SHOW_AGENT, { taskId: "task-1", agentId: "agent-1" });
+  assert.deepEqual((await voice.next()).value, {
+    push: PUSH.SHOW_AGENT,
+    payload: { taskId: "task-1", agentId: "agent-1" },
+  });
+
+  // Something it draws moves, and it is told, view and all.
+  app.update({ network: { online: false } });
+  publish();
+  const after = await voice.next();
+  assert.equal(versionOf(after), 2);
+  assert.ok(!after.done && after.value.push === PUSH.APP_STATE && after.value.payload.voice.view);
+});

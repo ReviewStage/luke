@@ -1,4 +1,10 @@
+import {
+  CHAPTERS_MODEL_LIST,
+  type ChaptersModelId,
+  chaptersModelFrom,
+} from "@luke/features/chapters-model-choice";
 import { CONTEXT_WINDOW, contextWindowSchema } from "@luke/features/coding-agent-wire";
+import { LINK_OPEN_LIST, type LinkOpen } from "@luke/features/link-open";
 import type { ModelChoice } from "@luke/features/models-wire";
 import { CODING_AGENT_DEFAULT_CHOICE } from "@luke/features/models-wire";
 import {
@@ -27,7 +33,8 @@ import { queueSessionSandboxes, sessionsOf } from "./session-sandbox-cleanup.js"
  * What the account group reads and writes of an account: the erasure, the
  * cross-device snapshot behind `/api/account/preferences`, which is the
  * settings preferences, the coding agents' default model, effort, and
- * context window, and the experiments the account turned on, and the plan template behind
+ * context window, the model the account's Generate chapters runs on, and
+ * the experiments the account turned on, and the plan template behind
  * `/api/account/plan-template`, a column of the same row that neither path
  * reads of the other, whose every change is kept as a revision
  * (`plan-template-revisions.ts`). Every function here is an effect over the ambient `SqlClient`
@@ -40,9 +47,12 @@ type AccountSeamFailure = QueryError | Schema.SchemaError;
 
 /** One account's stored snapshot: the preferences every device shares, the coding agents' default, and when the preferences were last written. */
 export interface AccountPreferencesRow {
+  /** The settings every device shares, the link choice among them where the account made one. */
   preferences: AccountPreferences;
   /** What a click on Start runs on; the catalog's default until the account chooses. */
   codingAgent: ModelChoice;
+  /** What a Generate chapters the account presses runs on; Haiku until the account chooses, and for a stored value no build lists any more. */
+  chaptersModel: ChaptersModelId;
   /** Each experiment the account turned on or back off; one it never chose is absent, and off. */
   experiments: ExperimentChoices;
   /**
@@ -59,10 +69,14 @@ export interface AccountPreferencesRow {
  * menu's choice each write their own part without reading the other first.
  * The experiments part is the one patch: its keys are merged over what
  * stood, so a Mac that knows fewer experiments never erases another's.
+ * `preferences` is the shared part, whose `voice` it replaces; the link
+ * choice is a part of its own, which a build that predates it never sends.
  */
 export interface AccountPreferencesWrite {
   preferences?: AccountPreferences;
+  linkOpen?: LinkOpen;
   codingAgent?: ModelChoice;
+  chaptersModel?: ChaptersModelId;
   experiments?: ExperimentChoices;
 }
 
@@ -131,18 +145,22 @@ export function deleteAccount(
 /** The columns every read and the write's `returning` project, so a row decodes one way whatever wrote it. */
 const PREFERENCE_COLUMNS = {
   voice: accountPreference.voice,
+  linkOpen: accountPreference.linkOpen,
   codingAgentModel: accountPreference.codingAgentModel,
   codingAgentEffort: accountPreference.codingAgentEffort,
   codingAgentContextWindow: accountPreference.codingAgentContextWindow,
+  chaptersModel: accountPreference.chaptersModel,
   experiments: accountPreference.experiments,
   updatedAt: accountPreference.updatedAt,
 };
 
 const PreferenceRowSchema = Schema.Struct({
   voice: Schema.NullOr(Schema.String),
+  linkOpen: Schema.NullOr(Schema.String),
   codingAgentModel: Schema.NullOr(Schema.String),
   codingAgentEffort: Schema.NullOr(Schema.String),
   codingAgentContextWindow: Schema.NullOr(contextWindowSchema),
+  chaptersModel: Schema.NullOr(Schema.String),
   experiments: Schema.NullOr(WireValueSchema),
   updatedAt: Schema.NullOr(InstantColumnSchema),
 });
@@ -166,8 +184,14 @@ function snapshotOf(row: PreferenceRow): AccountPreferencesRow {
         }
       : CODING_AGENT_DEFAULT_CHOICE;
   return {
-    preferences: accountPreferencesFromStored(row.voice ? { voice: row.voice } : {}) ?? {},
+    preferences:
+      accountPreferencesFromStored({
+        ...(row.voice ? { voice: row.voice } : undefined),
+        ...(row.linkOpen ? { linkOpen: row.linkOpen } : undefined),
+      }) ?? {},
     codingAgent,
+    // Note that a stored model no build lists any more reads as Haiku, as a row never written does.
+    chaptersModel: chaptersModelFrom(row.chaptersModel),
     // Note that a stored key no build lists any more reads as nothing, because the experiment it named graduated or went.
     experiments: experimentChoicesFrom(row.experiments ?? undefined) ?? NO_EXPERIMENTS,
     updatedAt: row.updatedAt ?? undefined,
@@ -224,9 +248,33 @@ export function chatEnabledFor(
   return accountExperimentOn(userId, EXPERIMENT.CHAT);
 }
 
+const findRole = SqlSchema.findOneOption({
+  Request: Schema.String,
+  Result: Schema.Struct({ role: Schema.NullOr(Schema.String) }),
+  execute: (userId) =>
+    Database.use((db) =>
+      db.select({ role: user.role }).from(user).where(eq(user.id, userId)).limit(1),
+    ),
+});
+
+/**
+ * The role stored on the account's own `user` row, as Better Auth keeps it,
+ * or nothing where the row holds none or there is no such account. Read for
+ * the one account named and no other; what a role means is the service's
+ * (`admin-access.ts`), so this answers the text as it stands.
+ */
+export function readAccountRole(
+  userId: string,
+): Effect.Effect<string | undefined, AccountSeamFailure, DatabaseServices> {
+  return Effect.map(findRole(userId), (row) =>
+    Option.match(row, { onNone: () => undefined, onSome: ({ role }) => role ?? undefined }),
+  );
+}
+
 const PreferenceWriteSchema = Schema.Struct({
   userId: Schema.String,
   voice: Schema.optionalKey(Schema.NullOr(Schema.String)),
+  linkOpen: Schema.optionalKey(Schema.Literals(LINK_OPEN_LIST)),
   codingAgent: Schema.optionalKey(
     Schema.Struct({
       model: Schema.String,
@@ -234,16 +282,19 @@ const PreferenceWriteSchema = Schema.Struct({
       contextWindow: Schema.optionalKey(contextWindowSchema),
     }),
   ),
+  chaptersModel: Schema.optionalKey(Schema.Literals(CHAPTERS_MODEL_LIST)),
   experiments: Schema.optionalKey(Schema.Record(Schema.String, Schema.Boolean)),
   updatedAt: Schema.Date,
 });
 
 type PreferenceWrite = typeof PreferenceWriteSchema.Type;
 
-/** The columns a write replaces: each part the write carries, the instant with the preferences part. */
+/** The columns a write replaces: each part the write carries, the instant with the shared preferences part alone. */
 function writtenColumns(write: PreferenceWrite) {
   return {
     ...(write.experiments === undefined ? undefined : { experiments: write.experiments }),
+    ...(write.linkOpen === undefined ? undefined : { linkOpen: write.linkOpen }),
+    ...(write.chaptersModel === undefined ? undefined : { chaptersModel: write.chaptersModel }),
     ...(write.voice === undefined ? undefined : { voice: write.voice, updatedAt: write.updatedAt }),
     ...(write.codingAgent === undefined
       ? undefined
@@ -286,10 +337,10 @@ const upsertPreference = SqlSchema.findOne({
 
 /**
  * Writes each part the write carries over what stood — the preferences
- * whole, the coding-agent default whole, the experiments key by key — and answers the snapshot as it
- * now stands. The instant moves with the preferences part alone, so a
- * coding-agent choice never reads to a Mac as a settings snapshot it has
- * to take.
+ * whole, the coding-agent default whole, the chapters model, the experiments key by key — and answers the snapshot as it
+ * now stands. The instant moves with the shared preferences part alone,
+ * so a coding-agent choice, a chapters model, or a link choice never reads to a Mac as a
+ * settings snapshot it has to take.
  */
 export function writeAccountPreferences(
   userId: string,
@@ -301,7 +352,9 @@ export function writeAccountPreferences(
       userId,
       updatedAt,
       ...(write.preferences === undefined ? undefined : { voice: write.preferences.voice ?? null }),
+      ...(write.linkOpen === undefined ? undefined : { linkOpen: write.linkOpen }),
       ...(write.codingAgent === undefined ? undefined : { codingAgent: write.codingAgent }),
+      ...(write.chaptersModel === undefined ? undefined : { chaptersModel: write.chaptersModel }),
       ...(write.experiments === undefined ? undefined : { experiments: write.experiments }),
     };
     const row = yield* upsertPreference(stored).pipe(

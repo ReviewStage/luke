@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
-import { runWithoutDatabase } from "@luke/database/testing/no-database";
+import type { HeldVoiceAgent } from "@luke/database/models/voice-session-record";
+import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
+import { openHostedStoreTestDatabase } from "@luke/database/testing";
 import { VOICE_SEGMENT_ROLE } from "@luke/database/voice-vocabulary";
 import {
   HOSTED_API_ERROR,
@@ -28,7 +30,7 @@ import {
 import { EXCESS_KEYS, isRecord, unparsedWire, type WireRecord } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import { Effect, Exit, Result, Scope } from "effect";
-import { onTestFinished, test } from "vitest";
+import { afterAll, onTestFinished, test } from "vitest";
 import {
   connect,
   FAKE_BEARER,
@@ -43,6 +45,7 @@ import {
   send,
   startFakeOpenAi,
 } from "../testing/voice-fakes.js";
+import { backendToolsOf, CALL_BACKEND } from "./call-backend.js";
 import type { LogEntry } from "./log.js";
 import {
   listening,
@@ -58,6 +61,10 @@ const BEARER = FAKE_BEARER;
 const SDP_OFFER =
   "v=0\r\no=- 1 1 IN IP4 127.0.0.1\r\ns=-\r\nt=0 0\r\nm=audio 9 UDP/TLS/RTP/SAVPF 111\r\n";
 const CLOSE_TIMEOUT_MS = 300;
+
+// An empty store: every record the service keeps is the fake's, and the agent's conversation reads as one with nothing in it yet.
+const database = await openHostedStoreTestDatabase();
+afterAll(() => database.close());
 
 const developerMessage = (text: string) => ({
   type: SEED_ITEM_TYPE,
@@ -90,7 +97,16 @@ const TASK: Task = {
   document: { body: "# Teammate invitations", assumptions: [] },
 };
 
-/** The desktop's opening frame for a call about the task the account holds. */
+/** The agent of the task the account's calls speak into, started blank, its conversation empty. */
+const AGENT: HeldVoiceAgent = {
+  agentId: "3b2a1c0d-9e8f-4a7b-8c6d-5e4f3a2b1c0d",
+  taskId: TASK.id,
+  archived: false,
+  runtime: CONVERSATION_RUNTIME.EVE,
+  conversation: { userId: FAKE_USER_ID, conversationId: "9c8b7a6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d" },
+};
+
+/** The desktop's opening frame for a call into the agent of the task the account holds. */
 function createFrame(input: WireRecord[] = SEED): WireRecord {
   return {
     type: VOICE_SERVICE_FRAME.SESSION_CREATE,
@@ -98,6 +114,7 @@ function createFrame(input: WireRecord[] = SEED): WireRecord {
     voice: LIVE_VOICE.MARIN,
     input,
     planId: TASK.id,
+    agentId: AGENT.agentId,
   };
 }
 
@@ -137,10 +154,11 @@ async function stand(overrides: Partial<VoiceServiceOptions> = {}): Promise<Stan
   const accounts = fakeAccounts();
   const record = fakeSessionRecord();
   record.tasks.push({ userId: FAKE_USER_ID, task: TASK });
+  record.agents.push({ userId: FAKE_USER_ID, agent: AGENT });
   const log: LogEntry[] = [];
   const voice = voiceServer();
-  const scope = await runWithoutDatabase(Scope.make());
-  const standing = await runWithoutDatabase(
+  const scope = await database.run(Scope.make());
+  const standing = await database.run(
     Scope.provide(
       Effect.gen(function* () {
         const port = yield* listening(voice, 0, "127.0.0.1");
@@ -163,7 +181,7 @@ async function stand(overrides: Partial<VoiceServiceOptions> = {}): Promise<Stan
       scope,
     ),
   );
-  const close = () => runWithoutDatabase(Scope.close(scope, Exit.void));
+  const close = () => database.run(Scope.close(scope, Exit.void));
   return {
     openAi,
     accounts,
@@ -171,7 +189,7 @@ async function stand(overrides: Partial<VoiceServiceOptions> = {}): Promise<Stan
     service: standing.service,
     log,
     url: (path) => `ws://127.0.0.1:${standing.port}${path}`,
-    sessions: () => runWithoutDatabase(standing.service.sessions),
+    sessions: () => database.run(standing.service.sessions),
     close,
     stop: async () => {
       await close();
@@ -256,6 +274,7 @@ test("a session is authorized, counted, created, registered to its account, atta
       userId: FAKE_USER_ID,
       sessionId: created.sessionId,
       taskId: TASK.id,
+      agentId: AGENT.agentId,
       model: LIVE_DEFAULTS.MODEL,
     },
   ]);
@@ -267,7 +286,7 @@ test("a session is authorized, counted, created, registered to its account, atta
   const session = create.body.session;
   assert.ok(isRecord(session));
   assert.deepEqual(create.body.transport, { type: LIVE_TRANSPORT_TYPE, sdp: SDP_OFFER });
-  assert.equal(session.instructions, sessionInstructions());
+  assert.equal(session.instructions, sessionInstructions(backendToolsOf(CALL_BACKEND)));
   assert.deepEqual(session.delegation, { type: LIVE_DELEGATION_TARGET.CLIENT });
   assert.equal(session.store, false);
   assert.equal(session.model, LIVE_DEFAULTS.MODEL);
@@ -321,7 +340,7 @@ test("an attach to a session another account created, or one never created, is r
   const context = await stand();
   onTestFinished(() => context.stop());
   const { created } = await openSession(context);
-  await runWithoutDatabase(
+  await database.run(
     context.record.register({
       userId: "user-2",
       sessionId: "live_theirs",

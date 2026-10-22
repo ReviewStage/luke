@@ -5,13 +5,15 @@ import {
   type DrawingElement,
   drawingElementsSchema,
 } from "@luke/features/board-wire";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
-import { Database, type DatabaseServices } from "../core/query.js";
+import { type LiveStatement, liveSelection, liveStatementOf } from "../core/live-statement.js";
+import { Database, type DatabaseServices, queryBuilder } from "../core/query.js";
+import { member } from "../schemas/auth.js";
 import { task, taskBoard } from "../schemas/task.js";
-import { TaskArchived, type TaskStoreEffect, type TaskStoreFailure } from "./task-store.js";
-import { reachableTask } from "./workspace-store.js";
+import type { TaskStoreEffect, TaskStoreFailure } from "./task-store.js";
+import { reachableTask, taskSeenBy } from "./workspace-store.js";
 
 /**
  * board-store.ts -- a task's whiteboard: read it, write the Mac's scene, and write Luke's drawing.
@@ -32,6 +34,11 @@ import { reachableTask } from "./workspace-store.js";
  * drawn as a PNG, which the board keeps until the next such save, so it
  * shows the drawing the scene holds; only `look_at_board` reads it
  * (`readBoardImage`), and a board read never carries it.
+ *
+ * Where the board stands is also written for Neon Realtime
+ * (`boardLiveStatement`), so the desktop reads it again the moment Luke
+ * draws or a save lands rather than when the call's activity suggests one
+ * might have.
  */
 
 const TaskKeySchema = Schema.Struct({ userId: Schema.String, taskId: Schema.String });
@@ -44,6 +51,16 @@ const BoardRowSchema = Schema.Struct({
 });
 
 type BoardRow = typeof BoardRowSchema.Type;
+
+/** A scene's row as its write returns it: the board, whether it holds an image, and the id of the transaction that wrote it. */
+const SavedSceneRowSchema = Schema.Struct({
+  ...BoardRowSchema.fields,
+  imaged: Schema.Boolean,
+  txid: Schema.String,
+});
+
+/** The id of the transaction a write runs in, read in the write's own `RETURNING`, as text so its 64 bits stay exact. */
+const TXID = sql<string>`pg_current_xact_id()::text`;
 
 const BOARD_COLUMNS = {
   elements: taskBoard.elements,
@@ -67,17 +84,36 @@ const findBoard = SqlSchema.findOneOption({
     ),
 });
 
-/** The task's id and whether it is archived, under its row's lock until the transaction ends; nothing where the account reaches no such task. */
+/** Where the board's live row (`boardLiveStatement`) stands: the drawing the scene holds and whether it holds its image, each null before the board was first written. */
+const LiveMarkSchema = Schema.Struct({
+  appliedDrawing: Schema.NullOr(Schema.Int),
+  imaged: Schema.NullOr(Schema.Boolean),
+});
+
+type LiveMark = typeof LiveMarkSchema.Type;
+
+/**
+ * The task's id and where its board's live row stands, under the task
+ * row's lock until the transaction ends; nothing where the account reaches
+ * no such task.
+ */
 const lockTask = SqlSchema.findOneOption({
   Request: TaskKeySchema,
-  Result: Schema.Struct({ id: Schema.String, archived: Schema.Boolean }),
+  Result: Schema.Struct({ id: Schema.String, ...LiveMarkSchema.fields }),
   execute: ({ userId, taskId }) =>
     Database.use((db) =>
       db
-        .select({ id: task.id, archived: sql<boolean>`${task.archivedAt} is not null` })
+        .select({
+          id: task.id,
+          appliedDrawing: taskBoard.appliedDrawing,
+          imaged: sql<
+            boolean | null
+          >`case when ${taskBoard.taskId} is null then null else ${taskBoard.image} is not null end`,
+        })
         .from(task)
+        .leftJoin(taskBoard, eq(taskBoard.taskId, task.id))
         .where(reachableTask(userId, taskId))
-        .for("update"),
+        .for("update", { of: task }),
     ),
 });
 
@@ -90,7 +126,7 @@ const lockTask = SqlSchema.findOneOption({
 function upsertScene(elements: readonly BoardElement[], image: string | undefined) {
   return SqlSchema.findOne({
     Request: Schema.Struct({ taskId: Schema.String, appliedDrawing: Schema.Int, now: Schema.Date }),
-    Result: BoardRowSchema,
+    Result: SavedSceneRowSchema,
     execute: ({ taskId, appliedDrawing, now }) => {
       const scene = { elements, appliedDrawing, updatedAt: now };
       // Note that a save moving to a new drawing with no image drops the old one, which shows a drawing gone.
@@ -103,7 +139,11 @@ function upsertScene(elements: readonly BoardElement[], image: string | undefine
             target: taskBoard.taskId,
             set: { ...scene, image: image ?? kept },
           })
-          .returning(BOARD_COLUMNS),
+          .returning({
+            ...BOARD_COLUMNS,
+            imaged: sql<boolean>`${taskBoard.image} is not null`,
+            txid: TXID,
+          }),
       );
     },
   });
@@ -161,21 +201,22 @@ function boardOf(row: BoardRow): Board {
 }
 
 /**
- * Runs one write under the task row's lock, handed whether the task is
- * archived as the lock read it; nothing where the account reaches no such task.
+ * Runs one write under the task row's lock, handed where the board's live
+ * row stood as the lock read it; nothing where the account reaches no such task.
  */
-function underTaskLock<E>(
+function underTaskLock<A, E>(
   userId: string,
   taskId: string,
-  write: (now: Date, archived: boolean) => Effect.Effect<BoardRow, E, DatabaseServices>,
+  write: (now: Date, locked: { readonly mark: LiveMark }) => Effect.Effect<A, E, DatabaseServices>,
 ) {
   return Effect.flatMap(SqlClient.SqlClient, (client) =>
     client.withTransaction(
       Effect.gen(function* () {
         const locked = yield* lockTask({ userId, taskId });
-        if (Option.isNone(locked)) return Option.none<Board>();
+        if (Option.isNone(locked)) return Option.none<A>();
         const now = yield* DateTime.nowAsDate;
-        return Option.some(boardOf(yield* write(now, locked.value.archived)));
+        const { appliedDrawing, imaged } = locked.value;
+        return Option.some(yield* write(now, { mark: { appliedDrawing, imaged } }));
       }),
     ),
   );
@@ -204,9 +245,13 @@ export function readBoardImage(
 
 /**
  * The Mac's scene, written whole with the number of Luke's drawing it holds
- * and any image of it; the board as written. An archived task takes no scene
- * of the developer's, read under the same lock, while a drawing of Luke's on
- * a call that stood when it was archived still lands.
+ * and any image of it; the board as written and, where the write moved the
+ * board's live row (`boardLiveStatement`), the id of the transaction that
+ * wrote it, which a desktop following the board waits on before it
+ * confirms the save, as Neon's guide to optimistic mutations has it. A save
+ * that leaves that row as it stood, such as one moving only the scene's
+ * elements, answers none, since no follower would ever see its
+ * transaction.
  */
 export function writeScene(
   userId: string,
@@ -214,14 +259,23 @@ export function writeScene(
   elements: readonly BoardElement[],
   appliedDrawing: number,
   image?: string,
-): Effect.Effect<Option.Option<Board>, TaskStoreFailure | TaskArchived, DatabaseServices> {
-  return underTaskLock(userId, taskId, (now, archived) =>
-    archived
-      ? Effect.fail(new TaskArchived())
-      : upsertScene(
-          elements,
-          image,
-        )({ taskId, appliedDrawing, now }).pipe(Effect.catchTag("NoSuchElementError", Effect.die)),
+): Effect.Effect<
+  Option.Option<{ readonly board: Board; readonly txid?: string }>,
+  TaskStoreFailure,
+  DatabaseServices
+> {
+  return underTaskLock(userId, taskId, (now, { mark }) =>
+    upsertScene(
+      elements,
+      image,
+    )({ taskId, appliedDrawing, now }).pipe(
+      Effect.catchTag("NoSuchElementError", Effect.die),
+      Effect.map((row) => {
+        const board = boardOf(row);
+        const moved = mark.appliedDrawing !== row.appliedDrawing || mark.imaged !== row.imaged;
+        return moved ? { board, txid: row.txid } : { board };
+      }),
+    ),
   );
 }
 
@@ -233,6 +287,43 @@ export function writeDrawing(
 ): TaskStoreEffect<Option.Option<Board>> {
   // An upsert that returned no row is the database breaking its own contract, not an outcome.
   return underTaskLock(userId, taskId, (now) =>
-    upsertDrawing(drawing)({ taskId, now }).pipe(Effect.catchTag("NoSuchElementError", Effect.die)),
+    upsertDrawing(drawing)({ taskId, now }).pipe(
+      Effect.catchTag("NoSuchElementError", Effect.die),
+      Effect.map(boardOf),
+    ),
+  );
+}
+
+/**
+ * Where the task's board stands, written for Neon Realtime: the number of
+ * Luke's latest drawing, the drawing the scene holds, and whether the scene
+ * holds its image, as one row a board, none before the board was first
+ * written. It is a mark, none of the elements or the image it marks, which
+ * the desktop reads again (`readBoard`) once the row moves. The account is
+ * joined through its membership of the task's workspace, as Neon's guide
+ * authorizes a live read, and held to the task's GitHub access as every
+ * read of it is (`taskSeenBy`), so one that leaves the workspace, or loses
+ * the repository a task on its owner's token names, stops seeing the row.
+ * None where a value cannot be carried, which a caller answers as the board
+ * not being live.
+ */
+export function boardLiveStatement(userId: string, taskId: string): Option.Option<LiveStatement> {
+  return liveStatementOf(
+    queryBuilder
+      .select(
+        liveSelection({
+          taskId: taskBoard.taskId,
+          drawingNumber: taskBoard.drawingNumber,
+          appliedDrawing: taskBoard.appliedDrawing,
+          imaged: sql<boolean>`${taskBoard.image} is not null`,
+        }),
+      )
+      .from(taskBoard)
+      .innerJoin(task, eq(task.id, taskBoard.taskId))
+      .innerJoin(
+        member,
+        and(eq(member.organizationId, task.organizationId), eq(member.userId, userId)),
+      )
+      .where(and(eq(taskBoard.taskId, taskId), taskSeenBy(userId))),
   );
 }

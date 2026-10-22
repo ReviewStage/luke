@@ -3,7 +3,7 @@
  *
  * A Luke link is the thing's address on the web, `https://<host>/<workspace>/…`,
  * and the desktop is handed the same address with its scheme swapped for the
- * app's own (`docs/proposals/web-and-links.md`). The product's name, and so
+ * app's own. The product's name, and so
  * the host and the scheme, may still change, so both are spelled here and
  * nowhere else: a rename is this constant and an alias, the old name moved
  * into `HOST_ALIASES` and `SCHEME_ALIASES` below, which every reader goes on

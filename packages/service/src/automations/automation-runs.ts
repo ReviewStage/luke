@@ -24,7 +24,6 @@ import {
   readCodingAgent,
   readCodingAgentByKey,
 } from "@luke/database/models/coding-agent-store";
-import { sentLineId } from "@luke/database/models/ids";
 import { sentLineStands } from "@luke/database/models/message-reads";
 import { storeWriter } from "@luke/database/models/writer";
 import type { StoredAutomationOrigin } from "@luke/database/schemas/coding-agent";
@@ -48,9 +47,10 @@ import {
 } from "@luke/features/coding-agent-wire";
 import { TRIGGER_CATALOG } from "@luke/features/trigger-catalog";
 import { failureKind } from "@luke/runtime/effect";
+import { sentLineId } from "@luke/wire/host-ids";
 import { Clock, Duration, Effect, Option, Result } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
-import type { EveSessions } from "../agents/brain-host/eve-sessions.js";
+import type { AgentSessions, EveTypedTurn } from "../agents/brain-host/eve-sessions.js";
 import { type StartServices, startCodingAgent } from "../agents/coder-host/start.js";
 import { codingAgentStatusOf } from "../agents/coder-host/status.js";
 import { steerCodingAgent } from "../agents/coder-host/steer.js";
@@ -117,7 +117,11 @@ const WORKING: ReadonlySet<CodingAgentStatus> = new Set([
 /** eve's coding-agent service as the deployment acting for one account, or the refusal where this deployment cannot reach it. */
 export type EveForAccount = (
   userId: string,
-) => Effect.Effect<EveSessions, HostedRefusal, HttpClient.HttpClient>;
+) => Effect.Effect<
+  AgentSessions<EveTypedTurn>,
+  HostedRefusal,
+  HttpClient.HttpClient | DatabaseServices
+>;
 
 /** Each GitHub event as the agent's prompt names it. */
 const GITHUB_EVENT_WORDS = {
@@ -305,7 +309,7 @@ const firingRepositoryHeld = Effect.fnUntraced(function* (
   const agent = yield* readCodingAgent(automation.userId, automation.targetAgentId);
   return Option.match(agent, {
     onNone: () => true,
-    onSome: (held) => held.repository.toLowerCase() === repository.toLowerCase(),
+    onSome: (held) => held.repository?.toLowerCase() === repository.toLowerCase(),
   });
 });
 

@@ -6,11 +6,11 @@ import {
   type GitHubAccountType,
   type GitHubInstallationStatus,
 } from "@luke/database/github-installation-vocabulary";
-import { roleOf, WORKSPACE_NAME } from "@luke/database/models/workspace-store";
+import { WORKSPACE_NAME } from "@luke/database/models/workspace-store";
 import { member, organization } from "@luke/database/schemas/auth";
 import { githubInstallIntent } from "@luke/database/schemas/github-install-intent";
 import { githubInstallation } from "@luke/database/schemas/github-installation";
-import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
+import { roleOf, WORKSPACE_ROLE } from "@luke/features/workspace-wire";
 import { and, asc, eq, gt, ne, sql } from "drizzle-orm";
 import { DateTime, Duration, Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";

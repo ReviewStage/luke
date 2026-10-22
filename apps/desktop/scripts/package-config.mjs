@@ -76,6 +76,25 @@ export function signingModeDefine(env) {
 }
 
 /**
+ * The esbuild define holding the analytics project key the renderer's session
+ * replay records into, baked only into a bundle built for Developer ID
+ * release: `scripts/release-macos.sh` and the release workflow set
+ * `LUKE_CODESIGN_IDENTITY` beside `POSTHOG_PROJECT_API_KEY`. Note that the
+ * key is withheld from every other build, because the service reads its own
+ * key under the same variable name, so a development shell that holds it for
+ * a local service would otherwise record that build into production's
+ * replay. A build without the key records nothing.
+ */
+export function replayProjectKeyDefine(env) {
+  const releaseBuild = resolveSigningMode(env).mode === SIGNING_MODE.DEVELOPER_ID;
+  return {
+    PACKAGED_POSTHOG_PROJECT_API_KEY: JSON.stringify(
+      releaseBuild ? (env.POSTHOG_PROJECT_API_KEY ?? "") : "",
+    ),
+  };
+}
+
+/**
  * The updater config electron-updater reads from the bundle's own Resources.
  * Setting the feed at runtime does not spare the file: before every download
  * the updater reads `updaterCacheDirName` from it (AppUpdater's

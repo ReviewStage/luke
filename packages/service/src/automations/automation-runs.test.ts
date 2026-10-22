@@ -21,7 +21,6 @@ import {
   readCodingAgent,
   takeCodingAgentMentionedServers,
 } from "@luke/database/models/coding-agent-store";
-import { sentLineId } from "@luke/database/models/ids";
 import { readMessageByClientId, sentLineStands } from "@luke/database/models/message-reads";
 import { claimRuntimeSession } from "@luke/database/models/recorded-session";
 import { type ConversationTarget, storeWriter } from "@luke/database/models/writer";
@@ -47,14 +46,15 @@ import { INBOX_RESPONSE } from "@luke/features/inbox-wire";
 import { INTEGRATION_PROVIDER, type IntegrationProvider } from "@luke/features/integration-wire";
 import { CODING_AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@luke/features/models-wire";
 import { TURN_ORIGIN, TURN_STATUS, type TurnStatus } from "@luke/wire";
+import { sentLineId } from "@luke/wire/host-ids";
 import { eq, inArray } from "drizzle-orm";
 import { Clock, Effect, Layer, Option, Result, Stream } from "effect";
 import {
+  type AgentSessions,
   EVE_CANCEL_OUTCOME,
   EVE_RESET_OUTCOME,
   EVE_SEND_OUTCOME,
   type EveMessage,
-  type EveSessions,
 } from "../agents/brain-host/eve-sessions.js";
 import { steerCodingAgent } from "../agents/coder-host/steer.js";
 import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
@@ -128,7 +128,7 @@ interface Opened {
 function fakeEve() {
   const opened: Opened[] = [];
   const sent: { readonly sessionId: string; readonly message: EveMessage }[] = [];
-  const sessions = (account: string): EveSessions => ({
+  const sessions = (account: string): AgentSessions => ({
     open: (message) =>
       Effect.sync(() => {
         opened.push({ account, message });

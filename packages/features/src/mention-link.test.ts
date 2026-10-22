@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "vitest";
 import { INTEGRATION_PROVIDER } from "./integration-wire.js";
 import {
+  askedInWords,
   decodeMention,
   encodeMention,
   handedMentionsIn,
@@ -581,6 +582,19 @@ test("a page on an integration's host, its own or one under it, reads as that in
   }
 });
 
+test("a Notion page reads as Notion's link on its app's host, app.notion.com, as on notion.so", () => {
+  for (const url of [
+    "https://app.notion.com/p/1a2b3c4d5e6f40718293a4b5c6d7e8f9",
+    "https://www.notion.so/acme/Plan-1a2b3c4d5e6f40718293a4b5c6d7e8f9",
+  ]) {
+    assert.deepEqual(
+      decodeMention(url, REPOSITORY),
+      { kind: MENTION_KIND.LINK, provider: INTEGRATION_PROVIDER.NOTION, url },
+      url,
+    );
+  }
+});
+
 test("a page's address stays one markdown link's however many parentheses it keeps", () => {
   const mention = decodeMention("https://www.notion.so/acme/Plan-(draft)-1a2b3c", REPOSITORY);
   assert.ok(mention !== undefined);
@@ -747,7 +761,7 @@ test("a page or an agent of a plan is its Luke link, read back by the app's sche
   }
 });
 
-test("an agent on no task is mentioned by its own Luke link under the workspace, read back by either scheme, and a page on no task names nothing", () => {
+test("an agent on no task is mentioned by its own Luke link under the workspace, read back by either scheme, and a page on neither a task nor an agent names nothing", () => {
   const agent: Mention = { kind: MENTION_KIND.AGENT, agentId: "agent-9" };
 
   assert.equal(encodeMention(agent, PLACE), "https://tryluke.dev/acme/agent/agent-9");
@@ -764,6 +778,27 @@ test("an agent on no task is mentioned by its own Luke link under the workspace,
     "https://tryluke.dev/acme/page/page-1",
   ]) {
     assert.equal(decodeMention(target, null), undefined, target);
+  }
+});
+
+test("a page an agent on no task showed is mentioned under the agent's own link, read back by either scheme, and a step past its id or one under an agent on a task names nothing", () => {
+  const page: Mention = { kind: MENTION_KIND.PAGE, agentId: "agent-9", pageId: "page-1" };
+  const target = "https://tryluke.dev/acme/agent/agent-9/page/page-1";
+
+  assert.equal(encodeMention(page, PLACE), target);
+  assert.deepEqual(decodeMention(target, null), page);
+  assert.deepEqual(
+    decodeMention("tryluke://tryluke.dev/acme/agent/agent-9/page/page-1", null),
+    page,
+  );
+  assert.deepEqual(linkMention("", target, null), { mention: page, name: "Page" });
+  for (const bent of [
+    `${target}/source`,
+    `${target}#top`,
+    "https://tryluke.dev/acme/agent/agent-9/page/",
+    `https://tryluke.dev/acme/plan/${TASK_ID}/agent/agent-9/page/page-1`,
+  ]) {
+    assert.equal(decodeMention(bent, null), undefined, bent);
   }
 });
 
@@ -790,6 +825,16 @@ test("a person is mentioned by their page's Luke link under the workspace, read 
   ]) {
     assert.equal(decodeMention(target, null), undefined, target);
   }
+});
+
+test("an old Luke issue page's link names nothing now that Luke keeps no issues: no mention read back, pasted, or handed", () => {
+  const page = "https://tryluke.dev/acme/issue/3f0e6f5c-7d1a-4f6e-9a55-000000000007";
+
+  assert.equal(decodeMention(page, null), undefined);
+  assert.equal(decodeMention(page.replace("https:", "tryluke:"), null), undefined);
+  assert.equal(linkMention("@ACME-7 Token refresh fails", page, null), undefined);
+  assert.equal(pastedLinkMention(page, REPOSITORY), undefined);
+  assert.deepEqual(handedMentionsIn(`See ${page} or [@ACME-7](${page}).`, REPOSITORY), []);
 });
 
 test("words pasted whole that are an address of Luke's own become its mention, named by what the address says, while a file of the plan pastes as words", () => {
@@ -876,4 +921,92 @@ test("the links written in words are every inline link whatever its label, an au
       ["https://example.com/e", "https://example.com/e"],
     ],
   );
+});
+
+test("Luke on a task is mentioned by the task's link and `/luke`, read back by either scheme, and on no task names nothing", () => {
+  const luke: Mention = { kind: MENTION_KIND.LUKE, taskId: "plan-1" };
+
+  assert.equal(encodeMention(luke, PLACE), "https://tryluke.dev/acme/plan/plan-1/luke");
+  assert.deepEqual(decodeMention("https://tryluke.dev/acme/plan/plan-1/luke", null), luke);
+  assert.deepEqual(decodeMention("tryluke://tryluke.dev/acme/plan/plan-1/luke", null), luke);
+  for (const target of [
+    "https://tryluke.dev/acme/luke",
+    "https://tryluke.dev/acme/plan/plan-1/luke/more",
+    "https://tryluke.dev/acme/plan/plan-1/luke#top",
+  ]) {
+    assert.equal(decodeMention(target, null), undefined, target);
+  }
+});
+
+test("a comment's words ask the agents they mention with `@`, each once, and no bare link or Luke", () => {
+  const words = [
+    "[@Luke](https://tryluke.dev/acme/plan/plan-1/luke), and",
+    "[@Wire it](https://tryluke.dev/acme/plan/plan-1/agent/agent-1) with",
+    "[@wire it again](https://tryluke.dev/acme/plan/plan-1/agent/AGENT-1),",
+    "[@Other](https://tryluke.dev/acme/agent/agent-2), not",
+    "[this one](https://tryluke.dev/acme/plan/plan-1/agent/agent-3) or `[@code](https://tryluke.dev/acme/plan/plan-1/agent/agent-4)`.",
+  ].join(" ");
+
+  assert.deepEqual(askedInWords(words), ["agent-1", "agent-2"]);
+});
+
+test("a comment's words ask an agent though twenty other mentions come before it", () => {
+  const files = Array.from(
+    { length: 20 },
+    (_, index) => `[@f${index}.ts](https://github.com/acme/relay/blob/main/f${index}.ts)`,
+  ).join(" ");
+
+  assert.deepEqual(
+    askedInWords(`${files} [@Wire it](https://tryluke.dev/acme/plan/plan-1/agent/agent-1)`),
+    ["agent-1"],
+  );
+});
+
+test("a date is written in the app's own form, a day, a time with its offset, or a range, and read back as written", () => {
+  const day: Mention = { kind: MENTION_KIND.DATE, start: "2026-10-20" };
+  const dates: Mention[] = [
+    day,
+    { kind: MENTION_KIND.DATE, start: "2026-10-20T15:00-07:00" },
+    { kind: MENTION_KIND.DATE, start: "2026-10-20T15:00+05:30", end: "2026-10-20T17:00+05:30" },
+    { kind: MENTION_KIND.DATE, start: "2026-10-20", end: "2026-10-24" },
+  ];
+  assert.deepEqual(
+    dates.map((date) => encodeMention(date, PLACE)),
+    [
+      "luke://date/2026-10-20",
+      "luke://date/2026-10-20T15:00-07:00",
+      "luke://date/2026-10-20T15:00+05:30/2026-10-20T17:00+05:30",
+      "luke://date/2026-10-20/2026-10-24",
+    ],
+  );
+  for (const date of dates) {
+    assert.deepEqual(decodeMention(encodeMention(date, PLACE), REPOSITORY), date);
+  }
+  assert.equal(
+    mentionMarkdown(day, "Oct 20, 2026", PLACE),
+    "[@Oct 20, 2026](luke://date/2026-10-20)",
+  );
+});
+
+test("a date that is no day, a range out of order or of two kinds, or a step past its end names nothing", () => {
+  for (const target of [
+    "luke://date/",
+    "luke://date/2026-02-30",
+    "luke://date/2026-10-20T15:00",
+    "luke://date/2026-10-24/2026-10-20",
+    "luke://date/2026-10-20/2026-10-20T15:00-07:00",
+    "luke://date/2026-10-20/2026-10-24/2026-10-25",
+    "luke://date/2026-10-20#today",
+    "luke://date/2026-10-20?tz=UTC",
+  ]) {
+    assert.equal(decodeMention(target, REPOSITORY), undefined, target);
+  }
+});
+
+test("a date written bare is named by its date in full, and is no address a paste makes a chip of", () => {
+  assert.deepEqual(linkMention("luke://date/2026-10-20", "luke://date/2026-10-20", REPOSITORY), {
+    mention: { kind: MENTION_KIND.DATE, start: "2026-10-20" },
+    name: "Oct 20, 2026",
+  });
+  assert.equal(pastedLinkMention("luke://date/2026-10-20", REPOSITORY), undefined);
 });

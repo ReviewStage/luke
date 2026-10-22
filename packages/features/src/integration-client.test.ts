@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { fakeCloudApi } from "@luke/wire/testing";
 import { Effect } from "effect";
+import { accountBearer } from "./account-call.js";
 import { HostedIntegrationsClient } from "./integration-client.js";
 import {
   INTEGRATION_PROVIDER,
@@ -18,9 +19,11 @@ import {
 
 const client = new HostedIntegrationsClient({
   serviceBaseUrl: "https://tryluke.dev",
-  readAccessToken: () => Effect.succeed("token-1"),
-  refreshAccount: () => Effect.void,
-  readAccountKey: () => Effect.succeed("ada@example.com"),
+  credential: accountBearer({
+    readAccessToken: () => Effect.succeed("token-1"),
+    refreshAccount: () => Effect.void,
+    readAccountKey: () => Effect.succeed("ada@example.com"),
+  }),
 });
 
 it.effect("a read keeps each sign-in failure it can read, beside every provider's status", () =>
@@ -138,4 +141,44 @@ it.effect(
         ["", "?add=true", "?connection=notion-2"],
       );
     }),
+);
+
+/** A browser tab's credential: no header at all, the cookie riding the request. */
+const cookieClient = new HostedIntegrationsClient({
+  serviceBaseUrl: "https://tryluke.dev",
+  credential: { holder: () => Effect.succeed("user-1") },
+});
+
+it.effect(
+  "a cookie caller whose read holds a sign-in under way asks the settling POST, and its answer stands",
+  () =>
+    Effect.gen(function* () {
+      const api = fakeCloudApi({
+        "GET /api/account/integrations": { answer: () => ({ integrations: { slack: "pending" } }) },
+        "POST /api/account/integrations/settle": {
+          answer: () => ({ integrations: { slack: "connected" } }),
+        },
+      });
+
+      const read = yield* Effect.provide(cookieClient.statuses(), api.layer);
+
+      assert.ok(!("failure" in read));
+      assert.equal(read.integrations[INTEGRATION_PROVIDER.SLACK], INTEGRATION_STATUS.CONNECTED);
+    }),
+);
+
+it.effect("a bearer's read is its own answer, its GET having settled what it could", () =>
+  Effect.gen(function* () {
+    const api = fakeCloudApi({
+      "GET /api/account/integrations": { answer: () => ({ integrations: { slack: "pending" } }) },
+      "POST /api/account/integrations/settle": {
+        answer: () => ({ integrations: { slack: "connected" } }),
+      },
+    });
+
+    const read = yield* Effect.provide(client.statuses(), api.layer);
+
+    assert.ok(!("failure" in read));
+    assert.equal(read.integrations[INTEGRATION_PROVIDER.SLACK], INTEGRATION_STATUS.PENDING);
+  }),
 );

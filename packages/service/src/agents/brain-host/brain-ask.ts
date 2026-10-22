@@ -28,16 +28,16 @@ import { ASK_ORIGIN, type AskOrigin, TURN_STATUS, type TurnStatus } from "../../
 import { HOSTED_HTTP_STATUS } from "../../http/http.js";
 import { BRAIN_HOST_TURN, type BrainHostTurn } from "./bounds.js";
 import {
+  type AgentSessions,
   EVE_CANCEL_OUTCOME,
   EVE_FIRST_TURN_ID,
   EVE_SEND_OUTCOME,
-  type EveSessions,
 } from "./eve-sessions.js";
 
 /**
- * The ask door: a spoken question handed to Luke's judgment, admitted before
- * eve is reached — the conversation it names stands and the caller reaches
- * it, its own or its workspace's task's, or it is refused as not found, a
+ * The ask door: a spoken question handed to an agent's judgment, admitted
+ * before eve is reached — the conversation it names stands and the caller
+ * reaches it, its own or its workspace's agent's, or it is refused as not found, a
  * stranger's and none at all answering alike — and then handed to the one eve session the conversation runs in,
  * or the session opened for it. eve folds asks that arrive while a turn runs
  * into the next turn and names no turn at accept time, so the ask stands on
@@ -67,6 +67,9 @@ const HOST_TURN_OF_ASK_ORIGIN = {
   [ASK_ORIGIN.TYPED]: BRAIN_HOST_TURN.TYPED,
   [ASK_ORIGIN.SPOKEN]: BRAIN_HOST_TURN.SPOKEN,
 } as const satisfies Record<AskOrigin, BrainHostTurn>;
+
+/** The kind of turn an ask of the origin given opens, which the eve it is handed to must send. */
+type HostTurnOf<Origin extends AskOrigin> = (typeof HOST_TURN_OF_ASK_ORIGIN)[Origin];
 
 /** Where an id stands: the ask it named, where it was an ask's id, and the turn eve started for it, where one has started. */
 type AskStanding =
@@ -151,23 +154,31 @@ type AskOutcome = Result.Result<AcceptedAsk, AskRefused>;
  * conversation it lands in under the member who opened it, whose id the ask
  * is recorded under, and, for a spoken one, the voice session it came from.
  */
-export interface AskInput {
+export interface AskInput<Origin extends AskOrigin = AskOrigin> {
   /** The account asking, which must reach the conversation. */
   readonly accountId: string;
   /** The conversation's owner, the address the ask and its turn are recorded under. */
   readonly userId: string;
   readonly question: string;
-  readonly origin: AskOrigin;
+  readonly origin: Origin;
   readonly clientId: string;
   readonly conversationId: string;
   readonly voice?: AskVoice;
+  /** The asker's time zone, which the turn the ask opens reads the day in; none reads UTC. */
+  readonly timeZone?: string | undefined;
 }
 
-/** What accepting an ask needs: the ask record built over the store's runner, and eve as the caller reaches it. */
-export interface AskSeams {
+/**
+ * What accepting an ask needs: the ask record built over the store's runner,
+ * and eve as the caller reaches it, sending the kinds of turn `Turn` names.
+ * The voice function's client, the deployment acting for the account, sends
+ * a spoken ask alone by its type. The brain's door admits a typed ask from
+ * anything that holds the deployment's secret, so no code path but the
+ * comment hand-over (`tasks/comment-ask.ts`) sends one.
+ */
+export interface AskSeams<Turn extends BrainHostTurn = BrainHostTurn> {
   readonly asks: AskRecord;
-  /** eve as the voice function reaches it: the deployment acting for the account. */
-  readonly eve: EveSessions;
+  readonly eve: AgentSessions<Turn>;
 }
 
 /**
@@ -216,9 +227,11 @@ const unreachableSend = () =>
  * session opened for it. A retry with the same client id finds the record
  * and dispatches again only where the first dispatch never reached eve.
  */
-export const acceptAsk = /* @__PURE__ */ Effect.fn("web/acceptAsk")(function* (
-  seams: AskSeams,
-  input: AskInput,
+export const acceptAsk = /* @__PURE__ */ Effect.fn("web/acceptAsk")(function* <
+  Origin extends AskOrigin,
+>(
+  seams: AskSeams<HostTurnOf<Origin>>,
+  input: AskInput<Origin>,
 ): Effect.fn.Return<AskOutcome, QueryError | EffectSchema.SchemaError, DatabaseServices> {
   const { accountId, userId, question, origin, clientId, conversationId } = input;
   const now = new Date(yield* Clock.currentTimeMillis);
@@ -240,9 +253,14 @@ export const acceptAsk = /* @__PURE__ */ Effect.fn("web/acceptAsk")(function* (
     queuedAt: ask.createdAt.getTime(),
   });
   if (ask.sessionId !== undefined) return accepted;
-  const message = { conversationId, turn: HOST_TURN_OF_ASK_ORIGIN[origin], message: question };
+  const message = {
+    conversationId,
+    turn: HOST_TURN_OF_ASK_ORIGIN[origin],
+    message: question,
+    ...(input.timeZone === undefined ? undefined : { timeZone: input.timeZone }),
+  };
 
-  // The dispatch runs under the conversation's lock, so one dispatch at a time runs in a
+  // The dispatch runs under the conversation's dispatch lock, so one dispatch at a time runs in a
   // conversation: of two retries for one client id the second finds the session written and
   // hands eve nothing, and of two first asks the second reads the session the first opened and
   // sends into it rather than opening a second the forward-only claim would lose. A Clear that
@@ -318,11 +336,11 @@ interface StopAnswer {
 
 export type StopOutcome = Result.Result<StopAnswer, StopRefused>;
 
-/** What a Stop needs: the standing reads, the record's stamp, the writer's stamp, and eve as the caller reaches it. */
+/** What a Stop needs: the standing reads, the record's stamp, the writer's stamp, and eve's cancel as the caller reaches it, whatever kinds of turn its client sends. */
 interface StopSeams extends AskStandingReads {
   readonly asks: Pick<AskRecord, "named" | "cancelRequested">;
   readonly writer: Pick<StoreWriter, "requestTurnCancel">;
-  readonly eve: EveSessions;
+  readonly eve: Pick<AgentSessions, "cancel">;
 }
 
 /** A turn as a Stop answers it: its status, and the stamp it carries where one stands. */
@@ -336,6 +354,16 @@ function turnStop(turn: StoredTurnRecord): StopAnswer {
 }
 
 /**
+ * What a Stop of a spoken ask that joined a typed turn answers: the turn's
+ * own status, with the ask's stamp as the cancel asked, unless the turn
+ * already ended, since then there was nothing left of the ask to stop.
+ */
+function joinedStop(turn: StoredTurnRecord, stampedAt: Date): StopAnswer {
+  if (TERMINAL_TURN_STATUSES.has(turn.status)) return turnStop(turn);
+  return { status: turn.status, cancelRequestedAt: stampedAt.getTime() };
+}
+
+/**
  * Stops one ask over plain arguments. A turn already settled is answered as
  * it stands and nothing is asked of eve. An ask eve has not yet started a
  * turn for takes the stamp on its record, for the start that names its
@@ -344,7 +372,10 @@ function turnStop(turn: StoredTurnRecord): StopAnswer {
  * conversation that records no session has nothing running to stop and is
  * refused as such. A row that names no eve turn was written ahead of eve's
  * start: eve runs nothing this build can name under it, so the Stop is the
- * stamp alone and eve is asked nothing.
+ * stamp alone and eve is asked nothing. A spoken ask that joined a typed
+ * turn under way (`AskRow.joinedAfterStep`) stops its own part alone: the
+ * stamp lands on the ask, which ends the voice's following of it, and the
+ * turn, an agent's coding of an hour, is neither cancelled nor stamped.
  */
 export const stopAsk = /* @__PURE__ */ Effect.fn("web/stopAsk")(function* (
   seams: StopSeams,
@@ -371,9 +402,17 @@ export const stopAsk = /* @__PURE__ */ Effect.fn("web/stopAsk")(function* (
     if (bound?.turnId === undefined) return stampedAnswer;
     const [started] = yield* seams.store.turns.named(userId, [bound.turnId]);
     if (started === undefined) return stampedAnswer;
+    // The binding that took it there named the place it joined a typed turn at, and its stamp stands.
+    if (bound.joinedAfterStep !== undefined) return Result.succeed(joinedStop(started, stampedAt));
     turn = started;
   } else {
     turn = standing.turn;
+    // A spoken ask that joined a typed turn stops its own part: its stamp, and nothing of the turn.
+    if (standing.ask?.joinedAfterStep !== undefined) {
+      if (TERMINAL_TURN_STATUSES.has(turn.status)) return Result.succeed(turnStop(turn));
+      yield* seams.asks.cancelRequested(standing.ask.id, at);
+      return Result.succeed(joinedStop(turn, standing.ask.cancelRequestedAt ?? at));
+    }
   }
   // A turn already settled, or already carrying a Stop (the start's honour, or an earlier Stop),
   // is answered as it stands: a stamp that stands is the one cancel this turn gets.

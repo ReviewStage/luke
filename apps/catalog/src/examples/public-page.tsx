@@ -9,6 +9,7 @@ import {
   PublicMedia,
   PublicPage,
   PublicSection,
+  ScrollArea,
   Stack,
   TEXT_TONE,
   TEXT_VARIANT,
@@ -158,27 +159,37 @@ function PublicPages(): React.JSX.Element {
     <>
       <CatalogSection id="public-page-hero" title="A hero, its lead, and sections">
         <div className="catalog-screen catalog-screen-public">
-          <Landing />
+          <ScrollArea>
+            <Landing />
+          </ScrollArea>
         </div>
       </CatalogSection>
       <CatalogSection id="public-page-title" title="A plain page title">
         <div className="catalog-screen catalog-screen-public">
-          <About />
+          <ScrollArea>
+            <About />
+          </ScrollArea>
         </div>
       </CatalogSection>
       <CatalogSection id="public-page-wide" title="A wide page of ruled entries with a rail">
         <div className="catalog-screen catalog-screen-public">
-          <Changelog beneath={false} />
+          <ScrollArea>
+            <Changelog beneath={false} />
+          </ScrollArea>
         </div>
       </CatalogSection>
       <CatalogSection id="public-page-back" title="A page beneath another, with its way back">
         <div className="catalog-screen catalog-screen-public">
-          <Changelog beneath />
+          <ScrollArea>
+            <Changelog beneath />
+          </ScrollArea>
         </div>
       </CatalogSection>
       <CatalogSection id="public-page-phone" title="A phone's width">
         <div className="catalog-screen catalog-screen-phone catalog-screen-public">
-          <Landing />
+          <ScrollArea>
+            <Landing />
+          </ScrollArea>
         </div>
       </CatalogSection>
     </>

@@ -38,6 +38,8 @@ const FUNCTIONS_DIRECTORY = "functions";
 const STATIC_DIRECTORY = "static";
 const FUNCTION_DIRECTORY_SUFFIX = ".func";
 const FUNCTION_CONFIG_FILE = ".vc-config.json";
+/** What a source map's name ends with: the site's client build writes them only to upload (`vite.config.ts`). */
+const SOURCE_MAP_SUFFIX = ".map";
 
 /** What Vercel's Node builder sets on every function it builds, and this build sets the same way. */
 const NODE_LAUNCHER = {
@@ -64,6 +66,8 @@ export interface EmittedFunction {
   readonly contents: Uint8Array | string;
   /** The bound the plan gave the function; undefined leaves the platform's default. */
   readonly maxDuration: number | undefined;
+  /** Files the function reads beside its entry, by name, such as the runner it uploads to a sandbox. */
+  readonly files?: readonly { readonly name: string; readonly contents: Uint8Array }[];
 }
 
 interface FunctionConfig {
@@ -107,7 +111,7 @@ interface BuildOutputInput {
   /** The output root, emptied first so a function an earlier plan emitted cannot ship beside the current ones. */
   readonly outputDirectory: string;
   readonly functions: readonly EmittedFunction[];
-  /** The built site, copied whole under `static/`; absent for a tree of functions alone. */
+  /** The built site, copied whole under `static/` but for any source map; absent for a tree of functions alone. */
   readonly staticDirectory?: string;
 }
 
@@ -120,14 +124,17 @@ export async function emitBuildOutput(input: BuildOutputInput): Promise<readonly
     `${JSON.stringify({ version: BUILD_OUTPUT_VERSION }, null, 2)}\n`,
   );
   if (input.staticDirectory !== undefined) {
+    // Note that a source map is never copied, because one served would hand anyone the app's source.
     await cp(input.staticDirectory, join(input.outputDirectory, STATIC_DIRECTORY), {
       recursive: true,
+      filter: (source) => !source.endsWith(SOURCE_MAP_SUFFIX),
     });
   }
   for (const fn of input.functions) {
     const directory = functionDirectory(input.outputDirectory, fn.path);
     await mkdir(directory, { recursive: true });
     await writeFile(functionEntryPath(input.outputDirectory, fn.path), fn.contents);
+    for (const file of fn.files ?? []) await writeFile(join(directory, file.name), file.contents);
     await writeFile(
       functionConfigPath(input.outputDirectory, fn.path),
       `${JSON.stringify(functionConfig(fn.maxDuration), null, 2)}\n`,

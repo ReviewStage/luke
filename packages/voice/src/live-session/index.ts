@@ -1,5 +1,4 @@
 export { holdSocket } from "../held-socket.js";
-export { type LiveSideband, sidebandOverSocket } from "../live-socket.js";
 export {
   closeGracefully,
   SIDEBAND_CLOSE_OUTCOME,

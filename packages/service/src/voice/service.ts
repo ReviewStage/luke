@@ -5,6 +5,7 @@ import type { DatabaseServices } from "@luke/database/core/query";
 import type { VoiceSessionRecord } from "@luke/database/models/voice-session-record";
 import { LIVE_CLIENT_EVENT } from "@luke/live";
 import { catchAllButInterrupt } from "@luke/runtime/effect";
+import { sentLineId } from "@luke/wire/host-ids";
 import { Context, Effect, Exit, FiberSet, Layer, Scope } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import { type WebSocket, WebSocketServer } from "ws";
@@ -12,11 +13,9 @@ import {
   HOSTED_API_ERROR,
   type HostedApiError,
   HTTP_STATUS,
-  type PlanDraftFrame,
   type TaskActivityFrame,
   type TaskCallEndingFrame,
   type TaskCodeFrame,
-  type TaskWorkFrame,
   VOICE_SERVICE_FRAME,
 } from "../core.js";
 import type { VoiceAccounts } from "./accounts.js";
@@ -507,57 +506,37 @@ export class VoiceService {
       // the relay is about to pipe. The socket is paused since the attach, so a
       // frame the session spoke while the exchange stood is read once both
       // consumers listen, by both, in order.
+      // Every frame of the service's own about the call names its agent, and the agent's task where it has one.
+      const subject = {
+        ...(opened.taskId === undefined ? undefined : { planId: opened.taskId }),
+        agentId: opened.agentId,
+      };
       const standing = yield* this.#attachExchange({
         accountId,
         sessionId,
         taskId: opened.taskId,
+        agentId: opened.agentId,
+        timeZone: opened.timeZone,
         started: opened.started,
         sideband,
-        // The call's plan as its notetaker has it now, sent on a fiber of
-        // the service's own set since the exchange reports it from inside
-        // its own, so the Tasks tab types it in as the call goes on; a
-        // device gone by then takes it nowhere.
-        onPlanDraft: (draft) => {
-          const frame: PlanDraftFrame = {
-            type: VOICE_SERVICE_FRAME.PLAN_DRAFT,
-            planId: opened.taskId,
-            document: draft.document,
-            readAt: draft.readAt,
-            ...(draft.savedAt === undefined ? undefined : { savedAt: draft.savedAt }),
-            ...(draft.sectionEdits === undefined
-              ? undefined
-              : { sectionEdits: draft.sectionEdits }),
-          };
-          this.#begin(Effect.ignore(device.send({ text: JSON.stringify(frame) })));
-        },
         // What each part of Luke is doing, sent the same way, so the
         // Tasks tab says the voice's state and the backend's apart.
         onActivity: (activity) => {
           const frame: TaskActivityFrame = {
             type: VOICE_SERVICE_FRAME.TASK_ACTIVITY,
-            planId: opened.taskId,
+            ...subject,
             ...activity,
           };
           this.#begin(Effect.ignore(device.send({ text: JSON.stringify(frame) })));
         },
-        // Code Luke is about to talk about, with its lines as the brain
-        // read them from the task's repository, sent the same way, so
-        // the Tasks tab's code pane draws it as he says it.
+        // Code Luke is about to talk about, with its lines as the agent
+        // read them from its checkout, sent the same way, so the Tasks
+        // tab's code pane draws it as he says it.
         onCode: (shown) => {
           const frame: TaskCodeFrame = {
             type: VOICE_SERVICE_FRAME.TASK_CODE,
-            planId: opened.taskId,
             ...shown,
-          };
-          this.#begin(Effect.ignore(device.send({ text: JSON.stringify(frame) })));
-        },
-        // Each brain turn's work, sent the same way, so the Tasks tab's
-        // Work tab reads what Luke's brain wrote and ran as it goes.
-        onWork: (turn) => {
-          const frame: TaskWorkFrame = {
-            type: VOICE_SERVICE_FRAME.TASK_WORK,
-            planId: opened.taskId,
-            turn,
+            ...subject,
           };
           this.#begin(Effect.ignore(device.send({ text: JSON.stringify(frame) })));
         },
@@ -568,7 +547,7 @@ export class VoiceService {
           this.#log({ event: LOG_EVENT.CALL_ENDING });
           const frame: TaskCallEndingFrame = {
             type: VOICE_SERVICE_FRAME.TASK_CALL_ENDING,
-            planId: opened.taskId,
+            ...subject,
           };
           this.#begin(Effect.ignore(device.send({ text: JSON.stringify(frame) })));
         },
@@ -633,8 +612,10 @@ export class VoiceService {
             }),
           ),
         // The device's reports reach the exchange: its idle, which the
-        // exchange decides the idle close on; and its stop, which the exchange
-        // answers with the one instruction it appends itself. With no exchange
+        // exchange decides the idle close on; its stop, which the exchange
+        // answers with the one instruction it appends itself; and a line the
+        // developer typed into the call, which the exchange hands the agent
+        // and whose reply it speaks. With no exchange
         // standing a report is read and goes nowhere.
         onDeviceReport:
           exchange === undefined
@@ -646,6 +627,10 @@ export class VoiceService {
                     return;
                   case VOICE_SERVICE_FRAME.SESSION_STOP:
                     exchange.service.stopSpeaking();
+                    return;
+                  case VOICE_SERVICE_FRAME.SESSION_TYPED:
+                    // Under the id a steer of the same send would write, so a Retry, by either path, is one line.
+                    exchange.service.typeLine(report.text, sentLineId(report.clientKey));
                     return;
                 }
               },

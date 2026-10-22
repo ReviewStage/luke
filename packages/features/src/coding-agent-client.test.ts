@@ -3,15 +3,20 @@ import { it } from "@effect/vitest";
 import { fakeCloudApi, HTTP_STATUS, type JsonValue, recordingHttpClient } from "@luke/wire/testing";
 import { Effect, Fiber } from "effect";
 import { TestClock } from "effect/testing";
-import { MEMBER_KIND } from "./chat-wire.js";
+import { accountBearer } from "./account-call.js";
 import { HostedCodingAgentClient } from "./coding-agent-client.js";
 import { CODING_AGENT_CALL_FAILURE } from "./coding-agent-view.js";
 import { CODING_AGENT_STATUS } from "./coding-agent-wire.js";
+import { INBOX_REPLY } from "./inbox-wire.js";
+import { LIVE_SIGNED_OUT } from "./live-wire.js";
 import {
+  PROVIDER_KEY_KIND,
   PROVIDER_KEY_PROVIDER,
   PROVIDER_KEY_REJECTION,
   PROVIDER_KEY_STATUS,
 } from "./provider-key-wire.js";
+import { PULL_REQUEST_CHAPTERS_CALL_FAILURE } from "./pull-request-chapters-view.js";
+import { PULL_REQUEST_CHAPTERS_STATE } from "./pull-request-chapters-wire.js";
 import { REPOSITORY_UNREACHED } from "./repository-reach-wire.js";
 import { HOSTED_API_ERROR } from "./service-wire.js";
 
@@ -35,8 +40,10 @@ const CHOICE = { model: "openai/gpt-6.1-sol", effort: "xhigh" };
 function client(): HostedCodingAgentClient {
   return new HostedCodingAgentClient({
     serviceBaseUrl: "https://tryluke.dev",
-    readAccessToken: () => Effect.succeed("token-1"),
-    refreshAccount: () => Effect.void,
+    credential: accountBearer({
+      readAccessToken: () => Effect.succeed("token-1"),
+      refreshAccount: () => Effect.void,
+    }),
   });
 }
 
@@ -58,7 +65,6 @@ it.effect(
           CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE,
         ],
         [HOSTED_API_ERROR.INVALID_REQUEST, CODING_AGENT_CALL_FAILURE.INVALID_CHOICE],
-        [HOSTED_API_ERROR.TASK_ARCHIVED, CODING_AGENT_CALL_FAILURE.TASK_ARCHIVED],
         [HOSTED_API_ERROR.GITHUB_UNANSWERED, CODING_AGENT_CALL_FAILURE.GITHUB_UNANSWERED],
         [HOSTED_API_ERROR.UNAVAILABLE, CODING_AGENT_CALL_FAILURE.UNANSWERED],
       ] as const;
@@ -148,6 +154,37 @@ it.effect(
 );
 
 it.effect(
+  "a message refused at its plan's limit carries the reset the service named, and one with none is the bare refusal",
+  () =>
+    Effect.gen(function* () {
+      const resetsAt = Date.UTC(2026, 9, 21, 15, 40);
+      const refusingWith = (body: JsonValue) =>
+        fakeCloudApi({
+          "POST /api/agents/agent-1/messages": {
+            answer: () => body,
+            status: HTTP_STATUS.CONFLICT,
+          },
+        });
+      const request = { text: "Also the emails.", clientKey: "key-1" };
+
+      const named = yield* Effect.provide(
+        client().message("agent-1", request),
+        refusingWith({ error: HOSTED_API_ERROR.AGENT_PLAN_LIMIT_REACHED, resetsAt }).layer,
+      );
+      const bare = yield* Effect.provide(
+        client().message("agent-1", request),
+        refusingWith({ error: HOSTED_API_ERROR.AGENT_PLAN_LIMIT_REACHED }).layer,
+      );
+
+      assert.deepEqual(named, {
+        failure: CODING_AGENT_CALL_FAILURE.AGENT_PLAN_LIMIT_REACHED,
+        resetsAt,
+      });
+      assert.deepEqual(bare, { failure: CODING_AGENT_CALL_FAILURE.AGENT_PLAN_LIMIT_REACHED });
+    }),
+);
+
+it.effect(
   "reads, saves, and removes the account's own provider keys, a save carrying the key once in its body and every answer its hint alone",
   () =>
     Effect.gen(function* () {
@@ -176,11 +213,18 @@ it.effect(
         client().removeProviderKey({ provider: PROVIDER_KEY_PROVIDER.ANTHROPIC }),
         api.layer,
       );
+      yield* Effect.provide(
+        client().removeProviderKey({
+          provider: PROVIDER_KEY_PROVIDER.ANTHROPIC,
+          kind: PROVIDER_KEY_KIND.CLAUDE_SETUP_TOKEN,
+        }),
+        api.layer,
+      );
 
       assert.deepEqual(read, { keys: [kept] });
       assert.deepEqual(saved, { keys: [], rejected: PROVIDER_KEY_REJECTION.INVALID });
       assert.deepEqual(removed, { keys: [] });
-      const [, save, removal] = api.requests();
+      const [, save, removal, tokenRemoval] = api.requests();
       assert.deepEqual(JSON.parse(save?.body ?? "{}"), {
         provider: PROVIDER_KEY_PROVIDER.ANTHROPIC,
         key,
@@ -188,6 +232,10 @@ it.effect(
       assert.equal(
         removal?.url,
         `https://tryluke.dev/api/account/provider-keys?provider=${PROVIDER_KEY_PROVIDER.ANTHROPIC}`,
+      );
+      assert.equal(
+        tokenRemoval?.url,
+        `https://tryluke.dev/api/account/provider-keys?provider=${PROVIDER_KEY_PROVIDER.ANTHROPIC}&kind=${PROVIDER_KEY_KIND.CLAUDE_SETUP_TOKEN}`,
       );
     }),
 );
@@ -222,23 +270,7 @@ it.effect(
 );
 
 it.effect(
-  "reads one agent's inbox past a cursor at the agent's own path, held as a plan's is",
-  () =>
-    Effect.gen(function* () {
-      const api = fakeCloudApi({
-        [`GET /api/agents/${AGENT_ID}/inbox`]: {
-          answer: () => ({ items: [], cursor: "3" }),
-        },
-      });
-
-      const read = yield* Effect.provide(client().agentInbox(AGENT_ID, "0"), api.layer);
-
-      assert.deepEqual(read, { items: [], cursor: "3" });
-    }),
-);
-
-it.effect(
-  "writes a message on an inbox item's thread at the item's own path, its words trimmed, answers the item as it then stands, names a refusal as a message's, and sends nothing that carries neither words nor files",
+  "writes a message on an inbox item's thread at the item's own path, its words trimmed, answers the item as it then stands, names a refusal as a message's, sends an answer to the open ask on a reply with no words, and sends nothing that carries neither words, files, nor an answer",
   () =>
     Effect.gen(function* () {
       const itemId = "5d2b8f0e-1a3c-4e6f-9b7d-2c4e6a8b0d1f";
@@ -281,15 +313,28 @@ it.effect(
         client().messageInbox(itemId, { text: " ", clientKey: "key-2" }),
         api.layer,
       );
+      const answers = {
+        ask: "7f4d0b2a-3c5e-4a81-9d9f-4e6a8c0d2f3b",
+        reply: INBOX_REPLY.CHOSE,
+        choices: ["Short"],
+      };
+      const answered = yield* Effect.provide(
+        client().messageInbox(itemId, { text: " ", clientKey: "key-3", answers }),
+        api.layer,
+      );
 
       assert.deepEqual(sent, { item });
-      assert.deepEqual(JSON.parse(api.requests()[0]?.body ?? "null"), {
-        text: "Drop the emoji.",
-        clientKey: "key-1",
-      });
       assert.deepEqual(refused, { failure: CODING_AGENT_CALL_FAILURE.AGENT_NOT_READY });
       assert.deepEqual(empty, { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
-      assert.equal(api.requests().length, 1, "nothing is sent for a message of neither");
+      assert.deepEqual(answered, { item });
+      assert.deepEqual(
+        api.requests().map((request) => JSON.parse(request.body ?? "null")),
+        [
+          { text: "Drop the emoji.", clientKey: "key-1" },
+          { text: "", clientKey: "key-3", answers },
+        ],
+        "nothing is sent for a message of neither, and an answer goes without words",
+      );
     }),
 );
 
@@ -431,37 +476,40 @@ it.effect(
 );
 
 it.effect(
-  "reads a workspace's chat past the cursor it names, and a workspace the account is not in as not found",
+  "reads a chat message's picture by the workspace, the message, and the attachment, as base64 under the type it was kept as, a type no picture is as unanswered, and a refusal as its failure",
   () =>
     Effect.gen(function* () {
-      const self = "4e2b8c1d-5f3a-4b6c-9d7e-8f1a2b3c4d5e";
-      const chat = {
-        self,
-        readSeq: 0,
-        members: [
-          { id: self, kind: MEMBER_KIND.HUMAN, handle: "ada", userId: "user-1", left: false },
+      const messageId = "5d2b8f0e-1a3c-4e6f-9b7d-2c4e6a8b0d1f";
+      const attachmentId = "6e3c9a1f-2b4d-4f70-8c8e-3d5f7b9c1e2a";
+      const servedAs = (type: string, status = 200) =>
+        recordingHttpClient(
+          () => new Response("%PDF", { status, headers: { "content-type": type } }),
+        );
+      const png = servedAs("image/png");
+      const read = (served: ReturnType<typeof servedAs>) =>
+        Effect.provide(
+          client().chatAttachment(WORKSPACE_ID, messageId, attachmentId),
+          served.layer,
+        );
+
+      assert.deepEqual(yield* read(png), { contentType: "image/png", base64: "JVBERg==" });
+      const [asked] = png.requests;
+      assert.equal(asked?.pathname, "/api/workspaces/chat/attachment");
+      assert.deepEqual(
+        [...(asked?.searchParams.entries() ?? [])],
+        [
+          ["workspaceId", WORKSPACE_ID],
+          ["messageId", messageId],
+          ["attachmentId", attachmentId],
         ],
-        channels: [],
-        messages: [],
-        cursor: "12",
-      };
-      const api = fakeCloudApi({ "GET /api/workspaces/chat": { answer: () => chat } });
-      const refusing = fakeCloudApi({
-        "GET /api/workspaces/chat": {
-          answer: () => ({ error: HOSTED_API_ERROR.NOT_FOUND }),
-          status: HTTP_STATUS.NOT_FOUND,
-        },
-      });
-
-      const read = yield* Effect.provide(client().chat(WORKSPACE_ID, "7"), api.layer);
-      const refused = yield* Effect.provide(client().chat(WORKSPACE_ID, "0"), refusing.layer);
-
-      assert.deepEqual(read, chat);
-      assert.equal(
-        api.requests()[0]?.url,
-        `https://tryluke.dev/api/workspaces/chat?workspaceId=${WORKSPACE_ID}&after=7`,
       );
-      assert.deepEqual(refused, { failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND });
+      assert.deepEqual(yield* read(servedAs("application/pdf")), {
+        failure: CODING_AGENT_CALL_FAILURE.UNANSWERED,
+      });
+      const refusing = recordingHttpClient(
+        () => new Response(JSON.stringify({ error: HOSTED_API_ERROR.NOT_FOUND }), { status: 404 }),
+      );
+      assert.deepEqual(yield* read(refusing), { failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND });
     }),
 );
 
@@ -496,7 +544,6 @@ it.effect(
       );
       for (const [error, failure] of [
         [HOSTED_API_ERROR.NOT_FOUND, CODING_AGENT_CALL_FAILURE.NOT_FOUND],
-        [HOSTED_API_ERROR.TASK_ARCHIVED, CODING_AGENT_CALL_FAILURE.TASK_ARCHIVED],
       ] as const) {
         const refusing = fakeCloudApi({
           "POST /api/workspaces/chat": {
@@ -547,5 +594,200 @@ it.effect(
       assert.deepEqual(yield* Fiber.join(unanswered), {
         failure: CODING_AGENT_CALL_FAILURE.UNANSWERED,
       });
+    }),
+);
+
+it.effect(
+  "a message outlasts the service's wait for the agent's conversation and its thirty-second hand-over to eve, so one that lands slowly answers as sent, and is unanswered only past its own deadline",
+  () =>
+    Effect.gen(function* () {
+      const request = { text: "Also the emails.", clientKey: "key-1" };
+      const ran = { agent: AGENT };
+      let answer: (response: Response) => void = () => undefined;
+      const slow = recordingHttpClient(
+        () =>
+          new Promise<Response>((resolve) => {
+            answer = resolve;
+          }),
+      );
+      const asked = yield* Effect.forkChild(
+        Effect.provide(client().message(AGENT_ID, request), slow.layer),
+      );
+      yield* TestClock.adjust("40 seconds");
+      answer(
+        new Response(JSON.stringify(ran), {
+          status: 202,
+          headers: { "content-type": "application/json" },
+        }),
+      );
+      assert.deepEqual(yield* Fiber.join(asked), ran);
+
+      const silent = recordingHttpClient(() => new Promise<Response>(() => undefined));
+      const unanswered = yield* Effect.forkChild(
+        Effect.provide(client().message(AGENT_ID, request), silent.layer),
+      );
+      yield* TestClock.adjust("44 seconds");
+      assert.equal(unanswered.pollUnsafe(), undefined, "still waiting short of its deadline");
+      yield* TestClock.adjust("1 second");
+      assert.deepEqual(yield* Fiber.join(unanswered), {
+        failure: CODING_AGENT_CALL_FAILURE.UNANSWERED,
+      });
+    }),
+);
+
+it.effect(
+  "a Start from an agent travels to that agent's own path with the body a task's Start carries, and one naming no agent travels nowhere",
+  () =>
+    Effect.gen(function* () {
+      const request = { idempotencyKey: "press-1", from: { agentId: AGENT_ID } };
+      const api = fakeCloudApi({
+        [`POST /api/agents/${AGENT_ID}/agents`]: {
+          answer: () => ({ agent: AGENT }),
+          status: 201,
+        },
+      });
+
+      const started = yield* Effect.provide(client().startFrom(request), api.layer);
+      const nowhere = yield* Effect.provide(
+        client().startFrom({ idempotencyKey: "press-2", prompt: "Go." }),
+        api.layer,
+      );
+
+      assert.deepEqual(started, { agent: AGENT });
+      assert.deepEqual(nowhere, { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
+      assert.deepEqual(
+        api.requests().map((each) => [each.url, JSON.parse(each.body ?? "{}")]),
+        [[`https://tryluke.dev/api/agents/${AGENT_ID}/agents`, request]],
+      );
+    }),
+);
+
+it.effect(
+  "the account inbox sealed for following is read as the service answers it for the account named, polled past a digest where asked, a session of another account is signed out, and a refusal or a body that is no answer is unanswered",
+  () =>
+    Effect.gen(function* () {
+      const sealed = {
+        capability: "capability-1",
+        queryFingerprint: "fingerprint-1",
+        expiresAt: 1_800_000_060_000,
+      };
+      const live = {
+        url: "wss://realtime.example/v1",
+        queries: {
+          items: sealed,
+          planless: sealed,
+          plans: sealed,
+          automations: sealed,
+          failedRuns: sealed,
+          chatAsks: sealed,
+          chatNotices: sealed,
+        },
+      };
+      const answering = (answer: JsonValue, status: number = HTTP_STATUS.OK) =>
+        fakeCloudApi({ "GET /api/live/inbox": { answer: () => answer, status } });
+
+      const api = answering(live);
+      const read = yield* Effect.provide(client().accountInboxLive("user-dana"), api.layer);
+      yield* Effect.provide(client().accountInboxLive("user-dana", true, "d-1"), api.layer);
+      const signedOut = yield* Effect.provide(
+        client().accountInboxLive("user-dana"),
+        answering({ error: HOSTED_API_ERROR.INVALID_TOKEN }, 401).layer,
+      );
+      const refused = yield* Effect.provide(
+        client().accountInboxLive("user-dana"),
+        answering({ error: HOSTED_API_ERROR.UNAVAILABLE }, 503).layer,
+      );
+      const unread = yield* Effect.provide(
+        client().accountInboxLive("user-dana"),
+        answering({ url: live.url }).layer,
+      );
+
+      assert.deepEqual(read, live);
+      const [sealing, polling] = api.requests().map((each) => each.searchParams);
+      assert.equal(sealing?.get("userId"), "user-dana");
+      assert.equal(sealing?.get("poll"), null);
+      assert.equal(polling?.get("poll"), "true");
+      assert.equal(polling?.get("after"), "d-1");
+      assert.deepEqual(signedOut, LIVE_SIGNED_OUT);
+      assert.deepEqual(refused, { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
+      assert.deepEqual(unread, { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
+    }),
+);
+
+it.effect(
+  "a pull request's chapters are read by the tab's number and generated with it in the query, each refusal the tab acts on read as its own failure",
+  () =>
+    Effect.gen(function* () {
+      const path = `/api/agents/${AGENT_ID}/chapters`;
+      const answer = {
+        pullRequest: {
+          number: 7,
+          headSha: "c0ffee1",
+          generatable: true,
+          chapters: { status: PULL_REQUEST_CHAPTERS_STATE.NONE },
+        },
+      };
+      const api = fakeCloudApi({
+        [`GET ${path}`]: { answer: () => answer },
+        [`POST ${path}`]: { answer: () => answer },
+      });
+
+      assert.deepEqual(yield* Effect.provide(client().chapters(AGENT_ID, 7), api.layer), answer);
+      assert.deepEqual(
+        yield* Effect.provide(client().generateChapters(AGENT_ID, 7), api.layer),
+        answer,
+      );
+      assert.deepEqual(yield* Effect.provide(client().chapters(AGENT_ID), api.layer), answer);
+      assert.deepEqual(
+        api.requests().map((request) => `${request.method} ${request.pathname}${request.search}`),
+        [`GET ${path}?number=7`, `POST ${path}?number=7`, `GET ${path}`],
+      );
+      assert.equal(api.requests()[1]?.body ?? "", "");
+
+      const refusals = [
+        [HOSTED_API_ERROR.NOT_FOUND, PULL_REQUEST_CHAPTERS_CALL_FAILURE.NOT_FOUND],
+        [
+          HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE,
+          PULL_REQUEST_CHAPTERS_CALL_FAILURE.REPOSITORY_NOT_REACHABLE,
+        ],
+        [HOSTED_API_ERROR.GITHUB_UNANSWERED, PULL_REQUEST_CHAPTERS_CALL_FAILURE.GITHUB_UNANSWERED],
+        [HOSTED_API_ERROR.UNAVAILABLE, PULL_REQUEST_CHAPTERS_CALL_FAILURE.UNAVAILABLE],
+        [HOSTED_API_ERROR.INVALID_REQUEST, PULL_REQUEST_CHAPTERS_CALL_FAILURE.UNANSWERED],
+      ] as const;
+      for (const [error, failure] of refusals) {
+        const refusing = fakeCloudApi({
+          [`POST ${path}`]: { answer: () => ({ error }), status: HTTP_STATUS.CONFLICT },
+        });
+        assert.deepEqual(
+          yield* Effect.provide(client().generateChapters(AGENT_ID), refusing.layer),
+          { failure },
+          error,
+        );
+      }
+    }),
+);
+
+it.effect(
+  "ensures the operator in a workspace with the reset as sent, and reads the experiment's 404 as not found",
+  () =>
+    Effect.gen(function* () {
+      const path = `PUT /api/workspaces/${WORKSPACE_ID}/operator`;
+      const api = fakeCloudApi({ [path]: { answer: () => ({ agentId: AGENT_ID, txid: "9103" }) } });
+      const refusing = fakeCloudApi({
+        [path]: { answer: () => ({ error: HOSTED_API_ERROR.NOT_FOUND }), status: 404 },
+      });
+
+      const ensured = yield* Effect.provide(
+        client().ensureOperator(WORKSPACE_ID, { reset: true }),
+        api.layer,
+      );
+      const refused = yield* Effect.provide(
+        client().ensureOperator(WORKSPACE_ID, {}),
+        refusing.layer,
+      );
+
+      assert.deepEqual(ensured, { agentId: AGENT_ID, txid: "9103" });
+      assert.deepEqual(JSON.parse(api.requests()[0]?.body ?? "{}"), { reset: true });
+      assert.deepEqual(refused, { failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND });
     }),
 );

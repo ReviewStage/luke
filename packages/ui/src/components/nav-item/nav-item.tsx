@@ -1,5 +1,7 @@
 import type { ButtonHTMLAttributes, KeyboardEvent, MouseEvent, ReactNode, Ref } from "react";
 import { ChevronRightIcon } from "../../face/glyphs.js";
+import { type ContextMenuProps, withContextMenu } from "../menu/menu.js";
+import { ClippedLine, ONE_LINE_ELEMENT, ONE_LINE_END } from "../one-line/clipped-line.js";
 
 /**
  * nav-item.tsx -- a place in a column of places: its glyph, its name, and what stands at its end, a count, a mark, or its chord.
@@ -35,6 +37,8 @@ import { ChevronRightIcon } from "../../face/glyphs.js";
  * A NavItemLink is a row's look on a link, for a place with an address of
  * its own: the browser follows it, so a modified click opens it in a new tab
  * as any link does, and its caller's `onClick` may take a plain one instead.
+ * One that leaves the page (`newTab`) opens in a tab of its own, which
+ * reaches nothing of this one.
  *
  * A row that drops a menu takes the props `useMenu().trigger()` hands out
  * (`menu`), and is lit while its menu stands. It takes an app's hint's
@@ -122,7 +126,8 @@ export type NavItemProps = HintProps & {
   /** The menu it drops, from `useMenu().trigger()`, in place of `onClick`. */
   menu?: NavMenuTrigger | undefined;
   onClick?: ((event: MouseEvent<HTMLButtonElement>) => void) | undefined;
-  onContextMenu?: ((event: MouseEvent<HTMLButtonElement>) => void) | undefined;
+  /** The menu a right-click or a long press opens on it (`useMenu`'s `contextMenu`). */
+  contextMenu?: ContextMenuProps | undefined;
   onKeyDown?: ((event: KeyboardEvent<HTMLButtonElement>) => void) | undefined;
   disabled?: boolean | undefined;
   /** Whether a pointer's press leaves the focus where it is. */
@@ -159,6 +164,15 @@ function Glyph({ icon, folds }: { icon: ReactNode; folds: boolean }): React.JSX.
   );
 }
 
+/** Its name on one line, fading out at its end while the row cuts it short, as a browser's tab does. */
+function Name({ children }: { children: ReactNode }): React.JSX.Element {
+  return (
+    <ClippedLine className="luke-nav-item-name" as={ONE_LINE_ELEMENT.SPAN} end={ONE_LINE_END.FADE}>
+      {children}
+    </ClippedLine>
+  );
+}
+
 /** What stands at rest: the mark, then the count, read with its noun. */
 function AtRest({ mark, count }: { mark: ReactNode; count: NavCount | undefined }) {
   const counted = count !== undefined && count.value > 0;
@@ -189,6 +203,7 @@ export function NavItemLink({
   children,
   current,
   title,
+  newTab,
   onClick,
   ...props
 }: {
@@ -201,6 +216,8 @@ export function NavItemLink({
   current?: NavCurrent | undefined;
   /** Its name as a pointer's hint, where its words are not drawn whole. */
   title?: string | undefined;
+  /** Whether it opens in a tab of its own rather than in this one. */
+  newTab?: boolean | undefined;
   /** Called as the press leaves, before the browser follows the link. */
   onClick?: ((event: MouseEvent<HTMLAnchorElement>) => void) | undefined;
   /** Its name, where the words drawn do not say the whole of it. */
@@ -211,13 +228,15 @@ export function NavItemLink({
       className="luke-nav-item"
       data-variant={NAV_ITEM_VARIANT.ROW}
       href={href}
+      target={newTab === true ? "_blank" : undefined}
+      rel={newTab === true ? "noopener" : undefined}
       title={title}
       aria-label={props["aria-label"]}
       aria-current={current}
       onClick={onClick}
     >
       {said(icon) ? <Glyph icon={icon} folds={false} /> : null}
-      <span className="luke-nav-item-name">{children}</span>
+      <Name>{children}</Name>
     </a>
   );
 }
@@ -257,17 +276,16 @@ export function NavItem({
       aria-keyshortcuts={props["aria-keyshortcuts"]}
       onPointerEnter={props.onPointerEnter}
       onPointerLeave={props.onPointerLeave}
-      onPointerDown={props.onPointerDown}
       // Note that the focus moves as a mousedown's default, so refusing it there is what keeps it.
       onMouseDown={keepFocus === true ? preventFocusMove : undefined}
       onFocus={props.onFocus}
       onBlur={props.onBlur}
       onClick={menu?.onClick ?? onClick}
-      onContextMenu={props.onContextMenu}
+      {...withContextMenu(props.contextMenu, { onPointerDown: props.onPointerDown })}
       onKeyDown={props.onKeyDown}
     >
       {said(icon) ? <Glyph icon={icon} folds={folds} /> : null}
-      <span className="luke-nav-item-name">{children}</span>
+      <Name>{children}</Name>
       {said(detail) ? <span className="luke-nav-item-detail">{detail}</span> : null}
       <AtRest mark={mark} count={count} />
       {said(shortcut) ? <span className="luke-nav-item-shortcut">{shortcut}</span> : null}

@@ -24,6 +24,17 @@ export const HOST_CAPABILITY = {
   MAC_TERMINAL: "macTerminal",
   /** An agent's Terminal tab, and Show terminal and New terminal that open it. */
   TERMINALS: "terminals",
+  /** Sign in with ChatGPT, whose loopback only a client on the machine itself can listen on. */
+  CHATGPT_SIGN_IN: "chatGptSignIn",
+  /** A Browser tab, whose page a view of the client's own draws over the panel. */
+  BROWSER: "browser",
+  /**
+   * An app installed on the machine rather than a page in a browser tab:
+   * the window's zoom, opening at login, the menu bar whose chords the
+   * Keyboard shortcuts page lists, and the machine's own name over the pages
+   * that are this client's alone.
+   */
+  DESKTOP_APP: "desktopApp",
 } as const;
 
 export type HostCapability = (typeof HOST_CAPABILITY)[keyof typeof HOST_CAPABILITY];

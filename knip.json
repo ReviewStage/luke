@@ -2,6 +2,7 @@
   "$schema": "https://unpkg.com/knip@6/schema.json",
   "ignoreDependencies": ["oxlint", "turbo"],
   "ignoreBinaries": [
+    "afconvert",
     "iconutil",
     "ditto",
     "shasum",
@@ -14,27 +15,19 @@
   "ignore": [".opencode/**"],
   "workspaces": {
     ".": {
-      "entry": ["scripts/fixtures/discarded-effect/*.ts", "scripts/fixtures/task-names/*.ts"],
+      "entry": ["scripts/fixtures/discarded-effect/*.ts"],
       "project": ["scripts/**"]
     },
     "apps/desktop": {
       "entry": [
         "src/main/index.ts",
         "src/preload/index.ts",
+        "src/utility/task-code.ts",
         "src/renderer/index.tsx",
         "src/renderer/voice/index.tsx",
         "src/renderer/call/index.tsx",
         "src/renderer/styles/index.css",
-        "src/renderer/whiteboard/index.tsx",
-        "src/renderer/whiteboard/index.css",
-        "src/renderer/plan-editor/index.ts",
-        "src/renderer/diagram/index.ts",
-        "src/renderer/diff-view/index.ts",
-        "src/renderer/factory-world/scene/index.ts",
-        "src/renderer/factory-world/worlds/*/index.ts",
         "src/renderer/session-recorder/index.ts",
-        "src/renderer/terminal/index.ts",
-        "src/renderer/terminal/index.css",
         "src/renderer/avatar-feed/pcm-tee-worklet.ts",
         "src/renderer/avatar-session/index.ts",
         "scripts/*.mjs",
@@ -49,7 +42,9 @@
     "apps/web": {
       "entry": [
         "server/routes/**/*.ts",
+        "server/orpc-route.ts",
         "src/*.tsx",
+        "src/app/main.tsx",
         "src/entry-server.tsx",
         "server/db/migrate.ts",
         "scripts/*.ts",
@@ -75,6 +70,7 @@
         "@better-auth/electron",
         "@better-auth/oauth-provider",
         "@sentry/cli",
+        "@sentry/effect",
         "@vercel/connect",
         "@vercel/oidc",
         "better-auth",
@@ -94,32 +90,15 @@
       ],
       "project": ["**/*.ts"]
     },
-    "apps/luke": {
-      "ignoreDependencies": [
-        "@ai-sdk/anthropic",
-        "@ai-sdk/openai",
-        "@better-auth/drizzle-adapter",
-        "@better-auth/electron",
-        "@better-auth/oauth-provider",
-        "@sentry/cli",
-        "@vercel/connect",
-        "@vercel/oidc",
-        "better-auth",
-        "diff",
-        "ws"
-      ],
-      "entry": [
-        "{,subagents/*/}agent.ts",
-        "{,subagents/*/}sandbox.ts",
-        "{,subagents/*/}instructions.ts",
-        "{,subagents/*/}instructions/*.ts",
-        "{,subagents/*/}{channels,connections,hooks,skills,tools}/**/*.ts",
-        "instrumentation/*.ts",
-        "nitro.config.ts",
-        "evals/evals.config.ts",
-        "evals/*.eval.ts"
-      ],
-      "project": ["**/*.ts"]
+    "packages/agent-runner": {
+      "entry": ["src/main.ts", "scripts/generate-codex-protocol.mjs"],
+      "project": ["src/**", "scripts/**"],
+      "ignore": ["src/codex-protocol/**"]
+    },
+    "tools/claude-code-probe": {
+      "entry": ["src/cli.ts", "src/sandbox/driver.mjs"],
+      "project": ["src/**", "tests/**"],
+      "ignoreDependencies": ["@anthropic-ai/claude-agent-sdk"]
     },
     "tools/anti-slop": {
       "entry": ["index.ts"],

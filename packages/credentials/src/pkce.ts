@@ -1,7 +1,7 @@
 /**
  * pkce.ts -- RFC 7636's verifier and S256 challenge, on Web Crypto so a browser can mint them too.
  */
-import { Effect } from "effect";
+import { Data, Effect } from "effect";
 import { Base64Url } from "effect/encoding";
 
 /** The verifier's random bytes: 43 characters once encoded, RFC 7636's own floor. */
@@ -16,9 +16,17 @@ export function createCodeVerifier(): string {
  * The S256 challenge sent in place of the verifier during authorization. A
  * verifier is unreserved ASCII alone, so its UTF-8 bytes are its ASCII ones.
  */
-export function codeChallenge(verifier: string): Effect.Effect<string> {
+export function codeChallenge(verifier: string): Effect.Effect<string, CodeChallengeFailed> {
   return Effect.map(
-    Effect.promise(() => crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier))),
+    Effect.tryPromise({
+      try: () => crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier)),
+      catch: (cause) => new CodeChallengeFailed({ cause }),
+    }),
     (digest) => Base64Url.encode(new Uint8Array(digest)),
   );
 }
+
+/** Web Crypto refused the challenge's digest, as a browser without a secure context does. */
+export class CodeChallengeFailed extends Data.TaggedError("CodeChallengeFailed")<{
+  readonly cause: unknown;
+}> {}

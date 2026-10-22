@@ -87,49 +87,6 @@ vercel env run --environment production --scope stage-review -- \
   pnpm --filter @luke/web auth:seed
 ```
 
-On a Preview, `pnpm db:migrate` then makes the branch database the
-Preview's own, the first time a build reaches it, on the same direct
-connection the migrations run on, which is where Neon puts admin work
-(`apps/web/server/db/migrate.ts`; `packages/service/src/maintenance/preview-database.ts`
-decides, `packages/database/src/models/preview-fork.ts` runs). Neon branches it off
-production with every row production held, so it arrives with every account's
-words and with whatever was in flight: turns still running, coding agents at
-work, open calls, commands queued for a Mac, sandboxes queued to stop,
-automations due. Each names a live thing in production that the Preview can
-neither finish nor reach, and no cron runs on a Preview to settle it. So the
-step keeps the workspaces `LUKE_PREVIEW_WORKSPACES` names by slug, their
-members, and those members' own first workspaces, and deletes every other
-workspace and account with their rows, and every conversation stamped
-cleared, which only a purge the Preview never runs would remove; deletes the
-copy's sessions, OAuth tokens and consents, provider keys, password hashes,
-and the provider tokens on `account` rows, which production's secrets sealed
-and the Preview's cannot open; settles every
-queued or running turn as failed for its session's end; archives every
-coding agent, since its session and sandbox are production's; closes open
-calls; pauses automations and skips their queued runs; and empties the Mac
-command queue and the sandbox deletion and terminal lease queues. Then it
-writes `preview_fork`'s one row, which a later build of the branch reads as
-done, so a teammate's agents started on the Preview are left alone. Because
-it runs after the migration, a branch's first build still applies its
-migrations to the whole copy of production before the copy is cut down.
-
-It runs only on a Preview's build that names both `LUKE_PREVIEW_WORKSPACES`
-and `LUKE_PRODUCTION_DATABASE_ENDPOINT` (production's Neon endpoint, its
-`ep-…` id), set for the Preview environment alone; without them a build
-leaves the copy as it stands. A Preview whose connection string names
-production's endpoint (the endpoint id Neon's documented hostnames carry,
-with or without `-pooler`), whose database says it is that endpoint, or whose
-database holds no member of the workspaces named, fails its build instead.
-The database's own word is the `neon.endpoint_id` setting every Neon compute
-carries, read before anything is touched whatever name the connection reached
-it by; Neon does not document that setting, so it is a second check behind
-the hostname's rather than the only one, and a compute without it reads as
-not production's. Production's own `preview_fork` table stays empty,
-so resetting a Preview's branch onto production in Neon has its next build
-cut it down again. Neon keeps the copy as it was in the branch's history for
-the project's history window, so this narrows what a Preview holds rather
-than never copying it.
-
 Better Auth runs on its Drizzle adapter over `packages/database/src/schemas/auth.ts`
 (`packages/service/src/auth/auth-database.ts`), not its Kysely one: the migrations declare the
 OAuth tables' `scopes`, `redirect_uris`, `grant_types`, and `response_types`
@@ -211,25 +168,22 @@ picture by its address (`@luke/features/plan-attachment-link`), which
 `savePlanText` reads to stamp the picture `saved_at`, and the scheduled sweep
 deletes, a day on, a picture no save stamped.
 
-A task's conversation keeps the member who opened it as its `user_id`, the
-address its messages, turns, and asks are written under, and is reached by
-every member of the task's workspace: `conversationReachableBy` in
-`packages/database/src/models/recorded-session.ts` admits a member of the
-workspace of the task or coding agent naming the conversation, or naming its
-standing parent one hop up (a subagent's session), and the opener alone for a
-conversation no task or agent names, so a member who leaves the workspace
-leaves its conversations with it. The eve doors
-(`brain-host/door.ts`), the two hosts' admission (`brain-host/conversation.ts`,
-which answers the caller beside the conversation's owner), and the ask door
-all read it, so a member speaks into the session a teammate opened. From
-there the caller and the owner are two ids: the brain's inference
-and research are metered to the caller, not the conversation's owner, and
-the task, the board, every tool binding, an integration's grant, and a
+A coding agent's conversation keeps the member who started it as its
+`user_id`, the address its messages, turns, and asks are written under, and
+is reached by every member of the agent's workspace: `conversationReachableBy`
+in `packages/database/src/models/recorded-session.ts` admits a member of the
+workspace of the coding agent naming the conversation, or naming its standing
+parent one hop up (a subagent's session), and the opener alone for a
+conversation no agent names, so a member who leaves the workspace leaves its
+conversations with it. The eve door (`brain-host/door.ts`), the host's
+admission (`brain-host/conversation.ts`, which answers the caller beside the
+conversation's owner), and the ask door all read it, so a member speaks into
+the session a teammate opened. From there the caller and the owner are two
+ids: the task, the board, every tool binding, an integration's grant, and a
 worker's title are read, written, and metered as the caller, while the
 writer, the seed, and the relay address the owner's rows.
 A voice call is the caller's `voice_sessions` row and meter, landing in the
-task's one conversation, which `openTaskConversation` answers with its
-opener. A coding agent still runs on its starter's provider keys and GitHub
+conversation of the agent it speaks into. A coding agent still runs on its starter's provider keys and GitHub
 token, and its steps are its starter's spend, whichever member messages it.
 
 A workspace's members are read, removed, and left, and a workspace renamed or given a photo, through
@@ -266,8 +220,11 @@ answering `{ workspace }` with its new `photoVersion` or none; any other
 photo is `invalid-request`. They are the plugin's own
 `removeMember`, `updateMemberRole`, `leaveOrganization`, and `updateOrganization` (`memberSeams`
 in `workspace-seams.ts`, the last handed the name alone or the logo alone), called with the
-request's headers, which carry the Mac's own Better Auth session as a signed
-bearer token that the bearer plugin reads as the session cookie. So these six
+request's one credential (`packages/service/src/auth/session-credential.ts`):
+its `Authorization` alone wherever it carries one, which carries the Mac's own
+Better Auth session as a signed bearer token that the bearer plugin reads as
+the session cookie, and the browser's cookie only where it carries none, so a
+bearer the plugin did not sign is never read past to a cookie beside it. So these six
 paths take the session, not the OAuth token, and the plugin checks the
 caller's role and membership again behind Luke's own rules. A workspace the
 account is not in is `not-found`; a role that does not allow it,
@@ -328,16 +285,18 @@ same script reads the other side of the table through `scripts/api-callers.ts`
 (`server/api-callers.ts`): every `/api/` literal and path builder a client in
 the repository spells — the desktop's, the packages', the
 scripts' — and the exports of `@luke/features`'s paths module, evaluated, must
-resolve to a rewrite of the table or to an extensionless alias the Build Output
-emits, and a builder the check cannot read is refused by name rather than
+resolve to an extensionless alias the Build Output emits, a rewrite of the
+table ahead of its fallback, or a procedure of the hosted oRPC contract, and a
+builder the check cannot read is refused by name rather than
 skipped, because a path constant that outlives its route otherwise fails
 nothing until production answers 404 (LUKE-186). The same derived list is
 what `scripts/preview-probe.ts` (`server/preview-probe.ts`) sends to a
 deployment: every caller path, the cron's, the page, and eve's health, failing
 on any answer that is Vercel's own rather than a handler's — the
 `x-vercel-error` header the platform puts on its `NOT_FOUND`, which a
-function's own 404 never carries — with seven of those requests held to
-their exact codes besides, because on 2026-09-11 five production deploys
+function's own 404 never carries — with the requests `EXPECTED_STATUS` names
+held to their exact codes besides, an unknown `/api/` path to the router's
+JSON 404 body among them, because on 2026-09-11 five production deploys
 failed in a row while nothing in CI could see the deployed shape (LUKE-164).
 Behind Deployment Protection it needs one of two doors, the bypass secret
 sent as a header or the OPTIONS allowlist, and names which it relies on.
@@ -363,10 +322,8 @@ is what caught.
 
 Each bundle's external imports are recorded in `server/function-externals.json`,
 generated by `pnpm functions:externals` and compared as data: the test bundles
-every function unwritten and asserts the whole map, and the bundle step refuses
-to ship a bundle whose externals differ from the record, naming the bundle, the
-added or removed package, and the import chain from the entry to the module
-that carried it. Under inline-first bundling the map holds Node's builtins and
+every function unwritten and asserts the whole map, naming the bundle and the
+added or removed package. Under inline-first bundling the map holds Node's builtins and
 the three exceptions, and the signal it keeps is a fourth external appearing.
 Reachability is a different check and reads a different field: `bundlesReaching`
 walks the metafile's inputs for the specifier a module wrote, so an import
@@ -405,29 +362,27 @@ at the `VOICE_SERVICE_PATH` path and the desktop posts feedback to
 commit with no migration and no dashboard state, and the deploy shape returns
 to Vercel's own pass.
 
-The Vercel project is three services in one deployment, declared under `services`
+The Vercel project is two services in one deployment, declared under `services`
 in the repository root's `vercel.json`, which Vercel reads at the project's
 Root Directory (the repository root, so each service's `root` is relative to
 it) and only while the project's Framework Preset is Services. `web` is this
 app, rooted at `apps/web`, and carries the migrate-and-seed
 build, the install filter, the ignore rule, and the `routes` above unchanged.
-`luke` is the hosted brain, the standalone eve app at `apps/luke`
-(`apps/luke/README.md`), built by a plain `pnpm exec eve build` in that root,
-which writes the Build Output static-build reads back from it, so nothing
-relocates it and no variable of eve's own is set by hand.
-`dev` is the coding-agent service, a second standalone eve app at `apps/dev`
-built and deployed on the same terms (`packages/service/README.md`'s "The
+`dev` is the coding-agent service, the standalone eve app at `apps/dev`,
+built by a plain `pnpm exec eve build` in that root, which writes the Build
+Output static-build reads back from it, so nothing relocates it and no
+variable of eve's own is set by hand (`packages/service/README.md`'s "The
 coding-agent service").
 Public routing is the top-level `rewrites`:
-`/eve/coder/v1/*` enters the dev service, `/eve/v1/*` the luke service, and
-everything else the web service, and a
+`/eve/coder/v1/*` enters the dev service, and everything else the web
+service, and a
 service's own routes run only once a request has entered it. That is why the
 generated `/api/` rewrites live under the web service's `routes` and the
 generator (`server/function-rewrites.ts`) refuses a `routes` key at the top
 level beside `services`: Vercel ignores one there rather than erroring, so a
 file generated into the old location would pass every check and 404 every
 `/api/` route in production. The project's
-environment variables reach all three services alike, and each service's own
+environment variables reach both services alike, and each service's own
 `ignoreCommand` is what skips its build, so a commit that changes nothing under
 `apps/web`, `packages`, the workspace manifests, or `vercel.json` deploys none
 of them. A Vercel `vercel.ts` is not used: Vercel's Git builds refuse a
@@ -553,8 +508,8 @@ test can end the one it started.
 
 The `SqlClient` is `PgClient.layer` over the connection string `DATABASE_URL`
 names, its pool held to the same `POOL_LIMITS` the `pg.Pool` behind Better
-Auth's Drizzle adapter is built to, one connection per warm instance, so the
-two pools on the one database cannot drift apart on how much of Neon's pooler
+Auth's Drizzle adapter is built to, `DATABASE_POOL_SIZE` (five) connections per
+warm instance, so the two pools on the one database cannot drift apart on how much of Neon's pooler
 a warm instance holds. The layer opens nothing while it builds: the pool keeps
 no minimum and makes its first connection on the first statement, which
 matters because this layer stands in the runtime every function shares and an
@@ -620,16 +575,15 @@ warm invocation reaches the services the cold one built. A group's routes are
 a layer rather than a value because that is what an `HttpRouter` registration
 is: the router is a service the layer writes each path into, and the
 requirements a route's own handler has travel as request markers the handler
-provides per request from the context `runWeb` read. The auth group, the
-events and maintenance groups below, the account group's
-`server/routes/account/delete.ts`, `preferences.ts`, and `plan-template.ts`,
-the tasks group's four, and the dashboard's five behind the admin group are
-converted this way; the voice route alone exports something else, the
+provides per request from the context `runWeb` read. The routes the hosted
+oRPC route does not answer are converted this way: auth, the two webhooks,
+the maintenance sweep and key rewrap, the GitHub and integration redirects,
+and the byte routes; the voice route alone exports something else, the
 `http.Server` described under "Hosted voice service".
 
 `packages/service/src/http/http-effect.ts` is the response vocabulary that conversion
 speaks: one schema per refusal, each annotated with the status it answers, and
-`readJsonBodyEffect` reading a bounded body off the request stream. A refusal is declared as its body
+`readBodyBytesEffect` reading a bounded body off the request stream. A refusal is declared as its body
 rather than as a `Schema.TaggedError`, because `error` is already the
 discriminant the desktop's hosted clients read and a `_tag` beside it would be
 a byte they never asked for.
@@ -661,22 +615,72 @@ bearer wherever `Authorization` is present, refused when it does not verify
 rather than read past to the cookie, and the browser's session cookie only
 where no `Authorization` is carried. `/api/mac-commands` takes the bearer
 alone (`resolveHostedBearerUserId`), because its held read claims commands
-for the one Mac that asks. A task's delete and the account's take the bearer
-alone too, asked in the endpoint itself (`hostedBearerOnly`) rather than by
-the route file's resolver, because every function holding a group answers
-every path the group declares, the one a client names in the dispatcher's
-`route-path` query among them: each ends the eve sessions of what it deletes
-over that bearer. The rest of what reaches eve over the caller's bearer (an
-agent's Start, message, and Stop) is refused at eve for a cookie. The eve
-services under `/eve/v1/*` and
-`/eve/coder/v1/*` share the origin but never pass through this adaptor; they
-resolve the bearer alone (`hostedUserId`) and take no cookie. Every route
+for the one Mac that asks. Everything else takes either, the work that
+reaches eve included: a request that carries a bearer reaches eve over it,
+and one that carries only the cookie reaches eve as the deployment acting
+for the account the cookie named (`packages/service/src/agents/coder-host/stop.ts`'s
+`eveFor`), so an agent's Start, message, and Stop, an inbox answer, a manual
+automation run, a comment's ask of an agent, and a task's delete and the account's, which
+retire the eve sessions of what they delete, all work in a browser. Note that a route
+file's choice of resolver is not a boundary, because every function holding
+a group answers every path the group declares, the one a client names in the
+dispatcher's `route-path` query among them; whom eve is reached as is chosen
+per request in the endpoint instead, so where a request lands changes
+nothing about it. The eve service under `/eve/coder/v1/*` shares the origin
+but never passes through this adaptor; it resolves the bearer alone
+(`hostedUserId`), or the deployment's own secret naming an account, and takes
+no cookie. Every route
 that answers bytes rather than JSON (a task's picture, an inbox attachment,
 a picture a tool answered, a workspace's photo, and an image an agent's pull
 request names, an SVG among them) answers them under `HOSTED_BYTES_HEADERS`:
-`nosniff`, `private, no-store`, and `default-src 'none'; style-src
+`nosniff`, `private, no-store`, `default-src 'none'; style-src
 'unsafe-inline'; sandbox`, so a tab opened on one runs no script as this
-origin.
+origin, and `Cross-Origin-Resource-Policy: same-origin`, so no other site's
+page embeds one under the cookie of whoever is looking. Every reader of them
+is same-origin: the web app's tab, and the Mac's host, which fetches them
+with its bearer and hands its renderer the bytes.
+
+## The hosted oRPC route
+
+`server/orpc-route.ts` holds `orpcRoute`, the one route every path moved onto
+the hosted oRPC router answers through (`packages/service/src/orpc/`, its
+contract in `@luke/features/contract`); `/api/models` is the first. It meets
+the cookie origin guard, reads the web runtime's services through `runWeb`
+once per instance as `routeFromHttpRouter` does, and hands each request to
+`OpenAPIHandler` with them as its `effect/context`, so it is a runtime edge
+of its own (`tools/anti-slop/effect-edges.json`). The router matches the
+public path itself: every `/api/` path no rule ahead of it takes reaches the
+route through the one fallback rewrite of `server/function-rewrites.ts`,
+which carries the whole path in `route-path` for the dispatcher to restore,
+and a path no procedure matches is the router's own JSON 404. Vercel runs the
+web service's routes before the filesystem, so the functions that answer by
+their own name (the two WebSocket functions and the feedback courier) each
+stand on a pass-through rule ahead of the fallback.
+Every answer the route gives, a refusal and an unmatched path's 404 among
+them, carries `nosniff` and `Cross-Origin-Resource-Policy: same-origin`
+(`handler.ts`), since each reader is a same-origin `fetch` or the Mac's host.
+
+## The pages' security headers
+
+Every page the site serves answers with a Content Security Policy, a refusal
+to be framed, `nosniff`, a referrer policy, an opener policy, and a
+permissions policy, from the web service's routes in `vercel.json`. A route
+whose headers differ from the site's comes first with its whole set and ends
+routing: the app's two (its own policy, and an opener policy that keeps the
+connect tab it opens), the page the app frames (framed by this origin alone,
+its one inline style admitted by digest), the pages a connect lands on (no
+opener policy, so their tab can close itself), and the admin pages (their
+charts' inline styles and accounts' pictures). Then one route lays the site's
+headers on every other path and lets routing go on to the page rewrites and
+the built files, so no page is ever sent two policies to be enforced
+together. It stands after the generated `/api/` table, so an API answer's
+headers are only its handler's, and it leaves `/assets/` alone, since a
+worker started from a script's address runs under the policy that script is
+sent with, and the app's chunks must never carry the site's. The site's policy
+admits PostHog's assets as a script source, because the analytics client
+(`src/analytics.ts`) loads its configuration and its recorder from there.
+`tests/vercel-services.test.ts` holds every page the build emits to these
+headers at every address it answers at.
 
 ## Signing in on a Preview deployment
 
@@ -813,11 +817,11 @@ this Vercel project to the `luke-web` Sentry project, owns `SENTRY_DSN`,
 `SENTRY_AUTH_TOKEN`, `SENTRY_ORG`, and `SENTRY_PROJECT`; a variable of those
 names set by hand stops it from syncing. Without `SENTRY_DSN` the SDK starts
 disabled. `VERCEL_ENV` names the environment. `scripts/bundle-functions.ts`
-uploads the function bundles' source maps when the build holds
-`SENTRY_AUTH_TOKEN`, under the release the plugin writes into each bundle from
+uploads the function bundles' source maps when a production build
+(`VERCEL_ENV=production`) holds `SENTRY_AUTH_TOKEN`; a Preview uploads none, under the release the plugin writes into each bundle from
 the deployment's commit. The eve roots' builds do the same after `eve build`:
-each root's `nitro.config.ts` has Nitro write hidden maps when the build holds
-the token, and `scripts/eve-source-maps.sh` gives the bundles debug IDs,
+each root's `nitro.config.ts` has Nitro write hidden maps when a production
+build holds the token, and `scripts/eve-source-maps.sh` gives the bundles debug IDs,
 uploads the maps to `luke-web` under `VERCEL_GIT_COMMIT_SHA`, and deletes them
 from the output. Alert rules are set in Sentry, not here: a Slack
 `#alerts` message on more than ten events in five minutes, and an email to
@@ -829,8 +833,9 @@ the issue's owners on a high-priority issue.
 
 Enable the WebSockets feature on the Vercel team, make sure Fluid compute is
 on for the project, and set `OPENAI_API_KEY`; `LUKE_LIVE_MODEL` optionally pins
-the model. The exchange also needs `CRON_SECRET`, the deployment's secret at
-eve's door, and without it every session is refused as unavailable; eve's
+the model. The exchange also needs `EVE_DEPLOYMENT_SECRET`, the deployment's
+own secret at eve's door and never the cron's `CRON_SECRET`, and without it
+every session is refused as unavailable; eve's
 origin is the deployment's own unless `LUKE_EVE_ORIGIN` names another. Luke's
 avatar needs `KEYFRAME_API_KEY` and `LUKE_KEYFRAME_PERSONA_ID` as well; without
 either, a call asking for video goes on as voice. No
@@ -839,7 +844,6 @@ separate service is deployed. Tests run against a fake OpenAI on loopback and an
 
 ## The agents
 
-Luke's planning brain is its own eve app, `apps/luke`, and the coding agent
-is another, `apps/dev`; their layout, deployment, and evals are in
-`apps/luke/README.md`, which `apps/dev` follows, and `packages/service/README.md`'s
-"The coding-agent service".
+Every agent is a coding agent, served by its own eve app, `apps/dev`; its
+layout, deployment, and evals are in `packages/service/README.md`'s "The
+coding-agent service".

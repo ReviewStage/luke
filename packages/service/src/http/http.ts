@@ -1,7 +1,7 @@
 import { timingSafeEqual } from "node:crypto";
 import { HTTP_STATUS } from "@luke/wire";
 import { Redacted } from "effect";
-import type { HostedApiError, HostedQuota } from "../core.js";
+import type { HostedApiError } from "../core.js";
 
 /**
  * The response vocabulary the hosted endpoints share. Every answer is JSON,
@@ -32,23 +32,8 @@ export function jsonResponse<Body extends object>(status: number, body: Body): R
   });
 }
 
-export interface HostedErrorFields {
-  quota?: HostedQuota;
-  upstreamStatus?: number;
-  /** The stored row a read could not hold to the vocabulary, named so an operator can find it. */
-  unreadableRow?: { conversationId: string; seq: number };
-}
-
-export function errorResponse(
-  status: number,
-  error: HostedApiError,
-  extra: HostedErrorFields = {},
-): Response {
-  const body: { error: HostedApiError } & HostedErrorFields = { error };
-  if (extra.quota !== undefined) body.quota = extra.quota;
-  if (extra.upstreamStatus !== undefined) body.upstreamStatus = extra.upstreamStatus;
-  if (extra.unreadableRow !== undefined) body.unreadableRow = extra.unreadableRow;
-  return jsonResponse(status, body);
+export function errorResponse(status: number, error: HostedApiError): Response {
+  return jsonResponse(status, { error });
 }
 
 /** What every bearer begins with; a secret that adds nothing to it is no secret. */

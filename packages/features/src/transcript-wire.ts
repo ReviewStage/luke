@@ -41,7 +41,7 @@ export const TRANSCRIPT_PART_TYPE = {
 } as const;
 
 /** The words of a line, as the one text part of its message. */
-export const transcriptTextPartSchema = EffectSchema.Struct({
+const transcriptTextPartSchema = EffectSchema.Struct({
   type: EffectSchema.Literal(TRANSCRIPT_PART_TYPE.TEXT),
   text: EffectSchema.String,
 });
@@ -59,7 +59,7 @@ export const transcriptTextPartSchema = EffectSchema.Struct({
  * SDK's type spells them, so a message read here is one of its messages
  * without a copy.
  */
-export const transcriptMessageSchema = EffectSchema.Struct({
+const transcriptMessageSchema = EffectSchema.Struct({
   id: EffectSchema.String,
   role: EffectSchema.Literals(Object.values(TRANSCRIPT_SPEAKER)),
   parts: EffectSchema.mutable(EffectSchema.Array(transcriptTextPartSchema)),
@@ -83,7 +83,7 @@ export type TranscriptMessage = typeof transcriptMessageSchema.Type;
  * its messages in the order they opened, and what its record says of the
  * call where it says it.
  */
-export const transcriptCallSchema = EffectSchema.Struct({
+const transcriptCallSchema = EffectSchema.Struct({
   id: wireUuidSchema,
   /** Epoch milliseconds the call started. */
   startedAt: countedNumber,
@@ -115,7 +115,7 @@ export const transcriptCallSchema = EffectSchema.Struct({
 export type TranscriptCall = typeof transcriptCallSchema.Type;
 
 /** A task's transcript: its calls oldest first, and whether older words were left out of the read. */
-export const taskTranscriptSchema = EffectSchema.Struct({
+const taskTranscriptSchema = EffectSchema.Struct({
   calls: EffectSchema.Array(transcriptCallSchema),
   earlierOmitted: EffectSchema.Boolean,
 });
@@ -124,6 +124,3 @@ export type TaskTranscript = typeof taskTranscriptSchema.Type;
 
 /** A transcript read (GET). */
 export const taskTranscriptAnswerSchema = EffectSchema.Struct({ transcript: taskTranscriptSchema });
-
-/** The transcript of a task no call has been made about. */
-export const EMPTY_TRANSCRIPT: TaskTranscript = { calls: [], earlierOmitted: false };

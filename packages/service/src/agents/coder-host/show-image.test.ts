@@ -4,12 +4,15 @@ import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
 import { readConversationPicture } from "@luke/database/models/conversation-pictures";
 import type { ConversationTarget } from "@luke/database/models/writer";
+import { attachment } from "@luke/database/schemas/attachment";
 import { user } from "@luke/database/schemas/auth";
-import { conversationAttachment } from "@luke/database/schemas/conversation-attachment";
 import { conversations } from "@luke/database/schemas/storage";
 import { CONVERSATION_KIND } from "@luke/database/storage-vocabulary";
 import { getTestDB } from "@luke/database/testing";
-import { CONVERSATION_PICTURE_BOUNDS } from "@luke/features/conversation-picture-wire";
+import {
+  CONVERSATION_MEDIA_TYPE,
+  CONVERSATION_PICTURE_BOUNDS,
+} from "@luke/features/conversation-picture-wire";
 import { INBOX_IMAGE_TYPE } from "@luke/features/inbox-wire";
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { eq } from "drizzle-orm";
@@ -26,7 +29,8 @@ import { runShowImage, SHOW_IMAGE_REFUSAL, type ShowImageBinding } from "./show-
  * more.
  *
  * Synthetic files throughout: a picture is a PNG's signature and header,
- * which states its size, and nothing more.
+ * which states its size, and nothing more; a video is a WebM's EBML header
+ * and a track that states its size.
  */
 
 const CHECKOUT = "/vercel/sandbox/repository";
@@ -39,6 +43,24 @@ function png(width: number, height: number, mark = 0): Uint8Array {
   new DataView(header.buffer).setUint32(20, height);
   header[32] = mark;
   return header;
+}
+
+/** One EBML element: its ID's bytes, its size in one byte, and its body. */
+function ebml(id: readonly number[], body: readonly number[]): number[] {
+  return [...id, 0x80 | body.length, ...body];
+}
+
+/** A Matroska file of the doctype given, whose one video track states the size, with no frames: the reader reads no further. */
+function matroska(docType: string, width: number, height: number): Uint8Array {
+  const video = ebml(
+    [0xe0],
+    [...ebml([0xb0], [width >> 8, width & 0xff]), ...ebml([0xba], [height >> 8, height & 0xff])],
+  );
+  const tracks = ebml([0x16, 0x54, 0xae, 0x6b], ebml([0xae], video));
+  return new Uint8Array([
+    ...ebml([0x1a, 0x45, 0xdf, 0xa3], ebml([0x42, 0x82], [...new TextEncoder().encode(docType)])),
+    ...ebml([0x18, 0x53, 0x80, 0x67], tracks),
+  ]);
 }
 
 /** A sandbox holding the files given by absolute path, each read as one stream. */
@@ -172,11 +194,67 @@ it.layer(getTestDB())("show_image", (it) => {
         );
         const db = yield* Database;
         const kept = yield* db
-          .select({ id: conversationAttachment.id })
-          .from(conversationAttachment)
-          .where(eq(conversationAttachment.conversationId, target.conversationId));
+          .select({ id: attachment.id })
+          .from(attachment)
+          .where(eq(attachment.conversationId, target.conversationId));
         assert.deepEqual(kept, [], "the file read before a refused one is not kept either");
       }),
+  );
+
+  it.effect(
+    "a WebM the agent recorded is kept beside the pictures it shows with, as a video of the size its track states",
+    () =>
+      Effect.gen(function* () {
+        const target = yield* openConversation;
+        const recording = matroska("webm", 1280, 800);
+        const sandbox = sandboxWith({
+          "/tmp/video/flow.webm": recording,
+          [`${CHECKOUT}/after.png`]: png(1200, 720),
+        });
+
+        const answer = readShown(
+          yield* show(
+            { target, sandbox, checkout: CHECKOUT },
+            {
+              images: [
+                { path: "/tmp/video/flow.webm", caption: "Inviting a member" },
+                { path: "after.png", caption: "The invite sent" },
+              ],
+            },
+          ),
+        );
+
+        assert.deepEqual(
+          answer.pictures.map(({ mediaType, width, height }) => [mediaType, width, height]),
+          [
+            [CONVERSATION_MEDIA_TYPE.WEBM, 1280, 800],
+            [INBOX_IMAGE_TYPE.PNG, 1200, 720],
+          ],
+        );
+        const [video] = answer.pictures;
+        assert.ok(video);
+        const read = yield* readConversationPicture(target.conversationId, video.id);
+        assert.deepEqual(
+          Option.map(read, (stored) => [stored.contentType, [...stored.bytes]]),
+          Option.some([CONVERSATION_MEDIA_TYPE.WEBM, [...recording]]),
+          "it is served back as the WebM it was",
+        );
+      }),
+  );
+
+  it.effect("a Matroska file that is no WebM is refused as no picture, naming the path", () =>
+    Effect.gen(function* () {
+      const target = yield* openConversation;
+      const sandbox = sandboxWith({ [`${CHECKOUT}/flow.mkv`]: matroska("matroska", 640, 480) });
+
+      assert.deepEqual(
+        yield* show(
+          { target, sandbox, checkout: CHECKOUT },
+          { images: [{ path: "flow.mkv", caption: "Not a WebM" }] },
+        ),
+        refused(`${SHOW_IMAGE_REFUSAL.NOT_IMAGE} flow.mkv`),
+      );
+    }),
   );
 
   it.effect(
@@ -210,7 +288,7 @@ it.layer(getTestDB())("show_image", (it) => {
       const db = yield* Database;
       // Note that the row stands in for pictures kept up to the budget, because two hundred
       // megabytes of real bytes would only slow the test.
-      yield* db.insert(conversationAttachment).values({
+      yield* db.insert(attachment).values({
         userId: target.userId,
         conversationId: target.conversationId,
         sha256: "f".repeat(64),
@@ -242,7 +320,7 @@ it.layer(getTestDB())("show_image", (it) => {
         const db = yield* Database;
         // Note that the row leaves room for the first picture below and not the second, so the
         // refusal falls between them.
-        yield* db.insert(conversationAttachment).values({
+        yield* db.insert(attachment).values({
           userId: target.userId,
           conversationId: target.conversationId,
           sha256: "e".repeat(64),
@@ -271,9 +349,9 @@ it.layer(getTestDB())("show_image", (it) => {
 
         assert.deepEqual(answer, refused(SHOW_IMAGE_REFUSAL.FULL));
         const kept = yield* db
-          .select({ sha256: conversationAttachment.sha256 })
-          .from(conversationAttachment)
-          .where(eq(conversationAttachment.conversationId, target.conversationId));
+          .select({ sha256: attachment.sha256 })
+          .from(attachment)
+          .where(eq(attachment.conversationId, target.conversationId));
         assert.deepEqual(kept, [{ sha256: "e".repeat(64) }], "the first picture was not kept");
       }),
   );

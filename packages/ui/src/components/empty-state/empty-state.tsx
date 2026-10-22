@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { BUTTON_VARIANT, Button } from "../button/button.js";
+import { BUTTON_VARIANT, Button, type ButtonVariant } from "../button/button.js";
 import { TEXT_ELEMENT, TEXT_TONE, TEXT_VARIANT, Text } from "../text/text.js";
 
 /**
@@ -15,15 +15,34 @@ import { TEXT_ELEMENT, TEXT_TONE, TEXT_VARIANT, Text } from "../text/text.js";
  *
  * Every empty state is one layout: the glyph, a heading where the line alone
  * would not say what the place is, the line, and under it, where one is
- * given, the one way on from the place as a quiet button. It fills the room
+ * given, the one way on from the place as a quiet button, or the primary
+ * one where that press is the whole point of the place (`look`), as a
+ * Generate is where nothing stands until it is pressed. It fills the room
  * its container leaves it and stands a little above that room's middle,
  * where the eye takes the middle to be, scrolling rather than overflowing
  * where the room is shorter than it.
  */
 
+/** How the way on from an empty place is drawn: quiet, or primary where the press is what the place is for. */
+export const EMPTY_STATE_ACTION_LOOK = {
+  QUIET: "quiet",
+  PRIMARY: "primary",
+} as const;
+
+export type EmptyStateActionLook =
+  (typeof EMPTY_STATE_ACTION_LOOK)[keyof typeof EMPTY_STATE_ACTION_LOOK];
+
+/** The look each way on is drawn in, as a button. */
+const ACTION_BUTTON = {
+  [EMPTY_STATE_ACTION_LOOK.QUIET]: BUTTON_VARIANT.QUIET,
+  [EMPTY_STATE_ACTION_LOOK.PRIMARY]: BUTTON_VARIANT.PRIMARY,
+} as const satisfies Record<EmptyStateActionLook, ButtonVariant>;
+
 /** The one way on from an empty place: a press, named by its words. */
 export interface EmptyStateAction {
   readonly label: string;
+  /** How it is drawn; quiet where none is named. */
+  readonly look?: EmptyStateActionLook | undefined;
   /** The glyph before its words, where one says what the press does. */
   readonly icon?: ReactNode;
   readonly onClick: () => void;
@@ -66,7 +85,7 @@ export function EmptyState({
         </div>
         {action === undefined ? null : (
           <Button
-            variant={BUTTON_VARIANT.QUIET}
+            variant={ACTION_BUTTON[action.look ?? EMPTY_STATE_ACTION_LOOK.QUIET]}
             icon={action.icon}
             disabled={action.disabled}
             onClick={action.onClick}

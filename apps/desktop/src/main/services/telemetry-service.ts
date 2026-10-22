@@ -5,18 +5,24 @@ import {
 } from "@luke/features/analytics";
 import type { FeedbackResult, FeedbackSubmission } from "@luke/features/feedback";
 import { feedbackDeliveryFromEnvironment } from "@luke/features/feedback";
+import {
+  eventWithoutAccessTokens,
+  SPANS_NAMING_ACCESS_TOKENS,
+  spanWithoutAccessTokens,
+  withoutAccessTokens,
+} from "@luke/features/sentry-breadcrumbs";
 import { type SentryCapture, sentryReporterLayer } from "@luke/features/sentry-reporting";
 import { SENTRY_TRACES_SAMPLE_RATE } from "@luke/features/sentry-tracing";
 import { type RunMode, sentryReportingEnabled } from "@luke/host";
 import type { EffectDesktopService } from "@luke/host/desktop-service";
 import type { SentryEnvironment } from "@luke/host/sentry-environment";
 import * as Sentry from "@sentry/electron/main";
-import { Effect, type Layer } from "effect";
+import { Effect, Exit, type Layer, Scope } from "effect";
 import {
-  eventWithoutAccessTokens,
-  transactionWithoutAccessTokens,
-  withoutAccessTokens,
-} from "#shared/sentry-breadcrumbs";
+  sampleWindowMemory,
+  type UnresponsiveEpisode,
+  type WorkingSetCrossing,
+} from "../window/renderer-health";
 import type { DesktopConfig } from "./desktop-config";
 
 /** How long the quit waits for a queued crash report to leave; a flush must not hold a quit. */
@@ -53,7 +59,8 @@ export function initializeCrashReporting(runMode: RunMode, environment: SentryEn
     integrations: [Sentry.startupTracingIntegration()],
     beforeBreadcrumb: withoutAccessTokens,
     beforeSend: eventWithoutAccessTokens,
-    beforeSendTransaction: transactionWithoutAccessTokens,
+    ignoreSpans: SPANS_NAMING_ACCESS_TOKENS,
+    beforeSendSpan: Sentry.withStreamedSpan(spanWithoutAccessTokens),
   });
 }
 
@@ -73,6 +80,42 @@ export const mainSentry: SentryCapture = {
  */
 export const mainErrorReporting: Layer.Layer<never> = sentryReporterLayer(mainSentry);
 
+/**
+ * One episode of a panel not answering, as one Sentry event: how long it
+ * lasted, whether it answered again, and the page's working set as it
+ * stopped, grouped as one issue whichever panel it was.
+ */
+export function reportUnresponsivePanel(episode: UnresponsiveEpisode): Effect.Effect<void> {
+  return Effect.sync(() => {
+    Sentry.captureEvent({
+      level: "warning",
+      message: "A panel window stopped responding",
+      fingerprint: ["panel-unresponsive"],
+      tags: {
+        "window.document": episode.document,
+        "unresponsive.recovered": episode.recovered,
+      },
+      contexts: {
+        unresponsive: {
+          duration_ms: episode.unresponsiveMs,
+          working_set_bytes: episode.workingSetBytes ?? null,
+          recovered: episode.recovered,
+        },
+      },
+    });
+  });
+}
+
+/** A window's working set crossing its bound, left as a breadcrumb for whatever is reported next. */
+function noteWorkingSetCrossing(crossing: WorkingSetCrossing): void {
+  Sentry.addBreadcrumb({
+    category: "memory",
+    level: "warning",
+    message: "A window's working set crossed its bound",
+    data: { document: crossing.document, working_set_bytes: crossing.workingSetBytes },
+  });
+}
+
 export interface TelemetryService extends EffectDesktopService {
   /**
    * A counted event, whose name and every property value the allowlist in
@@ -90,7 +133,7 @@ interface TelemetryServiceDependencies {
   recordEvent: RecordProductEvent;
 }
 
-/** Everything that leaves this process and is not the Gateway: the crash stream, the counted events, the feedback delivery. */
+/** Everything that leaves this process and is not the Gateway: the crash stream, the counted events, the feedback delivery, the windows' memory notes. */
 export function createTelemetryService(
   dependencies: TelemetryServiceDependencies,
 ): TelemetryService {
@@ -98,6 +141,8 @@ export function createTelemetryService(
   const feedbackDelivery = feedbackDeliveryFromEnvironment();
   const recordProductEvent: RecordProductEvent = (name, properties) =>
     dependencies.recordEvent(name, properties);
+  /** What the memory sampler runs in, from the start; closing it at the stop interrupts it. */
+  const sampling = Scope.makeUnsafe();
 
   return {
     name: "telemetry",
@@ -116,13 +161,18 @@ export function createTelemetryService(
           : Effect.void,
       );
     },
-    start: () => Effect.void,
+    // Every window's working set is read once a minute for the run's life.
+    start: () => Effect.asVoid(Effect.forkIn(sampleWindowMemory(noteWorkingSetCrossing), sampling)),
     // A report queued when the quit began would otherwise go with the
     // process; the flush is bounded so it cannot be what holds one open.
     // Note that it flushes rather than closes, because a launch that fails
     // after this service started runs this stop before the entry captures
     // the failure, and a closed client would drop that report; so would it
     // every defect a later stop of the same quit reports.
-    stop: () => Effect.asVoid(Effect.promise(() => Sentry.flush(CRASH_REPORT_FLUSH_MS))),
+    stop: () =>
+      Effect.andThen(
+        Scope.close(sampling, Exit.void),
+        Effect.asVoid(Effect.promise(() => Sentry.flush(CRASH_REPORT_FLUSH_MS))),
+      ),
   };
 }

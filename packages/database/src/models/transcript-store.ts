@@ -11,50 +11,34 @@ import { Effect, Option, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
 import { Database } from "../core/query.js";
 import { user } from "../schemas/auth.js";
-import { task } from "../schemas/task.js";
 import { voiceSessions, voiceTranscriptSegments } from "../schemas/voice.js";
 import { VOICE_CLOSE_REASON, VOICE_SEGMENT_ROLE } from "../voice-vocabulary.js";
+import { readCodingAgent } from "./coding-agent-store.js";
 import { InstantColumnSchema } from "./columns.js";
 import { type SpokenRow, spokenRowsOn } from "./message-reads.js";
 import type { TaskStoreEffect } from "./task-store.js";
-import { reachableTask } from "./workspace-store.js";
 
 /**
- * transcript-store.ts -- what was said on a task's voice calls, read back for the Tasks tab.
+ * transcript-store.ts -- what was said on an agent's voice calls, read back for its Calls.
  *
  * The voice writer keeps each call's words as timed fragments
- * (`@luke/database/models/voice-writer`); this reads the newest of them for one task and
- * groups each call's through the ledger the live captions keep, so a call
- * reads back in the lines its captions drew, each line one `UIMessage`
- * whose id is its place on the call and whose metadata names the rows the
- * voice wrote for it in the task's conversation, found by its call, its
- * speaker, and where on the call their words began. Beside its words, each call says what
- * its session row recorded of it: when and why it ended, its metered
- * seconds, and its model by the catalog's id (`catalogIdOf`), each only where the row holds it. The task is read
- * under the account's membership of its workspace, so a task of a workspace
- * the account is not in reads as no task, exactly as in `task-store.ts`;
- * past that gate a shared task's transcript is every member's calls about
- * it, so the calls are gathered by the task alone. Nothing is written here.
+ * (`@luke/database/models/voice-writer`); this reads the newest of them for
+ * one agent and groups each call's through the ledger the live captions
+ * keep, so a call reads back in the lines its captions drew, each line one
+ * `UIMessage` whose id is its place on the call and whose metadata names the
+ * rows the voice wrote for it in the agent's conversation, found by its
+ * call, its speaker, and where on the call their words began. Beside its
+ * words, each call says what its session row recorded of it: when and why
+ * it ended, its metered seconds, and its model by the catalog's id
+ * (`catalogIdOf`), each only where the row holds it. The agent is read under
+ * the account's membership of its workspace, then every member's calls into
+ * it are gathered by the agent alone. Nothing is written here.
  */
 
 const SPEAKER_OF_ROLE = {
   [VOICE_SEGMENT_ROLE.USER]: TRANSCRIPT_SPEAKER.USER,
   [VOICE_SEGMENT_ROLE.ASSISTANT]: TRANSCRIPT_SPEAKER.ASSISTANT,
 } as const;
-
-const TaskKeySchema = Schema.Struct({ userId: Schema.String, taskId: Schema.String });
-
-const findReachableTask = SqlSchema.findOneOption({
-  Request: TaskKeySchema,
-  Result: Schema.Struct({ id: Schema.String, conversationId: Schema.NullOr(Schema.String) }),
-  execute: ({ userId, taskId }) =>
-    Database.use((db) =>
-      db
-        .select({ id: task.id, conversationId: task.conversationId })
-        .from(task)
-        .where(reachableTask(userId, taskId)),
-    ),
-});
 
 const SegmentRowSchema = Schema.Struct({
   voiceSessionId: Schema.String,
@@ -67,15 +51,18 @@ const SegmentRowSchema = Schema.Struct({
 
 type SegmentRow = typeof SegmentRowSchema.Type;
 
+/** Whose calls a transcript gathers: a task's, or one agent's. */
+const CallsOfSchema = Schema.Struct({ agentId: Schema.String });
+
 /**
- * The newest fragments of every member's calls about the task, newest first:
- * the call by its start, then the fragment by its place. One more than the
- * bound is asked for, so the read can tell whether older words stand.
+ * The newest fragments of every member's calls into the agent, newest first: the call by its start, then the fragment by its
+ * place. One more than the bound is asked for, so the read can tell whether
+ * older words stand.
  */
 const findNewestSegments = SqlSchema.findAll({
-  Request: Schema.String,
+  Request: CallsOfSchema,
   Result: SegmentRowSchema,
-  execute: (taskId) =>
+  execute: (callsOf) =>
     Database.use((db) =>
       db
         .select({
@@ -88,7 +75,7 @@ const findNewestSegments = SqlSchema.findAll({
         })
         .from(voiceTranscriptSegments)
         .innerJoin(voiceSessions, eq(voiceSessions.id, voiceTranscriptSegments.voiceSessionId))
-        .where(eq(voiceSessions.taskId, taskId))
+        .where(eq(voiceSessions.agentId, callsOf.agentId))
         .orderBy(
           desc(voiceSessions.startedAt),
           desc(voiceSessions.id),
@@ -215,13 +202,13 @@ function transcriptOf(
   };
 }
 
-/** The rows the voice wrote for the calls named, by call; none where the task has no conversation yet. */
+/** The rows the voice wrote for the calls named, by call. */
 function spokenRowsOf(
   userId: string,
-  conversationId: string | null,
+  conversationId: string,
   ids: readonly string[],
 ): TaskStoreEffect<ReadonlyMap<string, readonly SpokenRow[]>> {
-  if (conversationId === null || ids.length === 0) return Effect.succeed(new Map());
+  if (ids.length === 0) return Effect.succeed(new Map());
   return Effect.map(spokenRowsOn(userId, conversationId, ids), (rows) => {
     const byCall = new Map<string, SpokenRow[]>();
     for (const row of rows)
@@ -230,25 +217,42 @@ function spokenRowsOf(
   });
 }
 
-/** What was said on the task's calls, oldest call first; nothing where the account reaches no such task. */
-export function readTranscript(
-  userId: string,
-  taskId: string,
-): TaskStoreEffect<Option.Option<TaskTranscript>> {
+/** The calls gathered as one transcript, each with its record and the rows its voice wrote in the conversation given, under that conversation's owner. */
+function gatheredTranscript(
+  callsOfRequest: typeof CallsOfSchema.Type,
+  conversation: { readonly userId: string; readonly conversationId: string },
+): TaskStoreEffect<TaskTranscript> {
   return Effect.gen(function* () {
-    const owned = yield* findReachableTask({ userId, taskId });
-    if (Option.isNone(owned)) return Option.none();
-    const newestFirst = yield* findNewestSegments(taskId);
+    const newestFirst = yield* findNewestSegments(callsOfRequest);
     const calls = callsOf(newestFirst);
     const ids = calls.map((call) => call.first.voiceSessionId);
     const records = ids.length === 0 ? [] : yield* findCallRecords(ids);
-    const spoken = yield* spokenRowsOf(userId, owned.value.conversationId, ids);
+    const spoken = yield* spokenRowsOf(conversation.userId, conversation.conversationId, ids);
+    return transcriptOf(
+      calls,
+      new Map(records.map((row) => [row.id, row])),
+      spoken,
+      newestFirst.length > TRANSCRIPT_BOUNDS.MAX_SEGMENTS,
+    );
+  });
+}
+
+/**
+ * What was said on the calls into the agent, oldest call first, each line
+ * naming the rows its voice wrote in the agent's conversation; nothing where
+ * the account reaches no such agent.
+ */
+export function readAgentTranscript(
+  userId: string,
+  agentId: string,
+): TaskStoreEffect<Option.Option<TaskTranscript>> {
+  return Effect.gen(function* () {
+    const agent = yield* readCodingAgent(userId, agentId);
+    if (Option.isNone(agent)) return Option.none();
     return Option.some(
-      transcriptOf(
-        calls,
-        new Map(records.map((row) => [row.id, row])),
-        spoken,
-        newestFirst.length > TRANSCRIPT_BOUNDS.MAX_SEGMENTS,
+      yield* gatheredTranscript(
+        { agentId },
+        { userId: agent.value.userId, conversationId: agent.value.conversationId },
       ),
     );
   });

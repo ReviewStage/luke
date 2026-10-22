@@ -1,7 +1,9 @@
 import type { CodingAgent } from "@luke/database/models/coding-agent-store";
+import { CLAUDE_CODE_TOOL, CODEX_TOOL, RETIRED_TOOL } from "@luke/features/agent-tools";
 import { CHAT_BLOCK } from "@luke/features/chat-wire";
-import { INBOX_BLOCK } from "@luke/features/inbox-wire";
-import { WireValueSchema } from "@luke/wire";
+import { CODING_AGENT_KIND } from "@luke/features/coding-agent-wire";
+import { inboxSandboxPicturePaths } from "@luke/features/inbox-attachment-link";
+import { ACTION_RESULT_STATUS, type WireRecord, WireValueSchema } from "@luke/wire";
 import { verbatimJsonSchema } from "@luke/wire/effect";
 import type { ToolSet } from "ai";
 import { Option, Schema } from "effect";
@@ -10,6 +12,7 @@ import { wireValidatedTool } from "../../core.js";
 import { connectionToolEntries } from "../../integrations/connection-tools.js";
 import { AGENT_ROLE } from "../agent-runtime/role.js";
 import { AGENT_TOOL, toolsOf } from "../agent-runtime/tools.js";
+import { BRAIN_HOST_TURN, type BrainHostTurn } from "../brain-host/bounds.js";
 
 /**
  * tool-set.ts -- every tool a coding agent's rows may name, as the store writer holds them.
@@ -26,8 +29,9 @@ import { AGENT_TOOL, toolsOf } from "../agent-runtime/tools.js";
  * reads (`chat.ts`), its reach to the other coding agents of
  * its workspace (`../coding-agent-tools.ts`), the load of one of its
  * repository's skills (`skills.ts`), and the pages it shows the developer
- * (`../page-tool.ts`), and eve's own durable `sleep`, which it waits on its
- * checks or a deploy with. The worker's own rows name
+ * (`../page-tool.ts`), eve's own durable `sleep`, which it waits on its
+ * checks or a deploy with, and the call's own question queue and hang-up,
+ * refused off a call (`runCallTool`). The worker's own rows name
  * the read-only few of the same tools (`WORKER_TOOL_NAMES`), so one writer
  * over this set holds both transcripts. The writer holds every tool part
  * of a row to a registered tool, so each is registered here under the name
@@ -39,8 +43,9 @@ import { AGENT_TOOL, toolsOf } from "../agent-runtime/tools.js";
 /**
  * The tools the coding agent is offered, by the name eve mounts each under:
  * the coder's in the registry (`../agent-runtime/tools.ts`), named here for
- * the callers that pick one out. Its test holds this to the registry's role
- * and the files under `apps/dev/tools/` to this.
+ * the callers that pick one out. Its test holds this to the registry's role,
+ * and `../agent-runtime/coder-tool-files.test.ts` the files under
+ * `apps/dev/tools/` to this.
  */
 export const CODER_TOOL = {
   BASH: AGENT_TOOL.BASH,
@@ -56,58 +61,183 @@ export const CODER_TOOL = {
   LOOK_AT_PICTURE: AGENT_TOOL.LOOK_AT_PICTURE,
   WRITE_TODOS: AGENT_TOOL.WRITE_TODOS,
   POST_TO_INBOX: AGENT_TOOL.POST_TO_INBOX,
-  CLOSE_INBOX_ITEM: AGENT_TOOL.CLOSE_INBOX_ITEM,
+  WITHDRAW_ASK: AGENT_TOOL.WITHDRAW_ASK,
   READ_INBOX: AGENT_TOOL.READ_INBOX,
-  REPLY_INBOX: AGENT_TOOL.REPLY_INBOX,
+  LIST_OPEN_ASKS: AGENT_TOOL.LIST_OPEN_ASKS,
   OPEN_PULL_REQUEST: AGENT_TOOL.OPEN_PULL_REQUEST,
   LIST_AGENTS: AGENT_TOOL.LIST_AGENTS,
   READ_AGENT: AGENT_TOOL.READ_AGENT,
-  MESSAGE_AGENT: AGENT_TOOL.MESSAGE_AGENT,
   START_AGENT: AGENT_TOOL.START_AGENT,
-  ARCHIVE_AGENT: AGENT_TOOL.ARCHIVE_AGENT,
-  UNARCHIVE_AGENT: AGENT_TOOL.UNARCHIVE_AGENT,
   STOP_AGENT: AGENT_TOOL.STOP_AGENT,
+  UPDATE_AGENT: AGENT_TOOL.UPDATE_AGENT,
   LIST_TASKS: AGENT_TOOL.LIST_TASKS,
+  READ_TASK: AGENT_TOOL.READ_TASK,
+  CREATE_TASK: AGENT_TOOL.CREATE_TASK,
   CREATE_SECTION: AGENT_TOOL.CREATE_SECTION,
   DELETE_SECTION: AGENT_TOOL.DELETE_SECTION,
-  MOVE_TASK: AGENT_TOOL.MOVE_TASK,
   UPDATE_TASK: AGENT_TOOL.UPDATE_TASK,
   POST_CHAT: AGENT_TOOL.POST_CHAT,
   READ_CHAT: AGENT_TOOL.READ_CHAT,
   RESOLVE_ASK: AGENT_TOOL.RESOLVE_ASK,
+  EDIT_CHANNEL: AGENT_TOOL.EDIT_CHANNEL,
   LIST_MODELS: AGENT_TOOL.LIST_MODELS,
   LOAD_SKILL: AGENT_TOOL.LOAD_SKILL,
   SHOW_PAGE: AGENT_TOOL.SHOW_PAGE,
+  READ_COMMENTS: AGENT_TOOL.READ_COMMENTS,
+  REPLY_TO_COMMENT: AGENT_TOOL.REPLY_TO_COMMENT,
+  RESOLVE_THREAD: AGENT_TOOL.RESOLVE_THREAD,
+  REOPEN_THREAD: AGENT_TOOL.REOPEN_THREAD,
   READ_PAGE: AGENT_TOOL.READ_PAGE,
   RUN_ON_MAC: AGENT_TOOL.RUN_ON_MAC,
+  BROWSER: AGENT_TOOL.BROWSER,
   SHOW_IMAGE: AGENT_TOOL.SHOW_IMAGE,
   SLEEP: AGENT_TOOL.SLEEP,
+  QUEUE_QUESTION: AGENT_TOOL.QUEUE_QUESTION,
+  WITHDRAW_QUESTION: AGENT_TOOL.WITHDRAW_QUESTION,
+  END_CALL: AGENT_TOOL.END_CALL,
+  SHOW_CODE: AGENT_TOOL.SHOW_CODE,
+  DRAW_ON_BOARD: AGENT_TOOL.DRAW_ON_BOARD,
+  LOOK_AT_BOARD: AGENT_TOOL.LOOK_AT_BOARD,
 } as const;
 
-/** The tools that act on the agent's plan: `edit_plan`, which takes notes in it, and `show_page`, which shows a page on it. */
-export type TaskTool = typeof CODER_TOOL.EDIT_PLAN | typeof CODER_TOOL.SHOW_PAGE;
+/** The tools that act on the agent's task: `edit_plan`, which takes notes in its plan, `show_page`, which shows a page on it (or on the agent itself where it works on none), `look_at_picture`, which looks at a picture in its plan, the four that read and answer its comments, and the two that draw on and look at its whiteboard. */
+export type TaskTool =
+  | typeof CODER_TOOL.EDIT_PLAN
+  | typeof CODER_TOOL.SHOW_PAGE
+  | typeof CODER_TOOL.LOOK_AT_PICTURE
+  | (typeof COMMENT_TASK_TOOLS)[number]
+  | (typeof BOARD_TASK_TOOLS)[number];
+
+/** The comment tools every agent on a task is offered, since a member may send any of them a thread. */
+const COMMENT_TASK_TOOLS = [
+  CODER_TOOL.READ_COMMENTS,
+  CODER_TOOL.REPLY_TO_COMMENT,
+  CODER_TOOL.RESOLVE_THREAD,
+  CODER_TOOL.REOPEN_THREAD,
+] as const;
+
+/** The whiteboard's tools, which draw on the task's board and look at it as the developer's Mac drew it (`../../tasks/board-tool.ts`, `../../tasks/board-look.ts`). */
+const BOARD_TASK_TOOLS = [CODER_TOOL.DRAW_ON_BOARD, CODER_TOOL.LOOK_AT_BOARD] as const;
 
 /**
- * The plan's tools an agent is offered: none for one on no plan, as an
- * automation's run starts one, and no `edit_plan` for one handed a prompt,
- * which never saw the plan. Note that each tool withheld is one its call
- * would only be refused by (`host.ts`'s `editPlan` and `showPage`), and that
- * the instructions leave out the same words (`instructions.ts`).
+ * The task's tools an agent is offered: `show_page` alone for one on no
+ * task, as an automation's run starts one, whose pages stand on the agent
+ * itself, and all of them for one on a task, whether
+ * it was handed the plan or a prompt, since New task starts every agent on
+ * the developer's own words while Luke writes the plan beside it. Note that
+ * each tool withheld is one its call would only be refused by (`host.ts`'s
+ * `editPlan`, `showPage`, and `board`), and that the instructions leave out
+ * the same words (`instructions.ts`).
  */
-export function taskToolsOf(agent: Pick<CodingAgent, "taskId" | "prompt">): ReadonlySet<TaskTool> {
-  if (agent.taskId === null) return new Set();
-  if (agent.prompt !== null) return new Set([CODER_TOOL.SHOW_PAGE]);
-  return new Set([CODER_TOOL.EDIT_PLAN, CODER_TOOL.SHOW_PAGE]);
+export function taskToolsOf(agent: Pick<CodingAgent, "taskId">): ReadonlySet<TaskTool> {
+  // A page stands on the agent itself where it works on no task, so every agent shows one.
+  if (agent.taskId === null) return new Set([CODER_TOOL.SHOW_PAGE]);
+  return new Set([
+    CODER_TOOL.EDIT_PLAN,
+    CODER_TOOL.SHOW_PAGE,
+    CODER_TOOL.LOOK_AT_PICTURE,
+    ...COMMENT_TASK_TOOLS,
+    ...BOARD_TASK_TOOLS,
+  ]);
+}
+
+/** The call's own tools, which mean something only while someone is listening (`../../tasks/queue-question.ts`, `../../tasks/end-call.ts`). */
+export type CallTool =
+  | typeof CODER_TOOL.QUEUE_QUESTION
+  | typeof CODER_TOOL.WITHDRAW_QUESTION
+  | typeof CODER_TOOL.END_CALL;
+
+/**
+ * Why each of the call's own tools is refused on a turn no call is live on.
+ * Note that they are offered on every turn, spoken or typed, so the tools a
+ * turn sends, which lead its prompt, are the same whichever kind it is, and
+ * a call that starts mid-PR reads the agent's history from the provider's
+ * cache; off a call each refuses as other tools refuse.
+ */
+const OFF_CALL_REASON = {
+  [CODER_TOOL.QUEUE_QUESTION]:
+    "No call is live, so no one hears a queued question: post it to the developer's inbox instead.",
+  [CODER_TOOL.WITHDRAW_QUESTION]: "No call is live, so no question waits on one.",
+  [CODER_TOOL.END_CALL]: "No call is live to end.",
+} as const satisfies Record<CallTool, string>;
+
+/** One call of the call's own tools as the turn's kind answers it: its run on a spoken turn, refused on any other. */
+export function runCallTool(
+  turn: BrainHostTurn | undefined,
+  tool: CallTool,
+  run: () => WireRecord,
+): WireRecord {
+  return turn === BRAIN_HOST_TURN.SPOKEN
+    ? run()
+    : { status: ACTION_RESULT_STATUS.REJECTED, reason: OFF_CALL_REASON[tool] };
+}
+
+/** The tools only an agent working in a repository is offered: the pull request the service opens for it, the two that write into its checkout, and `show_code`, which puts lines of it on the developer's screen. */
+export type RepositoryTool =
+  | typeof CODER_TOOL.OPEN_PULL_REQUEST
+  | typeof CODER_TOOL.WRITE_FILE
+  | typeof CODER_TOOL.APPLY_PATCH
+  | typeof CODER_TOOL.SHOW_CODE;
+
+/**
+ * The repository's tools an agent is offered, on every turn, typed or
+ * spoken: all of them for one working in a repository, and none for one
+ * with no repository, whose sandbox holds no checkout to write into or
+ * show lines of and which has no branch to open a pull request from. Note that its shell and its reads stay, in the empty working folder
+ * its sandbox opens with (`checkout.ts`'s `openWorkingFolder`), and that the
+ * instructions leave out the same words (`instructions.ts`).
+ */
+export function repositoryToolsOf(
+  agent: Pick<CodingAgent, "repository">,
+): ReadonlySet<RepositoryTool> {
+  if (agent.repository === null) return new Set();
+  return new Set([
+    CODER_TOOL.OPEN_PULL_REQUEST,
+    CODER_TOOL.WRITE_FILE,
+    CODER_TOOL.APPLY_PATCH,
+    CODER_TOOL.SHOW_CODE,
+  ]);
+}
+
+/** The tools offered by what kind of agent it is: `list_open_asks` to an operator alone, and `delete_section` to every agent but an operator. */
+export type KindTool = typeof CODER_TOOL.LIST_OPEN_ASKS | typeof CODER_TOOL.DELETE_SECTION;
+
+/**
+ * The tools an agent is offered by its kind, on every turn: an operator
+ * reads every open ask to its member across their agents, and deletes
+ * nothing, under Dean's Steward policy (`../steward.ts`), so it is offered
+ * `list_open_asks` and never `delete_section`; every other agent the reverse.
+ * Note that each tool withheld is one its call would only be refused by,
+ * since a native harness is offered every tool: an operator's delete by its
+ * door (`agent-doors.ts`'s `runAgentTools`), and another agent's read of the
+ * member's asks by the tool itself (`../operator-desk.ts`); and that the
+ * instructions leave out the same words (`instructions.ts`).
+ */
+export function kindToolsOf(agent: Pick<CodingAgent, "kind">): ReadonlySet<KindTool> {
+  return agent.kind === CODING_AGENT_KIND.OPERATOR
+    ? new Set([CODER_TOOL.LIST_OPEN_ASKS])
+    : new Set([CODER_TOOL.DELETE_SECTION]);
 }
 
 /**
- * eve's provider-run web reads, which coding agents ran before they had the
- * hosted pair: no agent is offered them now, but a transcript written then
- * names them, and reads back under the same set.
+ * The tools a coding agent's transcript may name that no agent is offered
+ * now: eve's provider-run web reads, which coding agents ran before they had
+ * the hosted pair, the archive, unarchive, and move of a task into a
+ * section since folded into `update_agent` and `update_task`, and the close
+ * of and reply on an inbox item since folded into `withdraw_ask` and
+ * `post_to_inbox`, and `message_agent`, since folded into `post_chat`'s
+ * direct message. A transcript written then names them, and reads back
+ * under the same set.
  */
 export const RETIRED_CODER_TOOL = {
   WEB_FETCH: "web_fetch",
   WEB_SEARCH: "web_search",
+  ARCHIVE_AGENT: RETIRED_TOOL.ARCHIVE_AGENT,
+  UNARCHIVE_AGENT: RETIRED_TOOL.UNARCHIVE_AGENT,
+  MOVE_TASK: RETIRED_TOOL.MOVE_TASK,
+  CLOSE_INBOX_ITEM: RETIRED_TOOL.CLOSE_INBOX_ITEM,
+  REPLY_INBOX: RETIRED_TOOL.REPLY_INBOX,
+  MESSAGE_AGENT: RETIRED_TOOL.MESSAGE_AGENT,
 } as const;
 
 /**
@@ -127,19 +257,25 @@ const SANDBOX_TOOLS: ReadonlySet<string> = new Set([
   CODER_TOOL.GREP,
   CODER_TOOL.APPLY_PATCH,
   CODER_TOOL.SHOW_IMAGE,
+  CODER_TOOL.SHOW_CODE,
+  // The browser runs in the sandbox, which its call opens first.
+  CODER_TOOL.BROWSER,
 ]);
 
-/** What a chat post's or an inbox post's input is read for here: the types of its blocks, an image's among them. */
+/** What a chat post's input is read for here: the types of its blocks, an image's among them. */
 const readPostedBlocks = Schema.decodeUnknownOption(
   Schema.Struct({ blocks: Schema.Array(Schema.Struct({ type: Schema.String })) }),
 );
 
+/** What an inbox post's input is read for here: its body, whose pictures name files in the sandbox. */
+const readPostedBody = Schema.decodeUnknownOption(Schema.Struct({ body: Schema.String }));
+
 /**
  * Whether an event of the agent's session opened its sandbox: a request for
  * a sandbox tool, for a page read from a file in the sandbox, for an
- * edit of the plan adding a picture read from one, for a chat post or an
- * inbox post with a picture, or for an inbox reply with one, each read
- * from a file in the sandbox, or a message
+ * edit of the plan adding a picture read from one, for a chat post with a
+ * picture, or for an inbox post whose body draws one by a path naming no
+ * scheme, each read from a file in the sandbox, or a message
  * received with files, which eve stages in the sandbox before the
  * turn opens, opening it to do so.
  */
@@ -154,16 +290,14 @@ export function opensSandbox(event: MessageStreamEvent): boolean {
             (action.toolName === CODER_TOOL.EDIT_PLAN &&
               Array.isArray(action.input.pictures) &&
               action.input.pictures.length > 0) ||
-            (action.toolName === CODER_TOOL.REPLY_INBOX &&
-              Array.isArray(action.input.images) &&
-              action.input.images.length > 0) ||
             (action.toolName === CODER_TOOL.POST_CHAT &&
               Option.exists(readPostedBlocks(action.input), ({ blocks }) =>
                 blocks.some((block) => block.type === CHAT_BLOCK.IMAGE),
               )) ||
             (action.toolName === CODER_TOOL.POST_TO_INBOX &&
-              Option.exists(readPostedBlocks(action.input), ({ blocks }) =>
-                blocks.some((block) => block.type === INBOX_BLOCK.IMAGE),
+              Option.exists(
+                readPostedBody(action.input),
+                ({ body }) => inboxSandboxPicturePaths(body).length > 0,
               ))),
       );
     case "message.received":
@@ -180,12 +314,6 @@ const TOOL_INPUT = verbatimJsonSchema(WireValueSchema, {
 });
 
 /**
- * The coding agent's tools as stored rows are held to them, built once for
- * the deployment, with the retired web reads a transcript written before
- * still names, and the Linear connection's calls beside them
- * (`../connection-tools.ts`), which the agent and its workers alike make.
- */
-/**
  * The two task controls eve adds beside any task, which a coding agent's
  * \`delegate\` is (\`apps/dev/tools/delegate.ts\`): eve runs them, so they are no
  * tool of Luke's, but a turn that waits on its worker or stops one names them.
@@ -196,6 +324,15 @@ const CODER_TASK_TOOL = {
   TASK_CANCEL: "task_cancel",
 } as const;
 
+/**
+ * The coding agent's tools as stored rows are held to them, built once for
+ * the deployment, with the retired web reads a transcript written before
+ * still names, Claude Code's own tools, which an agent running on Claude Code
+ * calls under their CLI names, Codex's own work, which an agent running on
+ * Codex does under its items' names (`../native-events/`), and the Linear
+ * connection's calls beside them (`../connection-tools.ts`), which the agent
+ * and its workers alike make.
+ */
 export const CODER_TOOL_SET: ToolSet = Object.fromEntries([
   ...[
     ...new Set([
@@ -203,6 +340,8 @@ export const CODER_TOOL_SET: ToolSet = Object.fromEntries([
       ...toolsOf(AGENT_ROLE.CODER_WORKER),
       ...Object.values(CODER_TASK_TOOL),
       ...Object.values(RETIRED_CODER_TOOL),
+      ...Object.values(CLAUDE_CODE_TOOL),
+      ...Object.values(CODEX_TOOL),
     ]),
   ].map((name) => [name, wireValidatedTool(`eve's ${name} tool`, TOOL_INPUT)]),
   ...connectionToolEntries(),

@@ -1,4 +1,6 @@
 import {
+  agentMembersOf,
+  type ChatAgentMember,
   type ChatChannelRow,
   type ChatMemberRow,
   type ChatMessageRow,
@@ -9,10 +11,14 @@ import {
   chatPast,
   ensureGeneral,
   ensureMember,
+  joinedMemberOf,
+  memberIn,
   roster,
 } from "@luke/database/models/chat-store";
+import { readAccountNames } from "@luke/database/models/workspace-store";
 import {
   CHANNEL_KIND,
+  CHAT_MEMBER_LABEL,
   type ChatAnswer,
   type ChatChannel,
   type ChatMember,
@@ -22,12 +28,17 @@ import {
 import { Effect, Option, Schedule } from "effect";
 import { CODER } from "./bounds.js";
 
+/** How many of an answer's independent reads run at once: under the web pool's five connections, so one held read leaves room for the rest of its instance. */
+const READ_CONCURRENCY = 3;
+
 /**
  * chat-page.ts -- a workspace's chat as the window reads it: everything a person sees of it past their cursor, held open while nothing moved.
  *
- * The reader is the account's own member of the workspace, minted on its
- * first read, which makes the workspace's `#general` too, so a window
- * opening an empty chat has a place to post. A person sees every channel,
+ * The reader is the account's own member of the workspace, minted when it
+ * joins (`joinWorkspaceChat`), which makes the workspace's `#general` too,
+ * so a window opening an empty chat has a place to post. The join is the
+ * one write a reader makes, once, before it reads: a read writes nothing,
+ * and answers nothing where the account has not joined. A person sees every channel,
  * DMs included, so where the chat stands for them is the workspace's head:
  * the last place its sequence handed out, which every post and every
  * change to a message takes. A read whose cursor is past the head is held,
@@ -51,21 +62,34 @@ function chatCursorOf(seq: number): string {
   return String(seq + 1);
 }
 
-/** A member as the window reads one. */
-function memberOnWire(row: ChatMemberRow): ChatMember {
+/** A member as the window reads one: a person by their account's name where `people` holds it, an agent by the name its tab shows and on the plan it works on where `agents` names them. */
+function memberOnWire(
+  row: ChatMemberRow,
+  agents: ReadonlyMap<string, ChatAgentMember>,
+  people: ReadonlyMap<string, string>,
+): ChatMember {
+  const agent = row.agentId === null ? undefined : agents.get(row.agentId);
+  const planId = agent?.taskId;
+  const name = row.userId === null ? agent?.name : people.get(row.userId);
+  // Note that a desktop up to v0.18.0 refuses a member with no handle, and draws it where newer windows draw the name.
+  const handle =
+    name ??
+    (row.kind === MEMBER_KIND.AGENT
+      ? CHAT_MEMBER_LABEL.FORMER_AGENT
+      : CHAT_MEMBER_LABEL.FORMER_PERSON);
   return {
     id: row.id,
     kind: row.kind,
-    handle: row.handle,
+    ...(name === undefined ? undefined : { name }),
+    handle,
     ...(row.userId === null ? undefined : { userId: row.userId }),
     ...(row.agentId === null ? undefined : { agentId: row.agentId }),
-    ...(row.taskId === null ? undefined : { planId: row.taskId }),
+    ...(planId === undefined ? undefined : { planId }),
     left: row.leftAt !== null,
   };
 }
 
-/** A channel as the window reads one, a DM's two members named. */
-function channelOnWire(row: ChatChannelRow): ChatChannel {
+export function channelOnWire(row: ChatChannelRow): ChatChannel {
   const pair =
     row.kind === CHANNEL_KIND.DM && row.dmAMemberId !== null && row.dmBMemberId !== null
       ? { members: [row.dmAMemberId, row.dmBMemberId] }
@@ -77,6 +101,7 @@ function channelOnWire(row: ChatChannelRow): ChatChannel {
     ...(row.taskId === null ? undefined : { planId: row.taskId }),
     ...pair,
     archived: row.archivedAt !== null,
+    ...(row.purpose === null ? undefined : { purpose: row.purpose }),
   };
 }
 
@@ -101,8 +126,12 @@ function askOnWire(row: ChatMessageRow): Pick<ChatMessage, "ask"> | undefined {
   };
 }
 
-/** A message as the window reads one. */
-export function messageOnWire(row: ChatMessageRow): ChatMessage {
+/**
+ * A message as the window of the member `readerId` reads one: the key it was
+ * posted under on a message of the reader's own alone, so the window that
+ * posted it knows it however it lands, and no member reads another's key.
+ */
+export function messageOnWire(row: ChatMessageRow, readerId: string): ChatMessage {
   return {
     id: row.id,
     seq: row.seq,
@@ -113,6 +142,7 @@ export function messageOnWire(row: ChatMessageRow): ChatMessage {
     blocks: row.blocks,
     mentions: row.mentions,
     postedAt: row.createdAt.getTime(),
+    ...(row.authorMemberId === readerId ? { clientKey: row.clientKey } : undefined),
     ...askOnWire(row),
   };
 }
@@ -156,17 +186,49 @@ export function readsOf(
   memberId: string,
 ): ChatStoreEffect<Pick<ChatAnswer, "readSeq" | "reads">> {
   return Effect.gen(function* () {
-    const members = yield* roster(userId, organizationId);
-    const floor = members.find((member) => member.id === memberId)?.readSeq ?? 0;
-    const reads = yield* channelReads(userId, organizationId, memberId);
+    const { member, reads } = yield* Effect.all(
+      {
+        member: memberIn(userId, organizationId, memberId),
+        reads: channelReads(userId, organizationId, memberId),
+      },
+      { concurrency: READ_CONCURRENCY },
+    );
+    const floor = Option.match(member, { onNone: () => 0, onSome: (row) => row.readSeq });
     return { readSeq: floor, ...readsPast(floor, reads) };
   });
 }
 
 /**
+ * The account's own member of the workspace's chat, and its `#general`,
+ * made where they are not yet: what a reader does once before it reads,
+ * since both are writes under the workspace's lock. Nothing where the
+ * account is not in the workspace.
+ */
+export function joinWorkspaceChat(
+  userId: string,
+  organizationId: string,
+): ChatStoreEffect<Option.Option<ChatMemberRow>> {
+  return Effect.gen(function* () {
+    const self = yield* ensureMember(userId, organizationId, { kind: MEMBER_KIND.HUMAN, userId });
+    if (Option.isNone(self)) return Option.none();
+    yield* ensureGeneral(userId, organizationId);
+    return self;
+  });
+}
+
+/** The account's own member of the workspace's chat, read and never made; nothing where it has not joined or is not in the workspace. */
+export function joinedMember(
+  userId: string,
+  organizationId: string,
+): ChatStoreEffect<Option.Option<ChatMemberRow>> {
+  return joinedMemberOf(userId, organizationId, { kind: MEMBER_KIND.HUMAN, userId });
+}
+
+/**
  * The workspace's chat as the account's person reads it from the cursor,
  * the next place it has yet to read, held while nothing moved past it;
- * nothing where the account is not in the workspace.
+ * nothing where the account is not in the workspace or has not joined its
+ * chat. Writes nothing.
  */
 export function workspaceChatPast(
   userId: string,
@@ -175,23 +237,32 @@ export function workspaceChatPast(
 ): ChatStoreEffect<Option.Option<ChatAnswer>> {
   return Effect.gen(function* () {
     const after = cursor - 1;
-    const self = yield* ensureMember(userId, organizationId, { kind: MEMBER_KIND.HUMAN, userId });
+    const self = yield* joinedMember(userId, organizationId);
     if (Option.isNone(self)) return Option.none();
-    yield* ensureGeneral(userId, organizationId);
     yield* heldUntilMoved(userId, organizationId, after);
     const past = yield* chatPast(userId, organizationId, self.value.id, after);
     if (Option.isNone(past)) return Option.none();
-    const members = yield* roster(userId, organizationId);
-    const channels = yield* channelsOf(userId, organizationId);
+    const { members, agents, channels, reads } = yield* Effect.all(
+      {
+        members: roster(userId, organizationId),
+        agents: agentMembersOf(userId, organizationId),
+        channels: channelsOf(userId, organizationId),
+        reads: channelReads(userId, organizationId, self.value.id),
+      },
+      { concurrency: READ_CONCURRENCY },
+    );
+    const people = yield* readAccountNames(
+      members.flatMap((member) => (member.userId === null ? [] : [member.userId])),
+    );
+    // The roster read after the hold carries the reader's cursor as it now stands.
     const reader = members.find((member) => member.id === self.value.id) ?? self.value;
-    const reads = yield* channelReads(userId, organizationId, reader.id);
     return Option.some({
       self: reader.id,
       readSeq: reader.readSeq,
       ...readsPast(reader.readSeq, reads),
-      members: members.map(memberOnWire),
+      members: members.map((member) => memberOnWire(member, agents, people)),
       channels: channels.map(channelOnWire),
-      messages: past.value.messages.map(messageOnWire),
+      messages: past.value.messages.map((message) => messageOnWire(message, reader.id)),
       cursor: chatCursorOf(past.value.cursor),
     });
   });

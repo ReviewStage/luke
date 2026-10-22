@@ -18,7 +18,11 @@ const API_DIRECTORY = "api";
 const ROUTE_EXTENSION = ".ts";
 const FUNCTION_EXTENSION = ".js";
 
-/** Every route under `server/routes/`, as its key `<dir>/<name>` with POSIX separators, sorted. */
+/**
+ * Every route under `server/routes/`, as its key `<dir>/<name>` with POSIX
+ * separators, sorted: the routes that stay off the hosted oRPC router, whose
+ * own paths are its contract's rather than a directory's.
+ */
 async function routeKeys(routesDirectory: string): Promise<readonly string[]> {
   const listing = await readdir(routesDirectory, { recursive: true });
   return listing
@@ -31,6 +35,9 @@ async function routeKeys(routesDirectory: string): Promise<readonly string[]> {
 export async function webFunctions(web: string): Promise<readonly FunctionDefinition[]> {
   return functionDefinitions(await routeKeys(join(web, ROUTES_DIRECTORY)));
 }
+
+/** The module of the hosted oRPC route, relative to the web app, which exports it as `orpcRoute`. */
+export const ORPC_ROUTE_MODULE = posix.join("server", "orpc-route.ts");
 
 /** The route file behind a key, relative to the web app. */
 export function routeSourcePath(routeKey: string): string {

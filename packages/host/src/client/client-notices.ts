@@ -2,8 +2,9 @@
  * client-notices.ts -- the agent notices as a client links them: read from the document and the host, written back into the document, and shown through the doors and the presenter the platform hands in.
  */
 import { ACCOUNT_STATUS, type AccountSnapshot } from "@luke/credentials/snapshot";
+import type { CodingAgentAccountInboxAnswerView } from "@luke/features/coding-agent-view";
 import { APP_SETTING_SCHEMA, EXPERIMENT, experimentOn, NO_EXPERIMENTS } from "@luke/settings";
-import { Effect, FiberSet, type Scope, Stream } from "effect";
+import { Effect, FiberSet, Queue, type Scope, Stream } from "effect";
 import {
   type AgentNoticeDoors,
   type AgentNotices,
@@ -26,7 +27,9 @@ type NoticeHost = Pick<
   | "codingAgentList"
   | "codingAgentPage"
   | "codingAgentPullRequest"
-  | "codingAgentAccountInbox"
+  | "codingAgentAccountInboxFollow"
+  | "codingAgentAccountInboxUnfollow"
+  | "onAccountInboxChanged"
   | "onAccountChanged"
   | "tasksRefresh"
   | "workspacesRefresh"
@@ -45,6 +48,25 @@ export interface ClientNoticesDependencies {
 /** Whose account this is, as the host keys it, or nobody: what tells another account from the same one renewed. */
 function accountKey(account: AccountSnapshot): string | undefined {
   return account.status === ACCOUNT_STATUS.SIGNED_IN ? account.email : undefined;
+}
+
+/**
+ * What waits across the account, as the host tells it, followed while the
+ * stream runs: heard from before the follow is asked, so its first answer is
+ * never missed, and let go as the stream ends.
+ */
+function accountInboxOf(host: NoticeHost): Stream.Stream<CodingAgentAccountInboxAnswerView> {
+  return Stream.callback<CodingAgentAccountInboxAnswerView>((queue) =>
+    Effect.gen(function* () {
+      yield* Effect.acquireRelease(
+        Effect.sync(() => host.onAccountInboxChanged((answer) => Queue.offerUnsafe(queue, answer))),
+        (unsubscribe) => Effect.sync(unsubscribe),
+      );
+      yield* Effect.acquireRelease(host.codingAgentAccountInboxFollow(), () =>
+        host.codingAgentAccountInboxUnfollow(),
+      );
+    }),
+  );
 }
 
 /**
@@ -77,8 +99,6 @@ export const linkClientNotices = /* @__PURE__ */ Effect.fn("client/linkClientNot
     );
   };
   const notices = yield* createAgentNotices({
-    listAgents: (taskId) => host.codingAgentList({ taskId: taskId }),
-    readAgent: (agentId) => host.codingAgentPage({ agentId }),
     readPullRequest: (agentId) => host.codingAgentPullRequest({ agentId }),
     taskName: (taskId) => noticeTaskTitle(state.snapshot().tasks, taskId),
     ...presenter,
@@ -94,18 +114,9 @@ export const linkClientNotices = /* @__PURE__ */ Effect.fn("client/linkClientNot
     },
     onAccountChanged: (listener) =>
       host.onAccountChanged((account) => listener(accountKey(account))),
-    // An agent starting or ending, or a new pull request, is read on the sidebar's rows from the list.
-    onTaskAgentsMoved: () => {
-      forkReported(host.tasksRefresh(), "the task list refresh");
-    },
-    readAccountInbox: (after) => host.codingAgentAccountInbox({ after }),
+    followAccountInbox: () => accountInboxOf(host),
     accounts: Stream.map(state.changes, (document) => accountKey(document.account)),
     onInboxChanged: (inbox) => state.update({ inbox }),
-    automationsOn: () =>
-      experimentOn(
-        state.snapshot().settings?.experiments ?? NO_EXPERIMENTS,
-        EXPERIMENT.AUTOMATIONS,
-      ),
     chatOn: () =>
       experimentOn(state.snapshot().settings?.experiments ?? NO_EXPERIMENTS, EXPERIMENT.CHAT),
     report,
@@ -124,6 +135,28 @@ export const linkClientNotices = /* @__PURE__ */ Effect.fn("client/linkClientNot
             Effect.sync(() =>
               report(
                 `the agents with no task could not be noted: ${defect instanceof Error ? defect.message : String(defect)}`,
+              ),
+            ),
+        ),
+    ),
+  );
+  // Every agent on a task, while the list is followed live, is the notices'
+  // to hold in place of the watch's own reads, and a task the list no longer
+  // holds takes its agents with it.
+  yield* Effect.forkScoped(
+    Stream.runForEach(
+      Stream.changes(Stream.map(state.changes, (document) => document.tasks.taskAgents)),
+      (agents) =>
+        Effect.catchDefect(
+          Effect.sync(() => {
+            if (agents === undefined) return;
+            const taskIds = state.snapshot().tasks.tasks.map((each) => each.id);
+            notices.observeFollowed(agents, taskIds);
+          }),
+          (defect) =>
+            Effect.sync(() =>
+              report(
+                `the agents on tasks could not be noted: ${defect instanceof Error ? defect.message : String(defect)}`,
               ),
             ),
         ),

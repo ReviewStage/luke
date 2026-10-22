@@ -1,0 +1,638 @@
+/**
+ * kinds.ts -- the act kinds the window's act port answers, by domain, and the handshake that opens the port.
+ *
+ * Kept free of oRPC and of every schema, so `acts.ts` can spell these kinds
+ * in `ACT_KIND` without resolving the contract behind them. A kind here is the key of its procedure in
+ * `actContract`, so the panel's act door calls a kind by its own name.
+ */
+
+/** The account's asks: a sign-in begun, begun again, or cancelled, a sign-out, and the account deleted. */
+export const ACCOUNT_ACT_KIND = {
+  ACCOUNT_BEGIN_SIGN_IN: "account.beginSignIn",
+  ACCOUNT_SIGN_IN_AGAIN: "account.signInAgain",
+  ACCOUNT_CANCEL_SIGN_IN: "account.cancelSignIn",
+  ACCOUNT_SIGN_OUT: "account.signOut",
+  ACCOUNT_DELETE: "account.delete",
+} as const;
+
+/**
+ * The account's own asks from Settings and a dictating box: its provider keys,
+ * its plan template and that template's history, and a dictated clip's words.
+ */
+export const ACCOUNT_ASK_ACT_KIND = {
+  /**
+   * Settings › API keys: the account's own provider keys read as hints and
+   * statuses, one saved, one removed. The save's payload is the one place a
+   * key crosses from the renderer, once, on its way to the service; no
+   * answer carries one back, and nothing on the way keeps it.
+   */
+  PROVIDER_KEYS_READ: "providerKeys.read",
+  PROVIDER_KEYS_SAVE: "providerKeys.save",
+  PROVIDER_KEYS_REMOVE: "providerKeys.remove",
+  /** A connected plan's default for the account's coding agents turned on or off, from beside its row in Settings. */
+  PROVIDER_KEYS_FOR_AGENTS: "providerKeys.forAgents",
+  /**
+   * Settings › Coding agents › Codex: Sign in with ChatGPT for Luke's hosted
+   * runtime, run by the host through the developer's browser, and the one
+   * waiting withdrawn. Nothing crosses from the renderer but the press, and
+   * the answer is the keys as the service then holds them: the sign-in's
+   * tokens go from the host to the service and never reach a window.
+   */
+  CHATGPT_SIGN_IN: "chatGpt.signIn",
+  CHATGPT_SIGN_IN_CANCEL: "chatGpt.cancelSignIn",
+  /**
+   * Settings › Integrations › GitHub: the member's own classic GitHub
+   * personal access token read as its login, hint, and status, saved, and
+   * removed. The save's payload carries the token from the renderer once,
+   * on its way to the service; no answer carries one back, and nothing on
+   * the way keeps it.
+   */
+  GITHUB_TOKEN_READ: "githubToken.read",
+  GITHUB_TOKEN_SAVE: "githubToken.save",
+  GITHUB_TOKEN_REMOVE: "githubToken.remove",
+  /**
+   * Settings › Plan template: the Markdown the account's new tasks start
+   * from, read as the page opens, and kept as the developer pauses or reset
+   * to the default with null. Each answers the template as the service then
+   * keeps it. Its version history reads a page of revisions and one
+   * revision at a time, and a restore answers the template as a write does.
+   */
+  PLAN_TEMPLATE_READ: "planTemplate.read",
+  PLAN_TEMPLATE_WRITE: "planTemplate.write",
+  PLAN_TEMPLATE_REVISIONS: "planTemplate.revisions",
+  PLAN_TEMPLATE_REVISION: "planTemplate.revision",
+  PLAN_TEMPLATE_RESTORE: "planTemplate.restore",
+  /**
+   * A clip dictated into a message box, carried once from the panel that
+   * recorded it to the service and answered with its words. Nothing on the
+   * way keeps it.
+   */
+  DICTATION_TRANSCRIBE: "dictation.transcribe",
+} as const;
+
+/** The Automations pages' asks: the account's automations listed, made, changed, deleted, run now, and one's runs read. */
+export const AUTOMATION_ACT_KIND = {
+  AUTOMATIONS_LIST: "automations.list",
+  AUTOMATIONS_CREATE: "automations.create",
+  AUTOMATIONS_CHANGE: "automations.change",
+  AUTOMATIONS_DELETE: "automations.delete",
+  AUTOMATIONS_RUN: "automations.run",
+  AUTOMATIONS_RUNS: "automations.runs",
+  /** A webhook's secret minted again by the host and answered to this window alone, once, to show. */
+  AUTOMATIONS_NEW_WEBHOOK_SECRET: "automations.newWebhookSecret",
+  /** A workspace's automations, or one's runs, pushed to the window while it holds the stream open. */
+  AUTOMATIONS_FOLLOW: "automations.follow",
+} as const;
+
+/**
+ * A task's coding agents, the core of what the Tasks tab asks of them: the
+ * models, the default, the lists, an agent started, read, messaged, changed,
+ * and shown, an agent's page, and what an agent published: its pull request,
+ * its changes, and its Pull request tab's overview.
+ */
+export const AGENT_ACT_KIND = {
+  /**
+   * A task's coding agents, asked of the service: the models one may run
+   * on, the account's default among them read and written, the task's
+   * agents with their status, one started under the press's own key, one's
+   * transcript past a cursor (held open by the service while the agent
+   * runs), one sent a message naming how it reaches a turn under way, one
+   * given another model and effort for its next step, one renamed, one stopped, one
+   * archived (a turn it still runs stopped first) or brought back, one deleted
+   * for good (stopped first the same way). The
+   * window holds what it draws; nothing here does.
+   */
+  CODING_AGENTS_MODELS: "codingAgents.models",
+  CODING_AGENTS_DEFAULT_READ: "codingAgents.defaultRead",
+  CODING_AGENTS_DEFAULT_WRITE: "codingAgents.defaultWrite",
+  CODING_AGENTS_LIST: "codingAgents.list",
+  /** One workspace's agents, newest started first: what an automation's Same agent is chosen from. */
+  CODING_AGENTS_WORKSPACE_LIST: "codingAgents.workspaceList",
+  CODING_AGENTS_START: "codingAgents.start",
+  CODING_AGENTS_MESSAGES: "codingAgents.messages",
+  /**
+   * One agent's transcript, a worker's, or a task's planning worker's,
+   * followed while the window holds the stream open: its pages, the first
+   * from the start and each later one what moved past the last.
+   */
+  CODING_AGENTS_TRANSCRIPT: "codingAgents.transcript",
+  /** One part of a message of a transcript, whole: what its followed page carried cut, fetched as the window opens it. */
+  CODING_AGENTS_PART: "codingAgents.part",
+  /** The page of a followed transcript below the oldest message the window holds, as its newest or last older page named it; or why there is none. */
+  CODING_AGENTS_TRANSCRIPT_OLDER: "codingAgents.transcriptOlder",
+  CODING_AGENTS_MESSAGE: "codingAgents.message",
+  CODING_AGENTS_CHOOSE: "codingAgents.choose",
+  CODING_AGENTS_RENAME: "codingAgents.rename",
+  CODING_AGENTS_SERVERS: "codingAgents.servers",
+  CODING_AGENTS_STOP: "codingAgents.stop",
+  CODING_AGENTS_ARCHIVE: "codingAgents.archive",
+  CODING_AGENTS_PIN: "codingAgents.pin",
+  /** The account's operator in a workspace, Luke, ensured: the one standing, made where none stands, or, with a reset, a fresh one in place of it. */
+  CODING_AGENTS_ENSURE_OPERATOR: "codingAgents.ensureOperator",
+  CODING_AGENTS_DELETE: "codingAgents.delete",
+  /**
+   * Which agent's tab the panel shows, or none, and which task's Inbox tab,
+   * or none: what main's notification of an agent's end or of an inbox item
+   * is held back by, and what clears an agent's tab's unseen dot.
+   */
+  CODING_AGENTS_SHOWN: "codingAgents.shown",
+  /** An agent's unseen dot cleared by hand, without its page being shown: its row's Mark as read. */
+  CODING_AGENTS_SEEN: "codingAgents.seen",
+  CODING_AGENTS_PAGE: "codingAgents.page",
+  /** The calls into one agent, oldest first, each with its lines and its record, which its tab draws a call's span from. */
+  CODING_AGENTS_CALLS: "codingAgents.calls",
+  /** What one agent published: its branch and pull request as GitHub holds them. */
+  CODING_AGENTS_PULL_REQUEST: "codingAgents.pullRequest",
+  /** One agent's changes, its pull request's files with their patches, which its Changes tab draws. */
+  CODING_AGENTS_CHANGES: "codingAgents.changes",
+  /** One agent's pull request itself, its description, branches, mergeability, and people, which its Pull request tab's overview draws. */
+  CODING_AGENTS_OVERVIEW_PULL_REQUEST: "codingAgents.overviewPullRequest",
+  /** What the reviewer and label pickers of an agent's Pull request tab offer. */
+  CODING_AGENTS_REVIEW_OPTIONS: "codingAgents.reviewOptions",
+  /** The checks on one agent's pull request's head, which its Pull request tab's overview draws. */
+  CODING_AGENTS_OVERVIEW_CHECKS: "codingAgents.overviewChecks",
+  /** One agent's pull request's conversation and where its reviewers stand, which its Pull request tab's overview draws. */
+  CODING_AGENTS_OVERVIEW_CONVERSATION: "codingAgents.overviewConversation",
+  /** One image an agent's pull request's overview names, its bytes read by the service on the App's token. */
+  CODING_AGENTS_GITHUB_IMAGE: "codingAgents.githubImage",
+  /** One change to an agent's pull request, such as marking it ready for review, made on GitHub as the account on its own GitHub sign-in. */
+  CODING_AGENTS_PULL_REQUEST_ACTION: "codingAgents.pullRequestAction",
+  /** Which of an agent's pull request's files the account marked viewed on GitHub, read on its own GitHub sign-in. */
+  CODING_AGENTS_PULL_REQUEST_VIEWED: "codingAgents.pullRequestViewed",
+} as const;
+
+/**
+ * A task's coding agents, what they need of the developer and what they
+ * say in the workspace: the Inbox read past a cursor (held open by the
+ * service while nothing changed), a task's or one agent's; one item
+ * answered, closed, messaged on its thread, or marked read or unread, and
+ * every item marked read; an item's image and an agent's picture read by the
+ * host under the account; and the workspace's chat read past a cursor,
+ * written to as the account's own member, and a message's picture read. The
+ * window holds what it draws; nothing here does.
+ */
+export const AGENT_INBOX_ACT_KIND = {
+  /**
+   * A task's inbox, or one agent's, followed while the window holds the
+   * stream open: what it holds, whole, each time it changes, or why there
+   * is none.
+   */
+  CODING_AGENTS_INBOX_FOLLOW: "codingAgents.inboxFollow",
+  CODING_AGENTS_INBOX_ANSWER: "codingAgents.inboxAnswer",
+  /** One open item closed without an answer against the revision the panel drew, under the panel's own key. */
+  CODING_AGENTS_INBOX_CLOSE: "codingAgents.inboxClose",
+  /** A message on one item's thread, open or settled, under the panel's own key; it never answers the item. */
+  CODING_AGENTS_INBOX_MESSAGE: "codingAgents.inboxMessage",
+  /** One item marked read or unread for the account; it changes neither what the item asks nor whether it waits. */
+  CODING_AGENTS_INBOX_READ_STATE: "codingAgents.inboxReadState",
+  /** Every item of the account's Inbox marked read, in one workspace or in all; the dots alone. */
+  CODING_AGENTS_INBOX_READ_ALL: "codingAgents.inboxReadAll",
+  /** One image of an inbox item, fetched by the host under the account, so the window holds no bearer and no address. */
+  CODING_AGENTS_INBOX_ATTACHMENT: "codingAgents.inboxAttachment",
+  CODING_AGENTS_PICTURE: "codingAgents.picture",
+  CODING_AGENTS_CHAT_POST: "codingAgents.chatPost",
+  CODING_AGENTS_CHAT_ATTACHMENT: "codingAgents.chatAttachment",
+  /**
+   * A workspace's chat followed while the window holds the stream open: the
+   * chat whole each time it changes, or why there is none.
+   */
+  CODING_AGENTS_CHAT_FOLLOW: "codingAgents.chatFollow",
+} as const;
+
+/**
+ * Luke's avatar as the windows reach it: the panel's word on it, starting,
+ * live on its first frame, or ended and why, taken from the panel alone; and
+ * the video tile's Video off, Video on, and Restart video, Luke's avatar asked
+ * for on the standing call or taken down, taken from the panel and the
+ * floating call window, which draw the tile, alone.
+ */
+export const AVATAR_ACT_KIND = {
+  AVATAR_REPORT: "avatar.report",
+  VOICE_SET_VIDEO: "voice.setVideo",
+} as const;
+
+/**
+ * A Browser tab's view, which main owns over the panel that asked
+ * (`browser-views.ts`): opened on an address and answered how its page
+ * stands, sent to another, stepped back, forward, reloaded or stopped,
+ * placed over the tab's body or put out of sight, caught as a still while
+ * something covers it, and closed with its tab. How the page goes on to
+ * stand arrives on the panel's `onBrowserState`. Taken from a panel alone,
+ * and only while the account has the Browser tab experiment on.
+ */
+export const BROWSER_ACT_KIND = {
+  BROWSER_OPEN: "browser.open",
+  BROWSER_NAVIGATE: "browser.navigate",
+  BROWSER_STEP: "browser.step",
+  BROWSER_PLACE: "browser.place",
+  BROWSER_CAPTURE: "browser.capture",
+  BROWSER_CLOSE: "browser.close",
+} as const;
+
+/**
+ * A coding agent's Pull request tab's Chapters: a pull request's chapters
+ * read as its workspace keeps them, and generated for its head on Luke's own
+ * model key when the developer presses Generate, the generation answered
+ * once it lands, which may take minutes; and Settings' choice of the Claude
+ * model the member's Generate runs on, read and written.
+ */
+export const CHAPTERS_ACT_KIND = {
+  CHAPTERS_READ: "chapters.read",
+  CHAPTERS_GENERATE: "chapters.generate",
+  CHAPTERS_MODEL_READ: "chapters.modelRead",
+  CHAPTERS_MODEL_WRITE: "chapters.modelWrite",
+} as const;
+
+/**
+ * Settings' integration rows: where every one of the account's integrations
+ * stands, a browser sign-in to one begun and opened by the host, and one
+ * connection ended. The window hears whether the browser was sent, never the
+ * address it was sent to.
+ */
+export const INTEGRATION_ACT_KIND = {
+  INTEGRATIONS_STATUS: "integrations.status",
+  INTEGRATIONS_CONNECT: "integrations.connect",
+  INTEGRATIONS_CANCEL: "integrations.cancel",
+  INTEGRATIONS_DISCONNECT: "integrations.disconnect",
+  /** The tools one account's server offers the account's agents, read from the service when a list of them is shown. */
+  INTEGRATIONS_TOOLS: "integrations.tools",
+  /** One account at a provider named as the developer calls it. */
+  INTEGRATIONS_RENAME: "integrations.rename",
+} as const;
+
+/** The settings writes: one setting, a page's settings reset, and one experiment turned on or off, each answering the settings as they then stand. */
+export const SETTINGS_ACT_KIND = {
+  SETTING_UPDATE: "setting.update",
+  SETTINGS_RESET: "settings.reset",
+  EXPERIMENT_SET: "experiment.set",
+} as const;
+
+/**
+ * The panel's Tasks tab asking the host: the task list and the active
+ * document read as the tab shows, one task made the active one, the open
+ * task left, a task started on a repository, and a task renamed, given its
+ * repository, pinned or unpinned, or deleted. The view arrives on the document rather than as
+ * an answer. The one write of a task's document from here is the
+ * developer's edit of a field, `TASKS_EDIT`, which answers whether it
+ * saved, conflicted with what Luke wrote meanwhile, or failed. Beside them,
+ * a page of GitHub's or the web's opened in the browser, the account's own
+ * GitHub connected or disconnected, a call about the open task, and its
+ * whiteboard saved. And what one task holds, read as its tabs draw it: its
+ * earlier work and conversation, a call's messages, its repository's files,
+ * folders, skills, pull requests, and issues, a fenced block coloured, its
+ * plan's history, pages, pictures, and comments, and a task given its
+ * status and priority.
+ */
+export const TASKS_ACT_KIND = {
+  TASKS_REFRESH: "tasks.refresh",
+  TASKS_SELECT: "tasks.select",
+  TASKS_CLOSE: "tasks.close",
+  TASKS_START: "tasks.start",
+  TASKS_DELETE: "tasks.delete",
+  TASKS_RENAME: "tasks.rename",
+  TASKS_PIN: "tasks.pin",
+  /** A repository pinned in the sidebar or unpinned, kept on the account; answers whether the service changed the pins. */
+  TASKS_PIN_REPOSITORY: "tasks.pinRepository",
+  /** One change to the sidebar's sections, kept on the account; answers whether the service took it. */
+  TASKS_WRITE_SECTION: "tasks.writeSection",
+  /** The repository chip's read: the repositories the account reaches through the Luke GitHub App, as the service answers them now. */
+  TASKS_REPOSITORIES: "tasks.repositories",
+  /** A task given its repository on the service, or none; answers the repository as kept, or why it is unchanged. */
+  TASKS_SET_REPOSITORY: "tasks.setRepository",
+  /** A task moved on the service to another of the account's workspaces, its owner's alone; answers the workspace it now belongs to, or why it stands where it was. */
+  TASKS_MOVE: "tasks.move",
+  /** The developer's edit of the open task's document, saved on the service; answers saved, a conflict with the text as it stands now, or why nothing was saved. */
+  TASKS_EDIT: "tasks.edit",
+  /** A page of GitHub's opened in the browser: a repository, or where the Luke GitHub App is installed. No other address opens through it. */
+  GITHUB_OPEN: "github.open",
+  /** A web page opened in the default browser: a link a transcript's or an Inbox item's words hold, off GitHub. No address but an http or https one opens through it. */
+  WEB_OPEN: "web.open",
+  /** The page that connects the account's GitHub, asked of the service and opened in the browser; the connection arrives on the document once the panel comes forward again. */
+  GITHUB_CONNECT: "github.connect",
+  /** The admin dashboard, opened in the default browser on the service's own origin, an address the host names and never one a window hands in. The service's gate decides who reads it. */
+  ADMIN_OPEN: "admin.open",
+  /** One admin dashboard read, asked of the service under the account's session and answered to the window that asked as it came, or why there is none; never held in app state. The service's gate decides it. */
+  ADMIN_READ: "admin.read",
+  /** The admin dashboard's star set or taken back on one account, for the viewing admin alone; whether it landed. */
+  ADMIN_FAVORITE: "admin.favorite",
+  /** The account's GitHub disconnected on the service under the Mac's session; the connection arrives on the document at once. */
+  GITHUB_DISCONNECT: "github.disconnect",
+  /** An agent's Call button: a call into that agent of the task the panel has open, opened, or its microphone toggled. */
+  TASKS_TALK: "tasks.talk",
+  /** The open task's whiteboard scene, saved whole with the number of Luke's drawing it holds. */
+  TASKS_BOARD_SAVE: "tasks.boardSave",
+  /** A task given its status and priority on the service; answers whether it saved. */
+  TASKS_SET_STANDING: "tasks.setStanding",
+  /** A File tab's window of a file of the open task's repository, read from GitHub through the service and coloured by main; answered to the tab, never on the document. */
+  TASKS_FILE: "tasks.file",
+  /** A File tab's tree listing one folder of the open task's repository, read from GitHub through the service; answered to the tree, never on the document. */
+  TASKS_TREE: "tasks.tree",
+  /** The skills a developer may choose of a task's repository, read from GitHub through the service; answered to the asker, never on the document. */
+  TASKS_SKILLS: "tasks.skills",
+  /** One pull request of a repository a workspace's installation reaches, by its number, read from GitHub through the service for a link to it to draw its title and state; null where there is none to draw; answered to the asker, never on the document. */
+  TASKS_PULL_REQUEST: "tasks.pullRequest",
+  /** One issue of a repository a workspace's installation reaches, by its number, read from GitHub through the service for a link to it to draw its title and state; null where there is none to draw; answered to the asker, never on the document. */
+  TASKS_ISSUE: "tasks.issue",
+  /** The Browser tabs open in a task's agents' browsers, read from the service for the side panel's cloud Browser tabs; answered to the panel, never on the document. */
+  TASKS_BROWSER_TABS: "tasks.browserTabs",
+  /**
+   * A task's agents' Browser tabs, followed while the window holds the
+   * stream open for the side panel's cloud Browser tabs: each time one
+   * moves, the agent's pointer among it, or a takeover lapses, over Neon
+   * Realtime, never on the document.
+   */
+  TASKS_BROWSER_TABS_FOLLOW: "tasks.browserTabsFollow",
+  /** A fenced block of a transcript's markdown, coloured by main as the File tab's lines are: the code and its fence's language go, the lines come back; answered to the block, never on the document. */
+  TASKS_COLOUR_CODE: "tasks.colourCode",
+  /** A page of the open plan's history for its version history, read from the service; answered to the view, never on the document. */
+  TASKS_REVISIONS: "tasks.revisions",
+  /** A revision of the open plan beside the one before it for its version history, read from the service; answered to the view, never on the document. */
+  TASKS_REVISION: "tasks.revision",
+  /** A revision of a plan restored as its content on the service; answers whether it was, and the document arrives as the service answered it. */
+  TASKS_RESTORE: "tasks.restore",
+  /** A page tab's source of one version of one of the plan's pages, read from the service as its frame's is and coloured by main as HTML; answered to the tab, never on the document. */
+  TASKS_PAGE_SOURCE: "tasks.pageSource",
+  /** One plan's pages, each by its newest version, read from the service for the Inbox's panel beside an item of that plan; answered to the view, never on the document. */
+  TASKS_PAGES: "tasks.pages",
+  /**
+   * One plan's pages, followed while the window holds the stream open for
+   * the Inbox's panel beside an item of that plan: each time they move, over
+   * Neon Realtime, never on the document.
+   */
+  TASKS_PAGES_FOLLOW: "tasks.pagesFollow",
+  /**
+   * One plan's newest page of history, followed while the window holds the
+   * stream open for its version history: each time a save lands, over Neon
+   * Realtime, never on the document.
+   */
+  TASKS_HISTORY_FOLLOW: "tasks.historyFollow",
+  /** One picture of the open plan as its bytes in base64, read from the service for the document drawing it; answered to the view, never on the document. */
+  TASKS_PICTURE_READ: "tasks.pictureRead",
+  /** A picture pasted, dropped, or chosen into the open plan's editor, kept on the service; answered with the id the text then names it by. */
+  TASKS_PICTURE_KEEP: "tasks.pictureKeep",
+  /**
+   * The open plan's comment threads: read past a cursor (held open by the
+   * service while nothing changed), one started on words of the plan, and
+   * one thing done to one thread. The window holds what it draws.
+   */
+  TASKS_COMMENTS: "tasks.comments",
+  TASKS_COMMENT_START: "tasks.commentStart",
+  TASKS_COMMENT_ACT: "tasks.commentAct",
+} as const;
+
+/**
+ * A cloud Browser tab's live view (`@luke/features/browser-live-acts`): one
+ * view attached for the asking panel, its socket opened by the host under
+ * the account's bearer, and detached. What the page shows travels on the
+ * port an attach posts to that panel, never on an act.
+ */
+export const BROWSER_LIVE_ACT_KIND = {
+  BROWSER_LIVE_ATTACH: "browserLive.attach",
+  BROWSER_LIVE_DETACH: "browserLive.detach",
+} as const;
+
+/**
+ * A coding agent's branch run on this Mac (`@luke/features/mac-terminal-wire`):
+ * each repository's run command read and set; a run of the agent's branch
+ * started for the asking panel, stopped with Stop, and closed with its tab;
+ * and its worktree opened in the Mac's own Terminal. What the run prints
+ * travels on the port an open posts to that panel, never on an act.
+ */
+export const MAC_TERMINAL_ACT_KIND = {
+  MAC_REPOSITORIES: "macRepositories.read",
+  MAC_REPOSITORY_SET: "macRepositories.set",
+  MAC_TERMINAL_OPEN: "macTerminal.open",
+  MAC_TERMINAL_CLOSE: "macTerminal.close",
+  MAC_TERMINAL_STOP: "macTerminal.stop",
+  MAC_TERMINAL_REVEAL: "macTerminal.reveal",
+} as const;
+
+/**
+ * A coding agent's Terminal tab (`messages/terminal.ts`): its shells listed,
+ * started, named, and ended, its sandbox resumed on the developer's click,
+ * and a shell attached and detached. What a shell prints travels on the port
+ * an attach posts to the asking panel, never on an act.
+ */
+export const TERMINAL_ACT_KIND = {
+  TERMINAL_LIST: "terminal.list",
+  TERMINAL_CREATE: "terminal.create",
+  TERMINAL_RENAME: "terminal.rename",
+  TERMINAL_KILL: "terminal.kill",
+  TERMINAL_RESUME: "terminal.resume",
+  TERMINAL_ATTACH: "terminal.attach",
+  TERMINAL_DETACH: "terminal.detach",
+} as const;
+
+/**
+ * The updater as Settings' row and the sidebar's foot reach it: a check
+ * asked for, answered with where the updater then stands; the ready build
+ * installed; and the releases page and the changelog opened.
+ */
+export const UPDATE_ACT_KIND = {
+  UPDATE_CHECK: "update.check",
+  UPDATE_INSTALL: "update.install",
+  UPDATE_OPEN_RELEASE: "update.openRelease",
+  UPDATE_OPEN_CHANGELOG: "update.openChangelog",
+} as const;
+
+/**
+ * The voice window's runtime: a command to it from a panel or the call
+ * window; the call card's way back, Luke's window brought forward on the
+ * call's own agent; the voice window as a GPT Live peer, its SDP offer handed
+ * to the host, which creates the one session and answers the SDP, the
+ * hang-up it asks the host to decide, and the two reports the host reads its
+ * transport and its idle from, none carrying a credential; Escape's stop;
+ * the voice diagnostics; and the microphone's privacy settings opened.
+ */
+export const VOICE_RUNTIME_ACT_KIND = {
+  VOICE_COMMAND: "voice.command",
+  CALL_SHOW_AGENT: "call.showAgent",
+  VOICE_CREATE_LIVE_SESSION: "voice.createLiveSession",
+  VOICE_END_LIVE_SESSION: "voice.endLiveSession",
+  VOICE_REPORT_LIVE_TRANSPORT: "voice.reportLiveTransport",
+  VOICE_REPORT_LIVE_ACTIVITY: "voice.reportLiveActivity",
+  VOICE_STOP_SPEAKING: "voice.stopSpeaking",
+  VOICE_DIAGNOSTICS: "voice.diagnostics",
+  MICROPHONE_OPEN_SETTINGS: "microphone.openSettings",
+} as const;
+
+/**
+ * The account's workspaces: one made under a name, answered as made, which
+ * the account owns; one renamed by its owners and admins, answered under
+ * its new name; one's photo set as a `data:` URL or removed with null by
+ * its owners and admins, answered with the photo's new version or none;
+ * one's pending invitations read, one made, answered
+ * with its accept link, and one canceled, for its owners and admins; a GitHub
+ * organization connected to one, the Luke GitHub App's install address the
+ * service answers opened in the browser, or disconnected from it; one
+ * workspace's members read; one member removed, answered with the members
+ * who remain; another member given a role, or the workspace handed to one
+ * of its admins, by its owner, each answered with the members as they then
+ * stand; and one workspace left. Every write reads the workspaces
+ * again, so they arrive on the document; a write the account's role does
+ * not allow is refused in words that say so. A workspace's photo is read
+ * apart, answered with its bytes in base64 under its media type or why
+ * there are none, since the document never carries them.
+ */
+export const WORKSPACE_ACT_KIND = {
+  WORKSPACE_CREATE: "workspace.create",
+  WORKSPACE_RENAME: "workspace.rename",
+  WORKSPACE_INVITATIONS_READ: "workspace.invitationsRead",
+  WORKSPACE_INVITE: "workspace.invite",
+  WORKSPACE_INVITATION_CANCEL: "workspace.invitationCancel",
+  WORKSPACE_GITHUB_CONNECT: "workspace.githubConnect",
+  WORKSPACE_GITHUB_DISCONNECT: "workspace.githubDisconnect",
+  WORKSPACE_LINEAR_CONNECT: "workspace.linearConnect",
+  WORKSPACE_LINEAR_DISCONNECT: "workspace.linearDisconnect",
+  WORKSPACE_LINEAR_ISSUES: "workspace.linearIssues",
+  WORKSPACE_GITHUB_ISSUES: "workspace.githubIssues",
+  WORKSPACE_MEMBERS_READ: "workspace.membersRead",
+  WORKSPACE_FORMER_MEMBERS_READ: "workspace.formerMembersRead",
+  /**
+   * A workspace's people, followed while the window holds the stream open:
+   * its members and who its work names but left as they first stand, then
+   * each time they move, or why there are none.
+   */
+  WORKSPACE_PEOPLE: "workspace.people",
+  /**
+   * A workspace's pending invitations, followed for an owner or an admin
+   * while the window holds the stream open: as they first stand, then each
+   * time they move, or why there are none.
+   */
+  WORKSPACE_INVITATIONS: "workspace.invitations",
+  WORKSPACE_MEMBER_REMOVE: "workspace.memberRemove",
+  WORKSPACE_MEMBER_ROLE: "workspace.memberRole",
+  WORKSPACE_TRANSFER: "workspace.transfer",
+  WORKSPACE_LEAVE: "workspace.leave",
+  WORKSPACE_PHOTO_READ: "workspace.photoRead",
+  WORKSPACE_PHOTO_SET: "workspace.photoSet",
+  WORKSPACE_TOKEN_REPOSITORIES_READ: "workspace.tokenRepositoriesRead",
+  WORKSPACE_TOKEN_REPOSITORY_SET: "workspace.tokenRepositorySet",
+} as const;
+
+/**
+ * What a window asks of the system it is drawn on: the microphone asked for
+ * and its route read afresh, the notification settings opened and a test
+ * notification posted, a new mail to the people who make Luke, the panel
+ * focused, words copied, a file saved, and feedback sent.
+ */
+export const WINDOW_SURFACE_ACT_KIND = {
+  MICROPHONE_REQUEST: "microphone.request",
+  /**
+   * Where the developer's voice would be captured from, read afresh: the act
+   * probes the native watcher rather than answering the document, because the
+   * route decides which device a press opens and macOS moves it between
+   * presses.
+   */
+  MICROPHONE_ROUTE: "microphone.route",
+  NOTIFICATIONS_OPEN_SETTINGS: "notifications.openSettings",
+  /** A notification posted right away, whatever window is in front, to learn whether macOS shows Luke's. */
+  NOTIFICATIONS_TEST: "notifications.test",
+  /** A new message to the people who make Luke, in the system's mail app, to the address main holds. */
+  CONTACT_EMAIL: "contact.email",
+  WINDOW_FOCUS_PANEL: "window.focusPanel",
+  WINDOW_COPY_TEXT: "window.copyText",
+  /** A picture put on the clipboard as a PNG, as a copy from Preview puts one. */
+  WINDOW_COPY_IMAGE: "window.copyImage",
+  WINDOW_SAVE_FILE: "window.saveFile",
+  /**
+   * A downscaled still of part of the asking panel, as ⌃Tab's card previews a
+   * tab it left: answered to that panel alone and kept nowhere else.
+   */
+  WINDOW_CAPTURE: "window.capture",
+  FEEDBACK_SEND: "feedback.send",
+} as const;
+
+/**
+ * A task's linked issues, GitHub's and Linear's, as its page asks for them:
+ * read with where each stands now, one linked, one's keyword changed, and
+ * one let go. Each answers the service's answer whole, or why there is none,
+ * which the page says.
+ */
+export const TASK_ISSUE_ACT_KIND = {
+  TASK_ISSUES_READ: "taskIssues.read",
+  TASK_ISSUES_LINK: "taskIssues.link",
+  TASK_ISSUES_RELATE: "taskIssues.relate",
+  TASK_ISSUES_UNLINK: "taskIssues.unlink",
+} as const;
+
+/** Every kind the act port answers, one spread per domain, in alphabetical order. */
+export const PORT_ACT_KIND = {
+  ...ACCOUNT_ACT_KIND,
+  ...ACCOUNT_ASK_ACT_KIND,
+  ...AGENT_ACT_KIND,
+  ...AGENT_INBOX_ACT_KIND,
+  ...AUTOMATION_ACT_KIND,
+  ...AVATAR_ACT_KIND,
+  ...BROWSER_ACT_KIND,
+  ...BROWSER_LIVE_ACT_KIND,
+  ...CHAPTERS_ACT_KIND,
+  ...INTEGRATION_ACT_KIND,
+  ...MAC_TERMINAL_ACT_KIND,
+  ...SETTINGS_ACT_KIND,
+  ...TASKS_ACT_KIND,
+  ...TASK_ISSUE_ACT_KIND,
+  ...TERMINAL_ACT_KIND,
+  ...UPDATE_ACT_KIND,
+  ...VOICE_RUNTIME_ACT_KIND,
+  ...WINDOW_SURFACE_ACT_KIND,
+  ...WORKSPACE_ACT_KIND,
+} as const;
+
+export type PortActKind = (typeof PORT_ACT_KIND)[keyof typeof PORT_ACT_KIND];
+
+/**
+ * The port kinds the platform shell answers itself, because they reach its
+ * windows, ports, and system, one spread per domain, in alphabetical order;
+ * the host's procedures answer every other.
+ */
+export const PLATFORM_PORT_ACT_KIND = {
+  ...AVATAR_ACT_KIND,
+  ...BROWSER_ACT_KIND,
+  ...BROWSER_LIVE_ACT_KIND,
+  ...MAC_TERMINAL_ACT_KIND,
+  ...TERMINAL_ACT_KIND,
+  ...UPDATE_ACT_KIND,
+  ...VOICE_RUNTIME_ACT_KIND,
+  ...WINDOW_SURFACE_ACT_KIND,
+} as const;
+
+export type PlatformPortActKind =
+  (typeof PLATFORM_PORT_ACT_KIND)[keyof typeof PLATFORM_PORT_ACT_KIND];
+
+/**
+ * The handshake that hands a window's act port to main, as oRPC's Electron
+ * adapter has it: the page posts one end of a channel to its own window with
+ * `REQUEST`, and the preload forwards it to main on `CHANNEL`.
+ */
+export const ACT_PORT = {
+  REQUEST: "luke:act-port",
+  CHANNEL: "app:act-port",
+} as const;
+
+/** A window message as the preload hears it: what was posted, by whom, and the ports it carried. */
+export interface ActPortMessage<Port, Source> {
+  readonly data: unknown;
+  readonly source: Source | null;
+  readonly ports: readonly Port[];
+}
+
+/**
+ * The preload's listener for the page's act port: the first port the page
+ * posts to itself with the handshake is forwarded to main, and every later
+ * one is ignored, so one page holds one port for its life. A reload runs the
+ * preload again, and the new page forwards its own.
+ */
+export function actPortForwarder<Port, Source>(
+  self: Source,
+  forward: (port: Port) => void,
+): (message: ActPortMessage<Port, Source>) => void {
+  let forwarded = false;
+  return (message) => {
+    if (forwarded || message.source !== self || message.data !== ACT_PORT.REQUEST) return;
+    const [port] = message.ports;
+    if (port === undefined) return;
+    forwarded = true;
+    forward(port);
+  };
+}

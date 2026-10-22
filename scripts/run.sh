@@ -64,10 +64,8 @@ done
 # The preview stands in for production through the one development override
 # the build honours (`LUKE_ACCOUNT_BASE_URL`, apps/desktop/src/main/bootstrap.ts),
 # which the voice socket follows; a packaged build ignores both. The preview's
-# Neon branch is its own database: a copy of production's that its first build
-# cut down to the team's workspaces (apps/web/server/README.md), so the account
-# there is your own with every session signed out, and no cron tick runs on a
-# preview.
+# Neon branch is its own database, so the account there starts empty, and no
+# cron tick runs on a preview.
 if [[ $use_preview == true ]]; then
     if [[ -z $preview_address ]]; then
         luke_require_command gh

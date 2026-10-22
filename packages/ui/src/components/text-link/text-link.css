@@ -75,8 +75,16 @@
     transition: opacity var(--luke-duration-hover) ease;
   }
 
-  .luke-text-link:is(:hover, :focus-visible) .luke-text-link-out {
+  .luke-text-link:focus-visible .luke-text-link-out {
     opacity: 1;
+  }
+
+  /* Note that the pointer lights it only where there is a hover, because
+     iOS plays a first tap as a hover, which a change it draws spends. */
+  @media (hover: hover) {
+    .luke-text-link:hover .luke-text-link-out {
+      opacity: 1;
+    }
   }
 
   .luke-text-link[data-variant="body"] {

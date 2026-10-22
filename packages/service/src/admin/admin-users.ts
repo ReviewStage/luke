@@ -1,17 +1,20 @@
 import type { DatabaseServices } from "@luke/database/core/query";
-import { Clock, Effect } from "effect";
-import type { AdminViewer } from "./admin-access.js";
+import type {
+  AdminSignIn,
+  AdminUserList,
+  AdminUserListRow,
+} from "@luke/features/admin-answer-wire";
 import {
-  ADMIN_ERROR,
-  ADMIN_HTTP_STATUS,
   type AdminMetricsScope,
   type AdminMetricsWindow,
+  type AdminUsersQuery,
   adminMetricsScope,
   adminMetricsWindow,
   adminUsersSearch,
-  errorResponse,
-  jsonResponse,
-} from "./http.js";
+} from "@luke/features/admin-wire";
+import { Clock, Effect } from "effect";
+import type { AdminViewer } from "./admin-access.js";
+import { ADMIN_REFUSAL, type AdminRefusal } from "./http-effect.js";
 import { type AdminSeamEffect, unavailableSeam } from "./seam.js";
 
 /**
@@ -41,44 +44,9 @@ export function searchLikePattern(term: string): string {
   return `%${term.replace(/[\\%_]/g, "\\$&")}%`;
 }
 
-export interface AdminUserListRow {
-  id: string;
-  name: string;
-  email: string;
-  /** The avatar URL the sign-in provider gave the account, when it gave one. */
-  image: string | null;
-  admin: boolean;
-  /** When the account was created, in epoch milliseconds. */
-  createdAt: number;
-  /** Window days with a hosted-usage row; zero for an account never active. */
-  activeDays: number;
-  /** The account's most recent active day inside the window, if any. */
-  lastActiveDay: string | null;
-  /**
-   * When the account last touched the service at all, in epoch milliseconds,
-   * as `lastSeenInstant` folds it. Null for an account whose sessions have
-   * all been pruned and which never touched the hosted tier.
-   */
-  lastSeenAt: number | null;
-  calls: number;
-  /** Whether the viewing admin starred this account, theirs alone to see. */
-  favorite: boolean;
-}
-
-export interface AdminUserList {
-  generatedAt: number;
-  windowDays: number;
-  /** Every account the scope — and the search, when one rode the read — covers, counted past the row bound. */
-  total: number;
-  /** The bound `rows` was read under, so the page can word a truncation. */
-  limit: number;
-  /** The term the rows and total were filtered by, echoed so the page words the answer it shows. */
-  search: string | undefined;
-  rows: AdminUserListRow[];
-}
-
 export interface AdminUserListSource {
   total: number;
+  signIn: AdminSignIn;
   rows: readonly AdminUserListRow[];
 }
 
@@ -115,12 +83,13 @@ export function buildAdminUserList(
     total: source.total,
     limit: ADMIN_USERS_LIMIT,
     search,
+    signIn: source.signIn,
     rows: [...source.rows],
   };
 }
 
 export interface AdminUsersOptions {
-  request: Request;
+  query: AdminUsersQuery;
   /** The signed-in admin the roster is read for: the favorites are theirs. */
   viewer: AdminViewer;
   /** Reads the roster as one viewer sees it: the favorites are theirs. */
@@ -140,31 +109,24 @@ export interface AdminUsersOptions {
  */
 export function handleAdminUsers(
   options: AdminUsersOptions,
-): Effect.Effect<Response, never, DatabaseServices> {
-  const { request } = options;
+): Effect.Effect<AdminUserList, AdminRefusal, DatabaseServices> {
+  const { query } = options;
 
-  const windowDays = adminMetricsWindow(request.url);
-  if (windowDays === undefined) {
-    return Effect.succeed(errorResponse(ADMIN_HTTP_STATUS.BAD_REQUEST, ADMIN_ERROR.INVALID_WINDOW));
-  }
+  const windowDays = adminMetricsWindow(query.window);
+  if (windowDays === undefined) return Effect.fail(ADMIN_REFUSAL.INVALID_WINDOW);
 
-  const search = adminUsersSearch(request.url);
-  if (search === undefined) {
-    return Effect.succeed(errorResponse(ADMIN_HTTP_STATUS.BAD_REQUEST, ADMIN_ERROR.INVALID_SEARCH));
-  }
+  const search = adminUsersSearch(query.search);
+  if (search === undefined) return Effect.fail(ADMIN_REFUSAL.INVALID_SEARCH);
 
   return Effect.flatMap(Clock.currentTimeMillis, (now) =>
     options
       .readUsers(
         now,
-        adminMetricsScope(request.url),
+        adminMetricsScope(query.scope),
         options.viewer.userId,
         windowDays,
         search.term,
       )
-      .pipe(
-        Effect.map((users) => jsonResponse(ADMIN_HTTP_STATUS.OK, users)),
-        Effect.catchCause((cause) => unavailableSeam("admin users read failed", cause)),
-      ),
+      .pipe(Effect.catchCause((cause) => unavailableSeam("admin users read failed", cause))),
   );
 }

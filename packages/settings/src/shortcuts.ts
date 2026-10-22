@@ -1,11 +1,13 @@
 /**
  * shortcuts.ts -- the window's keyboard shortcuts: one table the menu bar, the renderer's keymap, the hovers, and the Keyboard shortcuts page all read.
  *
- * Every shortcut but Escape and the Inbox's J and K holds Command, the way a
- * Mac app's own chords do, so none can be the talk or stop key: those take
- * the machine, and Command chords belong to whichever app is frontmost. J
- * and K are a letter alone, as Linear's and Superhuman's are, answered only
- * where the press is not typing, and the menu bar never offers them. Each is a command the window runs and
+ * Every shortcut but Escape, the Inbox's and Chat's J and K, and the tab switcher's
+ * ⌃Tab holds Command, the way a
+ * Mac app's own chords do, since Command chords belong to whichever app is
+ * frontmost. J
+ * and K are a letter alone, as Linear's and Superhuman's are, and R, which
+ * replies to an agent's words selected as GitHub's R quotes them, answered
+ * only where the press is not typing, and the menu bar never offers them. Each is a command the window runs and
  * a chord that reaches it; the menu bar shows the chord beside the command's
  * name, and a click there sends the command to the window, which runs it
  * exactly as the key does. The key itself is the renderer's to read: Chromium
@@ -28,7 +30,9 @@ export const APP_COMMAND = {
   NEW_TASK: "new-task",
   COPY_PLAN: "copy-plan",
   COPY_LINK: "copy-link",
-  ARCHIVE_TASK: "archive-plan",
+  COMMENT_ON_SELECTION: "comment-on-selection",
+  // Note that Mark done keeps Archive's id, because it took Archive's place and its chord, so the menu bar's item and any saved use of the id still reach it.
+  MARK_TASK_DONE: "archive-plan",
   DELETE_TASK: "delete-plan",
   PREVIOUS_TASK: "previous-plan",
   NEXT_TASK: "next-plan",
@@ -59,21 +63,25 @@ export const APP_COMMAND = {
   FIND_PREVIOUS: "find-previous",
   EXIT_SETTINGS: "exit-settings",
   EXIT_VERSION_HISTORY: "exit-version-history",
-  HOME: "home",
   INBOX: "inbox",
   INBOX_LIST: "inbox-list",
   PREVIOUS_INBOX_ITEM: "previous-inbox-item",
   NEXT_INBOX_ITEM: "next-inbox-item",
+  CHAT: "chat",
+  CHAT_LIST: "chat-list",
+  PREVIOUS_CHAT_CHANNEL: "previous-chat-channel",
+  NEXT_CHAT_CHANNEL: "next-chat-channel",
+  NEXT_UNREAD_CHAT_CHANNEL: "next-unread-chat-channel",
   TOGGLE_INBOX_ITEM_READ: "toggle-inbox-item-read",
+  REPLY_TO_SELECTION: "reply-to-selection",
   EXIT_AGENT_PAGE: "exit-agent-page",
   EXIT_PERSON_PAGE: "exit-person-page",
-  FACTORY: "factory",
-  EXIT_FACTORY: "exit-factory",
+  ASK_LUKE: "ask-luke",
   AUTOMATIONS: "automations",
   EXIT_AUTOMATIONS: "exit-automations",
-  ISSUES: "issues",
-  EXIT_ISSUES: "exit-issues",
-  NEW_ISSUE: "new-issue",
+  EXIT_BOARD: "exit-board",
+  ADMIN: "admin",
+  EXIT_ADMIN: "exit-admin",
   BACK: "back",
   FORWARD: "forward",
   SEND_FEEDBACK: "send-feedback",
@@ -90,9 +98,9 @@ export const APP_COMMAND = {
   ORDER_TASKS_BY_NAME: "order-tasks-by-name",
   SHOW_MY_TASKS: "show-my-tasks",
   SHOW_EVERYONES_TASKS: "show-everyones-tasks",
-  SHOW_ARCHIVED_TASKS: "show-archived-tasks",
-  HIDE_ARCHIVED_TASKS: "hide-archived-tasks",
   INSERT_PICTURE: "insert-picture",
+  NEXT_RECENT_TAB: "next-recent-tab",
+  PREVIOUS_RECENT_TAB: "previous-recent-tab",
 } as const;
 
 export type AppCommand = (typeof APP_COMMAND)[keyof typeof APP_COMMAND];
@@ -112,14 +120,17 @@ export type MenuCommand = keyof typeof MENU_COMMAND_LABELS;
 
 /**
  * The commands ⌘K alone offers, by the name it gives them: the sidebar's
- * view of its tasks, which its View options menu sets too, and Factory,
- * which the sidebar's row opens, so no chord or menu bar item spends a key
- * on them. Factory keeps no chord while it is an experiment, so ⇧⌘F stays
- * free for a find across everything; ⌘K offers it only while the account
- * has it on, since its command is offered nothing otherwise.
+ * view of its tasks, which its View options menu sets too, and Chat, which
+ * the sidebar's row opens, so no chord or menu bar item spends a key on
+ * them. Chat keeps no chord while it is an experiment, so ⇧⌘F stays free
+ * for a find across everything; ⌘K offers it only while the account has it
+ * on, since its command is offered nothing otherwise. Admin is an admin's
+ * alone, so it spends no chord, and ⌘K offers it only to an admin, as its
+ * sidebar row stands only for one.
  */
 const PALETTE_COMMAND_LABELS = {
-  [APP_COMMAND.FACTORY]: "Factory",
+  [APP_COMMAND.CHAT]: "Chat",
+  [APP_COMMAND.ADMIN]: "Admin",
   [APP_COMMAND.GROUP_TASKS_BY_REPOSITORY]: "Group tasks by repository",
   [APP_COMMAND.GROUP_TASKS_BY_CREATOR]: "Group tasks by creator",
   [APP_COMMAND.LIST_TASKS_UNGROUPED]: "Show tasks in one list",
@@ -128,8 +139,6 @@ const PALETTE_COMMAND_LABELS = {
   [APP_COMMAND.ORDER_TASKS_BY_NAME]: "Order tasks by name",
   [APP_COMMAND.SHOW_MY_TASKS]: "Show my tasks",
   [APP_COMMAND.SHOW_EVERYONES_TASKS]: "Show everyone's tasks",
-  [APP_COMMAND.SHOW_ARCHIVED_TASKS]: "Show archived tasks",
-  [APP_COMMAND.HIDE_ARCHIVED_TASKS]: "Hide archived tasks",
 } as const;
 
 export type PaletteCommand = keyof typeof PALETTE_COMMAND_LABELS;
@@ -150,7 +159,10 @@ export type KeyedCommand = Exclude<AppCommand, MenuCommand | PaletteCommand>;
  * with Command held, which the keymap leaves to the field. `unshifted` is the
  * character the same key types without Shift where `key` needs it on a US
  * keyboard, and `aria` the key's name where `aria-keyshortcuts` cannot spell
- * it as its character.
+ * it as its character. `placed` marks a punctuation key a plain chord reads
+ * by its place, because Shift, which a plain chord may hold, turns it into
+ * another character (`;` into `:`, `/` into `?`); a Command chord still reads
+ * its character, as the menu bar does.
  */
 interface ShortcutKey {
   accelerator: string;
@@ -160,6 +172,7 @@ interface ShortcutKey {
   editsText?: true;
   unshifted?: string;
   aria?: string;
+  placed?: true;
 }
 
 export const SHORTCUT_KEY = {
@@ -179,6 +192,9 @@ export const SHORTCUT_KEY = {
   J: { accelerator: "J", glyph: "J", key: "j", code: "KeyJ" },
   I: { accelerator: "I", glyph: "I", key: "i", code: "KeyI" },
   U: { accelerator: "U", glyph: "U", key: "u", code: "KeyU" },
+  R: { accelerator: "R", glyph: "R", key: "r", code: "KeyR" },
+  // A bare V is Files changed's own, marking the file stood on viewed; no app command holds it.
+  V: { accelerator: "V", glyph: "V", key: "v", code: "KeyV" },
   // ⌘L is New task's own, opening its Linear chip from the name field; no app command holds it.
   L: { accelerator: "L", glyph: "L", key: "l", code: "KeyL" },
   ZERO: { accelerator: "0", glyph: "0", key: "0", code: "Digit0" },
@@ -199,13 +215,16 @@ export const SHORTCUT_KEY = {
     editsText: true,
   },
   COMMA: { accelerator: ",", glyph: ",", key: ",", code: "Comma" },
-  SLASH: { accelerator: "/", glyph: "/", key: "/", code: "Slash" },
+  // ⇧/, the key `?` is typed on, is Files changed's own sheet of its keys, read by its place.
+  SLASH: { accelerator: "/", glyph: "/", key: "/", code: "Slash", placed: true },
   // A bare ; and ⇧; are Files changed's own fold keys, stage-cli's, read by their place.
-  SEMICOLON: { accelerator: ";", glyph: ";", key: ";", code: "Semicolon" },
+  SEMICOLON: { accelerator: ";", glyph: ";", key: ";", code: "Semicolon", placed: true },
   // Note that Return is ⏎ rather than ↩, because the system face draws ⏎ as
   // the Mac's own Return mark, centred on the capitals as ⌘ is, and has no ↩:
   // a ↩ is borrowed from another face and sits off the line beside it.
   ENTER: { accelerator: "Enter", glyph: "⏎", key: "Enter", code: "Enter" },
+  // ⌃Tab and ⌃⇧Tab are the tab switcher's own; a bare Tab moves focus, as everywhere.
+  TAB: { accelerator: "Tab", glyph: "⇥", key: "Tab", code: "Tab" },
   ESCAPE: { accelerator: "Escape", glyph: "Esc", key: "Escape", code: "Escape" },
   OPEN_BRACKET: { accelerator: "[", glyph: "[", key: "[", code: "BracketLeft" },
   CLOSE_BRACKET: { accelerator: "]", glyph: "]", key: "]", code: "BracketRight" },
@@ -253,8 +272,12 @@ function modifierGlyph(name: string): string {
  * `plain` chord is a letter alone too, which the keymap answers itself, but
  * only where the press is not typing into a field, and which no menu item
  * carries, since a menu's bare key would take the letter from every field.
- * Control joins only the system's own ⌃⌘F, since a Control chord is
- * otherwise a text field's caret move.
+ * Control joins only the system's own ⌃⌘F, and the `switching` chords,
+ * since a Control chord is otherwise a text field's caret move. A
+ * `switching` chord is Control and its key without Command, ⌃Tab as every
+ * browser's and editor's tab switcher has it: the switcher answers it
+ * itself, from the press to the ⌃'s release (`tab-switcher.tsx` in
+ * `@luke/panel`), so the keymap leaves it, as it leaves the layered Escape.
  */
 export interface ShortcutChord {
   key: ShortcutKey;
@@ -263,11 +286,12 @@ export interface ShortcutChord {
   shift?: true;
   bare?: true;
   plain?: true;
+  switching?: true;
 }
 
-/** Whether a chord is pressed without Command: the window's layered Escape, or a letter alone. */
+/** Whether a chord is pressed without Command: the window's layered Escape, a letter alone, or the tab switcher's ⌃Tab. */
 function commandless(chord: ShortcutChord): boolean {
-  return chord.bare === true || chord.plain === true;
+  return chord.bare === true || chord.plain === true || chord.switching === true;
 }
 
 /** One command as the menu, the hover, and the shortcuts page name it, and the chord that runs it. */
@@ -294,7 +318,8 @@ export interface AppShortcut {
  * Every shortcut. The chords are the ones Mac devtools already taught: ⌘N and ⌘, everywhere,
  * ⌥⌘B for the secondary sidebar as VS Code and Cursor have it, ⌘/ for the
  * shortcuts as ChatGPT has it, ⌘[ and ⌘] for back and forward as Finder and
- * Safari have them, ⇧⌘H for home as Finder has it, ⇧⌘⏎ to fill the window
+ * Safari have them, ⌃Tab and ⌃⇧Tab through the tabs used last as VS Code
+ * and Chrome have them, ⇧⌘⏎ to fill the window
  * with a pane as iTerm and Warp have it, ⇧⌘← and ⇧⌘→ to move the focused tab along its strip, the
  * keys VS Code's Move Editor Left and Right end in, ⌘T to open a tab, ⌘W
  * to close the tab chosen, ⇧⌘T to reopen the tab closed last, and ⇧⌘W to
@@ -303,7 +328,8 @@ export interface AppShortcut {
  * speaker beside it, ⌘K for the command palette as Linear, Slack, and
  * Raycast have it, ⌘J for the terminal as VS Code and Cursor have the
  * panel that holds it, ⌥⌘K to mention a File tab's selected lines in the
- * agent's message box, beside the palette's ⌘K, ⌘F to find, and ⌘G and ⇧⌘G to step through what it
+ * agent's message box, beside the palette's ⌘K, ⌥⌘M to comment on a plan's
+ * words selected as Google Docs has it, ⌘F to find, and ⌘G and ⇧⌘G to step through what it
  * found, as every Mac app has them, and ⌘+, ⌘−, and ⌘0 to zoom as every
  * browser has them.
  *
@@ -318,8 +344,12 @@ export const APP_SHORTCUTS = {
   [APP_COMMAND.COPY_PLAN]: { label: "Copy plan", chord: { key: SHORTCUT_KEY.C, shift: true } },
   // Note that ⇧⌘C, Linear's chord for a link, was Copy plan's first, so a link takes ⌥⌘C, where macOS copies a thing's address (Finder's Copy as Pathname).
   [APP_COMMAND.COPY_LINK]: { label: "Copy link", chord: { key: SHORTCUT_KEY.C, option: true } },
-  [APP_COMMAND.ARCHIVE_TASK]: {
-    label: "Archive task",
+  [APP_COMMAND.COMMENT_ON_SELECTION]: {
+    label: "Comment on selection",
+    chord: { key: SHORTCUT_KEY.M, option: true },
+  },
+  [APP_COMMAND.MARK_TASK_DONE]: {
+    label: "Mark done",
     chord: { key: SHORTCUT_KEY.A, shift: true },
   },
   [APP_COMMAND.DELETE_TASK]: {
@@ -405,7 +435,6 @@ export const APP_SHORTCUTS = {
     label: "Exit version history",
     chord: { key: SHORTCUT_KEY.ESCAPE, bare: true },
   },
-  [APP_COMMAND.HOME]: { label: "Home", chord: { key: SHORTCUT_KEY.H, shift: true } },
   [APP_COMMAND.INBOX]: { label: "Inbox", chord: { key: SHORTCUT_KEY.I, shift: true } },
   [APP_COMMAND.INBOX_LIST]: {
     label: "Back to inbox list",
@@ -423,6 +452,31 @@ export const APP_SHORTCUTS = {
     label: "Mark inbox item as read or unread",
     chord: { key: SHORTCUT_KEY.U, plain: true },
   },
+  [APP_COMMAND.CHAT_LIST]: {
+    label: "Back to chat list",
+    chord: { key: SHORTCUT_KEY.ESCAPE, bare: true },
+    experiment: EXPERIMENT.CHAT,
+  },
+  // Note that Chat's K and J are the Inbox's own keys, because the two never stand at once and the keymap runs whichever is offered.
+  [APP_COMMAND.PREVIOUS_CHAT_CHANNEL]: {
+    label: "Previous chat channel",
+    chord: { key: SHORTCUT_KEY.K, plain: true },
+    experiment: EXPERIMENT.CHAT,
+  },
+  [APP_COMMAND.NEXT_CHAT_CHANNEL]: {
+    label: "Next chat channel",
+    chord: { key: SHORTCUT_KEY.J, plain: true },
+    experiment: EXPERIMENT.CHAT,
+  },
+  [APP_COMMAND.NEXT_UNREAD_CHAT_CHANNEL]: {
+    label: "Next unread chat channel",
+    chord: { key: SHORTCUT_KEY.J, plain: true, shift: true },
+    experiment: EXPERIMENT.CHAT,
+  },
+  [APP_COMMAND.REPLY_TO_SELECTION]: {
+    label: "Reply to selection",
+    chord: { key: SHORTCUT_KEY.R, plain: true },
+  },
   [APP_COMMAND.EXIT_AGENT_PAGE]: {
     label: "Exit agent page",
     chord: { key: SHORTCUT_KEY.ESCAPE, bare: true },
@@ -431,36 +485,29 @@ export const APP_SHORTCUTS = {
     label: "Exit profile",
     chord: { key: SHORTCUT_KEY.ESCAPE, bare: true },
   },
-  [APP_COMMAND.EXIT_FACTORY]: {
-    label: "Exit factory",
-    chord: { key: SHORTCUT_KEY.ESCAPE, bare: true },
-    experiment: EXPERIMENT.FACTORY,
+  // Note that Luke takes ⇧⌘K beside the palette's ⌘K, whose first entry is Ask Luke, rather than ⇧⌘L, which macOS gives its Search With Google service.
+  [APP_COMMAND.ASK_LUKE]: {
+    label: "Ask Luke",
+    chord: { key: SHORTCUT_KEY.K, shift: true },
+    experiment: EXPERIMENT.OPERATOR,
   },
   [APP_COMMAND.AUTOMATIONS]: {
     label: "Automations",
     chord: { key: SHORTCUT_KEY.U, shift: true },
-    experiment: EXPERIMENT.AUTOMATIONS,
   },
   [APP_COMMAND.EXIT_AUTOMATIONS]: {
     label: "Exit automations",
     chord: { key: SHORTCUT_KEY.ESCAPE, bare: true },
-    experiment: EXPERIMENT.AUTOMATIONS,
   },
-  [APP_COMMAND.ISSUES]: {
-    label: "Issues",
-    chord: { key: SHORTCUT_KEY.K, shift: true },
-    experiment: EXPERIMENT.ISSUES,
-  },
-  [APP_COMMAND.EXIT_ISSUES]: {
-    label: "Exit issues",
+  [APP_COMMAND.EXIT_BOARD]: {
+    label: "Exit tasks",
     chord: { key: SHORTCUT_KEY.ESCAPE, bare: true },
-    experiment: EXPERIMENT.ISSUES,
   },
-  [APP_COMMAND.NEW_ISSUE]: {
-    label: "New issue",
-    chord: { key: SHORTCUT_KEY.C, plain: true },
-    experiment: EXPERIMENT.ISSUES,
+  [APP_COMMAND.EXIT_ADMIN]: {
+    label: "Exit admin",
+    chord: { key: SHORTCUT_KEY.ESCAPE, bare: true },
   },
+
   [APP_COMMAND.BACK]: { label: "Back", chord: { key: SHORTCUT_KEY.OPEN_BRACKET } },
   [APP_COMMAND.FORWARD]: { label: "Forward", chord: { key: SHORTCUT_KEY.CLOSE_BRACKET } },
   [APP_COMMAND.COMMAND_PALETTE]: { label: "Command palette", chord: { key: SHORTCUT_KEY.K } },
@@ -476,6 +523,17 @@ export const APP_SHORTCUTS = {
   [APP_COMMAND.INSERT_PICTURE]: {
     label: "Insert image",
     chord: { key: SHORTCUT_KEY.I, option: true },
+  },
+  // Note that ⌃Tab is a desktop app's alone, because a browser keeps it for its own tabs.
+  [APP_COMMAND.NEXT_RECENT_TAB]: {
+    label: "Next recent tab",
+    chord: { key: SHORTCUT_KEY.TAB, control: true, switching: true },
+    capability: HOST_CAPABILITY.DESKTOP_APP,
+  },
+  [APP_COMMAND.PREVIOUS_RECENT_TAB]: {
+    label: "Previous recent tab",
+    chord: { key: SHORTCUT_KEY.TAB, control: true, shift: true, switching: true },
+    capability: HOST_CAPABILITY.DESKTOP_APP,
   },
 } as const satisfies Record<KeyedCommand, AppShortcut>;
 
@@ -506,23 +564,27 @@ export const APP_SHORTCUT_GROUPS = [
       APP_COMMAND.NEW_TASK,
       APP_COMMAND.COPY_PLAN,
       APP_COMMAND.COPY_LINK,
-      APP_COMMAND.ARCHIVE_TASK,
+      APP_COMMAND.COMMENT_ON_SELECTION,
+      APP_COMMAND.MARK_TASK_DONE,
       APP_COMMAND.DELETE_TASK,
       APP_COMMAND.EXIT_VERSION_HISTORY,
-      APP_COMMAND.HOME,
+      APP_COMMAND.ASK_LUKE,
       APP_COMMAND.INBOX,
       APP_COMMAND.INBOX_LIST,
       APP_COMMAND.PREVIOUS_INBOX_ITEM,
       APP_COMMAND.NEXT_INBOX_ITEM,
       APP_COMMAND.TOGGLE_INBOX_ITEM_READ,
-      APP_COMMAND.ISSUES,
-      APP_COMMAND.EXIT_ISSUES,
-      APP_COMMAND.NEW_ISSUE,
+      APP_COMMAND.CHAT_LIST,
+      APP_COMMAND.PREVIOUS_CHAT_CHANNEL,
+      APP_COMMAND.NEXT_CHAT_CHANNEL,
+      APP_COMMAND.NEXT_UNREAD_CHAT_CHANNEL,
+      APP_COMMAND.REPLY_TO_SELECTION,
       APP_COMMAND.EXIT_AGENT_PAGE,
       APP_COMMAND.EXIT_PERSON_PAGE,
-      APP_COMMAND.EXIT_FACTORY,
       APP_COMMAND.AUTOMATIONS,
       APP_COMMAND.EXIT_AUTOMATIONS,
+      APP_COMMAND.EXIT_BOARD,
+      APP_COMMAND.EXIT_ADMIN,
     ],
   },
   {
@@ -551,6 +613,8 @@ export const APP_SHORTCUT_GROUPS = [
     commands: [
       APP_COMMAND.BACK,
       APP_COMMAND.FORWARD,
+      APP_COMMAND.NEXT_RECENT_TAB,
+      APP_COMMAND.PREVIOUS_RECENT_TAB,
       APP_COMMAND.PREVIOUS_TASK,
       APP_COMMAND.NEXT_TASK,
     ],
@@ -567,6 +631,155 @@ export const APP_SHORTCUT_GROUPS = [
     ],
   },
 ] as const satisfies readonly { title: string; commands: readonly KeyedCommand[] }[];
+
+/**
+ * What a key does in Files changed, the Pull request tab's view of its files.
+ * Its keys are stage-cli's own, a letter alone each or ⇧ with one, and answer
+ * only where the press lands inside the view and is not typing
+ * (`changes-list.tsx` in `@luke/panel`), so none is an app command: the
+ * window's keymap never sees them, no menu item carries them, and J and K
+ * keep the Inbox's meaning everywhere else.
+ */
+export const FILES_CHANGED_KEY = {
+  NEXT_FILE: "files-changed-next-file",
+  PREVIOUS_FILE: "files-changed-previous-file",
+  TOGGLE_FILE: "files-changed-toggle-file",
+  TOGGLE_ALL_FILES: "files-changed-toggle-all-files",
+  LET_GO: "files-changed-let-go",
+  MARK_VIEWED: "files-changed-mark-viewed",
+  MINIMIZE_COMMENTS: "files-changed-minimize-comments",
+  SHOW_SHORTCUTS: "files-changed-show-shortcuts",
+  TOGGLE_TREE: "files-changed-toggle-tree",
+} as const;
+
+export type FilesChangedKey = (typeof FILES_CHANGED_KEY)[keyof typeof FILES_CHANGED_KEY];
+
+/** One of Files changed's keys as its sheet and the Keyboard shortcuts page name it, and the chord that runs it. */
+interface FilesChangedShortcut {
+  label: string;
+  chord: ShortcutChord;
+}
+
+/**
+ * Files changed's keys: the one table the view's handler matches a press
+ * against, and its `?` sheet and the Keyboard shortcuts page list, so what
+ * is listed is what answers. Escape lets go of the file stood on only while
+ * one is, since otherwise it is the window's layered Escape, V answers
+ * only once the member's viewed marks are read, I only where Minimize
+ * inline comments can be turned, and ⇧F shows or hides the file tree
+ * beside the list, as its bar's toggle does.
+ */
+export const FILES_CHANGED_SHORTCUTS = {
+  [FILES_CHANGED_KEY.NEXT_FILE]: {
+    label: "Next file",
+    chord: { key: SHORTCUT_KEY.J, plain: true },
+  },
+  [FILES_CHANGED_KEY.PREVIOUS_FILE]: {
+    label: "Previous file",
+    chord: { key: SHORTCUT_KEY.K, plain: true },
+  },
+  [FILES_CHANGED_KEY.TOGGLE_FILE]: {
+    label: "Collapse or expand file",
+    chord: { key: SHORTCUT_KEY.SEMICOLON, plain: true },
+  },
+  [FILES_CHANGED_KEY.TOGGLE_ALL_FILES]: {
+    label: "Collapse or expand all files",
+    chord: { key: SHORTCUT_KEY.SEMICOLON, plain: true, shift: true },
+  },
+  [FILES_CHANGED_KEY.LET_GO]: {
+    label: "Clear file focus",
+    chord: { key: SHORTCUT_KEY.ESCAPE, bare: true },
+  },
+  [FILES_CHANGED_KEY.MARK_VIEWED]: {
+    label: "Toggle viewed and go to next file",
+    chord: { key: SHORTCUT_KEY.V, plain: true },
+  },
+  [FILES_CHANGED_KEY.MINIMIZE_COMMENTS]: {
+    label: "Minimize or show inline comments",
+    chord: { key: SHORTCUT_KEY.I, plain: true },
+  },
+  [FILES_CHANGED_KEY.SHOW_SHORTCUTS]: {
+    label: "Show keyboard shortcuts",
+    chord: { key: SHORTCUT_KEY.SLASH, plain: true, shift: true },
+  },
+  [FILES_CHANGED_KEY.TOGGLE_TREE]: {
+    label: "Show or hide file tree",
+    chord: { key: SHORTCUT_KEY.F, plain: true, shift: true },
+  },
+} as const satisfies Record<FilesChangedKey, FilesChangedShortcut>;
+
+/**
+ * Files changed's keys as its `?` sheet lists them, in stage-cli's groups,
+ * every key in exactly one; the Keyboard shortcuts page lists them in this
+ * order under one Files changed group.
+ */
+export const FILES_CHANGED_SHORTCUT_GROUPS = [
+  { title: "General", keys: [FILES_CHANGED_KEY.SHOW_SHORTCUTS] },
+  {
+    title: "Navigation",
+    keys: [
+      FILES_CHANGED_KEY.NEXT_FILE,
+      FILES_CHANGED_KEY.PREVIOUS_FILE,
+      FILES_CHANGED_KEY.TOGGLE_FILE,
+      FILES_CHANGED_KEY.TOGGLE_ALL_FILES,
+      FILES_CHANGED_KEY.LET_GO,
+    ],
+  },
+  {
+    title: "Review",
+    keys: [FILES_CHANGED_KEY.MARK_VIEWED, FILES_CHANGED_KEY.MINIMIZE_COMMENTS],
+  },
+  { title: "Panels", keys: [FILES_CHANGED_KEY.TOGGLE_TREE] },
+] as const satisfies readonly { title: string; keys: readonly FilesChangedKey[] }[];
+
+/** The Keyboard shortcuts page's group of Files changed's keys, and its settings search's words for them. */
+export const FILES_CHANGED_GROUP_TITLE = "Files changed";
+
+/** Files changed's keys in the order its sheet lists them, as the Keyboard shortcuts page lists them under one group. */
+export const FILES_CHANGED_KEYS_LISTED: readonly FilesChangedKey[] =
+  FILES_CHANGED_SHORTCUT_GROUPS.flatMap((group) => group.keys);
+
+/** Every one of Files changed's keys, in the order the table declares them. */
+export const FILES_CHANGED_KEYS: readonly FilesChangedKey[] = Object.values(FILES_CHANGED_KEY);
+
+/**
+ * What a key does in Chapters, the Pull request tab's view of its chapters,
+ * as ReviewStage's chapter navigator answers them: ← and → step to the
+ * previous and the next chapter, and ⇧V marks every file of the chapter
+ * viewed, or unmarks them all. They answer only where the press lands inside
+ * the view and is not typing (`agent-chapters-tab.tsx` in `@luke/panel`),
+ * past the chapter's own Files changed list, whose keys come first and none
+ * of which these share, so none is an app command.
+ */
+export const CHAPTERS_KEY = {
+  PREVIOUS_CHAPTER: "chapters-previous-chapter",
+  NEXT_CHAPTER: "chapters-next-chapter",
+  MARK_CHAPTER_VIEWED: "chapters-mark-chapter-viewed",
+} as const;
+
+export type ChaptersKey = (typeof CHAPTERS_KEY)[keyof typeof CHAPTERS_KEY];
+
+/** Chapters' keys: the one table the view's handler matches a press against, and the Keyboard shortcuts page lists, in this order. */
+export const CHAPTERS_SHORTCUTS = {
+  [CHAPTERS_KEY.PREVIOUS_CHAPTER]: {
+    label: "Previous chapter",
+    chord: { key: SHORTCUT_KEY.LEFT, plain: true },
+  },
+  [CHAPTERS_KEY.NEXT_CHAPTER]: {
+    label: "Next chapter",
+    chord: { key: SHORTCUT_KEY.RIGHT, plain: true },
+  },
+  [CHAPTERS_KEY.MARK_CHAPTER_VIEWED]: {
+    label: "Toggle chapter viewed",
+    chord: { key: SHORTCUT_KEY.V, plain: true, shift: true },
+  },
+} as const satisfies Record<ChaptersKey, FilesChangedShortcut>;
+
+/** The Keyboard shortcuts page's group of Chapters' keys, and its settings search's words for them. */
+export const CHAPTERS_GROUP_TITLE = "Chapters";
+
+/** Every one of Chapters' keys, in the order the table declares them, which the Keyboard shortcuts page lists. */
+export const CHAPTERS_KEYS: readonly ChaptersKey[] = Object.values(CHAPTERS_KEY);
 
 /** Every command, in the order the table declares them. */
 const APP_COMMANDS: readonly AppCommand[] = Object.values(APP_COMMAND);
@@ -642,8 +855,8 @@ export function shortcutAccelerator(chord: ShortcutChord): string {
  * Any chord's glyphs as the window draws them, one per key: the modifiers in
  * the order macOS writes them, ⌃⌥⇧⌘, then the key. It reads Electron's
  * accelerator, the one spelling the window's chords (`shortcutAccelerator`)
- * and the system-wide keys Settings stores share, so the two are drawn by one
- * rule: a key the window's table names takes its glyph, ⏎ for Return and ⌫
+ * share, so every chord is drawn by one rule: a key the window's table names
+ * takes its glyph, ⏎ for Return and ⌫
  * for Delete, and any other, Space or a letter, its name.
  */
 export function shortcutGlyphs(accelerator: string): readonly string[] {
@@ -654,11 +867,6 @@ export function shortcutGlyphs(accelerator: string): readonly string[] {
   const unknown = [...held].filter((glyph) => !MODIFIER_GLYPHS.some((each) => each === glyph));
   const ordered = MODIFIER_GLYPHS.filter((glyph) => held.has(glyph));
   return [...unknown, ...ordered, KEY_GLYPHS.get(key) ?? key];
-}
-
-/** Any chord as words, its glyphs set tight as a menu prints a key equivalent: ⇧⌘I, ⌥Space, Esc. */
-export function shortcutLabel(accelerator: string): string {
-  return shortcutGlyphs(accelerator).join("");
 }
 
 /** The chord as `aria-keyshortcuts` spells it. */
@@ -693,7 +901,8 @@ interface ShortcutKeyPress {
  * Whether a key press is the chord: Command, unless the chord goes without, and exactly the chord's other
  * modifiers, and the key. The character is read where it can be,
  * which is what the menu bar matches too, and the physical key where Option
- * has changed the character. A key with an unshifted character answers
+ * has changed the character, or where a plain chord's key is read by its
+ * place because Shift changes its character. A key with an unshifted character answers
  * either character, Shift held or not, because which of the two needs Shift
  * is the keyboard layout's to say.
  */
@@ -703,7 +912,9 @@ export function shortcutMatches(chord: ShortcutChord, event: ShortcutKeyPress): 
   const shiftFree = chord.key.unshifted !== undefined;
   if (event.altKey !== (chord.option === true)) return false;
   if (!shiftFree && event.shiftKey !== (chord.shift === true)) return false;
-  if (event.altKey) return event.code === chord.key.code;
+  if (event.altKey || (chord.plain === true && chord.key.placed === true)) {
+    return event.code === chord.key.code;
+  }
   const pressed = event.key.toLowerCase();
   return pressed === chord.key.key.toLowerCase() || pressed === chord.key.unshifted;
 }
@@ -716,9 +927,26 @@ export function commandForKey(
   return commands.find((command) => shortcutMatches(APP_SHORTCUTS[command].chord, event));
 }
 
+/** The Files changed key whose chord a key press is, or nothing. */
+export function filesChangedKeyFor(event: ShortcutKeyPress): FilesChangedKey | undefined {
+  return FILES_CHANGED_KEYS.find((key) =>
+    shortcutMatches(FILES_CHANGED_SHORTCUTS[key].chord, event),
+  );
+}
+
+/** The Chapters key whose chord a key press is, or nothing. */
+export function chaptersKeyFor(event: ShortcutKeyPress): ChaptersKey | undefined {
+  return CHAPTERS_KEYS.find((key) => shortcutMatches(CHAPTERS_SHORTCUTS[key].chord, event));
+}
+
 /** Whether the keymap leaves the chord to the window's own Escape, which steps back a layer at a time. */
 export function shortcutLayered(chord: ShortcutChord): boolean {
   return chord.bare === true;
+}
+
+/** Whether the keymap leaves the chord to the tab switcher, which holds it until the ⌃ is let go. */
+export function shortcutSwitching(chord: ShortcutChord): boolean {
+  return chord.switching === true;
 }
 
 /** Whether a field taking typing already answers the chord, so it is left to the field: a key it edits with, or a letter alone. */

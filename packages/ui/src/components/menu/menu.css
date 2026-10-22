@@ -8,14 +8,32 @@
    never inside it. */
 
 @layer components {
+  /* Held, an element a long press opens a menu on shows the menu rather
+     than iOS's own callout over a link or a picture in it. */
+  [data-long-press] {
+    -webkit-touch-callout: none;
+  }
+
+  /* Under a finger, nor a selection of its words, which iOS starts on a
+     hold of its own that races the menu's; a mouse still drags across a
+     row's words to copy them. */
+  @media (pointer: coarse) {
+    [data-long-press] {
+      -webkit-user-select: none;
+      user-select: none;
+    }
+  }
+
   .luke-menu {
     position: fixed;
-    z-index: 20;
+    z-index: var(--luke-z-menu);
     display: flex;
     flex-direction: column;
     min-width: 196px;
     max-width: 280px;
-    max-height: calc(100vh - 2 * var(--luke-space-8));
+    /* What can be seen, so a long menu scrolls above a phone's keyboard
+       rather than running on behind it (`tokens/viewport.css`). */
+    max-height: calc(var(--luke-stage-height) - 2 * var(--luke-space-8));
     overflow-x: hidden;
     overflow-y: auto;
     padding: var(--luke-menu-inset);
@@ -163,6 +181,13 @@
     text-overflow: ellipsis;
   }
 
+  /* Under a finger, on a phone held at arm's length, no smaller than 12px. */
+  @media (pointer: coarse) {
+    .luke-menu-item-detail {
+      font-size: 12px;
+    }
+  }
+
   /* A row's shortcut at its end, the way a system menu prints a chord. */
   .luke-menu-item-hint {
     display: inline-flex;
@@ -173,6 +198,14 @@
     color: var(--luke-color-text-subtle);
     font-size: var(--luke-type-caption-size);
     white-space: nowrap;
+  }
+
+  /* Under a finger a hint that is a chord alone is not drawn, so the
+     row's words keep its room; a hint of words still is. */
+  @media (hover: none) and (pointer: coarse) {
+    .luke-menu-item-hint:has(> kbd:only-child) {
+      display: none;
+    }
   }
 
   /* The end slot is one glyph wide, so a name ends where every other does;

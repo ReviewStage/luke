@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
+import * as Sentry from "@sentry/effect";
 import { Effect, Fiber, Layer, Logger } from "effect";
 import { HttpRouter, HttpServerResponse } from "effect/http";
 import { recordingSentry, sentOfType } from "../testing/sentry-transport.js";
@@ -185,4 +186,75 @@ it.effect("a web function answers before its report has left, and keeps awake un
     );
     assert.deepEqual(exceptionTypes(sentry.sent), ["RangeError"]);
   }),
+);
+
+it.effect(
+  "a request's address reaches Sentry with its query's values and its credentials redacted",
+  () =>
+    Effect.gen(function* () {
+      const sentry = recordingSentry();
+      const workspace = "1b480a3c-828f-4dee-b9e3-444eafa20fe3";
+      const invite = "fixture".repeat(6);
+      yield* Effect.gen(function* () {
+        const context = yield* Effect.context<never>();
+        const { handler, dispose } = HttpRouter.toWebHandler(
+          Layer.mergeAll(
+            HttpRouter.add("GET", "/api/auth/callback/:provider", HttpServerResponse.text("in")),
+            HttpRouter.add(
+              "GET",
+              "/api/workspaces/:id/invites/:invite",
+              HttpServerResponse.text("in"),
+            ),
+          ),
+          { disableLogger: true },
+        );
+        for (const address of [
+          `https://luke.test/api/auth/callback/github?code=fixture-oauth-code&state=fixture-oauth-state&${invite}=1`,
+          `https://luke.test/api/workspaces/${workspace}/invites/${invite}`,
+        ]) {
+          yield* Effect.promise(() => handler(new Request(address), context));
+        }
+        yield* Effect.promise(() => dispose());
+      }).pipe(Effect.provide(sentry.layer));
+      const spans = sentOfType(sentry.sent, "span").map((item) => item.text);
+      const sent = (words: string) => spans.some((text) => text.includes(words));
+      assert.ok(
+        sent("/api/auth/callback/github?code=[redacted]&state=[redacted]&[redacted]=[redacted]"),
+      );
+      assert.ok(sent(`/api/workspaces/${workspace}/invites/[redacted]`));
+      assert.ok(!sent("fixture-oauth") && !sent(invite));
+    }),
+);
+
+it.effect(
+  "an error reaches Sentry with its request's and its breadcrumbs' addresses redacted",
+  () =>
+    Effect.gen(function* () {
+      const sentry = recordingSentry();
+      const callback = "https://luke.test/api/auth/callback/github?code=fixture-oauth-code";
+      yield* Effect.gen(function* () {
+        // Note that the request is attached as Sentry's HTTP and request-data integrations attach the one an eve root answers.
+        yield* Effect.sync(() => {
+          Sentry.addIntegration(Sentry.requestDataIntegration());
+          Sentry.getIsolationScope().setSDKProcessingMetadata({
+            normalizedRequest: { url: callback, query_string: "code=fixture-oauth-code" },
+          });
+          Sentry.addBreadcrumb({ category: "http", data: { url: callback } });
+        });
+        yield* Effect.exit(Effect.withErrorReporting(Effect.fail(new TypeError("refused"))));
+      }).pipe(Effect.provide(sentry.layer));
+      // Note that the request and the breadcrumbs are read apart, because the event's context lines quote this file.
+      const [event] = sentOfType(sentry.sent, "event").map((item) => item.text);
+      const { request, breadcrumbs } = JSON.parse(event ?? "{}");
+      assert.deepEqual(
+        { request: [request.url, request.query_string], breadcrumb: breadcrumbs[0].data.url },
+        {
+          request: [
+            "https://luke.test/api/auth/callback/github?code=[redacted]",
+            "code=[redacted]",
+          ],
+          breadcrumb: "https://luke.test/api/auth/callback/github?code=[redacted]",
+        },
+      );
+    }),
 );

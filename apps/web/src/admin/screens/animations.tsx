@@ -1,4 +1,6 @@
 import type { FaceMotion } from "@luke/brand";
+import { CARD_GAP } from "@luke/panel/admin/charts/stat-card";
+import { AdminPage } from "@luke/panel/admin/chrome/page-header";
 import {
   ALIGN,
   Card,
@@ -21,7 +23,6 @@ import {
   indexAnimationAssets,
 } from "@luke/ui/admin-animations";
 import { useEffect, useRef } from "react";
-import { AdminPage, type ViewerAccount } from "../chrome/page-header";
 
 /**
  * The committed motion SVGs, inlined into the bundle at build time. The glob
@@ -93,13 +94,13 @@ function AnimationCard({ entry }: { entry: AnimationEntry }): React.JSX.Element 
             {formatCycleSeconds(entry.cycleMs)} cycle
           </Text>
         </Inline>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-2 gap-(--luke-space-12)">
           {PREVIEW_VARIANTS.map((variant) => {
             const markup = variants?.get(variant);
             return markup === undefined ? (
               <div
                 key={variant}
-                className={`${PREVIEW_FRAME} grid place-items-center border border-dashed border-(--luke-color-border) px-2 text-center`}
+                className={`${PREVIEW_FRAME} grid place-items-center border border-dashed border-(--luke-color-border) px-(--luke-space-8) text-center`}
               >
                 <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
                   No committed asset
@@ -133,13 +134,7 @@ function AnimationCard({ entry }: { entry: AnimationEntry }): React.JSX.Element 
  * time — so the local sign-in press is the only gate standing before it, the
  * same first-visit consent every other view starts behind.
  */
-export function AnimationsScreen({
-  account,
-  onSignOut,
-}: {
-  account: ViewerAccount | undefined;
-  onSignOut: () => void;
-}): React.JSX.Element {
+export function AnimationsScreen(): React.JSX.Element {
   // SMIL loops answer to neither `--luke-face-motion` nor `prefers-reduced-motion`,
   // so the page holds them still itself wherever the reader asked the system
   // for less motion, following the setting as it changes.
@@ -160,10 +155,10 @@ export function AnimationsScreen({
   }, []);
 
   return (
-    <AdminPage title="Animations" account={account} onSignOut={onSignOut} controls={null}>
+    <AdminPage title="Animations" controls={null}>
       <div
         ref={previewsRef}
-        className="mt-8 grid gap-4 min-[560px]:grid-cols-2 min-[880px]:grid-cols-3"
+        className={`grid ${CARD_GAP} min-[560px]:grid-cols-2 min-[880px]:grid-cols-3`}
       >
         {ANIMATION_ROSTER.map((entry) => (
           <AnimationCard key={entry.motion} entry={entry} />

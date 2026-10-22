@@ -78,6 +78,35 @@ test("an integration's answer names its kept pictures and the ones it left out, 
   );
 });
 
+test("a browser call's screenshots are named by their place among its steps, each as the transcript kept it, and a screenshot from before they were kept names none", () => {
+  const shot = (extra: Record<string, unknown>) => ({
+    action: "screenshot",
+    status: "done",
+    tab: "tab-1",
+    image: { mime: "image/jpeg", width: 1280, height: 800 },
+    ...extra,
+  });
+  const answer = {
+    status: "ran",
+    steps: [
+      shot({ picture: MEMBERS }),
+      { action: "click", status: "done", tab: "tab-1" },
+      shot({}),
+      shot({ omitted: PICTURE_OMISSION.LIMIT, byteCount: 410_000 }),
+      shot({ picture: ACCEPT }),
+    ],
+    skipped: 0,
+    tabs: [],
+  };
+
+  assert.deepEqual(calledPicturesOf("browser", { actions: [] }, answer), [
+    { kept: true, picture: MEMBERS, name: "screenshot-1" },
+    { kept: false, omitted: PICTURE_OMISSION.LIMIT, byteCount: 410_000, name: "screenshot-2" },
+    { kept: true, picture: ACCEPT, name: "screenshot-3" },
+  ]);
+  assert.deepEqual(calledPicturesOf("browser", {}, { status: "not-run", reason: "No." }), []);
+});
+
 test("a call whose answer is no list of blocks, or whose blocks carry no picture, names none", () => {
   assert.deepEqual(calledPicturesOf("bash", { command: "ls" }, { stdout: "a.png\n" }), []);
   assert.deepEqual(

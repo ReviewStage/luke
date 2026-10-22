@@ -1,0 +1,7 @@
+/* The standalone admin page: the site's own sheet, and the utilities the
+   admin screens spell, which live in the panel (`@luke/panel/admin`) rather
+   than under this app's sources. */
+@import "./styles.css";
+@import "@luke/panel/admin/sources.css";
+/* The View options button's hint, the app's own tooltip (`@luke/panel`'s `tooltip.tsx`). */
+@import "@luke/panel/styles/tooltip.css";

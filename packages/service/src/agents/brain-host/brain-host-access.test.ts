@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { Database } from "@luke/database/core/query";
 import { createCodingAgent } from "@luke/database/models/coding-agent-store";
-import { openTaskConversation } from "@luke/database/models/task-store";
 import { conversations } from "@luke/database/schemas/storage";
 import { CONVERSATION_KIND } from "@luke/database/storage-vocabulary";
 import {
@@ -17,7 +16,14 @@ import { Option, Redacted, Result } from "effect";
 import { type AuthFn, ForbiddenError } from "eve/channels/auth";
 import type { SessionAuthContext } from "eve/context";
 import { afterAll, test } from "vitest";
-import { actedForAccount, DEPLOYMENT_PRESENCE, deploymentActor, sessionAuthFor } from "./auth.js";
+import { CODER_DEPLOYMENT_TURNS } from "../coder-host/channel.js";
+import {
+  actedForAccount,
+  DEPLOYMENT_PRESENCE,
+  deploymentActor,
+  lukeAccount,
+  sessionAuthFor,
+} from "./auth.js";
 import {
   BRAIN_HOST_ATTRIBUTE,
   BRAIN_HOST_AUTHENTICATOR,
@@ -27,7 +33,6 @@ import {
   BRAIN_HOST_REFUSAL,
   BRAIN_HOST_TURN,
 } from "./bounds.js";
-import { DEPLOYMENT_TURNS } from "./channel.js";
 import {
   admitConversation,
   claimRuntimeSession,
@@ -228,11 +233,12 @@ test("who reaches the runtime session and the conversation reads from the rows",
 
 /** The deployment acting for an account: admitted for its turns on a message and refused, under its own secret, for everything else. */
 
-const CRON_SECRET = "cron-secret-1";
+const DEPLOYMENT_SECRET = "eve-deployment-secret-1";
 const DEPLOYMENT = {
-  secret: Redacted.make(CRON_SECRET),
-  admits: DEPLOYMENT_TURNS,
+  secret: Redacted.make(DEPLOYMENT_SECRET),
+  admits: CODER_DEPLOYMENT_TURNS,
   presents: DEPLOYMENT_PRESENCE.DEPLOYMENT,
+  streams: true,
 };
 
 /** A request under the deployment's secret naming the account, on the message route, for the kind of turn given. */
@@ -244,7 +250,7 @@ function scheduled(
 ): Request {
   return request(
     path,
-    CRON_SECRET,
+    DEPLOYMENT_SECRET,
     {
       ...(account !== undefined ? { [BRAIN_HOST_HEADER.ACCOUNT]: account } : undefined),
       ...(turn !== undefined ? { [BRAIN_HOST_HEADER.TURN]: turn } : undefined),
@@ -286,17 +292,28 @@ test("the account a principal acts for is its own for a person and the named one
   assert.equal(actedForAccount(laidOver), "user-a");
 });
 
-test("at the door the deployment is admitted for the named account's own conversation and session, and refused for another account's", async () => {
+test("at the door the deployment is admitted for the named account's own conversation and session, and refused for another account's; its spoken ask, its Stop, and its stream read present the deployment itself", async () => {
   const auth = ownedAuth(
     [deploymentActor(DEPLOYMENT), bearerOf("user-a")],
     ownershipOf({ [SESSION_A]: "user-a" }, { [CONVERSATION_ID]: "user-a" }),
   );
+  const deploymentItself = [
+    BRAIN_HOST_AUTHENTICATOR.DEPLOYMENT,
+    BRAIN_HOST_PRINCIPAL_TYPE.DEPLOYMENT,
+    BRAIN_HOST_DEPLOYMENT_PRINCIPAL,
+  ];
+  const presented = (admitted: SessionAuthContext | null | undefined) => [
+    admitted?.authenticator,
+    admitted?.principalType,
+    admitted?.principalId,
+  ];
   const opened = await auth(scheduled("user-a", BRAIN_HOST_TURN.SPOKEN));
-  assert.equal(opened?.principalId, BRAIN_HOST_DEPLOYMENT_PRINCIPAL);
+  assert.deepEqual(presented(opened), deploymentItself);
   assert.equal(actedForAccount(opened ?? null), "user-a");
   const followed = await auth(
     scheduled("user-a", BRAIN_HOST_TURN.SPOKEN, `/eve/v1/session/${SESSION_A}`),
   );
+  assert.deepEqual(presented(followed), deploymentItself);
   assert.equal(actedForAccount(followed ?? null), "user-a");
   assert.equal(
     await refusal(() => auth(scheduled("user-b", BRAIN_HOST_TURN.SPOKEN))),
@@ -304,7 +321,7 @@ test("at the door the deployment is admitted for the named account's own convers
   );
   // The authenticator's own refusal reaches the caller through the door with its reason, not as nobody signed in.
   assert.equal(
-    await refusal(() => auth(scheduled("user-a", BRAIN_HOST_TURN.TYPED))),
+    await refusal(() => auth(scheduled("user-a", undefined))),
     BRAIN_HOST_REFUSAL.NOT_DEPLOYMENT_ACT,
   );
   assert.equal(
@@ -318,7 +335,15 @@ test("at the door the deployment is admitted for the named account's own convers
   const cancelled = await auth(
     scheduled("user-a", undefined, `/eve/v1/session/${SESSION_A}/cancel`),
   );
+  assert.deepEqual(presented(cancelled), deploymentItself);
   assert.equal(actedForAccount(cancelled ?? null), "user-a");
+  // A typed turn's header on a cancel makes it no typed message: the Stop presents the deployment still.
+  assert.deepEqual(
+    presented(
+      await auth(scheduled("user-a", BRAIN_HOST_TURN.TYPED, `/eve/v1/session/${SESSION_A}/cancel`)),
+    ),
+    deploymentItself,
+  );
   assert.equal(
     await refusal(() =>
       auth(scheduled("user-b", undefined, `/eve/v1/session/${SESSION_A}/cancel`)),
@@ -336,6 +361,7 @@ test("at the door the deployment is admitted for the named account's own convers
   const streamed = await auth(
     scheduled("user-a", undefined, `/eve/v1/session/${SESSION_A}/stream`, "GET"),
   );
+  assert.deepEqual(presented(streamed), deploymentItself);
   assert.equal(actedForAccount(streamed ?? null), "user-a");
   assert.equal(
     await refusal(() =>
@@ -355,6 +381,119 @@ test("at the door the deployment is admitted for the named account's own convers
     ),
     BRAIN_HOST_REFUSAL.NOT_DEPLOYMENT_ACT,
   );
+});
+
+test("at the door the deployment's typed ask of Luke, which a comment sent from a browser hands over, is minted as the named account's own principal, the identity that account's bearer is admitted as, with the deployment named only as its carrier, on a conversation and a session that account reaches alone: a teammate's as the teammate's, never the owner's; another account named, or none, is refused", async () => {
+  const bearers = new Map([
+    ["Bearer token-a", "user-a"],
+    ["Bearer token-c", "user-c"],
+  ]);
+  // The owner's conversation and session, which their teammate reaches too, and a stranger does not.
+  const members = new Set(["user-a", "user-c"]);
+  const auth = ownedAuth(
+    [
+      deploymentActor(DEPLOYMENT),
+      lukeAccount(async (incoming) => bearers.get(incoming.headers.get("authorization") ?? "")),
+    ],
+    {
+      reachesSession: async (userId, sessionId) => members.has(userId) && sessionId === SESSION_A,
+      reachesConversation: async (userId, conversationId) =>
+        members.has(userId) && conversationId === CONVERSATION_ID,
+    },
+  );
+  const typedHeaders = {
+    [BRAIN_HOST_HEADER.CONVERSATION]: CONVERSATION_ID,
+    [BRAIN_HOST_HEADER.TURN]: BRAIN_HOST_TURN.TYPED,
+  };
+
+  for (const [account, token] of [
+    ["user-a", "token-a"],
+    ["user-c", "token-c"],
+  ] as const) {
+    // The member's own typed ask over their bearer, as the desktop sends it.
+    const overBearer = await auth(request("/eve/v1/session", token, typedHeaders, "POST"));
+    const opened = await auth(scheduled(account, BRAIN_HOST_TURN.TYPED));
+    const followed = await auth(
+      scheduled(account, BRAIN_HOST_TURN.TYPED, `/eve/v1/session/${SESSION_A}`),
+    );
+    assert.ok(overBearer && opened && followed);
+    assert.equal(overBearer.principalId, account);
+    for (const carried of [opened, followed]) {
+      assert.deepEqual(
+        [carried.authenticator, carried.issuer, carried.principalType, carried.principalId],
+        [
+          overBearer.authenticator,
+          overBearer.issuer,
+          overBearer.principalType,
+          overBearer.principalId,
+        ],
+        account,
+      );
+      assert.deepEqual(carried.attributes, {
+        ...overBearer.attributes,
+        [BRAIN_HOST_ATTRIBUTE.CARRIER]: BRAIN_HOST_DEPLOYMENT_PRINCIPAL,
+      });
+      assert.equal(actedForAccount(carried), account);
+    }
+  }
+
+  assert.equal(
+    await refusal(() => auth(scheduled("user-b", BRAIN_HOST_TURN.TYPED))),
+    BRAIN_HOST_REFUSAL.NOT_OWNER,
+  );
+  assert.equal(
+    await refusal(() =>
+      auth(scheduled("user-b", BRAIN_HOST_TURN.TYPED, `/eve/v1/session/${SESSION_A}`)),
+    ),
+    BRAIN_HOST_REFUSAL.NOT_OWNER,
+  );
+  assert.equal(
+    await refusal(() =>
+      auth(scheduled("user-a", BRAIN_HOST_TURN.TYPED, `/eve/v1/session/${SESSION_NEW}`)),
+    ),
+    BRAIN_HOST_REFUSAL.NOT_OWNER,
+  );
+  assert.equal(
+    await refusal(() => auth(scheduled(undefined, BRAIN_HOST_TURN.TYPED))),
+    BRAIN_HOST_REFUSAL.NO_ACCOUNT,
+  );
+});
+
+test("at the door the deployment's retire of a session, which a delete a browser asked for ends a task's session with, is admitted on the named account's own recorded session and refused on another account's, on one no record attributes, as a read, and for eve's other session controls", async () => {
+  const auth = ownedAuth(
+    [deploymentActor(DEPLOYMENT), bearerOf("user-a")],
+    ownershipOf({ [SESSION_A]: "user-a" }, { [CONVERSATION_ID]: "user-a" }),
+  );
+  const control = (account: string, sessionId: string, route: string, method = "POST") =>
+    request(
+      `/eve/v1/session/${sessionId}/${route}`,
+      DEPLOYMENT_SECRET,
+      { [BRAIN_HOST_HEADER.ACCOUNT]: account },
+      method,
+    );
+
+  const retired = await auth(control("user-a", SESSION_A, "reset"));
+  assert.equal(retired?.principalId, BRAIN_HOST_DEPLOYMENT_PRINCIPAL);
+  assert.equal(actedForAccount(retired ?? null), "user-a");
+  assert.equal(
+    await refusal(() => auth(control("user-b", SESSION_A, "reset"))),
+    BRAIN_HOST_REFUSAL.NOT_OWNER,
+  );
+  assert.equal(
+    await refusal(() => auth(control("user-a", SESSION_NEW, "reset"))),
+    BRAIN_HOST_REFUSAL.NOT_OWNER,
+  );
+  assert.equal(
+    await refusal(() => auth(control("user-a", SESSION_A, "reset", "GET"))),
+    BRAIN_HOST_REFUSAL.NOT_DEPLOYMENT_ACT,
+  );
+  for (const route of ["compact", "clear"]) {
+    assert.equal(
+      await refusal(() => auth(control("user-a", SESSION_A, route))),
+      BRAIN_HOST_REFUSAL.NOT_DEPLOYMENT_ACT,
+      route,
+    );
+  }
 });
 
 test("a session the deployment opened for an account admits that account's own bearer as the same initiator, and another account not at all", async () => {
@@ -396,13 +535,12 @@ test("a session the deployment opened for an account admits that account's own b
   assert.deepEqual(forOther, Result.fail(BRAIN_HOST_REFUSAL.NOT_INITIATOR));
 });
 
-test("a member of a plan's workspace reaches the plan's conversation, its coding agent's, and a subagent's beside either, and is admitted to them; a stranger reaches none", async () => {
+test("a member of a plan's workspace reaches its coding agent's conversation and a subagent's beside it, and is admitted to them; a stranger reaches none", async () => {
   const userA = await database.createUser();
   const teammate = await database.createUser();
   const stranger = await database.createUser();
   const started = await database.run(startTask(userA, { name: "Teammate invitations" }));
   await database.run(joinWorkspace(started.workspaceId, teammate));
-  const task = Option.getOrThrow(await database.run(openTaskConversation(userA, started.id)));
   const agent = Option.getOrThrow(
     await database.run(
       createCodingAgent(userA, {
@@ -416,11 +554,6 @@ test("a member of a plan's workspace reaches the plan's conversation, its coding
       }),
     ),
   ).agent;
-  const taskChild = await insertConversation(database.run, {
-    userId: userA,
-    kind: CONVERSATION_KIND.CHILD,
-    parentConversationId: task.conversationId,
-  });
   const agentChild = await insertConversation(database.run, {
     userId: userA,
     kind: CONVERSATION_KIND.CHILD,
@@ -428,20 +561,20 @@ test("a member of a plan's workspace reaches the plan's conversation, its coding
   });
   const elsewhere = await ownedConversation(userA);
 
-  for (const conversationId of [task.conversationId, agent.conversationId, taskChild, agentChild]) {
+  for (const conversationId of [agent.conversationId, agentChild]) {
     assert.equal(await database.run(conversationReachableBy(teammate, conversationId)), true);
     assert.equal(await database.run(conversationReachableBy(stranger, conversationId)), false);
   }
   assert.equal(await database.run(conversationReachableBy(teammate, elsewhere)), false);
   assert.equal(await database.run(conversationReachableBy(userA, elsewhere)), true);
 
-  const opener = principal(userA, { [BRAIN_HOST_ATTRIBUTE.CONVERSATION]: task.conversationId });
+  const opener = principal(userA, { [BRAIN_HOST_ATTRIBUTE.CONVERSATION]: agent.conversationId });
   const spoken = await database.run(
     admitConversation({ current: principal(teammate), initiator: opener }, CLAIMING),
   );
   assert.ok(Result.isSuccess(spoken));
   assert.equal(spoken.success.caller, teammate);
-  assert.deepEqual(spoken.success.target, { userId: userA, conversationId: task.conversationId });
+  assert.deepEqual(spoken.success.target, { userId: userA, conversationId: agent.conversationId });
   assert.deepEqual(
     await database.run(
       admitConversation({ current: principal(stranger), initiator: opener }, CLAIMING),
@@ -449,21 +582,18 @@ test("a member of a plan's workspace reaches the plan's conversation, its coding
     Result.fail(BRAIN_HOST_REFUSAL.NOT_INITIATOR),
   );
 
-  // The opener who leaves the workspace leaves its task's conversations with it.
-  await database.run(leaveWorkspace(started.workspaceId, userA));
-  for (const conversationId of [task.conversationId, agent.conversationId, taskChild]) {
-    assert.equal(await database.run(conversationReachableBy(userA, conversationId)), false);
-  }
-  assert.equal(await database.run(conversationReachableBy(userA, elsewhere)), true);
-  // A cleared task conversation takes the workers' children delegated from it out of reach.
+  // A cleared agent conversation takes the workers' children delegated from it out of reach.
   await database.run(
     Database.use((db) =>
       db
         .update(conversations)
         .set({ deletedAt: new Date(0) })
-        .where(eq(conversations.id, task.conversationId)),
+        .where(eq(conversations.id, agent.conversationId)),
     ),
   );
-  assert.equal(await database.run(conversationReachableBy(teammate, taskChild)), false);
-  assert.equal(await database.run(conversationReachableBy(teammate, agentChild)), true);
+  assert.equal(await database.run(conversationReachableBy(teammate, agentChild)), false);
+  // The starter who leaves the workspace leaves its agents' conversations with it.
+  await database.run(leaveWorkspace(started.workspaceId, userA));
+  assert.equal(await database.run(conversationReachableBy(userA, agentChild)), false);
+  assert.equal(await database.run(conversationReachableBy(userA, elsewhere)), true);
 });

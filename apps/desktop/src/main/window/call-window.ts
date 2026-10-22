@@ -4,9 +4,8 @@
 
 import fs from "node:fs";
 import type { RunMode } from "@luke/host";
-import { channels } from "@luke/host/bridge";
+import { PUSH } from "@luke/host/contract";
 import type { AvatarViewSignal } from "@luke/voice/avatar-view";
-import type { UnparsedWireValue } from "@luke/wire";
 import { Option, Schema } from "effect";
 import { BrowserWindow, screen, type WebContents } from "electron";
 import {
@@ -17,6 +16,7 @@ import {
   callWindowPosition,
 } from "./call-window-presence";
 import { hardenedWebPreferences, refuseForeignNavigation } from "./hardened-window";
+import { windowPushes } from "./window-pushes";
 
 export interface CallWindowOptions {
   runMode: RunMode;
@@ -105,8 +105,8 @@ export class CallWindow implements CallWindowSurface {
 
   /** The panel's answer to the window's view of the avatar's video. */
   signalAvatarView(signal: AvatarViewSignal): void {
-    // SAFETY: the signal is the structured-clone value `avatarViewSignalFromWire` admitted.
-    this.current()?.webContents.send(channels.onAvatarViewSignal, signal as UnparsedWireValue);
+    const window = this.current();
+    if (window) windowPushes.push(window.webContents, PUSH.AVATAR_VIEW_SIGNAL, signal);
   }
 
   #open(): BrowserWindow {
@@ -148,6 +148,7 @@ export class CallWindow implements CallWindowSurface {
       webPreferences: hardenedWebPreferences({
         preloadPath: this.#options.preloadPath,
         runMode: this.#options.runMode,
+        backgroundThrottling: true,
       }),
     });
     this.#window = window;
@@ -171,7 +172,8 @@ export class CallWindow implements CallWindowSurface {
     // The page is told the window is moving under the pointer, so a hover
     // the drag left on a button is not drawn.
     window.on("move", () => {
-      if (!window.isDestroyed()) window.webContents.send(channels.onCallWindowMoved);
+      if (!window.isDestroyed())
+        windowPushes.push(window.webContents, PUSH.CALL_WINDOW_MOVED, undefined);
     });
     // Only the developer's own drag moves the card's kept place: a move to
     // the frame this side just set, which macOS reports as a move too, is

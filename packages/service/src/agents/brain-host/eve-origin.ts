@@ -2,7 +2,7 @@ import { BRAIN_HOST_ENVIRONMENT } from "./bounds.js";
 
 /**
  * The origin eve answers on: the one the environment names, or the caller's
- * own, since eve answers behind this deployment's `/eve/v1/*` rewrite.
+ * own, since eve answers behind this deployment's `/eve/coder/v1/*` rewrite.
  */
 function eveOrigin(callerOrigin: string): string {
   return process.env[BRAIN_HOST_ENVIRONMENT.EVE_ORIGIN]?.trim() || callerOrigin;

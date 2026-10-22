@@ -1,14 +1,13 @@
 /**
  * host-core.ts -- what every agent's host does the same way: admit a session, claim its conversation, and find a worker's child.
  *
- * The brain host (`../brain-host/host.ts`) and the coding agent's host
- * (`../coder-host/host.ts`) differ in what their agents are for, and each
- * keeps the methods its role alone has. What they share is how a session is
+ * The coding agent's host (`../coder-host/host.ts`) keeps the methods its
+ * role alone has. What every host does the same way is how a session is
  * admitted for a conversation (the standing it runs under: its own, one
  * claiming the conversation as it starts, or a worker's on ownership alone),
  * how a starting session claims the conversation's record, and how a
  * worker's session finds the child conversation its turns are recorded
- * under: built here once, so both hosts are that core and their own role.
+ * under: built here once, so a host is that core and its own role.
  */
 
 import type { DatabaseServices, QueryError } from "@luke/database/core/query";

@@ -1,31 +1,18 @@
-import { HTTP_METHOD, unparsedWire, type WireBoundaryInput } from "@luke/wire";
-import { Effect, type Schema as EffectSchema, Result } from "effect";
+import { Effect } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
-import {
-  type AccountCallEffects,
-  accountBearer,
-  accountCall,
-  callAnswered,
-  sendInSession,
-  sessionBearer,
-} from "./account-call.js";
-import type { AccountSessionToken, AccountToken } from "./account-token.js";
-import {
-  type GitHubConnectAnswer,
-  type GitHubConnection,
-  githubConnectAnswerSchema,
-  githubConnectionAnswerSchema,
-} from "./github-connection-wire.js";
-import { HOSTED_SERVICE_PATH } from "./service-paths.js";
-import { HOSTED_API_ERROR, hostedErrorSchema, readServiceAnswer } from "./service-wire.js";
+import type { CallCredential } from "./account-call.js";
+import type { GitHubConnectAnswer, GitHubConnection } from "./github-connection-wire.js";
+import { askHosted, type HostedClient, type HostedFailure, hostedClient } from "./hosted-link.js";
+import { HOSTED_API_ERROR, type HostedApiError } from "./service-wire.js";
 import type { TaskCallResult } from "./task-client.js";
 import { GITHUB_DISCONNECT_FAILURE, TASK_CALL_FAILURE } from "./tasks-view.js";
 
 /**
  * github-connection-client.ts -- whether the signed-in account has connected its GitHub, and the page that connects it, as the host asks the service for them.
  *
- * Every call is the account call, so the bearer is read fresh per attempt
- * and a 401 is renewed and retried once. Each answers a result, as the
+ * Every call is a procedure of the hosted contract over the account call
+ * (`hosted-link.ts`), so the bearer is read fresh per attempt and a 401 is
+ * renewed and retried once. Each answers a result, as the
  * workspace client's calls do, so a caller tells a service that did not
  * answer apart from an answer it can draw. A disconnect is Better Auth's own
  * unlink on the service, so it carries the Mac's Better Auth session rather
@@ -51,42 +38,47 @@ export type GitHubConnectionCallResult<Answer> = TaskCallResult<
 
 const UNANSWERED = { ok: false, failure: GITHUB_CONNECTION_CALL_FAILURE.UNANSWERED } as const;
 
-/** One call read whole by its schema; anything else is unanswered. */
-function asked<Answer, Encoded>(
-  call: AccountCallEffects,
-  request: Parameters<AccountCallEffects["ask"]>[0],
-  schema: EffectSchema.Codec<Answer, Encoded>,
+/** A procedure's answer as a result; a refusal the caller names is that failure, and anything else unanswered. */
+function asked<Answer>(
+  procedure: Effect.Effect<Answer, HostedFailure, HttpClient.HttpClient>,
+  named: Readonly<Partial<Record<HostedApiError, GitHubConnectionCallFailure>>> = {},
 ): Effect.Effect<GitHubConnectionCallResult<Answer>, never, HttpClient.HttpClient> {
-  return Effect.map(call.ask(request, schema), (answer) =>
-    answer === undefined ? UNANSWERED : ({ ok: true, answer } as const),
-  );
+  return Effect.match(procedure, {
+    onSuccess: (answer) => ({ ok: true, answer }) as const,
+    onFailure: (failed) => {
+      const failure = failed._tag === "HostedRefused" ? named[failed.refusal] : undefined;
+      return failure === undefined ? UNANSWERED : ({ ok: false, failure } as const);
+    },
+  });
 }
 
-export interface HostedGitHubConnectionClientOptions extends AccountToken, AccountSessionToken {
+export interface HostedGitHubConnectionClientOptions {
+  /** What authorizes each call on the signed-in account, read fresh for every attempt. */
+  credential: CallCredential;
+  /** The Mac's own Better Auth session, for the calls that write through Better Auth's organization endpoints. */
+  sessionCredential: CallCredential;
   /** The hosted service origin, without a trailing slash. */
   serviceBaseUrl: string;
   requestTimeoutMs?: number;
 }
 
 export class HostedGitHubConnectionClient {
-  readonly #call: AccountCallEffects;
-  /** The send for the disconnect, under the Mac's session. */
-  readonly #inSession: AccountCallEffects["send"];
+  readonly #hosted: HostedClient;
+  /** The client for the disconnect, under the Mac's session. */
+  readonly #inSession: HostedClient;
 
   constructor(options: HostedGitHubConnectionClientOptions) {
-    this.#call = accountCall({
+    this.#hosted = hostedClient({
       baseUrl: options.serviceBaseUrl,
-      credential: accountBearer(options),
+      credential: options.credential,
       requestTimeoutMs: options.requestTimeoutMs,
     });
-    this.#inSession = sendInSession(
-      accountCall({
-        baseUrl: options.serviceBaseUrl,
-        credential: sessionBearer(options),
-        requestTimeoutMs: options.requestTimeoutMs,
-      }),
-      options,
-    );
+    this.#inSession = hostedClient({
+      baseUrl: options.serviceBaseUrl,
+      credential: options.sessionCredential,
+      requestTimeoutMs: options.requestTimeoutMs,
+      inSession: true,
+    });
   }
 
   /** A new connect intent: the page the browser opens to connect the account's GitHub. */
@@ -95,11 +87,7 @@ export class HostedGitHubConnectionClient {
     never,
     HttpClient.HttpClient
   > {
-    return asked(
-      this.#call,
-      { method: HTTP_METHOD.POST, path: HOSTED_SERVICE_PATH.GITHUB_CONNECT },
-      githubConnectAnswerSchema,
-    );
+    return asked(askHosted(this.#hosted.github.connect, undefined));
   }
 
   /** Whether the account has connected its GitHub, and its login where the service holds one. */
@@ -108,11 +96,7 @@ export class HostedGitHubConnectionClient {
     never,
     HttpClient.HttpClient
   > {
-    return asked(
-      this.#call,
-      { method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.GITHUB_CONNECTION },
-      githubConnectionAnswerSchema,
-    );
+    return asked(askHosted(this.#hosted.github.connection, undefined));
   }
 
   /** The account's GitHub disconnected on the service, answering the connection as it then stands. */
@@ -121,26 +105,8 @@ export class HostedGitHubConnectionClient {
     never,
     HttpClient.HttpClient
   > {
-    const send = this.#inSession;
-    return Effect.gen(function* () {
-      const answer = yield* send({
-        method: HTTP_METHOD.POST,
-        path: HOSTED_SERVICE_PATH.GITHUB_DISCONNECT,
-      });
-      if (!callAnswered(answer)) return UNANSWERED;
-      const payload = unparsedWire(
-        yield* Effect.promise(
-          (): Promise<WireBoundaryInput> => answer.response.json().catch(() => undefined),
-        ),
-      );
-      if (!answer.response.ok) {
-        const refusal = Result.getOrUndefined(readServiceAnswer(hostedErrorSchema)(payload));
-        return refusal === HOSTED_API_ERROR.NOT_PERMITTED
-          ? ({ ok: false, failure: GITHUB_CONNECTION_CALL_FAILURE.NOT_PERMITTED } as const)
-          : UNANSWERED;
-      }
-      const read = Result.getOrUndefined(readServiceAnswer(githubConnectionAnswerSchema)(payload));
-      return read === undefined ? UNANSWERED : ({ ok: true, answer: read } as const);
+    return asked(askHosted(this.#inSession.github.disconnect, undefined), {
+      [HOSTED_API_ERROR.NOT_PERMITTED]: GITHUB_CONNECTION_CALL_FAILURE.NOT_PERMITTED,
     });
   }
 }

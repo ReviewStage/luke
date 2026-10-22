@@ -116,8 +116,14 @@
 
   /* A dense row is one line a control's height: its title in the body's
      type, its description after it on that line, giving way before it. */
+  /* Note that a dense row's layout is its own, so a change inside one,
+     its words cut anew or its acts coming in, lays out that row alone. */
+  :is(.luke-list[data-density="dense"] > .luke-list-row, .luke-list-row[data-density="dense"]) {
+    contain: layout style;
+  }
+
   :is(.luke-list[data-density="dense"] > .luke-list-row, .luke-list-row[data-density="dense"])
-  > .luke-list-row-main {
+    > .luke-list-row-main {
     min-height: var(--luke-control-height);
     padding: 0 var(--luke-space-8);
   }
@@ -140,6 +146,18 @@
     .luke-list-row-description {
     flex: 0 100 auto;
     min-width: 0;
+  }
+
+  /* A dense row's description is a label beside its title, so it fades as
+     the title does (below) rather than ending in an ellipsis. */
+  :is(.luke-list[data-density="dense"] > .luke-list-row, .luke-list-row[data-density="dense"])
+  .luke-list-row-description[data-overflow] {
+    text-overflow: clip;
+  }
+
+  :is(.luke-list[data-density="dense"] > .luke-list-row, .luke-list-row[data-density="dense"])
+    .luke-list-row-description[data-overflow="true"] {
+    mask-image: linear-gradient(to left, transparent, #000 20px); /* off-scale: a label's fade */
   }
 
   :is(.luke-list[data-density="dense"] > .luke-list-row, .luke-list-row[data-density="dense"])
@@ -243,16 +261,16 @@
     font-weight: var(--luke-weight-medium);
   }
 
-  /* A title that fades rather than ending in an ellipsis (a row whose acts
-     come in on hover) fades out over its last few pixels only while it is
-     measured cut short, so a short one ends on its last letter. The mask
-     fades the words themselves, so it reads alike over every fill the row
-     wears. */
-  .luke-list-row-title[data-end="fade"] {
+  /* A title fades rather than ending in an ellipsis, as a browser's tab
+     does, out over its last few pixels only while it is measured cut short,
+     so a short one ends on its last letter; a row whose acts come in on
+     hover reads the cut sliding as they come and go. The mask fades the
+     words themselves, so it reads alike over every fill the row wears. */
+  .luke-list-row-title[data-overflow] {
     text-overflow: clip;
   }
 
-  .luke-list-row-title[data-end="fade"][data-overflow="true"] {
+  .luke-list-row-title[data-overflow="true"] {
     mask-image: linear-gradient(to left, transparent, #000 20px); /* off-scale: a label's fade */
   }
 
@@ -264,6 +282,22 @@
 
   .luke-list-row[data-unread="true"] .luke-list-row-description {
     color: var(--luke-color-text);
+  }
+
+  /* A row whose thing is done with stands back in the palette's quieter
+     inks rather than by fading its words, which still name what it opens
+     and so read at AA (`docs/DESIGN.md`): its title takes the subtle ink,
+     its description and metadata already the muted one. Only its marks,
+     the leading glyph and the attachments its words already say, fade.
+     Its fill, which says it is open or in hand, and its acts stay as they
+     are. */
+  .luke-list-row[data-muted="true"] .luke-list-row-title {
+    color: var(--luke-color-text-subtle);
+  }
+
+  .luke-list-row[data-muted="true"] .luke-list-row-leading,
+  .luke-list-row[data-muted="true"] .luke-list-row-attachments {
+    opacity: 0.45;
   }
 
   .luke-list-row-description,
@@ -309,8 +343,12 @@
   .luke-list-row-lead-label {
     min-width: 0;
     overflow: hidden;
-    text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  /* The name of what a row belongs to fades where its chip cuts it short. */
+  .luke-list-row-lead-label[data-overflow="true"] {
+    mask-image: linear-gradient(to left, transparent, #000 20px); /* off-scale: a label's fade */
   }
 
   /* The title gives way first; past it, the metadata is cut short rather
@@ -373,17 +411,52 @@
     height: var(--luke-space-12);
   }
 
-  .luke-list-row:is(:hover, :has(:focus-visible), [data-current="true"]) .luke-list-row-chevron {
+  .luke-list-row:is(:has(:focus-visible), [data-current="true"]) .luke-list-row-chevron {
     opacity: 1;
   }
 
+  /* Note that the pointer's own reveals, here and below, stand only where
+     there is a hover, because iOS plays a first tap as a hover and spends
+     it on a reveal: the row opens on the second tap alone. */
+  @media (hover: hover) {
+    .luke-list-row:hover .luke-list-row-chevron {
+      opacity: 1;
+    }
+  }
+
+  /* A screen with no hover shows every row's chevron at rest, so a row that
+     goes deeper says so before it is tapped. */
+  @media (hover: none) {
+    .luke-list-row-chevron {
+      opacity: 1;
+    }
+  }
+
   /* Acts offered to the row in hand come in at its end while the pointer
-     rests on the row, it holds the keyboard, or its menu is open, the
-     metadata stepping aside for them; where the metadata stands at the
-     title's line, they stand over its end there, so nothing moves. At rest
-     the press keeps its end inset, since the acts take no room beside it. */
+     rests on the row, it holds the keyboard, or its menu is open, laid over
+     the row's end, the metadata's and the title's alike, on a backdrop of
+     their own: the row's ground under its fill, as the row draws it, faded
+     in over the words they cover (`--luke-list-row-fade`). Coming in or
+     going, they change only what is painted, never where anything stands,
+     so the title keeps its room and its cut, the metadata its box, and the
+     press its edges and its ring. The metadata steps out of sight under
+     them rather than out of the line. */
   .luke-list-row[data-actions="hover"] {
+    --luke-list-row-fill: transparent;
+    /* Note that this is a label's fade, as a cut title's is (above). */
+    --luke-list-row-fade: 20px; /* off-scale: a label's fade */
+
     position: relative;
+  }
+
+  .luke-list-row[data-actions="hover"]:has(button.luke-list-row-main):hover:not(
+    [data-current="true"]
+  ) {
+    --luke-list-row-fill: var(--luke-color-fill-hover);
+  }
+
+  .luke-list-row[data-actions="hover"][data-current="true"] {
+    --luke-list-row-fill: var(--luke-color-fill-strong);
   }
 
   .luke-list-row[data-actions="hover"] .luke-list-row-main {
@@ -394,9 +467,32 @@
     position: absolute;
     inset-block: 0;
     inset-inline-end: 0;
+    isolation: isolate;
+    border-start-end-radius: inherit;
+    border-end-end-radius: inherit;
     opacity: 0;
     pointer-events: none;
     transition: opacity var(--luke-duration-hover) ease;
+  }
+
+  /* The backdrop: opaque where the acts stand, fading in over the words
+     before them, and taking no presses, so the press under its fade is
+     still the row's. Note that it stands a hairline in from the row's
+     edges, where the row's own fill shows alike, so the ring an open menu
+     draws inside the row (above) is never painted over. */
+  .luke-list-row[data-actions="hover"] .luke-list-row-actions::before {
+    content: "";
+    position: absolute;
+    z-index: -1;
+    inset-block: 1px; /* off-scale: the menu ring's hairline */
+    inset-inline: calc(-1 * var(--luke-list-row-fade)) 1px; /* off-scale: the menu ring's hairline */
+    border-start-end-radius: inherit;
+    border-end-end-radius: inherit;
+    background:
+      linear-gradient(var(--luke-list-row-fill), var(--luke-list-row-fill)),
+      var(--luke-list-row-ground, var(--luke-color-ground));
+    mask-image: linear-gradient(to right, transparent, #000 var(--luke-list-row-fade));
+    pointer-events: none;
   }
 
   .luke-list-row[data-actions="hover"][data-meta="title"] .luke-list-row-actions {
@@ -404,59 +500,48 @@
     height: var(--luke-type-label-leading);
   }
 
-  .luke-list-row[data-actions="hover"]:is(:hover, :has(:focus-visible), [data-menu-open="true"])
+  .luke-list-row[data-actions="hover"]:is(:has(:focus-visible), [data-menu-open="true"])
     .luke-list-row-actions {
     opacity: 1;
     pointer-events: auto;
   }
 
+  @media (hover: hover) {
+    .luke-list-row[data-actions="hover"]:hover .luke-list-row-actions {
+      opacity: 1;
+      pointer-events: auto;
+    }
+  }
+
   /* Note that a row offering no acts keeps its metadata, since nothing
      steps in for it. */
   .luke-list-row[data-actions="hover"]:has(.luke-list-row-actions):is(
-    :hover,
     :has(:focus-visible),
     [data-menu-open="true"]
   ) .luke-list-row-meta {
     visibility: hidden;
   }
 
-  /* Where the metadata stands at the row's middle, the acts that come in
-     take their own room at the row's end rather than standing over its
-     words, and the metadata gives its room up to the title: the title is
-     cut where the acts begin, fading out there (above), so a short time
-     never leaves a long name running under Pin and Archive. The acts go at
-     once as the row is let go, so the words coming back never show
-     through them. */
-  .luke-list-row[data-actions="hover"]:not([data-meta="title"]) .luke-list-row-actions {
-    transition: none;
+  @media (hover: hover) {
+    .luke-list-row[data-actions="hover"]:has(.luke-list-row-actions):hover .luke-list-row-meta {
+      visibility: hidden;
+    }
   }
 
-  .luke-list-row[data-actions="hover"]:not([data-meta="title"]):is(
-      :hover,
-      :has(:focus-visible),
-      [data-menu-open="true"]
-    )
-    .luke-list-row-actions {
-    position: static;
-    transition: opacity var(--luke-duration-hover) ease;
-  }
+  /* A screen with no hover never has a row in hand, so each row there keeps
+     its metadata at rest, its acts offered by its menu on a long press
+     (`menu.tsx`), and the open row alone shows its acts over its end, as
+     the row in hand does. */
+  @media (hover: none) {
+    .luke-list-row[data-actions="hover"][data-current="true"] .luke-list-row-actions {
+      opacity: 1;
+      pointer-events: auto;
+    }
 
-  .luke-list-row[data-actions="hover"]:not([data-meta="title"]):has(.luke-list-row-actions):is(
-      :hover,
-      :has(:focus-visible),
-      [data-menu-open="true"]
-    )
-    .luke-list-row-main {
-    padding-inline-end: 0;
-  }
-
-  .luke-list-row[data-actions="hover"]:not([data-meta="title"]):has(.luke-list-row-actions):is(
-      :hover,
-      :has(:focus-visible),
-      [data-menu-open="true"]
-    )
-    .luke-list-row-meta {
-    display: none;
+    .luke-list-row[data-actions="hover"][data-current="true"]:has(.luke-list-row-actions)
+      .luke-list-row-meta {
+      visibility: hidden;
+    }
   }
 
   /* Note that the row holding the keyboard stands over its neighbours,

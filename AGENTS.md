@@ -8,17 +8,17 @@ developer talks a task through with Luke, who writes its plan down as they go.
 | Command | What it does |
 | --- | --- |
 | `./scripts/bootstrap.sh` | Install pinned workspace dependencies |
-| `pnpm check:affected` | The portable checks for what changed since `origin/main`, replayed from cache where they already passed; run before pushing |
-| `./scripts/check.sh` | Every portable repository, type, test, and build check: before a release, for a broad refactor, or on request |
+| `pnpm check:affected` | The portable checks for what changed since `origin/main`, replayed from cache where they already passed; optional before a push, since CI runs every check |
+| `./scripts/check.sh` | Every portable repository, migration, lint, type, and test check: before a release, for a broad refactor, or on request |
 | `./scripts/run.sh` | Launch against live sessions, replacing the running plain instance (`--fixture smoke`, `--keep-running`, `--no-trace`); `--instance <name>` runs a named one beside it, with its own profile, and `--preview` is one named for its Preview |
 | `./scripts/evidence.sh` | Write the fixture PNG under `artifacts/` |
 | `pnpm release:macos` | Local signed, notarized, verified DMG, zip, and update manifest |
 | `pnpm lint:fix` | Repository formatting and safe lint fixes |
 
-CI runs the portable check on Linux alone. The release rehearsal
-(`release.yml`'s `macos-15` job, run on a `v*` tag push or a manual dispatch)
-is the only Mac gate, so a green PR says nothing about the Mac and there is no
-macOS check to wait for.
+CI runs the portable check on Linux alone, and no workflow runs the tests on a
+Mac: the release job (`release.yml`'s `macos-15` job, run on a `v*` tag push or
+a manual dispatch) only builds, signs, notarizes, and verifies the app. A green
+PR says nothing about the Mac and there is no macOS check to wait for.
 
 ## Layout
 
@@ -26,18 +26,18 @@ Application logic lives in `packages/`. An app holds what is specific to
 its platform or deployment and nothing else: Electron's main and preload
 processes, the window and page roots, the Vercel function routes under
 `apps/web/server/routes/`, the deployment shell beside them, the agents' eve
-apps, `apps/luke` and `apps/dev`, and build and release scripts. A React component, hook, or
+apps, `apps/dev`, and build and release scripts. A React component, hook, or
 DOM-free view model lives in `packages/ui` when more than one app can
-mount it, the hosted service's logic in `packages/service`, its contract
-and clients in `packages/features`, and a wire value in `packages/wire`. A
+mount it, the panel every client mounts, the desktop's panel window and the
+web's tab alike, in `packages/panel`, the hosted service's logic in
+`packages/service`, its contract and clients in `packages/features`, and a
+wire value in `packages/wire`. A
 `.ts` module whose imports name no module of its app and no platform
 library (`electron`, `react-dom`, a DOM API, `better-auth`, `eve`,
-`@vercel/*`) is logic and belongs in a package. The logic-lives-in-packages
-check in `scripts/repository-checks.sh` refuses one under
-`apps/desktop/src`, `apps/web/src`, `apps/web/server`, `apps/luke`, or `apps/dev` unless it is shell:
-an app entry in `knip.json`, a `runtimeEdges` row in
-`tools/anti-slop/effect-edges.json`, or a deployment or test-support file
-the check names. A component is placed by review under the same rule.
+`@vercel/*`) is logic and belongs in a package unless it is shell: an app
+entry in `knip.json`, a `runtimeEdges` row in
+`tools/anti-slop/effect-edges.json`, or a deployment or test-support file.
+Review places a module and a component alike under this rule.
 
 ## Never
 
@@ -63,20 +63,51 @@ the check names. A component is placed by review under the same rule.
   on 2026-10-13: the Keyframe session token for a call's own avatar may reach
   the panel window, which runs that session, and never the voice window,
   a Gateway answer or event, app state, a counted event, a trace, or a fixture.
+  And, approved by Dean on 2026-10-16, a Browser tab's page, its address,
+  title, and a still of it go only to the panel that opened the tab, from its
+  view in main (`apps/desktop/src/main/window/browser-views.ts`), never into a
+  trace, a counted event, a fixture, app state, the service, or the voice
+  window; the still is left out of the screen recording, and the title and
+  address the tab draws are masked there as every word is.
+  And, approved by Dean on 2026-10-20, an agent's cloud browser, a Chromium
+  in that agent's own Vercel Sandbox, shows its pages, their live-view frames,
+  address, title, screenshots, and text snapshots to that agent and its workers,
+  the model, the agent's transcript, and the panels of the workspace members who
+  open the task; the service keeps the tab list, each tab's address and title.
+  Amended, approved by Dean on 2026-10-22: the model is handed a small copy of
+  each screenshot, whose base64 is left out of the stored conversation, and the
+  service keeps a full-size copy beside the transcript the call is written to,
+  the agent's or its worker's, as `show_image`'s pictures are
+  (`packages/service/src/agents/browser/browser-tool.ts`), which the stored
+  conversation names by id, which that transcript shows to the members who can
+  open the task, and which is deleted with the conversation, by its purge thirty
+  days after a delete or at once with the account. None of it ever goes into a
+  trace, a counted event, a fixture, or the voice window, and session replay masks
+  the live view and the transcript's screenshots; the cookies a member types into
+  it stay in that agent's sandbox, and its snapshots, for the sandbox's life.
+  Amended, approved by Dean on 2026-10-22: an agent may record its browser as a
+  video (`record` and `stop_recording`), whose frames the recorder in its
+  sandbox writes to that sandbox's disk until the next recording clears them,
+  and whose WebM the service keeps beside the transcript the call is written to
+  as it keeps a screenshot (`packages/service/src/agents/browser/browser-tool.ts`),
+  shown and deleted on the same terms; the model is never handed the video, the
+  transcript's player is left out of session replay, and none of it goes into a
+  trace, a counted event, a fixture, or the voice window.
   And, approved by Charles on 2026-10-16: Sentry's SDKs run with their default
   data collection (`packages/service/src/observability/sentry.ts`, the eve
-  roots' `instrumentation/sentry.ts`, the desktop's `Sentry.init`), so what a
+  roots' `instrumentation/sentry.ts`, the desktop's `Sentry.init`, and the web
+  app's browser SDK, `apps/web/src/app/web-sentry-sdk.ts`, with the desktop
+  renderer's token filters, `@luke/features/sentry-breadcrumbs`), so what a
   request, a log line, a local variable, or an agent's prompt, reply, or tool
   result carries may reach Sentry; a credential among it is replaced only
   where Sentry's denylist catches it by name, and `PRIVACY.md` says so.
 - Session replay records the rendered panel with every word masked
-  (`apps/desktop/src/renderer/session-replay.ts`), so what leaves the machine is
+  (`packages/panel/src/session-replay.ts`), so what leaves the machine is
   layout, not text; an unmasked attribute or a new way of drawing words is what
   would change that.
-- Never push PR media to a branch but `pr-assets`, under `pr-<number>/`
-  (`docs/WORKFLOW.md` step 7). A fresh `pr-assets-<topic>` branch mails a
-  failed Vercel Preview on every push; a push refused because another workspace
-  got there first is fetched, rebased, and pushed again.
+- Never push PR media to a branch but `pr-assets`, under `pr-<number>/`, if
+  you add any; a fresh `pr-assets-<topic>` branch mails a failed Vercel Preview
+  on every push. PR media is not required.
 - Never add to this file (`AGENTS.md`, which `CLAUDE.md` links to) unless the
   user explicitly approved the addition.
 
@@ -91,21 +122,23 @@ past its bound (`packages/database/src/models/abandoned-turns.ts`'s
 `TURN_ABANDON`: an hour after it started, or twenty-five hours for a coding
 agent's turn, whose one turn is its whole run), and ends on Luke's key every
 voice session whose device detached and did not come back within the grace. It
-reads no account's words and runs no model.
+also starts due automation runs, and for coding agents on a member's GitHub
+token it reads their open pull requests' reviews, comments, and checks on that
+token and wakes the agent with them, as the webhook does for the App.
 
 ## Testing
 
 ```
-pnpm check:affected                      # before pushing: the checks for what changed
+pnpm check:affected                      # optional: the checks for what changed
 ./scripts/check.sh                       # CI's checks, bar the Postgres job
 pnpm exec vitest run <path>              # one file
-pnpm --filter @luke/web test:store       # store tests on a real Postgres (CI's postgres job runs it)
 pnpm --filter @luke/web test:agent       # offline brain eval, scripted model, by hand
 ```
 
-`pnpm check:affected` must exit 0 before a push; then push and let CI, which
-runs every check, gate the PR. `check.sh` is the full local run, for a
-release, a broad refactor, or on request, and must exit 0 when it is run.
+Push and let CI, which runs every check, gate the PR. Running the tests you
+touched (`pnpm exec vitest run <path>`) or `pnpm check:affected` before a push
+is optional. `check.sh` is the full local run, for a release, a broad
+refactor, or on request, and must exit 0 when it is run.
 
 The vendored `testing` skill (`.agents/skills/testing`, lobehub's) is the
 testing guide, and the rules below agree with it. Its `bunx vitest` is
@@ -114,7 +147,7 @@ testing guide, and the rules below agree with it. Its `bunx vitest` is
 - Every behavior change ships with a test that fails without it, same PR.
 - Use the smallest layer that catches the bug: a type or lint rule, then a
   test through the module's public export, then a real Postgres or child
-  process (`test:store`, which CI's postgres job runs).
+  process.
 - Tests are hermetic: one process, `TestClock`, a temp dir they made, PGlite.
   No network, personal data, live provider, or real clock. They pass alone
   and in any order.
@@ -139,7 +172,8 @@ testing guide, and the rules below agree with it. Its `bunx vitest` is
   exempt one by extension, because a test body is its own edge
   (`tools/anti-slop/shared/effect-edges.ts`), so review is the check.
 - Goldens change only under `LUKE_UPDATE_FIXTURES=1` through the shared
-  helpers, with the diff explained in the PR.
+  helpers, with the diff explained in the PR. A JSON Schema golden is kept
+  only for a schema a model is shown as a tool's input.
 - Never loosen or skip a test to go green: no `.only`, `.skip`, `.todo`, or
   `it.flakyTest`, which no lint rule refuses either. Fix or delete a flaky
   test. A test that breaks on a refactor because it checks internal
@@ -152,8 +186,7 @@ testing guide, and the rules below agree with it. Its `bunx vitest` is
 
 What the checks hold a test to is narrower than the rules above:
 `anti-slop/no-node-test` refuses `node:test` in TypeScript, so every test runs
-on vitest, and `scripts/repository-checks.sh` refuses a hand-rolled `mkdtemp`
-in a desktop or host test (`temporaryDirectory` instead) and a workspace whose
+on vitest, and `scripts/repository-checks.sh` refuses a workspace whose
 `vitest.config.ts` the root `vitest.config.ts` projects list does not name.
 
 ## Effect idioms
@@ -177,72 +210,19 @@ deliberately.
 
 ### Where an Effect may run
 
-An Effect describes work; only a runtime edge runs one. The edges are listed
-in `tools/anti-slop/effect-edges.json`'s `runtimeEdges`: `apps/desktop/src/main/main.ts`
-(the desktop's one `ManagedRuntime`), `apps/desktop/src/main/services/compose-desktop.ts`
-(the layer that runtime is built from), the renderer root
-`apps/desktop/src/renderer/window-root.tsx` (loaded once per window by each
-window's own entry, the panels' and the voice window's alike, so no two windows
-share a browser registry),
-`packages/panel/src/renderer-runtime.ts` (the module the root's
-runtime is built from: `Atom.runtime`'s layer is built, and `AtomRegistry.get`
-reads it, the moment the root first reaches it, so the edge is here rather than
-at the root that imports it), the renderer's own fiber sites — the
-voice window's `apps/desktop/src/renderer/voice/live-call.ts` and
-`apps/desktop/src/renderer/voice/use-voice-session.ts` — the web's own
-module-scope memoized runtime `apps/web/server/runtime.ts` and the four doors
-that hold its `runWeb`: `apps/web/server/route-effect.ts` (the adaptor every
-function module under `apps/web/server/routes/**` exports its `HttpRouter`
-through, which reads that runtime once per instance and lets the handler it
-builds do its own running), `apps/web/server/voice/function.ts`
-(the voice service, stood for a function instance's life rather than for a
-request, so there is no request fiber to compose it into),
-`apps/web/server/terminal/function.ts` (the terminal relay, stood for a
-function instance's life on the same terms) and
-`apps/web/server/seed-clients.ts` (the OAuth client seeding command, run as
-its own process), each eve root's own module-scope memoized runtime,
-`apps/luke/runtime.ts` and `apps/dev/runtime.ts`, built over the
-same layer (`@luke/service/runtime`'s `webServices`) and holding its
-`runAgent`, the eve project's authored files —
-`apps/luke/agent.ts`, `apps/luke/channels/eve.ts`,
-`apps/luke/hooks/store.ts`, `apps/luke/instructions/prompt.ts`,
-`apps/luke/instructions/seed.ts`, and `apps/luke/tools/brain.ts` — each
-an edge because eve drives them through promise-shaped hooks of its own and
-an authored file is where this deployment runs what it hands eve — and
-`apps/luke/host.ts`, the one module those files share their host through,
-which composes the production seams over `HostedEnvironment` with
-`Effect.runSync` as it loads, because the channel's door takes the
-deployment's secret as a value and the environment read suspends on nothing —
-and the coding-agent eve project's authored files on the same terms —
-`apps/dev/agent.ts`, `apps/dev/channels/eve.ts`,
-`apps/dev/hooks/store.ts`, `apps/dev/instructions/prompt.ts`, and
-`apps/dev/sandbox.ts` (the sandbox selector, which eve calls as a
-promise when a tool first needs the sandbox and which runs the checkout
-there), each an edge because eve drives them through promise-shaped hooks of
-its own, and `apps/dev/host.ts`, the one module those files share their
-host through, composed with `Effect.runSync` as it loads for the same reason
-`apps/luke/host.ts` is. Not
-every seam in `packages/service/src/` is an effect down to its floor:
-`packages/service/src/agents/brain-host/production.ts`'s `spend` is
-the AI SDK's async middleware, and `packages/service/src/agents/brain-host/door.ts`'s
-`SessionOwnership` speaks eve's own `AuthFn<Request>` — two promise-shaped
-foreign boundaries the effects around them compose over rather than
-replace, `apps/web/server/db/migrate.ts` (the migration command, through
-`NodeRuntime.runMain`), `apps/web/scripts/preview-probe.ts` (the deployed-shape
-probe, same terms), and `tools/trace-export/src/cli.ts` (the trace command).
+An Effect describes work; only a runtime edge runs one. The edges themselves
+are the files listed in `tools/anti-slop/effect-edges.json`'s `runtimeEdges`,
+and that file is the source of truth for them.
 `Effect.runPromise`, `Effect.runSync`, `Effect.runFork`, their
 `runPromiseExit`/`runSyncExit`/`runCallback` siblings, and the `…With` form of
-any of them — which is where a `Runtime<R>` went, v4 having removed the type —
-belong nowhere else — everything between the edges returns an Effect and lets its caller
-decide — which the oxlint rule `no-run-promise-outside-edges` enforces against
-that same file's `runtimeEdges`, `runShims`, and `runOnHandedRuntime` lists,
-reading `apps/web/server/runtime.ts`'s own `runWeb` and `webRuntime`, and
-each eve root's `runAgent`, as the runs they are, so a module that holds the edge's runner rather than
-`Effect.runPromise` itself is no less visible to it;
+any of them belong nowhere else — everything between the edges returns an
+Effect and lets its caller decide — which the oxlint rule
+`no-run-promise-outside-edges` enforces against that same file's
+`runtimeEdges`, `runShims`, and `runOnHandedRuntime` lists;
 `no-raw-async-primitives` enforces the equivalent for `setTimeout`,
 `setInterval`, `new Promise`, `AbortController`, and `fs.watch` against its
 `rawAsyncPrimitives` list. A file on those two run lists that is not a runtime
-edge above is a permanent adaptor, listed below with the one thing that keeps
+edge is a permanent adaptor, listed below with the one thing that keeps
 it from ever moving onto the edges themselves; there is no other kind of row
 on those lists, because a shim on its way to deletion is deleted in the same
 PR that finishes the callers it was for, not left as a name on an allowlist.
@@ -278,10 +258,11 @@ PR that finishes the callers it was for, not left as a name on an allowlist.
   strip's two clocks, armed from callbacks belonging to no fiber of their own,
   start on the services the orchestrator was constructed with; the standing
   call's lifecycle is a `forkDetach` and needs no door.
+- **`packages/features/src/hosted-link.ts`** — oRPC's `OpenAPILink` awaits a promise from its `fetch`, so the account call runs there on the services the asking fiber handed it; what would end this row is an Effect transport in oRPC's link.
 - **The test-support edges** — `packages/database/src/testing/sql-client.ts`,
   `packages/database/src/testing/no-database.ts`,
   `packages/database/src/testing/hosted-store-database.ts`,
-  `apps/luke/evals/brain-host.eval.ts`, `apps/dev/evals/coder.eval.ts`, and
+  `apps/dev/evals/coder.eval.ts`, and
   `packages/wire/src/testing/effect.ts` each build a runner (a
   `ManagedRuntime` over a throwaway database, a `SqlClient` that refuses every
   statement) so a suite or an offline eval still written on `node:assert` or a
@@ -345,11 +326,6 @@ reads it: `packages/host/src/acts.ts`,
   host's event loop for as long as it stands, so a store with an automatic
   reset enabled holds its host open for as long as its generation does: mind
   this when the caller is a process that would otherwise exit.
-- A bundle-budget baseline (`apps/desktop/bundle-budget.json`, checked with 5%
-  slack) is re-recorded with `LUKE_UPDATE_BUNDLE_BUDGET=1` by a PR that
-  genuinely needs the room, a feature's or a library's, which states the reason
-  and the size delta in its body. Drift and accidental growth are not a reason:
-  the slack is the speed bump that makes a PR stop and say why.
 
 ## Code style
 
@@ -378,10 +354,20 @@ Conventional Branch 1.1.0 (https://conventionalbranch.org/), both exactly.
 
 ## Merging
 
-To merge a PR, run `gh pr merge --auto` right away, once any manual pre-merge
-step (`docs/WORKFLOW.md` step 3's preview run) is done; the merge queue waits on
-CI, so do not, and do not rebase onto `main` unless it conflicts. In a stack,
-arm a PR only once it targets `main`.
+Do not rebase onto or merge in `main` to bring a branch up to date unless the
+user asks or the branch cannot go on without it: a conflict GitHub reports,
+or a change on `main` the work needs. Being behind `main` is not a reason: CI
+runs on the PR's merge with `main`, and the merge queue tests each PR against
+the latest `main` before it lands, so an up-to-date branch buys nothing and
+costs a rebuild, a re-run of CI, and a force-push. This holds before a push,
+while CI runs, before arming auto-merge, and while a PR waits in the queue.
+Restacking a stack onto the PR beneath it after that PR changed is the one
+routine rebase.
+
+Open a PR ready for review, never as a draft, so CI and review start on it at
+once. To merge a PR, run `gh pr merge --auto` right away; the merge queue waits
+on CI, so do not wait on it yourself, and do not update the branch first. In a
+stack, arm a PR only once it targets `main`.
 
 ## TypeScript
 

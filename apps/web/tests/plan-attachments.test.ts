@@ -2,23 +2,25 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
-import { createTask } from "@luke/database/models/task-store";
+import { PLAN_COMMENT_OUTCOME, startPlanCommentThread } from "@luke/database/models/plan-comments";
+import { createTask, savePlanText } from "@luke/database/models/task-store";
+import { attachment } from "@luke/database/schemas/attachment";
 import { user } from "@luke/database/schemas/auth";
-import { planAttachment } from "@luke/database/schemas/plan-attachment";
-import {
-  fakeWorkspaceSeams,
-  getTestDB,
-  joinWorkspace,
-  openWorkspace,
-} from "@luke/database/testing";
-import { PICTURE_TYPE } from "@luke/features/picture-wire";
+import { getTestDB, joinWorkspace, openWorkspace } from "@luke/database/testing";
+import { CODING_AGENT_ATTACHMENT_TYPE } from "@luke/features/coding-agent-wire";
+import { PICTURE_BOUNDS, PICTURE_TYPE } from "@luke/features/picture-wire";
 import {
   PLAN_ATTACHMENT_BOUNDS,
   PLAN_ATTACHMENT_REFUSAL,
   planAttachmentAnswerSchema,
 } from "@luke/features/plan-attachment-wire";
+import { PLAN_COMMENT_ACTOR, PLAN_COMMENT_SCOPE } from "@luke/features/plan-comment-wire";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "@luke/service/http/http";
+import type { UserIdResolver } from "@luke/service/http/http-effect";
+import { hostedFetch } from "@luke/service/orpc/handler";
 import { modelCatalogOf } from "@luke/service/providers/model-catalog";
+import type { WebServices } from "@luke/service/runtime";
+import { taskFilesProcedures } from "@luke/service/tasks/task-files-procedures";
 import { tasksApp } from "@luke/service/tasks/tasks-app";
 import {
   type OpenedPagePolicy,
@@ -32,7 +34,7 @@ import {
 } from "@luke/service/testing/integration-connect";
 import { unparsedWire } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
-import { Clock, Effect, Layer, Option, Result } from "effect";
+import { Clock, type Context, Effect, Layer, Option, Result } from "effect";
 import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
 
@@ -43,13 +45,15 @@ import { SqlClient } from "effect/sql";
  * to be, never cached on the way; an account outside the workspace keeps
  * and reads nothing, exactly as for a plan that does not exist; bytes that
  * are not the image their label names are refused; and a plan at its bound
- * refuses in band.
+ * refuses in band. An upload is answered by the hosted oRPC router at the
+ * plan's public path, and refuses exactly as the old route did. A file a
+ * comment on the plan carries is served at the same path, under the type
+ * it travelled as, to the same members alone.
  *
  * Synthetic accounts, bearers, and pictures throughout.
  */
 
 const ORIGIN = "https://luke.test";
-const ATTACHMENTS = "/api/plans/attachments";
 const ATTACHMENT = "/api/plans/attachment";
 
 /** A PNG's signature and a few bytes more: all the service reads of a picture. */
@@ -83,18 +87,22 @@ const ask = (request: Request) =>
       modelCatalogOf([]),
       integrationConnectOf(() => CONNECTOR_ASKED_NOTHING),
     );
+    const resolveUserId: UserIdResolver = (incoming) =>
+      Effect.succeed(
+        Option.fromNullishOr(incoming.headers.get("authorization")?.replace("Bearer ", "")),
+      );
     const { handler, dispose } = HttpRouter.toWebHandler(
-      tasksApp({
-        resolveUserId: (incoming) =>
-          Effect.succeed(
-            Option.fromNullishOr(incoming.headers.get("authorization")?.replace("Bearer ", "")),
-          ),
-        workspaces: yield* fakeWorkspaceSeams,
-        eveOrigin: () => undefined,
-      }).pipe(HttpRouter.provideRequest(services)),
+      tasksApp({ resolveUserId }).pipe(HttpRouter.provideRequest(services)),
       { disableLogger: true },
     );
-    const response = yield* Effect.promise(() => handler(request));
+    const keep = hostedFetch({ taskFiles: taskFilesProcedures({ resolveUserId }) });
+    // SAFETY: the upload yields the services provided above alone, which is all a test provides of the web runtime's services.
+    const webServices = (yield* Effect.scoped(
+      Layer.build(services),
+    )) as Context.Context<WebServices>;
+    const response = yield* Effect.promise(() =>
+      request.method === "POST" ? keep(request, webServices) : handler(request),
+    );
     const bytes = new Uint8Array(yield* Effect.promise(() => response.arrayBuffer()));
     yield* Effect.promise(() => dispose());
     return {
@@ -106,14 +114,27 @@ const ask = (request: Request) =>
     } satisfies Answered;
   });
 
-function upload(taskId: string, userId: string, picture: string): Request {
-  const url = new URL(ATTACHMENTS, ORIGIN);
-  url.searchParams.set("id", taskId);
-  return new Request(url, {
+/** An upload as a desktop sends it, to the plan's own public path. */
+function upload(
+  taskId: string,
+  userId: string | undefined,
+  body: string,
+  headers: Readonly<Record<string, string>> = {},
+): Request {
+  return new Request(new URL(`/api/plans/${taskId}/attachments`, ORIGIN), {
     method: "POST",
-    headers: { authorization: `Bearer ${userId}` },
-    body: JSON.stringify({ picture }),
+    headers: {
+      "content-type": "application/json",
+      ...(userId === undefined ? undefined : { authorization: `Bearer ${userId}` }),
+      ...headers,
+    },
+    body,
   });
+}
+
+/** One picture's upload, as JSON. */
+function pictureBody(picture: string): string {
+  return JSON.stringify({ picture });
 }
 
 function read(taskId: string, attachmentId: string, userId: string): Request {
@@ -145,12 +166,57 @@ const openSharedTask = Effect.gen(function* () {
 
 it.layer(getTestDB())("a plan's picture routes", (it) => {
   it.effect(
+    "a file a teammate's comment carries is served to every member as its bytes, and to nobody else",
+    () =>
+      Effect.gen(function* () {
+        const { owner, teammate, outsider, planId: taskId } = yield* openSharedTask;
+        const text = "## Goal\n\nInvites expire in seven days.\n";
+        yield* savePlanText(owner, taskId, text);
+        const pdf = new TextEncoder().encode("%PDF-1.4\n");
+        const from = text.indexOf("seven days");
+        const started = yield* startPlanCommentThread(
+          { actor: PLAN_COMMENT_ACTOR.MEMBER, userId: teammate },
+          taskId,
+          {
+            clientKey: randomUUID(),
+            scope: PLAN_COMMENT_SCOPE.WORDS,
+            quote: "seven days",
+            anchor: { from, to: from + "seven days".length },
+            text,
+            words: "The flow is attached.",
+            attachments: [
+              {
+                name: "flow.pdf",
+                mediaType: CODING_AGENT_ATTACHMENT_TYPE.PDF,
+                data: Buffer.from(pdf).toString("base64"),
+              },
+            ],
+          },
+        );
+        assert.ok(started.status === PLAN_COMMENT_OUTCOME.DONE && "thread" in started.answer);
+        const fileId = started.answer.thread.entries[0]?.files?.[0]?.attachmentId;
+        assert.ok(fileId !== undefined);
+
+        const served = yield* ask(read(taskId, fileId, owner));
+        assert.equal(served.status, HOSTED_HTTP_STATUS.OK);
+        assert.equal(served.contentType, CODING_AGENT_ATTACHMENT_TYPE.PDF);
+        assert.equal(served.cache, "private, no-store");
+        assert.deepEqual(served.policy, SANDBOXED_PAGE);
+        assert.deepEqual([...served.bytes], [...pdf]);
+        assert.equal(
+          (yield* ask(read(taskId, fileId, outsider))).status,
+          HOSTED_HTTP_STATUS.NOT_FOUND,
+        );
+      }),
+  );
+
+  it.effect(
     "a picture a teammate keeps on the plan is served to every member as its bytes, and to nobody else",
     () =>
       Effect.gen(function* () {
         const { owner, teammate, outsider, planId: taskId } = yield* openSharedTask;
 
-        const kept = yield* ask(upload(taskId, teammate, PNG_URL));
+        const kept = yield* ask(upload(taskId, teammate, pictureBody(PNG_URL)));
 
         assert.equal(kept.status, HOSTED_HTTP_STATUS.CREATED);
         const answer = uploaded(kept);
@@ -167,7 +233,7 @@ it.layer(getTestDB())("a plan's picture routes", (it) => {
           HOSTED_HTTP_STATUS.NOT_FOUND,
         );
         assert.equal(
-          (yield* ask(upload(taskId, outsider, PNG_URL))).status,
+          (yield* ask(upload(taskId, outsider, pictureBody(PNG_URL)))).status,
           HOSTED_HTTP_STATUS.NOT_FOUND,
         );
       }),
@@ -178,7 +244,7 @@ it.layer(getTestDB())("a plan's picture routes", (it) => {
       const { owner, planId: taskId } = yield* openSharedTask;
       const mislabelled = PNG_URL.replace("image/png", "image/webp");
 
-      const refused = yield* ask(upload(taskId, owner, mislabelled));
+      const refused = yield* ask(upload(taskId, owner, pictureBody(mislabelled)));
 
       assert.equal(refused.status, HOSTED_HTTP_STATUS.BAD_REQUEST);
       assert.equal(
@@ -188,11 +254,63 @@ it.layer(getTestDB())("a plan's picture routes", (it) => {
     }),
   );
 
+  it.effect(
+    "an upload refuses as the old route did, byte for byte: no bearer before its body is read, a key the upload does not name, and a body past its bound",
+    () =>
+      Effect.gen(function* () {
+        const { owner, planId: taskId } = yield* openSharedTask;
+        const bare = (answered: Answered) => ({
+          status: answered.status,
+          contentType: answered.contentType,
+          cache: answered.cache,
+          text: new TextDecoder().decode(answered.bytes),
+        });
+        const json = "application/json";
+
+        assert.deepEqual(bare(yield* ask(upload(taskId, undefined, '{"picture":7}'))), {
+          status: HOSTED_HTTP_STATUS.UNAUTHORIZED,
+          contentType: json,
+          cache: null,
+          text: '{"error":"invalid-token"}',
+        });
+        assert.deepEqual(
+          bare(yield* ask(upload(taskId, owner, JSON.stringify({ picture: PNG_URL, extra: 1 })))),
+          {
+            status: HOSTED_HTTP_STATUS.BAD_REQUEST,
+            contentType: json,
+            cache: null,
+            text: '{"error":"invalid-request"}',
+          },
+        );
+        assert.deepEqual(
+          bare(
+            yield* ask(
+              upload(taskId, owner, pictureBody(PNG_URL), {
+                "content-length": String(Math.ceil(PICTURE_BOUNDS.MAX_BYTES / 3) * 4 + 1_025),
+              }),
+            ),
+          ),
+          {
+            status: HOSTED_HTTP_STATUS.PAYLOAD_TOO_LARGE,
+            contentType: json,
+            cache: null,
+            text: '{"error":"request-too-large"}',
+          },
+        );
+        assert.deepEqual(bare(yield* ask(upload("not-a-plan", owner, pictureBody(PNG_URL)))), {
+          status: HOSTED_HTTP_STATUS.NOT_FOUND,
+          contentType: json,
+          cache: null,
+          text: '{"error":"not-found"}',
+        });
+      }),
+  );
+
   it.effect("a plan holding its bound of pictures refuses one more in band", () =>
     Effect.gen(function* () {
       const { owner, planId: taskId } = yield* openSharedTask;
       const db = yield* Database;
-      yield* db.insert(planAttachment).values(
+      yield* db.insert(attachment).values(
         Array.from({ length: PLAN_ATTACHMENT_BOUNDS.MAX_PER_PLAN }, () => ({
           taskId: taskId,
           userId: owner,
@@ -203,7 +321,7 @@ it.layer(getTestDB())("a plan's picture routes", (it) => {
         })),
       );
 
-      const refused = yield* ask(upload(taskId, owner, PNG_URL));
+      const refused = yield* ask(upload(taskId, owner, pictureBody(PNG_URL)));
 
       assert.equal(refused.status, HOSTED_HTTP_STATUS.OK);
       assert.deepEqual(uploaded(refused), { refused: PLAN_ATTACHMENT_REFUSAL.TOO_MANY });

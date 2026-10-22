@@ -26,14 +26,15 @@ export const SETTINGS_SEARCH_ROW = {
   UPDATES: "updates",
   CHANGELOG: "changelog",
   SIGN_OUT: "sign-out",
+  /** Profile's GitHub personal access token row, apart from Integrations' own GitHub row, which its provider anchors. */
+  GITHUB_ACCESS: "github-access",
   DELETE_ACCOUNT: "delete-account",
   MICROPHONE: "microphone",
-  TALK_KEY: "talk-key",
-  STOP_KEY: "stop-key",
   PLAN_TEMPLATE: "plan-template",
   CODING_AGENT_MODEL: "coding-agent-model",
   CODING_AGENT_EFFORT: "coding-agent-effort",
   CODING_AGENT_FAST: "coding-agent-fast",
+  CHAPTERS_MODEL: "chapters-model",
   API_KEY_ANTHROPIC: "api-key-anthropic",
   API_KEY_OPENAI: "api-key-openai",
 } as const;
@@ -46,10 +47,10 @@ export const SETTINGS_SEARCH_ROW = {
  * without one.
  */
 export const EXPERIMENT_ANCHOR = {
+  [EXPERIMENT.BROWSER]: "experiment-browser",
   [EXPERIMENT.CHAT]: "experiment-chat",
-  [EXPERIMENT.FACTORY]: "experiment-factory",
-  [EXPERIMENT.AUTOMATIONS]: "experiment-automations",
+  [EXPERIMENT.CODE_REVIEW]: "experiment-code-review",
   [EXPERIMENT.VIDEO_CALLS]: "experiment-video-calls",
-  [EXPERIMENT.ISSUES]: "experiment-issues",
-  [EXPERIMENT.SECTIONS]: "experiment-sections",
+  [EXPERIMENT.INBOX_FIRST]: "experiment-inbox-first",
+  [EXPERIMENT.OPERATOR]: "experiment-operator",
 } as const satisfies Record<Experiment, string>;

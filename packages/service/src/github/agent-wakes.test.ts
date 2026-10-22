@@ -7,25 +7,30 @@ import {
   type CodingAgentLatestTurn,
   createCodingAgent,
   lineSendersOf,
+  recordCodingAgentPublished,
   takeCodingAgentMentionedServers,
   updateCodingAgentBranch,
 } from "@luke/database/models/coding-agent-store";
-import { sentLineId } from "@luke/database/models/ids";
 import { readMessageByClientId } from "@luke/database/models/message-reads";
 import { claimRuntimeSession } from "@luke/database/models/recorded-session";
 import { turns } from "@luke/database/schemas/storage";
 import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import { getTestDB, startTask } from "@luke/database/testing";
-import { CODING_AGENT_BOUNDS } from "@luke/features/coding-agent-wire";
+import {
+  CHECK_SUMMARY,
+  CODING_AGENT_BOUNDS,
+  PULL_REQUEST_STATE,
+} from "@luke/features/coding-agent-wire";
 import { TURN_ORIGIN, TURN_STATUS, unparsedWire, type WireBoundaryInput } from "@luke/wire";
+import { sentLineId } from "@luke/wire/host-ids";
 import { Effect, Option, Stream } from "effect";
 import { test } from "vitest";
 import {
+  type AgentSessions,
   EVE_CANCEL_OUTCOME,
   EVE_RESET_OUTCOME,
   EVE_SEND_OUTCOME,
   type EveMessage,
-  type EveSessions,
 } from "../agents/brain-host/eve-sessions.js";
 import {
   connectWorkspaceGitHub,
@@ -38,6 +43,7 @@ import {
   type AgentWake,
   agentIsWoken,
   agentWakeOf,
+  checksCompletedWakeOf,
   wakeAgents,
 } from "./agent-wakes.js";
 
@@ -48,8 +54,10 @@ import {
  * and nothing else is; a person's review reaches the agent whether or not it
  * is at work, a comment Luke's own App made reaches only an agent idle since
  * before it was made, so an agent's own reply never wakes it, and a failed
- * check only an agent not at work. Over a real dialect, eve a fake at the
- * client's boundary and GitHub a script. Synthetic throughout.
+ * check only an agent not at work; and every check on an agent's head
+ * finished only the agent at work on that head, once GitHub says none is
+ * left to finish. Over a real dialect, eve a fake at the client's boundary
+ * and GitHub a script. Synthetic throughout.
  */
 
 const RELAY = { owner: "Acme", name: "Relay" } as const;
@@ -58,7 +66,7 @@ const LUKE_BOT = "luke-agents[bot]";
 const MADE_AT = Date.parse("2026-10-16T12:00:00Z");
 
 /** One installation per test's workspace, since one installation connects to one workspace and the tests share a database. */
-const INSTALLATIONS: readonly InstallationFixture[] = Array.from({ length: 8 }, (_, index) => ({
+const INSTALLATIONS: readonly InstallationFixture[] = Array.from({ length: 12 }, (_, index) => ({
   id: 8_100 + index,
   login: RELAY.owner,
   accountId: 81_000 + index,
@@ -135,7 +143,7 @@ function turn(settledAt: number | undefined): CodingAgentLatestTurn {
 /** eve's coding-agent service as the deployment reaches it for each account, writing down every message sent. */
 function fakeEve() {
   const sent: { readonly sessionId: string; readonly message: EveMessage }[] = [];
-  const sessions: EveSessions = {
+  const sessions: AgentSessions = {
     open: () =>
       Effect.succeed({ outcome: EVE_SEND_OUTCOME.ACCEPTED, sessionId: `wrun_${randomUUID()}` }),
     send: (sessionId, message) =>
@@ -179,6 +187,54 @@ const openAgent = Effect.gen(function* () {
   );
   return { owner, agent, ref, target: { userId: owner, conversationId: agent.conversationId } };
 });
+
+/** The commit an agent's pull request's head stands at in the checks tests. */
+const HEAD = "0123abcd0123abcd0123abcd0123abcd0123abcd";
+
+/** The agent's turn, still running since before everything below was made, as the relay leaves one mid-turn. */
+const runningTurn = (owner: string, conversationId: string) =>
+  Database.use((db) =>
+    db.insert(turns).values({
+      userId: owner,
+      conversationId,
+      origin: TURN_ORIGIN.TYPED,
+      status: TURN_STATUS.RUNNING,
+      queuedAt: new Date(MADE_AT - 600_000),
+      startedAt: new Date(MADE_AT - 600_000),
+    }),
+  );
+
+/** The agent's row keeping pull request 41 with its head at the commit given, as a read of it leaves the row. */
+const publishedAt = (owner: string, agentId: string, headSha: string) =>
+  recordCodingAgentPublished(owner, agentId, {
+    number: 41,
+    title: "Expire invitations",
+    url: `https://github.com/${RELAY_FULL_NAME}/pull/41`,
+    state: PULL_REQUEST_STATE.OPEN,
+    checks: CHECK_SUMMARY.PENDING,
+    additions: 1,
+    deletions: 0,
+    changedFiles: 1,
+    headSha,
+  });
+
+/** A check run GitHub lists on the head, finished at the instant given with the conclusion given, or still running. */
+function checkRun(conclusion: string | null, at: number) {
+  return conclusion === null
+    ? { status: "in_progress", conclusion: null, completed_at: null }
+    : { status: "completed", conclusion, completed_at: new Date(at).toISOString() };
+}
+
+/** A GitHub that answers the head's check runs and commit statuses from what `held` holds when it is asked. */
+function githubHoldingChecks(held: { checkRuns: object[]; statuses: object[] }) {
+  const commit = `/repos/${RELAY_FULL_NAME}/commits/${HEAD}`;
+  return githubReaching(INSTALLATIONS, undefined, {}, (sent) => {
+    const { pathname } = new URL(sent.url);
+    if (pathname === `${commit}/check-runs`) return Response.json({ check_runs: held.checkRuns });
+    if (pathname === `${commit}/status`) return Response.json({ statuses: held.statuses });
+    return undefined;
+  }).layer;
+}
 
 /** The agent's turn, ended at the instant given, as the relay leaves one. */
 const endedTurn = (owner: string, conversationId: string, settledAt: number) =>
@@ -287,6 +343,93 @@ test("a review submitted, a comment on a pull request, and a failed check suite 
   }
 });
 
+test("a check suite or check run completed, whatever its conclusion, or a commit status set to its outcome, on an agent's branch says its head's checks may all have finished, and nothing else does", () => {
+  const ref = "luke/invites";
+  const suite = (action: string, branch: string | null, conclusion: string | null) => ({
+    action,
+    repository,
+    check_suite: {
+      head_branch: branch,
+      head_sha: HEAD,
+      conclusion,
+      updated_at: new Date(MADE_AT).toISOString(),
+      app: { slug: "github-actions" },
+      pull_requests: [{ number: 41 }],
+    },
+  });
+  const run = (action: string, branch: string | null) => ({
+    action,
+    repository,
+    check_run: {
+      head_sha: HEAD,
+      status: action === "completed" ? "completed" : "in_progress",
+      completed_at: action === "completed" ? new Date(MADE_AT).toISOString() : null,
+      app: { slug: "vercel" },
+      check_suite: { head_branch: branch },
+      pull_requests: [{ number: 41 }],
+    },
+  });
+  const status = (state: string, branches: readonly string[]) => ({
+    state,
+    sha: HEAD,
+    updated_at: new Date(MADE_AT).toISOString(),
+    repository,
+    sender: { login: "buildkite[bot]", type: "Bot" },
+    branches: branches.map((name) => ({ name })),
+  });
+  const finished = {
+    kind: AGENT_WAKE.CHECKS_COMPLETED,
+    repository: RELAY_FULL_NAME,
+    branches: [ref],
+    pullRequest: 41,
+    url: `https://github.com/${RELAY_FULL_NAME}/commit/${HEAD}/checks`,
+    at: MADE_AT,
+    sha: HEAD,
+  };
+  for (const conclusion of ["success", "failure", "neutral"]) {
+    assert.deepEqual(
+      checksCompletedWakeOf("check_suite", unparsedWire(suite("completed", ref, conclusion)), 0),
+      { ...finished, by: "github-actions[bot]" },
+      conclusion,
+    );
+  }
+  assert.deepEqual(checksCompletedWakeOf("check_run", unparsedWire(run("completed", ref)), 0), {
+    ...finished,
+    by: "vercel[bot]",
+  });
+  // A run whose suite names no branch is placed by the pull requests it names.
+  const placedByPull = {
+    ...run("completed", null),
+    check_run: {
+      ...run("completed", null).check_run,
+      check_suite: {},
+      pull_requests: [{ number: 41, head: { ref } }],
+    },
+  };
+  assert.deepEqual(checksCompletedWakeOf("check_run", unparsedWire(placedByPull), 0), {
+    ...finished,
+    by: "vercel[bot]",
+  });
+  assert.deepEqual(
+    checksCompletedWakeOf("status", unparsedWire(status("success", ["main", ref])), 0),
+    { ...finished, pullRequest: undefined, by: "buildkite[bot]" },
+  );
+
+  for (const [event, payload] of [
+    ["check_suite", suite("requested", ref, null)],
+    ["check_suite", suite("completed", "main", "success")],
+    // A fork's branch, which GitHub names as none.
+    ["check_suite", suite("completed", null, "success")],
+    ["check_run", run("created", ref)],
+    ["check_run", run("completed", "release")],
+    ["status", status("pending", [ref])],
+    ["status", status("success", ["main"])],
+    ["pull_request_review", reviewDelivery(ref, "octocat")],
+  ] as const) {
+    assert.equal(checksCompletedWakeOf(event, unparsedWire(payload), 0), undefined, event);
+  }
+});
+
 test("a person's review reaches an agent at work or not, Luke's App's only an agent idle since before it was made, a failed check only an agent idle since before it failed, and an archived agent nothing", () => {
   const review = (by: string): AgentWake => ({
     kind: AGENT_WAKE.REVIEW,
@@ -319,6 +462,12 @@ test("a person's review reaches an agent at work or not, Luke's App's only an ag
     [idleBefore, endedSince, atWork].map((at) => woken(failed, at)),
     [true, false, false],
     "a failed check reaches only an agent that was not watching when it failed",
+  );
+  const finished: AgentWake = { ...failed, kind: AGENT_WAKE.CHECKS_COMPLETED, sha: HEAD };
+  assert.deepEqual(
+    [idleBefore, endedSince, atWork].map((at) => woken(finished, at)),
+    [false, false, true],
+    "every check finished reaches only an agent at work, which waits on them",
   );
   assert.equal(
     agentIsWoken(
@@ -542,6 +691,114 @@ it.layer(getTestDB())("a delivery told to the agents on its pull request", (it) 
         assert.ok(
           cut.includes("&lt;&lt;\n… (cut to fit; read the rest with `gh`)\n</github-review>"),
         );
+      }),
+  );
+
+  it.effect(
+    "every check on its head finished ends the wait of the agent at work on it once, says whether one failed, and a check run again tells it again",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const { owner, agent, ref } = yield* openAgent;
+        yield* runningTurn(owner, agent.conversationId);
+        yield* publishedAt(owner, agent.id, HEAD);
+        const held: { checkRuns: object[]; statuses: object[] } = {
+          checkRuns: [checkRun("success", MADE_AT), checkRun(null, MADE_AT)],
+          statuses: [{ state: "pending", updated_at: new Date(MADE_AT).toISOString() }],
+        };
+        const github = githubHoldingChecks(held);
+        const wake: AgentWake = {
+          kind: AGENT_WAKE.CHECKS_COMPLETED,
+          repository: RELAY_FULL_NAME,
+          branches: [ref],
+          pullRequest: 41,
+          url: `https://github.com/${RELAY_FULL_NAME}/commit/${HEAD}/checks`,
+          by: "github-actions[bot]",
+          at: MADE_AT,
+          sha: HEAD,
+        };
+        const deliver = Effect.suspend(() =>
+          wakeAgents(eve.eveFor, wake, randomUUID(), LUKE_BOT).pipe(Effect.provide(github)),
+        );
+
+        const running = yield* deliver;
+        held.checkRuns = [checkRun("success", MADE_AT), checkRun("success", MADE_AT + 60_000)];
+        const pending = yield* deliver;
+        held.statuses = [
+          { state: "success", updated_at: new Date(MADE_AT + 30_000).toISOString() },
+        ];
+        // Two suites finishing together are two deliveries reading the same checks.
+        const finished = yield* deliver;
+        const together = yield* deliver;
+        // One more check registered and finished in the same second the others did.
+        held.statuses = [
+          ...held.statuses,
+          {
+            context: "vercel",
+            state: "success",
+            updated_at: new Date(MADE_AT + 30_000).toISOString(),
+          },
+        ];
+        const another = yield* deliver;
+        held.checkRuns = [checkRun("success", MADE_AT), checkRun("failure", MADE_AT + 120_000)];
+        const rerun = yield* deliver;
+
+        assert.deepEqual(
+          [running, pending, finished, together, another, rerun],
+          [0, 0, 1, 1, 1, 1],
+        );
+        const texts = eve.sent.map((sent) => sentText(sent.message.message));
+        assert.equal(texts.length, 3, "suites finishing together tell once, one more check again");
+        assert.equal(
+          texts[0],
+          `Every check finished on \`0123abc\`, the head of your pull request [@#41](https://github.com/${RELAY_FULL_NAME}/commit/${HEAD}/checks).\n\nNone failed.`,
+        );
+        assert.ok(
+          texts[2]?.endsWith("At least one failed: read why with `gh`, fix the cause, and push."),
+        );
+      }),
+  );
+
+  it.effect(
+    "every check finished tells no agent idle since, none whose pull request has moved past that commit, and none where there are no checks at all",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const held = { checkRuns: [checkRun("success", MADE_AT)], statuses: [] as object[] };
+        const github = githubHoldingChecks(held);
+        const wakeOn = (ref: string): AgentWake => ({
+          kind: AGENT_WAKE.CHECKS_COMPLETED,
+          repository: RELAY_FULL_NAME,
+          branches: [ref],
+          pullRequest: 41,
+          url: `https://github.com/${RELAY_FULL_NAME}/commit/${HEAD}/checks`,
+          by: "github-actions[bot]",
+          at: MADE_AT,
+          sha: HEAD,
+        });
+        const deliver = (ref: string) =>
+          wakeAgents(eve.eveFor, wakeOn(ref), randomUUID(), LUKE_BOT).pipe(Effect.provide(github));
+
+        const idle = yield* openAgent;
+        yield* endedTurn(idle.owner, idle.agent.conversationId, MADE_AT - 60_000);
+        yield* publishedAt(idle.owner, idle.agent.id, HEAD);
+        const movedOn = yield* openAgent;
+        yield* runningTurn(movedOn.owner, movedOn.agent.conversationId);
+        yield* publishedAt(
+          movedOn.owner,
+          movedOn.agent.id,
+          "4567cdef4567cdef4567cdef4567cdef4567cdef",
+        );
+        const unchecked = yield* openAgent;
+        yield* runningTurn(unchecked.owner, unchecked.agent.conversationId);
+        yield* publishedAt(unchecked.owner, unchecked.agent.id, HEAD);
+
+        const told = [yield* deliver(idle.ref), yield* deliver(movedOn.ref)];
+        held.checkRuns = [];
+        told.push(yield* deliver(unchecked.ref));
+
+        assert.deepEqual(told, [0, 0, 0]);
+        assert.deepEqual(eve.sent, []);
       }),
   );
 });

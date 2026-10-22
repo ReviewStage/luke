@@ -14,8 +14,8 @@ import {
   AVATAR_UNAVAILABLE_REASON,
   type AvatarStopReason,
 } from "@luke/features";
-import type { ACT_KIND, ActPayload } from "@luke/host/acts";
 import type { AppStateStore } from "@luke/host/client";
+import type { AVATAR_ACT_KIND, PortActPayload } from "@luke/host/contract";
 import type { HostAvatar } from "@luke/host/effect";
 import {
   AVATAR_END_REASON,
@@ -34,7 +34,7 @@ import { Effect, type Scope, Stream } from "effect";
 import type { PanelManager } from "../window/panel-manager";
 
 /** The avatar as the panel reports it. */
-export type AvatarReport = ActPayload<typeof ACT_KIND.AVATAR_REPORT>;
+export type AvatarReport = PortActPayload<typeof AVATAR_ACT_KIND.AVATAR_REPORT>;
 
 /**
  * The panel's ends this side did not start, as the service is told them:

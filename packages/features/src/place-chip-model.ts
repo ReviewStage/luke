@@ -36,23 +36,24 @@ export interface PlaceChipLook {
 const KIND_NAME = {
   [LINK_PLACE.TASK]: "Task",
   [LINK_PLACE.SECTION]: "Section",
+  [LINK_PLACE.COMMENT]: "Comment",
   [LINK_PLACE.VERSION]: "Version",
   [LINK_PLACE.PAGE]: "Page",
-  [LINK_PLACE.CALL]: "Call",
   [LINK_PLACE.TURN]: "Luke's work",
   [LINK_PLACE.AGENT]: "Agent",
   [LINK_PLACE.WORKER]: "Worker",
   [LINK_PLACE.CHANGES]: "Changes",
+  [LINK_PLACE.PULL_REQUEST_THREAD]: "Review comment",
   [LINK_PLACE.MESSAGE]: "Message",
   [LINK_PLACE.INBOX]: "Inbox",
   [LINK_PLACE.INBOX_ITEM]: "Inbox item",
   [LINK_PLACE.AUTOMATIONS]: "Automations",
   [LINK_PLACE.AUTOMATION]: "Automation",
   [LINK_PLACE.AUTOMATION_RUN]: "Run",
-  [LINK_PLACE.FACTORY]: "Factory",
   [LINK_PLACE.SETTINGS]: "Settings",
   [LINK_PLACE.PERSON]: "Profile",
-  [LINK_PLACE.ISSUE]: "Issue",
+  [LINK_PLACE.CHAT]: "Chat",
+  [LINK_PLACE.ADMIN]: "Admin",
 } as const satisfies Record<LinkPlace["kind"], string>;
 
 /** The name the window holds for the place itself, where it holds one. */

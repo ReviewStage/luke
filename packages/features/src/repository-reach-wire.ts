@@ -16,6 +16,12 @@ import { workspaceIdSchema } from "./task-wire.js";
  * this one, or the owner's installation connected to another workspace the
  * account is in. The reason travels beside the refusal's `error`, so a
  * build that reads `error` alone reads the refusal as it always did.
+ *
+ * A member who saved their own personal access token is answered on it
+ * where no installation reaches the repository, and the reason is then the
+ * token's: none the service can open, refused by GitHub, no access to the
+ * repository, no push to it, or not authorized for its organization's SAML
+ * SSO, with the page on GitHub that authorizes it.
  */
 
 /** Why the workspace's GitHub installation does not reach the repository. */
@@ -32,10 +38,24 @@ export const REPOSITORY_UNREACHED = {
   GONE: "gone",
   /** The owner's installation is connected to another workspace the account is in, which the task can move to. */
   OTHER_WORKSPACE: "other-workspace",
+  /** The member's GitHub token cannot be opened, so there is none to use. */
+  NO_TOKEN: "no-token",
+  /** GitHub refused the member's token. */
+  TOKEN_INVALID: "token-invalid",
+  /** The member's token does not reach the repository. */
+  TOKEN_NO_ACCESS: "token-no-access",
+  /** The member's token reaches the repository but may not push to it. */
+  TOKEN_CANNOT_PUSH: "token-cannot-push",
+  /** The repository's organization enforces SAML SSO and the member's token is not authorized for it. */
+  TOKEN_SSO: "token-sso",
 } as const;
 
 /** Where GitHub's installation settings may live: GitHub's own site and nothing else, so an answer cannot send the desktop elsewhere. */
 const GITHUB_SETTINGS_URL_PATTERN = /^https:\/\/github\.com\/[A-Za-z0-9/_.-]+$/u;
+
+/** Where GitHub's SAML SSO authorization may live: a page of GitHub's own site, with the query GitHub gives it. */
+export const GITHUB_SSO_URL_PATTERN =
+  /^https:\/\/github\.com\/[A-Za-z0-9/_.-]+(?:\?[A-Za-z0-9_.~=&%+-]*)?$/u;
 
 /** A workspace as the reason names it: its id, for the move, and its name, for the sentence. */
 const reachingWorkspaceSchema = EffectSchema.Struct({
@@ -47,7 +67,11 @@ const unreachedBare = (
   reason:
     | typeof REPOSITORY_UNREACHED.NOT_CONNECTED
     | typeof REPOSITORY_UNREACHED.CONNECTION_LAPSED
-    | typeof REPOSITORY_UNREACHED.GONE,
+    | typeof REPOSITORY_UNREACHED.GONE
+    | typeof REPOSITORY_UNREACHED.NO_TOKEN
+    | typeof REPOSITORY_UNREACHED.TOKEN_INVALID
+    | typeof REPOSITORY_UNREACHED.TOKEN_NO_ACCESS
+    | typeof REPOSITORY_UNREACHED.TOKEN_CANNOT_PUSH,
 ) =>
   EffectSchema.Struct({
     reason: EffectSchema.Literal(reason),
@@ -59,6 +83,10 @@ export const repositoryUnreachedSchema = EffectSchema.Union([
   unreachedBare(REPOSITORY_UNREACHED.NOT_CONNECTED),
   unreachedBare(REPOSITORY_UNREACHED.CONNECTION_LAPSED),
   unreachedBare(REPOSITORY_UNREACHED.GONE),
+  unreachedBare(REPOSITORY_UNREACHED.NO_TOKEN),
+  unreachedBare(REPOSITORY_UNREACHED.TOKEN_INVALID),
+  unreachedBare(REPOSITORY_UNREACHED.TOKEN_NO_ACCESS),
+  unreachedBare(REPOSITORY_UNREACHED.TOKEN_CANNOT_PUSH),
   EffectSchema.Struct({
     reason: EffectSchema.Literal(REPOSITORY_UNREACHED.OTHER_OWNER),
     repository: githubRepositoryFullNameSchema,
@@ -70,6 +98,12 @@ export const repositoryUnreachedSchema = EffectSchema.Union([
     repository: githubRepositoryFullNameSchema,
     /** The installation's settings page on GitHub, where its repositories are chosen. */
     settingsUrl: EffectSchema.String.check(EffectSchema.isPattern(GITHUB_SETTINGS_URL_PATTERN)),
+  }),
+  EffectSchema.Struct({
+    reason: EffectSchema.Literal(REPOSITORY_UNREACHED.TOKEN_SSO),
+    repository: githubRepositoryFullNameSchema,
+    /** GitHub's page that authorizes the token for the organization, from its `X-GitHub-SSO` header. */
+    authorizeUrl: EffectSchema.String.check(EffectSchema.isPattern(GITHUB_SSO_URL_PATTERN)),
   }),
   EffectSchema.Struct({
     reason: EffectSchema.Literal(REPOSITORY_UNREACHED.OTHER_WORKSPACE),

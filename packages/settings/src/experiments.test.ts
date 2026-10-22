@@ -12,24 +12,24 @@ import { EXPERIMENT, experimentChoicesFrom, experimentOn, NO_EXPERIMENTS } from 
 describe("a choice of experiments read from the store or the wire", () => {
   test("keeps a known experiment's on and off, and passes over a key or a value it does not know", () => {
     const read = experimentChoicesFrom(
-      unparsedWire({ [EXPERIMENT.FACTORY]: true, graduated: true, newer: false }),
+      unparsedWire({ [EXPERIMENT.CODE_REVIEW]: true, graduated: true, newer: false }),
     );
-    assert.deepEqual(read, { [EXPERIMENT.FACTORY]: true });
-    assert.deepEqual(experimentChoicesFrom(unparsedWire({ [EXPERIMENT.FACTORY]: false })), {
-      [EXPERIMENT.FACTORY]: false,
+    assert.deepEqual(read, { [EXPERIMENT.CODE_REVIEW]: true });
+    assert.deepEqual(experimentChoicesFrom(unparsedWire({ [EXPERIMENT.CODE_REVIEW]: false })), {
+      [EXPERIMENT.CODE_REVIEW]: false,
     });
-    assert.deepEqual(experimentChoicesFrom(unparsedWire({ [EXPERIMENT.FACTORY]: "on" })), {});
+    assert.deepEqual(experimentChoicesFrom(unparsedWire({ [EXPERIMENT.CODE_REVIEW]: "on" })), {});
   });
 
   test("refuses only what is not a record of choices at all", () => {
-    for (const value of [null, "factory", 1, [EXPERIMENT.FACTORY]]) {
+    for (const value of [null, "code-review", 1, [EXPERIMENT.CODE_REVIEW]]) {
       assert.equal(experimentChoicesFrom(unparsedWire(value)), undefined, JSON.stringify(value));
     }
   });
 
   test("an experiment never chosen, or turned back off, is off", () => {
-    assert.equal(experimentOn(NO_EXPERIMENTS, EXPERIMENT.FACTORY), false);
-    assert.equal(experimentOn({ [EXPERIMENT.FACTORY]: false }, EXPERIMENT.FACTORY), false);
-    assert.equal(experimentOn({ [EXPERIMENT.FACTORY]: true }, EXPERIMENT.FACTORY), true);
+    assert.equal(experimentOn(NO_EXPERIMENTS, EXPERIMENT.CODE_REVIEW), false);
+    assert.equal(experimentOn({ [EXPERIMENT.CODE_REVIEW]: false }, EXPERIMENT.CODE_REVIEW), false);
+    assert.equal(experimentOn({ [EXPERIMENT.CODE_REVIEW]: true }, EXPERIMENT.CODE_REVIEW), true);
   });
 });

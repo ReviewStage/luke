@@ -20,8 +20,8 @@ import { Tooltip } from "../tooltip.js";
  * It draws what it is handed and decides nothing, so what it shows is
  * `tasks-model.ts`'s answer and a press is a callback the tab hands down.
  * Luke's face and the meter for whoever is talking are the sidebar's, and
- * the captions the window's own, drawn for a task's call exactly as for
- * any other.
+ * the voice's notice line the window's own, drawn for a task's call exactly
+ * as for any other.
  */
 
 /** What a reader is told while the backend works; the sighted read the dots and the line. */

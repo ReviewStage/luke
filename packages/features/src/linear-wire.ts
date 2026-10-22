@@ -18,8 +18,8 @@ import { Schema as EffectSchema } from "effect";
  * task, asks for its title and state (`linearIssueIdentifierOf`,
  * `linearIssueIdentifierIn`). A plan started from one names it by its id
  * (`taskCreateRequestSchema`'s `linearIssueId`), and the service reads the
- * issue itself through the workspace's grant and keeps what it read on the
- * plan (`taskLinearIssueSchema`), so the plan keeps it after Linear is
+ * issue itself through the workspace's grant and links what it read to the
+ * task (`task-issue-wire.ts`), so the task keeps it after Linear is
  * disconnected. No answer carries a token. The requests that name a
  * workspace are `workspace-wire.ts`'s, beside its GitHub's.
  */
@@ -29,7 +29,7 @@ export const LINEAR_BOUNDS = {
   MAX_QUERY_CHARS: 200,
   /** The most issues one read answers. */
   MAX_ISSUES: 50,
-  /** The most characters of an issue's description a plan keeps, enough for any brief and short of a document. */
+  /** The most characters of an issue's description a task's link keeps, whoever holds the issue: enough for any brief and short of a document. */
   MAX_DESCRIPTION_CHARS: 20_000,
   /** The most characters an issue's id may spell; Linear's are UUIDs. */
   MAX_ID_CHARS: 100,
@@ -99,23 +99,6 @@ export const linearIssueSummarySchema = EffectSchema.Struct({
 });
 
 export type LinearIssueSummary = typeof linearIssueSummarySchema.Type;
-
-/**
- * The issue a plan was started from, as the service read it through the
- * workspace's grant when the plan started: what the planning call is told
- * to research, and kept on the plan whatever becomes of the connection.
- */
-export const taskLinearIssueSchema = EffectSchema.Struct({
-  identifier: EffectSchema.String,
-  title: EffectSchema.String,
-  url: EffectSchema.String,
-  /** The issue's description as Markdown, bounded; empty where it has none. */
-  description: EffectSchema.String.check(
-    EffectSchema.isMaxLength(LINEAR_BOUNDS.MAX_DESCRIPTION_CHARS),
-  ),
-});
-
-export type TaskLinearIssue = typeof taskLinearIssueSchema.Type;
 
 export const linearIssuesAnswerSchema = EffectSchema.Struct({
   issues: EffectSchema.Array(linearIssueSummarySchema).check(

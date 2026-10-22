@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
+import { fixedBearer } from "@luke/features";
+import { LINK_OPEN } from "@luke/features/link-open";
 import { EXPERIMENT } from "@luke/settings";
 import { fakeHttpClientLayer } from "@luke/wire/testing";
 import { Effect } from "effect";
@@ -31,8 +33,7 @@ function service(answers: Array<() => Response>) {
 function client(options: Partial<ConstructorParameters<typeof AccountPreferencesClient>[0]> = {}) {
   return new AccountPreferencesClient({
     serviceBaseUrl: "https://tryluke.dev",
-    readAccessToken: () => Effect.succeed("token-1"),
-    refreshAccount: () => Effect.void,
+    credential: fixedBearer("token-1"),
     ...options,
   });
 }
@@ -40,7 +41,11 @@ function client(options: Partial<ConstructorParameters<typeof AccountPreferences
 it.effect("writes account preferences as a full snapshot", () =>
   Effect.gen(function* () {
     const { requests, fetchLike } = service([
-      () => new Response(JSON.stringify(PREFERENCES_ANSWER), { status: 200 }),
+      () =>
+        new Response(JSON.stringify(PREFERENCES_ANSWER), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
     ]);
 
     const answer = yield* client({ httpClient: fakeHttpClientLayer(fetchLike) }).writePreferences({
@@ -70,9 +75,9 @@ it.effect("reads the experiments part past a key it does not know, beside the vo
         new Response(
           JSON.stringify({
             ...PREFERENCES_ANSWER,
-            experiments: { [EXPERIMENT.FACTORY]: true, newer: true },
+            experiments: { [EXPERIMENT.CODE_REVIEW]: true, newer: true },
           }),
-          { status: 200 },
+          { status: 200, headers: { "content-type": "application/json" } },
         ),
     ]);
 
@@ -80,7 +85,7 @@ it.effect("reads the experiments part past a key it does not know, beside the vo
     assert.deepEqual(answer, {
       preferences: PREFERENCES_ANSWER.preferences,
       hasStoredSnapshot: true,
-      experiments: { [EXPERIMENT.FACTORY]: true },
+      experiments: { [EXPERIMENT.CODE_REVIEW]: true },
     });
   }),
 );
@@ -90,20 +95,95 @@ it.effect("writes an experiment's switch as a patch of that experiment alone", (
     const { requests, fetchLike } = service([
       () =>
         new Response(
-          JSON.stringify({ ...PREFERENCES_ANSWER, experiments: { [EXPERIMENT.FACTORY]: true } }),
-          { status: 200 },
+          JSON.stringify({
+            ...PREFERENCES_ANSWER,
+            experiments: { [EXPERIMENT.CODE_REVIEW]: true },
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
         ),
     ]);
 
     const answer = yield* client({ httpClient: fakeHttpClientLayer(fetchLike) }).writeExperiments({
-      [EXPERIMENT.FACTORY]: true,
+      [EXPERIMENT.CODE_REVIEW]: true,
     });
-    assert.deepEqual(answer?.experiments, { [EXPERIMENT.FACTORY]: true });
+    assert.deepEqual(answer?.experiments, { [EXPERIMENT.CODE_REVIEW]: true });
 
     const [request] = requests;
     assert.equal(request?.init?.method, "PUT");
     assert.deepEqual(JSON.parse(String(request?.init?.body)), {
-      experiments: { [EXPERIMENT.FACTORY]: true },
+      experiments: { [EXPERIMENT.CODE_REVIEW]: true },
     });
   }),
+);
+
+it.effect(
+  "writes the link choice as a part of its own beside the voice, and reads it back from there",
+  () =>
+    Effect.gen(function* () {
+      const { requests, fetchLike } = service([
+        () =>
+          new Response(JSON.stringify({ ...PREFERENCES_ANSWER, linkOpen: LINK_OPEN.MAC_APP }), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          }),
+      ]);
+
+      const answer = yield* client({ httpClient: fakeHttpClientLayer(fetchLike) }).writePreferences(
+        {
+          voice: "marin",
+          linkOpen: LINK_OPEN.MAC_APP,
+        },
+      );
+      assert.deepEqual(answer?.preferences, { voice: "marin", linkOpen: LINK_OPEN.MAC_APP });
+
+      // Note that the shared part a build from before the choice writes back whole carries none of it.
+      const [request] = requests;
+      assert.deepEqual(JSON.parse(String(request?.init?.body)), {
+        preferences: { voice: "marin" },
+        linkOpen: LINK_OPEN.MAC_APP,
+      });
+    }),
+);
+
+it.effect("sends no link part from a device that never chose, so it clears no other's choice", () =>
+  Effect.gen(function* () {
+    const { requests, fetchLike } = service([
+      () =>
+        new Response(JSON.stringify(PREFERENCES_ANSWER), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+    ]);
+
+    yield* client({ httpClient: fakeHttpClientLayer(fetchLike) }).writePreferences({
+      voice: "marin",
+    });
+
+    const [request] = requests;
+    assert.deepEqual(JSON.parse(String(request?.init?.body)), { preferences: { voice: "marin" } });
+  }),
+);
+
+it.effect(
+  "reads the voice past a preference it does not know, in the shared part or a part of its own",
+  () =>
+    Effect.gen(function* () {
+      const { fetchLike } = service([
+        () =>
+          new Response(
+            JSON.stringify({
+              preferences: { voice: "marin", newer: "choice" },
+              linkOpen: "a-newer-place",
+              updatedAt: PREFERENCES_ANSWER.updatedAt,
+            }),
+            { status: 200, headers: { "content-type": "application/json" } },
+          ),
+      ]);
+
+      const answer = yield* client({
+        httpClient: fakeHttpClientLayer(fetchLike),
+      }).readPreferences();
+      assert.deepEqual(answer?.preferences, { voice: "marin" });
+      assert.equal(answer?.hasStoredSnapshot, true);
+    }),
 );

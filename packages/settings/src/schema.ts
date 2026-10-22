@@ -1,3 +1,4 @@
+import { isLinkOpen, LINK_OPEN, LINK_OPEN_LABEL, LINK_OPEN_LIST } from "@luke/features/link-open";
 import {
   DEFAULT_VIDEO_AVATAR,
   isVideoAvatar,
@@ -5,7 +6,7 @@ import {
   VIDEO_AVATAR_NAME,
   videoAvatarCover,
 } from "@luke/features/video-avatar";
-import { isLiveVoice, LIVE_DEFAULTS, LIVE_VOICE_LIST, type LiveVoice } from "@luke/live";
+import { isLiveVoice, LIVE_DEFAULTS } from "@luke/live";
 import type { UnparsedWireValue } from "@luke/wire";
 import { APP_SETTING_ID, isAppSettingId } from "@luke/wire/app-settings";
 import { Schema } from "effect";
@@ -25,7 +26,7 @@ import {
   INLINE_DIFF_LABEL,
 } from "./diff-view.js";
 import { EXPERIMENT, experimentOn } from "./experiments.js";
-import { choiceSetting, hotkeySetting, optional, toggleSetting } from "./schema-builders.js";
+import { choiceSetting, optional, toggleSetting } from "./schema-builders.js";
 import {
   SETTING_SECTION,
   SETTING_SIDE_EFFECT,
@@ -34,6 +35,13 @@ import {
   type SettingsVisibility,
 } from "./schema-types.js";
 import { isTheme, THEME, THEME_LIST, type Theme } from "./theme.js";
+import {
+  OFFERED_VOICE_LIST,
+  voiceGroup,
+  voiceOptionLabel,
+  voiceSamplePath,
+  voiceTag,
+} from "./voice-choice.js";
 import { isZoomPercent, ZOOM_ACTUAL_SIZE, ZOOM_PERCENTS } from "./zoom.js";
 
 export {
@@ -49,18 +57,6 @@ export {
 // The ids themselves live in core, because the product-event vocabulary names
 // the same set and may not depend on anything here.
 export { APP_SETTING_ID, isAppSettingId };
-
-/* The voice is an account preference every device applies, and every device
-   reads the one Live vocabulary, so the row offers the whole of it. */
-const OFFERED_VOICE_LIST: readonly LiveVoice[] = LIVE_VOICE_LIST;
-
-/* The API names its voices in lowercase; on a control they read as names. The
-   default carries its status into the menu, so returning to it never needs the
-   README or a memory of what shipped. */
-function voiceOptionLabel(voice: LiveVoice): string {
-  const name = voice.charAt(0).toUpperCase() + voice.slice(1);
-  return voice === LIVE_DEFAULTS.VOICE ? `${name} (default)` : name;
-}
 
 /* A theme is stored in lowercase; on a control it reads as a name. */
 function themeOptionLabel(theme: Theme): string {
@@ -97,6 +93,13 @@ const microphoneRouteDrawn = (view: SettingsVisibility): boolean =>
 const videoCallsDrawn = (view: SettingsVisibility): boolean =>
   view.accountDrawn && experimentOn(view.settings.experiments, EXPERIMENT.VIDEO_CALLS);
 
+/** An installed app's own: what a browser tab answers for itself, or cannot do at all. */
+const desktopAppDrawn = (view: SettingsVisibility): boolean =>
+  view.capabilities.includes(HOST_CAPABILITY.DESKTOP_APP);
+
+/** Signed in: a choice the account carries is drawn only while there is an account to carry it. */
+const accountDrawn = (view: SettingsVisibility): boolean => view.accountDrawn;
+
 export const APP_SETTING_SCHEMA = {
   theme: choiceSetting({
     field: "theme",
@@ -127,6 +130,8 @@ export const APP_SETTING_SCHEMA = {
     page: SETTINGS_PAGE.APPEARANCE,
     order: 7,
     resetScope: SETTINGS_RESET_SCOPE.APPEARANCE,
+    // A browser zooms its tab itself, by its own keys.
+    visible: desktopAppDrawn,
     // Nothing to run per write, as for the theme: main zooms the windows
     // from every settings snapshot it publishes.
     sideEffect: SETTING_SIDE_EFFECT.NONE,
@@ -139,6 +144,7 @@ export const APP_SETTING_SCHEMA = {
     page: SETTINGS_PAGE.APPEARANCE,
     order: 10,
     resetScope: SETTINGS_RESET_SCOPE.APPEARANCE,
+    visible: desktopAppDrawn,
     sideEffect: SETTING_SIDE_EFFECT.LOGIN_ITEM,
   }),
   macCommands: toggleSetting({
@@ -173,6 +179,9 @@ export const APP_SETTING_SCHEMA = {
     values: OFFERED_VOICE_LIST,
     token: (voice) => voice,
     optionLabel: voiceOptionLabel,
+    optionSample: voiceSamplePath,
+    optionGroup: voiceGroup,
+    optionTag: voiceTag,
     guard: (value: UnparsedWireValue) => optional(value, isLiveVoice),
     default: LIVE_DEFAULTS.VOICE,
     page: SETTINGS_PAGE.VOICE,
@@ -207,31 +216,29 @@ export const APP_SETTING_SCHEMA = {
     sideEffect: SETTING_SIDE_EFFECT.NONE,
     visible: videoCallsDrawn,
   }),
-  voiceCaptions: toggleSetting({
-    field: "voiceCaptions",
-    id: APP_SETTING_ID.VOICE_CAPTIONS,
-    label: "Captions",
-    detail:
-      "Shows your words as well as Luke's, and keeps neither. Luke's appear anyway while the Mac's sound is muted or at zero.",
-    default: false,
-    page: SETTINGS_PAGE.VOICE,
-    section: SETTING_SECTION.CONTROLS,
-    order: 50,
-    resetScope: SETTINGS_RESET_SCOPE.VOICE,
+  /*
+   * Where a Luke link opened in a browser goes: it stays on the web, or the
+   * web hands it to Luke for Mac (`@luke/features/link-open`). The account's,
+   * so the web reads it on a signed-in load; it rides the preferences
+   * snapshot as a part of its own rather than the shared one, so a build
+   * that predates it neither refuses the snapshot nor clears the choice.
+   */
+  linkOpen: choiceSetting({
+    field: "linkOpen",
+    id: APP_SETTING_ID.LINK_OPEN,
+    label: "Open Luke links in",
+    detail: "Luke for Mac takes the links you open in a browser on a Mac with Luke installed.",
+    values: LINK_OPEN_LIST,
+    token: (choice) => choice,
+    optionLabel: (choice) => LINK_OPEN_LABEL[choice],
+    guard: (value: UnparsedWireValue) => optional(value, isLinkOpen),
+    default: LINK_OPEN.BROWSER,
+    page: SETTINGS_PAGE.ACCOUNT,
+    section: SETTING_SECTION.LINKS,
+    order: 300,
+    // Nothing to run per write: a web page reads the choice as it loads.
     sideEffect: SETTING_SIDE_EFFECT.NONE,
-    visible: voiceControlDrawn,
-  }),
-  voiceHotkey: hotkeySetting({
-    field: "voiceHotkey",
-    id: APP_SETTING_ID.TALK_HOTKEY,
-    order: 60,
-    sideEffect: SETTING_SIDE_EFFECT.TALK_HOTKEY,
-  }),
-  stopHotkey: hotkeySetting({
-    field: "stopHotkey",
-    id: APP_SETTING_ID.STOP_HOTKEY,
-    order: 80,
-    sideEffect: SETTING_SIDE_EFFECT.STOP_HOTKEY,
+    visible: accountDrawn,
   }),
   duckOtherMedia: toggleSetting({
     field: "duckOtherMedia",
@@ -319,7 +326,8 @@ export const APP_SETTING_SCHEMA = {
   inlineDiff: choiceSetting({
     field: "inlineDiff",
     id: APP_SETTING_ID.DIFF_INLINE,
-    label: "Inline diffs",
+    label: "Changed words",
+    detail: "What a changed line marks within itself; Off tints the line alone.",
     values: INLINE_DIFF_LIST,
     token: (inline) => inline,
     optionLabel: (inline) => INLINE_DIFF_LABEL[inline],

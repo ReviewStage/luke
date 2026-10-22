@@ -15,7 +15,7 @@
  */
 
 import { APP_SETTING_SCHEMA, type ZoomPercent, zoomFactor } from "@luke/settings";
-import { Context, Effect } from "effect";
+import { Context, Effect, MutableRef } from "effect";
 import type { Point, WebContents } from "electron";
 
 /**
@@ -76,3 +76,24 @@ export const applyZoomPreference = /* @__PURE__ */ Effect.fn("desktop/applyZoomP
     }
   },
 );
+
+/**
+ * A steer for the stored zoom that zooms the panels only when the size moved
+ * from the one it last applied. Note that the window service steers the
+ * appearance before every push of the document, and a panel's zoom and its
+ * traffic lights are each a round trip through Chromium and AppKit, so a
+ * size that has not moved is not applied again; a panel opened since is
+ * already created at it (`panel-manager.ts`).
+ */
+export function zoomSteer(): (
+  preference: ZoomPercent | undefined,
+) => Effect.Effect<void, never, PanelWindows> {
+  const applied = MutableRef.make<number | undefined>(undefined);
+  return (preference) =>
+    Effect.suspend(() => {
+      const factor = zoomFactorOf(preference);
+      if (MutableRef.get(applied) === factor) return Effect.void;
+      MutableRef.set(applied, factor);
+      return applyZoomPreference(preference);
+    });
+}

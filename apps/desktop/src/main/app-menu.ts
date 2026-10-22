@@ -12,7 +12,7 @@
  * is on.
  */
 
-import { channels } from "@luke/host/bridge";
+import { PUSH } from "@luke/host/contract";
 import { type ExperimentChoices, type HostCapability, NO_EXPERIMENTS } from "@luke/settings";
 import {
   APP_COMMAND,
@@ -28,6 +28,7 @@ import {
 } from "@luke/settings/shortcuts";
 import { UPDATE_STATUS, type UpdateSnapshot } from "@luke/settings/update";
 import { type BaseWindow, BrowserWindow, type MenuItemConstructorOptions } from "electron";
+import { windowPushes } from "./window/window-pushes";
 
 const SEPARATOR: MenuItemConstructorOptions = { type: "separator" };
 
@@ -88,6 +89,16 @@ export interface DeveloperToolsMenu {
   onOpenCallWindow: () => void;
 }
 
+/**
+ * What the menu reaches of the panel window beyond the window chosen over:
+ * whether that window is the panel, and the panel brought back, for a
+ * command chosen while it stands closed or behind another of Luke's windows.
+ */
+export interface PanelMenu {
+  isPanel: (window: BaseWindow) => boolean;
+  onReopen: (command: AppCommand) => void;
+}
+
 /** The short words a title leaves lower case after its first. */
 const TITLE_LOWER_WORDS = new Set(["a", "and", "in", "of", "or", "the", "to"]);
 
@@ -113,7 +124,9 @@ function sendCommand(command: AppCommand): NonNullable<MenuItemConstructorOption
     if (event.triggeredByAccelerator) return;
     // The window arrives as the base type, and only a browser window has a
     // page to hand the command to.
-    if (window instanceof BrowserWindow) window.webContents.send(channels.onMenuCommand, command);
+    if (window instanceof BrowserWindow) {
+      windowPushes.push(window.webContents, PUSH.MENU_COMMAND, command);
+    }
   };
 }
 
@@ -157,6 +170,27 @@ function closeTabItem(): MenuItemConstructorOptions {
     click: (item, window: BaseWindow | undefined, event) => {
       if (event.triggeredByAccelerator) window?.close();
       else handOn(item, window, event);
+    },
+  };
+}
+
+/**
+ * New Task, handed to the panel on a click as any command is while the
+ * panel is in front. Note that with it closed, its key runs it too, unlike
+ * a command item's: no window's keymap stands to answer ⌘N then, so the
+ * press brings the window back on a new task, as a Mac app's ⌘N opens a
+ * window when none is open.
+ */
+function newTaskItem(panel: PanelMenu | undefined): MenuItemConstructorOptions {
+  const handOn = sendCommand(APP_COMMAND.NEW_TASK);
+  return {
+    ...commandItem(APP_COMMAND.NEW_TASK),
+    click: (item, window: BaseWindow | undefined, event) => {
+      if (panel === undefined || (window !== undefined && panel.isPanel(window))) {
+        handOn(item, window, event);
+      } else {
+        panel.onReopen(APP_COMMAND.NEW_TASK);
+      }
     },
   };
 }
@@ -251,15 +285,17 @@ function developerItem(tools: DeveloperToolsMenu): MenuItemConstructorOptions {
  * window's own are macOS's Window menu, and the shortcuts and the notes to
  * the people who make Luke are Help's. A gated feature's item stands only
  * while `shown` says its command does (`shortcutShown`), and View's
- * Developer submenu only where `developerTools` is given.
+ * Developer submenu only where `developerTools` is given. New Task brings a
+ * closed window back only where `panel` is given.
  */
 export function appMenuTemplate(
   appName: string,
   update?: UpdateMenu,
   shown: (command: KeyedCommand) => boolean = () => true,
   developerTools?: DeveloperToolsMenu,
+  panel?: PanelMenu,
 ): MenuItemConstructorOptions[] {
-  return gated(fullMenuTemplate(appName, update, developerTools), shown);
+  return gated(fullMenuTemplate(appName, update, developerTools, panel), shown);
 }
 
 /** Whether a menu item is a command item the gate keeps out: one whose command does not stand now. */
@@ -297,22 +333,24 @@ function gated(
   return kept.filter((_item, at) => !strandedSeparator(kept, at));
 }
 
-/** What the menu bar is drawn from: the update item, the experiments the account has on, what the platform offers, and the developer tools. */
+/** What the menu bar is drawn from: the update item, the experiments the account has on, what the platform offers, the developer tools, and the panel window. */
 interface MenuBarState {
   readonly update: UpdateMenu | undefined;
   readonly experiments: ExperimentChoices;
   readonly capabilities: readonly HostCapability[];
   readonly developerTools: DeveloperToolsMenu | undefined;
+  readonly panel: PanelMenu | undefined;
 }
 
-/** One change to what the menu bar is drawn from: a new update item (or none), the account's experiments and the platform's capabilities as the document carries them, or the windows' developer tools. */
+/** One change to what the menu bar is drawn from: a new update item (or none), the account's experiments and the platform's capabilities as the document carries them, the windows' developer tools, or the panel window. */
 export type MenuBarChange =
   | { readonly update: UpdateMenu | undefined }
   | {
       readonly experiments: ExperimentChoices;
       readonly capabilities: readonly HostCapability[];
     }
-  | { readonly developerTools: DeveloperToolsMenu };
+  | { readonly developerTools: DeveloperToolsMenu }
+  | { readonly panel: PanelMenu };
 
 /**
  * The menu bar's one drawer: it draws the menus from what it was last told,
@@ -334,6 +372,7 @@ export function menuBarDrawer(
     experiments: NO_EXPERIMENTS,
     capabilities: [],
     developerTools: undefined,
+    panel: undefined,
   };
   let drawn = false;
   return (change) => {
@@ -341,6 +380,7 @@ export function menuBarDrawer(
     const moved =
       next.update !== state.update ||
       next.developerTools !== state.developerTools ||
+      next.panel !== state.panel ||
       JSON.stringify(next.experiments) !== JSON.stringify(state.experiments) ||
       JSON.stringify(next.capabilities) !== JSON.stringify(state.capabilities);
     if (drawn && !moved) return;
@@ -352,6 +392,7 @@ export function menuBarDrawer(
         state.update,
         (command) => shortcutShown(command, state.experiments, state.capabilities),
         build.packaged ? undefined : state.developerTools,
+        state.panel,
       ),
     );
   };
@@ -362,6 +403,7 @@ function fullMenuTemplate(
   appName: string,
   update?: UpdateMenu,
   developerTools?: DeveloperToolsMenu,
+  panel?: PanelMenu,
 ): MenuItemConstructorOptions[] {
   return [
     {
@@ -384,7 +426,7 @@ function fullMenuTemplate(
     {
       label: "File",
       submenu: [
-        commandItem(APP_COMMAND.NEW_TASK),
+        newTaskItem(panel),
         SEPARATOR,
         commandItem(APP_COMMAND.NEW_TAB),
         menuItem(APP_COMMAND.NEW_TERMINAL),
@@ -395,7 +437,7 @@ function fullMenuTemplate(
         commandItem(APP_COMMAND.COPY_PLAN),
         commandItem(APP_COMMAND.COPY_LINK),
         SEPARATOR,
-        commandItem(APP_COMMAND.ARCHIVE_TASK),
+        commandItem(APP_COMMAND.MARK_TASK_DONE),
         commandItem(APP_COMMAND.DELETE_TASK),
       ],
     },
@@ -423,6 +465,7 @@ function fullMenuTemplate(
         SEPARATOR,
         commandItem(APP_COMMAND.MENTION_LINES),
         commandItem(APP_COMMAND.INSERT_PICTURE),
+        commandItem(APP_COMMAND.COMMENT_ON_SELECTION),
         SEPARATOR,
         {
           label: "Speech",
@@ -462,13 +505,15 @@ function fullMenuTemplate(
     {
       label: "Go",
       submenu: [
-        commandItem(APP_COMMAND.HOME),
+        commandItem(APP_COMMAND.ASK_LUKE),
         commandItem(APP_COMMAND.INBOX),
-        commandItem(APP_COMMAND.ISSUES),
         commandItem(APP_COMMAND.AUTOMATIONS),
         SEPARATOR,
         commandItem(APP_COMMAND.BACK),
         commandItem(APP_COMMAND.FORWARD),
+        SEPARATOR,
+        commandItem(APP_COMMAND.NEXT_RECENT_TAB),
+        commandItem(APP_COMMAND.PREVIOUS_RECENT_TAB),
       ],
     },
     {

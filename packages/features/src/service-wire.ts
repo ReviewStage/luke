@@ -70,6 +70,43 @@ export const HOSTED_API_ERROR = {
   /** The agent's session has ended for good: its sandbox cannot be reached again, and only a new agent goes on from here. */
   AGENT_RETIRED: "agent-retired",
   /**
+   * The agent runs on a native harness whose sandbox image is still being
+   * prepared, so it could not start or take the message yet; nothing was
+   * written, and the same request a little later, under the same key, is taken.
+   */
+  AGENT_IMAGE_PREPARING: "agent-image-preparing",
+  /**
+   * The agent runs on a native harness (Claude Code or Codex) that this part
+   * of Luke cannot reach yet, such as a call, which runs on eve alone; nothing
+   * was written or charged. It is reached from the agent's own tab.
+   */
+  NATIVE_AGENT_NOT_HERE: "native-agent-not-here",
+  /**
+   * The agent runs on its starter's plan (a ChatGPT plan, on Codex), and the
+   * starter's sign-in cannot launch it: none is kept, the provider signed it
+   * out, or the service cannot open it. The starter signs in again in
+   * Settings; nothing was written, and nothing turned to another payer.
+   */
+  AGENT_PLAN_SIGNED_OUT: "agent-plan-signed-out",
+  /**
+   * The agent runs on its starter's plan and its provider did not answer as
+   * the sign-in was renewed; nothing was written, and the same request a
+   * little later, under the same key, may be taken.
+   */
+  AGENT_PLAN_UNREACHABLE: "agent-plan-unreachable",
+  /**
+   * The agent runs on its starter's plan, whose usage limit refused its last
+   * turn and has not reset; nothing was written, nothing turned to another
+   * payer, and the same request after the reset may be taken.
+   */
+  AGENT_PLAN_LIMIT_REACHED: "agent-plan-limit-reached",
+  /**
+   * The agent runs on its starter's plan, whose provider said the account
+   * is not eligible to run it; nothing was written, and nothing turned to
+   * another payer.
+   */
+  AGENT_PLAN_INELIGIBLE: "agent-plan-ineligible",
+  /**
    * The task is archived: it is read, and takes nothing — no edit, no call,
    * no agent started or sent a message — until it is brought back. Nothing
    * was written.
@@ -104,16 +141,6 @@ export interface HostedQuota {
 }
 
 const HOSTED_API_ERROR_NAMES = Object.values(HOSTED_API_ERROR);
-
-/**
- * A text admitted exactly as it arrived — no ends settled, nothing collapsed
- * — and refused only when there is nothing there at all. What an author or a
- * provider wrote, where trimming would be a display decision a wire reader
- * has no business making.
- */
-export const writtenText = EffectSchema.String.check(
-  EffectSchema.makeFilter((value) => value.length > 0),
-);
 
 /**
  * A count an answer reports: any finite number at or above zero, whole or

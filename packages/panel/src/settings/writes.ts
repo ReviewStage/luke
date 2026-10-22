@@ -11,8 +11,8 @@ import { useAct } from "../act.js";
 
 export interface SettingsWrites {
   setting(field: AppSettingField, value: AppSettingValue<AppSettingField>): Promise<ActionResult>;
-  /** Answers the settings as the reset left them, for an Undo to read what it changed. */
-  reset(scope: SettingsResetScope): Promise<SettingsUpdateResult>;
+  /** Returns a group to its defaults but for the fields `kept`, which the page does not draw, answering the settings as the reset left them, for an Undo to read what it changed. */
+  reset(scope: SettingsResetScope, kept: readonly AppSettingField[]): Promise<SettingsUpdateResult>;
 }
 
 /**
@@ -26,7 +26,7 @@ export function useSettingsWrites(): SettingsWrites {
   return useMemo<SettingsWrites>(
     () => ({
       setting: (field, value) => updateSetting(field, value),
-      reset: (scope) => act(ACT_KIND.SETTINGS_RESET, { scope }),
+      reset: (scope, kept) => act(ACT_KIND.SETTINGS_RESET, { scope, kept: [...kept] }),
     }),
     [act, updateSetting],
   );

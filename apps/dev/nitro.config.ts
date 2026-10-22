@@ -17,5 +17,11 @@ const SENTRY_SOURCE_MAPS = {
 };
 
 export default {
-  $production: process.env.SENTRY_AUTH_TOKEN ? SENTRY_SOURCE_MAPS : {},
+  // The same gate as `sourceMapUploadToken` (`@luke/service/observability/source-maps`),
+  // spelled here because Nitro loads this file without resolving a workspace
+  // package's TypeScript source; `apps/web/tests/eve-source-maps.test.ts` holds both.
+  $production:
+    process.env.SENTRY_AUTH_TOKEN && process.env.VERCEL_ENV === "production"
+      ? SENTRY_SOURCE_MAPS
+      : {},
 };

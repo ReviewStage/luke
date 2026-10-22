@@ -1,0 +1,13 @@
+/* The window's own part of its hover hints (`@luke/ui`'s `TooltipPill` and
+   `TooltipCard`, drawn by `tooltip.tsx`), and the shortcuts it prints beside
+   a control. */
+
+/* A hint is never part of the window's drag region, wherever it hangs. */
+[data-luke-profile="desktop"] .luke-tooltip {
+  -webkit-app-region: no-drag;
+}
+
+/* The pill's chord, muted against its own dark fill rather than the window's. */
+.tooltip-chord {
+  --shortcut-ink: var(--luke-color-tooltip-chord);
+}

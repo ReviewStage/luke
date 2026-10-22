@@ -1,17 +1,19 @@
 import type { DatabaseServices } from "@luke/database/core/query";
+import { keptImageOf } from "@luke/database/models/attached-file-parts";
 import {
   type CodingAgent,
   type LineSent,
   lineSendersOf,
   listPublishedCodingAgentsById,
 } from "@luke/database/models/coding-agent-store";
+import { readConversationPicture } from "@luke/database/models/conversation-pictures";
 import {
   listMessagesBefore,
   listMessagesPast,
   messageSeqOf,
   type StoredMessageRecord,
 } from "@luke/database/models/message-reads";
-import { readTask } from "@luke/database/models/task-store";
+import { readTaskHeader } from "@luke/database/models/task-store";
 import type { StoredStartedFrom } from "@luke/database/schemas/coding-agent";
 import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import {
@@ -36,8 +38,10 @@ import {
   type CodingAgentStartFrom,
   PULL_REQUEST_STATE,
 } from "@luke/features/coding-agent-wire";
+import { isVideoType } from "@luke/features/conversation-picture-wire";
+import { agentGivenName } from "@luke/features/model-label";
 import type { ModelChoice } from "@luke/features/models-wire";
-import { isFileUIPart, isTextUIPart } from "ai";
+import { type FileUIPart, isFileUIPart, isTextUIPart } from "ai";
 import { Effect, Option } from "effect";
 import {
   isRecord,
@@ -54,6 +58,7 @@ import {
   type HostedRefusal,
   hostedStoreOrUnavailable,
 } from "../../http/http-effect.js";
+import { controlsAgent } from "../agent-reach.js";
 import { agentPublished } from "./published.js";
 import { copySourceWork, type SnapshotOutcome, type SourceCopyServices } from "./snapshot.js";
 import { CODER_TOOL, CODER_TOOL_SET, RETIRED_CODER_TOOL } from "./tool-set.js";
@@ -76,7 +81,8 @@ import { CURSOR_START } from "./transcript.js";
  * the press stays out of it. The source's first
  * message is its brief and is not replayed: the new agent is handed the
  * plan as it stands now, or the source's prompt with the text files
- * attached to it, an automation run's prompt as it was handed, without the
+ * attached to it and the images kept beside its conversation (`filesOf`),
+ * an automation run's prompt as it was handed, without the
  * replay or note the source's own first message carried. A note the source
  * was handed behind its marker, or after a replay, is its first step
  * instead. A source that was itself started
@@ -370,37 +376,61 @@ function filesBytes(files: readonly CodingAgentAttachment[]): number {
 }
 
 /**
- * The files the source's first message carried: those whose bytes stand
- * and that fit beside the note's own files within one message's bounds,
- * attached again, and the names of the rest. Note that the note's files
- * are kept first, because they are what the developer attached now.
+ * A file of the source's first message as a Start attaches it again: its
+ * bytes where the row keeps them, or else the picture it was kept as beside
+ * the source's conversation, which a row names by id with no bytes once it
+ * was kept (`attached-file-parts.ts`); nothing where neither stands.
  */
-function filesOf(
+const sourceFileOf = (source: CodingAgent, file: FileUIPart, name: string) =>
+  Effect.gen(function* () {
+    const inline = attachmentOf(file.url, file.mediaType, name);
+    const kept = keptImageOf(file);
+    if (inline !== undefined || kept === undefined || !("id" in kept)) return inline;
+    const picture = yield* readConversationPicture(source.conversationId, kept.id);
+    // A video an agent showed is no file a message carries, so a Start names it as not attached.
+    if (Option.isNone(picture) || isVideoType(picture.value.contentType)) return undefined;
+    return {
+      name,
+      mediaType: picture.value.contentType,
+      data: Buffer.from(picture.value.bytes).toString("base64"),
+    } satisfies CodingAgentAttachment;
+  });
+
+/**
+ * The files the source's first message carried: those whose bytes stand,
+ * in the row or kept beside the source's conversation, and that fit beside
+ * the note's own files within one message's bounds, attached again, and the
+ * names of the rest. Note that the note's files are kept first, because
+ * they are what the developer attached now.
+ */
+const filesOf = (
+  source: CodingAgent,
   first: StoredMessageRecord | undefined,
   noteFiles: readonly CodingAgentAttachment[],
-): SourceFiles {
-  const files = (first?.message.parts ?? []).filter(isFileUIPart);
-  const attachments: CodingAgentAttachment[] = [];
-  const unkept: string[] = [];
-  let count = noteFiles.length;
-  let bytes = filesBytes(noteFiles);
-  for (const file of files) {
-    const name = file.filename ?? file.mediaType;
-    const attached = attachmentOf(file.url, file.mediaType, name);
-    const size = attached === undefined ? 0 : base64Bytes(attached.data);
-    const fits =
-      count < CODING_AGENT_BOUNDS.MAX_ATTACHMENTS &&
-      bytes + size <= CODING_AGENT_BOUNDS.MAX_ATTACHMENTS_BYTES;
-    if (attached === undefined || !fits) {
-      unkept.push(name);
-    } else {
-      attachments.push(attached);
-      count += 1;
-      bytes += size;
+) =>
+  Effect.gen(function* () {
+    const files = (first?.message.parts ?? []).filter(isFileUIPart);
+    const attachments: CodingAgentAttachment[] = [];
+    const unkept: string[] = [];
+    let count = noteFiles.length;
+    let bytes = filesBytes(noteFiles);
+    for (const file of files) {
+      const name = file.filename ?? file.mediaType;
+      const attached = yield* sourceFileOf(source, file, name);
+      const size = attached === undefined ? 0 : base64Bytes(attached.data);
+      const fits =
+        count < CODING_AGENT_BOUNDS.MAX_ATTACHMENTS &&
+        bytes + size <= CODING_AGENT_BOUNDS.MAX_ATTACHMENTS_BYTES;
+      if (attached === undefined || !fits) {
+        unkept.push(name);
+      } else {
+        attachments.push(attached);
+        count += 1;
+        bytes += size;
+      }
     }
-  }
-  return { attachments, unkept };
-}
+    return { attachments, unkept } satisfies SourceFiles;
+  });
 
 /** The source's rows a replay reads: its brief and the newest rows at or before the cut, oldest first, and the cut's sequence for a fork. */
 interface SourceRecords {
@@ -477,9 +507,9 @@ function capitalized(words: string): string {
   return `${words.charAt(0).toUpperCase()}${words.slice(1)}`;
 }
 
-/** An agent as the preamble names it: its title, or its model where it has none, and its id. */
+/** An agent as the preamble names it: Luke for an operator, its human name, else its title, or its model where it has none, and its id. */
 function agentName(agent: CodingAgent): string {
-  return `"${agent.title ?? agent.model}" (agent id ${agent.id})`;
+  return `"${agentGivenName(agent) ?? agent.title ?? agent.model}" (agent id ${agent.id})`;
 }
 
 /** A pull request as it follows the branch it is from; nothing where there is none. */
@@ -820,8 +850,8 @@ const editedAfter = (source: CodingAgent, cutSeq: number, rest: Parts) =>
   });
 
 /** Whether two repositories are one, as GitHub names them whatever their case. */
-function sameRepository(one: string, other: string | null): boolean {
-  return other !== null && one.toLowerCase() === other.toLowerCase();
+function sameRepository(one: string | null, other: string | null): boolean {
+  return one !== null && other !== null && one.toLowerCase() === other.toLowerCase();
 }
 
 /**
@@ -952,17 +982,39 @@ function transcriptSteps(
 }
 
 /**
- * The source agent of the plan read as the account, its transcript cut and
+ * Where a Start puts its agent: a task, or a workspace with no task and the
+ * repository the agent clones there, or none, which only the member's
+ * operator stands in (`start.ts`'s `landingOf`); an agent it is started
+ * from must stand in the same place.
+ */
+export type StartWhere =
+  | { readonly taskId: string }
+  | { readonly taskId: null; readonly organizationId: string; readonly repository: string }
+  | { readonly taskId: null; readonly organizationId: string; readonly repository: null };
+
+/** The repository the new agent clones in the place: the task's as it stands now, or the workspace place's own; none where the task names none. */
+const placeRepository = (userId: string, place: StartWhere) =>
+  Effect.gen(function* () {
+    if (place.taskId === null) return place.repository;
+    const task = yield* hostedStoreOrUnavailable(readTaskHeader(userId, place.taskId));
+    return Option.isSome(task) ? task.value.repository : null;
+  });
+
+/**
+ * The source agent of the place read as the account, on the plan or with
+ * no plan in the workspace, its transcript cut and
  * replayed as above, its work copied to a branch for the new agent under the
  * Start's key, and what the new agent is handed and runs on, the source's
  * files held to what fits beside `noteFiles`, the ones the Start's note
  * carries, within one message's bounds and named in the preamble past them;
- * refused as naming nothing where the account reaches no such agent on this
- * plan, and as invalid where the message named is none of its journals.
+ * refused as naming nothing where the account reaches no such agent in this
+ * place, so a source on another plan, or on none where the place is a
+ * plan's, is never dropped and started afresh, and as invalid where the
+ * message named is none of its journals.
  */
 export const startFromOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
-  taskId: string,
+  place: StartWhere,
   from: CodingAgentStartFrom,
   noteFiles: readonly CodingAgentAttachment[],
   idempotencyKey: string,
@@ -970,12 +1022,17 @@ export const startFromOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   const [found] = yield* hostedStoreOrUnavailable(
     listPublishedCodingAgentsById(userId, [from.agentId]),
   );
-  if (found === undefined || found.agent.taskId !== taskId) {
+  const inPlace =
+    found !== undefined &&
+    found.agent.taskId === place.taskId &&
+    (place.taskId !== null || found.agent.organizationId === place.organizationId);
+  if (!inPlace) {
     return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
   }
   const { agent: source, published } = found;
-  const task = yield* hostedStoreOrUnavailable(readTask(userId, taskId));
-  const repository = Option.isSome(task) ? task.value.task.repository : null;
+  // An agent on its starter's own GitHub token is continued or forked by its starter alone, before its work is copied.
+  if (!controlsAgent(userId, source)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
+  const repository = yield* placeRepository(userId, place);
   const { lineage, carried: carriedWork } = yield* hostedStoreOrUnavailable(
     lineageOf(userId, source, repository),
   );
@@ -1001,10 +1058,10 @@ export const startFromOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   const carried = handed.carried?.steps ?? [];
   const totalSteps = (handed.carried?.totalSteps ?? 0) + mine.length;
   // A source handed the plan carries files only where its own note did, so its first message is read either way.
-  const files = filesOf(records[0], noteFiles);
+  const files = yield* hostedStoreOrUnavailable(filesOf(source, records[0], noteFiles));
   const forked = from.messageId !== undefined;
   // The copy is made once the transcript reads, so a Start refused on its message pushes nothing.
-  const copy = yield* copySourceWork(userId, source, forked, idempotencyKey);
+  const copy = yield* copySourceWork(userId, source, repository, forked, idempotencyKey);
   const inPullRequest = !forked && (yield* goesOnInPullRequest(userId, source, published));
   const edited =
     cutSeq === undefined ? [] : yield* hostedStoreOrUnavailable(editedAfter(source, cutSeq, rest));

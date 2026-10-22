@@ -110,7 +110,14 @@ export type PromptInputSubmitProps = HintProps & {
   type?: ButtonType;
   disabled?: boolean | undefined;
   onClick?: (() => void) | undefined;
-};
+} & (
+    | { busy?: false | undefined; busyLabel?: undefined }
+    | {
+        /** Whether a send it made is still out: it takes no press, and is named and announced as `busyLabel` meanwhile. */
+        busy: boolean;
+        busyLabel: string;
+      }
+  );
 
 /** The submit: the shared round submit in the panel's ink that sends, or shows that a send is out or a reply streams; an owner may make the streaming one its Stop. */
 export function PromptInputSubmit({

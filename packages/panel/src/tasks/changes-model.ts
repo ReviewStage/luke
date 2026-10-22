@@ -7,8 +7,21 @@ import {
   PATCH_OMITTED,
   type ReviewThread,
 } from "@luke/features/coding-agent-wire";
-import { parsePatch } from "diff";
-import { DIFF_SELECTION_SIDE, type DiffSelection } from "../diff-view/contract.js";
+import {
+  DIFF_ROW,
+  type DiffHunk,
+  type DiffRow,
+  type DiffRowKind,
+  HUNK_COUNTS,
+  LOCKFILE_NAMES,
+  patchHunks,
+} from "@luke/features/diff-hunks";
+import { isSecretFile } from "@luke/features/task-wire";
+import {
+  DIFF_SELECTION_SIDE,
+  type DiffFileTexts,
+  type DiffSelection,
+} from "../diff-view/contract.js";
 import {
   FILE_MARK,
   type FileMark,
@@ -51,43 +64,20 @@ import {
  * the preview is the end of that hunk, from a few rows above the first line
  * the thread is on down to its last, counted where the thread was made
  * rather than where it stands now, since a later push moves the one and not
- * the other. The hunk's lines are read by jsdiff (`parsePatch`), which
- * counts them by the header, so a removed line whose own text starts with
- * dashes is still one removed line; the rows kept are written again as a
- * patch of their own, its header counting them, with the thread's own lines
- * selected.
+ * the other. The hunk's lines are read as every patch here is
+ * (`patchHunks`, from `@luke/features/diff-hunks`), counted by the header,
+ * so a removed line whose own text starts with dashes is still one removed
+ * line; the rows kept are written again as a patch of their own, its header
+ * counting them, with the thread's own lines selected.
+ *
+ * A review thread on a line of the head no hunk shows stands above the
+ * diff until a gap opened over its line draws it, and on that line from then
+ * on (`gapLines`, `threadsOn`); an outdated one stands above whatever is
+ * opened, its line being on an older commit.
+ *
+ * A comment on lines of the head alone may suggest a change to them, which
+ * starts from those lines as the file's patch holds them (`suggestedLines`).
  */
-
-/** What one row of a hunk is: a line of context, one added, one removed, or git's note on the line above it. */
-const DIFF_ROW = {
-  CONTEXT: "context",
-  ADDED: "added",
-  REMOVED: "removed",
-  NOTE: "note",
-} as const;
-
-type DiffRowKind = (typeof DIFF_ROW)[keyof typeof DIFF_ROW];
-
-/** One row of a hunk: what it is, its line number on each side it stands on, and its text without the mark before it. */
-interface DiffRow {
-  readonly kind: DiffRowKind;
-  readonly oldLine: number | undefined;
-  readonly newLine: number | undefined;
-  readonly text: string;
-}
-
-/** One hunk: its `@@` header as written, and its rows. */
-interface DiffHunk {
-  readonly header: string;
-  readonly rows: readonly DiffRow[];
-}
-
-/** The kind of row each mark starts in a patch; a line of context starts with a space. */
-const ROW_MARK = new Map<string, DiffRowKind>([
-  ["+", DIFF_ROW.ADDED],
-  ["-", DIFF_ROW.REMOVED],
-  ["\\", DIFF_ROW.NOTE],
-]);
 
 /** What the tab says where the changes cannot be drawn. */
 export const CHANGES_WORDS = {
@@ -106,6 +96,23 @@ export const CHANGES_WORDS = {
   TOO_NARROW_TO_SPLIT: "Needs a wider panel",
   UNPLACED_THREADS: "Comments on lines this diff does not show",
 } as const;
+
+/** Why a changed file's lines between its hunks could not be opened: not read as text, read but not the text its patch was made against, or not read at all just now. */
+export const EXPANSION_REFUSAL = {
+  NOT_TEXT: "not-text",
+  CHANGED: "changed",
+  UNAVAILABLE: "unavailable",
+} as const;
+
+export type ExpansionRefusal = (typeof EXPANSION_REFUSAL)[keyof typeof EXPANSION_REFUSAL];
+
+/** What a file whose lines between hunks could not be opened says, once, above its first hunk. */
+export const EXPANSION_REFUSED_WORDS = {
+  [EXPANSION_REFUSAL.NOT_TEXT]: "Can't load more of this file: it's too large or not plain text.",
+  [EXPANSION_REFUSAL.CHANGED]:
+    "Can't load more of this file: it changed since these changes were read.",
+  [EXPANSION_REFUSAL.UNAVAILABLE]: "Can't load more of this file just now.",
+} as const satisfies Record<ExpansionRefusal, string>;
 
 /** The letter a file wears for what became of it, as an editor's source control marks it. */
 export const STATUS_LETTER = {
@@ -137,65 +144,11 @@ const NO_SIDE = "/dev/null";
 /** The most lines a file may add and remove together before it starts collapsed. */
 const LARGE_FILE_LINES = 1000;
 
-/** The names of the lockfiles package managers write, which start collapsed wherever they stand. */
-const LOCKFILE_NAMES = new Set([
-  "pnpm-lock.yaml",
-  "package-lock.json",
-  "npm-shrinkwrap.json",
-  "yarn.lock",
-  "bun.lock",
-  "bun.lockb",
-  "Cargo.lock",
-  "Gemfile.lock",
-  "composer.lock",
-  "poetry.lock",
-  "uv.lock",
-  "Pipfile.lock",
-  "go.sum",
-  "Package.resolved",
-  "flake.lock",
-]);
-
 /** How many rows a review thread's preview shows above the first line it is on. */
 const THREAD_CONTEXT_ROWS = 3;
 
 /** A hunk's header: where it starts on each side, what it counts, and the scope git writes after. */
 const HUNK_HEADER = /^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@(.*)$/u;
-
-/** One hunk's lines as rows, each numbered on the side it stands on, counting from where the hunk starts. */
-function rowsOf(lines: readonly string[], oldStart: number, newStart: number): DiffRow[] {
-  let oldLine = oldStart;
-  let newLine = newStart;
-  return lines.map((line) => {
-    const kind = ROW_MARK.get(line.charAt(0)) ?? DIFF_ROW.CONTEXT;
-    const text = line.slice(1);
-    if (kind === DIFF_ROW.NOTE) return { kind, oldLine: undefined, newLine: undefined, text };
-    if (kind === DIFF_ROW.ADDED) return { kind, oldLine: undefined, newLine: newLine++, text };
-    if (kind === DIFF_ROW.REMOVED) return { kind, oldLine: oldLine++, newLine: undefined, text };
-    return { kind, oldLine: oldLine++, newLine: newLine++, text };
-  });
-}
-
-/**
- * A patch's hunks, or none where it does not read as a unified diff. Note
- * that each hunk's header is taken from the patch as written, because
- * jsdiff keeps only its numbers and git writes the enclosing scope after
- * them; a hunk's own lines start with a mark or a space, so the lines that
- * start with `@@` are its headers, in order.
- */
-function patchHunks(patch: string): readonly DiffHunk[] | undefined {
-  let parsed: ReturnType<typeof parsePatch>;
-  try {
-    parsed = parsePatch(patch);
-  } catch {
-    return undefined;
-  }
-  const headers = patch.split("\n").filter((line) => line.startsWith("@@"));
-  return (parsed[0]?.hunks ?? []).map((hunk, index) => ({
-    header: headers[index] ?? "",
-    rows: rowsOf(hunk.lines, hunk.oldStart, hunk.newStart),
-  }));
-}
 
 /**
  * A hunk GitHub froze for a review thread, its header counting the lines it
@@ -373,6 +326,22 @@ function drawnLines(file: CodingAgentChangedFile): DrawnLines {
   return lines;
 }
 
+/** Each whole file's lines, counted once for its texts. */
+const WHOLE_LINES = new WeakMap<DiffFileTexts, DrawnLines>();
+
+/** The lines a file drawn whole draws a row for: every line of each side's text. */
+function wholeLines(whole: DiffFileTexts): DrawnLines {
+  const kept = WHOLE_LINES.get(whole);
+  if (kept !== undefined) return kept;
+  const numbered = (text: string) => new Set(linesOf(text).lines.map((_line, index) => index + 1));
+  const lines = {
+    [DIFF_SIDE.LEFT]: numbered(whole.before),
+    [DIFF_SIDE.RIGHT]: numbered(whole.after),
+  };
+  WHOLE_LINES.set(whole, lines);
+  return lines;
+}
+
 /** The lines a file's diff draws a row for, read off its patch. */
 function linesDrawnBy(file: CodingAgentChangedFile): DrawnLines {
   const patch = fileNotice(file) === undefined ? file.patch : null;
@@ -388,31 +357,106 @@ function linesDrawnBy(file: CodingAgentChangedFile): DrawnLines {
 }
 
 /**
+ * Where each line after a hunk stands on the new side: the first old line
+ * past each hunk and the first new one, in order, every unchanged line
+ * after it counted on from there until the next hunk.
+ */
+function hunkEnds(patch: string): readonly { readonly old: number; readonly now: number }[] {
+  // A side a hunk holds no line of names the line before its place, as a patch does.
+  const past = (start: number, count: number) => (count === 0 ? start + 1 : start + count);
+  return (rawHunks(patch) ?? []).map((hunk) => ({
+    old: past(hunk.oldStart, hunk.oldLines),
+    now: past(hunk.newStart, hunk.newLines),
+  }));
+}
+
+/**
+ * The new side's line a line between a file's hunks stands on, as Pierre
+ * counts the lines a gap opens: a line of the new side as it is, and one of
+ * the old side counted on by what the hunks before it added and removed,
+ * since every line between hunks is the same on both sides. None where the
+ * file draws no patch.
+ */
+function gapLineOf(file: CodingAgentChangedFile, side: DiffSide, line: number): number | undefined {
+  if (side === DIFF_SIDE.RIGHT) return line;
+  if (file.patch === null) return undefined;
+  const before = hunkEnds(file.patch).findLast((end) => end.old <= line);
+  return before === undefined ? line : line + before.now - before.old;
+}
+
+/** Whether a thread may stand on a line a gap opened: one standing on a line of the head now, not outdated. */
+function openable(thread: ReviewThread): thread is ReviewThread & { readonly line: number } {
+  return thread.line !== null && !thread.outdated;
+}
+
+/**
+ * The lines of the new side between a file's hunks its review threads
+ * stand on, in ascending order, which the list is asked to tell of as a
+ * gap opens over them (`threadsOn`'s `opened`): every thread on a line of
+ * the head its patch draws no row for, not outdated, its old side's line
+ * counted on to the new side's (`gapLineOf`). None on a file whose patch
+ * is not drawn.
+ */
+export function gapLines(
+  threads: readonly ReviewThread[],
+  file: CodingAgentChangedFile,
+): readonly number[] {
+  const own = threads.filter(
+    (thread): thread is ReviewThread & { readonly line: number } =>
+      thread.path === file.path && openable(thread),
+  );
+  if (own.length === 0 || fileNotice(file) !== undefined) return [];
+  const lines = drawnLines(file);
+  const hidden = new Set<number>();
+  for (const thread of own) {
+    if (lines[thread.side].has(thread.line)) continue;
+    const gap = gapLineOf(file, thread.side, thread.line);
+    if (gap !== undefined) hidden.add(gap);
+  }
+  return [...hidden].toSorted((a, b) => a - b);
+}
+
+/**
  * A file's review threads as Files changed draws them, as GitHub's own
  * diff does: each on the line it stands on now, under that line on the
- * side it counts on, where the file's diff draws a row for that line; and,
- * at the top of the diff, in the order the pull request holds them, those
- * it draws none for: a thread whose line a later push took away, outdated;
- * one on a line no hunk shows; and every one on a file whose diff is not
- * drawn, binary, too large, or empty. Each is keyed by its first comment's
- * page, which no other thread shares; one with no comment is drawn nowhere.
+ * side it counts on, where the file's diff draws a row for that line, or
+ * where a gap it opened draws that line (`opened`, lines of the new side,
+ * as `gapLines` names them); and, at the top of the diff, in the order the
+ * pull request holds them, those it draws none for: a thread whose line a
+ * later push took away, outdated, which no opened gap draws; one on a line
+ * no hunk shows; and every one on a file whose diff is not drawn, binary,
+ * too large, or empty. A file drawn whole draws a row for every one of its
+ * lines, so its threads stand on any of them. Each is keyed by its first
+ * comment's page, which no other thread shares; one with no comment is
+ * drawn nowhere.
  */
 export function threadsOn(
   threads: readonly ReviewThread[],
   file: CodingAgentChangedFile,
+  /** The file's texts where it is drawn whole; none where it draws its patch. */
+  whole?: DiffFileTexts | undefined,
+  /** The lines of the new side between its hunks the file draws now, its gaps opened over them. */
+  opened?: ReadonlySet<number> | undefined,
 ): FileThreads {
   const placed: PlacedThread[] = [];
   const above: PlacedThread[] = [];
   // Note that a file no thread is on reads none of its lines, which would parse its patch.
   if (!threads.some((thread) => thread.path === file.path)) return { placed, above };
-  const lines = drawnLines(file);
+  const lines = whole === undefined ? drawnLines(file) : wholeLines(whole);
+  const inGap = (thread: ReviewThread) => {
+    if (opened === undefined || opened.size === 0 || !openable(thread)) return false;
+    const gap =
+      fileNotice(file) === undefined ? gapLineOf(file, thread.side, thread.line) : undefined;
+    return gap !== undefined && opened.has(gap);
+  };
   for (const thread of threads) {
     const key = thread.comments[0]?.url;
     if (thread.path !== file.path || key === undefined) continue;
     const side = SELECTION_SIDE[thread.side];
     const line = thread.line;
-    if (line !== null && lines[thread.side].has(line)) placed.push({ thread, key, side, line });
-    else above.push({ thread, key, side, line: line ?? thread.originalLine ?? 0 });
+    if (line !== null && (lines[thread.side].has(line) || inGap(thread))) {
+      placed.push({ thread, key, side, line });
+    } else above.push({ thread, key, side, line: line ?? thread.originalLine ?? 0 });
   }
   return { placed, above };
 }
@@ -431,17 +475,30 @@ export function fileNotice(file: CodingAgentChangedFile): string | undefined {
     : CHANGES_WORDS.NO_HUNKS;
 }
 
-/** Each changed file's row mark in the tree. */
-export function changeMarks(files: readonly CodingAgentChangedFile[]): readonly FileMark[] {
-  return files.map((file) => ({ path: file.path, status: STATUS_MARK[file.status] }));
-}
-
-/** The lines every file adds and removes, summed. */
-export function linesChanged(files: readonly CodingAgentChangedFile[]) {
-  return {
-    additions: files.reduce((sum, file) => sum + file.additions, 0),
-    deletions: files.reduce((sum, file) => sum + file.deletions, 0),
-  };
+/**
+ * Each changed file's row mark in the tree: what became of it, the lines it
+ * adds and removes, and, where Files changed knows them, how many review
+ * threads stand on it, every one counted, resolved or not, as stage-cli's
+ * tree counts them, and whether the member marked it viewed.
+ */
+export function changeMarks(
+  files: readonly CodingAgentChangedFile[],
+  beside: {
+    readonly threads?: readonly ReviewThread[] | undefined;
+    readonly viewed?: ((path: string) => boolean) | undefined;
+  } = {},
+): readonly FileMark[] {
+  const threads = new Map<string, number>();
+  for (const thread of beside.threads ?? []) {
+    threads.set(thread.path, (threads.get(thread.path) ?? 0) + 1);
+  }
+  return files.map((file) => ({
+    path: file.path,
+    status: STATUS_MARK[file.status],
+    lines: { additions: file.additions, deletions: file.deletions },
+    threads: threads.get(file.path) ?? 0,
+    viewed: beside.viewed?.(file.path),
+  }));
 }
 
 /**
@@ -475,13 +532,34 @@ export function changedFolders(paths: readonly string[]): ReadFolder {
  * paths on each side, `/dev/null` for a side it does not stand on; none
  * where the file carries no hunks to copy.
  */
-export function filePatch(file: CodingAgentChangedFile): string | undefined {
+function filePatch(file: CodingAgentChangedFile): string | undefined {
   if (file.patch === null || fileNotice(file) !== undefined) return undefined;
   const from = file.previousPath ?? file.path;
   const before = file.status === CHANGED_FILE_STATUS.ADDED ? NO_SIDE : `a/${from}`;
   const after = file.status === CHANGED_FILE_STATUS.DELETED ? NO_SIDE : `b/${file.path}`;
   const body = file.patch.endsWith("\n") ? file.patch : `${file.patch}\n`;
   return [`diff --git a/${from} b/${file.path}`, `--- ${before}`, `+++ ${after}`, body].join("\n");
+}
+
+/**
+ * A whole pull request's patch, as git writes one: the patch of every file
+ * given that has lines to draw (`filePatch`), one after another in the order
+ * given; a file with none (a binary, one GitHub omitted, or one that only
+ * moved) is left out. None where no file has one.
+ */
+export function pullRequestPatch(files: readonly CodingAgentChangedFile[]): string | undefined {
+  const patches = files.flatMap((file) => filePatch(file) ?? []);
+  return patches.length === 0 ? undefined : patches.join("");
+}
+
+/** What a pull request's patch is saved as, from its page on GitHub: `<repository>-pr-<number>.patch`, or a plain name where the page names neither. */
+export function pullRequestPatchName(url: string): string {
+  const [, name, kind, number] = URL.canParse(url)
+    ? new URL(url).pathname.split("/").filter((segment) => segment !== "")
+    : [];
+  return name === undefined || kind !== "pull" || number === undefined
+    ? "pull-request.patch"
+    : `${name}-pr-${number}.patch`;
 }
 
 /** A file's header as git writes one, with no hunks under it: what the list draws for a file whose place shows no lines. */
@@ -634,4 +712,190 @@ export function commentLinesLabel(lines: CommentLines): string {
       : `${side === DIFF_SIDE.LEFT ? "L" : "R"}${line}`;
   if (lines.startLine === undefined) return `line ${lines.line}`;
   return `lines ${mark(lines.startLine, lines.startSide ?? lines.side)}–${mark(lines.line, lines.side)}`;
+}
+
+/** A text's lines, and whether its last line ends in a newline, as a patch counts them. */
+function linesOf(text: string) {
+  const endsInNewline = text.endsWith("\n");
+  const body = endsInNewline ? text.slice(0, -1) : text;
+  return {
+    lines: body === "" && endsInNewline ? [""] : body === "" ? [] : body.split("\n"),
+    endsInNewline,
+  };
+}
+
+/** A hunk of a patch as written: where it starts and how many lines it holds on each side, and its lines, each with its mark. */
+interface RawHunk {
+  readonly oldStart: number;
+  readonly oldLines: number;
+  readonly newStart: number;
+  readonly newLines: number;
+  readonly lines: readonly string[];
+}
+
+/**
+ * A patch's hunks as written, each line split at its newline alone, so a
+ * line ending in a carriage return keeps it, as the file's own text does;
+ * none for a patch that does not read as hunks.
+ */
+function rawHunks(patch: string): readonly RawHunk[] | undefined {
+  const hunks: {
+    oldStart: number;
+    oldLines: number;
+    newStart: number;
+    newLines: number;
+    lines: string[];
+  }[] = [];
+  for (const line of patch.split("\n")) {
+    const header = HUNK_COUNTS.exec(line);
+    if (header !== null) {
+      const [, oldStart = "", oldLines = "1", newStart = "", newLines = "1"] = header;
+      hunks.push({
+        oldStart: Number(oldStart),
+        oldLines: Number(oldLines),
+        newStart: Number(newStart),
+        newLines: Number(newLines),
+        lines: [],
+      });
+      continue;
+    }
+    const hunk = hunks.at(-1);
+    if (hunk === undefined) return line === "" ? hunks : undefined;
+    // Note that a line of a hunk always starts with its mark, so an empty one is the patch's end.
+    if (line === "") continue;
+    hunk.lines.push(line);
+  }
+  return hunks;
+}
+
+/**
+ * The name git gives a file's contents, its blob: the SHA-1 of its header
+ * and its bytes, which GitHub names each changed file's contents after by
+ * (`CodingAgentChangedFile.blobSha`).
+ */
+export async function blobShaOf(text: string): Promise<string> {
+  const bytes = new TextEncoder().encode(text);
+  const header = new TextEncoder().encode(`blob ${bytes.length}\0`);
+  const whole = new Uint8Array(header.length + bytes.length);
+  whole.set(header);
+  whole.set(bytes, header.length);
+  const digest = new Uint8Array(await crypto.subtle.digest("SHA-1", whole));
+  return [...digest].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+/** Whether a file's lines between its hunks can be drawn: a file changed in place or moved with changes, whose patch is drawn, and that is no secret file. */
+export function expandable(file: CodingAgentChangedFile): boolean {
+  const changedInPlace =
+    file.status === CHANGED_FILE_STATUS.MODIFIED || file.status === CHANGED_FILE_STATUS.RENAMED;
+  // Note that a secret file is never read whole, so its gaps are never offered.
+  return changedInPlace && fileNotice(file) === undefined && !isSecretFile(file.path);
+}
+
+/** Whether a file only moved, its contents as they were: a rename whose patch holds no hunk. */
+function movedOnly(file: CodingAgentChangedFile): boolean {
+  return file.status === CHANGED_FILE_STATUS.RENAMED && file.patch?.trim() === "";
+}
+
+/** Whether a file can be drawn whole: one whose gaps open (`expandable`), or one that only moved, all of whose lines stand unchanged; never a secret one. */
+export function wholeable(file: CodingAgentChangedFile): boolean {
+  return expandable(file) || (movedOnly(file) && !isSecretFile(file.path));
+}
+
+/**
+ * A changed file's whole text before and after, from its text after alone
+ * and its patch: every line no hunk holds is the same on both sides, so the
+ * text before is the text after with each hunk turned back, its context and
+ * removed lines kept and its added lines dropped. None where the text after
+ * is not the one the patch was made against, any hunk's context or added
+ * lines differing from the text at its place, because the lines between
+ * hunks would then be drawn from another commit; and none for a file
+ * whose lines between hunks are not drawn (`expandable`).
+ */
+export function textsOf(file: CodingAgentChangedFile, after: string): DiffFileTexts | undefined {
+  // A file that only moved stood before as it stands now.
+  if (movedOnly(file) && wholeable(file)) return { before: after, after };
+  const patch = file.patch;
+  if (!expandable(file) || patch === null) return undefined;
+  const hunks = rawHunks(patch);
+  if (hunks === undefined) return undefined;
+  const { lines, endsInNewline } = linesOf(after);
+  const before: string[] = [];
+  let at = 0;
+  // Which side a "No newline at end of file" marker followed: the text before's last line, or the text after's alone.
+  let beforeUnended = false;
+  let afterOnlyUnended = false;
+  for (const hunk of hunks) {
+    // A hunk adding nothing names the line before its place, as a patch does.
+    const start = hunk.newLines === 0 ? hunk.newStart : hunk.newStart - 1;
+    if (start < at || start > lines.length) return undefined;
+    before.push(...lines.slice(at, start));
+    const beforeStart = hunk.oldLines === 0 ? hunk.oldStart : hunk.oldStart - 1;
+    if (before.length !== beforeStart) return undefined;
+    at = start;
+    let previous = " ";
+    for (const line of hunk.lines) {
+      const mark = line.slice(0, 1);
+      const text = line.slice(1);
+      if (mark === "\\") {
+        if (previous === "+") afterOnlyUnended = true;
+        else beforeUnended = true;
+        continue;
+      }
+      if (mark !== "-") {
+        if (lines[at] !== text) return undefined;
+        at += 1;
+      }
+      if (mark !== "+") before.push(text);
+      previous = mark;
+    }
+  }
+  before.push(...lines.slice(at));
+  const text = before.join("\n");
+  const beforeEndsInNewline = beforeUnended ? false : afterOnlyUnended ? true : endsInNewline;
+  return { before: beforeEndsInNewline && before.length > 0 ? `${text}\n` : text, after };
+}
+
+/**
+ * The lines a comment is on as they read at the head, for a suggestion to
+ * start from: the new side's words of each line from its first to its
+ * last, as the file's patch holds them. None where either end counts on
+ * the old side, whose lines a suggestion cannot change, or where the patch
+ * holds no row for one of the lines.
+ */
+export function suggestedLines(
+  file: CodingAgentChangedFile,
+  lines: CommentLines,
+): string | undefined {
+  const first = lines.startLine ?? lines.line;
+  const sides = [lines.side, lines.startSide ?? lines.side];
+  if (file.patch === null || sides.some((side) => side !== DIFF_SIDE.RIGHT)) return undefined;
+  const hunk = (patchHunks(file.patch) ?? []).find(({ rows }) =>
+    rows.some((row) => row.newLine === lines.line),
+  );
+  const rows = (hunk?.rows ?? []).filter(
+    (row) => row.newLine !== undefined && row.newLine >= first && row.newLine <= lines.line,
+  );
+  if (rows.length !== lines.line - first + 1) return undefined;
+  return rows.map((row) => row.text).join("\n");
+}
+
+/**
+ * Where a line of a file stands in the order its diff draws its rows: its
+ * row's place among every hunk's rows, the old side's line found among the
+ * rows that hold it, as a pick's ends are (`commentLines`); none for a line
+ * no row stands for.
+ */
+export function rowPlace(
+  file: CodingAgentChangedFile,
+  side: DiffSelection["side"],
+  line: number,
+): number | undefined {
+  if (file.patch === null) return undefined;
+  const rows = (patchHunks(file.patch) ?? []).flatMap((hunk) => hunk.rows);
+  const at = rows.findIndex((row) =>
+    side === DIFF_SELECTION_SIDE.DELETIONS
+      ? row.kind !== DIFF_ROW.ADDED && row.oldLine === line
+      : row.newLine === line,
+  );
+  return at === -1 ? undefined : at;
 }

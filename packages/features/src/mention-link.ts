@@ -1,4 +1,5 @@
 import { Schema as EffectSchema, Option } from "effect";
+import { dateLabel, isDateMoment, isDateRange } from "./date-mention.js";
 import {
   INTEGRATION_NAME,
   integrationConnectionNameSchema,
@@ -33,8 +34,7 @@ import { PLAN_SECTION_BOUNDS } from "./task-wire.js";
  * Linear issue's address is the words' own, and is handed nothing.
  *
  * The target is the address the thing has on the web, so a mention copied
- * out of Luke, into Slack, a pull request or a mail, still leads somewhere
- * (`docs/proposals/web-and-links.md`):
+ * out of Luke, into Slack, a pull request or a mail, still leads somewhere:
  *
  * - A task is `https://tryluke.dev/<workspace>/plan/<id>`, and one of its
  *   sections that with `#<anchor>` after it. Only the id finds the task: the
@@ -47,7 +47,9 @@ import { PLAN_SECTION_BOUNDS } from "./task-wire.js";
  *   (`luke-link.ts`): ids alone, never the page's title or the agent's. A
  *   coding agent on no task, as an automation's run or a one-off starts
  *   one, is the workspace's address with `/agent/<agentId>` after it, its
- *   own link, so any agent of the workspace can be mentioned.
+ *   own link, so any agent of the workspace can be mentioned, and a page
+ *   it showed, which stands on it rather than a task, is that address with
+ *   `/page/<pageId>` after it.
  * - A person is their page in the workspace, the workspace's address with
  *   `/person/<userId>` after it, the link their page is opened and copied
  *   by (`luke-link.ts`): the account's id alone, never their name or email,
@@ -82,6 +84,12 @@ import { PLAN_SECTION_BOUNDS } from "./task-wire.js";
  * the tool's own name
  * as the server lists it.
  *
+ * A date has no page of its own either, so it keeps the `luke:` form too:
+ * `luke://date/<start>`, and `luke://date/<start>/<end>` for a range, each
+ * end ISO 8601 as Notion holds a date's (`date-mention.ts`): a day,
+ * `2026-10-20`, or a time on one with its offset, `2026-10-20T15:00-07:00`.
+ * Its label is the date in full, so the words read as it anywhere.
+ *
  * A page of one of the integrations, a Linear issue or a pull request, is
  * named by its own web address, which a host of the integration's
  * (`INTEGRATION_HOSTS`) says it is the integration's. It is read last, after
@@ -101,6 +109,10 @@ export const MENTION_KIND = {
   PAGE: "page",
   AGENT: "agent",
   PERSON: "person",
+  /** Luke on one task, whom a comment's mention sends its thread. */
+  LUKE: "luke",
+  /** A day, a time on one, or a range of either. */
+  DATE: "date",
 } as const;
 
 const MENTION_BOUNDS = {
@@ -131,6 +143,7 @@ const LINK = {
   PAGE_STEP: "page",
   AGENT_STEP: "agent",
   PERSON_STEP: "person",
+  LUKE_STEP: "luke",
 } as const;
 
 /** A file's or a folder's page on GitHub: the default branch for the thing itself, a commit for its lines. */
@@ -149,6 +162,7 @@ const LEGACY = {
     [MENTION_KIND.FILE]: "file",
     [MENTION_KIND.FOLDER]: "folder",
     [MENTION_KIND.SERVER]: "mcp",
+    [MENTION_KIND.DATE]: "date",
   },
 } as const;
 
@@ -265,6 +279,9 @@ const linesSchema = EffectSchema.Struct({
   endLine: lineSchema,
 }).check(EffectSchema.makeFilter(({ startLine, endLine }) => startLine <= endLine));
 
+/** One end of a date: a day, or a time on one with its offset (`date-mention.ts`). */
+const dateMomentSchema = EffectSchema.String.check(EffectSchema.makeFilter(isDateMoment));
+
 const mentionSchema = EffectSchema.Union([
   EffectSchema.Struct({
     kind: EffectSchema.Literal(MENTION_KIND.TASK),
@@ -312,6 +329,12 @@ const mentionSchema = EffectSchema.Union([
     taskId: taskIdSchema,
     pageId: thingIdSchema,
   }),
+  // A page a coding agent on no task showed stands on the agent rather than a task.
+  EffectSchema.Struct({
+    kind: EffectSchema.Literal(MENTION_KIND.PAGE),
+    agentId: thingIdSchema,
+    pageId: thingIdSchema,
+  }),
   EffectSchema.Struct({
     kind: EffectSchema.Literal(MENTION_KIND.AGENT),
     /** The task the agent works on; absent for an agent on none. */
@@ -323,6 +346,18 @@ const mentionSchema = EffectSchema.Union([
     /** The person's account id, as the service names a member by. */
     userId: thingIdSchema,
   }),
+  EffectSchema.Struct({
+    kind: EffectSchema.Literal(MENTION_KIND.LUKE),
+    taskId: taskIdSchema,
+  }),
+  EffectSchema.Struct({
+    kind: EffectSchema.Literal(MENTION_KIND.DATE),
+    start: dateMomentSchema,
+    /** A range's end: both ends days or both times, the end after the start. */
+    end: EffectSchema.optionalKey(dateMomentSchema),
+  }).check(
+    EffectSchema.makeFilter(({ start, end }) => end === undefined || isDateRange(start, end)),
+  ),
 ]);
 
 export type Mention = typeof mentionSchema.Type;
@@ -409,7 +444,7 @@ function decodedPath(pathname: string): string | undefined {
 
 /**
  * A target read as an address, or nothing where it is none. Note that it is
- * `new URL` caught rather than `URL.parse`, because the "Open in Luke" page
+ * `new URL` caught rather than `URL.parse`, because the web app
  * reads a link in whatever browser opened it, and Safari before 18 has no
  * `URL.parse`.
  */
@@ -454,6 +489,12 @@ function legacyFields(url: URL) {
       if (tool === undefined) return { kind: MENTION_KIND.SERVER, ...server };
       return { kind: MENTION_KIND.TOOL, ...server, tool: decodedPart(tool) };
     }
+    case LEGACY.HOST[MENTION_KIND.DATE]: {
+      const [start, end, ...rest] = url.pathname.replace(/^\//u, "").split("/");
+      if (rest.length > 0 || url.hash !== "" || url.search !== "") return undefined;
+      const moments = { kind: MENTION_KIND.DATE, start: decodedPart(start ?? "") };
+      return end === undefined ? moments : { ...moments, end: decodedPart(end) };
+    }
     case LEGACY.HOST[MENTION_KIND.TASK]: {
       const taskId = decodedPart(url.pathname.replace(/^\//u, ""));
       if (url.hash === "") return { kind: MENTION_KIND.TASK, taskId };
@@ -470,20 +511,36 @@ function legacyFields(url: URL) {
 /** The fields a page's or an agent's address spells after its task's id, or after the workspace for an agent on no task: `/page/<id>` or `/agent/<id>`, with no fragment. */
 function taskFields(taskId: string | undefined, rest: readonly string[], hash: string) {
   const [step, id, ...more] = rest;
-  if (id === undefined || more.length > 0 || hash !== "") return undefined;
-  // A page always stands on a task, so one with none reads as nothing to the schema.
-  if (step === LINK.PAGE_STEP) return { kind: MENTION_KIND.PAGE, taskId, pageId: decodedPart(id) };
+  // Luke stands on a task with no id of his own: `/luke`.
+  if (step === LINK.LUKE_STEP && id === undefined && hash === "") {
+    return taskId === undefined ? undefined : { kind: MENTION_KIND.LUKE, taskId };
+  }
+  if (id === undefined || hash !== "") return undefined;
+  // A page always stands on a task here, so one with none reads as nothing to the schema.
+  if (step === LINK.PAGE_STEP && more.length === 0) {
+    return { kind: MENTION_KIND.PAGE, taskId, pageId: decodedPart(id) };
+  }
   if (step !== LINK.AGENT_STEP) return undefined;
   const agentId = decodedPart(id);
+  // An agent on no task holds its own pages: `/agent/<agentId>/page/<pageId>`.
+  if (taskId === undefined && more.length === 2 && more[0] === LINK.PAGE_STEP) {
+    return { kind: MENTION_KIND.PAGE, agentId, pageId: decodedPart(more[1] ?? "") };
+  }
+  if (more.length > 0) return undefined;
   return taskId === undefined
     ? { kind: MENTION_KIND.AGENT, agentId }
     : { kind: MENTION_KIND.AGENT, taskId, agentId };
 }
 
-/** The fields a person's address spells after the workspace, `/person/<userId>`, with nothing after it but the trailing slash a Luke link is read with (`luke-link.ts`). */
-function personFields(id: string, rest: readonly string[], hash: string) {
+/** Whether a thing's address under the workspace ends at its id, but for the trailing slash a Luke link is read with (`luke-link.ts`), and has no fragment. */
+function endsAtId(rest: readonly string[], hash: string): boolean {
   const trailing = rest.length === 1 && rest[0] === "";
-  if ((rest.length > 0 && !trailing) || hash !== "") return undefined;
+  return (rest.length === 0 || trailing) && hash === "";
+}
+
+/** The fields a person's address spells after the workspace, `/person/<userId>`, ending at the id. */
+function personFields(id: string, rest: readonly string[], hash: string) {
+  if (!endsAtId(rest, hash)) return undefined;
   return { kind: MENTION_KIND.PERSON, userId: decodedPart(id) };
 }
 
@@ -761,8 +818,14 @@ export function encodeMention(mention: Mention, place: MentionPlace): string {
       return `${LEGACY.PROTOCOL}//${LEGACY.HOST[MENTION_KIND.SERVER]}/${mention.connection ?? mention.provider}/${encodedPart(mention.tool)}`;
     case MENTION_KIND.LINK:
       return linkAddress(mention.url);
-    case MENTION_KIND.PAGE:
-      return `${taskTarget(mention.taskId, place, "")}/${LINK.PAGE_STEP}/${encodedPart(mention.pageId)}`;
+    case MENTION_KIND.PAGE: {
+      // A page of an agent on no task stands under that agent's own address.
+      const owner =
+        "agentId" in mention
+          ? `${LINK_ORIGIN}/${encodedPart(place.workspace)}/${LINK.AGENT_STEP}/${encodedPart(mention.agentId)}`
+          : taskTarget(mention.taskId, place, "");
+      return `${owner}/${LINK.PAGE_STEP}/${encodedPart(mention.pageId)}`;
+    }
     case MENTION_KIND.AGENT: {
       // An agent on no task stands under its workspace, as its own Luke link does.
       const owner =
@@ -773,6 +836,13 @@ export function encodeMention(mention: Mention, place: MentionPlace): string {
     }
     case MENTION_KIND.PERSON:
       return `${LINK_ORIGIN}/${encodedPart(place.workspace)}/${LINK.PERSON_STEP}/${encodedPart(mention.userId)}`;
+    case MENTION_KIND.LUKE:
+      return `${taskTarget(mention.taskId, place, "")}/${LINK.LUKE_STEP}`;
+    // A date has no page of its own, so it keeps the app's own form; its ends spell nothing a target must encode.
+    case MENTION_KIND.DATE: {
+      const date = `${LEGACY.PROTOCOL}//${LEGACY.HOST[MENTION_KIND.DATE]}/${mention.start}`;
+      return mention.end === undefined ? date : `${date}/${mention.end}`;
+    }
   }
 }
 
@@ -842,6 +912,7 @@ const BARE_NAME = {
   PAGE: "Page",
   AGENT: "Agent",
   PERSON: "Person",
+  LUKE: "Luke",
 } as const;
 
 /** A file's lines as a chip names them, `app.ts:12–20`, as a mention of them picked from a File tab is named. */
@@ -878,6 +949,10 @@ function bareName(mention: Mention): string {
       return BARE_NAME.AGENT;
     case MENTION_KIND.PERSON:
       return BARE_NAME.PERSON;
+    case MENTION_KIND.LUKE:
+      return BARE_NAME.LUKE;
+    case MENTION_KIND.DATE:
+      return dateLabel(mention);
   }
 }
 
@@ -1015,6 +1090,26 @@ export function mentionsIn(
     if (mention !== undefined) found.push({ ...link, mention });
   }
   return found;
+}
+
+/**
+ * The coding agents a comment on the task's plan asks: those its words
+ * mention, each once, in the order written. A mention is a link the writer
+ * placed with `@`; a bare link to an agent asks no one, and neither does a
+ * mention of a task's Luke, whom no task has any more.
+ */
+export function askedInWords(words: string): readonly string[] {
+  const agentIds: string[] = [];
+  // Note that every mention of the comment's bounded words is read, beyond the twenty a message hands an agent, so no one asked is missed.
+  for (const { mention } of mentionsIn(words, null, Number.POSITIVE_INFINITY)) {
+    if (
+      mention.kind === MENTION_KIND.AGENT &&
+      !agentIds.some((id) => id.toLowerCase() === mention.agentId.toLowerCase())
+    ) {
+      agentIds.push(mention.agentId);
+    }
+  }
+  return agentIds;
 }
 
 /** The quotes a link's title may stand between, after its destination. */

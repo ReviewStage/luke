@@ -127,7 +127,16 @@ export function UnpinIcon(): React.JSX.Element {
   );
 }
 
-/** A box under its lid: puts a task away under Archived. */
+/** A check, drawn as a button's glyph: marks a task done. */
+export function MarkDoneIcon(): React.JSX.Element {
+  return (
+    <Glyph className="icon-button-glyph">
+      <path d="M4.8 12.6 9.6 17.3 19.2 6.9" />
+    </Glyph>
+  );
+}
+
+/** A box under its lid: puts an agent, or a task left archived, away under Archived. */
 export function ArchiveIcon(): React.JSX.Element {
   return (
     <Glyph className="icon-button-glyph">
@@ -220,6 +229,15 @@ export function BackIcon(): React.JSX.Element {
   );
 }
 
+/** Points on, the mirror of `BackIcon`: a calendar's next month. */
+export function ForwardIcon(): React.JSX.Element {
+  return (
+    <Glyph className="icon-button-glyph">
+      <path d="m9.4 5.8 6.2 6.2-6.2 6.2" />
+    </Glyph>
+  );
+}
+
 /** An arrow pointing left: back to the place the window stood on before. */
 export function ArrowLeftIcon(): React.JSX.Element {
   return (
@@ -236,6 +254,26 @@ export function ArrowRightIcon(): React.JSX.Element {
     <Glyph className="icon-button-glyph">
       <path d="M5 12h14" />
       <path d="m12.4 5.4 6.6 6.6-6.6 6.6" />
+    </Glyph>
+  );
+}
+
+/** An arrow pointing up: a row moved one place up its list. */
+export function ArrowUpIcon(): React.JSX.Element {
+  return (
+    <Glyph className="icon-button-glyph">
+      <path d="M12 19V5" />
+      <path d="m5.4 11.6 6.6-6.6 6.6 6.6" />
+    </Glyph>
+  );
+}
+
+/** An arrow pointing down: a row moved one place down its list. */
+export function ArrowDownIcon(): React.JSX.Element {
+  return (
+    <Glyph className="icon-button-glyph">
+      <path d="M12 5v14" />
+      <path d="m5.4 12.4 6.6 6.6 6.6-6.6" />
     </Glyph>
   );
 }
@@ -584,6 +622,15 @@ export function PlayIcon(): React.JSX.Element {
   );
 }
 
+/** Stops what is playing: the square every transport draws for stop, at the triangle's weight. */
+export function StopIcon(): React.JSX.Element {
+  return (
+    <Glyph className="control-icon">
+      <rect x="6" y="6" width="12" height="12" rx="1.8" fill="currentColor" stroke="none" />
+    </Glyph>
+  );
+}
+
 /** A board on its stand with a line drawn across it: the task's whiteboard. */
 export function BoardIcon(): React.JSX.Element {
   return (
@@ -630,6 +677,36 @@ export function CallIcon(): React.JSX.Element {
   return (
     <Glyph className="icon-button-glyph">
       <path d="M13.58 15.93a.86.86 0 0 0 1.043-.261l.305-.4A1.72 1.72 0 0 1 16.3 14.58h2.58a1.72 1.72 0 0 1 1.72 1.72v2.58a1.72 1.72 0 0 1-1.72 1.72A15.48 15.48 0 0 1 3.4 5.12a1.72 1.72 0 0 1 1.72-1.72h2.58a1.72 1.72 0 0 1 1.72 1.72v2.58a1.72 1.72 0 0 1-.688 1.376l-.402.302a.86.86 0 0 0-.251 1.06 12.04 12.04 0 0 0 5.497 5.49" />
+    </Glyph>
+  );
+}
+
+/**
+ * A sound wave's bars: a call into an agent, which starts one where none is
+ * up. Its path is Lucide's `audio-lines` (ISC licence), drawn in our stroke.
+ */
+export function WaveformIcon(): React.JSX.Element {
+  return (
+    <Glyph className="icon-button-glyph">
+      <path d="M2 10v3" />
+      <path d="M6 6v11" />
+      <path d="M10 3v18" />
+      <path d="M14 8v7" />
+      <path d="M18 5v13" />
+      <path d="M22 10v3" />
+    </Glyph>
+  );
+}
+
+/**
+ * A speech bubble, for a plan's comments: the side panel's Comments tab and
+ * the summary's row. Its path is Lucide's `message-square` (ISC licence),
+ * drawn in our stroke.
+ */
+export function CommentsIcon(): React.JSX.Element {
+  return (
+    <Glyph className="icon-button-glyph">
+      <path d="M21 16a2 2 0 0 1-2 2H7.83a2 2 0 0 0-1.414.586l-2.2 2.2A.71.71 0 0 1 3 20.286V6a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
     </Glyph>
   );
 }

@@ -1,6 +1,14 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { appLinkOf, LINK_PLACE, type LinkPlace, linkOf, readLink } from "./luke-link.js";
+import {
+  ADMIN_LINK_SECTION,
+  appLinkOf,
+  LINK_PLACE,
+  type LinkPlace,
+  linkOf,
+  PULL_REQUEST_THREAD_VIEW,
+  readLink,
+} from "./luke-link.js";
 
 /**
  * A place in Luke as the link a teammate is sent: written under its
@@ -18,10 +26,12 @@ const HOME = "https://tryluke.dev/acme";
 const LINKS: readonly (readonly [LinkPlace, string])[] = [
   [{ kind: LINK_PLACE.TASK, planId: TASK }, `${HOME}/plan/${TASK}`],
   [{ kind: LINK_PLACE.SECTION, planId: TASK, anchor: "rollout" }, `${HOME}/plan/${TASK}#rollout`],
+  [
+    { kind: LINK_PLACE.COMMENT, planId: TASK, threadId: OTHER },
+    `${HOME}/plan/${TASK}?comment=${OTHER}`,
+  ],
   [{ kind: LINK_PLACE.VERSION, planId: TASK, revision: 12 }, `${HOME}/plan/${TASK}/version/12`],
   [{ kind: LINK_PLACE.PAGE, planId: TASK, pageId: OTHER }, `${HOME}/plan/${TASK}/page/${OTHER}`],
-  [{ kind: LINK_PLACE.CALL, planId: TASK }, `${HOME}/plan/${TASK}/call`],
-  [{ kind: LINK_PLACE.CALL, planId: TASK, callId: "call_9" }, `${HOME}/plan/${TASK}/call/call_9`],
   [
     { kind: LINK_PLACE.TURN, planId: TASK, at: 1760000000000 },
     `${HOME}/plan/${TASK}/work/1760000000000`,
@@ -41,12 +51,36 @@ const LINKS: readonly (readonly [LinkPlace, string])[] = [
     `${HOME}/plan/${TASK}/agent/${AGENT}/changes`,
   ],
   [
+    {
+      kind: LINK_PLACE.PULL_REQUEST_THREAD,
+      planId: TASK,
+      agentId: AGENT,
+      threadId: "PRRT_kwDOAbc-_12",
+      view: PULL_REQUEST_THREAD_VIEW.CONVERSATION,
+    },
+    `${HOME}/plan/${TASK}/agent/${AGENT}/changes/conversation/thread/PRRT_kwDOAbc-_12`,
+  ],
+  [
+    {
+      kind: LINK_PLACE.PULL_REQUEST_THREAD,
+      planId: TASK,
+      agentId: AGENT,
+      threadId: "PRRT_kwDOAbc-_12",
+      view: PULL_REQUEST_THREAD_VIEW.FILES,
+    },
+    `${HOME}/plan/${TASK}/agent/${AGENT}/changes/files/thread/PRRT_kwDOAbc-_12`,
+  ],
+  [
     { kind: LINK_PLACE.MESSAGE, planId: TASK, agentId: AGENT, messageId: OTHER },
     `${HOME}/plan/${TASK}/agent/${AGENT}/message/${OTHER}`,
   ],
   [
     { kind: LINK_PLACE.MESSAGE, agentId: AGENT, messageId: OTHER },
     `${HOME}/agent/${AGENT}/message/${OTHER}`,
+  ],
+  [
+    { kind: LINK_PLACE.PAGE, agentId: AGENT, pageId: OTHER },
+    `${HOME}/agent/${AGENT}/page/${OTHER}`,
   ],
   [{ kind: LINK_PLACE.INBOX }, `${HOME}/inbox`],
   [
@@ -63,11 +97,16 @@ const LINKS: readonly (readonly [LinkPlace, string])[] = [
     { kind: LINK_PLACE.AUTOMATION_RUN, automationId: OTHER, runId: AGENT },
     `${HOME}/automation/${OTHER}/run/${AGENT}`,
   ],
-  [{ kind: LINK_PLACE.FACTORY }, `${HOME}/factory`],
   [{ kind: LINK_PLACE.SETTINGS }, `${HOME}/settings`],
   [{ kind: LINK_PLACE.SETTINGS, page: "coding-agents" }, `${HOME}/settings/coding-agents`],
   [{ kind: LINK_PLACE.PERSON, userId: "user_9Fq2-x" }, `${HOME}/person/user_9Fq2-x`],
-  [{ kind: LINK_PLACE.ISSUE, issueId: OTHER }, `${HOME}/issue/${OTHER}`],
+  [{ kind: LINK_PLACE.CHAT }, `${HOME}/chat`],
+  [{ kind: LINK_PLACE.CHAT, channelId: OTHER }, `${HOME}/chat/${OTHER}`],
+  [{ kind: LINK_PLACE.ADMIN }, `${HOME}/admin`],
+  [{ kind: LINK_PLACE.ADMIN, section: ADMIN_LINK_SECTION.COST }, `${HOME}/admin/cost`],
+  [{ kind: LINK_PLACE.ADMIN, section: ADMIN_LINK_SECTION.USERS }, `${HOME}/admin/users`],
+  [{ kind: LINK_PLACE.ADMIN, userId: "user_9Fq2-x" }, `${HOME}/admin/user/user_9Fq2-x`],
+  [{ kind: LINK_PLACE.ADMIN, day: "2026-10-12" }, `${HOME}/admin/day/2026-10-12`],
 ];
 
 test("every place is shared as its kind's address under its workspace, by its ids alone", () => {
@@ -100,6 +139,22 @@ test("a link pasted with a trailing slash, a query, or a fragment its kind has n
     workspace: "acme",
     place: { kind: LINK_PLACE.INBOX_ITEM, agentId: AGENT, itemId: OTHER },
   });
+});
+
+test("a task's link names one of its comment threads by its comment query alone, any other query being the address's own", () => {
+  assert.deepEqual(readLink(`${HOME}/task/${TASK}/?from=slack&comment=${OTHER}#rollout`)?.place, {
+    kind: LINK_PLACE.COMMENT,
+    planId: TASK,
+    threadId: OTHER,
+  });
+  assert.deepEqual(readLink(`${HOME}/plan/${TASK}?comment=${OTHER}&comment=${AGENT}`)?.place, {
+    kind: LINK_PLACE.TASK,
+    planId: TASK,
+  });
+  assert.equal(
+    appLinkOf(`${HOME}/plan/${TASK}?comment=${OTHER}&from=slack`),
+    `tryluke://tryluke.dev/acme/plan/${TASK}?comment=${OTHER}`,
+  );
 });
 
 test("a task's own link, or a section's, is read under /task/ and with a slash after its id, as under /plan/", () => {
@@ -160,26 +215,49 @@ test("an address that names no place in Luke names nothing", () => {
     `${HOME}/agents/${AGENT}`,
     `${HOME}/agent/${AGENT}/changes`,
     `${HOME}/agent/${AGENT}/worker/toolu_01`,
+    `${HOME}/agent/${AGENT}/changes/files/thread/PRRT_1`,
+    `${HOME}/plan/${TASK}/agent/${AGENT}/changes/checks/thread/PRRT_1`,
+    `${HOME}/plan/${TASK}/agent/${AGENT}/changes/files/threads/PRRT_1`,
+    `${HOME}/plan/${TASK}/agent/${AGENT}/changes/files/thread`,
+    `${HOME}/plan/${TASK}/agent/${AGENT}/changes/files/thread/PRRT_1/more`,
+    `${HOME}/plan/${TASK}/agent/${AGENT}/changes/files/thread/MDE%3D`,
     `${HOME}/agent/Fix%20the%20billing%20export`,
     `${HOME}/task/Fix%20billing`,
     `${HOME}/plan/Fix%20billing#rollout`,
     `${HOME}/plan/${TASK}/version/latest`,
     `${HOME}/plan/${TASK}/call/call_9/more`,
+    // The task's Call tab is gone, and a link to it, or to a call there, names nothing.
+    `${HOME}/plan/${TASK}/call`,
+    `${HOME}/plan/${TASK}/call/call_9`,
     `${HOME}/inbox/${OTHER}`,
     `${HOME}/plan/${TASK}/agent/${AGENT}/inbox/${OTHER}`,
     `${HOME}/agent/${AGENT}/inbox/${OTHER}/answer`,
+    `${HOME}/agent/${AGENT}/page/${OTHER}/source`,
+    `${HOME}/plan/${TASK}/agent/${AGENT}/page/${OTHER}`,
     `${HOME}/automations/${OTHER}`,
     `${HOME}/automation/${OTHER}/runs/${AGENT}`,
-    `${HOME}/factory/today`,
+    // Factory is gone, and a link to it names nothing.
+    `${HOME}/factory`,
     `${HOME}/settings/Coding%20agents`,
     `${HOME}/person`,
     `${HOME}/people/user_9Fq2-x`,
     `${HOME}/person/user_9Fq2-x/tasks`,
     `${HOME}/person/charles%40acme.dev`,
-    `${HOME}/issue`,
-    `${HOME}/issues/${OTHER}`,
-    `${HOME}/issue/${OTHER}/comments`,
-    `${HOME}/issue/LUKE%2012`,
+    `${HOME}/issue/${OTHER}`,
+    `${HOME}/chats/${OTHER}`,
+    `${HOME}/chat/${OTHER}/message/${AGENT}`,
+    `${HOME}/chat/%23general`,
+    // The Admin place's Overview is the place's own link, and a section, an account, or a day it does not know is no place.
+    `${HOME}/admin/dashboard`,
+    `${HOME}/admin/animations`,
+    `${HOME}/admin/bogus`,
+    `${HOME}/admin/cost/more`,
+    `${HOME}/admin/user`,
+    `${HOME}/admin/user/u1/tasks`,
+    `${HOME}/admin/user/charles%40acme.dev`,
+    `${HOME}/admin/day`,
+    `${HOME}/admin/day/latest`,
+    `${HOME}/admin/day/2026-02-30`,
     `${HOME}/agent/%E0%A4%A`,
     `${HOME}/agent/${"a".repeat(201)}`,
     `luke://mcp/linear`,

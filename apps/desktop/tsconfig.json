@@ -3,5 +3,5 @@
   "compilerOptions": {
     "types": ["node", "electron"]
   },
-  "include": ["src/**/*.ts", "src/**/*.tsx"]
+  "include": ["src/**/*.ts", "src/**/*.tsx", "../../packages/panel/src/stylesheet.d.ts"]
 }

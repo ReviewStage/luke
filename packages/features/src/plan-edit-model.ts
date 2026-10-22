@@ -1,4 +1,5 @@
 import { Schema } from "effect";
+import type { PlanCommentAnchors } from "./plan-comment-wire.js";
 import { PLAN_EDIT_REFUSAL, type PlanEditRequest, type PlanEditValue } from "./plan-edit.js";
 import { TASK_BOUNDS } from "./task-wire.js";
 import { TASK_CALL_FAILURE, type TasksEditAnswer, type TasksEditFailure } from "./tasks-view.js";
@@ -41,6 +42,8 @@ type DocumentEditorState =
 export interface DocumentEditor {
   /** The words in the editor. */
   readonly draft: string;
+  /** Where the editor's comment threads stand in the words, where it carries any (`plan-comment-wire.ts`). */
+  readonly anchors?: PlanCommentAnchors;
   /** The text the developer's words are a change from: what the editor opened on, or their own last save. */
   readonly base: string;
   /** The save still out; absent while none is. */
@@ -54,7 +57,6 @@ export interface DocumentEditor {
 const FAILURE_NOTE = {
   [TASK_CALL_FAILURE.UNANSWERED]: "Not saved: the service did not answer.",
   [TASK_CALL_FAILURE.NOT_FOUND]: "Not saved: this task no longer exists.",
-  [TASK_CALL_FAILURE.TASK_ARCHIVED]: "Not saved: this task is archived.",
   [PLAN_EDIT_REFUSAL.TOO_LONG]: "Not saved: the plan is too long.",
 } as const satisfies Record<TasksEditFailure, string>;
 
@@ -84,18 +86,25 @@ export function editorOpened(text: string): DocumentEditor {
 }
 
 /**
- * Words typed: a failed save is tried again with them on the next pause; a
- * conflict still waits; a text past its bound says so and is not sent.
+ * Words typed, and where the editor's comment threads now stand in them,
+ * where it reports any: a failed save is tried again with them on the next
+ * pause; a conflict still waits; a text past its bound says so and is not
+ * sent.
  */
-export function editorTyped(editor: DocumentEditor, draft: string): DocumentEditor {
+export function editorTyped(
+  editor: DocumentEditor,
+  draft: string,
+  anchors: PlanCommentAnchors | undefined = editor.anchors,
+): DocumentEditor {
+  const typed = anchors === undefined ? { ...editor, draft } : { ...editor, draft, anchors };
   if (tooLong(draft)) {
     const note = FAILURE_NOTE[PLAN_EDIT_REFUSAL.TOO_LONG];
-    return { ...editor, draft, state: { kind: DOCUMENT_EDITOR_STATE.FAILED, note } };
+    return { ...typed, state: { kind: DOCUMENT_EDITOR_STATE.FAILED, note } };
   }
   if (editor.state.kind === DOCUMENT_EDITOR_STATE.FAILED) {
-    return { ...editor, draft, state: { kind: DOCUMENT_EDITOR_STATE.EDITING } };
+    return { ...typed, state: { kind: DOCUMENT_EDITOR_STATE.EDITING } };
   }
-  return { ...editor, draft };
+  return typed;
 }
 
 /**
@@ -106,9 +115,10 @@ export function editorTyped(editor: DocumentEditor, draft: string): DocumentEdit
 export function pendingSave(editor: DocumentEditor): PlanEditRequest | undefined {
   if (editor.sending !== undefined) return undefined;
   if (editor.state.kind !== DOCUMENT_EDITOR_STATE.EDITING) return undefined;
-  const { base, draft } = editor;
+  const { base, draft, anchors } = editor;
   if (draft === base || tooLong(draft)) return undefined;
-  return { document: { base, value: draft } };
+  const document = { base, value: draft };
+  return anchors === undefined ? { document } : { document, comments: anchors };
 }
 
 export function editorSent(editor: DocumentEditor, request: PlanEditRequest): DocumentEditor {

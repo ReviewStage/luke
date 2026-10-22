@@ -1,14 +1,17 @@
 import type { DatabaseServices } from "@luke/database/core/query";
-import { Clock, Effect } from "effect";
+import type {
+  AdminDayAccount,
+  AdminDayDetail,
+  AdminDayTotals,
+} from "@luke/features/admin-answer-wire";
 import {
-  ADMIN_ERROR,
-  ADMIN_HTTP_STATUS,
+  type AdminDayQuery,
   type AdminMetricsScope,
   adminDayKey,
   adminMetricsScope,
-  errorResponse,
-  jsonResponse,
-} from "./http.js";
+} from "@luke/features/admin-wire";
+import { Clock, Effect } from "effect";
+import { ADMIN_REFUSAL, type AdminRefusal } from "./http-effect.js";
 import { type AdminSeamEffect, unavailableSeam } from "./seam.js";
 
 /**
@@ -27,23 +30,6 @@ import { type AdminSeamEffect, unavailableSeam } from "./seam.js";
  */
 export const ADMIN_DAY_ACCOUNTS_LIMIT = 50;
 
-/** One account's share of the day, the same account fields the tables draw. */
-export interface AdminDayAccount {
-  id: string;
-  name: string;
-  email: string;
-  /** The avatar URL the sign-in provider gave the account, when it gave one. */
-  image: string | null;
-  admin: boolean;
-  calls: number;
-}
-
-/** The whole day's counts, over every account the scope keeps, past the row bound. */
-interface AdminDayTotals {
-  accounts: number;
-  calls: number;
-}
-
 /**
  * The raw shape the queries produce for one day. The rows arrive bounded and
  * ordered, so the totals ride their own aggregate read — folding them from
@@ -52,17 +38,6 @@ interface AdminDayTotals {
 export interface AdminDaySource {
   accounts: readonly AdminDayAccount[];
   totals: AdminDayTotals;
-}
-
-export interface AdminDayDetail {
-  generatedAt: number;
-  /** The UTC day the counts cover, as YYYY-MM-DD. */
-  day: string;
-  /** The bound `accounts` was read under, so the page can word a truncation. */
-  limit: number;
-  totals: AdminDayTotals;
-  /** The day's active accounts, busiest first, cut at the stated bound. */
-  accounts: AdminDayAccount[];
 }
 
 /** Stamps one day's queried source with the day it covers and the bound it was read under. */
@@ -81,7 +56,7 @@ export function buildAdminDayDetail(
 }
 
 export interface AdminDayOptions {
-  request: Request;
+  query: AdminDayQuery;
   readDay: (day: string, now: number, scope: AdminMetricsScope) => AdminSeamEffect<AdminDayDetail>;
 }
 
@@ -94,18 +69,15 @@ export interface AdminDayOptions {
  */
 export function handleAdminDay(
   options: AdminDayOptions,
-): Effect.Effect<Response, never, DatabaseServices> {
-  const { request } = options;
+): Effect.Effect<AdminDayDetail, AdminRefusal, DatabaseServices> {
+  const { query } = options;
 
-  const day = adminDayKey(request.url);
-  if (day === undefined) {
-    return Effect.succeed(errorResponse(ADMIN_HTTP_STATUS.BAD_REQUEST, ADMIN_ERROR.INVALID_DAY));
-  }
+  const day = adminDayKey(query.date);
+  if (day === undefined) return Effect.fail(ADMIN_REFUSAL.INVALID_DAY);
 
   return Effect.flatMap(Clock.currentTimeMillis, (now) =>
-    options.readDay(day, now, adminMetricsScope(request.url)).pipe(
-      Effect.map((detail) => jsonResponse(ADMIN_HTTP_STATUS.OK, detail)),
-      Effect.catchCause((cause) => unavailableSeam("admin day read failed", cause)),
-    ),
+    options
+      .readDay(day, now, adminMetricsScope(query.scope))
+      .pipe(Effect.catchCause((cause) => unavailableSeam("admin day read failed", cause))),
   );
 }

@@ -1,22 +1,34 @@
 import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
-import type { TaskSummary } from "@luke/features/task-wire";
+import {
+  TASK_PRIORITY,
+  TASK_STATUS,
+  type TaskPriority,
+  type TaskStatus,
+  type TaskSummary,
+} from "@luke/features/task-wire";
 import { expect, test } from "vitest";
 import {
   agentRow,
   type CreatorGroup,
   createdByOnly,
   creatorGroups,
+  hiddenStatuses,
   type RepositoryGroup,
   repositoryGroups,
   repositoryLabel,
+  shownStatuses,
+  TASK_GROUPING,
   TASK_ORDER,
   TASK_ROW,
   type TaskOrder,
   type TaskRow,
   taskRow,
   taskRowName,
+  taskRowsAssignedTo,
   taskRowsCreatedBy,
+  taskRowsInStatuses,
   taskTime,
+  toggledStatus,
 } from "./task-list-model.js";
 
 const DEAN = "user-dean";
@@ -301,4 +313,61 @@ test("an untitled one-off agent is named by its automation, as its tab names it,
   expect(names(repositoryGroups(rows, TASK_ORDER.NAME))).toEqual([
     ["Morning Sentry triage", "Zebra notes"],
   ]);
+});
+
+/** A task standing in `status` at `priority`, last updated at `updatedAt`. */
+function standing(
+  name: string,
+  status: TaskStatus | undefined,
+  priority: TaskPriority | undefined,
+  updatedAt: number,
+): TaskSummary {
+  return {
+    ...task(name, "acme/relay", 1, updatedAt),
+    ...(status === undefined ? undefined : { status }),
+    ...(priority === undefined ? undefined : { priority }),
+  };
+}
+
+test("the list leaves the backlog and the settled out until asked, counting them by status, and keeps a row with no status to leave out by", () => {
+  const rows = [
+    standing("Filed", TASK_STATUS.BACKLOG, TASK_PRIORITY.NONE, 1),
+    standing("Under way", TASK_STATUS.IN_PROGRESS, TASK_PRIORITY.HIGH, 2),
+    standing("Shipped", TASK_STATUS.DONE, TASK_PRIORITY.LOW, 3),
+    standing("Also filed", TASK_STATUS.BACKLOG, TASK_PRIORITY.LOW, 4),
+    standing("Older service", undefined, undefined, 5),
+  ].map(taskRow);
+  const statuses = shownStatuses({ grouping: TASK_GROUPING.NONE, order: TASK_ORDER.UPDATED });
+
+  expect(taskRowsInStatuses(rows, statuses).map(taskRowName)).toEqual([
+    "Under way",
+    "Older service",
+  ]);
+  expect(hiddenStatuses(rows, statuses)).toEqual([
+    { status: TASK_STATUS.BACKLOG, count: 2 },
+    { status: TASK_STATUS.DONE, count: 1 },
+  ]);
+});
+
+test("a status turned on joins the others in the order work moves through them, and turned off leaves them", () => {
+  const shown = toggledStatus([TASK_STATUS.TODO, TASK_STATUS.IN_PROGRESS], TASK_STATUS.BACKLOG);
+  expect(shown).toEqual([TASK_STATUS.BACKLOG, TASK_STATUS.TODO, TASK_STATUS.IN_PROGRESS]);
+  expect(toggledStatus(shown, TASK_STATUS.TODO)).toEqual([
+    TASK_STATUS.BACKLOG,
+    TASK_STATUS.IN_PROGRESS,
+  ]);
+});
+
+test("the rows assigned to one member are the tasks they are on and the one-off agents they started, and every row where nobody is named", () => {
+  const rows = [
+    taskRow({
+      ...task("Dean's on it", "acme/relay", 1, 10, CHARLES),
+      assignee: { userId: DEAN, name: "Dean" },
+    }),
+    taskRow(task("No one's on it", "acme/relay", 1, 20, DEAN)),
+    oneOff("Dean's agent", "acme/relay", 1, 30, DEAN),
+    oneOff("Charles's agent", "acme/relay", 1, 40, CHARLES),
+  ];
+  expect(taskRowsAssignedTo(rows, DEAN).map(taskRowName)).toEqual(["Dean's on it", "Dean's agent"]);
+  expect(taskRowsAssignedTo(rows, undefined)).toHaveLength(4);
 });

@@ -1,17 +1,13 @@
 /**
- * role.ts -- the four agents Luke runs on its one agent runtime, and what sets each apart.
+ * role.ts -- the two agents Luke runs on its one agent runtime, and what sets each apart.
  *
- * The brain, the coding agent, and each one's declared worker
- * are four eve agents over one runtime (`docs/proposals/one-agent-runtime.md`):
- * every slot of every one of them is the runtime's, told which role it
- * serves, and a role differs from another only by its profile here. The
- * profile grows as each slot moves onto the runtime.
+ * The coding agent and its declared worker are two eve agents over one
+ * runtime: every slot of each is the runtime's, told which role it serves,
+ * and a role differs from another only by its profile here.
  */
 
 /** The agents, by the role each plays. */
 export const AGENT_ROLE = {
-  BRAIN: "brain",
-  BRAIN_WORKER: "brain-worker",
   CODER: "coder",
   CODER_WORKER: "coder-worker",
 } as const;
@@ -34,19 +30,17 @@ export type ConnectionPolicy = (typeof CONNECTION_POLICY)[keyof typeof CONNECTIO
 
 /**
  * How a role's session comes by its sandbox, and what is done with the
- * sandbox between turns (`sandbox.ts`). A read checkout is a depth-1 clone
- * on a read token, made by the first `run_in_repository` that needs it and
- * kept between turns, so a later call reads it without cloning again. The
- * sandbox is never stopped at a turn's end, but it stops when its timeout
- * runs out, busy or not, so a call after that waits on it resuming. A
- * write checkout is the whole repository on a write token, made as the
- * sandbox opens, with its credential renewed at the firewall as it ages and
- * the sandbox stopped at each turn's end. A worker reads in its parent's
- * sandbox.
+ * sandbox between turns (`sandbox.ts`). A shallow-then-deep checkout is the
+ * agent's one lazy policy: the sandbox
+ * opens on the first tool that needs it, with a depth-1 clone on a read
+ * token and no credential standing, so a turn that only reads the code, as
+ * a call's does, opens fast; the first write deepens it to the whole
+ * history on a write token, which then stands at the firewall, renewed as
+ * it ages (`../coder-host/deepen.ts`); and the sandbox is stopped at each
+ * turn's end. A worker reads in its parent's sandbox.
  */
 export const SANDBOX_POLICY = {
-  READ_SHALLOW_LAZY: "read-shallow-lazy",
-  WRITE_FULL_EAGER: "write-full-eager",
+  SHALLOW_THEN_DEEP: "shallow-then-deep",
   PARENT: "parent",
 } as const;
 
@@ -63,23 +57,11 @@ export interface RoleProfile {
 }
 
 export const ROLE_PROFILE = {
-  [AGENT_ROLE.BRAIN]: {
-    delegated: false,
-    connections: CONNECTION_POLICY.ALWAYS_ON,
-    skills: true,
-    sandbox: SANDBOX_POLICY.READ_SHALLOW_LAZY,
-  },
-  [AGENT_ROLE.BRAIN_WORKER]: {
-    delegated: true,
-    connections: CONNECTION_POLICY.ALWAYS_ON,
-    skills: false,
-    sandbox: SANDBOX_POLICY.PARENT,
-  },
   [AGENT_ROLE.CODER]: {
     delegated: false,
     connections: CONNECTION_POLICY.AGENT_SWITCHES_AND_MENTIONS,
     skills: true,
-    sandbox: SANDBOX_POLICY.WRITE_FULL_EAGER,
+    sandbox: SANDBOX_POLICY.SHALLOW_THEN_DEEP,
   },
   // Note that a worker follows its parent agent's switches, because its session is admitted for its
   // parent's conversation, and takes none of its mentions, which are its parent's turn's to take.

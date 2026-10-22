@@ -70,7 +70,12 @@ function commit(root: string, path: string, content?: string): string {
 }
 
 /** Runs the project's Ignored Build Step at the head, as Vercel does, from the repository's root. */
-function decide(root: string, previous?: string, path = process.env.PATH): Verdict {
+function decide(
+  root: string,
+  previous?: string,
+  path = process.env.PATH,
+  vercel: Readonly<Record<string, string>> = {},
+): Verdict {
   const ran = spawnSync("bash", ["-c", IGNORED_BUILD_STEP], {
     cwd: root,
     encoding: "utf8",
@@ -80,6 +85,7 @@ function decide(root: string, previous?: string, path = process.env.PATH): Verdi
       GIT_CONFIG_NOSYSTEM: "1",
       // Note that a branch with no successful deployment yet carries the variable empty.
       VERCEL_GIT_PREVIOUS_SHA: previous ?? "",
+      ...vercel,
     },
   });
   if (ran.status === 0) return VERDICT.SKIP;
@@ -91,7 +97,7 @@ test("a push that changes only the desktop app or the docs since the last deploy
   const deployed = commit(root, "apps/web/package.json");
   commit(root, "apps/desktop/src/main/main.ts");
   assert.equal(decide(root, deployed), VERDICT.SKIP);
-  commit(root, "docs/proposals/factory/index.html");
+  commit(root, "docs/DESIGN.md");
   assert.equal(decide(root, deployed), VERDICT.SKIP);
 });
 
@@ -104,8 +110,7 @@ test("a branch that predates the script is built rather than failed", async (t) 
 
 test("a push that changes anything a service installs or builds from is built", async (t) => {
   for (const path of [
-    "apps/web/server/routes/plans.ts",
-    "apps/luke/agent.ts",
+    "apps/web/server/routes/github/webhook.ts",
     "apps/dev/sandbox.ts",
     "packages/service/src/index.ts",
     "patches/drizzle-orm.patch",
@@ -171,4 +176,28 @@ test("a host whose `timeout` is missing still fetches the last deployment by sha
   writeFileSync(join(bin, "timeout"), "#!/bin/sh\nexit 127\n");
   chmodSync(join(bin, "timeout"), 0o755);
   assert.equal(decide(clone, deployed, `${bin}${delimiter}${process.env.PATH}`), VERDICT.SKIP);
+});
+
+test("a checkout with no usable origin fetches the last deployment from the repository Vercel names, as Vercel's own does", async (t) => {
+  const origin = await repository(t);
+  commit(origin, "README.md");
+  const clone = await temporaryDirectory(t, "luke-vercel-ignore-clone-");
+  git(clone, "clone", "-q", `file://${origin}`, ".");
+  git(clone, "remote", "remove", "origin");
+  const deployed = commit(origin, "apps/web/src/main.tsx", "web v1\n");
+  commit(clone, "apps/desktop/src/main/main.ts");
+  commit(clone, "apps/web/src/main.tsx", "web v1\n");
+  assert.equal(decide(clone, deployed), VERDICT.BUILD);
+  // Note that git's own URL rewriting stands the origin in for GitHub, so the test reaches no network.
+  const vercel = {
+    VERCEL_GIT_PROVIDER: "github",
+    VERCEL_GIT_REPO_OWNER: "ReviewStage",
+    VERCEL_GIT_REPO_SLUG: "luke",
+    GIT_CONFIG_COUNT: "1",
+    GIT_CONFIG_KEY_0: `url.file://${origin}.insteadOf`,
+    GIT_CONFIG_VALUE_0: "https://github.com/ReviewStage/luke.git",
+  };
+  assert.equal(decide(clone, deployed, process.env.PATH, vercel), VERDICT.SKIP);
+  commit(clone, "apps/web/src/main.tsx", "web v2\n");
+  assert.equal(decide(clone, deployed, process.env.PATH, vercel), VERDICT.BUILD);
 });

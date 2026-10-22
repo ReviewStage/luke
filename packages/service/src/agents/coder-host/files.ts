@@ -153,8 +153,9 @@ export function grepIn(checkout: string) {
 /** A tool's answer as one value: eve's `grep` and `apply_patch` answer once rather than stream. */
 async function whole<T extends object>(answer: T | PromiseLike<T> | AsyncIterable<T>): Promise<T> {
   const settled = await answer;
+  // Note that a broken contract throws a class of its own, so Sentry reports it rather than taking it for a refusal.
   if (isStream(settled))
-    throw new Error("the tool answered a stream where one answer was expected");
+    throw new TypeError("the tool answered a stream where one answer was expected");
   return settled;
 }
 

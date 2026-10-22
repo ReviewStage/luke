@@ -4,11 +4,11 @@ import { fakeHttpClientLayer } from "@luke/wire/testing";
 import { Effect, Redacted, Stream } from "effect";
 import { BRAIN_HOST_HEADER, BRAIN_HOST_TURN } from "./bounds.js";
 import {
+  type AgentSessions,
   EVE_MOUNT,
   EVE_SEND_OUTCOME,
   type EveCaller,
   type EveMount,
-  type EveSessions,
   eveSessions,
 } from "./eve-sessions.js";
 
@@ -21,9 +21,9 @@ import {
  */
 
 const ORIGIN = "https://luke.test";
-const CRON_SECRET = "cron-secret-1";
+const DEPLOYMENT_SECRET = "eve-deployment-secret-1";
 const ACCOUNT = "user-1";
-const CALLER: EveCaller = { secret: Redacted.make(CRON_SECRET), account: ACCOUNT };
+const CALLER: EveCaller = { secret: Redacted.make(DEPLOYMENT_SECRET), account: ACCOUNT };
 const CONVERSATION = "2b000000-0000-4000-8000-000000000001";
 const SESSION = "wrun_01M0000000000000000000001";
 
@@ -76,11 +76,11 @@ function answeringEach(
     if (answer === undefined) throw new Error("fixture: connection refused");
     return new Response(JSON.stringify(answer.body), { status: answer.status });
   });
-  const sessions: Effect.Effect<EveSessions> = Effect.provide(
+  const sessions: Effect.Effect<AgentSessions> = Effect.provide(
     eveSessions({
       origin: ORIGIN,
       caller: options.caller ?? CALLER,
-      ...(options.mount === undefined ? undefined : { mount: options.mount }),
+      mount: options.mount ?? EVE_MOUNT.CODER,
     }),
     client,
   );
@@ -109,14 +109,34 @@ it.effect(
       assert.equal(seen.length, 1);
       const [request] = seen;
       assert.ok(request);
-      assert.equal(request.url, `${ORIGIN}/eve/v1/session`);
+      assert.equal(request.url, `${ORIGIN}/eve/coder/v1/session`);
       assert.equal(request.method, "POST");
-      assert.equal(request.headers.get("authorization"), `Bearer ${CRON_SECRET}`);
+      assert.equal(request.headers.get("authorization"), `Bearer ${DEPLOYMENT_SECRET}`);
       assert.equal(request.headers.get("content-type"), "application/json");
       assert.equal(request.headers.get(BRAIN_HOST_HEADER.ACCOUNT), ACCOUNT);
       assert.equal(request.headers.get(BRAIN_HOST_HEADER.CONVERSATION), CONVERSATION);
       assert.equal(request.headers.get(BRAIN_HOST_HEADER.TURN), BRAIN_HOST_TURN.TYPED);
+      assert.equal(request.headers.get(BRAIN_HOST_HEADER.TIME_ZONE), null);
       assert.deepEqual(request.body, { message: "hello", capabilities: { requestInput: false } });
+    }),
+);
+
+it.effect(
+  "a message naming its sender's time zone carries it as the header the door reads, opening and following up alike",
+  () =>
+    Effect.gen(function* () {
+      const accepted = { ok: true, sessionId: SESSION, status: "accepted" } as const;
+      const { seen, sessions } = answeringEach([
+        { status: 202, body: accepted },
+        { status: 202, body: { ...accepted, deliveryId: "delivery-1" } },
+      ]);
+      const zoned = { ...MESSAGE, timeZone: "Asia/Tokyo" };
+      yield* Effect.flatMap(sessions, (eve) => eve.open(zoned));
+      yield* Effect.flatMap(sessions, (eve) => eve.send(SESSION, zoned));
+      assert.deepEqual(
+        seen.map((request) => request.headers.get(BRAIN_HOST_HEADER.TIME_ZONE)),
+        ["Asia/Tokyo", "Asia/Tokyo"],
+      );
     }),
 );
 
@@ -160,8 +180,8 @@ function streaming(status: number, lines: readonly string[]) {
     });
     return new Response(lines.join("\n"), { status });
   });
-  const sessions: Effect.Effect<EveSessions> = Effect.provide(
-    eveSessions({ origin: ORIGIN, caller: CALLER }),
+  const sessions: Effect.Effect<AgentSessions> = Effect.provide(
+    eveSessions({ origin: ORIGIN, caller: CALLER, mount: EVE_MOUNT.CODER }),
     client,
   );
   return { seen, sessions };
@@ -192,9 +212,9 @@ it.effect(
       ]);
       assert.deepEqual(seen, [
         {
-          url: `${ORIGIN}/eve/v1/session/${SESSION}/stream?startIndex=-1`,
+          url: `${ORIGIN}/eve/coder/v1/session/${SESSION}/stream?startIndex=-1`,
           method: "GET",
-          authorization: `Bearer ${CRON_SECRET}`,
+          authorization: `Bearer ${DEPLOYMENT_SECRET}`,
         },
       ]);
     }),

@@ -6,15 +6,19 @@ import { act, createElement, type ReactNode, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
 import { onRegistry } from "../testing/copy-feedback.js";
+import { restOn } from "../testing/hint-rest.js";
 import { relayout } from "../testing/resize-observer.js";
-import { Tab, TabStrip } from "./tab-strip.js";
+import { MenuTab, Tab, TabStrip } from "./tab-strip.js";
 
 /**
  * tab-strip.test.ts -- however many tabs a strip holds and however it is
  * narrowed, chosen, or scrolled, it draws every tab and no list of hidden
- * ones, and settles with no loop of renders; a tab chosen past its end is
- * scrolled into its own place, the strip's scroll alone; a dragged tab lands
- * where its place in the row says; and a tab names itself in its hint. The
+ * ones, and settles with no loop of renders; a tab chosen past its end, or
+ * the one it opens on, is scrolled into its own place, the strip's scroll
+ * alone; a dragged tab lands
+ * where its place in the row says, and under a finger, which drags nothing,
+ * its long press's menu moves it a place either way, which a mouse's menu
+ * leaves to its drag; and a tab names itself in its hint. The
  * plan's column and the side panel draw this one strip, so this holds for
  * both. jsdom lays nothing out, so a test that scrolls lays the strip's boxes
  * out itself. Synthetic throughout.
@@ -36,14 +40,15 @@ afterEach(() => {
   document.body.innerHTML = "";
   document.head.innerHTML = "";
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
 });
 
 /** Every move the strip asked for, as its place before and after. */
 let moves: [number, number][] = [];
 
-/** A strip of `count` tabs, choosing the one pressed, each but the first closing, which may be moved. */
-function Strip({ count }: { count: number }): ReactNode {
-  const [chosen, choose] = useState(0);
+/** A strip of `count` tabs, opened on the one `opensOn` names, choosing the one pressed, each but the first closing, which may be moved. */
+function Strip({ count, opensOn = 0 }: { count: number; opensOn?: number }): ReactNode {
+  const [chosen, choose] = useState(opensOn);
   return createElement(TabStrip, {
     label: "Tabs",
     onMove: (from: number, to: number) => moves.push([from, to]),
@@ -60,13 +65,13 @@ function Strip({ count }: { count: number }): ReactNode {
   });
 }
 
-/** A strip of `count` tabs drawn into the document. */
-async function drawn(count: number): Promise<HTMLElement> {
+/** A strip of `count` tabs drawn into the document, opened on the tab `opensOn` names. */
+async function drawn(count: number, opensOn = 0): Promise<HTMLElement> {
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
   roots.push(root);
   await act(async () =>
-    root.render(onRegistry(AtomRegistry.make(), createElement(Strip, { count }))),
+    root.render(onRegistry(AtomRegistry.make(), createElement(Strip, { count, opensOn }))),
   );
   return container;
 }
@@ -143,6 +148,13 @@ test("a tab chosen past the strip's end is scrolled into its own place, and one 
   assert.equal(strip.scrollLeft, TAB_WIDTH);
 });
 
+test("a strip a phone's width opened on a tab past its end draws already scrolled to that tab", async () => {
+  layOut(330, 8);
+  const container = await drawn(8, 6);
+  const strip = container.querySelector<HTMLElement>(".tab-strip") ?? assert.fail("it stands");
+  assert.equal(strip.scrollLeft, 7 * TAB_WIDTH - 330);
+});
+
 test("the chosen tab, pinned at the strip's start after a scroll, dragged along lands where its own place in the row says", async () => {
   layOut(250, 6);
   const container = await drawn(6);
@@ -174,10 +186,131 @@ test("the chosen tab, pinned at the strip's start after a scroll, dragged along 
 
 test("a tab other than the chosen one names itself in its hint, though its label may stand as its glyph alone", async () => {
   const container = await drawn(3);
-  act(() => {
-    pill(container, "Tab 2")
-      .querySelector('[role="tab"]')
-      ?.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
-  });
+  restOn(pill(container, "Tab 2").querySelector('[role="tab"]') ?? assert.fail("the tab stands"));
   assert.equal(document.querySelector('[role="tooltip"]')?.textContent, "Tab 2");
+});
+
+/** A strip of three tabs with menus, each with a Close of its own, which may be moved. */
+function MenuStrip(): ReactNode {
+  return createElement(TabStrip, {
+    label: "Tabs",
+    onMove: (from: number, to: number) => moves.push([from, to]),
+    children: ["Plan", "Changes", "Terminal"].map((label, at) =>
+      createElement(MenuTab, {
+        key: label,
+        icon: createElement("svg"),
+        label,
+        selected: at === 0,
+        onSelect: ignore,
+        groups: [[{ label: "Close", onSelect: ignore }]],
+      }),
+    ),
+  });
+}
+
+/** The words of every item of the menus standing. */
+function menuWords(): string[] {
+  return [...document.querySelectorAll(".luke-menu-item-label")].map(
+    (each) => each.textContent ?? "",
+  );
+}
+
+/** The menu item named `label`. */
+function menuItem(label: string): HTMLElement {
+  const name = [...document.querySelectorAll(".luke-menu-item-label")].find(
+    (each) => each.textContent === label,
+  );
+  return name?.closest<HTMLElement>('[role="menuitem"]') ?? assert.fail(`no ${label} item`);
+}
+
+/** The strip of menu tabs drawn, and the tab named `label`'s button. */
+async function menuStripTab(label: string): Promise<HTMLElement> {
+  const container = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(container);
+  roots.push(root);
+  await act(async () => root.render(onRegistry(AtomRegistry.make(), createElement(MenuStrip))));
+  return pill(container, label).querySelector<HTMLElement>('[role="tab"]') ?? assert.fail("a tab");
+}
+
+const touch = (type: string) =>
+  new PointerEvent(type, {
+    bubbles: true,
+    cancelable: true,
+    pointerId: 7,
+    pointerType: "touch",
+    isPrimary: true,
+    clientX: 10,
+    clientY: 10,
+  });
+
+test("under a finger, a tab held offers Move left and Move right, and Move right moves it a place along", async () => {
+  vi.stubGlobal("matchMedia", (query: string) => ({ matches: query === "(pointer: coarse)" }));
+  const tab = await menuStripTab("Changes");
+  vi.useFakeTimers();
+  try {
+    act(() => {
+      tab.dispatchEvent(touch("pointerdown"));
+    });
+    act(() => {
+      vi.advanceTimersByTime(2000);
+    });
+  } finally {
+    vi.useRealTimers();
+  }
+  act(() => {
+    tab.dispatchEvent(touch("pointerup"));
+  });
+
+  assert.deepEqual(menuWords(), ["Move left", "Move right", "Close"]);
+  act(() => menuItem("Move right").click());
+  assert.deepEqual(moves, [[1, 2]]);
+});
+
+test("with a mouse, a tab's menu offers no move, which its drag makes", async () => {
+  const tab = await menuStripTab("Changes");
+
+  act(() => {
+    tab.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, clientX: 10, clientY: 10 }));
+  });
+
+  assert.deepEqual(menuWords(), ["Close"]);
+});
+
+test("a preview tab wears its name in italics, and a double-click keeps it, while a tab of its own takes no keep", async () => {
+  const kept: string[] = [];
+  const container = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(container);
+  roots.push(root);
+  await act(async () =>
+    root.render(
+      onRegistry(
+        AtomRegistry.make(),
+        createElement(TabStrip, {
+          label: "Tabs",
+          onMove: ignore,
+          children: ["Preview", "Kept"].map((label) =>
+            createElement(Tab, {
+              key: label,
+              icon: createElement("svg"),
+              label,
+              selected: label === "Preview",
+              preview: label === "Preview",
+              onSelect: ignore,
+              onKeep: () => kept.push(label),
+            }),
+          ),
+        }),
+      ),
+    ),
+  );
+  assert.equal(pill(container, "Preview").dataset.preview, "true");
+  assert.equal(pill(container, "Kept").dataset.preview, "false");
+  for (const label of ["Preview", "Kept"]) {
+    act(() => {
+      pill(container, label)
+        .querySelector('[role="tab"]')
+        ?.dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
+    });
+  }
+  assert.deepEqual(kept, ["Preview"]);
 });

@@ -7,9 +7,11 @@ import { BADGES_EXAMPLE } from "./examples/badges";
 import { BANNERS_EXAMPLE } from "./examples/banners";
 import { BREADCRUMBS_EXAMPLE } from "./examples/breadcrumbs";
 import { BUTTONS_EXAMPLE } from "./examples/buttons";
+import { CALENDAR_EXAMPLE } from "./examples/calendar";
 import { CARDS_EXAMPLE } from "./examples/cards";
 import { CHECKBOXES_EXAMPLE } from "./examples/checkboxes";
 import { CHIPS_EXAMPLE } from "./examples/chips";
+import { CHOICE_BAR_EXAMPLE } from "./examples/choice-bar";
 import { CHOICE_LIST_EXAMPLE } from "./examples/choice-list";
 import { COLLECTION_PAGE_EXAMPLE } from "./examples/collection-page";
 import { COMBOBOX_EXAMPLE } from "./examples/combobox";
@@ -39,7 +41,6 @@ import { PROVIDER_BUTTONS_EXAMPLE } from "./examples/provider-buttons";
 import { PUBLIC_PAGE_EXAMPLE } from "./examples/public-page";
 import { SCROLL_AREA_EXAMPLE } from "./examples/scroll-area";
 import { SEARCH_FIELDS_EXAMPLE } from "./examples/search-fields";
-import { SEGMENTED_EXAMPLE } from "./examples/segmented";
 import { SELECT_EXAMPLE } from "./examples/select";
 import { SETTINGS_PAGE_EXAMPLE } from "./examples/settings-page";
 import { SETTINGS_ROW_EXAMPLE } from "./examples/settings-row";
@@ -48,7 +49,6 @@ import { SKELETONS_EXAMPLE } from "./examples/skeletons";
 import { SPINNERS_EXAMPLE } from "./examples/spinners";
 import { SPLIT_BUTTONS_EXAMPLE } from "./examples/split-buttons";
 import { SWITCHES_EXAMPLE } from "./examples/switches";
-import { TABS_EXAMPLE } from "./examples/tabs";
 import { TEXT_BUTTONS_EXAMPLE } from "./examples/text-buttons";
 import { TEXT_FIELDS_EXAMPLE } from "./examples/text-fields";
 import { TEXT_LINKS_EXAMPLE } from "./examples/text-links";
@@ -81,8 +81,10 @@ export const EXAMPLES: readonly Example[] = [
   BANNERS_EXAMPLE,
   BREADCRUMBS_EXAMPLE,
   BUTTONS_EXAMPLE,
+  CALENDAR_EXAMPLE,
   CARDS_EXAMPLE,
   CHIPS_EXAMPLE,
+  CHOICE_BAR_EXAMPLE,
   CHOICE_LIST_EXAMPLE,
   COLLECTION_PAGE_EXAMPLE,
   COMBOBOX_EXAMPLE,
@@ -105,7 +107,6 @@ export const EXAMPLES: readonly Example[] = [
   TOOLTIPS_EXAMPLE,
   CHECKBOXES_EXAMPLE,
   SWITCHES_EXAMPLE,
-  TABS_EXAMPLE,
   LIST_ROW_EXAMPLE,
   MENU_EXAMPLE,
   NAV_ITEMS_EXAMPLE,
@@ -118,7 +119,6 @@ export const EXAMPLES: readonly Example[] = [
   PUBLIC_PAGE_EXAMPLE,
   SCROLL_AREA_EXAMPLE,
   SEARCH_FIELDS_EXAMPLE,
-  SEGMENTED_EXAMPLE,
   SELECT_EXAMPLE,
   SETTINGS_PAGE_EXAMPLE,
   SETTINGS_SECTION_EXAMPLE,

@@ -3,7 +3,6 @@ import { ANIMATION_ROSTER, formatCycleSeconds } from "@luke/ui/admin-animations"
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import type { ViewerAccount } from "../src/admin/chrome/page-header";
 import { AnimationsScreen } from "../src/admin/screens/animations";
 
 /**
@@ -17,13 +16,6 @@ import { AnimationsScreen } from "../src/admin/screens/animations";
  */
 
 Reflect.set(globalThis, "IS_REACT_ACT_ENVIRONMENT", true);
-
-/** A synthetic signed-in maintainer. */
-const VIEWER: ViewerAccount = {
-  name: "Ada Lovelace",
-  email: "ada@example.test",
-  image: undefined,
-};
 
 /** The system's reduced-motion setting, which the test flips as a reader would. */
 interface MotionSetting {
@@ -76,17 +68,17 @@ function stubMotionSetting(reduced: boolean): MotionSetting {
   };
 }
 
-function render(account: ViewerAccount | undefined): void {
+function render(): void {
   act(() => {
-    root?.render(createElement(AnimationsScreen, { account, onSignOut: () => undefined }));
+    root?.render(createElement(AnimationsScreen));
   });
 }
 
-function open(account: ViewerAccount | undefined = undefined): HTMLElement {
+function open(): HTMLElement {
   const page = document.createElement("div");
   document.body.replaceChildren(page);
   root = createRoot(page);
-  render(account);
+  render();
   return page;
 }
 
@@ -131,7 +123,7 @@ test("a re-render neither replaces a preview nor sets a held one moving", () => 
   const page = open();
   const before = previews(page);
 
-  render(VIEWER);
+  render();
 
   const after = previews(page);
   expect(after).toHaveLength(before.length);

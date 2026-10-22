@@ -6,6 +6,7 @@ import {
   Inline,
   POPOVER_ALIGN,
   type PopoverAlign,
+  ScrollArea,
   TEXT_TONE,
   Text,
 } from "@luke/ui";
@@ -51,9 +52,11 @@ function AnchoredPopoverExample(): React.JSX.Element {
       </CatalogSection>
       <CatalogSection id="anchored-popover-room" title="Inside a room that scrolls">
         <div className="catalog-popover-room" data-popover-room="">
-          <div className="catalog-popover-scroll">
-            <Hung align={POPOVER_ALIGN.START} label="Open, then scroll" />
-          </div>
+          <ScrollArea>
+            <div className="catalog-popover-scroll">
+              <Hung align={POPOVER_ALIGN.START} label="Open, then scroll" />
+            </div>
+          </ScrollArea>
         </div>
       </CatalogSection>
     </>

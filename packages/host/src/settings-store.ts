@@ -51,22 +51,12 @@ const SETTINGS_FIELD = {
   ACCOUNT_PREFERENCES_SYNC: "accountPreferencesSync",
   EXPERIMENTS: "experiments",
   MAC_REPOSITORIES: "macRepositories",
+  PRODUCT_EVENT_DAYS: "productEventDays",
   VERSION: "version",
 } as const;
 
 /** Where an earlier build kept its provider keys, ciphertext by provider id. */
 const STORED_API_KEYS_FIELD = "apiKeys";
-
-/**
- * The providers whose stored key an earlier build could still use: the set
- * its credential provider list last named. A ciphertext under any other id
- * (the developer's own OpenAI key, until LUKE-205) is dropped by
- * `retireStoredApiKeys`; these are carried. Spelled out here, since the
- * vocabulary that named them is gone with them.
- */
-const KEPT_API_KEY_PROVIDER = { CONDUCTOR: "conductor" } as const;
-
-const KEPT_API_KEY_PROVIDERS: ReadonlySet<string> = new Set(Object.values(KEPT_API_KEY_PROVIDER));
 
 /**
  * A credential is only ever written through OS-provided encryption. Electron's
@@ -85,7 +75,12 @@ export interface SecretCipher {
 
 export interface SettingsStoreOptions {
   directory: () => string;
-  cipher: SecretCipher;
+  /**
+   * What the account's tokens are sealed with. Without one the store holds no
+   * account: none is read back, and keeping one is refused as it is where the
+   * cipher is unavailable.
+   */
+  cipher: SecretCipher | undefined;
   /**
    * What the launch environment overrides, already read: the store reads no
    * environment of its own, so nothing it answers depends on a variable this
@@ -100,6 +95,13 @@ export interface SettingsStoreOptions {
    */
   credentialsUsable?: boolean;
   /**
+   * Who is signed in, for a store handed no cipher, which keeps no account of
+   * its own (a browser's cookie session): the address the account's
+   * experiments and synced preferences are kept under. A store that keeps
+   * the account reads it off its own record and never asks this.
+   */
+  sessionAccountEmail?: () => Effect.Effect<string | undefined>;
+  /**
    * The file system `#readPersisted` and `#write` below reach the settings
    * file through, resolved once by the composer from the host's own assembly
    * rather than by a layer this class stands up for itself. It is the service
@@ -109,6 +111,12 @@ export interface SettingsStoreOptions {
   fileSystem: FileSystem.FileSystem;
   /** The path service the settings file's own path is joined through, resolved by the same composer. */
   path: Path.Path;
+  /**
+   * This store's own name among several writing one file (browser tabs over
+   * one storage), which its writes' temporary file is named by. A store that
+   * is its file's one writer, as the desktop's is, is handed none.
+   */
+  writer?: string;
 }
 
 /* ----- The settings file's record ----- */
@@ -332,6 +340,77 @@ function storedMacRepositories(value: UnparsedWireValue): MacRepositories | unde
 }
 
 /**
+ * One once-a-day usage count as last sent: which event, for what, for which
+ * account (the sender's opaque account key), and the UTC day.
+ */
+export interface KeptProductEventDay {
+  readonly name: string;
+  readonly discriminator: string;
+  readonly account: string;
+  readonly day: string;
+}
+
+/**
+ * The UTC day each once-a-day usage count was last sent, by event, then
+ * discriminator, then account: nested rather than an interpolated key, so the
+ * three stay apart. Local bookkeeping only, so a relaunch the same day does
+ * not count the day again; it is kept whoever signs in, since the point is
+ * that another account's day is its own, and only the newest day stays.
+ */
+type ProductEventDays = Readonly<
+  Record<string, Readonly<Record<string, Readonly<Record<string, string>>>>>
+>;
+
+function productEventDayEntries(days: ProductEventDays | undefined): KeptProductEventDay[] {
+  const entries: KeptProductEventDay[] = [];
+  for (const [name, byDiscriminator] of Object.entries(days ?? {})) {
+    for (const [discriminator, byAccount] of Object.entries(byDiscriminator)) {
+      for (const [account, day] of Object.entries(byAccount)) {
+        entries.push({ name, discriminator, account, day });
+      }
+    }
+  }
+  return entries;
+}
+
+/** The nested record of these entries, built through `Map`s so no key from the file reaches a prototype. */
+function productEventDaysFrom(entries: readonly KeptProductEventDay[]): ProductEventDays {
+  const byName = new Map<string, Map<string, Map<string, string>>>();
+  for (const { name, discriminator, account, day } of entries) {
+    const byDiscriminator = byName.get(name) ?? new Map<string, Map<string, string>>();
+    const byAccount = byDiscriminator.get(discriminator) ?? new Map<string, string>();
+    byAccount.set(account, day);
+    byDiscriminator.set(discriminator, byAccount);
+    byName.set(name, byDiscriminator);
+  }
+  return Object.fromEntries(
+    [...byName].map(([name, byDiscriminator]) => [
+      name,
+      Object.fromEntries(
+        [...byDiscriminator].map(([discriminator, byAccount]) => [
+          discriminator,
+          Object.fromEntries(byAccount),
+        ]),
+      ),
+    ]),
+  );
+}
+
+function storedProductEventDays(value: UnparsedWireValue): ProductEventDays | undefined {
+  const kept: KeptProductEventDay[] = [];
+  for (const [name, byDiscriminator] of Object.entries(readWireRecord(value) ?? {})) {
+    for (const [discriminator, byAccount] of Object.entries(
+      readWireRecord(byDiscriminator) ?? {},
+    )) {
+      for (const [account, day] of Object.entries(readWireRecord(byAccount) ?? {})) {
+        if (isWireString(day) && day) kept.push({ name, discriminator, account, day });
+      }
+    }
+  }
+  return kept.length === 0 ? undefined : productEventDaysFrom(kept);
+}
+
+/**
  * The settings file's record: the version and the keys every file carries,
  * the sections a file holds only while something stands in them, and every
  * stored setting. Read by `parsePersistedSettingsEither` and written by
@@ -349,6 +428,7 @@ const PersistedSettingsSchema = Schema.Struct({
   ),
   [SETTINGS_FIELD.EXPERIMENTS]: Schema.optionalKey(settingsField(storedExperiments)),
   [SETTINGS_FIELD.MAC_REPOSITORIES]: Schema.optionalKey(settingsField(storedMacRepositories)),
+  [SETTINGS_FIELD.PRODUCT_EVENT_DAYS]: Schema.optionalKey(settingsField(storedProductEventDays)),
   ...storedSettingFields,
 });
 
@@ -378,26 +458,40 @@ const decodeAccountTokens = Schema.decodeUnknownResult(Schema.fromJsonString(Acc
  * not a key holding `undefined` but no key at all, and a sync baseline and
  * the experiments are kept only for the account signed in, since one left by
  * another account would let that account's edits stand in for this one's.
+ * A store that keeps no account of its own (a browser's cookie session)
+ * keeps both as they are, each naming the account it is for, and reads one
+ * only for the account its session names.
  */
-function settledPersistedSettings(persisted: PersistedSettings): PersistedSettings {
+function settledPersistedSettings(
+  persisted: PersistedSettings,
+  keepsOwnAccount = true,
+): PersistedSettings {
   const { account, accountPreferencesSync, experiments, ...settings } = persisted;
+  const keptFor = (section: { readonly accountEmail: string } | undefined) =>
+    section !== undefined && (!keepsOwnAccount || section.accountEmail === account?.email);
   return {
     ...settings,
     ...(account ? { account } : undefined),
-    ...(account && accountPreferencesSync?.accountEmail === account.email
-      ? { accountPreferencesSync }
-      : undefined),
-    ...(account && experiments?.accountEmail === account.email ? { experiments } : undefined),
+    ...(keptFor(accountPreferencesSync) ? { accountPreferencesSync } : undefined),
+    ...(keptFor(experiments) ? { experiments } : undefined),
   };
 }
 
-/** The signed-in account's experiments as last cached, or none. */
-function experimentsOf(persisted: PersistedSettings): ExperimentChoices {
-  const { account, experiments } = persisted;
-  return account && experiments?.accountEmail === account.email
+/** The signed-in account's experiments as last cached, and none for anyone else or for no one. */
+function experimentsOf(
+  persisted: PersistedSettings,
+  accountEmail: string | undefined,
+): ExperimentChoices {
+  const { experiments } = persisted;
+  return accountEmail !== undefined && experiments?.accountEmail === accountEmail
     ? experiments.choices
     : NO_EXPERIMENTS;
 }
+
+/** Who a settings record is kept for, read off the record itself or named apart from it. */
+type AccountEmailOf = (persisted: PersistedSettings) => string | undefined;
+
+const STORED_ACCOUNT_EMAIL: AccountEmailOf = (persisted) => persisted.account?.email;
 
 const DECLARED_SETTINGS_FIELDS: ReadonlySet<string> = new Set(
   Object.keys(PersistedSettingsSchema.fields),
@@ -421,6 +515,16 @@ function carriedSettingsFields(source: string): WireRecord {
 /** Every field at its fallback: the record an empty file decodes to. */
 function defaultPersistedSettings(): PersistedSettings {
   return settledPersistedSettings(decodePersistedSettings({}));
+}
+
+/**
+ * Keeping an account was refused because no cipher can seal its tokens: the
+ * store was handed none, or the system's encrypted storage is unavailable.
+ */
+export class EncryptedStorageUnavailable extends Data.TaggedError("EncryptedStorageUnavailable") {
+  override get message(): string {
+    return "Encrypted credential storage is unavailable on this system.";
+  }
 }
 
 /** A stored file this build cannot read as settings; `reason` is the legacy message. */
@@ -457,9 +561,10 @@ function refusalReason(source: string, error: Schema.SchemaError): string {
  */
 function parsePersistedSettingsEither(
   source: string,
+  keepsOwnAccount: boolean,
 ): Result.Result<PersistedSettings, SettingsParseRefusal> {
   return decodePersistedSettingsFile(source).pipe(
-    Result.map(settledPersistedSettings),
+    Result.map((persisted) => settledPersistedSettings(persisted, keepsOwnAccount)),
     Result.mapError((error) => new SettingsParseRefusal({ reason: refusalReason(source, error) })),
   );
 }
@@ -471,11 +576,13 @@ function parsePersistedSettingsEither(
  */
 export class SettingsStore {
   readonly #directory: () => string;
-  readonly #cipher: SecretCipher;
+  readonly #cipher: SecretCipher | undefined;
   readonly #overrides: SettingsEnvironmentOverrides;
   readonly #credentialsUsable: boolean;
+  readonly #sessionAccountEmail: (() => Effect.Effect<string | undefined>) | undefined;
   readonly #fileSystem: FileSystem.FileSystem;
   readonly #path: Path.Path;
+  readonly #writer: string | undefined;
   /**
    * The settings as last read or written. The gate beside it is what makes a
    * read shared rather than repeated: a second reader waits for the first
@@ -530,8 +637,9 @@ export class SettingsStore {
   > {
     return Effect.gen({ self: this }, function* () {
       const changed: AccountPreferenceField[] = [];
+      const signedIn = yield* this.#accountEmailOf();
       yield* this.#mutate((persisted) => {
-        if (expected && persisted.account?.email !== expected.accountEmail) return undefined;
+        if (expected && signedIn(persisted) !== expected.accountEmail) return undefined;
         const nextSettings = expected
           ? accountPreferencesWithLocalChanges(
               settings,
@@ -573,8 +681,9 @@ export class SettingsStore {
   ): Effect.Effect<boolean, PlatformError> {
     return Effect.gen({ self: this }, function* () {
       let saved = false;
+      const signedIn = yield* this.#accountEmailOf();
       yield* this.#mutate((persisted) => {
-        if (persisted.account?.email !== accountEmail) return undefined;
+        if (signedIn(persisted) !== accountEmail) return undefined;
         saved = true;
         if (
           persisted.accountPreferencesSync?.accountEmail === accountEmail &&
@@ -601,9 +710,12 @@ export class SettingsStore {
   ): Effect.Effect<boolean, PlatformError> {
     return Effect.gen({ self: this }, function* () {
       let changed = false;
+      const signedIn = yield* this.#accountEmailOf();
       yield* this.#mutate((persisted) => {
-        if (persisted.account?.email !== accountEmail) return undefined;
-        if (JSON.stringify(experimentsOf(persisted)) === JSON.stringify(choices)) return undefined;
+        if (signedIn(persisted) !== accountEmail) return undefined;
+        if (JSON.stringify(experimentsOf(persisted, accountEmail)) === JSON.stringify(choices)) {
+          return undefined;
+        }
         changed = true;
         return { ...persisted, experiments: { accountEmail, choices } };
       });
@@ -629,6 +741,45 @@ export class SettingsStore {
     });
   }
 
+  /** The UTC day one once-a-day usage count was last sent for this account, or nothing. */
+  lastProductEventDay(
+    name: string,
+    discriminator: string,
+    account: string,
+  ): Effect.Effect<string | undefined, PlatformError> {
+    return Effect.map(
+      this.#load(),
+      (persisted) =>
+        productEventDayEntries(persisted.productEventDays).find(
+          (entry) =>
+            entry.name === name &&
+            entry.discriminator === discriminator &&
+            entry.account === account,
+        )?.day,
+    );
+  }
+
+  /**
+   * Keeps the day one once-a-day usage count was last sent, as the clock
+   * read it, back as well as forward, so a clock that was wrong never hides a
+   * real day. Every entry from an earlier day is dropped, since no guard
+   * reads it again.
+   */
+  keepProductEventDay(kept: KeptProductEventDay): Effect.Effect<void, PlatformError> {
+    return this.#mutate((persisted) => {
+      const entries = productEventDayEntries(persisted.productEventDays);
+      const held = entries.find(
+        (entry) =>
+          entry.name === kept.name &&
+          entry.discriminator === kept.discriminator &&
+          entry.account === kept.account,
+      );
+      if (held?.day === kept.day) return undefined;
+      const others = entries.filter((entry) => entry !== held && entry.day >= kept.day);
+      return { ...persisted, productEventDays: productEventDaysFrom([...others, kept]) };
+    });
+  }
+
   /** Whether the cipher can protect a secret, asked at most once a run; unasked until then. */
   #secretStorageAvailable: boolean | undefined;
 
@@ -637,8 +788,10 @@ export class SettingsStore {
     this.#cipher = options.cipher;
     this.#overrides = options.overrides;
     this.#credentialsUsable = options.credentialsUsable ?? true;
+    this.#sessionAccountEmail = options.sessionAccountEmail;
     this.#fileSystem = options.fileSystem;
     this.#path = options.path;
+    this.#writer = options.writer;
   }
 
   snapshot(): Effect.Effect<AppSettings, PlatformError> {
@@ -652,7 +805,7 @@ export class SettingsStore {
           // what would actually be heard while the persisted file remains optional.
           voice: persisted.voice ?? this.#overrides.voice ?? LIVE_DEFAULTS.VOICE,
         },
-        experiments: experimentsOf(persisted),
+        experiments: experimentsOf(persisted, (yield* this.#accountEmailOf())(persisted)),
         status: {
           // Whether a spoken turn could actually be opened: an account signed in,
           // and this run will use it. Resolved here rather than left to the panel
@@ -699,14 +852,17 @@ export class SettingsStore {
   }
 
   /** Stores both OAuth tokens, and the session when there is one, under one Keychain-backed ciphertext. */
-  setAccount(account: StoredAccount): Effect.Effect<AccountSnapshot, PlatformError> {
+  setAccount(
+    account: StoredAccount,
+  ): Effect.Effect<AccountSnapshot, PlatformError | EncryptedStorageUnavailable> {
     return Effect.gen({ self: this }, function* () {
-      if (!this.#secretStorageUsable()) {
-        throw new Error("Encrypted credential storage is unavailable on this system.");
+      const cipher = this.#cipher;
+      if (!cipher || !this.#secretStorageUsable()) {
+        return yield* new EncryptedStorageUnavailable();
       }
       yield* this.#mutate((persisted) => {
         const tokenCipher = Base64.encode(
-          this.#cipher.encrypt(
+          cipher.encrypt(
             JSON.stringify({
               accessToken: account.accessToken,
               refreshToken: account.refreshToken,
@@ -736,10 +892,16 @@ export class SettingsStore {
     });
   }
 
+  /**
+   * The account's departure: its record and everything kept for it go. A
+   * store that keeps no account of its own still drops what it kept for the
+   * session's account, since that account is the one leaving.
+   */
   clearAccount(): Effect.Effect<AccountSnapshot, PlatformError> {
+    const keepsOwnAccount = this.#cipher !== undefined;
     return Effect.as(
       this.#mutate((persisted) => {
-        if (!persisted.account) return undefined;
+        if (keepsOwnAccount && !persisted.account) return undefined;
         const { account: _account, ...withoutAccount } = persisted;
         const next: PersistedSettings = { ...withoutAccount };
         for (const field of ACCOUNT_PREFERENCE_FIELDS) next[field] = undefined;
@@ -749,6 +911,29 @@ export class SettingsStore {
       }),
       { status: ACCOUNT_STATUS.SIGNED_OUT },
     );
+  }
+
+  /**
+   * For a store that keeps no account of its own: the account its session
+   * names now. Where what the record keeps for an account (the sync baseline,
+   * the experiments) is someone else's, the account preferences beside it are
+   * theirs too and go with it, as `setAccount` drops them for another
+   * address, so one person's choices never stand in for the next one's.
+   * Asked as the account arrives, before anything is written for it. A
+   * store that keeps its own account settles this in `setAccount`.
+   */
+  settleSessionAccount(accountEmail: string): Effect.Effect<void, PlatformError> {
+    if (this.#cipher !== undefined) return Effect.void;
+    return this.#mutate((persisted) => {
+      const keptFor =
+        persisted.accountPreferencesSync?.accountEmail ?? persisted.experiments?.accountEmail;
+      if (keptFor === undefined || keptFor === accountEmail) return undefined;
+      const next: PersistedSettings = { ...persisted };
+      for (const field of ACCOUNT_PREFERENCE_FIELDS) next[field] = undefined;
+      delete next.accountPreferencesSync;
+      delete next.experiments;
+      return next;
+    });
   }
 
   /**
@@ -765,19 +950,15 @@ export class SettingsStore {
   }
 
   /**
-   * Drops the ciphertext of every provider an earlier build no longer named,
-   * so a key nothing would read does not stay on disk, and carries the rest.
-   * A ciphertext is never decrypted to be dropped.
+   * Drops every provider key an earlier build stored, since no build reads
+   * one any more, so none stays on disk. A ciphertext is never decrypted to
+   * be dropped.
    */
   retireStoredApiKeys(): Effect.Effect<void, PlatformError> {
     return this.#mutate((persisted) => {
-      const apiKeys = this.#carried[STORED_API_KEYS_FIELD];
-      if (!isRecord(apiKeys)) return undefined;
-      const kept = Object.fromEntries(
-        Object.entries(apiKeys).filter(([providerId]) => KEPT_API_KEY_PROVIDERS.has(providerId)),
-      );
-      if (Object.keys(kept).length === Object.keys(apiKeys).length) return undefined;
-      this.#carried = { ...this.#carried, [STORED_API_KEYS_FIELD]: kept };
+      if (!(STORED_API_KEYS_FIELD in this.#carried)) return undefined;
+      const { [STORED_API_KEYS_FIELD]: _retired, ...carried } = this.#carried;
+      this.#carried = carried;
       return { ...persisted };
     });
   }
@@ -791,15 +972,22 @@ export class SettingsStore {
    * scopes are fixed by this build and none reaches a credential, an account,
    * or the agent pairing, whose own row already offers the provider's default.
    * A scope already at its defaults writes nothing, like any other setter
-   * asked for the value it holds.
+   * asked for the value it holds. The fields `kept` are left as the file
+   * holds them, inside the same write: the rows the asking page does not
+   * draw, so a reset never returns a choice its reader could not see, and
+   * never writes back an older reading over another window's newer one.
    */
-  resetSettings(scope: SettingsResetScope): Effect.Effect<SettingsUpdateResult, PlatformError> {
+  resetSettings(
+    scope: SettingsResetScope,
+    kept: readonly AppSettingField[] = [],
+  ): Effect.Effect<SettingsUpdateResult, PlatformError> {
     return Effect.gen({ self: this }, function* () {
       yield* this.#mutate((persisted) => {
         const next: PersistedSettings = { ...persisted };
         for (const field of APP_SETTING_FIELDS) {
           const definition = APP_SETTING_SCHEMA[field];
           if (!("resetScope" in definition) || definition.resetScope !== scope) continue;
+          if (kept.includes(field)) continue;
           if (definition.guard(undefined).valid) delete next[field];
           else Object.assign(next, { [field]: definition.default });
         }
@@ -811,17 +999,37 @@ export class SettingsStore {
   }
 
   /**
-   * The one settings write: serialize, load, mutate, stamp, write, and cache.
-   * A mutator answering nothing means the stored value is already the one
+   * Who the account's experiments and synced preferences are kept for: the
+   * account this store keeps, or, for a store that keeps none, the account
+   * the session names, read once before the record it is compared with.
+   */
+  #accountEmailOf(): Effect.Effect<AccountEmailOf> {
+    const read = this.#sessionAccountEmail;
+    if (this.#cipher !== undefined || read === undefined)
+      return Effect.succeed(STORED_ACCOUNT_EMAIL);
+    return Effect.map(read(), (email) => () => email);
+  }
+
+  /**
+   * The one settings write: serialize, read the file again, mutate, stamp,
+   * write, and cache. The read is the file's and not the held copy, because
+   * another writer on the same file (a second browser tab over one storage)
+   * may have written since this store last read it, and a change applied to
+   * the held copy would write that writer's fields back as they were. A
+   * mutator answering nothing means the stored value is already the one
    * asked for, so nothing is written. It runs exactly once per call, so it
-   * may record what it decided for its caller to read afterwards.
+   * may record what it decided for its caller to read afterwards. A store
+   * that is its file's one writer (no `writer`, as the desktop's) writes over
+   * the copy it holds where that read fails, since nobody else can have
+   * written the file since it was held; one of several writers fails the
+   * write rather than write another's fields back as they were.
    */
   #mutate(
     mutate: (persisted: PersistedSettings) => PersistedSettings | undefined,
   ): Effect.Effect<void, PlatformError> {
     return this.#writes.withPermits(1)(
       Effect.gen({ self: this }, function* () {
-        const persisted = yield* this.#load();
+        const persisted = yield* this.#rereadForWrite();
         const mutated = mutate(persisted);
         if (!mutated) return;
         const next: PersistedSettings = { ...mutated, version: SETTINGS_FILE_VERSION };
@@ -841,7 +1049,7 @@ export class SettingsStore {
     if (this.#secretStorageAvailable === undefined) {
       let available = false;
       try {
-        available = this.#cipher.isAvailable();
+        available = this.#cipher?.isAvailable() ?? false;
       } catch {
         available = false;
       }
@@ -857,8 +1065,10 @@ export class SettingsStore {
    * says to connect again.
    */
   #decryptTokens(cipherText: string): AccountTokens | undefined {
+    const cipher = this.#cipher;
+    if (!cipher) return undefined;
     const plain = Result.flatMap(Base64.decode(cipherText), (bytes) =>
-      Result.try(() => this.#cipher.decrypt(bytes)),
+      Result.try(() => cipher.decrypt(bytes)),
     );
     if (Result.isFailure(plain)) return undefined;
     return Result.getOrUndefined(decodeAccountTokens(plain.success));
@@ -885,6 +1095,34 @@ export class SettingsStore {
     );
   }
 
+  /**
+   * Reads the file again and holds what it says now, for when it may have
+   * been written by someone else: before every write, and when the shell
+   * says another writer changed it (`SettingsChangedElsewhere`). A read that
+   * fails leaves the held copy as it was.
+   */
+  reload(): Effect.Effect<void, PlatformError> {
+    return Effect.asVoid(this.#reread());
+  }
+
+  #rereadForWrite(): Effect.Effect<PersistedSettings, PlatformError> {
+    if (this.#writer !== undefined) return this.#reread();
+    return Effect.catch(this.#reread(), (error) => {
+      const held = this.#held;
+      return held === undefined ? Effect.fail(error) : Effect.succeed(held);
+    });
+  }
+
+  #reread(): Effect.Effect<PersistedSettings, PlatformError> {
+    return this.#reads.withPermits(1)(
+      Effect.tap(this.#readPersisted(), (persisted) =>
+        Effect.sync(() => {
+          this.#held = persisted;
+        }),
+      ),
+    );
+  }
+
   #readPersisted(): Effect.Effect<PersistedSettings, PlatformError> {
     return Effect.map(this.#onFileSystem(readSettingsFileText(this.#directory())), (source) => {
       this.#carried = {};
@@ -892,7 +1130,7 @@ export class SettingsStore {
       // A corrupt settings file is replaced by the next write rather than
       // failing app start, so a refusal here falls back to defaults exactly
       // as an absent file does, and carries nothing.
-      const parsed = parsePersistedSettingsEither(source);
+      const parsed = parsePersistedSettingsEither(source, this.#cipher !== undefined);
       if (Result.isFailure(parsed)) return defaultPersistedSettings();
       this.#carried = carriedSettingsFields(source);
       return parsed.success;
@@ -907,7 +1145,11 @@ export class SettingsStore {
   #write(persisted: PersistedSettings): Effect.Effect<void, PlatformError> {
     const written = { ...encodePersistedSettings(persisted), ...this.#carried };
     return this.#onFileSystem(
-      writeSettingsFileAtomic(this.#directory(), `${JSON.stringify(written, undefined, 2)}\n`),
+      writeSettingsFileAtomic(
+        this.#directory(),
+        `${JSON.stringify(written, undefined, 2)}\n`,
+        this.#writer,
+      ),
     );
   }
 

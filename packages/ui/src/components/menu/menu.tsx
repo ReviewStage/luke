@@ -2,7 +2,9 @@ import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState } f
 import { createPortal } from "react-dom";
 import { CheckIcon, ChevronRightIcon } from "../../face/glyphs.js";
 import { useDisclosure } from "../../use-disclosure.js";
+import { type ViewportBox, visibleViewport } from "../../visible-viewport.js";
 import { SwitchMark } from "../switch/switch.js";
+import { useTouchHold } from "./touch-hold.js";
 
 /**
  * menu.tsx -- a drop-down menu hung at a point in the window: a thing's ⋯, its right-click, and an account's row all open one.
@@ -92,6 +94,8 @@ export interface MenuAction {
   mark?: MenuItemMark | undefined;
   /** Whether choosing it opens a list beside it rather than acting, which a chevron at its end says. */
   opens?: boolean | undefined;
+  /** Whether choosing it leaves the menu standing, as one of several values a filter toggles is. */
+  stays?: boolean | undefined;
 }
 
 /**
@@ -182,11 +186,77 @@ export function riseAboveEnd(button: HTMLElement): MenuPlacement {
 /**
  * Where a right-click's menu hangs: at the pointer, growing rightward from
  * it; or, for the menu key the system turned into a right-click, which says
- * no point of its own, under what was clicked from its start.
+ * no point of its own, where `place` hangs it from what was clicked, under
+ * it from its start unless told otherwise.
  */
-export function atPointer(event: React.MouseEvent<HTMLElement>): MenuPlacement {
-  if (event.clientX === 0 && event.clientY === 0) return dropBelowStart(event.currentTarget);
+export function atPointer(
+  event: React.MouseEvent<HTMLElement>,
+  place: (element: HTMLElement) => MenuPlacement = dropBelowStart,
+): MenuPlacement {
+  if (event.clientX === 0 && event.clientY === 0) return place(event.currentTarget);
   return { x: event.clientX, y: event.clientY, align: MENU_ALIGN.START };
+}
+
+/**
+ * The props of an element whose menu a right-click opens (`useMenu`'s
+ * `contextMenu`), spread on it: the right-click's handler, the long press
+ * that opens the same menu from a touch, and the mark that keeps the
+ * system's own callout off it while held.
+ */
+export interface ContextMenuProps {
+  onContextMenu: (event: React.MouseEvent<HTMLElement>) => void;
+  onPointerDown: (event: React.PointerEvent<HTMLElement>) => void;
+  onTouchEnd: (event: React.TouchEvent<HTMLElement>) => void;
+  "data-long-press": "";
+}
+
+/**
+ * The props of a control inside an element carrying a context menu that
+ * keeps the menu its own press would otherwise open, as a row's switch
+ * does: a right-click on it does not reach the row, and a long press that
+ * starts on it never starts the row's hold.
+ */
+export const NO_CONTEXT_MENU = {
+  "data-no-context-menu": "",
+  onContextMenu: (event: React.MouseEvent<HTMLElement>) => event.stopPropagation(),
+} as const;
+
+/** The handlers of the events a context menu hears that an element carrying it may hear for itself too. */
+export interface ContextMenuCarrier<T extends HTMLElement> {
+  onContextMenu?: React.MouseEventHandler<T> | undefined;
+  onPointerDown?: React.PointerEventHandler<T> | undefined;
+  onTouchEnd?: React.TouchEventHandler<T> | undefined;
+}
+
+/** Two handlers of one event, both heard, the carrier's first; whichever is given where one is not. */
+function heardBoth<E>(
+  own: ((event: E) => void) | undefined,
+  menu: ((event: E) => void) | undefined,
+): ((event: E) => void) | undefined {
+  if (own === undefined || menu === undefined) return own ?? menu;
+  return (event) => {
+    own(event);
+    menu(event);
+  };
+}
+
+/**
+ * The props an element spreads to carry a context menu beside handlers of
+ * its own for the same events, as a row's swipe hears the same pointer:
+ * each event heard by both, its own first; its own alone where it carries
+ * no menu.
+ */
+export function withContextMenu<T extends HTMLElement>(
+  contextMenu: ContextMenuProps | undefined,
+  own: ContextMenuCarrier<T>,
+): ContextMenuCarrier<T> & { "data-long-press"?: "" } {
+  if (contextMenu === undefined) return own;
+  return {
+    "data-long-press": contextMenu["data-long-press"],
+    onContextMenu: heardBoth(own.onContextMenu, contextMenu.onContextMenu),
+    onPointerDown: heardBoth(own.onPointerDown, contextMenu.onPointerDown),
+    onTouchEnd: heardBoth(own.onTouchEnd, contextMenu.onTouchEnd),
+  };
 }
 
 /** Whether a key opens what holds the keyboard's own menu, as a right-click would: the menu key, or ⇧F10. */
@@ -206,11 +276,23 @@ export function opensMenu(event: React.KeyboardEvent): boolean {
  * the same way: `trigger`, the props of the button the menu drops from,
  * whose press opens it where `place` says (under the button, right edges
  * level, unless told otherwise) and closes it again while it stands; and
- * `contextMenu`, a right-click's handler that hangs it at the pointer and
- * hands focus back to `opener` where one is given, the ⋯ or the row the
- * keyboard reaches the menu from, else to what was clicked; and `keyMenu`,
+ * `contextMenu`, the props of what a right-click opens it on, which hang
+ * it at the pointer, or where `place` says for the menu key's right-click,
+ * which says no point, and hand focus back to `opener` where one is given,
+ * the ⋯ or the row the keyboard reaches the menu from, else to what was
+ * clicked; and `keyMenu`,
  * the same row's key handler, which hangs it under the row from its start
  * on the menu key or ⇧F10, for a row with no ⋯ to reach it by.
+ *
+ * A touch has no right-click, and iOS sends no contextmenu for a long
+ * press, so `contextMenu` opens the menu on a touch held still for
+ * `LONG_PRESS_MS` (`touch-hold.ts`) too, at the point it went down. Drifting past
+ * `LONG_PRESS_SLOP`, a scroll, or the touch ending first lets it go. A
+ * hold that opened the menu is not also a press, so its touch ends in no
+ * mousedown or click, which would land on the menu now under the finger,
+ * taking the focus off its first item; nor is it two, so the contextmenu
+ * Android sends for the same hold while it is down opens nothing more. A
+ * mouse and a pen have their right-click, and are left to it.
  */
 export function useMenu(shown: boolean) {
   const [menu, setMenu] = useState<OpenMenu | undefined>(undefined);
@@ -237,11 +319,28 @@ export function useMenu(shown: boolean) {
       else show(place(event.currentTarget), event.currentTarget);
     },
   });
-  const contextMenu =
-    (opener?: React.RefObject<HTMLElement | null>) => (event: React.MouseEvent<HTMLElement>) => {
+  const hold = useTouchHold();
+  const contextMenu = (
+    opener?: React.RefObject<HTMLElement | null>,
+    place: (element: HTMLElement) => MenuPlacement = dropBelowStart,
+  ): ContextMenuProps => ({
+    "data-long-press": "",
+    onContextMenu: (event) => {
       event.preventDefault();
-      show(atPointer(event), opener?.current ?? event.currentTarget);
-    };
+      if (hold.held.current) return;
+      // Note that Android's own contextmenu may come before the hold's
+      // timer, and opens the menu in its place.
+      if (hold.counting()) hold.claim();
+      show(atPointer(event, place), opener?.current ?? event.currentTarget);
+    },
+    onPointerDown: (event) => {
+      const element = event.currentTarget;
+      hold.start(event, ({ x, y }) =>
+        show({ x, y, align: MENU_ALIGN.START }, opener?.current ?? element),
+      );
+    },
+    onTouchEnd: hold.touchEnd,
+  });
   const keyMenu = (event: React.KeyboardEvent<HTMLElement>) => {
     if (!opensMenu(event)) return;
     event.preventDefault();
@@ -252,6 +351,18 @@ export function useMenu(shown: boolean) {
 
 function clamp(value: number, low: number, high: number): number {
   return Math.max(low, Math.min(value, high));
+}
+
+/** A layer of this size at `left` and `top`, held a margin inside what can be seen of the window. */
+function clampInside(
+  seen: ViewportBox,
+  at: { left: number; top: number },
+  size: { width: number; height: number },
+) {
+  return {
+    left: clamp(at.left, seen.left + MENU_MARGIN, seen.right - size.width - MENU_MARGIN),
+    top: clamp(at.top, seen.top + MENU_MARGIN, seen.bottom - size.height - MENU_MARGIN),
+  };
 }
 
 /** The item a navigation key moves to from the focused one, or nothing for any other key. */
@@ -484,7 +595,12 @@ function SubmenuItem({
       aria-haspopup="menu"
       aria-expanded={open}
       data-open={open ? "true" : undefined}
-      onPointerEnter={(event) => onOpen(event.currentTarget, false)}
+      onPointerEnter={(event) => {
+        // Note that a finger's arrival opens nothing, because iOS plays a
+        // tap's arrival as a hover and spends the tap on what comes in with
+        // it; the tap itself opens the submenu, the keyboard taken into it.
+        if (event.pointerType !== "touch") onOpen(event.currentTarget, false);
+      }}
       onClick={(event) => onOpen(event.currentTarget, true)}
       onKeyDown={(event) => {
         if (event.key !== "ArrowRight") return;
@@ -549,16 +665,13 @@ function Submenu({
     const { width, height } = drawn.getBoundingClientRect();
     const beside = menu.getBoundingClientRect();
     const opener = anchor.getBoundingClientRect();
+    const seen = visibleViewport();
     const right = beside.right + MENU_DROP;
-    const left =
-      right + width > window.innerWidth - MENU_MARGIN ? beside.left - MENU_DROP - width : right;
+    const left = right + width > seen.right - MENU_MARGIN ? beside.left - MENU_DROP - width : right;
     const down = opener.top - MENU_INSET;
     const top =
-      down + height > window.innerHeight - MENU_MARGIN ? opener.bottom + MENU_INSET - height : down;
-    setAt({
-      left: clamp(left, MENU_MARGIN, window.innerWidth - width - MENU_MARGIN),
-      top: clamp(top, MENU_MARGIN, window.innerHeight - height - MENU_MARGIN),
-    });
+      down + height > seen.bottom - MENU_MARGIN ? opener.bottom + MENU_INSET - height : down;
+    setAt(clampInside(seen, { left, top }, { width, height }));
   }, [anchor, surface, rows]);
 
   const placed = at !== undefined;
@@ -648,10 +761,7 @@ export function Menu({
     const { width, height } = drawn.getBoundingClientRect();
     const left = placement.align === MENU_ALIGN.END ? placement.x - width : placement.x;
     const top = placement.grow === MENU_GROW.UP ? placement.y - height : placement.y;
-    setAt({
-      left: clamp(left, MENU_MARGIN, window.innerWidth - width - MENU_MARGIN),
-      top: clamp(top, MENU_MARGIN, window.innerHeight - height - MENU_MARGIN),
-    });
+    setAt(clampInside(visibleViewport(), { left, top }, { width, height }));
   }, [placement]);
 
   // Focus lands on the first item, or the checked one where it opens on
@@ -708,8 +818,9 @@ export function Menu({
     if (moveMenuFocus(event)) setSubmenu(undefined);
   };
 
+  // Note that a value a filter toggles leaves the menu standing, so several are chosen in one visit.
   const choose = (action: MenuAction) => {
-    onClose(true);
+    if (action.stays !== true) onClose(true);
     action.onSelect();
   };
   // Note that an open submenu draws its entry from this render's groups, because its owner may redraw them while it stands.

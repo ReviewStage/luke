@@ -4,11 +4,11 @@ import assert from "node:assert/strict";
 import { WORKSPACE_CALL_FAILURE } from "@luke/features";
 import type { TasksWorkspacePhotoAnswer } from "@luke/features/tasks-view";
 import { WORKSPACE_PHOTO_TYPE } from "@luke/features/workspace-wire";
-import { ACT_KIND, ACT_OUTCOME_STATUS } from "@luke/host/acts";
+import { ACT_KIND } from "@luke/host/acts";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
-import { fakeAppBridge } from "../testing/app-bridge.js";
+import { fakeActPort } from "../testing/app-bridge.js";
 import { WorkspaceTile } from "./workspace-tile.js";
 
 /**
@@ -33,10 +33,10 @@ let answer: TasksWorkspacePhotoAnswer = PHOTO;
 beforeEach(() => {
   sent = [];
   answer = PHOTO;
-  fakeAppBridge({
-    act: (request: { kind: string; payload?: unknown }) => {
-      sent.push(request);
-      return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: answer });
+  fakeActPort({
+    [ACT_KIND.WORKSPACE_PHOTO_READ]: (payload) => {
+      sent.push({ kind: ACT_KIND.WORKSPACE_PHOTO_READ, payload });
+      return Promise.resolve(answer);
     },
   });
 });
@@ -153,11 +153,8 @@ test("a workspace with neither a photo nor a picture draws its letter and reads 
 test("a read of a version asked for again lands though an earlier read of it failed after the second was asked", async () => {
   // Each photo read waits until the test answers it, in the order it was asked.
   const answers: ((value: TasksWorkspacePhotoAnswer) => void)[] = [];
-  fakeAppBridge({
-    act: () =>
-      new Promise((resolve) =>
-        answers.push((value) => resolve({ status: ACT_OUTCOME_STATUS.DONE, value })),
-      ),
+  fakeActPort({
+    [ACT_KIND.WORKSPACE_PHOTO_READ]: () => new Promise((resolve) => answers.push(resolve)),
   });
   const container = document.createElement("div");
   document.body.append(container);

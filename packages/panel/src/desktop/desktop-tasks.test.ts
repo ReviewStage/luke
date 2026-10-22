@@ -1,0 +1,1130 @@
+// @vitest-environment jsdom
+
+import assert from "node:assert/strict";
+import {
+  CODING_AGENT_CALL_FAILURE,
+  type CodingAgentInboxAnswerParams,
+  type CodingAgentInboxAnswerView,
+  INBOX_SCOPE_KIND,
+} from "@luke/features/coding-agent-view";
+import {
+  CHECK_SUMMARY,
+  CODING_AGENT_STATUS,
+  type CodingAgentSummary,
+  PULL_REQUEST_STATE,
+} from "@luke/features/coding-agent-wire";
+import {
+  INBOX_REPLY,
+  INBOX_RESPONSE,
+  INBOX_STATUS,
+  INBOX_WIRE_VERSION,
+  type InboxItem,
+} from "@luke/features/inbox-wire";
+import { PLAN_ACTOR, type Task } from "@luke/features/task-wire";
+import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
+import { ACT_KIND } from "@luke/host/acts";
+import { EXPERIMENT } from "@luke/settings";
+import { APP_COMMAND } from "@luke/settings/shortcuts";
+import { experimentsOn } from "@luke/settings/testing";
+import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
+import { Effect } from "effect";
+import * as AtomRegistry from "effect/reactivity/AtomRegistry";
+import { act, createElement } from "react";
+import { createRoot } from "react-dom/client";
+import { renderToStaticMarkup } from "react-dom/server";
+import { afterEach, beforeAll, test, vi } from "vitest";
+import { runAppCommand } from "../app-commands.js";
+import { fixtureChat } from "../tasks/chat-fixture.js";
+import { PULL_REQUEST_VIEW, SIDE_PANEL_TAB, type SidePanelTab } from "../tasks/use-side-panel.js";
+import { NO_LOOKS } from "../tasks/use-task-looks.js";
+import type { TasksControl } from "../tasks/use-tasks-tab.js";
+import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
+import { DESKTOP_LINKS, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
+import { handState } from "../testing/app-state.js";
+import { onRegistry } from "../testing/copy-feedback.js";
+import { markdownHtmlParserLanded } from "../testing/markdown.js";
+import { relayout } from "../testing/resize-observer.js";
+import "../file-tree/index.js";
+import { followedInboxes } from "../testing/followed-inboxes.js";
+import { codingAgentsControl, tasksControl, UNPINNED_SUMMARY } from "../testing/tasks-control.js";
+import { DesktopTasks } from "./desktop-tasks.js";
+
+const TASK: Task = {
+  id: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
+  workspaceId: "workspace-personal",
+  name: "Teammate invitations",
+  createdAt: 1,
+  updatedAt: 2,
+  repository: null,
+  document: { body: "", assumptions: [] },
+};
+
+// A reply is drawn once the parser has landed, as the panel lands it after its first paint.
+beforeAll(() => Effect.runPromise(markdownHtmlParserLanded));
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
+/** The side panel shown on the plan, as a task opens. */
+const DOCUMENT_PANEL: TasksControl["sidePanel"] = {
+  ...tasksControl().sidePanel,
+  open: true,
+  tab: SIDE_PANEL_TAB.PLAN,
+};
+
+test("a task the service will not hand the reader, as a link to another workspace's may name, is not found, its Close the one way on", () => {
+  const left: string[] = [];
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  act(() =>
+    root.render(
+      createElement(DesktopTasks, {
+        summary: UNPINNED_SUMMARY,
+        looks: NO_LOOKS,
+        tasks: tasksControl({
+          page: TASKS_PAGE.DOCUMENT,
+          activeTaskId: TASK.id,
+          region: { kind: DOCUMENT_REGION.MISSING },
+          onLeaveTask: () => left.push(TASK.id),
+        }),
+      }),
+    ),
+  );
+  const close = [...container.querySelectorAll("button")].find(
+    (each) => each.textContent === "Close task",
+  );
+  act(() => close?.click());
+
+  assert.match(
+    container.textContent ?? "",
+    /Not foundThis task doesn't exist, or you don't have access to it\./u,
+  );
+  assert.deepEqual(left, [TASK.id]);
+  act(() => root.unmount());
+  container.remove();
+});
+
+test("a task with no agent tab draws a new agent's draft, its composer offering Call where the window takes calls, and no pane of start buttons", () => {
+  const DRAFT_ID = "draft-1";
+  const drawn = (calls: TasksControl["calls"]) => {
+    const page = document.createElement("div");
+    page.innerHTML = renderToStaticMarkup(
+      createElement(DesktopTasks, {
+        summary: UNPINNED_SUMMARY,
+        looks: NO_LOOKS,
+        tasks: tasksControl({
+          page: TASKS_PAGE.DOCUMENT,
+          activeTaskId: TASK.id,
+          region: { kind: DOCUMENT_REGION.READY, task: TASK },
+          mainTabs: {
+            ...tasksControl().mainTabs,
+            tabs: [{ draft: DRAFT_ID }],
+            tab: { draft: DRAFT_ID },
+          },
+          calls,
+          agents: codingAgentsControl({
+            agentIds: [],
+            draft: {
+              id: DRAFT_ID,
+              prompt: "",
+              attachments: [],
+              choice: undefined,
+              disabledServers: [],
+            },
+            startCall: () => Promise.resolve({ agentId: "agent-1" }),
+          }),
+        }),
+      }),
+    );
+    return page;
+  };
+  const voiced = drawn({ onPress: () => undefined });
+  assert.ok(
+    voiced.querySelector(".desktop-agent .agent-composer"),
+    "the draft's composer is drawn",
+  );
+  assert.equal(voiced.querySelector(".desktop-no-agent"), null);
+  assert.equal(
+    [...voiced.querySelectorAll("button")].some((each) =>
+      /voice chat/u.test(each.textContent ?? ""),
+    ),
+    false,
+  );
+  assert.ok(voiced.querySelector(".agent-call-button button"), "and Call in it");
+  assert.equal(drawn(undefined).querySelector(".agent-call-button"), null, "the web's offers none");
+});
+
+/** The Code tab as the task's page draws it over the code the task holds, and whether its code read did not land, as markup. */
+function codeTab(shownCode: readonly never[] | undefined, codeFailed = false): HTMLElement {
+  const markup = renderToStaticMarkup(
+    createElement(DesktopTasks, {
+      summary: UNPINNED_SUMMARY,
+      looks: NO_LOOKS,
+      tasks: tasksControl({
+        page: TASKS_PAGE.DOCUMENT,
+        activeTaskId: TASK.id,
+        region: { kind: DOCUMENT_REGION.READY, task: TASK },
+        sidePanel: { ...tasksControl().sidePanel, open: true, tab: SIDE_PANEL_TAB.CODE },
+        shownCode,
+        codeFailed,
+      }),
+    }),
+  );
+  const page = document.createElement("div");
+  page.innerHTML = markup;
+  return page;
+}
+
+test("the Code tab waits while the task's code is unread, and says there is none only once it is read as none", () => {
+  const tab = (page: HTMLElement) => {
+    const panel = page.querySelector("aside[aria-label='Panel'] [role=tabpanel]:not([hidden])");
+    assert.ok(panel, "the panel shows its tab");
+    return panel;
+  };
+  const unread = tab(codeTab(undefined));
+  assert.ok(unread.querySelector("[role=status]"), "the tab says it is waiting");
+  assert.doesNotMatch(unread.textContent ?? "", /No code yet\./u);
+
+  const none = tab(codeTab([]));
+  assert.match(none.textContent ?? "", /No code yet\./u);
+  assert.equal(none.querySelector("[role=status]"), null);
+});
+
+test("the Code tab whose code read did not land says so with Retry while it holds no code, and Retry reads it again", () => {
+  let retries = 0;
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  act(() =>
+    root.render(
+      createElement(DesktopTasks, {
+        summary: UNPINNED_SUMMARY,
+        looks: NO_LOOKS,
+        tasks: tasksControl({
+          page: TASKS_PAGE.DOCUMENT,
+          activeTaskId: TASK.id,
+          region: { kind: DOCUMENT_REGION.READY, task: TASK },
+          sidePanel: { ...tasksControl().sidePanel, open: true, tab: SIDE_PANEL_TAB.CODE },
+          shownCode: undefined,
+          codeFailed: true,
+          onRetryCode: () => {
+            retries += 1;
+          },
+        }),
+      }),
+    ),
+  );
+  const tab = container.querySelector("aside[aria-label='Panel'] [role=tabpanel]:not([hidden])");
+  assert.match(tab?.textContent ?? "", /The code could not be read\./u);
+  assert.equal(tab?.querySelector("[role=status]"), null, "the tab no longer waits");
+  const retry = [...(tab?.querySelectorAll("button") ?? [])].find(
+    (each) => each.textContent === "Retry",
+  );
+  act(() => retry?.click());
+  assert.equal(retries, 1);
+  act(() => root.unmount());
+  container.remove();
+
+  // Code already held stays drawn through a read that did not land.
+  const held = codeTab([], true).querySelector(
+    "aside[aria-label='Panel'] [role=tabpanel]:not([hidden])",
+  );
+  assert.match(held?.textContent ?? "", /No code yet\./u);
+  assert.doesNotMatch(held?.textContent ?? "", /could not be read/u);
+});
+
+test("a plan's Inbox tab whose read holds nothing says nothing needs you under the Inbox's glyph, or under its list where the list stands alone, rather than standing blank", async () => {
+  Object.defineProperty(window, "matchMedia", {
+    configurable: true,
+    value: () => ({
+      matches: false,
+      addEventListener: () => undefined,
+      removeEventListener: () => undefined,
+    }),
+  });
+  const agentId = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
+  const container = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(container);
+  act(() =>
+    root.render(
+      onRegistry(
+        AtomRegistry.make(),
+        createElement(DesktopTasks, {
+          summary: UNPINNED_SUMMARY,
+          looks: NO_LOOKS,
+          notice: undefined,
+          tasks: tasksControl({
+            page: TASKS_PAGE.DOCUMENT,
+            activeTaskId: TASK.id,
+            region: { kind: DOCUMENT_REGION.READY, task: TASK },
+            sidePanel: {
+              ...tasksControl().sidePanel,
+              open: true,
+              tabs: [SIDE_PANEL_TAB.PLAN, SIDE_PANEL_TAB.INBOX],
+              strip: [SIDE_PANEL_TAB.PLAN, SIDE_PANEL_TAB.INBOX],
+              tab: SIDE_PANEL_TAB.INBOX,
+            },
+            agents: codingAgentsControl({
+              agentIds: [agentId],
+              inboxFollower: followedInboxes(() => ({ items: [] })).follower,
+            }),
+          }),
+        }),
+      ),
+    ),
+  );
+  await act(async () => {
+    for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
+  });
+  const tab = container.querySelector<HTMLElement>('section.inbox-view[aria-label="Inbox"]');
+  assert.ok(tab, "the plan's Inbox tab");
+  assert.match(tab.textContent ?? "", /Nothing needs you/u);
+  // Too narrow for the pane beside it, the list standing alone says so.
+  vi.spyOn(tab, "getBoundingClientRect").mockReturnValue(
+    DOMRect.fromRect({ width: 700, height: 800 }),
+  );
+  act(() => relayout());
+  const shown = [...tab.querySelectorAll(".inbox-tasks, .inbox-view-items")].filter(
+    (column) => !column.hasAttribute("hidden"),
+  );
+  assert.match(shown.map((column) => column.textContent).join(""), /Nothing needs you/u);
+  assert.equal(
+    shown
+      .find((column) => column.classList.contains("inbox-tasks"))
+      ?.querySelector(".luke-empty-state")?.textContent,
+    "Nothing needs you",
+    "the list standing alone stands the Inbox's empty state",
+  );
+  act(() => root.unmount());
+  container.remove();
+});
+
+/** An item of the plan's agent, open and asking for an approval, as the service answers one. */
+function approvalItem(id: string, title: string, at: number): InboxItem {
+  return {
+    id,
+    agentId: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
+    key: id.slice(-4),
+    revision: 1,
+    version: INBOX_WIRE_VERSION,
+    title,
+    blocks: [],
+    response: { type: INBOX_RESPONSE.APPROVAL },
+    needsReply: true,
+    status: INBOX_STATUS.OPEN,
+    postedAt: at,
+    updatedAt: at,
+  };
+}
+
+/** The plan's Inbox tab over the items given, laid out 700px wide, too narrow for its list and the item side by side, or as wide as given. */
+async function narrowTaskInbox(
+  items: readonly InboxItem[],
+  width = 700,
+  /** What is pushed after the first push, where a test settles it; else nothing is. */
+  later: Promise<CodingAgentInboxAnswerView> = new Promise(() => undefined),
+  /** What the first push says, where a test holds it back until it settles; else the items given, once followed. */
+  first?: Promise<CodingAgentInboxAnswerView>,
+  /** The account reading, none where a test does not say, and where its answers go. */
+  reader: Pick<TasksControl, "me"> & Partial<Pick<TasksControl["agents"], "answerInbox">> = {
+    me: undefined,
+  },
+) {
+  Object.defineProperty(window, "matchMedia", {
+    configurable: true,
+    value: () => ({
+      matches: false,
+      addEventListener: () => undefined,
+      removeEventListener: () => undefined,
+    }),
+  });
+  // The inbox is pushed as `items` once followed, or as `first` says once it settles, and
+  // again as `later` says once it settles.
+  const main = followedInboxes(() => (first === undefined ? { items } : undefined));
+  const pushed = (answer: CodingAgentInboxAnswerView) =>
+    main.push(
+      { kind: INBOX_SCOPE_KIND.PLAN, id: TASK.id },
+      "failure" in answer ? { failure: answer.failure } : { items: answer.items },
+    );
+  void first?.then(pushed);
+  void later.then(pushed);
+  const container = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(container);
+  act(() =>
+    root.render(
+      onRegistry(
+        AtomRegistry.make(),
+        createElement(DesktopTasks, {
+          summary: UNPINNED_SUMMARY,
+          looks: NO_LOOKS,
+          notice: undefined,
+          tasks: tasksControl({
+            page: TASKS_PAGE.DOCUMENT,
+            activeTaskId: TASK.id,
+            region: { kind: DOCUMENT_REGION.READY, task: TASK },
+            sidePanel: {
+              ...tasksControl().sidePanel,
+              open: true,
+              tabs: [SIDE_PANEL_TAB.PLAN, SIDE_PANEL_TAB.INBOX],
+              strip: [SIDE_PANEL_TAB.PLAN, SIDE_PANEL_TAB.INBOX],
+              tab: SIDE_PANEL_TAB.INBOX,
+            },
+            me: reader.me,
+            agents: codingAgentsControl({
+              agentIds: ["8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21"],
+              ...(reader.answerInbox === undefined
+                ? undefined
+                : { answerInbox: reader.answerInbox }),
+              inboxFollower: main.follower,
+            }),
+          }),
+        }),
+      ),
+    ),
+  );
+  await act(async () => {
+    for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
+  });
+  const tab = container.querySelector<HTMLElement>('section.inbox-view[aria-label="Inbox"]');
+  assert.ok(tab, "the plan's Inbox tab");
+  vi.spyOn(tab, "getBoundingClientRect").mockReturnValue(DOMRect.fromRect({ width, height: 800 }));
+  act(() => relayout());
+  return {
+    /** What a reader finds standing: the list or the item, and the item's title. */
+    standing: () => [
+      tab.querySelector(".inbox-tasks")?.hasAttribute("hidden") === false ? "list" : "",
+      tab.querySelector(".inbox-view-items")?.hasAttribute("hidden") === false
+        ? (tab.querySelector("[data-inbox-title]")?.textContent ?? "item")
+        : "",
+    ],
+    title: () => tab.querySelector("[data-inbox-title]")?.textContent,
+    /** The list's head as a reader meets it: its name, then each scope its view's menu offers, the one shown in brackets; the menu is closed again on the scope shown. */
+    head: async () => {
+      const offered = await taskInboxScopes(tab);
+      const shown = offered.find((each) => each.getAttribute("aria-checked") === "true");
+      const words = offered.map((each) =>
+        each === shown ? `[${each.textContent}]` : (each.textContent ?? ""),
+      );
+      act(() => shown?.click());
+      return [tab.querySelector(".inbox-tasks header h1")?.textContent, ...words];
+    },
+    /** Shows the scope named `name` from the view's menu. */
+    pressScope: async (name: string) => {
+      const offered = await taskInboxScopes(tab);
+      act(() => offered.find((each) => each.textContent === name)?.click());
+    },
+    rows: () =>
+      [...tab.querySelectorAll(".inbox-tasks .luke-list-row-title")].map((row) => row.textContent),
+    /** The list's empty state as a reader meets it: its heading, its line, and its one press; none where the list stands none. */
+    filteredOut: () => {
+      const empty = tab.querySelector(".inbox-tasks:not([hidden]) .luke-empty-state");
+      if (empty === null) return null;
+      return [
+        empty.querySelector("h3")?.textContent,
+        empty.querySelector("p")?.textContent,
+        empty.querySelector("button")?.textContent,
+      ];
+    },
+    showAll: () =>
+      act(() =>
+        tab.querySelector<HTMLButtonElement>(".inbox-tasks .luke-empty-state button")?.click(),
+      ),
+    pager: () => tab.querySelector(".inbox-pager-count")?.textContent ?? null,
+    /** What the list says of a read that did not land, and whether it offers Retry. */
+    failure: () => {
+      const alert = tab.querySelector('.inbox-tasks [role="alert"]');
+      const retry = [...tab.querySelectorAll(".inbox-tasks button")].some((button) =>
+        button.textContent?.includes("Retry"),
+      );
+      return [alert?.textContent?.includes("The inbox could not be read.") ?? false, retry];
+    },
+    back: () =>
+      [
+        ...tab.querySelectorAll<HTMLButtonElement>(".inbox-view-items > .desktop-toolbar button"),
+      ].find((button) => button.textContent === "Inbox") ?? null,
+    row: (title: string) =>
+      [
+        ...tab.querySelectorAll<HTMLButtonElement>(".inbox-tasks li button.luke-list-row-main"),
+      ].find((each) => each.textContent?.includes(title)),
+    unmount: () => {
+      act(() => root.unmount());
+      container.remove();
+    },
+  };
+}
+
+/** The scopes a task's Inbox's view's menu offers, the menu opened from its head's View options and let settle, as a menu just closed hands the keyboard back first. */
+async function taskInboxScopes(tab: HTMLElement): Promise<HTMLElement[]> {
+  const options = tab.querySelector<HTMLButtonElement>('button[aria-label="View options"]');
+  assert.ok(options, "the head offers the view's menu");
+  await act(async () => {
+    options.click();
+    for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
+  });
+  const menu = [...document.querySelectorAll<HTMLElement>('[role="menu"]')].at(-1);
+  return [...(menu?.querySelectorAll<HTMLElement>('[role="menuitemcheckbox"]') ?? [])];
+}
+
+/** Where a task's own Inbox keeps the scope it shows, apart from the window's, and where its Needs you kept its press before the tabs that stood before its scopes. */
+const TASK_SHOW_KEY = "luke.taskInboxShow";
+const TASK_EARLIER_SHOW_KEY = "luke.taskInboxWaitingOnly";
+
+/** Opens every task's own Inbox on All, as a test of what it pages through over settled items asks. */
+function showEverything(): void {
+  window.localStorage.setItem(TASK_SHOW_KEY, JSON.stringify("all"));
+}
+
+test("a task's Inbox tab too narrow for its list and the item side by side is the item it holds, with no way back to a list of one", async () => {
+  const inbox = await narrowTaskInbox([
+    approvalItem("a1b2c3d4-0000-4000-8000-000000000001", "Expire after 7 days?", 1_000),
+  ]);
+  assert.deepEqual(inbox.standing(), ["", "Expire after 7 days?"]);
+  assert.equal(inbox.back(), null, "no way back to a list of one");
+  assert.equal(runAppCommand(APP_COMMAND.BACK), false, "nor does Back's chord go to one");
+  inbox.unmount();
+});
+
+/** An item of the plan's agent the developer approved, settled. */
+function approvedItem(id: string, title: string, at: number): InboxItem {
+  return {
+    ...approvalItem(id, title, at),
+    status: INBOX_STATUS.ANSWERED,
+    answer: { reply: INBOX_REPLY.APPROVED },
+  };
+}
+
+test("a task's Inbox heads its list with the Inbox's name and a view's menu offering To do and All alone, opening on To do with no tab bar; All lists everything, the head naming it, and the scope chosen is kept across a relaunch apart from the window's", async () => {
+  window.localStorage.clear();
+  window.localStorage.setItem("luke.inboxShow", JSON.stringify("all"));
+  const items = [
+    approvalItem("a1b2c3d4-0000-4000-8000-000000000001", "Expire after 7 days?", 1_000),
+    approvedItem("a1b2c3d4-0000-4000-8000-000000000002", "Resend on bounce?", 2_000),
+  ];
+  let inbox = await narrowTaskInbox(items, 1_200);
+  assert.equal(document.querySelector('.inbox-tasks [role="tab"]'), null, "no tab bar stands");
+  assert.deepEqual(await inbox.head(), ["Inbox", "[To do]", "All"]);
+  assert.deepEqual(inbox.rows(), ["Expire after 7 days?"]);
+  await inbox.pressScope("All");
+  assert.deepEqual(await inbox.head(), ["Inbox · All", "To do", "[All]"]);
+  assert.deepEqual(inbox.rows(), ["Resend on bounce?", "Expire after 7 days?"]);
+  inbox.unmount();
+
+  inbox = await narrowTaskInbox(items, 1_200);
+  assert.deepEqual(
+    await inbox.head(),
+    ["Inbox · All", "To do", "[All]"],
+    "the scope outlives a relaunch",
+  );
+  await inbox.pressScope("To do");
+  assert.deepEqual(inbox.rows(), ["Expire after 7 days?"]);
+  inbox.unmount();
+  window.localStorage.clear();
+});
+
+test("a task's Inbox whose Needs you was pressed before the tabs opens on To do, and one left off on All; a tab kept before the scopes opens on the scope that lists what it did", async () => {
+  const items = [
+    approvalItem("a1b2c3d4-0000-4000-8000-000000000001", "Expire after 7 days?", 1_000),
+  ];
+  for (const [key, kept, shown] of [
+    [TASK_EARLIER_SHOW_KEY, true, "[To do]"],
+    [TASK_EARLIER_SHOW_KEY, false, "[All]"],
+    [TASK_SHOW_KEY, "unread", "[To do]"],
+    [TASK_SHOW_KEY, "open", "[All]"],
+  ] as const) {
+    window.localStorage.clear();
+    window.localStorage.setItem(key, JSON.stringify(kept));
+    const inbox = await narrowTaskInbox(items, 1_200);
+    assert.ok(
+      (await inbox.head()).includes(shown),
+      `${key} kept as ${String(kept)} shows ${shown}`,
+    );
+    inbox.unmount();
+  }
+  window.localStorage.clear();
+});
+
+test("one column wide, a task's Inbox on To do pages through only what it lists", async () => {
+  window.localStorage.clear();
+  showEverything();
+  const inbox = await narrowTaskInbox([
+    approvalItem("a1b2c3d4-0000-4000-8000-000000000001", "Expire after 7 days?", 1_000),
+    approvedItem("a1b2c3d4-0000-4000-8000-000000000002", "Resend on bounce?", 2_000),
+    approvalItem("a1b2c3d4-0000-4000-8000-000000000003", "Alert at 80%?", 3_000),
+  ]);
+  assert.deepEqual(inbox.standing(), ["", "Alert at 80%?"]);
+  assert.equal(inbox.pager(), "1 of 3");
+
+  act(() => inbox.back()?.click());
+  await inbox.pressScope("To do");
+  act(() => inbox.row("Alert at 80%?")?.click());
+  assert.equal(inbox.pager(), "1 of 2", "the settled item is passed over");
+  window.localStorage.clear();
+  inbox.unmount();
+});
+
+test("one column wide, a task's Inbox filtered down to one item still offers its way back, to the list that holds the view's menu", async () => {
+  window.localStorage.clear();
+  showEverything();
+  const inbox = await narrowTaskInbox([
+    approvalItem("a1b2c3d4-0000-4000-8000-000000000001", "Expire after 7 days?", 1_000),
+    approvedItem("a1b2c3d4-0000-4000-8000-000000000002", "Resend on bounce?", 2_000),
+  ]);
+  act(() => inbox.back()?.click());
+  await inbox.pressScope("To do");
+  act(() => inbox.row("Expire after 7 days?")?.click());
+  assert.deepEqual(inbox.standing(), ["", "Expire after 7 days?"]);
+  act(() => inbox.back()?.click());
+  assert.deepEqual(await inbox.head(), ["Inbox", "[To do]", "All"]);
+  window.localStorage.clear();
+  inbox.unmount();
+});
+
+/** A read the test settles by hand: the promise the Inbox awaits, and what settles it. */
+interface HeldAnswer {
+  readonly promise: Promise<CodingAgentInboxAnswerView>;
+  readonly settle: (answer: CodingAgentInboxAnswerView) => Promise<void>;
+}
+
+/** A read held open until the test settles it. */
+function heldAnswer(): HeldAnswer {
+  let settle: (answer: CodingAgentInboxAnswerView) => void = () => undefined;
+  const promise = new Promise<CodingAgentInboxAnswerView>((resolve) => {
+    settle = resolve;
+  });
+  return {
+    promise,
+    settle: async (answer) => {
+      settle(answer);
+      await act(async () => {
+        for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
+      });
+    },
+  };
+}
+
+test("while a task's Inbox is first read, its list stands placeholder rows under a status saying the inbox is being read, with no ring in its corner; once the read lands, the items stand", async () => {
+  const read = heldAnswer();
+  const asked = approvalItem("a1b2c3d4-0000-4000-8000-000000000001", "Expire after 7 days?", 1_000);
+  const inbox = await narrowTaskInbox([], 1_200, undefined, read.promise);
+  const list = document.querySelector<HTMLElement>(".inbox-tasks");
+  assert.ok(list, "the list is drawn");
+  const wait = list.querySelector<HTMLElement>('[role="status"][aria-busy="true"]');
+  assert.equal(wait?.textContent, "Reading your inbox…");
+  assert.ok(
+    (wait?.querySelectorAll(".luke-list-row .luke-skeleton").length ?? 0) > 0,
+    "placeholder rows stand in the items' place",
+  );
+  assert.equal(list.querySelector(".luke-spinner"), null, "no ring stands in the list's corner");
+
+  await read.settle({ items: [asked], cursor: "1" });
+  assert.equal(list.querySelector('[aria-busy="true"]'), null);
+  assert.deepEqual(inbox.rows(), ["Expire after 7 days?"]);
+  inbox.unmount();
+});
+
+test("on To do, the item a task's Inbox chose for itself stays shown once it is answered, and its row stays where it stood, gray, so the list says nothing of there being nothing to do while it is chosen", async () => {
+  window.localStorage.clear();
+  const asked = approvalItem("a1b2c3d4-0000-4000-8000-000000000001", "Expire after 7 days?", 1_000);
+  const read = heldAnswer();
+  const inbox = await narrowTaskInbox([asked], 1_200, read.promise);
+  await inbox.pressScope("To do");
+  assert.equal(inbox.title(), "Expire after 7 days?");
+  await read.settle({ items: [approvedItem(asked.id, asked.title, 1_000)], cursor: "2" });
+  assert.deepEqual(inbox.rows(), ["Expire after 7 days?"], "the answered row stays while chosen");
+  assert.equal(inbox.row("Expire after 7 days?")?.closest("li")?.dataset["muted"], "true");
+  assert.equal(inbox.filteredOut(), null);
+  assert.equal(inbox.title(), "Expire after 7 days?", "the answer is seen landing");
+  window.localStorage.clear();
+  inbox.unmount();
+});
+
+test("a task's Inbox holding only settled items, read, on To do lists no row and says there is nothing to do with Show all, wide or one column wide, whose press shows All", async () => {
+  window.localStorage.clear();
+  showEverything();
+  const items = [
+    approvedItem("a1b2c3d4-0000-4000-8000-000000000001", "Expire after 7 days?", 1_000),
+    approvedItem("a1b2c3d4-0000-4000-8000-000000000002", "Resend on bounce?", 2_000),
+  ];
+  const wide = await narrowTaskInbox(items, 1_200);
+  assert.deepEqual(wide.rows(), ["Resend on bounce?", "Expire after 7 days?"]);
+  await wide.pressScope("To do");
+  assert.deepEqual(await wide.head(), ["Inbox", "[To do]", "All"]);
+  assert.deepEqual(wide.rows(), [], "the item read is not listed under a filter leaving it out");
+  assert.deepEqual(wide.filteredOut(), [undefined, "Nothing to do", "Show all"]);
+  assert.equal(wide.title(), "Resend on bounce?", "the item read stays shown beside the list");
+  wide.showAll();
+  assert.deepEqual(await wide.head(), ["Inbox · All", "To do", "[All]"]);
+  assert.deepEqual(wide.rows(), ["Resend on bounce?", "Expire after 7 days?"]);
+  await wide.pressScope("To do");
+  wide.unmount();
+
+  // Opened again one column wide, To do kept, nothing stands chosen, so the list stands alone and says so.
+  const narrow = await narrowTaskInbox(items);
+  assert.deepEqual(narrow.standing(), ["list", ""]);
+  assert.equal(narrow.filteredOut()?.[2], "Show all");
+  narrow.showAll();
+  assert.deepEqual(
+    narrow.standing(),
+    ["list", ""],
+    "Show all leaves the rows it brings back standing",
+  );
+  assert.deepEqual(await narrow.head(), ["Inbox · All", "To do", "[All]"]);
+  assert.deepEqual(narrow.rows(), ["Resend on bounce?", "Expire after 7 days?"]);
+  window.localStorage.clear();
+  narrow.unmount();
+});
+
+test("a task's Inbox whose read failed offers Retry though To do lists nothing it still holds", async () => {
+  window.localStorage.clear();
+  const settled = [
+    approvedItem("a1b2c3d4-0000-4000-8000-000000000002", "Resend on bounce?", 2_000),
+  ];
+  const first = await narrowTaskInbox(settled, 1_200);
+  await first.pressScope("To do");
+  first.unmount();
+
+  const read = heldAnswer();
+  const inbox = await narrowTaskInbox(settled, 1_200, read.promise);
+  assert.deepEqual(inbox.rows(), [], "To do, kept from before, lists nothing");
+  await read.settle({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
+  assert.deepEqual(inbox.failure(), [true, true]);
+  window.localStorage.clear();
+  inbox.unmount();
+});
+
+test("a plan's Inbox tab too narrow for its list and the item side by side shows the chosen item under a way back to the list, whose rows open their items again", async () => {
+  const inbox = await narrowTaskInbox([
+    approvalItem("a1b2c3d4-0000-4000-8000-000000000001", "Expire after 7 days?", 1_000),
+    approvalItem("a1b2c3d4-0000-4000-8000-000000000002", "Resend on bounce?", 2_000),
+  ]);
+  assert.deepEqual(inbox.standing(), ["", "Resend on bounce?"], "the newest that needs you");
+  assert.equal(inbox.back()?.textContent, "Inbox");
+  act(() => inbox.back()?.click());
+  assert.deepEqual(inbox.standing(), ["list", ""]);
+  act(() => inbox.row("Expire after 7 days?")?.click());
+  assert.deepEqual(inbox.standing(), ["", "Expire after 7 days?"]);
+  inbox.unmount();
+});
+
+test("a plan's document opens on its title, with who created it and last edited it under the title, and no crumb over it", () => {
+  const home = {
+    id: TASK.workspaceId,
+    name: "Personal",
+    role: WORKSPACE_ROLE.MEMBER,
+    github: null,
+  };
+  const task: Task = {
+    ...TASK,
+    repository: "acme/web",
+    lastEdit: {
+      actor: PLAN_ACTOR.DEVELOPER,
+      by: { userId: "user-lee", name: "Lee Park" },
+      at: 2,
+      duringCall: false,
+    },
+  };
+  const container = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(container);
+  act(() =>
+    root.render(
+      onRegistry(
+        AtomRegistry.make(),
+        createElement(DesktopTasks, {
+          summary: UNPINNED_SUMMARY,
+          looks: NO_LOOKS,
+          tasks: tasksControl({
+            page: TASKS_PAGE.DOCUMENT,
+            activeTaskId: task.id,
+            region: { kind: DOCUMENT_REGION.READY, task },
+            workspaces: [home],
+            workspace: home,
+            sidePanel: DOCUMENT_PANEL,
+          }),
+        }),
+      ),
+    ),
+  );
+  const body = container.querySelector(".desktop-document .plan-document-body .plan-body");
+  const first = body?.firstElementChild;
+  const byline = first?.nextElementSibling;
+
+  assert.equal(container.querySelector('nav[aria-label="Where this task is"]'), null);
+  assert.equal(body?.previousElementSibling, null, "nothing stands over the document's title");
+  assert.ok(first?.querySelector(".task-title"), "the title leads the document");
+  assert.ok(byline?.classList.contains("plan-byline"), "the byline stands under the title");
+  assert.match(byline?.textContent ?? "", /^Created by .*Last edited by .*Lee Park/u);
+  act(() => root.unmount());
+  container.remove();
+});
+
+test("a chip in the plan naming a pull request one of the task's agents opened opens that agent's Pull request tab on its conversation as the panel's preview, another of the task's repository, an archived agent's among them, opens by its number, and another repository's opens on GitHub", () => {
+  const agent: CodingAgentSummary = {
+    id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
+    planId: TASK.id,
+    model: "anthropic/claude-opus-5.5",
+    effort: "high",
+    title: "Batch the invitations",
+    createdAt: 3,
+    status: CODING_AGENT_STATUS.COMPLETED,
+    turnId: null,
+  };
+  const url = "https://github.com/acme/relay/pull/42";
+  const other = "https://github.com/acme/relay/pull/7";
+  const archived: CodingAgentSummary = {
+    ...agent,
+    id: "9d2b7b5a-4e3f-4e9c-9c77-7a5d8b3f4c32",
+    title: "An earlier try",
+    archivedAt: 4,
+  };
+  const archivedUrl = "https://github.com/acme/relay/pull/9";
+  const elsewhere = "https://github.com/acme/billing/pull/3";
+  const opened: unknown[] = [];
+  const onGitHub: string[] = [];
+  fakeAppPlatform({ ...QUIET_PANEL, ...DESKTOP_LINKS });
+  fakeAppBridge({});
+  fakeActPort({
+    [ACT_KIND.GITHUB_OPEN]: ({ url }) => {
+      onGitHub.push(url);
+      return Promise.resolve();
+    },
+  });
+  const task: Task = {
+    ...TASK,
+    repository: "acme/relay",
+    document: {
+      body: `## Rollout\n\nShipped in [@relay#42](${url}/), after [@relay#7](${other}) and [@relay#9](${archivedUrl}), beside [@billing#3](${elsewhere}).\n`,
+      assumptions: [],
+    },
+  };
+  const container = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(container);
+  act(() =>
+    root.render(
+      onRegistry(
+        AtomRegistry.make(),
+        createElement(DesktopTasks, {
+          summary: UNPINNED_SUMMARY,
+          looks: NO_LOOKS,
+          tasks: tasksControl({
+            page: TASKS_PAGE.DOCUMENT,
+            activeTaskId: task.id,
+            region: { kind: DOCUMENT_REGION.READY, task },
+            sidePanel: {
+              ...DOCUMENT_PANEL,
+              onPullRequestView: (tab, view) => opened.push({ agentId: tab.changes, view }),
+              onPreview: (tab) => opened.push(tab),
+            },
+            agents: codingAgentsControl({
+              agents: [agent],
+              archived: [archived],
+              agentIds: [agent.id],
+              pullRequests: new Map([
+                [
+                  agent.id,
+                  {
+                    number: 42,
+                    title: "Send invitations in batches",
+                    url,
+                    state: PULL_REQUEST_STATE.OPEN,
+                    checks: CHECK_SUMMARY.PASSING,
+                    additions: 12,
+                    deletions: 3,
+                    changedFiles: 2,
+                  },
+                ],
+                [
+                  archived.id,
+                  {
+                    number: 9,
+                    title: "Send invitations at once",
+                    url: archivedUrl,
+                    state: PULL_REQUEST_STATE.CLOSED,
+                    checks: CHECK_SUMMARY.NONE,
+                    additions: 4,
+                    deletions: 1,
+                    changedFiles: 1,
+                  },
+                ],
+              ]),
+            }),
+          }),
+        }),
+      ),
+    ),
+  );
+  const chip = (name: string) =>
+    [...container.querySelectorAll<HTMLButtonElement>(".desktop-document [data-mention-ref]")].find(
+      (each) => each.querySelector(".luke-inline-ref-label")?.textContent?.includes(name),
+    );
+
+  const own = chip("relay#42");
+  assert.ok(own, "the agent's pull request is its chip");
+  act(() => own.click());
+  assert.deepEqual(opened, [
+    { agentId: agent.id, view: PULL_REQUEST_VIEW.CONVERSATION },
+    { changes: agent.id },
+  ]);
+  assert.deepEqual(onGitHub, [], "nothing opened on GitHub");
+
+  // Another pull request of the task's repository opens in a Pull request tab of its own, by its number.
+  act(() => chip("relay#7")?.click());
+  // An archived agent's Pull request tab is not drawn on the task, so its pull request opens by its number too.
+  act(() => chip("relay#9")?.click());
+  assert.deepEqual(opened.slice(2), [
+    { agentId: agent.id, view: PULL_REQUEST_VIEW.CONVERSATION },
+    { changes: agent.id, number: 7 },
+    { agentId: agent.id, view: PULL_REQUEST_VIEW.CONVERSATION },
+    { changes: agent.id, number: 9 },
+  ]);
+  assert.deepEqual(onGitHub, [], "nothing opened on GitHub");
+
+  act(() => chip("billing#3")?.click());
+  assert.deepEqual(onGitHub, [elsewhere]);
+  assert.equal(opened.length, 6, "no tab was asked for");
+  act(() => root.unmount());
+  container.remove();
+});
+
+/** The task's column on its Chat tab over the fixture's chat, its plan channel this task's where `ownChannel`. */
+async function chatTabMounted(ownChannel: boolean) {
+  Object.defineProperty(window, "matchMedia", {
+    configurable: true,
+    value: () => ({
+      matches: false,
+      addEventListener: () => undefined,
+      removeEventListener: () => undefined,
+    }),
+  });
+  const staged = fixtureChat({ fixtureMode: true }, 0);
+  assert.ok(staged);
+  const chat = {
+    ...staged,
+    answer: {
+      ...staged.answer,
+      channels: staged.answer.channels.map((channel) =>
+        ownChannel && channel.name === "teammate-invitations"
+          ? { ...channel, planId: TASK.id }
+          : channel,
+      ),
+    },
+  };
+  const container = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(container);
+  act(() =>
+    root.render(
+      onRegistry(
+        AtomRegistry.make(),
+        createElement(DesktopTasks, {
+          summary: UNPINNED_SUMMARY,
+          looks: NO_LOOKS,
+          notice: undefined,
+          tasks: tasksControl({
+            page: TASKS_PAGE.DOCUMENT,
+            activeTaskId: TASK.id,
+            region: { kind: DOCUMENT_REGION.READY, task: TASK },
+            sidePanel: {
+              ...tasksControl().sidePanel,
+              open: true,
+              tab: SIDE_PANEL_TAB.CHAT,
+            },
+            chatView: { ...tasksControl().chatView, available: true, chat },
+          }),
+        }),
+      ),
+    ),
+  );
+  await act(async () => {
+    for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
+  });
+  return { container, root };
+}
+
+test("a task's Chat tab in the side panel shows its task channel at reading size, its composer posting there, and says so where the task has no channel yet", async () => {
+  handState(experimentsOn(EXPERIMENT.CHAT));
+  const own = await chatTabMounted(true);
+  const tab = own.container.querySelector('section.desktop-task-chat[aria-label="Chat"]');
+  assert.ok(tab, "the task's Chat tab");
+  assert.equal(tab.querySelector(".chat-head h1")?.textContent, "teammate-invitations");
+  assert.match(
+    tab.querySelector(".chat-composer")?.textContent ?? "",
+    /Message #teammate-invitations/u,
+    "its composer asks for a message to the channel",
+  );
+  assert.equal(tab.querySelectorAll(".chat-messages > .chat-message").length, 8);
+  act(() => own.root.unmount());
+  own.container.remove();
+
+  const none = await chatTabMounted(false);
+  assert.match(
+    none.container.querySelector("section.desktop-task-chat")?.textContent ?? "",
+    /Nothing is posted in this task's channel yet\./u,
+  );
+  act(() => none.root.unmount());
+  none.container.remove();
+});
+
+test("with Chat off for the account, a Chat tab kept in the side panel draws nothing", async () => {
+  handState({});
+  const off = await chatTabMounted(true);
+  assert.equal(off.container.querySelector("section.desktop-task-chat"), null);
+  act(() => off.root.unmount());
+  off.container.remove();
+});
+
+test("a plan's own Inbox marks the item it shows read as it opens it, and its rows offer to mark an item read or unread as the window's Inbox does", async () => {
+  const marked: string[] = [];
+  fakeAppBridge({});
+  fakeActPort({
+    [ACT_KIND.CODING_AGENTS_INBOX_READ_STATE]: ({ itemId, unread }) => {
+      marked.push(`${unread ? "unread" : "read"}:${itemId}`);
+      return Promise.resolve({ id: itemId, unread });
+    },
+  });
+  const SHIP = {
+    ...approvalItem("a1b2c3d4-0000-4000-8000-0000000000a1", "Ship it?", 2),
+    unread: true,
+  };
+  const ROLL = {
+    ...approvalItem("a1b2c3d4-0000-4000-8000-0000000000a2", "Roll back?", 1),
+    unread: true,
+  };
+  const inbox = await narrowTaskInbox([SHIP, ROLL], 1400);
+  await act(async () => {
+    for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
+  });
+  assert.equal(inbox.title(), "Ship it?");
+  assert.deepEqual(marked, [`read:${SHIP.id}`]);
+  const dot = (title: string) =>
+    inbox.row(title)?.querySelector(".inbox-row-gutter .inbox-row-unread") !== null;
+  assert.deepEqual([dot("Ship it?"), dot("Roll back?")], [false, true]);
+  const mark = inbox
+    .row("Roll back?")
+    ?.closest("li")
+    ?.querySelector<HTMLButtonElement>('.luke-list-row-actions button[aria-label="Mark as read"]');
+  assert.ok(mark, "an unread row offers Mark as read over its time");
+  await act(async () => mark.click());
+  assert.deepEqual(marked, [`read:${SHIP.id}`, `read:${ROLL.id}`]);
+  assert.equal(dot("Roll back?"), false);
+  inbox.unmount();
+});
+
+test("a plan's own Inbox acknowledges the reader's own notice as it opens it, and leaves a teammate's open", async () => {
+  // Note that the Inbox opens on All, since To do leaves the teammate's notice out.
+  window.localStorage.clear();
+  showEverything();
+  fakeAppBridge({});
+  fakeActPort({
+    [ACT_KIND.CODING_AGENTS_INBOX_READ_STATE]: ({ itemId, unread }) =>
+      Promise.resolve({ id: itemId, unread }),
+  });
+  const notice = (id: string, title: string, at: number): InboxItem => ({
+    ...approvalItem(id, title, at),
+    response: { type: INBOX_RESPONSE.NONE },
+    needsReply: false,
+    revision: 3,
+  });
+  const OWN = notice("a1b2c3d4-0000-4000-8000-0000000000b1", "The preview is up", 2);
+  const THEIRS = {
+    ...notice("a1b2c3d4-0000-4000-8000-0000000000b2", "The migration ran", 1),
+    startedBy: { userId: "user-teammate", name: "Charles Pan" },
+  };
+  const answered: CodingAgentInboxAnswerParams[] = [];
+  const inbox = await narrowTaskInbox([OWN, THEIRS], 1400, undefined, undefined, {
+    me: "user-reader",
+    answerInbox: (params) => {
+      answered.push(params);
+      return new Promise(() => undefined);
+    },
+  });
+  await act(async () => {
+    for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
+  });
+  assert.equal(inbox.title(), "The preview is up");
+  const sent = () => answered.map(({ itemId, revision, reply }) => ({ itemId, revision, reply }));
+  assert.deepEqual(sent(), [{ itemId: OWN.id, revision: 3, reply: INBOX_REPLY.ACKNOWLEDGED }]);
+
+  await act(async () => inbox.row("The migration ran")?.click());
+  assert.equal(inbox.title(), "The migration ran");
+  assert.deepEqual(sent(), [{ itemId: OWN.id, revision: 3, reply: INBOX_REPLY.ACKNOWLEDGED }]);
+  window.localStorage.clear();
+  inbox.unmount();
+});
+
+/** The task's page with the side panel shown on `tab`, its plan among its tabs, drawn into a container of its own. */
+function panelPage(tab: SidePanelTab, overrides: Partial<TasksControl> = {}) {
+  const container = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(container);
+  const draw = (shown: SidePanelTab) =>
+    act(() =>
+      root.render(
+        onRegistry(
+          AtomRegistry.make(),
+          createElement(DesktopTasks, {
+            summary: UNPINNED_SUMMARY,
+            looks: NO_LOOKS,
+            notice: undefined,
+            tasks: tasksControl({
+              page: TASKS_PAGE.DOCUMENT,
+              activeTaskId: TASK.id,
+              region: { kind: DOCUMENT_REGION.READY, task: TASK },
+              ...overrides,
+              sidePanel: { ...DOCUMENT_PANEL, ...overrides.sidePanel, tab: shown },
+            }),
+          }),
+        ),
+      ),
+    );
+  draw(tab);
+  return {
+    container,
+    draw,
+    unmount: () => {
+      act(() => root.unmount());
+      container.remove();
+    },
+  };
+}
+
+test("the plan stays drawn, hidden, while another tab of the side panel is shown, so an edit not yet saved outlives the switch", () => {
+  const page = panelPage(SIDE_PANEL_TAB.PLAN);
+  const document = page.container.querySelector(".desktop-document");
+  assert.ok(document, "the plan is drawn on its tab");
+
+  page.draw(SIDE_PANEL_TAB.CODE);
+  assert.equal(page.container.querySelector(".desktop-document"), document, "the same plan stands");
+  assert.equal(document.closest(".side-panel-content")?.hasAttribute("hidden"), true);
+
+  page.draw(SIDE_PANEL_TAB.PLAN);
+  assert.equal(page.container.querySelector(".desktop-document"), document);
+  assert.equal(document.closest(".side-panel-content")?.hasAttribute("hidden"), false);
+  page.unmount();
+});
+
+test("a summary row that opens a tab of the side panel hands the panel the keys, so ⌘W closes the panel's tab rather than the column's", () => {
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue(
+    DOMRect.fromRect({ width: 1200, height: 800 }),
+  );
+  const closed: string[] = [];
+  const agentId = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
+  const page = panelPage(SIDE_PANEL_TAB.PLAN, {
+    mainTabs: {
+      ...tasksControl().mainTabs,
+      tabs: [{ agent: agentId }],
+      tab: undefined,
+      onClose: () => closed.push("column"),
+    },
+    sidePanel: { ...DOCUMENT_PANEL, onClose: () => closed.push("panel") },
+  });
+  act(() => relayout());
+  const row = [
+    ...page.container.querySelectorAll<HTMLButtonElement>(".task-summary li button"),
+  ].find((each) => each.getAttribute("aria-label") === "Code");
+  assert.ok(row, "the summary offers the Code tab");
+  act(() => row.click());
+  act(() => runAppCommand(APP_COMMAND.CLOSE_TAB));
+
+  assert.deepEqual(closed, ["panel"]);
+  page.unmount();
+});

@@ -7,7 +7,7 @@ import {
 } from "./events.js";
 import { sessionInstructions } from "./instructions.js";
 import type { InitialItem } from "./seed.js";
-import { LIVE_DEFAULTS, type LiveVoice } from "./voices.js";
+import { LIVE_DEFAULTS, type LiveVoice, LiveVoiceSchema } from "./voices.js";
 
 /**
  * Creating a session and diagnosing why voice is or is not available. The
@@ -48,6 +48,8 @@ export const LIVE_DELEGATION_TYPE = "client";
 export const LiveDelegationTypeSchema = Schema.Literal(LIVE_DELEGATION_TYPE);
 
 interface LiveSessionOptions {
+  /** The tools the call's backend holds, which its instructions name (`sessionInstructions`). */
+  backendTools: readonly string[];
   /** The model, where a deployment pins one; `LIVE_DEFAULTS.MODEL` otherwise. */
   model?: string | undefined;
   /** Chosen at creation and immutable after startup. */
@@ -74,7 +76,7 @@ export function liveSessionConfig(options: LiveSessionOptions) {
   const input = options.input ?? [];
   return {
     model: options.model ?? LIVE_DEFAULTS.MODEL,
-    instructions: sessionInstructions(),
+    instructions: sessionInstructions(options.backendTools),
     ...(input.length > 0 ? { input: [...input] } : undefined),
     delegation: { type: LIVE_DELEGATION_TYPE },
     store: false,
@@ -143,6 +145,8 @@ export const LIVE_SESSION_OUTCOME = {
   QUOTA_EXHAUSTED: "quota-exhausted",
   /** The hosted tier is switched off service-side or not answering. */
   HOSTED_UNAVAILABLE: "hosted-unavailable",
+  /** The call named an agent that runs on Claude Code or Codex, which takes no call yet; nothing was charged. */
+  NATIVE_AGENT_NOT_HERE: "native-agent-not-here",
 } as const;
 
 export type LiveSessionOutcome = (typeof LIVE_SESSION_OUTCOME)[keyof typeof LIVE_SESSION_OUTCOME];
@@ -150,24 +154,25 @@ export type LiveSessionOutcome = (typeof LIVE_SESSION_OUTCOME)[keyof typeof LIVE
 /**
  * What the host knows about why voice is or is not available. It carries no
  * credential material: never the account's token, and never a session's SDP.
+ * Declared as a schema, since it crosses to the voice window that asks for it.
  */
-export interface LiveDiagnostics {
+export const liveDiagnosticsSchema = Schema.Struct({
   /** A fixture or evidence run never opens a session, regardless of credentials. */
-  fixtureMode: boolean;
-  model: string;
-  voice: LiveVoice;
-  lastOutcome: LiveSessionOutcome;
+  fixtureMode: Schema.Boolean,
+  model: Schema.String,
+  voice: LiveVoiceSchema,
+  lastOutcome: Schema.Literals(Object.values(LIVE_SESSION_OUTCOME)),
   /** A status code or error name; never a request body or credential. */
-  lastDetail?: string;
-  lastAttemptAt?: number;
+  lastDetail: Schema.optionalKey(Schema.String),
+  lastAttemptAt: Schema.optionalKey(Schema.Number),
   /** The billed seconds `session.closed` reported for the last session, once confirmed. */
-  lastSessionSeconds?: number;
+  lastSessionSeconds: Schema.optionalKey(Schema.Number),
   /** Whether the host's sideband stands on the current session. */
-  sidebandAttached: boolean;
+  sidebandAttached: Schema.Boolean,
   /** The hosted counter as the service last reported it; absent until a session has been created. */
-  quota?: {
-    used: number;
-    limit: number;
-    resetsAt: number;
-  };
-}
+  quota: Schema.optionalKey(
+    Schema.Struct({ used: Schema.Number, limit: Schema.Number, resetsAt: Schema.Number }),
+  ),
+});
+
+export type LiveDiagnostics = typeof liveDiagnosticsSchema.Type;

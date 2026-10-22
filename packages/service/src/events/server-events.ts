@@ -1,6 +1,10 @@
+import { PULL_REQUEST_CHAPTERS_FAILURE } from "@luke/database/pull-request-chapters-vocabulary";
+import type { AutomationTriggerKind } from "@luke/features/automation-wire";
+import type { IntegrationProvider } from "@luke/features/integration-wire";
 import { Clock, Context, Effect, Layer, Option, Redacted } from "effect";
 import * as HttpClient from "effect/http/HttpClient";
 import { HostedEnvironment } from "../environment.js";
+import { afterResponse } from "../http/after-response.js";
 import { type PosthogBatch, postBatchEffect } from "../providers/posthog.js";
 
 /**
@@ -12,8 +16,8 @@ import { type PosthogBatch, postBatchEffect } from "../providers/posthog.js";
  * It holds to the desktop's counted events' rule
  * (`@luke/features/analytics`'s `product-events.ts`): an event is a name from
  * this file, and every property is one of this file's fixed words, a boolean,
- * or an id from a catalog the service itself checked (a provider, a model, an
- * effort). Nothing typed, nothing a model wrote, and no title, branch,
+ * a count, or an id from a catalog the service itself checked (a provider, a
+ * model, an effort). Nothing typed, nothing a model wrote, and no title, branch,
  * repository, prompt, or row id has a property it could travel in, which the
  * types below enforce at each call site.
  *
@@ -30,7 +34,7 @@ export const SERVER_EVENT = {
   INBOX_ANSWER_SEND: "inbox:answer_send",
   CHAT_MESSAGE_SEND: "chat:message_send",
   AUTOMATION_CREATE: "automation:create",
-  ISSUE_CREATE: "issue:create",
+  PULL_REQUEST_CHAPTERS_GENERATE: "pull_request:chapters_generate",
   INTEGRATION_CONNECTION_CREATE: "integration:connection_create",
   INTEGRATION_CONNECTION_DELETE: "integration:connection_delete",
   WORKSPACE_CREATE: "workspace:create",
@@ -55,6 +59,12 @@ export const SERVER_AGENT_START_KIND = {
 export const SERVER_PULL_REQUEST_OPENER = {
   DEVELOPER: "developer",
   APP: "app",
+} as const;
+
+/** How a generation of a pull request's chapters came out: made, or the store's word for why it failed. */
+export const SERVER_CHAPTERS_OUTCOME = {
+  READY: "ready",
+  ...PULL_REQUEST_CHAPTERS_FAILURE,
 } as const;
 
 type Values<T> = T[keyof T];
@@ -83,10 +93,16 @@ interface ServerEventProperties {
   };
   [SERVER_EVENT.INBOX_ANSWER_SEND]: Record<string, never>;
   [SERVER_EVENT.CHAT_MESSAGE_SEND]: { is_reply: boolean };
-  [SERVER_EVENT.AUTOMATION_CREATE]: { trigger_kind: string };
-  [SERVER_EVENT.ISSUE_CREATE]: Record<string, never>;
-  [SERVER_EVENT.INTEGRATION_CONNECTION_CREATE]: { provider: string };
-  [SERVER_EVENT.INTEGRATION_CONNECTION_DELETE]: { provider: string };
+  [SERVER_EVENT.AUTOMATION_CREATE]: { trigger_kind: AutomationTriggerKind };
+  /** Counts alone: how many chapters and hunks a generation told, how long it took, and how it came out. */
+  [SERVER_EVENT.PULL_REQUEST_CHAPTERS_GENERATE]: {
+    outcome: Values<typeof SERVER_CHAPTERS_OUTCOME>;
+    chapters: number;
+    hunks: number;
+    duration_ms: number;
+  };
+  [SERVER_EVENT.INTEGRATION_CONNECTION_CREATE]: { provider: IntegrationProvider };
+  [SERVER_EVENT.INTEGRATION_CONNECTION_DELETE]: { provider: IntegrationProvider };
   [SERVER_EVENT.WORKSPACE_CREATE]: Record<string, never>;
 }
 
@@ -101,10 +117,9 @@ interface ServerEvent<Name extends ServerEventName = ServerEventName> {
 const SERVER_EVENT_LIB = "luke-service";
 
 /**
- * How long one capture may hold the request it rides on. A serverless
- * instance may freeze once it answers, so the capture is awaited rather than
- * left in the background, and bounded so a slow processor costs a count rather
- * than a request.
+ * How long one capture may take. It runs once the request has answered
+ * (`recordServerEvent`), the instance kept awake for it, and is bounded so a
+ * slow processor costs a count rather than an instance held open.
  */
 const SERVER_EVENT_TIMEOUT_MS = 2_000;
 
@@ -172,7 +187,9 @@ export const productAnalyticsFromEnvironment = Layer.effect(
 /**
  * Counts one event where the work was committed. Typed per event, so a call
  * site can only hand over that event's own properties; a runtime without
- * `ProductAnalytics` makes this a no-op.
+ * `ProductAnalytics` makes this a no-op. The capture runs once the request
+ * has answered (`after-response.ts`), so no answer waits on PostHog; a
+ * runtime that runs nothing past its answers captures it in place.
  */
 export function recordServerEvent<Name extends ServerEventName>(
   name: Name,
@@ -182,9 +199,12 @@ export function recordServerEvent<Name extends ServerEventName>(
   return Effect.flatMap(Effect.serviceOption(ProductAnalytics), (analytics) =>
     Option.isNone(analytics)
       ? Effect.void
-      : // SAFETY: `properties` is typed as this `name`'s own entry above; the
-        // union `ServerEvent` widens the pairing TypeScript cannot follow.
-        analytics.value.capture({ name, userId, properties } as ServerEvent),
+      : afterResponse(
+          name,
+          // SAFETY: `properties` is typed as this `name`'s own entry above; the
+          // union `ServerEvent` widens the pairing TypeScript cannot follow.
+          analytics.value.capture({ name, userId, properties } as ServerEvent),
+        ),
   );
 }
 

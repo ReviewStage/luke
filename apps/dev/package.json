@@ -1,6 +1,6 @@
 {
   "name": "@luke/coder",
-  "version": "0.18.0",
+  "version": "0.19.0",
   "private": true,
   "type": "module",
   "description": "The coding agent: a coding agent's run in a sandbox, as an eve app on the web deployment",
@@ -23,6 +23,7 @@
     "@luke/service": "workspace:*",
     "@luke/settings": "workspace:*",
     "@luke/wire": "workspace:*",
+    "@sentry/effect": "11.7.0",
     "@sentry/node": "11.7.0",
     "@vercel/connect": "2.4.1",
     "@vercel/oidc": "4.0.0",

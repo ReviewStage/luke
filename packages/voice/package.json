@@ -1,6 +1,6 @@
 {
   "name": "@luke/voice",
-  "version": "0.18.0",
+  "version": "0.19.0",
   "private": true,
   "type": "module",
   "description": "The live voice orchestrator: the call, its socket, and the live session source it opens",
@@ -8,6 +8,7 @@
     ".": "./src/index.js",
     "./effect": "./src/effect/index.js",
     "./live-session": "./src/live-session/index.js",
+    "./live-socket": "./src/live-socket.js",
     "./orchestrator": "./src/orchestrator/index.js",
     "./testing": "./src/testing.js",
     "./live-captions": "./src/live-captions.js",

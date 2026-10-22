@@ -1,5 +1,5 @@
 /**
- * call-video-tile.tsx -- Luke's avatar on the call, as a 16:9 tile with its video's controls, and the voice it plays.
+ * call-video-tile.tsx -- Luke's avatar on the call, as a tile with its video's controls, and the voice it plays.
  *
  * The tile draws what it is handed and decides nothing: the avatar's video
  * track and its status. While the avatar connects it
@@ -7,15 +7,28 @@
  * Luke's face as a still frame where no video track is handed, which is what
  * a fixture run draws, since it reaches no avatar; once it has ended it
  * offers Restart video. Video off puts the avatar away and leaves the call
- * going as voice, in every state, and the tile collapses to a compact strip
- * whose Video on puts a fresh avatar up again; ending the call is the call
- * bar's, which the tile does not repeat. No word of the conversation is drawn
+ * going as voice, in every state, and the tile goes; Video on, which puts a
+ * fresh avatar up again, is the call's own controls', as ending the call is,
+ * which the tile does not repeat. No word of the conversation is drawn
  * here. The avatar's lip-synced voice is played apart
  * from the tile (`AvatarVoice`), because the tile is drawn only while the
- * Call tab is, and the voice is what the developer hears whatever is shown.
+ * call's agent's tab or the call card is, and the voice is what the
+ * developer hears whatever is shown. The video is drawn whole, never cut:
+ * in an agent's tab the tile stands at the picture's own aspect, which it
+ * fills; on the call card, where the tile is wider than the avatar's square
+ * picture, a blurred copy of the same track fills the sides behind it
+ * (call.css).
  */
 
-import { Button, IconButton, ResetIcon, VideoIcon, VideoOffIcon, WingFace } from "@luke/ui";
+import {
+  BUTTON_SHAPE,
+  Button,
+  IconButton,
+  ResetIcon,
+  VideoIcon,
+  VideoOffIcon,
+  WingFace,
+} from "@luke/ui";
 import { AVATAR_STATUS, type AvatarStatus } from "@luke/voice/avatar";
 import { useCallback, useEffect, useRef } from "react";
 import { ThinkingDots } from "../thinking-dots.js";
@@ -27,7 +40,6 @@ export const CALL_VIDEO_LABEL = {
   ENDED: "Video ended",
   VIDEO_OFF: "Turn video off",
   VIDEO_ON: "Turn video on",
-  TURNED_OFF: "Video off",
   RESTART: "Restart video",
 } as const;
 
@@ -46,11 +58,55 @@ function useTrack(
   }, [media, track]);
 }
 
+/**
+ * Tells `onAspect` the picture's own width over its height each time the
+ * video learns or changes its size, which the element says with `resize`.
+ */
+function useAspect(
+  media: React.RefObject<HTMLVideoElement | null>,
+  onAspect: ((aspect: number) => void) | undefined,
+): void {
+  useEffect(() => {
+    const element = media.current;
+    if (!element || onAspect === undefined) return;
+    const read = () => {
+      if (element.videoWidth > 0 && element.videoHeight > 0) {
+        onAspect(element.videoWidth / element.videoHeight);
+      }
+    };
+    read();
+    element.addEventListener("resize", read);
+    return () => element.removeEventListener("resize", read);
+  }, [media, onAspect]);
+}
+
 /** The avatar's video, muted, since its sound is the audio element's to play. */
-function AvatarVideo({ track }: { track: MediaStreamTrack }): React.JSX.Element {
+function AvatarVideo({
+  track,
+  onAspect,
+}: {
+  track: MediaStreamTrack;
+  onAspect: ((aspect: number) => void) | undefined;
+}): React.JSX.Element {
   const video = useRef<HTMLVideoElement>(null);
+  const fill = useRef<HTMLVideoElement>(null);
   useTrack(video, track);
-  return <video ref={video} className="call-video-frame" autoPlay muted playsInline />;
+  useTrack(fill, track);
+  useAspect(video, onAspect);
+  return (
+    <>
+      <video ref={video} className="call-video-frame" autoPlay muted playsInline />
+      <video
+        ref={fill}
+        className="call-video-fill"
+        aria-hidden="true"
+        tabIndex={-1}
+        autoPlay
+        muted
+        playsInline
+      />
+    </>
+  );
 }
 
 /** Luke's face where there is no video to draw, with what the tile is waiting on, if anything. */
@@ -70,13 +126,19 @@ function TileGround({
   status,
   video,
   onRestart,
+  onAspect,
 }: {
   status: AvatarStatus;
   video: MediaStreamTrack | undefined;
   onRestart: () => void;
+  onAspect: ((aspect: number) => void) | undefined;
 }): React.JSX.Element {
   if (status === AVATAR_STATUS.LIVE) {
-    return video === undefined ? <AvatarStill /> : <AvatarVideo track={video} />;
+    return video === undefined ? (
+      <AvatarStill />
+    ) : (
+      <AvatarVideo track={video} onAspect={onAspect} />
+    );
   }
   if (status === AVATAR_STATUS.ENDED) {
     return (
@@ -134,7 +196,9 @@ export function AvatarVoice({
 /**
  * Video off or Video on: one button that says which the press will do,
  * named on hover by the system's own hint, since the floating window is too
- * small to hold a tooltip.
+ * small to hold a tooltip. It is round wherever it stands, as a call's own
+ * controls are, so the toggle keeps its shape as it flips; over the tile
+ * the disc is the round ground itself, never a square inside a circle.
  */
 export function VideoToggle({
   on,
@@ -149,6 +213,7 @@ export function VideoToggle({
       <IconButton
         icon={on ? <VideoOffIcon /> : <VideoIcon />}
         label={label}
+        shape={BUTTON_SHAPE.ROUND}
         onClick={() => onSetVideo(!on)}
       />
     </span>
@@ -156,35 +221,44 @@ export function VideoToggle({
 }
 
 /**
- * The top of the Call tab: the tile at the tab's width while the avatar
- * stands or has just ended, the compact strip once the developer turned
- * video off, and nothing where the status is `undefined`.
+ * Luke's avatar while it stands or has just ended: the tile, and nothing
+ * where the status is `undefined` or video is off, since the call's own
+ * controls carry Video on wherever the tile stands (the call card's head,
+ * an agent's composer). Where `toggles`, as on the call card, its own Video
+ * off stands in its corner; an agent's tab offers it from the composer
+ * instead. Where `onAspect` is handed, it is told the picture's own
+ * aspect, which an agent's tab draws the tile at (`AgentCallVideo`).
  */
 export function CallVideoTile({
   video,
   status,
   onSetVideo,
+  toggles = true,
+  onAspect,
 }: {
   video: MediaStreamTrack | undefined;
   status: AvatarStatus | undefined;
   /** Asks main to put the avatar up, a fresh session, or take it down with the developer's own reason. */
   onSetVideo: (on: boolean) => void;
+  /** Whether the tile offers its own Video off; the call card's does, an agent's tab's does not. */
+  toggles?: boolean;
+  /** Told the picture's width over its height as the video learns it, where the owner draws the tile at the picture's own aspect. */
+  onAspect?: ((aspect: number) => void) | undefined;
 }): React.JSX.Element | null {
-  if (status === undefined) return null;
-  if (status === AVATAR_STATUS.OFF) {
-    return (
-      <section className="call-video-strip" aria-label={CALL_VIDEO_LABEL.TILE} data-status={status}>
-        <span className="call-video-note">{CALL_VIDEO_LABEL.TURNED_OFF}</span>
-        <VideoToggle on={false} onSetVideo={onSetVideo} />
-      </section>
-    );
-  }
+  if (status === undefined || status === AVATAR_STATUS.OFF) return null;
   return (
     <section className="call-video-tile" aria-label={CALL_VIDEO_LABEL.TILE} data-status={status}>
-      <TileGround status={status} video={video} onRestart={() => onSetVideo(true)} />
-      <div className="call-video-controls">
-        <VideoToggle on onSetVideo={onSetVideo} />
-      </div>
+      <TileGround
+        status={status}
+        video={video}
+        onRestart={() => onSetVideo(true)}
+        onAspect={onAspect}
+      />
+      {toggles ? (
+        <div className="call-video-controls">
+          <VideoToggle on onSetVideo={onSetVideo} />
+        </div>
+      ) : null}
     </section>
   );
 }

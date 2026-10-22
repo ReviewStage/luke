@@ -4,9 +4,9 @@ import { CHAT_TOOLS } from "@luke/service/agents/coder-host/chat";
 import { reserveNotes, settleNotes, takenInTurn } from "@luke/service/agents/coder-host/plan-edit";
 import { ACTION_RESULT_STATUS, unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { emitJsonSchema } from "@luke/wire/effect";
-import { defineDynamic, defineTool } from "eve/tools";
-import { offeredChatTools, runChatTool } from "../host.js";
-import { chatPostsMade, sessionPrompt } from "../session-prompt.js";
+import { defineTool } from "eve/tools";
+import { runChatTool } from "../host.js";
+import { chatPostsMade } from "../session-prompt.js";
 
 /**
  * post_chat.ts -- the agent posts a message in its workspace's chat, told to the members it addresses.
@@ -20,34 +20,26 @@ import { chatPostsMade, sessionPrompt } from "../session-prompt.js";
  * because calls one step makes run at once and each must see the other's
  * reservation. An image block's picture is read from the session's
  * sandbox through the same door eve hands every file tool, opened on first
- * use, so a post with no image opens none. It is offered at each turn's
- * start only where the agent's starter turned Chat on and its session's prompt told of chat (`offeredChatTools`).
+ * use, so a post with no image opens none. It is offered to every agent, whatever its starter's Chat setting, since the chat is how agents message each other.
  */
-export default defineDynamic({
-  events: {
-    "turn.started": async (_event, ctx) =>
-      (await offeredChatTools(ctx.session.auth, ctx.session.id, pinnedState(sessionPrompt).get()))
-        ? defineTool({
-            description: CHAT_TOOLS.POST.description,
-            inputSchema: emitJsonSchema(CHAT_TOOLS.POST.inputSchema),
-            execute: async (input, toolContext) => {
-              const made = pinnedState(chatPostsMade);
-              const turnId = toolContext.session.turn.id;
-              const before = takenInTurn(made.get(), turnId);
-              made.update((held) => reserveNotes(held, turnId, 1));
-              const answer = await runChatTool(toolContext.session.auth, toolContext.session.id, {
-                tool: CHAT_TOOL.POST,
-                // SAFETY: eve hands a tool the JSON object the model emitted; the host parses it as wire input.
-                input: unparsedWire(input as WireBoundaryInput),
-                clientKey: toolContext.callId,
-                postsInTurn: before,
-                sandbox: () => toolContext.getSandbox(),
-              });
-              const posted = answer.status === ACTION_RESULT_STATUS.ACCEPTED ? 1 : 0;
-              made.update((held) => settleNotes(held, turnId, 1, posted));
-              return answer;
-            },
-          })
-        : null,
+export default defineTool({
+  description: CHAT_TOOLS.POST.description,
+  inputSchema: emitJsonSchema(CHAT_TOOLS.POST.inputSchema),
+  execute: async (input, ctx) => {
+    const made = pinnedState(chatPostsMade);
+    const turnId = ctx.session.turn.id;
+    const before = takenInTurn(made.get(), turnId);
+    made.update((held) => reserveNotes(held, turnId, 1));
+    const answer = await runChatTool(ctx.session.auth, ctx.session.id, {
+      tool: CHAT_TOOL.POST,
+      // SAFETY: eve hands a tool the JSON object the model emitted; the host parses it as wire input.
+      input: unparsedWire(input as WireBoundaryInput),
+      clientKey: ctx.callId,
+      postsInTurn: before,
+      sandbox: () => ctx.getSandbox(),
+    });
+    const posted = answer.status === ACTION_RESULT_STATUS.ACCEPTED ? 1 : 0;
+    made.update((held) => settleNotes(held, turnId, 1, posted));
+    return answer;
   },
 });

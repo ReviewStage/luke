@@ -2,14 +2,26 @@ import { hostTurnId } from "@luke/database/models/ids";
 import type { ModelChoice } from "@luke/features/models-wire";
 import { edgeKit } from "@luke/service/agents/agent-runtime/edge";
 import { AGENT_ROLE } from "@luke/service/agents/agent-runtime/role";
+import { environment } from "@luke/service/agents/agent-runtime/sandbox";
 import type { AgentSkill } from "@luke/service/agents/agent-runtime/skills";
+import { browserSessionOf } from "@luke/service/agents/browser/agent-browser";
+import {
+  BROWSER_TOOL,
+  type BrowserToolResult,
+  browserModelOutput,
+  browserNotRun,
+  browserTranscriptOf,
+  runBrowserTool,
+} from "@luke/service/agents/browser/browser-tool";
 import { type ChatToolResult, chatRejected } from "@luke/service/agents/coder-host/chat";
+import { CheckoutRefused } from "@luke/service/agents/coder-host/checkout";
 import type { DelegationAsk } from "@luke/service/agents/coder-host/delegation";
 import {
   type AgentToolCall,
+  type BoardTool,
   type ChatCall,
   type CoderHost,
-  type CoderSessionPromptRecord,
+  type CoderTurnMessage,
   coderHost,
   type InboxCall,
 } from "@luke/service/agents/coder-host/host";
@@ -27,10 +39,17 @@ import {
 } from "@luke/service/agents/coder-host/pull-request";
 import { showImageRejected } from "@luke/service/agents/coder-host/show-image";
 import {
+  type CallTool,
   type CODER_TOOL,
+  type KindTool,
+  kindToolsOf,
+  type RepositoryTool,
+  repositoryToolsOf,
+  runCallTool,
   type TaskTool,
   taskToolsOf,
 } from "@luke/service/agents/coder-host/tool-set";
+import type { TurnHanded } from "@luke/service/agents/coder-host/turn-context";
 import { agentToolRejected } from "@luke/service/agents/coding-agent-tools";
 import {
   MAC_COMMAND_STATUS,
@@ -38,9 +57,13 @@ import {
   RUN_ON_MAC_TOOL,
   runOnMacTool,
 } from "@luke/service/agents/mac-command";
+import type { RepositorySandbox } from "@luke/service/agents/repository-shell";
+import { keepSessionSandboxAlive } from "@luke/service/agents/session-sandboxes";
 import { hostedEnvironment } from "@luke/service/environment";
+import { type CommentToolName, commentToolRejected } from "@luke/service/tasks/comment-tools";
 import { showPageRejected } from "@luke/service/tasks/page-tool";
 import { type PictureLookResult, pictureNotLooked } from "@luke/service/tasks/picture-look";
+import { showCodeRejected } from "@luke/service/tasks/show-code";
 import { scriptedModel } from "@luke/service/testing/coder-scripted-model";
 import {
   ACTION_RESULT_STATUS,
@@ -52,21 +75,19 @@ import {
 import { emitJsonSchema } from "@luke/wire/effect";
 import { Effect, Result, Schema } from "effect";
 import type { SessionAuth } from "eve/context";
-import { defineTool } from "eve/tools";
+import { defineTool, type ToolContext } from "eve/tools";
 import { runAgent } from "./runtime.js";
 
 /**
  * The one host every authored file of this eve project shares, over the
- * deployment's seams, on the same terms as the brain's
- * (`apps/luke/host.ts`): the seams are composed here, once, over the same
+ * deployment's seams: the seams are composed here, once, over the same
  * `HostedEnvironment` layer the web runtime builds, and run synchronously
  * because eve loads the authored files as modules and the environment read
  * is a `Config` over `process.env`, which suspends on nothing. The edge's
  * own runner is handed down too: eve's door holds a promise, and it runs on
  * it, so nothing under `server/hosted/` keeps a runner of its own. The
  * worker's authored files and the delegation tool run what they need
- * through the doors below rather than at edges of their own, as the
- * planning worker's do through `apps/luke/host.ts`.
+ * through the doors below rather than at edges of their own.
  */
 export const seams: CoderHostSeams = Effect.runSync(
   Effect.provide(productionCoderHostSeams(runAgent), hostedEnvironment),
@@ -74,7 +95,7 @@ export const seams: CoderHostSeams = Effect.runSync(
 
 export const host: CoderHost = coderHost(seams);
 
-/** What a model resolver reads of eve's `step.started`, which eve hands it unparsed: eve's id for the turn the step is of. */
+/** What a resolver reads of eve's `step.started` or `turn.started`, which eve hands it unparsed: eve's id for the turn the step is of, or the turn opening. */
 const StepStartedSchema = Schema.Struct({ data: Schema.Struct({ turnId: Schema.String }) });
 
 /**
@@ -85,7 +106,7 @@ const StepStartedSchema = Schema.Struct({ data: Schema.Struct({ turnId: Schema.S
  */
 export const readStepStarted = Schema.decodeUnknownSync(StepStartedSchema);
 
-/** The store's id for the turn a `step.started` opens a step of in the session. */
+/** The store's id for the turn a `step.started` opens a step of in the session, or a `turn.started` opens. */
 export function stepTurnId(sessionId: string, started: typeof StepStartedSchema.Type): string {
   return hostTurnId(sessionId, started.data.turnId);
 }
@@ -163,11 +184,21 @@ export function relayChildEvent(
 }
 
 /**
- * The plan's tools the session is offered for the turn it opens, for those
- * tools' own files (`planToolsOf`): none for a session the host does not
+ * The agent's sandbox kept alive for a step of its worker, which reads in it
+ * (`@luke/service/agents/session-sandboxes`'s `keepSessionSandboxAlive`), on
+ * the edge's runner; a keep-alive that fails is logged there and never
+ * reaches the worker.
+ */
+export function keepAgentSandboxAlive(agentSessionId: string): Promise<void> {
+  return runAgent(keepSessionSandboxAlive(agentSessionId));
+}
+
+/**
+ * The task's tools the session is offered for the turn it opens, for those
+ * tools' own files (`taskToolsOf`): none for a session the host does not
  * admit or whose conversation is no agent's.
  */
-export function offeredPlanTools(
+export function offeredTaskTools(
   auth: SessionAuth,
   sessionId: string,
 ): Promise<ReadonlySet<TaskTool>> {
@@ -183,20 +214,91 @@ export function offeredPlanTools(
 }
 
 /**
- * Whether the session is offered the chat's tools for the turn it opens,
- * for those tools' own files: only where the account that started the agent
- * turned Chat on; never for a session the host does not admit.
+ * One call of the call's own tools (`runCallTool`), for those tools' own
+ * files: run on a spoken turn and refused on any other, the turn's kind
+ * read off the request alone, with no admission, because the tools reach
+ * nothing when they run: the journal carries their calls to the voice, and
+ * a session the host does not admit runs no model step to call them from.
  */
-export function offeredChatTools(
+export function callTool(auth: SessionAuth, tool: CallTool, run: () => WireRecord): WireRecord {
+  return runCallTool(host.turnKind(auth), tool, run);
+}
+
+/**
+ * The repository's tools the session is offered for the turn it opens, for
+ * those tools' own files (`repositoryToolsOf`): none for a session the host
+ * does not admit, whose conversation is no agent's, or whose agent works in
+ * no repository.
+ */
+export function offeredRepositoryTools(
   auth: SessionAuth,
   sessionId: string,
-  prompt: CoderSessionPromptRecord,
-): Promise<boolean> {
+): Promise<ReadonlySet<RepositoryTool>> {
   return runAgent(
     Effect.gen(function* () {
       const admitted = yield* host.admit(auth, sessionId);
-      if (Result.isFailure(admitted)) return false;
-      return yield* host.chatOffered(admitted.success, prompt);
+      if (Result.isFailure(admitted)) return new Set<RepositoryTool>();
+      const agent = yield* host.agent(admitted.success);
+      if (Result.isFailure(agent)) return new Set<RepositoryTool>();
+      return repositoryToolsOf(agent.success);
+    }),
+  );
+}
+
+/**
+ * The tools the session is offered by its agent's kind for the turn it
+ * opens, for those tools' own files (`kindToolsOf`): none for a session the
+ * host does not admit or whose conversation is no agent's.
+ */
+export function offeredKindTools(
+  auth: SessionAuth,
+  sessionId: string,
+): Promise<ReadonlySet<KindTool>> {
+  return runAgent(
+    Effect.gen(function* () {
+      const admitted = yield* host.admit(auth, sessionId);
+      if (Result.isFailure(admitted)) return new Set<KindTool>();
+      const agent = yield* host.agent(admitted.success);
+      if (Result.isFailure(agent)) return new Set<KindTool>();
+      return kindToolsOf(agent.success);
+    }),
+  );
+}
+
+/**
+ * The conversation so far, for the session's own `instructions/seed.ts` as
+ * it starts: the words already said over a conversation whose last session
+ * retired (`CoderHost.seed`), or nothing for a session the host does not
+ * admit or a conversation with nothing else said.
+ */
+export function sessionSeed(auth: SessionAuth, sessionId: string): Promise<string | undefined> {
+  return runAgent(
+    Effect.gen(function* () {
+      const admitted = yield* host.admitStarting(auth, sessionId);
+      if (Result.isFailure(admitted)) return undefined;
+      return yield* host.seed(admitted.success);
+    }),
+  );
+}
+
+/**
+ * The message a turn opens with after the history, the turn named by its
+ * store id, and what the session has handed once it is (`CoderHost`'s `turnMessage`), for the turn's message
+ * file (`instructions/turn-message.ts`); nothing to hand for a session the
+ * host does not admit.
+ */
+export function turnMessage(
+  auth: SessionAuth,
+  sessionId: string,
+  turnId: string,
+  handed: TurnHanded,
+): Promise<CoderTurnMessage> {
+  return runAgent(
+    Effect.gen(function* () {
+      const admitted = yield* host.admit(auth, sessionId);
+      if (Result.isFailure(admitted)) return { text: undefined, handed };
+      const turn = { kind: host.turnKind(auth), turnId };
+      return yield* host.turnMessage(admitted.success, turn, handed);
     }),
   );
 }
@@ -263,6 +365,26 @@ export function lookAtPlanPicture(
   );
 }
 
+/**
+ * One call of a comment tool, the planning model's tool too, one
+ * implementation for both (`packages/service/src/tasks/comment-tools.ts`),
+ * run here under the agent's session rather than at an edge of its own.
+ */
+export function runCommentTool(
+  auth: SessionAuth,
+  sessionId: string,
+  name: CommentToolName,
+  input: UnparsedWireValue,
+): Promise<WireRecord> {
+  return runAgent(
+    Effect.gen(function* () {
+      const admitted = yield* host.admit(auth, sessionId);
+      if (Result.isFailure(admitted)) return commentToolRejected(admitted.failure);
+      return yield* host.comment(admitted.success, name, input);
+    }),
+  );
+}
+
 /** One call of the agent's tools about the workspace's coding agents, run under its session, for the tool, which runs here rather than at an edge of its own. */
 export function runAgentTool(
   auth: SessionAuth,
@@ -306,6 +428,68 @@ export function runShowPageTool(
       if (Result.isFailure(admitted)) return showPageRejected(admitted.failure);
       return yield* host.showPage(admitted.success, input, sandbox);
     }),
+  );
+}
+
+/** One `show_code` call run under the agent's session, its lines read from the checkout through the session's sandbox door, for the tool, which runs here rather than at an edge of its own. */
+export function runShowCodeTool(
+  auth: SessionAuth,
+  sessionId: string,
+  input: UnparsedWireValue,
+  sandbox: () => Promise<RepositorySandbox>,
+): Promise<WireRecord> {
+  return runAgent(
+    Effect.gen(function* () {
+      const admitted = yield* host.admit(auth, sessionId);
+      if (Result.isFailure(admitted)) return showCodeRejected(admitted.failure);
+      return yield* host.showCode(admitted.success, input, sandbox);
+    }),
+  );
+}
+
+/** One call of the whiteboard's tools run under the agent's session, for the tool, which runs here rather than at an edge of its own. */
+export function runBoardTool(
+  auth: SessionAuth,
+  sessionId: string,
+  tool: BoardTool,
+  input: UnparsedWireValue,
+): Promise<WireRecord> {
+  return runAgent(
+    Effect.gen(function* () {
+      const admitted = yield* host.admit(auth, sessionId);
+      if (Result.isFailure(admitted)) {
+        return { status: ACTION_RESULT_STATUS.REJECTED, reason: admitted.failure };
+      }
+      return yield* host.board(admitted.success, tool, input);
+    }),
+  );
+}
+
+/**
+ * The session's checkout deepened before a call that writes runs
+ * (`packages/service/src/agents/coder-host/deepen.ts`), for the tools that
+ * write: the write token set at the sandbox's firewall, in the shape
+ * `credentialPolicy` gives it, and the rest of the history fetched through
+ * it, where no deepen finished in the sandbox yet; nothing where one did. A
+ * deepen that fails fails the call that asked for it, in the host's words,
+ * and the next write runs it again.
+ */
+export async function deepenCheckout(ctx: ToolContext): Promise<void> {
+  // The sandbox under its Vercel environment, which is the handle that carries the firewall.
+  const sandbox = await ctx.getSandbox(environment);
+  await runAgent(
+    Effect.gen(function* () {
+      const admitted = yield* host.admit(ctx.session.auth, ctx.session.id);
+      if (Result.isFailure(admitted)) {
+        return yield* Effect.fail(new CheckoutRefused({ reason: admitted.failure }));
+      }
+      yield* host.deepen(admitted.success, sandbox);
+    }).pipe(
+      // A store failure by its kind alone, since its message may name a statement.
+      Effect.mapError(
+        (failure) => new Error(failure._tag === "CheckoutRefused" ? failure.reason : failure._tag),
+      ),
+    ),
   );
 }
 
@@ -403,6 +587,44 @@ export function runOnMacFor(admit: CoderHost["admit"]) {
           // SAFETY: eve hands a tool the JSON object the model emitted; the door parses it as wire input.
           const call = unparsedWire(input as WireBoundaryInput);
           return yield* runOnMacTool(admitted.success.target.userId, call);
+        }),
+      ),
+  });
+}
+
+/**
+ * `browser` as the agent and its worker are offered it, each admitted on
+ * its own terms (the worker's on ownership, as its resolvers are), and run
+ * through the one door every agent's call goes through
+ * (`packages/service/src/agents/browser/browser-tool.ts`): the Chromium in
+ * the root's sandbox, which a worker shares, with its tabs kept under the
+ * agent's own conversation, which a worker's admission names too. A session
+ * the host does not admit runs nothing. Its screenshots reach the model as
+ * small images, and the transcript keeps each at full size beside the
+ * transcript the call is written to, a worker's its own.
+ */
+export function browserFor(admit: CoderHost["admit"]) {
+  return defineTool({
+    description: BROWSER_TOOL.description,
+    inputSchema: emitJsonSchema(BROWSER_TOOL.inputSchema),
+    // SAFETY: eve hands this the JSON the tool's own execute answered; the reader parses it as wire input.
+    toModelOutput: (output) => browserModelOutput(unparsedWire(output as WireBoundaryInput)),
+    execute: (input, ctx): Promise<BrowserToolResult> =>
+      runAgent(
+        Effect.gen(function* () {
+          const admitted = yield* admit(ctx.session.auth, ctx.session.id);
+          if (Result.isFailure(admitted)) return browserNotRun(admitted.failure);
+          const { target } = admitted.success;
+          const call = {
+            browserSession: browserSessionOf(ctx.session),
+            conversationId: target.conversationId,
+            // A worker's screenshots are kept beside its own transcript, where its window reads them.
+            transcript: browserTranscriptOf(target, ctx.session.parent?.callId),
+            // A worker's sandbox is its parent's (`defineParentSandbox`), so its door opens that one.
+            openSandbox: () => ctx.getSandbox(),
+          };
+          // SAFETY: eve hands a tool the JSON object the model emitted; the door parses it as wire input.
+          return yield* runBrowserTool(call, unparsedWire(input as WireBoundaryInput));
         }),
       ),
   });

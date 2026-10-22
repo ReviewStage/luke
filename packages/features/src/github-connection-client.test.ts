@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { fakeCloudApi, HTTP_STATUS } from "@luke/wire/testing";
 import { Effect } from "effect";
+import { accountBearer, sessionBearer } from "./account-call.js";
+import type { AccountSessionToken } from "./account-token.js";
 import {
   GITHUB_CONNECTION_CALL_FAILURE,
   HostedGitHubConnectionClient,
@@ -12,20 +14,20 @@ const CONNECT_PAGE = "https://tryluke.dev/connect-github.html?intent=opaque-inte
 
 /** The client over an account holding OAuth token `token-1` and, unless told otherwise, session `session-1`. */
 function client(
-  session: {
-    readSessionToken: () => Effect.Effect<string | undefined>;
-    obtainSession: () => Effect.Effect<void>;
-  } = {
+  session: AccountSessionToken = {
     readSessionToken: () => Effect.succeed("session-1"),
     obtainSession: () => Effect.void,
   },
 ): HostedGitHubConnectionClient {
-  return new HostedGitHubConnectionClient({
-    serviceBaseUrl: "https://tryluke.dev",
+  const token = {
     readAccessToken: () => Effect.succeed("token-1"),
     refreshAccount: () => Effect.void,
     readAccountKey: () => Effect.succeed("ada@example.com"),
-    ...session,
+  };
+  return new HostedGitHubConnectionClient({
+    serviceBaseUrl: "https://tryluke.dev",
+    credential: accountBearer(token),
+    sessionCredential: sessionBearer({ ...token, ...session }),
   });
 }
 

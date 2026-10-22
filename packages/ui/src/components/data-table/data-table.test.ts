@@ -16,8 +16,8 @@ import {
  * for what it holds; a sortable heading is a button whose press the caller
  * hears, its cell announcing the order chosen; a table that sorts nothing
  * offers no button, though it still announces an order it was given; a
- * press on a row opens it, while a press on a control in its cells answers
- * for that control alone; a mark column's heading is read, not drawn; and
+ * press on a row opens it, unless its caller says it has nothing to open,
+ * while a press on a control in its cells answers for that control alone; a mark column's heading is read, not drawn; and
  * no rows show the empty line in place of the table. Synthetic runs.
  */
 
@@ -201,6 +201,29 @@ test("a press on a row opens it, and a press on a control in its cells is that c
   press(release?.querySelector("td button"));
 
   expect(heard).toEqual(["open nightly", "pin release"]);
+});
+
+test("a row its caller says has nothing to open neither looks pressable nor opens", () => {
+  const heard: string[] = [];
+  const container = draw(
+    createElement(DataTable<Run, RunKey>, {
+      label: "Runs",
+      columns: columns(heard),
+      rows: RUNS,
+      rowKey: (run) => run.id,
+      empty: "No runs yet.",
+      onRowPress: (run) => heard.push(`open ${run.id}`),
+      rowPressable: (run) => run.id !== "release",
+    }),
+  );
+  const [nightly, release] = [...container.querySelectorAll("tbody tr")];
+
+  press(release?.querySelectorAll("td")[2]);
+  press(nightly?.querySelectorAll("td")[2]);
+
+  expect(release?.hasAttribute("data-pressable")).toBe(false);
+  expect(nightly?.getAttribute("data-pressable")).toBe("true");
+  expect(heard).toEqual(["open nightly"]);
 });
 
 test("no rows show the empty line in place of the table", () => {

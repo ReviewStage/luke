@@ -9,8 +9,8 @@ import { rendererRegistry, rendererRuntime } from "./renderer-runtime.js";
  * Streamdown runs every reply through `rehype-raw`, which hands the whole
  * tree to parse5, an HTML parser of some 50 KB gzipped, and the voice and
  * call windows, which draw no markdown, would parse it for nothing. So the build answers Streamdown's
- * `import "rehype-raw"` with this module (`scripts/build.mjs`'s
- * `markdownHtmlParserOnDemand`, and the same in `vitest.config.ts`), and
+ * `import "rehype-raw"` with this module (`scripts/build-table.mjs`'s
+ * `redirectOf`, and the same in `vitest.config.ts`), and
  * this module reaches the library through a dynamic `import()`, which the
  * build splits into a chunk of its own.
  *

@@ -1,23 +1,34 @@
+import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
 import { AGENT_ROLE } from "@luke/service/agents/agent-runtime/role";
 import {
   endsTurn,
+  keepsSandboxAlive,
+  lapsesCredential,
+  parksForLongSleep,
   renewsCredential,
   type SandboxRecord,
   stopsAtTurnEnd,
+  withdrawsCredential,
+  withdrawsCredentialForSleep,
 } from "@luke/service/agents/agent-runtime/sandbox";
+import { sandboxIdle } from "@luke/service/agents/agent-runtime/sandbox-idle";
 import { pinnedState } from "@luke/service/agents/brain-host/pinned-state";
 import { EMPTY_RELAY_STATE, type RelayState } from "@luke/service/agents/brain-host/relay";
+import { deepensSandbox } from "@luke/service/agents/coder-host/deepen";
 import type { CheckoutFailure } from "@luke/service/agents/coder-host/host";
 import { opensSandbox } from "@luke/service/agents/coder-host/tool-set";
+import { handedAfterCompaction } from "@luke/service/agents/coder-host/turn-context";
 import type { RepositorySandbox } from "@luke/service/agents/repository-shell";
-import { Effect, Redacted, Result } from "effect";
+import { keepSessionSandboxAlive } from "@luke/service/agents/session-sandboxes";
+import { credentialPolicy } from "@luke/service/agents/terminal/agent-sandbox";
+import { Effect, Result } from "effect";
+import type { MessageStreamEvent } from "eve/client";
 import { defineState } from "eve/context";
-import { authenticateGitHub } from "eve/extensions/code/sandbox";
 import { defineHook, type HookContext } from "eve/hooks";
 import { host, seams } from "../host.js";
 import { runAgent } from "../runtime.js";
 import { environment } from "../sandbox.js";
-import { sandboxRecord, sessionPrompt } from "../session-prompt.js";
+import { sandboxRecord, sessionPrompt, turnHanded } from "../session-prompt.js";
 
 /**
  * The relay from eve's stream into the store, and the two things the
@@ -27,9 +38,17 @@ import { sandboxRecord, sessionPrompt } from "../session-prompt.js";
  * (`packages/service/src/agents/brain-host/relay.ts`). A session the host does not admit
  * writes nothing. Beside the relay, the hook watches the sandbox: a call of
  * a sandbox tool, or a message received with files eve staged there, is
- * when the sandbox opened and its checkout set the repository credential
- * at the firewall, a step that starts past the credential's age renews it
- * there, and a turn's end, however it ended, writes the branch checked out
+ * when the sandbox opened on its shallow checkout, a call that writes is
+ * when that checkout deepened and set the repository credential at the
+ * firewall (`packages/service/src/agents/coder-host/deepen.ts`), a step
+ * that starts past the credential's age renews it there, or, for an agent on its starter's own token, which never ages, the
+ * first step of each turn sets it again, and a turn's end takes that token
+ * off wherever it stops the sandbox; a step keeps the running sandbox alive
+ * past its short timeout every few minutes of a turn
+ * (`packages/service/src/agents/session-sandboxes.ts`); a step whose one
+ * call is a long pause stops the sandbox for it where nothing the agent
+ * started still runs, and the next step resumes it; and a turn's end, however it ended,
+ * writes the branch checked out
  * in the sandbox on the agent's row, which is where its pull request is
  * read from, then stops the sandbox at once rather than waiting out its
  * timeout, with its filesystem kept for a later turn to resume, unless a
@@ -92,17 +111,62 @@ async function terminalHolds(ctx: HookContext): Promise<boolean> {
   );
 }
 
-/** A fresh token set at the firewall, in place of the aged one; a renewal that fails is logged and the next step tries again. */
+/** Whether the agent's credential is its starter's own GitHub token; a session the host does not admit, and a read that fails, are not. */
+async function onMemberToken(ctx: HookContext): Promise<boolean> {
+  return runAgent(
+    Effect.gen(function* () {
+      const admitted = yield* host.admit(ctx.session.auth, ctx.session.id);
+      if (Result.isFailure(admitted)) return false;
+      const agent = yield* host.agent(admitted.success);
+      return Result.isSuccess(agent) && agent.success.githubAccess === GITHUB_ACCESS.TOKEN;
+    }).pipe(
+      Effect.catch((failure) =>
+        Effect.as(
+          Effect.logWarning(
+            `The GitHub access of session ${ctx.session.id} was not read: ${failure._tag}`,
+          ),
+          false,
+        ),
+      ),
+    ),
+  );
+}
+
+/** A member's own token taken off the firewall as the turn ends, leaving the open internet; a withdrawal that fails is logged, so the stop that follows is never skipped. */
+async function withdrawCredential(ctx: HookContext): Promise<void> {
+  await runAgent(
+    Effect.tryPromise(async () =>
+      (await ctx.getSandbox(environment)).setNetworkPolicy("allow-all"),
+    ).pipe(
+      Effect.catch(() =>
+        Effect.logWarning(`The GitHub token of session ${ctx.session.id} was not taken off`),
+      ),
+    ),
+  );
+}
+
+/**
+ * A fresh credential set at the firewall, in place of the aged or lapsed
+ * one; a renewal that fails is logged and the next step tries again, and an
+ * agent with no repository mints none and sets nothing. Note that a
+ * sandbox opened shallow is renewed only once its deepen finished, which
+ * its record says rather than the request the hook saw, since a write
+ * requested may have failed before its deepen did.
+ */
 async function renewCredential(
   ctx: HookContext,
   record: ReturnType<typeof pinnedState<SandboxRecord>>,
   now: number,
 ): Promise<void> {
+  // The sandbox under its Vercel environment, which is the handle that carries the firewall.
+  const sandbox = await ctx.getSandbox(environment);
+  const shallow = record.get().openedShallow === true;
   const minted = await runAgent(
     Effect.gen(function* () {
       const admitted = yield* host.admit(ctx.session.auth, ctx.session.id);
       if (Result.isFailure(admitted)) return undefined;
-      return yield* host.repositoryToken(admitted.success);
+      if (shallow && !(yield* host.deepened(admitted.success, sandbox))) return undefined;
+      return yield* host.repositoryCredential(admitted.success);
     }).pipe(
       Effect.catch((failure) =>
         Effect.as(
@@ -115,11 +179,65 @@ async function renewCredential(
     ),
   );
   if (minted === undefined) return;
-  // The sandbox under its Vercel environment, which is the handle that carries the firewall.
-  const sandbox = await ctx.getSandbox(environment);
-  // The token is revealed here alone, into the firewall rules eve sets for github.com.
-  await authenticateGitHub(sandbox, { token: Redacted.value(minted), delivery: "firewall" });
-  record.update((held) => ({ ...held, credentialAt: now }));
+  // The token is revealed only into the firewall rules set for GitHub.
+  await sandbox.setNetworkPolicy(credentialPolicy(minted));
+  record.update((held) => ({
+    ...held,
+    credentialAt: now,
+    credentialLapsed: false,
+    memberToken: minted.access.kind === GITHUB_ACCESS.TOKEN,
+  }));
+}
+
+/**
+ * The sandbox at its turn's end, after the branch and the relay however they
+ * ended: a member's token taken off where the policy says, and the sandbox
+ * stopped unless a terminal holds it. Whether a terminal holds it is read
+ * last, just before the stop, so a developer who typed during the turn's end
+ * keeps it.
+ */
+async function endSandbox(
+  ctx: HookContext,
+  event: MessageStreamEvent,
+  sandbox: ReturnType<typeof pinnedState<SandboxRecord>>,
+  ending: Awaited<ReturnType<HookContext["getSandbox"]>>,
+): Promise<void> {
+  const held = await terminalHolds(ctx);
+  const record = sandbox.get();
+  if (withdrawsCredential(AGENT_ROLE.CODER, event, record, held)) await withdrawCredential(ctx);
+  if (lapsesCredential(AGENT_ROLE.CODER, event, record)) {
+    sandbox.update((standing) => ({ ...standing, credentialLapsed: true }));
+  }
+  if (stopsAtTurnEnd(AGENT_ROLE.CODER, event, record, held)) await ending.stop();
+}
+
+/**
+ * The sandbox stopped for a long pause inside the turn, its filesystem kept
+ * for the next step to resume, as a turn's end stops it: unless a
+ * developer's terminal holds it, and only where no process the agent
+ * started still runs, which a dev server or a command left in the
+ * background is. A member's own token comes off the firewall first and is
+ * set again at the next step. A stop that fails is logged, and the sandbox
+ * stands until the turn's end stops it.
+ */
+async function stopForSleep(
+  ctx: HookContext,
+  record: ReturnType<typeof pinnedState<SandboxRecord>>,
+): Promise<void> {
+  if (await terminalHolds(ctx)) return;
+  const sandbox = await ctx.getSandbox();
+  if (!(await runAgent(sandboxIdle(sandbox)))) return;
+  if (withdrawsCredentialForSleep(AGENT_ROLE.CODER, record.get())) {
+    await withdrawCredential(ctx);
+    record.update((standing) => ({ ...standing, credentialLapsed: true }));
+  }
+  await runAgent(
+    Effect.tryPromise(() => sandbox.stop()).pipe(
+      Effect.catch(() =>
+        Effect.logWarning(`The sandbox of session ${ctx.session.id} was not stopped for its pause`),
+      ),
+    ),
+  );
 }
 
 export default defineHook({
@@ -131,40 +249,57 @@ export default defineHook({
       const state = pinnedState(relayState);
       const prompt = pinnedState(sessionPrompt);
       const sandbox = pinnedState(sandboxRecord);
+      // A compaction may summarise away what the turns' messages handed, so the next turn hands it again.
+      if (event.type === "compaction.completed") {
+        pinnedState(turnHanded).update(handedAfterCompaction);
+      }
       if (opensSandbox(event) && sandbox.get().openedAt === undefined) {
-        sandbox.update((held) => ({ ...held, openedAt: seams.now() }));
+        const openedAt = seams.now();
+        const memberToken = await onMemberToken(ctx);
+        sandbox.update((held) => ({ ...held, openedAt, openedShallow: true, memberToken }));
+      }
+      // The first write deepens the shallow checkout and sets the credential, which the policy renews from then on.
+      if (deepensSandbox(event) && sandbox.get().deepenedAt === undefined) {
+        const deepenedAt = seams.now();
+        sandbox.update((held) => ({ ...held, deepenedAt }));
       }
       // The sandbox a tool opened, at the turn's end: its branch is read ahead of the relay, and the policy decides whether it is stopped after.
       const ending =
         endsTurn(event) && sandbox.get().openedAt !== undefined
           ? await ctx.getSandbox()
           : undefined;
-      if (ending !== undefined) await recordBranch(ctx, ending);
-      await runAgent(
-        Effect.gen(function* () {
-          if (event.type === "session.started") {
-            const starting = yield* host.admitStarting(ctx.session.auth, ctx.session.id);
-            if (Result.isFailure(starting)) return;
-            if (!(yield* host.sessionStarted(starting.success, ctx.session.id))) return;
-          }
-          // A fragment the store need hear nothing of is folded into the relay's state without
-          // admitting the session, whose reads would otherwise run for every one of them.
-          if (host.relaysQuietly(event, state)) return;
-          const admitted = yield* host.admit(ctx.session.auth, ctx.session.id);
-          if (Result.isFailure(admitted)) return;
-          yield* host.relay(event, admitted.success, ctx.session, state, prompt.get());
-        }),
-      );
-      const now = seams.now();
-      if (renewsCredential(AGENT_ROLE.CODER, event, sandbox.get(), now)) {
-        await renewCredential(ctx, sandbox, now);
-      }
-      // Whether a terminal holds the sandbox is read last, just before the stop, so a developer who typed during the turn's end keeps it.
-      if (
-        ending !== undefined &&
-        stopsAtTurnEnd(AGENT_ROLE.CODER, event, sandbox.get(), await terminalHolds(ctx))
-      ) {
-        await ending.stop();
+      // Note that the stop is in a `finally`, because a branch, relay, or renewal that threw would otherwise leave the sandbox running until its timeout.
+      try {
+        if (ending !== undefined) await recordBranch(ctx, ending);
+        await runAgent(
+          Effect.gen(function* () {
+            if (event.type === "session.started") {
+              const starting = yield* host.admitStarting(ctx.session.auth, ctx.session.id);
+              if (Result.isFailure(starting)) return;
+              if (!(yield* host.sessionStarted(starting.success, ctx.session.id))) return;
+            }
+            // A fragment the store need hear nothing of is folded into the relay's state without
+            // admitting the session, whose reads would otherwise run for every one of them.
+            if (host.relaysQuietly(event, state)) return;
+            const admitted = yield* host.admit(ctx.session.auth, ctx.session.id);
+            if (Result.isFailure(admitted)) return;
+            yield* host.relay(event, admitted.success, ctx.session, state, prompt.get());
+          }),
+        );
+        const now = seams.now();
+        if (renewsCredential(AGENT_ROLE.CODER, event, sandbox.get(), now)) {
+          await renewCredential(ctx, sandbox, now);
+        }
+        // Stamped before it is asked, so a keep-alive Vercel did not confirm waits the interval like one it did.
+        if (keepsSandboxAlive(AGENT_ROLE.CODER, event, sandbox.get(), now)) {
+          sandbox.update((held) => ({ ...held, keptAliveAt: now }));
+          await runAgent(keepSessionSandboxAlive(ctx.session.id));
+        }
+        if (parksForLongSleep(AGENT_ROLE.CODER, event, sandbox.get())) {
+          await stopForSleep(ctx, sandbox);
+        }
+      } finally {
+        if (ending !== undefined) await endSandbox(ctx, event, sandbox, ending);
       }
     },
   },

@@ -1,5 +1,11 @@
-import type { ChatImageWrite, ChatMessageRow } from "@luke/database/models/chat-store";
+import type {
+  ChatImageWrite,
+  ChatMemberSubject,
+  ChatMessageRow,
+  ChatNamedSubject,
+} from "@luke/database/models/chat-store";
 import { chatAttachmentId } from "@luke/database/models/ids";
+import { type ChatMemberMention, chatMentionsIn } from "@luke/features/chat-mentions";
 import {
   ASK_STATUS,
   type AskStatus,
@@ -15,9 +21,10 @@ import {
   type ChatReply,
   type ChatResponse,
   codeLinesReadable,
-  mentionedHandles,
+  MEMBER_KIND,
   type postChatAskInputSchema,
 } from "@luke/features/chat-wire";
+import { MENTION_KIND } from "@luke/features/mention-link";
 import { Effect, Result } from "effect";
 import { CODER } from "./bounds.js";
 import { type InboxSandboxDoor, readInboxImage } from "./inbox-image.js";
@@ -30,9 +37,10 @@ import { type InboxSandboxDoor, readInboxImage } from "./inbox-image.js";
  * under a key of the agent's, posted again under the key to keep it
  * current. What the wire's shapes admit but an ask cannot carry is
  * refused before the store is asked: a choice whose labels repeat or
- * whose recommendation names none, a form whose labels repeat or whose
- * options sit on a field that takes none, and lines of a repository other
- * than the agent's own. An image block names a file in the agent's
+ * whose recommendation names none, a form whose labels repeat, whose
+ * options sit on a field that takes none, or whose select recommends none
+ * of its options, and lines of a repository other than the agent's own. An
+ * image block names a file in the agent's
  * sandbox, read there (`inbox-image.ts`) and kept as an attachment of the
  * message's under an id named for the post and the path, so a post sent
  * again keeps the picture it kept. The agent reads its asks back whole
@@ -47,6 +55,8 @@ export const ASK_REFUSAL = {
   FIELD_LABELS: "Not posted: a form names each field by a label of its own.",
   SELECT_OPTIONS:
     "Not posted: a select field offers its options, each once, and no other field offers options.",
+  SELECT_RECOMMENDATION:
+    "Not posted: a select field's recommended names one of its options, and no other field recommends one.",
   CODE_REPOSITORY:
     "Not posted: a code block points at lines of your own repository, named as owner/name.",
   CODE_LINES: `Not posted: a code block's endLine is at or after its startLine, and it spans at most ${CHAT_BOUNDS.MAX_CODE_LINES} lines.`,
@@ -98,7 +108,7 @@ function choiceRefusal(choice: ChatChoice): string | undefined {
   return undefined;
 }
 
-/** A form's own refusal: a label used twice, a select with no options or one twice, or options on a field that takes none. */
+/** A form's own refusal: a label used twice, a select with no options or one twice, options on a field that takes none, or a recommendation naming none of a select's options. */
 function formRefusal(form: ChatForm): string | undefined {
   if (!distinct(form.fields.map((field) => field.label))) return ASK_REFUSAL.FIELD_LABELS;
   for (const field of form.fields) {
@@ -106,6 +116,12 @@ function formRefusal(form: ChatForm): string | undefined {
     const options = field.options;
     if (select ? options === undefined || !distinct(options) : options !== undefined) {
       return ASK_REFUSAL.SELECT_OPTIONS;
+    }
+    if (
+      field.recommended !== undefined &&
+      !(select && options?.includes(field.recommended) === true)
+    ) {
+      return ASK_REFUSAL.SELECT_RECOMMENDATION;
     }
   }
   return undefined;
@@ -151,12 +167,37 @@ export function askPostRefusal(post: AskPost, repository: string | null): string
   return post.ask === undefined ? undefined : responseRefusal(post.ask.response);
 }
 
-/** The handles a post mentions, in its words and in every Markdown block under them, each once. */
-export function postMentions(post: AskPost): readonly string[] {
+/** The members a post names as mention links, in its words and in every Markdown block under them. */
+export function postMentions(post: AskPost): ChatNamed {
   const markdown = (post.blocks ?? []).flatMap((block) =>
     block.type === CHAT_BLOCK.MARKDOWN ? [block.text] : [],
   );
-  return mentionedHandles([post.text, ...markdown].join("\n\n"));
+  return namedIn([post.text, ...markdown].join("\n\n"));
+}
+
+/** Whom a post's words name, as the store resolves them: the members written as mention links. */
+export interface ChatNamed {
+  readonly subjects: readonly ChatNamedSubject[];
+}
+
+/** The member a mention link names, as the store finds one: a person by their account, an agent by its id. */
+export function subjectOf(mention: ChatMemberMention): ChatMemberSubject {
+  switch (mention.kind) {
+    case MENTION_KIND.PERSON:
+      return { kind: MEMBER_KIND.HUMAN, userId: mention.userId };
+    case MENTION_KIND.AGENT:
+      return { kind: MEMBER_KIND.AGENT, agentId: mention.agentId };
+  }
+}
+
+/** Whom words name: each person or agent a mention link writes, with its label as written, which names it where it names no member. */
+export function namedIn(words: string): ChatNamed {
+  return {
+    subjects: chatMentionsIn(words).members.map(({ mention, label }) => ({
+      subject: subjectOf(mention),
+      label,
+    })),
+  };
 }
 
 /**
@@ -200,7 +241,7 @@ export function postPictures(
 export function askLineOf(
   message: ChatMessageRow,
   where: string,
-  handleOf: (memberId: string) => string,
+  nameOf: (memberId: string) => string,
 ): AskLine | undefined {
   const { ask, askKey, askRevision, askStatus } = message;
   if (ask === null || askKey === null || askRevision === null || askStatus === null) {
@@ -218,7 +259,7 @@ export function askLineOf(
     ...(message.answer === null ? undefined : { answer: message.answer }),
     ...(message.answeredByMemberId === null
       ? undefined
-      : { answeredBy: handleOf(message.answeredByMemberId) }),
+      : { answeredBy: nameOf(message.answeredByMemberId) }),
     ...(message.closedReason === null ? undefined : { closedReason: message.closedReason }),
   };
 }

@@ -1,4 +1,5 @@
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
+import type { TasklessAgent } from "@luke/features/coding-agent-wire";
 import {
   PLAN_ACTOR,
   type PlanSectionEdit,
@@ -7,7 +8,7 @@ import {
 } from "@luke/features/task-wire";
 import { Option, Schema, SchemaTransformation } from "effect";
 import { Atom } from "effect/reactivity";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 /**
  * use-task-looks.ts -- what changed since the developer last looked at a task on this Mac: the open plan's sections, and the sidebar's unread tasks.
@@ -47,6 +48,12 @@ import { useEffect, useRef, useState } from "react";
  * mark kept beside the word, so a mark by hand changes only the row's weight.
  * Marked read from a menu, a plan is looked at without opening: its mark
  * moves to its newest save, and the next visit lights nothing from before.
+ *
+ * An agent with no task keeps the same marks under its own id, its row's
+ * `activityAt` standing where a task's `updatedAt` does: its page opened is a
+ * look (`useAgentLook`), and its menus mark it unread or read through
+ * `useReadMarks`. Note that its row is unread by a mark by hand or by main's
+ * unseen dot alone, since no list of agents is seeded here.
  */
 
 /** Where the tasks' marks are kept in the renderer's storage. */
@@ -324,16 +331,38 @@ export function useTaskLooks(task: Task | undefined, readerId: string | undefine
     return () => watch(undefined);
   }, [taskId, watch]);
 
-  return {
-    changed: current.changed,
-    dismiss: () => {
-      setVisit((held) =>
-        held.taskId === taskId ? { ...held, mark: held.opened, changed: NOTHING_CHANGED } : held,
-      );
-      if (taskId !== undefined && newest !== undefined)
-        keep({ change: raised({ [taskId]: newest }, false), seeded: false });
-    },
-  };
+  const dismiss = useCallback(() => {
+    setVisit((held) =>
+      held.taskId === taskId ? { ...held, mark: held.opened, changed: NOTHING_CHANGED } : held,
+    );
+    if (taskId !== undefined && newest !== undefined)
+      keep({ change: raised({ [taskId]: newest }, false), seeded: false });
+  }, [taskId, newest, keep]);
+  // The same looks across draws while neither moves, so the plan they are handed to is not drawn again for new ones.
+  const { changed } = current;
+  return useMemo(() => ({ changed, dismiss }), [changed, dismiss]);
+}
+
+/**
+ * The agent with no task whose page is on screen, looked at: as it opens, which
+ * takes back a mark of it as unread, and again with each move of its row's
+ * time, which leaves one, as `useTaskLooks` does for a plan. Held by the
+ * window's shell, none while no agent's page is drawn.
+ */
+export function useAgentLook(agent: Pick<TasklessAgent, "id" | "activityAt"> | undefined): void {
+  const keep = useAtomSet(looksAtom);
+  const looked = useRef<string | undefined>(undefined);
+  const agentId = agent?.id;
+  const activityAt = agent?.activityAt;
+  useEffect(() => {
+    if (agentId === undefined || activityAt === undefined) {
+      looked.current = undefined;
+      return;
+    }
+    const opens = looked.current !== agentId;
+    looked.current = agentId;
+    keep({ change: raised({ [agentId]: activityAt }, opens), seeded: false });
+  }, [agentId, activityAt, keep]);
 }
 
 /**

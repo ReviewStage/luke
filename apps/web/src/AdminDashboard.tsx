@@ -1,10 +1,6 @@
-import type { AdminMetricsWindow } from "@luke/service/admin/http";
-import { useCallback, useEffect, useState } from "react";
-import { authClient } from "./admin/auth-client";
-import { ForbiddenCard, SignInCard } from "./admin/chrome/cards";
-import type { ViewerAccount } from "./admin/chrome/page-header";
-import { AdminSidebar } from "./admin/chrome/sidebar";
-import { ADMINS_HIDDEN, SIDEBAR_COLLAPSED, SIGN_IN_CHOSEN } from "./admin/prefs";
+import type { AdminMetricsWindow } from "@luke/features/admin-wire";
+import type { ViewerAccount } from "@luke/panel/admin/chrome/page-header";
+import { ADMINS_HIDDEN, SIDEBAR_HIDDEN, SIGN_IN_CHOSEN } from "@luke/panel/admin/prefs";
 import {
   type AdminTab,
   type AdminView,
@@ -14,14 +10,31 @@ import {
   viewFromLocation,
   windowFromLocation,
   windowHref,
-} from "./admin/routing";
-import { AccountScreen } from "./admin/screens/account";
+} from "@luke/panel/admin/routing";
+import { AccountScreen } from "@luke/panel/admin/screens/account";
+import { CostScreen } from "@luke/panel/admin/screens/cost";
+import { DashboardScreen, useMetricsRead } from "@luke/panel/admin/screens/dashboard";
+import { DayScreen } from "@luke/panel/admin/screens/day";
+import { ReliabilityScreen } from "@luke/panel/admin/screens/reliability";
+import { UsersScreen } from "@luke/panel/admin/screens/users";
+import { WorkspacesScreen } from "@luke/panel/admin/screens/workspaces";
+import { useCallback, useEffect, useState } from "react";
+import { authClient } from "./admin/auth-client";
+import { ForbiddenCard, SignInCard } from "./admin/chrome/gate-cards";
+import { AdminShell } from "./admin/chrome/sidebar";
 import { AnimationsScreen } from "./admin/screens/animations";
-import { DashboardScreen, useMetricsRead } from "./admin/screens/dashboard";
-import { DayScreen } from "./admin/screens/day";
-import { UsersScreen } from "./admin/screens/users";
+import { WebAdminDoors } from "./admin/web-admin-doors";
 
+/** The standalone page: the dashboard under this page's own doors (`web-admin-doors.tsx`). */
 export function AdminDashboard(): React.JSX.Element {
+  return (
+    <WebAdminDoors>
+      <AdminDashboardPage />
+    </WebAdminDoors>
+  );
+}
+
+function AdminDashboardPage(): React.JSX.Element {
   // Admin accounts are the maintainers' own; their traffic reads as noise in
   // every count, so admins start hidden and the toggle is the explicit ask to
   // include them, remembered across visits. The scope is the server's filter —
@@ -57,7 +70,10 @@ export function AdminDashboard(): React.JSX.Element {
   }, []);
   const navigate = useCallback((tab: AdminTab) => {
     window.history.pushState(null, "", tabHref(tab));
-    if (tab === "users") setView({ kind: "users" });
+    if (tab === "cost") setView({ kind: "cost" });
+    else if (tab === "reliability") setView({ kind: "reliability" });
+    else if (tab === "workspaces") setView({ kind: "workspaces" });
+    else if (tab === "users") setView({ kind: "users" });
     else if (tab === "animations") setView({ kind: "animations" });
     else setView({ kind: "dashboard" });
   }, []);
@@ -69,10 +85,10 @@ export function AdminDashboard(): React.JSX.Element {
     });
   }, []);
 
-  const [sidebarFolded, setSidebarFolded] = useState(SIDEBAR_COLLAPSED.read);
+  const [sidebarHidden, setSidebarHidden] = useState(SIDEBAR_HIDDEN.read);
   const toggleSidebar = () => {
-    setSidebarFolded((current) => {
-      SIDEBAR_COLLAPSED.write(!current);
+    setSidebarHidden((current) => {
+      SIDEBAR_HIDDEN.write(!current);
       return !current;
     });
   };
@@ -82,14 +98,28 @@ export function AdminDashboard(): React.JSX.Element {
   // way any refetch does.
   const metrics = useMetricsRead(hideAdmins, windowDays, view.kind === "dashboard");
   const withdrawSession = metrics.withdraw;
+  // Note that Better Auth answers a refused sign-out as a result rather than a
+  // throw, so the refusal is thrown here: the session still stands, and
+  // nothing past this may say it is gone.
   const signOut = useCallback(
     () =>
       withdrawSession(async () => {
-        await authClient.signOut();
+        const { error } = await authClient.signOut();
+        if (error) throw new Error("The sign-out was refused.");
         SIGN_IN_CHOSEN.write(false);
       }),
     [withdrawSession],
   );
+
+  // Log out in the sidebar's foot leaves whichever view stood for the sign-in
+  // card. Note that the view is unmounted rather than told, because that drops
+  // its read with it: an answer that left carrying the old cookie cannot then
+  // put the page back up behind the sign-out.
+  const [loggedOut, setLoggedOut] = useState(false);
+  const logOut = useCallback(async () => {
+    await signOut();
+    setLoggedOut(true);
+  }, [signOut]);
 
   const viewer: ViewerAccount | undefined = account
     ? { name: account.name, email: account.email, image: account.image ?? undefined }
@@ -99,24 +129,21 @@ export function AdminDashboard(): React.JSX.Element {
   // every view: navigation drawn beside a consent card would pose as
   // somewhere to go. Everything past the gate wears the sidebar, which is why
   // the screens below take the shell as a frame to apply themselves, only
-  // around the answers that earn it. The content region is a div because the
-  // `main` landmark belongs to whatever stands inside it — a page's own root
-  // or a centered card's — and each render path stands exactly one. The shell
-  // is the viewport's height because a page owns its own scroll; a centered
-  // card taller than what is left scrolls in the region instead.
+  // around the answers that earn it.
   const shell = (tab: AdminTab, content: React.JSX.Element) => (
-    <div className="flex h-dvh flex-col min-[720px]:flex-row">
-      <AdminSidebar
-        active={tab}
-        collapsed={sidebarFolded}
-        onToggle={toggleSidebar}
-        onNavigate={navigate}
-      />
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden overflow-y-auto">
-        {content}
-      </div>
-    </div>
+    <AdminShell
+      active={tab}
+      hidden={sidebarHidden}
+      account={viewer}
+      onToggleHidden={toggleSidebar}
+      onNavigate={navigate}
+      onLogOut={logOut}
+    >
+      {content}
+    </AdminShell>
   );
+
+  if (loggedOut) return <SignInCard />;
 
   if (view.kind === "account") {
     return (
@@ -157,9 +184,49 @@ export function AdminDashboard(): React.JSX.Element {
     if (metrics.state.status === "forbidden") {
       return <ForbiddenCard email={account?.email} onSignOut={() => void signOut()} />;
     }
-    return shell(
-      "animations",
-      <AnimationsScreen account={viewer} onSignOut={() => void signOut()} />,
+    return shell("animations", <AnimationsScreen />);
+  }
+
+  if (view.kind === "cost") {
+    return (
+      <CostScreen
+        hideAdmins={hideAdmins}
+        onHideAdminsChange={changeHideAdmins}
+        windowDays={windowDays}
+        onWindowDaysChange={changeWindow}
+        account={viewer}
+        onSignOut={signOut}
+        onOpenAccount={openAccount}
+        frame={(content) => shell("cost", content)}
+      />
+    );
+  }
+
+  if (view.kind === "reliability") {
+    return (
+      <ReliabilityScreen
+        hideAdmins={hideAdmins}
+        onHideAdminsChange={changeHideAdmins}
+        windowDays={windowDays}
+        onWindowDaysChange={changeWindow}
+        account={viewer}
+        onSignOut={signOut}
+        onOpenAccount={openAccount}
+        frame={(content) => shell("reliability", content)}
+      />
+    );
+  }
+
+  if (view.kind === "workspaces") {
+    return (
+      <WorkspacesScreen
+        hideAdmins={hideAdmins}
+        onHideAdminsChange={changeHideAdmins}
+        account={viewer}
+        onSignOut={signOut}
+        onOpenAccount={openAccount}
+        frame={(content) => shell("workspaces", content)}
+      />
     );
   }
 

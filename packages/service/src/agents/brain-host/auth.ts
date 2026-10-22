@@ -1,4 +1,5 @@
-import type { Redacted } from "effect";
+import { timeZoneSchema } from "@luke/features/date-mention";
+import { type Redacted, Schema } from "effect";
 import { type AuthFn, ForbiddenError, withAuthChallenges } from "eve/channels/auth";
 import type { SessionAuthContext } from "eve/context";
 import { isWireString } from "../../core.js";
@@ -11,6 +12,7 @@ import {
   BRAIN_HOST_HEADER,
   BRAIN_HOST_PRINCIPAL_TYPE,
   BRAIN_HOST_REFUSAL,
+  BRAIN_HOST_TURN,
   type BrainHostTurn,
   CONVERSATION_ID_PATTERN,
   isBrainHostTurn,
@@ -43,24 +45,38 @@ import {
  * account owns, and the deployment's secret can open only the turns the
  * table admits, a row for each of the two things a message does, opening a
  * session or following one up: a spoken ask for the voice function on the
- * brain channel, and on the coder channel (`coder-host/channel.ts`) the
- * typed line the voice brain sends a coding agent and the typed opening
- * that starts one, where it presents the account's own principal so the
- * line steers the agent's running turn, never a stream.
+ * brain channel, with the typed ask a comment sent from a browser hands
+ * Luke, and on the coder channel (`coder-host/channel.ts`) the typed line
+ * the voice brain sends a coding agent and the typed opening that starts
+ * one. A typed message presents the account's own principal on either
+ * channel (`DEPLOYMENT_PRESENCE`), so it steers, waits, and folds into a
+ * turn exactly as the developer's own bearer would: the line steers the
+ * agent's running turn, and the ask of Luke never joins a call's spoken one.
  * Ownership is not scope: the kinds of turn the credential may open are the
- * table's, decided before any principal exists. The one other thing the
- * secret may do is stop a turn: the Stop a spoken ask takes reaches eve as
- * the deployment's cancel, from the voice function or from the hook that
- * carries a waiting ask's Stop at its turn's start, and neither holds a
- * bearer of the account's. A cancel opens no turn, so the table says nothing
- * about it and it names no kind; what bounds it is the door's ownership
- * check, which admits it only on a session the named account's conversation
- * recorded.
+ * table's, decided before any principal exists. The two other things the
+ * secret may do are stop a turn and retire a session. The Stop a spoken ask
+ * takes reaches eve as the deployment's cancel, from the voice function or
+ * from the hook that carries a waiting ask's Stop at its turn's start, and
+ * neither holds a bearer of the account's. A retire is eve's reset of a
+ * session for good, which a task's delete and an account's deletion ask of
+ * every session of what they delete (`agents/retire-sessions.ts`). Both
+ * also come from a hosted route a browser reached on its session cookie,
+ * which carries no bearer eve takes, so the route reaches eve as the
+ * deployment acting for the account the cookie named (`coder-host/stop.ts`'s
+ * `eveFor`), and so does every message such a route sends: a coding agent's
+ * start, a message to one, an inbox answer, a manual automation's run, and
+ * a comment's ask of Luke. A cancel and a reset open no turn, so the table
+ * says nothing about them and they name no kind; what bounds them is the
+ * door's ownership check, which admits them only on a session a
+ * conversation the named account reaches recorded.
  */
 
 const BEARER_CHALLENGE = [{ scheme: "Bearer" }] as const;
 
-/** The two request headers as attributes, each only when it is well formed; a malformed one names nothing. */
+/** Whether a zone is one the service counts days in. */
+const isTimeZone = Schema.is(timeZoneSchema);
+
+/** The three request headers as attributes, each only when it is well formed; a malformed one names nothing. */
 function requestAttributes(headers: Headers): SessionAuthContext["attributes"] {
   const attributes: Record<string, string> = {};
   const conversation = headers.get(BRAIN_HOST_HEADER.CONVERSATION)?.trim();
@@ -69,6 +85,9 @@ function requestAttributes(headers: Headers): SessionAuthContext["attributes"] {
   }
   const turn = headers.get(BRAIN_HOST_HEADER.TURN)?.trim();
   if (turn && isBrainHostTurn(turn)) attributes[BRAIN_HOST_ATTRIBUTE.TURN] = turn;
+  // Note that a zone the service does not know names none, and the turn reads UTC, rather than refusing the message.
+  const timeZone = headers.get(BRAIN_HOST_HEADER.TIME_ZONE)?.trim();
+  if (timeZone && isTimeZone(timeZone)) attributes[BRAIN_HOST_ATTRIBUTE.TIME_ZONE] = timeZone;
   return attributes;
 }
 
@@ -97,15 +116,24 @@ export function lukeAccount(resolveUserId: BearerAccount): AuthFn<Request> {
 /**
  * Whose identity the deployment's principal presents once admitted. eve
  * steers a running turn only with a message whose principal is the turn's
- * own, read as the tuple of authenticator, type, and id, so a principal of
- * the deployment's own type can open a turn or follow one up but never
- * join one under way. The brain channel's deployment presents itself: a
- * spoken ask opens its own turn, and nothing of the voice's joins a typed
- * one. The coder channel's presents the account: a coding agent's turn runs
- * under the developer's bearer, and the one message the deployment carries
- * there is the voice brain's steer of that very turn, so it is minted as
- * the developer's own tuple, with the deployment named as its carrier in an
- * attribute, which eve's identity does not read and the record keeps.
+ * own, read as the tuple of authenticator, issuer, type, and id, and folds
+ * messages that waited into one turn only where they share that tuple, so a
+ * principal of the deployment's own type never joins a developer's turn,
+ * nor a developer's the deployment's. A typed message is a developer's own
+ * line, so on every channel it presents the account, whatever the channel
+ * presents otherwise: minted as the developer's own tuple, with the
+ * deployment named as its carrier in an attribute, which eve's identity
+ * does not read and the record keeps, it joins and waits behind a turn
+ * exactly as the developer's own bearer would. That is the voice brain's
+ * steer of a coding agent's turn, which runs under the developer's bearer,
+ * and the ask of Luke a comment sent from a browser hands over, which waits
+ * behind a call's spoken turn as the desktop's does. Everything else
+ * presents the channel's own: the brain channel's deployment presents
+ * itself, so a spoken ask opens or joins a spoken turn alone and nothing of
+ * the voice's joins a typed one, and the coder channel's presents the
+ * account, so a call's spoken ask joins an agent's running typed turn at
+ * its next step and a line typed to the agent joins a spoken one, each as
+ * the developer's own word (`coder-host/channel.ts`).
  */
 export const DEPLOYMENT_PRESENCE = {
   /** A principal of the deployment's own type, the account as its attribute. */
@@ -129,22 +157,26 @@ export type DeploymentTurnTable = Readonly<
   Record<DeploymentAct, Readonly<Record<BrainHostTurn, boolean>>>
 >;
 
-/** The deployment acting for an account: which secret admits it, which turns a message under it may open or follow up, and whose identity it presents. */
+/** The deployment acting for an account: which secret admits it, which turns a message under it may open or follow up, whose identity it presents for all but a typed message, which presents the account's, and whether it may read a session's stream. */
 export interface DeploymentActor {
-  /** The deployment's own secret, sealed; nothing while the environment names none, which admits no request. */
+  /** The deployment's own secret (`EVE_DEPLOYMENT_SECRET`, never the cron's `CRON_SECRET`), sealed; nothing while the environment names none, which admits no request. */
   readonly secret: Redacted.Redacted | undefined;
   readonly admits: DeploymentTurnTable;
   readonly presents: DeploymentPresence;
+  /** Whether the deployment may read a session's event stream, which the voice function follows a spoken ask's turn on; a flag of its own, since the coder channel's presents the account and is followed all the same. */
+  readonly streams: boolean;
 }
 
 /**
  * The routes a deployment actor may reach: a message opening a session or
- * following one up, a cancel of a turn in a session, and, for an actor that
- * presents itself, a read of a session's event stream; no other.
+ * following one up, a cancel of a turn in a session, a reset retiring a
+ * session for good, and, for an actor admitted to (`streams`), a read of a
+ * session's event stream; no other.
  */
 const OPEN_ROUTE = /^\/eve\/v1\/session\/?$/;
 const MESSAGE_ROUTE = /^\/eve\/v1\/session(?:\/[^/]+)?\/?$/;
 const CANCEL_ROUTE = /^\/eve\/v1\/session\/[^/]+\/cancel\/?$/;
+const RESET_ROUTE = /^\/eve\/v1\/session\/[^/]+\/reset\/?$/;
 const STREAM_ROUTE = /^\/eve\/v1\/session\/[^/]+\/stream\/?$/;
 
 /**
@@ -154,15 +186,19 @@ const STREAM_ROUTE = /^\/eve\/v1\/session\/[^/]+\/stream\/?$/;
  * opened the session reads the deployment, in the role the turn kind names.
  * A request with another bearer is not this caller's and the walk moves on;
  * a request with this secret that names no account, reaches any route but a
- * message, a cancel, or a stream read, or is a message naming a kind of turn the table does
- * not admit for what it does is refused here, before any later authenticator could admit it
- * as something else. The stream read is the voice function hearing a spoken
- * ask's turn as eve writes it rather than reading the record on a timer, so
- * it is admitted to the actor that presents itself (the brain channel's)
- * and no other, and the door's ownership check still holds it to a session
- * the named account reaches. An actor that presents the account mints the account's
- * own principal instead, the deployment named as its carrier, so the
- * ownership check reads the same account either way.
+ * message, a cancel, a reset, or a stream read, or is a message naming a kind
+ * of turn the table does not admit for what it does is refused here, before
+ * any later authenticator could admit it as something else. A cancel and a
+ * reset are posted on a session the door's ownership check holds to one the
+ * named account reaches, on every channel alike. The stream read is the
+ * voice function hearing a spoken ask's turn as eve writes it rather than
+ * reading the record on a timer, so it is admitted to an actor whose
+ * channel a call speaks into (`streams`) and no other, and the door's
+ * ownership check still holds it to a session the named account reaches.
+ * A typed message, and everything an actor that
+ * presents the account is admitted for, is minted as the account's own
+ * principal instead, the deployment named as its carrier, so the ownership
+ * check reads the same account either way.
  */
 export function deploymentActor(actor: DeploymentActor): AuthFn<Request> {
   return withAuthChallenges((request) => {
@@ -183,14 +219,16 @@ export function deploymentActor(actor: DeploymentActor): AuthFn<Request> {
       isBrainHostTurn(turn) &&
       actor.admits[act][turn];
     const cancel = posted && CANCEL_ROUTE.test(pathname);
-    const stream =
-      actor.presents === DEPLOYMENT_PRESENCE.DEPLOYMENT &&
-      request.method === "GET" &&
-      STREAM_ROUTE.test(pathname);
-    if (!message && !cancel && !stream) {
+    const reset = posted && RESET_ROUTE.test(pathname);
+    const stream = actor.streams && request.method === "GET" && STREAM_ROUTE.test(pathname);
+    if (!message && !cancel && !reset && !stream) {
       throw new ForbiddenError({ message: BRAIN_HOST_REFUSAL.NOT_DEPLOYMENT_ACT });
     }
-    if (actor.presents === DEPLOYMENT_PRESENCE.ACCOUNT) {
+    // Note that a typed message presents the account whatever the channel presents, because it
+    // is a developer's own line: eve steers it into, and folds it with, their own turns alone.
+    const presents =
+      message && turn === BRAIN_HOST_TURN.TYPED ? DEPLOYMENT_PRESENCE.ACCOUNT : actor.presents;
+    if (presents === DEPLOYMENT_PRESENCE.ACCOUNT) {
       return {
         principalId: account,
         principalType: BRAIN_HOST_PRINCIPAL_TYPE.ACCOUNT,
@@ -247,6 +285,12 @@ function attribute(auth: SessionAuthContext | null, name: string): string | unde
 /** The conversation a session was opened for: the initiator's attribute, read for the session's life. */
 export function conversationIdOf(initiator: SessionAuthContext | null): string | undefined {
   return attribute(initiator, BRAIN_HOST_ATTRIBUTE.CONVERSATION);
+}
+
+/** The time zone the current request named, or nothing for one that named none; read again as the turn opens. */
+export function timeZoneOf(current: SessionAuthContext | null): string | undefined {
+  const timeZone = attribute(current, BRAIN_HOST_ATTRIBUTE.TIME_ZONE);
+  return timeZone !== undefined && isTimeZone(timeZone) ? timeZone : undefined;
 }
 
 /** The kind of turn the current request opened, or nothing for a request that named none. */

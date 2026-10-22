@@ -30,22 +30,16 @@ export const GATEWAY_METHOD = {
   TASKS_PIN_REPOSITORY: "tasks.pinRepository",
   /** One change to the account's sidebar sections on the service; the view takes the sections it answered. */
   TASKS_WRITE_SECTION: "tasks.writeSection",
-  /** One task archived or brought back on the service, taken in place as a pin is; the open task stays open either way. */
-  TASKS_ARCHIVE: "tasks.archive",
   /** The repositories the account reaches through the Luke GitHub App, read from the service now. */
   TASKS_REPOSITORIES: "tasks.repositories",
   /** One task given its repository on the service, or none; the list and the open document take what it answered without reading either again. */
   TASKS_SET_REPOSITORY: "tasks.setRepository",
+  /** One task's status, priority, or both set on the service; the list and the open document take the task it answered without reading either again. */
+  TASKS_SET_STANDING: "tasks.setStanding",
   /** One task moved to another of the account's workspaces on the service; the list and the open document take the task it answered without reading either again. */
   TASKS_MOVE: "tasks.move",
   /** The developer's edit of a task's document saved on the service; the open document takes the task it answered, and a conflict leaves it unchanged. */
   TASKS_EDIT: "tasks.edit",
-  /** The page of the open task's work before the oldest turn held, read from the service where an older one stands; the view takes it. */
-  TASKS_WORK_EARLIER: "tasks.workEarlier",
-  /** The page of the open task's conversation before the oldest turn held, read from the service where an older one stands; the view takes it before the rest, and the held read's cursor stays. */
-  TASKS_CONVERSATION_EARLIER: "tasks.conversationEarlier",
-  /** One page of a task's conversation as an agent's transcript is read, or a brain worker's under the call that started it, held open by the service while a turn or the worker runs; answered to the caller, never held in the view. */
-  TASKS_MESSAGES: "tasks.messages",
   /** A window of a file of one task's repository, read from GitHub through the service as it stands now and coloured here; answered to the caller, never held in the view. */
   TASKS_FILE: "tasks.file",
   /** One folder of one task's repository, listed from GitHub through the service as it stands now; answered to the caller, never held in the view. */
@@ -56,6 +50,18 @@ export const GATEWAY_METHOD = {
   TASKS_PULL_REQUEST: "tasks.pullRequest",
   /** One issue of a repository a workspace's installation reaches, by its number, read from GitHub through the service as it stands now; answered to the caller, never held in the view. */
   TASKS_ISSUE: "tasks.issue",
+  /** A repository's issues as New task's picker asks for them, read from GitHub through the service as they stand now, or that its installation grants none; answered to the caller, never held in the view. */
+  TASKS_GITHUB_ISSUES: "tasks.githubIssues",
+  /** The issues one task links, each with where it stands now, read live through the service; answered to the caller, never held in the view. */
+  TASKS_ISSUE_LINKS: "tasks.issueLinks",
+  /** The Browser tabs open in a task's agents' browsers, read from the service and answered to the panel that asked, held nowhere. */
+  TASKS_BROWSER_TABS: "tasks.browserTabs",
+  /** One more issue linked to a task on the service, which reads it from its provider first; answered to the caller. */
+  TASKS_ISSUE_LINK: "tasks.issueLink",
+  /** Which keyword a task's pull requests write of one of its links, changed on the service; answered to the caller. */
+  TASKS_ISSUE_RELATE: "tasks.issueRelate",
+  /** One of a task's links let go on the service; answered to the caller. */
+  TASKS_ISSUE_UNLINK: "tasks.issueUnlink",
   /** A page of one plan's history, read from the service; answered to the caller, never held in the view. */
   TASKS_REVISIONS: "tasks.revisions",
   /** One revision of one plan beside the one before it, read from the service; answered to the caller, never held in the view. */
@@ -64,10 +70,41 @@ export const GATEWAY_METHOD = {
   TASKS_PAGE: "tasks.page",
   /** One plan's pages, each by its newest version, read from the service for the Inbox's panel beside an item of that plan; answered to the caller, never held in the view. */
   TASKS_PAGES: "tasks.pages",
+  /**
+   * One plan's pages, followed from now until let go, over Neon Realtime.
+   * What they hold is heard as `TASKS_PAGES_CHANGED` events, never answered;
+   * following what is already followed does nothing.
+   */
+  TASKS_PAGES_FOLLOW: "tasks.pagesFollow",
+  /** A followed plan's pages let go: no more `TASKS_PAGES_CHANGED` events of it until it is followed again. */
+  TASKS_PAGES_UNFOLLOW: "tasks.pagesUnfollow",
+  /**
+   * One plan's newest page of history, followed from now until let go, over
+   * Neon Realtime. What it holds is heard as `TASKS_HISTORY_CHANGED` events,
+   * never answered; following what is already followed does nothing.
+   */
+  TASKS_HISTORY_FOLLOW: "tasks.historyFollow",
+  /** A followed plan's history let go: no more `TASKS_HISTORY_CHANGED` events of it until it is followed again. */
+  TASKS_HISTORY_UNFOLLOW: "tasks.historyUnfollow",
+  /**
+   * One task's cloud Browser tabs, the agent's pointer on each among them,
+   * followed from now until let go, over Neon Realtime. What they hold is
+   * heard as `TASKS_BROWSER_TABS_CHANGED` events, never answered; following
+   * what is already followed does nothing.
+   */
+  TASKS_BROWSER_TABS_FOLLOW: "tasks.browserTabsFollow",
+  /** A followed task's Browser tabs let go: no more `TASKS_BROWSER_TABS_CHANGED` events of it until it is followed again. */
+  TASKS_BROWSER_TABS_UNFOLLOW: "tasks.browserTabsUnfollow",
   /** One picture of one plan, read from the service now as its bytes in base64; answered to the caller, never held in the view. */
   TASKS_PICTURE: "tasks.picture",
   /** One picture kept on one plan on the service, sent as a `data:` URL, answered with the id its text names it by; never held in the view. */
   TASKS_PICTURE_KEEP: "tasks.pictureKeep",
+  /** One task's plan's comment threads past a cursor, held open by the service while nothing changed. */
+  TASKS_COMMENTS: "tasks.comments",
+  /** A comment thread started on one task's plan, answered with the thread as it stands. */
+  TASKS_COMMENT_START: "tasks.commentStart",
+  /** One thing done to one comment thread of one task's plan, answered with the thread as it stands. */
+  TASKS_COMMENT_ACT: "tasks.commentAct",
   /** One revision of one plan put back as its content on the service; the view takes the task as the service answered it. */
   TASKS_RESTORE: "tasks.restore",
   /** The developer's scene of the open task's whiteboard, saved over the revision it was drawn on; the view takes the board as the service answered it. */
@@ -92,8 +129,30 @@ export const GATEWAY_METHOD = {
   WORKSPACES_LINEAR_ISSUES: "workspaces.linearIssues",
   /** One workspace's members, read from the service now; answered to the caller, never held in the view. */
   WORKSPACES_MEMBERS: "workspaces.members",
+  /**
+   * A workspace's people, followed from now until let go, over Neon
+   * Realtime. What they hold is heard as `WORKSPACE_PEOPLE_CHANGED` events,
+   * never answered; following again starts over, so its first word is told
+   * again.
+   */
+  WORKSPACES_PEOPLE_FOLLOW: "workspaces.peopleFollow",
+  /** A followed workspace's people let go: no more `WORKSPACE_PEOPLE_CHANGED` events of it until it is followed again. */
+  WORKSPACES_PEOPLE_UNFOLLOW: "workspaces.peopleUnfollow",
+  /**
+   * A workspace's pending invitations, followed by an owner or an admin from
+   * now until let go, over Neon Realtime: heard as
+   * `WORKSPACE_INVITATIONS_CHANGED` events, never answered; following again
+   * starts over.
+   */
+  WORKSPACES_INVITATIONS_FOLLOW: "workspaces.invitationsFollow",
+  /** A followed workspace's invitations let go: no more `WORKSPACE_INVITATIONS_CHANGED` events of it until it is followed again. */
+  WORKSPACES_INVITATIONS_UNFOLLOW: "workspaces.invitationsUnfollow",
   /** One workspace's photo, read from the service now as its bytes in base64; answered to the caller, never held in the view. */
   WORKSPACES_PHOTO: "workspaces.photo",
+  /** The repositories members added to one workspace on their own GitHub tokens, read from the service now; answered to the caller, never held in the view. */
+  WORKSPACES_TOKEN_REPOSITORIES: "workspaces.tokenRepositories",
+  /** A repository added to a workspace on the account's own GitHub token, or removed from it, on the service; answered to the caller with the workspace's token repositories as they then stand. */
+  WORKSPACES_TOKEN_REPOSITORY_SET: "workspaces.tokenRepositorySet",
   /** One member removed from a workspace on the service, answered with the members who remain; the view's workspaces are read again. */
   WORKSPACES_MEMBER_REMOVE: "workspaces.memberRemove",
   /** Another member made an admin or an admin a member on the service by the owner, answered with the members as they then stand; the view's workspaces are read again. */
@@ -112,6 +171,10 @@ export const GATEWAY_METHOD = {
   GITHUB_CONNECT: "github.connect",
   /** The account's GitHub disconnected on the service under the Mac's session; the view takes the connection, and the next workspaces read is owed at once. */
   GITHUB_DISCONNECT: "github.disconnect",
+  /** One admin dashboard read, asked of the service now under the account's session and answered to the caller as it came, or why not; never held in the view. */
+  ADMIN_READ: "admin.read",
+  /** The admin dashboard's star set or taken back on one account under the account's session; whether it landed. */
+  ADMIN_FAVORITE: "admin.favorite",
   /** The models a coding agent may run on, read from the service's catalog now. */
   CODING_AGENTS_MODELS: "codingAgents.models",
   /** The account's default model and effort for a coding agent, read from the service now. */
@@ -126,6 +189,17 @@ export const GATEWAY_METHOD = {
   CODING_AGENTS_START: "codingAgents.start",
   /** One agent's transcript past a cursor, held open by the service while the agent runs. */
   CODING_AGENTS_MESSAGES: "codingAgents.messages",
+  /**
+   * One agent's transcript, or one of its workers', followed from now until
+   * it is let go or the account signs out. Its pages are heard as
+   * `TRANSCRIPT_CHANGED` events, never answered: the first from the start,
+   * then each one past the last; following again starts over.
+   */
+  CODING_AGENTS_TRANSCRIPT_FOLLOW: "codingAgents.transcriptFollow",
+  /** One agent's or worker's transcript let go: no more `TRANSCRIPT_CHANGED` events of it until it is followed again. */
+  CODING_AGENTS_TRANSCRIPT_UNFOLLOW: "codingAgents.transcriptUnfollow",
+  /** The page of an agent's or worker's transcript below the oldest message a window holds, read at once: its messages, and where the page older still is read below. */
+  CODING_AGENTS_TRANSCRIPT_OLDER: "codingAgents.transcriptOlder",
   /** One agent sent a message, naming how it reaches a turn under way; the agent as it then stands, or why it was not. */
   CODING_AGENTS_MESSAGE: "codingAgents.message",
   /** One agent's model and effort changed for its next step; the agent as it then stands, or why it is unchanged. */
@@ -140,8 +214,14 @@ export const GATEWAY_METHOD = {
   CODING_AGENTS_ARCHIVE: "codingAgents.archive",
   /** One agent pinned for the account alone, or unpinned; the agent as it then stands, or why it is unchanged. */
   CODING_AGENTS_PIN: "codingAgents.pin",
+  /** The account's operator in a workspace ensured, or reset and ensured afresh; its id, or why there is none. */
+  CODING_AGENTS_ENSURE_OPERATOR: "codingAgents.ensureOperator",
+  /** One agent deleted for good, a turn it still runs stopped first; that it was, or why not. */
+  CODING_AGENTS_DELETE: "codingAgents.delete",
   /** What one agent published: the branch it pushed and the pull request from it, as GitHub holds them now. */
   CODING_AGENTS_PAGE: "codingAgents.page",
+  /** The calls into one agent, oldest first, each with its lines and its record, which its tab draws a call's span from. */
+  CODING_AGENTS_CALLS: "codingAgents.calls",
   AUTOMATIONS_LIST: "automations.list",
   AUTOMATIONS_CREATE: "automations.create",
   AUTOMATIONS_CHANGE: "automations.change",
@@ -150,16 +230,26 @@ export const GATEWAY_METHOD = {
   AUTOMATIONS_RUNS: "automations.runs",
   /** A webhook trigger's secret minted again by the host, its hash sent to the service, and the secret answered once to the window that asked (root AGENTS.md's carve-out). */
   AUTOMATIONS_NEW_WEBHOOK_SECRET: "automations.newWebhookSecret",
-  /** A workspace's issues: listed, one read, one filed, and one changed. */
-  ISSUES_LIST: "issues.list",
-  ISSUES_READ: "issues.read",
-  ISSUES_CREATE: "issues.create",
-  ISSUES_CHANGE: "issues.change",
-  /** A workspace's Factory world, read whole as it stands now. */
-  FACTORY_WORLD: "factory.world",
+  /**
+   * A workspace's automations, or an automation's runs, followed from now
+   * until let go or signed out, on the service's live read. What it holds
+   * is heard as `AUTOMATIONS_CHANGED` events, never answered; following
+   * again starts over, from the list or history as it stands.
+   */
+  AUTOMATIONS_FOLLOW: "automations.follow",
+  /** A followed list or history let go: no more `AUTOMATIONS_CHANGED` events of it until it is followed again. */
+  AUTOMATIONS_UNFOLLOW: "automations.unfollow",
   CODING_AGENTS_PULL_REQUEST: "codingAgents.pullRequest",
   /** One agent's changes: the files of its pull request as GitHub holds them now, each with its patch. */
   CODING_AGENTS_CHANGES: "codingAgents.changes",
+  /** The workspace's newest chapters of one agent's pull request, with its head as GitHub holds it now; or why there are none. */
+  CODING_AGENTS_CHAPTERS: "codingAgents.chapters",
+  /** One agent's pull request's chapters generated for its head on Luke's own model key, or the generation already under way, answered as a read of them is. */
+  CODING_AGENTS_CHAPTERS_GENERATE: "codingAgents.chaptersGenerate",
+  /** The Claude model the account's Generate chapters runs on, read from the service now. */
+  CHAPTERS_MODEL_READ: "chapters.modelRead",
+  /** The Claude model the account's Generate chapters runs on, written to the service; the model as kept, or why it is unchanged. */
+  CHAPTERS_MODEL_WRITE: "chapters.modelWrite",
   /** One agent's pull request itself as its overview draws it: its description, branches, mergeability, and people as GitHub holds them now. */
   CODING_AGENTS_OVERVIEW_PULL_REQUEST: "codingAgents.overviewPullRequest",
   CODING_AGENTS_REVIEW_OPTIONS: "codingAgents.reviewOptions",
@@ -177,8 +267,20 @@ export const GATEWAY_METHOD = {
   PROVIDER_KEYS_READ: "providerKeys.read",
   /** One provider key saved on the service, the key carried once in the params; the keys as they then stand, or why nothing was kept. */
   PROVIDER_KEYS_SAVE: "providerKeys.save",
-  /** One provider's key removed on the service; the keys as they then stand. */
+  /** One provider's key of the kind named removed on the service, an API key where none is; the keys as they then stand. */
   PROVIDER_KEYS_REMOVE: "providerKeys.remove",
+  /** A connected plan's default for the account's coding agents turned on or off on the service; the keys as they then stand. */
+  PROVIDER_KEYS_FOR_AGENTS: "providerKeys.forAgents",
+  /** A ChatGPT sign-in for Luke's hosted runtime, run on this Mac through the browser and handed to the service; the keys as they then stand, or why nothing was kept. Never a token. */
+  CHATGPT_SIGN_IN: "chatGpt.signIn",
+  /** The ChatGPT sign-in waiting on the browser, withdrawn. */
+  CHATGPT_SIGN_IN_CANCEL: "chatGpt.cancelSignIn",
+  /** The member's own GitHub token, read from the service now as its login, hint, and status; never the token. */
+  GITHUB_TOKEN_READ: "githubToken.read",
+  /** The member's GitHub token saved on the service, carried once in the params; the token as it then stands, or why nothing was kept. */
+  GITHUB_TOKEN_SAVE: "githubToken.save",
+  /** The member's GitHub token removed on the service; none then stands. */
+  GITHUB_TOKEN_REMOVE: "githubToken.remove",
   /** The Markdown the account's new tasks start from, read from the service now: its own, or the default while it keeps none. */
   PLAN_TEMPLATE_READ: "planTemplate.read",
   /** The account's plan template kept verbatim on the service, or the default again for null; the template as kept, or why it is unchanged. */
@@ -191,21 +293,37 @@ export const GATEWAY_METHOD = {
   PLAN_TEMPLATE_RESTORE: "planTemplate.restore",
   /** One clip dictated into an agent's message box, carried once to the service; its words, or why there are none. Nothing of it is kept. */
   DICTATION_TRANSCRIBE: "dictation.transcribe",
-  /** One task's inbox past a cursor: every item its coding agents posted for the developer, held open by the service while nothing changed. */
-  CODING_AGENTS_INBOX: "codingAgents.inbox",
-  CODING_AGENTS_AGENT_INBOX: "codingAgents.agentInbox",
+  /**
+   * One plan's inbox, or one agent's, followed from now until it is let go
+   * or the account signs out, over Neon Realtime. What it holds is heard as
+   * `INBOX_CHANGED` events, never answered; following again starts over.
+   */
+  CODING_AGENTS_INBOX_FOLLOW: "codingAgents.inboxFollow",
+  /** One plan's or agent's inbox let go: no more `INBOX_CHANGED` events of it until it is followed again. */
+  CODING_AGENTS_INBOX_UNFOLLOW: "codingAgents.inboxUnfollow",
   /** One item of a task's inbox answered against the revision the panel drew, under the panel's own key; the item as it then stands and whether the answer was taken, or why there is no answer. */
   CODING_AGENTS_INBOX_ANSWER: "codingAgents.inboxAnswer",
-  /** One message of the account's on an item's thread, open or settled, under the panel's own key; the item as it then stands, its thread with the message on it, or why there is no answer. */
+  /** One open item of a task's inbox closed without an answer against the revision the panel drew, under the panel's own key; answered as an answer is. */
+  CODING_AGENTS_INBOX_CLOSE: "codingAgents.inboxClose",
+  /** One message of the account's on an item's thread, open or settled, under the panel's own key, carrying the answer to the thread's open ask where the reader attached one; the item as it then stands, its thread with the message on it, or why there is no answer. */
   CODING_AGENTS_INBOX_MESSAGE: "codingAgents.inboxMessage",
   /** One item marked read or unread for the account, as the Inbox's dot says it; its read state, or why there is no answer. */
   CODING_AGENTS_INBOX_READ_STATE: "codingAgents.inboxReadState",
   /** Every item of the account's Inbox marked read, in one workspace or in all; how many were unread, or why there is no answer. */
   CODING_AGENTS_INBOX_READ_ALL: "codingAgents.inboxReadAll",
-  /** A workspace's chat past a cursor: what a person in it sees of it, held open by the service while nothing moved. */
-  CODING_AGENTS_CHAT: "codingAgents.chat",
   /** A write to a workspace's chat as the account's own member: a post, an answer to an ask, a resolve, or how far it has read; what the write came to, or why there is no answer. */
   CODING_AGENTS_CHAT_POST: "codingAgents.chatPost",
+  /**
+   * A workspace's chat followed from now until it is let go or the account
+   * signs out, over Neon Realtime: the account's person joins it once, and
+   * what it holds is heard as `CHAT_CHANGED` events, never answered;
+   * following again starts over.
+   */
+  CODING_AGENTS_CHAT_FOLLOW: "codingAgents.chatFollow",
+  /** A workspace's chat let go: no more `CHAT_CHANGED` events of it until it is followed again. */
+  CODING_AGENTS_CHAT_UNFOLLOW: "codingAgents.chatUnfollow",
+  /** One picture a chat message carries, fetched under the account: its bytes in base64 under the media type the service kept, or why there is none. */
+  CODING_AGENTS_CHAT_ATTACHMENT: "codingAgents.chatAttachment",
   /** Where every one of the account's integrations stands, read from the service now. */
   INTEGRATIONS_STATUS: "integrations.status",
   /** A browser sign-in to one account at a provider, or to a new one, begun on the service and opened on this Mac; whether it was opened and the account it signs in, never the address. */
@@ -218,12 +336,21 @@ export const GATEWAY_METHOD = {
   INTEGRATIONS_DISCONNECT: "integrations.disconnect",
   /** One account at a provider named as the developer calls it, on the service; the account as it then stands. */
   INTEGRATIONS_RENAME: "integrations.rename",
-  /** What waits on the developer across the account's tasks past a cursor: every open inbox item, held open by the service while nothing changed. Main's own read, which no window asks. */
-  CODING_AGENTS_ACCOUNT_INBOX: "codingAgents.accountInbox",
+  /**
+   * What waits on the developer across the account, followed from now until
+   * it is let go or the account signs out: every open inbox item, heard as
+   * `ACCOUNT_INBOX_CHANGED` events, never answered; following again starts
+   * over. Main's own follow, which no window asks.
+   */
+  CODING_AGENTS_ACCOUNT_INBOX_FOLLOW: "codingAgents.accountInboxFollow",
+  /** The account inbox let go: no more `ACCOUNT_INBOX_CHANGED` events until it is followed again. */
+  CODING_AGENTS_ACCOUNT_INBOX_UNFOLLOW: "codingAgents.accountInboxUnfollow",
   /** One image of an inbox item, fetched under the account: its bytes in base64 under the media type the service kept, or why there is none. */
   CODING_AGENTS_INBOX_ATTACHMENT: "codingAgents.inboxAttachment",
   /** One picture a tool answered an agent or one of its workers, fetched under the account: its bytes in base64 under the media type the service kept, or why there is none. */
   CODING_AGENTS_PICTURE: "codingAgents.picture",
+  /** One part of a message of an agent's transcript or one of its workers', whole, fetched under the account: what the page carried cut, or why there is none. */
+  CODING_AGENTS_PART: "codingAgents.part",
   /**
    * A coding agent's terminals (`@luke/features/terminal-view`): its shells
    * listed, started, named, and ended, and its sandbox resumed on the
@@ -243,6 +370,16 @@ export const GATEWAY_METHOD = {
   TERMINALS_ACK: "terminals.ack",
   TERMINALS_DISCONNECT: "terminals.disconnect",
   TERMINALS_WAKE: "terminals.wake",
+  /**
+   * A cloud Browser tab's live view (`@luke/features/browser-live-wire`),
+   * opened for one panel under a connection id the desktop minted, sent on,
+   * and closed. The host only carries the socket's text frames each way;
+   * what the service sends is heard as `BROWSER_LIVE_MESSAGE` events, and
+   * its close as `BROWSER_LIVE_CLOSED`, never answered.
+   */
+  BROWSER_LIVE_CONNECT: "browserLive.connect",
+  BROWSER_LIVE_SEND: "browserLive.send",
+  BROWSER_LIVE_DISCONNECT: "browserLive.disconnect",
   /** Everything a window's bootstrap reads of the host, in one answer. */
   CLIENT_BOOTSTRAP: "client.bootstrap",
   SETTINGS_SNAPSHOT: "settings.snapshot",
@@ -388,12 +525,15 @@ function keptText(max: number): Schema.Codec<string, string> {
 const sdpSchema = keptText(LIVE_SDP_MAX_CHARACTERS);
 
 /**
- * `voice.createLiveSession`: the peer's SDP offer, and the task the call is
- * about. The host creates a call only for the task the panel has open.
+ * `voice.createLiveSession`: the peer's SDP offer, and the agent the call
+ * speaks into with the task it is on, none for an agent with no task. The
+ * host creates a call only into an agent the account reaches on eve, whose
+ * own task is the one named.
  */
 export const voiceCreateLiveSessionParamsSchema = Schema.Struct({
   sdp: sdpSchema,
-  taskId: text,
+  taskId: Schema.optionalKey(text),
+  agentId: text,
 });
 
 /**
@@ -542,6 +682,8 @@ export const GATEWAY_EVENT = {
   NODE_CHANGED: "node.changed",
   SETTINGS_CHANGED: "settings.changed",
   ACCOUNT_CHANGED: "account.changed",
+  /** What the signed-in account may open in the app (whether it is an admin), whenever a read or the account moved it. */
+  ACCOUNT_ACCESS_CHANGED: "accountAccess.changed",
   VOICE_LIVE_SESSION_CHANGED: "voiceLiveSession.changed",
   SESSION_REPLAY_CHANGED: "sessionReplay.changed",
   /** The panel's tasks, active task, and document, whole, whenever a read moved them. */
@@ -550,6 +692,30 @@ export const GATEWAY_EVENT = {
   TERMINAL_OUTPUT: "terminal.output",
   /** How an attached shell's connection stands, named by its connection. */
   TERMINAL_STATE: "terminal.state",
+  /** One text frame a cloud Browser tab's live view sent, named by its connection, for the one panel that connection's port reaches. */
+  BROWSER_LIVE_MESSAGE: "browserLive.message",
+  /** A cloud Browser tab's live view closed, with its close code, named by its connection. */
+  BROWSER_LIVE_CLOSED: "browserLive.closed",
+  /** A followed transcript's next page, or why there is none, each time it moves while it is followed. */
+  TRANSCRIPT_CHANGED: "transcript.changed",
+  /** One followed workspace's chat, whole or why there is none, each time it changes while it is followed. */
+  CHAT_CHANGED: "chat.changed",
+  /** A followed plan's pages as they now stand, each time they move while followed. */
+  TASKS_PAGES_CHANGED: "tasks.pagesChanged",
+  /** A followed plan's newest page of history as it now stands, each time a save lands while followed. */
+  TASKS_HISTORY_CHANGED: "tasks.historyChanged",
+  /** A followed task's cloud Browser tabs as they now stand, each time one moves or a takeover lapses while followed. */
+  TASKS_BROWSER_TABS_CHANGED: "tasks.browserTabsChanged",
+  /** A followed workspace's automations, or an automation's runs, as they now stand, each time they move while followed. */
+  AUTOMATIONS_CHANGED: "automations.changed",
+  /** A followed workspace's people as they now stand, each time they move while followed. */
+  WORKSPACE_PEOPLE_CHANGED: "workspacePeople.changed",
+  /** A followed workspace's pending invitations as they now stand, each time they move while followed. */
+  WORKSPACE_INVITATIONS_CHANGED: "workspaceInvitations.changed",
+  /** One followed plan's or agent's inbox, its items whole or why there are none, each time it changes while it is followed. */
+  INBOX_CHANGED: "inbox.changed",
+  /** What waits across the followed account, whole or why there is none, each time it moves while it is followed. */
+  ACCOUNT_INBOX_CHANGED: "accountInbox.changed",
 } as const;
 
 export type GatewayEventKind = (typeof GATEWAY_EVENT)[keyof typeof GATEWAY_EVENT];

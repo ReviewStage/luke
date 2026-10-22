@@ -1,0 +1,2 @@
+ALTER TABLE "coding_agent" ADD COLUMN IF NOT EXISTS "github_access" text DEFAULT 'app' NOT NULL;--> statement-breakpoint
+ALTER TABLE "task" ADD COLUMN IF NOT EXISTS "github_access" text DEFAULT 'app' NOT NULL;

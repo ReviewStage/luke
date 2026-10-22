@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
+import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
 import { SANDBOX_STATE } from "@luke/features/terminal-wire";
 import { fakeHttpClientLayer } from "@luke/wire/testing";
 import { Effect, Layer, Redacted, Result } from "effect";
 import { afterEach, vi } from "vitest";
 import { sandboxListRefusal } from "../../testing/vercel-sandbox-fake.js";
+import { CODER } from "../coder-host/bounds.js";
 import { SandboxUnavailable } from "../vercel-sandbox-api.js";
 import { AgentSandbox, agentSandboxLayer, SHELL_REFUSAL } from "./agent-sandbox.js";
 import { TMUX_EXIT } from "./tmux.js";
@@ -16,7 +18,9 @@ import { TMUX_EXIT } from "./tmux.js";
  * read from tmux in its running session, a shell starts under the id given
  * and is read back, one tmux does not hold is not found, a list tmux could
  * not give is an outage, and only a resume wakes a stopped sandbox, by its
- * name. The token is a synthetic one the
+ * name. A GitHub credential is set at the firewall in its shape: an
+ * installation's on GitHub's two hosts, a member's own on its repository's
+ * paths alone. The token is a synthetic one the
  * environment carries, unexpired, so nothing refreshes it.
  */
 
@@ -24,6 +28,8 @@ const SESSION = "wrun_fixture";
 const SANDBOX = "eve-sbx-vercel-fixture";
 const RUNNING_SESSION = "sbs_running";
 const SHELL = "8b3c7a1e-2f4d-4c6b-9e0a-1d2f3a4b5c6d";
+const REPOSITORY = "Acme/Relay";
+const MEMBER_TOKEN = "member-token-fixture";
 
 /** An unsigned token naming a fixture project and team, a year from expiring. */
 function fixtureToken(): string {
@@ -56,7 +62,8 @@ function commandStream(exitCode: number, stdout = ""): Response {
 /**
  * Vercel as the scenario has it: the session's sandbox in the status given,
  * tmux holding the shells the list prints, refusing to name a shell it does
- * not hold, and a resume that brings the sandbox up under a fresh session.
+ * not hold, a resume that brings the sandbox up under a fresh session, and
+ * an update of the sandbox's configuration kept as it was asked.
  */
 function vercel(
   status: string | undefined,
@@ -64,9 +71,11 @@ function vercel(
   listExit = 0,
   interactiveUrl = "wss://sbx-fixture.vercel.run/ws",
   shellCheckExit: number = TMUX_EXIT.NO_SESSION,
+  timeout?: number,
 ) {
   const asked: Asked[] = [];
   const policies: unknown[] = [];
+  const updates: unknown[] = [];
   const layer = Layer.provide(
     agentSandboxLayer,
     fakeHttpClientLayer(async (url, init) => {
@@ -76,13 +85,15 @@ function vercel(
         const body = JSON.parse(await new Response(init.body).text());
         const args: readonly string[] = body.args;
         asked.push({ method, url: parsed, args });
-        // Every command is `sh -c <script> sh <tmux args>`; the list is the one with none.
-        const tmuxArgs = args.slice(3);
+        // Every command is `setpriv <drop> -- sh -c <script> sh <tmux args>`; the list is the one with none.
+        const scriptAt = args.indexOf("-c") + 1;
+        const tmuxArgs = args.slice(scriptAt + 2);
         if (tmuxArgs.length === 0) return commandStream(listExit, shells.join("\n"));
         if (tmuxArgs[0] === "new-session") return commandStream(0);
         const named = tmuxArgs.some((arg) => arg.startsWith(`=luke-${SHELL}`));
-        // The shell check exits its own code for a session tmux does not hold, or what a failed install exits.
-        if (args[1]?.includes("has-session")) return commandStream(named ? 0 : shellCheckExit);
+        // The shell check exits its own code for a session tmux does not hold, or what a tmux that would not start exits.
+        if (args[scriptAt]?.includes("has-session"))
+          return commandStream(named ? 0 : shellCheckExit);
         return commandStream(named ? 0 : 1);
       }
       asked.push({ method, url: parsed });
@@ -92,6 +103,10 @@ function vercel(
       if (parsed.pathname.endsWith("/network-policy")) {
         policies.push(JSON.parse(await new Response(init.body).text()));
         return Response.json({});
+      }
+      if (method === "PATCH") {
+        updates.push(JSON.parse(await new Response(init.body).text()));
+        return Response.json({ sandbox: { name: SANDBOX } });
       }
       if (parsed.searchParams.get("resume") === "true") {
         return Response.json({
@@ -105,12 +120,12 @@ function vercel(
           sandboxes:
             status === undefined
               ? []
-              : [{ name: SANDBOX, status, currentSessionId: RUNNING_SESSION }],
+              : [{ name: SANDBOX, status, currentSessionId: RUNNING_SESSION, timeout }],
         })
       );
     }),
   );
-  return { layer, asked, policies };
+  return { layer, asked, policies, updates };
 }
 
 /** One field as the list prints it: what tmux printed, newline and all, in base64. */
@@ -237,6 +252,30 @@ it.effect("a resume wakes the stopped sandbox by its name and answers it running
   }),
 );
 
+it.effect(
+  "a sandbox opened before the timeout was shortened has it lowered ahead of its resume, so the session the resume opens lives the timeout, and one within it is left",
+  () =>
+    Effect.gen(function* () {
+      vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+      const resume = (api: ReturnType<typeof vercel>) =>
+        Effect.flatMap(AgentSandbox, (sandbox) => sandbox.resume(SESSION)).pipe(
+          Effect.provide(api.layer),
+        );
+      const old = vercel("stopped", [], 0, undefined, undefined, CODER.SANDBOX_MAX_LIFETIME_MS);
+      const capped = vercel("stopped", [], 0, undefined, undefined, CODER.SANDBOX_TIMEOUT_MS);
+
+      yield* resume(old);
+      yield* resume(capped);
+
+      const lowered = old.asked.findIndex((call) => call.method === "PATCH");
+      const woken = old.asked.findIndex((call) => call.url.searchParams.get("resume") === "true");
+      assert.ok(lowered >= 0 && lowered < woken, "the timeout is lowered before the resume");
+      assert.equal(old.asked[lowered]?.url.pathname, `/api/v2/sandboxes/${SANDBOX}`);
+      assert.deepEqual(old.updates, [{ timeout: CODER.SANDBOX_TIMEOUT_MS }]);
+      assert.ok(capped.asked.every((call) => call.method !== "PATCH"));
+    }),
+);
+
 it.effect("an attach mints the running session's PTY and never wakes a stopped sandbox", () =>
   Effect.gen(function* () {
     vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
@@ -312,20 +351,76 @@ it.effect("a tmux that could not be asked is an outage the tab may retry, never 
 );
 
 it.effect(
-  "a GitHub token is set at the firewall on GitHub's two hosts alone, every other host left open",
+  "an installation's token is set at the firewall on GitHub's two hosts alone, every other host left open",
   () =>
     Effect.gen(function* () {
       vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
       const api = vercel("running");
 
       yield* Effect.flatMap(AgentSandbox, (sandbox) =>
-        sandbox.setGitHubToken(RUNNING_SESSION, Redacted.make("ghs_fixture")),
+        sandbox.setCredential(RUNNING_SESSION, {
+          token: Redacted.make("ghs_fixture"),
+          fullName: REPOSITORY,
+          access: { kind: GITHUB_ACCESS.APP },
+        }),
       ).pipe(Effect.provide(api.layer));
 
       const authorization = `Basic ${Buffer.from("x-access-token:ghs_fixture").toString("base64")}`;
       const injected = [{ transform: [{ headers: { authorization } }] }];
       assert.deepEqual(api.policies, [
         { allow: { "*": [], "github.com": injected, "api.github.com": injected } },
+      ]);
+    }),
+);
+
+it.effect(
+  "a member's own token is set on the repository's git paths as Basic under their login and on its REST paths as a bearer, and nowhere else, then taken off whole",
+  () =>
+    Effect.gen(function* () {
+      vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+      const api = vercel("running");
+
+      yield* Effect.flatMap(AgentSandbox, (sandbox) =>
+        Effect.andThen(
+          sandbox.setCredential(RUNNING_SESSION, {
+            token: Redacted.make(MEMBER_TOKEN),
+            fullName: REPOSITORY,
+            access: {
+              kind: GITHUB_ACCESS.TOKEN,
+              githubLogin: "octo-member",
+              githubUserId: "4242",
+              markInvalid: Effect.void,
+            },
+          }),
+          sandbox.withdrawCredential(RUNNING_SESSION),
+        ),
+      ).pipe(Effect.provide(api.layer));
+
+      const basic = `Basic ${Buffer.from(`octo-member:${MEMBER_TOKEN}`).toString("base64")}`;
+      const bearer = `Bearer ${MEMBER_TOKEN}`;
+      assert.deepEqual(api.policies, [
+        {
+          allow: {
+            "*": [],
+            "github.com": [
+              {
+                match: { path: { startsWith: `/${REPOSITORY}.git/` } },
+                transform: [{ headers: { authorization: basic } }],
+              },
+            ],
+            "api.github.com": [
+              {
+                match: { path: { exact: `/repos/${REPOSITORY}` } },
+                transform: [{ headers: { authorization: bearer } }],
+              },
+              {
+                match: { path: { startsWith: `/repos/${REPOSITORY}/` } },
+                transform: [{ headers: { authorization: bearer } }],
+              },
+            ],
+          },
+        },
+        { mode: "allow-all" },
       ]);
     }),
 );

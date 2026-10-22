@@ -3,24 +3,36 @@ import { emitJsonSchema } from "@luke/wire/effect";
 import type { MessageStreamEvent } from "eve/client";
 import { serializeModelInputSchema, type ToolDefinition } from "eve/tools";
 import loadSkill from "eve/tools/load_skill";
-import { SHOW_PAGE_TOOL } from "../../tasks/page-tool.js";
-import { LOOK_AT_PICTURE_TOOL } from "../../tasks/picture-look.js";
+import { LOOK_AT_BOARD_TOOL } from "../../tasks/board-look.js";
+import { DRAW_ON_BOARD_TOOL } from "../../tasks/board-tool.js";
 import {
-  ARCHIVE_AGENT_TOOL,
+  READ_COMMENTS_TOOL,
+  REOPEN_THREAD_TOOL,
+  REPLY_TO_COMMENT_TOOL,
+  RESOLVE_THREAD_TOOL,
+} from "../../tasks/comment-tools.js";
+import { END_CALL_TOOL } from "../../tasks/end-call.js";
+import { CODER_SHOW_PAGE_TOOL } from "../../tasks/page-tool.js";
+import { LOOK_AT_PICTURE_TOOL } from "../../tasks/picture-look.js";
+import { QUEUE_QUESTION_TOOL, WITHDRAW_QUESTION_TOOL } from "../../tasks/queue-question.js";
+import { SHOW_CODE_TOOL } from "../../tasks/show-code.js";
+import { BROWSER_TOOL } from "../browser/browser-tool.js";
+import {
   CODER_READ_AGENT_TOOL,
   LIST_AGENTS_TOOL,
   LIST_MODELS_TOOL,
   LIST_TASKS_TOOL,
-  MESSAGE_AGENT_TOOL,
   READ_PAGE_TOOL,
   START_AGENT_TOOL,
   STOP_AGENT_TOOL,
-  UNARCHIVE_AGENT_TOOL,
+  UPDATE_AGENT_TOOL,
   UPDATE_TASK_TOOL,
 } from "../coding-agent-tools.js";
 import { RUN_ON_MAC_TOOL } from "../mac-command.js";
+import { LIST_OPEN_ASKS_TOOL } from "../operator-desk.js";
 import { READ_WEB_PAGE_TOOL, SEARCH_WEB_TOOL } from "../public-research.js";
-import { CREATE_SECTION_TOOL, DELETE_SECTION_TOOL, MOVE_TASK_TOOL } from "../task-section-tools.js";
+import { CREATE_SECTION_TOOL, DELETE_SECTION_TOOL } from "../task-section-tools.js";
+import { CREATE_TASK_TOOL, READ_TASK_TOOL } from "../task-tools.js";
 import { CODER } from "./bounds.js";
 import { CHAT_TOOLS } from "./chat.js";
 import { DELEGATE_TOOL } from "./delegation.js";
@@ -103,17 +115,17 @@ const AUTHORED_TOOLS = {
     description: INBOX_TOOLS.POST.description,
     inputSchema: emitJsonSchema(INBOX_TOOLS.POST.inputSchema),
   },
-  [CODER_TOOL.CLOSE_INBOX_ITEM]: {
-    description: INBOX_TOOLS.CLOSE.description,
-    inputSchema: emitJsonSchema(INBOX_TOOLS.CLOSE.inputSchema),
+  [CODER_TOOL.WITHDRAW_ASK]: {
+    description: INBOX_TOOLS.WITHDRAW.description,
+    inputSchema: emitJsonSchema(INBOX_TOOLS.WITHDRAW.inputSchema),
   },
   [CODER_TOOL.READ_INBOX]: {
     description: INBOX_TOOLS.READ.description,
     inputSchema: emitJsonSchema(INBOX_TOOLS.READ.inputSchema),
   },
-  [CODER_TOOL.REPLY_INBOX]: {
-    description: INBOX_TOOLS.REPLY.description,
-    inputSchema: emitJsonSchema(INBOX_TOOLS.REPLY.inputSchema),
+  [CODER_TOOL.LIST_OPEN_ASKS]: {
+    description: LIST_OPEN_ASKS_TOOL.description,
+    inputSchema: emitJsonSchema(LIST_OPEN_ASKS_TOOL.inputSchema),
   },
   [CODER_TOOL.OPEN_PULL_REQUEST]: {
     description: OPEN_PULL_REQUEST_TOOL.description,
@@ -127,29 +139,29 @@ const AUTHORED_TOOLS = {
     description: CODER_READ_AGENT_TOOL.description,
     inputSchema: emitJsonSchema(CODER_READ_AGENT_TOOL.inputSchema),
   },
-  [CODER_TOOL.MESSAGE_AGENT]: {
-    description: MESSAGE_AGENT_TOOL.description,
-    inputSchema: emitJsonSchema(MESSAGE_AGENT_TOOL.inputSchema),
-  },
   [CODER_TOOL.START_AGENT]: {
     description: START_AGENT_TOOL.description,
     inputSchema: emitJsonSchema(START_AGENT_TOOL.inputSchema),
-  },
-  [CODER_TOOL.ARCHIVE_AGENT]: {
-    description: ARCHIVE_AGENT_TOOL.description,
-    inputSchema: emitJsonSchema(ARCHIVE_AGENT_TOOL.inputSchema),
-  },
-  [CODER_TOOL.UNARCHIVE_AGENT]: {
-    description: UNARCHIVE_AGENT_TOOL.description,
-    inputSchema: emitJsonSchema(UNARCHIVE_AGENT_TOOL.inputSchema),
   },
   [CODER_TOOL.STOP_AGENT]: {
     description: STOP_AGENT_TOOL.description,
     inputSchema: emitJsonSchema(STOP_AGENT_TOOL.inputSchema),
   },
+  [CODER_TOOL.UPDATE_AGENT]: {
+    description: UPDATE_AGENT_TOOL.description,
+    inputSchema: emitJsonSchema(UPDATE_AGENT_TOOL.inputSchema),
+  },
   [CODER_TOOL.LIST_TASKS]: {
     description: LIST_TASKS_TOOL.description,
     inputSchema: emitJsonSchema(LIST_TASKS_TOOL.inputSchema),
+  },
+  [CODER_TOOL.CREATE_TASK]: {
+    description: CREATE_TASK_TOOL.description,
+    inputSchema: emitJsonSchema(CREATE_TASK_TOOL.inputSchema),
+  },
+  [CODER_TOOL.READ_TASK]: {
+    description: READ_TASK_TOOL.description,
+    inputSchema: emitJsonSchema(READ_TASK_TOOL.inputSchema),
   },
   [CODER_TOOL.CREATE_SECTION]: {
     description: CREATE_SECTION_TOOL.description,
@@ -158,10 +170,6 @@ const AUTHORED_TOOLS = {
   [CODER_TOOL.DELETE_SECTION]: {
     description: DELETE_SECTION_TOOL.description,
     inputSchema: emitJsonSchema(DELETE_SECTION_TOOL.inputSchema),
-  },
-  [CODER_TOOL.MOVE_TASK]: {
-    description: MOVE_TASK_TOOL.description,
-    inputSchema: emitJsonSchema(MOVE_TASK_TOOL.inputSchema),
   },
   [CODER_TOOL.UPDATE_TASK]: {
     description: UPDATE_TASK_TOOL.description,
@@ -179,14 +187,34 @@ const AUTHORED_TOOLS = {
     description: CHAT_TOOLS.RESOLVE.description,
     inputSchema: emitJsonSchema(CHAT_TOOLS.RESOLVE.inputSchema),
   },
+  [CODER_TOOL.EDIT_CHANNEL]: {
+    description: CHAT_TOOLS.EDIT_CHANNEL.description,
+    inputSchema: emitJsonSchema(CHAT_TOOLS.EDIT_CHANNEL.inputSchema),
+  },
   [CODER_TOOL.LIST_MODELS]: {
     description: LIST_MODELS_TOOL.description,
     inputSchema: emitJsonSchema(LIST_MODELS_TOOL.inputSchema),
   },
   [CODER_TOOL.LOAD_SKILL]: shown(loadSkill),
   [CODER_TOOL.SHOW_PAGE]: {
-    description: SHOW_PAGE_TOOL.description,
-    inputSchema: emitJsonSchema(SHOW_PAGE_TOOL.inputSchema),
+    description: CODER_SHOW_PAGE_TOOL.description,
+    inputSchema: emitJsonSchema(CODER_SHOW_PAGE_TOOL.inputSchema),
+  },
+  [CODER_TOOL.READ_COMMENTS]: {
+    description: READ_COMMENTS_TOOL.description,
+    inputSchema: emitJsonSchema(READ_COMMENTS_TOOL.inputSchema),
+  },
+  [CODER_TOOL.REPLY_TO_COMMENT]: {
+    description: REPLY_TO_COMMENT_TOOL.description,
+    inputSchema: emitJsonSchema(REPLY_TO_COMMENT_TOOL.inputSchema),
+  },
+  [CODER_TOOL.RESOLVE_THREAD]: {
+    description: RESOLVE_THREAD_TOOL.description,
+    inputSchema: emitJsonSchema(RESOLVE_THREAD_TOOL.inputSchema),
+  },
+  [CODER_TOOL.REOPEN_THREAD]: {
+    description: REOPEN_THREAD_TOOL.description,
+    inputSchema: emitJsonSchema(REOPEN_THREAD_TOOL.inputSchema),
   },
   [CODER_TOOL.READ_PAGE]: {
     description: READ_PAGE_TOOL.description,
@@ -196,11 +224,39 @@ const AUTHORED_TOOLS = {
     description: RUN_ON_MAC_TOOL.description,
     inputSchema: emitJsonSchema(RUN_ON_MAC_TOOL.inputSchema),
   },
+  [CODER_TOOL.BROWSER]: {
+    description: BROWSER_TOOL.description,
+    inputSchema: emitJsonSchema(BROWSER_TOOL.inputSchema),
+  },
   [CODER_TOOL.SHOW_IMAGE]: {
     description: SHOW_IMAGE_TOOL.description,
     inputSchema: emitJsonSchema(SHOW_IMAGE_TOOL.inputSchema),
   },
   [CODER_TOOL.SLEEP]: shown(SLEEP_TOOL),
+  [CODER_TOOL.QUEUE_QUESTION]: {
+    description: QUEUE_QUESTION_TOOL.description,
+    inputSchema: emitJsonSchema(QUEUE_QUESTION_TOOL.inputSchema),
+  },
+  [CODER_TOOL.WITHDRAW_QUESTION]: {
+    description: WITHDRAW_QUESTION_TOOL.description,
+    inputSchema: emitJsonSchema(WITHDRAW_QUESTION_TOOL.inputSchema),
+  },
+  [CODER_TOOL.END_CALL]: {
+    description: END_CALL_TOOL.description,
+    inputSchema: emitJsonSchema(END_CALL_TOOL.inputSchema),
+  },
+  [CODER_TOOL.SHOW_CODE]: {
+    description: SHOW_CODE_TOOL.description,
+    inputSchema: emitJsonSchema(SHOW_CODE_TOOL.inputSchema),
+  },
+  [CODER_TOOL.DRAW_ON_BOARD]: {
+    description: DRAW_ON_BOARD_TOOL.description,
+    inputSchema: emitJsonSchema(DRAW_ON_BOARD_TOOL.inputSchema),
+  },
+  [CODER_TOOL.LOOK_AT_BOARD]: {
+    description: LOOK_AT_BOARD_TOOL.description,
+    inputSchema: emitJsonSchema(LOOK_AT_BOARD_TOOL.inputSchema),
+  },
 } as const satisfies Record<(typeof CODER_TOOL)[keyof typeof CODER_TOOL], ShownTool>;
 
 /** What a step's end says its provider counted; nothing where it counted nothing. */
@@ -217,7 +273,7 @@ function estimatedTokens(json: string): number {
   return Math.ceil(new TextEncoder().encode(json).byteLength / BYTES_PER_TOKEN);
 }
 
-/** The definitions of the authored tools, estimated once: the same for every agent. */
+/** The definitions of the authored tools, estimated once: the same for every agent and every turn. */
 const TOOL_DEFINITION_TOKENS = estimatedTokens(
   JSON.stringify(Object.entries(AUTHORED_TOOLS).map(([name, tool]) => ({ name, ...tool }))),
 );

@@ -9,14 +9,17 @@
 
 import { ConfigProvider, Effect, Layer, Logger } from "effect";
 import { FetchHttpClient } from "effect/http";
+import { bearerCallersLayer } from "./auth/bearer-callers.js";
 import { webSqlClient } from "./db/sql-client.js";
 import { hostedEnvironment } from "./environment.js";
 import { productAnalyticsFromEnvironment } from "./events/server-events.js";
 import { githubAppFromEnvironment } from "./github/github-app.js";
+import { pullRequestLinksLayer } from "./github/pull-request-links.js";
 import {
   integrationConnectFromEnvironment,
   workspaceLinearConnectFromEnvironment,
 } from "./integrations/integration-connect.js";
+import { liveSealingFromEnvironment } from "./live/realtime.js";
 import { sentryLogger } from "./observability/sentry.js";
 import { modelCatalogLayer } from "./providers/model-catalog.js";
 import { sentryAppFromEnvironment } from "./triggers/sentry/sentry-app-config.js";
@@ -61,9 +64,20 @@ const webLogger = Logger.layer([Logger.consoleJson, Logger.tracerLogger, sentryL
  * the agents that read its tokens alike; `WorkspaceLinearConnect` is the one
  * place the workspace Linear connector's UID is.
  *
+ * `LiveSealing` is the one place Neon Realtime's switch, address and secret
+ * are read, so a live read is sealed under the same secret on every route
+ * (`live/realtime.ts`); without `LUKE_REALTIME=on` and both of Neon's
+ * variables it stands as none, and every live read is answered polled.
+ *
  * `ModelCatalog` is here for the same reason: its read of AI Gateway's
  * public catalog is cached on the service, so one instance reads the catalog
  * once an hour for every route that offers or checks a model.
+ * `PullRequestLinks` is here on the same terms: one instance reads a pull
+ * request a link draws once a minute, however many links ask for it.
+ *
+ * `BearerCallers` keeps the caller each bearer resolved to for a minute
+ * (`auth/bearer-callers.ts`), so a held read and the polls inside it ask the
+ * auth service once a minute per bearer rather than on every request.
  *
  * `@effect/platform-node` has no entry: a Vercel function's platform is the
  * Web `fetch` its runtime already carries, and a Node-reaching companion
@@ -76,12 +90,15 @@ export const webServices = Layer.mergeAll(
   FetchHttpClient.layer,
   webSqlClient,
   hostedEnvironment,
-  githubAppFromEnvironment,
+  githubAppFromEnvironment.pipe(Layer.provide(hostedEnvironment)),
   sentryAppFromEnvironment,
   integrationConnectFromEnvironment,
   workspaceLinearConnectFromEnvironment,
   webLogger,
+  liveSealingFromEnvironment,
+  bearerCallersLayer,
   modelCatalogLayer.pipe(Layer.provide(Layer.merge(FetchHttpClient.layer, hostedEnvironment))),
+  pullRequestLinksLayer,
   productAnalyticsFromEnvironment.pipe(
     Layer.provide(Layer.merge(FetchHttpClient.layer, hostedEnvironment)),
   ),

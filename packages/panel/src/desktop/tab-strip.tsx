@@ -1,8 +1,8 @@
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
-  atPointer,
   BUTTON_SIZE,
   CloseIcon,
+  type ContextMenuProps,
   cssCustomProperties,
   IconButton,
   MENU_ALIGN,
@@ -12,11 +12,20 @@ import {
   useMenu,
 } from "@luke/ui";
 import { useClipped } from "@luke/ui/use-clipped";
-import { Children, isValidElement, useLayoutEffect, useRef, useState } from "react";
+import {
+  Children,
+  createContext,
+  isValidElement,
+  useContext,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import { flushSync } from "react-dom";
 import { useAppCommand } from "../app-commands.js";
 import { Tooltip } from "../tooltip.js";
 import { ActionMenu, type MenuAction } from "./action-menu.js";
+import { ROW_RUN, type RowPlace, withRowMoves } from "./row-moves.js";
 import { type TabMove, useTabDrag } from "./use-tab-drag.js";
 
 /**
@@ -178,6 +187,16 @@ function movedLine(tab: HTMLElement | undefined, to: number, count: number): str
   return `${tab?.textContent ?? "Tab"} moved to position ${to + 1} of ${count}`;
 }
 
+/**
+ * Where a tab of the strip around it stands among the tabs that move, read
+ * from the strip as the tab's menu opens, which moves it one place either
+ * way under a finger (`row-moves.tsx`); none in a strip whose tabs stay
+ * put, or for the tab anchored at its start.
+ */
+const TabPlaceContext = createContext<((tab: HTMLElement) => RowPlace | undefined) | undefined>(
+  undefined,
+);
+
 /** Where a tab's menu hangs when the keyboard asks for it: under the tab, from its start. */
 function underTab(tab: HTMLElement): MenuPlacement {
   const bounds = (tab.closest(".tab") ?? tab).getBoundingClientRect();
@@ -244,6 +263,14 @@ export function TabStrip({
           onMove(from, to);
         };
   const onPointerDown = useTabDrag(move);
+  const placeOf =
+    move === undefined
+      ? undefined
+      : (tab: HTMLElement): RowPlace | undefined => {
+          const tabs = [...(strip.current?.querySelectorAll<HTMLElement>(MOVABLE_TAB) ?? [])];
+          const at = tabs.indexOf(tab);
+          return at < 0 ? undefined : { at, count: tabs.length, onMove: move };
+        };
   // The focused tab one place along, drawn there before focus is put back
   // on it, since moving it in the document can take focus from it.
   const step = (by: number) => {
@@ -317,7 +344,7 @@ export function TabStrip({
           if (!event.currentTarget.contains(event.relatedTarget)) setFocused(false);
         }}
       >
-        {children}
+        <TabPlaceContext.Provider value={placeOf}>{children}</TabPlaceContext.Provider>
       </div>
     </>
   );
@@ -335,8 +362,9 @@ export function TabStrip({
  * it. A label cut short is said whole in the tab's hint, before what
  * `tooltip` adds and an unread tab's news; `card`, while given, hangs in the
  * hint's place whether or not the label is cut short, and says the whole
- * name itself. `onMenu` opens the tab's own actions where it says, from a
- * right-click or the keyboard's menu keys. A `quiet` tab draws no fill at
+ * name itself. `contextMenu` (`useMenu`'s) opens the tab's own actions
+ * from a right-click or a long press, and `onMenu` opens them where it
+ * says from the keyboard's menu keys. A `quiet` tab draws no fill at
  * rest, chosen or not, and the hover fill under the pointer: a lone tab,
  * always the chosen one, need not be told from the others. An `anchored`
  * tab stands at the strip's start for good, never moved.
@@ -355,8 +383,11 @@ export function Tab({
   tabRef,
   quiet = false,
   anchored = false,
+  preview = false,
   onSelect,
+  onKeep,
   onClose,
+  contextMenu,
   onMenu,
 }: {
   icon: React.JSX.Element;
@@ -377,13 +408,18 @@ export function Tab({
   tabRef?: React.RefObject<HTMLButtonElement | null> | undefined;
   quiet?: boolean;
   anchored?: boolean;
+  /** Stands as its strip's preview, which the next link opened takes the place of: its label in italics, as VS Code draws one. */
+  preview?: boolean;
   onSelect: () => void;
+  /** Keeps a preview as a tab of its own, as a double-click on it asks. */
+  onKeep?: (() => void) | undefined;
   onClose?: (() => void) | undefined;
+  contextMenu?: ContextMenuProps | undefined;
   onMenu?: ((placement: MenuPlacement, opener: HTMLElement) => void) | undefined;
 }): React.JSX.Element {
   // Whether the label is cut short: a label renamed, or the task's one tab
   // giving way to its toolbar.
-  const [words, clipped] = useClipped();
+  const [words, clipped] = useClipped(detail === undefined ? label : `${label} ${detail}`);
   // Note that a tab other than the chosen one is named in its hint whether or
   // not its label shows, because a narrow strip draws it as its glyph alone
   // (desktop.css), which the label's own measure cannot see.
@@ -402,18 +438,8 @@ export function Tab({
       aria-description={unread ? UNREAD_TAB_NOTE : undefined}
       tabIndex={selected ? 0 : -1}
       onClick={onSelect}
-      onContextMenu={
-        onMenu === undefined
-          ? undefined
-          : (event) => {
-              event.preventDefault();
-              // A menu key the system turned into a right-click says no point
-              // of its own, and hangs the menu under the whole tab.
-              const fromKeyboard = event.clientX === 0 && event.clientY === 0;
-              const at = fromKeyboard ? underTab(event.currentTarget) : atPointer(event);
-              onMenu(at, event.currentTarget);
-            }
-      }
+      onDoubleClick={preview ? onKeep : undefined}
+      {...contextMenu}
       onKeyDown={(event) => {
         if (onMenu !== undefined && opensMenu(event)) {
           event.preventDefault();
@@ -445,6 +471,7 @@ export function Tab({
       data-closable={String(onClose !== undefined)}
       data-quiet={String(quiet)}
       data-anchored={String(anchored)}
+      data-preview={String(preview)}
       data-unread={String(unread)}
       data-marked={String(endMark !== undefined)}
     >
@@ -483,10 +510,11 @@ export function Tab({
 export function MenuTab({
   groups,
   ...tab
-}: Omit<React.ComponentProps<typeof Tab>, "onMenu"> & {
+}: Omit<React.ComponentProps<typeof Tab>, "contextMenu" | "onMenu"> & {
   groups: MenuAction[][];
 }): React.JSX.Element {
   const menu = useMenu(true);
+  const placeOf = useContext(TabPlaceContext);
   return (
     <>
       <Tab
@@ -495,13 +523,15 @@ export function MenuTab({
           menu.close(false);
           tab.onSelect();
         }}
+        // A menu key the system turned into a right-click says no point of its own, and hangs the menu under the whole tab.
+        contextMenu={menu.contextMenu(undefined, underTab)}
         onMenu={menu.show}
       />
       {menu.drawn === undefined ? null : (
         <ActionMenu
           label={`${tab.label} actions`}
           menu={menu.drawn}
-          groups={groups}
+          groups={withRowMoves(groups, placeOf?.(menu.drawn.opener), ROW_RUN.ALONG)}
           onClose={menu.close}
         />
       )}

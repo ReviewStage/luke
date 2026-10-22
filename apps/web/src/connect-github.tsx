@@ -1,4 +1,3 @@
-import { HOSTED_SERVICE_PATH } from "@luke/features";
 import {
   CONNECT_STEP,
   type ConnectStep,
@@ -7,15 +6,17 @@ import {
   LINK_FAILED,
   linkErrorWords,
 } from "@luke/features/connect-github-step";
+import { browserClient, browserRefusal } from "@luke/features/contract/browser-client";
 import {
   GITHUB_CONNECT_CLAIM,
   GITHUB_CONNECT_PAGE,
   type GitHubConnectClaim,
-  githubConnectClaimAnswerSchema,
 } from "@luke/features/github-connection-wire";
 import { SOCIAL_PROVIDER } from "@luke/features/sign-in-provider";
 import {
   AuthPage,
+  BUTTON_VARIANT,
+  ButtonLink,
   MARK_PROVIDER,
   PROVIDER_MARK_SIZE,
   ProviderMark,
@@ -23,9 +24,9 @@ import {
   TextLink,
 } from "@luke/ui";
 import { createAuthClient } from "better-auth/react";
-import { Option, Schema } from "effect";
 import { StrictMode, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
+import { BACK_TO_LUKE, CONNECT_RETURN, useConnectReturn } from "./connect-return";
 import { ConnectionGraphic } from "./connection-graphic";
 import { ProviderChoices, SIGN_IN_FAILURE, useSocialSignIn } from "./sign-in-choices";
 import "./styles.css";
@@ -42,12 +43,13 @@ import "./styles.css";
  * (`POST /api/github/disconnect`), so no page acts on whichever account a
  * browser happens to be signed in to. A browser with no session signs in and
  * comes back to the same address. Nothing of the address is drawn: an error is drawn by our
- * words for its code, or by Better Auth's own.
+ * words for its code, or by Better Auth's own. A connect the web app started
+ * offers the way back to it (`connect-return.ts`) once the page says how it
+ * ended, and closes where that is `done=1`; never while the page is still
+ * on its way to GitHub.
  */
 
 const authClient = createAuthClient();
-
-const decodeClaim = Schema.decodeUnknownOption(githubConnectClaimAnswerSchema);
 
 /** What the card shows: the work under way, a sign-in to choose, or how the work settled. */
 const VIEW = { WORKING: "working", SIGN_IN: "sign-in", SAID: "said" } as const;
@@ -85,17 +87,13 @@ function signIn(title: string, body: string): View {
 
 /** The intent claimed on this browser's session: how it settled, or why it did not. */
 async function claimIntent(intent: string): Promise<GitHubConnectClaim | ClaimUnsettled> {
-  const response = await fetch(HOSTED_SERVICE_PATH.GITHUB_CONNECT_CLAIM, {
-    method: "POST",
-    credentials: "same-origin",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ intent }),
-  }).catch(() => undefined);
-  if (response === undefined) return CLAIM_UNSETTLED.UNANSWERED;
-  if (response.status === 401) return CLAIM_UNSETTLED.SIGNED_OUT;
-  if (!response.ok) return CLAIM_UNSETTLED.UNANSWERED;
-  const answer = decodeClaim(await response.json().catch(() => undefined));
-  return Option.isSome(answer) ? answer.value.claim : CLAIM_UNSETTLED.UNANSWERED;
+  try {
+    return (await browserClient.github.claim({ intent })).claim;
+  } catch (failure) {
+    return browserRefusal(failure)?.status === 401
+      ? CLAIM_UNSETTLED.SIGNED_OUT
+      : CLAIM_UNSETTLED.UNANSWERED;
+  }
 }
 
 /** Carries out a connect: claims the intent, then hands the browser to Better Auth's link. */
@@ -156,6 +154,10 @@ function ConnectGitHub(): React.JSX.Element {
   const session = authClient.useSession();
   const started = useRef(false);
   const signInChoices = useSocialSignIn(authClient);
+  const done = step.kind === CONNECT_STEP.DONE;
+  const { back, onBack } = useConnectReturn({ landed: view.kind === VIEW.SAID, settled: done });
+  // A connect the way back is offered for says nothing more where it settled: the title is the news.
+  const backed = done && back.kind !== CONNECT_RETURN.ELSEWHERE;
 
   useEffect(() => {
     if (step.kind !== CONNECT_STEP.CONNECT || session.isPending || started.current) return;
@@ -178,7 +180,7 @@ function ConnectGitHub(): React.JSX.Element {
       }
       title={view.kind === VIEW.WORKING ? "Connecting GitHub…" : view.title}
       description={
-        view.kind === VIEW.WORKING ? undefined : (
+        view.kind === VIEW.WORKING || backed ? undefined : (
           <>
             {view.body}
             {retry === undefined ? null : (
@@ -197,6 +199,11 @@ function ConnectGitHub(): React.JSX.Element {
       {view.kind === VIEW.SIGN_IN ? (
         <ProviderChoices pending={signInChoices.pending} onPress={signInChoices.begin} />
       ) : null}
+      {back.kind === CONNECT_RETURN.ELSEWHERE ? null : (
+        <ButtonLink href={back.href} variant={BUTTON_VARIANT.PRIMARY} onClick={onBack}>
+          {BACK_TO_LUKE}
+        </ButtonLink>
+      )}
     </AuthPage>
   );
 }

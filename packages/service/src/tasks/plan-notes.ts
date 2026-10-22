@@ -31,11 +31,11 @@ import { SqlClient } from "effect/sql";
 import { logStoreFailure, type StoreFailure } from "../http/store-failure.js";
 
 /**
- * plan-notes.ts -- the plan's one write: take the notetaker's notes, the developer's edit of the text, or their restore of a revision, into a plan and read back what was saved.
+ * plan-notes.ts -- the plan's one write: take an agent's notes, the developer's edit of the text, or their restore of a revision, into a plan and read back what was saved.
  *
- * A plan is one Markdown text (`@luke/features/plan-document`). Its callers
- * are a task call's notetaker (`tasks/plan-scribe.ts`) and a coding
- * agent's `edit_plan` (`coder-host/plan-edit.ts`), whose models answer with
+ * A plan is one Markdown text (`@luke/features/plan-document`). Its caller
+ * is a coding agent's `edit_plan` (`coder-host/plan-edit.ts`), whose model
+ * answers with
  * notes (`@luke/features/plan-template`): a point added under a heading, a
  * phrase corrected, a line struck, or a section struck or moved, anywhere in
  * the text, its headings among it. They are taken in order over the text as
@@ -70,13 +70,6 @@ import { logStoreFailure, type StoreFailure } from "../http/store-failure.js";
  * outcome is a result, never a failure: an unsaved change leaves the
  * notetaker's lines for its next run, over the text as it then stands, and a
  * coding agent retries from the text its conflict answered.
- *
- * An archived task takes no new edit or restore of the developer's, read
- * under the same lock as the save, so an older desktop or an archive racing
- * the edit cannot write it. The notes of a call already running when the
- * task was archived, or of a coding agent's turn its archive stopped that eve
- * has yet to end, still land, as revisions in its history: the archive takes
- * no new work, and loses none under way.
  */
 
 /** The account and task a task call writes, as the service bound them. */
@@ -102,7 +95,6 @@ export const PLAN_SAVE_REFUSAL = {
   TOO_LONG: "Not saved: the plan is longer than a plan may be.",
   NO_TASK: "Not saved: this task no longer exists.",
   NO_REVISION: "Not saved: this plan has no such revision.",
-  ARCHIVED: "Not saved: this task is archived.",
   UNAVAILABLE: "Not saved: the service could not reach its store.",
 } as const;
 
@@ -139,20 +131,10 @@ const NO_TASK_RESULT: PlanNotSaved = {
   reason: PLAN_SAVE_REFUSAL.NO_TASK,
 };
 
-const ARCHIVED_RESULT: PlanNotSaved = {
-  status: PLAN_SAVE_STATUS.NOT_SAVED,
-  reason: PLAN_SAVE_REFUSAL.ARCHIVED,
-};
-
 const TOO_LONG_RESULT: PlanNotSaved = {
   status: PLAN_SAVE_STATUS.NOT_SAVED,
   reason: PLAN_SAVE_REFUSAL.TOO_LONG,
 };
-
-/** Whether the task as read under its lock is archived, which takes none of the developer's writes. */
-function archived(stored: StoredTask): boolean {
-  return stored.task.archivedAt !== undefined;
-}
 
 /** What a change made of the plan's text under its lock: the text to save, how many changes it made, the agents' journal where it moved, and where the developer's editor reported its comment anchors. */
 interface TextTaken {
@@ -170,6 +152,8 @@ type LockedSave<T> =
       readonly taken: T;
       /** Whether the change moved the plan's words, which is when the save is a revision. */
       readonly moved: boolean;
+      /** The transaction the revision was written in, where the save is one, which a reader following the history waits for. */
+      readonly txid: string | undefined;
     }
   | PlanNotSaved;
 
@@ -215,8 +199,9 @@ function savedUnderLock<T extends TextTaken, F>(
     const after = taken.text;
     if (after.length > TASK_BOUNDS.MAX_BODY_CHARS) return TOO_LONG_RESULT;
     const moved = after !== before;
+    let txid: string | undefined;
     if (moved) {
-      yield* recordRevision({
+      txid = yield* recordRevision({
         taskId: binding.taskId,
         writer,
         userId: binding.userId,
@@ -238,7 +223,7 @@ function savedUnderLock<T extends TextTaken, F>(
       taken.agentEdits === undefined ? {} : { agentEdits: taken.agentEdits },
     );
     if (Option.isNone(saved)) return NO_TASK_RESULT;
-    return { status: PLAN_SAVE_STATUS.SAVED, task: saved.value, taken, moved };
+    return { status: PLAN_SAVE_STATUS.SAVED, task: saved.value, taken, moved, txid };
   });
   return Effect.flatMap(SqlClient.SqlClient, (client) => client.withTransaction(locked));
 }
@@ -347,7 +332,7 @@ export function saveDeveloperEdit(
 ): Effect.Effect<PlanEditSaveResult, never, DatabaseServices> {
   const take = (stored: StoredTask) =>
     Effect.succeed<Result.Result<TextTaken, PlanConflict | PlanNotSaved>>(
-      archived(stored) ? Result.fail(ARCHIVED_RESULT) : takeDocumentEdit(stored, edit),
+      takeDocumentEdit(stored, edit),
     );
   const saved = Effect.map(
     savedUnderLock(binding, DEVELOPER, take),
@@ -361,7 +346,12 @@ export function saveDeveloperEdit(
 
 /** A restore answered: the plan as it now stands saved, or why it was not. */
 export type TaskRestoreResult =
-  | { readonly status: typeof PLAN_SAVE_STATUS.SAVED; readonly task: Task }
+  | {
+      readonly status: typeof PLAN_SAVE_STATUS.SAVED;
+      readonly task: Task;
+      /** The transaction the restore's revision was written in; none where it changed nothing. */
+      readonly txid: string | undefined;
+    }
   | PlanNotSaved;
 
 /**
@@ -389,9 +379,7 @@ export function restoreRevision(
     const text = content.value;
     const take = (stored: StoredTask) =>
       Effect.succeed<Result.Result<TextTaken, PlanNotSaved>>(
-        archived(stored)
-          ? Result.fail(ARCHIVED_RESULT)
-          : Result.succeed({ text, changes: changedSections(stored.text, text).length }),
+        Result.succeed({ text, changes: changedSections(stored.text, text).length }),
       );
     const saved = yield* savedUnderLock(
       binding,
@@ -399,7 +387,7 @@ export function restoreRevision(
       take,
     );
     return saved.status === PLAN_SAVE_STATUS.SAVED
-      ? { status: saved.status, task: saved.task }
+      ? { status: saved.status, task: saved.task, txid: saved.txid }
       : saved;
   });
   return reachedStore(restored);

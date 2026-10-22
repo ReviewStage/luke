@@ -3,7 +3,7 @@ import { BUTTON_SIZE, cn, IconButton } from "@luke/ui";
 import { QUOTE_CLASS } from "@luke/ui/quote-face";
 import type { UIMessage } from "ai";
 import { AsyncResult } from "effect/reactivity";
-import { type ComponentProps, type HTMLAttributes, memo, type ReactNode } from "react";
+import { type ComponentProps, type HTMLAttributes, memo, type ReactNode, useState } from "react";
 import { type Components, Streamdown } from "streamdown";
 import { markdownHtmlParserAtom } from "../markdown-html-parser.js";
 import { Tooltip } from "../tooltip.js";
@@ -14,7 +14,7 @@ import { Tooltip } from "../tooltip.js";
  * Copied from the AI Elements registry (https://elements.ai-sdk.dev) and
  * restyled to Luke's tokens: the developer's turn stands at the right in a
  * raised bubble, Luke's at the left in plain text across the whole column,
- * as the voice captions draw them. The actions on a message are the
+ * as a chat app draws them. The actions on a message are the
  * registry's, each one a quiet icon button that shows while the pointer or
  * the keyboard is on the message, floated to its corner rather than drawn
  * in a row under it, with the window's own hover hint in place of the
@@ -27,9 +27,8 @@ import { Tooltip } from "../tooltip.js";
  * panel of fixed height, where the log and the messages are flex items of
  * definite size, that `height: 100%` resolved against the message's own
  * column, so every text part asked for the whole column and the parts
- * beside it were shrunk to slivers. The content stacks as blocks here, and
- * `apps/desktop/src/renderer/planning/transcript-layout.test.ts` holds the
- * rule. And one more: the registry's content clips with `overflow-hidden`,
+ * beside it were shrunk to slivers. The content stacks as blocks here.
+ * And one more: the registry's content clips with `overflow-hidden`,
  * which cut the keyboard's ring off every fold, tool line, picture, and chip
  * a reply holds, so it clips past the ring instead (base.css's room).
  */
@@ -38,10 +37,37 @@ export type MessageProps = HTMLAttributes<HTMLDivElement> & {
   from: UIMessage["role"];
 };
 
-export function Message({ className, from, ...props }: MessageProps): ReactNode {
+/** What a tap may land on in a message that is a control of its own, which a tap works rather than showing the message's actions. */
+const OWN_CONTROL =
+  "a, button, summary, input, textarea, select, label, [role='button'], [role='tab']";
+
+/** The media query a screen with no hover answers, the one the stylesheet shows a tapped message's actions under. */
+const NO_HOVER = "(hover: none)";
+
+/**
+ * A screen with no hover has none to show a message's actions by, so a tap
+ * on the message, anywhere but a control of its own, shows them, and another
+ * hides them again (`.transcript-message[data-actions-shown]`, tasks.css,
+ * under the same `(hover: none)`). The screen is asked at the tap, never
+ * kept, so a mouse changes nothing, and a press that ends a selection of the
+ * message's words leaves them be.
+ */
+export function Message({ className, from, onClick, ...props }: MessageProps): ReactNode {
+  const [actionsShown, setActionsShown] = useState(false);
   return (
+    // biome-ignore lint/a11y/noStaticElementInteractions: a tap stands in for the hover a finger lacks; the keyboard reaches the actions themselves, which show while they hold it.
+    // biome-ignore lint/a11y/useKeyWithClickEvents: as above, the keyboard needs no key here, since focusing an action shows the bar.
     <div
       className={cn("transcript-message", from === "user" ? "is-user" : "is-assistant", className)}
+      data-actions-shown={actionsShown ? "true" : undefined}
+      onClick={(event) => {
+        onClick?.(event);
+        // A tap spent on something of the message's own, a hint it opened, shows nothing more.
+        if (event.defaultPrevented || !window.matchMedia(NO_HOVER).matches) return;
+        if (window.getSelection()?.isCollapsed === false) return;
+        if (event.target instanceof Element && event.target.closest(OWN_CONTROL) !== null) return;
+        setActionsShown((shown) => !shown);
+      }}
       {...props}
     />
   );
@@ -101,6 +127,8 @@ export type MessageActionProps = {
   label: string;
   /** Whether it hangs a hint: its label, or the words given here in its place. */
   tooltip?: boolean | string;
+  /** A hover card hung in the hint's place, saying more about the action than its label (`tooltip.tsx`'s `card`). */
+  card?: ReactNode;
   onClick: () => void;
   /** Its glyph. */
   children: ReactNode;
@@ -110,12 +138,20 @@ export type MessageActionProps = {
 export function MessageAction({
   label,
   tooltip = false,
+  card,
   onClick,
   children,
 }: MessageActionProps): ReactNode {
   const button = (
     <IconButton icon={children} label={label} size={BUTTON_SIZE.COMPACT} onClick={onClick} />
   );
+  if (card !== undefined) {
+    return (
+      <Tooltip label={label} card={card}>
+        {button}
+      </Tooltip>
+    );
+  }
   if (tooltip === false) return button;
   return <Tooltip label={tooltip === true ? label : tooltip}>{button}</Tooltip>;
 }

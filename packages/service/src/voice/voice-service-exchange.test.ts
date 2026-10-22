@@ -2,11 +2,15 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { setTimeout as sleep } from "node:timers/promises";
 import { it } from "@effect/vitest";
+import { Database } from "@luke/database/core/query";
 import { askRecord } from "@luke/database/models/asks";
-import { openTaskConversation, readTask } from "@luke/database/models/task-store";
+import { createCodingAgent } from "@luke/database/models/coding-agent-store";
 import { voiceSessionRecord } from "@luke/database/models/voice-session-record";
 import { type ConversationTarget, storeWriter } from "@luke/database/models/writer";
+import { conversations } from "@luke/database/schemas/storage";
+import { CONVERSATION_RUNTIME, type ConversationRuntime } from "@luke/database/storage-vocabulary";
 import {
+  insertMessage,
   joinWorkspace,
   openHostedStoreTestDatabase,
   readMessagesByConversationTyped,
@@ -17,6 +21,7 @@ import { VOICE_SERVICE_FRAME, VOICE_SERVICE_PATH } from "@luke/features";
 import {
   callOpeningHistory,
   LIVE_CLIENT_EVENT,
+  LIVE_INPUT_BOUNDS,
   LIVE_SERVER_EVENT,
   LIVE_VOICE,
   type LiveClientEvent,
@@ -26,19 +31,20 @@ import {
   sessionInstructions,
 } from "@luke/live";
 import { isRecord, unparsedWire, type WireRecord } from "@luke/wire";
+import { eq } from "drizzle-orm";
 import { Effect, Exit, Option, Redacted, Schema, Scope, Stream } from "effect";
 import { afterAll } from "vitest";
 import { BRAIN_HOST_TURN } from "../agents/brain-host/bounds.js";
-import { BRAIN_EXPLORE_ASK } from "../agents/brain-host/brain.js";
 import {
+  type AgentSessions,
+  EVE_MOUNT,
   EVE_SEND_OUTCOME,
   type EveMessage,
-  type EveSessions,
+  type EveMount,
 } from "../agents/brain-host/eve-sessions.js";
 import { memoryRelayState, StreamRelay } from "../agents/brain-host/relay.js";
+import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
 import { HOSTED_API_ERROR, MESSAGE_ROLE } from "../core.js";
-import { HOSTED_HTTP_STATUS } from "../http/http.js";
-import { HOSTED_TOOL_SET } from "../tasks/brain-tool-set.js";
 import { FIRST_EVE_TURN, spokenTurn } from "../testing/eve-turns.js";
 import {
   appended,
@@ -49,6 +55,7 @@ import {
 } from "../testing/live-events.js";
 import {
   connect,
+  type FakeAccounts,
   fakeAccounts,
   hangUpDevice,
   readSocket,
@@ -57,6 +64,7 @@ import {
   sendText,
   startFakeOpenAi,
 } from "../testing/voice-fakes.js";
+import { backendToolsOf, CALL_BACKEND } from "./call-backend.js";
 import { deploymentExchange } from "./deployment-exchange.js";
 import type { AttachedSession } from "./live-exchange.js";
 import { LOG_EVENT, type LogEntry } from "./log.js";
@@ -118,7 +126,7 @@ const SEED = [
 
 const writer = await database.run(
   storeWriter({
-    tools: HOSTED_TOOL_SET,
+    tools: CODER_TOOL_SET,
   }),
 );
 const askEffects = askRecord();
@@ -134,24 +142,14 @@ const relay = new StreamRelay({
 });
 const sessionRecord = voiceSessionRecord(() => NOW);
 
-interface FakeEve extends EveSessions {
+interface FakeEve extends AgentSessions {
   readonly opened: EveMessage[];
-  /** Every exploring a fresh session asked for, which eve declines, so a test of the developer's asks finds their first ask opens the session. */
-  readonly explored: EveMessage[];
 }
 
 function fakeEve(): FakeEve {
   const eve: FakeEve = {
     opened: [],
-    explored: [],
     open(message) {
-      if (message.message === BRAIN_EXPLORE_ASK) {
-        eve.explored.push(message);
-        return Effect.succeed({
-          outcome: EVE_SEND_OUTCOME.FAILED,
-          status: HOSTED_HTTP_STATUS.BAD_GATEWAY,
-        });
-      }
       eve.opened.push(message);
       return Effect.succeed({
         outcome: EVE_SEND_OUTCOME.ACCEPTED,
@@ -183,14 +181,51 @@ const TASK = {
   name: "Teammate invitations",
 } as const;
 
-/** An account holding one task, and the task's conversation every call about it lands in. */
-async function account(): Promise<{ target: ConversationTarget; taskId: string }> {
+/** An agent on the task, started blank under the account, on eve unless a runtime is named. */
+async function startAgent(userId: string, taskId: string, runtime?: ConversationRuntime) {
+  const started = await database.run(
+    createCodingAgent(userId, {
+      taskId,
+      planSnapshot: null,
+      prompt: null,
+      idempotencyKey: randomUUID(),
+      model: "anthropic/claude-opus-5.5",
+      effort: "high",
+      repository: null,
+      runtime,
+    }),
+  );
+  return Option.getOrThrow(started).agent;
+}
+
+/** An agent with no task, as an automation's run starts one in the workspace, handed a prompt since there is no plan. */
+async function startTasklessAgent(userId: string) {
+  const { workspaceId } = await database.run(startTask(userId, { name: "Workspace anchor" }));
+  const started = await database.run(
+    createCodingAgent(userId, {
+      taskId: null,
+      organizationId: workspaceId,
+      planSnapshot: null,
+      prompt: "Triage the overnight failures.",
+      idempotencyKey: randomUUID(),
+      model: "anthropic/claude-opus-5.5",
+      effort: "high",
+      repository: null,
+    }),
+  );
+  return Option.getOrThrow(started).agent;
+}
+
+/** An account holding one task with one agent on it, and the agent's conversation every call into it lands in. */
+async function account(): Promise<{ target: ConversationTarget; taskId: string; agentId: string }> {
   const userId = await database.createUser();
   const task = await database.run(startTask(userId, TASK));
-  const conversationId = Option.getOrThrow(
-    await database.run(openTaskConversation(userId, task.id)),
-  ).conversationId;
-  return { target: { userId, conversationId }, taskId: task.id };
+  const agent = await startAgent(userId, task.id);
+  return {
+    target: { userId, conversationId: agent.conversationId },
+    taskId: task.id,
+    agentId: agent.id,
+  };
 }
 
 function record(text: string): WireRecord {
@@ -219,11 +254,7 @@ async function framesWithin(reader: SocketReader, ms: number): Promise<LiveClien
 }
 
 /** The service's own word about the task, sent beside the relayed frames as the call goes. */
-const TASK_FRAMES: readonly unknown[] = [
-  VOICE_SERVICE_FRAME.TASK_ACTIVITY,
-  VOICE_SERVICE_FRAME.PLAN_DRAFT,
-  VOICE_SERVICE_FRAME.TASK_WORK,
-];
+const TASK_FRAMES: readonly unknown[] = [VOICE_SERVICE_FRAME.TASK_ACTIVITY];
 
 /** The next frame relayed to the desktop, past the service's own word about the task. */
 async function relayedFrame(reader: SocketReader, timeoutMs?: number): Promise<WireRecord> {
@@ -242,15 +273,20 @@ async function until(predicate: () => boolean, what: () => string): Promise<void
 }
 
 interface Stand {
-  /** The account and the conversation of the task its calls are about by default. */
+  /** The account and the conversation of the agent its calls speak into by default. */
   readonly target: ConversationTarget;
   readonly taskId: string;
+  readonly agentId: string;
   readonly eve: FakeEve;
   /** Every account eve was reached as the deployment for, in order. */
   readonly eveAccounts: string[];
+  /** The mount eve was reached under for each of those, in the same order. */
+  readonly eveMounts: EveMount[];
   readonly log: LogEntry[];
   readonly reports: string[];
   readonly openAi: Awaited<ReturnType<typeof startFakeOpenAi>>;
+  /** The accounts door, which records every session counted against the account. */
+  readonly accounts: FakeAccounts;
   /** Every session the attachment was offered, in order, as the route described it. */
   readonly offered: AttachedSession[];
   /** Lets a gated attachment proceed; a no-op for every other offer. */
@@ -272,13 +308,17 @@ type Offer = (typeof OFFER)[keyof typeof OFFER];
 
 /** The service for one account, with the exchange offered as the route would offer it, or nothing, or one that cannot stand. */
 async function stand(offer: Offer): Promise<Stand> {
-  const { target, taskId } = await account();
+  const { target, taskId, agentId } = await account();
   const openAi = await startFakeOpenAi();
   const eve = fakeEve();
   const eveAccounts: string[] = [];
+  const eveMounts: EveMount[] = [];
   const log: LogEntry[] = [];
   const reports: string[] = [];
-  const accounts = { ...fakeAccounts(), resolveUserId: () => Effect.succeedSome(target.userId) };
+  const accounts: FakeAccounts = {
+    ...fakeAccounts(),
+    resolveUserId: () => Effect.succeedSome(target.userId),
+  };
   let release = (): void => undefined;
   const gate = new Promise<void>((resolve) => {
     release = resolve;
@@ -292,9 +332,9 @@ async function stand(offer: Offer): Promise<Stand> {
             deploymentSecret: () =>
               offer === OFFER.UNCONFIGURED ? undefined : Redacted.make("deployment-secret"),
             eveOrigin: () => "https://eve.test",
-            openAiKey: () => undefined,
-            eve: (accountId) => {
+            eve: (accountId, mount) => {
               eveAccounts.push(accountId);
+              eveMounts.push(mount);
               return eve;
             },
             report: (reported) => reports.push(reported),
@@ -337,11 +377,14 @@ async function stand(offer: Offer): Promise<Stand> {
   return {
     target,
     taskId,
+    agentId,
     eve,
     eveAccounts,
+    eveMounts,
     log,
     reports,
     openAi,
+    accounts,
     offered,
     release: () => release(),
     url: (path) => `ws://127.0.0.1:${port}${path}`,
@@ -352,15 +395,50 @@ async function stand(offer: Offer): Promise<Stand> {
   };
 }
 
-/** The desktop's opening frame for a call about the task named. */
-function createFrame(taskId: string, input: readonly WireRecord[] = []): WireRecord {
+/** The desktop's opening frame for a call into the agent named, about the task named where one is, in the time zone named where a desktop names one. */
+function createFrame(
+  taskId: string | undefined,
+  agentId: string,
+  input: readonly WireRecord[] = [],
+  timeZone?: string,
+): WireRecord {
   return {
     type: VOICE_SERVICE_FRAME.SESSION_CREATE,
     sdp: SDP_OFFER,
     voice: LIVE_VOICE.MARIN,
     input: [...input],
-    planId: taskId,
+    ...(taskId === undefined ? undefined : { planId: taskId }),
+    agentId,
+    ...(timeZone === undefined ? undefined : { timeZone }),
   };
+}
+
+/** A signed-in desktop through to a standing session opened with the frame given. */
+async function openSessionWith(context: Stand, frame: WireRecord) {
+  const opened = await connect(context.url(VOICE_SERVICE_PATH.SESSIONS), { authorization: BEARER });
+  assert.ok("reader" in opened);
+  const desktop = opened.reader;
+  await send(desktop.socket, frame);
+  const attach = await context.openAi.nextAttach();
+  const upstream = readSocket(attach.socket);
+  const created = record(await desktop.next());
+  return { desktop, upstream, attach, created };
+}
+
+/** The refusal a signed-in desktop is answered for the opening frame given. */
+async function refusalFor(context: Stand, frame: WireRecord): Promise<unknown> {
+  const opened = await connect(context.url(VOICE_SERVICE_PATH.SESSIONS), { authorization: BEARER });
+  assert.ok("reader" in opened);
+  await send(opened.reader.socket, frame);
+  return record(await opened.reader.next()).error;
+}
+
+/** The next of the service's own frames about the call the desktop is sent, past the relayed ones. */
+async function ownFrame(reader: SocketReader): Promise<WireRecord> {
+  for (;;) {
+    const frame = record(await reader.next(5_000));
+    if (TASK_FRAMES.includes(frame.type)) return frame;
+  }
 }
 
 /** A signed-in desktop through to a standing session: the created frame read, and OpenAI's end of the sideband. */
@@ -368,11 +446,13 @@ async function openSession(
   context: Stand,
   taskId: string = context.taskId,
   input: readonly WireRecord[] = [],
+  timeZone?: string,
+  agentId: string = context.agentId,
 ) {
   const opened = await connect(context.url(VOICE_SERVICE_PATH.SESSIONS), { authorization: BEARER });
   assert.ok("reader" in opened);
   const desktop = opened.reader;
-  await send(desktop.socket, createFrame(taskId, input));
+  await send(desktop.socket, createFrame(taskId, agentId, input, timeZone));
   const attach = await context.openAi.nextAttach();
   // The upstream reader stands the instant the attach lands, ahead of the created frame, so a frame
   // the service sent between its attach and its answer is seen rather than lost before any listener.
@@ -510,12 +590,6 @@ it.effect(
     }),
 );
 
-/** The conversation the task resumes in, as the task's row names it now. */
-async function taskConversationOf(userId: string, taskId: string): Promise<string | undefined> {
-  const stored = await database.run(readTask(userId, taskId));
-  return Option.getOrUndefined(stored)?.conversationId;
-}
-
 /** The delegations the conversation's developer lines were written under, in order. */
 async function sessionRowOf(userId: string, sessionId: string) {
   const rows = await readVoiceSessionsByUserTyped(database.run, userId);
@@ -548,16 +622,47 @@ async function hangUpConnection(
 }
 
 it.effect(
-  "a call is created under the planning instructions, its spoken ask reaches eve in its plan's conversation and never another plan's, and a re-attach is bound to the same plan by the session's row",
+  "a call whose desktop named its time zone hands that zone to eve with its spoken ask",
+  () =>
+    Effect.promise(async () => {
+      const context = await stand(OFFER.EXCHANGE);
+      const session = await openSession(context, context.taskId, [], "Pacific/Honolulu");
+      assert.equal(session.created.type, VOICE_SERVICE_FRAME.SESSION_CREATED);
+
+      await speak(session.attach.socket, context.openAi.attaches[0]?.sessionId ?? "");
+      await until(
+        () => context.eve.opened.length === 1,
+        () => `the ask to reach eve; reports ${JSON.stringify(context.reports)}`,
+      );
+      assert.deepEqual(
+        context.eve.opened.map((message) => [message.conversationId, message.timeZone]),
+        [[context.target.conversationId, "Pacific/Honolulu"]],
+      );
+
+      await hangUpConnection(session.desktop, session.attach, session.upstream);
+      await until(
+        () => context.log.some((entry) => entry.event === LOG_EVENT.SESSION_ENDED),
+        () => `the connection to be reported ended; log ${JSON.stringify(context.log)}`,
+      );
+      await context.stop();
+    }),
+);
+
+it.effect(
+  "a call is created under the agent's instructions, its spoken ask reaches eve in that agent's conversation and never another's, and a re-attach is bound to the same agent by the session's row",
   () =>
     Effect.promise(async () => {
       const context = await stand(OFFER.EXCHANGE);
       const task = await database.run(startTask(context.target.userId, TASK));
-      const session = await openSession(context, task.id);
+      const agent = await startAgent(context.target.userId, task.id);
+      const session = await openSession(context, task.id, [], undefined, agent.id);
       assert.equal(session.created.type, VOICE_SERVICE_FRAME.SESSION_CREATED);
       const create = context.openAi.creates[0];
       assert.ok(create && isRecord(create.body.session));
-      assert.equal(create.body.session.instructions, sessionInstructions());
+      assert.equal(
+        create.body.session.instructions,
+        sessionInstructions(backendToolsOf(CALL_BACKEND)),
+      );
 
       const sessionId = context.openAi.attaches[0]?.sessionId ?? "";
       await speak(session.attach.socket, sessionId);
@@ -565,15 +670,14 @@ it.effect(
         () => context.eve.opened.length === 1,
         () => `the ask to reach eve; reports ${JSON.stringify(context.reports)}`,
       );
-      const planned = await taskConversationOf(context.target.userId, task.id);
-      assert.ok(planned);
-      assert.notEqual(planned, context.target.conversationId);
       assert.deepEqual(
         context.eve.opened.map((message) => [message.conversationId, message.turn]),
-        [[planned, BRAIN_HOST_TURN.SPOKEN]],
+        [[agent.conversationId, BRAIN_HOST_TURN.SPOKEN]],
       );
+      // A desktop that named no time zone hands none, and the turn reads UTC.
+      assert.equal(context.eve.opened[0]?.timeZone, undefined);
 
-      // A fresh connection names no task; the session's row binds it, and its words land in the same task.
+      // A fresh connection names no agent; the session's row binds it, and its words land in the same agent.
       const again = await connect(context.url(VOICE_SERVICE_PATH.SESSIONS), {
         authorization: BEARER,
       });
@@ -583,18 +687,19 @@ it.effect(
       const reattachUpstream = readSocket(reattach.socket);
       assert.equal(record(await again.reader.next()).type, VOICE_SERVICE_FRAME.SESSION_ATTACHED);
       assert.deepEqual(
-        context.offered.map((offered) => offered.taskId),
-        [task.id, task.id],
+        context.offered.map((offered) => [offered.taskId, offered.agentId]),
+        [
+          [task.id, agent.id],
+          [task.id, agent.id],
+        ],
       );
       // A re-attach creates nothing, so no opening is added and none is appended.
       assert.equal(context.openAi.creates.length, 1);
       await sendText(reattach.socket, JSON.stringify(heard("Any member can invite.", 5000, 6400)));
       await sendText(reattach.socket, JSON.stringify(delegated("dl_2", 6500)));
-      // The line is attached to its ask once the brain took it, so the hang-up waits for the record.
-      const taskConversation = await taskConversationOf(context.target.userId, task.id);
-      assert.ok(taskConversation);
+      // The line is attached to its ask once the agent took it, so the hang-up waits for the record.
       for (let attempt = 0; attempt < 600; attempt += 1) {
-        if ((await spokenDelegations(taskConversation)).includes("dl_2")) break;
+        if ((await spokenDelegations(agent.conversationId)).includes("dl_2")) break;
         await sleep(5);
       }
 
@@ -604,73 +709,43 @@ it.effect(
         () => context.log.filter((entry) => entry.event === LOG_EVENT.SESSION_ENDED).length === 2,
         () => `both connections to be reported ended; log ${JSON.stringify(context.log)}`,
       );
-      assert.deepEqual(await spokenDelegations(taskConversation), ["dl_1", "dl_2"]);
+      assert.deepEqual(await spokenDelegations(agent.conversationId), ["dl_1", "dl_2"]);
       assert.deepEqual(await spokenDelegations(context.target.conversationId), []);
       await context.stop();
     }),
 );
 
 it.effect(
-  "a call about another plan lands in that plan's conversation alone, and a plan the account does not hold is refused as not found before any session is created",
+  "a call that names no agent is refused as no request at all, and one about a task the account does not hold as not found, each before any session is created",
   () =>
     Effect.promise(async () => {
       const context = await stand(OFFER.EXCHANGE);
-      const first = await database.run(startTask(context.target.userId, TASK));
-      const second = await database.run(
-        startTask(context.target.userId, { ...TASK, name: "Billing export" }),
-      );
       const stranger = await database.createUser();
       const foreign = await database.run(startTask(stranger, TASK));
+      const foreignAgent = await startAgent(stranger, foreign.id);
+      const refusalOf = async (frame: WireRecord) => {
+        const opened = await connect(context.url(VOICE_SERVICE_PATH.SESSIONS), {
+          authorization: BEARER,
+        });
+        assert.ok("reader" in opened);
+        await send(opened.reader.socket, frame);
+        return record(await opened.reader.next()).error;
+      };
 
-      const firstCall = await openSession(context, first.id);
-      await speak(firstCall.attach.socket, context.openAi.attaches[0]?.sessionId ?? "");
-      await until(
-        () => context.eve.opened.length === 1,
-        () => "the first plan's ask to reach eve",
+      const { agentId: _named, ...noAgent } = createFrame(context.taskId, context.agentId);
+      assert.equal(await refusalOf(noAgent), HOSTED_API_ERROR.INVALID_REQUEST);
+      assert.equal(
+        await refusalOf(createFrame(foreign.id, foreignAgent.id)),
+        HOSTED_API_ERROR.NOT_FOUND,
       );
-      await hangUpConnection(firstCall.desktop, firstCall.attach, firstCall.upstream);
-
-      const secondCall = await openSession(context, second.id);
-      await speak(secondCall.attach.socket, context.openAi.attaches[1]?.sessionId ?? "");
-      await until(
-        () => context.eve.opened.length === 2,
-        () => "the second plan's ask to reach eve",
-      );
-      await hangUpConnection(secondCall.desktop, secondCall.attach, secondCall.upstream);
-      await until(
-        () => context.log.filter((entry) => entry.event === LOG_EVENT.SESSION_ENDED).length === 2,
-        () => `both calls to be reported ended; log ${JSON.stringify(context.log)}`,
-      );
-
-      const firstConversation = await taskConversationOf(context.target.userId, first.id);
-      const secondConversation = await taskConversationOf(context.target.userId, second.id);
-      assert.ok(firstConversation && secondConversation);
-      assert.notEqual(firstConversation, secondConversation);
-      assert.deepEqual(
-        context.eve.opened.map((message) => message.conversationId),
-        [firstConversation, secondConversation],
-      );
-      assert.deepEqual(await spokenDelegations(firstConversation), ["dl_1"]);
-      assert.deepEqual(await spokenDelegations(secondConversation), ["dl_1"]);
-
-      const refused = await connect(context.url(VOICE_SERVICE_PATH.SESSIONS), {
-        authorization: BEARER,
-      });
-      assert.ok("reader" in refused);
-      await send(refused.reader.socket, {
-        type: VOICE_SERVICE_FRAME.SESSION_CREATE,
-        sdp: SDP_OFFER,
-        voice: LIVE_VOICE.MARIN,
-        input: [],
-        planId: foreign.id,
-      });
-      assert.equal(record(await refused.reader.next()).error, HOSTED_API_ERROR.NOT_FOUND);
-      assert.equal(context.openAi.creates.length, 2);
+      assert.equal(context.openAi.creates.length, 0);
+      assert.deepEqual(context.offered, []);
+      assert.deepEqual(context.eve.opened, []);
       await context.stop();
     }),
 );
 it.effect(
-  "a member's call about a plan a teammate opened lands in the plan's one conversation, recorded under the teammate who opened it, and its ask reaches eve as the member",
+  "a member's call into an agent a teammate started lands in the agent's conversation, recorded under the teammate who started it, and its ask reaches eve as the member",
   () =>
     Effect.promise(async () => {
       const context = await stand(OFFER.EXCHANGE);
@@ -678,9 +753,9 @@ it.effect(
       const teammate = await database.createUser();
       const task = await database.run(startTask(teammate, TASK));
       await database.run(joinWorkspace(task.workspaceId, member));
-      const opened = Option.getOrThrow(await database.run(openTaskConversation(teammate, task.id)));
+      const theirs = await startAgent(teammate, task.id);
 
-      const call = await openSession(context, task.id);
+      const call = await openSession(context, task.id, [], undefined, theirs.id);
       assert.equal(call.created.type, VOICE_SERVICE_FRAME.SESSION_CREATED);
       const sessionId = context.openAi.attaches[0]?.sessionId ?? "";
       await speak(call.attach.socket, sessionId);
@@ -696,13 +771,362 @@ it.effect(
 
       assert.deepEqual(
         context.eve.opened.map((message) => message.conversationId),
-        [opened.conversationId],
+        [theirs.conversationId],
       );
       assert.deepEqual(context.eveAccounts, [member]);
-      assert.deepEqual(await spokenDelegations(opened.conversationId), ["dl_1"]);
+      assert.deepEqual(await spokenDelegations(theirs.conversationId), ["dl_1"]);
       assert.deepEqual(await spokenDelegations(context.target.conversationId), []);
       assert.ok(await sessionRowOf(member, sessionId));
       assert.equal(await sessionRowOf(teammate, sessionId), undefined);
+      await context.stop();
+    }),
+);
+
+it.effect(
+  "a call created with an agent id names the agent on its row, is told the agent's tools, explores nothing, and lands its spoken ask on the coding agents' mount and its words in that agent's conversation alone",
+  () =>
+    Effect.promise(async () => {
+      const context = await stand(OFFER.EXCHANGE);
+      const agent = await startAgent(context.target.userId, context.taskId);
+      const session = await openSession(context, context.taskId, [], undefined, agent.id);
+      assert.equal(session.created.type, VOICE_SERVICE_FRAME.SESSION_CREATED);
+      const create = context.openAi.creates[0];
+      assert.ok(create && isRecord(create.body.session));
+      assert.equal(
+        create.body.session.instructions,
+        sessionInstructions(backendToolsOf(CALL_BACKEND)),
+      );
+      const sessionId = context.openAi.attaches[0]?.sessionId ?? "";
+      assert.equal((await sessionRowOf(context.target.userId, sessionId))?.agentId, agent.id);
+      assert.deepEqual(context.accounts.spent, [context.target.userId]);
+      assert.deepEqual(
+        context.offered.map((offered) => offered.agentId),
+        [agent.id],
+      );
+
+      await speak(session.attach.socket, sessionId);
+      await until(
+        () => context.eve.opened.length === 1,
+        () => `the ask to reach eve; reports ${JSON.stringify(context.reports)}`,
+      );
+      assert.deepEqual(
+        context.eve.opened.map((message) => [message.conversationId, message.turn]),
+        [[agent.conversationId, BRAIN_HOST_TURN.SPOKEN]],
+      );
+      assert.deepEqual(context.eveMounts, [EVE_MOUNT.CODER]);
+
+      for (let attempt = 0; attempt < 600; attempt += 1) {
+        if ((await spokenDelegations(agent.conversationId)).includes("dl_1")) break;
+        await sleep(5);
+      }
+      await hangUpConnection(session.desktop, session.attach, session.upstream);
+      await until(
+        () => context.log.some((entry) => entry.event === LOG_EVENT.SESSION_ENDED),
+        () => `the call to be reported ended; log ${JSON.stringify(context.log)}`,
+      );
+      assert.deepEqual(await spokenDelegations(agent.conversationId), ["dl_1"]);
+      assert.deepEqual(await spokenDelegations(context.target.conversationId), []);
+      await context.stop();
+    }),
+);
+
+it.effect(
+  "a call into another account's agent, or into an agent of another task, is refused as not found before any session is created",
+  () =>
+    Effect.promise(async () => {
+      const context = await stand(OFFER.EXCHANGE);
+      const stranger = await database.createUser();
+      const strangerTask = await database.run(startTask(stranger, TASK));
+      const theirs = await startAgent(stranger, strangerTask.id);
+      const otherTask = await database.run(
+        startTask(context.target.userId, { ...TASK, name: "Billing export" }),
+      );
+      const elsewhere = await startAgent(context.target.userId, otherTask.id);
+
+      for (const agentId of [theirs.id, elsewhere.id]) {
+        const refused = await connect(context.url(VOICE_SERVICE_PATH.SESSIONS), {
+          authorization: BEARER,
+        });
+        assert.ok("reader" in refused);
+        await send(refused.reader.socket, createFrame(context.taskId, agentId));
+        assert.equal(record(await refused.reader.next()).error, HOSTED_API_ERROR.NOT_FOUND);
+      }
+      assert.equal(context.openAi.creates.length, 0);
+      assert.deepEqual(context.eve.opened, []);
+      await context.stop();
+    }),
+);
+
+it.effect(
+  "a call into an agent that runs on Claude Code or Codex is refused by name before anything is counted or created, and eve is never reached",
+  () =>
+    Effect.promise(async () => {
+      const context = await stand(OFFER.EXCHANGE);
+      for (const runtime of [CONVERSATION_RUNTIME.CLAUDE_CODE, CONVERSATION_RUNTIME.CODEX]) {
+        const native = await startAgent(context.target.userId, context.taskId, runtime);
+        const refused = await connect(context.url(VOICE_SERVICE_PATH.SESSIONS), {
+          authorization: BEARER,
+        });
+        assert.ok("reader" in refused);
+        await send(refused.reader.socket, createFrame(context.taskId, native.id));
+        assert.equal(
+          record(await refused.reader.next()).error,
+          HOSTED_API_ERROR.NATIVE_AGENT_NOT_HERE,
+        );
+      }
+      assert.deepEqual(context.accounts.spent, []);
+      assert.equal(context.openAi.creates.length, 0);
+      assert.deepEqual(context.offered, []);
+      assert.deepEqual(context.eve.opened, []);
+      await context.stop();
+    }),
+);
+
+it.effect(
+  "a session admitted into an eve agent whose conversation a native harness answers by the time the exchange stands is refused, and eve is never reached",
+  () =>
+    Effect.promise(async () => {
+      const context = await stand(OFFER.GATED);
+      const agent = await startAgent(context.target.userId, context.taskId);
+      const opened = await connect(context.url(VOICE_SERVICE_PATH.SESSIONS), {
+        authorization: BEARER,
+      });
+      assert.ok("reader" in opened);
+      await send(opened.reader.socket, createFrame(context.taskId, agent.id));
+      await until(
+        () => context.offered.length === 1,
+        () => "the attachment to be offered the session",
+      );
+      await database.run(
+        Database.use((db) =>
+          db
+            .update(conversations)
+            .set({ runtime: CONVERSATION_RUNTIME.CLAUDE_CODE })
+            .where(eq(conversations.id, agent.conversationId)),
+        ),
+      );
+      context.release();
+      assert.equal(record(await opened.reader.next()).error, HOSTED_API_ERROR.UNAVAILABLE);
+      assert.deepEqual(context.eve.opened, []);
+      assert.deepEqual(context.eveAccounts, []);
+      await context.stop();
+    }),
+);
+
+it.effect(
+  "a call into an agent that has already worked opens on the developer's typed messages to it and its last turn, and not on a new task's blank plan",
+  () =>
+    Effect.promise(async () => {
+      const context = await stand(OFFER.EXCHANGE);
+      const agent = await startAgent(context.target.userId, context.taskId);
+      const at = new Date(NOW);
+      const typed = "Export the invoices as CSV, newest first.";
+      const reply = "The CSV export is written and its test passes.";
+      await insertMessage(database.run, {
+        userId: context.target.userId,
+        conversationId: agent.conversationId,
+        seq: 1,
+        clientId: randomUUID(),
+        role: MESSAGE_ROLE.USER,
+        parts: [{ type: "text", text: typed }],
+        metadata: { author: "developer", channel: "typed" },
+        createdAt: at,
+        finishedAt: at,
+      });
+      await insertMessage(database.run, {
+        userId: context.target.userId,
+        conversationId: agent.conversationId,
+        seq: 2,
+        clientId: randomUUID(),
+        role: MESSAGE_ROLE.ASSISTANT,
+        parts: [{ type: "text", text: reply }],
+        metadata: { author: "brain" },
+        createdAt: at,
+        finishedAt: at,
+      });
+
+      const session = await openSession(context, context.taskId, [], undefined, agent.id);
+      assert.equal(session.created.type, VOICE_SERVICE_FRAME.SESSION_CREATED);
+      const create = context.openAi.creates[0];
+      assert.ok(create && isRecord(create.body.session));
+      const input = create.body.session.input;
+      assert.ok(Array.isArray(input));
+      const texts = input.map((item) => JSON.stringify(item));
+      const agentSeed = texts.find((text) => text.includes(typed));
+      assert.ok(agentSeed, `the agent's typed message in the startup history; ${texts.join("\n")}`);
+      assert.ok(agentSeed.includes(reply));
+      assert.equal(
+        texts.some((text) => text.includes("Nothing in its plan is answered yet.")),
+        false,
+      );
+      assert.deepEqual(input.at(-1), callOpeningHistory());
+
+      await hangUpConnection(session.desktop, session.attach, session.upstream);
+      await until(
+        () => context.log.some((entry) => entry.event === LOG_EVENT.SESSION_ENDED),
+        () => `the call to be reported ended; log ${JSON.stringify(context.log)}`,
+      );
+      await context.stop();
+    }),
+);
+
+it.effect(
+  "a call naming no task into an agent with none opens on the agent's own work and no plan, writes no task on its row, lands its ask in the agent's conversation, names the agent and no task on the service's own frames, and is taken back by a re-attach",
+  () =>
+    Effect.promise(async () => {
+      const context = await stand(OFFER.EXCHANGE);
+      const userId = context.target.userId;
+      const agent = await startTasklessAgent(userId);
+      const typed = "Which nightly jobs failed?";
+      const at = new Date(NOW);
+      await insertMessage(database.run, {
+        userId,
+        conversationId: agent.conversationId,
+        seq: 1,
+        clientId: randomUUID(),
+        role: MESSAGE_ROLE.USER,
+        parts: [{ type: "text", text: typed }],
+        metadata: { author: "developer", channel: "typed" },
+        createdAt: at,
+        finishedAt: at,
+      });
+
+      const session = await openSessionWith(context, createFrame(undefined, agent.id));
+      assert.equal(session.created.type, VOICE_SERVICE_FRAME.SESSION_CREATED);
+      const create = context.openAi.creates[0];
+      assert.ok(create && isRecord(create.body.session));
+      const input = create.body.session.input;
+      assert.ok(Array.isArray(input));
+      const texts = input.map((item) => JSON.stringify(item));
+      assert.ok(
+        texts.some((text) => text.includes(typed)),
+        texts.join("\n"),
+      );
+      assert.equal(
+        texts.some((text) => text.includes("[task]")),
+        false,
+      );
+      assert.deepEqual(input.at(-1), callOpeningHistory());
+      const sessionId = context.openAi.attaches[0]?.sessionId ?? "";
+      const row = await database.run(sessionRecord.owned({ userId, sessionId }));
+      assert.equal(row?.agentId, agent.id);
+      assert.equal(row?.taskId, undefined);
+      assert.deepEqual(context.accounts.spent, [userId]);
+
+      await speak(session.attach.socket, sessionId);
+      await until(
+        () => context.eve.opened.length === 1,
+        () => `the ask to reach eve; reports ${JSON.stringify(context.reports)}`,
+      );
+      assert.deepEqual(
+        context.eve.opened.map((message) => message.conversationId),
+        [agent.conversationId],
+      );
+      const activity = await ownFrame(session.desktop);
+      assert.equal(activity.agentId, agent.id);
+      assert.equal("planId" in activity, false);
+
+      const again = await connect(context.url(VOICE_SERVICE_PATH.SESSIONS), {
+        authorization: BEARER,
+      });
+      assert.ok("reader" in again);
+      await send(again.reader.socket, { type: VOICE_SERVICE_FRAME.SESSION_ATTACH, sessionId });
+      const reattach = await context.openAi.nextAttach();
+      const reattachUpstream = readSocket(reattach.socket);
+      assert.equal(record(await again.reader.next()).type, VOICE_SERVICE_FRAME.SESSION_ATTACHED);
+      assert.deepEqual(
+        context.offered.map((offered) => [offered.taskId, offered.agentId]),
+        [
+          [undefined, agent.id],
+          [undefined, agent.id],
+        ],
+      );
+
+      await hangUpConnection(again.reader, reattach, reattachUpstream);
+      await hangUpConnection(session.desktop, session.attach, session.upstream);
+      await until(
+        () => context.log.filter((entry) => entry.event === LOG_EVENT.SESSION_ENDED).length === 2,
+        () => `both connections to be reported ended; log ${JSON.stringify(context.log)}`,
+      );
+      await context.stop();
+    }),
+);
+
+it.effect(
+  "a call naming no task into an agent on one is bound to that task; a call naming a task into an agent with none is refused as not found, before anything is counted",
+  () =>
+    Effect.promise(async () => {
+      const context = await stand(OFFER.EXCHANGE);
+      const userId = context.target.userId;
+      const session = await openSessionWith(context, createFrame(undefined, context.agentId));
+      assert.equal(session.created.type, VOICE_SERVICE_FRAME.SESSION_CREATED);
+      const sessionId = context.openAi.attaches[0]?.sessionId ?? "";
+      assert.equal(
+        (await database.run(sessionRecord.owned({ userId, sessionId })))?.taskId,
+        context.taskId,
+      );
+      assert.deepEqual(
+        context.offered.map((offered) => offered.taskId),
+        [context.taskId],
+      );
+      await hangUpConnection(session.desktop, session.attach, session.upstream);
+      await until(
+        () => context.log.some((entry) => entry.event === LOG_EVENT.SESSION_ENDED),
+        () => `the call to be reported ended; log ${JSON.stringify(context.log)}`,
+      );
+
+      const taskless = await startTasklessAgent(userId);
+      assert.equal(
+        await refusalFor(context, createFrame(context.taskId, taskless.id)),
+        HOSTED_API_ERROR.NOT_FOUND,
+      );
+      assert.equal(context.openAi.creates.length, 1);
+      assert.deepEqual(context.accounts.spent, [userId]);
+      await context.stop();
+    }),
+);
+
+it.effect(
+  "a call into an agent with no task keeps the agent's work in a startup input the device fills to all but two messages, since no plan's seed takes a message",
+  () =>
+    Effect.promise(async () => {
+      const context = await stand(OFFER.EXCHANGE);
+      const userId = context.target.userId;
+      const agent = await startTasklessAgent(userId);
+      const typed = "Which nightly jobs failed?";
+      const at = new Date(NOW);
+      await insertMessage(database.run, {
+        userId,
+        conversationId: agent.conversationId,
+        seq: 1,
+        clientId: randomUUID(),
+        role: MESSAGE_ROLE.USER,
+        parts: [{ type: "text", text: typed }],
+        metadata: { author: "developer", channel: "typed" },
+        createdAt: at,
+        finishedAt: at,
+      });
+      const filled = Array.from({ length: LIVE_INPUT_BOUNDS.MESSAGES - 2 }, (_, index) => ({
+        type: SEED_ITEM_TYPE,
+        role: SEED_ROLE.USER,
+        content: [{ type: SEED_CONTENT_TYPE.INPUT_TEXT, text: `line ${index}` }],
+      }));
+
+      const session = await openSessionWith(context, createFrame(undefined, agent.id, filled));
+      assert.equal(session.created.type, VOICE_SERVICE_FRAME.SESSION_CREATED);
+      const create = context.openAi.creates[0];
+      assert.ok(create && isRecord(create.body.session));
+      const input = create.body.session.input;
+      assert.ok(Array.isArray(input));
+      assert.equal(input.length, LIVE_INPUT_BOUNDS.MESSAGES);
+      assert.ok(JSON.stringify(input[0]).includes(typed));
+      assert.deepEqual(input.at(-1), callOpeningHistory());
+
+      await hangUpConnection(session.desktop, session.attach, session.upstream);
+      await until(
+        () => context.log.some((entry) => entry.event === LOG_EVENT.SESSION_ENDED),
+        () => `the call to be reported ended; log ${JSON.stringify(context.log)}`,
+      );
       await context.stop();
     }),
 );

@@ -1,5 +1,6 @@
 import {
   type ComponentType,
+  createContext,
   type FocusEventHandler,
   type KeyboardEvent,
   type MouseEvent,
@@ -7,11 +8,15 @@ import {
   type ReactElement,
   type ReactNode,
   type RefCallback,
+  useCallback,
+  useContext,
   useEffect,
 } from "react";
 import { cssCustomProperties } from "../../css.js";
 import { ChevronRightIcon } from "../../face/glyphs.js";
 import { useClipped } from "../../use-clipped.js";
+import { useLinkAddress } from "../menu/link-address.js";
+import { type ContextMenuProps, withContextMenu } from "../menu/menu.js";
 import { useRowSwipe } from "./use-row-swipe.js";
 
 /**
@@ -36,9 +41,9 @@ import { useRowSwipe } from "./use-row-swipe.js";
  * one focused) reaches a row's press through `ref` and hears the keys
  * pressed on it through `onKeyDown`; a row that opens nothing takes no
  * focus, so its `ref` reaches its item, to scroll or measure, and it hears
- * no keys, which would only be its acts'. `onContextMenu` hears a
- * right-click anywhere on the row, its acts included, so the app can open
- * its own menu there.
+ * no keys, which would only be its acts'. `contextMenu` (`useMenu`'s)
+ * hears a right-click or a touch's long press anywhere on the row, its acts
+ * included, so the app can open its own menu there.
  *
  * A list stands plain, its rows apart on the ground, each lit on its own;
  * or as a card (`LIST_VARIANT.CARD`), its rows edge to edge on the card's
@@ -71,7 +76,10 @@ import { useRowSwipe } from "./use-row-swipe.js";
  * shown beside the list, as an Inbox's item is, or the one item chosen in
  * its set. An unread row's title stands in the heavier weight, and its
  * description in the body's ink, until it is read, as a mail app's unread
- * thread does. A row that opens something may hang the app's hint from its press
+ * thread does. A row whose thing is done with stands back (`muted`), as a
+ * done to-do grays: its words in the palette's quieter inks, still legible,
+ * and only its marks faded, its fill as the row's own. A row that opens
+ * something may hang the app's hint from its press
  * (`hint`), as a Button's hint hangs: the app's own tooltip, handed the
  * words to raise and the press it wraps, whose pointer and focus handlers
  * land on the press itself.
@@ -88,12 +96,16 @@ import { useRowSwipe } from "./use-row-swipe.js";
  * that offers them only to the row in hand (`LIST_ROW_ACTIONS.HOVER`), over
  * its metadata's end while the pointer rests on it or it holds the
  * keyboard, the metadata stepping aside as a sidebar row's time does for
- * Pin and Archive. Where its metadata stands at its middle, the acts take
- * their own room as they come in, so the title is cut where they begin
- * rather than running under them, and a title cut short there or at rest
- * fades out over its last few pixels instead of ending in an ellipsis, as a
- * browser's tab does, so the cut moving as the acts come and go reads as
- * the fade sliding rather than the words cut again.
+ * Pin and Archive. They are laid over the row's end on a backdrop of the
+ * row's own fill, faded in over the words they cover, so coming and going
+ * they move nothing: the title keeps its room, and the press its ring.
+ *
+ * A title cut short, there or anywhere, fades out over its last few pixels
+ * instead of ending in an ellipsis, as a browser's tab does; one drawn
+ * whole ends on its last letter. A dense
+ * row's description, a label beside its title, fades the same way, and so
+ * does the name of what a row belongs to (`lead`), while a fuller row's
+ * description, a preview's prose, and its metadata end in an ellipsis.
  *
  * A row may lead its description with what it belongs to (`lead`), a
  * thread's task, say, in a list grouped by something else: a small chip
@@ -193,23 +205,24 @@ function preventFocusMove(event: MouseEvent<HTMLElement>): void {
   event.preventDefault();
 }
 
-/** A row's title as measured: the ref to hand it, none where nothing measures it, and whether it is cut short. */
-interface TitleClip {
-  readonly ref: RefCallback<HTMLElement> | undefined;
-  readonly clipped: boolean;
+/**
+ * The words a slot is measured by, where they are a plain string: a box whose
+ * words are a tree is watched for any change under it instead, which a long
+ * list of rows would pay for once a row.
+ */
+function plainWords(words: ReactNode): string | undefined {
+  // A slot is handed over as a loose ReactNode, and a string is the one form
+  // whose words can be compared from render to render; this check is the boundary.
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof
+  return typeof words === "string" ? words : undefined;
 }
 
-/** Whether the title is cut short, told to `onTitleClipped`, measured only where someone asks or the title fades. */
-function useTitleClipped(
-  onTitleClipped: ((clipped: boolean) => void) | undefined,
-  fades: boolean,
-): TitleClip {
-  const [measured, clipped] = useClipped();
-  useEffect(() => {
-    onTitleClipped?.(clipped);
-  }, [onTitleClipped, clipped]);
-  return { ref: onTitleClipped === undefined && !fades ? undefined : measured, clipped };
-}
+/**
+ * The density of the `List` a row stands in, which its rows take as the
+ * stylesheet does, so a row knows it is dense in the render that draws it
+ * rather than by reading where it stands once drawn.
+ */
+const ListDensityContext = createContext<ListDensity>(LIST_DENSITY.REGULAR);
 
 /** The act of a row that offers no swipe. */
 const NO_ACT = (): void => undefined;
@@ -233,7 +246,7 @@ export function List({
 }): React.JSX.Element {
   return (
     <ul className="luke-list" data-variant={variant} data-density={density} aria-label={label}>
-      {children}
+      <ListDensityContext.Provider value={density}>{children}</ListDensityContext.Provider>
     </ul>
   );
 }
@@ -250,8 +263,10 @@ export function ListRow({
   actions,
   actionsAt = LIST_ROW_ACTIONS.ALWAYS,
   onPress,
+  linkHref,
   current,
   unread,
+  muted,
   hint,
   density,
   ink = LIST_ROW_INK.TEXT,
@@ -264,7 +279,7 @@ export function ListRow({
   id,
   ref,
   onKeyDown,
-  onContextMenu,
+  contextMenu,
   swipe,
 }: {
   /** A mark before the title (an avatar, a status's glyph), drawn as decoration. */
@@ -286,10 +301,14 @@ export function ListRow({
   actionsAt?: ListRowActions;
   /** What pressing the row does, handed the press, whose modifiers it may read; a row without one is not a control. */
   onPress?: ((event: MouseEvent<HTMLButtonElement>) => void) | undefined;
+  /** The address its press opens, where it opens one, which a right-click offers as a link's (`useLinkAddress`). */
+  linkHref?: string | undefined;
   /** How the row is the one open now, drawn and announced as current; nothing where it is not. */
   current?: ListRowCurrent | undefined;
   /** Whether what the row stands for has not been seen, its title in the heavier weight. */
   unread?: boolean | undefined;
+  /** Whether what the row stands for is done with, so the row stands back, its words in quieter inks and its marks faded, its fill and acts as they are. */
+  muted?: boolean | undefined;
   /** The app's hint hung from the row's press and the words it raises; a row that opens nothing raises none. */
   hint?: { readonly Hint: ListRowHint; readonly label: string } | undefined;
   /** Its density where it stands in a list of the app's own rather than a `List`, which sets its rows'. */
@@ -314,24 +333,42 @@ export function ListRow({
   ref?: RefCallback<HTMLElement> | undefined;
   /** A key pressed on the row's press; a row that opens nothing hears none. */
   onKeyDown?: ((event: KeyboardEvent<HTMLElement>) => void) | undefined;
-  /** A right-click, or the menu key, anywhere on the row. */
-  onContextMenu?: ((event: MouseEvent<HTMLElement>) => void) | undefined;
+  /** The menu a right-click, the menu key, or a long press opens anywhere on the row (`useMenu`'s `contextMenu`). */
+  contextMenu?: ContextMenuProps | undefined;
   /** The row's one swipe right; none where it offers none. */
   swipe?: ListRowSwipe | undefined;
 }): React.JSX.Element {
   const swiped = useRowSwipe(swipe?.label, swipe?.onAct ?? NO_ACT);
-  // Note that the acts coming in cut the title back to where they begin, so
-  // it fades there rather than having its ellipsis jump as they come and go.
-  const fades =
-    actionsAt === LIST_ROW_ACTIONS.HOVER && metaAt === LIST_ROW_META.MIDDLE && said(actions);
-  const titleClip = useTitleClipped(onTitleClipped, fades);
+  // The press hands the row's ref its element, and the link menu the address it opens.
+  const linkAddress = useLinkAddress(linkHref);
+  const pressRef = useCallback(
+    (element: HTMLButtonElement | null) => {
+      ref?.(element);
+      linkAddress(element);
+    },
+    [ref, linkAddress],
+  );
+  const [titleMeasured, titleClipped] = useClipped(plainWords(title));
+  useEffect(() => {
+    onTitleClipped?.(titleClipped);
+  }, [onTitleClipped, titleClipped]);
+  const [descriptionMeasured, descriptionClipped] = useClipped(plainWords(description));
+  // Note that only a dense row's description fades, so a fuller row's prose
+  // is never measured; the row is dense by its own density, else its list's,
+  // as the stylesheet reads it, so a list made dense or regular again
+  // measures its rows' descriptions or lets them go.
+  const listDensity = useContext(ListDensityContext);
+  const describedDense = (density ?? listDensity) === LIST_DENSITY.DENSE;
+  const described = useCallback(
+    (element: HTMLElement | null) => {
+      if (element === null || !describedDense) return undefined;
+      return descriptionMeasured(element);
+    },
+    [descriptionMeasured, describedDense],
+  );
+  const [leadMeasured, leadClipped] = useClipped(lead?.label);
   const heading = (
-    <span
-      ref={titleClip.ref}
-      className="luke-list-row-title"
-      data-end={fades ? "fade" : undefined}
-      data-overflow={fades ? String(titleClip.clipped) : undefined}
-    >
+    <span ref={titleMeasured} className="luke-list-row-title" data-overflow={String(titleClipped)}>
       {title}
     </span>
   );
@@ -353,13 +390,23 @@ export function ListRow({
           heading
         )}
         {said(description) || lead !== undefined ? (
-          <span className="luke-list-row-description">
+          <span
+            ref={described}
+            className="luke-list-row-description"
+            data-overflow={describedDense ? String(descriptionClipped) : undefined}
+          >
             {lead === undefined ? null : (
               <span className="luke-list-row-lead">
                 <span className="luke-list-row-lead-icon" aria-hidden="true">
                   {lead.icon}
                 </span>
-                <span className="luke-list-row-lead-label">{lead.label}</span>
+                <span
+                  ref={leadMeasured}
+                  className="luke-list-row-lead-label"
+                  data-overflow={String(leadClipped)}
+                >
+                  {lead.label}
+                </span>
               </span>
             )}
             {description}
@@ -381,7 +428,7 @@ export function ListRow({
   );
   const press = onPress ? (
     <button
-      ref={ref}
+      ref={pressRef}
       type="button"
       className="luke-list-row-main"
       aria-current={current}
@@ -423,16 +470,19 @@ export function ListRow({
       data-actions={actionsAt === LIST_ROW_ACTIONS.HOVER ? actionsAt : undefined}
       data-current={current === undefined ? undefined : "true"}
       data-unread={unread === true ? "true" : undefined}
+      data-muted={muted === true ? "true" : undefined}
       data-density={density}
       data-ink={ink}
       data-menu-open={menuOpen ? "true" : undefined}
       data-swipe={swipe === undefined ? undefined : view.state}
       data-armed={view.armed ? "true" : undefined}
-      onContextMenu={onContextMenu}
+      {...withContextMenu(
+        contextMenu,
+        swipe === undefined ? {} : { onPointerDown: item.onPointerDown },
+      )}
       {...(swipe === undefined
         ? undefined
         : {
-            onPointerDown: item.onPointerDown,
             onPointerMove: item.onPointerMove,
             onPointerUp: item.onPointerUp,
             onPointerCancel: item.onPointerCancel,

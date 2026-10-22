@@ -1,5 +1,5 @@
 import { PRODUCT_SETTING_VALUE, type ProductSettingValue } from "@luke/features/analytics";
-import { isWireString, type UnparsedWireValue } from "@luke/wire";
+import type { UnparsedWireValue } from "@luke/wire";
 import { APP_SETTING_KIND, type AppSettingId, appToggleText } from "@luke/wire/app-settings";
 import { Result, Schema } from "effect";
 import {
@@ -7,8 +7,6 @@ import {
   type AppSettingSchemaEntry,
   SETTING_ROWS,
   SETTING_SECTION,
-  SETTINGS_PAGE,
-  SETTINGS_RESET_SCOPE,
   type SettingControl,
   type SettingGuardResult,
   type SettingOption,
@@ -19,7 +17,6 @@ import {
   type SettingsVisibility,
   type StoredSettingValue,
 } from "./schema-types.js";
-import { parseVoiceHotkey, VOICE_HOTKEY_NONE } from "./voice-hotkey.js";
 
 const valid = <Value>(value: Value): SettingGuardResult<Value> => ({ valid: true, value });
 const invalid = <Value>(value: Value): SettingGuardResult<Value> => ({ valid: false, value });
@@ -51,27 +48,11 @@ function boolean(defaultValue: boolean) {
     settingGuardFromEither(isBoolean(value) ? Result.succeed(value) : Result.fail(defaultValue));
 }
 
-function hotkey(value: UnparsedWireValue): SettingGuardResult<string | undefined> {
-  if (value === undefined) return valid(undefined);
-  if (!isWireString(value)) return settingGuardFromEither(Result.fail(undefined));
-  // A deletion is a choice the parser cannot spell: no chord at all, with no
-  // default standing in behind the absence.
-  if (value === VOICE_HOTKEY_NONE) return settingGuardFromEither(Result.succeed(VOICE_HOTKEY_NONE));
-  const parsed = parseVoiceHotkey(value);
-  return settingGuardFromEither(parsed ? Result.succeed(parsed) : Result.fail(undefined));
-}
-
 const toggleAnalytics = (value: StoredSettingValue): ProductSettingValue =>
   value ? PRODUCT_SETTING_VALUE.ON : PRODUCT_SETTING_VALUE.OFF;
 
 const choiceAnalytics = (value: StoredSettingValue): ProductSettingValue =>
   value === undefined ? PRODUCT_SETTING_VALUE.CLEARED : PRODUCT_SETTING_VALUE.SET;
-
-// A deleted key counts as off rather than set: a stored value stands either
-// way, and the count is the one reader of the difference. The chord itself
-// never travels, whichever shape is reported.
-const hotkeyAnalytics = (value: StoredSettingValue): ProductSettingValue =>
-  value === VOICE_HOTKEY_NONE ? PRODUCT_SETTING_VALUE.OFF : choiceAnalytics(value);
 
 /**
  * A stored on/off. That it is a toggle is what fixes its guard, its
@@ -141,6 +122,12 @@ export function choiceSetting<
   optionLabel?: (value: Value) => string;
   /** The address of the picture a value is shown with, for a choice whose values have faces, which is then chosen from them. */
   optionPicture?: (value: Value) => string | undefined;
+  /** The path of the clip a value is heard in, under the panel's asset base, for a choice whose values are sounds. */
+  optionSample?: (value: Value) => string | undefined;
+  /** The heading a value stands under, for a choice drawn in groups; values sharing one stand together in `values`' order. */
+  optionGroup?: (value: Value) => string | undefined;
+  /** A short word of what a value is, at the end of its row where the control draws one. */
+  optionTag?: (value: Value) => string | undefined;
   default: Default;
   /** The word for no choice at all, required where the default is nothing. */
   absent?: string;
@@ -186,10 +173,16 @@ export function choiceSetting<
     options: (): readonly SettingOption[] =>
       spec.values.map((value) => {
         const picture = spec.optionPicture?.(value);
+        const sample = spec.optionSample?.(value);
+        const group = spec.optionGroup?.(value);
+        const tag = spec.optionTag?.(value);
         return {
           value: spec.token(value),
           label: optionLabel(value),
           ...(picture === undefined ? undefined : { picture }),
+          ...(sample === undefined ? undefined : { sample }),
+          ...(group === undefined ? undefined : { group }),
+          ...(tag === undefined ? undefined : { tag }),
         };
       }),
     stored: (token) => byToken.get(token),
@@ -215,34 +208,5 @@ export function choiceSetting<
     visible: spec.visible,
     control,
     analytics: { value: choiceAnalytics },
-  };
-}
-
-/**
- * A stored chord. Every hotkey is the same setting three times: the same
- * guard, the same reading for a count — a deleted key counts as off — and no
- * description, because the Voice page draws the registered chord by hand
- * rather than as a schema row, and resets it with the page's other settings. The id is listed all the same, so the chord's
- * page is named and a change to it can be counted.
- */
-export function hotkeySetting<Field extends string, Id extends AppSettingId>(spec: {
-  field: Field;
-  id: Id;
-  order: number;
-  sideEffect: SettingSideEffectId;
-}): AppSettingSchemaEntry<Field, string | undefined, Id, undefined> {
-  return {
-    field: spec.field,
-    default: undefined,
-    guard: hotkey,
-    page: SETTINGS_PAGE.VOICE,
-    section: SETTING_SECTION.MAIN,
-    order: spec.order,
-    resetScope: SETTINGS_RESET_SCOPE.VOICE,
-    sideEffect: spec.sideEffect,
-    rows: SETTING_ROWS.BESPOKE,
-    ids: [spec.id],
-    describe: () => undefined,
-    analytics: { value: hotkeyAnalytics },
   };
 }

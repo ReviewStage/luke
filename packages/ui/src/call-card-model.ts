@@ -1,12 +1,14 @@
 /**
  * call-card-model.ts -- what the call card says about the standing call, and where it is drawn.
  *
- * The card draws no words of the conversation: the call's task by name over
+ * The card draws no words of the conversation: the call's task by name, or
+ * its agent's for a call into an agent with no task, over
  * the call bar's own status and mutes. Everything here is read off the
  * document the card is handed, in the call bar's own terms, so the card and
  * the bar can never disagree about the call they draw.
  */
 
+import { agentTabLabel } from "@luke/features/model-label";
 import type { TasksView } from "@luke/features/tasks-view";
 import { LIVE_STATUS } from "@luke/live";
 import {
@@ -16,7 +18,7 @@ import {
   avatarStanding,
   avatarTiled,
 } from "@luke/voice/avatar";
-import { callInProgress, type VoiceView } from "@luke/voice/voice-view";
+import { callInProgress, type VoiceCallAbout, type VoiceView } from "@luke/voice/voice-view";
 import { type CallStatus, standingCallStatus } from "./tasks-model.js";
 
 /** The task's name where the document has none to give, which a task just started can briefly be. */
@@ -30,8 +32,13 @@ export interface CallCardModel {
   readonly microphoneMuted: boolean;
 }
 
-/** The call's task by name, from the list or the task open, whichever holds it. */
-function taskNameOf(tasks: TasksView, taskId: string | undefined): string {
+/** The call's task by name, from the list or the task open, whichever holds it; or its agent's, as its row names it, where it has no task. */
+export function callTaskName(tasks: TasksView, call: VoiceCallAbout | undefined): string {
+  if (call !== undefined && call.taskId === undefined) {
+    const agent = tasks.tasklessAgents?.find((each) => each.id === call.agentId);
+    return agent === undefined ? CALL_CARD_UNNAMED : agentTabLabel(agent);
+  }
+  const taskId = call?.taskId;
   const open = tasks.document.task;
   const named =
     tasks.tasks.find((task) => task.id === taskId)?.name ??
@@ -40,70 +47,74 @@ function taskNameOf(tasks: TasksView, taskId: string | undefined): string {
 }
 
 export function callCard(input: {
-  view: Pick<VoiceView, "voiceStatus" | "lukeSpeaking" | "listening" | "callTaskId">;
+  view: Pick<VoiceView, "voiceStatus" | "lukeSpeaking" | "listening" | "call">;
   tasks: TasksView;
 }): CallCardModel {
   const { view, tasks } = input;
   return {
-    taskName: taskNameOf(tasks, view.callTaskId),
+    taskName: callTaskName(tasks, view.call),
     status: standingCallStatus(view, tasks.callActivity),
     microphoneMuted: !view.listening && view.voiceStatus !== LIVE_STATUS.CONNECTING,
   };
 }
 
 /**
- * The task whose call bar this window has on screen, or none: the Tasks tab
- * on a task's document, unless its version history, the window's Inbox, an
- * agent's page, or a side panel filling the window covers the column the
- * call bar stands in.
+ * The agent whose call bar this window has on screen, or none: the Tasks tab
+ * on an agent's own page, which draws its agent's call bar as its tab would,
+ * or on a task's document with that agent's tab chosen in its column, unless
+ * its version history, the window's Inbox, an agent's page, or a side panel
+ * filling the window covers the column the agent's tab stands in.
  */
-export function callBarTaskId(input: {
+export function callBarAgentId(input: {
   tasksTab: boolean;
   documentPage: boolean;
   historyOpen: boolean;
   inboxOpen: boolean;
-  agentPageOpen: boolean;
+  /** The agent whose own page stands in the plan's place; none while no agent's page does. */
+  pageAgentId: string | undefined;
   sidePanelFullScreen: boolean;
-  activeTaskId: string | undefined;
+  /** The agent whose tab the open task's column has chosen; none on its Chat or with no agent tab. */
+  columnAgentId: string | undefined;
 }): string | undefined {
-  const covered =
-    input.historyOpen || input.inboxOpen || input.agentPageOpen || input.sidePanelFullScreen;
-  return input.tasksTab && input.documentPage && !covered ? input.activeTaskId : undefined;
+  if (!input.tasksTab || input.inboxOpen || input.sidePanelFullScreen) return undefined;
+  if (input.pageAgentId !== undefined) return input.pageAgentId;
+  return input.documentPage && !input.historyOpen ? input.columnAgentId : undefined;
 }
 
 /**
  * Whether a Luke window draws the card: a call in progress, the window has
- * the keyboard, and the task it shows is not the call's, where the call bar
- * already is. A window without the keyboard leaves the call to the floating
- * window, so the call is drawn in one place at a time.
+ * the keyboard, and the agent tab it shows is not the call's, where the call
+ * bar already is. A window without the keyboard leaves the call to the
+ * floating window, so the call is drawn in one place at a time.
  */
 export function callCardShown(input: {
-  view: Pick<VoiceView, "voiceStatus" | "callTaskId">;
+  view: Pick<VoiceView, "voiceStatus" | "call">;
   focused: boolean;
-  taskShown: string | undefined;
+  agentShown: string | undefined;
 }): boolean {
-  const { view, focused, taskShown } = input;
-  return focused && callInProgress(view) && taskShown !== view.callTaskId;
+  const { view, focused, agentShown } = input;
+  return focused && callInProgress(view) && agentShown !== view.call?.agentId;
 }
 
 /**
- * What the top of one plan's Call tab draws while that plan's call is in
- * progress: the avatar's tile while it is starting, live, or ended for a
- * reason it offers to restart from, and `OFF` otherwise, which is the
- * compact strip that offers to turn video on, because the developer's own
- * off is not the end of video on the call. `undefined`, which draws nothing,
- * on any other plan or once the call is over. With the Video calls
- * experiment off nothing offers to put an avatar up, but an avatar still
- * standing keeps its tile, and with it the one control that takes it down.
+ * What the foot of an agent's tab draws over its call bar while a call into
+ * that agent is in progress: the avatar's tile while it is starting, live,
+ * or ended for a reason it offers to restart from, and `OFF` otherwise,
+ * which is the compact strip that offers to turn video on, because the
+ * developer's own off is not the end of video on the call. `undefined`,
+ * which draws nothing, on any other agent or once the call is over. With the
+ * Video calls experiment off nothing offers to put an avatar up, but an
+ * avatar still standing keeps its tile, and with it the one control that
+ * takes it down.
  */
-export function callTabVideoStatus(input: {
-  view: Pick<VoiceView, "voiceStatus" | "callTaskId">;
+export function agentCallVideoStatus(input: {
+  view: Pick<VoiceView, "voiceStatus" | "call">;
   avatar: AvatarState;
-  taskId: string;
+  agentId: string;
   videoCalls: boolean;
 }): AvatarStatus | undefined {
-  const { view, avatar, taskId, videoCalls } = input;
-  if (!callInProgress(view) || view.callTaskId !== taskId) return undefined;
+  const { view, avatar, agentId, videoCalls } = input;
+  if (!callInProgress(view) || view.call?.agentId !== agentId) return undefined;
   if (!videoCalls) return avatarStanding(avatar) ? avatar.status : undefined;
   return avatarTiled(avatar) ? avatar.status : AVATAR_STATUS.OFF;
 }
@@ -115,11 +126,11 @@ export function callTabVideoStatus(input: {
  * `undefined`, which is today's card and nothing more, once the call is
  * over or while the Video calls experiment is off. The card is small, so an
  * avatar that ended is not drawn ended there: it falls back to the plain
- * card, and the Call tab keeps saying why. As on the Call tab, an avatar
+ * card, and the agent's tab keeps saying why. As on the agent's tab, an avatar
  * still standing when the experiment is turned off keeps its tile.
  */
 export function callCardVideoStatus(input: {
-  view: Pick<VoiceView, "voiceStatus" | "callTaskId">;
+  view: Pick<VoiceView, "voiceStatus" | "call">;
   avatar: AvatarState;
   videoCalls: boolean;
 }): AvatarStatus | undefined {

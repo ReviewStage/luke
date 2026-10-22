@@ -59,11 +59,11 @@ it.layer(getTestDB())("the session sandbox queue", (it) => {
       Effect.gen(function* () {
         const userId = yield* openUser;
         const other = yield* openUser;
-        const tasks = mintSession();
+        const main = mintSession();
         const agent = mintSession();
-        const taskConversation = yield* openConversation(userId, {
-          kind: CONVERSATION_KIND.TASK,
-          sessionId: tasks,
+        const mainConversation = yield* openConversation(userId, {
+          kind: CONVERSATION_KIND.MAIN,
+          sessionId: main,
         });
         yield* openConversation(userId, { kind: CONVERSATION_KIND.CODING_AGENT, sessionId: agent });
         yield* openConversation(userId, {
@@ -72,20 +72,20 @@ it.layer(getTestDB())("the session sandbox queue", (it) => {
           deletedAt: new Date(),
         });
         yield* openConversation(userId, { kind: CONVERSATION_KIND.CHILD });
-        yield* openConversation(other, { kind: CONVERSATION_KIND.TASK, sessionId: mintSession() });
+        yield* openConversation(other, { kind: CONVERSATION_KIND.MAIN, sessionId: mintSession() });
 
         const all = yield* standingSessionsOf(userId);
         assert.deepEqual(
           [...all].sort((a, b) => a.sessionId.localeCompare(b.sessionId)),
           [
-            { sessionId: tasks, kind: CONVERSATION_KIND.TASK },
+            { sessionId: main, kind: CONVERSATION_KIND.MAIN },
             { sessionId: agent, kind: CONVERSATION_KIND.CODING_AGENT },
           ].sort((a, b) => a.sessionId.localeCompare(b.sessionId)),
         );
-        assert.deepEqual(yield* standingSessionsOf(userId, [taskConversation]), [
-          { sessionId: tasks, kind: CONVERSATION_KIND.TASK },
+        assert.deepEqual(yield* standingSessionsOf(userId, [mainConversation]), [
+          { sessionId: main, kind: CONVERSATION_KIND.MAIN },
         ]);
-        assert.deepEqual(yield* standingSessionsOf(other, [taskConversation]), []);
+        assert.deepEqual(yield* standingSessionsOf(other, [mainConversation]), []);
       }),
   );
 });

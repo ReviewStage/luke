@@ -1,5 +1,5 @@
 /**
- * relay.ts -- one attached shell: the desktop's socket piped to the shell's PTY in the agent's sandbox, held while someone types and closed when nobody has for five minutes.
+ * relay.ts -- one attached shell: a panel's socket, the desktop's or the web app's, piped to the shell's PTY in the agent's sandbox, held while someone types and closed when nobody has for five minutes.
  *
  * A connection reaches its agent through the one rule every agent route
  * keeps, then attaches only to a sandbox that is running: a stopped one is
@@ -18,16 +18,23 @@
  * connection closes as idle once nobody has typed in it for the bound,
  * whatever its sandbox's other terminals do, and the sweep stops the
  * sandbox once the lease every terminal moved on has lapsed past its grace.
- * While a terminal is connected, the GitHub token at the sandbox's firewall
+ * While a terminal is connected it also keeps the sandbox alive past its
+ * short timeout, every keep-alive interval (`CODER.SANDBOX_KEEP_ALIVE_EVERY`,
+ * `agents/sandbox-keep-alive.ts`), so a developer typing after the agent's
+ * turn ended is never cut off by it. While a terminal is connected, the GitHub token at the sandbox's firewall
  * is kept fresh on the rule the agent's own steps keep it by, claimed
  * through the lease so two windows mint one token between them; a renewal
  * that fails gives its claim back, is logged, and is tried again at the
- * next check. The shell is said to be attached once the first renewal has
- * ended, so a command typed at once finds the token set, and what was typed
- * before waits for it, up to a bound past which the shell attaches at once.
+ * next check. A member's own token, which never ages, is set at every check
+ * instead, so another window's close never leaves this one without it, and
+ * is taken off as the connection closes unless a turn of the agent is under
+ * way, which keeps it until the turn ends. The shell is said to be attached
+ * once the first renewal has ended, so a command typed at once finds the
+ * token set, and what was typed before waits for it, up to a bound past
+ * which the shell attaches at once.
  *
- * How the connection ended is the close code the desktop reads as the tab's
- * state (`@luke/features/terminal-wire`'s `TERMINAL_RELAY_CLOSE`).
+ * How the connection ended is the close code the panel's host reads as the
+ * tab's state (`@luke/features/terminal-wire`'s `TERMINAL_RELAY_CLOSE`).
  */
 
 import {
@@ -46,7 +53,6 @@ import {
   Fiber,
   Option,
   Queue,
-  type Redacted,
   Ref,
   Result,
   Schedule,
@@ -55,7 +61,10 @@ import {
   Stream,
 } from "effect";
 import { CODER } from "../agents/coder-host/bounds.js";
-import type { AgentSandboxService } from "../agents/terminal/agent-sandbox.js";
+import type {
+  AgentSandboxService,
+  RepositoryCredential,
+} from "../agents/terminal/agent-sandbox.js";
 import { attachTerminal, TMUX } from "../agents/terminal/tmux.js";
 import type { InteractiveShell, SandboxUnavailable } from "../agents/vercel-sandbox-api.js";
 import { unparsedWire } from "../core.js";
@@ -99,8 +108,12 @@ export interface RelayAsk {
 export interface RelayAgent {
   readonly conversationId: string;
   readonly sessionId: string | undefined;
-  /** A fresh GitHub token for the agent's repository, minted under the deployment's GitHub App. */
-  readonly repositoryToken: Effect.Effect<Redacted.Redacted, unknown>;
+  /** A fresh credential for the agent's repository: a token minted under the deployment's GitHub App, or its starter's own. */
+  readonly repositoryCredential: Effect.Effect<RepositoryCredential, unknown>;
+  /** Whether the agent's credential is its starter's own GitHub token, set at every check and taken off at the close rather than renewed. */
+  readonly memberToken: boolean;
+  /** Whether a turn of the agent is under way, which keeps a member's token standing as a connection closes. */
+  readonly turnUnderWay: Effect.Effect<boolean, unknown>;
 }
 
 /** What the relay stands on: the deployment's in production, a script's in a test. */
@@ -116,6 +129,8 @@ export interface RelayDependencies {
     shell: InteractiveShell,
   ) => Effect.Effect<RelaySocket, SandboxUnavailable, Scope.Scope>;
   readonly hold: (conversationId: string, heldUntil: Date) => Effect.Effect<void>;
+  /** Keeps the running sandbox the eve session is tagged with alive the timeout from now; a keep-alive that fails is logged, for the next to try again. */
+  readonly keepAlive: (sessionId: string) => Effect.Effect<void>;
   /** Claims the token's renewal on the running sandbox session, once per lease per session within the refresh rule. */
   readonly claimRenewal: (
     conversationId: string,
@@ -164,13 +179,43 @@ function heldFrom(instant: Date): Date {
   return new Date(instant.getTime() + Duration.toMillis(reach));
 }
 
-/** The GitHub token renewed at the firewall where this connection claims it, on the agent's own rule; a renewal that failed or was cut off gives the claim back, and the next check tries again. */
+/** The credential set at the firewall; a set that failed is logged, and the next check tries again. */
+function setCredential(
+  deps: RelayDependencies,
+  agent: RelayAgent,
+  sandboxSessionId: string,
+): Effect.Effect<void, unknown> {
+  return Effect.flatMap(agent.repositoryCredential, (credential) =>
+    deps.sandbox.setCredential(sandboxSessionId, credential),
+  );
+}
+
+/** A member's token taken off the firewall as the connection closes, unless a turn of the agent still uses it; a withdrawal that fails is logged. */
+function withdrawCredential(
+  deps: RelayDependencies,
+  agent: RelayAgent,
+  sandboxSessionId: string,
+): Effect.Effect<void> {
+  return Effect.gen(function* () {
+    if (yield* agent.turnUnderWay) return;
+    yield* deps.sandbox.withdrawCredential(sandboxSessionId);
+  }).pipe(
+    Effect.catch(() => Effect.logWarning("a terminal's GitHub credential was not taken off")),
+  );
+}
+
+/** The GitHub token renewed at the firewall where this connection claims it, on the agent's own rule, or a member's token set at every check; a renewal that failed or was cut off gives the claim back, and the next check tries again. */
 function renewCredential(
   deps: RelayDependencies,
   agent: RelayAgent,
   sandboxSessionId: string,
 ): Effect.Effect<void> {
   return Effect.gen(function* () {
+    if (agent.memberToken) {
+      return yield* setCredential(deps, agent, sandboxSessionId).pipe(
+        Effect.catch(() => Effect.logWarning("a terminal's GitHub credential was not set")),
+      );
+    }
     const at = yield* now;
     const renewedBefore = new Date(at.getTime() - Duration.toMillis(CODER.GITHUB_TOKEN_REFRESH));
     const claimed = yield* deps.claimRenewal(
@@ -180,9 +225,7 @@ function renewCredential(
       renewedBefore,
     );
     if (!claimed) return;
-    yield* Effect.flatMap(agent.repositoryToken, (token) =>
-      deps.sandbox.setGitHubToken(sandboxSessionId, token),
-    ).pipe(
+    yield* setCredential(deps, agent, sandboxSessionId).pipe(
       // Note that a connection closing mid-renewal interrupts it, and the claim goes back then too.
       Effect.onError(() => deps.releaseRenewal(agent.conversationId, sandboxSessionId, at)),
       Effect.catch(() => Effect.logWarning("a terminal's GitHub credential was not renewed")),
@@ -324,11 +367,22 @@ export function relayTerminal(
     const attachedAt = yield* now;
     const lastTyped = yield* Ref.make(attachedAt.getTime());
     yield* deps.hold(agent.conversationId, heldFrom(attachedAt));
+    // The sandbox is kept alive from the attach for as long as the connection stands, which nobody typing ends.
+    const { sessionId } = agent;
+    yield* Effect.forkScoped(
+      Effect.repeat(deps.keepAlive(sessionId), {
+        schedule: Schedule.spaced(CODER.SANDBOX_KEEP_ALIVE_EVERY),
+      }),
+    );
     // Note that the desktop's frames are read from here on into a queue of the relay's own, because the first renewal waits on the desktop leaving while what it typed waits for the shell.
     const fromDevice = yield* Queue.make<RelayFrame, Cause.Done>();
     const held = yield* Ref.make<number | undefined>(0);
     const overheld = yield* Deferred.make<void>();
     const deviceLeft = yield* Effect.forkScoped(readDevice(device, fromDevice, held, overheld));
+    // Note that the withdrawal is added ahead of the renewal's fork, so the scope ends the renewal first.
+    if (agent.memberToken) {
+      yield* Effect.addFinalizer(() => withdrawCredential(deps, agent, sandbox.sandboxSessionId));
+    }
     const firstRenewed = yield* Deferred.make<void>();
     yield* Effect.forkScoped(
       Effect.repeat(

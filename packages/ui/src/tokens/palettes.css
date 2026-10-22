@@ -47,7 +47,10 @@
   --luke-color-ink: light-dark(#000, #fff);
   /* Words on a fill of the text's own ink, which read in the ground's colour. */
   --luke-color-ink-inverse: var(--luke-color-ground);
-  --luke-color-accent-text: light-dark(#0a72a8, #5cd5ff);
+  /* Links' and text buttons' ink: in the light a step darker than the working
+     teal-blue, at its hue, so it reads at AA on the sidebar's current row
+     (`tokens.test.ts`). */
+  --luke-color-accent-text: light-dark(#00689b, #5cd5ff);
 
   --luke-color-ground: light-dark(#fcfcfc, #0c0c0e);
   /* A settings group's ground, a card's. */
@@ -70,6 +73,14 @@
   --luke-color-border: light-dark(rgba(0, 0, 0, 0.08), rgba(255, 255, 255, 0.08));
   --luke-color-border-strong: light-dark(rgba(0, 0, 0, 0.1), rgba(255, 255, 255, 0.12));
   --luke-color-border-selected: light-dark(rgba(0, 0, 0, 0.3), rgba(255, 255, 255, 0.32));
+  /* A chip's own face, opaque so it reads the same on any ground: its fill
+     at rest, under the pointer, and standing chosen, and its hairline, the
+     strong one round a chosen chip. */
+  --luke-color-chip: light-dark(#ffffff, #18181b);
+  --luke-color-chip-hover: light-dark(#f5f5f6, #202024);
+  --luke-color-chip-selected: light-dark(#ececee, #2c2c31);
+  --luke-color-chip-edge: light-dark(#dfdfe3, #2b2b30);
+  --luke-color-chip-edge-strong: light-dark(#b9b9c0, #45454c);
   --luke-color-input: light-dark(#fff, rgba(0, 0, 0, 0.4));
   --luke-color-input-focus: light-dark(#fff, rgba(0, 0, 0, 0.55));
   --luke-color-match: light-dark(rgba(0, 0, 0, 0.09), rgba(255, 255, 255, 0.16));
@@ -103,6 +114,9 @@
   --luke-color-switch-track: light-dark(rgba(0, 0, 0, 0.14), rgba(255, 255, 255, 0.09));
   --luke-color-switch-on: #0071e3;
   --luke-color-switch-thumb: light-dark(#fff, rgba(255, 255, 255, 0.95));
+  /* A segmented control's chosen option, raised on its trough: white in the
+     light, a lighter step of the trough in the dark. */
+  --luke-color-thumb: light-dark(#fff, rgba(255, 255, 255, 0.13));
   /* A hint is a dark pill in either appearance, as the system's own are. */
   --luke-color-tooltip: #0b0b0c;
   --luke-color-tooltip-edge: rgba(255, 255, 255, 0.1);
@@ -138,8 +152,13 @@
   --luke-color-identity-6: light-dark(#3f7434, #477a3a);
   --luke-color-on-identity: #fff;
 
-  /* A chart's one series: a mark that holds 3:1 on either ground. */
+  /* A chart's series, in the order a chart takes them: each mark holds 3:1
+     on either ground, so a stack of them reads apart by hue alone. */
   --luke-color-chart-1: #2f9bd8;
+  --luke-color-chart-2: #8b6cd9;
+  --luke-color-chart-3: #2e9e6a;
+  --luke-color-chart-4: #c97a1a;
+  --luke-color-chart-5: #868b94;
 }
 
 /* The site's light ground is shadcn/ui's stock light theme warmed off pure
@@ -148,8 +167,10 @@
 [data-luke-profile="web"],
 [data-luke-profile="web"][data-luke-theme="light"] {
   --luke-color-text: oklch(0.145 0 0);
-  --luke-color-text-muted: oklch(0.556 0 0);
-  --luke-color-text-subtle: oklch(0.556 0 0);
+  /* The quieter words, one ink: a step under shadcn's stock muted gray, so a
+     caption reads at AA on the sidebar's current row (`tokens.test.ts`). */
+  --luke-color-text-muted: oklch(0.5 0 0);
+  --luke-color-text-subtle: oklch(0.5 0 0);
   --luke-color-text-body: oklch(0.145 0 0);
   --luke-color-ink: #000;
   --luke-color-ink-inverse: var(--luke-color-ground);
@@ -171,6 +192,11 @@
   --luke-color-border: oklch(0.922 0 0);
   --luke-color-border-strong: oklch(0.922 0 0);
   --luke-color-border-selected: oklch(0.145 0 0);
+  --luke-color-chip: #ffffff;
+  --luke-color-chip-hover: #f5f5f5;
+  --luke-color-chip-selected: #ebebeb;
+  --luke-color-chip-edge: #e5e5e5;
+  --luke-color-chip-edge-strong: #b5b5b5;
   --luke-color-input: oklch(1 0 0);
   --luke-color-input-focus: oklch(1 0 0);
   --luke-color-match: rgba(0, 0, 0, 0.09);
@@ -199,6 +225,7 @@
   --luke-color-switch-track: rgba(0, 0, 0, 0.14);
   --luke-color-switch-on: #0d6e80;
   --luke-color-switch-thumb: #fff;
+  --luke-color-thumb: oklch(1 0 0);
   --luke-color-tooltip: #0b0b0c;
   --luke-color-tooltip-edge: rgba(255, 255, 255, 0.1);
   --luke-color-tooltip-text: rgba(255, 255, 255, 0.95);
@@ -226,12 +253,18 @@
   --luke-color-identity-6: #3f7434;
   --luke-color-on-identity: #fff;
 
-  /* A chart's one series: a mark that holds 3:1 on either ground. */
+  /* A chart's series, in the order a chart takes them: each mark holds 3:1
+     on either ground, so a stack of them reads apart by hue alone. */
   --luke-color-chart-1: #2f9bd8;
+  --luke-color-chart-2: #8b6cd9;
+  --luke-color-chart-3: #2e9e6a;
+  --luke-color-chart-4: #c97a1a;
+  --luke-color-chart-5: #868b94;
 }
 
-/* The admin dashboard's and the OAuth cards' dark ground, the product's state
-   palette on it verbatim. */
+/* The site's dark ground, worn where the account's Theme setting (or the
+   machine, under System) asks for it, as the app and the admin dashboard do,
+   and where a page asks for it itself, as the OAuth cards do. The product's state palette on it verbatim. */
 [data-luke-profile="web"][data-luke-theme="dark"] {
   --luke-color-text: rgba(255, 255, 255, 0.92);
   --luke-color-text-muted: rgba(255, 255, 255, 0.56);
@@ -239,7 +272,8 @@
   --luke-color-text-body: rgba(255, 255, 255, 0.92);
   --luke-color-ink: #fff;
   --luke-color-ink-inverse: var(--luke-color-ground);
-  --luke-color-accent-text: #0d6e80;
+  /* Luke's teal lifted to read on the dark grounds, AA against each (`tokens.test.ts`). */
+  --luke-color-accent-text: #15b3d0;
 
   --luke-color-ground: #08090b;
   /* A step above the page (1.06:1) lets a card read before its border does. */
@@ -255,6 +289,11 @@
   --luke-color-border: rgba(255, 255, 255, 0.08);
   --luke-color-border-strong: rgba(255, 255, 255, 0.08);
   --luke-color-border-selected: rgba(255, 255, 255, 0.92);
+  --luke-color-chip: #16171b;
+  --luke-color-chip-hover: #1d1e23;
+  --luke-color-chip-selected: #272930;
+  --luke-color-chip-edge: #26272c;
+  --luke-color-chip-edge-strong: #3f4148;
   --luke-color-input: #101114;
   --luke-color-input-focus: #101114;
   --luke-color-match: rgba(255, 255, 255, 0.16);
@@ -281,6 +320,7 @@
   --luke-color-switch-track: rgba(255, 255, 255, 0.09);
   --luke-color-switch-on: #2f9bd8;
   --luke-color-switch-thumb: rgba(255, 255, 255, 0.95);
+  --luke-color-thumb: rgba(255, 255, 255, 0.13);
   --luke-color-tooltip: #0b0b0c;
   --luke-color-tooltip-edge: rgba(255, 255, 255, 0.1);
   --luke-color-tooltip-text: rgba(255, 255, 255, 0.95);
@@ -308,8 +348,13 @@
   --luke-color-identity-6: #477a3a;
   --luke-color-on-identity: #fff;
 
-  /* The admin dashboard's chart series. The accent cyan sits too light for a
+  /* The chart series on the dark ground. The accent cyan sits too light for a
      mark on the dark card, so the slot is a darker step of the same hue
-     family, validated against the card at #101114 (6.1:1, ≥ 3:1). */
+     family, validated against the card at #101114 (6.1:1, ≥ 3:1); the series
+     after it hold the same bound there (4.7:1 to 5.7:1). */
   --luke-color-chart-1: #2f9bd8;
+  --luke-color-chart-2: #8b6cd9;
+  --luke-color-chart-3: #2e9e6a;
+  --luke-color-chart-4: #c97a1a;
+  --luke-color-chart-5: #868b94;
 }

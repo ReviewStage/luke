@@ -1,4 +1,4 @@
-import { MESSAGE_ROLE, TURN_ORIGIN, WireValueSchema } from "@luke/wire";
+import { keepIdentity, MESSAGE_ROLE, TURN_ORIGIN, WireValueSchema } from "@luke/wire";
 import { readEither, verbatimJsonSchema, wireKeys } from "@luke/wire/effect";
 import { Schema as EffectSchema, Result, SchemaTransformation } from "effect";
 import { integrationConnectionNameSchema, integrationConnectionOf } from "./integration-wire.js";
@@ -85,6 +85,13 @@ export const CODING_AGENT_BOUNDS = {
   MAX_SERVER_CHARS: 64,
   /** The most messages one page of a transcript carries; a page with fewer holds everything past its cursor as the transcript stood when it was read. */
   MESSAGES_PAGE: 200,
+  /**
+   * The most characters a tool part's output, as JSON text, or a reasoning
+   * part's words may spell on a transcript page a reader asked cut: past it
+   * the page carries its first and last half alone, with the whole's size,
+   * and the reader fetches the part whole when it opens it.
+   */
+  MAX_PART_CHARS: 4_096,
   /** The most items one to-do list may hold: a long run of work, never a log of every command. */
   MAX_TODOS: 40,
   /** The most characters one to-do may spell: a line of the list, not a paragraph. */
@@ -137,15 +144,81 @@ export const CODING_AGENT_AUTHOR = {
   APP_AUTOMATION: "app-automation",
   /** The App: GitHub could not be read as the agent started, so the developer's reach went unknown. */
   APP_UNREAD: "app-unread",
+  /** The developer who started the agent, through their own GitHub personal access token, where no installation reaches the repository. */
+  TOKEN: "token",
 } as const;
 
 export type CodingAgentAuthor = (typeof CODING_AGENT_AUTHOR)[keyof typeof CODING_AGENT_AUTHOR];
 
-/** What an agent was handed as its first message: the task's document, or a prompt the developer wrote in its place. */
+/**
+ * Who pays for a coding agent's model calls, recorded as the agent starts
+ * and never moved after: the starter's Claude plan or ChatGPT plan, which
+ * run the provider's own harness, the starter's own API key, or Luke's key.
+ * A plan that runs out pauses the agent rather than falling through to
+ * another payer.
+ */
+export const CODING_AGENT_PAYER = {
+  // Note that the stored spelling says "plan", the subscription's own word, not a task's document.
+  CLAUDE_SUBSCRIPTION: "claude_plan",
+  CHATGPT_SUBSCRIPTION: "chatgpt_plan",
+  API_KEY: "api_key",
+  LUKE: "luke",
+} as const;
+
+export type CodingAgentPayer = (typeof CODING_AGENT_PAYER)[keyof typeof CODING_AGENT_PAYER];
+
+/**
+ * What answers a coding agent's conversation, as its conversation's row
+ * records it: eve, as every agent ran before the native harnesses, or the
+ * provider's own harness, Claude Code or Codex, which Luke launches in the
+ * agent's sandbox. The store's own vocabulary spells the same words
+ * (`@luke/database/storage-vocabulary`'s `CONVERSATION_RUNTIME`).
+ */
+export const CODING_AGENT_RUNTIME = {
+  EVE: "eve",
+  CLAUDE_CODE: "claude_code",
+  CODEX: "codex",
+} as const;
+
+export type CodingAgentRuntime = (typeof CODING_AGENT_RUNTIME)[keyof typeof CODING_AGENT_RUNTIME];
+
+/** The runtimes that are a provider's own harness rather than eve, which an agent's summary names. */
+export const NATIVE_CODING_AGENT_RUNTIMES = [
+  CODING_AGENT_RUNTIME.CLAUDE_CODE,
+  CODING_AGENT_RUNTIME.CODEX,
+] as const;
+
+export type NativeCodingAgentRuntime = (typeof NATIVE_CODING_AGENT_RUNTIMES)[number];
+
+/**
+ * What kind of agent a row is: a coder, which every agent started on work is,
+ * or a member's operator, the one agent per member per workspace that
+ * manages their other agents, started blank with no task and no repository.
+ */
+export const CODING_AGENT_KIND = {
+  CODER: "coder",
+  OPERATOR: "operator",
+} as const;
+
+export type CodingAgentKind = (typeof CODING_AGENT_KIND)[keyof typeof CODING_AGENT_KIND];
+
+/**
+ * The whole of what an operator answers a heartbeat that found nothing for
+ * its member: a turn whose reply is exactly this, and nothing more, is a
+ * quiet turn, which leaves its member no unseen dot and no notice, and whose
+ * reply the panel does not draw. A reply that only mentions it is no quiet one.
+ */
+export const OPERATOR_QUIET_REPLY = "HEARTBEAT_OK";
+
+/** The most characters of the time zone an operator's ensure names, an IANA zone's name. */
+const OPERATOR_TIME_ZONE_MAX_CHARS = 64;
+
+/** What an agent was handed as its first message: the task's document, a prompt the developer wrote in its place, or nothing, for an agent started blank, whose first words come later, typed or spoken. */
 export const CODING_AGENT_BRIEF = {
   PLAN: "plan",
   // Note that the value says "task", because a released desktop decodes it.
   PROMPT: "task",
+  BLANK: "blank",
 } as const;
 
 export type CodingAgentBrief = (typeof CODING_AGENT_BRIEF)[keyof typeof CODING_AGENT_BRIEF];
@@ -225,6 +298,15 @@ const CODING_AGENT_ATTACHMENT_BYTES = {
 export function base64Chars(bytes: number): number {
   return 4 * Math.ceil(bytes / 3);
 }
+
+/** The files one message or Start may carry: their base64 together, and each one's name at JSON's widest escape with room for the keys around it. */
+export const MAXIMUM_ATTACHMENTS_BODY_BYTES =
+  base64Chars(CODING_AGENT_BOUNDS.MAX_ATTACHMENTS_BYTES) +
+  CODING_AGENT_BOUNDS.MAX_ATTACHMENTS * (6 * CODING_AGENT_BOUNDS.MAX_ATTACHMENT_NAME_CHARS + 128);
+
+/** A Start names a key, a choice, and a prompt with its files at most: the prompt's bound at JSON's widest escape, the files, and room for the rest. */
+export const MAXIMUM_START_BODY_BYTES =
+  6 * CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS + MAXIMUM_ATTACHMENTS_BODY_BYTES + 4_096;
 
 /** The bytes standard padded base64 spells, as an attachment's data carries them. */
 export function base64Bytes(base64: string): number {
@@ -376,7 +458,13 @@ export type CodingAgentStartFrom = typeof codingAgentStartFromSchema.Type;
  * so it names no prompt of its own, and it runs on that agent's choice and
  * servers where it names none. A note, bounded as a message is, goes only
  * beside such a source, written after the replay as the developer's, and
- * files go with it there as they go with a prompt.
+ * files go with it there as they go with a prompt. A Start `blank` hands the
+ * agent nothing at all, neither the plan nor a prompt, so it names no
+ * prompt, files, source, or note; its first words come later, typed or
+ * spoken, and it may start on a task with no repository, where it works in
+ * none. A Start `call` is one a Call opens a call into as it lands, from a
+ * draft's composer: it runs on eve whatever the account's routing would
+ * choose, as a blank one does, since a call reaches eve alone.
  */
 export const codingAgentStartRequestFields = {
   idempotencyKey: trimmedText(CODING_AGENT_BOUNDS.MAX_KEY_CHARS),
@@ -388,6 +476,8 @@ export const codingAgentStartRequestFields = {
   disabledServers: EffectSchema.optionalKey(disabledServersSchema),
   from: EffectSchema.optionalKey(codingAgentStartFromSchema),
   note: EffectSchema.optionalKey(messageWordsSchema),
+  blank: EffectSchema.optionalKey(EffectSchema.Boolean),
+  call: EffectSchema.optionalKey(EffectSchema.Boolean),
 };
 
 /** Whether `words` carry the files, as a prompt or a note does: no files without them, and words, files, or both with them. */
@@ -398,22 +488,28 @@ function carriesFiles(
   return words === undefined ? attachments === undefined : hasWordsOrFiles(words, attachments);
 }
 
-/** A Start's words or files: a prompt and its files afresh, never a note; from another agent, whose brief it is handed, no prompt, and a note and its files. */
+/** A Start's words or files: a prompt and its files afresh, never a note; from another agent, whose brief it is handed, no prompt, and a note and its files; blank, none of them. */
 export const startBrief = EffectSchema.makeFilter(
   ({
     prompt,
     attachments,
     from,
     note,
+    blank,
   }: {
     readonly prompt?: string;
     readonly attachments?: readonly CodingAgentAttachment[];
     readonly from?: CodingAgentStartFrom;
     readonly note?: string;
-  }) =>
-    from === undefined
+    readonly blank?: boolean;
+  }) => {
+    if (blank === true) {
+      return [prompt, attachments, from, note].every((each) => each === undefined);
+    }
+    return from === undefined
       ? note === undefined && carriesFiles(prompt, attachments)
-      : prompt === undefined && carriesFiles(note, attachments),
+      : prompt === undefined && carriesFiles(note, attachments);
+  },
 );
 
 /** The Start request as a caller holds it, before it is put on the wire. */
@@ -552,7 +648,7 @@ export type CodingAgentArchiver =
  * a member archived by archiving its task, which brings it back with the
  * task; a build from before it reads the archive as the member's own.
  */
-export const codingAgentArchivedBySchema = EffectSchema.Struct({
+const codingAgentArchivedBySchema = EffectSchema.Struct({
   by: EffectSchema.Literals(Object.values(CODING_AGENT_ARCHIVER)),
   member: EffectSchema.optionalKey(memberRefSchema),
   agent: EffectSchema.optionalKey(
@@ -580,11 +676,29 @@ export const codingAgentSummarySchema = EffectSchema.Struct({
   effort: EffectSchema.String,
   /** The context window the agent runs on where it is the standard one; absent for the model's whole window. */
   contextWindow: EffectSchema.optionalKey(contextWindowSchema),
+  /**
+   * The provider's own harness the agent runs on, which narrows the models
+   * its chip offers (`agent-runtime-models.ts`); absent for an agent on eve,
+   * and from a service older than it.
+   */
+  runtime: EffectSchema.optionalKey(EffectSchema.Literals(NATIVE_CODING_AGENT_RUNTIMES)),
   /** The agent's title as its tab shows it; null until one is generated, and after a rename cleared it, when the tab shows the model's name. */
   title: EffectSchema.NullOr(EffectSchema.String),
+  /** The human name the agent was given, which names it ahead of its title; absent for an agent from before names were given, and from a service before them. */
+  personaName: EffectSchema.optionalKey(EffectSchema.String),
+  /** What kind of agent it is, said only of a member's operator, which the panel draws as Luke in a row of his own; absent for a coder, and from a service before operators. */
+  kind: EffectSchema.optionalKey(EffectSchema.Literals(Object.values(CODING_AGENT_KIND))),
   /** Epoch milliseconds the agent was started. */
   createdAt: countedNumber,
   status: EffectSchema.Literals(Object.values(CODING_AGENT_STATUS)),
+  /**
+   * True where the agent is a member's operator whose newest turn's reply is
+   * its quiet reply alone (`OPERATOR_QUIET_REPLY`): a heartbeat that found
+   * nothing, whose end leaves no unseen dot and no notice. Absent for every
+   * other turn, from the held reads, which do not read it, and from a service
+   * before heartbeats.
+   */
+  quietTurn: EffectSchema.optionalKey(EffectSchema.Literal(true)),
   /**
    * The newest turn the status is read from, by the service's own id for
    * it; nothing before the first turn. A message that opens a new turn moves
@@ -604,9 +718,9 @@ export const codingAgentSummarySchema = EffectSchema.Struct({
   runStartedAt: EffectSchema.optionalKey(countedNumber),
   /**
    * What the agent was handed as its first message, so its tab draws a
-   * plan as the plan's card and a task as the developer's own message.
-   * Absent from a service older than the task, which handed every agent
-   * the plan.
+   * plan as the plan's card, a task as the developer's own message, and,
+   * for an agent started blank, its first line as any other line. Absent
+   * from a service older than the task, which handed every agent the plan.
    */
   brief: EffectSchema.optionalKey(EffectSchema.Literals(Object.values(CODING_AGENT_BRIEF))),
   /** Epoch milliseconds the agent was archived; absent while it is not, and from a service before archiving. */
@@ -672,7 +786,61 @@ export const codingAgentSummarySchema = EffectSchema.Struct({
 export type CodingAgentSummary = typeof codingAgentSummarySchema.Type;
 
 /** A started, stopped, or changed agent (POST, PATCH). */
-export const codingAgentAnswerSchema = EffectSchema.Struct({ agent: codingAgentSummarySchema });
+/**
+ * The id of the transaction a write on the agent committed in, as Postgres
+ * counts it, in decimal: present where a Start, a rename, an archive, or a
+ * pin changed a row, so the desktop following the task list waits for it to
+ * arrive before it confirms the write, as Neon's mutations guide says.
+ */
+const codingAgentTxidSchema = EffectSchema.String.check(EffectSchema.isPattern(/^[0-9]+$/u));
+
+export const codingAgentAnswerSchema = EffectSchema.Struct({
+  agent: codingAgentSummarySchema,
+  txid: EffectSchema.optionalKey(codingAgentTxidSchema),
+});
+
+/**
+ * A message handed to an agent, as the service answers it: the agent as it
+ * then stands, and the transaction that wrote the message's row, where this
+ * send wrote one, which the host waits to see on the transcript's live
+ * subscription before it confirms the send. Absent from a send that wrote
+ * nothing, and from a service older than it.
+ */
+export const codingAgentMessageAnswerSchema = EffectSchema.Struct({
+  agent: codingAgentSummarySchema,
+  txid: EffectSchema.optionalKey(EffectSchema.String),
+});
+
+/**
+ * The asking member's operator in a workspace ensured (PUT
+ * `/api/workspaces/{id}/operator`): the one standing, or a fresh one made
+ * blank where none stands, or, with `reset`, the standing one archived, its
+ * transcript kept, and a fresh one made in its place. `timeZone` is the
+ * IANA zone the client runs in, which the heartbeat an ensure that makes the
+ * operator aims at it is read in; UTC where it is absent or does not read.
+ */
+export const operatorEnsureRequestSchema = EffectSchema.Struct({
+  reset: EffectSchema.optionalKey(EffectSchema.Boolean),
+  timeZone: EffectSchema.optionalKey(
+    EffectSchema.String.check(EffectSchema.isMaxLength(OPERATOR_TIME_ZONE_MAX_CHARS)),
+  ),
+});
+
+export type OperatorEnsureRequest = typeof operatorEnsureRequestSchema.Type;
+
+/** The operator an ensure answers, by its id, and the transaction its row went in where this ensure made it. */
+export const operatorEnsureAnswerSchema = EffectSchema.Struct({
+  agentId: EffectSchema.String,
+  txid: EffectSchema.optionalKey(codingAgentTxidSchema),
+});
+
+export type OperatorEnsureAnswer = typeof operatorEnsureAnswerSchema.Type;
+
+/** An agent deleted for good (DELETE), as a task's delete answers: with the transaction its row went in, which the host waits to see on the followed list. */
+export const codingAgentDeleteAnswerSchema = EffectSchema.Struct({
+  deleted: EffectSchema.Literal(true),
+  txid: EffectSchema.optionalKey(codingAgentTxidSchema),
+});
 
 /**
  * The run of an automation that started an agent, as its page opens on it:
@@ -682,7 +850,7 @@ export const codingAgentAnswerSchema = EffectSchema.Struct({ agent: codingAgentS
  * it, cut as the agent was handed it, and the member who asked for a run
  * now, absent once their account is gone.
  */
-export const codingAgentOriginSchema = EffectSchema.Struct({
+const codingAgentOriginSchema = EffectSchema.Struct({
   prompt: EffectSchema.String,
   subject: EffectSchema.optionalKey(
     EffectSchema.Struct({
@@ -702,45 +870,22 @@ export type CodingAgentOrigin = typeof codingAgentOriginSchema.Type;
  * started with no task is read, having no task's tab to stand in: the
  * summary the tabs draw, the automation whose run started it or none, the
  * run that did where one did, the workspace it belongs to, and the
- * repository it works in. An agent on a plan reads so too, by the same id.
+ * repository it works in, null for one with none. An agent on a plan reads
+ * so too, by the same id.
  */
-export const codingAgentPageSchema = EffectSchema.Struct({
+const codingAgentPageSchema = EffectSchema.Struct({
   ...codingAgentSummarySchema.fields,
   automationId: EffectSchema.NullOr(wireUuidSchema),
   /** The run that started the agent; absent for one started by hand, and from a service before it. */
   origin: EffectSchema.optionalKey(codingAgentOriginSchema),
   workspaceId: EffectSchema.String,
-  repository: EffectSchema.String,
+  repository: EffectSchema.NullOr(EffectSchema.String),
 });
 
 export type CodingAgentPage = typeof codingAgentPageSchema.Type;
 
 /** One agent read by its id (GET), on a task or with none. */
 export const codingAgentPageAnswerSchema = EffectSchema.Struct({ agent: codingAgentPageSchema });
-
-/**
- * One agent with no plan as the plan list carries it beside the plans, so
- * the sidebar lists it among them: the agent as the tabs draw it, its
- * automation's name among them, the automation, workspace, and repository
- * its own page names, and when it last moved, which orders it among the
- * plans by their last update, and when the reader pinned it, where they did.
- * The run that started it is its page's alone, so a list of many carries no
- * prompt.
- */
-export const tasklessAgentSchema = EffectSchema.Struct({
-  ...codingAgentSummarySchema.fields,
-  automationId: codingAgentPageSchema.fields.automationId,
-  workspaceId: codingAgentPageSchema.fields.workspaceId,
-  repository: codingAgentPageSchema.fields.repository,
-  /** Epoch milliseconds the agent last moved: its start, its newest run's start, or that run's end, whichever is latest. */
-  activityAt: countedNumber,
-  /** Epoch milliseconds the reader pinned the agent, a pin being each member's own; absent while they have not, and from a service before agents were pinned. */
-  pinnedAt: EffectSchema.optionalKey(countedNumber),
-  /** Where the reader's pin stands in the sidebar's Pinned section once they dragged it (`pin-order.ts`); absent while it stands by `pinnedAt`. */
-  pinPosition: EffectSchema.optionalKey(EffectSchema.String),
-});
-
-export type TasklessAgent = typeof tasklessAgentSchema.Type;
 
 /** The task's agents (GET), in the order they were started. */
 export const codingAgentListAnswerSchema = EffectSchema.Struct({
@@ -778,23 +923,61 @@ export const codingAgentPullRequestSchema = EffectSchema.Struct({
   additions: countedNumber,
   deletions: countedNumber,
   changedFiles: countedNumber,
+  /** True where the pull request is open and GitHub holds it in its base's merge queue; absent otherwise, and from a service before it was sent. */
+  queued: EffectSchema.optionalKey(EffectSchema.Literal(true)),
 });
 
 export type CodingAgentPullRequest = typeof codingAgentPullRequestSchema.Type;
 
 /**
  * What an agent published (GET): the repository it works in as `owner/name`,
- * the branch it pushed, where GitHub holds one, and the pull request from
- * it, where one is open or was; null for each it has not. A pull request's
- * branch is its head.
+ * null for one with none, which publishes nothing; the branch it pushed,
+ * where GitHub holds one; and the pull request from it, where one is open or
+ * was; null for each it has not. A pull request's branch is its head.
  */
 export const codingAgentPullRequestAnswerSchema = EffectSchema.Struct({
-  repository: EffectSchema.String,
+  repository: EffectSchema.NullOr(EffectSchema.String),
   branch: EffectSchema.NullOr(EffectSchema.String),
   pullRequest: EffectSchema.NullOr(codingAgentPullRequestSchema),
 });
 
 export type CodingAgentPullRequestAnswer = typeof codingAgentPullRequestAnswerSchema.Type;
+
+/**
+ * One agent with no plan as the plan list carries it beside the plans, so
+ * the sidebar lists it among them: the agent as the tabs draw it, its
+ * automation's name among them, the automation, workspace, and repository
+ * its own page names, and when it last moved, which orders it among the
+ * plans by their last update, when the reader pinned it, where they did,
+ * and the pull request it opened, where it opened one.
+ * The run that started it is its page's alone, so a list of many carries no
+ * prompt.
+ */
+export const tasklessAgentSchema = EffectSchema.Struct({
+  ...codingAgentSummarySchema.fields,
+  automationId: codingAgentPageSchema.fields.automationId,
+  workspaceId: codingAgentPageSchema.fields.workspaceId,
+  repository: codingAgentPageSchema.fields.repository,
+  /** Epoch milliseconds the agent last moved: its start, its newest run's start, or that run's end, whichever is latest. */
+  activityAt: countedNumber,
+  /** Epoch milliseconds the reader pinned the agent, a pin being each member's own; absent while they have not, and from a service before agents were pinned. */
+  pinnedAt: EffectSchema.optionalKey(countedNumber),
+  /** Where the reader's pin stands in the sidebar's Pinned section once they dragged it (`pin-order.ts`); absent while it stands by `pinnedAt`. */
+  pinPosition: EffectSchema.optionalKey(EffectSchema.String),
+  /** The pull request it opened, as GitHub last answered the service, which its row's card shows as a task's row's card shows its own; absent while it opened none, and from a service before it was sent. */
+  pullRequest: EffectSchema.optionalKey(
+    EffectSchema.Struct({
+      number: codingAgentPullRequestSchema.fields.number,
+      title: codingAgentPullRequestSchema.fields.title,
+      url: codingAgentPullRequestSchema.fields.url,
+      state: codingAgentPullRequestSchema.fields.state,
+      checks: codingAgentPullRequestSchema.fields.checks,
+      queued: codingAgentPullRequestSchema.fields.queued,
+    }),
+  ),
+});
+
+export type TasklessAgent = typeof tasklessAgentSchema.Type;
 
 /** What became of one file: made, changed in place, removed, or moved, with or without changes. */
 export const CHANGED_FILE_STATUS = {
@@ -836,6 +1019,13 @@ export const CHANGES_BOUNDS = {
 /** A commit as GitHub names it: forty hex digits. */
 const commitShaSchema = EffectSchema.String.check(EffectSchema.isPattern(/^[0-9a-f]{40}$/u));
 
+/**
+ * One changed file as GitHub lists it: its path, where it moved from, what
+ * became of it, the lines it adds and removes, its patch or why none, and
+ * the git object its contents after are (`blobSha`), which a reader of the
+ * file whole checks it read the very contents the patch was made against;
+ * absent from a service before it, and for a file with no contents after.
+ */
 const changedFileSchema = EffectSchema.Struct({
   path: EffectSchema.String,
   previousPath: EffectSchema.NullOr(EffectSchema.String),
@@ -844,6 +1034,7 @@ const changedFileSchema = EffectSchema.Struct({
   deletions: countedNumber,
   patch: EffectSchema.NullOr(EffectSchema.String),
   omitted: EffectSchema.NullOr(EffectSchema.Literals(Object.values(PATCH_OMITTED))),
+  blobSha: EffectSchema.optionalKey(commitShaSchema),
 });
 
 export type CodingAgentChangedFile = typeof changedFileSchema.Type;
@@ -1044,6 +1235,8 @@ export const OVERVIEW_BOUNDS = {
   MAX_REACTORS: 10,
   /** The most labels, users, or teams the reviewer and label pickers are offered, each. */
   MAX_OPTIONS: 300,
+  /** The most comments of the member's own pending review one read carries, its first kept, the rest only counted. */
+  MAX_PENDING_COMMENTS: 100,
 } as const;
 
 /** The side of a diff a review thread's line counts on: the old file's, or the new file's. */
@@ -1177,6 +1370,33 @@ const reviewThreadSchema = EffectSchema.Struct({
 export type ReviewThread = typeof reviewThreadSchema.Type;
 
 /**
+ * One comment of the member's own pending review, which nobody else sees
+ * until they submit it: GitHub's own id for it, which an edit or a deletion
+ * names it by; the published review thread it replies on, by GitHub's id
+ * for it (`ReviewThread.id`), absent for a comment that starts a thread of
+ * its own; who, the member; the file it is on; the line it stands on
+ * and the first of its range, each null where it is on the whole file, and
+ * the side each counts on; their words whole, as GitHub renders them, or,
+ * where GitHub sent no rendering, null with their words as markdown in
+ * `body`, which an edit starts from; and when, in epoch milliseconds.
+ */
+const pendingReviewCommentSchema = EffectSchema.Struct({
+  id: EffectSchema.String,
+  threadId: EffectSchema.optionalKey(EffectSchema.String),
+  by: githubPersonSchema,
+  path: EffectSchema.String,
+  line: EffectSchema.NullOr(countedNumber),
+  startLine: EffectSchema.NullOr(countedNumber),
+  side: diffSideSchema,
+  startSide: EffectSchema.NullOr(diffSideSchema),
+  html: EffectSchema.NullOr(EffectSchema.String),
+  body: EffectSchema.String,
+  at: countedNumber,
+});
+
+export type PendingReviewComment = typeof pendingReviewCommentSchema.Type;
+
+/**
  * One entry of a pull request's conversation: a comment on it, or a review
  * and where it left its reviewer; who; their words whole, as GitHub renders
  * them (`body_html`), or, where GitHub sent no rendering, null with their
@@ -1246,7 +1466,9 @@ export type PullRequestStackEntry = typeof stackEntrySchema.Type;
  * the first of the overview's three reads, each of which lands on its own:
  * where it stands, its title, number, and page; its description as GitHub
  * renders it (`body_html`), empty where it has none; the branch it merges
- * into and the one it merges from; when it was opened, and merged where it
+ * into and the one it merges from, with the account whose fork that one
+ * stands on where it is not the repository's own (absent from a service
+ * before it); when it was opened, and merged where it
  * was; whether it would merge as it stands; who opened it, who the agent
  * writes as on GitHub, and who it still asks for a review, people and
  * teams; its labels; and,
@@ -1265,6 +1487,7 @@ export const codingAgentOverviewPullRequestAnswerSchema = EffectSchema.Struct({
       html: EffectSchema.String,
       base: overviewName,
       head: overviewName,
+      headOwner: EffectSchema.optionalKey(overviewName),
       createdAt: countedNumber,
       mergedAt: EffectSchema.NullOr(countedNumber),
       merge: EffectSchema.Literals(Object.values(MERGE_STATE)),
@@ -1357,7 +1580,9 @@ export type CodingAgentOverviewChecks = NonNullable<
  * conversation rather than the description itself, since they are read in
  * the same ask as the reactions of its comments; and, read beside it on the
  * reader's own token, the review they hold pending on it, by how many
- * comments it holds, null where they hold none or it could not be read as
+ * comments it holds and those comments themselves, the first up to the
+ * bound (`drafts`, absent where they could not be read, or from a service
+ * before them), null where they hold none or it could not be read as
  * theirs, absent from a service before it. Null where the agent has opened
  * no pull request yet.
  */
@@ -1374,7 +1599,16 @@ export const codingAgentOverviewConversationAnswerSchema = EffectSchema.Struct({
       descriptionReactions: EffectSchema.optionalKey(reactionsSchema),
       descriptionSubject: reactionSubjectSchema,
       pendingReview: EffectSchema.optionalKey(
-        EffectSchema.NullOr(EffectSchema.Struct({ comments: countedNumber })),
+        EffectSchema.NullOr(
+          EffectSchema.Struct({
+            comments: countedNumber,
+            drafts: EffectSchema.optionalKey(
+              EffectSchema.Array(pendingReviewCommentSchema).check(
+                EffectSchema.isMaxLength(OVERVIEW_BOUNDS.MAX_PENDING_COMMENTS),
+              ),
+            ),
+          }),
+        ),
       ),
     }),
   ),
@@ -1509,7 +1743,7 @@ const recordedChoice = EffectSchema.String.check(
  * absent where the row recorded none and from a service older than it; the
  * tokens and the ending, too, until the turn has ended.
  */
-export const turnRecordFields = {
+const turnRecordFields = {
   /** The catalog id of the model the turn ran on, such as `openai/gpt-6.1-sol`. */
   model: EffectSchema.optionalKey(recordedChoice),
   effort: EffectSchema.optionalKey(recordedChoice),
@@ -1522,6 +1756,24 @@ export const turnRecordFields = {
 const turnRecordSchema = EffectSchema.Struct(turnRecordFields);
 
 export type TurnRecord = typeof turnRecordSchema.Type;
+
+/**
+ * What sent one of the developer's lines to a coding agent: a member, from
+ * the message box or an Inbox answer; Luke, from a call; an automation's
+ * run, on its creator's behalf; GitHub, telling the agent of a review, a
+ * comment, or a failed check on its pull request, by who caused it there;
+ * or another coding agent of the workspace, through a chat message told to
+ * it, or, in a line written before it was retired, through `message_agent`.
+ */
+export const MESSAGE_SENDER = {
+  MEMBER: "member",
+  LUKE: "luke",
+  AUTOMATION: "automation",
+  GITHUB: "github",
+  AGENT: "agent",
+} as const;
+
+export type MessageSender = (typeof MESSAGE_SENDER)[keyof typeof MESSAGE_SENDER];
 
 /** What kind of thing sent one of the developer's messages to a coding agent: a member, a member whose account is gone, Luke from a call, an automation's run, or GitHub, by the login of who caused what it tells the agent of. */
 export const CODING_AGENT_SENDER = {
@@ -1571,6 +1823,42 @@ const codingAgentSenderSchema = EffectSchema.Struct({
 
 export type CodingAgentSender = typeof codingAgentSenderSchema.Type;
 
+/** Which field of a part a page carries cut: a tool call's output, or a reasoning's words. */
+export const PART_CUT_FIELD = {
+  OUTPUT: "output",
+  TEXT: "text",
+} as const;
+
+export type PartCutField = (typeof PART_CUT_FIELD)[keyof typeof PART_CUT_FIELD];
+
+/** The query a transcript read asks its heavy parts cut by, and the one word it takes. */
+export const TRANSCRIPT_PARTS_QUERY = { PARTS: "parts", CUT: "cut" } as const;
+
+/**
+ * One part a page carries cut: its index among the message's `parts`, the
+ * field left out of that part, the whole field's size in UTF-8 bytes, and
+ * its first and last characters, a tool output as its JSON text, at most
+ * half of `MAX_PART_CHARS` each. The part itself stands in `parts` without
+ * the field, so nothing reads the cut words as the part's own; the message's
+ * id and this index name the part to fetch whole.
+ */
+const codingAgentPartCutSchema = EffectSchema.Struct({
+  index: countedNumber,
+  field: EffectSchema.Literals(Object.values(PART_CUT_FIELD)),
+  bytes: countedNumber,
+  head: EffectSchema.String,
+  tail: EffectSchema.String,
+});
+
+export type CodingAgentPartCut = typeof codingAgentPartCutSchema.Type;
+
+/** One part of a transcript's message whole, as its row holds it: what a reader fetches for a part its page carried cut. */
+export const codingAgentPartAnswerSchema = EffectSchema.Struct({
+  part: storedObjectSchema,
+});
+
+export type CodingAgentPartAnswer = typeof codingAgentPartAnswerSchema.Type;
+
 /**
  * One message of an agent's transcript, as the conversation's row holds it:
  * an AI SDK `UIMessage`, its parts as the SDK shapes them (text, reasoning,
@@ -1582,13 +1870,13 @@ export type CodingAgentSender = typeof codingAgentSenderSchema.Type;
  * ended, so a tab says how long a finished turn worked, and once it has,
  * what it ran on and spent (`turnRecordFields`).
  */
-export const codingAgentMessageSchema = EffectSchema.Struct({
+const codingAgentMessageSchema = EffectSchema.Struct({
   id: EffectSchema.String,
   /**
-   * The turn the message is the journal of, on a task conversation's
-   * page, so the Call tab knows which of the developer's lines asked for it;
-   * absent on a coding agent's page, on any other row, and from a service
-   * older than it.
+   * The turn the message is the journal of, so the Call tab knows which of
+   * the developer's lines asked for it and an agent's tab which turn a line
+   * said on a call answers (`readFrom`); absent on any other row, and from
+   * a service older than it.
    */
   turnId: EffectSchema.optionalKey(EffectSchema.String),
   /**
@@ -1630,10 +1918,27 @@ export const codingAgentMessageSchema = EffectSchema.Struct({
   earlierOmitted: EffectSchema.optionalKey(EffectSchema.Boolean),
   role: EffectSchema.Literals(Object.values(MESSAGE_ROLE)),
   parts: EffectSchema.Array(storedObjectSchema),
+  /** The parts carried cut, each standing in `parts` without its field (`codingAgentPartCutSchema`); absent where none is, on a page not asked cut, and from a service older than it. */
+  cutParts: EffectSchema.optionalKey(EffectSchema.Array(codingAgentPartCutSchema)),
   metadata: EffectSchema.optionalKey(storedObjectSchema),
   /** What sent one of the developer's messages to a coding agent (`codingAgentSenderSchema`); absent on every other row, on a message written before senders were kept, and from a service older than it. */
   sentBy: EffectSchema.optionalKey(codingAgentSenderSchema),
-  /** Epoch milliseconds one of the developer's lines was sent, which the tab names under its bubble; absent on every other row, and from a service older than it. */
+  /**
+   * The id one of the developer's lines was written under, which a line a
+   * window sent is its send key's (`sentLineId` of `@luke/wire/host-ids`), so
+   * the window that sent it knows the row as it lands and draws it in the
+   * place of the line it drew at once; absent on every other row, and from a
+   * service older than it.
+   */
+  clientId: EffectSchema.optionalKey(
+    EffectSchema.String.check(EffectSchema.isMaxLength(CODING_AGENT_BOUNDS.MAX_LINE_ID_CHARS)),
+  ),
+  /**
+   * Epoch milliseconds one of the developer's lines was sent, which the tab
+   * names under its bubble, or a line said on a call into the agent began,
+   * either speaker's, its metadata naming the voice channel and its call;
+   * absent on every other row, and from a service older than it.
+   */
   sentAt: EffectSchema.optionalKey(countedNumber),
   /**
    * Where in a turn under way one of the developer's lines arrived: the
@@ -1646,6 +1951,21 @@ export const codingAgentMessageSchema = EffectSchema.Struct({
    */
   arrivedIn: EffectSchema.optionalKey(
     EffectSchema.Struct({ journalId: EffectSchema.String, afterStep: countedNumber }),
+  ),
+  /**
+   * The turn whose work a line the agent said on a call answers: the turn
+   * the ask it followed ran in, by the turn's id as its journal names it
+   * (`turnId`), and where that ask joined a typed turn under way, how many
+   * of the turn's steps had begun before it, so the tab folds only the work
+   * after them under the line. Absent on a line that followed no ask, or
+   * one whose ask has learned no turn, on every other row, and from a
+   * service older than it.
+   */
+  readFrom: EffectSchema.optionalKey(
+    EffectSchema.Struct({
+      turnId: EffectSchema.String,
+      afterStep: EffectSchema.optionalKey(countedNumber),
+    }),
   ),
   /** Epoch milliseconds the turn began, as a working line counts it: its start, or its queueing where eve has not started it; absent on the developer's rows, and from a service older than it. */
   startedAt: EffectSchema.optionalKey(countedNumber),
@@ -1677,11 +1997,19 @@ export const CODING_AGENT_CURSOR_START = "0:0";
  * service knows one for every model they ran on; tokens alone where it
  * does not.
  */
-export const codingAgentUsageSchema = EffectSchema.Struct({
+const codingAgentUsageSchema = EffectSchema.Struct({
   inputTokens: countedNumber,
   outputTokens: countedNumber,
   cachedInputTokens: EffectSchema.optionalKey(countedNumber),
   costUsd: EffectSchema.optionalKey(countedNumber),
+  /**
+   * Who paid for the turns (`CODING_AGENT_PAYER`), on the agent's own
+   * transcript where its row records one: a plan's turns are drawn as the
+   * plan's usage rather than in dollars, since a subscription has no bill
+   * per token. Absent on a worker's, an agent from before payers were
+   * recorded, and from a service older than it.
+   */
+  payer: EffectSchema.optionalKey(EffectSchema.Literals(Object.values(CODING_AGENT_PAYER))),
 });
 
 export type CodingAgentUsage = typeof codingAgentUsageSchema.Type;
@@ -1700,7 +2028,7 @@ export type CodingAgentUsage = typeof codingAgentUsageSchema.Type;
  * a compaction's summary may have folded it in. When that step ended, and
  * when eve last compacted the conversation, where it has.
  */
-export const codingAgentContextSchema = EffectSchema.Struct({
+const codingAgentContextSchema = EffectSchema.Struct({
   windowTokens: countedNumber,
   compactionThresholdTokens: countedNumber,
   inputTokens: countedNumber,
@@ -1816,11 +2144,50 @@ export const codingAgentMessagesAnswerSchema = EffectSchema.Struct({
 export type CodingAgentMessagesAnswer = typeof codingAgentMessagesAnswerSchema.Type;
 
 /**
+ * Where a reader of a transcript read back from its end stands: the lowest
+ * message sequence it holds, in decimal. The next older page is the
+ * messages below it.
+ */
+export const codingAgentBeforeSchema = EffectSchema.String.check(EffectSchema.isPattern(/^\d+$/u));
+
+/**
+ * The transcript's newest page, read at once: the newest messages, oldest
+ * first, with everything the page past a cursor carries, its `cursor` the
+ * one a reader follows on from with nothing written meanwhile missed, and
+ * `before` the place the next older page is read below; absent where
+ * nothing older stands.
+ */
+export const codingAgentNewestAnswerSchema = EffectSchema.Struct({
+  ...codingAgentMessagesAnswerSchema.fields,
+  before: EffectSchema.optionalKey(codingAgentBeforeSchema),
+});
+
+export type CodingAgentNewestAnswer = typeof codingAgentNewestAnswerSchema.Type;
+
+/**
+ * An older page of the transcript, read below `before`: its messages,
+ * oldest first, and where the page older still is read below; absent where
+ * nothing older stands. It carries nothing of the agent as a whole, which
+ * the newest page told.
+ */
+export const codingAgentOlderAnswerSchema = EffectSchema.Struct({
+  messages: EffectSchema.Array(codingAgentMessageSchema),
+  before: EffectSchema.optionalKey(codingAgentBeforeSchema),
+});
+
+export type CodingAgentOlderAnswer = typeof codingAgentOlderAnswerSchema.Type;
+
+/**
  * A page of an agent's messages joined to the ones held: a message heard
- * again replaces the one held under its id, in place, and a new one joins
- * at the end, so a journal that grows in place is redrawn where it stands.
- * The agent's tab and the host's read of a task's conversation join pages
- * the same way, so both draw one transcript from the same answers.
+ * again that says something new replaces the one held under its id, in
+ * place, and a new one joins at the end, so a journal that grows in place is
+ * redrawn where it stands. A message heard again keeps every part of it that
+ * is unchanged, the whole message where nothing is (`keepIdentity`), and a
+ * page that changes nothing answers what was held, because a transcript
+ * followed afresh is heard again whole, and what draws a message by its
+ * identity then draws only what changed. The agent's tab and the
+ * host's read of a task's conversation join pages the same way, so both
+ * draw one transcript from the same answers.
  */
 export function applyMessagesPage(
   held: readonly CodingAgentMessage[],
@@ -1828,8 +2195,13 @@ export function applyMessagesPage(
 ): readonly CodingAgentMessage[] {
   if (page.length === 0) return held;
   const heard = new Map(page.map((message) => [message.id, message]));
-  const joined = held.map((message) => heard.get(message.id) ?? message);
+  const joined = held.map((message) => {
+    const again = heard.get(message.id);
+    return again === undefined ? message : keepIdentity(message, again);
+  });
   const known = new Set(held.map((message) => message.id));
   const appended = page.filter((message) => !known.has(message.id));
-  return [...joined, ...appended];
+  const unchanged =
+    appended.length === 0 && joined.every((message, index) => message === held[index]);
+  return unchanged ? held : [...joined, ...appended];
 }

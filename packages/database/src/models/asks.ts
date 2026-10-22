@@ -1,10 +1,12 @@
 import { ASK_ORIGIN, type AskOrigin } from "@luke/features";
+import { MESSAGE_CHANNEL } from "@luke/wire";
 import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 import { Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
 import { Database, type DatabaseServices, type QueryError } from "../core/query.js";
-import { asks, conversations } from "../schemas/storage.js";
+import { asks, conversations, messages } from "../schemas/storage.js";
 import { InstantColumnSchema } from "./columns.js";
+import { holdConversationDispatch } from "./dispatch-lock.js";
 import { recordedRuntimeSession } from "./recorded-session.js";
 import type { ConversationTarget } from "./writer.js";
 
@@ -35,6 +37,8 @@ export interface AskRow {
   /** The turn the ask ran in, as the store keys it, once known. */
   readonly turnId?: string;
   readonly cancelRequestedAt?: Date;
+  /** For a spoken ask bound to a typed turn, which it joined under way: how many of the turn's steps had begun before it; absent for an ask that is its whole turn's. */
+  readonly joinedAfterStep?: number;
 }
 
 /** Where a spoken ask came from: the voice session it was delegated in and its ask revision there. */
@@ -59,10 +63,18 @@ interface SpokenAsk {
   readonly revision: number;
   readonly turnId?: string;
   readonly cancelRequestedAt?: Date;
+  /** The steps of a typed turn begun before the ask joined it (`AskRow.joinedAfterStep`); absent for an ask that is its whole turn's. */
+  readonly joinedAfterStep?: number;
   /** The last event of the turn told to the voice under this ask; 0 for none. */
   readonly toldSeq: number;
   /** When the run's end was told under this ask; absent while it has not been. */
   readonly endToldAt?: Date;
+  /**
+   * Whether a line the developer typed into the call asked it rather than a
+   * delegation of the voice's: its client id is then the typed row's, and
+   * names no delegation the session knows.
+   */
+  readonly typed: boolean;
 }
 
 /** How far one telling went: the turn's last event told, and the instant its end was told, where it was. */
@@ -93,7 +105,7 @@ export interface AskRecord {
   /** The newest eve session any of the conversation's asks was handed to, by eve's own sortable ids, ahead of the conversation row recording it. */
   latestSession(userId: string, conversationId: string): AskEffect<string | undefined>;
   /**
-   * Runs the dispatch under the conversation's lock unless a session is already written, handing it
+   * Runs the dispatch under the conversation's dispatch lock unless a session is already written, handing it
    * the conversation's newest session as read under that lock, and writes what eve answered; answers
    * the row after, or `NO_CONVERSATION` when the conversation no longer stands, so a deletion landing
    * between the ask's admission and its dispatch is the caller's refusal and not a failure.
@@ -123,11 +135,16 @@ export interface AskRecord {
 
 /** The binding the relay makes when eve's `turn.started` names the deliveries a turn carries. */
 export interface AskDeliveryBinding {
-  /** Names the turn each delivered ask of the conversation ran in; answers the asks bound, with any Stop stamped on them. */
+  /**
+   * Names the turn each delivered ask of the conversation ran in; answers the asks bound, with any
+   * Stop stamped on them. Where the turn is a typed one, `joinedAfterStep` is how many of its steps
+   * had begun, which each spoken ask bound keeps as the place it joined the turn at.
+   */
   bindDeliveries(
     target: ConversationTarget,
     deliveryIds: readonly string[],
     turnId: string,
+    joinedAfterStep?: number,
   ): AskEffect<readonly AskRow[]>;
   /**
    * The conversation's asks bound to the turn that carry a Stop: the ask that opened the session is
@@ -154,6 +171,7 @@ const ASK_COLUMNS = {
   deliveryId: asks.deliveryId,
   turnId: asks.turnId,
   cancelRequestedAt: asks.cancelRequestedAt,
+  joinedAfterStep: asks.joinedAfterStep,
 } as const;
 
 const AskRowSchema = Schema.Struct({
@@ -167,6 +185,7 @@ const AskRowSchema = Schema.Struct({
   deliveryId: Schema.NullOr(Schema.String),
   turnId: Schema.NullOr(Schema.String),
   cancelRequestedAt: Schema.NullOr(InstantColumnSchema),
+  joinedAfterStep: Schema.NullOr(Schema.Int),
 });
 
 type AskRowRead = Schema.Schema.Type<typeof AskRowSchema>;
@@ -186,6 +205,7 @@ function askRow(read: AskRowRead): AskRow {
     ...(read.cancelRequestedAt !== null
       ? { cancelRequestedAt: read.cancelRequestedAt }
       : undefined),
+    ...(read.joinedAfterStep !== null ? { joinedAfterStep: read.joinedAfterStep } : undefined),
   };
 }
 
@@ -348,9 +368,25 @@ const SpokenAskRowSchema = Schema.Struct({
   revision: Schema.Int,
   turnId: Schema.NullOr(Schema.String),
   cancelRequestedAt: Schema.NullOr(InstantColumnSchema),
+  joinedAfterStep: Schema.NullOr(Schema.Int),
   toldSeq: Schema.Int,
   endToldAt: Schema.NullOr(InstantColumnSchema),
+  typed: Schema.Boolean,
 });
+
+/**
+ * The ask's own row where it is a line typed into the call: the typed row
+ * standing under the ask's client id, which a delegation's ask never has,
+ * its rows standing under the ledger's ids. At most one, the pair unique.
+ */
+const TYPED_LINE_OF_ASK = and(
+  eq(messages.conversationId, asks.conversationId),
+  eq(messages.clientId, asks.clientId),
+  sql`${messages.metadata} ->> 'channel' = ${MESSAGE_CHANNEL.TYPED}`,
+);
+
+/** Whether a typed line asked it, as the join above reads it. */
+const ASKED_BY_TYPED_LINE = sql<boolean>`${messages.id} is not null`;
 
 const findSpokenIn = SqlSchema.findAll({
   Request: SpokenInSchema,
@@ -364,10 +400,13 @@ const findSpokenIn = SqlSchema.findAll({
           revision: sql<number>`coalesce(${asks.askRevision}, 0)`,
           turnId: asks.turnId,
           cancelRequestedAt: asks.cancelRequestedAt,
+          joinedAfterStep: asks.joinedAfterStep,
           toldSeq: asks.toldSeq,
           endToldAt: asks.endToldAt,
+          typed: ASKED_BY_TYPED_LINE,
         })
         .from(asks)
+        .leftJoin(messages, TYPED_LINE_OF_ASK)
         .where(and(eq(asks.userId, key.userId), eq(asks.voiceSessionId, key.voiceSessionId)))
         .orderBy(asc(asks.askRevision), asc(asks.createdAt)),
     ),
@@ -391,10 +430,13 @@ const findUnendedSpoken = SqlSchema.findAll({
           revision: sql<number>`coalesce(${asks.askRevision}, 0)`,
           turnId: asks.turnId,
           cancelRequestedAt: asks.cancelRequestedAt,
+          joinedAfterStep: asks.joinedAfterStep,
           toldSeq: asks.toldSeq,
           endToldAt: asks.endToldAt,
+          typed: ASKED_BY_TYPED_LINE,
         })
         .from(asks)
+        .leftJoin(messages, TYPED_LINE_OF_ASK)
         .where(
           and(
             eq(asks.userId, key.userId),
@@ -415,10 +457,12 @@ function spokenAsk(read: Schema.Schema.Type<typeof SpokenAskRowSchema>): SpokenA
     clientId: read.clientId,
     revision: read.revision,
     toldSeq: read.toldSeq,
+    typed: read.typed,
     ...(read.turnId !== null ? { turnId: read.turnId } : undefined),
     ...(read.cancelRequestedAt !== null
       ? { cancelRequestedAt: read.cancelRequestedAt }
       : undefined),
+    ...(read.joinedAfterStep !== null ? { joinedAfterStep: read.joinedAfterStep } : undefined),
     ...(read.endToldAt !== null ? { endToldAt: read.endToldAt } : undefined),
   };
 }
@@ -450,6 +494,7 @@ const BindSchema = Schema.Struct({
   conversationId: Schema.String,
   deliveryIds: Schema.Array(Schema.String),
   turnId: Schema.String,
+  joinedAfterStep: Schema.NullOr(Schema.Int),
 });
 
 const StoppedOnSchema = Schema.Struct({
@@ -478,7 +523,11 @@ const findStoppedOn = SqlSchema.findAll({
     ),
 });
 
-/** Only an ask not yet bound takes the turn: a start eve emits again names the same deliveries and changes nothing. */
+/**
+ * Only an ask not yet bound takes the turn: a start eve emits again names the same deliveries and
+ * changes nothing. A spoken ask keeps the place it joined a typed turn at, and a typed ask none,
+ * since it is a line of the turn's own kind.
+ */
 const bindDeliveredAsks = SqlSchema.findAll({
   Request: BindSchema,
   Result: AskRowSchema,
@@ -486,7 +535,10 @@ const bindDeliveredAsks = SqlSchema.findAll({
     Database.use((db) =>
       db
         .update(asks)
-        .set({ turnId: bind.turnId })
+        .set({
+          turnId: bind.turnId,
+          joinedAfterStep: sql`case when ${asks.origin} = ${ASK_ORIGIN.SPOKEN} then ${bind.joinedAfterStep}::integer end`,
+        })
         .where(
           and(
             eq(asks.userId, bind.userId),
@@ -504,8 +556,8 @@ const ConversationLockSchema = Schema.Struct({
   conversationId: Schema.String,
 });
 
-/** The conversation row under its own lock, the lock the writer and Clear take, so one dispatch at a time runs in a conversation. */
-const lockConversation = SqlSchema.findOneOption({
+/** The conversation row, unless Clear stamped it, read under the conversation's dispatch lock rather than its row lock. */
+const readConversation = SqlSchema.findOneOption({
   Request: ConversationLockSchema,
   Result: Schema.Struct({ id: Schema.String }),
   execute: (target) =>
@@ -519,8 +571,7 @@ const lockConversation = SqlSchema.findOneOption({
             eq(conversations.userId, target.userId),
             isNull(conversations.deletedAt),
           ),
-        )
-        .for("update"),
+        ),
     ),
 });
 
@@ -532,18 +583,22 @@ const readAsk = SqlSchema.findOneOption({
 });
 
 /**
- * One dispatch at a time per conversation: the conversation row is locked,
- * the ask row is read under it, a session already written ends the call
- * with nothing dispatched, and otherwise the caller's dispatch runs under
- * the lock and what eve answered is written before it is released. The lock
- * is the conversation's rather than the ask's on purpose: two first asks of
- * different client ids on a conversation with no session would each open
- * one, and the ask bound to the session the forward-only claim loses would
- * never read a turn; under the conversation's lock the second waits, reads
- * the session the first opened, and sends into it. A dispatch that answers
- * nothing leaves the row as it was, for a retry. The order is the one every
- * lock here keeps: the user's row, then the conversation's, and never an
- * ask's row held while a conversation's is wanted.
+ * One dispatch at a time per conversation: the conversation's dispatch lock
+ * is held (`dispatch-lock.ts`), the ask row is read under it, a session
+ * already written ends the call with nothing dispatched, and otherwise the
+ * caller's dispatch runs under the lock and what eve answered is written
+ * before it is released. The lock is the conversation's rather than the
+ * ask's on purpose: two first asks of different client ids on a conversation
+ * with no session would each open one, and the ask bound to the session the
+ * forward-only claim loses would never read a turn; under the conversation's
+ * lock the second waits, reads the session the first opened, and sends into
+ * it. It is the dispatch lock rather than the row lock so the journal of the
+ * turn under way keeps landing while eve answers; the relay's take of a line
+ * into a turn waits it out, so the binding after it reads the delivery
+ * written here. A dispatch that answers nothing leaves the row as it was, for
+ * a retry. The order is the one every lock here keeps: the user's row, then
+ * the conversation's dispatch lock, then its row, and never an ask's row
+ * held while a conversation's is wanted.
  */
 function dispatchAskOnce(
   target: ConversationTarget,
@@ -553,8 +608,9 @@ function dispatchAskOnce(
   return Effect.flatMap(SqlClient.SqlClient, (client) =>
     client.withTransaction(
       Effect.gen(function* () {
-        const locked = yield* lockConversation(target);
-        if (Option.isNone(locked)) return ASK_DISPATCH_REFUSAL.NO_CONVERSATION;
+        yield* holdConversationDispatch(target.conversationId);
+        const standingConversation = yield* readConversation(target);
+        if (Option.isNone(standingConversation)) return ASK_DISPATCH_REFUSAL.NO_CONVERSATION;
         const read = yield* readAsk(id);
         if (Option.isNone(read)) throw new Error("the ask to dispatch is not standing");
         const standing = askRow(read.value);
@@ -608,11 +664,16 @@ export function askRecord(): AskRecord & AskDeliveryBinding {
         rows.map(spokenAsk),
       ),
     told: (id, told) => markTold({ id, seq: told.seq, endAt: told.endAt?.toISOString() ?? null }),
-    bindDeliveries: (target, deliveryIds, turnId) =>
+    bindDeliveries: (target, deliveryIds, turnId, joinedAfterStep) =>
       deliveryIds.length === 0
         ? Effect.succeed([])
         : Effect.map(
-            bindDeliveredAsks({ ...target, deliveryIds: [...deliveryIds], turnId }),
+            bindDeliveredAsks({
+              ...target,
+              deliveryIds: [...deliveryIds],
+              turnId,
+              joinedAfterStep: joinedAfterStep ?? null,
+            }),
             (rows) => rows.map(askRow),
           ),
     stoppedOn: (target, turnId) =>

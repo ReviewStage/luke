@@ -28,7 +28,10 @@ export type Theme = (typeof THEME)[keyof typeof THEME];
 /**
  * How densely a web surface is drawn, where it is not at the site's own
  * size: `compact` is a dashboard's, its controls and type a step under a
- * public page's. The desktop has one density, its own.
+ * public page's. The desktop has one density, its own. Note that compact
+ * holds only with a fine pointer: on a coarse one the site's full size
+ * stands (`profiles.css`), so a root may ask for compact and a finger still
+ * meets controls and words sized for it.
  */
 export const DENSITY = {
   COMPACT: "compact",

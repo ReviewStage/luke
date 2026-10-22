@@ -6,13 +6,14 @@ import { defineTool } from "eve/tools";
 import { runInboxTool } from "../host.js";
 
 /**
- * post_to_inbox.ts -- the agent posts an item to the developer's inbox, or replaces the one under the same key.
+ * post_to_inbox.ts -- the agent posts a message, perhaps ending with an ask, on its thread under a key in the developer's inbox.
  *
  * The call reaches the store through the host's door (`../host.ts`), as
  * `edit_plan` does, and answers with the agent's whole inbox as it stands
- * (`packages/service/src/agents/coder-host/inbox.ts`). An image block's picture is read
- * from the session's sandbox through the same door eve hands every file
- * tool, opened on first use, so a post with no image opens none.
+ * (`packages/service/src/agents/coder-host/inbox.ts`). A picture the body
+ * draws by its path is read from the session's sandbox through the same
+ * door eve hands every file tool, opened on first use, so a post with no
+ * such picture opens none.
  */
 export default defineTool({
   description: INBOX_TOOLS.POST.description,

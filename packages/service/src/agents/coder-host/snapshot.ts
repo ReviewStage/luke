@@ -12,9 +12,11 @@
  * temporary directory, so the source's own index and working tree are never
  * touched, and the source may be idle or mid-turn: nothing here writes to it
  * but git's objects, and a push. The push goes through the repository's
- * write token, set at the sandbox's firewall on GitHub's hosts as eve's own
- * `authenticateGitHub` and the Terminal tab set it, so no token enters the
- * sandbox's files or a command's words. A sandbox this step woke is stopped
+ * write credential, set at the sandbox's firewall in the shape the agent's
+ * own session and the Terminal tab set it (`credentialPolicy`), so no token
+ * enters the sandbox's files or a command's words; a member's own token is
+ * taken off again once the push is done, unless a terminal or a turn of the
+ * source still uses the sandbox. A sandbox this step woke is stopped
  * again once it is done, however it ended, unless a developer's terminal
  * holds it, a turn of the source began meanwhile, or another Start's copy
  * still holds it past this one's own hold; one already up stays as it was.
@@ -31,18 +33,27 @@
 
 import { createHash } from "node:crypto";
 import type { DatabaseServices } from "@luke/database/core/query";
-import { type CodingAgent, readCodingAgentByKey } from "@luke/database/models/coding-agent-store";
+import {
+  type CodingAgent,
+  hasRepository,
+  readCodingAgentByKey,
+} from "@luke/database/models/coding-agent-store";
 import { latestTurnsOfReached } from "@luke/database/models/message-reads";
 import { standingSessionsOf } from "@luke/database/models/recorded-session";
 import { holdSandbox, sandboxHeld } from "@luke/database/models/sandbox-terminal-lease";
-import { readTask } from "@luke/database/models/task-store";
+import { redactCredentials } from "@luke/features/credential-redaction";
+import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
 import { TURN_STATUS } from "@luke/wire";
-import { Clock, Duration, Effect, Option, type Redacted, Schedule } from "effect";
+import { Clock, Duration, Effect, Option, Schedule } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import type { GitHubApp } from "../../github/github-app.js";
-import { redactCredentials } from "../brain-host/relay.js";
-import { REPOSITORY_SANDBOX_CONTRACT } from "../repository-shell.js";
-import { githubTokenPolicy } from "../terminal/agent-sandbox.js";
+import { REPOSITORY_SANDBOX_CONTRACT } from "../repository-sandbox-contract.js";
+import { capSandboxTimeout } from "../sandbox-keep-alive.js";
+import {
+  credentialPolicy,
+  OPEN_INTERNET_POLICY,
+  type RepositoryCredential,
+} from "../terminal/agent-sandbox.js";
 import {
   deploymentOidcToken,
   type ListedSandbox,
@@ -85,15 +96,15 @@ export type SnapshotOutcome =
     }
   | { readonly copied: false; readonly miss: SnapshotMiss };
 
-/** What a copy is asked: whose sandbox, the branch and the commit's message, the token the push goes through, and whether a woken sandbox must be left up. */
+/** What a copy is asked: whose sandbox, the branch and the commit's message, the credential the push goes through, and whether the sandbox is in use and must be left up. */
 export interface SnapshotAsk<R> {
   /** The eve session the source's sandbox is tagged with. */
   readonly sessionId: string;
   readonly branch: string;
   readonly message: string;
-  /** The repository's write token, minted once the sandbox stands up. */
-  readonly token: Effect.Effect<Redacted.Redacted, unknown, R>;
-  /** Whether a sandbox this step woke stays up: a developer's terminal holds it, or a turn of the source began. */
+  /** The repository's write credential, minted once the sandbox stands up. */
+  readonly credential: Effect.Effect<RepositoryCredential, unknown, R>;
+  /** Whether the sandbox is in use and stays up as it stands: a developer's terminal holds it, or a turn of the source began. */
   readonly keepUp: Effect.Effect<boolean, unknown, R>;
 }
 
@@ -228,6 +239,27 @@ const stopWoken = <R>(api: VercelSandboxApi, ask: SnapshotAsk<R>) =>
     Effect.catch((failure) => stopMissed(String(failure))),
   );
 
+/**
+ * A member's own token taken off the sandbox session's firewall once the
+ * copy is done, however it ended, unless a terminal or a turn uses the
+ * sandbox, which keeps it standing for them; within the stop's bound, and
+ * a withdrawal that fails is logged, since the copy's outcome stands.
+ */
+const withdrawUnlessInUse = <R>(api: VercelSandboxApi, session: string, ask: SnapshotAsk<R>) =>
+  Effect.gen(function* () {
+    if (yield* ask.keepUp) return;
+    yield* api.updateNetworkPolicy(session, OPEN_INTERNET_POLICY);
+  }).pipe(
+    // Note that a finalizer runs uninterruptibly, so the bound can cut the withdrawal off only once it is made interruptible.
+    Effect.interruptible,
+    Effect.timeout(SNAPSHOT.STOP_TIMEOUT),
+    Effect.catch((failure) =>
+      Effect.logWarning(
+        `a member's token was not taken off the source's sandbox: ${String(failure)}`,
+      ),
+    ),
+  );
+
 /** The copy inside the scope a woken sandbox's stop is registered on. */
 const copyIn = <R>(api: VercelSandboxApi, ask: SnapshotAsk<R>) =>
   Effect.gen(function* () {
@@ -238,8 +270,15 @@ const copyIn = <R>(api: VercelSandboxApi, ask: SnapshotAsk<R>) =>
     const up = UP_STATUSES.has(sandbox.status ?? "");
     // Note that the stop is registered ahead of the wake, so a wake cut short by the bound is stopped too.
     if (!up) yield* Effect.addFinalizer(() => stopWoken(api, ask));
+    // Lowered ahead of a wake, so a woken session a terminal or a turn keeps up lives the timeout, not an old sandbox's day.
+    if (!up) yield* capSandboxTimeout(api, sandbox);
     const session = runningSession(sandbox) ?? (yield* upSession(api, ask.sessionId, sandbox.name));
-    yield* api.updateNetworkPolicy(session, githubTokenPolicy(yield* ask.token));
+    const credential = yield* ask.credential;
+    // Note that a member's token is taken off in a finalizer, so a copy that fails or runs past its bound leaves none standing either.
+    if (credential.access.kind === GITHUB_ACCESS.TOKEN) {
+      yield* Effect.addFinalizer(() => withdrawUnlessInUse(api, session, ask));
+    }
+    yield* api.updateNetworkPolicy(session, credentialPolicy(credential));
     const ran = yield* api.run(session, {
       command: "sh",
       args: ["-c", SNAPSHOT_SCRIPT, "sh", ask.branch, ask.message],
@@ -289,6 +328,12 @@ const TAKEN_UP = { CONTINUED: "continued", FORKED: "forked" } as const;
 /** The turn states a source's sandbox is in use under, which a woken sandbox is left up for. */
 const TURN_UNDER_WAY: ReadonlySet<string> = new Set([TURN_STATUS.QUEUED, TURN_STATUS.RUNNING]);
 
+/** Whether a turn of the agent whose conversation is named is under way: queued, or running. */
+export const agentTurnUnderWay = (conversationId: string) =>
+  Effect.map(latestTurnsOfReached([conversationId]), (turns) =>
+    TURN_UNDER_WAY.has(turns.get(conversationId)?.status ?? ""),
+  );
+
 /**
  * The branch the copy is pushed to: the source's own, or one named for the
  * source where it recorded none, then how the new agent takes it up and a
@@ -310,11 +355,14 @@ export type SourceCopyServices = DatabaseServices | HttpClient.HttpClient | GitH
  * already made its agent, which is handed nothing new, or for a source that
  * never opened a sandbox. The token the push goes through is the one a
  * coding agent's checkout is minted, through the installation of the
- * source's workspace as the account reaches it.
+ * source's workspace as the account reaches it. `repository` is the one the
+ * new agent clones: its task's as it stands now, or the workspace place's
+ * own for an agent with no task; none where the task names none.
  */
 export const copySourceWork = /* @__PURE__ */ Effect.fn("web/copySourceWork")(function* (
   userId: string,
   source: CodingAgent,
+  repository: string | null,
   forked: boolean,
   idempotencyKey: string,
 ): Effect.fn.Return<SnapshotOutcome, never, SourceCopyServices> {
@@ -325,9 +373,8 @@ export const copySourceWork = /* @__PURE__ */ Effect.fn("web/copySourceWork")(fu
     }
     // Note that the new agent clones the task's repository as it stands now, so a branch pushed to the
     // one the source cloned before the task moved would be none of its checkout's.
-    const task = yield* readTask(userId, source.taskId ?? "");
-    const repository = Option.isSome(task) ? task.value.task.repository : null;
-    if (repository?.toLowerCase() !== source.repository.toLowerCase()) {
+    // A source with no repository has no branch any checkout would hold.
+    if (!hasRepository(source) || repository?.toLowerCase() !== source.repository.toLowerCase()) {
       return missed(SNAPSHOT_MISS.MOVED);
     }
     const [session] = yield* standingSessionsOf(source.userId, [source.conversationId]);
@@ -344,14 +391,13 @@ export const copySourceWork = /* @__PURE__ */ Effect.fn("web/copySourceWork")(fu
     yield* holdSandbox(source.conversationId, heldUntil);
     const keepUp = Effect.gen(function* () {
       if (yield* sandboxHeld(source.conversationId, heldUntil)) return true;
-      const turns = yield* latestTurnsOfReached([source.conversationId]);
-      return TURN_UNDER_WAY.has(turns.get(source.conversationId)?.status ?? "");
+      return yield* agentTurnUnderWay(source.conversationId);
     });
     return yield* snapshotSource(api, {
       sessionId: session.sessionId,
       branch: snapshotBranch(source, forked, idempotencyKey),
       message: `Snapshot of ${source.title ?? source.model} for ${forked ? TAKEN_UP.FORKED : TAKEN_UP.CONTINUED} agent`,
-      token: Effect.map(agentRepositoryToken(target, source), (minted) => minted.token),
+      credential: agentRepositoryToken(target, source),
       keepUp,
     });
   }).pipe(

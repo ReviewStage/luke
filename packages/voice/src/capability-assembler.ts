@@ -138,7 +138,8 @@ export class VoiceCapabilityAssembler {
   }
 
   #report(): void {
-    const write = this.#options.report ?? ((message: string) => process.stderr.write(message));
+    // The console where none is handed in: a desktop's main process and a browser tab both have one.
+    const write = this.#options.report ?? ((message: string) => console.warn(message.trimEnd()));
     if (this.#liveSessions) {
       write(`Luke voice: enabled (hosted, ${this.#liveSessions.diagnostics().model})\n`);
     } else {

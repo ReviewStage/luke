@@ -5,7 +5,7 @@ import { and, asc, eq, inArray, isNull, lt, sql } from "drizzle-orm";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
 import { Database } from "../core/query.js";
-import { planAttachment } from "../schemas/plan-attachment.js";
+import { attachment, ownedByTaskAlone } from "../schemas/attachment.js";
 import { task } from "../schemas/task.js";
 import type { TaskStoreEffect } from "./task-store.js";
 import { reachableTask, taskReachableBy } from "./workspace-store.js";
@@ -14,8 +14,7 @@ import { reachableTask, taskReachableBy } from "./workspace-store.js";
  * plan-attachments.ts -- a plan's pictures: keep one, read one, stamp the ones a save names, and sweep the uploads no save named.
  *
  * A picture is kept under the plan row's own lock, so the count it is held
- * to cannot be crossed by a second upload, and an archived plan, which no
- * editor is drawn on, keeps none. Every read names the account beside the
+ * to cannot be crossed by a second upload. Every read names the account beside the
  * plan and gates on its membership of the plan's workspace, so a member
  * reads a picture a teammate pasted and a plan of a workspace the account is
  * not in reads as no plan, exactly as in `plan-store.ts`. A save stamps the
@@ -38,16 +37,19 @@ export type PlanAttachmentKeep =
 /** The most unsaved pictures one sweep deletes, so a sweep stays bounded however many piled up. */
 const PURGE_BATCH = 200;
 
-/** The plan's id under its row's lock, where the account reaches it and it is not archived; nothing otherwise. */
+/** A plan's pictures among every attachment: the ones its task owns alone. */
+const planPicture = ownedByTaskAlone(attachment);
+
+/** The plan's id and workspace under its row's lock, where the account reaches it; nothing otherwise. */
 const lockOpenTask = SqlSchema.findOneOption({
   Request: Schema.Struct({ userId: Schema.String, taskId: Schema.String }),
-  Result: Schema.Struct({ id: Schema.String }),
+  Result: Schema.Struct({ id: Schema.String, organizationId: Schema.String }),
   execute: ({ userId, taskId }) =>
     Database.use((db) =>
       db
-        .select({ id: task.id })
+        .select({ id: task.id, organizationId: task.organizationId })
         .from(task)
-        .where(and(reachableTask(userId, taskId), isNull(task.archivedAt)))
+        .where(reachableTask(userId, taskId))
         .for("update"),
     ),
 });
@@ -59,8 +61,8 @@ const countPictures = SqlSchema.findOne({
     Database.use((db) =>
       db
         .select({ count: sql<number>`count(*)::int` })
-        .from(planAttachment)
-        .where(eq(planAttachment.taskId, taskId)),
+        .from(attachment)
+        .where(and(eq(attachment.taskId, taskId), planPicture)),
     ),
 });
 
@@ -68,13 +70,14 @@ const insertPicture = SqlSchema.void({
   Request: Schema.Struct({
     id: Schema.String,
     taskId: Schema.String,
+    organizationId: Schema.String,
     userId: Schema.String,
     contentType: pictureTypeSchema,
     byteCount: Schema.Number,
     bytes: Schema.Uint8Array,
     createdAt: Schema.Date,
   }),
-  execute: (row) => Database.use((db) => db.insert(planAttachment).values(row)),
+  execute: (row) => Database.use((db) => db.insert(attachment).values(row)),
 });
 
 const findPicture = SqlSchema.findOneOption({
@@ -87,13 +90,14 @@ const findPicture = SqlSchema.findOneOption({
   execute: ({ userId, taskId, attachmentId }) =>
     Database.use((db) =>
       db
-        .select({ contentType: planAttachment.contentType, bytes: planAttachment.bytes })
-        .from(planAttachment)
-        .innerJoin(task, eq(task.id, planAttachment.taskId))
+        .select({ contentType: attachment.contentType, bytes: attachment.bytes })
+        .from(attachment)
+        .innerJoin(task, eq(task.id, attachment.taskId))
         .where(
           and(
-            eq(planAttachment.taskId, taskId),
-            eq(planAttachment.id, attachmentId),
+            eq(attachment.taskId, taskId),
+            eq(attachment.id, attachmentId),
+            planPicture,
             taskReachableBy(userId),
           ),
         ),
@@ -109,13 +113,14 @@ const stampSaved = SqlSchema.void({
   execute: ({ taskId, ids, now }) =>
     Database.use((db) =>
       db
-        .update(planAttachment)
+        .update(attachment)
         .set({ savedAt: now })
         .where(
           and(
-            eq(planAttachment.taskId, taskId),
-            inArray(planAttachment.id, [...ids]),
-            isNull(planAttachment.savedAt),
+            eq(attachment.taskId, taskId),
+            inArray(attachment.id, [...ids]),
+            planPicture,
+            isNull(attachment.savedAt),
           ),
         ),
     ),
@@ -133,11 +138,11 @@ const lockUnsaved = SqlSchema.findAll({
   execute: ({ before }) =>
     Database.use((db) =>
       db
-        .select({ id: planAttachment.id })
-        .from(planAttachment)
-        .innerJoin(task, eq(task.id, planAttachment.taskId))
-        .where(and(isNull(planAttachment.savedAt), lt(planAttachment.createdAt, before)))
-        .orderBy(asc(planAttachment.createdAt))
+        .select({ id: attachment.id })
+        .from(attachment)
+        .innerJoin(task, eq(task.id, attachment.taskId))
+        .where(and(planPicture, isNull(attachment.savedAt), lt(attachment.createdAt, before)))
+        .orderBy(asc(attachment.createdAt))
         .limit(PURGE_BATCH)
         .for("update", { of: task, skipLocked: true }),
     ),
@@ -146,13 +151,15 @@ const lockUnsaved = SqlSchema.findAll({
 const deletePictures = SqlSchema.void({
   Request: Schema.Struct({ ids: Schema.Array(Schema.String) }),
   execute: ({ ids }) =>
-    Database.use((db) => db.delete(planAttachment).where(inArray(planAttachment.id, [...ids]))),
+    Database.use((db) =>
+      db.delete(attachment).where(and(inArray(attachment.id, [...ids]), planPicture)),
+    ),
 });
 
 /**
  * Keeps one picture on the plan, uploaded by the account, under a new id;
  * refused where the plan already holds its bound of pictures, and nothing
- * where the account reaches no such plan or the plan is archived.
+ * where the account reaches no such plan.
  */
 export function keepPlanAttachment(
   userId: string,
@@ -175,6 +182,7 @@ export function keepPlanAttachment(
         yield* insertPicture({
           id,
           taskId,
+          organizationId: locked.value.organizationId,
           userId,
           contentType: picture.contentType,
           byteCount: picture.bytes.length,

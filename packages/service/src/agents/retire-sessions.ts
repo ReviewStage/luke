@@ -1,18 +1,23 @@
-import type { StandingSession } from "@luke/database/models/recorded-session";
-import { CONVERSATION_KIND } from "@luke/database/storage-vocabulary";
-import { Duration, Effect, Option } from "effect";
-import type { HttpClient } from "effect/http";
-import type { HostedRefusal } from "../http/http-effect.js";
+import type { DatabaseServices, QueryError } from "@luke/database/core/query";
 import {
+  type StandingSession,
+  standingSessionsNamed,
+} from "@luke/database/models/recorded-session";
+import { CONVERSATION_KIND } from "@luke/database/storage-vocabulary";
+import { Duration, Effect, Option, Ref, type Schema } from "effect";
+import type { HttpClient } from "effect/http";
+import { type HostedRefusal, hostedCarriesBearer } from "../http/http-effect.js";
+import {
+  type AgentSessions,
   describeUnreachable,
   EVE_MOUNT,
   EVE_RESET_OUTCOME,
   type EveMount,
-  type EveSessions,
 } from "./brain-host/eve-sessions.js";
+import { type EveReach, eveFor } from "./coder-host/stop.js";
 
 /**
- * retire-sessions.ts -- the eve sessions Luke lets go of, retired for good: a task's at its delete, an account's at its deletion.
+ * retire-sessions.ts -- the eve sessions Luke lets go of, retired for good: a task's or an agent's at its delete, an account's at its deletion.
  *
  * A session retired ends its workflow run, a turn under way and the workers
  * it handed out with it, and takes nothing again, so Vercel Workflow can
@@ -21,39 +26,75 @@ import {
  * still stands, because eve's door admits no one to the session of a
  * cleared conversation; so a task's delete retires its sessions before it
  * clears them, and an account's deletion before the account goes. Each is
- * asked as the developer, over the bearer the request carried, which both
- * deletes refuse to go on without (`http/http-effect.ts`'s
- * `hostedBearerOnly`): a browser's session cookie carries none eve takes.
+ * asked as the delete's own caller (`coder-host/stop.ts`'s `eveFor`): over
+ * the bearer the request carried, or, for a browser's session cookie, as the
+ * deployment acting for the account the cookie named, which eve's door
+ * admits for a retire on a session that account reaches
+ * (`brain-host/auth.ts`).
  *
  * A retire is a courtesy the delete does not wait on: an eve that cannot be
  * reached or does not confirm is logged by its outcome and status, and the
  * delete goes on, since the door refuses everyone the session once its
  * conversation is cleared, and its sandbox is deleted on the queue all the
- * same (`session-sandboxes.ts`).
+ * same (`session-sandboxes.ts`). The one exception is a delete that cannot
+ * name its caller to eve at all, which `retiringReach` refuses before it
+ * changes anything. Only a coding agent's session is asked: a task's own
+ * Luke's, from before every turn was an agent's, ran under an eve service
+ * that stands no more, and its sandbox is left to the sweep.
  */
 
 const RETIRE_SESSIONS = {
   CONCURRENCY: 4,
   /** eve answers a reset once the session lets go of its inbox, which it waits thirty seconds for at most. */
   TIMEOUT: Duration.seconds(35),
+  /**
+   * How long a delete spends on its retires in all. Note that the whole is
+   * bounded as well as each, because a large account's retires, four at a
+   * time at up to thirty-five seconds apiece, would otherwise outlast the
+   * function, which would end with the sessions retired and the account
+   * still standing. Past this the rest are skipped and logged, as one past
+   * its own timeout is, and the delete goes on.
+   */
+  BUDGET: Duration.seconds(60),
 } as const;
 
-/** How a caller reaches eve under one mount: the developer's own client, or the refusal that there is none. */
+/** How a caller reaches eve under one mount: the delete's own caller's client, typed to retire a session and nothing else, or the refusal that there is none. */
 export type EveAt = (
   mount: EveMount,
-) => Effect.Effect<EveSessions, HostedRefusal, HttpClient.HttpClient>;
+) => Effect.Effect<
+  Pick<AgentSessions, "reset">,
+  HostedRefusal,
+  HttpClient.HttpClient | DatabaseServices
+>;
 
-/** The eve service a conversation's session runs under: a coding agent's under the coder mount, every other under the brain's. */
-function mountOf(session: StandingSession): EveMount {
-  return session.kind === CONVERSATION_KIND.CODING_AGENT ? EVE_MOUNT.CODER : EVE_MOUNT.TASKS;
-}
+/**
+ * How a delete's caller reaches eve to retire what it deletes, settled
+ * before the delete changes anything. A bearer's delete composes eve under
+ * each mount as it retires, a courtesy as it has always been. A browser's
+ * session cookie reaches eve only as the deployment, and a deployment that
+ * cannot compose that caller, with no secret or no eve origin, would retire
+ * nothing and still answer the delete done with every session standing; so
+ * a cookie's delete composes eve first, and is refused as unavailable where
+ * it cannot.
+ */
+export const retiringReach = /* @__PURE__ */ Effect.fnUntraced(function* (
+  reach: EveReach,
+  request: Request,
+  account: string,
+): Effect.fn.Return<EveAt, HostedRefusal, HttpClient.HttpClient | DatabaseServices> {
+  if (hostedCarriesBearer(request)) return (mount) => eveFor(reach, request, account, mount);
+  const composed = {
+    [EVE_MOUNT.CODER]: yield* eveFor(reach, request, account, EVE_MOUNT.CODER),
+  } satisfies Readonly<Record<EveMount, Pick<AgentSessions, "reset">>>;
+  return (mount) => Effect.succeed(composed[mount]);
+});
 
 /** One session retired, or why not, written down by its outcome alone. */
 const retireOne = (
   eveAt: EveAt,
   session: StandingSession,
-): Effect.Effect<void, never, HttpClient.HttpClient> =>
-  eveAt(mountOf(session)).pipe(
+): Effect.Effect<void, never, HttpClient.HttpClient | DatabaseServices> =>
+  eveAt(EVE_MOUNT.CODER).pipe(
     Effect.flatMap((eve) => eve.reset(session.sessionId)),
     Effect.timeoutOption(RETIRE_SESSIONS.TIMEOUT),
     Effect.flatMap((answered) => {
@@ -73,13 +114,56 @@ const retireOne = (
     ),
   );
 
-/** Retires every session named, a few at a time; never fails, whatever eve answered. */
+/**
+ * Retires every coding agent's session named, a few at a time, for as long
+ * as the budget lasts; never fails, whatever eve answered. A retire still waiting when the
+ * budget ends is interrupted, and it and every one not yet asked are logged
+ * by their count and left to the sandbox sweep, as one eve never answered is.
+ */
 export function retireSessions(
   eveAt: EveAt,
   sessions: readonly StandingSession[],
-): Effect.Effect<void, never, HttpClient.HttpClient> {
-  return Effect.forEach(sessions, (session) => retireOne(eveAt, session), {
-    concurrency: RETIRE_SESSIONS.CONCURRENCY,
-    discard: true,
+): Effect.Effect<void, never, HttpClient.HttpClient | DatabaseServices> {
+  return Effect.gen(function* () {
+    const settled = yield* Ref.make(0);
+    const agents = sessions.filter((session) => session.kind === CONVERSATION_KIND.CODING_AGENT);
+    const all = Effect.forEach(
+      agents,
+      (session) =>
+        Effect.andThen(
+          retireOne(eveAt, session),
+          Ref.update(settled, (n) => n + 1),
+        ),
+      { concurrency: RETIRE_SESSIONS.CONCURRENCY, discard: true },
+    );
+    const finished = yield* Effect.timeoutOption(all, RETIRE_SESSIONS.BUDGET);
+    if (Option.isSome(finished)) return;
+    const skipped = agents.length - (yield* Ref.get(settled));
+    yield* Effect.logWarning(
+      `eve did not retire ${skipped} of ${agents.length} sessions within the delete's budget`,
+    );
   });
+}
+
+/**
+ * What a task's or an agent's delete runs under its lock before anything
+ * goes: the sessions its conversations run in, retired while those still
+ * stand, since eve's door admits no one to a cleared conversation's session.
+ * Inside the transaction, since outside it a refused delete would leave a
+ * standing agent's session retired; the retires' own budget bounds how long
+ * they hold the lock.
+ */
+export function retiredBeforeDelete(
+  eveAt: EveAt,
+): (
+  conversationIds: readonly string[],
+) => Effect.Effect<
+  void,
+  QueryError | Schema.SchemaError,
+  HttpClient.HttpClient | DatabaseServices
+> {
+  return (conversationIds) =>
+    Effect.flatMap(standingSessionsNamed(conversationIds), (sessions) =>
+      retireSessions(eveAt, sessions),
+    );
 }

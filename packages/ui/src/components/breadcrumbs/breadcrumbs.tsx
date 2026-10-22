@@ -1,6 +1,13 @@
-import type { ComponentProps, ComponentType, ReactNode } from "react";
+import { type ComponentProps, type ComponentType, type ReactNode, useState } from "react";
+import { useDisclosure } from "../../use-disclosure.js";
 import { BUTTON_VARIANT } from "../button/button.js";
 import { FoldingButton, type FoldingButtonHint } from "../folding-button/folding-button.js";
+import {
+  ClippedLine,
+  ONE_LINE_ELEMENT,
+  ONE_LINE_END,
+  type OneLineEnd,
+} from "../one-line/clipped-line.js";
 
 /**
  * breadcrumbs.tsx -- a path to where the reader stands: a named landmark holding an ordered list of crumbs, each words, a press, or a press that opens a menu or a dialog, the chevrons between them punctuation alone.
@@ -13,10 +20,13 @@ import { FoldingButton, type FoldingButtonHint } from "../folding-button/folding
  * open, and its press is handed the crumb, which the caller hangs what it
  * opens from and hands the keyboard back to. A crumb may wear a glyph
  * before its words, as a tab names its kind, and hang a card in its hint's
- * place, the app's hint raising it as it raises a pill.
+ * place, the app's hint raising it as it raises a pill. A crumb may come
+ * and go (`shown`), as a page's title joins its bar once its heading has
+ * scrolled away: it fades in with a short rise as it comes, and fades out
+ * before it goes (`use-disclosure.ts`).
  *
  * Two looks: a bar's path in the caption type, every crumb a quiet pill
- * that narrows by its share, cut short at its end, the current one last of
+ * that narrows by its share, fading out at its end, the current one last of
  * all; and a toolbar's heading, a way back then the page's name in the
  * dialog heading type.
  *
@@ -98,6 +108,10 @@ interface PathCrumb extends CrumbBase {
   readonly popup?: BreadcrumbPopup | undefined;
   /** Whether what it opens stands open. */
   readonly expanded?: boolean | undefined;
+  /** Whether it stands in the path now, for a crumb that comes and goes; always where none is said. */
+  readonly shown?: boolean | undefined;
+  /** How its words end where they are cut short: fading out where none is said, or in an ellipsis. */
+  readonly end?: OneLineEnd | undefined;
 }
 
 /**
@@ -115,6 +129,8 @@ interface WayBackCrumb extends CrumbBase {
   readonly current?: undefined;
   readonly popup?: undefined;
   readonly expanded?: undefined;
+  readonly shown?: undefined;
+  readonly end?: undefined;
 }
 
 /** One crumb of a path. */
@@ -168,13 +184,15 @@ function Chevron({ at }: { at: Widths }): React.JSX.Element {
 /**
  * At which widths a chevron stands before the crumb at `at`: each width
  * where a crumb before it is drawn too, so a crumb leading the path at a
- * width, the others before it gone there, stands without one. Note that a
- * width the crumb is not drawn at says yes, since nothing is drawn there.
+ * width, the others before it gone there, stands without one, as one
+ * whose crumbs before it are not `shown` does. Note that a width the crumb
+ * is not drawn at says yes, since nothing is drawn there.
  */
 function chevronBefore(crumbs: readonly Crumb[], at: number): Widths | undefined {
   const own = SHOWN_WIDTHS[crumbs[at]?.shownAt ?? BREADCRUMB_SHOWN.ALWAYS];
   const before = crumbs
     .slice(0, at)
+    .filter((each) => each.shown !== false)
     .map((each) => SHOWN_WIDTHS[each.shownAt ?? BREADCRUMB_SHOWN.ALWAYS]);
   const led = {
     wide: before.some((widths) => widths.wide),
@@ -197,7 +215,15 @@ function CrumbChevron({ at }: { at: Widths | undefined }): React.JSX.Element | n
 }
 
 /** A crumb's face: its glyph, where it wears one, then its words. */
-function CrumbFace({ glyph, label }: { glyph: ReactNode; label: string }): React.JSX.Element {
+function CrumbFace({
+  glyph,
+  label,
+  end = ONE_LINE_END.FADE,
+}: {
+  glyph: ReactNode;
+  label: string;
+  end?: OneLineEnd | undefined;
+}): React.JSX.Element {
   return (
     <>
       {glyph === undefined ? null : (
@@ -205,7 +231,14 @@ function CrumbFace({ glyph, label }: { glyph: ReactNode; label: string }): React
           {glyph}
         </span>
       )}
-      <span className="luke-breadcrumb-label">{label}</span>
+      <ClippedLine
+        className="luke-breadcrumb-label"
+        as={ONE_LINE_ELEMENT.SPAN}
+        end={end}
+        words={label}
+      >
+        {label}
+      </ClippedLine>
     </>
   );
 }
@@ -234,7 +267,7 @@ function CrumbControl({
   const control =
     onPress === undefined ? (
       <span className="luke-breadcrumb-words" aria-current={current}>
-        <CrumbFace glyph={crumb.glyph} label={label} />
+        <CrumbFace glyph={crumb.glyph} label={label} end={crumb.end} />
       </span>
     ) : (
       <button
@@ -246,7 +279,7 @@ function CrumbControl({
         aria-expanded={crumb.popup === undefined ? undefined : crumb.expanded === true}
         onClick={(event) => onPress(event.currentTarget)}
       >
-        <CrumbFace glyph={crumb.glyph} label={label} />
+        <CrumbFace glyph={crumb.glyph} label={label} end={crumb.end} />
       </button>
     );
   return Hint === undefined || (crumb.hint === undefined && crumb.card === undefined) ? (
@@ -255,6 +288,56 @@ function CrumbControl({
     <Hint label={crumb.hint} card={crumb.card}>
       {control}
     </Hint>
+  );
+}
+
+/** The motions a crumb that comes and goes rides, read by the stylesheet from its `data-motion`. */
+const CRUMB_MOTION = {
+  ARRIVING: "arriving",
+  LEAVING: "leaving",
+} as const;
+
+/**
+ * One crumb's place in the path, its chevron before it. A crumb that comes
+ * and goes is drawn while `shown` and through its exit after, and rides in
+ * only when it comes on a change, so a path drawn with it already there
+ * stands still. Note that one leaving is inert, since it already reads as
+ * gone.
+ */
+function CrumbItem({
+  crumb,
+  chevron,
+  hint,
+}: {
+  crumb: Crumb;
+  chevron: Widths | undefined;
+  hint: BreadcrumbHint | undefined;
+}): React.JSX.Element | null {
+  const shown = crumb.shown ?? true;
+  const presence = useDisclosure(shown);
+  const [was, setWas] = useState(shown);
+  const [arriving, setArriving] = useState(false);
+  if (shown !== was) {
+    setWas(shown);
+    setArriving(shown);
+  }
+  if (!presence.mounted) return null;
+  const motion = presence.leaving
+    ? CRUMB_MOTION.LEAVING
+    : arriving
+      ? CRUMB_MOTION.ARRIVING
+      : undefined;
+  return (
+    <li
+      ref={presence.ref}
+      data-shown={crumb.shownAt ?? BREADCRUMB_SHOWN.ALWAYS}
+      data-words={crumb.icon === undefined && crumb.onPress === undefined}
+      data-motion={motion}
+      inert={presence.leaving}
+    >
+      <CrumbChevron at={chevron} />
+      <CrumbControl crumb={crumb} hint={hint} />
+    </li>
   );
 }
 
@@ -279,15 +362,13 @@ export function Breadcrumbs({
     <nav className="luke-breadcrumbs" data-variant={variant} aria-label={label}>
       <ol>
         {crumbs.map((crumb, at) => (
-          <li
+          <CrumbItem
             // oxlint-disable-next-line react/no-array-index-key -- a path's crumbs are its places, and the same words may stand twice.
             key={at}
-            data-shown={crumb.shownAt ?? BREADCRUMB_SHOWN.ALWAYS}
-            data-words={crumb.icon === undefined && crumb.onPress === undefined}
-          >
-            <CrumbChevron at={chevronBefore(crumbs, at)} />
-            <CrumbControl crumb={crumb} hint={hint} />
-          </li>
+            crumb={crumb}
+            chevron={chevronBefore(crumbs, at)}
+            hint={hint}
+          />
         ))}
       </ol>
     </nav>

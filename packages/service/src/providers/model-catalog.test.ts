@@ -100,6 +100,7 @@ function environment(anthropicKey?: string): Layer.Layer<HostedEnvironment> {
     posthogProjectApiKey: undefined,
     posthogIngestHost: undefined,
     cronSecret: undefined,
+    eveDeploymentSecret: undefined,
     githubWebhookSecret: undefined,
     providerKeyEncryptionKeys: undefined,
   });

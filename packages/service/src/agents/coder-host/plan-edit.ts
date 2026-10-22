@@ -1,7 +1,8 @@
 import type { DatabaseServices } from "@luke/database/core/query";
 import { keepPlanAttachment, PLAN_ATTACHMENT_KEEP } from "@luke/database/models/plan-attachments";
-import { readTask } from "@luke/database/models/task-store";
+import { readTaskHeader } from "@luke/database/models/task-store";
 import { workspaceOf } from "@luke/database/models/workspace-store";
+import { sniffImageType } from "@luke/features/image-signature";
 import { PICTURE_BOUNDS, type Picture } from "@luke/features/picture-wire";
 import { planAttachmentAddress, taskPictureMarkdown } from "@luke/features/plan-attachment-link";
 import { PLAN_ATTACHMENT_BOUNDS } from "@luke/features/plan-attachment-wire";
@@ -33,11 +34,10 @@ import { type InboxSandboxDoor, readSandboxImage, type SandboxImageTerms } from 
  *
  * An agent that meets something the plan does not settle, verifies a fact
  * the plan has wrong, or makes a decision the plan left open does not stop
- * and does not keep it to itself: it takes notes on the plan exactly as the
- * task's call's notetaker does (`tasks/plan-scribe.ts`), under the same
- * schema and through the plan's one write (`plan-notes.ts`), which journals
- * the save under the agent's id, so the brain and the developer
- * read them on the next call and see which agent wrote what. A call's notes
+ * and does not keep it to itself: it takes notes on the plan through the
+ * plan's one write (`plan-notes.ts`), which journals the save under the
+ * agent's id, so the developer and the other agents read them and see which
+ * agent wrote what. A call's notes
  * may land anywhere in the plan, its headings among it, and land together or
  * not at all: one naming what the plan does not hold exactly once answers the
  * plan as it stands, so the agent retries from it rather than from the text
@@ -138,11 +138,9 @@ export const PLAN_EDIT_REFUSAL = {
   UNREADABLE: "Not saved: the notes do not read under the plan's template.",
   TOO_MANY: `Not saved: a turn may take at most ${PLAN_EDIT.MAX_NOTES_PER_TURN} notes on the plan. Go on, and name what you would have noted in your message.`,
   UNAVAILABLE: "Not saved: the service could not reach its store.",
-  NO_TASK:
-    "Not saved: you were handed a prompt rather than the plan, so there is no plan of yours to update.",
+  NO_TASK: "Not saved: you work on no task, so there is no plan of yours to update.",
   TOO_MANY_PICTURES: `Not saved: the plan holds ${PLAN_ATTACHMENT_BOUNDS.MAX_PER_PLAN} pictures, as many as a plan may. Leave the pictures out.`,
-  ARCHIVED:
-    "Not saved: this task is archived, so no picture can be added to its plan. Send the notes again without the pictures.",
+  TASK_GONE: "Not saved: this task no longer exists, so no picture can be added to its plan.",
   CONFLICT:
     "Not saved: none of this call's notes was taken, because one names what the plan does not hold exactly once. The plan as it stands is in current; retry from it.",
 } as const;
@@ -161,6 +159,7 @@ export const TASK_PICTURE_FILE_REFUSAL = {
 /** What a picture's file is read under: a plan picture's bound, and the refusals in this tool's words. */
 const TASK_PICTURE_TERMS: SandboxImageTerms = {
   maxBytes: PICTURE_BOUNDS.MAX_BYTES,
+  sniff: sniffImageType,
   refusals: TASK_PICTURE_FILE_REFUSAL,
 };
 /** How many notes a turn has taken, kept in eve's durable session state: the turn and its count. */
@@ -302,10 +301,9 @@ function picturesInSandbox(
 ): Effect.Effect<Result.Result<PicturesRead, string>, StoreFailure, DatabaseServices> {
   if (pictures.length === 0) return Effect.succeed(Result.succeed({ slug: "", files: [] }));
   return Effect.gen(function* () {
-    const stored = yield* readTask(binding.userId, binding.taskId);
+    const stored = yield* readTaskHeader(binding.userId, binding.taskId);
     if (Option.isNone(stored)) return Result.fail(PLAN_SAVE_REFUSAL.NO_TASK);
-    const { task } = stored.value;
-    if (task.archivedAt !== undefined) return Result.fail(PLAN_EDIT_REFUSAL.ARCHIVED);
+    const task = stored.value;
     const workspace = yield* workspaceOf(binding.userId, task.workspaceId);
     const slug = Option.getOrUndefined(workspace)?.slug ?? task.workspaceId;
     const files = yield* readPictureFiles(pictures, sandbox);
@@ -333,7 +331,7 @@ function keptAsNotes(
         return yield* new EditRefused({ refusal: refused(PLAN_EDIT_REFUSAL.TOO_MANY_PICTURES) });
       }
       if (kept.status === PLAN_ATTACHMENT_KEEP.NO_TASK) {
-        return yield* new EditRefused({ refusal: refused(PLAN_EDIT_REFUSAL.ARCHIVED) });
+        return yield* new EditRefused({ refusal: refused(PLAN_EDIT_REFUSAL.TASK_GONE) });
       }
       const address = planAttachmentAddress(
         { taskId: binding.taskId, attachmentId: kept.id },

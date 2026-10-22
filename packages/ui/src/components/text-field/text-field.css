@@ -74,6 +74,24 @@
     display: none;
   }
 
+  /* WebKit on iOS draws a time in a box of its own: at a least width of its
+     own, past the field's, and with its value at the top of a block field
+     and centred across it. The engine's look is let go so the field keeps
+     its width, its block inset is the room around one line, so the value
+     stands on the field's middle wherever the engine sets it, and the value
+     starts where every field's words start. */
+  .luke-text-field[type="time"] {
+    -webkit-appearance: none;
+    appearance: none;
+    padding-block: calc((var(--luke-control-height) - var(--luke-type-body-leading)) / 2 - 1px);
+  }
+
+  .luke-text-field[type="time"]::-webkit-date-and-time-value {
+    min-height: var(--luke-type-body-leading);
+    margin: 0;
+    text-align: start;
+  }
+
   .luke-text-field::placeholder {
     color: var(--luke-color-text-subtle);
   }

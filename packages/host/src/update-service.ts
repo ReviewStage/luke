@@ -27,8 +27,8 @@ export const UPDATE_ENDPOINT = {
 
 const UPDATE_CHECK_DEFAULTS = {
   /**
-   * Four hours between timed checks, matching the interval Superset settled
-   * on for the same feed shape: a release lands at most every few days, and
+   * Four hours between timed checks, a common interval for the same feed
+   * shape: a release lands at most every few days, and
    * an unauthenticated GitHub read is rate-limited by address.
    */
   INTERVAL_MS: 4 * 60 * 60 * 1000,
@@ -122,14 +122,14 @@ interface UpdateServiceOptions {
 }
 
 /**
- * Luke's face on electron-updater, shaped after the updater Superset runs in
- * production. A check reads the release manifest from the feed fixed by the
+ * Luke's face on electron-updater, shaped after a common production updater
+ * setup. A check reads the release manifest from the feed fixed by the
  * build; a newer build downloads at once and installs at the quit the user
  * asks for — the row's restart press, or whenever they next quit. Failures
  * are answers for the row, never throws: a network failure is silence (the
  * next timed check retries), anything else is `error`, drawn as the way back
  * to the releases page. An install may only be asked for once — repeat
- * presses racing Squirrel's binary swap is a failure Superset met in
+ * presses racing Squirrel's binary swap is a known failure in
  * production — and a failed install falls out of `ready`, so the guard
  * releases with it.
  */
@@ -244,7 +244,7 @@ export class UpdateService {
     const engine = this.#engine;
     if (!engine || this.#installing) return this.#snapshot;
     // A download in flight or in hand holds the row — here Luke is stricter
-    // than the updater Superset runs: a timed tick that re-checked mid-flight
+    // than the common updater setup: a timed tick that re-checked mid-flight
     // would stomp the progress or the restart offer with `checking`, and a
     // feed failure after a completed download would trade a build in hand
     // for an error row and a cleared cache.

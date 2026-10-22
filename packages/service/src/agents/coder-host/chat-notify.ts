@@ -1,17 +1,20 @@
 import type { DatabaseServices } from "@luke/database/core/query";
-import { chatEnabledFor } from "@luke/database/models/account-store";
 import {
+  attachMessageImages,
   CHAT_REFUSAL,
   type ChatChannelRow,
+  type ChatImageWrite,
   type ChatMemberRow,
   type ChatMessageRow,
   type ChatPost,
+  type ChatPosted,
   type ChatRefusal,
   channelOf,
   leave,
   markNoticed,
   postMessage,
-  releaseNotice,
+  readMessagePictures,
+  readPast,
   roster,
   threadAuthors,
 } from "@luke/database/models/chat-store";
@@ -24,14 +27,23 @@ import {
   CHANNEL_KIND,
   CHAT_BLOCK,
   CHAT_BOUNDS,
+  CHAT_IMAGE_TYPE,
+  CHAT_MEMBER_LABEL,
   CHAT_NOTICE_LEAD,
-  CHAT_TOOL,
+  type ChatImageType,
   type ChatReadBlock,
+  chatNoticeAsksLine,
+  chatNoticeReplyLine,
+  chatNoticeUnattachedLine,
   MEMBER_KIND,
+  type MemberKind,
 } from "@luke/features/chat-wire";
-import { CODING_AGENT_BOUNDS } from "@luke/features/coding-agent-wire";
+import { CODING_AGENT_BOUNDS, type CodingAgentAttachment } from "@luke/features/coding-agent-wire";
+import { mentionLinksIn } from "@luke/features/mention-link";
+import { CHAT_NOTICE_FROM_CHARS } from "@luke/wire";
 import { Effect, Option, Result } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
+import { SqlClient } from "effect/sql";
 import { MESSAGE_AUTHOR, MESSAGE_CHANNEL } from "../../core.js";
 import type { GitHubApp } from "../../github/github-app.js";
 import {
@@ -39,7 +51,8 @@ import {
   type HostedRefusal,
   hostedStoreOrUnavailable,
 } from "../../http/http-effect.js";
-import type { EveSessions } from "../brain-host/eve-sessions.js";
+import type { AgentSessions } from "../brain-host/eve-sessions.js";
+import { type ChatNames, chatNamesOf } from "./chat-names.js";
 import { steerCodingAgent } from "./steer.js";
 
 /**
@@ -59,25 +72,27 @@ import { steerCodingAgent } from "./steer.js";
  * that the notice is minted for the receiving agent's starter, whoever
  * posted, because eve steers a running turn only with a message whose
  * principal is that turn's own (`coder-host/channel.ts`), and an agent's
- * turn runs as the member who started it. An agent
- * holds one notice at a time: another while it has not read past the first
- * is held, since the agent reads it with the rest when it next reads the
- * chat. An agent archived, on an archived plan, or whose starter has left
+ * turn runs as the member who started it. Every message that addresses
+ * an agent is steered into its session as it arrives, its key landing it
+ * once, unless the agent has already read past it. An agent archived, on an archived plan, or whose starter has left
  * the workspace, is said to have left and is steered nothing, though
  * nothing is stamped, since each can be undone: its session and transcript
  * are its starter's, and workspace chat reaches no one outside it; one whose session eve no longer runs has left for good and
  * is stamped so, and hears nothing more. A notice that could not be handed
- * over is let go, so the next one is told; one the deployment reaches no eve
- * for is held for the agent's next read. A post sent again under its key
- * is told again: the notice's key and the one outstanding notice keep that
- * from steering anyone twice, and it finishes a telling the first send did
- * not. A plan's planner and a person are handed to doors of
- * their own: a person is told through their window's account-wide read
- * (`tellPerson`), and the planner's holds the message until Luke's report
- * turn fills it. What each member came to is the
- * receipt the poster reads: told, held, left, and the handles that named no
- * one. A name marked `@public` is what the coder's tools, Luke's planner,
- * the window's route, and its announcements read as they land.
+ * over, or that the deployment reaches no eve for, is held for the agent's
+ * next read. A post sent again under its key is told again: the notice's
+ * key keeps that from steering anyone twice, and it finishes a telling the
+ * first send did not. A person is handed to a door of their own, told through their
+ * window's account-wide read (`tellPerson`). A notice names who said it by their mention link, and
+ * hands the words as they were written, every link in them whole
+ * (`chat-names.ts`), and an agent the message's pictures as files of its
+ * line, as a composer's are, in the order the message shows them while
+ * they fit what one message carries; the rest are named in its words as
+ * not attached. What each member came to is the
+ * receipt the poster reads, each member by its mention link: told, held,
+ * left, and the labels of the links that named no one. A name marked
+ * `@public` is what the coder's tools, the window's route, and its
+ * announcements read as they land.
  */
 
 /**
@@ -97,7 +112,7 @@ export const NOTICE_OUTCOME = {
 export type NoticeOutcome = (typeof NOTICE_OUTCOME)[keyof typeof NOTICE_OUTCOME];
 
 /**
- * What a post's poster reads back: the handles told now, held, and left, and the handles mentioned that name no member.
+ * What a post's poster reads back: the members told now, held, and left, each by its mention link or a plain label where none can be written, and the labels of the mention links that name no member.
  * @public
  */
 export type ChatReceipt = {
@@ -108,21 +123,20 @@ export type ChatReceipt = {
 };
 
 /**
- * A message as a door tells it: the message, the line that tells it, and who posted it.
+ * A message as a door tells it: the message, the line that tells it, who posted it, and what they are called.
  * @public
  */
 export interface ChatNotice {
   readonly message: ChatMessageRow;
   readonly text: string;
+  /** The message's pictures an agent is handed with the line, each named by its attachment id. */
+  readonly attachments: readonly CodingAgentAttachment[];
   readonly from: ChatMemberRow;
+  readonly fromName: string;
 }
 
-/** How Luke and a person are told, each a door its own chain fills. */
+/** How a person is told, a door its own chain fills. */
 export interface ChatNoticeDoors {
-  readonly luke: (
-    member: ChatMemberRow,
-    notice: ChatNotice,
-  ) => Effect.Effect<NoticeOutcome, never, DatabaseServices>;
   readonly human: (
     member: ChatMemberRow,
     notice: ChatNotice,
@@ -132,15 +146,14 @@ export interface ChatNoticeDoors {
 /** A door that holds the message for the member's next read. */
 const hold = () => Effect.succeed(NOTICE_OUTCOME.HELD);
 
-/** The doors before Luke's report turn and the window's announcement fill them: each holds the message for the member's next read. */
-export const HELD_DOORS: ChatNoticeDoors = { luke: hold, human: hold };
+/** The doors before the window's announcement fills them: each holds the message for the member's next read. */
+export const HELD_DOORS: ChatNoticeDoors = { human: hold };
 
 /**
- * How a person is told: their member stamped with the message's place, one
- * at a time as an agent's notice is, which the account's held read carries
- * to every window they are signed in to and each announces once
- * (`chat-waiting.ts`); held where a notice already stands unread, which
- * they read with the rest, and where the stamp could not be made.
+ * How a person is told: their member stamped with the message's place,
+ * which the account's held read carries to every window they are signed in
+ * to and each announces once (`chat-waiting.ts`); held where the stamp
+ * could not be made, such as for a message told again.
  */
 function tellPerson(
   member: ChatMemberRow,
@@ -159,8 +172,8 @@ function tellPerson(
   );
 }
 
-/** The doors a post is told through until Luke's report turn fills Luke's: a person told through their window, Luke held for his next read. */
-export const CHAT_DOORS: ChatNoticeDoors = { luke: hold, human: tellPerson };
+/** The doors a post is told through: a person told through their window. */
+export const CHAT_DOORS: ChatNoticeDoors = { human: tellPerson };
 
 /**
  * What a door's caller needs to steer a coding agent: eve as the account an
@@ -168,7 +181,7 @@ export const CHAT_DOORS: ChatNoticeDoors = { luke: hold, human: tellPerson };
  * the deployment reaches no eve, the writer, and the account posting.
  */
 export interface ChatTelling {
-  readonly eveFor: (starterUserId: string) => EveSessions | undefined;
+  readonly eveFor: (starterUserId: string) => AgentSessions | undefined;
   readonly writer: Effect.Effect<StoreWriter>;
   readonly userId: string;
   readonly organizationId: string;
@@ -190,25 +203,20 @@ interface ChatAddress {
   readonly threadAuthors: readonly string[];
 }
 
-/** The refusals of a steer that mean the agent is away for now: archived, or on an archived plan, either of which can be undone. */
-const GONE_REFUSALS: ReadonlySet<string> = new Set([
-  HOSTED_REFUSAL.NOT_FOUND.error,
-  HOSTED_REFUSAL.TASK_ARCHIVED.error,
-]);
+/** The refusals of a steer that mean the agent is away for now: archived, which can be undone. */
+const GONE_REFUSALS: ReadonlySet<string> = new Set([HOSTED_REFUSAL.NOT_FOUND.error]);
 
 /**
- * What sent a notice, as the row keeps it: a person by their account, Luke
- * for a planner, and an agent by its handle and, where the member still
- * names one the poster reaches, its agent and the model it runs on as it
- * posts, which its line's mark is drawn by for good.
+ * What sent a notice, as the row keeps it: a person by their account, and
+ * an agent by its name, its title or else its model's id
+ * as `list_agents` names one, and, where the member still names one the
+ * poster reaches, its agent and the model it runs on as it posts, which its
+ * line's mark is drawn by for good.
  */
-function senderOf(userId: string, from: ChatMemberRow) {
+function senderOf(userId: string, from: ChatMemberRow, name: string) {
   return Effect.gen(function* () {
     if (from.kind === MEMBER_KIND.HUMAN && from.userId !== null) {
       return { kind: MESSAGE_SENDER.MEMBER, userId: from.userId } satisfies LineSender;
-    }
-    if (from.kind === MEMBER_KIND.LUKE) {
-      return { kind: MESSAGE_SENDER.LUKE } satisfies LineSender;
     }
     const agent =
       from.agentId === null
@@ -216,7 +224,7 @@ function senderOf(userId: string, from: ChatMemberRow) {
         : yield* hostedStoreOrUnavailable(readCodingAgent(userId, from.agentId));
     const sender: LineSender = {
       kind: MESSAGE_SENDER.AGENT,
-      name: from.handle,
+      name,
       ...(Option.isNone(agent) ? undefined : { agentId: agent.value.id, model: agent.value.model }),
     };
     return sender;
@@ -226,11 +234,10 @@ function senderOf(userId: string, from: ChatMemberRow) {
 /** The message author each kind of member speaks as, on the notice's row. */
 const AUTHOR_OF_KIND = {
   [MEMBER_KIND.AGENT]: MESSAGE_AUTHOR.AGENT,
-  [MEMBER_KIND.LUKE]: MESSAGE_AUTHOR.LUKE,
   [MEMBER_KIND.HUMAN]: MESSAGE_AUTHOR.HUMAN,
 } as const;
 
-/** One block as a notice's line reads it, and a read of the chat: words as written, anything else named by what it is. */
+/** One block as a notice's line reads it, and a read of the chat: words as written, every mention link in them whole, a picture by its alt and its attachment id, which an agent names it by, anything else named by what it is. */
 export function blockWords(block: ChatReadBlock): string {
   switch (block.type) {
     case CHAT_BLOCK.MARKDOWN:
@@ -242,7 +249,7 @@ export function blockWords(block: ChatReadBlock): string {
         ? `[code: ${block.repo} ${block.path}:${block.startLine}-${block.endLine} at ${block.sha}]`
         : "";
     case CHAT_BLOCK.IMAGE:
-      return "alt" in block ? `[image: ${block.alt}]` : "";
+      return "alt" in block ? `[image: ${block.alt} (attachment ${block.attachmentId})]` : "";
     default:
       return `[${block.type}]`;
   }
@@ -254,24 +261,126 @@ function whereSaid(channel: ChatChannelRow, message: ChatMessageRow): string {
   return message.parentId === null ? room : `${room}, in a thread`;
 }
 
+/** What a paragraph break between a notice's parts takes of its bound. */
+const PARAGRAPH_BREAK = "\n\n";
+
+/** What a sender is called where their name holds nothing to call them by, by their kind. */
+const BLANK_NAME = {
+  [MEMBER_KIND.AGENT]: CHAT_MEMBER_LABEL.FORMER_AGENT,
+  [MEMBER_KIND.HUMAN]: CHAT_MEMBER_LABEL.FORMER_PERSON,
+} as const satisfies Record<MemberKind, string>;
+
 /**
- * The line a notice is: who said it where and at what place, the words,
- * what it asks where it asks, and how to answer. Bounded to a message's
- * own bound.
+ * What a notice's row names its sender by: their name within the metadata's
+ * bound, cut between two characters so no emoji is split, or their kind's
+ * plain label where nothing of the name is left.
  */
-function noticeText(from: ChatMemberRow, channel: ChatChannelRow, message: ChatMessageRow): string {
-  const header = `${CHAT_NOTICE_LEAD} · @${from.handle} ${whereSaid(channel, message)} (m ${message.seq}):`;
+function noticeFrom(name: string, kind: MemberKind): string {
+  let kept = "";
+  for (const character of name.trim()) {
+    if (kept.length + character.length > CHAT_NOTICE_FROM_CHARS) break;
+    kept += character;
+  }
+  const trimmed = kept.trim();
+  return trimmed === "" ? BLANK_NAME[kind] : trimmed;
+}
+
+/**
+ * The line a notice is: who said it, by their mention link, where and at what place, the words, cut outside any link,
+ * what it asks where it asks, and how to answer. Bounded to a message's own
+ * bound by the words alone, so the head and the closing lines always stand
+ * whole: the agent always reads how to answer, and a window reading the
+ * notice back always finds its closing lines in their whole shape
+ * (`chatNoticeWords`).
+ */
+function noticeText(
+  from: string,
+  channel: ChatChannelRow,
+  message: ChatMessageRow,
+  unattached: readonly string[],
+): string {
+  const header = `${CHAT_NOTICE_LEAD} · ${from} ${whereSaid(channel, message)} (m ${message.seq}):`;
+  const closings = [
+    ...(unattached.length === 0 ? [] : [chatNoticeUnattachedLine(unattached)]),
+    ...(message.ask === null ? [] : [chatNoticeAsksLine(message.ask.response.type)]),
+    chatNoticeReplyLine(message.seq),
+  ];
+  const kept = [header, ...closings].join(PARAGRAPH_BREAK);
+  const room = CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS - kept.length - PARAGRAPH_BREAK.length;
   const words = message.blocks
-    .map(blockWords)
+    .map((block) => blockWords(block))
     .filter((part) => part !== "")
-    .join("\n\n");
-  const asks =
-    message.ask === null
-      ? ""
-      : `It asks you (${message.ask.response.type}): answer it in its thread.`;
-  const reply = `Reply with ${CHAT_TOOL.POST}({ replyTo: ${message.seq}, text }).`;
-  const text = [header, words, asks, reply].filter((part) => part !== "").join("\n\n");
-  return text.slice(0, CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS);
+    .join(PARAGRAPH_BREAK);
+  const cut = words.slice(0, wholeLinksEnd(words, Math.max(room, 0)));
+  return [header, cut, ...closings].filter((part) => part !== "").join(PARAGRAPH_BREAK);
+}
+
+/** The extension a picture's file is named with, by the type its bytes were sniffed to be. */
+const PICTURE_EXTENSION = {
+  [CHAT_IMAGE_TYPE.PNG]: ".png",
+  [CHAT_IMAGE_TYPE.JPEG]: ".jpg",
+  [CHAT_IMAGE_TYPE.WEBP]: ".webp",
+} as const satisfies Record<ChatImageType, string>;
+
+/** The attachment ids a message's image blocks name, each once, in the order it first shows them: two blocks of one picture name one id. */
+function pictureIdsOf(message: ChatMessageRow): readonly string[] {
+  const ids = message.blocks.flatMap((block) =>
+    block.type === CHAT_BLOCK.IMAGE && "attachmentId" in block ? [block.attachmentId] : [],
+  );
+  return [...new Set(ids)];
+}
+
+/**
+ * The pictures a notice hands an agent, and the ids of the rest: the
+ * message's pictures as files named by their attachment id, never a path,
+ * taken in the order it shows them while they fit what one message to an
+ * agent carries, its count and bytes together and each within an image's
+ * own bound. Note that the first that does not fit ends the taking, so what is
+ * attached is always the message's first pictures. A picture its blocks name
+ * whose bytes the store does not keep is among the rest.
+ */
+function noticePictures(
+  ids: readonly string[],
+  kept: readonly {
+    readonly id: string;
+    readonly contentType: ChatImageType;
+    readonly bytes: Uint8Array;
+  }[],
+): {
+  readonly attachments: readonly CodingAgentAttachment[];
+  readonly unattached: readonly string[];
+} {
+  const bytesOf = new Map(kept.map((picture) => [picture.id, picture]));
+  const attachments: CodingAgentAttachment[] = [];
+  let total = 0;
+  for (const id of ids) {
+    const picture = bytesOf.get(id);
+    if (picture === undefined) break;
+    const size = picture.bytes.byteLength;
+    const fits =
+      attachments.length < CODING_AGENT_BOUNDS.MAX_ATTACHMENTS &&
+      total + size <= CODING_AGENT_BOUNDS.MAX_ATTACHMENTS_BYTES &&
+      size <= CODING_AGENT_BOUNDS.MAX_IMAGE_BYTES;
+    if (!fits) break;
+    total += size;
+    attachments.push({
+      name: `${id}${PICTURE_EXTENSION[picture.contentType]}`,
+      mediaType: picture.contentType,
+      data: Buffer.from(picture.bytes).toString("base64"),
+    });
+  }
+  return { attachments, unattached: ids.slice(attachments.length) };
+}
+
+/**
+ * Where words cut at the bound end, never inside a mention link: a link the
+ * bound falls inside is left out whole, so every link a notice carries is
+ * one the agent can copy to address its member.
+ */
+function wholeLinksEnd(words: string, bound: number): number {
+  if (words.length <= bound) return words.length;
+  const straddling = mentionLinksIn(words).find((link) => link.start < bound && link.end > bound);
+  return straddling?.start ?? bound;
 }
 
 /**
@@ -290,8 +399,7 @@ function toldBy(address: ChatAddress): readonly string[] {
 }
 
 /**
- * A coding agent told of a message, as the module's header says: held
- * where a notice is outstanding, left where it is archived, on an archived
+ * A coding agent told of a message, as the module's header says: left where it is archived, on an archived
  * plan, its starter gone from the workspace, or retired, the last stamped
  * for good, otherwise steered.
  */
@@ -306,7 +414,6 @@ function tellAgent(
 > {
   return Effect.gen(function* () {
     const { userId, organizationId } = telling;
-    const place = notice.message.touchedSeq;
     if (member.leftAt !== null) return NOTICE_OUTCOME.LEFT;
     const agent =
       member.agentId === null
@@ -318,32 +425,35 @@ function tellAgent(
       isWorkspaceMember(agent.value.userId, organizationId),
     );
     if (!starterStays) return NOTICE_OUTCOME.LEFT;
-    // An agent whose starter has not turned Chat on has no chat tools to answer with, so it is steered nothing.
-    const chatOn = yield* hostedStoreOrUnavailable(chatEnabledFor(agent.value.userId));
-    if (!chatOn) return NOTICE_OUTCOME.HELD;
+    // A message the agent has read already, told again, is no news to it.
+    const read = yield* hostedStoreOrUnavailable(
+      readPast(
+        userId,
+        organizationId,
+        member.id,
+        notice.message.channelId,
+        notice.message.touchedSeq,
+      ),
+    );
+    if (read) return NOTICE_OUTCOME.HELD;
     // A deployment that reaches no eve steers nothing, so the agent reads the message when it next reads.
     const eve = telling.eveFor(agent.value.userId);
     if (eve === undefined) return NOTICE_OUTCOME.HELD;
-    // Note that who sent it is read before the notice is claimed, because a read that fails after the claim would hold the notice with nothing to release it.
-    const sender = yield* senderOf(userId, notice.from);
-    const claimed = yield* hostedStoreOrUnavailable(
-      markNoticed(userId, organizationId, member.id, notice.message.channelId, place),
-    );
-    if (!claimed) return NOTICE_OUTCOME.HELD;
+    const sender = yield* senderOf(userId, notice.from, notice.fromName);
     // Note that eve is the starter's, whose turn it steers, while the plan is read as the poster's, who may stay when the starter leaves.
     const steered = yield* steerCodingAgent(eve, telling.writer, userId, agent.value, {
       text: notice.text,
+      attachments: notice.attachments,
       clientKey: chatNoticeKey(notice.message.id, notice.message.askRevision ?? 0, member.id),
       sender,
       metadata: {
         author: AUTHOR_OF_KIND[notice.from.kind],
         channel: MESSAGE_CHANNEL.CHAT,
         chat_seq: notice.message.seq,
-        from: notice.from.handle,
+        from: noticeFrom(notice.fromName, notice.from.kind),
       },
     }).pipe(Effect.result);
     if (Result.isSuccess(steered)) return NOTICE_OUTCOME.TOLD;
-    yield* hostedStoreOrUnavailable(releaseNotice(userId, organizationId, member.id, place));
     if (steered.failure.error === HOSTED_REFUSAL.AGENT_RETIRED.error) {
       return yield* Effect.as(
         hostedStoreOrUnavailable(leave(userId, organizationId, member.id)),
@@ -358,8 +468,9 @@ function tellAgent(
  * Tells a message just posted to the members it addresses, each through
  * the way its kind is told, and answers the receipt: what `postChat` does
  * after a post, and what an ask's post or an answer's reply calls itself.
- * The handles that named no one when it was posted are the caller's to
- * pass on.
+ * Every member is named by its mention link as the poster's account reads
+ * the workspace; the labels of the links that named no one when it was
+ * posted are the caller's to pass on.
  * @public
  */
 export function tellMessage(
@@ -384,35 +495,55 @@ export function tellMessage(
     );
     const from = members.get(message.authorMemberId);
     if (from === undefined) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-    const notice = { message, text: noticeText(from, channel.value, message), from };
+    const names: ChatNames = yield* hostedStoreOrUnavailable(
+      chatNamesOf(userId, organizationId, members.values()),
+    );
     const told = toldBy({
       authorMemberId: message.authorMemberId,
       mentions: message.mentions,
       channel: channel.value,
       threadAuthors: authors,
     }).flatMap((id) => Option.toArray(Option.fromNullishOr(members.get(id))));
-    const outcomes = yield* Effect.forEach(told, (member) => {
-      switch (member.kind) {
-        case MEMBER_KIND.AGENT:
-          return Effect.map(tellAgent(telling, member, notice), (outcome) => ({ member, outcome }));
-        case MEMBER_KIND.LUKE:
-          return Effect.map(telling.doors.luke(member, notice), (outcome) => ({
-            member,
-            outcome,
-          }));
-        case MEMBER_KIND.HUMAN:
-          return Effect.map(telling.doors.human(member, notice), (outcome) => ({
-            member,
-            outcome,
-          }));
-      }
-    });
-    const handles = (outcome: NoticeOutcome) =>
-      outcomes.filter((each) => each.outcome === outcome).map((each) => each.member.handle);
+    // The pictures are read once, as the poster, and only where an agent is told, since a person's door reads none.
+    const ids = pictureIdsOf(message);
+    const tellsAgent = told.some((member) => member.kind === MEMBER_KIND.AGENT);
+    const kept =
+      ids.length === 0 || !tellsAgent
+        ? []
+        : yield* hostedStoreOrUnavailable(readMessagePictures(userId, organizationId, message.id));
+    const { attachments, unattached } = noticePictures(ids, kept);
+    const notice = {
+      message,
+      text: noticeText(names.mention(from), channel.value, message, tellsAgent ? unattached : []),
+      attachments,
+      from,
+      fromName: names.name(from),
+    };
+    // Note that each member is told at once beside the others, because each claim and steer is its own member's, and an answer waited on three steers in a row.
+    const outcomes = yield* Effect.forEach(
+      told,
+      (member) => {
+        switch (member.kind) {
+          case MEMBER_KIND.AGENT:
+            return Effect.map(tellAgent(telling, member, notice), (outcome) => ({
+              member,
+              outcome,
+            }));
+          case MEMBER_KIND.HUMAN:
+            return Effect.map(telling.doors.human(member, notice), (outcome) => ({
+              member,
+              outcome,
+            }));
+        }
+      },
+      { concurrency: CHAT_BOUNDS.MAX_STEERS_PER_POST },
+    );
+    const named = (outcome: NoticeOutcome) =>
+      outcomes.filter((each) => each.outcome === outcome).map((each) => names.mention(each.member));
     return {
-      told: handles(NOTICE_OUTCOME.TOLD),
-      held: handles(NOTICE_OUTCOME.HELD),
-      left: handles(NOTICE_OUTCOME.LEFT),
+      told: named(NOTICE_OUTCOME.TOLD),
+      held: named(NOTICE_OUTCOME.HELD),
+      left: named(NOTICE_OUTCOME.LEFT),
       unresolved,
     };
   });
@@ -430,26 +561,54 @@ export const HOSTED_OF_CHAT_REFUSAL = {
 } as const satisfies Record<ChatRefusal, HostedRefusal>;
 
 /**
- * Posts a message and tells the members it addresses: the one door a
- * coding agent's `post_chat` and the window's post both call. A post
- * repeated under its key answers the message it made, and is told again,
- * which steers no one twice. Refused as the store refuses the post, in the
- * route's words.
+ * Posts a message and tells no one yet: what `postChat` does before it
+ * tells, and what the window's post answers at, telling the members after
+ * its answer has left. The pictures handed in are kept under the ids its
+ * image blocks name in the same transaction as the message, so no reader
+ * sees the message before its pictures stand, and before anyone is told. A
+ * post repeated under its key answers the message it made. Refused as the
+ * store refuses the post, in the route's words.
+ * @public
+ */
+export function writeChatPost(
+  telling: Pick<ChatTelling, "userId" | "organizationId">,
+  post: ChatPost,
+  images: readonly ChatImageWrite[] = [],
+): Effect.Effect<ChatPosted, HostedRefusal, DatabaseServices> {
+  return Effect.gen(function* () {
+    const { userId, organizationId } = telling;
+    const written = Effect.gen(function* () {
+      const posted = yield* postMessage(userId, organizationId, post);
+      if (Result.isFailure(posted) || images.length === 0) return posted;
+      const { id } = posted.success.message;
+      yield* attachMessageImages(userId, organizationId, post.authorMemberId, id, images);
+      return posted;
+    });
+    const posted = yield* hostedStoreOrUnavailable(
+      Effect.flatMap(SqlClient.SqlClient, (client) => client.withTransaction(written)),
+    );
+    if (Result.isFailure(posted)) return yield* Effect.fail(HOSTED_OF_CHAT_REFUSAL[posted.failure]);
+    return posted.success;
+  });
+}
+
+/**
+ * Posts a message and tells the members it addresses: the door a coding
+ * agent's `post_chat` calls, which reads who heard it in the receipt. A
+ * post repeated under its key answers the message it made, and is told
+ * again, which steers no one twice.
  */
 export function postChat(
   telling: ChatTelling,
   post: ChatPost,
+  images: readonly ChatImageWrite[] = [],
 ): Effect.Effect<
   ChatPostTold,
   HostedRefusal,
   DatabaseServices | HttpClient.HttpClient | GitHubApp
 > {
   return Effect.gen(function* () {
-    const posted = yield* hostedStoreOrUnavailable(
-      postMessage(telling.userId, telling.organizationId, post),
-    );
-    if (Result.isFailure(posted)) return yield* Effect.fail(HOSTED_OF_CHAT_REFUSAL[posted.failure]);
-    const { message, repeated, unresolved } = posted.success;
+    const { message, repeated, unresolved } = yield* writeChatPost(telling, post, images);
     const receipt = yield* tellMessage(telling, message, unresolved);
     return { message, repeated, receipt };
   });

@@ -6,7 +6,7 @@
  */
 export { jsonStateFile } from "./json-state-file.js";
 export { closeEveryMacTerminal, type MacTerminal, startMacTerminal } from "./mac-terminal.js";
-export { cloneFolder, openOnMacScript, worktreeFolder } from "./open-on-mac.js";
+export { cloneFolder, openOnMacScript, worktreeFolder, worktreesRoot } from "./open-on-mac.js";
 export { reportToStderr, tolerateClosedStderr } from "./stderr-report.js";
 export { openTerminalSocketOverWs } from "./terminal-socket-over-ws.js";
 export { openVoiceSocketOverWs } from "./voice-socket-over-ws.js";

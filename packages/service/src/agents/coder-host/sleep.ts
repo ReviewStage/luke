@@ -9,12 +9,17 @@ import { CODER } from "./bounds.js";
  *
  * A command still running after eve's half a minute keeps running in the
  * background (`shell.ts`), and the agent checks on it with a later command:
- * a pull request's checks it watches, a deploy, a slow suite. Without a way
- * to wait, each check is a model step spent finding nothing changed. eve's
- * `sleep` parks the turn durably, holding no function open, and a message
- * from the developer ends it early, as it steers any turn; the sandbox and
- * what runs in it stand while the turn does, since only a turn's end stops
- * them (`../agent-runtime/sandbox.ts`). One pause is held to
+ * a deploy, a slow suite. Without a way to wait, each check is a model step
+ * spent finding nothing changed. eve's `sleep` parks the turn durably,
+ * holding no function open, and a message ends it early, as it steers any
+ * turn: the developer's, or GitHub's saying every check on the agent's pull
+ * request finished (`github/agent-wakes.ts`), which is what the agent waits
+ * on after a push rather than watching CI. A pause of
+ * `CODER.SLEEP_STOPS_AT` or more stops the sandbox where no process the
+ * agent started still runs in it, and the next step resumes it from its
+ * snapshot with its files as they stood; a command left running in the
+ * background keeps it up, and runs on through the pause
+ * (`../agent-runtime/sandbox.ts`'s `parksForLongSleep`). One pause is held to
  * `CODER.SLEEP_MAX`, inside what is left of the GitHub credential its
  * background commands reach GitHub with, since only a step renews it; a
  * longer wait is several pauses, each one's end a step.
@@ -28,7 +33,8 @@ const SLEEP_DESCRIPTION =
   "Wait for the given number of seconds without running anything, then carry on. Use it before you check again on what " +
   "takes time to change: a command bash left running in the background, a pull request's checks, or a deploy. Wait about " +
   "as long as the thing usually takes rather than checking every few seconds. Commands running in the background keep " +
-  "running while you wait, and a message from the developer ends the wait early. One wait is at most " +
+  "running while you wait. A message ends the wait early: the developer's, or GitHub's saying every check on your pull " +
+  "request finished. One wait is at most " +
   `${SLEEP_MAX_SECONDS / 60} minutes; to wait longer, wait again.`;
 
 /** eve's `sleep` input, held to the bound: how many seconds to wait. */

@@ -1,18 +1,16 @@
+import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
 import {
+  HostedAdminClient,
   HostedAutomationClient,
   HostedCodingAgentClient,
-  HostedFactoryWorldClient,
   HostedGitHubConnectionClient,
   HostedIntegrationsClient,
-  HostedIssueClient,
   HostedMacCommandClient,
   HostedTaskClient,
   HostedTerminalClient,
   HostedWorkspaceClient,
-  type PlanDraftFrame,
   type TaskActivityFrame,
   type TaskCodeFrame,
-  type TaskWorkFrame,
 } from "@luke/features";
 import {
   carried,
@@ -23,6 +21,7 @@ import {
 } from "@luke/gateway";
 import { APP_SETTING_SCHEMA } from "@luke/settings";
 import { LIVE_SESSION_END_CAUSE } from "@luke/voice/live-session";
+import type { VoiceCallAbout } from "@luke/voice/voice-view";
 import { Effect, Layer } from "effect";
 import type * as FileSystem from "effect/FileSystem";
 import type * as HttpClient from "effect/http/HttpClient";
@@ -30,10 +29,9 @@ import type * as Path from "effect/Path";
 import type { ChildProcessSpawner } from "effect/process";
 import { composeAccount } from "./compose-account.js";
 import { composeAutomations } from "./compose-automations.js";
+import { composeChatGptSignIn } from "./compose-chatgpt-sign-in.js";
 import { composeCodingAgents } from "./compose-coding-agents.js";
-import { composeFactory } from "./compose-factory.js";
 import { composeIntegrations } from "./compose-integrations.js";
-import { composeIssues } from "./compose-issues.js";
 import { composeLive } from "./compose-live.js";
 import { composeMacCommands } from "./compose-mac-commands.js";
 import { composeMacTerminal } from "./compose-mac-terminal.js";
@@ -45,12 +43,12 @@ import { mergedMethods } from "./effect/composer.js";
 import { type HostAssembly, HostAssemblyTag, hostDrain } from "./effect/host.js";
 import { HostKernelTag, HostService } from "./effect/kernel.js";
 import {
+  type AccountSource,
   type AppIdentity,
   type Environment,
   Reporter,
-  type SecretCipher,
   ShutdownSignal,
-  type SignInConsent,
+  SignInConsent,
   TerminalSocket,
   VoiceSocket,
 } from "./effect/seams.js";
@@ -77,8 +75,6 @@ const HOST_START_ORDER: readonly HostConcern[] = [
   HOST_CONCERN.TASKS,
   HOST_CONCERN.CODING_AGENTS,
   HOST_CONCERN.AUTOMATIONS,
-  HOST_CONCERN.ISSUES,
-  HOST_CONCERN.FACTORY,
   HOST_CONCERN.INTEGRATIONS,
   HOST_CONCERN.MAC_COMMANDS,
 ];
@@ -90,10 +86,9 @@ type HostAssemblyRequirements =
   | Reporter
   | VoiceSocket
   | Environment
-  | SecretCipher
   | AppIdentity
   | ShutdownSignal
-  | SignInConsent
+  | AccountSource
   | FileSystem.FileSystem
   | Path.Path
   | HttpClient.HttpClient;
@@ -103,6 +98,7 @@ interface PlatformConcernRequirements {
   [HOST_PLATFORM_CONCERN.MAC_COMMANDS]: ChildProcessSpawner.ChildProcessSpawner;
   [HOST_PLATFORM_CONCERN.MAC_TERMINAL]: never;
   [HOST_PLATFORM_CONCERN.TERMINALS]: TerminalSocket;
+  [HOST_PLATFORM_CONCERN.CHATGPT_SIGN_IN]: SignInConsent;
 }
 
 /**
@@ -133,79 +129,76 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
     const settings = yield* composeSettings();
     const account = yield* composeAccount({ settings, openSocket: openVoiceSocket });
     // No brain runs on this Mac: the exchange is the service's, and Luke
-    // speaks only on a task's call the developer opened.
+    // speaks only on a call the developer opened into an agent.
     // The tasks composer is built after the live one and ends its calls, so
-    // the live composer reads the open task, and hands it the task's drafts
-    // and their activity, through these late bindings.
-    let activeTaskId: () => string | undefined = () => undefined;
-    let showPlanDraft: (draft: PlanDraftFrame) => void = () => undefined;
+    // the live composer reads the agent a call goes into, and hands the
+    // call's activity, code, and work on, through these late bindings.
+    let callTaskOf: (agentId: string) => Effect.Effect<string | null | undefined> = () =>
+      Effect.succeed(undefined);
     let showTaskActivity: (activity: TaskActivityFrame) => void = () => undefined;
-    let taskCallEnded: (taskId: string) => void = () => undefined;
+    let taskCallEnded: (about: VoiceCallAbout) => void = () => undefined;
     let showTaskCode: (code: TaskCodeFrame) => void = () => undefined;
-    let showTaskWork: (work: TaskWorkFrame) => void = () => undefined;
     const live = yield* composeLive({
       settings,
       account,
-      activeTaskId: () => activeTaskId(),
-      showPlanDraft: (draft) => showPlanDraft(draft),
+      callTaskOf: (agentId) => callTaskOf(agentId),
       showTaskActivity: (activity) => showTaskActivity(activity),
-      taskCallEnded: (taskId) => taskCallEnded(taskId),
+      taskCallEnded: (about) => taskCallEnded(about),
       showTaskCode: (code) => showTaskCode(code),
-      showTaskWork: (work) => showTaskWork(work),
     });
     const workspaceClient = new HostedWorkspaceClient({
       serviceBaseUrl: kernel.hostedServiceBaseUrl,
-      ...account.token,
-      ...account.sessionToken,
+      credential: account.credential,
+      sessionCredential: account.sessionCredential,
     });
     const codingAgentClient = new HostedCodingAgentClient({
       serviceBaseUrl: kernel.hostedServiceBaseUrl,
-      ...account.token,
+      credential: account.credential,
     });
+    /** The account signed in now, by its id, which every live read names. */
+    const accountId = () => {
+      const signedIn = account.session.snapshot();
+      return signedIn.status === ACCOUNT_STATUS.SIGNED_IN ? signedIn.id : undefined;
+    };
     const tasks = yield* composeTasks({
       kernel,
       account,
+      accountId,
       endTaskCall: (taskId) => live.service.endTaskCall(taskId),
       client: Object.assign(
-        new HostedTaskClient({ serviceBaseUrl: kernel.hostedServiceBaseUrl, ...account.token }),
+        new HostedTaskClient({
+          serviceBaseUrl: kernel.hostedServiceBaseUrl,
+          credential: account.credential,
+        }),
         {
           workspaces: workspaceClient,
           github: new HostedGitHubConnectionClient({
             serviceBaseUrl: kernel.hostedServiceBaseUrl,
-            ...account.token,
-            ...account.sessionToken,
+            credential: account.credential,
+            sessionCredential: account.sessionCredential,
+          }),
+          admin: new HostedAdminClient({
+            serviceBaseUrl: kernel.hostedServiceBaseUrl,
+            sessionCredential: account.sessionCredential,
           }),
         },
       ),
-      conversations: codingAgentClient,
     });
     const codingAgents = yield* composeCodingAgents({
       kernel,
       account,
+      accountId,
       client: codingAgentClient,
+      typeIntoCall: (agentId, text, clientKey) => live.service.typeLine(agentId, text, clientKey),
+      listed: tasks.listed,
     });
     const automations = yield* composeAutomations({
       kernel,
       account,
+      accountId,
       client: new HostedAutomationClient({
         serviceBaseUrl: kernel.hostedServiceBaseUrl,
-        ...account.token,
-      }),
-    });
-    const issues = yield* composeIssues({
-      kernel,
-      account,
-      client: new HostedIssueClient({
-        serviceBaseUrl: kernel.hostedServiceBaseUrl,
-        ...account.token,
-      }),
-    });
-    const factory = yield* composeFactory({
-      kernel,
-      account,
-      client: new HostedFactoryWorldClient({
-        serviceBaseUrl: kernel.hostedServiceBaseUrl,
-        ...account.token,
+        credential: account.credential,
       }),
     });
     const integrations = yield* composeIntegrations({
@@ -213,7 +206,7 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
       account,
       client: new HostedIntegrationsClient({
         serviceBaseUrl: kernel.hostedServiceBaseUrl,
-        ...account.token,
+        credential: account.credential,
       }),
       // Note that a refusal's reason is not reported, because it may carry the address.
       openExternal: (url) =>
@@ -226,13 +219,14 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
       ? yield* composeMacCommands({
           kernel,
           account,
+          accountId,
           enabled: Effect.map(
             Effect.orDie(settings.store.snapshot()),
             (snapshot) => snapshot.stored.macCommands ?? APP_SETTING_SCHEMA.macCommands.default,
           ),
           client: new HostedMacCommandClient({
             serviceBaseUrl: kernel.hostedServiceBaseUrl,
-            ...account.token,
+            credential: account.credential,
           }),
         })
       : unavailableConcern(HOST_PLATFORM_CONCERN.MAC_COMMANDS);
@@ -245,33 +239,50 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
           account,
           client: new HostedTerminalClient({
             serviceBaseUrl: kernel.hostedServiceBaseUrl,
-            ...account.token,
+            credential: account.credential,
           }),
           openSocket: yield* TerminalSocket,
         })
       : { ...unavailableConcern(HOST_PLATFORM_CONCERN.TERMINALS), reset: Effect.void };
-    activeTaskId = tasks.activeTaskId;
-    showPlanDraft = tasks.showDraft;
+    const chatGptSignIn = platform.has(HOST_PLATFORM_CONCERN.CHATGPT_SIGN_IN)
+      ? yield* composeChatGptSignIn({
+          kernel,
+          account,
+          client: codingAgentClient,
+          openConsent: (yield* SignInConsent).open,
+        })
+      : { ...unavailableConcern(HOST_PLATFORM_CONCERN.CHATGPT_SIGN_IN), reset: Effect.void };
+    callTaskOf = codingAgents.callTaskOf;
     showTaskActivity = tasks.showActivity;
     taskCallEnded = tasks.callEnded;
-    showTaskCode = ({ type: _type, planId: taskId, ...shown }) => tasks.showCode(taskId, shown);
-    showTaskWork = (work) => tasks.showWork(work.planId, work.turn);
+    // Note that code a call into an agent with no task shows names no task, so it is held for that agent's page by its agent.
+    showTaskCode = ({ type: _type, planId: taskId, ...shown }) => {
+      if (taskId !== undefined) tasks.showCode(taskId, shown);
+      else if (shown.agentId !== undefined) tasks.showAgentCode(shown.agentId, shown);
+    };
 
     /**
      * The account gate opening, which is what a sign-in runs and what a launch
-     * behind an account already signed in runs: the preferences reconciled and
-     * the voice credential applied.
+     * behind an account already signed in runs: the preferences reconciled,
+     * the account's access read, and the voice credential applied.
      */
     const openCapabilities = Effect.gen(function* () {
-      if (account.signedIn()) yield* settings.reconcileAccountPreferences();
+      if (account.signedIn()) {
+        yield* settings.reconcileAccountPreferences();
+        yield* account.refreshAccess;
+      }
       yield* account.applyVoiceCredential;
       yield* settings.emitSettings();
     });
 
     /** The gate closing: what a sign-out means. */
     const closeCapabilities = Effect.gen(function* () {
+      yield* account.forgetAccess;
       yield* tasks.reset;
+      yield* codingAgents.reset;
+      yield* automations.reset;
       yield* terminals.reset;
+      yield* chatGptSignIn.reset;
       yield* account.applyVoiceCredential;
       yield* settings.emitSettings();
     });
@@ -281,7 +292,9 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
     // composer's own set-once, so a reader that awaits its links suspends
     // until this has run rather than reading nothing.
     yield* settings.link({
-      refreshAccount: account.session.renewOnce,
+      credential: account.credential,
+      readAccountKey: () => account.token.readAccountKey?.() ?? Effect.succeed(undefined),
+      confirmAccount: () => account.session.confirmAccount?.() ?? Effect.void,
       setVoice: (voice) =>
         Effect.sync(() => account.voiceCapabilities.liveSessions?.setVoice(voice)),
       endLiveSession: Effect.suspend(() =>
@@ -299,12 +312,11 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
       [HOST_CONCERN.TASKS]: tasks,
       [HOST_CONCERN.CODING_AGENTS]: codingAgents,
       [HOST_CONCERN.AUTOMATIONS]: automations,
-      [HOST_CONCERN.ISSUES]: issues,
-      [HOST_CONCERN.FACTORY]: factory,
       [HOST_CONCERN.INTEGRATIONS]: integrations,
       [HOST_CONCERN.MAC_COMMANDS]: macCommands,
       [HOST_CONCERN.MAC_TERMINAL]: macTerminal,
       [HOST_CONCERN.TERMINALS]: terminals,
+      [HOST_CONCERN.CHATGPT_SIGN_IN]: chatGptSignIn,
     } satisfies Readonly<Record<HostConcern, Composer>>;
     // Note that the platform concerns are the only ones a host may leave out.
     const running = (name: HostConcern) => !isPlatformConcern(name) || platform.has(name);
@@ -324,10 +336,12 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
         Effect.gen(function* () {
           const snapshot = yield* Effect.orDie(settings.store.snapshot());
           const replay = yield* account.sessionReplayState;
+          const access = yield* account.accessState;
           return {
             settings: carried(snapshot),
             account: carried(account.snapshot()),
             sessionReplay: carried(replay),
+            access: carried(access),
             voiceAvailable: account.voiceCapabilities.liveSessions !== undefined,
             agentTraceEnabled: account.agentTrace !== undefined,
           };

@@ -1,4 +1,10 @@
-import { APP_SETTING_FIELDS, APP_SETTING_SCHEMA, settingsScopeChanged } from "@luke/settings";
+import {
+  APP_SETTING_FIELDS,
+  APP_SETTING_SCHEMA,
+  type SettingsRowsInput,
+  settingsScopeChanged,
+  settingVisible,
+} from "@luke/settings";
 import { SETTINGS_VIEW, type SettingsView } from "@luke/settings/settings-views";
 import type {
   AppSettingField,
@@ -89,25 +95,37 @@ function writeBack(writes: SettingsWrites, held: readonly HeldSetting[]): Promis
  * said in a toast with an Undo, which writes back what the page held.
  * The control is `@luke/ui`'s quiet `Button`, its glyph in the button's icon
  * slot.
+ *
+ * The page resets only the rows it draws: it names the group's rows it
+ * leaves out, Zoom in a browser, and the store keeps them inside the one
+ * write, so nothing the reader could not see changes.
  */
 function ResetPageButton({
   scope,
   settings,
   writes,
+  rows,
 }: {
   scope: SettingsResetScope;
   settings: AppSettingsView;
   writes: SettingsWrites;
+  rows: SettingsRowsInput;
 }): React.JSX.Element {
   const toast = useToast();
   const reset = (asked: SettingsResetScope): Promise<ActionResult> => {
     const before = settings;
-    return writes.reset(asked).then((result) => {
+    const unseen = APP_SETTING_FIELDS.filter(
+      (field) => APP_SETTING_SCHEMA[field].resetScope === asked && !settingVisible(field, rows),
+    );
+    return writes.reset(asked, unseen).then((result) => {
       if (result.status !== ACTION_RESULT_STATUS.ACCEPTED) {
         toast({ words: result.reason, tone: TOAST_TONE.FAILED, hold: TOAST_HOLD.FAILED });
         return result;
       }
-      const held = changedBy(before, appSettingsView(result.settings), asked);
+      // Note that a kept row never enters the Undo, because another window may have changed it since this page read it.
+      const held = changedBy(before, appSettingsView(result.settings), asked).filter(
+        ([field]) => !unseen.includes(field),
+      );
       const undo = () =>
         writeBack(writes, held).then((taken) => {
           if (taken) return;
@@ -148,11 +166,15 @@ export function pageResetControl(
   view: SettingsView,
   settings: AppSettingsView | undefined,
   writes: SettingsWrites,
+  /** Which rows the page draws, so a change only to a row it leaves out, Zoom in a browser, offers no reset. */
+  rows: SettingsRowsInput | undefined,
 ): React.JSX.Element | undefined {
   if (!(view in PAGE_RESET)) return undefined;
   // SAFETY: `in` narrows the view to the pages the table names.
   const scope = PAGE_RESET[view as keyof typeof PAGE_RESET];
-  if (!settings || !settingsScopeChanged(settings, scope)) return undefined;
+  if (!settings || !rows || !settingsScopeChanged(settings, scope, rows)) return undefined;
   // Keyed to the page, so a press out on one page does not rest the next one's.
-  return <ResetPageButton key={scope} scope={scope} settings={settings} writes={writes} />;
+  return (
+    <ResetPageButton key={scope} scope={scope} settings={settings} writes={writes} rows={rows} />
+  );
 }

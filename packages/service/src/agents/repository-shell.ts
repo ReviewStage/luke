@@ -1,38 +1,25 @@
-import type { DatabaseServices } from "@luke/database/core/query";
-import type { UnparsedWireValue } from "@luke/wire";
-import { describeWire, readEither } from "@luke/wire/effect";
-import { Data, Duration, Effect, Option, Redacted, Result, Schema } from "effect";
-import type * as HttpClient from "effect/http/HttpClient";
+import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
+import { Data, Duration, Effect, Redacted } from "effect";
 import type { SandboxSession } from "eve/sandbox";
 import type { VercelSandboxSession } from "eve/sandbox/vercel";
-import { GitHubApp } from "../github/github-app.js";
-import { taskWorkspace } from "../github/workspace-repository.js";
-import type { PlanDocumentBinding } from "../tasks/plan-notes.js";
-import { AGENT_TOOL } from "./agent-runtime/tools.js";
-import { COMMAND_DESCRIPTION } from "./command-description.js";
+import type { GitHubTokenAccess } from "../github/github-app.js";
+import { DEEPEN_STEP, REPOSITORY_SANDBOX_CONTRACT } from "./repository-sandbox-contract.js";
 
 /**
- * repository-shell.ts -- the brain's one source read: a shell command run in the brain session's sandbox, on a checkout of the task's GitHub repository.
+ * repository-shell.ts -- an agent's checkout of the task's GitHub repository in its session's sandbox: the clone, its deepening, and the commit identity set in it.
  *
- * The planning model runs here and so does the sandbox: eve opens one Vercel
- * Sandbox per planning session (`apps/luke/sandbox.ts`) and hands a tool
- * its door. The first call that finds no checkout of the plan's repository
- * makes one, at the repository's current default branch and one commit
- * deep, and later calls reuse it; a task whose repository changed meanwhile
- * is checked out again. The checkout reads the repository through the Luke
- * GitHub App: the owner's reach is confirmed and a token minted for that one
- * repository with contents read (`github-app.ts`), and the token is set as a
- * header at the sandbox's firewall for the clone and withdrawn after it. It
- * never enters the sandbox's filesystem or environment, so no command, and
- * no output of one, can carry it. Every refusal answers `not-run` and says
- * why in words the model can act on, so nothing unread is ever described as
- * read.
+ * A checkout reads the repository through the Luke GitHub App, or the
+ * member's own token: the token is set as a header at the sandbox's
+ * firewall for the clone and withdrawn after it. It never enters the
+ * sandbox's filesystem or environment, so no command, and no output of one,
+ * can carry it. Every refusal says why in words the model can act on, so
+ * nothing unread is ever described as read (`coder-host/checkout.ts`).
  */
 
 /**
  * Why the checkout could not be reached, in words the model can act on,
- * without the verb each tool puts ahead of them: the shell says a command
- * was not run, `show_code` that lines were not shown.
+ * without the verb each tool puts ahead of them: `show_code` says that lines
+ * were not shown.
  */
 export const REPOSITORY_REFUSAL = {
   NO_REPOSITORY:
@@ -52,74 +39,11 @@ export const REPOSITORY_REFUSAL = {
   CHECKOUT_FAILED: "the repository could not be checked out. The call may be made again.",
 } as const;
 
-/** The verb the shell puts ahead of every reason it ran nothing. */
-const NOT_RUN = "Not run: ";
-
-/** Each refusal reworded as the shell says it; the keys are the reasons' own. */
-function notRunWording<const Reasons extends Readonly<Record<string, string>>>(
-  reasons: Reasons,
-): { readonly [Key in keyof Reasons]: string } {
-  // SAFETY: the entries are the reasons' own, so the keys are the ones the mapped type names.
-  return Object.fromEntries(
-    Object.entries(reasons).map(([key, reason]) => [key, `${NOT_RUN}${reason}`]),
-  ) as { [Key in keyof Reasons]: string };
-}
-
-/** Why a call ran nothing, in words the model can act on. */
-export const REPOSITORY_SHELL_REFUSAL = {
-  UNREADABLE: `${NOT_RUN}the arguments must be \`command\`, one shell command, and its optional \`description\`.`,
-  ...notRunWording(REPOSITORY_REFUSAL),
-} as const;
-
-export const REPOSITORY_SHELL_STATUS = {
-  RAN: "ran",
-  NOT_RUN: "not-run",
-} as const;
-
 const REPOSITORY_SHELL_BOUNDS = {
-  /** The most characters of stdout or stderr one command's result carries. */
-  OUTPUT_MAX_CHARS: 20_000,
-  /** How long one command may run before it is killed, in seconds, so a command that never ends does not hold the turn. */
-  COMMAND_TIMEOUT_SECONDS: 60,
   /** How long the checkout may take before it is given up on. */
   CHECKOUT_TIMEOUT: Duration.minutes(5),
   /** How many characters of the checkout's own error the model is told. */
   CHECKOUT_ERROR_MAX_CHARS: 500,
-} as const;
-
-/**
- * What the shell hands the sandbox, which is the whole of what a sandbox
- * sees of it: where the checkout stands and the file beside it naming
- * which repository it is of, and the variables each script reads, so
- * nothing of the repository's name or the model's command is spliced into
- * shell text. A test's sandbox double answers from this contract.
- */
-export const REPOSITORY_SANDBOX_CONTRACT = {
-  PATH: {
-    WORKSPACE: "/workspace",
-    CHECKOUT: "/workspace/repository",
-    CHECKOUT_RECORD: ".luke/repository",
-  },
-  VARIABLE: {
-    /** The repository the call is about, `owner/name`, read by the probe and the checkout. */
-    REPOSITORY: "LUKE_REPOSITORY",
-    /** The branch the checkout is of: the default branch, or the one a coding agent was started on. */
-    BRANCH: "LUKE_BRANCH",
-    /** The clone's URL, which carries no credential; its presence is what makes a run the checkout. */
-    URL: "LUKE_CLONE_URL",
-    /** How deep the clone is; unset, the whole history, which a coding agent's branch and pull request need. */
-    DEPTH: "LUKE_CLONE_DEPTH",
-    /** The model's command, which bash reads from the variable and never from shell text. */
-    COMMAND: "LUKE_COMMAND",
-    /** The file `show_code` reads, relative to the checkout root, which its scripts read from the variable alone. */
-    FILE: "LUKE_FILE",
-    /** The first and last line of the window `show_code` reads, counted from one. */
-    FIRST_LINE: "LUKE_FIRST_LINE",
-    LAST_LINE: "LUKE_LAST_LINE",
-    /** Who a coding agent's commits are by: the Luke GitHub App's bot and its noreply address, set in the checkout's own config. */
-    GIT_NAME: "LUKE_GIT_NAME",
-    GIT_EMAIL: "LUKE_GIT_EMAIL",
-  },
 } as const;
 
 const { PATH: SANDBOX_PATH, VARIABLE: SANDBOX_VARIABLE } = REPOSITORY_SANDBOX_CONTRACT;
@@ -129,7 +53,7 @@ const GITHUB_HOST = "github.com";
 /** The firewall with nothing injected: eve's default open internet, which is what every command but the clone runs under. */
 const OPEN_INTERNET = "allow-all";
 
-/** The environment the checkout and every command see: no pager, git taking no lock and asking nothing. */
+/** The environment the checkout and every git run in it see: no pager, git taking no lock and asking nothing. */
 const COMMAND_ENVIRONMENT = {
   PAGER: "cat",
   GIT_PAGER: "cat",
@@ -137,30 +61,6 @@ const COMMAND_ENVIRONMENT = {
   GIT_TERMINAL_PROMPT: "0",
   TERM: "dumb",
 } as const;
-
-/**
- * The whole environment the model's command sees, as the Mac runner once
- * gave one: a search path and a home carried over from the sandbox's own,
- * the fixed values above, and nothing else the sandbox's process carries,
- * so `env` prints no variable of the sandbox's or eve's into a stored
- * result.
- */
-const COMMAND_CLEAN_ENVIRONMENT = [
-  'PATH="$PATH"',
-  'HOME="$HOME"',
-  'LANG="${LANG:-C.UTF-8}"',
-  ...Object.entries(COMMAND_ENVIRONMENT).map(([name, value]) => `${name}=${value}`),
-].join(" ");
-
-/**
- * Whether the checkout standing is this repository's: exit 0 when the
- * checkout and its record both stand and the record names the repository
- * the variable carries.
- */
-const CHECKED_OUT_SCRIPT = [
-  `[ -d repository/.git ] || exit 1`,
-  `[ "$(cat ${SANDBOX_PATH.CHECKOUT_RECORD} 2>/dev/null)" = "$${SANDBOX_VARIABLE.REPOSITORY}" ]`,
-].join("\n");
 
 /**
  * The checkout: a clone of the one branch, as deep as the depth variable
@@ -192,8 +92,37 @@ const IDENTITY_SCRIPT = [
   `git config user.email "$${SANDBOX_VARIABLE.GIT_EMAIL}"`,
 ].join("\n");
 
-/** The model's command, run by its own bash under the time bound and the clean environment, from the checkout root. Note that the variable is read by the outer bash, ahead of `env -i`, so the command reaches the inner bash as an argument and no variable. */
-const COMMAND_SCRIPT = `timeout ${REPOSITORY_SHELL_BOUNDS.COMMAND_TIMEOUT_SECONDS}s env -i ${COMMAND_CLEAN_ENVIRONMENT} bash -c "$${SANDBOX_VARIABLE.COMMAND}"`;
+/** The file a coding agent's deepen writes beside the checkout once it is whole, its identity set, and its credential standing. */
+const DEEPENED_RECORD = ".luke/deepened";
+
+/** Whether the deepen finished, printed as `true` or `false`: its record stands only once every step of it did. */
+const DEEPENED_PROBE_SCRIPT = `if [ -f ${DEEPENED_RECORD} ]; then echo true; else echo false; fi`;
+
+/** How long a deepen waits on another deepen of the same checkout before it goes ahead, in seconds. */
+const DEEPEN_LOCK_WAIT_SECONDS = 120;
+
+/**
+ * The rest of a shallow checkout's history fetched, from the workspace
+ * root, through the credential the caller set at the firewall. Note that
+ * two first writes of one session may deepen at once, so the fetch runs
+ * under a lock of its own and asks again under it, so the second finds the
+ * history whole and fetches nothing; and that a lock a stopped sandbox left
+ * standing is waited on for a bounded while and then taken over, so no
+ * deepen waits forever.
+ */
+const DEEPEN_SCRIPT = [
+  "set -e",
+  "mkdir -p .luke",
+  "lock=.luke/deepening",
+  "waited=0",
+  `until mkdir "$lock" 2>/dev/null; do waited=$((waited + 1)); [ "$waited" -le ${DEEPEN_LOCK_WAIT_SECONDS} ] || break; sleep 1; done`,
+  `trap 'rmdir "$lock" 2>/dev/null || true' EXIT`,
+  "cd repository",
+  `if [ "$(git rev-parse --is-shallow-repository)" = true ]; then git fetch --quiet --unshallow; fi`,
+].join("\n");
+
+/** The deepen's record written, once its every step is done. */
+const DEEPENED_MARK_SCRIPT = `mkdir -p .luke && touch ${DEEPENED_RECORD}`;
 
 /**
  * The sandbox as the shell reaches it: one command run, and, where the
@@ -209,14 +138,6 @@ export interface RepositorySandbox {
 /** The door to the session's sandbox, opened on first use: eve's `ctx.getSandbox()`, or a test's double. */
 export type RepositorySandboxDoor = () => Promise<RepositorySandbox>;
 
-/** What one call runs under: the task, the repository it names now, and the session's sandbox. */
-export interface RepositoryCall {
-  readonly task: PlanDocumentBinding;
-  /** The task's repository as the row holds it, `owner/name`; null for a task with none. */
-  readonly repository: string | null;
-  readonly sandbox: RepositorySandboxDoor;
-}
-
 /** What a command answered: its exit code and its two outputs, each cut to the bound. */
 interface CommandResult {
   readonly exitCode: number;
@@ -224,45 +145,13 @@ interface CommandResult {
   readonly stderr: string;
 }
 
-// A type rather than an interface, so a result is a `WireRecord` the model is handed as it stands.
-export type RepositoryShellResult =
-  | ({ readonly status: typeof REPOSITORY_SHELL_STATUS.RAN } & CommandResult)
-  | { readonly status: typeof REPOSITORY_SHELL_STATUS.NOT_RUN; readonly reason: string };
-
-/** What the shell may reach: the store and GitHub for the checkout's confirmation and token. */
-export type RepositoryShellServices = DatabaseServices | HttpClient.HttpClient | GitHubApp;
-
-const RUN_IN_REPOSITORY_INPUT = Schema.Struct({
-  command: describeWire(
-    Schema.String.check(Schema.isMinLength(1)),
-    'One bash command, run from the root of the repository checkout, such as "ls", ' +
-      '"grep -rn invite src", or "cat package.json".',
-  ),
-  description: COMMAND_DESCRIPTION,
-});
-
-const readInput = readEither(RUN_IN_REPOSITORY_INPUT);
-
-/** The tool as the brain is offered it: its name, its words, and its input schema. */
-export const RUN_IN_REPOSITORY_TOOL = {
-  name: AGENT_TOOL.RUN_IN_REPOSITORY,
-  description:
-    "Run one bash command in a checkout of the task's GitHub repository, from the checkout root. " +
-    "Use it to read the code: ls, find, grep, cat, sed, git log. " +
-    "The checkout is the repository's default branch, one commit deep, made on the first call " +
-    "and kept for the conversation; it is meant for reading, and nothing written to it reaches " +
-    "the repository. " +
-    "Answers the exit code, stdout, and stderr, or `not-run` and why.",
-  inputSchema: RUN_IN_REPOSITORY_INPUT,
-} as const;
-
 /** Why the checkout could not be reached or read, as the reason the tool that asked words for the model; a coding agent's checkout answers the same word. */
 export class RepositoryRefusal extends Data.TaggedError("RepositoryRefusal")<{
   readonly reason: string;
 }> {}
 
-/** The brain's checkout is one commit deep: it is read and never pushed from. */
-const BRAIN_CLONE_DEPTH = "1";
+/** A shallow checkout is one commit deep: a coding agent's until its first write deepens it. */
+export const SHALLOW_CLONE_DEPTH = "1";
 
 /** A repository as the checkout clones it: the full name as GitHub spells it, the branch the clone is of (the default branch, or a coding agent's start branch), and the name the checkout's record keeps where a caller spells it otherwise. */
 export interface CheckoutRepository {
@@ -272,18 +161,12 @@ export interface CheckoutRepository {
   readonly recordedAs?: string;
 }
 
-/** How deep a checkout is cloned: one commit for a read, the whole history for a coding agent. */
+/** How deep a checkout is cloned: one commit for a read, the whole history for a coding agent; and whose the token is. */
 export interface CheckoutDepth {
   /** The commits kept; absent, every one. */
   readonly depth?: string;
-}
-
-function notRun(reason: string): RepositoryShellResult {
-  return { status: REPOSITORY_SHELL_STATUS.NOT_RUN, reason };
-}
-
-function truncated(output: string): string {
-  return output.slice(0, REPOSITORY_SHELL_BOUNDS.OUTPUT_MAX_CHARS);
+  /** Whose the token is; absent, an installation token. */
+  readonly access?: GitHubTokenAccess;
 }
 
 /** The path every request of the clone is under: the repository's own git endpoint, which no other repository's path shares. */
@@ -292,13 +175,28 @@ function cloneUrl(repository: string): string {
 }
 
 /**
+ * The username git over HTTPS takes beside the token: `x-access-token` for
+ * an installation token
+ * (https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/authenticating-as-a-github-app-installation#about-authentication-as-a-github-app-installation),
+ * the member's own login for their personal access token
+ * (https://docs.github.com/en/get-started/git-basics/about-remote-repositories#cloning-with-https-urls).
+ */
+function gitUsername(access: GitHubTokenAccess): string {
+  return access.kind === GITHUB_ACCESS.TOKEN ? access.githubLogin : "x-access-token";
+}
+
+/**
  * The firewall for the clone: open internet, and the token as GitHub's
  * header on requests under the one repository's git endpoint alone, so a
  * request for a neighbouring repository, or for the repository's pages
  * outside git, carries nothing.
  */
-function cloneNetworkPolicy(repository: string, token: Redacted.Redacted) {
-  const basic = Buffer.from(`x-access-token:${Redacted.value(token)}`).toString("base64");
+function cloneNetworkPolicy(
+  repository: string,
+  token: Redacted.Redacted,
+  access: GitHubTokenAccess,
+) {
+  const basic = Buffer.from(`${gitUsername(access)}:${Redacted.value(token)}`).toString("base64");
   return {
     allow: {
       "*": [],
@@ -336,18 +234,20 @@ export function runInSandbox(
 }
 
 /**
- * The clone made in the sandbox with the token at the firewall, or the
- * refusal that stopped it: what the brain's checkout and a coding agent's
- * share. The token stands at the firewall for the clone alone: the policy is
- * set back to open internet as the clone ends, however it ended, so no later
- * command runs under it, and a caller that wants the token standing for its
- * own commands sets it again afterwards.
+ * A run of git's against GitHub with the token at the firewall, for the
+ * repository's own git endpoint alone, and the refusal for a git that
+ * failed. The token stands for the run alone: the policy is set back to
+ * open internet as the run ends, however it ended, and in a finalizer, so
+ * an interrupted run leaves no credential standing either, no later command
+ * runs under it, and a caller that wants the token standing for its own
+ * commands sets it again afterwards.
  */
-export const cloneRepository = /* @__PURE__ */ Effect.fn("web/cloneRepository")(function* (
+const underCloneCredential = /* @__PURE__ */ Effect.fn("web/underCloneCredential")(function* (
   sandbox: RepositorySandbox,
-  confirmed: CheckoutRepository,
+  fullName: string,
   token: Redacted.Redacted,
-  { depth }: CheckoutDepth = {},
+  access: GitHubTokenAccess,
+  run: Effect.Effect<CommandResult, RepositoryRefusal>,
 ): Effect.fn.Return<void, RepositoryRefusal> {
   const setNetworkPolicy = sandbox.setNetworkPolicy;
   if (setNetworkPolicy === undefined)
@@ -357,6 +257,28 @@ export const cloneRepository = /* @__PURE__ */ Effect.fn("web/cloneRepository")(
       try: () => setNetworkPolicy(next),
       catch: () => new RepositoryRefusal({ reason: REPOSITORY_REFUSAL.CHECKOUT_FAILED }),
     });
+  const timed = run.pipe(
+    Effect.timeoutOrElse({
+      duration: REPOSITORY_SHELL_BOUNDS.CHECKOUT_TIMEOUT,
+      orElse: () => new RepositoryRefusal({ reason: REPOSITORY_REFUSAL.CHECKOUT_FAILED }),
+    }),
+  );
+  yield* policy(cloneNetworkPolicy(fullName, token, access));
+  const ran = yield* Effect.ensuring(timed, Effect.ignore(policy(OPEN_INTERNET)));
+  if (ran.exitCode !== 0) return yield* gitRefusal(ran);
+});
+
+/**
+ * The clone made in the sandbox with the token at the firewall, or the
+ * refusal that stopped it: what the brain's checkout and a coding agent's
+ * share, the token standing for the clone alone (`underCloneCredential`).
+ */
+export const cloneRepository = /* @__PURE__ */ Effect.fn("web/cloneRepository")(function* (
+  sandbox: RepositorySandbox,
+  confirmed: CheckoutRepository,
+  token: Redacted.Redacted,
+  { depth, access = { kind: GITHUB_ACCESS.APP } }: CheckoutDepth = {},
+): Effect.fn.Return<void, RepositoryRefusal> {
   const clone = runInSandbox(
     sandbox,
     {
@@ -371,17 +293,66 @@ export const cloneRepository = /* @__PURE__ */ Effect.fn("web/cloneRepository")(
       },
     },
     REPOSITORY_REFUSAL.CHECKOUT_FAILED,
-  ).pipe(
+  );
+  yield* underCloneCredential(sandbox, confirmed.fullName, token, access, clone);
+});
+
+/** One step of a deepen, run from the workspace root under the step's own mark (`DEEPEN_STEP`). */
+function deepenStep(
+  sandbox: RepositorySandbox,
+  command: string,
+  step: (typeof DEEPEN_STEP)[keyof typeof DEEPEN_STEP],
+) {
+  return runInSandbox(
+    sandbox,
+    {
+      command,
+      workingDirectory: SANDBOX_PATH.WORKSPACE,
+      env: { ...COMMAND_ENVIRONMENT, [SANDBOX_VARIABLE.DEEPEN]: step },
+    },
+    REPOSITORY_REFUSAL.CHECKOUT_FAILED,
+  );
+}
+
+/**
+ * Whether a coding agent's deepen finished in this sandbox: its history
+ * fetched, its identity set, and its credential set at the firewall, which
+ * its record is written after; refused where the sandbox could not say.
+ * A deepen cut short anywhere leaves no record, so the next write deepens
+ * again.
+ */
+export const checkoutDeepened = /* @__PURE__ */ Effect.fn("web/checkoutDeepened")(function* (
+  sandbox: RepositorySandbox,
+): Effect.fn.Return<boolean, RepositoryRefusal> {
+  const probed = yield* deepenStep(sandbox, DEEPENED_PROBE_SCRIPT, DEEPEN_STEP.PROBE);
+  if (probed.exitCode !== 0) return yield* gitRefusal(probed);
+  return probed.stdout.trim() === "true";
+});
+
+/**
+ * The rest of the standing checkout's history fetched, through the
+ * credential the caller already set at the firewall, so a shallow checkout
+ * holds its branch's whole history after, as one cloned whole would; one
+ * already whole fetches nothing.
+ */
+export const deepenRepository = /* @__PURE__ */ Effect.fn("web/deepenRepository")(function* (
+  sandbox: RepositorySandbox,
+): Effect.fn.Return<void, RepositoryRefusal> {
+  const fetched = yield* deepenStep(sandbox, DEEPEN_SCRIPT, DEEPEN_STEP.FETCH).pipe(
     Effect.timeoutOrElse({
       duration: REPOSITORY_SHELL_BOUNDS.CHECKOUT_TIMEOUT,
       orElse: () => new RepositoryRefusal({ reason: REPOSITORY_REFUSAL.CHECKOUT_FAILED }),
     }),
   );
-  yield* policy(cloneNetworkPolicy(confirmed.fullName, token));
-  // Note that the policy is opened again whatever the clone answered, and in
-  // a finalizer, so an interrupted clone leaves no credential standing either.
-  const cloned = yield* Effect.ensuring(clone, Effect.ignore(policy(OPEN_INTERNET)));
-  if (cloned.exitCode !== 0) return yield* gitRefusal(cloned);
+  if (fetched.exitCode !== 0) return yield* gitRefusal(fetched);
+});
+
+/** The deepen's record written beside the checkout, once its every step is done (`checkoutDeepened`). */
+export const markDeepened = /* @__PURE__ */ Effect.fn("web/markDeepened")(function* (
+  sandbox: RepositorySandbox,
+): Effect.fn.Return<void, RepositoryRefusal> {
+  const marked = yield* deepenStep(sandbox, DEEPENED_MARK_SCRIPT, DEEPEN_STEP.MARK);
+  if (marked.exitCode !== 0) return yield* gitRefusal(marked);
 });
 
 /** Who a checkout's commits are by; a git identity is a name and an address as git takes them. */
@@ -416,101 +387,8 @@ export const setCheckoutIdentity = /* @__PURE__ */ Effect.fn("web/setCheckoutIde
   if (set.exitCode !== 0) return yield* gitRefusal(set);
 });
 
-/**
- * The brain's checkout: the repository confirmed reachable and a read
- * token minted for it, then the clone, one commit deep. Note that the
- * repository is recorded under the name the task holds, which is what the
- * checkout probe compares, so a task whose spelling differs from GitHub's
- * is still checked out once.
- */
-const checkOut = /* @__PURE__ */ Effect.fn("web/repositoryCheckOut")(function* (
-  call: RepositoryCall,
-  repository: string,
-  sandbox: RepositorySandbox,
-): Effect.fn.Return<void, RepositoryRefusal, RepositoryShellServices> {
-  const app = yield* GitHubApp;
-  const reached = yield* Effect.gen(function* () {
-    const workspace = yield* taskWorkspace(call.task.userId, call.task.taskId);
-    if (Option.isNone(workspace)) return Option.none();
-    return yield* app.repositoryReadToken(workspace.value, repository);
-  }).pipe(
-    Effect.mapError(() => new RepositoryRefusal({ reason: REPOSITORY_REFUSAL.GITHUB_UNAVAILABLE })),
-  );
-  if (Option.isNone(reached))
-    return yield* new RepositoryRefusal({ reason: REPOSITORY_REFUSAL.NOT_REACHABLE });
-  const { repository: confirmed, token } = reached.value;
-  yield* cloneRepository(sandbox, { ...confirmed, recordedAs: repository }, token, {
-    depth: BRAIN_CLONE_DEPTH,
-  });
-});
-
 /** The session's sandbox with a checkout standing in it, and which repository the checkout is of. */
 export interface CheckedOutSandbox {
   readonly sandbox: RepositorySandbox;
   readonly repository: string;
-}
-
-/**
- * The session's sandbox with the task's repository checked out in it: the
- * checkout made first where none of this repository stands, and reused
- * after. A task with no repository is refused ahead of the sandbox, so it
- * opens none. What stands checked out is the repository's own text, so
- * every reader of it owes the model the same honesty: a refusal here says
- * nothing was read.
- */
-export const checkedOutSandbox = /* @__PURE__ */ Effect.fn("web/checkedOutSandbox")(function* (
-  call: RepositoryCall,
-): Effect.fn.Return<CheckedOutSandbox, RepositoryRefusal, RepositoryShellServices> {
-  const repository = call.repository;
-  if (repository === null)
-    return yield* new RepositoryRefusal({ reason: REPOSITORY_REFUSAL.NO_REPOSITORY });
-  const sandbox = yield* Effect.tryPromise({
-    try: () => call.sandbox(),
-    catch: () => new RepositoryRefusal({ reason: REPOSITORY_REFUSAL.SANDBOX_UNAVAILABLE }),
-  });
-  const standing = yield* runInSandbox(
-    sandbox,
-    {
-      command: CHECKED_OUT_SCRIPT,
-      workingDirectory: SANDBOX_PATH.WORKSPACE,
-      env: { [SANDBOX_VARIABLE.REPOSITORY]: repository },
-    },
-    REPOSITORY_REFUSAL.SANDBOX_UNAVAILABLE,
-  );
-  if (standing.exitCode !== 0) yield* checkOut(call, repository, sandbox);
-  return { sandbox, repository };
-});
-
-/**
- * One call of `run_in_repository`: the command run from the checkout root,
- * made first where none of this repository stands, and what it answered;
- * or `not-run` and why.
- */
-export function runInRepository(
-  call: RepositoryCall,
-  input: UnparsedWireValue,
-): Effect.Effect<RepositoryShellResult, never, RepositoryShellServices> {
-  const ran = Effect.gen(function* () {
-    const read = readInput(input);
-    if (Result.isFailure(read)) return notRun(REPOSITORY_SHELL_REFUSAL.UNREADABLE);
-    const { sandbox } = yield* checkedOutSandbox(call);
-    const result = yield* runInSandbox(
-      sandbox,
-      {
-        command: COMMAND_SCRIPT,
-        workingDirectory: SANDBOX_PATH.CHECKOUT,
-        env: { ...COMMAND_ENVIRONMENT, [SANDBOX_VARIABLE.COMMAND]: read.success.command },
-      },
-      REPOSITORY_REFUSAL.SANDBOX_UNAVAILABLE,
-    );
-    return {
-      status: REPOSITORY_SHELL_STATUS.RAN,
-      exitCode: result.exitCode,
-      stdout: truncated(result.stdout),
-      stderr: truncated(result.stderr),
-    } satisfies RepositoryShellResult;
-  });
-  return Effect.catchTag(ran, "RepositoryRefusal", (refusal) =>
-    Effect.succeed(notRun(`${NOT_RUN}${refusal.reason}`)),
-  );
 }

@@ -100,12 +100,17 @@ const spanInstant = nonNegativeInteger;
  * developer's typed ask, a spoken ask cut from a voice session, a chat
  * notice steered into a coding agent, or an observation the brain wrote down
  * for itself. Four structs rather than one with every field optional, so an
- * observation carrying a channel or a typed ask carrying a voice session has
- * no shape to arrive in.
+ * observation carrying a channel has no shape to arrive in. A typed ask
+ * names a voice session only where it was typed into that call, with the
+ * instant on the call's clock it was typed at, so the voice's reply to it
+ * finds it as the line it followed; it carries no span, since nothing of it
+ * was said.
  */
 const TYPED_ASK_METADATA = EffectSchema.Struct({
   author: EffectSchema.Literal(MESSAGE_AUTHOR.DEVELOPER),
   channel: EffectSchema.Literal(MESSAGE_CHANNEL.TYPED),
+  voice_session_id: EffectSchema.optional(identifier),
+  from_ms: EffectSchema.optional(spanInstant),
 });
 
 export type TypedAskMetadata = EffectSchema.Schema.Type<typeof TYPED_ASK_METADATA>;
@@ -138,15 +143,19 @@ const SPOKEN_ASK_METADATA = SPOKEN_ASK_STRUCT.check(EffectSchema.makeFilter(cohe
 /**
  * A chat notice is a line the chat steered into a coding agent's turn on a
  * member's behalf: which kind of member posted the message it tells, the
- * message's place in its workspace's chat sequence, and the poster's handle.
- * The words are the notice the chat wrote, never the developer's, so a
+ * message's place in its workspace's chat sequence, and what the poster is
+ * called: their display name as a card draws it, within `CHAT_NOTICE_FROM_CHARS`,
+ * never a link or a handle. The words are the notice the chat wrote, never the developer's, so a
  * reader that names the developer's task passes this row by.
  */
+/** The most UTF-16 code units a chat notice names its poster in. */
+export const CHAT_NOTICE_FROM_CHARS = 128;
+
 const CHAT_NOTICE_METADATA = EffectSchema.Struct({
   author: EffectSchema.Literals([MESSAGE_AUTHOR.AGENT, MESSAGE_AUTHOR.LUKE, MESSAGE_AUTHOR.HUMAN]),
   channel: EffectSchema.Literal(MESSAGE_CHANNEL.CHAT),
   chat_seq: nonNegativeInteger,
-  from: identifier,
+  from: trimmedText.check(EffectSchema.isMaxLength(CHAT_NOTICE_FROM_CHARS)),
 });
 
 export type ChatNoticeMetadata = EffectSchema.Schema.Type<typeof CHAT_NOTICE_METADATA>;

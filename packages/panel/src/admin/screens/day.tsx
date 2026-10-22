@@ -1,0 +1,185 @@
+import type { AdminDayAccount } from "@luke/features/admin-answer-wire";
+import { ADMIN_READ } from "@luke/features/admin-wire";
+import {
+  DATA_TABLE_COLUMN_KIND,
+  DATA_TABLE_MIN_WIDTH,
+  DataTable,
+  type DataTableColumn,
+} from "@luke/ui";
+import { formatDayHeading, formatNumber } from "@luke/ui/admin-format";
+import { partialDayKey } from "@luke/ui/daily-series";
+import { AccountCell } from "../accounts-table/accounts-table.js";
+import { useAdminDoors } from "../admin-doors.js";
+import { AdminSection, STAT_CELL, STAT_ROW, StatCard } from "../charts/stat-card.js";
+import { AdminErrorState } from "../chrome/cards.js";
+import { AdminViewOptions, Refreshing } from "../chrome/controls.js";
+import { DayNote } from "../chrome/notes.js";
+import { AdminPage, type AdminWayBack, type ViewerAccount } from "../chrome/page-header.js";
+import { PageSkeleton } from "../chrome/page-skeleton.js";
+import { dayReadQuery } from "../routing.js";
+import { SKELETON_SHAPE, type SkeletonShape } from "../skeleton.js";
+import { adminReadFailure, useAdminRead } from "../use-admin-read.js";
+
+const DAY_ERROR = "The day endpoint did not answer.";
+
+/** One day's own sections. */
+const DAY_SHAPES: readonly SkeletonShape[] = [
+  { kind: SKELETON_SHAPE.HEADING, label: "Hosted tier · this day" },
+  { kind: SKELETON_SHAPE.STAT_CARDS, count: 2, columns: 2 },
+  { kind: SKELETON_SHAPE.HEADING, label: "Accounts active this day" },
+  { kind: SKELETON_SHAPE.TABLE, rows: 5, numericColumns: 1 },
+];
+
+/** The day's two columns: who called, and how many times. */
+function dayAccountColumns(
+  onOpen: (id: string) => void,
+): readonly DataTableColumn<AdminDayAccount>[] {
+  return [
+    {
+      key: "account",
+      label: "Account",
+      cell: (row) => <AccountCell account={row} onOpen={onOpen} />,
+    },
+    {
+      key: "calls",
+      label: "Calls",
+      kind: DATA_TABLE_COLUMN_KIND.NUMERIC,
+      cell: (row) => formatNumber(row.calls),
+    },
+  ];
+}
+
+/**
+ * The day's accounts, busiest first as the endpoint orders them. The shared
+ * `AccountsTable` draws windowed columns a single day does not have, so the
+ * day page keeps a table of its own over the same account cell: the row for
+ * the pointer, the anchor on the name for a keyboard.
+ */
+function DayAccountsTable({
+  accounts,
+  onOpen,
+}: {
+  accounts: readonly AdminDayAccount[];
+  onOpen: (id: string) => void;
+}): React.JSX.Element {
+  return (
+    <DataTable
+      label="Accounts active this day"
+      columns={dayAccountColumns(onOpen)}
+      rows={accounts}
+      rowKey={(row) => row.id}
+      empty="No hosted-tier calls recorded on this day."
+      minWidth={DATA_TABLE_MIN_WIDTH.NARROW}
+      onRowPress={(row) => onOpen(row.id)}
+    />
+  );
+}
+
+export function DayScreen({
+  day,
+  hideAdmins,
+  onHideAdminsChange,
+  account,
+  onSignOut,
+  onBack,
+  onOpenAccount,
+  frame,
+}: {
+  day: string;
+  hideAdmins: boolean;
+  onHideAdminsChange: (hide: boolean) => void;
+  account: ViewerAccount | undefined;
+  onSignOut: () => Promise<void>;
+  onBack: () => void;
+  onOpenAccount: (id: string) => void;
+  /** Applied around every answer but the gate's own cards, which stand alone. */
+  frame: (content: React.JSX.Element) => React.JSX.Element;
+}): React.JSX.Element {
+  const { reads, gate } = useAdminDoors();
+  const query = dayReadQuery(day, hideAdmins);
+  const { state, refreshing, reload, withdraw } = useAdminRead(
+    { procedure: ADMIN_READ.DAY, query: query },
+    (signal) => reads.day(query, signal),
+    DAY_ERROR,
+    { keeps: (shown) => shown.day === day },
+  );
+  const signOut = () => void withdraw(onSignOut);
+  const back: AdminWayBack = { tab: "dashboard", onBack };
+  const controls = (
+    <AdminViewOptions hideAdmins={hideAdmins} onHideAdminsChange={onHideAdminsChange} />
+  );
+
+  switch (state.status) {
+    case "loading":
+      return frame(
+        <PageSkeleton
+          title={formatDayHeading(day)}
+          back={back}
+          controls={controls}
+          shapes={DAY_SHAPES}
+        />,
+      );
+    case "signed-out":
+      return gate.signedOut();
+    case "forbidden":
+      return gate.forbidden({ email: account?.email, onSignOut: signOut });
+    case "missing":
+    case "error":
+      return frame(
+        <AdminPage title={formatDayHeading(day)} back={back} controls={controls}>
+          <AdminErrorState
+            detail={adminReadFailure(state, DAY_ERROR)}
+            refreshing={refreshing}
+            onRetry={reload}
+          />
+        </AdminPage>,
+      );
+    case "ready": {
+      const detail = state.value;
+      const stillFilling = partialDayKey([{ day: detail.day }], detail.generatedAt) !== undefined;
+      const soFar = stillFilling ? "so far today" : undefined;
+
+      return frame(
+        <AdminPage title={formatDayHeading(detail.day)} back={back} controls={controls}>
+          <Refreshing failure={state.refreshFailure} refreshing={refreshing} onRetry={reload}>
+            <AdminSection title="Hosted tier · this day">
+              {/* Note that each card shares the row from nothing up but never
+            shrinks below its own figure, so the pair stacks once a figure
+            needs the room rather than overflowing its card. */}
+              <div className={STAT_ROW}>
+                <div className={STAT_CELL}>
+                  <StatCard
+                    label="Active accounts"
+                    value={formatNumber(detail.totals.accounts)}
+                    hint={soFar}
+                  />
+                </div>
+                <div className={STAT_CELL}>
+                  <StatCard
+                    label="Hosted calls"
+                    value={formatNumber(detail.totals.calls)}
+                    hint={soFar}
+                  />
+                </div>
+              </div>
+            </AdminSection>
+
+            <AdminSection title="Accounts active this day">
+              <DayAccountsTable accounts={detail.accounts} onOpen={onOpenAccount} />
+              {detail.accounts.length > 0 ? (
+                <DayNote
+                  truncatedTo={
+                    detail.totals.accounts > detail.accounts.length
+                      ? detail.accounts.length
+                      : undefined
+                  }
+                  totalAccounts={detail.totals.accounts}
+                />
+              ) : null}
+            </AdminSection>
+          </Refreshing>
+        </AdminPage>,
+      );
+    }
+  }
+}

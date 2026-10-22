@@ -1,14 +1,15 @@
 import { createHash } from "node:crypto";
 import {
   CONVERSATION_PICTURE_BOUNDS,
+  type ConversationMediaType,
+  conversationMediaTypeSchema,
   type KeptPicture,
 } from "@luke/features/conversation-picture-wire";
-import { type InboxImageType, inboxImageTypeSchema } from "@luke/features/inbox-wire";
 import { and, eq, sum } from "drizzle-orm";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
 import { Database } from "../core/query.js";
-import { conversationAttachment } from "../schemas/conversation-attachment.js";
+import { attachment } from "../schemas/attachment.js";
 import type { TaskStoreEffect } from "./task-store.js";
 import type { ConversationTarget } from "./writer.js";
 
@@ -28,34 +29,34 @@ import type { ConversationTarget } from "./writer.js";
  * that conversation, as every transcript read does.
  */
 
-/** A picture to keep: its bytes, the type they were sniffed to be, and the size their header states. */
+/** A picture to keep, or a video shown as one: its bytes, the type they were sniffed to be, and the size their header states. */
 export interface PictureToKeep {
   readonly bytes: Uint8Array;
-  readonly contentType: InboxImageType;
+  readonly contentType: ConversationMediaType;
   readonly width: number;
   readonly height: number;
 }
 
 /** A kept picture as a read answers it: the type it is served under, and its bytes. */
 export interface StoredPicture {
-  readonly contentType: InboxImageType;
+  readonly contentType: ConversationMediaType;
   readonly bytes: Uint8Array;
 }
 
 const KeptRowSchema = Schema.Struct({
   id: Schema.String,
-  contentType: inboxImageTypeSchema,
+  contentType: conversationMediaTypeSchema,
   width: Schema.Int,
   height: Schema.Int,
   byteCount: Schema.Int,
 });
 
 const KEPT_COLUMNS = {
-  id: conversationAttachment.id,
-  contentType: conversationAttachment.contentType,
-  width: conversationAttachment.width,
-  height: conversationAttachment.height,
-  byteCount: conversationAttachment.byteCount,
+  id: attachment.id,
+  contentType: attachment.contentType,
+  width: attachment.width,
+  height: attachment.height,
+  byteCount: attachment.byteCount,
 };
 
 const findByHash = SqlSchema.findOneOption({
@@ -65,13 +66,8 @@ const findByHash = SqlSchema.findOneOption({
     Database.use((db) =>
       db
         .select(KEPT_COLUMNS)
-        .from(conversationAttachment)
-        .where(
-          and(
-            eq(conversationAttachment.conversationId, conversationId),
-            eq(conversationAttachment.sha256, sha256),
-          ),
-        ),
+        .from(attachment)
+        .where(and(eq(attachment.conversationId, conversationId), eq(attachment.sha256, sha256))),
     ),
 });
 
@@ -81,9 +77,9 @@ const sumKept = SqlSchema.findAll({
   execute: ({ conversationId }) =>
     Database.use((db) =>
       db
-        .select({ kept: sum(conversationAttachment.byteCount).mapWith(Number) })
-        .from(conversationAttachment)
-        .where(eq(conversationAttachment.conversationId, conversationId)),
+        .select({ kept: sum(attachment.byteCount).mapWith(Number) })
+        .from(attachment)
+        .where(eq(attachment.conversationId, conversationId)),
     ),
 });
 
@@ -92,7 +88,7 @@ const insertPicture = SqlSchema.findAll({
     userId: Schema.String,
     conversationId: Schema.String,
     sha256: Schema.String,
-    contentType: inboxImageTypeSchema,
+    contentType: conversationMediaTypeSchema,
     width: Schema.Int,
     height: Schema.Int,
     bytes: Schema.Uint8Array,
@@ -102,10 +98,10 @@ const insertPicture = SqlSchema.findAll({
   execute: ({ now, bytes, ...row }) =>
     Database.use((db) =>
       db
-        .insert(conversationAttachment)
+        .insert(attachment)
         .values({ ...row, bytes, byteCount: bytes.byteLength, createdAt: now })
         .onConflictDoNothing({
-          target: [conversationAttachment.conversationId, conversationAttachment.sha256],
+          target: [attachment.conversationId, attachment.sha256],
         })
         .returning(KEPT_COLUMNS),
     ),
@@ -113,21 +109,16 @@ const insertPicture = SqlSchema.findAll({
 
 const findPicture = SqlSchema.findOneOption({
   Request: Schema.Struct({ conversationId: Schema.String, id: Schema.String }),
-  Result: Schema.Struct({ contentType: inboxImageTypeSchema, bytes: Schema.Uint8Array }),
+  Result: Schema.Struct({ contentType: conversationMediaTypeSchema, bytes: Schema.Uint8Array }),
   execute: ({ conversationId, id }) =>
     Database.use((db) =>
       db
         .select({
-          contentType: conversationAttachment.contentType,
-          bytes: conversationAttachment.bytes,
+          contentType: attachment.contentType,
+          bytes: attachment.bytes,
         })
-        .from(conversationAttachment)
-        .where(
-          and(
-            eq(conversationAttachment.conversationId, conversationId),
-            eq(conversationAttachment.id, id),
-          ),
-        ),
+        .from(attachment)
+        .where(and(eq(attachment.conversationId, conversationId), eq(attachment.id, id))),
     ),
 });
 

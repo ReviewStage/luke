@@ -6,10 +6,12 @@ import {
   type CodingAgentStartedFromIt,
   continuationsOf,
   latestTurnsOfReached,
+  nativeRuntimesOfReached,
   RUNNING_TURN_STATUSES,
 } from "@luke/database/models/coding-agent-store";
+import { replaceCodingAgentWakeups } from "@luke/database/models/coding-agent-wakeups";
 import { recordedRuntimeSession } from "@luke/database/models/recorded-session";
-import type { TaskArchivedAgent } from "@luke/database/models/task-store";
+import type { TaskStandingAgent } from "@luke/database/models/task-store";
 import { readAccountNames } from "@luke/database/models/workspace-store";
 import type { StoreWriter } from "@luke/database/models/writer";
 import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@luke/features/coding-agent-wire";
@@ -19,21 +21,27 @@ import { HOSTED_HTTP_STATUS } from "../../http/http.js";
 import {
   HOSTED_REFUSAL,
   type HostedRefusal,
+  hostedCarriesBearer,
   hostedStoreOrUnavailable,
 } from "../../http/http-effect.js";
+import { admitsPlanWriter } from "../agent-reach.js";
+import type { BrainHostTurn } from "../brain-host/bounds.js";
 import {
+  type AgentSessions,
   describeUnreachable,
   EVE_CANCEL_OUTCOME,
   EVE_MOUNT,
   type EveMount,
-  type EveSessions,
   eveSessions,
 } from "../brain-host/eve-sessions.js";
+import { deploymentEve } from "../deployment-eve.js";
+import { failedCallRefusal, routedSessions } from "./runtime-sessions.js";
 import {
   type AgentTurnStanding,
   codingAgentStatusOf,
   codingAgentSummary,
   lineAwaitsTurn,
+  startedBlank,
   summaryAccounts,
 } from "./status.js";
 
@@ -41,8 +49,8 @@ import {
  * stop.ts -- the one Stop: eve's cancel of a coding agent's turn under way, then the row's stamp.
  *
  * A Stop pressed on the agent, its archive, and the archive or the delete of
- * the task it works on all stop it here, reaching eve as the developer over the
- * request's own authorization; a continue of the agent stops it here too,
+ * the task it works on all stop it here, reaching eve as the request's own
+ * caller (`eveFor`); a continue of the agent stops it here too,
  * over the eve its Start reached (`start.ts`), and an agent's `stop_agent`
  * stops one as the deployment acting for the member the caller acts for
  * (`../coding-agent-tools.ts`). The cancel names the turn the row was
@@ -62,21 +70,61 @@ export interface EveReach {
   /** The origin eve answers on; nothing where the deployment names none, which refuses every Start and Stop as unavailable. */
   eveOrigin: () => string | undefined;
   /** eve as the developer reaches it, over the request's own authorization; a test hands a fake, and the deployment composes eve's client over the ambient `HttpClient`. */
-  eve?: (authorization: Redacted.Redacted) => EveSessions;
+  eve?: (authorization: Redacted.Redacted) => AgentSessions;
+  /** eve as the deployment reaches it acting for an account, for a request that carried the browser's session cookie and no bearer; a test hands a fake, and the deployment composes eve's client under its own secret. */
+  eveAs?: (account: string) => AgentSessions;
 }
 
-/** eve as the developer reaches it, the coding agents' service unless another is named, or unavailable where the deployment names no origin for eve. */
-export const eveFor = /* @__PURE__ */ Effect.fnUntraced(function* (
+/**
+ * eve as the request's own caller reaches it, the coding agents' service
+ * unless another is named. A request that carries a bearer reaches eve over
+ * that bearer, as it always has, and eve verifies the account itself. A
+ * request that carries none is one a browser's session cookie named
+ * (`hostedCarriesBearer`, the question `auth/bearer.ts`'s `requestUserId`
+ * asks too), which eve's channels never read, so it reaches eve as the
+ * deployment acting for the account, under the deployment's own secret
+ * (`../deployment-eve.ts`): the channel's door admits that caller only for
+ * what its actor admits (`brain-host/auth.ts`), and only on a session or a
+ * conversation the account reaches, as it holds every caller. `account` is
+ * the one the route resolved from this request (`resolveUserId`), never one
+ * a request or a row names, so the cookie names the account eve acts for
+ * exactly as the bearer would have. A deployment that names no origin for
+ * eve, or no secret for a cookie's request, answers unavailable.
+ *
+ * The client sends the kinds of turn `Turn` names and none unless a caller
+ * names one, so a route that holds it to stop, retire, or follow a session
+ * cannot open or steer one: a route that sends the account's words asks for
+ * `EveTypedTurn` by name.
+ */
+export function eveFor<Turn extends BrainHostTurn = never>(
   reach: EveReach,
   request: Request,
+  account: string,
   mount: EveMount = EVE_MOUNT.CODER,
-): Effect.fn.Return<EveSessions, HostedRefusal, HttpClient.HttpClient> {
-  const authorization = Redacted.make(request.headers.get("authorization") ?? "");
-  if (reach.eve !== undefined) return reach.eve(authorization);
-  const origin = reach.eveOrigin();
-  if (origin === undefined) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
-  return yield* eveSessions({ origin, caller: { authorization }, mount });
-});
+): Effect.Effect<
+  AgentSessions<NoInfer<Turn>>,
+  HostedRefusal,
+  HttpClient.HttpClient | DatabaseServices
+> {
+  // A coding agent's session is answered by the runtime its conversation runs on (`runtime-sessions.ts`).
+  const routed = (eve: AgentSessions<NoInfer<Turn>>) =>
+    mount === EVE_MOUNT.CODER ? routedSessions(eve, account) : Effect.succeed(eve);
+  return Effect.gen(function* () {
+    if (hostedCarriesBearer(request)) {
+      const authorization = Redacted.make(request.headers.get("authorization") ?? "");
+      if (reach.eve !== undefined) return yield* routed(reach.eve(authorization));
+      const origin = reach.eveOrigin();
+      if (origin === undefined) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
+      return yield* routed(yield* eveSessions<Turn>({ origin, caller: { authorization }, mount }));
+    }
+    if (reach.eveAs !== undefined) return yield* routed(reach.eveAs(account));
+    // Note that a runtime without the deployment's environment refuses a cookie's request as
+    // unavailable on purpose, as one whose environment names no secret does: the deployment acts
+    // for no account it cannot prove itself to eve as, and nothing falls back to another caller.
+    const eveAs = yield* deploymentEve<Turn>(reach.eveOrigin(), mount);
+    return eveAs(account);
+  });
+}
 
 /** Where each of the agents' conversations named stands now, read by id since the agents passed the task's gate: its newest turn, and whether a line of the developer's awaits one. */
 export const standingsOf = /* @__PURE__ */ Effect.fnUntraced(function* (
@@ -88,9 +136,11 @@ export const standingsOf = /* @__PURE__ */ Effect.fnUntraced(function* (
 > {
   const turns = yield* hostedStoreOrUnavailable(latestTurnsOfReached(conversationIds));
   const awaiting = yield* hostedStoreOrUnavailable(awaitingLinesOfReached(conversationIds));
+  const runtimes = yield* hostedStoreOrUnavailable(nativeRuntimesOfReached(conversationIds));
   return (conversationId) => ({
     turn: turns.get(conversationId),
     awaitingLineAt: awaiting.get(conversationId),
+    runtime: runtimes.get(conversationId),
   });
 });
 
@@ -135,6 +185,7 @@ export const statusOf = /* @__PURE__ */ Effect.fnUntraced(function* (
     createdAt: agent.createdAt,
     now: yield* Clock.currentTimeMillis,
     awaitingLineAt,
+    blank: startedBlank(agent),
   });
 });
 
@@ -150,14 +201,17 @@ function stoppable(turn: CodingAgentLatestTurn | undefined): turn is CodingAgent
   );
 }
 
-/** eve's cancel of the agent's turn under way, then the row's stamp; nothing where no turn runs that a Stop has to stop. */
+/** eve's cancel of the agent's turn under way, as the request's own caller for the account it resolved to (`eveFor`), then the row's stamp; nothing where no turn runs that a Stop has to stop. */
 export const stoppedTurn = /* @__PURE__ */ Effect.fnUntraced(function* (
   reach: EveReach,
   writer: Effect.Effect<StoreWriter>,
   request: Request,
+  account: string,
   agent: CodingAgent,
 ): Effect.fn.Return<void, HostedRefusal, DatabaseServices | HttpClient.HttpClient> {
-  yield* cancelledTurn(eveFor(reach, request), writer, agent);
+  // An agent its starter's plan pays for is stopped by those the plan's policy admits.
+  yield* admitsPlanWriter(account, agent);
+  yield* cancelledTurn(eveFor(reach, request, account), writer, agent);
 });
 
 /**
@@ -172,12 +226,19 @@ export const stoppedTurn = /* @__PURE__ */ Effect.fnUntraced(function* (
  * again as it first ran.
  */
 export const cancelledTurn = /* @__PURE__ */ Effect.fnUntraced(function* (
-  eveOf: Effect.Effect<EveSessions, HostedRefusal, HttpClient.HttpClient>,
+  eveOf: Effect.Effect<
+    Pick<AgentSessions, "cancel">,
+    HostedRefusal,
+    HttpClient.HttpClient | DatabaseServices
+  >,
   writer: Effect.Effect<StoreWriter>,
   agent: CodingAgent,
   key?: string,
 ): Effect.fn.Return<boolean, HostedRefusal, DatabaseServices | HttpClient.HttpClient> {
   const target = { userId: agent.userId, conversationId: agent.conversationId };
+  // A native agent's released wait left wakeups with no turn running to name, which a Stop ends
+  // as a stopped CLI's own end with it, so they go whether or not a turn stands to cancel.
+  yield* hostedStoreOrUnavailable(replaceCodingAgentWakeups(agent.id, []));
   const turn = (yield* standingsOf([agent.conversationId]))(agent.conversationId).turn;
   if (!stoppable(turn)) return false;
   const sessionId = yield* hostedStoreOrUnavailable(recordedRuntimeSession(target));
@@ -199,7 +260,7 @@ export const cancelledTurn = /* @__PURE__ */ Effect.fnUntraced(function* (
       ),
     );
   if (cancelled.outcome === EVE_CANCEL_OUTCOME.FAILED) {
-    return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
+    return yield* Effect.fail(failedCallRefusal(cancelled));
   }
   const accepted = cancelled.outcome === EVE_CANCEL_OUTCOME.ACCEPTED;
   const at = yield* DateTime.nowAsDate;
@@ -226,9 +287,10 @@ export const stoppedForGood = /* @__PURE__ */ Effect.fnUntraced(function* (
   reach: EveReach,
   writer: Effect.Effect<StoreWriter>,
   request: Request,
+  account: string,
   agent: CodingAgent,
 ): Effect.fn.Return<void, HostedRefusal, DatabaseServices | HttpClient.HttpClient> {
-  yield* stoppedTurn(reach, writer, request, agent);
+  yield* stoppedTurn(reach, writer, request, account, agent);
   const status = yield* statusOf(agent);
   if (status === CODING_AGENT_STATUS.STARTING || status === CODING_AGENT_STATUS.RUNNING) {
     return yield* Effect.fail(HOSTED_REFUSAL.AGENT_NOT_READY);
@@ -250,6 +312,7 @@ export const stopsForGood = /* @__PURE__ */ Effect.fnUntraced(function* (agent: 
     createdAt: agent.createdAt,
     now: yield* Clock.currentTimeMillis,
     awaitingLineAt,
+    blank: startedBlank(agent),
   };
   if (lineAwaitsTurn(turn, standing)) return false;
   const status = codingAgentStatusOf(turn, standing);
@@ -258,13 +321,13 @@ export const stopsForGood = /* @__PURE__ */ Effect.fnUntraced(function* (agent: 
 });
 
 /**
- * Whether an agent a task's archive stopped still stands stopped, read under
- * its conversation's lock as the archive holds it: neither starting, nor
+ * Whether an agent stands stopped, read under its conversation's lock as a
+ * task's finish holds it (`tasks/task-finish.ts`): neither starting, nor
  * running, nor holding a line awaiting the turn it opens, a turn whose Stop
  * is on its way to eve reading as stopped, as `stoppedForGood` reads it.
  */
 export const standsStopped = /* @__PURE__ */ Effect.fnUntraced(function* (
-  agent: TaskArchivedAgent,
+  agent: TaskStandingAgent,
 ) {
   const turns = yield* latestTurnsOfReached([agent.conversationId]);
   const awaiting = yield* awaitingLinesOfReached([agent.conversationId]);
@@ -272,6 +335,7 @@ export const standsStopped = /* @__PURE__ */ Effect.fnUntraced(function* (
     createdAt: agent.createdAt,
     now: yield* Clock.currentTimeMillis,
     awaitingLineAt: awaiting.get(agent.conversationId),
+    blank: agent.blank,
   });
   return status !== CODING_AGENT_STATUS.STARTING && status !== CODING_AGENT_STATUS.RUNNING;
 });

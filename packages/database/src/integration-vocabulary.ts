@@ -1,19 +1,11 @@
 /**
- * integration-vocabulary.ts -- the words an integration row's status is spelled in, for an account's row and a workspace's alike.
- *
- * No row is a disconnected provider; these are what a row that stands says.
+ * integration-vocabulary.ts -- the status words of an integration row, declared on the wire below this package
+ * (`@luke/features/integration-row-wire`) because the admin pages draw them too.
  */
-export const INTEGRATION_ROW_STATUS = {
-  /** A first sign-in is under way and has not completed. */
-  PENDING: "pending",
-  /** A sign-in completed and Connect last answered with a token. */
-  CONNECTED: "connected",
-  /** It was connected, and Connect then answered it holds no grant it can use. */
-  EXPIRED: "expired",
-} as const;
-
-export type IntegrationRowStatus =
-  (typeof INTEGRATION_ROW_STATUS)[keyof typeof INTEGRATION_ROW_STATUS];
+export {
+  INTEGRATION_ROW_STATUS,
+  type IntegrationRowStatus,
+} from "@luke/features/integration-row-wire";
 
 /**
  * Where an integration's installation on a workspace stands, as its

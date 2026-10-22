@@ -4,11 +4,9 @@ import { it } from "@effect/vitest";
 import { PICTURE_TYPE, type Picture } from "@luke/features/picture-wire";
 import { planAttachmentAddress } from "@luke/features/plan-attachment-link";
 import { PLAN_ATTACHMENT_BOUNDS } from "@luke/features/plan-attachment-wire";
-import { eq } from "drizzle-orm";
 import { Effect, Option } from "effect";
 import { Database } from "../../core/query.js";
 import { user } from "../../schemas/auth.js";
-import { task } from "../../schemas/task.js";
 import { getTestDB, joinWorkspace, openWorkspace } from "../../testing/index.js";
 import {
   keepPlanAttachment,
@@ -21,8 +19,8 @@ import { createTask, savePlanText } from "../task-store.js";
 /**
  * A plan's pictures over a real dialect: kept by a member, read by every
  * member of the plan's workspace and by nobody else, held to the plan's
- * bound, refused on an archived plan, and swept a day after upload only
- * where no save ever named them.
+ * bound, refused on a plan the account does not reach, and swept a day
+ * after upload only where no save ever named them.
  *
  * Synthetic accounts and pictures throughout.
  */
@@ -89,29 +87,26 @@ it.layer(getTestDB())("a plan's pictures", (it) => {
     }),
   );
 
-  it.effect("a plan keeps no more pictures than its bound, and an archived plan keeps none", () =>
-    Effect.gen(function* () {
-      const { owner, taskId } = yield* openSharedTask;
-      for (let kept = 0; kept < PLAN_ATTACHMENT_BOUNDS.MAX_PER_PLAN; kept += 1) {
-        keptId(yield* keepPlanAttachment(owner, taskId, PICTURE));
-      }
+  it.effect(
+    "a plan keeps no more pictures than its bound, and one the account does not reach keeps none",
+    () =>
+      Effect.gen(function* () {
+        const { owner, taskId } = yield* openSharedTask;
+        for (let kept = 0; kept < PLAN_ATTACHMENT_BOUNDS.MAX_PER_PLAN; kept += 1) {
+          keptId(yield* keepPlanAttachment(owner, taskId, PICTURE));
+        }
 
-      assert.equal(
-        (yield* keepPlanAttachment(owner, taskId, PICTURE)).status,
-        PLAN_ATTACHMENT_KEEP.TOO_MANY,
-      );
+        assert.equal(
+          (yield* keepPlanAttachment(owner, taskId, PICTURE)).status,
+          PLAN_ATTACHMENT_KEEP.TOO_MANY,
+        );
 
-      const other = yield* openSharedTask;
-      const db = yield* Database;
-      yield* db
-        .update(task)
-        .set({ archivedAt: new Date(0) })
-        .where(eq(task.id, other.taskId));
-      assert.equal(
-        (yield* keepPlanAttachment(other.owner, other.taskId, PICTURE)).status,
-        PLAN_ATTACHMENT_KEEP.NO_TASK,
-      );
-    }),
+        const other = yield* openSharedTask;
+        assert.equal(
+          (yield* keepPlanAttachment(owner, other.taskId, PICTURE)).status,
+          PLAN_ATTACHMENT_KEEP.NO_TASK,
+        );
+      }),
   );
 
   it.effect(

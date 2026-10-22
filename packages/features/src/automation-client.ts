@@ -1,20 +1,12 @@
-import {
-  HTTP_METHOD,
-  type UnparsedWireValue,
-  unparsedWire,
-  type WireBoundaryInput,
-} from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
-import { Effect, Result, type Schema } from "effect";
+import { Effect, Result } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
+import type { CallCredential } from "./account-call.js";
 import {
-  type AccountCallEffects,
-  accountBearer,
-  accountCall,
-  type CallAnswer,
-  callAnswered,
-} from "./account-call.js";
-import type { AccountToken } from "./account-token.js";
+  type AutomationRunsLiveAnswer,
+  type AutomationsLiveAnswer,
+  withWebhookUrl,
+} from "./automation-live.js";
 import {
   AUTOMATION_CALL_FAILURE,
   type AutomationCallFailure,
@@ -31,34 +23,23 @@ import {
   automationChangeParamsSchema,
   automationCreateParamsSchema,
 } from "./automation-view.js";
+import type { automationAnswerSchema, automationChangeRequestSchema } from "./automation-wire.js";
 import {
-  AUTOMATION_LIST_QUERY,
-  AUTOMATION_TRIGGER,
-  type AutomationSummary,
-  automationAnswerSchema,
-  automationListAnswerSchema,
-  automationRunAnswerSchema,
-  automationRunsAnswerSchema,
-} from "./automation-wire.js";
-import { type RepositoryUnreached, repositoryNotReachableSchema } from "./repository-reach-wire.js";
-import {
-  automationPath,
-  automationRunPath,
-  automationRunsPath,
-  automationWebhookPath,
-  HOSTED_SERVICE_PATH,
-} from "./service-paths.js";
-import {
-  HOSTED_API_ERROR,
-  type HostedApiError,
-  hostedErrorSchema,
-  readServiceAnswer,
-} from "./service-wire.js";
+  askHosted,
+  askLive,
+  type HostedClient,
+  type HostedFailure,
+  hostedClient,
+} from "./hosted-link.js";
+import { LIVE_SIGNED_OUT, LIVE_USER_QUERY } from "./live-wire.js";
+import type { RepositoryUnreached } from "./repository-reach-wire.js";
+import { HOSTED_API_ERROR, type HostedApiError } from "./service-wire.js";
 
 /**
  * automation-client.ts -- the window's side of the account's automations, as the host asks the service for them.
  *
- * Every call is the one account call, so the bearer is read fresh per
+ * Every call is a procedure of the hosted contract (`contract/automations.ts`)
+ * carried by the one account call (`hosted-link.ts`), so the bearer is read fresh per
  * attempt and a 401 is renewed and retried once. Each call answers what the
  * service said or why there is no answer, never a failure, because every
  * caller does the same with one: says why, and offers to try again. A write
@@ -67,7 +48,9 @@ import {
  * why where the service said.
  */
 
-export interface HostedAutomationClientOptions extends AccountToken {
+export interface HostedAutomationClientOptions {
+  /** What authorizes each call on the signed-in account, read fresh for every attempt. */
+  credential: CallCredential;
   /** The hosted service origin, without a trailing slash. */
   serviceBaseUrl: string;
   requestTimeoutMs?: number;
@@ -92,42 +75,26 @@ const REFUSALS = {
   [HOSTED_API_ERROR.NOT_PERMITTED]: AUTOMATION_CALL_FAILURE.NOT_PERMITTED,
 } satisfies NamedRefusals;
 
-/** A response's body as JSON, or nothing where it is not JSON at all. */
-function jsonOf(response: Response): Effect.Effect<WireBoundaryInput> {
-  return Effect.promise((): Promise<WireBoundaryInput> => response.json().catch(() => undefined));
-}
-
 /**
- * A body that says nothing let go unread: cancelled rather than read, so its
- * stream is not left open and a body that stalls past its headers holds up
- * no answer.
+ * A procedure's answer, or the refusal it failed with where it is one this
+ * client names, with why a repository is out of reach where the service
+ * said; unanswered for everything else.
  */
-function cancelled(response: Response): Effect.Effect<void> {
-  return Effect.ignore(Effect.tryPromise(() => response.body?.cancel() ?? Promise.resolve()));
+function answered<Answer>(
+  asked: Effect.Effect<Answer, HostedFailure, HttpClient.HttpClient>,
+): Effect.Effect<Answer | Failed, never, HttpClient.HttpClient> {
+  return Effect.catch(asked, (failed) => Effect.succeed(failedAs(failed, REFUSALS)));
 }
 
-/** The refusal a refused answer carries, where it is one this client names, with why a repository is out of reach where the service said; unanswered otherwise. */
-function refusedAs(payload: UnparsedWireValue, named: NamedRefusals): Failed {
-  const refusal = Result.getOrUndefined(readServiceAnswer(hostedErrorSchema)(payload));
-  const failure = refusal === undefined ? undefined : named[refusal];
+function failedAs(failed: HostedFailure, named: NamedRefusals): Failed {
+  if (failed._tag !== "HostedRefused") return UNANSWERED;
+  const failure = named[failed.refusal];
   if (failure === undefined) return UNANSWERED;
-  if (failure !== AUTOMATION_CALL_FAILURE.REPOSITORY_NOT_REACHABLE) return { failure };
-  const reached = Result.getOrUndefined(readServiceAnswer(repositoryNotReachableSchema)(payload));
-  return reached === undefined ? { failure } : { failure, unreached: reached.unreached };
-}
-
-/** An answer read whole: the body the schema admits, a key a newer service added dropped, or why there is none. */
-function readAnswer<Answer, Encoded>(
-  answer: CallAnswer,
-  schema: Schema.Codec<Answer, Encoded>,
-): Effect.Effect<Answer | Failed> {
-  if (!callAnswered(answer)) return Effect.succeed(UNANSWERED);
-  return Effect.map(jsonOf(answer.response), (body): Answer | Failed => {
-    const payload = unparsedWire(body);
-    if (!answer.response.ok) return refusedAs(payload, REFUSALS);
-    const read = Result.getOrUndefined(readServiceAnswer(schema)(payload));
-    return read === undefined ? UNANSWERED : read;
-  });
+  const unreached =
+    failure === AUTOMATION_CALL_FAILURE.REPOSITORY_NOT_REACHABLE
+      ? failed.data?.unreached
+      : undefined;
+  return unreached === undefined ? { failure } : { failure, unreached };
 }
 
 /** A write's answer as the window hears it: the summary, and a webhook secret the write minted, the window's to show once by root AGENTS.md's carve-out. */
@@ -137,38 +104,36 @@ function summaryOnly(
 ): AutomationView {
   if ("failure" in read) return read;
   const automation = withWebhookUrl(serviceBaseUrl, read.automation);
-  return read.webhookSecret === undefined
-    ? { automation }
-    : { automation, webhookSecret: read.webhookSecret };
+  return {
+    automation,
+    ...(read.webhookSecret === undefined ? undefined : { webhookSecret: read.webhookSecret }),
+    ...(read.txid === undefined ? undefined : { txid: read.txid }),
+  };
 }
 
-/** A webhook automation with the address its caller posts to, on the service this client reaches; any other as it came. */
-function withWebhookUrl(serviceBaseUrl: string, automation: AutomationSummary): AutomationSummary {
-  if (automation.trigger.kind !== AUTOMATION_TRIGGER.WEBHOOK) return automation;
-  return { ...automation, webhookUrl: `${serviceBaseUrl}${automationWebhookPath(automation.id)}` };
-}
-
-/** The list's query: one task's or one workspace's, or none for every automation the account reads. */
-function listQuery(params: AutomationListParams): string {
-  const query = new URLSearchParams();
-  if (params.taskId !== undefined) query.set(AUTOMATION_LIST_QUERY.TASK_ID, params.taskId);
-  if (params.workspaceId !== undefined) {
-    query.set(AUTOMATION_LIST_QUERY.WORKSPACE_ID, params.workspaceId);
-  }
-  const spelled = query.toString();
-  return spelled === "" ? "" : `?${spelled}`;
+/** A live read's seal, or why there is none: signed out where the session is not the account it names. */
+function liveAnswered<Answer>(
+  asked: Effect.Effect<Answer, HostedFailure, HttpClient.HttpClient>,
+): Effect.Effect<Answer | Failed | typeof LIVE_SIGNED_OUT, never, HttpClient.HttpClient> {
+  return Effect.catch(asked, (failed) =>
+    Effect.succeed(
+      failed._tag === "HostedRefused" && failed.refusal === HOSTED_API_ERROR.INVALID_TOKEN
+        ? LIVE_SIGNED_OUT
+        : failedAs(failed, REFUSALS),
+    ),
+  );
 }
 
 /** The window's reads and writes of the account's automations. */
 export class HostedAutomationClient {
-  readonly #call: AccountCallEffects;
+  readonly #hosted: HostedClient;
   readonly #serviceBaseUrl: string;
 
   constructor(options: HostedAutomationClientOptions) {
     this.#serviceBaseUrl = options.serviceBaseUrl;
-    this.#call = accountCall({
+    this.#hosted = hostedClient({
       baseUrl: options.serviceBaseUrl,
-      credential: accountBearer(options),
+      credential: options.credential,
       requestTimeoutMs: options.requestTimeoutMs,
     });
   }
@@ -177,21 +142,20 @@ export class HostedAutomationClient {
   list(
     params: AutomationListParams,
   ): Effect.Effect<AutomationListView, never, HttpClient.HttpClient> {
-    return Effect.flatMap(
-      this.#call.send({
-        method: HTTP_METHOD.GET,
-        path: `${HOSTED_SERVICE_PATH.AUTOMATIONS}${listQuery(params)}`,
-      }),
-      (answer) =>
-        Effect.map(readAnswer(answer, automationListAnswerSchema), (read) =>
-          "failure" in read
-            ? read
-            : {
-                automations: read.automations.map((each) =>
-                  withWebhookUrl(this.#serviceBaseUrl, each),
-                ),
-              },
-        ),
+    const query = {
+      ...(params.taskId === undefined ? undefined : { planId: params.taskId }),
+      ...(params.workspaceId === undefined ? undefined : { workspaceId: params.workspaceId }),
+    };
+    return Effect.map(
+      answered(askHosted(this.#hosted.automations.list, query)),
+      (read): AutomationListView =>
+        "failure" in read
+          ? read
+          : {
+              automations: read.automations.map((each) =>
+                withWebhookUrl(this.#serviceBaseUrl, each),
+              ),
+            },
     );
   }
 
@@ -201,16 +165,8 @@ export class HostedAutomationClient {
   ): Effect.Effect<AutomationView, never, HttpClient.HttpClient> {
     const admitted = Result.getOrUndefined(readEither(automationCreateParamsSchema)(params));
     if (admitted === undefined) return Effect.succeed({ failure: AUTOMATION_CALL_FAILURE.INVALID });
-    return Effect.flatMap(
-      this.#call.send({
-        method: HTTP_METHOD.POST,
-        path: HOSTED_SERVICE_PATH.AUTOMATIONS,
-        body: JSON.stringify(admitted),
-      }),
-      (answer) =>
-        Effect.map(readAnswer(answer, automationAnswerSchema), (read) =>
-          summaryOnly(this.#serviceBaseUrl, read),
-        ),
+    return Effect.map(answered(askHosted(this.#hosted.automations.create, admitted)), (read) =>
+      summaryOnly(this.#serviceBaseUrl, read),
     );
   }
 
@@ -220,17 +176,7 @@ export class HostedAutomationClient {
   ): Effect.Effect<AutomationView, never, HttpClient.HttpClient> {
     const admitted = Result.getOrUndefined(readEither(automationChangeParamsSchema)(params));
     if (admitted === undefined) return Effect.succeed({ failure: AUTOMATION_CALL_FAILURE.INVALID });
-    return Effect.flatMap(
-      this.#call.send({
-        method: HTTP_METHOD.PATCH,
-        path: automationPath(admitted.automationId),
-        body: JSON.stringify(admitted.change),
-      }),
-      (answer) =>
-        Effect.map(readAnswer(answer, automationAnswerSchema), (read) =>
-          summaryOnly(this.#serviceBaseUrl, read),
-        ),
-    );
+    return this.#changed(admitted.automationId, admitted.change);
   }
 
   /**
@@ -242,32 +188,21 @@ export class HostedAutomationClient {
     readonly automationId: string;
     readonly webhookSecretHash: string;
   }): Effect.Effect<AutomationView, never, HttpClient.HttpClient> {
-    return Effect.flatMap(
-      this.#call.send({
-        method: HTTP_METHOD.PATCH,
-        path: automationPath(params.automationId),
-        body: JSON.stringify({ webhookSecretHash: params.webhookSecretHash }),
-      }),
-      (answer) =>
-        Effect.map(readAnswer(answer, automationAnswerSchema), (read) =>
-          summaryOnly(this.#serviceBaseUrl, read),
-        ),
-    );
+    return this.#changed(params.automationId, { webhookSecretHash: params.webhookSecretHash });
   }
 
   /** One automation deleted with its history. */
   remove(
     params: AutomationIdParams,
   ): Effect.Effect<AutomationDeletedView, never, HttpClient.HttpClient> {
-    return Effect.flatMap(
-      this.#call.send({ method: HTTP_METHOD.DELETE, path: automationPath(params.automationId) }),
-      (answer): Effect.Effect<AutomationDeletedView> => {
-        if (!callAnswered(answer)) return Effect.succeed(UNANSWERED);
-        if (answer.response.ok) return Effect.as(cancelled(answer.response), { deleted: true });
-        return Effect.map(jsonOf(answer.response), (body) =>
-          refusedAs(unparsedWire(body), REFUSALS),
-        );
-      },
+    return Effect.map(
+      answered(askHosted(this.#hosted.automations.remove, { id: params.automationId })),
+      (read): AutomationDeletedView =>
+        "failure" in read
+          ? read
+          : read.txid === undefined
+            ? { deleted: true }
+            : { deleted: true, txid: read.txid },
     );
   }
 
@@ -275,13 +210,14 @@ export class HostedAutomationClient {
   runNow(
     params: AutomationRunParams,
   ): Effect.Effect<AutomationRunView, never, HttpClient.HttpClient> {
-    return Effect.flatMap(
-      this.#call.send({
-        method: HTTP_METHOD.POST,
-        path: automationRunPath(params.automationId),
-        body: JSON.stringify({ idempotencyKey: params.idempotencyKey }),
-      }),
-      (answer) => readAnswer(answer, automationRunAnswerSchema),
+    return Effect.map(
+      answered(
+        askHosted(this.#hosted.automations.run, {
+          params: { id: params.automationId },
+          body: { idempotencyKey: params.idempotencyKey },
+        }),
+      ),
+      (read): AutomationRunView => ("failure" in read ? read : read.body),
     );
   }
 
@@ -289,9 +225,66 @@ export class HostedAutomationClient {
   runs(
     params: AutomationIdParams,
   ): Effect.Effect<AutomationRunsView, never, HttpClient.HttpClient> {
-    return Effect.flatMap(
-      this.#call.send({ method: HTTP_METHOD.GET, path: automationRunsPath(params.automationId) }),
-      (answer) => readAnswer(answer, automationRunsAnswerSchema),
+    return answered(askHosted(this.#hosted.automations.runs, { id: params.automationId }));
+  }
+
+  /** One automation's change sent, answering it as it then stands. */
+  #changed(
+    automationId: string,
+    change: typeof automationChangeRequestSchema.Encoded,
+  ): Effect.Effect<AutomationView, never, HttpClient.HttpClient> {
+    return Effect.map(
+      answered(
+        askHosted(this.#hosted.automations.change, { params: { id: automationId }, body: change }),
+      ),
+      (read) => summaryOnly(this.#serviceBaseUrl, read),
+    );
+  }
+
+  /**
+   * A workspace's automations sealed for following over Neon Realtime for
+   * the account `userId` names, or with `poll` their rows inline: signed
+   * out where the session is another account's, and why there is none
+   * otherwise.
+   */
+  listLive(
+    workspaceId: string,
+    userId: string,
+    poll = false,
+    after?: string,
+  ): Effect.Effect<
+    AutomationsLiveAnswer | Failed | typeof LIVE_SIGNED_OUT,
+    never,
+    HttpClient.HttpClient
+  > {
+    return liveAnswered(
+      askLive(
+        this.#hosted.live.automations,
+        { workspaceId, [LIVE_USER_QUERY]: userId },
+        poll,
+        after,
+      ),
+    );
+  }
+
+  /** One automation's runs sealed for following over Neon Realtime, on the terms the list is: not found where the account does not read it. */
+  runsLive(
+    automationId: string,
+    userId: string,
+    poll = false,
+    after?: string,
+  ): Effect.Effect<
+    AutomationRunsLiveAnswer | Failed | typeof LIVE_SIGNED_OUT,
+    never,
+    HttpClient.HttpClient
+  > {
+    return liveAnswered(
+      askLive(
+        this.#hosted.live.automationRuns,
+        { id: automationId, [LIVE_USER_QUERY]: userId },
+        poll,
+        after,
+      ),
     );
   }
 }

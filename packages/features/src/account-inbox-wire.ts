@@ -18,7 +18,14 @@ import { countedNumber, wireUuidSchema } from "./service-wire.js";
  * however long ago it changed, as a task's read carries every open one
  * apart from its bound: the open items an agent may hold at once keep them
  * few. An archived task's items wait
- * nowhere, since the developer put the task out of the way. The read is
+ * nowhere, since the developer put the task out of the way: none of its open
+ * items is carried, so neither the Dock nor a toast counts one. A reader
+ * that asks with `archived=include` (the `inbox.account` procedure's
+ * query, `contract/inbox.ts`) is listed the
+ * archived tasks holding items beside the rest in `plans`, which its
+ * Inbox's Archived tab reads, so an item is put away with its task and
+ * comes back as it stood when the task is brought back; a build from
+ * before it never asks, and lists none. The read is
  * held open while nothing changed past the cursor, as a task's inbox read
  * is, and starts from the task read's own start (`INBOX_CURSOR_START`).
  *
@@ -40,10 +47,15 @@ import { countedNumber, wireUuidSchema } from "./service-wire.js";
  * under a key of its own (`chat`), on the same terms: every open ask
  * someone else posted, and the one direct message or mention their member
  * was last told of and has not read past. Each says only enough to be
- * announced and opened, who posted it by handle and the plan of the
+ * announced and opened, who posted it by name and the plan of the
  * channel it stands in, and none of its words, which the window reads
  * from the chat itself. A build that predates it reads none.
  */
+
+/** What the read's `archived` query may say. */
+export const ACCOUNT_INBOX_ARCHIVED = {
+  INCLUDE: "include",
+} as const;
 
 /** One open item as the account's read carries it: where it waits, who posted it, and what it is called. */
 export const accountInboxEntrySchema = EffectSchema.Struct({
@@ -72,10 +84,17 @@ export const accountInboxEntrySchema = EffectSchema.Struct({
 
 export type AccountInboxEntry = typeof accountInboxEntrySchema.Type;
 
-/** One task the account's read lists as holding inbox items: the task, how many it holds, open and settled alike, and when the latest of them changed. */
+/** One task the account's read lists as holding inbox items: the task, how many it holds, open and settled alike, how many of them are the reader's to do, and when the latest of them changed. */
 export const accountInboxTaskSchema = EffectSchema.Struct({
   planId: wireUuidSchema,
   items: countedNumber,
+  /**
+   * How many of the task's items the Inbox's To do lists for the reader:
+   * their own (their agent's), open or unread for them; none on an archived
+   * task. Absent from a service before it, which the desktop counts as it
+   * did before, by the open items alone.
+   */
+  toDo: EffectSchema.optionalKey(countedNumber),
   updatedAt: countedNumber,
 });
 
@@ -148,7 +167,7 @@ export const ACCOUNT_CHAT_REASON = {
 /**
  * One chat message that waits on the developer, as the account's read
  * carries it: the message by its id and its place in its workspace's chat,
- * the workspace, why it waits, who posted it by handle, the plan of the
+ * the workspace, why it waits, who posted it by name, the plan of the
  * channel it stands in where it stands in a plan's, the place it last
  * changed at, which an ask posted again moves, and when it last changed.
  */

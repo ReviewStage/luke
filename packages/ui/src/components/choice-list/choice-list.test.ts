@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import { act, createElement, type ReactElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
+import { BADGE_TONE } from "../badge/badge.js";
 import {
   CHOICE_FLOW,
   CHOICE_LOOK,
@@ -20,8 +21,9 @@ import {
  * past an unavailable row, a press on its checked row keeping or clearing
  * the choice as asked; a pick-several list toggles each row on its own, the
  * arrows moving along it; a marked and numbered list
- * leads each row with its control and wears its key; and a settled list
- * names what was picked and takes no press.
+ * leads each row with its control and wears its key; a read-only list
+ * keeps the open look, its pick checked, and takes no press, key, or Tab;
+ * and a settled list names what was picked and takes no press.
  */
 
 declare global {
@@ -61,10 +63,12 @@ function Held({
   start = [],
   look,
   numbered,
+  readOnly = false,
 }: {
   select?: ChoiceSelect;
   clearable?: boolean;
   disabled?: boolean;
+  readOnly?: boolean;
   start?: readonly Retry[];
   look?: ChoiceLook;
   numbered?: boolean;
@@ -81,6 +85,7 @@ function Held({
       select,
       clearable,
       disabled,
+      readOnly,
       look,
       numbered,
       onChange: (next: readonly Retry[]) => {
@@ -160,6 +165,44 @@ test("a press chooses a row; a press on the checked row keeps it, unless the lis
   act(() => row(cleared, "Never retry").click());
   assert.equal(heard(cleared), "never,none");
   assert.equal(row(cleared, "Never retry").getAttribute("aria-checked"), "false");
+});
+
+test("an open row's badge stands in the attention tone unless the option names its own", () => {
+  const page = render(
+    createElement(ChoiceList<Retry>, {
+      legend: "Retries",
+      options: [
+        { value: "three", label: "Retry 3 times", badge: "Recommended" },
+        { value: "never", label: "Never retry", badge: "Quiet", badgeTone: BADGE_TONE.NEUTRAL },
+      ],
+      value: [],
+      onChange: () => undefined,
+    }),
+  );
+  const tones = [...page.querySelectorAll(".luke-badge")].map((badge) => [
+    badge.textContent,
+    badge.getAttribute("data-tone"),
+  ]);
+  assert.deepEqual(tones, [
+    ["Recommended", BADGE_TONE.ATTENTION],
+    ["Quiet", BADGE_TONE.NEUTRAL],
+  ]);
+});
+
+test("a press on the checked row is heard by a list that listens for it, and changes nothing", () => {
+  const pressed: string[] = [];
+  const page = render(
+    createElement(ChoiceList<Retry>, {
+      legend: "Retries",
+      options: OPTIONS,
+      value: ["never"],
+      onChange: (next: readonly Retry[]) => pressed.push(`change:${next.join("+")}`),
+      onPressChecked: (value: Retry) => pressed.push(`again:${value}`),
+    }),
+  );
+  act(() => row(page, "Never retry").click());
+  act(() => row(page, "Retry 3 times").click());
+  assert.deepEqual(pressed, ["again:never", "change:three"]);
 });
 
 test("after a clearable list's pick is taken back, the arrows step from the row the keyboard is on", () => {
@@ -274,6 +317,31 @@ test("an unavailable list changes nothing, by press or by key", () => {
   act(() => row(page, "Never retry").click());
   key(row(page, "Retry 3 times"), "ArrowDown");
   assert.equal(heard(page), "");
+});
+
+test("a read-only list keeps the open look with its pick checked, its badge in the neutral tone, and takes no press, key, or Tab", () => {
+  for (const select of [CHOICE_SELECT.ONE, CHOICE_SELECT.MANY]) {
+    const page = render(
+      createElement(Held, { select, readOnly: true, look: CHOICE_LOOK.MARKED, start: ["three"] }),
+    );
+    const list = page.querySelector<HTMLElement>(".luke-choice-list") ?? assert.fail("no list");
+    assert.equal(list.dataset.readOnly, "true");
+    assert.equal(list.dataset.look, "marked", "each row still leads with its control");
+    assert.deepEqual(
+      rows(page).map((each) => [each.getAttribute("aria-checked"), each.disabled]),
+      [
+        ["true", true],
+        ["false", true],
+        ["false", true],
+      ],
+    );
+    assert.equal(page.querySelector<HTMLElement>(".luke-badge")?.dataset.tone, "neutral");
+    act(() => row(page, "Never retry").click());
+    key(row(page, "Retry 3 times"), "ArrowDown");
+    assert.equal(heard(page), "", "nothing is handed on");
+  }
+  const page = render(createElement(Held, { readOnly: true, start: ["never"] }));
+  assert.equal(page.querySelector('[role="radiogroup"]')?.getAttribute("aria-readonly"), "true");
 });
 
 test("a settled list names each option, the pick beside its note and the rest without, and offers nothing to press", () => {

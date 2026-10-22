@@ -28,7 +28,12 @@ type Transport = NonNullable<NonNullable<SentryOptions>["transport"]>;
 const SentPayloadSchema = Schema.Struct({
   exception: Schema.optionalKey(
     Schema.Struct({
-      values: Schema.Array(Schema.Struct({ type: Schema.optionalKey(Schema.String) })),
+      values: Schema.Array(
+        Schema.Struct({
+          type: Schema.optionalKey(Schema.String),
+          value: Schema.optionalKey(Schema.String),
+        }),
+      ),
     }),
   ),
   breadcrumbs: Schema.optionalKey(

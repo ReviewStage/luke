@@ -14,12 +14,10 @@ daily series, and animations roster).
   second way in that every app has to provide.
 - Nothing here reaches an app: no `window.luke`, no `#shared/`, `#renderer/`,
   or `#main/` import. The desktop's bridge and the site's fetches stay in the
-  app that mounts the component, and `repository-checks.sh` refuses either
-  spelled under `src/`.
+  app that mounts the component.
 - A component draws with its own `luke-*` classes over the `--luke-*` tokens,
   never an app's Tailwind theme, whose `--color-*` each app maps to a
-  different role; `repository-checks.sh` refuses a theme colour utility or the
-  `-(--name)` shorthand here. The chart's frame is `src/chart/chart.css`.
+  different role, so no theme colour utility or `-(--name)` shorthand. The chart's frame is `src/chart/chart.css`.
 - A module that pulls a heavy library gets a subpath of its own and stays out
   of the barrel: the chart is `@luke/ui/chart`, so recharts reaches only the
   bundle that draws a chart.

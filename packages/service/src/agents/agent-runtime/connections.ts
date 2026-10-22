@@ -20,10 +20,10 @@ import {
   type McpClientConnectionDefinition,
 } from "eve/connections";
 import {
-  type IntegrationAccountRef,
   type IntegrationTokenRead,
   integrationConnection,
 } from "../../integrations/integration-connection.js";
+import type { IntegrationAccountRef } from "../../integrations/integration-token.js";
 import type { ServerStandingRead } from "./servers.js";
 
 /** How one agent's edge reads what a turn is handed and each account's token, under that agent's own admission. */

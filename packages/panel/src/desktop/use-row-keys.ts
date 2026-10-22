@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 
 /**
- * use-row-keys.ts -- ↑ and ↓ through a page's rows, a launcher's way, from the window itself as well as from a row, as Home and Factory move.
+ * use-row-keys.ts -- ↑ and ↓ through a page's rows, a launcher's way, from the window itself as well as from a row, as Home moves.
  *
  * Return opens the row reached, since each row is a button. A key pressed
  * anywhere else, the sidebar or a field, is left to it.

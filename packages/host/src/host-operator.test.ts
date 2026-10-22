@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { INBOX_REPLY } from "@luke/features/inbox-wire";
+import { INBOX_REPLY, type InboxAnswers } from "@luke/features/inbox-wire";
+import { PROVIDER_KEY_KIND, PROVIDER_KEY_PROVIDER } from "@luke/features/provider-key-wire";
+import { TASK_PRIORITY, TASK_STATUS } from "@luke/features/task-wire";
 import {
   carried,
   GATEWAY_ERROR,
@@ -9,7 +11,7 @@ import {
   type GatewayClient,
   type GatewayMethod,
 } from "@luke/gateway";
-import { APP_SETTING_SCHEMA } from "@luke/settings";
+import { APP_SETTING_SCHEMA, THEME } from "@luke/settings";
 import { appSettingsWire, settingsView } from "@luke/settings/testing";
 import type { AppSettings } from "@luke/settings/wire";
 import { ACTION_RESULT_STATUS, type WireRecord } from "@luke/wire";
@@ -52,8 +54,8 @@ it.effect("a setting's value travels as the method's value field", () =>
     const operator = operatorOver(client);
 
     const result = yield* operator.updateSetting(
-      APP_SETTING_SCHEMA.voiceHotkey.field,
-      "Alt+Space",
+      APP_SETTING_SCHEMA.theme.field,
+      THEME.DARK,
       REPORTER,
     );
 
@@ -62,8 +64,8 @@ it.effect("a setting's value travels as the method's value field", () =>
     const [request] = requests;
     assert.equal(request?.method, GATEWAY_METHOD.SETTINGS_UPDATE);
     assert.deepEqual(request?.params, {
-      field: APP_SETTING_SCHEMA.voiceHotkey.field,
-      value: "Alt+Space",
+      field: APP_SETTING_SCHEMA.theme.field,
+      value: THEME.DARK,
       reporter: REPORTER,
     });
   }),
@@ -98,6 +100,89 @@ it.effect(
           [GATEWAY_METHOD.TASKS_START, { name: "Typo", planning: false }],
           [GATEWAY_METHOD.TASKS_START, { repository: "acme/ledger", agent }],
           [GATEWAY_METHOD.TASKS_START, { brief: "Let any member invite a teammate." }],
+        ],
+      );
+    }),
+);
+
+it.effect("a save names the kind of credential it carries, and an API key's names none", () =>
+  Effect.gen(function* () {
+    const { client, requests } = recordingClient();
+    const operator = operatorOver(client);
+    const key = "sk-ant-oat01-fake-setup-token-0000";
+
+    yield* operator.providerKeySave({
+      provider: PROVIDER_KEY_PROVIDER.ANTHROPIC,
+      kind: PROVIDER_KEY_KIND.CLAUDE_SETUP_TOKEN,
+      key,
+    });
+    yield* operator.providerKeySave({ provider: PROVIDER_KEY_PROVIDER.ANTHROPIC, key });
+
+    assert.deepEqual(
+      requests.map((request) => [request.method, request.params]),
+      [
+        [
+          GATEWAY_METHOD.PROVIDER_KEYS_SAVE,
+          {
+            provider: PROVIDER_KEY_PROVIDER.ANTHROPIC,
+            kind: PROVIDER_KEY_KIND.CLAUDE_SETUP_TOKEN,
+            key,
+          },
+        ],
+        [GATEWAY_METHOD.PROVIDER_KEYS_SAVE, { provider: PROVIDER_KEY_PROVIDER.ANTHROPIC, key }],
+      ],
+    );
+  }),
+);
+
+it.effect("a task filed for later carries its status and priority to the host", () =>
+  Effect.gen(function* () {
+    const { client, requests } = recordingClient();
+    const operator = operatorOver(client);
+
+    yield* operator.tasksStart({
+      name: "Rate limit search",
+      planning: false,
+      status: TASK_STATUS.BACKLOG,
+      priority: TASK_PRIORITY.HIGH,
+    });
+
+    assert.deepEqual(
+      requests.map((request) => [request.method, request.params]),
+      [
+        [
+          GATEWAY_METHOD.TASKS_START,
+          {
+            name: "Rate limit search",
+            planning: false,
+            status: TASK_STATUS.BACKLOG,
+            priority: TASK_PRIORITY.HIGH,
+          },
+        ],
+      ],
+    );
+  }),
+);
+
+it.effect(
+  "a Start from an agent that names no task travels to the host with no task key, and one on a task with its task",
+  () =>
+    Effect.gen(function* () {
+      const { client, requests } = recordingClient();
+      const operator = operatorOver(client);
+      const from = { agentId: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21" };
+
+      yield* operator.codingAgentStart({ idempotencyKey: "press-1", from });
+      yield* operator.codingAgentStart({ taskId: "task-1", idempotencyKey: "press-2", from });
+
+      assert.deepEqual(
+        requests.map((request) => [request.method, request.params]),
+        [
+          [GATEWAY_METHOD.CODING_AGENTS_START, { idempotencyKey: "press-1", from }],
+          [
+            GATEWAY_METHOD.CODING_AGENTS_START,
+            { taskId: "task-1", idempotencyKey: "press-2", from },
+          ],
         ],
       );
     }),
@@ -140,6 +225,46 @@ it.effect("an inbox answer's files travel to the host with its words, under the 
 );
 
 it.effect(
+  "a message on an inbox item's thread carries the answer to its open ask to the host beside its words, and a plain reply carries none",
+  () =>
+    Effect.gen(function* () {
+      const { client, requests } = recordingClient();
+      const operator = operatorOver(client);
+      const answers: InboxAnswers = {
+        ask: "7f4d0b2a-3c5e-4a81-9d9f-4e6a8c0d2f3b",
+        reply: INBOX_REPLY.CHOSE,
+        choices: ["Ship it"],
+      };
+
+      yield* operator.codingAgentInboxMessage({
+        itemId: "item-1",
+        text: "Ship it today.",
+        clientKey: "message-1",
+        answers,
+      });
+      yield* operator.codingAgentInboxMessage({
+        itemId: "item-1",
+        text: "Any news?",
+        clientKey: "message-2",
+      });
+
+      assert.deepEqual(
+        requests.map((request) => [request.method, request.params]),
+        [
+          [
+            GATEWAY_METHOD.CODING_AGENTS_INBOX_MESSAGE,
+            { itemId: "item-1", text: "Ship it today.", clientKey: "message-1", answers },
+          ],
+          [
+            GATEWAY_METHOD.CODING_AGENTS_INBOX_MESSAGE,
+            { itemId: "item-1", text: "Any news?", clientKey: "message-2" },
+          ],
+        ],
+      );
+    }),
+);
+
+it.effect(
   "a host's refusal is not reported to Sentry, where the handler that died behind it already was; an answer this build cannot read is",
   () => {
     const sentry = recordingReporter();
@@ -148,7 +273,7 @@ it.effect(
         operatorOver({
           call: () => Effect.succeed(answer),
           on: () => () => undefined,
-        }).updateSetting(APP_SETTING_SCHEMA.voiceHotkey.field, "Alt+Space", REPORTER);
+        }).updateSetting(APP_SETTING_SCHEMA.theme.field, THEME.DARK, REPORTER);
       // The router's own boundary, which every act's call through the operator runs under.
       const asked = (answer: GatewayCallResult) =>
         Effect.exit(Effect.withErrorReporting(answering(answer), { defectsOnly: true }));

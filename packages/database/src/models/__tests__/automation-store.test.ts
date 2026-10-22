@@ -22,6 +22,7 @@ import { personalWorkspace } from "../../schemas/personal-workspace.js";
 import { task } from "../../schemas/task.js";
 import { getTestDB } from "../../testing/index.js";
 import {
+  aimOperatorHeartbeat,
   automationRunsSince,
   claimAutomationRun,
   claimDueAutomations,
@@ -41,6 +42,7 @@ import {
   subjectRunStartedSince,
   updateAutomation,
 } from "../automation-store.js";
+import { createCodingAgent } from "../coding-agent-store.js";
 import { createTask, updateTask } from "../task-store.js";
 
 /**
@@ -105,6 +107,100 @@ const nightly = (taskId: string): NewAutomation => ({
 });
 
 it.layer(getTestDB())("the automation store", (it) => {
+  it.effect(
+    "an operator's heartbeat re-aims the member's own automations aimed at the operator it replaced, a teammate's left as they stood, and is made only where none is then aimed at it",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* openAccount;
+        const teammate = yield* openAccount;
+        const taskId = yield* openTask(owner);
+        const onTask = Option.getOrThrow(
+          yield* createAutomation(owner, { ...nightly(taskId), nextRunAt: null }),
+        );
+        const workspace = onTask.organizationId ?? "";
+        const db = yield* Database;
+        const now = yield* DateTime.nowAsDate;
+        yield* db.insert(member).values({
+          id: randomUUID(),
+          organizationId: workspace,
+          userId: teammate,
+          role: "member",
+          createdAt: now,
+        });
+        const agentOf = (userId: string) =>
+          Effect.map(
+            createCodingAgent(userId, {
+              taskId: null,
+              organizationId: workspace,
+              planSnapshot: null,
+              prompt: "Watch the agents.",
+              idempotencyKey: randomUUID(),
+              model: "anthropic/claude-opus-5.5",
+              effort: "high",
+              repository: "acme/api",
+            }),
+            (made) => Option.getOrThrow(made).agent.id,
+          );
+        const retired = yield* agentOf(owner);
+        const fresh = yield* agentOf(owner);
+        const aimedAt = (userId: string, agentId: string) =>
+          Effect.map(
+            createAutomation(userId, {
+              ...nightly(taskId),
+              taskId: null,
+              organizationId: workspace,
+              repositories: [],
+              nextRunAt: null,
+              targetKind: AUTOMATION_TARGET.SAME_AGENT,
+              targetAgentId: agentId,
+            }),
+            (made) => Option.getOrThrow(made).id,
+          );
+        const owners = yield* aimedAt(owner, retired);
+        const teammates = yield* aimedAt(teammate, retired);
+        const heartbeat: NewAutomation = {
+          ...nightly(taskId),
+          taskId: null,
+          organizationId: workspace,
+          repositories: [],
+          nextRunAt: null,
+        };
+
+        const reaimed = yield* aimOperatorHeartbeat(owner, {
+          operatorId: fresh,
+          retiredId: retired,
+          heartbeat,
+        });
+        const another = yield* agentOf(owner);
+        const made = Option.getOrThrow(
+          yield* aimOperatorHeartbeat(owner, {
+            operatorId: another,
+            retiredId: undefined,
+            heartbeat,
+          }),
+        );
+
+        assert.deepEqual(reaimed, Option.some([owners]), "re-aimed, and none made beside it");
+        const targetOf = (userId: string, id: string) =>
+          Effect.map(
+            readAutomation(userId, id),
+            Option.map((row) => row.targetAgentId),
+          );
+        assert.deepEqual(yield* targetOf(owner, owners), Option.some(fresh));
+        assert.deepEqual(yield* targetOf(teammate, teammates), Option.some(retired));
+        assert.equal(made.length, 1);
+        const [madeId = ""] = made;
+        assert.deepEqual(
+          Option.map(yield* readAutomation(owner, madeId), (row) => [
+            row.targetKind,
+            row.targetAgentId,
+            row.repositories,
+          ]),
+          Option.some([AUTOMATION_TARGET.SAME_AGENT, another, []]),
+        );
+      }),
+  );
+
   it.effect(
     "a webhook automation reads for a call while its owner is a member of its workspace, and its run keeps the body for the sweep alone",
     () =>

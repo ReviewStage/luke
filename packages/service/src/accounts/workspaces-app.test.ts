@@ -4,13 +4,14 @@ import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
 import { createAutomation } from "@luke/database/models/automation-store";
 import { createCodingAgent } from "@luke/database/models/coding-agent-store";
+import { createTask, readTask } from "@luke/database/models/task-store";
 import {
   type MemberSeams,
   OrganizationRefused,
   type WorkspaceSeams,
 } from "@luke/database/models/workspace-seams";
 import { ensurePersonalWorkspace } from "@luke/database/models/workspace-store";
-import { member, organization, user } from "@luke/database/schemas/auth";
+import { invitation, member, organization, user } from "@luke/database/schemas/auth";
 import { task } from "@luke/database/schemas/task";
 import { joinWorkspace } from "@luke/database/testing";
 import { GITHUB_INSTALL_STATUS, HOSTED_SERVICE_PATH } from "@luke/features";
@@ -27,6 +28,10 @@ import {
   workspaceInvitationsAnswerSchema,
 } from "@luke/features/workspace-invitation-wire";
 import {
+  workspaceInvitationsLiveRowsSchema,
+  workspaceInvitationsOfLiveRows,
+} from "@luke/features/workspace-live";
+import {
   WORKSPACE_BOUNDS,
   WORKSPACE_PHOTO_BOUNDS,
   WORKSPACE_PHOTO_TYPE,
@@ -41,13 +46,15 @@ import {
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import { and, eq } from "drizzle-orm";
-import { Cause, Clock, Effect, Layer, Option, Result, type Schema } from "effect";
+import { Cause, Clock, type Context, Effect, Layer, Option, Result, Schema } from "effect";
 import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
 import { githubInstallApp } from "../github/github-install-app.js";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../http/http.js";
 import { answerInboxItem, postInboxItem } from "../inbox/inbox-store.js";
+import { hostedFetch } from "../orpc/handler.js";
+import type { WebServices } from "../runtime.js";
 import { openedPagePolicy, SANDBOXED_PAGE } from "../testing/content-policy.js";
 import {
   type FakeGitHub,
@@ -56,7 +63,11 @@ import {
   openGithubUser,
 } from "../testing/github-app-fake.js";
 import { openWorkspacePlugin } from "../testing/workspace-plugin.js";
-import { type WorkspacesAppSeams, workspacesApp } from "./workspaces-app.js";
+import { workspaceGithubProcedures } from "./workspace-github-procedures.js";
+import { workspaceInvitationsLiveStatement } from "./workspace-invitations.js";
+import { workspaceInvitationsProcedures } from "./workspace-invitations-procedures.js";
+import { workspacesApp } from "./workspaces-app.js";
+import { type WorkspacesProcedureSeams, workspacesProcedures } from "./workspaces-procedures.js";
 
 /**
  * The account's workspaces, answered by their group the way a function
@@ -101,7 +112,7 @@ const openGithubAccount = (name: string) =>
 /** The plugin's member writes and the session they are made under, for the paths that write through the plugin. */
 interface SessionSeams {
   readonly members: MemberSeams;
-  readonly resolveSessionUserId: WorkspacesAppSeams["resolveSessionUserId"];
+  readonly resolveSessionUserId: WorkspacesProcedureSeams["resolveSessionUserId"];
 }
 
 /** No session at all: a path that takes one finds none, and nothing writes through the plugin. */
@@ -118,8 +129,31 @@ const NO_SESSION: SessionSeams = {
   resolveSessionUserId: () => Effect.succeed(Option.none()),
 };
 
+/** An OAuth bearer stands for the account it names. */
+const bearerUserId = (incoming: Request) =>
+  Effect.succeed(
+    Option.fromNullishOr(incoming.headers.get("authorization")?.replace(/^Bearer /u, "")),
+  );
+
+/** The paths the hosted oRPC router answers, every other one the old groups. */
+const HOSTED_PATHS: ReadonlySet<string> = new Set([
+  HOSTED_SERVICE_PATH.WORKSPACE_GITHUB_CONNECT,
+  HOSTED_SERVICE_PATH.WORKSPACE_GITHUB_DISCONNECT,
+  HOSTED_SERVICE_PATH.WORKSPACES_INVITATIONS,
+  HOSTED_SERVICE_PATH.WORKSPACES_INVITATIONS_CANCEL,
+  HOSTED_SERVICE_PATH.WORKSPACES_INVITATION_OFFER,
+  HOSTED_SERVICE_PATH.WORKSPACES,
+  HOSTED_SERVICE_PATH.WORKSPACES_RENAME,
+  HOSTED_SERVICE_PATH.WORKSPACES_PHOTO_SET,
+  HOSTED_SERVICE_PATH.WORKSPACES_MEMBERS,
+  HOSTED_SERVICE_PATH.WORKSPACES_MEMBERS_REMOVE,
+  HOSTED_SERVICE_PATH.WORKSPACES_MEMBERS_ROLE,
+  HOSTED_SERVICE_PATH.WORKSPACES_TRANSFER,
+  HOSTED_SERVICE_PATH.WORKSPACES_LEAVE,
+]);
+
 /**
- * One request answered by the workspaces group and the install group over
+ * One request answered by the hosted oRPC router, the workspaces group, and the install group over
  * the ambient database and the GitHub given, its response read by `read`
  * before the handler is let go; an OAuth bearer stands for the account it
  * names, and a session bearer is read by the plugin itself.
@@ -139,16 +173,26 @@ const answered = <A>(
       Layer.succeed(Clock.Clock, yield* Clock.Clock),
       github.layer,
     );
+    if (HOSTED_PATHS.has(new URL(request.url).pathname)) {
+      const context = yield* Effect.context<never>().pipe(Effect.provide(services));
+      const procedures = hostedFetch({
+        workspaceGithub: workspaceGithubProcedures({ resolveUserId: bearerUserId }),
+        workspaceInvitations: workspaceInvitationsProcedures(session),
+        workspaces: workspacesProcedures({
+          resolveUserId: bearerUserId,
+          resolveSessionUserId: session.resolveSessionUserId,
+          workspaces: seams,
+          members: session.members,
+        }),
+      });
+      // SAFETY: the procedures yield the database, the clock and GitHub alone, which is all a test provides of the web runtime's services.
+      const response = yield* Effect.promise(() =>
+        procedures(request, context as Context.Context<WebServices>),
+      );
+      return yield* Effect.promise(() => read(response));
+    }
     const routes = Layer.mergeAll(
-      workspacesApp({
-        resolveUserId: (incoming) =>
-          Effect.succeed(
-            Option.fromNullishOr(incoming.headers.get("authorization")?.replace(/^Bearer /u, "")),
-          ),
-        resolveSessionUserId: session.resolveSessionUserId,
-        workspaces: seams,
-        members: session.members,
-      }),
+      workspacesApp({ resolveUserId: bearerUserId }),
       githubInstallApp(),
     );
     const { handler, dispose } = HttpRouter.toWebHandler(
@@ -183,6 +227,7 @@ function bearerRequest(path: string, userId: string | undefined, body?: WireBoun
   if (body !== undefined) {
     init.method = "POST";
     init.body = JSON.stringify(body);
+    headers.set("content-type", "application/json");
   }
   return new Request(new URL(path, ORIGIN), init);
 }
@@ -1020,6 +1065,7 @@ const readPhoto = (seams: WorkspaceSeams, userId: string | undefined, workspaceI
       contentType: response.headers.get("content-type"),
       nosniff: response.headers.get("x-content-type-options"),
       cacheControl: response.headers.get("cache-control"),
+      resourcePolicy: response.headers.get("cross-origin-resource-policy"),
       policy: openedPagePolicy(response.headers),
       base64: Buffer.from(await response.arrayBuffer()).toString("base64"),
     }),
@@ -1055,6 +1101,7 @@ it.effect(
           contentType: "image/png",
           nosniff: "nosniff",
           cacheControl: "private, no-store",
+          resourcePolicy: "same-origin",
           policy: SANDBOXED_PAGE,
           base64: png,
         });
@@ -1088,9 +1135,13 @@ it.effect(
         ]);
         yield* pictured(grace, "https://avatars.githubusercontent.com/u/1?v=4");
         yield* Database.use((db) =>
-          db
-            .insert(task)
-            .values({ userId: grace, organizationId: acme, name: "Relay retries", document: "" }),
+          db.insert(task).values({
+            userId: grace,
+            organizationId: acme,
+            name: "Relay retries",
+            number: 1,
+            document: "",
+          }),
         );
         yield* leaving(plugin, grace, acme);
         yield* removing(plugin, ada, acme, alan);
@@ -1274,6 +1325,42 @@ it.effect("an owner cannot leave, and a member leaves", () =>
       assert.deepEqual(yield* membersOf(acme), [{ userId: ada, role: WORKSPACE_ROLE.OWNER }]);
     }).pipe(Effect.provide(database));
   }),
+);
+
+it.effect(
+  "a member removed, or one who leaves, lets go of the workspace's tasks assigned to them, and keeps those of every other workspace",
+  () =>
+    Effect.gen(function* () {
+      const plugin = yield* openWorkspacePlugin;
+      const { api, database } = plugin;
+      yield* Effect.gen(function* () {
+        const ada = yield* openGithubAccount("Ada Lovelace");
+        const grace = yield* openGithubAccount("Grace Hopper");
+        const alan = yield* openGithubAccount("Alan Turing");
+        const acme = yield* openTeam(api, ada, [
+          { userId: grace, role: "member" },
+          { userId: alan, role: "member" },
+        ]);
+        const initech = yield* openTeam(api, grace, [{ userId: ada, role: "member" }]);
+        const assigned = (organizationId: string, assigneeId: string) =>
+          createTask(ada, { organizationId, name: "Invites", assigneeId });
+        const gracesHere = yield* assigned(acme, grace);
+        const gracesThere = yield* assigned(initech, grace);
+        const alansHere = yield* assigned(acme, alan);
+        const assigneeOf = (taskId: string) =>
+          Effect.map(
+            readTask(ada, taskId),
+            (read) => Option.getOrUndefined(read)?.task.assignee?.userId,
+          );
+
+        yield* removing(plugin, ada, acme, grace);
+        yield* leaving(plugin, alan, acme);
+
+        assert.equal(yield* assigneeOf(gracesHere.id), undefined);
+        assert.equal(yield* assigneeOf(alansHere.id), undefined);
+        assert.equal(yield* assigneeOf(gracesThere.id), grace);
+      }).pipe(Effect.provide(database));
+    }),
 );
 
 /** The account giving a teammate a role, under its session. */
@@ -1954,6 +2041,75 @@ it.effect(
     }),
 );
 
+/** A workspace's pending invitations as the desktop builds them from the live rows at `now`, run as Realtime runs them, for `readerId`. */
+const liveInvitationsOf = (readerId: string, workspaceId: string, now: number) =>
+  Effect.gen(function* () {
+    const sql = yield* SqlClient.SqlClient;
+    const statement = Option.getOrThrow(workspaceInvitationsLiveStatement(readerId, workspaceId));
+    const rows = yield* Effect.all({
+      invitations: sql.unsafe(statement.sql, [...statement.params]),
+    });
+    return workspaceInvitationsOfLiveRows(
+      yield* Schema.decodeUnknownEffect(workspaceInvitationsLiveRowsSchema)(rows),
+      ORIGIN,
+      now,
+    );
+  });
+
+it.effect(
+  "the live statement delivers the pending invitations the held read lists, the expired left out by the desktop's clock, to an owner and an admin, and none to a member or an outsider",
+  () =>
+    Effect.gen(function* () {
+      const plugin = yield* openWorkspacePlugin;
+      yield* Effect.gen(function* () {
+        const ada = yield* openGithubAccount("Ada Lovelace");
+        const grace = yield* openGithubAccount("Grace Hopper");
+        const sam = yield* openGithubAccount("Sam Member");
+        const outsider = yield* openGithubAccount("Olive Outsider");
+        const acme = yield* openTeam(plugin.api, ada, [
+          { userId: grace, role: "admin" },
+          { userId: sam, role: "member" },
+        ]);
+        const madeFor = (email: string, role = "member") =>
+          Effect.map(
+            inviting(plugin, ada, acme, email, role),
+            (made) =>
+              readAs(made, workspaceInvitationAnswerSchema, HOSTED_HTTP_STATUS.CREATED).invitation,
+          );
+        yield* madeFor("alan@example.com");
+        yield* madeFor("bea@example.com", "admin");
+        const canceled = yield* madeFor("carl@example.com");
+        const expired = yield* madeFor("dora@example.com");
+        yield* postedInSession(plugin, ada, HOSTED_SERVICE_PATH.WORKSPACES_INVITATIONS_CANCEL, {
+          workspaceId: acme,
+          invitationId: canceled.id,
+        });
+        const now = yield* Clock.currentTimeMillis;
+        yield* Database.use((db) =>
+          db
+            .update(invitation)
+            .set({ expiresAt: new Date(now) })
+            .where(eq(invitation.id, expired.id)),
+        );
+
+        const held = readAs(
+          yield* readInSession(plugin, ada, invitationsAt(acme)),
+          workspaceInvitationsAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+        ).invitations;
+        assert.deepEqual(held.map((one) => one.email).toSorted(), [
+          "alan@example.com",
+          "bea@example.com",
+        ]);
+        for (const reader of [ada, grace]) {
+          assert.deepEqual(yield* liveInvitationsOf(reader, acme, now), held);
+        }
+        assert.deepEqual(yield* liveInvitationsOf(sam, acme, now), []);
+        assert.deepEqual(yield* liveInvitationsOf(outsider, acme, now), []);
+      }).pipe(Effect.provide(plugin.database));
+    }),
+);
+
 /** The accept page's read of the invitation `id`. */
 const offerAt = (id: string) =>
   `${HOSTED_SERVICE_PATH.WORKSPACES_INVITATION_OFFER}?${new URLSearchParams({ id })}`;
@@ -2251,7 +2407,7 @@ it.effect(
 );
 
 it.effect(
-  "invitations under the Mac's OAuth token rather than its session are unauthenticated",
+  "invitations under the Mac's OAuth token rather than its session are unauthenticated, whatever input they carry",
   () =>
     Effect.gen(function* () {
       const plugin = yield* openWorkspacePlugin;
@@ -2276,12 +2432,34 @@ it.effect(
           plugin,
         );
 
+        // A malformed input is read only after the caller, so it is unauthenticated too, as it always was.
+        const malformed = yield* send(
+          plugin.seams,
+          NO_GITHUB_TO_READ,
+          bearerRequest(HOSTED_SERVICE_PATH.WORKSPACES_INVITATIONS_CANCEL, ada, {
+            workspaceId: 7,
+            stray: true,
+          }),
+          plugin,
+        );
+        const malformedRead = yield* send(
+          plugin.seams,
+          NO_GITHUB_TO_READ,
+          bearerRequest(HOSTED_SERVICE_PATH.WORKSPACES_INVITATIONS, ada),
+          plugin,
+        );
+
         const unauthenticated = refusedAs(
           HOSTED_HTTP_STATUS.UNAUTHORIZED,
           HOSTED_API_ERROR.INVALID_TOKEN,
         );
         assert.deepEqual({ status: read.status, body: read.body }, unauthenticated);
         assert.deepEqual({ status: made.status, body: made.body }, unauthenticated);
+        assert.deepEqual({ status: malformed.status, body: malformed.body }, unauthenticated);
+        assert.deepEqual(
+          { status: malformedRead.status, body: malformedRead.body },
+          unauthenticated,
+        );
       }).pipe(Effect.provide(plugin.database));
     }),
 );

@@ -2,10 +2,13 @@ import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { NodeFileSystem, NodePath } from "@effect/platform-node";
+import { it } from "@effect/vitest";
 import { ACCOUNT_STATUS, type AccountSnapshot } from "@luke/credentials/snapshot";
+import { LINK_OPEN } from "@luke/features/link-open";
 import type { MacRepository } from "@luke/features/mac-terminal-wire";
 import { VIDEO_AVATAR } from "@luke/features/video-avatar";
 import { LIVE_VOICE } from "@luke/live";
+import { temporaryDirectoryScoped } from "@luke/runtime/testing";
 import {
   type AccountPreferenceField,
   type AccountPreferences,
@@ -13,8 +16,12 @@ import {
   APP_SETTING_SCHEMA,
   type AppSettingField,
   type AppSettingValue,
+  accountPreferencesFromParts,
+  accountPreferencesParts,
   EXPERIMENT,
   type ExperimentChoices,
+  SETTINGS_RESET_SCOPE,
+  snapshotAccountPreferences,
   THEME,
 } from "@luke/settings";
 import {
@@ -35,6 +42,7 @@ import { temporaryDirectory } from "@luke/wire/testing";
 import { ConfigProvider, Context, Effect, Layer } from "effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
+import { systemError } from "effect/PlatformError";
 import { test } from "vitest";
 import { Environment } from "./effect/seams.js";
 import {
@@ -42,6 +50,7 @@ import {
   settingsOverrides,
 } from "./effect/settings-overrides.js";
 import {
+  type KeptProductEventDay,
   type SecretCipher,
   SettingsStore,
   type SettingsStoreOptions,
@@ -126,6 +135,12 @@ interface PromisedSettingsStore {
   cacheExperiments(accountEmail: string, choices: ExperimentChoices): Promise<boolean>;
   macRepositories(): Promise<readonly MacRepository[]>;
   setMacRepository(entry: MacRepository): Promise<void>;
+  lastProductEventDay(
+    name: string,
+    discriminator: string,
+    account: string,
+  ): Promise<string | undefined>;
+  keepProductEventDay(kept: KeptProductEventDay): Promise<void>;
 }
 
 function awaitedStoreOf(
@@ -155,6 +170,9 @@ function awaitedStoreOf(
       awaited(store.cacheExperiments(accountEmail, choices)),
     macRepositories: () => awaited(store.macRepositories()),
     setMacRepository: (entry) => awaited(store.setMacRepository(entry)),
+    lastProductEventDay: (name, discriminator, account) =>
+      awaited(store.lastProductEventDay(name, discriminator, account)),
+    keepProductEventDay: (kept) => awaited(store.keepProductEventDay(kept)),
   };
 }
 
@@ -205,9 +223,6 @@ const SAMPLE_VALUE = {
   zoom: 150,
   openAtLogin: false,
   voice: LIVE_VOICE.MARIN,
-  voiceCaptions: true,
-  voiceHotkey: "Shift+Command+L",
-  stopHotkey: "Control+Alt+P",
   duckOtherMedia: false,
   preferBuiltInMicrophone: false,
   // On is the default, so Off is the choice that has to survive a reopen.
@@ -229,6 +244,7 @@ const SAMPLE_VALUE = {
   diffLineHeight: DIFF_LINE_HEIGHT.SPACIOUS,
   diffLigatures: true,
   diffMinimizeComments: true,
+  linkOpen: LINK_OPEN.MAC_APP,
 } satisfies { [Field in AppSettingField]: NonNullable<AppSettingValue<Field>> };
 
 /**
@@ -277,6 +293,33 @@ test("every setting starts at its default, survives a reopen, and can be cleared
   }
 });
 
+it.effect(
+  "a reset returns its group to the defaults but for the fields it keeps, which stand as the file holds them",
+  () =>
+    Effect.gen(function* () {
+      const directory = yield* temporaryDirectoryScoped("luke-settings-");
+      const opened = () =>
+        new SettingsStore({
+          directory: () => directory,
+          cipher: testCipher(),
+          overrides: overridesFor({}),
+          fileSystem: FILE_SYSTEM,
+          path: PATH,
+        });
+      const store = opened();
+      yield* store.set("theme", THEME.DARK);
+      yield* store.set("zoom", 125);
+
+      const reset = yield* store.resetSettings(SETTINGS_RESET_SCOPE.APPEARANCE, ["zoom"]);
+
+      assert.equal(reset.reason, undefined);
+      const reopened = opened();
+      // The theme's choice is forgotten, so it reads as no choice at all.
+      assert.equal(yield* reopened.get("theme"), undefined);
+      assert.equal(yield* reopened.get("zoom"), 125);
+    }).pipe(Effect.provide(NodeFileSystem.layer)),
+);
+
 // A call reads no choice as Atlas, which compose-live's "a call opens with the avatar asked for" holds.
 test("the Default avatar an earlier build stored reads as no choice", async (t) => {
   const directory = await temporaryDirectory(t, "luke-settings-");
@@ -289,6 +332,24 @@ test("the Default avatar an earlier build stored reads as no choice", async (t) 
   const reopened = storeIn(directory);
   assert.equal(await reopened.get("videoAvatar"), undefined);
   assert.equal(appSettingsView(await reopened.snapshot()).videoAvatar, undefined);
+});
+
+test("every provider key an earlier build stored is dropped, and the choices beside it stay", async (t) => {
+  const directory = await temporaryDirectory(t, "luke-settings-");
+  await storeIn(directory).set("videoAvatar", VIDEO_AVATAR.CELIA);
+  const file = path.join(directory, SETTINGS_FILE_NAME);
+  const stored = JSON.parse(await readSettingsFile(directory));
+  await fs.writeFile(
+    file,
+    JSON.stringify({ ...stored, apiKeys: { "provider-a": "c2VhbGVk", "provider-b": "c2VhbGVk" } }),
+  );
+
+  const reopened = storeIn(directory);
+  await reopened.retireStoredApiKeys();
+
+  const written = JSON.parse(await readSettingsFile(directory));
+  assert.equal("apiKeys" in written, false);
+  assert.equal(await storeIn(directory).get("videoAvatar"), VIDEO_AVATAR.CELIA);
 });
 
 test("a stored account and a chosen preference survive each other's writes", async (t) => {
@@ -329,6 +390,40 @@ test("a repository's run command on this Mac survives a reopen, by name in any c
 
   await store.setMacRepository({ repository: "acme/site", command: null });
   assert.deepEqual(await storeIn(directory).macRepositories(), [renamed]);
+});
+
+test("the day a usage count was sent survives a reopen and a sign-out, by account, and only the newest day stays", async (t) => {
+  const directory = await temporaryDirectory(t, "luke-settings-");
+  const store = storeIn(directory);
+  const dayActive = { name: "app:day_active", discriminator: "day" } as const;
+
+  await store.setAccount(TEST_ACCOUNT);
+  await store.keepProductEventDay({ ...dayActive, account: "ada@luke.test", day: "2026-08-19" });
+  await store.keepProductEventDay({ ...dayActive, account: "grace@luke.test", day: "2026-08-19" });
+  await store.clearAccount();
+
+  const reopened = storeIn(directory);
+  assert.equal(
+    await reopened.lastProductEventDay("app:day_active", "day", "ada@luke.test"),
+    "2026-08-19",
+  );
+  assert.equal(
+    await reopened.lastProductEventDay("app:day_active", "day", "grace@luke.test"),
+    "2026-08-19",
+  );
+  assert.equal(await reopened.lastProductEventDay("app:launch", "day", "ada@luke.test"), undefined);
+
+  await reopened.keepProductEventDay({ ...dayActive, account: "ada@luke.test", day: "2026-08-20" });
+  const nextDay = storeIn(directory);
+  assert.equal(
+    await nextDay.lastProductEventDay("app:day_active", "day", "ada@luke.test"),
+    "2026-08-20",
+  );
+  assert.equal(
+    await nextDay.lastProductEventDay("app:day_active", "day", "grace@luke.test"),
+    undefined,
+  );
+  assert.ok(!(await readSettingsFile(directory)).includes("grace@luke.test"));
 });
 
 test("round-trips an encrypted account without exposing either token in snapshots", async (t) => {
@@ -405,42 +500,148 @@ test("a stored account that signed in with Google still loads", async (t) => {
   });
 });
 
-test("refuses to store an account when encrypted storage is unavailable", async (t) => {
-  const directory = await temporaryDirectory(t, "luke-settings-");
-  const store = storeIn(directory, { cipher: testCipher(false) });
+it.effect(
+  "refuses to store an account when encrypted storage is unavailable, as a typed failure",
+  () =>
+    Effect.gen(function* () {
+      const directory = yield* temporaryDirectoryScoped("luke-settings-");
+      const store = new SettingsStore({
+        directory: () => directory,
+        cipher: testCipher(false),
+        overrides: overridesFor({}),
+        fileSystem: FILE_SYSTEM,
+        path: PATH,
+      });
 
-  await assert.rejects(
-    store.setAccount(TEST_ACCOUNT),
-    /Encrypted credential storage is unavailable/,
+      const refused = yield* Effect.flip(store.setAccount(TEST_ACCOUNT));
+
+      assert.equal(refused._tag, "EncryptedStorageUnavailable");
+      assert.deepEqual(yield* store.accountSnapshot(), { status: ACCOUNT_STATUS.SIGNED_OUT });
+      assert.equal(yield* FILE_SYSTEM.exists(path.join(directory, SETTINGS_FILE_NAME)), false);
+    }).pipe(Effect.provide(NodeFileSystem.layer)),
+);
+
+/** Preferences as they cross the wire: split into the snapshot's parts, through JSON, and joined again. */
+function throughSnapshot(preferences: AccountPreferences): AccountPreferences | undefined {
+  const wire = unparsedWire(JSON.parse(JSON.stringify(accountPreferencesParts(preferences))));
+  return isRecord(wire) ? accountPreferencesFromParts(wire) : undefined;
+}
+
+test("a link choice made on one Mac reaches another through the snapshot, beside the voice", async (t) => {
+  const chooser = storeIn(await temporaryDirectory(t, "luke-settings-"));
+  await chooser.setAccount(TEST_ACCOUNT);
+  await chooser.set("voice", LIVE_VOICE.MARIN);
+  await chooser.set("linkOpen", LINK_OPEN.MAC_APP);
+
+  const other = storeIn(await temporaryDirectory(t, "luke-settings-"));
+  await other.setAccount(TEST_ACCOUNT);
+  const baseline = await other.accountPreferences();
+  await other.setAccountPreferencesSyncBaseline(TEST_ACCOUNT.email, baseline);
+
+  const remote = throughSnapshot(await chooser.accountPreferences());
+  assert.ok(remote, "the snapshot's parts did not read back");
+  const applied = await other.applyAccountPreferences(remote, {
+    accountEmail: TEST_ACCOUNT.email,
+    preferences: baseline,
+  });
+
+  assert.ok(applied.changed.includes("linkOpen"));
+  assert.equal(await other.get("linkOpen"), LINK_OPEN.MAC_APP);
+  assert.equal(await other.get("voice"), LIVE_VOICE.MARIN);
+  assert.equal(appSettingsView(await other.snapshot()).linkOpen, LINK_OPEN.MAC_APP);
+});
+
+test("a link choice made on the web, before any voice was synced, reaches a Mac without costing it its voice", async (t) => {
+  const mac = storeIn(await temporaryDirectory(t, "luke-settings-"));
+  await mac.setAccount(TEST_ACCOUNT);
+  await mac.set("voice", LIVE_VOICE.CEDAR);
+  const baseline = await mac.accountPreferences();
+  await mac.setAccountPreferencesSyncBaseline(TEST_ACCOUNT.email, baseline);
+
+  // The service's answer holds the link part alone, and no shared part was ever written.
+  const remote = { linkOpen: LINK_OPEN.MAC_APP };
+  await mac.applyAccountPreferences(
+    snapshotAccountPreferences(remote, false, await mac.accountPreferences()),
+    { accountEmail: TEST_ACCOUNT.email, preferences: baseline },
   );
-  assert.deepEqual(await store.accountSnapshot(), { status: ACCOUNT_STATUS.SIGNED_OUT });
-  await assert.rejects(() => readSettingsFile(directory), /ENOENT/);
+
+  assert.equal(await mac.get("linkOpen"), LINK_OPEN.MAC_APP);
+  assert.equal(await mac.get("voice"), LIVE_VOICE.CEDAR);
+});
+
+test("a Mac takes the web's newer link choice over the one it last synced, and keeps one it made since", async (t) => {
+  const synced = { linkOpen: LINK_OPEN.BROWSER };
+  const remote = { linkOpen: LINK_OPEN.MAC_APP };
+
+  const untouched = storeIn(await temporaryDirectory(t, "luke-settings-"));
+  await untouched.setAccount(TEST_ACCOUNT);
+  await untouched.set("linkOpen", LINK_OPEN.BROWSER);
+  await untouched.applyAccountPreferences(
+    snapshotAccountPreferences(remote, false, await untouched.accountPreferences()),
+    { accountEmail: TEST_ACCOUNT.email, preferences: synced },
+  );
+  assert.equal(await untouched.get("linkOpen"), LINK_OPEN.MAC_APP);
+
+  const changed = storeIn(await temporaryDirectory(t, "luke-settings-"));
+  await changed.setAccount(TEST_ACCOUNT);
+  await changed.set("linkOpen", LINK_OPEN.BROWSER);
+  await changed.applyAccountPreferences(
+    snapshotAccountPreferences(remote, false, await changed.accountPreferences()),
+    { accountEmail: TEST_ACCOUNT.email, preferences: {} },
+  );
+  assert.equal(await changed.get("linkOpen"), LINK_OPEN.BROWSER);
+});
+
+test("a first link choice made before the first sync is kept to be written, whether or not a voice was synced", async (t) => {
+  for (const sharedWritten of [false, true]) {
+    const mac = storeIn(await temporaryDirectory(t, "luke-settings-"));
+    await mac.setAccount(TEST_ACCOUNT);
+    await mac.set("linkOpen", LINK_OPEN.MAC_APP);
+    // Note that a first hydration takes the Mac's preferences as they stand for its baseline.
+    const baseline = await mac.accountPreferences();
+
+    const remote = sharedWritten ? { voice: LIVE_VOICE.CEDAR } : {};
+    await mac.applyAccountPreferences(
+      snapshotAccountPreferences(remote, sharedWritten, await mac.accountPreferences()),
+      { accountEmail: TEST_ACCOUNT.email, preferences: baseline },
+    );
+
+    assert.equal(
+      await mac.get("linkOpen"),
+      LINK_OPEN.MAC_APP,
+      `shared part written: ${sharedWritten}`,
+    );
+    assert.deepEqual(
+      accountPreferencesParts(await mac.accountPreferences()).linkOpen,
+      LINK_OPEN.MAC_APP,
+    );
+  }
 });
 
 test("the experiments the service answered stand for the account signed in, across a reopen", async (t) => {
   const directory = await temporaryDirectory(t, "luke-settings-");
   const store = storeIn(directory);
   await store.setAccount(TEST_ACCOUNT);
-  const factoryOn = { [EXPERIMENT.FACTORY]: true };
+  const codeReviewOn = { [EXPERIMENT.CODE_REVIEW]: true };
 
   assert.deepEqual((await store.snapshot()).experiments, {});
-  assert.equal(await store.cacheExperiments(TEST_ACCOUNT.email, factoryOn), true);
-  assert.deepEqual((await store.snapshot()).experiments, factoryOn);
-  assert.deepEqual((await storeIn(directory).snapshot()).experiments, factoryOn);
+  assert.equal(await store.cacheExperiments(TEST_ACCOUNT.email, codeReviewOn), true);
+  assert.deepEqual((await store.snapshot()).experiments, codeReviewOn);
+  assert.deepEqual((await storeIn(directory).snapshot()).experiments, codeReviewOn);
 
   // The same answer again changes nothing, and an answer for an account not signed in is no choice of this one's.
-  assert.equal(await store.cacheExperiments(TEST_ACCOUNT.email, factoryOn), false);
+  assert.equal(await store.cacheExperiments(TEST_ACCOUNT.email, codeReviewOn), false);
   assert.equal(await store.cacheExperiments("someone-else@example.com", {}), false);
-  assert.deepEqual((await store.snapshot()).experiments, factoryOn);
+  assert.deepEqual((await store.snapshot()).experiments, codeReviewOn);
 });
 
 test("a sign-out, or another account's sign-in, leaves no experiment of the last account on", async (t) => {
-  const factoryOn = { [EXPERIMENT.FACTORY]: true };
+  const codeReviewOn = { [EXPERIMENT.CODE_REVIEW]: true };
 
   const signedOut = await temporaryDirectory(t, "luke-settings-");
   const store = storeIn(signedOut);
   await store.setAccount(TEST_ACCOUNT);
-  await store.cacheExperiments(TEST_ACCOUNT.email, factoryOn);
+  await store.cacheExperiments(TEST_ACCOUNT.email, codeReviewOn);
   await store.clearAccount();
   assert.deepEqual((await store.snapshot()).experiments, {});
   await store.setAccount(TEST_ACCOUNT);
@@ -449,7 +650,85 @@ test("a sign-out, or another account's sign-in, leaves no experiment of the last
   const switched = await temporaryDirectory(t, "luke-settings-");
   const other = storeIn(switched);
   await other.setAccount(TEST_ACCOUNT);
-  await other.cacheExperiments(TEST_ACCOUNT.email, factoryOn);
+  await other.cacheExperiments(TEST_ACCOUNT.email, codeReviewOn);
   await other.setAccount({ ...TEST_ACCOUNT, email: "teammate@example.com" });
   assert.deepEqual((await storeIn(switched).snapshot()).experiments, {});
 });
+
+it.effect("two stores on one file, as two browser tabs are, each keep the other's change", () =>
+  Effect.gen(function* () {
+    const directory = yield* temporaryDirectoryScoped("luke-settings-tabs-");
+    // A browser tab's store: the cookie session hands it no cipher.
+    const tab = () =>
+      new SettingsStore({
+        directory: () => directory,
+        cipher: undefined,
+        overrides: overridesFor({}),
+        fileSystem: FILE_SYSTEM,
+        path: PATH,
+      });
+    const first = tab();
+    const second = tab();
+    // Both tabs have read the file before either writes.
+    yield* first.snapshot();
+    yield* second.snapshot();
+
+    yield* first.set("theme", THEME.DARK);
+    yield* second.set("zoom", 150);
+
+    const reopened = (yield* tab().snapshot()).stored;
+    assert.equal(reopened.theme, THEME.DARK);
+    assert.equal(reopened.zoom, 150);
+  }).pipe(Effect.provide(NodeFileSystem.layer)),
+);
+
+/** The suite's file system, but with every read of a file failing while `failing.reads` is set, as a disk's transient error does. */
+function flakyReads(failing: { reads: boolean }): FileSystem.FileSystem {
+  return {
+    ...FILE_SYSTEM,
+    readFileString: (filePath, encoding) =>
+      failing.reads
+        ? Effect.fail(
+            systemError({
+              _tag: "Unknown",
+              module: "FileSystem",
+              method: "readFileString",
+              pathOrDescriptor: filePath,
+              cause: Object.assign(new Error("EIO: i/o error"), { code: "EIO" }),
+            }),
+          )
+        : FILE_SYSTEM.readFileString(filePath, encoding),
+  };
+}
+
+it.effect(
+  "the file's one writer, as the desktop is, writes over its held copy when the read before a write fails, and one of several writers does not",
+  () =>
+    Effect.gen(function* () {
+      const directory = yield* temporaryDirectoryScoped("luke-settings-");
+      const failing = { reads: false };
+      const storeOf = (writer?: string) =>
+        new SettingsStore({
+          directory: () => directory,
+          cipher: undefined,
+          overrides: overridesFor({}),
+          fileSystem: flakyReads(failing),
+          path: PATH,
+          ...(writer === undefined ? undefined : { writer }),
+        });
+      const desktop = storeOf();
+      const tab = storeOf("tab-1");
+      yield* desktop.snapshot();
+      yield* tab.snapshot();
+
+      failing.reads = true;
+      yield* desktop.set("theme", THEME.DARK);
+      const refused = yield* Effect.flip(tab.set("zoom", 150));
+      failing.reads = false;
+
+      assert.equal(refused._tag, "PlatformError");
+      const reopened = (yield* storeOf().snapshot()).stored;
+      assert.equal(reopened.theme, THEME.DARK);
+      assert.notEqual(reopened.zoom, 150);
+    }).pipe(Effect.provide(NodeFileSystem.layer)),
+);

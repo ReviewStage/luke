@@ -43,9 +43,7 @@ Each instance has its own profile under `~/Library/Application Support/Luke Dev
 <name>/` (sign-in, settings, window place, single-instance lock), its own
 `Luke Dev <name> Safe Storage` Keychain entry, and its own trace folder,
 `.build/traces/<name>/`. Its windows' titles end in `(<name>)`, and its app menu
-says "Quit Luke Dev <name>". The system-wide talk and stop keys are held by
-one Luke only, so a named instance leaves them to the plain one and registers
-none (a call starts from the panel instead). No development run claims the
+says "Quit Luke Dev <name>". No development run claims the
 `tryluke:` links, named or not.
 Agents' commands for this Mac go to whichever signed-in instance of the account
 reads them first, once each, and every instance runs them in the same login
@@ -67,7 +65,6 @@ again only when it opens or reloads a window.
 apps/
   desktop/        the Electron app: main, preload, the renderer windows, build and release scripts
   dev/            the coding agent's eve app
-  luke/           Luke, the orchestrator: the planner's eve app
   web/            the site, the Vercel function routes (server/routes/), and the deployment shell
 packages/
   brand/          the design sources, the generators, and the generated art, motion tokens, and geometry
@@ -86,7 +83,7 @@ tools/
   anti-slop/      the repository's oxlint rules
   trace-export/   turns a recorded development trace into the unbox-ai viewer's document
 scripts/          bootstrap, check, run, evidence, and release; repository-checks.sh holds the contract checks
-docs/             design, tasks, style, and workflow; proposals/ for what is not built yet
+docs/             design, tasks, style, and workflow; a plan lives on its task, never in a document here
 ```
 
 Application logic lives in `packages/`; an app holds only what is specific to
@@ -96,8 +93,8 @@ package's `package.json` `description` says what it holds.
 
 ## Make the change
 
-[docs/WORKFLOW.md](docs/WORKFLOW.md) is the step-by-step, from the scoped issue
-through the evidence in the pull request.
+[docs/WORKFLOW.md](docs/WORKFLOW.md) is the step-by-step, from the scoped task
+to the merge.
 
 Keep Electron main and preload code thin, keep the renderer sandboxed, and put
 platform-independent behavior in a package (see Repository layout above).
@@ -109,8 +106,8 @@ The canonical commands and when each one is required are the command table in
 
 ## Open the pull request
 
-What the description has to carry is step 5 of
-[docs/WORKFLOW.md](docs/WORKFLOW.md).
+Open it ready for review, not as a draft, with a short summary of what changed
+and why; root [AGENTS.md](AGENTS.md)'s "Merging" says how it merges.
 
 ## Reporting problems
 

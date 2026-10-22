@@ -5,16 +5,21 @@
  * (`App` is where session replay starts) and the one that runs Luke's
  * avatar, so neither the voice window's nor the call window's entry mounts
  * either. The avatar's voice plays beside `App`, so no tab it shows cuts it.
+ * It is also the one window whose page Sentry watches for freezes.
  */
 
+import { App } from "@luke/panel/app";
+import { callAvatarAtom } from "@luke/panel/call/call-avatar";
+import { PanelAvatarVoice } from "@luke/panel/call/panel-avatar";
+import { installWindowHistory } from "@luke/panel/navigation-history";
 import { rendererRegistry } from "@luke/panel/renderer-runtime";
+import { installShellBundles } from "@luke/panel/shell-bundles";
 import { memoryHistory } from "@luke/ui/history-adapter";
-import { App } from "./app";
-import { callAvatarAtom } from "./call/call-avatar";
-import { PanelAvatarVoice } from "./call/panel-avatar";
-import { installWindowHistory } from "./navigation-history";
+import { DESKTOP_BUNDLES } from "./desktop-bundles";
 import { mountWindow } from "./window-root";
 
+// A call's avatar is the desktop's own bundle.
+installShellBundles(DESKTOP_BUNDLES);
 // The panel's back and forward live in memory for as long as the window is open.
 installWindowHistory(memoryHistory());
 
@@ -23,6 +28,8 @@ mountWindow(
     <PanelAvatarVoice />
     <App />
   </>,
+  // The panel is the window a person waits on, so it alone reports a freeze.
+  { reportsFreezes: true },
 );
 
 // The avatar is subscribed to before anything is drawn, because main hands

@@ -97,3 +97,30 @@ test("a stored-row read drops a tool part naming a tool the registry has retired
   assert.ok(Result.isSuccess(either));
   assert.deepEqual(either.success, [reply]);
 });
+
+test("a stored-row read holds a row to the structure and the registry's names, not to each tool's schemas, which the write door holds it to", async () => {
+  const reply = await fixture(FIXTURE.REPLY_WITH_TOOL_PART);
+  const answered = {
+    ...reply,
+    parts: [
+      {
+        type: "tool-read_transcript",
+        toolCallId: "call_12",
+        state: TOOL_PART_STATE.OUTPUT_AVAILABLE,
+        input: { providerId: "codex", providerSessionId: "session-1" },
+        output: { lines: "not a list" },
+      },
+    ],
+  };
+  assert.equal((await runTest(readStoredUIMessages([answered], TOOLS))).ok, false);
+  assert.deepEqual(
+    await runTest(readStoredUIMessages([answered], TOOLS, UNREGISTERED_TOOL_PART.DROP)),
+    { ok: true, value: [answered] },
+  );
+  // A row the SDK's structure refuses is still refused on read.
+  const shapeless = { ...reply, parts: [{ type: "text" }] };
+  assert.equal(
+    (await runTest(readStoredUIMessages([shapeless], TOOLS, UNREGISTERED_TOOL_PART.DROP))).ok,
+    false,
+  );
+});

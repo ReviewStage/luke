@@ -10,10 +10,16 @@ import { focusSeek } from "./focus-seek.js";
  * field mounts on the same press that summons it, so it may not be drawn yet.
  * What is already typed is selected rather than kept, so a repeated summons
  * types the next query over the last one instead of appending to it.
+ * `ready` says when the field can take the caret, where its arrival is more
+ * than the panel's staging, as a column shown on the same press is.
  */
-export function focusSearchField(fieldId: string): () => void {
+export function focusSearchField(
+  fieldId: string,
+  ready?: (field: HTMLElement) => boolean,
+): () => void {
   return focusSeek({
     find: () => document.getElementById(fieldId),
+    ...(ready === undefined ? undefined : { ready }),
     act: (element) => {
       element.focus({ preventScroll: true });
       if (element instanceof HTMLInputElement) element.select();

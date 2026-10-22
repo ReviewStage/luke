@@ -1,4 +1,3 @@
-import { Duration } from "effect";
 import {
   BRAIN_TURN_ORIGIN,
   BRAIN_TURN_TRIGGER,
@@ -7,30 +6,18 @@ import {
 } from "../../core.js";
 
 /**
- * The bounds and names the hosted brain host runs under: how a request names
- * the conversation and the kind of turn it opens, how long the runtime keeps
- * one session, and what a rotated session is seeded with. Every one is a
+ * The bounds and names the agents' hosts run under: how a request names the
+ * conversation and the kind of turn it opens, and what a reopened session
+ * is seeded with. Every one is a
  * product knob as much as an implementation detail.
  */
 export const BRAIN_HOST = {
-  /** The model's context window as the runtime is told it; the compaction threshold is a fraction of this. */
-  MODEL_CONTEXT_WINDOW_TOKENS: 400_000,
-  /** The fraction of the window at which eve folds the session's context. */
-  COMPACTION_THRESHOLD: 0.8,
   /** The longest one stored message is rendered in the rotation seed, in characters. */
   RECENT_MESSAGE_CHARS: 600,
   /** How many stored messages a rotated session is seeded with, newest last. */
   SEED_MESSAGES: 60,
   /** The longest the seed grows, in characters, cut from the front. */
   SEED_CHARS: 40_000,
-  /**
-   * The snapshots Vercel keeps of a session's sandbox: the newest alone, which
-   * is all a resume reads, so snapshot storage stays flat however often it
-   * stops. An evicted one is deleted at once, and the kept one expires a
-   * month after it was last used, named here because Vercel's own pages
-   * disagree on the default.
-   */
-  SANDBOX_SNAPSHOTS: { count: 1, expiration: Duration.days(30), deleteEvicted: true },
 } as const;
 
 /** A conversation id as the header carries it: a uuid, and nothing else names a row. */
@@ -38,15 +25,18 @@ export const CONVERSATION_ID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
- * The request headers a client names the conversation and the turn's kind
- * with, and the one the deployment names the account it acts for with: read
- * only from a request the deployment's own credential admitted, never from
- * an account's bearer, whose account is the bearer's.
+ * The request headers a client names the conversation, the turn's kind, and
+ * its sender's time zone with, and the one the deployment names the account
+ * it acts for with, the last read only from a request the deployment's own
+ * credential admitted, never from an account's bearer, whose account is the
+ * bearer's.
  */
 export const BRAIN_HOST_HEADER = {
   CONVERSATION: "x-luke-conversation",
   TURN: "x-luke-turn",
   ACCOUNT: "x-luke-account",
+  /** The sender's IANA time zone, which the turn its message opens reads the day in. */
+  TIME_ZONE: "x-luke-time-zone",
 } as const;
 
 /** An account id as the header carries it: the auth service's own id shape, bounded, and nothing else names a user row. */
@@ -62,7 +52,9 @@ export const BRAIN_HOST_ATTRIBUTE = {
   CONVERSATION: "luke:conversation",
   TURN: "luke:turn",
   ACCOUNT: "luke:account",
-  /** Who carried a message minted as the account's own principal: the deployment, named on the coder channel's voice steer and never laid over from a request. */
+  /** The current request's time zone, where it named one a zone stands under; the turn's standing context reads it. */
+  TIME_ZONE: "luke:time-zone",
+  /** Who carried a request minted as the account's own principal: the deployment, named on every typed message it carries, the voice brain's steer of a coding agent and a browser's comment to Luke among them, and on the coder channel's cancel and reset; never laid over from a request. */
   CARRIER: "luke:carrier",
 } as const;
 
@@ -131,8 +123,9 @@ export type RelayTurn = (typeof RELAY_TURN)[keyof typeof RELAY_TURN];
  * delegation's id, while eve's input is the question the service composed
  * around it, already on record on the ask. Writing that input as a user row
  * too would leave two developer lines for one utterance, read back to the
- * brain twice, so the relay writes none for a spoken turn and instead ties the
- * transcript's row, which shares the ask's client id, to the turn.
+ * brain twice, so the relay writes none for a spoken ask's line and instead
+ * ties the transcript's row, which shares the ask's client id, to the turn,
+ * whether the ask opened a spoken turn or joined a typed one under way.
  */
 export const RECEIVED_LINE = {
   /** The relay writes eve's received message as the turn's user row. */
@@ -143,7 +136,7 @@ export const RECEIVED_LINE = {
 
 export type ReceivedLine = (typeof RECEIVED_LINE)[keyof typeof RECEIVED_LINE];
 
-/** The run stream's origin and trigger for each kind of turn the relay records, and whose row its received message is. */
+/** The run stream's origin and trigger for each kind of turn the relay records, and whose row the line that opens it is; a line that joins the turn under way is told apart as it arrives (`relay.ts`'s `#received`). */
 export const BRAIN_HOST_TURN_KIND = {
   [BRAIN_HOST_TURN.TYPED]: {
     origin: BRAIN_TURN_ORIGIN.TYPED,
@@ -172,16 +165,15 @@ export const BRAIN_HOST_TURN_KIND = {
 
 /** The environment the host reads beside the names every hosted route already honours. */
 export const BRAIN_HOST_ENVIRONMENT = {
-  /** Selects the scripted fixture model in place of OpenAI; set only by the fixture eval. */
-  MODEL_FIXTURE: "LUKE_BRAIN_MODEL_FIXTURE",
-  /** The origin the ask routes reach eve on; unset, eve is the deployment's own origin behind its `/eve/v1/*` rewrite. */
+  /** The origin the ask routes reach eve on; unset, eve is the deployment's own origin behind its `/eve/coder/v1/*` rewrite. */
   EVE_ORIGIN: "LUKE_EVE_ORIGIN",
-} as const;
-
-/** The one fixture the model environment may name, and the model id its turns are recorded under. */
-export const BRAIN_HOST_MODEL_FIXTURE = {
-  SCRIPTED: "scripted",
-  SCRIPTED_MODEL_ID: "luke-scripted",
+  /**
+   * The secret the deployment acts for an account under at eve's door, read on
+   * both sides of it: the web functions and the eve service send it, and the
+   * eve service admits it. It is never the cron's `CRON_SECRET`, so the bearer
+   * Vercel's scheduler holds opens no eve session.
+   */
+  DEPLOYMENT_SECRET: "EVE_DEPLOYMENT_SECRET",
 } as const;
 
 /** Why the host refused a request's standing, in words the model or a route can read. */
@@ -193,8 +185,7 @@ export const BRAIN_HOST_REFUSAL = {
   NO_TURN_KIND: "Not run: the request names no kind of turn.",
   NO_ACCOUNT: "Not run: the deployment's request names no account.",
   NOT_DEPLOYMENT_ACT:
-    "Not run: the deployment may only open the turns it is admitted for, or stop one.",
-  NO_MODEL: "Not run: this deployment holds no model key, so the hosted brain is off.",
+    "Not run: the deployment may only open the turns it is admitted for, stop one, or retire a session.",
   NOT_CURRENT_SESSION: "Not run: this conversation runs in another session now.",
 } as const;
 

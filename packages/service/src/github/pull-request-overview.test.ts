@@ -1467,6 +1467,48 @@ it.layer(getTestDB())("a pull request's overview", (it) => {
   );
 
   it.effect(
+    "a head on a fork names the account whose fork it is; one on the repository itself names none",
+    () =>
+      Effect.gen(function* () {
+        const workspace = yield* openWorkspace(yield* linkedAccount(CHARLES.id));
+        const pulled = pull();
+        const own = yield* pullRequestPartOf(workspace, false).pipe(
+          answering(
+            repository({
+              pull: {
+                ...pulled,
+                head: {
+                  ref: "luke/invite-once",
+                  sha: "a1b2c3d",
+                  repo: { id: 1, owner: { login: "acme" } },
+                },
+                base: { ref: "main", repo: { id: 1 } },
+              },
+            }),
+          ),
+        );
+        const forked = yield* pullRequestPartOf(workspace, false).pipe(
+          answering(
+            repository({
+              pull: {
+                ...pulled,
+                head: {
+                  ref: "patch-1",
+                  sha: "a1b2c3d",
+                  repo: { id: 2, owner: { login: "octocat" } },
+                },
+                base: { ref: "main", repo: { id: 1 } },
+              },
+            }),
+          ),
+        );
+
+        assert.deepEqual([own?.head, own?.headOwner], ["luke/invite-once", undefined]);
+        assert.deepEqual([forked?.head, forked?.headOwner], ["patch-1", "octocat"]);
+      }),
+  );
+
+  it.effect(
     "no stack for a pull request no longer open, or where GitHub will not list the open ones, the rest standing",
     () =>
       Effect.gen(function* () {

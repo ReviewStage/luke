@@ -1,4 +1,5 @@
 import type { TaskShownCode } from "@luke/features/tasks-view";
+import type { LiveDelegationId } from "@luke/live";
 import type { Effect } from "effect";
 
 /**
@@ -153,8 +154,12 @@ export type LiveBrainCancel = (typeof LIVE_BRAIN_CANCEL)[keyof typeof LIVE_BRAIN
 /** One run a re-attached connection takes up again, as the brain's record holds it. */
 export interface LiveBrainRecoveredRun {
   readonly runId: string;
-  /** The delegation the run answers, still open in the session the run was asked in. */
-  readonly delegationId: string;
+  /**
+   * The delegation the run answers, still open in the session the run was
+   * asked in; none for a run a line typed into the call asked for, which
+   * answers no delegation of the session's and speaks session-wide.
+   */
+  readonly delegationId: LiveDelegationId;
   readonly revision: number;
   /** The developer stopped it: its cancel was already asked, and nothing of it is to be said. */
   readonly stopped: boolean;

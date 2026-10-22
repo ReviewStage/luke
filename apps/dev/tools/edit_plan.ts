@@ -10,7 +10,7 @@ import { CODER_TOOL } from "@luke/service/agents/coder-host/tool-set";
 import { ACTION_RESULT_STATUS, unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { emitJsonSchema } from "@luke/wire/effect";
 import { defineDynamic, defineTool } from "eve/tools";
-import { editPlanNotes, offeredPlanTools } from "../host.js";
+import { editPlanNotes, offeredTaskTools } from "../host.js";
 import { planNotesTaken } from "../session-prompt.js";
 
 /**
@@ -24,13 +24,14 @@ import { planNotesTaken } from "../session-prompt.js";
  * once, and each must see the other's reservation. A picture's file is
  * read from the session's sandbox through the same door eve hands every
  * file tool, opened on first use, so notes alone open none. It is offered at each
- * turn's start only to an agent handed its plan (`planToolsOf`), so one on
- * no plan, or handed a prompt, is never offered a tool it would be refused.
+ * turn's start only to an agent on a task (`taskToolsOf`), whether it was
+ * handed the plan or a prompt, so one on no plan is never offered a tool it
+ * would be refused.
  */
 export default defineDynamic({
   events: {
     "turn.started": async (_event, ctx) =>
-      (await offeredPlanTools(ctx.session.auth, ctx.session.id)).has(CODER_TOOL.EDIT_PLAN)
+      (await offeredTaskTools(ctx.session.auth, ctx.session.id)).has(CODER_TOOL.EDIT_PLAN)
         ? defineTool({
             description: EDIT_PLAN_TOOL.description,
             inputSchema: emitJsonSchema(EDIT_PLAN_TOOL.inputSchema),

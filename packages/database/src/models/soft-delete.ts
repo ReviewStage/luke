@@ -1,5 +1,5 @@
-import { and, eq, inArray, isNotNull, lte, notExists, or } from "drizzle-orm";
-import { Duration, Effect, Schema } from "effect";
+import { and, eq, inArray, isNotNull, isNull, lte, notExists, or } from "drizzle-orm";
+import { DateTime, Duration, Effect, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
 import { Database, type DatabaseServices, type QueryError } from "../core/query.js";
 import { conversations } from "../schemas/storage.js";
@@ -9,9 +9,9 @@ import { queueSessionSandboxes, sessionsOf } from "./session-sandbox-cleanup.js"
 
 /**
  * The purge that follows a soft delete. Nothing is erased at the stamp: a
- * deleted task's conversation is stamped `deleted_at` (`task-store.ts`), so
- * the reads — which skip a stamped row — show nothing of it from the call
- * after, while the rows stand until the purge. There is no archive, no
+ * deleted task's agents' conversations are stamped `deleted_at`
+ * (`task-store.ts`), so the reads — which skip a stamped row — show nothing
+ * of them from the call after, while the rows stand until the purge. There is no archive, no
  * registry, and no cutoff: the stamp is the whole record, and the cron's
  * purge removes the stamped conversations thirty days on, their messages,
  * turns, and events going with them by the schema's own cascade. Deleting
@@ -19,6 +19,10 @@ import { queueSessionSandboxes, sessionsOf } from "./session-sandbox-cleanup.js"
  * a purged conversation ran in is queued in the same transaction for the
  * sweep to delete its sandbox (`session-sandbox-cleanup.ts`), since the
  * conversation's row is the last record that names it.
+ *
+ * A deleted agent's conversation is stamped the same way, by the same
+ * statement (`stampConversationsDeleted`), so the two deletes keep one
+ * promise about when the words go.
  *
  * A deleted task's calls are not stamped: the delete removes the ones that
  * had ended (`task-store.ts`), and the cron removes each one left once it
@@ -67,6 +71,58 @@ export function purgeClearedConversations(
       }),
     ),
   );
+}
+
+const stampRows = SqlSchema.findAll({
+  Request: Schema.Struct({ conversationIds: Schema.Array(Schema.String), now: Schema.Date }),
+  Result: IdRowSchema,
+  execute: ({ conversationIds, now }) =>
+    Database.use((db) =>
+      db
+        .update(conversations)
+        .set({ deletedAt: now })
+        .where(and(inArray(conversations.id, conversationIds), isNull(conversations.deletedAt)))
+        .returning({ id: conversations.id }),
+    ),
+});
+
+const findChildren = SqlSchema.findAll({
+  Request: Schema.Array(Schema.String),
+  Result: IdRowSchema,
+  execute: (parentIds) =>
+    Database.use((db) =>
+      db
+        .select({ id: conversations.id })
+        .from(conversations)
+        .where(inArray(conversations.parentConversationId, parentIds)),
+    ),
+});
+
+/**
+ * Stamps the conversations deleted now, and every conversation delegated
+ * from them, a worker's under its agent's, so the reads skip them from the
+ * call after and the purge takes them thirty days on; one already stamped
+ * keeps its stamp. Note that each child is stamped itself rather than left
+ * to its parent's cascade, because the purge queues the sandbox of each row
+ * it deletes by name (`purgeClearedConversations`) and a row the cascade
+ * takes names none. By id alone, so the caller has gated the rows that
+ * named them: a task's delete its agents', an agent's delete its own.
+ */
+export function stampConversationsDeleted(
+  conversationIds: readonly string[],
+): Effect.Effect<void, ClearFailure, DatabaseServices> {
+  if (conversationIds.length === 0) return Effect.void;
+  return Effect.gen(function* () {
+    const now = yield* DateTime.nowAsDate;
+    const seen = new Set(conversationIds);
+    let level: readonly string[] = conversationIds;
+    while (level.length > 0) {
+      yield* stampRows({ conversationIds: level, now });
+      const children = yield* findChildren(level);
+      level = children.map(({ id }) => id).filter((id) => !seen.has(id));
+      for (const id of level) seen.add(id);
+    }
+  });
 }
 
 /**

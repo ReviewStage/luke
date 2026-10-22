@@ -1,17 +1,22 @@
 import { createHash, randomUUID } from "node:crypto";
 import { pinnedPictureUrl } from "@luke/features/account-picture";
+import { CODING_AGENT_KIND } from "@luke/features/coding-agent-wire";
+import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
+import { GITHUB_TOKEN_STATUS } from "@luke/features/github-token-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import {
   RESERVED_WORKSPACE_SLUGS,
+  roleOf,
   type Workspace as WireWorkspace,
+  WORKSPACE_PHOTO_TYPE,
   WORKSPACE_ROLE,
   type WorkspacePhoto,
-  type WorkspaceRole,
   workspacePhotoOfDataUrl,
 } from "@luke/features/workspace-wire";
 import { and, asc, eq, exists, inArray, type SQL, type SQLWrapper, sql } from "drizzle-orm";
 import { type Cause, DateTime, Effect, Option, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
+import { type LiveStatement, liveSelection, liveStatementOf } from "../core/live-statement.js";
 import {
   Database,
   type DatabaseServices,
@@ -24,6 +29,8 @@ import { INTEGRATION_ROW_STATUS } from "../integration-vocabulary.js";
 import { member, organization, user } from "../schemas/auth.js";
 import { codingAgent } from "../schemas/coding-agent.js";
 import { githubInstallation } from "../schemas/github-installation.js";
+import { githubPersonalToken } from "../schemas/github-personal-token.js";
+import { githubRepositoryRead } from "../schemas/github-repository-read.js";
 import { personalWorkspace } from "../schemas/personal-workspace.js";
 import { task } from "../schemas/task.js";
 import { workspaceIntegrationConnection } from "../schemas/workspace-integration.js";
@@ -57,6 +64,11 @@ import {
  * read and written by every member of the workspace it names, so a store
  * gates a task through `taskReachableBy` and `reachableTask` rather than by
  * the account that started it.
+ * A task or a coding agent reached on its owner's own GitHub token
+ * (`github_access = 'token'`) is narrower: beside its owner, it is seen only
+ * by a member whose own verified token GitHub last answered with its
+ * repository, as the service wrote that answer in `github_repository_read`;
+ * this module asks GitHub nothing.
  * A workspace's photo is the plugin's own `organization.logo`, kept as a
  * `data:` URL of one of `WORKSPACE_PHOTO_TYPE`; a list names only a digest of
  * it, and its bytes are read apart, by a member alone. The account's own
@@ -77,8 +89,6 @@ const PHOTO_VERSION_CHARS = 16;
  * first.
  */
 export type Workspace = WireWorkspace;
-
-const WORKSPACE_ROLES: readonly WorkspaceRole[] = Object.values(WORKSPACE_ROLE);
 
 /** What a workspace read answers: an effect over the ambient database. */
 /**
@@ -438,12 +448,6 @@ function slugOf(name: string): string {
   return own ? `workspace-${spelled}` : spelled;
 }
 
-/** The highest role the plugin's role text names, read as a member where it names none Luke knows. */
-export function roleOf(text: string): WorkspaceRole {
-  const named = text.split(",").map((part) => part.trim());
-  return WORKSPACE_ROLES.find((role) => named.includes(role)) ?? WORKSPACE_ROLE.MEMBER;
-}
-
 /** Whether an organization already stands for what a workspace is being made for, as the caller reads it. */
 type OrganizationLinked = (organizationId: string) => WorkspaceStoreEffect<boolean>;
 
@@ -503,17 +507,79 @@ export function workspaceReachableBy(userId: string, organizationId: string | SQ
   return memberOfWorkspace(userId, organizationId);
 }
 
-/** A coding agent row's workspace: its own, or its task's on a row the backfill has not reached yet. */
-export const AGENT_WORKSPACE = sql<string>`coalesce(${codingAgent.organizationId}, (select ${task.organizationId} from ${task} where ${task.id} = ${codingAgent.taskId}))`;
+/** A coding agent row's workspace: the column itself, never null since `20261015062923_organization_not_null`, so a membership check reaches its indexes. */
+export const AGENT_WORKSPACE = sql<string>`${codingAgent.organizationId}`;
 
-/** The condition that the account may read and write the coding agent row a statement reads: it is a member of the agent's workspace, an agent with no task as much as one on a task. */
-export function agentReachableBy(userId: string): SQL {
-  return memberOfWorkspace(userId, AGENT_WORKSPACE);
+/** How a task or an agent row was reached on GitHub, whose it is, and its repository, as `seenThroughGitHub` reads them. */
+interface GitHubReachedColumns {
+  readonly access: SQLWrapper;
+  readonly owner: SQLWrapper;
+  readonly repository: SQLWrapper;
 }
 
-/** The condition that the account may read and write the task row a statement reads: it is a member of the task's workspace. */
+/**
+ * The condition that the account sees a row as the way it reached GitHub
+ * allows: one reached through the workspace's App by every member, and one
+ * reached on its owner's own token by that owner and by any other member
+ * whose own token stands verified and was last answered with the row's
+ * repository.
+ */
+function seenThroughGitHub(userId: string, row: GitHubReachedColumns): SQL {
+  const readsRepository = exists(
+    queryBuilder
+      .select({ one: githubRepositoryRead.userId })
+      .from(githubRepositoryRead)
+      .innerJoin(githubPersonalToken, eq(githubPersonalToken.userId, githubRepositoryRead.userId))
+      .where(
+        and(
+          eq(githubRepositoryRead.userId, userId),
+          eq(githubRepositoryRead.repository, sql`lower(${row.repository})`),
+          eq(githubRepositoryRead.readable, true),
+          eq(githubPersonalToken.status, GITHUB_TOKEN_STATUS.VERIFIED),
+        ),
+      ),
+  );
+  return sql`(${eq(row.access, GITHUB_ACCESS.APP)} or ${eq(row.owner, userId)} or ${readsRepository})`;
+}
+
+/** The condition that the account sees the coding agent row as its GitHub access allows (`seenThroughGitHub`), for a statement that gates its workspace already. */
+export function agentSeenBy(userId: string): SQL {
+  return seenThroughGitHub(userId, {
+    access: codingAgent.githubAccess,
+    owner: codingAgent.userId,
+    repository: codingAgent.repository,
+  });
+}
+
+/**
+ * The condition that the account may read and write the coding agent row a
+ * statement reads: it is a member of the agent's workspace, an agent with no
+ * task as much as one on a task, sees it as its GitHub access allows, and the
+ * agent is no teammate's operator. Note that an operator is private to its
+ * member, because it reads their inbox, DMs, and every agent they reach, so
+ * every read and write gated here refuses or leaves out another member's.
+ */
+export function agentReachableBy(userId: string): SQL {
+  return sql`(${memberOfWorkspace(userId, AGENT_WORKSPACE)} and ${agentSeenBy(userId)} and ${agentNoTeammatesOperator(userId)})`;
+}
+
+/** The condition that the coding agent row is no operator but the account's own: a coder, or an operator the account started. */
+export function agentNoTeammatesOperator(userId: string): SQL {
+  return sql`(${codingAgent.kind} <> ${CODING_AGENT_KIND.OPERATOR} or ${eq(codingAgent.userId, userId)})`;
+}
+
+/** The condition that the account sees the task row as its GitHub access allows (`seenThroughGitHub`), for a statement that gates its workspace already. */
+export function taskSeenBy(userId: string): SQL {
+  return seenThroughGitHub(userId, {
+    access: task.githubAccess,
+    owner: task.userId,
+    repository: task.repository,
+  });
+}
+
+/** The condition that the account may read and write the task row a statement reads: it is a member of the task's workspace, and sees it as its GitHub access allows. */
 export function taskReachableBy(userId: string): SQL {
-  return memberOfWorkspace(userId, task.organizationId);
+  return sql`(${memberOfWorkspace(userId, task.organizationId)} and ${taskSeenBy(userId)})`;
 }
 
 /** The task under this id, where the account is a member of its workspace; any other id reads as no task. */
@@ -583,6 +649,109 @@ export function listWorkspaces(userId: string): WorkspaceStoreEffect<readonly Wo
       ...rows.filter((row) => row.personalOf !== null),
       ...rows.filter((row) => row.personalOf === null),
     ].map((row) => workspaceOfRow(row, installations.get(row.id) ?? []));
+  });
+}
+
+/** The statements the account's workspaces are followed by live: the workspaces, and the installations connected to them. */
+export type WorkspacesLiveStatements = Readonly<
+  Record<"workspaces" | "installations", LiveStatement>
+>;
+
+/**
+ * A logo's text as its bytes, the ones the held read digests. Note that it
+ * is `decode(…, 'escape')` over the text with each backslash doubled, rather
+ * than `convert_to`, because Realtime refuses any function Postgres does not
+ * mark immutable, and `convert_to` and `textsend` are only stable.
+ */
+const LOGO_BYTES = sql`decode(replace(${organization.logo}, ${"\\"}, ${"\\\\"}), 'escape')`;
+
+/** The base64 a logo's `data:` URL carries, after its comma. */
+const LOGO_PAYLOAD = sql`substring(${organization.logo} from position(',' in ${organization.logo}) + 1)`;
+
+/** The first bytes of a logo's photo, which name its image type (`sniffImageType`). */
+const LOGO_HEAD = sql`decode(left(${LOGO_PAYLOAD}, 16), 'base64')`;
+
+/**
+ * A logo that holds a photo, as the held read reads one
+ * (`workspacePhotoOfDataUrl`): a `data:` URL of one of
+ * `WORKSPACE_PHOTO_TYPE` whose base64 reads whole, and whose bytes are the
+ * image its label names. Note that the base64 is only decoded once it is
+ * known to read, inside the outer case, so a logo of any other text answers
+ * false rather than failing the statement.
+ */
+const LOGO_IS_PHOTO = sql<boolean>`case when coalesce(${organization.logo} ~ ${`^data:(${Object.values(WORKSPACE_PHOTO_TYPE).join("|")});base64,[A-Za-z0-9+/]+={0,2}$`}, false) and length(${LOGO_PAYLOAD}) % 4 = 0 then case split_part(substring(${organization.logo} from 6), ';', 1)
+  when ${WORKSPACE_PHOTO_TYPE.PNG} then substring(${LOGO_HEAD} from 1 for 8) = '\\x89504e470d0a1a0a'::bytea
+  when ${WORKSPACE_PHOTO_TYPE.JPEG} then substring(${LOGO_HEAD} from 1 for 3) = '\\xffd8ff'::bytea
+  when ${WORKSPACE_PHOTO_TYPE.WEBP} then substring(${LOGO_HEAD} from 1 for 4) = '\\x52494646'::bytea and substring(${LOGO_HEAD} from 9 for 4) = '\\x57454250'::bytea
+  else false end else false end`;
+
+/**
+ * The account's workspaces written for Neon Realtime: the same rows, joins,
+ * and rule of who may read them as `listWorkspaces`, each column under the
+ * key `live-wire.ts` reads it by. What the held read works out from a row
+ * here is worked out in the statement, so a row carries no photo's bytes:
+ * its digest, the Linear connection's standing, and an installation's.
+ * Note that a photo is told by its `data:` label alone, where the held read
+ * also reads its bytes, because a photo is checked when it is set. The
+ * order is the reader's to keep, since Realtime keeps none. None where a
+ * statement names a value Realtime cannot carry.
+ */
+export function workspacesLiveStatements(userId: string): Option.Option<WorkspacesLiveStatements> {
+  const workspaces = queryBuilder
+    .select(
+      liveSelection({
+        id: organization.id,
+        name: WORKSPACE_NAME,
+        slug: organization.slug,
+        own: sql<boolean>`${personalWorkspace.userId} is not null`,
+        personal: sql<boolean>`exists(select 1 from ${personalWorkspace} as "first" where "first"."organization_id" = ${organization.id})`,
+        role: member.role,
+        linearActive: sql<
+          boolean | null
+        >`case ${workspaceIntegrationConnection.status} when ${INTEGRATION_ROW_STATUS.CONNECTED} then true when ${INTEGRATION_ROW_STATUS.EXPIRED} then false end`,
+        memberCount: sql<number>`(select count(*)::int from ${member} as "members" where "members"."organization_id" = ${organization.id})`,
+        photoVersion: sql<
+          string | null
+        >`case when ${LOGO_IS_PHOTO} then left(encode(sha256(${LOGO_BYTES}), 'hex'), ${PHOTO_VERSION_CHARS}) end`,
+        ownerImage: user.image,
+      }),
+    )
+    .from(member)
+    .innerJoin(organization, eq(organization.id, member.organizationId))
+    .leftJoin(
+      personalWorkspace,
+      and(
+        eq(personalWorkspace.organizationId, organization.id),
+        eq(personalWorkspace.userId, userId),
+      ),
+    )
+    .leftJoin(user, eq(user.id, personalWorkspace.userId))
+    .leftJoin(
+      workspaceIntegrationConnection,
+      and(
+        eq(workspaceIntegrationConnection.organizationId, organization.id),
+        eq(workspaceIntegrationConnection.provider, INTEGRATION_PROVIDER.LINEAR),
+      ),
+    )
+    .where(eq(member.userId, userId));
+  const installations = queryBuilder
+    .select(
+      liveSelection(
+        {
+          workspaceId: githubInstallation.organizationId,
+          installationId: sql<number>`${githubInstallation.installationId}::float8`,
+          login: githubInstallation.accountLogin,
+          active: sql<boolean>`${githubInstallation.status} = ${GITHUB_INSTALLATION_STATUS.ACTIVE}`,
+        },
+        { linkedAt: githubInstallation.createdAt },
+      ),
+    )
+    .from(githubInstallation)
+    .innerJoin(member, eq(member.organizationId, githubInstallation.organizationId))
+    .where(eq(member.userId, userId));
+  return Option.all({
+    workspaces: liveStatementOf(workspaces),
+    installations: liveStatementOf(installations),
   });
 }
 

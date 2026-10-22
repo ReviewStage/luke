@@ -38,7 +38,7 @@ environment of the Luke it is: `production` for a Developer ID package, `test`
 for an ad-hoc `Luke Test` package, and `development` for `electron .`. When
 `SENTRY_AUTH_TOKEN` is present, the final esbuild plugin on the main, preload,
 and renderer JavaScript builds uploads their source maps to that release before
-electron-builder packages the app, and a refused upload fails the build. The
+electron-builder packages the app; a refused upload warns and the build goes on. The
 maps are written beside the bundles, named by no `sourceMappingURL` comment,
 and excluded from the app bundle; ordinary local builds need neither Sentry
 value and upload nothing, and neither does a rehearsal (below).
@@ -47,9 +47,7 @@ value and upload nothing, and neither does a rehearsal (below).
 
 1. **Prepare and merge the version PR.** Bump `apps/desktop/package.json` and add the
    release's entry to `CHANGELOG.md` at the repository root in the same change. The
-   landing page renders that file at `/changelog`, and `scripts/repository-checks.sh`
-   refuses a desktop version the changelog does not name, so a bump cannot land without
-   its notes. Every bullet and feature section links the pull request or
+   landing page renders that file at `/changelog`. Every bullet and feature section links the pull request or
    requests that made it, in the form the comment atop `CHANGELOG.md` gives.
    A feature section's screenshot is taken on a Mac from the release's own build
    with mock data staged for it, and framed by `scripts/changelog-screenshot.sh` on
@@ -77,11 +75,12 @@ value and upload nothing, and neither does a rehearsal (below).
    git push origin v0.1.0
    ```
 
-5. **Let Actions finish.** The run bootstraps the workspace, runs `./scripts/check.sh`,
-   imports the Developer ID certificate into a throwaway keychain, builds the signed and
+5. **Let Actions finish.** The run bootstraps the workspace, imports the Developer ID
+   certificate into a throwaway keychain, builds the signed and
    notarized artifacts, validates them, and then creates a published, non-draft release
    titled `Luke X.Y.Z` with generated notes and uploads all six assets. The keychain is
-   removed whether the run succeeds or fails.
+   removed whether the run succeeds or fails. The run does not run the tests: the tagged
+   commit already passed CI on Linux, and no workflow runs the tests on a Mac.
 
 Re-running the workflow on the same tag is safe: an existing release is reused and its
 assets are replaced with `gh release upload --clobber`. The release must stay non-draft
@@ -137,7 +136,7 @@ somewhere else; the workflow fails its secret check if any one is missing.
 | `APPLE_API_KEY_P8_BASE64` | Base64-encoded App Store Connect API private key | The downloaded `.p8` file from App Store Connect |
 | `APPLE_API_KEY_ID` | Identifies the App Store Connect API key | App Store Connect, Users and Access, Integrations |
 | `APPLE_API_ISSUER_ID` | Identifies the App Store Connect API key issuer | App Store Connect, Users and Access, Integrations |
-| `POSTHOG_PROJECT_API_KEY` | PostHog project key, baked into the renderer at build time; a build without it records nothing at all, silently | PostHog, Project settings → Project API key |
+| `POSTHOG_PROJECT_API_KEY` | PostHog project key, baked into the renderer at build time, and only into a build with `LUKE_CODESIGN_IDENTITY` set; a build without it records nothing at all, silently | PostHog, Project settings → Project API key |
 | `SENTRY_DSN` | Sentry project DSN, baked into main; a build without it sends no crash reports | Sentry, `luke-desktop` → Client Keys |
 | `SENTRY_AUTH_TOKEN` | Secret build token used only to upload source maps for `Luke@X.Y.Z` | Sentry, Organization Settings → Auth → Auth Tokens |
 

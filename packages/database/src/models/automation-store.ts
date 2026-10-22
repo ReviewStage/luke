@@ -42,6 +42,7 @@ import {
 } from "drizzle-orm";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
+import { type LiveStatement, liveSelection, liveStatementOf } from "../core/live-statement.js";
 import { Database, type DatabaseServices, queryBuilder } from "../core/query.js";
 import { member } from "../schemas/auth.js";
 import { automation, automationRun } from "../schemas/automation.js";
@@ -49,6 +50,7 @@ import { codingAgent } from "../schemas/coding-agent.js";
 import { inboxItem } from "../schemas/inbox.js";
 import { conversations } from "../schemas/storage.js";
 import { task } from "../schemas/task.js";
+import { agentGivenNameSql } from "./agent-name.js";
 import { InstantColumnSchema } from "./columns.js";
 import type { TaskStoreEffect, TaskStoreFailure } from "./task-store.js";
 import { AGENT_WORKSPACE, isWorkspaceMember, reachableTask } from "./workspace-store.js";
@@ -102,14 +104,14 @@ const AutomationRowSchema = Schema.Struct({
 export type Automation = typeof AutomationRowSchema.Type;
 
 /** An automation row's workspace: its own, or its task's on a row an older build wrote, its workspace still null. */
-const AUTOMATION_WORKSPACE = sql<string>`coalesce(${automation.organizationId}, (select ${task.organizationId} from ${task} where ${task.id} = ${automation.taskId}))`;
+export const AUTOMATION_WORKSPACE = sql<string>`coalesce(${automation.organizationId}, (select ${task.organizationId} from ${task} where ${task.id} = ${automation.taskId}))`;
 
 /** An automation row's repositories: its own, or its task's on a row an older build wrote, its list still empty. */
 const AUTOMATION_REPOSITORIES = sql<
   readonly string[]
 >`case when ${automation.repositories} = '[]'::jsonb and ${task.repository} is not null then jsonb_build_array(${task.repository}) else ${automation.repositories} end`;
 
-const AUTOMATION_COLUMNS = {
+export const AUTOMATION_COLUMNS = {
   id: automation.id,
   userId: automation.userId,
   taskId: automation.taskId,
@@ -240,7 +242,7 @@ const AutomationKeySchema = Schema.Struct({ userId: Schema.String, id: Schema.St
 
 /**
  * What an account asks to do with an automation, each allowed by its own
- * rule (`docs/proposals/automations-scope.md`, D2): a personal automation
+ * rule: a personal automation
  * is its creator's, which the workspace's owners and admins see, pause, and
  * delete; a workspace's every member sees, runs, and pauses, and its
  * creator, owners, and admins change and delete.
@@ -352,6 +354,17 @@ const findReachableTask = SqlSchema.findOneOption({
     ),
 });
 
+/**
+ * The id of the transaction a write committed in, read in the write's own
+ * `RETURNING`, as Neon's mutations guide says, so a client following the
+ * automations waits for that transaction to arrive before it confirms the
+ * write.
+ */
+const TXID = sql<string>`pg_current_xact_id()::text`;
+
+/** A written automation's id, and the transaction it was written in. */
+const WrittenSchema = Schema.Struct({ id: Schema.String, txid: Schema.String });
+
 const insertAutomation = SqlSchema.findAll({
   Request: Schema.Struct({
     userId: Schema.String,
@@ -370,7 +383,7 @@ const insertAutomation = SqlSchema.findAll({
     archiveSuccessful: Schema.Boolean,
     now: Schema.Date,
   }),
-  Result: Schema.Struct({ id: Schema.String }),
+  Result: WrittenSchema,
   execute: (row) =>
     Database.use((db) =>
       db
@@ -392,7 +405,7 @@ const insertAutomation = SqlSchema.findAll({
           createdAt: row.now,
           updatedAt: row.now,
         })
-        .returning({ id: automation.id }),
+        .returning({ id: automation.id, txid: TXID }),
     ),
 });
 
@@ -451,7 +464,7 @@ const writeAutomation = SqlSchema.findAll({
     archiveSuccessful: Schema.optionalKey(Schema.Boolean),
     now: Schema.Date,
   }),
-  Result: Schema.Struct({ id: Schema.String }),
+  Result: WrittenSchema,
   execute: ({ userId, id, access, now, trigger, nextRunAt, webhookSecretHash, ...changes }) =>
     Database.use((db) =>
       db
@@ -466,19 +479,61 @@ const writeAutomation = SqlSchema.findAll({
           updatedAt: now,
         })
         .where(allowedTo(userId, access, id))
+        .returning({ id: automation.id, txid: TXID }),
+    ),
+});
+
+const reaimAutomations = SqlSchema.findAll({
+  Request: Schema.Struct({
+    userId: Schema.String,
+    fromAgentId: Schema.String,
+    toAgentId: Schema.String,
+    now: Schema.Date,
+  }),
+  Result: Schema.Struct({ id: Schema.String }),
+  execute: ({ userId, fromAgentId, toAgentId, now }) =>
+    Database.use((db) =>
+      db
+        .update(automation)
+        .set({ targetAgentId: toAgentId, updatedAt: now })
+        .where(
+          and(
+            eq(automation.userId, userId),
+            eq(automation.targetKind, AUTOMATION_TARGET.SAME_AGENT),
+            eq(automation.targetAgentId, fromAgentId),
+          ),
+        )
         .returning({ id: automation.id }),
+    ),
+});
+
+const findAimedAt = SqlSchema.findAll({
+  Request: Schema.Struct({ userId: Schema.String, agentId: Schema.String }),
+  Result: Schema.Struct({ id: Schema.String }),
+  execute: ({ userId, agentId }) =>
+    Database.use((db) =>
+      db
+        .select({ id: automation.id })
+        .from(automation)
+        .where(
+          and(
+            eq(automation.userId, userId),
+            eq(automation.targetKind, AUTOMATION_TARGET.SAME_AGENT),
+            eq(automation.targetAgentId, agentId),
+          ),
+        ),
     ),
 });
 
 const removeAutomation = SqlSchema.findAll({
   Request: AutomationKeySchema,
-  Result: Schema.Struct({ id: Schema.String }),
+  Result: WrittenSchema,
   execute: ({ userId, id }) =>
     Database.use((db) =>
       db
         .delete(automation)
         .where(allowedTo(userId, AUTOMATION_ACCESS.DELETE, id))
-        .returning({ id: automation.id }),
+        .returning({ id: automation.id, txid: TXID }),
     ),
 });
 
@@ -491,14 +546,14 @@ const insertRun = SqlSchema.findAll({
     payload: Schema.NullOr(Schema.String),
     firedAt: Schema.Date,
   }),
-  Result: QueuedRunSchema,
+  Result: Schema.Struct({ ...QueuedRunSchema.fields, txid: Schema.String }),
   execute: (row) =>
     Database.use((db) =>
       db
         .insert(automationRun)
         .values({ ...row, status: AUTOMATION_RUN_STATUS.QUEUED })
         .onConflictDoNothing({ target: [automationRun.automationId, automationRun.dedupeKey] })
-        .returning(QUEUED_RUN_COLUMNS),
+        .returning({ ...QUEUED_RUN_COLUMNS, txid: TXID }),
     ),
 });
 
@@ -549,7 +604,8 @@ function historyOf(userId: string, automationId: string): SQL {
 const HISTORY_COLUMNS = {
   ...RUN_COLUMNS,
   agentConversationId: codingAgent.conversationId,
-  agentTitle: codingAgent.title,
+  // The name the agent goes by: Luke for an operator, its human name, else its title.
+  agentTitle: sql<string | null>`coalesce(${agentGivenNameSql(codingAgent)}, ${codingAgent.title})`,
   agentCreatedAt: codingAgent.createdAt,
   agentUserId: codingAgent.userId,
 };
@@ -1078,6 +1134,47 @@ const findOwnFailedRuns = SqlSchema.findAll({
     ),
 });
 
+/**
+ * The newest failed run of each of the account's own automations, written for
+ * Neon Realtime as `findOwnFailedRuns` reads them, each column under the key
+ * `account-inbox-wire.ts` reads it by. Note that it names no window, because
+ * a live read measures nothing from the clock: the reader keeps the runs of
+ * its own last week. None where the statement names a value Realtime cannot
+ * carry.
+ */
+export function ownFailedRunsLiveStatement(userId: string): Option.Option<LiveStatement> {
+  return liveStatementOf(
+    queryBuilder
+      .selectDistinctOn(
+        [automationRun.automationId],
+        liveSelection(
+          {
+            id: automationRun.id,
+            automationId: automationRun.automationId,
+            automationName: automation.name,
+            workspaceId: AUTOMATION_WORKSPACE,
+            reason: automationRun.reason,
+          },
+          { failedAt: automationRun.settledAt },
+        ),
+      )
+      .from(automationRun)
+      .innerJoin(automation, eq(automation.id, automationRun.automationId))
+      .where(
+        and(
+          eq(automation.userId, userId),
+          memberOfAutomationWorkspace(userId),
+          eq(automationRun.status, AUTOMATION_RUN_STATUS.FAILED),
+        ),
+      )
+      .orderBy(
+        asc(automationRun.automationId),
+        desc(automationRun.settledAt),
+        desc(automationRun.id),
+      ),
+  );
+}
+
 /** Re-reads one automation after a write, which answered only that a row was written. */
 function readWritten(userId: string, id: string): TaskStoreEffect<Option.Option<Automation>> {
   return findAutomation({ userId, id, access: AUTOMATION_ACCESS.READ });
@@ -1109,6 +1206,25 @@ export function createAutomation(
   userId: string,
   made: NewAutomation,
 ): TaskStoreEffect<Option.Option<Automation>> {
+  return Effect.map(createAutomationCommitted(userId, made), Option.map(automationOf));
+}
+
+/** An automation as a write left it, and the transaction it committed in. */
+export interface AutomationCommitted {
+  readonly automation: Automation;
+  readonly txid: string;
+}
+
+/** The automation without the transaction it was written in. */
+function automationOf({ automation: written }: AutomationCommitted): Automation {
+  return written;
+}
+
+/** An automation made, as `createAutomation` makes one, and the transaction its row was written in. */
+export function createAutomationCommitted(
+  userId: string,
+  made: NewAutomation,
+): TaskStoreEffect<Option.Option<AutomationCommitted>> {
   return Effect.gen(function* () {
     const reached = yield* placeOf(userId, made);
     if (Option.isNone(reached)) return Option.none();
@@ -1125,8 +1241,58 @@ export function createAutomation(
       archiveSuccessful: made.archiveSuccessful ?? false,
       now,
     });
-    return row === undefined ? Option.none() : yield* readWritten(userId, row.id);
+    if (row === undefined) return Option.none();
+    const { txid } = row;
+    return Option.map(yield* readWritten(userId, row.id), (written) => ({
+      automation: written,
+      txid,
+    }));
   });
+}
+
+/** What aiming a member's operator its heartbeat takes: the operator, the one it replaced where a Reset retired one, and the heartbeat to make where none is aimed at it. */
+export interface OperatorHeartbeat {
+  readonly operatorId: string;
+  readonly retiredId: string | undefined;
+  readonly heartbeat: NewAutomation;
+}
+
+/**
+ * The member's automations aimed at the operator a Reset retired re-aimed
+ * at the fresh one, and the heartbeat made where none is then aimed at it,
+ * in one transaction: answers the automations aimed at the operator after,
+ * by id, or nothing where the heartbeat's place is one the account does not
+ * reach. Note that its caller runs it only for the ensure that made the
+ * operator, which one ensure alone is, so a heartbeat the member deleted
+ * is never made again by a repeat ensure.
+ */
+export function aimOperatorHeartbeat(
+  userId: string,
+  aimed: OperatorHeartbeat,
+): TaskStoreEffect<Option.Option<readonly string[]>> {
+  return Effect.flatMap(SqlClient.SqlClient, (client) =>
+    client.withTransaction(
+      Effect.gen(function* () {
+        const now = yield* DateTime.nowAsDate;
+        if (aimed.retiredId !== undefined) {
+          yield* reaimAutomations({
+            userId,
+            fromAgentId: aimed.retiredId,
+            toAgentId: aimed.operatorId,
+            now,
+          });
+        }
+        const standing = yield* findAimedAt({ userId, agentId: aimed.operatorId });
+        if (standing.length > 0) return Option.some(standing.map((row) => row.id));
+        const made = yield* createAutomationCommitted(userId, {
+          ...aimed.heartbeat,
+          targetKind: AUTOMATION_TARGET.SAME_AGENT,
+          targetAgentId: aimed.operatorId,
+        });
+        return Option.map(made, (written) => [written.automation.id]);
+      }),
+    ),
+  );
 }
 
 /** Which automations a list reads: one task's, one workspace's, or every one the account may read where it names neither. */
@@ -1169,24 +1335,50 @@ export function updateAutomation(
     | typeof AUTOMATION_ACCESS.CHANGE
     | typeof AUTOMATION_ACCESS.TOGGLE = AUTOMATION_ACCESS.CHANGE,
 ): TaskStoreEffect<Option.Option<Automation>> {
+  return Effect.map(
+    updateAutomationCommitted(userId, id, changes, access),
+    Option.map(automationOf),
+  );
+}
+
+/** An automation changed, as `updateAutomation` changes one, and the transaction its row was written in. */
+export function updateAutomationCommitted(
+  userId: string,
+  id: string,
+  changes: AutomationChanges,
+  access:
+    | typeof AUTOMATION_ACCESS.CHANGE
+    | typeof AUTOMATION_ACCESS.TOGGLE = AUTOMATION_ACCESS.CHANGE,
+): TaskStoreEffect<Option.Option<AutomationCommitted>> {
   return Effect.gen(function* () {
     const now = yield* DateTime.nowAsDate;
-    const written = yield* writeAutomation({ ...changes, userId, id, access, now });
-    if (written.length === 0) return Option.none();
-    return yield* readWritten(userId, id);
+    const [written] = yield* writeAutomation({ ...changes, userId, id, access, now });
+    if (written === undefined) return Option.none();
+    const { txid } = written;
+    return Option.map(yield* readWritten(userId, id), (automation) => ({ automation, txid }));
   });
 }
 
 /** Deletes an automation the account may delete, and its history; false for any other id. */
 export function deleteAutomation(userId: string, id: string): TaskStoreEffect<boolean> {
-  return Effect.map(removeAutomation({ userId, id }), (rows) => rows.length > 0);
+  return Effect.map(deleteAutomationCommitted(userId, id), Option.isSome);
+}
+
+/** An automation deleted, as `deleteAutomation` deletes one, and the transaction its row went in; none for any other id. */
+export function deleteAutomationCommitted(
+  userId: string,
+  id: string,
+): TaskStoreEffect<Option.Option<{ readonly txid: string }>> {
+  return Effect.map(removeAutomation({ userId, id }), (rows) =>
+    Option.map(Option.fromUndefinedOr(rows[0]), ({ txid }) => ({ txid })),
+  );
 }
 
 /** Records a firing of the automation, queued; nothing where a run under the same dedupe key stands already. */
 export function recordAutomationRun(
   owner: Pick<Automation, "id" | "userId">,
   run: NewAutomationRun,
-): TaskStoreEffect<Option.Option<QueuedRun>> {
+): TaskStoreEffect<Option.Option<QueuedRun & { readonly txid: string }>> {
   const row = {
     dedupeKey: run.dedupeKey,
     firing: run.firing,

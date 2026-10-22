@@ -16,12 +16,12 @@
  */
 
 import type { DatabaseServices } from "@luke/database/core/query";
-import { readTask, type TaskStoreFailure } from "@luke/database/models/task-store";
+import { readTaskHeader, type TaskStoreFailure } from "@luke/database/models/task-store";
 import { TASK_FILE_REFUSAL, type TaskSkillsAnswer } from "@luke/features/task-wire";
 import { Effect, Option } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import { readRepositorySkills, skillFilePath } from "../agents/repository-skills.js";
-import type { GitHubApp } from "../github/github-app.js";
+import { type GitHubApp, markRefusedToken } from "../github/github-app.js";
 import { logGitHubReadFailure } from "../github/github-refusal.js";
 import { reachTaskRepository, refused } from "./task-file.js";
 
@@ -29,11 +29,12 @@ import { reachTaskRepository, refused } from "./task-file.js";
 const readSkills = /* @__PURE__ */ Effect.fn("web/taskSkillsRead")(function* (
   organizationId: string,
   repository: string,
+  member: string,
 ) {
-  const reach = yield* reachTaskRepository(organizationId, repository);
+  const reach = yield* reachTaskRepository(organizationId, repository, member);
   if ("refused" in reach) return reach.refused;
-  const { token, repository: confirmed } = reach.reached;
-  const skills = yield* readRepositorySkills(token, confirmed);
+  const { token, repository: confirmed, access } = reach.reached;
+  const skills = yield* readRepositorySkills(token, confirmed).pipe(markRefusedToken(access));
   return {
     skills: {
       repository,
@@ -63,11 +64,11 @@ export function readTaskSkills(
   DatabaseServices | HttpClient.HttpClient | GitHubApp
 > {
   return Effect.gen(function* () {
-    const stored = yield* readTask(userId, taskId);
+    const stored = yield* readTaskHeader(userId, taskId);
     if (Option.isNone(stored)) return Option.none();
-    const repository = stored.value.task.repository;
+    const repository = stored.value.repository;
     if (repository === null) return Option.some(refused(TASK_FILE_REFUSAL.NO_REPOSITORY));
-    return Option.some(yield* readWorkspaceSkills(stored.value.task.workspaceId, repository));
+    return Option.some(yield* readWorkspaceSkills(stored.value.workspaceId, repository, userId));
   });
 }
 
@@ -81,8 +82,9 @@ export function readTaskSkills(
 export function readWorkspaceSkills(
   workspaceId: string,
   repository: string,
+  member: string,
 ): Effect.Effect<TaskSkillsAnswer, never, DatabaseServices | HttpClient.HttpClient | GitHubApp> {
-  return readSkills(workspaceId, repository).pipe(
+  return readSkills(workspaceId, repository, member).pipe(
     Effect.catchTag("GitHubUnavailable", (failure) =>
       Effect.as(logGitHubReadFailure(failure), refused(TASK_FILE_REFUSAL.UNAVAILABLE)),
     ),

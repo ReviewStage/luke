@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # Uploads an eve root's source maps to Sentry's `luke-web` project after its
-# `eve build`, so a stack trace from the luke or dev service reads as the
+# `eve build`, so a stack trace from the dev service reads as the
 # source rather than as `_libs/eve.mjs`. Each service's build command in the
 # root `vercel.json` runs it from the service's root, after the build:
 #
@@ -24,9 +24,11 @@
 # `node_modules` are not ours to touch. Each bundle is given a debug ID,
 # which is what Sentry matches a frame to its map by, the maps are uploaded
 # under the release the SDK reports (`VERCEL_GIT_COMMIT_SHA`), and then
-# deleted, so none ships in a function. A token-holding build with no map
-# to upload fails, because that is a build whose traces would silently stay
-# unreadable.
+# deleted, so none ships in a function. Sentry is not the build's to wait
+# on: a failed inject or upload, or a token-holding build with no map to
+# upload, prints a warning and the build goes on, its traces unreadable but
+# its deployment shipped. The maps are deleted whether the upload succeeded
+# or not.
 
 set -euo pipefail
 
@@ -35,6 +37,14 @@ SENTRY_PROJECT=luke-web
 
 if [[ -z ${SENTRY_AUTH_TOKEN:-} ]]; then
     printf 'eve-source-maps: no SENTRY_AUTH_TOKEN, so no source maps are uploaded\n'
+    exit 0
+fi
+
+# Only a production build uploads: a Preview's traces are read rarely, and
+# the maps cost every Preview build time. Each root's nitro.config.ts writes
+# no maps outside production either.
+if [[ ${VERCEL_ENV:-} != production ]]; then
+    printf 'eve-source-maps: not a production build, so no source maps are uploaded\n'
     exit 0
 fi
 
@@ -57,9 +67,9 @@ if ((${#bundles[@]} > 0)); then
     maps=$(find "${bundles[@]}" -name node_modules -prune -o -type f -name '*.map' -print | wc -l)
 fi
 if ((maps == 0)); then
-    printf 'eve-source-maps: no source maps under %s/functions to upload; is the root missing its nitro.config.ts?\n' \
+    printf 'eve-source-maps: warning: no source maps under %s/functions to upload; is the root missing its nitro.config.ts?\n' \
         "$output" >&2
-    exit 1
+    exit 0
 fi
 
 release=()
@@ -67,9 +77,18 @@ if [[ -n ${VERCEL_GIT_COMMIT_SHA:-} ]]; then
     release=(--release "$VERCEL_GIT_COMMIT_SHA")
 fi
 
-sentry-cli sourcemaps inject --ignore node_modules "${bundles[@]}"
-sentry-cli sourcemaps upload --org "$SENTRY_ORG" --project "$SENTRY_PROJECT" \
-    ${release[@]+"${release[@]}"} --ignore node_modules "${bundles[@]}"
+uploaded=true
+if ! sentry-cli sourcemaps inject --ignore node_modules "${bundles[@]}"; then
+    uploaded=false
+elif ! sentry-cli sourcemaps upload --org "$SENTRY_ORG" --project "$SENTRY_PROJECT" \
+    ${release[@]+"${release[@]}"} --ignore node_modules "${bundles[@]}"; then
+    uploaded=false
+fi
 find "${bundles[@]}" -name node_modules -prune -o -type f -name '*.map' -exec rm -f {} +
-printf 'eve-source-maps: uploaded %s source maps from %s and removed them from the output\n' \
-    "$(echo "$maps" | tr -d ' ')" "$output"
+if [[ $uploaded == true ]]; then
+    printf 'eve-source-maps: uploaded %s source maps from %s and removed them from the output\n' \
+        "$(echo "$maps" | tr -d ' ')" "$output"
+else
+    printf 'eve-source-maps: warning: sentry-cli failed, so %s source maps from %s were not uploaded; removed them from the output and went on\n' \
+        "$(echo "$maps" | tr -d ' ')" "$output" >&2
+fi

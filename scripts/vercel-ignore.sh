@@ -16,8 +16,8 @@
 #   scripts/vercel-ignore.sh           decide, as the project's Ignored Build Step
 #   scripts/vercel-ignore.sh --paths   print the deployed tree, one pathspec a line
 #
-# The deployed tree is every path the web, luke and dev services install or
-# build from: the three apps, every package (the services' workspace closure
+# The deployed tree is every path the web and dev services install or
+# build from: the two apps, every package (the services' workspace closure
 # is all of them bar `host` and `credentials`, which is not worth a list that
 # could go stale), the dependency patches, the install's own files, the shared
 # compiler options, the documents the web app prerenders, `vercel.json`, this
@@ -26,20 +26,28 @@
 #
 # Note that since the project's Root Directory became the repository root
 # (#2876), Vercel's own "not affected" skip sees every push as affecting it,
-# so without this step every push of a desktop-only branch built all three
+# so without this step every push of a desktop-only branch built both
 # services and woke its branch's Neon compute (2026-10-15).
 #
 # The comparison is with `VERCEL_GIT_PREVIOUS_SHA`, the commit of this
 # branch's last deployment that succeeded, fetched by its sha where the
 # shallow clone lacks it (a rebased branch's), so the verdict is that the
 # deployed tree is the one already deployed, whatever the commits between.
+# The fetch goes to the repository Vercel names in its system environment
+# variables (`VERCEL_GIT_PROVIDER`, `VERCEL_GIT_REPO_OWNER`,
+# `VERCEL_GIT_REPO_SLUG`), not to `origin`: on 2026-10-20, 50 of 120 sampled
+# preview builds printed "could not be fetched" within 5 ms of starting, for
+# a commit GitHub still served by its sha, which is a clone with no usable
+# `origin` rather than a slow or missing commit. The address is GitHub's
+# anonymous one, which answers because the repository is public; were it not,
+# the fetch would fail and the step would build. Off Vercel, where the
+# variables are unset, the fetch goes to `origin`.
 # Every doubt builds: a branch with no deployment yet, a commit that cannot
 # be fetched, or a diff that errors exits 1. Note that the script sets no
 # `-e` or `-u`, and every path ends in an explicit `exit 0` or `exit 1`.
 
 DEPLOYED_PATHS=(
     :/apps/web
-    :/apps/luke
     :/apps/dev
     :/packages
     :/patches
@@ -59,7 +67,17 @@ if [[ ${1:-} == --paths ]]; then
     exit 0
 fi
 
-# Fetches the commit `$1` from origin within thirty seconds, by a watchdog of
+# Where the previous deployment is fetched from: the repository Vercel built
+# this deployment from, where it names one on GitHub, and `origin` otherwise.
+fetch_source() {
+    if [[ ${VERCEL_GIT_PROVIDER:-} == github && -n ${VERCEL_GIT_REPO_OWNER:-} && -n ${VERCEL_GIT_REPO_SLUG:-} ]]; then
+        printf 'https://github.com/%s/%s.git' "$VERCEL_GIT_REPO_OWNER" "$VERCEL_GIT_REPO_SLUG"
+    else
+        printf 'origin'
+    fi
+}
+
+# Fetches the commit `$1` from `$2` within thirty seconds, by a watchdog of
 # the shell's own rather than coreutils' `timeout`, which macOS lacks. Note
 # that job control (`set -m`) starts the fetch and the watchdog each in a
 # process group of its own, so the kill that ends either one ends everything
@@ -67,7 +85,7 @@ fi
 # Neither writes to the step's output.
 fetch_previous() {
     set -m
-    GIT_TERMINAL_PROMPT=0 git fetch --quiet --depth=1 origin "$1" >/dev/null 2>&1 &
+    GIT_TERMINAL_PROMPT=0 git fetch --quiet --depth=1 "$2" "$1" >/dev/null 2>&1 &
     local fetching=$!
     (sleep 30 && kill -TERM -- "-$fetching") >/dev/null 2>&1 &
     local watchdog=$!
@@ -84,8 +102,9 @@ if [[ -z $previous ]]; then
     printf 'vercel-ignore: building (no deployment of this branch has succeeded yet)\n'
     exit 1
 fi
-if ! git cat-file -e "$previous^{commit}" 2>/dev/null && ! fetch_previous "$previous"; then
-    printf 'vercel-ignore: building (the last deployment, %s, could not be fetched)\n' "$previous"
+fetch_from=$(fetch_source)
+if ! git cat-file -e "$previous^{commit}" 2>/dev/null && ! fetch_previous "$previous" "$fetch_from"; then
+    printf 'vercel-ignore: building (the last deployment, %s, could not be fetched from %s)\n' "$previous" "$fetch_from"
     exit 1
 fi
 

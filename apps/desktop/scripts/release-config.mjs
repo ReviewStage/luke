@@ -140,3 +140,22 @@ export async function awaitNotarizationDecision({
 export function stapleArguments(artifactPath) {
   return ["stapler", "staple", artifactPath];
 }
+
+// Apple's ticket service can drop the stapler's lookup for a minute or two after a
+// notarization is accepted (the v0.18.0 run lost its connection twice, seconds after
+// acceptance), so a staple is tried again on a wait before the release gives up.
+export const STAPLE_ATTEMPTS = 6;
+export const STAPLE_RETRY_INTERVAL_MS = 30_000;
+
+/** Staples through `staple`, trying again after `wait` until it succeeds or the attempts run out. */
+export async function stapleWithRetry({ staple, wait, attempts, intervalMs }) {
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      return staple();
+    } catch (error) {
+      if (attempt >= attempts) throw error;
+      process.stderr.write(`staple attempt ${attempt} of ${attempts} failed; retrying\n`);
+      await wait(intervalMs);
+    }
+  }
+}

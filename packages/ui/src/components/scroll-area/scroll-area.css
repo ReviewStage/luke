@@ -1,5 +1,5 @@
 /* scroll-area.css -- the one box that scrolls: the axis it names and no
-   other, its overscroll held inside it, filling its parent's room or as
+   other, its overscroll held inside it or handed on, filling its parent's room or as
    tall as what it holds, and the edges it fades dissolving into whatever
    ground it stands on. No padding: the caller's is on its own element
    inside, so the scroll bar stands at the area's edge. */
@@ -19,6 +19,15 @@
 }
 
 @property --luke-scroll-area-fade-end {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+
+/* How far below the area's start edge its start fade begins: none, or a
+   stuck band's height. It does not inherit either, so an area inside one
+   with a band begins its own fade at its edge. */
+@property --luke-scroll-area-fade-inset {
   syntax: "<length>";
   inherits: false;
   initial-value: 0px;
@@ -49,6 +58,14 @@
     box-sizing: border-box;
     min-width: 0;
     min-height: 0;
+  }
+
+  /* Held, a swipe that reaches an end stops there. Handed on, the browser's
+     own chaining is left alone, so a swipe past the end, or up and down over
+     an area that scrolls only sideways, moves whatever scrolls around it.
+     Note that a contained axis an area does not scroll still swallows a
+     swipe along it, which is why a short box inside a scroller hands on. */
+  .luke-scroll-area[data-overscroll="contain"] {
     overscroll-behavior: contain;
   }
 
@@ -76,6 +93,10 @@
     overflow-y: auto;
   }
 
+  .luke-scroll-area[data-gutter="stable"] {
+    scrollbar-gutter: stable;
+  }
+
   /* Filling, it takes the rest of a flex column or row, and the whole of a
      box or a grid cell that is no flex container. Note that its basis is a
      percentage, so in a column of no fixed height, where that resolves to
@@ -97,16 +118,18 @@
      on, in either theme. A scroll timeline stands only while the area has
      something to scroll, and is not motion, so reduced motion leaves it
      be. The scroll padding brings what the keys move to clear of a faded
-     edge. */
+     edge. Above its inset the mask is whole, so a band stuck there stands
+     whole, and the fade begins beneath it; the scroll padding clears both. */
   .luke-scroll-area:not([data-fade="none"]) {
     mask-image: linear-gradient(
       to bottom,
-      transparent,
-      #000 var(--luke-scroll-area-fade-start),
+      #000 var(--luke-scroll-area-fade-inset),
+      transparent var(--luke-scroll-area-fade-inset),
+      #000 calc(var(--luke-scroll-area-fade-inset) + var(--luke-scroll-area-fade-start)),
       #000 calc(100% - var(--luke-scroll-area-fade-end)),
       transparent
     );
-    scroll-padding-block-start: var(--luke-scroll-fade);
+    scroll-padding-block-start: calc(var(--luke-scroll-area-fade-inset) + var(--luke-scroll-fade));
     animation-name: luke-scroll-area-fade-start, luke-scroll-area-fade-end;
     animation-timing-function: linear;
     animation-fill-mode: both;
@@ -114,6 +137,10 @@
     animation-range:
       0 var(--luke-scroll-fade),
       calc(100% - var(--luke-scroll-fade)) 100%;
+  }
+
+  .luke-scroll-area[data-fade-inset="band"] {
+    --luke-scroll-area-fade-inset: var(--luke-scroll-band);
   }
 
   /* The end's depth stays at none where the start alone fades. */

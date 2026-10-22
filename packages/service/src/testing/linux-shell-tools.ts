@@ -2,10 +2,11 @@
  * linux-shell-tools.ts -- the GNU forms eve's code tools run, for a test shell on a Mac.
  *
  * eve's `apply_patch` and `grep` run `realpath -e`, `realpath -m`,
- * `realpath -z`, and `stat -c %a`, which the coding agent's Linux sandbox
- * answers through GNU coreutils and a Mac's BSD tools refuse. A test that
+ * `realpath -z`, `stat -c %a`, and `chmod <mode> --`, which the coding
+ * agent's Linux sandbox answers through GNU coreutils and a Mac's BSD tools
+ * refuse (BSD `chmod` reads the `--` after a mode as a file). A test that
  * runs eve's commands in a real host shell stands for that Linux sandbox,
- * so on a host without the GNU forms it puts these two tools ahead of the
+ * so on a host without the GNU forms it puts these three tools ahead of the
  * host's on PATH. Each answers only the forms eve runs, and refuses any
  * other, so a new GNU form eve starts running fails loudly here rather
  * than passing on a guess. On a host that has the GNU forms the PATH is
@@ -68,10 +69,24 @@ try { process.stdout.write((fs.statSync(args[2]).mode & 0o7777).toString(8) + "\
 catch { process.stderr.write("stat: cannot stat '" + args[2] + "'\\n"); process.exit(1); }
 `;
 
+/** GNU `chmod <octal mode> -- <path>`, in Node, as eve restores a file's mode. */
+const CHMOD = `
+const fs = require("node:fs");
+const args = process.argv.slice(2);
+if (args.length !== 3 || !/^[0-7]{3,4}$/.test(args[0]) || args[1] !== "--") {
+  process.stderr.write("chmod: unsupported form: " + args.join(" ") + "\\n");
+  process.exit(1);
+}
+try { fs.chmodSync(args[2], parseInt(args[0], 8)); }
+catch { process.stderr.write("chmod: cannot access '" + args[2] + "'\\n"); process.exit(1); }
+`;
+
 /** Whether the host's shell already answers the GNU forms. */
 function hostHasGnuForms(): boolean {
   try {
-    execFileSync("/bin/sh", ["-c", "realpath -m -- / && stat -c %a -- /"], { stdio: "ignore" });
+    execFileSync("/bin/sh", ["-c", "realpath -m -- / && stat -c %a -- / && chmod --version"], {
+      stdio: "ignore",
+    });
     return true;
   } catch {
     return false;
@@ -94,5 +109,6 @@ export function linuxShellPath(): string {
   const tools = mkdtempSync(join(tmpdir(), "linux-shell-tools-"));
   writeTool(tools, "realpath", REALPATH);
   writeTool(tools, "stat", STAT);
+  writeTool(tools, "chmod", CHMOD);
   return `${tools}:${hostPath}`;
 }

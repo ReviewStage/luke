@@ -1,4 +1,0 @@
-#!/usr/bin/env bash
-REAL=/conductor/bin/git
-if [ "$1" = push ]; then echo "git: push refused by the review-bot harness" >&2; echo "[harness] git push refused: $*" >> "$HARNESS_LOG"; exit 1; fi
-exec "$REAL" "$@"

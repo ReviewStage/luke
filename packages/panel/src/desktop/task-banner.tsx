@@ -5,7 +5,7 @@ import { AttentionMark } from "../attention-mark.js";
 /**
  * task-banner.tsx -- a notice about the whole task: one slim line under the task's toolbar, over every tab of it, which only mending what it says takes away.
  *
- * A banner over a document (`archived-task.tsx`) is about
+ * A banner over a document is about
  * that document, so it stands over the task's own tab and nowhere else; what
  * is wrong with the task itself, wherever the developer is reading it, is
  * said here instead. It spans the task's column under the toolbar, so it

@@ -1,4 +1,5 @@
 import type { UnparsedWireValue } from "@luke/wire";
+import { Schema } from "effect";
 
 export const ACCOUNT_PROVIDER = {
   GOOGLE: "google",
@@ -39,3 +40,20 @@ export type AccountSnapshot =
       pictureUrl?: string;
       provider: AccountProvider;
     };
+
+/**
+ * An account snapshot as it crosses to a window, the type above as a schema:
+ * what an act that answers the account carries back to the window that asked.
+ */
+export const accountSnapshotSchema = Schema.Union([
+  Schema.Struct({ status: Schema.Literal(ACCOUNT_STATUS.SIGNED_OUT) }),
+  Schema.Struct({ status: Schema.Literal(ACCOUNT_STATUS.SIGNING_IN) }),
+  Schema.Struct({
+    status: Schema.Literal(ACCOUNT_STATUS.SIGNED_IN),
+    id: Schema.optionalKey(Schema.String),
+    email: Schema.String,
+    name: Schema.optionalKey(Schema.String),
+    pictureUrl: Schema.optionalKey(Schema.String),
+    provider: Schema.Literals(Object.values(ACCOUNT_PROVIDER)),
+  }),
+]);

@@ -10,9 +10,10 @@ import { EXCESS_KEYS, isWireString, SCHEMA_REFUSAL, type UnparsedWireValue } fro
 import { declareReader, emitJsonSchema, readEither, wireRefusal } from "@luke/wire/effect";
 import { Result, Schema, SchemaGetter } from "effect";
 import { AVATAR_GRANT_BOUNDS, avatarGrantSchema } from "./avatar-grant.js";
+import { CODING_AGENT_BOUNDS } from "./coding-agent-wire.js";
+import { timeZoneSchema } from "./date-mention.js";
 import { hostedQuotaSchema, wireUuidSchema } from "./service-wire.js";
-import { planDocumentSchema, planSectionEditSchema } from "./task-wire.js";
-import { taskActivitySchema, taskShownCodeSchema, taskWorkTurnSchema } from "./tasks-view.js";
+import { taskActivitySchema, taskShownCodeSchema } from "./tasks-view.js";
 import { VIDEO_AVATAR_LIST, type VideoAvatar } from "./video-avatar.js";
 
 /**
@@ -118,7 +119,7 @@ export const VOICE_SERVICE_FRAME = {
   /** The service's answer once its sideband stands on that session again. */
   SESSION_ATTACHED: "session.attached",
   /**
-   * One of the three frames the desktop sends after the handshake in this
+   * One of the frames the desktop sends after the handshake in this
    * vocabulary: whether its peer has gone quiet, as the renderer's own idle
    * window reads it. The service's exchange decides the idle close against
    * the appends it made itself, so the report crosses to it; the relay reads
@@ -142,36 +143,32 @@ export const VOICE_SERVICE_FRAME = {
    */
   SESSION_HANG_UP: "session.hangup",
   /**
-   * The service's frame to the desktop after the handshake: the task's
-   * document as its notetaker is writing it,
-   * sent again as the draft grows and once more as saved, so the Tasks tab
-   * types the plan in while the call goes on rather than waiting for a read.
+   * A line the developer typed into the agent's composer while this call is
+   * up on that agent. The host decides it belongs to the call, never the
+   * voice window, and the service's exchange writes it down as typed, hands
+   * it to the agent, and speaks the agent's reply: GPT-Live takes no user
+   * text item under client delegation, so the line is never appended to the
+   * session as the developer's own words. Read by the service like the
+   * reports, and forwarded nowhere.
    */
-  PLAN_DRAFT: "plan.draft",
+  SESSION_TYPED: "session.typed",
   /**
-   * The service's other frame to the desktop: what each part of Luke is
-   * doing now, the voice, the brain, and the
-   * notetaker, sent whole each time any of them changes, so the Tasks tab
-   * says each part's own state rather than one word for all of them.
+   * The service's frame to the desktop after the handshake: what each part of Luke is
+   * doing now, the voice and the agent the call speaks into, sent whole each
+   * time either changes, so the Tasks tab says each part's own state rather
+   * than one word for all of them.
    */
   TASK_ACTIVITY: "plan.activity",
   /**
    * The service's fourth frame to the desktop, on a task call alone:
    * code of the task's repository Luke is about to talk about, with its
-   * lines as the service read them from the brain session's checkout,
+   * lines as the service read them from the agent's checkout,
    * sent as he starts to speak, so the Tasks tab's code pane draws it as he
    * says it.
    */
   TASK_CODE: "plan.code",
   /**
-   * The service's fifth frame to the desktop, on a task call alone: one
-   * brain turn's work as it stands, what the model wrote and each call
-   * it made with its output, sent whole each time it changes, so the Tasks
-   * tab's Work tab reads like an agent's own transcript.
-   */
-  TASK_WORK: "plan.work",
-  /**
-   * The service's sixth frame to the desktop, on a task call alone: the
+   * The service's fifth frame to the desktop, on a task call alone: the
    * developer said they are done and Luke is saying goodbye, so the desktop
    * hangs up through its own hang-up once that goodbye has played, and keeps
    * the call up if the developer speaks first. It carries no words.
@@ -310,20 +307,44 @@ const liveInitialItemSchema = Schema.Union([
 ]).annotate(wireRefusal(SCHEMA_REFUSAL.MALFORMED));
 
 /**
- * The desktop's opening frame: the offer, the voice, the seed, and the id of
- * the saved task the call is about. The service checks the task is the
- * account's, creates the session under the planning scene, lands its asks in
- * the task's conversation, and writes the binding on the session's row, so a
- * later `session.attach` is bound to the same task by that row and never by
- * anything the attaching connection says. The id names the task and nothing
- * of its document.
+ * The developer's time zone as an opening frame names it, which the brain's
+ * turns on the call count days and spell times in. A zone this service does
+ * not know reads as none rather than refusing the call, since a client's
+ * zone list and the service's can differ, and a call without one reads UTC.
+ */
+const readTimeZone = readEither(timeZoneSchema);
+
+const callTimeZone = Schema.optionalKey(
+  declareReader<string | undefined>(
+    (value) => ({ ok: true, value: Result.getOrUndefined(readTimeZone(value)) }),
+    emitJsonSchema(timeZoneSchema),
+  ),
+);
+
+/**
+ * The desktop's opening frame: the offer, the voice, the seed, the id of
+ * the agent the call speaks into and, where the agent is on a task, of that
+ * task, and the developer's time zone, which a desktop released before it
+ * sends none of. The service checks the agent is one the account reaches,
+ * and a task named is the one the agent is on, creates the session, lands
+ * its asks in the agent's conversation, and writes the binding on the
+ * session's row, so a later `session.attach` is bound to the same agent by
+ * that row and never by anything the attaching connection says. The ids
+ * name the task and the agent and nothing of the task's document. A frame
+ * that names no agent is no request at all, and the service refuses it as
+ * one; one that names no task is a call into the agent as it stands, on its
+ * own task where it has one, and on none where it has none.
  */
 export const sessionCreateFrameSchema = Schema.Struct({
   type: Schema.Literal(VOICE_SERVICE_FRAME.SESSION_CREATE),
   sdp: verbatimText(SESSION_CREATE_BOUNDS.SDP_CHARS),
   voice: Schema.Literals(LIVE_VOICE_LIST),
   input: Schema.Array(liveInitialItemSchema).check(Schema.isMaxLength(LIVE_INPUT_BOUNDS.MESSAGES)),
-  planId: wireUuidSchema,
+  /** The task the agent is on, which a released desktop always names; none for a call keyed by the agent alone. */
+  planId: Schema.optionalKey(wireUuidSchema),
+  /** The agent the call speaks into: its asks run in that agent's conversation and its transcript is that agent's. */
+  agentId: wireUuidSchema,
+  timeZone: callTimeZone,
 });
 
 export type SessionCreateFrame = typeof sessionCreateFrameSchema.Type;
@@ -333,10 +354,11 @@ const SESSION_ID_CHARS = 256;
 
 const sessionId = text(SESSION_ID_CHARS);
 
-/** The desktop's opening frame on a connection to a session it already holds. */
+/** The desktop's opening frame on a connection to a session it already holds, with the developer's time zone as the create frame's. */
 export const sessionAttachFrameSchema = Schema.Struct({
   type: Schema.Literal(VOICE_SERVICE_FRAME.SESSION_ATTACH),
   sessionId,
+  timeZone: callTimeZone,
 });
 
 export type SessionAttachFrame = typeof sessionAttachFrameSchema.Type;
@@ -371,72 +393,70 @@ export const sessionHangUpFrameSchema = Schema.Struct({
 
 export type SessionHangUpFrame = typeof sessionHangUpFrameSchema.Type;
 
+/**
+ * A line typed into the call: its words as the composer sent them, bounded
+ * as a message to an agent is, and the composer's own key for the send,
+ * which a Retry after a lost answer carries again, so the service writes and
+ * asks the line once however often it is sent. Nothing of an attachment
+ * rides here: the call hands on words alone.
+ */
+export const sessionTypedFrameSchema = Schema.Struct({
+  type: Schema.Literal(VOICE_SERVICE_FRAME.SESSION_TYPED),
+  text: text(CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS),
+  clientKey: text(CODING_AGENT_BOUNDS.MAX_KEY_CHARS),
+});
+
+export type SessionTypedFrame = typeof sessionTypedFrameSchema.Type;
+
 /** Any frame the desktop sends after the handshake in this vocabulary, read by the service and forwarded nowhere. */
 export const sessionReportFrameSchema = Schema.Union([
   sessionActivityFrameSchema,
   sessionStopFrameSchema,
+  sessionTypedFrameSchema,
 ]).annotate(wireRefusal(SCHEMA_REFUSAL.MALFORMED));
 
 export type SessionReportFrame = typeof sessionReportFrameSchema.Type;
 
 /**
- * The task's document as the notetaker has it now: a draft while its model is
- * still writing, and the saved document with the instant it was saved once
- * the save lands, or the document as it stood where the run saved nothing.
- * Each names the save it was drawn over, so a window that saved an edit of
- * its own since can drop a draft that does not hold it; the saved one
- * carries who last changed each section, which each section's line reads.
+ * Whom a frame the service sends about a call names: the agent the call
+ * speaks into, and that agent's task where it has one. Note that the agent
+ * is optional on the read, because a service from before it sent none, and
+ * that a released desktop only ever opens a call naming a task, so every
+ * frame it is sent still names one.
  */
-export const planDraftFrameSchema = Schema.Struct({
-  type: Schema.Literal(VOICE_SERVICE_FRAME.PLAN_DRAFT),
-  planId: wireUuidSchema,
-  document: planDocumentSchema,
-  /** Epoch milliseconds of the save the document is; absent while it is a draft. */
-  savedAt: Schema.optionalKey(Schema.Number),
-  /** Epoch milliseconds of the save the notetaker read before it wrote; absent from a service before editing. */
-  readAt: Schema.optionalKey(Schema.Number),
-  /** For a plan that is one document, the save that last changed each section after the save; absent while it is a draft, and for any other plan. */
-  sectionEdits: Schema.optionalKey(Schema.Array(planSectionEditSchema)),
-});
+const callSubjectFields = {
+  planId: Schema.optionalKey(wireUuidSchema),
+  agentId: Schema.optionalKey(wireUuidSchema),
+};
 
-export type PlanDraftFrame = typeof planDraftFrameSchema.Type;
-
-/** The activity on the call about the task named, as the service sends it to the desktop. */
-export const taskActivityFrameSchema = Schema.Struct({
+/** The activity on the call into the agent named, as the service sends it to the desktop. */
+const taskActivityFrameSchema = Schema.Struct({
   type: Schema.Literal(VOICE_SERVICE_FRAME.TASK_ACTIVITY),
-  planId: wireUuidSchema,
+  ...callSubjectFields,
   ...taskActivitySchema.fields,
 });
 
 export type TaskActivityFrame = typeof taskActivityFrameSchema.Type;
 
 /**
- * Code Luke put on screen on the call about the task named, with its lines
- * as the service read them from the task's repository, and the `show_code`
- * call and turn that showed it, as the task's work reads them back, so the
- * desktop holds a call's code and the record's copy of it once.
+ * Code Luke put on screen on the call into the agent named, with its lines
+ * as the service read them from the agent's repository, and the `show_code`
+ * call and turn that showed it, as the agent's work reads them back, so the
+ * desktop holds a call's code and the record's copy of it once. The agent
+ * is the shown code's own `agentId`.
  */
-export const taskCodeFrameSchema = Schema.Struct({
+const taskCodeFrameSchema = Schema.Struct({
   type: Schema.Literal(VOICE_SERVICE_FRAME.TASK_CODE),
-  planId: wireUuidSchema,
+  planId: callSubjectFields.planId,
   ...taskShownCodeSchema.fields,
 });
 
 export type TaskCodeFrame = typeof taskCodeFrameSchema.Type;
 
-/** One brain turn's work on the call about the task named, as the service sends it to the desktop. */
-export const taskWorkFrameSchema = Schema.Struct({
-  type: Schema.Literal(VOICE_SERVICE_FRAME.TASK_WORK),
-  planId: wireUuidSchema,
-  turn: taskWorkTurnSchema,
-});
-
-export type TaskWorkFrame = typeof taskWorkFrameSchema.Type;
-
-/** Luke is ending the call about the task named, once his goodbye has played. */
-export const taskCallEndingFrameSchema = Schema.Struct({
+/** Luke is ending the call into the agent named, once his goodbye has played. */
+const taskCallEndingFrameSchema = Schema.Struct({
   type: Schema.Literal(VOICE_SERVICE_FRAME.TASK_CALL_ENDING),
-  planId: wireUuidSchema,
+  ...callSubjectFields,
 });
 
 export type TaskCallEndingFrame = typeof taskCallEndingFrameSchema.Type;
@@ -551,7 +571,7 @@ export const avatarStopFrameSchema = Schema.Struct({
 export type AvatarStopFrame = typeof avatarStopFrameSchema.Type;
 
 /** Either avatar frame the desktop sends after the handshake, read by the service and forwarded nowhere. */
-export const avatarRequestFrameSchema = Schema.Union([
+const avatarRequestFrameSchema = Schema.Union([
   avatarStartFrameSchema,
   avatarStopFrameSchema,
 ]).annotate(wireRefusal(SCHEMA_REFUSAL.MALFORMED));
@@ -563,7 +583,7 @@ export type AvatarRequestFrame = typeof avatarRequestFrameSchema.Type;
  * as its create-session call answered it, the LiveKit server, the participant token the call
  * window joins with, and the identity the avatar publishes its tracks under.
  */
-export const avatarStartedFrameSchema = Schema.Struct({
+const avatarStartedFrameSchema = Schema.Struct({
   type: Schema.Literal(VOICE_SERVICE_FRAME.AVATAR_STARTED),
   requestId: avatarRequestId,
   ...avatarGrantSchema.fields,
@@ -572,7 +592,7 @@ export const avatarStartedFrameSchema = Schema.Struct({
 export type AvatarStartedFrame = typeof avatarStartedFrameSchema.Type;
 
 /** The avatar the request asked for could not come up, and why; the call goes on as voice. */
-export const avatarUnavailableFrameSchema = Schema.Struct({
+const avatarUnavailableFrameSchema = Schema.Struct({
   type: Schema.Literal(VOICE_SERVICE_FRAME.AVATAR_UNAVAILABLE),
   requestId: avatarRequestId,
   reason: answeredReason(Object.values(AVATAR_UNAVAILABLE_REASON), AVATAR_UNAVAILABLE_REASON.ERROR),
@@ -644,14 +664,9 @@ export function sessionReportFrameFromWire(
 }
 
 /**
- * The service's draft of the open plan, read the answering way: a key a
- * newer service added is dropped rather than refusing the whole frame.
+ * What each part of Luke is doing on a task call, read the answering way: a
+ * key a newer service added is dropped rather than refusing the whole frame.
  */
-export function planDraftFrameFromWire(value: UnparsedWireValue): PlanDraftFrame | undefined {
-  return admittedAnswer(planDraftFrameSchema, value);
-}
-
-/** What each part of Luke is doing on a task call, read the same answering way. */
 export function taskActivityFrameFromWire(value: UnparsedWireValue): TaskActivityFrame | undefined {
   return admittedAnswer(taskActivityFrameSchema, value);
 }
@@ -659,11 +674,6 @@ export function taskActivityFrameFromWire(value: UnparsedWireValue): TaskActivit
 /** The code Luke put on screen on a task call, read the same answering way. */
 export function taskCodeFrameFromWire(value: UnparsedWireValue): TaskCodeFrame | undefined {
   return admittedAnswer(taskCodeFrameSchema, value);
-}
-
-/** One brain turn's work on a task call, read the same answering way. */
-export function taskWorkFrameFromWire(value: UnparsedWireValue): TaskWorkFrame | undefined {
-  return admittedAnswer(taskWorkFrameSchema, value);
 }
 
 /** Luke ending a task call, read the same answering way. */

@@ -10,7 +10,7 @@ import { Checkbox } from "./checkbox.js";
  * checkbox.test.ts -- a press on the box and a press on its words each hand
  * the caller the value they ask for, a mixed box resolves to checked while
  * still submitting what its caller holds, and an unavailable one changes
- * nothing.
+ * nothing; nor does a read-only one, which is not unavailable.
  */
 
 declare global {
@@ -35,7 +35,12 @@ function render(element: ReactElement): HTMLElement {
 }
 
 /** A choice the caller holds, every change it was handed listed after it. */
-function Signed({ mixed = false, disabled = false, start = false }): React.JSX.Element {
+function Signed({
+  mixed = false,
+  disabled = false,
+  readOnly = false,
+  start = false,
+}): React.JSX.Element {
   const [signed, setSigned] = useState(start);
   const [heard, setHeard] = useState<boolean[]>([]);
   return createElement(
@@ -45,6 +50,7 @@ function Signed({ mixed = false, disabled = false, start = false }): React.JSX.E
       checked: signed,
       mixed,
       disabled,
+      readOnly,
       onChange: (value: boolean) => {
         setSigned(value);
         setHeard((all) => [...all, value]);
@@ -104,4 +110,16 @@ test("an unavailable box changes nothing", () => {
   assert.equal(box(page).disabled, true);
   press(box(page));
   assert.equal(page.querySelector("output")?.textContent, "");
+});
+
+test("a read-only box stands as its caller holds it, checked or not, and hands on no press of the box or its words", () => {
+  for (const start of [false, true]) {
+    const page = render(createElement(Signed, { readOnly: true, start }));
+    assert.equal(box(page).disabled, false, "it is not unavailable, so it is not faded");
+    assert.equal(box(page).getAttribute("aria-readonly"), "true");
+    press(box(page));
+    press(page.querySelector("label"));
+    assert.equal(box(page).checked, start);
+    assert.equal(page.querySelector("output")?.textContent, "");
+  }
 });

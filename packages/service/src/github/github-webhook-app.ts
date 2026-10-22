@@ -15,8 +15,9 @@ import {
   type HttpServerResponse,
 } from "effect/http";
 import { deploymentEveOrigin } from "../agents/brain-host/eve-origin.js";
-import { EVE_MOUNT, eveSessions } from "../agents/brain-host/eve-sessions.js";
+import { EVE_MOUNT, type EveTypedTurn } from "../agents/brain-host/eve-sessions.js";
 import { agentPublished } from "../agents/coder-host/published.js";
+import { deploymentEveForAccounts } from "../agents/deployment-eve.js";
 import { queueGithubRuns } from "../automations/automation-github.js";
 import type { EveForAccount } from "../automations/automation-runs.js";
 import { HostedEnvironment } from "../environment.js";
@@ -31,7 +32,7 @@ import {
   readBodyBytesEffect,
 } from "../http/http-effect.js";
 import { ANY_METHOD, type WebRoutes } from "../route.js";
-import { agentWakeOf, wakeAgents } from "./agent-wakes.js";
+import { agentWakeOf, checksCompletedWakeOf, wakeAgents } from "./agent-wakes.js";
 import { clearRevokedAuthorization, GitHubApp } from "./github-app.js";
 import { setInstallationStatus } from "./github-installations.js";
 
@@ -65,7 +66,7 @@ import { setInstallationStatus } from "./github-installations.js";
  * `installation_repositories` deliveries, a repository given or taken, are
  * answered and ignored, because no repository of an installation is held:
  * the chip lists them from GitHub each time it opens, and every start checks
- * its repository there (`github-repositories-app.ts`, `workspace-repository.ts`).
+ * its repository there (`github-procedures.ts`, `workspace-repository.ts`).
  *
  * A user revoking their authorization of the App, which GitHub also sends
  * without subscribing (`github_app_authorization`), drops that GitHub user's
@@ -79,9 +80,10 @@ import { setInstallationStatus } from "./github-installations.js";
  * listens for it, and the minute sweep starts each one's agent. And a
  * review, a comment on a pull request, or a check that failed on an
  * agent's branch is told to the agents on that pull request as a message
- * from GitHub (`agent-wakes.ts`), through eve as the deployment acting for
- * each agent's owner, under the cron secret an automation's run reaches eve
- * by; a deployment without it tells nobody.
+ * from GitHub (`agent-wakes.ts`), and so is every check on an agent's head
+ * finished, to the agent at work waiting on them, through eve as the deployment acting for
+ * each agent's owner, under the deployment's own eve secret an automation's
+ * run reaches eve by; a deployment without it tells nobody.
  */
 
 /** The path GitHub delivers to, as the App's settings name it under the deployment's origin. */
@@ -125,7 +127,7 @@ const INSTALLATION_ACTION_STATUS: ReadonlyMap<string, GitHubInstallationStatus> 
   ["unsuspend", GITHUB_INSTALLATION_STATUS.ACTIVE],
 ]);
 
-/** A pull request's actions that change what a task's row says of it: where it stands, its title, or its size. */
+/** A pull request's actions that change what a task's row says of it: where it stands, its merge queue among it, its title, or its size. */
 const PULL_REQUEST_ACTIONS: ReadonlySet<string> = new Set([
   "opened",
   "reopened",
@@ -134,6 +136,8 @@ const PULL_REQUEST_ACTIONS: ReadonlySet<string> = new Set([
   "synchronize",
   "ready_for_review",
   "converted_to_draft",
+  "enqueued",
+  "dequeued",
 ]);
 
 /** A check run is read once it has ended, since its start moves nothing a suite's own start does not. */
@@ -317,20 +321,6 @@ const readAgainOnBranches = /* @__PURE__ */ Effect.fn("web/githubWebhookReadAgai
   return landed.filter(Boolean).length;
 });
 
-/**
- * eve's coding-agent service as the deployment acting for an account, as an
- * automation's run reaches it (`maintenance-app.ts`): under the deployment's
- * own cron secret, which the coder channel admits a deployment's message
- * by; a deployment without it, or without an origin for eve, tells nobody.
- */
-function eveForAccount(secret: Redacted.Redacted | undefined): EveForAccount {
-  const origin = deploymentEveOrigin();
-  return (account) =>
-    secret === undefined || origin === undefined
-      ? Effect.fail(HOSTED_REFUSAL.UNAVAILABLE)
-      : eveSessions({ origin, caller: { secret, account }, mount: EVE_MOUNT.CODER });
-}
-
 /** POST: one delivery, its signature confirmed before anything of it is read. */
 const deliveryEndpoint = /* @__PURE__ */ Effect.fn("web/githubWebhookEndpoint")(
   function* (): Effect.fn.Return<
@@ -346,7 +336,7 @@ const deliveryEndpoint = /* @__PURE__ */ Effect.fn("web/githubWebhookEndpoint")(
     if (request.method !== HTTP_METHOD.POST) {
       return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
     }
-    const { githubWebhookSecret, cronSecret } = yield* HostedEnvironment;
+    const { githubWebhookSecret } = yield* HostedEnvironment;
     if (githubWebhookSecret === undefined) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
     const body = yield* readBodyBytesEffect(MAXIMUM_DELIVERY_BYTES);
     const signature = request.headers[DELIVERY_HEADER.SIGNATURE] ?? null;
@@ -377,16 +367,27 @@ const deliveryEndpoint = /* @__PURE__ */ Effect.fn("web/githubWebhookEndpoint")(
     );
     const target = deliveryTarget(event, payload);
     const read = target === undefined ? 0 : yield* readAgainOnBranches(target);
-    const wake = agentWakeOf(event, payload, yield* Clock.currentTimeMillis);
-    const told =
+    const now = yield* Clock.currentTimeMillis;
+    // Note that the checks finishing are read after the agents' pull requests were read again above,
+    // because a wake tells only the agents whose row keeps the finished commit as their head.
+    const wakes = [agentWakeOf(event, payload, now), checksCompletedWakeOf(event, payload, now)];
+    // eve's coding-agent service as the deployment acting for each agent's owner, as an automation's
+    // run reaches it (`agents/deployment-eve.ts`); a deployment that cannot reach it tells nobody.
+    const eveForAccount: EveForAccount = yield* deploymentEveForAccounts<EveTypedTurn>(
+      deploymentEveOrigin(),
+      EVE_MOUNT.CODER,
+    );
+    const counts = yield* Effect.forEach(wakes, (wake) =>
       wake === undefined
-        ? 0
-        : yield* wakeAgents(
-            eveForAccount(cronSecret),
+        ? Effect.succeed(0)
+        : wakeAgents(
+            eveForAccount,
             wake,
             request.headers[DELIVERY_HEADER.DELIVERY] ?? "",
             agentLogin,
-          );
+          ),
+    );
+    const told = counts.reduce((sum, count) => sum + count, 0);
     return hostedJsonResponse(200, { read, queued, told });
   },
 );

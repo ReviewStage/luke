@@ -8,17 +8,20 @@ import { storeWriter } from "@luke/database/models/writer";
 import { Effect, Layer, Redacted } from "effect";
 import { HttpClient, HttpRouter } from "effect/http";
 import { deploymentEveOrigin } from "../agents/brain-host/eve-origin.js";
-import { EVE_MOUNT, eveSessions } from "../agents/brain-host/eve-sessions.js";
+import { EVE_MOUNT, type EveTypedTurn } from "../agents/brain-host/eve-sessions.js";
+import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
+import { deploymentEveForAccounts } from "../agents/deployment-eve.js";
+import { sweepNativeTemplates } from "../agents/native-sandbox-template.js";
 import { sessionSandboxesLayer, sweepSessionSandboxes } from "../agents/session-sandboxes.js";
 import type { EveForAccount } from "../automations/automation-runs.js";
 import { sweepAutomations } from "../automations/automation-sweep.js";
 import { HostedEnvironment } from "../environment.js";
 import type { GitHubApp } from "../github/github-app.js";
-import { effectPassthrough, HOSTED_REFUSAL, hostedNotFoundRoute } from "../http/http-effect.js";
+import { sweepTokenPullRequests } from "../github/token-pull-request-sweep.js";
+import { effectPassthrough, hostedNotFoundRoute } from "../http/http-effect.js";
 import { type CronMonitor, sentryCronCheckIns } from "../observability/sentry.js";
 import type { ModelCatalog } from "../providers/model-catalog.js";
 import { ANY_METHOD, type WebRoutes } from "../route.js";
-import { HOSTED_TOOL_SET } from "../tasks/brain-tool-set.js";
 import { createLiveUpstream } from "../voice/openai.js";
 import {
   NOTHING_ORPHANED,
@@ -26,8 +29,13 @@ import {
   VOICE_ORPHAN_SWEEP,
   VOICE_SESSION_LIMIT_MS,
 } from "../voice/orphan-sweep.js";
+import { sweepEveSandboxes } from "./eve-sandbox-sweep.js";
 import { MAINTENANCE_SWEEP, MAINTENANCE_SWEEP_PATH } from "./maintenance-bounds.js";
 import { handleMaintenanceSweep } from "./maintenance-sweep.js";
+import { sweepNativeSandboxes } from "./native-sandbox-sweep.js";
+import { sweepNativeWakeups } from "./native-wakeup-sweep.js";
+import { sweepOperatorWakes } from "./operator-wake-sweep.js";
+import { sweepSandboxRetention } from "./sandbox-retention-sweep.js";
 import { sweepTerminalLeases } from "./terminal-lease-sweep.js";
 
 /** The sweep as Sentry's Crons watches it: three minutes in a row missed, late, or failed open an issue. */
@@ -51,9 +59,9 @@ const UNSAVED_PICTURE_GRACE_MS = 24 * 60 * 60 * 1_000;
  * sweeps no detached voice session, since it opened none; one with it ends
  * them on the same upstream the voice functions attach through. An
  * automation's run reaches eve as the deployment acting for the
- * automation's owner, under the same secret the cron calls with; a
- * deployment without it, or without an origin for eve, fails each run it
- * acts on as unavailable.
+ * automation's owner, under the deployment's own eve secret, never the
+ * bearer the cron called with; a deployment without it, or without an
+ * origin for eve, fails each run it acts on as unavailable.
  */
 const maintenanceSweepEffect = /* @__PURE__ */ Effect.fn("web/maintenanceSweepEffect")(function* (
   request: Request,
@@ -64,15 +72,14 @@ const maintenanceSweepEffect = /* @__PURE__ */ Effect.fn("web/maintenanceSweepEf
 > {
   const environment = yield* HostedEnvironment;
   const startContext = yield* Effect.context<HttpClient.HttpClient | GitHubApp | ModelCatalog>();
-  const secret = environment.cronSecret;
-  const origin = deploymentEveOrigin();
-  const eveFor: EveForAccount = (account) =>
-    secret === undefined || origin === undefined
-      ? Effect.fail(HOSTED_REFUSAL.UNAVAILABLE)
-      : eveSessions({ origin, caller: { secret, account }, mount: EVE_MOUNT.CODER });
+  const eveFor: EveForAccount = yield* deploymentEveForAccounts<EveTypedTurn>(
+    deploymentEveOrigin(),
+    EVE_MOUNT.CODER,
+  );
+  const httpClient = yield* HttpClient.HttpClient;
   const sandboxes = Layer.provide(
     sessionSandboxesLayer,
-    Layer.succeed(HttpClient.HttpClient, yield* HttpClient.HttpClient),
+    Layer.succeed(HttpClient.HttpClient, httpClient),
   );
   const voiceUpstream = environment.openAiKey
     ? createLiveUpstream({
@@ -89,16 +96,38 @@ const maintenanceSweepEffect = /* @__PURE__ */ Effect.fn("web/maintenanceSweepEf
     purgeDeletedTaskCalls: (now) =>
       hostedStore().retention.purgeDeletedTaskCalls(new Date(now - VOICE_SESSION_LIMIT_MS)),
     sweepAbandonedTurns: (now) =>
-      Effect.flatMap(storeWriter({ tools: HOSTED_TOOL_SET }), (writer) =>
+      Effect.flatMap(storeWriter({ tools: CODER_TOOL_SET }), (writer) =>
         sweepAbandonedTurns({ writer }, { now }),
       ),
     sweepSandboxes: (now) => sweepSessionSandboxes(new Date(now)).pipe(Effect.provide(sandboxes)),
     sweepTerminalLeases: (now) =>
       sweepTerminalLeases(new Date(now)).pipe(Effect.provide(sandboxes)),
+    sweepNativeSandboxes: (now) =>
+      sweepNativeSandboxes(new Date(now)).pipe(
+        Effect.provideService(HttpClient.HttpClient, httpClient),
+      ),
+    sweepEveSandboxes: (now) =>
+      sweepEveSandboxes(new Date(now)).pipe(
+        Effect.provideService(HttpClient.HttpClient, httpClient),
+      ),
+    sweepSandboxRetention: (now) =>
+      sweepSandboxRetention(new Date(now)).pipe(
+        Effect.provideService(HttpClient.HttpClient, httpClient),
+      ),
+    sweepNativeWakeups: (now) =>
+      sweepNativeWakeups(eveFor, new Date(now)).pipe(Effect.provideContext(startContext)),
+    sweepOperatorWakes: (now) =>
+      sweepOperatorWakes(eveFor, new Date(now)).pipe(Effect.provideContext(startContext)),
     sweepAutomations: (now) =>
       sweepAutomations(eveFor, now).pipe(Effect.provideContext(startContext)),
     purgeUnsavedPictures: (now) =>
       purgeUnsavedAttachments(new Date(now - UNSAVED_PICTURE_GRACE_MS)),
+    sweepTokenPullRequests: (now) =>
+      sweepTokenPullRequests(eveFor, environment.providerKeyEncryptionKeys, new Date(now)).pipe(
+        Effect.provideContext(startContext),
+      ),
+    // The current image's template is built ahead of any launch, so the first one after a deploy finds it ready.
+    sweepImageTemplates: () => sweepNativeTemplates().pipe(Effect.provideContext(startContext)),
     sweepVoice: (now) =>
       voiceUpstream === undefined
         ? Effect.succeed(NOTHING_ORPHANED)

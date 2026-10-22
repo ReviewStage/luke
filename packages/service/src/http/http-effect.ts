@@ -1,4 +1,3 @@
-import type { TaskArchived } from "@luke/database/models/task-store";
 import type { RepositoryUnreached } from "@luke/features/repository-reach-wire";
 import { type Cause, Effect, type Layer, type Option, Stream } from "effect";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
@@ -25,7 +24,7 @@ import { logStoreFailure, type StoreFailure } from "./store-failure.js";
 const HOSTED_CACHE_CONTROL = "private, no-store";
 
 /** The status each refusal is answered with, which is a function of the refusal alone. */
-const HOSTED_REFUSAL_STATUS = {
+export const HOSTED_REFUSAL_STATUS = {
   [HOSTED_API_ERROR.INVALID_TOKEN]: HOSTED_HTTP_STATUS.UNAUTHORIZED,
   [HOSTED_API_ERROR.INVALID_REQUEST]: HOSTED_HTTP_STATUS.BAD_REQUEST,
   [HOSTED_API_ERROR.METHOD_NOT_ALLOWED]: HOSTED_HTTP_STATUS.METHOD_NOT_ALLOWED,
@@ -43,6 +42,12 @@ const HOSTED_REFUSAL_STATUS = {
   [HOSTED_API_ERROR.MESSAGE_TOO_LONG]: HOSTED_HTTP_STATUS.BAD_REQUEST,
   [HOSTED_API_ERROR.AGENT_NOT_READY]: HOSTED_HTTP_STATUS.CONFLICT,
   [HOSTED_API_ERROR.AGENT_RETIRED]: HOSTED_HTTP_STATUS.CONFLICT,
+  [HOSTED_API_ERROR.AGENT_IMAGE_PREPARING]: HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE,
+  [HOSTED_API_ERROR.NATIVE_AGENT_NOT_HERE]: HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE,
+  [HOSTED_API_ERROR.AGENT_PLAN_SIGNED_OUT]: HOSTED_HTTP_STATUS.CONFLICT,
+  [HOSTED_API_ERROR.AGENT_PLAN_UNREACHABLE]: HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE,
+  [HOSTED_API_ERROR.AGENT_PLAN_LIMIT_REACHED]: HOSTED_HTTP_STATUS.CONFLICT,
+  [HOSTED_API_ERROR.AGENT_PLAN_INELIGIBLE]: HOSTED_HTTP_STATUS.CONFLICT,
   [HOSTED_API_ERROR.TASK_ARCHIVED]: HOSTED_HTTP_STATUS.CONFLICT,
   [HOSTED_API_ERROR.NOT_PERMITTED]: HOSTED_HTTP_STATUS.FORBIDDEN,
   [HOSTED_API_ERROR.ALREADY_INVITED]: HOSTED_HTTP_STATUS.CONFLICT,
@@ -52,10 +57,12 @@ const HOSTED_REFUSAL_STATUS = {
 
 type HostedRefusalSlug = keyof typeof HOSTED_REFUSAL_STATUS;
 
-/** A refusal: its slug, and for a repository out of reach, why (`repositoryNotReachable`). */
+/** A refusal: its slug, for a repository out of reach, why (`repositoryNotReachable`), for an upstream that refused, its status (`upstreamRefused`), and for a plan's reached limit, when it resets (`planLimitReached`). */
 export type HostedRefusal = {
   readonly error: HostedRefusalSlug;
   readonly unreached?: RepositoryUnreached;
+  readonly upstreamStatus?: number;
+  readonly resetsAt?: number;
 };
 
 /**
@@ -104,7 +111,19 @@ export const HOSTED_REFUSAL = {
   AGENT_NOT_READY: { error: HOSTED_API_ERROR.AGENT_NOT_READY },
   /** eve no longer runs the agent's session, so nothing reaches its sandbox again; nothing was written. */
   AGENT_RETIRED: { error: HOSTED_API_ERROR.AGENT_RETIRED },
-  /** The task is archived, so it takes nothing until it is brought back; nothing was written. */
+  /** The agent's native harness's sandbox image is still being prepared; nothing was written, and the same request later, under its key, is taken. */
+  AGENT_IMAGE_PREPARING: { error: HOSTED_API_ERROR.AGENT_IMAGE_PREPARING },
+  /** The agent runs on a native harness this function cannot reach (neither launched nor relayed from it); nothing was written, and nothing fell through to eve. */
+  NATIVE_AGENT_NOT_HERE: { error: HOSTED_API_ERROR.NATIVE_AGENT_NOT_HERE },
+  /** The agent runs on its starter's plan, whose sign-in cannot launch it until the starter signs in again; nothing was written, and nothing turned to another payer. */
+  AGENT_PLAN_SIGNED_OUT: { error: HOSTED_API_ERROR.AGENT_PLAN_SIGNED_OUT },
+  /** The agent runs on its starter's plan, whose provider did not answer; nothing was written, and the same request later may be taken. */
+  AGENT_PLAN_UNREACHABLE: { error: HOSTED_API_ERROR.AGENT_PLAN_UNREACHABLE },
+  /** The agent runs on its starter's plan, whose usage limit is reached until it resets; nothing was written, and nothing turned to another payer. */
+  AGENT_PLAN_LIMIT_REACHED: { error: HOSTED_API_ERROR.AGENT_PLAN_LIMIT_REACHED },
+  /** The agent runs on its starter's plan, which its provider said is not eligible to run it; nothing was written, and nothing turned to another payer. */
+  AGENT_PLAN_INELIGIBLE: { error: HOSTED_API_ERROR.AGENT_PLAN_INELIGIBLE },
+  /** The chat channel is archived, so it takes no post; nothing was written. Named for the task archive it once answered too, which no task has any more. */
   TASK_ARCHIVED: { error: HOSTED_API_ERROR.TASK_ARCHIVED },
   /** The account's role in the workspace does not allow this; nothing was written. */
   NOT_PERMITTED: { error: HOSTED_API_ERROR.NOT_PERMITTED },
@@ -116,27 +135,35 @@ export const HOSTED_REFUSAL = {
   LINEAR_UNAVAILABLE: { error: HOSTED_API_ERROR.LINEAR_UNAVAILABLE },
 } as const satisfies Record<string, HostedRefusal>;
 
+/** A plan's usage limit reached, with when it resets in epoch milliseconds where the provider said, so the words can name it. */
+export function planLimitReached(resetsAt: number | undefined): HostedRefusal {
+  return resetsAt === undefined
+    ? HOSTED_REFUSAL.AGENT_PLAN_LIMIT_REACHED
+    : { ...HOSTED_REFUSAL.AGENT_PLAN_LIMIT_REACHED, resetsAt };
+}
+
 /** The repository out of reach, with why, so the desktop can offer what mends it. */
 export function repositoryNotReachable(unreached: RepositoryUnreached): HostedRefusal {
   return { ...HOSTED_REFUSAL.REPOSITORY_NOT_REACHABLE, unreached };
 }
 
+/** The upstream refused what was asked of it, with the status it answered and none of its body. */
+export function upstreamRefused(upstreamStatus: number): HostedRefusal {
+  return { ...HOSTED_REFUSAL.UPSTREAM_ERROR, upstreamStatus };
+}
+
 /**
- * Refuses, as unauthenticated, a request that carries no `Authorization`:
- * one that only a browser's session cookie could name. A request that
- * carries one is read by its bearer alone (`auth/bearer.ts`'s
- * `requestUserId`), so an endpoint asks for this where its work reaches eve
- * as the developer over that bearer and must not go on without it: a
- * delete ends the eve sessions of what it deletes (`agents/retire-sessions.ts`),
- * and a refusal there goes unnoticed. Note that the endpoint asks for it
- * itself rather than its route file handing the group a bearer-only
- * resolver, because every function holding a group answers every path the
- * group declares (`apps/web/server/function-dispatch.ts`).
+ * Whether a request carries an `Authorization`, so its account was read
+ * from that bearer alone and never from a browser's session cookie
+ * (`auth/bearer.ts`'s `requestUserId`, which resolves nobody for one that
+ * does not verify). An endpoint that does on a GET what a link must not
+ * make a browser do asks for this itself, because a Lax cookie rides a
+ * top-level navigation and every function holding a group answers every
+ * path the group declares; and the work that reaches eve picks its caller
+ * by it (`agents/coder-host/stop.ts`'s `eveFor`).
  */
-export function hostedBearerOnly(request: Request): Effect.Effect<void, HostedRefusal> {
-  return request.headers.has("authorization")
-    ? Effect.void
-    : Effect.fail(HOSTED_REFUSAL.INVALID_TOKEN);
+export function hostedCarriesBearer(request: Request): boolean {
+  return request.headers.has("authorization");
 }
 
 /**
@@ -150,12 +177,17 @@ export function hostedBearerOnly(request: Request): Effect.Effect<void, HostedRe
  * own (`sandbox`). Note that the policy is what keeps markup among them, an
  * SVG's, from acting as this origin, because every account route takes the
  * browser's session cookie (`auth/bearer.ts`'s `resolveHostedUserId`) and a
- * tab opened on one of these paths carries it.
+ * tab opened on one of these paths carries it. For the same reason no other
+ * site's page may embed them (`cross-origin-resource-policy`): an `<img>` there
+ * would load them with the cookie of whoever is looking. Every reader of them
+ * is same-origin: the web app's own tab, and the Mac's host, which fetches
+ * them with its bearer and hands its renderer the bytes.
  */
 export const HOSTED_BYTES_HEADERS = {
   "x-content-type-options": "nosniff",
   "cache-control": "private, no-store",
   "content-security-policy": "default-src 'none'; style-src 'unsafe-inline'; sandbox",
+  "cross-origin-resource-policy": "same-origin",
 } as const;
 
 /**
@@ -174,22 +206,6 @@ export function hostedStoreOrUnavailable<A, R>(
   );
 }
 
-/**
- * A task write an archive may refuse: the archive answered as its own
- * refusal, and a store failure as `hostedStoreOrUnavailable` answers one.
- */
-export function hostedStoreOrArchived<A, R>(
-  effect: Effect.Effect<A, StoreFailure | TaskArchived, R>,
-): Effect.Effect<A, HostedRefusal, R> {
-  return Effect.catch(
-    effect,
-    (failure): Effect.Effect<never, HostedRefusal> =>
-      "_tag" in failure && failure._tag === "TaskArchived"
-        ? Effect.fail(HOSTED_REFUSAL.TASK_ARCHIVED)
-        : hostedStoreOrUnavailable(Effect.fail(failure)),
-  );
-}
-
 /** An endpoint's refusal carried back onto the answer channel, so a group registers a route that answers every request. */
 export function hostedRefusing<R>(
   endpoint: Effect.Effect<HttpServerResponse.HttpServerResponse, HostedRefusal, R>,
@@ -197,10 +213,8 @@ export function hostedRefusing<R>(
   return Effect.catch(endpoint, (refusal) => Effect.succeed(hostedRefusalResponse(refusal)));
 }
 
-/** A refusal as the response an `HttpApp` answers with outside an `HttpApi` group. */
-export function hostedRefusalResponse(
-  refusal: HostedRefusal,
-): HttpServerResponse.HttpServerResponse {
+/** A refusal as the response a route group answers with. */
+function hostedRefusalResponse(refusal: HostedRefusal): HttpServerResponse.HttpServerResponse {
   return HttpServerResponse.jsonUnsafe(refusal, {
     status: HOSTED_REFUSAL_STATUS[refusal.error],
   });
@@ -275,15 +289,6 @@ export function hostedJsonResponse<Body extends object>(
   });
 }
 
-/** Refuses a request whose method is not the one the endpoint documents. */
-export function hostedMethod(
-  method: string,
-): Effect.Effect<void, HostedRefusal, HttpServerRequest.HttpServerRequest> {
-  return Effect.flatMap(HttpServerRequest.HttpServerRequest, (request) =>
-    request.method === method ? Effect.void : Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED),
-  );
-}
-
 /**
  * The request's body as the bytes it arrived as. The stream is counted as it
  * arrives rather than trusting a Content-Length the sender may omit or
@@ -323,10 +328,3 @@ export function parseJsonBytes(bytes: Uint8Array): Effect.Effect<UnparsedWireVal
     catch: () => HOSTED_REFUSAL.INVALID_REQUEST,
   });
 }
-
-/** The request's JSON body as the unparsed wire value a schema reads next, bounded as `readBodyBytesEffect` bounds it. */
-export const readJsonBodyEffect = /* @__PURE__ */ Effect.fn("web/readJsonBodyEffect")(function* (
-  maximumBytes: number,
-): Effect.fn.Return<UnparsedWireValue, HostedRefusal, HttpServerRequest.HttpServerRequest> {
-  return yield* parseJsonBytes(yield* readBodyBytesEffect(maximumBytes));
-});

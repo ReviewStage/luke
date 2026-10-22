@@ -1,12 +1,15 @@
 import type { AutomationFiring } from "@luke/features/automation-wire";
 import {
+  CODING_AGENT_KIND,
   CONTEXT_WINDOW,
   type CodingAgentArchiver,
   type CodingAgentAuthor,
+  type CodingAgentKind,
+  type CodingAgentPayer,
   type CodingAgentPullRequest,
   type ContextWindow,
 } from "@luke/features/coding-agent-wire";
-import type { PullRequestArea } from "@luke/features/pull-request-area";
+import { GITHUB_ACCESS, type GitHubAccess } from "@luke/features/github-repositories-wire";
 import { sql } from "drizzle-orm";
 import {
   type AnyPgColumn,
@@ -37,7 +40,10 @@ import { task } from "./task.js";
  * is the exact plan text the agent was handed, kept whole because the plan
  * keeps being edited after, or where the developer started it on a prompt of
  * their own, the snapshot is null and the prompt is what it was handed, so
- * exactly one of the two stands; the repository is `owner/name`; the branch
+ * at most one of the two stands, and neither for an agent started blank,
+ * whose first words come later, such as a call's spoken opening; the
+ * repository is `owner/name`, null for an agent with none, such as one on a
+ * task with no repository, which does no repository work; the branch
  * is the one checked out in the agent's sandbox as its last turn ended,
  * which is where its pull request is looked up, and null until a turn ends
  * or where the checkout stood detached or on its start branch; the start branch is the one its
@@ -86,15 +92,29 @@ import { task } from "./task.js";
  * settled once as its first session starts and never moved after, so its
  * instructions and its checkout agree; null before then, and for an agent
  * from before the column, which writes as the App.
+ * `payer` is who pays for the agent's model calls (`CODING_AGENT_PAYER`),
+ * the starter's Claude or ChatGPT plan, their own API key, or Luke's,
+ * recorded as it starts and never moved after; null for an agent from
+ * before the column. What answers its conversation is the conversation's
+ * own `runtime`.
  * There is no commit column: the
  * checkout's own output is in the transcript, and the pull request on
  * GitHub records its base.
+ *
+ * `kind` is what the agent is (`CODING_AGENT_KIND`): a coder, as every agent
+ * started on work is and every row from before the column reads, or its
+ * member's operator, started blank with no task and no repository, of which
+ * a member holds at most one standing per workspace; a Reset archives it,
+ * transcript kept, and ensures a fresh one.
  *
  * `idempotency_key` is the Start request's own key, unique per account, so a
  * network retry of one Start finds the agent it already made rather than
  * starting a second. The row goes with its task, its account, and its
  * conversation alike.
  */
+/** A literal in an index's predicate, which Postgres takes no parameter in. */
+const literal = (value: string) => sql.raw(`'${value}'`);
+
 /**
  * The newest model step of an agent's own conversation, as the coder host
  * relayed it: the tokens its provider counted, the share of them its
@@ -170,15 +190,15 @@ export interface StoredArchive {
 /**
  * The pull request from an agent's branch as its row keeps it: what the
  * wire carries of it, and beside that what the service alone reads. The
- * head it was read at, so the next read knows whether its files moved;
- * when it merged, as GitHub reports it, absent until it has; and the lines
- * it changed in each directory (`pullRequestAreasOf`). A row written
- * before these were kept holds none of them.
+ * head it was read at, which a delivery about a commit's checks is matched
+ * against; and when it merged, as GitHub reports it, absent until it has.
+ * A row written before these were kept holds none of them. A row written
+ * while Factory stood may hold `areas` beside them, which nothing reads now
+ * and the next write drops.
  */
 export interface StoredPullRequest extends CodingAgentPullRequest {
   readonly headSha?: string;
   readonly mergedAt?: number;
-  readonly areas?: readonly PullRequestArea[];
 }
 
 export const codingAgent = pgTable(
@@ -213,13 +233,13 @@ export const codingAgent = pgTable(
       .$type<ContextWindow>()
       .notNull()
       .default(CONTEXT_WINDOW.LONG),
-    /** The plan's document exactly as the agent was given it; null for an agent handed a prompt instead. */
+    /** The plan's document exactly as the agent was given it; null for an agent handed a prompt instead, or started blank. */
     planSnapshot: text("plan_snapshot"),
-    /** The developer's own words the agent was handed in the plan's place; null for an agent handed the plan. */
+    /** The developer's own words the agent was handed in the plan's place; null for an agent handed the plan, or started blank. */
     prompt: text("prompt"),
-    /** The GitHub repository the agent works in, as `owner/name`: the first of `repositories`. */
-    repository: text("repository").notNull(),
-    /** Every repository the agent works in, `owner/name` each, the first where it starts; one until full multi-repo. */
+    /** The GitHub repository the agent works in, as `owner/name`: the first of `repositories`; null for an agent with none. */
+    repository: text("repository"),
+    /** Every repository the agent works in, `owner/name` each, the first where it starts; empty for an agent with none. */
     repositories: jsonb("repositories").$type<readonly string[]>().notNull().default([]),
     /** The branch checked out in the sandbox as the last turn ended; null before one ends or on a detached HEAD. */
     branch: text("branch"),
@@ -227,6 +247,8 @@ export const codingAgent = pgTable(
     startBranch: text("start_branch"),
     /** The agent's title as its tab shows it; null falls back to the model's name. */
     title: text("title"),
+    /** The human name the agent was given as it was created, a first name no other agent of its task wears (`@luke/features/agent-persona`); null for an agent from before names were given, named by its title. */
+    personaName: text("persona_name"),
     /** The newest model step of the agent's own conversation; null before its first. */
     lastStep: jsonb("last_step").$type<StoredAgentStep>(),
     /** When eve last compacted the agent's own conversation; null where it never has. */
@@ -243,6 +265,19 @@ export const codingAgent = pgTable(
     mentionedServers: jsonb("mentioned_servers").$type<readonly string[]>(),
     /** Who the agent's commits are by and its pull request is opened as; null until its first session settles it. */
     author: text("author").$type<CodingAgentAuthor>(),
+    /** How the agent's repository was reached as it started: the workspace's GitHub App, or its starter's own token. */
+    githubAccess: text("github_access").$type<GitHubAccess>().notNull().default(GITHUB_ACCESS.APP),
+    /** Who pays for the agent's model calls, recorded as it starts and never moved; null for an agent from before the column. */
+    payer: text("payer").$type<CodingAgentPayer>(),
+    /**
+     * The digest of the bearer the agent's runner presents at Luke's MCP server and its events
+     * route, never the bearer itself; null where no runner holds one. Kept on the agent's row rather
+     * than its conversation's, because a launch writes it while a message's hand-over holds the
+     * conversation's lock (`steer.ts`), from another function's connection where the eve apps relay.
+     */
+    runnerTokenHash: text("runner_token_hash"),
+    /** What the agent is: a coder, or its member's operator; a coder for every row from before the column. */
+    kind: text("kind").$type<CodingAgentKind>().notNull().default(CODING_AGENT_KIND.CODER),
     idempotencyKey: text("idempotency_key").notNull(),
     createdAt: createdAt(),
   },
@@ -251,10 +286,29 @@ export const codingAgent = pgTable(
     uniqueIndex("coding_agent_user_idempotency").on(table.userId, table.idempotencyKey),
     // The tabs read one task's agents in the order they were started.
     index("coding_agent_task_created").on(table.taskId, table.createdAt),
+    // Every Luke tool call, runner event, and session route finds the agent its conversation is;
+    // one agent per conversation, since an agent is started on a conversation of its own.
+    uniqueIndex("coding_agent_conversation").on(table.conversationId),
     // A workspace's agents with no task are read newest first.
     index("coding_agent_org_created").on(table.organizationId, table.createdAt),
+    // The agents with no task, which the sidebar lists across the account's workspaces, are read
+    // by workspace newest first, apart from the task agents that outnumber them.
+    index("coding_agent_org_taskless_created")
+      .on(table.organizationId, table.createdAt)
+      .where(sql`${table.taskId} is null`),
     // An agent's summary names the agents started from it, read by the source's id.
     index("coding_agent_started_from_agent").on(sql`(${table.startedFrom}->>'agentId')`),
+    // Luke's MCP server and the events route find the agent a runner's bearer stands for by the
+    // bearer's digest, on every call; one digest names one agent.
+    uniqueIndex("coding_agent_runner_token_hash")
+      .on(table.runnerTokenHash)
+      .where(sql`${table.runnerTokenHash} is not null`),
+    // A member holds one standing operator per workspace, so two ensures that race make one row.
+    uniqueIndex("coding_agent_member_operator")
+      .on(table.organizationId, table.userId)
+      .where(
+        sql`${table.kind} = ${literal(CODING_AGENT_KIND.OPERATOR)} and ${table.archivedAt} is null`,
+      ),
   ],
 );
 

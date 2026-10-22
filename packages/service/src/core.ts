@@ -13,7 +13,6 @@ export {
   AssistantMessageBuilder,
   addModelUsage,
   BRAIN_REQUEST_FAILURE,
-  BRAIN_REQUEST_ORIGIN,
   BRAIN_REQUEST_STATUS,
   BRAIN_RUN_EVENT,
   BRAIN_TURN_ORIGIN,
@@ -43,5 +42,4 @@ export * from "@luke/features/task-wire";
 export * from "@luke/runtime/vocabulary";
 export * from "@luke/wire";
 export * from "@luke/wire/conversation";
-export * from "@luke/wire/provider-identity";
 export * from "@luke/wire/ui-messages";

@@ -1,0 +1,28 @@
+/**
+ * task-sections.ts -- the sections the account made in its sidebars and the tasks in them (`task-section-wire.ts`): read them, and write one change.
+ */
+
+import { HTTP_METHOD } from "@luke/wire";
+import { openapi } from "@orpc/openapi";
+import { Schema as EffectSchema } from "effect";
+import { HOSTED_SERVICE_PATH } from "../service-paths.js";
+import {
+  taskSectionsAnswerSchema,
+  taskSectionsWrittenSchema,
+  taskSectionWriteSchema,
+} from "../task-section-wire.js";
+import { bodyCap, exactInput, hostedProcedure } from "./base.js";
+
+/** A write is two ids, a title, and an emoji at most, so a body past this is not one. */
+const WRITE_BODY_BYTES = 2_048;
+
+export const taskSectionsContract = {
+  list: hostedProcedure
+    .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.TASK_SECTIONS }))
+    .output(EffectSchema.flip(taskSectionsAnswerSchema)),
+  write: hostedProcedure
+    .meta(bodyCap(WRITE_BODY_BYTES))
+    .meta(openapi({ method: HTTP_METHOD.PUT, path: HOSTED_SERVICE_PATH.TASK_SECTIONS }))
+    .input(exactInput(taskSectionWriteSchema))
+    .output(EffectSchema.flip(taskSectionsWrittenSchema)),
+};

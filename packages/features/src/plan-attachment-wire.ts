@@ -27,6 +27,12 @@ export const PLAN_ATTACHMENT_REFUSAL = {
   TOO_MANY: "too-many",
 } as const;
 
+/** The status an upload is answered with: 201 where it kept the picture, 200 where it refused in band. */
+export const PLAN_ATTACHMENT_STATUS = {
+  KEPT: 201,
+  REFUSED: 200,
+} as const;
+
 /** What an upload answers: the kept picture's id, which the text then names, or why nothing was kept. */
 export const planAttachmentAnswerSchema = EffectSchema.Union([
   EffectSchema.Struct({ id: wireUuidSchema }),

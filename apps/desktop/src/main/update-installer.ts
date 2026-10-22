@@ -27,7 +27,7 @@ interface AppUpdaterInternals {
 }
 
 /**
- * The updater Superset runs in production, bound the same way: electron
+ * The common production electron-updater setup, bound the same way: electron
  * updater's generic provider pointed at the feed fixed by the build, auto
  * download on, install at quit on, differential download off (a known source
  * of flaky downloads). Under it all is still Squirrel.Mac: the archive's code

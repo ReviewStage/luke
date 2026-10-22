@@ -103,7 +103,7 @@ const RESUME = { kind: TERMINAL_ACTION.RESUME, label: "Resume sandbox" } as cons
 
 /** What the unreachable bar says, by why. */
 const UNREACHED_WORDS = {
-  [TERMINAL_UNREACHED.SERVICE]: "Couldn’t reach Luke’s service.",
+  [TERMINAL_UNREACHED.SERVICE]: "Luke's service did not answer.",
   [TERMINAL_UNREACHED.SANDBOX]: "The agent’s sandbox didn’t answer.",
   [TERMINAL_UNREACHED.NOT_FOUND]: "Couldn’t find this agent’s shell.",
   [TERMINAL_UNREACHED.RELAY]: "The terminal service isn’t set up on this deployment.",

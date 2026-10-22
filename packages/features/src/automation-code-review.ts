@@ -19,8 +19,7 @@ import {
  * automation and Luke keeps no second copy of what it does.
  *
  * The code review preset reviews every pull request opened, marked ready,
- * or pushed to, and posts one GitHub review as the App
- * (`docs/proposals/code-review-bot.md`). What keeps it quiet is the prompt
+ * or pushed to, and posts one GitHub review as the App. What keeps it quiet is the prompt
  * alone: at most five findings at P0 or P1, each with the input that makes
  * it fail, checked before it is posted; its own earlier threads found by
  * its marker, those a push fixed resolved and the rest never posted again;

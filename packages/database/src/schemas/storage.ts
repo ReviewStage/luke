@@ -1,5 +1,6 @@
 import type { BrainModelUsage, BrainRunUsage } from "@luke/features/brain";
 import {
+  MESSAGE_ROLE,
   type MessageRole,
   type StoredMessageMetadata,
   TURN_STATUS,
@@ -7,7 +8,7 @@ import {
   type TurnStatus,
 } from "@luke/wire";
 import type { StoredUIMessage } from "@luke/wire/ui-messages";
-import { sql } from "drizzle-orm";
+import { type SQL, type SQLWrapper, sql } from "drizzle-orm";
 import {
   type AnyPgColumn,
   bigint,
@@ -21,7 +22,11 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
-import { CONVERSATION_KIND, type MessageSender } from "../storage-vocabulary.js";
+import {
+  CONVERSATION_KIND,
+  type ConversationRuntime,
+  type MessageSender,
+} from "../storage-vocabulary.js";
 import { createdAt, timestamptz } from "./_helpers.js";
 import { user } from "./auth.js";
 
@@ -81,6 +86,14 @@ export const conversations = pgTable(
     label: text("label"),
     /** Whether a settled child owes its parent a completion; false on every child opened now, eve handing its findings to the parent turn itself. */
     expectsCompletion: boolean("expects_completion").notNull().default(true),
+    /** What answers the conversation's turns, settled as it is opened; null on a conversation from before the column, which runs on eve. */
+    runtime: text("runtime").$type<ConversationRuntime>(),
+    /** The harness's own session or thread id on a Claude Code or Codex conversation, which a relaunch resumes; null on eve's and before the harness answers one. */
+    nativeSession: text("native_session"),
+    /** The number of the last runner event projected into the conversation, so a batch the runner posts again applies nothing twice; null before a runner's first event. */
+    nativeSequence: bigint("native_sequence", { mode: "number" }),
+    /** What the projection of a native harness's events holds between the runner's batches: the turn under way and its step's words so far; null before the first batch. */
+    nativeProjection: jsonb("native_projection"),
   },
   (table) => [
     // One main stands per account at a time: Clear stamps the old one and opens the next in one
@@ -98,8 +111,29 @@ export const conversations = pgTable(
       .where(sql`${table.deletedAt} is not null`),
     // The children and agents reads pick one account's rows of one kind.
     index("conversations_user_kind").on(table.userId, table.kind),
+    // A recorded session is found by the runtime's own id, by the session's reads and by the sweep
+    // that settles an ended session's turns.
+    index("conversations_runtime_session")
+      .on(table.runtimeSessionId)
+      .where(sql`${table.runtimeSessionId} is not null`),
   ],
 );
+
+/**
+ * That a row of `messages` is a user line no turn owns yet: the rows the
+ * awaiting-line reads look among (`message-reads.ts`'s
+ * `newestAwaitingLineAt`), and the predicate of the partial index they are
+ * read through. The role is inlined rather than bound, because an index
+ * predicate is DDL, which takes no bound parameter, and a read that bound it
+ * would match the index only in a plan made for that one value, never in the
+ * generic plan of a statement prepared once and run again.
+ */
+export function turnlessUserLine(table: {
+  readonly role: SQLWrapper;
+  readonly turnId: SQLWrapper;
+}): SQL {
+  return sql`(${table.role} = ${sql.raw(`'${MESSAGE_ROLE.USER}'`)} and ${table.turnId} is null)`;
+}
 
 /**
  * One `UIMessage` per row. A message in flight is mutable until
@@ -186,6 +220,11 @@ export const messages = pgTable(
     index("messages_conversation_revision")
       .on(table.conversationId, table.revision)
       .where(sql`${table.revision} is not null`),
+    // The awaiting-line reads find a conversation's user lines no turn owns, a few among its every
+    // row, which a scan of the conversation's sequence would read through to the last.
+    index("messages_awaiting_line")
+      .on(table.conversationId, table.seq)
+      .where(turnlessUserLine(table)),
   ],
 );
 
@@ -314,6 +353,13 @@ export const asks = pgTable(
     toldSeq: integer("told_seq").notNull().default(0),
     /** When the run's end was told to the voice under this ask, written before it is told. */
     endToldAt: timestamptz("end_told_at"),
+    /**
+     * For a spoken ask bound to a typed turn, which it joined under way: how
+     * many of that turn's steps had begun before it, from which its answer
+     * is read and its line placed. Null for every other ask, which opened its
+     * turn or joined one of its own kind, and is the whole turn's.
+     */
+    joinedAfterStep: integer("joined_after_step"),
   },
   (table) => [
     uniqueIndex("asks_conversation_client").on(table.conversationId, table.clientId),

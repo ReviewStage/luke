@@ -12,12 +12,11 @@ tagged, the head of its version pull request. The
 work is in four parts: plan the shots, stage them in a throwaway patch, build
 and capture on the Mac, then frame and land them.
 
-You need the developer's Mac (Conductor's `RunLocalCommand`): the native build,
-the window capture, and the framer are macOS-only. The cloud workspace writes
-code and reviews pictures; with Conductor's file sync on, anything under the
-workspace's `.context/` appears on the Mac at
-`~/conductor/remote-workspace-sync/luke/<workspace-id>/.context/`, and nothing
-syncs back.
+You need the developer's Mac (a run-on-Mac tool, such as Luke's `run_on_mac`):
+the native build, the window capture, and the framer are macOS-only. The cloud
+workspace writes code and reviews pictures; with the workspace's file sync on,
+anything under its `.context/` appears in the workspace's synced copy on the
+Mac (`$S` below), and nothing syncs back.
 
 ## 1. Plan the shots
 
@@ -43,13 +42,12 @@ in front. Then look at the list as a set.
 - The plan document is not wallpaper. Show it only where it is the subject;
   elsewhere open another task, another tab, or fold it away.
 - Nothing experimental gets a picture. A feature behind Settings ›
-  Experimental (the Factory, Issues, Automations, video calls, and whatever
+  Experimental (the Factory, Issues, Code review, video calls, and whatever
   joins them) is no section's subject, even where the notes announce it, and
   no shot turns an experiment on (`ShotSpec.experiments` stays empty), so
-  nothing an experiment draws (a sidebar row, a person's Automations
-  section, an automation's chip) shows at the edge of another picture
-  either. 0.15.0's Factory and 0.17.0's Issues pictures were taken and then
-  removed for this.
+  nothing an experiment draws (a sidebar row, the Code review suggestion)
+  shows at the edge of another picture either. 0.15.0's Factory and
+  0.17.0's Issues pictures were taken and then removed for this.
 
 Show the developer the list (and the old releases' pictures it should not
 repeat) before staging; it is cheap to change now and expensive later.
@@ -128,8 +126,7 @@ Every picture, whatever it shows:
   chrome.
 
 Each shot's agent verifies in the cloud before anything reaches the Mac:
-`pnpm typecheck`, `pnpm build` (esbuild only; `build:native` needs macOS;
-`LUKE_UPDATE_BUNDLE_BUDGET=1` if the embedded pictures trip the budget), and a
+`pnpm typecheck`, `pnpm build` (esbuild only; `build:native` needs macOS), and a
 throwaway jsdom render of the shot that checks its key text and the absence of
 "1969", deleted before the diff. Merge the shots by copying each agent's
 `shots/` files into one worktree over the foundation, not by stacking patches:
@@ -144,7 +141,7 @@ worktree of the clone at `LUKE_REPO` (default `~/Developer/luke`); nothing
 touches the developer's own checkout or a running Luke.
 
 ```sh
-S=~/conductor/remote-workspace-sync/luke/<workspace-id>
+S=<the workspace's synced copy on the Mac>
 bash $S/.agents/skills/changelog-screenshots/scripts/build.sh <commit> $S/.context/shots/staging.patch
 bash $S/.agents/skills/changelog-screenshots/scripts/window.sh ~/luke-shots/<v>/call.png --profile shot-call
 ```
@@ -219,9 +216,8 @@ crop.
 
 Review every picture in the cloud before showing anyone: make small JPEG
 previews on the Mac (`sips -s format jpeg -Z 1500`), `tar` and `base64` them
-to stdout, and decode the retained output here (`RunLocalCommand` keeps
-output over 32,000 characters in `.context/conductor/`; keep each transfer
-under about 10 MB). Read each one against the spec and the rules above, fix
+to stdout, and decode the output here (a run-on-Mac tool may cut or
+spill long output; keep each transfer under about 10 MB). Read each one against the spec and the rules above, fix
 the staging, rebuild, and capture again; it took 0.12.0 four rounds.
 
 Land the finished PNGs in `apps/web/public/changelog/<version>/`, named for

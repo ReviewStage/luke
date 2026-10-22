@@ -1,5 +1,13 @@
-import type { InboxBlock, InboxReply, InboxResponse, InboxStatus } from "@luke/features/inbox-wire";
 import {
+  INBOX_STATUS,
+  type InboxBlock,
+  type InboxReply,
+  type InboxResponse,
+  type InboxStatus,
+} from "@luke/features/inbox-wire";
+import { sql } from "drizzle-orm";
+import {
+  type AnyPgColumn,
   boolean,
   index,
   integer,
@@ -12,6 +20,7 @@ import {
 import { timestamptz } from "./_helpers.js";
 import { organization, user } from "./auth.js";
 import { codingAgent } from "./coding-agent.js";
+import { inboxMessage } from "./inbox-message.js";
 import { task } from "./task.js";
 
 /**
@@ -27,15 +36,20 @@ import { task } from "./task.js";
  * is whether the agent is to hear the answer as a message. The status is
  * open until a member answers it, which writes the answer, the member, and
  * the key the client sent it under, so an answer sent again after a lost
- * reply is taken once, or until the agent closes it, which writes why. The task is
+ * reply is taken once, or until it is closed: by the agent, which writes
+ * why, or by a member without an answer, which writes the member. The task is
  * the agent's, kept on the row so a task's inbox is read by one index, and
  * the account's open items are read by another. A message on the item's
  * thread (`inbox-message.ts`) moves when it last changed and never when it
- * was settled. The row goes with its
+ * was settled. From version 5 an agent's message on the thread may carry
+ * an ask, and the one that waits on an answer is named here; the title,
+ * blocks, response, and `needs_reply` stay written beside it for a reader
+ * from before version 5. The row goes with its
  * account, its task, and its agent alike. The columns
  * the fixed kinds stood in, `kind`, `details`, `options`, and
- * `recommended`, are declared no longer and wait on their drop
- * (`tests/drizzle-schema.test.ts`'s `PENDING_DROP`).
+ * `recommended`, are declared no longer: the database still holds them,
+ * kept in step by the trigger `20261007104640_inbox_item_blocks` installed,
+ * until a contract migration drops them both.
  */
 export const inboxItem = pgTable(
   "inbox_item",
@@ -68,7 +82,7 @@ export const inboxItem = pgTable(
     status: text("status").$type<InboxStatus>().notNull(),
     /** The developer's answer; null until they answer. */
     answer: jsonb("answer").$type<InboxReply>(),
-    /** The key the answer was sent under; null until they answer. */
+    /** The key the answer, or a member's close, was sent under; null until a member answers or closes it. */
     answerKey: text("answer_key"),
     /**
      * The member who answered, any member of the task's workspace; null until
@@ -76,8 +90,14 @@ export const inboxItem = pgTable(
      * account is gone, which reads as nobody the service can name.
      */
     answeredBy: text("answered_by").references(() => user.id, { onDelete: "set null" }),
-    /** Why the agent took the item back; null until it does. */
+    /** Why the agent took the item back; null until it does, and on an item a member closed. */
     closedReason: text("closed_reason"),
+    /**
+     * The member who closed the item without answering it, any member of the
+     * task's workspace; null on an open or answered item, on one its agent
+     * took back, and once their account is gone.
+     */
+    closedBy: text("closed_by").references(() => user.id, { onDelete: "set null" }),
     postedAt: timestamptz("posted_at").notNull(),
     /**
      * When the item was last answered or closed; null while it is open, and
@@ -99,6 +119,14 @@ export const inboxItem = pgTable(
      * default.
      */
     readThrough: timestamptz("read_through"),
+    /**
+     * The message on the item's thread whose ask waits on an answer, the one
+     * that may at a time; null where none waits, on every item from before
+     * version 5, and once that message is gone.
+     */
+    openAskMessageId: uuid("open_ask_message_id").references((): AnyPgColumn => inboxMessage.id, {
+      onDelete: "set null",
+    }),
   },
   (table) => [
     // One item per key per agent: a post under a key it used is that item's write.
@@ -107,6 +135,14 @@ export const inboxItem = pgTable(
     index("inbox_item_task_updated").on(table.taskId, table.updatedAt),
     // A workspace's items of agents with no task are read the latest changed first.
     index("inbox_item_org_updated").on(table.organizationId, table.updatedAt),
+    // The open items of agents with no task, which every account's read of what waits names
+    // beside its tasks' items, are read by workspace the latest changed first. The predicate is
+    // DDL, which takes no bound parameter, so the status is inlined rather than passed.
+    index("inbox_item_org_open_taskless_updated")
+      .on(table.organizationId, table.updatedAt)
+      .where(
+        sql`${table.status} = ${sql.raw(`'${INBOX_STATUS.OPEN}'`)} and ${table.taskId} is null`,
+      ),
     // What waits across the account is read on every look of a held read, its open items the latest changed first.
     index("inbox_item_user_status_updated").on(table.userId, table.status, table.updatedAt),
   ],

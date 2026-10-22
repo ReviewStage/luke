@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { fakeCloudApi, HTTP_STATUS } from "@luke/wire/testing";
 import { Effect } from "effect";
+import { accountBearer } from "./account-call.js";
 import { HostedAutomationClient } from "./automation-client.js";
 import { AUTOMATION_CALL_FAILURE } from "./automation-view.js";
 import {
@@ -26,9 +27,11 @@ const WORKSPACE_ID = "workspace-1";
 function client(): HostedAutomationClient {
   return new HostedAutomationClient({
     serviceBaseUrl: "https://tryluke.dev",
-    readAccessToken: () => Effect.succeed("token-1"),
-    refreshAccount: () => Effect.void,
-    readAccountKey: () => Effect.succeed("ada@example.com"),
+    credential: accountBearer({
+      readAccessToken: () => Effect.succeed("token-1"),
+      refreshAccount: () => Effect.void,
+      readAccountKey: () => Effect.succeed("ada@example.com"),
+    }),
   });
 }
 

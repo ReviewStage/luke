@@ -3,14 +3,14 @@
 
    A pill has no arrow, because it always hangs centred on the control it
    names. A hint is hidden for the one layout pass that measures where it
-   fits, then fades in from just short of its size once the pointer has
-   rested `--luke-hint-delay`, or at once while it is `instant`: its opacity over
-   `--luke-duration-quick`, its growth on the spring. Reduced motion keeps the
-   wait, which is not motion, and drops the fade with the tokens. A pill
-   takes no presses. A card is a surface the pointer crosses onto, so it
-   takes the pointer once it is placed, and its words can be selected; it is
-   hidden, not only clear, while it waits, so nothing under a card not yet
-   shown loses the pointer to it. */
+   fits, then fades in from just short of its size: its opacity over
+   `--luke-duration-quick`, its growth on the spring. The wait before it is
+   the app's, which mounts it only once the pointer has rested, so nothing
+   here waits; reduced motion drops the fade with the tokens. A pill takes
+   no presses. A card is a surface the pointer crosses onto, so it takes the
+   pointer once it is placed, and its words can be selected; it is hidden,
+   not only clear, while it is placed, so nothing under it loses the pointer
+   before it shows. */
 
 @layer components {
   .luke-tooltip {
@@ -39,14 +39,8 @@
     overflow-wrap: anywhere;
     pointer-events: none;
     animation:
-      luke-tooltip-fade var(--luke-duration-quick) var(--luke-motion-exit) var(--luke-hint-delay)
-      both,
-      luke-tooltip-grow var(--luke-duration-fast) var(--luke-spring-fast) var(--luke-hint-delay)
-      both;
-  }
-
-  .luke-tooltip[data-instant="true"] {
-    animation-delay: 0s;
+      luke-tooltip-fade var(--luke-duration-quick) var(--luke-motion-exit) both,
+      luke-tooltip-grow var(--luke-duration-fast) var(--luke-spring-fast) both;
   }
 
   /* Taken down once seen, it fades over `--luke-duration-exit`, held drawn and

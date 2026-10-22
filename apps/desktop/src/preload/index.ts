@@ -1,10 +1,11 @@
+import { BROWSER_LIVE_PORT_CHANNEL } from "@luke/features/browser-live-acts";
 import { MAC_TERMINAL_PORT_CHANNEL } from "@luke/features/mac-terminal-wire";
+import { eventWithoutAccessTokens, withoutAccessTokens } from "@luke/features/sentry-breadcrumbs";
 import { TERMINAL_PORT_CHANNEL } from "@luke/features/terminal-acts";
-import { type AppBridge, bridgeEntries } from "@luke/host/bridge";
+import { ACT_PORT, actPortForwarder, bridgeEntries, type PreloadBridge } from "@luke/host/bridge";
 import type { UnparsedWireValue } from "@luke/wire";
 import * as Sentry from "@sentry/electron/renderer";
 import { contextBridge, ipcRenderer } from "electron";
-import { eventWithoutAccessTokens, withoutAccessTokens } from "#shared/sentry-breadcrumbs";
 
 Sentry.init({ beforeBreadcrumb: withoutAccessTokens, beforeSend: eventWithoutAccessTokens });
 
@@ -20,26 +21,18 @@ for (const [method, definition] of bridgeEntries()) {
     };
     continue;
   }
-  if (definition.kind === "send") {
-    bridge[method] = (...args: UnparsedWireValue[]) => {
-      ipcRenderer.send(definition.channel, ...args);
-      return undefined;
-    };
-    continue;
-  }
-  bridge[method] = (callback: (payload: UnparsedWireValue) => void) => {
-    const listener = (_event: Electron.IpcRendererEvent, payload: UnparsedWireValue) => {
-      if (definition.result?.(payload) !== false) callback(payload);
-    };
-    ipcRenderer.on(definition.channel, listener);
-    return () => ipcRenderer.removeListener(definition.channel, listener);
+  bridge[method] = (...args: UnparsedWireValue[]) => {
+    ipcRenderer.send(definition.channel, ...args);
+    return undefined;
   };
 }
 
-function exposedBridge(): AppBridge {
+// What main pushes the page reaches it on its act port, which the page opens
+// itself (`renderer/window-root.tsx`), so nothing here listens for a push.
+function exposedBridge(): PreloadBridge {
   // SAFETY: the loop derives every method and transport from all entries in BRIDGE.
   // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- The manifest loop proves the dynamically keyed object is the derived bridge.
-  return bridge as unknown as AppBridge;
+  return bridge as unknown as PreloadBridge;
 }
 
 contextBridge.exposeInMainWorld("luke", exposedBridge());
@@ -54,4 +47,19 @@ ipcRenderer.on(TERMINAL_PORT_CHANNEL, (event, ticket: UnparsedWireValue) => {
 // A terminal of this Mac's port is handed in the same way (`renderer/planning/mac-terminal-tab.tsx`).
 ipcRenderer.on(MAC_TERMINAL_PORT_CHANNEL, (event, ticket: UnparsedWireValue) => {
   window.postMessage({ channel: MAC_TERMINAL_PORT_CHANNEL, ticket }, "*", [...event.ports]);
+});
+
+// The page's act port, posted to its own window by its root as oRPC's
+// Electron adapter has it, is forwarded to main once for this page's life;
+// main upgrades it in `bridge-host.ts`, and a later port this page posts is ignored.
+window.addEventListener(
+  "message",
+  actPortForwarder<MessagePort, MessageEventSource>(window, (port) => {
+    ipcRenderer.postMessage(ACT_PORT.CHANNEL, null, [port]);
+  }),
+);
+
+// A cloud Browser tab's live view's port is handed in the same way (`@luke/panel`'s `tasks/browser-live-port.ts`).
+ipcRenderer.on(BROWSER_LIVE_PORT_CHANNEL, (event, ticket: UnparsedWireValue) => {
+  window.postMessage({ channel: BROWSER_LIVE_PORT_CHANNEL, ticket }, "*", [...event.ports]);
 });

@@ -33,15 +33,25 @@ type HighlightMode = (typeof HIGHLIGHT_MODE)[keyof typeof HIGHLIGHT_MODE];
 const HIGHLIGHT_WORKERS = 2;
 
 /**
+ * How many results the pool keeps on the window's thread, for each of its
+ * file and diff caches (Pierre's `totalASTLRUCacheSize`, which defaults to
+ * 100 of each). The list names every read under a counter of its own, so a
+ * kept result is never asked for again; only the files drawn right now are
+ * read back, so a few are all the cache is for.
+ */
+const HIGHLIGHT_CACHE_ENTRIES = 16;
+
+/**
  * What a list highlights with: the pool to hand Pierre, none for the
  * window's own thread, where it settles once started, and the door that
  * hands its workers a look, since a pool kept across lists holds the look
- * it was last handed, not the one a list is drawn in.
+ * it was last handed, not the one a list is drawn in, settling once they
+ * hold it.
  */
 export interface Highlighting {
   readonly pool: WorkerPoolManager | undefined;
   readonly settled: Promise<HighlightMode>;
-  readonly follow: (drawn: DiffLook) => void;
+  readonly follow: (drawn: DiffLook) => Promise<void>;
 }
 
 /** What the pool's workers highlight with, read off the look: its themes and how a changed line is marked, up to the longest line marked. */
@@ -67,13 +77,14 @@ export function startHighlighting(
     return {
       pool: undefined,
       settled: Promise.resolve(HIGHLIGHT_MODE.MAIN_THREAD),
-      follow: () => undefined,
+      follow: () => Promise.resolve(),
     };
   }
   const pool = new WorkerPoolManager(
     {
       workerFactory: startWorker,
       poolSize: HIGHLIGHT_WORKERS,
+      totalASTLRUCacheSize: HIGHLIGHT_CACHE_ENTRIES,
       // Note that a worker failing to start is no error of the window's, since the list then highlights on its own thread.
       onWorkerError: (event) => event.preventDefault(),
     },
@@ -84,8 +95,7 @@ export function startHighlighting(
     () => HIGHLIGHT_MODE.MAIN_THREAD,
   );
   // Note that a look not taken, the pool having failed, leaves the list on the window's own thread in its own look.
-  const follow = (next: DiffLook) => {
+  const follow = (next: DiffLook) =>
     pool.setRenderOptions(poolRenderOptions(next, maxLineDiffLength)).catch(() => undefined);
-  };
   return { pool, settled, follow };
 }

@@ -10,10 +10,12 @@ import type { CodingAgent } from "@luke/database/models/coding-agent-store";
 import { REPLAY_STEP_KIND, type ReplayStep } from "@luke/features/agent-replay";
 import {
   CHECK_SUMMARY,
+  CODING_AGENT_KIND,
   CONTEXT_WINDOW,
   type CodingAgentPullRequest,
   PULL_REQUEST_STATE,
 } from "@luke/features/coding-agent-wire";
+import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
 import { it } from "vitest";
 import { replayOf, type StartFrom } from "./replay.js";
 import { SNAPSHOT_MISS } from "./snapshot.js";
@@ -44,10 +46,13 @@ const source: CodingAgent = {
   branch: null,
   startBranch: null,
   title: "Build the store",
+  personaName: null,
   archivedAt: null,
   archivedBy: null,
   disabledServers: [],
   author: null,
+  githubAccess: GITHUB_ACCESS.APP,
+  kind: CODING_AGENT_KIND.CODER,
   createdAt: new Date(0),
 };
 

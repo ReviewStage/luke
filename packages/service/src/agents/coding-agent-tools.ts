@@ -1,4 +1,5 @@
 import type { DatabaseServices } from "@luke/database/core/query";
+import type { ChatMemberSubject } from "@luke/database/models/chat-store";
 import {
   archiveIdleCodingAgent,
   awaitingLinesOfReached,
@@ -7,11 +8,18 @@ import {
   continuationsOf,
   IDLE_ARCHIVE,
   latestTurnsOfReached,
+  nativeRuntimesOfReached,
+  operatorReplaced,
+  pinCodingAgent,
   RUNNING_TURN_STATUSES,
   readCodingAgent,
   readCodingAgentByKey,
+  readCodingAgentRouting,
+  renameCodingAgent,
   taskNamesOf,
   unarchiveCodingAgentFrom,
+  updateCodingAgentChoice,
+  updateCodingAgentServers,
 } from "@luke/database/models/coding-agent-store";
 import {
   listJournals,
@@ -20,20 +28,25 @@ import {
   turnStoppedUnderReached,
 } from "@luke/database/models/message-reads";
 import { readPageById } from "@luke/database/models/plan-pages";
-import { listTaskSections } from "@luke/database/models/task-section-store";
+import { listTaskIssues, type TaskIssueLink } from "@luke/database/models/task-issue-store";
+import { listTaskSections, writeTaskSections } from "@luke/database/models/task-section-store";
 import {
-  createTask,
-  deleteTask,
   listTasks,
   readTask,
+  readTaskHeader,
   type StoredTask,
   type TaskChanges,
   updateTask,
 } from "@luke/database/models/task-store";
-import type { LineSender, StoreWriter } from "@luke/database/models/writer";
+import type { StoreWriter } from "@luke/database/models/writer";
 import type { StoredArchive } from "@luke/database/schemas/coding-agent";
-import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import { START_NOTE_HEADING } from "@luke/features/agent-replay";
+import {
+  runtimeChoiceRefusal,
+  runtimeChoiceRefusalWords,
+  runtimeModels,
+} from "@luke/features/agent-runtime-models";
+import { CHAT_TOOL, MEMBER_KIND } from "@luke/features/chat-wire";
 import {
   CODING_AGENT_ARCHIVER,
   CODING_AGENT_BOUNDS,
@@ -42,16 +55,34 @@ import {
   type CodingAgentPullRequestAnswer,
   type CodingAgentStartFrom,
   type CodingAgentStatus,
+  contextWindowSchema,
+  disabledServersSchema,
+  type NativeCodingAgentRuntime,
 } from "@luke/features/coding-agent-wire";
-import { githubRepositoryFullNameSchema } from "@luke/features/github-repositories-wire";
+import {
+  GITHUB_ACCESS,
+  type GitHubAccess,
+  githubRepositoryFullNameSchema,
+} from "@luke/features/github-repositories-wire";
 import { MENTION_KIND } from "@luke/features/mention-link";
-import { modelLabel } from "@luke/features/model-label";
+import { agentGivenName, modelLabel } from "@luke/features/model-label";
 import { type ModelChoice, modelChoiceSchema } from "@luke/features/models-wire";
-import { TASK_BOUNDS } from "@luke/features/task-wire";
+import { PAGE_OWNER, type PageOwner } from "@luke/features/page-wire";
+import { TASK_SECTION_WRITE } from "@luke/features/task-section-wire";
+import {
+  TASK_BOUNDS,
+  TASK_PRIORITY,
+  TASK_STATUS,
+  type TaskSummary,
+  taskPrioritySchema,
+  taskStatusSchema,
+} from "@luke/features/task-wire";
+import { taskKey } from "@luke/features/workspace-key";
 import { describeWire } from "@luke/wire/effect";
 import { isTextUIPart } from "ai";
-import { Clock, Effect, Option, Result, Schema } from "effect";
+import { Clock, Data, Effect, Option, Result, Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
+import { SqlClient } from "effect/sql";
 import {
   ACTION_RESULT_STATUS,
   HOSTED_API_ERROR,
@@ -62,7 +93,6 @@ import {
   type WireRecord,
   wireUuidSchema,
 } from "../core.js";
-import { recordServerEvent, SERVER_EVENT, SERVER_TASK_SOURCE } from "../events/server-events.js";
 import type { GitHubApp } from "../github/github-app.js";
 import {
   agentWorkspace,
@@ -75,23 +105,58 @@ import {
   hostedStoreOrUnavailable,
 } from "../http/http-effect.js";
 import { logStoreFailure, type StoreFailure } from "../http/store-failure.js";
+import type { WorkspaceLinearConnect } from "../integrations/integration-connect.js";
 import {
   ModelCatalog,
   ModelChoiceRefused,
   type OfferedModel,
   validateModelChoice,
 } from "../providers/model-catalog.js";
+import { archiveAskedStatus } from "../tasks/archive-settle.js";
 import type { PlanDocumentBinding } from "../tasks/plan-notes.js";
+import { agentStarterName, controlsAgent, writesToAgent } from "./agent-reach.js";
 import { AGENT_TOOL } from "./agent-runtime/tools.js";
-import type { EveSessions } from "./brain-host/eve-sessions.js";
+import type { AgentSessions } from "./brain-host/eve-sessions.js";
+import {
+  forwardedImageRefusalWords,
+  forwardedImages,
+  type ImageForwarder,
+} from "./coder-host/forwarded-images.js";
 import { agentPublished } from "./coder-host/published.js";
 import { callEntry } from "./coder-host/replay.js";
 import type { SummaryModelOf } from "./coder-host/replay-summary.js";
-import { accountModelChoices, startCodingAgent } from "./coder-host/start.js";
-import { codingAgentFailureOf, codingAgentStatusOf, lineAwaitsTurn } from "./coder-host/status.js";
-import { steerCodingAgent } from "./coder-host/steer.js";
-import { cancelledTurn, standsStopped, standingsOf as turnStandingsOf } from "./coder-host/stop.js";
+import { runnerChoiceApplied } from "./coder-host/runtime-sessions.js";
+import {
+  accountModelChoices,
+  placeOfAgent,
+  type StartWhere,
+  startCodingAgent,
+} from "./coder-host/start.js";
+import {
+  codingAgentFailureOf,
+  codingAgentStatusOf,
+  lineAwaitsTurn,
+  startedBlank,
+} from "./coder-host/status.js";
+import { cancelledTurn, standingsOf as turnStandingsOf } from "./coder-host/stop.js";
 import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
+import { STEWARD_ACT, type StewardAct, stewardRefusal } from "./steward.js";
+import {
+  assigneeIdOf,
+  assigneeMentionOf,
+  TASK_ASSIGNEE_INPUT,
+  taskAssigneeWrittenSchema,
+} from "./task-assignee.js";
+import {
+  issueChangesOf,
+  issueChangesStand,
+  issuesAnswered,
+  TASK_ISSUE_REFUSAL,
+  TASK_ISSUES_TO_LINK,
+  TASK_ISSUES_TO_RELATE,
+  TASK_ISSUES_TO_UNLINK,
+  writeIssueChanges,
+} from "./task-issue-tools.js";
 import {
   AGENT_LIST_INPUT,
   type AgentTask,
@@ -103,23 +168,29 @@ import {
   workspaceAgent,
   workspaceAgentsOf,
 } from "./workspace-agents.js";
-import { taskStepOf, workspaceStepOf, writtenMention } from "./written-mentions.js";
+import {
+  pageMention,
+  pageStepOf,
+  workspaceNamingOf,
+  workspaceStepOf,
+  writtenMention,
+} from "./written-mentions.js";
 
 /**
- * coding-agent-tools.ts -- the tools every agent reaches the workspace's coding agents by: list them, read one's progress, message one, start one.
+ * coding-agent-tools.ts -- the tools every agent reaches the workspace's coding agents by: list them, read one's progress, start one.
  *
  * Luke on a call and every coding agent are offered the same `list_agents`,
- * `read_agent`, `message_agent`, and `start_agent`, one implementation each;
+ * `read_agent`, and `start_agent`, one implementation each;
  * the caller is what differs (`AgentCaller`):
  * Luke acting for the member on the call, on the call's task, or a coding
  * agent acting for its starter, on its own task, which the host read from
- * the session it admitted and never from the call. A list, a read, and a
- * message reach any agent of the caller's workspace, on any task or none
+ * the session it admitted and never from the call. A list and a read
+ * reach any agent of the caller's workspace, on any task or none
  * and by any member, read on the caller's standing on every call
  * (`workspace-agents.ts`); an agent of another workspace is none of them,
  * even one the member is also in. A list names each agent's task, narrows
  * to one task or the caller's own where asked, and marks the archived
- * ones; a coding agent's own list leaves itself out. Each tool reads the
+ * agents; a coding agent's own list leaves itself out. Each tool reads the
  * same rows the agent tabs read: the agents and the newest turn each stands
  * on (`coder-host/status.ts`), the branch each row holds, and the
  * transcript's turn journals, rendered as a short tail of what the agent
@@ -129,16 +200,9 @@ import { taskStepOf, workspaceStepOf, writtenMention } from "./written-mentions.
  * aloud, so his tail's entries are cut close and his words for the tool say
  * so; a coding agent reads its tail as text, to learn why an agent went
  * quiet, so each of its entries keeps more, and it may ask for a longer
- * tail, to a bound. A message takes the one
- * path the message box's does (`coder-host/steer.ts`), under the key eve
- * gave the tool call, so a call eve runs again after a lost answer sends
- * once, and answers as soon as the session took it, never waiting on a
- * reply; an archived agent takes none and is woken by none. Luke's line is
- * kept as Luke's; a coding agent's under its own name
- * (`MESSAGE_SENDER.AGENT`), its words opening with who sent it and the id
- * to answer it by, written here rather than by the model, so the receiving
- * agent reads it as a colleague's word and neither the developer's nor
- * Luke's. A start takes the one path the Start button's does
+ * tail, to a bound. One agent messages another in a direct message of
+ * the workspace's chat (`coder-host/chat.ts`), which `message_agent` once
+ * did here. A start takes the one path the Start button's does
  * (`coder-host/start.ts`), on the caller's own task or another of its workspace, under the
  * same key, so a call run again starts no second agent: the plan as the
  * agent's brief, or the prompt in its place, and the note the call carries
@@ -148,7 +212,7 @@ import { taskStepOf, workspaceStepOf, writtenMention } from "./written-mentions.
  * lists is one a start takes, with its checkout cloned at the branch named
  * where one is, which GitHub must hold. An agent a
  * coding agent starts is told in that note which agent started it and how
- * to report back, and its choice leaves the member's default as it stood.
+ * to report back, in their task's chat or a direct message to it, and its choice leaves the member's default as it stood.
  * A start may name a new task instead, which is made as the member the
  * caller acts for would make it from the sidebar: in the caller's workspace,
  * owned by that member, with an empty plan, on the repository the caller
@@ -178,14 +242,13 @@ import { taskStepOf, workspaceStepOf, writtenMention } from "./written-mentions.
  * A task's change takes the one path the member's own task menu does
  * (`tasks-app.ts`'s PATCH, `task-store.ts`'s `updateTask`), for the member
  * the caller acts for: a new name, a repository confirmed through the
- * workspace's installation or none, that member's own pin, or an archive,
- * on any task of the caller's workspace, a teammate's among them. An archive
- * is made as the menu makes it, without asking and without stopping the
- * task's agents, so an agent still at work on it finishes the turn it is on
- * and takes no message after, and it records neither who archived the task
- * nor why, since a task's archive stamps only when it stands from. The
- * caller never archives the task it works on itself, and a change already
- * standing answers as done.
+ * workspace's installation or none, where it stands, or that member's own
+ * pin, on any task of the caller's workspace, a teammate's among them. A
+ * task is archived no longer, so an archive a call from before still asks
+ * for settles the task instead, Done or Canceled by whether an agent's
+ * pull request merged, without asking and without stopping the task's
+ * agents, and an unarchive puts it back to work (`tasks/archive-settle.ts`);
+ * a change already standing answers as done.
  * A stop takes the one path the Stop button's does (`coder-host/stop.ts`):
  * eve's cancel of the turn under way, named by eve's own id for it, then the
  * row's stamp, which `list_agents` then reads as cancelled. The agent stays
@@ -224,87 +287,48 @@ const CODING_AGENT_TOOL_BOUNDS = {
   ACTIVITY_CHARS: 160,
 } as const;
 
-/**
- * The room the heading a coding agent's message opens with takes
- * (`agentLine`), which its words leave free: a message's words may run to a
- * member's bound, as Luke's do, since he passes on the developer's own, but
- * a coding agent's whole line is held to that bound as it is composed, so
- * the line the other agent receives is never longer than one a member could
- * send.
- */
-const AGENT_HEADING_ROOM_CHARS = 1_000;
-
 /** Why a call ran nothing, or sent nothing, in words the model can act on. */
 export const CODING_AGENT_TOOL_REFUSAL = {
-  UNREADABLE:
-    `Not run: name the agent by the id ${AGENT_TOOL.LIST_AGENTS} answered, and a message as text of at ` +
-    `most ${CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS} characters.`,
+  UNREADABLE: `Not run: name the agent by the id ${AGENT_TOOL.LIST_AGENTS} answered.`,
   UNREADABLE_FILTER: "Not run: narrow the list by a taskId, by thisTask, or by neither.",
   UNREADABLE_TASKS:
-    "Not run: narrow the tasks by words of their name, page them by an offset of 0 or more, and " +
-    "ask for the archived ones too with includeArchived true, or leave it out.",
+    "Not run: narrow the tasks by words of their name, by a status " +
+    `(${Object.values(TASK_STATUS).join(", ")}), and by an assignee as a member's mention link ` +
+    "or null, and page them by an offset of 0 or more.",
   NO_AGENT: `Not run: no coding agent of your workspace has that id; ${AGENT_TOOL.LIST_AGENTS} names them.`,
   NO_WORKSPACE:
     "Not run: your workspace could not be read for you, so no agent is reached from here.",
-  SELF: "Not sent: that id is your own; message another agent.",
-  TOO_LONG:
-    `Not sent: with the heading naming you, the message runs over ${CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS} ` +
-    `characters; keep a message of yours under ${CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS - AGENT_HEADING_ROOM_CHARS}.`,
   STORE: "Not run: the agents could not be read just now. The call may be made again.",
-  NO_SERVICE: "Not sent: this deployment cannot reach the coding agents' service.",
-  NOT_REACHABLE:
-    "Not sent: the GitHub installation connected to the workspace no longer reaches that agent's repository.",
-  NOT_READY:
-    "Not sent: that agent's session is still coming up; the same message a moment later is taken.",
-  RETIRED:
-    "Not sent: that agent's session has ended for good, so nothing reaches it; it is idle now, and reads as failed " +
-    "where it was at work, so it may be archived, and only a new agent goes on from here.",
-  UNAVAILABLE: "Not sent: the service could not take the message just now.",
-  ARCHIVED:
-    "Not sent: that agent's task is archived, so its agents take no message until a member unarchives it.",
-  AGENT_ARCHIVED:
-    "Not sent: that agent is archived, so it takes no message and is not woken until a member unarchives it.",
 } as const;
 
-/** Why an archive or an unarchive changed nothing, in words the model can act on. */
-export const ARCHIVE_AGENT_REFUSAL = {
-  UNREADABLE:
-    `Not run: name the agent by the id ${AGENT_TOOL.LIST_AGENTS} answered, and a reason as text of at ` +
-    `most ${CODING_AGENT_BOUNDS.MAX_ARCHIVE_REASON_CHARS} characters or none.`,
-  SELF: "Not archived: that id is your own, and an agent does not archive itself; say you are done, and the developer archives you.",
-  WORKING:
-    "Not archived: that agent is still starting or working, and archiving it would stop a turn no one gets back. " +
-    "Wait until it is idle, or ask the developer, who can stop and archive it.",
-  REARCHIVED:
-    "Not unarchived: that agent was archived again as it was read, so the archive standing is " +
-    `another's; read it again with ${AGENT_TOOL.LIST_AGENTS} and call again if it should still come back.`,
-} as const;
+/** How the task tools word a priority. */
+export const TASK_PRIORITY_WORDS =
+  "How much the task matters; none for a task no one has weighed yet.";
 
 /** Why a task's change changed nothing, in words the model can act on. */
 export const UPDATE_TASK_REFUSAL = {
   UNREADABLE:
     `Not run: name the task by the id ${AGENT_TOOL.LIST_TASKS} or ${AGENT_TOOL.LIST_AGENTS} answered, ` +
     `and at least one change: a name of at most ${TASK_BOUNDS.MAX_NAME_CHARS} characters, a ` +
-    "repository as owner/name or null, archived, or pinned.",
-  OWN_TASK:
-    "Not archived: that is the task you work on, and you do not archive it yourself; say you are " +
-    "done, and the developer archives it. Its other changes are yours to make without archived.",
+    "repository as owner/name or null, pinned, a sectionId or null, a status " +
+    `(${Object.values(TASK_STATUS).join(", ")}), a priority ` +
+    `(${Object.values(TASK_PRIORITY).join(", ")}), an assignee as a member's mention link or ` +
+    "null, or issues to link, unlink, or relate.",
   NO_TASK:
     "Not run: no task of your workspace has that id, so it is none you can change; " +
-    `${AGENT_TOOL.LIST_TASKS} names them, the archived ones too with includeArchived.`,
-  ARCHIVED:
-    "Not changed: that task is archived, so it takes no new name or repository; bring it back in " +
-    "the same call with archived false, or leave it as it is.",
-  AGENTS_WORKING:
-    "Not archived: an agent on that task is still starting or working, and archiving the task " +
-    "archives its agents with it, which would stop a turn no one gets back. Wait until they are " +
-    "idle, or ask the developer, who can archive it and stop them.",
+    `${AGENT_TOOL.LIST_TASKS} names them.`,
+  NOT_MEMBER:
+    "Not run: that assignee is no member of the task's workspace, or names no person; name a " +
+    `member by the mention link read_chat or ${AGENT_TOOL.LIST_TASKS} hands you, or null for no one.`,
   NOT_REACHABLE:
-    "Not changed: the GitHub installation connected to the workspace does not reach that " +
+    "Not run: the GitHub installation connected to the workspace does not reach that " +
     "repository; name one it reaches, or null for none.",
   GITHUB_UNANSWERED:
-    "Not changed: GitHub did not answer whether the workspace reaches that repository. The call " +
+    "Not run: GitHub did not answer whether the workspace reaches that repository. The call " +
     "may be made again.",
+  NO_SECTION:
+    "Not run: the developer you work for keeps no section of this workspace under that id; " +
+    `${AGENT_TOOL.LIST_TASKS} names the sections.`,
 } as const;
 
 /** Why a stop changed nothing, in words the model can act on. */
@@ -318,6 +342,8 @@ export const STOP_AGENT_REFUSAL = {
   NO_SERVICE: "Not stopped: this deployment cannot reach the coding agents' service.",
   UNAVAILABLE:
     "Not stopped: the service could not reach that agent's session just now. The call may be made again.",
+  NATIVE_NOT_HERE:
+    "Not stopped: that agent runs on Claude Code or Codex, which cannot be reached from here yet; a member stops it from the agent's own tab.",
 } as const;
 
 /** The most characters of a page's HTML a read answers, about ten thousand tokens: the rest is counted, never sent. */
@@ -338,13 +364,20 @@ export const START_CODING_AGENT_REFUSAL = {
     `${CODING_AGENT_BOUNDS.MAX_START_WORDS_CHARS} characters, or none to start on the plan, a note ` +
     `bounded the same or none, a title of at most ${CODING_AGENT_BOUNDS.MAX_TITLE_CHARS} ` +
     "characters or none, a branch as one git branch name or none, a model with its effort, " +
-    "both or neither, and a taskId or a newTask name of at most " +
-    `${TASK_BOUNDS.MAX_NAME_CHARS} characters, one or neither.`,
-  NO_TASK: `Not started: you work on no task; name one by its taskId, as ${AGENT_TOOL.LIST_TASKS} answered it.`,
+    `both or neither, a taskId or none, and images as at most ${CODING_AGENT_BOUNDS.MAX_ATTACHMENTS} ` +
+    "attachment ids or none.",
+  NO_TASK:
+    `Not started: you work on no task; name one by its taskId, as ${AGENT_TOOL.LIST_TASKS} ` +
+    `answered it, or make one with ${AGENT_TOOL.CREATE_TASK} first.`,
+  NEW_TASK:
+    `Not started: start_agent no longer makes a task; make it with ${AGENT_TOOL.CREATE_TASK}, then ` +
+    "start the agent on it by its taskId.",
   NO_SUCH_TASK: `Not started: no task of your workspace has that id; ${AGENT_TOOL.LIST_TASKS} names them.`,
-  NO_WORKSPACE: "Not started: your workspace could not be read for you, so no task is made in it.",
   NO_SERVICE: "Not started: this deployment cannot reach the coding agents' service.",
   NO_REPOSITORY: "Not started: this task names no GitHub repository yet.",
+  SOURCE_NO_REPOSITORY:
+    "Not started: that agent works on no task and in no GitHub repository, so there is no " +
+    "checkout to go on from; start a new agent with a prompt instead.",
   NO_BRANCH:
     "Not started: the task's repository has no such branch on GitHub. Push it first, or name a " +
     "branch that exists there, such as the head branch of the pull request to build on; leave " +
@@ -355,16 +388,22 @@ export const START_CODING_AGENT_REFUSAL = {
     "Not started: the GitHub installation connected to the task's workspace does not reach the task's repository.",
   UNAVAILABLE:
     "Not started: the service could not start an agent just now. The call may be made again.",
-  ARCHIVED: "Not started: this task is archived; a member unarchives it first.",
+  IMAGE_PREPARING:
+    "Not started: the agent's sandbox image is still being prepared; start it again in a minute or two.",
+  PLAN_SIGNED_OUT:
+    "Not started: the plan that would pay for it is signed out; its starter signs in again in Settings.",
+  PLAN_UNREACHABLE:
+    "Not started: the plan's provider did not answer; start it again in a minute or two.",
+  PLAN_LIMIT_REACHED:
+    "Not started: the plan that would pay for it has reached its usage limit; start it after the limit resets, or its starter chooses the API key in Settings.",
+  PLAN_INELIGIBLE:
+    "Not started: the plan's provider said the account is not eligible to run it; its starter chooses the API key in Settings.",
   NO_SOURCE:
     "Not started: no coding agent of your workspace has that id to start from; " +
     `${AGENT_TOOL.LIST_AGENTS} names them.`,
-  SOURCE_NO_TASK:
-    "Not started: that agent works on no task, and only an agent on a task is continued or " +
-    "forked; start a new agent with a prompt instead.",
   SOURCE_OTHER_TASK:
-    "Not started: that agent works on another task than the taskId named; leave taskId out to " +
-    "start on its own task.",
+    "Not started: that agent works on another task than the taskId named, or on none; leave " +
+    "taskId out to start where it works.",
   FROM_WITH_PROMPT:
     "Not started: an agent started from another is handed that agent's brief, transcript, and " +
     "work on that agent's own task, so it takes no prompt, no branch, and no new task; put what it " +
@@ -385,7 +424,14 @@ export const START_CODING_AGENT_REFUSAL = {
 /** Why a list of the models answered none, in words the model can act on. */
 export const LIST_MODELS_REFUSAL = {
   UNAVAILABLE: "Not listed: the models could not be read just now. The call may be made again.",
+  UNREADABLE: `Not listed: name an agent, if any, by the id ${AGENT_TOOL.LIST_AGENTS} answered.`,
 } as const;
+
+/** Whether the caller may write to the agent under the plan's policy (`agent-reach.ts`'s `writesToAgent`), its payer read now. */
+const writesAsPlanPolicy = (userId: string, agent: CodingAgent) =>
+  Effect.map(readCodingAgentRouting(userId, agent.id), (routing) =>
+    writesToAgent(userId, agent, Option.isSome(routing) ? routing.value.payer : null),
+  );
 
 /** The start refusal's sentence for each hosted refusal a start may answer; any other is the service down. */
 const START_REFUSAL_WORDS: ReadonlyMap<string, string> = new Map([
@@ -393,16 +439,11 @@ const START_REFUSAL_WORDS: ReadonlyMap<string, string> = new Map([
   [HOSTED_API_ERROR.BRANCH_NOT_FOUND, START_CODING_AGENT_REFUSAL.NO_BRANCH],
   [HOSTED_API_ERROR.GITHUB_UNANSWERED, START_CODING_AGENT_REFUSAL.GITHUB_UNANSWERED],
   [HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE, START_CODING_AGENT_REFUSAL.NOT_REACHABLE],
-  [HOSTED_API_ERROR.TASK_ARCHIVED, START_CODING_AGENT_REFUSAL.ARCHIVED],
-]);
-
-/** The refusal's sentence for each hosted refusal a steer may answer; any other is the service down. */
-const REFUSAL_WORDS: ReadonlyMap<string, string> = new Map([
-  [HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE, CODING_AGENT_TOOL_REFUSAL.NOT_REACHABLE],
-  [HOSTED_API_ERROR.AGENT_NOT_READY, CODING_AGENT_TOOL_REFUSAL.NOT_READY],
-  [HOSTED_API_ERROR.AGENT_RETIRED, CODING_AGENT_TOOL_REFUSAL.RETIRED],
-  [HOSTED_API_ERROR.NOT_FOUND, CODING_AGENT_TOOL_REFUSAL.NO_AGENT],
-  [HOSTED_API_ERROR.TASK_ARCHIVED, CODING_AGENT_TOOL_REFUSAL.ARCHIVED],
+  [HOSTED_API_ERROR.AGENT_IMAGE_PREPARING, START_CODING_AGENT_REFUSAL.IMAGE_PREPARING],
+  [HOSTED_API_ERROR.AGENT_PLAN_SIGNED_OUT, START_CODING_AGENT_REFUSAL.PLAN_SIGNED_OUT],
+  [HOSTED_API_ERROR.AGENT_PLAN_UNREACHABLE, START_CODING_AGENT_REFUSAL.PLAN_UNREACHABLE],
+  [HOSTED_API_ERROR.AGENT_PLAN_LIMIT_REACHED, START_CODING_AGENT_REFUSAL.PLAN_LIMIT_REACHED],
+  [HOSTED_API_ERROR.AGENT_PLAN_INELIGIBLE, START_CODING_AGENT_REFUSAL.PLAN_INELIGIBLE],
 ]);
 
 /** Who calls an agent tool: Luke on a call, or a coding agent from its own session. */
@@ -424,7 +465,7 @@ type AgentCaller =
 export interface CodingAgentCall {
   readonly caller: AgentCaller;
   /** eve's coding-agent service as the deployment acting for the caller's member; nothing where the deployment names no secret or no origin for eve, which sends and starts nothing. */
-  readonly eve: EveSessions | undefined;
+  readonly eve: AgentSessions | undefined;
   readonly writer: Effect.Effect<StoreWriter>;
   /** The key a message or a start is made under: eve's own id for the tool call, so a call run again sends or starts once. */
   readonly clientKey: string;
@@ -432,8 +473,13 @@ export interface CodingAgentCall {
   readonly summaryModel?: SummaryModelOf | undefined;
 }
 
-/** What a message or a start reaches: the store, GitHub through the App on the member's standing, the network to eve, and the catalog a start's choice is checked against. */
-type CodingAgentToolServices = DatabaseServices | HttpClient.HttpClient | GitHubApp | ModelCatalog;
+/** What a message or a start reaches: the store, GitHub through the App on the member's standing, the network to eve, the catalog a start's choice is checked against, and the workspace's Linear a task's issue is read through. */
+export type CodingAgentToolServices =
+  | DatabaseServices
+  | HttpClient.HttpClient
+  | GitHubApp
+  | ModelCatalog
+  | WorkspaceLinearConnect;
 
 const AGENT_ID = describeWire(
   wireUuidSchema,
@@ -441,6 +487,19 @@ const AGENT_ID = describeWire(
 );
 
 const READ_AGENT_INPUT = Schema.Struct({ agentId: AGENT_ID });
+
+/** A list of models names, at most, the agent whose change it is for, whose runtime narrows it. */
+const LIST_MODELS_INPUT = Schema.Struct({
+  agentId: Schema.optionalKey(
+    describeWire(
+      wireUuidSchema,
+      `An agent of your workspace, by the id ${AGENT_TOOL.LIST_AGENTS} answered, to list what it ` +
+        `may move to with ${AGENT_TOOL.UPDATE_AGENT}; leave it out for what a start takes.`,
+    ),
+  ),
+});
+
+const readListModelsAsked = Schema.decodeUnknownResult(LIST_MODELS_INPUT);
 
 /** A coding agent's read names the agent and, at most, how long a tail it wants. */
 const CODER_READ_AGENT_INPUT = Schema.Struct({
@@ -457,18 +516,10 @@ const CODER_READ_AGENT_INPUT = Schema.Struct({
   ),
 });
 
-const MESSAGE_AGENT_INPUT = Schema.Struct({
-  agentId: AGENT_ID,
-  text: describeWire(
-    Schema.Trim.check(
-      Schema.isNonEmpty(),
-      Schema.isMaxLength(CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS),
-    ),
-    "What to tell the agent, as a message it reads in its own conversation; the developer's " +
-      `words where you pass on theirs. A coding agent's message opens with a heading naming it, so ` +
-      `keep one of yours under ${CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS - AGENT_HEADING_ROOM_CHARS} characters.`,
-  ),
-});
+/** A bound in bytes as a tool's words say it, in megabytes. */
+function megabytesOf(bytes: number): string {
+  return `${bytes / 1_000_000} MB`;
+}
 
 /** A prompt or a note a start may name: bounded apart from a message, since a brief to a worker on a long plan is quoted whole. */
 const START_PROMPT = Schema.Trim.check(
@@ -505,17 +556,7 @@ const START_AGENT_INPUT = Schema.Struct({
     describeWire(
       wireUuidSchema,
       `The task to start the agent on, by the id ${AGENT_TOOL.LIST_TASKS} answered; leave it out ` +
-        "for the task you work on or a new task.",
-    ),
-  ),
-  newTask: Schema.optionalKey(
-    describeWire(
-      Schema.Trim.check(Schema.isNonEmpty(), Schema.isMaxLength(TASK_BOUNDS.MAX_NAME_CHARS)),
-      "The name of a new task to make and start the agent on, as the developer would name it in " +
-        "the sidebar: made in your workspace, on the repository you work in, owned by the " +
-        "developer you work for, with an empty plan, so give a prompt with it. Never with a taskId, " +
-        "and only for work unrelated to the task you work on, where the developer asked for a new " +
-        "task, or where you work on no task.",
+        "for the task you work on.",
     ),
   ),
   prompt: Schema.optionalKey(
@@ -533,11 +574,22 @@ const START_AGENT_INPUT = Schema.Struct({
         "message; leave it out where there is nothing beyond the plan.",
     ),
   ),
+  images: Schema.optionalKey(
+    describeWire(
+      Schema.Array(wireUuidSchema).check(Schema.isMaxLength(CODING_AGENT_BOUNDS.MAX_ATTACHMENTS)),
+      "Pictures handed to the agent with its first message, which it sees as images: at most " +
+        `${CODING_AGENT_BOUNDS.MAX_ATTACHMENTS} attachment ids, each a picture of your own ` +
+        `conversation, such as one ${AGENT_TOOL.SHOW_IMAGE} kept, or of a chat message you can ` +
+        `read; each at most ${megabytesOf(CODING_AGENT_BOUNDS.MAX_IMAGE_BYTES)} and all of them ` +
+        `${megabytesOf(CODING_AGENT_BOUNDS.MAX_ATTACHMENTS_BYTES)} together, since a larger one is ` +
+        "refused, never made smaller. Leave it out to hand none.",
+    ),
+  ),
   title: Schema.optionalKey(
     describeWire(
       START_TITLE,
-      "The agent's title from the start, how the developer sees it named, such as the pull " +
-        "request it will open; leave it out to have it named from what it is told.",
+      "The agent's title from the start, what it works on, shown beside the human name it is " +
+        "given, such as the pull request it will open; leave it out to have it named from what it is told.",
     ),
   ),
   branch: Schema.optionalKey(
@@ -577,7 +629,8 @@ const START_AGENT_INPUT = Schema.Struct({
           ),
         ),
       }),
-      "Another coding agent of your workspace to take over from, on its own task: the new " +
+      "Another coding agent of your workspace to take over from, on its own task, or on no " +
+        "task where it has none: the new " +
         "agent is handed its brief and its transcript (with Luke's summary of the steps that " +
         "do not fit) and a copy of its work, runs on its model unless you name one, and hears " +
         "the note after them; it takes no prompt and no branch. Without messageId it continues " +
@@ -589,28 +642,10 @@ const START_AGENT_INPUT = Schema.Struct({
 const readAgentRef = Schema.decodeUnknownResult(READ_AGENT_INPUT);
 const readAgentAsked = Schema.decodeUnknownResult(CODER_READ_AGENT_INPUT);
 
-const ARCHIVE_AGENT_INPUT = Schema.Struct({
-  agentId: AGENT_ID,
-  reason: Schema.optionalKey(
-    describeWire(
-      Schema.Trim.check(
-        Schema.isNonEmpty(),
-        Schema.isMaxLength(CODING_AGENT_BOUNDS.MAX_ARCHIVE_REASON_CHARS),
-      ),
-      "Why it is archived, in a short sentence the developer reads on the archived agent's " +
-        "banner beside your name, such as its pull request having merged; leave it out where " +
-        "there is nothing to say.",
-    ),
-  ),
-});
-
-const readArchive = Schema.decodeUnknownResult(ARCHIVE_AGENT_INPUT);
-
 /**
  * A task's change names the task and at least one of what the member's own
- * menu changes of it: its name, its repository, its archive, and the
- * member's own pin. Note that an archive keeps no reason, since a task's
- * archive stamps only when it stands from.
+ * menu changes of it: its name, its repository, where it stands, and the
+ * member's own pin.
  */
 const UPDATE_TASK_INPUT = Schema.Struct({
   taskId: describeWire(
@@ -631,12 +666,6 @@ const UPDATE_TASK_INPUT = Schema.Struct({
         "installation must reach; null for none.",
     ),
   ),
-  archived: Schema.optionalKey(
-    describeWire(
-      Schema.Boolean,
-      "true to archive it, as the Archive task menu does, false to bring an archived one back.",
-    ),
-  ),
   pinned: Schema.optionalKey(
     describeWire(
       Schema.Boolean,
@@ -644,14 +673,43 @@ const UPDATE_TASK_INPUT = Schema.Struct({
         "alone, no other member's.",
     ),
   ),
+  status: Schema.optionalKey(describeWire(taskStatusSchema, "Where the task now stands.")),
+  priority: Schema.optionalKey(describeWire(taskPrioritySchema, TASK_PRIORITY_WORDS)),
+  assignee: Schema.optionalKey(TASK_ASSIGNEE_INPUT),
+  sectionId: Schema.optionalKey(
+    describeWire(
+      Schema.NullOr(wireUuidSchema),
+      "The sidebar section the developer you work for keeps it in, by the id " +
+        `${AGENT_TOOL.LIST_TASKS} or ${AGENT_TOOL.CREATE_SECTION} answered; it leaves the section ` +
+        "it stood in and lands at the top of this one. null takes it out of its section, back " +
+        "under Tasks.",
+    ),
+  ),
+  linkIssues: Schema.optionalKey(TASK_ISSUES_TO_LINK),
+  unlinkIssues: Schema.optionalKey(TASK_ISSUES_TO_UNLINK),
+  relateIssues: Schema.optionalKey(TASK_ISSUES_TO_RELATE),
 });
 
-const readTaskUpdate = Schema.decodeUnknownResult(UPDATE_TASK_INPUT);
-const readMessage = Schema.decodeUnknownResult(MESSAGE_AGENT_INPUT);
-/** A start as a call carries it: one Luke made under the tool's earlier words names its prompt `task`. */
+/**
+ * A task's change as a call carries it: one from before a task stopped
+ * being archived may still ask for its archive, which settles the task
+ * instead, or its unarchive, which puts it back to work (`archive-settle.ts`).
+ */
+const UPDATE_TASK_CALL = Schema.Struct({
+  ...UPDATE_TASK_INPUT.fields,
+  archived: Schema.optionalKey(Schema.Boolean),
+});
+
+const readTaskUpdate = Schema.decodeUnknownResult(UPDATE_TASK_CALL);
+/**
+ * A start as a call carries it: one Luke made under the tool's earlier words
+ * names its prompt `task`, and one made before `create_task` may name a
+ * `newTask`, which is read only to be refused with where to go now.
+ */
 const START_AGENT_CALL = Schema.Struct({
   ...START_AGENT_INPUT.fields,
   task: Schema.optionalKey(START_PROMPT),
+  newTask: Schema.optionalKey(Schema.Unknown),
 });
 
 const readStart = Schema.decodeUnknownResult(START_AGENT_CALL);
@@ -661,11 +719,11 @@ export const LIST_AGENTS_TOOL = {
   name: AGENT_TOOL.LIST_AGENTS,
   description:
     "List the coding agents of your workspace, on any task or none and started by any member, " +
-    "yourself left out: each with its id, its title (how the developer sees it named), the model " +
+    "yourself left out: each with its id, its name (the human name the developer sees it by, where it has one), its title (what it works on), the model " +
     "and effort it runs on with the model's name to say it by, its status (starting, running, " +
     "completed, failed, cancelled) and why where it failed, its repository and the branch its " +
     "sandbox is on if a turn " +
-    "has ended, one line of what it last did, its task (id, name, and whether archived; null for " +
+    "has ended, one line of what it last did, its task (id and name; null for " +
     "an agent on no task) and whether that is the task you work on, and whether the agent is " +
     "archived, and its mention, the `[@title](link)` to name it by in your words, " +
     `the newest started first and at most ${WORKSPACE_AGENTS_LIST_LIMIT}. Pass thisTask ` +
@@ -675,17 +733,6 @@ export const LIST_AGENTS_TOOL = {
     "still running long after its last activity may have lost its session; a message to it " +
     "refused as ended for good settles it as failed.",
   inputSchema: AGENT_LIST_INPUT,
-} as const;
-
-/** `read_agent` as Luke on a call is offered it, who says what he read aloud. */
-export const READ_AGENT_TOOL = {
-  name: AGENT_TOOL.READ_AGENT,
-  description:
-    "Read one coding agent's recent progress: its status, the branch it pushed and the pull " +
-    "request from it as GitHub holds them, and a short tail of what it last said and did, " +
-    "newest last, each entry with the messageId to fork the agent at. Summarise it in a " +
-    "sentence or two; never read it out.",
-  inputSchema: READ_AGENT_INPUT,
 } as const;
 
 /** `read_agent` as a coding agent is offered it, which reads the tail as text and may ask for more of it. */
@@ -705,30 +752,19 @@ export const CODER_READ_AGENT_TOOL = {
   inputSchema: CODER_READ_AGENT_INPUT,
 } as const;
 
-export const MESSAGE_AGENT_TOOL = {
-  name: AGENT_TOOL.MESSAGE_AGENT,
-  description:
-    "Send a coding agent of your workspace a message, by its id. It lands in that agent's " +
-    "conversation under your name: a running agent sees it at its next step, and an idle one " +
-    "starts a turn on it. Answers `accepted` once that agent's session has taken it, without " +
-    "waiting for it to act or reply, or `rejected` and why nothing was sent; an archived agent " +
-    "takes nothing.",
-  inputSchema: MESSAGE_AGENT_INPUT,
-} as const;
-
 export const START_AGENT_TOOL = {
   name: AGENT_TOOL.START_AGENT,
   description:
     "Start a new coding agent on the task you work on, or on another task of your workspace by " +
-    `its taskId as ${AGENT_TOOL.LIST_TASKS} answered it, or on a new task named by newTask, ` +
-    "which is made in your workspace on the repository you work in, for a separate piece of " +
-    "work that should stand as a task of its own in the developer's sidebar; exactly as the " +
-    "developer's Start button would: on the task's plan itself with no prompt, or on the prompt given in the plan's " +
-    "place, with the note after either. Start it on the task you work on, taskId and newTask " +
-    "left out, for any part of that task's work, even one that runs apart from yours, so its " +
-    "branch, pull request, and transcript stand under that task; name another task or a new " +
-    "one only for work unrelated to it, or where the developer asked for that; where you work " +
-    "on no task, name one, or a new one, for any work. " +
+    `its taskId as ${AGENT_TOOL.LIST_TASKS} answered it, exactly as the developer's Start ` +
+    "button would: on the task's plan itself with no prompt, or on the prompt given in the " +
+    "plan's place, with the note after either and any pictures images names, which it sees as " +
+    "images. Start it on the task you work on, taskId left " +
+    "out, for any part of that task's work, even one that runs apart from yours, so its " +
+    "branch, pull request, and transcript stand under that task; name another task only for " +
+    "work unrelated to it, or where the developer asked for that, and for work that should " +
+    `stand as a task of its own, make it with ${AGENT_TOOL.CREATE_TASK} first; where you work ` +
+    "on no task, name one for any work. " +
     "This one call carries everything the agent is told as " +
     "it starts, and the agent sets to work on it at once, so never follow it with a message to " +
     "the agent it started; message it only when there is something new to say. Its checkout is " +
@@ -736,7 +772,7 @@ export const START_AGENT_TOOL = {
     "It runs on the " +
     "model and effort named, or on the member's default with neither. Answers `accepted` with " +
     "the agent's id, model, the model's name to say it by, effort, status, and mention once its session " +
-    "is open, and the new task's id, name, and mention where it made one, or `rejected` and why " +
+    "is open, or `rejected` and why " +
     "nothing was started; a rejected model or effort lists the choices. " +
     `${AGENT_TOOL.LIST_MODELS} lists them before you name one. With from, it starts from ` +
     "another agent instead: continue an agent (or worker) " +
@@ -756,53 +792,29 @@ export const LIST_MODELS_TOOL = {
     "model takes, the model's name to say it by, and the efforts it lists, one of which its " +
     "effort takes; and the member's default model and effort, which a start naming neither runs " +
     "on, and whether it is still offered. Call it before you name a model or an effort to " +
-    `${AGENT_TOOL.START_AGENT}, such as one the developer named in their own words.`,
-  inputSchema: Schema.Struct({}),
-} as const;
-
-export const ARCHIVE_AGENT_TOOL = {
-  name: AGENT_TOOL.ARCHIVE_AGENT,
-  description:
-    "Archive a coding agent of your workspace by its id, as the developer's Archive agent " +
-    "would, on behalf of the developer you work for: it leaves the sidebar, its task's tabs, " +
-    "and every list but the archived ones, takes no message, and is not woken, while its " +
-    "transcript, branch, and pull request are kept, and any member can unarchive it. Archive " +
-    "a helper or worker agent whose work is done, such as one whose pull request merged, or " +
-    "one the developer asked you to clean up; never a teammate's agent still in use unless " +
-    "the developer asked for it. Only an idle agent is archived: one still starting or " +
-    "running is refused, and no agent archives itself. Give a short reason, which the " +
-    "archived agent's banner shows with your name. Answers `accepted`, also for an agent " +
-    "already archived, or `rejected` and why. Then say which agent you archived and why.",
-  inputSchema: ARCHIVE_AGENT_INPUT,
-} as const;
-
-export const UNARCHIVE_AGENT_TOOL = {
-  name: AGENT_TOOL.UNARCHIVE_AGENT,
-  description:
-    "Bring an archived coding agent of your workspace back by its id, as the developer's " +
-    "Unarchive would: it stands in its task and the lists again and takes messages, its " +
-    "transcript and pull request as they were. Unarchive one archived by mistake, or one the " +
-    "developer asks for. Answers `accepted`, also for an agent not archived, or `rejected` " +
-    "and why.",
-  inputSchema: READ_AGENT_INPUT,
+    `${AGENT_TOOL.START_AGENT}, such as one the developer named in their own words. Name an ` +
+    `agentId to list instead what that agent may move to with ${AGENT_TOOL.UPDATE_AGENT}: an ` +
+    "agent on Claude Code runs Claude models alone, and one on Codex GPT models alone, with no " +
+    "fast version.",
+  inputSchema: LIST_MODELS_INPUT,
 } as const;
 
 export const UPDATE_TASK_TOOL = {
   name: AGENT_TOOL.UPDATE_TASK,
   description:
     "Change a task of your workspace by its id, as the developer's own task menu would, on behalf " +
-    "of the developer you work for: rename it, set or clear its repository, pin or unpin it in " +
-    "their sidebar, or archive it or bring it back; name at least one change, and several go in " +
-    "one call. An archived task leaves the sidebar and every list but the archived ones, its plan " +
-    "takes no edit, and its agents take no message and start no new turn, while everything on it " +
-    "is kept and any member can bring it back. Like the menu, an archive asks no one and stops no " +
-    "agent: one still working on the task finishes the turn it is on. Archive a task whose work is " +
-    "done, such as one whose pull requests merged, or one the developer asked you to clean up; " +
-    "never a teammate's task still in use unless the developer asked for it. The task you work on " +
-    "yourself is never archived, though its other changes are yours to make. Find an archived " +
-    `task with ${AGENT_TOOL.LIST_TASKS} and includeArchived. Answers \`accepted\` with the task as ` +
-    "it now stands, `already` true where every change named already stood, or `rejected` and " +
-    "why. Then say which tasks you changed and how.",
+    "of the developer you work for: rename it, set or clear its repository, set where it stands " +
+    "(its status) or how much it matters (its priority), assign it to a member of the " +
+    "workspace or to no one, pin or unpin it in their sidebar, " +
+    "or link, unlink, or relate its GitHub or Linear issues, each " +
+    "issue to link read from its provider first; name at least one change, and several go in " +
+    "one call. Mark a task whose work is " +
+    "done Done, with status done, as the menu's Mark done does, such as one whose pull requests " +
+    "merged, or one the developer asked you to clean up; never a teammate's " +
+    "task still in use unless the developer asked for it. A task is never archived: a settled " +
+    `one stands Done or Canceled, which ${AGENT_TOOL.LIST_TASKS} lists by status. Answers \`accepted\` with the task as ` +
+    "it now stands, the issues it links where the call changed them, `already` true where every " +
+    "change named already stood, or `rejected` and why. Then say which tasks you changed and how.",
   inputSchema: UPDATE_TASK_INPUT,
 } as const;
 
@@ -838,9 +850,10 @@ const readPageAsked = Schema.decodeUnknownResult(READ_PAGE_INPUT);
 export const READ_PAGE_TOOL = {
   name: AGENT_TOOL.READ_PAGE,
   description:
-    "Read a page an agent showed on a task of your workspace, by its id: its title, the " +
-    "version read (the newest unless you name one) and the newest there is, its task and " +
-    "whether that is the task you work on, its mention ready to write, and its HTML as it " +
+    "Read a page an agent showed in your workspace, by its id: its title, the version read " +
+    "(the newest unless you name one) and the newest there is, its task and whether that is " +
+    "the task you work on, or, for a page an agent on no task showed on itself, that agent " +
+    "and whether it is you, its mention ready to write, and its HTML as it " +
     "stands, cut on a line at " +
     `${READ_PAGE_CHARS} characters with how many were left out. Read a page the developer ` +
     "pointed you at, or one another agent showed, before you build on it or revise it; to " +
@@ -848,19 +861,157 @@ export const READ_PAGE_TOOL = {
   inputSchema: READ_PAGE_INPUT,
 } as const;
 
-/** A list of tasks names its words to look for at most, how many of the matching tasks to pass over, and whether the archived ones are listed too. */
-const LIST_TASKS_INPUT = Schema.Struct({
-  includeArchived: Schema.optionalKey(
+/** Why a change to an agent changed nothing, in words the model can act on; a choice the catalog refused is said with the choices (`choiceRefusal`). */
+export const UPDATE_AGENT_REFUSAL = {
+  UNREADABLE:
+    `Not changed: name the agent by the id ${AGENT_TOOL.LIST_AGENTS} answered and at least one ` +
+    `change: a title of at most ${CODING_AGENT_BOUNDS.MAX_TITLE_CHARS} characters (empty clears ` +
+    "it), a model with its effort, both or neither, a contextWindow only with them, pinned, or " +
+    "disabledServers as connection names, or archived, with a reason only where it is true.",
+  UNAVAILABLE: "Not changed: the models could not be read just now. The call may be made again.",
+  SELF: "Not archived: that id is your own, and an agent does not archive itself; say you are done, and the developer archives you.",
+  WORKING:
+    "Not archived: that agent is still starting or working, and archiving it would stop a turn no one gets back. " +
+    "Wait until it is idle, or ask the developer, who can stop and archive it. Nothing else asked was changed.",
+  REPLACED_OPERATOR:
+    "Not unarchived: that agent is an operator its member has since replaced with a fresh one, " +
+    "which stands in its place; its transcript is kept, and it stays archived.",
+  REARCHIVED:
+    "Not unarchived: that agent was archived again as it was read, so the archive standing is " +
+    `another's; read it again with ${AGENT_TOOL.LIST_AGENTS} and call again if it should still come back.`,
+  PIN_ON_TASK:
+    "Not changed: only an agent on no task is pinned in the sidebar; an agent on a task stands in " +
+    "its task's tabs, so leave pinned out.",
+} as const;
+
+/** The lead a refused choice of a change is said under. */
+const UPDATE_CHOICE_LEAD = "Not changed";
+
+/** Whether a change names anything to change, and a model only with its effort and a window only with them. */
+function updateNamesAChange(update: {
+  readonly title?: string;
+  readonly model?: string;
+  readonly effort?: string;
+  readonly contextWindow?: string;
+  readonly pinned?: boolean;
+  readonly disabledServers?: readonly string[];
+  readonly archived?: boolean;
+  readonly reason?: string;
+}): boolean {
+  const { title, model, effort, contextWindow, pinned, disabledServers, archived, reason } = update;
+  if ((model === undefined) !== (effort === undefined)) return false;
+  if (contextWindow !== undefined && model === undefined) return false;
+  if (reason !== undefined && archived !== true) return false;
+  return [title, model, pinned, disabledServers, archived].some((field) => field !== undefined);
+}
+
+/**
+ * A change names the agent and at least one of: a title, the model with its
+ * effort and, at most, its context window, which the catalog then checks,
+ * whether the member pins it, and the MCP servers switched off for it, the
+ * whole list. Each is the change a member makes from the agent's own menu,
+ * model chip, or composer.
+ */
+const UPDATE_AGENT_INPUT = Schema.Struct({
+  agentId: AGENT_ID,
+  title: Schema.optionalKey(
     describeWire(
-      Schema.Boolean,
-      "true to list the archived tasks too, each marked archived, such as to find one to " +
-        `bring back with ${AGENT_TOOL.UPDATE_TASK}; leave it out for the open tasks alone.`,
+      Schema.Trim.check(Schema.isMaxLength(CODING_AGENT_BOUNDS.MAX_TITLE_CHARS)),
+      "The agent's title as its tab shows it; empty clears it, so the tab shows the model's name.",
     ),
   ),
+  model: Schema.optionalKey(
+    describeWire(
+      modelChoiceSchema.fields.model,
+      `The model it runs on from its next step, by its catalog id as ${AGENT_TOOL.LIST_MODELS} ` +
+        "answers it; given with the effort or not at all.",
+    ),
+  ),
+  effort: Schema.optionalKey(
+    describeWire(
+      modelChoiceSchema.fields.effort,
+      "The reasoning effort, as the model lists it; given with the model or not at all.",
+    ),
+  ),
+  contextWindow: Schema.optionalKey(
+    describeWire(
+      contextWindowSchema,
+      "The context window it runs on, standard or long; only with a model, and the model's " +
+        "whole window where left out.",
+    ),
+  ),
+  pinned: Schema.optionalKey(
+    describeWire(
+      Schema.Boolean,
+      "Whether the developer you work for keeps it pinned in their sidebar, the pin theirs alone; " +
+        "only an agent on no task is pinned, one on a task standing in its task's tabs.",
+    ),
+  ),
+  disabledServers: Schema.optionalKey(
+    describeWire(
+      disabledServersSchema,
+      "The MCP servers switched off for the agent, by connection name, the whole list, which " +
+        "replaces the one standing; empty switches every server back on. Its next turn reads it.",
+    ),
+  ),
+  archived: Schema.optionalKey(
+    describeWire(
+      Schema.Boolean,
+      "true to archive it, as the developer's Archive agent would: it leaves the sidebar, its " +
+        "task's tabs, and every list but the archived ones, takes no message, and is not woken, " +
+        "its transcript, branch, and pull request kept; only an idle agent is archived, never " +
+        "yourself. false to bring an archived one back.",
+    ),
+  ),
+  reason: Schema.optionalKey(
+    describeWire(
+      Schema.Trim.check(
+        Schema.isNonEmpty(),
+        Schema.isMaxLength(CODING_AGENT_BOUNDS.MAX_ARCHIVE_REASON_CHARS),
+      ),
+      "Why it is archived, in a short sentence the developer reads on its archived banner " +
+        "beside your name, such as its pull request having merged; only with archived true.",
+    ),
+  ),
+}).check(Schema.makeFilter(updateNamesAChange));
+
+const readUpdateAsked = Schema.decodeUnknownResult(UPDATE_AGENT_INPUT);
+
+export const UPDATE_AGENT_TOOL = {
+  name: AGENT_TOOL.UPDATE_AGENT,
+  description:
+    "Change a coding agent of your workspace by its id, as the developer's own menu, model " +
+    "chip, and composer would, for the developer you work for: rename it (empty clears the " +
+    "title), move it to another model and effort, and context window, from its next step, as " +
+    `${AGENT_TOOL.LIST_MODELS} lists them, pin or unpin an agent on no task in that ` +
+    "developer's sidebar, replace the list of MCP servers switched off for it, or archive it " +
+    "or bring it back. Name at least one change; an archive is checked first, and the rest " +
+    "land together or not at all. Archive an idle helper agent whose work is done, such as one " +
+    "whose pull request merged, or one the developer asked you to clean up, with a short reason " +
+    "its archived banner shows beside your name; one still starting or working is refused, and " +
+    "no agent archives itself. Change a teammate's agent still in use only where the developer " +
+    "asked for it. Answers `accepted` with the agent as it then stands, whether archived among " +
+    "it, or `rejected` and why; a rejected model or effort lists the choices. Then say which " +
+    "agent you changed and how.",
+  inputSchema: UPDATE_AGENT_INPUT,
+} as const;
+
+/** A list of tasks names its words to look for at most, and how many of the matching tasks to pass over. */
+const LIST_TASKS_INPUT = Schema.Struct({
   nameContains: Schema.optionalKey(
     describeWire(
       Schema.Trim.check(Schema.isNonEmpty(), Schema.isMaxLength(200)),
       "Only the tasks whose name holds these words, whatever their case; leave it out for all.",
+    ),
+  ),
+  status: Schema.optionalKey(
+    describeWire(taskStatusSchema, "Only the tasks that stand here; leave it out for all."),
+  ),
+  assignee: Schema.optionalKey(
+    describeWire(
+      taskAssigneeWrittenSchema,
+      "Only the tasks assigned to this member, by their mention link, or null for the tasks no " +
+        "one is assigned to; leave it out for all.",
     ),
   ),
   offset: Schema.optionalKey(
@@ -877,18 +1028,20 @@ const readTasksAsked = Schema.decodeUnknownResult(LIST_TASKS_INPUT);
 export const LIST_TASKS_TOOL = {
   name: AGENT_TOOL.LIST_TASKS,
   description:
-    "List the open tasks of your workspace, started by any member, and the archived ones too " +
-    "where includeArchived asks: each with its id, its name, " +
+    "List the tasks of your workspace, started by any member, the Done and Canceled ones " +
+    "among them: each with its id, its key (such as ACME-42), its name, where " +
+    "it stands (its status) and how much it matters (its priority), who it is assigned to (its " +
+    "assignee's mention link, null for no one), " +
     "the repository its agents work in (null for none yet), who started it, whether it is " +
-    "the task you work on, whether it is archived, the sectionId of the sidebar section the " +
+    "the task you work on, the sectionId of the sidebar section the " +
     "developer you work for keeps it in (null for none, under Tasks), and its mention, the " +
     "`[@name](link)` to name it by in your words, the newest first and at most " +
     `${TASKS_LIST_LIMIT} a page, with ` +
     "nextOffset where more stand; and beside them every section that developer keeps in this " +
     "workspace's sidebar, each with its id and title. Narrow it by words of a task's name with " +
-    `nameContains. Call it to find the task to start an agent on with ${AGENT_TOOL.START_AGENT}'s ` +
+    `nameContains, by where it stands with status, and by who it is assigned to with assignee. Call it to find the task to start an agent on with ${AGENT_TOOL.START_AGENT}'s ` +
     `taskId, to narrow ${AGENT_TOOL.LIST_AGENTS} to one, or to find the task and the section ` +
-    `${AGENT_TOOL.MOVE_TASK} and ${AGENT_TOOL.DELETE_SECTION} name.`,
+    `${AGENT_TOOL.UPDATE_TASK}'s sectionId and ${AGENT_TOOL.DELETE_SECTION} name.`,
   inputSchema: LIST_TASKS_INPUT,
 } as const;
 
@@ -922,7 +1075,9 @@ interface AgentReading {
   /** Whether the agent works on the call's own task. */
   readonly onYourTask: boolean;
   readonly archived: boolean;
-  /** The agent's title as its tab shows it; the model's id where it has none yet, which is what the tab falls back to. */
+  /** The human name the agent was given, as its tab shows it and its mention names it; none for an agent from before names were given, which goes by its title. */
+  readonly name?: string;
+  /** The agent's title, what it works on, which update_agent renames; the model's id where it has none yet. */
   readonly title: string;
   readonly model: string;
   /** The model as Luke says it and the screen shows it, without the maker's word (`modelLabel`). */
@@ -930,7 +1085,8 @@ interface AgentReading {
   readonly effort: string;
   readonly status: CodingAgentStatus;
   readonly failureReason?: CodingAgentFailure;
-  readonly repository: string;
+  /** The repository it works in; null for an agent with none. */
+  readonly repository: string | null;
   readonly branch: string | null;
   readonly activity: string | null;
   /** The agent's mention, `[@title](link)`, as the caller writes it to name the agent in its words. */
@@ -957,6 +1113,7 @@ const standingsOf = (agents: readonly CodingAgent[]) =>
         createdAt: agent.createdAt,
         now,
         awaitingLineAt: awaiting.get(agent.conversationId),
+        blank: startedBlank(agent),
       });
       // Why the newest turn failed is said only while the agent reads as failed: a line awaiting the next turn makes it running again.
       return {
@@ -996,6 +1153,7 @@ const readAgent = (
       id: agent.id,
       ...task,
       archived: agent.archivedAt !== null,
+      ...givenNameOf(agent),
       title: agent.title ?? agent.model,
       model: agent.model,
       modelName: modelLabel(agent.model, offered),
@@ -1030,7 +1188,7 @@ export function callerUserId(caller: AgentCaller): string {
 }
 
 /** The task the caller works on: the call's, or the coding agent's own, which may be none. */
-function callerTask(caller: AgentCaller): string | null {
+export function callerTask(caller: AgentCaller): string | null {
   return caller.kind === AGENT_CALLER.LUKE ? caller.plan.taskId : caller.agent.taskId;
 }
 
@@ -1041,6 +1199,12 @@ export const callerWorkspace = (caller: AgentCaller) =>
     : agentWorkspace(caller.agent.userId, caller.agent);
 
 /** An agent of the caller's workspace under the id, with its task, or nothing: one of another workspace, the member's other ones included, or none. */
+/** The provider's own harness the agent runs on; none on eve. */
+const agentRuntimeOf = (agent: CodingAgent) =>
+  Effect.map(nativeRuntimesOfReached([agent.conversationId]), (runtimes) =>
+    runtimes.get(agent.conversationId),
+  );
+
 const workspaceAgentOf = (caller: AgentCaller, agentId: string) =>
   Effect.gen(function* () {
     const workspace = yield* callerWorkspace(caller);
@@ -1071,29 +1235,53 @@ export function agentToolRejected(reason: string): WireRecord {
   return { status: ACTION_RESULT_STATUS.REJECTED, reason };
 }
 
-/** A steer's refusal in the model's words. */
-function refusalWords(refusal: HostedRefusal): string {
-  return REFUSAL_WORDS.get(refusal.error) ?? CODING_AGENT_TOOL_REFUSAL.UNAVAILABLE;
+/** Why the caller may not act on the agent under Steward (`steward.ts`): an operator acts only on its member's own agents. */
+function stewardRefused(
+  caller: AgentCaller,
+  agent: CodingAgent,
+  act: StewardAct,
+): string | undefined {
+  return stewardRefusal(caller.kind === AGENT_CALLER.AGENT ? caller.agent : undefined, agent, act);
+}
+
+/** A refusal's words, with when a plan's reached limit resets where the provider said. */
+function withReset(words: string, refusal: HostedRefusal): string {
+  return refusal.resetsAt === undefined
+    ? words
+    : `${words} It resets at ${new Date(refusal.resetsAt).toISOString()}.`;
 }
 
 /** A start's refusal in the model's words. */
 function startRefusalWords(refusal: HostedRefusal): string {
-  return START_REFUSAL_WORDS.get(refusal.error) ?? START_CODING_AGENT_REFUSAL.UNAVAILABLE;
+  return withReset(
+    START_REFUSAL_WORDS.get(refusal.error) ?? START_CODING_AGENT_REFUSAL.UNAVAILABLE,
+    refusal,
+  );
 }
 
 /** A choice the catalog refused, the one named or the member's stored default, said with every model offered and the efforts each lists, so the model can try again or ask. */
-function choiceRefusal(choice: ModelChoice | undefined, offered: readonly OfferedModel[]): string {
+function choiceRefusal(
+  choice: ModelChoice | undefined,
+  offered: readonly OfferedModel[],
+  lead = "Not started",
+): string {
   const refused =
     choice === undefined
       ? "the member's default model is no longer offered"
       : `no offered model is ${choice.model} at effort ${choice.effort}`;
   const choices = offered.map((model) => `${model.id} (${model.efforts.join(", ")})`).join("; ");
-  return `Not started: ${refused}. The choices are: ${choices}.`;
+  return `${lead}: ${refused}. The choices are: ${choices}.`;
 }
 
-/** An agent by the name its tab shows: its title, or its model's id where it has none yet. */
+/** An agent by the name its tab shows: Luke for an operator, its human name, else its title, or its model's id where it has none yet. */
 function agentName(agent: CodingAgent): string {
-  return agent.title ?? agent.model;
+  return agentGivenName(agent) ?? agent.title ?? agent.model;
+}
+
+/** The name an answer names an agent by, Luke for an operator and its human name for any other, where it goes by one. */
+function givenNameOf(agent: CodingAgent): { name?: string } {
+  const name = agentGivenName(agent);
+  return name === undefined ? {} : { name };
 }
 
 /** The agent's mention under the workspace's step: under its task where it has one, else under the workspace, named as its tab is. */
@@ -1106,26 +1294,54 @@ function agentMention(agent: CodingAgent, workspace: string): string {
   );
 }
 
-/** How a coding agent names itself to another: its title, its id to answer it by, and its repository. */
+/** How a coding agent names itself to another: its title, its id to answer it by, and its repository where it has one. */
 function agentIntroduction(agent: CodingAgent): string {
-  return `"${agentName(agent)}" (agent id ${agent.id}), working in ${agent.repository}`;
+  const working = agent.repository === null ? "" : `, working in ${agent.repository}`;
+  return `"${agentName(agent)}" (agent id ${agent.id})${working}`;
 }
 
-/** The words a coding agent's message hands the other: who sent them and how to answer, then its own. */
-function agentLine(sender: CodingAgent, text: string): string {
-  return (
-    `A message from another coding agent of your workspace, ${agentIntroduction(sender)}. It is ` +
-    "that agent's word, not the developer's or Luke's. To answer it, call " +
-    `${AGENT_TOOL.MESSAGE_AGENT} with that id.\n\n${text}`
-  );
-}
-
-/** The note an agent a coding agent starts is handed: which agent started it and how to report back, then the note it was given. */
-function startedByNote(starter: CodingAgent, note: string | undefined): string {
+/**
+ * The note an agent a coding agent starts is handed: which agent started it,
+ * how to report back, and that the developer's inbox is its starter's, so
+ * what it would post there goes to its starter, who relays what the
+ * developer must see, then the note it was given. Where the two share a
+ * task, the report goes in its chat, to the starter's mention link, as
+ * every word between a task's agents does (`coder-host/instructions.ts`);
+ * otherwise it goes to the starter in a direct message.
+ */
+function startedByNote(
+  starter: CodingAgent,
+  note: string | undefined,
+  starterLink: { readonly mention: string; readonly sameTask: boolean },
+): string {
+  const report = starterLink.sameTask
+    ? `It is ${starterLink.mention} in your task's chat: report back to it there, with that mention link in your words. `
+    : `To report back to it, send it a direct message: call ${CHAT_TOOL.POST} with to set to ${starterLink.mention}. `;
   const lead =
     `You were started by another coding agent of your workspace, ${agentIntroduction(starter)}, ` +
-    `not by the developer. To report back to it, call ${AGENT_TOOL.MESSAGE_AGENT} with that id.`;
+    `not by the developer. ${report}` +
+    "The developer's inbox is that agent's to keep: post nothing to it, and send that agent what " +
+    "you would have posted there instead, a pull request ready for review, a decision, a question, " +
+    "or something only the developer can do by hand.";
   return note === undefined ? lead : `${lead}\n\n${note}`;
+}
+
+/** The starter's mention link, as the chat names it, and whether an agent it starts on the task given shares its task's chat. */
+function starterLinkOf(
+  starter: CodingAgent,
+  taskId: string | null,
+): Effect.Effect<
+  { readonly mention: string; readonly sameTask: boolean },
+  StoreFailure,
+  DatabaseServices
+> {
+  return Effect.gen(function* () {
+    const mention = agentMention(
+      starter,
+      yield* workspaceStepOf(starter.userId, starter.organizationId),
+    );
+    return { mention, sameTask: taskId !== null && starter.taskId === taskId };
+  });
 }
 
 /** The agent as a start answers it: its id, what it runs on, where it stands now, and whether it is on the caller's own task, which a window that opens the caller's task alone reads to link it or not. */
@@ -1139,6 +1355,7 @@ const startedReading = (
     const workspace = yield* workspaceStepOf(agent.userId, agent.organizationId);
     return {
       id: agent.id,
+      ...givenNameOf(agent),
       model: agent.model,
       modelName: modelLabel(agent.model, offered),
       effort: agent.effort,
@@ -1156,72 +1373,22 @@ export const orStoreRefusal = <R>(
     Effect.as(logStoreFailure(failure), agentToolRejected(CODING_AGENT_TOOL_REFUSAL.STORE)),
   );
 
-/** A new task as a start answers it: its id, its name, and its mention, to name it by in the caller's words. */
-interface NewTaskReading {
-  readonly id: string;
-  readonly name: string;
-  readonly mention: string;
-}
-
-/** The new task as the answer tells it, its mention under the workspace's step. */
-const newTaskReading = (userId: string, workspaceId: string, taskId: string, name: string) =>
-  Effect.map(
-    workspaceStepOf(userId, workspaceId),
-    (step): NewTaskReading => ({
-      id: taskId,
-      name,
-      mention: writtenMention({ kind: MENTION_KIND.TASK, taskId }, name, step),
-    }),
-  );
-
 /** The repository the caller works in: the calling agent's own, or that of Luke's task; none where that task names none or is gone. */
-const workedRepository = (caller: AgentCaller) =>
+export const workedRepository = (caller: AgentCaller) =>
   caller.kind === AGENT_CALLER.AGENT
     ? Effect.succeed<string | null>(caller.agent.repository)
-    : Effect.map(readTask(caller.plan.userId, caller.plan.taskId), (read) =>
-        Option.isSome(read) ? read.value.task.repository : null,
+    : Effect.map(readTaskHeader(caller.plan.userId, caller.plan.taskId), (read) =>
+        Option.isSome(read) ? read.value.repository : null,
       );
 
 /**
- * A new task made for a start, as the member the caller acts for makes one
- * from the sidebar: in the caller's workspace, owned by that member, its plan
- * empty, on the repository the caller works in once the workspace's
- * installation is confirmed to reach it, as a task's repository is confirmed
- * when a member names it; or the refusal's words, with nothing made.
- */
-const newTaskOf = (caller: AgentCaller, name: string) =>
-  Effect.gen(function* () {
-    const workspace = yield* callerWorkspace(caller);
-    if (Option.isNone(workspace)) return Result.fail(START_CODING_AGENT_REFUSAL.NO_WORKSPACE);
-    const repository = yield* workedRepository(caller);
-    if (repository === null) return Result.fail(START_CODING_AGENT_REFUSAL.NO_REPOSITORY);
-    const reached = yield* Effect.result(workspaceRepository(workspace.value, repository));
-    if (Result.isFailure(reached)) return Result.fail(startRefusalWords(reached.failure));
-    const userId = callerUserId(caller);
-    const made = yield* createTask(userId, {
-      organizationId: workspace.value,
-      name,
-      repository: reached.success.fullName,
-      planning: false,
-    });
-    return Result.succeed(yield* newTaskReading(userId, workspace.value, made.id, made.name));
-  });
-
-/** Takes away a task made for a start that failed, answering whether it went; one an agent stands on after all, a retry's that raced it, is left. */
-const discardNewTask = (userId: string, taskId: string) =>
-  deleteTask(userId, taskId, { stoppedAgentIds: new Set(), beforeDelete: () => Effect.void }).pipe(
-    Effect.catchTag("TaskAgentUnstopped", () => Effect.succeed(false)),
-  );
-
-/**
  * What a call made before, run again after its start landed: the agent made
- * under its key, with the new task it was started on where the call named
- * one, while that agent is still of the caller's workspace, and refused as
- * naming no task once it has moved out of it, so a retry neither starts a
- * second agent nor makes a second task nor tells of either in a workspace
- * the caller left behind; nothing where the call made no agent.
+ * under its key, while that agent is still of the caller's workspace, and
+ * refused as naming no task once it has moved out of it, so a retry neither
+ * starts a second agent nor tells of one in a workspace the caller left
+ * behind; nothing where the call made no agent.
  */
-const startedBefore = (call: CodingAgentCall, newTask: boolean) =>
+const startedBefore = (call: CodingAgentCall) =>
   Effect.gen(function* () {
     const { caller } = call;
     const userId = callerUserId(caller);
@@ -1233,17 +1400,10 @@ const startedBefore = (call: CodingAgentCall, newTask: boolean) =>
       return Option.some(agentToolRejected(START_CODING_AGENT_REFUSAL.NO_SUCH_TASK));
     }
     const reading = yield* startedReading(agent, yield* offeredModels, callerTask(caller));
-    const taskId = newTask ? agent.taskId : null;
-    const name =
-      taskId === null ? undefined : (yield* taskNamesOf(userId, [taskId])).get(taskId)?.name;
-    const task =
-      taskId === null || name === undefined
-        ? undefined
-        : yield* newTaskReading(userId, workspace.value, taskId, name);
     // A continue run again names the agents that continued its source before it, as its first answer did.
     const from = agent.startedFrom;
     const continuedBy =
-      from === null || from.messageId !== undefined || agent.taskId === null
+      from === null || from.messageId !== undefined
         ? []
         : yield* earlierContinuationsOf(
             { userId, workspaceId: workspace.value, taskId: agent.taskId },
@@ -1253,7 +1413,6 @@ const startedBefore = (call: CodingAgentCall, newTask: boolean) =>
     return Option.some<WireRecord>({
       status: ACTION_RESULT_STATUS.ACCEPTED,
       agent: reading,
-      ...(task === undefined ? undefined : { newTask: { ...task } }),
       ...earlierContinuations(continuedBy, agent.id),
     });
   });
@@ -1356,80 +1515,15 @@ export function runReadAgent(
   );
 }
 
-/** The line a message makes, and what sent it: Luke's words as they are, or a coding agent's opening with who sent them; nothing where a coding agent's line runs over the bound. */
-function messageLine(
-  caller: AgentCaller,
-  text: string,
-): { readonly text: string; readonly sender: LineSender } | undefined {
-  if (caller.kind === AGENT_CALLER.LUKE) return { text, sender: { kind: MESSAGE_SENDER.LUKE } };
-  const line = agentLine(caller.agent, text);
-  if (line.length > CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS) return undefined;
-  return {
-    text: line,
-    sender: {
-      kind: MESSAGE_SENDER.AGENT,
-      agentId: caller.agent.id,
-      name: agentName(caller.agent),
-      model: caller.agent.model,
-    },
-  };
-}
-
-/** One call of `message_agent`: the words handed to an agent of the caller's workspace, or why nothing was sent. */
-export function runMessageAgent(
-  call: CodingAgentCall,
-  input: UnparsedWireValue,
-): Effect.Effect<WireRecord, never, CodingAgentToolServices> {
-  const asked = readMessage(input);
-  if (Result.isFailure(asked)) {
-    return Effect.succeed(agentToolRejected(CODING_AGENT_TOOL_REFUSAL.UNREADABLE));
-  }
-  const { agentId, text } = asked.success;
-  const { caller, eve } = call;
-  if (caller.kind === AGENT_CALLER.AGENT && agentId === caller.agent.id) {
-    return Effect.succeed(agentToolRejected(CODING_AGENT_TOOL_REFUSAL.SELF));
-  }
-  const line = messageLine(caller, text);
-  if (line === undefined)
-    return Effect.succeed(agentToolRejected(CODING_AGENT_TOOL_REFUSAL.TOO_LONG));
-  if (eve === undefined)
-    return Effect.succeed(agentToolRejected(CODING_AGENT_TOOL_REFUSAL.NO_SERVICE));
-  return orStoreRefusal(
-    Effect.gen(function* () {
-      const found = yield* workspaceAgentOf(caller, agentId);
-      if (Option.isNone(found)) return agentToolRejected(CODING_AGENT_TOOL_REFUSAL.NO_AGENT);
-      const { agent } = found.value;
-      if (agent.archivedAt !== null)
-        return agentToolRejected(CODING_AGENT_TOOL_REFUSAL.AGENT_ARCHIVED);
-      const sent = yield* steerCodingAgent(eve, call.writer, callerUserId(caller), agent, {
-        ...line,
-        clientKey: call.clientKey,
-      }).pipe(Effect.result);
-      if (Result.isFailure(sent)) return agentToolRejected(refusalWords(sent.failure));
-      return {
-        status: ACTION_RESULT_STATUS.ACCEPTED,
-        delivery: sent.success,
-        agent: {
-          id: agent.id,
-          title: agentName(agent),
-          model: agent.model,
-          status: CODING_AGENT_STATUS.RUNNING,
-          onYourTask: agent.taskId !== null && agent.taskId === callerTask(caller),
-        },
-      };
-    }),
-  );
-}
-
 /** An agent that already continued the one a start continues, as the start's answer names it: its id and its mention. */
 interface EarlierContinuation {
   readonly id: string;
   readonly mention: string;
 }
 
-/** Where a start from another agent lands: the source's own task, and, for a continue, the agents that already continued the source, oldest first. */
+/** Where a start from another agent lands: the source's own place, its task or, with none, its workspace and repository, and, for a continue, the agents that already continued the source, oldest first. */
 interface SourceLanding {
-  readonly taskId: string;
+  readonly place: StartWhere;
   readonly continuedBy: readonly EarlierContinuation[];
 }
 
@@ -1439,7 +1533,7 @@ interface SourceLanding {
  * after it; all of them where none is named. A fork is no continuation.
  */
 const earlierContinuationsOf = (
-  at: { readonly userId: string; readonly workspaceId: string; readonly taskId: string },
+  at: { readonly userId: string; readonly workspaceId: string; readonly taskId: string | null },
   sourceId: string,
   upTo?: string,
 ) =>
@@ -1454,7 +1548,11 @@ const earlierContinuationsOf = (
       (each): EarlierContinuation => ({
         id: each.agentId,
         mention: writtenMention(
-          { kind: MENTION_KIND.AGENT, taskId: at.taskId, agentId: each.agentId },
+          {
+            kind: MENTION_KIND.AGENT,
+            ...(at.taskId === null ? undefined : { taskId: at.taskId }),
+            agentId: each.agentId,
+          },
           each.title ?? CONTINUATION_NAME,
           step,
         ),
@@ -1462,7 +1560,7 @@ const earlierContinuationsOf = (
     );
   });
 
-/** The task a start from another agent lands on, the source's own, once the source is read and found fit to start from, with the agents that already continued it; or why it is not. */
+/** The place a start from another agent lands in, the source's own, once the source is read and found fit to start from, with the agents that already continued it; or why it is not. */
 const sourceLanding = (
   caller: AgentCaller,
   from: CodingAgentStartFrom,
@@ -1471,19 +1569,25 @@ const sourceLanding = (
   Effect.gen(function* () {
     const found = yield* workspaceAgentOf(caller, from.agentId);
     if (Option.isNone(found)) return Result.fail(START_CODING_AGENT_REFUSAL.NO_SOURCE);
-    const { agent: source, task, workspaceId } = found.value;
-    if (source.taskId === null) return Result.fail(START_CODING_AGENT_REFUSAL.SOURCE_NO_TASK);
+    const { agent: source, workspaceId } = found.value;
+    const steward = stewardRefused(caller, source, STEWARD_ACT.START_FROM);
+    if (steward !== undefined) return Result.fail(steward);
+    if (!controlsAgent(callerUserId(caller), source)) {
+      return Result.fail(`Not started: only ${yield* agentStarterName(source)} can do this.`);
+    }
     if (named !== undefined && named !== source.taskId) {
       return Result.fail(START_CODING_AGENT_REFUSAL.SOURCE_OTHER_TASK);
     }
-    if (task.task?.archived === true) return Result.fail(START_CODING_AGENT_REFUSAL.ARCHIVED);
+    // An agent with no task is started from in its own workspace, on the repository it cloned.
+    const place = placeOfAgent(source);
+    if (place === undefined) return Result.fail(START_CODING_AGENT_REFUSAL.SOURCE_NO_REPOSITORY);
     // A fork names one of the source's own messages, and leaves the source going on beside it.
     if (from.messageId !== undefined) {
       const { userId, conversationId } = source;
       const role = MESSAGE_ROLE.ASSISTANT;
       const at = yield* messageSeqOf(userId, conversationId, from.messageId, role);
       if (Option.isNone(at)) return Result.fail(START_CODING_AGENT_REFUSAL.NO_MESSAGE);
-      return Result.succeed({ taskId: source.taskId, continuedBy: [] });
+      return Result.succeed({ place, continuedBy: [] });
     }
     // A continue takes over work that has ended; one already continued is
     // continued again, since a continuation may itself fail or go wrong, and
@@ -1492,9 +1596,8 @@ const sourceLanding = (
     if (status === CODING_AGENT_STATUS.STARTING || status === CODING_AGENT_STATUS.RUNNING) {
       return Result.fail(START_CODING_AGENT_REFUSAL.SOURCE_RUNNING);
     }
-    const taskId = source.taskId;
-    const at = { userId: callerUserId(caller), workspaceId, taskId };
-    return Result.succeed({ taskId, continuedBy: yield* earlierContinuationsOf(at, source.id) });
+    const at = { userId: callerUserId(caller), workspaceId, taskId: source.taskId };
+    return Result.succeed({ place, continuedBy: yield* earlierContinuationsOf(at, source.id) });
   });
 
 /** What a continue's answer adds where other agents already continued its source: those agents, oldest first, the one it started left out; nothing otherwise. */
@@ -1520,7 +1623,30 @@ function startFromRefusalWords(
   return startRefusalWords(refusal);
 }
 
-/** Why a start's input asks for nothing that can start, read before anything is: a source with a prompt, a branch, or a new task, or a coding agent continuing itself. */
+/**
+ * Who hands pictures on in the caller's name: a coding agent its own
+ * conversation's and its workspace's chat's as its chat member reads them;
+ * Luke on a call, which keeps no conversation of its own here, the chat's as
+ * the member on the call reads them.
+ */
+const forwarderOf = (caller: AgentCaller) =>
+  Effect.map(callerWorkspace(caller), (workspace): ImageForwarder => {
+    const userId = callerUserId(caller);
+    const reader: ChatMemberSubject =
+      caller.kind === AGENT_CALLER.AGENT
+        ? { kind: MEMBER_KIND.AGENT, agentId: caller.agent.id }
+        : { kind: MEMBER_KIND.HUMAN, userId };
+    return {
+      userId,
+      conversationId: caller.kind === AGENT_CALLER.AGENT ? caller.agent.conversationId : undefined,
+      chat: Option.match(workspace, {
+        onNone: () => undefined,
+        onSome: (organizationId) => ({ organizationId, reader }),
+      }),
+    };
+  });
+
+/** Why a start's input asks for nothing that can start, read before anything is: a source with a prompt or a branch, or a coding agent continuing itself. */
 function startInputRefusal(
   caller: AgentCaller,
   start: typeof START_AGENT_CALL.Type,
@@ -1528,7 +1654,7 @@ function startInputRefusal(
   const { from } = start;
   if (from === undefined) return undefined;
   const prompt = start.prompt ?? start.task;
-  if (prompt !== undefined || start.branch !== undefined || start.newTask !== undefined) {
+  if (prompt !== undefined || start.branch !== undefined) {
     return START_CODING_AGENT_REFUSAL.FROM_WITH_PROMPT;
   }
   const self = caller.kind === AGENT_CALLER.AGENT && from.agentId === caller.agent.id;
@@ -1539,13 +1665,10 @@ function startInputRefusal(
 
 /**
  * One call of `start_agent`: an agent started under the call's own key on
- * the caller's own task, another of its workspace, a new one made for it, or
- * the task of the agent it starts from, or why nothing was started. A new
- * task stands only under the agent its own call made: one whose start failed,
- * or that found an agent a concurrent run of the same call made meanwhile on
- * a task of its own, goes (and is left where an agent stands on it after
- * all), and the call answers whatever agent its key now stands for, with that
- * agent's own task, or else the refusal. Note that a start from another agent
+ * the caller's own task, another of its workspace, or the task of the agent
+ * it starts from, or why nothing was started. A call naming `newTask`, as a
+ * start did before `create_task` made tasks, is refused with where to go
+ * now, rather than started on the caller's own task. Note that a start from another agent
  * can take tens of seconds, a copy of its work and a summary of its
  * transcript among them, which the call is let run: eve's workflow step runs
  * a tool to the function's own bound, and the copy and the summary each hold
@@ -1556,16 +1679,17 @@ export function runStartAgent(
   input: UnparsedWireValue,
 ): Effect.Effect<WireRecord, never, CodingAgentToolServices> {
   const asked = readStart(input);
-  // A choice is one thing: a model without its effort, or the reverse, names nothing to run on;
-  // and a start lands on one task, never on a task named and a new one at once.
+  // A choice is one thing: a model without its effort, or the reverse, names nothing to run on.
   if (
     Result.isFailure(asked) ||
-    (asked.success.model === undefined) !== (asked.success.effort === undefined) ||
-    (asked.success.taskId !== undefined && asked.success.newTask !== undefined)
+    (asked.success.model === undefined) !== (asked.success.effort === undefined)
   ) {
     return Effect.succeed(agentToolRejected(START_CODING_AGENT_REFUSAL.UNREADABLE));
   }
-  const { model, effort, newTask, from } = asked.success;
+  if (asked.success.newTask !== undefined) {
+    return Effect.succeed(agentToolRejected(START_CODING_AGENT_REFUSAL.NEW_TASK));
+  }
+  const { model, effort, from } = asked.success;
   const { caller, eve } = call;
   const refused = startInputRefusal(caller, asked.success);
   if (refused !== undefined) return Effect.succeed(agentToolRejected(refused));
@@ -1575,65 +1699,64 @@ export function runStartAgent(
   const ownTask = callerTask(caller);
   if (eve === undefined)
     return Effect.succeed(agentToolRejected(START_CODING_AGENT_REFUSAL.NO_SERVICE));
-  // An agent a coding agent starts hears who started it.
-  const byAgent = caller.kind === AGENT_CALLER.AGENT;
-  const note = byAgent ? startedByNote(caller.agent, asked.success.note) : asked.success.note;
   const userId = callerUserId(caller);
   return orStoreRefusal(
     Effect.gen(function* () {
-      // Another task, a new one, or another agent's is started on only where it is of the caller's
+      // Another task, or another agent's, is started on only where it is of the caller's
       // own workspace; a call run again after its start landed answers what it made
-      // (`startedBefore`), before a source is read, which its own continue has since stopped.
-      const elsewhere =
-        from !== undefined || newTask !== undefined || (named !== undefined && named !== ownTask);
-      if (elsewhere) {
-        const before = yield* startedBefore(call, newTask !== undefined);
+      // (`startedBefore`), before a source is read, which its own continue has since stopped,
+      // or the pictures it named, which may be gone since.
+      const elsewhere = from !== undefined || (named !== undefined && named !== ownTask);
+      if (elsewhere || asked.success.images !== undefined) {
+        const before = yield* startedBefore(call);
         if (Option.isSome(before)) return before.value;
       }
       if (from === undefined && named !== undefined && named !== ownTask) {
         const reached = yield* taskOfCallerWorkspace(caller, named);
         if (!reached) return agentToolRejected(START_CODING_AGENT_REFUSAL.NO_SUCH_TASK);
       }
-      // A start from another agent lands on that agent's own task.
+      // A start from another agent lands in that agent's own place, its task or its workspace.
       const landing = from === undefined ? undefined : yield* sourceLanding(caller, from, named);
       if (landing !== undefined && Result.isFailure(landing)) {
         return agentToolRejected(landing.failure);
       }
-      const making = newTask === undefined ? undefined : yield* newTaskOf(caller, newTask);
-      if (making !== undefined && Result.isFailure(making)) {
-        return agentToolRejected(making.failure);
+      const taskId = named ?? ownTask;
+      const place: StartWhere | undefined =
+        landing?.success.place ?? (taskId === null ? undefined : { taskId });
+      if (place === undefined) return agentToolRejected(START_CODING_AGENT_REFUSAL.NO_TASK);
+      // The pictures it is handed are read as the caller may read them, and refused whole where one is not.
+      const images =
+        asked.success.images === undefined
+          ? Result.succeed([])
+          : yield* forwardedImages(yield* forwarderOf(caller), asked.success.images);
+      if (Result.isFailure(images)) {
+        return agentToolRejected(`Not started: ${forwardedImageRefusalWords(images.failure)}`);
       }
-      const made = making?.success;
-      const taskId = landing?.success.taskId ?? made?.id ?? named ?? ownTask;
-      if (taskId === null) return agentToolRejected(START_CODING_AGENT_REFUSAL.NO_TASK);
+      // An agent a coding agent starts hears who started it, and where to report back: in the
+      // chat of the task they share, or in a direct message to it otherwise.
+      const note =
+        caller.kind === AGENT_CALLER.AGENT
+          ? startedByNote(
+              caller.agent,
+              asked.success.note,
+              yield* starterLinkOf(caller.agent, place.taskId),
+            )
+          : asked.success.note;
       const started = yield* startCodingAgent(Effect.succeed(eve), userId, {
-        taskId: taskId,
+        ...place,
         idempotencyKey: call.clientKey,
         choice,
         prompt,
         note,
+        attachments: images.success,
         title: asked.success.title,
         branch: asked.success.branch,
         from,
         summaryModel: call.summaryModel,
-        ...(byAgent ? { noteHeading: START_NOTE_HEADING.AGENT } : undefined),
+        ...(caller.kind === AGENT_CALLER.AGENT
+          ? { noteHeading: START_NOTE_HEADING.AGENT }
+          : undefined),
       }).pipe(Effect.result);
-      // A new task stands only under the agent its own call made (see above).
-      if (made !== undefined) {
-        const discarding = Result.isFailure(started) || !started.success.created;
-        // Counted once it is known to stand: never where the discard took it back, and still where an agent kept it.
-        const stands = discarding ? !(yield* discardNewTask(userId, made.id)) : true;
-        if (stands) {
-          yield* recordServerEvent(SERVER_EVENT.TASK_CREATE, userId, {
-            source: SERVER_TASK_SOURCE.AGENT,
-            has_issue: false,
-          });
-        }
-        if (discarding) {
-          const standing = yield* startedBefore(call, true);
-          if (Option.isSome(standing)) return standing.value;
-        }
-      }
       if (Result.isFailure(started)) {
         const refusal = started.failure;
         if (refusal instanceof ModelChoiceRefused) {
@@ -1645,7 +1768,6 @@ export function runStartAgent(
       return {
         status: ACTION_RESULT_STATUS.ACCEPTED,
         agent: yield* startedReading(started.success.agent, yield* offeredModels, ownTask),
-        ...(made === undefined ? undefined : { newTask: { ...made } }),
         ...earlierContinuations(landing?.success.continuedBy, started.success.agent.id),
       };
     }),
@@ -1667,27 +1789,6 @@ function archiverOf(caller: AgentCaller, reason: string | undefined): StoredArch
   };
 }
 
-/** An archive or an unarchive as the model reads it: the agent, whether it now stands archived, and whether it already stood so before the call. */
-function archiveAnswer(
-  agent: CodingAgent,
-  task: AgentTaskReading,
-  archived: boolean,
-  already: boolean,
-): WireRecord {
-  return {
-    status: ACTION_RESULT_STATUS.ACCEPTED,
-    agent: {
-      id: agent.id,
-      title: agentName(agent),
-      model: agent.model,
-      task: task.task === null ? null : { ...task.task },
-      onYourTask: task.onYourTask,
-    },
-    archived,
-    already,
-  };
-}
-
 /**
  * Whether an agent stands idle for an archive: no line awaits its turn, its
  * newest turn is neither queued nor running, a Stop requested of it or not,
@@ -1705,103 +1806,138 @@ const idleForArchive = (agent: CodingAgent) =>
     }
     if (turn !== undefined) return !RUNNING_TURN_STATUSES.has(turn.status);
     return (
-      codingAgentStatusOf(undefined, { createdAt: agent.createdAt, now }) !==
-      CODING_AGENT_STATUS.STARTING
+      codingAgentStatusOf(undefined, {
+        createdAt: agent.createdAt,
+        now,
+        blank: startedBlank(agent),
+      }) !== CODING_AGENT_STATUS.STARTING
     );
   });
 
-/** One call of `archive_agent`: an idle agent of the caller's workspace archived for the caller's member, by the caller and for the reason given, or why it was not. */
-export function runArchiveAgent(
-  call: CodingAgentCall,
-  input: UnparsedWireValue,
-): Effect.Effect<WireRecord, never, CodingAgentToolServices> {
-  const asked = readArchive(input);
-  if (Result.isFailure(asked)) {
-    return Effect.succeed(agentToolRejected(ARCHIVE_AGENT_REFUSAL.UNREADABLE));
-  }
-  const { agentId, reason } = asked.success;
-  const { caller } = call;
-  if (caller.kind === AGENT_CALLER.AGENT && agentId === caller.agent.id) {
-    return Effect.succeed(agentToolRejected(ARCHIVE_AGENT_REFUSAL.SELF));
-  }
-  return orStoreRefusal(
-    Effect.gen(function* () {
-      const found = yield* workspaceAgentOf(caller, agentId);
-      if (Option.isNone(found)) return agentToolRejected(CODING_AGENT_TOOL_REFUSAL.NO_AGENT);
-      const { agent, task } = found.value;
-      // Whether it is idle is read under its conversation's lock, so a turn queued or a message
-      // handed over meanwhile waits on the archive and is seen by it, never left running unseen.
-      const archived = yield* archiveIdleCodingAgent(
-        callerUserId(caller),
+/**
+ * An agent archived for the caller's member, by the caller and for the reason
+ * given, as the Archive agent menu archives it, only while it stands idle,
+ * read idle under its conversation's lock, so a turn queued or a message
+ * handed over meanwhile waits on the archive and is seen by it; or brought
+ * back, only the archive read cleared, so one made again since stands as its
+ * maker left it. An archive or an unarchive already standing is no refusal.
+ * Answers why nothing was changed, or nothing where the change stands.
+ */
+const archiveChange = (
+  caller: AgentCaller,
+  agent: CodingAgent,
+  archived: boolean,
+  reason: string | undefined,
+) =>
+  Effect.gen(function* () {
+    const userId = callerUserId(caller);
+    if (archived) {
+      const outcome = yield* archiveIdleCodingAgent(
+        userId,
         agent.id,
         archiverOf(caller, reason),
         idleForArchive,
       );
-      if (archived === IDLE_ARCHIVE.NOT_FOUND) {
-        return agentToolRejected(CODING_AGENT_TOOL_REFUSAL.NO_AGENT);
-      }
-      if (archived === IDLE_ARCHIVE.WORKING)
-        return agentToolRejected(ARCHIVE_AGENT_REFUSAL.WORKING);
-      return archiveAnswer(agent, task, true, archived === IDLE_ARCHIVE.ALREADY);
-    }),
-  );
-}
+      if (outcome === IDLE_ARCHIVE.NOT_FOUND) return CODING_AGENT_TOOL_REFUSAL.NO_AGENT;
+      return outcome === IDLE_ARCHIVE.WORKING ? UPDATE_AGENT_REFUSAL.WORKING : undefined;
+    }
+    if (agent.archivedAt === null) return undefined;
+    // An operator a Reset replaced stays archived while the fresh one stands.
+    if (yield* operatorReplaced(userId, agent.id)) return UPDATE_AGENT_REFUSAL.REPLACED_OPERATOR;
+    if (yield* unarchiveCodingAgentFrom(userId, agent.id, agent.archivedAt)) return undefined;
+    const now = yield* readCodingAgent(userId, agent.id);
+    return Option.isSome(now) && now.value.archivedAt === null
+      ? undefined
+      : UPDATE_AGENT_REFUSAL.REARCHIVED;
+  });
 
-/** One call of `unarchive_agent`: an archived agent of the caller's workspace brought back, as a member's Unarchive brings it. */
-export function runUnarchiveAgent(
-  call: CodingAgentCall,
-  input: UnparsedWireValue,
-): Effect.Effect<WireRecord, never, CodingAgentToolServices> {
-  const asked = readAgentRef(input);
-  if (Result.isFailure(asked)) {
-    return Effect.succeed(agentToolRejected(ARCHIVE_AGENT_REFUSAL.UNREADABLE));
-  }
-  const { caller } = call;
-  return orStoreRefusal(
-    Effect.gen(function* () {
-      const found = yield* workspaceAgentOf(caller, asked.success.agentId);
-      if (Option.isNone(found)) return agentToolRejected(CODING_AGENT_TOOL_REFUSAL.NO_AGENT);
-      const { agent, task } = found.value;
-      if (agent.archivedAt === null) return archiveAnswer(agent, task, false, true);
-      const userId = callerUserId(caller);
-      // Note that only the archive read is cleared, so one made again since stands as its maker left it.
-      if (yield* unarchiveCodingAgentFrom(userId, agent.id, agent.archivedAt)) {
-        return archiveAnswer(agent, task, false, false);
-      }
-      const now = yield* readCodingAgent(userId, agent.id);
-      if (Option.isSome(now) && now.value.archivedAt === null) {
-        return archiveAnswer(agent, task, false, true);
-      }
-      return agentToolRejected(ARCHIVE_AGENT_REFUSAL.REARCHIVED);
-    }),
-  );
+/**
+ * A task's key, where it stands, how much it matters, and who it is assigned
+ * to, as every task tool answers them: its key drawn from its workspace's
+ * name as the member reads it (`workspace-key.ts`), and its assignee by their
+ * mention link under the workspace's step (`task-assignee.ts`); null for any
+ * a service before them left out, and for a task no one is assigned to.
+ */
+export function taskStandingOf(
+  task: Pick<TaskSummary, "number" | "status" | "priority" | "assignee">,
+  naming: { readonly step: string; readonly name: string },
+) {
+  return {
+    key: task.number === undefined ? null : taskKey(naming.name, task.number),
+    status: task.status ?? null,
+    priority: task.priority ?? null,
+    assignee: assigneeMentionOf(task, naming.step),
+  };
 }
 
 /** A task's change as the model reads it: the task as it now stands, with its mention, and whether every change named already stood before the call. */
-const taskUpdateAnswer = (userId: string, task: StoredTask["task"], already: boolean) =>
+const taskUpdateAnswer = (
+  userId: string,
+  task: StoredTask["task"],
+  already: boolean,
+  section: TaskSectionReading | null | undefined,
+  issues?: readonly TaskIssueLink[],
+) =>
   Effect.map(
-    workspaceStepOf(userId, task.workspaceId),
-    (step): WireRecord => ({
+    workspaceNamingOf(userId, task.workspaceId),
+    ({ step, name }): WireRecord => ({
       status: ACTION_RESULT_STATUS.ACCEPTED,
       task: {
         id: task.id,
+        ...taskStandingOf(task, { step, name }),
         name: task.name,
         repository: task.repository,
-        archived: task.archivedAt !== undefined,
         pinned: task.pinnedAt !== undefined,
         mention: writtenMention({ kind: MENTION_KIND.TASK, taskId: task.id }, task.name, step),
+        ...(section === undefined
+          ? undefined
+          : { section: section === null ? null : { ...section } }),
+        ...(issues === undefined ? undefined : { issues: issuesAnswered(issues) }),
       },
       already,
     }),
   );
+
+/** A sidebar section as an answer names it. */
+interface TaskSectionReading {
+  readonly id: string;
+  readonly title: string;
+}
+
+/**
+ * Where a task is asked to stand in its member's sidebar, read before
+ * anything is written: the section of the caller's workspace named, none for
+ * null, the refusal's words for a section of no workspace of the caller's,
+ * and whether the task already stands there.
+ */
+const sectionAsked = (
+  userId: string,
+  workspaceId: string,
+  taskId: string,
+  sectionId: string | null,
+) =>
+  Effect.map(listTaskSections(userId), (kept) => {
+    const section =
+      sectionId === null
+        ? null
+        : kept.sections.find((each) => each.id === sectionId && each.workspaceId === workspaceId);
+    if (section === undefined) return Result.fail(UPDATE_TASK_REFUSAL.NO_SECTION);
+    const standing = kept.entries.find((entry) => entry.taskId === taskId)?.sectionId ?? null;
+    return Result.succeed({
+      section: section === null ? null : { id: section.id, title: section.title },
+      stands: standing === sectionId,
+    });
+  });
 
 /** Whether every change named already stands on the task as its member reads it. */
 function changesStand(task: StoredTask["task"], changes: TaskChanges): boolean {
   return (
     (changes.name === undefined || changes.name === task.name) &&
     (changes.repository === undefined || changes.repository === task.repository) &&
-    (changes.archived === undefined || changes.archived === (task.archivedAt !== undefined)) &&
-    (changes.pinned === undefined || changes.pinned === (task.pinnedAt !== undefined))
+    (changes.pinned === undefined || changes.pinned === (task.pinnedAt !== undefined)) &&
+    (changes.status === undefined || changes.status === task.status) &&
+    (changes.priority === undefined || changes.priority === task.priority) &&
+    (changes.assigneeId === undefined || changes.assigneeId === (task.assignee?.userId ?? null))
   );
 }
 
@@ -1815,15 +1951,34 @@ function repositoryRefusalWords(refusal: HostedRefusal): string {
     : CODING_AGENT_TOOL_REFUSAL.STORE;
 }
 
-/** A repository confirmed as the menu's PATCH confirms one, through the workspace's installation, or the refusal's words; none clears it. */
-const reachedRepository = (workspaceId: string, repository: string | null) =>
+/** A repository as a task records it: its name as GitHub spells it, none where it is cleared, and how it was reached. */
+interface RecordedRepository {
+  readonly repository: string | null;
+  readonly githubAccess: GitHubAccess;
+}
+
+/**
+ * A repository confirmed as the menu's PATCH confirms one, through the
+ * workspace's installation or else the member's own token, or the refusal's
+ * words; none clears it.
+ */
+export const reachedRepository = (
+  workspaceId: string,
+  repository: string | null,
+  member: string | undefined,
+) =>
   repository === null
-    ? Effect.succeed<Result.Result<string | null, string>>(Result.succeed(null))
+    ? Effect.succeed<Result.Result<RecordedRepository, string>>(
+        Result.succeed({ repository: null, githubAccess: GITHUB_ACCESS.APP }),
+      )
     : Effect.map(
-        Effect.result(workspaceRepository(workspaceId, repository)),
-        (reached): Result.Result<string | null, string> =>
+        Effect.result(workspaceRepository(workspaceId, repository, member)),
+        (reached): Result.Result<RecordedRepository, string> =>
           Result.isSuccess(reached)
-            ? Result.succeed(reached.success.fullName)
+            ? Result.succeed({
+                repository: reached.success.repository.fullName,
+                githubAccess: reached.success.access,
+              })
             : Result.fail(repositoryRefusalWords(reached.failure)),
       );
 
@@ -1844,14 +1999,33 @@ export function runUpdateTask(
   if (Result.isFailure(asked)) {
     return Effect.succeed(agentToolRejected(UPDATE_TASK_REFUSAL.UNREADABLE));
   }
-  const { taskId, ...changes } = asked.success;
-  if (Object.keys(changes).length === 0) {
+  const {
+    taskId,
+    sectionId,
+    linkIssues,
+    unlinkIssues,
+    relateIssues,
+    assignee,
+    archived,
+    ...named
+  } = asked.success;
+  const assigneeId =
+    assignee === undefined ? undefined : assignee === null ? null : assigneeIdOf(assignee);
+  if (assignee !== undefined && assigneeId === undefined) {
+    return Effect.succeed(agentToolRejected(UPDATE_TASK_REFUSAL.NOT_MEMBER));
+  }
+  const changes = assigneeId === undefined ? named : { ...named, assigneeId };
+  const issuesAsked = { linkIssues, unlinkIssues, relateIssues };
+  const relinking = [linkIssues, unlinkIssues, relateIssues].some((each) => each !== undefined);
+  if (
+    Object.keys(changes).length === 0 &&
+    archived === undefined &&
+    sectionId === undefined &&
+    !relinking
+  ) {
     return Effect.succeed(agentToolRejected(UPDATE_TASK_REFUSAL.UNREADABLE));
   }
   const { caller } = call;
-  if (changes.archived === true && taskId === callerTask(caller)) {
-    return Effect.succeed(agentToolRejected(UPDATE_TASK_REFUSAL.OWN_TASK));
-  }
   return orStoreRefusal(
     Effect.gen(function* () {
       const userId = callerUserId(caller);
@@ -1864,43 +2038,125 @@ export function runUpdateTask(
       ) {
         return agentToolRejected(UPDATE_TASK_REFUSAL.NO_TASK);
       }
+      // Where it is asked to stand in the sidebar is read before anything is written.
+      const placing =
+        sectionId === undefined
+          ? undefined
+          : yield* sectionAsked(userId, workspace.value, taskId, sectionId);
+      if (placing !== undefined && Result.isFailure(placing)) {
+        return agentToolRejected(placing.failure);
+      }
+      // Note that a teammate names a repository on the App alone, never their own token, because a task on a token is its owner's.
+      const owner = read.value.ownerId === userId ? userId : undefined;
       const repository =
         changes.repository === undefined
           ? undefined
-          : yield* reachedRepository(workspace.value, changes.repository);
+          : yield* reachedRepository(workspace.value, changes.repository, owner);
       if (repository !== undefined && Result.isFailure(repository)) {
         return agentToolRejected(repository.failure);
       }
+      // An archive from an older call settles the task, and an unarchive puts it back to work; a status named beside either is the one written.
+      const status =
+        changes.status !== undefined || archived === undefined
+          ? changes.status
+          : yield* archiveAskedStatus(
+              userId,
+              taskId,
+              read.value.task.status ?? TASK_STATUS.TODO,
+              archived,
+            );
       // A repository is compared as GitHub spells it, which is how the task holds it.
       const asWritten = {
         ...changes,
-        ...(repository === undefined ? undefined : { repository: repository.success }),
+        ...(status === undefined ? undefined : { status }),
+        ...(repository === undefined
+          ? undefined
+          : {
+              repository: repository.success.repository,
+              githubAccess: repository.success.githubAccess,
+            }),
       };
-      const already = changesStand(read.value.task, asWritten);
-      // Note that the task's agents are archived with it, so one still at work, read under its
-      // conversation's lock, refuses the archive rather than being stopped from here.
-      const guard = changes.archived === true ? standsStopped : undefined;
-      const changed = yield* updateTask(userId, taskId, asWritten, undefined, guard).pipe(
+      // Every issue to link is read from its provider before anything is written; `#N` names a link
+      // of the repository the task stands on now, and an issue to link of the one the call leaves it on.
+      const relinked = relinking
+        ? yield* issueChangesOf(
+            userId,
+            workspace.value,
+            read.value.issueLinks,
+            {
+              standing: read.value.task.repository,
+              changed:
+                repository === undefined
+                  ? read.value.task.repository
+                  : repository.success.repository,
+            },
+            issuesAsked,
+          )
+        : undefined;
+      if (relinked !== undefined && Result.isFailure(relinked)) {
+        return agentToolRejected(relinked.failure);
+      }
+      const already =
+        changesStand(read.value.task, asWritten) &&
+        (placing?.success.stands ?? true) &&
+        (relinked === undefined || issueChangesStand(relinked.success));
+      // The task's change and its place in the sidebar are one transaction, so a place refused, its
+      // section deleted meanwhile, takes the change back with it.
+      const writing = Effect.gen(function* () {
+        const task =
+          Object.keys(asWritten).length === 0
+            ? Option.some(read.value.task)
+            : yield* updateTask(userId, taskId, asWritten);
+        if (Option.isSome(task) && placing !== undefined && !placing.success.stands) {
+          // The sidebar's own write puts it in the section named, or in none, as the developer's drag does.
+          const placed = yield* writeTaskSections(userId, {
+            kind: TASK_SECTION_WRITE.PLACE,
+            taskId,
+            sectionId: placing.success.section?.id ?? null,
+          });
+          if (Option.isNone(placed)) return yield* Effect.fail(new TaskPlaceRefused());
+        }
+        // The task's links change after it does, so a call that brings it back relinks it too.
+        if (Option.isSome(task) && relinked !== undefined) {
+          yield* writeIssueChanges(userId, taskId, relinked.success);
+        }
+        return task;
+      });
+      const changed = yield* Effect.flatMap(SqlClient.SqlClient, (client) =>
+        client.withTransaction(writing),
+      ).pipe(
         Effect.map(
           (task): Result.Result<Option.Option<StoredTask["task"]>, string> => Result.succeed(task),
         ),
-        Effect.catchTag("TaskArchived", () =>
-          Effect.succeed(Result.fail(UPDATE_TASK_REFUSAL.ARCHIVED)),
+        Effect.catchTag("TaskAssigneeNotMember", () =>
+          Effect.succeed(Result.fail(UPDATE_TASK_REFUSAL.NOT_MEMBER)),
         ),
-        Effect.catchTag("TaskAgentUnstopped", () =>
-          Effect.succeed(Result.fail(UPDATE_TASK_REFUSAL.AGENTS_WORKING)),
+        Effect.catchTag("TaskPlaceRefused", () =>
+          Effect.succeed(Result.fail(UPDATE_TASK_REFUSAL.NO_SECTION)),
+        ),
+        Effect.catchTag("TaskIssuesFull", () =>
+          Effect.succeed(Result.fail(TASK_ISSUE_REFUSAL.FULL)),
         ),
       );
       if (Result.isFailure(changed)) return agentToolRejected(changed.failure);
       if (Option.isNone(changed.success)) return agentToolRejected(UPDATE_TASK_REFUSAL.NO_TASK);
-      return yield* taskUpdateAnswer(userId, changed.success.value, already);
+      return yield* taskUpdateAnswer(
+        userId,
+        changed.success.value,
+        already,
+        placing?.success.section,
+        relinking ? yield* listTaskIssues(userId, taskId) : undefined,
+      );
     }),
   );
 }
 
 /** A stop's refusal in the model's words: an agent gone meanwhile is none, a deployment with no eve says so, and anything else is the service down. */
-function stopRefusalWords(refusal: HostedRefusal, eve: EveSessions | undefined): string {
+function stopRefusalWords(refusal: HostedRefusal, eve: AgentSessions | undefined): string {
   if (refusal.error === HOSTED_API_ERROR.NOT_FOUND) return CODING_AGENT_TOOL_REFUSAL.NO_AGENT;
+  if (refusal.error === HOSTED_API_ERROR.NATIVE_AGENT_NOT_HERE) {
+    return STOP_AGENT_REFUSAL.NATIVE_NOT_HERE;
+  }
   return eve === undefined ? STOP_AGENT_REFUSAL.NO_SERVICE : STOP_AGENT_REFUSAL.UNAVAILABLE;
 }
 
@@ -1922,7 +2178,7 @@ function stopStands(turn: CodingAgentLatestTurn | undefined): boolean {
  * so a deployment with no eve still answers an idle agent as idle.
  */
 const stopOf = (
-  eve: EveSessions | undefined,
+  eve: AgentSessions | undefined,
   writer: Effect.Effect<StoreWriter>,
   agent: CodingAgent,
   key: string,
@@ -1939,6 +2195,7 @@ const stopOf = (
       createdAt: agent.createdAt,
       now: yield* Clock.currentTimeMillis,
       awaitingLineAt: after.awaitingLineAt,
+      blank: startedBlank(agent),
     });
     const standing = stopStands(before.turn) && after.turn?.id === before.turn?.id;
     return { stopped: earlier || cancelled || standing, status };
@@ -1963,7 +2220,14 @@ export function runStopAgent(
       const found = yield* workspaceAgentOf(caller, agentId);
       if (Option.isNone(found)) return agentToolRejected(CODING_AGENT_TOOL_REFUSAL.NO_AGENT);
       const { agent, task } = found.value;
+      const steward = stewardRefused(caller, agent, STEWARD_ACT.STOP);
+      if (steward !== undefined) return agentToolRejected(steward);
       if (agent.archivedAt !== null) return agentToolRejected(STOP_AGENT_REFUSAL.ARCHIVED);
+      if (!(yield* writesAsPlanPolicy(callerUserId(caller), agent))) {
+        return agentToolRejected(
+          `Not stopped: ${yield* agentStarterName(agent)}'s own plan pays for that agent, so only they and their agents can stop it.`,
+        );
+      }
       const stop = yield* Effect.result(stopOf(eve, call.writer, agent, call.clientKey));
       if (Result.isFailure(stop)) return agentToolRejected(stopRefusalWords(stop.failure, eve));
       // Note that a Stop already standing on a turn still ending is this call's own run again, or
@@ -1976,12 +2240,174 @@ export function runStopAgent(
         status: ACTION_RESULT_STATUS.ACCEPTED,
         agent: {
           id: agent.id,
-          title: agentName(agent),
+          ...givenNameOf(agent),
+          title: agent.title ?? agent.model,
           task: task.task === null ? null : { ...task.task },
           onYourTask: task.onYourTask,
           status,
         },
         stopped,
+      };
+    }),
+  );
+}
+
+/** A change to an agent that found no row to write: the agent left the caller's reach as it was changed. */
+class AgentChangeLost extends Data.TaggedError("AgentChangeLost") {}
+
+/** A task's place in a section refused inside its change's transaction, its section gone meanwhile, which takes the change back. */
+class TaskPlaceRefused extends Data.TaggedError("TaskPlaceRefused") {}
+
+/** An archive or an unarchive refused inside a change's transaction, its words for the model, which takes every change back. */
+class AgentChangeRefused extends Data.TaggedError("AgentChangeRefused")<{
+  readonly refusal: string;
+}> {}
+
+/** The changes a call asks of an agent, each already read and its choice already the catalog's. */
+interface AgentChanges {
+  readonly title: string | undefined;
+  readonly choice: ModelChoice | undefined;
+  readonly pinned: boolean | undefined;
+  readonly disabledServers: readonly string[] | undefined;
+}
+
+/**
+ * Writes every change asked of an agent in one transaction and answers the
+ * agent as the last write left it, nothing where none was asked; a write that
+ * finds no row fails it, so either every change stands or none does.
+ */
+const changedAgent = (userId: string, agentId: string, changes: AgentChanges) =>
+  Effect.flatMap(SqlClient.SqlClient, (client) =>
+    client.withTransaction(
+      Effect.gen(function* () {
+        const kept = (changed: Option.Option<CodingAgent>) =>
+          Option.isSome(changed) ? Effect.succeed(changed) : Effect.fail(new AgentChangeLost());
+        const { title, choice, pinned, disabledServers } = changes;
+        let last = Option.none<CodingAgent>();
+        if (title !== undefined) {
+          last = yield* kept(
+            yield* renameCodingAgent(userId, agentId, title.length === 0 ? null : title),
+          );
+        }
+        if (choice !== undefined)
+          last = yield* kept(yield* updateCodingAgentChoice(userId, agentId, choice));
+        if (pinned !== undefined)
+          last = yield* kept(yield* pinCodingAgent(userId, agentId, pinned));
+        if (disabledServers !== undefined) {
+          last = yield* kept(yield* updateCodingAgentServers(userId, agentId, disabledServers));
+        }
+        return last;
+      }),
+    ),
+  );
+
+/**
+ * One call of `update_agent`: an agent of the caller's workspace renamed,
+ * moved to another choice the catalog takes, pinned or unpinned for the
+ * caller's member, or given another list of servers switched off, each by
+ * the store's own write the agent's menu, chip, and composer make. A choice
+ * is checked before anything is written, so one refused changes nothing, and
+ * every change asked is written in one transaction, so none stands where
+ * another failed.
+ */
+export function runUpdateAgent(
+  call: CodingAgentCall,
+  input: UnparsedWireValue,
+): Effect.Effect<WireRecord, never, CodingAgentToolServices> {
+  const asked = readUpdateAsked(input);
+  if (Result.isFailure(asked)) {
+    return Effect.succeed(agentToolRejected(UPDATE_AGENT_REFUSAL.UNREADABLE));
+  }
+  const { agentId, title, model, effort, contextWindow, pinned, disabledServers } = asked.success;
+  const { archived, reason } = asked.success;
+  const { caller } = call;
+  if (archived === true && caller.kind === AGENT_CALLER.AGENT && agentId === caller.agent.id) {
+    return Effect.succeed(agentToolRejected(UPDATE_AGENT_REFUSAL.SELF));
+  }
+  const userId = callerUserId(caller);
+  return orStoreRefusal(
+    Effect.gen(function* () {
+      const found = yield* workspaceAgentOf(caller, agentId);
+      if (Option.isNone(found)) return agentToolRejected(CODING_AGENT_TOOL_REFUSAL.NO_AGENT);
+      const steward = stewardRefused(caller, found.value.agent, STEWARD_ACT.CHANGE);
+      if (steward !== undefined) return agentToolRejected(steward);
+      const { task, workspaceId } = found.value;
+      const choices = yield* Effect.result(accountModelChoices(userId));
+      if (Result.isFailure(choices)) return agentToolRejected(UPDATE_AGENT_REFUSAL.UNAVAILABLE);
+      const { offered } = choices.success;
+      const asked =
+        model === undefined || effort === undefined
+          ? undefined
+          : { model, effort, ...(contextWindow === undefined ? undefined : { contextWindow }) };
+      // A provider's own harness takes only what it runs (`agent-runtime-models.ts`).
+      const runtime = asked === undefined ? undefined : yield* agentRuntimeOf(found.value.agent);
+      const refused = asked === undefined ? undefined : runtimeChoiceRefusal(runtime, asked);
+      if (refused !== undefined) {
+        return agentToolRejected(
+          `${UPDATE_CHOICE_LEAD}: ${runtimeChoiceRefusalWords(runtime, refused)}`,
+        );
+      }
+      const accepted = asked === undefined ? undefined : validateModelChoice(offered, asked);
+      if (asked !== undefined && accepted !== undefined && Result.isFailure(accepted)) {
+        return agentToolRejected(choiceRefusal(asked, offered, UPDATE_CHOICE_LEAD));
+      }
+      // The catalog's own reading of the choice is written, a window the model does not offer apart dropped.
+      const choice = accepted === undefined ? undefined : Result.getOrUndefined(accepted);
+      // A pin stands only on an agent with no task, in the sidebar's list of them; one on a task lives in its task's tabs.
+      if (pinned !== undefined && found.value.agent.taskId !== null) {
+        return agentToolRejected(UPDATE_AGENT_REFUSAL.PIN_ON_TASK);
+      }
+      // An archive is checked first, so one refused, its agent working, leaves every change asked unwritten.
+      // The archive and every other change are one transaction: a refused archive writes nothing, and
+      // a change that finds no row takes the archive back with it.
+      const written = yield* Effect.flatMap(SqlClient.SqlClient, (client) =>
+        client.withTransaction(
+          Effect.gen(function* () {
+            if (archived !== undefined) {
+              const refusal = yield* archiveChange(caller, found.value.agent, archived, reason);
+              if (refusal !== undefined)
+                return yield* Effect.fail(new AgentChangeRefused({ refusal }));
+            }
+            return yield* changedAgent(userId, agentId, { title, choice, pinned, disabledServers });
+          }),
+        ),
+      ).pipe(
+        Effect.map(
+          (changed): Result.Result<Option.Option<CodingAgent>, string> => Result.succeed(changed),
+        ),
+        Effect.catchTag("AgentChangeLost", () =>
+          Effect.succeed(Result.fail(CODING_AGENT_TOOL_REFUSAL.NO_AGENT)),
+        ),
+        Effect.catchTag("AgentChangeRefused", (refused) =>
+          Effect.succeed(Result.fail(refused.refusal)),
+        ),
+      );
+      if (Result.isFailure(written)) return agentToolRejected(written.failure);
+      // A native agent's runner that runs is handed the change now; eve reads the row at its next step.
+      if (choice !== undefined) yield* runnerChoiceApplied(found.value.agent);
+      // The agent as it now stands, its archive among it, which a change left unwritten does not answer.
+      const now = Option.isSome(written.success)
+        ? written.success
+        : yield* readCodingAgent(userId, agentId);
+      const agent = Option.getOrElse(now, () => found.value.agent);
+      const step = yield* workspaceStepOf(userId, workspaceId);
+      return {
+        status: ACTION_RESULT_STATUS.ACCEPTED,
+        agent: {
+          id: agent.id,
+          ...givenNameOf(agent),
+          title: agent.title ?? agent.model,
+          model: agent.model,
+          modelName: modelLabel(agent.model, offered),
+          effort: agent.effort,
+          contextWindow: agent.contextWindow,
+          disabledServers: [...agent.disabledServers],
+          task: task.task === null ? null : { ...task.task },
+          onYourTask: task.onYourTask,
+          mention: agentMention(agent, step),
+          archived: agent.archivedAt !== null,
+          ...(pinned === undefined ? undefined : { pinned }),
+        },
       };
     }),
   );
@@ -1999,6 +2425,13 @@ export function runListTasks(
   }
   const words = asked.success.nameContains?.toLowerCase();
   const offset = asked.success.offset ?? 0;
+  const assigned = asked.success.assignee;
+  // The tasks of one member, or with null of no one; a link that names no person names no one's tasks.
+  const assigneeId =
+    assigned === undefined || assigned === null ? assigned : assigneeIdOf(assigned);
+  if (assigned !== undefined && assigned !== null && assigneeId === undefined) {
+    return Effect.succeed(agentToolRejected(CODING_AGENT_TOOL_REFUSAL.UNREADABLE_TASKS));
+  }
   return orStoreRefusal(
     Effect.gen(function* () {
       const workspace = yield* callerWorkspace(caller);
@@ -2007,13 +2440,13 @@ export function runListTasks(
       }
       const ownTask = callerTask(caller);
       const userId = callerUserId(caller);
-      const listed = yield* listTasks(userId, {
-        includeArchived: asked.success.includeArchived === true,
-      });
+      const listed = yield* listTasks(userId);
       const matching = listed.filter(
         (task) =>
           task.workspaceId === workspace.value &&
-          (words === undefined || task.name.toLowerCase().includes(words)),
+          (words === undefined || task.name.toLowerCase().includes(words)) &&
+          (asked.success.status === undefined || task.status === asked.success.status) &&
+          (assigned === undefined || (task.assignee?.userId ?? null) === assigneeId),
       );
       const kept = yield* listTaskSections(userId);
       const sections = kept.sections.filter((section) => section.workspaceId === workspace.value);
@@ -2023,14 +2456,14 @@ export function runListTasks(
           .filter((entry) => shelved.has(entry.sectionId))
           .map((entry) => [entry.taskId, entry.sectionId]),
       );
-      const step = yield* workspaceStepOf(userId, workspace.value);
+      const { step, name } = yield* workspaceNamingOf(userId, workspace.value);
       const tasks = matching.slice(offset, offset + TASKS_LIST_LIMIT).map((task) => ({
         id: task.id,
+        ...taskStandingOf(task, { step, name }),
         name: task.name,
         repository: task.repository ?? null,
         startedBy: task.createdBy?.name ?? null,
         isYourTask: task.id === ownTask,
-        archived: task.archivedAt !== undefined,
         sectionId: sectionOf.get(task.id) ?? null,
         mention: writtenMention({ kind: MENTION_KIND.TASK, taskId: task.id }, task.name, step),
       }));
@@ -2054,25 +2487,44 @@ export function runListTasks(
  */
 export function runListModels(
   call: CodingAgentCall,
-  _input: UnparsedWireValue,
+  input: UnparsedWireValue,
 ): Effect.Effect<WireRecord, never, CodingAgentToolServices> {
-  return Effect.match(accountModelChoices(callerUserId(call.caller)), {
-    onFailure: () => agentToolRejected(LIST_MODELS_REFUSAL.UNAVAILABLE),
-    onSuccess: ({ offered, defaultChoice }) => ({
-      status: ACTION_RESULT_STATUS.ACCEPTED,
-      models: offered.map((model) => ({
-        id: model.id,
-        name: modelLabel(model.id, offered),
-        efforts: [...model.efforts],
-      })),
-      default: {
-        model: defaultChoice.model,
-        modelName: modelLabel(defaultChoice.model, offered),
-        effort: defaultChoice.effort,
-        offered: Result.isSuccess(validateModelChoice(offered, defaultChoice)),
-      },
+  const asked = readListModelsAsked(input);
+  if (Result.isFailure(asked)) {
+    return Effect.succeed(agentToolRejected(LIST_MODELS_REFUSAL.UNREADABLE));
+  }
+  const { agentId } = asked.success;
+  const { caller } = call;
+  return orStoreRefusal(
+    Effect.gen(function* () {
+      // The agent named, whose runtime narrows the list to what it may move to.
+      let runtime: NativeCodingAgentRuntime | undefined;
+      if (agentId !== undefined) {
+        const found = yield* workspaceAgentOf(caller, agentId);
+        if (Option.isNone(found)) return agentToolRejected(CODING_AGENT_TOOL_REFUSAL.NO_AGENT);
+        runtime = yield* agentRuntimeOf(found.value.agent);
+      }
+      const choices = yield* Effect.result(accountModelChoices(callerUserId(caller)));
+      if (Result.isFailure(choices)) return agentToolRejected(LIST_MODELS_REFUSAL.UNAVAILABLE);
+      const { offered, defaultChoice } = choices.success;
+      const listed = runtimeModels(offered, runtime);
+      return {
+        status: ACTION_RESULT_STATUS.ACCEPTED,
+        models: listed.map((model) => ({
+          id: model.id,
+          name: modelLabel(model.id, offered),
+          efforts: [...model.efforts],
+        })),
+        default: {
+          model: defaultChoice.model,
+          modelName: modelLabel(defaultChoice.model, offered),
+          effort: defaultChoice.effort,
+          // Whether the default is among the models listed: for the agent named, one it may move to.
+          offered: Result.isSuccess(validateModelChoice(listed, defaultChoice)),
+        },
+      };
     }),
-  });
+  );
 }
 
 /** A page's HTML as a read answers it, and how many characters of it were left out. */
@@ -2081,15 +2533,59 @@ interface PageCut {
   readonly leftOutChars: number;
 }
 
-/** A page's HTML cut on a line to the read's bound, and how many characters were left out; whole where it fits. */
-function pageCut(html: string): PageCut {
-  if (html.length <= READ_PAGE_CHARS) return { html, leftOutChars: 0 };
-  const lineEnd = html.lastIndexOf("\n", READ_PAGE_CHARS);
-  const kept = html.slice(0, lineEnd > 0 ? lineEnd : READ_PAGE_CHARS);
-  return { html: kept, leftOutChars: html.length - kept.length };
+/** A text as a read answers it, cut to a bound, and how many characters of it were left out. */
+export interface TextCut {
+  readonly text: string;
+  readonly leftOutChars: number;
 }
 
-/** One call of `read_page`: a version of a page of a task of the caller's workspace, its HTML cut to the bound, or why there is none. */
+/** A text cut on a line to a bound, and how many characters were left out; whole where it fits. */
+export function cutOnLine(text: string, maximumChars: number): TextCut {
+  if (text.length <= maximumChars) return { text, leftOutChars: 0 };
+  const lineEnd = text.lastIndexOf("\n", maximumChars);
+  const kept = text.slice(0, lineEnd > 0 ? lineEnd : maximumChars);
+  return { text: kept, leftOutChars: text.length - kept.length };
+}
+
+/** A page's HTML cut on a line to the read's bound, and how many characters were left out; whole where it fits. */
+function pageCut(html: string): PageCut {
+  const cut = cutOnLine(html, READ_PAGE_CHARS);
+  return { html: cut.text, leftOutChars: cut.leftOutChars };
+}
+
+/**
+ * What a page read says it stands on, where that is of the caller's
+ * workspace: its task, by name, and whether it is the caller's own, or the
+ * coding agent on no task that showed it, by name, and whether that is the
+ * caller; nothing for an owner of another workspace.
+ */
+type PageStanding =
+  | {
+      readonly task: { readonly id: string; readonly name: string | null };
+      readonly isYourTask: boolean;
+    }
+  | { readonly agent: { readonly id: string; readonly name: string }; readonly isYours: boolean };
+
+const pageStandingOf = (caller: AgentCaller, owner: PageOwner) =>
+  Effect.gen(function* () {
+    const userId = callerUserId(caller);
+    if (owner.kind === PAGE_OWNER.TASK) {
+      if (!(yield* taskOfCallerWorkspace(caller, owner.taskId))) return Option.none<PageStanding>();
+      const names = yield* taskNamesOf(userId, [owner.taskId]);
+      return Option.some<PageStanding>({
+        task: { id: owner.taskId, name: names.get(owner.taskId)?.name ?? null },
+        isYourTask: owner.taskId === callerTask(caller),
+      });
+    }
+    const found = yield* workspaceAgentOf(caller, owner.agentId);
+    if (Option.isNone(found)) return Option.none<PageStanding>();
+    return Option.some<PageStanding>({
+      agent: { id: owner.agentId, name: agentName(found.value.agent) },
+      isYours: caller.kind === AGENT_CALLER.AGENT && caller.agent.id === owner.agentId,
+    });
+  });
+
+/** One call of `read_page`: a version of a page of the caller's workspace, on a task or on an agent with no task, its HTML cut to the bound, or why there is none. */
 export function runReadPage(
   call: CodingAgentCall,
   input: UnparsedWireValue,
@@ -2107,13 +2603,12 @@ export function runReadPage(
       }
       const userId = callerUserId(caller);
       const found = yield* readPageById(userId, asked.success.pageId, asked.success.version);
-      // A page of a task of another workspace, even one the member is also in, is none of the caller's.
-      if (Option.isNone(found) || !(yield* taskOfCallerWorkspace(caller, found.value.taskId))) {
-        return agentToolRejected(READ_PAGE_REFUSAL.NO_PAGE);
-      }
-      const { taskId, page, newestVersion } = found.value;
-      const names = yield* taskNamesOf(userId, [taskId]);
-      const step = yield* taskStepOf(userId, taskId);
+      if (Option.isNone(found)) return agentToolRejected(READ_PAGE_REFUSAL.NO_PAGE);
+      const { owner, page, newestVersion } = found.value;
+      // A page of another workspace, even one the member is also in, is none of the caller's.
+      const standing = yield* pageStandingOf(caller, owner);
+      if (Option.isNone(standing)) return agentToolRejected(READ_PAGE_REFUSAL.NO_PAGE);
+      const step = yield* pageStepOf(userId, owner);
       const cut = pageCut(page.html);
       return {
         status: ACTION_RESULT_STATUS.ACCEPTED,
@@ -2122,18 +2617,11 @@ export function runReadPage(
           title: page.title,
           version: page.version,
           newestVersion,
-          task: { id: taskId, name: names.get(taskId)?.name ?? null },
-          isYourTask: taskId === callerTask(caller),
-          // The page's mention, ready to write, wherever its task's workspace reads for the member.
+          ...standing.value,
+          // The page's mention, ready to write, wherever its owner's workspace reads for the member.
           ...(Option.isNone(step)
             ? undefined
-            : {
-                mention: writtenMention(
-                  { kind: MENTION_KIND.PAGE, taskId, pageId: page.id },
-                  page.title,
-                  step.value,
-                ),
-              }),
+            : { mention: writtenMention(pageMention(owner, page.id), page.title, step.value) }),
           html: cut.html,
           leftOutChars: cut.leftOutChars,
         },

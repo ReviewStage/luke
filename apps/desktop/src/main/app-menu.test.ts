@@ -5,17 +5,14 @@ import { EXPERIMENT } from "@luke/settings";
 import {
   APP_COMMAND,
   APP_SHORTCUTS,
-  appCommandLabel,
   KEYED_COMMANDS,
-  SHORTCUT_KEY,
   shortcutAccelerator,
   shortcutShown,
-  shownShortcutGroups,
 } from "@luke/settings/shortcuts";
 import { experimentsOn } from "@luke/settings/testing";
-import type { MenuItemConstructorOptions } from "electron";
+import type { BaseWindow, KeyboardEvent, MenuItem, MenuItemConstructorOptions } from "electron";
 import { describe, test } from "vitest";
-import { appMenuTemplate, menuBarDrawer, UPDATE_MENU_ACT } from "./app-menu";
+import { appMenuTemplate, menuBarDrawer, type PanelMenu, UPDATE_MENU_ACT } from "./app-menu";
 
 /**
  * The menu bar as a gated feature's experiment decides it: an item whose
@@ -38,13 +35,15 @@ function labelsOf(template: MenuItemConstructorOptions[], menu: string): readonl
 describe("the menu bar's gate", () => {
   test("every item stands while every command does", () => {
     assert.deepEqual(labelsOf(appMenuTemplate("Luke"), "Go"), [
-      "Home",
+      "Ask Luke",
       "Inbox",
-      "Issues",
       "Automations",
       "-",
       "Back",
       "Forward",
+      "-",
+      "Next Recent Tab",
+      "Previous Recent Tab",
     ]);
   });
 
@@ -52,60 +51,53 @@ describe("the menu bar's gate", () => {
     const withoutInbox = appMenuTemplate(
       "Luke",
       undefined,
-      (command) => command !== APP_COMMAND.INBOX,
+      (command) => command !== APP_COMMAND.INBOX && command !== APP_COMMAND.ASK_LUKE,
     );
     assert.deepEqual(labelsOf(withoutInbox, "Go"), [
-      "Home",
-      "Issues",
       "Automations",
       "-",
       "Back",
       "Forward",
+      "-",
+      "Next Recent Tab",
+      "Previous Recent Tab",
     ]);
 
     const withoutPlaces = appMenuTemplate(
       "Luke",
       undefined,
       (command) =>
-        command !== APP_COMMAND.HOME &&
+        command !== APP_COMMAND.ASK_LUKE &&
         command !== APP_COMMAND.INBOX &&
-        command !== APP_COMMAND.ISSUES &&
         command !== APP_COMMAND.AUTOMATIONS,
     );
-    assert.deepEqual(labelsOf(withoutPlaces, "Go"), ["Back", "Forward"]);
+    assert.deepEqual(labelsOf(withoutPlaces, "Go"), [
+      "Back",
+      "Forward",
+      "-",
+      "Next Recent Tab",
+      "Previous Recent Tab",
+    ]);
+  });
+});
+
+describe("the Ask Luke item", () => {
+  test("stands under Go only while the account has the operator on", () => {
+    const shownWith = (experiments: Parameters<typeof shortcutShown>[1]) =>
+      appMenuTemplate("Luke", undefined, (command) =>
+        shortcutShown(command, experiments, DESKTOP_CAPABILITIES),
+      );
+    assert.ok(!labelsOf(shownWith({}), "Go").includes("Ask Luke"));
+    assert.equal(labelsOf(shownWith(experimentsOn(EXPERIMENT.OPERATOR)), "Go")[0], "Ask Luke");
   });
 });
 
 describe("the Automations item", () => {
-  test("stands under Go only while the account has its experiment on", () => {
-    const off = appMenuTemplate("Luke", undefined, (command) =>
+  test("stands under Go with no experiment on", () => {
+    const menu = appMenuTemplate("Luke", undefined, (command) =>
       shortcutShown(command, {}, DESKTOP_CAPABILITIES),
     );
-    assert.ok(!labelsOf(off, "Go").includes("Automations"));
-    const on = appMenuTemplate("Luke", undefined, (command) =>
-      shortcutShown(command, experimentsOn(EXPERIMENT.AUTOMATIONS), DESKTOP_CAPABILITIES),
-    );
-    assert.ok(labelsOf(on, "Go").includes("Automations"));
-  });
-});
-
-describe("Factory", () => {
-  test("keeps no menu bar item and no chord, with its experiment on as off, so ⇧⌘F reaches no command", () => {
-    const on = appMenuTemplate("Luke", undefined, (command) =>
-      shortcutShown(command, experimentsOn(EXPERIMENT.FACTORY), DESKTOP_CAPABILITIES),
-    );
-    assert.ok(!labelsOf(on, "Go").includes("Factory"));
-    const listed = shownShortcutGroups(
-      experimentsOn(EXPERIMENT.FACTORY),
-      DESKTOP_CAPABILITIES,
-    ).flatMap((group) => group.commands);
-    assert.ok(!listed.some((command) => appCommandLabel(command) === "Factory"));
-    const freed = shortcutAccelerator({ key: SHORTCUT_KEY.F, shift: true });
-    assert.ok(
-      !KEYED_COMMANDS.some(
-        (command) => shortcutAccelerator(APP_SHORTCUTS[command].chord) === freed,
-      ),
-    );
+    assert.ok(labelsOf(menu, "Go").includes("Automations"));
   });
 });
 
@@ -123,7 +115,7 @@ describe("the menu bar's drawer", () => {
     show();
     assert.equal(drawn.length, 1, "nothing moved, so nothing was drawn again");
 
-    show({ experiments: experimentsOn(EXPERIMENT.FACTORY), capabilities: [] });
+    show({ experiments: experimentsOn(EXPERIMENT.CHAT), capabilities: [] });
     assert.equal(drawn.length, 2);
 
     const update = {
@@ -217,5 +209,42 @@ describe("the developer tools", () => {
         (command) => shortcutAccelerator(APP_SHORTCUTS[command].chord) === tools.accelerator,
       ),
     );
+  });
+});
+
+/** A window of Luke's, as the menu is handed the one it was chosen over. */
+function aWindow(): BaseWindow {
+  return {} as BaseWindow;
+}
+
+/** Presses File's New Task as its key does, over the window in front, and answers the commands the panel was brought back on. */
+function pressNewTask(window: BaseWindow | undefined, panelWindow: BaseWindow): readonly string[] {
+  const reopened: string[] = [];
+  const panel: PanelMenu = {
+    isPanel: (candidate) => candidate === panelWindow,
+    onReopen: (command) => reopened.push(command),
+  };
+  let drawn: MenuItemConstructorOptions[] = [];
+  menuBarDrawer({ appName: "Luke", packaged: true }, (template) => {
+    drawn = template;
+  })({ panel });
+  const newTask = everyItem(drawn).find((item) => item.id === APP_COMMAND.NEW_TASK);
+  if (!newTask?.click) return assert.fail("File has no New Task item");
+  newTask.click({} as MenuItem, window, { triggeredByAccelerator: true } as KeyboardEvent);
+  return reopened;
+}
+
+describe("New Task", () => {
+  test("its key brings the closed window back on a new task", () => {
+    assert.deepEqual(pressNewTask(undefined, aWindow()), [APP_COMMAND.NEW_TASK]);
+  });
+
+  test("its key over another of Luke's windows brings the panel forward on a new task", () => {
+    assert.deepEqual(pressNewTask(aWindow(), aWindow()), [APP_COMMAND.NEW_TASK]);
+  });
+
+  test("its key over the panel is left to the panel's own keymap", () => {
+    const panelWindow = aWindow();
+    assert.deepEqual(pressNewTask(panelWindow, panelWindow), []);
   });
 });

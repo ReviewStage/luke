@@ -1,7 +1,15 @@
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
 import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
-import { INBOX_STATUS, type InboxItem, type InboxReply } from "@luke/features/inbox-wire";
-import type { AppInboxTask, AppInboxTasklessItem } from "@luke/host/app-state";
+import {
+  INBOX_ASK_STATUS,
+  INBOX_MESSAGE_AUTHOR,
+  INBOX_STATUS,
+  type InboxAnswers,
+  type InboxItem,
+  type InboxMessage,
+  type InboxReply,
+} from "@luke/features/inbox-wire";
+import type { AppInboxTask, AppInboxTaskHolding, AppInboxTasklessItem } from "@luke/host/app-state";
 import { Atom } from "effect/reactivity";
 import { useEffect, useLayoutEffect, useMemo } from "react";
 import { appStateNow } from "../use-app-state.js";
@@ -19,9 +27,19 @@ import { appStateNow } from "../use-app-state.js";
  * that one instead, and left again once it caught up. So an answer is laid
  * here the moment it is sent, as the item would stand answered, and every
  * read draws it so while it holds the item open at that revision or older;
- * a read holding it settled draws it as it holds it. A message on an
+ * a read holding it settled draws it as it holds it. A close without an
+ * answer is laid the same way, as the item would stand closed by the
+ * reader. A message on an
  * item's thread, once the service took it, is laid the same way over a read
  * that does not hold it yet.
+ *
+ * On a thread from version 5 an answer is a member's reply carrying it, and
+ * a close withdraws the open ask, neither of which moves the item's
+ * revision, so what a read shows is what says it holds the send: a reply
+ * by the message landing on its thread, and an answer or a close by the
+ * ask it settles standing settled there. Until the service answers, the
+ * answer is laid as the thread would hold it, its ask answered and the
+ * reply under it, and a close as its ask withdrawn by the reader.
  *
  * An entry is let go where the service refused it, the item standing again
  * as the reads hold it, or once a read holds the item changed since: at a
@@ -43,11 +61,19 @@ import { appStateNow } from "../use-app-state.js";
  * the item changed since, or once a held read that held the item as marked
  * holds it otherwise, at the same change: a mark made since, another
  * window's, whose word stands.
+ *
+ * The sidebar's Inbox counts what To do lists from main's count of each
+ * task's to do (`useSettledToDo`), which moves only once main hears of an
+ * answer or a mark, so both are laid over it too: an item the window
+ * answered counts no longer while main still lists it open, and a mark on a
+ * settled item of the reader's moves its task's count by one while main's
+ * word on that task stands as it was when the mark was made.
  */
 
 /** What the window sent on an item. */
 const SETTLING = {
   ANSWER: "answer",
+  CLOSE: "close",
   MESSAGE: "message",
 } as const;
 
@@ -62,15 +88,53 @@ interface Settling {
   readonly sent: symbol;
   readonly taken: boolean;
   readonly mainCaughtUp: boolean;
+  /** The message whose ask an answer or a close settles, on a thread from version 5; none for a reply, or an item before it. */
+  readonly ask?: string | undefined;
+}
+
+/**
+ * What a read mark on a settled item of the reader's moves of its task's
+ * To do count as main counts it: the task, whether main counts the item,
+ * as it was unread, and main's word on the task as the mark was made, which
+ * the move stands over until main's word changes.
+ */
+export interface InboxToDoMark {
+  readonly taskId: string;
+  readonly wasUnread: boolean;
+  readonly counted: Pick<AppInboxTaskHolding, "updatedAt"> & { readonly toDo: number };
+}
+
+/** Whether two marks were made over the same word of main's on the same task. */
+function sameCounted(one: InboxToDoMark, other: InboxToDoMark): boolean {
+  return (
+    one.taskId === other.taskId &&
+    one.counted.toDo === other.counted.toDo &&
+    one.counted.updatedAt === other.counted.updatedAt
+  );
+}
+
+/**
+ * A mark made again over the same word of main's as the item's last one:
+ * main still counts the item as it did under the last, so the new one moves
+ * the count from there rather than from what the last mark drew.
+ */
+function markedAgain(mark: InboxReadMark, last: Mark | undefined): InboxReadMark {
+  const before = last?.mainCaughtUp === false ? last.toDo : undefined;
+  if (mark.toDo === undefined || before === undefined || !sameCounted(before, mark.toDo)) {
+    return mark;
+  }
+  return { ...mark, toDo: { ...mark.toDo, wasUnread: before.wasUnread } };
 }
 
 /**
  * A read mark the window made that the reads may not hold yet: whether the
- * item now reads as unread, and when it last changed as it was marked.
+ * item now reads as unread, when it last changed as it was marked, and what
+ * it moves of its task's To do count, where it moves it.
  */
 export interface InboxReadMark {
   readonly unread: boolean;
   readonly updatedAt: number;
+  readonly toDo?: InboxToDoMark | undefined;
 }
 
 /** Whether an item is unread for the reader; an item from a service before read state reads as read. */
@@ -96,12 +160,15 @@ interface Mark extends InboxReadMark {
   readonly made: symbol;
   readonly taken: boolean;
   readonly held: boolean;
+  /** Whether main handed the window a read of the account since the service took the mark, which holds it, so it moves main's count no longer. */
+  readonly mainCaughtUp: boolean;
 }
 
-/** What the window holds: its sends and its marks, by item. */
+/** What the window holds: its sends and its marks, by item, and main's latest read of the account it saw. */
 interface Book {
   readonly entries: ReadonlyMap<string, Settling>;
   readonly marks: ReadonlyMap<string, Mark>;
+  readonly mainRead?: unknown;
 }
 
 /** What a read saw of the marks as it was drawn. */
@@ -130,7 +197,9 @@ type Change =
     }
   | { readonly unmark: symbol }
   | { readonly marked: symbol }
-  | { readonly marksSeen: MarksSeen };
+  | { readonly marksSeen: MarksSeen }
+  /** Main handed the window this read of the account. */
+  | { readonly mainRead: unknown };
 
 const NOTHING_LAID: Book = { entries: new Map(), marks: new Map() };
 
@@ -183,9 +252,16 @@ function marksChanged(marks: ReadonlyMap<string, Mark>, change: Change): Readonl
   if ("mark" in change) {
     const next = new Map(marks);
     for (const [itemId, mark] of change.mark.marks) {
+      const again = markedAgain(mark, next.get(itemId));
       // Note that an item marked again moves to the newest place, so the oldest marks go first.
       next.delete(itemId);
-      next.set(itemId, { ...mark, made: change.mark.made, taken: false, held: false });
+      next.set(itemId, {
+        ...again,
+        made: change.mark.made,
+        taken: false,
+        held: false,
+        mainCaughtUp: false,
+      });
     }
     return new Map([...next].slice(-KEPT_MARKS));
   }
@@ -221,8 +297,28 @@ function marksChanged(marks: ReadonlyMap<string, Mark>, change: Change): Readonl
   );
 }
 
+/**
+ * The book once main hands the window a read of the account: every mark the
+ * service took before it is caught up, since the read was asked after the
+ * mark was written, the account's held read waking on the reader's marks;
+ * the very book where the read is the one last seen.
+ */
+function mainReadChanged(book: Book, mainRead: unknown): Book {
+  if (book.mainRead === mainRead) return book;
+  const caught = [...book.marks].some(([, mark]) => mark.taken && !mark.mainCaughtUp);
+  if (!caught) return { ...book, mainRead };
+  const marks = new Map(
+    [...book.marks].map(([itemId, mark]) => [
+      itemId,
+      mark.taken ? { ...mark, mainCaughtUp: true } : mark,
+    ]),
+  );
+  return { ...book, marks, mainRead };
+}
+
 /** What the change makes of the book. */
 function changed(book: Book, change: Change): Book {
+  if ("mainRead" in change) return mainReadChanged(book, change.mainRead);
   const marks = marksChanged(book.marks, change);
   if (marks !== book.marks) return { ...book, marks };
   const entries = entriesChanged(book.entries, change);
@@ -341,19 +437,31 @@ function passedBy(read: InboxItem, entry: Settling): boolean {
   return read.revision > entry.revision || (entry.taken && read.updatedAt > entry.item.updatedAt);
 }
 
-/** Whether a read holds the message the entry stands for: the newest on the service's thread. */
+/** Whether a read holds the message the entry stands for: the newest on the service's thread, its whole thread's from version 5. */
 function holdsMessage(read: InboxItem, entry: Settling): boolean {
-  const newest = entry.item.messages?.at(-1)?.id;
-  return newest === undefined || (read.messages ?? []).some((message) => message.id === newest);
+  const newest = (entry.item.thread ?? entry.item.messages)?.at(-1)?.id;
+  const held = [...(read.thread ?? []), ...(read.messages ?? [])];
+  return newest === undefined || held.some((message) => message.id === newest);
+}
+
+/**
+ * Whether a read holds an answer or a close settled: the ask it settles no
+ * longer open on the read's thread, or, where the thread does not carry
+ * that message, as on an item before version 5, the item no longer open.
+ */
+function holdsSettled(read: InboxItem, entry: Settling): boolean {
+  const asked =
+    entry.ask === undefined ? undefined : read.thread?.find(({ id }) => id === entry.ask);
+  if (asked?.ask === undefined) return read.status !== INBOX_STATUS.OPEN;
+  return asked.ask.status !== INBOX_ASK_STATUS.OPEN;
 }
 
 /** How a read's item stands under an entry: the entry's item where the read is behind it, nothing where it holds the send, and passed where it holds a later change. */
 function overlaid(read: InboxItem, entry: Settling): InboxItem | "passed" | undefined {
   if (passedBy(read, entry)) return "passed";
-  if (entry.kind === SETTLING.ANSWER) {
-    return read.status === INBOX_STATUS.OPEN ? entry.item : undefined;
-  }
-  return holdsMessage(read, entry) ? undefined : entry.item;
+  const holds =
+    entry.kind === SETTLING.MESSAGE ? holdsMessage(read, entry) : holdsSettled(read, entry);
+  return holds ? undefined : entry.item;
 }
 
 /** What a read saw as it was drawn: the entries it has passed, and what it saw of the marks. */
@@ -516,6 +624,72 @@ export function useSettledWaiting(
   return laid.value;
 }
 
+/**
+ * Whether a mark's move stands over main's count of its task: main has heard
+ * of the item as it was marked, its task's latest change no earlier than the
+ * item's, so the mark changes what main counts; main has handed the window
+ * no read since the service took the mark (`mainReadChanged`); and main's
+ * word on the task is still what it was as the mark was made, which a read
+ * holding the mark before the service's word on it reached the window moves.
+ * Note that the count and the instant alone never prove main has not caught
+ * up, since a mark elsewhere may leave both as they stood.
+ */
+function toDoMoveStands(mark: Mark, holding: AppInboxTaskHolding): boolean {
+  const counted = mark.toDo?.counted;
+  return (
+    counted !== undefined &&
+    !mark.mainCaughtUp &&
+    mark.updatedAt <= counted.updatedAt &&
+    holding.toDo === counted.toDo &&
+    holding.updatedAt === counted.updatedAt
+  );
+}
+
+/**
+ * How many items To do lists across the tasks given, as main counts each
+ * task's to do, with the window's own answers and marks laid over it until
+ * main hears of them: an answered item main still lists open counts no
+ * longer, `waiting` being main's open items and `settled` those it still
+ * counts once the window's answers are laid (`useSettledWaiting`), and a
+ * mark moves its task's count while it stands (`toDoMoveStands`), from
+ * what main counts of the item to what the mark says. None where
+ * main's word carries no count, from a service before it.
+ */
+export function useSettledToDo(
+  holdings: readonly AppInboxTaskHolding[],
+  waiting: readonly AppInboxTask[],
+  settled: readonly AppInboxTask[],
+  /** Main's read of the account, whose every new answer catches up the marks the service took before it. */
+  mainRead: unknown,
+): number | undefined {
+  const { marks } = useBook();
+  const change = useAtomSet(settlingAtom);
+  useEffect(() => {
+    change({ mainRead });
+  }, [change, mainRead]);
+  return useMemo(() => {
+    const counted = new Map<string, AppInboxTaskHolding & { readonly toDo: number }>();
+    for (const holding of holdings) {
+      if (holding.toDo === undefined) return undefined;
+      counted.set(holding.taskId, { ...holding, toDo: holding.toDo });
+    }
+    // Note that a task main lists open items on and no count for is one its count cannot stand for yet.
+    if (waiting.some((task) => !counted.has(task.taskId))) return undefined;
+    const openIn = (tasks: readonly AppInboxTask[]) =>
+      tasks.reduce((sum, task) => sum + (counted.has(task.taskId) ? task.items.length : 0), 0);
+    let total = [...counted.values()].reduce((sum, holding) => sum + holding.toDo, 0);
+    total -= openIn(waiting) - openIn(settled);
+    for (const mark of marks.values()) {
+      const holding = mark.toDo === undefined ? undefined : counted.get(mark.toDo.taskId);
+      if (holding === undefined || mark.toDo === undefined || !toDoMoveStands(mark, holding)) {
+        continue;
+      }
+      total += Number(mark.unread) - Number(mark.toDo.wasUnread);
+    }
+    return Math.max(0, total);
+  }, [holdings, waiting, settled, marks]);
+}
+
 /** The signed-in member, as an answer names who gave it; none where the account names no id. */
 function readerNow(): { readonly userId: string; readonly name: string } | undefined {
   const account = appStateNow()?.account;
@@ -523,19 +697,81 @@ function readerNow(): { readonly userId: string; readonly name: string } | undef
   return { userId: account.id, name: account.name ?? account.email };
 }
 
+/** The thread's open ask's message, by id; none where its thread holds no open ask, as on an item before version 5. */
+function openAskId(item: InboxItem): string | undefined {
+  return item.thread?.findLast((message) => message.ask?.status === INBOX_ASK_STATUS.OPEN)?.id;
+}
+
+/** The thread with the ask on the message given settled as `status` says, and the messages given after it. */
+function settledThread(
+  thread: readonly InboxMessage[],
+  askId: string,
+  status: typeof INBOX_ASK_STATUS.ANSWERED | typeof INBOX_ASK_STATUS.WITHDRAWN,
+  after: readonly InboxMessage[],
+): readonly InboxMessage[] {
+  const settled = thread.map((message) =>
+    message.id === askId && message.ask !== undefined
+      ? { ...message, ask: { ...message.ask, status } }
+      : message,
+  );
+  return [...settled, ...after];
+}
+
 /**
  * The item as the window answered it, before the service says how it
- * stands: answered by the reader, now, and read, as the service answers it.
- * Note that the files the answer carried are not drawn until then, since
- * the service names them.
+ * stands: answered by the reader, now, and read, as the service answers it;
+ * on a thread from version 5, its open ask answered and the reply carrying
+ * the answer after it, under an id of the window's own until the service
+ * names the message. Note that the files the answer carried are not drawn
+ * until then, since the service names them.
  */
-function answeredNow(item: InboxItem, answer: InboxReply, now: number): InboxItem {
+function answeredNow(
+  item: InboxItem,
+  answer: InboxReply,
+  answers: InboxAnswers | undefined,
+  now: number,
+): InboxItem {
   const reader = readerNow();
+  const reply: InboxMessage | undefined =
+    answers === undefined
+      ? undefined
+      : {
+          id: crypto.randomUUID(),
+          author: INBOX_MESSAGE_AUTHOR.MEMBER,
+          ...(reader === undefined ? undefined : { member: reader }),
+          text: answer.note ?? "",
+          answers,
+          createdAt: now,
+        };
+  const thread =
+    item.thread === undefined || reply === undefined || answers === undefined
+      ? undefined
+      : settledThread(item.thread, answers.ask, INBOX_ASK_STATUS.ANSWERED, [reply]);
   return {
     ...item,
     status: INBOX_STATUS.ANSWERED,
     answer,
     ...(reader === undefined ? undefined : { answeredBy: reader }),
+    ...(thread === undefined ? undefined : { thread }),
+    settledAt: now,
+    updatedAt: Math.max(item.updatedAt, now),
+    unread: false,
+  };
+}
+
+/** The item as the window closed it without an answer, before the service says how it stands: closed by the reader, now, and read, its thread's open ask withdrawn with no reason. */
+function closedNow(item: InboxItem, now: number): InboxItem {
+  const reader = readerNow();
+  const askId = openAskId(item);
+  const thread =
+    item.thread === undefined || askId === undefined
+      ? undefined
+      : settledThread(item.thread, askId, INBOX_ASK_STATUS.WITHDRAWN, []);
+  return {
+    ...item,
+    status: INBOX_STATUS.CLOSED,
+    ...(reader === undefined ? undefined : { closedBy: reader }),
+    ...(thread === undefined ? undefined : { thread }),
     settledAt: now,
     updatedAt: Math.max(item.updatedAt, now),
     unread: false,
@@ -544,8 +780,10 @@ function answeredNow(item: InboxItem, answer: InboxReply, now: number): InboxIte
 
 /** How a send is laid, and what the service's word makes of it. */
 export interface InboxSettler {
-  /** Lays an answer on its item at once, as answered by the reader now; the send it stands for. */
-  readonly answer: (item: InboxItem, answer: InboxReply) => symbol;
+  /** Lays an answer on its item at once, as answered by the reader now, the reply carrying it on the thread where `answers` names the ask it answers; the send it stands for. */
+  readonly answer: (item: InboxItem, answer: InboxReply, answers?: InboxAnswers) => symbol;
+  /** Lays a close without an answer on its item at once, as closed by the reader now; the send it stands for. */
+  readonly close: (item: InboxItem) => symbol;
   /** Lays a message's item as the service answered it, over every read that does not hold it yet. */
   readonly message: (item: InboxItem) => void;
   /** The service took the send: the item as it answered, laid over every read behind it. */
@@ -565,11 +803,34 @@ export function useInboxSettler(): InboxSettler {
   const change = useAtomSet(settlingAtom);
   return useMemo(
     () => ({
-      answer: (item, answer) => {
+      answer: (item, answer, answers) => {
         const sent = Symbol("inbox answer");
-        const laid = answeredNow(item, answer, Date.now());
+        const laid = answeredNow(item, answer, answers, Date.now());
+        const ask = answers?.ask ?? openAskId(item);
         change({
-          lay: { kind: SETTLING.ANSWER, item: laid, revision: item.revision, sent, taken: false },
+          lay: {
+            kind: SETTLING.ANSWER,
+            item: laid,
+            revision: item.revision,
+            sent,
+            taken: false,
+            ask,
+          },
+        });
+        return sent;
+      },
+      close: (item) => {
+        const sent = Symbol("inbox close");
+        const laid = closedNow(item, Date.now());
+        change({
+          lay: {
+            kind: SETTLING.CLOSE,
+            item: laid,
+            revision: item.revision,
+            sent,
+            taken: false,
+            ask: openAskId(item),
+          },
         });
         return sent;
       },

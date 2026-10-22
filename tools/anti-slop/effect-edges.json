@@ -2,6 +2,7 @@
   "runtimeEdges": [
     "apps/desktop/src/main/main.ts",
     "apps/desktop/src/main/services/compose-desktop.ts",
+    "apps/desktop/src/utility/task-code.ts",
     "packages/panel/src/renderer-runtime.ts",
     "apps/desktop/src/renderer/voice/live-call.ts",
     "apps/desktop/src/renderer/voice/use-voice-session.ts",
@@ -13,26 +14,21 @@
     "apps/dev/instructions/prompt.ts",
     "apps/dev/runtime.ts",
     "apps/dev/sandbox.ts",
-    "apps/luke/agent.ts",
-    "apps/luke/channels/eve.ts",
-    "apps/luke/hooks/store.ts",
-    "apps/luke/host.ts",
-    "apps/luke/instructions/prompt.ts",
-    "apps/luke/instructions/seed.ts",
-    "apps/luke/runtime.ts",
-    "apps/luke/tools/brain.ts",
     "apps/web/scripts/preview-probe.ts",
     "apps/web/server/db/migrate.ts",
+    "apps/web/server/orpc-route.ts",
     "apps/web/server/route-effect.ts",
     "apps/web/server/runtime.ts",
     "apps/web/server/seed-clients.ts",
     "apps/web/server/terminal/function.ts",
     "apps/web/server/voice/function.ts",
+    "apps/web/src/app/web-root.tsx",
+    "packages/agent-runner/src/main.ts",
+    "tools/claude-code-probe/src/cli.ts",
     "tools/trace-export/src/cli.ts"
   ],
   "runShims": [
     "apps/dev/evals/coder.eval.ts",
-    "apps/luke/evals/brain-host.eval.ts",
     "packages/database/src/testing/hosted-store-database.ts",
     "packages/database/src/testing/no-database.ts",
     "packages/database/src/testing/sql-client.ts",
@@ -41,6 +37,7 @@
     "packages/wire/src/testing/effect.ts"
   ],
   "runOnHandedRuntime": [
+    "packages/features/src/hosted-link.ts",
     "packages/host/src/client/app-state-store.ts",
     "packages/host/src/update-service.ts",
     "packages/voice/src/orchestrator/live-voice-orchestrator.ts"
@@ -53,8 +50,9 @@
     "apps/desktop/src/main/window/voice-window.ts",
     "packages/panel/src/feedback-images.ts",
     "packages/panel/src/luke-face-mood.ts",
-    "packages/panel/src/use-caption-presentation.ts",
-    "apps/web/src/admin/use-admin-read.ts",
+    "packages/panel/src/use-voice-notice.ts",
+    "packages/ui/src/components/menu/touch-hold.ts",
+    "packages/panel/src/admin/use-admin-read.ts",
     "packages/service/src/testing/voice-fakes.ts"
   ]
 }

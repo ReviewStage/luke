@@ -1,3 +1,5 @@
+import { pullRequestAddressOf } from "@luke/features/github-repositories-wire";
+
 /**
  * pull-request-link.ts -- which agent's pull request a link names, so a press on it opens the agent's Pull request tab rather than GitHub.
  *
@@ -51,7 +53,7 @@ interface ListedTask {
 /**
  * The task and the agent whose Pull request tab a link to a pull request
  * opens, among the tasks the window lists, wherever the link is pressed:
- * Factory, Chat, a task's card, or another task. Note that a task's row
+ * Chat, a task's card, or another task. Note that a task's row
  * names only its few newest pull requests, so an older one is not found here
  * and opens on GitHub.
  */
@@ -67,4 +69,23 @@ export function listedPullRequestOf(
     if (agentId !== undefined) return { taskId: task.id, agentId };
   }
   return undefined;
+}
+
+/**
+ * The number of the pull request of the repository given whose page on
+ * GitHub the link is, or any page under it, whatever the case its owner and
+ * name are spelled in; none for any other address, a pull request of another
+ * repository among them. A place opens such a pull request in a Pull request
+ * tab of one of its agents by its number, where none of them opened it from
+ * the branch it stands on.
+ */
+export function repositoryPullRequestOf(
+  href: string,
+  repository: string | null | undefined,
+): number | undefined {
+  if (repository === null || repository === undefined) return undefined;
+  const address = pullRequestAddressOf(href);
+  return address !== undefined && address.repository.toLowerCase() === repository.toLowerCase()
+    ? address.number
+    : undefined;
 }

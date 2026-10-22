@@ -52,6 +52,17 @@ import {
  * which the item names by attachment, file name, and type until the answer
  * is taken back or the agent posts the item again.
  *
+ * An item is closed by its agent, which takes it back with why, or by a
+ * member, who puts it away without answering it, at the revision they were
+ * shown, as an answer is taken. A member's close names the member and
+ * reaches the agent under its own lead where the item asks to be heard
+ * back, so an agent waiting on it is not left waiting; otherwise the agent
+ * reads it the next time it reads its inbox. Either close is undone by the
+ * agent posting under the item's key again. Note that a member's close is
+ * the closed status an older desktop already reads, with `closedBy`
+ * beside it, which such a desktop ignores, so it draws the item as closed
+ * rather than refusing the inbox.
+ *
  * Beside its one answer, an item holds a thread: messages a member of its
  * workspace or its agent adds at any point, open or settled, each in
  * Markdown with the files it carried, read oldest first. A message changes
@@ -63,7 +74,7 @@ import {
  * under the item's key, which changes what the item asks and not what was
  * said about it.
  *
- * The agent posts, closes, and reads its items through the tools named
+ * The agent posts, withdraws, and reads its items through the tools named
  * below, whose inputs are declared here so the model is shown, eve holds,
  * and the desktop draws one shape. A task's inbox is read past a cursor the
  * service hands back, held open while nothing changed, as a transcript is.
@@ -73,6 +84,25 @@ import {
  * of a type this build does not know as its type alone, so a desktop
  * behind the service draws what it knows and a placeholder for the rest
  * rather than refusing the whole inbox.
+ *
+ * From version 5 a message on the thread may carry an ask, or the answer
+ * to one. An ask is one of three, each answered its own way: `decide`
+ * among options, `do` steps the reader ticks, or `answer` with typed
+ * fields or the reply's own words. A read carries where an ask stands:
+ * open, answered, replaced by a newer ask, or withdrawn with why. An
+ * answer is a member's message naming the message whose ask it answers,
+ * with how they answered; the words under it are the message's own. The
+ * item still carries its title, blocks, response, and status, as a view of
+ * its open ask for a desktop before version 5, which reads the messages'
+ * new keys as nothing, and its `messages` leave out every message that
+ * asks or answers, which those fields stand for, so such a desktop draws
+ * neither twice; its `thread` carries every message, for a desktop from
+ * version 5. A thread whose agent asks nothing, a notice, holds no ask and
+ * waits open on the developer's nod alone, which its agent never hears, and
+ * stands to an older desktop as a note to answer with Got it. The functions at the end
+ * of this file map an ask to the version 4 response nearest it, a stored
+ * response to the ask it stands for, and an older desktop's answer to the
+ * answer of the open ask.
  */
 
 /**
@@ -81,9 +111,11 @@ import {
  * what it cannot draw was written for a newer Luke. Version 1 was the
  * fixed kinds, a choice, an approval, a question, and a task, with one
  * Markdown details field; version 2 is blocks and a response; version 3
- * adds the code block; version 4 adds the image block.
+ * adds the code block; version 4 adds the image block; version 5 adds an
+ * ask (decide, do, or answer) and the answer to one on a thread's
+ * messages, the item's response kept as a view of its open ask.
  */
-export const INBOX_WIRE_VERSION = 4;
+export const INBOX_WIRE_VERSION = 5;
 
 export const INBOX_BOUNDS = {
   /** The most characters an item's key may spell: a short slug the agent chooses. */
@@ -136,20 +168,28 @@ export const INBOX_BOUNDS = {
   MAX_MESSAGE_CHARS: 8_000,
   /** The most messages an item read carries, the latest ones, oldest first among them: a thread read at a glance, never a log. */
   MAX_MESSAGES_READ: 50,
-  /** The most pictures the agent's message on a thread may carry, each held to the image bound. */
-  MAX_REPLY_IMAGES: 4,
+  /** The most pictures the agent's message on a thread may carry, each held to the image bound: as many as a post's image blocks once could be. */
+  MAX_MESSAGE_PICTURES: 8,
+  /** The most steps a `do` ask may list: a to-do a person works through at a glance. */
+  MAX_STEPS: 8,
+  /** The most characters one step of a `do` ask may spell, in Markdown. */
+  MAX_STEP_CHARS: 600,
 } as const;
 
-/** The tools an agent keeps its items with, by the names their tool parts carry in its transcript. */
+/**
+ * The tools an agent keeps its threads with, by the names their tool parts
+ * carry in its transcript. Note that `close_inbox_item` and `reply_inbox`,
+ * which a transcript before version 5 names, are retired
+ * (`agent-tools.ts`'s `RETIRED_TOOL`): a post that asks nothing is a reply,
+ * and a withdrawn ask is a close.
+ */
 export const INBOX_TOOL = {
-  /** Posts an item, or replaces the one under the same key. */
+  /** Adds the agent's message to the thread under its key, opening one under a new key, its ask replacing the open one. */
   POST: "post_to_inbox",
-  /** Takes an item back, with why. */
-  CLOSE: "close_inbox_item",
-  /** Reads the agent's items as they stand, answers and all. */
+  /** Withdraws the thread's open ask, with why. */
+  WITHDRAW: "withdraw_ask",
+  /** Reads the agent's threads as they stand, answers and all. */
   READ: "read_inbox",
-  /** Writes the agent's message on one of its items' threads, by key. */
-  REPLY: "reply_inbox",
 } as const;
 
 /** The blocks an item's context is made of. */
@@ -212,7 +252,7 @@ export const INBOX_STATUS = {
   OPEN: "open",
   /** The developer answered it. */
   ANSWERED: "answered",
-  /** The agent took it back. */
+  /** The agent took it back, or a member closed it without answering (`closedBy`). */
   CLOSED: "closed",
 } as const;
 
@@ -249,6 +289,37 @@ const INBOX_REPLIES_OF = {
   [INBOX_RESPONSE.FORM]: [INBOX_REPLY.SUBMITTED],
   [INBOX_RESPONSE.NONE]: [INBOX_REPLY.ACKNOWLEDGED],
 } as const satisfies Record<InboxResponseType, readonly InboxReplyKind[]>;
+
+/** The asks a message on an item's thread may end with, from version 5, each answered its own way. */
+export const INBOX_ASK = {
+  /** Pick one of the agent's options, or several where it allows, one perhaps recommended. */
+  DECIDE: "decide",
+  /** Do steps by hand, ticking each, then mark it done, or say it could not be done. */
+  DO: "do",
+  /** Fill in typed fields, or, with none, answer in the reply's own words. */
+  ANSWER: "answer",
+} as const;
+
+/** Where an ask stands, as a read carries it. */
+export const INBOX_ASK_STATUS = {
+  /** Waiting on an answer: the one ask of the item that is. */
+  OPEN: "open",
+  /** A member answered it. */
+  ANSWERED: "answered",
+  /** The agent asked again on a later message, which settled this one. */
+  REPLACED: "replaced",
+  /** The agent took it back, with why. */
+  WITHDRAWN: "withdrawn",
+} as const;
+
+/**
+ * The options a version 4 approval stands for as a `decide` ask, and the
+ * picks an older desktop's Approve and Decline are read as.
+ */
+export const INBOX_APPROVAL_OPTION = {
+  APPROVE: "Approve",
+  DECLINE: "Decline",
+} as const;
 
 function boundedText(maximumChars: number) {
   return EffectSchema.String.check(EffectSchema.isMaxLength(maximumChars));
@@ -334,13 +405,8 @@ export function codeLinesReadable(block: Pick<InboxCodeBlock, "startLine" | "end
 /** An image block as an item carries one, naming the attachment the desktop fetches. */
 export type InboxImageBlock = Extract<InboxBlock, { type: typeof INBOX_BLOCK.IMAGE }>;
 
-/** An item's context: its blocks in order, few. */
-export const inboxBlocksSchema = EffectSchema.Array(inboxBlockSchema).check(
-  EffectSchema.isMaxLength(INBOX_BOUNDS.MAX_BLOCKS),
-);
-
 /** One block as the agent posts it: the word blocks as they are kept, and an image by the path of its file in the agent's sandbox, which the service reads and keeps. */
-export const inboxPostBlockSchema = EffectSchema.Union([
+const inboxPostBlockSchema = EffectSchema.Union([
   ...WORD_BLOCKS,
   EffectSchema.Struct({
     type: EffectSchema.Literal(INBOX_BLOCK.IMAGE),
@@ -362,7 +428,7 @@ export const inboxOptionSchema = EffectSchema.Struct({
   detail: EffectSchema.optionalKey(boundedText(INBOX_BOUNDS.MAX_OPTION_DETAIL_CHARS)),
 });
 
-/** One field of a form: its type, its label, which names its value in the answer, whether it must be filled, and a select's options. */
+/** One field of a form: its type, its label, which names its value in the answer, whether it must be filled, and a select's options, one perhaps recommended. */
 export const inboxFieldSchema = EffectSchema.Struct({
   type: EffectSchema.Literals(Object.values(INBOX_FIELD)),
   label: filledText(INBOX_BOUNDS.MAX_LABEL_CHARS),
@@ -373,6 +439,8 @@ export const inboxFieldSchema = EffectSchema.Struct({
       EffectSchema.isMaxLength(INBOX_BOUNDS.MAX_OPTIONS),
     ),
   ),
+  /** The select's option the agent recommends, as a choice names its recommended label. */
+  recommended: EffectSchema.optionalKey(EffectSchema.String),
 });
 
 export type InboxField = typeof inboxFieldSchema.Type;
@@ -380,8 +448,8 @@ export type InboxField = typeof inboxFieldSchema.Type;
 /**
  * What an item asks of the developer, one of six: a choice among options,
  * several where `multiple`, the label it recommends named; an approval; words,
- * with what the box says while empty; a task; a form of fields; or nothing
- * but an acknowledgement.
+ * with what the box says while empty; a task; a form of fields, each select
+ * naming the option it recommends; or nothing but an acknowledgement.
  */
 export const inboxResponseSchema = EffectSchema.Union([
   EffectSchema.Struct({
@@ -434,35 +502,11 @@ export const inboxPostInputSchema = EffectSchema.Struct({
 
 export type InboxPost = typeof inboxPostInputSchema.Type;
 
-/** What a close's tool part carries as its input: the item's key, and why the agent takes it back. */
-export const inboxCloseInputSchema = EffectSchema.Struct({
-  key: inboxKeySchema,
-  reason: filledText(INBOX_BOUNDS.MAX_REASON_CHARS),
-});
-
-/**
- * What a reply's tool part carries as its input: the key of one of the
- * agent's own items, its words in Markdown, and the pictures it shows, each
- * by the path of its file in the agent's sandbox, as an image block names
- * one; words or pictures or both, which the tool holds it to.
- */
-export const inboxReplyInputSchema = EffectSchema.Struct({
-  key: inboxKeySchema,
-  text: boundedText(INBOX_BOUNDS.MAX_MESSAGE_CHARS),
-  images: EffectSchema.optionalKey(
-    EffectSchema.Array(
-      EffectSchema.Struct({ path: filledText(INBOX_BOUNDS.MAX_PATH_CHARS) }),
-    ).check(EffectSchema.isMaxLength(INBOX_BOUNDS.MAX_REPLY_IMAGES)),
-  ),
-});
-
-export type InboxReplyInput = typeof inboxReplyInputSchema.Type;
-
 /** What a read's tool part carries as its input: nothing, since an agent reads its own items alone. */
 export const inboxReadInputSchema = EffectSchema.Struct({});
 
 /** What a form's field holds once filled: words, a number, an option, or yes or no, by the field's type. */
-export const inboxFieldValueSchema = EffectSchema.Union([
+const inboxFieldValueSchema = EffectSchema.Union([
   boundedText(INBOX_BOUNDS.MAX_FIELD_VALUE_CHARS),
   EffectSchema.Finite,
   EffectSchema.Boolean,
@@ -499,25 +543,28 @@ export const inboxReplySchema = EffectSchema.Struct({
 
 export type InboxReply = typeof inboxReplySchema.Type;
 
-/** The types this build draws, by which a read tells a type it does not know. */
-const KNOWN_TYPES: ReadonlySet<string> = new Set([
-  ...Object.values(INBOX_BLOCK),
-  ...Object.values(INBOX_RESPONSE),
-]);
-
 /**
  * A type this build does not know, as a newer service wrote one: read as
  * the type's name alone, so it narrows away from every type this build
  * draws, and drawn as a placeholder naming a newer Luke. Note that a type
- * this build knows is refused here, because a known block or response
- * that fails its own shape is a broken read and not a newer one.
+ * this build knows is refused here, because a known block, response, or
+ * ask that fails its own shape is a broken read and not a newer one.
  */
-const unknownTypeSchema = EffectSchema.String.check(
-  EffectSchema.makeFilter((type) => !KNOWN_TYPES.has(type)),
-).pipe(EffectSchema.brand("UnknownInboxType"));
+function unknownTypeOf(known: readonly string[]) {
+  const knownTypes: ReadonlySet<string> = new Set(known);
+  return EffectSchema.String.check(EffectSchema.makeFilter((type) => !knownTypes.has(type))).pipe(
+    EffectSchema.brand("UnknownInboxType"),
+  );
+}
+
+/** A block or a response type this build does not know. */
+const unknownTypeSchema = unknownTypeOf([
+  ...Object.values(INBOX_BLOCK),
+  ...Object.values(INBOX_RESPONSE),
+]);
 
 /** A block as a desktop reads one: one this build knows, or the type alone of one it does not. */
-export const inboxReadBlockSchema = EffectSchema.Union([
+const inboxReadBlockSchema = EffectSchema.Union([
   ...inboxBlockSchema.members,
   EffectSchema.Struct({ type: unknownTypeSchema }),
 ]);
@@ -531,6 +578,121 @@ export const inboxReadResponseSchema = EffectSchema.Union([
 ]);
 
 export type InboxReadResponse = typeof inboxReadResponseSchema.Type;
+
+/** A step of a `do` ask by its place in the ask's steps, from the first at 0. */
+const stepIndexSchema = EffectSchema.Int.check(
+  EffectSchema.isGreaterThanOrEqualTo(0),
+  EffectSchema.isLessThan(INBOX_BOUNDS.MAX_STEPS),
+);
+
+/** A `decide` ask's own keys: two to six options, several to be picked where `multiple`, one perhaps recommended by its label. */
+const DECIDE_FIELDS = {
+  type: EffectSchema.Literal(INBOX_ASK.DECIDE),
+  options: EffectSchema.Array(inboxOptionSchema).check(
+    EffectSchema.isMinLength(2),
+    EffectSchema.isMaxLength(INBOX_BOUNDS.MAX_OPTIONS),
+  ),
+  multiple: EffectSchema.optionalKey(EffectSchema.Boolean),
+  recommended: EffectSchema.optionalKey(EffectSchema.String),
+};
+
+/**
+ * A `do` ask's own keys: its steps in Markdown, in order, few. Note that
+ * none is a `do` ask too, because a version 4 to-do named no step and its
+ * item's words say what to do; marking it done ticks nothing.
+ */
+const DO_FIELDS = {
+  type: EffectSchema.Literal(INBOX_ASK.DO),
+  steps: EffectSchema.Array(filledText(INBOX_BOUNDS.MAX_STEP_CHARS)).check(
+    EffectSchema.isMaxLength(INBOX_BOUNDS.MAX_STEPS),
+  ),
+};
+
+/** An `answer` ask's own keys: the fields of a form, where it asks typed values, and none where the reply's words are the answer. */
+const ANSWER_FIELDS = {
+  type: EffectSchema.Literal(INBOX_ASK.ANSWER),
+  fields: EffectSchema.optionalKey(
+    EffectSchema.Array(inboxFieldSchema).check(
+      EffectSchema.isMinLength(1),
+      EffectSchema.isMaxLength(INBOX_BOUNDS.MAX_FIELDS),
+    ),
+  ),
+};
+
+/** What a message asks of its reader, one of three: decide among options, do steps, or answer. */
+const inboxAskSchema = EffectSchema.Union([
+  EffectSchema.Struct(DECIDE_FIELDS),
+  EffectSchema.Struct(DO_FIELDS),
+  EffectSchema.Struct(ANSWER_FIELDS),
+]);
+
+export type InboxAsk = typeof inboxAskSchema.Type;
+
+/**
+ * What a post's tool part carries as its input from version 5: the
+ * thread's key, its title, which a first post under the key names, the
+ * agent's message as one Markdown body, its pictures by their paths in the
+ * agent's sandbox, the ask it may end with, and whether the agent waits to
+ * hear a `do` done; an answer to any other ask is always heard. The model
+ * is shown this schema and eve holds the call to it.
+ */
+export const inboxThreadPostInputSchema = EffectSchema.Struct({
+  key: inboxKeySchema,
+  title: EffectSchema.optionalKey(filledText(INBOX_BOUNDS.MAX_TITLE_CHARS)),
+  body: filledText(INBOX_BOUNDS.MAX_MESSAGE_CHARS),
+  ask: EffectSchema.optionalKey(inboxAskSchema),
+  waits: EffectSchema.optionalKey(EffectSchema.Boolean),
+});
+
+export type InboxThreadPostInput = typeof inboxThreadPostInputSchema.Type;
+
+/** What a withdrawal's tool part carries as its input: the thread's key, and why the agent takes its open ask back. */
+export const inboxWithdrawInputSchema = EffectSchema.Struct({
+  key: inboxKeySchema,
+  reason: filledText(INBOX_BOUNDS.MAX_REASON_CHARS),
+});
+
+/** Where an ask stands as a read carries it, and why its agent withdrew it, on a withdrawn one. */
+const ASK_STANDING_FIELDS = {
+  status: EffectSchema.Literals(Object.values(INBOX_ASK_STATUS)),
+  withdrawnReason: EffectSchema.optionalKey(EffectSchema.String),
+};
+
+/**
+ * An ask as a message read carries it: one this build knows, or the type
+ * alone of one it does not, each with where it stands, so a desktop behind
+ * the service draws a placeholder for a newer ask and still knows whether
+ * it waits.
+ */
+export const inboxReadAskSchema = EffectSchema.Union([
+  EffectSchema.Struct({ ...DECIDE_FIELDS, ...ASK_STANDING_FIELDS }),
+  EffectSchema.Struct({ ...DO_FIELDS, ...ASK_STANDING_FIELDS }),
+  EffectSchema.Struct({ ...ANSWER_FIELDS, ...ASK_STANDING_FIELDS }),
+  EffectSchema.Struct({
+    type: unknownTypeOf(Object.values(INBOX_ASK)),
+    ...ASK_STANDING_FIELDS,
+  }),
+]);
+
+export type InboxReadAsk = typeof inboxReadAskSchema.Type;
+
+/**
+ * The answer a member's message carries: the message whose ask it answers,
+ * by id, how they answered, the options where they picked, the form's
+ * values where they filled one, and the steps they ticked, by place. Their
+ * words and files are the message's own.
+ */
+export const inboxAnswersSchema = EffectSchema.Struct({
+  ask: wireUuidSchema,
+  reply: EffectSchema.Literals(Object.values(INBOX_REPLY)),
+  choices: inboxReplySchema.fields.choices,
+  values: EffectSchema.optionalKey(inboxFormValuesSchema),
+  steps: EffectSchema.optionalKey(
+    EffectSchema.Array(stepIndexSchema).check(EffectSchema.isMaxLength(INBOX_BOUNDS.MAX_STEPS)),
+  ),
+});
+
+export type InboxAnswers = typeof inboxAnswersSchema.Type;
 
 /**
  * One file the developer's answer carried, as an item names it: the
@@ -562,7 +724,10 @@ export type InboxMessageAuthor = (typeof INBOX_MESSAGE_AUTHOR)[keyof typeof INBO
  * account is gone or for the agent, which is the item's own; the words as
  * Markdown, written as they were sent, so a mention in them stands as its
  * link; the files it carried, named as an answer's are and fetched by the
- * same attachment path; and when it was written.
+ * same attachment path; from version 5, the ask it ends with, on an
+ * agent's, or the answer it carries, on a member's; and when it was
+ * written. Note that the words keep the name `text`, which a desktop before
+ * version 5 requires.
  */
 export const inboxMessageSchema = EffectSchema.Struct({
   id: wireUuidSchema,
@@ -573,6 +738,10 @@ export const inboxMessageSchema = EffectSchema.Struct({
   text: EffectSchema.String,
   /** The files it carried, in the order they were attached; absent where it carried none. */
   files: EffectSchema.optionalKey(EffectSchema.Array(inboxAnswerFileSchema)),
+  /** The ask the message ends with, and where it stands; absent where it asks nothing. */
+  ask: EffectSchema.optionalKey(inboxReadAskSchema),
+  /** The answer the message carries to an earlier message's ask; absent where it answers none. */
+  answers: EffectSchema.optionalKey(inboxAnswersSchema),
   createdAt: countedNumber,
 });
 
@@ -609,10 +778,29 @@ export const inboxItemSchema = EffectSchema.Struct({
    * is the signed-in account.
    */
   answeredBy: EffectSchema.optionalKey(memberRefSchema),
-  /** Why the agent took the item back, on a closed one. */
+  /** Why the agent took the item back, on one it closed. */
   closedReason: EffectSchema.optionalKey(EffectSchema.String),
-  /** The item's thread, oldest first, the latest `MAX_MESSAGES_READ` of it; absent where nobody wrote one. */
+  /**
+   * The member who closed the item without answering it, on one a member
+   * closed; absent on one its agent took back, and once the member's
+   * account is gone. Absent from a service before members closed items.
+   */
+  closedBy: EffectSchema.optionalKey(memberRefSchema),
+  /**
+   * The item's thread as a desktop before version 5 draws it under the
+   * item's blocks and answer, oldest first, the latest `MAX_MESSAGES_READ`
+   * of its messages that carry neither an ask nor answers, since the item's
+   * blocks, response, and answer stand for those; absent where it has none.
+   */
   messages: EffectSchema.optionalKey(EffectSchema.Array(inboxMessageSchema)),
+  /**
+   * The item's whole thread, from version 5, oldest first: the latest
+   * `MAX_MESSAGES_READ` of every message, asks and answers included, and
+   * the first message and the one whose ask is open however long ago they
+   * were written; absent where nobody wrote one, and from a service before
+   * version 5.
+   */
+  thread: EffectSchema.optionalKey(EffectSchema.Array(inboxMessageSchema)),
   /** When the agent first posted the item under its key. */
   postedAt: countedNumber,
   /**
@@ -663,36 +851,86 @@ export const inboxAnswerRequestSchema = EffectSchema.Struct({
 
 export type InboxAnswerRequest = typeof inboxAnswerRequestSchema.Type;
 
-/** What an answer comes back as: the item as it then stands, and whether the answer was taken, which it is not where the agent changed the item first. */
+/**
+ * The transaction a member's write on the inbox committed in, as Neon's
+ * mutations guide returns it, which a window following the inbox waits for
+ * on its live view before it answers; left out where the write changed no
+ * row, and by a service from before it, so there is nothing to wait for.
+ */
+const writtenIn = { txid: EffectSchema.optionalKey(EffectSchema.String) };
+
+/** What an answer comes back as: the item as it then stands, whether the answer was taken, which it is not where the agent changed the item first, and the transaction it was taken in. */
 export const inboxAnsweredSchema = EffectSchema.Struct({
   item: inboxItemSchema,
   taken: EffectSchema.Boolean,
+  ...writtenIn,
 });
 
 /** How the developer's answer opens, in the message that hands it to the agent. */
 export const INBOX_ANSWER_LEAD = "Inbox answer";
 
 /**
+ * A member's close of one item without an answer: the revision they were
+ * shown, so an item the agent changed since is not closed unseen, and a key
+ * the client made, so a close sent again after a lost reply reaches the
+ * agent once. It answers as an answer does (`inboxAnsweredSchema`): the
+ * item as it then stands, and whether the close was taken.
+ */
+export const inboxCloseRequestSchema = EffectSchema.Struct({
+  revision: countedNumber,
+  clientKey: filledText(INBOX_BOUNDS.MAX_CLIENT_KEY_CHARS),
+});
+
+export type InboxCloseRequest = typeof inboxCloseRequestSchema.Type;
+
+/** How a member's close opens, in the message that tells the agent of it. */
+export const INBOX_CLOSE_LEAD = "Inbox closed";
+
+/**
+ * The message a member's close reaches the agent as: a first line naming
+ * the item by its key and title, as an answer's does, and that it was
+ * closed without an answer, which the agent takes as the developer not
+ * wanting what it asked.
+ */
+export function inboxClosedMessage(item: Pick<InboxItem, "key" | "title">): string {
+  const title = item.title.replace(/\s+/gu, " ").trim();
+  return `${INBOX_CLOSE_LEAD} on "${title}" (key ${item.key}): Closed without an answer.`;
+}
+
+/**
  * A member's message on an item's thread: the words in Markdown, trimmed and
  * bounded, the files they attached, bounded as a message's to an agent are,
- * words or files or both and never neither, and a key the client made, so
- * a message sent again after a lost reply is written once.
+ * and a key the client made, so a message sent again after a lost reply is
+ * written once. From version 5 it may carry the answer to the thread's open
+ * ask, which the reader pressed and attached to their reply: such a message
+ * is the one that answers the ask, and may be the answer alone, with no
+ * words or files; one without it is a plain reply, words or files or both
+ * and never neither, which never answers.
  */
 export const inboxMessageRequestSchema = EffectSchema.Struct({
   text: EffectSchema.Trim.check(EffectSchema.isMaxLength(INBOX_BOUNDS.MAX_MESSAGE_CHARS)),
   attachments: codingAgentMessageRequestSchema.fields.attachments,
   clientKey: filledText(INBOX_BOUNDS.MAX_CLIENT_KEY_CHARS),
-}).check(EffectSchema.makeFilter(({ text, attachments }) => hasWordsOrFiles(text, attachments)));
+  /** The answer to the thread's open ask, which names it; absent on a plain reply. */
+  answers: EffectSchema.optionalKey(inboxAnswersSchema),
+  /** The revision of the notice the reply was written on, which it settles where the notice still stands there; absent where it settles none, as from a client before it. */
+  revision: EffectSchema.optionalKey(countedNumber),
+}).check(
+  EffectSchema.makeFilter(
+    ({ text, attachments, answers }) => answers !== undefined || hasWordsOrFiles(text, attachments),
+  ),
+);
 
 export type InboxMessageRequest = typeof inboxMessageRequestSchema.Type;
 
-/** What a member's message comes back as: the item as it then stands, its thread with the message on it. */
-export const inboxMessagedSchema = EffectSchema.Struct({ item: inboxItemSchema });
+/** What a member's message comes back as: the item as it then stands, its thread with the message on it, and, where the message answered the thread's open ask, the transaction it was taken in. */
+export const inboxMessagedSchema = EffectSchema.Struct({ item: inboxItemSchema, ...writtenIn });
 
 /** One item's read state for the member who marked it, as marking it read or unread answers it. */
 export const inboxReadStateSchema = EffectSchema.Struct({
   id: wireUuidSchema,
   unread: EffectSchema.Boolean,
+  ...writtenIn,
 });
 
 /**
@@ -706,8 +944,8 @@ export const inboxReadAllRequestSchema = EffectSchema.Struct({
 
 export type InboxReadAllRequest = typeof inboxReadAllRequestSchema.Type;
 
-/** What marking every item read answers: how many items it marked read that were unread. */
-export const inboxReadAllSchema = EffectSchema.Struct({ marked: countedNumber });
+/** What marking every item read answers: how many items it marked read that were unread, and the transaction that marked them. */
+export const inboxReadAllSchema = EffectSchema.Struct({ marked: countedNumber, ...writtenIn });
 
 /** How a member's message on an item's thread opens, in the message that hands it to the agent. */
 export const INBOX_MESSAGE_LEAD = "Inbox message";
@@ -722,6 +960,22 @@ export function inboxThreadMessage(item: Pick<InboxItem, "key" | "title">, text:
   const title = item.title.replace(/\s+/gu, " ").trim();
   const header = `${INBOX_MESSAGE_LEAD} on "${title}" (key ${item.key}):`;
   return text.trim() === "" ? header : `${header}\n\n${text.trim()}`;
+}
+
+/** An answer's, a close's, or a thread message's first line, as `inboxAnswerMessage`, `inboxClosedMessage`, and `inboxThreadMessage` write it. */
+const INBOX_LINE_HEAD = new RegExp(
+  `^(${INBOX_ANSWER_LEAD}|${INBOX_CLOSE_LEAD}|${INBOX_MESSAGE_LEAD}) on (".*") \\(key [a-z0-9][a-z0-9._-]*\\):`,
+  "u",
+);
+
+/**
+ * An inbox answer or thread message as the developer reads it back in the
+ * agent's transcript: its first line without the item's key, which names the
+ * item to the agent and says nothing the title beside it does not to a
+ * person. Any other line is answered as it is.
+ */
+export function inboxLineWords(text: string): string {
+  return text.replace(INBOX_LINE_HEAD, "$1 on $2:");
 }
 
 /** Whether a response read off the wire is one this build knows, which its type decides. */
@@ -787,21 +1041,66 @@ export function inboxAnswerHeard(
   return item.needsReply || (reply.note ?? "").trim() !== "" || files.length > 0;
 }
 
+/** A `do` ask's steps and those an answer to it ticked, by place, as the agent hears them. */
+export interface InboxTodoTicks {
+  readonly steps: readonly string[];
+  readonly ticked: readonly number[];
+}
+
+/** What the developer did, as the header says it: a `do`'s steps ticked with neither press by how many, else the answer's own words. */
+function answerHeadWords(reply: InboxReply, todo: InboxTodoTicks | undefined): string {
+  if (reply.reply !== INBOX_REPLY.ANSWERED || todo === undefined || todo.ticked.length === 0) {
+    return replyWords(reply);
+  }
+  const total = todo.steps.length;
+  return `Ticked ${todo.ticked.length} of ${total} ${total === 1 ? "step" : "steps"}.`;
+}
+
+/** A `do`'s steps as a checklist, each ticked or not; nothing where it names none. */
+function checklistLines(todo: InboxTodoTicks | undefined): string {
+  if (todo === undefined) return "";
+  const ticked = new Set(todo.ticked);
+  return todo.steps
+    .map((step, at) => `- [${ticked.has(at) ? "x" : " "}] ${step.replace(/\s+/gu, " ").trim()}`)
+    .join("\n");
+}
+
+/**
+ * The steps of the `do` ask an answer answers, and those the answer
+ * ticked: the ask as given where the caller holds it, since a long
+ * thread's read may have left it out, else as the item's thread carries
+ * it; nothing where the answer is to another kind of ask, its ask names no
+ * steps, or neither carries it.
+ */
+export function inboxTodoTicks(
+  item: Pick<InboxItem, "thread">,
+  answers: InboxAnswers,
+  answered?: InboxAsk,
+): InboxTodoTicks | undefined {
+  const ask = answered ?? (item.thread ?? []).find((message) => message.id === answers.ask)?.ask;
+  if (ask?.type !== INBOX_ASK.DO) return undefined;
+  const steps = (ask as { readonly steps?: readonly string[] }).steps ?? [];
+  return steps.length === 0 ? undefined : { steps, ticked: answers.steps ?? [] };
+}
+
 /**
  * The message an answer reaches the agent as: a first line naming the item
- * by its key and title with what the developer did, then a form's values
- * one per line, then their note. Note that the title is put on one line,
- * because the line is read whole.
+ * by its key and title with what the developer did, then a `do`'s steps as
+ * a checklist where the answer's ask names them (`todo`), then a form's
+ * values one per line, then their note. Note that the title is put on one
+ * line, because the line is read whole.
  */
 export function inboxAnswerMessage(
   item: Pick<InboxItem, "key" | "title">,
   reply: InboxReply,
+  todo?: InboxTodoTicks,
 ): string {
   const title = item.title.replace(/\s+/gu, " ").trim();
-  const header = `${INBOX_ANSWER_LEAD} on "${title}" (key ${item.key}): ${replyWords(reply)}`;
+  const header = `${INBOX_ANSWER_LEAD} on "${title}" (key ${item.key}): ${answerHeadWords(reply, todo)}`;
+  const checklist = checklistLines(todo);
   const values = reply.values === undefined ? "" : valueLines(reply.values);
   const note = reply.note?.trim() ?? "";
-  return [header, values, note].filter((part) => part !== "").join("\n\n");
+  return [header, checklist, values, note].filter((part) => part !== "").join("\n\n");
 }
 
 /** Whether a field's value is of the field's type, and names one of a select's options. */
@@ -823,8 +1122,22 @@ function filled(value: InboxFieldValue): boolean {
   return !isWireString(value) || value.trim() !== "";
 }
 
-/** Why a form's values do not fill the form, or nothing where they do: each names a field once and is of its type, and every required field is filled. */
-function formRefusal(form: InboxForm, values: InboxFormValues | undefined): string | undefined {
+/** The refusal of a form whose required field is empty. */
+const REQUIRED_EMPTY = "A required field of the form is empty.";
+
+/**
+ * Why a form's values do not answer the form, or nothing where they do:
+ * each names a field once and is of its type, a required one never blank,
+ * and every required field is filled, unless the answer gives something, a
+ * value filled or the developer's own words or files, since a form filled
+ * in part still sends what was filled; a field left empty is simply absent
+ * from the values, never there blank.
+ */
+function formRefusal(
+  form: Pick<InboxForm, "fields">,
+  values: InboxFormValues | undefined,
+  said: boolean,
+): string | undefined {
   const given = new Map((values ?? []).map(({ label, value }) => [label, value]));
   if (given.size !== (values ?? []).length) return "A value names a field twice.";
   const fields = new Map(form.fields.map((field) => [field.label, field]));
@@ -832,19 +1145,24 @@ function formRefusal(form: InboxForm, values: InboxFormValues | undefined): stri
     const field = fields.get(label);
     if (field === undefined) return "A value names no field of the form.";
     if (!fieldTakes(field, value)) return "A value is not of its field's type.";
+    if (field.required === true && !filled(value)) return REQUIRED_EMPTY;
   }
+  if (said || [...given.values()].some(filled)) return undefined;
   for (const field of form.fields) {
     const value = given.get(field.label);
-    if (field.required === true && (value === undefined || !filled(value))) {
-      return "A required field of the form is empty.";
-    }
+    if (field.required === true && value === undefined) return REQUIRED_EMPTY;
   }
   return undefined;
 }
 
+/** Whether the developer said something of their own beside an answer: words, or a file. */
+function saysAny(words: string, files: AnswerFiles): boolean {
+  return words.trim() !== "" || files.length > 0;
+}
+
 /** Why a pick does not fit the choice, or nothing where it does: at least one option, each offered and once, and one alone unless the choice allows several. */
 function choiceRefusal(
-  choice: InboxChoice,
+  choice: Pick<InboxChoice, "options" | "multiple">,
   choices: readonly string[] | undefined,
 ): string | undefined {
   const picked = choices ?? [];
@@ -856,12 +1174,21 @@ function choiceRefusal(
   return undefined;
 }
 
+/** Why an answer in the developer's own words does not stand, or nothing where it does: words or files, as a message to an agent may be files alone. */
+function ownWordsRefusal(words: string, files: AnswerFiles): string | undefined {
+  if (!saysAny(words, files)) {
+    return "An answer in the developer's own words needs words or a file.";
+  }
+  return undefined;
+}
+
 /**
  * Why an answer does not fit its item, or nothing where it does: the
  * response takes the reply, a pick names offered options, a form's values
- * fill it, and words or files stand where the answer is the developer's
- * own, as a message to an agent may be files alone. A response this build
- * does not know takes nothing.
+ * fit it, filling it or giving something beside the note or the files,
+ * and words or files stand where the answer is the developer's own, as a
+ * message to an agent may be files alone. A response this build does not
+ * know takes nothing.
  */
 export function inboxReplyRefusal(
   item: Pick<InboxItem, "response">,
@@ -876,14 +1203,244 @@ export function inboxReplyRefusal(
     return choiceRefusal(response, reply.choices);
   }
   if (reply.reply === INBOX_REPLY.SUBMITTED && response.type === INBOX_RESPONSE.FORM) {
-    return formRefusal(response, reply.values);
+    return formRefusal(response, reply.values, saysAny(reply.note ?? "", files));
   }
-  if (
-    reply.reply === INBOX_REPLY.ANSWERED &&
-    (reply.note ?? "").trim() === "" &&
-    files.length === 0
-  ) {
-    return "An answer in the developer's own words needs words or a file.";
+  if (reply.reply === INBOX_REPLY.ANSWERED) return ownWordsRefusal(reply.note ?? "", files);
+  return undefined;
+}
+
+/** The refusal of an answer an ask does not take at all. */
+const NOT_TAKEN = "The ask does not take that answer.";
+
+/**
+ * Why the steps an answer ticks do not fit a `do` ask, or nothing where
+ * they do: each names one of its steps, once, and Mark done ticks every one.
+ */
+function stepsRefusal(
+  ask: Extract<InboxAsk, { type: typeof INBOX_ASK.DO }>,
+  answers: InboxAnswers,
+): string | undefined {
+  const ticked = answers.steps ?? [];
+  if (new Set(ticked).size !== ticked.length) return "A step is ticked twice.";
+  if (!ticked.every((step) => step < ask.steps.length)) return "A tick names no step of the ask.";
+  if (answers.reply === INBOX_REPLY.DONE && ticked.length !== ask.steps.length) {
+    return "Mark done needs every step ticked.";
   }
   return undefined;
+}
+
+/**
+ * Why an answer does not fit the ask it answers, or nothing where it does:
+ * a `decide` takes a pick of offered options, or words or files where none
+ * fits; a `do` takes Mark done, with every step ticked, Couldn't do it,
+ * or the steps ticked with neither, at least one, as an answer;
+ * an `answer` with fields takes their values, every required one filled
+ * unless something is given, a value or words or files, and one without
+ * takes words or files. The words and files are those of the answering
+ * message.
+ */
+export function inboxAnswersRefusal(
+  ask: InboxAsk,
+  answers: InboxAnswers,
+  words: string,
+  files: AnswerFiles = [],
+): string | undefined {
+  switch (ask.type) {
+    case INBOX_ASK.DECIDE:
+      if (answers.reply === INBOX_REPLY.CHOSE) return choiceRefusal(ask, answers.choices);
+      if (answers.reply === INBOX_REPLY.ANSWERED) return ownWordsRefusal(words, files);
+      return NOT_TAKEN;
+    case INBOX_ASK.DO:
+      if (answers.reply === INBOX_REPLY.DONE || answers.reply === INBOX_REPLY.NOT_DONE) {
+        return stepsRefusal(ask, answers);
+      }
+      // Steps ticked with neither press go as an answer that decides nothing, so it must tick one.
+      if (answers.reply === INBOX_REPLY.ANSWERED && (answers.steps ?? []).length > 0) {
+        return stepsRefusal(ask, answers);
+      }
+      return NOT_TAKEN;
+    case INBOX_ASK.ANSWER:
+      if (ask.fields !== undefined) {
+        return answers.reply === INBOX_REPLY.SUBMITTED
+          ? formRefusal({ fields: ask.fields }, answers.values, saysAny(words, files))
+          : NOT_TAKEN;
+      }
+      return answers.reply === INBOX_REPLY.ANSWERED ? ownWordsRefusal(words, files) : NOT_TAKEN;
+  }
+}
+
+/**
+ * The version 4 response nearest an ask, which the item carries as a view
+ * of its open ask for a desktop before version 5: a `decide` is a choice of
+ * the same options, a `do` a to-do, whose steps the item's blocks must say,
+ * and an `answer` a form of its fields, or words where it has none.
+ */
+export function inboxAskResponse(ask: InboxAsk): InboxResponse {
+  switch (ask.type) {
+    case INBOX_ASK.DECIDE:
+      // A choice is a decide's own keys, its options, multiple, and recommended, under its own type.
+      return { ...ask, type: INBOX_RESPONSE.CHOICE };
+    case INBOX_ASK.DO:
+      return { type: INBOX_RESPONSE.TODO };
+    case INBOX_ASK.ANSWER:
+      return ask.fields === undefined
+        ? { type: INBOX_RESPONSE.TEXT }
+        : { type: INBOX_RESPONSE.FORM, fields: ask.fields };
+  }
+}
+
+/**
+ * The ask a stored version 4 response stands for, which the first message
+ * of the item's thread ends with: a choice is a `decide` of its options, an
+ * approval a `decide` between Approve and Decline, a to-do a `do` of no
+ * steps, a form an `answer` of its fields, words an `answer` of none, and
+ * an acknowledgement no ask at all.
+ */
+export function inboxResponseAsk(response: InboxResponse): InboxAsk | undefined {
+  switch (response.type) {
+    case INBOX_RESPONSE.CHOICE:
+      return { ...response, type: INBOX_ASK.DECIDE };
+    case INBOX_RESPONSE.APPROVAL:
+      return {
+        type: INBOX_ASK.DECIDE,
+        options: [
+          { label: INBOX_APPROVAL_OPTION.APPROVE },
+          { label: INBOX_APPROVAL_OPTION.DECLINE },
+        ],
+      };
+    case INBOX_RESPONSE.TODO:
+      return { type: INBOX_ASK.DO, steps: [] };
+    case INBOX_RESPONSE.FORM:
+      return { type: INBOX_ASK.ANSWER, fields: response.fields };
+    case INBOX_RESPONSE.TEXT:
+      return { type: INBOX_ASK.ANSWER };
+    case INBOX_RESPONSE.NONE:
+      return undefined;
+  }
+}
+
+/**
+ * An older desktop's answer, given against the item's version 4 response,
+ * as the answer to the open ask, which the message `asking.id` ends with:
+ * a pick as a pick, Approve and Decline as a pick of that option, Done as
+ * Mark done with every step ticked, since an older desktop shows none to
+ * tick, and the rest as they are. The note becomes the answering message's
+ * words. An acknowledgement answers no ask, since an item that asks nothing
+ * has none. Note that the answer is not checked here: `inboxAnswersRefusal`
+ * reads it against the ask.
+ */
+export function inboxReplyAnswers(
+  asking: { readonly id: string; readonly ask: InboxAsk },
+  reply: InboxReply,
+): InboxAnswers | undefined {
+  const ask = asking.id;
+  switch (reply.reply) {
+    case INBOX_REPLY.CHOSE:
+      return reply.choices === undefined
+        ? { ask, reply: INBOX_REPLY.CHOSE }
+        : { ask, reply: INBOX_REPLY.CHOSE, choices: reply.choices };
+    case INBOX_REPLY.APPROVED:
+      return { ask, reply: INBOX_REPLY.CHOSE, choices: [INBOX_APPROVAL_OPTION.APPROVE] };
+    case INBOX_REPLY.DECLINED:
+      return { ask, reply: INBOX_REPLY.CHOSE, choices: [INBOX_APPROVAL_OPTION.DECLINE] };
+    case INBOX_REPLY.DONE:
+      return asking.ask.type === INBOX_ASK.DO
+        ? { ask, reply: INBOX_REPLY.DONE, steps: asking.ask.steps.map((_step, index) => index) }
+        : { ask, reply: INBOX_REPLY.DONE };
+    case INBOX_REPLY.SUBMITTED:
+      return reply.values === undefined
+        ? { ask, reply: INBOX_REPLY.SUBMITTED }
+        : { ask, reply: INBOX_REPLY.SUBMITTED, values: reply.values };
+    case INBOX_REPLY.NOT_DONE:
+    case INBOX_REPLY.ANSWERED:
+      return { ask, reply: reply.reply };
+    case INBOX_REPLY.ACKNOWLEDGED:
+      return undefined;
+  }
+}
+
+/**
+ * A member's answer to an ask, with the words of the message that carries
+ * it, as the agent hears an answer (`inboxAnswerMessage`) and as whether it
+ * hears it is read (`inboxAnswerHeard`): how they answered, the options
+ * picked, the values filled, and the words as the note, whole. Note that the
+ * steps ticked are left out, because a reply names no step; the thread the
+ * agent reads carries them.
+ */
+export function inboxAnswersReply(answers: InboxAnswers, words: string): InboxReply {
+  const note = words.trim();
+  return {
+    reply: answers.reply,
+    ...(answers.choices === undefined ? undefined : { choices: answers.choices }),
+    ...(answers.values === undefined ? undefined : { values: answers.values }),
+    ...(note === "" ? undefined : { note }),
+  };
+}
+
+/** An ask as a message keeps it without where it stands, where this build knows its type; nothing for a type a newer deployment wrote. */
+export function knownAsk(ask: InboxReadAsk): InboxAsk | undefined {
+  const { status: _status, withdrawnReason: _reason, ...kept } = ask;
+  return EffectSchema.is(inboxAskSchema)(kept) ? kept : undefined;
+}
+
+/**
+ * Whether the item's response still stands for the ask: the ask a response
+ * maps to is the ask itself, a to-do any `do` ask, whose steps its blocks
+ * carry. A post from before version 5 rewrites the response and not the
+ * thread, so an ask it posted over stands for it no longer.
+ */
+function askStandsFor(response: InboxResponse, ask: InboxAsk): boolean {
+  const asked = inboxResponseAsk(response);
+  if (asked === undefined || asked.type !== ask.type) return false;
+  // Note that the two are built apart, so they are compared by their shape rather than by who they are.
+  return asked.type === INBOX_ASK.DO || sameAsk(asked, ask);
+}
+
+/** Whether two asks say the same, key by key, as the held read compared them. */
+const sameAsk = EffectSchema.toEquivalence(inboxAskSchema);
+
+/** Whether the ask held open is still the one the item asks: an ask, or a response, of a type a newer deployment wrote is taken at its word. */
+export function askStillAsked(response: InboxReadResponse, ask: InboxReadAsk): boolean {
+  const known = knownAsk(ask);
+  return known === undefined || !knownResponse(response) || askStandsFor(response, known);
+}
+
+/** Where an item stands, as each ask of its thread is read against it. */
+export interface InboxAskStanding {
+  readonly status: InboxStatus;
+  readonly response: InboxReadResponse;
+  readonly openAskMessageId: string | null;
+  readonly closedReason: string | null;
+}
+
+/**
+ * An ask as a read carries it: as it was kept, unless it was kept open and
+ * the item no longer holds it open, which a deployment from before version
+ * 5 leaves by closing the item without a word to the ask; then withdrawn
+ * with the item's reason where the item closed on it, answered where the
+ * item was answered on it, and replaced where the item holds another or,
+ * posted over from before version 5, asks something else.
+ * Note that an ask withdrawn with no reason is a member's close without an
+ * answer, the item's `closedBy` naming the member while the close stands,
+ * because an agent's close always says why: a reader tells the two closes
+ * apart by the reason alone, as it tells a closed item's.
+ */
+export function standingAsk(
+  ask: InboxReadAsk,
+  messageId: string,
+  item: InboxAskStanding,
+): InboxReadAsk {
+  if (ask.status !== INBOX_ASK_STATUS.OPEN) return ask;
+  const replaced = { ...ask, status: INBOX_ASK_STATUS.REPLACED };
+  if (messageId !== item.openAskMessageId) return replaced;
+  switch (item.status) {
+    case INBOX_STATUS.OPEN:
+      return askStillAsked(item.response, ask) ? ask : replaced;
+    case INBOX_STATUS.ANSWERED:
+      return { ...ask, status: INBOX_ASK_STATUS.ANSWERED };
+    case INBOX_STATUS.CLOSED:
+      return item.closedReason === null
+        ? { ...ask, status: INBOX_ASK_STATUS.WITHDRAWN }
+        : { ...ask, status: INBOX_ASK_STATUS.WITHDRAWN, withdrawnReason: item.closedReason };
+  }
 }

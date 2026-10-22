@@ -1,7 +1,15 @@
 import assert from "node:assert/strict";
 import { execFileSync, spawn } from "node:child_process";
 import { once } from "node:events";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { text } from "node:stream/consumers";
@@ -40,7 +48,8 @@ async function runShell(cwd: string, run: SandboxRunOptions): Promise<SandboxCom
 
 /** A sandbox rooted at a directory the test made, with a checkout one directory below it, as the coding agent's stands. */
 function directorySandbox() {
-  const root = mkdtempSync(join(tmpdir(), "coder-files-"));
+  // Note that we resolve the root, because eve patches a Mac's /private/var, not /var.
+  const root = realpathSync(mkdtempSync(join(tmpdir(), "coder-files-")));
   const checkout = join(root, "repository");
   mkdirSync(checkout);
   const reads: string[] = [];

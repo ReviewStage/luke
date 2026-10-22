@@ -27,7 +27,7 @@ const REFUSAL = {
   TOO_LARGE: (name: string) => `${name} is too large to attach.`,
   EMPTY: (name: string) => `${name} is empty.`,
   UNREADABLE: (name: string) => `${name} couldn't be read.`,
-  FULL: `A message can carry up to ${CODING_AGENT_BOUNDS.MAX_ATTACHMENTS} files.`,
+  FULL: (most: number) => `A message can carry up to ${most} files.`,
   TOO_MUCH: "These files are too large to send together.",
 } as const;
 
@@ -91,7 +91,7 @@ export async function readFiles(files: readonly File[]): Promise<FilesRead> {
   let refusal: string | undefined;
   for (const file of files) {
     if (attachments.length >= CODING_AGENT_BOUNDS.MAX_ATTACHMENTS) {
-      refusal ??= REFUSAL.FULL;
+      refusal ??= REFUSAL.FULL(CODING_AGENT_BOUNDS.MAX_ATTACHMENTS);
       break;
     }
     const read = await attachmentOf(file);
@@ -103,15 +103,20 @@ export async function readFiles(files: readonly File[]): Promise<FilesRead> {
 
 /**
  * Files read, taken after those the box holds, in order, while the message
- * stays within its count and its bytes together; the read's own refusal is
- * said first, then the first file the bounds left out.
+ * stays within its count, a message's to an agent unless the box carries
+ * fewer, and its bytes together; the read's own refusal is said first, then
+ * the first file the bounds left out.
  */
-export function withFiles(held: readonly CodingAgentAttachment[], read: FilesRead): FilesRead {
+export function withFiles(
+  held: readonly CodingAgentAttachment[],
+  read: FilesRead,
+  most: number = CODING_AGENT_BOUNDS.MAX_ATTACHMENTS,
+): FilesRead {
   const attachments = [...held];
   let refusal = read.refusal;
   for (const attachment of read.attachments) {
-    if (attachments.length >= CODING_AGENT_BOUNDS.MAX_ATTACHMENTS) {
-      refusal ??= REFUSAL.FULL;
+    if (attachments.length >= most) {
+      refusal ??= REFUSAL.FULL(most);
       break;
     }
     const total = attachments.reduce(

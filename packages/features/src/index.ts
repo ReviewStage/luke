@@ -6,13 +6,17 @@ export {
   type CallCredential,
   callAnswered,
   fixedBearer,
+  lateCredential,
   NO_CREDENTIAL,
+  resolvedCredential,
+  sessionBearer,
 } from "./account-call.js";
 export {
   AccountRefreshFailed,
   type AccountSessionToken,
   type AccountToken,
 } from "./account-token.js";
+export { HostedAdminClient } from "./admin-client.js";
 export { ASK_ORIGIN, type AskOrigin } from "./ask-wire.js";
 export {
   HostedAutomationClient,
@@ -22,10 +26,6 @@ export {
   HostedCodingAgentClient,
   type HostedCodingAgentClientOptions,
 } from "./coding-agent-client.js";
-export {
-  HostedFactoryWorldClient,
-  type HostedFactoryWorldClientOptions,
-} from "./factory-world-client.js";
 export {
   GITHUB_CONNECTION_CALL_FAILURE,
   type GitHubConnectionCallFailure,
@@ -61,7 +61,6 @@ export {
   HostedIntegrationsClient,
   type HostedIntegrationsClientOptions,
 } from "./integration-client.js";
-export { HostedIssueClient, type HostedIssueClientOptions } from "./issue-client.js";
 export {
   AVATAR_FRAME_BOUNDS,
   AVATAR_STOP_REASON,
@@ -83,8 +82,6 @@ export {
   hostedVoiceServiceOrigin,
   isHostedVoiceServiceAddress,
   type LiveSessionCreated,
-  type PlanDraftFrame,
-  planDraftFrameFromWire,
   SESSION_CREATE_BOUNDS,
   type SessionActivityFrame,
   type SessionAttachedFrame,
@@ -94,6 +91,7 @@ export {
   type SessionHangUpFrame,
   type SessionReportFrame,
   type SessionStopFrame,
+  type SessionTypedFrame,
   sessionActivityFrameFromWire,
   sessionActivityFrameSchema,
   sessionAttachedFrameFromWire,
@@ -108,14 +106,13 @@ export {
   sessionReportFrameFromWire,
   sessionReportFrameSchema,
   sessionStopFrameSchema,
+  sessionTypedFrameSchema,
   type TaskActivityFrame,
   type TaskCallEndingFrame,
   type TaskCodeFrame,
-  type TaskWorkFrame,
   taskActivityFrameFromWire,
   taskCallEndingFrameFromWire,
   taskCodeFrameFromWire,
-  taskWorkFrameFromWire,
   VOICE_SERVICE_FRAME,
   VOICE_SERVICE_ORIGIN_VARIABLE,
   webSocketOrigin,
@@ -123,20 +120,13 @@ export {
 export {
   HostedMacCommandClient,
   type HostedMacCommandClientOptions,
+  MAC_COMMAND_NOT_CLAIMED,
 } from "./mac-command-client.js";
 export {
-  agentMessagesPath,
-  agentPullRequestPath,
-  agentStopPath,
   automationPath,
-  automationRunPath,
-  automationRunsPath,
   automationWebhookPath,
   HOSTED_SERVICE_PATH,
-  taskAgentsPath,
-  taskPath,
   VOICE_SERVICE_PATH,
-  workspacePhotoPath,
 } from "./service-paths.js";
 export {
   HOSTED_API_ERROR,
@@ -155,6 +145,7 @@ export {
   type TaskCallResult,
   type TaskMarks,
   type TaskStarted,
+  type TaskWritten,
 } from "./task-client.js";
 export {
   HostedTerminalClient,

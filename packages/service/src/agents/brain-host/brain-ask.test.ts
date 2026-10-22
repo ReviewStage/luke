@@ -7,12 +7,12 @@ import {
   type AskRow,
   newestSession,
 } from "@luke/database/models/asks";
+import { createCodingAgent } from "@luke/database/models/coding-agent-store";
 import { hostTurnId } from "@luke/database/models/ids";
 import {
   conversationReachableBy,
   recordedRuntimeSession,
 } from "@luke/database/models/recorded-session";
-import { openTaskConversation } from "@luke/database/models/task-store";
 import { storeWriter } from "@luke/database/models/writer";
 import { conversations, turns } from "@luke/database/schemas/storage";
 import { CONVERSATION_KIND } from "@luke/database/storage-vocabulary";
@@ -22,15 +22,15 @@ import { TURN_ORIGIN, TURN_STATUS, type TurnStatus } from "@luke/wire";
 import { eq } from "drizzle-orm";
 import { Effect, Option, PartitionedSemaphore, Result, Schema, Stream } from "effect";
 import { afterAll, test } from "vitest";
-import { HOSTED_TOOL_SET } from "../../tasks/brain-tool-set.js";
+import { CODER_TOOL_SET } from "../coder-host/tool-set.js";
 import { BRAIN_HOST_TURN } from "./bounds.js";
 import { ASK_REFUSAL, type AskInput, acceptAsk, STOP_REFUSAL, stopAsk } from "./brain-ask.js";
 import {
+  type AgentSessions,
   EVE_CANCEL_OUTCOME,
   EVE_FIRST_TURN_ID,
   EVE_SEND_OUTCOME,
   type EveMessage,
-  type EveSessions,
 } from "./eve-sessions.js";
 
 /**
@@ -49,7 +49,7 @@ afterAll(() => database.close());
 /** The store writer over the test database, for the one write a Stop makes on a turn's row. */
 const writer = await database.run(
   storeWriter({
-    tools: HOSTED_TOOL_SET,
+    tools: CODER_TOOL_SET,
   }),
 );
 
@@ -146,7 +146,7 @@ type EveCall =
       readonly eveTurnId: string | undefined;
     };
 
-interface FakeEve extends EveSessions {
+interface FakeEve extends AgentSessions {
   readonly calls: EveCall[];
   /** Sessions eve has retired, so a follow-up to one reads as such. */
   readonly retired: Set<string>;
@@ -393,15 +393,25 @@ test("a Stop on another account's id is refused as not found, and one on a turn 
   assert.equal(row?.cancelRequestedAt, null);
 });
 
-test("a member's ask in the plan conversation a teammate opened is recorded under the teammate and reaches eve; a stranger's in the same conversation is refused as not found", async () => {
+test("a member's ask in the agent's conversation a teammate started is recorded under the teammate and reaches eve; a stranger's in the same conversation is refused as not found", async () => {
   const opener = await database.createUser();
   const member = await database.createUser();
   const stranger = await database.createUser();
   const task = await database.run(startTask(opener, { name: "Teammate invitations" }));
   await database.run(joinWorkspace(task.workspaceId, member));
   const { conversationId } = Option.getOrThrow(
-    await database.run(openTaskConversation(opener, task.id)),
-  );
+    await database.run(
+      createCodingAgent(opener, {
+        taskId: task.id,
+        idempotencyKey: randomUUID(),
+        model: "anthropic/claude-opus-5.5",
+        effort: "high",
+        repository: null,
+        planSnapshot: "# Teammate invitations",
+        prompt: null,
+      }),
+    ),
+  ).agent;
   const h = harness();
 
   assert.deepEqual(

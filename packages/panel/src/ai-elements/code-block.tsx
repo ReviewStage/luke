@@ -1,3 +1,4 @@
+import { SCROLL_OVERSCROLL, SCROLL_SIZE, ScrollArea } from "@luke/ui";
 import type { ReactNode } from "react";
 
 /**
@@ -10,13 +11,19 @@ import type { ReactNode } from "react";
  * drawn by the markdown renderer. The registry's copy button is not here,
  * because the words are selectable and nothing draws it yet. The block
  * carries no frame of its own: the body that holds it does, and its look is
- * `.code-block`'s (tasks.css).
+ * `.code-block`'s (tasks.css). It scrolls past its height in `@luke/ui`'s
+ * `ScrollArea`, the bound standing on the box around it, and hands a swipe
+ * past its end on to the transcript it stands in.
  */
 
 export function CodeBlock({ children }: { children: ReactNode }): ReactNode {
   return (
-    <pre className="code-block">
-      <code>{children}</code>
-    </pre>
+    <div className="code-block">
+      <ScrollArea size={SCROLL_SIZE.CONTENT} overscroll={SCROLL_OVERSCROLL.CHAIN}>
+        <pre className="code-block-words">
+          <code>{children}</code>
+        </pre>
+      </ScrollArea>
+    </div>
   );
 }

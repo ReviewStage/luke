@@ -5,88 +5,75 @@ import {
   type WireBoundaryInput,
 } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
-import { Effect, Result } from "effect";
+import { Effect, Result, Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import {
   type AccountCallEffects,
-  accountBearer,
   accountCall,
+  type CallCredential,
   callAnswered,
 } from "./account-call.js";
-import type { AccountToken } from "./account-token.js";
-import { type Board, type BoardElement, boardAnswerSchema } from "./board-wire.js";
+import type { Board, BoardElement, BoardSaveAnswer } from "./board-wire.js";
 import { startRefusedAs } from "./coding-agent-client.js";
 import type { CodingAgentAgentAnswer } from "./coding-agent-view.js";
-import {
-  GITHUB_REPOSITORIES_QUERY,
-  type GitHubRepositoriesAnswer,
-  type GitHubRepositoryIssueAnswer,
-  type GitHubRepositoryPullRequestAnswer,
-  githubRepositoriesAnswerSchema,
-  githubRepositoryIssueAnswerSchema,
-  githubRepositoryPullRequestAnswerSchema,
+import { CODING_AGENT_ATTACHMENT_TYPE } from "./coding-agent-wire.js";
+import { GITHUB_REPOSITORY_TREE_RECURSIVE } from "./contract/github.js";
+import { TASK_FILE_QUERY_FLAG } from "./contract/task-files.js";
+import type {
+  GitHubRepositoriesAnswer,
+  GitHubRepositoryIssueAnswer,
+  GitHubRepositoryIssuesAnswer,
+  GitHubRepositoryPullRequestAnswer,
+  RepositoryIssuesAsk,
 } from "./github-repositories-wire.js";
+import {
+  askHosted,
+  askLive,
+  HOSTED_DEADLINE,
+  type HostedClient,
+  type HostedFailure,
+  hostedClient,
+} from "./hosted-link.js";
 import { imageBodyOf } from "./image-body.js";
 import {
-  type PageLine,
-  type PageVersion,
-  planPageVersionAnswerSchema,
-  taskPagesAnswerSchema,
-} from "./page-wire.js";
-import { pictureTypeSchema } from "./picture-wire.js";
-import { PLAN_ATTACHMENT_REFUSAL, planAttachmentAnswerSchema } from "./plan-attachment-wire.js";
+  LIVE_SIGNED_OUT,
+  LIVE_USER_QUERY,
+  type TaskBoardLiveAnswer,
+  type TaskBrowserTabsLiveAnswer,
+  type TaskHistoryLiveAnswer,
+  type TaskPagesLiveAnswer,
+  type TaskRecordLiveAnswer,
+} from "./live-wire.js";
+import { type PageLine, type PagePlace, type PageVersion, pagePlaceId } from "./page-wire.js";
+import { PLAN_ATTACHMENT_REFUSAL } from "./plan-attachment-wire.js";
 import {
-  type PlanEditAnswer,
-  type PlanEditRequest,
-  planEditAnswerSchema,
-  planEditRequestSchema,
-} from "./plan-edit.js";
-import {
-  HOSTED_SERVICE_PATH,
-  planAttachmentPath,
-  planAttachmentsPath,
-  planEditPath,
-  planPageVersionPath,
-  planRevisionPath,
-  planRevisionsPath,
-  type RepositoryPlace,
-  repositoryIssuePath,
-  repositoryPullRequestPath,
-  repositorySkillsPath,
-  repositoryTreePath,
-  taskBoardPath,
-  taskCodePath,
-  taskFilePath,
-  taskPagesPath,
-  taskPath,
-  taskRestorePath,
-  taskSkillsPath,
-  taskTranscriptPath,
-  taskTreePath,
-  taskWorkPath,
-} from "./service-paths.js";
+  type PlanCommentActionRequest,
+  type PlanCommentStartRequest,
+  planCommentActionRequestSchema,
+  planCommentStartRequestSchema,
+} from "./plan-comment-wire.js";
+import { type PlanEditAnswer, type PlanEditRequest, planEditRequestSchema } from "./plan-edit.js";
+import { planAttachmentPath, type RepositoryPlace } from "./service-paths.js";
 import {
   HOSTED_API_ERROR,
   type HostedApiError,
   hostedErrorSchema,
   readServiceAnswer,
 } from "./service-wire.js";
+import type { SidebarLiveAnswer } from "./sidebar-live.js";
+import type { TaskIssueChoice, TaskIssueRelation } from "./task-issue-wire.js";
+import type { TaskListLiveAnswer } from "./task-list-live.js";
 import {
-  type TaskSections,
+  type TaskSectionsWritten,
   type TaskSectionWrite,
-  taskSectionsAnswerSchema,
   taskSectionWriteSchema,
 } from "./task-section-wire.js";
 import {
   type PlanRevisionAnswer,
   type PlanRevisionsAnswer,
-  planRevisionAnswerSchema,
-  planRevisionsAnswerSchema,
-  type RepositoryPin,
+  type RepositoryPinsWritten,
   repositoryPinRequestSchema,
-  repositoryPinsAnswerSchema,
   TASK_LIST_ARCHIVED,
-  TASK_LIST_QUERY,
   type Task,
   type TaskCreateRequest,
   type TaskFileAnswer,
@@ -94,38 +81,37 @@ import {
   type TaskListAnswer,
   type TaskRenameRequest,
   type TaskSkillsAnswer,
+  type TaskStanding,
   type TaskStartAnswer,
   type TaskTreeAnswer,
   type TaskTreeRequest,
   type TaskUpdateRequest,
-  taskAnswerSchema,
   taskCreateRequestSchema,
-  taskDeleteAnswerSchema,
-  taskFileAnswerSchema,
   taskFileRequestSchema,
-  taskListAnswerSchema,
   taskRenameRequestSchema,
-  taskSkillsAnswerSchema,
-  taskStartAnswerSchema,
-  taskTreeAnswerSchema,
   taskTreeRequestSchema,
   taskUpdateRequestSchema,
 } from "./task-wire.js";
 import {
   PICTURE_KEEP_FAILURE,
+  PLAN_COMMENT_CALL_FAILURE,
   type RepositoryCallFailure,
   type RepositoryListFailure,
   type StartCallFailure,
   TASK_CALL_FAILURE,
   type TaskCallFailure,
   type TaskCodeAnswer,
+  type TaskIssueCallFailure,
+  type TasksBrowserTabsAnswer,
+  type TasksCommentAnswer,
+  type TasksCommentsAnswer,
+  type TasksIssueLinkAnswer,
+  type TasksIssueLinksAnswer,
+  type TasksIssueRelateAnswer,
+  type TasksIssueUnlinkAnswer,
   type TasksPictureAnswer,
   type TasksPictureKeepAnswer,
-  type TaskWorkAnswer,
-  taskCodeAnswerSchema,
-  taskWorkAnswerSchema,
 } from "./tasks-view.js";
-import { type TaskTranscript, taskTranscriptAnswerSchema } from "./transcript-wire.js";
 
 /**
  * task-client.ts -- the Tasks tab's side of the named tasks, as the host asks the service for them.
@@ -137,13 +123,18 @@ import { type TaskTranscript, taskTranscriptAnswerSchema } from "./transcript-wi
  * reach refused it.
  */
 
-/** How long a start naming an agent may stand: an agent's Start's own bound, since it opens the agent's session before it answers. */
-const AGENT_START_TIMEOUT_MS = 120_000;
-
 /** A started task, and, where the start named an agent, the agent started on it or why it was not, as an agent's Start answers. */
 export interface TaskStarted {
   readonly task: Task;
   readonly agent?: CodingAgentAgentAnswer;
+  /** The transaction the task was written in, which the task list followed live carries once it lands. */
+  readonly txid?: string;
+}
+
+/** A task as a write answered it, and the transaction the write committed in where it changed a row. */
+export interface TaskWritten {
+  readonly task: Task;
+  readonly txid?: string;
 }
 
 /** One call's answer, or why there is none. */
@@ -151,7 +142,9 @@ export type TaskCallResult<Answer, Failure> =
   | { readonly ok: true; readonly answer: Answer }
   | { readonly ok: false; readonly failure: Failure };
 
-export interface HostedTaskClientOptions extends AccountToken {
+export interface HostedTaskClientOptions {
+  /** What authorizes each call on the signed-in account, read fresh for every attempt. */
+  credential: CallCredential;
   /** The hosted service origin, without a trailing slash. */
   serviceBaseUrl: string;
   requestTimeoutMs?: number;
@@ -159,13 +152,17 @@ export interface HostedTaskClientOptions extends AccountToken {
 
 const UNANSWERED = { ok: false, failure: TASK_CALL_FAILURE.UNANSWERED } as const;
 
-/** The list with the archived tasks among it, each flagged, which this build sorts into its own place. */
-const LIST_WITH_ARCHIVED_PATH = `${HOSTED_SERVICE_PATH.TASKS}?${new URLSearchParams({
-  [TASK_LIST_QUERY.ARCHIVED]: TASK_LIST_ARCHIVED.INCLUDE,
-})}`;
+/** The types a plan's attachment is served as: a picture's, or any a comment's file may be. */
+const attachmentTypeSchema = Schema.Literals(Object.values(CODING_AGENT_ATTACHMENT_TYPE));
 
-/** What a task's pin and archive change names: pinned or not, where the pin stands, archived or not, or both. */
-export type TaskMarks = Pick<TaskUpdateRequest, "pinned" | "pinPosition" | "archived">;
+/** A comment call that answered nothing to draw. */
+const COMMENT_UNANSWERED = { failure: PLAN_COMMENT_CALL_FAILURE.UNANSWERED } as const;
+
+/** A comment call refused because the plan is not the account's to read or write. */
+const COMMENT_NOT_FOUND = { failure: PLAN_COMMENT_CALL_FAILURE.NOT_FOUND } as const;
+
+/** What a task's pin change names: pinned or not, and where the pin stands. */
+export type TaskMarks = Pick<TaskUpdateRequest, "pinned" | "pinPosition">;
 
 function succeeded<Answer>(answer: Answer) {
   return { ok: true, answer } as const;
@@ -183,10 +180,9 @@ const START_REFUSALS = {
   [HOSTED_API_ERROR.NOT_FOUND]: TASK_CALL_FAILURE.NOT_FOUND,
 } as const;
 
-/** The refusals a move can answer with: the task or the workspace not the account's, the task archived, or the workspace not reaching its repository. */
+/** The refusals a move can answer with: the task or the workspace not the account's, or the workspace not reaching its repository. */
 const MOVE_REFUSALS = {
   [HOSTED_API_ERROR.NOT_FOUND]: TASK_CALL_FAILURE.NOT_FOUND,
-  [HOSTED_API_ERROR.TASK_ARCHIVED]: TASK_CALL_FAILURE.TASK_ARCHIVED,
   [HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE]: TASK_CALL_FAILURE.REPOSITORY_NOT_REACHABLE,
 } as const;
 
@@ -194,6 +190,61 @@ const MOVE_REFUSALS = {
 const NOT_FOUND_REFUSAL = {
   [HOSTED_API_ERROR.NOT_FOUND]: TASK_CALL_FAILURE.NOT_FOUND,
 } as const;
+
+/** The refusals a live read names: the task gone, or a session that is no longer the account's the read names (`live-wire.ts`). */
+const LIVE_REFUSALS = {
+  ...NOT_FOUND_REFUSAL,
+  [HOSTED_API_ERROR.INVALID_TOKEN]: LIVE_SIGNED_OUT.failure,
+} as const;
+
+/** A procedure's answer as a result: its refusal where it is one the caller names, unanswered for everything else. */
+function hostedResult<Answer, Failure extends string>(
+  asked: Effect.Effect<Answer, HostedFailure, HttpClient.HttpClient>,
+  named: Readonly<Partial<Record<HostedApiError, Failure>>>,
+): Effect.Effect<
+  TaskCallResult<Answer, Failure | typeof TASK_CALL_FAILURE.UNANSWERED>,
+  never,
+  HttpClient.HttpClient
+> {
+  return Effect.match(asked, {
+    onSuccess: succeeded,
+    onFailure: (failed) => {
+      const failure = failed._tag === "HostedRefused" ? named[failed.refusal] : undefined;
+      return failure === undefined ? UNANSWERED : ({ ok: false, failure } as const);
+    },
+  });
+}
+
+/** The refusals a call on a task's linked issues can answer with, by the service's own word for each. */
+const TASK_ISSUE_REFUSALS = new Map<HostedApiError, TaskIssueCallFailure>([
+  [HOSTED_API_ERROR.NOT_FOUND, TASK_CALL_FAILURE.NOT_FOUND],
+  [HOSTED_API_ERROR.LINEAR_UNAVAILABLE, TASK_CALL_FAILURE.LINEAR_UNAVAILABLE],
+]);
+
+/** A call on a task's linked issues as the window hears it: the answer, or why there is none, a refusal it does not name as unanswered. */
+function issueView<Answer>(
+  asked: Effect.Effect<Answer, HostedFailure, HttpClient.HttpClient>,
+): Effect.Effect<
+  Answer | { readonly failure: TaskIssueCallFailure },
+  never,
+  HttpClient.HttpClient
+> {
+  return Effect.match(asked, {
+    onSuccess: (answer): Answer | { readonly failure: TaskIssueCallFailure } => answer,
+    onFailure: (failed) => ({
+      failure:
+        (failed._tag === "HostedRefused" ? TASK_ISSUE_REFUSALS.get(failed.refusal) : undefined) ??
+        TASK_CALL_FAILURE.UNANSWERED,
+    }),
+  });
+}
+
+/** A procedure's answer, or nothing where it reached none. */
+function orNothing<Answer>(
+  asked: Effect.Effect<Answer, HostedFailure, HttpClient.HttpClient>,
+): Effect.Effect<Answer | undefined, never, HttpClient.HttpClient> {
+  return Effect.orElseSucceed(asked, () => undefined);
+}
 
 /** The refusal a refused answer carries, where it is one the caller names; unanswered otherwise. */
 function refusedAs<Failure extends TaskCallFailure>(
@@ -214,34 +265,93 @@ function refusedAs<Failure extends TaskCallFailure>(
  */
 export class HostedTaskClient {
   readonly #call: AccountCallEffects;
-  readonly #start: AccountCallEffects;
+  readonly #hosted: HostedClient;
 
   constructor(options: HostedTaskClientOptions) {
-    const credential = accountBearer(options);
+    const { credential } = options;
+    this.#hosted = hostedClient({
+      baseUrl: options.serviceBaseUrl,
+      credential,
+      requestTimeoutMs: options.requestTimeoutMs,
+    });
     this.#call = accountCall({
       baseUrl: options.serviceBaseUrl,
       credential,
       requestTimeoutMs: options.requestTimeoutMs,
     });
-    this.#start = accountCall({
-      baseUrl: options.serviceBaseUrl,
-      credential,
-      requestTimeoutMs: AGENT_START_TIMEOUT_MS,
-    });
   }
 
-  /** Every plan the account owns, newest started first, and every agent with no plan in its workspaces, the archived ones of each among them. */
+  /** The plan's comment threads past the cursor, held by the service while nothing changed; not found where the plan is not the account's. */
+  comments(
+    planId: string,
+    after: string,
+  ): Effect.Effect<TasksCommentsAnswer, never, HttpClient.HttpClient> {
+    return commentAnswer(
+      askHosted(this.#hosted.planComments.read, { id: planId, after }, HOSTED_DEADLINE.HELD),
+    );
+  }
+
+  /** A thread started on the plan with its first comment, answered as it stands, or why not; a request the service would refuse by shape travels nowhere. */
+  startComment(
+    planId: string,
+    request: PlanCommentStartRequest,
+  ): Effect.Effect<TasksCommentAnswer, never, HttpClient.HttpClient> {
+    const admitted = Result.getOrUndefined(readEither(planCommentStartRequestSchema)(request));
+    if (admitted === undefined) return Effect.succeed(COMMENT_UNANSWERED);
+    return commentAnswer(
+      Effect.map(
+        askHosted(this.#hosted.planComments.start, { params: { id: planId }, body: admitted }),
+        (started) => started.body,
+      ),
+    );
+  }
+
+  /** One thing done to one thread of the plan, answered with the thread as it stands, its deletion, or why not. */
+  actOnComment(
+    planId: string,
+    threadId: string,
+    request: PlanCommentActionRequest,
+  ): Effect.Effect<TasksCommentAnswer, never, HttpClient.HttpClient> {
+    const admitted = Result.getOrUndefined(readEither(planCommentActionRequestSchema)(request));
+    if (admitted === undefined) return Effect.succeed(COMMENT_UNANSWERED);
+    return commentAnswer(
+      askHosted(this.#hosted.planComments.act, {
+        params: { id: planId, thread: threadId },
+        body: admitted,
+      }),
+    );
+  }
+
+  /** Every plan the account owns, newest started first, and every agent with no plan in its workspaces, the archived agents among them. */
   list(): Effect.Effect<
     TaskCallResult<TaskListAnswer, typeof TASK_CALL_FAILURE.UNANSWERED>,
     never,
     HttpClient.HttpClient
   > {
-    return Effect.map(
-      this.#call.ask(
-        { method: HTTP_METHOD.GET, path: LIST_WITH_ARCHIVED_PATH },
-        taskListAnswerSchema,
-      ),
-      (answer) => (answer === undefined ? UNANSWERED : succeeded(answer)),
+    // Note that the query still asks for the archived, because the service reads it for the agents with no plan too, whose archive stands.
+    return hostedResult(
+      askHosted(this.#hosted.plans.list, { archived: TASK_LIST_ARCHIVED.INCLUDE }),
+      {},
+    );
+  }
+
+  /**
+   * The task list sealed for following over Neon Realtime, answered at
+   * once; unanswered for anything that went wrong, which the caller answers
+   * by asking again.
+   */
+  listLive(
+    userId: string,
+    poll = false,
+    after?: string,
+  ): Effect.Effect<
+    TaskCallResult<TaskListLiveAnswer, TaskCallFailure | typeof LIVE_SIGNED_OUT.failure>,
+    never,
+    HttpClient.HttpClient
+  > {
+    return hostedResult(
+      askLive(this.#hosted.live.tasks, { [LIVE_USER_QUERY]: userId }, poll, after),
+      LIVE_REFUSALS,
     );
   }
 
@@ -249,24 +359,17 @@ export class HostedTaskClient {
   open(
     taskId: string,
   ): Effect.Effect<TaskCallResult<Task, TaskCallFailure>, never, HttpClient.HttpClient> {
-    const call = this.#call;
-    return Effect.gen(function* () {
-      const answer = yield* call.send({ method: HTTP_METHOD.GET, path: taskPath(taskId) });
-      if (!callAnswered(answer)) return UNANSWERED;
-      const payload = unparsedWire(yield* jsonOf(answer.response));
-      if (answer.response.ok) {
-        const opened = Result.getOrUndefined(readServiceAnswer(taskAnswerSchema)(payload));
-        return opened === undefined ? UNANSWERED : succeeded(opened.plan);
-      }
-      return refusedAs(payload, { [HOSTED_API_ERROR.NOT_FOUND]: TASK_CALL_FAILURE.NOT_FOUND });
-    });
+    return hostedResult(
+      Effect.map(askHosted(this.#hosted.plans.open, { id: taskId }), (opened) => opened.plan),
+      NOT_FOUND_REFUSAL,
+    );
   }
 
   /**
    * Saves the developer's edit of the document, answering the task as saved,
    * the text as it now stands where the edit no longer lands in it, or why
    * it was refused; or why there is no answer: the service did not answer,
-   * the task is gone, or it is archived. An edit the service would refuse by shape is
+   * or the task is gone. An edit the service would refuse by shape is
    * refused here without traveling at all.
    */
   edit(
@@ -275,33 +378,19 @@ export class HostedTaskClient {
   ): Effect.Effect<
     TaskCallResult<
       PlanEditAnswer,
-      | typeof TASK_CALL_FAILURE.UNANSWERED
-      | typeof TASK_CALL_FAILURE.NOT_FOUND
-      | typeof TASK_CALL_FAILURE.TASK_ARCHIVED
+      typeof TASK_CALL_FAILURE.UNANSWERED | typeof TASK_CALL_FAILURE.NOT_FOUND
     >,
     never,
     HttpClient.HttpClient
   > {
     const admitted = Result.getOrUndefined(readEither(planEditRequestSchema)(edit));
     if (admitted === undefined) return Effect.succeed(UNANSWERED);
-    const call = this.#call;
-    return Effect.gen(function* () {
-      const answer = yield* call.send({
-        method: HTTP_METHOD.POST,
-        path: planEditPath(taskId),
-        body: JSON.stringify(admitted),
-      });
-      if (!callAnswered(answer)) return UNANSWERED;
-      const payload = unparsedWire(yield* jsonOf(answer.response));
-      if (answer.response.ok) {
-        const edited = Result.getOrUndefined(readServiceAnswer(planEditAnswerSchema)(payload));
-        return edited === undefined ? UNANSWERED : succeeded(edited);
-      }
-      return refusedAs(payload, {
+    return hostedResult(
+      askHosted(this.#hosted.plans.edit, { params: { id: taskId }, body: admitted }),
+      {
         [HOSTED_API_ERROR.NOT_FOUND]: TASK_CALL_FAILURE.NOT_FOUND,
-        [HOSTED_API_ERROR.TASK_ARCHIVED]: TASK_CALL_FAILURE.TASK_ARCHIVED,
-      });
-    });
+      },
+    );
   }
 
   /**
@@ -317,24 +406,10 @@ export class HostedTaskClient {
     never,
     HttpClient.HttpClient
   > {
-    const call = this.#call;
-    return Effect.gen(function* () {
-      const query =
-        workspaceId === undefined
-          ? ""
-          : `?${new URLSearchParams({ [GITHUB_REPOSITORIES_QUERY.WORKSPACE_ID]: workspaceId })}`;
-      const answer = yield* call.send({
-        method: HTTP_METHOD.GET,
-        path: `${HOSTED_SERVICE_PATH.GITHUB_REPOSITORIES}${query}`,
-      });
-      if (!callAnswered(answer)) return UNANSWERED;
-      const payload = unparsedWire(yield* jsonOf(answer.response));
-      if (!answer.response.ok) return UNANSWERED;
-      const listed = Result.getOrUndefined(
-        readServiceAnswer(githubRepositoriesAnswerSchema)(payload),
-      );
-      return listed === undefined ? UNANSWERED : succeeded(listed);
-    });
+    return Effect.match(
+      askHosted(this.#hosted.github.repositories, workspaceId === undefined ? {} : { workspaceId }),
+      { onSuccess: succeeded, onFailure: () => UNANSWERED },
+    );
   }
 
   /**
@@ -346,95 +421,157 @@ export class HostedTaskClient {
   setRepository(
     taskId: string,
     repository: string | null,
-  ): Effect.Effect<TaskCallResult<Task, RepositoryCallFailure>, never, HttpClient.HttpClient> {
+  ): Effect.Effect<
+    TaskCallResult<TaskWritten, RepositoryCallFailure>,
+    never,
+    HttpClient.HttpClient
+  > {
     const admitted = Result.getOrUndefined(readEither(taskUpdateRequestSchema)({ repository }));
     if (admitted === undefined) return Effect.succeed(UNANSWERED);
-    const call = this.#call;
-    return Effect.gen(function* () {
-      const answer = yield* call.send({
-        method: HTTP_METHOD.PATCH,
-        path: taskPath(taskId),
-        body: JSON.stringify(admitted),
-      });
-      if (!callAnswered(answer)) return UNANSWERED;
-      const payload = unparsedWire(yield* jsonOf(answer.response));
-      if (answer.response.ok) {
-        const changed = Result.getOrUndefined(readServiceAnswer(taskAnswerSchema)(payload));
-        return changed === undefined ? UNANSWERED : succeeded(changed.plan);
-      }
-      return refusedAs(payload, REPOSITORY_REFUSALS);
-    });
+    return hostedResult(this.#update(taskId, admitted), REPOSITORY_REFUSALS);
   }
 
   /**
    * Moves one task to another of the account's workspaces, answering the
    * task as moved; or why it stands where it was: the service did not
    * answer, the task or the workspace is not the account's to move it to,
-   * the task is archived, or the workspace does not reach its repository.
+   * or the workspace does not reach its repository.
    */
   move(
     taskId: string,
     workspaceId: string,
-  ): Effect.Effect<TaskCallResult<Task, TaskCallFailure>, never, HttpClient.HttpClient> {
+  ): Effect.Effect<TaskCallResult<TaskWritten, TaskCallFailure>, never, HttpClient.HttpClient> {
     const admitted = Result.getOrUndefined(readEither(taskUpdateRequestSchema)({ workspaceId }));
     if (admitted === undefined) return Effect.succeed(UNANSWERED);
-    const call = this.#call;
-    return Effect.gen(function* () {
-      const answer = yield* call.send({
-        method: HTTP_METHOD.PATCH,
-        path: taskPath(taskId),
-        body: JSON.stringify(admitted),
-      });
-      if (!callAnswered(answer)) return UNANSWERED;
-      const payload = unparsedWire(yield* jsonOf(answer.response));
-      if (answer.response.ok) {
-        const moved = Result.getOrUndefined(readServiceAnswer(taskAnswerSchema)(payload));
-        return moved === undefined ? UNANSWERED : succeeded(moved.plan);
-      }
-      return refusedAs(payload, MOVE_REFUSALS);
-    });
+    return hostedResult(this.#update(taskId, admitted), MOVE_REFUSALS);
   }
 
   /** One task's whiteboard as it stands; nothing where the service did not answer one. */
   readBoard(taskId: string): Effect.Effect<Board | undefined, never, HttpClient.HttpClient> {
-    return Effect.map(
-      this.#call.ask({ method: HTTP_METHOD.GET, path: taskBoardPath(taskId) }, boardAnswerSchema),
-      (answer) => answer?.board,
+    return orNothing(
+      Effect.map(askHosted(this.#hosted.plans.readBoard, { id: taskId }), (answer) => answer.board),
     );
   }
 
-  /** What was said on one task's calls; nothing where the service did not answer it. */
-  readTranscript(
+  /**
+   * Where one task's whiteboard stands, sealed for following over Neon
+   * Realtime, or with `poll` its rows inline at the poll address, for a
+   * reader polling while Realtime fails it, for the account `userId`
+   * names: not found where the account reaches no such task, signed out
+   * where the session is no longer that account's, unanswered for anything
+   * else, which the caller answers by sealing it again.
+   */
+  boardLive(
     taskId: string,
-  ): Effect.Effect<TaskTranscript | undefined, never, HttpClient.HttpClient> {
-    return Effect.map(
-      this.#call.ask(
-        { method: HTTP_METHOD.GET, path: taskTranscriptPath(taskId) },
-        taskTranscriptAnswerSchema,
+    userId: string,
+    poll = false,
+    after?: string,
+  ): Effect.Effect<
+    TaskCallResult<TaskBoardLiveAnswer, TaskCallFailure | typeof LIVE_SIGNED_OUT.failure>,
+    never,
+    HttpClient.HttpClient
+  > {
+    return hostedResult(
+      askLive(this.#hosted.live.taskBoard, { id: taskId, [LIVE_USER_QUERY]: userId }, poll, after),
+      LIVE_REFUSALS,
+    );
+  }
+
+  /**
+   * Where one task's pages and calls stand, sealed for following over Neon
+   * Realtime, or with `poll` their rows inline, for a reader polling while
+   * Realtime fails them, for the account `userId` names: not found where the
+   * account reaches no such task, signed out where the session is another's,
+   * unanswered for anything else, which the caller answers by sealing again.
+   */
+  recordLive(
+    taskId: string,
+    userId: string,
+    poll = false,
+    after?: string,
+  ): Effect.Effect<
+    TaskCallResult<TaskRecordLiveAnswer, TaskCallFailure | typeof LIVE_SIGNED_OUT.failure>,
+    never,
+    HttpClient.HttpClient
+  > {
+    return hostedResult(
+      askLive(this.#hosted.live.taskRecord, { id: taskId, [LIVE_USER_QUERY]: userId }, poll, after),
+      LIVE_REFUSALS,
+    );
+  }
+
+  /**
+   * One task's pages, or one coding agent's on no task, each at its newest
+   * version, sealed for following over Neon Realtime, or with `poll` their
+   * rows inline at the poll address, on the terms a task's record's is.
+   */
+  pagesLive(
+    place: PagePlace,
+    userId: string,
+    poll = false,
+    after?: string,
+  ): Effect.Effect<
+    TaskCallResult<TaskPagesLiveAnswer, TaskCallFailure | typeof LIVE_SIGNED_OUT.failure>,
+    never,
+    HttpClient.HttpClient
+  > {
+    const procedure =
+      "taskId" in place ? this.#hosted.live.taskPages : this.#hosted.live.agentPages;
+    return hostedResult(
+      askLive(procedure, { id: pagePlaceId(place), [LIVE_USER_QUERY]: userId }, poll, after),
+      LIVE_REFUSALS,
+    );
+  }
+
+  /** One task's Browser tabs, the agent's pointer on each among them, sealed for following, or with `poll` their rows inline, on the terms its pages' is. */
+  browserTabsLive(
+    taskId: string,
+    userId: string,
+    poll = false,
+    after?: string,
+  ): Effect.Effect<
+    TaskCallResult<TaskBrowserTabsLiveAnswer, TaskCallFailure | typeof LIVE_SIGNED_OUT.failure>,
+    never,
+    HttpClient.HttpClient
+  > {
+    return hostedResult(
+      askLive(
+        this.#hosted.live.taskBrowserTabs,
+        { id: taskId, [LIVE_USER_QUERY]: userId },
+        poll,
+        after,
       ),
-      (answer) => answer?.transcript,
+      LIVE_REFUSALS,
     );
   }
 
-  /** A page of one task's work as the service keeps it, the newest or the one before a turn, with every code shown on the newest; nothing where the service did not answer it. */
-  readWork(
+  /** One task's newest page of plan history sealed for following, or with `poll` its rows inline, on the terms its pages' is. */
+  historyLive(
     taskId: string,
-    before?: string,
-  ): Effect.Effect<TaskWorkAnswer | undefined, never, HttpClient.HttpClient> {
-    return this.#call.ask(
-      { method: HTTP_METHOD.GET, path: taskWorkPath(taskId, before) },
-      taskWorkAnswerSchema,
+    userId: string,
+    poll = false,
+    after?: string,
+  ): Effect.Effect<
+    TaskCallResult<TaskHistoryLiveAnswer, TaskCallFailure | typeof LIVE_SIGNED_OUT.failure>,
+    never,
+    HttpClient.HttpClient
+  > {
+    return hostedResult(
+      askLive(
+        this.#hosted.live.taskHistory,
+        { id: taskId, [LIVE_USER_QUERY]: userId },
+        poll,
+        after,
+      ),
+      LIVE_REFUSALS,
     );
   }
 
-  /** Every code Luke showed on one task, oldest first; nothing where the service did not answer it. */
+  /** Every code the task's agents showed on it, oldest first; nothing where the service did not answer it. */
   readCode(
     taskId: string,
   ): Effect.Effect<TaskCodeAnswer | undefined, never, HttpClient.HttpClient> {
-    return this.#call.ask(
-      { method: HTTP_METHOD.GET, path: taskCodePath(taskId) },
-      taskCodeAnswerSchema,
-    );
+    return orNothing(askHosted(this.#hosted.taskFiles.code, { id: taskId }));
   }
 
   /**
@@ -448,9 +585,15 @@ export class HostedTaskClient {
   ): Effect.Effect<TaskFileAnswer | undefined, never, HttpClient.HttpClient> {
     const admitted = Result.getOrUndefined(readEither(taskFileRequestSchema)(window));
     if (admitted === undefined) return Effect.succeed(undefined);
-    return this.#call.ask(
-      { method: HTTP_METHOD.GET, path: taskFilePath(taskId, admitted) },
-      taskFileAnswerSchema,
+    return orNothing(
+      askHosted(this.#hosted.taskFiles.file, {
+        id: taskId,
+        path: admitted.path,
+        first: String(admitted.firstLine),
+        last: String(admitted.lastLine),
+        ...(admitted.raw === true ? { raw: TASK_FILE_QUERY_FLAG } : undefined),
+        ...(admitted.ref === undefined ? undefined : { ref: admitted.ref }),
+      }),
     );
   }
 
@@ -465,9 +608,12 @@ export class HostedTaskClient {
   ): Effect.Effect<TaskTreeAnswer | undefined, never, HttpClient.HttpClient> {
     const admitted = Result.getOrUndefined(readEither(taskTreeRequestSchema)(folder));
     if (admitted === undefined) return Effect.succeed(undefined);
-    return this.#call.ask(
-      { method: HTTP_METHOD.GET, path: taskTreePath(taskId, admitted) },
-      taskTreeAnswerSchema,
+    return orNothing(
+      askHosted(this.#hosted.taskFiles.tree, {
+        id: taskId,
+        ...(admitted.path === "" ? undefined : { path: admitted.path }),
+        ...(admitted.recursive === true ? { recursive: TASK_FILE_QUERY_FLAG } : undefined),
+      }),
     );
   }
 
@@ -475,10 +621,7 @@ export class HostedTaskClient {
   readSkills(
     taskId: string,
   ): Effect.Effect<TaskSkillsAnswer | undefined, never, HttpClient.HttpClient> {
-    return this.#call.ask(
-      { method: HTTP_METHOD.GET, path: taskSkillsPath(taskId) },
-      taskSkillsAnswerSchema,
-    );
+    return orNothing(askHosted(this.#hosted.taskFiles.skills, { id: taskId }));
   }
 
   /**
@@ -493,9 +636,14 @@ export class HostedTaskClient {
   ): Effect.Effect<TaskTreeAnswer | undefined, never, HttpClient.HttpClient> {
     const admitted = Result.getOrUndefined(readEither(taskTreeRequestSchema)(folder));
     if (admitted === undefined) return Effect.succeed(undefined);
-    return this.#call.ask(
-      { method: HTTP_METHOD.GET, path: repositoryTreePath(place, admitted) },
-      taskTreeAnswerSchema,
+    return orNothing(
+      askHosted(this.#hosted.github.repositoryTree, {
+        ...place,
+        ...(admitted.path === "" ? undefined : { path: admitted.path }),
+        ...(admitted.recursive === true
+          ? { recursive: GITHUB_REPOSITORY_TREE_RECURSIVE }
+          : undefined),
+      }),
     );
   }
 
@@ -503,10 +651,7 @@ export class HostedTaskClient {
   readRepositorySkills(
     place: RepositoryPlace,
   ): Effect.Effect<TaskSkillsAnswer | undefined, never, HttpClient.HttpClient> {
-    return this.#call.ask(
-      { method: HTTP_METHOD.GET, path: repositorySkillsPath(place) },
-      taskSkillsAnswerSchema,
-    );
+    return orNothing(askHosted(this.#hosted.github.repositorySkills, { ...place }));
   }
 
   /** One pull request of a repository the workspace's installation reaches, by its number, or null where there is none to draw; nothing where the service did not answer. */
@@ -514,9 +659,8 @@ export class HostedTaskClient {
     place: RepositoryPlace,
     number: number,
   ): Effect.Effect<GitHubRepositoryPullRequestAnswer | undefined, never, HttpClient.HttpClient> {
-    return this.#call.ask(
-      { method: HTTP_METHOD.GET, path: repositoryPullRequestPath(place, number) },
-      githubRepositoryPullRequestAnswerSchema,
+    return orNothing(
+      askHosted(this.#hosted.github.repositoryPullRequest, { ...place, number: String(number) }),
     );
   }
 
@@ -525,9 +669,71 @@ export class HostedTaskClient {
     place: RepositoryPlace,
     number: number,
   ): Effect.Effect<GitHubRepositoryIssueAnswer | undefined, never, HttpClient.HttpClient> {
-    return this.#call.ask(
-      { method: HTTP_METHOD.GET, path: repositoryIssuePath(place, number) },
-      githubRepositoryIssueAnswerSchema,
+    return orNothing(
+      askHosted(this.#hosted.github.repositoryIssue, { ...place, number: String(number) }),
+    );
+  }
+
+  /** The issues one task links, each with where it stands now, read live by the service; or why there are none. */
+  readIssueLinks(
+    taskId: string,
+  ): Effect.Effect<TasksIssueLinksAnswer, never, HttpClient.HttpClient> {
+    return issueView(askHosted(this.#hosted.plans.issues, { id: taskId }));
+  }
+
+  /** The Browser tabs open in one task's agents' browsers, the oldest first; or that the service did not answer. */
+  readBrowserTabs(
+    taskId: string,
+  ): Effect.Effect<TasksBrowserTabsAnswer, never, HttpClient.HttpClient> {
+    return Effect.match(askHosted(this.#hosted.agentBrowserTabs.list, { id: taskId }), {
+      onSuccess: (answer): TasksBrowserTabsAnswer => answer,
+      onFailure: (): TasksBrowserTabsAnswer => ({ failure: TASK_CALL_FAILURE.UNANSWERED }),
+    });
+  }
+
+  /** An issue linked to one task, which the service reads from its provider first; or why none was linked. */
+  linkIssue(
+    taskId: string,
+    issue: TaskIssueChoice,
+  ): Effect.Effect<TasksIssueLinkAnswer, never, HttpClient.HttpClient> {
+    return issueView(
+      askHosted(this.#hosted.plans.linkIssue, { params: { id: taskId }, body: issue }),
+    );
+  }
+
+  /** Which keyword one task's pull requests write of one of its links; or why it stands as it was. */
+  relateIssue(
+    taskId: string,
+    linkId: string,
+    relation: TaskIssueRelation,
+  ): Effect.Effect<TasksIssueRelateAnswer, never, HttpClient.HttpClient> {
+    return issueView(
+      askHosted(this.#hosted.plans.relateIssue, {
+        params: { id: taskId, link: linkId },
+        body: { relation },
+      }),
+    );
+  }
+
+  /** One of a task's links let go; or why it stands. */
+  unlinkIssue(
+    taskId: string,
+    linkId: string,
+  ): Effect.Effect<TasksIssueUnlinkAnswer, never, HttpClient.HttpClient> {
+    return issueView(askHosted(this.#hosted.plans.unlinkIssue, { id: taskId, link: linkId }));
+  }
+
+  /** The issues of a repository the workspace's installation reaches, as New task's picker asks for them, or that the installation grants none; nothing where the service did not answer. */
+  readRepositoryIssues(
+    place: RepositoryPlace,
+    ask: RepositoryIssuesAsk,
+  ): Effect.Effect<GitHubRepositoryIssuesAnswer | undefined, never, HttpClient.HttpClient> {
+    return orNothing(
+      askHosted(this.#hosted.github.repositoryIssues, {
+        ...place,
+        ...(ask.number === undefined ? undefined : { number: String(ask.number) }),
+        ...(ask.number !== undefined || ask.query === undefined ? undefined : { query: ask.query }),
+      }),
     );
   }
 
@@ -536,9 +742,11 @@ export class HostedTaskClient {
     taskId: string,
     before?: number,
   ): Effect.Effect<PlanRevisionsAnswer | undefined, never, HttpClient.HttpClient> {
-    return this.#call.ask(
-      { method: HTTP_METHOD.GET, path: planRevisionsPath(taskId, before) },
-      planRevisionsAnswerSchema,
+    return orNothing(
+      askHosted(this.#hosted.plans.revisions, {
+        id: taskId,
+        ...(before === undefined ? undefined : { before: String(before) }),
+      }),
     );
   }
 
@@ -547,21 +755,22 @@ export class HostedTaskClient {
     taskId: string,
     seq: number,
   ): Effect.Effect<PlanRevisionAnswer["revision"] | undefined, never, HttpClient.HttpClient> {
-    return Effect.map(
-      this.#call.ask(
-        { method: HTTP_METHOD.GET, path: planRevisionPath(taskId, seq) },
-        planRevisionAnswerSchema,
+    return orNothing(
+      Effect.map(
+        askHosted(this.#hosted.plans.revision, { id: taskId, seq: String(seq) }),
+        (answer) => answer.revision,
       ),
-      (answer) => answer?.revision,
     );
   }
 
   /**
-   * One picture of one plan, fetched under the account: its bytes in base64
-   * under its media type, where the service answered with a type a picture
-   * may be; not found where the plan is not one the account reaches or holds
-   * no such picture; unanswered for anything else, another media type
-   * included, so nothing a window draws is a type it did not expect.
+   * One attachment of one plan, a picture its text names or a file one of
+   * its comments carries, fetched under the account: its bytes in base64
+   * under its media type, where the service answered with a type a coding
+   * agent's file may be; not found where the plan is not one the account
+   * reaches or holds no such attachment; unanswered for anything else,
+   * another media type included, so nothing a window draws is a type it did
+   * not expect.
    */
   readPicture(
     taskId: string,
@@ -578,7 +787,7 @@ export class HostedTaskClient {
         const refused = refusedAs(unparsedWire(yield* jsonOf(answer.response)), NOT_FOUND_REFUSAL);
         return { failure: refused.ok ? TASK_CALL_FAILURE.UNANSWERED : refused.failure };
       }
-      const picture = yield* imageBodyOf(answer.response, pictureTypeSchema);
+      const picture = yield* imageBodyOf(answer.response, attachmentTypeSchema);
       return picture ?? { failure: TASK_CALL_FAILURE.UNANSWERED };
     });
   }
@@ -593,103 +802,94 @@ export class HostedTaskClient {
     taskId: string,
     picture: string,
   ): Effect.Effect<TasksPictureKeepAnswer, never, HttpClient.HttpClient> {
-    const send = this.#call.send;
-    return Effect.gen(function* () {
-      const answer = yield* send({
-        method: HTTP_METHOD.POST,
-        path: planAttachmentsPath(taskId),
-        body: JSON.stringify({ picture }),
-      });
-      if (!callAnswered(answer)) return { failure: PICTURE_KEEP_FAILURE.UNANSWERED };
-      const payload = unparsedWire(yield* jsonOf(answer.response));
-      if (!answer.response.ok) {
-        const refused = refusedAs(payload, NOT_FOUND_REFUSAL);
-        return { failure: refused.ok ? PICTURE_KEEP_FAILURE.UNANSWERED : refused.failure };
-      }
-      const kept = Result.getOrUndefined(readServiceAnswer(planAttachmentAnswerSchema)(payload));
-      if (kept === undefined) return { failure: PICTURE_KEEP_FAILURE.UNANSWERED };
-      return "id" in kept
-        ? { id: kept.id }
-        : {
-            failure:
-              kept.refused === PLAN_ATTACHMENT_REFUSAL.TOO_MANY
-                ? PICTURE_KEEP_FAILURE.TOO_MANY
-                : PICTURE_KEEP_FAILURE.UNANSWERED,
-          };
-    });
-  }
-
-  /** One plan's pages, each by its newest version; nothing where the service did not answer them. */
-  readPages(
-    taskId: string,
-  ): Effect.Effect<readonly PageLine[] | undefined, never, HttpClient.HttpClient> {
-    return Effect.map(
-      this.#call.ask(
-        { method: HTTP_METHOD.GET, path: taskPagesPath(taskId) },
-        taskPagesAnswerSchema,
-      ),
-      (answer) => answer?.pages,
+    return Effect.match(
+      askHosted(this.#hosted.taskFiles.keepPicture, {
+        params: { id: taskId },
+        body: { picture },
+      }),
+      {
+        onFailure: (failed): TasksPictureKeepAnswer =>
+          failed._tag === "HostedRefused" && failed.refusal === HOSTED_API_ERROR.NOT_FOUND
+            ? { failure: TASK_CALL_FAILURE.NOT_FOUND }
+            : { failure: PICTURE_KEEP_FAILURE.UNANSWERED },
+        onSuccess: ({ body: kept }): TasksPictureKeepAnswer =>
+          "id" in kept
+            ? { id: kept.id }
+            : {
+                failure:
+                  kept.refused === PLAN_ATTACHMENT_REFUSAL.TOO_MANY
+                    ? PICTURE_KEEP_FAILURE.TOO_MANY
+                    : PICTURE_KEEP_FAILURE.UNANSWERED,
+              },
+      },
     );
   }
 
-  /** One version of one page of one plan, with its HTML; nothing where the service did not answer it, or holds no such version. */
+  /** One plan's pages, or one coding agent's on no task, each by its newest version; nothing where the service did not answer them. */
+  readPages(
+    place: PagePlace,
+  ): Effect.Effect<readonly PageLine[] | undefined, never, HttpClient.HttpClient> {
+    const asked =
+      "taskId" in place
+        ? askHosted(this.#hosted.taskFiles.pages, { id: place.taskId })
+        : askHosted(this.#hosted.agentPages.list, { id: place.agentId });
+    return Effect.map(orNothing(asked), (answer) => answer?.pages);
+  }
+
+  /** One version of one page of one plan, or of one coding agent on no task, with its HTML; nothing where the service did not answer it, or holds no such version. */
   readPageVersion(
-    taskId: string,
+    place: PagePlace,
     pageId: string,
     version: number,
   ): Effect.Effect<PageVersion | undefined, never, HttpClient.HttpClient> {
-    return Effect.map(
-      this.#call.ask(
-        { method: HTTP_METHOD.GET, path: planPageVersionPath(taskId, pageId, version) },
-        planPageVersionAnswerSchema,
-      ),
-      (answer) => answer?.page,
-    );
+    const named = { page: pageId, version: String(version) };
+    const asked =
+      "taskId" in place
+        ? askHosted(this.#hosted.taskFiles.page, { id: place.taskId, ...named })
+        : askHosted(this.#hosted.agentPages.version, { id: place.agentId, ...named });
+    return Effect.map(orNothing(asked), (answer) => answer?.page);
   }
 
-  /** Puts one revision of a plan back as its content, answering the task as it now stands, or nothing where the service did not restore it. */
+  /** Puts one revision of a plan back as its content, answering the task as it now stands and the transaction its revision was written in (none where it changed nothing), or nothing where the service did not restore it. */
   restore(
     taskId: string,
     seq: number,
-  ): Effect.Effect<Task | undefined, never, HttpClient.HttpClient> {
-    return Effect.map(
-      this.#call.ask(
-        { method: HTTP_METHOD.POST, path: taskRestorePath(taskId, seq) },
-        taskAnswerSchema,
+  ): Effect.Effect<
+    { readonly task: Task; readonly txid: string | undefined } | undefined,
+    never,
+    HttpClient.HttpClient
+  > {
+    return orNothing(
+      Effect.map(
+        askHosted(this.#hosted.plans.restore, { id: taskId, seq: String(seq) }),
+        (answer) => ({ task: answer.plan, txid: answer.txid }),
       ),
-      (answer) => answer?.plan,
     );
   }
 
-  /** The board's scene written whole, with the number of Luke's drawing it holds and, when it is the first to hold it, the scene's image; the board as written, or nothing where the service did not answer. */
+  /** The board's scene written whole, with the number of Luke's drawing it holds and, when it is the first to hold it, the scene's image; the board as written and, where the write moved the board's live row, the id of its transaction, or nothing where the service did not answer. */
   saveBoard(
     taskId: string,
     elements: readonly BoardElement[],
     appliedDrawing: number,
     image?: string,
-  ): Effect.Effect<Board | undefined, never, HttpClient.HttpClient> {
-    return Effect.map(
-      this.#call.ask(
-        {
-          method: HTTP_METHOD.PUT,
-          path: taskBoardPath(taskId),
-          body: JSON.stringify({ elements, appliedDrawing, image }),
-        },
-        boardAnswerSchema,
-      ),
-      (answer) => answer?.board,
+  ): Effect.Effect<BoardSaveAnswer | undefined, never, HttpClient.HttpClient> {
+    return orNothing(
+      askHosted(this.#hosted.plans.saveBoard, {
+        params: { id: taskId },
+        body: { elements, appliedDrawing, ...(image === undefined ? undefined : { image }) },
+      }),
     );
   }
 
-  /** Deletes one task with its document and its conversation; whether the service deleted it. */
-  delete(taskId: string): Effect.Effect<boolean, never, HttpClient.HttpClient> {
-    return Effect.map(
-      this.#call.ask(
-        { method: HTTP_METHOD.DELETE, path: taskPath(taskId) },
-        taskDeleteAnswerSchema,
-      ),
-      (answer) => answer?.deleted === true,
-    );
+  /** Deletes one task with its document and its agents' conversations; the transaction it went in, or nothing where the service deleted nothing. */
+  delete(
+    taskId: string,
+  ): Effect.Effect<{ readonly txid?: string } | undefined, never, HttpClient.HttpClient> {
+    return Effect.match(askHosted(this.#hosted.plans.delete, { id: taskId }), {
+      onFailure: () => undefined,
+      onSuccess: (answer) => (answer.txid === undefined ? {} : { txid: answer.txid }),
+    });
   }
 
   /**
@@ -700,105 +900,103 @@ export class HostedTaskClient {
   rename(
     taskId: string,
     request: TaskRenameRequest,
-  ): Effect.Effect<Task | undefined, never, HttpClient.HttpClient> {
+  ): Effect.Effect<TaskWritten | undefined, never, HttpClient.HttpClient> {
     const admitted = Result.getOrUndefined(readEither(taskRenameRequestSchema)(request));
     if (admitted === undefined) return Effect.succeed(undefined);
-    return Effect.map(
-      this.#call.ask(
-        { method: HTTP_METHOD.PATCH, path: taskPath(taskId), body: JSON.stringify(admitted) },
-        taskAnswerSchema,
-      ),
-      (answer) => answer?.plan,
-    );
+    return orNothing(this.#update(taskId, admitted));
   }
 
   /**
-   * Pins or unpins one task, archives it or brings it back, answering it as
+   * Sets where one task stands, how much it matters, who it is assigned to, or any of them, answering it as
+   * changed with its document, or nothing where the service did not change
+   * it; a change that names neither never travels.
+   */
+  setStanding(
+    taskId: string,
+    standing: TaskStanding,
+  ): Effect.Effect<TaskWritten | undefined, never, HttpClient.HttpClient> {
+    const admitted = Result.getOrUndefined(readEither(taskUpdateRequestSchema)(standing));
+    if (admitted === undefined) return Effect.succeed(undefined);
+    return orNothing(this.#update(taskId, admitted));
+  }
+
+  /**
+   * Pins or unpins one task, answering it as
    * changed with its document, or nothing where the service did not change
    * it; a change that names neither never travels.
    */
   mark(
     taskId: string,
     marks: TaskMarks,
-  ): Effect.Effect<Task | undefined, never, HttpClient.HttpClient> {
+  ): Effect.Effect<TaskWritten | undefined, never, HttpClient.HttpClient> {
     const admitted = Result.getOrUndefined(readEither(taskUpdateRequestSchema)(marks));
     if (admitted === undefined) return Effect.succeed(undefined);
-    return Effect.map(
-      this.#call.ask(
-        { method: HTTP_METHOD.PATCH, path: taskPath(taskId), body: JSON.stringify(admitted) },
-        taskAnswerSchema,
-      ),
-      (answer) => answer?.plan,
-    );
+    return orNothing(this.#update(taskId, admitted));
   }
 
-  /** The repositories the account pinned in the sidebar, newest pinned first; nothing where the service did not answer. */
-  repositoryPins(): Effect.Effect<
-    readonly RepositoryPin[] | undefined,
-    never,
-    HttpClient.HttpClient
-  > {
+  /** One plan changed as the request names, answered as changed. */
+  #update(
+    taskId: string,
+    changes: TaskUpdateRequest,
+  ): Effect.Effect<TaskWritten, HostedFailure, HttpClient.HttpClient> {
     return Effect.map(
-      this.#call.ask(
-        { method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.REPOSITORY_PINS },
-        repositoryPinsAnswerSchema,
-      ),
-      (answer) => answer?.pins,
+      askHosted(this.#hosted.plans.update, { params: { id: taskId }, body: changes }),
+      (changed) =>
+        changed.txid === undefined
+          ? { task: changed.plan }
+          : { task: changed.plan, txid: changed.txid },
     );
   }
 
   /**
    * Pins one repository or unpins it, answering the account's pins as they
-   * then stand; nothing where the service refused or did not answer. A
+   * then stand and the transaction the pin was written in, none where it
+   * changed nothing; nothing where the service refused or did not answer. A
    * repository the wire would refuse by shape never travels.
    */
   pinRepository(
     repository: string,
     pinned: boolean,
-  ): Effect.Effect<readonly RepositoryPin[] | undefined, never, HttpClient.HttpClient> {
+  ): Effect.Effect<RepositoryPinsWritten | undefined, never, HttpClient.HttpClient> {
     const asked = Result.getOrUndefined(
       readEither(repositoryPinRequestSchema)({ repository, pinned }),
     );
     if (asked === undefined) return Effect.succeed(undefined);
-    return Effect.map(
-      this.#call.ask(
-        {
-          method: HTTP_METHOD.PUT,
-          path: HOSTED_SERVICE_PATH.REPOSITORY_PINS,
-          body: JSON.stringify(asked),
-        },
-        repositoryPinsAnswerSchema,
-      ),
-      (answer) => answer?.pins,
-    );
+    return orNothing(askHosted(this.#hosted.repositoryPins.set, asked));
   }
 
-  /** The sections the account made in its sidebars and the tasks in them; nothing where the service did not answer. */
-  taskSections(): Effect.Effect<TaskSections | undefined, never, HttpClient.HttpClient> {
-    return this.#call.ask(
-      { method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.TASK_SECTIONS },
-      taskSectionsAnswerSchema,
+  /**
+   * The account's sidebar sealed for following over Neon Realtime, for the
+   * account named, or with each part's rows inline where `poll` asks for
+   * them; signed out where the session is another account's.
+   */
+  sidebarLive(
+    userId: string,
+    poll = false,
+    after?: string,
+  ): Effect.Effect<
+    TaskCallResult<SidebarLiveAnswer, TaskCallFailure | typeof LIVE_SIGNED_OUT.failure>,
+    never,
+    HttpClient.HttpClient
+  > {
+    return hostedResult(
+      askLive(this.#hosted.live.sidebar, { [LIVE_USER_QUERY]: userId }, poll, after),
+      LIVE_REFUSALS,
     );
   }
 
   /**
    * Writes one change to the account's sections, answering them all as they
-   * then stand; nothing where the service refused or did not answer. A
+   * then stand and the transaction the change was written in, none where it
+   * changed nothing; nothing where the service refused or did not answer. A
    * write the wire would refuse by shape never travels.
    */
   writeTaskSection(
     write: TaskSectionWrite,
-  ): Effect.Effect<TaskSections | undefined, never, HttpClient.HttpClient> {
+  ): Effect.Effect<TaskSectionsWritten | undefined, never, HttpClient.HttpClient> {
     const asked = Result.getOrUndefined(readEither(taskSectionWriteSchema)(write));
     if (asked === undefined) return Effect.succeed(undefined);
-    return this.#call.ask(
-      {
-        method: HTTP_METHOD.PUT,
-        path: HOSTED_SERVICE_PATH.TASK_SECTIONS,
-        body: JSON.stringify(asked),
-      },
-      taskSectionsAnswerSchema,
-    );
+    return orNothing(askHosted(this.#hosted.taskSections.write, asked));
   }
 
   /**
@@ -815,31 +1013,43 @@ export class HostedTaskClient {
     const admitted = Result.getOrUndefined(readEither(taskCreateRequestSchema)(request));
     if (admitted === undefined) return Effect.succeed(UNANSWERED);
     // Note that a start naming an agent waits as an agent's Start does, since it opens the agent's session too.
-    const call = admitted.agent === undefined ? this.#call : this.#start;
-    return Effect.gen(function* () {
-      const answer = yield* call.send({
-        method: HTTP_METHOD.POST,
-        path: HOSTED_SERVICE_PATH.TASKS,
-        body: JSON.stringify(admitted),
-      });
-      if (!callAnswered(answer)) return UNANSWERED;
-      const payload = unparsedWire(yield* jsonOf(answer.response));
-      if (answer.response.ok) {
-        const started = Result.getOrUndefined(readServiceAnswer(taskStartAnswerSchema)(payload));
-        return started === undefined ? UNANSWERED : succeeded(taskStartedOf(started));
-      }
-      return refusedAs(payload, START_REFUSALS);
-    });
+    const deadline = admitted.agent === undefined ? HOSTED_DEADLINE.USUAL : HOSTED_DEADLINE.START;
+    return hostedResult(
+      Effect.map(askHosted(this.#hosted.plans.create, admitted, deadline), (started) =>
+        taskStartedOf(started.body),
+      ),
+      START_REFUSALS,
+    );
   }
 }
 
 /** A started task as the service answered it, with the agent started on it, or why it was not, where one was asked for. */
 function taskStartedOf(started: TaskStartAnswer): TaskStarted {
-  if (started.agent !== undefined) return { task: started.plan, agent: { agent: started.agent } };
-  if (started.agentRefusal !== undefined) {
-    return { task: started.plan, agent: startRefusedAs(started.agentRefusal) };
+  const written = started.txid === undefined ? {} : { txid: started.txid };
+  if (started.agent !== undefined) {
+    return { task: started.plan, agent: { agent: started.agent }, ...written };
   }
-  return { task: started.plan };
+  if (started.agentRefusal !== undefined) {
+    return { task: started.plan, agent: startRefusedAs(started.agentRefusal), ...written };
+  }
+  return { task: started.plan, ...written };
+}
+
+/** A comment call's answer, or why there was none: not found where the service said so, unanswered for anything else. */
+function commentAnswer<Answer>(
+  asked: Effect.Effect<Answer, HostedFailure, HttpClient.HttpClient>,
+): Effect.Effect<
+  Answer | typeof COMMENT_NOT_FOUND | typeof COMMENT_UNANSWERED,
+  never,
+  HttpClient.HttpClient
+> {
+  return Effect.catch(asked, (failed) =>
+    Effect.succeed(
+      failed._tag === "HostedRefused" && failed.refusal === HOSTED_API_ERROR.NOT_FOUND
+        ? COMMENT_NOT_FOUND
+        : COMMENT_UNANSWERED,
+    ),
+  );
 }
 
 /** A response's body as JSON, or nothing where it is not JSON at all. */

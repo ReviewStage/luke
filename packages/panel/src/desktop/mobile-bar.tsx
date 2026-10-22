@@ -1,0 +1,128 @@
+import { EllipsisIcon } from "@luke/ui";
+import { TASKS_PAGE } from "@luke/ui/tasks-model";
+import { InboxIcon, ListTodoIcon, MessagesSquareIcon } from "lucide-react";
+import type { ReactNode } from "react";
+import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
+import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
+import { SIDEBAR_OVERLAY, type SidebarCollapse } from "./sidebar-collapse.js";
+
+/**
+ * mobile-bar.tsx -- a phone's way between the window's places: a bar at the
+ * screen's foot with the Inbox, the Tasks page, Chat where the account has
+ * it, and More, which opens the sidebar's drawer for everything else.
+ *
+ * It stands only in a narrow room and only on a place's list, the Inbox's,
+ * the Tasks page, Chat's rail, Automations, or the window resting with no
+ * task open, so a task, an agent's page, an item, or a channel being read
+ * keeps the whole screen and is left by Back. The Inbox's press lands on its
+ * list, not on the item last read, since on a phone the list is the place.
+ */
+
+/** Whether the bar stands: a narrow room, signed in, on one of the places' lists. */
+export function mobileBarShown(room: ShellRoom, tasks: TasksControl, chatOn: boolean): boolean {
+  // Note that the open task's side panel is not asked: it is held behind every place, so it says nothing of the one on screen.
+  if (room !== SHELL_ROOM.NARROW || !tasks.signedIn) return false;
+  const { inboxView, chatView, boardView, automationsView, agentView, personView } = tasks;
+  if (chatView.open && chatOn) return chatView.listed;
+  if (inboxView.open) return inboxView.listed || inboxView.chosen === undefined;
+  if (agentView.agentId !== undefined || personView.userId !== undefined) return false;
+  if (boardView.open) return true;
+  // Note that an automation's editor and its runs keep the whole screen, as an item does; only the list stands over the bar.
+  if (automationsView.open) return automationsView.place.kind === AUTOMATIONS_PAGE.LIST;
+  return tasks.page === TASKS_PAGE.HOME;
+}
+
+/** The bar; see the module's head. */
+export function MobileBar({
+  tasks,
+  chatOn,
+  sidebar,
+  onPressMore,
+}: {
+  tasks: TasksControl;
+  chatOn: boolean;
+  /** The drawer the bar's More opens, whose float while open leaves every other item inert, as the work it covers is. */
+  sidebar: SidebarCollapse;
+  /** Marks the press on More as the drawer's own, so the press that opens it does not also put it away. */
+  onPressMore: () => void;
+}): React.JSX.Element {
+  const { inboxView, chatView, boardView } = tasks;
+  const inChat = chatView.open && chatOn;
+  const inInbox = !inChat && inboxView.open;
+  const inTasks = !inChat && !inInbox && boardView.open;
+  const drawerOpen = sidebar.overlay !== SIDEBAR_OVERLAY.CLOSED;
+  return (
+    <nav className="mobile-bar" aria-label="Places">
+      <MobileBarItem
+        icon={<InboxIcon />}
+        current={inInbox}
+        inert={drawerOpen}
+        onPress={inboxView.onOpenList}
+      >
+        Inbox
+      </MobileBarItem>
+      <MobileBarItem
+        icon={<ListTodoIcon />}
+        current={inTasks}
+        inert={drawerOpen}
+        onPress={boardView.onOpen}
+      >
+        Tasks
+      </MobileBarItem>
+      {chatOn && chatView.available ? (
+        <MobileBarItem
+          icon={<MessagesSquareIcon />}
+          current={inChat}
+          inert={drawerOpen}
+          onPress={chatView.onOpen}
+        >
+          Chat
+        </MobileBarItem>
+      ) : null}
+      <MobileBarItem
+        icon={<EllipsisIcon />}
+        current={false}
+        expanded={sidebar.overlay === SIDEBAR_OVERLAY.OPEN}
+        onPointerDown={onPressMore}
+        onPress={sidebar.onToggle}
+      >
+        More
+      </MobileBarItem>
+    </nav>
+  );
+}
+
+function MobileBarItem({
+  icon,
+  current,
+  expanded,
+  inert = false,
+  onPointerDown,
+  onPress,
+  children,
+}: {
+  icon: ReactNode;
+  current: boolean;
+  inert?: boolean;
+  expanded?: boolean;
+  onPointerDown?: () => void;
+  onPress: () => void;
+  children: ReactNode;
+}): React.JSX.Element {
+  return (
+    <button
+      type="button"
+      className="mobile-bar-item"
+      aria-current={current ? "page" : undefined}
+      aria-expanded={expanded}
+      inert={inert}
+      onPointerDown={onPointerDown}
+      onClick={onPress}
+    >
+      <span className="mobile-bar-icon" aria-hidden="true">
+        {icon}
+      </span>
+      <span>{children}</span>
+    </button>
+  );
+}

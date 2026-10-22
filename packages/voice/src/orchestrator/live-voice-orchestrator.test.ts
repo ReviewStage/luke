@@ -2,8 +2,12 @@ import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import type { VoiceLiveSessionChanged } from "@luke/gateway";
 import { LIVE_STATUS, type LiveStatus } from "@luke/live";
-import { Context, Effect, Fiber } from "effect";
+import { CONVERSATION_ENTRY_KIND, type ConversationEntryKind } from "@luke/wire/conversation";
+import { Context, Duration, Effect, Fiber } from "effect";
+import { TestClock } from "effect/testing";
+import type { VoiceCallAbout, VoiceCallTranscriptChange } from "../voice-view.js";
 import type {
+  LiveCaptionRow,
   LiveVoiceCall,
   LiveVoiceCallEvents,
   LiveVoiceCallOpening,
@@ -16,6 +20,16 @@ import {
 } from "./live-voice-orchestrator.js";
 
 const INVITES_TASK = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
+
+/** Two agents of the invites task, either of which a call may speak into. */
+const INVITES_AGENT: VoiceCallAbout = {
+  taskId: INVITES_TASK,
+  agentId: "0b5f8c1e-4d3a-4e6b-8f2c-9a1d7e3b5c40",
+};
+const REVIEW_AGENT: VoiceCallAbout = {
+  taskId: INVITES_TASK,
+  agentId: "6e2a9d4b-1c7f-4a8e-b3d5-2f9c8e1a7b60",
+};
 
 /** A call that records the verbs it was asked and answers for its status. */
 let sessions = 0;
@@ -117,14 +131,17 @@ class FakeCall implements LiveVoiceCall {
 
 const SURROUNDINGS: LiveVoiceSurroundings = {
   voiceAvailable: true,
-  captionsEnabled: true,
-  outputSilent: false,
   microphoneGranted: true,
 };
 
-function fixture(surroundings: Partial<LiveVoiceSurroundings> = {}) {
+function fixture(
+  surroundings: Partial<LiveVoiceSurroundings> = {},
+  services: Context.Context<never> = Context.empty(),
+) {
   const calls: FakeCall[] = [];
   const views: LiveVoiceView[] = [];
+  /** What moved in the transcript with each report, none where nothing did. */
+  const transcripts: (VoiceCallTranscriptChange | undefined)[] = [];
   /** Whether each report was the one an exchange opened on. */
   const openings: boolean[] = [];
   let microphoneGranted = true;
@@ -133,11 +150,12 @@ function fixture(surroundings: Partial<LiveVoiceSurroundings> = {}) {
   const stops: number[] = [];
   const silencedAtStops: number[] = [];
   const orchestrator = new LiveVoiceOrchestrator({
-    services: Context.empty(),
+    services,
     bridge: {
-      reportView: (view, exchange) => {
+      reportView: (view, exchange, transcript) => {
         views.push(view);
         openings.push(exchange);
+        transcripts.push(transcript);
       },
       requestMicrophone: () =>
         Effect.suspend(() => {
@@ -161,10 +179,8 @@ function fixture(surroundings: Partial<LiveVoiceSurroundings> = {}) {
   orchestrator.surround({ ...SURROUNDINGS, ...surroundings });
   return {
     surround: (next: LiveVoiceSurroundings) => orchestrator.surround(next),
-    beginTalk: (taskId?: string) => orchestrator.beginTalk(taskId),
-    talkAboutTask: (taskId: string) => orchestrator.talkAboutTask(taskId),
+    talkTo: (about: VoiceCallAbout) => orchestrator.talkTo(about),
     toggleMicrophone: () => orchestrator.toggleMicrophone(),
-    endTalk: () => orchestrator.endTalk(),
     stopSpeaking: () => orchestrator.stopSpeaking(),
     stopCall: () => orchestrator.stopCall(),
     muteSpeaker: (muted: boolean) => orchestrator.muteSpeaker(muted),
@@ -175,6 +191,7 @@ function fixture(surroundings: Partial<LiveVoiceSurroundings> = {}) {
     calls,
     views,
     openings,
+    transcripts,
     setMicrophone: (granted: boolean) => {
       microphoneGranted = granted;
     },
@@ -192,37 +209,34 @@ function fixture(surroundings: Partial<LiveVoiceSurroundings> = {}) {
 }
 
 it.effect(
-  "the talk key's press opens a session about the plan when none stands and unmutes it once started; its release mutes once",
+  "calling a second agent while the first one's call stands hangs that call up and opens one into the second, which the view names",
   () =>
     Effect.gen(function* () {
       const f = fixture();
-      const pressed = yield* Effect.forkChild(f.beginTalk(INVITES_TASK), {
-        startImmediately: true,
-      });
-      const call = f.latest();
-      assert.ok(call);
-      assert.equal(call.opens, 1);
-      assert.deepEqual(call.openings, [{ taskId: INVITES_TASK }]);
-      assert.equal(call.unmutes, 0);
-      call.started();
-      yield* Fiber.join(pressed);
-      assert.equal(call.unmutes, 1);
-      assert.equal(call.mutes, 0);
-      assert.equal(call.status, LIVE_STATUS.LISTENING);
-      yield* f.endTalk();
-      assert.equal(call.mutes, 1);
-      assert.equal(call.opens, 1);
-      assert.equal(f.calls.length, 1);
-      // A release with no press behind it does nothing.
-      yield* f.endTalk();
-      assert.equal(call.mutes, 1);
-      // The next hold against the standing session, naming no task: no second session, one more unmute, one more mute.
-      yield* f.beginTalk();
-      assert.equal(f.calls.length, 1);
-      assert.equal(call.unmutes, 2);
-      assert.equal(call.mutes, 1);
-      yield* f.endTalk();
-      assert.equal(call.mutes, 2);
+      const first = yield* Effect.forkChild(f.talkTo(INVITES_AGENT), { startImmediately: true });
+      const invites = f.latest();
+      assert.ok(invites);
+      invites.started();
+      yield* Fiber.join(first);
+      yield* Effect.yieldNow;
+      assert.deepEqual(f.views.at(-1)?.call, INVITES_AGENT);
+      const second = yield* Effect.forkChild(f.talkTo(REVIEW_AGENT), { startImmediately: true });
+      const review = f.latest();
+      assert.ok(review);
+      assert.notEqual(review, invites);
+      // The first call was closed before the second was offered.
+      assert.equal(invites.closes, 1);
+      assert.deepEqual(review.openings, [REVIEW_AGENT]);
+      review.started();
+      yield* Fiber.join(second);
+      yield* Effect.yieldNow;
+      assert.equal(f.calls.length, 2);
+      assert.equal(review.status, LIVE_STATUS.LISTENING);
+      assert.deepEqual(f.views.at(-1)?.call, REVIEW_AGENT);
+      // The same agent's button again mutes its call rather than opening another.
+      yield* f.talkTo(REVIEW_AGENT);
+      assert.equal(f.calls.length, 2);
+      assert.equal(review.status, LIVE_STATUS.MUTED);
     }),
 );
 
@@ -231,7 +245,7 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const f = fixture();
-      const pressed = yield* Effect.forkChild(f.talkAboutTask(INVITES_TASK), {
+      const pressed = yield* Effect.forkChild(f.talkTo(INVITES_AGENT), {
         startImmediately: true,
       });
       const call = f.latest();
@@ -253,14 +267,15 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const f = fixture();
-      const pressed = yield* Effect.forkChild(f.talkAboutTask(INVITES_TASK), {
+      const pressed = yield* Effect.forkChild(f.talkTo(INVITES_AGENT), {
         startImmediately: true,
       });
       const call = f.latest();
       assert.ok(call);
       call.started();
       yield* Fiber.join(pressed);
-      yield* f.endTalk();
+      // The agent's own button again mutes it before the hang-up.
+      yield* f.talkTo(INVITES_AGENT);
       yield* f.stopCall();
       assert.equal(call.silences, 0);
       assert.equal(call.closes, 1);
@@ -269,11 +284,11 @@ it.effect(
 );
 
 it.effect(
-  "the stop key while Luke speaks still silences him first and then tells the host to stop, leaving the call up",
+  "Escape while Luke speaks still silences him first and then tells the host to stop, leaving the call up",
   () =>
     Effect.gen(function* () {
       const f = fixture();
-      const pressed = yield* Effect.forkChild(f.talkAboutTask(INVITES_TASK), {
+      const pressed = yield* Effect.forkChild(f.talkTo(INVITES_AGENT), {
         startImmediately: true,
       });
       const call = f.latest();
@@ -285,5 +300,112 @@ it.effect(
       assert.deepEqual(f.silencedAtStops, [1]);
       assert.equal(f.stops.length, 1);
       assert.equal(call.closes, 0);
+    }),
+);
+
+/** One caption row as the call's ledger hands it over: unsettled, so it is still being said. */
+function captionRow(rowId: string, kind: ConversationEntryKind, words: string): LiveCaptionRow {
+  return {
+    rowId,
+    entry: { kind, words },
+    startMs: 0,
+    endMs: words.length * 10,
+    voiceSessionId: "voice-session-1",
+    settled: false,
+  };
+}
+
+it.effect(
+  "heard rows landing within 100 ms are one report with the latest words, and a line said is carried once rather than with every later row",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture({}, yield* Effect.context<never>());
+      const pressed = yield* Effect.forkChild(f.talkTo(INVITES_AGENT), {
+        startImmediately: true,
+      });
+      const call = f.latest();
+      assert.ok(call);
+      call.started();
+      yield* Fiber.join(pressed);
+      call.settle(LIVE_STATUS.SPEAKING);
+      yield* Effect.yieldNow;
+      const before = f.views.length;
+      assert.equal(f.views[before - 1]?.voiceStatus, LIVE_STATUS.SPEAKING);
+
+      // Ten transcription deltas growing Luke's first line, 9 ms apart.
+      const words = [
+        "Seven",
+        "days",
+        "then",
+        "and",
+        "the",
+        "link",
+        "dies",
+        "with",
+        "the",
+        "invite.",
+      ];
+      const first = (count: number) =>
+        captionRow("row-1", CONVERSATION_ENTRY_KIND.REPLY, words.slice(0, count).join(" "));
+      for (let count = 1; count <= words.length; count += 1) {
+        call.events.onCaptions([first(count)]);
+        yield* TestClock.adjust(Duration.millis(9));
+        yield* Effect.yieldNow;
+      }
+      assert.equal(f.views.length, before);
+      yield* TestClock.adjust(Duration.millis(10));
+      yield* Effect.yieldNow;
+      assert.equal(f.views.length, before + 1);
+      assert.deepEqual(
+        Object.keys(f.views[before] ?? {}).filter((key) => /caption/iu.test(key)),
+        [],
+        "the view carries no captions: what is said is the transcript's alone",
+      );
+      assert.deepEqual(f.transcripts[before], {
+        voiceSessionId: "voice-session-1",
+        from: 0,
+        lines: [
+          {
+            rowId: "row-1",
+            speaker: "assistant",
+            words: words.join(" "),
+            startMs: 0,
+            endMs: words.join(" ").length * 10,
+          },
+        ],
+      });
+
+      // A second line growing over the next stretch carries only itself.
+      const second = (text: string) => captionRow("row-2", CONVERSATION_ENTRY_KIND.REPLY, text);
+      for (const text of ["Anything", "Anything else", "Anything else on invites?"]) {
+        call.events.onCaptions([first(words.length), second(text)]);
+        yield* TestClock.adjust(Duration.millis(100));
+        yield* Effect.yieldNow;
+      }
+      assert.equal(f.views.length, before + 4);
+      const later = f.transcripts.slice(before + 1);
+      assert.deepEqual(
+        later.map((change) => [change?.from, change?.lines.map((line) => line.words)]),
+        [
+          [1, ["Anything"]],
+          [1, ["Anything else"]],
+          [1, ["Anything else on invites?"]],
+        ],
+      );
+
+      // Rows that moved nothing are not reported at all.
+      call.events.onCaptions([first(words.length), second("Anything else on invites?")]);
+      yield* TestClock.adjust(Duration.millis(100));
+      yield* Effect.yieldNow;
+      assert.equal(f.views.length, before + 4);
+
+      // The call gone takes its transcript with it, from the first line.
+      yield* f.stopCall();
+      yield* Effect.yieldNow;
+      assert.deepEqual(f.transcripts.at(-1), {
+        voiceSessionId: undefined,
+        from: 0,
+        lines: [],
+      });
     }),
 );

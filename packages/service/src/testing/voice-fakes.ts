@@ -2,7 +2,10 @@ import { randomUUID } from "node:crypto";
 import http, { type IncomingMessage } from "node:http";
 import type { AddressInfo } from "node:net";
 import { VOICE_SECONDS_OUTCOME } from "@luke/database/models/quota";
-import type { VoiceSessionRecord } from "@luke/database/models/voice-session-record";
+import type {
+  HeldVoiceAgent,
+  VoiceSessionRecord,
+} from "@luke/database/models/voice-session-record";
 import type { VoiceCloseReason } from "@luke/database/voice-vocabulary";
 import type { Task } from "@luke/features/task-wire";
 import { LIVE_CLIENT_EVENT, LIVE_SESSIONS_PATH, LIVE_TRANSPORT_TYPE } from "@luke/live";
@@ -231,13 +234,21 @@ interface FakeSessionRow {
 }
 
 export interface FakeSessionRecord extends VoiceSessionRecord {
-  registered: Array<{ userId: string; sessionId: string; taskId: string; model: string }>;
+  registered: Array<{
+    userId: string;
+    sessionId: string;
+    taskId: string | undefined;
+    agentId: string | undefined;
+    model: string;
+  }>;
   /** Each live session's row as the writes that landed left it, by live session id. */
   rows: Map<string, FakeSessionRow>;
   /** The store id the fake minted for each live session's row, by live session id, as `register` answered it. */
   voiceSessionIds: Map<string, string>;
   /** The tasks the fake holds, by the account that holds each. */
   tasks: Array<{ userId: string; task: Task }>;
+  /** The agents the fake holds, by an account that reaches each. */
+  agents: Array<{ userId: string; agent: HeldVoiceAgent }>;
   /** Every usage snapshot, in order. */
   usage: Array<{ sessionId: string; seconds: number }>;
   closes: RecordedClose[];
@@ -253,7 +264,10 @@ export interface FakeSessionRecord extends VoiceSessionRecord {
  * on an open row, and a detach only from the connection that holds the row.
  */
 export function fakeSessionRecord(): FakeSessionRecord {
-  const owners = new Map<string, { userId: string; taskId: string }>();
+  const owners = new Map<
+    string,
+    { userId: string; taskId: string | undefined; agentId: string | undefined }
+  >();
   /** Which connection holds each open row, by live session id. */
   const holders = new Map<string, string>();
   const openRow = (sessionId: string) => {
@@ -265,6 +279,7 @@ export function fakeSessionRecord(): FakeSessionRecord {
     rows: new Map(),
     voiceSessionIds: new Map(),
     tasks: [],
+    agents: [],
     usage: [],
     closes: [],
     detachments: [],
@@ -274,10 +289,15 @@ export function fakeSessionRecord(): FakeSessionRecord {
           userId: input.userId,
           sessionId: input.sessionId,
           taskId: input.taskId,
+          agentId: input.agentId,
           model: input.model,
         });
         if (!owners.has(input.sessionId)) {
-          owners.set(input.sessionId, { userId: input.userId, taskId: input.taskId });
+          owners.set(input.sessionId, {
+            userId: input.userId,
+            taskId: input.taskId,
+            agentId: input.agentId,
+          });
           fake.voiceSessionIds.set(input.sessionId, randomUUID());
           fake.rows.set(input.sessionId, { closed: false, detached: false });
           holders.set(input.sessionId, input.attachId);
@@ -297,9 +317,20 @@ export function fakeSessionRecord(): FakeSessionRecord {
         const owner = owners.get(input.sessionId);
         const voiceSessionId = fake.voiceSessionIds.get(input.sessionId);
         return owner?.userId === input.userId && voiceSessionId !== undefined
-          ? { voiceSessionId, taskId: owner.taskId }
+          ? {
+              voiceSessionId,
+              taskId: owner.taskId,
+              ...(owner.agentId === undefined ? undefined : { agentId: owner.agentId }),
+            }
           : undefined;
       }),
+    heldAgent: (input) =>
+      Effect.sync(
+        () =>
+          fake.agents.find(
+            (held) => held.userId === input.userId && held.agent.agentId === input.agentId,
+          )?.agent,
+      ),
     earlierCalls: () => Effect.succeed([]),
     noteUsage: (input) =>
       Effect.sync(() => {

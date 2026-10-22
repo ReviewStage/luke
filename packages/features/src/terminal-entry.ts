@@ -9,8 +9,7 @@
  * several agents, ⌘J goes to the one whose terminal was used last and New
  * terminal asks, that one chosen to begin with; with none used yet both
  * ask; with no agent at all, the picker offers to start one. An archived
- * agent is offered nowhere (`docs/proposals/terminal-tab.md`, "New terminal:
- * the rules").
+ * agent is offered nowhere.
  */
 
 /** What was asked for: an existing terminal, or a new shell. */

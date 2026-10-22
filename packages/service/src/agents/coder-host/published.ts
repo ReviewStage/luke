@@ -1,33 +1,39 @@
 import type { DatabaseServices } from "@luke/database/core/query";
 import {
   type CodingAgent,
+  hasRepository,
   readCodingAgent,
   readCodingAgentPublished,
   recordCodingAgentPublished,
+  type WithRepository,
 } from "@luke/database/models/coding-agent-store";
 import type { StoredPullRequest } from "@luke/database/schemas/coding-agent";
-import type {
-  CodingAgentPullRequest,
-  CodingAgentPullRequestAnswer,
+import { OPERATOR_NOTICE_KIND, type OperatorNoticeKind } from "@luke/database/storage-vocabulary";
+import {
+  type CodingAgentPullRequest,
+  type CodingAgentPullRequestAnswer,
+  PULL_REQUEST_STATE,
 } from "@luke/features/coding-agent-wire";
-import { type PullRequestArea, pullRequestAreasOf } from "@luke/features/pull-request-area";
-import { Cache, Data, Duration, Effect, Exit, type Layer, Option, type Redacted } from "effect";
+import { Cache, Data, Duration, Effect, Exit, Option, type Redacted } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import {
   GitHubApp,
   type GitHubRepositoryToken,
   type GitHubWorkspaceReadFailure,
 } from "../../github/github-app.js";
+import { pullRequestQueued } from "../../github/pull-request-merging.js";
 import {
   branchStands,
   checkSummaryOf,
   type GitHubPullRequest,
   type PullRequestReadFailure,
-  pullRequestFiles,
+  pullRequestByNumber,
   pullRequestOfBranch,
 } from "../../github/pull-requests.js";
-import { agentWorkspace } from "../../github/workspace-repository.js";
+import { agentMember, agentWorkspace } from "../../github/workspace-repository.js";
 import type { StoreFailure } from "../../http/store-failure.js";
+import { settleTaskIfFinished } from "../../tasks/task-finish.js";
+import { noticedForOperator } from "../operator-notice.js";
 import { CODER } from "./bounds.js";
 
 /**
@@ -46,22 +52,24 @@ import { CODER } from "./bounds.js";
  * still on the repository's default branch, as an agent that only read
  * leaves it, published nothing either; otherwise the newest pull request
  * from the branch, else whether the branch was pushed at all, with the
- * pull request's head's checks. Every answer read is written on the
+ * pull request's head's checks and, for an open one, whether GitHub's merge
+ * queue holds it (`pull-request-merging.ts`'s `pullRequestQueued`), which the
+ * REST pull request does not say. Every answer read is written on the
  * agent's row as well, the pull request or none, which is what the task
  * list reads, so the sidebar says what the last read found without asking
- * GitHub itself. The row keeps beside it the head it was read at, when it
- * merged, and its lines by directory, folded from its changed files
- * (`@luke/features/pull-request-area`); the files cost a read of their
- * own, so they are read again only where the pull request, its head,
- * where it stands, or its size moved since the row's, or the row keeps
- * none, and a check's delivery, which moves none of them, reads only the
- * checks; a failed read of them leaves the pull request read and the
- * areas for the next refresh. The answer is kept per
+ * GitHub itself. The row keeps beside it the head it was read at and when
+ * it merged. The answer is kept per
  * agent for `CODER.PUBLISHED_TTL` so a tab reading it beside every page of
  * a held transcript asks GitHub a few times a minute at most, under a key
  * that says whether the agent had ended, so the first read after a turn
  * ends is a fresh one rather than the running turn's kept answer; a read
- * that failed is kept for no time, so the next ask tries again.
+ * that failed is kept for no time, so the next ask tries again. A read
+ * that first finds the pull request merged, the row having kept it
+ * unmerged or not at all, is one of the moments that may finish the
+ * agent's task, so the task is asked to settle once the row is written
+ * (`tasks/task-finish.ts`); and a read that first finds it merged or
+ * closed is told the agent's member's operator as a notice
+ * (`../operator-notice.ts`), the webhook's read and the token sweep's alike.
  */
 
 /** The installation of the task's workspace no longer reaches the agent's repository, so nothing of it is read. */
@@ -74,108 +82,105 @@ type PublishedReadFailure = StoreFailure | GitHubWorkspaceReadFailure | Reposito
 
 type PublishedServices = DatabaseServices | HttpClient.HttpClient | GitHubApp;
 
-/** What one read found: the answer the wire carries, and the pull request as the agent's row keeps it, null where none was found. */
+/** How a pull request ended: merged, or closed unmerged. */
+type PullRequestEnd = typeof PULL_REQUEST_STATE.MERGED | typeof PULL_REQUEST_STATE.CLOSED;
+
+/** What one read found: the answer the wire carries, the pull request as the agent's row keeps it, null where none was found, and how it ended where the read is the first to find it so. */
 interface Published {
   readonly answer: CodingAgentPullRequestAnswer;
   readonly stored: StoredPullRequest | null;
+  readonly ended: PullRequestEnd | undefined;
+}
+
+/** The wire's pull request from GitHub's, with its head's checks as read and whether the merge queue holds it. */
+function wirePullRequestOf(
+  found: GitHubPullRequest,
+  checks: CodingAgentPullRequest["checks"],
+  queued: boolean,
+): CodingAgentPullRequest {
+  return {
+    number: found.number,
+    title: found.title,
+    url: found.url,
+    state: found.state,
+    checks,
+    additions: found.additions,
+    deletions: found.deletions,
+    changedFiles: found.changedFiles,
+    ...(queued && found.state === PULL_REQUEST_STATE.OPEN ? { queued: true } : undefined),
+  };
 }
 
 /**
- * Whether the files the row's areas were folded from may have moved since:
- * another pull request, another head, a move of where it stands, or another
- * size. Note that the size is compared too, because the files are counted
- * against the base, which can move, or be retargeted, under a head that
- * stays.
+ * Whether GitHub's merge queue holds the pull request, asked only of an open
+ * one, since a draft, a merged, and a closed one stand in no queue. Note
+ * that a read that fails keeps what the row kept of that same pull request,
+ * so a queue read GitHub could not answer neither fails the read it rides
+ * with nor drops a queued mark the last read saw.
  */
-function filesMoved(kept: StoredPullRequest, found: GitHubPullRequest): boolean {
-  return (
-    kept.number !== found.number ||
-    kept.headSha !== found.headSha ||
-    kept.state !== found.state ||
-    kept.additions !== found.additions ||
-    kept.deletions !== found.deletions ||
-    kept.changedFiles !== found.changedFiles
-  );
-}
-
-/**
- * The pull request's lines by directory: the row's own where it keeps them
- * and its files cannot have moved, else folded from its files read afresh.
- * Note that the files are read within `pullRequestFiles`' bound, so a pull
- * request past it is placed by the files it reads, while its own size stays
- * GitHub's whole count. A read of the files that failed answers none rather
- * than failing the pull request beside it, and the row then keeps no areas,
- * so the next refresh reads them again.
- */
-function areasOf(
+function queuedOf(
   token: Redacted.Redacted,
-  agent: CodingAgent,
+  agent: WithRepository<CodingAgent>,
   found: GitHubPullRequest,
   kept: StoredPullRequest | null,
-): Effect.Effect<readonly PullRequestArea[] | undefined, never, HttpClient.HttpClient> {
-  if (kept?.areas !== undefined && !filesMoved(kept, found)) return Effect.succeed(kept.areas);
-  return pullRequestFiles(token, agent.repository, found).pipe(
-    Effect.map(({ files }) =>
-      pullRequestAreasOf(
-        files.map(({ path, additions, deletions }) => ({ path, additions, deletions })),
-      ),
-    ),
-    // The kind alone: nothing of the repository or the token rides the line.
-    Effect.catch((failure) =>
-      Effect.as(
-        Effect.logWarning("a pull request's files could not be read; its areas wait", {
-          failure: failure._tag,
-        }),
-        undefined,
-      ),
-    ),
+): Effect.Effect<boolean, never, HttpClient.HttpClient> {
+  if (found.state !== PULL_REQUEST_STATE.OPEN) return Effect.succeed(false);
+  const keptQueued = kept !== null && kept.number === found.number && kept.queued === true;
+  return pullRequestQueued(token, agent.repository, found.number).pipe(
+    Effect.catch(() => Effect.succeed(keptQueued)),
   );
 }
 
-/** The wire's pull request from GitHub's, with its head's checks read beside it, and the row's with its areas beside that. */
+/** The wire's pull request from GitHub's, with its head's checks read beside it, and the row's with its head and when it merged beside that. */
 function withChecks(
   token: Redacted.Redacted,
-  agent: CodingAgent,
+  agent: WithRepository<CodingAgent>,
   found: GitHubPullRequest,
   kept: StoredPullRequest | null,
 ): Effect.Effect<Published, PullRequestReadFailure, HttpClient.HttpClient> {
-  return Effect.map(
-    Effect.all(
-      [checkSummaryOf(token, agent.repository, found.headSha), areasOf(token, agent, found, kept)],
-      {
-        concurrency: "unbounded",
-      },
-    ),
-    ([checks, areas]) => {
-      const pullRequest: CodingAgentPullRequest = {
-        number: found.number,
-        title: found.title,
-        url: found.url,
-        state: found.state,
-        checks,
-        additions: found.additions,
-        deletions: found.deletions,
-        changedFiles: found.changedFiles,
-      };
-      const stored: StoredPullRequest = {
-        ...pullRequest,
-        headSha: found.headSha,
-        ...(found.mergedAt === undefined ? undefined : { mergedAt: found.mergedAt }),
-        ...(areas === undefined ? undefined : { areas }),
-      };
-      return {
-        answer: { repository: agent.repository, branch: found.headRef, pullRequest },
-        stored,
-      };
-    },
-  );
+  const read = Effect.all([
+    checkSummaryOf(token, agent.repository, found.headSha),
+    queuedOf(token, agent, found, kept),
+  ]);
+  return Effect.map(read, ([checks, queued]) => {
+    const pullRequest = wirePullRequestOf(found, checks, queued);
+    const stored: StoredPullRequest = {
+      ...pullRequest,
+      headSha: found.headSha,
+      ...(found.mergedAt === undefined ? undefined : { mergedAt: found.mergedAt }),
+    };
+    return {
+      answer: { repository: agent.repository, branch: found.headRef, pullRequest },
+      stored,
+      ended: firstSeenEnd(found, kept),
+    };
+  });
 }
+
+/** How the pull request ended, where the read is the first to find it so: GitHub says merged or closed, and the row kept it otherwise, or kept none. */
+function firstSeenEnd(
+  found: GitHubPullRequest,
+  kept: StoredPullRequest | null,
+): PullRequestEnd | undefined {
+  if (found.state !== PULL_REQUEST_STATE.MERGED && found.state !== PULL_REQUEST_STATE.CLOSED) {
+    return undefined;
+  }
+  const seen = kept !== null && kept.number === found.number && kept.state === found.state;
+  return seen ? undefined : found.state;
+}
+
+/** The operator's notice of each end. */
+const END_NOTICE = {
+  [PULL_REQUEST_STATE.MERGED]: OPERATOR_NOTICE_KIND.PR_MERGED,
+  [PULL_REQUEST_STATE.CLOSED]: OPERATOR_NOTICE_KIND.PR_CLOSED,
+} as const satisfies Record<PullRequestEnd, OperatorNoticeKind>;
 
 /** Nothing published: neither a branch GitHub holds nor a pull request. */
 function nothing(agent: CodingAgent): Published {
   return {
     answer: { repository: agent.repository, branch: null, pullRequest: null },
     stored: null,
+    ended: undefined,
   };
 }
 
@@ -187,13 +192,13 @@ function nothing(agent: CodingAgent): Published {
  */
 export const agentPullRequestReach = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
-  agent: CodingAgent,
+  agent: WithRepository<CodingAgent>,
 ): Effect.fn.Return<GitHubRepositoryToken, PublishedReadFailure, PublishedServices> {
   const workspace = yield* agentWorkspace(userId, agent);
   const app = yield* GitHubApp;
   const reached = Option.isNone(workspace)
     ? Option.none()
-    : yield* app.repositoryPullRequestToken(workspace.value, agent.repository);
+    : yield* app.repositoryPullRequestToken(workspace.value, agent.repository, agentMember(agent));
   if (Option.isNone(reached)) {
     return yield* new RepositoryNotReachable({ repository: agent.repository });
   }
@@ -211,6 +216,8 @@ const publishedOnGitHub = /* @__PURE__ */ Effect.fnUntraced(function* (
 ): Effect.fn.Return<Published, PublishedReadFailure, PublishedServices> {
   // No branch on the row, no publication: no turn has ended in the sandbox, or its checkout stood detached.
   if (agent.branch === null) return nothing(agent);
+  // No repository, nothing to publish to.
+  if (!hasRepository(agent)) return nothing(agent);
   const reached = yield* agentPullRequestReach(userId, agent);
   // The default branch is the checkout's own, not a branch the agent cut: nothing published from it.
   if (agent.branch === reached.repository.defaultBranch) return nothing(agent);
@@ -225,6 +232,7 @@ const publishedOnGitHub = /* @__PURE__ */ Effect.fnUntraced(function* (
     ? {
         answer: { repository: agent.repository, branch: agent.branch, pullRequest: null },
         stored: null,
+        ended: undefined,
       }
     : nothing(agent);
 });
@@ -239,10 +247,43 @@ export const agentPublished = /* @__PURE__ */ Effect.fn("web/agentPublished")(fu
   userId: string,
   agent: CodingAgent,
 ): Effect.fn.Return<CodingAgentPullRequestAnswer, PublishedReadFailure, PublishedServices> {
-  const { answer, stored } = yield* publishedOnGitHub(userId, agent);
+  const { answer, stored, ended } = yield* publishedOnGitHub(userId, agent);
   yield* recordCodingAgentPublished(userId, agent.id, stored);
+  // A merge first seen may have finished the task's work; the task is asked once the row says merged.
+  const merged = ended === PULL_REQUEST_STATE.MERGED;
+  if (merged && agent.taskId !== null) yield* settleTaskIfFinished(userId, agent.taskId);
+  // An end first seen is told the agent's member's operator, whoever's read saw it.
+  if (ended !== undefined) yield* noticedForOperator(agent.id, END_NOTICE[ended]);
   return answer;
 });
+
+/**
+ * Another pull request of the agent's repository by its number, as GitHub
+ * holds it now, with its head's checks: one the agent opened from a branch
+ * it has since left, or one no agent opened, which a Pull request tab shows
+ * by its number; none where the repository holds no such one. Note that it
+ * is read afresh on each ask and never written on the agent's row, which
+ * keeps the pull request of the branch the agent stands on.
+ */
+export const agentPullRequestOfNumber = /* @__PURE__ */ Effect.fn("web/agentPullRequestOfNumber")(
+  function* (
+    userId: string,
+    agent: CodingAgent,
+    number: number,
+  ): Effect.fn.Return<CodingAgentPullRequestAnswer, PublishedReadFailure, PublishedServices> {
+    if (!hasRepository(agent)) return nothing(agent).answer;
+    const { token } = yield* agentPullRequestReach(userId, agent);
+    const found = yield* pullRequestByNumber(token, agent.repository, number);
+    if (Option.isNone(found)) return nothing(agent).answer;
+    const checks = yield* checkSummaryOf(token, agent.repository, found.value.headSha);
+    const queued = yield* queuedOf(token, agent, found.value, null);
+    return {
+      repository: agent.repository,
+      branch: found.value.headRef,
+      pullRequest: wirePullRequestOf(found.value, checks, queued),
+    };
+  },
+);
 
 /** One agent of one account, as the kept answers are keyed, and whether it had ended as asked: the first ask after a turn ends is its own key, so it reads afresh. */
 export class PublishedKey extends Data.Class<{
@@ -279,16 +320,32 @@ const lookupPublished = (
     return yield* agentPublished(key.userId, agent.value);
   });
 
-/** The cache, built once where the routes are composed. */
+/** The cache, made once per instance by `instancePublishedCache`. */
 const publishedCache: Effect.Effect<PublishedCache> = Cache.makeWith(lookupPublished, {
   capacity: KEPT_AGENTS,
   requireServicesAt: "lookup",
   timeToLive: (exit) => (Exit.isSuccess(exit) ? CODER.PUBLISHED_TTL : Duration.zero),
 });
 
-/** The routes composed over a cache of their own. */
-export function withPublishedCache<A, E, R>(
-  routes: (cache: PublishedCache) => Layer.Layer<A, E, R>,
-): Effect.Effect<Layer.Layer<A, E, R>> {
-  return Effect.map(publishedCache, routes);
+/**
+ * A cache of its own for procedures that are built with no Effect to build
+ * one in: made on the first ask and kept for the instance's life, as a
+ * route group's is. Note that two first asks at once each make one and the
+ * first to land is the one kept, so every later ask shares it. The hosted
+ * router makes one and hands it to every resource that reads the kept
+ * answers or lets them go (`PublishedReach`), so a change to a pull request
+ * lets go of what each of them read.
+ */
+export function instancePublishedCache(): Effect.Effect<PublishedCache> {
+  let kept: PublishedCache | undefined;
+  return Effect.suspend(() =>
+    kept === undefined
+      ? Effect.map(publishedCache, (made) => (kept ??= made))
+      : Effect.succeed(kept),
+  );
+}
+
+/** The kept published answers a resource's procedures read and let go of: the instance's one cache where the router hands it, one of their own otherwise. */
+export interface PublishedReach {
+  readonly published?: Effect.Effect<PublishedCache>;
 }

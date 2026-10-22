@@ -11,7 +11,8 @@ import path from "node:path";
  * code. The script is written to a folder only this user may open, and its
  * first line writes the terminal's device there, which a resize sets the
  * size of with `stty`. Closing a terminal hangs up every process on its
- * device and ends the `script` around them; quitting Luke closes every
+ * device and ends the `script` around them, and kills what is still
+ * running five seconds later; quitting Luke closes every
  * terminal still open. What the terminal prints is handed to `onOutput` and
  * nothing else keeps it.
  */
@@ -28,6 +29,8 @@ export interface MacTerminalTools {
   ) => readonly [string, readonly string[]];
   /** The command that hangs up every process on the terminal at `tty`. */
   readonly hangUp: (tty: string) => readonly [string, readonly string[]];
+  /** The command that prints the id of every process on the terminal at `tty`, one a line. */
+  readonly processes: (tty: string) => readonly [string, readonly string[]];
 }
 
 /**
@@ -56,14 +59,43 @@ const MACOS_TERMINAL_TOOLS: MacTerminalTools = {
       tty.replace(/^\/dev\//u, ""),
     ],
   ],
+  processes: (tty) => ["/bin/ps", ["-o", "pid=", "-t", tty.replace(/^\/dev\//u, "")]],
 };
 
 export interface MacTerminal {
   /** What was typed, written to the terminal. */
   write(data: string): void;
   resize(cols: number, rows: number): void;
-  /** Every process on the terminal hung up, and the terminal ended. */
+  /** Every process on the terminal hung up, and the terminal ended; what still runs five seconds later is killed. */
   close(): void;
+}
+
+/** How long a closed terminal's processes have to end before they are killed. */
+const STOP_GRACE_MS = 5_000;
+
+/** The id of every process on the terminal at `tty`; none where they cannot be read. */
+function processesOn(tools: MacTerminalTools, tty: string): readonly number[] {
+  const [command, args] = tools.processes(tty);
+  const listed = spawnSync(command, [...args], { encoding: "utf8", timeout: 2_000 });
+  return (listed.stdout ?? "")
+    .split("\n")
+    .map((line) => Number(line.trim()))
+    .filter((pid) => Number.isInteger(pid) && pid > 0);
+}
+
+/** When each process started, by its id, as one `ps` says it, which no later process given the same id shares; none for one that has ended. */
+function startTimes(pids: readonly number[]): ReadonlyMap<number, string> {
+  if (pids.length === 0) return new Map();
+  const listed = spawnSync("ps", ["-o", "pid=,lstart=", "-p", pids.join(",")], {
+    encoding: "utf8",
+    timeout: 2_000,
+  });
+  const times = new Map<number, string>();
+  for (const line of (listed.stdout ?? "").split("\n")) {
+    const [pid, ...started] = line.trim().split(/\s+/u);
+    if (pid !== undefined && started.length > 0) times.set(Number(pid), started.join(" "));
+  }
+  return times;
 }
 
 /** Every terminal standing, which a quit closes. */
@@ -83,6 +115,8 @@ export function startMacTerminal(options: {
   readonly onOutput: (bytes: Uint8Array) => void;
   readonly onExit: (code: number | null) => void;
   readonly tools?: MacTerminalTools | undefined;
+  /** How long a close waits before it kills what still runs; five seconds unless a test names its own. */
+  readonly stopGraceMs?: number | undefined;
 }): MacTerminal {
   const tools = options.tools ?? MACOS_TERMINAL_TOOLS;
   const folder = mkdtempSync(path.join(tmpdir(), "luke-terminal-"));
@@ -124,6 +158,18 @@ export function startMacTerminal(options: {
       // Every process on the tty is hung up first, and waited for, so a job in a
       // process group of its own is reached before the wrapper's end takes the tty away.
       const device = tty();
+      // Note that what runs on the terminal is noted before the hang-up, since a job that outlives it no longer names the terminal once it is gone.
+      const running = device === undefined ? [] : processesOn(tools, device);
+      // Note that each process is named with when it started, and the terminal's own process group by its id, both before any signal, so the kill after the grace reaches what was running then and nothing the system started since under an id it gave again.
+      // Note that the times are read in one `ps`, so Stop's signals are not held up by a read per process.
+      const started = startTimes(running);
+      const targets = [
+        ...running.flatMap((pid) => {
+          const time = started.get(pid);
+          return time === undefined ? [] : [String(pid), time];
+        }),
+        ...(child.pid === undefined ? [] : [String(-child.pid), "group"]),
+      ];
       if (device !== undefined) {
         const [command, hangUpArgs] = tools.hangUp(device);
         spawnSync(command, [...hangUpArgs], { stdio: "ignore", timeout: 2_000 });
@@ -133,6 +179,32 @@ export function startMacTerminal(options: {
       } catch {
         // The terminal ended on its own between the check and the signal.
       }
+      // Note that a process that ignores the hang-up and the terminate, as a dev server shutting down slowly may, is killed after the grace; the kill is left to a process of its own, so it reaches a job that ignored the hang-up and outlived the `script` around it, and is done even when Luke quits within the grace.
+      spawn(
+        "/bin/sh",
+        [
+          "-c",
+          [
+            'sleep "$1"; shift',
+            'while [ "$#" -ge 2 ]; do',
+            '  target="$1"; was="$2"; shift 2',
+            // Note that a group is killed while any process is still in it, since its id is given to no other while it has one; a process only while it started when it was noted, its time read with spaces folded, as `ps` pads it.
+            '  if [ "$was" = group ]; then',
+            "    ps -A -o pgid= | awk -v g=\"${target#-}\" '$1 == g { found = 1 } END { exit !found }' &&",
+            '      kill -s KILL -- "$target" 2>/dev/null',
+            "  else",
+            '    now="$(echo $(ps -o lstart= -p "$target" 2>/dev/null))"',
+            '    [ "$now" = "$was" ] && kill -s KILL -- "$target" 2>/dev/null',
+            "  fi",
+            "done",
+            "true",
+          ].join("\n"),
+          "sh",
+          String((options.stopGraceMs ?? STOP_GRACE_MS) / 1_000),
+          ...targets,
+        ],
+        { detached: true, stdio: "ignore" },
+      ).unref();
     },
   };
   standing.add(terminal);

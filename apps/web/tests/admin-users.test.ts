@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
-import type { AdminUserList, AdminUserListRow } from "@luke/service/admin/admin-users";
-import { ADMIN_USERS_SEARCH_MAX_LENGTH } from "@luke/service/admin/http";
+import type { AdminUserList, AdminUserListRow } from "@luke/features/admin-answer-wire";
+import { ADMIN_USERS_SEARCH_MAX_LENGTH } from "@luke/features/admin-wire";
+import { UsersScreen } from "@luke/panel/admin/screens/users";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, test, vi } from "vitest";
-import { UsersScreen } from "../src/admin/screens/users";
+import { underWebAdminDoors } from "./support/admin-doors";
 
 /**
  * admin-users.test.ts -- the roster names itself and its search before its
@@ -53,6 +54,7 @@ function roster(overrides: Partial<AdminUserList> = {}): AdminUserList {
     total: 2,
     limit: 500,
     search: undefined,
+    signIn: { accounts: 4, methods: { github: 3, google: 1, other: 0 } },
     rows: [ADA, GRACE],
     ...overrides,
   };
@@ -110,16 +112,18 @@ async function mount(): Promise<HTMLElement> {
   root = createRoot(page);
   await act(async () => {
     root?.render(
-      createElement(UsersScreen, {
-        hideAdmins: false,
-        onHideAdminsChange: () => undefined,
-        windowDays: 30,
-        onWindowDaysChange: () => undefined,
-        account: undefined,
-        onSignOut: async () => undefined,
-        onOpenAccount: () => undefined,
-        frame: (content) => content,
-      }),
+      underWebAdminDoors(
+        createElement(UsersScreen, {
+          hideAdmins: false,
+          onHideAdminsChange: () => undefined,
+          windowDays: 30,
+          onWindowDaysChange: () => undefined,
+          account: undefined,
+          onSignOut: async () => undefined,
+          onOpenAccount: () => undefined,
+          frame: (content) => content,
+        }),
+      ),
     );
   });
   return page;
@@ -235,4 +239,23 @@ test("clearing the search lists every account again and takes it out of the addr
   expect(searchBox(page).value).toBe("");
   expect(window.location.search).toBe("");
   expect(accounts(page)).toHaveLength(2);
+});
+
+test("under the roster, the sign-in methods count every account, whatever the search", async () => {
+  const page = await openUsers(roster({ search: "ada", total: 1, rows: [ADA] }));
+
+  const headings = Array.from(page.querySelectorAll("h2"), (heading) => heading.textContent);
+  expect(headings).toContain("Sign-in methods");
+  // A method nobody linked draws no bar.
+  expect(page.textContent).toContain("Linked sign-in methods");
+  expect(page.textContent).toContain("GitHubGoogle");
+  expect(page.textContent).not.toContain("Other");
+});
+
+test("a search that finds nobody still shows how every kept account signs in", async () => {
+  const page = await openUsers(roster({ search: "nobody", total: 0, rows: [] }));
+
+  expect(page.textContent).toContain("No account matches.");
+  expect(page.textContent).toContain("Linked sign-in methods");
+  expect(page.textContent).toContain("GitHubGoogle");
 });

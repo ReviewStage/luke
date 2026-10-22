@@ -24,7 +24,6 @@ const SOURCE_GLOBS = [
   "apps/web/server/**/*.ts",
   "apps/web/tests/**/*.ts",
   "apps/web/scripts/**/*.ts",
-  "apps/luke/**/*.ts",
   "apps/dev/**/*.ts",
   "packages/*/src/**/*.ts",
   "packages/*/src/**/*.tsx",

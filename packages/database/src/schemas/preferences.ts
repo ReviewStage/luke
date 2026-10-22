@@ -1,4 +1,6 @@
+import type { ChaptersModelId } from "@luke/features/chapters-model-choice";
 import type { ContextWindow } from "@luke/features/coding-agent-wire";
+import type { LinkOpen } from "@luke/features/link-open";
 import type { ExperimentChoices } from "@luke/settings";
 import { jsonb, pgTable, text } from "drizzle-orm/pg-core";
 import { createdAt, timestamptz } from "./_helpers.js";
@@ -16,6 +18,14 @@ export const accountPreference = pgTable("account_preference", {
     .references(() => user.id, { onDelete: "cascade" }),
   voice: text("voice"),
   /**
+   * Where the account's Luke links open (`@luke/features/link-open`); null
+   * until the account chooses, which reads as the browser. A part of the
+   * snapshot of its own rather than the shared preferences beside `voice`,
+   * so a build that predates it, writing that part whole, never clears it;
+   * written alone, it moves no `updated_at`.
+   */
+  linkOpen: text("link_open").$type<LinkOpen>(),
+  /**
    * The model and effort a coding agent starts on when Start is clicked, as
    * AI Gateway's catalog names them (`packages/service/src/providers/model-catalog.ts`); null on both
    * means the account has never chosen and starts on the catalog's default.
@@ -26,6 +36,13 @@ export const accountPreference = pgTable("account_preference", {
   codingAgentModel: text("coding_agent_model"),
   codingAgentEffort: text("coding_agent_effort"),
   codingAgentContextWindow: text("coding_agent_context_window").$type<ContextWindow>(),
+  /**
+   * The Claude model a Generate chapters this account presses runs on
+   * (`@luke/features/chapters-model-choice`); null until the account
+   * chooses, and a value no build lists any more, both read as Haiku.
+   * Written alone, it moves no `updated_at`.
+   */
+  chaptersModel: text("chapters_model").$type<ChaptersModelId>(),
   /**
    * The Markdown a new plan of this account starts from, kept verbatim as
    * Settings wrote it; null means the built-in `DEFAULT_PLAN_TEMPLATE`

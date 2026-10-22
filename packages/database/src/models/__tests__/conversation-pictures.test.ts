@@ -3,10 +3,11 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { CONVERSATION_PICTURE_BOUNDS } from "@luke/features/conversation-picture-wire";
 import { INBOX_IMAGE_TYPE } from "@luke/features/inbox-wire";
-import { Effect, Option } from "effect";
+import { inArray } from "drizzle-orm";
+import { DateTime, Effect, Option } from "effect";
 import { Database } from "../../core/query.js";
+import { attachment } from "../../schemas/attachment.js";
 import { user } from "../../schemas/auth.js";
-import { conversationAttachment } from "../../schemas/conversation-attachment.js";
 import { conversations } from "../../schemas/storage.js";
 import { CONVERSATION_KIND } from "../../storage-vocabulary.js";
 import { getTestDB } from "../../testing/index.js";
@@ -15,13 +16,20 @@ import {
   type PictureToKeep,
   readConversationPicture,
 } from "../conversation-pictures.js";
+import { childConversationId } from "../ids.js";
+import {
+  CLEARED_CONVERSATION_RETENTION_MS,
+  purgeClearedConversations,
+  stampConversationsDeleted,
+} from "../soft-delete.js";
 import type { ConversationTarget } from "../writer.js";
 
 /**
  * The pictures a conversation's tools answered, over a real dialect: the
  * same bytes are kept once per conversation and answered as the same row,
  * another conversation keeps and reads only its own, and a picture that
- * would take its conversation past its bytes is not kept.
+ * would take its conversation past its bytes is not kept, and a deleted
+ * conversation's pictures, its workers' among them, go with its purge.
  *
  * Synthetic accounts and bytes throughout: no picture is a real one.
  */
@@ -87,7 +95,7 @@ it.layer(getTestDB())("a conversation's pictures", (it) => {
       // the budget is read off the rows' byte counts and two hundred megabytes of real bytes
       // would only slow the test.
       const db = yield* Database;
-      yield* db.insert(conversationAttachment).values({
+      yield* db.insert(attachment).values({
         userId: target.userId,
         conversationId: target.conversationId,
         sha256: "f".repeat(64),
@@ -105,5 +113,65 @@ it.layer(getTestDB())("a conversation's pictures", (it) => {
       assert.deepEqual(past, Option.none());
       assert.deepEqual(keptAlready, kept, "a picture kept before the budget is still answered");
     }),
+  );
+
+  it.effect(
+    "a deleted conversation's pictures, its worker's among them, stand through the retention window and go with its purge",
+    () =>
+      Effect.gen(function* () {
+        const db = yield* Database;
+        const agent = yield* openConversation;
+        const worker: ConversationTarget = {
+          userId: agent.userId,
+          conversationId: childConversationId(agent.conversationId, "call-worker"),
+        };
+        yield* db.insert(conversations).values({
+          id: worker.conversationId,
+          userId: agent.userId,
+          kind: CONVERSATION_KIND.CODING_AGENT,
+          parentConversationId: agent.conversationId,
+        });
+        const standing = yield* openConversation;
+        const own = yield* keepConversationPicture(agent, picture(1));
+        const workers = yield* keepConversationPicture(worker, picture(2));
+        const kept = yield* keepConversationPicture(standing, picture(3));
+        assert.ok(Option.isSome(own) && Option.isSome(workers) && Option.isSome(kept));
+
+        yield* stampConversationsDeleted([agent.conversationId]);
+        const stamped = yield* DateTime.nowAsDate;
+        yield* purgeClearedConversations(
+          new Date(stamped.getTime() + CLEARED_CONVERSATION_RETENTION_MS - 1),
+        );
+        const withinWindow = yield* readConversationPicture(agent.conversationId, own.value.id);
+        yield* purgeClearedConversations(
+          new Date(stamped.getTime() + CLEARED_CONVERSATION_RETENTION_MS),
+        );
+
+        assert.ok(
+          Option.isSome(withinWindow),
+          "a stamped conversation keeps its pictures until the purge",
+        );
+        assert.deepEqual(
+          yield* readConversationPicture(agent.conversationId, own.value.id),
+          Option.none(),
+        );
+        assert.deepEqual(
+          yield* readConversationPicture(worker.conversationId, workers.value.id),
+          Option.none(),
+        );
+        assert.deepEqual(
+          yield* db
+            .select({ id: attachment.id })
+            .from(attachment)
+            .where(
+              inArray(attachment.conversationId, [agent.conversationId, worker.conversationId]),
+            ),
+          [],
+        );
+        assert.ok(
+          Option.isSome(yield* readConversationPicture(standing.conversationId, kept.value.id)),
+          "a conversation no one deleted keeps its pictures",
+        );
+      }),
   );
 });

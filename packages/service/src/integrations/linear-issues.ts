@@ -19,12 +19,10 @@
 
 import type { DatabaseServices, QueryError } from "@luke/database/core/query";
 import { INTEGRATION_ROW_STATUS } from "@luke/database/integration-vocabulary";
+import type { NewTaskIssueLink } from "@luke/database/models/task-issue-store";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
-import {
-  LINEAR_BOUNDS,
-  type LinearIssueSummary,
-  type TaskLinearIssue,
-} from "@luke/features/linear-wire";
+import { LINEAR_BOUNDS, type LinearIssueSummary } from "@luke/features/linear-wire";
+import { TASK_ISSUE_PROVIDER } from "@luke/features/task-issue-wire";
 import { Data, Duration, Effect, Option, Redacted, Result, Schema } from "effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
@@ -99,6 +97,7 @@ const IssueOneSchema = Schema.Struct({
   data: Schema.Struct({
     issue: Schema.NullOr(
       Schema.Struct({
+        id: Schema.String,
         identifier: Schema.String,
         title: Schema.String,
         url: Schema.String,
@@ -112,38 +111,13 @@ const IssueByIdentifierSchema = Schema.Struct({
   data: Schema.Struct({ issue: Schema.NullOr(IssueNodeSchema) }),
 });
 
-/** One issue as the world's planned read lists it: its priority beside what a picker shows. */
-const PlannedNodeSchema = Schema.Struct({
-  identifier: Schema.String,
-  title: Schema.String,
-  url: Schema.String,
-  priority: Schema.optionalKey(Schema.NullOr(Schema.Number)),
-  state: Schema.optionalKey(Schema.NullOr(Schema.Struct({ name: Schema.String }))),
-});
-
-const PlannedListSchema = Schema.Struct({
-  data: Schema.Struct({
-    issues: Schema.Struct({ nodes: Schema.Array(PlannedNodeSchema) }),
-  }),
-});
-
-/** One issue still to do, as the world places it: its key, title, page, state's name, and Linear's priority number. */
-export interface PlannedLinearIssue {
-  readonly identifier: string;
-  readonly title: string;
-  readonly url: string;
-  readonly state?: string;
-  readonly priority?: number;
-}
-
 const ISSUE_FIELDS = "id identifier title url state { name } assignee { name }";
 
 const QUERY = {
   RECENT: `query LukeRecentIssues($first: Int!) { issues(first: $first, orderBy: updatedAt) { nodes { ${ISSUE_FIELDS} } } }`,
   SEARCH: `query LukeSearchIssues($term: String!, $first: Int!) { searchIssues(term: $term, first: $first) { nodes { ${ISSUE_FIELDS} } } }`,
-  ONE: "query LukeIssue($id: String!) { issue(id: $id) { identifier title url description } }",
+  ONE: "query LukeIssue($id: String!) { issue(id: $id) { id identifier title url description } }",
   BY_IDENTIFIER: `query LukeIssueByIdentifier($id: String!) { issue(id: $id) { ${ISSUE_FIELDS} } }`,
-  PLANNED: `query LukePlannedIssues($first: Int!) { issues(first: $first, orderBy: updatedAt, filter: { state: { type: { nin: ["completed", "canceled"] } } }) { nodes { identifier title url priority state { name } } } }`,
 } as const;
 
 /** HTTP statuses Linear answers a token it no longer honors with. */
@@ -284,40 +258,22 @@ export function linearIssueByIdentifier(
 }
 
 /**
- * The issues the grant reaches that are still to do, neither completed nor
- * canceled, newest changed first, at most `first` of them: what the Factory's
- * world draws as planned.
+ * One issue by its id, as a task links it: under the id Linear answers for
+ * it, which is its UUID even where it was asked for by its identifier, its
+ * description bounded, empty where it has none.
  */
-export function plannedLinearIssues(
-  token: Redacted.Redacted,
-  first: number,
-): Effect.Effect<readonly PlannedLinearIssue[], LinearReadFailure, HttpClient.HttpClient> {
-  return Effect.map(graphql(token, QUERY.PLANNED, { first }, PlannedListSchema), (answer) =>
-    answer.data.issues.nodes.slice(0, first).map((node) => {
-      const state = node.state?.name;
-      const priority = node.priority ?? undefined;
-      return {
-        identifier: node.identifier,
-        title: node.title,
-        url: node.url,
-        ...(state !== undefined ? { state } : undefined),
-        ...(priority !== undefined ? { priority } : undefined),
-      };
-    }),
-  );
-}
-
-/** One issue by its id, as a plan keeps it: its description bounded, empty where it has none. */
 export function linearIssue(
   token: Redacted.Redacted,
   id: string,
-): Effect.Effect<TaskLinearIssue, LinearReadFailure, HttpClient.HttpClient> {
+): Effect.Effect<NewTaskIssueLink, LinearReadFailure, HttpClient.HttpClient> {
   return Effect.flatMap(graphql(token, QUERY.ONE, { id }, IssueOneSchema), (answer) =>
     Option.match(Option.fromNullOr(answer.data.issue), {
       onNone: () => Effect.fail(failed(LINEAR_READ_FAILURE.NOT_FOUND)),
       onSome: (issue) =>
         Effect.succeed({
-          identifier: issue.identifier,
+          provider: TASK_ISSUE_PROVIDER.LINEAR,
+          externalId: issue.id,
+          key: issue.identifier,
           title: issue.title,
           url: issue.url,
           description: (issue.description ?? "").slice(0, LINEAR_BOUNDS.MAX_DESCRIPTION_CHARS),

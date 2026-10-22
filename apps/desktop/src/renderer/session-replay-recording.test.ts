@@ -45,12 +45,12 @@ const WORDS = [
 const GZIP_MAGIC = "\u001f\u008b";
 
 function bootstrap(permitted: boolean, accountId = "user-1"): SessionReplayBootstrap {
-  return { permitted, appVersion: "1.2.3", accountId };
+  return { permitted, appVersion: "1.2.3", packaged: true, accountId };
 }
 
 /** The same run's word on recording with nobody signed in. */
 function signedOut(permitted: boolean): SessionReplayBootstrap {
-  return { permitted, appVersion: "1.2.3" };
+  return { permitted, appVersion: "1.2.3", packaged: true };
 }
 
 function drawPage(): void {
@@ -145,6 +145,16 @@ test("the recorder loads before anything records, a stop while it loads holds, a
   // And none of its words, in a text node, an attribute, a link's address, an input's value, or
   // an editor's words and chips (the agent's message box, `tasks/composer-field.tsx`).
   for (const word of WORDS) assert.ok(!recording.includes(word), word);
+  // A stop resets the client, and the recording a sign-in as someone else
+  // resumes still names the build it came from, in the properties the counted
+  // events are stamped with, on the events sent beside it: a snapshot itself
+  // carries none, so these are what a recording is filtered by.
+  applySessionReplay(bootstrap(false), importRecorder);
+  applySessionReplay(bootstrap(true, "user-4"), importRecorder);
+  await vi.advanceTimersByTimeAsync(10_000);
+  const identify = sent.find((event) => event.event === "$identify");
+  assert.equal(identify?.properties.app_version, "1.2.3");
+  assert.equal(identify?.properties.packaged, true);
 });
 
 test("a sign-in partway through a recording files it under the account, and one after a deletion records again", async () => {

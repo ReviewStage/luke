@@ -1,58 +1,101 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
+import type { LiveStatement } from "@luke/database/core/live-statement";
 import { Database } from "@luke/database/core/query";
-import { createAutomation } from "@luke/database/models/automation-store";
+import { writeAccountPreferences } from "@luke/database/models/account-store";
+import {
+  createAutomation,
+  ownFailedRunsLiveStatement,
+  recordAutomationRun,
+  settleAutomationRun,
+} from "@luke/database/models/automation-store";
+import {
+  ensureMember,
+  ensureTaskChannel,
+  findOrMakeDm,
+  markNoticed,
+  postAsk,
+  postMessage,
+} from "@luke/database/models/chat-store";
 import { createCodingAgent } from "@luke/database/models/coding-agent-store";
 import { updateTask } from "@luke/database/models/task-store";
 import { organization, user } from "@luke/database/schemas/auth";
-import { automation as automationTable } from "@luke/database/schemas/automation";
+import { automationRun, automation as automationTable } from "@luke/database/schemas/automation";
 import { codingAgent } from "@luke/database/schemas/coding-agent";
 import { inboxItem } from "@luke/database/schemas/inbox";
 import { inboxItemRead } from "@luke/database/schemas/inbox-item-read";
 import { getTestDB, joinWorkspace, openWorkspace, startTask } from "@luke/database/testing";
+import { ACCOUNT_CHAT_REASON, type AccountInboxTask } from "@luke/features/account-inbox-wire";
 import {
   AUTOMATION_ACTION,
   AUTOMATION_DEFAULT_GUARDS,
+  AUTOMATION_FIRING,
+  AUTOMATION_RUN_REASON,
+  AUTOMATION_RUN_STATUS,
   AUTOMATION_SCOPE,
   AUTOMATION_TRIGGER,
 } from "@luke/features/automation-wire";
+import { CHAT_ASK, CHAT_BLOCK, MEMBER_KIND } from "@luke/features/chat-wire";
 import {
   CODING_AGENT_ATTACHMENT_TYPE,
+  CODING_AGENT_KIND,
   type CodingAgentAttachment,
 } from "@luke/features/coding-agent-wire";
 import {
+  INBOX_ASK,
   INBOX_BLOCK,
+  INBOX_BOUNDS,
   INBOX_CURSOR_START,
   INBOX_IMAGE_TYPE,
   INBOX_MESSAGE_AUTHOR,
   INBOX_REPLY,
   INBOX_RESPONSE,
   INBOX_STATUS,
+  INBOX_WIRE_VERSION,
   type InboxImageBlock,
   type InboxPost,
 } from "@luke/features/inbox-wire";
+import {
+  accountInboxLiveRowSchemas,
+  accountInboxOfLiveRows,
+  FAILED_RUN_WINDOW_MILLIS,
+  inboxOfLiveRows,
+  scopeInboxLiveRowsSchema,
+} from "@luke/features/live-wire";
+import { TASK_STATUS } from "@luke/features/task-wire";
+import { EXPERIMENT } from "@luke/settings";
 import { eq } from "drizzle-orm";
-import { DateTime, Duration, Effect, Option, Result } from "effect";
+import { DateTime, Duration, Effect, Option, Result, Schema } from "effect";
+import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
 import {
+  accountInboxLiveStatements,
   accountInboxTasks,
   accountWaitingItems,
+  accountWaitingStamps,
+  answerInboxAsk,
   answerInboxItem,
   closeInboxItem,
+  closeInboxItemAsMember,
   INBOX_MESSAGE_OUTCOME,
   type InboxAgent,
   type InboxFile,
   markInboxItemRead,
   markInboxItemUnread,
   markInboxRead,
+  memberAgentInboxItems,
+  memberAgentInboxLiveStatements,
   postInboxItem,
   postInboxMessage,
+  postInboxThread,
   readInboxAttachment,
   readInboxItem,
   replyInboxItem,
   taskInboxItems,
+  taskInboxLiveStatements,
   withdrawInboxAnswer,
+  withdrawInboxClose,
   withdrawInboxMessage,
 } from "../../inbox/inbox-store.js";
 import { accountInboxPast, taskInboxPast } from "./inbox-page.js";
@@ -68,7 +111,8 @@ import { accountInboxPast, taskInboxPast } from "./inbox-page.js";
  * workspace's members as one on a task does to its task's, a member writes
  * on an item's thread whatever its status, which moves the item's last
  * change and nothing else of it, and nothing of a workspace the account is
- * not in is read or written.
+ * not in is read or written. A member's operator's items are that member's
+ * alone.
  *
  * Synthetic accounts, tasks, and words throughout.
  */
@@ -162,7 +206,401 @@ const openTasklessAgentOf = (byAutomation: boolean) =>
 
 const openTasklessAgent = openTasklessAgentOf(false);
 
+/** A live statement run as Realtime runs it, its SQL and its values as they are, and its rows read back under the schema the desktop decodes them with. */
+const runLive = <Row, Encoded>(statement: LiveStatement, schema: Schema.Codec<Row, Encoded>) =>
+  Effect.gen(function* () {
+    const sql = yield* SqlClient.SqlClient;
+    const rows = yield* sql.unsafe(statement.sql, [...statement.params]);
+    return yield* Schema.decodeUnknownEffect(Schema.Array(schema))(rows);
+  });
+
+/** What waits across the account as the desktop builds it from the live rows, at the instant the held read was read. */
+const liveAnswerOf = (userId: string, readAt: number) =>
+  Effect.gen(function* () {
+    const parts = Option.getOrThrow(accountInboxLiveStatements(userId));
+    const failedRuns = Option.getOrThrow(ownFailedRunsLiveStatement(userId));
+    return accountInboxOfLiveRows(
+      {
+        items: yield* runLive(parts.items, accountInboxLiveRowSchemas.items),
+        planless: yield* runLive(parts.planless, accountInboxLiveRowSchemas.planless),
+        plans: yield* runLive(parts.plans, accountInboxLiveRowSchemas.plans),
+        automations: yield* runLive(parts.automations, accountInboxLiveRowSchemas.automations),
+        failedRuns: yield* runLive(failedRuns, accountInboxLiveRowSchemas.failedRuns),
+        chatAsks: yield* runLive(parts.chatAsks, accountInboxLiveRowSchemas.chatAsks),
+        chatNotices: yield* runLive(parts.chatNotices, accountInboxLiveRowSchemas.chatNotices),
+      },
+      readAt,
+    );
+  });
+
 it.layer(getTestDB())("the inbox store", (it) => {
+  it.effect(
+    "a message that waits names its author by what they are called, a person by their account's name, alike in the live read and the held read",
+    () =>
+      Effect.gen(function* () {
+        const { agent, workspaceId } = yield* openAgentIn;
+        const owner = agent.userId;
+        const teammate = yield* openUser;
+        yield* Database.use((db) =>
+          db.update(user).set({ name: "Grace Hopper" }).where(eq(user.id, teammate)),
+        );
+        yield* joinWorkspace(workspaceId, teammate);
+        for (const each of [owner, teammate]) {
+          yield* writeAccountPreferences(each, { experiments: { [EXPERIMENT.CHAT]: true } });
+        }
+        const channel = Option.getOrThrow(yield* ensureTaskChannel(owner, agent.taskId));
+        const grace = Option.getOrThrow(
+          yield* ensureMember(owner, workspaceId, { kind: MEMBER_KIND.HUMAN, userId: teammate }),
+        );
+        // A person posts as themselves, so Grace's ask is hers.
+        const fromGrace = Result.getOrThrow(
+          yield* postAsk(teammate, workspaceId, {
+            authorMemberId: grace.id,
+            to: { channelId: channel.id },
+            blocks: [{ type: CHAT_BLOCK.MARKDOWN, text: "Ship it?" }],
+            clientKey: randomUUID(),
+            key: "ship",
+            ask: { response: { type: CHAT_ASK.APPROVAL } },
+          }),
+        );
+        const held = yield* accountInboxPast(owner, INBOX_CURSOR_START);
+        const live = yield* liveAnswerOf(owner, held.readAt);
+        assert.deepEqual({ ...live, cursor: held.cursor }, held);
+        const fromOf = new Map(held.chat?.map((entry) => [entry.messageId, entry.from]));
+        assert.equal(fromOf.get(fromGrace.message.id), "Grace Hopper");
+      }),
+  );
+
+  it.effect(
+    "the live statements of a plan's inbox and an agent's deliver the items their held reads answer, open, answered, and closed alike, to a member and to no one else",
+    () =>
+      Effect.gen(function* () {
+        const { agent, workspaceId } = yield* openAgentIn;
+        const teammate = yield* openUser;
+        yield* joinWorkspace(workspaceId, teammate);
+        const outsider = yield* openUser;
+        yield* openWorkspace(outsider);
+        const posted = yield* postInboxItem(agent, SETTINGS);
+        assert.ok(Result.isSuccess(posted));
+        const open = yield* postInboxItem(agent, { ...SETTINGS, key: "open" });
+        assert.ok(Result.isSuccess(open));
+        assert.ok(Result.isSuccess(yield* postInboxItem(agent, { ...SETTINGS, key: "closed" })));
+        assert.ok(
+          Option.isSome(
+            yield* answerInboxItem(teammate, posted.success.id, 1, DONE, randomUUID(), [
+              attached("first.txt", "text/plain", TRACE),
+              attached("second.txt", "text/plain", TRACE),
+            ]),
+          ),
+        );
+        assert.ok(Option.isSome(yield* closeInboxItem(agent, "closed", "Not needed after all")));
+        // The teammate's message on the open item, with a file, leaves it read for them and unread for its starter.
+        assert.ok(
+          Option.isSome(
+            yield* postInboxMessage(teammate, open.success.id, {
+              text: "Here is the trace.",
+              clientKey: randomUUID(),
+              files: [attached("trace.txt", "text/plain", TRACE)],
+            }),
+          ),
+        );
+
+        for (const reader of [agent.userId, teammate, outsider]) {
+          const plan = Option.getOrThrow(taskInboxLiveStatements(reader, agent.taskId ?? ""));
+          const ofAgent = Option.getOrThrow(memberAgentInboxLiveStatements(reader, agent.agentId));
+          const liveOf = (statements: typeof plan) =>
+            Effect.gen(function* () {
+              const sql = yield* SqlClient.SqlClient;
+              const rows = yield* Effect.all({
+                items: sql.unsafe(statements.items.sql, [...statements.items.params]),
+                messages: sql.unsafe(statements.messages.sql, [...statements.messages.params]),
+                files: sql.unsafe(statements.files.sql, [...statements.files.params]),
+              });
+              return inboxOfLiveRows(
+                yield* Schema.decodeUnknownEffect(scopeInboxLiveRowsSchema)(rows),
+              );
+            });
+          assert.deepEqual(yield* liveOf(plan), yield* taskInboxItems(reader, agent.taskId ?? ""));
+          assert.deepEqual(
+            yield* liveOf(ofAgent),
+            yield* memberAgentInboxItems(reader, agent.agentId),
+          );
+        }
+        const read = yield* taskInboxItems(teammate, agent.taskId ?? "");
+        const openOf = (items: typeof read) => items.find((item) => item.id === open.success.id);
+        assert.equal(openOf(read)?.unread, false, "the teammate wrote on it last");
+        assert.equal(openOf(yield* taskInboxItems(agent.userId, agent.taskId ?? ""))?.unread, true);
+        assert.deepEqual(
+          openOf(read)?.messages?.map((message) => [message.text, message.files?.length]),
+          [["Here is the trace.", 1]],
+        );
+        assert.deepEqual(
+          read.find((item) => item.id === posted.success.id)?.answerFiles?.map((file) => file.name),
+          ["first.txt", "second.txt"],
+        );
+        assert.deepEqual(read.map((item) => item.status).toSorted(), [
+          INBOX_STATUS.ANSWERED,
+          INBOX_STATUS.CLOSED,
+          INBOX_STATUS.OPEN,
+        ]);
+      }),
+  );
+
+  it.effect(
+    "the live statements of the account's read deliver the rows its held read answers, under the keys the wire reads them by, to every member it answers and to no one else",
+    () =>
+      Effect.gen(function* () {
+        const onTask = yield* openAgentIn;
+        const { agent: taskless, workspaceId } = yield* openTasklessAgentOf(true);
+        const teammate = yield* openUser;
+        yield* joinWorkspace(workspaceId, teammate);
+        yield* joinWorkspace(onTask.workspaceId, teammate);
+        const outsider = yield* openUser;
+        yield* openWorkspace(outsider);
+        const first = yield* postInboxItem(onTask.agent, SETTINGS);
+        assert.ok(Result.isSuccess(first));
+        assert.ok(
+          Result.isSuccess(yield* postInboxItem(onTask.agent, { ...SETTINGS, key: "second" })),
+        );
+        assert.ok(Result.isSuccess(yield* postInboxItem(taskless, SETTINGS)));
+        // Read by the agent's starter and not by the teammate, so the two read it apart.
+        assert.ok(yield* markInboxItemRead(onTask.agent.userId, first.success.id));
+        // A second task of the starter's holding an item, settled, which the Inbox lists like any other.
+        const shelved = yield* startTask(onTask.agent.userId, { name: "Billing export" });
+        const shelvedAgent = yield* createCodingAgent(onTask.agent.userId, {
+          taskId: shelved.id,
+          idempotencyKey: randomUUID(),
+          model: "anthropic/claude-opus-5.5",
+          effort: "high",
+          repository: "acme/relay",
+          planSnapshot: "# Billing export\n",
+          prompt: null,
+        });
+        assert.ok(Option.isSome(shelvedAgent));
+        assert.ok(
+          Result.isSuccess(
+            yield* postInboxItem(
+              {
+                userId: onTask.agent.userId,
+                taskId: shelved.id,
+                agentId: shelvedAgent.value.agent.id,
+              },
+              SETTINGS,
+            ),
+          ),
+        );
+        yield* updateTask(onTask.agent.userId, shelved.id, { status: TASK_STATUS.DONE });
+
+        // Chat on for everyone but the taskless agent's starter: an open ask the plan's agent
+        // posts in its channel, a direct message to the teammate they were told of, and the
+        // starter told of the ask itself, which waits once.
+        const owner = onTask.agent.userId;
+        const workspace = onTask.workspaceId;
+        for (const each of [owner, teammate, outsider]) {
+          yield* writeAccountPreferences(each, { experiments: { [EXPERIMENT.CHAT]: true } });
+        }
+        const person = (userId: string) =>
+          Effect.map(
+            ensureMember(owner, workspace, { kind: MEMBER_KIND.HUMAN, userId }),
+            Option.getOrThrow,
+          );
+        const ownerMember = yield* person(owner);
+        const teammateMember = yield* person(teammate);
+        const agentMember = Option.getOrThrow(
+          yield* ensureMember(owner, workspace, {
+            kind: MEMBER_KIND.AGENT,
+            agentId: onTask.agent.agentId,
+          }),
+        );
+        const channel = Option.getOrThrow(yield* ensureTaskChannel(owner, onTask.agent.taskId));
+        const asked = Result.getOrThrow(
+          yield* postAsk(owner, workspace, {
+            authorMemberId: agentMember.id,
+            to: { channelId: channel.id },
+            blocks: [{ type: CHAT_BLOCK.MARKDOWN, text: "Which expiry?" }],
+            clientKey: randomUUID(),
+            key: "invite-expiry",
+            ask: {
+              title: "Invite expiry",
+              response: {
+                type: CHAT_ASK.CHOICE,
+                options: [{ label: "Seven days" }, { label: "Five days" }],
+              },
+            },
+          }),
+        );
+        const dm = Option.getOrThrow(
+          yield* findOrMakeDm(owner, workspace, agentMember.id, teammateMember.id),
+        );
+        const direct = Result.getOrThrow(
+          yield* postMessage(owner, workspace, {
+            authorMemberId: agentMember.id,
+            to: { channelId: dm.id },
+            blocks: [{ type: CHAT_BLOCK.MARKDOWN, text: "Can I take the invite file too?" }],
+            clientKey: randomUUID(),
+          }),
+        );
+        assert.ok(
+          yield* markNoticed(owner, workspace, teammateMember.id, dm.id, direct.message.seq),
+        );
+        assert.ok(
+          yield* markNoticed(owner, workspace, ownerMember.id, channel.id, asked.message.seq),
+        );
+
+        for (const reader of [owner, taskless.userId, teammate, outsider]) {
+          const held = yield* accountInboxPast(reader, INBOX_CURSOR_START);
+          const live = yield* liveAnswerOf(reader, held.readAt);
+          // Each read keeps a cursor of its own, which the other never reads.
+          assert.deepEqual({ ...live, cursor: held.cursor }, held);
+        }
+        const shelvedRead = yield* liveAnswerOf(onTask.agent.userId, 0);
+        assert.ok(
+          shelvedRead.plans.some((plan) => plan.planId === shelved.id),
+          "the settled task is listed",
+        );
+        assert.ok(
+          shelvedRead.items.some((item) => item.planId === shelved.id),
+          "its item waits like any other",
+        );
+        // The notices name their sender by the human name it was given.
+        const [authorRow] = yield* Database.use((db) =>
+          db
+            .select({ personaName: codingAgent.personaName })
+            .from(codingAgent)
+            .where(eq(codingAgent.id, onTask.agent.agentId)),
+        );
+        const author = authorRow?.personaName;
+        const read = yield* accountInboxPast(teammate, INBOX_CURSOR_START);
+        assert.equal(read.items.length + (read.planless?.length ?? 0), 4);
+        const unreadOf = (answer: typeof read) =>
+          answer.items.find((item) => item.id === first.success.id)?.unread;
+        assert.equal(unreadOf(read), true, "the teammate has not read it");
+        assert.equal(unreadOf(yield* accountInboxPast(owner, INBOX_CURSOR_START)), false);
+        // Every change in a test lands at one instant, so the asks stand before the notices.
+        assert.deepEqual(
+          read.chat?.map((entry) => [entry.messageId, entry.reason, entry.from]),
+          [
+            [asked.message.id, ACCOUNT_CHAT_REASON.ASK, author],
+            [direct.message.id, ACCOUNT_CHAT_REASON.DIRECT, author],
+          ],
+        );
+        assert.deepEqual(
+          (yield* accountInboxPast(owner, INBOX_CURSOR_START)).chat?.map((entry) => entry.reason),
+          [ACCOUNT_CHAT_REASON.ASK],
+          "a notice of an ask is the ask",
+        );
+        assert.deepEqual((yield* accountInboxPast(outsider, INBOX_CURSOR_START)).chat, []);
+      }),
+  );
+
+  it.effect(
+    "the live statements of the account's read keep level with its held read through threads with asks, an ask answered or closed, a notice, a member's message, and failed runs in and out of the last week",
+    () =>
+      Effect.gen(function* () {
+        yield* TestClock.setTime(Date.parse("2026-10-21T12:00:00Z"));
+        const { agent, workspaceId } = yield* openAgentIn;
+        const owner = agent.userId;
+        const teammate = yield* openUser;
+        yield* joinWorkspace(workspaceId, teammate);
+        const decide = { type: INBOX_ASK.DECIDE, options: [{ label: "iad1" }, { label: "sfo1" }] };
+        const thread = (key: string, ask?: typeof decide) =>
+          Effect.map(
+            postInboxThread(agent, {
+              key,
+              title: `About ${key}`,
+              body: "Two regions are free.",
+              ask,
+            }),
+            Result.getOrThrow,
+          );
+        const asking = yield* thread("deploy-region", decide);
+        const notice = yield* thread("heads-up");
+        const answered = yield* thread("preview-region", decide);
+        const closed = yield* thread("staging-region", decide);
+        const askOf = (item: typeof answered) => item.thread?.[0]?.id ?? "";
+        assert.ok(
+          Option.isSome(
+            yield* answerInboxAsk(teammate, answered.id, {
+              answers: { ask: askOf(answered), reply: INBOX_REPLY.CHOSE, choices: ["sfo1"] },
+              text: "Closer to the team.",
+              clientKey: randomUUID(),
+            }),
+          ),
+        );
+        assert.ok(
+          Option.isSome(
+            yield* closeInboxItemAsMember(owner, closed.id, closed.revision, randomUUID()),
+          ),
+        );
+        yield* postInboxMessage(teammate, asking.id, {
+          text: "Which is cheaper?",
+          clientKey: randomUUID(),
+        });
+        // The agent writes on the thread again, asking nothing, under the asking item's key.
+        yield* thread("deploy-region");
+
+        // A run of each of two of the owner's automations failed: one now, one past the last week.
+        const failedRun = (name: string) =>
+          Effect.gen(function* () {
+            const made = Option.getOrThrow(
+              yield* createAutomation(owner, {
+                taskId: agent.taskId,
+                name,
+                trigger: { kind: AUTOMATION_TRIGGER.WEBHOOK },
+                action: { kind: AUTOMATION_ACTION.CODING_AGENT, prompt: "Fix one flaky test." },
+                guards: AUTOMATION_DEFAULT_GUARDS,
+                nextRunAt: null,
+                webhookSecretHash: null,
+              }),
+            );
+            const run = Option.getOrThrow(
+              yield* recordAutomationRun(made, {
+                dedupeKey: randomUUID(),
+                firing: { kind: AUTOMATION_FIRING.MANUAL },
+                firedAt: yield* DateTime.nowAsDate,
+              }),
+            );
+            yield* settleAutomationRun(run.id, {
+              status: AUTOMATION_RUN_STATUS.FAILED,
+              reason: AUTOMATION_RUN_REASON.REPOSITORY_UNREACHABLE,
+            });
+            return run.id;
+          });
+        const recent = yield* failedRun("Nightly flaky-test sweep");
+        const old = yield* failedRun("Weekly dependency bump");
+        const now = yield* DateTime.nowAsDate;
+        yield* Database.use((db) =>
+          db
+            .update(automationRun)
+            .set({ settledAt: new Date(now.getTime() - FAILED_RUN_WINDOW_MILLIS - 60_000) })
+            .where(eq(automationRun.id, old)),
+        );
+
+        for (const reader of [owner, teammate]) {
+          const held = yield* accountInboxPast(reader, INBOX_CURSOR_START);
+          const live = yield* liveAnswerOf(reader, held.readAt);
+          assert.deepEqual({ ...live, cursor: held.cursor }, held);
+          assert.notEqual(live.cursor, "", "the live cursor is a digest");
+        }
+        const read = yield* accountInboxPast(owner, INBOX_CURSOR_START);
+        assert.deepEqual(
+          read.items.map((item) => item.id).toSorted(),
+          [asking.id, notice.id].toSorted(),
+          "the asking item and the notice wait; the answered and the closed do not",
+        );
+        assert.deepEqual(
+          read.plans.map((plan) => plan.items),
+          [4],
+          "the task holds all four",
+        );
+        assert.deepEqual(
+          read.failedRuns?.map((run) => run.id),
+          [recent],
+          "the run past the last week is carried by neither",
+        );
+      }),
+  );
+
   it.effect(
     "the account's read carries an open item of an agent with no plan under its own keys, by its automation and repository, for every member of the workspace and no one else, never among the plans' items, and names a personal automation, by name or id, only to who may read it",
     () =>
@@ -359,7 +797,7 @@ it.layer(getTestDB())("the inbox store", (it) => {
   );
 
   it.effect(
-    "an answer taken back, or a post that opens the item again, deletes the answer's files and keeps the item's pictures",
+    "an answer taken back deletes the answer's files and keeps the item's pictures, and a post that opens the item again clears its answer's files while the message that answered keeps them on the thread",
     () =>
       Effect.gen(function* () {
         const agent = yield* openAgent;
@@ -398,7 +836,13 @@ it.layer(getTestDB())("the inbox store", (it) => {
         const askedAgain = yield* postInboxItem(agent, SETTINGS);
         assert.ok(Result.isSuccess(askedAgain));
         assert.equal(askedAgain.success.answerFiles, undefined);
-        assert.ok(Option.isNone(yield* readInboxAttachment(agent.userId, id, fileOf(second))));
+        const answering = askedAgain.success.thread?.find((message) => message.answers);
+        assert.deepEqual(
+          answering?.files?.map((file) => file.attachmentId),
+          [fileOf(second)],
+          "the message that answered keeps its files on the thread",
+        );
+        assert.ok(Option.isSome(yield* readInboxAttachment(agent.userId, id, fileOf(second))));
       }),
   );
 
@@ -485,6 +929,55 @@ it.layer(getTestDB())("the inbox store", (it) => {
           "a closed item takes no answer",
         );
         assert.deepEqual(yield* taskInboxItems(other, agent.taskId), []);
+      }),
+  );
+
+  it.effect(
+    "a member closes an open item without an answer only at the revision they saw, the item naming them and taking no answer since, a close withdrawn only under its own key, the agent withdrawing nothing a member's close withdrew already, and the agent's post under the key opens it again",
+    () =>
+      Effect.gen(function* () {
+        const { agent, workspaceId } = yield* openAgentIn;
+        const teammate = yield* openUser;
+        const stranger = yield* openUser;
+        yield* joinWorkspace(workspaceId, teammate);
+        const posted = yield* postInboxItem(agent, SETTINGS);
+        assert.ok(Result.isSuccess(posted));
+        const { id } = posted.success;
+
+        assert.ok(Option.isNone(yield* closeInboxItemAsMember(stranger, id, 1, randomUUID())));
+        assert.ok(Option.isNone(yield* closeInboxItemAsMember(teammate, id, 2, randomUUID())));
+        const key = randomUUID();
+        const closed = Option.getOrUndefined(yield* closeInboxItemAsMember(teammate, id, 1, key));
+        assert.equal(closed?.status, INBOX_STATUS.CLOSED);
+        assert.deepEqual(closed?.closedBy, { userId: teammate, name: "Test User" });
+        assert.equal(closed?.closedReason, undefined);
+        assert.equal(closed?.unread, false, "the member's own close leaves it read for them");
+        assert.ok(
+          Option.isNone(yield* answerInboxItem(agent.userId, id, 1, DONE, randomUUID())),
+          "a closed item takes no answer",
+        );
+        assert.ok(Option.isNone(yield* closeInboxItemAsMember(agent.userId, id, 1, randomUUID())));
+
+        assert.ok(Option.isNone(yield* withdrawInboxClose(teammate, id, randomUUID())));
+        const reopened = Option.getOrUndefined(yield* withdrawInboxClose(teammate, id, key));
+        assert.equal(reopened?.status, INBOX_STATUS.OPEN);
+        assert.equal(reopened?.closedBy, undefined);
+
+        const later = randomUUID();
+        assert.ok(Option.isSome(yield* closeInboxItemAsMember(teammate, id, 1, later)));
+        assert.ok(
+          Option.isNone(yield* closeInboxItem(agent, SETTINGS.key, "Did it myself.")),
+          "the agent withdraws no ask a member's close withdrew already",
+        );
+        assert.equal(
+          Option.getOrUndefined(yield* withdrawInboxClose(teammate, id, later))?.status,
+          INBOX_STATUS.OPEN,
+        );
+        yield* closeInboxItem(agent, SETTINGS.key, "Did it myself.");
+        const again = yield* postInboxItem(agent, { ...SETTINGS, title: "Require two reviews" });
+        assert.ok(Result.isSuccess(again));
+        assert.equal(again.success.status, INBOX_STATUS.OPEN);
+        assert.equal(again.success.closedBy, undefined);
       }),
   );
 
@@ -776,8 +1269,14 @@ it.layer(getTestDB())("an inbox item's read state", (it) => {
           [[id, true]],
         );
 
-        assert.equal(yield* markInboxItemRead(agent.userId, id), true);
-        assert.equal(yield* markInboxItemRead(agent.userId, id), true, "reading it again is fine");
+        // The read answers the transaction that wrote it, and one already standing writes none.
+        const read = yield* markInboxItemRead(agent.userId, id);
+        assert.match(read === false ? "" : (read.txid ?? ""), /^\d+$/u);
+        assert.deepEqual(
+          yield* markInboxItemRead(agent.userId, id),
+          {},
+          "reading it again is fine",
+        );
         assert.deepEqual(
           [yield* unreadFor(agent.userId, id), yield* unreadFor(teammate, id)],
           [false, true],
@@ -846,11 +1345,12 @@ it.layer(getTestDB())("an inbox item's read state", (it) => {
         yield* markInboxItemRead(agent.userId, id);
         yield* markInboxItemRead(teammate, id);
 
-        assert.equal(yield* markInboxItemUnread(agent.userId, id), true);
-        assert.equal(
+        const marked = yield* markInboxItemUnread(agent.userId, id);
+        assert.match(marked === false ? "" : (marked.txid ?? ""), /^\d+$/u);
+        assert.deepEqual(
           yield* markInboxItemUnread(agent.userId, id),
-          true,
-          "marking it again is fine",
+          {},
+          "marking it again is fine, and writes nothing to wait for",
         );
         assert.deepEqual(
           [yield* unreadFor(agent.userId, id), yield* unreadFor(teammate, id)],
@@ -903,7 +1403,9 @@ it.layer(getTestDB())("an inbox item's read state", (it) => {
         yield* markInboxItemRead(agent.userId, read);
         const other = yield* postedId(elsewhere.agent, SETTINGS.key);
 
-        assert.equal(yield* markInboxRead(agent.userId, workspaceId), 3);
+        const all = yield* markInboxRead(agent.userId, workspaceId);
+        assert.equal(all.marked, 3);
+        assert.match(all.txid ?? "", /^\d+$/u, "one transaction marked them all");
         for (const id of [open, settled, marked, read]) {
           assert.equal(yield* unreadFor(agent.userId, id), false);
         }
@@ -913,9 +1415,13 @@ it.layer(getTestDB())("an inbox item's read state", (it) => {
           [true, false],
           "the teammate's markers stand as they were",
         );
-        assert.equal(yield* markInboxRead(agent.userId, workspaceId), 0, "nothing is left unread");
+        assert.deepEqual(
+          yield* markInboxRead(agent.userId, workspaceId),
+          { marked: 0 },
+          "nothing is left unread, so nothing was written to wait for",
+        );
 
-        assert.equal(yield* markInboxRead(agent.userId, undefined), 1);
+        assert.equal((yield* markInboxRead(agent.userId, undefined)).marked, 1);
         assert.equal(yield* unreadFor(agent.userId, other), false);
       }),
   );
@@ -937,12 +1443,12 @@ it.layer(getTestDB())("an inbox item's read state", (it) => {
 
         yield* markInboxItemRead(agent.userId, id);
         assert.equal(
-          yield* markInboxRead(agent.userId, undefined),
+          (yield* markInboxRead(agent.userId, undefined)).marked,
           0,
           "nothing moved, so nothing counts",
         );
         yield* markInboxItemUnread(agent.userId, id);
-        assert.equal(yield* markInboxRead(agent.userId, undefined), 1);
+        assert.equal((yield* markInboxRead(agent.userId, undefined)).marked, 1);
 
         yield* TestClock.adjust(Duration.seconds(2));
         yield* replyInboxItem(agent, SETTINGS.key, "Before the later change.");
@@ -973,7 +1479,7 @@ it.layer(getTestDB())("an inbox item's read state", (it) => {
           [yield* unreadFor(agent.userId, id), yield* unreadFor(teammate, id)],
           [false, false],
         );
-        assert.equal(yield* markInboxRead(agent.userId, undefined), 0);
+        assert.equal((yield* markInboxRead(agent.userId, undefined)).marked, 0);
 
         yield* TestClock.adjust(Duration.seconds(1));
         yield* replyInboxItem(agent, SETTINGS.key, "One more thing.");
@@ -1016,6 +1522,239 @@ it.layer(getTestDB())("an inbox item's read state", (it) => {
         );
         const unmoved = yield* taskInboxPast(teammate, taskId, INBOX_CURSOR_START);
         assert.equal(unmoved.cursor, theirs.cursor, "the teammate's inbox stands where it stood");
+      }),
+  );
+
+  it.effect(
+    "each task the account's read lists counts what is the reader's to do, their own open or unread items, settled task's among them, alike live and held, its held read waking as a settled one is read or written on again, and no one counts another's",
+    () =>
+      Effect.gen(function* () {
+        const { agent, workspaceId } = yield* openAgentIn;
+        const owner = agent.userId;
+        const taskId = agent.taskId ?? "";
+        const teammate = yield* openUser;
+        yield* joinWorkspace(workspaceId, teammate);
+        const stranger = yield* openUser;
+        yield* openWorkspace(stranger);
+        const agentOn = (userId: string, onTask: string) =>
+          Effect.gen(function* () {
+            const started = yield* createCodingAgent(userId, {
+              taskId: onTask,
+              idempotencyKey: randomUUID(),
+              model: "anthropic/claude-opus-5.5",
+              effort: "high",
+              repository: "acme/relay",
+              planSnapshot: null,
+              prompt: null,
+            });
+            assert.ok(Option.isSome(started));
+            return { userId, taskId: onTask, agentId: started.value.agent.id };
+          });
+        const teammates = yield* agentOn(teammate, taskId);
+        const shelved = yield* startTask(owner, { name: "Shelved work" });
+        const shelvedAgent = yield* agentOn(owner, shelved.id);
+
+        // The owner's open ask and open notice, both unread, are theirs to do.
+        yield* postedId(agent, "ask");
+        assert.ok(
+          Result.isSuccess(
+            yield* postInboxItem(agent, {
+              ...SETTINGS,
+              key: "notice",
+              response: { type: INBOX_RESPONSE.NONE },
+            }),
+          ),
+        );
+        // A thread they answered, which its agent writes on again, and one they answered and read, which is done.
+        const followed = yield* postedId(agent, "followed");
+        const seen = yield* postedId(agent, "seen");
+        for (const id of [followed, seen]) {
+          assert.ok(Option.isSome(yield* answerInboxItem(owner, id, 1, DONE, randomUUID())));
+        }
+        yield* TestClock.adjust(Duration.seconds(1));
+        assert.ok(Option.isSome(yield* replyInboxItem(agent, "followed", "One more thing.")));
+        // A teammate's agent asks on the same task, and a settled task holds the owner's open item.
+        yield* postedId(teammates, "theirs");
+        yield* postedId(shelvedAgent, "shelved");
+        yield* updateTask(owner, shelved.id, { status: TASK_STATUS.DONE });
+
+        const toDoOf = (answer: { readonly plans: readonly AccountInboxTask[] }) =>
+          new Map(answer.plans.map((plan) => [plan.planId, plan.toDo]));
+        for (const reader of [owner, teammate, stranger]) {
+          const held = yield* accountInboxPast(reader, INBOX_CURSOR_START);
+          const live = yield* liveAnswerOf(reader, held.readAt);
+          assert.deepEqual({ ...live, cursor: held.cursor }, held);
+        }
+        const held = yield* accountInboxPast(owner, INBOX_CURSOR_START);
+        assert.deepEqual(
+          toDoOf(held),
+          new Map([
+            [taskId, 3],
+            [shelved.id, 1],
+          ]),
+          "the ask, the notice, and the thread written on again; and the settled task's open item",
+        );
+        assert.equal(
+          toDoOf(yield* accountInboxPast(teammate, INBOX_CURSOR_START)).get(taskId),
+          1,
+          "the teammate counts their own ask alone",
+        );
+        assert.deepEqual((yield* accountInboxPast(stranger, INBOX_CURSOR_START)).plans, []);
+
+        // Reading the settled thread wakes the held read, and it is the owner's to do no longer.
+        yield* markInboxItemRead(owner, followed);
+        const read = yield* accountInboxPast(owner, held.cursor);
+        assert.notEqual(read.cursor, held.cursor);
+        assert.equal(toDoOf(read).get(taskId), 2);
+        // Its agent writing on it again wakes it once more.
+        yield* TestClock.adjust(Duration.seconds(1));
+        assert.ok(Option.isSome(yield* replyInboxItem(agent, "followed", "And another.")));
+        const written = yield* accountInboxPast(owner, read.cursor);
+        assert.notEqual(written.cursor, read.cursor);
+        assert.equal(toDoOf(written).get(taskId), 3);
+        assert.equal(
+          toDoOf(yield* accountInboxPast(teammate, INBOX_CURSOR_START)).get(taskId),
+          1,
+          "the owner's reads move nothing of the teammate's count",
+        );
+      }),
+  );
+
+  it.effect(
+    "a task's To do counts its unread settled items only among the latest its read carries, as the Inbox can list no older one, alike live and held",
+    () =>
+      Effect.gen(function* () {
+        const { agent, workspaceId } = yield* openAgentIn;
+        const owner = agent.userId;
+        const taskId = agent.taskId ?? "";
+        const bound = INBOX_BOUNDS.MAX_ITEMS_READ;
+        const at = (step: number) => new Date(Date.parse("2026-10-21T12:00:00Z") + step * 1_000);
+        // One more answered item than a task's read carries, none of them read, written as the store keeps them.
+        yield* Database.use((db) =>
+          db.insert(inboxItem).values(
+            Array.from({ length: bound + 1 }, (_, step) => ({
+              userId: owner,
+              taskId,
+              organizationId: workspaceId,
+              agentId: agent.agentId,
+              key: `settled-${step}`,
+              revision: 1,
+              version: INBOX_WIRE_VERSION,
+              title: `Settled ${step}`,
+              blocks: [],
+              response: { type: INBOX_RESPONSE.TODO },
+              needsReply: false,
+              status: INBOX_STATUS.ANSWERED,
+              answer: DONE,
+              postedAt: at(step),
+              settledAt: at(step),
+              updatedAt: at(step),
+            })),
+          ),
+        );
+        yield* postedId(agent, "open");
+
+        const held = yield* accountInboxPast(owner, INBOX_CURSOR_START);
+        const live = yield* liveAnswerOf(owner, held.readAt);
+        assert.deepEqual({ ...live, cursor: held.cursor }, held);
+        assert.deepEqual(
+          held.plans.map((plan) => [plan.items, plan.toDo]),
+          [[bound + 2, bound + 1]],
+          "the open item and the settled ones the read carries, the oldest left out",
+        );
+        assert.equal(
+          (yield* taskInboxItems(owner, taskId)).filter((item) => item.unread === true).length,
+          bound + 1,
+          "as many as the task's read holds unread",
+        );
+      }),
+  );
+});
+
+it.layer(getTestDB())("a member's writes on an item", (it) => {
+  it.effect(
+    "an answer and a close each answer the transaction they were taken in, which a follower of the inbox waits for, and one taken in another transaction than the last",
+    () =>
+      Effect.gen(function* () {
+        const { agent, workspaceId } = yield* openAgentIn;
+        const teammate = yield* openUser;
+        yield* joinWorkspace(workspaceId, teammate);
+        const answeredId = yield* postedId(agent, "answered");
+        const closedId = yield* postedId(agent, "closed");
+
+        const answered = Option.getOrThrow(
+          yield* answerInboxItem(teammate, answeredId, 1, DONE, randomUUID()),
+        );
+        const closed = Option.getOrThrow(
+          yield* closeInboxItemAsMember(teammate, closedId, 1, randomUUID()),
+        );
+        assert.match(answered.txid ?? "", /^\d+$/u);
+        assert.match(closed.txid ?? "", /^\d+$/u);
+        assert.notEqual(answered.txid, closed.txid);
+        assert.ok(
+          Option.isNone(yield* closeInboxItemAsMember(teammate, closedId, 1, randomUUID())),
+          "a close that finds the item settled writes nothing, so nothing is waited for",
+        );
+      }),
+  );
+});
+
+it.layer(getTestDB())("the inbox store's operator, private to its member", (it) => {
+  it.effect(
+    "a teammate reads, counts, answers, closes, and writes on none of a member's operator's items, while its member reads and answers them",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* openUser;
+        const teammate = yield* openUser;
+        const workspaceId = yield* openWorkspace(owner);
+        yield* joinWorkspace(workspaceId, teammate);
+        const operator = Option.getOrThrow(
+          yield* createCodingAgent(owner, {
+            taskId: null,
+            organizationId: workspaceId,
+            planSnapshot: null,
+            prompt: null,
+            kind: CODING_AGENT_KIND.OPERATOR,
+            idempotencyKey: randomUUID(),
+            model: "anthropic/claude-opus-5.5",
+            effort: "high",
+            repository: null,
+          }),
+        ).agent;
+        const posted = Result.getOrThrow(
+          yield* postInboxItem({ userId: owner, taskId: null, agentId: operator.id }, SETTINGS),
+        );
+        const stampIds = (userId: string) =>
+          Effect.map(accountWaitingStamps(userId), (stamps) => stamps.map((stamp) => stamp.id));
+
+        assert.deepEqual(
+          [
+            Option.isNone(yield* readInboxItem(teammate, posted.id)),
+            (yield* stampIds(teammate)).includes(posted.id),
+            Option.isNone(
+              yield* postInboxMessage(teammate, posted.id, {
+                text: "Done it for you.",
+                clientKey: randomUUID(),
+              }),
+            ),
+            Option.isNone(
+              yield* closeInboxItemAsMember(teammate, posted.id, posted.revision, randomUUID()),
+            ),
+            Option.isNone(
+              yield* answerInboxItem(teammate, posted.id, posted.revision, DONE, randomUUID()),
+            ),
+          ],
+          [true, false, true, true, true],
+        );
+
+        assert.ok((yield* stampIds(owner)).includes(posted.id));
+        const read = Option.getOrThrow(yield* readInboxItem(owner, posted.id));
+        assert.equal(read.item.status, INBOX_STATUS.OPEN, "nothing the teammate tried landed");
+        assert.ok(
+          Option.isSome(
+            yield* answerInboxItem(owner, posted.id, posted.revision, DONE, randomUUID()),
+          ),
+        );
       }),
   );
 });

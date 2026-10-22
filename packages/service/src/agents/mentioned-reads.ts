@@ -4,7 +4,9 @@ import {
   taskNamesOf,
 } from "@luke/database/models/coding-agent-store";
 import { listPages } from "@luke/database/models/plan-pages";
+import { agentGivenName } from "@luke/features/model-label";
 import type { PageLine } from "@luke/features/page-wire";
+import { taskPageOwner } from "@luke/features/page-wire";
 import type { Task } from "@luke/features/task-wire";
 import { Effect, Option, Schema } from "effect";
 import { listMembers } from "../accounts/workspace-members.js";
@@ -47,7 +49,7 @@ const agentIdOf = Schema.decodeUnknownOption(wireUuidSchema);
 /** Each page named that the task holds, by id, as its newest version names it. */
 const readPages = (userId: string, taskId: string, named: readonly string[]) =>
   Effect.map(
-    listPages(userId, taskId),
+    listPages(userId, taskPageOwner(taskId)),
     (lines) =>
       new Map<string, PageLine>(
         lines.filter((line) => named.includes(line.id)).map((line) => [line.id, line]),
@@ -71,11 +73,11 @@ const readAgents = (userId: string, workspaceId: string, named: readonly string[
       const task = agent.taskId === null ? undefined : tasks.get(agent.taskId);
       found.set(agent.id, {
         id: agent.id,
-        name: agent.title ?? agent.model,
+        name: agentGivenName(agent) ?? agent.title ?? agent.model,
         task:
           agent.taskId === null || task === undefined
             ? null
-            : { id: agent.taskId, name: task.name, archived: task.archived },
+            : { id: agent.taskId, name: task.name },
         repository: agent.repository,
         branch: agent.branch,
         pullRequest: published === null ? null : { number: published.number, url: published.url },

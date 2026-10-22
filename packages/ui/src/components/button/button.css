@@ -73,6 +73,21 @@
     border-radius: var(--luke-radius-6);
   }
 
+  /* A finger's target: on a coarse pointer a button takes a press
+     `--luke-touch-target` across at least, centred on it, while it draws at
+     its own size, so a row's 24px mark keeps its glyph and its place. */
+  @media (pointer: coarse) {
+    .luke-button::before {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: max(100%, var(--luke-touch-target));
+      height: max(100%, var(--luke-touch-target));
+      transform: translate(-50%, -50%);
+      content: "";
+    }
+  }
+
   /* Compact with words, a row mark's height in the caption's type, its
      glyph nearer its words. */
   .luke-button[data-size="compact"]:not([data-icon-only="true"]) {
@@ -89,6 +104,17 @@
 
   .luke-button[data-variant="outline"] {
     --luke-button-edge: var(--luke-color-border-strong);
+  }
+
+  /* Subtle, a quiet press among quiet words: their muted ink, and compact
+     with words their weight rather than a label's, so it never outweighs
+     the line it stands in. */
+  .luke-button[data-variant="subtle"] {
+    --luke-button-ink: var(--luke-color-text-muted);
+  }
+
+  .luke-button[data-variant="subtle"][data-size="compact"]:not([data-icon-only="true"]) {
+    font-weight: var(--luke-weight-medium);
   }
 
   .luke-button[data-variant="primary"] {
@@ -153,7 +179,7 @@
      still while something slides beneath them, as a window's title bar
      does over its panes, names the opaque ground they rest on, so what
      passes beneath never shows through the fill. */
-  .luke-button:is([data-variant="quiet"], [data-variant="outline"]):where(
+  .luke-button:is([data-variant="quiet"], [data-variant="subtle"], [data-variant="outline"]):where(
     :hover:not(:disabled, [aria-disabled="true"]),
     [aria-expanded="true"],
     [aria-pressed="true"]
@@ -221,10 +247,11 @@
     --luke-button-fill: color-mix(in srgb, var(--luke-color-danger) 12%, transparent);
   }
 
-  .luke-button:is([data-variant="quiet"], [data-variant="outline"]):active:not(
-    :disabled,
-    [aria-disabled="true"]
-  ) {
+  .luke-button:is(
+    [data-variant="quiet"],
+    [data-variant="subtle"],
+    [data-variant="outline"]
+  ):active:not(:disabled, [aria-disabled="true"]) {
     --luke-button-fill: var(--luke-color-fill-pressed);
     background: linear-gradient(var(--luke-button-fill), var(--luke-button-fill))
       var(--luke-button-ground, transparent);
@@ -245,9 +272,14 @@
   }
 
   /* An ink fill is black or white, which a brightness does not move, so it
-     fades a little under the pointer and more under the press. */
-  .luke-button[data-variant="ink"]:hover:not(:disabled, [aria-disabled="true"]) {
-    opacity: 0.85;
+     fades a little under the pointer and more under the press. Note that
+     the pointer's fade stands only where there is a hover, because a tap
+     on iOS leaves the button hovered, and a change a hover draws there
+     can spend the tap. */
+  @media (hover: hover) {
+    .luke-button[data-variant="ink"]:hover:not(:disabled, [aria-disabled="true"]) {
+      opacity: 0.85;
+    }
   }
 
   .luke-button[data-variant="ink"]:active:not(:disabled, [aria-disabled="true"]) {
@@ -260,6 +292,12 @@
   .luke-button:disabled {
     opacity: 0.45;
     cursor: default;
+  }
+
+  /* A read-only button records a press, so it stands at full strength:
+     the press given, never one faded while it waits. */
+  .luke-button[data-read-only="true"]:disabled {
+    opacity: 1;
   }
 
   .luke-button[aria-disabled="true"]:not([aria-busy="true"]) {

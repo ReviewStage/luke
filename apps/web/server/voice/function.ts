@@ -2,7 +2,7 @@ import { recordVoiceSeconds, spendHostedMeter } from "@luke/database/models/quot
 import { voiceSessionRecord } from "@luke/database/models/voice-session-record";
 import { deploymentEveOrigin } from "@luke/service/agents/brain-host/eve-origin";
 import { hostedUserInfo, userIdForAuthorization } from "@luke/service/auth/bearer";
-import { CRON_ENVIRONMENT } from "@luke/service/maintenance/maintenance-bounds";
+import { eveDeploymentSecretIn } from "@luke/service/environment";
 import { standReported } from "@luke/service/observability/sentry";
 import { HOSTED_OPENAI_ENVIRONMENT } from "@luke/service/providers/openai";
 import type { VoiceAccounts } from "@luke/service/voice/accounts";
@@ -17,6 +17,7 @@ import {
 } from "@luke/service/voice/service";
 import { Effect, Layer, Redacted } from "effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import type * as HttpClient from "effect/http/HttpClient";
 import { runWeb } from "../runtime.js";
 
 /**
@@ -89,8 +90,17 @@ function reportReason(message: string): string {
   return (colon === -1 ? message : message.slice(0, colon)).slice(0, REPORT_REASON_BOUND);
 }
 
-/** The service's options as this deployment composes them for the server given, the exchange among them. */
-export function voiceFunctionOptions(server: VoiceServer): VoiceServiceOptions {
+/**
+ * The service's options as this deployment composes them for the server
+ * given, the exchange among them. The exchange reaches eve over its own
+ * fetch unless a test hands it the `HttpClient` eve answers on, which is
+ * the one thing a caller may replace: the secret and the origin are always
+ * this deployment's own.
+ */
+export function voiceFunctionOptions(
+  server: VoiceServer,
+  seams: { readonly httpClient?: Layer.Layer<HttpClient.HttpClient> } = {},
+): VoiceServiceOptions {
   return {
     server,
     apiKey: process.env[VOICE_FUNCTION_ENVIRONMENT.API_KEY],
@@ -99,11 +109,11 @@ export function voiceFunctionOptions(server: VoiceServer): VoiceServiceOptions {
     record: voiceSessionRecord(),
     avatar: deploymentAvatar(),
     exchange: deploymentExchange({
-      deploymentSecret: () => configured(CRON_ENVIRONMENT.CRON_SECRET),
+      deploymentSecret: () => eveDeploymentSecretIn(process.env),
       eveOrigin: deploymentEveOrigin,
-      openAiKey: () => configured(VOICE_FUNCTION_ENVIRONMENT.API_KEY),
       report: (message) =>
         standardOutputLog({ event: LOG_EVENT.EXCHANGE_REPORTED, reason: reportReason(message) }),
+      ...(seams.httpClient === undefined ? undefined : { httpClient: seams.httpClient }),
     }),
   };
 }

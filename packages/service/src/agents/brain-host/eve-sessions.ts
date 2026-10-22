@@ -26,7 +26,7 @@ import {
   unparsedWire,
   type WireBoundaryInput,
 } from "../../core.js";
-import { BRAIN_HOST_HEADER, type BrainHostTurn } from "./bounds.js";
+import { BRAIN_HOST_HEADER, type BRAIN_HOST_TURN, type BrainHostTurn } from "./bounds.js";
 
 /**
  * The host's own calls into eve's HTTP API, made from a web function on the
@@ -70,18 +70,20 @@ import { BRAIN_HOST_HEADER, type BrainHostTurn } from "./bounds.js";
  */
 
 /**
- * Where an eve service's routes stand under its origin: the brain's
- * at eve's own `/eve`, and the coding-agent service's at the named mount
- * `/eve/coder`, which the deployment's rewrite carries into that service and
- * whose own route transform turns back into `/eve/v1/*` before the door
- * reads it (`door.ts` spells the paths the door sees).
+ * Where the eve service's routes stand under its origin: the coding-agent
+ * service's at the named mount `/eve/coder`, which the deployment's rewrite
+ * carries into that service and whose own route transform turns back into
+ * `/eve/v1/*` before the door reads it (`door.ts` spells the paths the door
+ * sees).
  */
 export const EVE_MOUNT = {
-  TASKS: "/eve",
   CODER: "/eve/coder",
 } as const;
 
 export type EveMount = (typeof EVE_MOUNT)[keyof typeof EVE_MOUNT];
+
+/** A typed turn: the account's own words, the one kind a route's client may send. */
+export type EveTypedTurn = typeof BRAIN_HOST_TURN.TYPED;
 
 /** eve's session routes under a mount; a path is composed from these and nothing else. */
 const SESSION_ROUTE = "/v1/session";
@@ -214,9 +216,60 @@ export const EVE_SEND_OUTCOME = {
   FAILED: "failed",
 } as const;
 
+/**
+ * How the account's plan kept a native harness from launching or taking a
+ * message, where it is why a call failed: no sign-in, one the provider
+ * signed out, one the deployment cannot open, or the provider not reached.
+ * eve never answers one; the agent waits on it rather than turning to
+ * another payer.
+ */
+export const PLAN_REFUSAL = {
+  NONE: "none",
+  SIGNED_OUT: "signed_out",
+  UNREADABLE: "unreadable",
+  UNREACHABLE: "unreachable",
+  /** The plan's usage limit refused its last turn and has not reset. */
+  LIMIT_REACHED: "limit_reached",
+  /** The provider said the account is not eligible to run on its plan. */
+  INELIGIBLE: "ineligible",
+} as const;
+
+export type PlanRefusal = (typeof PLAN_REFUSAL)[keyof typeof PLAN_REFUSAL];
+
+/**
+ * Why a coding agent's native runtime did not take a call, where that is
+ * why it failed: its conversation runs on a native harness that this
+ * function has no way to launch or write to, nor to relay to one that can, or
+ * whose sandbox image is still being prepared. eve never answers one;
+ * nothing falls through to eve in its place.
+ */
+export const RUNTIME_REFUSAL = {
+  NOT_HERE: "not_here",
+  /** The harness's sandbox image is still being prepared; the same call a little later is taken. */
+  IMAGE_PREPARING: "image_preparing",
+} as const;
+
+export type RuntimeRefusal = (typeof RUNTIME_REFUSAL)[keyof typeof RUNTIME_REFUSAL];
+
+/**
+ * A call that failed: the status for the operator, and the plan's or the
+ * runtime's refusal where that is why. The one shape a failed open or send
+ * has, here and as the native relay reads it off the wire.
+ */
+export const EveFailedSchema = EffectSchema.Struct({
+  outcome: EffectSchema.Literal(EVE_SEND_OUTCOME.FAILED),
+  status: EffectSchema.Number,
+  planRefusal: EffectSchema.optionalKey(EffectSchema.Literals(Object.values(PLAN_REFUSAL))),
+  /** When the plan's reached limit resets, in epoch milliseconds, where the provider said. */
+  planResetsAt: EffectSchema.optionalKey(EffectSchema.Number),
+  runtimeRefusal: EffectSchema.optionalKey(EffectSchema.Literals(Object.values(RUNTIME_REFUSAL))),
+});
+
+export type EveFailed = typeof EveFailedSchema.Type;
+
 type EveOpened =
   | { readonly outcome: typeof EVE_SEND_OUTCOME.ACCEPTED; readonly sessionId: string }
-  | { readonly outcome: typeof EVE_SEND_OUTCOME.FAILED; readonly status: number };
+  | EveFailed;
 
 type EveSent =
   | {
@@ -226,7 +279,7 @@ type EveSent =
     }
   | { readonly outcome: typeof EVE_SEND_OUTCOME.RETIRED }
   | { readonly outcome: typeof EVE_SEND_OUTCOME.NOT_READY }
-  | { readonly outcome: typeof EVE_SEND_OUTCOME.FAILED; readonly status: number };
+  | EveFailed;
 
 /** How eve answered a cancel: its own two words, or an answer this build cannot read as either. */
 export const EVE_CANCEL_OUTCOME = {
@@ -238,7 +291,11 @@ export const EVE_CANCEL_OUTCOME = {
 type EveCancelled =
   | { readonly outcome: typeof EVE_CANCEL_OUTCOME.ACCEPTED }
   | { readonly outcome: typeof EVE_CANCEL_OUTCOME.NO_ACTIVE_TURN }
-  | { readonly outcome: typeof EVE_CANCEL_OUTCOME.FAILED; readonly status: number };
+  | {
+      readonly outcome: typeof EVE_CANCEL_OUTCOME.FAILED;
+      readonly status: number;
+      readonly runtimeRefusal?: RuntimeRefusal;
+    };
 
 /** How eve answered a reset: the session retired now, one it no longer ran, or an answer this build cannot read as either. */
 export const EVE_RESET_OUTCOME = {
@@ -250,20 +307,46 @@ export const EVE_RESET_OUTCOME = {
 type EveReset =
   | { readonly outcome: typeof EVE_RESET_OUTCOME.RESET }
   | { readonly outcome: typeof EVE_RESET_OUTCOME.NO_ACTIVE_SESSION }
-  | { readonly outcome: typeof EVE_RESET_OUTCOME.FAILED; readonly status: number };
+  | {
+      readonly outcome: typeof EVE_RESET_OUTCOME.FAILED;
+      readonly status: number;
+      readonly runtimeRefusal?: RuntimeRefusal;
+    };
 
 export interface EveMessage<Turn extends BrainHostTurn = BrainHostTurn> {
   readonly conversationId: string;
   readonly turn: Turn;
   /** The words alone, or the AI SDK's user content where a coding agent's message carries files (`attached-files.ts`). */
   readonly message: string | UserContent;
+  /** The sender's time zone, which the turn the message opens reads the day in; none reads UTC. */
+  readonly timeZone?: string;
+  /**
+   * Luke's own id for the message, the client id of the line it wrote for
+   * it: a native harness's runner names it back as it takes the message
+   * (`runner-sessions.ts`). eve is never handed it.
+   */
+  readonly lineId?: string;
 }
 
-export interface EveSessions<Turn extends BrainHostTurn = BrainHostTurn> {
+/**
+ * An agent's sessions for one caller, sending the kinds of turn `Turn`
+ * names: open, follow up, cancel a turn, retire, and listen. Every caller
+ * holds this interface rather than an implementation, so the runtime that
+ * answers a conversation can change beneath it; eve's session routes, below,
+ * are the one implementation today. Note that the two calls that carry a message are properties rather
+ * than methods, because TypeScript checks a method's parameters both ways: a
+ * client composed for one kind alone, such as the voice function's for a
+ * spoken ask, would pass for one that sends any kind, and the narrowing
+ * would hold nothing.
+ */
+export interface AgentSessions<Turn extends BrainHostTurn = BrainHostTurn> {
   /** Opens a session over the conversation with its first message; eve's answer names the session, whose first turn is the message's. */
-  open(message: EveMessage<Turn>): Effect.Effect<EveOpened, EveUnreachable>;
+  readonly open: (message: EveMessage<Turn>) => Effect.Effect<EveOpened, EveUnreachable>;
   /** Hands a message to the session the conversation runs in; eve's answer names the delivery its turn's events will carry. */
-  send(sessionId: string, message: EveMessage<Turn>): Effect.Effect<EveSent, EveUnreachable>;
+  readonly send: (
+    sessionId: string,
+    message: EveMessage<Turn>,
+  ) => Effect.Effect<EveSent, EveUnreachable>;
   /**
    * Asks eve to cancel exactly the turn named, by eve's own id for it. A turn
    * no longer under way answers `no_active_turn` and the session's next turn
@@ -316,10 +399,12 @@ interface EvePostBody {
  * own secret, or the account itself, under the bearer its request carried,
  * which the door resolves as a hosted route resolves a bearer
  * (`auth/bearer.ts`'s `hostedUserId`) and never by a session cookie. The
- * brain's asks come from the voice function as the deployment; a coding
- * agent's Start and Stop come from a route holding the developer's own
- * bearer and reach eve as that developer, so a route a browser reached on
- * its session cookie alone hands eve no bearer, and eve refuses it.
+ * brain's spoken asks come from the voice function as the deployment; a
+ * comment's ask of Luke, and a coding agent's Start and Stop, come from a
+ * route and reach eve as its caller (`coder-host/stop.ts`'s `eveFor`): over
+ * the developer's own bearer, or, for a route a browser reached on its
+ * session cookie alone, as the deployment acting for the account the cookie
+ * named, since eve takes no cookie.
  */
 export type EveCaller =
   | {
@@ -337,14 +422,18 @@ export interface EveSessionsOptions {
   /** The origin eve answers on; the deployment's own, where its rewrites carry the mount's `/v1/*` into the eve service. */
   readonly origin: string;
   readonly caller: EveCaller;
-  /** Which eve service's routes are reached; the brain's when unsaid. */
-  readonly mount?: EveMount;
+  /**
+   * Which eve service's routes are reached. Note that it is always said,
+   * because the brain's is the one that takes a typed turn as the account's
+   * own words, and a client must never reach it by leaving a field out.
+   */
+  readonly mount: EveMount;
 }
 
 /** The constructor over one fiber's client: every seam handed eve's client composes it for a caller through this. */
 export type EveSessionsComposer = <Turn extends BrainHostTurn = BrainHostTurn>(
   options: EveSessionsOptions,
-) => EveSessions<Turn>;
+) => AgentSessions<Turn>;
 
 /** The headers the caller's identity travels as: the deployment's bearer with the account beside it, or the account's own authorization as it came. */
 function callerHeaders(caller: EveCaller) {
@@ -484,14 +573,17 @@ function readReset({ status, body }: EveAnswer): EveReset {
 function sessionsOver<Turn extends BrainHostTurn>(
   client: HttpClient.HttpClient,
   options: EveSessionsOptions,
-): EveSessions<Turn> {
+): AgentSessions<Turn> {
   const identity = callerHeaders(options.caller);
-  const mount = options.mount ?? EVE_MOUNT.TASKS;
+  const { mount } = options;
   const post = (path: string, headers: Readonly<Record<string, string>>, body: EvePostBody) =>
     postToEve(client, new URL(path, options.origin), { ...identity, ...headers }, body);
   const turnHeaders = (message: EveMessage<Turn>) => ({
     [BRAIN_HOST_HEADER.CONVERSATION]: message.conversationId,
     [BRAIN_HOST_HEADER.TURN]: message.turn,
+    ...(message.timeZone === undefined
+      ? undefined
+      : { [BRAIN_HOST_HEADER.TIME_ZONE]: message.timeZone }),
   });
   return {
     open: (message) =>
@@ -545,6 +637,6 @@ export const eveSessionsComposer: Effect.Effect<EveSessionsComposer, never, Http
 /** eve's client for one caller, over the calling fiber's `HttpClient`. */
 export function eveSessions<Turn extends BrainHostTurn = BrainHostTurn>(
   options: EveSessionsOptions,
-): Effect.Effect<EveSessions<Turn>, never, HttpClient.HttpClient> {
+): Effect.Effect<AgentSessions<Turn>, never, HttpClient.HttpClient> {
   return Effect.map(eveSessionsComposer, (compose) => compose<Turn>(options));
 }

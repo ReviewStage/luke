@@ -5,10 +5,12 @@ import {
   ProviderButton,
   TEXT_BUTTON_TONE,
   TEXT_ELEMENT,
+  TEXT_LINK_LOOK,
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
   TextButton,
+  TextLink,
   WingFace,
 } from "@luke/ui";
 
@@ -32,6 +34,7 @@ export function SignInGate({
   waiting,
   failure,
   lastUsed,
+  macAppLink,
   onBegin,
   onCancel,
 }: {
@@ -42,6 +45,8 @@ export function SignInGate({
   failure?: string;
   /** The provider this Mac last signed in with; absent while none is kept. */
   lastUsed?: AccountProvider;
+  /** The link that opens the Mac app instead, which a shell that is not the Mac app offers; absent in the Mac app. */
+  macAppLink?: string;
   /** Sends the browser to the provider; the gate then waits on it. */
   onBegin: (provider: AccountProvider) => void;
   onCancel: () => void;
@@ -91,6 +96,15 @@ export function SignInGate({
           </p>
         ) : null}
       </div>
+      {macAppLink === undefined ? null : (
+        <div className="sign-in-elsewhere">
+          <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
+            <TextLink href={macAppLink} look={TEXT_LINK_LOOK.UNDERLINED}>
+              Open in the Mac app
+            </TextLink>
+          </Text>
+        </div>
+      )}
     </section>
   );
 }

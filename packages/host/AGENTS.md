@@ -2,8 +2,9 @@
 
 ## Everything of the machine arrives as a seam
 
-`composeHost` is handed the state root, the version, the environment, the cipher,
-and the id source, and derives none of them. Nothing here reads
+`composeHost` is handed the state root, the version, the environment, the account
+source (whose desktop implementation brings the cipher), and the id source, and
+derives none of them. Nothing here reads
 the hosting process's own profile, so a validation run on a temporary state root
 is the same composition as a live one.
 
@@ -72,12 +73,18 @@ its next answer.
 `@luke/features`, but the snapshot it carries is `@luke/settings` vocabulary
 and `settings` already reaches `features`. This is the lowest package holding both.
 
-## Three doors the renderer reads
+## The doors a browser loads
 
 `@luke/host/acts` and `@luke/host/app-state` are the desktop's
 renderer-and-main vocabulary, kept here because this is the lowest package that
 reaches every package they name (`@luke/gateway` cannot, since `@luke/voice`
 already depends on it), and `@luke/host/bridge` is the window's bridge contract
-built from those two, which the preload builds its bridge from and a web
-bridge will too. The renderer may import only these three doors from this
-package, so they and everything they import stay free of Node.
+built from the app state, which the preload builds its bridge from and the web
+bridge does too; `@luke/host/contract` is the act port's oRPC contract that the
+window's client is typed by. The panel reads these four, and `@luke/host/act-port`
+beside them.
+
+The web app (`apps/web/src/app/web-host.ts`) runs the host itself in the tab,
+so it also loads the barrel, `@luke/host/effect`, `@luke/host/client`,
+`@luke/host/service-layer`, and `@luke/host/agent-notices`. Every door named
+here, and everything it imports, stays free of Node.

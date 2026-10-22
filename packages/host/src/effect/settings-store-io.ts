@@ -11,7 +11,15 @@ import * as FileSystem from "effect/FileSystem";
 import type { PlatformError } from "effect/PlatformError";
 
 const SETTINGS_FILE_NAME = "settings.json";
-const SETTINGS_TEMPORARY_FILE_NAME = "settings.json.tmp";
+/**
+ * Where a write lands before its rename: one name per writer where the file
+ * has several (browser tabs over one storage), so two overlapping writes
+ * never rename each other's bytes away, and one name otherwise, so a write
+ * cut off midway leaves at most one file behind for the next to replace.
+ */
+function temporaryFileName(writer: string | undefined): string {
+  return writer === undefined ? "settings.json.tmp" : `settings.json.${writer}.tmp`;
+}
 /** Owner read/write only: a settings file carries a decryption key's ciphertext. */
 const SETTINGS_FILE_MODE = 0o600;
 
@@ -58,19 +66,26 @@ export const readSettingsFileText = /* @__PURE__ */ Effect.fn("host/readSettings
  * creation and restated with `chmod` right after, because `mode` only takes
  * effect when the file is created — a temporary file left behind by an
  * earlier interrupted write would otherwise keep whatever mode it already had.
+ * A write that fails after the temporary file was made removes it, because a
+ * writer's own name (a browser tab's) is never written through again, and on
+ * a storage with a quota (a browser's `localStorage`) a file left behind there
+ * would hold its bytes forever.
  */
 export const writeSettingsFileAtomic = /* @__PURE__ */ Effect.fn("host/writeSettingsFileAtomic")(
   function* (
     directory: string,
     contents: string,
+    writer?: string,
   ): Effect.fn.Return<void, PlatformError, FileSystem.FileSystem | Path.Path> {
     const fileSystem = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const settingsPath = path.join(directory, SETTINGS_FILE_NAME);
-    const temporaryPath = path.join(directory, SETTINGS_TEMPORARY_FILE_NAME);
+    const temporaryPath = path.join(directory, temporaryFileName(writer));
     yield* fileSystem.makeDirectory(directory, { recursive: true });
-    yield* fileSystem.writeFileString(temporaryPath, contents, { mode: SETTINGS_FILE_MODE });
-    yield* fileSystem.chmod(temporaryPath, SETTINGS_FILE_MODE);
-    yield* fileSystem.rename(temporaryPath, settingsPath);
+    yield* Effect.gen(function* () {
+      yield* fileSystem.writeFileString(temporaryPath, contents, { mode: SETTINGS_FILE_MODE });
+      yield* fileSystem.chmod(temporaryPath, SETTINGS_FILE_MODE);
+      yield* fileSystem.rename(temporaryPath, settingsPath);
+    }).pipe(Effect.onError(() => Effect.ignore(fileSystem.remove(temporaryPath, { force: true }))));
   },
 );

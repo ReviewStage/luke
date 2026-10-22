@@ -11,14 +11,14 @@ const PLATFORM = `${process.platform}-${process.arch}-node${process.versions.nod
  * are never scoped, and their hash, which covers every tracked file, is what
  * decides whether they run.
  */
-export const ROOT_TASKS = ["lint", "knip", "discarded-effect"];
+export const ROOT_TASKS = ["lint", "discarded-effect"];
 
 /** The checks that run once per workspace. */
 export const WORKSPACE_TASKS = ["typecheck"];
 
 /**
  * The tests, one task per workspace holding a `vitest.config.ts`, except that
- * @luke/service's suite, the largest, is cut into three shards so CI can run
+ * @luke/service's and @luke/panel's suites, the largest, are cut into three shards so CI can run
  * them on three runners. `scripts/repository-checks.sh` refuses a
  * workspace whose tests are under none of these names.
  */

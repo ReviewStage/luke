@@ -1,4 +1,6 @@
 import {
+  BADGE_TONE,
+  Badge,
   CHIP_LOOK,
   CHIP_SIZE,
   CHIP_TONE,
@@ -19,7 +21,7 @@ import { CatalogSection } from "../section";
  * chips.tsx -- each chip look at rest, with a mark and a chevron, with its
  * menu open, unavailable, and with a long name in a narrow column; a row of
  * filters, one pressed at a time; a row of compact counts, one pressed and
- * one busy; each tone; each width; a chip drawn as
+ * one busy; each tone, and each in a compact pill beside a badge of its size; each width; a chip drawn as
  * its mark alone; a name in the code face; and a removable filter.
  */
 
@@ -117,6 +119,19 @@ function Chips(): React.JSX.Element {
               <ChipName>{tone}</ChipName>
             </Chip>
           ))}
+        </Inline>
+      </CatalogSection>
+      <CatalogSection id="chips-compact-tones" title="Compact tones, beside a badge">
+        <Inline gap={GAP.TIGHT}>
+          {Object.values(CHIP_TONE).map((tone) => (
+            <Chip key={tone} look={CHIP_LOOK.PILL} size={CHIP_SIZE.COMPACT} tone={tone} chevron>
+              <ProviderMark provider={MARK_PROVIDER.GITHUB} />
+              <ChipName>{tone}</ChipName>
+            </Chip>
+          ))}
+          <Badge tone={BADGE_TONE.MERGED} icon={<ProviderMark provider={MARK_PROVIDER.GITHUB} />}>
+            badge
+          </Badge>
         </Inline>
       </CatalogSection>
       <CatalogSection id="chips-widths" title="Widths">

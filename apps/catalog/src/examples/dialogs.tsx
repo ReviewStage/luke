@@ -9,6 +9,8 @@ import {
   IconButton,
   ImageIcon,
   Inline,
+  SCROLL_SIZE,
+  ScrollArea,
   TEXT_ELEMENT,
   TEXT_TONE,
   TEXT_VARIANT,
@@ -24,8 +26,10 @@ import { CatalogSection } from "../section";
 /**
  * dialogs.tsx -- a dialog holding a field, a question that must be
  * answered, a long one, a wide note that grows with its words and rings
- * while a file is dragged over the window, a tool at its foot's start, and a
- * picture shown edge to edge under its own bar, each opened from its button and
+ * while a file is dragged over the window, a tool at its foot's start, a
+ * composer's card as New task's stands, which on a phone's screen gives its
+ * words the room the desktop's margins would spend, and a picture shown edge
+ * to edge under its own bar, each opened from its button and
  * put away by its answers, Escape, or a press on the dimmed window. The
  * question's words scroll inside the card in a short window, so its answers
  * stay on screen.
@@ -82,12 +86,13 @@ function DeleteDialog({ onClose }: { onClose: () => void }): React.JSX.Element {
         </>
       }
     >
-      <div className="catalog-dialog-scroll">
+      {/* The long words give way and scroll in a short window, so the answers under them stay on the card. */}
+      <ScrollArea size={SCROLL_SIZE.CONTENT}>
         <Text tone={TEXT_TONE.MUTED} id={bodyId}>
           The task, its plan, and every agent’s transcript under it go for good. Anyone in the
           workspace who opened it sees it gone the next time they look.
         </Text>
-      </div>
+      </ScrollArea>
     </Dialog>
   );
 }
@@ -142,6 +147,36 @@ function NoteDialog({ onClose }: { onClose: () => void }): React.JSX.Element {
   );
 }
 
+/** A task's first words on the composer's card, its tool at the foot's start and its start at the end. */
+function ComposerDialog({ onClose }: { onClose: () => void }): React.JSX.Element {
+  const [words, setWords] = useState("");
+  const field = useRef<HTMLTextAreaElement | null>(null);
+  return (
+    <Dialog
+      size={DIALOG_SIZE.COMPOSER}
+      title="New task"
+      initialFocus={field}
+      onDismiss={onClose}
+      actionsStart={<IconButton icon={<ImageIcon />} label="Attach files" />}
+      actions={
+        <Button variant={BUTTON_VARIANT.PRIMARY} disabled={words.trim() === ""} onClick={onClose}>
+          Start
+        </Button>
+      }
+    >
+      <TextArea
+        ref={field}
+        label="Task"
+        placeholder="Describe the change for a coding agent…"
+        value={words}
+        onChange={setWords}
+        rows={5}
+        grow
+      />
+    </Dialog>
+  );
+}
+
 /** A picture opened over the window, the card fitted to it under a bar naming it. */
 function PictureDialog({ onClose }: { onClose: () => void }): React.JSX.Element {
   const titleId = useId();
@@ -186,6 +221,7 @@ function Dialogs(): React.JSX.Element {
         <Opener label="Rename task…" Body={RenameDialog} />
         <Opener label="Delete task…" Body={DeleteDialog} />
         <Opener label="Send feedback…" Body={NoteDialog} />
+        <Opener label="New task…" Body={ComposerDialog} />
         <Opener label="Open picture…" Body={PictureDialog} />
       </Inline>
     </CatalogSection>

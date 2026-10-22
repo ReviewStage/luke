@@ -1,23 +1,28 @@
 import type { DatabaseServices } from "@luke/database/core/query";
 import { utcDayKey } from "@luke/database/models/quota";
-import { Clock, Effect } from "effect";
-import { DAY_MS } from "../core.js";
+import type {
+  AdminMetrics,
+  AdminRetentionCohort,
+  AdminSignInMethods,
+  AdminTrend,
+} from "@luke/features/admin-answer-wire";
 import {
-  ADMIN_ERROR,
-  ADMIN_HTTP_STATUS,
   type AdminMetricsScope,
   type AdminMetricsWindow,
+  type AdminWindowedQuery,
   adminMetricsScope,
   adminMetricsWindow,
-  errorResponse,
-  jsonResponse,
-} from "./http.js";
+} from "@luke/features/admin-wire";
+import { Clock, Effect } from "effect";
+import { DAY_MS } from "../core.js";
+import { ADMIN_REFUSAL, type AdminRefusal } from "./http-effect.js";
 import { type AdminSeamEffect, unavailableSeam } from "./seam.js";
 
 /**
  * What the admin dashboard reads about the service, and only what the service's
  * own tables can answer. Every number here is an aggregate of rows Luke already
- * stores for its own operation — signups and hosted-tier usage — read by a
+ * stores for its own operation — signups, hosted-tier usage, and what
+ * `admin-overview.ts` reads of tasks, agents, and calls — read by a
  * maintainer on their own service. It is not the desktop observing
  * sessions and it widens no analytics event: the product-event allowlist and
  * `PRIVACY.md` govern what leaves a user's machine, where this reads counts
@@ -50,46 +55,11 @@ const WEEK_MS = 7 * DAY_MS;
  */
 export const ADMIN_RETENTION_WEEKS = 8;
 
-export interface AdminDailyUsage {
-  /** The UTC day the count covers, as YYYY-MM-DD. */
-  day: string;
-  calls: number;
-}
-
-export interface AdminDailySignups {
-  day: string;
-  count: number;
-}
-
-/**
- * A trailing run of days beside the run before it — the one thing a count on
- * its own cannot say, which is whether it is going up. Both runs are folded
- * from the same zero-filled series the page draws, so the comparison can never
- * disagree with the bars above it.
- */
-export interface AdminTrend {
-  /** The length of each run, in whole UTC days. */
-  days: number;
-  recent: number;
-  prior: number;
-}
-
 /** The provider ids the dashboard names; every other linked provider pools into `other`. */
 const SIGN_IN_PROVIDER_ID = {
   GOOGLE: "google",
   GITHUB: "github",
 } as const;
-
-/**
- * How many accounts linked each sign-in method. An account that linked more
- * than one method counts once under each, so the methods can legitimately sum
- * past the account total — never past it per method.
- */
-export interface AdminSignInMethods {
-  google: number;
-  github: number;
-  other: number;
-}
 
 /**
  * Folds the linked (account, provider) pairs the query reads into per-method
@@ -113,145 +83,6 @@ export function countSignInMethods(
 }
 
 /**
- * One cell of the retention grid: of the accounts created in the cohort's
- * week, how many used the hosted tier during the week `offset` weeks after it.
- * `share` is null for a cohort with nobody to take a share of — a percentage
- * of nothing would pose as precision — and a week the calendar has not
- * reached is no cell at all rather than a zero.
- */
-export interface AdminRetentionCell {
-  offset: number;
-  activeAccounts: number;
-  share: number | null;
-  /** The cell's week is the one `generatedAt` falls in, still accruing. */
-  inProgress: boolean;
-}
-
-interface AdminRetentionCohort {
-  /** The cohort's UTC week, named by its Monday as YYYY-MM-DD. */
-  weekStart: string;
-  /** Accounts created during this week. */
-  size: number;
-  cells: AdminRetentionCell[];
-}
-
-/**
- * A most-active account of the hosted tier over the window, ordered by the
- * days it showed up rather than the volume it spent: the question the table
- * answers is who lives in Luke daily, which a single heavy day cannot fake.
- * The overview names an individual account here and nowhere else, and it
- * names it to the maintainer who operates the service, from that service's
- * own user row — the same fields the account already holds and the analytics
- * person record already carries. The id is carried so the row can open the
- * account's own page, and it goes back into the detail endpoint's gate,
- * never into a rendered string. The account fields match the roster row's,
- * because both tables draw one account cell.
- */
-export interface AdminTopUser {
-  id: string;
-  name: string;
-  email: string;
-  /** The avatar URL the sign-in provider gave the account, when it gave one. */
-  image: string | null;
-  admin: boolean;
-  /** Window days with a hosted-usage row — the account showed up that day. */
-  activeDays: number;
-  /** The account's most recent active day inside the window, as YYYY-MM-DD. */
-  lastActiveDay: string;
-  calls: number;
-}
-
-interface AdminDatabaseHealth {
-  reachable: boolean;
-  /** Round-trip of a trivial probe query, in milliseconds. */
-  latencyMs: number;
-}
-
-/**
- * Whether one integration is wired, by the presence of its key alone — never
- * the value. A maintainer reads that recording is on or the hosted tier is off
- * without any secret crossing into the response.
- */
-export interface AdminIntegration {
-  key: string;
-  label: string;
-  configured: boolean;
-}
-
-/**
- * The integrations the dashboard reports on, each by the key whose presence in
- * the environment decides it. The label is the maintainer-facing name; the key
- * is stable for anything that keys off the row.
- */
-const ADMIN_INTEGRATION = {
-  ANALYTICS_RECORDING: { key: "analytics-recording", label: "Product analytics recording" },
-  ANALYTICS_ERASURE: { key: "analytics-erasure", label: "Analytics erasure on account delete" },
-  HOSTED_TIER: { key: "hosted-tier", label: "Hosted voice & attention (OpenAI)" },
-  GOOGLE_SIGN_IN: { key: "google-sign-in", label: "Google sign-in" },
-  GITHUB_SIGN_IN: { key: "github-sign-in", label: "GitHub sign-in" },
-} as const;
-
-/** Whether each integration's configuration is present — never its value. */
-export interface AdminIntegrationPresence {
-  analyticsRecording: boolean;
-  analyticsErasure: boolean;
-  hostedTier: boolean;
-  googleSignIn: boolean;
-  githubSignIn: boolean;
-}
-
-/** The integration health list, in the fixed order the dashboard draws it. */
-export function adminIntegrations(present: AdminIntegrationPresence): AdminIntegration[] {
-  return [
-    { ...ADMIN_INTEGRATION.HOSTED_TIER, configured: present.hostedTier },
-    { ...ADMIN_INTEGRATION.ANALYTICS_RECORDING, configured: present.analyticsRecording },
-    { ...ADMIN_INTEGRATION.ANALYTICS_ERASURE, configured: present.analyticsErasure },
-    { ...ADMIN_INTEGRATION.GOOGLE_SIGN_IN, configured: present.googleSignIn },
-    { ...ADMIN_INTEGRATION.GITHUB_SIGN_IN, configured: present.githubSignIn },
-  ];
-}
-
-export interface AdminMetrics {
-  generatedAt: number;
-  windowDays: number;
-  users: {
-    total: number;
-    /** Accounts created inside the window, the same rows the signup series draws. */
-    newInWindow: number;
-    signupTrend: AdminTrend;
-    signInMethods: AdminSignInMethods;
-    dailySignups: AdminDailySignups[];
-  };
-  featureUsage: {
-    callsToday: number;
-    callsWindow: number;
-    activeUsersToday: number;
-    /** Distinct accounts that spent anything in the window — the engaged base behind today's number. */
-    activeUsersWindow: number;
-    usageTrend: AdminTrend;
-    daily: AdminDailyUsage[];
-    topUsers: AdminTopUser[];
-  };
-  retention: {
-    weeks: number;
-    /** Oldest cohort first; each row's cells stop at the current week. */
-    cohorts: AdminRetentionCohort[];
-  };
-  reliability: {
-    /**
-     * The analytics project's console, where the per-request error rates this
-     * section cannot show actually live. Absent when the deployment names no
-     * project, so the page states the absence rather than drawing a dead link.
-     */
-    analyticsConsoleUrl?: string | undefined;
-  };
-  systemHealth: {
-    database: AdminDatabaseHealth;
-    integrations: AdminIntegration[];
-  };
-}
-
-/**
  * The raw shape the queries produce, before the pure builder zero-fills the
  * series and folds the window totals. Split out so the shaping — the part with
  * off-by-one risk in a day window — is testable without a database.
@@ -259,28 +90,13 @@ export interface AdminMetrics {
 export interface AdminMetricsSource {
   users: {
     total: number;
-    signInMethods: AdminSignInMethods;
     signupsByDay: ReadonlyMap<string, number>;
-  };
-  usage: {
-    byDay: ReadonlyMap<string, number>;
-    activeUsersToday: number;
-    activeUsersWindow: number;
-    topUsers: readonly AdminTopUser[];
   };
   retention: {
     /** Accounts created per UTC week, keyed by the week's Monday. */
     cohortSizes: ReadonlyMap<string, number>;
     /** Distinct accounts active per week, keyed by signup week then activity week. */
     activeByCohortWeek: ReadonlyMap<string, ReadonlyMap<string, number>>;
-  };
-  reliability: {
-    /** Read from the environment like the integrations, not from a table. */
-    analyticsConsoleUrl?: string | undefined;
-  };
-  systemHealth: {
-    database: AdminDatabaseHealth;
-    integrations: readonly AdminIntegration[];
   };
 }
 
@@ -325,9 +141,9 @@ export function lastNWeekStartKeys(now: number, weeks: number): string[] {
  * cohort's cells run from its own week to the current one and no further:
  * a week the calendar has not reached is absent rather than a zero, which is
  * what shapes the triangle, and the current week's cell in every row is
- * marked still accruing.
+ * marked still accruing. Both of the grid's bases fold through it.
  */
-function buildRetentionCohorts(
+export function buildRetentionCohorts(
   retention: AdminMetricsSource["retention"],
   now: number,
 ): AdminRetentionCohort[] {
@@ -363,74 +179,52 @@ export function trailingTrend(counts: readonly number[], days: number): AdminTre
   };
 }
 
-/** Shapes the queried source into the answer, zero-filling and totalling in one place. */
+/**
+ * Shapes the queried source into the answer, zero-filling and totalling in one
+ * place. The overview is shaped beside it by `buildAdminOverview`, which reads
+ * this module's day keys and trends, so the route joins the two.
+ */
 export function buildAdminMetrics(
   source: AdminMetricsSource,
   now: number,
   windowDays: AdminMetricsWindow,
-): AdminMetrics {
+): Omit<AdminMetrics, "overview"> {
   const dayKeys = lastNDayKeys(now, windowDays);
   // The trends read the same maps through their own trailing keys — the drawn
   // series' own tail whenever the window holds both runs, and the wider fetch's
   // when it does not — so a 7-day view still compares against the week before.
   const trendKeys = lastNDayKeys(now, ADMIN_TREND_DAYS * 2);
-  const todayKey = utcDayKey(now);
 
   const dailySignups = dayKeys.map((day) => ({
     day,
     count: source.users.signupsByDay.get(day) ?? 0,
   }));
 
-  const daily = dayKeys.map((day) => ({
-    day,
-    calls: source.usage.byDay.get(day) ?? 0,
-  }));
-
-  // Every windowed count is folded from the zero-filled series rather than
-  // queried beside it: a rolling `now - 30 days` count and a series of whole
-  // UTC days cover different spans, so two reads of "the last 30 days" would
-  // disagree by the part-day between them and the page would contradict itself.
-  const callsWindow = sum(daily.map((day) => day.calls));
-
   return {
     generatedAt: now,
     windowDays,
     users: {
       total: source.users.total,
+      // Note that the window's count is folded from the zero-filled series
+      // rather than queried beside it: a rolling `now - 30 days` count and a
+      // series of whole UTC days cover different spans, so two reads of "the
+      // last 30 days" would disagree by the part-day between them.
       newInWindow: sum(dailySignups.map((day) => day.count)),
       signupTrend: trailingTrend(
         trendKeys.map((day) => source.users.signupsByDay.get(day) ?? 0),
         ADMIN_TREND_DAYS,
       ),
-      signInMethods: source.users.signInMethods,
       dailySignups,
-    },
-    featureUsage: {
-      callsToday: source.usage.byDay.get(todayKey) ?? 0,
-      callsWindow,
-      activeUsersToday: source.usage.activeUsersToday,
-      activeUsersWindow: source.usage.activeUsersWindow,
-      usageTrend: trailingTrend(
-        trendKeys.map((day) => source.usage.byDay.get(day) ?? 0),
-        ADMIN_TREND_DAYS,
-      ),
-      daily,
-      topUsers: [...source.usage.topUsers],
     },
     retention: {
       weeks: ADMIN_RETENTION_WEEKS,
       cohorts: buildRetentionCohorts(source.retention, now),
     },
-    reliability: { analyticsConsoleUrl: source.reliability.analyticsConsoleUrl },
-    systemHealth: {
-      database: source.systemHealth.database,
-      integrations: [...source.systemHealth.integrations],
-    },
   };
 }
 
 export interface AdminMetricsOptions {
-  request: Request;
+  query: AdminWindowedQuery;
   readMetrics: (
     now: number,
     scope: AdminMetricsScope,
@@ -449,18 +243,15 @@ export interface AdminMetricsOptions {
  */
 export function handleAdminMetrics(
   options: AdminMetricsOptions,
-): Effect.Effect<Response, never, DatabaseServices> {
-  const { request } = options;
+): Effect.Effect<AdminMetrics, AdminRefusal, DatabaseServices> {
+  const { query } = options;
 
-  const windowDays = adminMetricsWindow(request.url);
-  if (windowDays === undefined) {
-    return Effect.succeed(errorResponse(ADMIN_HTTP_STATUS.BAD_REQUEST, ADMIN_ERROR.INVALID_WINDOW));
-  }
+  const windowDays = adminMetricsWindow(query.window);
+  if (windowDays === undefined) return Effect.fail(ADMIN_REFUSAL.INVALID_WINDOW);
 
   return Effect.flatMap(Clock.currentTimeMillis, (now) =>
-    options.readMetrics(now, adminMetricsScope(request.url), windowDays).pipe(
-      Effect.map((metrics) => jsonResponse(ADMIN_HTTP_STATUS.OK, metrics)),
-      Effect.catchCause((cause) => unavailableSeam("admin metrics read failed", cause)),
-    ),
+    options
+      .readMetrics(now, adminMetricsScope(query.scope), windowDays)
+      .pipe(Effect.catchCause((cause) => unavailableSeam("admin metrics read failed", cause))),
   );
 }

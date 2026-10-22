@@ -74,7 +74,7 @@ export function CollectionPage({
   children,
   ...heading
 }: PageHeading & {
-  /** What narrows the collection (a search field, chips, a Segmented), on one wrapping line. */
+  /** What narrows the collection (a search field, chips, a `ChoiceBar`), on one wrapping line. */
   filters?: ReactNode;
   state: CollectionState;
   /** What is being read, said to a reader while the rows are. */
