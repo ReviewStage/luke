@@ -38,6 +38,7 @@ import {
   type CodingAgentStartFrom,
   PULL_REQUEST_STATE,
 } from "@luke/features/coding-agent-wire";
+import { isVideoType } from "@luke/features/conversation-picture-wire";
 import { agentGivenName } from "@luke/features/model-label";
 import type { ModelChoice } from "@luke/features/models-wire";
 import { type FileUIPart, isFileUIPart, isTextUIPart } from "ai";
@@ -386,7 +387,8 @@ const sourceFileOf = (source: CodingAgent, file: FileUIPart, name: string) =>
     const kept = keptImageOf(file);
     if (inline !== undefined || kept === undefined || !("id" in kept)) return inline;
     const picture = yield* readConversationPicture(source.conversationId, kept.id);
-    if (Option.isNone(picture)) return undefined;
+    // A video an agent showed is no file a message carries, so a Start names it as not attached.
+    if (Option.isNone(picture) || isVideoType(picture.value.contentType)) return undefined;
     return {
       name,
       mediaType: picture.value.contentType,
