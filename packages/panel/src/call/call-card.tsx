@@ -13,9 +13,8 @@
 
 import { ACT_KIND } from "@luke/host/acts";
 import { EXPERIMENT } from "@luke/settings";
-import { IconButton, ReturnIcon, Tooltip } from "@luke/ui";
+import { IconButton, OneLine, ReturnIcon, Tooltip } from "@luke/ui";
 import { type CallCardModel, callCardVideoStatus } from "@luke/ui/call-card-model";
-import { useClipped } from "@luke/ui/use-clipped";
 import { AVATAR_STATUS, type AvatarStatus } from "@luke/voice/avatar";
 import { VOICE_COMMAND, type VoiceCommand } from "@luke/voice/voice-view";
 import {
@@ -145,13 +144,7 @@ export function CallCard({
   leaving?: boolean;
   onLeft?: () => void;
 }): React.JSX.Element {
-  const [title, clipped] = useClipped(card.taskName);
   const inWindow = surface === CALL_CARD_SURFACE.WINDOW;
-  const name = (
-    <span className="call-card-task" ref={title} data-overflow={clipped}>
-      {card.taskName}
-    </span>
-  );
   const returnButton = (
     <IconButton
       icon={<ReturnIcon />}
@@ -181,7 +174,9 @@ export function CallCard({
         <CallVideoTile video={video.track} status={video.status} onSetVideo={video.onSetVideo} />
       ) : null}
       <div className="call-card-head">
-        <p className="call-card-title">{name}</p>
+        <p className="call-card-title">
+          <OneLine>{card.taskName}</OneLine>
+        </p>
         {video?.status === AVATAR_STATUS.OFF ? (
           <VideoToggle on={false} onSetVideo={video.onSetVideo} />
         ) : null}

@@ -15,12 +15,19 @@
 import { useAtomMount, useAtomSet, useAtomValue } from "@effect/atom-react/Hooks";
 import { ACT_KIND } from "@luke/host/acts";
 import { EXPERIMENT } from "@luke/settings";
-import { cssCustomProperties } from "@luke/ui";
+import {
+  cssCustomProperties,
+  RESIZE_CORNER,
+  ResizeCorner,
+  type ResizeCornerSide,
+  ResizeFrame,
+  type ResizeTravel,
+} from "@luke/ui";
 import { agentCallVideoStatus } from "@luke/ui/call-card-model";
 import { AVATAR_STATUS, type AvatarStatus } from "@luke/voice/avatar";
 import { Option } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import { useAct } from "../act.js";
 import { useExperiment } from "../use-app-state.js";
 import { useStandingVoiceView, useVoiceAvatar, useVoiceView } from "../use-voice-view.js";
@@ -34,11 +41,7 @@ import {
 } from "./call-avatar.js";
 import { type CallCardVideo, cardVideo, useCardVideoStatus } from "./call-card.js";
 import { AvatarVoice, CallVideoTile } from "./call-video-tile.js";
-import {
-  CALL_VIDEO_HEIGHT,
-  clampCallVideoHeight,
-  useCallVideoHeight,
-} from "./use-call-video-size.js";
+import { CALL_VIDEO_HEIGHT, useCallVideoHeight } from "./use-call-video-size.js";
 
 /** The avatar's tracks as published so far, none before a session stands. */
 function useAvatarTracks(): CallAvatarTracks {
@@ -91,18 +94,10 @@ export function useAgentCallVideo(agentId: string): AgentCallVideoState {
   };
 }
 
-/** Which top corner of the video a handle stands on. */
-const VIDEO_CORNER = {
-  LEFT: "left",
-  RIGHT: "right",
-} as const;
-
-type VideoCorner = (typeof VIDEO_CORNER)[keyof typeof VIDEO_CORNER];
-
 /** What the video's resize controls are called, for a reader and the keyboard. */
 const CALL_VIDEO_RESIZE_LABEL = {
-  [VIDEO_CORNER.LEFT]: "Resize video from its top-left corner",
-  [VIDEO_CORNER.RIGHT]: "Resize video from its top-right corner",
+  [RESIZE_CORNER.LEFT]: "Resize video from its top-left corner",
+  [RESIZE_CORNER.RIGHT]: "Resize video from its top-right corner",
 } as const;
 
 /** How far one arrow press on a corner grows or shrinks the video, in CSS pixels. */
@@ -111,102 +106,17 @@ const KEY_STEP = 16;
 /** The stock avatars stream a square picture, which is what the video stands at until its own is known. */
 const SQUARE = 1;
 
-/** A drag under way on a corner: the pointer making it, where it began, and the height the video stood at. */
-interface CornerDrag {
-  pointerId: number;
-  x: number;
-  y: number;
-  from: number;
-}
-
 /**
  * How much a drag from a corner grows the video, in height: the way it went
  * up, or the way it went out sideways, whichever is the longer pull. The
  * video stands centred, so a corner moves out by half of what its width
  * grows, which is that over the aspect in height.
  */
-function cornerGrowth(
-  drag: CornerDrag,
-  corner: VideoCorner,
-  aspect: number,
-  at: { x: number; y: number },
-): number {
-  const up = drag.y - at.y;
-  const out = corner === VIDEO_CORNER.LEFT ? drag.x - at.x : at.x - drag.x;
+function cornerGrowth(corner: ResizeCornerSide, aspect: number, travel: ResizeTravel): number {
+  const up = -travel.y;
+  const out = corner === RESIZE_CORNER.LEFT ? -travel.x : travel.x;
   const sideways = (2 * out) / aspect;
   return Math.abs(sideways) > Math.abs(up) ? sideways : up;
-}
-
-/**
- * One of the video's top corners, dragged to grow or shrink it from that
- * side, or stepped from the keyboard: ↑ or → grows it, ↓ or ← shrinks it,
- * Home and End take it to its bounds.
- */
-function VideoCornerHandle({
-  corner,
-  height,
-  aspect,
-  onResize,
-  onDragging,
-}: {
-  corner: VideoCorner;
-  height: number;
-  aspect: number;
-  onResize: (height: number) => void;
-  onDragging: (dragging: boolean) => void;
-}): React.JSX.Element {
-  const drag = useRef<CornerDrag | undefined>(undefined);
-  const onPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
-    if (event.button !== 0) return;
-    event.preventDefault();
-    event.currentTarget.setPointerCapture?.(event.pointerId);
-    drag.current = { pointerId: event.pointerId, x: event.clientX, y: event.clientY, from: height };
-    onDragging(true);
-  };
-  const onPointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
-    const held = drag.current;
-    if (held === undefined || held.pointerId !== event.pointerId) return;
-    const growth = cornerGrowth(held, corner, aspect, { x: event.clientX, y: event.clientY });
-    onResize(held.from + growth);
-  };
-  const onPointerEnd = (event: React.PointerEvent<HTMLDivElement>) => {
-    if (drag.current?.pointerId !== event.pointerId) return;
-    drag.current = undefined;
-    onDragging(false);
-  };
-  const onKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
-    const asked =
-      event.key === "ArrowUp" || event.key === "ArrowRight"
-        ? height + KEY_STEP
-        : event.key === "ArrowDown" || event.key === "ArrowLeft"
-          ? height - KEY_STEP
-          : event.key === "Home"
-            ? CALL_VIDEO_HEIGHT.MIN
-            : event.key === "End"
-              ? CALL_VIDEO_HEIGHT.MAX
-              : undefined;
-    if (asked === undefined) return;
-    event.preventDefault();
-    onResize(clampCallVideoHeight(asked));
-  };
-  return (
-    <div
-      className="agent-call-video-corner"
-      data-corner={corner}
-      role="slider"
-      aria-label={CALL_VIDEO_RESIZE_LABEL[corner]}
-      aria-orientation="vertical"
-      aria-valuemin={CALL_VIDEO_HEIGHT.MIN}
-      aria-valuemax={CALL_VIDEO_HEIGHT.MAX}
-      aria-valuenow={height}
-      tabIndex={0}
-      onPointerDown={onPointerDown}
-      onPointerMove={onPointerMove}
-      onPointerUp={onPointerEnd}
-      onPointerCancel={onPointerEnd}
-      onKeyDown={onKeyDown}
-    />
-  );
 }
 
 /**
@@ -239,23 +149,29 @@ export function AgentCallVideo({ agentId }: { agentId: string }): React.JSX.Elem
       })}
     >
       <div className="agent-call-video-frame">
-        <CallVideoTile
-          video={video}
-          status={status}
-          onSetVideo={onSetVideo}
-          toggles={false}
-          onAspect={setAspect}
-        />
-        {Object.values(VIDEO_CORNER).map((corner) => (
-          <VideoCornerHandle
-            key={corner}
-            corner={corner}
-            height={height}
-            aspect={aspect}
-            onResize={onResize}
-            onDragging={setDragging}
+        <ResizeFrame reveal={hovered || dragging}>
+          <CallVideoTile
+            video={video}
+            status={status}
+            onSetVideo={onSetVideo}
+            toggles={false}
+            onAspect={setAspect}
           />
-        ))}
+          {Object.values(RESIZE_CORNER).map((corner) => (
+            <ResizeCorner
+              key={corner}
+              corner={corner}
+              label={CALL_VIDEO_RESIZE_LABEL[corner]}
+              value={height}
+              min={CALL_VIDEO_HEIGHT.MIN}
+              max={CALL_VIDEO_HEIGHT.MAX}
+              step={KEY_STEP}
+              growth={(travel) => cornerGrowth(corner, aspect, travel)}
+              onResize={onResize}
+              onDragging={setDragging}
+            />
+          ))}
+        </ResizeFrame>
       </div>
     </div>
   );
