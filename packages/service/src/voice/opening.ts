@@ -1,5 +1,9 @@
 import { randomUUID } from "node:crypto";
 import type { DatabaseServices, QueryError } from "@luke/database/core/query";
+import {
+  PROVIDER_KEY_UNREADABLE,
+  type ProviderKeyUnreadable,
+} from "@luke/database/models/provider-key-seal";
 import type {
   EarlierCallLine,
   HeldVoiceAgent,
@@ -363,7 +367,11 @@ export interface SessionOpenerOptions {
    */
   readonly upstreamOf: (
     accountId: string,
-  ) => Effect.Effect<LiveUpstream | undefined, SessionFailure, DatabaseServices>;
+  ) => Effect.Effect<
+    LiveUpstream | ProviderKeyUnreadable | undefined,
+    SessionFailure,
+    DatabaseServices
+  >;
 }
 
 export interface SessionOpener {
@@ -451,6 +459,7 @@ export function sessionOpener(options: SessionOpenerOptions): SessionOpener {
       }
       const upstream = yield* options.upstreamOf(accountId);
       if (upstream === undefined) return refused(HOSTED_API_ERROR.OPENAI_KEY_MISSING);
+      if (upstream === PROVIDER_KEY_UNREADABLE) return refused(HOSTED_API_ERROR.UNAVAILABLE);
       yield* accounts.spend(accountId);
       return { accountId, task, agent, upstream };
     });
@@ -554,9 +563,11 @@ export function sessionOpener(options: SessionOpenerOptions): SessionOpener {
       // A session no agent was bound to is no call this service still runs.
       if (owned.agentId === undefined) return refused(HOSTED_API_ERROR.INVALID_REQUEST);
       const accountId = account.value;
-      // Note that the session was created on this account's key, so it is re-attached on it.
+      // Note that the session was created on this account's key, so it is re-attached on its key now:
+      // one replaced in Settings since reaches the session no more, which OpenAI's hour limit then ends.
       const upstream = yield* options.upstreamOf(accountId);
       if (upstream === undefined) return refused(HOSTED_API_ERROR.OPENAI_KEY_MISSING);
+      if (upstream === PROVIDER_KEY_UNREADABLE) return refused(HOSTED_API_ERROR.UNAVAILABLE);
       const sideband = yield* attach(upstream, frame.sessionId);
       if (sideband === undefined) return refused(HOSTED_API_ERROR.UPSTREAM_ERROR);
       // A connection holds the session again, so the orphan sweep leaves it be

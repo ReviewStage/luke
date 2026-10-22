@@ -20,6 +20,7 @@
  * key is looked for before the clip is read.
  */
 
+import { PROVIDER_KEY_UNREADABLE } from "@luke/database/models/provider-key-seal";
 import { spendDictationMeter } from "@luke/database/models/quota";
 import { base64Bytes } from "@luke/features/coding-agent-wire";
 import { DICTATION_BOUNDS } from "@luke/features/dictation-wire";
@@ -39,7 +40,7 @@ export interface DictationProcedureSeams {
   resolveUserId: UserIdResolver;
 }
 
-/** The caller's own OpenAI API key, or refused as missing where it saved none; unavailable where the store did not answer. */
+/** The caller's own OpenAI API key, or refused as missing where it saved none; unavailable where the store did not answer or the deployment cannot open the key it saved. */
 const openAiKeyMiddleware = middlewareGen<
   HostedContext & HostedCaller,
   { readonly openAiKey: Redacted.Redacted<string> }
@@ -54,6 +55,7 @@ const openAiKeyMiddleware = middlewareGen<
     Effect.mapError(() => HOSTED_REFUSAL.UNAVAILABLE),
   );
   if (key === undefined) return yield* Effect.fail(HOSTED_REFUSAL.OPENAI_KEY_MISSING);
+  if (key === PROVIDER_KEY_UNREADABLE) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
   return yield* next({ context: { openAiKey: key } });
 });
 

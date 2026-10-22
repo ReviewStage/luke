@@ -43,7 +43,12 @@ import type { LiveUpstream } from "./openai.js";
  * which has ended whatever it answers, is closed as expired instead. An
  * owner who holds no OpenAI key now, having removed it in Settings since the
  * call began, is read the same way: no other key may end the session, so it
- * waits for the owner's key or for the limit. Whichever way a voice row is closed here, the
+ * waits for the owner's key or for the limit. Note that the key read is the
+ * owner's now: one replaced in Settings since the call began belongs to
+ * another OpenAI project, whose answer to the attach (a refusal, or a 404 the
+ * sweep reads as gone) leaves the call to OpenAI's own limit, still on the
+ * owner's old key and never Luke's, since no row keeps the key a call was
+ * created on. Whichever way a voice row is closed here, the
  * avatar rows still open on it close behind it as orphaned, the voice row
  * first so no avatar opens on it after. Every sweep then closes whatever
  * avatar row is still open on a call already closed, as of that call's own

@@ -2,6 +2,7 @@ import http, { type IncomingMessage } from "node:http";
 import type { AddressInfo } from "node:net";
 import type { Duplex } from "node:stream";
 import type { DatabaseServices } from "@luke/database/core/query";
+import { PROVIDER_KEY_UNREADABLE } from "@luke/database/models/provider-key-seal";
 import type { VoiceSessionRecord } from "@luke/database/models/voice-session-record";
 import { LIVE_CLIENT_EVENT } from "@luke/live";
 import { catchAllButInterrupt } from "@luke/runtime/effect";
@@ -9,6 +10,7 @@ import { sentLineId } from "@luke/wire/host-ids";
 import { Context, Effect, Exit, FiberSet, Layer, Redacted, Scope } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import { type WebSocket, WebSocketServer } from "ws";
+import type { OwnApiKey } from "../accounts/own-api-key.js";
 import {
   HOSTED_API_ERROR,
   type HostedApiError,
@@ -202,9 +204,7 @@ export interface VoiceServiceOptions {
    * nothing where the account saved none: every call runs on its caller's
    * key, never Luke's (`../accounts/own-api-key.ts`).
    */
-  openAiKeyOf: (
-    accountId: string,
-  ) => Effect.Effect<Redacted.Redacted | undefined, SessionFailure, DatabaseServices>;
+  openAiKeyOf: (accountId: string) => Effect.Effect<OwnApiKey, SessionFailure, DatabaseServices>;
   model?: string | undefined;
   accounts: VoiceAccounts;
   /** The `voice_sessions` row of each session. */
@@ -284,8 +284,8 @@ export class VoiceService {
       accounts: options.accounts,
       upstreamOf: (accountId) =>
         Effect.map(options.openAiKeyOf(accountId), (key) =>
-          key === undefined
-            ? undefined
+          key === undefined || key === PROVIDER_KEY_UNREADABLE
+            ? key
             : createLiveUpstream({
                 apiKey: Redacted.value(key),
                 baseUrl: options.openAiBaseUrl,

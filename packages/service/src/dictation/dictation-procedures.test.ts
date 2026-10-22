@@ -107,7 +107,9 @@ const saveOwnKey = (userId: string, key: string) =>
   });
 
 /** An account behind its own bearer, with its own key saved where one is given, the model, and the group answering. */
-const openAccount = (options: { model?: ModelAnswer; key?: string | undefined } = {}) =>
+const openAccount = (
+  options: { model?: ModelAnswer; key?: string | undefined; ringless?: boolean } = {},
+) =>
   Effect.gen(function* () {
     const db = yield* Database;
     const userId = `user-${randomUUID()}`;
@@ -124,7 +126,9 @@ const openAccount = (options: { model?: ModelAnswer; key?: string | undefined } 
     });
     const key = "key" in options ? options.key : OPENAI_KEY;
     if (key !== undefined) yield* saveOwnKey(userId, key);
-    const ask = (request: Request) => answer(procedures, request, { model: model.layer, logged });
+    const ring = options.ringless === true ? undefined : RING;
+    const ask = (request: Request) =>
+      answer(procedures, request, { model: model.layer, logged, ring });
     return { userId, ask, calls: model.requests, logged };
   });
 
@@ -133,6 +137,7 @@ const answer = (
   request: Request,
   seams: {
     readonly model: ReturnType<typeof recordingHttpClient>["layer"];
+    readonly ring: string | undefined;
     readonly logged: string[];
   },
 ) =>
@@ -140,7 +145,7 @@ const answer = (
     const environment: HostedEnvironmentValues = {
       ...NO_ENVIRONMENT,
       openAiKey: Redacted.make(LUKE_OPENAI_KEY),
-      providerKeyEncryptionKeys: Redacted.make(RING),
+      providerKeyEncryptionKeys: seams.ring === undefined ? undefined : Redacted.make(seams.ring),
     };
     // Every line the procedure logs is kept, so the test can read what it says.
     const recorder = Logger.make(({ message, cause }) => {
@@ -278,6 +283,22 @@ it.layer(getTestDB())("the dictation route", (it) => {
           refusal(HOSTED_HTTP_STATUS.CONFLICT, HOSTED_API_ERROR.OPENAI_KEY_MISSING),
         );
         assert.equal(calls.length + keyless.calls.length, 0);
+      }),
+  );
+
+  it.effect(
+    "an account whose saved key the deployment cannot open is answered unavailable, not told to add a key, and nothing is sent",
+    () =>
+      Effect.gen(function* () {
+        const { userId, ask, calls } = yield* openAccount({ ringless: true });
+
+        const answered = yield* ask(clip(userId));
+
+        assert.deepEqual(
+          answered,
+          refusal(HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE, HOSTED_API_ERROR.UNAVAILABLE),
+        );
+        assert.equal(calls.length, 0);
       }),
   );
 });

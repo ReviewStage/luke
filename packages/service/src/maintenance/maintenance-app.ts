@@ -2,6 +2,7 @@ import type { DatabaseServices } from "@luke/database/core/query";
 import { sweepAbandonedTurns } from "@luke/database/models/abandoned-turns";
 import { hostedStore } from "@luke/database/models/hosted-store";
 import { purgeUnsavedAttachments } from "@luke/database/models/plan-attachments";
+import { PROVIDER_KEY_UNREADABLE } from "@luke/database/models/provider-key-seal";
 import { recordVoiceSeconds } from "@luke/database/models/quota";
 import { voiceSessionRecord } from "@luke/database/models/voice-session-record";
 import { storeWriter } from "@luke/database/models/writer";
@@ -87,7 +88,8 @@ const maintenanceSweepEffect = /* @__PURE__ */ Effect.fn("web/maintenanceSweepEf
     Effect.map(
       ownApiKeyOf(userId, PROVIDER_KEY_PROVIDER.OPENAI, environment.providerKeyEncryptionKeys),
       (key) =>
-        key === undefined
+        // A key the ring cannot open reaches nothing, so the orphan waits for the next sweep.
+        key === undefined || key === PROVIDER_KEY_UNREADABLE
           ? undefined
           : createLiveUpstream({
               apiKey: Redacted.value(key),
