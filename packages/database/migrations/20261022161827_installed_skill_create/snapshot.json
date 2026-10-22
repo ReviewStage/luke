@@ -1,7 +1,7 @@
 {
   "version": "8",
   "dialect": "postgres",
-  "id": "8385415a-69f4-4961-87a6-b9a6ba1a79d7",
+  "id": "f67f13a5-853d-41d9-9258-025734b87007",
   "prevIds": ["5652ee62-20d3-4f22-b894-108462479497", "78003c3a-ead0-4f4e-88ad-c85da6b368cf"],
   "ddl": [
     {
@@ -5999,12 +5999,25 @@
     {
       "type": "text",
       "typeSchema": null,
-      "notNull": true,
+      "notNull": false,
       "dimensions": 0,
       "default": null,
       "generated": null,
       "identity": null,
-      "name": "user_id",
+      "name": "owner_user_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "installed_skill"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "installed_by_user_id",
       "entityType": "columns",
       "schema": "public",
       "table": "installed_skill"
@@ -12286,7 +12299,7 @@
       "nameExplicit": true,
       "columns": [
         {
-          "value": "user_id",
+          "value": "owner_user_id",
           "isExpression": false,
           "asc": true,
           "nullsFirst": false,
@@ -14837,13 +14850,26 @@
     },
     {
       "nameExplicit": false,
-      "columns": ["user_id"],
+      "columns": ["owner_user_id"],
       "schemaTo": "public",
       "tableTo": "user",
       "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
-      "name": "installed_skill_user_id_user_id_fkey",
+      "name": "installed_skill_owner_user_id_user_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "installed_skill"
+    },
+    {
+      "nameExplicit": false,
+      "columns": ["installed_by_user_id"],
+      "schemaTo": "public",
+      "tableTo": "user",
+      "columnsTo": ["id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "SET NULL",
+      "name": "installed_skill_installed_by_user_id_user_id_fkey",
       "entityType": "fks",
       "schema": "public",
       "table": "installed_skill"
@@ -16572,8 +16598,8 @@
       "table": "chat_message"
     },
     {
-      "value": "(\"scope\" = 'personal' and \"organization_id\" is null) or (\"scope\" = 'workspace' and \"organization_id\" is not null)",
-      "name": "installed_skill_scope_workspace",
+      "value": "(\"scope\" = 'personal' and \"owner_user_id\" is not null and \"organization_id\" is null) or (\"scope\" = 'workspace' and \"organization_id\" is not null and \"owner_user_id\" is null)",
+      "name": "installed_skill_scope_owner",
       "entityType": "checks",
       "schema": "public",
       "table": "installed_skill"

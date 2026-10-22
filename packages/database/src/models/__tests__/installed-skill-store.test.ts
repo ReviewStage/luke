@@ -207,6 +207,34 @@ it.layer(getTestDB())("the installed skill store", (it) => {
   );
 
   it.effect(
+    "a workspace skill outlives its installer's deleted account, unattributed, while their personal skills go with it",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* openAccount;
+        const installer = yield* openAccount;
+        const workspace = yield* openWorkspace(owner);
+        yield* joinWorkspace(workspace, installer, WORKSPACE_ROLE.ADMIN);
+        const shared = yield* installed(installer, skill(inWorkspace(workspace), "release-notes"));
+        const own = yield* installed(installer, skill(PERSONAL, "my-pr-style"));
+        assert.deepEqual(
+          Option.map(yield* readInstalledSkill(owner, shared), (row) => row.installedByUserId),
+          Option.some(installer),
+        );
+
+        const db = yield* Database;
+        yield* db.delete(user).where(eq(user.id, installer));
+
+        const kept = yield* readInstalledSkill(owner, shared);
+        assert.deepEqual(
+          Option.map(kept, (row) => [row.installedByUserId, row.files.map((file) => file.path)]),
+          Option.some([null, ["SKILL.md"]]),
+        );
+        assert.deepEqual(yield* namesSeen(owner, workspace), ["workspace:release-notes"]);
+        assert.equal(yield* readable(installer, own), false);
+      }),
+  );
+
+  it.effect(
     "a name is held once per scope: one personal skill of a name per account, one workspace skill of a name per workspace",
     () =>
       Effect.gen(function* () {

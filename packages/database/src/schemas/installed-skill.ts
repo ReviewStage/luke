@@ -13,18 +13,19 @@ import { organization, user } from "./auth.js";
 /**
  * installed-skill.ts -- the agent skills members install into Luke, personal or their workspace's, and each one's files.
  *
- * A skill is its installer's (`user_id`) and stands in one of two scopes: a
- * personal skill names no workspace, so it follows its installer into
- * every workspace they are a member of, and a workspace skill names the
- * workspace whose every member's agents are offered it; a check holds the
- * two columns to agree. A name is the repository skills' rule (lowercase
+ * A skill stands in one of two scopes: a personal skill is its owner's
+ * (`owner_user_id`) and names no workspace, so it follows them into every
+ * workspace they are a member of, and a workspace skill names the
+ * workspace whose every member's agents are offered it and no owner; a
+ * check holds the columns to agree. Who installed it is kept apart
+ * (`installed_by_user_id`), for attribution alone, so a workspace skill
+ * outlives its installer's account while a personal one goes with it. A name is the repository skills' rule (lowercase
  * letters and digits in words joined by single hyphens, at most 64), held
  * once per owner: one personal skill of a name per account, one workspace
  * skill of a name per workspace. `source` says where the files came from,
  * and `computed_hash` is the SHA-256 the store computes over every file's
  * path and hash, so a source read again is known changed or not. `enabled`
- * false keeps it installed and offers it to no agent. The rows go with
- * their installer's account and with their workspace alike.
+ * false keeps it installed and offers it to no agent.
  */
 
 const literal = (value: string) => sql.raw(`'${value}'`);
@@ -37,10 +38,12 @@ export const installedSkill = pgTable(
   "installed_skill",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    /** The member who installed it, whose a personal skill is. */
-    userId: text("user_id")
-      .notNull()
-      .references(() => user.id, { onDelete: "cascade" }),
+    /** The account a personal skill is, which it goes with; null for a workspace skill. */
+    ownerUserId: text("owner_user_id").references(() => user.id, { onDelete: "cascade" }),
+    /** Who installed it, for attribution; null once their account is deleted. */
+    installedByUserId: text("installed_by_user_id").references(() => user.id, {
+      onDelete: "set null",
+    }),
     /** The workspace a workspace skill is offered in; null for a personal skill. */
     organizationId: text("organization_id").references(() => organization.id, {
       onDelete: "cascade",
@@ -62,16 +65,16 @@ export const installedSkill = pgTable(
   (table) => [
     // One personal skill of a name per account; its list is read by the account.
     uniqueIndex("installed_skill_personal_name")
-      .on(table.userId, table.name)
+      .on(table.ownerUserId, table.name)
       .where(sql`${table.scope} = ${literal(INSTALLED_SKILL_SCOPE.PERSONAL)}`),
     // One workspace skill of a name per workspace; its list is read by the workspace.
     uniqueIndex("installed_skill_workspace_name")
       .on(table.organizationId, table.name)
       .where(sql`${table.scope} = ${literal(INSTALLED_SKILL_SCOPE.WORKSPACE)}`),
-    // A personal skill names no workspace and a workspace skill names one.
+    // A personal skill names its owner and no workspace, and a workspace skill its workspace and no owner.
     check(
-      "installed_skill_scope_workspace",
-      sql`(${table.scope} = ${literal(INSTALLED_SKILL_SCOPE.PERSONAL)} and ${table.organizationId} is null) or (${table.scope} = ${literal(INSTALLED_SKILL_SCOPE.WORKSPACE)} and ${table.organizationId} is not null)`,
+      "installed_skill_scope_owner",
+      sql`(${table.scope} = ${literal(INSTALLED_SKILL_SCOPE.PERSONAL)} and ${table.ownerUserId} is not null and ${table.organizationId} is null) or (${table.scope} = ${literal(INSTALLED_SKILL_SCOPE.WORKSPACE)} and ${table.organizationId} is not null and ${table.ownerUserId} is null)`,
     ),
     // The repository skills' rule for a name.
     check(

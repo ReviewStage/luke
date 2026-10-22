@@ -10,7 +10,7 @@ import {
   installedSkillSourceSchema,
 } from "@luke/features/installed-skill-wire";
 import { WORKSPACE_ROLE, type WorkspaceRole } from "@luke/features/workspace-wire";
-import { and, asc, eq, exists, inArray, or, type SQL, sql } from "drizzle-orm";
+import { and, asc, eq, exists, or, type SQL, sql } from "drizzle-orm";
 import { Data, DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
 import { Database, type DatabaseServices, queryBuilder } from "../core/query.js";
@@ -27,7 +27,8 @@ import type { TaskStoreEffect, TaskStoreFailure } from "./task-store.js";
  * none. A workspace skill is its workspace's: every current member reads
  * it and their agents use it, and only its current owners and admins
  * install, change, toggle, and remove it, its installer among them only
- * while they are one. Every statement names the account beside the skill
+ * while they are one. A workspace skill outlives its installer, who is
+ * kept for attribution alone. Every statement names the account beside the skill
  * and gates on that rule in SQL, so a member who leaves a workspace reaches
  * none of its skills at once. A skill and its files are written in one
  * transaction: the files are checked first, at least `SKILL.md` and within
@@ -48,7 +49,10 @@ export class InstalledSkillFilesRefused extends Data.TaggedError("InstalledSkill
 
 const InstalledSkillRowSchema = Schema.Struct({
   id: Schema.String,
-  userId: Schema.String,
+  /** The account a personal skill is; null for a workspace one. */
+  ownerUserId: Schema.NullOr(Schema.String),
+  /** Who installed it, for attribution; null once their account is gone. */
+  installedByUserId: Schema.NullOr(Schema.String),
   /** The workspace of a workspace skill; null for a personal one. */
   organizationId: Schema.NullOr(Schema.String),
   scope: installedSkillScopeSchema,
@@ -67,7 +71,8 @@ export type InstalledSkill = typeof InstalledSkillRowSchema.Type;
 
 const INSTALLED_SKILL_COLUMNS = {
   id: installedSkill.id,
-  userId: installedSkill.userId,
+  ownerUserId: installedSkill.ownerUserId,
+  installedByUserId: installedSkill.installedByUserId,
   organizationId: installedSkill.organizationId,
   scope: installedSkill.scope,
   name: installedSkill.name,
@@ -79,13 +84,6 @@ const INSTALLED_SKILL_COLUMNS = {
   createdAt: installedSkill.createdAt,
   updatedAt: installedSkill.updatedAt,
 };
-
-const FileRowSchema = Schema.Struct({
-  skillId: Schema.String,
-  path: Schema.String,
-  bytes: Schema.Uint8Array,
-  sha256: Schema.String,
-});
 
 /** One file of an installed skill: its path from the skill's folder, its bytes, and their hex SHA-256. */
 export interface InstalledSkillFile {
@@ -168,7 +166,7 @@ function memberOf(
 function ownPersonal(userId: string): SQL | undefined {
   return and(
     eq(installedSkill.scope, INSTALLED_SKILL_SCOPE.PERSONAL),
-    eq(installedSkill.userId, userId),
+    eq(installedSkill.ownerUserId, userId),
   );
 }
 
@@ -278,7 +276,8 @@ const findManagedWorkspace = SqlSchema.findAll({
 
 const insertSkill = SqlSchema.findAll({
   Request: Schema.Struct({
-    userId: Schema.String,
+    ownerUserId: Schema.NullOr(Schema.String),
+    installedByUserId: Schema.String,
     organizationId: Schema.NullOr(Schema.String),
     scope: installedSkillScopeSchema,
     name: Schema.String,
@@ -321,59 +320,67 @@ const deleteFiles = SqlSchema.void({
     ),
 });
 
-const findSkill = SqlSchema.findOneOption({
-  Request: Schema.Struct({
-    userId: Schema.String,
-    id: Schema.String,
-    access: Schema.Literals(Object.values(INSTALLED_SKILL_ACCESS)),
-  }),
-  Result: InstalledSkillRowSchema,
+/** A skill's row beside one of its files: a row per file, the skill's columns repeated on each. */
+const SkillFileRowSchema = Schema.Struct({
+  ...InstalledSkillRowSchema.fields,
+  filePath: Schema.NullOr(Schema.String),
+  fileBytes: Schema.NullOr(Schema.Uint8Array),
+  fileSha256: Schema.NullOr(Schema.String),
+});
+
+const SKILL_FILE_COLUMNS = {
+  ...INSTALLED_SKILL_COLUMNS,
+  filePath: installedSkillFile.path,
+  fileBytes: installedSkillFile.bytes,
+  fileSha256: installedSkillFile.sha256,
+};
+
+const accessSchema = Schema.Literals(Object.values(INSTALLED_SKILL_ACCESS));
+
+/**
+ * Note that a skill and its files are read in one statement, under the
+ * rule that gates the skill, because two statements may each see another
+ * committed state: an update's new files beside the old hash, or a
+ * member's files read after they left.
+ */
+const findSkillWithFiles = SqlSchema.findAll({
+  Request: Schema.Struct({ userId: Schema.String, id: Schema.String, access: accessSchema }),
+  Result: SkillFileRowSchema,
   execute: ({ userId, id, access }) =>
     Database.use((db) =>
       db
-        .select(INSTALLED_SKILL_COLUMNS)
+        .select(SKILL_FILE_COLUMNS)
         .from(installedSkill)
-        .where(allowedTo(userId, access, id)),
+        .leftJoin(installedSkillFile, eq(installedSkillFile.skillId, installedSkill.id))
+        .where(allowedTo(userId, access, id))
+        .orderBy(asc(installedSkillFile.path)),
     ),
 });
 
 const findOffered = SqlSchema.findAll({
-  Request: Schema.Struct({
-    userId: Schema.String,
-    organizationId: Schema.NullOr(Schema.String),
-    enabledOnly: Schema.Boolean,
-  }),
+  Request: Schema.Struct({ userId: Schema.String, organizationId: Schema.String }),
   Result: InstalledSkillRowSchema,
-  execute: ({ userId, organizationId, enabledOnly }) =>
+  execute: ({ userId, organizationId }) =>
     Database.use((db) =>
       db
         .select(INSTALLED_SKILL_COLUMNS)
         .from(installedSkill)
-        .where(
-          and(
-            offeredIn(userId, organizationId),
-            enabledOnly ? eq(installedSkill.enabled, true) : undefined,
-          ),
-        )
+        .where(offeredIn(userId, organizationId))
         .orderBy(...OFFERED_ORDER),
     ),
 });
 
-const findFiles = SqlSchema.findAll({
-  Request: Schema.Array(Schema.String),
-  Result: FileRowSchema,
-  execute: (skillIds) =>
+const findOfferedWithFiles = SqlSchema.findAll({
+  Request: Schema.Struct({ userId: Schema.String, organizationId: Schema.NullOr(Schema.String) }),
+  Result: SkillFileRowSchema,
+  execute: ({ userId, organizationId }) =>
     Database.use((db) =>
       db
-        .select({
-          skillId: installedSkillFile.skillId,
-          path: installedSkillFile.path,
-          bytes: installedSkillFile.bytes,
-          sha256: installedSkillFile.sha256,
-        })
-        .from(installedSkillFile)
-        .where(inArray(installedSkillFile.skillId, skillIds))
-        .orderBy(asc(installedSkillFile.skillId), asc(installedSkillFile.path)),
+        .select(SKILL_FILE_COLUMNS)
+        .from(installedSkill)
+        .leftJoin(installedSkillFile, eq(installedSkillFile.skillId, installedSkill.id))
+        .where(and(offeredIn(userId, organizationId), eq(installedSkill.enabled, true)))
+        .orderBy(...OFFERED_ORDER, asc(installedSkill.id), asc(installedSkillFile.path)),
     ),
 });
 
@@ -428,20 +435,19 @@ const removeSkill = SqlSchema.findAll({
     ),
 });
 
-/** The skills with their files, in the order given, read in one statement. */
-function withFiles(
-  skills: readonly InstalledSkill[],
-): TaskStoreEffect<readonly InstalledSkillWithFiles[]> {
-  if (skills.length === 0) return Effect.succeed([]);
-  return Effect.map(findFiles(skills.map((skill) => skill.id)), (rows) => {
-    const bySkill = new Map<string, InstalledSkillFile[]>();
-    for (const { skillId, ...file } of rows) {
-      const held = bySkill.get(skillId) ?? [];
-      held.push(file);
-      bySkill.set(skillId, held);
+/** The skills of rows a file each, in the order read, each with its files. */
+function groupedFiles(
+  rows: readonly (typeof SkillFileRowSchema.Type)[],
+): readonly InstalledSkillWithFiles[] {
+  const skills = new Map<string, { skill: InstalledSkill; files: InstalledSkillFile[] }>();
+  for (const { filePath, fileBytes, fileSha256, ...skill } of rows) {
+    const held = skills.get(skill.id) ?? { skill, files: [] };
+    if (filePath !== null && fileBytes !== null && fileSha256 !== null) {
+      held.files.push({ path: filePath, bytes: fileBytes, sha256: fileSha256 });
     }
-    return skills.map((skill) => ({ ...skill, files: bySkill.get(skill.id) ?? [] }));
-  });
+    skills.set(skill.id, held);
+  }
+  return [...skills.values()].map(({ skill, files }) => ({ ...skill, files }));
 }
 
 /** Runs the effect in one transaction. */
@@ -456,7 +462,7 @@ export function listInstalledSkills(
   userId: string,
   organizationId: string,
 ): TaskStoreEffect<readonly InstalledSkill[]> {
-  return findOffered({ userId, organizationId, enabledOnly: false });
+  return findOffered({ userId, organizationId });
 }
 
 /** One skill the account may do `access` with, reading by default, with its files; nothing for any other id. */
@@ -465,11 +471,8 @@ export function readInstalledSkill(
   id: string,
   access: InstalledSkillAccess = INSTALLED_SKILL_ACCESS.READ,
 ): TaskStoreEffect<Option.Option<InstalledSkillWithFiles>> {
-  return Effect.flatMap(findSkill({ userId, id, access }), (found) =>
-    Option.match(found, {
-      onNone: () => Effect.succeed(Option.none()),
-      onSome: (skill) => Effect.map(withFiles([skill]), ([read]) => Option.fromUndefinedOr(read)),
-    }),
+  return Effect.map(findSkillWithFiles({ userId, id, access }), (rows) =>
+    Option.fromUndefinedOr(groupedFiles(rows)[0]),
   );
 }
 
@@ -500,7 +503,8 @@ export function installSkill(
         }
         const now = yield* DateTime.nowAsDate;
         const [row] = yield* insertSkill({
-          userId,
+          ownerUserId: organizationId === null ? userId : null,
+          installedByUserId: userId,
           organizationId,
           scope: made.owner.scope,
           name: made.name,
@@ -584,5 +588,5 @@ export function sessionInstalledSkills(
   userId: string,
   organizationId: string | null,
 ): TaskStoreEffect<readonly InstalledSkillWithFiles[]> {
-  return Effect.flatMap(findOffered({ userId, organizationId, enabledOnly: true }), withFiles);
+  return Effect.map(findOfferedWithFiles({ userId, organizationId }), groupedFiles);
 }
