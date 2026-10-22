@@ -36,13 +36,12 @@ import {
   listTaskBrowserTabs,
   type ReachedBrowserTab,
   readTaskBrowserTab,
+  recordMemberOpenedBrowserTab,
   takeOverBrowserTab,
-  upsertBrowserTab,
 } from "@luke/database/models/agent-browser-tabs";
 import { standingSessionsOf } from "@luke/database/models/recorded-session";
 import { holdSandbox } from "@luke/database/models/sandbox-terminal-lease";
 import {
-  AGENT_BROWSER_TAB_OPENER,
   type AgentBrowserTab,
   type AgentBrowserTabOpenRequest,
   agentBrowserTabOf,
@@ -50,7 +49,7 @@ import {
 import { isBrowserAddress } from "@luke/features/browser-acts";
 import { DateTime, Duration, Effect, type Layer, Option } from "effect";
 import type { HttpClient } from "effect/http";
-import { BROWSER_LIVE_BOUNDS } from "../browser-live/relay.js";
+import { BROWSER_LIVE_BOUNDS } from "../browser-live/bounds.js";
 import {
   HOSTED_REFUSAL,
   type HostedRefusal,
@@ -67,7 +66,7 @@ export const BROWSER_TAKEOVER_HOLD_MS = 60_000;
 
 /**
  * How long an open holds the agent's sandbox: the live view's idle bound and
- * the minute until its next write (`browser-live/relay.ts`), since the
+ * the minute until its next write (`browser-live/bounds.ts`), since the
  * member's window opens the tab's live view at once, whose own lease takes
  * over within seconds; one that never attaches is stopped by the lease
  * sweep once this lapses.
@@ -197,14 +196,15 @@ const openTab = /* @__PURE__ */ Effect.fnUntraced(function* (
     holdSandbox(conversationId, new Date(held.getTime() + Duration.toMillis(OPEN_HOLD))),
   );
   const targetId = yield* openedPage(sessionId, conversationId, body.address);
-  // Note that the page is kept at the address asked, its title too, until the agent's next look at it reads the page's own.
+  // Note that the page is kept at the address asked, its title too, until the agent's next look at it
+  // reads the page's own, and the member stands as its opener though the agent's `list` wrote it first.
   const tab = yield* hostedStoreOrUnavailable(
-    upsertBrowserTab({
+    recordMemberOpenedBrowserTab({
       conversationId,
       targetId,
       address: body.address,
       title: body.address,
-      openedBy: { kind: AGENT_BROWSER_TAB_OPENER.MEMBER, userId },
+      userId,
     }),
   );
   const now = yield* DateTime.nowAsDate;

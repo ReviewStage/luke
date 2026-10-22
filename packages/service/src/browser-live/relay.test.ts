@@ -26,12 +26,8 @@ import {
   fakeCdpPeer,
   fakeSandboxApi,
 } from "../testing/agent-browser-fake.js";
-import {
-  BROWSER_LIVE_BOUNDS,
-  type BrowserLiveDependencies,
-  type BrowserLiveViewer,
-  relayBrowserTab,
-} from "./relay.js";
+import { BROWSER_LIVE_BOUNDS } from "./bounds.js";
+import { type BrowserLiveDependencies, type BrowserLiveViewer, relayBrowserTab } from "./relay.js";
 
 /**
  * One live view of one tab, over a fake Chromium behind the real browser

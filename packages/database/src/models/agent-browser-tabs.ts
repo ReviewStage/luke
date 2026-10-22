@@ -214,10 +214,12 @@ const upsertTab = SqlSchema.findOne({
     title: Schema.String,
     openedBy: Schema.Literals(OPENERS),
     openedByUserId: Schema.NullOr(Schema.String),
+    /** Whether the opener given replaces the one a row already keeps: only for a target this caller just made. */
+    claimOpener: Schema.Boolean,
     now: Schema.Date,
   }),
   Result: BrowserTabSchema,
-  execute: ({ now, ...tab }) =>
+  execute: ({ now, claimOpener, ...tab }) =>
     Database.use((db) =>
       db
         .insert(agentBrowserTab)
@@ -234,6 +236,9 @@ const upsertTab = SqlSchema.findOne({
             address: tab.address,
             title: tab.title,
             lastActedAt: sql`greatest(${agentBrowserTab.lastActedAt}, ${now}::timestamptz)`,
+            ...(claimOpener
+              ? { openedBy: tab.openedBy, openedByUserId: tab.openedByUserId }
+              : undefined),
           },
         })
         .returning(tabColumns),
@@ -445,6 +450,28 @@ export function listAgentBrowserTabs(
  * member's takeover is left as it is, for the agent's side to heed.
  */
 export function upsertBrowserTab(action: BrowserTabAction): BrowserTabEffect<AgentBrowserTabRow> {
+  return writeTab(action, false);
+}
+
+/**
+ * Records a tab a member just opened in an agent's browser, as
+ * `upsertBrowserTab` does, but with the member as its opener even where a
+ * row for the target stands already: one the agent's own `list` wrote in
+ * the moment between the page opening and this write, since the browser
+ * makes a new id for every page, so no agent opened it.
+ */
+export function recordMemberOpenedBrowserTab(
+  tab: Omit<BrowserTabAction, "openedBy"> & { readonly userId: string },
+): BrowserTabEffect<AgentBrowserTabRow> {
+  const { userId, ...page } = tab;
+  return writeTab({ ...page, openedBy: { kind: AGENT_BROWSER_TAB_OPENER.MEMBER, userId } }, true);
+}
+
+/** A tab's write: upserted with its page as it stands, its opener kept from its first report unless `claimOpener`. */
+function writeTab(
+  action: BrowserTabAction,
+  claimOpener: boolean,
+): BrowserTabEffect<AgentBrowserTabRow> {
   return Effect.gen(function* () {
     const now = yield* DateTime.nowAsDate;
     const { openedBy } = action;
@@ -455,6 +482,7 @@ export function upsertBrowserTab(action: BrowserTabAction): BrowserTabEffect<Age
       title: shown(action.title),
       openedBy: openedBy.kind,
       openedByUserId: openedBy.kind === AGENT_BROWSER_TAB_OPENER.MEMBER ? openedBy.userId : null,
+      claimOpener,
       now,
     }).pipe(
       // An upsert that returned no row is the database breaking its own contract, not an outcome.

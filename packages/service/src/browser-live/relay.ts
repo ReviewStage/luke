@@ -86,27 +86,7 @@ import { BROWSER_UNREACHABLE, type BrowserUnreachable } from "../agents/browser/
 import { CODER } from "../agents/coder-host/bounds.js";
 import { EXCESS_KEYS, type UnparsedWireValue, unparsedWire } from "../core.js";
 import type { RelaySocket } from "../terminal/relay.js";
-
-export const BROWSER_LIVE_BOUNDS = {
-  /** How long a socket stays open past the panel's last message. */
-  IDLE: Duration.minutes(5),
-  /** How often the panel's messages move the lease on, so a mouse move is not a write. */
-  LEASE_WRITE_EVERY: Duration.minutes(1),
-  /** How often a socket asks whether the panel has gone the idle bound silent. */
-  IDLE_CHECK_EVERY: Duration.seconds(30),
-  /** How often the tab is read again, for its driver and whether it still stands. */
-  TAB_CHECK_EVERY: Duration.seconds(5),
-  /** How often input moves the member's takeover on, well inside its hold. */
-  RENEW_EVERY: Duration.seconds(10),
-  /** The least time between two frames: at most eight a second. */
-  FRAME_EVERY: Duration.millis(125),
-  /** How long the close waits on the browser to stop the cast. */
-  CAST_END_TIMEOUT: Duration.seconds(2),
-  /** The most bytes the panel's socket may still be sending before a frame is skipped. */
-  MAX_BUFFERED_BYTES: 1024 * 1024,
-  /** The screencast: JPEG, no larger than a laptop's screen, at a quality text stays legible at. */
-  SCREENCAST: { format: "jpeg", quality: 60, maxWidth: 1280, maxHeight: 800 },
-} as const;
+import { BROWSER_LIVE_BOUNDS } from "./bounds.js";
 
 /** The panel's socket: a relay side, and how many bytes it has yet to send, which paces the frames. */
 export interface BrowserLiveViewer extends RelaySocket {

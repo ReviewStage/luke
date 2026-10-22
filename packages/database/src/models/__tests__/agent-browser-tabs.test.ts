@@ -24,6 +24,7 @@ import {
   listTaskBrowserTabs,
   pointBrowserTab,
   readTaskBrowserTab,
+  recordMemberOpenedBrowserTab,
   renewBrowserTabTakeover,
   retargetBrowserTab,
   takeOverBrowserTab,
@@ -243,6 +244,35 @@ it.layer(getTestDB())("an agent's Browser tabs", (it) => {
         assert.equal(yield* driverNow, teammate);
         assert.equal(yield* handBackBrowserTab(tab.id, teammate), true);
         assert.equal(yield* driverNow, null);
+      }),
+  );
+
+  it.effect(
+    "a tab a member opened stands as theirs though the agent's list wrote it first, and the agent's later writes leave it theirs",
+    () =>
+      Effect.gen(function* () {
+        const { agent, teammate } = yield* openTask;
+        // The agent's `list` saw the new page in the moment before the member's open recorded it.
+        const listed = yield* upsertBrowserTab(
+          action(agent.conversationId, "target-new", "about:blank"),
+        );
+        const opened = yield* recordMemberOpenedBrowserTab({
+          conversationId: agent.conversationId,
+          targetId: "target-new",
+          address: "https://accounts.test/",
+          title: "https://accounts.test/",
+          userId: teammate,
+        });
+        const later = yield* upsertBrowserTab(
+          action(agent.conversationId, "target-new", "https://accounts.test/home"),
+        );
+
+        assert.equal(opened.id, listed.id);
+        assert.equal(opened.address, "https://accounts.test/");
+        for (const row of [opened, later]) {
+          assert.equal(row.openedBy, AGENT_BROWSER_TAB_OPENER.MEMBER);
+          assert.equal(row.openedByUserId, teammate);
+        }
       }),
   );
 
