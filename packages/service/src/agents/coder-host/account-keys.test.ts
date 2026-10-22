@@ -407,5 +407,8 @@ test("a replay's summary is written on the account's own key, the new agent's ow
   assert.deepEqual(anthropic.asked, [{ host: "api.anthropic.com", model: "claude-opus-5-5" }]);
   assert.deepEqual(openAi.keys, [ACCOUNT_KEY.OPENAI]);
   assert.deepEqual(openAi.asked, [{ host: "api.openai.com", model: "gpt-6.1-sol" }]);
+  // The other provider's model may hold less than the new agent's, so its chunks are sized to its own window.
+  assert.equal(own.windowTokens, undefined);
+  assert.equal(other.windowTokens, 200_000);
   assert.equal(await summaryModelFor(none, opus, anthropic.fetch), undefined);
 });

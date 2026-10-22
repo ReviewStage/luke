@@ -114,6 +114,22 @@ const windowFor = (chunkBytes: number) =>
   );
 
 it.effect(
+  "a summary model whose own window holds less than the new agent's, as another provider's does, is handed chunks sized to its own window",
+  () =>
+    Effect.gen(function* () {
+      const { summary, asked } = scripted((prompt) =>
+        prompt.includes("Part 1:") ? "Whole recap." : "Recap.",
+      );
+      const narrow: SummaryModel = { ...summary, windowTokens: windowFor(25_000) };
+      const steps = Array.from({ length: 6 }, (_, at) => said(at, 10_000));
+      const written = yield* summarizeSteps(narrow, steps, 1_000_000);
+
+      assert.deepEqual(written, Option.some({ text: "Whole recap.", steps: 6 }));
+      assert.equal(asked.length, 4, "three chunks of two steps, then the combining call");
+    }),
+);
+
+it.effect(
   "steps that fit one call are summarized by it alone, the summary standing for every step",
   () =>
     Effect.gen(function* () {

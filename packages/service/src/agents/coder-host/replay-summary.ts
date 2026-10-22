@@ -98,6 +98,8 @@ const COMBINE_INSTRUCTIONS =
 export interface SummaryModel {
   readonly model: LanguageModel;
   readonly providerOptions: Record<string, Record<string, string>>;
+  /** The most the summary model's own window holds, where it is another model than the new agent's and may hold less; the new agent's window bounds it otherwise. */
+  readonly windowTokens?: number;
 }
 
 /**
@@ -111,6 +113,15 @@ const OTHER_PROVIDER_SUMMARY = {
 } as const satisfies Record<ModelProvider, string>;
 
 const OTHER_PROVIDER_SUMMARY_EFFORT = "low";
+
+/**
+ * The window a summary on the other provider's model is sized against. Note
+ * that it is the least either provider's balanced model holds, rather than
+ * read from the catalog, because the catalog lists the new agent's model and
+ * a summary sized past the model it runs on fails and leaves the earlier
+ * steps out.
+ */
+const OTHER_PROVIDER_SUMMARY_WINDOW_TOKENS = 200_000;
 
 /** How a Start finds the model a summary is written on, for the account and the new agent's choice at the effort named; nothing where it has no key to reach it on. */
 export type SummaryModelOf = (
@@ -254,7 +265,8 @@ function summaryCall(model: SummaryModel, system: string, prompt: string, maxOut
 /**
  * A summary of the steps, the recap the source already carried of those
  * before them read first, written on the model in chunks sized to its
- * window, a few at a time, then combined into one; each chunk's summary is
+ * window, the new agent's or the summary model's own where that holds less,
+ * a few at a time, then combined into one; each chunk's summary is
  * held to its share of the combining call's room, and the oldest chunks
  * past `REPLAY_FIT.MAX_CHUNKS` are left out, which the summary says. The
  * summary stands for the steps of the chunks it read alone, so the steps
@@ -267,7 +279,8 @@ export function summarizeSteps(
   windowTokens: number,
   earlier?: ReplaySummary,
 ): Effect.Effect<Option.Option<ReplaySummary>> {
-  const threshold = Math.floor(windowTokens * CODER.COMPACTION_THRESHOLD_SHARE);
+  const window = Math.min(windowTokens, model.windowTokens ?? windowTokens);
+  const threshold = Math.floor(window * CODER.COMPACTION_THRESHOLD_SHARE);
   const room = Math.max(
     1,
     threshold - REPLAY_FIT.SUMMARY_OUTPUT_TOKENS - REPLAY_FIT.SUMMARY_PROMPT_TOKENS,
@@ -435,8 +448,10 @@ export const productionSummaryModel = (
       own.provider === MODEL_PROVIDER.ANTHROPIC
         ? createAnthropic(settings)(modelId)
         : createOpenAI(settings).responses(modelId);
+    if (same) return { model, providerOptions: summaryOptions(own.provider, effort) };
     return {
       model,
-      providerOptions: summaryOptions(own.provider, same ? effort : OTHER_PROVIDER_SUMMARY_EFFORT),
+      providerOptions: summaryOptions(own.provider, OTHER_PROVIDER_SUMMARY_EFFORT),
+      windowTokens: OTHER_PROVIDER_SUMMARY_WINDOW_TOKENS,
     };
   });
