@@ -1,10 +1,12 @@
 import {
   ALIGN,
+  Button,
   FILL_FLOW,
   Fill,
   GAP,
   Inline,
   JUSTIFY,
+  LAYOUT_ELEMENT,
   Stack,
   TEXT_TONE,
   TEXT_VARIANT,
@@ -103,6 +105,24 @@ function Layout(): React.JSX.Element {
             </Fill>
           </div>
         </Inline>
+      </CatalogSection>
+      <CatalogSection id="layout-grow" title="A form whose first item takes the room">
+        <Stack gap={GAP.CONTROL}>
+          {[false, true].map((narrow) => (
+            <div key={String(narrow)} className={narrow ? "catalog-narrow" : "catalog-frame"}>
+              <Inline
+                as={LAYOUT_ELEMENT.FORM}
+                justify={JUSTIFY.END}
+                growFirst
+                onSubmit={(event) => event.preventDefault()}
+              >
+                <Swatch>A field that fills what the buttons leave</Swatch>
+                <Button>Cancel</Button>
+                <Button>Save</Button>
+              </Inline>
+            </div>
+          ))}
+        </Stack>
       </CatalogSection>
     </>
   );

@@ -1,0 +1,38 @@
+/* A glyph's own size wherever the window draws it bare, in the `base`
+   layer under the shared components, so a control, a menu, or a row that
+   holds one sizes it as its own contract says and the window's own markup
+   is all these reach. Sized to the heading it labels rather than to a grid:
+   the glyph is a letter in the line, not an element beside it. */
+@layer base {
+  .settings-icon {
+    width: 14px;
+    height: 14px;
+    flex: 0 0 auto;
+    opacity: 0.85;
+  }
+}
+
+/* A chevron the window draws bare; a chip, a menu item, and a picker's
+   option draw their own over this (`chip.css`, `menu.css`, `combobox.css`). */
+@layer base {
+  .settings-chevron {
+    width: 11px;
+    height: 11px;
+    flex: 0 0 auto;
+    color: var(--luke-color-text-subtle);
+  }
+}
+
+/* The one green thing on the line, in the same palette a finished session
+   uses, so connected reads the same way complete does. A menu item and a
+   picker's option draw their own check over this (`menu.css`,
+   `combobox.css`). */
+@layer base {
+  .credential-check {
+    width: 12px;
+    height: 12px;
+    flex: 0 0 auto;
+    color: var(--luke-color-complete);
+    opacity: 1;
+  }
+}

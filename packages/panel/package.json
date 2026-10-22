@@ -52,6 +52,7 @@
     "./styles/desktop.css": "./src/styles/desktop.css",
     "./styles/index.css": "./src/styles/index.css",
     "./styles/markdown.css": "./src/styles/markdown.css",
+    "./styles/search.css": "./src/styles/search.css",
     "./styles/settings.css": "./src/styles/settings.css",
     "./styles/shell.css": "./src/styles/shell.css",
     "./styles/shortcut.css": "./src/styles/shortcut.css",
