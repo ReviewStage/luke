@@ -98,13 +98,19 @@ function Box({
     send: sender,
     onStatus: ignore,
   });
-  return createElement(AgentComposer, {
-    ...QUIET_COMPOSER,
-    composer,
-    skills: reading,
-    call: call?.controls,
-    dictates: !(call?.onCall ?? false),
-  });
+  return createElement(
+    "div",
+    null,
+    createElement(AgentComposer, {
+      ...QUIET_COMPOSER,
+      composer,
+      skills: reading,
+      call: call?.controls,
+      dictates: !(call?.onCall ?? false),
+    }),
+    // What Continue would carry, as the tab hands it on.
+    createElement("output", { "data-unsent": composer.unsent.words }),
+  );
 }
 
 /** The box mounted, every message it sends written down and answered by `answer`. */
@@ -751,4 +757,22 @@ test("a message refused because the member's token is not authorized for the org
 
   assert.deepEqual(box.opened.github, [authorizeUrl]);
   assert.deepEqual(box.opened.settings, []);
+});
+
+test("messages still waiting to go as the agent refuses one for good are all kept for Continue, in the order sent", async () => {
+  const box = await answeredInTurn();
+  typeInComposer(box.container, "Fix tests");
+  pressInComposer(box.container, "Enter");
+  await settle();
+  typeInComposer(box.container, "Update docs");
+  pressInComposer(box.container, "Enter");
+  await settle();
+
+  await box.answer(0, { failure: CODING_AGENT_CALL_FAILURE.AGENT_RETIRED });
+  assert.deepEqual(
+    box.sent.map((each) => each.text),
+    ["Fix tests"],
+    "the one behind it is not sent",
+  );
+  assert.equal(box.container.querySelector("output")?.dataset.unsent, "Fix tests\n\nUpdate docs");
 });
