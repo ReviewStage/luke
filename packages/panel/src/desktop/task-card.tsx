@@ -14,6 +14,7 @@ import {
   ProviderMark,
   TaskPriorityMark,
   TaskStatusMark as TaskStatusGlyph,
+  VisuallyHidden,
 } from "@luke/ui";
 import { ACTOR_KIND, actorName, SOMEONE_REASON } from "@luke/ui/actor-model";
 import { TASK_ORDER, taskTime } from "@luke/ui/task-list-model";
@@ -86,7 +87,7 @@ export function TaskStatusMark({
     return (
       <span className="task-mark-attention">
         <AttentionMark />
-        <span className="visually-hidden">{`(repository belongs to ${stranded.name})`}</span>
+        <VisuallyHidden>{`(repository belongs to ${stranded.name})`}</VisuallyHidden>
       </span>
     );
   }

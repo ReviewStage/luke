@@ -14,6 +14,9 @@ import {
   AttachmentChip,
   type AttachmentChipState,
   PictureTile,
+  TEXT_ELEMENT,
+  TEXT_VARIANT,
+  Text,
 } from "@luke/ui";
 import {
   PICTURE_STATE,
@@ -313,7 +316,14 @@ function SetTile({
           onOpen={onOpen}
           caption={
             many || shown.caption === "" ? null : (
-              <span className="picture-set-caption">{shown.caption}</span>
+              <Text
+                as={TEXT_ELEMENT.SPAN}
+                variant={TEXT_VARIANT.INHERIT}
+                truncate
+                className="picture-set-caption"
+              >
+                {shown.caption}
+              </Text>
             )
           }
         >

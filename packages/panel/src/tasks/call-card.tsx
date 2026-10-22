@@ -1,6 +1,6 @@
 import type { PlanEditor } from "@luke/features/task-wire";
 import { LIVE_CLOSE_REASON, type LiveCloseReason } from "@luke/live";
-import { WaveformIcon } from "@luke/ui";
+import { TEXT_ELEMENT, TEXT_VARIANT, Text, WaveformIcon } from "@luke/ui";
 import type { CallRecord } from "@luke/voice/transcript-model";
 import { PhoneOffIcon } from "lucide-react";
 import type { ReactNode } from "react";
@@ -174,7 +174,12 @@ export function CallStartMarker({
         <span className="call-marker-icon" data-live={live ? "" : undefined} aria-hidden="true">
           <WaveformIcon />
         </span>
-        <span className="call-marker-text">
+        <Text
+          as={TEXT_ELEMENT.SPAN}
+          variant={TEXT_VARIANT.INHERIT}
+          truncate
+          className="call-marker-text"
+        >
           <span className="call-marker-words">
             {caller === undefined ? CALL_MARKER_WORDS.STARTED : <CallerStarted caller={caller} />}
           </span>
@@ -182,7 +187,7 @@ export function CallStartMarker({
             {WORKED_SEPARATOR}
             <time dateTime={new Date(startedAt).toISOString()}>{callHeading(startedAt, now)}</time>
           </span>
-        </span>
+        </Text>
         {live ? <span className="call-marker-live">{CALL_MARKER_WORDS.LIVE}</span> : null}
       </span>
     </CallMarker>
@@ -218,9 +223,14 @@ export function CallEndMarker({
       <CallMarker end={CALL_MARKER_END.END}>
         <p className="call-marker-pill" data-call-ended="">
           {icon}
-          <span className="call-marker-text">
+          <Text
+            as={TEXT_ELEMENT.SPAN}
+            variant={TEXT_VARIANT.INHERIT}
+            truncate
+            className="call-marker-text"
+          >
             <span className="call-marker-words">{line}</span>
-          </span>
+          </Text>
         </p>
       </CallMarker>
     );
@@ -235,7 +245,12 @@ export function CallEndMarker({
       >
         <p className="call-marker-pill" data-call-ended="">
           {icon}
-          <span className="call-marker-text">
+          <Text
+            as={TEXT_ELEMENT.SPAN}
+            variant={TEXT_VARIANT.INHERIT}
+            truncate
+            className="call-marker-text"
+          >
             <span className="call-marker-words" data-call-length="">
               {line}
               <span className="call-marker-detail">
@@ -247,7 +262,7 @@ export function CallEndMarker({
               {WORKED_SEPARATOR}
               <time dateTime={new Date(endedAt).toISOString()}>{ended}</time>
             </span>
-          </span>
+          </Text>
         </p>
       </Tooltip>
     </CallMarker>

@@ -245,7 +245,14 @@ function TaskBoardCard({
         {drawn(TASK_PROPERTY.CREATOR) ? (
           <span className="tasks-board-face">
             {maker === undefined ? null : (
-              <span className="tasks-board-maker">{actorName(maker.actor)}</span>
+              <Text
+                as={TEXT_ELEMENT.SPAN}
+                variant={TEXT_VARIANT.INHERIT}
+                truncate
+                className="tasks-board-maker"
+              >
+                {actorName(maker.actor)}
+              </Text>
             )}
             <ActorMark
               actor={maker?.actor ?? creator}
@@ -312,7 +319,14 @@ function TaskBoardCard({
           <StatusChip task={task} look={CHIP_LOOK.TOOLBAR} named={narrow} onStanding={onStanding} />
         ) : null}
         {task.repository === null || !drawn(TASK_PROPERTY.REPOSITORY) ? null : (
-          <span className="tasks-board-repository">{repositoryName(task.repository)}</span>
+          <Text
+            as={TEXT_ELEMENT.SPAN}
+            variant={TEXT_VARIANT.INHERIT}
+            truncate
+            className="tasks-board-repository"
+          >
+            {repositoryName(task.repository)}
+          </Text>
         )}
         {drawn(TASK_PROPERTY.AGENTS) ? <TaskWorkMarks task={task} /> : null}
         <span className="tasks-board-card-more">

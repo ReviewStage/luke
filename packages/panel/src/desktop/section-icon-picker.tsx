@@ -16,7 +16,11 @@ import {
   ScrollArea,
   SearchField,
   Swatch,
+  TEXT_ELEMENT,
+  TEXT_VARIANT,
+  Text,
   TextField,
+  VisuallyHidden,
 } from "@luke/ui";
 import {
   emojiGroups,
@@ -347,7 +351,7 @@ function ColorChoices({
   );
   return (
     <fieldset className="section-icon-colors">
-      <legend className="visually-hidden">Icon color</legend>
+      <VisuallyHidden as="legend">Icon color</VisuallyHidden>
       {swatch("No color", undefined)}
       {Object.values(TASK_SECTION_ICON_COLOR).map((value) => swatch(COLOR_LABEL[value], value))}
     </fieldset>
@@ -496,7 +500,7 @@ export function SectionIconPicker({
             setResting(restingLabel(event));
           }}
         >
-          <legend className="visually-hidden">{tab === ICON_TAB.ICONS ? "Icons" : "Emoji"}</legend>
+          <VisuallyHidden as="legend">{tab === ICON_TAB.ICONS ? "Icons" : "Emoji"}</VisuallyHidden>
           <div className="section-icon-scroll">
             <ScrollArea ref={grid}>
               {tab === ICON_TAB.ICONS ? (
@@ -507,12 +511,18 @@ export function SectionIconPicker({
             </ScrollArea>
           </div>
         </fieldset>
-        <p className="section-icon-resting" aria-hidden="true">
+        <Text
+          as={TEXT_ELEMENT.P}
+          variant={TEXT_VARIANT.INHERIT}
+          truncate
+          className="section-icon-resting"
+          aria-hidden="true"
+        >
           {resting ??
             (tab === ICON_TAB.ICONS && icon?.kind === TASK_SECTION_ICON_KIND.GLYPH
               ? glyphLabel(icon.glyph)
               : "")}
-        </p>
+        </Text>
         {tab === ICON_TAB.EMOJI ? (
           <TextField
             label="Any emoji"

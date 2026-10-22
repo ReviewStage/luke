@@ -155,7 +155,8 @@ for (const room of ["narrow", "wide"]) {
       .appendChild(document.createElement("div"))
       .appendChild(document.createElement("span"))
       .appendChild(document.createElement("span"));
-    words.className = "message-sender-words";
+    words.className = "luke-text message-sender-words";
+    words.dataset.truncate = "";
     words.textContent = "a-sender-name-too-long-to-stand-beside-anything-in-its-column";
     const style = getComputedStyle(words);
     assert.deepEqual(

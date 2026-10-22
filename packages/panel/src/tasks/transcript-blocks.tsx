@@ -31,6 +31,7 @@ import {
   LineButton,
   LineSummary,
   ProviderMark,
+  TEXT_ELEMENT,
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
@@ -1316,7 +1317,16 @@ export function TranscriptTodosDock({
       <FoldSummary className="todos-dock-head">
         <ListTodoIcon className="todos-dock-icon" aria-hidden="true" />
         <span className="todos-dock-summary">{summary}</span>
-        {focus === undefined ? null : <span className="todos-dock-focus">{focus}</span>}
+        {focus === undefined ? null : (
+          <Text
+            as={TEXT_ELEMENT.SPAN}
+            variant={TEXT_VARIANT.INHERIT}
+            truncate
+            className="todos-dock-focus"
+          >
+            {focus}
+          </Text>
+        )}
         <span className="todos-dock-chevron">
           <DisclosureChevron />
         </span>

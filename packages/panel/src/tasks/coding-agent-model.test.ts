@@ -37,6 +37,7 @@ import {
   messageWords,
   modelLabel,
   offeredModels,
+  openingLineOf,
   placedMessages,
   planPayerOf,
   publishedUrl,
@@ -50,6 +51,7 @@ import {
   startedAgentOf,
   startFailureNote,
   transcriptRowKey,
+  unreadOpeningLine,
   unreadSentLines,
   withAgentRun,
 } from "./coding-agent-model.js";
@@ -205,6 +207,23 @@ test("a sent line is read back by the row written under its key alone, so two li
   const both = [...secondLanded, writtenFor("m-1", "key-1", "Go on.")];
   assert.deepEqual(unreadSentLines([first, second], both), []);
   assert.equal(messageWords(both[2] ?? plan), "Go on.");
+});
+
+test("the line an agent was started on stands until the transcript reads back the developer's first row, whatever key that row was written under", () => {
+  const opening = openingLineOf({
+    key: "key-start",
+    prompt: " Fix the sidebar.\n",
+    attachments: [],
+  });
+  assert.equal(
+    messageWords(agentLines([], [opening])[0] ?? developer("none", "")),
+    "Fix the sidebar.",
+  );
+  const reply: CodingAgentMessage = { id: "m-0", role: MESSAGE_ROLE.ASSISTANT, parts: [] };
+  assert.equal(unreadOpeningLine(opening, [reply]), opening, "no row of the developer's yet");
+  // eve writes the first row under no key of the start's.
+  assert.equal(unreadOpeningLine(opening, [developer("m-1", "Fix the sidebar.")]), undefined);
+  assert.equal(unreadOpeningLine(undefined, []), undefined);
 });
 
 test("a line refused for now is let go once its row lands, and one refused for good stands", () => {

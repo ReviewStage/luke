@@ -48,6 +48,7 @@ import {
   TrashIcon,
   useConfirmDialog,
   useMenu,
+  VisuallyHidden,
 } from "@luke/ui";
 import { type Actor, LUKE_ACTOR } from "@luke/ui/actor-model";
 import {
@@ -952,7 +953,7 @@ function ThreadCard({
           onPress={() => onOpen?.()}
         >
           {replies.length === 0 ? (
-            <span className="luke-visually-hidden">{COMMENT_WORDS.OPEN_THREAD}</span>
+            <VisuallyHidden>{COMMENT_WORDS.OPEN_THREAD}</VisuallyHidden>
           ) : (
             <span className="comment-replies">
               <span className="comment-faces">

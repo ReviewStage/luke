@@ -86,6 +86,7 @@ import {
   TEXT_VARIANT,
   Text,
   UnpinIcon,
+  VisuallyHidden,
   WingFace,
 } from "@luke/ui";
 import {
@@ -855,7 +856,7 @@ function inboxRows(
       endMark: needsYou(listed, seams.readerId) ? (
         <span className="inbox-row-attention">
           <AttentionMark />
-          <span className="visually-hidden">{NEEDS_YOU.LABEL}</span>
+          <VisuallyHidden>{NEEDS_YOU.LABEL}</VisuallyHidden>
         </span>
       ) : undefined,
       terms: [title, name],

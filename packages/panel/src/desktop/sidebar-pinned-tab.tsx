@@ -20,6 +20,7 @@ import {
   ListRow,
   UnpinIcon,
   useMenu,
+  VisuallyHidden,
 } from "@luke/ui";
 import { isAgentTab, isChangesTab, isFileTab } from "@luke/ui/tab-strip-model";
 import { shownFiles } from "@luke/voice/code-pane-model";
@@ -360,7 +361,7 @@ export function SidebarPinnedTab({
             gone ? (
               <span className="sidebar-pinned-tab-gone">
                 {pin.label}
-                <span className="luke-visually-hidden">(unavailable)</span>
+                <VisuallyHidden>(unavailable)</VisuallyHidden>
               </span>
             ) : (
               pin.label

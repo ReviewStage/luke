@@ -46,6 +46,7 @@ import {
   TEXT_VARIANT,
   Text,
   useMenu,
+  VisuallyHidden,
 } from "@luke/ui";
 import { ChevronRightIcon, GitPullRequestIcon, PlusIcon, ZapIcon } from "lucide-react";
 import { Fragment, useEffect, useRef, useState } from "react";
@@ -206,8 +207,7 @@ function AutomationRow({
   // Note that the glyph is the row's decoration, so its working word is said in the row's words instead.
   const working = state === GLYPH_STATE.WORKING ? glyphStateWords(state, false) : undefined;
   const trigger = automationTriggerText(automation.trigger, automation.repositories ?? []);
-  const hiddenWorking =
-    working === undefined ? null : <span className="luke-visually-hidden">{working}</span>;
+  const hiddenWorking = working === undefined ? null : <VisuallyHidden>{working}</VisuallyHidden>;
   return (
     <>
       <ListRow
@@ -247,7 +247,14 @@ function AutomationRow({
               <span className="automation-row-next">
                 {stateEndMark(state, true)}
                 <Tooltip label={next.kind === AUTOMATION_NEXT.AT ? momentText(next.at) : undefined}>
-                  <span className="automation-row-when">{automationNextText(automation, now)}</span>
+                  <Text
+                    as={TEXT_ELEMENT.SPAN}
+                    variant={TEXT_VARIANT.INHERIT}
+                    truncate
+                    className="automation-row-when"
+                  >
+                    {automationNextText(automation, now)}
+                  </Text>
                 </Tooltip>
               </span>
             </span>

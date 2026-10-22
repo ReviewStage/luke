@@ -471,14 +471,6 @@
   padding-left: calc(var(--row-inset) + var(--luke-menu-inset));
 }
 
-/* A folder's path too long for the crumb is cut short. */
-.mention-menu-crumb-title {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .mention-menu .mention-menu-foot {
   display: flex;
   gap: var(--luke-space-12);
@@ -1240,13 +1232,6 @@
   white-space: nowrap;
 }
 
-/* The words and when, one run of text, so the separators keep their own spaces. */
-.call-marker-text {
-  overflow: hidden;
-  min-width: 0;
-  text-overflow: ellipsis;
-}
-
 .call-marker-words {
   color: var(--luke-color-text);
   font-weight: var(--luke-weight-semibold);
@@ -1440,12 +1425,6 @@
   margin: 0;
   color: var(--luke-color-text-muted);
   white-space: nowrap;
-}
-
-.files-viewed-words {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 .files-viewed[data-complete] {
@@ -2296,18 +2275,13 @@
 }
 
 .diff-list-folder {
-  min-width: 0;
-  overflow: hidden;
   color: var(--luke-color-text-muted);
-  text-overflow: ellipsis;
 }
 
 .diff-list-name {
   flex: none;
   max-width: 100%;
-  overflow: hidden;
   font-weight: var(--luke-weight-medium);
-  text-overflow: ellipsis;
 }
 
 /* A file's letter in its header stands on a tint of its own colour, the
@@ -3281,12 +3255,9 @@
 }
 
 .pull-request-section-head > .pull-request-heading {
-  min-width: 0;
   flex: 1 1 auto;
-  overflow: hidden;
   margin: 0;
   padding: 0;
-  text-overflow: ellipsis;
   transition: color var(--luke-duration-hover) ease;
 }
 
@@ -4171,13 +4142,6 @@
   white-space: nowrap;
 }
 
-.annotation-where-folder,
-.annotation-where-file {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
 /* The folder gives way long before the file's name does. */
 .annotation-where-folder {
   flex: 0 1000 auto;
@@ -4432,12 +4396,6 @@
 
 .pull-request-pending-list > .pull-request-thread-comment:first-child {
   border-top: 0;
-}
-
-.pull-request-pending-where {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .pull-request-thread-actions-row {
@@ -5000,11 +4958,7 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
 }
 
 .reasoning-preview {
-  min-width: 0;
   flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .reasoning-label {
@@ -5051,12 +5005,8 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
 }
 
 .transcript-code-language {
-  min-width: 0;
-  overflow: hidden;
   font-family: var(--luke-font-mono);
-  text-overflow: ellipsis;
   text-transform: lowercase;
-  white-space: nowrap;
 }
 
 /* A suggested change's header names it in words rather than as a language. */
@@ -5577,11 +5527,7 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
 }
 
 .todos-dock-focus {
-  min-width: 0;
   flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .todos-dock-chevron {
@@ -5829,14 +5775,11 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
   top: 0;
   right: 0;
   left: 0;
-  overflow: hidden;
   padding: var(--luke-space-16) var(--luke-space-16) 0;
   color: var(--luke-color-text-muted);
   font-size: var(--luke-type-body-size);
   line-height: var(--luke-type-body-leading);
   pointer-events: none;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .agent-composer-field:has([aria-disabled="true"]) .agent-composer-placeholder {
@@ -6601,12 +6544,6 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
 .terminal-bar-busy {
   color: var(--luke-color-text-subtle);
   letter-spacing: 1px;
-}
-
-.terminal-bar-words {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 .terminal-bar-end {
@@ -7489,12 +7426,9 @@ svg.lucide {
 }
 
 .picture-set-caption {
-  overflow: hidden;
   color: var(--luke-color-text-muted);
   font-size: 0.9em;
   line-height: 1.4;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .picture-set-more {

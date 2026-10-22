@@ -152,7 +152,7 @@ test("a working agent's card says only how long its run has gone at its corner, 
     "the tile wears the working mark",
   );
   assert.equal(
-    card.querySelector("[data-tab-card] > .visually-hidden")?.textContent,
+    card.querySelector("[data-tab-card] > .luke-visually-hidden")?.textContent,
     "Working",
     "a reader, whom the tile's mark is hidden from, hears that it works",
   );

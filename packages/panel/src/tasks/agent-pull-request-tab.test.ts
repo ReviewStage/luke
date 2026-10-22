@@ -603,7 +603,7 @@ test("the tab draws the pull request as a page: its standing and branches, wheth
   const merge = mergeControl(tab) ?? assert.fail("an open pull request has a merge control");
   assert.equal(merge.querySelector(".luke-badge")?.textContent, "Conflicts");
   assert.equal(
-    merge.querySelector(".merge-chip .visually-hidden")?.textContent,
+    merge.querySelector(".merge-chip .luke-visually-hidden")?.textContent,
     ": Conflicts with main",
     "an open pull request says whether it would merge",
   );
@@ -2341,7 +2341,7 @@ function mergeShown(tab: HTMLElement) {
   return {
     chip: badge?.textContent,
     tone: badge?.getAttribute("data-tone"),
-    sentence: control.querySelector(".merge-chip .visually-hidden")?.textContent?.slice(2),
+    sentence: control.querySelector(".merge-chip .luke-visually-hidden")?.textContent?.slice(2),
     press: press?.textContent,
     look: press?.getAttribute("data-variant"),
     chevron: control.querySelector('[aria-label="Choose how to merge"]') !== null,

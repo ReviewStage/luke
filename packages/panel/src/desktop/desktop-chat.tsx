@@ -28,6 +28,7 @@ import {
   ScrollArea,
   UnarchiveIcon,
   useMenu,
+  VisuallyHidden,
 } from "@luke/ui";
 import { type Actor, actorName } from "@luke/ui/actor-model";
 import {
@@ -694,11 +695,11 @@ function PlaceRow({
           description={preview}
           meta={
             <span className="home-row-meta">
-              {unread ? <span className="visually-hidden">{UNREAD_WORDS}</span> : null}
+              {unread ? <VisuallyHidden>{UNREAD_WORDS}</VisuallyHidden> : null}
               {needsYou ? (
                 <span className="inbox-row-attention">
                   <AttentionMark />
-                  <span className="visually-hidden">{NEEDS_YOU.LABEL}</span>
+                  <VisuallyHidden>{NEEDS_YOU.LABEL}</VisuallyHidden>
                 </span>
               ) : null}
               {end}

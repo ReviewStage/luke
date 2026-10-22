@@ -1,5 +1,5 @@
 import type { GitHubPerson } from "@luke/features/coding-agent-wire";
-import { Badge, HoverCardNote } from "@luke/ui";
+import { Badge, HoverCardNote, VisuallyHidden } from "@luke/ui";
 import { githubActor } from "@luke/ui/actor-model";
 import { GitCommitHorizontalIcon, MessageSquareIcon } from "lucide-react";
 import { ActorLine, ActorRef } from "../actor-ref.js";
@@ -139,14 +139,14 @@ function CountsNote({
           <span className="card-count">
             <MessageSquareIcon aria-hidden="true" />
             {comments}
-            <span className="visually-hidden">{comments === 1 ? " comment" : " comments"}</span>
+            <VisuallyHidden>{comments === 1 ? " comment" : " comments"}</VisuallyHidden>
           </span>
         )}
         {commits === undefined ? null : (
           <span className="card-count">
             <GitCommitHorizontalIcon aria-hidden="true" />
             {commits}
-            <span className="visually-hidden">{commits === 1 ? " commit" : " commits"}</span>
+            <VisuallyHidden>{commits === 1 ? " commit" : " commits"}</VisuallyHidden>
           </span>
         )}
       </span>
