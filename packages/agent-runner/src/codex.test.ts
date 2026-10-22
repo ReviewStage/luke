@@ -43,22 +43,24 @@ import {
   recordedExchanges,
   type Script,
   type Spawned,
-  withReplyText,
 } from "./testing/fake-app-server.js";
 import { fakeClaudeCode } from "./testing/fake-claude-code.js";
 import { makeFakeLuke } from "./testing/fake-luke.js";
 import { UNREAD_PROC } from "./testing/fake-proc.js";
 
 const BEARER = "runner-bearer-for-tests";
-const ACCESS_TOKEN = "chatgpt-access-token-for-tests";
-const REFRESHED_TOKEN = "chatgpt-refreshed-token-for-tests";
 const EVENTS_URL = "https://luke.test/runner/events";
 const FIRST_SEQUENCE = 11;
 const THREAD = "00000000-0000-4000-8000-000000000002";
 
+const TOKEN_URL = "https://luke.test/api/agents/runner-token";
+const SELF: RunnerSelf = {
+  executable: "/usr/local/bin/node",
+  script: "/opt/luke/agent-runner.mjs",
+};
+
 const ENV = {
   [RUNNER_ENV.BEARER]: BEARER,
-  [RUNNER_ENV.CODEX_TOKEN]: ACCESS_TOKEN,
   CODEX_HOME: "/home/agent/.codex",
   PATH: "/usr/bin",
 };
@@ -73,6 +75,7 @@ const CONFIG: CodexConfig = {
   firstSequence: FIRST_SEQUENCE,
   eventsUrl: EVENTS_URL,
   mcpUrl: "https://luke.test/runner/mcp",
+  tokenUrl: TOKEN_URL,
 };
 
 /** A message line of text alone, under Luke's id for the line where one is given. */
@@ -133,7 +136,9 @@ function launch(
   scripts: readonly Script[],
   luke: ReturnType<typeof makeFakeLuke>,
   env: Record<string, string> = ENV,
-  extra: { readonly self?: RunnerSelf; readonly http?: Layer.Layer<HttpClient.HttpClient> } = {},
+  extra: { readonly self?: RunnerSelf; readonly http?: Layer.Layer<HttpClient.HttpClient> } = {
+    self: SELF,
+  },
 ) {
   return Effect.gen(function* () {
     const server = fakeAppServer(scripts);
@@ -221,7 +226,10 @@ it.effect(
         'model_provider="openai_chatgpt_plan"',
         'model_providers.openai_chatgpt_plan.name="ChatGPT plan"',
         'model_providers.openai_chatgpt_plan.base_url="https://api.openai.com/v1"',
-        'model_providers.openai_chatgpt_plan.env_key="ACCESS_TOKEN"',
+        `model_providers.openai_chatgpt_plan.auth.command="${SELF.executable}"`,
+        `model_providers.openai_chatgpt_plan.auth.args=["${SELF.script}", "codex-token", "${TOKEN_URL}"]`,
+        "model_providers.openai_chatgpt_plan.auth.timeout_ms=30000",
+        "model_providers.openai_chatgpt_plan.auth.refresh_interval_ms=300000",
         'model_providers.openai_chatgpt_plan.wire_api="responses"',
         "model_providers.openai_chatgpt_plan.requires_openai_auth=false",
         "model_providers.openai_chatgpt_plan.supports_websockets=false",
@@ -234,13 +242,12 @@ it.effect(
         `sandbox_workspace_write.writable_roots=["${CONFIG.cwd}/.git"]`,
         'shell_environment_policy.inherit="core"',
         "shell_environment_policy.ignore_default_excludes=false",
-        'shell_environment_policy.exclude=["ACCESS_TOKEN", "LUKE_RUNNER_TOKEN"]',
+        'shell_environment_policy.exclude=["LUKE_RUNNER_TOKEN"]',
       ]);
-      // The token and the bearer reach app-server in its environment alone, never argv.
-      assert.equal(process?.env[RUNNER_ENV.CODEX_TOKEN], ACCESS_TOKEN);
+      // The bearer reaches app-server in its environment alone, never argv.
       assert.equal(process?.env[RUNNER_ENV.BEARER], BEARER);
       assert.equal(process?.env.CODEX_HOME, ENV.CODEX_HOME);
-      assert.ok(!process?.args.some((arg) => arg.includes(ACCESS_TOKEN) || arg.includes(BEARER)));
+      assert.ok(!process?.args.some((arg) => arg.includes(BEARER)));
 
       assert.deepEqual(received(process, "initialize"), [
         { clientInfo: { name: "Luke", title: "Luke", version: "dev" }, capabilities: null },
@@ -454,50 +461,11 @@ it.effect("ends the launch as stopped when app-server never answers the stop's i
   }),
 );
 
-it.effect(
-  "restarts app-server with a refreshed token between turns and never lets a token out",
-  () =>
-    Effect.gen(function* () {
-      const luke = fakeLuke();
-      // The reply carries both tokens, as a tool's output might, to show they are taken out.
-      const leaky = withReplyText(
-        RESUMED_TURN,
-        "luke-probe-hermetic",
-        `${ACCESS_TOKEN} ${REFRESHED_TOKEN}`,
-      );
-      const { spawned, write, run, logged } = yield* launch(
-        [{ exchanges: OPEN }, { exchanges: [...RESUME, leaky] }],
-        luke,
-      );
-      yield* write(CONFIG);
-      yield* write({ type: INPUT_LINE.TOKEN, accessToken: REFRESHED_TOKEN });
-      yield* write(message("What exact line did you first write to PROBE.md?"));
-
-      assert.equal(yield* Fiber.join(run), RUNNER_END.TURN_ENDED);
-      const [first, second] = spawned;
-      assert.ok(first?.ended);
-      assert.deepEqual(received(first, "turn/start"), []);
-      assert.equal(first?.env[RUNNER_ENV.CODEX_TOKEN], ACCESS_TOKEN);
-      assert.equal(second?.env[RUNNER_ENV.CODEX_TOKEN], REFRESHED_TOKEN);
-      assert.ok(!second?.args.some((arg) => arg.includes(REFRESHED_TOKEN)));
-      assert.deepEqual(second?.unexpected, []);
-      assert.equal(received(second, "thread/resume")[0]?.threadId, THREAD);
-      assert.equal(received(second, "turn/start").length, 1);
-
-      const posted = luke.bodies.join("\n");
-      assert.ok(posted.includes("[redacted] [redacted]"));
-      for (const secret of [ACCESS_TOKEN, REFRESHED_TOKEN, BEARER]) {
-        assert.ok(!posted.includes(secret));
-        assert.ok(!logged.some((line) => line.includes(secret)));
-      }
-    }),
-);
-
 it.effect("ends the launch as failed when app-server exits, its secrets taken out of why", () =>
   Effect.gen(function* () {
     const luke = fakeLuke();
     const { write, run } = yield* launch(
-      [{ exchanges: [...OPEN, exchange(FIRST, 3)], exitWith: `panic: bad token ${ACCESS_TOKEN}` }],
+      [{ exchanges: [...OPEN, exchange(FIRST, 3)], exitWith: `panic: bad token ${BEARER}` }],
       luke,
     );
     yield* write(CONFIG);
@@ -574,28 +542,6 @@ it.effect("starts the next turn for a message Luke sent just before the turn com
   }),
 );
 
-it.effect("never starts app-server without the plan's token", () =>
-  Effect.gen(function* () {
-    const luke = fakeLuke();
-    const { [RUNNER_ENV.CODEX_TOKEN]: _token, ...withoutToken } = ENV;
-    const { spawned, write, run } = yield* launch([WORKFLOW], luke, withoutToken);
-    yield* write(CONFIG);
-
-    assert.equal(yield* Fiber.join(run), RUNNER_END.FAILED);
-    assert.deepEqual(spawned, []);
-    assert.deepEqual(luke.applied.at(-1)?.message, {
-      type: RUNNER_EVENT.END,
-      reason: RUNNER_END.FAILED,
-      detail: "ACCESS_TOKEN is not set",
-    });
-  }),
-);
-
-const TOKEN_URL = "https://luke.test/api/agents/runner-token";
-const SELF: RunnerSelf = {
-  executable: "/usr/local/bin/node",
-  script: "/opt/luke/agent-runner.mjs",
-};
 const PROVIDER = "model_providers.openai_chatgpt_plan";
 
 /** The value of the `-c` override `key` a process was started with, where it has one. */
@@ -657,12 +603,10 @@ it.effect(
       const { spawned, write, run, logged } = yield* launch(
         [{ exchanges: [...RESUME, turn] }],
         luke,
-        { ...ENV, [RUNNER_ENV.CODEX_TOKEN]: "a-launch-token-the-plan-never-uses" },
+        ENV,
         { self: SELF, http },
       );
-      yield* write({ ...CONFIG, threadId: THREAD, tokenUrl: TOKEN_URL });
-      // A token line on the plan is withheld and restarts nothing.
-      yield* write({ type: INPUT_LINE.TOKEN, accessToken: REFRESHED_TOKEN });
+      yield* write({ ...CONFIG, threadId: THREAD });
       yield* write(message("What exact line did you first write to PROBE.md?"));
 
       assert.equal(yield* Fiber.join(run), RUNNER_END.TURN_ENDED);
@@ -677,8 +621,7 @@ it.effect(
         reason: RUNNER_END.TURN_ENDED,
       });
 
-      // The provider runs the command in place of reading ACCESS_TOKEN, which app-server is not handed.
-      assert.equal(override(process, `${PROVIDER}.env_key`), undefined);
+      // The provider runs the command.
       assert.equal(override(process, `${PROVIDER}.auth.timeout_ms`), "30000");
       assert.equal(override(process, `${PROVIDER}.auth.refresh_interval_ms`), "300000");
       assert.deepEqual(JSON.parse(override(process, `${PROVIDER}.auth.args`) ?? "[]"), [
@@ -686,18 +629,14 @@ it.effect(
         CODEX_TOKEN_COMMAND,
         TOKEN_URL,
       ]);
-      assert.equal(process?.env[RUNNER_ENV.CODEX_TOKEN], undefined);
       // The command inherits the bearer; no command the agent runs does.
       assert.equal(process?.env[RUNNER_ENV.BEARER], BEARER);
-      assert.equal(
-        override(process, "shell_environment_policy.exclude"),
-        '["ACCESS_TOKEN", "LUKE_RUNNER_TOKEN"]',
-      );
+      assert.equal(override(process, "shell_environment_policy.exclude"), '["LUKE_RUNNER_TOKEN"]');
       assert.equal(override(process, "shell_environment_policy.inherit"), '"core"');
 
       // What the command printed went to app-server alone: never argv, an event, or a log.
       const posted = luke.bodies.join("\n");
-      for (const secret of ["plan-token-1", "plan-token-2", REFRESHED_TOKEN, BEARER]) {
+      for (const secret of ["plan-token-1", "plan-token-2", BEARER]) {
         assert.ok(!posted.includes(secret));
         assert.ok(!logged.some((line) => line.includes(secret)));
         assert.ok(!process?.args.some((arg) => arg.includes(secret)));
@@ -728,8 +667,8 @@ it.effect("the token command says only Luke's status when Luke refuses it, never
 it.effect("never starts app-server on the plan when it does not know its own bundle", () =>
   Effect.gen(function* () {
     const luke = fakeLuke();
-    const { spawned, write, run } = yield* launch([WORKFLOW], luke);
-    yield* write({ ...CONFIG, tokenUrl: TOKEN_URL });
+    const { spawned, write, run } = yield* launch([WORKFLOW], luke, ENV, {});
+    yield* write(CONFIG);
 
     assert.equal(yield* Fiber.join(run), RUNNER_END.FAILED);
     assert.deepEqual(spawned, []);

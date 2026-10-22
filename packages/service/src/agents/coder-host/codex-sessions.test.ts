@@ -75,7 +75,6 @@ const BUNDLE = new TextEncoder().encode("// the runner, bundled\nconsole.log('ru
 const KEK = `1:${Buffer.alloc(32, 3).toString("base64")}`;
 const ISSUED_CLIENT = "oaiapp_test_client";
 const THREAD = "019a0b1c-2d3e-7f40-8a5b-6c7d8e9f0a1b";
-const TEST_KEY = "sk-proj-fixture-test-mode-key";
 const TOKEN_URL = "https://luke.test/api/agents/runner-token";
 const MINUTE = 60 * 1000;
 
@@ -191,20 +190,14 @@ const signIn = (userId: string, minutesLeft: number) =>
     );
   });
 
-function sessionsFor(
-  userId: string,
-  sequence: { next: number } = { next: 0 },
-  testApiKey?: string,
-  tokenUrl?: string,
-) {
+function sessionsFor(userId: string, sequence: { next: number } = { next: 0 }) {
   const options: CodexSessionsOptions = {
     userId,
     eventsUrl: EVENTS_URL,
     mcpUrl: MCP_URL,
     instructions: () => Effect.succeed(INSTRUCTIONS),
     nextSequence: () => Effect.sync(() => sequence.next),
-    testApiKey: testApiKey === undefined ? undefined : Redacted.make(testApiKey),
-    tokenUrl,
+    tokenUrl: TOKEN_URL,
     run: (effect) => Effect.runPromise(effect),
   };
   return codexSessions(options);
@@ -235,7 +228,7 @@ afterEach(() => {
 
 it.layer(getTestDB())("a coding agent's sessions on Codex", (it) => {
   it.effect(
-    "open launches the runner in its Codex mode on the account's access token, with the token and the bearer in its environment alone",
+    "open launches the runner in its Codex mode on the account's plan, naming the token route, with the bearer in its environment alone",
     () =>
       Effect.gen(function* () {
         vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
@@ -259,9 +252,7 @@ it.layer(getTestDB())("a coding agent's sessions on Codex", (it) => {
         assert.ok(command !== undefined);
         assert.equal(command.sudo, true);
         assert.match(command.args[1] ?? "", /exec setpriv --reuid=agent --regid=agent/u);
-        assert.equal(command.env[RUNNER_ENV.CODEX_TOKEN], "access-0");
         assert.equal(command.env.CODEX_HOME, "/home/agent/.codex");
-        assert.equal(command.env[RUNNER_ENV.API_KEY], undefined);
         assert.equal(command.env[RUNNER_ENV.CLAUDE_TOKEN], undefined);
         const bearer = command.env[RUNNER_ENV.BEARER];
         assert.ok(bearer !== undefined && bearer.length > 20);
@@ -279,13 +270,15 @@ it.layer(getTestDB())("a coding agent's sessions on Codex", (it) => {
           firstSequence: 0,
           eventsUrl: EVENTS_URL,
           mcpUrl: MCP_URL,
+          tokenUrl: TOKEN_URL,
         });
         assert.deepEqual(first, {
           type: INPUT_LINE.MESSAGE,
           uuid: lineId,
           content: [{ type: "text", text: "Fix the invitations." }],
         });
-        // No secret in argv, the config line, a tag, or anything uploaded.
+        // No token anywhere in the command, and the bearer only in its environment.
+        assert.equal(JSON.stringify(command).includes("access-0"), false);
         const visible = JSON.stringify([
           command.args,
           command.stdin,
@@ -299,7 +292,7 @@ it.layer(getTestDB())("a coding agent's sessions on Codex", (it) => {
   );
 
   it.effect(
-    "a token with less than forty-five minutes left is renewed before the launch, which runs on the renewed one",
+    "a token with less than forty-five minutes left is renewed before the launch, and handed to the runner nowhere",
     () =>
       Effect.gen(function* () {
         vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
@@ -314,62 +307,10 @@ it.layer(getTestDB())("a coding agent's sessions on Codex", (it) => {
 
         assert.equal(opened.outcome, EVE_SEND_OUTCOME.ACCEPTED);
         assert.equal(openai.state.renewals, 1);
-        assert.equal(api.commands[0]?.env[RUNNER_ENV.CODEX_TOKEN], "access-1");
-        assert.equal(JSON.stringify(api.sandboxes).includes("access-1"), false);
+        assert.equal(JSON.stringify([api.commands, api.sandboxes]).includes("access-1"), false);
         const [row] = yield* listProviderKeyRows(userId, PROVIDER_KEY_KIND.CHATGPT_OAUTH);
         const now = (yield* DateTime.nowAsDate).getTime();
         assert.equal(row?.accessExpiresAt?.getTime(), now + 60 * MINUTE);
-      }),
-  );
-
-  it.effect(
-    "a message to a running runner goes behind a token line only where the account's token was renewed since the runner was handed one",
-    () =>
-      Effect.gen(function* () {
-        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
-        const api = runnerSandboxApi();
-        const openai = openAi();
-        const { userId, agent } = yield* openAgent;
-        yield* signIn(userId, 60);
-        const sessions = yield* sessionsFor(userId).pipe(Effect.provide(services(api, openai)));
-        const opened = yield* sessions.open(message(agent, "Fix the invitations."));
-        assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
-
-        // Still the token the runner holds: no token line.
-        yield* sessions.send(opened.sessionId, message(agent, "Also the emails."));
-        // Fifty minutes on, ten are left: the token is renewed, and handed on ahead of the message.
-        yield* TestClock.adjust("50 minutes");
-        const lineId = randomUUID();
-        const sent = yield* sessions.send(
-          opened.sessionId,
-          message(agent, "And the copy.", lineId),
-        );
-        // Renewed once, and handed on once.
-        yield* sessions.send(opened.sessionId, message(agent, "Thanks."));
-
-        assert.deepEqual(sent, {
-          outcome: EVE_SEND_OUTCOME.ACCEPTED,
-          sessionId: opened.sessionId,
-          deliveryId: lineId,
-        });
-        assert.equal(openai.state.renewals, 1);
-        assert.equal(api.commands.length, 1);
-        const lines = linesOf(api.commands[0]).slice(2) as InputLine[];
-        const model = { type: INPUT_LINE.MODEL, model: "gpt-6.1-sol", effort: "xhigh" };
-        assert.deepEqual(
-          lines.map((each) => (each.type === INPUT_LINE.MESSAGE ? each.content : each)),
-          [
-            model,
-            [{ type: "text", text: "Also the emails." }],
-            { type: INPUT_LINE.TOKEN, accessToken: "access-1" },
-            model,
-            [{ type: "text", text: "And the copy." }],
-            model,
-            [{ type: "text", text: "Thanks." }],
-          ],
-        );
-        // The runner's token is kept as its expiry alone.
-        assert.equal(JSON.stringify(api.sandboxes).includes("access-1"), false);
       }),
   );
 
@@ -450,12 +391,11 @@ it.layer(getTestDB())("a coding agent's sessions on Codex", (it) => {
         assert.equal(api.commands.length, 2);
         const relaunch = api.commands[1];
         assert.equal(relaunch?.sandboxSessionId, api.sandboxes[0]?.currentSessionId);
-        assert.equal(relaunch?.env[RUNNER_ENV.CODEX_TOKEN], "access-1");
+        assert.equal(openai.state.renewals, 1);
         const [config, first] = linesOf(relaunch) as [CodexConfig, InputLine];
         assert.equal(config.harness, RUNNER_HARNESS.CODEX);
         assert.equal(config.threadId, THREAD);
         assert.equal(config.firstSequence, 17);
-        // A fresh launch starts on the token in its environment: no token line.
         assert.ok(first.type === INPUT_LINE.MESSAGE);
         assert.deepEqual(first.content, [{ type: "text", text: "Now the emails." }]);
         const bearer = relaunch?.env[RUNNER_ENV.BEARER];
@@ -568,7 +508,7 @@ it.layer(getTestDB())("a coding agent's sessions on Codex", (it) => {
   );
 
   it.effect(
-    "on the plan, the launch names the token route and hands the runner no token, a token with fifty minutes left goes as it stands, and no message goes behind a token line",
+    "on the plan, the launch names the token route and hands the runner no token, a token with fifty minutes left goes as it stands, and a message renews it where it is due",
     () =>
       Effect.gen(function* () {
         vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
@@ -576,9 +516,7 @@ it.layer(getTestDB())("a coding agent's sessions on Codex", (it) => {
         const openai = openAi();
         const { userId, agent } = yield* openAgent;
         yield* signIn(userId, 50);
-        const sessions = yield* sessionsFor(userId, { next: 0 }, undefined, TOKEN_URL).pipe(
-          Effect.provide(services(api, openai)),
-        );
+        const sessions = yield* sessionsFor(userId).pipe(Effect.provide(services(api, openai)));
 
         const opened = yield* sessions.open(message(agent, "Fix the invitations."));
         assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
@@ -589,45 +527,13 @@ it.layer(getTestDB())("a coding agent's sessions on Codex", (it) => {
         assert.equal(openai.state.renewals, 1);
 
         const [command] = api.commands;
-        assert.equal(command?.env[RUNNER_ENV.CODEX_TOKEN], undefined);
         assert.equal(command?.env.CODEX_HOME, "/home/agent/.codex");
         const lines = linesOf(command) as [CodexConfig, ...InputLine[]];
         assert.equal(lines[0].tokenUrl, TOKEN_URL);
-        assert.equal(
-          lines.some((each) => "type" in each && each.type === INPUT_LINE.TOKEN),
-          false,
-        );
         const visible = JSON.stringify([command, api.sandboxes]);
         for (const secret of ["access-0", "access-1", "refresh-1"]) {
           assert.equal(visible.includes(secret), false, "a token handed to the runner");
         }
       }),
-  );
-
-  it.effect("a launch in test mode runs on the OpenAI key given, and hands on no token line", () =>
-    Effect.gen(function* () {
-      vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
-      const api = runnerSandboxApi();
-      const { userId, agent } = yield* openAgent;
-      const sessions = yield* sessionsFor(userId, { next: 0 }, TEST_KEY, TOKEN_URL).pipe(
-        Effect.provide(services(api)),
-      );
-      const opened = yield* sessions.open(message(agent, "Fix the invitations."));
-      assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
-      yield* TestClock.adjust("2 hours");
-
-      yield* sessions.send(opened.sessionId, message(agent, "Again."));
-
-      const [command] = api.commands;
-      assert.equal(command?.env[RUNNER_ENV.CODEX_TOKEN], TEST_KEY);
-      // The key does not age, so the route is not named.
-      assert.equal((linesOf(command)[0] as CodexConfig).tokenUrl, undefined);
-      const lines = linesOf(command) as InputLine[];
-      assert.equal(
-        lines.some((each) => each.type === INPUT_LINE.TOKEN),
-        false,
-      );
-      assert.equal(JSON.stringify([command?.args, command?.stdin]).includes(TEST_KEY), false);
-    }),
   );
 });
