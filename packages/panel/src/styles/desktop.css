@@ -4205,7 +4205,7 @@ ul.actor-stack {
 /* The suggested automations, each a card of its own in a grid that wraps
    as more are suggested: the glyph of what fires it on a tile, a plus at
    its corner, its name, and what it does, read whole. The whole card is one
-   press, lifting to the raised fill under the pointer. */
+   press (`CardPress`), lifting to the raised fill under the pointer. */
 .automation-suggestion-cards {
   display: grid;
   gap: var(--luke-space-12);
@@ -4213,34 +4213,28 @@ ul.actor-stack {
 }
 
 .automation-suggestion {
+  position: relative;
   display: flex;
   min-width: 0;
   flex-direction: column;
-  align-items: stretch;
-  gap: var(--luke-space-6);
   padding: var(--luke-space-16);
   border: 1px solid var(--luke-color-border);
   border-radius: var(--luke-control-radius);
   background: var(--luke-color-surface);
-  color: inherit;
-  text-align: left;
 }
 
-.automation-suggestion:hover:not(:disabled) {
+.automation-suggestion:hover:not([data-disabled="true"]) {
   background: var(--luke-color-fill-hover);
 }
 
-.automation-suggestion:focus-visible {
-  outline: none; /* no ring: the keyboard's is drawn inside the card's edge, below */
-}
-
-:root[data-keyboard="true"] .automation-suggestion:focus-visible {
-  outline: var(--luke-focus-ring-width) solid var(--luke-color-focus-ring);
-  outline-offset: calc(var(--luke-focus-ring-width) / -2);
-}
-
-.automation-suggestion:disabled {
+.automation-suggestion[data-disabled="true"] {
   opacity: 0.5;
+}
+
+.automation-suggestion-face {
+  display: flex;
+  flex-direction: column;
+  gap: var(--luke-space-6);
 }
 
 .automation-suggestion-head {
@@ -4275,7 +4269,7 @@ ul.actor-stack {
   color: var(--luke-color-text-subtle);
 }
 
-.automation-suggestion:hover:not(:disabled) .automation-suggestion-add {
+.automation-suggestion:hover:not([data-disabled="true"]) .automation-suggestion-add {
   color: var(--luke-color-text);
 }
 
@@ -8008,33 +8002,14 @@ body:has(.luke-dialog-backdrop) .toast[data-action="true"] .toast-dismiss {
   border-radius: var(--luke-radius-8);
 }
 
-.tasks-board-card-press {
+/* What a card's press shows, or its field while it is renamed: its first
+   line over its name. The press (`CardPress`) reaches every edge of the
+   card, under its foot's chips. */
+.tasks-board-card-face {
   display: flex;
   min-width: 0;
   flex-direction: column;
   gap: var(--luke-space-4);
-  padding: 0;
-  border: 0;
-  background: none;
-  color: inherit;
-  font: inherit;
-  text-align: left;
-}
-
-/* The press reaches every edge of the card, under its foot's chips. */
-button.tasks-board-card-press::after {
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  content: "";
-}
-
-button.tasks-board-card-press:focus-visible {
-  outline: none;
-}
-
-button.tasks-board-card-press:focus-visible::after {
-  box-shadow: 0 0 0 2px var(--luke-color-focus-ring);
 }
 
 /* A card's first line: its key, and at its end what waits on the reader,
@@ -8451,33 +8426,14 @@ button.tasks-board-card-press:focus-visible::after {
   pointer-events: auto;
 }
 
+/* What a row's press shows, or its field while it is renamed: its name on
+   one line. The press (`CardPress`) reaches every edge of the row, under
+   its chips and its ⋯. */
 .tasks-list-press {
   display: flex;
   min-width: 0;
   align-items: center;
-  padding: 0;
-  border: 0;
-  background: none;
-  color: inherit;
-  font: inherit;
   font-weight: var(--luke-weight-medium);
-  text-align: left;
-}
-
-/* The press reaches every edge of the row, under its chips and its ⋯. */
-button.tasks-list-press::after {
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  content: "";
-}
-
-button.tasks-list-press:focus-visible {
-  outline: none;
-}
-
-button.tasks-list-press:focus-visible::after {
-  box-shadow: inset 0 0 0 2px var(--luke-color-focus-ring);
 }
 
 .tasks-list-name {

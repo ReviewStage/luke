@@ -7748,7 +7748,10 @@ svg.lucide {
   line-height: 1.5;
 }
 
+/* A thread at rest is one press (`CardPress`) over its words and replies,
+   which reaches its whole card and rings it from the keyboard. */
 .comment-card[data-open="false"] {
+  position: relative;
   border-color: var(--luke-color-border);
   cursor: pointer;
 }
@@ -7832,26 +7835,6 @@ svg.lucide {
   overflow: hidden;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 3;
-}
-
-/* A thread at rest is one press over its words and replies. */
-.comment-open {
-  display: block;
-  width: 100%;
-  padding: 0;
-  border: 0;
-  background: none;
-  color: inherit;
-  cursor: pointer;
-  font: inherit;
-  text-align: left;
-}
-
-/* The keyboard on a thread at rest rings its card, since its button may
-   hold nothing to see but its name for a screen reader. */
-.comment-card[data-open="false"]:has(> .comment-open:focus-visible) {
-  outline: var(--luke-focus-ring-width) solid var(--luke-color-focus-ring);
-  outline-offset: calc(var(--luke-focus-ring-width) / -2);
 }
 
 .comment-replies {

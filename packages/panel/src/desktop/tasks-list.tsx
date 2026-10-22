@@ -17,6 +17,8 @@ import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
   BUTTON_SIZE,
   BUTTON_VARIANT,
+  CARD_PRESS_SELECTOR,
+  CardPress,
   CHIP_LOOK,
   COLLECTION_STATE,
   CollectionPage,
@@ -163,7 +165,7 @@ const DRAG_HERE = "Drag tasks here";
 const PINNED = "Pinned";
 
 /** What a press must land on to carry a row: its press, which reaches every edge of the row but its chips and its ⋯. */
-const ROW_HANDLE = ".tasks-list-press";
+const ROW_HANDLE = CARD_PRESS_SELECTOR;
 
 /** Where the folded groups are kept in the renderer's storage. */
 const LIST_FOLDS_KEY = "luke.tasksListFolds";
@@ -594,25 +596,25 @@ function TaskListRow({
           </span>
         ) : (
           <Tooltip label={task.name} card={taskCardOf(tasks, task, now)} cardRegion={item}>
-            <button
+            <CardPress
               ref={press}
-              type="button"
-              className="tasks-list-press"
               disabled={actions.deletion.busy}
-              onClick={() => {
+              onPress={() => {
                 actions.close(false);
                 onOpen();
               }}
               onKeyDown={actions.keyMenu}
-              {...actions.contextMenu(press)}
+              contextMenu={actions.contextMenu(press)}
             >
-              <FadingWords className="tasks-list-name" words={task.name} />
-              {spoken === "" ? null : (
-                <span className="visually-hidden" {...{ [FIND_SKIP_ATTRIBUTE]: "" }}>
-                  {spoken}
-                </span>
-              )}
-            </button>
+              <span className="tasks-list-press">
+                <FadingWords className="tasks-list-name" words={task.name} />
+                {spoken === "" ? null : (
+                  <span className="visually-hidden" {...{ [FIND_SKIP_ATTRIBUTE]: "" }}>
+                    {spoken}
+                  </span>
+                )}
+              </span>
+            </CardPress>
           </Tooltip>
         )}
         {rename.refused ? (

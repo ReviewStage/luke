@@ -21,6 +21,7 @@ import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
   BUTTON_VARIANT,
   Button,
+  CardPress,
   COLLECTION_STATE,
   CollectionPage,
   type CollectionState,
@@ -361,22 +362,24 @@ function SuggestedAutomations({
         {SUGGESTIONS.map(({ name, glyph }) => {
           const preset = automationPreset(name);
           return (
-            <button
+            <div
               key={name}
-              type="button"
               className="automation-suggestion"
-              disabled={disabled}
-              onClick={() => onStart(name)}
+              data-disabled={disabled ? "true" : undefined}
             >
-              <span className="automation-suggestion-head">
-                <span className="automation-suggestion-glyph" aria-hidden="true">
-                  {glyph}
+              <CardPress disabled={disabled} onPress={() => onStart(name)}>
+                <span className="automation-suggestion-face">
+                  <span className="automation-suggestion-head">
+                    <span className="automation-suggestion-glyph" aria-hidden="true">
+                      {glyph}
+                    </span>
+                    <PlusIcon className="automation-suggestion-add" aria-hidden="true" />
+                  </span>
+                  <span className="automation-suggestion-name">{preset.name}</span>
+                  <span className="automation-suggestion-detail">{preset.description}</span>
                 </span>
-                <PlusIcon className="automation-suggestion-add" aria-hidden="true" />
-              </span>
-              <span className="automation-suggestion-name">{preset.name}</span>
-              <span className="automation-suggestion-detail">{preset.description}</span>
-            </button>
+              </CardPress>
+            </div>
           );
         })}
       </div>

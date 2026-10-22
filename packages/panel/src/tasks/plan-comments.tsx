@@ -19,6 +19,9 @@ import {
   BUTTON_SIZE,
   BUTTON_VARIANT,
   Button,
+  CARD_PRESS_CORNER,
+  CARD_PRESS_REACH,
+  CardPress,
   CommentsIcon,
   ConfirmDialog,
   DIALOG_TONE,
@@ -156,6 +159,9 @@ const COMMENT_MARK_CLASS = "plan-comment-mark";
 
 /** How far below the scroller's top a thread asked to be shown lands. */
 const REVEAL_ROOM = 96;
+
+/** What a mention's chip wears, whose press opens the thread at rest it stands in as well as what it names. */
+const MENTION_REF = "[data-mention-ref]";
 
 /** How far apart two cards of the margin stand. */
 const CARD_GAP = 8;
@@ -915,32 +921,12 @@ function ThreadCard({
     const faces = [
       ...new Map(replies.map((entry) => [JSON.stringify(entry.writer), entry.writer])).values(),
     ];
-    // Note that the whole card at rest is one press that opens it, but for what is a press of its own inside it, a writer's name say; its button is the keyboard's way in.
-    const pressed = (event: React.MouseEvent<HTMLDivElement>) => {
-      const inner =
-        event.target instanceof Element
-          ? event.target.closest("a, button, [role='button'], [role='menuitem']")
-          : null;
-      if (inner === null || inner.classList.contains("comment-open")) onOpen?.();
-    };
     return (
-      // biome-ignore lint/a11y/noStaticElementInteractions: the card's own button takes the keyboard, and this widens its press to the card
-      // biome-ignore lint/a11y/useKeyWithClickEvents: the card's own button takes the keyboard, and this widens its press to the card
       <div
         className="comment-card"
         data-open="false"
         data-pointed={pointed}
         data-thread={thread.id}
-        onClick={pressed}
-        // Note that a mention's chip takes its own press and lets it go no further, so the card hears it first and opens with it.
-        onClickCapture={(event) => {
-          if (
-            event.target instanceof Element &&
-            event.target.closest("[data-mention-ref]") !== null
-          ) {
-            onOpen?.();
-          }
-        }}
       >
         {head}
         {first === undefined ? null : (
@@ -957,8 +943,13 @@ function ThreadCard({
             <CommentWords words={first.words ?? ""} />
           </div>
         )}
-        {/* Note that the card's button is the keyboard's way in, the replies drawn on it, or its name alone where there are none. */}
-        <button type="button" className="comment-open">
+        {/* Note that the whole card at rest is one press that opens it, but for a control of its own inside it, an agent's name say, and a mention's chip opens it as it takes its own press; its button is the keyboard's way in, the replies drawn on it, or its name alone where there are none. */}
+        <CardPress
+          reach={CARD_PRESS_REACH.CARD}
+          alsoPressedBy={MENTION_REF}
+          corner={CARD_PRESS_CORNER.MENU}
+          onPress={() => onOpen?.()}
+        >
           {replies.length === 0 ? (
             <span className="luke-visually-hidden">{COMMENT_WORDS.OPEN_THREAD}</span>
           ) : (
@@ -975,7 +966,7 @@ function ThreadCard({
               </span>
             </span>
           )}
-        </button>
+        </CardPress>
       </div>
     );
   }
