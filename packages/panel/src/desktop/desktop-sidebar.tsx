@@ -118,7 +118,7 @@ import { useFailedRunsMark } from "./failed-runs.js";
 import { type FoldedGroups, useFoldedGroups } from "./folded-groups.js";
 import { type HoverPane, useHoverPane } from "./hover-pane.js";
 import { LukeIdentity } from "./luke-identity.js";
-import { useLukeOperator, withoutLuke } from "./luke-operator.js";
+import { isLuke, useLukeOperator, withoutLuke } from "./luke-operator.js";
 import { ADMIN_PLACE } from "./pages-on-demand.js";
 import { RowPlaced } from "./row-moves.js";
 import { SidebarAgent } from "./sidebar-agent.js";
@@ -1859,7 +1859,10 @@ function SidebarColumn({
                 <ul className="sidebar-tasks">
                   <SidebarLuke
                     operator={operator}
-                    agent={tasks.listedAgents.standing.find((agent) => agent.id === lukeId)}
+                    agent={tasks.listedAgents.standing.find(
+                      (agent) =>
+                        agent.workspaceId === operator.workspaceId && isLuke(agent, operator),
+                    )}
                     current={lukeId !== undefined && lukeId === agentShown}
                     unread={lukeId !== undefined && context.unseenAgent(lukeId)}
                     shown={tasks.shown && overlay.inSight}

@@ -2,11 +2,16 @@
 
 import assert from "node:assert/strict";
 import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
-import { CODING_AGENT_STATUS, type TasklessAgent } from "@luke/features/coding-agent-wire";
+import {
+  CODING_AGENT_KIND,
+  CODING_AGENT_STATUS,
+  type TasklessAgent,
+} from "@luke/features/coding-agent-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { EXPERIMENT } from "@luke/settings";
 import { experimentsOn } from "@luke/settings/testing";
+import type { WireBoundaryInput } from "@luke/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -50,9 +55,11 @@ const OPERATOR: TasklessAgent = {
   effort: "high",
   title: null,
   personaName: "Orla",
+  kind: CODING_AGENT_KIND.OPERATOR,
   createdAt: 1,
   status: CODING_AGENT_STATUS.COMPLETED,
   turnId: null,
+  automationId: null,
   workspaceId: ACME.id,
   repository: null,
   activityAt: 2,
@@ -60,13 +67,19 @@ const OPERATOR: TasklessAgent = {
 
 /** An agent with no task beside him, an automation's run. */
 const SWEEP: TasklessAgent = {
-  ...OPERATOR,
   id: "6a1f0c2e-0000-4000-8000-0000000000b1",
-  personaName: undefined,
+  planId: null,
+  model: OPERATOR.model,
+  effort: OPERATOR.effort,
   title: "Copy sweep",
+  createdAt: 1,
+  status: CODING_AGENT_STATUS.COMPLETED,
+  turnId: null,
   automationName: "Copy sweep",
   automationId: "6a1f0c2e-0000-4000-8000-0000000000c1",
+  workspaceId: ACME.id,
   repository: "acme/relay",
+  activityAt: 2,
 };
 
 const roots: Root[] = [];
@@ -79,7 +92,7 @@ afterEach(() => {
 });
 
 /** Answers each ensure as the script says, every other act with nothing, and keeps every act sent. */
-function serve(ensure: (payload: unknown) => unknown): SentPortAct[] {
+function serve(ensure: (payload: unknown) => WireBoundaryInput): SentPortAct[] {
   const sent: SentPortAct[] = [];
   fakeActPortAnswering((request) => {
     sent.push(request);
@@ -236,6 +249,14 @@ test("Luke is listed once, in his own row, not again among the agents with no ta
   assert.equal(names.filter((name) => name === "Luke").length, 1);
   assert.ok(!names.includes("Orla"), "the operator is not drawn again by its agent's name");
   assert.ok(names.includes("Copy sweep"), "every other agent still stands");
+});
+
+test("Luke is known by his kind, so a list read before his ensure answers never draws him twice", async () => {
+  fakeActPortAnswering(() => new Promise<never>(() => undefined));
+  handState(experimentsOn(EXPERIMENT.OPERATOR));
+  const { sidebar } = await mount(acme([OPERATOR, SWEEP]));
+
+  assert.deepEqual(rowNames(sidebar), ["Luke", "Copy sweep"]);
 });
 
 test("Reset asks first, and only then ensures a fresh Luke and opens him", async () => {

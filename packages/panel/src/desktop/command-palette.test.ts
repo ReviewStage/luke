@@ -1927,6 +1927,7 @@ test("⌘K's first entry is Ask Luke while the account has the operator on, whic
           createdAt: 1,
           status: CODING_AGENT_STATUS.COMPLETED,
           turnId: null,
+          automationId: null,
           workspaceId: ACME.id,
           repository: null,
           activityAt: 2,

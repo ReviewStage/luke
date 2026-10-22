@@ -1248,7 +1248,7 @@ function PaletteFooter({ typed }: { typed: boolean }): React.JSX.Element {
  */
 /** The window's tasks with Luke left out of the agents listed, since Ask Luke stands for him. */
 function withoutLukeIn(tasks: TasksControl, operator: LukeOperator | undefined): TasksControl {
-  if (operator?.agentId === undefined) return tasks;
+  if (operator === undefined) return tasks;
   return {
     ...tasks,
     listedAgents: {

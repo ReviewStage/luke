@@ -1,5 +1,5 @@
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
-import type { TasklessAgent } from "@luke/features/coding-agent-wire";
+import { CODING_AGENT_KIND, type TasklessAgent } from "@luke/features/coding-agent-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { EXPERIMENT } from "@luke/settings";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
@@ -133,11 +133,19 @@ export function useLukeOperator(workspaceId: string | undefined): LukeOperator |
   };
 }
 
-/** The agents a list draws with Luke left out, since he stands in his own row. */
+/** Whether an agent is the account's operator: by its kind, or, from a service before the summary said it, by the id its ensure answered. */
+export function isLuke(agent: TasklessAgent, operator: LukeOperator): boolean {
+  return agent.kind === CODING_AGENT_KIND.OPERATOR || agent.id === operator.agentId;
+}
+
+/**
+ * The agents a list draws with Luke left out, since he stands in his own
+ * row; every one while the account has him off. Note that he is known by his
+ * kind, so a list read before his ensure answered never draws him twice.
+ */
 export function withoutLuke(
   agents: readonly TasklessAgent[],
   operator: LukeOperator | undefined,
 ): readonly TasklessAgent[] {
-  const agentId = operator?.agentId;
-  return agentId === undefined ? agents : agents.filter((agent) => agent.id !== agentId);
+  return operator === undefined ? agents : agents.filter((agent) => !isLuke(agent, operator));
 }

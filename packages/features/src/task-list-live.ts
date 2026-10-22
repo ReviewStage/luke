@@ -8,6 +8,7 @@ import {
 import {
   CODING_AGENT_ARCHIVER,
   CODING_AGENT_BRIEF,
+  CODING_AGENT_KIND,
   CODING_AGENT_STATUS,
   CONTEXT_WINDOW,
   type CodingAgentArchivedBy,
@@ -116,10 +117,13 @@ const agentLiveRowSchema = EffectSchema.Struct({
   title: EffectSchema.NullOr(EffectSchema.String),
   /** The human name the agent was given; null for one from before names were given, absent from a statement before them. */
   personaName: EffectSchema.optionalKey(EffectSchema.NullOr(EffectSchema.String)),
+  /** What kind of agent it is, a coder or a member's operator; absent from a statement before operators. */
+  kind: EffectSchema.optionalKey(EffectSchema.Literals(Object.values(CODING_AGENT_KIND))),
   /** Whether the agent was handed a prompt rather than its plan. */
   /** What the agent was handed as its first message: the plan, the developer's prompt, or nothing, for one started blank. */
   brief: EffectSchema.Literals(Object.values(CODING_AGENT_BRIEF)),
-  repository: EffectSchema.String,
+  /** The repository the agent works in; null for a member's operator, which works in none. */
+  repository: EffectSchema.NullOr(EffectSchema.String),
   starterId: EffectSchema.String,
   starterName: EffectSchema.NullOr(EffectSchema.String),
   automationId: EffectSchema.NullOr(EffectSchema.String),
@@ -403,6 +407,7 @@ function agentSummaryOf(row: AgentLiveRow, now: number): CodingAgentSummary {
       : undefined),
     title: row.title,
     ...personaOf(row),
+    ...(row.kind === CODING_AGENT_KIND.OPERATOR ? { kind: row.kind } : undefined),
     createdAt: row.createdAt,
     status: statusOf(row, now),
     turnId: row.turnId,

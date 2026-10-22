@@ -37,6 +37,7 @@ import { LINE_GRACE_MILLIS, STARTING_GRACE_MILLIS } from "@luke/features/coding-
 import {
   CHECK_SUMMARY,
   CODING_AGENT_ARCHIVER,
+  CODING_AGENT_KIND,
   CODING_AGENT_STATUS,
   PULL_REQUEST_STATE,
 } from "@luke/features/coding-agent-wire";
@@ -426,6 +427,37 @@ it.layer(getTestDB())("the plan list's live statements", (it) => {
           ],
         );
         assert.deepEqual((yield* liveListOf(outsider, NOW)).plans, []);
+      }),
+  );
+
+  it.effect(
+    "a member's operator, with no repository, is delivered and says its kind, as the held read reads it, while a coder says none",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* openUser;
+        const workspace = yield* openWorkspace(owner);
+        const coder = yield* openAgent(owner, { workspaceId: workspace }, 60_000);
+        const { agent: operator } = Option.getOrThrow(
+          yield* createCodingAgent(owner, {
+            taskId: null,
+            organizationId: workspace,
+            planSnapshot: null,
+            prompt: null,
+            kind: CODING_AGENT_KIND.OPERATOR,
+            idempotencyKey: randomUUID(),
+            model: "anthropic/claude-opus-5.5",
+            effort: "high",
+            repository: null,
+          }),
+        );
+
+        const read = yield* liveListOf(owner, NOW);
+
+        assert.deepEqual(read, yield* heldListOf(owner, NOW));
+        const listed = new Map(read.planlessAgents?.map((agent) => [agent.id, agent]));
+        assert.equal(listed.get(operator.id)?.kind, CODING_AGENT_KIND.OPERATOR);
+        assert.equal(listed.get(operator.id)?.repository, null);
+        assert.equal(listed.get(coder.id)?.kind, undefined);
       }),
   );
 
