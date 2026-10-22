@@ -7,7 +7,9 @@
  * this script whenever the pin moves:
  * `pnpm --filter @luke/agent-runner generate:codex-protocol`. The one change
  * made to Codex's output is each relative import's `.js` suffix, which the
- * repository's checks require of every package.
+ * repository's checks require of every package. The pin is `src/pins.ts`'s,
+ * and the version generated from is written beside the types
+ * (`generated-from.ts`), which `pins.test.ts` holds to the pin.
  */
 
 import { execFileSync } from "node:child_process";
@@ -23,9 +25,18 @@ import {
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { CODEX_PIN } from "../src/pins.ts";
 
-/** The Codex the runner drives in the sandbox (P16's pin; P17 puts it in the image). */
-const CODEX_PACKAGE = "@openai/codex@0.163.0";
+/** The Codex the runner drives in the sandbox, the one the image installs. */
+const CODEX_PACKAGE = `@openai/codex@${CODEX_PIN.VERSION}`;
+
+/** The file the generated types name their Codex in. */
+const GENERATED_FROM = [
+  "// generated-from.ts -- the Codex these types were generated from (`scripts/generate-codex-protocol.mjs`).",
+  "",
+  `export const CODEX_PROTOCOL_VERSION = "${CODEX_PIN.VERSION}";`,
+  "",
+].join("\n");
 
 const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const target = path.join(packageRoot, "src", "codex-protocol");
@@ -50,6 +61,7 @@ try {
     });
     writeFileSync(file, text);
   }
+  writeFileSync(path.join(scratch, "generated-from.ts"), GENERATED_FROM);
   rmSync(target, { recursive: true, force: true });
   execFileSync("cp", ["-R", scratch, target]);
 } finally {

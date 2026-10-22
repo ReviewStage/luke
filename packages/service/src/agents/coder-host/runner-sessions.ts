@@ -55,6 +55,7 @@
  */
 
 import { createHash, randomBytes, randomUUID } from "node:crypto";
+import { AGENT_USER } from "@luke/agent-runner/pins";
 import {
   type ContentBlock,
   INPUT_LINE,
@@ -227,9 +228,6 @@ const RUNNER_PATH = {
   UPLOAD: "/tmp/luke-agent-runner.mjs",
   INSTALLED: "/opt/luke/agent-runner/agent-runner.mjs",
 } as const;
-
-/** The unprivileged user the harness runs as, which the image creates. */
-export const AGENT_USER = "agent";
 
 /** The variables the sandbox opens with, as eve's coding-agent environment sets them. */
 const SANDBOX_ENV = { NO_COLOR: "1", GH_STACK_NO_UPDATE_NOTIFIER: "1" } as const;
