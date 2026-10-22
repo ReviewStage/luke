@@ -197,11 +197,6 @@
   display: flex;
 }
 
-/* Back's and Forward's hold-to-list wrapper lays nothing out of its own. */
-.title-bar-history {
-  display: contents;
-}
-
 /* The buttons over the open sidebar, or the floating one, stand on its
    ground. */
 .desktop-shell[data-sidebar-collapsed="false"] .title-bar-controls:not([data-edge]),

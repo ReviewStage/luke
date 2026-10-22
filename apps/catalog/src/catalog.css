@@ -904,3 +904,11 @@ body {
   color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
 }
+
+/* The box a hidden rail's strip stands in, as tall as a few rows. */
+.catalog-mark-strip {
+  display: flex;
+  width: var(--luke-space-12);
+  height: 160px;
+  border-right: 1px solid var(--luke-color-border);
+}

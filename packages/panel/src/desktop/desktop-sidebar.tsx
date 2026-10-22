@@ -23,6 +23,7 @@ import {
   EllipsisIcon,
   ErrorState,
   FolderIcon,
+  HoldPress,
   IconButton,
   MarkDoneIcon,
   NAV_COUNT_TONE,
@@ -42,7 +43,6 @@ import {
   Tooltip,
   UnpinIcon,
   useMenu,
-  useTouchHold,
   VisuallyHidden,
 } from "@luke/ui";
 import { actorName, creatorActor } from "@luke/ui/actor-model";
@@ -270,7 +270,7 @@ function historyGroups(
 }
 
 /**
- * Back or Forward: a press takes one step, and a press held (`useTouchHold`),
+ * Back or Forward: a press takes one step, and a press held (`HoldPress`),
  * or a right-click, lists the steps along that way, any of which it goes straight
  * to, as a browser's Back and Forward do.
  */
@@ -293,28 +293,19 @@ function HistoryButton({
 }): React.JSX.Element {
   const menu = useMenu(able);
   const button = useRef<HTMLButtonElement>(null);
-  // A press held, the mouse's as a touch's, opens the list, as a browser's Back does.
-  const hold = useTouchHold();
   const openList = () => {
     const element = button.current;
     if (element !== null && steps.length > 0) menu.show(dropBelowStart(element), element);
   };
   return (
-    <span
-      className="title-bar-history"
-      // A long press here opens the list, so the tooltip's own hold for its hint leaves it be.
-      data-long-press=""
-      onPointerDown={(event) => {
-        if (able) hold.start(event, openList, { mouse: true });
-      }}
-      onTouchEnd={hold.touchEnd}
-      onClickCapture={(event) => {
-        if (!hold.held.current) return;
-        hold.held.current = false;
-        // Note that the release of a press that opened the list is no step as well, while a
-        // click in the list, drawn in a portal whose clicks still pass through here, is its own.
-        const target = event.target;
-        if (target instanceof Node && button.current?.contains(target)) event.stopPropagation();
+    // A press held, the mouse's as a touch's, opens the list, as a browser's Back does, and so
+    // does a right-click, which opens no list a hold already opened.
+    <HoldPress
+      mouse
+      disabled={!able}
+      onHold={openList}
+      onContextMenu={() => {
+        if (menu.open === undefined) openList();
       }}
     >
       <Tooltip label={label} command={command}>
@@ -326,15 +317,6 @@ function HistoryButton({
           aria-haspopup="menu"
           aria-expanded={menu.open !== undefined}
           onClick={onPress}
-          onContextMenu={(event) => {
-            event.preventDefault();
-            // Note that a list standing, as a hold opened it, is not opened twice, and Android's
-            // own contextmenu, which may come before the hold's timer, spends the hold, so the
-            // finger's lift takes no step as well.
-            if (hold.counting()) hold.claim();
-            if (menu.open !== undefined) return;
-            openList();
-          }}
         />
       </Tooltip>
       {menu.drawn === undefined ? null : (
@@ -345,7 +327,7 @@ function HistoryButton({
           onClose={menu.close}
         />
       )}
-    </span>
+    </HoldPress>
   );
 }
 
