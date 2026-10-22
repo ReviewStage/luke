@@ -113,8 +113,10 @@ import { type InboxFollower, useFollowedInboxes } from "./use-followed-inboxes.j
  * files attached to it are held in this window's memory alone, as a
  * message's are, and go with the answer apart from it. A settled item's
  * box keeps the message being written the same way. A read of the inbox
- * lets go of the drafts of items it no longer holds at their revision, and
- * an answer taken or a message written lets go of its own.
+ * lets go of the drafts of items it no longer holds at their revision, save
+ * that the words and files written on an item the agent posted on again are
+ * carried to it as it now stands, and an answer taken or a message written
+ * lets go of its own.
  */
 
 /** How one answer is sent: the item, its revision, the answer, and the key the send is known by. */
@@ -638,7 +640,10 @@ export function useTaskInbox(input: {
   // item keeps its thread's draft, and an answer left unsent on an item settled since is let go.
   // Note that a draft of the item as the board draws it is kept too, so a message written on an
   // item the window's own send settled stands while the read still holds the item open.
-  const { drop } = writer;
+  // Note that the agent posting on the item again moves its revision on, which starts its picks,
+  // fields, and steps afresh, but the words and files being written on it are carried to the item
+  // as it now stands, so a post landing while the developer writes never takes them.
+  const { drop, update } = writer;
   useEffect(() => {
     if (!held.read || (ownTask === undefined && readAgent === undefined)) return;
     const stale = drafts.filter(
@@ -648,8 +653,19 @@ export function useTaskInbox(input: {
         !settled.some((item) => draftOfItem(kept.place, item)),
     );
     if (stale.length === 0) return;
+    for (const kept of stale) {
+      const reposted = settled.find(
+        (item) => item.id === kept.place.itemId && item.revision > kept.place.revision,
+      );
+      if (reposted === undefined || (kept.text === "" && kept.attachments.length === 0)) continue;
+      update(draftPlace(reposted, draftsOn), (was) => ({
+        ...was,
+        text: was.text === "" ? kept.text : was.text,
+        attachments: was.attachments.length === 0 ? kept.attachments : was.attachments,
+      }));
+    }
     drop((place) => stale.some((kept) => Equal.equals(kept.place, place)));
-  }, [held.read, held.items, settled, ownTask, readAgent, drafts, drop]);
+  }, [held.read, held.items, settled, ownTask, readAgent, drafts, drop, update, draftsOn]);
 
   const board = useMemo(() => inboxBoard(settled), [settled]);
   const draftOf = useCallback(
