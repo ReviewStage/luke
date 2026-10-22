@@ -242,22 +242,20 @@ it.layer(getTestDB())("the models route", (it) => {
   );
 
   it.effect(
-    "an account reads Anthropic's fast versions by the key its agents run on: withheld, its base model saying so, where Anthropic said that key's organization was never granted fast mode, its own or Luke's; offered where it ran one or none has answered",
+    "an account reads Anthropic's fast versions by its own Anthropic key: withheld, its base model saying so, where Anthropic said that key's organization was never granted fast mode; offered where it ran one or none has answered, and where the account saved no Anthropic key, whose fast access Luke's own key never stands in for",
     () =>
       Effect.gen(function* () {
         yield* accountWithAnthropicKey("user-own-not-enabled", FAST_ACCESS.NOT_ENABLED);
         yield* accountWithAnthropicKey("user-own-enabled", FAST_ACCESS.ENABLED);
         yield* accountWithAnthropicKey("user-own-unasked", null);
-        const lukeEnabled = modelCatalogOf(FAST_CATALOG, FAST_ACCESS.ENABLED);
-        const lukeNotEnabled = modelCatalogOf(FAST_CATALOG, FAST_ACCESS.NOT_ENABLED);
+        const catalog = modelCatalogOf(FAST_CATALOG);
         const withheld = { ids: [OPUS.id, SOL.id], notEnabled: [OPUS.id] };
         const offered = { ids: [OPUS.id, OPUS_FAST.id, SOL.id], notEnabled: [] };
 
-        assert.deepEqual(yield* offeredTo(lukeEnabled, "user-own-not-enabled"), withheld);
-        assert.deepEqual(yield* offeredTo(lukeNotEnabled, "user-own-enabled"), offered);
-        assert.deepEqual(yield* offeredTo(lukeNotEnabled, "user-own-unasked"), offered);
-        assert.deepEqual(yield* offeredTo(lukeNotEnabled, "user-on-luke"), withheld);
-        assert.deepEqual(yield* offeredTo(lukeEnabled, "user-on-luke"), offered);
+        assert.deepEqual(yield* offeredTo(catalog, "user-own-not-enabled"), withheld);
+        assert.deepEqual(yield* offeredTo(catalog, "user-own-enabled"), offered);
+        assert.deepEqual(yield* offeredTo(catalog, "user-own-unasked"), offered);
+        assert.deepEqual(yield* offeredTo(catalog, "user-without-key"), offered);
       }),
   );
 });

@@ -103,7 +103,7 @@ function scripted(answer: (prompt: string) => string | undefined) {
       };
     },
   });
-  const summary: SummaryModel = { model, providerOptions: {}, counted: Effect.void };
+  const summary: SummaryModel = { model, providerOptions: {} };
   return { summary, asked, bounds };
 }
 

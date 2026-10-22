@@ -23,8 +23,10 @@ import { useAct } from "../act.js";
  * The choice is the account's, kept on the service beside the default model
  * (`@luke/features/chapters-model-choice`), and read by the service when
  * the member presses Generate chapters; the chapters stay the workspace's.
- * Every model runs on Luke's key and outside the account's usage, so the
- * row offers Claude's alone, as a segmented control. The page reads the
+ * Every model runs on the member's own API key: the Claude model chosen on
+ * an Anthropic key, OpenAI's of its tier where they saved only an OpenAI key
+ * (`@luke/service`'s `chaptersModelOf`), so the row offers Claude's alone,
+ * as a segmented control. The page reads the
  * choice afresh as it opens; a write is one ask of the service, the control
  * resting until it answers and a refusal worded under it. With no account
  * signed in there is nothing to show, and the group says so.
@@ -35,7 +37,7 @@ const SECTION_LINE = {
   FAILED: "The chapters model could not be read.",
   SIGNED_OUT: "Sign in to choose the model your chapters run on.",
   WRITE_FAILED: "The chapters model could not be saved. Try again.",
-  DETAIL: "Runs on Luke's key, outside your usage.",
+  DETAIL: "Runs on your own API key, or OpenAI's model of the same tier on an OpenAI key alone.",
 } as const;
 
 /** The Chapters group, over the member's choice as the service holds it. */

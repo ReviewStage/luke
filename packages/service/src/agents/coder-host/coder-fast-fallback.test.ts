@@ -8,10 +8,9 @@ import { coderModel, type ProviderKeys } from "./model.js";
 import { usageOfTurns } from "./usage.js";
 
 /**
- * A fast step Anthropic refuses, as a coding agent's step meets it on Luke's
- * key against an Anthropic faked at its fetch: the call runs again at
- * standard speed, without fast mode's beta, counted once on the account's
- * meter, and its turn is marked so; and a turn so marked is priced at the
+ * A fast step Anthropic refuses, as a coding agent's step meets it on the
+ * account's key against an Anthropic faked at its fetch: the call runs again
+ * at standard speed, without fast mode's beta, and its turn is marked so; and a turn so marked is priced at the
  * base model's standard rate. Synthetic keys throughout.
  */
 
@@ -99,20 +98,11 @@ function anthropicRefusingFast(standard: "answers" | "refuses" = "answers") {
   return { fetch, received };
 }
 
-/** A fast step on Luke's key over that Anthropic, counting the account's meter and the turn's marks. */
+/** A fast step on the account's key over that Anthropic, counting the turn's marks. */
 function fastStep(fetch: typeof globalThis.fetch) {
-  const counted: string[] = [];
   const marks: string[] = [];
   const keys: ProviderKeys = {
-    anthropic: {
-      key: Redacted.make("sk-ant-luke-fixture"),
-      meter: {
-        spend: async () => {
-          counted.push("use");
-        },
-        report: () => undefined,
-      },
-    },
+    anthropic: { key: Redacted.make("sk-ant-account-fixture") },
     openAi: undefined,
     fetch,
   };
@@ -127,10 +117,10 @@ function fastStep(fetch: typeof globalThis.fetch) {
     maxRetries: 0,
     ...(providerOptions === undefined ? undefined : { providerOptions }),
   };
-  return { call, counted, marks };
+  return { call, marks };
 }
 
-test("a fast step Anthropic refuses with a 429 answers at standard speed, without fast mode's beta, counted once, and its turn marked", async () => {
+test("a fast step Anthropic refuses with a 429 answers at standard speed, without fast mode's beta, and its turn marked", async () => {
   const anthropic = anthropicRefusingFast();
   const step = fastStep(anthropic.fetch);
 
@@ -143,7 +133,6 @@ test("a fast step Anthropic refuses with a 429 answers at standard speed, withou
   );
   assert.equal(anthropic.received[0]?.betas.includes("fast-mode"), true);
   assert.equal(anthropic.received[1]?.betas.includes("fast-mode"), false);
-  assert.deepEqual(step.counted, ["use"]);
   assert.deepEqual(step.marks, ["fast refused"]);
 });
 

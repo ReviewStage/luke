@@ -467,7 +467,7 @@ through `validateModelChoice`, accepts a `(model, effort)` only for an
 offered model at an effort it lists, keeping the standard window only for a
 model that offers two, and `providerModelOf`, which turns a
 catalog id into the id the provider's own API takes — model calls go to
-Anthropic and OpenAI directly on Luke's keys, never through the gateway — so
+Anthropic and OpenAI directly on the account's own keys, never through the gateway — so
 `anthropic/claude-opus-5.5` is `claude-opus-5-5` and an OpenAI id is the
 catalog's after its prefix. `src/providers/model-catalog.test.ts` reads the catalog
 through a scripted gateway and the test clock; `src/accounts/models-procedures.test.ts`
@@ -1258,13 +1258,12 @@ thinks whether asked or not. An older Claude is not asked, since the ask
 would start it thinking. Nothing goes through AI Gateway.
 
 The key a step runs on is read at every step too
-(`src/agents/coder-host/account-keys.ts`): the account's own key for the provider where
-it saved one (above, "Accounts' own provider keys"), opened from its row,
-and Luke's own `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` only where it saved
-none. A row the deployment's ring cannot open, or a deployment holding no
-ring, refuses the step with `ACCOUNT_KEY_UNREADABLE` rather than run it on
-Luke's key, so nothing the account meant to pay for is quietly billed to
-Luke. A step on the account's key goes through a middleware that keeps the
+(`src/agents/coder-host/account-keys.ts`): the account's own key for the provider
+(above, "Accounts' own provider keys"), opened from its row, and never
+Luke's own `ANTHROPIC_API_KEY` or `OPENAI_API_KEY`. A provider it saved no
+key for refuses the step with `NO_PROVIDER_KEY`, and a row the deployment's
+ring cannot open, or a deployment holding no ring, with
+`ACCOUNT_KEY_UNREADABLE`, so nothing is quietly billed to Luke. A step on the account's key goes through a middleware that keeps the
 row's status as the provider answers: a 401 marks it `invalid`, OpenAI's
 429 `insufficient_quota` or Anthropic's "credit balance" refusal marks it
 `quota_exceeded`, and a call that goes through marks it `verified` again,
@@ -1272,8 +1271,15 @@ each written only where the row still holds the key the step ran on. The
 first two fail the step with `ACCOUNT_KEY_REFUSED` or
 `ACCOUNT_KEY_NO_QUOTA` in place of the provider's own error, and the three
 refusals read as the agent's failure `provider_key`, which the desktop
-words as a key to replace in Settings. An agent's title stays on Luke's
-Anthropic key. Reading the row every
+words as a key to replace in Settings. The calls beside an account's agents
+run on its own key too, through `ownKeyOf`, the provider they prefer first
+and the other where it saved only that, and never on Luke's: an agent's or
+a worker's title on the provider's small model (Haiku, or OpenAI's
+`gpt-6-luna`), and a Continue's or Fork's replay summary on the new agent's
+own model, or the other provider's balanced model. An account that saved
+no API key, as one on a subscription alone, has its agents titled from the
+first words of their opening's first line, with no model call, and its
+replays carried without a summary. Reading the row every
 step means a later change to it is the next step's model.
 
 The sandbox (`apps/dev/sandbox.ts`) is one Vercel Sandbox per session at the
@@ -1420,9 +1426,11 @@ groups, orders, and narrates the hunks in one structured call
 the answer), holds the answer to the diff, asks once more for any hunk it left
 out, and closes the story with "Other changes": the files a reader reads past,
 those with no hunk, and whatever is still outside. The model is a seam: the
-route hands in `chaptersModelOf(anthropicKey)`, one fixed fast Claude model on
-Luke's own key, never the account's meter, and a test hands in a scripted
-one. An input past `CHAPTERS_BOUNDS.MAX_INPUT_TOKENS` is refused before any
+route hands in `chaptersModelOf(own, modelId)` on the API key the member who
+pressed Generate saved (`ownKeyOf`), the Claude model they chose on an
+Anthropic key and OpenAI's of its tier on an OpenAI key alone, never Luke's
+key; a member who saved none reads `generatable: false`. A test hands in a
+scripted one. An input past `CHAPTERS_BOUNDS.MAX_INPUT_TOKENS` is refused before any
 call, the whole run is bounded by `CHAPTERS_BOUNDS.TIMEOUT`, and a failure is
 one of the store's `PULL_REQUEST_CHAPTERS_FAILURE` kinds, logged by its kind alone. The prompt,
 ReviewStage's rules in one pass, and the diff laid out as stage-cli's `prep`

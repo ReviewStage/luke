@@ -243,7 +243,7 @@ function hostOf(acting: boolean, summaryModel?: SummaryModelOf): CoderHost {
     eveOrigin: () => (acting ? EVE_ORIGIN : undefined),
     keys: () => Effect.succeed({ anthropic: undefined, openAi: undefined }),
     fastRefused: async () => undefined,
-    titleModel: () => undefined,
+    titleModel: () => Effect.succeed(undefined),
     scriptedModel: () => true,
     ...(summaryModel === undefined ? undefined : { summaryModel }),
     now: () => NOW,
@@ -1299,7 +1299,6 @@ test("list_models says the default is no longer offered where the catalog droppe
         ? Effect.succeed([sol])
         : Effect.fail(new ModelCatalogUnavailable({ cause: "offline" }));
     }),
-    lukeFastAccess: Effect.succeed(undefined),
   });
   const once = await peerCaller(hostOf(true), agents.caller, eve.services, flaky);
   const refused = await once(CODER_TOOL.START_AGENT, { model: SOL, effort: "max" }, "call-max");
@@ -1308,7 +1307,6 @@ test("list_models says the default is no longer offered where the catalog droppe
 
   const unreadable = Layer.succeed(ModelCatalog, {
     read: Effect.fail(new ModelCatalogUnavailable({ cause: "offline" })),
-    lukeFastAccess: Effect.succeed(undefined),
   });
   const blind = await peerCaller(hostOf(true), agents.caller, eve.services, unreadable);
   assert.deepEqual(await blind(CODER_TOOL.LIST_MODELS, {}), {
@@ -1607,7 +1605,6 @@ test("start_agent from a source whose transcript does not fit the new agent's wi
         }),
       }),
       providerOptions: {},
-      counted: Effect.void,
     });
   const eve = await fakeCoderEve(workspaceId);
   const small: OfferedModel = {

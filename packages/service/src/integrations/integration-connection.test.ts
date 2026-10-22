@@ -135,7 +135,7 @@ const agentHost = Effect.gen(function* () {
     eveOrigin: () => undefined,
     keys: () => Effect.die(new Error("no token read reads a provider key")),
     fastRefused: async () => undefined,
-    titleModel: () => undefined,
+    titleModel: () => Effect.succeed(undefined),
     scriptedModel: () => false,
     now: () => NOW,
   });
