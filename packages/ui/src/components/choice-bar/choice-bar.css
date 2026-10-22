@@ -72,7 +72,15 @@
     height: var(--luke-control-icon);
   }
 
+  /* Note that the count lays its parts out as a row centred on the option,
+     rather than as words on a line, because a part is an inline box whose
+     baseline is its glyph's bottom edge, which set it a pixel or two above
+     the option's name; the gap stands for the space between parts, which a
+     row drops. */
   .luke-choice-bar-count {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--luke-space-4);
     color: var(--luke-color-text-subtle);
     font-size: var(--luke-type-caption-size);
     line-height: var(--luke-type-caption-leading);

@@ -2369,7 +2369,7 @@ async function answerQuestion(label: string): Promise<void> {
   await settle();
 }
 
-test("the merge control is a chip saying what holds the merge up, GitHub's sentence for a reader, beside the one press that may be made now, in the look of what it does", async () => {
+test("the merge control is a chip saying what holds the merge up, GitHub's sentence for a reader, beside the one press that may be made now, in the look of what it does; checks alone holding it up draw no chip, the Checks tab saying them", async () => {
   const draft = controlAnswering(
     {
       pullRequest: () =>
@@ -2407,14 +2407,7 @@ test("the merge control is a chip saying what holds the merge up, GitHub's sente
     [
       "checks running",
       merging(MERGE_STATE.BLOCKED, { checks: CHECK_SUMMARY.PENDING }),
-      {
-        chip: "Checks running",
-        tone: "working",
-        sentence: "Waiting on required checks",
-        press: "Enable auto-merge",
-        look: "outline",
-        chevron: true,
-      },
+      { ...none, press: "Enable auto-merge", look: "outline", chevron: true },
     ],
     [
       "a merge queue's base",
@@ -2462,10 +2455,14 @@ test("the merge control is a chip saying what holds the merge up, GitHub's sente
       merging(MERGE_STATE.BLOCKED, { review: REVIEW_DECISION.REVIEW_REQUIRED }),
       held("Review required", "attention", "A required review is missing"),
     ],
+    ["checks failing", merging(MERGE_STATE.BLOCKED, { checks: CHECK_SUMMARY.FAILING }), undefined],
     [
-      "checks failing",
-      merging(MERGE_STATE.BLOCKED, { checks: CHECK_SUMMARY.FAILING }),
-      held("Checks failing", "danger", "Required checks are failing"),
+      "checks failing and a review required",
+      merging(MERGE_STATE.BLOCKED, {
+        checks: CHECK_SUMMARY.FAILING,
+        review: REVIEW_DECISION.REVIEW_REQUIRED,
+      }),
+      held("Review required", "attention", "A required review is missing"),
     ],
     [
       "changes requested",
