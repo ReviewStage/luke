@@ -9,6 +9,7 @@ import { BAR_ITEMS_EXAMPLE } from "./examples/bar-items";
 import { BREADCRUMBS_EXAMPLE } from "./examples/breadcrumbs";
 import { BUTTONS_EXAMPLE } from "./examples/buttons";
 import { CALENDAR_EXAMPLE } from "./examples/calendar";
+import { CARD_PRESSES_EXAMPLE } from "./examples/card-presses";
 import { CARDS_EXAMPLE } from "./examples/cards";
 import { CHECKBOXES_EXAMPLE } from "./examples/checkboxes";
 import { CHIPS_EXAMPLE } from "./examples/chips";
@@ -87,6 +88,7 @@ export const EXAMPLES: readonly Example[] = [
   BUTTONS_EXAMPLE,
   CALENDAR_EXAMPLE,
   CARDS_EXAMPLE,
+  CARD_PRESSES_EXAMPLE,
   CHIPS_EXAMPLE,
   BAR_ITEMS_EXAMPLE,
   CHOICE_BAR_EXAMPLE,

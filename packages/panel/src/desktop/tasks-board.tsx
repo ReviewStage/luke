@@ -9,6 +9,8 @@ import {
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
   BUTTON_SIZE,
+  CARD_PRESS_SELECTOR,
+  CardPress,
   CHIP_LOOK,
   CHIP_SIZE,
   CHOICE_BAR_LOOK,
@@ -138,7 +140,7 @@ function repositoryName(repository: string): string {
 }
 
 /** What a press must land on to carry a card: the press that opens it, which reaches every edge of the card but its foot's controls. */
-const CARD_HANDLE = ".tasks-board-card-press";
+const CARD_HANDLE = CARD_PRESS_SELECTOR;
 
 /** The column a narrow board shows first, where it stands: where a task starts. */
 const FIRST_SHOWN: string = TASK_STATUS.TODO;
@@ -263,7 +265,7 @@ function TaskBoardCard({
       data-editing={rename.editing ? "true" : undefined}
     >
       {rename.editing ? (
-        <div className="tasks-board-card-press">
+        <div className="tasks-board-card-face">
           {head}
           <span className="tasks-board-name">
             <InlineEdit
@@ -279,21 +281,21 @@ function TaskBoardCard({
           </span>
         </div>
       ) : (
-        <button
+        <CardPress
           ref={press}
-          type="button"
-          className="tasks-board-card-press"
           disabled={actions.deletion.busy}
-          onClick={() => {
+          onPress={() => {
             actions.close(false);
             onOpen();
           }}
           onKeyDown={actions.keyMenu}
-          {...actions.contextMenu(press)}
+          contextMenu={actions.contextMenu(press)}
         >
-          {head}
-          <span className="tasks-board-name">{task.name}</span>
-        </button>
+          <span className="tasks-board-card-face">
+            {head}
+            <span className="tasks-board-name">{task.name}</span>
+          </span>
+        </CardPress>
       )}
       {rename.refused ? (
         <span className="tasks-board-card-note" role="alert">

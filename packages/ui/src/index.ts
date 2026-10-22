@@ -10,6 +10,7 @@ export * from "./components/breadcrumbs/breadcrumbs.js";
 export * from "./components/button/button.js";
 export * from "./components/calendar/calendar.js";
 export * from "./components/card/card.js";
+export * from "./components/card-press/card-press.js";
 export * from "./components/checkbox/checkbox.js";
 export * from "./components/chip/chip.js";
 export * from "./components/choice/count-part.js";

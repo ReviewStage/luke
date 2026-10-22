@@ -29,6 +29,7 @@
 @import "./components/swatch/swatch.css";
 @import "./components/calendar/calendar.css";
 @import "./components/card/card.css";
+@import "./components/card-press/card-press.css";
 @import "./chart/chart.css";
 @import "./components/virtual-rows/virtual-rows.css";
 @import "./components/folding-button/folding-button.css";
