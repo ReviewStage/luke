@@ -898,6 +898,7 @@ test("Open in Chat on a direct message hangs a card saying it is one, and who it
   const card = placeCardOf(41);
   assert.match(card, /^Direct message/u);
   assert.equal(card.includes("Reply in a thread"), false);
+  assert.match(card, /19[67]\d/u, "a message of another year says its year");
 });
 
 test("Open in Chat on a thread reply hangs a card naming the channel, the thread, and its first message", () => {

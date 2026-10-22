@@ -24,7 +24,7 @@ import { ChannelName, channelTitle } from "./chat-channel-name.js";
 import { CopyMessageAction } from "./copy-message.js";
 import { SentTime } from "./sent-time.js";
 import { SentWords } from "./skill-chip.js";
-import { dayAndTimeText } from "./task-time.js";
+import { momentText } from "./task-time.js";
 import { TranscriptWords } from "./transcript-blocks.js";
 
 /**
@@ -124,7 +124,7 @@ function NoticePlaceCard({
           </HoverCardNote>
         </>
       )}
-      <HoverCardNote>{dayAndTimeText(held.postedAt)}</HoverCardNote>
+      <HoverCardNote>{momentText(held.postedAt)}</HoverCardNote>
     </HoverCard>
   );
 }
