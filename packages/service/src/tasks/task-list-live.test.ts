@@ -46,7 +46,7 @@ import {
   taskListLiveRowsSchema,
   taskListOfLiveRows,
 } from "@luke/features/task-list-live";
-import { PLAN_ACTOR } from "@luke/features/task-wire";
+import { PLAN_ACTOR, TASK_STATUS } from "@luke/features/task-wire";
 import {
   MESSAGE_AUTHOR,
   MESSAGE_CHANNEL,
@@ -216,7 +216,7 @@ const clockAt = (now: number) =>
     }),
   );
 
-/** The list as the service's collection answers it to the desktop at `now`, archived plans and agents among them. */
+/** The list as the service's collection answers it to the desktop at `now`, archived agents among them. */
 const heldListOf = (userId: string, now: number) =>
   Effect.gen(function* () {
     const clock = yield* clockAt(now);
@@ -225,7 +225,7 @@ const heldListOf = (userId: string, now: number) =>
 
 const heldList = (userId: string) =>
   Effect.gen(function* () {
-    const tasks = yield* listTasks(userId, { includeArchived: true });
+    const tasks = yield* listTasks(userId);
     return {
       plans: yield* withTaskAgents(userId, tasks),
       planlessAgents: yield* listTasklessAgents(userId, { includeArchived: true }),
@@ -361,12 +361,12 @@ it.layer(getTestDB())("the plan list's live statements", (it) => {
         });
         yield* lineOf(orphaned, 1, "Try again.", null, 60_000);
 
-        // An archived plan the owner pinned, and an agent with no plan, pinned and archived.
+        // A settled plan the owner pinned, and an agent with no plan, pinned and archived.
         // An agent started blank, long past the starting grace: it reads completed, not failed.
         yield* openAgent(owner, { taskId: shelved.id, blank: true }, STARTING_GRACE_MILLIS * 3);
         yield* updateTask(owner, plan.id, { assigneeId: teammate });
         yield* updateTask(owner, shelved.id, { pinned: true });
-        yield* updateTask(owner, shelved.id, { archived: true });
+        yield* updateTask(owner, shelved.id, { status: TASK_STATUS.DONE });
         const loose = yield* openAgent(owner, { workspaceId: plan.workspaceId }, 10 * 60_000);
         yield* turnOf(loose, TURN_STATUS.QUEUED, 5 * 60_000);
         yield* pinCodingAgent(owner, loose.id, true);
@@ -385,13 +385,18 @@ it.layer(getTestDB())("the plan list's live statements", (it) => {
         for (const reader of [owner, teammate, outsider]) {
           assert.deepEqual(yield* liveListOf(reader, NOW), yield* heldListOf(reader, NOW));
         }
-        // Every plan's agents, as each plan's own list names them, for the desktop's ledger.
+        // Every plan's agents, as each plan's own list names them, for the desktop's ledger; the live rows come in the order they were started across the plans.
+        const byId = (agents: readonly { readonly id: string }[]) =>
+          agents.toSorted((a, b) => a.id.localeCompare(b.id));
         for (const reader of [owner, teammate]) {
           const taskAgents = taskAgentsOfLiveRows(yield* liveRowsOf(reader), NOW);
-          assert.deepEqual(taskAgents, [
-            ...(yield* heldTaskAgentsOf(reader, plan.id, NOW)),
-            ...(yield* heldTaskAgentsOf(reader, shelved.id, NOW)),
-          ]);
+          assert.deepEqual(
+            byId(taskAgents),
+            byId([
+              ...(yield* heldTaskAgentsOf(reader, plan.id, NOW)),
+              ...(yield* heldTaskAgentsOf(reader, shelved.id, NOW)),
+            ]),
+          );
         }
         const read = yield* liveListOf(owner, NOW);
         const originOf = (taskId: string) => read.plans.find((each) => each.id === taskId)?.origin;

@@ -18,7 +18,7 @@ import {
   type TaskIssueLink,
   unlinkTaskIssue,
 } from "../task-issue-store.js";
-import { createTask, listTasks, readTask, updateTask } from "../task-store.js";
+import { createTask, listTasks, readTask } from "../task-store.js";
 
 /**
  * A task's links are its workspace's: every member reads and changes them,
@@ -238,23 +238,11 @@ it.layer(getTestDB())("a task's issue links", (it) => {
   );
 
   it.effect(
-    "an archived task takes no link, relation, or unlink, and a read's refresh of what a chip draws lands on it all the same",
+    "a read's refresh of what a chip draws lands for a member of the task's workspace, leaves the rest of the link standing, and lands for no account outside it",
     () =>
       Effect.gen(function* () {
         const { dean, charles, priya, taskId } = yield* openSharedTask;
         const link = yield* linked(dean, taskId, linear(7));
-        yield* updateTask(dean, taskId, { archived: true });
-
-        const refusedLink = yield* Effect.result(linkTaskIssue(charles, taskId, linear(8)));
-        assert.ok(Result.isFailure(refusedLink) && refusedLink.failure._tag === "TaskArchived");
-        const refusedRelation = yield* Effect.result(
-          relateTaskIssue(charles, taskId, link.id, TASK_ISSUE_RELATION.PART_OF),
-        );
-        assert.ok(
-          Result.isFailure(refusedRelation) && refusedRelation.failure._tag === "TaskArchived",
-        );
-        const refusedUnlink = yield* Effect.result(unlinkTaskIssue(charles, taskId, link.id));
-        assert.ok(Result.isFailure(refusedUnlink) && refusedUnlink.failure._tag === "TaskArchived");
 
         const refreshed = yield* refreshTaskIssue(charles, taskId, link.id, {
           key: "ENG-70",
@@ -280,8 +268,6 @@ it.layer(getTestDB())("a task's issue links", (it) => {
           ),
         );
         assert.deepEqual(keysOf(yield* listTaskIssues(dean, taskId)), ["ENG-70"]);
-
-        yield* updateTask(dean, taskId, { archived: false });
         assert.equal(yield* unlinkTaskIssue(charles, taskId, link.id), true);
       }),
   );

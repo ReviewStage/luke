@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { CODING_AGENT_ARCHIVER, PULL_REQUEST_STATE } from "@luke/features/coding-agent-wire";
+import { PULL_REQUEST_STATE } from "@luke/features/coding-agent-wire";
 import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
 import { INBOX_RESPONSE, INBOX_STATUS } from "@luke/features/inbox-wire";
 import { DEFAULT_PLAN_TEMPLATE } from "@luke/features/plan-document-template";
@@ -18,12 +18,7 @@ import { task } from "../../schemas/task.js";
 import { taskPin } from "../../schemas/task-pin.js";
 import { CONVERSATION_KIND } from "../../storage-vocabulary.js";
 import { getTestDB, joinWorkspace, leaveWorkspace, openWorkspace } from "../../testing/index.js";
-import { VOICE_CLOSE_REASON } from "../../voice-vocabulary.js";
-import {
-  archiveCodingAgent,
-  readCodingAgent,
-  recordCodingAgentPublished,
-} from "../coding-agent-store.js";
+import { archiveCodingAgent, recordCodingAgentPublished } from "../coding-agent-store.js";
 import {
   assignUnassignedTask,
   beginTaskWork,
@@ -36,19 +31,16 @@ import {
   readTask,
   readTaskHeader,
   readTaskWorkspace,
-  TaskArchived,
   TaskAssigneeNotMember,
   updateTask,
 } from "../task-store.js";
-import { voiceSessionRecord } from "../voice-session-record.js";
 
 /**
  * A plan's pin is its reader's own: two members of one workspace read the
  * plan they share, and each reads only the pin they made, through the
  * store's public reads, over a real dialect. A pin made again keeps its first
- * instant, an archive leaves it standing, and it goes with its plan and its
- * account. And a plan's archive, which archives its coding agents with it
- * and whose unarchive brings back those it archived and no other.
+ * instant, a settle leaves it standing, and it goes with its plan and its
+ * account.
  *
  * Synthetic accounts, workspaces, and plans throughout.
  */
@@ -72,10 +64,10 @@ const openSharedTask = Effect.gen(function* () {
   return { dean, charles, taskId, workspace };
 });
 
-/** The plan's line in the account's list, archived ones among the rest, failing the test where it has none. */
+/** The plan's line in the account's list, failing the test where it has none. */
 const listedTask = (userId: string, taskId: string) =>
   Effect.map(
-    listTasks(userId, { includeArchived: true }),
+    listTasks(userId),
     (tasks): TaskSummary =>
       tasks.find(({ id }) => id === taskId) ?? assert.fail("the plan is not in the list"),
   );
@@ -128,7 +120,7 @@ it.layer(getTestDB())("a plan's pin", (it) => {
   );
 
   it.effect(
-    "a plan pinned again keeps its first instant, and an archive and its return leave the pin standing",
+    "a plan pinned again keeps its first instant, and a settle and its reopening leave the pin standing",
     () =>
       Effect.gen(function* () {
         const { dean, taskId } = yield* openSharedTask;
@@ -138,9 +130,9 @@ it.layer(getTestDB())("a plan's pin", (it) => {
 
         yield* updateTask(dean, taskId, { pinned: true });
         assert.equal(yield* pinReadBy(dean, taskId), pinnedAt);
-        yield* updateTask(dean, taskId, { archived: true });
+        yield* updateTask(dean, taskId, { status: TASK_STATUS.DONE });
         assert.equal(yield* pinReadBy(dean, taskId), pinnedAt);
-        yield* updateTask(dean, taskId, { archived: false });
+        yield* updateTask(dean, taskId, { status: TASK_STATUS.IN_PROGRESS });
         assert.equal(yield* pinReadBy(dean, taskId), pinnedAt);
       }),
   );
@@ -196,7 +188,7 @@ it.layer(getTestDB())("a plan's pin", (it) => {
       assert.equal(Option.isNone(yield* updateTask(outsider, taskId, { pinned: true })), true);
       assert.equal(Option.isNone(yield* updateTask(outsider, taskId, { pinned: false })), true);
       assert.equal(Option.isNone(yield* readTask(outsider, taskId)), true);
-      assert.deepEqual(yield* listTasks(outsider, { includeArchived: true }), []);
+      assert.deepEqual(yield* listTasks(outsider), []);
       assert.notEqual(yield* pinReadBy(dean, taskId), undefined);
       assert.equal(yield* pinReadBy(charles, taskId), undefined);
     }),
@@ -279,20 +271,16 @@ it.layer(getTestDB())("an untitled plan's name", (it) => {
     }),
   );
 
-  it.effect("leaves an archived plan, and one of a workspace the account is not in, untitled", () =>
+  it.effect("leaves a plan of a workspace the account is not in untitled", () =>
     Effect.gen(function* () {
       const owner = yield* openAccount;
       const outsider = yield* openAccount;
       const organizationId = yield* openWorkspace(owner);
       const theirs = yield* createTask(owner, { organizationId });
-      const archived = yield* createTask(owner, { organizationId });
-      yield* updateTask(owner, archived.id, { archived: true });
 
       assert.equal(yield* nameUntitledTask(outsider, theirs.id, "Expire invitations"), false);
-      assert.equal(yield* nameUntitledTask(owner, archived.id, "Expire invitations"), false);
 
       assert.equal((yield* listedTask(owner, theirs.id)).name, "Untitled");
-      assert.equal((yield* listedTask(owner, archived.id)).name, "Untitled");
     }),
   );
 });
@@ -390,7 +378,7 @@ it.layer(getTestDB())("a plan's workspace", (it) => {
   );
 
   it.effect(
-    "a plan's header names where it stands and whose it is to every member, follows its archive, and names nothing to an account outside it or for a plan that is none",
+    "a plan's header names where it stands and whose it is to every member, follows its status, and names nothing to an account outside it or for a plan that is none",
     () =>
       Effect.gen(function* () {
         const { dean, charles, taskId } = yield* openSharedTask;
@@ -402,7 +390,6 @@ it.layer(getTestDB())("a plan's workspace", (it) => {
           name: SHARED_TASK.name,
           repository: null,
           status: TASK_STATUS.TODO,
-          archived: false,
         };
 
         assert.deepEqual(yield* readTaskHeader(dean, taskId), Option.some(started));
@@ -410,9 +397,9 @@ it.layer(getTestDB())("a plan's workspace", (it) => {
         assert.deepEqual(yield* readTaskHeader(stranger, taskId), Option.none());
         assert.deepEqual(yield* readTaskHeader(dean, randomUUID()), Option.none());
 
-        yield* updateTask(dean, taskId, { archived: true, status: TASK_STATUS.IN_PROGRESS });
+        yield* updateTask(dean, taskId, { status: TASK_STATUS.IN_PROGRESS });
         const header = Option.getOrThrow(yield* readTaskHeader(charles, taskId));
-        assert.deepEqual(header, { ...started, status: TASK_STATUS.IN_PROGRESS, archived: true });
+        assert.deepEqual(header, { ...started, status: TASK_STATUS.IN_PROGRESS });
         // The header agrees with the whole read on everything it answers.
         const whole = Option.getOrThrow(yield* readTask(charles, taskId));
         assert.deepEqual(header, {
@@ -421,7 +408,6 @@ it.layer(getTestDB())("a plan's workspace", (it) => {
           name: whole.task.name,
           repository: whole.task.repository,
           status: whole.task.status,
-          archived: whole.task.archivedAt !== undefined,
         });
       }),
   );
@@ -450,136 +436,6 @@ const openTaskAgent = (userId: string, organizationId: string, taskId: string) =
     });
     return id;
   });
-
-/** The agent's archive as the store reads it: when, and who it was by. */
-const archiveOf = (userId: string, agentId: string) =>
-  Effect.map(readCodingAgent(userId, agentId), (read) => {
-    const agent = Option.getOrThrow(read);
-    return { archivedAt: agent.archivedAt?.getTime(), archivedBy: agent.archivedBy };
-  });
-
-it.layer(getTestDB())("a plan's archive and its coding agents", (it) => {
-  it.effect(
-    "a plan's archive archives its standing agents with it as the member who archived it, again for one brought back on its own since, and its unarchive brings back only those",
-    () =>
-      Effect.gen(function* () {
-        const { dean, charles, taskId } = yield* openSharedTask;
-        const workspace = (yield* listedTask(dean, taskId)).workspaceId;
-        const working = yield* openTaskAgent(dean, workspace, taskId);
-        const putAway = yield* openTaskAgent(dean, workspace, taskId);
-        yield* archiveCodingAgent(charles, putAway, true);
-        const before = yield* archiveOf(dean, putAway);
-
-        const archived = Option.getOrThrow(yield* updateTask(charles, taskId, { archived: true }));
-        assert.deepEqual(yield* archiveOf(dean, working), {
-          archivedAt: archived.archivedAt,
-          archivedBy: { by: CODING_AGENT_ARCHIVER.MEMBER, userId: charles, withTask: true },
-        });
-        assert.deepEqual(yield* archiveOf(dean, putAway), before);
-
-        // An agent brought back on its own is taken in again by the archive asked again, under its stamp.
-        yield* archiveCodingAgent(dean, working, false);
-        yield* updateTask(charles, taskId, { archived: true });
-        assert.equal((yield* archiveOf(dean, working)).archivedAt, archived.archivedAt);
-
-        yield* updateTask(dean, taskId, { archived: false });
-        assert.deepEqual(yield* archiveOf(dean, working), {
-          archivedAt: undefined,
-          archivedBy: null,
-        });
-        assert.deepEqual(yield* archiveOf(dean, putAway), before);
-      }),
-  );
-
-  it.effect(
-    "an archive whose guard finds an agent at work under its conversation's lock is refused, and nothing is archived",
-    () =>
-      Effect.gen(function* () {
-        const { dean, taskId } = yield* openSharedTask;
-        const workspace = (yield* listedTask(dean, taskId)).workspaceId;
-        const agentId = yield* openTaskAgent(dean, workspace, taskId);
-        const read: string[] = [];
-
-        const refused = yield* Effect.result(
-          updateTask(dean, taskId, { archived: true }, undefined, (agent) => {
-            read.push(agent.id);
-            return Effect.succeed(false);
-          }),
-        );
-
-        assert.equal(Result.isFailure(refused) && refused.failure._tag, "TaskAgentUnstopped");
-        assert.deepEqual(read, [agentId]);
-        assert.equal((yield* listedTask(dean, taskId)).archivedAt, undefined);
-        assert.equal((yield* archiveOf(dean, agentId)).archivedAt, undefined);
-      }),
-  );
-});
-
-/** A call the account opened on the task, held by a connection; answers its live session id. */
-const openCall = (userId: string, taskId: string) =>
-  Effect.gen(function* () {
-    const sessionId = `live-${randomUUID()}`;
-    yield* voiceSessionRecord().register({
-      userId,
-      sessionId,
-      taskId,
-      attachId: randomUUID(),
-      model: "gpt-realtime",
-    });
-    return sessionId;
-  });
-
-/** Which of the calls named the orphan sweep's next run reads, past any grace. */
-const sweptOf = (sessionIds: readonly string[]) =>
-  Effect.map(
-    voiceSessionRecord().detached({ detachedBefore: Date.UTC(1970, 0, 1, 0, 0, 1), limit: 1_000 }),
-    (swept) => sessionIds.filter((id) => swept.some((call) => call.sessionId === id)),
-  );
-
-it.layer(getTestDB())("a plan's archive and its live calls", (it) => {
-  it.effect(
-    "an archive hands every open call on the plan to the sweep, the member's and a teammate's, held or not, and no other",
-    () =>
-      Effect.gen(function* () {
-        const { dean, charles, taskId } = yield* openSharedTask;
-        const { id: otherTask } = yield* createTask(dean, {
-          name: "Billing export",
-          organizationId: yield* openWorkspace(dean),
-        });
-        const deansCall = yield* openCall(dean, taskId);
-        const charlesCall = yield* openCall(charles, taskId);
-        const ended = yield* openCall(dean, taskId);
-        yield* voiceSessionRecord().close({
-          sessionId: ended,
-          seconds: 3,
-          reason: VOICE_CLOSE_REASON.CLOSE_REQUESTED,
-        });
-        const elsewhere = yield* openCall(dean, otherTask);
-        const calls = [deansCall, charlesCall, ended, elsewhere];
-        assert.deepEqual(yield* sweptOf(calls), []);
-
-        yield* updateTask(charles, taskId, { archived: true });
-
-        assert.deepEqual(yield* sweptOf(calls), [deansCall, charlesCall]);
-      }),
-  );
-
-  it.effect(
-    "a call opened, or re-attached, on a plan the archive already landed on is handed to the sweep as well",
-    () =>
-      Effect.gen(function* () {
-        const { dean, charles, taskId } = yield* openSharedTask;
-        const held = yield* openCall(dean, taskId);
-        yield* updateTask(dean, taskId, { archived: true });
-
-        // A re-attach and a creation that read the plan before its archive land after it.
-        yield* voiceSessionRecord().attached({ sessionId: held, attachId: randomUUID() });
-        const late = yield* openCall(charles, taskId);
-
-        assert.deepEqual(yield* sweptOf([held, late]), [held, late]);
-      }),
-  );
-});
 
 /** The task's number, status, and priority as the account opens it, failing the test where it reaches none. */
 const standingOf = (userId: string, taskId: string) =>
@@ -653,7 +509,7 @@ it.layer(getTestDB())("a task's status and priority", (it) => {
     }),
   );
 
-  it.effect("change for every member, refused while archived, and not at all for an outsider", () =>
+  it.effect("change for every member, and not at all for an outsider", () =>
     Effect.gen(function* () {
       const { dean, charles, taskId } = yield* openSharedTask;
       const outsider = yield* openAccount;
@@ -670,12 +526,6 @@ it.layer(getTestDB())("a task's status and priority", (it) => {
         Option.isNone(yield* updateTask(outsider, taskId, { status: TASK_STATUS.CANCELED })),
         true,
       );
-
-      yield* updateTask(dean, taskId, { archived: true });
-      const refused = yield* Effect.result(
-        updateTask(dean, taskId, { priority: TASK_PRIORITY.LOW }),
-      );
-      assert.ok(Result.isFailure(refused) && refused.failure instanceof TaskArchived);
       assert.deepEqual(yield* standingOf(dean, taskId), {
         number: 1,
         status: TASK_STATUS.DONE,
@@ -754,19 +604,6 @@ it.layer(getTestDB())("a task's assignee", (it) => {
 
       yield* updateTask(dean, taskId, { assigneeId: null });
       assert.equal(yield* assigneeReadBy(dean, taskId), undefined);
-    }),
-  );
-
-  it.effect("is refused while the task is archived, unless the same change brings it back", () =>
-    Effect.gen(function* () {
-      const { dean, charles, taskId } = yield* openSharedTask;
-      yield* updateTask(dean, taskId, { archived: true });
-
-      const refused = yield* Effect.result(updateTask(dean, taskId, { assigneeId: charles }));
-      yield* updateTask(dean, taskId, { archived: false, assigneeId: charles });
-
-      assert.ok(Result.isFailure(refused) && refused.failure instanceof TaskArchived);
-      assert.equal(yield* assigneeReadBy(dean, taskId), charles);
     }),
   );
 

@@ -9,7 +9,7 @@ import {
   PLAN_ATTACHMENT_KEEP,
   readPlanAttachment,
 } from "@luke/database/models/plan-attachments";
-import { createTask, readTask, updateTask } from "@luke/database/models/task-store";
+import { createTask, readTask } from "@luke/database/models/task-store";
 import { user } from "@luke/database/schemas/auth";
 import { getTestDB, joinWorkspace, openWorkspace } from "@luke/database/testing";
 import { PICTURE_TYPE, type Picture } from "@luke/features/picture-wire";
@@ -174,12 +174,11 @@ it.layer(getTestDB())("edit_plan's pictures", (it) => {
   );
 
   it.effect(
-    "a missing file, a file that is no image, one past the bound, pictures past the plan's bound, and an archived plan each refuse the call, nothing is saved, and no picture kept before the refusal holds a place in the bound",
+    "a missing file, a file that is no image, one past the bound, and pictures past the plan's bound each refuse the call, nothing is saved, and no picture kept before the refusal holds a place in the bound",
     () =>
       Effect.gen(function* () {
         const { owner, taskId, agentId } = yield* openAgentTask;
         const full = yield* openAgentTask;
-        const archived = yield* openAgentTask;
         const tooLarge = new Uint8Array(1_500_001);
         tooLarge.set(SCREENSHOT);
         const sandbox = sandboxWith({
@@ -193,7 +192,6 @@ it.layer(getTestDB())("edit_plan's pictures", (it) => {
           const answer = yield* keepPlanAttachment(full.owner, full.taskId, picture);
           assert.equal(answer.status, PLAN_ATTACHMENT_KEEP.KEPT);
         }
-        yield* updateTask(archived.owner, archived.taskId, { archived: true });
         const before = Option.getOrThrow(yield* readTask(owner, taskId)).text;
         const edit = (at: { owner: string; taskId: string; agentId: string }, ...paths: string[]) =>
           recordPlanEdit(
@@ -213,7 +211,6 @@ it.layer(getTestDB())("edit_plan's pictures", (it) => {
           yield* edit(own, "notes.txt"),
           yield* edit(own, "huge.png"),
           yield* edit(full, "shots/members.png", "shots/members.png"),
-          yield* edit(archived, "shots/members.png"),
         ];
         const lastPlace = yield* edit(full, "shots/members.png");
 
@@ -222,7 +219,6 @@ it.layer(getTestDB())("edit_plan's pictures", (it) => {
           planEditRejected(`${TASK_PICTURE_FILE_REFUSAL.NOT_IMAGE} notes.txt`),
           planEditRejected(`${TASK_PICTURE_FILE_REFUSAL.TOO_LARGE} huge.png`),
           planEditRejected(PLAN_EDIT_REFUSAL.TOO_MANY_PICTURES),
-          planEditRejected(PLAN_EDIT_REFUSAL.ARCHIVED),
         ]);
         assert.equal(Option.getOrThrow(yield* readTask(owner, taskId)).text, before);
         assert.deepEqual(lastPlace, {

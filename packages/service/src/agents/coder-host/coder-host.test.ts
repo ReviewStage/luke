@@ -2011,7 +2011,7 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
   );
 
   it.effect(
-    "a post from an archived agent, or from one on an archived task, is refused without stamping it as having left, so once brought back it posts again",
+    "a post from an archived agent is refused without stamping it as having left, so once brought back it posts again",
     () =>
       Effect.gen(function* () {
         const host = yield* hostOverStore();
@@ -2040,19 +2040,6 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
         assert.equal(yield* stamped(archived.userId, archived.agent.id), false);
         yield* archiveCodingAgent(archived.userId, archived.agent.id, false);
         assert.notDeepEqual(yield* post(archived.admitted), refused, "brought back, it posts");
-
-        const onArchivedTask = yield* openAgent(host);
-        yield* chatOn(onArchivedTask.userId);
-        const taskId = onArchivedTask.agent.taskId ?? "";
-        yield* updateTask(onArchivedTask.userId, taskId, { archived: true });
-        assert.deepEqual(yield* post(onArchivedTask.admitted), refused);
-        assert.equal(yield* stamped(onArchivedTask.userId, onArchivedTask.agent.id), false);
-        yield* updateTask(onArchivedTask.userId, taskId, { archived: false });
-        assert.notDeepEqual(
-          yield* post(onArchivedTask.admitted),
-          refused,
-          "brought back, it posts",
-        );
       }),
   );
 

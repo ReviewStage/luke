@@ -479,28 +479,6 @@ it.layer(getTestDB())("the chat store's members and channels", (it) => {
       }),
   );
 
-  it.effect(
-    "a plan's channel is archived with its plan and opened again when the plan comes back, and one made for an archived plan is made archived",
-    () =>
-      Effect.gen(function* () {
-        const owner = yield* openAccount("Ada Lovelace");
-        const workspace = yield* openWorkspace(owner);
-        const task = yield* openTask(owner, workspace);
-        const channel = () =>
-          Effect.map(ensureTaskChannel(owner, task), (row) => Option.getOrThrow(row).archivedAt);
-        assert.equal(yield* channel(), null);
-        yield* updateTask(owner, task, { archived: true });
-        assert.notEqual(yield* channel(), null);
-        yield* updateTask(owner, task, { archived: false });
-        assert.equal(yield* channel(), null);
-
-        const shelved = yield* openTask(owner, workspace, "Old export");
-        yield* updateTask(owner, shelved, { archived: true });
-        const made = Option.getOrThrow(yield* ensureTaskChannel(owner, shelved));
-        assert.notEqual(made.archivedAt, null);
-      }),
-  );
-
   it.effect("no DM is opened with a member that left, from either side", () =>
     Effect.gen(function* () {
       const owner = yield* openAccount("Ada Lovelace");
@@ -1434,7 +1412,7 @@ it.layer(getTestDB())("the chat store's asks", (it) => {
   );
 
   it.effect(
-    "what waits on a person is the open asks of others they may answer: not their own, not an agents' DM, not on an archived plan, and a DM to them included",
+    "what waits on a person is the open asks of others they may answer: not their own, not an agents' DM, and a DM to them included",
     () =>
       Effect.gen(function* () {
         const room = yield* openRoom;
@@ -1465,11 +1443,6 @@ it.layer(getTestDB())("the chat store's asks", (it) => {
           waiting.map((each) => each.message.id),
         );
 
-        yield* updateTask(room.owner, room.plan, { archived: true });
-        assert.deepEqual(
-          (yield* waitingOn(room.owner)).map((each) => each.message.id),
-          [dmAsk.message.id],
-        );
         const stranger = yield* openAccount();
         assert.deepEqual(yield* waitingOn(stranger), []);
         assert.deepEqual(

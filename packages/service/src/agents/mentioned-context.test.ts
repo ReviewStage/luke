@@ -404,7 +404,7 @@ const agent = (name: string, agentId = OTHER_AGENT_ID, taskId: string | undefine
 const OTHER_AGENT: MentionedAgent = {
   id: OTHER_AGENT_ID,
   name: "Store the invitations",
-  task: { id: TASK.id, name: "Rollout", archived: false },
+  task: { id: TASK.id, name: "Rollout" },
   repository: "acme/relay",
   branch: "luke/store-invitations",
   pullRequest: { number: 42, url: "https://github.com/acme/relay/pull/42" },
@@ -446,7 +446,7 @@ test("another agent of the plan the words mention is handed by its id, where its
 test("an agent of the workspace on another task or on none is handed with its task, to an agent with a plan or with none, and an archived one is not offered to message", () => {
   const onAnother = {
     ...OTHER_AGENT,
-    task: { id: "1c1c1c1c-0000-4000-8000-000000000000", name: "Billing", archived: false },
+    task: { id: "1c1c1c1c-0000-4000-8000-000000000000", name: "Billing" },
   };
   const onNone = { ...OTHER_AGENT, task: null, archived: true };
   const reads = (standing: MentionedAgent) => ({
@@ -516,20 +516,12 @@ test("a page the send did not find on the plan is named as gone, an agent it did
   assert.equal(elsewhere, undefined);
 });
 
-test("an agent whose task is archived is handed as taking no message, and one mentioned in upper case is found as the store holds it", () => {
-  const onArchived = { ...OTHER_AGENT, task: { id: TASK.id, name: "Rollout", archived: true } };
-  const reads = {
-    pages: new Map(),
-    agents: new Map([[OTHER_AGENT_ID, onArchived]]),
-    people: new Map(),
-  };
-
+test("an agent mentioned in upper case is found as the store holds it", () => {
   const part =
-    mentionedContext(`See ${agent("Store", OTHER_AGENT_ID.toUpperCase())}.`, TASK, reads) ?? "";
+    mentionedContext(`See ${agent("Store", OTHER_AGENT_ID.toUpperCase())}.`, TASK, READS) ?? "";
 
   assert.match(part, /"Store the invitations" \(id `9e8d7c6b-5a4f-4e3d-8c2b-1a0f9e8d7c6b`\)/u);
-  assert.match(part, /Its task is archived, so it takes no message\./u);
-  assert.doesNotMatch(part, /To message it/u);
+  assert.match(part, /To message it/u);
 });
 
 test("a person the words mention is handed by their name and role in the workspace, once however often named, and never their email", () => {
