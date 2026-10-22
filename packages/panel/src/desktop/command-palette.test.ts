@@ -13,6 +13,7 @@ import {
 } from "@luke/features/coding-agent-view";
 import {
   CHECK_SUMMARY,
+  CODING_AGENT_KIND,
   CODING_AGENT_STATUS,
   PULL_REQUEST_STATE,
 } from "@luke/features/coding-agent-wire";
@@ -1908,7 +1909,7 @@ function servingLuke(agentId: string): SentPortAct[] {
   return sent;
 }
 
-test("⌘K's first entry is Ask Luke while the account has the operator on, which opens his page, and he is not listed again", async () => {
+test("⌘K's first entry is Ask Luke while the account has the operator on, which opens his page, and he is not listed again, nor a Luke a Reset retired", async () => {
   const lukeId = "6a1f0c2e-0000-4000-8000-0000000000a1";
   servingLuke(lukeId);
   const opened: string[] = [];
@@ -1933,7 +1934,25 @@ test("⌘K's first entry is Ask Luke while the account has the operator on, whic
           activityAt: 2,
         },
       ],
-      archived: [],
+      archived: [
+        {
+          id: "6a1f0c2e-0000-4000-8000-0000000000a0",
+          planId: null,
+          model: "anthropic/claude-opus-5.5",
+          effort: "high",
+          title: null,
+          personaName: "Ines",
+          kind: CODING_AGENT_KIND.OPERATOR,
+          createdAt: 0,
+          status: CODING_AGENT_STATUS.COMPLETED,
+          turnId: null,
+          archivedAt: 1,
+          automationId: null,
+          workspaceId: ACME.id,
+          repository: null,
+          activityAt: 1,
+        },
+      ],
     },
   });
   handState(experimentsOn(EXPERIMENT.OPERATOR));
@@ -1948,6 +1967,9 @@ test("⌘K's first entry is Ask Luke while the account has the operator on, whic
     !rows().some((row) => row.startsWith("Orla")),
     "Luke is not listed again by his agent's name",
   );
+  type("Ines");
+  assert.ok(!rows().some((row) => row.startsWith("Ines")), "a Luke a Reset retired is not listed");
+  type("");
   press("Ask Luke");
   await settle();
   assert.deepEqual(opened, [lukeId]);

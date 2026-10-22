@@ -1586,7 +1586,10 @@ function SidebarColumn({
     tasks.agentView.onOpen(agentId);
   };
   // Luke stands in his own row at the list's head, so every other place leaves him out.
-  const operator = useLukeOperator(tasks.signedIn ? tasks.workspace?.id : undefined);
+  const operator = useLukeOperator({
+    accountId: tasks.me,
+    workspaceId: tasks.signedIn ? tasks.workspace?.id : undefined,
+  });
   const lukeId = operator?.agentId;
   // The list is the chosen workspace's; the unread marks above read every task.
   const { listed: listedRows } = tasks;

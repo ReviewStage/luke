@@ -1,5 +1,9 @@
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
-import { CODING_AGENT_KIND, type TasklessAgent } from "@luke/features/coding-agent-wire";
+import {
+  CODING_AGENT_KIND,
+  type CodingAgentSummary,
+  type TasklessAgent,
+} from "@luke/features/coding-agent-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { EXPERIMENT } from "@luke/settings";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
@@ -45,8 +49,33 @@ type OperatorRead =
 /** What a Reset that did not land says. */
 const RESET_REFUSED = "Luke could not be started afresh. Try again in a moment.";
 
-/** Each workspace's ensure, by its id, kept for the window's life. */
-const operatorsAtom = Atom.keepAlive(Atom.make<ReadonlyMap<string, OperatorRead>>(new Map()));
+/** Each account's ensures, by the account's id, then by each workspace's id. */
+type OperatorReads = ReadonlyMap<string | undefined, ReadonlyMap<string, OperatorRead>>;
+
+/**
+ * Each account's ensure in each workspace, kept for the window's life. Note
+ * that it is the account's as much as the workspace's, because an operator is
+ * one member's, so another account signed in to the same workspace in this
+ * window ensures its own rather than opening the last one's.
+ */
+const operatorsAtom = Atom.keepAlive(Atom.make<OperatorReads>(new Map()));
+
+/** Where an ensure is kept: the account asking, none in a fixture run, and the workspace. */
+interface OperatorPlace {
+  readonly accountId: string | undefined;
+  readonly workspaceId: string;
+}
+
+/** One account's ensure in one workspace, as the window holds it. */
+function readAt(held: OperatorReads, place: OperatorPlace): OperatorRead | undefined {
+  return held.get(place.accountId)?.get(place.workspaceId);
+}
+
+/** What the window holds with one account's ensure in one workspace set to `read`. */
+function withRead(held: OperatorReads, place: OperatorPlace, read: OperatorRead): OperatorReads {
+  const account = new Map(held.get(place.accountId)).set(place.workspaceId, read);
+  return new Map(held).set(place.accountId, account);
+}
 
 /** The account's operator in one workspace, as every surface that names it reads it. */
 export interface LukeOperator {
@@ -79,62 +108,70 @@ function settled(agentId: string | undefined): OperatorRead {
     : { kind: OPERATOR_READ.ENSURED, agentId };
 }
 
-/** Writes one workspace's ensure into what the window keeps. */
-type OperatorsWrite = (
-  change: (held: ReadonlyMap<string, OperatorRead>) => ReadonlyMap<string, OperatorRead>,
-) => void;
+/** Writes one ensure into what the window keeps. */
+type OperatorsWrite = (change: (held: OperatorReads) => OperatorReads) => void;
 
 /**
  * Asks one workspace's ensure where none was asked yet, or, `again`, where
  * the last one failed. Note that the claim is taken inside the write, which
  * runs at once, so two surfaces drawn together ask once.
  */
-function claimEnsure(write: OperatorsWrite, workspaceId: string, again: boolean): void {
+function claimEnsure(write: OperatorsWrite, place: OperatorPlace, again: boolean): void {
   let claimed = false;
   write((held) => {
-    const standing = held.get(workspaceId);
+    const standing = readAt(held, place);
     if (standing !== undefined && !(again && standing.kind === OPERATOR_READ.FAILED)) return held;
     claimed = true;
-    return new Map(held).set(workspaceId, { kind: OPERATOR_READ.ENSURING });
+    return withRead(held, place, { kind: OPERATOR_READ.ENSURING });
   });
   if (!claimed) return;
-  void ensuredId(workspaceId, false).then((agentId) =>
-    write((held) => new Map(held).set(workspaceId, settled(agentId))),
+  // Note that the answer lands under the account that asked, so one arriving after a sign-out is never another account's.
+  void ensuredId(place.workspaceId, false).then((agentId) =>
+    write((held) => withRead(held, place, settled(agentId))),
   );
 }
 
 /**
- * Luke in the workspace named: ensured the first time any surface asks, and
- * none while the account has the experiment off or no workspace is listed.
+ * Luke for the account in the workspace named: ensured the first time any
+ * surface asks, and none while the account has the experiment off or no
+ * workspace is listed.
  */
-export function useLukeOperator(workspaceId: string | undefined): LukeOperator | undefined {
+export function useLukeOperator(asking: {
+  readonly accountId: string | undefined;
+  readonly workspaceId: string | undefined;
+}): LukeOperator | undefined {
   const on = useExperiment(EXPERIMENT.OPERATOR);
   const reads = useAtomValue(operatorsAtom);
   const write = useAtomSet(operatorsAtom);
-  const asked = on ? workspaceId : undefined;
+  const { accountId } = asking;
+  const workspaceId = on ? asking.workspaceId : undefined;
   useEffect(() => {
-    if (asked !== undefined) claimEnsure(write, asked, false);
-  }, [asked, write]);
-  if (asked === undefined) return undefined;
-  const read = reads.get(asked);
+    if (workspaceId !== undefined) claimEnsure(write, { accountId, workspaceId }, false);
+  }, [accountId, workspaceId, write]);
+  if (workspaceId === undefined) return undefined;
+  const place = { accountId, workspaceId };
+  const read = readAt(reads, place);
   return {
-    workspaceId: asked,
+    workspaceId,
     agentId: read?.kind === OPERATOR_READ.ENSURED ? read.agentId : undefined,
     failed: read?.kind === OPERATOR_READ.FAILED,
-    retry: () => claimEnsure(write, asked, true),
+    retry: () => claimEnsure(write, place, true),
     reset: () =>
-      ensuredId(asked, true).then((agentId) => {
+      ensuredId(workspaceId, true).then((agentId) => {
         if (agentId === undefined) {
           return { status: ACTION_RESULT_STATUS.REJECTED, reason: RESET_REFUSED };
         }
-        write((held) => new Map(held).set(asked, settled(agentId)));
+        write((held) => withRead(held, place, settled(agentId)));
         return { status: ACTION_RESULT_STATUS.ACCEPTED, agentId };
       }),
   };
 }
 
 /** Whether an agent is the account's operator: by its kind, or, from a service before the summary said it, by the id its ensure answered. */
-export function isLuke(agent: TasklessAgent, operator: LukeOperator): boolean {
+export function isLuke(
+  agent: Pick<CodingAgentSummary, "id" | "kind">,
+  operator: LukeOperator,
+): boolean {
   return agent.kind === CODING_AGENT_KIND.OPERATOR || agent.id === operator.agentId;
 }
 

@@ -1251,9 +1251,10 @@ function withoutLukeIn(tasks: TasksControl, operator: LukeOperator | undefined):
   if (operator === undefined) return tasks;
   return {
     ...tasks,
+    // Note that a Luke a Reset retired is left out too, since he is known by his kind and the row he stood in now opens his successor.
     listedAgents: {
-      ...tasks.listedAgents,
       standing: withoutLuke(tasks.listedAgents.standing, operator),
+      archived: withoutLuke(tasks.listedAgents.archived, operator),
     },
   };
 }
@@ -1427,7 +1428,10 @@ export function CommandPalette({
 
   const tokens = searchTokens(query);
   // Luke leads the list as Ask Luke, so the rows that list agents leave him out.
-  const operator = useLukeOperator(tasks.signedIn ? tasks.workspace?.id : undefined);
+  const operator = useLukeOperator({
+    accountId: tasks.me,
+    workspaceId: tasks.signedIn ? tasks.workspace?.id : undefined,
+  });
   const listedTasks = withoutLukeIn(tasks, operator);
   const askLuke = operator === undefined ? undefined : askLukeRow(operator, onTasks, choose, tasks);
   const askLukeShown =

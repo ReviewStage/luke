@@ -61,7 +61,7 @@ import {
   useAgentDraftDoors,
   useAgentTerminalDoors,
 } from "./agent-actions.js";
-import { LUKE_NAME, useLukeOperator } from "./luke-operator.js";
+import { isLuke, LUKE_NAME, useLukeOperator } from "./luke-operator.js";
 import { AgentPane } from "./main-tabs.js";
 import {
   COLUMN,
@@ -269,7 +269,7 @@ export function DesktopAgentPage({
   );
   const { act } = useAct();
   // Luke's page is an agent's page in every way but his name and the actions he does not offer.
-  const luke = useLukeOperator(tasks.workspace?.id)?.agentId === agentId;
+  const operator = useLukeOperator({ accountId: tasks.me, workspaceId: tasks.workspace?.id });
   const views = useTabViews();
   const { sidePanel } = tasks;
   const drawing = useSidePanelDrawing(sidePanel);
@@ -294,6 +294,10 @@ export function DesktopAgentPage({
     me: tasks.me,
   });
   const agent = agents.agents?.[0] ?? agents.archived?.[0];
+  // Note that Luke is known by his kind, so one a Reset retired is still drawn as Luke, never as an agent to rename or delete.
+  const luke =
+    operator !== undefined &&
+    (operator.agentId === agentId || (agent !== undefined && isLuke(agent, operator)));
   useTaskAgentsFollow(tasks, agentId, agent);
   // Its Call names the agent's own task, or none, and an archived agent takes none.
   const calls = useAgentCallDoors(tasks.calls, {

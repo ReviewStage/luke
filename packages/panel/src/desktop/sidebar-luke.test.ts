@@ -205,6 +205,20 @@ test("with the operator on, Luke's row stands first and is ensured once per work
   assert.deepEqual(ensures(sent), [{ workspaceId: ACME.id }, { workspaceId: SIDE.id }]);
 });
 
+test("another account signed in to the same workspace ensures its own Luke rather than opening the last one's", async () => {
+  const sent = serve(() => ({ agentId: ensures(sent).length === 1 ? LUKE_ID : FRESH_ID }));
+  handState(experimentsOn(EXPERIMENT.OPERATOR));
+  const opened: string[] = [];
+  const { sidebar, redraw } = await mount({ ...acme([], opened), me: "user-alice" });
+  await redraw({ ...acme([], opened), me: "user-bob" });
+
+  const press = lukeRow(sidebar)?.querySelector<HTMLElement>("button") ?? assert.fail("Luke's row");
+  act(() => press.click());
+
+  assert.deepEqual(ensures(sent), [{ workspaceId: ACME.id }, { workspaceId: ACME.id }]);
+  assert.deepEqual(opened, [FRESH_ID]);
+});
+
 test("a press on Luke's row opens his page", async () => {
   serve(() => ({ agentId: LUKE_ID }));
   handState(experimentsOn(EXPERIMENT.OPERATOR));

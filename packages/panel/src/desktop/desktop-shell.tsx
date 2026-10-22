@@ -379,7 +379,10 @@ function usePlaceCommands(
       : undefined,
   );
   // Luke's chord opens his page in the listed workspace, or asks his ensure again where it failed; while the account has him off it is no chord at all.
-  const operator = useLukeOperator(pastGate && tasks.signedIn ? tasks.workspace?.id : undefined);
+  const operator = useLukeOperator({
+    accountId: tasks.me,
+    workspaceId: pastGate && tasks.signedIn ? tasks.workspace?.id : undefined,
+  });
   const lukeId = operator?.agentId;
   useAppCommand(
     APP_COMMAND.ASK_LUKE,
