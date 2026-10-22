@@ -207,14 +207,16 @@ function describeStopFailure(failure: {
 /**
  * One archived agent's sandbox stopped, if it is still archived, as a native
  * runner's end stops it (`coder-host/runner-sessions.ts`'s `runnerEnded`):
- * its runner's bearer retired, then its credential off the firewall, then
- * the stop. Note that the archive is read again just before the stop,
+ * its credential off the firewall, then the stop, then its runner's bearer
+ * retired, so an archived agent's bearer admits nothing to Luke, its GitHub
+ * token among it. Note that the archive is read again just before the stop,
  * because an agent unarchived and messaged since has resumed the sandbox
  * this would stop, and its turn must keep it; what is left of the race is
- * the moment between this read and the stop. The bearer goes first, as a
- * reset retires it, so a runner still up is refused by Luke, its GitHub
- * token among what it asks, before its sandbox is gone; an unarchive's next
- * message launches a runner with a bearer of its own.
+ * the moment between this read and the stop. The bearer goes only once the
+ * sandbox stopped, and is read for once more, because a stop that failed
+ * leaves its runner up, which a message after an unarchive is handed
+ * (`coder-host/runner-sessions.ts`'s `sendHolding`), and a runner a later
+ * unarchive launched holds a bearer of its own.
  */
 const stoppedWhileArchived = /* @__PURE__ */ Effect.fnUntraced(function* (
   agent: Pick<CodingAgent, "id" | "userId">,
@@ -222,8 +224,11 @@ const stoppedWhileArchived = /* @__PURE__ */ Effect.fnUntraced(function* (
 ) {
   const current = yield* readCodingAgent(agent.userId, agent.id);
   if (Option.isNone(current) || current.value.archivedAt === null) return;
-  yield* recordCodingAgentRunnerToken(agent.userId, agent.id, null);
   yield* (yield* SessionSandboxes).stopFor(sessionId);
+  // Read once more, so a runner an unarchive launched since keeps the bearer it was minted.
+  const after = yield* readCodingAgent(agent.userId, agent.id);
+  if (Option.isNone(after) || after.value.archivedAt === null) return;
+  yield* recordCodingAgentRunnerToken(agent.userId, agent.id, null);
 });
 
 /**

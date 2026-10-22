@@ -407,30 +407,75 @@ it.layer(getTestDB())("the agent terminals procedures", (it) => {
     }),
   );
 
+  it.effect("archiving the agent stops its sandbox without deleting it", () =>
+    Effect.gen(function* () {
+      const { userId, agent, sessionId } = yield* openAgent;
+      const sandboxes = yield* scriptedSessionSandboxes();
+      const call = yield* standing(
+        new Map([["Bearer owner", userId]]),
+        scriptedSandbox(SANDBOX_STATE.RUNNING).layer,
+        sandboxes.layer,
+      );
+
+      const archived = yield* call(agentOf(agent.id), "Bearer owner", {
+        method: "PATCH",
+        body: { archived: true },
+      });
+
+      assert.equal(archived.status, 200);
+      assert.equal(yield* Queue.take(sandboxes.stops), sessionId);
+    }),
+  );
+
   it.effect(
-    "archiving the agent stops its sandbox without deleting it, its runner's bearer retired first",
+    "an archive retires its runner's bearer once the sandbox stopped, and leaves it where the stop failed",
     () =>
       Effect.gen(function* () {
-        const { userId, agent, sessionId } = yield* openAgent;
-        const bearer = `runner-${randomUUID()}`;
-        yield* recordCodingAgentRunnerToken(userId, agent.id, runnerTokenDigest(bearer));
-        const admittedBefore = yield* admitRunnerBearer(bearer);
-        const sandboxes = yield* scriptedSessionSandboxes();
-        const call = yield* standing(
-          new Map([["Bearer owner", userId]]),
-          scriptedSandbox(SANDBOX_STATE.RUNNING).layer,
-          sandboxes.layer,
+        const stopped = yield* openAgent;
+        const failing = yield* openAgent;
+        const bearerOf = (opened: typeof stopped) =>
+          Effect.gen(function* () {
+            const bearer = `runner-${randomUUID()}`;
+            yield* recordCodingAgentRunnerToken(
+              opened.userId,
+              opened.agent.id,
+              runnerTokenDigest(bearer),
+            );
+            return bearer;
+          });
+        const stoppedBearer = yield* bearerOf(stopped);
+        const failingBearer = yield* bearerOf(failing);
+        const held: Effect.Effect<void, never, never>[] = [];
+        // The stop is run here, once the archive answered, so what it left is read after it.
+        const keep: SandboxStopReach["keepAwake"] = (work) =>
+          Effect.sync(() => void held.push(work as Effect.Effect<void, never, never>));
+        const bearers = new Map([
+          ["Bearer stopped", stopped.userId],
+          ["Bearer failing", failing.userId],
+        ]);
+        const scripted = scriptedSandbox(SANDBOX_STATE.RUNNING).layer;
+        const answering = yield* scriptedSessionSandboxes();
+        const refused = yield* scriptedSessionSandboxes(() =>
+          Effect.fail(new SandboxUnavailable({})),
         );
+        const up = yield* standing(bearers, scripted, answering.layer, keep);
+        const down = yield* standing(bearers, scripted, refused.layer, keep);
+        const context = yield* Effect.context<Database | SqlClient.SqlClient>();
 
-        const archived = yield* call(agentOf(agent.id), "Bearer owner", {
+        yield* up(agentOf(stopped.agent.id), "Bearer stopped", {
           method: "PATCH",
           body: { archived: true },
         });
+        yield* down(agentOf(failing.agent.id), "Bearer failing", {
+          method: "PATCH",
+          body: { archived: true },
+        });
+        for (const work of held) yield* Effect.provideContext(work, context);
 
-        assert.equal(archived.status, 200);
-        assert.equal(yield* Queue.take(sandboxes.stops), sessionId);
-        assert.ok(Option.isSome(admittedBefore));
-        assert.ok(Option.isNone(yield* admitRunnerBearer(bearer)));
+        assert.equal(held.length, 2);
+        assert.ok(Option.isNone(yield* admitRunnerBearer(stoppedBearer)));
+        // A runner whose sandbox would not stop keeps its bearer, since a message after an unarchive reaches it.
+        assert.ok(Option.isSome(yield* admitRunnerBearer(failingBearer)));
       }),
   );
 
