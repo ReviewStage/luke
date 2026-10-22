@@ -1017,12 +1017,13 @@ export const runnerSessions = <
           { userId, conversationId: agent.conversationId },
           { turnId, eveTurnId: turnId, origin: TURN_ORIGIN.TYPED },
         );
-        // The checkout's own sentence names GitHub or the sandbox (`status.ts`'s `FAILURE_WORDS`).
+        // The checkout's own sentence names GitHub or the sandbox (`status.ts`'s `FAILURE_WORDS`);
+        // any other failure, a missing snapshot among them, reads as the sandbox's, with its reason.
         const detail =
           failure instanceof CheckoutRefused
             ? failure.reason
             : failure instanceof LaunchRefused
-              ? `the launch was refused: ${failure.reason}`
+              ? `${REPOSITORY_REFUSAL.SANDBOX_UNAVAILABLE}: ${failure.reason}`
               : REPOSITORY_REFUSAL.SANDBOX_UNAVAILABLE;
         yield* settleRunnerLostTurns(
           writer,

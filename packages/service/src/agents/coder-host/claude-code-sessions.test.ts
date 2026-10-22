@@ -1509,4 +1509,26 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         assert.equal(visible.includes(writeHeader), false);
       }),
   );
+
+  it.effect(
+    "an image that could not be made opens nothing, and the agent's first turn reads failed for its sandbox",
+    () =>
+      Effect.gen(function* () {
+        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+        const api = runnerSandboxApi();
+        const { userId, agent } = yield* openAgent;
+        const sessions = yield* sessionsFor(userId, { next: 0 }).pipe(
+          Effect.provide(services(api, null)),
+        );
+
+        const opened = yield* sessions.open(message(agent, "Go."));
+
+        assert.equal(opened.outcome, EVE_SEND_OUTCOME.ACCEPTED);
+        assert.deepEqual(api.sandboxes, []);
+        assert.deepEqual(yield* newestTurn(agent), {
+          status: TURN_STATUS.FAILED,
+          failure: CODING_AGENT_FAILURE.SANDBOX,
+        });
+      }),
+  );
 });
