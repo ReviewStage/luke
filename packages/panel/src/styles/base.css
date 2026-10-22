@@ -315,6 +315,12 @@ body,
   height: 18px;
 }
 
+/* A face handed to an auth card as its mark takes the artwork's size. */
+.luke-auth-mark .luke-face {
+  width: 52px;
+  height: 52px;
+}
+
 /* The wait's three dots, one drawing wherever a run of Luke's is still going:
    the Conversation bubble rides them beside his face, and the Plans tab's
    status row beside its backend line. */

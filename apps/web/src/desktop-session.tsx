@@ -25,13 +25,13 @@ import {
   desktopSessionPageQuery,
   desktopSessionReturnUrl,
 } from "@luke/features/desktop-session-wire";
-import { AuthPage } from "@luke/ui";
+import { AuthPage, SIGN_IN_FAILURE, SocialSignInChoices } from "@luke/ui";
 import { createAuthClient } from "better-auth/react";
 import { Schema } from "effect";
 import { StrictMode, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { completeSiteSignIn, signInCountDeadline, startSiteAnalytics } from "./analytics";
-import { ProviderChoices, SIGN_IN_FAILURE, useSocialSignIn } from "./sign-in-choices";
+import { useSocialSignIn } from "./sign-in-choices";
 import "./styles.css";
 
 const authClient = createAuthClient();
@@ -124,7 +124,7 @@ function DesktopSession(): React.JSX.Element {
       error={view.kind === VIEW.SIGN_IN && signInChoices.failed ? SIGN_IN_FAILURE : undefined}
     >
       {view.kind === VIEW.SIGN_IN ? (
-        <ProviderChoices pending={signInChoices.pending} onPress={signInChoices.begin} />
+        <SocialSignInChoices pending={signInChoices.pending} onPress={signInChoices.begin} />
       ) : null}
     </AuthPage>
   );

@@ -2,6 +2,7 @@ export * from "./cn.js";
 export * from "./components/anchored-popover/anchored-popover.js";
 export * from "./components/attachment-chip/attachment-chip.js";
 export * from "./components/auth-page/auth-page.js";
+export * from "./components/auth-page/social-sign-in.js";
 export * from "./components/avatar/avatar.js";
 export * from "./components/badge/badge.js";
 export * from "./components/banner/banner.js";

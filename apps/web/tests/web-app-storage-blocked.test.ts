@@ -36,6 +36,6 @@ test("with the site's storage blocked, the tab still draws the sign-in", async (
 
   assert.ok(app !== undefined, "the host stands");
   await vi.waitFor(() =>
-    assert.ok(root.querySelector("section.sign-in-gate") !== null, "the panel draws its sign-in"),
+    assert.ok(root.querySelector("section.luke-auth-card") !== null, "the panel draws its sign-in"),
   );
 });
