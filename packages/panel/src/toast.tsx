@@ -31,7 +31,7 @@
  * do, by Escape while focus is in it, or by whoever showed it
  * withdrawing what it is about. One with no action is never pointed at, so
  * clicks pass through it. It arrives on the pair
- * every arriving element rides and leaves first over `--duration-exit`, held
+ * every arriving element rides and leaves first over `--luke-duration-exit`, held
  * mounted through its leaving; the ones its coming or going moves glide
  * there, so reduced motion and a capture run hold all of it still at the
  * tokens.
@@ -127,7 +127,7 @@ export type ToastNotice = {
 /** How long a toast carrying an action stands while nobody points at it: long enough to reach for the action. */
 const ACTION_HOLD = Duration.seconds(5);
 
-/** How long a toast takes to leave, as `--duration-exit` says it. */
+/** How long a toast takes to leave, as `--luke-duration-exit` says it. */
 const TOAST_EXIT = Duration.millis(MOTION_DURATION_MS.EXIT);
 
 /** How many toasts stand at once: three, or two in a window no taller than `SHORT_WINDOW`. */
@@ -408,8 +408,8 @@ function useStackGlide(): React.RefObject<HTMLOListElement | null> {
       return;
     }
     const style = getComputedStyle(root);
-    const duration = Number.parseFloat(style.getPropertyValue("--duration-fast")) || 0;
-    const easing = style.getPropertyValue("--spring-fast").trim();
+    const duration = Number.parseFloat(style.getPropertyValue("--luke-duration-fast")) || 0;
+    const easing = style.getPropertyValue("--luke-spring-fast").trim();
     const next = new Map<Element, number>();
     for (const toast of root.children) {
       const top = toast.getBoundingClientRect().top;
