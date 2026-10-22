@@ -138,6 +138,7 @@ function vercelSessions(
   sandboxes: readonly object[],
   sessions: Record<string, FakeSession>,
   extendStatus?: number,
+  snapshots: Record<string, readonly { readonly id: string; readonly status: string }[]> = {},
 ) {
   const asked: Asked[] = [];
   const extensions: { readonly session: string; readonly duration: number }[] = [];
@@ -152,6 +153,20 @@ function vercelSessions(
         const name = decodeURIComponent(parsed.pathname.split("/").at(-1) ?? "");
         updates.push({ name, body: JSON.parse(String(init.body)) });
         return Response.json({ sandbox: { name } });
+      }
+      // A sandbox's snapshots, the newest first, and a lookup of one of them.
+      if (parsed.pathname === "/api/v2/sandboxes/snapshots") {
+        const listed = snapshots[parsed.searchParams.get("name") ?? ""] ?? [];
+        return Response.json({ snapshots: listed.slice(0, 1) });
+      }
+      if (parsed.pathname.startsWith("/api/v2/sandboxes/snapshots/")) {
+        const id = parsed.pathname.split("/").at(-1);
+        const found = Object.values(snapshots)
+          .flat()
+          .find((each) => each.id === id);
+        return found === undefined
+          ? new Response("{}", { status: 404 })
+          : Response.json({ snapshot: found });
       }
       const [, id, action] =
         /^\/api\/v2\/sandboxes\/sessions\/([^/]+)(?:\/(.+))?$/u.exec(parsed.pathname) ?? [];
@@ -179,7 +194,18 @@ const keepAliveFor = (sessionId: string) =>
   Effect.flatMap(SessionSandboxes, (sandboxes) => sandboxes.keepAliveFor(sessionId));
 
 const MINUTE = 60_000;
-const UP = { name: "eve-sbx-vercel-up", status: "running", currentSessionId: "sbs_up" } as const;
+/** The snapshot retention a sandbox opened today stands at, which a keep-alive leaves as it is. */
+const BOUND = {
+  count: CODER.SANDBOX_SNAPSHOTS.count,
+  expiration: Duration.toMillis(CODER.SANDBOX_SNAPSHOTS.expiration),
+  deleteEvicted: true,
+} as const;
+const UP = {
+  name: "eve-sbx-vercel-up",
+  status: "running",
+  currentSessionId: "sbs_up",
+  keepLastSnapshots: BOUND,
+} as const;
 
 it.effect(
   "a running session is extended to end the timeout from now, by a JSON POST in the token's team, and a stopped sandbox is never looked up",
@@ -246,7 +272,15 @@ it.effect(
       vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
       const nearCap = CODER.SANDBOX_MAX_LIFETIME_MS - 10 * MINUTE;
       const api = vercelSessions(
-        [UP, { name: "eve-sbx-vercel-capped", status: "running", currentSessionId: "sbs_capped" }],
+        [
+          UP,
+          {
+            name: "eve-sbx-vercel-capped",
+            status: "running",
+            currentSessionId: "sbs_capped",
+            keepLastSnapshots: BOUND,
+          },
+        ],
         {
           sbs_up: { status: "running", createdAt: 0, timeout: nearCap },
           sbs_capped: { status: "running", createdAt: 0, timeout: CODER.SANDBOX_MAX_LIFETIME_MS },
@@ -267,7 +301,15 @@ it.effect(
     Effect.gen(function* () {
       vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
       const api = vercelSessions(
-        [UP, { name: "eve-sbx-vercel-gone", status: "running", currentSessionId: "sbs_gone" }],
+        [
+          UP,
+          {
+            name: "eve-sbx-vercel-gone",
+            status: "running",
+            currentSessionId: "sbs_gone",
+            keepLastSnapshots: BOUND,
+          },
+        ],
         {
           sbs_up: {
             status: "stopped",
@@ -324,6 +366,7 @@ it.effect(
             status: "running",
             currentSessionId: "sbs_capped",
             timeout: CODER.SANDBOX_TIMEOUT_MS,
+            keepLastSnapshots: BOUND,
           },
         ],
         {
@@ -351,5 +394,68 @@ it.effect(
       assert.equal(update?.contentType, "application/json");
       assert.equal(update?.url.searchParams.get("projectId"), PROJECT);
       assert.deepEqual(api.extensions, [], "each running session still ends far enough ahead");
+    }),
+);
+
+it.effect(
+  "a running sandbox opened before its snapshot retention was bounded is brought onto it as it is kept alive, one whose snapshot is not its newest is left, and one bounded is never asked after",
+  () =>
+    Effect.gen(function* () {
+      vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+      const running = (name: string) => ({
+        status: "running",
+        currentSessionId: `sbs_${name}`,
+        timeout: CODER.SANDBOX_TIMEOUT_MS,
+      });
+      const session = {
+        status: "running",
+        createdAt: 0,
+        startedAt: 0,
+        timeout: CODER.SANDBOX_TIMEOUT_MS,
+      };
+      const api = vercelSessions(
+        [
+          {
+            name: "eve-sbx-vercel-old",
+            ...running("old"),
+            currentSnapshotId: "snap_old_newest",
+            keepLastSnapshots: null,
+          },
+          {
+            name: "eve-sbx-vercel-rolled",
+            ...running("rolled"),
+            currentSnapshotId: "snap_rolled_older",
+            keepLastSnapshots: null,
+          },
+          {
+            name: "eve-sbx-vercel-bounded",
+            ...running("bounded"),
+            currentSnapshotId: "snap_bounded",
+            keepLastSnapshots: BOUND,
+          },
+        ],
+        { sbs_old: session, sbs_rolled: session, sbs_bounded: session },
+        undefined,
+        {
+          "eve-sbx-vercel-old": [
+            { id: "snap_old_newest", status: "created" },
+            { id: "snap_old_older", status: "created" },
+          ],
+          "eve-sbx-vercel-rolled": [
+            { id: "snap_rolled_newest", status: "created" },
+            { id: "snap_rolled_older", status: "created" },
+          ],
+        },
+      );
+
+      yield* keepAliveFor(SESSION).pipe(Effect.provide(api.layer));
+
+      assert.deepEqual(api.updates, [
+        { name: "eve-sbx-vercel-old", body: { keepLastSnapshots: BOUND } },
+      ]);
+      const listedFor = api.asked
+        .filter((asked) => asked.url.pathname === "/api/v2/sandboxes/snapshots")
+        .map((asked) => asked.url.searchParams.get("name"));
+      assert.deepEqual(listedFor, ["eve-sbx-vercel-old", "eve-sbx-vercel-rolled"]);
     }),
 );

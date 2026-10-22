@@ -523,12 +523,15 @@ export function AgentComposer({
 
   // Note that a held box gives up the caret, because a field that takes no
   // words, and a Send disabled under the press, can hold none; a send made
-  // from the box hands it back as the box opens again, unless the caret went
+  // from the box hands it back as soon as the box takes words again, which
+  // is at once where the send holds nothing, as an agent's never does, and
+  // as the answer lands where it holds the box, unless the caret went
   // somewhere else meanwhile: to another field, or to a press or a menu in
   // the box's own foot, such as the model chip's search.
   const refocus = useRef(false);
+  const [sends, setSends] = useState(0);
   useEffect(() => {
-    if (held || !refocus.current) return;
+    if (sends === 0 || held || !refocus.current) return;
     refocus.current = false;
     const active = document.activeElement;
     const dropped =
@@ -541,7 +544,7 @@ export function AgentComposer({
     if (dropped) {
       editor.current?.focus();
     }
-  }, [held]);
+  }, [held, sends]);
 
   // The transcript's Reply lays its quote in where the caret stands, for as long as the box stands.
   useEffect(() => {
@@ -691,6 +694,7 @@ export function AgentComposer({
           setRefusal(undefined);
           refocus.current = card.current?.contains(document.activeElement) === true;
           composer.send();
+          setSends((count) => count + 1);
         }}
       >
         {above}

@@ -21,7 +21,6 @@ import {
   readCodingAgent,
   takeCodingAgentMentionedServers,
 } from "@luke/database/models/coding-agent-store";
-import { sentLineId } from "@luke/database/models/ids";
 import { readMessageByClientId, sentLineStands } from "@luke/database/models/message-reads";
 import { claimRuntimeSession } from "@luke/database/models/recorded-session";
 import { type ConversationTarget, storeWriter } from "@luke/database/models/writer";
@@ -47,6 +46,7 @@ import { INBOX_RESPONSE } from "@luke/features/inbox-wire";
 import { INTEGRATION_PROVIDER, type IntegrationProvider } from "@luke/features/integration-wire";
 import { CODING_AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@luke/features/models-wire";
 import { TURN_ORIGIN, TURN_STATUS, type TurnStatus } from "@luke/wire";
+import { sentLineId } from "@luke/wire/host-ids";
 import { eq, inArray } from "drizzle-orm";
 import { Clock, Effect, Layer, Option, Result, Stream } from "effect";
 import {

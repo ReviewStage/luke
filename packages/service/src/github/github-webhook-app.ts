@@ -127,7 +127,7 @@ const INSTALLATION_ACTION_STATUS: ReadonlyMap<string, GitHubInstallationStatus> 
   ["unsuspend", GITHUB_INSTALLATION_STATUS.ACTIVE],
 ]);
 
-/** A pull request's actions that change what a task's row says of it: where it stands, its title, or its size. */
+/** A pull request's actions that change what a task's row says of it: where it stands, its merge queue among it, its title, or its size. */
 const PULL_REQUEST_ACTIONS: ReadonlySet<string> = new Set([
   "opened",
   "reopened",
@@ -136,6 +136,8 @@ const PULL_REQUEST_ACTIONS: ReadonlySet<string> = new Set([
   "synchronize",
   "ready_for_review",
   "converted_to_draft",
+  "enqueued",
+  "dequeued",
 ]);
 
 /** A check run is read once it has ended, since its start moves nothing a suite's own start does not. */

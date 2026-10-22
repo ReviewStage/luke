@@ -503,7 +503,8 @@ interface ChatViewControl {
   /** Opens it on a place, from wherever the window stands: what a chat notice's Open in Chat asks. */
   readonly onShow: (place: ChatPlace) => void;
   /** Posts a message as the developer; answers why it was refused, or nothing once it is taken. */
-  readonly onPost: (post: ChatPost) => Promise<string | undefined>;
+  /** Posts under the key the box minted for the post, which the chat hands back on the message once it holds it. */
+  readonly onPost: (post: ChatPost, clientKey: string) => Promise<string | undefined>;
   /** Answers an ask as the developer; answers why it was refused, or nothing once it is taken. */
   readonly onAnswer: (answer: ChatAskAnswer) => Promise<string | undefined>;
   /** Opens or edits a topic channel as the developer; answers why it was refused, or nothing once it is taken. */
@@ -513,6 +514,9 @@ interface ChatViewControl {
   /** Reads one picture a message carries, by the message and the attachment its block names; a fixture run's are not there to read. */
   readonly readPicture: (messageId: string, attachmentId: string) => Promise<PictureAnswer>;
 }
+
+/** The agent lines a live chat read carries beyond the plans': none, since a read of each agent names it (`useChatNames`). */
+const NO_CHAT_AGENTS: FixtureChat["agents"] = [];
 
 /** The fixture's staging, as a fixture run imports it. */
 type ChatStager = typeof import("./chat-fixture.js");
@@ -1447,11 +1451,14 @@ export function useTasksTab(input: {
     readPicture: (params) => act(ACT_KIND.CODING_AGENTS_CHAT_ATTACHMENT, params),
   });
   const liveRun = fixture === undefined;
-  const shownChat: FixtureChat | undefined = liveRun
-    ? liveChat.chat === undefined
-      ? undefined
-      : { answer: liveChat.chat, agents: [] }
-    : chat;
+  // Note that the live chat is wrapped once per read, so everything named from it holds while the read does.
+  const liveAnswer = liveChat.chat;
+  const liveShown = useMemo(
+    (): FixtureChat | undefined =>
+      liveAnswer === undefined ? undefined : { answer: liveAnswer, agents: NO_CHAT_AGENTS },
+    [liveAnswer],
+  );
+  const shownChat = liveRun ? liveShown : chat;
   // A channel shown that a read answered since does not hold, as a stale link's, puts Chat back on For you, its root, and is read no more.
   const shownChannel =
     standIn?.kind === STAND_IN.CHAT && standIn.place.kind === CHAT_PLACE.CHANNEL
@@ -3581,10 +3588,10 @@ export function useTasksTab(input: {
         // Note that For you stands while the read is sought, since it lists the message, where the channel shown before need not.
         setStandIn({ kind: STAND_IN.CHAT, place: FOR_YOU, listed: false, seek: messageId });
       }),
-      onPost: (post) =>
+      onPost: (post, clientKey) =>
         liveRun
-          ? liveChat.onPost(post)
-          : stage((held, staging) => staging.stagedPost(held, post, Date.now())),
+          ? liveChat.onPost(post, clientKey)
+          : stage((held, staging) => staging.stagedPost(held, post, Date.now(), clientKey)),
       onAnswer: (answer) =>
         liveRun
           ? liveChat.onAnswer(answer)

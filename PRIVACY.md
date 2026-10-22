@@ -330,11 +330,18 @@ your Mac. Luke reads only the files you hand it and sends our service each
 one's name and contents, including whatever the file carries inside it, such
 as where and on what a photo was taken, but never where it was on your Mac.
 Our service sends them to the agent's model with your message and with every
-later call, copies images and PDFs into the agent's sandbox, and keeps them in
-the agent's transcript, stored as sent and readable by our own operators,
-except that the prompt an agent is started on keeps an image or PDF by name
-alone. They go when the transcript does; the sandbox's snapshot and the
-agent's session history keep them on the terms under "Who we send it to".
+later call, and keeps them in the agent's transcript, stored as sent and
+readable by our own operators, except that the prompt an agent is started on
+keeps a PDF by name alone and an image by name and the id below. An agent that
+runs on Luke's own agent has its images and PDFs copied into its sandbox too;
+one that runs on Claude Code or Codex is handed them in its messages and never
+as files in its sandbox. Each PNG, JPEG, or WebP is also kept once beside the
+agent's transcript, as a tool's pictures are (see "Pictures in a tool's
+answer"), and the agent is told its id, by which it may hand the image to
+another agent, as a file of another agent's Start or a picture of a chat
+message, on the same bounds as a file you attach. They go when the transcript
+does; the sandbox's snapshot and the agent's session history keep them on the
+terms under "Who we send it to".
 
 **Pictures in a tool's answer.** When a tool answers a coding agent
 with a picture, as a connected service can answer a screenshot or an image
@@ -481,6 +488,13 @@ sandbox when the task is deleted, as above. Only the plan's short-lived
 access token, never your sign-in's refresh token, is handed to Codex, in its
 process's environment and on its input: it is never written to that disk, a
 command Codex runs, or the conversation's record.
+
+On either, what keeps the token from anyone with a Terminal in that sandbox
+is not a missing `sudo`: Claude Code or Codex runs as a user of its own,
+whose home no other user reads, and every Terminal shell, every command the
+agent runs, and Claude Code or Codex itself start with every Linux capability
+dropped, so none of them can read another process's environment or a file
+kept from it, or become root.
 
 **Code on screen during a call.** When a coding agent wants to
 show you code, it names a file and lines, and our service reads them from

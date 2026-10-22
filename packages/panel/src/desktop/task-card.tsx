@@ -416,7 +416,9 @@ function sharedWorkspace(
  * Inbox's crumb. An agent's line opens the task on that agent's tab.
  */
 export function taskCardOf(
-  tasks: Pick<TasksControl, "agents" | "repositories" | "onShowAgent" | "me" | "workspaces">,
+  tasks: Pick<TasksControl, "repositories" | "onShowAgent" | "me" | "workspaces"> & {
+    readonly agents: Pick<TasksControl["agents"], "models">;
+  },
   task: TaskSummary,
   now: number,
   focus?: React.ComponentProps<typeof TaskCard>["focus"],

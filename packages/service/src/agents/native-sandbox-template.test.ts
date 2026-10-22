@@ -365,10 +365,13 @@ it.effect(
         current.snapshotId,
         oldReady.state === TEMPLATE_STATE.READY ? oldReady.snapshotId : "",
       );
-      assert.deepEqual(yield* sweepTemplates(api, build, false), { current: "unread", deleted: 0 });
+      assert.deepEqual(yield* sweepTemplates(api, build), {
+        current: TEMPLATE_STATE.READY,
+        deleted: 0,
+      });
 
       yield* TestClock.adjust(NATIVE_TEMPLATE.SWEEP_AFTER);
-      const swept = yield* sweepTemplates(api, build, true);
+      const swept = yield* sweepTemplates(api, build);
 
       assert.deepEqual(swept, { current: TEMPLATE_STATE.READY, deleted: 1 });
       assert.deepEqual(
@@ -378,16 +381,18 @@ it.effect(
     }),
 );
 
-it.effect("the sweep builds a missing template where native agents are admitted", () =>
-  Effect.gen(function* () {
-    const fake = vercel();
-    const { api, build } = yield* setUp(fake);
+it.effect(
+  "the sweep starts the current image's build with no cohort, plan, or setting to gate it",
+  () =>
+    Effect.gen(function* () {
+      const fake = vercel();
+      const { api, build } = yield* setUp(fake);
 
-    const swept = yield* sweepTemplates(api, build, true);
+      const swept = yield* sweepTemplates(api, build);
 
-    assert.deepEqual(swept, { current: TEMPLATE_STATE.PREPARING, deleted: 0 });
-    assert.equal(fake.commands.length, 1);
-  }),
+      assert.deepEqual(swept, { current: TEMPLATE_STATE.PREPARING, deleted: 0 });
+      assert.equal(fake.commands.length, 1);
+    }),
 );
 
 it.effect(
@@ -543,7 +548,7 @@ it.effect(
       const { api, build } = yield* setUp(fake);
       yield* advanceTemplate(api, build);
       fake.finishBuild(0);
-      assert.deepEqual(yield* sweepTemplates(api, build, true), {
+      assert.deepEqual(yield* sweepTemplates(api, build), {
         current: TEMPLATE_STATE.READY,
         deleted: 0,
       });
@@ -553,11 +558,11 @@ it.effect(
 
       // A sweep between checks reads the template's record alone, which still names the snapshot.
       yield* TestClock.adjust(NATIVE_TEMPLATE.SWEEP_PERIOD);
-      const between = yield* sweepTemplates(api, build, true);
+      const between = yield* sweepTemplates(api, build);
       yield* TestClock.adjust(
         Duration.subtract(NATIVE_TEMPLATE.SNAPSHOT_CHECK, NATIVE_TEMPLATE.SWEEP_PERIOD),
       );
-      const checked = yield* sweepTemplates(api, build, true);
+      const checked = yield* sweepTemplates(api, build);
 
       assert.equal(between.current, TEMPLATE_STATE.READY);
       assert.equal(checked.current, TEMPLATE_STATE.PREPARING);

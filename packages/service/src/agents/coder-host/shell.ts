@@ -30,7 +30,8 @@ import { shellWithoutCapabilities } from "../sandbox-capabilities.js";
  * hands eve's `bash` the command alone. The command runs in a bash of its
  * own with every capability dropped (`sandbox-capabilities.ts`), so what
  * the model runs cannot read another process's environment or a file its
- * mode keeps from the sandbox's user, nor reach root through sudo.
+ * mode keeps from the sandbox's user, nor reach root through sudo, which
+ * the emptied bounding set refuses.
  *
  * eve reads a command's output and exit over calls to Vercel Sandbox's API
  * apart from the one that starts it, and Vercel at times answers one of

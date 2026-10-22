@@ -6,7 +6,10 @@
  * and extended so it ends the timeout from now, within the platform's
  * maximum. A sandbox opened before that timeout was shortened has its own
  * lowered to it on the way, for its next sessions, since Vercel reapplies a
- * sandbox's configuration at every resume. A sandbox that is not running
+ * sandbox's configuration at every resume, and one opened before its
+ * snapshot retention was bounded is brought onto the bound
+ * (`sandbox-retention.ts`), so its next stop writes the one snapshot Luke
+ * keeps. A sandbox that is not running
  * has nothing to keep alive, and a stopped one is never resumed here.
  *
  * eve opens one persistent Vercel Sandbox per top-level session, tagged with
@@ -41,6 +44,7 @@ import {
 import { Clock, Context, Duration, Effect, Layer, Option, Result, type Schema } from "effect";
 import type { HttpClient } from "effect/http";
 import { capSandboxTimeout, keepAliveExtension } from "./sandbox-keep-alive.js";
+import { boundSnapshotRetention } from "./sandbox-retention.js";
 import {
   deploymentOidcToken,
   RUNNING_STATUS,
@@ -98,6 +102,7 @@ function sessionSandboxesOver(api: VercelSandboxApi): SessionSandboxesService {
           const running = sandbox.currentSessionId;
           if (sandbox.status !== RUNNING_STATUS || running === undefined) continue;
           yield* capSandboxTimeout(api, sandbox);
+          yield* boundSnapshotRetention(api, sandbox);
           const lifetime = yield* api.getSession(running);
           // The sandbox's record can lag its session's, which is the one whose end counts.
           if (lifetime === undefined || lifetime.status !== RUNNING_STATUS) continue;

@@ -10,7 +10,7 @@ import {
 } from "@luke/ui/actor-model";
 import { type ChatAgentLine, type ChatNames, chatNames, chatWho } from "@luke/ui/chat-model";
 import { useMemo } from "react";
-import { useMemberDirectory } from "../member-directory.js";
+import { type Directory, useMemberDirectory } from "../member-directory.js";
 import { agentActor } from "./coding-agent-model.js";
 import { type UnlinedAgent, useUnlinedAgents } from "./mentioned-agent-card.js";
 
@@ -55,6 +55,7 @@ function lineOf(agent: CodingAgentSummary): ChatAgentLine {
         ? CODING_AGENT_STATUS.FAILED
         : CODING_AGENT_STATUS.COMPLETED,
     ...(agent.personaName === undefined ? undefined : { personaName: agent.personaName }),
+    ...(agent.kind === undefined ? undefined : { kind: agent.kind }),
   };
   return agent.automationName === undefined
     ? line
@@ -96,67 +97,94 @@ export function useChatNames(
   read: { readonly answer: ChatAnswer; readonly agents: readonly TaskAgentLine[] } | undefined,
   selfName: string | undefined,
 ): ChatNames {
-  const listed = useMemo(
-    () => chatNames(tasks, read?.agents ?? [], selfName),
-    [tasks, read, selfName],
-  );
-  const unlined = useMemo(() => unlinedAgents(read?.answer, listed), [read, listed]);
+  // Note that the names are kept on the lines the read carries, not the read, so a push that brings a message names no one anew.
+  const lines = read?.agents;
+  const answer = read?.answer;
+  const listed = useMemo(() => chatNames(tasks, lines ?? [], selfName), [tasks, lines, selfName]);
+  const unlined = useMemo(() => unlinedAgents(answer, listed), [answer, listed]);
   const found = useUnlinedAgents(unlined);
   return useMemo(
     () =>
       found.length === 0
         ? listed
-        : chatNames(tasks, [...(read?.agents ?? []), ...found.map(lineOf)], selfName),
-    [found, listed, tasks, read, selfName],
+        : chatNames(tasks, [...(lines ?? []), ...found.map(lineOf)], selfName),
+    [found, listed, tasks, lines, selfName],
   );
 }
 
-/** The actor a member is drawn as, by the member's id, read against the workspace's members around the caller. */
+/**
+ * The actor a member is drawn as, by the member's id, read against the
+ * workspace's members around the caller. Note that it stands, and hands back
+ * the one actor for a member, while the roster, the names, and the members
+ * read stand, so a row drawn from it holds across a push that only brings a
+ * message.
+ */
 export function useChatActor(
-  chat: ChatAnswer | undefined,
+  chat: Pick<ChatAnswer, "self" | "members"> | undefined,
   names: ChatNames,
 ): (memberId: string) => Actor {
   const { members, readerId, former } = useMemberDirectory();
-  return (memberId) => {
-    if (chat === undefined) return personActor(undefined, members, readerId, former);
-    const who = chatWho(chat, names, memberId);
-    const member = who.member;
-    switch (member?.kind) {
-      case MEMBER_KIND.AGENT: {
-        // Note that the read names every agent's plan; the summaries' few stand in for a read from before it did.
-        const taskId =
-          member.planId ??
-          (member.agentId === undefined ? undefined : names.agentTasks.get(member.agentId));
-        // An agent no line names is drawn at rest on the mark of no known harness.
-        const drawn =
-          who.agent === undefined
-            ? {
-                kind: ACTOR_KIND.AGENT,
-                name: who.name,
-                provider: undefined,
-                state: ACTOR_STATE.REST,
-              }
-            : agentActor(who.agent, who.name);
-        return {
-          ...drawn,
-          ...(member.agentId === undefined ? undefined : { agentId: member.agentId }),
-          ...(taskId === undefined ? undefined : { taskId }),
-        };
-      }
-      case MEMBER_KIND.HUMAN: {
-        if (member.userId !== undefined) {
-          const named = members?.find((each) => each.userId === member.userId)?.name;
-          return personActor(
-            { userId: member.userId, name: named ?? who.name },
-            members,
-            readerId,
-            former,
-          );
-        }
-        return formerMember(member.name);
-      }
-      default:
-        return formerMember(undefined);
+  const self = chat?.self;
+  const roster = chat?.members;
+  return useMemo(() => {
+    const drawn = new Map<string, Actor>();
+    const read = { members, readerId, former };
+    const held = self === undefined || roster === undefined ? undefined : { self, members: roster };
+    return (memberId: string) => {
+      const standing = drawn.get(memberId);
+      if (standing !== undefined) return standing;
+      const actor = actorOf(held, names, read, memberId);
+      drawn.set(memberId, actor);
+      return actor;
+    };
+  }, [self, roster, names, members, readerId, former]);
+}
+
+/** One member's actor, read against the roster, the names, and the workspace's members. */
+function actorOf(
+  chat: Pick<ChatAnswer, "self" | "members"> | undefined,
+  names: ChatNames,
+  { members, readerId, former }: Pick<Directory, "members" | "readerId" | "former">,
+  memberId: string,
+): Actor {
+  if (chat === undefined) return personActor(undefined, members, readerId, former);
+  const who = chatWho(chat, names, memberId);
+  const member = who.member;
+  switch (member?.kind) {
+    case MEMBER_KIND.AGENT: {
+      // Note that the read names every agent's plan; the summaries' few stand in for a read from before it did.
+      const taskId =
+        member.planId ??
+        (member.agentId === undefined ? undefined : names.agentTasks.get(member.agentId));
+      // An agent no line names is drawn at rest on the mark of no known harness.
+      const drawn =
+        who.agent === undefined
+          ? {
+              kind: ACTOR_KIND.AGENT,
+              name: who.name,
+              provider: undefined,
+              state: ACTOR_STATE.REST,
+            }
+          : agentActor(who.agent, who.name);
+      return {
+        ...drawn,
+        ...(member.agentId === undefined ? undefined : { agentId: member.agentId }),
+        ...(taskId === undefined ? undefined : { taskId }),
+      };
     }
-  };
+    case MEMBER_KIND.HUMAN: {
+      if (member.userId !== undefined) {
+        const named = members?.find((each) => each.userId === member.userId)?.name;
+        return personActor(
+          { userId: member.userId, name: named ?? who.name },
+          members,
+          readerId,
+          former,
+        );
+      }
+      return formerMember(member.name);
+    }
+    default:
+      return formerMember(undefined);
+  }
 }

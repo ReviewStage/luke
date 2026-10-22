@@ -15,6 +15,7 @@ import { FAILURE_REASON } from "@luke/features/failure-remedy";
 import { MODEL_PROVIDER } from "@luke/features/models-wire";
 import { REPOSITORY_UNREACHED } from "@luke/features/repository-reach-wire";
 import { MESSAGE_ROLE, type WireRecord } from "@luke/wire";
+import { sentLineId } from "@luke/wire/host-ids";
 import { test } from "vitest";
 import { TOOL_STATE } from "../ai-elements/tool.js";
 import {
@@ -29,7 +30,6 @@ import {
   choiceOn,
   delegates,
   effortFor,
-  knownDeveloperRows,
   messageFailureNote,
   messageFailureWords,
   messageWords,
@@ -41,10 +41,12 @@ import {
   pullRequestPillLabel,
   pullRequestStateWord,
   readModelChoice,
+  SENT_LINE_STATE,
   type SentLine,
   settledPlanEdits,
   sidebarCallIds,
   startedAgentOf,
+  transcriptRowKey,
   unreadSentLines,
   withAgentRun,
 } from "./coding-agent-model.js";
@@ -172,70 +174,67 @@ test("an operator's heartbeat that found nothing draws no reply, a line it took 
   );
 });
 
-test("a sent line is read back by a developer's row it did not know holding its words, one row answering one line in order", () => {
-  const task = developer("m-plan", "Go on.");
-  const sent = (id: string, text: string, known: readonly CodingAgentMessage[]): SentLine => ({
-    id,
+/** A line sent under `clientKey`, still on its way. */
+function sentUnder(clientKey: string, text: string): SentLine {
+  return {
+    id: sentLineId(clientKey),
+    clientKey,
     text,
     attachments: [],
-    known: knownDeveloperRows(known),
     steers: false,
-  });
-  // The plan already says the same words: the line is not read back by it.
-  const first = sent("sent-1", "Go on.", [task]);
-  assert.deepEqual(unreadSentLines([first], [task]).lines, [first]);
-  // Two lines of the same words are read back one row at a time, in order.
-  const second = sent("sent-2", "Go on.", [task]);
-  const one = [task, developer("m-1", "Go on.")];
-  const read = unreadSentLines([first, second], one);
-  assert.deepEqual(read.lines, [second]);
-  assert.deepEqual([...read.taken], ["m-1"]);
-  // Read again with the first line let go, the row it took stays taken: the second line waits for its own.
-  assert.deepEqual(unreadSentLines(read.lines, one, read.taken).lines, [second]);
-  const two = [...one, developer("m-2", "Go on.")];
-  assert.deepEqual(unreadSentLines(read.lines, two, read.taken).lines, []);
-  assert.deepEqual(unreadSentLines([first, second], two).lines, []);
-  // Other words are nobody's.
-  assert.deepEqual(unreadSentLines([first], [task, developer("m-3", "Stop.")]).lines, [first]);
-  assert.equal(messageWords(two[2] ?? task), "Go on.");
+    state: SENT_LINE_STATE.PENDING,
+  };
+}
+
+/** The developer's row the service wrote for a line sent under `clientKey`. */
+function writtenFor(id: string, clientKey: string, text: string): CodingAgentMessage {
+  return { ...developer(id, text), clientId: sentLineId(clientKey) };
+}
+
+test("a sent line is read back by the row written under its key alone, so two lines of the same words are each read back by their own", () => {
+  const plan = developer("m-plan", "Go on.");
+  const first = sentUnder("key-1", "Go on.");
+  const second = sentUnder("key-2", "Go on.");
+  // The plan already says the same words, and a row of the same words under another key is another line's.
+  assert.deepEqual(unreadSentLines([first, second], [plan]), [first, second]);
+  const secondLanded = [plan, writtenFor("m-2", "key-2", "Go on.")];
+  assert.deepEqual(unreadSentLines([first, second], secondLanded), [first]);
+  const both = [...secondLanded, writtenFor("m-1", "key-1", "Go on.")];
+  assert.deepEqual(unreadSentLines([first, second], both), []);
+  assert.equal(messageWords(both[2] ?? plan), "Go on.");
 });
 
-test("a chat notice of the same words as a line still on its way never reads that line back; the developer's own row does", () => {
-  const plan = developer("m-plan", "Go on.");
-  const line: SentLine = {
-    id: "sent-1",
-    text: "Stop.",
-    attachments: [],
-    steers: false,
-    known: knownDeveloperRows([plan]),
-  };
-  const notice: CodingAgentMessage = {
-    ...developer("m-notice", "Stop."),
-    metadata: { author: "human", channel: "chat", chat_seq: 9, from: "Maria Chen" },
-  };
-  assert.deepEqual(unreadSentLines([line], [plan, notice]).lines, [line]);
-  const typed: CodingAgentMessage = {
-    ...developer("m-1", "Stop."),
-    metadata: { author: "developer", channel: "typed" },
-  };
-  assert.deepEqual(unreadSentLines([line], [plan, notice, typed]).lines, []);
+test("a line refused for now is let go once its row lands, and one refused for good stands", () => {
+  const unsent = { ...sentUnder("key-1", "Stop."), state: SENT_LINE_STATE.FAILED };
+  const undelivered = { ...sentUnder("key-2", "Wait."), state: SENT_LINE_STATE.UNDELIVERED };
+  const rows = [writtenFor("m-1", "key-1", "Stop."), writtenFor("m-2", "key-2", "Wait.")];
+  assert.deepEqual(unreadSentLines([unsent, undelivered], rows), [undelivered]);
+});
+
+test("a developer's row is keyed by the id its line was drawn under, and every other row by its own", () => {
+  const line = sentUnder("key-1", "Soon.");
+  const row = writtenFor("m-1", "key-1", "Soon.");
+  const [drawn] = agentLines([], [line]);
+  assert.ok(drawn);
+  assert.equal(transcriptRowKey(row), transcriptRowKey(drawn));
+  assert.equal(transcriptRowKey(developer("m-2", "Older.")), "m-2");
+  const reply: CodingAgentMessage = { id: "m-3", role: MESSAGE_ROLE.ASSISTANT, parts: [] };
+  assert.equal(transcriptRowKey(reply), "m-3");
 });
 
 test("the lines sent and not read back follow the transcript's rows, as the developer's own, in the order they went", () => {
   const task = developer("m-plan", "Go on.");
   const taken = developer("m-1", "Taken.");
-  const lines: SentLine[] = [
-    { id: "sent-1", text: "Soon.", attachments: [], known: new Set(), steers: false },
-    { id: "sent-2", text: "Later.", attachments: [], known: new Set(), steers: false },
-  ];
-  const drawn = agentLines([task, taken], lines);
+  const soon = sentUnder("key-1", "Soon.");
+  const later = sentUnder("key-2", "Later.");
+  const drawn = agentLines([task, taken], [soon, later]);
   assert.deepEqual(
     drawn.map((each) => [each.id, each.role, messageWords(each)]),
     [
       ["m-plan", "user", "Go on."],
       ["m-1", "user", "Taken."],
-      ["sent-1", "user", "Soon."],
-      ["sent-2", "user", "Later."],
+      [soon.id, "user", "Soon."],
+      [later.id, "user", "Later."],
     ],
   );
 });

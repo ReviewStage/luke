@@ -22,6 +22,7 @@ import {
   TURN_STATUS,
   type TurnStatus,
 } from "@luke/wire";
+import { sentLineId } from "@luke/wire/host-ids";
 import { eq } from "drizzle-orm";
 import { Clock, DateTime, Effect, Option, Result } from "effect";
 import { TestClock } from "effect/testing";
@@ -88,7 +89,6 @@ import {
   updateCodingAgentChoice,
   writeDelegation,
 } from "../coding-agent-store.js";
-import { sentLineId } from "../ids.js";
 import { readMessageByClientId } from "../message-reads.js";
 import { conversationReachableBy } from "../recorded-session.js";
 import { createTask } from "../task-store.js";
@@ -2170,6 +2170,49 @@ it.layer(getTestDB())("the coding-agent store's human names", (it) => {
         }
         assert.equal(new Set(names).size, names.length);
         assert.equal((yield* start("Maya Chen")).personaName, "Maya Chen");
+      }),
+  );
+
+  it.effect(
+    "a member's operator is given no name, not even one its Start carries, while an agent on no task still is",
+    () =>
+      Effect.gen(function* () {
+        const starter = yield* openAccount;
+        const workspace = yield* openWorkspace(starter);
+        const operator = Option.getOrThrow(
+          yield* createCodingAgent(starter, {
+            taskId: null,
+            organizationId: workspace,
+            planSnapshot: null,
+            prompt: null,
+            kind: CODING_AGENT_KIND.OPERATOR,
+            // A continue of an operator from before carries the first name it was given.
+            personaName: "Ava",
+            idempotencyKey: randomUUID(),
+            model: "anthropic/claude-opus-5.5",
+            effort: "high",
+            repository: null,
+          }),
+        ).agent;
+        const coder = Option.getOrThrow(
+          yield* createCodingAgent(starter, {
+            taskId: null,
+            organizationId: workspace,
+            planSnapshot: null,
+            prompt: "Sweep the flaky tests.",
+            idempotencyKey: randomUUID(),
+            model: "anthropic/claude-opus-5.5",
+            effort: "high",
+            repository: "acme/api",
+          }),
+        ).agent;
+
+        assert.equal(operator.personaName, null);
+        assert.equal(
+          Option.getOrThrow(yield* readCodingAgent(starter, operator.id)).personaName,
+          null,
+        );
+        assert.match(coder.personaName ?? "", /^\S+$/u);
       }),
   );
 });

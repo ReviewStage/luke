@@ -142,30 +142,15 @@ const INSTALL_CODEX = [
 ];
 
 /**
- * Removes every sudoers line and file that grants the user named as `$1`,
- * and takes it out of the groups a sudoers file commonly grants. Run as root
- * in one shell, so the user's sudo is not lost halfway through.
+ * The image's last step: a check that a command started under the
+ * capability drop (`../sandbox-capabilities.ts`) holds no capability, which
+ * fails the preparation rather than leave a Terminal's shell, an agent's
+ * command, or the runner holding the set. Note that the default user keeps
+ * its sudo: Vercel Sandbox runs the API's `sudo` through it, which the
+ * runner's launch needs, and the user reaches root without sudo anyway
+ * while it holds the set, so the drop, not sudoers, is the boundary.
  */
-const DROP_SUDOERS = [
-  'user="$1"',
-  "for file in /etc/sudoers.d/*; do",
-  '  if [ -f "$file" ] && grep -qE "^[[:space:]]*$user[[:space:]]" "$file"; then rm -f "$file"; fi',
-  "done",
-  'sed -i "/^[[:space:]]*$user[[:space:]]/d" /etc/sudoers',
-  'for group in wheel sudo admin; do gpasswd -d "$user" "$group" >/dev/null 2>&1 || true; done',
-].join("\n");
-
-/**
- * The image's last step: the default user's sudo dropped, then a check that
- * it is gone and that a command started under the capability drop holds no
- * capability, which fails the preparation rather than leave either standing.
- * A sandbox prepared as root has no default user's sudo to drop.
- */
-const DROP_SUDO = [
-  'if [ "$(id -u)" != 0 ]; then',
-  `  sudo -n sh -c '${DROP_SUDOERS.replaceAll("'", `'\\''`)}' drop-sudo "$(id -un)"`,
-  "  if sudo -n true 2>/dev/null; then echo 'sudo still stands for the default user' >&2; exit 1; fi",
-  "fi",
+const CHECK_CAPABILITY_DROP = [
   `${WITHOUT_CAPABILITIES.COMMAND} ${WITHOUT_CAPABILITIES.ARGS.join(" ")} grep -q '^CapEff:[[:space:]]*0*$' /proc/self/status || { echo 'a command without capabilities still holds one' >&2; exit 1; }`,
 ];
 
@@ -197,8 +182,8 @@ export const PREPARE_SCRIPT = [
   ...INSTALL_CLAUDE_CODE,
   ...CREATE_AGENT_USER,
   ...INSTALL_CODEX,
-  // Last, once everything that needs root is in place.
-  ...DROP_SUDO,
+  // Last, once everything is in place.
+  ...CHECK_CAPABILITY_DROP,
 ].join("\n");
 
 /**

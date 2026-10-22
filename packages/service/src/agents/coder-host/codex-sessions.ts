@@ -1,5 +1,5 @@
 /**
- * codex-sessions.ts -- a coding agent's sessions on Codex: the runner in its Codex mode, launched on the account's ChatGPT sign-in, and handed each renewed access token.
+ * codex-sessions.ts -- a coding agent's sessions on Codex: the runner in its Codex mode, launched on the account's ChatGPT sign-in, whose token the runner asks Luke's token route for.
  *
  * The `codex` implementation of `AgentSessions`
  * (`brain-host/eve-sessions.ts`), on the launch machinery every native
@@ -26,18 +26,8 @@
  *   not hold, one OpenAI signed out, one the deployment cannot open, or
  *   OpenAI not answering fails the call with that refusal: an agent paid for
  *   by the plan never turns to another payer.
- * - In test mode an OpenAI API key stands in for the plan, as `ACCESS_TOKEN`,
- *   the provider's `env_key`, and the route is not named. (Were neither a
- *   key nor a route given, the account's token would go so too, and a
- *   message would go behind a `token` line wherever the account's token was
- *   renewed since the runner was handed one: the runner restarts app-server
- *   with it before its next turn. Which token the runner holds is kept as
- *   its expiry, in a tag, never the token.) A `model` line with the agent's
- *   model and effort as they stand goes ahead of every message, as on
- *   Claude Code.
- *
- * A token travels in the command's environment and on stdin alone, never in
- * argv, the config line, a tag, or a log.
+ * - A `model` line with the agent's model and effort as they stand goes
+ *   ahead of every message, as on Claude Code.
  */
 
 import { CODEX_PIN } from "@luke/agent-runner/pins";
@@ -47,14 +37,13 @@ import {
   type CodexEffort,
   INPUT_LINE,
   type InputLine,
-  RUNNER_ENV,
   RUNNER_HARNESS,
 } from "@luke/agent-runner/protocol";
 import type { CodingAgent } from "@luke/database/models/coding-agent-store";
 import { parseKeyRing } from "@luke/database/models/provider-key-seal";
 import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
 import { MODEL_PROVIDER } from "@luke/features/models-wire";
-import { Duration, Effect, Redacted, Result } from "effect";
+import { Duration, Effect, Result } from "effect";
 import { CHATGPT_ACCESS, refreshChatGptAccess } from "../../accounts/chatgpt-credentials.js";
 import { HostedEnvironment } from "../../environment.js";
 import { providerModelOf } from "../../providers/model-catalog.js";
@@ -75,10 +64,8 @@ import type { NativeSessions } from "./runtime-sessions.js";
 export type CodexServices = RunnerServices;
 
 export interface CodexSessionsOptions extends RunnerSessionsOptions {
-  /** An OpenAI API key Codex runs on in place of the account's plan: test mode alone. */
-  readonly testApiKey?: Redacted.Redacted | undefined;
   /** Luke's token route, which the runner asks for the plan's token mid-turn (`RUNNER_TOKEN_PATH`). */
-  readonly tokenUrl?: string | undefined;
+  readonly tokenUrl: string;
 }
 
 /** Where the image keeps Codex (`agent-runtime/sandbox-image.ts`'s `INSTALL_CODEX`): the binary, and the `CODEX_HOME` it made for `agent`. */
@@ -116,24 +103,16 @@ function codexModelOf(agent: CodingAgent): string | undefined {
   return model?.provider === MODEL_PROVIDER.OPENAI ? model.modelId : undefined;
 }
 
-/** A token as the runner holds it: its secret, and the stamp that tells it apart, its expiry. */
-interface HeldToken {
-  readonly accessToken: string;
-  readonly stamp: string | undefined;
-}
-
 /** Codex as the shared launch drives it, for one account. */
 function codex(options: CodexSessionsOptions): RunnerHarness<{ readonly _tag: string }> {
-  const { userId } = options;
-  // Note that on the plan the runner asks the route for its token, so none is handed to it.
-  const tokenUrl = options.testApiKey === undefined ? options.tokenUrl : undefined;
+  const { userId, tokenUrl } = options;
 
-  /** The token Codex runs on: the test key, or the account's access token, renewed first where it is due. */
-  const token = Effect.gen(function* () {
-    if (options.testApiKey !== undefined) {
-      const held: HeldToken = { accessToken: Redacted.value(options.testApiKey), stamp: undefined };
-      return held;
-    }
+  /**
+   * The account's sign-in asked whether it still pays, its access token
+   * renewed first where it is due, so the route has a fresh one to hand on.
+   * Note that the runner asks the route for the token, so none is handed to it.
+   */
+  const standingPlan = Effect.gen(function* () {
     const environment = yield* HostedEnvironment;
     const ring = environment.providerKeyEncryptionKeys;
     const parsed = ring === undefined ? undefined : parseKeyRing(ring);
@@ -153,21 +132,9 @@ function codex(options: CodexSessionsOptions): RunnerHarness<{ readonly _tag: st
           : undefined),
       });
     }
-    const held: HeldToken = {
-      accessToken: Redacted.value(access.accessToken),
-      stamp: String(access.expiresAt.getTime()),
-    };
-    return held;
   });
 
-  const launch = () =>
-    Effect.map(token, (held) => ({
-      env:
-        tokenUrl === undefined
-          ? { [RUNNER_ENV.CODEX_TOKEN]: held.accessToken, [CODEX_HOME_ENV]: CODEX_PATH.HOME }
-          : { [CODEX_HOME_ENV]: CODEX_PATH.HOME },
-      stamp: tokenUrl === undefined ? held.stamp : undefined,
-    }));
+  const launch = () => Effect.as(standingPlan, { env: { [CODEX_HOME_ENV]: CODEX_PATH.HOME } });
 
   const config = (agent: CodingAgent, resume: string | undefined, firstSequence: number) =>
     Effect.gen(function* () {
@@ -185,26 +152,22 @@ function codex(options: CodexSessionsOptions): RunnerHarness<{ readonly _tag: st
         firstSequence,
         eventsUrl: options.eventsUrl,
         mcpUrl: options.mcpUrl,
-        ...(tokenUrl === undefined ? undefined : { tokenUrl }),
+        tokenUrl,
       };
       return written;
     });
 
-  // Off the route, a renewed token goes first, so the turn the message starts runs on it; then the agent's model and effort as they stand.
-  const ahead = (agent: CodingAgent, stamp: string | undefined) =>
-    Effect.map(token, (held) => {
-      const model = codexModelOf(agent);
-      const effort = effortOf(agent.effort);
-      const choice: InputLine = {
-        type: INPUT_LINE.MODEL,
-        ...(model === undefined ? undefined : { model }),
-        ...(effort === undefined ? undefined : { effort }),
-      };
-      if (tokenUrl !== undefined) return { lines: [choice], stamp: undefined };
-      const renewed: readonly InputLine[] =
-        held.stamp === stamp ? [] : [{ type: INPUT_LINE.TOKEN, accessToken: held.accessToken }];
-      return { lines: [...renewed, choice], stamp: held.stamp };
-    });
+  // The agent's model and effort as they stand, once the plan is asked, as a launch asks it.
+  const ahead = (agent: CodingAgent) => {
+    const model = codexModelOf(agent);
+    const effort = effortOf(agent.effort);
+    const choice: InputLine = {
+      type: INPUT_LINE.MODEL,
+      ...(model === undefined ? undefined : { model }),
+      ...(effort === undefined ? undefined : { effort }),
+    };
+    return Effect.as(standingPlan, { lines: [choice] });
+  };
 
   return {
     name: "Codex",

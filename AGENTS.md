@@ -210,68 +210,19 @@ deliberately.
 
 ### Where an Effect may run
 
-An Effect describes work; only a runtime edge runs one. The edges are listed
-in `tools/anti-slop/effect-edges.json`'s `runtimeEdges`: `apps/desktop/src/main/main.ts`
-(the desktop's one `ManagedRuntime`), `apps/desktop/src/main/services/compose-desktop.ts`
-(the layer that runtime is built from), the renderer root
-`apps/desktop/src/renderer/window-root.tsx` (loaded once per window by each
-window's own entry, the panels' and the voice window's alike, so no two windows
-share a browser registry), and the web app's root `apps/web/src/app/web-root.tsx`,
-on the same terms for a browser tab: its entry (`app.html`) loads it once per tab,
-`packages/panel/src/renderer-runtime.ts` (the module the root's
-runtime is built from: `Atom.runtime`'s layer is built, and `AtomRegistry.get`
-reads it, the moment the root first reaches it, so the edge is here rather than
-at the root that imports it), the renderer's own fiber sites — the
-voice window's `apps/desktop/src/renderer/voice/live-call.ts` and
-`apps/desktop/src/renderer/voice/use-voice-session.ts` — the web's own
-module-scope memoized runtime `apps/web/server/runtime.ts` and the five doors
-that hold its `runWeb`: `apps/web/server/route-effect.ts` (the adaptor every
-function module under `apps/web/server/routes/**` exports its `HttpRouter`
-through, which reads that runtime once per instance and lets the handler it
-builds do its own running), `apps/web/server/orpc-route.ts` (the route every
-path moved onto the hosted oRPC router answers through, which reads that
-runtime once per instance and hands its services to each request as oRPC's
-`effect/context`), `apps/web/server/voice/function.ts`
-(the voice service, stood for a function instance's life rather than for a
-request, so there is no request fiber to compose it into),
-`apps/web/server/terminal/function.ts` (the terminal relay, stood for a
-function instance's life on the same terms) and
-`apps/web/server/seed-clients.ts` (the OAuth client seeding command, run as
-its own process), each eve root's own module-scope memoized runtime,
-`apps/dev/runtime.ts`, built over the
-same layer (`@luke/service/runtime`'s `webServices`) and holding its
-`runAgent`, the eve project's authored files —
-`apps/dev/agent.ts`, `apps/dev/channels/eve.ts`,
-`apps/dev/hooks/store.ts`, `apps/dev/instructions/prompt.ts`, and
-`apps/dev/sandbox.ts` (the sandbox selector, which eve calls as a
-promise when a tool first needs the sandbox and which runs the checkout
-there), each an edge because eve drives them through promise-shaped hooks of
-its own, and `apps/dev/host.ts`, the one module those files share their
-host through, composed with `Effect.runSync` as it loads. Not
-every seam in `packages/service/src/` is an effect down to its floor:
-`packages/service/src/agents/coder-host/production.ts`'s `spend` is
-the AI SDK's async middleware, and `packages/service/src/agents/brain-host/door.ts`'s
-`SessionOwnership` speaks eve's own `AuthFn<Request>` — two promise-shaped
-foreign boundaries the effects around them compose over rather than
-replace, `apps/web/server/db/migrate.ts` (the migration command, through
-`NodeRuntime.runMain`), `apps/web/scripts/preview-probe.ts` (the deployed-shape
-probe, same terms), `tools/claude-code-probe/src/cli.ts` (the Claude Code
-sandbox probe, same terms), `packages/agent-runner/src/main.ts` (the coding
-agent's runner, its own process in the agent's sandbox, same terms), and
-`tools/trace-export/src/cli.ts` (the trace command).
+An Effect describes work; only a runtime edge runs one. The edges themselves
+are the files listed in `tools/anti-slop/effect-edges.json`'s `runtimeEdges`,
+and that file is the source of truth for them.
 `Effect.runPromise`, `Effect.runSync`, `Effect.runFork`, their
 `runPromiseExit`/`runSyncExit`/`runCallback` siblings, and the `…With` form of
-any of them — which is where a `Runtime<R>` went, v4 having removed the type —
-belong nowhere else — everything between the edges returns an Effect and lets its caller
-decide — which the oxlint rule `no-run-promise-outside-edges` enforces against
-that same file's `runtimeEdges`, `runShims`, and `runOnHandedRuntime` lists,
-reading `apps/web/server/runtime.ts`'s own `runWeb` and `webRuntime`, and
-each eve root's `runAgent`, as the runs they are, so a module that holds the edge's runner rather than
-`Effect.runPromise` itself is no less visible to it;
+any of them belong nowhere else — everything between the edges returns an
+Effect and lets its caller decide — which the oxlint rule
+`no-run-promise-outside-edges` enforces against that same file's
+`runtimeEdges`, `runShims`, and `runOnHandedRuntime` lists;
 `no-raw-async-primitives` enforces the equivalent for `setTimeout`,
 `setInterval`, `new Promise`, `AbortController`, and `fs.watch` against its
 `rawAsyncPrimitives` list. A file on those two run lists that is not a runtime
-edge above is a permanent adaptor, listed below with the one thing that keeps
+edge is a permanent adaptor, listed below with the one thing that keeps
 it from ever moving onto the edges themselves; there is no other kind of row
 on those lists, because a shim on its way to deletion is deleted in the same
 PR that finishes the callers it was for, not left as a name on an allowlist.

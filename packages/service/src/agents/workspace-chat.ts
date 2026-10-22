@@ -45,6 +45,7 @@ import type { HttpClient } from "effect/http";
 import type { HostedEnvironment } from "../environment.js";
 import { recordServerEvent, SERVER_EVENT } from "../events/server-events.js";
 import type { GitHubApp } from "../github/github-app.js";
+import { afterResponse } from "../http/after-response.js";
 import {
   HOSTED_REFUSAL,
   type HostedRefusal,
@@ -57,8 +58,8 @@ import {
   CHAT_DOORS,
   type ChatTelling,
   HOSTED_OF_CHAT_REFUSAL,
-  postChat,
   tellMessage,
+  writeChatPost,
 } from "./coder-host/chat-notify.js";
 import {
   channelOnWire,
@@ -86,8 +87,9 @@ import { deploymentEve } from "./deployment-eve.js";
  * workspace, one of four things besides: a post, to the channel the window shows
  * by its id, a channel by `#name`, a member's DM by the member's mention
  * link, `#general` where unsaid, or a thread by the
- * place of the message it replies to, told to the members it addresses
- * through the one door a coding agent's post goes through too
+ * place of the message it replies to, answered once it is committed and
+ * told to the members it addresses after the answer has left, through the
+ * one door a coding agent's post goes through too
  * (`hosted/coder-host/chat-notify.ts`); an answer to an ask, at the
  * revision the window drew, posted as the person's reply in its thread and
  * told to the ask's poster where it asked to hear back; a resolve of an
@@ -288,7 +290,13 @@ function txidOf(row: {
   return row.txid === undefined ? undefined : { txid: row.txid };
 }
 
-/** A person's post, told to the members it addresses: the message as the window reads it, and who it came to. */
+/**
+ * A person's post: the message as the window reads it. A window that reads
+ * no receipt is answered once the post is committed, and the members it
+ * addresses are told after the answer has left (`after-response.ts`), so it
+ * never waits on a steer; a released window, which reads one, is answered
+ * once they are told, with who it came to.
+ */
 const postAsPerson = /* @__PURE__ */ Effect.fnUntraced(function* (
   telling: Effect.Effect<
     ChatTelling,
@@ -301,6 +309,7 @@ const postAsPerson = /* @__PURE__ */ Effect.fnUntraced(function* (
     readonly blocks?: readonly ChatBlock[];
     readonly attachments?: readonly CodingAgentAttachment[];
     readonly clientKey: string;
+    readonly receipt?: false;
   },
 ): Effect.fn.Return<ChatWriteAnswer, HostedRefusal, ChatServices> {
   const pictures = picturesOf(post.clientKey, post.attachments ?? []);
@@ -313,8 +322,9 @@ const postAsPerson = /* @__PURE__ */ Effect.fnUntraced(function* (
     ...pictures.map(({ id, name }) => ({ type: CHAT_BLOCK.IMAGE, attachmentId: id, alt: name })),
   ];
   const to = yield* placeOf(writer, post);
+  // Note that eve is reached before the post is written, so a deployment that reaches none refuses the post rather than keeping one it never tells.
   const teller = yield* telling;
-  const told = yield* postChat(
+  const { message, repeated, unresolved } = yield* writeChatPost(
     teller,
     {
       authorMemberId: writer.self.id,
@@ -325,12 +335,19 @@ const postAsPerson = /* @__PURE__ */ Effect.fnUntraced(function* (
     },
     pictures.map(({ id, contentType, bytes }) => ({ id, contentType, bytes })),
   );
-  if (!told.repeated) {
+  if (!repeated) {
     yield* recordServerEvent(SERVER_EVENT.CHAT_MESSAGE_SEND, teller.userId, {
       is_reply: post.replyTo !== undefined,
     });
   }
-  return { posted: messageOnWire(told.message), receipt: told.receipt, ...txidOf(told.message) };
+  // A post sent again under its key is told again, which finishes a telling the first left undone and steers no one twice.
+  const notices = tellMessage(teller, message, unresolved);
+  const posted = { posted: messageOnWire(message, writer.self.id), ...txidOf(message) };
+  if (post.receipt === false) {
+    yield* afterResponse("a chat post's notices", notices);
+    return posted;
+  }
+  return { ...posted, receipt: yield* notices };
 });
 
 /**
@@ -383,9 +400,9 @@ const answerAsPerson = /* @__PURE__ */ Effect.fnUntraced(function* (
     yield* recordServerEvent(SERVER_EVENT.CHAT_MESSAGE_SEND, userId, { is_reply: true });
   }
   if (taken && Option.isSome(posted) && ask.value.needsReply !== false) {
-    yield* tellMessage(yield* telling, posted.value, []);
+    yield* afterResponse("an answer's notices", tellMessage(yield* telling, posted.value, []));
   }
-  return { ask: messageOnWire(now), taken, ...(taken ? txidOf(now) : undefined) };
+  return { ask: messageOnWire(now, self.id), taken, ...(taken ? txidOf(now) : undefined) };
 });
 
 /** A person's own ask resolved with why; not found where the place holds no ask of theirs. */
@@ -405,7 +422,7 @@ const resolveAsPerson = /* @__PURE__ */ Effect.fnUntraced(function* (
     resolveAsk(userId, organizationId, self.id, key.value, reason),
   );
   if (Option.isNone(resolved)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-  return { resolved: messageOnWire(resolved.value), ...txidOf(resolved.value) };
+  return { resolved: messageOnWire(resolved.value, self.id), ...txidOf(resolved.value) };
 });
 
 /**

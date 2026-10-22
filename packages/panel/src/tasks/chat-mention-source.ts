@@ -1,8 +1,17 @@
-import type { ChatAnswer, ChatChannel } from "@luke/features/chat-wire";
+import type { ChatChannel } from "@luke/features/chat-wire";
 import type { MentionPlace } from "@luke/features/mention-link";
+import { agentGivenName } from "@luke/features/model-label";
 import type { TaskSummary } from "@luke/features/task-wire";
 import type { Actor } from "@luke/ui/actor-model";
-import { type ChatNames, chatMentionables, toldPastBound } from "@luke/ui/chat-model";
+import {
+  CHAT_PLACE,
+  type ChatNames,
+  type ChatRoster,
+  chatMentionables,
+  placeChannel,
+  toldPastBound,
+} from "@luke/ui/chat-model";
+import { useMemo } from "react";
 import { useMemberDirectory } from "../member-directory.js";
 import type { ChatComposerMentions } from "./chat-composer.js";
 import type { MentionablePullRequest, MentionMembers, MentionSource } from "./mention-picker.js";
@@ -44,7 +53,8 @@ function summaryPullRequests(
         url: line.url,
         state: line.state,
         checks: line.checks,
-        agent: agent?.personaName ?? agent?.title ?? undefined,
+        agent:
+          agent === undefined ? undefined : (agentGivenName(agent) ?? agent.title ?? undefined),
       },
     ];
   });
@@ -93,7 +103,10 @@ function sourceIn(
  * What a chat box posting in a channel offers, by the channel's id and, for
  * a reply, the members of its thread: the members a mention there tells,
  * the channel's task, the channels, and whether a post of the words would
- * address more members than a post tells.
+ * address more members than a post tells. Note that it stands, and hands
+ * back what it offered a box before, while the roster and what the members
+ * are drawn by stand, so a box drawn from it holds across a push that only
+ * brings a message.
  */
 export function useChatMentions({
   chat,
@@ -102,7 +115,7 @@ export function useChatMentions({
   tasks,
   actorOf,
 }: {
-  chat: ChatAnswer;
+  chat: ChatRoster;
   names: ChatNames;
   /** The workspace a mention is written in; none where it is not known yet. */
   place: MentionPlace | undefined;
@@ -113,34 +126,50 @@ export function useChatMentions({
 }): (channelId: string, thread?: readonly string[]) => ChatComposerMentions {
   const page = useTaskMentions();
   const { members: read } = useMemberDirectory();
-  return (channelId, thread) => {
-    const channel = chat.channels.find((each) => each.id === channelId);
-    const offered = chatMentionables(chat, names, channel);
-    const members: MentionMembers =
-      place === undefined
-        ? NO_MEMBERS
-        : {
-            people: offered.people.map((person) => {
-              const member = read?.find((each) => each.userId === person.userId);
-              return {
-                userId: person.userId,
-                name: member?.name ?? person.name,
-                email: member?.email,
-                actor: actorOf(person.memberId),
-              };
-            }),
-            agents: offered.agents.map((agent) => ({
-              id: agent.agentId,
-              name: agent.name,
-              actor: actorOf(agent.memberId),
-              task: agent.task,
-            })),
-          };
-    return {
-      source: sourceIn(channel, place, page, tasks, names),
-      members,
-      channels: offered.channels,
-      crowded: (text) => channel !== undefined && toldPastBound(chat, channel, text, thread),
+  const { self, members: roster, channels } = chat;
+  return useMemo(() => {
+    const held: ChatRoster = { self, members: roster, channels };
+    const offers = new Map<string, ChatComposerMentions>();
+    const offerIn = (
+      channelId: string,
+      thread: readonly string[] | undefined,
+    ): ChatComposerMentions => {
+      const channel = placeChannel(held, { kind: CHAT_PLACE.CHANNEL, channelId });
+      const offered = chatMentionables(held, names, channel);
+      const members: MentionMembers =
+        place === undefined
+          ? NO_MEMBERS
+          : {
+              people: offered.people.map((person) => {
+                const member = read?.find((each) => each.userId === person.userId);
+                return {
+                  userId: person.userId,
+                  name: member?.name ?? person.name,
+                  email: member?.email,
+                  actor: actorOf(person.memberId),
+                };
+              }),
+              agents: offered.agents.map((agent) => ({
+                id: agent.agentId,
+                name: agent.name,
+                actor: actorOf(agent.memberId),
+                task: agent.task,
+              })),
+            };
+      return {
+        source: sourceIn(channel, place, page, tasks, names),
+        members,
+        channels: offered.channels,
+        crowded: (text) => channel !== undefined && toldPastBound(held, channel, text, thread),
+      };
     };
-  };
+    return (channelId, thread) => {
+      const key = JSON.stringify([channelId, thread ?? null]);
+      const standing = offers.get(key);
+      if (standing !== undefined) return standing;
+      const offer = offerIn(channelId, thread);
+      offers.set(key, offer);
+      return offer;
+    };
+  }, [self, roster, channels, names, place, page, tasks, actorOf, read]);
 }

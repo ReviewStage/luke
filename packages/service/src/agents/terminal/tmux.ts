@@ -10,14 +10,15 @@
  * and what a developer typed reaches it only as a positional argument, never
  * spliced into its text. tmux and its settings come with the image
  * (`agent-runtime/sandbox.ts`), and nothing here installs them, since a
- * Terminal's shell holds no sudo: the settings keep tmux out of sight, with
+ * Terminal's shell reaches no root: the settings keep tmux out of sight, with
  * no status line, no mouse, and its output scrolling into the terminal's own
  * scrollback. Every command runs with every capability dropped
  * (`sandbox-capabilities.ts`), the command that starts tmux's server among
  * them, so the server, on a socket of its own (`TMUX.SOCKET`), and every
  * shell it starts hold none: a shell cannot
  * read another process's environment, a file its mode keeps from the
- * sandbox's user, or reach root through sudo.
+ * sandbox's user, or reach root through sudo, which the emptied bounding
+ * set refuses.
  *
  * tmux prints a control character in a format's value as `_`, so a list
  * cannot separate its fields with one; each free-text field is read on its

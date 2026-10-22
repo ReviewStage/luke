@@ -1,4 +1,8 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { it } from "@effect/vitest";
 import { fakeHttpClientLayer } from "@luke/wire/testing";
 import { Effect } from "effect";
@@ -11,9 +15,13 @@ import { agentSandboxDoors, SANDBOX_DOOR_MAX_BYTES } from "./sandbox-door.js";
  * The door to a native agent's sandbox, over Vercel Sandbox's REST API as
  * the deployment asks it under its own OIDC token: the sandbox tagged with
  * the agent's session is found, the file is read from its running session
- * by a POST of its path, a file Vercel has not is no file, a file past
- * every tool's bound is read only one byte past it, and a conversation that
- * records no session opens no door. The token is a synthetic one.
+ * by a command run with every capability dropped, never by Vercel's own
+ * file read, a path that is no file is no file, a file past every tool's
+ * bound is read only one byte past it, and a conversation that records no
+ * session opens no door. The read's command runs in a real bash over a
+ * temporary directory standing in for the sandbox's disk, once the fake
+ * has checked that `setpriv` empties every capability set ahead of it. The
+ * token is a synthetic one.
  */
 
 const TEAM = "team_fixture";
@@ -34,8 +42,33 @@ interface Asked {
   readonly body: unknown;
 }
 
-/** Vercel with one running sandbox tagged with the session, holding the files given; what it was asked is kept. */
-function vercel(files: Readonly<Record<string, Uint8Array<ArrayBuffer>>>) {
+/** What `setpriv` is handed ahead of the command it runs, every capability set emptied. */
+const CAPABILITIES_DROPPED = [
+  "--inh-caps=-all",
+  "--ambient-caps=-all",
+  "--bounding-set=-all",
+  "--",
+];
+
+/** A command's run as Vercel streams it back: its start, its stdout, and its exit. */
+function commandStream(exitCode: number, stdout: string): Response {
+  return new Response(
+    `${JSON.stringify({ command: { exitCode: null } })}\n${JSON.stringify({ stream: "stdout", data: stdout })}\n${JSON.stringify({ command: { exitCode } })}\n`,
+  );
+}
+
+/** A temporary directory standing in for the sandbox's disk, holding the files given by their path under it. */
+function disk(files: Readonly<Record<string, Uint8Array>>): string {
+  const root = mkdtempSync(join(tmpdir(), "sandbox-door-"));
+  for (const [path, bytes] of Object.entries(files)) {
+    mkdirSync(join(root, path, ".."), { recursive: true });
+    writeFileSync(join(root, path), bytes);
+  }
+  return root;
+}
+
+/** Vercel with one running sandbox tagged with the session, its disk the directory given; what it was asked is kept. */
+function vercel(root: string) {
   const asked: Asked[] = [];
   const layer = fakeHttpClientLayer((url, init) => {
     const parsed = new URL(url);
@@ -54,14 +87,21 @@ function vercel(files: Readonly<Record<string, Uint8Array<ArrayBuffer>>>) {
       );
     }
     if (parsed.pathname.endsWith("/cmd")) {
-      return new Response(
-        `${JSON.stringify({ command: { exitCode: null } })}\n${JSON.stringify({ stream: "stdout", data: "12: const invite = true;\n" })}\n${JSON.stringify({ command: { exitCode: 0 } })}\n`,
-      );
+      const { command, args } = body as { command: string; args: string[] };
+      if (command !== "setpriv") return commandStream(0, "12: const invite = true;\n");
+      // The capability drop holds, so the rest runs as the sandbox's user, in the stand-in disk.
+      if (args.slice(0, CAPABILITIES_DROPPED.length).join(" ") !== CAPABILITIES_DROPPED.join(" ")) {
+        return commandStream(97, "");
+      }
+      const [program = "", ...rest] = args.slice(CAPABILITIES_DROPPED.length);
+      const ran = spawnSync(program, rest, {
+        cwd: root,
+        encoding: "utf8",
+        maxBuffer: 64 * 1024 * 1024,
+      });
+      return commandStream(ran.status ?? 1, ran.stdout);
     }
-    const bytes = files[(body as { path: string }).path];
-    return bytes === undefined
-      ? Response.json({ error: { code: "file_not_found" } }, { status: 404 })
-      : new Response(bytes);
+    return Response.json({ error: { code: "not_asked" } }, { status: 500 });
   });
   return { layer, asked };
 }
@@ -90,38 +130,44 @@ async function bytesOf(stream: ReadableStream<Uint8Array> | null): Promise<numbe
 }
 
 it.effect(
-  "a file is read from the running sandbox tagged with the agent's session, by its path, and one Vercel has not is no file",
+  "a file is read from the running sandbox tagged with the agent's session, by its path, under the capability drop, and a path that is no file is no file",
   () =>
     Effect.gen(function* () {
-      const api = vercel({ "/workspace/repository/shot.png": new Uint8Array([1, 2, 3]) });
+      const root = disk({ "repository/shot.png": new Uint8Array([1, 0, 255, 10, 3]) });
+      const api = vercel(root);
       const door = yield* doorOver(ADMITTED).pipe(Effect.provide(api.layer));
 
       const sandbox = yield* Effect.promise(() => door());
-      const read = yield* Effect.promise(async () =>
-        bytesOf(await sandbox.readFile({ path: "/workspace/repository/shot.png" })),
-      );
-      const missing = yield* Effect.promise(async () =>
-        bytesOf(await sandbox.readFile({ path: "/workspace/repository/none.png" })),
-      );
+      const readOf = (path: string) =>
+        Effect.promise(async () => bytesOf(await sandbox.readFile({ path })));
+      const read = yield* readOf(join(root, "repository/shot.png"));
+      const missing = yield* readOf(join(root, "repository/none.png"));
+      const directory = yield* readOf(join(root, "repository"));
 
-      assert.deepEqual(read, [1, 2, 3]);
+      assert.deepEqual(read, [1, 0, 255, 10, 3]);
       assert.equal(missing, null);
+      assert.equal(directory, null);
       const [list, file] = api.asked;
       assert.equal(list?.url.searchParams.get("tags"), `sessionId:${SESSION}`);
       assert.equal(list?.url.searchParams.get("teamId"), TEAM);
-      assert.equal(file?.url.pathname, "/api/v2/sandboxes/sessions/sbs_up/fs/read");
-      assert.deepEqual(file?.body, { path: "/workspace/repository/shot.png" });
+      assert.equal(file?.url.pathname, "/api/v2/sandboxes/sessions/sbs_up/cmd");
+      // Vercel's own file read reads as root, whatever the path names.
+      assert.equal(
+        api.asked.some(({ url }) => url.pathname.endsWith("/fs/read")),
+        false,
+      );
     }),
 );
 
 it.effect("a file past every tool's bound is read only one byte past it", () =>
   Effect.gen(function* () {
-    const api = vercel({ "/big.bin": new Uint8Array(SANDBOX_DOOR_MAX_BYTES + 4096) });
+    const root = disk({ "big.bin": new Uint8Array(SANDBOX_DOOR_MAX_BYTES + 4096) });
+    const api = vercel(root);
     const door = yield* doorOver(ADMITTED).pipe(Effect.provide(api.layer));
 
     const sandbox = yield* Effect.promise(() => door());
     const read = yield* Effect.promise(async () =>
-      bytesOf(await sandbox.readFile({ path: "/big.bin" })),
+      bytesOf(await sandbox.readFile({ path: join(root, "big.bin") })),
     );
 
     assert.equal(read?.length, SANDBOX_DOOR_MAX_BYTES + 1);
@@ -132,7 +178,7 @@ it.effect(
   "a command of the checkout's is run in the running sandbox under bash, its environment set by env on its command line, and waited on",
   () =>
     Effect.gen(function* () {
-      const api = vercel({});
+      const api = vercel(tmpdir());
       const doors = yield* doorsOver(ADMITTED).pipe(Effect.provide(api.layer));
 
       const sandbox = yield* Effect.promise(() => doors.repository());
@@ -162,7 +208,7 @@ it.effect(
 
 it.effect("a conversation that records no session opens no door", () =>
   Effect.gen(function* () {
-    const api = vercel({});
+    const api = vercel(tmpdir());
     const door = yield* doorOver({ ...ADMITTED, runtimeSessionId: undefined }).pipe(
       Effect.provide(api.layer),
     );

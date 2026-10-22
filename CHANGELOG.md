@@ -111,6 +111,8 @@ picks the model chapters run on.
 [#3998](https://github.com/ReviewStage/luke/pull/3998),
 [#4088](https://github.com/ReviewStage/luke/pull/4088))
 
+![#214's Chapters tab over the whole window: four chapters in the rail with their risk and lines, the first viewed, beside "Invite, withdraw, accept", high risk, with its summary, what to review, and its own hunks.](apps/web/public/changelog/0.19.0/pull-request-chapters.png)
+
 ### Task status, priority, and the Board
 
 Every task has a key such as ACME-42, a status, and a priority, set from its
@@ -124,6 +126,8 @@ and agents link them too.
 [#3972](https://github.com/ReviewStage/luke/pull/3972),
 [#3979](https://github.com/ReviewStage/luke/pull/3979),
 [#3995](https://github.com/ReviewStage/luke/pull/3995))
+
+![The Board beside the sidebar: acme's tasks in Backlog, Todo, In progress, and Done, each card with its key such as ACME-42, its creator, priority, status, and repository, and the sidebar's rows wearing their status marks.](apps/web/public/changelog/0.19.0/task-status-priority-and-the-board.png)
 
 ### Inbox asks
 
@@ -144,6 +148,8 @@ message itself.
 [#3886](https://github.com/ReviewStage/luke/pull/3886),
 [#3969](https://github.com/ReviewStage/luke/pull/3969),
 [#3865](https://github.com/ReviewStage/luke/pull/3865))
+
+![An agent's Inbox message asking which invite email should ship: the two emails side by side, #216's card, and a Pick one of three options with The card, plain text as its fallback recommended, waiting on you.](apps/web/public/changelog/0.19.0/inbox-asks.png)
 
 ### Files changed, reworked
 
@@ -327,6 +333,8 @@ Continue opens as a draft you can edit before it starts.
 [#3519](https://github.com/ReviewStage/luke/pull/3519),
 [#3635](https://github.com/ReviewStage/luke/pull/3635))
 
+![The end of Add teammate invitations' last reply, close up: its actions drawn, Copy, Copy link, and Fork to new agent with its tooltip.](apps/web/public/changelog/0.18.0/continue-and-fork-an-agent.png)
+
 ### Review in the Pull request tab
 
 Review an agent's pull request without leaving Luke. Comment on lines in Files
@@ -354,6 +362,8 @@ and every pull request chip opens its agent's tab.
 [#3645](https://github.com/ReviewStage/luke/pull/3645),
 [#3646](https://github.com/ReviewStage/luke/pull/3646))
 
+![#214's Pull request tab over the whole window on its Conversation: Ready to merge with Squash and merge, two labels and the reviewers in its head, the description with its reactions, and Dana's approving review with her thread on invite.ts.](apps/web/public/changelog/0.18.0/review-in-the-pull-request-tab.png)
+
 ### Inbox threads
 
 Every Inbox item is a thread of messages under its title, and the agent reads
@@ -378,6 +388,8 @@ and you mark it read or unread, or swipe it right to do so.
 [#3657](https://github.com/ReviewStage/luke/pull/3657),
 [#3662](https://github.com/ReviewStage/luke/pull/3662),
 [#3665](https://github.com/ReviewStage/luke/pull/3665))
+
+![The Inbox over the whole window with "Who may withdraw a pending invite?" as a thread: Dean's answer quoting the agent with member-roles.pdf attached, the agent's reply naming #214, Dana's follow-up, and the agent's last word, beside rows of two lines with unread dots.](apps/web/public/changelog/0.18.0/inbox-threads.png)
 
 ### Improvements
 

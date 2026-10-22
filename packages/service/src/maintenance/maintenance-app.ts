@@ -2,7 +2,6 @@ import type { DatabaseServices } from "@luke/database/core/query";
 import { sweepAbandonedTurns } from "@luke/database/models/abandoned-turns";
 import { hostedStore } from "@luke/database/models/hosted-store";
 import { purgeUnsavedAttachments } from "@luke/database/models/plan-attachments";
-import { anyPlanConnected } from "@luke/database/models/provider-key-store";
 import { recordVoiceSeconds } from "@luke/database/models/quota";
 import { voiceSessionRecord } from "@luke/database/models/voice-session-record";
 import { storeWriter } from "@luke/database/models/writer";
@@ -36,6 +35,7 @@ import { handleMaintenanceSweep } from "./maintenance-sweep.js";
 import { sweepNativeSandboxes } from "./native-sandbox-sweep.js";
 import { sweepNativeWakeups } from "./native-wakeup-sweep.js";
 import { sweepOperatorWakes } from "./operator-wake-sweep.js";
+import { sweepSandboxRetention } from "./sandbox-retention-sweep.js";
 import { sweepTerminalLeases } from "./terminal-lease-sweep.js";
 
 /** The sweep as Sentry's Crons watches it: three minutes in a row missed, late, or failed open an issue. */
@@ -110,6 +110,10 @@ const maintenanceSweepEffect = /* @__PURE__ */ Effect.fn("web/maintenanceSweepEf
       sweepEveSandboxes(new Date(now)).pipe(
         Effect.provideService(HttpClient.HttpClient, httpClient),
       ),
+    sweepSandboxRetention: (now) =>
+      sweepSandboxRetention(new Date(now)).pipe(
+        Effect.provideService(HttpClient.HttpClient, httpClient),
+      ),
     sweepNativeWakeups: (now) =>
       sweepNativeWakeups(eveFor, new Date(now)).pipe(Effect.provideContext(startContext)),
     sweepOperatorWakes: (now) =>
@@ -122,11 +126,8 @@ const maintenanceSweepEffect = /* @__PURE__ */ Effect.fn("web/maintenanceSweepEf
       sweepTokenPullRequests(eveFor, environment.providerKeyEncryptionKeys, new Date(now)).pipe(
         Effect.provideContext(startContext),
       ),
-    // The template is built ahead of a launch only where some account connected a plan to launch a native agent on.
-    sweepImageTemplates: () =>
-      Effect.flatMap(anyPlanConnected(), (advance) =>
-        sweepNativeTemplates(advance).pipe(Effect.provideContext(startContext)),
-      ),
+    // The current image's template is built ahead of any launch, so the first one after a deploy finds it ready.
+    sweepImageTemplates: () => sweepNativeTemplates().pipe(Effect.provideContext(startContext)),
     sweepVoice: (now) =>
       voiceUpstream === undefined
         ? Effect.succeed(NOTHING_ORPHANED)

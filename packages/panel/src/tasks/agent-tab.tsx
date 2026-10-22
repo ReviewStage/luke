@@ -136,12 +136,14 @@ import {
   placedMessages,
   planPayerOf,
   providerOf,
+  SENT_LINE_STATE,
   type SpokenMessage,
   settledPlanEdits,
   sidebarCallIds,
   spokenMessages,
   type TurnRead,
   teammateStarter,
+  transcriptRowKey,
   turnStretches,
   WORKING_PHASE_WORDS,
   workerLines,
@@ -203,7 +205,7 @@ import {
 import { type FindRow, useTranscriptFind } from "./transcript-find.js";
 import { UndeliveredLines, UndeliveredMark, useUndeliveredLines } from "./undelivered-mark.js";
 import { useAgentCalls } from "./use-agent-calls.js";
-import { type AgentComposerControl, useAgentComposer } from "./use-agent-composer.js";
+import { type HeldComposer, useAgentComposer } from "./use-agent-composer.js";
 import { type AgentModelControl, useAgentModel } from "./use-agent-model.js";
 import { useAgentPullRequest } from "./use-agent-pull-request.js";
 import { useAgentServers } from "./use-agent-servers.js";
@@ -313,6 +315,7 @@ const ROW_GAP_PX = 12;
 
 /** What the tab says where its transcript could not be read. */
 const TRANSCRIPT_FAILED_LINE = "The transcript could not be read.";
+const OLDER_FAILED_LINE = "Earlier messages could not be read.";
 
 /** A worker's transcript: the subagent task it was handed, and the worker starting. */
 const WORKER_LEAD: TranscriptLead = {
@@ -1626,7 +1629,7 @@ function findWordsOf(message: CodingAgentMessage): string {
 /** A row as a find reads it before it is drawn: its messages' words. */
 function findRowOf(row: PlacedRow): FindRow {
   return {
-    key: row.message.id,
+    key: transcriptRowKey(row.message),
     words: [...row.said, row.message, ...row.arrived].map(findWordsOf).join("\n"),
   };
 }
@@ -1744,6 +1747,7 @@ function AgentTranscriptView({
   onOpenApiKeys,
   onRetry,
   onOlder,
+  olderFailed = false,
   overComposer = false,
   earlierOmitted = false,
   briefTitle,
@@ -1790,6 +1794,8 @@ function AgentTranscriptView({
   onRetry: () => void;
   /** Reads the messages older than the first held, which the log asks for as the reader nears its top; none where none stand. */
   onOlder?: (() => void) | undefined;
+  /** Whether the last read of older messages did not answer, which a line over the log says with Retry. */
+  olderFailed?: boolean;
   /** Whether the composer stands right under the log, which the log's foot then fades into. */
   overComposer?: boolean;
   /** Whether older steps than these were left out, which a note says after the card. */
@@ -1830,9 +1836,10 @@ function AgentTranscriptView({
   // Note that the clock is the minute's own, so a call's day moves on with it while the rows hold.
   const now = useMinute();
   const heard = places.heard;
-  // Each row is keyed by the message it draws, which its measured height is kept by.
+  // Each row is keyed by the message it draws, which its measured height is kept by, a
+  // developer's line by the id it was written under, so its row lands where the line was drawn.
   const rowKeys = useKept(
-    placing.placed.map(({ message }) => message.id),
+    placing.placed.map(({ message }) => transcriptRowKey(message)),
     sameIds,
   );
   const log = useRef<HTMLDivElement>(null);
@@ -1853,7 +1860,10 @@ function AgentTranscriptView({
     if (bringIn === undefined) return;
     bringIn.current = (messageId, then) => {
       const row = placing.placed.find((placed) => drawsMessage(placed, messageId));
-      return row !== undefined && rowsHandle.current?.bringIn(row.message.id, then) === true;
+      return (
+        row !== undefined &&
+        rowsHandle.current?.bringIn(transcriptRowKey(row.message), then) === true
+      );
     };
   });
   if (!holding && (messages.length > 0 || heard.length > 0)) {
@@ -1871,6 +1881,12 @@ function AgentTranscriptView({
     return (
       <LiveDoors value={live}>
         <Conversation list={log} onNearTop={onOlder}>
+          {/* Note that it floats in a fixed slot over the log's top rather than standing in its flow, so its coming and going moves no row, measured or not. */}
+          {olderFailed && onOlder !== undefined ? (
+            <div className="conversation-older">
+              <ErrorState onRetry={onOlder}>{OLDER_FAILED_LINE}</ErrorState>
+            </div>
+          ) : null}
           {/* The plan's card stands off the tab row by the gap between a column's groups; lines fade under the bar or banner above. */}
           <ConversationContent className={overComposer ? "agent-log-over-composer" : undefined}>
             <ConversationRows
@@ -2081,7 +2097,7 @@ function AgentTabView({
   models: readonly CatalogModel[] | undefined;
   readModels: () => void;
   transcript: AgentTranscriptControl;
-  composer: AgentComposerControl;
+  composer: HeldComposer;
   model: AgentModelControl;
   servers: AgentServersControl;
   /** What the agent published, once the service has said; nothing before. */
@@ -2138,8 +2154,23 @@ function AgentTabView({
     sameSet,
   );
   const undelivered = useKept(
-    new Set(composer.sent.filter((line) => line.undelivered === true).map((line) => line.id)),
+    new Set(
+      composer.sent
+        .filter((line) => line.state === SENT_LINE_STATE.UNDELIVERED)
+        .map((line) => line.id),
+    ),
     sameSet,
+  );
+  const unsent = useKept(
+    new Set(
+      composer.sent.filter((line) => line.state === SENT_LINE_STATE.FAILED).map((line) => line.id),
+    ),
+    sameSet,
+  );
+  const retryLine = useSteady(composer.retryLine);
+  const marks = useMemo(
+    () => ({ undelivered, unsent, retry: (id: string) => retryLine?.(id) }),
+    [undelivered, unsent, retryLine],
   );
   const starterActor = usePerson(agent.startedBy);
   const pictures = useAgentPictureDoor(agent.id);
@@ -2189,7 +2220,7 @@ function AgentTabView({
         <AgentPicturesProvider value={pictures}>
           <WholePartsProvider value={wholeParts}>
             <MentionedServers value={mentioned}>
-              <UndeliveredLines value={undelivered}>
+              <UndeliveredLines value={marks}>
                 <AgentTranscriptView
                   messages={lines}
                   quietReplies={agent.kind === CODING_AGENT_KIND.OPERATOR}
@@ -2229,6 +2260,7 @@ function AgentTabView({
                   endTrail={endTrail}
                   onRetry={transcript.onRetry}
                   onOlder={transcript.hasOlder ? transcript.loadOlder : undefined}
+                  olderFailed={transcript.olderFailed}
                   overComposer
                   calls={calls}
                   bringIn={bringIn}
@@ -2695,6 +2727,7 @@ export function AgentSubagentTab({
               ended={transcript.pages === 0 ? undefined : endLineParts(status, transcript.failure)}
               onRetry={transcript.onRetry}
               onOlder={transcript.hasOlder ? transcript.loadOlder : undefined}
+              olderFailed={transcript.olderFailed}
             />
           </WholePartsProvider>
         </AgentPicturesProvider>
