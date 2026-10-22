@@ -3,6 +3,7 @@ import { it } from "@effect/vitest";
 import { createCodingAgent } from "@luke/database/models/coding-agent-store";
 import {
   PROVIDER_KEY_ENCRYPTION_ENVIRONMENT,
+  PROVIDER_KEY_UNREADABLE,
   parseKeyRing,
   sealProviderKey,
 } from "@luke/database/models/provider-key-seal";
@@ -155,7 +156,8 @@ test("a call runs on its caller's own OpenAI key, and a caller who saved none ha
   const own = await database.run(openAiKeyOf(keyed));
   const none = await database.run(openAiKeyOf(keyless));
 
-  assert.equal(own === undefined ? undefined : Redacted.value(own), CALLER_KEY);
+  assert.ok(own !== undefined && own !== PROVIDER_KEY_UNREADABLE);
+  assert.equal(Redacted.value(own), CALLER_KEY);
   assert.equal(none, undefined);
 });
 
