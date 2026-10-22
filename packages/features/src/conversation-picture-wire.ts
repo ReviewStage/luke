@@ -1,7 +1,8 @@
+import { Schema as EffectSchema, Option } from "effect";
 import type { InboxImageType } from "./inbox-wire.js";
 
 /**
- * conversation-picture-wire.ts -- a picture a transcript names: how a tool's stored output names one the service kept beside the conversation, and why one it answered was not kept.
+ * conversation-picture-wire.ts -- a picture a transcript names: how a tool's stored output or a line's image names one the service kept beside the conversation, and why one was not kept.
  *
  * A tool may answer a model with a picture, as an integration's MCP tool
  * answers an image block. The model sees the picture where eve hands it
@@ -9,7 +10,10 @@ import type { InboxImageType } from "./inbox-wire.js";
  * (`attachment`), and the stored output names that row in the
  * picture's place, never the bytes, which would otherwise ride every read,
  * journal amend, and long poll of the transcript. A picture the service did
- * not keep is named by why, with its size, so a reader can say so.
+ * not keep is named by why, with its size, so a reader can say so. An image
+ * a coding agent is handed on a line is kept the same way, and its file part
+ * in the row names the row under the provider key below
+ * (`keptPictureIdOf`).
  *
  * The bounds are the policy, held here alone so moving one is one edit:
  * the byte bound is also the check on the table's column, so moving it is
@@ -52,4 +56,29 @@ export interface KeptPicture {
   readonly width: number;
   readonly height: number;
   readonly byteCount: number;
+}
+
+/**
+ * The provider key an image file part of a coding agent's line names what
+ * was kept of its picture under, which no provider reads
+ * (`packages/database/src/models/attached-file-parts.ts`).
+ */
+export const KEPT_IMAGE_PROVIDER_KEY = "luke";
+
+/** What an image file part names of its picture under that key: the attachment it was kept as, or why it was not kept. */
+export const keptImageMetadataSchema = EffectSchema.Struct({
+  [KEPT_IMAGE_PROVIDER_KEY]: EffectSchema.Union([
+    EffectSchema.Struct({ attachmentId: EffectSchema.String }),
+    EffectSchema.Struct({ omitted: EffectSchema.Literals(Object.values(PICTURE_OMISSION)) }),
+  ]),
+});
+
+const readKeptImageMetadata = EffectSchema.decodeUnknownOption(keptImageMetadataSchema);
+
+/** The id of the picture an image file part's provider metadata names it kept as; none where it names none. */
+export function keptPictureIdOf(providerMetadata: unknown): string | undefined {
+  const kept = Option.getOrUndefined(readKeptImageMetadata(providerMetadata))?.[
+    KEPT_IMAGE_PROVIDER_KEY
+  ];
+  return kept !== undefined && "attachmentId" in kept ? kept.attachmentId : undefined;
 }

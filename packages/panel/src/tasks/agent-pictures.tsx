@@ -5,6 +5,7 @@ import {
   shownPicturesOf,
 } from "@luke/features/agent-pictures-model";
 import type { FileChip } from "@luke/features/attachment-model";
+import type { CodingAgentMessage } from "@luke/features/coding-agent-wire";
 import type { KeptPicture } from "@luke/features/conversation-picture-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { ATTACHMENT_CHIP_STATE, AttachmentChip, type AttachmentChipState } from "@luke/ui";
@@ -31,10 +32,11 @@ import { PictureBlock } from "../picture-block.js";
 import { SPINNER_SIZE, Spinner } from "../spinner.js";
 import { Tooltip } from "../tooltip.js";
 import { useAddToPlan } from "./add-to-plan.js";
+import { AttachedFileChips, messageFileChips } from "./attached-file-chips.js";
 import { AttachmentViewer, type ViewerAction } from "./attachment-viewer.js";
 
 /**
- * agent-pictures.tsx -- the pictures in an agent's transcript: a set it showed with `show_image`, and the pictures an integration's call answered, under the call's row.
+ * agent-pictures.tsx -- the pictures in an agent's transcript: a set it showed with `show_image`, the pictures an integration's call answered, under the call's row, and an image a line handed it, over the line.
  *
  * Each picture is read once through the window's picture cache
  * (`@luke/ui/picture-cache`), under the agent, or under the worker whose
@@ -49,7 +51,10 @@ import { AttachmentViewer, type ViewerAction } from "./attachment-viewer.js";
  * its row, open or closed: a thumbnail, the spinner while read, or the
  * glyph where gone. A press on any opens the window's file viewer
  * walking the set, or the call's pictures, from it, with Add to plan
- * beside Download where the transcript is drawn on a plan's page. Everything here is
+ * beside Download where the transcript is drawn on a plan's page. An image a
+ * line handed the agent, which its row names by the picture it was kept as
+ * rather than carrying its bytes, is read the same way and drawn among the
+ * line's files (`MessageFileChips`). Everything here is
  * left out of the screen recording, as the tab around it is.
  */
 
@@ -130,17 +135,17 @@ interface PictureViewer {
   readonly viewer: ReactNode;
 }
 
-/** One picture of an open viewer's set, watched so the viewer is drawn again as its read lands. */
+/** One picture read through the door, watched so what draws it is drawn again as its read lands. */
 function PictureWatch({
   door,
-  picture,
+  id,
   onSettled,
 }: {
   door: AgentPictureDoor;
-  picture: KeptPicture;
+  id: string;
   onSettled: () => void;
 }): null {
-  const state = usePicture(door.owner, picture.id, door.read);
+  const state = usePicture(door.owner, id, door.read);
   useEffect(() => onSettled(), [state.kind, onSettled]);
   return null;
 }
@@ -171,7 +176,7 @@ function OpenViewer({
   return (
     <>
       {items.map((each) => (
-        <PictureWatch key={each.picture.id} door={door} picture={each.picture} onSettled={redraw} />
+        <PictureWatch key={each.picture.id} door={door} id={each.picture.id} onSettled={redraw} />
       ))}
       {at < 0 ? null : (
         <AttachmentViewer
@@ -484,5 +489,35 @@ export function CallPictures({
       )}
       {viewer}
     </ul>
+  );
+}
+
+/**
+ * The files on a line of the transcript, as chips: each from the bytes its
+ * row carries, and an image its row names by the picture it was kept as
+ * read through the agent's door, so it draws its thumbnail and opens once
+ * the read lands, and is its name alone while read or where it is gone.
+ */
+export function MessageFileChips({ message }: { message: CodingAgentMessage }): ReactNode {
+  const door = useContext(AgentPicturesContext);
+  const [, redraw] = useReducer((count: number) => count + 1, 0);
+  const files = messageFileChips(message);
+  const chips = files.map(({ pictureId, ...chip }): FileChip => {
+    if (pictureId === undefined || door === undefined) return chip;
+    const state = pictureNow(door.owner, pictureId);
+    return state.kind === PICTURE_STATE.READY ? { ...chip, url: state.url } : chip;
+  });
+  return (
+    <>
+      {door === undefined
+        ? null
+        : files.map(({ pictureId }, index) =>
+            pictureId === undefined ? null : (
+              // Note that a file's place on its line is its identity: a line never reorders.
+              <PictureWatch key={index} door={door} id={pictureId} onSettled={redraw} />
+            ),
+          )}
+      <AttachedFileChips files={chips} />
+    </>
   );
 }

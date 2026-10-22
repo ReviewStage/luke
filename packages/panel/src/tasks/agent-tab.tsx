@@ -92,6 +92,7 @@ import { AgentComposer } from "./agent-composer.js";
 import {
   AgentPicturesProvider,
   CallPictures,
+  MessageFileChips,
   ShownPictures,
   useAgentPictureDoor,
 } from "./agent-pictures.js";
@@ -101,7 +102,6 @@ import type { AgentServersControl } from "./agent-servers.js";
 import type { HeldTranscript } from "./agent-tab-card.js";
 import { AgentTabSkeleton, TranscriptSkeleton } from "./agent-tab-skeleton.js";
 import { ArchivedComposerNote } from "./archived-note.js";
-import { AttachedFileChips, messageFileChips } from "./attached-file-chips.js";
 import { CallEndMarker, CallStartMarker } from "./call-card.js";
 import { useChatOn } from "./chat-gate.js";
 import { ChatNoticeCard, type ChatNoticeDoors } from "./chat-notice.js";
@@ -1290,7 +1290,7 @@ export function AgentMessage({
     const shown = inboxLineWords(words);
     return (
       <Message from={message.role} data-message-id={message.id}>
-        <AttachedFileChips files={messageFileChips(message)} />
+        <MessageFileChips message={message} />
         {words === "" ? null : (
           <MessageContent>
             <SentToAgent id={message.id} arrived={message.arrivedIn !== undefined}>

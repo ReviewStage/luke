@@ -6,6 +6,7 @@ import {
   sizeLabel,
 } from "@luke/features/attachment-model";
 import type { CodingAgentAttachment, CodingAgentMessage } from "@luke/features/coding-agent-wire";
+import { keptPictureIdOf } from "@luke/features/conversation-picture-wire";
 import { AttachmentChip } from "@luke/ui";
 import { isRecord, isWireString } from "@luke/wire";
 import { type ReactNode, useState } from "react";
@@ -22,9 +23,13 @@ import { FileTypeIcon } from "./file-type-icon.js";
  * transcript read back after a restart draws the same row. A press on a chip
  * opens its file over the window (`attachment-viewer.tsx`), walking the
  * message's files from there; a chip's way off in the box takes it off
- * without opening it. A file the service kept no bytes of, one eve staged
- * in the sandbox before the row was written, is drawn by its name alone,
- * with nothing to open and nothing to walk to.
+ * without opening it. An image the service kept beside the transcript is
+ * named on its row by the picture's id rather than carried as bytes
+ * (`messageFileChips`), and the transcript reads it through the agent's
+ * pictures (`agent-pictures.tsx`'s `MessageFileChips`). A file the service
+ * kept no bytes of, one eve staged in the sandbox before the row was
+ * written, is drawn by its name alone, with nothing to open and nothing to
+ * walk to.
  */
 
 /** How the AI SDK spells a file part's type. */
@@ -39,19 +44,23 @@ export function attachmentChips(attachments: readonly CodingAgentAttachment[]): 
   }));
 }
 
-/** The files a row of the transcript carries, as chips: its AI SDK file parts, in order. */
-export function messageFileChips(message: CodingAgentMessage): FileChip[] {
-  return message.parts.flatMap((part) =>
-    isRecord(part) && part.type === FILE_PART && isWireString(part.mediaType)
-      ? [
-          {
-            name: isWireString(part.filename) ? part.filename : part.mediaType,
-            mediaType: part.mediaType,
-            url: isWireString(part.url) ? part.url : "",
-          },
-        ]
-      : [],
-  );
+/** A file of a transcript's row as its chip draws it, beside the picture it was kept as where the row names that rather than carrying its bytes. */
+export interface MessageFileChip extends FileChip {
+  readonly pictureId?: string;
+}
+
+/** The files a row of the transcript carries, as chips: its AI SDK file parts, in order, each the row keeps no bytes of naming the picture it was kept as, where it was. */
+export function messageFileChips(message: CodingAgentMessage): MessageFileChip[] {
+  return message.parts.flatMap((part): MessageFileChip[] => {
+    if (!isRecord(part) || part.type !== FILE_PART || !isWireString(part.mediaType)) return [];
+    const chip = {
+      name: isWireString(part.filename) ? part.filename : part.mediaType,
+      mediaType: part.mediaType,
+      url: isWireString(part.url) ? part.url : "",
+    };
+    const pictureId = chipBase64(chip) === "" ? keptPictureIdOf(part.providerMetadata) : undefined;
+    return [pictureId === undefined ? chip : { ...chip, pictureId }];
+  });
 }
 
 export function AttachedFileChips({

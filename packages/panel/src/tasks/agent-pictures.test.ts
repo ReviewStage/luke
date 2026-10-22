@@ -18,8 +18,10 @@ import { AGENT_LEAD, AgentMessage } from "./agent-tab.js";
  * fold and reads each picture once through the door it is given; two calls
  * one after another are one set; an integration's call keeps its row and
  * gains its pictures as chips under it, one left out saying so; a refused
- * call is a row where its error is read; and a picture written in the
- * agent's words is a link, never an image.
+ * call is a row where its error is read; a picture written in the
+ * agent's words is a link, never an image; and an image a line handed the
+ * agent, which its row names by id, is read through the door as a chip,
+ * while one a row keeps the bytes of is drawn from them.
  *
  * Synthetic turns and pictures throughout: the door answers a PNG's first
  * bytes for every picture it is asked for.
@@ -368,4 +370,35 @@ test("the viewer opened on the first picture to land reaches the rest as their r
   });
 
   assert.equal(document.querySelector(".attachment-viewer-place")?.textContent, "1 of 3");
+});
+
+test("an image a line's row names by the picture it was kept as is read through the door and drawn as its chip, and one an older row keeps the bytes of is drawn from them with no read", async () => {
+  const kept = picture(2, 1);
+  const { container, read } = await drawn({
+    id: "line",
+    role: MESSAGE_ROLE.USER,
+    parts: [
+      text("Match these."),
+      {
+        type: "file",
+        mediaType: INBOX_IMAGE_TYPE.PNG,
+        filename: "flow.png",
+        url: "",
+        providerMetadata: { luke: { attachmentId: kept.id } },
+      },
+      {
+        type: "file",
+        mediaType: INBOX_IMAGE_TYPE.PNG,
+        filename: "old.png",
+        url: "data:image/png;base64,AAAA",
+      },
+    ],
+  });
+
+  const chips = [...container.querySelectorAll('ul[aria-label="Attached files"] > li')];
+  assert.deepEqual(
+    chips.map((chip) => chip.querySelector("img")?.getAttribute("src")),
+    ["data:image/png;base64,iVBORw==", "data:image/png;base64,AAAA"],
+  );
+  assert.deepEqual(read, [kept.id]);
 });

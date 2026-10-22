@@ -337,16 +337,18 @@ your Mac. Luke reads only the files you hand it and sends our service each
 one's name and contents, including whatever the file carries inside it, such
 as where and on what a photo was taken, but never where it was on your Mac.
 Our service sends them to the agent's model with your message and with every
-later call, and keeps them in the agent's transcript, stored as sent and
-readable by our own operators, except that the prompt an agent is started on
-keeps a PDF by name alone and an image by name and the id below. An agent that
-runs on Luke's own agent has its images and PDFs copied into its sandbox too;
-one that runs on Claude Code or Codex is handed them in its messages and never
-as files in its sandbox. Each PNG, JPEG, or WebP is also kept once beside the
-agent's transcript, as a tool's pictures are (see "Pictures in a tool's
-answer"), and the agent is told its id, by which it may hand the image to
-another agent, as a file of another agent's Start or a picture of a chat
-message, on the same bounds as a file you attach. They go when the transcript
+later call, and keeps them with the agent's transcript, readable by our own
+operators. Each PNG, JPEG, or WebP is kept once, beside the transcript, as a
+tool's pictures are (see "Pictures in a tool's answer"), and the transcript
+names it by an id rather than carrying it; the agent is told that id, by which
+it may hand the image to another agent, as a file of another agent's Start or
+a picture of a chat message, on the same bounds as a file you attach. Any
+other file, and an image not kept that way, such as one past the transcript's
+200 MB of pictures, is stored in the transcript as sent, except that the
+prompt an agent is started on keeps a PDF, or an image not kept, by name
+alone. An agent that runs on Luke's own agent has its images and PDFs copied
+into its sandbox too; one that runs on Claude Code or Codex is handed them in
+its messages and never as files in its sandbox. They go when the transcript
 does; the sandbox's snapshot and the agent's session history keep them on the
 terms under "Who we send it to".
 
