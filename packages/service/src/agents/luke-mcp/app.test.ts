@@ -703,6 +703,22 @@ it.layer(getTestDB())("Luke's MCP server", (it) => {
       }),
   );
 
+  it.effect("every tool declares the most of its result Claude Code takes whole", () =>
+    Effect.gen(function* () {
+      const fetch = yield* standing;
+      const agent = yield* agentWithBearer;
+      const client = yield* connected(fetch, agent.bearer);
+
+      const listed = yield* Effect.promise(() => client.listTools());
+      yield* Effect.promise(() => client.close());
+
+      assert.ok(listed.tools.length > 0);
+      for (const tool of listed.tools) {
+        assert.equal(tool._meta?.["anthropic/maxResultSizeChars"], 500_000, tool.name);
+      }
+    }),
+  );
+
   it.effect("show_page reads the page the agent names by its path from the agent's sandbox", () =>
     Effect.gen(function* () {
       const sandbox = sandboxWith({
