@@ -9,6 +9,7 @@ import type { EveSandboxSweepOutcome } from "./eve-sandbox-sweep.js";
 import { MAINTENANCE_SWEEP_PATH } from "./maintenance-bounds.js";
 import { handleMaintenanceSweep, type MaintenanceSweepOptions } from "./maintenance-sweep.js";
 import type { NativeSandboxSweepOutcome } from "./native-sandbox-sweep.js";
+import type { SandboxRetentionSweepOutcome } from "./sandbox-retention-sweep.js";
 import type { TerminalLeaseSweepOutcome } from "./terminal-lease-sweep.js";
 
 const CRON_SECRET = Redacted.make("cron-secret-1");
@@ -22,6 +23,14 @@ const TERMINALS: TerminalLeaseSweepOutcome = { stopped: 2, released: 1, pending:
 const NATIVE: NativeSandboxSweepOutcome = { stopped: 1, held: 1, failed: 0, deferred: 0 };
 /** What the sweep over the running eve sandboxes answers. */
 const EVE: EveSandboxSweepOutcome = { stopped: 2, held: 0, failed: 1, deferred: 0, unmapped: 3 };
+/** What the bound on the stopped sandboxes' snapshot retention answers. */
+const RETAINED: SandboxRetentionSweepOutcome = {
+  applied: 3,
+  skipped: 1,
+  failed: 0,
+  deferred: 2,
+  lost: 0,
+};
 
 /** The scheduler's call; `null` sends no bearer at all. */
 function sweepRequest(
@@ -44,6 +53,7 @@ interface Recorded {
   terminals: number[];
   native: number[];
   eve: number[];
+  retention: number[];
   wakeups: number[];
   operatorWakes: number[];
   automated: number[];
@@ -62,6 +72,7 @@ function sweepOptions(overrides: Partial<MaintenanceSweepOptions> = {}) {
     terminals: [],
     native: [],
     eve: [],
+    retention: [],
     wakeups: [],
     operatorWakes: [],
     automated: [],
@@ -112,6 +123,11 @@ function sweepOptions(overrides: Partial<MaintenanceSweepOptions> = {}) {
       Effect.sync(() => {
         recorded.eve.push(now);
         return EVE;
+      }),
+    sweepSandboxRetention: (now) =>
+      Effect.sync(() => {
+        recorded.retention.push(now);
+        return RETAINED;
       }),
     sweepNativeWakeups: (now) =>
       Effect.sync(() => {
@@ -171,6 +187,7 @@ it.effect("a deployment without CRON_SECRET answers unavailable and sweeps nothi
       terminals: [],
       native: [],
       eve: [],
+      retention: [],
       wakeups: [],
       operatorWakes: [],
       automated: [],
@@ -200,6 +217,7 @@ it.effect("a wrong or missing bearer is refused and sweeps nothing", () =>
       terminals: [],
       native: [],
       eve: [],
+      retention: [],
       wakeups: [],
       operatorWakes: [],
       automated: [],
@@ -216,6 +234,7 @@ it.effect("a wrong or missing bearer is refused and sweeps nothing", () =>
       terminals: [],
       native: [],
       eve: [],
+      retention: [],
       wakeups: [],
       operatorWakes: [],
       automated: [],
@@ -237,6 +256,7 @@ it.effect(
       assert.deepEqual(answer.body.terminals, TERMINALS);
       assert.deepEqual(answer.body.nativeSandboxes, NATIVE);
       assert.deepEqual(answer.body.eveSandboxes, EVE);
+      assert.deepEqual(answer.body.sandboxRetention, RETAINED);
       assert.deepEqual(answer.body.nativeWakeups, { delivered: 1, failed: 0 });
       assert.deepEqual(answer.body.operatorWakes, { woken: 1, failed: 0 });
       assert.deepEqual(answer.body.sandboxes, SANDBOXED);
@@ -254,6 +274,7 @@ it.effect(
         terminals: [instant],
         native: [instant],
         eve: [instant],
+        retention: [instant],
         wakeups: [instant],
         operatorWakes: [instant],
         automated: [instant],
