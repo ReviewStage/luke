@@ -292,7 +292,7 @@ function drawn(part: StoredUIMessage["parts"][number]): readonly WireValue[] {
 
 it.layer(getTestDB())("the runner events route", (it) => {
   it.effect(
-    "a call's ask whose line a native runner takes is bound to the turn that took it, as its whole turn where it opened it and from the step it joined at where it joined one under way, before its first step among them, so the call follows that turn",
+    "a call's ask whose line a native runner takes is bound to the turn that took it, as its whole turn where it opened it and from the step it joined at where it joined one under way, before its first step among them, and the turn's first line its whole turn though the harness opened the turn just before naming it, so the call follows that turn",
     () =>
       Effect.gen(function* () {
         const post = yield* standing;
@@ -323,10 +323,11 @@ it.layer(getTestDB())("the runner events route", (it) => {
           ...envelope,
         });
         const batch = [
+          // The harness may open the turn a moment before it names the line that opened it, as Codex does.
+          { type: "system", subtype: "init", ...envelope },
           { type: RUNNER_EVENT.ACCEPTED, uuid: opening },
           // Taken into the turn the first line opened, before its first step.
           { type: RUNNER_EVENT.ACCEPTED, uuid: early },
-          { type: "system", subtype: "init", ...envelope },
           step("Looking."),
           { type: RUNNER_EVENT.ACCEPTED, uuid: joining },
           step("Found it."),

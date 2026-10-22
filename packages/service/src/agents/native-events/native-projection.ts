@@ -95,6 +95,8 @@ const TurnSchema = Schema.Struct({
   told: Schema.Number,
   /** How many steps the turn has opened. */
   steps: Schema.Number,
+  /** Whether a line of Luke's was already taken into the turn, so a later one joined it; absent before the first. */
+  taken: Schema.optionalKey(Schema.Boolean),
   step: Schema.optionalKey(StepSchema),
   /** The calls the turn holds, by id, under the name each is stored under. */
   calls: Schema.Record(Schema.String, Schema.String),
@@ -460,11 +462,14 @@ class Fold {
   fold(moment: NativeMoment): void {
     switch (moment.kind) {
       case NATIVE_MOMENT.LINE_ACCEPTED: {
-        // Note that a line taken into a turn already under way joined it at the steps begun so far, none
-        // among them, which is where a call's ask that joined it is told from and what keeps its Stop its
-        // own, as eve's relay binds one (`brain-host/relay.ts`); only the line that opens the turn has none.
-        const joined = this.state.turn?.steps;
+        // Note that a line taken into a turn another line already opened joined it at the steps begun so
+        // far, none among them, which is where a call's ask that joined it is told from and what keeps its
+        // Stop its own, as eve's relay binds one (`brain-host/relay.ts`). The turn's first line has none,
+        // though the harness may have opened the turn a moment before it named the line (Codex does).
+        const before = this.state.turn;
+        const joined = before?.taken === true ? before.steps : undefined;
         const turn = this.turn();
+        this.#setTurn({ ...turn, taken: true });
         this.writes.push({
           kind: NATIVE_WRITE.TAKE_LINE,
           turnId: turn.id,
