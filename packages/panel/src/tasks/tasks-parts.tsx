@@ -79,7 +79,10 @@ function CallStatusLines({
           <ThinkingDots />
           {brain === undefined ? null : (
             // Note that this keeps the system's title, because the floating call window is too short for a pill.
-            <span
+            <Text
+              as={TEXT_ELEMENT.SPAN}
+              variant={TEXT_VARIANT.INHERIT}
+              truncate
               className="call-backend-part"
               data-part="brain"
               title={titled ? brain.action : undefined}
@@ -90,7 +93,7 @@ function CallStatusLines({
               ) : (
                 <span className="call-backend-action">{brain.action}</span>
               )}
-            </span>
+            </Text>
           )}
           {notes ? (
             <Text
