@@ -7,6 +7,7 @@ import {
   isPageTab,
   isSubagentTab,
   isTerminalTab,
+  isTranscriptTab,
   pullRequestLabelOf,
   TAB_WORDS,
 } from "@luke/ui/tab-strip-model";
@@ -47,6 +48,12 @@ function sideTabLabel(tab: SidePanelTab, tasks: StepTitleTasks): string {
   if (isMacTerminalTab(tab)) return TAB_WORDS.MAC_TERMINAL;
   if (isBrowserTab(tab) || isCloudBrowserTab(tab)) return TAB_WORDS.BROWSER;
   if (isSubagentTab(tab)) return "Worker";
+  if (isTranscriptTab(tab)) {
+    const agent = tasks.agents.agents?.find((each) => each.id === tab.transcript);
+    return agent === undefined
+      ? TAB_WORDS.CODING_AGENT
+      : (mainTabLabel({ agent: agent.id }, tasks.agents) ?? TAB_WORDS.CODING_AGENT);
+  }
   return SIDE_PANEL_TAB_KIND[tab].label;
 }
 

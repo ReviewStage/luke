@@ -54,6 +54,7 @@ import { ACT_KIND } from "@luke/host/acts";
 import type { AppInboxTaskHolding, AppInboxTasklessItem } from "@luke/host/app-state";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { DocumentIcon } from "@luke/ui";
+import { isTranscriptTab } from "@luke/ui/tab-strip-model";
 import type { TaskMark } from "@luke/ui/tasks-model";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
 import { Effect, Schema } from "effect";
@@ -460,6 +461,8 @@ afterEach(() => {
 interface Asked {
   readonly shownTasks: string[];
   readonly shownAgents: [string, string][];
+  /** The agents whose transcripts it was asked to show beside the item, as the panel's preview. */
+  readonly previewedAgents: string[];
   /** The automations whose pages it was asked to open. */
   readonly shownAutomations: string[];
   /** How many times it was asked to close. */
@@ -500,6 +503,7 @@ function mount(
   const asked: Asked = {
     shownTasks: [],
     shownAgents: [],
+    previewedAgents: [],
     shownAutomations: [],
     closed: 0,
     marks: [],
@@ -532,7 +536,12 @@ function mount(
       workspace: listedWorkspace,
       tasks: listed,
       listRead,
-      sidePanel: sidePanel ?? tasksControl().sidePanel,
+      sidePanel: sidePanel ?? {
+        ...tasksControl().sidePanel,
+        onPreview: (tab) => {
+          if (isTranscriptTab(tab)) asked.previewedAgents.push(tab.transcript);
+        },
+      },
       inbox: [
         { taskId: BILLING.id, items: [waitingOf(THRESHOLD)] },
         { taskId: INVITES.id, items: [waitingOf(EXPIRY)] },
@@ -1963,7 +1972,7 @@ test("a form's select wears the Recommended badge on the option the agent recomm
   assert.deepEqual(readSegmented(segmentedGroup(pane, "Severity")).options, ["Low", "High"]);
 });
 
-test("the pane's crumbs lead with their tabs' glyphs, the plan's document and the agent's mark, and open the item's plan and its agent's tab, each leaving the Inbox, with no other way out in its bar", async () => {
+test("the pane's crumbs lead with their tabs' glyphs, the plan's document and the agent's mark, and open the item's plan, leaving the Inbox, and its agent's transcript beside the item, with no other way out in its bar", async () => {
   const { page, asked } = mount();
   await settle();
   const crumbs = [
@@ -1993,7 +2002,8 @@ test("the pane's crumbs lead with their tabs' glyphs, the plan's document and th
   act(() => crumbs[0]?.click());
   act(() => crumbs[1]?.click());
   assert.deepEqual(asked.shownTasks, [BILLING.id]);
-  assert.deepEqual(asked.shownAgents, [[BILLING.id, AGENT.id]]);
+  assert.deepEqual(asked.previewedAgents, [AGENT.id], "the agent reads beside the item");
+  assert.deepEqual(asked.shownAgents, []);
 });
 
 /** What an intersection observer reports of the heading it watches: in the thread's view, or scrolled up past its top. */
@@ -2336,7 +2346,7 @@ function wearsAgentTile(element: Element): boolean {
   return element.querySelector('.actor-mark[data-kind="agent"]') !== null;
 }
 
-test("the thread names its agent as one button wherever it does, its question's comment and the line saying an answer was sent to it: each hangs the agent's tab's card, which offers no Open agent, and opens its tab, leaving the Inbox", async () => {
+test("the thread names its agent as one button wherever it does, its question's comment and the line saying an answer was sent to it: each hangs the agent's tab's card, which offers no Open agent, and opens its transcript beside the item", async () => {
   const { page, asked } = mount();
   await settle();
   const [comment, ...more] = threadRefs(page);
@@ -2353,7 +2363,8 @@ test("the thread names its agent as one button wherever it does, its question's 
   assert.deepEqual(standingCard(), ["Alerts", undefined]);
   assert.deepEqual(openings("[data-tab-card]"), [], "the name is the way to the tab");
   act(() => comment.click());
-  assert.deepEqual(asked.shownAgents, [[BILLING.id, AGENT.id]]);
+  assert.deepEqual(asked.previewedAgents, [AGENT.id], "the agent reads beside the item");
+  assert.deepEqual(asked.shownAgents, []);
 
   act(() => rowNamed(page, "How is a failed email retried?").click());
   await settle();
@@ -2367,13 +2378,11 @@ test("the thread names its agent as one button wherever it does, its question's 
   assert.deepEqual(standingCard(), ["Alerts", undefined]);
   assert.deepEqual(openings("[data-tab-card]"), []);
   act(() => sent.click());
-  assert.deepEqual(asked.shownAgents, [
-    [BILLING.id, AGENT.id],
-    [BILLING.id, AGENT.id],
-  ]);
+  assert.deepEqual(asked.previewedAgents, [AGENT.id, AGENT.id]);
+  assert.deepEqual(asked.shownAgents, []);
 });
 
-test("an archived agent is still named by its name, its card saying it was archived, and an agent the plan does not list goes by Coding agent, its card saying it is not found; each opens its tab, which shows the plan where its tab is gone", async () => {
+test("an archived agent is still named by its name, its card saying it was archived, and an agent the plan does not list goes by Coding agent, its card saying it is not found; each opens its tab on its task, which shows the plan where its tab is gone, an agent the task does not list being drawn there alone", async () => {
   listedAgents = [{ ...AGENT, status: CODING_AGENT_STATUS.CANCELLED, archivedAt: 4_000 }];
   let { page, asked } = mount();
   await settle();
@@ -2399,7 +2408,9 @@ test("an archived agent is still named by its name, its card saying it was archi
   reach(named);
   assert.deepEqual(standingCard(), ["Coding agent", "Not found"]);
   act(() => named.click());
+  // An agent the task does not list, as an archived one, is drawn on its task alone, so its name goes there.
   assert.deepEqual(asked.shownAgents, [[BILLING.id, AGENT.id]]);
+  assert.deepEqual(asked.previewedAgents, []);
 });
 
 test("an item's row hangs the thread's card beside it, as a sidebar task's row hangs its task's, its tile hanging none of its own: its task, its title, where it stands, how it ended, and the agent that asked at its foot with the spinner while it works; a press on the card chooses nothing, and a press on the row chooses the item", async () => {
@@ -5424,7 +5435,7 @@ test("an open item's box still answers it: its note goes as the answer and never
   assert.deepEqual(messages, []);
 });
 
-test("a thread read cut to its latest messages says the earlier ones are in the agent's tab, the agent's name opening it", async () => {
+test("a thread read cut to its latest messages says the earlier ones are in the agent's tab, the agent's name opening its transcript beside the item", async () => {
   const long: InboxItem = {
     ...RETRY,
     messages: Array.from({ length: INBOX_BOUNDS.MAX_MESSAGES_READ }, (_, at) =>
@@ -5451,7 +5462,8 @@ test("a thread read cut to its latest messages says the earlier ones are in the 
   assert.equal(wordsOf(earlier), "Earlier messages are in Alerts’s tab");
   assert.equal(threadOf(page)[1]?.[0], "earlier", "the line stands before the messages");
   act(() => earlier.querySelector<HTMLButtonElement>("button")?.click());
-  assert.deepEqual(asked.shownAgents, [[BILLING.id, AGENT.id]]);
+  assert.deepEqual(asked.previewedAgents, [AGENT.id], "the agent reads beside the item");
+  assert.deepEqual(asked.shownAgents, []);
 });
 
 test("an answer left unsent on an item a teammate answers meanwhile is let go rather than becoming a message, and a message being written on a settled item outlasts the reads after it", async () => {

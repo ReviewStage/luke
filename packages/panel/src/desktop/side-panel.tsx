@@ -43,6 +43,7 @@ import {
   isPageTab,
   isSubagentTab,
   isTerminalTab,
+  isTranscriptTab,
   type PageStripTab,
   type StripTab,
   type SubagentStripTab,
@@ -836,8 +837,23 @@ function stripTabs(input: {
       },
     ];
   });
+  // An agent's transcript beside the Inbox wears the agent's tab as its column draws it.
+  const transcriptTabs = panel.strip.filter(isTranscriptTab).flatMap((tab) => {
+    const agent = agents.agents?.find((each) => each.id === tab.transcript);
+    if (agent === undefined) return [];
+    return [
+      {
+        tab,
+        look: look(tab, {
+          ...tabLook({ kind: TAB_KIND.AGENT, name: agentTabLabel(agent, models), agent }),
+        }),
+        close: () => panel.onClose(tab),
+      },
+    ];
+  });
   return [
     ...fixed,
+    ...transcriptTabs,
     ...subagentTabs,
     ...fileTabs,
     ...changesTabs,
@@ -1333,6 +1349,7 @@ function TabContent({
   plan,
   inbox,
   chat,
+  transcript,
   onTabActions,
   onRunOnMac,
 }: {
@@ -1394,6 +1411,8 @@ function TabContent({
   inbox: React.ReactNode;
   /** The task's Chat, its channel, drawn by the task's page on the same terms. */
   chat: React.ReactNode;
+  /** An agent's transcript and composer, drawn by the panel's holder: the Inbox's, beside an item. */
+  transcript: ((agentId: string) => React.ReactNode) | undefined;
   /** Hears what a tab's body offers its toolbar's ⋯, under the tab it is drawn for (`useHandedTabActions`). */
   onTabActions: (tab: SidePanelTab, actions: MenuAction[] | undefined) => void;
   /** Runs an agent's branch in a terminal of this Mac in this panel, which its Pull request tab's Run offers; none where no repository is known or the platform has no Mac terminal. */
@@ -1401,6 +1420,7 @@ function TabContent({
 }): React.JSX.Element {
   const { act } = useAct();
   const directory = useMemberDirectory();
+  if (isTranscriptTab(tab)) return <>{transcript?.(tab.transcript)}</>;
   if (isMacTerminalTab(tab)) {
     return <MacTerminalTab key={tab.macTerminal} tab={tab} />;
   }
@@ -1828,6 +1848,7 @@ export function SidePanel({
   task,
   inbox,
   chat,
+  transcript,
 }: SidePanelDrawing & {
   panel: SidePanelControl;
   /** The tabs holding something that arrived while another was shown, each in semibold until it is shown. */
@@ -1869,6 +1890,8 @@ export function SidePanel({
     | undefined;
   /** The task's Chat, its channel, which its Chat tab shows; none where Chat is off or beside anything but a task's page. */
   chat?: React.ReactNode;
+  /** An agent's transcript and composer, which its transcript tab shows beside the Inbox; none elsewhere, where the agent's column shows them. */
+  transcript?: ((agentId: string) => React.ReactNode) | undefined;
 }): React.JSX.Element {
   // The one slot the bar keeps for the chosen tab's ⋯, drawn there from the tab (`strip-tabs.tsx`).
   const [actionsSlot, setActionsSlot] = useState<HTMLElement | null>(null);
@@ -1990,23 +2013,25 @@ export function SidePanel({
   const label =
     tab === undefined
       ? undefined
-      : isSubagentTab(tab)
-        ? subagents.find((each) => sameTab(each.tab, tab))?.label
-        : isFileTab(tab)
-          ? tab.file
-          : isChangesTab(tab)
-            ? changesLook(tab, agents).label
-            : isPageTab(tab)
-              ? pageTabs.find((each) => sameTab(each.tab, tab))?.line.title
-              : isTerminalTab(tab)
-                ? TAB_WORDS.TERMINAL
-                : isMacTerminalTab(tab)
-                  ? TAB_WORDS.MAC_TERMINAL
-                  : isBrowserTab(tab)
-                    ? (browserTitleOf(browserPages.get(tab.browser)) ?? TAB_WORDS.BROWSER)
-                    : isCloudBrowserTab(tab)
-                      ? cloudBrowserLabel(tab.cloudBrowser)
-                      : tabLook({ kind: TAB_KIND.PANEL, tab, plan: task }).label;
+      : isTranscriptTab(tab)
+        ? (taskAgentLabel(agents, tab.transcript) ?? TAB_WORDS.CODING_AGENT)
+        : isSubagentTab(tab)
+          ? subagents.find((each) => sameTab(each.tab, tab))?.label
+          : isFileTab(tab)
+            ? tab.file
+            : isChangesTab(tab)
+              ? changesLook(tab, agents).label
+              : isPageTab(tab)
+                ? pageTabs.find((each) => sameTab(each.tab, tab))?.line.title
+                : isTerminalTab(tab)
+                  ? TAB_WORDS.TERMINAL
+                  : isMacTerminalTab(tab)
+                    ? TAB_WORDS.MAC_TERMINAL
+                    : isBrowserTab(tab)
+                      ? (browserTitleOf(browserPages.get(tab.browser)) ?? TAB_WORDS.BROWSER)
+                      : isCloudBrowserTab(tab)
+                        ? cloudBrowserLabel(tab.cloudBrowser)
+                        : tabLook({ kind: TAB_KIND.PANEL, tab, plan: task }).label;
   const keys = shown && leaving === PANEL_LEAVING.NONE;
   // The panel's "+" asks for a new shell where the panel already holds the keys.
   const openTerminal = useOpenTerminal(panel, noFocusMove);
@@ -2167,6 +2192,7 @@ export function SidePanel({
               plan={plan}
               inbox={inbox?.body}
               chat={chat}
+              transcript={transcript}
               onTabActions={handTabActions}
               onRunOnMac={macTerminalDoors.onOpenOnMac}
             />

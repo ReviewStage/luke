@@ -69,3 +69,19 @@ test("a file of the task's repository and the task's own page and Pull request t
     undefined,
   );
 });
+
+test("a Luke link to an agent of the item's own task reads beside the item, and one to another task's agent, or to an agent on no task, is the window's to open", () => {
+  assert.deepEqual(
+    inboxPanelTarget(`https://tryluke.dev/acme/plan/${TASK}/agent/${AGENT}`, PLACE),
+    {
+      kind: INBOX_PANEL_TARGET.AGENT,
+      agentId: AGENT,
+    },
+  );
+  const other = "5b7d9f1a-3c5e-4a7b-9d1f-2b4c6d8e0f1a";
+  assert.equal(
+    inboxPanelTarget(`https://tryluke.dev/acme/plan/${other}/agent/${AGENT}`, PLACE),
+    undefined,
+  );
+  assert.equal(inboxPanelTarget(`https://tryluke.dev/acme/agent/${AGENT}`, PLACE), undefined);
+});

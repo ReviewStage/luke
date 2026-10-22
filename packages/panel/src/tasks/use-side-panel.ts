@@ -17,6 +17,7 @@ import {
   isPageTab,
   isSubagentTab,
   isTerminalTab,
+  isTranscriptTab,
   type MacTerminalStripTab,
   movedOrder,
   openedOrder,
@@ -28,6 +29,7 @@ import {
   stampedViewed,
   TAB_WORDS,
   type TerminalStripTab,
+  type TranscriptStripTab,
   type ViewedAt,
   viewedLast,
   withoutViewedAt,
@@ -218,6 +220,7 @@ export type FixedSidePanelTab = (typeof SIDE_PANEL_TAB)[keyof typeof SIDE_PANEL_
 /** A tab of the panel: one of the fixed kinds, one subagent's, one file's, one agent's Changes or Terminal, one page's, a Browser tab, or one of an agent's cloud Browser tabs. */
 export type SidePanelTab =
   | FixedSidePanelTab
+  | TranscriptStripTab
   | SubagentStripTab
   | FileStripTab
   | ChangesStripTab
@@ -491,6 +494,8 @@ interface HeldState extends Omit<SidePanelState, "tabs" | "tab" | "tasks" | "pin
   readonly tabs: readonly FixedSidePanelTab[];
   readonly tab?: SidePanelTab | undefined;
   readonly subagents: readonly SubagentStripTab[];
+  /** The open agents' transcript tabs, which a panel beside the Inbox draws, by agent, in the order opened. */
+  readonly transcripts: readonly TranscriptStripTab[];
   readonly files: readonly OpenFile[];
   /** The open page tabs, by page, in the order opened. */
   readonly pages: readonly PageStripTab[];
@@ -973,6 +978,10 @@ function withTab(held: HeldState, tab: SidePanelTab, taskId: string | undefined)
     isPageTab(tab) && !held.pages.some((each) => sameTab(each, tab))
       ? [...held.pages, tab]
       : held.pages;
+  const transcripts =
+    isTranscriptTab(tab) && !held.transcripts.some((each) => sameTab(each, tab))
+      ? [...held.transcripts, tab]
+      : held.transcripts;
   const terminals =
     isTerminalTab(tab) && !held.terminals.some((each) => sameTab(each, tab))
       ? [...held.terminals, tab]
@@ -990,11 +999,22 @@ function withTab(held: HeldState, tab: SidePanelTab, taskId: string | undefined)
     subagents === held.subagents &&
     files === held.files &&
     pages === held.pages &&
+    transcripts === held.transcripts &&
     terminals === held.terminals &&
     lastTerminals === held.lastTerminals &&
     chosen === held.tab
     ? held
-    : { ...opened, subagents, files, pages, terminals, lastTerminals, macTerminals, tab: chosen };
+    : {
+        ...opened,
+        subagents,
+        transcripts,
+        files,
+        pages,
+        terminals,
+        lastTerminals,
+        macTerminals,
+        tab: chosen,
+      };
 }
 
 /** An inbox read with nothing waiting, or never read. */
@@ -1203,6 +1223,18 @@ export function drawsChanges(tab: ChangesStripTab, drawn: Pick<DrawnTabs, "taskA
  * Changes tab, because a Terminal tab is kept across no launch, so nothing
  * stands in for it meanwhile, and the tabs are held across the tasks.
  */
+/**
+ * Whether the panel draws an agent's transcript tab: beside the Inbox alone,
+ * where the item's task's agents stand in no column of their own, once its
+ * agents are read and the agent is among them.
+ */
+export function drawsTranscript(
+  tab: TranscriptStripTab,
+  drawn: Pick<DrawnTabs, "taskAgents" | "task">,
+): boolean {
+  return drawn.task.bare === true && drawn.taskAgents?.includes(tab.transcript) === true;
+}
+
 export function drawsTerminal(
   tab: TerminalStripTab,
   drawn: Pick<DrawnTabs, "taskAgents">,
@@ -1266,6 +1298,7 @@ function drawnSubagents(held: HeldState, drawn: DrawnTabs): readonly SubagentStr
 function stripOf(held: HeldState, drawn: DrawnTabs): readonly SidePanelTab[] {
   const kinds = [
     ...drawnFixed(held, drawn.task),
+    ...held.transcripts.filter((each) => drawsTranscript(each, drawn)),
     ...drawnSubagents(held, drawn),
     ...drawnFiles(held, drawn).map((file) => ({ file })),
     ...drawnChanges(held, drawn),
@@ -1324,29 +1357,31 @@ function withoutTab(held: HeldState, tab: SidePanelTab, drawn: DrawnTabs): HeldS
     ? drawnFixed(held, drawn.task).includes(tab)
       ? withChoice(held, drawn.task.id, tab, false)
       : undefined
-    : isSubagentTab(tab)
-      ? held.subagents.some((each) => sameTab(each, tab))
-        ? { ...held, subagents: held.subagents.filter((each) => !sameTab(each, tab)) }
-        : undefined
-      : isChangesTab(tab)
-        ? withTaskTabs(held, drawn.task.id, (was) => ({
-            ...was,
-            changes: (was.changes ?? NO_CHANGES).filter((each) => !sameTab(each, tab)),
-          }))
-        : isPageTab(tab)
-          ? { ...held, pages: held.pages.filter((each) => !sameTab(each, tab)) }
-          : isTerminalTab(tab)
-            ? { ...held, terminals: held.terminals.filter((each) => !sameTab(each, tab)) }
-            : isMacTerminalTab(tab)
-              ? { ...held, macTerminals: held.macTerminals.filter((each) => !sameTab(each, tab)) }
-              : isBrowserTab(tab)
-                ? { ...held, browsers: held.browsers.filter((each) => !sameTab(each.tab, tab)) }
-                : isCloudBrowserTab(tab)
-                  ? {
-                      ...held,
-                      closedCloudBrowsers: [...held.closedCloudBrowsers, tab.cloudBrowser],
-                    }
-                  : { ...held, files: held.files.filter((each) => each.path !== tab.file) };
+    : isTranscriptTab(tab)
+      ? { ...held, transcripts: held.transcripts.filter((each) => !sameTab(each, tab)) }
+      : isSubagentTab(tab)
+        ? held.subagents.some((each) => sameTab(each, tab))
+          ? { ...held, subagents: held.subagents.filter((each) => !sameTab(each, tab)) }
+          : undefined
+        : isChangesTab(tab)
+          ? withTaskTabs(held, drawn.task.id, (was) => ({
+              ...was,
+              changes: (was.changes ?? NO_CHANGES).filter((each) => !sameTab(each, tab)),
+            }))
+          : isPageTab(tab)
+            ? { ...held, pages: held.pages.filter((each) => !sameTab(each, tab)) }
+            : isTerminalTab(tab)
+              ? { ...held, terminals: held.terminals.filter((each) => !sameTab(each, tab)) }
+              : isMacTerminalTab(tab)
+                ? { ...held, macTerminals: held.macTerminals.filter((each) => !sameTab(each, tab)) }
+                : isBrowserTab(tab)
+                  ? { ...held, browsers: held.browsers.filter((each) => !sameTab(each.tab, tab)) }
+                  : isCloudBrowserTab(tab)
+                    ? {
+                        ...held,
+                        closedCloudBrowsers: [...held.closedCloudBrowsers, tab.cloudBrowser],
+                      }
+                    : { ...held, files: held.files.filter((each) => each.path !== tab.file) };
   if (closed === undefined) return held;
   const forgotten = withoutViewed(closed, drawn.task.id, tab);
   const left = stripOf(forgotten, drawn);
@@ -1620,6 +1655,7 @@ function settled(state: SidePanelState): HeldState {
     tab: tab === undefined || !panelChoice(tab) ? undefined : tab,
     width: clampWidth(state.width),
     subagents: [],
+    transcripts: [],
     files: [],
     pages: [],
     terminals: [],
@@ -1732,6 +1768,7 @@ function shownTab(
   if (kept === undefined) return tabs[0];
   if (isFixedTab(kept)) return tabs.includes(kept) ? kept : tabs[0];
   if (isFileTab(kept)) return drawn.files.includes(kept.file) ? kept : tabs[0];
+  if (isTranscriptTab(kept)) return drawsTranscript(kept, drawn) ? kept : tabs[0];
   if (isChangesTab(kept)) return changes.some((each) => sameTab(each, kept)) ? kept : tabs[0];
   if (isPageTab(kept)) return drawn.pages.includes(kept.page) ? kept : tabs[0];
   if (isTerminalTab(kept)) return drawsTerminal(kept, drawn) ? kept : tabs[0];

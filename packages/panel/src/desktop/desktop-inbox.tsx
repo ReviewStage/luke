@@ -3,7 +3,7 @@ import { TASK_CALL_FAILURE, type TasksFileAnswer } from "@luke/features/tasks-vi
 import { ACT_KIND } from "@luke/host/acts";
 import { EmptyState } from "@luke/ui";
 import { INBOX_PANEL_TARGET, inboxPanelTarget } from "@luke/ui/inbox-panel-link";
-import type { StripTab } from "@luke/ui/tab-strip-model";
+import { isAgentTab, isTranscriptTab, type StripTab, sameTab } from "@luke/ui/tab-strip-model";
 import { InboxIcon } from "lucide-react";
 import { useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import type { useAct } from "../act.js";
@@ -14,6 +14,7 @@ import { FIND_PAGE, PageFind } from "../find-in-tab.js";
 import { MemberDirectory } from "../member-directory.js";
 import { NOT_FOUND_THING, NotFound } from "../not-found.js";
 import { pressedWithCommand } from "../press-intent.js";
+import { agentTabLabel } from "../tasks/coding-agent-model.js";
 import { INBOX_COLUMNS, useInboxColumns } from "../tasks/inbox-columns.js";
 import { InboxList, InboxListNote, ItemMark, newTaskAction } from "../tasks/inbox-list.js";
 import {
@@ -30,6 +31,8 @@ import { InboxPane, type InboxPaneDoors } from "../tasks/inbox-pane.js";
 import { SkillFiles } from "../tasks/skill-chip.js";
 import {
   type TasklessPlace,
+  TaskMentions,
+  type TaskMentionsValue,
   tasklessMentions,
   useMentionAgentsReader,
 } from "../tasks/task-mentions.js";
@@ -41,6 +44,8 @@ import { useNodOnOpen, useReadOnOpen } from "../tasks/use-inbox-read-marks.js";
 import { type OpenHere, OpenHereProvider, useOpenLink } from "../tasks/use-open-link.js";
 import { PULL_REQUEST_VIEW, type SidePanelControl } from "../tasks/use-side-panel.js";
 import { AUTOMATIONS_PAGE, type InboxChoice, type TasksControl } from "../tasks/use-tasks-tab.js";
+import { useAgentCallDoors } from "./agent-actions.js";
+import { AgentPane } from "./main-tabs.js";
 import {
   COLUMN,
   changesTabOf,
@@ -48,6 +53,7 @@ import {
   SidePanel,
   type SidePanelDrawing,
   showPullRequest,
+  taskCards,
   useColumnFocus,
   useSidePanelDrawing,
 } from "./side-panel.js";
@@ -337,6 +343,14 @@ function InboxShown({
         if (going !== undefined) tasks.onShowPanelTab(going, { changes: target.agentId });
         else sidePanel.onPreview({ changes: target.agentId });
         return true;
+      case INBOX_PANEL_TARGET.AGENT:
+        // An agent of the item's task reads beside the item as the panel's preview; pressed with ⌘, or archived, which its task alone draws, it goes to the task on its tab.
+        if (going === undefined && named.agentIds?.includes(target.agentId) === true) {
+          sidePanel.onPreview({ transcript: target.agentId });
+          return true;
+        }
+        if (taskId !== undefined) tasks.onShowAgent(taskId, target.agentId);
+        return true;
       case INBOX_PANEL_TARGET.PULL_REQUEST:
         if (going !== undefined) {
           // The tab is the one the plain press would open, the pull request's own where it is another than the agent's.
@@ -469,6 +483,7 @@ function InboxShown({
                               openLink: openItemLink,
                               now,
                               panelFor,
+                              besideAgents: named.agentIds,
                             }),
                             onMark: markItem,
                             onClose: closeItem,
@@ -491,6 +506,7 @@ function InboxShown({
                 pages={pages}
                 agents={named}
                 views={views}
+                mentions={mentions}
               />
             ) : null}
           </div>
@@ -547,6 +563,7 @@ function InboxSidePanel({
   pages,
   agents,
   views,
+  mentions,
 }: {
   tasks: TasksControl;
   drawing: SidePanelDrawing & { panel: SidePanelControl };
@@ -558,17 +575,60 @@ function InboxSidePanel({
   pages: TasksControl["inboxView"]["pages"];
   agents: CodingAgentsControl;
   views: TabViews;
+  /** What the item's box offers an `@`, which the composer of an agent's transcript beside it offers too. */
+  mentions: TaskMentionsValue | undefined;
 }): React.JSX.Element {
   const { panel } = drawing;
   const openTarget = (target: ToolTarget) => {
     if (target.kind === TOOL_TARGET.PAGE) return panel.onPreview({ page: target.page });
     if (target.kind === TOOL_TARGET.TASK) return tasks.onShowTask(target.task);
     if (target.kind === TOOL_TARGET.AGENT) {
-      return taskId === undefined
-        ? tasks.agentView.onOpen(target.agent)
-        : tasks.onShowAgent(taskId, target.agent);
+      if (taskId === undefined) return tasks.agentView.onOpen(target.agent);
+      // An agent of the item's task reads beside the item as the panel's preview; pressed with ⌘, it goes to the task.
+      if (!pressedWithCommand() && agents.agentIds?.includes(target.agent) === true) {
+        return panel.onPreview({ transcript: target.agent });
+      }
+      return tasks.onShowAgent(taskId, target.agent);
     }
     if (target.kind !== TOOL_TARGET.INBOX && taskId !== undefined) tasks.onShowTask(taskId);
+  };
+  // An agent's transcript beside the item reads and writes as its tab in the task's column does,
+  // through the agents the Inbox read of the item's task; its call starts on that task.
+  const calls = useAgentCallDoors(tasks.calls, { taskId, archived: false });
+  const cards = taskCards({
+    agents,
+    held: views.held,
+    chosen: (opened) =>
+      isAgentTab(opened) && panel.tab !== undefined && isTranscriptTab(panel.tab)
+        ? panel.tab.transcript === opened.agent
+        : panel.tab !== undefined && sameTab(opened, panel.tab),
+    shownCode: [],
+  });
+  const transcript = (agentId: string) => {
+    const agent = agents.agents?.find((each) => each.id === agentId);
+    return (
+      <TaskMentions value={mentions}>
+        <AgentPane
+          call={calls}
+          label={agent === undefined ? undefined : agentTabLabel(agent, agents.models)}
+          tabbed={false}
+          tab={{ agent: agentId }}
+          agents={agents}
+          shown={tasks.shown}
+          views={views}
+          // Note that a worker is drawn beside its agent's column alone, so its row goes to the task.
+          onOpenDelegation={(agent, callId, _task, status) => {
+            views.onWorkerStatus(callId, status);
+            if (taskId !== undefined) tasks.onShowAgent(taskId, agent);
+          }}
+          onOpenPullRequest={(agent) =>
+            showPullRequest(panel, agents, agent, PULL_REQUEST_VIEW.CONVERSATION)
+          }
+          onOpenTarget={openTarget}
+          cards={cards}
+        />
+      </TaskMentions>
+    );
   };
   return (
     <SidePanel
@@ -588,6 +648,7 @@ function InboxSidePanel({
       shown={tasks.shown}
       focused={focused}
       onOpenTarget={openTarget}
+      transcript={taskId === undefined ? undefined : transcript}
     />
   );
 }
@@ -608,6 +669,8 @@ function paneDoors(
     now: number;
     /** The task, or the agent, the panel beside the Inbox stands for. */
     panelFor: string | undefined;
+    /** The task's agents whose transcripts the panel beside the Inbox draws: its agents not archived, once read. */
+    besideAgents: readonly string[] | undefined;
   },
 ): InboxPaneDoors {
   if (holder.kind === INBOX_HOLDER.TASK) {
@@ -615,7 +678,14 @@ function paneDoors(
     return {
       onOpenHolder: () => tasks.onShowTask(task.id),
       taskCard: taskCardOf(tasks, task, seams.now),
-      onOpenAgent: (agentId) => tasks.onShowAgent(task.id, agentId),
+      // An agent the item names reads beside it, as a link to it does; pressed with ⌘, it goes to the task on its tab.
+      // Note that an archived agent's transcript is drawn on its task alone, so it goes there.
+      onOpenAgent: (agentId) =>
+        seams.panelFor === task.id &&
+        seams.besideAgents?.includes(agentId) === true &&
+        !pressedWithCommand()
+          ? tasks.sidePanel.onPreview({ transcript: agentId })
+          : tasks.onShowAgent(task.id, agentId),
       openLink: seams.openLink,
       code: {
         repository: task.repository,
