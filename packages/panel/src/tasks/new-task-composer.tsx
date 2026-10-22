@@ -171,12 +171,18 @@ function filedName(issueName: string | undefined, said: string): string {
 }
 
 /** What one Agent-mode press asked beside its key: the task's name, repository, workspace, and issues, and the agent's words, files, and model. */
-interface AgentAsk {
+export interface AgentAsk {
   readonly name: string;
   readonly repository: string | null;
   readonly workspaceId: string | undefined;
   readonly issues: readonly TaskIssueChoice[];
   readonly agent: Omit<NewTaskAgent, "idempotencyKey">;
+}
+
+/** One Agent-mode press: what it asked, and the key it carried. */
+export interface NewTaskPress {
+  readonly ask: AgentAsk;
+  readonly key: string;
 }
 
 /** Whether two presses link the same issues, in the same order and with the same relations. */
@@ -216,8 +222,9 @@ function newTaskPlace(workspaceId: string | undefined): DraftPlace {
 /** The account's default model as read, and the chip's pick, which runs this one agent and leaves the default as it stands. */
 function useDefaultChoice(
   newTask: TasksControl["newTask"],
+  kept: ModelChoice | undefined,
 ): readonly [ModelChoice | undefined, (next: ModelChoice) => void] {
-  const [choice, setChoice] = useState<ModelChoice | undefined>(undefined);
+  const [choice, setChoice] = useState<ModelChoice | undefined>(kept);
   // Note that the control is read through a ref, because the tab hands a
   // new one on every render and the default is read once, as the card opens.
   const latest = useRef(newTask);
@@ -268,14 +275,20 @@ export function NewTaskComposer({
     writer.update(newTaskPlace(workspaceId), () => loose);
     writer.update(newTaskPlace(undefined), () => EMPTY_DRAFT);
   }, [workspaceId, loose, writer]);
+  // A card opened again on a start refused after it closed starts where it was left, saying why.
+  const refused = newTask.preset?.refused;
   // The GitHub and Linear issues picked from the Issue chip, in the order picked.
-  const [picks, setLinks] = useState<readonly NewTaskLink[]>([]);
-  const [chosen, setChosen] = useState<string | null | undefined>(newTask.preset?.repository);
-  const [choice, choose] = useDefaultChoice(newTask);
+  const [picks, setLinks] = useState<readonly NewTaskLink[]>(refused?.card.links ?? []);
+  const [chosen, setChosen] = useState<string | null | undefined>(
+    refused === undefined ? newTask.preset?.repository : refused.card.repository,
+  );
+  const [choice, choose] = useDefaultChoice(newTask, refused?.card.choice);
   const [starting, setStarting] = useState(false);
-  const [note, setNote] = useState<Failure | undefined>(undefined);
+  const [note, setNote] = useState<Failure | undefined>(
+    refused === undefined ? undefined : { reason: FAILURE_REASON.OTHER, text: refused.note },
+  );
   // The last agent press's key and what it asked, until a start lands.
-  const pressed = useRef<{ ask: AgentAsk; key: string } | undefined>(undefined);
+  const pressed = useRef<NewTaskPress | undefined>(refused?.card.press);
   // How many times ⌘L asked the Issue chip to open its menu.
   const [issueAsks, setIssueAsks] = useState(0);
   const { linearIssuesIn, githubIssuesIn } = newTask;
@@ -362,7 +375,10 @@ export function NewTaskComposer({
     );
   };
 
-  const begin = (name: string, handing: Pick<NewTaskStart, "handed" | "brief" | "status"> = {}) => {
+  const begin = (
+    name: string,
+    handing: Pick<NewTaskStart, "handed" | "brief" | "status" | "card"> = {},
+  ) => {
     if (starting) return;
     setStarting(true);
     onStarting?.(true);
@@ -402,8 +418,12 @@ export function NewTaskComposer({
     };
     const held = pressed.current;
     const key = held !== undefined && sameAsk(held.ask, ask) ? held.key : crypto.randomUUID();
-    pressed.current = { ask, key };
-    begin(name, { handed: { idempotencyKey: key, ...ask.agent } });
+    const press = { ask, key };
+    pressed.current = press;
+    begin(name, {
+      handed: { idempotencyKey: key, ...ask.agent },
+      card: { repository, links, choice, press },
+    });
   };
   // ⌘Return on a box with nothing in it starts a bare task: no call and no agent.
   const bare = () => {

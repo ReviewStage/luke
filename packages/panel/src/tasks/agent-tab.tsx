@@ -100,7 +100,7 @@ import { type PublishedDoors, PublishedRow } from "./agent-published.js";
 import { SendingAgent } from "./agent-ref.js";
 import type { AgentServersControl } from "./agent-servers.js";
 import type { HeldTranscript } from "./agent-tab-card.js";
-import { AgentTabSkeleton, TranscriptSkeleton } from "./agent-tab-skeleton.js";
+import { AgentTabSkeleton, ComposerSkeleton, TranscriptSkeleton } from "./agent-tab-skeleton.js";
 import { ArchivedComposerNote } from "./archived-note.js";
 import { CallEndMarker, CallStartMarker } from "./call-card.js";
 import { useChatOn } from "./chat-gate.js";
@@ -138,6 +138,7 @@ import {
   planPayerOf,
   providerOf,
   SENT_LINE_STATE,
+  type SentLine,
   type SpokenMessage,
   settledPlanEdits,
   sidebarCallIds,
@@ -2368,6 +2369,37 @@ type AgentTabProps = AgentTabDoors &
     | { agent: CodingAgentSummary; agentId?: undefined }
     | { agent: CodingAgentSummary | undefined; agentId: string }
   );
+
+/** Nothing to retry on a tab whose agent is not made yet. */
+const NO_RETRY = () => undefined;
+
+/**
+ * The tab of an agent New task is still starting, before the service has
+ * made it: the developer's words as its first line, as the agent's own
+ * transcript will draw them, and its working line saying it is starting,
+ * over the composer's card, which the agent's own tab takes the place of
+ * once the start answers, its first line drawn in the same place.
+ */
+export function StartingAgentTab({ line }: { line: SentLine }): React.JSX.Element {
+  const messages = useMemo(() => agentLines([], [line]), [line]);
+  return (
+    <section className="agent-tab ph-no-capture">
+      <AgentTranscriptView
+        messages={messages}
+        brief={CODING_AGENT_BRIEF.PROMPT}
+        reading={false}
+        failed={false}
+        working
+        sessionStarting
+        onRetry={NO_RETRY}
+        overComposer
+      />
+      <footer className="agent-tab-foot">
+        <ComposerSkeleton />
+      </footer>
+    </section>
+  );
+}
 
 /**
  * An agent's tab, by the agent's id alone: its transcript is followed and

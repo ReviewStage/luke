@@ -42,7 +42,7 @@ export function TranscriptSkeleton({
 }
 
 /** The composer's card in its own frame and size, its field and its row of controls. */
-function ComposerSkeleton(): React.JSX.Element {
+export function ComposerSkeleton(): React.JSX.Element {
   return (
     <div className="agent-composer" aria-hidden="true">
       <div className="prompt-input">
