@@ -15,6 +15,7 @@ import {
   IconButton,
   ScrollArea,
   SearchField,
+  Swatch,
   TextField,
 } from "@luke/ui";
 import {
@@ -227,17 +228,7 @@ function GridChoice({
   onPress: () => void;
 }): React.JSX.Element {
   return (
-    <button
-      type="button"
-      className="section-icon-choice"
-      aria-label={label}
-      aria-pressed={pressed}
-      data-label={label}
-      tabIndex={stop ? 0 : -1}
-      onClick={onPress}
-    >
-      {face}
-    </button>
+    <IconButton icon={face} label={label} pressed={pressed} tabbable={stop} onClick={onPress} />
   );
 }
 
@@ -326,7 +317,7 @@ const EmojiPanel = memo(function EmojiPanel({
                 label={one.name}
                 pressed={chosenEmoji(icon, one.emoji)}
                 stop={one === stop}
-                face={one.emoji}
+                face={<span className="section-emoji-face">{one.emoji}</span>}
                 onPress={() => onIcon({ kind: TASK_SECTION_ICON_KIND.EMOJI, emoji: one.emoji })}
               />
             ))}
@@ -346,13 +337,11 @@ function ColorChoices({
   onColor: (color: TaskSectionIconColor | undefined) => void;
 }): React.JSX.Element {
   const swatch = (label: string, value: TaskSectionIconColor | undefined) => (
-    <button
+    <Swatch
       key={label}
-      type="button"
-      className="section-icon-color"
-      aria-label={label}
-      aria-pressed={color === value}
-      data-icon-color={value}
+      label={label}
+      color={value === undefined ? undefined : `var(--file-icon-${value})`}
+      pressed={color === value}
       onClick={() => onColor(value)}
     />
   );
@@ -387,7 +376,7 @@ function standTabStop(event: React.FocusEvent<HTMLFieldSetElement>): void {
   const focused = event.target;
   if (!(focused instanceof HTMLButtonElement)) return;
   for (const stop of event.currentTarget.querySelectorAll<HTMLButtonElement>(
-    'button[tabindex="0"]',
+    'button:not([tabindex="-1"])',
   )) {
     stop.tabIndex = -1;
   }
@@ -397,7 +386,7 @@ function standTabStop(event: React.FocusEvent<HTMLFieldSetElement>): void {
 /** The name of the choice a pointer or the keyboard rests on, read off the button under it. */
 function restingLabel(event: React.SyntheticEvent): string | undefined {
   if (!(event.target instanceof Element)) return undefined;
-  return event.target.closest<HTMLElement>("[data-label]")?.dataset.label;
+  return event.target.closest("button")?.getAttribute("aria-label") ?? undefined;
 }
 
 /**
@@ -452,7 +441,7 @@ export function SectionIconPicker({
   const toGrid = (event: React.KeyboardEvent<HTMLElement>) => {
     if (event.key !== "ArrowDown" || !(event.target instanceof HTMLInputElement)) return;
     event.preventDefault();
-    grid.current?.querySelector<HTMLButtonElement>('button[tabindex="0"]')?.focus();
+    grid.current?.querySelector<HTMLButtonElement>('button:not([tabindex="-1"])')?.focus();
   };
   return (
     <fieldset className="section-icon-picker" disabled={disabled}>

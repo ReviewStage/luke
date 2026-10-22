@@ -50,6 +50,7 @@ import { SKELETONS_EXAMPLE } from "./examples/skeletons";
 import { SLIDER_EXAMPLE } from "./examples/slider";
 import { SPINNERS_EXAMPLE } from "./examples/spinners";
 import { SPLIT_BUTTONS_EXAMPLE } from "./examples/split-buttons";
+import { SWATCHES_EXAMPLE } from "./examples/swatches";
 import { SWITCHES_EXAMPLE } from "./examples/switches";
 import { TEXT_BUTTONS_EXAMPLE } from "./examples/text-buttons";
 import { TEXT_FIELDS_EXAMPLE } from "./examples/text-fields";
@@ -104,6 +105,7 @@ export const EXAMPLES: readonly Example[] = [
   HOVER_CARDS_EXAMPLE,
   INLINE_EDITS_EXAMPLE,
   INLINE_REFS_EXAMPLE,
+  SWATCHES_EXAMPLE,
   TEXT_BUTTONS_EXAMPLE,
   TEXT_FIELDS_EXAMPLE,
   TEXT_LINKS_EXAMPLE,
