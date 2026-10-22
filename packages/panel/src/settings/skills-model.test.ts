@@ -216,7 +216,7 @@ test("a source installs the ticked skills that may install, and nothing while no
   assert.equal(installRequest({ ...state, preview: undefined, ticked: new Set() }), undefined);
 });
 
-test("text with no description installs once one is typed, and a typed name must follow the rule", () => {
+test("text with no description installs once one within the bound is typed, and a typed name must follow the rule", () => {
   const preview: InstalledSkillPreview = {
     kind: SKILL_PASTE_KIND.TEXT,
     bytes: 40,
@@ -236,6 +236,10 @@ test("text with no description installs once one is typed, and a typed name must
   );
   assert.equal(
     installRequest({ ...state, fill: { name: "PR Style", description: "How PRs read." } }),
+    undefined,
+  );
+  assert.equal(
+    installRequest({ ...state, fill: { name: "pr-style", description: "x".repeat(1025) } }),
     undefined,
   );
   assert.deepEqual(

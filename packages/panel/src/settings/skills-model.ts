@@ -26,6 +26,7 @@ import {
   type SkillPaste,
   type SkillPasteUnsupportedReason,
 } from "@luke/features/skill-paste";
+import { TASK_SKILL_BOUNDS } from "@luke/features/task-wire";
 import { managesWorkspace } from "@luke/features/workspace-role";
 import type { Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
 
@@ -221,7 +222,7 @@ const PROBLEM_WORDS = {
   [INSTALLED_SKILL_PROBLEM.NAME_MISSING]: "No name",
   [INSTALLED_SKILL_PROBLEM.NAME_INVALID]: "Name must be lowercase words joined by hyphens",
   [INSTALLED_SKILL_PROBLEM.DESCRIPTION_MISSING]: "No description",
-  [INSTALLED_SKILL_PROBLEM.DESCRIPTION_TOO_LONG]: "Description too long",
+  [INSTALLED_SKILL_PROBLEM.DESCRIPTION_TOO_LONG]: `Description over ${TASK_SKILL_BOUNDS.MAX_DESCRIPTION_CHARS} characters`,
   [INSTALLED_SKILL_PROBLEM.FRONTMATTER_UNCLOSED]: "Frontmatter never closed",
   [INSTALLED_SKILL_PROBLEM.TOO_LARGE]: `SKILL.md over ${sizeText(SKILL_FILE_BOUNDS.MAX_FILE_BYTES)}`,
   [INSTALLED_SKILL_PROBLEM.CREDENTIAL_SHAPED]: "Holds what looks like a credential",
@@ -389,8 +390,11 @@ export function textProblems(
     if (name === "") left.push(INSTALLED_SKILL_PROBLEM.NAME_MISSING);
     else if (!SKILL_NAME_RULE.test(name)) left.push(INSTALLED_SKILL_PROBLEM.NAME_INVALID);
   }
-  if (problems.includes(INSTALLED_SKILL_PROBLEM.DESCRIPTION_MISSING) && description === "") {
-    left.push(INSTALLED_SKILL_PROBLEM.DESCRIPTION_MISSING);
+  if (problems.includes(INSTALLED_SKILL_PROBLEM.DESCRIPTION_MISSING)) {
+    if (description === "") left.push(INSTALLED_SKILL_PROBLEM.DESCRIPTION_MISSING);
+    else if (description.length > TASK_SKILL_BOUNDS.MAX_DESCRIPTION_CHARS) {
+      left.push(INSTALLED_SKILL_PROBLEM.DESCRIPTION_TOO_LONG);
+    }
   }
   return left;
 }

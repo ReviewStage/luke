@@ -428,3 +428,17 @@ test("Everyone in the workspace is offered to an owner and installs there, and n
   await mountDialog(workspace({ role: WORKSPACE_ROLE.MEMBER }));
   assert.ok(!(document.body.textContent ?? "").includes("Everyone in Stage"));
 });
+
+test("a description typed for one paste is never sent with the next", async () => {
+  await mountDialog();
+  await paste(TEXT);
+  const description = () =>
+    [...document.querySelectorAll<HTMLInputElement>("input")].find(
+      (each) => each.labels?.[0]?.textContent === "Description",
+    ) ?? assert.fail("no description field");
+  typeInto(description(), "How PRs read here.");
+
+  await paste("# Review style\n\nAsk for tests.");
+  assert.equal(description().value, "");
+  assert.equal(button("Install").disabled, true);
+});

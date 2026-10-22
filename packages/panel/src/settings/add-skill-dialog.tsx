@@ -77,6 +77,9 @@ import {
 /** How long the box stands still before the service previews it. */
 const PREVIEW_PAUSE_MS = 400;
 
+/** The name and description fields as a new paste leaves them. */
+const EMPTY_FILL: TextFill = { name: "", description: "" };
+
 /** How the line under the box is drawn: understood with its dot, a problem in the attention tint, or plain while it waits. */
 const LINE_STATE = {
   [DETECTED_TONE.DETECTED]: "connected",
@@ -239,7 +242,7 @@ export function AddSkillDialog({
   const [text, setText] = useState("");
   const [previewed, setPreviewed] = useState<Previewed | undefined>(undefined);
   const [ticked, setTicked] = useState<ReadonlySet<string>>(new Set());
-  const [fill, setFill] = useState<TextFill>({ name: "", description: "" });
+  const [fill, setFill] = useState<TextFill>(EMPTY_FILL);
   const [scope, setScope] = useState<InstalledSkillScope>(INSTALLED_SKILL_SCOPE.PERSONAL);
   const [installing, setInstalling] = useState(false);
   const [refusal, setRefusal] = useState<string | undefined>(undefined);
@@ -340,6 +343,8 @@ export function AddSkillDialog({
               onSubmit={install}
               onChange={(next) => {
                 setText(next);
+                // Note that what was typed beside one paste is never sent with another.
+                if (next !== text) setFill(EMPTY_FILL);
                 setRefusal(undefined);
               }}
             />
