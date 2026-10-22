@@ -2293,22 +2293,6 @@
   cursor: default;
 }
 
-.diff-list-head-row {
-  display: flex;
-  box-sizing: border-box;
-  height: 36px;
-  min-width: 0;
-  align-items: center;
-  gap: var(--luke-space-8);
-  padding: 0 var(--luke-space-12) 0 var(--luke-space-4);
-  font-size: var(--luke-type-caption-size);
-  white-space: nowrap;
-}
-
-.diff-list-head:not([data-collapsed]) > .diff-list-head-row {
-  border-bottom: 1px solid var(--luke-color-border);
-}
-
 /* The file stage-cli's keys stand on is marked as a selected card is: the
    card's own edge, Pierre's file element the header stands in, drawn in the
    selected edge's ink, around the folded header or the whole open file. It
