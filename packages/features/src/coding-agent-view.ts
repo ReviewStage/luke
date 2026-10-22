@@ -29,6 +29,7 @@ import {
   operatorEnsureAnswerSchema,
   operatorEnsureRequestSchema,
 } from "./coding-agent-wire.js";
+import { CONVERSATION_MEDIA_TYPE } from "./conversation-picture-wire.js";
 import { dictationAnswerSchema, dictationRequestSchema } from "./dictation-wire.js";
 import { GITHUB_IMAGE_BOUNDS, GITHUB_IMAGE_TYPE } from "./github-image.js";
 import { githubPullRequestNumberSchema } from "./github-repositories-wire.js";
@@ -753,7 +754,11 @@ export type CodingAgentChatAttachmentParams = typeof codingAgentChatAttachmentPa
  */
 export const codingAgentInboxAttachmentViewSchema = EffectSchema.Union([
   EffectSchema.Struct({
-    contentType: EffectSchema.Literals(Object.values(CODING_AGENT_ATTACHMENT_TYPE)),
+    // A transcript's picture may be a WebM an agent recorded, read through this same view.
+    contentType: EffectSchema.Literals([
+      ...Object.values(CODING_AGENT_ATTACHMENT_TYPE),
+      CONVERSATION_MEDIA_TYPE.WEBM,
+    ]),
     base64: EffectSchema.String,
   }),
   failed,

@@ -420,7 +420,7 @@ function useLiveDoors(
   return useContext(LiveDoors) ?? doors;
 }
 
-/** A chat notice's card, at the moment the window's clock says. */
+/** A chat notice's bubble, from its sender, at the column's left. */
 function NoticeRow({
   message,
   doors,
@@ -428,7 +428,6 @@ function NoticeRow({
   message: CodingAgentMessage;
   doors: ChatNoticeDoors | undefined;
 }): ReactNode {
-  const now = useMinute();
   const live = useLiveDoors({ chat: doors });
   const notice = chatNoticeOf(message);
   if (notice === undefined) return null;
@@ -444,8 +443,8 @@ function NoticeRow({
       notice={notice}
       words={messageWords(message)}
       from={from}
+      sentAt={message.sentAt}
       doors={live?.chat}
-      now={now}
     />
   );
 }

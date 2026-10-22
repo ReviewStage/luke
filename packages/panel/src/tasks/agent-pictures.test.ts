@@ -2,7 +2,10 @@
 
 import assert from "node:assert/strict";
 import type { CodingAgentMessage } from "@luke/features/coding-agent-wire";
-import { PICTURE_OMISSION } from "@luke/features/conversation-picture-wire";
+import {
+  CONVERSATION_MEDIA_TYPE,
+  PICTURE_OMISSION,
+} from "@luke/features/conversation-picture-wire";
 import { INBOX_IMAGE_TYPE } from "@luke/features/inbox-wire";
 import type { PictureAnswer } from "@luke/ui/picture-cache";
 import { MESSAGE_ROLE, type WireRecord, type WireValue } from "@luke/wire";
@@ -19,9 +22,11 @@ import { AGENT_LEAD, AgentMessage } from "./agent-tab.js";
  * one after another are one set; an integration's call keeps its row and
  * gains its pictures as chips under it, one left out saying so; a refused
  * call is a row where its error is read; a picture written in the
- * agent's words is a link, never an image; and an image a line handed the
- * agent, which its row names by id, is read through the door as a chip,
- * while one a row keeps the bytes of is drawn from them.
+ * agent's words is a link, never an image; a WebM it showed plays in a
+ * player of its own, from a `blob:` address let go of as the player goes;
+ * and an image a line handed the agent, which its row names by id, is read
+ * through the door as a chip, while one a row keeps the bytes of is drawn
+ * from them.
  *
  * Synthetic turns and pictures throughout: the door answers a PNG's first
  * bytes for every picture it is asked for.
@@ -370,6 +375,69 @@ test("the viewer opened on the first picture to land reaches the rest as their r
   });
 
   assert.equal(document.querySelector(".attachment-viewer-place")?.textContent, "1 of 3");
+});
+
+test("a WebM the agent showed plays in its own player, left out of the replay, beside the picture shown with it", async () => {
+  const created: string[] = [];
+  const revoked: string[] = [];
+  const own = { create: URL.createObjectURL, revoke: URL.revokeObjectURL };
+  // Note that jsdom makes no object URLs, so the window's own are stood in for, and put back after.
+  URL.createObjectURL = (blob: Blob) => {
+    created.push(blob.type);
+    return `blob:video-${String(created.length)}`;
+  };
+  URL.revokeObjectURL = (url: string) => {
+    revoked.push(url);
+  };
+  try {
+    const video = { ...picture(1280, 800), mediaType: CONVERSATION_MEDIA_TYPE.WEBM };
+    const still = picture(1200, 720);
+    const { container, read } = await drawn(
+      finished([
+        toolPart(
+          "show_image",
+          "call-show",
+          {
+            images: [
+              { path: "/tmp/video/flow.webm", caption: "Inviting a member" },
+              { path: "shots/after.png", caption: "The invite sent" },
+            ],
+          },
+          { status: "accepted", pictures: [video, still] },
+        ),
+        text("Invites can be sent from the members page."),
+      ]),
+      false,
+      (id) =>
+        Promise.resolve(
+          id === video.id
+            ? { contentType: CONVERSATION_MEDIA_TYPE.WEBM, base64: "GkXfow==" }
+            : { contentType: INBOX_IMAGE_TYPE.PNG, base64: "iVBORw==" },
+        ),
+    );
+
+    const player = container.querySelector("video");
+    assert.ok(player, "the video is played, not drawn");
+    assert.equal(player.getAttribute("src"), "blob:video-1");
+    assert.equal(player.getAttribute("aria-label"), "Video: Inviting a member");
+    assert.ok(player.hasAttribute("controls"));
+    assert.ok(player.closest(".ph-no-capture"), "the player is left out of the replay");
+    assert.deepEqual(created, [CONVERSATION_MEDIA_TYPE.WEBM]);
+    assert.deepEqual(
+      [...container.querySelectorAll("img")].map((image) => image.getAttribute("src")),
+      ["data:image/png;base64,iVBORw=="],
+      "the picture shown with it is drawn as one picture alone is",
+    );
+    assert.deepEqual(read.sort(), [video.id, still.id].sort());
+
+    const root = roots.pop();
+    assert.ok(root);
+    act(() => root.unmount());
+    assert.deepEqual(revoked, ["blob:video-1"], "the address is let go of as the player goes");
+  } finally {
+    URL.createObjectURL = own.create;
+    URL.revokeObjectURL = own.revoke;
+  }
 });
 
 test("an image a line's row names by the picture it was kept as is read through the door and drawn as its chip, and one an older row keeps the bytes of is drawn from them with no read", async () => {

@@ -127,6 +127,8 @@ export type MessageActionProps = {
   label: string;
   /** Whether it hangs a hint: its label, or the words given here in its place. */
   tooltip?: boolean | string;
+  /** A hover card hung in the hint's place, saying more about the action than its label (`tooltip.tsx`'s `card`). */
+  card?: ReactNode;
   onClick: () => void;
   /** Its glyph. */
   children: ReactNode;
@@ -136,12 +138,20 @@ export type MessageActionProps = {
 export function MessageAction({
   label,
   tooltip = false,
+  card,
   onClick,
   children,
 }: MessageActionProps): ReactNode {
   const button = (
     <IconButton icon={children} label={label} size={BUTTON_SIZE.COMPACT} onClick={onClick} />
   );
+  if (card !== undefined) {
+    return (
+      <Tooltip label={label} card={card}>
+        {button}
+      </Tooltip>
+    );
+  }
   if (tooltip === false) return button;
   return <Tooltip label={tooltip === true ? label : tooltip}>{button}</Tooltip>;
 }

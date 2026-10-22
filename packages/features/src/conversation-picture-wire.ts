@@ -1,5 +1,6 @@
 import { Schema as EffectSchema, Option } from "effect";
-import type { InboxImageType } from "./inbox-wire.js";
+import { INBOX_IMAGE_TYPE } from "./inbox-wire.js";
+import { WEBM_TYPE } from "./video-signature.js";
 
 /**
  * conversation-picture-wire.ts -- a picture a transcript names: how a tool's stored output or a line's image names one the service kept beside the conversation, and why one was not kept.
@@ -49,10 +50,35 @@ export const PICTURE_OMISSION = {
 
 export type PictureOmission = (typeof PICTURE_OMISSION)[keyof typeof PICTURE_OMISSION];
 
+/**
+ * What a transcript's picture may be: one of the three pictures, or a WebM
+ * an agent recorded of what it did, shown as a picture is and kept under the
+ * same bounds, which the transcript plays where it would draw a picture.
+ */
+export const CONVERSATION_MEDIA_TYPE = {
+  ...INBOX_IMAGE_TYPE,
+  WEBM: WEBM_TYPE,
+} as const;
+
+export type ConversationMediaType =
+  (typeof CONVERSATION_MEDIA_TYPE)[keyof typeof CONVERSATION_MEDIA_TYPE];
+
+/** A transcript picture's media type as the wire carries it. */
+export const conversationMediaTypeSchema = EffectSchema.Literals(
+  Object.values(CONVERSATION_MEDIA_TYPE),
+);
+
+/** Whether a transcript's picture is a video, played rather than drawn. */
+export function isVideoType(
+  mediaType: ConversationMediaType,
+): mediaType is typeof CONVERSATION_MEDIA_TYPE.WEBM {
+  return mediaType === CONVERSATION_MEDIA_TYPE.WEBM;
+}
+
 /** A kept picture as a stored output names it: the row, the type its bytes were sniffed to be, its size in pixels, and its size in bytes. */
 export interface KeptPicture {
   readonly id: string;
-  readonly mediaType: InboxImageType;
+  readonly mediaType: ConversationMediaType;
   readonly width: number;
   readonly height: number;
   readonly byteCount: number;

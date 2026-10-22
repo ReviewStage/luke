@@ -8,11 +8,12 @@ import {
 } from "@luke/wire";
 import { AGENT_TOOL } from "./agent-tools.js";
 import {
+  CONVERSATION_MEDIA_TYPE,
+  type ConversationMediaType,
   type KeptPicture,
   PICTURE_OMISSION,
   type PictureOmission,
 } from "./conversation-picture-wire.js";
-import { INBOX_IMAGE_TYPE, type InboxImageType } from "./inbox-wire.js";
 
 /**
  * agent-pictures-model.ts -- the pictures an agent's transcript names, read from its stored calls: the set a `show_image` call showed, the pictures an integration's call answered, and the screenshots a `browser` call took, each by the id the service kept it under.
@@ -24,14 +25,14 @@ import { INBOX_IMAGE_TYPE, type InboxImageType } from "./inbox-wire.js";
  * picture the service did not keep is named by why, with its size.
  */
 
-const PICTURE_TYPES: ReadonlySet<string> = new Set(Object.values(INBOX_IMAGE_TYPE));
+const PICTURE_TYPES: ReadonlySet<string> = new Set(Object.values(CONVERSATION_MEDIA_TYPE));
 
 const OMISSIONS: ReadonlySet<string> = new Set(Object.values(PICTURE_OMISSION));
 
 /** The kinds of block an MCP tool answers that can carry a picture. */
 const PICTURE_BLOCK = { IMAGE: "image", RESOURCE: "resource" } as const;
 
-function isPictureType(value: UnparsedWireValue): value is InboxImageType {
+function isPictureType(value: UnparsedWireValue): value is ConversationMediaType {
   return isWireString(value) && PICTURE_TYPES.has(value);
 }
 
