@@ -3212,6 +3212,30 @@ test("New task's Agent mode sends one start carrying the agent, its words and mo
   assert.deepEqual(tab.control().mainTabs.tab, { agent: AGENT_ID }, "the task opens on its tab");
 });
 
+test("New task's agent stands on its task with the words it started on as its first line before the task's agents or its transcript are read", async () => {
+  const started = { ...RUNNING_AGENT, planId: OTHER_TASK_ID };
+  const tab = mount(
+    { shown: true, tasks: OPEN },
+    {
+      [ACT_KIND.TASKS_START]: () =>
+        Promise.resolve({ planId: OTHER_TASK_ID, agentStart: { agent: started } }),
+      // The task's agents are still being read.
+      [ACT_KIND.CODING_AGENTS_LIST]: () => new Promise(() => undefined),
+    },
+  );
+  const { prompt } = await startAgentTask(tab);
+
+  const agents = tab.control().agents;
+  assert.deepEqual(
+    agents.agents?.map((agent) => agent.id),
+    [AGENT_ID],
+    "the agent stands as the task's list",
+  );
+  assert.deepEqual(tab.control().mainTabs.tab, { agent: AGENT_ID }, "the task opens on its tab");
+  assert.equal(agents.opening?.agentId, AGENT_ID);
+  assert.equal(agents.opening?.line.text, prompt, "its first line is the words it started on");
+});
+
 test("an agent refused as New task's Agent mode started its task opens the task on a draft holding the words, model, and why, whose Retry starts the agent on that task under the start's key", async () => {
   const started = { ...RUNNING_AGENT, planId: OTHER_TASK_ID };
   // The service holds the agent once its own Start made it.

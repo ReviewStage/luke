@@ -146,6 +146,7 @@ import {
   teammateStarter,
   transcriptRowKey,
   turnStretches,
+  unreadOpeningLine,
   WORKING_PHASE_WORDS,
   workerLines,
   workerStatusOf,
@@ -2499,8 +2500,20 @@ function AgentTabBody({
   const surroundsLanded =
     publishedSettled &&
     (callsSettled || !messages.some((message) => callOfLine(message) !== undefined));
+  // An agent New task just started draws the words it was started on as its
+  // first line until its transcript reads one back (`unreadOpeningLine`).
+  const opening = unreadOpeningLine(
+    control.opening?.agentId === agent.id ? control.opening.line : undefined,
+    messages,
+  );
+  const sent = useMemo(
+    () => (opening === undefined ? composer.sent : [opening, ...composer.sent]),
+    [opening, composer.sent],
+  );
   const opened = useRef(false);
-  if (surroundsLanded) opened.current = true;
+  // Note that a log already drawn on its opening line is never held back again, because
+  // an agent just started has published nothing and been called by no one, so nothing would move it.
+  if (surroundsLanded || opening !== undefined) opened.current = true;
   const holding = messages.length > 0 && !opened.current;
   const copyWithToast = useCopyToast();
   const openGitHub = (url: string) => appPlatform().openGitHub(url);
@@ -2571,7 +2584,7 @@ function AgentTabBody({
         models={control.models}
         readModels={control.readModels}
         transcript={transcript}
-        composer={composer}
+        composer={sent === composer.sent ? composer : { ...composer, sent }}
         model={model}
         servers={servers}
         published={published}
