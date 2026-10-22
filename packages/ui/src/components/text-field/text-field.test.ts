@@ -7,6 +7,7 @@ import { afterEach, test } from "vitest";
 import { FormField } from "../form-field/form-field.js";
 import { SettingsRow } from "../settings-row/settings-row.js";
 import {
+  ENTER_KEY_HINT,
   TEXT_AREA_SUBMIT,
   TEXT_FIELD_AUTO_COMPLETE,
   TEXT_FIELD_TYPE,
@@ -24,7 +25,9 @@ import {
  * form back while empty where required, hands a paste to a
  * caller that takes pasted files itself, inside a field is named, described, and marked invalid by
  * the field's words, and standing alone in a settings row is described by the row's words
- * and marked invalid while the row says its error.
+ * and marked invalid while the row says its error, selects its words as the
+ * caret arrives and stays out of the system's corrections where asked, and
+ * names its return key's label.
  */
 
 declare global {
@@ -476,4 +479,44 @@ test("a busy text area takes no typing and answers neither its submit key nor Es
   press(field, { key: "Escape", cancelable: true });
   press(field, { key: "Enter", metaKey: true, cancelable: true });
   assert.deepEqual(answered, ["escape", "submit"]);
+});
+
+test("a field asked to selects its words as the caret arrives, and is left out of the system's corrections", () => {
+  const page = render(
+    createElement(TextField, {
+      label: "Address",
+      value: "localhost:3000",
+      onChange: () => undefined,
+      selectOnFocus: true,
+      autoCorrect: false,
+    }),
+  );
+  const field = fieldNamed(page, "Address");
+  act(() => field.focus());
+  assert.equal(field.selectionStart, 0);
+  assert.equal(field.selectionEnd, "localhost:3000".length);
+  assert.equal(field.getAttribute("autocorrect"), "off");
+  assert.equal(field.getAttribute("autocapitalize"), "off");
+});
+
+test("a field not asked to leaves the caret where it lands and the system's corrections on", () => {
+  const page = render(
+    createElement(TextField, { label: "Name", value: "Ada", onChange: () => undefined }),
+  );
+  const field = fieldNamed(page, "Name");
+  act(() => field.focus());
+  assert.equal(field.selectionStart, field.selectionEnd);
+  assert.equal(field.getAttribute("autocorrect"), null);
+});
+
+test("a text area names its return key's label to an on-screen keyboard", () => {
+  const page = render(
+    createElement(TextArea, {
+      label: "Message",
+      value: "",
+      onChange: () => undefined,
+      enterKeyHint: ENTER_KEY_HINT.SEND,
+    }),
+  );
+  assert.equal(page.querySelector("textarea")?.getAttribute("enterkeyhint"), "send");
 });

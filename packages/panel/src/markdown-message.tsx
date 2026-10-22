@@ -1,9 +1,9 @@
-import { PROSE_CLASS } from "@luke/ui";
+import { Checkbox, PROSE_CLASS } from "@luke/ui";
 import { gluedRun, LINK_GLUE } from "@luke/ui/link-glue";
 import { QUOTE_CLASS } from "@luke/ui/quote-face";
 import { matchRanges } from "@luke/ui/search-tokens";
 import { isWireString } from "@luke/wire";
-import { createContext, memo, type ReactNode, useContext, useMemo, useRef } from "react";
+import { createContext, memo, type ReactNode, useContext, useMemo, useRef, useState } from "react";
 import Markdown, { type AllowElement, type Components, type Options } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { PlanDiagram } from "./plan-diagram.js";
@@ -426,8 +426,8 @@ export type TaskToggler = (at: number) => Promise<boolean>;
 /**
  * A task item's checkbox that ticks or clears its item. It flips at the
  * press, since the words come back changed only once the change is saved,
- * and flips back where it was not. Note that it is keyed by the words' own
- * state, so a change arriving from anyone redraws it from the words.
+ * and flips back where it was not. Note that its caller keys it by the
+ * words' own state, so a change arriving from anyone redraws it from them.
  */
 function TaskBox({
   item,
@@ -438,23 +438,22 @@ function TaskBox({
   checked: boolean;
   toggle: TaskToggler;
 }): React.JSX.Element {
-  // Note that the box stands in a label, as the editor's does, so a finger's
-  // press around it, wider than the box draws, ticks it (`markdown.css`).
+  const [shown, setShown] = useState(checked);
+  // Note that the box stands in the bullet's gutter (`markdown.css`), and
+  // takes a finger's press around it there, as the editor's does.
   return (
-    <label className="task-list-box">
-      <input
-        key={String(checked)}
-        type="checkbox"
-        aria-label={item.label}
-        defaultChecked={checked}
-        onChange={(event) => {
-          const box = event.currentTarget;
+    <span className="task-list-box">
+      <Checkbox
+        label={item.label}
+        checked={shown}
+        onChange={(next) => {
+          setShown(next);
           toggle(item.at).then((saved) => {
-            if (!saved) box.checked = checked;
+            if (!saved) setShown(checked);
           });
         }}
       />
-    </label>
+    </span>
   );
 }
 
@@ -796,9 +795,19 @@ export const MarkdownMessage = memo(function MarkdownMessage({
       drawing.input = ({ node, ...props }) => {
         const item = node === undefined ? undefined : TASK_ITEMS.get(node);
         return item === undefined ? (
-          <input {...props} />
+          <Checkbox
+            label="Task"
+            checked={props.checked === true}
+            disabled
+            onChange={() => undefined}
+          />
         ) : (
-          <TaskBox item={item} checked={props.checked === true} toggle={toggle} />
+          <TaskBox
+            key={String(props.checked === true)}
+            item={item}
+            checked={props.checked === true}
+            toggle={toggle}
+          />
         );
       };
     }

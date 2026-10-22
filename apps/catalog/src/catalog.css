@@ -833,3 +833,13 @@ body {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* A message box's card around a bare text area, at a composer's insets. */
+.catalog-message-box {
+  --luke-text-area-inset-start: var(--luke-space-12);
+  --luke-text-area-inset-inline: var(--luke-space-12);
+  --luke-text-area-inset-end: var(--luke-space-8);
+  border: 1px solid var(--luke-color-border);
+  border-radius: var(--luke-control-radius);
+  background: var(--luke-color-ground);
+}

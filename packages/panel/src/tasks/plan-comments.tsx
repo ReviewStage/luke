@@ -31,10 +31,13 @@ import {
   SCROLL_FADE,
   ScrollArea,
   SUBMIT_STATE,
+  TEXT_AREA_LOOK,
+  TEXT_AREA_SUBMIT,
   TEXT_ELEMENT,
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
+  TextArea,
   TrashIcon,
   useConfirmDialog,
   useMenu,
@@ -639,39 +642,25 @@ function PlainCommentText({
   autoFocus = false,
   onPasteFiles,
 }: CommentTextProps): React.JSX.Element {
-  const field = useRef<HTMLTextAreaElement>(null);
-  useLayoutEffect(() => {
-    const element = field.current;
-    if (element === null) return;
-    element.style.height = "auto";
-    element.style.height = `${element.scrollHeight}px`;
-  }, [value]);
   return (
-    <textarea
-      ref={field}
-      className="comment-text"
+    <TextArea
+      look={TEXT_AREA_LOOK.BARE}
+      grow
       rows={1}
       value={value}
       placeholder={label}
-      aria-label={label}
+      label={label}
       // biome-ignore lint/a11y/noAutofocus: the field is opened by the press that asked for it, as a reply field is.
       autoFocus={autoFocus}
-      onChange={(event) => onChange(event.target.value)}
+      onChange={onChange}
       onPaste={(event) => {
         // Note that only files the field takes stop the paste, so text pastes as it always does.
         const files = Array.from(event.clipboardData.files);
         if (files.length > 0 && onPasteFiles?.(files) === true) event.preventDefault();
       }}
-      onKeyDown={(event) => {
-        if (event.nativeEvent.isComposing) return;
-        if (event.key === "Enter" && !event.shiftKey) {
-          event.preventDefault();
-          onSubmit();
-        } else if (event.key === "Escape") {
-          event.preventDefault();
-          onCancel();
-        }
-      }}
+      submitKey={TEXT_AREA_SUBMIT.ENTER}
+      onSubmit={onSubmit}
+      onEscape={onCancel}
     />
   );
 }

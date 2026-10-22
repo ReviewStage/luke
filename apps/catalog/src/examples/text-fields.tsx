@@ -1,8 +1,11 @@
 import {
+  ENTER_KEY_HINT,
   FormField,
   GAP,
   SettingsRow,
   Stack,
+  TEXT_AREA_LOOK,
+  TEXT_AREA_SUBMIT,
   TEXT_FIELD_AUTO_COMPLETE,
   TEXT_FIELD_FONT,
   TEXT_FIELD_SIZE,
@@ -20,8 +23,10 @@ import { CatalogSection } from "../section";
  * text-fields.tsx -- a TextField empty with a placeholder, filled, invalid,
  * unavailable, as a secret, as code in the mono face, as a time of day, and as a number; a page's title
  * written in place; a TextArea, standing and growing with its words, and busy
- * sending what ⌘Return submitted; a TextField in a settings row, invalid while the row says its error;
- * and both in a narrow column.
+ * sending what ⌘Return submitted; a compact TextField in a bar, selecting its
+ * address as the caret arrives; a bare TextArea growing in a message box's card,
+ * sent with Return; a TextField in a settings row, invalid while the row says
+ * its error; and both in a narrow column.
  */
 
 /** A field the example holds the value of, as a caller would. */
@@ -65,6 +70,36 @@ function SubmittedNote(): React.JSX.Element {
         {sent === undefined ? "Nothing sent yet." : `Sent: ${sent}`}
       </Text>
       <TextArea label="Sending" value="On its way." onChange={() => undefined} rows={2} busy />
+    </Stack>
+  );
+}
+
+/** A message box's card holding a bare note that Return sends, saying what it sent. */
+function MessageBox(): React.JSX.Element {
+  const [message, setMessage] = useState("");
+  const [sent, setSent] = useState<string | undefined>(undefined);
+  return (
+    <Stack gap={GAP.FIELD}>
+      <div className="catalog-message-box">
+        <TextArea
+          label="Message"
+          placeholder="Message"
+          look={TEXT_AREA_LOOK.BARE}
+          grow
+          rows={1}
+          enterKeyHint={ENTER_KEY_HINT.SEND}
+          submitKey={TEXT_AREA_SUBMIT.ENTER}
+          value={message}
+          onChange={setMessage}
+          onSubmit={() => {
+            setSent(message);
+            setMessage("");
+          }}
+        />
+      </div>
+      <Text tone={TEXT_TONE.MUTED}>
+        {sent === undefined ? "Nothing sent yet." : `Sent: ${sent}`}
+      </Text>
     </Stack>
   );
 }
@@ -189,6 +224,29 @@ function TextFields(): React.JSX.Element {
       <CatalogSection id="text-area-submit" title="Many lines, submitted with ⌘Return">
         <div className="catalog-column">
           <SubmittedNote />
+        </div>
+      </CatalogSection>
+      <CatalogSection id="text-compact" title="Compact, in a bar">
+        <div className="catalog-column">
+          <Held start="localhost:3000">
+            {(value, onChange) => (
+              <TextField
+                label="Address"
+                placeholder="Search or type an address"
+                size={TEXT_FIELD_SIZE.COMPACT}
+                spellCheck={false}
+                autoCorrect={false}
+                selectOnFocus
+                value={value}
+                onChange={onChange}
+              />
+            )}
+          </Held>
+        </div>
+      </CatalogSection>
+      <CatalogSection id="text-area-bare" title="Many lines, bare in a message box">
+        <div className="catalog-column">
+          <MessageBox />
         </div>
       </CatalogSection>
       <CatalogSection id="text-settings-row" title="In a settings row, invalid">

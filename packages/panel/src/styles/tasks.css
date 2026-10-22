@@ -2123,38 +2123,6 @@
   flex: 1;
 }
 
-.browser-view-address input {
-  width: 100%;
-  min-width: 0;
-  height: calc(var(--luke-control-height) - 2 * var(--luke-space-2));
-  padding: 0 var(--luke-space-6);
-  border: 1px solid var(--luke-color-border);
-  border-radius: calc(var(--luke-control-radius) - var(--luke-space-2));
-  background: var(--luke-color-well);
-  color: var(--luke-color-text);
-  font-family: inherit;
-  font-size: var(--luke-type-caption-size);
-  text-overflow: ellipsis;
-  transition: border-color var(--duration-hover) ease;
-}
-
-/* A finger's field takes 16px words, or iOS zooms the page into it the
-   moment it is focused. */
-@media (pointer: coarse) {
-  .browser-view-address input {
-    font-size: 16px;
-  }
-}
-
-.browser-view-address input::placeholder {
-  color: var(--luke-color-text-subtle);
-}
-
-.browser-view-address input:focus {
-  border-color: var(--luke-color-text-subtle);
-  outline: none; /* no ring: its border lights */
-}
-
 .browser-view-body {
   position: relative;
   display: flex;
@@ -8086,35 +8054,14 @@ button.subagent-line:hover {
 /* The field that answers a thread, or starts one, in the composer's well. */
 .comment-field {
   --comment-field-inline: var(--luke-space-8);
+  /* The plain field's insets (`PlainCommentText`), the editor's below. */
+  --luke-text-area-inset-start: var(--luke-space-8);
+  --luke-text-area-inset-inline: var(--comment-field-inline);
+  --luke-text-area-inset-end: var(--luke-space-2);
   margin-top: var(--luke-space-8);
   border: 1px solid var(--luke-color-border);
   border-radius: var(--luke-control-radius);
   background: var(--luke-color-ground);
-}
-
-.comment-text {
-  display: block;
-  width: 100%;
-  min-height: 36px; /* off-scale: one line and its padding */
-  padding: var(--luke-space-8) var(--comment-field-inline) var(--luke-space-2);
-  border: 0;
-  background: none;
-  color: var(--luke-color-text);
-  font: inherit;
-  line-height: 1.45;
-  resize: none;
-}
-
-/* A finger's comment field takes 16px words, or iOS zooms the page into it
-   the moment it is focused, as it does a Browser tab's address. */
-@media (pointer: coarse) {
-  .comment-text {
-    font-size: 16px;
-  }
-}
-
-.comment-text::placeholder {
-  color: var(--luke-color-text-muted);
 }
 
 /* The agent box's editor as a comment's field, its placeholder and its

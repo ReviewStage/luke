@@ -35,4 +35,27 @@
   .luke-checkbox[data-read-only="true"] .luke-checkbox-box {
     cursor: default;
   }
+
+  /* A box without words stands on no line of its own, and on a coarse
+     pointer takes a press a finger's width across, centred on it, while it
+     draws at its own size, as a compact button does. */
+  .luke-checkbox[data-words="false"] {
+    position: relative;
+  }
+
+  .luke-checkbox[data-words="false"] .luke-checkbox-box {
+    margin: 0;
+  }
+
+  @media (pointer: coarse) {
+    .luke-checkbox[data-words="false"]::before {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: var(--luke-touch-target);
+      height: var(--luke-touch-target);
+      transform: translate(-50%, -50%);
+      content: "";
+    }
+  }
 }
