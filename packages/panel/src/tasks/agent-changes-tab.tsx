@@ -20,6 +20,7 @@ import {
   ERROR_STATE_PLACEMENT,
   ErrorState,
   IconButton,
+  SpinnerRegion,
   TEXT_BUTTON_TONE,
   TEXT_ELEMENT,
   TEXT_VARIANT,
@@ -51,7 +52,6 @@ import {
   type DiffSelection,
   FILE_NOTE_LINE,
 } from "../diff-view/contract.js";
-import { SpinnerRegion } from "../spinner.js";
 import {
   type ChangesList,
   FileHead,
@@ -1772,7 +1772,7 @@ export function AgentChangesTab({
   }, [revealGone, revealAsk]);
   // A failure gives way to the wait as soon as it is asked again; files drawn stand until the answer lands.
   if (answer === undefined || (out && "failure" in answer)) {
-    return <SpinnerRegion label={CHANGES_WORDS.READING} />;
+    return <SpinnerRegion delay label={CHANGES_WORDS.READING} />;
   }
   if ("failure" in answer) {
     return (

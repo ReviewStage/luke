@@ -33,6 +33,7 @@ import {
   SCROLL_SIZE,
   ScrollArea,
   SidePanelIcon,
+  SpinnerRegion,
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
@@ -82,7 +83,6 @@ import { drawnVisibly, focusSeek } from "../focus-seek.js";
 import { panelTabPlace } from "../links-at-hand.js";
 import { useMemberDirectory } from "../member-directory.js";
 import { type MenuRow, MenuRowList } from "../searchable-menu.js";
-import { SpinnerRegion } from "../spinner.js";
 import { GLYPH_STATE, type GlyphState, stateEndMark } from "../state-glyph.js";
 import { AgentActorRef, AgentCard, agentSubject, NOTHING_HELD } from "../tasks/agent-ref.js";
 import { AgentSubagentTab, type BriefTask, type TranscriptCards } from "../tasks/agent-tab.js";
@@ -1552,7 +1552,7 @@ function TabContent({
     const open = browsers.find((each) => sameTab(each.tab, tab));
     // The tab stands for one no longer open only until the panel moves on, a render away.
     return open === undefined ? (
-      <SpinnerRegion label="Loading page" />
+      <SpinnerRegion delay label="Loading page" />
     ) : (
       <BrowserPane
         key={tab.browser}
@@ -1566,7 +1566,7 @@ function TabContent({
     const drawn = cloudBrowsers.find((each) => each.tab.id === tab.cloudBrowser);
     // The tab stands for one the service no longer lists only until the panel moves on, a render away.
     return drawn === undefined ? (
-      <SpinnerRegion label="Loading page" />
+      <SpinnerRegion delay label="Loading page" />
     ) : (
       <CloudBrowserPane
         key={tab.cloudBrowser}
@@ -1595,7 +1595,7 @@ function TabContent({
     const page = pages.find((each) => each.id === tab.page);
     // The tab stands for a page the plan no longer lists only until the panel moves on, a render away.
     return page === undefined ? (
-      <SpinnerRegion label="Loading page" />
+      <SpinnerRegion delay label="Loading page" />
     ) : (
       <PagePane
         key={page.id}
@@ -1613,7 +1613,7 @@ function TabContent({
     return (
       <PullRequestsOnGitHub key={tabKey(tab)}>
         {/* The tab is a chunk of its own, read the first time one is drawn or its card hangs (`pages-on-demand.ts`). */}
-        <Suspense fallback={<SpinnerRegion label="Loading pull request" />}>
+        <Suspense fallback={<SpinnerRegion delay label="Loading pull request" />}>
           <PULL_REQUEST_TAB.Route
             agentId={tab.changes}
             number={tab.number}
@@ -1642,7 +1642,7 @@ function TabContent({
     // Note that the task given another repository draws the file afresh,
     // because the lines held were read from the one before.
     return file === undefined ? (
-      <SpinnerRegion label="Loading file" />
+      <SpinnerRegion delay label="Loading file" />
     ) : (
       <Fragment key={repository ?? undefined}>
         <FileView
@@ -1699,7 +1699,7 @@ function TabContent({
       );
     }
     // A tab no delegation started, a task's own Luke's worker's, stands only until the panel moves back to the board, a render away.
-    return <SpinnerRegion label="Loading subagent" />;
+    return <SpinnerRegion delay label="Loading subagent" />;
   }
   switch (tab) {
     case SIDE_PANEL_TAB.PLAN:
@@ -1723,7 +1723,7 @@ function TabContent({
           </ErrorState>
         );
       }
-      if (shownCode === undefined) return <SpinnerRegion label="Loading code" />;
+      if (shownCode === undefined) return <SpinnerRegion delay label="Loading code" />;
       return shownCode.length === 0 ? (
         <EmptyState icon={tabLook({ kind: TAB_KIND.PANEL, tab: SIDE_PANEL_TAB.CODE }).icon}>
           {NO_CODE_LINE}

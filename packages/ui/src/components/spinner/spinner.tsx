@@ -12,9 +12,10 @@ import type { ReactNode } from "react";
  * the ring shows, because a reader announces a line filling more surely than
  * one arriving.
  *
- * When a wait starts showing is the app's: one that waits a moment before
- * drawing a ring for a read that may land at once says so with `shown`,
- * which is true unless it says otherwise.
+ * A wait that may land at once says `delay`: its ring shows only once it has
+ * stood a moment (180ms, a CSS animation delay in `spinner.css`), because a
+ * ring that flashes for a read that landed at once is noise. Each mount waits
+ * afresh. Its status line stands from the start.
  */
 
 /** How large the ring is drawn: on a caption's line, beside words or inside a control, or alone in a region. */
@@ -41,24 +42,25 @@ export function SpinnerRing({ size }: { size?: SpinnerSize }): React.JSX.Element
   );
 }
 
-/** A wait, said to a reader in `label` and drawn as the ring while `shown`. */
+/** A wait, said to a reader in `label` and drawn as the ring, once it has stood a moment where `delay`. */
 export function Spinner({
   label,
   size = SPINNER_SIZE.INLINE,
-  shown = true,
+  delay = false,
 }: {
   label: string;
   size?: SpinnerSize;
-  shown?: boolean;
+  delay?: boolean;
 }): React.JSX.Element {
   return (
-    <span className="luke-spinner" data-size={size} role="status">
-      {shown ? (
-        <>
-          <SpinnerRing />
-          <span className="luke-visually-hidden">{label}</span>
-        </>
-      ) : null}
+    <span
+      className="luke-spinner"
+      data-size={size}
+      data-delay={delay ? "true" : undefined}
+      role="status"
+    >
+      <SpinnerRing />
+      <span className="luke-visually-hidden">{label}</span>
     </span>
   );
 }
@@ -66,47 +68,44 @@ export function Spinner({
 /** A region still being read: the ring at the region's size, centred in the room it fills. */
 export function SpinnerRegion({
   label,
-  shown = true,
+  delay = false,
 }: {
   label: string;
-  shown?: boolean;
+  delay?: boolean;
 }): React.JSX.Element {
   return (
     <div className="luke-spinner-region">
-      <Spinner label={label} size={SPINNER_SIZE.REGION} shown={shown} />
+      <Spinner label={label} size={SPINNER_SIZE.REGION} delay={delay} />
     </div>
   );
 }
 
 /**
- * A control's words, which give way to the ring while `busy`. The words
- * keep their room, hidden under the ring, so the control neither shrinks nor
- * moves what stands beside it, and the control is named by `label` ("Checking
- * for updates") while the ring stands, since hidden words name nothing.
+ * A control's words, which give way to the ring while `busy`, once the press
+ * has been out a moment where `delay`. The words keep their room, hidden under
+ * the ring, so the control neither shrinks nor moves what stands beside it, and
+ * the control is named by `label` ("Checking for updates") while the ring
+ * stands, since hidden words name nothing.
  */
 export function BusyLabel({
   busy,
   label,
-  shown = true,
+  delay = false,
   children,
 }: {
   busy: boolean;
   label: string;
-  shown?: boolean;
+  delay?: boolean;
   children: ReactNode;
 }): React.JSX.Element {
   if (!busy) return <>{children}</>;
   return (
-    <span className="luke-busy-label" data-shown={shown}>
+    <span className="luke-busy-label" data-delay={delay ? "true" : undefined}>
       <span className="luke-busy-label-words">{children}</span>
-      {shown ? (
-        <>
-          <span className="luke-spinner" data-size={SPINNER_SIZE.INLINE}>
-            <SpinnerRing />
-          </span>
-          <span className="luke-visually-hidden">{label}</span>
-        </>
-      ) : null}
+      <span className="luke-spinner" data-size={SPINNER_SIZE.INLINE}>
+        <SpinnerRing />
+      </span>
+      <span className="luke-visually-hidden">{label}</span>
     </span>
   );
 }

@@ -2263,6 +2263,10 @@ ul.actor-stack {
   font-size: var(--luke-type-caption-size);
 }
 
+.call-backend-dots {
+  display: flex;
+}
+
 /* Luke's part is the one that gives way to a long command; the notetaker's
    says the same few words whole, or goes (below). */
 .call-backend-part[data-part="notes"] {
@@ -2303,7 +2307,7 @@ ul.actor-stack {
    apart from the next, and the working dots go, the line's own words saying
    Luke works, so Luke's command keeps their room. */
 @container call-bar (max-width: 279px) {
-  .call-backend > .thinking-dots {
+  .call-backend > .call-backend-dots {
     display: none;
   }
 

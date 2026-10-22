@@ -28,6 +28,7 @@ import {
   RowHintOptions,
   SCROLL_FADE,
   ScrollArea,
+  SpinnerRegion,
   Tooltip,
   UnarchiveIcon,
   useMenu,
@@ -62,7 +63,6 @@ import { LinkWorkspaceProvider, useCopyLinkItem } from "../copy-link-item.js";
 import { ExperimentTag, SendFeedbackButton } from "../experiment-marks.js";
 import { MemberDirectory } from "../member-directory.js";
 import { hiddenColumns, SHELL_ROOM, type ShellRoom } from "../shell-room.js";
-import { SpinnerRegion } from "../spinner.js";
 import { AgentCard, lineSubject } from "../tasks/agent-ref.js";
 import { useChatActor, useChatNames } from "../tasks/chat-actors.js";
 import { channelTitle } from "../tasks/chat-channel-name.js";
@@ -1348,7 +1348,7 @@ export function TaskChatTab({
             {CHAT_FAILED}
           </ErrorState>
         ) : read === undefined && view.available ? (
-          <SpinnerRegion label="Loading chat" />
+          <SpinnerRegion delay label="Loading chat" />
         ) : (
           <EmptyState icon={<MessagesSquareIcon />}>{NO_TASK_CHANNEL}</EmptyState>
         )}

@@ -9,11 +9,11 @@ import {
   type ErrorStatePlacement,
   SCROLL_FADE,
   ScrollArea,
+  SpinnerRegion,
 } from "@luke/ui";
 import { fileName } from "@luke/voice/code-pane-model";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAppCommand } from "../app-commands.js";
-import { SpinnerRegion } from "../spinner.js";
 import { typingInto } from "./changes-list.js";
 import { CodeSnippet } from "./code-snippet.js";
 import { FileNoteAnnotation, type FileNotes, type NoteLines, noteLineOf } from "./file-note.js";
@@ -325,7 +325,7 @@ export function FileTab({
       {read.kind === FILE_READ.READY ? (
         <FileTextView file={file} held={read} notes={notes} handleRef={handle} />
       ) : read.kind === FILE_READ.READING ? (
-        <SpinnerRegion label="Loading file" />
+        <SpinnerRegion delay label="Loading file" />
       ) : snippet === undefined ? (
         <ReadNotice
           read={read}

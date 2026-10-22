@@ -14,6 +14,7 @@ import {
   ErrorState,
   IconButton,
   InlineEdit,
+  SpinnerRegion,
   Tooltip,
   useMenu,
 } from "@luke/ui";
@@ -30,7 +31,6 @@ import { FindScope } from "../find-in-tab.js";
 import { usePageWorkspace } from "../links-at-hand.js";
 import { MemberDirectory } from "../member-directory.js";
 import { NOT_FOUND_THING, NotFound } from "../not-found.js";
-import { SpinnerRegion } from "../spinner.js";
 import { CallNotice } from "../tasks/agent-call.js";
 import { agentTabLabel } from "../tasks/coding-agent-model.js";
 import { SkillFiles } from "../tasks/skill-chip.js";
@@ -455,7 +455,7 @@ export function DesktopAgentPage({
             {NOT_READ}
           </ErrorState>
         ) : (
-          <SpinnerRegion label="Loading agent" />
+          <SpinnerRegion delay label="Loading agent" />
         )}
       </section>
     );

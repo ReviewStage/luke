@@ -10,6 +10,7 @@ import type { DialogConfirm } from "@luke/ui";
 import {
   BackIcon,
   BUTTON_SIZE,
+  BusyLabel,
   commandKeyshortcuts,
   EllipsisIcon,
   EmptyState,
@@ -45,7 +46,6 @@ import { FadingWords } from "../fading-words.js";
 import { FIND_PAGE, PageFind } from "../find-in-tab.js";
 import type { NavigationHistory } from "../navigation-history.js";
 import { hiddenColumns, SHELL_ROOM, type ShellRoom } from "../shell-room.js";
-import { BusyLabel } from "../spinner.js";
 import { centreWithin } from "../tasks/code-pane.js";
 import { DocumentScroll } from "../tasks/document-frame.js";
 import {
@@ -418,7 +418,7 @@ function EarlierRow({ onRead }: { onRead: () => Promise<boolean> }): React.JSX.E
   return (
     <p className="version-earlier">
       <TextButton lines={TEXT_BUTTON_LINES.TWO} onClick={read}>
-        <BusyLabel busy={reading} label="Loading older versions">
+        <BusyLabel delay busy={reading} label="Loading older versions">
           {failed ? (
             <RetryRowLabel failure="Could not read older versions." />
           ) : (

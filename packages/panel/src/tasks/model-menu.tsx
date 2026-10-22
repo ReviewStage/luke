@@ -1,8 +1,8 @@
 import { CONTEXT_WINDOW } from "@luke/features/coding-agent-wire";
 import type { CatalogModel, ModelChoice } from "@luke/features/models-wire";
+import { Spinner } from "@luke/ui";
 import { HarnessMark } from "../harness-marks.js";
 import { type FootRow, type MenuRow, SearchableMenu } from "../searchable-menu.js";
-import { Spinner } from "../spinner.js";
 import {
   CONTEXT_WORD,
   choiceModelId,
@@ -236,7 +236,7 @@ export function ModelMenu(props: {
       value={read?.base}
       note={
         models === undefined ? (
-          <Spinner label="Loading models" />
+          <Spinner delay label="Loading models" />
         ) : models.length === 0 ? (
           MENU_NOTE.NONE
         ) : undefined

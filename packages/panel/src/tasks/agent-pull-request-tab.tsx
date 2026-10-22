@@ -70,6 +70,7 @@ import {
   ScrollArea,
   Skeleton,
   SkeletonRegion,
+  SpinnerRegion,
   TEXT_BUTTON_TONE,
   TEXT_ELEMENT,
   TEXT_VARIANT,
@@ -116,7 +117,6 @@ import { appPlatform } from "../app-platform.js";
 import { useCopyLinkItem } from "../copy-link-item.js";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu.js";
 import { type HandTabActions, useHandedTabActions } from "../desktop/strip-tabs.js";
-import { SpinnerRegion } from "../spinner.js";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast.js";
 import {
   AgentChangesTab,
@@ -2528,7 +2528,7 @@ function PullRequestTabBody({
                 >
                   {chaptersSeen ? (
                     <Suspense
-                      fallback={<SpinnerRegion label={PULL_REQUEST_WORDS.READING_CHAPTERS} />}
+                      fallback={<SpinnerRegion delay label={PULL_REQUEST_WORDS.READING_CHAPTERS} />}
                     >
                       <AgentChaptersTab
                         agentId={agentId}

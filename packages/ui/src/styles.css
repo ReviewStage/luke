@@ -78,6 +78,9 @@
 @import "./components/settings-section/settings-section.css";
 @import "./components/spinner/spinner.css";
 @import "./components/skeleton/skeleton.css";
+@import "./components/shimmer/shimmer.css";
+@import "./components/thinking-dots/thinking-dots.css";
+@import "./components/working-mark/working-mark.css";
 /* After the button's, whose edge and corners it joins. */
 @import "./components/split-button/split-button.css";
 /* After the button's, whose glyph button its × is. */

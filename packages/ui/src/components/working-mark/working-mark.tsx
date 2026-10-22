@@ -1,15 +1,14 @@
 /**
  * working-mark.tsx -- the one mark an agent at work wears: two pixels chasing each other round the edge of a small grid, in the gray ink around it.
  *
- * Every place that says an agent is working draws this mark through the one
- * seat that says so (`state-glyph.tsx`'s `StateGlyph`): an agent's or a
- * subagent's glyph, a sidebar task's row, and a call's row in a transcript. Its cells and the gap between them are whole
- * pixels, eight cells lapped round a 3×3 grid. Each cell steps to the next
- * on one beat, so the motion is stepped frames of `transform` alone and
- * never lays anything out. Reduced motion and a capture run hold it on
- * `--loop-motion`, on a frame chosen to show the chase mid-lap rather than
- * its first, so a still mark still reads as working. The mark itself is
- * decorative; the seat it stands in names it.
+ * Every place that says an agent is working draws this mark. Its cells and
+ * the gap between them are whole pixels, eight cells lapped round a 3×3 grid.
+ * Each cell steps to the next on one beat, so the motion is stepped frames of
+ * `transform` alone and never lays anything out. Reduced motion and a capture
+ * run hold it on `--luke-loop-motion`, on a frame chosen to show the chase
+ * mid-lap rather than its first, so a still mark still reads as working. The
+ * mark itself is decorative; the seat it stands in names it. Its side is 12px
+ * unless a container sets `--luke-working-mark-size`.
  */
 
 /** The pixels that move: each chaser and the fainter tail one cell behind it. */
@@ -23,7 +22,7 @@ const WORKING_DOT = {
 /** One cell's side, in CSS pixels. */
 const CELL = 2;
 
-/** One step from a cell to the next, cell and gap, in CSS pixels; the keyframes in `base.css` step by it. */
+/** One step from a cell to the next, cell and gap, in CSS pixels; the keyframes in `working-mark.css` step by it. */
 const PITCH = 4;
 
 /** Where the first cell starts, from the mark's corner. */
@@ -60,7 +59,7 @@ export function WorkingMark(): React.JSX.Element {
   const start = cellAt(0, 0);
   return (
     <svg
-      className="working-mark"
+      className="luke-working-mark"
       width={SIDE}
       height={SIDE}
       viewBox={`0 0 ${SIDE} ${SIDE}`}
@@ -69,7 +68,7 @@ export function WorkingMark(): React.JSX.Element {
       {TRACK.map(([column, row], index) => (
         <rect
           key={index}
-          className="working-mark-track"
+          className="luke-working-mark-track"
           {...cellAt(column, row)}
           width={CELL}
           height={CELL}
@@ -79,7 +78,7 @@ export function WorkingMark(): React.JSX.Element {
       {Object.values(WORKING_DOT).map((dot) => (
         <rect
           key={dot}
-          className="working-mark-dot"
+          className="luke-working-mark-dot"
           data-dot={dot}
           {...start}
           width={CELL}

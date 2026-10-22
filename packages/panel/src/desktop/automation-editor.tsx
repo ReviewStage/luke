@@ -106,6 +106,7 @@ import {
   SKELETON_SHAPE,
   Skeleton,
   SkeletonRegion,
+  Spinner,
   Switch,
   TEXT_ELEMENT,
   TEXT_FIELD_FONT,
@@ -136,7 +137,6 @@ import { Picker, PickerRow } from "../settings/picker-row.js";
 import { SelectRow } from "../settings/select-row.js";
 import { SwitchRow } from "../settings/switch-row.js";
 import { hiddenColumns, SHELL_ROOM, type ShellRoom } from "../shell-room.js";
-import { Spinner } from "../spinner.js";
 import { AgentModelChip } from "../tasks/agent-model-chip.js";
 import { AgentServersButton } from "../tasks/agent-servers.js";
 import { ModelMenu } from "../tasks/model-menu.js";
@@ -1576,7 +1576,7 @@ function AgentRow({
       rows={rows}
       note={
         agents === undefined ? (
-          <Spinner label="Loading agents" />
+          <Spinner delay label="Loading agents" />
         ) : rows.length === 0 ? (
           "No agents of this workspace work in it yet."
         ) : undefined
