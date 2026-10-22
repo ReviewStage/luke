@@ -102,8 +102,6 @@ import {
   accountFastOffer,
   agentRuntimeChoice,
   markedUnconnected,
-  onApiKey,
-  providerOfModel,
 } from "./agent-runtime-choice.js";
 import { CODER } from "./bounds.js";
 import { contextWindowOf } from "./context.js";
@@ -410,7 +408,7 @@ export type StartAsk = StartPlace & {
   readonly serverWords?: string | undefined;
   /** The branch the agent's checkout is cloned at, such as a stacked pull request's; none for the repository's default branch. */
   readonly branch?: string | undefined;
-  /** Whether a call is opened into the agent as it lands, which pins it to eve as a blank Start is (`startRuntimeOf`). */
+  /** Whether a call is opened into the agent as it lands; it runs where any Start would (`startRuntimeOf`). */
   readonly call?: boolean | undefined;
   /** The repository the task's own start reached in the same request, which the agent's Start takes rather than asking GitHub again; none for every other Start. */
   readonly reached?: StartReach | undefined;
@@ -918,19 +916,14 @@ export const startCredentialStands = (userId: string, model: string) =>
 /**
  * The runtime a new agent's conversation is recorded on, with its payer,
  * by the account's routing (`agentRuntimeChoice`): the credential Settings
- * chose, a blank Start, a continue and a fork alike. A Start a Call opens a
- * call into as it lands (`call`) is eve's whatever the routing would choose,
- * since a call reaches eve alone (`voice/opening.ts` refuses an agent on any
- * other runtime), so it runs on the account's own API key. Where no
- * credential of the account's pays, the Start is refused by name, the
- * provider beside it, and nothing is written.
+ * chose, a blank Start, one a Call opens a call into (`call`), a continue
+ * and a fork alike, since a call reaches a native harness's agent as it
+ * reaches eve's (`voice/deployment-exchange.ts`). Where no credential of
+ * the account's pays, the Start is refused by name, the provider beside
+ * it, and nothing is written.
  */
-function startRuntimeOf(userId: string, ask: StartAsk, model: string) {
-  const choice =
-    ask.call === true
-      ? Effect.flatMap(providerOfModel(model), (provider) => onApiKey(userId, provider))
-      : agentRuntimeChoice(userId, model);
-  return Effect.catch(choice, (failure) =>
+function startRuntimeOf(userId: string, model: string) {
+  return Effect.catch(agentRuntimeChoice(userId, model), (failure) =>
     failure instanceof AgentCredentialMissing
       ? Effect.fail(credentialMissing(failure.provider))
       : hostedStoreOrUnavailable(Effect.fail(failure)),
@@ -1079,7 +1072,7 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
   const continued = from !== undefined && from.told.messageId === undefined;
   const title = ask.title ?? (continued ? continuedTitle(from.source.title) : undefined);
   // The runtime and the payer are decided as the agent is made, by the starter's account and model, and never change.
-  const runtime = yield* startRuntimeOf(userId, ask, choice.model);
+  const runtime = yield* startRuntimeOf(userId, choice.model);
   const started = yield* hostedStoreOrUnavailable(
     createCodingAgent(userId, {
       ...brief,

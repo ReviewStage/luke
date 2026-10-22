@@ -1,4 +1,3 @@
-import type { CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
@@ -51,11 +50,9 @@ import { CALL_CONTROL_LABEL } from "./tasks-parts.js";
  * with no voice, the web's, hands the tab no doors, and the tab draws
  * neither. The tab around them is left out of the screen recording
  * (`agent-tab.tsx`). An agent on a provider's own harness, Claude Code or
- * Codex, takes no call, since calls run on eve alone and the service
- * refuses one into it (`NATIVE_AGENT_NOT_HERE`), so its tab draws neither
- * (`takesCalls`). A call runs on the account's own OpenAI key, so with none
- * saved Call says to add one and its press opens Settings › Agents
- * (`../openai-key.tsx`).
+ * Codex, takes a call as an eve one does: the call's asks reach its runner.
+ * A call runs on the account's own OpenAI key, so with none saved Call says
+ * to add one and its press opens Settings › Agents (`../openai-key.tsx`).
  */
 
 /** What an agent's tab is handed to take calls; none where the platform has no voice. */
@@ -86,11 +83,6 @@ export interface AgentCallPlace {
  */
 export interface AgentCallPress {
   readonly onPress: (agentId: string, place: AgentCallPlace) => void;
-}
-
-/** Whether a call may go into the agent: one on eve, whose summary names no native runtime, and never one on Claude Code or Codex. */
-export function takesCalls(agent: Pick<CodingAgentSummary, "runtime">): boolean {
-  return agent.runtime === undefined;
 }
 
 /** The voice's notice line, which rides the foot of the tab of the agent the call speaks into; none where the window draws it elsewhere. */

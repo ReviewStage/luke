@@ -21,7 +21,7 @@ import {
   type StoreWriter,
   storeWriter,
 } from "@luke/database/models/writer";
-import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
+import { CONVERSATION_RUNTIME, type ConversationRuntime } from "@luke/database/storage-vocabulary";
 import { CODING_AGENT_PAYER, type CodingAgentPayer } from "@luke/features/coding-agent-wire";
 import {
   PROVIDER_KEY_KIND,
@@ -30,6 +30,7 @@ import {
   type ProviderKeyKind,
   type ProviderKeyProvider,
 } from "@luke/features/provider-key-wire";
+import { causeKind } from "@luke/runtime/effect";
 import { type WireValue, WireValueSchema } from "@luke/wire";
 import { Clock, Effect, Layer, Option, Predicate, Result, Schema } from "effect";
 import {
@@ -55,6 +56,8 @@ import { ANY_METHOD, type WebRoutes } from "../../route.js";
 import { reopenTaskForWork, settleTaskIfFinished } from "../../tasks/task-finish.js";
 import { runnerEnded } from "../coder-host/claude-code-sessions.js";
 import { estimatedTokens } from "../coder-host/token-estimate.js";
+import { isNativeRuntime } from "../coder-host/native-runtime.js";
+import { NativeAgentSessions } from "../coder-host/runtime-sessions.js";
 import { CODER_TOOL_SET } from "../coder-host/tool-set.js";
 import { admitRunnerBearer, presentedBearer, runnerTokenDigest } from "../luke-mcp/bearer.js";
 import { keepAliveDue } from "../sandbox-keep-alive.js";
@@ -336,13 +339,27 @@ function landWrite(
         ASKS.bindDeliveries(target, [write.clientId], write.turnId, write.joinedAfterStep),
         (bound) =>
           bound.length > 0
-            ? // The call's own rows, written before its line was taken, go into the turn too.
-              Effect.flatMap(writer.attachAskLines(target, write.turnId), (attached) =>
-                reportRefused("a call's lines' attaching", attached),
+            ? // The call's own rows, written before its line was taken, go into the turn too, and an
+              // ask stopped before its line was taken stops the turn it opened once it binds.
+              Effect.as(
+                Effect.flatMap(writer.attachAskLines(target, write.turnId), (attached) =>
+                  reportRefused("a call's lines' attaching", attached),
+                ),
+                bound.some(
+                  (ask) => ask.cancelRequestedAt !== undefined && ask.joinedAfterStep === undefined,
+                )
+                  ? write.turnId
+                  : undefined,
               )
-            : Effect.flatMap(
-                writer.takeAwaitingLine(target, { clientId: write.clientId, turnId: write.turnId }),
-                (result) => reportRefused("a line's taking", result),
+            : Effect.as(
+                Effect.flatMap(
+                  writer.takeAwaitingLine(target, {
+                    clientId: write.clientId,
+                    turnId: write.turnId,
+                  }),
+                  (result) => reportRefused("a line's taking", result),
+                ),
+                undefined,
               ),
       );
     case NATIVE_WRITE.SESSION:
@@ -399,6 +416,7 @@ function landWrite(
 function landWrites(applying: Applying, writes: readonly NativeWrite[], now: number) {
   return Effect.gen(function* () {
     let events: BrainRunEvent[] = [];
+    const stops: string[] = [];
     // Only the newest reading of the context stands, so one batch writes it once.
     const lastContext = writes.findLastIndex((write) => write.kind === NATIVE_WRITE.CONTEXT);
     for (const [index, write] of writes.entries()) {
@@ -409,9 +427,11 @@ function landWrites(applying: Applying, writes: readonly NativeWrite[], now: num
       }
       yield* landEvents(applying, events);
       events = [];
-      yield* landWrite(applying, write, now);
+      const landed = yield* landWrite(applying, write, now);
+      if (typeof landed === "string") stops.push(landed);
     }
     yield* landEvents(applying, events);
+    return stops;
   });
 }
 
@@ -455,7 +475,7 @@ function applyBatch(applying: Applying, batch: RunnerEventBatch, held: NativePro
       }
     }
     for (const said of reports) yield* Effect.logWarning(`runner-events: ${said}`);
-    yield* landWrites(applying, writes, now);
+    const stops = yield* landWrites(applying, writes, now);
     const last = events.at(-1)?.sequence;
     const ends = endsOf(batch, held.sequence);
     // Any post is the runner still running, a heartbeat with no events among them, but a batch that
@@ -470,12 +490,45 @@ function applyBatch(applying: Applying, batch: RunnerEventBatch, held: NativePro
       ends,
       turns: turnsMovedBy(writes),
       keepsAlive,
+      stops,
     };
     return sequence === null || (last === undefined && !keepsAlive)
       ? { result }
       : { result, saved: { sequence, projection: state } };
   });
 }
+
+/**
+ * A turn a stopped ask opened, stopped: the runner told to stop it, where
+ * this function reaches the harness (`apps/web/server/native-agents.ts`),
+ * and the turn's row stamped as a Stop stamps it. A stop that cannot be
+ * told is logged; the stamp stands, and the turn ends as its run does.
+ */
+const stopTurnOfAsk = (
+  target: ConversationTarget,
+  sessionId: string | undefined,
+  runtime: ConversationRuntime | undefined,
+  turnId: string,
+) =>
+  Effect.gen(function* () {
+    const native = yield* Effect.serviceOption(NativeAgentSessions);
+    if (sessionId !== undefined && runtime !== undefined && isNativeRuntime(runtime)) {
+      const reached = Option.flatMap(native, (service) => service.sessions(runtime, target.userId));
+      if (Option.isSome(reached)) {
+        const sessions = yield* reached.value;
+        yield* sessions.cancel(sessionId, turnId);
+      } else {
+        yield* Effect.logWarning("a stopped ask's turn could not be told to its runner here");
+      }
+    }
+    const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
+    const at = new Date(yield* Clock.currentTimeMillis);
+    yield* writer.requestTurnCancel(target, { turnId, at });
+  }).pipe(
+    Effect.catchCause((cause) =>
+      Effect.logWarning(`a stopped ask's turn was not stopped: ${causeKind(cause)}`),
+    ),
+  );
 
 /** POST: one batch of a runner's events, admitted by its bearer and applied once. */
 const runnerEventsEndpoint = /* @__PURE__ */ Effect.fn("web/runnerEventsEndpoint")(function* <R>(
@@ -543,6 +596,16 @@ const runnerEventsEndpoint = /* @__PURE__ */ Effect.fn("web/runnerEventsEndpoint
   }
   if (alive !== undefined && applied.value.keepsAlive) {
     yield* alive({ target, sessionId: admitted.value.runtimeSessionId });
+  }
+  // A call's ask stopped before the runner took its line ends the turn it opened, as a Stop after
+  // its binding does (`brain-host/brain-ask.ts`), once the batch's writes stand.
+  for (const turnId of applied.value.stops) {
+    yield* stopTurnOfAsk(
+      target,
+      admitted.value.runtimeSessionId,
+      Option.getOrUndefined(runtime),
+      turnId,
+    );
   }
   if (ended !== undefined) {
     for (const sequence of applied.value.ends) {
