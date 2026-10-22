@@ -66,7 +66,9 @@ export const conversationMediaTypeSchema = EffectSchema.Literals(
 );
 
 /** Whether a transcript's picture is a video, played rather than drawn. */
-export function isVideoType(mediaType: ConversationMediaType): boolean {
+export function isVideoType(
+  mediaType: ConversationMediaType,
+): mediaType is typeof CONVERSATION_MEDIA_TYPE.WEBM {
   return mediaType === CONVERSATION_MEDIA_TYPE.WEBM;
 }
 
