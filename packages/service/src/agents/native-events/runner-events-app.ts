@@ -55,9 +55,9 @@ import { providerModelOf } from "../../providers/model-catalog.js";
 import { ANY_METHOD, type WebRoutes } from "../../route.js";
 import { reopenTaskForWork, settleTaskIfFinished } from "../../tasks/task-finish.js";
 import { runnerEnded } from "../coder-host/claude-code-sessions.js";
-import { estimatedTokens } from "../coder-host/token-estimate.js";
 import { isNativeRuntime } from "../coder-host/native-runtime.js";
 import { NativeAgentSessions } from "../coder-host/runtime-sessions.js";
+import { estimatedTokens } from "../coder-host/token-estimate.js";
 import { CODER_TOOL_SET } from "../coder-host/tool-set.js";
 import { admitRunnerBearer, presentedBearer, runnerTokenDigest } from "../luke-mcp/bearer.js";
 import { keepAliveDue } from "../sandbox-keep-alive.js";
@@ -590,15 +590,9 @@ const runnerEventsEndpoint = /* @__PURE__ */ Effect.fn("web/runnerEventsEndpoint
   if (taskId !== null && applied.value.turns.ended) {
     yield* settleTaskIfFinished(target.userId, taskId);
   }
-  // Note that the title is awaited rather than forked, because the function instance ends with the answer.
-  if (title !== undefined && (applied.value.turns.started || applied.value.turns.ended)) {
-    yield* title(target, agent.value);
-  }
-  if (alive !== undefined && applied.value.keepsAlive) {
-    yield* alive({ target, sessionId: admitted.value.runtimeSessionId });
-  }
   // A call's ask stopped before the runner took its line ends the turn it opened, as a Stop after
-  // its binding does (`brain-host/brain-ask.ts`), once the batch's writes stand.
+  // its binding does (`brain-host/brain-ask.ts`), once the batch's writes stand, and
+  // ahead of anything slower, as a title, so the runner hears the Stop at once.
   for (const turnId of applied.value.stops) {
     yield* stopTurnOfAsk(
       target,
@@ -606,6 +600,13 @@ const runnerEventsEndpoint = /* @__PURE__ */ Effect.fn("web/runnerEventsEndpoint
       Option.getOrUndefined(runtime),
       turnId,
     );
+  }
+  // Note that the title is awaited rather than forked, because the function instance ends with the answer.
+  if (title !== undefined && (applied.value.turns.started || applied.value.turns.ended)) {
+    yield* title(target, agent.value);
+  }
+  if (alive !== undefined && applied.value.keepsAlive) {
+    yield* alive({ target, sessionId: admitted.value.runtimeSessionId });
   }
   if (ended !== undefined) {
     for (const sequence of applied.value.ends) {
