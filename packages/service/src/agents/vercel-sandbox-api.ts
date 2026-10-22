@@ -490,9 +490,25 @@ const PASSING_RETRY = Schedule.max([
   Schedule.recurs(PASSING.RETRIES),
 ]);
 
-/** The text cut to `DETAIL_CHARS` and to one line. */
+/**
+ * A run of characters shaped like a credential: twenty or more of a token's
+ * alphabet unbroken, which a bearer, a provider key, a JWT, and an env value
+ * Luke sent all are, and Vercel's prose, codes, and a URL's slashed path
+ * segments mostly are not.
+ */
+const TOKEN_SHAPED = /[A-Za-z0-9._~+-]{20,}=*/gu;
+
+/** What a token-shaped run of a detail reads as. */
+const REDACTED_DETAIL = "[redacted]";
+
+/**
+ * The text cut to `DETAIL_CHARS` and to one line, every token-shaped run
+ * redacted first. Note that a detail is redacted by shape rather than by the
+ * values sent, because Vercel or a cause may echo any of them back, and a
+ * detail reaches the logs.
+ */
 function capped(text: string): string {
-  const line = text.replace(/\s+/gu, " ").trim();
+  const line = text.replace(TOKEN_SHAPED, REDACTED_DETAIL).replace(/\s+/gu, " ").trim();
   return line.length > DETAIL_CHARS ? `${line.slice(0, DETAIL_CHARS - 1)}…` : line;
 }
 

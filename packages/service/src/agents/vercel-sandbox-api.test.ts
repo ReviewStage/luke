@@ -108,12 +108,35 @@ it.effect("each call Vercel refused names the call, its status, and Vercel's err
 it.effect("a refusal's detail is one line of at most 300 characters", () =>
   Effect.gen(function* () {
     const api = yield* apiOver(() =>
-      Response.json({ error: { code: "x", message: `a\n${"b".repeat(1000)}` } }, { status: 500 }),
+      Response.json(
+        { error: { code: "x", message: `a\n${"word ".repeat(200)}` } },
+        { status: 500 },
+      ),
     );
     const failure = yield* Effect.flip(api.updateTags(NAME, {}));
     assert.ok(failure.detail !== undefined);
     assert.equal(failure.detail.length, 300);
     assert.equal(failure.detail.includes("\n"), false);
+  }),
+);
+
+it.effect("a secret Vercel or a cause echoes back is redacted from the detail", () =>
+  Effect.gen(function* () {
+    const echoed = `env SECRET=${SECRET_ENV} under Bearer ${fixtureToken()}`;
+    const refusing = yield* apiOver(() =>
+      Response.json({ error: { code: "bad_request", message: echoed } }, { status: 400 }),
+    );
+    const throwing = yield* apiOver(() => {
+      throw new Error(echoed);
+    });
+    for (const api of [refusing, throwing]) {
+      const failure = yield* Effect.flip(
+        api.start(SESSION, { command: "bash", args: [], sudo: true }),
+      );
+      assert.match(failure.detail ?? "", /env SECRET=\[redacted\] under Bearer \[redacted\]/u);
+      assert.equal(failure.message.includes(SECRET_ENV), false);
+      assert.equal(failure.message.includes(fixtureToken()), false);
+    }
   }),
 );
 
