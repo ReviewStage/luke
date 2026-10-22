@@ -17,6 +17,7 @@ import { eventsContract } from "./events.js";
 import { githubContract } from "./github.js";
 import { githubTokenContract } from "./github-token.js";
 import { inboxContract } from "./inbox.js";
+import { installedSkillsContract } from "./installed-skills.js";
 import { integrationsContract } from "./integrations.js";
 import { liveContract } from "./live.js";
 import { macCommandsContract } from "./mac-commands.js";
@@ -55,6 +56,7 @@ export const hostedContract = {
   github: githubContract,
   githubToken: githubTokenContract,
   inbox: inboxContract,
+  installedSkills: installedSkillsContract,
   integrations: integrationsContract,
   live: liveContract,
   macCommands: macCommandsContract,
