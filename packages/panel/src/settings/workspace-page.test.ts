@@ -1440,7 +1440,7 @@ test("a member leaves after confirming, which names what stays and what stops, s
     "Your own workspace, Dana, isn't affected.",
   ]);
   assert.equal(
-    document.querySelector(".toast-stack")?.textContent?.includes("You left acme."),
+    document.querySelector(".luke-toast-stack")?.textContent?.includes("You left acme."),
     true,
   );
 

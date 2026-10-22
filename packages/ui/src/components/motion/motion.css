@@ -18,12 +18,6 @@
   }
 }
 
-@keyframes luke-toast-rise {
-  from {
-    transform: translateY(var(--luke-space-12));
-  }
-}
-
 @keyframes luke-sheet-drop {
   from {
     transform: translateY(-16px);

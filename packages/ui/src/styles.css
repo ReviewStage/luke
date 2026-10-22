@@ -70,6 +70,7 @@
 @import "./components/search-field/search-field.css";
 @import "./components/shortcut/shortcut.css";
 @import "./components/text-field/text-field.css";
+@import "./components/toast/toast.css";
 @import "./components/tooltip/tooltip.css";
 @import "./components/checkbox/checkbox.css";
 @import "./components/choice-list/choice-list.css";

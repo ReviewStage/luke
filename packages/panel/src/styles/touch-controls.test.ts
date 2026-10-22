@@ -186,11 +186,11 @@ const HOVER_ONLY: readonly {
     name: "a toast's ×",
     piece: {
       tag: "li",
-      className: "toast",
+      className: "luke-toast",
       data: { action: "true" },
-      children: [{ tag: "span", className: "toast-dismiss" }],
+      children: [{ tag: "span", className: "luke-toast-dismiss" }],
     },
-    control: ".toast-dismiss",
+    control: ".luke-toast-dismiss",
   },
 ];
 
