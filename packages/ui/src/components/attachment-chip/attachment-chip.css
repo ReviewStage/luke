@@ -17,16 +17,12 @@
   }
 
   /* A chip with a way off was added to what it comes along with, so it
-     springs in as a removable chip does (`chip.css`'s keyframes), and its
-     way off pressed, scales out over the exit before its caller takes it. */
+     springs in as a removable chip does (`chip.css`'s keyframes); its exit
+     is the list's that draws it. */
   .luke-attachment-chip[data-removable="true"] {
     animation:
       luke-chip-fade-in var(--luke-duration-quick) ease-out backwards,
       luke-chip-pop var(--luke-duration-fast) var(--luke-spring-fast) backwards;
-  }
-
-  .luke-attachment-chip[data-removable="true"][data-leaving="true"] {
-    animation: luke-chip-pop-out var(--luke-duration-exit) var(--luke-motion-exit) forwards;
   }
 
   .luke-attachment-chip[data-image="true"] {

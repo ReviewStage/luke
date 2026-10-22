@@ -1,7 +1,6 @@
 import type { ComponentPropsWithRef, ReactNode } from "react";
 import { ChevronDownIcon, RemoveIcon } from "../../face/glyphs.js";
 import { useClipped } from "../../use-clipped.js";
-import { useRemoval } from "../../use-removal.js";
 
 /**
  * chip.tsx -- the one chip: a button naming a value or a thing, drawn in the look of the place it stands.
@@ -31,9 +30,10 @@ import { useRemoval } from "../../use-removal.js";
  * alone where its place has no room for its words (`iconOnly`), its words
  * still read as its name. A removable chip (`onRemove`) is no button of its
  * own: it names what stands, a filter applied, a mention or a label added to
- * a field, and ends in a × named for what lifting it does. It springs in as
- * it arrives and, its × pressed, scales out before its caller is asked to
- * lift it (`useRemoval`), so it is never taken on the frame of the press.
+ * a field, and ends in a × named for what lifting it does, which its caller
+ * answers at once, so what it named is gone on the press. It springs in as
+ * it arrives; its exit is the list's that draws it (`ListMotion`), since
+ * its caller has already let it go.
  *
  * A chip comes at the control's size, or compact (`size`), a caption
  * line's pill, where it is one of a row of small counts (a pull request's
@@ -184,22 +184,14 @@ function RemovableChip({
   children,
   ...face
 }: RemovableChipProps): React.JSX.Element {
-  const removal = useRemoval(onRemove);
   return (
-    <span
-      ref={removal.ref}
-      className="luke-chip"
-      data-removable="true"
-      data-leaving={removal.leaving ? "true" : undefined}
-      inert={removal.leaving}
-      {...faceAttributes(face)}
-    >
+    <span className="luke-chip" data-removable="true" {...faceAttributes(face)}>
       <span className="luke-chip-face">{children}</span>
       <button
         type="button"
         className="luke-chip-remove"
         aria-label={removeLabel}
-        onClick={removal.remove}
+        onClick={onRemove}
       >
         <RemoveIcon />
       </button>
