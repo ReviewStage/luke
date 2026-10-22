@@ -141,6 +141,18 @@ const REFUSAL_OF_SEND_OUTCOME = {
 } as const;
 
 /**
+ * Why a line was not written, in the route's words: a conversation gone is
+ * the agent gone, a conversation whose lock another write held past the
+ * send's wait for it is an outage the same key may retry, since eve was told
+ * nothing, and words the vocabulary refused are the request's own fault.
+ */
+const REFUSAL_OF_UNWRITTEN_LINE = {
+  [STORE_WRITE_REFUSAL.NO_CONVERSATION]: HOSTED_REFUSAL.NOT_FOUND,
+  [STORE_WRITE_REFUSAL.BUSY]: HOSTED_REFUSAL.UNAVAILABLE,
+  [STORE_WRITE_REFUSAL.MESSAGE_REFUSED]: HOSTED_REFUSAL.INVALID_REQUEST,
+} as const;
+
+/**
  * Whether a message to an agent whose session has not claimed its record
  * opens one: where its Start opened none, as an agent started blank, with
  * neither the plan nor a prompt, has none until its first words; or past the
@@ -407,13 +419,8 @@ export const steerCodingAgentWritten = /* @__PURE__ */ Effect.fn("web/steerCodin
       write.writeAwaitingLine(target, { ...line, mentioned }, dispatch),
     ),
   );
-  if (Result.isFailure(written)) {
-    return yield* Effect.fail(
-      written.failure.refusal === STORE_WRITE_REFUSAL.NO_CONVERSATION
-        ? HOSTED_REFUSAL.NOT_FOUND
-        : HOSTED_REFUSAL.INVALID_REQUEST,
-    );
-  }
+  if (Result.isFailure(written))
+    return yield* Effect.fail(REFUSAL_OF_UNWRITTEN_LINE[written.failure.refusal]);
   // The turn the ended session was running is settled whether or not the fresh session took the words.
   if (ended && running !== undefined) yield* settledEnded(writer, agent, running);
   if (Option.isNone(written.success))

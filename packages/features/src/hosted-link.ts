@@ -57,12 +57,15 @@ import {
 /**
  * The deadlines a procedure is asked under, by how long its answer may
  * take: the usual one, a held read the service keeps open for as long as it
- * waits on the next change (or a dictated clip the model hears through),
- * and a Start, which may copy another agent's work before it answers.
+ * waits on the next change (or a dictated clip the model hears through), a
+ * message to an agent, which waits on the agent's conversation and on eve
+ * taking the words before it answers, and a Start, which may copy another
+ * agent's work before it answers.
  */
 export const HOSTED_DEADLINE = {
   USUAL: "usual",
   HELD: "held",
+  STEER: "steer",
   START: "start",
   CHAPTERS: "chapters",
 } as const;
@@ -72,12 +75,17 @@ export type HostedDeadline = (typeof HOSTED_DEADLINE)[keyof typeof HOSTED_DEADLI
 /**
  * The deadlines longer than the usual one, which is the account call's own
  * default or the one a client keeps: a held read's is the service's hold and
- * room for the answer to travel after it, a Start's outlasts the copy, and a
+ * room for the answer to travel after it, a message's outlasts the service's
+ * wait for the conversation's lock (five seconds) and its hand-over to eve
+ * under it (thirty, `@luke/database/models/writer`'s bounds) with room for
+ * the reads before them, so a send that lands slowly is never read as one
+ * that did not answer, a Start's outlasts the copy, and a
  * Generate of a pull request's chapters outlasts the function it runs in
  * (`@luke/service/chapters/chapters-function`'s 240 seconds).
  */
 const LONG_DEADLINE_MS = {
   [HOSTED_DEADLINE.HELD]: 35_000,
+  [HOSTED_DEADLINE.STEER]: 45_000,
   [HOSTED_DEADLINE.START]: 120_000,
   [HOSTED_DEADLINE.CHAPTERS]: 250_000,
 } as const satisfies Record<Exclude<HostedDeadline, typeof HOSTED_DEADLINE.USUAL>, number>;
