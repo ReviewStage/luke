@@ -816,7 +816,7 @@ test("in the Comments tab a thread's quote shows its words in the plan, and a de
   const { container, documentsShown } = drawn("tab");
   const quote = (thread: string) =>
     container.querySelector<HTMLButtonElement>(
-      `.comment-card[data-thread="${thread}"] button.comment-quote-link`,
+      `.comment-card[data-thread="${thread}"] .comment-quote button`,
     );
 
   act(() => quote(ID.OPEN)?.click());

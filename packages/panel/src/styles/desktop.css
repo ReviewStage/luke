@@ -2122,26 +2122,7 @@ ul.actor-stack {
   font-size: var(--luke-type-caption-size);
 }
 
-.agent-origin-body-line {
-  display: flex;
-  height: 28px; /* off-scale: a call's line */
-  align-items: center;
-  gap: var(--luke-icon-gap);
-  padding-inline: var(--luke-space-4);
-  border-radius: var(--luke-radius-6);
-  color: var(--luke-color-text-muted);
-  cursor: pointer;
-  transition:
-    color var(--duration-quick) var(--spring),
-    background-color var(--duration-quick) var(--spring);
-}
-
-.agent-origin-body-line:hover {
-  background: var(--luke-color-fill-strong);
-  color: var(--luke-color-text);
-}
-
-.agent-origin-body-line > svg {
+.agent-origin-body-icon {
   width: 16px;
   height: 16px;
   flex-shrink: 0;

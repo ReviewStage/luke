@@ -1,9 +1,9 @@
-import { TextButton, useDisclosureBodyDrawn } from "@luke/ui";
+import { LineSummary, TextButton, useDisclosureBodyDrawn } from "@luke/ui";
 import { useClipped } from "@luke/ui/use-clipped";
 import { type ReactNode, useState } from "react";
 import { GLYPH_STATE, StateGlyph, stateEndMark } from "../state-glyph.js";
 import { CodeBlock } from "./code-block.js";
-import { Fold, FoldBody, type FoldProps, FoldSummary } from "./fold.js";
+import { Fold, FoldBody, type FoldProps } from "./fold.js";
 
 /**
  * tool.tsx -- AI Elements' Tool: one tool call as a compact row, with its input and its answer under it once opened.
@@ -200,7 +200,7 @@ export function ToolHeader({
 }: ToolHeaderProps): ReactNode {
   const drawn = useDisclosureBodyDrawn();
   return (
-    <FoldSummary className="tool-line">
+    <LineSummary>
       <ToolLine
         state={state}
         icon={icon}
@@ -210,7 +210,7 @@ export function ToolHeader({
         subjectIsCode={subjectIsCode}
         place={place}
       />
-    </FoldSummary>
+    </LineSummary>
   );
 }
 

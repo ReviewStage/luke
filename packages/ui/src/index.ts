@@ -32,6 +32,7 @@ export * from "./components/hover-card/hover-card.js";
 export * from "./components/inline-edit/inline-edit.js";
 export * from "./components/inline-ref/inline-ref.js";
 export * from "./components/layout/layout.js";
+export * from "./components/line-button/line-button.js";
 export * from "./components/list-row/list-row.js";
 export * from "./components/menu/link-address.js";
 export * from "./components/menu/menu.js";

@@ -4774,39 +4774,12 @@ ol.transcript-list {
   --transcript-gutter: calc(var(--luke-space-4) + 16px + var(--luke-icon-gap));
 }
 
-/* A tool call (../ai-elements/tool.tsx): one line, opening its body under
-   it, or a tab elsewhere (`.tool-opening`), in the muted ink its icon,
-   subject, and working mark keep, its label in the full ink over it; a
-   hover fill says the line opens. */
+/* A tool call (../ai-elements/tool.tsx): one line, a LineSummary opening
+   its body under it or a LineButton opening a tab elsewhere, in the muted
+   ink its icon, subject, and working mark keep, its label in the full ink
+   over it. */
 .tool {
   font-size: var(--luke-type-caption-size);
-}
-
-.tool-line {
-  display: flex;
-  height: 28px; /* off-scale: a call's line */
-  align-items: center;
-  gap: var(--luke-icon-gap);
-  padding-inline: var(--luke-space-4);
-  border-radius: var(--luke-radius-6);
-  color: var(--luke-color-text-muted);
-  cursor: pointer;
-  transition:
-    color var(--duration-quick) var(--spring),
-    background-color var(--duration-quick) var(--spring);
-}
-
-.tool-line:hover {
-  background: var(--luke-color-fill-strong);
-}
-
-/* A call whose subject opens in a tab of its own: the same line as a button
-   across the transcript's width. */
-.tool-opening {
-  width: 100%;
-  background: transparent;
-  font-size: var(--luke-type-caption-size);
-  text-align: left;
 }
 
 .tool-icon {
@@ -4869,7 +4842,7 @@ summary:is(:hover, :focus-visible) button[data-tool-agent-ref] {
   background: var(--luke-color-fill-selected);
 }
 
-.tool-line button[data-tool-agent-ref]:is(:hover, :focus-visible) {
+summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
   background: var(--luke-color-fill-pressed);
 }
 
@@ -5072,25 +5045,6 @@ summary:is(:hover, :focus-visible) button[data-tool-agent-ref] {
    brain, in the muted ink, keeping their own breaks and wrapping anywhere. */
 .reasoning {
   font-size: var(--luke-type-caption-size);
-}
-
-.reasoning-line {
-  display: flex;
-  height: 28px; /* off-scale: a call's line */
-  align-items: center;
-  gap: var(--luke-icon-gap);
-  padding-inline: var(--luke-space-4);
-  border-radius: var(--luke-radius-6);
-  color: var(--luke-color-text-muted);
-  cursor: pointer;
-  transition:
-    color var(--duration-quick) var(--spring),
-    background-color var(--duration-quick) var(--spring);
-}
-
-.reasoning-line:hover {
-  background: var(--luke-color-fill-strong);
-  color: var(--luke-color-text);
 }
 
 .reasoning-icon {
@@ -5644,11 +5598,11 @@ summary:is(:hover, :focus-visible) button[data-tool-agent-ref] {
 }
 
 /* A finger's press is 44px tall, so on a coarse pointer a transcript's rows
-   that open something, a call's line, the docked to-do list's head, and the
-   agent's pull request's row, stand that tall, their words still centred;
-   a mouse keeps their compact heights. */
+   that open something, the docked to-do list's head and the agent's pull
+   request's row, stand that tall, their words still centred, as a call's
+   line (a LineButton's row) does of its own; a mouse keeps their compact
+   heights. */
 @media (pointer: coarse) {
-  .tool-line,
   .todos-dock-head {
     height: auto;
     min-height: 44px;
@@ -7243,13 +7197,17 @@ svg.lucide {
 }
 
 /* A subagent's row, on the Work tab and an agent's tab alike
-   (transcript-blocks.tsx): a line drawn as a call's row is (`.tool-line`),
-   in its muted ink, unboxed, the whole of it the button that opens the
-   subagent's tab, with the same hover fill and the focus ring every button
-   of ours draws. It answers its own width, so the job, the one thing naming
+   (transcript-blocks.tsx): a call's row, the whole of it the line button
+   that opens the subagent's tab, the summary that folds its task and
+   answer open, or, where it opens nothing, the same line pressed by
+   nothing. The row answers its own width, so the job, the one thing naming
    the subagent, keeps the room in a narrow column. */
-.subagent-line {
+.subagent-row {
   container: subagent-row / inline-size;
+  font-size: var(--luke-type-caption-size);
+}
+
+.subagent-line {
   display: flex;
   width: 100%;
   min-width: 0;
@@ -7258,16 +7216,9 @@ svg.lucide {
   gap: var(--luke-icon-gap);
   padding: 0 var(--luke-space-4);
   border-radius: var(--luke-radius-6);
-  background: none;
   color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
   line-height: var(--luke-type-caption-leading);
-  text-align: left;
-  transition: background-color var(--duration-hover) ease;
-}
-
-button.subagent-line:hover {
-  background: var(--luke-color-fill-strong);
 }
 
 /* The harness's mark, in the 16px seat a call's icon stands in. */
@@ -7921,10 +7872,6 @@ button.picture-frame {
   margin-left: var(--comment-indent);
 }
 
-.comment-entry > .comment-quote-link {
-  width: calc(100% - var(--comment-indent));
-}
-
 .comment-entry > .comment-quote {
   margin-top: var(--luke-space-4);
 }
@@ -8258,23 +8205,6 @@ button.picture-frame {
   border-color: var(--luke-color-border);
   background: none;
   box-shadow: none;
-}
-
-/* A quote that shows its words in the plan: the quote's look, pressed. */
-.comment-quote-link {
-  width: 100%;
-  border-top: 0;
-  border-right: 0;
-  border-bottom: 0;
-  background: none;
-  color: inherit;
-  cursor: pointer;
-  font: inherit;
-  text-align: left;
-}
-
-.comment-quote-link:hover {
-  color: var(--luke-color-text);
 }
 
 /* A call that sent another agent words (`SentCall`): the words whole in

@@ -426,7 +426,7 @@ test("with a mouse those presses still wait for the pointer", () => {
 function transcriptRows(): [string, HTMLElement][] {
   const host = document.body.appendChild(document.createElement("div"));
   host.innerHTML = `
-    <div class="tool"><details><summary class="tool-line" data-row="a call's line"></summary></details></div>
+    <div class="tool"><details><summary class="luke-line-button" data-look="row" data-row="a call's line"></summary></details></div>
     <details class="todos-dock"><summary class="todos-dock-head" data-row="the to-do list's head"></summary></details>
     <div class="agent-published-dock"><ul class="luke-list"><li class="luke-list-row"><button class="luke-list-row-main" data-row="the pull request's row"></button></li></ul></div>`;
   return [...host.querySelectorAll<HTMLElement>("[data-row]")].map((row) => [
