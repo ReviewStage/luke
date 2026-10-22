@@ -28,7 +28,7 @@ import {
 } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
-import { type ChatPlace, FOR_YOU } from "@luke/ui/chat-model";
+import { type ChatPlace, type ChatPost, FOR_YOU } from "@luke/ui/chat-model";
 import type { PictureAnswer } from "@luke/ui/picture-cache";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -110,6 +110,11 @@ function mount(
     Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND }),
   opened: ReadLink[] | undefined = undefined,
   control: Partial<TasksControl> = {},
+  /** How a post lands: at once, staged, unless the test holds it and stages it itself. */
+  posting: (
+    land: () => Promise<string | undefined>,
+    post: ChatPost,
+  ) => Promise<string | undefined> = (land) => land(),
 ): HTMLElement {
   function Page() {
     const [place, setPlace] = useState<ChatPlace>(FOR_YOU);
@@ -143,7 +148,7 @@ function mount(
           onShowMessage: () => undefined,
           listed: false,
           onList: () => undefined,
-          onPost: (post) => stage((held) => stagedPost(held, post, AT)),
+          onPost: (post) => posting(() => stage((held) => stagedPost(held, post, AT)), post),
           onAnswer: (answer) => stage((held) => stagedAnswer(held, answer, AT)),
           onChannel: (change) => stage((held) => stagedChannel(held, change)),
           onRead: (channelIds) => void stage((held) => stagedRead(held, channelIds)),
@@ -2411,4 +2416,119 @@ test("a member whose account is gone is named and drawn as one former member, in
     (each) => each.querySelector(".chat-face .actor-mark[data-kind='someone']") !== null,
   );
   assert.equal(gone?.querySelector(".chat-byline-name")?.textContent, "Former member");
+});
+
+/** Chat over the fixture's chat on its plan's channel, each post held until the test lands it or refuses it, in the order posted. */
+function heldPosts() {
+  const held: {
+    readonly post: ChatPost;
+    readonly land: () => Promise<string | undefined>;
+    readonly answer: (refused: string | undefined) => void;
+  }[] = [];
+  const page = mount(
+    (chat) => chat,
+    ACME,
+    undefined,
+    undefined,
+    { tasks: [INVITATIONS] },
+    (land, post) =>
+      new Promise((answer) => {
+        held.push({ post, land, answer });
+      }),
+  );
+  act(() => railRow(page, "teammate-invitations").click());
+  const box = boxNamed(page, "Message #teammate-invitations");
+  return {
+    page,
+    box,
+    /** The words of each post handed to the service, in the order handed. */
+    posted: () => held.map((each) => each.post.text),
+    /** The service takes the post `index`: the chat holds it as the answer lands, in the same draw. */
+    land: async (index: number) => {
+      const each = held[index] ?? assert.fail(`no post ${index}`);
+      await act(async () => each.answer(await each.land()));
+      await settle();
+    },
+    refuse: async (index: number, why: string) => {
+      act(() => held[index]?.answer(why));
+      await settle();
+    },
+    send: async (text: string) => {
+      typeInComposer(box, text);
+      pressInComposer(box, "Enter");
+      await settle();
+    },
+    pending: () => [...page.querySelectorAll(".chat-message[data-pending]")],
+  };
+}
+
+test("a post stands in the channel at once as the developer's, the box empty and keeping the caret, and the posted message takes its place, drawn once", async () => {
+  const chat = heldPosts();
+  const before = words(chat.page).length;
+  await chat.send("Shipping the invite emails today.");
+
+  assert.equal(boxWords(chat.box), "");
+  assert.equal(composerEditor(chat.box).getAttribute("aria-disabled"), null);
+  assert.equal(document.activeElement, composerEditor(chat.box));
+  assert.equal(chat.pending().length, 1, "drawn as on its way");
+  assert.equal(words(chat.page).at(-1), "Shipping the invite emails today.");
+
+  await chat.land(0);
+  assert.equal(chat.pending().length, 0);
+  assert.equal(
+    words(chat.page).length,
+    before + 1,
+    "the message stands in its place, never beside it",
+  );
+  assert.equal(words(chat.page).at(-1), "Shipping the invite emails today.");
+});
+
+test("two posts sent at once reach the service one at a time, in the order sent", async () => {
+  const chat = heldPosts();
+  await chat.send("First.");
+  await chat.send("Second.");
+  assert.deepEqual(chat.posted(), ["First."], "the second waits for the first's answer");
+  assert.deepEqual(words(chat.page).slice(-2), ["First.", "Second."]);
+
+  await chat.land(0);
+  assert.deepEqual(chat.posted(), ["First.", "Second."]);
+  await chat.land(1);
+  assert.deepEqual(words(chat.page).slice(-2), ["First.", "Second."]);
+  assert.equal(chat.pending().length, 0);
+});
+
+test("a post refused while the box holds nothing newer comes back into it with why; one refused after the developer wrote on stays where it went with Retry", async () => {
+  const chat = heldPosts();
+  await chat.send("Back to the box.");
+  await chat.refuse(0, "Chat could not be reached.");
+  assert.equal(boxWords(chat.box), "Back to the box.");
+  assert.match(
+    chat.box.querySelector('[role="alert"]')?.textContent ?? "",
+    /could not be reached/u,
+  );
+  assert.equal(chat.pending().length, 0, "the post leaves the stream");
+
+  typeInComposer(chat.box, " Again.");
+  pressInComposer(chat.box, "Enter");
+  await settle();
+  typeInComposer(chat.box, "Still writing");
+  await chat.refuse(1, "Chat could not be reached.");
+  assert.equal(boxWords(chat.box), "Still writing", "the newer words stay");
+  const unsent =
+    chat.page.querySelector<HTMLElement>(".chat-message[data-unsent]") ??
+    assert.fail("the refused post stays where it went");
+  assert.match(unsent.textContent ?? "", /Back to the box\. Again\./u);
+  const retry =
+    [...unsent.querySelectorAll("button")].find((each) => each.textContent === "Retry") ??
+    assert.fail("with Retry");
+  act(() => retry.click());
+  await settle();
+  assert.deepEqual(chat.posted(), [
+    "Back to the box.",
+    "Back to the box. Again.",
+    "Back to the box. Again.",
+  ]);
+  await chat.land(2);
+  assert.equal(chat.page.querySelector(".chat-message[data-unsent]"), null);
+  assert.equal(words(chat.page).at(-1), "Back to the box. Again.");
 });

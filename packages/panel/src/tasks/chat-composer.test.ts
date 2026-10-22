@@ -21,9 +21,9 @@ import { ChatComposer, type ChatComposerMentions } from "./chat-composer.js";
 /**
  * Chat's box as the developer works it, alike with the agent's box and the
  * Inbox's: words typed and not sent wait under their channel, and under
- * their thread for a reply, while another is open; a post out holds the
- * box and its send, and the caret comes back once it lands; a post refused
- * says why with Retry beside it; Escape leaves the box; and a Luke address
+ * their thread for a reply, while another is open; a post leaves the box at
+ * once, which keeps the caret and takes the next; a post refused comes back
+ * with why and Retry where the box holds nothing newer; Escape leaves the box; and a Luke address
  * pasted whole is written as its chip.
  */
 
@@ -69,7 +69,7 @@ interface Drawn {
   readonly channelId: string;
   readonly replyTo?: number;
   readonly label: string;
-  readonly onSend: (text: string) => Promise<string | undefined>;
+  readonly onSend: (text: string, takeBack: (refused: string) => boolean) => void;
 }
 
 /**
@@ -92,7 +92,7 @@ function page(workspace?: string) {
         mentions: NO_MENTIONS,
         keywords: [],
         compact: box.replyTo !== undefined,
-        onSend: (text) => box.onSend(text),
+        onSend: (text, _attachments, takeBack) => box.onSend(text, takeBack),
       }),
     );
     const held = createElement("div", null, ...drawn);
@@ -131,24 +131,25 @@ function sendOf(box: HTMLElement): HTMLButtonElement {
   return send;
 }
 
-/** A send that answers only when the test says, every post it was handed written down. */
+/** A send that answers only when the test says, every post it was handed written down, and whether the box took a refused one back. */
 function heldSend() {
   const sent: string[] = [];
   const answers: ((refused: string | undefined) => void)[] = [];
-  const onSend = (text: string) => {
+  const takenBack: boolean[] = [];
+  const onSend = (text: string, takeBack: (refused: string) => boolean) => {
     sent.push(text);
-    return new Promise<string | undefined>((resolve) => {
-      answers.push(resolve);
+    answers.push((refused) => {
+      if (refused !== undefined) takenBack.push(takeBack(refused));
     });
   };
   const answer = async (refused: string | undefined) => {
     act(() => answers.shift()?.(refused));
     await settle();
   };
-  return { sent, onSend, answer };
+  return { sent, onSend, answer, takenBack };
 }
 
-const taken = () => Promise.resolve(undefined);
+const taken = () => undefined;
 
 test("words left in a channel's box wait there while another channel is open, a reply waits under its thread once hidden, and each goes with the post that sends it", async () => {
   const { container, draw } = page();
@@ -185,7 +186,7 @@ test("words left in a channel's box wait there while another channel is open, a 
   assert.equal(boxWords(boxNamed(container, "Message #general")), "half a thought");
 });
 
-test("a post out holds the box and a send that reads as sent, an Enter meanwhile posts nothing more, and the caret comes back once it lands", async () => {
+test("a post leaves the box at once, which keeps the caret and takes the next post before the first answers", async () => {
   const { container, draw } = page();
   const send = heldSend();
   draw([{ channelId: GENERAL, label: "Message #general", onSend: send.onSend }]);
@@ -193,19 +194,32 @@ test("a post out holds the box and a send that reads as sent, an Enter meanwhile
   typeInComposer(box, "Shipping today.");
   pressInComposer(box, "Enter");
   await settle();
-  assert.equal(sendOf(box).disabled, true);
-  assert.equal(sendOf(box).dataset.submit, "submitted");
-  assert.equal(composerEditor(box).getAttribute("aria-disabled"), "true");
-  pressInComposer(box, "Enter");
-  await settle();
-  assert.deepEqual(send.sent, ["Shipping today."]);
-  // A field that takes no words can hold no caret, so the browser takes it off the held box.
-  act(() => composerEditor(box).blur());
-
-  await send.answer(undefined);
   assert.equal(boxWords(box), "");
   assert.equal(composerEditor(box).getAttribute("aria-disabled"), null);
   assert.equal(document.activeElement, composerEditor(box));
+  assert.equal(sendOf(box).dataset.submit, "ready");
+
+  typeInComposer(box, "And the notes.");
+  pressInComposer(box, "Enter");
+  await settle();
+  assert.deepEqual(send.sent, ["Shipping today.", "And the notes."]);
+  assert.equal(boxWords(box), "");
+});
+
+test("a post refused after the developer wrote on leaves their words in the box, and its own stay where it went", async () => {
+  const { container, draw } = page();
+  const send = heldSend();
+  draw([{ channelId: GENERAL, label: "Message #general", onSend: send.onSend }]);
+  const box = boxNamed(container, "Message #general");
+  typeInComposer(box, "Shipping today.");
+  pressInComposer(box, "Enter");
+  await settle();
+  typeInComposer(box, "Still writing");
+
+  await send.answer("Chat could not be reached.");
+  assert.equal(boxWords(box), "Still writing");
+  assert.deepEqual(send.takenBack, [false]);
+  assert.equal(box.querySelector('[role="alert"]'), null);
 });
 
 test("a box that opens again after a post leaves the caret where the developer went meanwhile", async () => {
@@ -224,7 +238,7 @@ test("a box that opens again after a post leaves the caret where the developer w
   assert.equal(document.activeElement, elsewhere);
 });
 
-test("a post refused says why with Retry, which posts the same words again and empties the box once taken", async () => {
+test("a post refused while the box holds nothing newer comes back into it with why and Retry, which posts the same words again", async () => {
   const { container, draw } = page();
   const send = heldSend();
   draw([{ channelId: GENERAL, label: "Message #general", onSend: send.onSend }]);
@@ -240,8 +254,9 @@ test("a post refused says why with Retry, which posts the same words again and e
     (button) => button.textContent === "Retry",
   );
   assert.ok(retry, "the refusal offers Retry");
+  assert.deepEqual(send.takenBack, [true]);
   act(() => retry.click());
-  await send.answer(undefined);
+  await settle();
   assert.deepEqual(send.sent, ["Shipping today.", "Shipping today."]);
   assert.equal(boxWords(box), "");
   assert.equal(box.querySelector('[role="alert"]'), null);
