@@ -121,6 +121,8 @@ export function ModelMenu(props: {
   offersFast?: boolean | undefined;
   /** One muted line under the pinned rows: what the agent has cost, on the chip's menu; nothing on the Start button's. */
   footNote?: string | undefined;
+  /** One muted line under that: the plan that pays and where to manage it, on a ChatGPT-paid agent's chip; nothing elsewhere. */
+  planNote?: React.ReactNode;
   /** The menu is on its way out (`SearchableMenu`'s). */
   leaving?: boolean | undefined;
   /** Hands the menu's element to the hold its owner draws it through its exit with. */
@@ -249,6 +251,7 @@ export function ModelMenu(props: {
       onLeave={props.onLeave}
       foot={foot}
       footNote={props.footNote}
+      planNote={props.planNote}
       leaving={props.leaving}
       ref={props.ref}
     />

@@ -234,7 +234,7 @@ function submenuOptions(open: Submenu): ComboboxOption[] {
 }
 
 /** One muted line pressed by nothing, under the pinned rows or a submenu's. */
-function FootNote({ words }: { words: string }): React.JSX.Element {
+function FootNote({ words }: { words: React.ReactNode }): React.JSX.Element {
   return (
     <div className="task-compose-menu-foot-note">
       <Text as={TEXT_ELEMENT.P} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.SUBTLE}>
@@ -318,6 +318,8 @@ export function SearchableMenu(props: {
   foot?: readonly FootRow[] | undefined;
   /** One muted line under the pinned rows, pressed by nothing: what the agent has cost. */
   footNote?: string | undefined;
+  /** One muted line under that, which may hold a link: the plan that pays, as its provider asks. */
+  planNote?: React.ReactNode;
   className?: string;
   /** The menu is on its way out: drawn fading, and taking nothing. */
   leaving?: boolean | undefined;
@@ -423,7 +425,7 @@ export function SearchableMenu(props: {
   // What the field controls, as the space-separated list of ids ARIA reads:
   // the list, the pinned rows, and a submenu while one is open, so every row
   // it may name stands in a popup it controls.
-  const footed = foot.length > 0 || props.footNote !== undefined;
+  const footed = foot.length > 0 || props.footNote !== undefined || props.planNote !== undefined;
   const controlled = [
     listId,
     ...(footed ? [footId] : []),
@@ -616,6 +618,7 @@ export function SearchableMenu(props: {
             );
           })}
           {props.footNote === undefined ? null : <FootNote words={props.footNote} />}
+          {props.planNote === undefined ? null : <FootNote words={props.planNote} />}
         </div>
       ) : null}
     </div>

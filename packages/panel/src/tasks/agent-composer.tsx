@@ -347,7 +347,6 @@ export function AgentComposer({
   replyDoor,
   sendsEmpty = false,
   closedRemedy,
-  payer,
   wording,
   maxLength = CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS,
   above,
@@ -396,8 +395,6 @@ export function AgentComposer({
   sendsEmpty?: boolean;
   /** What mends a box closed for good, drawn after its note: Continue in new agent (`continue-agent.tsx`); none where nothing does. */
   closedRemedy?: ReactNode;
-  /** Who pays, said under the card: a plan's label, as its provider asks; none where nothing is said. */
-  payer?: ReactNode;
   /** What the box asks for, calls its field, and calls its round button, where its owner says other than an agent's box does, as New task's does. */
   wording?: ComposerWords | undefined;
   /** The most the words may spell: a message to an agent's bound, unless the owner sends them elsewhere, as New task's Plan mode sends a task's brief. */
@@ -845,7 +842,6 @@ export function AgentComposer({
           {closed ? closedRemedy : null}
         </div>
       ) : null}
-      {payer !== undefined ? <div className="agent-composer-payer">{payer}</div> : null}
     </div>
   );
 }

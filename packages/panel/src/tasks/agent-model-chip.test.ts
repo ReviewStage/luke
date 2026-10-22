@@ -20,6 +20,8 @@ import { AgentModelChip } from "./agent-model-chip.js";
  * on Codex GPT models alone with neither, the list `list_models` answers
  * for the same catalog (`coder-agent-tools.test.ts`), while an eve agent's
  * offers all of it. A model whose plan runs no fast mode draws no Fast.
+ * A Codex agent's menu ends on the ChatGPT plan that pays and a link to
+ * manage its usage; no other agent's says what pays.
  */
 
 const MODELS: readonly CatalogModel[] = [
@@ -172,6 +174,7 @@ function openMenuOn(
 ): {
   models: string[];
   foot: string;
+  menu: Element;
 } {
   const view = document.createElement("div");
   document.body.append(view);
@@ -201,7 +204,7 @@ function openMenuOn(
   const listed = [...menu.querySelectorAll('[role="listbox"] [role="option"]')].map(
     (row) => row.textContent ?? "",
   );
-  return { models: listed, foot };
+  return { models: listed, foot, menu };
 }
 
 test("on a Claude Code agent the menu offers Claude models alone with Fast and no Context row, on a Codex agent GPT models alone with neither, while an eve agent's offers every model with both", () => {
@@ -241,4 +244,22 @@ test("a GPT model whose ChatGPT plan pays draws no Fast row in the menu, not eve
   assert.match(gpt.foot, /Effort/u);
   assert.doesNotMatch(gpt.foot, /Fast/u);
   assert.match(opus.foot, /Fast/u);
+});
+
+test("a Codex agent's menu ends on \"Using ChatGPT plan · Manage usage\", the link opening ChatGPT's usage settings, while a Claude Code or eve agent's names no plan", () => {
+  const opened: string[] = [];
+  fakeAppPlatform({ assetBase: () => "https://luke.test/", openWeb: (href) => opened.push(href) });
+  const codex = openMenuOn(CODING_AGENT_RUNTIME.CODEX, {
+    model: "openai/gpt-6.1-sol",
+    effort: "low",
+  });
+  assert.match(codex.foot, /Using ChatGPT plan · Manage usage$/u);
+  const link = [...codex.menu.querySelectorAll("a")].find((a) => a.textContent === "Manage usage");
+  assert.ok(link, "Manage usage is a link");
+  act(() => link.click());
+  assert.deepEqual(opened, ["https://chatgpt.com/settings/usage"]);
+
+  for (const runtime of [CODING_AGENT_RUNTIME.CLAUDE_CODE, undefined]) {
+    assert.doesNotMatch(openMenuOn(runtime).foot, /plan|Manage usage/u);
+  }
 });
