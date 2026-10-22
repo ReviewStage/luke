@@ -21,6 +21,8 @@ import {
   DIALOG_TONE,
   type DialogQuestion,
   EmptyState,
+  ONE_LINE_ELEMENT,
+  OneLine,
   TEXT_BUTTON_TONE,
   TEXT_ELEMENT,
   TEXT_TONE,
@@ -74,7 +76,7 @@ import {
   ConversationScrollButton,
 } from "../ai-elements/conversation.js";
 import { MESSAGE_ACTIONS_PLACEMENT } from "../ai-elements/message.js";
-import { FADING_ELEMENT, FadingWords } from "../fading-words.js";
+import { FadingWords } from "../fading-words.js";
 import { PictureBlock } from "../picture-block.js";
 import { useSteadyDoor } from "../steady-door.js";
 import { SendingAgent } from "./agent-ref.js";
@@ -1094,9 +1096,9 @@ function PlaceHead({
     <header className="desktop-toolbar chat-head">
       {lead}
       <div className="desktop-toolbar-heading">
-        <FadingWords as={FADING_ELEMENT.H1} className="desktop-toolbar-title" words={title}>
+        <OneLine as={ONE_LINE_ELEMENT.H1} className="desktop-toolbar-title" words={title}>
           {name}
-        </FadingWords>
+        </OneLine>
         {meta === undefined ? null : (
           <span className="chat-head-meta">
             <Text as={TEXT_ELEMENT.SPAN} tone={TEXT_TONE.MUTED} truncate>

@@ -15,6 +15,7 @@ export type OneLineEnd = (typeof ONE_LINE_END)[keyof typeof ONE_LINE_END];
 
 /** The elements a line may be drawn as: words in a row, a name, a detail under it, or a paragraph. */
 export const ONE_LINE_ELEMENT = {
+  H1: "h1",
   SPAN: "span",
   STRONG: "strong",
   SMALL: "small",

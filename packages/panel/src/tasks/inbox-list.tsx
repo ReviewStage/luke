@@ -31,6 +31,9 @@ import {
   LIST_ROW_META,
   List,
   ListRow,
+  ONE_LINE_ELEMENT,
+  ONE_LINE_END,
+  OneLine,
   RowHint,
   RowHintOptions,
   SCROLL_FADE,
@@ -1544,7 +1547,15 @@ function ListHead({
       ) : (
         <header className="desktop-toolbar inbox-tasks-bar">
           <div className="desktop-toolbar-heading">
-            {search.field ?? <h1 className="desktop-toolbar-title">{title}</h1>}
+            {search.field ?? (
+              <OneLine
+                as={ONE_LINE_ELEMENT.H1}
+                end={ONE_LINE_END.ELLIPSIS}
+                className="desktop-toolbar-title"
+              >
+                {title}
+              </OneLine>
+            )}
           </div>
           <div className="desktop-toolbar-actions">{options}</div>
         </header>

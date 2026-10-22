@@ -26,6 +26,8 @@ import {
   ListRow,
   type ListRowHint,
   McpIcon,
+  ONE_LINE_END,
+  OneLine,
   POPOVER_ALIGN,
   POPOVER_PANEL_LOOK,
   PopoverPanel,
@@ -42,6 +44,7 @@ import {
   TEXT_VARIANT,
   Text,
   Tooltip,
+  wholeWordsHint,
 } from "@luke/ui";
 import {
   namedServers,
@@ -233,16 +236,22 @@ export function ServerRowWords({ row }: { row: ServerRow }): React.JSX.Element {
         </Tooltip>
       ) : null}
       {row.problem !== undefined ? (
-        <Tooltip label={row.problem}>
-          <span className="agent-servers-problem">{row.problem}</span>
-        </Tooltip>
+        <OneLine
+          end={ONE_LINE_END.ELLIPSIS}
+          hint={wholeWordsHint(row.problem)}
+          className="agent-servers-problem"
+        >
+          {row.problem}
+        </OneLine>
       ) : null}
       {row.note !== undefined && row.kind !== SERVER_ROW.SIGNING_IN ? (
-        <Tooltip label={row.note}>
-          <span className="agent-servers-problem" data-tone="quiet">
-            {row.note}
-          </span>
-        </Tooltip>
+        <OneLine
+          end={ONE_LINE_END.ELLIPSIS}
+          hint={wholeWordsHint(row.note)}
+          className="agent-servers-problem agent-servers-problem-quiet"
+        >
+          {row.note}
+        </OneLine>
       ) : null}
     </span>
   );

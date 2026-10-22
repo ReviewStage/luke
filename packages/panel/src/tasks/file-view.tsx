@@ -9,6 +9,10 @@ import {
   IconButton,
   ProviderMark,
   SidePanelIcon,
+  TEXT_ELEMENT,
+  TEXT_TRUNCATE,
+  TEXT_VARIANT,
+  Text,
   Tooltip,
 } from "@luke/ui";
 import { shownFiles } from "@luke/voice/code-pane-model";
@@ -465,9 +469,14 @@ function BarPathWords({ path }: { path: BarPath }): React.JSX.Element {
   if (browse === undefined) {
     return (
       <Tooltip label={path.path}>
-        <span className="file-view-path">
+        <Text
+          as={TEXT_ELEMENT.SPAN}
+          variant={TEXT_VARIANT.INHERIT}
+          truncate={TEXT_TRUNCATE.START}
+          className="file-view-path"
+        >
           <bdi>{path.path}</bdi>
-        </span>
+        </Text>
       </Tooltip>
     );
   }

@@ -1,4 +1,10 @@
-import { DisclosureChevron, Tooltip, useDisclosureState } from "@luke/ui";
+import {
+  DisclosureChevron,
+  Tooltip,
+  useDisclosureState,
+  VISUALLY_HIDDEN_UNDER,
+  VisuallyHidden,
+} from "@luke/ui";
 import { MessageSquareIcon } from "lucide-react";
 import type { AnimationEvent, ReactNode } from "react";
 import { Fold, FoldBody, FoldSummary } from "../ai-elements/fold.js";
@@ -56,7 +62,7 @@ function StateChip({ state }: { state: AnnotationState }): React.JSX.Element {
   return (
     <Tooltip label={state.word}>
       <span className="annotation-card-chip" data-tone={state.tone}>
-        <span className="annotation-card-chip-word">{state.word}</span>
+        <VisuallyHidden under={VISUALLY_HIDDEN_UNDER.TIGHT}>{state.word}</VisuallyHidden>
       </span>
     </Tooltip>
   );
@@ -70,7 +76,10 @@ function FoldedCount({ count }: { count: number }): React.JSX.Element | null {
     <span className="annotation-card-count">
       <MessageSquareIcon aria-hidden="true" />
       {count}
-      <span className="annotation-card-count-word"> {COUNT_WORDS.word(count)}</span>
+      <VisuallyHidden under={VISUALLY_HIDDEN_UNDER.TIGHT}>
+        {" "}
+        {COUNT_WORDS.word(count)}
+      </VisuallyHidden>
     </span>
   );
 }

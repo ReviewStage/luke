@@ -26,13 +26,12 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 /** What a cut label's mask draws: its words faded out over their last few pixels. */
 const FADE = "linear-gradient(to left, transparent, #000 var(--label-fade))";
 
-/** A sample of the places that fade: a sidebar row's repository, a row's context, a chat byline's place, a tool's title, and a page's toolbar title. */
+/** A sample of the places that fade: a sidebar row's repository, a row's context, a chat byline's place, and a tool's title. */
 const FADING = [
   "sidebar-task-repository",
   "home-row-context",
   "chat-byline-where",
   "integration-tool-title",
-  "desktop-toolbar-title",
 ] as const;
 
 const roots: Root[] = [];
@@ -115,12 +114,6 @@ for (const className of FADING) {
     assert.ok(!label(className, false).maskImage.includes("gradient"));
   });
 }
-
-test("a toolbar's title nothing measures, a fixed word or a date, keeps its ellipsis", () => {
-  const style = label("desktop-toolbar-title", undefined);
-  assert.equal(style.textOverflow, "ellipsis");
-  assert.ok(!style.maskImage.includes("gradient"));
-});
 
 test("who wrote a revision, pressed to open where it was written, is a box of its own that fades, not an inline line its press cuts with an ellipsis", () => {
   const head = document.body.appendChild(document.createElement("p"));

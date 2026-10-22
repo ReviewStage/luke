@@ -22,6 +22,9 @@ import {
   LIST_ROW_INK,
   LIST_ROW_META,
   ListRow,
+  ONE_LINE_ELEMENT,
+  ONE_LINE_END,
+  OneLine,
   PencilIcon,
   PlusIcon,
   RowHint,
@@ -1183,7 +1186,13 @@ function RailBar({
   return (
     <header className="desktop-toolbar chat-rail-bar">
       <div className="desktop-toolbar-heading">
-        <h1 className="desktop-toolbar-title">{CHAT_LIST}</h1>
+        <OneLine
+          as={ONE_LINE_ELEMENT.H1}
+          end={ONE_LINE_END.ELLIPSIS}
+          className="desktop-toolbar-title"
+        >
+          {CHAT_LIST}
+        </OneLine>
         <ExperimentTag />
       </div>
       <div className="desktop-toolbar-actions">

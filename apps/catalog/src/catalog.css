@@ -935,3 +935,8 @@ body {
   border-radius: var(--luke-radius-14);
   transform: translateZ(0);
 }
+
+/* A box the words inside answer the width of (`under`), as a card or a header does. */
+.catalog-room {
+  container: luke-room / inline-size;
+}
