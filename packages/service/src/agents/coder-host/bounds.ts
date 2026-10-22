@@ -146,6 +146,21 @@ export const CODER = {
    * developer is offered Continue on it.
    */
   LINE_GRACE: Duration.millis(LINE_GRACE_MILLIS),
+  /**
+   * The lease one call holds on a native agent's runner across reading
+   * whether it runs and writing to it or launching it
+   * (`runner-sessions.ts`). `HOLD` is how long a lease stands before
+   * another call may take it over: past the platform's default function
+   * duration of five minutes, so a holder killed mid-launch lets go by
+   * then, and longer than a launch with its checkout takes. `WAIT` is how
+   * long a call waits behind another's lease before it fails as
+   * unavailable, checking every `POLL`.
+   */
+  RUNNER_LEASE: {
+    HOLD: Duration.minutes(5),
+    WAIT: Duration.minutes(2),
+    POLL: Duration.millis(250),
+  },
 } as const;
 
 /** The environment the coding-agent host reads beside the names every hosted route already honours. */
