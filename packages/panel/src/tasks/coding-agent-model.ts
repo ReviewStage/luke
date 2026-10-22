@@ -80,6 +80,7 @@ import {
   USER_MESSAGE_METADATA,
   type WireValue,
 } from "@luke/wire";
+import { sentLineId } from "@luke/wire/host-ids";
 import { Option, Schema } from "effect";
 import { TOOL_STATE, type ToolState } from "../ai-elements/tool.js";
 import { GLYPH_STATE, type GlyphState, glyphStateWords } from "../state-glyph.js";
@@ -2095,6 +2096,40 @@ function sentLineMessage(line: SentLine): CodingAgentMessage {
     role: MESSAGE_ROLE.USER,
     parts: [{ type: AGENT_PART.TEXT, text: line.text }, ...files],
   };
+}
+
+/**
+ * The line an agent New task started is drawn on before its transcript is
+ * read: the developer's words as they went, under the id their start's key
+ * names, on their way.
+ */
+export function openingLineOf(words: {
+  readonly key: string;
+  readonly prompt: string;
+  readonly attachments: readonly CodingAgentAttachment[];
+}): SentLine {
+  return {
+    id: sentLineId(words.key),
+    clientKey: words.key,
+    text: words.prompt.trim(),
+    attachments: words.attachments,
+    steers: false,
+    state: SENT_LINE_STATE.PENDING,
+  };
+}
+
+/**
+ * The line an agent was started on, while its transcript reads back no line
+ * of the developer's. Note that the service writes that first row under a
+ * key of its own, or eve under none, so the line is let go by any row of
+ * theirs rather than by its id, and the first is always that one.
+ */
+export function unreadOpeningLine(
+  opening: SentLine | undefined,
+  messages: readonly CodingAgentMessage[],
+): SentLine | undefined {
+  if (opening === undefined) return undefined;
+  return messages.some((message) => message.role === MESSAGE_ROLE.USER) ? undefined : opening;
 }
 
 /** The transcript's rows, with the lines sent and not yet read back at its end, in the order they went. */

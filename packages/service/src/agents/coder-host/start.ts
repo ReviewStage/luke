@@ -47,6 +47,7 @@ import {
   type CodingAgentStartRequest,
   type CodingAgentSummary,
 } from "@luke/features/coding-agent-wire";
+import type { GitHubAccess } from "@luke/features/github-repositories-wire";
 import { decodeMention, mentionMarkdown } from "@luke/features/mention-link";
 import { CODING_AGENT_DEFAULT_CHOICE, type ModelChoice } from "@luke/features/models-wire";
 import { planMarkdown } from "@luke/features/plan-markdown";
@@ -407,7 +408,15 @@ export type StartAsk = StartPlace & {
   readonly branch?: string | undefined;
   /** Whether a call is opened into the agent as it lands, which pins it to eve as a blank Start is (`startRuntimeOf`). */
   readonly call?: boolean | undefined;
+  /** The repository the task's own start reached in the same request, which the agent's Start takes rather than asking GitHub again; none for every other Start. */
+  readonly reached?: StartReach | undefined;
 };
+
+/** A repository as a task's start reached it: the full name its row keeps, and how it was reached. */
+export interface StartReach {
+  readonly repository: string;
+  readonly access: GitHubAccess;
+}
 
 /** What a Start came to: the agent, and whether this ask made it or found it under its key. */
 export interface CodingAgentStart {
@@ -991,11 +1000,20 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
   const landing = yield* landingOf(userId, ask, fitter, noteFiles);
   // An automation's agent reaches through the workspace's installation alone; a Start by hand, on the starter's token too.
   // A blank agent on a task with no repository reaches none.
+  // Note that a task started with its agent reached the repository a moment ago, in the same
+  // request and as the same member, so that reach stands rather than a second round of GitHub reads.
   const member = ask.automationOrigin === undefined ? userId : undefined;
   const reached =
     landing.repository === null
       ? undefined
-      : yield* workspaceRepository(landing.workspaceId, landing.repository, member, landing.mover);
+      : ask.reached !== undefined && ask.reached.repository === landing.repository
+        ? ask.reached
+        : yield* workspaceRepository(
+            landing.workspaceId,
+            landing.repository,
+            member,
+            landing.mover,
+          );
   // An agent started from another goes on from the branch that one was started on.
   const branch = yield* startBranchOf(
     userId,
@@ -1208,6 +1226,7 @@ export const startRequestedAgent = /* @__PURE__ */ Effect.fnUntraced(function* (
   where: StartWhere,
   request: CodingAgentStartRequest,
   summaryModel?: SummaryModelOf,
+  reached?: StartReach,
 ): Effect.fn.Return<RequestedStart, HostedRefusal, StartServices> {
   const { note } = request;
   const choice = yield* requestedChoice(request);
@@ -1223,6 +1242,7 @@ export const startRequestedAgent = /* @__PURE__ */ Effect.fnUntraced(function* (
     blank: request.blank,
     call: request.call,
     summaryModel,
+    reached,
   }).pipe(Effect.catchTag("ModelChoiceRefused", () => Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST)));
   if (!created) return { agent: yield* summaryOf(userId, agent), created };
   const names = yield* hostedStoreOrUnavailable(readAccountNames(summaryAccounts(agent)));

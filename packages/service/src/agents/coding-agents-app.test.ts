@@ -1172,11 +1172,12 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
   );
 
   it.effect(
-    "a task's start naming an agent makes the task with an empty plan and starts the agent on it with the prompt, opening its session as the developer, and answers the task in progress",
+    "a task's start naming an agent makes the task with an empty plan and starts the agent on it with the prompt, opening its session as the developer, reaching the repository on GitHub once for both, and answers the task in progress",
     () =>
       Effect.gen(function* () {
-        const { owner, task, eve, ask } = yield* openTask();
+        const { owner, task, eve, installation, github, ask } = yield* openTask();
         const prompt = "Expire invitations after a week.";
+        const asked = github.sent.length;
 
         const started = yield* ask(
           request(TASKS, owner, {
@@ -1217,6 +1218,12 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
           eve.opened.map((opened) => [opened.authorization, opened.message.message]),
           [[`Bearer ${owner}`, prompt]],
         );
+        assert.deepEqual(reachRequests(github.sent.slice(asked), installation.id), {
+          installationReads: 1,
+          listings: 1,
+          listingMints: 1,
+          repositoryMints: 0,
+        });
       }),
   );
 

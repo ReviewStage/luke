@@ -2845,7 +2845,11 @@ export function useTasksTab(input: {
     started: CodingAgentAgentAnswer | undefined,
   ) => {
     if (started !== undefined && !("failure" in started)) {
-      agents.onTaskStarted(planId, started.agent);
+      agents.onTaskStarted(planId, started.agent, {
+        key: handed.idempotencyKey,
+        prompt: handed.prompt,
+        attachments: handed.attachments,
+      });
       mainTabs.onShow(planId, { agent: started.agent.id });
       return;
     }

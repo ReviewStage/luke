@@ -79,7 +79,7 @@ import { readEither } from "@luke/wire/effect";
 import { Data, Effect, Option, Result } from "effect";
 import type { HttpClient } from "effect/http";
 import type { EveTypedTurn } from "../agents/brain-host/eve-sessions.js";
-import { startRequestedAgent } from "../agents/coder-host/start.js";
+import { type StartReach, startRequestedAgent } from "../agents/coder-host/start.js";
 import {
   type EveReach,
   eveFor,
@@ -346,12 +346,15 @@ const startedAgentOn = (
   userId: string,
   task: Task,
   agent: TaskAgentStart,
+  reached: StartReach | undefined,
 ) =>
   startRequestedAgent(
     eveFor<EveTypedTurn>(seams, request, userId),
     userId,
     { taskId: task.id },
     agent,
+    undefined,
+    reached,
   ).pipe(
     Effect.flatMap((started) =>
       Effect.map(
@@ -484,7 +487,16 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
       const answer: TaskStartAnswer =
         agent === undefined
           ? { plan: task }
-          : yield* startedAgentOn(seams, request, userId, task, agent);
+          : yield* startedAgentOn(
+              seams,
+              request,
+              userId,
+              task,
+              agent,
+              reached.repository === null
+                ? undefined
+                : { repository: reached.repository, access: reached.githubAccess },
+            );
       // An agent's Start commits after the task's insert, so its transaction, where it has one, is the later.
       const committed = answer.txid ?? txid;
       return {
