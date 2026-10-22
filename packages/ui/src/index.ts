@@ -63,6 +63,7 @@ export * from "./components/provider-button/provider-button.js";
 export * from "./components/public-page/public-page.js";
 export * from "./components/readable-controls/readable-controls.js";
 export * from "./components/resize-corner/resize-corner.js";
+export * from "./components/rolling-number/rolling-number.js";
 export * from "./components/saved-tick/saved-tick.js";
 export * from "./components/scroll-area/scroll-area.js";
 export * from "./components/search-field/search-field.js";

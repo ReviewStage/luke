@@ -13,7 +13,8 @@ import { createContext, type ReactNode, useContext } from "react";
  * refused for now while the developer had already written on in the box
  * keeps its words on its line the same way, and its mark offers Retry,
  * which sends it again where it stands. The tab hands its transcript the
- * lines so marked (`SentLineMarks`), by the id each was drawn under.
+ * lines so marked (`SentLineMarks`), by the id each was drawn under, and
+ * the lines still on their way, whose files are drawn going up.
  */
 
 /** What the marks say. */
@@ -27,12 +28,15 @@ export interface SentLineMarks {
   readonly undelivered: ReadonlySet<string>;
   /** The lines refused for now that keep their words, each offering Retry. */
   readonly unsent: ReadonlySet<string>;
+  /** The lines on their way, whose row has not been read back yet. */
+  readonly sending: ReadonlySet<string>;
   readonly retry: (id: string) => void;
 }
 
 const NO_MARKS: SentLineMarks = {
   undelivered: new Set(),
   unsent: new Set(),
+  sending: new Set(),
   retry: () => undefined,
 };
 
@@ -44,6 +48,11 @@ export const UndeliveredLines = MarksContext.Provider;
 /** The ids of the lines the agent refused for good, none of which is the brief its transcript opens on. */
 export function useUndeliveredLines(): ReadonlySet<string> {
   return useContext(MarksContext).undelivered;
+}
+
+/** Whether the line drawn under `messageId` is still on its way. */
+export function useLineSending(messageId: string): boolean {
+  return useContext(MarksContext).sending.has(messageId);
 }
 
 /** The mark under a line that did not go; nothing under any other. */

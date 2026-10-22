@@ -1,6 +1,8 @@
 import {
   ATTACHMENT_CHIP_STATE,
   AttachmentChip,
+  BUTTON_VARIANT,
+  Button,
   ImageIcon,
   LIST_MOTION_WAY,
   ListMotion,
@@ -16,8 +18,9 @@ import { CatalogSection } from "../section";
  * picture's thumbnail, files drawn by name and size, one with nothing to
  * open, a long name cut short, and the way off each, unavailable while busy,
  * each file taken off scaling out under the row's `ListMotion`;
- * then the same chips in a narrow column, and a call's pictures still read,
- * gone, and not kept.
+ * then the same chips in a narrow column, a call's pictures still read,
+ * gone, and not kept, and files going up, at a share and with none, which
+ * land on a press, each taking its check.
  */
 
 /** A synthetic picture drawn in place, so the catalog renders offline. */
@@ -98,6 +101,23 @@ function AttachmentRow({ busy }: { busy: boolean }): React.JSX.Element {
   );
 }
 
+/** Files on their way up: one at a known share, one whose send says none; a press lands them. */
+function UploadingRow(): React.JSX.Element {
+  const [landed, setLanded] = useState(false);
+  const state = landed ? ATTACHMENT_CHIP_STATE.READY : ATTACHMENT_CHIP_STATE.UPLOADING;
+  return (
+    <>
+      <ul className="catalog-attachments" aria-label="Files going up">
+        <AttachmentChip name="screenshot.png" image={PICTURE} state={state} progress={64} />
+        <AttachmentChip name="spec.pdf" icon={<ImageIcon />} detail="48 KB" state={state} />
+      </ul>
+      <Button variant={BUTTON_VARIANT.OUTLINE} onClick={() => setLanded((now) => !now)}>
+        {landed ? "Send again" : "Land them"}
+      </Button>
+    </>
+  );
+}
+
 function AttachmentChips(): React.JSX.Element {
   return (
     <>
@@ -123,6 +143,9 @@ function AttachmentChips(): React.JSX.Element {
             detail="6.2 MB"
           />
         </ul>
+      </CatalogSection>
+      <CatalogSection id="attachment-chip-uploading" title="Going up">
+        <UploadingRow />
       </CatalogSection>
       <CatalogSection id="attachment-chip-narrow" title="Narrow column, long names">
         <div className="catalog-narrow">

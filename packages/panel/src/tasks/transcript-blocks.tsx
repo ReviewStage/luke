@@ -34,6 +34,7 @@ import {
   LineSummary,
   OneLine,
   ProviderMark,
+  RollingNumber,
   Shimmer,
   TEXT_ELEMENT,
   TEXT_TONE,
@@ -104,6 +105,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useState,
 } from "react";
 import remarkBreaks from "remark-breaks";
 import {
@@ -139,7 +141,7 @@ import { ModelLabel } from "./model-label.js";
 import { usePlanPictureDrawer } from "./plan-pictures.js";
 import { SubagentMark } from "./tab-look.js";
 import { useMentionDoors } from "./task-mentions.js";
-import { cardTitle, type SentWords } from "./tool-call-model.js";
+import { cardTitle, type SentWords, todosCount } from "./tool-call-model.js";
 import {
   TRANSCRIPT_CODE_AND_TABLE_COMPONENTS,
   TranscriptMarkdownSource,
@@ -1252,31 +1254,52 @@ function TodoItems({
 }): ReactNode {
   return (
     <ul className="todo-items">
-      {todos.map((todo, index) => {
-        const look = TODO_LOOK[todo.status];
-        const working = live && todo.status === CODING_AGENT_TODO_STATUS.IN_PROGRESS;
-        return (
-          <li key={index} className="todo-item" data-todo-status={todo.status}>
-            <GlyphSlot
-              line
-              ink={
-                todo.status === CODING_AGENT_TODO_STATUS.IN_PROGRESS
-                  ? GLYPH_INK.TEXT
-                  : GLYPH_INK.MUTED
-              }
-              label={look.label}
-            >
-              {working ? (
-                <StateGlyph state={GLYPH_STATE.WORKING} />
-              ) : (
-                <StateGlyph state={GLYPH_STATE.REST} glyph={<look.Icon aria-hidden="true" />} />
-              )}
-            </GlyphSlot>
-            <span className="todo-words">{todo.content}</span>
-          </li>
-        );
-      })}
+      {todos.map((todo, index) => (
+        // Note that an item's place is its identity, so a write that moves
+        // an item on is drawn as that item changing where it stands.
+        <TodoItem key={index} todo={todo} live={live} />
+      ))}
     </ul>
+  );
+}
+
+/**
+ * One item behind the glyph of where it stands. An item that changes where
+ * it stands while drawn has its glyph arrive (`GlyphSlot`'s `arrival`), a
+ * check springing in as the item is done and a smaller arrival as it is
+ * taken up; its words ease to their ink alike (tasks.css). An item drawn as it
+ * stands is still, so a list opened or read back does not play its history.
+ */
+function TodoItem({
+  todo,
+  live,
+}: {
+  todo: CodingAgentTodos["todos"][number];
+  live: boolean;
+}): ReactNode {
+  const [first] = useState(todo.status);
+  const look = TODO_LOOK[todo.status];
+  const working = live && todo.status === CODING_AGENT_TODO_STATUS.IN_PROGRESS;
+  const arrived = todo.status !== first;
+  const done = todo.status === CODING_AGENT_TODO_STATUS.DONE;
+  return (
+    <li className="todo-item" data-todo-status={todo.status}>
+      {/* Keyed by where it stands, so each change mounts the glyph anew and its arrival runs. */}
+      <GlyphSlot
+        key={todo.status}
+        line
+        ink={todo.status === CODING_AGENT_TODO_STATUS.IN_PROGRESS ? GLYPH_INK.TEXT : GLYPH_INK.MUTED}
+        label={look.label}
+        arrival={arrived ? (done ? GLYPH_ARRIVAL.CHECK : GLYPH_ARRIVAL.STEP) : undefined}
+      >
+        {working ? (
+          <StateGlyph state={GLYPH_STATE.WORKING} />
+        ) : (
+          <StateGlyph state={GLYPH_STATE.REST} glyph={<look.Icon aria-hidden="true" />} />
+        )}
+      </GlyphSlot>
+      <span className="todo-words">{todo.content}</span>
+    </li>
   );
 }
 
@@ -1327,26 +1350,28 @@ export function TranscriptTodos({
  * VS Code's collapses to the item in progress, so it costs the log one
  * line. It is a card on the task card's look, since it stands outside the
  * log, and it is drawn by the caller only while the list is worked. It
- * opens upward off the composer, as one sheet (tasks.css).
+ * opens upward off the composer, as one sheet (tasks.css). How far it has
+ * got is said as the transcript's row says it (`todosSummary`), its counts
+ * rolling as they change, so a step done is seen to tick over.
  */
 export function TranscriptTodosDock({
   todos,
-  summary,
   focus,
 }: {
   todos: CodingAgentTodos["todos"];
-  /** How far the list has got, as the row says it. */
-  summary: string;
   /** The item the list is at; none once every item is done. */
   focus: string | undefined;
 }): ReactNode {
+  const { done, total } = todosCount(todos);
   return (
     <Fold className="todos-dock" data-todos-dock="" aria-label="To-dos">
       <FoldSummary className="todos-dock-head">
         <GlyphSlot>
           <ListTodoIcon />
         </GlyphSlot>
-        <span className="todos-dock-summary">{summary}</span>
+        <span className="todos-dock-summary">
+          <RollingNumber value={done} /> of <RollingNumber value={total} /> done
+        </span>
         {focus === undefined ? null : (
           <Text
             as={TEXT_ELEMENT.SPAN}

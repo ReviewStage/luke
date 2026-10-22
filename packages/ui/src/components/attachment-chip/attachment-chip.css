@@ -139,3 +139,97 @@
     height: 8px;
   }
 }
+
+/* An upload's meter, a hairline along the chip's foot inside its edge in
+   the working ink: filled from its start to the share gone up on
+   `transform`, so the bar never changes size, and easing to each new share
+   as a pane does rather than springing past it; where no share is known, a
+   third of the track sweeps across it, an endless loop with no end to wait
+   for, so its duration is a literal held still on --luke-loop-motion. A file
+   that lands takes a check on its corner, which springs in on the pair an
+   arriving element rides and fades after a beat. */
+@layer components {
+  .luke-attachment-chip-meter {
+    position: absolute;
+    right: var(--luke-space-4);
+    bottom: var(--luke-space-2);
+    left: var(--luke-space-4);
+    height: 2px; /* off-scale: a hairline bar */
+    overflow: hidden;
+    border-radius: var(--luke-radius-full);
+    background: var(--luke-color-fill-strong);
+    pointer-events: none;
+  }
+
+  .luke-attachment-chip-meter-fill {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+    background: var(--luke-color-working);
+    transform: scaleX(var(--luke-attachment-chip-share, 0));
+    transform-origin: left;
+    transition: transform var(--luke-duration-pane) var(--luke-motion-pane);
+  }
+
+  .luke-attachment-chip-meter[data-indeterminate="true"] > .luke-attachment-chip-meter-fill {
+    width: 34%;
+    transform: none;
+    transition: none;
+    animation: luke-attachment-chip-sweep 1200ms var(--luke-motion-pane) infinite;
+    animation-play-state: var(--luke-loop-motion);
+  }
+
+  .luke-attachment-chip-landed {
+    position: absolute;
+    bottom: -6px;
+    right: -6px;
+    display: flex;
+    width: 16px;
+    height: 16px;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    background: var(--luke-color-overlay);
+    box-shadow: inset 0 0 0 1px var(--luke-color-border-strong);
+    color: var(--luke-color-complete);
+    pointer-events: none;
+    animation:
+      luke-attachment-chip-fade var(--luke-duration-quick) var(--luke-motion-pane) backwards,
+      luke-attachment-chip-spring var(--luke-duration-fast) var(--luke-spring-fast) backwards,
+      luke-attachment-chip-leave var(--luke-duration-exit) var(--luke-motion-exit)
+      var(--luke-late-delay) forwards;
+  }
+
+  .luke-attachment-chip-landed svg {
+    width: 10px;
+    height: 10px;
+    color: inherit;
+  }
+
+  @keyframes luke-attachment-chip-sweep {
+    from {
+      transform: translateX(-100%);
+    }
+    to {
+      transform: translateX(300%);
+    }
+  }
+
+  @keyframes luke-attachment-chip-fade {
+    from {
+      opacity: 0;
+    }
+  }
+
+  @keyframes luke-attachment-chip-spring {
+    from {
+      transform: scale(0.4);
+    }
+  }
+
+  @keyframes luke-attachment-chip-leave {
+    to {
+      opacity: 0;
+    }
+  }
+}
