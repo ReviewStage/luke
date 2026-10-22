@@ -525,11 +525,6 @@ export function inboxThreadOf(item: InboxItem): readonly InboxMessage[] | undefi
   return opens ? thread : undefined;
 }
 
-/** Whether a member started the item's thread, their words its first message, rather than its agent. */
-export function inboxStartedByMember(item: InboxItem): boolean {
-  return inboxThreadOf(item)?.[0]?.author === INBOX_MESSAGE_AUTHOR.MEMBER;
-}
-
 /** An ask this build knows, as a read carries it, with where it stands. */
 export type InboxKnownAsk = Extract<InboxReadAsk, { type: InboxAsk["type"] }>;
 
@@ -1445,10 +1440,12 @@ export function inboxSettledStanding(
   item: InboxItem,
 ): (typeof INBOX_SETTLED_STANDING)[keyof typeof INBOX_SETTLED_STANDING] {
   if (item.status === INBOX_STATUS.ANSWERED) {
-    // A thread a member started stands settled on their own nod until its agent posts on it.
-    return inboxStartedByMember(item) && item.revision === 1
-      ? INBOX_SETTLED_STANDING.STARTED
-      : INBOX_SETTLED_STANDING.ANSWERED;
+    // A thread a member started stands settled on their own nod until its agent writes on it.
+    const thread = inboxThreadOf(item) ?? [];
+    const sent =
+      thread.length > 0 &&
+      thread.every((message) => message.author === INBOX_MESSAGE_AUTHOR.MEMBER);
+    return sent ? INBOX_SETTLED_STANDING.STARTED : INBOX_SETTLED_STANDING.ANSWERED;
   }
   if (item.closedBy !== undefined) return INBOX_SETTLED_STANDING.RESOLVED;
   const withdrawn = (inboxThreadOf(item) ?? []).some(

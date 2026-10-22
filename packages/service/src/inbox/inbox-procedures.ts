@@ -483,6 +483,9 @@ const started = /* @__PURE__ */ Effect.fnUntraced(function* (
   );
   if (Option.isNone(written)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
   const { item, outcome } = written.value;
+  if (outcome === INBOX_MESSAGE_OUTCOME.KEY_REUSED) {
+    return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+  }
   // Note that a repeat leaves the thread standing on failure, because the write that wrote it decides whether it stays.
   const unheard =
     outcome === INBOX_MESSAGE_OUTCOME.WRITTEN

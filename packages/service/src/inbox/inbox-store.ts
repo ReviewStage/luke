@@ -3642,8 +3642,9 @@ const deleteStartedItem = SqlSchema.void({
  * lock it, so a post of its own under the minted key waits on this one. A
  * thread started again under the client's key is the one it started, which
  * writes nothing; nothing where the member does not reach the agent, or its
- * starter is no longer a member of its workspace. The item comes back as
- * the member reads it.
+ * starter is no longer a member of its workspace; one started again with
+ * another subject, words, or files is refused as the key reused. The item
+ * comes back as the member reads it.
  */
 export function startInboxThread(
   userId: string,
@@ -3663,10 +3664,22 @@ export function startInboxThread(
         if (Option.isNone(reached)) return Option.none();
         const locked = yield* lockAgent(agent);
         if (Option.isNone(locked)) return Option.none();
+        const files = (thread.files ?? []).map((file) => ({
+          name: file.name,
+          contentType: file.mediaType,
+          bytes: bytesOf(file),
+        }));
         const started = yield* findStartedThread({ userId, agentId: agent.agentId, clientKey });
         if (Option.isSome(started)) {
           const item = yield* itemAsWritten(userId, started.value.id);
-          return Option.some({ item, outcome: INBOX_MESSAGE_OUTCOME.REPEATED });
+          const first = yield* findKeyedMessage({ itemId: item.id, clientKey });
+          // Note that another subject, words, or files under a key taken is refused, so the agent never hears what the thread does not show.
+          const same =
+            item.title === title &&
+            Option.isSome(first) &&
+            sameMessage(first.value, { userId, text, files });
+          const outcome = same ? INBOX_MESSAGE_OUTCOME.REPEATED : INBOX_MESSAGE_OUTCOME.KEY_REUSED;
+          return Option.some({ item, outcome });
         }
         const stem = keyStem(title);
         const taken = yield* findStemKeys({ agentId: agent.agentId, stem });
@@ -3692,17 +3705,15 @@ export function startInboxThread(
           clientKey,
           now,
         });
-        yield* Effect.forEach(thread.files ?? [], (file, position) =>
+        yield* Effect.forEach(files, (file, position) =>
           insertMessageFile({
             userId: agent.userId,
             taskId: agent.taskId,
             organizationId,
             itemId,
             messageId: message.id,
-            name: file.name,
+            ...file,
             position,
-            contentType: file.mediaType,
-            bytes: bytesOf(file),
             now,
           }),
         );
