@@ -291,16 +291,18 @@ function InboxShown({
     url: opened.url,
   }));
   const { pages } = view;
-  // The panel's state is held to the task's agents this Inbox read, whose Pull request tabs alone the panel draws.
+  // The panel's state is held to the task's agents this Inbox read, whose Pull request tabs alone the panel draws, an archived one's among them.
   const { onTaskAgents } = view;
   const taskAgents = agents.agents;
+  const { heldIds } = agents;
   useEffect(() => {
     if (taskId === undefined || taskAgents === undefined) return;
     onTaskAgents(
       taskId,
       taskAgents.map((agent) => agent.id),
+      heldIds,
     );
-  }, [taskId, taskAgents, onTaskAgents]);
+  }, [taskId, taskAgents, heldIds, onTaskAgents]);
   const openHere: OpenHere = (href) => {
     const target = inboxPanelTarget(href, {
       taskId,

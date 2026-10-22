@@ -403,6 +403,23 @@ function cloudBrowserTitleOf(tab: AgentBrowserTab): string {
 const NO_OPEN_CHANGES: readonly ChangesStripTab[] = [];
 
 /**
+ * The task's agents in the order started, an archived one among them, since
+ * the pull request an agent opened, merged or not, stays the task's once the
+ * agent is archived.
+ */
+function everyTaskAgent(
+  agents: Pick<CodingAgentsControl, "agents" | "archived">,
+): readonly CodingAgentSummary[] {
+  const listed = agents.agents ?? [];
+  // Note that an agent's own page lists its agent among `agents` archived or not, so each is taken once.
+  const archived = (agents.archived ?? []).filter(
+    (agent) => !listed.some((each) => each.id === agent.id),
+  );
+  if (archived.length === 0) return listed;
+  return [...listed, ...archived].sort((one, other) => one.createdAt - other.createdAt);
+}
+
+/**
  * The agent whose Changes tab stands for the agent's pull request: among the
  * agents on that pull request, in the order started, the first whose tab is
  * open on the task (`open`), else the first; the agent itself where its pull
@@ -417,7 +434,7 @@ function changesAgentOf(
 ): string {
   const url = agents.pullRequests.get(agentId)?.url;
   if (url === undefined) return agentId;
-  const sharing = (agents.agents ?? []).filter(
+  const sharing = everyTaskAgent(agents).filter(
     (agent) => agents.pullRequests.get(agent.id)?.url === url,
   );
   const opened = sharing.find((agent) =>
@@ -428,7 +445,8 @@ function changesAgentOf(
 
 /**
  * The task's agents' Changes tabs on offer, in the order the agents
- * started: one for each agent with a pull request, its tab open in the
+ * started, an archived one among them (`everyTaskAgent`): one for each
+ * agent with a pull request, merged or not, its tab open in the
  * task's column or not, and none for an agent that has opened none yet,
  * whose tab would only say so. Note that two agents on one pull request
  * offer it once, under the agent whose tab stands for it (`changesAgentOf`),
@@ -440,12 +458,13 @@ export function changesOffers(
   open: readonly ChangesStripTab[] = NO_OPEN_CHANGES,
 ): readonly ChangesOffer[] {
   const offered = new Set<string>();
-  return (agents.agents ?? []).flatMap((each) => {
+  const every = everyTaskAgent(agents);
+  return every.flatMap((each) => {
     const pullRequest = agents.pullRequests.get(each.id);
     if (pullRequest === undefined || offered.has(pullRequest.url)) return [];
     offered.add(pullRequest.url);
     const agentId = changesAgentOf(agents, each.id, open);
-    const agent = agents.agents?.find((other) => other.id === agentId) ?? each;
+    const agent = every.find((other) => other.id === agentId) ?? each;
     // The row shows the pull request as the agent its tab stands for last read it, as its tab's card does.
     const shown = agents.pullRequests.get(agent.id) ?? pullRequest;
     const label = agentTabLabel(agent, agents.models);
@@ -2071,9 +2090,9 @@ export function SidePanel({
   const files = panel.files.filter(
     (file) => file.browsedOn === taskId || offered.some((ref) => ref.path === file.path),
   );
-  // An agent's Changes tab stands while the agent is the task's.
+  // An agent's Changes tab stands while the agent is the task's, archived or not, as its pull request does.
   const changes = panel.changes.filter((each) =>
-    drawsChanges(each, { taskAgents: agents.agentIds }),
+    drawsChanges(each, { taskAgents: agents.heldIds }),
   );
   // An agent's Terminal tab stands while the agent is the task's, as its Changes tab does, and never beside the Inbox or where the platform runs no terminals.
   const terminalsOffered = useCapability(HOST_CAPABILITY.TERMINALS);

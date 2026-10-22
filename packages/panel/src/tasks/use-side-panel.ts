@@ -736,8 +736,10 @@ export interface DrawnTabs {
   files: readonly string[];
   /** The plan's pages, by id, whose open tabs the strip draws. */
   pages: readonly string[];
-  /** The task's agents, by id, whose Changes tabs the strip draws, or nothing while unread. */
+  /** The task's agents, by id, archived ones left out, whose Terminal tabs, and beside the Inbox transcripts, the strip draws, or nothing while unread. */
   taskAgents: readonly string[] | undefined;
+  /** Every agent of the task, by id, an archived one among them, whose Pull request tabs the strip draws, since its pull request stays the task's; `taskAgents` where none is given. */
+  heldAgents?: readonly string[] | undefined;
   /** The task's agents' cloud Browser tabs, by the id the service keeps each under, or nothing while unread. */
   cloudBrowsers?: readonly string[] | undefined;
 }
@@ -1213,8 +1215,12 @@ export function drawsSubagent(
  * opens it either way, or until the agents are read, as a delegated
  * worker's tab stands.
  */
-export function drawsChanges(tab: ChangesStripTab, drawn: Pick<DrawnTabs, "taskAgents">): boolean {
-  return drawn.taskAgents === undefined || drawn.taskAgents.includes(tab.changes);
+export function drawsChanges(
+  tab: ChangesStripTab,
+  drawn: Pick<DrawnTabs, "taskAgents" | "heldAgents">,
+): boolean {
+  const held = drawn.heldAgents ?? drawn.taskAgents;
+  return held === undefined || held.includes(tab.changes);
 }
 
 /**
@@ -1844,6 +1850,7 @@ export function useSidePanel(
   taskAgents?: readonly string[] | undefined,
   room: ShellRoom = SHELL_ROOM.WIDE,
   cloudBrowsers?: readonly string[] | undefined,
+  heldAgents?: readonly string[] | undefined,
 ): SidePanelControl {
   // Note that the fixture run's panel is a state of its own rather than the
   // kept one reset, because the run is only known once the first state
@@ -1893,6 +1900,7 @@ export function useSidePanel(
       files: taskFiles,
       pages,
       taskAgents,
+      heldAgents,
       cloudBrowsers,
     });
 
@@ -1926,6 +1934,7 @@ export function useSidePanel(
         files: taskFiles,
         pages,
         taskAgents,
+        heldAgents,
         cloudBrowsers,
       };
       update((held) => withArrived(held, arrivals, was));
@@ -1940,8 +1949,17 @@ export function useSidePanel(
     [tabs, seen],
   );
   const drawn = useMemo(
-    () => ({ task: seen, agents, subagents, files: taskFiles, pages, taskAgents, cloudBrowsers }),
-    [seen, agents, subagents, taskFiles, pages, taskAgents, cloudBrowsers],
+    () => ({
+      task: seen,
+      agents,
+      subagents,
+      files: taskFiles,
+      pages,
+      taskAgents,
+      heldAgents,
+      cloudBrowsers,
+    }),
+    [seen, agents, subagents, taskFiles, pages, taskAgents, heldAgents, cloudBrowsers],
   );
   // A Browser tab closed, on whatever plan and however, takes its page with
   // it, since main holds a page for the window's life otherwise.

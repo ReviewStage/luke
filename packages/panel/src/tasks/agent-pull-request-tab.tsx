@@ -2238,7 +2238,11 @@ function PullRequestTabBody({
   onActions,
   onRun,
 }: AgentPullRequestTabProps): React.JSX.Element {
-  const status = control.agents?.find((each) => each.id === agentId)?.status;
+  // The agent, archived or not, since an archived agent's pull request keeps its tab.
+  const agent =
+    control.agents?.find((each) => each.id === agentId) ??
+    control.archived?.find((each) => each.id === agentId);
+  const status = agent?.status;
   const ended = !agentStillWriting(status ?? CODING_AGENT_STATUS.RUNNING);
   const id = useId();
   const ids = (each: PullRequestView) => ({
@@ -2363,7 +2367,7 @@ function PullRequestTabBody({
   );
   const threadJumps = useThreadJumps({
     agentId,
-    planId: control.agents?.find((each) => each.id === agentId)?.planId ?? null,
+    planId: agent?.planId ?? null,
     number,
     shown,
     threads: threadList,
