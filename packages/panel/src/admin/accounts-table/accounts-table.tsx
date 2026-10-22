@@ -24,7 +24,7 @@ import {
   nextSort,
   sortAccountsRows,
 } from "@luke/ui/accounts-sort";
-import { formatDayTick, formatNumber } from "@luke/ui/admin-format";
+import { formatCount, formatDayTick } from "@luke/ui/time-format";
 import { useState } from "react";
 import { useAdminDoorsIfAny } from "../admin-doors.js";
 import { AccountAvatar } from "../chrome/page-header.js";
@@ -212,7 +212,7 @@ export function AccountsTable<Row extends AccountsTableRow>({
       label: "Calls",
       kind: DATA_TABLE_COLUMN_KIND.NUMERIC,
       sortable,
-      cell: (row) => (row.calls === undefined ? "—" : formatNumber(row.calls)),
+      cell: (row) => (row.calls === undefined ? "—" : formatCount(row.calls)),
     },
   ];
   const columns: DataTableColumn<Row, AccountsColumnKey>[] = [
@@ -231,10 +231,10 @@ export function AccountsTable<Row extends AccountsTableRow>({
       sortable,
       cell: (row) => (
         <>
-          {formatNumber(row.activeDays)}
+          {formatCount(row.activeDays)}
           <Text as={TEXT_ELEMENT.SPAN} tone={TEXT_TONE.MUTED}>
             {" "}
-            of {formatNumber(windowDays)}
+            of {formatCount(windowDays)}
           </Text>
         </>
       ),

@@ -40,6 +40,8 @@ import {
   TEXT_VARIANT,
   Text,
   TextButton,
+  TIME_LOOK,
+  Time,
   Tooltip,
 } from "@luke/ui";
 import {
@@ -83,7 +85,6 @@ import { BarMenu } from "./file-menu.js";
 import type { TreeShown } from "./file-view.js";
 import { TranscriptWords } from "./transcript-blocks.js";
 import type { CodingAgentsControl } from "./use-coding-agents.js";
-import { useWorkingNow, workingTime } from "./working-time.js";
 
 /**
  * agent-chapters-tab.tsx -- the Chapters view of an agent's Pull request tab (`agent-pull-request-tab.tsx`): its pull request's diff told as chapters to review in order, each read as its title, risk, and summary over its own hunks, drawn by Files changed's own list.
@@ -211,17 +212,6 @@ const RISK_TONES = {
 /** The rail's toggle that opens it beside the chapter, which the stylesheet draws only where it has room there. */
 const BESIDE_TOGGLE = '.chapter-rail-toggle[data-place="beside"]';
 
-/** How long chapters have been generating, moving each second on the window's own clock; a timer to a reader, never announced. */
-function Elapsed({ startedAt }: { startedAt: number }): React.JSX.Element | null {
-  const now = useWorkingNow();
-  if (now === undefined) return null;
-  return (
-    <span role="timer" aria-live="off">
-      {workingTime(now - startedAt)}
-    </span>
-  );
-}
-
 /** The widths of the blocks standing for the rail's rows, and for the chapter's lines. */
 const SKELETON_ROWS = ["80%", "65%", "72%", "50%"] as const;
 const SKELETON_LINES = ["40%", "92%", "86%", "60%"] as const;
@@ -254,7 +244,7 @@ function Generating({
           {live ? (
             <>
               {" · "}
-              <Elapsed startedAt={startedAt} />
+              <Time at={startedAt} look={TIME_LOOK.DURATION} />
             </>
           ) : null}
         </span>

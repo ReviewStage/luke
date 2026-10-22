@@ -76,12 +76,16 @@ import {
   TEXT_VARIANT,
   Text,
   TextButton,
+  TIME_LOOK,
+  Time,
   Tooltip,
   useMenu,
+  useMinute,
   VisuallyHidden,
 } from "@luke/ui";
 import { actorName } from "@luke/ui/actor-model";
 import { PICTURE_STATE, usePicture } from "@luke/ui/picture-cache";
+import { formatLocaleCount, workingTime } from "@luke/ui/time-format";
 import {
   BookOpenIcon,
   BotIcon,
@@ -195,8 +199,6 @@ import {
   type PullRequestWrites,
   usePullRequestWrites,
 } from "./pull-request-writes.js";
-import { RelativeTime } from "./relative-time.js";
-import { useMinute } from "./task-time.js";
 import {
   THREAD_REVEAL_WORDS,
   type ThreadLanding,
@@ -209,7 +211,6 @@ import { type GitHubPictureDrawer, GitHubWords, TranscriptWords } from "./transc
 import type { CodingAgentsControl } from "./use-coding-agents.js";
 import { type OpenHere, OpenHereFirst, useOpenLink, useOpenPlace } from "./use-open-link.js";
 import { PULL_REQUEST_VIEW, type PullRequestView } from "./use-side-panel.js";
-import { useWorkingNow, workingTime } from "./working-time.js";
 
 /**
  * agent-pull-request-tab.tsx -- one agent's Pull request tab in the side panel: its pull request as GitHub holds it, laid out as stage-cli's pull request page: a fixed header, then tabs for its conversation, its checks, its chapters, and its files.
@@ -337,7 +338,7 @@ const PULL_REQUEST_WORDS = {
   LEFT: "left",
   /** What the Files changed tab's hint says of every line the pull request changes. */
   total: (additions: number, deletions: number) =>
-    `+${additions.toLocaleString()} −${deletions.toLocaleString()} total`,
+    `+${formatLocaleCount(additions)} −${formatLocaleCount(deletions)} total`,
 } as const;
 
 /** The lines a review thread is on, as its head names them: where it stands now, else where it was made; none for a thread on the whole file. */
@@ -590,17 +591,6 @@ function Section({
   );
 }
 
-/** A running check's count since it started, moving each second on the window's own clock; a timer to a reader, never announced. */
-function RunningTime({ startedAt }: { startedAt: number }): React.JSX.Element | null {
-  const now = useWorkingNow();
-  if (now === undefined) return null;
-  return (
-    <span role="timer" aria-live="off">
-      {workingTime(now - startedAt)}
-    </span>
-  );
-}
-
 /** The App's square at a check's size: its picture once it loads, and its robot on the quiet tile until then and where there is none. */
 function CheckSquare({ name, src }: { name: string; src: string | undefined }): React.JSX.Element {
   return (
@@ -716,7 +706,7 @@ function CheckRow({
         </>
       }
       description={check.app ?? undefined}
-      meta={running ? live ? <RunningTime startedAt={startedAt} /> : null : duration}
+      meta={running ? live ? <Time at={startedAt} look={TIME_LOOK.DURATION} /> : null : duration}
       onPress={url === null ? undefined : () => openLink(url)}
       linkHref={url ?? undefined}
     />
@@ -996,7 +986,7 @@ function useThreadHead(thread: ReviewThread, now: number, pending: boolean) {
       ),
     time:
       first === undefined ? undefined : (
-        <RelativeTime className="annotation-card-time" at={first.at} now={now} />
+        <Time className="annotation-card-time" at={first.at} now={now} />
       ),
     states: threadStates(thread, pending),
     count: thread.comments.length + thread.more,
@@ -1092,7 +1082,7 @@ function ThreadComment({
         meta: (
           <>
             <ActorRef actor={writer} nameOnly />
-            <RelativeTime className="annotation-card-time" at={comment.at} now={now} />
+            <Time className="annotation-card-time" at={comment.at} now={now} />
             {draft === undefined ? null : <PendingBadge />}
           </>
         ),
@@ -1141,7 +1131,7 @@ function PendingList({
             head={
               <>
                 <PersonRef person={draft.by} />
-                <RelativeTime className="changes-comment-time" at={draft.at} now={now} />
+                <Time className="changes-comment-time" at={draft.at} now={now} />
               </>
             }
             words={<EntryWords entry={draft} picture={picture} />}
@@ -1271,7 +1261,7 @@ function EntryCard({
       <span className="changes-comment-head">
         <PersonRef person={entry.by} />
         {entry.state === undefined ? null : <ReviewStanding state={entry.state} />}
-        <RelativeTime className="changes-comment-time" at={entry.at} now={now} />
+        <Time className="changes-comment-time" at={entry.at} now={now} />
       </span>
       <EntryWords entry={entry} picture={picture} />
       <Reactions reactions={entry.reactions} subject={entry.subject} />
@@ -1351,8 +1341,10 @@ function PullRequestHead({
       </span>
       <OpenedLine
         person={author}
-        opened={<RelativeTime at={pullRequest.createdAt} now={now} ago />}
-        merged={mergedAt === null ? undefined : <RelativeTime at={mergedAt} now={now} ago />}
+        opened={<Time at={pullRequest.createdAt} now={now} look={TIME_LOOK.AGO} />}
+        merged={
+          mergedAt === null ? undefined : <Time at={mergedAt} now={now} look={TIME_LOOK.AGO} />
+        }
       />
       <span className="pull-request-reviewers">
         {reviewers.length === 0 ? null : <HeaderReviewers reviewers={reviewers} />}
@@ -1417,7 +1409,7 @@ function Deployments({
 }): React.JSX.Element | null {
   if (deployments.length === 0) return null;
   return (
-    <Section title="Deployments" count={deployments.length.toLocaleString()}>
+    <Section title="Deployments" count={formatLocaleCount(deployments.length)}>
       <List label="Deployment list" variant={LIST_VARIANT.CARD} density={LIST_DENSITY.DENSE}>
         {deployments.map((deployment) => (
           <DeploymentRow key={deployment.environment} agentId={agentId} deployment={deployment} />
@@ -1647,7 +1639,7 @@ function checksCount(
 ): readonly CountPart[] | undefined {
   const glyph = SUMMARY_GLYPHS[summary];
   if (glyph === null && count === undefined) return undefined;
-  const text = count?.toLocaleString() ?? "";
+  const text = count === undefined ? "" : formatLocaleCount(count);
   const tone = SUMMARY_TONES[summary];
   return [
     glyph === null ? { text, tone } : { text, tone, glyph, glyphLabel: SUMMARY_WORDS[summary] },
@@ -1737,7 +1729,7 @@ function tabsOf(
       icon: <MessagesSquareIcon />,
       label: "Conversation",
       count:
-        conversation === undefined ? undefined : conversationCount(conversation).toLocaleString(),
+        conversation === undefined ? undefined : formatLocaleCount(conversationCount(conversation)),
     },
     {
       value: PULL_REQUEST_VIEW.CHECKS,
@@ -1755,7 +1747,7 @@ function tabsOf(
       value: PULL_REQUEST_VIEW.CHAPTERS,
       icon: <BookOpenIcon />,
       label: "Chapters",
-      count: chapterCount?.toLocaleString(),
+      count: chapterCount === undefined ? undefined : formatLocaleCount(chapterCount),
     },
     {
       value: PULL_REQUEST_VIEW.FILES,
@@ -1796,7 +1788,7 @@ function ConversationFilter({
         <ChipName>{label}</ChipName>
         {count === undefined ? null : (
           <span className="pull-request-filter-count" aria-hidden="true">
-            {count.toLocaleString()}
+            {formatLocaleCount(count)}
           </span>
         )}
       </Chip>

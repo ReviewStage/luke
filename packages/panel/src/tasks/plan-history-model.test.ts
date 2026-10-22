@@ -3,6 +3,7 @@ import { MODEL_PROVIDER } from "@luke/features/models-wire";
 import { PLAN_ACTOR, type PlanLastEdit, type PlanRevisionLine } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
 import { ACTOR_KIND, ACTOR_STATE, actorName, SOMEONE_REASON } from "@luke/ui/actor-model";
+import { dayAndTimeText } from "@luke/ui/time-format";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { test } from "vitest";
@@ -20,7 +21,6 @@ import {
   VERSION_CHANGE,
   versionDiff,
 } from "./plan-history-model.js";
-import { dayAndTimeText } from "./task-time.js";
 
 const HOUR = 3_600_000;
 const AGENT_ID = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";

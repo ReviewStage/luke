@@ -20,8 +20,10 @@ import {
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
+  Time,
   Tooltip,
   useMenu,
+  useMinute,
 } from "@luke/ui";
 import {
   ACTOR_KIND,
@@ -51,8 +53,6 @@ import { useOpenSettings } from "../open-settings.js";
 import { lineSubject } from "../tasks/agent-ref.js";
 import { InboxItemRow, InboxListSkeleton } from "../tasks/inbox-list.js";
 import { holderName, INBOX_HOLDER, type InboxListed, inboxWaitsOn } from "../tasks/inbox-model.js";
-import { RelativeTime } from "../tasks/relative-time.js";
-import { useMinute } from "../tasks/task-time.js";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
 import { useWaitingItems } from "../tasks/use-waiting-items.js";
 import { ActionMenu, type MenuAction } from "./action-menu.js";
@@ -203,7 +203,7 @@ function AgentRow({
       meta={
         <span className="home-row-meta">
           <FadingWords className="home-row-context" words={task.name} />
-          {agent.at === undefined ? null : <RelativeTime at={agent.at} now={now} />}
+          {agent.at === undefined ? null : <Time at={agent.at} now={now} />}
         </span>
       }
       onPress={() => tasks.onShowAgent(task.id, agent.id)}

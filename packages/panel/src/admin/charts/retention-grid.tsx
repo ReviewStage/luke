@@ -10,7 +10,7 @@ import {
   TEXT_VARIANT,
   Text,
 } from "@luke/ui";
-import { formatDayTick, formatNumber } from "@luke/ui/admin-format";
+import { formatCount, formatDayTick } from "@luke/ui/time-format";
 import { Fragment } from "react";
 import { ChartEmpty, ChartFrame } from "./chart-frame.js";
 
@@ -53,7 +53,7 @@ function RetentionCell({ cell }: { cell: AdminRetentionCell }): React.JSX.Elemen
     );
   }
   const percent = `${Math.round(cell.share * 100)}%`;
-  const title = `${formatNumber(cell.activeAccounts)} ${
+  const title = `${formatCount(cell.activeAccounts)} ${
     cell.activeAccounts === 1 ? "account" : "accounts"
   } active${cell.inProgress ? " so far this week" : ""}`;
   if (cell.share === 0) {
@@ -151,7 +151,7 @@ export function RetentionGrid({
                   <Fragment key={cohort.weekStart}>
                     <div className="flex items-center">{formatDayTick(cohort.weekStart)}</div>
                     <div className="flex items-center justify-end pr-(--luke-space-4) text-(--luke-color-text-muted)">
-                      {formatNumber(cohort.size)}
+                      {formatCount(cohort.size)}
                     </div>
                     {offsets.map((offset) => {
                       const cell = cohort.cells[offset];

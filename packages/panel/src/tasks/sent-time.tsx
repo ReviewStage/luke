@@ -1,4 +1,4 @@
-import { callHeading, useMinute } from "./task-time.js";
+import { TIME_LOOK, Time } from "@luke/ui";
 
 /**
  * sent-time.tsx -- when a line sent to an agent was sent, set after who sent it in the line under its bubble or card: "Dean · Today, 3:42 PM", or the time alone for the reader's own.
@@ -10,11 +10,10 @@ import { callHeading, useMinute } from "./task-time.js";
 
 /** When one of the developer's lines was sent, in the words a finished turn's line ends on (`WorkedFor`), after who sent it where anyone is named. */
 export function SentTime({ at, named }: { at: number; named: boolean }): React.JSX.Element {
-  const now = useMinute();
   return (
     <span className="message-sent-at">
       {named ? <span aria-hidden="true">·</span> : null}
-      <time dateTime={new Date(at).toISOString()}>{callHeading(at, now)}</time>
+      <Time at={at} look={TIME_LOOK.DAY} />
     </span>
   );
 }

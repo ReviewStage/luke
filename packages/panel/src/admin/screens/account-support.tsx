@@ -39,7 +39,7 @@ import {
   TEXT_TONE,
   Text,
 } from "@luke/ui";
-import { formatNumber } from "@luke/ui/admin-format";
+import { formatCount, formatInstant } from "@luke/ui/time-format";
 import { AdminSection, STAT_CELL, STAT_PAIR, STAT_ROW, StatCard } from "../charts/stat-card.js";
 
 /** What the page draws where a value is absent. */
@@ -96,19 +96,6 @@ function windowWords(contextWindow: string | null): string {
   return contextWindow === CONTEXT_WINDOW.STANDARD ? " · standard window" : "";
 }
 
-/** An instant drawn as its UTC date and time, e.g. "Oct 21, 12:04 UTC". */
-export function formatInstant(epochMs: number): string {
-  const drawn = new Date(epochMs).toLocaleString("en-US", {
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    hourCycle: "h23",
-    timeZone: "UTC",
-  });
-  return `${drawn} UTC`;
-}
-
 /** A share of a whole as a whole percentage, or nothing where there is no whole. */
 function percentOf(part: number, whole: number): string | undefined {
   return whole === 0 ? undefined : `${Math.round((part / whole) * 100)}%`;
@@ -131,17 +118,17 @@ function WorkCards({
         <div className={STAT_CELL}>
           <StatCard
             label={`Tasks created · ${windowDays} days`}
-            value={formatNumber(totals.tasksCreated)}
+            value={formatCount(totals.tasksCreated)}
           />
         </div>
         <div className={STAT_CELL}>
           <StatCard
             label={`Coding agents · ${windowDays} days`}
-            value={formatNumber(totals.agentsStarted)}
+            value={formatCount(totals.agentsStarted)}
             hint={
               failed === undefined
                 ? "none started"
-                : `${failed} failed${truncated ? ` of the newest ${formatNumber(totals.agentsRead)}` : ""}`
+                : `${failed} failed${truncated ? ` of the newest ${formatCount(totals.agentsRead)}` : ""}`
             }
           />
         </div>
@@ -150,15 +137,15 @@ function WorkCards({
         <div className={STAT_CELL}>
           <StatCard
             label={`Pull requests merged · ${windowDays} days`}
-            value={formatNumber(totals.pullRequestsMerged)}
-            hint={`of ${formatNumber(totals.pullRequestsOpened)} opened`}
+            value={formatCount(totals.pullRequestsMerged)}
+            hint={`of ${formatCount(totals.pullRequestsOpened)} opened`}
             title="Of the pull requests opened by the agents started in the window"
           />
         </div>
         <div className={STAT_CELL}>
           <StatCard
             label={`Call minutes · ${windowDays} days`}
-            value={formatNumber(totals.callMinutes)}
+            value={formatCount(totals.callMinutes)}
           />
         </div>
       </div>
@@ -214,7 +201,7 @@ const WORKSPACE_COLUMNS: readonly DataTableColumn<AdminAccountWorkspace>[] = [
     key: "members",
     label: "Members",
     kind: DATA_TABLE_COLUMN_KIND.NUMERIC,
-    cell: (workspace) => formatNumber(workspace.memberCount),
+    cell: (workspace) => formatCount(workspace.memberCount),
   },
   {
     key: "github",

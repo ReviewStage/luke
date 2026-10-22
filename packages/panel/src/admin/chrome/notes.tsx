@@ -1,6 +1,6 @@
 import { RETENTION_BASIS, type RetentionBasis } from "@luke/features/admin-overview-vocabulary";
 import { TEXT_TONE, Text } from "@luke/ui";
-import { formatNumber } from "@luke/ui/admin-format";
+import { formatCount } from "@luke/ui/time-format";
 
 /** A note under the cards of the section it explains, in the muted body role; the section stands it. */
 function SectionNote({ children }: { children: React.ReactNode }): React.JSX.Element {
@@ -79,8 +79,8 @@ export function RosterNote({
       account's latest sign-in session, which a sign-in moves without any hosted use.
       {truncatedTo !== undefined
         ? searched
-          ? ` Only the ${formatNumber(truncatedTo)} most recently active matches are listed. Narrow the search to reach the rest.`
-          : ` Only the ${formatNumber(truncatedTo)} most recently active accounts are listed. Search reads every account.`
+          ? ` Only the ${formatCount(truncatedTo)} most recently active matches are listed. Narrow the search to reach the rest.`
+          : ` Only the ${formatCount(truncatedTo)} most recently active accounts are listed. Search reads every account.`
         : ""}
     </SectionNote>
   );
@@ -97,7 +97,7 @@ export function DayNote({
     <SectionNote>
       Voice and attention count the hosted-tier calls each account spent on this UTC day.
       {truncatedTo !== undefined
-        ? ` Only the ${formatNumber(truncatedTo)} busiest accounts are listed. The totals count all ${formatNumber(totalAccounts)}.`
+        ? ` Only the ${formatCount(truncatedTo)} busiest accounts are listed. The totals count all ${formatCount(totalAccounts)}.`
         : ""}
     </SectionNote>
   );

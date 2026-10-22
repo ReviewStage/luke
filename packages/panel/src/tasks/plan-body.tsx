@@ -20,10 +20,12 @@ import {
   TextButton,
   Tooltip,
   useMenu,
+  useMinute,
   VisuallyHidden,
 } from "@luke/ui";
 import { actorName } from "@luke/ui/actor-model";
 import { commentSpansIn, usePlanCommentsControl } from "@luke/ui/plan-comments";
+import { agoText, momentText, sinceText } from "@luke/ui/time-format";
 import { LinkIcon } from "lucide-react";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ActorStack } from "../actor-ref.js";
@@ -80,7 +82,6 @@ import {
   type UnitView,
 } from "./task-reveal.js";
 import { TaskKeyLine, TaskStandingChips, type TaskStandingDoor } from "./task-standing.js";
-import { agoText, momentText, sinceText, useMinute } from "./task-time.js";
 import { TaskTitle } from "./task-title.js";
 import { useOpenLink } from "./use-open-link.js";
 import { EDITOR_PLACE, type PlanEditDoor, usePlanEditing } from "./use-plan-editing.js";

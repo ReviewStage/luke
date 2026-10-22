@@ -8,7 +8,7 @@ import {
   knownResponse,
 } from "@luke/features/chat-wire";
 import type { InboxAsk } from "@luke/features/inbox-wire";
-import { ErrorState, TEXT_TONE, TEXT_VARIANT, Text } from "@luke/ui";
+import { ErrorState, TEXT_TONE, TEXT_VARIANT, Text, Time } from "@luke/ui";
 import { type Actor, actorName } from "@luke/ui/actor-model";
 import type { ChatAskAnswer } from "@luke/ui/chat-model";
 import { CheckIcon } from "lucide-react";
@@ -57,7 +57,6 @@ import {
   type InboxMissing,
   sentenceCased,
 } from "./inbox-model.js";
-import { RelativeTime } from "./relative-time.js";
 import { SentWords } from "./skill-chip.js";
 
 /**
@@ -321,7 +320,7 @@ function AnsweredComment({
             <span className="inbox-comment-when">
               {at === undefined ? null : (
                 <>
-                  <RelativeTime className={THREAD_TIME_CLASS} at={at} now={now} /> ·{" "}
+                  <Time className={THREAD_TIME_CLASS} at={at} now={now} /> ·{" "}
                 </>
               )}
               <Delivered heard={ask.needsReply} poster={actorOf(message.authorId)} />

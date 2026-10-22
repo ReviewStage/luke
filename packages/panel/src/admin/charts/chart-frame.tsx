@@ -24,12 +24,8 @@ import {
   TEXT_VARIANT,
   Text,
 } from "@luke/ui";
-import {
-  formatNumber,
-  formatTrendMove,
-  TREND_DIRECTION,
-  trendDirection,
-} from "@luke/ui/admin-format";
+import { formatTrendMove, TREND_DIRECTION, trendDirection } from "@luke/ui/admin-format";
+import { formatCount } from "@luke/ui/time-format";
 
 /** The ink a trend's move is drawn in: a rise complete, a fall attention, no move muted. */
 const TREND_TONE = {
@@ -72,8 +68,8 @@ export function TrendMove({ trend }: { trend: AdminTrend }): React.JSX.Element {
 export function ChartTrend({ trend }: { trend: AdminTrend }): React.JSX.Element {
   return (
     <>
-      <TrendMove trend={trend} /> {formatNumber(trend.recent)} in the last {trend.days} days,
-      against {formatNumber(trend.prior)} before
+      <TrendMove trend={trend} /> {formatCount(trend.recent)} in the last {trend.days} days, against{" "}
+      {formatCount(trend.prior)} before
     </>
   );
 }

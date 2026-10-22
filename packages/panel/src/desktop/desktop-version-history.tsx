@@ -31,8 +31,10 @@ import {
   SkeletonRegion,
   TEXT_BUTTON_LINES,
   TextButton,
+  Time,
   Tooltip,
   useMenu,
+  useMinute,
 } from "@luke/ui";
 import { type Actor, actorName } from "@luke/ui/actor-model";
 import { DOCUMENT_REGION } from "@luke/ui/tasks-model";
@@ -62,9 +64,7 @@ import {
   VERSION_CHANGE,
   versionDiff,
 } from "../tasks/plan-history-model.js";
-import { RelativeTime } from "../tasks/relative-time.js";
 import type { MentionedTask } from "../tasks/task-mentions.js";
-import { useMinute } from "../tasks/task-time.js";
 import {
   HISTORY_READ,
   type OpenedSections,
@@ -256,7 +256,7 @@ function RevisionRow({
           </span>
         }
         description={<span className="version-row-summary">{summary}</span>}
-        meta={<RelativeTime at={lastEdit.at} now={now} />}
+        meta={<Time at={lastEdit.at} now={now} />}
         current={selected ? LIST_ROW_CURRENT.ITEM : undefined}
         onPress={onSelect}
         contextMenu={offered ? showMenu : undefined}
