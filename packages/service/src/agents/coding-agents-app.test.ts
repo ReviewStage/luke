@@ -48,7 +48,7 @@ import {
   updateCodingAgentBranch,
 } from "@luke/database/models/coding-agent-store";
 import { keepConversationPicture } from "@luke/database/models/conversation-pictures";
-import { childConversationId, sentLineId } from "@luke/database/models/ids";
+import { childConversationId } from "@luke/database/models/ids";
 import { listMessagesPast, sentLineStands } from "@luke/database/models/message-reads";
 import { unreadOperatorNotices } from "@luke/database/models/operator-notices";
 import { writePage } from "@luke/database/models/plan-pages";
@@ -197,6 +197,7 @@ import { LIVE_CLOSE_REASON, TRANSCRIPT_SPEAKER } from "@luke/live";
 import { EXPERIMENT } from "@luke/settings";
 import { CHAT_NOTICE_FROM_CHARS, unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
+import { sentLineId } from "@luke/wire/host-ids";
 import { temporaryDirectory } from "@luke/wire/testing";
 import { MockLanguageModelV4 } from "ai/test";
 import { and, eq, sql } from "drizzle-orm";

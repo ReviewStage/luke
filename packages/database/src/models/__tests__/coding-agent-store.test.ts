@@ -22,6 +22,7 @@ import {
   TURN_STATUS,
   type TurnStatus,
 } from "@luke/wire";
+import { sentLineId } from "@luke/wire/host-ids";
 import { eq } from "drizzle-orm";
 import { Clock, DateTime, Effect, Option, Result } from "effect";
 import { TestClock } from "effect/testing";
@@ -88,7 +89,6 @@ import {
   updateCodingAgentChoice,
   writeDelegation,
 } from "../coding-agent-store.js";
-import { sentLineId } from "../ids.js";
 import { readMessageByClientId } from "../message-reads.js";
 import { conversationReachableBy } from "../recorded-session.js";
 import { createTask } from "../task-store.js";

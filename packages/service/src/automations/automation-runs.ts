@@ -24,7 +24,6 @@ import {
   readCodingAgent,
   readCodingAgentByKey,
 } from "@luke/database/models/coding-agent-store";
-import { sentLineId } from "@luke/database/models/ids";
 import { sentLineStands } from "@luke/database/models/message-reads";
 import { storeWriter } from "@luke/database/models/writer";
 import type { StoredAutomationOrigin } from "@luke/database/schemas/coding-agent";
@@ -47,6 +46,7 @@ import {
   type CodingAgentStatus,
 } from "@luke/features/coding-agent-wire";
 import { failureKind } from "@luke/runtime/effect";
+import { sentLineId } from "@luke/wire/host-ids";
 import { Clock, Duration, Effect, Option, Result } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import type { AgentSessions, EveTypedTurn } from "../agents/brain-host/eve-sessions.js";
