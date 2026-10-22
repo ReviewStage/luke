@@ -15,6 +15,7 @@
 
 import type { ErrorMapItem } from "@orpc/contract";
 import { Schema as EffectSchema } from "effect";
+import { installedSkillRefusedDataSchema } from "../installed-skill-route-wire.js";
 import { modelProviderSchema } from "../models-wire.js";
 import { repositoryUnreachedSchema } from "../repository-reach-wire.js";
 import { HOSTED_API_ERROR, type HostedApiError } from "../service-wire.js";
@@ -71,6 +72,11 @@ const credentialMissingData = EffectSchema.toStandardSchemaV1(
   EffectSchema.flip(credentialMissingDataSchema),
 );
 
+/** What a refused install or update carries beside its slug: which skill, and why its files were refused. */
+const installedSkillRefusedData = EffectSchema.toStandardSchemaV1(
+  EffectSchema.flip(installedSkillRefusedDataSchema),
+);
+
 /** Every hosted refusal, the slug its code, and the extra fields of each that carries some. */
 export const HOSTED_ERRORS = {
   [HOSTED_API_ERROR.INVALID_TOKEN]: {},
@@ -104,4 +110,6 @@ export const HOSTED_ERRORS = {
   [HOSTED_API_ERROR.ALREADY_INVITED]: {},
   [HOSTED_API_ERROR.SANDBOX_STOPPED]: {},
   [HOSTED_API_ERROR.LINEAR_UNAVAILABLE]: {},
+  [HOSTED_API_ERROR.SKILL_NAME_TAKEN]: { data: installedSkillRefusedData },
+  [HOSTED_API_ERROR.SKILL_FILES_REFUSED]: { data: installedSkillRefusedData },
 } as const satisfies Record<HostedApiError, ErrorMapItem>;
