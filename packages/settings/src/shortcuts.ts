@@ -79,6 +79,7 @@ export const APP_COMMAND = {
   AUTOMATIONS: "automations",
   EXIT_AUTOMATIONS: "exit-automations",
   EXIT_BOARD: "exit-board",
+  ADMIN: "admin",
   EXIT_ADMIN: "exit-admin",
   BACK: "back",
   FORWARD: "forward",
@@ -122,10 +123,13 @@ export type MenuCommand = keyof typeof MENU_COMMAND_LABELS;
  * the sidebar's row opens, so no chord or menu bar item spends a key on
  * them. Chat keeps no chord while it is an experiment, so ⇧⌘F stays free
  * for a find across everything; ⌘K offers it only while the account has it
- * on, since its command is offered nothing otherwise.
+ * on, since its command is offered nothing otherwise. Admin is an admin's
+ * alone, so it spends no chord, and ⌘K offers it only to an admin, as its
+ * sidebar row stands only for one.
  */
 const PALETTE_COMMAND_LABELS = {
   [APP_COMMAND.CHAT]: "Chat",
+  [APP_COMMAND.ADMIN]: "Admin",
   [APP_COMMAND.GROUP_TASKS_BY_REPOSITORY]: "Group tasks by repository",
   [APP_COMMAND.GROUP_TASKS_BY_CREATOR]: "Group tasks by creator",
   [APP_COMMAND.LIST_TASKS_UNGROUPED]: "Show tasks in one list",

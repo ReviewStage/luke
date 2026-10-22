@@ -354,6 +354,17 @@ function usePlaceCommands(
         }
       : undefined,
   );
+  // The Admin place is an admin's alone, so ⌘K offers it only on the terms its sidebar row stands on.
+  const adminOn = useAdminAccess();
+  useAppCommand(
+    APP_COMMAND.ADMIN,
+    pastGate && tasks.signedIn && adminOn
+      ? () => {
+          if (tab !== PANEL_TAB.TASKS) onTabChange(PANEL_TAB.TASKS);
+          tasks.adminView.onOpen();
+        }
+      : undefined,
+  );
   // Chat is an experiment, so ⌘K offers it only on the terms its sidebar row stands on.
   const chatOn = useChatOn();
   useAppCommand(
