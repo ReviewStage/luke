@@ -1,10 +1,5 @@
-import { useAtomValue } from "@effect/atom-react";
-import { Clock, Duration, Schedule, Stream } from "effect";
-import * as AsyncResult from "effect/reactivity/AsyncResult";
-import { rendererRuntime } from "../renderer-runtime.js";
-
 /**
- * task-time.ts -- the window's one way of saying when: how long ago in a row's few letters or a line's words, a moment in full, a span, a call's day, and the minute that says it again.
+ * time-format.ts -- every app's one way of saying when and how many, with no DOM: how long ago in a row's few letters or a line's words, a moment in full, a span, a call's day, how long a run has gone, a calendar day, and a count.
  *
  * A row's word is the shortest a devtool's list uses: "now", then minutes,
  * hours, days, and weeks by their letter, and the date itself once a task is
@@ -14,14 +9,17 @@ import { rendererRuntime } from "../renderer-runtime.js";
  * Every word is set in US English whatever the Mac's own region, since the
  * words around it are English, and in the Mac's own zone: a call's "Today,
  * 3:42 PM" and the "2:32 PM → 3:42 PM" its card hangs read one clock. The
- * words move on a minute's tick from the renderer's own runtime, so no row
- * arms a timer of its own and a test advances the tick on a `TestClock`.
+ * `Time` (`components/time`) draws these and moves them on the minute's or the
+ * second's tick, so no row arms a timer of its own.
  */
 
 const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
 const DAY = 24 * HOUR;
 const WEEK = 7 * DAY;
+const SECOND = 1_000;
+const MINUTE_SECONDS = 60;
+const HOUR_MINUTES = 60;
 
 /** The spans a row counts in, longest first, each with its letter; past the last, the row names the date. */
 const SINCE_UNITS = [
@@ -52,6 +50,26 @@ const DAY_AND_TIME = new Intl.DateTimeFormat(LOCALE, {
 });
 const MOMENT = new Intl.DateTimeFormat(LOCALE, { dateStyle: "medium", timeStyle: "short" });
 const TIME_OF_DAY = new Intl.DateTimeFormat(LOCALE, { timeStyle: "short" });
+
+/** Calendar days and instants named in UTC, as the admin page and the changelog name them: a day is a calendar day, not an instant. */
+const UTC_DAY = new Intl.DateTimeFormat(LOCALE, { dateStyle: "medium", timeZone: "UTC" });
+const UTC_DAY_TICK = new Intl.DateTimeFormat(LOCALE, {
+  month: "short",
+  day: "numeric",
+  timeZone: "UTC",
+});
+const UTC_DAY_HEADING = new Intl.DateTimeFormat(LOCALE, { dateStyle: "long", timeZone: "UTC" });
+const UTC_INSTANT = new Intl.DateTimeFormat(LOCALE, {
+  month: "short",
+  day: "numeric",
+  hour: "2-digit",
+  minute: "2-digit",
+  hourCycle: "h23",
+  timeZone: "UTC",
+});
+
+/** A count as every list says it, grouped by thousands: "1,234". */
+const COUNT = new Intl.NumberFormat(LOCALE);
 
 /** What parts a span's start from its end. */
 const SPAN_ARROW = " → ";
@@ -139,19 +157,49 @@ export function callHeading(startedAt: number, now: number): string {
   return `${day}, ${time}`;
 }
 
-/** The time now, and again on every minute after, on whatever clock the stream runs under. */
-const minuteTicks: Stream.Stream<number> = Stream.fromEffectSchedule(
-  Clock.currentTimeMillis,
-  Schedule.spaced(Duration.minutes(1)),
-);
+/** What separates how long a turn worked from when it ended, and a call's heading from its length. */
+export const WORKED_SEPARATOR = " · ";
 
-const minuteAtom = rendererRuntime.atom(minuteTicks);
+/** How long a run has gone, as devtools count it: "42s" under a minute, "1m 12s" under an hour, and "1h 3m" past it. */
+export function workingTime(elapsedMs: number): string {
+  const seconds = Math.floor(Math.max(0, elapsedMs) / SECOND);
+  if (seconds < MINUTE_SECONDS) return `${seconds}s`;
+  const minutes = Math.floor(seconds / MINUTE_SECONDS);
+  if (minutes < HOUR_MINUTES) return `${minutes}m ${seconds % MINUTE_SECONDS}s`;
+  return `${Math.floor(minutes / HOUR_MINUTES)}h ${minutes % HOUR_MINUTES}m`;
+}
 
-/**
- * The time the window's times count from, moved on once a minute while any
- * of them reads it. Note that the time read at the render stands in until the
- * tick's first reading lands, so a row never draws a blank.
- */
-export function useMinute(): number {
-  return AsyncResult.getOrElse(useAtomValue(minuteAtom), () => Date.now());
+/** A count grouped by thousands, as every list and badge says it: "1,234". */
+export function formatCount(value: number): string {
+  return COUNT.format(value);
+}
+
+/** An instant drawn as its UTC date alone, e.g. "Aug 3, 2026". */
+export function formatDate(epochMs: number): string {
+  return UTC_DAY.format(epochMs);
+}
+
+/** An instant drawn as its UTC date and time, e.g. "Oct 21, 12:04 UTC". */
+export function formatInstant(epochMs: number): string {
+  return `${UTC_INSTANT.format(epochMs)} UTC`;
+}
+
+/** A day key ("2026-08-21") drawn as a short axis tick, e.g. "Aug 21". */
+export function formatDayTick(day: string): string {
+  return UTC_DAY_TICK.format(new Date(`${day}T00:00:00.000Z`));
+}
+
+/** A day key drawn as a page's own masthead, e.g. "August 21, 2026". */
+export function formatDayHeading(day: string): string {
+  return UTC_DAY_HEADING.format(new Date(`${day}T00:00:00.000Z`));
+}
+
+/** Every time zone this machine knows, as a zone menu lists them. */
+export function timeZoneNames(): readonly string[] {
+  return Intl.supportedValuesOf("timeZone");
+}
+
+/** The zone this machine is in. */
+export function localTimeZone(): string {
+  return Intl.DateTimeFormat().resolvedOptions().timeZone;
 }

@@ -42,7 +42,9 @@ import {
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
+  Time,
   Tooltip,
+  useMinute,
   VisuallyHidden,
 } from "@luke/ui";
 import { actorName, creatorActor } from "@luke/ui/actor-model";
@@ -85,9 +87,7 @@ import { useMemberDirectory } from "../member-directory.js";
 import { RepositoryPicture } from "../repository-picture.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { useSettledWaiting } from "../tasks/inbox-settling.js";
-import { RelativeTime } from "../tasks/relative-time.js";
 import { TASK_PRIORITY_WORDS, TASK_STATUS_WORDS, TaskKey } from "../tasks/task-standing.js";
-import { useMinute } from "../tasks/task-time.js";
 import { useReadMarks } from "../tasks/use-task-looks.js";
 import { useTaskMaker } from "../tasks/use-task-origin.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
@@ -680,7 +680,7 @@ function TaskListRow({
       {cell(TASK_PROPERTY.AGENTS, <TaskWorkMarks task={task} most={1} steady />)}
       {cell(
         TASK_PROPERTY.UPDATED,
-        <RelativeTime at={taskTime(task, TASK_ORDER.UPDATED)} now={now} hint={false} />,
+        <Time at={taskTime(task, TASK_ORDER.UPDATED)} now={now} hint={false} />,
       )}
       <span className="tasks-list-cell" data-cell="more">
         <Tooltip label="Task actions">

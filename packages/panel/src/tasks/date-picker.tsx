@@ -28,6 +28,7 @@ import {
   Stack,
   TEXT_FIELD_TYPE,
   TextField,
+  useMinute,
 } from "@luke/ui";
 import {
   type ReactNode,
@@ -42,7 +43,6 @@ import {
 import type { MentionNode } from "../plan-editor/contract.js";
 import { type MenuRow, SearchableMenu } from "../searchable-menu.js";
 import { SwitchRow } from "../settings/switch-row.js";
-import { useMinute } from "./task-time.js";
 
 /**
  * date-picker.tsx -- a date mention picked or changed in place, as Notion's date picker does: the date as written, a month to pick from, an end date, a time, and Clear, hung from the chip or the `@` word.

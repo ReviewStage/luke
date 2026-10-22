@@ -45,6 +45,7 @@ import { LIVE_STATUS } from "@luke/live";
 import { EXPERIMENT, HOST_CAPABILITY } from "@luke/settings";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
 import { experimentsOn } from "@luke/settings/testing";
+import { timeRuntime } from "@luke/ui";
 import { CHAT_PLACE, FOR_YOU } from "@luke/ui/chat-model";
 import { memoryHistory } from "@luke/ui/history-adapter";
 import { SECTION_WRITE_FAILED_NOTE } from "@luke/ui/task-sections-model";
@@ -3633,7 +3634,10 @@ test("Mark done's Undo leaves a status chosen since alone, though that choice is
 /** A registry whose atoms count on this clock, as the window's count on its own. */
 function registryOn(clock: Clock.Clock): AtomRegistry {
   return AtomRegistryModule.make({
-    initialValues: [[rendererRuntime, AsyncResult.success(Context.make(Clock.Clock, clock))]],
+    initialValues: [
+      [rendererRuntime, AsyncResult.success(Context.make(Clock.Clock, clock))],
+      [timeRuntime, AsyncResult.success(Context.make(Clock.Clock, clock))],
+    ],
   });
 }
 

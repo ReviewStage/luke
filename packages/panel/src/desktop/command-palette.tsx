@@ -89,6 +89,7 @@ import {
   Text,
   Tooltip,
   UnpinIcon,
+  useMinute,
   VisuallyHidden,
   WingFace,
 } from "@luke/ui";
@@ -112,6 +113,7 @@ import {
   taskRowName,
 } from "@luke/ui/task-list-model";
 import { DOCUMENT_REGION, TASK_MARK } from "@luke/ui/tasks-model";
+import { formatCount } from "@luke/ui/time-format";
 import { Command, defaultFilter } from "cmdk";
 import { LinkIcon } from "lucide-react";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -149,7 +151,6 @@ import {
 } from "../tasks/inbox-model.js";
 import { agentEndMark, openPlanStanding, TAB_KIND, tabLook } from "../tasks/tab-look.js";
 import { markReadItem } from "../tasks/task-menu-items.js";
-import { useMinute } from "../tasks/task-time.js";
 import { cardTitle } from "../tasks/tool-call-model.js";
 import type { CodingAgentsControl } from "../tasks/use-coding-agents.js";
 import { choiceOf } from "../tasks/use-inbox-listing.js";
@@ -288,7 +289,7 @@ type PaletteNotice =
     };
 
 /** What the Files filter says under a listing cut short at the wire's bound. */
-const TRUNCATED_LINE = `Only the repository's first ${TASK_TREE_BOUNDS.MAX_RECURSIVE_ENTRIES.toLocaleString("en-US")} entries are searched.`;
+const TRUNCATED_LINE = `Only the repository's first ${formatCount(TASK_TREE_BOUNDS.MAX_RECURSIVE_ENTRIES)} entries are searched.`;
 
 /** A footer hint: the chords it names and what they do. */
 interface FooterHint {

@@ -16,7 +16,7 @@ import { DateTime, Option, Schema } from "effect";
  * agent's prompt or a pull request among them, and never go stale. Its chip
  * says it from where the reader stands, in the reader's own zone and on the
  * reader's own day: Today, Tomorrow, Friday, Oct 20. Every word is US
- * English, as the window's are (`task-time.ts`).
+ * English, as the window's are (`@luke/ui/time-format`).
  *
  * The words an `@` reads as a date are a short list people type, not a
  * language: a named day (`today`, `tomorrow`, `yesterday`), a weekday,

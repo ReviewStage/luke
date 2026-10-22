@@ -4,13 +4,11 @@ import {
   type PagePlace,
   type PageShower,
 } from "@luke/features/page-wire";
-import { HoverCard, HoverCardHead } from "@luke/ui";
+import { HoverCard, HoverCardHead, Time, useMinute } from "@luke/ui";
 import { AppWindowIcon } from "lucide-react";
 import { useState } from "react";
 import { appPlatform } from "../app-platform.js";
 import { PAGE_SANDBOX } from "./page-pane.js";
-import { RelativeTime } from "./relative-time.js";
-import { useMinute } from "./task-time.js";
 import { useKnownNames } from "./use-known-names.js";
 
 /**
@@ -95,7 +93,7 @@ export function PageCard({ place, page }: CardPage): React.JSX.Element {
         name={page.title}
         // Note that the words stand in a span of their own, so a long agent's name wraps inside the card.
         sub={sub === undefined ? undefined : <span>{sub}</span>}
-        corner={<RelativeTime at={page.at} now={now} hint={false} />}
+        corner={<Time at={page.at} now={now} hint={false} />}
       />
       {/* A new version is a new preview, held hidden until it has loaded rather than over the last one's frame. */}
       <PagePreview key={`${page.id}/${page.version}`} place={place} page={page} />

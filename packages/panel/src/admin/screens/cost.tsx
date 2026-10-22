@@ -15,7 +15,8 @@ import {
   TEXT_TONE,
   Text,
 } from "@luke/ui";
-import { formatCompact, formatNumber, formatTrendMove, formatUsd } from "@luke/ui/admin-format";
+import { formatCompact, formatTrendMove, formatUsd } from "@luke/ui/admin-format";
+import { formatCount } from "@luke/ui/time-format";
 import { AccountCell } from "../accounts-table/accounts-table.js";
 import { useAdminDoors } from "../admin-doors.js";
 import { CostChart } from "../charts/cost-chart.js";
@@ -56,7 +57,7 @@ const NO_FIGURE = "—";
 
 /** Whole minutes, and a positive part of one as under one rather than a zero that hides it. */
 function wholeMinutes(minutes: number): string {
-  return minutes > 0 && minutes < 1 ? "<1" : formatNumber(Math.round(minutes));
+  return minutes > 0 && minutes < 1 ? "<1" : formatCount(Math.round(minutes));
 }
 
 function usdOrNone(value: number | null): string {
@@ -162,7 +163,7 @@ function accountColumns(
       key: ACCOUNT_COLUMN.MERGED,
       label: "PRs merged",
       kind: DATA_TABLE_COLUMN_KIND.NUMERIC,
-      cell: (row) => formatNumber(row.mergedPullRequests),
+      cell: (row) => formatCount(row.mergedPullRequests),
     },
     {
       key: ACCOUNT_COLUMN.PER_MERGED,
@@ -279,13 +280,13 @@ export function CostScreen({
                 <StatCard
                   label={`${LIST_PRICE} per active account`}
                   value={usdOrNone(cost.perAccount.meanUsd)}
-                  hint={`median ${usdOrNone(cost.perAccount.medianUsd)} · ${formatNumber(cost.perAccount.accounts)} accounts`}
+                  hint={`median ${usdOrNone(cost.perAccount.medianUsd)} · ${formatCount(cost.perAccount.accounts)} accounts`}
                   grouped
                 />
                 <StatCard
                   label={`${LIST_PRICE} per merged PR`}
                   value={usdOrNone(cost.perMergedPullRequest.spendUsd)}
-                  hint={`the window's whole figure over ${formatNumber(cost.perMergedPullRequest.mergedPullRequests)} PRs merged`}
+                  hint={`the window's whole figure over ${formatCount(cost.perMergedPullRequest.mergedPullRequests)} PRs merged`}
                   grouped
                 />
                 <StatCard

@@ -41,6 +41,7 @@ import {
   Tooltip,
 } from "@luke/ui";
 import { ACTOR_KIND, actorName, githubActor } from "@luke/ui/actor-model";
+import { formatCount } from "@luke/ui/time-format";
 import { SmilePlusIcon } from "lucide-react";
 import { useId, useRef, useState } from "react";
 import { useMemberDirectory } from "../member-directory.js";
@@ -176,7 +177,7 @@ function ReactionPill({
     <>
       <span aria-hidden="true">{face.emoji}</span>
       <span className="pull-request-reaction-count" aria-hidden="true">
-        {reaction.count.toLocaleString()}
+        {formatCount(reaction.count)}
       </span>
     </>
   );
