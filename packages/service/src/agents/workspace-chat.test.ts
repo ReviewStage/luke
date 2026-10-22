@@ -561,14 +561,6 @@ it.layer(getTestDB())("the window's read of a workspace's chat", (it) => {
         const statements = workspaceChatLiveStatements(room.owner, ada);
         const live = workspaceChatOfLiveRows(yield* liveRowsOf(statements));
         assert.deepEqual(live, { ...held, messages: newestOfEachChannel(messages), cursor: "" });
-        // A window from before members were named by their links still reads a handle on each member's row, handed the member's id rather than the retired column.
-        const members = Option.getOrThrow(statements).members;
-        const raw = yield* Effect.flatMap(SqlClient.SqlClient, (sql) =>
-          sql.unsafe<{ readonly id: string; readonly handle: string }>(members.sql, [
-            ...members.params,
-          ]),
-        );
-        assert.ok(raw.length > 0 && raw.every((row) => row.handle === row.id));
         // Each channel's newest, and the one ask still open behind them.
         assert.equal(
           live?.messages.filter((each) => each.channelId === general.id).length,

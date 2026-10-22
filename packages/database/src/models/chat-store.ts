@@ -3092,8 +3092,6 @@ export function workspaceChatLiveStatements(
         {
           id: chatMember.id,
           kind: chatMember.kind,
-          // Note that a window from before members were named by their links still reads a handle, so it is handed the member's id in its place; nothing reads the retired column.
-          handle: sql<string>`${chatMember.id}::text`,
           // A person by their account's name; an agent by its human name, else its title, else its model's id, as `agentMembersOf` names one.
           name: sql<
             string | null

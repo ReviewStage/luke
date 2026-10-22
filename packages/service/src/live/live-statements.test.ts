@@ -50,7 +50,6 @@ const READER = {
   userId: USER_ID,
   agentId: null,
   taskId: null,
-  handle: "ada",
   ordinal: 1,
   readSeq: 0,
   noticeSeq: null,
