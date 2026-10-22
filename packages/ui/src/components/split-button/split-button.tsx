@@ -9,6 +9,7 @@ import type {
 } from "react";
 import { ChevronDownIcon } from "../../face/glyphs.js";
 import { BUTTON_VARIANT, Button, type ButtonVariant, IconButton } from "../button/button.js";
+import { Tooltip } from "../tooltip/hint.js";
 
 /**
  * split-button.tsx -- one act and the menu of its options in one control: a labelled Button and, joined to it, a chevron that drops the menu.
@@ -28,7 +29,8 @@ import { BUTTON_VARIANT, Button, type ButtonVariant, IconButton } from "../butto
  * glyph alone, the chevron not drawn, so the options are reached some
  * other way the app offers.
  *
- * The hint over the main part is the app's (`hint`): it is handed
+ * The hint over the main part is the window's tooltip (`Tooltip`), or one
+ * the caller hangs in its place (`hint`): it is handed
  * `hintLabel` and wraps the main part, which takes what the hint hands it.
  */
 
@@ -69,7 +71,7 @@ export function SplitButton({
   onClick,
   disabled,
   busy,
-  hint: Hint,
+  hint: Hint = Tooltip,
   hintLabel,
   menu,
 }: {
@@ -85,7 +87,7 @@ export function SplitButton({
   disabled?: boolean | undefined;
   /** While the main part's press is out, what it is doing ("Starting"): a ring stands over it under that name. */
   busy?: string | undefined;
-  /** The app's hint over the main part. */
+  /** The hint over the main part: the window's tooltip, unless the caller hangs one of its own. */
   hint?: SplitButtonHint | undefined;
   /** What the hint says. */
   hintLabel?: string | undefined;
@@ -108,7 +110,7 @@ export function SplitButton({
   );
   return (
     <span className="luke-split-button" data-variant={variant}>
-      {Hint === undefined ? main : <Hint label={hintLabel}>{main}</Hint>}
+      <Hint label={hintLabel}>{main}</Hint>
       <IconButton
         variant={variant}
         icon={<ChevronDownIcon />}

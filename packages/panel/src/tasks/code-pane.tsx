@@ -1,6 +1,6 @@
 import type { CodeRef } from "@luke/features/task-wire";
 import type { TaskCodeShowing } from "@luke/features/tasks-view";
-import { IconButton, SCROLL_FADE_INSET } from "@luke/ui";
+import { IconButton, SCROLL_FADE_INSET, Tooltip } from "@luke/ui";
 import {
   type CodeFeedCall,
   type CodeFeedCallSource,
@@ -17,7 +17,6 @@ import {
   ConversationScrollButton,
 } from "../ai-elements/conversation.js";
 import { CopyGlyph, copyHint, useCopyFeedback } from "../copy-feedback.js";
-import { Tooltip } from "../tooltip.js";
 import { CallEndMarker, CallStartMarker } from "./call-card.js";
 import { CodeSnippet, useSnippetNote } from "./code-snippet.js";
 import { FileRef } from "./file-ref.js";

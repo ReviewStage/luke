@@ -1,6 +1,6 @@
+import { Tooltip } from "@luke/ui";
 import * as Atom from "effect/reactivity/Atom";
 import { WifiOffIcon } from "lucide-react";
-import { Tooltip } from "../tooltip.js";
 import { APP_SLICE, useAppSlice } from "../use-app-state.js";
 
 /**

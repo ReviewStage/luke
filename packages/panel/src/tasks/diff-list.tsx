@@ -1,5 +1,12 @@
 import { useAtomValue } from "@effect/atom-react";
-import { Button, cssCustomProperties, EmptyState, ScrollArea, TooltipPill } from "@luke/ui";
+import {
+  Button,
+  cssCustomProperties,
+  EmptyState,
+  ScrollArea,
+  TooltipPill,
+  useHintRest,
+} from "@luke/ui";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { MessageSquarePlusIcon } from "lucide-react";
 import {
@@ -31,7 +38,6 @@ import {
   sameLook,
   sameNotes,
 } from "../diff-view/contract.js";
-import { useHintRest } from "../tooltip.js";
 
 /**
  * diff-list.tsx -- a pull request's files as Files changed draws them: one list, every file under a header of its own, drawn by Pierre's list (`../diff-view/`'s `mountList`), only the files near the view drawn at all.

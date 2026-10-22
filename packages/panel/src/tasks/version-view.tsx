@@ -8,12 +8,12 @@ import {
   ErrorState,
   Skeleton,
   SkeletonRegion,
+  Tooltip,
   useConfirmDialog,
 } from "@luke/ui";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import { MarkdownMessage } from "../markdown-message.js";
 import { TOAST_HOLD, TOAST_TONE, type ToastNotice, UNDO_LABEL } from "../toast.js";
-import { Tooltip } from "../tooltip.js";
 import { DocumentScroll } from "./document-frame.js";
 import { VERSION_CHANGE, type VersionDiff, versionDiff } from "./plan-history-model.js";
 import { PlanPictures, usePlanPictureDrawer } from "./plan-pictures.js";

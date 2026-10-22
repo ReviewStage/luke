@@ -20,6 +20,7 @@ import {
   TEXT_VARIANT,
   Text,
   TextField,
+  Tooltip,
   VisuallyHidden,
 } from "@luke/ui";
 import {
@@ -51,7 +52,6 @@ import {
 } from "lucide-react";
 import { memo, useCallback, useId, useMemo, useRef, useState } from "react";
 import { rendererRuntime } from "../renderer-runtime.js";
-import { Tooltip } from "../tooltip.js";
 
 /**
  * section-icon-picker.tsx -- how a sidebar section's icon is drawn, and the section dialog's picker of one: every Lucide glyph in a color of the palette, every emoji by category, one search over whichever is shown, and No icon.

@@ -45,6 +45,7 @@ import {
   TEXT_VARIANT,
   Text,
   TextArea,
+  Tooltip,
   TrashIcon,
   useConfirmDialog,
   useMenu,
@@ -97,7 +98,6 @@ import {
   type PlanEditorHandle,
   type PlanEditorModule,
 } from "../plan-editor/contract.js";
-import { Tooltip } from "../tooltip.js";
 import { AgentActorRef, agentSubject, NOTHING_HELD } from "./agent-ref.js";
 import { AttachFilesButton } from "./attach-files-button.js";
 import { AttachedFileChips, attachmentChips } from "./attached-file-chips.js";

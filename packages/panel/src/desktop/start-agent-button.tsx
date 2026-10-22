@@ -7,7 +7,6 @@ import { choiceLabel } from "../tasks/coding-agent-model.js";
 import { ModelMenu, settledChoice } from "../tasks/model-menu.js";
 import { useRepositoryRemedy } from "../tasks/repository-remedy.js";
 import type { CodingAgentsControl } from "../tasks/use-coding-agents.js";
-import { Tooltip } from "../tooltip.js";
 
 /**
  * start-agent-button.tsx -- the task toolbar's Start: a split button that starts a coding agent on the task.
@@ -124,7 +123,6 @@ export function StartAgentButton({ control }: { control: CodingAgentsControl }):
           label="Start a coding agent"
           disabled={unavailable}
           busy={start.busy ? "Starting" : undefined}
-          hint={Tooltip}
           hintLabel={hint}
           onClick={press}
           menu={{

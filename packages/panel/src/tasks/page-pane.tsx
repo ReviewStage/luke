@@ -8,7 +8,7 @@ import {
 import { type PageLine, type PagePlace, pagePlaceId } from "@luke/features/page-wire";
 import type { CodeLines, TasksPageSourceAnswer } from "@luke/features/tasks-view";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
-import { ERROR_STATE_PLACEMENT, ErrorState, IconButton } from "@luke/ui";
+import { ERROR_STATE_PLACEMENT, ErrorState, IconButton, Tooltip } from "@luke/ui";
 import { useClipped } from "@luke/ui/use-clipped";
 import { Option, Schema } from "effect";
 import {
@@ -30,7 +30,6 @@ import {
   useFindSource,
 } from "../find-in-tab.js";
 import { SpinnerRegion } from "../spinner.js";
-import { Tooltip } from "../tooltip.js";
 import { BarMenu } from "./file-menu.js";
 import { VIEW_SETTINGS_SCOPE, ViewSettingsButton } from "./view-settings.js";
 import { WholeFile, type WholeFileNote } from "./whole-file.js";

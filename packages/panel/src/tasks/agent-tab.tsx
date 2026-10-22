@@ -28,6 +28,7 @@ import {
   ERROR_STATE_PLACEMENT,
   ErrorState,
   INLINE_REF_LOOK,
+  InlineRef,
   LineSummary,
   TaskStatusMark,
   TEXT_LINK_LOOK,
@@ -77,7 +78,6 @@ import { useAutomation } from "../automation-directory.js";
 import { useCopyToast } from "../copy-feedback.js";
 import { FadingWords } from "../fading-words.js";
 import { useFindOpen } from "../find-in-tab.js";
-import { InlineRef } from "../inline-ref.js";
 import { useMemberDirectory, usePerson } from "../member-directory.js";
 import { GLYPH_STATE, stateEndMark } from "../state-glyph.js";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast.js";

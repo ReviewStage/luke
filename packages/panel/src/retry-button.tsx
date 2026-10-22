@@ -8,8 +8,8 @@
  * `@luke/ui`'s `RetryRowLabel` instead, and its own press is the retry.
  */
 
+import { FoldingButton } from "@luke/ui";
 import { RotateCwIcon } from "lucide-react";
-import { FoldingButton } from "./folding-button.js";
 
 const RETRY_WORD = "Retry";
 

@@ -1,12 +1,11 @@
 import { useAtomValue } from "@effect/atom-react";
-import { BUTTON_SIZE, cn, IconButton } from "@luke/ui";
+import { BUTTON_SIZE, cn, IconButton, Tooltip } from "@luke/ui";
 import { QUOTE_CLASS } from "@luke/ui/quote-face";
 import type { UIMessage } from "ai";
 import { AsyncResult } from "effect/reactivity";
 import { type ComponentProps, type HTMLAttributes, memo, type ReactNode, useState } from "react";
 import { type Components, Streamdown } from "streamdown";
 import { markdownHtmlParserAtom } from "../markdown-html-parser.js";
-import { Tooltip } from "../tooltip.js";
 
 /**
  * message.tsx -- AI Elements' Message: one turn of a conversation, by who said it, and the markdown of a reply.
@@ -127,7 +126,7 @@ export type MessageActionProps = {
   label: string;
   /** Whether it hangs a hint: its label, or the words given here in its place. */
   tooltip?: boolean | string;
-  /** A hover card hung in the hint's place, saying more about the action than its label (`tooltip.tsx`'s `card`). */
+  /** A hover card hung in the hint's place, saying more about the action than its label (`@luke/ui`'s `Tooltip`'s `card`). */
   card?: ReactNode;
   onClick: () => void;
   /** Its glyph. */

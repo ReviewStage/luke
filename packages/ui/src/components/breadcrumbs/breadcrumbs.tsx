@@ -8,6 +8,7 @@ import {
   ONE_LINE_END,
   type OneLineEnd,
 } from "../one-line/clipped-line.js";
+import { Tooltip } from "../tooltip/hint.js";
 
 /**
  * breadcrumbs.tsx -- a path to where the reader stands: a named landmark holding an ordered list of crumbs, each words, a press, or a press that opens a menu or a dialog, the chevrons between them punctuation alone.
@@ -20,7 +21,7 @@ import {
  * open, and its press is handed the crumb, which the caller hangs what it
  * opens from and hands the keyboard back to. A crumb may wear a glyph
  * before its words, as a tab names its kind, and hang a card in its hint's
- * place, the app's hint raising it as it raises a pill. A crumb may come
+ * place, its hint raising it as it raises a pill. A crumb may come
  * and go (`shown`), as a page's title joins its bar once its heading has
  * scrolled away: it fades in with a short rise as it comes, and fades out
  * before it goes (`use-disclosure.ts`).
@@ -74,7 +75,7 @@ export const BREADCRUMB_POPUP = {
 export type BreadcrumbPopup = (typeof BREADCRUMB_POPUP)[keyof typeof BREADCRUMB_POPUP];
 
 /**
- * The app's hint a path hangs from its crumbs: the words a crumb raises, or
+ * The hint a path hangs from its crumbs, the window's tooltip unless the caller hangs its own: the words a crumb raises, or
  * the card it hangs in their place, and a folded way back's words.
  */
 export type BreadcrumbHint = ComponentType<
@@ -249,7 +250,7 @@ function CrumbControl({
   hint: Hint,
 }: {
   crumb: Crumb;
-  hint: BreadcrumbHint | undefined;
+  hint: BreadcrumbHint;
 }): React.JSX.Element {
   const { label, icon, onPress } = crumb;
   const current = crumb.current === true ? "page" : undefined;
@@ -282,7 +283,7 @@ function CrumbControl({
         <CrumbFace glyph={crumb.glyph} label={label} end={crumb.end} />
       </button>
     );
-  return Hint === undefined || (crumb.hint === undefined && crumb.card === undefined) ? (
+  return crumb.hint === undefined && crumb.card === undefined ? (
     control
   ) : (
     <Hint label={crumb.hint} card={crumb.card}>
@@ -311,7 +312,7 @@ function CrumbItem({
 }: {
   crumb: Crumb;
   chevron: Widths | undefined;
-  hint: BreadcrumbHint | undefined;
+  hint: BreadcrumbHint;
 }): React.JSX.Element | null {
   const shown = crumb.shown ?? true;
   const presence = useDisclosure(shown);
@@ -349,13 +350,13 @@ export function Breadcrumbs({
   label,
   crumbs,
   variant = BREADCRUMBS_VARIANT.CAPTION,
-  hint,
+  hint = Tooltip,
 }: {
   /** The landmark's name ("Path"). */
   label: string;
   crumbs: readonly Crumb[];
   variant?: BreadcrumbsVariant;
-  /** The app's hint, raising a crumb's `hint` or hanging its `card`, and a folded way back's words. */
+  /** The hint raising a crumb's `hint` or hanging its `card`, and a folded way back's words: the window's tooltip, unless the caller hangs one of its own. */
   hint?: BreadcrumbHint | undefined;
 }): React.JSX.Element {
   return (

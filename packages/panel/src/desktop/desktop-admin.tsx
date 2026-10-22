@@ -20,7 +20,17 @@
  */
 
 import { APP_COMMAND, APP_SHORTCUTS } from "@luke/settings/shortcuts";
-import { BackIcon, NAV_CURRENT, NavItem, NavItemLink, SCROLL_FADE, ScrollArea } from "@luke/ui";
+import {
+  BackIcon,
+  commandKeyshortcuts,
+  FoldingButton,
+  NAV_CURRENT,
+  NavItem,
+  NavItemLink,
+  SCROLL_FADE,
+  ScrollArea,
+  Shortcut,
+} from "@luke/ui";
 import { ExternalLinkIcon } from "lucide-react";
 import { AdminPlace, adminSectionOf, adminSectionView } from "../admin/admin-place.js";
 import { AdminToolbarLead } from "../admin/chrome/page-header.js";
@@ -30,11 +40,8 @@ import { useAppCommand } from "../app-commands.js";
 import { appPlatform } from "../app-platform.js";
 import { ColumnFoot } from "../call/call-card.js";
 import { FIND_PAGE, PageFind } from "../find-in-tab.js";
-import { FoldingButton } from "../folding-button.js";
 import type { NavigationHistory } from "../navigation-history.js";
 import { hiddenColumns, SHELL_ROOM, type ShellRoom } from "../shell-room.js";
-import { Shortcut } from "../shortcut.js";
-import { commandKeyshortcuts } from "../tooltip.js";
 import { HistoryButtons, SidebarResizeEdge, useSidebarEdge } from "./desktop-sidebar.js";
 import { useNarrowFocus } from "./narrow-focus.js";
 import type { SidebarCollapse } from "./sidebar-collapse.js";

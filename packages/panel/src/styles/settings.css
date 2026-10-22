@@ -391,14 +391,6 @@
   margin-top: var(--luke-space-4);
 }
 
-/* A chord that is a Keyboard shortcuts row's whole value: set at the row's
-   label size in the value's ink, the way System Settings lists its keyboard
-   shortcuts. */
-.shortcut-value {
-  --shortcut-text: var(--luke-type-label-size);
-  --shortcut-ink: var(--luke-color-text-muted);
-}
-
 /* What leads a row that stands for something of its own, a provider's or a
    service's mark, in one box whatever the artwork's proportions. */
 .settings-row-mark {

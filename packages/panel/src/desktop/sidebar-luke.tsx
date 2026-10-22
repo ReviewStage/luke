@@ -10,6 +10,7 @@ import {
   LIST_ROW_CURRENT,
   LIST_ROW_INK,
   ListRow,
+  Tooltip,
   useConfirmDialog,
   useMenu,
   VisuallyHidden,
@@ -22,7 +23,6 @@ import { GLYPH_STATE, StateGlyph } from "../state-glyph.js";
 import { agentGlyphState } from "../tasks/coding-agent-model.js";
 import { agentEndMark, TAB_KIND, tabLook } from "../tasks/tab-look.js";
 import { markReadItem } from "../tasks/task-menu-items.js";
-import { Tooltip } from "../tooltip.js";
 import { useCallingAgent } from "../use-voice-view.js";
 import { ActionMenu, type MenuEntry } from "./action-menu.js";
 import { useAgentReadMarks } from "./agent-read-marks.js";

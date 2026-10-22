@@ -5,10 +5,10 @@ import {
   HoverCardNote,
   HoverCardRow,
   INLINE_REF_LOOK,
+  InlineRef,
 } from "@luke/ui";
 import { type SkillOption, skillWord } from "@luke/ui/skill-mention";
 import { BookOpenIcon } from "lucide-react";
-import { InlineRef } from "../inline-ref.js";
 import { FileTypeIcon } from "./file-type-icon.js";
 
 /**

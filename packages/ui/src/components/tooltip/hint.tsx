@@ -1,5 +1,5 @@
 /**
- * tooltip.tsx -- the window's one hover hint: a small dark pill naming a control and the shortcut that reaches it.
+ * hint.tsx -- the window's one hover hint: a small dark pill naming a control and the shortcut that reaches it.
  *
  * It stands in for the system `title`, which waits over a second, cannot say
  * a shortcut apart from its name, and draws in a style of its own. The pill
@@ -58,10 +58,15 @@
  * with the rest; nothing of it rides an attribute, and a card is left out
  * of the recording whole.
  *
- * The pill and the card are drawn, and placed, by `@luke/ui`'s `TooltipPill`
- * and `TooltipCard`; what is the window's own is here: when one shows and
- * goes, the warm spell, a card's linger on the window's runtime, and the
- * stack of cards hung over one another.
+ * The pill and the card are drawn, and placed, by `TooltipPill` and
+ * `TooltipCard` (`tooltip.tsx`); what is here is when one shows and goes,
+ * the warm spell, a card's linger, and the stack of cards hung over one
+ * another. The waits are atoms' work on the registry the app's root provides
+ * (`RegistryContext`), or the library's own where none is, over no services,
+ * so nothing here builds a runtime of its own. Whether focus moved by the
+ * keyboard is read from the root's `data-keyboard`, which the app's root
+ * marks as the keyboard moves it; an app that marks nothing shows no pill on
+ * focus.
  */
 
 import { useAtomSet } from "@effect/atom-react";
@@ -72,17 +77,6 @@ import {
   type ShortcutChord,
   shortcutAria,
 } from "@luke/settings/shortcuts";
-import {
-  type ListRowHint,
-  type OneLineHint,
-  TOOLTIP_LEAVING,
-  TooltipCard,
-  type TooltipLeaving,
-  TooltipPill,
-  useTouchHold,
-} from "@luke/ui";
-import { useDisclosure } from "@luke/ui/use-disclosure";
-import { useStateWithRef } from "@luke/ui/use-state-with-ref";
 import { Duration, Effect } from "effect";
 import * as Atom from "effect/reactivity/Atom";
 import {
@@ -103,8 +97,13 @@ import {
   useRef,
   useState,
 } from "react";
-import { rendererRuntime } from "./renderer-runtime.js";
-import { Shortcut } from "./shortcut.js";
+import { useDisclosure } from "../../use-disclosure.js";
+import { useStateWithRef } from "../../use-state-with-ref.js";
+import type { ListRowHint } from "../list-row/list-row.js";
+import { useTouchHold } from "../menu/touch-hold.js";
+import type { OneLineHint } from "../one-line/clipped-line.js";
+import { Shortcut } from "../shortcut/shortcut.js";
+import { TOOLTIP_LEAVING, TooltipCard, type TooltipLeaving, TooltipPill } from "./tooltip.js";
 
 /**
  * How long after one pill goes the next shows at once. Note that it is the
@@ -171,7 +170,7 @@ function unstack(id: string): void {
  * it off. Note that the way up is handed inside a record, as a linger's way
  * down is (`cardLingerAtom`).
  */
-const hintRestAtom = rendererRuntime.fn(({ show }: { readonly show: () => void }) =>
+const hintRestAtom = Atom.fn(({ show }: { readonly show: () => void }) =>
   Effect.andThen(Effect.sleep(HINT_REST), Effect.sync(show)),
 );
 
@@ -220,7 +219,7 @@ function hearRestEnders(stop: () => void): () => void {
  * setter is read as an update of its value and called at once.
  */
 const cardLingerAtom = Atom.family((_tooltip: string) =>
-  rendererRuntime.fn(({ leave }: { readonly leave: () => void }) =>
+  Atom.fn(({ leave }: { readonly leave: () => void }) =>
     Effect.andThen(Effect.sleep(CARD_LINGER), Effect.sync(leave)),
   ),
 );
@@ -229,7 +228,7 @@ const cardLingerAtom = Atom.family((_tooltip: string) =>
  * A pill's linger, which is none: one atom every pill shares, so only a
  * tooltip that hangs a card holds a linger of its own.
  */
-const noLingerAtom = rendererRuntime.fn((_pill: { readonly leave: () => void }) => Effect.void);
+const noLingerAtom = Atom.fn((_pill: { readonly leave: () => void }) => Effect.void);
 
 /** What the tooltip adds to its control's props. */
 interface AnchorProps {
@@ -355,7 +354,7 @@ function Hint({
       {...placed}
       label={drawn.label}
       shortcut={
-        chord === undefined ? undefined : <Shortcut chord={chord} className="tooltip-chord" />
+        chord === undefined ? undefined : <Shortcut chord={chord} className="luke-tooltip-chord" />
       }
     />
   );

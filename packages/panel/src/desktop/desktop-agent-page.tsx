@@ -14,6 +14,7 @@ import {
   ErrorState,
   IconButton,
   InlineEdit,
+  Tooltip,
   useMenu,
 } from "@luke/ui";
 import { type StripTab, sameTab } from "@luke/ui/tab-strip-model";
@@ -52,7 +53,6 @@ import {
 import { PULL_REQUEST_VIEW, SIDE_PANEL_TAB } from "../tasks/use-side-panel.js";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast.js";
-import { Tooltip } from "../tooltip.js";
 import { ActionMenu } from "./action-menu.js";
 import {
   type AgentTerminalDoors,

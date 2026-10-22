@@ -46,6 +46,7 @@ import {
   useConfirmDialog,
   useFilePicker,
   useMenu,
+  wholeWordsHint,
 } from "@luke/ui";
 import { ACTOR_KIND, memberActor, ROLE_WORDS, SOMEONE_REASON } from "@luke/ui/actor-model";
 import { githubAccountPictureUrl } from "@luke/ui/tasks-model";
@@ -74,7 +75,6 @@ import { useOpenPerson } from "../person-door.js";
 import { dayAndTimeText } from "../tasks/task-time.js";
 import { useWorkspaceMembersRead } from "../tasks/use-workspace-members.js";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast.js";
-import { wholeWordsHint } from "../tooltip.js";
 import { useCapability } from "../use-app-state.js";
 import { MacRepositoriesGroup } from "./mac-repository-settings.js";
 import { MenuRow } from "./menu-row.js";

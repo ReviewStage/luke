@@ -1,10 +1,10 @@
 import type { ReviewThread } from "@luke/features/coding-agent-wire";
+import { Tooltip } from "@luke/ui";
 import { actorName } from "@luke/ui/actor-model";
 import { CircleCheckIcon, CircleIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref.js";
 import { Fold, FoldBody, FoldSummary } from "../ai-elements/fold.js";
-import { Tooltip } from "../tooltip.js";
 import { useNamer } from "./pull-request-people.js";
 
 /**

@@ -11,6 +11,7 @@ import {
   TEXT_VARIANT,
   Text,
   TextButton,
+  Tooltip,
   useMenu,
 } from "@luke/ui";
 import {
@@ -72,7 +73,6 @@ import type { ReactNode } from "react";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref.js";
 import { useMemberDirectory } from "../member-directory.js";
 import { TASK_PRIORITY_WORDS, TASK_STATUS_WORDS } from "../tasks/task-standing.js";
-import { Tooltip } from "../tooltip.js";
 import { ActionMenu, type MenuAction, type MenuEntry } from "./action-menu.js";
 
 /**

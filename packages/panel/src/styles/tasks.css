@@ -975,7 +975,7 @@
   }
 
   /* An action whose hover card stands keeps the bar up while the pointer
-     crosses onto the card, off the message (`tooltip.tsx` marks it
+     crosses onto the card, off the message (`@luke/ui`'s `Tooltip` marks it
      described while it does). */
   .message-actions:focus-within,
   .message-actions:has([aria-describedby]) {
@@ -6559,7 +6559,7 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
 
 /* The action's key, after its words, in the action's own ink. */
 .terminal-bar-key {
-  --shortcut-ink: currentColor;
+  --luke-shortcut-ink: currentColor;
   margin-inline-start: var(--luke-space-4);
 }
 

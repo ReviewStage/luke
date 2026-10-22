@@ -75,6 +75,7 @@ import {
   TEXT_VARIANT,
   Text,
   TextButton,
+  Tooltip,
   useMenu,
   VisuallyHidden,
 } from "@luke/ui";
@@ -117,7 +118,6 @@ import { ActionMenu, type MenuAction } from "../desktop/action-menu.js";
 import { type HandTabActions, useHandedTabActions } from "../desktop/strip-tabs.js";
 import { SpinnerRegion } from "../spinner.js";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast.js";
-import { Tooltip } from "../tooltip.js";
 import {
   AgentChangesTab,
   type ChangesReads,
@@ -2466,7 +2466,6 @@ function PullRequestTabBody({
                   <ChoiceBar<PullRequestView>
                     label="Pull request"
                     items={tabsOf(parts, published, held, changes, chapters)}
-                    hint={Tooltip}
                     value={view}
                     onChange={onView}
                     look={CHOICE_BAR_LOOK.FILL}
