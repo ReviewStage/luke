@@ -108,7 +108,7 @@ export function AddTokenRepository({
   const menuId = useId();
   const holder = useRef<HTMLSpanElement>(null);
   const button = useRef<HTMLButtonElement>(null);
-  const placement = usePickerPlacement(open, button, PICKER_ALIGN.END);
+  const placement = usePickerPlacement(open, button, PICKER_ALIGN.END, menuId);
   const close = () => {
     setOpen(false);
     button.current?.focus();
@@ -143,7 +143,7 @@ export function AddTokenRepository({
           ? WORDS.NONE
           : undefined;
   return (
-    <span className="settings-picker" ref={holder} {...placement} data-align={PICKER_ALIGN.END}>
+    <span className="settings-picker" ref={holder} {...placement}>
       <Button
         ref={button}
         variant={BUTTON_VARIANT.OUTLINE}

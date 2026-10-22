@@ -400,16 +400,23 @@ export function SearchableMenu(props: {
   }, [leaving]);
 
   // A submenu opens to the right and down from its row, and turns to the
-  // left or stands up where the window ends before it does, measured
-  // before it is painted, and again as the pointer moves it to another
-  // row, whose submenu may stand taller.
+  // left or stands up where the window ends before it does, or where the
+  // room its menu keeps to (`data-popover-room`, the side panel or an
+  // agent's pane) ends, so it never runs past a column and scrolls it
+  // sideways; measured before it is painted, and again as the pointer moves
+  // it to another row, whose submenu may stand taller.
   const openAt = open === undefined ? undefined : footAt;
   useLayoutEffect(() => {
     if (openAt === undefined || panel.current === null) return;
     const bounds = panel.current.getBoundingClientRect();
     const room = document.documentElement;
+    const roomRight = Math.min(
+      panel.current.closest("[data-popover-room]")?.getBoundingClientRect().right ??
+        room.clientWidth,
+      room.clientWidth,
+    );
     setPlace({
-      side: bounds.right > room.clientWidth ? SUBMENU_SIDE.LEFT : SUBMENU_SIDE.RIGHT,
+      side: bounds.right > roomRight ? SUBMENU_SIDE.LEFT : SUBMENU_SIDE.RIGHT,
       stand: bounds.bottom > room.clientHeight ? SUBMENU_STAND.UP : SUBMENU_STAND.DOWN,
     });
   }, [openAt]);

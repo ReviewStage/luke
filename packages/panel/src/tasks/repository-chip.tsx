@@ -239,7 +239,7 @@ export function RepositoryChip(props: {
   const menuId = useId();
   const chip = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
-  const placement = usePickerPlacement(open, trigger, props.align ?? PICKER_ALIGN.END);
+  const placement = usePickerPlacement(open, trigger, props.align ?? PICKER_ALIGN.END, menuId);
   /** What held focus as the menu opened, which closing hands it back to. */
   const opener = useRef<HTMLElement | null>(null);
   // Note that the chooser is read through a ref, because the tab hands a
