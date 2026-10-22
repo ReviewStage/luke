@@ -23,6 +23,7 @@ import { member, organization, user } from "../../schemas/auth.js";
 import { chatMessage, workspaceChat } from "../../schemas/chat.js";
 import { codingAgent } from "../../schemas/coding-agent.js";
 import { getTestDB } from "../../testing/index.js";
+import { writeAccountPreferences } from "../account-store.js";
 import {
   agentMembersOf,
   agentWorkspace,
@@ -75,7 +76,6 @@ import {
   withdrawAnswer,
   workspaceChatStamp,
 } from "../chat-store.js";
-import { writeAccountPreferences } from "../account-store.js";
 import { createCodingAgent } from "../coding-agent-store.js";
 import { createTask, updateTask } from "../task-store.js";
 

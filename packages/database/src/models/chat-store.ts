@@ -1468,6 +1468,15 @@ function madeOrStanding(
   return row === undefined ? standing : Effect.succeed(Option.some(row));
 }
 
+/** Whether the account may reach the subject's member: any but a teammate's operator, which is private to its member. */
+function reachesSubject(userId: string, subject: ChatMemberSubject): ChatStoreEffect<boolean> {
+  if (subject.kind !== MEMBER_KIND.AGENT) return Effect.succeed(true);
+  return Effect.map(
+    findTeammatesOperator({ userId, agentId: subject.agentId }),
+    (operators) => operators.length === 0,
+  );
+}
+
 /**
  * The subject's member where it already stands and the subject is still of
  * the workspace, read by its key and without the workspace's lock; nothing
@@ -1492,7 +1501,7 @@ function standingMember(
   });
 }
 
-/** The subject's member made under the workspace's lock, or the one a racing join made first, as `ensureMember` says. */
+/** The subject's member made under the workspace's lock, or the one a racing join made first, as `ensureMember` says; the caller has checked the account reaches the subject. */
 function mintMember(
   userId: string,
   organizationId: string,
@@ -1501,13 +1510,6 @@ function mintMember(
   return transaction(
     Effect.gen(function* () {
       if (!(yield* lockedFor(userId, organizationId))) return Option.none();
-      // A teammate's operator is private to its member, so no one else seats it or reaches its member.
-      if (
-        subject.kind === MEMBER_KIND.AGENT &&
-        (yield* findTeammatesOperator({ userId, agentId: subject.agentId })).length > 0
-      ) {
-        return Option.none();
-      }
       const key = { organizationId, kind: subject.kind, subjectId: subjectId(subject) };
       // A person is asked of again each time, because one who left the workspace keeps a row for the messages they wrote.
       const standing = yield* findMemberOfSubject(key);
@@ -1547,6 +1549,8 @@ export function ensureMember(
 ): ChatStoreEffect<Option.Option<ChatMemberRow>> {
   return Effect.gen(function* () {
     if (!(yield* isWorkspaceMember(userId, organizationId))) return Option.none();
+    // A teammate's operator is private to its member, so no one else seats it or reaches its member.
+    if (!(yield* reachesSubject(userId, subject))) return Option.none();
     const standing = yield* standingMember(organizationId, subject);
     if (Option.isSome(standing)) return standing;
     return yield* mintMember(userId, organizationId, subject);
@@ -1565,6 +1569,7 @@ export function joinedMemberOf(
 ): ChatStoreEffect<Option.Option<ChatMemberRow>> {
   return Effect.gen(function* () {
     if (!(yield* isWorkspaceMember(userId, organizationId))) return Option.none();
+    if (!(yield* reachesSubject(userId, subject))) return Option.none();
     return yield* standingMember(organizationId, subject);
   });
 }

@@ -1,8 +1,8 @@
 {
   "version": "8",
   "dialect": "postgres",
-  "id": "2db53b35-5c76-4efd-a43a-04fe23afdaed",
-  "prevIds": ["09fc51bf-6a3d-4874-9d1a-de605f2a71f0", "b7d1c1d7-c194-44cd-82ff-830d42914d15"],
+  "id": "5652ee62-20d3-4f22-b894-108462479497",
+  "prevIds": ["c3af05c8-01ca-42eb-877d-d5f89a59bc03"],
   "ddl": [
     {
       "isRlsEnabled": false,
@@ -180,6 +180,18 @@
     },
     {
       "isRlsEnabled": false,
+      "name": "coding_agent_runner_lease",
+      "entityType": "tables",
+      "schema": "public"
+    },
+    {
+      "isRlsEnabled": false,
+      "name": "coding_agent_wakeup",
+      "entityType": "tables",
+      "schema": "public"
+    },
+    {
+      "isRlsEnabled": false,
       "name": "admin_favorite",
       "entityType": "tables",
       "schema": "public"
@@ -253,6 +265,18 @@
     {
       "isRlsEnabled": false,
       "name": "mac_command_listener_kind",
+      "entityType": "tables",
+      "schema": "public"
+    },
+    {
+      "isRlsEnabled": false,
+      "name": "operator_notice",
+      "entityType": "tables",
+      "schema": "public"
+    },
+    {
+      "isRlsEnabled": false,
+      "name": "operator_wake",
       "entityType": "tables",
       "schema": "public"
     },
@@ -379,6 +403,12 @@
     {
       "isRlsEnabled": false,
       "name": "task_pin",
+      "entityType": "tables",
+      "schema": "public"
+    },
+    {
+      "isRlsEnabled": false,
+      "name": "agent_section_entry",
       "entityType": "tables",
       "schema": "public"
     },
@@ -3979,19 +4009,6 @@
       "table": "chat_member"
     },
     {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": "gen_random_uuid()",
-      "generated": null,
-      "identity": null,
-      "name": "handle",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "chat_member"
-    },
-    {
       "type": "integer",
       "typeSchema": null,
       "notNull": true,
@@ -4802,6 +4819,19 @@
       "typeSchema": null,
       "notNull": true,
       "dimensions": 0,
+      "default": "'coder'",
+      "generated": null,
+      "identity": null,
+      "name": "kind",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "coding_agent"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
       "default": null,
       "generated": null,
       "identity": null,
@@ -4874,6 +4904,123 @@
       "entityType": "columns",
       "schema": "public",
       "table": "coding_agent_delegation"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "agent_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "coding_agent_runner_lease"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "holder",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "coding_agent_runner_lease"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "held_until",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "coding_agent_runner_lease"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "gen_random_uuid()",
+      "generated": null,
+      "identity": null,
+      "name": "id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "coding_agent_wakeup"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "agent_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "coding_agent_wakeup"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "prompt",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "coding_agent_wakeup"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "due_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "coding_agent_wakeup"
+    },
+    {
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "0",
+      "generated": null,
+      "identity": null,
+      "name": "attempts",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "coding_agent_wakeup"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "coding_agent_wakeup"
     },
     {
       "type": "text",
@@ -6189,6 +6336,149 @@
       "table": "mac_command_listener_kind"
     },
     {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "gen_random_uuid()",
+      "generated": null,
+      "identity": null,
+      "name": "id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "operator_notice"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "operator_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "operator_notice"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "kind",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "operator_notice"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "agent_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "operator_notice"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "task_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "operator_notice"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "operator_notice"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "read_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "operator_notice"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "gen_random_uuid()",
+      "generated": null,
+      "identity": null,
+      "name": "id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "operator_wake"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "operator_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "operator_wake"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "agent_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "operator_wake"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "woken_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "operator_wake"
+    },
+    {
       "type": "text",
       "typeSchema": null,
       "notNull": true,
@@ -6568,12 +6858,25 @@
     {
       "type": "uuid",
       "typeSchema": null,
-      "notNull": true,
+      "notNull": false,
       "dimensions": 0,
       "default": null,
       "generated": null,
       "identity": null,
       "name": "task_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "plan_page_version"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "agent_id",
       "entityType": "columns",
       "schema": "public",
       "table": "plan_page_version"
@@ -7814,19 +8117,6 @@
       "table": "conversations"
     },
     {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "runner_token_hash",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "conversations"
-    },
-    {
       "type": "bigint",
       "typeSchema": null,
       "notNull": false,
@@ -8956,6 +9246,71 @@
       "entityType": "columns",
       "schema": "public",
       "table": "task_pin"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "user_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "agent_section_entry"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "coding_agent_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "agent_section_entry"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "section_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "agent_section_entry"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "position",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "agent_section_entry"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "added_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "agent_section_entry"
     },
     {
       "type": "uuid",
@@ -10886,34 +11241,6 @@
           "opclass": null
         },
         {
-          "value": "handle",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        }
-      ],
-      "isUnique": true,
-      "where": null,
-      "with": "",
-      "method": "btree",
-      "concurrently": false,
-      "name": "chat_member_organization_handle",
-      "entityType": "indexes",
-      "schema": "public",
-      "table": "chat_member"
-    },
-    {
-      "nameExplicit": true,
-      "columns": [
-        {
-          "value": "organization_id",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        },
-        {
           "value": "kind",
           "isExpression": false,
           "asc": true,
@@ -11383,6 +11710,76 @@
       "nameExplicit": true,
       "columns": [
         {
+          "value": "organization_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "user_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": true,
+      "where": "\"kind\" = 'operator' and \"archived_at\" is null",
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "coding_agent_member_operator",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "coding_agent"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "due_at",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "coding_agent_wakeup_due",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "coding_agent_wakeup"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "agent_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "coding_agent_wakeup_agent",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "coding_agent_wakeup"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
           "value": "user_id",
           "isExpression": false,
           "asc": true,
@@ -11789,6 +12186,139 @@
       "nameExplicit": true,
       "columns": [
         {
+          "value": "operator_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "agent_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "kind",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": true,
+      "where": "\"read_at\" is null",
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "operator_notice_unread",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "operator_notice"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "operator_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "at",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "operator_notice_operator_at",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "operator_notice"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "agent_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "operator_notice_agent",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "operator_notice"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "operator_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "agent_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": true,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "operator_wake_operator_agent",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "operator_wake"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "agent_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "operator_wake_agent",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "operator_wake"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
           "value": "thread_id",
           "isExpression": false,
           "asc": true,
@@ -11907,6 +12437,27 @@
       "method": "btree",
       "concurrently": false,
       "name": "plan_page_version_task",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "plan_page_version"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "agent_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "plan_page_version_agent",
       "entityType": "indexes",
       "schema": "public",
       "table": "plan_page_version"
@@ -12251,27 +12802,6 @@
       "nameExplicit": true,
       "columns": [
         {
-          "value": "runner_token_hash",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        }
-      ],
-      "isUnique": true,
-      "where": "\"runner_token_hash\" is not null",
-      "with": "",
-      "method": "btree",
-      "concurrently": false,
-      "name": "conversations_runner_token_hash",
-      "entityType": "indexes",
-      "schema": "public",
-      "table": "conversations"
-    },
-    {
-      "nameExplicit": true,
-      "columns": [
-        {
           "value": "conversation_id",
           "isExpression": false,
           "asc": true,
@@ -12603,6 +13133,48 @@
       "entityType": "indexes",
       "schema": "public",
       "table": "task_pin"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "coding_agent_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "agent_section_entry_agent",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "agent_section_entry"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "section_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "agent_section_entry_section",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "agent_section_entry"
     },
     {
       "nameExplicit": true,
@@ -13675,6 +14247,32 @@
     },
     {
       "nameExplicit": false,
+      "columns": ["agent_id"],
+      "schemaTo": "public",
+      "tableTo": "coding_agent",
+      "columnsTo": ["id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "name": "coding_agent_runner_lease_agent_id_coding_agent_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "coding_agent_runner_lease"
+    },
+    {
+      "nameExplicit": false,
+      "columns": ["agent_id"],
+      "schemaTo": "public",
+      "tableTo": "coding_agent",
+      "columnsTo": ["id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "name": "coding_agent_wakeup_agent_id_coding_agent_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "coding_agent_wakeup"
+    },
+    {
+      "nameExplicit": false,
       "columns": ["admin_id"],
       "schemaTo": "public",
       "tableTo": "user",
@@ -13974,6 +14572,71 @@
     },
     {
       "nameExplicit": false,
+      "columns": ["operator_id"],
+      "schemaTo": "public",
+      "tableTo": "coding_agent",
+      "columnsTo": ["id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "name": "operator_notice_operator_id_coding_agent_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "operator_notice"
+    },
+    {
+      "nameExplicit": false,
+      "columns": ["agent_id"],
+      "schemaTo": "public",
+      "tableTo": "coding_agent",
+      "columnsTo": ["id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "name": "operator_notice_agent_id_coding_agent_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "operator_notice"
+    },
+    {
+      "nameExplicit": false,
+      "columns": ["task_id"],
+      "schemaTo": "public",
+      "tableTo": "task",
+      "columnsTo": ["id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "SET NULL",
+      "name": "operator_notice_task_id_task_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "operator_notice"
+    },
+    {
+      "nameExplicit": false,
+      "columns": ["operator_id"],
+      "schemaTo": "public",
+      "tableTo": "coding_agent",
+      "columnsTo": ["id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "name": "operator_wake_operator_id_coding_agent_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "operator_wake"
+    },
+    {
+      "nameExplicit": false,
+      "columns": ["agent_id"],
+      "schemaTo": "public",
+      "tableTo": "coding_agent",
+      "columnsTo": ["id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "name": "operator_wake_agent_id_coding_agent_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "operator_wake"
+    },
+    {
+      "nameExplicit": false,
       "columns": ["user_id"],
       "schemaTo": "public",
       "tableTo": "user",
@@ -14085,6 +14748,19 @@
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
       "name": "plan_page_version_plan_id_plan_id_fk",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "plan_page_version"
+    },
+    {
+      "nameExplicit": false,
+      "columns": ["agent_id"],
+      "schemaTo": "public",
+      "tableTo": "coding_agent",
+      "columnsTo": ["id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "SET NULL",
+      "name": "plan_page_version_agent_id_coding_agent_id_fkey",
       "entityType": "fks",
       "schema": "public",
       "table": "plan_page_version"
@@ -14474,6 +15150,45 @@
       "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
+      "name": "agent_section_entry_user_id_user_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "agent_section_entry"
+    },
+    {
+      "nameExplicit": false,
+      "columns": ["coding_agent_id"],
+      "schemaTo": "public",
+      "tableTo": "coding_agent",
+      "columnsTo": ["id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "name": "agent_section_entry_coding_agent_id_coding_agent_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "agent_section_entry"
+    },
+    {
+      "nameExplicit": false,
+      "columns": ["section_id"],
+      "schemaTo": "public",
+      "tableTo": "task_section",
+      "columnsTo": ["id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "name": "agent_section_entry_section_id_task_section_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "agent_section_entry"
+    },
+    {
+      "nameExplicit": false,
+      "columns": ["user_id"],
+      "schemaTo": "public",
+      "tableTo": "user",
+      "columnsTo": ["id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
       "name": "task_section_user_id_user_id_fkey",
       "entityType": "fks",
       "schema": "public",
@@ -14768,6 +15483,14 @@
       "table": "task_pin"
     },
     {
+      "columns": ["user_id", "coding_agent_id"],
+      "nameExplicit": false,
+      "name": "agent_section_entry_pkey",
+      "entityType": "pks",
+      "schema": "public",
+      "table": "agent_section_entry"
+    },
+    {
       "columns": ["user_id", "task_id"],
       "nameExplicit": false,
       "name": "task_section_entry_pkey",
@@ -15008,6 +15731,22 @@
       "entityType": "pks"
     },
     {
+      "columns": ["agent_id"],
+      "nameExplicit": false,
+      "name": "coding_agent_runner_lease_pkey",
+      "schema": "public",
+      "table": "coding_agent_runner_lease",
+      "entityType": "pks"
+    },
+    {
+      "columns": ["id"],
+      "nameExplicit": false,
+      "name": "coding_agent_wakeup_pkey",
+      "schema": "public",
+      "table": "coding_agent_wakeup",
+      "entityType": "pks"
+    },
+    {
       "columns": ["id"],
       "nameExplicit": false,
       "name": "github_connect_intent_pkey",
@@ -15085,6 +15824,22 @@
       "name": "mac_command_listener_pkey",
       "schema": "public",
       "table": "mac_command_listener",
+      "entityType": "pks"
+    },
+    {
+      "columns": ["id"],
+      "nameExplicit": false,
+      "name": "operator_notice_pkey",
+      "schema": "public",
+      "table": "operator_notice",
+      "entityType": "pks"
+    },
+    {
+      "columns": ["id"],
+      "nameExplicit": false,
+      "name": "operator_wake_pkey",
+      "schema": "public",
+      "table": "operator_wake",
       "entityType": "pks"
     },
     {
@@ -15443,6 +16198,13 @@
       "entityType": "checks",
       "schema": "public",
       "table": "chat_message"
+    },
+    {
+      "value": "\"task_id\" is not null or \"agent_id\" is not null",
+      "name": "plan_page_version_owner",
+      "entityType": "checks",
+      "schema": "public",
+      "table": "plan_page_version"
     },
     {
       "value": "\"provider\" <> 'github' or (\"repository\" is not null and \"number\" is not null)",
