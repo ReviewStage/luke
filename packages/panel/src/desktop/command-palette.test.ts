@@ -1027,6 +1027,30 @@ test('a file found wears the look the side panel\'s "+" gives it, hangs its card
   assert.deepEqual(opened, [[{ path }], [{ path }]]);
 });
 
+test("a task's row hangs the task's card beside it while the pointer rests on it, as its sidebar row does", () => {
+  openPalette(
+    tasksControl({
+      tasks: [
+        {
+          id: "plan-1",
+          workspaceId: "workspace-personal",
+          name: "Billing usage alerts",
+          createdAt: 1,
+          updatedAt: 2,
+          repository: "acme/billing",
+        },
+      ],
+    }),
+  );
+  chooseFilter("Tasks");
+  const row = document.querySelector<HTMLElement>('[role="option"]');
+  assert.ok(row, "the task is listed");
+  restOn(row);
+  const card = document.querySelector(".luke-tooltip-card [data-task-card]");
+  assert.ok(card, "the task's card is hung");
+  assert.equal(card.querySelector(".luke-hover-card-name")?.textContent, "Billing usage alerts");
+});
+
 test("Search lists the listed workspace's plans first, then every other workspace's, each naming its workspace by its tile and name and found by it", () => {
   const personal = {
     id: "workspace-personal",

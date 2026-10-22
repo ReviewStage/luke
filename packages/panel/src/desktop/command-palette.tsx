@@ -16,7 +16,8 @@
  * what its shortcut would, Delete task's question included, and it opens a
  * task through the same select the sidebar does, which takes its ask back
  * when the host does not open the task. Each task names its repository
- * beside it, so two tasks of one name can be told apart. An agent opens its tab as the column's "+" would, hanging
+ * beside it, so two tasks of one name can be told apart, and hangs the
+ * task's card beside its row, as its sidebar row does. An agent opens its tab as the column's "+" would, hanging
  * its tab's card beside its row while the pointer rests on it, as every
  * place naming an agent does (`agent-ref.tsx`), and an archived agent, which
  * says so, its own page, a subagent
@@ -147,6 +148,7 @@ import {
 } from "../tasks/inbox-model.js";
 import { agentEndMark, openPlanStanding, TAB_KIND, tabLook } from "../tasks/tab-look.js";
 import { markReadItem } from "../tasks/task-menu-items.js";
+import { useMinute } from "../tasks/task-time.js";
 import { cardTitle } from "../tasks/tool-call-model.js";
 import type { CodingAgentsControl } from "../tasks/use-coding-agents.js";
 import { choiceOf } from "../tasks/use-inbox-listing.js";
@@ -165,6 +167,7 @@ import { LUKE_NAME, type LukeOperator, useLukeOperator, withoutLuke } from "./lu
 import { agentEntries, chatEntries, inboxEntries } from "./main-tabs.js";
 import { changesOffers, panelEntries } from "./side-panel.js";
 import { taskOf } from "./task-actions.js";
+import { homeTaskCardOf } from "./task-card.js";
 import { WorkspaceRef } from "./workspace-ref.js";
 
 /** The kinds of row the palette lists, each a filter of its own after All, in the order the filters stand. */
@@ -357,7 +360,7 @@ interface PaletteRow {
   endMark?: React.JSX.Element | undefined;
   /** A task's creator's name, said after the detail where the query found it. */
   creator?: string | undefined;
-  /** The card the row hangs beside it while the pointer rests on it: an agent's tab's. */
+  /** The card the row hangs beside it while the pointer rests on it: a task's, an agent's tab's, or a file's. */
   card?: React.ReactNode;
   /** The chord an action's row draws as keys. */
   command?: KeyedCommand | undefined;
@@ -558,6 +561,17 @@ const MADE_BY_WORDS: Partial<Record<Actor["kind"], string>> = {
   [ACTOR_KIND.AUTOMATION]: "automation",
 };
 
+/** A task's row's card, as its sidebar row hangs it, its times counted back from the minute it is hung. */
+function PaletteTaskCard({
+  tasks,
+  task,
+}: {
+  tasks: TasksControl;
+  task: TaskSummary;
+}): React.JSX.Element {
+  return homeTaskCardOf(tasks, task, useMinute());
+}
+
 /** A task's muted words: its repository. */
 function taskDetail(task: TaskSummary): string | undefined {
   return task.repository ?? undefined;
@@ -605,6 +619,7 @@ function taskRows(
           ? detail
           : [detail, `by ${madeBy}`].filter((words) => words !== undefined).join(" · "),
       workspace: elsewhere,
+      card: <PaletteTaskCard tasks={tasks} task={task} />,
       endMark:
         origin !== undefined ? (
           <>

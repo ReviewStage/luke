@@ -25,6 +25,8 @@ import {
   ErrorState,
   ExpandIcon,
   FoldingButton,
+  HoverCard,
+  HoverCardHead,
   IconButton,
   List,
   ListRow,
@@ -93,6 +95,7 @@ import {
 } from "../tasks/agent-tab-card.js";
 import { BrowserPane, browserTitleOf, useBrowserPages } from "../tasks/browser-pane.js";
 import { ChangesCard, peopleOf } from "../tasks/changes-card.js";
+import { TaskChipCard } from "../tasks/chip-cards.js";
 import { CloudBrowserPane } from "../tasks/cloud-browser-pane.js";
 import { useCloudBrowserTabs } from "../tasks/cloud-browser-tabs.js";
 import { CodePane, centreWithin } from "../tasks/code-pane.js";
@@ -600,6 +603,26 @@ export function panelEntries(input: {
   return [...kinds, ...fileRows, ...changesRows, ...pageRows, ...terminalRows, ...browserRows];
 }
 
+/**
+ * The Plan tab's card: the task's own card, as its sidebar row and a chip
+ * naming it hang it (`TaskChipCard`), or its glyph and name where the
+ * window lists no such task; none where the panel knows no task. The plan's
+ * summary row hangs the same (`task-summary.tsx`).
+ */
+export function planTabCard(
+  planId: string | undefined,
+  plan: PlanStanding | undefined,
+): React.ReactNode {
+  if (planId === undefined || plan === undefined) return undefined;
+  const { icon, label } = tabLook({ kind: TAB_KIND.PLAN, ...plan });
+  const fallback = (
+    <HoverCard>
+      <HoverCardHead glyph={icon} name={label} />
+    </HoverCard>
+  );
+  return <TaskChipCard taskId={planId} fallback={fallback} />;
+}
+
 /** A Pull request tab's look, named by its pull request's number and title as the task's agents last read it, wearing its mark for where it stands. */
 function changesLook(tab: ChangesStripTab, agents: CodingAgentsControl): KindLook {
   return tabLook({ kind: TAB_KIND.CHANGES, pullRequest: pullRequestOfTab(agents, tab) });
@@ -678,6 +701,8 @@ function stripTabs(input: {
   pagePlace: PagePlace;
   /** The task the panel stands beside, whose name and status its Plan tab wears; none where it is not known. */
   plan: PlanStanding | undefined;
+  /** The task's id, whose card its Plan tab hangs; none beside an agent's own page. */
+  planId: string | undefined;
   /** How many of the task's inbox items wait on the developer, which its Inbox tab counts. */
   inboxWaiting: number;
   /** Whether a card of the task's Inbox holds a draft, which its tab marks while another is chosen. */
@@ -709,6 +734,7 @@ function stripTabs(input: {
       detail: tab === SIDE_PANEL_TAB.INBOX && inboxWaiting > 0 ? String(inboxWaiting) : undefined,
       endMark:
         tab === SIDE_PANEL_TAB.INBOX && inboxDrafted && !chosen(tab) ? <DraftMark /> : undefined,
+      card: tab === SIDE_PANEL_TAB.PLAN ? planTabCard(input.planId, input.plan) : undefined,
     }),
     close: () => panel.onClose(tab),
   }));
@@ -842,15 +868,17 @@ function stripTabs(input: {
       },
     ];
   });
-  // An agent's transcript beside the Inbox wears the agent's tab as its column draws it.
+  // An agent's transcript beside the Inbox wears the agent's tab as its column draws it, and hangs its card.
   const transcriptTabs = panel.strip.filter(isTranscriptTab).flatMap((tab) => {
     const agent = agents.agents?.find((each) => each.id === tab.transcript);
     if (agent === undefined) return [];
+    const { name, read } = agentSubject(agents, agent.id, held, chosen(tab));
     return [
       {
         tab,
         look: look(tab, {
-          ...tabLook({ kind: TAB_KIND.AGENT, name: agentTabLabel(agent, models), agent }),
+          ...tabLook({ kind: TAB_KIND.AGENT, name, agent }),
+          card: <AgentTabCard name={name} models={models} read={read} />,
         }),
         close: () => panel.onClose(tab),
       },
@@ -873,7 +901,8 @@ function stripTabs(input: {
 /**
  * The strip of tabs across the panel's top: the open fixed tabs, then the
  * subagents and the files, then the "+". A fixed tab's own word is all it
- * needs to say, so it hangs no pill, while a subagent's hangs a card naming
+ * needs to say, so it hangs no pill, but the Plan tab, which hangs the
+ * task's card as its sidebar row does (`planTabCard`), while a subagent's hangs a card naming
  * it whole with when it last moved and its latest step
  * (`agent-tab-card.tsx`), and a Changes tab its pull request's, naming the
  * agent whose it is (`ChangesCard`), and a page's a preview of the page
@@ -993,6 +1022,7 @@ function PanelTabs({
     shownAgent,
     pagePlace: pagePlaceOf(holder, taskId),
     plan: task,
+    planId: holder === SIDE_PANEL_HOLDER.TASK ? taskId : undefined,
     inboxWaiting,
     inboxDrafted,
   });
