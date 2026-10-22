@@ -153,7 +153,7 @@ export function DesktopAdmin({
           }
         >
           {/* Each view is found in as one scope, its bar under the view's toolbar; another view closes it. */}
-          <PageFind page={FIND_PAGE.ADMIN} at={adminViewKey(view)} active>
+          <PageFind page={FIND_PAGE.ADMIN} at={adminViewKey(view)} active={!hidden.item}>
             <AdminPlace view={view} onOpen={onOpen} />
           </PageFind>
         </AdminToolbarLead>

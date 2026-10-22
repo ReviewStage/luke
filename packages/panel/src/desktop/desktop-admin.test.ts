@@ -252,3 +252,12 @@ test("⌘F finds in the view standing, its bar under the view's toolbar, and cou
     "1 of 1",
   );
 });
+
+test("on a narrow stage with the section list standing, ⌘F is offered nothing, since the view it would find in is hidden", async () => {
+  await open({ kind: "users" }, { room: SHELL_ROOM.NARROW, listed: true });
+
+  act(() => {
+    assert.equal(runAppCommand(APP_COMMAND.FIND), false);
+  });
+  assert.equal(document.querySelector('search[aria-label="Find"]'), null);
+});
