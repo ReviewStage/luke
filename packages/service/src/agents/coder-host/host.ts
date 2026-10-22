@@ -81,6 +81,7 @@ import {
 } from "../brain-host/relay.js";
 import { rotationSeedText } from "../brain-host/seed.js";
 import { carryStop } from "../brain-host/stop-carrier.js";
+import { memoryOnFor } from "../memory-tools.js";
 import { markDeskNoticesRead, type OperatorDesk, readOperatorDesk } from "../operator-desk.js";
 import { type ReadWebPageResult, ResearchBudget, runReadWebPage } from "../public-research.js";
 import { checkoutDeepened, type RepositorySandbox } from "../repository-shell.js";
@@ -192,6 +193,8 @@ interface CoderSessionPrompt {
   readonly workspace: string;
   /** Whether the prompt told of the task's chat as the team's channel, which only an agent whose starter turned Chat on is, though every agent has the chat's tools. */
   readonly chatOn: boolean;
+  /** Whether the prompt told of the workspace's memory, which only an agent whose starter turned Memory on is offered. */
+  readonly memoryOn: boolean;
 }
 
 /**
@@ -212,6 +215,7 @@ export interface CoderSessionPromptRecord {
   readonly coAuthor?: string;
   readonly workspace?: string;
   readonly chatOn?: boolean;
+  readonly memoryOn?: boolean;
 }
 
 /** The turn opening: its kind, as its request named it, and its store id. */
@@ -608,6 +612,7 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
     coAuthor: string | undefined,
     workspace: string,
     chatOn: boolean,
+    memoryOn: boolean,
   ): CoderSessionPrompt => {
     const brief = codingAgentBriefOf(agent);
     const taskLink =
@@ -628,8 +633,9 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
       agent.githubAccess === GITHUB_ACCESS.TOKEN,
       CODER_HARNESS.EVE,
       agent.kind,
+      memoryOn,
     );
-    return { text, hash: promptHashOf(text), ciReadable, coAuthor, workspace, chatOn };
+    return { text, hash: promptHashOf(text), ciReadable, coAuthor, workspace, chatOn, memoryOn };
   };
 
   /**
@@ -657,6 +663,7 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
                 prompt.coAuthor,
                 prompt.workspace ?? agent.organizationId,
                 prompt.chatOn ?? false,
+                prompt.memoryOn ?? false,
               ).text,
               brief: agent.prompt ?? agent.planSnapshot ?? "",
             },
@@ -918,9 +925,11 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
             Effect.tapError(logStoreFailure),
             Effect.orElseSucceed(() => false),
           ),
+          // Memory likewise, off where it cannot be read, as its tools then are (`../memory-tools.ts`).
+          memoryOnFor(admitted.target.userId),
         ]),
-        ([ciReadable, coAuthor, workspace, chatOn]) =>
-          promptOf(agent, ciReadable, coAuthor, workspace, chatOn),
+        ([ciReadable, coAuthor, workspace, chatOn, memoryOn]) =>
+          promptOf(agent, ciReadable, coAuthor, workspace, chatOn, memoryOn),
       ),
 
     skills: (admitted, agent) => agentSkills(admitted.target, agent),

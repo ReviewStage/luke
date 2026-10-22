@@ -28,6 +28,7 @@ import {
 } from "@luke/database/models/coding-agent-store";
 import { keepConversationPicture } from "@luke/database/models/conversation-pictures";
 import { linkIntegrationInstallation } from "@luke/database/models/integration-installation-store";
+import { listMemories } from "@luke/database/models/memory-store";
 import { writePage } from "@luke/database/models/plan-pages";
 import { listRevisions } from "@luke/database/models/plan-revisions";
 import {
@@ -126,6 +127,8 @@ import { integrationConnectOver, NO_WORKSPACE_LINEAR } from "../../testing/integ
 import { nativeRelayFake } from "../../testing/native-relay-fake.js";
 import { sandboxDouble } from "../../testing/repository-sandbox.js";
 import { SentryApp, sentryAppService } from "../../triggers/sentry/sentry-app-config.js";
+import { AGENT_ROLE } from "../agent-runtime/role.js";
+import { toolsOf } from "../agent-runtime/tools.js";
 import { AUTOMATION_TOOL_REFUSAL } from "../automation-tools.js";
 import { BRAIN_HOST_ATTRIBUTE, BRAIN_HOST_HEADER, BRAIN_HOST_TURN } from "../brain-host/bounds.js";
 import { claimRuntimeSession } from "../brain-host/conversation.js";
@@ -4236,5 +4239,131 @@ test("create_automation and update_automation take a Sentry trigger once the wor
       "cooldown-too-long",
     ),
     rejected(AUTOMATION_TOOL_REFUSAL.UNREADABLE_UPDATE),
+  );
+});
+
+/** Turns the Memory experiment on for each member, whose agents are refused memory otherwise. */
+async function turnMemoryOn(...userIds: readonly string[]): Promise<void> {
+  for (const userId of userIds) {
+    await database.run(
+      writeAccountPreferences(userId, { experiments: { [EXPERIMENT.MEMORY]: true } }),
+    );
+  }
+}
+
+/** The words of the memories a recall answered. */
+function recalledWords(answer: WireRecord): readonly unknown[] {
+  assert.equal(answer.status, ACTION_RESULT_STATUS.ACCEPTED);
+  assert.ok(Array.isArray(answer.memories));
+  return answer.memories.map((memory) => (isRecord(memory) ? memory.text : memory));
+}
+
+test("a coding agent remembers for its workspace, as its starter's words: a teammate's agent there recalls it, an agent of another workspace recalls nothing, and a workspace or account the call names is ignored", async () => {
+  const { workspaceId, elsewhere, agents } = await openWorkspaces();
+  const eve = await fakeCoderEve(workspaceId);
+  const host = hostOf(true);
+  const fact = "Every hosted route is an oRPC procedure declared in the features contract.";
+  await turnMemoryOn(agents.caller.userId, agents.teammates.userId, agents.otherWorkspaces.userId);
+  const asCaller = await peerCaller(host, agents.caller, eve.services);
+
+  const kept = await asCaller(CODER_TOOL.REMEMBER, {
+    text: fact,
+    workspaceId: elsewhere,
+    userId: agents.strangers.userId,
+  });
+  const asTeammate = await peerCaller(host, agents.teammates, eve.services);
+  const asOtherWorkspace = await peerCaller(host, agents.otherWorkspaces, eve.services);
+
+  assert.equal(kept.status, ACTION_RESULT_STATUS.ACCEPTED);
+  assert.deepEqual(recalledWords(await asTeammate(CODER_TOOL.RECALL, { query: "hosted routes" })), [
+    fact,
+  ]);
+  assert.deepEqual(recalledWords(await asOtherWorkspace(CODER_TOOL.RECALL, {})), []);
+  assert.deepEqual(
+    (await database.run(listMemories(workspaceId))).map((memory) => [memory.text, memory.userId]),
+    [[fact, agents.caller.userId]],
+  );
+  assert.deepEqual(await database.run(listMemories(elsewhere)), []);
+});
+
+test("a teammate's agent corrects a memory in place as its own starter's words, and a credential is never kept", async () => {
+  const { workspaceId, agents } = await openWorkspaces();
+  const eve = await fakeCoderEve(workspaceId);
+  const host = hostOf(true);
+  await turnMemoryOn(agents.caller.userId, agents.teammates.userId);
+  const asCaller = await peerCaller(host, agents.caller, eve.services);
+  const asTeammate = await peerCaller(host, agents.teammates, eve.services);
+  const kept = await asCaller(CODER_TOOL.REMEMBER, { text: "Deploys go out from main." });
+  assert.ok(isRecord(kept.memory) && isWireString(kept.memory.id));
+
+  const corrected = await asTeammate(CODER_TOOL.REMEMBER, {
+    text: "Deploys go out from the release branch.",
+    replaces: kept.memory.id,
+  });
+  const refused = await asTeammate(CODER_TOOL.REMEMBER, {
+    text: `The deploy key is ${["ghp", "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"].join("_")}.`,
+  });
+
+  assert.equal(corrected.outcome, "corrected");
+  assert.equal(refused.status, ACTION_RESULT_STATUS.REJECTED);
+  assert.deepEqual(
+    (await database.run(listMemories(workspaceId))).map((memory) => [memory.text, memory.userId]),
+    [["Deploys go out from the release branch.", agents.teammates.userId]],
+  );
+});
+
+test("while its starter has Memory off, a coding agent's remember and recall are refused and nothing is kept", async () => {
+  const { workspaceId, agents } = await openWorkspaces();
+  const eve = await fakeCoderEve(workspaceId);
+  const host = hostOf(true);
+  await turnMemoryOn(agents.teammates.userId);
+  const asCaller = await peerCaller(host, agents.caller, eve.services);
+  const asTeammate = await peerCaller(host, agents.teammates, eve.services);
+  await asTeammate(CODER_TOOL.REMEMBER, { text: "Deploys go out from main." });
+
+  const kept = await asCaller(CODER_TOOL.REMEMBER, { text: "Every route is an oRPC procedure." });
+  const recalled = await asCaller(CODER_TOOL.RECALL, {});
+
+  assert.equal(kept.status, ACTION_RESULT_STATUS.REJECTED);
+  assert.equal(recalled.status, ACTION_RESULT_STATUS.REJECTED);
+  assert.equal(recalled.memories, undefined);
+  assert.deepEqual(
+    (await database.run(listMemories(workspaceId))).map((memory) => memory.text),
+    ["Deploys go out from main."],
+  );
+});
+
+test("remember and recall are a coding agent's alone, never a worker's", () => {
+  assert.deepEqual(
+    [CODER_TOOL.REMEMBER, CODER_TOOL.RECALL].map((tool) => [
+      toolsOf(AGENT_ROLE.CODER).has(tool),
+      toolsOf(AGENT_ROLE.CODER_WORKER).has(tool),
+    ]),
+    [
+      [true, false],
+      [true, false],
+    ],
+  );
+});
+
+test("the member's operator keeps memories in its workspace as its member's words, which a teammate's coding agent recalls", async () => {
+  const { workspaceId, agents } = await openWorkspaces();
+  const eve = await fakeCoderEve(workspaceId);
+  const host = hostOf(true);
+  const luke = await operatorOn(agents.caller.userId, workspaceId);
+  const fact = "Releases are cut from the release branch every Thursday.";
+  await turnMemoryOn(agents.caller.userId, agents.teammates.userId);
+  const asLuke = await peerCaller(host, luke, eve.services);
+
+  const kept = await asLuke(CODER_TOOL.REMEMBER, { text: fact });
+  const asTeammate = await peerCaller(host, agents.teammates, eve.services);
+
+  assert.equal(kept.status, ACTION_RESULT_STATUS.ACCEPTED);
+  assert.deepEqual(recalledWords(await asTeammate(CODER_TOOL.RECALL, { query: "releases" })), [
+    fact,
+  ]);
+  assert.deepEqual(
+    (await database.run(listMemories(workspaceId))).map((memory) => [memory.text, memory.userId]),
+    [[fact, agents.caller.userId]],
   );
 });

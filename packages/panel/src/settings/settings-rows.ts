@@ -1,7 +1,14 @@
 import type { AccountSnapshot } from "@luke/credentials/snapshot";
 import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
 import type { Workspace } from "@luke/features/workspace-wire";
-import { HOST_CAPABILITY, type HostCapability } from "@luke/settings";
+import {
+  EXPERIMENT,
+  type Experiment,
+  type ExperimentChoices,
+  experimentOn,
+  HOST_CAPABILITY,
+  type HostCapability,
+} from "@luke/settings";
 import { SETTINGS_VIEW, type SettingsView } from "@luke/settings/settings-views";
 import type { AppSettingsView } from "@luke/settings/wire";
 import { microphoneAccessRow } from "@luke/voice/microphone-access";
@@ -31,6 +38,7 @@ const PAGE_CAPABILITY = {
   [SETTINGS_VIEW.INTEGRATIONS]: null,
   [SETTINGS_VIEW.SKILLS]: null,
   [SETTINGS_VIEW.PLAN_TEMPLATE]: null,
+  [SETTINGS_VIEW.MEMORY]: null,
   [SETTINGS_VIEW.VOICE]: HOST_CAPABILITY.VOICE,
   [SETTINGS_VIEW.APPEARANCE]: null,
   [SETTINGS_VIEW.NOTIFICATIONS]: HOST_CAPABILITY.NOTIFICATIONS,
@@ -41,26 +49,49 @@ const PAGE_CAPABILITY = {
   [SETTINGS_VIEW.SHORTCUTS]: HOST_CAPABILITY.DESKTOP_APP,
 } as const satisfies Record<SettingsView, HostCapability | null>;
 
-/** Whether a page stands on this platform: the sidebar, the command palette, the search, and the page Settings shows all ask it. */
+/**
+ * The experiment a page stands on, for each page that is one experiment's:
+ * while the account has it off, the page is not listed, found, or drawn.
+ */
+const PAGE_EXPERIMENT: Partial<Record<SettingsView, Experiment>> = {
+  [SETTINGS_VIEW.MEMORY]: EXPERIMENT.MEMORY,
+};
+
+/** Whether a page stands for the account's experiments: every page but one an experiment the account has off holds. */
+export function settingsPageExperimentStands(
+  view: SettingsView,
+  experiments: ExperimentChoices,
+): boolean {
+  const experiment = PAGE_EXPERIMENT[view];
+  return experiment === undefined || experimentOn(experiments, experiment);
+}
+
+/** Whether a page stands on this platform and for the account's experiments: the sidebar, the command palette, the search, and the page Settings shows all ask it. */
 export function settingsPageShown(
   view: SettingsView,
   capabilities: readonly HostCapability[],
+  experiments: ExperimentChoices,
 ): boolean {
   const capability: HostCapability | null = PAGE_CAPABILITY[view];
-  return capability === null || capabilities.includes(capability);
+  return (
+    (capability === null || capabilities.includes(capability)) &&
+    settingsPageExperimentStands(view, experiments)
+  );
 }
 
 /**
  * The page Settings shows for the one chosen: that page where the platform
- * offers it, and Profile in place of one a link turned to that it does not,
+ * and the account's experiments offer it, and Profile in place of one a
+ * link or the history turned to that they do not,
  * so the title, the reset, the copied link, and the history all name the
  * page on screen.
  */
 export function shownSettingsView(
   view: SettingsView,
   capabilities: readonly HostCapability[],
+  experiments: ExperimentChoices,
 ): SettingsView {
-  return settingsPageShown(view, capabilities) ? view : SETTINGS_VIEW.ACCOUNT;
+  return settingsPageShown(view, capabilities, experiments) ? view : SETTINGS_VIEW.ACCOUNT;
 }
 
 /** The workspace the page shows: the one the sidebar lists, else the first; none before the workspaces are read. */

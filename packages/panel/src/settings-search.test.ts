@@ -188,6 +188,7 @@ test("an experiment is found by its name, what it brings, and what other apps ca
         "Browser tab",
         "Chat",
         "Video calls",
+        "Memory",
       ],
       query,
     );

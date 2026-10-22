@@ -303,6 +303,10 @@ export const GATEWAY_METHOD = {
   GITHUB_TOKEN_SAVE: "githubToken.save",
   /** The member's GitHub token removed on the service; none then stands. */
   GITHUB_TOKEN_REMOVE: "githubToken.remove",
+  /** The memories Luke's agents kept in a workspace, read from the service now. */
+  MEMORIES_READ: "memories.read",
+  /** One memory forgotten on the service for good; the workspace's memories as they then stand. */
+  MEMORIES_FORGET: "memories.forget",
   /** The Markdown the account's new tasks start from, read from the service now: its own, or the default while it keeps none. */
   PLAN_TEMPLATE_READ: "planTemplate.read",
   /** The account's plan template kept verbatim on the service, or the default again for null; the template as kept, or why it is unchanged. */

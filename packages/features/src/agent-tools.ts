@@ -50,6 +50,9 @@ export const AGENT_TOOL = {
   RUN_AUTOMATION: "run_automation",
   // The models an agent may be started on, named for any agent offered `start_agent`.
   LIST_MODELS: "list_models",
+  // The workspace's shared memory, which a coding agent keeps and searches.
+  REMEMBER: "remember",
+  RECALL: "recall",
   // The public reads, every role's: eve's provider-run search on the agent's own model call, and the page read.
   WEB_SEARCH: "web_search",
   READ_WEB_PAGE: "read_web_page",

@@ -79,6 +79,7 @@ const DECLARED_TABLES = [
   "jwks",
   "mac_command",
   "mac_command_listener",
+  "memory",
   "member",
   "messages",
   "oauth_access_token",

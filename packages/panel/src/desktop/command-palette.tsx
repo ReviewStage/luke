@@ -54,7 +54,7 @@ import type { TasklessAgent } from "@luke/features/coding-agent-wire";
 import { TASK_TREE_BOUNDS, TASK_TREE_ENTRY, type TaskSummary } from "@luke/features/task-wire";
 import type { TaskCodeShowing, TasksTreeAnswer } from "@luke/features/tasks-view";
 import type { Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
-import type { HostCapability } from "@luke/settings";
+import type { ExperimentChoices, HostCapability } from "@luke/settings";
 import { SETTINGS_PAGE_LIST, type SettingsView } from "@luke/settings/settings-views";
 import {
   APP_COMMAND,
@@ -162,6 +162,7 @@ import {
   useWorkspaceMembersRead,
   type WorkspaceMembersRead,
 } from "../tasks/use-workspace-members.js";
+import { useExperimentChoices } from "../use-app-state.js";
 import { type AgentReadMarks, useAgentReadMarks } from "./agent-read-marks.js";
 import { LUKE_NAME, type LukeOperator, useLukeOperator, withoutLuke } from "./luke-operator.js";
 import { agentEntries, chatEntries, inboxEntries } from "./main-tabs.js";
@@ -1064,9 +1065,12 @@ function agentPinRows(
 /** Every Settings page this platform offers, in the sidebar's order, under its own glyph and name. */
 function settingsPageRows(
   capabilities: readonly HostCapability[],
+  experiments: ExperimentChoices,
   open: (page: SettingsView) => void,
 ): readonly PaletteRow[] {
-  return SETTINGS_PAGE_LIST.filter((page) => settingsPageShown(page, capabilities)).map((page) => {
+  return SETTINGS_PAGE_LIST.filter((page) =>
+    settingsPageShown(page, capabilities, experiments),
+  ).map((page) => {
     const { title, icon } = settingsPageOf(page);
     return {
       icon,
@@ -1317,6 +1321,7 @@ export function CommandPalette({
 }): React.JSX.Element {
   const [open, setOpen] = useState(false);
   const chatOn = useChatOn();
+  const experiments = useExperimentChoices();
   if (open && !available) setOpen(false);
   const [filter, setFilter] = useState<PaletteFilter>(PALETTE_FILTER.ALL);
   const [query, setQuery] = useState("");
@@ -1544,7 +1549,7 @@ export function CommandPalette({
       ],
     ],
     [PALETTE_FILTER.SETTINGS]: () => [
-      settingsPageRows(settings.capabilities, openPage),
+      settingsPageRows(settings.capabilities, experiments, openPage),
       settingRows(settings.rows, land),
     ],
   } as const satisfies Record<PaletteKind, () => readonly (readonly PaletteRow[])[]>;
