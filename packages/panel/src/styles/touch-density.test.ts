@@ -2,6 +2,7 @@
 
 import assert from "node:assert/strict";
 import {
+  AddressField,
   BUTTON_SIZE,
   IconButton,
   INLINE_EDIT_LOOK,
@@ -10,9 +11,7 @@ import {
   PROVIDER_BUTTON_SIZE,
   ProviderButton,
   TEXT_AREA_LOOK,
-  TEXT_FIELD_SIZE,
   TextArea,
-  TextField,
 } from "@luke/ui";
 import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -322,13 +321,11 @@ function fields(): ReadonlyMap<string, HTMLInputElement | HTMLTextAreaElement> {
     return container.querySelector("input") ?? assert.fail("the field is drawn");
   };
   const address = drawn(
-    createElement(TextField, {
-      label: "Address",
-      size: TEXT_FIELD_SIZE.COMPACT,
+    createElement(AddressField, {
       value: "",
       onChange: () => undefined,
+      onOpen: () => undefined,
     }),
-    "browser-view-address",
   );
   const comment = drawn(
     createElement(TextArea, {

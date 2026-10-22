@@ -49,7 +49,7 @@ import {
   type InputMessage,
   OPENING_VIEW,
 } from "./cloud-browser-live.js";
-import { CLOUD_BROWSER_AGENT_RECENT } from "./cloud-browser-tabs.js";
+import { CLOUD_BROWSER_AGENT_RECENT, claimTakeOver } from "./cloud-browser-tabs.js";
 
 /**
  * cloud-browser-pane.tsx -- one Browser tab in an agent's cloud browser, in the side panel: a bar saying whose browser it is and who drives it, with Take over and Hand back, and the page drawn live on a canvas.
@@ -70,7 +70,9 @@ import { CLOUD_BROWSER_AGENT_RECENT } from "./cloud-browser-tabs.js";
  * recording (`ph-no-capture`), whose canvas recording is off in any case,
  * and no frame, address, or title is kept past the drawn tab. The agent's
  * pointer is drawn over the canvas, never in its frame, while the agent has
- * the tab (`cloud-browser-cursor.tsx`).
+ * the tab (`cloud-browser-cursor.tsx`). A tab the member just opened from
+ * this window is taken over by its view as soon as the view is live, so
+ * they land driving it.
  */
 
 /** The most characters one text message carries; a longer paste goes in pieces. */
@@ -302,6 +304,11 @@ export function CloudBrowserPane({
     paint(canvas.current, shownFrame.current);
     live.resized();
   }, [live, size.width, size.height]);
+
+  // A tab opened here lands driven: its view takes it over once, as soon as it is live.
+  useEffect(() => {
+    if (view.phase === CLOUD_BROWSER_PHASE.LIVE && claimTakeOver(tab.id)) live.takeOver();
+  }, [view.phase, tab.id, live]);
 
   const yours = view.driver?.yours === true;
   // A wheel over the page the member drives scrolls the page alone, never the panel around it;

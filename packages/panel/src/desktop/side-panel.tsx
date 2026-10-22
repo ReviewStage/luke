@@ -97,6 +97,7 @@ import {
 import { BrowserPane, browserTitleOf, useBrowserPages } from "../tasks/browser-pane.js";
 import { ChangesCard, peopleOf } from "../tasks/changes-card.js";
 import { TaskChipCard } from "../tasks/chip-cards.js";
+import { type CloudBrowserAgent, CloudBrowserOpenDialog } from "../tasks/cloud-browser-open.js";
 import { CloudBrowserPane } from "../tasks/cloud-browser-pane.js";
 import { useCloudBrowserTabs } from "../tasks/cloud-browser-tabs.js";
 import { CodePane, centreWithin } from "../tasks/code-pane.js";
@@ -493,6 +494,9 @@ export function showPullRequest(
   panel.onPreview(tab);
 }
 
+/** The "+" menu's row for a new tab in an agent's cloud browser, apart from every kind's and the Browser tab's own. */
+const NEW_CLOUD_BROWSER_ROW = "new-cloud-browser";
+
 /** The "+" menu's row for a kind: its glyph and its name, whether or not its tab is open, the Plan's the task's own where it is known. */
 function kindRow(tab: FixedSidePanelTab, plan: PlanStanding | undefined): MenuRow {
   return { id: tab, ...tabLook({ kind: TAB_KIND.PANEL, tab, plan }) };
@@ -529,6 +533,8 @@ export function panelEntries(input: {
   };
   /** The door a new Browser tab opens through, while the Browser tab experiment is on; none where the caller offers none. */
   onNewBrowser?: (() => void) | undefined;
+  /** A new tab in one of the task's coding agents' cloud browsers: the row's words, naming the agent chosen first, and the door it asks through; none where the caller offers none. */
+  cloudBrowser?: { readonly label: string; readonly onNew: () => void } | undefined;
   /** The task the panel stands beside, whose name and status the Plan's row wears; none where the caller does not know it. */
   plan?: PlanStanding | undefined;
 }): AddEntry[] {
@@ -600,7 +606,30 @@ export function panelEntries(input: {
             onPick: onNewBrowser,
           },
         ];
-  return [...kinds, ...fileRows, ...changesRows, ...pageRows, ...terminalRows, ...browserRows];
+  // A tab in an agent's cloud browser is opened afresh too, after the dialog asks whose and where.
+  const cloudBrowser = input.cloudBrowser;
+  const cloudBrowserRows =
+    cloudBrowser === undefined
+      ? []
+      : [
+          {
+            row: {
+              id: NEW_CLOUD_BROWSER_ROW,
+              ...tabLook({ kind: TAB_KIND.BROWSER, title: cloudBrowser.label }),
+              section: ADD_SECTION.BROWSER,
+            },
+            onPick: cloudBrowser.onNew,
+          },
+        ];
+  return [
+    ...kinds,
+    ...fileRows,
+    ...changesRows,
+    ...pageRows,
+    ...terminalRows,
+    ...browserRows,
+    ...cloudBrowserRows,
+  ];
 }
 
 /**
@@ -2138,6 +2167,21 @@ export function SidePanel({
           })),
     [cloudListed, agents, drawnTranscripts],
   );
+  // A tab in a coding agent's cloud browser is opened from a task's own "+" while the
+  // experiment is on, on every platform, in the browser of the agent the member views first.
+  const [cloudOpening, setCloudOpening] = useState(false);
+  const cloudAgents: readonly CloudBrowserAgent[] =
+    browserOn && holder === SIDE_PANEL_HOLDER.TASK
+      ? (agents.agents ?? []).map((each) => ({
+          id: each.id,
+          name: agentSubject(agents, each.id, drawnTranscripts, false).name,
+        }))
+      : [];
+  const panelAgent = panel.tab === undefined ? undefined : agentOfTab(panel.tab);
+  const cloudChosen =
+    cloudAgents.find((each) => each.id === shownAgent) ??
+    cloudAgents.find((each) => each.id === panelAgent) ??
+    cloudAgents[0];
   const cloudBrowserLabel = (id: string) => {
     const drawn = cloudBrowsers.find((each) => each.tab.id === id);
     return drawn === undefined ? TAB_WORDS.BROWSER : cloudBrowserTitleOf(drawn.tab);
@@ -2204,157 +2248,177 @@ export function SidePanel({
         }),
     onNewBrowser:
       browsing && holder !== SIDE_PANEL_HOLDER.INBOX ? () => panel.onOpenBrowser() : undefined,
+    cloudBrowser:
+      cloudChosen === undefined
+        ? undefined
+        : { label: `New tab in ${cloudChosen.name}'s browser`, onNew: () => setCloudOpening(true) },
     plan: task,
   });
   // Something on offer past the fixed kinds, which an empty panel offers in place as a closed kind is.
   const offersMore = offers.some((entry) => entry.row.section !== undefined);
 
   return (
-    <PanelFrame
-      panel={panel}
-      leaving={leaving}
-      onLeft={onLeft}
-      edge={edge}
-      label="Panel"
-      banner={banner}
-      switched={switched}
-      tabs={
-        <>
-          {switched && !listing && tab !== SIDE_PANEL_TAB.PLAN ? (
-            <FoldingButton
-              label="Activity"
-              icon={<BackIcon />}
-              onClick={() => activity.onListed(true)}
+    <>
+      <PanelFrame
+        panel={panel}
+        leaving={leaving}
+        onLeft={onLeft}
+        edge={edge}
+        label="Panel"
+        banner={banner}
+        switched={switched}
+        tabs={
+          <>
+            {switched && !listing && tab !== SIDE_PANEL_TAB.PLAN ? (
+              <FoldingButton
+                label="Activity"
+                icon={<BackIcon />}
+                onClick={() => activity.onListed(true)}
+              />
+            ) : null}
+            <PanelTabs
+              panel={panel}
+              holder={holder}
+              taskId={taskId}
+              keys={keys && focused}
+              unread={unread}
+              agents={agents}
+              subagents={subagents}
+              files={files}
+              changes={changes}
+              pages={pageTabs}
+              terminals={terminals}
+              browsers={browsers}
+              browserPages={browserPages}
+              cloudBrowsers={cloudBrowsers}
+              shown={shownCode ?? []}
+              repository={repository}
+              offers={offers}
+              held={drawnTranscripts}
+              actionsSlot={actionsSlot}
+              handed={handed}
+              onOpenAgent={(agent) => onOpenTarget({ kind: TOOL_TARGET.AGENT, agent })}
+              shownAgent={shownAgent}
+              inboxWaiting={inbox?.waiting ?? 0}
+              inboxDrafted={inbox?.drafted ?? false}
+              task={task}
+              activity={
+                switched
+                  ? { slot: listing ? activitySlot : null, onListed: activity.onListed }
+                  : undefined
+              }
             />
-          ) : null}
-          <PanelTabs
-            panel={panel}
-            holder={holder}
-            taskId={taskId}
-            keys={keys && focused}
-            unread={unread}
-            agents={agents}
-            subagents={subagents}
-            files={files}
-            changes={changes}
-            pages={pageTabs}
-            terminals={terminals}
-            browsers={browsers}
-            browserPages={browserPages}
-            cloudBrowsers={cloudBrowsers}
-            shown={shownCode ?? []}
-            repository={repository}
-            offers={offers}
-            held={drawnTranscripts}
-            actionsSlot={actionsSlot}
-            handed={handed}
-            onOpenAgent={(agent) => onOpenTarget({ kind: TOOL_TARGET.AGENT, agent })}
-            shownAgent={shownAgent}
-            inboxWaiting={inbox?.waiting ?? 0}
-            inboxDrafted={inbox?.drafted ?? false}
-            task={task}
-            activity={
-              switched
-                ? { slot: listing ? activitySlot : null, onListed: activity.onListed }
-                : undefined
-            }
-          />
-        </>
-      }
-      actions={<span ref={setActionsSlot} className="toolbar-tab-actions" />}
-    >
-      {/* A panel with nothing to offer but kinds it has never closed stands
+          </>
+        }
+        actions={<span ref={setActionsSlot} className="toolbar-tab-actions" />}
+      >
+        {/* A panel with nothing to offer but kinds it has never closed stands
             empty, the "+" above offering any; otherwise every tab closed, it
             offers in place all that the "+" offers. */}
-      {/* The plan stays mounted while another tab is shown, hidden, so an
+        {/* The plan stays mounted while another tab is shown, hidden, so an
           edit not yet saved is neither sent on a tab switch nor lost with it,
           as it stayed in the column before it stood here. */}
-      {plan === undefined ? null : (
-        <FindScope
-          className="side-panel-content"
-          role="tabpanel"
-          aria-label={tabLook({ kind: TAB_KIND.PANEL, tab: SIDE_PANEL_TAB.PLAN, plan: task }).label}
-          hidden={listing || tab !== SIDE_PANEL_TAB.PLAN}
-          active={keys && focused && !listing && tab === SIDE_PANEL_TAB.PLAN}
-          subject={{ task: taskId, tab: SIDE_PANEL_TAB.PLAN }}
-        >
-          {plan}
-        </FindScope>
-      )}
-      {listing ? (
-        <div ref={setActivitySlot} className="side-panel-content" />
-      ) : tab === SIDE_PANEL_TAB.PLAN && plan !== undefined ? null : tab === undefined ? (
-        <div className="side-panel-content">
-          {panel.closedTabs.length === 0 && !offersMore ? null : <NoTabs entries={offers} />}
-        </div>
-      ) : (
-        // The Board is drawn on a canvas, which keeps a find of its own, and
-        // a page's words stand in a sandboxed frame no find of the window
-        // reaches, so a page's tab finds itself, through its frame or in its
-        // source; a Browser tab's page stands in a view of main's, which no
-        // find of the window reaches either.
-        <FindScope
-          className="side-panel-content"
-          role="tabpanel"
-          aria-label={label}
-          active={
-            keys &&
-            focused &&
-            tab !== SIDE_PANEL_TAB.BOARD &&
-            !isPageTab(tab) &&
-            !isBrowserTab(tab) &&
-            !isCloudBrowserTab(tab)
-          }
-          subject={{ task: taskId, tab }}
-        >
-          {/* Typing into a preview, as a review's comment or a terminal's line, keeps it as a tab of its own. */}
-          <div
-            className="side-panel-keeps"
-            onInputCapture={() => {
-              if (panel.preview !== undefined && sameTab(panel.preview, tab)) panel.onKeep(tab);
-            }}
+        {plan === undefined ? null : (
+          <FindScope
+            className="side-panel-content"
+            role="tabpanel"
+            aria-label={
+              tabLook({ kind: TAB_KIND.PANEL, tab: SIDE_PANEL_TAB.PLAN, plan: task }).label
+            }
+            hidden={listing || tab !== SIDE_PANEL_TAB.PLAN}
+            active={keys && focused && !listing && tab === SIDE_PANEL_TAB.PLAN}
+            subject={{ task: taskId, tab: SIDE_PANEL_TAB.PLAN }}
           >
-            <TabContent
-              tab={tab}
-              taskId={taskId}
-              codeFilesRead={holder === SIDE_PANEL_HOLDER.TASK}
-              pagePlace={pagePlaceOf(holder, taskId)}
-              repository={repository}
-              board={board}
-              shownCode={shownCode}
-              codeFailed={codeFailed}
-              files={files}
-              pages={taskPages}
-              agents={agents}
-              standings={standings}
-              shown={keys}
-              findActive={keys && focused}
-              onOpenTarget={onOpenTarget}
-              onWorkerStatus={views.onWorkerStatus}
-              onWorkerHeld={views.onWorkerHeld}
-              onOpenFile={panel.onPreviewFile}
-              fileTree={fileTree}
-              onBrowseFile={panel.onBrowseFile}
-              onFileHistory={panel.onFileHistory}
-              onFoldNote={panel.onFoldNote}
-              onCloseTab={panel.onClose}
-              pullRequestViews={panel.pullRequestViews}
-              onPullRequestView={panel.onPullRequestView}
-              shellsList={shellsList}
-              browsers={browsers}
-              onBrowserOpened={panel.onBrowserOpened}
-              cloudBrowsers={cloudBrowsers}
-              plan={plan}
-              inbox={inbox?.body}
-              chat={chat}
-              transcript={transcript}
-              onTabActions={handTabActions}
-              onRunOnMac={macTerminalDoors.onOpenOnMac}
-            />
+            {plan}
+          </FindScope>
+        )}
+        {listing ? (
+          <div ref={setActivitySlot} className="side-panel-content" />
+        ) : tab === SIDE_PANEL_TAB.PLAN && plan !== undefined ? null : tab === undefined ? (
+          <div className="side-panel-content">
+            {panel.closedTabs.length === 0 && !offersMore ? null : <NoTabs entries={offers} />}
           </div>
-        </FindScope>
-      )}
-    </PanelFrame>
+        ) : (
+          // The Board is drawn on a canvas, which keeps a find of its own, and
+          // a page's words stand in a sandboxed frame no find of the window
+          // reaches, so a page's tab finds itself, through its frame or in its
+          // source; a Browser tab's page stands in a view of main's, which no
+          // find of the window reaches either.
+          <FindScope
+            className="side-panel-content"
+            role="tabpanel"
+            aria-label={label}
+            active={
+              keys &&
+              focused &&
+              tab !== SIDE_PANEL_TAB.BOARD &&
+              !isPageTab(tab) &&
+              !isBrowserTab(tab) &&
+              !isCloudBrowserTab(tab)
+            }
+            subject={{ task: taskId, tab }}
+          >
+            {/* Typing into a preview, as a review's comment or a terminal's line, keeps it as a tab of its own. */}
+            <div
+              className="side-panel-keeps"
+              onInputCapture={() => {
+                if (panel.preview !== undefined && sameTab(panel.preview, tab)) panel.onKeep(tab);
+              }}
+            >
+              <TabContent
+                tab={tab}
+                taskId={taskId}
+                codeFilesRead={holder === SIDE_PANEL_HOLDER.TASK}
+                pagePlace={pagePlaceOf(holder, taskId)}
+                repository={repository}
+                board={board}
+                shownCode={shownCode}
+                codeFailed={codeFailed}
+                files={files}
+                pages={taskPages}
+                agents={agents}
+                standings={standings}
+                shown={keys}
+                findActive={keys && focused}
+                onOpenTarget={onOpenTarget}
+                onWorkerStatus={views.onWorkerStatus}
+                onWorkerHeld={views.onWorkerHeld}
+                onOpenFile={panel.onPreviewFile}
+                fileTree={fileTree}
+                onBrowseFile={panel.onBrowseFile}
+                onFileHistory={panel.onFileHistory}
+                onFoldNote={panel.onFoldNote}
+                onCloseTab={panel.onClose}
+                pullRequestViews={panel.pullRequestViews}
+                onPullRequestView={panel.onPullRequestView}
+                shellsList={shellsList}
+                browsers={browsers}
+                onBrowserOpened={panel.onBrowserOpened}
+                cloudBrowsers={cloudBrowsers}
+                plan={plan}
+                inbox={inbox?.body}
+                chat={chat}
+                transcript={transcript}
+                onTabActions={handTabActions}
+                onRunOnMac={macTerminalDoors.onOpenOnMac}
+              />
+            </div>
+          </FindScope>
+        )}
+      </PanelFrame>
+      {cloudOpening && cloudChosen !== undefined ? (
+        <CloudBrowserOpenDialog
+          taskId={taskId}
+          agents={cloudAgents}
+          chosen={cloudChosen.id}
+          onOpened={(opened) => {
+            setCloudOpening(false);
+            panel.onChoose({ cloudBrowser: opened.id });
+          }}
+          onDismiss={() => setCloudOpening(false)}
+        />
+      ) : null}
+    </>
   );
 }
 

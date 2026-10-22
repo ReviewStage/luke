@@ -15,7 +15,11 @@ import { fakeAppPlatform } from "../testing/app-platform.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import type { BrowserLiveListener } from "./cloud-browser-live.js";
 import { CloudBrowserPane } from "./cloud-browser-pane.js";
-import { CLOUD_BROWSER_TABS_AGAIN, useCloudBrowserTabs } from "./cloud-browser-tabs.js";
+import {
+  CLOUD_BROWSER_TABS_AGAIN,
+  noteOpenedCloudTab,
+  useCloudBrowserTabs,
+} from "./cloud-browser-tabs.js";
 import {
   type OpenTask,
   SIDE_PANEL_TAB,
@@ -381,4 +385,79 @@ test("while the member drives, a paste reaches the page as text, Control-V and â
     ),
     [{ type: BROWSER_LIVE_CLIENT.TEXT, text: "hello" }],
   );
+});
+
+test("a tab the member opened here is listed before the service lists it, let go once it does, and its pane takes it over as soon as its view is live", async () => {
+  const opened: AgentBrowserTab = {
+    ...LISTED,
+    id: OTHER_TAB,
+    openedBy: { kind: "member", userId: "user-dean" },
+    driver: { userId: "user-dean", heldUntil: 60_000 },
+  };
+  const follow = pushedFollow<{ tabs: readonly AgentBrowserTab[] } | { failure: string }>();
+  fakeActPortAnswering((request) => {
+    if (request.kind === ACT_KIND.TASKS_BROWSER_TABS_FOLLOW) {
+      // SAFETY: the window reads oRPC's stream as an async iterator alone, which this is.
+      return Promise.resolve(follow.stream as unknown as WireBoundaryInput);
+    }
+    return Promise.resolve({ tabs: [LISTED] });
+  });
+  const sent: unknown[] = [];
+  let listener: BrowserLiveListener | undefined;
+  fakeAppPlatform({
+    openBrowserLive: (target, heard) => {
+      assert.deepEqual(target, { taskId: TASK, tabId: OTHER_TAB });
+      listener = heard;
+      return { send: (text) => sent.push(JSON.parse(text)), close: () => undefined };
+    },
+  });
+  let read: readonly AgentBrowserTab[] | undefined;
+  function Probe() {
+    read = useCloudBrowserTabs(TASK, true);
+    const tab = read?.find((each) => each.id === OTHER_TAB);
+    return tab === undefined
+      ? null
+      : createElement(CloudBrowserPane, {
+          taskId: TASK,
+          tab,
+          owner: "Invite expiry",
+          shown: true,
+          memberName: () => undefined,
+        });
+  }
+
+  noteOpenedCloudTab(TASK, opened);
+  draw(createElement(Probe));
+  await settle();
+  assert.deepEqual(
+    read?.map((tab) => tab.id),
+    [TAB, OTHER_TAB],
+    "listed beside what the service listed, before it lists it",
+  );
+  assert.ok(listener, "its pane opened its view");
+  await act(async () =>
+    listener?.message(
+      JSON.stringify({ type: BROWSER_LIVE_SERVER.DRIVER, driver: null, yours: false }),
+    ),
+  );
+  await settle();
+  const takeOvers = () =>
+    sent.filter(
+      (message) =>
+        message instanceof Object &&
+        "type" in message &&
+        message.type === BROWSER_LIVE_CLIENT.TAKE_OVER,
+    ).length;
+  assert.equal(takeOvers(), 1, "the view took the tab over once it was live");
+
+  // The service lists it, and later its agent's browser closes it: it goes, as any listed tab would.
+  await act(async () => follow.push({ tabs: [LISTED, opened] }));
+  await settle();
+  await act(async () => follow.push({ tabs: [LISTED] }));
+  await settle();
+  assert.deepEqual(
+    read?.map((tab) => tab.id),
+    [TAB],
+  );
+  assert.equal(takeOvers(), 1, "and only once");
 });

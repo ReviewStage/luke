@@ -6,17 +6,9 @@ import {
   browserAddressOf,
 } from "@luke/features/browser-acts";
 import { ACT_KIND } from "@luke/host/acts";
-import {
-  ERROR_STATE_PLACEMENT,
-  ErrorState,
-  IconButton,
-  TEXT_FIELD_SIZE,
-  TextField,
-  Tooltip,
-} from "@luke/ui";
+import { AddressField, ERROR_STATE_PLACEMENT, ErrorState, IconButton, Tooltip } from "@luke/ui";
 import { ArrowLeftIcon, ArrowRightIcon, ExternalLinkIcon, RotateCwIcon, XIcon } from "lucide-react";
 import {
-  type FormEvent,
   type RefObject,
   useCallback,
   useEffect,
@@ -426,8 +418,7 @@ export function BrowserPane({
     };
   }, [browserId, opened, tell]);
 
-  const go = (event: FormEvent) => {
-    event.preventDefault();
+  const go = () => {
     const address = browserAddressOf(typed ?? "");
     if (address === undefined) return;
     setTyped(undefined);
@@ -466,24 +457,17 @@ export function BrowserPane({
             onPress={() => stepTo(loading ? BROWSER_STEP.STOP : BROWSER_STEP.RELOAD)}
           />
         </div>
-        <form className="browser-view-address" onSubmit={go}>
-          <TextField
-            ref={field}
-            size={TEXT_FIELD_SIZE.COMPACT}
-            label="Address"
-            placeholder="Search or type an address, like localhost:3000"
-            spellCheck={false}
-            autoCorrect={false}
-            selectOnFocus
-            value={typed ?? address}
-            onChange={setTyped}
-            onBlur={() => setTyped(undefined)}
-            onEscape={() => {
-              setTyped(undefined);
-              field.current?.blur();
-            }}
-          />
-        </form>
+        <AddressField
+          ref={field}
+          value={typed ?? address}
+          onChange={setTyped}
+          onOpen={go}
+          onBlur={() => setTyped(undefined)}
+          onEscape={() => {
+            setTyped(undefined);
+            field.current?.blur();
+          }}
+        />
         <div className="file-view-actions">
           <BarStep
             label="Open in your browser"

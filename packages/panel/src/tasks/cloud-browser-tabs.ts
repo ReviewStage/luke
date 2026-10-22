@@ -13,6 +13,12 @@
  * or a follow the host did not answer keeps the list as it last stood. What a tab says (its address and title) is
  * drawn and held nowhere past the read: no trace, count, or app state (root
  * `AGENTS.md`'s cloud browser line).
+ *
+ * A tab the member opened from this window (`cloud-browser-open.tsx`) is
+ * listed from the moment the service answered it, until the read or the
+ * follow first lists it, so the panel lands on it before Realtime has told
+ * it; and its pane takes it over once its view opens (`claimTakeOver`),
+ * since the service's takeover is the member's but not yet their view's.
  */
 
 import { useAtomValue } from "@effect/atom-react";
@@ -21,6 +27,7 @@ import { ACT_KIND } from "@luke/host/acts";
 import { Duration, Effect, Schedule, Stream } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as Atom from "effect/reactivity/Atom";
+import { useEffect, useSyncExternalStore } from "react";
 import { askAct } from "../act.js";
 import { rendererRuntime } from "../renderer-runtime.js";
 
@@ -78,16 +85,65 @@ const unreadAtom = Atom.make<AsyncResult.AsyncResult<readonly AgentBrowserTab[]>
   AsyncResult.initial(),
 );
 
+/** The tabs this window opened, by task, that no read has listed yet; a new map at each change. */
+let opened: ReadonlyMap<string, readonly AgentBrowserTab[]> = new Map();
+
+/** The tabs opened here whose view has yet to take them over, by the id the service keeps each under. */
+const takingOver = new Set<string>();
+
+const openedListeners = new Set<() => void>();
+
+function setOpened(next: ReadonlyMap<string, readonly AgentBrowserTab[]>): void {
+  opened = next;
+  for (const listener of openedListeners) listener();
+}
+
+function hearOpened(listener: () => void): () => void {
+  openedListeners.add(listener);
+  return () => openedListeners.delete(listener);
+}
+
+/** Notes a tab the member opened in an agent's browser on the task, listed until a read lists it, and taken over once its view opens. */
+export function noteOpenedCloudTab(taskId: string, tab: AgentBrowserTab): void {
+  const standing = (opened.get(taskId) ?? NO_TABS).filter((each) => each.id !== tab.id);
+  takingOver.add(tab.id);
+  setOpened(new Map(opened).set(taskId, [...standing, tab]));
+}
+
+/** Whether the tab's view is to take it over now, as one this window opened is once; asking answers it once. */
+export function claimTakeOver(tabId: string): boolean {
+  return takingOver.delete(tabId);
+}
+
+/** The listed tabs, then those opened here that no read has listed yet. */
+function withOpened(
+  listed: readonly AgentBrowserTab[],
+  mine: readonly AgentBrowserTab[],
+): readonly AgentBrowserTab[] {
+  const pending = mine.filter((tab) => !listed.some((each) => each.id === tab.id));
+  return pending.length === 0 ? listed : [...listed, ...pending];
+}
+
 /**
  * The open task's cloud Browser tabs, the oldest first; none while unread,
  * and none at all where `listing` is off: the Browser tab experiment off, or
- * no task open.
+ * no task open. A tab opened here stands from its open, and is let go of
+ * once a read lists it, so one its agent closes afterwards goes.
  */
 export function useCloudBrowserTabs(
   taskId: string | undefined,
   listing: boolean,
 ): readonly AgentBrowserTab[] | undefined {
   const read = useAtomValue(listing && taskId !== undefined ? tabsAtom(taskId) : unreadAtom);
+  const openedHere = () => (taskId === undefined ? NO_TABS : (opened.get(taskId) ?? NO_TABS));
+  const mine = useSyncExternalStore(hearOpened, openedHere, openedHere);
+  const listed = AsyncResult.isSuccess(read) ? read.value : undefined;
+  useEffect(() => {
+    if (taskId === undefined || listed === undefined || mine.length === 0) return;
+    const left = mine.filter((tab) => !listed.some((each) => each.id === tab.id));
+    if (left.length < mine.length) setOpened(new Map(opened).set(taskId, left));
+  }, [taskId, listed, mine]);
   if (!listing) return NO_TABS;
-  return AsyncResult.isSuccess(read) ? read.value : undefined;
+  if (listed === undefined) return mine.length === 0 ? undefined : mine;
+  return withOpened(listed, mine);
 }

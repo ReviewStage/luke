@@ -1,4 +1,5 @@
 export * from "./cn.js";
+export * from "./components/address-field/address-field.js";
 export * from "./components/anchored-popover/anchored-popover.js";
 export * from "./components/attachment-chip/attachment-chip.js";
 export * from "./components/auth-page/auth-page.js";

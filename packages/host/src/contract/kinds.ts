@@ -335,6 +335,8 @@ export const TASKS_ACT_KIND = {
   TASKS_ISSUE: "tasks.issue",
   /** The Browser tabs open in a task's agents' browsers, read from the service for the side panel's cloud Browser tabs; answered to the panel, never on the document. */
   TASKS_BROWSER_TABS: "tasks.browserTabs",
+  /** A Browser tab opened at an address in a task's coding agent's cloud browser through the service, taken over by the member at once, as the side panel's "+" opens one; answered to the panel, never on the document. */
+  TASKS_BROWSER_TAB_OPEN: "tasks.browserTabOpen",
   /**
    * A task's agents' Browser tabs, followed while the window holds the
    * stream open for the side panel's cloud Browser tabs: each time one

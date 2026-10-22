@@ -17,7 +17,10 @@
  * handed back or asks; what ran before it stands. After it runs, the store
  * follows what the browser now holds: a tab opened or acted on is written
  * with its address and title, a `list` writes every page the browser
- * holds, and only a tab the agent closed is dropped.
+ * holds, and only a tab the agent closed is dropped. A tab a member opened
+ * in the agent's browser, as one does to sign in somewhere for it
+ * (`agent-browser-tabs-procedures.ts`), is answered among the tabs as one
+ * they opened, so the agent knows to use it once it is handed back.
  *
  * While it runs, the agent's pointer is written to the tab it points at
  * (`pointBrowserTab`), one write just before each click, type, or wheel
@@ -123,7 +126,9 @@ export const BROWSER_TOOL = {
     "label, rather than clicking it or its options, whose popup no click reaches. An action that leaves out its tab acts on the tab the action before " +
     "it acted on in the same call only, so open and go on in one call; a new call names its " +
     "tab. While the developer drives a tab, actions on " +
-    "it are refused until they hand it back: wait, or ask them. Answers each step that ran and " +
+    "it are refused until they hand it back: wait, or ask them. You may find a tab the " +
+    "developer opened in your browser, such as one they signed in on for you, which the tabs " +
+    "answered say they opened: use it once they hand it back. Answers each step that ran and " +
     "the tabs it acted on as they now stand, or `not-run` and why, such as the browser not " +
     "being reachable.",
   inputSchema: BROWSER_INPUT,
@@ -134,8 +139,13 @@ export const BROWSER_TOOL_STATUS = {
   NOT_RUN: "not-run",
 } as const;
 
-/** A tab as a result names it: its id, address, and title. */
-type ShownTab = { readonly tab: string; readonly url: string; readonly title: string };
+/** A tab as a result names it: its id, address, and title, and that a member opened it, where one did. */
+type ShownTab = {
+  readonly tab: string;
+  readonly url: string;
+  readonly title: string;
+  readonly openedBy?: typeof AGENT_BROWSER_TAB_OPENER.MEMBER;
+};
 
 /** A screenshot step as the runner answers it, the transcript's copy beside the model's where it fit. */
 type ScreenshotStep = Extract<
@@ -269,6 +279,21 @@ function shownTab(page: PageTarget): ShownTab {
     url: cutBrowserText(page.url, BROWSER_AGENT_LIMITS.SHOWN_MAX_CHARS),
     title: cutBrowserText(page.title, BROWSER_AGENT_LIMITS.SHOWN_MAX_CHARS),
   };
+}
+
+/** The tabs shown, each a member opened, as one opens a tab to sign in for the agent, saying so. */
+function withOpeners(
+  tabs: readonly ShownTab[],
+  rows: readonly AgentBrowserTabRow[],
+): readonly ShownTab[] {
+  const memberOpened = new Set(
+    rows
+      .filter((row) => row.openedBy === AGENT_BROWSER_TAB_OPENER.MEMBER)
+      .map((row) => row.targetId),
+  );
+  return tabs.map((tab) =>
+    memberOpened.has(tab.tab) ? { ...tab, openedBy: AGENT_BROWSER_TAB_OPENER.MEMBER } : tab,
+  );
 }
 
 /** The tabs the steps acted on, every tab a list named among them, in the order first acted on, a closed one left out. */
@@ -657,7 +682,7 @@ export function runBrowserTool(
             runnable.length === 0
               ? { run: { steps: [], skipped: 0 }, tabs: [] }
               : yield* runOn(withoutStartPage(cdp, kept), call, runnable, now);
-          return { ...outcome, refused, runnable };
+          return { ...outcome, tabs: withOpeners(outcome.tabs, rows), refused, runnable };
         }),
       ),
     );

@@ -1830,6 +1830,14 @@
   opacity: 1;
 }
 
+/* New tab in an agent's browser (cloud-browser-open.tsx): whose browser,
+   the address, and what opening it does, stacked in the dialog's body. */
+.cloud-browser-open {
+  display: flex;
+  flex-direction: column;
+  gap: var(--luke-space-12);
+}
+
 /* A cloud Browser tab (cloud-browser-pane.tsx): whose browser it is and
    the page's address beside who drives it, then the page drawn on a canvas
    of the page's own shape, centred in the body, with a quiet line over it
@@ -2046,15 +2054,10 @@
 
 /* The find a page's tab keeps over its source fills the tab as the panel's
    own would. */
-/* A Browser tab (browser-pane.tsx): the page's bar, its address field
-   filling what the steps leave, and the body main lays the page's view
-   over, which draws a still of the page while something covers it. */
-.browser-view-address {
-  display: flex;
-  min-width: 0;
-  flex: 1;
-}
-
+/* A Browser tab (browser-pane.tsx): the body main lays the page's view
+   over, which draws a still of the page while something covers it; its
+   bar's address field (`@luke/ui`'s AddressField) fills what the steps
+   leave. */
 .browser-view-body {
   position: relative;
   display: flex;
