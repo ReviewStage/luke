@@ -30,10 +30,11 @@ import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { useSteadyDoor } from "../steady-door.js";
 import { CallNotice } from "../tasks/agent-call.js";
 import { AgentCard, agentSubject } from "../tasks/agent-ref.js";
+import { StartingAgentTab } from "../tasks/agent-tab.js";
 import { AgentTabSkeleton } from "../tasks/agent-tab-skeleton.js";
 import { useChatNames } from "../tasks/chat-actors.js";
 import { useChatOn } from "../tasks/chat-gate.js";
-import { agentActor, agentTabLabel } from "../tasks/coding-agent-model.js";
+import { agentActor, agentTabLabel, type SentLine } from "../tasks/coding-agent-model.js";
 import { useInboxCloser } from "../tasks/inbox-close.js";
 import type { InboxCodeDoors } from "../tasks/inbox-code-card.js";
 import { INBOX_COLUMNS, useInboxColumns } from "../tasks/inbox-columns.js";
@@ -196,7 +197,10 @@ function TaskPageSkeleton({
   panel,
   summary,
   onColumn,
+  starting,
 }: {
+  /** The line New task's agent start under way opens its agent on, which the column draws as the agent's tab will; none while a task is read. */
+  starting?: SentLine | undefined;
   /** The side panel as it will be drawn; none where it is shut. */
   panel: { width: number; fullScreen: boolean } | undefined;
   /** How the summary will stand, whose room is kept. */
@@ -222,7 +226,11 @@ function TaskPageSkeleton({
         <div className="desktop-plan-body">
           <div className="desktop-task-column">
             <section className="desktop-agent">
-              <AgentTabSkeleton label={TASK_LOADING_LABEL} />
+              {starting === undefined ? (
+                <AgentTabSkeleton label={TASK_LOADING_LABEL} />
+              ) : (
+                <StartingAgentTab line={starting} />
+              )}
             </section>
           </div>
           {summary === SUMMARY_MODE.NONE ? null : (
@@ -1184,6 +1192,36 @@ function PlanDocument({
 }
 
 /**
+ * The page of a task New task is still starting with its agent, before the
+ * service has made either: the task's page in the shape it lands in, its
+ * column standing as the agent's tab with the developer's words as its first
+ * line, and the side panel at its width, so Start opens the page at once
+ * and the start's answer only fills it in.
+ */
+function StartingTaskPage({
+  tasks,
+  line,
+  summary,
+}: {
+  tasks: TasksControl;
+  line: SentLine;
+  summary: SummaryPin;
+}): React.JSX.Element {
+  const drawing = useSidePanelDrawing(tasks.sidePanel);
+  const [column, setColumn] = useState<HTMLDivElement | null>(null);
+  // Note that the summary's room is kept, as the task's page keeps it for the agent it lists, so nothing moves as the page lands.
+  const summaryLayout = useSummaryLayout(summary, column, tasks.sidePanel.fullScreen, true);
+  return (
+    <TaskPageSkeleton
+      panel={drawing.panel}
+      summary={summaryLayout.mode}
+      onColumn={setColumn}
+      starting={line}
+    />
+  );
+}
+
+/**
  * The Tasks tab's work column: the open task's page, or a new account's welcome.
  *
  * A memo boundary: the shell drawn again over the same tasks, as a setting
@@ -1212,6 +1250,10 @@ export const DesktopTasks = memo(function DesktopTasks({
   const secondCall = (
     <ConfirmDialog confirm={tasks.secondCall.confirm} question={tasks.secondCall.question} />
   );
+  // A task New task is starting with its agent stands as its page until the start answers.
+  if (tasks.starting !== undefined) {
+    return <StartingTaskPage tasks={tasks} line={tasks.starting} summary={summary} />;
+  }
   switch (tasks.page) {
     case TASKS_PAGE.DOCUMENT:
       return (

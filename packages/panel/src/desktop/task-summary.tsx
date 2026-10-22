@@ -8,9 +8,12 @@ import {
   LIST_DENSITY,
   List,
   ListRow,
+  RowHint,
+  RowHintOptions,
   SCROLL_FADE,
   SCROLL_SIZE,
   ScrollArea,
+  Tooltip,
   useMenu,
 } from "@luke/ui";
 import { openThread, usePlanCommentsControl } from "@luke/ui/plan-comments";
@@ -39,11 +42,16 @@ import { openPlanStanding, TAB_KIND, tabLook } from "../tasks/tab-look.js";
 import type { CodingAgentsControl } from "../tasks/use-coding-agents.js";
 import { SIDE_PANEL_TAB } from "../tasks/use-side-panel.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
-import { RowHint, RowHintOptions, Tooltip } from "../tooltip.js";
 import { ActionMenu } from "./action-menu.js";
 import { ArchivedAgents, useAgentArchive } from "./agent-archive.js";
 import { AGENTS_SECTION, agentEntries, INBOX_ROW, inboxEntry } from "./main-tabs.js";
-import { ADD_SECTION, type ChangesOffer, changesOffers, panelEntries } from "./side-panel.js";
+import {
+  ADD_SECTION,
+  type ChangesOffer,
+  changesOffers,
+  panelEntries,
+  planTabCard,
+} from "./side-panel.js";
 import type { AddEntry, HeldTranscripts } from "./strip-tabs.js";
 
 /**
@@ -357,8 +365,9 @@ function InboxCard({ inbox }: { inbox: InboxBoardView }): React.JSX.Element {
  * agent's its tab's card, read from what its tab last held; a file's its
  * path and the agent's note; a pull request's its title, number, and what it
  * changes, under the agent whose it is; a page's a preview of its newest
- * version; the Inbox's what waits. The panel's kinds hang none, as their
- * tabs hang none, since their names say all there is.
+ * version; the Inbox's what waits; the plan's the task's card, as its tab
+ * hangs it. The panel's other kinds hang none, as their tabs hang none,
+ * since their names say all there is.
  */
 function withCards(
   entries: readonly AddEntry[],
@@ -386,6 +395,9 @@ function withCards(
       return { ...entry, card: <AgentTabCard name={label} models={models} read={read} /> };
     }
     if (row.id === INBOX_ROW) return { ...entry, card: <InboxCard inbox={inbox} /> };
+    if (row.id === SIDE_PANEL_TAB.PLAN) {
+      return { ...entry, card: planTabCard(tasks.activeTaskId, openPlanStanding(tasks)) };
+    }
     if (row.section === ADD_SECTION.PULL_REQUESTS) {
       // Note that a pull request's row is named by its page (`panelEntries`).
       const offer = changes.find((each) => each.pullRequest.url === row.id);

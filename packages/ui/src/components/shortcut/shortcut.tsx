@@ -1,20 +1,20 @@
+import { type ShortcutChord, shortcutAccelerator, shortcutGlyphs } from "@luke/settings/shortcuts";
+import { cn } from "../../cn.js";
+
 /**
  * shortcut.tsx -- a chord as the window draws it everywhere: its glyphs set tight and muted, ⇧⌘I, the way a Mac menu prints a key equivalent.
  *
  * One look in every place a chord is shown — a hover, a menu, a sidebar
  * row, ⌘K and its foot, a button, and the Keyboard shortcuts page — so a
  * chord reads the same wherever it is met. A place says only how big and how
- * loud (`--shortcut-text`, `--shortcut-ink`), never draws it some other way.
- * Each key is a glyph of its own (`shortcut-glyph`), so the stylesheet can set
- * a modifier and a letter on one line and centre the chord on the words
- * beside it.
+ * loud (`--luke-shortcut-text`, `--luke-shortcut-ink`), never draws it some
+ * other way. Each key is a glyph of its own (`luke-shortcut-glyph`), so the
+ * stylesheet can set a modifier and a letter on one line and centre the
+ * chord on the words beside it.
  *
  * Its words are text like any other, so the session recording masks them with
  * the rest.
  */
-
-import { type ShortcutChord, shortcutAccelerator, shortcutGlyphs } from "@luke/settings/shortcuts";
-import type React from "react";
 
 /** Which chord: the window's own, or a system-wide key's accelerator as Settings stores it. */
 type ShortcutOf =
@@ -31,17 +31,24 @@ export function Shortcut(
      * read.
      */
     spoken?: boolean;
+    /**
+     * Whether the chord is a row's whole value, as on the Keyboard shortcuts
+     * page: set at the row's label size in the value's ink, and drawn under a
+     * finger too, where a chord shown as a hint is not.
+     */
+    value?: boolean;
   },
 ): React.JSX.Element {
   const accelerator =
     props.accelerator === undefined ? shortcutAccelerator(props.chord) : props.accelerator;
   return (
     <kbd
-      className={props.className ? `shortcut ${props.className}` : "shortcut"}
+      className={cn("luke-shortcut", props.className)}
+      data-value={props.value === true ? "" : undefined}
       aria-hidden={props.spoken === true ? undefined : "true"}
     >
       {shortcutGlyphs(accelerator).map((glyph) => (
-        <span key={glyph} className="shortcut-glyph">
+        <span key={glyph} className="luke-shortcut-glyph">
           {glyph}
         </span>
       ))}

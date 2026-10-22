@@ -10,6 +10,7 @@ import {
   NoteLine,
   PlusIcon,
   SearchIcon,
+  Shortcut,
   TEXT_ELEMENT,
   TEXT_TONE,
   TEXT_VARIANT,
@@ -17,7 +18,6 @@ import {
 } from "@luke/ui";
 import { Command } from "cmdk";
 import { useEffect, useState } from "react";
-import { Shortcut } from "../shortcut.js";
 import { agentTabLabel } from "./coding-agent-model.js";
 import { AgentGlyph } from "./tab-look.js";
 import type { CodingAgentsControl } from "./use-coding-agents.js";

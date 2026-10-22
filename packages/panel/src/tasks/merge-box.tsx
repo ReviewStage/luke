@@ -26,6 +26,7 @@ import {
   SPINNER_SIZE,
   SpinnerRing,
   SplitButton,
+  Tooltip,
   useConfirmDialog,
   useMenu,
   VisuallyHidden,
@@ -42,7 +43,6 @@ import {
 import { type ReactNode, useState } from "react";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu.js";
 import { readKept, writeKept } from "../desktop/folded-groups.js";
-import { Tooltip } from "../tooltip.js";
 import type { PullRequestWrites } from "./pull-request-writes.js";
 
 /**

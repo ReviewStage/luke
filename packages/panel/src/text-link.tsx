@@ -1,8 +1,7 @@
-import { TextLink as SharedTextLink, TEXT_LINK_LOOK } from "@luke/ui";
+import { TextLink as SharedTextLink, TEXT_LINK_LOOK, Tooltip } from "@luke/ui";
 import { linkFace } from "@luke/ui/link-face";
 import type { ReactNode } from "react";
 import { opensAsLink } from "./tasks/use-open-link.js";
-import { Tooltip } from "./tooltip.js";
 
 /**
  * text-link.tsx -- a plain link in written words, drawn one way in every place that draws words: its label underlined quietly in the words' own ink, a bare address cut to its host and path with a small ↗, the whole address in the window's hint.

@@ -266,12 +266,6 @@ body {
   list-style: none;
 }
 
-/* The pointer's room over a line held to one line, as wide as the column. */
-.catalog-one-line {
-  display: block;
-  min-width: 0;
-}
-
 /* A column narrower than a phone, where long words have to wrap. */
 .catalog-narrow {
   display: flex;
@@ -488,7 +482,13 @@ body {
   flex: 1 1 var(--luke-select-field-width);
 }
 
-/* The tooltip and hover card examples' control, whose wrapper is the hint's anchor and so wraps it exactly. */
+/* The tooltips example's row, whose name's card hangs beside the whole row. */
+.catalog-carded-row {
+  display: inline-flex;
+  gap: var(--luke-space-4);
+}
+
+/* The hover card example's control, whose wrapper is the hint's anchor and so wraps it exactly. */
 .catalog-hinted {
   display: inline-flex;
 }
@@ -903,4 +903,12 @@ body {
   margin: 0;
   color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
+}
+
+/* The box a hidden rail's strip stands in, as tall as a few rows. */
+.catalog-mark-strip {
+  display: flex;
+  width: var(--luke-space-12);
+  height: 160px;
+  border-right: 1px solid var(--luke-color-border);
 }

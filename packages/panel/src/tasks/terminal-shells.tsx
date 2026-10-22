@@ -26,6 +26,7 @@ import {
   SKELETON_SHAPE,
   Skeleton,
   SkeletonRegion,
+  Tooltip,
   useConfirmDialog,
   useMenu,
 } from "@luke/ui";
@@ -33,7 +34,6 @@ import { PencilIcon, TerminalIcon, Trash2Icon } from "lucide-react";
 import { type RefObject, useRef, useState } from "react";
 import { ActionMenu } from "../desktop/action-menu.js";
 import type { FloatingBox } from "../desktop/hover-pane.js";
-import { Tooltip } from "../tooltip.js";
 import { AgentRef, type AgentSubject } from "./agent-ref.js";
 import { AgentGlyph } from "./tab-look.js";
 import type { TerminalSession } from "./use-terminal-session.js";

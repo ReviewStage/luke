@@ -35,6 +35,7 @@ import {
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
+  Tooltip,
   useDisclosureState,
 } from "@luke/ui";
 import { ACTOR_KIND, ACTOR_STATE, type Actor, actorName } from "@luke/ui/actor-model";
@@ -118,10 +119,8 @@ import {
   type ToolState,
   ToolStateMark,
 } from "../ai-elements/tool.js";
-import { InlineRef as HintedInlineRef } from "../inline-ref.js";
 import { GLYPH_STATE, StateGlyph } from "../state-glyph.js";
 import { TextLink } from "../text-link.js";
-import { Tooltip } from "../tooltip.js";
 import { useInboxPictureDrawer } from "./inbox-pictures.js";
 import { LoneLinkCard } from "./lone-link-card.js";
 import { linkChip } from "./mention-chip.js";
@@ -903,6 +902,7 @@ function AgentCallChip({
         look={INLINE_REF_LOOK.PILL}
         glyph={<ActorMark actor={agent} size={ACTOR_SIZE.INLINE} />}
         label={actorName(agent)}
+        hint={false}
         data-tool-agent-ref=""
       />
     );
@@ -914,7 +914,7 @@ function AgentCallChip({
     opens.onOpen();
   };
   return (
-    <HintedInlineRef
+    <InlineRef
       look={INLINE_REF_LOOK.PILL}
       glyph={<ActorMark actor={agent} size={ACTOR_SIZE.INLINE} />}
       label={actorName(agent)}

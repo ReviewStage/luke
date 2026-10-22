@@ -78,6 +78,7 @@ import {
   DetailPage,
   EllipsisIcon,
   ErrorState,
+  FoldingButton,
   IconButton,
   PAGE_FRAME,
   POPOVER_ALIGN,
@@ -100,6 +101,7 @@ import {
   Text,
   TextArea,
   TextField,
+  Tooltip,
   useConfirmDialog,
   useMenu,
 } from "@luke/ui";
@@ -113,7 +115,6 @@ import { useAppCommand } from "../app-commands.js";
 import { CopyGlyph, copyHint, useCopyFeedback } from "../copy-feedback.js";
 import { useCopyLinkItem } from "../copy-link-item.js";
 import { ExperimentTag, SendFeedbackButton } from "../experiment-marks.js";
-import { FoldingButton } from "../folding-button.js";
 import { useIntegrationStatuses } from "../integration-statuses.js";
 import { useOpenSettings } from "../open-settings.js";
 import { Picker, PickerRow } from "../settings/picker-row.js";
@@ -127,7 +128,6 @@ import { ModelMenu } from "../tasks/model-menu.js";
 import { CHIP_PLACE, RepositoryChip, type RepositoryChooser } from "../tasks/repository-chip.js";
 import { dayAndTimeText, sinceText, useMinute } from "../tasks/task-time.js";
 import type { LeaveAsk, LeaveGuard } from "../tasks/use-tasks-tab.js";
-import { Tooltip } from "../tooltip.js";
 import { useExperiment } from "../use-app-state.js";
 import { ActionMenu, type MenuAction } from "./action-menu.js";
 import { OWNER_MARK_SIZE, OwnerMark } from "./automation-owner.js";

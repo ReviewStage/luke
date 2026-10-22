@@ -8,7 +8,6 @@ import settings from "@luke/panel/styles/settings.css?raw";
 import shell from "@luke/panel/styles/shell.css?raw";
 import shortcut from "@luke/panel/styles/shortcut.css?raw";
 import tasks from "@luke/panel/styles/tasks.css?raw";
-import tooltip from "@luke/panel/styles/tooltip.css?raw";
 import ui from "@luke/ui/styles.css?inline";
 import tokens from "@luke/ui/tokens.css?inline";
 
@@ -53,7 +52,6 @@ const SHEET_BY_IMPORT = {
   "@luke/ui/styles.css": ui,
   "./markdown.css": markdown,
   "./shortcut.css": shortcut,
-  "./tooltip.css": tooltip,
   "./tasks.css": tasks,
   "./shell.css": shell,
   "./desktop.css": desktop,

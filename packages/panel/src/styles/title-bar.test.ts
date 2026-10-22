@@ -23,7 +23,7 @@ afterEach(() => {
 });
 
 /** The panel's sheets that declare a drag region. */
-const DRAG_SHEETS = ["call.css", "shell.css", "desktop.css", "tasks.css", "tooltip.css"];
+const DRAG_SHEETS = ["call.css", "shell.css", "desktop.css", "tasks.css"];
 
 /**
  * Every rule of those sheets that declares a drag region, in order, read from

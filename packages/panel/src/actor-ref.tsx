@@ -18,10 +18,12 @@ import {
   HoverCardNote,
   HoverCardRule,
   INLINE_REF_LOOK,
+  InlineRef,
   SCROLL_SIZE,
   ScrollArea,
   TEXT_BUTTON_LINES,
   TextButton,
+  Tooltip,
   UNASSIGNED_WORDS,
   UnassignedAvatar,
   VisuallyHidden,
@@ -43,13 +45,11 @@ import { BotIcon, ClockIcon, HistoryIcon, UserRoundIcon, UserRoundXIcon } from "
 import { type ReactNode, useEffect } from "react";
 import { automationNextText, automationOwnerName } from "./desktop/automation-words.js";
 import { PERSON_PAGE } from "./desktop/pages-on-demand.js";
-import { InlineRef } from "./inline-ref.js";
 import { useActorDoor } from "./person-door.js";
 import { GLYPH_STATE, type GlyphState, StateGlyph } from "./state-glyph.js";
 import { RelativeTime } from "./tasks/relative-time.js";
 import { AgentMark } from "./tasks/tab-look.js";
 import { useMinute } from "./tasks/task-time.js";
-import { Tooltip } from "./tooltip.js";
 
 /**
  * actor-ref.tsx -- whoever did something, drawn one way wherever the window names them: a person on a circle, and Luke, an agent, or an automation by its glyph in a rounded square's box, on a solid tile in a facepile whose faces overlap.

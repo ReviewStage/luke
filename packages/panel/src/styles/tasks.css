@@ -975,7 +975,7 @@
   }
 
   /* An action whose hover card stands keeps the bar up while the pointer
-     crosses onto the card, off the message (`tooltip.tsx` marks it
+     crosses onto the card, off the message (`@luke/ui`'s `Tooltip` marks it
      described while it does). */
   .message-actions:focus-within,
   .message-actions:has([aria-describedby]) {
@@ -2736,24 +2736,21 @@
   border-radius: var(--luke-radius-full);
 }
 
-.chapter-risk-mark[data-risk="high"],
-.chapter-strip-mark[data-risk="high"] {
+.chapter-risk-mark[data-risk="high"] {
   background: var(--luke-color-danger-text);
 }
 
-.chapter-risk-mark[data-risk="medium"],
-.chapter-strip-mark[data-risk="medium"] {
+.chapter-risk-mark[data-risk="medium"] {
   background: var(--luke-color-attention);
 }
 
-.chapter-risk-mark[data-risk="low"],
-.chapter-strip-mark[data-risk="low"] {
+.chapter-risk-mark[data-risk="low"] {
   background: var(--luke-color-complete);
 }
 
-/* While the rail is hidden, a strip stands in its place, one mark for each
-   chapter in its risk's colour, dimmed once viewed, the chapter shown
-   standing out, as Files changed's strip stands for its tree. */
+/* While the rail is hidden, a strip stands in its place (`MarkStrip`), one
+   mark for each chapter in its risk's colour, as Files changed's strip
+   stands for its tree; this box says when it is drawn and its edge. */
 .chapter-strip {
   display: none;
 }
@@ -2762,29 +2759,7 @@
   display: flex;
   width: var(--luke-space-12);
   flex: none;
-  flex-direction: column;
-  align-items: center;
-  gap: var(--luke-space-4);
-  padding-block: var(--luke-space-12);
   border-right: 1px solid var(--luke-color-border);
-  cursor: pointer;
-}
-
-.chapter-strip-mark {
-  width: var(--luke-space-6);
-  height: var(--luke-space-6);
-  flex: none;
-  border-radius: var(--luke-radius-full);
-  background: var(--luke-color-border-strong);
-}
-
-.chapter-strip-mark[data-viewed] {
-  opacity: 0.35;
-}
-
-.chapter-strip-mark[data-current] {
-  opacity: 1;
-  box-shadow: 0 0 0 1px var(--luke-color-text);
 }
 
 .chapter-rail-toggle {
@@ -2977,12 +2952,7 @@
     display: flex;
     width: var(--luke-space-12);
     flex: none;
-    flex-direction: column;
-    align-items: center;
-    gap: var(--luke-space-4);
-    padding-block: var(--luke-space-12);
     border-right: 1px solid var(--luke-color-border);
-    cursor: pointer;
   }
 
   .chapter-rail-toggle[data-place="beside"] {
@@ -5786,24 +5756,6 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
   opacity: 0.6;
 }
 
-/* A chosen skill's pill in the composer (`skill-picker.tsx`): a word of the
-   editor's, which a press opens the skill's file from where the skill is
-   known. */
-.skill-chip {
-  border-radius: var(--luke-radius-6);
-  background: var(--luke-color-fill-strong);
-  box-shadow: 0 0 0 2px var(--luke-color-fill-strong);
-}
-
-.skill-chip[data-opens] {
-  cursor: pointer;
-}
-
-.skill-chip[data-opens]:hover {
-  background: var(--luke-color-fill-selected);
-  box-shadow: 0 0 0 2px var(--luke-color-fill-selected);
-}
-
 /* The list a `/` opens: a searchable menu whose field is the composer,
    standing over the caret's line at the left the line put it, inside the
    box. Named with the menu's own class, since the menu's rule opens it
@@ -6559,7 +6511,7 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
 
 /* The action's key, after its words, in the action's own ink. */
 .terminal-bar-key {
-  --shortcut-ink: currentColor;
+  --luke-shortcut-ink: currentColor;
   margin-inline-start: var(--luke-space-4);
 }
 

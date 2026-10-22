@@ -25,6 +25,7 @@ import {
   TEXT_VARIANT,
   Text,
   TextButton,
+  Tooltip,
 } from "@luke/ui";
 import {
   CheckIcon,
@@ -51,7 +52,6 @@ import {
   FILE_NOTE_LINE,
 } from "../diff-view/contract.js";
 import { SpinnerRegion } from "../spinner.js";
-import { Tooltip } from "../tooltip.js";
 import {
   type ChangesList,
   FileHead,

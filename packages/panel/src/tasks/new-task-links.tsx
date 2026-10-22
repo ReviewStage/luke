@@ -15,10 +15,10 @@ import {
   IconButton,
   PROVIDER_MARK_SIZE,
   ProviderMark,
+  Tooltip,
 } from "@luke/ui";
 import { CircleDotIcon } from "lucide-react";
 import { FadingWords } from "../fading-words.js";
-import { Tooltip } from "../tooltip.js";
 import { RELATION_DETAIL } from "./task-issue-links-model.js";
 
 /**

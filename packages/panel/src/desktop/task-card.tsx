@@ -25,6 +25,7 @@ import { useCreator, useMemberDirectory } from "../member-directory.js";
 import { useActorDoor } from "../person-door.js";
 import { RepositoryPicture } from "../repository-picture.js";
 import { GLYPH_STATE, StateGlyph } from "../state-glyph.js";
+import { WorkspaceDirectory } from "../tasks/chip-cards.js";
 import { agentTabLabel, pullRequestNumberLabel } from "../tasks/coding-agent-model.js";
 import { PullRequestMark } from "../tasks/pull-request-mark.js";
 import { RelativeTime } from "../tasks/relative-time.js";
@@ -440,5 +441,25 @@ export function taskCardOf(
       onOpenGitHub={tasks.repositories.openGitHub}
       onShowAgent={(agentId) => tasks.onShowAgent(task.id, agentId)}
     />
+  );
+}
+
+/**
+ * The task's card as a place standing in any workspace hangs it, a chip or
+ * a ⌘K row: `taskCardOf`'s, naming its creator as the task's own workspace
+ * holds them, whatever workspace the place stands in.
+ */
+export function homeTaskCardOf(
+  tasks: Parameters<typeof taskCardOf>[0],
+  task: TaskSummary,
+  now: number,
+  focus?: React.ComponentProps<typeof TaskCard>["focus"],
+): React.JSX.Element {
+  const home = tasks.workspaces.find((each) => each.id === task.workspaceId);
+  const card = taskCardOf(tasks, task, now, focus);
+  return home === undefined ? (
+    card
+  ) : (
+    <WorkspaceDirectory workspace={home}>{card}</WorkspaceDirectory>
   );
 }

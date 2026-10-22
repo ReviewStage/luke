@@ -19,12 +19,12 @@ import {
   ProviderMark,
   TEXT_BUTTON_TONE,
   TextButton,
+  Tooltip,
   useMenu,
 } from "@luke/ui";
 import { CircleDotIcon } from "lucide-react";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu.js";
 import { PICKER_ALIGN } from "../settings/picker-row.js";
-import { Tooltip } from "../tooltip.js";
 import { IssueMark } from "./issue-mark.js";
 import { IssuePickerChip } from "./issue-picker-chip.js";
 import { linksFull, RELATION_DETAIL, standingWords } from "./task-issue-links-model.js";

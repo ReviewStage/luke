@@ -28,6 +28,7 @@ import {
   McpIcon,
   POPOVER_ALIGN,
   POPOVER_PANEL_LOOK,
+  PopoverPanel,
   PROVIDER_MARK_SIZE,
   ProviderMark,
   SCROLL_SIZE,
@@ -40,6 +41,7 @@ import {
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
+  Tooltip,
 } from "@luke/ui";
 import {
   namedServers,
@@ -77,9 +79,7 @@ import {
   keepInView,
 } from "../integration-tool-list.js";
 import { useIntegrationTools } from "../integration-tools.js";
-import { PopoverPanel } from "../popover-panel.js";
 import { Highlighted } from "../search-field.js";
-import { Tooltip } from "../tooltip.js";
 
 /**
  * agent-servers.tsx -- the MCP button at an agent box's foot, and the popover that lists the servers the agent is handed with a switch for each, and each server's tools.

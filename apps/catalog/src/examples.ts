@@ -41,6 +41,7 @@ import { ONE_LINE_EXAMPLE } from "./examples/one-line";
 import { PAGINATION_EXAMPLE } from "./examples/pagination";
 import { PICTURE_TILES_EXAMPLE } from "./examples/picture-tiles";
 import { POPOVER_PANELS_EXAMPLE } from "./examples/popover-panels";
+import { PRESS_SHORTCUTS_EXAMPLE } from "./examples/press-shortcuts";
 import { PROGRESS_EXAMPLE } from "./examples/progress";
 import { PROSE_EXAMPLE } from "./examples/prose";
 import { PROVIDER_BUTTONS_EXAMPLE } from "./examples/provider-buttons";
@@ -51,6 +52,7 @@ import { SELECT_EXAMPLE } from "./examples/select";
 import { SETTINGS_PAGE_EXAMPLE } from "./examples/settings-page";
 import { SETTINGS_ROW_EXAMPLE } from "./examples/settings-row";
 import { SETTINGS_SECTION_EXAMPLE } from "./examples/settings-section";
+import { SHORTCUTS_EXAMPLE } from "./examples/shortcuts";
 import { SKELETONS_EXAMPLE } from "./examples/skeletons";
 import { SLIDER_EXAMPLE } from "./examples/slider";
 import { SPINNERS_EXAMPLE } from "./examples/spinners";
@@ -119,6 +121,7 @@ export const EXAMPLES: readonly Example[] = [
   TEXT_LINKS_EXAMPLE,
   LINE_BUTTONS_EXAMPLE,
   TOOLTIPS_EXAMPLE,
+  SHORTCUTS_EXAMPLE,
   CHECKBOXES_EXAMPLE,
   SWITCHES_EXAMPLE,
   TABS_EXAMPLE,
@@ -130,6 +133,7 @@ export const EXAMPLES: readonly Example[] = [
   PAGINATION_EXAMPLE,
   PICTURE_TILES_EXAMPLE,
   POPOVER_PANELS_EXAMPLE,
+  PRESS_SHORTCUTS_EXAMPLE,
   PROGRESS_EXAMPLE,
   PROSE_EXAMPLE,
   PROVIDER_BUTTONS_EXAMPLE,

@@ -4,8 +4,8 @@ import {
   Menu,
   type MenuAction as SharedMenuAction,
   type MenuEntry as SharedMenuEntry,
+  Shortcut,
 } from "@luke/ui";
-import { Shortcut } from "../shortcut.js";
 
 /**
  * action-menu.tsx -- the window's own drop-down menu: a task's actions, a repository's, a side panel tab's, and the account's.

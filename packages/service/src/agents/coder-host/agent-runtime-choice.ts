@@ -134,7 +134,7 @@ const onPlanOf = (provider: string): AgentRuntimeChoice =>
   provider === MODEL_PROVIDER.ANTHROPIC ? ON_CLAUDE_CODE : ON_CODEX;
 
 /** Whether the account saved its own API key for the provider, which pays for its agents on eve. */
-export const keepsApiKey = (
+const keepsApiKey = (
   userId: string,
   provider: ModelProvider,
 ): Effect.Effect<boolean, StoreFailure, DatabaseServices> =>
@@ -143,7 +143,7 @@ export const keepsApiKey = (
   );
 
 /** eve on the account's own API key for the provider, or refused by name where it saved none, since Luke's key pays for no coding agent. */
-export const onApiKey = Effect.fnUntraced(function* (
+const onApiKey = Effect.fnUntraced(function* (
   userId: string,
   provider: ModelProvider,
 ): Effect.fn.Return<AgentRuntimeChoice, StoreFailure | AgentCredentialMissing, DatabaseServices> {
@@ -154,7 +154,7 @@ export const onApiKey = Effect.fnUntraced(function* (
 });
 
 /** The provider of a model the catalog offers; every model a Start accepted has one, so none is a defect. */
-export const providerOfModel = (model: string): Effect.Effect<ModelProvider> => {
+const providerOfModel = (model: string): Effect.Effect<ModelProvider> => {
   const named = providerModelOf(model);
   return named === undefined
     ? Effect.die(new Error(`no provider for the model ${model}`))

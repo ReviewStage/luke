@@ -19,7 +19,10 @@ import {
   MarkDoneIcon,
   PinIcon,
   ProviderMark,
+  RowHint,
+  RowHintOptions,
   TaskStatusMark as TaskStandingMark,
+  Tooltip,
   TrashIcon,
   UnpinIcon,
   useConfirmDialog,
@@ -68,7 +71,6 @@ import { useMinute } from "../tasks/task-time.js";
 import { useReadMarks } from "../tasks/use-task-looks.js";
 import { useTaskOrigin } from "../tasks/use-task-origin.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
-import { RowHint, RowHintOptions, Tooltip } from "../tooltip.js";
 import { APP_SLICE, useAppSlice } from "../use-app-state.js";
 import { ActionMenu, type MenuAction, type MenuEntry } from "./action-menu.js";
 import { strandedHome, useMoveTaskDialog } from "./move-task-dialog.js";

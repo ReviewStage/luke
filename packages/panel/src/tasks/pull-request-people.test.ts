@@ -13,6 +13,7 @@ import {
 } from "@luke/features/coding-agent-wire";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
+import { Tooltip } from "@luke/ui";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -23,7 +24,6 @@ import { ChangesTabReading } from "../testing/changes-tab.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
 import { codingAgentsControl } from "../testing/tasks-control.js";
-import { Tooltip } from "../tooltip.js";
 import { agentSubject, NOTHING_HELD } from "./agent-ref.js";
 import { ChangesCard, peopleOf } from "./changes-card.js";
 

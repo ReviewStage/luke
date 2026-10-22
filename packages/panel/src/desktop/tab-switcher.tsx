@@ -53,7 +53,7 @@ import {
   SHORTCUT_KEY,
   type ShortcutChord,
 } from "@luke/settings/shortcuts";
-import { TabCard, TabCards } from "@luke/ui";
+import { Shortcut, TabCard, TabCards } from "@luke/ui";
 import {
   isAgentTab,
   isBrowserTab,
@@ -85,7 +85,6 @@ import { stepTitle } from "../history-titles.js";
 import type { StepTitle } from "../navigation-history.js";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs.js";
 import { rendererRuntime } from "../renderer-runtime.js";
-import { Shortcut } from "../shortcut.js";
 import { tasklessRowSubject } from "../tasks/agent-ref.js";
 import { type KindLook, PlanGlyph, TAB_KIND, tabLook } from "../tasks/tab-look.js";
 import type { MainTab } from "../tasks/use-main-tabs.js";

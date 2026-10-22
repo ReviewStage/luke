@@ -13,7 +13,7 @@
 
 import { ACT_KIND } from "@luke/host/acts";
 import { EXPERIMENT } from "@luke/settings";
-import { IconButton, ReturnIcon } from "@luke/ui";
+import { IconButton, ReturnIcon, Tooltip } from "@luke/ui";
 import { type CallCardModel, callCardVideoStatus } from "@luke/ui/call-card-model";
 import { useClipped } from "@luke/ui/use-clipped";
 import { AVATAR_STATUS, type AvatarStatus } from "@luke/voice/avatar";
@@ -29,7 +29,6 @@ import {
 } from "react";
 import type { ActHandle } from "../act.js";
 import { CALL_CONTROL_LABEL, CallBar } from "../tasks/tasks-parts.js";
-import { Tooltip } from "../tooltip.js";
 import { useExperiment } from "../use-app-state.js";
 import { useStandingVoiceView, useVoiceAvatar } from "../use-voice-view.js";
 import { CallVideoTile, VideoToggle } from "./call-video-tile.js";

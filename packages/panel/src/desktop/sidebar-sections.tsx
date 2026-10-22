@@ -18,6 +18,7 @@ import {
   NoteLine,
   PencilIcon,
   TextField,
+  Tooltip,
   TrashIcon,
   useConfirmDialog,
   useMenu,
@@ -41,7 +42,6 @@ import { FolderOutputIcon, LayersIcon, MailOpenIcon } from "lucide-react";
 import { useRef, useState } from "react";
 import { useReadMarks } from "../tasks/use-task-looks.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
-import { Tooltip } from "../tooltip.js";
 import { ActionMenu, type MenuAction, type MenuEntry } from "./action-menu.js";
 import { type RowPlace, RowPlaced, withRowMoves } from "./row-moves.js";
 import { SectionIconPicker, sectionGlyph } from "./section-icon-picker.js";

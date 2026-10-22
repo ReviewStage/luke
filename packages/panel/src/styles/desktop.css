@@ -4158,7 +4158,7 @@ ul.actor-stack {
    traffic lights their room or not as the sidebar folds, so the window's
    width says nothing of the room the crumbs have. Too narrow for every
    act's words beside a readable name, the acts fold to their glyphs, each
-   named by its pill (`folding-button.tsx`, folded by `--luke-fold`), and the draft's state goes,
+   named by its pill (`@luke/ui`'s `FoldingButton`, folded by `--luke-fold`), and the draft's state goes,
    since Save, pressable or not, says it already; the crumb back folds to
    its glyph alike, so the name it leads to keeps the room. */
 .automation-toolbar {
@@ -6128,8 +6128,8 @@ ul.actor-stack {
   gap: 0.04em;
 }
 
-.command-palette-footer .shortcut {
-  --shortcut-ink: var(--luke-color-text-muted);
+.command-palette-footer {
+  --luke-shortcut-ink: var(--luke-color-text-muted);
 }
 
 /* Under a finger the foot's keys are none to press, so it is not drawn. */
@@ -6274,8 +6274,8 @@ ul.actor-stack {
   gap: var(--luke-space-4);
 }
 
-.tab-switcher-footer .shortcut {
-  --shortcut-ink: var(--luke-color-text-muted);
+.tab-switcher-footer {
+  --luke-shortcut-ink: var(--luke-color-text-muted);
 }
 
 @keyframes tab-switcher-rise {
@@ -6303,7 +6303,7 @@ ul.actor-stack {
   max-width: 50cqi;
 }
 
-/* The split button's box, which hears its presses as they pass. */
+/* The split button's box. */
 .start-agent-split {
   display: flex;
 }
@@ -6359,7 +6359,7 @@ ul.actor-stack {
    page's New task) a glyph's gap after its word, muted against the button's
    own fill rather than the ground around it. */
 .button-chord {
-  --shortcut-ink: var(--luke-color-on-accent-muted);
+  --luke-shortcut-ink: var(--luke-color-on-accent-muted);
   margin-inline-start: var(--luke-icon-gap);
 }
 

@@ -1,8 +1,14 @@
 import { searchAnchorProps } from "@luke/settings/settings-anchors";
-import { EllipsisIcon, IconButton, SettingsRow, type SettingsRowControl, useMenu } from "@luke/ui";
+import {
+  EllipsisIcon,
+  IconButton,
+  SettingsRow,
+  type SettingsRowControl,
+  Tooltip,
+  useMenu,
+} from "@luke/ui";
 import { type ReactNode, useRef } from "react";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu.js";
-import { Tooltip } from "../tooltip.js";
 
 /**
  * menu-row.tsx -- a Settings row with actions of its own: a stored key, a connected service, a changeable shortcut.

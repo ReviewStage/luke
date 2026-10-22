@@ -1,8 +1,6 @@
 import type { CodingAgentBrief, CodingAgentContext } from "@luke/features/coding-agent-wire";
-import { AnchoredPopover, IconButton, POPOVER_ALIGN } from "@luke/ui";
+import { AnchoredPopover, IconButton, POPOVER_ALIGN, PopoverPanel, Tooltip } from "@luke/ui";
 import { useId, useRef, useState } from "react";
-import { PopoverPanel } from "../popover-panel.js";
-import { Tooltip } from "../tooltip.js";
 import {
   contextFullLine,
   contextHint,

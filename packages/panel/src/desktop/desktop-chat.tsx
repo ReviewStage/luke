@@ -24,8 +24,11 @@ import {
   ListRow,
   PencilIcon,
   PlusIcon,
+  RowHint,
+  RowHintOptions,
   SCROLL_FADE,
   ScrollArea,
+  Tooltip,
   UnarchiveIcon,
   useMenu,
   VisuallyHidden,
@@ -78,7 +81,6 @@ import { useMinute } from "../tasks/task-time.js";
 import { useTaskStatus } from "../tasks/use-known-names.js";
 import { useOpenLink, useOpenTask } from "../tasks/use-open-link.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
-import { RowHint, RowHintOptions, Tooltip } from "../tooltip.js";
 import { ActionMenu, type MenuAction } from "./action-menu.js";
 import { type ChannelDialogs, useChannelDialogs } from "./chat-channel-dialogs.js";
 import { previewWords } from "./chat-preview.js";

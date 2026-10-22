@@ -8,6 +8,7 @@ import {
   COLLECTION_STATE,
   CollectionPage,
   ComposeIcon,
+  commandKeyshortcuts,
   DetailPage,
   IconButton,
   NavItem,
@@ -15,8 +16,10 @@ import {
   ScrollArea,
   SettingsPage,
   SettingsSectionsSkeleton,
+  Shortcut,
   SidebarIcon,
   Skeleton,
+  Tooltip,
 } from "@luke/ui";
 import { isAgentTab } from "@luke/ui/tab-strip-model";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
@@ -30,10 +33,9 @@ import type { NavigationHistory, WindowHistory } from "../navigation-history.js"
 import { PANEL_TAB, type PanelTab } from "../panel-tabs.js";
 import type { SettingsPanelProps } from "../settings/settings-panel.js";
 import { type HiddenColumns, hiddenColumns, SHELL_ROOM, type ShellRoom } from "../shell-room.js";
-import { Shortcut } from "../shortcut.js";
 import { SignInGate } from "../sign-in-gate.js";
 import { useChatOn } from "../tasks/chat-gate.js";
-import { ChipCards, type TaskFocus, WorkspaceDirectory } from "../tasks/chip-cards.js";
+import { ChipCards, type TaskFocus } from "../tasks/chip-cards.js";
 import { MentionedAgents } from "../tasks/mentioned-agent-card.js";
 import { NewTaskDialog } from "../tasks/new-task-dialog.js";
 import { useInboxListing } from "../tasks/use-inbox-listing.js";
@@ -43,7 +45,6 @@ import {
   type AutomationsPlace,
   type TasksControl,
 } from "../tasks/use-tasks-tab.js";
-import { commandKeyshortcuts, Tooltip } from "../tooltip.js";
 import {
   useAdminAccess,
   useAdminAccessPending,
@@ -68,7 +69,7 @@ import { ADMIN_PLACE, PERSON_PAGE, VERSION_HISTORY } from "./pages-on-demand.js"
 import { PaneGlide } from "./pane-motion.js";
 import { SidePanelToggle } from "./side-panel.js";
 import { SIDEBAR_OVERLAY, type SidebarCollapse, sidebarInSight } from "./sidebar-collapse.js";
-import { taskCardOf } from "./task-card.js";
+import { homeTaskCardOf } from "./task-card.js";
 import { useSummaryPin } from "./task-summary.js";
 import { useWindowTitle } from "./window-title.js";
 
@@ -641,15 +642,7 @@ export function DesktopShell({
     () => ({
       taskCard: (taskId: string, now: number, focus: TaskFocus | undefined) => {
         const task = tasks.tasks.find((each) => each.id === taskId);
-        if (task === undefined) return undefined;
-        // Note that the card names its creator as the task's own workspace holds them, whatever workspace the chip stands in.
-        const home = tasks.workspaces.find((each) => each.id === task.workspaceId);
-        const card = taskCardOf(tasks, task, now, focus);
-        return home === undefined ? (
-          card
-        ) : (
-          <WorkspaceDirectory workspace={home}>{card}</WorkspaceDirectory>
-        );
+        return task === undefined ? undefined : homeTaskCardOf(tasks, task, now, focus);
       },
     }),
     [tasks],

@@ -11,6 +11,7 @@ import {
   TEXT_VARIANT,
   Text,
   TextButton,
+  Tooltip,
   useMenu,
 } from "@luke/ui";
 import {
@@ -71,8 +72,8 @@ import {
 import type { ReactNode } from "react";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref.js";
 import { useMemberDirectory } from "../member-directory.js";
+import { RepositoryPicture } from "../repository-picture.js";
 import { TASK_PRIORITY_WORDS, TASK_STATUS_WORDS } from "../tasks/task-standing.js";
-import { Tooltip } from "../tooltip.js";
 import { ActionMenu, type MenuAction, type MenuEntry } from "./action-menu.js";
 
 /**
@@ -80,7 +81,8 @@ import { ActionMenu, type MenuAction, type MenuEntry } from "./action-menu.js";
  *
  * Filter drops a submenu for each field a task can be narrowed by, Status,
  * Priority, Creator in a shared workspace, and Repository, each value led by
- * its mark and checked while the filter keeps it; a value toggles where it
+ * its mark, a repository by its owner's picture as the List's rows lead it,
+ * and checked while the filter keeps it; a value toggles where it
  * stands and leaves the menu open, so several are chosen in one visit, as
  * Linear's and Stage's filters are. While the filter keeps anything the
  * button wears the sidebar's dot, and a chip under the toolbar says each
@@ -247,14 +249,16 @@ export function creatorWords(
 /**
  * The values a field offers: every status and priority, in their order; the
  * reader, then each member, then anyone else a task names, and nobody where
- * a task names no one; and each repository a task is on, by name, then none.
- * A value the filter keeps is offered though no task holds it now.
+ * a task names no one; and each repository a task is on, by name, led by its
+ * owner's picture, then none. A value the filter keeps is offered though no
+ * task holds it now.
  */
 function fieldValues(
   field: TasksFilterField,
   tasks: readonly TaskSummary[],
   filter: TasksFilter,
   reader: ReturnType<typeof useMemberDirectory>,
+  pictures: boolean,
 ): readonly FieldValue[] {
   const held = new Set<string | null>([
     ...valueCounts(tasks, field).keys(),
@@ -310,7 +314,13 @@ function fieldValues(
           .map((repository) => ({
             value: repository,
             words: repositoryName(repository),
-            icon: <FolderGitIcon />,
+            icon: (
+              <RepositoryPicture
+                repository={repository}
+                pictures={pictures}
+                fallback={<FolderGitIcon />}
+              />
+            ),
           })),
         ...(held.has(null) ? [{ value: null, words: NO_REPOSITORY, icon: <FolderXIcon /> }] : []),
       ];
@@ -331,13 +341,14 @@ function filterEntries(
   onFilter: (filter: TasksFilter) => void,
   shared: boolean,
   reader: ReturnType<typeof useMemberDirectory>,
+  pictures: boolean,
 ): MenuEntry[][] {
   const fields: MenuEntry[] = offeredFields(shared).map((field) => {
     const kept = filterValues(filter, field);
     return {
       label: FIELD_WORDS[field],
       icon: FIELD_ICON[field],
-      items: fieldValues(field, tasks, filter, reader).map(
+      items: fieldValues(field, tasks, filter, reader, pictures).map(
         ({ value, words, icon }): MenuAction => ({
           label: words,
           icon,
@@ -368,6 +379,7 @@ export function TasksFilterButton({
   filter,
   onFilter,
   shared,
+  pictures,
 }: {
   /** Whether the page is on screen, for the menu not to outlive it. */
   shown: boolean;
@@ -377,6 +389,8 @@ export function TasksFilterButton({
   onFilter: (filter: TasksFilter) => void;
   /** Whether the workspace is shared, which alone filters by creator. */
   shared: boolean;
+  /** Whether repositories' owners' pictures are drawn at all: not in a fixture run. */
+  pictures: boolean;
 }): React.JSX.Element {
   const menu = useMenu(shown);
   const reader = useMemberDirectory();
@@ -397,7 +411,7 @@ export function TasksFilterButton({
         <ActionMenu
           label={FILTER}
           menu={menu.drawn}
-          groups={filterEntries(tasks, filter, onFilter, shared, reader)}
+          groups={filterEntries(tasks, filter, onFilter, shared, reader, pictures)}
           onClose={menu.close}
         />
       )}
@@ -428,9 +442,9 @@ export function TasksFilterChips({
   return (
     <>
       {fields.map((field) => {
-        // Note that a chip names its values in the menu's order, whatever order they were chosen in.
+        // Note that a chip names its values in the menu's order, whatever order they were chosen in, and draws none of their marks.
         const kept = filterValues(filter, field);
-        const words = fieldValues(field, tasks, filter, reader)
+        const words = fieldValues(field, tasks, filter, reader, false)
           .filter((each) => kept.includes(each.value))
           .map((each) => each.words);
         return (

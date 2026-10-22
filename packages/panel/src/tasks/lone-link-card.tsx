@@ -11,10 +11,9 @@ import {
   mentionName,
 } from "@luke/features/mention-link";
 import { placeChipLook } from "@luke/features/place-chip-model";
-import { LIST_VARIANT, List, ListRow, ProviderMark } from "@luke/ui";
+import { LIST_VARIANT, List, ListRow, ProviderMark, RowHint, RowHintOptions } from "@luke/ui";
 import { AppWindowIcon } from "lucide-react";
 import { createContext, type ReactNode, useContext } from "react";
-import { RowHint, RowHintOptions } from "../tooltip.js";
 import { LinesChanged } from "./agent-published.js";
 import { pullRequestStateWord } from "./coding-agent-model.js";
 import { InboxCodeCard, type InboxCodeDoors } from "./inbox-code-card.js";

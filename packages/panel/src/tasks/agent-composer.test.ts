@@ -388,7 +388,7 @@ test("a / opens the repository's skills over the caret, the keys move through th
   assert.equal(box.sent.length, 0, "the Enter picked rather than sent");
   assert.equal(box.container.querySelector('[role="listbox"]'), null);
   assert.equal(
-    box.container.querySelector(".agent-composer-input .skill-chip")?.textContent,
+    box.container.querySelector(".agent-composer-input .luke-skill-chip")?.textContent,
     "/deploy",
   );
   typeInComposer(box.container, "now");

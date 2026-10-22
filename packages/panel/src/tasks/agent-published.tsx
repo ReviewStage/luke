@@ -14,12 +14,14 @@ import {
   List,
   ListRow,
   ProviderMark,
+  RowHint,
+  RowHintOptions,
+  Tooltip,
   useMenu,
 } from "@luke/ui";
 import { GitBranchIcon, TerminalIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu.js";
-import { RowHint, RowHintOptions, Tooltip } from "../tooltip.js";
 import {
   checkoutCommand,
   publishedUrl,

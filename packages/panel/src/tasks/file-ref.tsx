@@ -6,9 +6,9 @@ import {
   HoverCardNote,
   INLINE_REF_LOOK,
   INLINE_REF_NAME,
+  InlineRef,
 } from "@luke/ui";
 import { fileFolder, fileName, fileRefText, lineRangeText } from "@luke/voice/code-pane-model";
-import { InlineRef } from "../inline-ref.js";
 import { shownWhereRead } from "./file-tab-model.js";
 import { FileTypeIcon } from "./file-type-icon.js";
 

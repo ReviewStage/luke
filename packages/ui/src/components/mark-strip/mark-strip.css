@@ -1,0 +1,44 @@
+/* mark-strip.css -- a hidden rail's strip: a column of dots, one for each
+   row, filling the box its place stands it in. */
+
+@layer components {
+  .luke-mark-strip {
+    display: flex;
+    min-width: 0;
+    flex: 1;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--luke-space-4);
+    padding-block: var(--luke-space-12);
+    cursor: pointer;
+  }
+
+  .luke-mark-strip-mark {
+    width: var(--luke-space-6);
+    height: var(--luke-space-6);
+    flex: none;
+    border-radius: var(--luke-radius-full);
+    background: var(--luke-color-border-strong);
+  }
+
+  .luke-mark-strip-mark[data-tone="danger"] {
+    background: var(--luke-color-danger-text);
+  }
+
+  .luke-mark-strip-mark[data-tone="attention"] {
+    background: var(--luke-color-attention);
+  }
+
+  .luke-mark-strip-mark[data-tone="complete"] {
+    background: var(--luke-color-complete);
+  }
+
+  .luke-mark-strip-mark[data-viewed] {
+    opacity: 0.35;
+  }
+
+  .luke-mark-strip-mark[data-current] {
+    opacity: 1;
+    box-shadow: 0 0 0 1px var(--luke-color-text);
+  }
+}

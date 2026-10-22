@@ -26,6 +26,7 @@ import {
   HoverCardHead,
   HoverCardNote,
   IconButton,
+  MarkStrip,
   NAV_CURRENT,
   NavItem,
   SCROLL_SIZE,
@@ -38,6 +39,7 @@ import {
   TEXT_VARIANT,
   Text,
   TextButton,
+  Tooltip,
 } from "@luke/ui";
 import {
   ArrowLeftIcon,
@@ -52,7 +54,6 @@ import {
 import { type ReactNode, useId, useMemo, useRef, useState } from "react";
 import { PANE_EDGE, usePaneSlide } from "../desktop/pane-motion.js";
 import { SpinnerRegion } from "../spinner.js";
-import { Tooltip } from "../tooltip.js";
 import {
   AgentChangesTab,
   type ChangesReads,
@@ -419,7 +420,7 @@ function ChapterRail({
   );
 }
 
-/** The strip the rail leaves in its place while hidden: a mark for each chapter in its risk's colour, dimmed once viewed, the one shown standing out; a press shows the rail. A picture of the rail, hidden from assistive technology, which reaches the rail through its toggle. */
+/** The strip the rail leaves in its place while hidden: a mark for each chapter in its risk's colour, dimmed once viewed, the one shown standing out; a press shows the rail (`MarkStrip`). Its box is the stylesheet's to draw only while the rail is hidden. */
 function ChapterStrip({
   rows,
   at,
@@ -432,16 +433,15 @@ function ChapterStrip({
   onOpen: () => void;
 }): React.JSX.Element {
   return (
-    <div className="chapter-strip" aria-hidden="true" onClick={onOpen}>
-      {rows.map((row, index) => (
-        <span
-          key={index}
-          className="chapter-strip-mark"
-          data-risk={row.chapter.risk ?? undefined}
-          data-viewed={viewed(row.paths) ? "" : undefined}
-          data-current={index === at ? "" : undefined}
-        />
-      ))}
+    <div className="chapter-strip">
+      <MarkStrip
+        marks={rows.map((row, index) => ({
+          tone: row.chapter.risk ? RISK_TONES[row.chapter.risk] : undefined,
+          viewed: viewed(row.paths),
+          current: index === at,
+        }))}
+        onPress={onOpen}
+      />
     </div>
   );
 }

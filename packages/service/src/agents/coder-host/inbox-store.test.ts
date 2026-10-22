@@ -1758,3 +1758,135 @@ it.layer(getTestDB())("the inbox store's operator, private to its member", (it) 
       }),
   );
 });
+
+it.layer(getTestDB())("who an inbox item waits on", (it) => {
+  /** A plan's inbox as the desktop builds it from the live rows. */
+  const liveTaskInbox = (readerId: string, taskId: string) =>
+    Effect.gen(function* () {
+      const statements = Option.getOrThrow(taskInboxLiveStatements(readerId, taskId));
+      const sql = yield* SqlClient.SqlClient;
+      const rows = yield* Effect.all({
+        items: sql.unsafe(statements.items.sql, [...statements.items.params]),
+        messages: sql.unsafe(statements.messages.sql, [...statements.messages.params]),
+        files: sql.unsafe(statements.files.sql, [...statements.files.params]),
+      });
+      return inboxOfLiveRows(yield* Schema.decodeUnknownEffect(scopeInboxLiveRowsSchema)(rows));
+    });
+
+  it.effect(
+    "an item on a task waits on the task's assignee, else on its agent's starter, and moves with the assignee, alike in a plan's read, the account's, its To do count, its cursor, and the live reads",
+    () =>
+      Effect.gen(function* () {
+        const { agent, workspaceId } = yield* openAgentIn;
+        const owner = agent.userId;
+        const taskId = agent.taskId ?? "";
+        const teammate = yield* openUser;
+        yield* joinWorkspace(workspaceId, teammate);
+        yield* updateTask(owner, taskId, { assigneeId: null });
+        const itemId = yield* postedId(agent, "assigned");
+        const standing = Effect.gen(function* () {
+          const [item] = yield* taskInboxItems(teammate, taskId);
+          const account = yield* accountInboxPast(teammate, INBOX_CURSOR_START);
+          const toDoOf = (tasks: readonly AccountInboxTask[]) =>
+            tasks.find((each) => each.planId === taskId)?.toDo;
+          assert.deepEqual(yield* liveTaskInbox(teammate, taskId), [item]);
+          const live = yield* liveAnswerOf(teammate, account.readAt);
+          assert.deepEqual({ ...live, cursor: account.cursor }, account);
+          return {
+            waitsOn: item?.waitsOn?.userId,
+            startedBy: item?.startedBy?.userId,
+            accountWaitsOn: account.items.find((each) => each.id === itemId)?.waitsOn,
+            toDo: {
+              owner: toDoOf(yield* accountInboxTasks(owner)),
+              teammate: toDoOf(account.plans),
+            },
+            cursors: {
+              task: (yield* taskInboxPast(teammate, taskId, INBOX_CURSOR_START)).cursor,
+              account: account.cursor,
+            },
+          };
+        });
+
+        const unassigned = yield* standing;
+        yield* updateTask(owner, taskId, { assigneeId: teammate });
+        const toTeammate = yield* standing;
+        yield* updateTask(owner, taskId, { assigneeId: owner });
+        const toOwner = yield* standing;
+
+        assert.deepEqual(
+          [unassigned, toTeammate, toOwner].map(({ waitsOn, startedBy, accountWaitsOn, toDo }) => ({
+            waitsOn,
+            startedBy,
+            accountWaitsOn,
+            toDo,
+          })),
+          [
+            {
+              waitsOn: owner,
+              startedBy: owner,
+              accountWaitsOn: owner,
+              toDo: { owner: 1, teammate: 0 },
+            },
+            {
+              waitsOn: teammate,
+              startedBy: owner,
+              accountWaitsOn: teammate,
+              toDo: { owner: 0, teammate: 1 },
+            },
+            {
+              waitsOn: owner,
+              startedBy: owner,
+              accountWaitsOn: owner,
+              toDo: { owner: 1, teammate: 0 },
+            },
+          ],
+        );
+        assert.notEqual(toTeammate.cursors.task, unassigned.cursors.task);
+        assert.notEqual(toTeammate.cursors.account, unassigned.cursors.account);
+        assert.deepEqual(
+          (yield* accountWaitingStamps(teammate)).map((stamp) => stamp.waitsOn),
+          [owner],
+        );
+      }),
+  );
+
+  it.effect(
+    "a settled item still unread is counted in the account's read of whoever its task is assigned to, else of its agent's starter",
+    () =>
+      Effect.gen(function* () {
+        const { agent, workspaceId } = yield* openAgentIn;
+        const owner = agent.userId;
+        const taskId = agent.taskId ?? "";
+        const teammate = yield* openUser;
+        yield* joinWorkspace(workspaceId, teammate);
+        yield* updateTask(owner, taskId, { assigneeId: null });
+        const itemId = yield* postedId(agent, "settled");
+        // The owner's answer leaves it read for them and unread for the teammate.
+        assert.ok(Option.isSome(yield* answerInboxItem(owner, itemId, 1, DONE, randomUUID())));
+        const counted = (readerId: string) =>
+          Effect.map(accountWaitingStamps(readerId), (stamps) =>
+            stamps.some((stamp) => stamp.id === itemId),
+          );
+
+        const unassigned = yield* counted(teammate);
+        yield* updateTask(owner, taskId, { assigneeId: teammate });
+        const assigned = yield* counted(teammate);
+        yield* updateTask(owner, taskId, { assigneeId: owner });
+        const reassigned = yield* counted(teammate);
+
+        assert.deepEqual([unassigned, assigned, reassigned], [false, true, false]);
+      }),
+  );
+
+  it.effect("an item of an agent with no task waits on the member who started it", () =>
+    Effect.gen(function* () {
+      const { agent, workspaceId } = yield* openTasklessAgent;
+      const teammate = yield* openUser;
+      yield* joinWorkspace(workspaceId, teammate);
+      yield* postedId(agent, "taskless");
+
+      const [item] = yield* memberAgentInboxItems(teammate, agent.agentId);
+      assert.equal(item?.waitsOn?.userId, agent.userId);
+    }),
+  );
+});

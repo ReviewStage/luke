@@ -19,19 +19,19 @@ import {
   ChoiceBar,
   IconButton,
   POPOVER_ALIGN,
+  PopoverPanel,
   SETTINGS_ROW_DENSITY,
   SettingsRow,
+  Shortcut,
+  Tooltip,
 } from "@luke/ui";
 import { drawnDark } from "@luke/ui/appearance";
 import { SlidersHorizontalIcon } from "lucide-react";
 import { useId, useRef, useState } from "react";
-import { PopoverPanel } from "../popover-panel.js";
 import { ChangedMark } from "../settings/marks.js";
 import { PickerRow } from "../settings/picker-row.js";
 import { SelectRow } from "../settings/select-row.js";
 import { SwitchRow } from "../settings/switch-row.js";
-import { Shortcut } from "../shortcut.js";
-import { Tooltip } from "../tooltip.js";
 import { CHANGES_WORDS } from "./changes-model.js";
 import {
   DEFAULT_SETTINGS,

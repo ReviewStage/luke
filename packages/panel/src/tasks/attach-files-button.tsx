@@ -1,7 +1,6 @@
-import { IconButton, useFilePicker } from "@luke/ui";
+import { IconButton, Tooltip, useFilePicker } from "@luke/ui";
 import { PlusIcon } from "lucide-react";
 import { type Ref, useImperativeHandle } from "react";
-import { Tooltip } from "../tooltip.js";
 
 /**
  * attach-files-button.tsx -- the + at a message box's foot that opens the system's file picker, as every box that takes files draws it.

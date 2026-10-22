@@ -33,7 +33,7 @@ import {
   FILES_CHANGED_SHORTCUTS,
   shownShortcutGroups,
 } from "@luke/settings/shortcuts";
-import { NAV_CURRENT, NavItem, SearchField } from "@luke/ui";
+import { commandKeyshortcuts, NAV_CURRENT, NavItem, SearchField, Shortcut } from "@luke/ui";
 import { integrationLines } from "@luke/ui/integration-search";
 import { matchesTokens, searchTokens } from "@luke/ui/search-tokens";
 import { useStateWithRef } from "@luke/ui/use-state-with-ref";
@@ -44,8 +44,6 @@ import { drawnVisibly, focusSeek } from "./focus-seek.js";
 import { focusSearchField, Highlighted } from "./search-field.js";
 import { settingsPageOf } from "./settings/pages.js";
 import { settingsPageShown } from "./settings/settings-rows.js";
-import { Shortcut } from "./shortcut.js";
-import { commandKeyshortcuts } from "./tooltip.js";
 
 /**
  * Searching the Settings tab.
