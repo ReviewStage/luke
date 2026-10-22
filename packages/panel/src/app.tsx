@@ -457,10 +457,7 @@ function AppWindow(): React.JSX.Element {
   const chatOn = useChatOn();
   const toast = useToast();
   // A pull request a listed task's agent opened opens in that agent's Pull request tab wherever it is pressed (`use-open-link.ts`).
-  const listedTasks = useMemo(
-    () => [...tasks.tasks, ...tasks.archived],
-    [tasks.tasks, tasks.archived],
-  );
+  const listedTasks = tasks.tasks;
   // An Admin link opens while the account's access is still being read, the
   // place waiting on it, and never for an account that is no admin
   // (`link-route.ts`).

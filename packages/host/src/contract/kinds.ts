@@ -269,7 +269,7 @@ export const SETTINGS_ACT_KIND = {
  * The panel's Tasks tab asking the host: the task list and the active
  * document read as the tab shows, one task made the active one, the open
  * task left, a task started on a repository, and a task renamed, given its
- * repository, pinned or unpinned, archived or brought back, or deleted. The view arrives on the document rather than as
+ * repository, pinned or unpinned, or deleted. The view arrives on the document rather than as
  * an answer. The one write of a task's document from here is the
  * developer's edit of a field, `TASKS_EDIT`, which answers whether it
  * saved, conflicted with what Luke wrote meanwhile, or failed. Beside them,
@@ -293,7 +293,6 @@ export const TASKS_ACT_KIND = {
   TASKS_PIN_REPOSITORY: "tasks.pinRepository",
   /** One change to the sidebar's sections, kept on the account; answers whether the service took it. */
   TASKS_WRITE_SECTION: "tasks.writeSection",
-  TASKS_ARCHIVE: "tasks.archive",
   /** The repository chip's read: the repositories the account reaches through the Luke GitHub App, as the service answers them now. */
   TASKS_REPOSITORIES: "tasks.repositories",
   /** A task given its repository on the service, or none; answers the repository as kept, or why it is unchanged. */

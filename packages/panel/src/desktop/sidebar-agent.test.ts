@@ -380,7 +380,7 @@ test("an agent whose turn ended unseen offers Mark as read, which clears main's 
   });
 });
 
-test("an archived agent's row offers the read mark too, as an archived task's does", () => {
+test("an archived agent's row offers the read mark too, as a task's does", () => {
   const row = mount({ ...RUN, archivedAt: 3 });
   assert.ok(rightClick(row).some((each) => each.textContent === "Mark as unread"));
 });

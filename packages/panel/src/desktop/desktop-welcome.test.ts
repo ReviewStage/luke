@@ -111,8 +111,7 @@ function mount(overrides: Partial<TasksControl> = {}) {
   const tasks = tasksControl({
     listRead: true,
     tasks: [],
-    archived: [],
-    listed: { tasks: [], archived: [], inbox: [], inboxTasks: [] },
+    listed: { tasks: [], inbox: [], inboxTasks: [] },
     inbox: [],
     inboxTasks: [],
     newTask: newTaskControl(started),
@@ -168,10 +167,8 @@ test("signed out, nothing is welcomed, since nothing could start", () => {
   assert.equal(welcomed(page), false);
 });
 
-test("an account with a plan in any workspace, or one archived, is not welcomed, the window resting on its Inbox instead", () => {
+test("an account with a plan in any workspace is not welcomed, the window resting on its Inbox instead", () => {
   assert.equal(welcomed(mount({ tasks: [PLAN] }).page), false, "a plan in another workspace");
-  act(() => root?.unmount());
-  assert.equal(welcomed(mount({ archived: [PLAN] }).page), false, "an archived plan");
 });
 
 test("an account with no plan yet but an automation's question waiting on it is not welcomed, the question waiting in its Inbox", () => {
@@ -251,8 +248,7 @@ async function mountUnderDialog() {
   const tasks = tasksControl({
     listRead: true,
     tasks: [],
-    archived: [],
-    listed: { tasks: [], archived: [], inbox: [], inboxTasks: [] },
+    listed: { tasks: [], inbox: [], inboxTasks: [] },
     inbox: [],
     inboxTasks: [],
   });

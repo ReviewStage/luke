@@ -83,7 +83,6 @@ const REFUSAL = {
   [TASKS_ACT_KIND.TASKS_PIN]: "Could not pin that task on this system.",
   [TASKS_ACT_KIND.TASKS_PIN_REPOSITORY]: "Could not pin that repository on this system.",
   [TASKS_ACT_KIND.TASKS_WRITE_SECTION]: "Could not change that section on this system.",
-  [TASKS_ACT_KIND.TASKS_ARCHIVE]: "Could not archive that task on this system.",
   [TASKS_ACT_KIND.TASKS_REPOSITORIES]: "Could not read your GitHub repositories on this system.",
   [TASKS_ACT_KIND.TASKS_SET_REPOSITORY]: "Could not change that task's repository on this system.",
   [TASKS_ACT_KIND.TASKS_MOVE]: "Could not move that task on this system.",
@@ -210,7 +209,6 @@ const ACTS: readonly { kind: TasksKind; payload: AnyPayload }[] = [
     kind: TASKS_ACT_KIND.TASKS_WRITE_SECTION,
     payload: { kind: TASK_SECTION_WRITE.PLACE, taskId: TASK_ID, sectionId: null },
   },
-  { kind: TASKS_ACT_KIND.TASKS_ARCHIVE, payload: { ...TASK, archived: true } },
   { kind: TASKS_ACT_KIND.TASKS_REPOSITORIES, payload: { workspaceId: "workspace-acme" } },
   { kind: TASKS_ACT_KIND.TASKS_SET_REPOSITORY, payload: { ...TASK, repository: "acme/relay" } },
   { kind: TASKS_ACT_KIND.TASKS_MOVE, payload: { ...TASK, workspaceId: "workspace-relay" } },
@@ -309,7 +307,6 @@ function windowPort(
     tasksPinRepository: (params) =>
       ask(`pin-repository:${params.repository}:${params.pinned}`, () => true),
     tasksWriteSection: (params) => ask(`section:${params.kind}`, () => true),
-    tasksArchive: (params) => ask(`archive:${params.taskId}:${params.archived}`, () => false),
     tasksStart: (request) =>
       ask(`start:${request.name ?? ""}`, () =>
         // A key no start answer names, carried on purpose to show the port drops it.
@@ -535,9 +532,6 @@ it("the task acts reach the host from a panel and answer what it answered", asyn
     }),
     { answer: true },
   );
-  assert.deepEqual(await ask(TASKS_ACT_KIND.TASKS_ARCHIVE, { ...TASK, archived: true }), {
-    answer: false,
-  });
   assert.deepEqual(
     await ask(TASKS_ACT_KIND.TASKS_REPOSITORIES, { workspaceId: "workspace-acme" }),
     { answer: { failure: TASK_CALL_FAILURE.UNANSWERED } },
@@ -562,7 +556,6 @@ it("the task acts reach the host from a panel and answer what it answered", asyn
     `pin:${TASK_ID}:true`,
     "pin-repository:acme/relay:false",
     `section:${TASK_SECTION_WRITE.PLACE}`,
-    `archive:${TASK_ID}:true`,
     "repositories:workspace-acme",
     `repository:${TASK_ID}:acme/relay`,
     `move:${TASK_ID}:workspace-relay`,

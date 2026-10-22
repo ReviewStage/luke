@@ -134,7 +134,7 @@ function task(id: string, name: string, body: string, updatedAt: number): Task {
   };
 }
 
-/** The instant the fake service stamps every pin and archive with. */
+/** The instant the fake service stamps every pin with. */
 const MARKED_AT = 5_000;
 
 /** The service as a table of tasks the test edits between beats. */
@@ -1124,18 +1124,16 @@ function fakeService(tasks: Task[]): FakeService {
         );
         return { task: changed };
       }),
-    // The service stamps a pin or an archive at its own clock, and a false takes it away.
-    mark: (taskId, { pinned, archived }) =>
+    // The service stamps a pin at its own clock, and a false takes it away.
+    mark: (taskId, { pinned }) =>
       Effect.sync(() => {
         const found = service.tasks.find((candidate) => candidate.id === taskId);
         if (found === undefined) return undefined;
-        const { pinnedAt, archivedAt, ...rest } = found;
+        const { pinnedAt, ...rest } = found;
         const pin = pinned === undefined ? pinnedAt : pinned ? MARKED_AT : undefined;
-        const archive = archived === undefined ? archivedAt : archived ? MARKED_AT : undefined;
         const marked = {
           ...rest,
           ...(pin === undefined ? undefined : { pinnedAt: pin }),
-          ...(archive === undefined ? undefined : { archivedAt: archive }),
         };
         service.tasks = service.tasks.map((candidate) =>
           candidate.id === taskId ? marked : candidate,
@@ -4150,6 +4148,7 @@ function taskRow(id: string, name: string) {
     ownerName: "Dana",
     pinnedAt: null,
     pinPosition: null,
+    // A key the service still answers for older builds, which this one reads past.
     archivedAt: null,
     createdAt: 1_000,
     updatedAt: 2_000,

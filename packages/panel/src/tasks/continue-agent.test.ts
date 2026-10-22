@@ -56,7 +56,7 @@ import type { AgentContinuer } from "./use-coding-agents.js";
  * more past three) and Archive, the failed end line's press saying
  * Continue again in the same place, and Continued in is drawn nowhere
  * else, unless an archive took the box, when the transcript ends on it.
- * Words beside a Continue never tell the reader to start a new agent. Nothing is offered on a refused API key, an archived task, or a
+ * Words beside a Continue never tell the reader to start a new agent. Nothing is offered on a refused API key, an archived agent, or a
  * turn that did not fail. Synthetic throughout.
  */
 
@@ -429,7 +429,7 @@ test("a failed turn's end line ends on Continue in new agent, which continues th
   assert.match(line.textContent ?? "", /The agent could not be started\. Try again\./);
 });
 
-test("no Continue stands on a turn failed on a refused API key, on an archived task, or on a turn that did not fail", async () => {
+test("no Continue stands on a turn failed on a refused API key, on an archived agent, or on a turn that did not fail", async () => {
   const key = await drawnTab({
     status: CODING_AGENT_STATUS.FAILED,
     failure: CODING_AGENT_FAILURE.PROVIDER_KEY,

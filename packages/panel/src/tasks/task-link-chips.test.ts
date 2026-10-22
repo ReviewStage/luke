@@ -208,7 +208,6 @@ test("the plan's version history, off the plan's page, reads a version's mention
         run: () => undefined,
         clear: () => undefined,
       },
-      restorable: false,
       task: { taskId: TASK_ID, place: PAGE.doors.place, anchors: PAGE.doors.anchors },
     }),
   );

@@ -105,7 +105,6 @@ async function settle(): Promise<void> {
  */
 async function mount(options: {
   links: readonly TaskIssueLinkView[];
-  archived?: boolean;
   github?: boolean;
   answers?: Partial<Record<string, WireBoundaryInput>>;
   /** Each read's answer in turn, the last standing for every read after; the task's links where none is given. */
@@ -167,7 +166,6 @@ async function mount(options: {
           taskId: TASK_ID,
           workspaceId: WORKSPACE_ID,
           repository: "acme/web",
-          archived: options.archived ?? false,
           linearIn: () => undefined,
           githubIn: () =>
             options.github === false
@@ -214,17 +212,6 @@ function choose(container: HTMLElement, at: number, label: string): void {
   press(container.querySelectorAll(".task-issue-link button")[at]);
   const items = [...document.querySelectorAll<HTMLElement>('[role^="menuitem"]')];
   press(items.find((item) => item.querySelector(".luke-menu-item-label")?.textContent === label));
-}
-
-/** The labels of the menu the chip of the link at `at` drops, which it closes again. */
-function menuOf(container: HTMLElement, at: number): string[] {
-  const chip = container.querySelectorAll(".task-issue-link button")[at];
-  press(chip);
-  const labels = [...document.querySelectorAll('[role^="menuitem"] .luke-menu-item-label')].map(
-    (label) => label.textContent ?? "",
-  );
-  press(chip);
-  return labels;
 }
 
 test("each link is drawn with its key, title, live state, and keyword, and its menu opens the issue", async () => {
@@ -298,12 +285,12 @@ test("Link issue opens the picker over the task's repository, the linked issue d
   );
 });
 
-test("a link refused, a keyword the service refused, and an archived task are said, and an archived task's chips only open their issue", async () => {
+test("a link refused and a keyword the service did not take are said", async () => {
   const full = await mount({
     links: [SAFARI],
     answers: {
       [ACT_KIND.TASK_ISSUES_LINK]: { refused: TASK_ISSUE_LINK_REFUSAL.FULL },
-      [ACT_KIND.TASK_ISSUES_RELATE]: { failure: TASK_CALL_FAILURE.TASK_ARCHIVED },
+      [ACT_KIND.TASK_ISSUES_RELATE]: { failure: TASK_CALL_FAILURE.UNANSWERED },
     },
   });
   press(
@@ -325,25 +312,12 @@ test("a link refused, a keyword the service refused, and an archived task are sa
   assert.equal(fullNote, "A task links at most 10 issues.");
   assert.equal(
     full.container.querySelector('[role="alert"]')?.textContent,
-    "This task is archived, so its issues can't change.",
+    "Luke didn't answer. Try again.",
   );
   assert.deepEqual(
     rows(full.container).map(({ keyword }) => keyword),
     ["Closes"],
   );
-
-  act(() => {
-    for (const root of roots.splice(0)) root.unmount();
-  });
-  document.body.innerHTML = "";
-  const archived = await mount({ links: [SAFARI], archived: true });
-  assert.equal(
-    [...archived.container.querySelectorAll("button")].some(
-      (each) => each.textContent === "Link issue",
-    ),
-    false,
-  );
-  assert.deepEqual(menuOf(archived.container, 0), ["Open on GitHub"]);
 });
 
 test("a task that links nothing in a workspace offering no issue to link draws no row, and one offering some offers Link issue alone", async () => {

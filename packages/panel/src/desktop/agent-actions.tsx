@@ -180,7 +180,7 @@ export function useAgentActions(
   const archive = useAgentArchive(agent, agents, shown);
   const unarchive = useAgentUnarchive(agent.id, agents);
   const deletion = useAgentDelete(agent, agents, { shown, onDeleted });
-  // Note that an Unarchive stands while the agent or its task is archived, and neither is renamed then.
+  // Note that an Unarchive stands while the agent is archived, and it is not renamed then.
   const renamable = agents.onUnarchive === undefined;
   const { onOpenTerminal } = terminals;
   const read = agentTranscriptRead(

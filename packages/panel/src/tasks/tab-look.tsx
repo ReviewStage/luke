@@ -142,11 +142,11 @@ export function PlanGlyph({ status }: { status: TaskStatus | undefined }) {
  * while no task is open.
  */
 export function openPlanStanding(
-  tasks: Pick<TasksControl, "region" | "tasks" | "archived">,
+  tasks: Pick<TasksControl, "region" | "tasks">,
 ): PlanStanding | undefined {
   if (tasks.region.kind !== DOCUMENT_REGION.READY) return undefined;
   const { task } = tasks.region;
-  const listed = [...tasks.tasks, ...tasks.archived].find((each) => each.id === task.id) ?? task;
+  const listed = tasks.tasks.find((each) => each.id === task.id) ?? task;
   return { name: task.name, status: listed.status };
 }
 

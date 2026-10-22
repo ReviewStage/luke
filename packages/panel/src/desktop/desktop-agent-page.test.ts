@@ -1642,7 +1642,7 @@ test("Rename on the page's ⋯ turns the title into its name's field, and the na
   assert.equal(page.querySelector("h1")?.textContent, "Sweep the slow tests");
 });
 
-test("an @ in the agent's box names an archived agent of an archived task by that task's name, read from the window's archived tasks", async () => {
+test("an @ in the agent's box names an archived agent by its task's name, read from the window's tasks", async () => {
   installEditorLayout();
   installScrollIntoView();
   const billing: Task = {
@@ -1667,7 +1667,7 @@ test("an @ in the agent's box names an archived agent of an archived task by tha
       archivedAt: 3,
     },
   ];
-  const page = mount(tasksControl({ archived: [billing] }));
+  const page = mount(tasksControl({ tasks: [billing] }));
   await settle();
 
   typeInComposer(page, "Ask @billing");

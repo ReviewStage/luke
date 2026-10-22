@@ -53,7 +53,6 @@ import {
   PREPARING_IMAGE,
   RENAME_FAILED,
   SERVERS_FAILED,
-  START_ARCHIVED,
   START_FAILED_AWAY,
   START_NEEDS_REPOSITORY,
   STOP_FAILED,
@@ -132,18 +131,12 @@ const NO_KEYWORDS: readonly string[] = [];
  * key that start carried, so its tab's Retry is an agent's own Start on the
  * task and answers the agent the first start made where it made one.
  *
- * An archived task starts no agent and sends none a message: Start is
- * unavailable and says why, and `onUnarchive` stands, which every place
- * that would have taken words offers instead. An agent already running
- * finishes the turn it is on, so its Stop stays.
- *
  * An agent may be archived on its own, which the service does only once a
  * turn it still runs is stopped. The list is read with the archived agents
  * among the rest and split here: `agents` holds those standing, which is
  * every tab, row, and menu of the task, and `archived` the rest, which the
  * summary keeps folded away with an Unarchive on each. The agent the
- * service answers moves between the two at once, and a toast offers Undo,
- * as an archived task's does.
+ * service answers moves between the two at once, and a toast offers Undo.
  *
  * An agent may be continued in a new one, which is a Start on the task
  * `from` that agent on its whole transcript, with the developer's words, where
@@ -265,12 +258,12 @@ export interface CodingAgentsControl {
     attachments: readonly CodingAgentAttachment[],
     disabledServers?: readonly string[],
   ) => Promise<Failure | undefined>;
-  /** Brings the open task back from the archive; present exactly while it is archived, when nothing is started or sent on it. */
+  /** Brings back the archived agent a surface draws alone, as its own page does; none from here, where every agent is a task's. */
   onUnarchive: (() => void) | undefined;
   /** Continues one agent in a new one on its whole transcript, the developer's words and files as its note, its tab opening as a Start's does; present exactly while a Start could run. */
   continueAgent: AgentContinuer | undefined;
   start: {
-    /** Whether a Start could run now: the task names a repository and is not archived. */
+    /** Whether a Start could run now: the task names a repository. */
     available: boolean;
     /** Why it cannot, said on the button, while it cannot. */
     reason: string | undefined;
@@ -288,8 +281,7 @@ export interface CodingAgentsControl {
    * `call`; an empty one starts blank under a key of the press's own, which
    * needs no repository. Either runs on the draft's chips, lets the draft go
    * once it lands, and opens the agent's tab as a Start's does. Answers the
-   * agent, or why it did not start. Present exactly while the open task is
-   * not archived.
+   * agent, or why it did not start. Present exactly while a task is open.
    */
   startCall: ((draft: AgentDraft) => Promise<DraftCallStart>) | undefined;
   /** Stops one agent; the list is read again once the service answers. */
@@ -483,14 +475,9 @@ function sameFiles(
   return a.length === b.length && a.every((file, index) => file === b[index]);
 }
 
-/** Why a Start cannot run on the open task, while it cannot: an archive first, since unarchiving is what would be asked before any repository. */
-function startReason(
-  taskId: string | undefined,
-  repository: string | null,
-  archived: boolean,
-): string | undefined {
+/** Why a Start cannot run on the open task, while it cannot: it names no repository. */
+function startReason(taskId: string | undefined, repository: string | null): string | undefined {
   if (taskId === undefined) return undefined;
-  if (archived) return START_ARCHIVED;
   return repository === null ? START_NEEDS_REPOSITORY : undefined;
 }
 
@@ -591,10 +578,6 @@ export function useCodingAgents(input: {
   agentId?: string | undefined;
   /** The open task's repository, or null while it names none. */
   repository: string | null;
-  /** Whether the open task is archived, which starts nothing on it. */
-  archived: boolean;
-  /** Brings the open task back from the archive. */
-  onUnarchive: () => void;
   /** Opens Settings on its Integrations page. */
   onOpenIntegrations: () => void;
   /** Opens Settings on its Agents page. */
@@ -609,7 +592,7 @@ export function useCodingAgents(input: {
   mintKey?: () => string;
 }): CodingAgentsControl {
   const chatOn = useChatOn();
-  const { taskId, agentId, repository, archived } = input;
+  const { taskId, agentId, repository } = input;
   const { act } = input.acts;
   const mintKey = input.mintKey ?? (() => crypto.randomUUID());
   // Note that the list is held under the agent too, where it is the page's one agent, so another agent's page holds nothing of the last.
@@ -633,8 +616,7 @@ export function useCodingAgents(input: {
   const startsOn = taskId ?? agentId;
   // Whether a Start from one of the agents could run: on a task naming a repository, or on an agent's
   // page, where the service reads the repository off the agent started from.
-  const startsFrom =
-    startsOn !== undefined && !archived && (taskId === undefined || repository !== null);
+  const startsFrom = startsOn !== undefined && (taskId === undefined || repository !== null);
   // Each place's draft's key and chip, by the plan's id or the page's agent's; its words and files are kept apart.
   const [drafts, setDrafts] = useState<ReadonlyMap<string, DraftChoices>>(new Map());
   const heldDraft = startsOn === undefined ? undefined : drafts.get(startsOn);
@@ -798,7 +780,7 @@ export function useCodingAgents(input: {
   };
 
   const pressStart = (choice?: ModelChoice) => {
-    if (taskId === undefined || repository === null || archived || starting) return;
+    if (taskId === undefined || repository === null || starting) return;
     // The key is the press's own, and a press asked again after the service
     // did not answer carries the one it minted, so the service answers the
     // agent it may already have started rather than a second one.
@@ -833,7 +815,6 @@ export function useCodingAgents(input: {
   const startCall = async (held: AgentDraft): Promise<DraftCallStart> => {
     if (taskId === undefined)
       return { failure: { reason: FAILURE_REASON.OTHER, text: START_NEEDS_REPOSITORY } };
-    if (archived) return { failure: { reason: FAILURE_REASON.OTHER, text: START_ARCHIVED } };
     const prompt = held.prompt.trim();
     const { choice, attachments, disabledServers } = held;
     const words = hasWordsOrFiles(prompt, attachments);
@@ -1080,7 +1061,6 @@ export function useCodingAgents(input: {
   ): Promise<Failure | undefined> => {
     if (taskId === undefined || repository === null)
       return { reason: FAILURE_REASON.OTHER, text: START_NEEDS_REPOSITORY };
-    if (archived) return { reason: FAILURE_REASON.OTHER, text: START_ARCHIVED };
     const answer = await askStart(taskId, {
       idempotencyKey: draftId,
       prompt,
@@ -1104,7 +1084,6 @@ export function useCodingAgents(input: {
     attachments: readonly CodingAgentAttachment[],
     disabledServers: readonly string[] = [],
   ): Promise<Failure | undefined> => {
-    if (archived) return { reason: FAILURE_REASON.OTHER, text: START_ARCHIVED };
     if (startsOn === undefined || !startsFrom)
       return { reason: FAILURE_REASON.OTHER, text: START_NEEDS_REPOSITORY };
     const asked = forkStart({
@@ -1548,16 +1527,16 @@ export function useCodingAgents(input: {
     models,
     readModels,
     readDefault,
-    onUnarchive: taskId !== undefined && archived ? input.onUnarchive : undefined,
+    onUnarchive: undefined,
     continueAgent: startsFrom ? continueAgent : undefined,
     start: {
-      available: taskId !== undefined && repository !== null && !archived,
-      reason: startReason(taskId, repository, archived),
+      available: taskId !== undefined && repository !== null,
+      reason: startReason(taskId, repository),
       busy: starting,
       note: note !== undefined && note.taskId === taskId ? note.note : undefined,
       onPress: pressStart,
     },
-    startCall: taskId !== undefined && !archived ? startCall : undefined,
+    startCall: taskId !== undefined ? startCall : undefined,
     onStop,
     onMessage,
     onChoose,

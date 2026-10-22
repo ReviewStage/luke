@@ -362,38 +362,21 @@ export function unsettledRenames(renames: PendingRenames, view: TasksView): Pend
   return unsettled.length === renames.size ? renames : new Map(unsettled);
 }
 
-/** What a press of the task menu does to a task's place: pins it or unpins it, archives it or brings it back. */
+/** What a press of the task menu does to a task's place: pins it or unpins it. */
 export const TASK_MARK = {
   PIN: "pin",
   UNPIN: "unpin",
-  ARCHIVE: "archive",
-  UNARCHIVE: "unarchive",
 } as const;
 
 export type TaskMark = (typeof TASK_MARK)[keyof typeof TASK_MARK];
 
-/** What the toast says when the service refused a pin or an archive, by what was asked. */
+/** What the toast says when the service refused a pin, by what was asked. */
 export const MARK_FAILED_NOTES = {
   [TASK_MARK.PIN]: "The task could not be pinned. Try again.",
   [TASK_MARK.UNPIN]: "The task could not be unpinned. Try again.",
-  [TASK_MARK.ARCHIVE]: "The task could not be archived. Try again.",
-  [TASK_MARK.UNARCHIVE]: "The task could not be unarchived. Try again.",
 } as const satisfies Record<TaskMark, string>;
 
-/**
- * What the toast says once an archive, or its undoing, landed, and the mark
- * its Undo asks for. A pin says nothing, since the row it moves is in sight.
- */
-export const MARK_UNDOS = {
-  [TASK_MARK.ARCHIVE]: { note: "Task archived", undo: TASK_MARK.UNARCHIVE },
-  [TASK_MARK.UNARCHIVE]: { note: "Task unarchived", undo: TASK_MARK.ARCHIVE },
-} as const satisfies Partial<Record<TaskMark, { note: string; undo: TaskMark }>>;
-
-/**
- * The statuses a press of the task menu settles a task at: Mark done, the
- * gesture Archive used to be, with its chord and its place on the row, and
- * Cancel task.
- */
+/** The statuses a press of the task menu settles a task at: Mark done and Cancel task. */
 export const SETTLED_STATUS = {
   DONE: TASK_STATUS.DONE,
   CANCELED: TASK_STATUS.CANCELED,
@@ -468,16 +451,15 @@ export function settleFailedNote(status: SettledStatus, refused: number): string
 /** What the toast says when the service refused an Undo putting a status back. */
 export const STATUS_RESTORE_FAILED_NOTE = "The task's status could not be put back. Try again.";
 
-/** A task's pin and archive as the list carries them, each only where it stands. */
-type MarkStamps = Pick<TaskSummary, "pinnedAt" | "archivedAt">;
+/** A task's pin as the list carries it, only where it stands. */
+type MarkStamps = Pick<TaskSummary, "pinnedAt">;
 
-/** A pin or an archive given to a task that main's view has yet to carry: the instant it was asked, or null for one taken away. */
+/** A pin given to a task that main's view has yet to carry: the instant it was asked, or null for one taken away. */
 export interface PendingMark {
   readonly pinnedAt?: number | null;
-  readonly archivedAt?: number | null;
 }
 
-/** The pins and archives given to tasks that main's view has yet to carry, by task id. */
+/** The pins given to tasks that main's view has yet to carry, by task id. */
 export type PendingMarks = ReadonlyMap<string, PendingMark>;
 
 /** The pending stamps a press asks for, made at `at`. */
@@ -487,10 +469,6 @@ export function pendingMark(mark: TaskMark, at: number): PendingMark {
       return { pinnedAt: at };
     case TASK_MARK.UNPIN:
       return { pinnedAt: null };
-    case TASK_MARK.ARCHIVE:
-      return { archivedAt: at };
-    case TASK_MARK.UNARCHIVE:
-      return { archivedAt: null };
   }
 }
 
@@ -505,23 +483,21 @@ function stampAfter(standing: number | undefined, asked: number | null | undefin
   return standing ?? asked;
 }
 
-/** A row or the open document with its pending pin and archive drawn in place of what it carries; an unpin takes the pin's place with it. */
+/** A row or the open document with its pending pin drawn in place of what it carries; an unpin takes the pin's place with it. */
 function marked<Row extends TaskSummary>(
   row: Row,
   mark: PendingMark | undefined,
 ): Omit<Row, keyof MarkStamps | "pinPosition"> & MarkStamps & Pick<TaskSummary, "pinPosition"> {
-  const { pinnedAt, pinPosition, archivedAt, ...rest } = row;
+  const { pinnedAt, pinPosition, ...rest } = row;
   const pinned = stampAfter(pinnedAt, mark?.pinnedAt);
-  const archived = stampAfter(archivedAt, mark?.archivedAt);
   return {
     ...rest,
     ...(pinned === undefined ? undefined : { pinnedAt: pinned }),
     ...(pinned === undefined || pinPosition === undefined ? undefined : { pinPosition }),
-    ...(archived === undefined ? undefined : { archivedAt: archived }),
   };
 }
 
-/** The view with each pending pin and archive drawn in place, in the list and on the open document alike. */
+/** The view with each pending pin drawn in place, in the list and on the open document alike. */
 export function markedView(view: TasksView, marks: PendingMarks): TasksView {
   if (marks.size === 0) return view;
   const held = view.document.task;
@@ -535,13 +511,9 @@ export function markedView(view: TasksView, marks: PendingMarks): TasksView {
   };
 }
 
-/** Whether the view carries every stamp a pending mark asks for: each standing where it is asked, and gone where it is taken away. */
+/** Whether the view carries the stamp a pending mark asks for: standing where it is asked, and gone where it is taken away. */
 function markLanded(row: MarkStamps, mark: PendingMark): boolean {
-  const pinLanded =
-    mark.pinnedAt === undefined || (mark.pinnedAt === null) === (row.pinnedAt === undefined);
-  const archiveLanded =
-    mark.archivedAt === undefined || (mark.archivedAt === null) === (row.archivedAt === undefined);
-  return pinLanded && archiveLanded;
+  return mark.pinnedAt === undefined || (mark.pinnedAt === null) === (row.pinnedAt === undefined);
 }
 
 /**
@@ -568,7 +540,7 @@ interface PendingStatus {
   readonly status: TaskStatus;
 }
 
-/** The statuses given to tasks that main's view has yet to carry, by task id, apart from the pins and archives, so each lands or is refused on its own. */
+/** The statuses given to tasks that main's view has yet to carry, by task id, apart from the pins, so each lands or is refused on its own. */
 export type PendingStatuses = ReadonlyMap<string, PendingStatus>;
 
 /** The view with each pending status drawn in place, in the list and on the open document alike. */
@@ -776,27 +748,19 @@ export interface SidebarTasks {
   readonly pinned: readonly TaskSummary[];
   /** The rest, as the service lists them: newest started first. */
   readonly rest: readonly TaskSummary[];
-  /** The archived tasks, newest archived first, whether or not they are pinned. */
-  readonly archived: readonly TaskSummary[];
 }
 
 /**
  * The account's tasks sorted into the sidebar's places, the pinned ones
  * newest pinned first until the Pinned section orders them with the rest of
- * its pins (`@luke/features/pin-order`). Note that an
- * archived task is drawn only among the archived, pinned or not, because its
- * pin is kept for when it is brought back rather than shown while it is away.
+ * its pins (`@luke/features/pin-order`).
  */
 export function sidebarTasks(tasks: readonly TaskSummary[]): SidebarTasks {
-  const archived = tasks
-    .filter((task) => task.archivedAt !== undefined)
-    .sort((a, b) => (b.archivedAt ?? 0) - (a.archivedAt ?? 0));
-  const standing = tasks.filter((task) => task.archivedAt === undefined);
-  const pinned = standing
+  const pinned = tasks
     .filter((task) => task.pinnedAt !== undefined)
     .sort((a, b) => (b.pinnedAt ?? 0) - (a.pinnedAt ?? 0));
-  const rest = standing.filter((task) => task.pinnedAt === undefined);
-  return { pinned, rest, archived };
+  const rest = tasks.filter((task) => task.pinnedAt === undefined);
+  return { pinned, rest };
 }
 
 /** The status word beside the microphone for a call, or nothing where none stands. */
@@ -876,7 +840,7 @@ export function standingCallStatus(
 
 /** What an agent's Call button does when pressed. */
 export const MICROPHONE_PRESS = {
-  /** Nothing: voice cannot run, or the task is archived. */
+  /** Nothing: voice cannot run, or the agent is archived. */
   NONE: "none",
   /** Raises macOS's own microphone prompt. */
   ASK_ACCESS: "ask-access",
@@ -896,8 +860,8 @@ export interface MicrophoneButton {
   readonly muted: boolean;
 }
 
-/** What the Call button says on an archived task's agent, which no call speaks into. */
-const ARCHIVED_CALL_LABEL = "Unarchive the task to call its agents";
+/** What the Call button says on an archived agent, which no call speaks into. */
+const ARCHIVED_CALL_LABEL = "Unarchive the agent to call it";
 
 /** What the Call button says where a press opens a call into its agent. */
 export const CALL_LABEL = "Call";
@@ -918,18 +882,17 @@ const CALL_STANDING: ReadonlySet<LiveStatus> = new Set([
  * agent or hears it again, hanging up another agent's first, which is also
  * how a call that failed or was lost is tried again. Muted is this agent's
  * own call standing with the developer not heard, so the button says so
- * rather than reading as a call not yet begun. An archived task's agent
- * takes no call, so its press is none until the task is brought back; a
- * call of its own still standing, which only a race leaves, is still muted
- * and heard again.
+ * rather than reading as a call not yet begun. An archived agent takes no
+ * call, so its press is none until it is brought back; a call of its own
+ * still standing, which only a race leaves, is still muted and heard again.
  */
 export function microphoneButton(input: {
   voiceAvailable: boolean;
   microphoneStatus: MicrophoneStatus;
   /** The agent whose tab the button stands in. */
   agentId: string;
-  /** Whether the agent's task is archived. */
-  archived: boolean;
+  /** Whether the agent is archived; only its own page's press names it, since an archived agent draws no Call. */
+  archived?: boolean;
   listening: boolean;
   /** What the standing call speaks into, as the voice window reports it. */
   call: VoiceCallAbout | undefined;
@@ -959,7 +922,7 @@ export function microphoneButton(input: {
   if (ownCall && CALL_STANDING.has(input.voiceStatus)) {
     return { press: MICROPHONE_PRESS.TALK, label: "Unmute the microphone", muted: true };
   }
-  if (input.archived) {
+  if (input.archived === true) {
     return { press: MICROPHONE_PRESS.NONE, label: ARCHIVED_CALL_LABEL, muted: false };
   }
   return { press: MICROPHONE_PRESS.TALK, label: CALL_LABEL, muted: false };

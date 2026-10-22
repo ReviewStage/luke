@@ -934,9 +934,7 @@ function useHistory(input: {
  * for, so a move waiting on the host's answer is already where it is going —
  * or on that plan's version history, or the Inbox, or Settings on its page. A task the
  * account's list once held and holds no more is passed over, unless the list
- * itself could not be read, and so is an archived task, which the developer
- * put out of the way, unless it is the task the window is bound for, as it is
- * from its own version history or from Settings opened over it. Note that a
+ * itself could not be read, or it is the task the window is bound for. Note that a
  * task no list has held yet is still a place, because the list may not have
  * landed or may not yet carry a task just started; a task that cannot be read
  * is a place too, and says so when it is gone back to. Going to a place
@@ -966,7 +964,6 @@ export function useWindowHistory(input: {
     TasksControl,
     | "boundFor"
     | "tasks"
-    | "archived"
     | "listFailed"
     | "onRestoreTask"
     | "onLeaveTask"
@@ -1050,7 +1047,7 @@ export function useWindowHistory(input: {
   const known = input.known && !tasks.restoring;
   // Only grows, so writing it as the list is drawn is the same on every render.
   const everListed = useRef(new Set<string>()).current;
-  for (const task of [...tasks.tasks, ...tasks.archived]) everListed.add(task.id);
+  for (const task of tasks.tasks) everListed.add(task.id);
   // Only grows the same way: every automation the window has seen deleted.
   const deletedAutomations = useRef(new Set<string>()).current;
   if (automationsPage.kind === AUTOMATIONS_PAGE.LIST && automationsPage.deleted !== undefined) {
@@ -1168,7 +1165,6 @@ export function useWindowHistory(input: {
     if (to.kind === PLACE_KIND.PERSON) return to.workspaceId === listedWorkspace;
     if (to.kind === PLACE_KIND.TASK && !tabsStand(to)) return false;
     if (!("taskId" in to) || to.taskId === boundFor) return true;
-    if (tasks.archived.some((task) => task.id === to.taskId)) return false;
     return (
       tasks.listFailed ||
       !everListed.has(to.taskId) ||

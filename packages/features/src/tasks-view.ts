@@ -357,14 +357,6 @@ export const tasksWriteSectionParamsSchema = taskSectionWriteSchema;
 
 export type TasksWriteSectionParams = typeof tasksWriteSectionParamsSchema.Type;
 
-/** Archiving a task, or bringing it back, as the window asks it. */
-export const tasksArchiveParamsSchema = EffectSchema.Struct({
-  taskId: EffectSchema.NonEmptyString,
-  archived: EffectSchema.Boolean,
-});
-
-export type TasksArchiveParams = typeof tasksArchiveParamsSchema.Type;
-
 /** Giving a task its repository, or taking it away: the task, and the repository's full name or null for none. */
 export const tasksSetRepositoryParamsSchema = EffectSchema.Struct({
   taskId: EffectSchema.NonEmptyString,
@@ -418,8 +410,6 @@ export const TASK_CALL_FAILURE = {
   NOT_FOUND: "not-found",
   /** The repository named is not one the Luke GitHub App reaches for the account. */
   REPOSITORY_NOT_REACHABLE: "repository-not-reachable",
-  /** The task is archived, so it takes no write until it is brought back. */
-  TASK_ARCHIVED: "plan-archived",
   /** The workspace's Linear could not be read for the issue a plan was to start from: none connected, its grant refused, or no such issue. */
   LINEAR_UNAVAILABLE: "linear-unavailable",
 } as const;
@@ -497,11 +487,10 @@ export const tasksEditParamsSchema = EffectSchema.Struct({
 
 export type TasksEditParams = typeof tasksEditParamsSchema.Type;
 
-/** Why an edit saved nothing: the service did not answer, the task is gone or archived, or the plan would be longer than a plan may be. */
+/** Why an edit saved nothing: the service did not answer, the task is gone, or the plan would be longer than a plan may be. */
 const EDIT_FAILURES = [
   TASK_CALL_FAILURE.UNANSWERED,
   TASK_CALL_FAILURE.NOT_FOUND,
-  TASK_CALL_FAILURE.TASK_ARCHIVED,
   PLAN_EDIT_REFUSAL.TOO_LONG,
 ] as const;
 
@@ -648,11 +637,10 @@ export const tasksGitHubIssuesAnswerSchema = EffectSchema.Union([
 
 export type TasksGitHubIssuesAnswer = typeof tasksGitHubIssuesAnswerSchema.Type;
 
-/** Why a call on a task's linked issues answered nothing: unanswered, the task or the link gone, the task archived, or Linear unread. */
+/** Why a call on a task's linked issues answered nothing: unanswered, the task or the link gone, or Linear unread. */
 const TASK_ISSUE_CALL_FAILURES = [
   TASK_CALL_FAILURE.UNANSWERED,
   TASK_CALL_FAILURE.NOT_FOUND,
-  TASK_CALL_FAILURE.TASK_ARCHIVED,
   TASK_CALL_FAILURE.LINEAR_UNAVAILABLE,
 ] as const;
 
@@ -1139,7 +1127,7 @@ export const tasksGitHubDisconnectAnswerSchema = EffectSchema.Union([
 
 export type TasksGitHubDisconnectAnswer = typeof tasksGitHubDisconnectAnswerSchema.Type;
 
-/** Why a call about a plan's comments answered nothing to draw: no answer, or the plan is not the account's to read or write, an archived one for a write. */
+/** Why a call about a plan's comments answered nothing to draw: no answer, or the plan is not the account's to read or write. */
 export const PLAN_COMMENT_CALL_FAILURE = {
   UNANSWERED: TASK_CALL_FAILURE.UNANSWERED,
   NOT_FOUND: TASK_CALL_FAILURE.NOT_FOUND,

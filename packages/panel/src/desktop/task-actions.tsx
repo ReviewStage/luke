@@ -21,7 +21,6 @@ import {
   ProviderMark,
   TaskStatusMark as TaskStandingMark,
   TrashIcon,
-  UnarchiveIcon,
   UnpinIcon,
   useConfirmDialog,
   useMenu,
@@ -40,6 +39,7 @@ import {
   SETTLED_STATUS,
   settleOffered,
   TASK_MARK,
+  type TaskMark,
 } from "@luke/ui/tasks-model";
 import { useInlineRename } from "@luke/ui/use-inline-rename";
 import { FolderInputIcon } from "lucide-react";
@@ -94,7 +94,7 @@ import { TaskStatusMark, taskCardOf } from "./task-card.js";
  * Cancel task sets it Canceled, each said in a toast whose Undo puts back
  * the status it stood at, and neither asking anything, since neither stops
  * an agent. A sidebar row also offers Pin and Mark done as buttons at its
- * end on hover. A task still archived offers only Unarchive there.
+ * end on hover.
  * Move to workspace opens a dialog listing the account's other workspaces
  * and what the move does (`move-task-dialog.tsx`), offered on a task the
  * reader started. Move to section, beside Pin and Mark done while the account
@@ -106,9 +106,9 @@ import { TaskStatusMark, taskCardOf } from "./task-card.js";
  * the menu says who created the task and who last edited it, and when.
  */
 
-/** A task as the list or the open document holds it, archived or not; nothing for a task neither holds. */
+/** A task as the list or the open document holds it; nothing for a task neither holds. */
 export function taskOf(tasks: TasksControl, taskId: string): TaskSummary | undefined {
-  const listed = [...tasks.tasks, ...tasks.archived].find((task) => task.id === taskId);
+  const listed = tasks.tasks.find((task) => task.id === taskId);
   if (listed !== undefined) return listed;
   const { region } = tasks;
   return region.kind === DOCUMENT_REGION.READY && region.task.id === taskId
@@ -125,26 +125,9 @@ interface PlaceMark {
   command?: KeyedCommand;
 }
 
-/**
- * Pin, offered as whichever way the task is not yet, and Mark done, offered
- * on a task not yet done. A task still archived offers only Unarchive,
- * because the sidebar draws it among the archived whether or not it is
- * pinned or done.
- */
+/** Pin, offered as whichever way the task is not yet, and Mark done, offered on a task not yet done. */
 function placeMarks(tasks: TasksControl, task: TaskSummary): PlaceMark[] {
-  const marking =
-    (mark: typeof TASK_MARK.PIN | typeof TASK_MARK.UNPIN | typeof TASK_MARK.UNARCHIVE) => () =>
-      tasks.onMarkTask(task.id, mark);
-  if (task.archivedAt !== undefined) {
-    return [
-      {
-        key: TASK_MARK.UNARCHIVE,
-        label: "Unarchive",
-        icon: <UnarchiveIcon />,
-        onSelect: marking(TASK_MARK.UNARCHIVE),
-      },
-    ];
-  }
+  const marking = (mark: TaskMark) => () => tasks.onMarkTask(task.id, mark);
   const pin: PlaceMark =
     task.pinnedAt === undefined
       ? { key: TASK_MARK.PIN, label: "Pin", icon: <PinIcon />, onSelect: marking(TASK_MARK.PIN) }
@@ -164,7 +147,7 @@ function placeMarks(tasks: TasksControl, task: TaskSummary): PlaceMark[] {
   return settleOffered(task, SETTLED_STATUS.DONE) ? [pin, done] : [pin];
 }
 
-/** Pin, Mark done, and Cancel task as the menu's items, Cancel task on a task neither archived nor already canceled; nothing for a task neither the list nor the document holds. */
+/** Pin, Mark done, and Cancel task as the menu's items, Cancel task on a task not already canceled; nothing for a task neither the list nor the document holds. */
 function placeActions(tasks: TasksControl, task: TaskSummary | undefined): MenuAction[] {
   if (task === undefined) return [];
   const marks = placeMarks(tasks, task).map(({ label, icon, onSelect }) => ({
@@ -177,7 +160,7 @@ function placeActions(tasks: TasksControl, task: TaskSummary | undefined): MenuA
     icon: <TaskStandingMark status={TASK_STATUS.CANCELED} />,
     onSelect: () => tasks.onSettleTasks([task.id], SETTLED_STATUS.CANCELED),
   };
-  const cancelable = task.archivedAt === undefined && settleOffered(task, SETTLED_STATUS.CANCELED);
+  const cancelable = settleOffered(task, SETTLED_STATUS.CANCELED);
   return cancelable ? [...marks, cancel] : marks;
 }
 
@@ -260,11 +243,7 @@ function SidebarTaskMarks({
  * offers it, ahead of Copy link, Mark as unread or read, Rename,
  * and Version history; Pin, Mark done, and Cancel task follow; the repository is changed from any plan and opened on
  * GitHub where there is one, beside Move to workspace where the plan may be
- * moved; Permanently delete is last and alone. An archived plan takes
- * nothing until it is brought back, so it offers neither Rename, Change
- * repository, nor a move, only what reads it, its link, its read mark, and
- * its version history (which restores nothing), Unarchive, and Permanently
- * delete.
+ * moved; Permanently delete is last and alone.
  */
 function taskActionGroups(
   tasks: TasksControl,
@@ -282,7 +261,6 @@ function taskActionGroups(
   const { region } = tasks;
   const drawn = region.kind === DOCUMENT_REGION.READY && region.task.id === taskId;
   const task = taskOf(tasks, taskId);
-  const archived = task?.archivedAt !== undefined;
   const copy: MenuAction = { label: "Copy plan", icon: <CopyIcon />, onSelect: tasks.copy.onPress };
   const link: MenuAction[] =
     task === undefined
@@ -308,13 +286,9 @@ function taskActionGroups(
     onSelect: () => tasks.onOpenOnGitHub(taskId),
   };
   const groups: MenuEntry[][] = [
-    [...(drawn ? [copy] : []), ...link, ...(archived ? [] : [rename]), versions],
+    [...(drawn ? [copy] : []), ...link, rename, versions],
     [...placeActions(tasks, task), ...(doors.section === undefined ? [] : [doors.section])],
-    [
-      ...(archived ? [] : [change]),
-      ...move,
-      ...((task?.repository ?? null) === null ? [] : [open]),
-    ],
+    [change, ...move, ...((task?.repository ?? null) === null ? [] : [open])],
     [
       {
         label: "Permanently delete",
@@ -388,7 +362,7 @@ function TaskMenuFooter({
  * The question Permanently delete asks, naming the task. Deleting a task
  * removes its document and its board and clears the conversation its
  * transcript is read from, which nothing in the app brings back, so a task
- * not yet done, canceled, or archived is pointed at Mark done, which keeps
+ * not yet done or canceled is pointed at Mark done, which keeps
  * all of it.
  */
 function deleteQuestion(name: string, settled: boolean): DialogQuestion {
@@ -401,14 +375,10 @@ function deleteQuestion(name: string, settled: boolean): DialogQuestion {
   };
 }
 
-/** Whether a task is already out of the way: done, canceled, or archived. */
+/** Whether a task is already out of the way: done or canceled. */
 function settledTask(task: TaskSummary | undefined): boolean {
   if (task === undefined) return false;
-  return (
-    task.archivedAt !== undefined ||
-    !settleOffered(task, SETTLED_STATUS.DONE) ||
-    !settleOffered(task, SETTLED_STATUS.CANCELED)
-  );
+  return !settleOffered(task, SETTLED_STATUS.DONE) || !settleOffered(task, SETTLED_STATUS.CANCELED);
 }
 
 /**
@@ -430,9 +400,9 @@ export function useTaskMenu(
   const deletion = useConfirmDialog({ subject: task !== undefined, surfaceOpen: tasks.shown }, () =>
     tasks.onDeleteTask(taskId),
   );
-  // Mark done as the chord runs it: on a task neither archived nor already done, and nothing otherwise.
+  // Mark done as the chord runs it: on a task not already done, and nothing otherwise.
   const markDone =
-    task !== undefined && task.archivedAt === undefined && settleOffered(task, SETTLED_STATUS.DONE)
+    task !== undefined && settleOffered(task, SETTLED_STATUS.DONE)
       ? () => tasks.onSettleTasks([taskId], SETTLED_STATUS.DONE)
       : undefined;
   const moving = useMoveTaskDialog(tasks, task);
@@ -440,10 +410,9 @@ export function useTaskMenu(
   const { open, drawn, close, trigger, contextMenu, keyMenu } = useMenu(tasks.shown && doors.drawn);
   // The place the row stands in a list that reorders, which the menu moves it from under a finger; none for the toolbar's ⋯.
   const place = useRowPlace();
-  // Note that an archived task stands in no section, so it is offered none until it is brought back.
   const sections = useSectionDialogs(tasks, tasks.shown && doors.drawn);
   const section =
-    task !== undefined && task.archivedAt === undefined
+    task !== undefined
       ? moveToSectionEntry(tasks, { agent: false, id: task.id }, task.workspaceId, sections.askNew)
       : undefined;
   const menu =
@@ -497,7 +466,7 @@ export function useTaskMenu(
  * an agent's. It is also what offers the open task's Mark done and
  * Permanently delete shortcuts, on every tab of the task, so each runs
  * exactly as its menu item would: Permanently delete still asks first, and a
- * task already done or still archived has no Mark done to offer.
+ * task already done has no Mark done to offer.
  */
 export function TaskActions({
   tasks,
@@ -614,7 +583,7 @@ function SidebarTaskCard({
 }
 
 /**
- * A task in the sidebar, pinned, listed, or archived alike: led by its
+ * A task in the sidebar, pinned or listed alike: led by its
  * status's mark (`task-marks.tsx`), where its service gives it one; its name, in the
  * body's weight unless the task is unread, and at the row's end how long ago
  * it was last updated, led by one mark for a repository that belongs to

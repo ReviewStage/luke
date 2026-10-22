@@ -131,8 +131,6 @@ export interface VersionSubject {
   /** What the versions are of, in the view's own words: "plan", or "template". */
   readonly noun: string;
   readonly title: string | undefined;
-  /** Whether a version may be restored: not an archived task's. */
-  readonly restorable: boolean;
   /** Whether the view is on screen, which the restore's question stands on. */
   readonly shown: boolean;
   /** The coding agents whose harness a revision of theirs wears. */
@@ -214,7 +212,7 @@ function RevisionRow({
   onOpenSections: (() => void) | undefined;
   /** The way to the place that wrote the revision; none where nothing else in the window did. */
   source: SourceDoor | undefined;
-  /** Chooses the version and asks to restore it; none for the plan as it stands, or an archived task's. */
+  /** Chooses the version and asks to restore it; none for the plan as it stands. */
   onRestore: (() => void) | undefined;
   /** Copies the version's link; none for a history with no link of its own. */
   onCopyLink: (() => void) | undefined;
@@ -527,8 +525,7 @@ function openedSections(
 
 /**
  * The version history's page beside the list: the version chosen, or the
- * state standing in its place; an archived plan's versions are read and not
- * restored.
+ * state standing in its place.
  */
 function VersionPage({
   subject,
@@ -549,7 +546,6 @@ function VersionPage({
       <VersionView
         viewing={versions.viewing}
         restore={restore}
-        restorable={subject.restorable}
         title={subject.title}
         noun={subject.noun}
         section={section}
@@ -601,7 +597,7 @@ function VersionPage({
 /** What the way back from a version to the list says, in a narrow room. */
 const VERSION_LIST = "Versions";
 
-/** The open plan's history as the view's subject: its name, whether it is archived, its agents, and the places in the window its revisions were written. */
+/** The open plan's history as the view's subject: its name, its agents, and the places in the window its revisions were written. */
 export function taskVersionSubject(tasks: TasksControl): VersionSubject {
   const { region, boundFor } = tasks;
   const task = region.kind === DOCUMENT_REGION.READY ? region.task : undefined;
@@ -622,7 +618,6 @@ export function taskVersionSubject(tasks: TasksControl): VersionSubject {
     versions: tasks.history,
     noun: "plan",
     title: task?.name,
-    restorable: task?.archivedAt === undefined,
     shown: tasks.shown,
     agents: tasks.agents.agents ?? [],
     summary: revisionSummary,
@@ -660,7 +655,7 @@ export function DesktopVersionHistory({
   onRestored: () => void;
 }): React.JSX.Element {
   const now = useMinute();
-  const { versions, agents, restorable } = subject;
+  const { versions, agents } = subject;
   const { list } = versions;
   const revisions = list.kind === HISTORY_READ.READY ? list.revisions : [];
   const rows = useRef(new Map<number, HTMLElement>()).current;
@@ -675,7 +670,7 @@ export function DesktopVersionHistory({
   const former = useFormerMembers(subject.workspace);
   const reader = readerOf(account, members, former);
   // A restore that lands leaves for the task it restored, which is not always the one Back returns to.
-  const restore = useVersionRestore(versions, subject.shown, restorable, onRestored);
+  const restore = useVersionRestore(versions, subject.shown, onRestored);
   const sections = openedSections(versions.viewing, opened);
   const sourceOf = (line: PlanRevisionLine, author: Actor): SourceDoor | undefined => {
     const source = revisionSource(line);
@@ -698,7 +693,7 @@ export function DesktopVersionHistory({
   const openSections = versions.onOpenSections;
   const restoreOf = (line: PlanRevisionLine): (() => void) | undefined => {
     const newest = revisions[0]?.seq;
-    if (!restorable || line.seq === newest) return undefined;
+    if (line.seq === newest) return undefined;
     return () => {
       versions.onSelect(line.seq);
       restore.ask();

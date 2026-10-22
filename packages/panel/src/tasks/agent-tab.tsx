@@ -99,7 +99,7 @@ import { SendingAgent } from "./agent-ref.js";
 import type { AgentServersControl } from "./agent-servers.js";
 import type { HeldTranscript } from "./agent-tab-card.js";
 import { AgentTabSkeleton, TranscriptSkeleton } from "./agent-tab-skeleton.js";
-import { ArchivedComposerNote } from "./archived-task.js";
+import { ArchivedComposerNote } from "./archived-note.js";
 import { AttachedFileChips, messageFileChips } from "./attached-file-chips.js";
 import { CallEndMarker, CallStartMarker } from "./call-card.js";
 import { useChatOn } from "./chat-gate.js";
@@ -2021,7 +2021,7 @@ function AgentTranscriptView({
 /**
  * The tab as drawn from what it holds: the transcript with the lines sent
  * and not yet read back at its end, and the composer under it, or, while
- * the task is archived, the note that offers Unarchive in its place, with
+ * the agent is archived, the note that offers Unarchive in its place, with
  * the Stop of a turn still running.
  */
 function AgentTabView({
@@ -2087,7 +2087,7 @@ function AgentTabView({
   /** When each of its running workers began, as their rows count from it; none while the tab is off screen. */
   delegationStarts: ReadonlyMap<string, number> | undefined;
   onStop: () => Promise<void>;
-  /** Brings the task back from the archive; present exactly while it is archived, when no message is sent. */
+  /** Brings the agent back from the archive; present exactly while it is archived, when no message is sent. */
   onUnarchive?: (() => void) | undefined;
   /** Opens one of the agent's workers in a tab of the panel's own; none where the view stands in no panel. */
   onOpenSubagent?: DelegationDoors["onOpen"];
@@ -2284,13 +2284,7 @@ function AgentTabView({
               ) : undefined
             }
             call={
-              call === undefined ? undefined : (
-                <AgentCallControls
-                  agentId={agent.id}
-                  archived={onUnarchive !== undefined}
-                  doors={call}
-                />
-              )
+              call === undefined ? undefined : <AgentCallControls agentId={agent.id} doors={call} />
             }
             // Note that a call holds the microphone, so its own mute stands where Dictate would.
             dictates={!onCall}

@@ -1614,7 +1614,7 @@ test("Tasks says a refused list with a Retry that reads it again", () => {
   assert.deepEqual(retried, [1]);
 });
 
-test("⌘K's Tasks lists the agents with no task among the tasks by their last activity, as the sidebar does, the archived after among the archived tasks, and opens one on its own page", () => {
+test("⌘K's Tasks lists the agents with no task among the tasks by their last activity, as the sidebar does, the archived after them, and opens one on its own page", () => {
   const opened: string[] = [];
   const oneOff = (id: string, title: string, activityAt: number) => ({
     id,
@@ -1644,7 +1644,6 @@ test("⌘K's Tasks lists the agents with no task among the tasks by their last a
       standing: [oneOff("a-1", "Triage overnight issues", 20)],
       archived: [{ ...oneOff("a-2", "Remove stale copy", 40), archivedAt: 41 }],
     },
-    archived: [{ ...task("t-3", "Old sweep", 5), archivedAt: 6 }],
     agentView: { agentId: undefined, onOpen: (id) => opened.push(id), onClose: () => undefined },
   });
   openPalette(control);
@@ -1655,7 +1654,6 @@ test("⌘K's Tasks lists the agents with no task among the tasks by their last a
     "Triage overnight issues · acme/relay",
     "Retry budget",
     "Remove stale copy · acme/relay · Archived",
-    "Old sweep · Archived",
   ]);
   press("Triage overnight issues · acme/relay");
   assert.deepEqual(opened, ["a-1"]);

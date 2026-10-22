@@ -67,12 +67,12 @@ export interface AgentCallDoors {
 
 /**
  * Where an agent pressed for stands, which its call names: the task it is
- * on, none for an agent with no task, and whether it or its task is
- * archived, which takes no call.
+ * on, none for an agent with no task, and whether it is archived, which
+ * takes no call; only an agent's own page draws an archived one.
  */
 export interface AgentCallPlace {
   readonly taskId: string | undefined;
-  readonly archived: boolean;
+  readonly archived?: boolean;
 }
 
 /**
@@ -112,7 +112,7 @@ export function useAgentOnCall(agentId: string): boolean {
 }
 
 /** The Call button's look for the agent, as the voice and the microphone stand now (`microphoneButton`). */
-function useCallButton(agentId: string, archived: boolean) {
+function useCallButton(agentId: string) {
   const view = useStandingVoiceView();
   const voiceAvailable = useAppSlice(VOICE_AVAILABLE);
   const microphoneStatus =
@@ -123,7 +123,6 @@ function useCallButton(agentId: string, archived: boolean) {
       voiceAvailable,
       microphoneStatus,
       agentId,
-      archived,
       listening: view.listening,
       call: view.call,
       voiceStatus: view.voiceStatus,
@@ -187,16 +186,14 @@ function CallVideoButton({ agentId }: { agentId: string }): React.JSX.Element | 
  */
 export function CallButton({
   subject,
-  archived,
   busy = false,
   onPress,
 }: {
   subject: string;
-  archived: boolean;
   busy?: boolean | undefined;
   onPress: () => void;
 }): React.JSX.Element {
-  const { button } = useCallButton(subject, archived);
+  const { button } = useCallButton(subject);
   return (
     <span className="agent-call-button">
       <Tooltip label={button.label}>
@@ -224,19 +221,15 @@ export function CallButton({
  */
 export function AgentCallControls({
   agentId,
-  archived,
   doors,
 }: {
   agentId: string;
-  archived: boolean;
   doors: AgentCallDoors;
 }): React.JSX.Element {
   const { tell } = useAct();
-  const { view, button } = useCallButton(agentId, archived);
+  const { view, button } = useCallButton(agentId);
   if (!onCallInto(view, agentId)) {
-    return (
-      <CallButton subject={agentId} archived={archived} onPress={() => doors.onPress(agentId)} />
-    );
+    return <CallButton subject={agentId} onPress={() => doors.onPress(agentId)} />;
   }
   // The speaker and the end are the voice window's to carry out: it plays Luke and holds the call.
   const command = (sent: VoiceCommand) => tell(ACT_KIND.VOICE_COMMAND, { command: sent });

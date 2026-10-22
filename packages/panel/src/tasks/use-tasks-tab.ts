@@ -91,7 +91,6 @@ import {
   documentRegion,
   type LinearIssuesAsk,
   MARK_FAILED_NOTES,
-  MARK_UNDOS,
   MICROPHONE_PRESS,
   markedView,
   microphoneButton,
@@ -147,7 +146,6 @@ import { appPlatform } from "../app-platform.js";
 import { usePrefetchDiffBundle } from "../bundle-loader.js";
 import { useCopyToast } from "../copy-feedback.js";
 import { useChosenWorkspace } from "../desktop/chosen-workspace.js";
-import { useSidebarWalkNow, walkSuccessor } from "../desktop/sidebar-walk.js";
 import { PANEL_SPAN, PANEL_SPAN_ATTRIBUTE, recordPanelSpan } from "../panel-spans.js";
 import { pressedWithCommand } from "../press-intent.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
@@ -578,16 +576,13 @@ export interface TasksControl {
   me: string | undefined;
   /** Every task of every workspace, in the sidebar's order: the pinned ones first, newest pinned first, then the rest, newest started first; what the palette, the inbox, and the history find a task in. */
   tasks: TasksView["tasks"];
-  /** Every archived task of every workspace, newest archived first. */
-  archived: TasksView["tasks"];
   /**
-   * The chosen workspace's share of `plans` and `archived`, which alone the
-   * sidebar lists, and of `inbox` and `inboxTasks`, which alone the Inbox,
-   * its count, and Home list; everything while no workspace is chosen.
+   * The chosen workspace's share of `plans`, which alone the sidebar lists,
+   * and of `inbox` and `inboxTasks`, which alone the Inbox, its count, and
+   * Home list; everything while no workspace is chosen.
    */
   listed: {
     tasks: TasksView["tasks"];
-    archived: TasksView["tasks"];
     inbox: readonly AppInboxTask[];
     inboxTasks: readonly AppInboxTaskHolding[];
   };
@@ -846,9 +841,8 @@ export interface TasksControl {
    */
   onDraftName: (taskId: string, name: string | undefined) => void;
   /**
-   * Pins or unpins a task, archives it or brings it back, drawn at once and
-   * put back with a note if the service refuses. Archiving the open task
-   * leaves it for the home page, as deleting it does.
+   * Pins or unpins a task, drawn at once and put back with a note if the
+   * service refuses.
    */
   onMarkTask: (taskId: string, mark: TaskMark) => void;
   /**
@@ -1072,11 +1066,10 @@ const DELETE_REFUSED: ActionResult = {
  * not yet listed is in no workspace's share until it is.
  */
 
-/** The sidebar's lists of `tasks`: those standing, pinned first, and every one, the archived last. */
-function sidebarList(tasks: readonly TaskSummary[]) {
-  const { pinned, rest, archived } = sidebarTasks(tasks);
-  const standing = [...pinned, ...rest];
-  return { standing, archived, every: [...standing, ...archived] };
+/** The sidebar's list of `tasks`, pinned first. */
+function sidebarList(tasks: readonly TaskSummary[]): readonly TaskSummary[] {
+  const { pinned, rest } = sidebarTasks(tasks);
+  return [...pinned, ...rest];
 }
 
 /** The entries of the tasks in `workspaceId`, or every entry while no workspace is listed. */
@@ -1532,12 +1525,6 @@ export function useTasksTab(input: {
     taskId: fixture === undefined ? viewed.activeTaskId : undefined,
     repository:
       openDocument?.id === viewed.activeTaskId ? (openDocument?.repository ?? null) : null,
-    // Read through the marks, so an Unarchive opens the composers at once, as it does the document.
-    archived: region.kind === DOCUMENT_REGION.READY && region.task.archivedAt !== undefined,
-    onUnarchive: () => {
-      if (region.kind === DOCUMENT_REGION.READY)
-        markNow.current(region.task.id, TASK_MARK.UNARCHIVE);
-    },
     onOpenIntegrations: input.onOpenIntegrations,
     onOpenApiKeys: input.onOpenApiKeys,
     me: input.accountId,
@@ -1965,8 +1952,8 @@ export function useTasksTab(input: {
   const navigations = useRef(0);
   // A workspace chosen on purpose, from the switcher, a workspace made, or
   // one left, is listed at once, and the task on screen follows: the task
-  // last open there opens again, where it is still that workspace's and not
-  // archived, or else the home page, so the task on screen is the listed
+  // last open there opens again, where it is still that workspace's, or
+  // else the home page, so the task on screen is the listed
   // workspace's. A remembered task that would not open gives way to the home
   // page, unless the developer went somewhere else meanwhile.
   const switchWorkspace = useCallback(
@@ -1976,10 +1963,7 @@ export function useTasksTab(input: {
       chooseListed(workspaceId);
       if (openWorkspaceId === undefined || openWorkspaceId === workspaceId) return;
       const last = lastOpenIn.current.get(workspaceId);
-      const reopens = tasksNow.some(
-        (task) =>
-          task.id === last && task.workspaceId === workspaceId && task.archivedAt === undefined,
-      );
+      const reopens = tasksNow.some((task) => task.id === last && task.workspaceId === workspaceId);
       if (last === undefined || !reopens) {
         leaveTask();
         return;
@@ -2078,44 +2062,20 @@ export function useTasksTab(input: {
     return renamed;
   };
 
-  // The open task as it stands when an archive is answered, which may be
+  // The open task as it stands when a move is answered, which may be
   // another than the one open when it was pressed.
   const openNow = useRef(openTaskId);
   openNow.current = openTaskId;
-  // The tasks as they stand when an archive is answered, and the sidebar's
-  // walk, read at the press, since the archive's row is gone by the answer.
-  const tasksAnswered = useRef(tasksNow);
-  tasksAnswered.current = tasksNow;
-  const walkNow = useSidebarWalkNow();
-  // The open task archived opens the task the sidebar drew after it as the
-  // archive was pressed, or else the nearest before it, passing over any
-  // archived or gone since; with none, the window leaves the task.
-  const leaveArchived = (walk: readonly string[], taskId: string) => {
-    const standing = (each: string) =>
-      tasksAnswered.current.some((task) => task.id === each && task.archivedAt === undefined);
-    const next = walkSuccessor(walk, taskId, (each) => each === taskId || !standing(each));
-    if (next === undefined) leaveTask();
-    else selectNow.current(next);
-  };
 
   // A fixture's tasks are marked nowhere, as they are read from nowhere. A
-  // refusal puts back the mark it drew only while no later press replaced it,
-  // and says so in a toast, since the menu that asked has closed. An archive
-  // that landed, or an unarchive, says so with an Undo, which marks the task
-  // back and opens it again if the archive had left it; an undoing says
-  // nothing of its own unless it is refused. Note that the open task is left
-  // for the next one only once its archive is answered, because leaving ends
-  // its call, which a refusal could not give back, nor can an Undo.
-  const markTask = (taskId: string, mark: TaskMark, undoing?: { reopen: boolean }) => {
+  // pin says nothing once it lands, since the row it moves is in sight; a
+  // refusal puts back the mark it drew only while no later press replaced
+  // it, and says so in a toast, since the menu that asked has closed.
+  const markTask = (taskId: string, mark: TaskMark) => {
     if (fixture !== undefined) return;
-    const walk = walkNow();
     const next = { ...marks.get(taskId), ...pendingMark(mark, Date.now()) };
     setMarks((held) => new Map(held).set(taskId, next));
-    const pinning = mark === TASK_MARK.PIN || mark === TASK_MARK.UNPIN;
-    const asked = pinning
-      ? act(ACT_KIND.TASKS_PIN, { taskId, pinned: mark === TASK_MARK.PIN })
-      : act(ACT_KIND.TASKS_ARCHIVE, { taskId, archived: mark === TASK_MARK.ARCHIVE });
-    asked
+    act(ACT_KIND.TASKS_PIN, { taskId, pinned: mark === TASK_MARK.PIN })
       .catch(() => false)
       .then((changed) => {
         if (!changed) {
@@ -2129,21 +2089,7 @@ export function useTasksTab(input: {
             tone: TOAST_TONE.FAILED,
             hold: TOAST_HOLD.FAILED,
           });
-          return;
         }
-        const left = mark === TASK_MARK.ARCHIVE && openNow.current === taskId;
-        if (left) leaveArchived(walk, taskId);
-        if (undoing?.reopen) selectNow.current(taskId);
-        if (pinning || undoing !== undefined) return;
-        const { note, undo } = MARK_UNDOS[mark];
-        toast({
-          words: note,
-          tone: TOAST_TONE.DONE,
-          action: {
-            label: UNDO_LABEL,
-            onPress: () => markNow.current(taskId, undo, { reopen: left }),
-          },
-        });
       });
   };
   // A fixture's repositories are pinned nowhere, as its tasks are marked
@@ -2405,10 +2351,6 @@ export function useTasksTab(input: {
   // An Undo is pressed renders after its press landed, so it sends through the tab as it stands then.
   const restoreNow = useRef(restoreStatuses);
   restoreNow.current = restoreStatuses;
-  // An Undo is pressed renders after its archive landed, so it marks, and
-  // opens, through the tab as it stands then rather than as it stood.
-  const markNow = useRef(markTask);
-  markNow.current = markTask;
   const restoring = useLastTask({
     staged: fixture !== undefined,
     account: input.account,
@@ -2418,8 +2360,6 @@ export function useTasksTab(input: {
     boundFor,
     select,
   });
-  const selectNow = useRef(select);
-  selectNow.current = select;
 
   // With no task open the window rests on a page of its own rather than on
   // nothing: the Inbox, the inbox-first sidebar's newest thread or the Tasks
@@ -2428,8 +2368,7 @@ export function useTasksTab(input: {
   // a launch reopening the task last open, so neither flashes before it.
   const inboxFirst = useExperiment(EXPERIMENT.INBOX_FIRST);
   const fresh = freshAccount({
-    tasks: sidebar.standing,
-    archived: sidebar.archived,
+    tasks: sidebar,
     taskless: input.inboxTaskless,
     readerId: input.accountId,
   });
@@ -2556,7 +2495,7 @@ export function useTasksTab(input: {
       voiceAvailable: input.voiceAvailable,
       microphoneStatus: input.microphoneStatus,
       agentId,
-      archived: place.archived,
+      archived: place.archived === true,
       listening: now.listening,
       call: now.call,
       voiceStatus: now.voiceStatus,
@@ -3459,11 +3398,9 @@ export function useTasksTab(input: {
     shown,
     signedIn,
     me: fixture === undefined ? input.accountId : undefined,
-    tasks: sidebar.standing,
-    archived: sidebar.archived,
+    tasks: sidebar,
     listed: {
-      tasks: listedSidebar.standing,
-      archived: listedSidebar.archived,
+      tasks: listedSidebar,
       inbox: listedInbox.inbox,
       inboxTasks: listedInbox.inboxTasks,
     },
@@ -3805,7 +3742,7 @@ export function useTasksTab(input: {
       readModels: agents.readModels,
       readDefault: agents.readDefault,
       onClose: () => setNewTaskAsk(undefined),
-      tasks: sidebar.every,
+      tasks: sidebar,
       onShowMention: guard(showMention),
       linearIssuesIn,
       githubIssuesIn,

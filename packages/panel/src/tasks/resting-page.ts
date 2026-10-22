@@ -35,19 +35,16 @@ export type RestingPage =
   | { readonly kind: typeof RESTING_PAGE.TASKS };
 
 /**
- * Whether an account is new: no task in any workspace, standing or archived,
- * and nothing an agent with no task waits on it for. Note that a teammate's
+ * Whether an account is new: no task in any workspace, and nothing an agent with no task waits on it for. Note that a teammate's
  * agent's question waits on the teammate, so it leaves the account new.
  */
 export function freshAccount(account: {
   readonly tasks: readonly unknown[];
-  readonly archived: readonly unknown[];
   readonly taskless: readonly Pick<AppInboxTasklessItem, "startedBy">[];
   readonly readerId: string | undefined;
 }): boolean {
   return (
     account.tasks.length === 0 &&
-    account.archived.length === 0 &&
     !account.taskless.some((each) => waitsOnReader(each, account.readerId))
   );
 }

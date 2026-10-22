@@ -201,11 +201,9 @@ function VersionContent({
 export function useVersionRestore(
   history: PlanHistoryControl,
   shown: boolean,
-  restorable: boolean,
   onRestored: () => void,
 ): DialogConfirm {
-  // An archive landing while the question stands takes the question down with the button.
-  return useConfirmDialog({ subject: restorable, surfaceOpen: shown }, async () => {
+  return useConfirmDialog({ subject: true, surfaceOpen: shown }, async () => {
     const result = await history.onRestore();
     if (result.status === ACTION_RESULT_STATUS.ACCEPTED) onRestored();
     return result;
@@ -246,14 +244,11 @@ export function sayRestored(
 
 /**
  * The version chosen in the version history, the page beside its list: the
- * bar with when it was saved and its restore, over the version itself. An
- * archived plan's versions are read but not restored, so its bar offers no
- * restore.
+ * bar with when it was saved and its restore, over the version itself.
  */
 export function VersionView({
   viewing,
   restore,
-  restorable = true,
   title,
   noun = "plan",
   section,
@@ -263,8 +258,6 @@ export function VersionView({
   viewing: ViewedVersion;
   /** The restore's question, held by the history around the page (`useVersionRestore`). */
   restore: DialogConfirm;
-  /** Whether the version may be restored: not while the task is archived. */
-  restorable?: boolean;
   /** The task's name, which every version is drawn under. */
   title?: string | undefined;
   /** What the versions are of, as the restore's question names it. */
@@ -290,20 +283,18 @@ export function VersionView({
             </Tooltip>
           </h1>
         </div>
-        {restorable ? (
-          <div className="desktop-toolbar-actions">
-            <Tooltip label={viewing.current ? CURRENT_HINT : undefined}>
-              <Button
-                variant={BUTTON_VARIANT.PRIMARY}
-                disabled={viewing.current}
-                focusableWhenDisabled
-                onClick={restore.ask}
-              >
-                Restore this version
-              </Button>
-            </Tooltip>
-          </div>
-        ) : null}
+        <div className="desktop-toolbar-actions">
+          <Tooltip label={viewing.current ? CURRENT_HINT : undefined}>
+            <Button
+              variant={BUTTON_VARIANT.PRIMARY}
+              disabled={viewing.current}
+              focusableWhenDisabled
+              onClick={restore.ask}
+            >
+              Restore this version
+            </Button>
+          </Tooltip>
+        </div>
       </header>
       <div className="desktop-document">
         <DocumentScroll>

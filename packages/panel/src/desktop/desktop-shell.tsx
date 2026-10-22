@@ -617,7 +617,7 @@ export function DesktopShell({
   const chipCards = useMemo(
     () => ({
       taskCard: (taskId: string, now: number, focus: TaskFocus | undefined) => {
-        const task = [...tasks.tasks, ...tasks.archived].find((each) => each.id === taskId);
+        const task = tasks.tasks.find((each) => each.id === taskId);
         if (task === undefined) return undefined;
         // Note that the card names its creator as the task's own workspace holds them, whatever workspace the chip stands in.
         const home = tasks.workspaces.find((each) => each.id === task.workspaceId);

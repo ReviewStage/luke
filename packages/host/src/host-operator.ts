@@ -185,7 +185,6 @@ import {
   type TaskHistoryFollowed,
   type TaskPagesFollow,
   type TaskPagesFollowed,
-  type TasksArchiveParams,
   type TasksBoardSaveParams,
   type TasksBrowserTabsAnswer,
   type TasksBrowserTabsParams,
@@ -473,8 +472,6 @@ export interface HostOperator {
   /** One repository pinned in the sidebar or unpinned, kept on the account; answers whether the service changed the pins. */
   tasksPinRepository(params: TasksPinRepositoryParams): Effect.Effect<boolean>;
   tasksWriteSection(params: TasksWriteSectionParams): Effect.Effect<boolean>;
-  /** One task archived or brought back; answers whether the service changed it. */
-  tasksArchive(params: TasksArchiveParams): Effect.Effect<boolean>;
   /** The repositories the account reaches through the Luke GitHub App, read from the service now; or why there is no list. */
   tasksRepositories(params: TasksRepositoriesParams): Effect.Effect<TasksRepositoriesAnswer>;
   /** One task given its repository, or none; the repository as kept, or why it is unchanged. */
@@ -1278,14 +1275,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
     tasksWriteSection: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.TASKS_WRITE_SECTION, params),
-        (answer) => record(answer)?.changed === true,
-      ),
-    tasksArchive: (params) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.TASKS_ARCHIVE, {
-          taskId: params.taskId,
-          archived: params.archived,
-        }),
         (answer) => record(answer)?.changed === true,
       ),
     tasksRepositories: (params) =>

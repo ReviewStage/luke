@@ -52,7 +52,6 @@ import {
   DOCUMENT_REGION,
   PIN_MOVE_FAILED_NOTE,
   SETTLED_STATUS,
-  TASK_MARK,
   TASKS_PAGE,
 } from "@luke/ui/tasks-model";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
@@ -73,7 +72,6 @@ import { act, createElement, Fragment, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
 import type { ActHandle } from "../act.js";
-import { usePublishSidebarWalk } from "../desktop/sidebar-walk.js";
 import {
   installWindowHistory,
   useWindowHistory,
@@ -340,11 +338,6 @@ const landed = Effect.promise(settle);
 const _advance = (millis: number) =>
   Effect.andThen(TestClock.adjust(Duration.millis(millis)), landed);
 
-/** What the newest toast says, while one stands. */
-function _toast(): string | undefined {
-  return newestToastSays();
-}
-
 /** The newest toast's Undo. */
 function _undoButton(): HTMLButtonElement {
   const undo = newestToastAction();
@@ -377,12 +370,8 @@ const _FIRST_VERSION = { body: "# Teammate invitations\n\n## Goal", assumptions:
 /** A task other than the open one, which the host opens in its place. */
 const OTHER_TASK_ID = "0c9a3f1e-6b2d-4e8f-a1c7-3d5e7f9a1b2c";
 
-/** A task's row of the list, started at `createdAt`, with whatever pin or archive it is given. */
-function _row(
-  id: string,
-  createdAt: number,
-  marks: { pinnedAt?: number; archivedAt?: number } = {},
-) {
+/** A task's row of the list, started at `createdAt`, with whatever pin it is given. */
+function _row(id: string, createdAt: number, marks: { pinnedAt?: number } = {}) {
   return {
     id,
     workspaceId: "workspace-personal",
@@ -394,12 +383,8 @@ function _row(
   };
 }
 
-/** A task's row of the list, started at `createdAt`, with whatever pin or archive it is given. */
-function row(
-  id: string,
-  createdAt: number,
-  marks: { pinnedAt?: number; archivedAt?: number } = {},
-) {
+/** A task's row of the list, started at `createdAt`, with whatever pin it is given. */
+function row(id: string, createdAt: number, marks: { pinnedAt?: number } = {}) {
   return {
     id,
     workspaceId: "workspace-personal",
@@ -427,18 +412,12 @@ const ACME = {
   github: null,
 };
 
-/** The account's tasks across its two workspaces: two of its own, one of the team's, and one of each archived. */
+/** The account's tasks across its two workspaces: two of its own, and one of the team's. */
 const TWO_WORKSPACES: TasksView = {
   ...IDLE_TASKS_VIEW,
   listStatus: TASKS_READ.READY,
   workspaces: [PERSONAL, ACME],
-  tasks: [
-    row("notes", 4),
-    { ...row("alerts", 3), workspaceId: ACME.id },
-    row("billing", 2),
-    { ...row("old-launch", 1, { archivedAt: 9 }), workspaceId: ACME.id },
-    row("old-notes", 1, { archivedAt: 8 }),
-  ],
+  tasks: [row("notes", 4), { ...row("alerts", 3), workspaceId: ACME.id }, row("billing", 2)],
 };
 
 /** A start's or a repository read's payload, read back as the acts' own schemas admit it. */
@@ -1504,14 +1483,7 @@ test("a render that hands the same plans keeps the lists the tab hands out, and 
   const tab = mount({ shown: true, tasks: TWO_WORKSPACES });
   const lists = () => {
     const control = tab.control();
-    return [
-      control.tasks,
-      control.archived,
-      control.listed.tasks,
-      control.listed.archived,
-      control.taskSections,
-      control.newTask.tasks,
-    ];
+    return [control.tasks, control.listed.tasks, control.taskSections, control.newTask.tasks];
   };
   const before = lists();
 
@@ -1534,7 +1506,6 @@ test("the sidebar lists the first workspace's plans first, a workspace chosen li
   const personal = {
     workspace: tab.control().workspace?.id,
     tasks: tab.control().listed.tasks.map((task) => task.id),
-    archived: tab.control().listed.archived.map((task) => task.id),
   };
   await tab.control().newTask.start("Invites", null, tab.control().newTask.workspaceId);
   act(() => tab.control().onChooseWorkspace(ACME.id));
@@ -1543,26 +1514,17 @@ test("the sidebar lists the first workspace's plans first, a workspace chosen li
   assert.deepEqual(personal, {
     workspace: PERSONAL.id,
     tasks: ["notes", "billing"],
-    archived: ["old-notes"],
   });
   assert.equal(tab.control().workspace?.id, ACME.id);
   assert.deepEqual(
     tab.control().listed.tasks.map((task) => task.id),
     ["alerts"],
   );
-  assert.deepEqual(
-    tab.control().listed.archived.map((task) => task.id),
-    ["old-launch"],
-  );
   assert.deepEqual(startedIn(tab.payloads), [PERSONAL.id, ACME.id]);
   assert.deepEqual(
     tab.control().tasks.map((task) => task.id),
     ["notes", "alerts", "billing"],
     "the palette, the inbox, and the history find every workspace's plans",
-  );
-  assert.deepEqual(
-    tab.control().archived.map((task) => task.id),
-    ["old-launch", "old-notes"],
   );
 });
 
@@ -2380,10 +2342,10 @@ test("a fixture run lists its first workspace's plans under the switcher, and a 
   assert.equal(window.localStorage.length, 0);
 });
 
-/** The task as the list names it, archived where `archivedAt` is given. */
-function listed(archivedAt?: number): TasksView["tasks"][number] {
+/** The task as the list names it. */
+function listed(): TasksView["tasks"][number] {
   const { document: _document, ...summary } = TASK;
-  return archivedAt === undefined ? summary : { ...summary, archivedAt };
+  return summary;
 }
 
 /** The view a launch starts on: nothing open, and the list not yet read. */
@@ -2427,9 +2389,8 @@ test("a launch opens the plan the account had open at quit, drawing no home page
   assert.equal(tab.control().restoring, false);
 });
 
-test("a plan archived or deleted since the quit, or kept by another account, leaves the launch on the home page", () => {
+test("a plan deleted since the quit, or kept by another account, leaves the launch on the home page", () => {
   for (const [why, account, tasks] of [
-    ["archived", "dev@example.com", [listed(3)]],
     ["deleted", "dev@example.com", []],
     ["another account", "other@example.com", [listed()]],
   ] as const) {
@@ -3449,7 +3410,10 @@ test("an agent's page takes a call into its agent with no task open, naming no t
   assert.equal(tab.control().secondCall.confirm.standing, true, "the press asks first");
   await act(async () => tab.control().secondCall.confirm.run());
   await settle();
-  assert.deepEqual(payloadsOf(tab, ACT_KIND.TASKS_TALK), [{ agentId: AGENT_ID }, { agentId: AGENT_ID }]);
+  assert.deepEqual(payloadsOf(tab, ACT_KIND.TASKS_TALK), [
+    { agentId: AGENT_ID },
+    { agentId: AGENT_ID },
+  ]);
 });
 
 test("a task opened is timed from the press to its document drawn ready, and one refused is timed by no span", async () => {
@@ -3764,96 +3728,3 @@ it.effect(
 
 /** A list's payload, read back as the act's own schema admits it. */
 const readListed = Schema.decodeUnknownOption(Schema.Struct({ taskId: Schema.String }));
-
-/** Four tasks of one workspace, listed newest first. */
-const FOUR: TasksView = {
-  ...IDLE_TASKS_VIEW,
-  listStatus: TASKS_READ.READY,
-  workspaces: [PERSONAL],
-  tasks: [row("first", 4), row("second", 3), row("third", 2), row("fourth", 1)],
-};
-
-/** Main's answers: every open, leave, and archive or unarchive lands. */
-const ARCHIVES = {
-  ...OPENS,
-  [ACT_KIND.TASKS_ARCHIVE]: () => Promise.resolve(true),
-};
-
-/** A sidebar drawing `walk`'s tasks, top to bottom, as the window's own publishes them. */
-function SidebarDrawing({ walk }: { walk: readonly string[] }) {
-  usePublishSidebarWalk(walk);
-  return null;
-}
-
-/** The tab mounted with `open` open, beside a sidebar drawing `walk` in the same window. */
-function mountBesideSidebar(
-  walk: readonly string[],
-  open: string,
-  answers: Parameters<typeof mount>[1] = ARCHIVES,
-) {
-  const registry = AtomRegistryModule.make();
-  const tab = mount({ shown: true, tasks: { ...FOUR, activeTaskId: open } }, answers, registry);
-  const root = createRoot(document.body.appendChild(document.createElement("div")));
-  roots.push(root);
-  act(() => root.render(onRegistry(registry, createElement(SidebarDrawing, { walk }))));
-  return tab;
-}
-
-test("archiving the open task opens the task the sidebar draws after it once the archive lands, and Undo opens the archived one again", async () => {
-  const tab = mountBesideSidebar(["first", "second", "third", "fourth"], "second");
-
-  act(() => tab.control().onMarkTask("second", TASK_MARK.ARCHIVE));
-  const atPress = opensAsked(tab.payloads);
-  await settle();
-  const opened = opensAsked(tab.payloads);
-  tab.stand({ tasks: { ...FOUR, activeTaskId: "third" } });
-  act(() => _undoButton().click());
-  await settle();
-
-  assert.deepEqual(atPress, [], "nothing opens before the archive is answered");
-  assert.deepEqual(opened, ["third"]);
-  assert.deepEqual(opensAsked(tab.payloads), ["third", "second"]);
-  assert.ok(!tab.told.includes(ACT_KIND.TASKS_CLOSE), "the task is never left for no task");
-});
-
-test("archiving the open task the sidebar draws last opens the one drawn before it", async () => {
-  const tab = mountBesideSidebar(["first", "second", "third", "fourth"], "fourth");
-
-  act(() => tab.control().onMarkTask("fourth", TASK_MARK.ARCHIVE));
-  await settle();
-
-  assert.deepEqual(opensAsked(tab.payloads), ["third"]);
-  assert.ok(!tab.told.includes(ACT_KIND.TASKS_CLOSE));
-});
-
-test("archiving the only task the sidebar draws, or with no sidebar drawn, leaves the task as before", async () => {
-  const only = mountBesideSidebar(["second"], "second");
-  act(() => only.control().onMarkTask("second", TASK_MARK.ARCHIVE));
-  await settle();
-  const undrawn = mount({ shown: true, tasks: { ...FOUR, activeTaskId: "second" } }, ARCHIVES);
-  act(() => undrawn.control().onMarkTask("second", TASK_MARK.ARCHIVE));
-  await settle();
-
-  assert.deepEqual(
-    [opensAsked(only.payloads), only.told.includes(ACT_KIND.TASKS_CLOSE)],
-    [[], true],
-  );
-  assert.deepEqual(
-    [opensAsked(undrawn.payloads), undrawn.told.includes(ACT_KIND.TASKS_CLOSE)],
-    [[], true],
-  );
-});
-
-test("an archive of the open task the service refuses opens nothing and leaves nothing", async () => {
-  const tab = mountBesideSidebar(["first", "second", "third"], "second", {
-    ...OPENS,
-    [ACT_KIND.TASKS_ARCHIVE]: () => Promise.resolve(false),
-  });
-
-  act(() => tab.control().onMarkTask("second", TASK_MARK.ARCHIVE));
-  await settle();
-
-  assert.deepEqual(opensAsked(tab.payloads), []);
-  assert.ok(!tab.told.includes(ACT_KIND.TASKS_CLOSE));
-  assert.equal(_toast(), "The task could not be archived. Try again.");
-});

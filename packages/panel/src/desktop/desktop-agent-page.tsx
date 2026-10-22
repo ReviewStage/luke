@@ -278,8 +278,6 @@ export function DesktopAgentPage({
     taskId: undefined,
     agentId,
     repository: null,
-    archived: false,
-    onUnarchive: nothing,
     onOpenIntegrations: tasks.agents.onOpenIntegrations,
     onOpenApiKeys: tasks.agents.onOpenApiKeys,
     // An agent a Continue or a Fork started opens on its own page, as a Start's tab opens on a task.
@@ -318,11 +316,7 @@ export function DesktopAgentPage({
     setFocus(COLUMN.SIDE),
   );
   // The workspace's agents an `@` offers, named by the tasks the window lists.
-  const mentionTasks = useMemo(
-    () => [...tasks.tasks, ...tasks.archived],
-    [tasks.tasks, tasks.archived],
-  );
-  const readMentionAgents = useMentionAgentsReader(workspaceId, mentionTasks, agents.models);
+  const readMentionAgents = useMentionAgentsReader(workspaceId, tasks.tasks, agents.models);
   const listed = tasks.workspaces.find((each) => each.id === workspaceId);
   const workspace = workspaceId === undefined ? undefined : (listed ?? { id: workspaceId });
   // The words a dictation into the agent's box listens for: its repository and its title.

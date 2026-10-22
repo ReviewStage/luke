@@ -61,7 +61,6 @@ function sideTabLabel(tab: SidePanelTab, tasks: StepTitleTasks): string {
 export type StepTitleTasks = Pick<
   TasksControl,
   | "tasks"
-  | "archived"
   | "boundFor"
   | "activeTaskId"
   | "agents"
@@ -80,7 +79,7 @@ export type StepTitleTasks = Pick<
 /** The name of a task the account lists, where it is listed. */
 function taskName(tasks: StepTitleTasks, taskId: string | undefined): string | undefined {
   if (taskId === undefined) return undefined;
-  return [...tasks.tasks, ...tasks.archived].find((task) => task.id === taskId)?.name;
+  return tasks.tasks.find((task) => task.id === taskId)?.name;
 }
 
 /** What the step the window stands on is called, in a room that is `narrow` or not; none while nothing names it, as a task not yet listed. */

@@ -23,11 +23,10 @@ function taskless(
   };
 }
 
-test("an account is new with no task in any workspace, none archived, and nothing waiting on it, a teammate's question leaving it new", () => {
-  const nothing = { tasks: [], archived: [], taskless: [], readerId: "me" };
+test("an account is new with no task in any workspace and nothing waiting on it, a teammate's question leaving it new", () => {
+  const nothing = { tasks: [], taskless: [], readerId: "me" };
   assert.equal(freshAccount(nothing), true);
   assert.equal(freshAccount({ ...nothing, tasks: [{}] }), false);
-  assert.equal(freshAccount({ ...nothing, archived: [{}] }), false);
   assert.equal(freshAccount({ ...nothing, taskless: [{ startedBy: "me" }] }), false);
   assert.equal(freshAccount({ ...nothing, taskless: [{ startedBy: "teammate" }] }), true);
 });

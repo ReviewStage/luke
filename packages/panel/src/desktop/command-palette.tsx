@@ -16,8 +16,7 @@
  * what its shortcut would, Delete task's question included, and it opens a
  * task through the same select the sidebar does, which takes its ask back
  * when the host does not open the task. Each task names its repository
- * beside it, so two tasks of one name can be told apart, and an archived
- * task says so. An agent opens its tab as the column's "+" would, hanging
+ * beside it, so two tasks of one name can be told apart. An agent opens its tab as the column's "+" would, hanging
  * its tab's card beside its row while the pointer rests on it, as every
  * place naming an agent does (`agent-ref.tsx`), and an archived agent, which
  * says so, its own page, a subagent
@@ -324,7 +323,7 @@ const FILTER_HINT = {
 /** The word a Settings page is also found by, beside its own name, so "settings" lists the pages. */
 const SETTINGS_WORD = "Settings";
 
-/** What an archived task's or agent's detail says of it. */
+/** What an archived agent's detail says of it. */
 const ARCHIVED_WORD = "Archived";
 
 /** The commands the palette lists: the Keyboard shortcuts page's, then the menu bar's own dialogs, then its own, the sidebar's view of its tasks. */
@@ -554,7 +553,6 @@ function steppedFilter(filter: PaletteFilter, step: number): PaletteFilter {
   return PALETTE_FILTERS[(at + step + count) % count] ?? PALETTE_FILTER.ALL;
 }
 
-/** A task's muted words: its repository, and whether it is archived. */
 /** The word a task Luke or an agent made is also found by, beside its maker's name. */
 const MADE_BY_WORDS: Partial<Record<Actor["kind"], string>> = {
   [ACTOR_KIND.LUKE]: "luke",
@@ -562,15 +560,15 @@ const MADE_BY_WORDS: Partial<Record<Actor["kind"], string>> = {
   [ACTOR_KIND.AUTOMATION]: "automation",
 };
 
-function taskDetail(task: TaskSummary, archived: boolean): string | undefined {
-  const words = [task.repository, archived ? ARCHIVED_WORD : null].filter((word) => word !== null);
-  return words.length === 0 ? undefined : words.join(" · ");
+/** A task's muted words: its repository. */
+function taskDetail(task: TaskSummary): string | undefined {
+  return task.repository ?? undefined;
 }
 
 /**
  * Every plan and every agent with no task, as the sidebar lists them among
  * each other (`task-list-model.ts`'s rows): the pinned first, then the rest
- * by their last activity (`taskRowTime`), then the archived ones, each in
+ * by their last activity (`taskRowTime`), then the archived agents, each in
  * its tab's look, an archived one saying so in its detail. Within each, the
  * listed workspace's come first and every other workspace's tasks after
  * them, naming its workspace and found by its name, since opening one
@@ -594,14 +592,14 @@ function taskRows(
     listedId === undefined || task.workspaceId === listedId
       ? undefined
       : tasks.workspaces.find((each) => each.id === task.workspaceId);
-  const taskOf = (task: TaskSummary, archived: boolean): PaletteRow => {
+  const taskOf = (task: TaskSummary): PaletteRow => {
     const elsewhere = elsewhereOf(task);
     const creator = creatorOf(task);
     const createdBy = task.createdBy?.name ?? null;
     // Note that a task Luke or an agent made wears its maker on the reader's own task too, and says them in its detail, so it is found by them.
     const origin = originOf(task);
     const madeBy = origin === undefined ? null : actorName(origin);
-    const detail = taskDetail(task, archived);
+    const detail = taskDetail(task);
     return {
       ...tabLook({ kind: TAB_KIND.PLAN, name: task.name, status: task.status }),
       detail:
@@ -655,7 +653,7 @@ function taskRows(
     };
   };
   const rowOf = (row: TaskRow, archived: boolean): PaletteRow =>
-    row.kind === TASK_ROW.TASK ? taskOf(row.task, archived) : agentOf(row.agent, archived);
+    row.kind === TASK_ROW.TASK ? taskOf(row.task) : agentOf(row.agent, archived);
   const listed = (task: TaskSummary) => listedId === undefined || task.workspaceId === listedId;
   // The pinned stand first, as the sidebar's; the rest by their last
   // activity, as the sidebar, Home's Recent, and the row's time read it.
@@ -669,14 +667,8 @@ function taskRows(
   const { standing: agents, archived: archivedAgents } = tasks.listedAgents;
   const here = [...tasks.tasks.filter(listed).map(taskRow), ...agents.map(agentRow)];
   const elsewhere = tasks.tasks.filter((task) => !listed(task)).map(taskRow);
-  // The archived of the listed workspace, its agents among its tasks, by their last activity as the sidebar's Archived lists them.
-  const archived = [
-    ...orderTaskRows(
-      [...tasks.archived.filter(listed).map(taskRow), ...archivedAgents.map(agentRow)],
-      TASK_ORDER.UPDATED,
-    ),
-    ...tasks.archived.filter((task) => !listed(task)).map(taskRow),
-  ];
+  // The listed workspace's archived agents, by their last activity.
+  const archived = orderTaskRows(archivedAgents.map(agentRow), TASK_ORDER.UPDATED);
   return [
     ...pinnedFirst(here).map((row) => rowOf(row, false)),
     ...pinnedFirst(elsewhere).map((row) => rowOf(row, false)),
@@ -711,7 +703,7 @@ function agentRows(
 ): readonly PaletteRow[] {
   const taskId = tasks.activeTaskId;
   if (taskId === undefined) return [];
-  const taskName = [...tasks.tasks, ...tasks.archived].find((task) => task.id === taskId)?.name;
+  const taskName = tasks.tasks.find((task) => task.id === taskId)?.name;
   const inbox = inboxEntries(tasks.agents, () => tasks.onShowInbox(taskId));
   const chat = chatEntries(chatOn && tasks.chatView.available, () => tasks.onShowChat(taskId));
   const agents = agentEntries(tasks.mainTabs, tasks.agents).map((entry) => ({
@@ -1021,8 +1013,7 @@ function agentReadMarkRows(
 /**
  * Pin task, or Unpin task once it is pinned, for the plan on screen, as its
  * sidebar row's menu offers it: the reader's own pin, through the same mark.
- * None while no plan is looked at, nor for an archived plan, which offers
- * no pin.
+ * None while no plan is looked at.
  */
 function taskPinRows(
   tasks: TasksControl,
@@ -1030,7 +1021,7 @@ function taskPinRows(
   choose: (run: () => void) => void,
 ): readonly PaletteRow[] {
   const task = reads.watched === undefined ? undefined : taskOf(tasks, reads.watched);
-  if (task === undefined || task.archivedAt !== undefined) return [];
+  if (task === undefined) return [];
   const pinned = task.pinnedAt !== undefined;
   const label = pinned ? "Unpin task" : "Pin task";
   const mark = pinned ? TASK_MARK.UNPIN : TASK_MARK.PIN;
@@ -1048,7 +1039,7 @@ function taskPinRows(
  * Pin agent, or Unpin agent once it is pinned, for the agent whose page
  * stands, as its sidebar row's menu offers it: the reader's own pin. None
  * while no agent's page stands, nor for an archived agent, which offers no
- * pin, as an archived task's row offers none.
+ * pin.
  */
 function agentPinRows(
   tasks: TasksControl,
@@ -1402,8 +1393,7 @@ export function CommandPalette({
   const agentReads = useAgentReadMarks();
   const limit = filter === PALETTE_FILTER.ALL ? KIND_ROWS.ALL : KIND_ROWS.FILTERED;
   const taskId = tasks.activeTaskId;
-  const repository =
-    [...tasks.tasks, ...tasks.archived].find((task) => task.id === taskId)?.repository ?? null;
+  const repository = tasks.tasks.find((task) => task.id === taskId)?.repository ?? null;
   // The files held are the open task's repository's, or none of its.
   const held =
     files !== undefined && files.taskId === taskId && files.repository === repository

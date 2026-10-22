@@ -6441,8 +6441,8 @@ summary:is(:hover, :focus-visible) button[data-tool-agent-ref] {
   line-height: var(--luke-type-caption-leading);
 }
 
-/* An archived plan's agent takes no message, so its composer's place says
-   why on one quiet row (`archived-task.tsx`, `@luke/ui`'s Banner), with
+/* An archived agent takes no message, so its composer's place says
+   why on one quiet row (`archived-note.tsx`, `@luke/ui`'s Banner), with
    Unarchive as the press that opens it again. The note a continued agent's
    box gives way to (`continue-agent.tsx`) is framed as the box was, on its
    card, edge and corner, so it stands where the box stood rather than across

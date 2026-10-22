@@ -4688,7 +4688,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         assert.deepEqual(eve.cancelled, [], "no agent's turn was stopped");
         const standing = Option.getOrUndefined(yield* readTask(owner, task.id))?.task;
         // The agent's Start by hand assigned its starter, which the refused change leaves standing.
-        assert.deepEqual([standing?.archivedAt, standing?.assignee?.userId], [undefined, owner]);
+        assert.equal(standing?.assignee?.userId, owner);
       }),
   );
 
@@ -4786,15 +4786,14 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
           );
         const standing = () =>
           Effect.map(readTask(owner, task.id), (read) => {
-            const { status, archivedAt, completedAt } = Option.getOrThrow(read).task;
-            return { status, archivedAt, finished: completedAt !== undefined };
+            const { status, completedAt } = Option.getOrThrow(read).task;
+            return { status, finished: completedAt !== undefined };
           });
 
         assert.equal(yield* marked({ archived: true }), HOSTED_HTTP_STATUS.OK);
         assert.deepEqual(eve.cancelled, [[sessionId, "turn_0"]]);
         assert.deepEqual(yield* standing(), {
           status: TASK_STATUS.CANCELED,
-          archivedAt: undefined,
           finished: true,
         });
         assert.equal(
@@ -4806,7 +4805,6 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         assert.equal(yield* marked({ archived: false }), HOSTED_HTTP_STATUS.OK);
         assert.deepEqual(yield* standing(), {
           status: TASK_STATUS.IN_PROGRESS,
-          archivedAt: undefined,
           finished: false,
         });
 
@@ -4851,7 +4849,6 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
           yield* ask(request(TASK(task.id), owner, { method: "PATCH", body: { archived: true } })),
           refusal(HOSTED_HTTP_STATUS.CONFLICT, HOSTED_API_ERROR.AGENT_NOT_READY),
         );
-        assert.equal(Option.getOrThrow(yield* readTask(owner, task.id)).task.archivedAt, undefined);
         assert.equal(Option.getOrThrow(yield* readCodingAgent(owner, agent.id)).archivedAt, null);
         assert.deepEqual(eve.cancelled, []);
       }),

@@ -5,7 +5,7 @@ import { EmptyState } from "@luke/ui";
 import { INBOX_PANEL_TARGET, inboxPanelTarget } from "@luke/ui/inbox-panel-link";
 import { isAgentTab, isTranscriptTab, type StripTab, sameTab } from "@luke/ui/tab-strip-model";
 import { InboxIcon } from "lucide-react";
-import { useEffect, useLayoutEffect, useMemo, useRef } from "react";
+import { useEffect, useLayoutEffect, useRef } from "react";
 import type { useAct } from "../act.js";
 import { appPlatform } from "../app-platform.js";
 import { AutomationDirectory } from "../automation-directory.js";
@@ -259,11 +259,7 @@ function InboxShown({
       ? (tasks.workspace?.slug ?? tasks.workspace?.id)
       : (tasks.workspaces.find((each) => each.id === chosenWorkspaceId)?.slug ?? chosenWorkspaceId);
   // What the chosen item's box offers an `@`, read under that workspace and repository.
-  const mentionTasks = useMemo(
-    () => [...tasks.tasks, ...tasks.archived],
-    [tasks.tasks, tasks.archived],
-  );
-  const readMentionAgents = useMentionAgentsReader(place?.workspaceId, mentionTasks, named.models);
+  const readMentionAgents = useMentionAgentsReader(place?.workspaceId, tasks.tasks, named.models);
   const mentions =
     place === undefined
       ? undefined
