@@ -53,3 +53,10 @@ test("a badge that gives up its words in a narrow room still holds them for a re
   );
   assert.equal(view.textContent, "Ready");
 });
+
+test("a badge with no glyph or swatch keeps its words drawn however narrow the room", () => {
+  const view = render(
+    createElement(Badge, { hideWordsUnder: VISUALLY_HIDDEN_UNDER.SNUG, children: "Ready" }),
+  );
+  assert.equal(view.querySelector(".luke-badge-words")?.getAttribute("data-under"), null);
+});

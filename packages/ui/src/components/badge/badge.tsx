@@ -50,7 +50,7 @@ export function Badge({
   swatch?: string | undefined;
   /** Whether a muted dot leads the words, as a marker of something standing open. */
   dot?: boolean;
-  /** Give the words up, to a reader alone, once the room around the badge (a `luke-room` container) is narrower than this step. */
+  /** Give the words up, to a reader alone, once the room around the badge (a `luke-room` container) is narrower than this step; kept drawn where no `icon` or `swatch` says the state in their place. */
   hideWordsUnder?: VisuallyHiddenUnder | undefined;
   /** The state's words, which the colour only repeats. */
   children: ReactNode;
@@ -67,7 +67,10 @@ export function Badge({
       )}
       {dot ? <span className="luke-badge-swatch" aria-hidden="true" /> : null}
       {icon}
-      <span className="luke-badge-words" data-under={hideWordsUnder}>
+      <span
+        className="luke-badge-words"
+        data-under={icon === undefined && swatch === undefined ? undefined : hideWordsUnder}
+      >
         {children}
       </span>
     </span>
