@@ -20,7 +20,7 @@ import {
   type InstallationFixture,
   openGithubUser,
 } from "../../testing/github-app-fake.js";
-import { offeredSkills } from "../agent-runtime/skills.js";
+import { offeredSkills, skillsOpenSandbox } from "../agent-runtime/skills.js";
 import { agentSkills } from "./skills.js";
 
 /**
@@ -168,7 +168,7 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("a coding agent's skills", (it)
   );
 
   it.effect(
-    "hands eve an installed skill's supporting files, its body told where eve writes them",
+    "hands eve an installed skill's supporting files, its body told where eve writes them, and says eve opens the sandbox for them",
     () =>
       Effect.gen(function* () {
         const { userId, agent, target } = yield* startAgent(null);
@@ -178,9 +178,10 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("a coding agent's skills", (it)
         ]);
         yield* install(userId, PERSONAL, "pr-style", "My pr style.");
 
-        const offered = offeredSkills(
-          yield* agentSkills(target, agent).pipe(Effect.provide(repositoryWithSkills([]))),
+        const skills = yield* agentSkills(target, agent).pipe(
+          Effect.provide(repositoryWithSkills([])),
         );
+        const offered = offeredSkills(skills);
 
         const triage = offered?.["sentry-triage"];
         assert.deepEqual(triage?.files, { "scripts/triage.sh": script });
@@ -191,6 +192,9 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("a coding agent's skills", (it)
         const style = offered?.["pr-style"];
         assert.equal(style?.files, undefined);
         assert.ok(!(style?.markdown ?? "").includes(".agents/skills"));
+        // eve opens the sandbox to write those files, which the session records so its turn's end stops it.
+        assert.equal(skillsOpenSandbox(skills), true);
+        assert.equal(skillsOpenSandbox(skills.filter((skill) => skill.name === "pr-style")), false);
       }),
   );
 

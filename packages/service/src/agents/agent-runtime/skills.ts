@@ -219,6 +219,11 @@ export const mergedSkills = /* @__PURE__ */ Effect.fn("web/mergedSkills")(functi
   return [...offered.values()];
 });
 
+/** Whether eve opens the session's sandbox to take the skills: it writes the files of any that carry them as the session starts. */
+export function skillsOpenSandbox(skills: readonly AgentSkill[]): boolean {
+  return skills.some((skill) => skill.files !== undefined);
+}
+
 /** The skills as eve's map of them, by name, for a role's \`skills/repository.ts\`, each with its supporting files where it has any; nothing where there are none. */
 export function offeredSkills(skills: readonly AgentSkill[]) {
   if (skills.length === 0) return null;
