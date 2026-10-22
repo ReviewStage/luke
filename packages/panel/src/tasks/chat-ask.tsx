@@ -215,7 +215,7 @@ function Answer({
   };
   const controls =
     asked === undefined || !asks ? undefined : (
-      <DraftQuestion held={false} pane={box}>
+      <DraftQuestion pane={box}>
         <AskControls
           ask={asked}
           title={undefined}

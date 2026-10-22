@@ -4,7 +4,6 @@ import { ACT_KIND } from "@luke/host/acts";
 import { EmptyState } from "@luke/ui";
 import { INBOX_PANEL_TARGET, inboxPanelTarget } from "@luke/ui/inbox-panel-link";
 import type { StripTab } from "@luke/ui/tab-strip-model";
-import { TASK_MARK } from "@luke/ui/tasks-model";
 import { InboxIcon } from "lucide-react";
 import { useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import type { useAct } from "../act.js";
@@ -16,13 +15,7 @@ import { MemberDirectory } from "../member-directory.js";
 import { NOT_FOUND_THING, NotFound } from "../not-found.js";
 import { pressedWithCommand } from "../press-intent.js";
 import { INBOX_COLUMNS, useInboxColumns } from "../tasks/inbox-columns.js";
-import {
-  INBOX_SCOPES,
-  InboxList,
-  InboxListNote,
-  ItemMark,
-  newTaskAction,
-} from "../tasks/inbox-list.js";
+import { InboxList, InboxListNote, ItemMark, newTaskAction } from "../tasks/inbox-list.js";
 import {
   anyUnread,
   INBOX_HOLDER,
@@ -76,12 +69,10 @@ import { taskCardOf } from "./task-card.js";
  * last chose; Needs
  * you is the Inbox's one name for an item not yet answered
  * (`inbox-model.ts`'s `NEEDS_YOU`), and the sidebar's Inbox row counts the
- * same items. An archived task's items are put away with it rather than
- * dropped: no other scope lists or counts them, and Archived, offered beside
- * the others in the view's menu, lists them, read only while it is shown and counted by main's
- * word of each task, each drawn as it stood but answered no longer, the
- * pane's box giving way to Unarchive, which brings the task back and its
- * items with it as they stood. A press on a row chooses it, and the pane beside the
+ * same items. A task's status never hides its items: the Inbox is a feed
+ * of what the agents got done, so an item of a task done or canceled is
+ * listed and counted as any other until it is read or answered, its row
+ * wearing its task's status (`inbox-list.tsx`). A press on a row chooses it, and the pane beside the
  * list (`inbox-pane.tsx`) shows it as a thread, answered in place, on its
  * task's own held read, which stands in for the list's read of that task
  * so an answer shows at once. With nothing chosen, the first item listed
@@ -174,9 +165,7 @@ function InboxShown({
     folds,
     openAutomation,
     read,
-    archivedRead,
     taskless,
-    showArchived,
     asked,
     chosenTask,
     taskId,
@@ -390,9 +379,7 @@ function InboxShown({
                     head={{
                       shown: tasks.shown,
                       show: choices,
-                      scopes: INBOX_SCOPES.WINDOW,
                       view: { choices, folds },
-                      // Note that Mark all as read marks what the service's own mark reaches, which leaves the archived tasks' items be.
                       readAll: {
                         unread: anyUnread(standing),
                         onMarkAll: () => marks.onMarkAll(standing.flatMap(({ items }) => items)),
@@ -403,7 +390,7 @@ function InboxShown({
                     readerId={tasks.me}
                     note={
                       <InboxListNote
-                        failed={showArchived ? archivedRead.failed : read.failed || taskless.failed}
+                        failed={read.failed || taskless.failed}
                         reading={reading}
                         empty={listedItems(list).length === 0}
                         alone={columns.shown === INBOX_COLUMNS.LIST}
@@ -630,10 +617,6 @@ function paneDoors(
       taskCard: taskCardOf(tasks, task, seams.now),
       onOpenAgent: (agentId) => tasks.onShowAgent(task.id, agentId),
       openLink: seams.openLink,
-      onUnarchive:
-        task.archivedAt === undefined
-          ? undefined
-          : () => tasks.onMarkTask(task.id, TASK_MARK.UNARCHIVE),
       code: {
         repository: task.repository,
         readFile: (window) => seams.act(ACT_KIND.TASKS_FILE, { taskId: task.id, ...window }),

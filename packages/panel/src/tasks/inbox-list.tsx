@@ -1,4 +1,4 @@
-import { INBOX_ASK, INBOX_STATUS } from "@luke/features/inbox-wire";
+import { INBOX_ASK, INBOX_STATUS, type InboxItem } from "@luke/features/inbox-wire";
 import { LINK_PLACE } from "@luke/features/luke-link";
 import type { CatalogModel } from "@luke/features/models-wire";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
@@ -37,6 +37,7 @@ import {
   SKELETON_SHAPE,
   Skeleton,
   SkeletonRegion,
+  TaskStatusMark,
   useMenu,
 } from "@luke/ui";
 import {
@@ -50,7 +51,6 @@ import {
 import { TAB_WORDS } from "@luke/ui/tab-strip-model";
 import * as Atom from "effect/reactivity/Atom";
 import {
-  ArchiveIcon,
   ArrowDownNarrowWideIcon,
   CheckCheckIcon,
   CheckIcon,
@@ -113,7 +113,6 @@ import {
   VIEW_OPTIONS,
 } from "./inbox-columns.js";
 import {
-  archivedHolder,
   EVERYONES,
   holderKey,
   holderName,
@@ -162,7 +161,7 @@ import { ReadAgentModel } from "./mentioned-agent-card.js";
 import { RelativeTime } from "./relative-time.js";
 import { PlanGlyph } from "./tab-look.js";
 import { markReadItem } from "./task-menu-items.js";
-import { TaskKey } from "./task-standing.js";
+import { TASK_STATUS_WORDS, TaskKey } from "./task-standing.js";
 import { useMinute } from "./task-time.js";
 import { cardTitle, plainWords } from "./tool-call-model.js";
 import { useOpenPlace } from "./use-open-link.js";
@@ -203,8 +202,7 @@ import { useOpenPlace } from "./use-open-link.js";
  * menu: first what the list holds, To do, the developer's own items they are
  * not done with, asks waiting on them and anything of theirs unread, a
  * settled thread its agent wrote on again among them, or All, every item,
- * and on the window's Inbox Archived, the archived tasks' items, the head
- * naming any but To do after the Inbox's name; then Group by, by task, by
+ * the head naming All after the Inbox's name; then Group by, by task, by
  * person, by status (what needs the developer
  * under the attention mark, what waits on others, what is answered, each
  * folding as a task's group does), or None, one run; Sort, the latest
@@ -215,7 +213,7 @@ import { useOpenPlace } from "./use-open-link.js";
  * each row shows the pictures and pages its item carries, drawn small under
  * its preview (`inbox-row-media.tsx`); and under them Mark all as read,
  * which clears the dots alone. Every
- * choice is kept across launches, Archived aside. Grouped by person, each person's items
+ * choice is kept across launches. Grouped by person, each person's items
  * stand under their face, the reader's own first as You. Grouped by
  * anything but task, a row names its task in a chip before its preview,
  * since no task's header stands over it. Where the scope leaves out every
@@ -280,14 +278,10 @@ const SKELETON_MARK = "16px";
 const SCOPE_WORDS = {
   [INBOX_SHOW.TO_DO]: { label: "To do", icon: <ListTodoIcon /> },
   [INBOX_SHOW.ALL]: { label: "All", icon: <InboxIcon /> },
-  [INBOX_SHOW.ARCHIVED]: { label: "Archived", icon: <ArchiveIcon /> },
 } as const satisfies Record<InboxShow, { label: string; icon: React.JSX.Element }>;
 
-/** The scopes a task's own Inbox offers, and the window's, which offers the archived tasks' items too, in the order its menu lists them. */
-export const INBOX_SCOPES = {
-  TASK: [INBOX_SHOW.TO_DO, INBOX_SHOW.ALL],
-  WINDOW: [INBOX_SHOW.TO_DO, INBOX_SHOW.ALL, INBOX_SHOW.ARCHIVED],
-} as const satisfies Record<string, readonly InboxShow[]>;
+/** The scopes every Inbox's view's menu offers, in its order. */
+const INBOX_SCOPES = [INBOX_SHOW.TO_DO, INBOX_SHOW.ALL] as const satisfies readonly InboxShow[];
 
 /** The Inbox's name at its head: the scope after it, but for To do, where the Inbox opens, since no other control on the head says it. */
 function inboxTitle(show: InboxShow): string {
@@ -296,30 +290,21 @@ function inboxTitle(show: InboxShow): string {
 
 /**
  * What the list says where its scope leaves out every item it holds.
- * All leaves out only what Whose does, or an archived task's items.
+ * All leaves out only what Whose does.
  */
 const SHOW_EMPTY = {
   [INBOX_SHOW.TO_DO]: "Nothing to do",
   [INBOX_SHOW.ALL]: "Nothing here",
-  [INBOX_SHOW.ARCHIVED]: "Nothing archived",
 } as const satisfies Record<InboxShow, string>;
 
 /** What the empty state's press says, by the scope it shows instead. */
 const SHOW_INSTEAD = {
   [INBOX_SHOW.ALL]: "Show all",
-  [INBOX_SHOW.ARCHIVED]: "Show archived",
 } as const;
 
-/**
- * The scope an empty scope offers instead: All from To do where it holds
- * anything, else Archived where only an archived task holds items; none
- * from Archived, whose items the other scopes never list, nor where
- * nothing is there to show.
- */
+/** The scope an empty scope offers instead: All from To do where it holds anything; none where nothing is there to show. */
 function insteadOf(show: InboxShow, counts: InboxCounts): keyof typeof SHOW_INSTEAD | undefined {
-  if (show === INBOX_SHOW.ARCHIVED) return undefined;
-  if (show !== INBOX_SHOW.ALL && counts[INBOX_SHOW.ALL] > 0) return INBOX_SHOW.ALL;
-  return (counts[INBOX_SHOW.ARCHIVED] ?? 0) > 0 ? INBOX_SHOW.ARCHIVED : undefined;
+  return show !== INBOX_SHOW.ALL && counts[INBOX_SHOW.ALL] > 0 ? INBOX_SHOW.ALL : undefined;
 }
 
 /** What All says where Whose, naming someone, leaves out every item. */
@@ -445,16 +430,10 @@ export function ItemMark({
   );
 }
 
-/** What an archived task's open item says of where it stands: put away with its task, waiting on nobody. */
-const ARCHIVED_WORDS = "Archived with its task";
-
 /** Where an item stands, as its row's card says it under its title. */
-function standingWords(listed: InboxListed, needsYou: boolean, starter: Actor | undefined): string {
-  const { holder, item } = listed;
+function standingWords(item: InboxItem, needsYou: boolean, starter: Actor | undefined): string {
   if (needsYou) return NEEDS_YOU.LABEL;
   if (item.status === INBOX_STATUS.OPEN) {
-    // Note that an archived task's open item waits on nobody, since nothing answers it until the task is back.
-    if (archivedHolder(holder)) return ARCHIVED_WORDS;
     return starter === undefined ? "Waiting" : waitingOn(starter);
   }
   return inboxSettledStanding(item);
@@ -466,7 +445,7 @@ function standingWords(listed: InboxListed, needsYou: boolean, starter: Actor | 
  * thread. It leads with what holds it, a task as its key and its status
  * and name or an automation by its name, as a task's card leads with where
  * it stands; then the item's title and when it last moved; where it stands,
- * waiting on the reader, on a teammate, put away with its task, or settled;
+ * waiting on the reader, on a teammate, or settled;
  * the ask in full while one waits, every option with the recommended one
  * marked or every step as the reader's draft ticks it, or how it ended; and
  * the agent's latest words, three lines at most. The agent that asked
@@ -508,7 +487,7 @@ function InboxItemCard({
         sub={
           <>
             {needsYou ? <AttentionMark /> : null}
-            <span>{standingWords(listed, needsYou, starter)}</span>
+            <span>{standingWords(item, needsYou, starter)}</span>
           </>
         }
         corner={<RelativeTime at={item.updatedAt} now={now} hint={false} />}
@@ -545,9 +524,10 @@ const WORKSPACES = Atom.map(APP_SLICE.TASKS, (tasks) => tasks?.workspaces);
 
 /**
  * What holds an item, as its card leads with it, on one line: a task by its
- * key, as the task's own card leads with it (`TaskKey`), and by its chip
- * as a mention of it is drawn (`HolderRef`); an automation, or the agents no
- * automation names, by their chip alone.
+ * key, as the task's own card leads with it (`TaskKey`), by its chip
+ * as a mention of it is drawn (`HolderRef`), and by its status in words,
+ * which the row's own chip draws as its mark alone (`TaskStatusChip`); an
+ * automation, or the agents no automation names, by their chip alone.
  */
 function HolderLine({ holder }: { holder: InboxHolder }): React.JSX.Element {
   const workspaces = useAppSlice(WORKSPACES);
@@ -561,6 +541,9 @@ function HolderLine({ holder }: { holder: InboxHolder }): React.JSX.Element {
         <TaskKey workspaceName={workspaceName} number={holder.task.number} />
       ) : null}
       <HolderRef holder={holder} />
+      {holder.kind === INBOX_HOLDER.TASK && holder.task.status !== undefined ? (
+        <span className="inbox-card-task-status">{TASK_STATUS_WORDS[holder.task.status]}</span>
+      ) : null}
     </div>
   );
 }
@@ -699,7 +682,8 @@ function lineGlyph(kind: InboxLineKind): React.JSX.Element | null {
 
 /**
  * One item as a `ListRow` of two lines, as a mail app lists a thread: the
- * agent's mark, the title, and how long ago it changed, then the last word
+ * agent's mark, the title, its task's status (`TaskStatusChip`), and how
+ * long ago it changed, then the last word
  * in its thread, muted, led on a thread by what its open ask asks, the
  * steps its draft ticks counted (`inboxPreview`). One that needs the developer wears
  * the attention mark before its time, and a teammate's item their face
@@ -731,8 +715,7 @@ function lineGlyph(kind: InboxLineKind): React.JSX.Element | null {
  * hands down `onClose`, an open item's row offers to close it without an
  * answer, asked first (`inbox-close.tsx`): a press beside its mark while
  * the pointer rests on it or it holds the keyboard, and the last item of
- * its right-click menu; never on an archived task's item, which nothing
- * answers until the task is back.
+ * its right-click menu.
  */
 export function InboxItemRow({
   listed,
@@ -809,7 +792,7 @@ export function InboxItemRow({
           ...markReadItem({ unread, onMark: (next) => onMark(listed, next) }),
           command: APP_COMMAND.TOGGLE_INBOX_ITEM_READ,
         };
-  const close = useInboxClose(item, archivedHolder(holder) ? undefined : onClose, true);
+  const close = useInboxClose(item, onClose, true);
   const groups = [
     read === undefined ? [] : [read],
     copyLink === undefined ? [] : [copyLink],
@@ -902,6 +885,7 @@ export function InboxItemRow({
                   <span className="visually-hidden">{NEEDS_YOU.LABEL}</span>
                 </span>
               ) : null}
+              <TaskStatusChip holder={holder} />
               <RelativeTime at={item.updatedAt} now={now} hint={false} />
             </span>
           }
@@ -955,6 +939,26 @@ export function InboxItemRow({
       )}
       {close.dialog}
     </>
+  );
+}
+
+/**
+ * An item's task's status as its row wears it before its time: the
+ * status's mark alone, small and quiet, as the task's sidebar row wears
+ * it, so a Done task's item reads ✓ and a Canceled one's ×, its words said
+ * to a reader and in the row's card (`HolderLine`). Note that it is drawn
+ * whatever the status, an item of a finished task staying listed until it
+ * is read or answered, and none for an agent with no task, nor for a task
+ * from a service before statuses.
+ */
+function TaskStatusChip({ holder }: { holder: InboxHolder }): React.JSX.Element | null {
+  if (holder.kind !== INBOX_HOLDER.TASK || holder.task.status === undefined) return null;
+  const { status } = holder.task;
+  return (
+    <span className="inbox-row-task-status" data-task-status={status}>
+      <TaskStatusMark status={status} />
+      <span className="visually-hidden">{TASK_STATUS_WORDS[status]}</span>
+    </span>
   );
 }
 
@@ -1152,7 +1156,7 @@ function whoseEntries(
 
 /**
  * The head's button that drops the view's menu: first the scopes the Inbox
- * offers, To do, All, and on the window's Archived, the one shown checked;
+ * offers, To do and All, the one shown checked;
  * then, on the window's Inbox, Group by and Sort, each a submenu with its
  * choice checked; Whose, Everyone, Mine, or a teammate by face and name;
  * Media previews; and Mark all as read at its foot.
@@ -1160,14 +1164,12 @@ function whoseEntries(
 function ViewOptions({
   shown,
   show,
-  scopes,
   choices,
   readerId,
   readAll,
 }: {
   shown: boolean;
   show: InboxShowChoice;
-  scopes: readonly InboxShow[];
   /** The window's Inbox's other choices; none on a task's own, whose menu offers its scopes alone. */
   choices: InboxViewChoices | undefined;
   readerId: string | undefined;
@@ -1175,7 +1177,7 @@ function ViewOptions({
 }): React.JSX.Element {
   const menu = useMenu(shown);
   const reader = useMemberDirectory();
-  const scope: MenuEntry[] = scopes.map((value) => ({
+  const scope: MenuEntry[] = INBOX_SCOPES.map((value) => ({
     ...SCOPE_WORDS[value],
     checked: show.show === value,
     onSelect: () => show.onShow(value),
@@ -1508,7 +1510,7 @@ function ListHead({
   readerId: string | undefined;
   placement: InboxListPlacement;
 }): React.JSX.Element {
-  const { shown, show, scopes, view } = head;
+  const { shown, show, view } = head;
   const title = inboxTitle(show.show);
   const search = useListSearch(head.search);
   const options = (
@@ -1517,7 +1519,6 @@ function ListHead({
       <ViewOptions
         shown={shown}
         show={show}
-        scopes={scopes}
         choices={view?.choices}
         readerId={readerId}
         readAll={head.readAll}
@@ -1641,8 +1642,6 @@ export interface InboxListHead {
   readonly shown: boolean;
   /** The scope the list shows, and the choice that shows another. */
   readonly show: InboxShowChoice;
-  /** The scopes its view's menu offers, in their order (`INBOX_SCOPES`). */
-  readonly scopes: readonly InboxShow[];
   /** The window's Inbox's grouping and its plans' folds; none on a task's own, which lists one task's items in one run. */
   readonly view: { readonly choices: InboxViewChoices; readonly folds: InboxTaskFolds } | undefined;
   /** Mark all as read, in the view's menu, where the list marks its items. */

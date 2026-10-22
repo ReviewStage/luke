@@ -6,8 +6,7 @@
  * is the item the Inbox opens. Note that nothing is followed until a search
  * asks, because most uses of the palette never look in the Inbox, and that
  * the items pushed are kept once it stops asking, so the next search shows
- * them at once while their follows come back. The archived tasks' items are
- * left out, as every Inbox scope but Archived leaves them out.
+ * them at once while their follows come back.
  */
 
 import type { AppInboxTaskHolding } from "@luke/host/app-state";

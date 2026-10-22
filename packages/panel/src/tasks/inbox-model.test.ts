@@ -15,7 +15,7 @@ import {
   type InboxMessage,
 } from "@luke/features/inbox-wire";
 import { LINK_PLACE, linkOf } from "@luke/features/luke-link";
-import type { TaskSummary } from "@luke/features/task-wire";
+import { TASK_STATUS, type TaskSummary } from "@luke/features/task-wire";
 import { TASK_CALL_FAILURE } from "@luke/features/tasks-view";
 import type { AppInboxTasklessItem } from "@luke/host/app-state";
 import { test } from "vitest";
@@ -792,28 +792,30 @@ test("only an open item the reader's own agent asks needs them, or one whose sta
   assert.equal(needingYou(undefined), 1, "a reader not known yet is asked everything");
 });
 
-test("an archived task's items, open or unread, need nobody, as a plan's own Inbox lists them: To do neither lists nor counts them, nor is one the next, while All still lists them", () => {
-  const archived = [
+test("a task done or canceled hides none of its items: its open ones need you and its unread ones wait, To do listing and counting them as any task's, and one is the next", () => {
+  const finished = [
     {
-      holder: taskHolder({ ...BILLING, archivedAt: 9 }),
+      holder: taskHolder({ ...BILLING, status: TASK_STATUS.DONE }),
       items: [
-        item({ id: "put-away", updatedAt: 20 }),
-        item({ id: "also", updatedAt: 10 }),
-        item({ id: "unread", status: INBOX_STATUS.ANSWERED, updatedAt: 5, unread: true }),
+        item({ id: "done-open", updatedAt: 20 }),
+        item({ id: "done-unread", status: INBOX_STATUS.ANSWERED, updatedAt: 5, unread: true }),
+      ],
+    },
+    {
+      holder: taskHolder({ ...INVITES, status: TASK_STATUS.CANCELED }),
+      items: [
+        item({ id: "canceled-open", updatedAt: 10 }),
+        item({ id: "canceled-unread", status: INBOX_STATUS.ANSWERED, updatedAt: 4, unread: true }),
       ],
     },
   ];
-  const counts = inboxCounts(archived, undefined);
-  assert.equal(counts[INBOX_SHOW.TO_DO], 0);
-  assert.equal(counts[INBOX_SHOW.ALL], 3);
+  const counts = inboxCounts(finished, undefined);
+  assert.equal(counts[INBOX_SHOW.TO_DO], 4);
+  assert.equal(counts[INBOX_SHOW.ALL], 4);
   const view = { grouping: INBOX_GROUPING.NONE, readerId: undefined, chosen: undefined } as const;
-  assert.deepEqual(drawn(inboxList(archived, { ...view, show: INBOX_SHOW.TO_DO })), []);
-  const open = inboxList(archived, { ...view, show: INBOX_SHOW.ALL });
-  assert.deepEqual(drawn(open), ["put-away", "also", "unread"]);
-  assert.equal(
-    nextNeedingYou(open, "put-away", () => false),
-    undefined,
-  );
+  const toDo = inboxList(finished, { ...view, show: INBOX_SHOW.TO_DO });
+  assert.deepEqual(drawn(toDo), ["done-open", "canceled-open", "done-unread", "canceled-unread"]);
+  assert.equal(nextNeedingYou(toDo, "done-open", () => false)?.item.id, "canceled-open");
 });
 
 test("a teammate's open item is never the one chosen first nor the next that needs you, which go to the reader's own", () => {
@@ -935,14 +937,14 @@ test("the first item chosen and the next one reach the reader's own unread updat
   assert.equal(inboxSteps(steps, "mine-followed", () => false)?.previous, undefined);
 });
 
-test("what waits, as Home, Factory, and a person's page list it, is every open item of a standing task, whoever's, the latest first, never a settled one however unread nor an archived task's", () => {
-  const archived = {
-    holder: taskHolder({ ...INVITES, id: "put-away", archivedAt: 9 }),
-    items: [item({ id: "archived-open", updatedAt: 90 })],
+test("what waits, as Home, Factory, and a person's page list it, is every open item, whoever's, a finished task's among them, the latest first, never a settled one however unread", () => {
+  const done = {
+    holder: taskHolder({ ...INVITES, id: "done", status: TASK_STATUS.DONE }),
+    items: [item({ id: "done-open", updatedAt: 90 })],
   };
   assert.deepEqual(
-    openItems([...UNREAD_SHARED, archived]).map(({ item }) => item.id),
-    ["danas", "kais", "mine-invites", "mine", "unnamed"],
+    openItems([...UNREAD_SHARED, done]).map(({ item }) => item.id),
+    ["done-open", "danas", "kais", "mine-invites", "mine", "unnamed"],
   );
 });
 

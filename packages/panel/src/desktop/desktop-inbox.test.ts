@@ -53,7 +53,7 @@ import { ACT_KIND } from "@luke/host/acts";
 import type { AppInboxTaskHolding, AppInboxTasklessItem } from "@luke/host/app-state";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { DocumentIcon } from "@luke/ui";
-import { TASK_MARK, type TaskMark } from "@luke/ui/tasks-model";
+import type { TaskMark } from "@luke/ui/tasks-model";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
 import { Effect, Schema } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -462,13 +462,12 @@ interface Asked {
   newTasks: number;
 }
 
-/** The Inbox over the two tasks, and the items of agents with no task given, its own view real, as the tasks tab holds it, and every press that leaves it recorded; or, `listUnread`, opened before the account's task list is first read; or over the tasks and archived tasks given; or, `room`, under the side panel itself in that room, as the tasks tab holds it while the Inbox has chosen nothing. */
+/** The Inbox over the two tasks, and the items of agents with no task given, its own view real, as the tasks tab holds it, and every press that leaves it recorded; or, `listUnread`, opened before the account's task list is first read; or over the tasks given; or, `room`, under the side panel itself in that room, as the tasks tab holds it while the Inbox has chosen nothing. */
 function mount(
   firstTaskless: readonly AppInboxTasklessItem[] = [],
   {
     listUnread = false,
     standing = [BILLING, INVITES],
-    archived = [],
     room,
     sidebar = false,
     panel,
@@ -477,7 +476,6 @@ function mount(
   }: {
     listUnread?: boolean;
     standing?: readonly TaskSummary[];
-    archived?: readonly TaskSummary[];
     room?: ShellRoom;
     /** Whether the inbox-first sidebar lists the Inbox, read once for it and the page, which then shows the chosen item alone. */
     sidebar?: boolean;
@@ -525,7 +523,6 @@ function mount(
       me: READER.userId,
       workspace: listedWorkspace,
       tasks: listed,
-      archived,
       listRead,
       sidePanel: sidePanel ?? tasksControl().sidePanel,
       inbox: [
@@ -671,6 +668,14 @@ function wordsOf(element: Element | null | undefined): string | null {
   return copy.textContent;
 }
 
+/** What the row of the item so titled says of its task's status; none where it wears no status. */
+function rowStatus(page: HTMLElement, title: string): string | undefined {
+  return (
+    rowNamed(page, title).closest("li")?.querySelector(".inbox-row-task-status")?.textContent ??
+    undefined
+  );
+}
+
 /** Whether the row of the item so titled is drawn gray, its item done with. */
 function rowMuted(page: HTMLElement, title: string): boolean {
   return rowNamed(page, title).closest("li")?.getAttribute("data-muted") === "true";
@@ -691,7 +696,7 @@ function openViewOptions(page: HTMLElement): void {
   act(() => options.click());
 }
 
-/** The scopes the view's menu may offer, in their order. */
+/** The scopes the view's menu may offer, in their order, and Archived, which it offered while tasks were archived, so a menu offering it again is heard. */
 const SCOPE_NAMES = ["To do", "All", "Archived"] as const;
 
 /** The Inbox's name as the list's head says it. */
@@ -2436,7 +2441,7 @@ test("an item's card says whom an open item waits on, the reader as Needs you an
   );
 });
 
-test("an item's card names its task as the window names a task everywhere: the key as plain words, as every place draws a key, then the task's mention pill wearing its status's mark, its whole name in the task's card it hangs", async () => {
+test("an item's card names its task as the window names a task everywhere: the key as plain words, as every place draws a key, then the task's mention pill wearing its status's mark, its whole name in the task's card it hangs, then its status in words", async () => {
   const LONG = "Billing usage alerts, with a name long enough to be cut short in the card";
   handState(
     {},
@@ -2463,8 +2468,9 @@ test("an item's card names its task as the window names a task everywhere: the k
     [
       ["task-key", "STAG-182"],
       ["luke-inline-ref", LONG],
+      ["inbox-card-task-status", "In progress"],
     ],
-    "the key, then the task's chip, on one line",
+    "the key, then the task's chip, then its status, on one line",
   );
   assert.ok(head?.querySelector("[data-task-key] .luke-text"), "the key is the shared key's words");
   assert.equal(head?.querySelector(".task-card-chip"), null, "the key is no chip");
@@ -2524,18 +2530,18 @@ test("a plan main says changed is read again, so an item answered on another Mac
   ];
 
   showScope(page, "To do");
-  assert.deepEqual(scopes(page), ["Inbox", "[To do]", "All", "Archived"]);
+  assert.deepEqual(scopes(page), ["Inbox", "[To do]", "All"]);
   assert.deepEqual(listed(page), ["# Billing usage alerts", "▸ *Alert at 80%?"]);
 
   act(() => root?.unmount());
   root = undefined;
   ({ page } = mount());
   await settle();
-  assert.deepEqual(scopes(page), ["Inbox", "[To do]", "All", "Archived"]);
+  assert.deepEqual(scopes(page), ["Inbox", "[To do]", "All"]);
   assert.deepEqual(listed(page), ["# Billing usage alerts", "▸ *Alert at 80%?"]);
 
   showScope(page, "All");
-  assert.deepEqual(scopes(page), ["Inbox · All", "To do", "[All]", "Archived"]);
+  assert.deepEqual(scopes(page), ["Inbox · All", "To do", "[All]"]);
   assert.deepEqual(listed(page), everything);
 });
 
@@ -2583,7 +2589,7 @@ function toDoRows(page: HTMLElement): number {
   return listed(page).filter((row) => !row.startsWith("# ")).length;
 }
 
-test("the sidebar's Inbox counts what To do lists, as main counts each task's to do: an open ask, an unread notice, and a thread you answered written on again, never a read settled item, a teammate's ask, or an archived task's; reading or answering one drops it at once", async () => {
+test("the sidebar's Inbox counts what To do lists, as main counts each task's to do: an open ask, an unread notice, and a thread you answered written on again, never a read settled item, or a teammate's ask; reading or answering one drops it at once", async () => {
   window.localStorage.setItem(SHOW_KEY, JSON.stringify("to-do"));
   const NOTE: InboxItem = {
     ...item("a1b2c3d4-0000-4000-8000-000000000011", "Preview is up", 3_500),
@@ -2604,23 +2610,13 @@ test("the sidebar's Inbox counts what To do lists, as main counts each task's to
   };
   // Note that the thread written on again changed before the open ask, so the item chosen as the Inbox opens is one opening never reads out of To do.
   const followed: InboxItem = { ...RETRY, updatedAt: 2_500, unread: true };
-  const SHELVED: TaskSummary = {
-    ...INVITES,
-    id: "9d2b7b5a-4e3f-4e9c-9c77-7a5d8b3f4c40",
-    name: "Shelved",
-    archivedAt: 7_000,
-  };
   inboxes.set(BILLING.id, [{ ...THRESHOLD, unread: true }, followed, SEEN]);
   inboxes.set(INVITES.id, [{ ...EXPIRY, unread: true }, NOTE, THEIRS]);
-  inboxes.set(SHELVED.id, [
-    { ...item("a1b2c3d4-0000-4000-8000-000000000014", "Old?", 2_000), unread: true },
-  ]);
   const holding = (billing: number): readonly AppInboxTaskHolding[] => [
     { taskId: BILLING.id, items: 3, toDo: billing, updatedAt: 4_500 },
     { taskId: INVITES.id, items: 3, toDo: 2, updatedAt: 4_000 },
-    { taskId: SHELVED.id, items: 1, toDo: 0, updatedAt: 2_000 },
   ];
-  const { page } = mount([], { holding: holding(2), archived: [SHELVED], withSidebar: true });
+  const { page } = mount([], { holding: holding(2), withSidebar: true });
   await settle();
   assert.equal(toDoRows(page), 4);
   assert.equal(sidebarInboxCount(page), 4, "the sidebar counts what To do lists");
@@ -2696,76 +2692,11 @@ test("the sidebar's Inbox counts the open items alone, as before, where main car
   );
 });
 
-test("an archived task's items stand under Archived alone, which the view's menu offers beside To do and All and the head then names: each drawn as it stood, needing nobody, read but not answered, the box giving way to Unarchive, which brings the task back; Archived is never where a relaunch opens", async () => {
-  const archivedInvites: TaskSummary = { ...INVITES, archivedAt: 9_000 };
-  const { page, asked } = mount([], { standing: [BILLING], archived: [archivedInvites] });
-  await settle();
-  assert.deepEqual(scopes(page), ["Inbox · All", "To do", "[All]", "Archived"]);
-  assert.deepEqual(listed(page), [
-    "# Billing usage alerts",
-    "How is a failed email retried?",
-    "▸ *Alert at 80%?",
-  ]);
-
-  showScope(page, "Archived");
-  await settle();
-  assert.equal(headTitle(page), "Inbox · Archived");
-  assert.deepEqual(listed(page), ["# Invites", "▸ Expire after 7 days?"]);
-  assert.deepEqual(subjectOf(page), ["Expire after 7 days?"]);
-  restOn(rowNamed(page, "Expire after 7 days?"));
-  const rowCard = wordsOf(document.querySelector(".luke-tooltip-card [data-inbox-row-card]")) ?? "";
-  assert.match(rowCard, /Archived with its task/u, "the row's card says it waits on nobody");
-  assert.doesNotMatch(rowCard, /Waiting/u);
-  const pane =
-    page.querySelector<HTMLElement>(".inbox-view-items:not([hidden])") ??
-    assert.fail("the item is shown beside the list");
-  const options = [...pane.querySelectorAll<HTMLButtonElement>('[role="radio"]')];
-  assert.equal(options.length, 2, "what it asks still stands");
-  assert.equal(pane.querySelector(DRAFT_REPLY), null, "no draft reply stands to hold it");
-  assert.ok(
-    pane.querySelector('[data-inbox-comment="asked"] [data-held] [role="radio"]'),
-    "it stands in the agent's message instead",
-  );
-  assert.ok(
-    options.every((option) => option.disabled),
-    "its options take no pick",
-  );
-  assert.equal(pane.querySelector(".inbox-answer"), null, "no box takes an answer");
-  assert.match(pane.textContent ?? "", /Unarchive the task to answer or reply/u);
-  const unarchive =
-    [...pane.querySelectorAll<HTMLButtonElement>("button")].find(
-      (button) => button.textContent === "Unarchive",
-    ) ?? assert.fail("the pane offers Unarchive");
-  act(() => unarchive.click());
-  assert.deepEqual(asked.marks, [[INVITES.id, TASK_MARK.UNARCHIVE]]);
-  assert.equal(window.localStorage.getItem(SHOW_KEY), JSON.stringify("all"));
-});
-
-test("All holding only an archived task's items, Whose naming nobody, says nothing is here and offers Show archived, blaming no one", async () => {
-  const archivedInvites: TaskSummary = { ...INVITES, archivedAt: 9_000 };
-  const { page } = mount([], { standing: [], archived: [archivedInvites] });
-  await settle();
-  showScope(page, "All");
-  await settle();
-  assert.deepEqual(listed(page), []);
-  assert.deepEqual(listEmpty(page), [undefined, "Nothing here", "Show archived"]);
-});
-
-test("a link to an archived task's item opens it under Archived, which lists it, rather than saying it is not found", async () => {
-  const archivedInvites: TaskSummary = { ...INVITES, archivedAt: 9_000 };
-  const { page } = mount([], { standing: [BILLING], archived: [archivedInvites] });
-  await settle();
-  act(() => chooseFromOutside({ taskId: INVITES.id, itemId: EXPIRY.id, opened: true }));
-  await settle();
-  assert.equal(headTitle(page), "Inbox · Archived");
-  assert.deepEqual(subjectOf(page), ["Expire after 7 days?"]);
-});
-
 test("a fresh profile opens the Inbox on To do, grouped by task, its head naming no scope, a settled item left out until All is chosen, which the head then names", async () => {
   window.localStorage.clear();
   const { page } = mount();
   await settle();
-  assert.deepEqual(scopes(page), ["Inbox", "[To do]", "All", "Archived"]);
+  assert.deepEqual(scopes(page), ["Inbox", "[To do]", "All"]);
   assert.deepEqual(listed(page), [
     "# Invites",
     "▸ *Expire after 7 days?",
@@ -2781,6 +2712,55 @@ test("a fresh profile opens the Inbox on To do, grouped by task, its head naming
     "# Invites",
     "▸ *Expire after 7 days?",
   ]);
+});
+
+test("a task done or canceled keeps its items listed and counted as any other's, each row wearing its task's status, its card saying it in words, and a row of an agent with no task wearing none; no scope offers an archive", async () => {
+  window.localStorage.clear();
+  agentInboxes = new Map([[SWEEP_AGENT, [QUARANTINE]]]);
+  const { page } = mount(
+    [
+      {
+        id: QUARANTINE.id,
+        agentId: SWEEP_AGENT,
+        title: QUARANTINE.title,
+        postedAt: QUARANTINE.postedAt,
+        agentTitle: "Sweep the flaky tests",
+        agentModel: "anthropic/claude-opus-5.5",
+        automationId: null,
+        automationName: null,
+        repository: "acme/relay",
+      },
+    ],
+    {
+      standing: [
+        { ...BILLING, status: TASK_STATUS.DONE },
+        { ...INVITES, status: TASK_STATUS.CANCELED },
+      ],
+    },
+  );
+  await settle();
+  assert.deepEqual(scopes(page), ["Inbox", "[To do]", "All"]);
+  const rows = listed(page);
+  for (const row of ["*Alert at 80%?", "*Expire after 7 days?", "*Quarantine the flaky test?"]) {
+    assert.ok(
+      rows.some((each) => each.replace(/^▸ /u, "") === row),
+      `To do lists ${row}: ${rows.join(" | ")}`,
+    );
+  }
+  const tasksFolded = foldedCounts(page).filter(
+    (each) => each?.startsWith("Billing") === true || each?.startsWith("Invites") === true,
+  );
+  assert.deepEqual(tasksFolded.toSorted(), [
+    "Billing usage alerts1 needs you",
+    "Invites1 needs you",
+  ]);
+  assert.equal(rowStatus(page, "Alert at 80%?"), "Done");
+  assert.equal(rowStatus(page, "Expire after 7 days?"), "Canceled");
+  assert.equal(rowStatus(page, "Quarantine the flaky test?"), undefined);
+
+  restOn(rowNamed(page, "Alert at 80%?"));
+  const card = document.querySelector(".luke-tooltip-card [data-inbox-row-card]");
+  assert.equal(card?.querySelector(".inbox-card-task-status")?.textContent, "Done");
 });
 
 test("a tab kept before the scopes opens the Inbox on the scope that lists what it did, Needs you and Unread on To do and All open and Everything on All, and the Needs you press kept before the tabs on To do where pressed and All where not; a scope chosen since is kept in its place", async () => {
@@ -2814,7 +2794,7 @@ test("a tab kept before the scopes opens the Inbox on the scope that lists what 
   root = undefined;
   ({ page } = mount());
   await settle();
-  assert.deepEqual(scopes(page), ["Inbox", "[To do]", "All", "Archived"]);
+  assert.deepEqual(scopes(page), ["Inbox", "[To do]", "All"]);
 });
 
 test("Sort in the view's menu offers Latest first and Oldest first, which lists the item changed longest ago first; a Waiting longest kept before is read as Oldest first, and the sort chosen outlives a relaunch", async () => {
@@ -4251,7 +4231,7 @@ function pending(): PendingRead {
   return { promise, settle };
 }
 
-test("a chosen item whose plan leaves the account's list, archived on another Mac, gives way to the first item still waiting", async () => {
+test("a chosen item whose plan leaves the account's list, deleted on another Mac, gives way to the first item still waiting", async () => {
   const { page } = mount();
   await settle();
   assert.deepEqual(
@@ -5625,7 +5605,6 @@ test("Mark all as read in the view's menu, under Group by, marks every unread it
   assert.deepEqual(openOptions(), [
     "To do",
     "All",
-    "Archived",
     "—",
     "Group by",
     "Sort",
@@ -6323,9 +6302,6 @@ function scrollButton(pane: HTMLElement): HTMLButtonElement | null {
   return pane.querySelector<HTMLButtonElement>('button[aria-label="Scroll to the newest line"]');
 }
 
-/** The reader's draft reply at the thread's end, which holds the box and the open question's controls. */
-const DRAFT_REPLY = '[data-inbox-comment="draft"]';
-
 test("a long thread opens at its newest message, its draft reply just over the board's foot, whether its question waits on an answer or nothing is asked", async () => {
   layOutBoards({ height: 1200 });
   for (const shown of [
@@ -6778,21 +6754,6 @@ test("a teammate's notice is left open as it is opened, since acknowledging it s
     { itemId: notice.id, revision: 4, reply: INBOX_REPLY.ACKNOWLEDGED },
   ]);
   assert.deepEqual(messaged, []);
-});
-
-test("an archived task's notice is left open as it is opened, since nothing answers it until the task is back", async () => {
-  const archivedInvites: TaskSummary = { ...INVITES, archivedAt: 9_000 };
-  const notice = noticeItem({ id: EXPIRY.id, title: "Invites now expire after 7 days" });
-  inboxes.set(INVITES.id, [notice]);
-  const { answered } = noticeWrites();
-  const { page } = mount([], { standing: [BILLING], archived: [archivedInvites] });
-  await settle();
-  showScope(page, "Archived");
-  await settle();
-  act(() => rowNamed(page, notice.title).click());
-  await settle();
-  assert.deepEqual(subjectOf(page), [notice.title]);
-  assert.deepEqual(answered, []);
 });
 
 test("with the inbox-first sidebar, opening the reader's own notice from the sidebar acknowledges it", async () => {

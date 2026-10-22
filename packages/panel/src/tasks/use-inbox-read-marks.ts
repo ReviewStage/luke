@@ -8,7 +8,6 @@ import type { ActHandle } from "../act.js";
 import { useAppCommand } from "../app-commands.js";
 import {
   acknowledgedOnOpen,
-  archivedHolder,
   EMPTY_INBOX_DRAFT,
   INBOX_HOLDER,
   type InboxGroup,
@@ -68,14 +67,14 @@ export interface InboxToDoBasis {
 /**
  * What a mark on the item moves of its task's To do count, as
  * `inbox-settling.ts` lays it over main's: only a settled item of the
- * reader's, on a task not archived that main counts, since an open one is
- * to do whether read or not, and nobody else's or an archived task's ever is.
+ * reader's, on a task main counts, whatever its status, since an open one
+ * is to do whether read or not, and nobody else's ever is.
  */
 function toDoMarkOf(basis: InboxToDoBasis | undefined, item: InboxItem): InboxToDoMark | undefined {
   if (basis === undefined || item.status === INBOX_STATUS.OPEN) return undefined;
   if (!readersItem(item, basis.readerId)) return undefined;
   const group = basis.groups.find(({ items }) => items.some(({ id }) => id === item.id));
-  if (group?.holder.kind !== INBOX_HOLDER.TASK || archivedHolder(group.holder)) return undefined;
+  if (group?.holder.kind !== INBOX_HOLDER.TASK) return undefined;
   const taskId = group.holder.task.id;
   const holding = basis.holdings.find((each) => each.taskId === taskId);
   if (holding?.toDo === undefined) return undefined;
@@ -225,8 +224,7 @@ export function useReadOnOpen({
  * Acknowledges the notice an Inbox shows as it is opened, as Got it did,
  * once for each revision each time it is shown, where opening it settles it
  * (`inbox-model.ts`'s `acknowledgedOnOpen`): the reader's own, messaging
- * nobody, on a task not put away in the archive, and its box holding no
- * words or files, which stay a reply to send. `shown` is the item the pane
+ * nobody, and its box holding no words or files, which stay a reply to send. `shown` is the item the pane
  * draws, none while the Inbox is hidden or shows its list alone; `control`
  * is the held read of its holder, which the item is waited on until it
  * holds, so the answer names the revision the service holds rather than an
@@ -252,11 +250,11 @@ export function useNodOnOpen({
     }
     // Note that nothing is settled until the holder's held read and the reader's id stand, so neither an older revision nor a teammate's notice is acknowledged.
     if (!read || failed || readerId === undefined) return;
-    const { holder, item } = shown;
+    const { item } = shown;
     const was = nodded.current;
     if (was !== undefined && was.id === item.id && was.revision === item.revision) return;
     nodded.current = { id: item.id, revision: item.revision };
-    if (archivedHolder(holder) || !acknowledgedOnOpen(item, readerId)) return;
+    if (!acknowledgedOnOpen(item, readerId)) return;
     const draft = draftOf(item);
     if (draft.note.trim() !== "" || draft.attachments.length > 0) return;
     onAnswer(item, EMPTY_INBOX_DRAFT, INBOX_REPLY.ACKNOWLEDGED);

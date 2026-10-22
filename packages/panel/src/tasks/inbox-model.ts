@@ -1580,11 +1580,6 @@ export function taskHolder(task: TaskSummary): InboxHolder {
   return { kind: INBOX_HOLDER.TASK, task };
 }
 
-/** Whether a holder is a task put away in the archive, whose items are read but not answered until it is brought back. */
-export function archivedHolder(holder: InboxHolder): boolean {
-  return holder.kind === INBOX_HOLDER.TASK && holder.task.archivedAt !== undefined;
-}
-
 /**
  * The workspace an item belongs to: its plan's, or, for an agent with no
  * plan, the agent's own, where the service named it; none where it did not,
@@ -1759,13 +1754,13 @@ export type InboxGrouping = (typeof INBOX_GROUPING)[keyof typeof INBOX_GROUPING]
 /**
  * Which items an Inbox lists, as its view's menu chooses: To do, the
  * reader's own items not done with (`toDo`), or All, every item, open and
- * settled; and, on the window's Inbox alone, Archived, the items of the
- * archived tasks, which neither of the others lists (`desktop-inbox.tsx`).
+ * settled. Note that no scope asks where the item's task stands: an item
+ * of a task done or canceled is listed and counted as any other, the
+ * Inbox being a feed of what the agents got done.
  */
 export const INBOX_SHOW = {
   TO_DO: "to-do",
   ALL: "all",
-  ARCHIVED: "archived",
 } as const;
 
 export type InboxShow = (typeof INBOX_SHOW)[keyof typeof INBOX_SHOW];
@@ -1813,11 +1808,10 @@ const STATUS_KEY = {
   [INBOX_STATUS_GROUP.ANSWERED]: "status:answered",
 } as const satisfies Record<InboxStatusGroupKind, string>;
 
-/** How many items each scope lists, filtered out by the scope shown or not; Archived only on an Inbox that offers it. */
+/** How many items each scope lists, filtered out by the scope shown or not. */
 export interface InboxCounts {
   readonly [INBOX_SHOW.TO_DO]: number;
   readonly [INBOX_SHOW.ALL]: number;
-  readonly [INBOX_SHOW.ARCHIVED]?: number;
 }
 
 /** One holder, a task or an automation, and every item it holds, as the list is handed them. */
@@ -1915,28 +1909,25 @@ export function acknowledgedOnOpen(item: InboxItem, readerId: string | undefined
   );
 }
 
-/** Whether a listed item needs the reader (`needsReader`) where it stands: never on a task put away in the archive, which nothing answers until it is back. */
+/** Whether a listed item needs the reader (`needsReader`), whatever its task's status. */
 export function needsYou(listed: InboxListed, readerId: string | undefined): boolean {
-  return needsReader(listed.item, readerId) && !archivedHolder(listed.holder);
+  return needsReader(listed.item, readerId);
 }
 
 /**
  * Whether a listed item is one the reader is not done with, as To do lists
  * it: one that needs them (`needsYou`), or one of theirs (`readersItem`)
- * still unread, such as a settled thread its agent wrote on again; never
- * on a task put away in the archive, as `needsYou` reads it.
+ * still unread, such as a settled thread its agent wrote on again.
  */
 function toDo(listed: InboxListed, readerId: string | undefined): boolean {
-  if (archivedHolder(listed.holder)) return false;
   return (
     needsYou(listed, readerId) || (readersItem(listed.item, readerId) && isUnread(listed.item))
   );
 }
 
 /**
- * Every open item of a holder not put away in the archive, whoever's, the
- * latest changed first, as Home, Factory, and a person's page list what
- * waits (`use-waiting-items.ts`).
+ * Every open item, whoever's, the latest changed first, as Home, Factory,
+ * and a person's page list what waits (`use-waiting-items.ts`).
  */
 export function openItems(groups: readonly InboxGroup[]): readonly InboxListed[] {
   return groups
@@ -2136,14 +2127,12 @@ export function isDone(item: InboxItem): boolean {
   return item.status !== INBOX_STATUS.OPEN && !isUnread(item);
 }
 
-/** Whether a scope lists the item: To do the reader's own not done with (`toDo`), and All and Archived all of them. */
+/** Whether a scope lists the item: To do the reader's own not done with (`toDo`), and All all of them. */
 function showsItem(show: InboxShow, listed: InboxListed, readerId: string | undefined): boolean {
   switch (show) {
     case INBOX_SHOW.TO_DO:
       return toDo(listed, readerId);
-    // Note that Archived is handed the archived tasks' groups alone, every item of which it lists.
     case INBOX_SHOW.ALL:
-    case INBOX_SHOW.ARCHIVED:
       return true;
   }
 }

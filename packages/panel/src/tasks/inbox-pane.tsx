@@ -78,7 +78,6 @@ import {
   agentSubject,
   NOTHING_HELD,
 } from "./agent-ref.js";
-import { ArchivedComposerNote } from "./archived-task.js";
 import { AttachedFileChips } from "./attached-file-chips.js";
 import { InboxAnswerBox } from "./inbox-answer-box.js";
 import {
@@ -109,7 +108,6 @@ import { COMMENT, Comment, CommentName, THREAD_TIME_CLASS } from "./inbox-commen
 import { type FormTextDoors, InboxFormText } from "./inbox-form-text.js";
 import {
   answerOf,
-  archivedHolder,
   askNumberedPick,
   CLOSED_WORDS,
   decidedOf,
@@ -1497,7 +1495,6 @@ function ThreadMessage({
   now,
   control,
   waitingOn,
-  held,
 }: {
   item: InboxItem;
   message: InboxMessage;
@@ -1506,8 +1503,6 @@ function ThreadMessage({
   now: number;
   control: TaskInboxControl;
   waitingOn: InboxItem["startedBy"];
-  /** The open ask's controls, taking nothing, where the item is put away with its task and no draft stands to hold them. */
-  held: React.ReactNode;
 }): React.JSX.Element {
   const member = usePerson(message.member);
   const fromAgent = message.author === INBOX_MESSAGE_AUTHOR.AGENT;
@@ -1568,7 +1563,6 @@ function ThreadMessage({
           waitingOn={waitingOn}
         />
       )}
-      {held}
     </Comment>
   );
 }
@@ -1579,7 +1573,7 @@ const ITEM_MENU_LABEL = "Item actions";
 /**
  * The item's ⋯ menu at the end of the pane's bar, as an issue's page and an
  * agent's tab end theirs: Mark as read or unread, naming U, as the item's
- * row's menu does; Copy link, the item's link under its task or its agent; and, while the item is open on a task that is not archived, Close
+ * row's menu does; Copy link, the item's link under its task or its agent; and, while the item is open, Close
  * without answering, asked first (`inbox-close.tsx`). It is keyed by its
  * item where it is drawn, so a question asked on one item never closes the
  * next, and the menu and the question go with the pane once it is hidden.
@@ -1610,7 +1604,7 @@ function InboxItemMenu({
       ? { kind: LINK_PLACE.INBOX_ITEM, planId: holder.task.id, itemId: item.id }
       : { kind: LINK_PLACE.INBOX_ITEM, agentId: item.agentId, itemId: item.id },
   );
-  const close = useInboxClose(item, archivedHolder(holder) ? undefined : onClose, shown);
+  const close = useInboxClose(item, onClose, shown);
   const groups = [
     read === undefined ? [] : [read],
     copyLink === undefined ? [] : [copyLink],
@@ -1634,9 +1628,6 @@ function InboxItemMenu({
     </>
   );
 }
-
-/** What stands in the box's place while the item's task is archived. */
-const ARCHIVED_ITEM_NOTE = "Unarchive the task to answer or reply";
 
 /**
  * The thread's subject, as a plan or a pull request leads with one: the
@@ -1734,8 +1725,6 @@ export interface InboxPaneDoors {
   /** Opens a link block's web page in the browser (`use-open-link.ts`). */
   readonly openLink: (url: string) => void;
   readonly code: InboxCodeDoors;
-  /** Brings the item's task back from the archive, offered where the box would stand while it is archived; none where the task is not archived. */
-  readonly onUnarchive?: (() => void) | undefined;
   /** Marks the item read or unread, from the bar's ⋯ menu; none where the pane offers no mark. */
   readonly onMark?: ((item: InboxItem, unread: boolean) => void) | undefined;
   /** Closes an open item without an answer, from the bar's ⋯ menu; none where the pane offers no close. */
@@ -1896,19 +1885,10 @@ export function InboxPane({
     onOpen: () => doors.onOpenAgent(item.agentId),
   };
   const open = item.status === INBOX_STATUS.OPEN;
-  // An item put away with its task is read but not answered, nor written on, until the task is back.
-  const archived = archivedHolder(holder);
-  const answerable = open && !archived;
   const draft = control.draftOf(item);
   // Note that an item from version 5 is drawn as its thread, and one from before as it always was.
   const thread = inboxThreadOf(item);
-  useOptionNumbers(
-    pane,
-    item,
-    draft,
-    control,
-    answerable ? numberedPickOf(item, thread) : undefined,
-  );
+  useOptionNumbers(pane, item, draft, control, open ? numberedPickOf(item, thread) : undefined);
   const formText: FormTextDoors = {
     self: item.agentId,
     agent: by.subject.agent,
@@ -1927,31 +1907,30 @@ export function InboxPane({
   const wordsAlone = openAsk?.type === INBOX_ASK.ANSWER && openAsk.fields === undefined;
   // Note that a note asks nothing back but a nod, so it waits on no one's answer and wears no marker.
   const marked = knownResponse(item.response) && item.response.type !== INBOX_RESPONSE.NONE;
-  // Note that an item put away with its task draws its question in the agent's message instead, taking nothing, since no draft stands to hold it.
   const question =
     thread === undefined ? (
       open && drawsControls(item) ? (
-        <DraftQuestion held={archived} pane={pane}>
+        <DraftQuestion pane={pane}>
           <ResponseControls
             item={item}
             draft={draft}
-            disabled={!answerable}
+            disabled={!open}
             text={formText}
             onDraft={onDraft}
           />
         </DraftQuestion>
       ) : undefined
     ) : openAsk === undefined || wordsAlone ? undefined : (
-      <DraftQuestion held={archived} pane={pane}>
+      <DraftQuestion pane={pane}>
         <AskControls
           ask={openAsk}
           title={cardTitle(item.title)}
-          doors={{ draft, disabled: !answerable, text: formText, onDraft }}
+          doors={{ draft, disabled: !open, text: formText, onDraft }}
         />
       </DraftQuestion>
     );
-  // The box stands at the thread's end as the reader's draft reply, unless the item is put away with its task.
-  const draftReply = archived ? null : (
+  // The box stands at the thread's end as the reader's draft reply.
+  const draftReply = (
     <AnswerMentions value={mentions}>
       <DraftReply readerId={readerId}>
         <InboxAnswerBox
@@ -2039,7 +2018,6 @@ export function InboxPane({
                           ) : marked ? (
                             <AskMarker on={waitingOn} />
                           ) : null}
-                          {archived ? question : null}
                         </Comment>
                         <ThreadAfter item={item} by={by} now={now} control={control} />
                         {draftReply}
@@ -2060,11 +2038,6 @@ export function InboxPane({
                                 now={now}
                                 control={control}
                                 waitingOn={waitingOn}
-                                held={
-                                  archived && asking?.message.id === message.id
-                                    ? question
-                                    : undefined
-                                }
                               />
                               {/* The first message always stands, so the line saying earlier ones are cut follows it. */}
                               {at === 0 && thread.length >= INBOX_BOUNDS.MAX_MESSAGES_READ ? (
@@ -2086,10 +2059,7 @@ export function InboxPane({
           </ConversationContent>
           <ConversationScrollButton />
         </Conversation>
-        {open || archived || next === undefined ? null : <InboxNextUp next={next} />}
-        {archived && doors.onUnarchive !== undefined ? (
-          <ArchivedComposerNote onUnarchive={doors.onUnarchive} words={ARCHIVED_ITEM_NOTE} />
-        ) : null}
+        {open || next === undefined ? null : <InboxNextUp next={next} />}
       </div>
     </section>
   );
