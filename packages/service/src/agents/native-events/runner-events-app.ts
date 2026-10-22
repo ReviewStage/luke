@@ -51,6 +51,7 @@ import {
 import { ANY_METHOD, type WebRoutes } from "../../route.js";
 import { reopenTaskForWork, settleTaskIfFinished } from "../../tasks/task-finish.js";
 import { runnerEnded } from "../coder-host/claude-code-sessions.js";
+import { estimatedTokens } from "../coder-host/token-estimate.js";
 import { CODER_TOOL_SET } from "../coder-host/tool-set.js";
 import { admitRunnerBearer, presentedBearer, runnerTokenDigest } from "../luke-mcp/bearer.js";
 import { keepAliveDue } from "../sandbox-keep-alive.js";
@@ -138,14 +139,6 @@ interface Applying {
   readonly payer: CodingAgentPayer | undefined;
   /** The plan or prompt the agent was handed first, whose share of its context the ring estimates. */
   readonly brief: string;
-}
-
-/** The bytes a token stands for in eve's own estimate (`../coder-host/context-estimate.ts`). */
-const BYTES_PER_TOKEN = 4;
-
-/** The tokens of a value's JSON as eve's compaction estimates them: its bytes over four, rounded up. */
-function estimatedTokens(json: string): number {
-  return Math.ceil(new TextEncoder().encode(json).byteLength / BYTES_PER_TOKEN);
 }
 
 /** The row each plan is kept in, which a turn's word on the plan is written to; a key's payer has none. */
