@@ -58,6 +58,7 @@ import {
 } from "../testing/live-events.js";
 import {
   connect,
+  everyAccountKeyed,
   type FakeAccounts,
   fakeAccounts,
   hangUpDevice,
@@ -368,7 +369,7 @@ async function stand(offer: Offer): Promise<Stand> {
         const listener = yield* listening(voice, 0, "127.0.0.1");
         yield* VoiceService.make({
           server: voice,
-          apiKey: API_KEY,
+          openAiKeyOf: everyAccountKeyed(API_KEY),
           accounts,
           record: sessionRecord,
           openAiBaseUrl: openAi.baseUrl,

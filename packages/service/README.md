@@ -422,15 +422,18 @@ with Opus in base64, held to two minutes and a megabyte and refused past
 either as `request_too_large` before anything goes upstream; `keywords` are
 up to fifty words the desktop expects to hear (the repository, the task's
 title, the paths it names), each on one line. `src/dictation/transcription.ts`
-sends the clip and the words to OpenAI's `gpt-transcribe` on Luke's key as one
+sends the clip and the words to OpenAI's `gpt-transcribe` on the caller's own
+OpenAI API key (`src/accounts/own-api-key.ts`, the key saved in Settings ›
+Agents, never Luke's) as one
 multipart `POST /v1/audio/transcriptions`, the words as its `keywords[]`
 ([OpenAI's speech-to-text guide](https://developers.openai.com/api/docs/guides/speech-to-text)).
 Nothing of the clip or the text is stored, logged, traced, or counted as an
-event; a failure logs OpenAI's status alone and answers `unavailable`, as a
-deployment without `OPENAI_API_KEY` does. The day is metered one call and the
+event; a failure logs OpenAI's status alone and answers `unavailable`, and a
+caller who saved no OpenAI API key is refused `openai-key-missing` (409)
+before the clip is read. The day is metered one call and the
 seconds OpenAI billed, or the clip's own length where the answer reports none,
 and a meter the database refused is logged while the text is still answered.
-There is no path on an account's own key. `src/dictation/dictation-procedures.test.ts`
+`src/dictation/dictation-procedures.test.ts`
 answers the route over a scripted OpenAI at its HTTP door.
 
 ## The models group
@@ -2695,8 +2698,7 @@ already closed, as of that call's own close.
 Before any socket stands, an HTTP status on the upgrade: `401` for
 `/api/voice/sessions` without a bearer, `403` for a handshake carrying a
 browser `Origin` header (the caller is no page: the desktop connects from
-its main process), `503` while
-`OPENAI_API_KEY` is absent. Once a socket stands, one frame `{ "error": <reason> }`
+its main process). Once a socket stands, one frame `{ "error": <reason> }`
 in `hostedErrorSchema`'s vocabulary, then a close with code 1008 and the same
 reason: `invalid-request` for a first frame that is not a valid `session.create`
 or `session.attach`, a create naming no task or no agent, or an attach to a
@@ -2704,7 +2706,9 @@ session bound to no task or no agent; `invalid-token` for a
 bearer no account stands behind, and for an attach to a session this account
 did not create; `not-found` for a call naming a task the account
 does not hold, or an agent that is not that task's, the account's to reach,
-or standing unarchived, refused before the session is counted; `upstream-error` when OpenAI refused the
+or standing unarchived, refused before the session is counted; `openai-key-missing`
+for a caller who saved no OpenAI API key, which every call runs on, refused
+before the session is counted or created; `upstream-error` when OpenAI refused the
 creation or the sideband could not attach; `upstream-throttled` when OpenAI
 answered 429.
 
@@ -2731,9 +2735,10 @@ the relay never heard and which are settled as failed for `abandoned`
 through the same write the relay's own end takes, at most fifty a sweep and
 counted as `abandoned`; and the bound on a detached voice session described
 under "How a session ends", which ends every open session whose device went
-without a hang-up more than a minute ago on Luke's key, at most 20 a sweep and
-each inside ten seconds, counted as `voice`. A deployment without the OpenAI
-key opened no voice session and sweeps none.
+without a hang-up more than a minute ago on its owner's own OpenAI key, at
+most 20 a sweep and each inside ten seconds, counted as `voice`; one whose
+owner holds no OpenAI key now is stamped for a later sweep, until OpenAI's
+own hour limit closes it as expired.
 
 It then fires the automations whose schedule is due ("Automations" below),
 at most twenty-five a sweep, counted as `automations.fired`, and acts on

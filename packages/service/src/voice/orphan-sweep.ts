@@ -25,10 +25,11 @@ import type { LiveUpstream } from "./openai.js";
  * The bound on a detached voice session. A sessions-route connection whose
  * device socket went without a hang-up leaves the WebRTC session standing
  * for the device's re-attach and stamps the row detached; a device that does
- * not come back within the grace leaves a session running on Luke's key with
- * no connection to end it, since nothing else will send `session.close`. The
- * scheduled sweep ends each one the way a connection would: it attaches a
- * fresh sideband through the same upstream, sends `session.close` through the
+ * not come back within the grace leaves a session running on its owner's
+ * OpenAI key with no connection to end it, since nothing else will send
+ * `session.close`. The scheduled sweep ends each one the way a connection
+ * would: it attaches a fresh sideband on the owner's own key, the one the
+ * session was created on, sends `session.close` through the
  * same graceful close the exchange runs, and on `session.closed` writes the
  * close and the seconds exactly as the service does, the seconds once
  * through the ledger. A session OpenAI answers the attach for as gone (404
@@ -38,9 +39,16 @@ import type { LiveUpstream } from "./openai.js";
  * never confirmed — says nothing of whether the session still runs, so the
  * row is stamped again and a sweep a grace later tries again, behind the
  * orphans stamped meanwhile, so a few that never answer cannot hold every
- * sweep's bounded batch; only a session past
- * OpenAI's own duration limit, which has ended whatever it answers, is
- * closed as expired instead. Whichever way a voice row is closed here, the
+ * sweep's bounded batch; only a session past OpenAI's own duration limit,
+ * which has ended whatever it answers, is closed as expired instead. An
+ * owner who holds no OpenAI key now, having removed it in Settings since the
+ * call began, is read the same way: no other key may end the session, so it
+ * waits for the owner's key or for the limit. Note that the key read is the
+ * owner's now: one replaced in Settings since the call began belongs to
+ * another OpenAI project, whose answer to the attach (a refusal, or a 404 the
+ * sweep reads as gone) leaves the call to OpenAI's own limit, still on the
+ * owner's old key and never Luke's, since no row keeps the key a call was
+ * created on. Whichever way a voice row is closed here, the
  * avatar rows still open on it close behind it as orphaned, the voice row
  * first so no avatar opens on it after. Every sweep then closes whatever
  * avatar row is still open on a call already closed, as of that call's own
@@ -99,8 +107,10 @@ export const NOTHING_ORPHANED: VoiceOrphanSweepOutcome = {
 };
 
 export interface VoiceOrphanSweepSeams {
-  /** Luke's own upstream, the one the voice functions attach through. */
-  readonly upstream: LiveUpstream;
+  /** OpenAI on the session owner's own key, as the voice functions attach through; nothing where the owner holds none now. */
+  readonly upstreamOf: (
+    userId: string,
+  ) => Effect.Effect<LiveUpstream | undefined, unknown, DatabaseServices>;
   readonly record: VoiceSessionRecord;
   /** The seconds ledger the service records a closed session through. */
   readonly recordSeconds: VoiceAccounts["recordSeconds"];
@@ -170,7 +180,9 @@ const endOrphan = /* @__PURE__ */ Effect.fn("web/endOrphan")(function* (
   now: number,
 ): Effect.fn.Return<OrphanEnding, unknown, DatabaseServices | Scope.Scope> {
   const { sessionId, userId } = orphan;
-  const attached = yield* Effect.result(seams.upstream.attach(sessionId));
+  const upstream = yield* seams.upstreamOf(userId);
+  if (upstream === undefined) return yield* unanswered(seams, orphan, now);
+  const attached = yield* Effect.result(upstream.attach(sessionId));
   if (Result.isFailure(attached)) {
     const { status } = attached.failure;
     if (status === undefined || !SESSION_GONE_STATUS.has(status)) {

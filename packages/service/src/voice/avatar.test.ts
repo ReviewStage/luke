@@ -27,6 +27,7 @@ import { afterAll } from "vitest";
 import { connectAgentApiKeys } from "../testing/agent-credentials.js";
 import {
   connect,
+  everyAccountKeyed,
   fakeAccounts,
   hangUpDevice,
   readSocket,
@@ -147,7 +148,7 @@ async function stand(keyframe: Layer.Layer<Keyframe> | undefined): Promise<Stand
         const listener = yield* listening(voice, 0, "127.0.0.1");
         yield* VoiceService.make({
           server: voice,
-          apiKey: API_KEY,
+          openAiKeyOf: everyAccountKeyed(API_KEY),
           accounts: { ...fakeAccounts(), resolveUserId: () => Effect.succeedSome(userId) },
           record: voiceSessionRecord(),
           openAiBaseUrl: openAi.baseUrl,
@@ -544,7 +545,8 @@ it.effect(
       await database.run(
         sweepVoiceOrphans(
           {
-            upstream: createLiveUpstream({ apiKey: API_KEY, baseUrl: openAi.baseUrl }),
+            upstreamOf: () =>
+              Effect.succeed(createLiveUpstream({ apiKey: API_KEY, baseUrl: openAi.baseUrl })),
             record,
             recordSeconds: () => Effect.die(new Error("a lost session records no seconds")),
           },

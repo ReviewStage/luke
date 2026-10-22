@@ -1229,9 +1229,9 @@ only when you press Send.
   seconds; Luke can still speak while it is closed. A call opens only when you
   press an agent's Call button or start a new voice chat; starting a task
   never opens one, and Luke takes no key from the machine to open one. Every session goes through our own voice service on your
-  account: nothing on your Mac holds or is handed an OpenAI credential, and it
-  never reaches OpenAI on a key of your own. The service creates the session
-  on our key; relays the control and transcript events between your Mac and
+  account, and runs on the OpenAI API key you saved in Settings › Agents, never
+  on a key of ours: without one, calls are off. Nothing on your Mac holds or
+  is handed the key. The service creates the session on your key; relays the control and transcript events between your Mac and
   OpenAI; reads them to keep the record and to hand each spoken ask to the
   agent the call speaks into; drops the audio OpenAI reflects back, so neither your voice nor
   Luke's transits our service; keeps only the lines and the call record
@@ -1262,7 +1262,9 @@ only when you press Send.
 - OpenAI, for dictation. Pressing the microphone in a message box records it,
   in memory and never on disk, until you press ✓ or Enter (or for two minutes
   at most); ✕ or Escape discards the recording. It goes through our service,
-  on your account, to OpenAI's transcription model on our key, with words the
+  on your account, to OpenAI's transcription model on the OpenAI API key you
+  saved in Settings › Agents (never a key of ours; without one, dictation is
+  off), with words the
   task is likely to contain — its repository's name, its title, and the file
   paths it names — so they are spelled right. Only the text comes back, into
   the box at the caret, and it goes nowhere until you send it. Our service

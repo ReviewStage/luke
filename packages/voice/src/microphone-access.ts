@@ -12,6 +12,9 @@ export const VOICE_KEYLESS_NOTE = "Voice is off: sign in to turn it on.";
 
 const HOSTED_VOICE_UNAVAILABLE_NOTE = "Voice is temporarily unavailable. Try again later.";
 
+/** Why a call or a dictated clip cannot run: it runs on the account's own OpenAI key, and none is saved. */
+export const OPENAI_KEY_MISSING_NOTE = "Add an OpenAI API key in Settings";
+
 const NATIVE_AGENT_CALL_NOTE = "This agent runs in Claude Code or Codex and can't take calls yet.";
 
 const CREDENTIAL_MISSING_CALL_NOTE = "Connect an API key in Settings to call this agent.";
@@ -30,6 +33,8 @@ export function hostedVoiceUnavailableNote(
       return HOSTED_VOICE_UNAVAILABLE_NOTE;
     case LIVE_SESSION_OUTCOME.NATIVE_AGENT_NOT_HERE:
       return NATIVE_AGENT_CALL_NOTE;
+    case LIVE_SESSION_OUTCOME.OPENAI_KEY_MISSING:
+      return OPENAI_KEY_MISSING_NOTE;
     case LIVE_SESSION_OUTCOME.AGENT_CREDENTIAL_MISSING:
       return CREDENTIAL_MISSING_CALL_NOTE;
     default:
