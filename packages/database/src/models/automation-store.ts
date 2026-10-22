@@ -49,6 +49,7 @@ import { codingAgent } from "../schemas/coding-agent.js";
 import { inboxItem } from "../schemas/inbox.js";
 import { conversations } from "../schemas/storage.js";
 import { task } from "../schemas/task.js";
+import { agentGivenNameSql } from "./agent-name.js";
 import { InstantColumnSchema } from "./columns.js";
 import type { TaskStoreEffect, TaskStoreFailure } from "./task-store.js";
 import { AGENT_WORKSPACE, isWorkspaceMember, reachableTask } from "./workspace-store.js";
@@ -602,8 +603,8 @@ function historyOf(userId: string, automationId: string): SQL {
 const HISTORY_COLUMNS = {
   ...RUN_COLUMNS,
   agentConversationId: codingAgent.conversationId,
-  // The name the agent goes by: its human name, else its title.
-  agentTitle: sql<string | null>`coalesce(${codingAgent.personaName}, ${codingAgent.title})`,
+  // The name the agent goes by: Luke for an operator, its human name, else its title.
+  agentTitle: sql<string | null>`coalesce(${agentGivenNameSql(codingAgent)}, ${codingAgent.title})`,
   agentCreatedAt: codingAgent.createdAt,
   agentUserId: codingAgent.userId,
 };

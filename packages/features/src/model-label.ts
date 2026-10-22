@@ -1,3 +1,4 @@
+import { CODING_AGENT_KIND, type CodingAgentKind } from "./coding-agent-wire.js";
 import { type CatalogModel, MODEL_PROVIDER } from "./models-wire.js";
 
 /**
@@ -68,9 +69,14 @@ export function modelLabel(modelId: string, models?: readonly CatalogModel[]): s
   );
 }
 
-/** What names an agent: the human name it was given, its title, the automation whose run started it, and the model it runs on. */
+/** The name a member's operator goes by everywhere it is named: Luke, never a teammate's first name. */
+export const OPERATOR_NAME = "Luke";
+
+/** What names an agent: what kind it is, the human name it was given, its title, the automation whose run started it, and the model it runs on. */
 interface NamedAgent {
-  /** The human name the agent was given as it was created (`agent-persona.ts`); none for an agent from before names were given. */
+  /** What kind of agent it is; an operator is named Luke whatever else it holds. Absent for a coder, as the wire leaves it. */
+  readonly kind?: CodingAgentKind | undefined;
+  /** The human name the agent was given as it was created (`agent-persona.ts`); none for an agent from before names were given, or for an operator. */
   readonly personaName?: string | null | undefined;
   readonly title: string | null;
   readonly model: string;
@@ -79,13 +85,27 @@ interface NamedAgent {
 }
 
 /**
+ * The name an agent goes by as a person would call it: Luke for an
+ * operator, the human name it was given for any other agent, and none for
+ * an agent from before names were given. Every place that names an agent
+ * goes through this, `agentTabLabel` among them, so an operator is Luke in
+ * every one; a query names it as `agentGivenNameSql` does.
+ */
+export function agentGivenName(
+  agent: Pick<NamedAgent, "kind" | "personaName">,
+): string | undefined {
+  if (agent.kind === CODING_AGENT_KIND.OPERATOR) return OPERATOR_NAME;
+  return agent.personaName ?? undefined;
+}
+
+/**
  * An agent as every place names it, its tab, a sidebar row, a card, a
- * notification: the human name it was given, or for an agent from before
- * names were given its title, or until it has one the name of the automation
- * whose run started it, or else its model's name (`modelLabel`).
+ * notification: the name it goes by (`agentGivenName`), or for an agent from
+ * before names were given its title, or until it has one the name of the
+ * automation whose run started it, or else its model's name (`modelLabel`).
  */
 export function agentTabLabel(agent: NamedAgent, models?: readonly CatalogModel[]): string {
   return (
-    agent.personaName ?? agent.title ?? agent.automationName ?? modelLabel(agent.model, models)
+    agentGivenName(agent) ?? agent.title ?? agent.automationName ?? modelLabel(agent.model, models)
   );
 }

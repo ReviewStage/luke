@@ -36,6 +36,7 @@ import {
   type CodingAgentStartFrom,
   PULL_REQUEST_STATE,
 } from "@luke/features/coding-agent-wire";
+import { agentGivenName } from "@luke/features/model-label";
 import type { ModelChoice } from "@luke/features/models-wire";
 import { isFileUIPart, isTextUIPart } from "ai";
 import { Effect, Option } from "effect";
@@ -478,9 +479,9 @@ function capitalized(words: string): string {
   return `${words.charAt(0).toUpperCase()}${words.slice(1)}`;
 }
 
-/** An agent as the preamble names it: its human name, else its title, or its model where it has none, and its id. */
+/** An agent as the preamble names it: Luke for an operator, its human name, else its title, or its model where it has none, and its id. */
 function agentName(agent: CodingAgent): string {
-  return `"${agent.personaName ?? agent.title ?? agent.model}" (agent id ${agent.id})`;
+  return `"${agentGivenName(agent) ?? agent.title ?? agent.model}" (agent id ${agent.id})`;
 }
 
 /** A pull request as it follows the branch it is from; nothing where there is none. */

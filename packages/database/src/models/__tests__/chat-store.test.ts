@@ -2379,6 +2379,50 @@ it.layer(getTestDB())("the chat store's operator, private to its member", (it) =
         assert.ok(Option.isNone(yield* operatorHome(teammate, workspace, coderId)));
       }),
   );
+
+  it.effect(
+    "the operator is named Luke to its member, as the agent of its DM with them, never by a first name or a title, while a coder keeps its human name",
+    () =>
+      Effect.gen(function* () {
+        const db = yield* Database;
+        const owner = yield* openAccount("Ada Lovelace");
+        const workspace = yield* openWorkspace(owner);
+        const task = yield* openTask(owner, workspace);
+        const operatorId = Option.getOrThrow(
+          yield* createCodingAgent(owner, {
+            taskId: null,
+            organizationId: workspace,
+            planSnapshot: null,
+            prompt: null,
+            kind: CODING_AGENT_KIND.OPERATOR,
+            idempotencyKey: randomUUID(),
+            model: "anthropic/claude-opus-5.5",
+            effort: "high",
+            repository: null,
+          }),
+        ).agent.id;
+        const coderId = yield* openAgent(owner, task);
+        // A title the model gave it, and a first name an operator from before was given, name it no longer.
+        yield* db
+          .update(codingAgent)
+          .set({ title: "Desk sweep", personaName: "Ava" })
+          .where(eq(codingAgent.id, operatorId));
+        yield* db
+          .update(codingAgent)
+          .set({ personaName: "Maya" })
+          .where(eq(codingAgent.id, coderId));
+        const seat = (subject: ChatMemberSubject) =>
+          Effect.map(ensureMember(owner, workspace, subject), Option.getOrThrow);
+        const ada = yield* seat({ kind: MEMBER_KIND.HUMAN, userId: owner });
+        const operator = yield* seat({ kind: MEMBER_KIND.AGENT, agentId: operatorId });
+        yield* seat({ kind: MEMBER_KIND.AGENT, agentId: coderId });
+        assert.ok(Option.isSome(yield* findOrMakeDm(owner, workspace, ada.id, operator.id)));
+
+        const agents = yield* agentMembersOf(owner, workspace);
+        assert.deepEqual(agents.get(operatorId), { taskId: undefined, name: "Luke" });
+        assert.deepEqual(agents.get(coderId), { taskId: task, name: "Maya" });
+      }),
+  );
 });
 
 it.layer(getTestDB())("the chat store's keyed member reads and the chat's stamp", (it) => {

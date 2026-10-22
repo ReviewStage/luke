@@ -55,6 +55,7 @@ function lineOf(agent: CodingAgentSummary): ChatAgentLine {
         ? CODING_AGENT_STATUS.FAILED
         : CODING_AGENT_STATUS.COMPLETED,
     ...(agent.personaName === undefined ? undefined : { personaName: agent.personaName }),
+    ...(agent.kind === undefined ? undefined : { kind: agent.kind }),
   };
   return agent.automationName === undefined
     ? line
