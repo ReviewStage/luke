@@ -1,5 +1,7 @@
+import { randomUUID } from "node:crypto";
 import type { DatabaseServices } from "@luke/database/core/query";
 import { readAccountPreferences } from "@luke/database/models/account-store";
+import type { HandedFile } from "@luke/database/models/attached-file-parts";
 import { ensureMember } from "@luke/database/models/chat-store";
 import {
   type CodingAgent,
@@ -23,7 +25,7 @@ import type {
   StoredAutomationOrigin,
   StoredStartedFrom,
 } from "@luke/database/schemas/coding-agent";
-import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
+import { CONVERSATION_RUNTIME, MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import {
   firstMessageText,
   type NoteFiles,
@@ -56,6 +58,7 @@ import {
 } from "@luke/features/task-issue-wire";
 import type { Task } from "@luke/features/task-wire";
 import { failureKind } from "@luke/runtime/effect";
+import { sentLineId } from "@luke/wire/host-ids";
 import { Clock, Effect, Option } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import {
@@ -99,6 +102,7 @@ import {
 } from "./agent-runtime-choice.js";
 import { CODER } from "./bounds.js";
 import { contextWindowOf } from "./context.js";
+import { isNativeRuntime } from "./native-runtime.js";
 import {
   type FittedReplay,
   replayOf,
@@ -897,6 +901,38 @@ function startRuntimeOf(userId: string, ask: StartAsk, model: string) {
   return agentRuntimeChoice(userId, model);
 }
 
+/**
+ * The first message of a native agent's Start, written as the line awaiting
+ * its turn under a fresh key, as a steer's is (`steer.ts`), and its line id,
+ * which the runner is handed and names back as it takes the line. Its
+ * dispatch has already happened by the time it matters: the line is written
+ * standing, and the Start's own open is what hands it over.
+ */
+const openingLine = (
+  agent: CodingAgent,
+  text: string,
+  files: readonly HandedFile[],
+  mentioned: string | undefined,
+) =>
+  Effect.gen(function* () {
+    const clientKey = randomUUID();
+    const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
+    yield* hostedStoreOrUnavailable(
+      writer.writeAwaitingLine(
+        { userId: agent.userId, conversationId: agent.conversationId },
+        {
+          text,
+          clientKey,
+          attachments: files,
+          mentioned,
+          sender: { kind: MESSAGE_SENDER.MEMBER, userId: agent.userId },
+        },
+        Effect.succeed(true),
+      ),
+    );
+    return sentLineId(clientKey);
+  });
+
 /** Starts the account's agent on the task or in the workspace, as above; eve is composed only once a new agent needs its session opened, so a retry that found its agent asks for none. */
 export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent")(function* (
   eve: Effect.Effect<
@@ -1029,15 +1065,20 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
       { userId: agent.userId, conversationId: agent.conversationId },
       given,
     ).pipe(Effect.catch((failure) => Effect.as(logStoreFailure(failure), given)));
+    const mentioned =
+      words === undefined ? undefined : mentionedContext(words, landing.task, reads);
+    // eve writes the first message into the transcript as its session takes it; a native harness's
+    // runner only names its line back as it takes it (`native-events/`), so the line is written here,
+    // awaiting its turn, before the runner can name it. A launch refused discards the agent, line and all.
+    const line = isNativeRuntime(runtime.runtime)
+      ? yield* openingLine(agent, handed, files, mentioned)
+      : undefined;
     const opened = yield* sessions
       .open({
         conversationId: agent.conversationId,
         turn: BRAIN_HOST_TURN.TYPED,
-        message: eveContent(
-          handed,
-          files,
-          words === undefined ? undefined : mentionedContext(words, landing.task, reads),
-        ),
+        message: eveContent(handed, files, mentioned),
+        ...(line === undefined ? undefined : { lineId: line }),
       })
       .pipe(
         Effect.catchTag("EveUnreachable", (failure) =>
