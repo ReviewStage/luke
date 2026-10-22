@@ -259,7 +259,7 @@ it.layer(getTestDB())("the notices an operator reads of its member's agents", (i
       const writer = yield* storeWriter({ tools: {} });
       const { member, workspace, operator: standing } = yield* openMember;
       const agent = yield* coderOf(member, workspace);
-      const dueFor = Effect.map(dueOperatorWakes(HOUR_MS, EVERY), (due) =>
+      const dueFor = Effect.map(dueOperatorWakes(new Date(0), HOUR_MS, EVERY), (due) =>
         due.filter((wake) => wake.agentId === agent.id).map((wake) => wake.at.getTime()),
       );
 
@@ -272,7 +272,8 @@ it.layer(getTestDB())("the notices an operator reads of its member's agents", (i
       yield* turnEnding(writer, agent, BRAIN_REQUEST_STATUS.FAILED, T0 + HOUR_MS + 10);
       assert.deepEqual(yield* dueFor, [T0 + HOUR_MS + 10]);
       assert.equal(
-        (yield* dueOperatorWakes(HOUR_MS, EVERY)).find((w) => w.agentId === agent.id)?.userId,
+        (yield* dueOperatorWakes(new Date(0), HOUR_MS, EVERY)).find((w) => w.agentId === agent.id)
+          ?.userId,
         member,
       );
     }),

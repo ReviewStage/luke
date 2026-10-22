@@ -20,7 +20,7 @@
  */
 
 import { CODING_AGENT_KIND } from "@luke/features/coding-agent-wire";
-import { and, asc, desc, eq, isNull, lte, ne, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, isNull, lte, ne, or, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { Effect, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
@@ -160,7 +160,9 @@ const DueWakeSchema = Schema.Struct({
   at: Schema.Date,
   operatorId: Schema.String,
   userId: Schema.String,
+  organizationId: Schema.String,
   agentId: Schema.String,
+  taskId: Schema.NullOr(Schema.String),
   agentPersonaName: Schema.NullOr(Schema.String),
   agentTitle: Schema.NullOr(Schema.String),
   agentModel: Schema.String,
@@ -172,9 +174,9 @@ export type DueOperatorWake = typeof DueWakeSchema.Type;
 const failedAgent = alias(codingAgent, "failed_agent");
 
 const findDueWakes = SqlSchema.findAll({
-  Request: Schema.Struct({ holdMs: Schema.Int, limit: Schema.Int }),
+  Request: Schema.Struct({ since: Schema.Date, holdMs: Schema.Int, limit: Schema.Int }),
   Result: DueWakeSchema,
-  execute: ({ holdMs, limit }) =>
+  execute: ({ since, holdMs, limit }) =>
     Database.use((db) =>
       db
         .select({
@@ -182,7 +184,9 @@ const findDueWakes = SqlSchema.findAll({
           at: operatorNotice.at,
           operatorId: operatorNotice.operatorId,
           userId: operatorOf.userId,
+          organizationId: operatorOf.organizationId,
           agentId: operatorNotice.agentId,
+          taskId: operatorNotice.taskId,
           agentPersonaName: failedAgent.personaName,
           agentTitle: failedAgent.title,
           agentModel: failedAgent.model,
@@ -201,6 +205,7 @@ const findDueWakes = SqlSchema.findAll({
           and(
             eq(operatorNotice.kind, OPERATOR_NOTICE_KIND.TURN_FAILED),
             isNull(operatorNotice.readAt),
+            gte(operatorNotice.at, since),
             isNull(operatorOf.archivedAt),
             or(
               isNull(operatorWake.id),
@@ -280,15 +285,18 @@ export function markOperatorNoticesRead(
 
 /**
  * The failures a wake is due for, the oldest first and at most `limit`: an
- * unread failure notice of a standing operator's whose agent no wake
- * answered within `holdMs` before the failure. A wake that landed after
- * the failure answers it, so each is due once.
+ * unread failure notice of a standing operator's, no older than `since`,
+ * whose agent no wake answered within `holdMs` before the failure. A wake
+ * that landed after the failure answers it, so each is due once; one older
+ * than `since` is left to the operator's next turn, so a wake that keeps
+ * failing is not tried for ever.
  */
 export function dueOperatorWakes(
+  since: Date,
   holdMs: number,
   limit: number,
 ): NoticeEffect<readonly DueOperatorWake[]> {
-  return findDueWakes({ holdMs, limit });
+  return findDueWakes({ since, holdMs, limit });
 }
 
 /** Records that a wake for the agent's failure reached its operator at `wokenAt`. */

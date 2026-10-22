@@ -50,6 +50,7 @@ import {
 import { keepConversationPicture } from "@luke/database/models/conversation-pictures";
 import { childConversationId, sentLineId } from "@luke/database/models/ids";
 import { listMessagesPast, sentLineStands } from "@luke/database/models/message-reads";
+import { unreadOperatorNotices } from "@luke/database/models/operator-notices";
 import { writePage } from "@luke/database/models/plan-pages";
 import { claimRuntimeSession } from "@luke/database/models/recorded-session";
 import { holdSandbox } from "@luke/database/models/sandbox-terminal-lease";
@@ -67,7 +68,11 @@ import { planRevision } from "@luke/database/schemas/plan-revision";
 import { conversations, messages } from "@luke/database/schemas/storage";
 import { task as taskTable } from "@luke/database/schemas/task";
 import { voiceSessions, voiceTranscriptSegments } from "@luke/database/schemas/voice";
-import { CONVERSATION_KIND, MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
+import {
+  CONVERSATION_KIND,
+  MESSAGE_SENDER,
+  OPERATOR_NOTICE_KIND,
+} from "@luke/database/storage-vocabulary";
 import {
   fakeWorkspaceSeams,
   getTestDB,
@@ -126,6 +131,7 @@ import {
   CODING_AGENT_ATTACHMENT_TYPE,
   CODING_AGENT_BOUNDS,
   CODING_AGENT_BRIEF,
+  CODING_AGENT_KIND,
   CODING_AGENT_SENDER,
   CODING_AGENT_STATUS,
   type CodingAgentMessage,
@@ -4190,7 +4196,7 @@ it.layer(getTestDB())("an agent's kept pull request", (it) => {
         return answered.body;
       });
       const kept = readCodingAgentPublished(owner, agent.id);
-      return { read, kept };
+      return { owner, task, read, kept };
     });
 
   it.effect(
@@ -4234,6 +4240,38 @@ it.layer(getTestDB())("an agent's kept pull request", (it) => {
         standing.mergedAt = MERGED_AT;
         yield* read;
         assert.equal((yield* kept)?.mergedAt, Date.parse(MERGED_AT));
+      }),
+  );
+
+  it.effect(
+    "a read that first finds the pull request merged notes it for the owner's operator, once however often it is read",
+    () =>
+      Effect.gen(function* () {
+        const standing: Standing = { mergedAt: null };
+        const { owner, task, read } = yield* publishedAs(standing);
+        const operator = Option.getOrThrow(
+          yield* createCodingAgent(owner, {
+            taskId: null,
+            organizationId: task.workspaceId,
+            planSnapshot: null,
+            prompt: null,
+            kind: CODING_AGENT_KIND.OPERATOR,
+            idempotencyKey: randomUUID(),
+            model: "anthropic/claude-opus-5.5",
+            effort: "high",
+            repository: null,
+          }),
+        ).agent;
+        const kinds = Effect.map(unreadOperatorNotices(operator.id, 10), (notices) =>
+          notices.map(({ kind }) => kind),
+        );
+
+        yield* read;
+        assert.deepEqual(yield* kinds, [], "an open pull request is no notice");
+        standing.mergedAt = MERGED_AT;
+        yield* read;
+        yield* read;
+        assert.deepEqual(yield* kinds, [OPERATOR_NOTICE_KIND.PR_MERGED]);
       }),
   );
 });
