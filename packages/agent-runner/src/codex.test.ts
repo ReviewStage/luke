@@ -273,6 +273,32 @@ it.effect(
       ]);
       assert.deepEqual(withNone?.unexpected, []);
       assert.deepEqual(received(withNone, "skills/extraRoots/set"), []);
+
+      // The roots are app-server's process-wide, so a relaunch's new app-server is set them again before its thread resumes.
+      const relaunched = yield* launch(
+        [
+          {
+            exchanges: [
+              exchange(RESUMED, 0),
+              exchange(RESUMED, 1),
+              extraRoots,
+              exchange(RESUMED, 2),
+            ],
+          },
+        ],
+        fakeLuke(),
+      );
+      yield* relaunched.write({ ...CONFIG, threadId: THREAD, installedSkills: folder });
+      yield* relaunched.closeStdin;
+      assert.equal(yield* Fiber.join(relaunched.run), RUNNER_END.INPUT_CLOSED);
+      const [resumed] = relaunched.spawned;
+      assert.deepEqual(resumed?.unexpected, []);
+      assert.deepEqual(resumed?.received.map((each) => each.method).slice(0, 4), [
+        "initialize",
+        "initialized",
+        "skills/extraRoots/set",
+        "thread/resume",
+      ]);
     }),
 );
 
