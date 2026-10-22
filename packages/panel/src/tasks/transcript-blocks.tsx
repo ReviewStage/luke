@@ -28,6 +28,8 @@ import {
   DisclosureSummary,
   INLINE_REF_LOOK,
   InlineRef,
+  LineButton,
+  LineSummary,
   ProviderMark,
   TEXT_TONE,
   TEXT_VARIANT,
@@ -1099,13 +1101,7 @@ export function TranscriptOpeningCall({
   const { line, chip } = chippedLine(kind, subject, undefined, agent);
   return (
     <Tooltip label={hint} card={card ?? undefined}>
-      <button
-        type="button"
-        className="tool-line tool-opening"
-        data-call-id={callId}
-        data-opens=""
-        onClick={onOpen}
-      >
+      <LineButton data-call-id={callId} data-opens="" onClick={onOpen}>
         <ToolLine
           state={state}
           icon={<Icon aria-hidden="true" />}
@@ -1114,7 +1110,7 @@ export function TranscriptOpeningCall({
           chip={chip}
           subjectIsCode={line.code}
         />
-      </button>
+      </LineButton>
     </Tooltip>
   );
 }
@@ -1417,9 +1413,9 @@ export function TranscriptSubagent({
   const row =
     onOpen === undefined && body !== undefined ? (
       <Tool>
-        <FoldSummary className="subagent-line" data-subagent-row="" data-call-id={callId}>
+        <LineSummary data-subagent-row="" data-call-id={callId}>
           {line}
-        </FoldSummary>
+        </LineSummary>
         <ToolContent>
           <ToolInput block={body.input} />
           <ToolOutput block={body.output} errorText={undefined} />
@@ -1431,24 +1427,19 @@ export function TranscriptSubagent({
       </div>
     ) : (
       <Tooltip label={SUBAGENT_HINT} card={card ?? undefined}>
-        <button
-          type="button"
-          className="subagent-line"
-          data-subagent-row=""
-          data-call-id={callId}
-          onClick={onOpen}
-        >
+        <LineButton data-subagent-row="" data-call-id={callId} onClick={onOpen}>
           {line}
-        </button>
+        </LineButton>
       </Tooltip>
     );
-  if (errorText === undefined) return row;
   return (
-    <div>
+    <div className="subagent-row">
       {row}
-      <p className="subagent-error" role="alert">
-        {errorText}
-      </p>
+      {errorText === undefined ? null : (
+        <p className="subagent-error" role="alert">
+          {errorText}
+        </p>
+      )}
     </div>
   );
 }

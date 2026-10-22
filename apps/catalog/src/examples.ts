@@ -30,6 +30,7 @@ import { HOVER_CARDS_EXAMPLE } from "./examples/hover-cards";
 import { INLINE_EDITS_EXAMPLE } from "./examples/inline-edits";
 import { INLINE_REFS_EXAMPLE } from "./examples/inline-refs";
 import { LAYOUT_EXAMPLE } from "./examples/layout";
+import { LINE_BUTTONS_EXAMPLE } from "./examples/line-buttons";
 import { LIST_ROW_EXAMPLE } from "./examples/list-row";
 import { MENU_EXAMPLE } from "./examples/menu";
 import { NAV_ITEMS_EXAMPLE } from "./examples/nav-items";
@@ -110,6 +111,7 @@ export const EXAMPLES: readonly Example[] = [
   TEXT_BUTTONS_EXAMPLE,
   TEXT_FIELDS_EXAMPLE,
   TEXT_LINKS_EXAMPLE,
+  LINE_BUTTONS_EXAMPLE,
   TOOLTIPS_EXAMPLE,
   CHECKBOXES_EXAMPLE,
   SWITCHES_EXAMPLE,

@@ -28,6 +28,7 @@ import {
   ERROR_STATE_PLACEMENT,
   ErrorState,
   INLINE_REF_LOOK,
+  LineSummary,
   TaskStatusMark,
   TEXT_LINK_LOOK,
   TEXT_TONE,
@@ -67,7 +68,7 @@ import {
   ConversationRows,
   ConversationScrollButton,
 } from "../ai-elements/conversation.js";
-import { Fold, FoldBody, FoldSummary } from "../ai-elements/fold.js";
+import { Fold, FoldBody } from "../ai-elements/fold.js";
 import { MESSAGE_ACTIONS_PLACEMENT, Message, MessageContent } from "../ai-elements/message.js";
 import { Plan, PlanContent, PlanHeader, PlanIcon, PlanTitle } from "../ai-elements/plan.js";
 import { TOOL_STATE } from "../ai-elements/tool.js";
@@ -882,11 +883,11 @@ function AgentPartView({
 function OriginBody({ body }: { body: string }): React.JSX.Element {
   return (
     <Fold className="agent-origin-body">
-      <FoldSummary className="agent-origin-body-line">
+      <LineSummary brightens>
         <DisclosureChevron />
-        <WebhookIcon aria-hidden="true" />
+        <WebhookIcon className="agent-origin-body-icon" aria-hidden="true" />
         {WEBHOOK_BODY_LABEL}
-      </FoldSummary>
+      </LineSummary>
       <FoldBody>
         <pre className="agent-origin-body-text">{body}</pre>
       </FoldBody>

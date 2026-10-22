@@ -374,6 +374,14 @@ body {
   width: 160px;
 }
 
+/* A transcript's column, as wide as a narrow panel's, which a line spans. */
+.catalog-transcript {
+  width: 360px;
+  padding: var(--luke-space-8);
+  border: 1px dashed var(--luke-color-border-strong);
+  border-radius: var(--luke-radius-8);
+}
+
 /* A card in a column narrower than its words. */
 .catalog-card-narrow {
   width: 200px;

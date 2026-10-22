@@ -28,6 +28,8 @@ import {
   ERROR_STATE_PLACEMENT,
   ErrorState,
   IconButton,
+  LINE_BUTTON_LOOK,
+  LineButton,
   SCROLL_FADE,
   ScrollArea,
   SUBMIT_STATE,
@@ -866,16 +868,13 @@ function ThreadQuote({
     );
   }
   return (
-    <Tooltip label={COMMENT_WORDS.SHOW_WORDS}>
-      <button
-        type="button"
-        className="comment-quote comment-quote-link"
-        data-gone={gone}
-        onClick={onShowWords}
-      >
-        {thread.quote}
-      </button>
-    </Tooltip>
+    <blockquote className="comment-quote" data-gone={gone}>
+      <Tooltip label={COMMENT_WORDS.SHOW_WORDS}>
+        <LineButton look={LINE_BUTTON_LOOK.QUOTE} onClick={onShowWords}>
+          {thread.quote}
+        </LineButton>
+      </Tooltip>
+    </blockquote>
   );
 }
 
