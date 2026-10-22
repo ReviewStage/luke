@@ -8,10 +8,6 @@
 .task-board {
   position: relative;
   isolation: isolate;
-  display: flex;
-  min-height: 0;
-  flex: 1;
-  flex-direction: column;
   overflow: hidden;
   color: var(--luke-color-text-muted);
 }
@@ -793,15 +789,6 @@
   line-height: var(--luke-type-caption-leading);
 }
 
-/* The Code tab: every code Luke showed on the plan, one card each under the
-   call it was shown on, in a log that fills the tab (code-pane.tsx). */
-.code-pane {
-  display: flex;
-  min-height: 0;
-  flex: 1;
-  flex-direction: column;
-}
-
 /* The transcript's frame (../ai-elements/conversation.tsx): a log that
    scrolls inside the room its pane leaves it, in a `ScrollArea` holding the
    block its lines stand in (`.conversation-log`), its lines a step apart,
@@ -813,10 +800,6 @@
 @layer components {
   .conversation {
     position: relative;
-    display: flex;
-    min-height: 0;
-    flex: 1;
-    flex-direction: column;
   }
 
   .conversation-log {
@@ -1307,21 +1290,7 @@
 /* A File tab: its file, or the lines Luke showed of it under why the file
    is not shown, filling the tab. */
 .file-tab {
-  display: flex;
-  min-height: 0;
-  flex: 1;
-  flex-direction: column;
   background: var(--code-ground);
-}
-
-/* A File tab beside its repository's tree, under one bar across both: the
-   file takes the room the tree leaves, and the tree keeps to the right, as
-   an editor's explorer docked there does. */
-.file-view {
-  display: flex;
-  min-height: 0;
-  flex: 1;
-  flex-direction: column;
 }
 
 /* The tree slides in past the view's right edge and out over the file, so
@@ -1329,14 +1298,6 @@
    which would make a scroller a focus could scroll sideways. */
 .file-view-body {
   position: relative;
-  display: flex;
-  min-height: 0;
-  flex: 1;
-  overflow: clip;
-}
-
-.file-view-body > .file-tab {
-  min-width: 0;
 }
 
 /* The bar: history, the path, then the file's actions and the tree's
@@ -1964,8 +1925,8 @@
 }
 
 .cloud-browser-cursor[data-shown][data-kind="click"]:not([data-still]) .cloud-browser-cursor-arrow {
-  animation: cloud-browser-cursor-press var(--luke-duration-fast) ease-in-out var(--luke-duration-fast)
-    backwards;
+  animation: cloud-browser-cursor-press var(--luke-duration-fast) ease-in-out
+    var(--luke-duration-fast) backwards;
 }
 
 .cloud-browser-cursor[data-shown][data-kind="type"]:not([data-still]) .cloud-browser-cursor-arrow {
@@ -1983,8 +1944,8 @@
   border: calc(var(--luke-space-2) / 2) solid var(--agent-pointer);
   border-radius: 50%;
   opacity: 0;
-  animation: cloud-browser-cursor-ripple var(--luke-duration-shape) ease-out var(--luke-duration-fast)
-    backwards;
+  animation: cloud-browser-cursor-ripple var(--luke-duration-shape) ease-out
+    var(--luke-duration-fast) backwards;
 }
 
 @keyframes cloud-browser-cursor-rock {
@@ -2047,11 +2008,6 @@
 
 .browser-view-body {
   position: relative;
-  display: flex;
-  min-height: 0;
-  flex: 1;
-  flex-direction: column;
-  overflow: clip;
 }
 
 /* The still stands where the page stood, at the size the page was drawn
@@ -2062,13 +2018,6 @@
   top: 0;
   left: 0;
   max-width: none;
-}
-
-.page-view-find {
-  display: flex;
-  min-height: 0;
-  flex: 1;
-  flex-direction: column;
 }
 
 /* What became of a changed file, lettered quietly beside its path in a
@@ -2133,10 +2082,6 @@
    two of them (diff-view/index.ts's LIST_FILE_GAP). */
 .diff-list {
   position: relative;
-  display: flex;
-  min-height: 0;
-  flex: 1;
-  flex-direction: column;
   background: var(--luke-color-ground);
 }
 
@@ -2436,10 +2381,6 @@
   --trees-git-modified-color-override: var(--luke-color-attention);
   --trees-git-deleted-color-override: var(--luke-color-danger-text);
   --trees-git-renamed-color-override: var(--luke-color-working);
-  display: flex;
-  min-height: 0;
-  flex: 1;
-  flex-direction: column;
 }
 
 /* The tree rings whichever row holds focus, a pressed one too, so until the
@@ -2614,10 +2555,6 @@
      the fade begins beneath the heading at whatever height it stands
      (`SCROLL_FADE_INSET.BAND`). */
   --luke-scroll-band: var(--pull-request-band);
-  display: flex;
-  min-height: 0;
-  flex: 1;
-  flex-direction: column;
 }
 
 .pull-request-view[hidden] {
@@ -2633,18 +2570,10 @@
    leaves a strip of one mark a chapter while hidden. */
 .chapters-view {
   --chapter-rail-width: calc(var(--luke-space-64) * 4);
-  display: flex;
-  min-height: 0;
-  flex: 1;
-  flex-direction: column;
 }
 
 .chapters-body {
   position: relative;
-  display: flex;
-  min-height: 0;
-  flex: 1;
-  overflow: clip;
 }
 
 .chapter-rail {
@@ -2732,14 +2661,6 @@
 /* The chapter: its head, which scrolls on its own once it is taller than
    its share, so the diff under it keeps at least half the view; the list;
    and the foot. */
-.chapter-reading {
-  display: flex;
-  min-width: 0;
-  min-height: 0;
-  flex: 1;
-  flex-direction: column;
-}
-
 .chapter-head {
   display: flex;
   min-height: 0;
@@ -2840,13 +2761,6 @@
 
 /* Chapters being made: how long it has been, then blocks where the rail
    and the chapter will stand. */
-.chapters-generating {
-  display: flex;
-  min-height: 0;
-  flex: 1;
-  flex-direction: column;
-}
-
 .chapters-generating-line {
   display: flex;
   align-items: center;
@@ -4453,10 +4367,6 @@
    diff bundle loads. */
 .whole-file {
   position: relative;
-  display: flex;
-  min-height: 0;
-  flex: 1;
-  flex-direction: column;
 }
 
 .whole-file > .luke-spinner-region {
@@ -5049,14 +4959,6 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
    (../tasks/transcript-blocks.tsx over ../ai-elements/). What follows is
    each one's own: Luke's mark beside a note of his, drawn at the row's 16px
    in his voice's colour; the agent's composer; a worker's line. */
-.task-call,
-.agent-tab {
-  display: flex;
-  min-height: 0;
-  flex: 1;
-  flex-direction: column;
-}
-
 /* An agent's tab while its transcript or the agent is read
    (`agent-tab-skeleton.tsx`): the log's last lines stand at its foot, where
    the newest lines draw, on the log's own inset, over the composer's card. */
@@ -6298,10 +6200,6 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
    it, with `clip` rather than `hidden`, as a File tab's body does. */
 .terminal-tab-body {
   position: relative;
-  display: flex;
-  min-height: 0;
-  flex: 1;
-  overflow: clip;
   background: var(--terminal-ground);
 }
 
@@ -6362,13 +6260,6 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
 
 /* The list's room while no read has listed the shells: the blocks standing
    for them, or the failure, with the foot kept at the list's end. */
-.terminal-shells-wait {
-  display: flex;
-  min-height: 0;
-  flex: 1;
-  flex-direction: column;
-}
-
 .terminal-shells-wait[data-failed] {
   padding: var(--luke-space-8) var(--luke-space-12);
 }
@@ -7887,11 +7778,7 @@ svg.lucide {
    which holds the list's own padded element). */
 .comments-tab {
   position: relative;
-  display: flex;
   height: 100%;
-  min-height: 0;
-  flex: 1;
-  flex-direction: column;
 }
 
 /* The tab's head, as the sidebar's section heads are: the list's name in

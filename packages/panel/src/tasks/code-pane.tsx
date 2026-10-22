@@ -1,6 +1,6 @@
 import type { CodeRef } from "@luke/features/task-wire";
 import type { TaskCodeShowing } from "@luke/features/tasks-view";
-import { IconButton, SCROLL_FADE_INSET, Tooltip } from "@luke/ui";
+import { FILL_ELEMENT, Fill, IconButton, SCROLL_FADE_INSET, Tooltip } from "@luke/ui";
 import { callHeading, WORKED_SEPARATOR } from "@luke/ui/time-format";
 import {
   type CodeFeedCall,
@@ -275,7 +275,7 @@ export function CodePane({
 }): React.JSX.Element {
   const now = Date.now();
   return (
-    <section className="code-pane ph-no-capture" aria-label="Code shown">
+    <Fill as={FILL_ELEMENT.SECTION} className="code-pane ph-no-capture" aria-label="Code shown">
       <Conversation>
         <ConversationContent className="checkpoint-log" fadeInset={SCROLL_FADE_INSET.BAND}>
           {codeFeedCalls(shown, calls).map((call) => (
@@ -291,6 +291,6 @@ export function CodePane({
         </ConversationContent>
         <ConversationScrollButton />
       </Conversation>
-    </section>
+    </Fill>
   );
 }

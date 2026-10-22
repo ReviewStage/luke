@@ -2,6 +2,7 @@ import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
   CloseIcon,
   DisclosureFind,
+  Fill,
   IconButton,
   SearchField,
   Tooltip,
@@ -359,7 +360,7 @@ export function FindScope({
   active: boolean;
   subject: FindSubject;
 }): React.JSX.Element {
-  const [root, setRoot] = useState<HTMLDivElement | null>(null);
+  const [root, setRoot] = useState<HTMLElement | null>(null);
   const [query, setQuery] = useState("");
   const [bar, setBar] = useState<OpenBar | undefined>(undefined);
   const back = useRef<HTMLElement | null>(null);
@@ -413,7 +414,7 @@ export function FindScope({
   }));
 
   return (
-    <div
+    <Fill
       ref={setRoot}
       className={className === undefined ? "find-scope" : `${className} find-scope`}
       {...props}
@@ -431,7 +432,7 @@ export function FindScope({
       <FindScopeContext.Provider value={doors}>
         <DisclosureFind finding={open}>{children}</DisclosureFind>
       </FindScopeContext.Provider>
-    </div>
+    </Fill>
   );
 }
 

@@ -91,4 +91,23 @@
   [data-justify="between"]:is(.luke-stack, .luke-inline) {
     justify-content: space-between;
   }
+
+  /* A Fill takes the room its column leaves and may give way to nothing in
+     either direction, so what it holds scrolls or clips inside it rather than
+     stretching the column past the window. */
+  .luke-fill {
+    display: flex;
+    min-width: 0;
+    min-height: 0;
+    flex: 1;
+    flex-direction: column;
+  }
+
+  .luke-fill[data-flow="row"] {
+    flex-direction: row;
+  }
+
+  .luke-fill[data-clip="true"] {
+    overflow: clip;
+  }
 }

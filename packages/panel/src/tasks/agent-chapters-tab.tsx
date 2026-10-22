@@ -22,6 +22,9 @@ import {
   EmptyState,
   ERROR_STATE_PLACEMENT,
   ErrorState,
+  FILL_ELEMENT,
+  FILL_FLOW,
+  Fill,
   HoverCard,
   HoverCardHead,
   HoverCardNote,
@@ -237,7 +240,7 @@ function Generating({
 }): React.JSX.Element {
   const words = ours ? CHAPTERS_WORDS.GENERATING : CHAPTERS_WORDS.ELSEWHERE;
   return (
-    <div className="chapters-generating">
+    <Fill className="chapters-generating">
       <p className="chapters-generating-line">
         <span>
           {words}
@@ -268,7 +271,7 @@ function Generating({
           </div>
         </div>
       </SkeletonRegion>
-    </div>
+    </Fill>
   );
 }
 
@@ -598,8 +601,8 @@ function ChaptersReading({
   const previous = chapters[at - 1];
   const next = chapters[at + 1];
   return (
-    // biome-ignore lint/a11y/noStaticElementInteractions: the view hears its chapter keys from whatever in it has the focus, past the list's own.
-    <div
+    // The view hears its chapter keys from whatever in it has the focus, past the list's own.
+    <Fill
       ref={root}
       className="chapters-view"
       data-rail-beside={String(slide.drawn)}
@@ -621,7 +624,7 @@ function ChaptersReading({
           {CHAPTERS_WORDS.madeBy(chaptersModelLabel(model))}
         </Text>
       </p>
-      <div className="chapters-body">
+      <Fill flow={FILL_FLOW.ROW} clip className="chapters-body">
         {slide.drawn || over ? (
           <ChapterRail
             rows={rows}
@@ -634,7 +637,7 @@ function ChaptersReading({
           />
         ) : null}
         <ChapterStrip rows={rows} at={at} viewed={viewed} onOpen={toggleRail} />
-        <section className="chapter-reading" aria-labelledby={headingId}>
+        <Fill as={FILL_ELEMENT.SECTION} className="chapter-reading" aria-labelledby={headingId}>
           <header className="chapter-head">
             <ScrollArea size={SCROLL_SIZE.CONTENT}>
               <div className="chapter-head-body">
@@ -776,9 +779,9 @@ function ChaptersReading({
               </Button>
             </Tooltip>
           </footer>
-        </section>
-      </div>
-    </div>
+        </Fill>
+      </Fill>
+    </Fill>
   );
 }
 

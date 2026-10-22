@@ -30,6 +30,7 @@ import {
   EmptyState,
   ERROR_STATE_PLACEMENT,
   ErrorState,
+  Fill,
   IconButton,
   LINE_BUTTON_LOOK,
   LineButton,
@@ -1886,7 +1887,7 @@ export function PlanCommentsTab({
   const listed = filter === COMMENTS_FILTER.OPEN ? open : resolved;
   const full = { ...doors, control };
   return (
-    <div className="comments-tab">
+    <Fill className="comments-tab">
       <WordsDatePickerRoom>
         <div className="comments-head">
           <span className="comments-head-title">
@@ -1942,6 +1943,6 @@ export function PlanCommentsTab({
           </div>
         </ScrollArea>
       </WordsDatePickerRoom>
-    </div>
+    </Fill>
   );
 }

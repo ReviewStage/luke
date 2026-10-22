@@ -4,7 +4,7 @@ import {
   macTerminalPortOutboundSchema,
 } from "@luke/features/mac-terminal-wire";
 import { ACT_KIND } from "@luke/host/acts";
-import { BUTTON_SIZE, BUTTON_VARIANT, Button } from "@luke/ui";
+import { BUTTON_SIZE, BUTTON_VARIANT, Button, FILL_FLOW, Fill } from "@luke/ui";
 import type { MacTerminalStripTab } from "@luke/ui/tab-strip-model";
 import { useClipped } from "@luke/ui/use-clipped";
 import { Option, Schema } from "effect";
@@ -200,7 +200,7 @@ export function MacTerminalTab({ tab }: { tab: MacTerminalStripTab }): React.JSX
   };
 
   return (
-    <div className="terminal-tab file-view ph-no-capture">
+    <Fill className="terminal-tab file-view ph-no-capture">
       <header className="file-view-bar">
         <span className="terminal-tab-title">
           <span
@@ -247,7 +247,7 @@ export function MacTerminalTab({ tab }: { tab: MacTerminalStripTab }): React.JSX
           )}
         </div>
       </header>
-      <div className="terminal-tab-body">
+      <Fill flow={FILL_FLOW.ROW} clip className="terminal-tab-body">
         <div className="terminal-tab-host">
           {AsyncResult.isFailure(loaded) ? (
             <p className="terminal-tab-failed">{TERMINAL_LOAD_FAILED}</p>
@@ -255,7 +255,7 @@ export function MacTerminalTab({ tab }: { tab: MacTerminalStripTab }): React.JSX
             <div ref={setElement} className="terminal-tab-screen" />
           )}
         </div>
-      </div>
-    </div>
+      </Fill>
+    </Fill>
   );
 }

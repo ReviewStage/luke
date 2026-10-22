@@ -1,5 +1,6 @@
 import {
   cn,
+  Fill,
   IconButton,
   SCROLL_FADE,
   ScrollArea,
@@ -253,9 +254,9 @@ export function Conversation({
   );
   return (
     <ConversationContext.Provider value={scroll}>
-      <div className={cn("conversation", className)} {...props}>
+      <Fill className={cn("conversation", className)} {...props}>
         {children}
-      </div>
+      </Fill>
     </ConversationContext.Provider>
   );
 }

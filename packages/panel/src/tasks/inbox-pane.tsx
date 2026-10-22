@@ -37,6 +37,7 @@ import {
   DisclosureSummary,
   EllipsisIcon,
   ErrorState,
+  Fill,
   FoldingButton,
   type FoldingButtonHint,
   GAP,
@@ -1989,7 +1990,7 @@ export function InboxPane({
           />
         </div>
       </header>
-      <div className="desktop-inbox">
+      <Fill className="desktop-inbox">
         {/* The thread is a log as an agent's transcript is: each item opens at its newest message, the box at its end, and keeps to it while the reader is there; scrolled up, the way back floats over its foot. */}
         <Conversation subject={item.id} list={board}>
           <ConversationContent className="inbox-board agent-log-over-composer ph-no-capture">
@@ -2062,7 +2063,7 @@ export function InboxPane({
           <ConversationScrollButton />
         </Conversation>
         {open || next === undefined ? null : <InboxNextUp next={next} />}
-      </div>
+      </Fill>
     </section>
   );
 }

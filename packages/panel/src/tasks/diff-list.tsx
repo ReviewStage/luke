@@ -3,6 +3,7 @@ import {
   Button,
   cssCustomProperties,
   EmptyState,
+  Fill,
   ScrollArea,
   TooltipPill,
   useHintRest,
@@ -448,7 +449,7 @@ export function PierreDiffList({
   // list into it as the scroller it virtualizes over and empties it when
   // taken down; the headers and notes reach their slots through portals.
   return (
-    <div
+    <Fill
       ref={holdBox}
       className="diff-view diff-list"
       data-diff-layout={look.layout}
@@ -492,6 +493,6 @@ export function PierreDiffList({
           )}
         </Fragment>
       ))}
-    </div>
+    </Fill>
   );
 }

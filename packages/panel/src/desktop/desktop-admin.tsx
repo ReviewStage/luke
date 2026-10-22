@@ -23,6 +23,7 @@ import { APP_COMMAND, APP_SHORTCUTS } from "@luke/settings/shortcuts";
 import {
   BackIcon,
   commandKeyshortcuts,
+  Fill,
   FoldingButton,
   NAV_CURRENT,
   NavItem,
@@ -119,7 +120,7 @@ export function DesktopAdmin({
           Back
         </NavItem>
         <h1 className="admin-sections-title">{ADMIN_TITLE}</h1>
-        <div className="sidebar-section">
+        <Fill className="sidebar-section">
           <ScrollArea fade={SCROLL_FADE.BOTH}>
             <div className="sidebar-section-body">
               <ul>
@@ -143,7 +144,7 @@ export function DesktopAdmin({
               </ul>
             </div>
           </ScrollArea>
-        </div>
+        </Fill>
         <ColumnFoot />
         {/* Last, so the drag strip above the way back does not take the edge's top from it. */}
         {room === SHELL_ROOM.WIDE ? <SidebarResizeEdge edge={edge} /> : null}

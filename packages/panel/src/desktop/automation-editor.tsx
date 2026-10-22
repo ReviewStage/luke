@@ -93,6 +93,7 @@ import {
   DetailPage,
   EllipsisIcon,
   ErrorState,
+  Fill,
   FoldingButton,
   IconButton,
   PAGE_FRAME,
@@ -2075,8 +2076,8 @@ export function AutomationEditor({
     onOpenAgent,
   };
   return (
-    <div ref={screen} className="automations-view">
-      <div className="automation-editor-screen" hidden={hidden.list}>
+    <Fill ref={screen} className="automations-view">
+      <Fill className="automation-editor-screen" hidden={hidden.list}>
         <EditorToolbar
           automation={automation}
           codeReview={codeReviewOn && readCodeReviewSettings(draft.prompt) !== undefined}
@@ -2137,7 +2138,7 @@ export function AutomationEditor({
           {narrow ? null : <AutomationRunsPanel panel={runsPanel} {...runsRead} />}
           <PaneGlide root={editorLayout} layout={{ runsOpen: !narrow && runsPanel.open }} />
         </div>
-      </div>
+      </Fill>
       {narrow ? (
         <AutomationRunsScreen
           id={runsScreen}
@@ -2164,6 +2165,6 @@ export function AutomationEditor({
           running: "Deleting",
         }}
       />
-    </div>
+    </Fill>
   );
 }

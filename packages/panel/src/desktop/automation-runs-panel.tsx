@@ -19,6 +19,8 @@ import {
   EmptyState,
   ERROR_STATE_PLACEMENT,
   ErrorState,
+  FILL_ELEMENT,
+  Fill,
   FoldingButton,
   LIST_DENSITY,
   LIST_ROW_CURRENT,
@@ -369,13 +371,19 @@ export function AutomationRunsScreen({
   onBack: () => void;
 }): React.JSX.Element {
   return (
-    <section id={id} className="automation-runs-screen" aria-label="Runs" hidden={hidden}>
+    <Fill
+      as={FILL_ELEMENT.SECTION}
+      id={id}
+      className="automation-runs-screen"
+      aria-label="Runs"
+      hidden={hidden}
+    >
       <header className="desktop-toolbar">
         <div className="automation-runs-back">
           <FoldingButton label={name} icon={<BackIcon />} onClick={onBack} />
         </div>
       </header>
       <RunsBody {...shown} />
-    </section>
+    </Fill>
   );
 }
