@@ -25,6 +25,7 @@ import { CODING_AGENT_PAYER, type CodingAgentPayer } from "@luke/features/coding
 import {
   PROVIDER_KEY_KIND,
   PROVIDER_KEY_PROVIDER,
+  PROVIDER_KEY_STATUS,
   type ProviderKeyKind,
   type ProviderKeyProvider,
 } from "@luke/features/provider-key-wire";
@@ -48,6 +49,7 @@ import {
   parseJsonBytes,
   readBodyBytesEffect,
 } from "../../http/http-effect.js";
+import { providerModelOf } from "../../providers/model-catalog.js";
 import { ANY_METHOD, type WebRoutes } from "../../route.js";
 import { reopenTaskForWork, settleTaskIfFinished } from "../../tasks/task-finish.js";
 import { runnerEnded } from "../coder-host/claude-code-sessions.js";
@@ -157,6 +159,14 @@ const PLAN_ROW: Partial<
     kind: PROVIDER_KEY_KIND.CHATGPT_OAUTH,
   },
 };
+
+/** The API key row of the agent's model's provider, which pays for an agent on its starter's key. */
+function apiKeyRowOf(
+  model: string,
+): { readonly provider: ProviderKeyProvider; readonly kind: ProviderKeyKind } | undefined {
+  const provider = providerModelOf(model)?.provider;
+  return provider === undefined ? undefined : { provider, kind: PROVIDER_KEY_KIND.API_KEY };
+}
 
 /** What one post applied: how many events, and the number of the last event the conversation has applied. */
 interface Applied {
@@ -342,8 +352,16 @@ function landWrite(
         write.wakeups.map(({ at, prompt }) => ({ at: new Date(at), prompt })),
       );
     case NATIVE_WRITE.PLAN_STATUS: {
-      // Note that the plan's row is the starter's, whose plan pays, and an agent a key pays for writes none.
-      const row = applying.payer === undefined ? undefined : PLAN_ROW[applying.payer];
+      // Note that the row is the starter's credential that pays: its plan's, or, for an agent its API key
+      // pays for, that key's, which a refusal marks invalid as eve's step does; a plan's limit is no key's.
+      const row =
+        applying.payer === CODING_AGENT_PAYER.API_KEY
+          ? write.status === PROVIDER_KEY_STATUS.LIMIT_REACHED
+            ? undefined
+            : apiKeyRowOf(applying.model)
+          : applying.payer === undefined
+            ? undefined
+            : PLAN_ROW[applying.payer];
       if (row === undefined) return Effect.void;
       return setPlanStatus(
         target.userId,
