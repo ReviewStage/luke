@@ -213,8 +213,7 @@ test("Claude Code's Agent is drawn as a subagent's row, named by its description
   const row = running.querySelector("[data-subagent-row]") ?? assert.fail("a subagent's row");
   assert.ok(row.textContent?.includes("Find the invoice callers"), row.textContent ?? "");
   assert.ok(row.textContent?.includes("Sonnet"), row.textContent ?? "");
-  assert.equal(running.querySelector("summary"), null, "no call's fold");
-  assert.equal(row.tagName, "DIV", "no worker's tab to open yet");
+  assert.notEqual(row.tagName, "BUTTON", "no worker's tab to open yet");
   const settled = drawn({
     type: "tool-Agent",
     toolCallId: "toolu_agent",
@@ -222,7 +221,11 @@ test("Claude Code's Agent is drawn as a subagent's row, named by its description
     input,
     output: "Two callers round: src/export.ts and src/print.ts.",
   }).container;
-  assert.ok(settled.querySelector("[data-subagent-row]"));
+  const line = settled.querySelector<HTMLElement>("[data-subagent-row]") ?? assert.fail("a row");
+  act(() => line.click());
+  // With no worker's tab to read it in, the task and the answer fold open under the row.
+  assert.ok(settled.textContent?.includes("Find every caller of invoiceTotal"));
+  assert.ok(settled.textContent?.includes("Two callers round"));
 });
 
 test("an Edit's patch marks the lines it changed, the newline ending its words opening none", () => {

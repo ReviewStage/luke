@@ -1252,9 +1252,9 @@ it.layer(getTestDB())("the runner events route, on Codex", (it) => {
         status: "inProgress",
         senderThreadId: THREAD,
         receiverThreadIds: [],
-        prompt: "Find the queue.",
-        model: "gpt-5.5",
-        reasoningEffort: "high",
+        prompt: null,
+        model: null,
+        reasoningEffort: null,
         agentsStates: {},
       };
       const first: WireValue[] = [
@@ -1266,7 +1266,14 @@ it.layer(getTestDB())("the runner events route, on Codex", (it) => {
         notification("turn/started", { turn: { id: "turn-1" } }),
         notification("item/started", { item: spawn }),
         notification("item/completed", {
-          item: { ...spawn, status: "completed", receiverThreadIds: ["thread-sub"] },
+          item: {
+            ...spawn,
+            status: "completed",
+            receiverThreadIds: ["thread-sub"],
+            prompt: "Find the queue.",
+            model: "gpt-5.5",
+            reasoningEffort: "high",
+          },
         }),
       ];
       const second: WireValue[] = [
@@ -1295,6 +1302,64 @@ it.layer(getTestDB())("the runner events route, on Codex", (it) => {
         ["step-start"],
         ["tool-collabAgentToolCall", "output-available", { status: "completed" }],
       ]);
+      // The spawn settles with the task and the pair it completed with, which its start left out.
+      const call = rows.at(-1)?.parts.find((part) => part.type === "tool-collabAgentToolCall");
+      assert.deepEqual(call !== undefined && "input" in call ? call.input : undefined, {
+        tool: "spawnAgent",
+        prompt: "Find the queue.",
+        model: "gpt-5.5",
+        effort: "high",
+        receiverThreadIds: ["thread-sub"],
+      });
+    }),
+  );
+
+  it.effect("a subagent that ends before its spawn completes still settles it", () =>
+    Effect.gen(function* () {
+      const post = yield* standing;
+      const agent = yield* agentOn(HARNESS.CODEX, ["Find the queue."]);
+      const spawn = {
+        type: "collabAgentToolCall",
+        id: "call_spawn",
+        tool: "spawnAgent",
+        status: "inProgress",
+        senderThreadId: THREAD,
+        receiverThreadIds: ["thread-sub"],
+        prompt: null,
+        model: null,
+        agentsStates: {},
+      };
+      const messagesOfTurn: WireValue[] = [
+        {
+          method: "thread/started",
+          params: { thread: { id: THREAD, parentThreadId: null } },
+        },
+        { type: RUNNER_EVENT.ACCEPTED, uuid: agent.lineId },
+        notification("turn/started", { turn: { id: "turn-1" } }),
+        notification("item/started", { item: spawn }),
+        {
+          method: "turn/completed",
+          params: { threadId: "thread-sub", turn: { id: "turn-sub", status: "completed" } },
+        },
+        notification("item/completed", {
+          item: { ...spawn, status: "completed", prompt: "Find the queue.", model: "gpt-5.5" },
+        }),
+        notification("turn/completed", { turn: { id: "turn-1", status: "completed" } }),
+        { type: RUNNER_EVENT.END, reason: RUNNER_END.TURN_ENDED },
+      ];
+      // SAFETY: each message above is one app-server or the runner emits, written in its JSON shape.
+      const events = messagesOfTurn.map(
+        (message, sequence) => ({ sequence, message }) as RunnerEvent,
+      );
+
+      yield* post(agent.bearer, events);
+      const { rows } = yield* transcriptOf(agent.target.conversationId);
+
+      const call = rows.at(-1)?.parts.find((part) => part.type === "tool-collabAgentToolCall");
+      assert.deepEqual(
+        call !== undefined && "state" in call ? call.state : undefined,
+        "output-available",
+      );
     }),
   );
 

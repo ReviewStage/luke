@@ -1354,6 +1354,12 @@ export type TranscriptSubagentProps = {
   onOpen: (() => void) | undefined;
   /** The card the hover hangs in its hint's place, the subagent's tab's own; none where the row knows none. */
   card?: ReactNode;
+  /**
+   * The task and the answer, for a row that opens no tab, which folds them
+   * open under its line as a call's row does: a native harness's subagent,
+   * whose own work Luke keeps no transcript of.
+   */
+  body?: { readonly input: ToolBlock; readonly output: ToolBlock | undefined } | undefined;
 };
 
 /** What the hover over a subagent's row says it opens. */
@@ -1372,7 +1378,8 @@ const SUBAGENT_HINT = "Open the subagent";
  * tab's card, or saying what it opens where it is given none, and the tab
  * is where its steps and its answer are read, so it folds nothing open in
  * place. Where it
- * opens no tab it is the same line, pressed by nothing. A call that failed
+ * opens no tab it is the same line, pressed by nothing, or, given the task
+ * and the answer, a fold that opens onto them as a call's row does. A call that failed
  * says why in red under the line, open from the start.
  */
 export function TranscriptSubagent({
@@ -1384,6 +1391,7 @@ export function TranscriptSubagent({
   errorText,
   onOpen,
   card,
+  body,
 }: TranscriptSubagentProps): ReactNode {
   const [words, clipped] = useClipped(job);
   const running = state === TOOL_STATE.INPUT_STREAMING || state === TOOL_STATE.INPUT_AVAILABLE;
@@ -1407,7 +1415,17 @@ export function TranscriptSubagent({
     </>
   );
   const row =
-    onOpen === undefined ? (
+    onOpen === undefined && body !== undefined ? (
+      <Tool>
+        <FoldSummary className="subagent-line" data-subagent-row="" data-call-id={callId}>
+          {line}
+        </FoldSummary>
+        <ToolContent>
+          <ToolInput block={body.input} />
+          <ToolOutput block={body.output} errorText={undefined} />
+        </ToolContent>
+      </Tool>
+    ) : onOpen === undefined ? (
       <div className="subagent-line" data-subagent-row="" data-call-id={callId}>
         {line}
       </div>

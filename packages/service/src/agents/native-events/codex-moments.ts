@@ -404,13 +404,20 @@ function spawnedThreads(type: string, whole: unknown): readonly string[] {
  * the thread starts, so its own answer says nothing of the subagent's work.
  */
 function spawnMoments(call: Call, threads: readonly string[]): readonly NativeMoment[] {
-  return [
-    started(call),
-    ...threads.map(
-      (key): NativeMoment => ({ kind: NATIVE_MOMENT.SUBAGENT_RUNNING, callId: call.callId, key }),
-    ),
-    { kind: NATIVE_MOMENT.STEP_CLOSED },
-  ];
+  return [started(call), ...running(call, threads), { kind: NATIVE_MOMENT.STEP_CLOSED }];
+}
+
+/** A spawn's subagents running, each by its thread, the call to settle with the input it stood with. */
+function running(call: Call, threads: readonly string[]): readonly NativeMoment[] {
+  const { callId, input } = call;
+  return threads.map(
+    (key): NativeMoment => ({
+      kind: NATIVE_MOMENT.SUBAGENT_RUNNING,
+      callId,
+      key,
+      ...(input === undefined ? undefined : { input }),
+    }),
+  );
 }
 
 /** A subagent's thread finished its turn: the spawn it runs under settles, failed where the turn did not complete. */
@@ -436,8 +443,12 @@ function itemStartedMoments(params: unknown): readonly NativeMoment[] {
   if (Option.isNone(item)) return [];
   const { type, id, whole } = item.value;
   if (type === ITEM.AGENT_MESSAGE) return [{ kind: NATIVE_MOMENT.STEP, key: id }];
+  // Note that a spawn naming its thread as it starts is waited on from then, so a subagent that ends before the spawn completes still settles it.
   return Option.match(callOf(type, whole), {
-    onSome: (call): readonly NativeMoment[] => [started(call)],
+    onSome: (call): readonly NativeMoment[] => [
+      started(call),
+      ...running(call, spawnedThreads(type, whole)),
+    ],
     onNone: () => [],
   });
 }

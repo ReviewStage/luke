@@ -1,6 +1,6 @@
 import type { BrainRunUsage, ToolCallSettlement } from "@luke/features/brain";
 import { PROVIDER_KEY_STATUS } from "@luke/features/provider-key-wire";
-import type { UnparsedWireValue } from "@luke/wire";
+import type { UnparsedWireValue, WireValue } from "@luke/wire";
 
 /**
  * native-moments.ts -- what a native harness's run amounts to for the transcript, said once for every harness.
@@ -119,6 +119,8 @@ export type NativeMoment =
       readonly kind: typeof NATIVE_MOMENT.SUBAGENT_RUNNING;
       readonly callId: string;
       readonly key: string;
+      /** The call's input as it stood when it answered, for a harness that fills it in after the start (Codex); the call settles with it. */
+      readonly input?: WireValue;
     }
   | {
       readonly kind: typeof NATIVE_MOMENT.SUBAGENT_ENDED;

@@ -563,8 +563,11 @@ function DelegationRow({
   const choice =
     standing === undefined ? view.choice : { model: standing.model, effort: standing.effort };
   const status = standing?.status ?? workerStatusOf(part.state);
-  // A native harness's subagent has no worker's tab to open yet, so its row is the line alone.
-  const opens = onOpen !== undefined && !nativeSubagent(part);
+  // A native harness's subagent has no worker's tab to open yet.
+  const native = nativeSubagent(part);
+  const opens = onOpen !== undefined && !native;
+  // Note that a native subagent's task and answer fold open under its row instead, as its call's own body reads them.
+  const call = toolCallView(part);
   return (
     <TranscriptSubagent
       callId={part.callId}
@@ -577,6 +580,7 @@ function DelegationRow({
       card={
         opens ? live?.cards?.worker({ callId: part.callId, task: view.task, status }) : undefined
       }
+      body={native ? { input: call.input, output: call.output } : undefined}
     />
   );
 }
