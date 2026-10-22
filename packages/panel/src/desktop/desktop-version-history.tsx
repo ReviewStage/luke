@@ -11,6 +11,7 @@ import {
   BackIcon,
   BUTTON_SIZE,
   EllipsisIcon,
+  EmptyState,
   ERROR_STATE_PLACEMENT,
   ErrorState,
   IconButton,
@@ -581,13 +582,13 @@ function VersionPage({
       ) : (
         <header className="desktop-toolbar">{lead}</header>
       )}
-      <div className="desktop-empty">
+      <div className="desktop-empty-region">
         {list.kind === HISTORY_READ.FAILED ? (
           <ErrorState onRetry={versions.onRetry} placement={ERROR_STATE_PLACEMENT.CENTRED}>
             The history could not be read.
           </ErrorState>
         ) : (
-          <p>{NO_HISTORY_LINE}</p>
+          <EmptyState>{NO_HISTORY_LINE}</EmptyState>
         )}
       </div>
     </>

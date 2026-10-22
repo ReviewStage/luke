@@ -36,6 +36,7 @@ import { LINE_BUTTONS_EXAMPLE } from "./examples/line-buttons";
 import { LIST_ROW_EXAMPLE } from "./examples/list-row";
 import { MENU_EXAMPLE } from "./examples/menu";
 import { NAV_ITEMS_EXAMPLE } from "./examples/nav-items";
+import { NOTE_LINES_EXAMPLE } from "./examples/note-lines";
 import { ONE_LINE_EXAMPLE } from "./examples/one-line";
 import { PAGINATION_EXAMPLE } from "./examples/pagination";
 import { PICTURE_TILES_EXAMPLE } from "./examples/picture-tiles";
@@ -124,6 +125,7 @@ export const EXAMPLES: readonly Example[] = [
   LIST_ROW_EXAMPLE,
   MENU_EXAMPLE,
   NAV_ITEMS_EXAMPLE,
+  NOTE_LINES_EXAMPLE,
   ONE_LINE_EXAMPLE,
   PAGINATION_EXAMPLE,
   PICTURE_TILES_EXAMPLE,

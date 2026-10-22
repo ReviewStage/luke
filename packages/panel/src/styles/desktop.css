@@ -1230,15 +1230,12 @@ ul.actor-stack {
 
 /* An open section with nothing in it says how to fill it, under its header's
    name, which stands at the row's inset where the section wears no icon. */
-.sidebar-section-empty {
-  margin: 0;
+.sidebar-section-slot {
   padding: var(--luke-space-4) var(--row-inset) var(--luke-space-6)
     calc(var(--row-inset) + var(--luke-control-icon) + var(--luke-space-8));
-  color: var(--luke-color-text-subtle);
-  font-size: var(--luke-type-caption-size);
 }
 
-.sidebar-own-section[data-iconless="true"] > .sidebar-section-empty {
+.sidebar-own-section[data-iconless="true"] > .sidebar-section-slot {
   padding-left: var(--row-inset);
 }
 
@@ -1829,24 +1826,12 @@ ul.actor-stack {
 
 /* Empty and waiting states ---------------------------------------------- */
 
-.desktop-empty {
+/* The room an empty or failed pane's state fills. */
+.desktop-empty-region {
   display: flex;
   min-height: 0;
   flex: 1;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: var(--luke-space-12);
-  padding: var(--luke-page-inset);
-  color: var(--luke-color-text-muted);
-  text-align: center;
-}
-
-.desktop-empty p {
-  max-width: 400px;
-  margin: 0 0 var(--luke-space-8);
-  font-size: var(--luke-type-body-size);
-  line-height: var(--luke-type-body-leading);
 }
 
 /* A pane that scrolls a list lays its empty state out as a column the state
@@ -5958,16 +5943,6 @@ ul.actor-stack {
   padding-inline: max(var(--luke-space-16), var(--code-reading-room));
 }
 
-.side-panel-empty {
-  max-width: 260px;
-  margin: auto;
-  padding: var(--luke-space-24);
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-caption-size);
-  line-height: var(--luke-type-caption-leading);
-  text-align: center;
-}
-
 /* Tabs ------------------------------------------------------------------------ */
 
 /* The window's one strip is `@luke/ui`'s Tabs (tab-strip.tsx), drawn alike
@@ -6340,13 +6315,12 @@ ul.actor-stack {
   }
 }
 
-.command-palette-empty {
+/* Where the palette's rows would stand, a failure of their read centred in it as a note is. */
+.command-palette-notice-slot {
   display: flex;
   min-height: 40px;
   align-items: center;
   justify-content: center;
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-body-size);
 }
 
 /* A quiet line under the rows: the Files filter saying its search is of

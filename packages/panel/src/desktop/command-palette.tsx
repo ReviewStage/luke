@@ -78,6 +78,7 @@ import {
   ComboboxOptionItem,
   ErrorState,
   GearIcon,
+  NoteLine,
   PinIcon,
   SearchIcon,
   TEXT_ELEMENT,
@@ -507,21 +508,12 @@ function emptyNotice(
 function NoticeLine({ notice }: { notice: PaletteNotice }): React.JSX.Element {
   if (notice.kind === PALETTE_NOTICE.FAILED) {
     return (
-      <div className="command-palette-empty">
+      <div className="command-palette-notice-slot">
         <ErrorState onRetry={notice.onRetry}>{notice.line}</ErrorState>
       </div>
     );
   }
-  return (
-    <div
-      className="command-palette-empty"
-      role={notice.kind === PALETTE_NOTICE.READING ? "status" : undefined}
-    >
-      <Text as={TEXT_ELEMENT.SPAN} tone={TEXT_TONE.MUTED}>
-        {notice.line}
-      </Text>
-    </div>
-  );
+  return <NoteLine status={notice.kind === PALETTE_NOTICE.READING}>{notice.line}</NoteLine>;
 }
 
 /** A file's row, as every place names a file (`file-ref.tsx`): its type's icon, its name, and its folder after it, hanging the file's card with Luke's note on its newest lines where he showed it. */
@@ -1612,10 +1604,8 @@ export function CommandPalette({
       <Command.List asChild label="Results">
         <ComboboxListBox height={COMBOBOX_LIST_HEIGHT.FILL}>
           {notice === undefined ? (
-            <Command.Empty className="command-palette-empty">
-              <Text as={TEXT_ELEMENT.SPAN} tone={TEXT_TONE.MUTED}>
-                Nothing matches.
-              </Text>
+            <Command.Empty>
+              <NoteLine>Nothing matches.</NoteLine>
             </Command.Empty>
           ) : (
             <NoticeLine notice={notice} />

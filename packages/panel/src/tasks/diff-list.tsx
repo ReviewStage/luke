@@ -1,5 +1,5 @@
 import { useAtomValue } from "@effect/atom-react";
-import { Button, cssCustomProperties, ScrollArea, TooltipPill } from "@luke/ui";
+import { Button, cssCustomProperties, EmptyState, ScrollArea, TooltipPill } from "@luke/ui";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { MessageSquarePlusIcon } from "lucide-react";
 import {
@@ -436,7 +436,7 @@ export function PierreDiffList({
   }, [offered]);
 
   if (AsyncResult.isFailure(loaded)) {
-    return <p className="side-panel-empty">{DIFF_LOAD_FAILED}</p>;
+    return <EmptyState>{DIFF_LOAD_FAILED}</EmptyState>;
   }
   // Note that the area holds no React of its own, because Pierre draws the
   // list into it as the scroller it virtualizes over and empties it when

@@ -26,6 +26,8 @@ import {
   NAV_COUNT_TONE,
   NAV_CURRENT,
   NavItem,
+  NOTE_LINE_LOOK,
+  NoteLine,
   PinIcon,
   PlusIcon,
   ProviderMark,
@@ -711,7 +713,9 @@ function PinnedSection({
       />
       {drawn.length === 0 ? (
         folded ? null : (
-          <p className="sidebar-section-empty">Drag tasks here to pin them</p>
+          <div className="sidebar-section-slot">
+            <NoteLine look={NOTE_LINE_LOOK.INSET}>Drag tasks here to pin them</NoteLine>
+          </div>
         )
       ) : (
         <PinnedRows

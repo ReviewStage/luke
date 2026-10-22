@@ -1551,7 +1551,7 @@ function FilesList({
         </div>
       )}
       {list.kept.length === 0 ? (
-        <p className="side-panel-empty">{LIST_WORDS.NONE_KEPT}</p>
+        <EmptyState>{LIST_WORDS.NONE_KEPT}</EmptyState>
       ) : (
         <ThreadLandingProvider value={landing.provided}>
           <PierreDiffList
