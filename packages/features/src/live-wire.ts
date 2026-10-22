@@ -795,6 +795,8 @@ const chatAskLiveSchema = EffectSchema.Struct({
 const chatMessageLiveRowSchema = EffectSchema.Struct({
   ...chatMessageSchema.fields,
   parentId: EffectSchema.NullOr(chatMessageSchema.fields.id),
+  /** The key the reader's own post went under; null on every other member's message, and absent from a service older than it. */
+  clientKey: EffectSchema.optionalKey(EffectSchema.NullOr(EffectSchema.String)),
   ask: EffectSchema.NullOr(chatAskLiveSchema),
   askKey: EffectSchema.NullOr(EffectSchema.String),
   askRevision: EffectSchema.NullOr(countedNumber),
@@ -889,6 +891,9 @@ function chatMessageOfLiveRow(row: typeof chatMessageLiveRowSchema.Type): ChatMe
     blocks: row.blocks,
     mentions: row.mentions,
     postedAt: row.postedAt,
+    ...(row.clientKey === null || row.clientKey === undefined
+      ? undefined
+      : { clientKey: row.clientKey }),
     ...chatAskOfLiveRow(row),
   };
 }

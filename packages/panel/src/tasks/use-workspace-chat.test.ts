@@ -202,7 +202,7 @@ test("a message the window posted stands through a push read before it landed, a
   await settle();
   let said: Promise<string | undefined> | undefined;
   act(() => {
-    said = tab.control().onPost({ text: "hold the template", to: "#invites" });
+    said = tab.control().onPost({ text: "hold the template", to: "#invites" }, "key-1");
   });
   const posted = message(2, { authorId: ME });
   service.writes[0]?.settle({
@@ -270,7 +270,7 @@ test("a chat that could not be read is let go and says so, and Try again follows
   assert.deepEqual(service.asked, ["follow:acme", "unfollow:acme", "follow:acme"]);
 });
 
-test("a post sent again after a reply that never came goes under the same key, and the message the service answers stands at once", async () => {
+test("a post goes under the key the window hands it, so one sent again after a reply that never came goes under the same key, and the message the service answers stands at once", async () => {
   const service = scriptedService();
   const tab = mount(service);
   service.push("acme", answered([message(1)]));
@@ -278,17 +278,18 @@ test("a post sent again after a reply that never came goes under the same key, a
   const post = { text: "hold the template", to: "#invites" };
   let said: Promise<string | undefined> | undefined;
   act(() => {
-    said = tab.control().onPost(post);
+    said = tab.control().onPost(post, "key-1");
   });
   service.writes[0]?.settle({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
   await settle();
   assert.ok(await said);
   act(() => {
-    said = tab.control().onPost(post);
+    said = tab.control().onPost(post, "key-1");
   });
   const [first, second] = service.writes.map((write) => write.params.write);
   assert.ok(first && "clientKey" in first && second && "clientKey" in second);
-  assert.equal(second.clientKey, first.clientKey);
+  assert.equal(first.clientKey, "key-1");
+  assert.equal(second.clientKey, "key-1");
   service.writes[1]?.settle({
     posted: message(2, {
       authorId: ME,

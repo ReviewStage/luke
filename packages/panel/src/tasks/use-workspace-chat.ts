@@ -108,8 +108,8 @@ export interface WorkspaceChatControl {
   /** Whether the last read did not answer, so Chat offers to try again. */
   readonly failed: boolean;
   readonly onRetry: () => void;
-  /** Posts as the developer; answers why the post did not go, or nothing once it is taken. */
-  readonly onPost: (post: ChatPost) => Promise<string | undefined>;
+  /** Posts as the developer under the key the window minted for it, which a retry carries again; answers why the post did not go, or nothing once it is taken. */
+  readonly onPost: (post: ChatPost, clientKey: string) => Promise<string | undefined>;
   /** Answers an ask as the developer; answers why it was not taken, or nothing once it is. */
   readonly onAnswer: (answer: ChatAskAnswer) => Promise<string | undefined>;
   /** Opens or edits a topic channel as the developer; answers why it was refused, or nothing once it is taken. */
@@ -404,13 +404,12 @@ export function useWorkspaceChat(input: {
   );
 
   const onPost = useCallback(
-    (post: ChatPost) => {
-      const words = JSON.stringify([workspaceId, post]);
-      // The window reads no receipt, so the post is answered once it is committed.
-      const request = { ...post, clientKey: keyFor(keys.current, words), receipt: false as const };
-      return write(request).then((landed) => settledWords(keys.current, words, landed));
-    },
-    [workspaceId, write],
+    // Note that the window reads no receipt, so the post is answered once it is committed.
+    (post: ChatPost, clientKey: string) =>
+      write({ ...post, clientKey, receipt: false as const }).then((landed) =>
+        "refused" in landed ? landed.refused : undefined,
+      ),
+    [write],
   );
   const onAnswer = useCallback(
     (answer: ChatAskAnswer) => {

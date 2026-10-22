@@ -3211,6 +3211,10 @@ export function workspaceChatLiveStatements(
           channelId: chatMessage.channelId,
           parentId: chatMessage.parentId,
           authorId: chatMessage.authorMemberId,
+          // Note that the key a post went under is read by its author alone, so no member reads another's.
+          clientKey: sql<
+            string | null
+          >`case when ${chatMessage.authorMemberId} = ${reader.id} then ${chatMessage.clientKey} end`,
           blocks: chatMessage.blocks,
           mentions: chatMessage.mentions,
           ask: chatMessage.ask,

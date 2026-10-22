@@ -1,3 +1,5 @@
+import { useAtomValue } from "@effect/atom-react";
+import { RegistryContext } from "@effect/atom-react/RegistryContext";
 import type { FileChip } from "@luke/features/attachment-model";
 import {
   CHANNEL_KIND,
@@ -14,7 +16,18 @@ import {
 import type { CodingAgentAttachment } from "@luke/features/coding-agent-wire";
 import type { MentionPlace } from "@luke/features/mention-link";
 import type { TaskSummary } from "@luke/features/task-wire";
-import { EmptyState, TEXT_BUTTON_TONE, TEXT_ELEMENT, TEXT_TONE, Text, TextButton } from "@luke/ui";
+import {
+  ConfirmDialog,
+  DIALOG_TONE,
+  type DialogQuestion,
+  EmptyState,
+  TEXT_BUTTON_TONE,
+  TEXT_ELEMENT,
+  TEXT_TONE,
+  Text,
+  TextButton,
+  useConfirmDialog,
+} from "@luke/ui";
 import { ACTOR_KIND, type Actor, actorName, distinctActors } from "@luke/ui/actor-model";
 import {
   CHAT_PLACE,
@@ -37,8 +50,11 @@ import {
 } from "@luke/ui/chat-model";
 import { PICTURE_STATE, type PictureAnswer, usePicture } from "@luke/ui/picture-cache";
 import type { SkillOption } from "@luke/ui/skill-mention";
-import { AtSignIcon, HashIcon } from "lucide-react";
-import { Fragment, useCallback, useLayoutEffect, useRef, useState } from "react";
+import { ACTION_RESULT_STATUS } from "@luke/wire";
+import * as Atom from "effect/reactivity/Atom";
+import type * as AtomRegistry from "effect/reactivity/AtomRegistry";
+import { AtSignIcon, CircleAlertIcon, HashIcon } from "lucide-react";
+import { Fragment, useCallback, useContext, useLayoutEffect, useRef, useState } from "react";
 import { ACTOR_SIZE, ActorMark, ActorRef, ActorStack } from "../actor-ref.js";
 import {
   Conversation,
@@ -50,6 +66,7 @@ import { FADING_ELEMENT, FadingWords } from "../fading-words.js";
 import { PictureBlock } from "../picture-block.js";
 import { SendingAgent } from "./agent-ref.js";
 import { ArchivedComposerNote } from "./archived-note.js";
+import { AttachedFileChips, attachmentChips } from "./attached-file-chips.js";
 import { AttachmentViewer } from "./attachment-viewer.js";
 import { useChatActor } from "./chat-actors.js";
 import { AskCard } from "./chat-ask.js";
@@ -296,7 +313,16 @@ interface MessageContext {
   /** The actor a member is drawn as, by the member's id (`chat-actors.ts`). */
   readonly actorOf: (memberId: string) => Actor;
   readonly openLink: (url: string) => void;
-  readonly onPost: (post: ChatPost) => Promise<string | undefined>;
+  /** Posts from a box, the post drawn as on its way until the chat holds it (`usePendingPosts`). */
+  readonly send: (
+    place: PendingPlace,
+    post: ChatPost,
+    takeBack: (refused: string) => boolean,
+  ) => void;
+  /** The reader's posts the chat does not hold yet, in the order sent. */
+  readonly pending: readonly PendingPost[];
+  readonly onRetryPost: (id: string) => void;
+  readonly onDiscardPost: (id: string) => void;
   readonly onAnswer: (answer: ChatAskAnswer) => Promise<string | undefined>;
   /** Reads one picture a message carries, by the message and the attachment its block names. */
   readonly readPicture: (messageId: string, attachmentId: string) => Promise<PictureAnswer>;
@@ -304,6 +330,190 @@ interface MessageContext {
   readonly doorsIn: (channelId: string) => ChatTaskDoors | undefined;
   /** Shows a place of the chat, as For you's row opens the channel it was posted in; none where no other place is shown here. */
   readonly onOpen: ((place: ChatPlace) => void) | undefined;
+}
+
+/** Where a post goes: its channel, and the thread's root it replies under, by its place; none for the channel's foot. */
+interface PendingPlace {
+  readonly channelId: string;
+  readonly replyTo?: number | undefined;
+}
+
+/** A post the reader sent that the chat does not hold yet: on its way, or refused with why. */
+interface PendingPost extends PendingPlace {
+  /** The reader's member who sent it, which names the account and the workspace at once, so only that reader's chat draws it. */
+  readonly self: string;
+  /** The key the post goes under, which the chat hands back on the message once it holds it (`ChatMessage.clientKey`), so the message stands in the post's place whichever lands first. */
+  readonly id: string;
+  readonly post: ChatPost;
+  /** When it was sent, which its byline says. */
+  readonly at: number;
+  /** Why it was refused, where it was and its words stayed on it rather than in the box. */
+  readonly refused?: string;
+}
+
+/** What a post refused says where nothing said why. */
+const UNSENT = "Not sent";
+const RETRY_POST = "Retry";
+const DISCARD_POST = "Discard";
+
+/** What Discard asks before a refused post is let go. */
+const DISCARD_QUESTION: DialogQuestion = {
+  title: "Discard this post?",
+  body: "Its words and pictures are kept nowhere else.",
+  verb: "Discard",
+  running: "Discarding…",
+  tone: DIALOG_TONE.DANGER,
+};
+
+/**
+ * The reader's posts on their way, drawn in the stream as theirs at once,
+ * each under the key it goes under, and drawn no more once the chat holds a
+ * message under that key, which the reader's own messages carry, so the
+ * message stands in the post's place and never beside it, whether the push
+ * or the post's answer brings it first. Posts go one at a time in the order
+ * sent, each once the one before it has answered, since the service places
+ * each as it takes it. A post refused goes back to its box where the box
+ * holds nothing newer (`ChatSend`), and the same words sent from there again
+ * go under the same key, so a post whose answer was lost is posted once;
+ * else it stays where it went, marked as not sent, with Retry, which sends
+ * it under its key, and Discard.
+ */
+/** A post's place and words, which the same post sent again is known by. */
+function postWords(
+  entry: PendingPlace & { readonly self: string; readonly post: ChatPost },
+): string {
+  return JSON.stringify([entry.self, entry.channelId, entry.replyTo ?? null, entry.post]);
+}
+
+/**
+ * Each window's posts still on their way or refused, kept past the pane, so
+ * a refused post with its pictures waits where it went while Chat is closed
+ * and opened again. Note that each window's registry holds its own.
+ */
+const pendingPostsAtom = Atom.keepAlive(Atom.make<readonly PendingPost[]>([]));
+
+/** What a window's posts go out through, kept past the pane as its posts are: the queue they go in, and the key of each post taken back into its box, by its place and words. */
+interface Outbox {
+  queue: Promise<void>;
+  readonly refusedKeys: Map<string, string>;
+  /** How each post is sent, by its key, as the pane handed it when the post was sent, so it goes to the account and workspace it was written in whatever the window reads by then. */
+  readonly senders: Map<string, (post: ChatPost, clientKey: string) => Promise<string | undefined>>;
+}
+
+const outboxes = new WeakMap<AtomRegistry.AtomRegistry, Outbox>();
+
+function usePendingPosts(
+  chat: ChatAnswer,
+  onPost: (post: ChatPost, clientKey: string) => Promise<string | undefined>,
+) {
+  const registry = useContext(RegistryContext);
+  const pending = useAtomValue(pendingPostsAtom);
+  const outbox: Outbox = outboxes.get(registry) ?? {
+    queue: Promise.resolve(),
+    refusedKeys: new Map(),
+    senders: new Map(),
+  };
+  outboxes.set(registry, outbox);
+  const change = (next: (was: readonly PendingPost[]) => readonly PendingPost[]) =>
+    registry.set(pendingPostsAtom, next(registry.get(pendingPostsAtom)));
+  const go = (entry: PendingPost, takeBack: (refused: string) => boolean) => {
+    outbox.queue = outbox.queue.then(async () => {
+      const sender = outbox.senders.get(entry.id) ?? onPost;
+      const refused = await sender(entry.post, entry.id).catch((failed: unknown) =>
+        failed instanceof Error ? failed.message : UNSENT,
+      );
+      const back = refused !== undefined && takeBack(refused);
+      if (back) outbox.refusedKeys.set(postWords(entry), entry.id);
+      if (refused === undefined || back) outbox.senders.delete(entry.id);
+      change((was) =>
+        refused === undefined || back
+          ? was.filter((each) => each.id !== entry.id)
+          : was.map((each) => (each.id === entry.id ? { ...each, refused } : each)),
+      );
+    });
+  };
+  const send = (place: PendingPlace, post: ChatPost, takeBack: (refused: string) => boolean) => {
+    const words = postWords({ ...place, self: chat.self, post });
+    const id = outbox.refusedKeys.get(words) ?? crypto.randomUUID();
+    outbox.refusedKeys.delete(words);
+    const entry: PendingPost = { ...place, self: chat.self, id, post, at: Date.now() };
+    outbox.senders.set(id, onPost);
+    change((was) => [...was, entry]);
+    go(entry, takeBack);
+  };
+  const onRetryPost = (id: string) => {
+    const entry = registry.get(pendingPostsAtom).find((each) => each.id === id);
+    if (entry?.refused === undefined) return;
+    const { refused: _refused, ...again } = entry;
+    change((was) => was.map((each) => (each.id === id ? again : each)));
+    go(again, () => false);
+  };
+  const onDiscardPost = (id: string) => {
+    outbox.senders.delete(id);
+    change((was) => was.filter((each) => each.id !== id));
+  };
+  // Note that a post the chat already holds is drawn as the chat's message alone, whether its answer has landed or not.
+  const held = new Set(chat.messages.flatMap((message) => message.clientKey ?? []));
+  // Note that only the reader's own posts in this workspace are drawn, so another account signed in to the window reads none.
+  const shown = pending.filter((each) => each.self === chat.self && !held.has(each.id));
+  return { pending: shown, send, onRetryPost, onDiscardPost };
+}
+
+/** A post of the reader's the chat does not hold yet, drawn as their message is, quiet while it goes, and marked with why and Retry where it was refused. */
+function PendingRow({
+  entry,
+  context,
+  reply = false,
+}: {
+  entry: PendingPost;
+  context: MessageContext;
+  /** Whether it stands in a thread, as a reply is drawn. */
+  reply?: boolean;
+}): React.JSX.Element {
+  const actor = context.actorOf(context.chat.self);
+  const { text, attachments } = entry.post;
+  // Note that Discard asks first, since the post's words and pictures are kept nowhere else.
+  const discard = useConfirmDialog(
+    { subject: entry.refused !== undefined, surfaceOpen: true },
+    () => {
+      context.onDiscardPost(entry.id);
+      return Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
+    },
+  );
+  return (
+    <li
+      className={reply ? "chat-reply" : "chat-message"}
+      data-pending={entry.refused === undefined ? "" : undefined}
+      data-unsent={entry.refused === undefined ? undefined : ""}
+    >
+      <Face actor={actor} at={entry.at} now={context.now} />
+      <div className="chat-message-body">
+        <Byline actor={actor} at={entry.at} where={undefined} now={context.now} />
+        <AttachedFileChips files={attachmentChips(attachments ?? [])} />
+        {text === undefined ? null : (
+          <div className="chat-words">
+            <SentWords text={text} asDocument />
+          </div>
+        )}
+        {entry.refused === undefined ? null : (
+          <p className="agent-undelivered chat-unsent" role="alert">
+            <CircleAlertIcon aria-hidden="true" />
+            {entry.refused}
+            <TextButton
+              tone={TEXT_BUTTON_TONE.ACCENT}
+              onClick={() => context.onRetryPost(entry.id)}
+            >
+              {RETRY_POST}
+            </TextButton>
+            <TextButton tone={TEXT_BUTTON_TONE.QUIET} onClick={discard.ask}>
+              {DISCARD_POST}
+            </TextButton>
+          </p>
+        )}
+        <ConfirmDialog confirm={discard} question={DISCARD_QUESTION} />
+      </div>
+    </li>
+  );
 }
 
 /** Whether a person wrote the message, whose words are drawn as typed and whose pictures lead them. */
@@ -550,6 +760,10 @@ function ThreadRow({
       {threadToggleWords(open, replies.length)}
     </TextButton>
   );
+  // The reader's replies on their way stand after the thread's, while the thread is open.
+  const pendingReplies = context.pending.filter(
+    (each) => each.channelId === message.channelId && each.replyTo === message.seq,
+  );
   // A message nobody has replied to offers Reply at its byline's end beside its Copy, out of the way until wanted.
   const quiet = replies.length === 0 && !open;
   return (
@@ -579,10 +793,13 @@ function ThreadRow({
               ) : null}
               {toggle}
             </div>
-            {open && replies.length > 0 ? (
+            {open && replies.length + pendingReplies.length > 0 ? (
               <ul className="chat-replies">
                 {replies.map((reply) => (
                   <Reply key={reply.id} message={reply} context={context} />
+                ))}
+                {pendingReplies.map((entry) => (
+                  <PendingRow key={entry.id} entry={entry} context={context} reply />
                 ))}
               </ul>
             ) : null}
@@ -597,8 +814,12 @@ function ThreadRow({
                 ])}
                 keywords={context.keywords}
                 compact
-                onSend={(text, attachments) =>
-                  context.onPost({ ...postOf(text, attachments), replyTo: message.seq })
+                onSend={(text, attachments, takeBack) =>
+                  context.send(
+                    { channelId: message.channelId, replyTo: message.seq },
+                    { ...postOf(text, attachments), replyTo: message.seq },
+                    takeBack,
+                  )
                 }
               />
             ) : null}
@@ -678,6 +899,11 @@ function ChannelStream({
               </Fragment>
             );
           })}
+          {context.pending
+            .filter((each) => each.channelId === channelId && each.replyTo === undefined)
+            .map((entry) => (
+              <PendingRow key={entry.id} entry={entry} context={context} />
+            ))}
         </ol>
       </ConversationContent>
       <ConversationScrollButton />
@@ -821,8 +1047,8 @@ export function ChatPane({
   tasks?: readonly TaskSummary[];
   now: number;
   openLink: (url: string) => void;
-  /** Posts a message; answers why it was refused, or nothing once it is taken. */
-  onPost: (post: ChatPost) => Promise<string | undefined>;
+  /** Posts a message under the key the pane minted for it; answers why it was refused, or nothing once it is taken. */
+  onPost: (post: ChatPost, clientKey: string) => Promise<string | undefined>;
   /** Answers an ask; answers why it was refused, or nothing once it is taken. */
   onAnswer: (answer: ChatAskAnswer) => Promise<string | undefined>;
   /** Reads one picture a message carries, by the message and the attachment its block names. */
@@ -849,6 +1075,7 @@ export function ChatPane({
     if (home?.kind !== CHANNEL_KIND.TASK || home.planId === undefined) return undefined;
     return taskDoors?.(home.planId);
   };
+  const posting = usePendingPosts(chat, onPost);
   const context: MessageContext = {
     actorOf,
     chat,
@@ -857,7 +1084,10 @@ export function ChatPane({
     mentionsIn,
     keywords,
     openLink,
-    onPost,
+    send: posting.send,
+    pending: posting.pending,
+    onRetryPost: posting.onRetryPost,
+    onDiscardPost: posting.onDiscardPost,
     onAnswer,
     readPicture,
     doorsIn,
@@ -905,7 +1135,7 @@ export function ChatPane({
         lead={lead}
         actions={channelActions?.(channel)}
       />
-      {threads.length === 0 ? (
+      {threads.length === 0 && !posting.pending.some((each) => each.channelId === channel.id) ? (
         <EmptyState icon={channel.kind === CHANNEL_KIND.DM ? <AtSignIcon /> : <HashIcon />}>
           {NOTHING_POSTED}
         </EmptyState>
@@ -922,8 +1152,12 @@ export function ChatPane({
           label={composerLabel(chat, names, channel)}
           mentions={mentionsIn(channel.id)}
           keywords={keywords}
-          onSend={(text, attachments) =>
-            onPost({ ...postOf(text, attachments), channelId: channel.id })
+          onSend={(text, attachments, takeBack) =>
+            posting.send(
+              { channelId: channel.id },
+              { ...postOf(text, attachments), channelId: channel.id },
+              takeBack,
+            )
           }
         />
       ) : channel.archived && channel.kind === CHANNEL_KIND.TOPIC && onBringBack !== undefined ? (

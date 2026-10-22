@@ -342,7 +342,7 @@ const postAsPerson = /* @__PURE__ */ Effect.fnUntraced(function* (
   }
   // A post sent again under its key is told again, which finishes a telling the first left undone and steers no one twice.
   const notices = tellMessage(teller, message, unresolved);
-  const posted = { posted: messageOnWire(message), ...txidOf(message) };
+  const posted = { posted: messageOnWire(message, writer.self.id), ...txidOf(message) };
   if (post.receipt === false) {
     yield* afterResponse("a chat post's notices", notices);
     return posted;
@@ -402,7 +402,7 @@ const answerAsPerson = /* @__PURE__ */ Effect.fnUntraced(function* (
   if (taken && Option.isSome(posted) && ask.value.needsReply !== false) {
     yield* afterResponse("an answer's notices", tellMessage(yield* telling, posted.value, []));
   }
-  return { ask: messageOnWire(now), taken, ...(taken ? txidOf(now) : undefined) };
+  return { ask: messageOnWire(now, self.id), taken, ...(taken ? txidOf(now) : undefined) };
 });
 
 /** A person's own ask resolved with why; not found where the place holds no ask of theirs. */
@@ -422,7 +422,7 @@ const resolveAsPerson = /* @__PURE__ */ Effect.fnUntraced(function* (
     resolveAsk(userId, organizationId, self.id, key.value, reason),
   );
   if (Option.isNone(resolved)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-  return { resolved: messageOnWire(resolved.value), ...txidOf(resolved.value) };
+  return { resolved: messageOnWire(resolved.value, self.id), ...txidOf(resolved.value) };
 });
 
 /**

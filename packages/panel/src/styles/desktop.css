@@ -4709,6 +4709,13 @@ ul.actor-stack {
   transition: background-color var(--duration-hover) ease;
 }
 
+/* A post of the reader's on its way reads quieter until the chat holds it,
+   and one refused stays as quiet over its red mark. */
+:is(.chat-message, .chat-reply)[data-pending] > .chat-message-body > .chat-words,
+:is(.chat-message, .chat-reply)[data-unsent] > .chat-message-body > .chat-words {
+  opacity: 0.6;
+}
+
 /* A message continuing its author's run sits right under the one before. */
 .chat-message[data-continued="true"] {
   padding-top: var(--luke-space-2);
