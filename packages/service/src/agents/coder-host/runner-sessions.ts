@@ -61,7 +61,7 @@
  */
 
 import { createHash, randomBytes, randomUUID } from "node:crypto";
-import { AGENT_USER } from "@luke/agent-runner/pins";
+import { AGENT_USER, RUNNER_DIRECTORY } from "@luke/agent-runner/pins";
 import {
   type ContentBlock,
   INPUT_LINE,
@@ -220,12 +220,13 @@ export const SANDBOX_NAME = "luke-agent-";
 
 /**
  * Where the launch stands in the sandbox: the bundle as the file API uploads
- * it, as the default user, and where root installs it, in a directory only
- * root writes, so no Terminal's shell changes what runs as `agent`.
+ * it, as the default user, and where it is installed root's, in the directory
+ * the image made root's (`RUNNER_DIRECTORY`), so no Terminal's shell changes
+ * what runs as `agent`.
  */
 const RUNNER_PATH = {
   UPLOAD: "/tmp/luke-agent-runner.mjs",
-  INSTALLED: "/opt/luke/agent-runner/agent-runner.mjs",
+  INSTALLED: `${RUNNER_DIRECTORY}/agent-runner.mjs`,
 } as const;
 
 /** The variables the sandbox opens with, as eve's coding-agent environment sets them. */
@@ -250,6 +251,30 @@ const LAUNCH_SCRIPT = [
   `find ${CODER.CHECKOUT_PATH} -type d -exec chmod g+s {} +`,
   `exec ${WITHOUT_CAPABILITIES.COMMAND} --reuid=${AGENT_USER} --regid=${AGENT_USER} --init-groups ${WITHOUT_CAPABILITIES.ARGS.join(" ")} env HOME=/home/${AGENT_USER} USER=${AGENT_USER} LOGNAME=${AGENT_USER} node ${RUNNER_PATH.INSTALLED}`,
 ].join("\n");
+
+/**
+ * A launch whose stdin was refused, said in the log by how its command
+ * ended: its exit code where Vercel has one, and the tail of its stderr,
+ * every token-shaped run redacted (`commandStderrTail`), since a runner that
+ * dies before it reads its config says why there alone. Every value the
+ * launch handed it in its environment is redacted too, whatever its shape,
+ * so neither its credential nor its bearer can reach the log.
+ */
+const diedAtStart = (
+  api: VercelSandboxApi,
+  sandboxSessionId: string,
+  commandId: string,
+  secrets: readonly string[],
+) =>
+  Effect.gen(function* () {
+    const exit = yield* api
+      .commandExit(sandboxSessionId, commandId)
+      .pipe(Effect.orElseSucceed(() => undefined));
+    const stderr = yield* api.commandStderrTail(sandboxSessionId, commandId, secrets);
+    yield* Effect.logWarning(
+      `A runner's launch took no stdin: exit ${exit === null || exit === undefined ? "unknown" : String(exit)}, stderr: ${stderr ?? "none"}`,
+    );
+  });
 
 /** What `$0` reads as in the launch's shell. */
 const LAUNCH_NAME = "luke-agent-runner";
@@ -604,6 +629,8 @@ export const runnerSessions = <
           command: "bash",
           args: ["-c", LAUNCH_SCRIPT, LAUNCH_NAME, digest],
           cwd: CODER.CHECKOUT_PATH,
+          // Note that the credential and the bearer ride in the environment alone, which the API's
+          // sudo keeps, as Vercel documents it does, on an image that honours that (`sandbox-image.ts`).
           env: { ...SANDBOX_ENV, ...credential.env, [RUNNER_ENV.BEARER]: bearer },
           sudo: true,
         });
@@ -619,7 +646,16 @@ export const runnerSessions = <
             }),
           );
           const config = yield* harness.config(agent, resume, firstSequence);
-          yield* api.writeStdin(sandbox.running, commandId, `${line(config)}${line(first)}`);
+          yield* api
+            .writeStdin(sandbox.running, commandId, `${line(config)}${line(first)}`)
+            .pipe(
+              Effect.tapError(() =>
+                diedAtStart(api, sandbox.running, commandId, [
+                  ...Object.values(credential.env),
+                  bearer,
+                ]),
+              ),
+            );
         }).pipe(
           Effect.tapError(() =>
             Effect.ignore(

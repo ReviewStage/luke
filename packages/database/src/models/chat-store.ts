@@ -3480,6 +3480,56 @@ export function readAttachment(
   });
 }
 
+const findMessagePictures = SqlSchema.findAll({
+  Request: Schema.Struct({
+    organizationId: Schema.String,
+    userId: Schema.String,
+    messageId: Schema.String,
+  }),
+  Result: Schema.Struct({
+    id: Schema.String,
+    contentType: chatImageTypeSchema,
+    bytes: Schema.Uint8Array,
+  }),
+  execute: (key) =>
+    Database.use((db) =>
+      db
+        .select({ id: attachment.id, contentType: attachment.contentType, bytes: attachment.bytes })
+        .from(attachment)
+        .innerJoin(chatMessage, eq(chatMessage.id, attachment.chatMessageId))
+        .innerJoin(chatChannel, eq(chatChannel.id, chatMessage.channelId))
+        .where(
+          and(
+            eq(attachment.organizationId, key.organizationId),
+            eq(chatMessage.organizationId, key.organizationId),
+            eq(attachment.chatMessageId, key.messageId),
+            // A picture in a DM with a teammate's operator is as private as the DM.
+            channelSeenBy(key.userId),
+          ),
+        ),
+    ),
+});
+
+/**
+ * Every picture the message keeps, each under its id, in no order of its
+ * own: what a notice of the message hands the agents it tells, which put
+ * them in the order its image blocks name them. Scoped as `readAttachment`
+ * is: nothing where the account is not in the workspace, the message is
+ * not the workspace's, or its channel is a DM the account does not see.
+ * Kept apart from a read of one picture by its id alone, which checks the
+ * caller's own right to read it.
+ */
+export function readMessagePictures(
+  userId: string,
+  organizationId: string,
+  messageId: string,
+): ChatStoreEffect<readonly ChatImageWrite[]> {
+  return Effect.gen(function* () {
+    if (!(yield* isWorkspaceMember(userId, organizationId))) return [];
+    return yield* findMessagePictures({ organizationId, userId, messageId });
+  });
+}
+
 const findThreadAuthors = SqlSchema.findAll({
   Request: Schema.Struct({
     organizationId: Schema.String,

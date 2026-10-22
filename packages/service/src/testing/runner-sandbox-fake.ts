@@ -53,6 +53,8 @@ export interface FakeCommand {
   readonly sudo: boolean;
   stdin: string;
   exitCode: number | null;
+  /** What the command printed on stderr, which its logs answer. */
+  stderr?: string;
   /** Whether Vercel recorded the exit, which it does only once a read that waits for it saw it. */
   recorded?: boolean;
 }
@@ -267,7 +269,7 @@ export function runnerSandboxApi() {
       await hooks.onStart?.(command);
       return Response.json({ command: { id: command.id, exitCode: null } });
     }
-    const commandCall = /^cmd\/([^/]+)(\/stdin|\/kill)?$/u.exec(rest);
+    const commandCall = /^cmd\/([^/]+)(\/stdin|\/kill|\/logs)?$/u.exec(rest);
     assert.ok(commandCall !== null, `an unexpected call: ${method} ${path}`);
     const command = commands.find((each) => each.id === commandCall[1]);
     if (command === undefined) return new Response(null, { status: 404 });
@@ -275,7 +277,21 @@ export function runnerSandboxApi() {
       command.exitCode = command.exitCode ?? 143;
       return Response.json({ command: { id: command.id, exitCode: command.exitCode } });
     }
+    if (commandCall[2] === "/logs") {
+      const lines =
+        command.stderr === undefined ? [] : [{ stream: "stderr", data: command.stderr }];
+      return new Response(lines.map((each) => `${JSON.stringify(each)}\n`).join(""), {
+        headers: { "content-type": "application/x-ndjson" },
+      });
+    }
     if (commandCall[2] === "/stdin") {
+      // Vercel refuses stdin to a command that already exited.
+      if (command.exitCode !== null) {
+        return Response.json(
+          { error: { code: "command_not_found_or_exited", message: "the command exited" } },
+          { status: 404 },
+        );
+      }
       const asked = await body();
       if (asked.data !== undefined && failStdin.remaining > 0) {
         failStdin.remaining -= 1;

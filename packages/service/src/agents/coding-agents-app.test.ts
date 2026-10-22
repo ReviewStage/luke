@@ -125,6 +125,7 @@ import {
   chatAnswerSchema,
   chatNoticeAsksLine,
   chatNoticeReplyLine,
+  chatNoticeUnattachedLine,
   chatNoticeWords,
   chatWriteAnswerSchema,
   MEMBER_KIND,
@@ -7796,6 +7797,103 @@ it.layer(getTestDB())("telling a chat message to the agents it addresses", (it) 
         const second = yield* chat.post(chat.first.member, "And the emails.", { channelId: dm.id });
         assert.deepEqual(second.receipt.told, [chat.links.second]);
         assert.equal(eve.sent.length, 2);
+      }),
+  );
+
+  /** The files of the line eve was handed last, by name, and the words of the notice row an agent's conversation holds. */
+  const steeredFiles = (eve: ReturnType<typeof fakeEve>) => {
+    const content = eve.sent.at(-1)?.message.message;
+    assert.ok(Array.isArray(content), "the line was handed over as parts");
+    return content.flatMap((part) => (part.type === "file" ? [part.filename] : []));
+  };
+
+  it.effect(
+    "a DM's picture steers the agent it tells with the picture itself, a file named by its attachment id that the line keeps, and the words name it by that id",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const chat = yield* openChat(eve);
+        const dm = Option.getOrThrow(
+          yield* findOrMakeDm(chat.owner, chat.workspace, chat.person.id, chat.second.member.id),
+        );
+        const attachmentId = randomUUID();
+        const sent = yield* postChat(
+          chat.telling,
+          {
+            authorMemberId: chat.person.id,
+            to: { channelId: dm.id },
+            blocks: [
+              { type: CHAT_BLOCK.MARKDOWN, text: "The new email." },
+              { type: CHAT_BLOCK.IMAGE, attachmentId, alt: "email.png" },
+            ],
+            clientKey: randomUUID(),
+          },
+          [{ id: attachmentId, contentType: CHAT_IMAGE_TYPE.PNG, bytes: PNG }],
+        ).pipe(Effect.provide(chat.github.layer));
+        assert.deepEqual(sent.receipt.told, [chat.links.second]);
+        assert.deepEqual(steeredFiles(eve), [`${attachmentId}.png`]);
+
+        const [notice] = yield* chat.rowsOf(chat.second.target);
+        assert.ok(notice !== undefined);
+        assert.deepEqual(
+          notice.message.parts.flatMap((part) =>
+            part.type === "file" ? [{ filename: part.filename, url: part.url }] : [],
+          ),
+          [
+            {
+              filename: `${attachmentId}.png`,
+              url: `data:${CHAT_IMAGE_TYPE.PNG};base64,${Buffer.from(PNG).toString("base64")}`,
+            },
+          ],
+        );
+        const [words] = notice.message.parts.flatMap((part) =>
+          part.type === "text" ? [part.text] : [],
+        );
+        assert.equal(
+          chatNoticeWords(words ?? ""),
+          `The new email.\n\n[image: email.png (attachment ${attachmentId})]`,
+        );
+      }),
+  );
+
+  it.effect(
+    "a post whose pictures go past what one message carries steers the agent with the first that fit, each once however often it is shown, and names the rest as not attached where a person reading the notice never sees it",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const chat = yield* openChat(eve);
+        // Three pictures each within a chat picture's bound, two of which fill one message's bytes.
+        const bytes = new Uint8Array(1_400_000);
+        bytes.set(PNG);
+        const ids = [randomUUID(), randomUUID(), randomUUID()];
+        const text = `${chat.links.second} the three screens.`;
+        yield* postChat(
+          chat.telling,
+          {
+            authorMemberId: chat.person.id,
+            to: { channelId: chat.channel.id },
+            blocks: [
+              { type: CHAT_BLOCK.MARKDOWN, text },
+              // The first picture shown twice, as two blocks of one sandbox path name one id, is still one file.
+              ...[ids[0] ?? "", ...ids].map((attachmentId, at) => ({
+                type: CHAT_BLOCK.IMAGE,
+                attachmentId,
+                alt: `screen ${at}`,
+              })),
+            ],
+            ...namedIn(text),
+            clientKey: randomUUID(),
+          },
+          ids.map((id) => ({ id, contentType: CHAT_IMAGE_TYPE.PNG, bytes })),
+        ).pipe(Effect.provide(chat.github.layer));
+        assert.deepEqual(steeredFiles(eve), [`${ids[0]}.png`, `${ids[1]}.png`]);
+
+        const [notice] = yield* chat.rowsOf(chat.second.target);
+        const [words = ""] = (notice?.message.parts ?? []).flatMap((part) =>
+          part.type === "text" ? [part.text] : [],
+        );
+        assert.ok(words.includes(chatNoticeUnattachedLine([ids[2] ?? ""])));
+        assert.ok(!chatNoticeWords(words).includes("Not attached"));
       }),
   );
 

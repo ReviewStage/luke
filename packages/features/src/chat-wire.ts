@@ -254,6 +254,11 @@ export function chatNoticeReplyLine(seq: number): string {
   return `Reply with ${CHAT_TOOL.POST}({ replyTo: ${seq}, text }).`;
 }
 
+/** A notice's closing line naming the message's pictures it could not carry, past what one message to an agent may: each by its attachment id, as the words name it. */
+export function chatNoticeUnattachedLine(attachmentIds: readonly string[]): string {
+  return `Not attached, past what one message carries: ${attachmentIds.map((id) => `attachment ${id}`).join(", ")}.`;
+}
+
 /**
  * A notice's head as `chat-notify.ts` writes it, whole: the lead, who said it,
  * by their mention link or a plain name, where, and its place.
@@ -263,8 +268,9 @@ const CHAT_NOTICE_HEAD = new RegExp(
   "u",
 );
 
-/** The closing lines as `chatNoticeAsksLine` and `chatNoticeReplyLine` write them, whole, which nothing a member typed is read as. */
+/** The closing lines as `chatNoticeUnattachedLine`, `chatNoticeAsksLine`, and `chatNoticeReplyLine` write them, whole, which nothing a member typed is read as. */
 const CHAT_NOTICE_CLOSINGS = [
+  /^Not attached, past what one message carries: attachment [0-9a-f-]+(?:, attachment [0-9a-f-]+)*\.$/u,
   /^It asks you \([a-z-]+\): answer it in its thread\.$/u,
   new RegExp(`^Reply with ${CHAT_TOOL.POST}\\(\\{ replyTo: \\d+, text \\}\\)\\.$`, "u"),
 ] as const;
