@@ -8,9 +8,10 @@ import {
   AUTOMATION_TRIGGER,
   type AutomationSummary,
 } from "@luke/features/automation-wire";
+import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
 import { MENTION_KIND, type MentionPlace, mentionMarkdown } from "@luke/features/mention-link";
 import { pageFrameUrl } from "@luke/features/page-frame";
-import { PAGE_SHOWER } from "@luke/features/page-wire";
+import { PAGE_SHOWER, type PageLine } from "@luke/features/page-wire";
 import type { TaskSummary } from "@luke/features/task-wire";
 import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
 import {
@@ -56,6 +57,21 @@ const TASK_ID = "3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b";
 const PAGE_ID = "26494df1-595a-4364-abf7-85781c65a9f8";
 
 const ITEM_ID = "item_4b9e";
+
+/** A coding agent on no task, which shows its pages on itself. */
+const SWEEP_AGENT = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
+
+/** Another agent on no task, which the reader cannot reach. */
+const HIDDEN_AGENT = "9d2b7b5f-4e3f-4e9c-9c77-7a5d8b3f4c32";
+
+/** The page the agent on no task showed on itself, as a read of its pages lists it. */
+const SWEEP_PAGE: PageLine = {
+  id: "4a5b6c7d-8e9f-4a0b-8c1d-2e3f4a5b6c7d",
+  title: "Flake ledger",
+  version: 2,
+  at: AT,
+  shownBy: { kind: PAGE_SHOWER.AGENT, agentId: SWEEP_AGENT },
+};
 
 const SAM = "user-sam";
 
@@ -129,6 +145,22 @@ const STATE: AppStateSnapshot = (() => {
     tasks: {
       ...IDLE_TASKS_VIEW,
       tasks: [TASK],
+      tasklessAgents: [
+        {
+          id: SWEEP_AGENT,
+          planId: null,
+          turnId: null,
+          title: "Sweep the flaky tests",
+          model: "anthropic/claude-opus-5.5",
+          effort: "high",
+          status: CODING_AGENT_STATUS.COMPLETED,
+          createdAt: AT,
+          automationId: null,
+          workspaceId: ACME.id,
+          repository: "acme/relay",
+          activityAt: AT,
+        },
+      ],
       workspaces: [ACME, BETA],
       activeTaskId: TASK_ID,
       pages: [
@@ -159,6 +191,9 @@ const told: AnyAct[] = [];
 /** Every workspace whose automations the act port was asked for, in order. */
 const automationReads: (string | undefined)[] = [];
 
+/** Every agent on no task whose pages the act port was asked for, in order. */
+const agentPageReads: string[] = [];
+
 let root: Root | undefined;
 
 beforeAll(() => Effect.runPromise(markdownHtmlParserLanded));
@@ -169,6 +204,7 @@ afterEach(() => {
   document.body.innerHTML = "";
   told.length = 0;
   automationReads.length = 0;
+  agentPageReads.length = 0;
 });
 
 /** The plan's card as the window's plans make it, with what a chip hangs it for. */
@@ -216,6 +252,14 @@ async function drawn(text: string): Promise<HTMLElement> {
       automationReads.push(payload.workspaceId);
       const beta = payload.workspaceId === BETA.id;
       return Promise.resolve({ automations: beta ? [AUDIT] : [SWEEP] });
+    },
+    // The agent on no task's pages are its own; an agent the reader cannot reach lists none, as the service answers it.
+    [ACT_KIND.TASKS_PAGES]: (place) => {
+      if (!("agentId" in place)) return Promise.resolve({ pages: [] });
+      agentPageReads.push(place.agentId);
+      return Promise.resolve(
+        place.agentId === SWEEP_AGENT ? { pages: [SWEEP_PAGE] } : { pages: [] },
+      );
     },
   });
   fakeAppPlatform({ pageFrameUrl });
@@ -361,6 +405,48 @@ test("a page's chip hangs its title, its version and who showed it, and when it 
   // A page id the open plan holds, named on another plan, is not the open plan's page.
   assert.equal(another.card, "data-mention-card");
   assert.equal(another.name, "Another plan's page");
+});
+
+test("a chip of a page an agent on no task showed hangs the same card as a plan's page, read as it is first hung: its title, its version and the agent that showed it, and when it moved, over its preview; one the agent's pages hold not, or of an agent the reader cannot reach, keeps the chip's own card", async () => {
+  const container = await drawn(
+    [
+      mentionMarkdown(
+        { kind: MENTION_KIND.PAGE, agentId: SWEEP_AGENT, pageId: SWEEP_PAGE.id },
+        "",
+        PLACE,
+      ),
+      mentionMarkdown(
+        { kind: MENTION_KIND.PAGE, agentId: SWEEP_AGENT, pageId: PAGE_ID },
+        "Old ledger",
+        PLACE,
+      ),
+      mentionMarkdown(
+        { kind: MENTION_KIND.PAGE, agentId: HIDDEN_AGENT, pageId: SWEEP_PAGE.id },
+        "Someone's ledger",
+        PLACE,
+      ),
+    ].join(" "),
+  );
+  assert.deepEqual(agentPageReads, [], "words full of chips read nothing until one is looked at");
+  const [shown, unheld, hidden] = chipsOf(container);
+
+  const page = await cardOf(shown);
+  assert.equal(page.card, "data-page-card");
+  assert.equal(page.name, "Flake ledger");
+  assert.equal(page.sub, "Version 2 · Shown by Sweep the flaky tests");
+  assert.ok(page.corner, "the corner says when the page last moved");
+  assert.equal(
+    document.querySelector(".luke-tooltip-card .page-card-frame")?.getAttribute("src"),
+    pageFrameUrl({ agentId: SWEEP_AGENT, pageId: SWEEP_PAGE.id, version: 2 }),
+    "the preview is the agent's page at its newest version",
+  );
+
+  const other = await cardOf(unheld);
+  assert.equal(other.card, "data-mention-card");
+  assert.equal(other.name, "Old ledger");
+  const refused = await cardOf(hidden);
+  assert.equal(refused.card, "data-mention-card");
+  assert.equal(refused.name, "Someone's ledger");
 });
 
 test("a file's and a folder's chips hang their path, their repository, and where they are read", async () => {
