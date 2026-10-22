@@ -96,7 +96,6 @@ const EVENTS_URL = "https://luke.test/api/agents/runner/events";
 const MCP_URL = "https://luke.test/api/agents/mcp";
 const INSTRUCTIONS = "You are a Luke coding agent.";
 const BUNDLE = new TextEncoder().encode("// the runner, bundled\nconsole.log('runner');\n");
-const TEST_KEY = "sk-ant-api03-fixture-test-mode-key";
 const PLAN_TOKEN = "sk-ant-oat01-fixture-plan-token";
 const RING = `1:${Buffer.alloc(32, 3).toString("base64")}`;
 const RELAY = { owner: "Acme", name: "Relay", defaultBranch: "trunk" } as const;
@@ -140,8 +139,8 @@ function services(
   );
 }
 
-/** An account with one agent on a task with no repository. */
-const openAgent = Effect.gen(function* () {
+/** An account with one agent on a task with no repository, and no Claude plan. */
+const openAgentWithoutPlan = Effect.gen(function* () {
   const userId = `user-${randomUUID()}`;
   yield* Effect.flatMap(Database, (db) =>
     db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` }),
@@ -160,19 +159,38 @@ const openAgent = Effect.gen(function* () {
   return { userId, agent: started.value.agent };
 });
 
+/** The account's Claude plan: its setup-token, sealed as Settings saves it. */
+const savePlan = (userId: string) =>
+  Effect.gen(function* () {
+    const ring = parseKeyRing(Redacted.make(RING));
+    assert.ok(Result.isSuccess(ring));
+    const owner = {
+      userId,
+      provider: PROVIDER_KEY_PROVIDER.ANTHROPIC,
+      kind: PROVIDER_KEY_KIND.CLAUDE_SETUP_TOKEN,
+    };
+    yield* saveProviderKey(
+      userId,
+      owner.provider,
+      owner.kind,
+      sealProviderKey(ring.success, owner, Redacted.make(PLAN_TOKEN)),
+      "sk-ant-oat…oken",
+      null,
+      new Date(0),
+    );
+  });
+
+/** An account with one agent on a task with no repository, on its Claude plan. */
+const openAgent = Effect.tap(openAgentWithoutPlan, ({ userId }) => savePlan(userId));
+
 /** The sessions for the account, the next event number read from the counter given. */
-function sessionsFor(
-  userId: string,
-  sequence: { next: number },
-  testApiKey: string | null = TEST_KEY,
-) {
+function sessionsFor(userId: string, sequence: { next: number }) {
   const options: ClaudeCodeSessionsOptions = {
     userId,
     eventsUrl: EVENTS_URL,
     mcpUrl: MCP_URL,
     instructions: () => Effect.succeed(INSTRUCTIONS),
     nextSequence: () => Effect.sync(() => sequence.next),
-    testApiKey: testApiKey === null ? undefined : Redacted.make(testApiKey),
     run: (effect) => Effect.runPromise(effect),
   };
   return claudeCodeSessions(options);
@@ -284,8 +302,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
 
         const bearer = command.env[RUNNER_ENV.BEARER];
         assert.ok(bearer !== undefined && bearer.length > 20);
-        assert.equal(command.env[RUNNER_ENV.API_KEY], TEST_KEY);
-        assert.equal(command.env[RUNNER_ENV.CLAUDE_TOKEN], undefined);
+        assert.equal(command.env[RUNNER_ENV.CLAUDE_TOKEN], PLAN_TOKEN);
         const routing = Option.getOrThrow(yield* readCodingAgentRouting(userId, agent.id));
         assert.equal(routing.runnerTokenHash, runnerTokenDigest(bearer));
 
@@ -315,43 +332,8 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
           api.sandboxes,
           [...(api.uploads[0]?.values() ?? [])],
         ]);
-        for (const secret of [TEST_KEY, bearer]) assert.equal(visible.includes(secret), false);
+        for (const secret of [PLAN_TOKEN, bearer]) assert.equal(visible.includes(secret), false);
       }),
-  );
-
-  it.effect("a plan's launch runs on the account's setup-token, opened from its sealed row", () =>
-    Effect.gen(function* () {
-      vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
-      const api = runnerSandboxApi();
-      const { userId, agent } = yield* openAgent;
-      const ring = parseKeyRing(Redacted.make(RING));
-      assert.ok(Result.isSuccess(ring));
-      const owner = {
-        userId,
-        provider: PROVIDER_KEY_PROVIDER.ANTHROPIC,
-        kind: PROVIDER_KEY_KIND.CLAUDE_SETUP_TOKEN,
-      };
-      yield* saveProviderKey(
-        userId,
-        owner.provider,
-        owner.kind,
-        sealProviderKey(ring.success, owner, Redacted.make(PLAN_TOKEN)),
-        "sk-ant-oat…oken",
-        null,
-        new Date(0),
-      );
-      const sessions = yield* sessionsFor(userId, { next: 0 }, null).pipe(
-        Effect.provide(services(api)),
-      );
-
-      const opened = yield* sessions.open(message(agent, "Fix the invitations."));
-
-      assert.equal(opened.outcome, EVE_SEND_OUTCOME.ACCEPTED);
-      const [command] = api.commands;
-      assert.equal(command?.env[RUNNER_ENV.CLAUDE_TOKEN], PLAN_TOKEN);
-      assert.equal(command?.env[RUNNER_ENV.API_KEY], undefined);
-      assert.equal(JSON.stringify([command?.args, command?.stdin]).includes(PLAN_TOKEN), false);
-    }),
   );
 
   it.effect(
@@ -360,22 +342,11 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
       Effect.gen(function* () {
         vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
         const { userId, agent } = yield* openAgent;
-        const ring = parseKeyRing(Redacted.make(RING));
-        assert.ok(Result.isSuccess(ring));
         const owner = {
           userId,
           provider: PROVIDER_KEY_PROVIDER.ANTHROPIC,
           kind: PROVIDER_KEY_KIND.CLAUDE_SETUP_TOKEN,
         };
-        yield* saveProviderKey(
-          userId,
-          owner.provider,
-          owner.kind,
-          sealProviderKey(ring.success, owner, Redacted.make(PLAN_TOKEN)),
-          "sk-ant-oat…oken",
-          null,
-          new Date(0),
-        );
         const markPlan = (
           status: typeof PROVIDER_KEY_STATUS.LIMIT_REACHED | typeof PROVIDER_KEY_STATUS.INVALID,
           resetsAt?: Date,
@@ -386,7 +357,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
           });
         const openOn = (api: ReturnType<typeof runnerSandboxApi>) =>
           Effect.gen(function* () {
-            const sessions = yield* sessionsFor(userId, { next: 0 }, null).pipe(
+            const sessions = yield* sessionsFor(userId, { next: 0 }).pipe(
               Effect.provide(services(api)),
             );
             return yield* sessions.open(message(agent, "Go."));
@@ -405,9 +376,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
 
         yield* TestClock.adjust("31 minutes");
         const reset = runnerSandboxApi();
-        const live = yield* sessionsFor(userId, { next: 0 }, null).pipe(
-          Effect.provide(services(reset)),
-        );
+        const live = yield* sessionsFor(userId, { next: 0 }).pipe(Effect.provide(services(reset)));
         const reopened = yield* live.open(message(agent, "Go."));
         assert.ok(reopened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
         assert.equal(reset.commands[0]?.env[RUNNER_ENV.CLAUDE_TOKEN], PLAN_TOKEN);
@@ -437,7 +406,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
     () =>
       Effect.gen(function* () {
         vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
-        const { userId, agent } = yield* openAgent;
+        const { userId, agent } = yield* openAgentWithoutPlan;
         const noSnapshot = runnerSandboxApi();
         const withoutImage = yield* sessionsFor(userId, { next: 0 }).pipe(
           Effect.provide(services(noSnapshot, null)),
@@ -449,7 +418,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         assert.deepEqual(noSnapshot.sandboxes, []);
 
         const noToken = runnerSandboxApi();
-        const withoutPlan = yield* sessionsFor(userId, { next: 0 }, null).pipe(
+        const withoutPlan = yield* sessionsFor(userId, { next: 0 }).pipe(
           Effect.provide(services(noToken)),
         );
         assert.equal(
@@ -1258,7 +1227,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         const bearer = api.commands[0]?.env[RUNNER_ENV.BEARER];
         assert.ok(bearer !== undefined);
         const written = logged.join("\n");
-        for (const secret of [TEST_KEY, bearer, fixtureToken()]) {
+        for (const secret of [PLAN_TOKEN, bearer, fixtureToken()]) {
           assert.equal(written.includes(secret), false);
         }
       }),
@@ -1274,6 +1243,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         yield* Effect.flatMap(Database, (db) =>
           db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` }),
         );
+        yield* savePlan(userId);
         const task = yield* startTask(userId, { name: "Relay", repository: RELAY_FULL_NAME });
         yield* connectWorkspaceGitHub(task.workspaceId, RELAY_INSTALLATION);
         const started = yield* createCodingAgent(userId, {
