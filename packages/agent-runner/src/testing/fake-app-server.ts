@@ -38,9 +38,6 @@ const RecordedLineSchema = Schema.Struct({
   message: RecordedMessageSchema,
 });
 const decodeRecordedLine = Schema.decodeUnknownSync(Schema.fromJsonString(RecordedLineSchema));
-const decodeReply = Schema.decodeUnknownSync(
-  Schema.fromJsonString(Schema.Array(RecordedMessageSchema)),
-);
 const decodeReceived = Schema.decodeUnknownOption(Schema.fromJsonString(RecordedMessageSchema));
 const decodeClientId = Schema.decodeUnknownOption(
   Schema.Struct({ clientUserMessageId: Schema.String }),
@@ -99,12 +96,6 @@ export function recordedExchanges(phase: string): readonly Exchange[] {
     }
   }
   return exchanges;
-}
-
-/** An exchange with every occurrence of `text` in its reply replaced, such as to plant a secret in a tool's output. */
-export function withReplyText(exchange: Exchange, text: string, replacement: string): Exchange {
-  const reply = decodeReply(JSON.stringify(exchange.reply).replaceAll(text, replacement));
-  return { method: exchange.method, reply };
 }
 
 /** The params of each message of `method` a process received, in order, as the protocol types them. */

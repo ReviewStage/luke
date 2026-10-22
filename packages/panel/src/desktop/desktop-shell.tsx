@@ -54,7 +54,7 @@ import { WindowVoiceNotice } from "../window-voice.js";
 import { READING_AUTOMATIONS } from "./automation-words.js";
 import { useColumnDock } from "./column-dock.js";
 import { DesktopAgentPage } from "./desktop-agent-page.js";
-import { DesktopChat } from "./desktop-chat.js";
+import { DesktopChat, useChatSurface } from "./desktop-chat.js";
 import { DesktopInbox } from "./desktop-inbox.js";
 import type { SettingsStep } from "./desktop-settings.js";
 import { DesktopSidebar } from "./desktop-sidebar.js";
@@ -659,6 +659,8 @@ export function DesktopShell({
   const planToggle = tasks.page === TASKS_PAGE.DOCUMENT && !standingIn;
   const taskDrawn = planToggle && tasks.region.kind === DOCUMENT_REGION.READY;
   const calling = useCallingAgent();
+  // Chat is handed only what it reads of the tasks, so a delivery that moves the rest draws none of it.
+  const chatSurface = useChatSurface(tasks);
   const callShown = taskDrawn && callTabShown(tasks, calling);
   // A phone's task leads its own row with the way back to the page it was opened from, named for it (`task-pane-switcher.tsx`).
   const awayLabel = awayBack(history.away, history.onLeave).label;
@@ -841,7 +843,7 @@ export function DesktopShell({
             {chatOpen ? (
               <PageFind page={FIND_PAGE.CHAT} active={tasks.shown}>
                 <DesktopChat
-                  tasks={tasks}
+                  tasks={chatSurface}
                   room={room}
                   accountName={
                     account.status === ACCOUNT_STATUS.SIGNED_IN ? account.name : undefined

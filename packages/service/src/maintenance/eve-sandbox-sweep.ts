@@ -44,20 +44,19 @@ import { OPEN_INTERNET_POLICY } from "../agents/terminal/agent-sandbox.js";
 import {
   deploymentOidcToken,
   type ListedSandbox,
-  type ListOrder,
   RUNNING_STATUS,
   SESSION_TAG,
   type VercelSandboxApi,
   vercelSandboxApi,
 } from "../agents/vercel-sandbox-api.js";
-import { listOrderAt } from "./native-sandbox-sweep.js";
+import { listOrderAt, listRunningSandboxes, windowAt } from "./sandbox-sweep-list.js";
 
 /**
  * The name eve gives a session's own Vercel sandbox (eve 0.74.0's
  * `vercelSessionName`); its templates are `eve-sbx-tpl-vercel-`, which this
  * leaves out, and a native agent's are Luke's own `luke-agent-`.
  */
-const EVE_SESSION_SANDBOX_NAME = "eve-sbx-vercel-";
+export const EVE_SESSION_SANDBOX_NAME = "eve-sbx-vercel-";
 
 export const EVE_SANDBOX_SWEEP = {
   /**
@@ -134,55 +133,6 @@ function eveSandboxOf(sandbox: ListedSandbox): EveSandbox | undefined {
   return { sessionId, running: sandbox.currentSessionId };
 }
 
-/**
- * The running eve sandboxes on at most `MAX_PAGES` pages, in the order
- * listed. A first page Vercel did not answer fails the list; a later one
- * ends it at the pages already read, whose sandboxes are no less the
- * sweep's to read.
- */
-const runningEveSandboxes = (api: VercelSandboxApi, order: ListOrder) =>
-  Effect.gen(function* () {
-    const found: EveSandbox[] = [];
-    let cursor: string | undefined;
-    for (let page = 0; page < EVE_SANDBOX_SWEEP.MAX_PAGES; page += 1) {
-      const asked = yield* Effect.result(api.listRunning(cursor, order));
-      if (Result.isFailure(asked)) {
-        if (page === 0) return yield* asked.failure;
-        yield* Effect.logWarning(
-          `a later page of the running sandboxes was not listed: ${asked.failure.message}`,
-        );
-        break;
-      }
-      const listed = asked.success;
-      for (const sandbox of listed.sandboxes) {
-        const eve = eveSandboxOf(sandbox);
-        if (eve !== undefined) found.push(eve);
-      }
-      cursor = listed.next;
-      if (cursor === undefined) break;
-    }
-    return found;
-  });
-
-/**
- * The `MAX_SANDBOXES` of the listed ones this sweep reads against the store:
- * a window that moves on by its own width each time a sweep lists from the
- * same end, wrapping round. Note that it moves, because the sandboxes that
- * keep running, every agent at work and every one a lease holds, would
- * otherwise fill a window fixed at either end for as long as they ran, and
- * an orphan listed past it would never be read. Every eve sandbox on the
- * pages either end lists is so read within a few minutes, with no cursor
- * kept between sweeps.
- */
-function windowAt(found: readonly EveSandbox[], now: Date): readonly EveSandbox[] {
-  const width = EVE_SANDBOX_SWEEP.MAX_SANDBOXES;
-  if (found.length <= width) return found;
-  // The list's end alternates by the minute (`listOrderAt`), so each end's sweeps come every other minute.
-  const sweepsFromThisEnd = Math.floor(now.getTime() / 120_000);
-  const start = (sweepsFromThisEnd * width) % found.length;
-  return [...found.slice(start), ...found.slice(0, start)].slice(0, width);
-}
-
 /** Whether the sandbox, read afresh, has moved on from the list: gone, down, or in another session. Vercel not answering counts as moved on. */
 const movedOn = (api: VercelSandboxApi, sandbox: EveSandbox) =>
   Effect.map(
@@ -250,14 +200,16 @@ export const sweepEveSandboxes = /* @__PURE__ */ Effect.fn("web/sweepEveSandboxe
   DatabaseServices | HttpClient.HttpClient
 > {
   const api = yield* vercelSandboxApi(deploymentOidcToken);
-  const listed = yield* Effect.result(runningEveSandboxes(api, listOrderAt(now)));
+  const listed = yield* Effect.result(
+    listRunningSandboxes(api, listOrderAt(now), EVE_SANDBOX_SWEEP.MAX_PAGES, eveSandboxOf),
+  );
   if (Result.isFailure(listed)) {
     yield* Effect.logWarning(`the running sandboxes were not listed: ${listed.failure.message}`);
     return NOTHING_SWEPT;
   }
   const budget: StopBudget = { remaining: EVE_SANDBOX_SWEEP.MAX_STOPS };
   const endings = yield* Effect.forEach(
-    windowAt(listed.success, now),
+    windowAt(listed.success, EVE_SANDBOX_SWEEP.MAX_SANDBOXES, now),
     (sandbox) => endSandbox(api, sandbox, now, budget),
     { concurrency: EVE_SANDBOX_SWEEP.CONCURRENCY },
   );

@@ -20,6 +20,7 @@ import {
   type RepositoryRefusal,
   runInSandbox,
 } from "../agents/repository-shell.js";
+import { shellWithoutCapabilities } from "../agents/sandbox-capabilities.js";
 import {
   ACTION_RESULT_STATUS,
   type StoredToolPart,
@@ -225,7 +226,14 @@ export function showCodeRejected(reason: string): WireRecord {
   return { status: ACTION_RESULT_STATUS.REJECTED, reason };
 }
 
-/** The lines read from the checkout for `ref`, or the refusal that stopped the read. */
+/**
+ * The lines read from the checkout for `ref`, or the refusal that stopped
+ * the read. Both reads run with every capability dropped
+ * (`../agents/sandbox-capabilities.ts`), as a Terminal's shell does: the
+ * checkout is the sandbox user's to write, so a link swapped in between the
+ * probe and the window, or a git setting written into it, reaches nothing
+ * that user cannot, never another user's home or a process's environment.
+ */
 const readLines = /* @__PURE__ */ Effect.fn("web/showCodeRead")(function* <R>(
   checkout: CodeCheckout<R>,
   ref: CodeRef,
@@ -234,7 +242,7 @@ const readLines = /* @__PURE__ */ Effect.fn("web/showCodeRead")(function* <R>(
   const probed = yield* runInSandbox(
     sandbox,
     {
-      command: FILE_PROBE_SCRIPT,
+      command: shellWithoutCapabilities(FILE_PROBE_SCRIPT),
       workingDirectory: SANDBOX_PATH.CHECKOUT,
       env: { [SANDBOX_VARIABLE.FILE]: ref.path },
     },
@@ -252,7 +260,7 @@ const readLines = /* @__PURE__ */ Effect.fn("web/showCodeRead")(function* <R>(
   const read = yield* runInSandbox(
     sandbox,
     {
-      command: FILE_WINDOW_SCRIPT,
+      command: shellWithoutCapabilities(FILE_WINDOW_SCRIPT),
       workingDirectory: SANDBOX_PATH.CHECKOUT,
       env: {
         [SANDBOX_VARIABLE.FILE]: ref.path,

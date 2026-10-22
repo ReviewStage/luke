@@ -243,7 +243,8 @@ const PUBLISHED = {
   additions: 12,
   deletions: 3,
   changedFiles: 2,
-};
+  queued: true,
+} as const;
 
 it.layer(getTestDB())("the plan list's live statements", (it) => {
   it.effect(
@@ -412,6 +413,7 @@ it.layer(getTestDB())("the plan list's live statements", (it) => {
         );
         const agents = read.plans.find((each) => each.id === plan.id)?.agents;
         assert.deepEqual([agents?.total, agents?.working, agents?.pullRequestTotal], [7, 2, 1]);
+        assert.equal(agents?.pullRequests[0]?.queued, true, "a queued pull request says so");
         assert.ok(
           (agents?.agents ?? []).every(
             (line) =>
@@ -626,6 +628,7 @@ it.layer(getTestDB())("the plan list's live statements", (it) => {
         const read = yield* liveListOf(owner, NOW);
         const byId = new Map((read.planlessAgents ?? []).map((agent) => [agent.id, agent]));
         assert.equal(byId.get(loose.id)?.pullRequest?.number, PUBLISHED.number);
+        assert.equal(byId.get(loose.id)?.pullRequest?.queued, true);
         assert.equal(byId.get(continued.id)?.from?.agentId, loose.id);
         assert.equal(byId.get(continued.id)?.archivedBy?.withTask, true);
         const lines = read.plans.find((each) => each.id === plan.id)?.agents?.agents ?? [];

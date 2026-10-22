@@ -598,6 +598,13 @@ export const chatMessageSchema = EffectSchema.Struct({
   blocks: EffectSchema.Array(chatReadBlockSchema),
   mentions: EffectSchema.Array(wireUuidSchema),
   postedAt: countedNumber,
+  /**
+   * The key the reader's own post went under, which the window that posted
+   * it drew it under before the chat held it; absent on every other
+   * member's message, so no member reads another's key, and from a service
+   * older than it.
+   */
+  clientKey: EffectSchema.optionalKey(filledText(CHAT_BOUNDS.MAX_CLIENT_KEY_CHARS)),
   ask: EffectSchema.optionalKey(chatMessageAskSchema),
 });
 
@@ -763,6 +770,13 @@ const chatPostRequestSchema = EffectSchema.Struct({
   channelId: EffectSchema.optionalKey(wireUuidSchema),
   replyTo: EffectSchema.optionalKey(countedNumber),
   clientKey: filledText(CHAT_BOUNDS.MAX_CLIENT_KEY_CHARS),
+  /**
+   * False from a window that reads no receipt, which is answered as soon as
+   * the post is committed and whose members are told after the answer has
+   * left; a released window leaves it out and is answered with who the post
+   * came to, once they are told.
+   */
+  receipt: EffectSchema.optionalKey(EffectSchema.Literal(false)),
 }).check(
   EffectSchema.makeFilter(wordsOnce),
   EffectSchema.makeFilter(picturesFit),
@@ -869,7 +883,8 @@ const writtenIn = { txid: EffectSchema.optionalKey(EffectSchema.String) };
 /**
  * What a write to the chat answers, one key for each kind of write: a post,
  * the message and who it came to, a repeat under its key finishing a
- * telling the first left undone and steering no one twice; an answer, the ask as it then stands and whether the answer was
+ * telling the first left undone and steering no one twice, or the message
+ * alone where the window asked for no receipt; an answer, the ask as it then stands and whether the answer was
  * taken, which it is not at a revision its poster has moved past or on an
  * ask no longer open; a resolve, the ask resolved; a read, where the
  * person's cursor then stands everywhere, and each channel past it; and a
@@ -877,6 +892,7 @@ const writtenIn = { txid: EffectSchema.optionalKey(EffectSchema.String) };
  */
 export const chatWriteAnswerSchema = EffectSchema.Union([
   EffectSchema.Struct({ posted: chatMessageSchema, receipt: chatReceiptSchema, ...writtenIn }),
+  EffectSchema.Struct({ posted: chatMessageSchema, ...writtenIn }),
   EffectSchema.Struct({ ask: chatMessageSchema, taken: EffectSchema.Boolean, ...writtenIn }),
   EffectSchema.Struct({ resolved: chatMessageSchema, ...writtenIn }),
   EffectSchema.Struct({

@@ -23,7 +23,7 @@ import { APP_SLICE, useAppSlice } from "./use-app-state.js";
  */
 
 /** The members as read, the reader's own account id, who the workspace's work names but left, the workspace they are the members of, and where their reads stand. */
-interface Directory {
+export interface Directory {
   readonly members: readonly WorkspaceMember[] | undefined;
   readonly readerId: string | undefined;
   readonly former: readonly FormerMember[] | undefined;

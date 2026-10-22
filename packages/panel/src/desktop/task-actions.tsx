@@ -106,9 +106,31 @@ import { TaskStatusMark, taskCardOf } from "./task-card.js";
  * the menu says who created the task and who last edited it, and when.
  */
 
+/**
+ * Each task list's tasks by id, built once for each list the control hands
+ * down and let go with it, so every row of a redraw finds its task at once
+ * rather than walking the whole list, which made a redraw of the sidebar
+ * grow with the square of its rows. Note that a list is never changed in
+ * place, since a change hands down a new one, so an index never goes stale.
+ */
+const tasksById = new WeakMap<readonly TaskSummary[], ReadonlyMap<string, TaskSummary>>();
+
+/** `list`'s task of `taskId`, from its index, built the first time the list is asked. */
+function listedTask(list: readonly TaskSummary[], taskId: string): TaskSummary | undefined {
+  let index = tasksById.get(list);
+  if (index === undefined) {
+    const built = new Map<string, TaskSummary>();
+    // Note that the first of an id wins, as a walk of the list finds it.
+    for (const task of list) if (!built.has(task.id)) built.set(task.id, task);
+    index = built;
+    tasksById.set(list, index);
+  }
+  return index.get(taskId);
+}
+
 /** A task as the list or the open document holds it; nothing for a task neither holds. */
 export function taskOf(tasks: TasksControl, taskId: string): TaskSummary | undefined {
-  const listed = tasks.tasks.find((task) => task.id === taskId);
+  const listed = listedTask(tasks.tasks, taskId);
   if (listed !== undefined) return listed;
   const { region } = tasks;
   return region.kind === DOCUMENT_REGION.READY && region.task.id === taskId

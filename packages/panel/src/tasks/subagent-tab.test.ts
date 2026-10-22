@@ -1,16 +1,19 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
 import {
   CODING_AGENT_STATUS,
   type CodingAgentStatus,
   type CodingAgentSummary,
 } from "@luke/features/coding-agent-wire";
+import { ACT_KIND } from "@luke/host/acts";
 import type { WireRecord } from "@luke/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
+import { fakeActPort } from "../testing/app-bridge.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { codingAgentsControl, pushedTranscripts } from "../testing/tasks-control.js";
 import { AgentSubagentTab } from "./agent-tab.js";
@@ -167,4 +170,64 @@ test("a worker opened by its link whose own first row has no words still draws i
   );
 
   assert.match(container.textContent ?? "", /Both writers quote fields the same way\./u);
+});
+
+test("a worker's tab whose earlier messages could not be read says so over its log, and Retry reads them again", async () => {
+  const asked: unknown[] = [];
+  fakeActPort({
+    [ACT_KIND.CODING_AGENTS_TRANSCRIPT_OLDER]: (payload: unknown) => {
+      asked.push(payload);
+      return Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
+    },
+  } as unknown as Parameters<typeof fakeActPort>[0]);
+  const control = codingAgentsControl({
+    agents: [AGENT],
+    transcripts: pushedTranscripts(() => [
+      {
+        messages: [
+          { id: "worker-turn", role: "assistant", parts: [{ type: "text", text: "Done." }] },
+        ],
+        cursor: "1:0",
+        status: CODING_AGENT_STATUS.COMPLETED,
+        title: null,
+        newest: true,
+        before: "40",
+        caughtUp: true,
+      },
+    ]),
+  });
+  const container = document.body.appendChild(document.createElement("div"));
+  root = createRoot(container);
+  const settle = () =>
+    act(async () => {
+      for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
+    });
+  act(() =>
+    root?.render(
+      onRegistry(
+        AtomRegistry.make(),
+        createElement(AgentSubagentTab, {
+          agentId: AGENT.id,
+          callId: "delegation-call",
+          task: "Audit the CSV writers",
+          status: CODING_AGENT_STATUS.COMPLETED,
+          control,
+          shown: true,
+          onStatus: () => undefined,
+          onHeld: () => undefined,
+        }),
+      ),
+    ),
+  );
+  await settle();
+  // A log its lines do not fill asks for the earlier ones at once.
+  assert.equal(asked.length, 1);
+  assert.ok(container.textContent?.includes("Earlier messages could not be read."));
+  const retry = [...container.querySelectorAll("button")].find((button) =>
+    button.textContent?.includes("Retry"),
+  );
+  assert.ok(retry, "the line offers Retry");
+  act(() => retry.click());
+  await settle();
+  assert.equal(asked.length, 2);
 });

@@ -35,6 +35,7 @@ import {
   type ChatPlace,
   type ChatRailRow,
   type ChatTaskGrouping,
+  chatIndex,
   chatRail,
   FOR_YOU,
 } from "@luke/ui/chat-model";
@@ -47,7 +48,7 @@ import {
   MessagesSquareIcon,
   SlidersHorizontalIcon,
 } from "lucide-react";
-import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useAct } from "../act.js";
 import { ACTOR_SIZE, ActorMark, ActorStack, actorCard } from "../actor-ref.js";
 import { useAppCommand } from "../app-commands.js";
@@ -134,11 +135,74 @@ import { EDGE_SIDE, useResizableEdge } from "./use-resizable-edge.js";
  * through its items, the row they land on taking the keyboard where the
  * rail stands. For you, and any channel with an ask waiting on the reader,
  * wears the Inbox's attention mark; the blue dot is for the unread alone.
+ *
+ * It reads only what it draws of the window's tasks (`ChatSurface`), kept as
+ * one value while none of it moves (`useChatSurface`), so a delivery that
+ * moves anything else draws none of Chat. The rail is read once per chat,
+ * names, and grouping, and each place's time counts the minute itself.
  */
 
+/**
+ * What Chat reads of the window's tasks, and nothing else: the chat's own
+ * control, the tasks and workspaces it names, how the sidebar groups them,
+ * the reader, the agents' models a card names, and the doors it opens a
+ * task, an agent, and a file through.
+ */
+export type ChatSurface = Pick<
+  TasksControl,
+  | "chatView"
+  | "tasks"
+  | "workspace"
+  | "workspaces"
+  | "taskSections"
+  | "me"
+  | "repositories"
+  | "onShowAgent"
+  | "onSelect"
+  | "onShowFile"
+  | "shown"
+> & { readonly agents: Pick<TasksControl["agents"], "models"> };
+
+/** What Chat reads of the window's tasks, the one value while none of it moves, so Chat holds (`memo`) through a delivery that moves only the rest. */
+export function useChatSurface(tasks: TasksControl): ChatSurface {
+  const { chatView, workspace, workspaces, taskSections, me, repositories, shown } = tasks;
+  const { onShowAgent, onSelect, onShowFile } = tasks;
+  const listed = tasks.tasks;
+  const { models } = tasks.agents;
+  return useMemo(
+    () => ({
+      chatView,
+      tasks: listed,
+      workspace,
+      workspaces,
+      taskSections,
+      me,
+      repositories,
+      onShowAgent,
+      onSelect,
+      onShowFile,
+      shown,
+      agents: { models },
+    }),
+    [
+      chatView,
+      listed,
+      workspace,
+      workspaces,
+      taskSections,
+      me,
+      repositories,
+      onShowAgent,
+      onSelect,
+      onShowFile,
+      shown,
+      models,
+    ],
+  );
+}
+
 /** The workspace a chip's link is written in, the chat's own; none while no workspace is listed. */
-function mentionPlaceOf(tasks: TasksControl): MentionPlace | undefined {
-  const { workspace } = tasks;
+function mentionPlaceOf(workspace: ChatSurface["workspace"]): MentionPlace | undefined {
   if (workspace === undefined) return undefined;
   return { workspace: workspace.slug ?? workspace.id, repository: null };
 }
@@ -159,7 +223,7 @@ const OPEN_NOTHING = (): void => undefined;
  * the task's page it stands on hands its own.
  */
 function useTaskDoors(
-  tasks: TasksControl,
+  tasks: ChatSurface,
   mentions: boolean,
 ): (taskId: string) => ChatTaskDoors | undefined {
   const { act } = useAct();
@@ -167,7 +231,7 @@ function useTaskDoors(
   // Note that a file is opened through the latest control, so the doors stand while the window's lists move.
   const latest = useRef(tasks);
   latest.current = tasks;
-  const workspace = mentionPlaceOf(tasks)?.workspace;
+  const workspace = mentionPlaceOf(tasks.workspace)?.workspace;
   const { tasks: listed } = tasks;
   // Note that each task's skills are read once and kept while its repository and workspace stand, because a source made anew, as a change to any listed task would make it, reads them again and draws its chips as words until it lands.
   const skillSources = useRef(
@@ -223,7 +287,7 @@ function useTaskDoors(
     for (const taskId of kept.keys()) if (!reading.has(taskId)) kept.delete(taskId);
     return held;
   }, [listed, act, openTask, workspace, mentions]);
-  return (taskId) => doors.get(taskId);
+  return useCallback((taskId: string) => doors.get(taskId), [doors]);
 }
 
 /** What Chat is called: its toolbar's title, and the way back from a place to the rail in a narrow room. */
@@ -253,13 +317,15 @@ const BackHint: FoldingButtonHint = ({ children }) => (
  * the tasks, the pinned first in the pins' order, then each of the
  * reader's sections in the listed workspace.
  */
-function taskGrouping(tasks: TasksControl): ChatTaskGrouping {
+function taskGrouping(
+  listed: ChatSurface["tasks"],
+  workspaceId: string | undefined,
+  state: ChatSurface["taskSections"],
+): ChatTaskGrouping {
   const pinned = inPinOrder(
-    tasks.tasks.filter((task) => task.pinnedAt !== undefined),
+    listed.filter((task) => task.pinnedAt !== undefined),
     (task) => ({ position: task.pinPosition, at: task.pinnedAt ?? 0 }),
   ).map((task) => task.id);
-  const workspaceId = tasks.workspace?.id;
-  const state = tasks.taskSections;
   const sections =
     workspaceId === undefined
       ? []
@@ -424,15 +490,14 @@ const MARK_ALL_READ = "Mark all as read";
  * of the workspace's own, whose row names it whole.
  */
 function placeCard(
-  tasks: TasksControl,
+  tasks: ChatSurface,
   row: ChatRailRow,
   actorOf: (memberId: string) => Actor,
-  now: number,
 ): React.ReactNode {
   const { channel, other } = row;
   if (channel.kind === CHANNEL_KIND.TASK) {
     const task = tasks.tasks.find((each) => each.id === channel.planId);
-    return task === undefined ? undefined : taskCardOf(tasks, task, now);
+    return task === undefined ? undefined : <TaskCardNow tasks={tasks} task={task} />;
   }
   if (other?.member === undefined) return undefined;
   if (other.agent !== undefined) {
@@ -441,6 +506,17 @@ function placeCard(
     return <AgentCard subject={subject} models={models} foot={other.taskName} />;
   }
   return actorCard(actorOf(other.member.id));
+}
+
+/** A task's card, counted from the window's minute, which it alone reads while it hangs. */
+function TaskCardNow({
+  tasks,
+  task,
+}: {
+  tasks: ChatSurface;
+  task: ChatSurface["tasks"][number];
+}): React.JSX.Element {
+  return taskCardOf(tasks, task, useMinute());
 }
 
 /** A topic's actions, from its head's ⋯ or its row's menu: edit its name and purpose and archive it, or bring an archived one back. */
@@ -474,17 +550,15 @@ function RailRow({
   row,
   current,
   actorOf,
-  now,
   dialogs,
   shown,
   onRead,
   onChoose,
 }: {
-  tasks: TasksControl;
+  tasks: ChatSurface;
   row: ChatRailRow;
   current: boolean;
   actorOf: (memberId: string) => Actor;
-  now: number;
   dialogs: ChannelDialogs;
   /** Whether Chat is on screen, which a menu does not outlive. */
   shown: boolean;
@@ -530,11 +604,10 @@ function RailRow({
           : `${actorName(actorOf(latest.authorId))}${said === "" ? "" : `: ${said}`}`
       }
       at={latest?.postedAt}
-      now={now}
       unread={row.unread > 0}
       needsYou={row.asks > 0}
       current={current}
-      card={placeCard(tasks, row, actorOf, now)}
+      card={placeCard(tasks, row, actorOf)}
       end={
         task !== undefined ? (
           <TaskStatusMark task={task} stranded={strandedHome(tasks, task)} />
@@ -567,7 +640,6 @@ function PlaceRow({
   title,
   preview,
   at,
-  now,
   unread,
   needsYou,
   current,
@@ -582,7 +654,6 @@ function PlaceRow({
   title: string;
   preview: string | undefined;
   at: number | undefined;
-  now: number;
   unread: boolean;
   needsYou: boolean;
   current: boolean;
@@ -632,7 +703,7 @@ function PlaceRow({
                 </span>
               ) : null}
               {end}
-              {at === undefined ? null : <RelativeTime at={at} now={now} hint={false} />}
+              {at === undefined ? null : <RelativeTime at={at} hint={false} />}
             </span>
           }
           metaAt={LIST_ROW_META.TITLE}
@@ -850,8 +921,8 @@ function useChannelKeys({
  * stands, so every member is drawn with their photo and card and a link
  * names its workspace.
  */
-export function DesktopChat(props: {
-  tasks: TasksControl;
+export const DesktopChat = memo(function DesktopChat(props: {
+  tasks: ChatSurface;
   room: ShellRoom;
   accountName: string | undefined;
 }): React.JSX.Element {
@@ -863,7 +934,7 @@ export function DesktopChat(props: {
       </MemberDirectory>
     </LinkWorkspaceProvider>
   );
-}
+});
 
 /** The rail and the place chosen, read against the members around it. */
 function ChatView({
@@ -871,12 +942,11 @@ function ChatView({
   room,
   accountName,
 }: {
-  tasks: TasksControl;
+  tasks: ChatSurface;
   room: ShellRoom;
   accountName: string | undefined;
 }): React.JSX.Element {
   const view = tasks.chatView;
-  const now = useMinute();
   const openLink = useOpenLink();
   const read = view.chat;
   const listed = tasks.tasks;
@@ -921,7 +991,16 @@ function ChatView({
   useAppCommand(APP_COMMAND.CHAT_LIST, hidden.list ? view.onList : undefined);
   const [showArchived, setShowArchived] = useState(false);
   const railWidth = single ? undefined : drawnWidth(width);
-  const rail = read === undefined ? undefined : chatRail(read.answer, names, taskGrouping(tasks));
+  const answer = read?.answer;
+  const workspaceId = tasks.workspace?.id;
+  const { taskSections } = tasks;
+  const rail = useMemo(
+    () =>
+      answer === undefined
+        ? undefined
+        : chatRail(answer, names, taskGrouping(listed, workspaceId, taskSections)),
+    [answer, names, listed, workspaceId, taskSections],
+  );
   const groups =
     rail === undefined
       ? undefined
@@ -937,6 +1016,32 @@ function ChatView({
   });
   // Note that the window's Chat stands on no task's page, so a task's channel is handed its task's mentions here.
   const taskDoors = useTaskDoors(tasks, true);
+  const mentionPlace = useMemo(() => mentionPlaceOf(tasks.workspace), [tasks.workspace]);
+  const { onRead: readChannels, onList } = view;
+  const { onSelect } = tasks;
+  const channelActions = useCallback(
+    (channel: ChatChannel) =>
+      answer === undefined ? undefined : (
+        <ChannelActions
+          key={channel.id}
+          channel={channel}
+          title={channelTitle(answer, names, channel)}
+          unread={(chatIndex(answer).unread.get(channel.id) ?? 0) > 0}
+          dialogs={dialogs}
+          shown={view.open}
+          onMarkRead={() => readChannels([channel.id])}
+          onOpenTask={onSelect}
+        />
+      ),
+    [answer, names, dialogs, view.open, readChannels, onSelect],
+  );
+  const lead = useMemo(
+    () =>
+      single ? (
+        <FoldingButton label={CHAT_LIST} icon={<BackIcon />} onClick={onList} hint={BackHint} />
+      ) : undefined,
+    [single, onList],
+  );
   if (read === undefined || view.failed || rail === undefined || groups === undefined) {
     // Nothing read yet: a read that did not answer, one still out, or no chat to read at all.
     const standIn = view.failed ? (
@@ -970,8 +1075,6 @@ function ChatView({
     ...rail.archived,
     ...rail.direct,
   ];
-  const unreadIn = (channel: ChatChannel) =>
-    places.some((each) => each.channel.id === channel.id && each.unread > 0);
   const row = (each: ChatRailRow) => (
     <RailRow
       key={each.channel.id}
@@ -979,7 +1082,6 @@ function ChatView({
       row={each}
       current={shows(view.place, each)}
       actorOf={actorOf}
-      now={now}
       dialogs={dialogs}
       shown={view.open}
       onRead={view.onRead}
@@ -1032,7 +1134,6 @@ function ChatView({
                 title="For you"
                 preview={needsYouWords(rail.forYou)}
                 at={undefined}
-                now={now}
                 unread={false}
                 needsYou={rail.forYou > 0}
                 current={view.place.kind === CHAT_PLACE.FOR_YOU}
@@ -1055,38 +1156,17 @@ function ChatView({
         chat={chat}
         names={names}
         place={view.place}
-        mentionPlace={mentionPlaceOf(tasks)}
+        mentionPlace={mentionPlace}
         tasks={listed}
-        now={now}
         openLink={openLink}
         onPost={view.onPost}
         onAnswer={view.onAnswer}
-        channelActions={(channel) => (
-          <ChannelActions
-            key={channel.id}
-            channel={channel}
-            title={channelTitle(chat, names, channel)}
-            unread={unreadIn(channel)}
-            dialogs={dialogs}
-            shown={view.open}
-            onMarkRead={() => view.onRead([channel.id])}
-            onOpenTask={tasks.onSelect}
-          />
-        )}
+        channelActions={channelActions}
         onOpen={view.onChoose}
         onBringBack={dialogs.askArchive}
         readPicture={view.readPicture}
         taskDoors={taskDoors}
-        lead={
-          single ? (
-            <FoldingButton
-              label={CHAT_LIST}
-              icon={<BackIcon />}
-              onClick={view.onList}
-              hint={BackHint}
-            />
-          ) : undefined
-        }
+        lead={lead}
         hidden={hidden.item}
       />
       {dialogs.dialog}
@@ -1296,11 +1376,10 @@ export function TaskChatTab({
   tasks,
   taskId,
 }: {
-  tasks: TasksControl;
+  tasks: ChatSurface;
   taskId: string;
 }): React.JSX.Element {
   const view = tasks.chatView;
-  const now = useMinute();
   const openLink = useOpenLink();
   const read = view.chat;
   const listed = tasks.tasks;
@@ -1309,6 +1388,12 @@ export function TaskChatTab({
   const channel = read?.answer.channels.find(
     (each) => each.kind === CHANNEL_KIND.TASK && each.planId === taskId,
   );
+  const channelId = channel?.id;
+  const place = useMemo(
+    (): ChatPlace => (channelId === undefined ? FOR_YOU : { kind: CHAT_PLACE.CHANNEL, channelId }),
+    [channelId],
+  );
+  const mentionPlace = useMemo(() => mentionPlaceOf(tasks.workspace), [tasks.workspace]);
   if (read === undefined || channel === undefined) {
     return (
       <section className="chat-stream task-chat" aria-label="Chat">
@@ -1328,10 +1413,9 @@ export function TaskChatTab({
     <ChatPane
       chat={read.answer}
       names={names}
-      place={{ kind: CHAT_PLACE.CHANNEL, channelId: channel.id }}
-      mentionPlace={mentionPlaceOf(tasks)}
+      place={place}
+      mentionPlace={mentionPlace}
       tasks={listed}
-      now={now}
       openLink={openLink}
       onPost={view.onPost}
       onAnswer={view.onAnswer}

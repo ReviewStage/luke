@@ -56,13 +56,13 @@ import { useKnownNames } from "./use-known-names.js";
  * box's own editor (`composer-field.tsx`), as the agent tab's, the Inbox's,
  * and a plan comment's are, and under it the card's foot saying what it
  * takes, the microphone, and the shared round send. Enter sends, Shift-Enter
- * starts a new line, and the box is empty again once the post is taken; a
- * post refused keeps its words and says why under the box, with Retry,
- * which posts it once whatever the first try did, since the same words go
- * under the same key (`use-workspace-chat.ts`). While a post is out the
- * field is held and Send with it, and the caret comes back to the field
- * once it lands, unless it went somewhere else meanwhile, as the agent
- * box's does. Escape, where no list or dictation takes it, leaves the box.
+ * starts a new line, and the box is empty at once, keeping the caret, so
+ * the next post can be written while this one goes, drawn in the stream as
+ * on its way (`chat-pane.tsx`). A post refused comes back into the box with
+ * why under it and Retry, which posts it once whatever the first try did,
+ * since the same words go under the same key (`use-workspace-chat.ts`),
+ * where the box holds nothing newer; else it stays where it went, marked
+ * as not sent, with a Retry of its own. Escape, where no list or dictation takes it, leaves the box.
  * What is typed and not sent is kept per channel, and per thread for a
  * reply, as every box that sends somewhere keeps it (`composer-drafts.ts`),
  * so another channel opened, a thread hidden, or the window reloaded finds
@@ -139,11 +139,12 @@ interface ChatComposerProps {
   readonly keywords: readonly string[];
   /** Whether it stands under a thread, a line high, rather than at a place's foot. */
   readonly compact?: boolean;
-  /** Sends the words and the pictures, either of which may be empty; answers why they were refused, or nothing once they are taken. */
-  readonly onSend: (
-    text: string,
-    attachments: readonly CodingAgentAttachment[],
-  ) => Promise<string | undefined>;
+  /**
+   * Sends the words and the pictures, either of which may be empty, the box
+   * already empty for the next post; where they are refused, hands `takeBack`
+   * why, which answers whether the box took them back (`ChatSend`).
+   */
+  readonly onSend: ChatSend;
 }
 
 /** The composer: the agent box's editor once its bundle has loaded, with dictation, and the plain box where the bundle failed, so a message can always be written. */
@@ -160,12 +161,10 @@ export function ChatComposer(props: ChatComposerProps): React.JSX.Element {
 
 /** The bar under the box, as the agent box's and the Inbox's stand: the parts it leads with (the + of pictures), then the parts the box hands it (dictation's) and the round send at its end. */
 function ComposerFoot({
-  sending,
   empty,
   lead,
   children,
 }: {
-  sending: boolean;
   empty: boolean;
   lead?: React.ReactNode;
   children?: React.ReactNode;
@@ -176,11 +175,7 @@ function ComposerFoot({
       <Inline gap={GAP.TIGHT} wrap={false}>
         {children}
         <Tooltip label={SEND}>
-          <PromptInputSubmit
-            label={SEND}
-            status={sending ? SUBMIT_STATE.SUBMITTED : SUBMIT_STATE.READY}
-            disabled={sending || empty}
-          />
+          <PromptInputSubmit label={SEND} status={SUBMIT_STATE.READY} disabled={empty} />
         </Tooltip>
       </Inline>
     </PromptInputFooter>
@@ -206,46 +201,63 @@ function chatPlace(channelId: string, replyTo: number | undefined): ChatDraftPla
 }
 
 /**
- * Sends the draft kept for the box's place and its pictures once, holding
- * them while they go: let go once taken, kept with why where refused. A
- * send waits while pictures handed to the box are still being read.
+ * How a box hands its post on: the words and the pictures, and what to do
+ * where they are refused, `takeBack`, handed why, which answers whether the
+ * box took them back, as it does where it holds nothing newer.
+ */
+export type ChatSend = (
+  text: string,
+  attachments: readonly CodingAgentAttachment[],
+  takeBack: (refused: string) => boolean,
+) => void;
+
+/** Whether a draft holds neither words nor pictures. */
+function holdsNothing(draft: { readonly text: string; readonly attachments: readonly unknown[] }) {
+  return draft.text.trim() === "" && draft.attachments.length === 0;
+}
+
+/**
+ * Sends the draft kept for the box's place and its pictures, letting them go
+ * at once so the box takes the next post while this one goes. Where it is
+ * refused, the words and pictures come back into the box with why and
+ * Retry, which sends them again under the same key, only where the box
+ * holds nothing newer; else they stay on the post where it went. A send
+ * waits while pictures handed to the box are still being read.
  */
 function useChatSend(place: ChatDraftPlace, onSend: ChatComposerProps["onSend"]) {
   const { draft: kept, update } = useDraft(place);
   const draft = kept.text;
   const { attachments } = kept;
-  const [sending, setSending] = useState(false);
+  // How many posts the box has sent, each of which hands the caret back to it.
+  const [sends, setSends] = useState(0);
   // How many hand-offs of files are still being read, during which the post waits.
   const [reading, setReading] = useState(0);
   const [note, setNote] = useState<ComposerNote | undefined>(undefined);
   const empty = draft.trim() === "" && attachments.length === 0;
   const send = () => {
-    if (empty || sending || reading > 0) return;
+    if (empty || reading > 0) return;
     const sent = kept;
-    setSending(true);
     setNote(undefined);
-    onSend(draft.trim(), attachments).then(
-      (refused) => {
-        setSending(false);
-        if (refused !== undefined) {
-          setNote({ words: refused, retries: true });
-          return;
-        }
-        // Note that only what was sent is let go, so words typed meanwhile in another window stay.
-        update((now) =>
-          now.text === sent.text && now.attachments === sent.attachments ? EMPTY_DRAFT : now,
-        );
-      },
-      (failed: Error) => {
-        setSending(false);
-        setNote({ words: failed.message, retries: true });
-      },
+    setSends((count) => count + 1);
+    // Note that only what was sent is let go, so words typed meanwhile in another window stay.
+    update((now) =>
+      now.text === sent.text && now.attachments === sent.attachments ? EMPTY_DRAFT : now,
     );
+    onSend(draft.trim(), attachments, (refused) => {
+      // Note that the draft store takes a change at once, so the box as the refusal lands decides.
+      let back = false;
+      update((now) => {
+        back = holdsNothing(now);
+        return back ? { ...EMPTY_DRAFT, text: sent.text, attachments: sent.attachments } : now;
+      });
+      if (back) setNote({ words: refused, retries: true });
+      return back;
+    });
   };
   const setDraft = (text: string) => update((was) => ({ ...was, text }));
   /** Reads the images among the files handed in and takes them after those the box holds; the first that cannot come says why. */
   const attach = (files: readonly File[]) => {
-    if (files.length === 0 || sending) return;
+    if (files.length === 0) return;
     const images = imageFiles(files);
     const other = files.find((file) => !images.includes(file));
     setNote(plainNote(other === undefined ? undefined : NOT_IMAGE(other.name)));
@@ -276,7 +288,7 @@ function useChatSend(place: ChatDraftPlace, onSend: ChatComposerProps["onSend"])
     attachments,
     attach,
     remove,
-    sending,
+    sends,
     reading: reading > 0,
     empty,
     note,
@@ -363,7 +375,7 @@ function EditorChatComposer({
     attachments,
     attach,
     remove,
-    sending,
+    sends,
     reading,
     empty,
     note,
@@ -379,13 +391,12 @@ function EditorChatComposer({
   const doors = useMentionDoors();
   const pasted = usePastedMention(doors);
 
-  // Note that a held box gives up the caret, because a field that takes no
-  // words can hold none; a send made from the box hands it back as the box
-  // opens again, unless the caret went somewhere else meanwhile, as the
-  // agent box's does (`agent-composer.tsx`).
+  // Note that a send made from the box hands the caret back to it at once,
+  // as a press of Send takes it, unless the caret went somewhere else
+  // meanwhile, as the agent box's does (`agent-composer.tsx`).
   const refocus = useRef(false);
   useEffect(() => {
-    if (sending || !refocus.current) return;
+    if (sends === 0 || !refocus.current) return;
     refocus.current = false;
     const active = document.activeElement;
     const dropped =
@@ -396,7 +407,7 @@ function EditorChatComposer({
         active.type === "submit" &&
         card.current?.contains(active) === true);
     if (dropped) editor.current?.focus();
-  }, [sending]);
+  }, [sends]);
   // A mention is written as its chip, the link every box of the app writes; a channel as its word.
   const picker = useMentionPicker({
     source: mentions.source,
@@ -417,7 +428,7 @@ function EditorChatComposer({
       data-compact={String(compact === true)}
       data-dropping={dropping ? "" : undefined}
       onDragOver={(event) => {
-        if (!carriesFiles(event) || sending) return;
+        if (!carriesFiles(event)) return;
         event.preventDefault();
         setDropping(true);
       }}
@@ -427,7 +438,7 @@ function EditorChatComposer({
         if (!(into instanceof Node && event.currentTarget.contains(into))) setDropping(false);
       }}
       onDrop={(event) => {
-        if (!carriesFiles(event) || sending) return;
+        if (!carriesFiles(event)) return;
         event.preventDefault();
         setDropping(false);
         attach(Array.from(event.dataTransfer.files));
@@ -439,10 +450,7 @@ function EditorChatComposer({
           send();
         }}
       >
-        <AttachedFileChips
-          files={attachmentChips(attachments)}
-          onRemove={sending ? undefined : remove}
-        />
+        <AttachedFileChips files={attachmentChips(attachments)} onRemove={remove} />
         <ComposerField
           module={module}
           editor={editor}
@@ -451,13 +459,7 @@ function EditorChatComposer({
           setDraft={setDraft}
           placeholder={label}
           label={label}
-          input={
-            sending
-              ? COMPOSER_INPUT.DISABLED
-              : dictating
-                ? COMPOSER_INPUT.READ_ONLY
-                : COMPOSER_INPUT.EDITABLE
-          }
+          input={dictating ? COMPOSER_INPUT.READ_ONLY : COMPOSER_INPUT.EDITABLE}
           maxLength={CHAT_BOUNDS.MAX_TEXT_CHARS}
           skills={NO_SKILLS}
           aria={{ ...picker.aria, "aria-placeholder": label }}
@@ -507,18 +509,10 @@ function EditorChatComposer({
           </PromptInputFooter>
         ) : (
           <ComposerFoot
-            sending={sending}
             empty={empty || reading}
-            lead={
-              <AttachFilesButton
-                label={ATTACH}
-                accept={PICKS_IMAGES}
-                disabled={sending}
-                onFiles={attach}
-              />
-            }
+            lead={<AttachFilesButton label={ATTACH} accept={PICKS_IMAGES} onFiles={attach} />}
           >
-            <DictateButton dictation={dictation} disabled={sending || module === undefined} />
+            <DictateButton dictation={dictation} disabled={module === undefined} />
           </ComposerFoot>
         )}
       </PromptInput>
@@ -538,10 +532,7 @@ function PlainChatComposer({
   onSend,
 }: ChatComposerProps): React.JSX.Element {
   const field = useRef<HTMLTextAreaElement>(null);
-  const { draft, setDraft, sending, empty, note, send } = useChatSend(
-    chatPlace(channelId, replyTo),
-    onSend,
-  );
+  const { draft, setDraft, empty, note, send } = useChatSend(chatPlace(channelId, replyTo), onSend);
   // The field grows with its words, a line at a time, as a plan comment's plain field does.
   useLayoutEffect(() => {
     const element = field.current;
@@ -568,11 +559,10 @@ function PlainChatComposer({
           maxLength={CHAT_BOUNDS.MAX_TEXT_CHARS}
           enterKeyHint={enterKeyHint()}
           value={draft}
-          disabled={sending}
           onChange={(event) => setDraft(event.currentTarget.value)}
           onKeyDown={onKeyDown}
         />
-        <ComposerFoot sending={sending} empty={empty} />
+        <ComposerFoot empty={empty} />
       </PromptInput>
       <CrowdedNote shown={mentions.crowded(draft)} />
       <NoteLine note={note} onRetry={send} />

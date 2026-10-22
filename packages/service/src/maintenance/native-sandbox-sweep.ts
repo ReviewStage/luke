@@ -7,7 +7,8 @@
  * that failed there is logged and not retried, so the sandbox would idle
  * until its timeout. This sweep retries it: it pages through the project's
  * running sandboxes, from the oldest and the newest on alternate minutes, keeps the ones named as Luke names a
- * native sandbox and carrying an agent's tag, and stops each whose
+ * native sandbox and carrying an agent's tag, reads a window of them that
+ * moves along the list from one sweep to the next, and stops each whose
  * conversation is native, whose newest turn ended longer ago than a short
  * grace (which leaves the END's own stop to go first), and on which no
  * developer's Terminal holds a lease. eve's sandboxes are never looked at
@@ -17,51 +18,67 @@
  * then the session stopped, its filesystem kept for a later resume; where the
  * credential would not come off, the sandbox is left for the next sweep.
  *
+ * A runner that exited while its run's turn still runs died without its END
+ * (it drains its END to Luke before it exits): the sweep settles that turn
+ * as failed (`settleRunnerLostTurns`), so the agent offers Continue rather
+ * than running for a day, and its sandbox is stopped once the grace passes,
+ * as any ended run's is. Nothing is relaunched.
+ *
  * Every call is bounded so the sweep's minute holds: a few pages of the
- * list, a set number of sandboxes read against the store, and a set number
- * of stops. What is asked of Vercel is a page, a name, and a session; what
+ * list, a set number of sandboxes read against the store, taken from a
+ * window that moves along the list from one sweep to the next, and a set
+ * number of stops. What is asked of Vercel is a page, a name, and a session; what
  * is logged of a failure is its status.
  */
 
 import type { DatabaseServices, QueryError } from "@luke/database/core/query";
+import { settleRunnerLostTurns } from "@luke/database/models/abandoned-turns";
 import { readNativeRunStanding } from "@luke/database/models/coding-agent-store";
 import { sandboxHeld } from "@luke/database/models/sandbox-terminal-lease";
+import { type StoreWriter, storeWriter } from "@luke/database/models/writer";
 import { Duration, Effect, Option, Result, type Schema } from "effect";
 import type { HttpClient } from "effect/http";
 import { RUNNER_TAG, SANDBOX_NAME, taggedRunner } from "../agents/coder-host/runner-sessions.js";
+import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
 import { OPEN_INTERNET_POLICY } from "../agents/terminal/agent-sandbox.js";
 import {
   deploymentOidcToken,
-  LIST_ORDER,
   type ListedSandbox,
-  type ListOrder,
   RUNNING_STATUS,
   SESSION_TAG,
   type VercelSandboxApi,
   vercelSandboxApi,
 } from "../agents/vercel-sandbox-api.js";
+import { listOrderAt, listRunningSandboxes, windowAt } from "./sandbox-sweep-list.js";
 
 export const NATIVE_SANDBOX_SWEEP = {
   /** How long after its run's newest turn ended a sandbox waits for the END's own stop before the sweep stops it. */
   GRACE: Duration.minutes(2),
   /** The most pages of running sandboxes one sweep reads, each the API's widest. */
   MAX_PAGES: 4,
-  /** The most native sandboxes one sweep reads against the store; the rest wait for the next minute. */
+  /** The most native sandboxes one sweep reads against the store; the rest wait for a later sweep's window. */
   MAX_SANDBOXES: 40,
   /** The most sandboxes one sweep stops. */
   MAX_STOPS: 10,
   CONCURRENCY: 5,
 } as const;
 
-/** What one sweep of the running native sandboxes came to: sandboxes stopped, ones a Terminal holds, ones whose stop Vercel did not confirm, and ones left for the next minute past the bound. */
+/** What one sweep of the running native sandboxes came to: sandboxes stopped, ones a Terminal holds, ones whose stop Vercel did not confirm, ones left for the next minute past the bound, and ones whose runner died mid-turn, its turn settled failed. */
 export interface NativeSandboxSweepOutcome {
   stopped: number;
   held: number;
   failed: number;
   deferred: number;
+  lost: number;
 }
 
-const NOTHING_SWEPT: NativeSandboxSweepOutcome = { stopped: 0, held: 0, failed: 0, deferred: 0 };
+const NOTHING_SWEPT: NativeSandboxSweepOutcome = {
+  stopped: 0,
+  held: 0,
+  failed: 0,
+  deferred: 0,
+  lost: 0,
+};
 
 const SANDBOX_ENDING = {
   STOPPED: "stopped",
@@ -71,6 +88,8 @@ const SANDBOX_ENDING = {
   LEFT: "left",
   /** Stoppable, but past the sweep's bound of stops. */
   DEFERRED: "deferred",
+  /** Its runner exited while its run's turn still ran, which the sweep settled failed. */
+  LOST: "lost",
 } as const;
 
 type SandboxEnding = (typeof SANDBOX_ENDING)[keyof typeof SANDBOX_ENDING];
@@ -93,34 +112,6 @@ function nativeSandboxOf(sandbox: ListedSandbox): NativeSandbox | undefined {
 }
 
 /**
- * The order a sweep lists in: oldest first on an even minute and newest
- * first on an odd one, so the running sandboxes past one end's bound are
- * reached from the other's within two minutes.
- */
-export function listOrderAt(now: Date): ListOrder {
-  return Math.floor(now.getTime() / 60_000) % 2 === 0
-    ? LIST_ORDER.OLDEST_FIRST
-    : LIST_ORDER.NEWEST_FIRST;
-}
-
-/** The running native sandboxes, from at most `MAX_PAGES` pages and no more than `MAX_SANDBOXES`. */
-const runningNativeSandboxes = (api: VercelSandboxApi, order: ListOrder) =>
-  Effect.gen(function* () {
-    const found: NativeSandbox[] = [];
-    let cursor: string | undefined;
-    for (let page = 0; page < NATIVE_SANDBOX_SWEEP.MAX_PAGES; page += 1) {
-      const listed = yield* api.listRunning(cursor, order);
-      for (const sandbox of listed.sandboxes) {
-        const native = nativeSandboxOf(sandbox);
-        if (native !== undefined) found.push(native);
-      }
-      cursor = listed.next;
-      if (cursor === undefined || found.length >= NATIVE_SANDBOX_SWEEP.MAX_SANDBOXES) break;
-    }
-    return found.slice(0, NATIVE_SANDBOX_SWEEP.MAX_SANDBOXES);
-  });
-
-/**
  * Whether the sandbox, read afresh, has moved on from the list: gone, down,
  * in another session, or running a runner that has not exited. A runner
  * exits as its run ends, so one still up after the run ended is a newer
@@ -141,10 +132,37 @@ const movedOn = (api: VercelSandboxApi, sandbox: NativeSandbox) =>
     return (yield* api.commandExit(runner.sandboxSessionId, runner.commandId)) === null;
   }).pipe(Effect.orElseSucceed(() => true));
 
+/**
+ * The command of the runner that exited, where the sandbox, read afresh,
+ * still runs the session it was listed in and the runner its tags name
+ * there has exited, or Vercel no longer knows its command. None for a
+ * runner not yet tagged (a launch under way, which clears the runner's tags
+ * first), or where Vercel does not answer.
+ */
+const exitedRunner = (api: VercelSandboxApi, sandbox: NativeSandbox) =>
+  Effect.gen(function* () {
+    const [fresh] = yield* api.listTagged(sandbox.sessionId);
+    if (fresh?.status !== RUNNING_STATUS || fresh.currentSessionId !== sandbox.running) {
+      return undefined;
+    }
+    const runner = taggedRunner(fresh);
+    if (runner === undefined || runner.sandboxSessionId !== sandbox.running) return undefined;
+    const exit = yield* api.commandExit(runner.sandboxSessionId, runner.commandId);
+    return exit === null ? undefined : runner.commandId;
+  }).pipe(Effect.orElseSucceed(() => undefined));
+
 /** A count of stops taken, shared by the sandboxes one sweep reads at once. */
 interface StopBudget {
   remaining: number;
 }
+
+/** Whether the run of the sandbox's agent still has a turn queued or running, read from the store. */
+const runGoesOn = (sandbox: NativeSandbox) =>
+  Effect.map(readNativeRunStanding(sandbox.agentId), (standing) =>
+    Option.isSome(standing) && standing.value.endedAt === null
+      ? Option.some(standing.value.conversationId)
+      : Option.none(),
+  );
 
 /** Whether the run of the sandbox's agent ended past the grace, read from the store. */
 const runEnded = (sandbox: NativeSandbox, now: Date) =>
@@ -167,11 +185,22 @@ const runEnded = (sandbox: NativeSandbox, now: Date) =>
  */
 const endSandbox = (
   api: VercelSandboxApi,
+  writer: Pick<StoreWriter, "consume">,
   sandbox: NativeSandbox,
   now: Date,
   budget: StopBudget,
 ): Effect.Effect<SandboxEnding, QueryError | Schema.SchemaError, DatabaseServices> =>
   Effect.gen(function* () {
+    const going = yield* runGoesOn(sandbox);
+    if (Option.isSome(going)) {
+      const exited = yield* exitedRunner(api, sandbox);
+      if (exited === undefined) return SANDBOX_ENDING.LEFT;
+      // Read again just before the settle, so a message that relaunched the runner since keeps its turn.
+      if (Option.isNone(yield* runGoesOn(sandbox))) return SANDBOX_ENDING.LEFT;
+      if ((yield* exitedRunner(api, sandbox)) !== exited) return SANDBOX_ENDING.LEFT;
+      yield* settleRunnerLostTurns(writer, going.value, now.getTime());
+      return SANDBOX_ENDING.LOST;
+    }
     if (Option.isNone(yield* runEnded(sandbox, now))) return SANDBOX_ENDING.LEFT;
     if (yield* movedOn(api, sandbox)) return SANDBOX_ENDING.LEFT;
     const ended = yield* runEnded(sandbox, now);
@@ -209,15 +238,18 @@ export const sweepNativeSandboxes = /* @__PURE__ */ Effect.fn("web/sweepNativeSa
     DatabaseServices | HttpClient.HttpClient
   > {
     const api = yield* vercelSandboxApi(deploymentOidcToken);
-    const listed = yield* Effect.result(runningNativeSandboxes(api, listOrderAt(now)));
+    const listed = yield* Effect.result(
+      listRunningSandboxes(api, listOrderAt(now), NATIVE_SANDBOX_SWEEP.MAX_PAGES, nativeSandboxOf),
+    );
     if (Result.isFailure(listed)) {
       yield* Effect.logWarning(`the running sandboxes were not listed: ${listed.failure.message}`);
       return NOTHING_SWEPT;
     }
     const budget: StopBudget = { remaining: NATIVE_SANDBOX_SWEEP.MAX_STOPS };
+    const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
     const endings = yield* Effect.forEach(
-      listed.success,
-      (sandbox) => endSandbox(api, sandbox, now, budget),
+      windowAt(listed.success, NATIVE_SANDBOX_SWEEP.MAX_SANDBOXES, now),
+      (sandbox) => endSandbox(api, writer, sandbox, now, budget),
       { concurrency: NATIVE_SANDBOX_SWEEP.CONCURRENCY },
     );
     const count = (ending: SandboxEnding) => endings.filter((each) => each === ending).length;
@@ -226,6 +258,7 @@ export const sweepNativeSandboxes = /* @__PURE__ */ Effect.fn("web/sweepNativeSa
       held: count(SANDBOX_ENDING.HELD),
       failed: count(SANDBOX_ENDING.FAILED),
       deferred: count(SANDBOX_ENDING.DEFERRED),
+      lost: count(SANDBOX_ENDING.LOST),
     };
   },
 );

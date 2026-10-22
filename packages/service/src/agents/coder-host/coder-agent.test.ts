@@ -824,11 +824,13 @@ test("an operator's instructions are the golden's, byte for byte: its own job an
     "You are Luke, the developer's operator in this workspace",
     "## What you may do unasked",
     "## Never",
-    "Never merge or close a pull request",
+    "Never merge or close a pull request yourself, and never ask an agent to merge or close one on your own initiative.",
+    "When the developer asks you in this conversation to merge or close a pull request, tell the agent that owns it to do it, in a direct message",
+    "and messaging the developer's own agents. To reach a teammate's agent, ask the developer.",
     "Never delete anything.",
     "Never answer an inbox ask for the developer",
     "Never change Settings, keys, or integrations.",
-    "Never act on a teammate's agent beyond reading it and messaging it",
+    "Never act on a teammate's agent beyond reading it:",
     "Report each action you took unasked as a line of its own in your reply",
     "ask the developer in their inbox",
     "reports back to you in a direct message",
@@ -842,6 +844,9 @@ test("an operator's instructions are the golden's, byte for byte: its own job an
     `\`${CODER_TOOL.OPEN_PULL_REQUEST}\``,
     `\`${CODER_TOOL.DELETE_SECTION}\``,
     "## Your team's chat",
+    "and never ask an agent to.",
+    "and messaging any agent.",
+    "beyond reading it and messaging it",
   ]) {
     assert.ok(!operator.includes(untold), untold);
   }

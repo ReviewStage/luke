@@ -4,6 +4,7 @@ import {
   taskNamesOf,
 } from "@luke/database/models/coding-agent-store";
 import { listPages } from "@luke/database/models/plan-pages";
+import { agentGivenName } from "@luke/features/model-label";
 import type { PageLine } from "@luke/features/page-wire";
 import { taskPageOwner } from "@luke/features/page-wire";
 import type { Task } from "@luke/features/task-wire";
@@ -72,7 +73,7 @@ const readAgents = (userId: string, workspaceId: string, named: readonly string[
       const task = agent.taskId === null ? undefined : tasks.get(agent.taskId);
       found.set(agent.id, {
         id: agent.id,
-        name: agent.personaName ?? agent.title ?? agent.model,
+        name: agentGivenName(agent) ?? agent.title ?? agent.model,
         task:
           agent.taskId === null || task === undefined
             ? null

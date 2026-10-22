@@ -19,6 +19,7 @@ import {
   AUTOMATION_TRIGGER,
 } from "@luke/features/automation-wire";
 import { CODING_AGENT_KIND } from "@luke/features/coding-agent-wire";
+import { agentTabLabel } from "@luke/features/model-label";
 import { CODING_AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@luke/features/models-wire";
 import { EXPERIMENT } from "@luke/settings";
 import { Effect, Layer, Option, Result, Stream } from "effect";
@@ -39,6 +40,7 @@ import {
 import { OPERATOR_HEARTBEAT } from "./instructions.js";
 import { ensureOperator } from "./operator.js";
 import { type StartAsk, startCodingAgent } from "./start.js";
+import { codingAgentSummary } from "./status.js";
 
 /**
  * operator.test.ts -- the member's operator ensured in a workspace, and reset.
@@ -172,6 +174,32 @@ it.layer(getTestDB())("the member's operator", (it) => {
           [agent.model, agent.effort],
           [CODING_AGENT_DEFAULT_CHOICE.model, CODING_AGENT_DEFAULT_CHOICE.effort],
         );
+      }),
+  );
+
+  it.effect(
+    "an ensured operator, and a Reset's fresh one, is given no human name and goes by Luke in its summary",
+    () =>
+      Effect.gen(function* () {
+        const member = yield* openMember;
+        const workspaceId = yield* openWorkspace(member);
+        const named = (agentId: string) =>
+          Effect.map(readCodingAgent(member, agentId), (read) => {
+            const agent = Option.getOrThrow(read);
+            const summary = codingAgentSummary(
+              agent,
+              { turn: undefined, awaitingLineAt: undefined },
+              0,
+              new Map(),
+            );
+            return [agent.personaName, summary.personaName, agentTabLabel(summary)];
+          });
+
+        const ensured = yield* ensure(member, workspaceId);
+        const reset = yield* ensure(member, workspaceId, true);
+
+        assert.deepEqual(yield* named(ensured.agent.id), [null, undefined, "Luke"]);
+        assert.deepEqual(yield* named(reset.agent.id), [null, undefined, "Luke"]);
       }),
   );
 

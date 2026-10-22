@@ -19,10 +19,12 @@ import { type AnyAct, FAKE_ANSWER, type FakeActAnswer, fakeActs } from "../testi
 import { onRegistry } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
 import { codingAgentsControl } from "../testing/tasks-control.js";
+import { type AgentActions, rowDoors, useAgentActions } from "./agent-actions.js";
 import { SidebarAgent } from "./sidebar-agent.js";
+import { contentActionGroups } from "./strip-tabs.js";
 
 /**
- * sidebar-agent.test.ts -- an agent with no task, as a row among the sidebar's tasks, is acted on as a task's row is: archived from its right-click at once while it rests, read again by its own id first, asked first while it works, and brought back by Unarchive once archived; renamed in place; deleted for good once asked, last and alone in its menu; and hanging its card while rested on.
+ * sidebar-agent.test.ts -- an agent with no task, as a row among the sidebar's tasks, offers every action its tab and its page offer but those `NOT_ON_A_ROW` names, and is acted on as a task's row is: archived from its right-click at once while it rests, read again by its own id first, asked first while it works, and brought back by Unarchive once archived; renamed in place; deleted for good once asked, last and alone in its menu; and hanging its card while rested on.
  *
  * The service is a script at the act boundary; synthetic agents throughout.
  */
@@ -434,4 +436,66 @@ test("an archived agent's row offers Permanently delete too, and Cancel deletes 
 
   assert.deepEqual(deletes, []);
   assert.equal(left, 0);
+});
+
+/** Hands `onActions` the agent's actions as its tab and its page offer them, every door they open on offered. */
+function OfferedActions({
+  agent,
+  onActions,
+}: {
+  agent: TasklessAgent;
+  onActions: (actions: AgentActions) => void;
+}): null {
+  const actions = useAgentActions(agent, codingAgentsControl({}), {
+    label: agent.title ?? "",
+    shown: true,
+    terminals: { onOpenTerminal: () => undefined },
+  });
+  onActions(actions);
+  return null;
+}
+
+/** The labels of the agent's actions, as its tab and its page offer them, that a row does not leave out by name. */
+function sharedOnRow(agent: TasklessAgent): string[] {
+  let offered: AgentActions | undefined;
+  const container = document.createElement("div");
+  const held = createRoot(container);
+  act(() =>
+    held.render(
+      onRegistry(
+        AtomRegistry.make(),
+        createElement(OfferedActions, {
+          agent,
+          onActions: (actions) => {
+            offered = actions;
+          },
+        }),
+      ),
+    ),
+  );
+  act(() => held.unmount());
+  const doors = (offered ?? assert.fail("the actions were offered")).doors;
+  const tab = { chosen: false, onClose: undefined, onCloseOthers: undefined, pin: undefined };
+  return contentActionGroups({ ...tab, ...rowDoors(doors) })
+    .flat()
+    .map((each) => each.label);
+}
+
+test("every action an agent's tab and page offer stands in its row's right-click unless NOT_ON_A_ROW names it, at rest and archived", () => {
+  for (const agent of [RUN, { ...RUN, archivedAt: 3 }]) {
+    const shared = sharedOnRow(agent);
+    const row = mount(agent);
+    const labels = rightClick(row).map((each) => each.textContent);
+    act(() => root?.unmount());
+    root = undefined;
+    document.body.innerHTML = "";
+
+    assert.ok(shared.length > 0, "the agent offers actions");
+    const missing = shared.filter((label) => !labels.includes(label));
+    assert.deepEqual(
+      missing,
+      [],
+      "place each on the row (sidebar-agent.tsx) or name it in NOT_ON_A_ROW",
+    );
+  }
 });

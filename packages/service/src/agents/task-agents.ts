@@ -10,6 +10,7 @@ import {
 } from "@luke/database/models/coding-agent-store";
 import { readAccountNames } from "@luke/database/models/workspace-store";
 import {
+  CODING_AGENT_KIND,
   CODING_AGENT_STATUS,
   type CodingAgentPullRequest,
   type CodingAgentStatus,
@@ -82,6 +83,7 @@ function agentLine(
       id: agent.id,
       title: agent.title,
       ...(agent.personaName === null ? undefined : { personaName: agent.personaName }),
+      ...(agent.kind === CODING_AGENT_KIND.OPERATOR ? { kind: agent.kind } : undefined),
       model: agent.model,
       effort: agent.effort,
       status,
@@ -135,6 +137,7 @@ function summaryOf(read: readonly ReadAgent[]): TaskAgentsSummary {
       deletions,
       url,
       agentId: line.id,
+      ...(published.queued === true ? { queued: true } : undefined),
     });
   }
   return {
@@ -156,8 +159,17 @@ function summaryOf(read: readonly ReadAgent[]): TaskAgentsSummary {
 /** An agent's pull request as its sidebar row carries it, where it opened one: as a task's row names its own. */
 function pullRequestOf(published: CodingAgentPullRequest | null | undefined) {
   if (published == null) return undefined;
-  const { number, title, url, state, checks } = published;
-  return { pullRequest: { number, title, url, state, checks } };
+  const { number, title, url, state, checks, queued } = published;
+  return {
+    pullRequest: {
+      number,
+      title,
+      url,
+      state,
+      checks,
+      ...(queued === true ? { queued } : undefined),
+    },
+  };
 }
 
 /** The account's listed tasks, each carrying its agents in brief, whichever member started each, where it has any; the tasks' order and every other field as listed. */
