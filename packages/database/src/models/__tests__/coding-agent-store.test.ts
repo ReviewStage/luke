@@ -85,6 +85,7 @@ import {
   taskNamesOf,
   turnUsagesOf,
   unarchiveCodingAgentFrom,
+  updateCodingAgentChoice,
   writeDelegation,
 } from "../coding-agent-store.js";
 import { sentLineId } from "../ids.js";
@@ -112,6 +113,7 @@ import { type LineSender, storeWriter } from "../writer.js";
  * And the agent a conversation is, one at most, read by its header.
  * And an agent deleted for good by any member of its workspace, once it stands stopped.
  * And the member's operator, one standing per workspace, and archived for a fresh one.
+ * And that operator private to its member: no teammate reaches it.
  *
  * Synthetic accounts and conversations throughout.
  */
@@ -2410,5 +2412,76 @@ it.layer(getTestDB())("the coding-agent store's operators", (it) => {
         null,
       );
     }),
+  );
+});
+
+it.layer(getTestDB())("the coding-agent store's operator, private to its member", (it) => {
+  it.effect(
+    "a teammate lists, reads, renames, re-chooses, pins, archives, and deletes none of a member's operator or its conversation, while its member does all of it and both still reach each other's coders",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* openAccount;
+        const teammate = yield* openAccount;
+        const workspace = yield* openWorkspace(owner);
+        yield* joinWorkspace(workspace, teammate);
+        const operator = Option.getOrThrow(
+          yield* createCodingAgent(owner, operatorStart(workspace)),
+        ).agent;
+        const ownerCoder = yield* tasklessAgent(owner, workspace);
+        const teammateCoder = yield* tasklessAgent(teammate, workspace);
+        const ids = (agents: readonly { readonly id: string }[]) =>
+          agents.map((agent) => agent.id).toSorted();
+        const choice = { model: "anthropic/claude-opus-5.5", effort: "low" };
+        const stopped = {
+          standsStopped: () => Effect.succeed(true),
+          beforeDelete: () => Effect.void,
+        };
+
+        assert.deepEqual(
+          ids(yield* listWorkspaceCodingAgents(teammate, workspace, { limit: 10 })),
+          [ownerCoder.agentId, teammateCoder.agentId].toSorted(),
+        );
+        assert.deepEqual(
+          ids(yield* listTasklessCodingAgents(teammate)),
+          [ownerCoder.agentId, teammateCoder.agentId].toSorted(),
+        );
+        assert.deepEqual(
+          [
+            Option.isNone(yield* readCodingAgent(teammate, operator.id)),
+            Option.isNone(yield* readCodingAgentOfConversation(teammate, operator.conversationId)),
+            yield* conversationReachableBy(teammate, operator.conversationId),
+            Option.isNone(yield* renameCodingAgent(teammate, operator.id, "Mine now")),
+            Option.isNone(yield* updateCodingAgentChoice(teammate, operator.id, choice)),
+            Option.isNone(yield* pinCodingAgent(teammate, operator.id, true)),
+            Option.isNone(yield* archiveCodingAgent(teammate, operator.id, true)),
+            Option.isNone(yield* deleteCodingAgent(teammate, operator.id, stopped)),
+          ],
+          [true, true, false, true, true, true, true, true],
+          "a teammate reaches nothing of the operator",
+        );
+        assert.ok(Option.isSome(yield* readCodingAgent(teammate, ownerCoder.agentId)));
+        assert.ok(Option.isSome(yield* readCodingAgent(owner, teammateCoder.agentId)));
+
+        assert.deepEqual(
+          ids(yield* listWorkspaceCodingAgents(owner, workspace, { limit: 10 })),
+          [operator.id, ownerCoder.agentId, teammateCoder.agentId].toSorted(),
+        );
+        const read = Option.getOrThrow(yield* readCodingAgent(owner, operator.id));
+        assert.deepEqual(
+          [read.title, read.archivedAt],
+          [null, null],
+          "nothing a teammate tried landed",
+        );
+        assert.ok(yield* conversationReachableBy(owner, operator.conversationId));
+        assert.equal(
+          Option.getOrThrow(yield* renameCodingAgent(owner, operator.id, "Luke")).title,
+          "Luke",
+        );
+        assert.equal(
+          Option.getOrThrow(yield* updateCodingAgentChoice(owner, operator.id, choice)).effort,
+          "low",
+        );
+        assert.ok(Option.isSome(yield* pinCodingAgent(owner, operator.id, true)));
+      }),
   );
 });

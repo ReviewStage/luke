@@ -31,6 +31,7 @@ import {
   chatJoinAnswerSchema,
   MEMBER_KIND,
 } from "@luke/features/chat-wire";
+import { CODING_AGENT_KIND } from "@luke/features/coding-agent-wire";
 import { INBOX_REPLY } from "@luke/features/inbox-wire";
 import { workspaceChatLiveRowsSchema, workspaceChatOfLiveRows } from "@luke/features/live-wire";
 import { EXPERIMENT } from "@luke/settings";
@@ -55,6 +56,7 @@ import { TestClock } from "effect/testing";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../environment.js";
 import { LINK_OUTCOME } from "../github/github-installations.js";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
+import { HOSTED_REFUSAL } from "../http/http-effect.js";
 import { hostedFetch } from "../orpc/handler.js";
 import type { WebServices } from "../runtime.js";
 import { announcingClock, driven } from "../testing/clock-driven.js";
@@ -81,6 +83,8 @@ import { writeWorkspaceChat } from "./workspace-chat.js";
  * And a teammate's post to an agent, with no eve handed in, tells the agent
  * through eve as the deployment acting for its starter, under the
  * deployment's own secret and never the cron's the same environment holds.
+ * And a member's operator, which a teammate's directory leaves out and their
+ * window DMs not at all.
  * Synthetic accounts, bearers, and words throughout.
  */
 
@@ -667,6 +671,80 @@ it.layer(getTestDB())("a person's chat post told to an agent through eve", (it) 
             },
           ],
         );
+      }),
+  );
+});
+
+it.layer(getTestDB())("a member's operator in the workspace's chat", (it) => {
+  it.effect(
+    "a teammate's directory, held and live, leaves out the member's operator and their DM with it, and the teammate's window DMs it not at all, while the member reads both",
+    () =>
+      Effect.gen(function* () {
+        const room = yield* openRoom;
+        const { grace } = yield* room.post("Morning.");
+        const { agent: operator } = Option.getOrThrow(
+          yield* createCodingAgent(room.owner, {
+            taskId: null,
+            organizationId: room.workspace,
+            planSnapshot: null,
+            prompt: null,
+            kind: CODING_AGENT_KIND.OPERATOR,
+            idempotencyKey: randomUUID(),
+            model: "anthropic/claude-opus-5.5",
+            effort: "high",
+            repository: null,
+          }),
+        );
+        const seat = (subject: Parameters<typeof ensureMember>[2]) =>
+          Effect.map(ensureMember(room.owner, room.workspace, subject), Option.getOrThrow);
+        const ada = yield* seat({ kind: MEMBER_KIND.HUMAN, userId: room.owner });
+        const seated = yield* seat({ kind: MEMBER_KIND.AGENT, agentId: operator.id });
+        const dm = Option.getOrThrow(
+          yield* findOrMakeDm(room.owner, room.workspace, ada.id, seated.id),
+        );
+        const said = Result.getOrThrow(
+          yield* postMessage(room.owner, room.workspace, {
+            authorMemberId: ada.id,
+            to: { channelId: dm.id },
+            blocks: [{ type: CHAT_BLOCK.MARKDOWN, text: "What's on my plate?" }],
+            clientKey: randomUUID(),
+          }),
+        ).message;
+        const sees = (chat: {
+          readonly members: readonly { readonly agentId?: string | null | undefined }[];
+          readonly channels: readonly { readonly id: string }[];
+          readonly messages: readonly { readonly id: string }[];
+        }) => [
+          chat.members.some((member) => member.agentId === operator.id),
+          chat.channels.some((channel) => channel.id === dm.id),
+          chat.messages.some((message) => message.id === said.id),
+        ];
+
+        const teammates = yield* room.read(CHAT_CURSOR_START, room.teammate);
+        assert.deepEqual(sees(teammates), [false, false, false]);
+        const live = workspaceChatOfLiveRows(
+          yield* liveRowsOf(workspaceChatLiveStatements(room.teammate, grace)),
+        );
+        assert.ok(live !== undefined);
+        assert.deepEqual(sees(live), [false, false, false]);
+        const refused = yield* writeWorkspaceChat(
+          { eveOrigin: () => ORIGIN },
+          room.teammate,
+          room.workspace,
+          {
+            text: "What does Ada have on?",
+            to: `[@Luke](https://tryluke.dev/w/agent/${operator.id})`,
+            clientKey: randomUUID(),
+          },
+        ).pipe(
+          Effect.provide(
+            Layer.merge(githubReaching([]).layer, Layer.succeed(HostedEnvironment, BOTH_SECRETS)),
+          ),
+          Effect.flip,
+        );
+        assert.equal(refused, HOSTED_REFUSAL.NOT_FOUND);
+
+        assert.deepEqual(sees(yield* room.read(CHAT_CURSOR_START, room.owner)), [true, true, true]);
       }),
   );
 });

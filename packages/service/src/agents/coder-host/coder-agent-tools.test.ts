@@ -150,6 +150,7 @@ import { CODER_TOOL, CODER_TOOL_SET, kindToolsOf } from "./tool-set.js";
  * agent's turn by the Stop button's own cancel, once, and the list then reads
  * it cancelled; an idle agent is answered as idle, and the caller itself, an
  * archived agent, and an agent of another workspace are not stopped.
+ * A member's operator is that member's alone: no teammate's agent reaches it.
  * Synthetic accounts, plans, and words throughout.
  */
 
@@ -3541,4 +3542,71 @@ test("list_open_asks lists every ask waiting on the operator's member across the
     status: ACTION_RESULT_STATUS.REJECTED,
     reason: LIST_OPEN_ASKS_REFUSAL.NOT_OPERATOR,
   });
+
+test("a teammate's agent lists, reads, messages, stops, updates, continues, and forks none of a member's operator, while the member's own agent does each and both still reach each other's coders", async () => {
+  const { workspaceId, agents } = await openWorkspaces();
+  const bob = agents.teammates.userId;
+  const operator = await operatorOn(bob, workspaceId);
+  await saidTurnOn(operator, "Two PRs wait on you.");
+  const own = await tasklessAgentOn(bob, workspaceId);
+  const eve = await fakeCoderEve(workspaceId);
+  const host = hostOf(true);
+  const teammate = await peerCaller(host, agents.caller, eve.services);
+  const member = await peerCaller(host, own, eve.services);
+  const listed = async (call: typeof teammate) => {
+    const list = await call(CODER_TOOL.LIST_AGENTS, {});
+    assert.ok(Array.isArray(list.agents), JSON.stringify(list));
+    return list.agents.map((agent) => (isRecord(agent) ? agent.id : undefined));
+  };
+  const rejected = (reason: string) => ({ status: ACTION_RESULT_STATUS.REJECTED, reason });
+  const noAgent = rejected(CODING_AGENT_TOOL_REFUSAL.NO_AGENT);
+  const [messageId] = tailMessageIds(await member(CODER_TOOL.READ_AGENT, { agentId: operator.id }));
+  assert.ok(messageId !== undefined);
+
+  assert.ok(!(await listed(teammate)).includes(operator.id));
+  assert.ok((await listed(teammate)).includes(own.id), "the member's coder stays in view");
+  assert.deepEqual(await teammate(CODER_TOOL.READ_AGENT, { agentId: operator.id }), noAgent);
+  assert.deepEqual(await teammate(CODER_TOOL.STOP_AGENT, { agentId: operator.id }), noAgent);
+  assert.deepEqual(
+    await teammate(CODER_TOOL.UPDATE_AGENT, { agentId: operator.id, title: "Mine now" }),
+    noAgent,
+  );
+  for (const from of [{ agentId: operator.id }, { agentId: operator.id, messageId }]) {
+    assert.deepEqual(
+      await teammate(CODER_TOOL.START_AGENT, { from }, `call-${randomUUID()}`),
+      rejected(START_CODING_AGENT_REFUSAL.NO_SOURCE),
+    );
+  }
+  const refusedDm = await directMessage(host, agents.caller, operator, eve.services);
+  assert.equal(refusedDm.status, ACTION_RESULT_STATUS.REJECTED, JSON.stringify(refusedDm));
+  assert.deepEqual(openingsOf(eve), [], "nothing reached the operator");
+  assert.equal(
+    (await member(CODER_TOOL.READ_AGENT, { agentId: agents.caller.id })).status,
+    ACTION_RESULT_STATUS.ACCEPTED,
+  );
+
+  assert.ok((await listed(member)).includes(operator.id));
+  assert.equal(
+    (await member(CODER_TOOL.READ_AGENT, { agentId: operator.id })).status,
+    ACTION_RESULT_STATUS.ACCEPTED,
+  );
+  const stopped = await member(CODER_TOOL.STOP_AGENT, { agentId: operator.id });
+  assert.deepEqual([stopped.status, stopped.stopped], [ACTION_RESULT_STATUS.ACCEPTED, false]);
+  assert.equal(
+    (await member(CODER_TOOL.UPDATE_AGENT, { agentId: operator.id, title: "Luke" })).status,
+    ACTION_RESULT_STATUS.ACCEPTED,
+  );
+  assert.equal(
+    Option.getOrThrow(await database.run(readCodingAgent(bob, operator.id))).title,
+    "Luke",
+  );
+  // The member's Continue and Fork find the operator, and only then refuse it for having no checkout.
+  for (const from of [{ agentId: operator.id }, { agentId: operator.id, messageId }]) {
+    assert.deepEqual(
+      await member(CODER_TOOL.START_AGENT, { from }, `call-${randomUUID()}`),
+      rejected(START_CODING_AGENT_REFUSAL.SOURCE_NO_REPOSITORY),
+    );
+  }
+  const sent = await directMessage(host, own, operator, eve.services);
+  assert.equal(sent.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(sent));
 });

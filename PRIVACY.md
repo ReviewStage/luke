@@ -109,6 +109,20 @@ spoken ask as a turn of its own conversation, with the tools it has on any
 turn, and what was said on the call is kept in that agent's transcript. A
 fixture or evidence run keeps no conversation at all.
 
+**Your operator.** With the "Luke, your operator" experiment on, our
+service keeps one coding agent of yours in each workspace, your operator,
+with no task and no repository, to manage your other agents. It can read
+what you reach in that workspace: the coding agents you can open and their
+transcripts, the workspace's tasks, your inbox, and your direct messages in
+the workspace's chat. Its own conversation, what you and it said, what it
+read, and the tools it called, is visible in Luke only to you: no other
+member of the workspace can list it, open it, read its transcript, message
+it, call it, or find it in the chat, and your direct messages with it are
+left out of theirs. The agents, tasks, pull requests, and posts it makes
+are visible to the workspace as anyone's. Its conversation is stored on our
+service like any coding agent's, bound to your account and readable by our
+own operators. Deleting your account removes it.
+
 **Tasks.** When you start a named task, our service stores it in a
 workspace: the first workspace made for your account unless you start it in
 another workspace you are a member of, and the task records which, and who
