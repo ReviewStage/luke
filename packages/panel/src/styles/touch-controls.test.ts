@@ -392,23 +392,29 @@ for (const metaAt of [LIST_ROW_META.MIDDLE, LIST_ROW_META.TITLE]) {
   });
 }
 
-test("on a touch screen the open row whose metadata stands on the title's line keeps its title clear of its acts, the title's line ending where they begin, and a row not open keeps its whole line", () => {
-  layFor(true);
-  drawRows(LIST_ROW_META.TITLE);
-  const [open, other] = [...document.querySelectorAll<HTMLElement>(".luke-list-row")];
-  assert.ok(open !== undefined && other !== undefined);
-  // jsdom lays nothing out, so the row is handed the width its acts would be measured at.
-  open.style.setProperty("--luke-list-row-acts", "56px");
-  const head = (row: Element) => row.querySelector(".luke-list-row-head");
-  const room = (row: Element) => {
-    const line = head(row);
-    assert.ok(line !== null, "the title's line is drawn");
-    return getComputedStyle(line).paddingInlineEnd;
-  };
-  assert.match(
-    room(open),
-    /--luke-list-row-acts/u,
-    "the open row's title line ends where its acts begin",
-  );
-  assert.ok(!/--luke-list-row-acts/u.test(room(other)), "a row not open keeps its whole line");
-});
+for (const metaAt of [LIST_ROW_META.MIDDLE, LIST_ROW_META.TITLE]) {
+  test(`a list row with its metadata at its ${metaAt} lays out alike with its acts shown or not: they stand over its end, the metadata keeps its box, and the title its room`, () => {
+    layFor(true);
+    drawRows(metaAt);
+    const [open, other] = [...document.querySelectorAll<HTMLElement>(".luke-list-row")];
+    assert.ok(open !== undefined && other !== undefined);
+    const laidOut = (row: Element) => {
+      const style = (selector: string) =>
+        getComputedStyle(row.querySelector(selector) ?? assert.fail(selector));
+      const head = row.querySelector(".luke-list-row-head");
+      return {
+        acts: style(".luke-list-row-actions").position,
+        meta: style(".luke-list-row-meta").display,
+        press: style(".luke-list-row-main").paddingInlineEnd,
+        head: head === null ? undefined : getComputedStyle(head).paddingInlineEnd,
+      };
+    };
+    assert.ok(standing(open.querySelector(".luke-list-row-actions") ?? assert.fail("acts")));
+    assert.equal(laidOut(open).acts, "absolute");
+    assert.deepEqual(
+      laidOut(open),
+      laidOut(other),
+      "the open row, its acts shown, lays out as the other",
+    );
+  });
+}
