@@ -85,7 +85,6 @@ import {
   AgentCallControls,
   type AgentCallDoors,
   AgentCallFoot,
-  takesCalls,
   useAgentOnCall,
 } from "./agent-call.js";
 import { AgentComposer } from "./agent-composer.js";
@@ -2149,8 +2148,7 @@ function AgentTabView({
   /** Whether the tab offers Continue somewhere, or another agent continued this one, so the end line tells no one to start a new one. */
   continuable?: boolean;
 }): React.JSX.Element {
-  // Note that an agent on a provider's own harness takes no call, so its tab draws neither the button nor the foot.
-  const call = takesCalls(agent) ? offeredCall : undefined;
+  const call = offeredCall;
   const onCall = useAgentOnCall(agent.id) && call !== undefined;
   const lines = useMemo(
     () => agentLines(transcript.messages, composer.sent),
