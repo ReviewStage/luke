@@ -26,6 +26,7 @@
 import { randomUUID, type UUID } from "node:crypto";
 import type {
   HookCallback,
+  McpSdkServerConfigWithInstance,
   Options,
   SDKMessage,
   SDKUserMessage,
@@ -50,7 +51,7 @@ import { ClaudeCode, type ClaudeCodeSession } from "./claude-code.js";
 import { runCodex } from "./codex.js";
 import { type EventSink, makeEventSink } from "./events.js";
 import { type LaunchContext, type LaunchOutcome, RunnerFailed, type RunnerSelf } from "./launch.js";
-import { openMcpProxy } from "./mcp-proxy.js";
+import { openMcpRelay } from "./mcp-relay.js";
 import { ProcessTable } from "./processes.js";
 import {
   type ClaudeCodeConfig,
@@ -114,7 +115,7 @@ const decodeLine = Schema.decodeUnknownOption(Schema.fromJsonString(InputLineSch
 function queryOptions(
   config: ClaudeCodeConfig,
   env: RunnerInput["env"],
-  mcpUrl: string,
+  luke: McpSdkServerConfigWithInstance,
   onStop: HookCallback,
 ): Options {
   const options: Options = {
@@ -129,10 +130,10 @@ function queryOptions(
     // The CLI's environment is the runner's own, less the bearer, which only
     // the runner uses; Node leaves an undefined one unset.
     env: { ...env, [RUNNER_ENV.BEARER]: undefined },
-    // Note that the SDK puts this config in the CLI's argv, which any process
-    // in the sandbox can read, so it names the runner's loopback proxy
-    // (`mcp-proxy.ts`), which adds the bearer, and carries no header.
-    mcpServers: { [MCP_SERVER]: { type: "http", url: mcpUrl } },
+    // Note that the SDK puts an HTTP server's config, headers and all, in the
+    // CLI's argv, which any process in the sandbox can read, so Luke's is an
+    // SDK server the runner relays over the CLI's own stdio (`mcp-relay.ts`).
+    mcpServers: { [MCP_SERVER]: luke },
     sandbox: {
       enabled: true,
       failIfUnavailable: true,
@@ -416,13 +417,11 @@ const runClaudeCode = Effect.fn("agent-runner/runClaudeCode")(function* (
     }
     return { continue: true };
   };
-  const mcpUrl = yield* openMcpProxy(config.mcpUrl, bearer).pipe(
-    Effect.mapError((error) => new RunnerFailed({ detail: error.detail })),
-  );
+  const luke = yield* openMcpRelay(MCP_SERVER, config.mcpUrl, bearer);
   const prompts = yield* Queue.unbounded<SDKUserMessage, Cause.Done>();
   const session = claudeCode.query({
     prompt: Stream.toAsyncIterable(Stream.fromQueue(prompts)),
-    options: queryOptions(config, context.env, mcpUrl, onStop),
+    options: queryOptions(config, context.env, luke, onStop),
   });
   const launch: Launch = {
     session,
