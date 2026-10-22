@@ -54,7 +54,7 @@ import {
 } from "./contract.js";
 import { drawnAmong, drawnTeller } from "./drawn-lines.js";
 import { watchGapControls } from "./gap-controls.js";
-import { type Highlighting, startHighlighting } from "./highlight-pool.js";
+import { type Highlighting, preferredHighlighter, startHighlighting } from "./highlight-pool.js";
 import { adoptShadowStyles } from "./inline-styles.js";
 import { pressedOnCode, selectedLines, selectionRect } from "./text-selection.js";
 import { wholeOf } from "./whole-diff.js";
@@ -491,7 +491,7 @@ function sharedOptions(drawn: DiffLook) {
   return {
     theme: drawn.themes,
     themeType: "system",
-    preferredHighlighter: "shiki-js",
+    preferredHighlighter: preferredHighlighter(),
     diffStyle: drawn.layout === DIFF_LAYOUT.SPLIT ? "split" : "unified",
     diffIndicators: drawn.indicators,
     lineDiffType: drawn.inlineDiff,
@@ -1217,7 +1217,7 @@ function wholeFileOptions(
   return {
     theme: drawn.themes,
     themeType: "system",
-    preferredHighlighter: "shiki-js",
+    preferredHighlighter: preferredHighlighter(),
     tokenizeMaxLineLength: MAX_LINE_DIFF_LENGTH,
     disableLineNumbers: !drawn.lineNumbers,
     overflow: drawn.wrap ? "wrap" : "scroll",

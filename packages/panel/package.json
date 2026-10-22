@@ -91,7 +91,7 @@
     "@luke/voice": "workspace:*",
     "@luke/wire": "workspace:*",
     "@orpc/client": "catalog:",
-    "@pierre/diffs": "1.5.2",
+    "@pierre/diffs": "1.6.1",
     "@pierre/trees": "1.0.0-beta.6",
     "@tiptap/core": "3.31.4",
     "@tiptap/extension-heading": "3.31.4",
