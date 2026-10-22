@@ -146,6 +146,8 @@ function shellProps(
       steps: { back: [], forward: [] },
       onGoTo: ignore,
       onLeaveVersionHistory: ignore,
+      away: undefined,
+      onLeave: ignore,
     },
     sidebar: {
       collapsed: true,
@@ -920,6 +922,8 @@ function CallShell({ place, folded }: { place: Place; folded: boolean }): React.
       steps: { back: [], forward: [] },
       onGoTo: ignore,
       onLeaveVersionHistory: ignore,
+      away: undefined,
+      onLeave: ignore,
     },
     sidebar: {
       collapsed: folded,
@@ -1306,4 +1310,55 @@ test("the sign-in, which needs the network, says over it when the Mac is offline
 
   assert.ok(container.querySelector(".desktop-onboarding"), "the sign-in stands");
   assert.equal(titleBarOffline(container)?.textContent, "Offline");
+});
+
+test("on a phone an open task leads its own row with the way back the window's history names, in the sidebar toggle's place, and a wide window keeps the toggle", async () => {
+  const left: string[] = [];
+  const render = (away: Parameters<typeof DesktopShell>[0]["history"]["away"], room: ShellRoom) => {
+    const container = document.body.appendChild(document.createElement("div"));
+    root = createRoot(container);
+    const tasks = tasksControl({
+      page: TASKS_PAGE.DOCUMENT,
+      region: { kind: DOCUMENT_REGION.READY, task: DOCUMENT_TASK },
+    });
+    const props = shellProps(tasks, PANEL_TAB.TASKS, ignore, {});
+    act(() =>
+      root?.render(
+        onRegistry(
+          AtomRegistry.make(),
+          createElement(DesktopShell, {
+            ...props,
+            history: { ...props.history, away, onLeave: () => left.push("left") },
+            room,
+          }),
+        ),
+      ),
+    );
+    return container;
+  };
+  const back = (page: HTMLElement) =>
+    page.querySelector<HTMLButtonElement>(".task-head-back button") ?? assert.fail("a way back");
+
+  const fromInbox = render({ title: { label: "Inbox" } }, SHELL_ROOM.NARROW);
+  await settle();
+  assert.equal(back(fromInbox).textContent, "Inbox");
+  assert.equal(fromInbox.querySelector(".desktop-shell > .title-bar-controls"), null);
+  act(() => back(fromInbox).click());
+  assert.deepEqual(left, ["left"]);
+  act(() => root?.unmount());
+  document.body.innerHTML = "";
+
+  const fromNowhere = render(undefined, SHELL_ROOM.NARROW);
+  await settle();
+  assert.equal(back(fromNowhere).textContent, "Tasks", "with no page behind, the Tasks page");
+  act(() => root?.unmount());
+  document.body.innerHTML = "";
+
+  const wide = render({ title: { label: "Inbox" } }, SHELL_ROOM.WIDE);
+  await settle();
+  assert.equal(wide.querySelector(".task-head"), null);
+  assert.ok(
+    wide.querySelector(".desktop-shell > .title-bar-controls"),
+    "the sidebar's toggle stands",
+  );
 });

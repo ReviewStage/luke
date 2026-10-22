@@ -17,14 +17,12 @@ import { ACT_KIND } from "@luke/host/acts";
 import { EXPERIMENT, HOST_CAPABILITY } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
-  BackIcon,
   CloseIcon,
   CollapseIcon,
   EmptyState,
   ERROR_STATE_PLACEMENT,
   ErrorState,
   ExpandIcon,
-  FoldingButton,
   IconButton,
   List,
   ListRow,
@@ -151,6 +149,7 @@ import { paneTiming } from "./pane-motion.js";
 import {
   type AddEntry,
   AddTabButton,
+  contentActionGroups,
   DoorsTab,
   type HeldTranscripts,
   type TabDoors,
@@ -164,6 +163,23 @@ import {
 import { LOOK_STRIP, useStripLooks } from "./switcher-looks.js";
 import { TabStrip } from "./tab-strip.js";
 import { EDGE_SIDE, type ResizableEdgeProps, useResizableEdge } from "./use-resizable-edge.js";
+
+/**
+ * What a phone's header is handed of the tab the panel shows (`task-pane-switcher.tsx`):
+ * what it is called, and, read as the header's ⋯ opens, what it offers on what
+ * it shows, which its own ⋯ offers where the panel's bar stands.
+ */
+export interface ShownTab {
+  readonly label: string;
+  readonly groups: () => MenuAction[][];
+}
+
+/** A phone's Activity, as the panel's strip is handed it: where it lists the tabs, how a row's press leaves the list, and where the tab shown is handed on. */
+interface StripActivity {
+  readonly slot: HTMLElement | null;
+  readonly onListed: (listed: boolean) => void;
+  readonly onShown: (shown: ShownTab | undefined) => void;
+}
 
 /**
  * side-panel.tsx -- the open task's side panel at the window's right: its toggle, its tabs and their "+", its full-screen button, the tab shown, and the edge it is resized by.
@@ -967,10 +983,8 @@ function PanelTabs({
   inboxWaiting: number;
   /** Whether a card of the task's Inbox holds a draft, which its tab marks while another is chosen. */
   inboxDrafted: boolean;
-  /** Where a phone's Activity lists the tabs in the strip's place, and how a row's press leaves the list; none where the strip is the way between them. */
-  activity?:
-    | { readonly slot: HTMLElement | null; readonly onListed: (listed: boolean) => void }
-    | undefined;
+  /** Where a phone's Activity lists the tabs in the strip's place, how a row's press leaves the list, and where the tab shown is handed on; none where the strip is the way between them. */
+  activity?: StripActivity | undefined;
 }): React.JSX.Element {
   const copied = useTranscriptCopier();
   const kinds = stripTabs({
@@ -1040,6 +1054,7 @@ function PanelTabs({
           : undefined,
     };
   };
+  useShownTab(activity?.onShown, strip, doorsOf);
   return (
     <div className="side-panel-tabs">
       {activity?.slot
@@ -1060,7 +1075,7 @@ function PanelTabs({
             key={tabKey(entry.tab)}
             look={entry.look}
             doors={doorsOf(entry, at)}
-            slot={actionsSlot}
+            slot={activity === undefined ? actionsSlot : null}
           />
         ))}
       </TabStrip>
@@ -1076,6 +1091,32 @@ function PanelTabs({
       />
     </div>
   );
+}
+
+/**
+ * Hands a phone's header the tab the strip shows, past the plan, which the
+ * header names itself by: its name as it changes, and what it offers on what
+ * it shows, read as the header's ⋯ opens, since those actions are made anew
+ * on every draw; and none once no tab past the plan is shown, or the strip
+ * is gone.
+ */
+function useShownTab(
+  onShown: ((shown: ShownTab | undefined) => void) | undefined,
+  strip: readonly DrawnTab[],
+  doorsOf: (entry: DrawnTab, at: number) => TabDoors,
+): void {
+  const at = strip.findIndex((entry) => entry.look.selected);
+  const chosen = strip[at];
+  const groups = useRef<MenuAction[][]>([]);
+  useLayoutEffect(() => {
+    groups.current = chosen === undefined ? [] : contentActionGroups(doorsOf(chosen, at));
+  });
+  const label =
+    chosen === undefined || chosen.tab === SIDE_PANEL_TAB.PLAN ? undefined : chosen.look.label;
+  useEffect(() => {
+    onShown?.(label === undefined ? undefined : { label, groups: () => groups.current });
+  }, [onShown, label]);
+  useEffect(() => () => onShown?.(undefined), [onShown]);
 }
 
 /**
@@ -1991,11 +2032,19 @@ export function SidePanel({
    * A phone's Activity (`task-pane-switcher.tsx`): whether the panel lists
    * its tabs rather than showing one, and the way to ask for the list or
    * leave it. Where it is handed and the panel stands only full screen, the
-   * strip and its "+" are not drawn, the list standing for both, and a tab
-   * shown but the plan leads the bar with the way back to the list; none
-   * beside anything but a task's page.
+   * panel's bar is not drawn, the list standing for its strip and its "+",
+   * and the phone's header for the rest: the way back to the list, the tab's
+   * name, and its ⋯, which the tab shown is handed up for; none beside
+   * anything but a task's page.
    */
-  activity?: { readonly listed: boolean; readonly onListed: (listed: boolean) => void } | undefined;
+  activity?:
+    | {
+        readonly listed: boolean;
+        readonly onListed: (listed: boolean) => void;
+        /** Hands the header the tab shown past the plan, or none (`ShownTab`). */
+        readonly onShown: (shown: ShownTab | undefined) => void;
+      }
+    | undefined;
 }): React.JSX.Element {
   // The one slot the bar keeps for the chosen tab's ⋯, drawn there from the tab (`strip-tabs.tsx`).
   const [actionsSlot, setActionsSlot] = useState<HTMLElement | null>(null);
@@ -2190,13 +2239,6 @@ export function SidePanel({
       switched={switched}
       tabs={
         <>
-          {switched && !listing && tab !== SIDE_PANEL_TAB.PLAN ? (
-            <FoldingButton
-              label="Activity"
-              icon={<BackIcon />}
-              onClick={() => activity.onListed(true)}
-            />
-          ) : null}
           <PanelTabs
             panel={panel}
             holder={holder}
@@ -2225,7 +2267,11 @@ export function SidePanel({
             task={task}
             activity={
               switched
-                ? { slot: listing ? activitySlot : null, onListed: activity.onListed }
+                ? {
+                    slot: listing ? activitySlot : null,
+                    onListed: activity.onListed,
+                    onShown: activity.onShown,
+                  }
                 : undefined
             }
           />
@@ -2361,7 +2407,7 @@ function PanelFrame({
   actions: React.ReactNode;
   /** Drawn under the row while the panel fills the window and covers what draws it otherwise. */
   banner?: React.ReactNode;
-  /** Whether a phone's views of the task stand for the strip, which is then not drawn (`task-pane-switcher.tsx`). */
+  /** Whether a phone's header stands for the bar, which is then not drawn (`task-pane-switcher.tsx`). */
   switched?: boolean;
   children: React.ReactNode;
 }): React.JSX.Element {

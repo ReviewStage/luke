@@ -1,7 +1,8 @@
 import type { Experiment } from "@luke/settings";
-import { MessageSquareIcon } from "lucide-react";
+import { FlaskConicalIcon, MessageSquareIcon } from "lucide-react";
 import { FoldingButton } from "./folding-button.js";
 import { useOpenFeedback } from "./open-feedback.js";
+import { Tooltip } from "./tooltip.js";
 
 /**
  * experiment-marks.tsx -- what an experiment's page wears in its toolbar: the Experimental tag after its title, and Send feedback among its actions.
@@ -10,15 +11,30 @@ import { useOpenFeedback } from "./open-feedback.js";
  * experiment the same way, so the two are drawn here once. The tag reads as
  * a devtool's Beta label rather than a badge that asks for a look: small,
  * neutral, hairlined, and sitting on the title's baseline (`.experiment-tag`
- * in desktop.css). Send feedback is the window's labelled toolbar button,
+ * in desktop.css); a phone draws its glyph alone. Send feedback is the window's labelled toolbar button,
  * the same box, weight, and glyph as every other act in a page's toolbar,
  * its words folding away where a narrow toolbar folds its acts', and opens
  * the feedback dialog about the page's own experiment.
  */
 
-/** The quiet tag after an experiment's title. */
-export function ExperimentTag(): React.JSX.Element {
-  return <span className="experiment-tag">Experimental</span>;
+/** What the tag says, and what its glyph is called where it is drawn alone. */
+const EXPERIMENTAL = "Experimental";
+
+/**
+ * The quiet tag after an experiment's title; in a narrow room, a phone's,
+ * whose header leaves the title little room, the experiment's glyph alone,
+ * the flask Settings › Experimental is listed by, still called Experimental
+ * and saying so in its hint.
+ */
+export function ExperimentTag({ narrow = false }: { narrow?: boolean }): React.JSX.Element {
+  if (!narrow) return <span className="experiment-tag">{EXPERIMENTAL}</span>;
+  return (
+    <Tooltip label={EXPERIMENTAL}>
+      <span className="experiment-tag" data-glyph="" role="img" aria-label={EXPERIMENTAL}>
+        <FlaskConicalIcon aria-hidden="true" />
+      </span>
+    </Tooltip>
+  );
 }
 
 /** The toolbar's Send feedback: the feedback dialog, about `experiment`. */

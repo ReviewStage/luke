@@ -182,6 +182,8 @@ function Shell({
       steps: { back: [], forward: [] },
       onGoTo: ignore,
       onLeaveVersionHistory: ignore,
+      away: undefined,
+      onLeave: ignore,
     },
     sidebar,
     room,

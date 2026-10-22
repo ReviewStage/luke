@@ -533,6 +533,21 @@ function nearest(
 }
 
 /**
+ * The nearest step behind the one standing that stands on another page and
+ * can still be gone to, passing over the standing page's own steps, its
+ * narrow panes and its tabs among them; none where no such step stands.
+ */
+function awayFrom(trail: Trail, reachable: (place: Place) => boolean): number | undefined {
+  const standing = trail.entries[trail.at]?.state;
+  for (let at = trail.at - 1; at >= 0; at -= 1) {
+    const place = trail.entries[at]?.state;
+    if (place === undefined || !reachable(place)) continue;
+    if (standing === undefined || !samePage(standing, place)) return at;
+  }
+  return undefined;
+}
+
+/**
  * Whether two places are one draft's: one page, and for a new automation's
  * page the same suggestion, since one opened from another suggestion starts
  * another draft.
@@ -646,10 +661,24 @@ export interface ListBacks {
   readonly task: () => void;
 }
 
-/** The window's history, with the way a restore leaves a plan's version history. */
+/** The step a page's way out goes back to, the nearest behind it on another page, as Back's list names it. */
+export interface AwayStep {
+  readonly title: StepTitle | undefined;
+}
+
+/** The window's history, with the way a restore leaves a plan's version history and a page's way out. */
 export interface WindowHistory extends NavigationHistory {
   /** Leaves the version history for its task: a step back where the task is the step behind, else a visit. */
   onLeaveVersionHistory: () => void;
+  /** The step `onLeave` goes back to; none where no step behind stands on another page. */
+  away: AwayStep | undefined;
+  /**
+   * Leaves the page standing for the nearest step behind it on another page,
+   * passing over the page's own panes and tabs, as a phone's way back out of
+   * a task goes back to the list it was opened from and pushes nothing;
+   * where none stands, as on a task a link loaded, it opens the Tasks page.
+   */
+  onLeave: () => void;
 }
 
 /** The window's history with the narrow screens' ways back to their lists, which the root hands the screens. */
@@ -754,6 +783,10 @@ function useHistory(input: {
   upTo: (place: Place, stand: () => void) => void;
   /** A step back, answering whether one stood behind to take, though the leave ask may yet hold it. */
   stepBack: () => boolean;
+  /** The step behind on another page (`awayFrom`), where one stands. */
+  away: AwayStep | undefined;
+  /** Goes back to that step, answering whether one stood there to go to. */
+  stepAway: () => boolean;
 } {
   const { place, address, reachable, guard } = input;
   const history = windowHistory();
@@ -926,7 +959,15 @@ function useHistory(input: {
     backTo,
     upTo,
     stepBack: () => step(-1),
+    away: awayStep(trail, reachable),
+    stepAway: () => goTo(awayFrom(history.current(), latest.current.reachable)),
   };
+}
+
+/** The step behind on another page (`awayFrom`), as a way out names it. */
+function awayStep(trail: Trail, reachable: (place: Place) => boolean): AwayStep | undefined {
+  const at = awayFrom(trail, reachable);
+  return at === undefined ? undefined : { title: titleOf(trail.entries[at]?.state) };
 }
 
 /**
@@ -1279,7 +1320,7 @@ export function useWindowHistory(input: {
     if (panel.open && panel.tab !== undefined) sidePanel.onShow(taskId, panel.tab);
     else sidePanel.onSetOpen(panel.open);
   };
-  const { backTo, upTo, stepBack, ...history } = useHistory({
+  const { backTo, upTo, stepBack, stepAway, ...history } = useHistory({
     place,
     address: addressOf(input.link),
     reachable,
@@ -1347,6 +1388,9 @@ export function useWindowHistory(input: {
     onLeaveVersionHistory: () => {
       if (boundFor !== undefined && backTo({ kind: PLACE_KIND.TASK, taskId: boundFor })) return;
       tasks.history.onClose();
+    },
+    onLeave: () => {
+      if (!stepAway()) tasks.boardView.onOpen();
     },
     lists,
   });

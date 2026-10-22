@@ -706,6 +706,7 @@ function EditorToolbar({
   running,
   onRunNow,
   runs,
+  narrow,
 }: {
   automation: AutomationSummary | undefined;
   /** Whether it is a code review, an experiment still, whose page says so with the tag and Send feedback. */
@@ -720,6 +721,8 @@ function EditorToolbar({
   running: boolean;
   onRunNow: () => void;
   runs: RunsControl;
+  /** Whether the room is a phone's, whose tag is the experiment's glyph alone. */
+  narrow: boolean;
 }): React.JSX.Element {
   const runsLabel = runs.shown ? "Hide runs" : "Show runs";
   const status =
@@ -740,7 +743,7 @@ function EditorToolbar({
             <ChevronRightIcon aria-hidden="true" />
             <CurrentCrumb name={automation === undefined ? NEW_AUTOMATION : automation.name} />
           </nav>
-          {codeReview ? <ExperimentTag /> : null}
+          {codeReview ? <ExperimentTag narrow={narrow} /> : null}
         </div>
         <div className="desktop-toolbar-actions">
           {codeReview ? <SendFeedbackButton experiment={EXPERIMENT.CODE_REVIEW} /> : null}
@@ -1825,6 +1828,7 @@ export function AutomationEditor({
             screen: narrow ? runsScreen : undefined,
             onPress: toggleRuns,
           }}
+          narrow={narrow}
         />
         <div ref={editorLayout} className="automation-editor-layout">
           <DetailPage frame={PAGE_FRAME.TOOLBAR} label="Automation">

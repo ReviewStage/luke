@@ -75,6 +75,7 @@ import { type TaskInboxControl, useTaskInbox } from "../tasks/use-task-inbox.js"
 import { type TaskLooks, useReadMarks } from "../tasks/use-task-looks.js";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
 import { useCallingAgent } from "../use-voice-view.js";
+import type { MenuAction } from "./action-menu.js";
 import { useAgentCallDoors, useAgentDraftDoors, useAgentTerminalDoors } from "./agent-actions.js";
 import { TaskChatTab } from "./desktop-chat.js";
 import { DesktopWelcome } from "./desktop-welcome.js";
@@ -82,6 +83,7 @@ import { useTaskInboxShow } from "./folded-groups.js";
 import { AgentPane, MainTabStrip, mainTabLabel, TAB_SKELETON_WIDTH } from "./main-tabs.js";
 import {
   COLUMN,
+  type ShownTab,
   SIDE_PANEL_HOLDER,
   SidePanel,
   showPullRequest,
@@ -94,7 +96,16 @@ import { useStrandedTaskBanner } from "./stranded-task-banner.js";
 import { useTabViews } from "./strip-tabs.js";
 import { TaskActions } from "./task-actions.js";
 import { taskCardOf } from "./task-card.js";
-import { TASK_PANE, type TaskPane, TaskPaneSwitcher, taskPaneOf } from "./task-pane-switcher.js";
+import {
+  ACTIVITY_BACK,
+  TASK_PANE,
+  TASKS_BACK,
+  TaskHead,
+  type TaskHeadBack,
+  type TaskPane,
+  taskPaneItems,
+  taskPaneOf,
+} from "./task-pane-switcher.js";
 import {
   SUMMARY_MODE,
   SummaryButton,
@@ -436,6 +447,19 @@ function TaskInboxTab({
 }
 
 /**
+ * What the tab a phone shows offers on what it shows, as its header's ⋯
+ * offers it between the task's views and the task's own actions: each item
+ * says under it what it acts on, the tab, so the tab's Copy link is told
+ * from the task's beneath it.
+ */
+function shownTabGroups(shown: ShownTab | undefined): MenuAction[][] {
+  if (shown === undefined) return [];
+  return shown
+    .groups()
+    .map((group) => group.map((item) => ({ ...item, detail: item.detail ?? shown.label })));
+}
+
+/**
  * The open task's region: its column, or the state standing in its place.
  * While the task is read, its strip holds one tab-shaped skeleton where the
  * plan's tab will stand, so the row does not move when the task is drawn,
@@ -449,14 +473,18 @@ function PlanDocument({
   notice,
   summary,
   room,
+  away,
 }: {
   tasks: TasksControl;
   looks: TaskLooks;
   notice: React.ReactNode;
   summary: SummaryPin;
   room: ShellRoom;
+  away: TaskHeadBack;
 }): React.JSX.Element {
   const { region } = tasks;
+  // The tab a phone's panel shows past the plan, which its header is named by (`side-panel.tsx`'s `ShownTab`).
+  const [shownTab, setShownTab] = useState<ShownTab | undefined>(undefined);
   // A phone's Activity lists the panel's tabs until one is chosen, from it or by anything else, such as
   // an arrival the panel shows, on the task it was asked on alone (`task-pane-switcher.tsx`).
   // Asked over a shut panel, it holds whatever tab the panel opens on, which a shut panel with every tab closed chooses as it opens.
@@ -914,6 +942,7 @@ function PlanDocument({
         sectionLinks={sectionLinks}
         standing={standing}
         underTitle={underTitle}
+        titleActions={room !== SHELL_ROOM.NARROW}
       />
     </section>
   );
@@ -933,7 +962,7 @@ function PlanDocument({
       }}
     />
   );
-  // A phone heads the task with its three views in place of the side panel's strip and toggle.
+  // A phone heads the task with one row in place of the side panel's bar and toggle: the way back, what is on screen, and one ⋯.
   const switched = room === SHELL_ROOM.NARROW;
   const activityListed =
     activityAsked !== undefined &&
@@ -961,6 +990,36 @@ function PlanDocument({
     else if (chosen === TASK_PANE.PLAN) sidePanel.onChoose(SIDE_PANEL_TAB.PLAN);
     else if (!sidePanel.open) sidePanel.onToggle();
   };
+  // A tab chosen from Activity heads the row by its name and leads back to the list; the task's own views name the task and lead out of it.
+  const onTab = pane === TASK_PANE.ACTIVITY && !activityListed ? shownTab : undefined;
+  const taskMenu = (
+    <TaskActions
+      tasks={tasks}
+      task={task}
+      button
+      onRename={rename.begin}
+      lead={
+        switched ? () => [taskPaneItems(pane, choosePane), ...shownTabGroups(onTab)] : undefined
+      }
+    />
+  );
+  const head = switched ? (
+    <TaskHead
+      back={onTab === undefined ? away : { label: ACTIVITY_BACK, onPress: () => onListed(true) }}
+      title={onTab?.label ?? task.name}
+      rename={
+        onTab === undefined
+          ? {
+              editing: rename.editing,
+              onEnd: (end) => {
+                void rename.end(end.value);
+              },
+            }
+          : undefined
+      }
+      actions={taskMenu}
+    />
+  ) : null;
   return (
     <LinkWorkspaceProvider value={workspace}>
       <PlanCommentsProvider value={comments}>
@@ -978,14 +1037,7 @@ function PlanDocument({
             >
               <TaskMentions value={mentions}>
                 <OpenHereProvider value={openHere}>
-                  {switched ? (
-                    <TaskPaneSwitcher
-                      pane={pane}
-                      agents={agents.agents?.length ?? 0}
-                      waiting={inbox.board.open.length}
-                      onChoose={choosePane}
-                    />
-                  ) : null}
+                  {head}
                   <div
                     ref={setArea}
                     className="desktop-task"
@@ -1055,8 +1107,8 @@ function PlanDocument({
                             openRequest={menuRequest}
                           />
                           <StartAgentButton control={agents} />
-                          {/* The toolbar's one ⋯ is the task's; a tab's own actions are its menu's. */}
-                          <TaskActions tasks={tasks} task={task} button onRename={rename.begin} />
+                          {/* The toolbar's one ⋯ is the task's; a tab's own actions are its menu's. A phone's is its header's. */}
+                          {switched ? null : taskMenu}
                         </Fragment>
                         <SummaryButton layout={summaryLayout} cardId={summaryCard} />
                       </Toolbar>
@@ -1148,7 +1200,11 @@ function PlanDocument({
                             </section>
                           ) : undefined
                         }
-                        activity={switched ? { listed: activityListed, onListed } : undefined}
+                        activity={
+                          switched
+                            ? { listed: activityListed, onListed, onShown: setShownTab }
+                            : undefined
+                        }
                       />
                     ) : null}
                     {stranded.dialog}
@@ -1176,6 +1232,7 @@ export const DesktopTasks = memo(function DesktopTasks({
   notice,
   summary,
   room = SHELL_ROOM.WIDE,
+  away,
 }: {
   tasks: TasksControl;
   /** The open plan's sections changed since the developer last looked, held by the shell across the plan's version history. */
@@ -1184,8 +1241,10 @@ export const DesktopTasks = memo(function DesktopTasks({
   notice?: React.ReactNode;
   /** Whether the task's summary stands pinned beside its column where it fits, rather than collapsed to its rail, and whether it fits, held by the shell, whose panes glide as either turns. */
   summary: SummaryPin;
-  /** The room the panel's stage gives; narrow, a task is headed by its three views (`task-pane-switcher.tsx`). */
+  /** The room the panel's stage gives; narrow, a task is headed by one row of its own (`task-pane-switcher.tsx`). */
   room?: ShellRoom;
+  /** A phone's way back out of the task, to the page it was opened from (`WindowHistory`'s `onLeave`); the Tasks page where none is handed. */
+  away?: TaskHeadBack | undefined;
 }): React.JSX.Element {
   // The second call's question stands over either page: a Talk press on a
   // task's page asks it, and so does a task started from the New task dialog.
@@ -1201,7 +1260,14 @@ export const DesktopTasks = memo(function DesktopTasks({
           // so its tab stands on this task though Luke never showed it.
           onOpen={(skill) => tasks.sidePanel.onOpenFile({ path: skill.path })}
         >
-          <PlanDocument tasks={tasks} looks={looks} notice={notice} summary={summary} room={room} />
+          <PlanDocument
+            tasks={tasks}
+            looks={looks}
+            notice={notice}
+            summary={summary}
+            room={room}
+            away={away ?? { label: TASKS_BACK, onPress: tasks.boardView.onOpen }}
+          />
           {secondCall}
         </SkillFiles>
       );

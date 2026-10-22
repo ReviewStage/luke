@@ -36,7 +36,7 @@ import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { sideBundles } from "../bundle-loader.js";
-import { SHELL_ROOM } from "../shell-room.js";
+import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { ChatComposer, type ChatComposerMentions } from "../tasks/chat-composer.js";
 import {
   type FixtureChat,
@@ -110,6 +110,7 @@ function mount(
     Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND }),
   opened: ReadLink[] | undefined = undefined,
   control: Partial<TasksControl> = {},
+  room: ShellRoom = SHELL_ROOM.WIDE,
 ): HTMLElement {
   function Page() {
     const [place, setPlace] = useState<ChatPlace>(FOR_YOU);
@@ -123,7 +124,7 @@ function mount(
       return Promise.resolve("refused" in landed ? landed.refused : undefined);
     };
     return createElement(DesktopChat, {
-      room: SHELL_ROOM.WIDE,
+      room,
       accountName: "Dean Stratakos",
       tasks: tasksControl({
         workspace,
@@ -1429,6 +1430,15 @@ test("the rail's bar is a page's toolbar: Chat's title and its Experimental tag,
     [],
     "nothing waits unread",
   );
+});
+
+test("on a phone the rail's Experimental tag is the experiment's glyph alone, still called Experimental, so Chat's title keeps its room", () => {
+  const page = mount(undefined, undefined, undefined, undefined, {}, SHELL_ROOM.NARROW);
+  const tag = page.querySelector(".chat-rail-bar .experiment-tag");
+  assert.equal(tag?.getAttribute("role"), "img");
+  assert.equal(tag?.getAttribute("aria-label"), "Experimental");
+  assert.equal(tag?.textContent, "", "no words beside the title");
+  assert.equal(page.querySelector(".chat-rail-bar h1")?.textContent, "Chat");
 });
 
 test("a For you row names a task's channel by its glyph and name, and a press on it opens the channel", () => {

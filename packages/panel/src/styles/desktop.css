@@ -4153,6 +4153,20 @@ ul.actor-stack {
   letter-spacing: 0.01em;
 }
 
+/* A phone's tag is the experiment's glyph alone, in the same muted voice,
+   centred on the title, since a glyph has no baseline to sit on. */
+.experiment-tag[data-glyph] {
+  display: inline-flex;
+  align-self: center;
+  padding: 0;
+  border: 0;
+}
+
+.experiment-tag[data-glyph] > svg {
+  width: var(--luke-control-icon);
+  height: var(--luke-control-icon);
+}
+
 /* Automations ---------------------------------------------------------------- */
 
 /* A window-wide place beside the sidebar, as the Inbox is: its toolbar over
@@ -6706,44 +6720,34 @@ ul.actor-stack {
   margin-left: auto;
 }
 
-/* A phone's task is headed by its three views (`task-pane-switcher.tsx`):
-   a row of its own clear of the title bar's buttons at its left, the bar
-   taking the rest, each view an even share. The title bar's buttons stand
-   in that row, so the column's bar and the panel's under it start and end
-   at the column's own inset; and the panel draws no strip, its tabs listed
-   by the Activity view in its place. */
-.task-pane-switcher {
+/* A phone's task is headed by one row of its own (`task-pane-switcher.tsx`),
+   a phone's standard header: the way back at its start, the title of what is
+   on screen taking the rest and truncating, and one ⋯ at its end. It stands
+   in the title bar's buttons' place, which a phone's task does not draw, so
+   it starts at the column's inset as the way back of a Chat place does. The
+   way back gives up its words before the title does, never more than a share
+   of the row. The column's bar under it starts and ends at the column's own
+   inset, and the side panel draws no bar at all, the row standing for it. */
+.desktop-shell[data-room="narrow"] .desktop-main .desktop-toolbar.task-head {
+  padding-right: var(--column-inset);
+  padding-left: var(--column-inset);
+}
+
+.task-head-back {
   display: flex;
-  flex: 0 0 auto;
-  align-items: center;
-  min-height: var(--desktop-bar-height);
-  padding: var(--luke-space-8) var(--column-inset) var(--luke-space-8)
-    var(--sidebar-toggle-clearance);
-  border-bottom: 1px solid var(--luke-color-border);
+  min-width: 0;
+  max-width: 40%;
+  flex: 0 1 auto;
 }
 
-.task-pane-switcher .luke-choice-bar[data-look="segmented"] {
-  width: auto;
-  flex: 1 1 auto;
-  flex-wrap: nowrap;
-}
-
-.task-pane-switcher .luke-choice-bar-option {
-  flex: 1 1 0;
-  justify-content: center;
-}
-
-.desktop-shell[data-room="narrow"]
-  .task-pane-switcher
-  ~ .desktop-task
-  :is(.desktop-task-main .desktop-toolbar, .side-panel-bar) {
+.desktop-shell[data-room="narrow"] .task-head ~ .desktop-task .desktop-task-main .desktop-toolbar {
   --bar-start: var(--column-inset);
   --bar-end: var(--column-inset);
   padding-right: var(--bar-end);
   padding-left: var(--bar-start);
 }
 
-.side-panel[data-pane-switch] .side-panel-tabs {
+.side-panel[data-pane-switch] > .side-panel-bar {
   display: none;
 }
 

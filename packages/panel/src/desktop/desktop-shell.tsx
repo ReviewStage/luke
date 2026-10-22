@@ -69,6 +69,7 @@ import { PaneGlide } from "./pane-motion.js";
 import { SidePanelToggle } from "./side-panel.js";
 import { SIDEBAR_OVERLAY, type SidebarCollapse, sidebarInSight } from "./sidebar-collapse.js";
 import { taskCardOf } from "./task-card.js";
+import { awayBack } from "./task-pane-switcher.js";
 import { useSummaryPin } from "./task-summary.js";
 import { useWindowTitle } from "./window-title.js";
 
@@ -224,7 +225,14 @@ function VersionHistoryLoading({
  * Escape pressed in that frame closes Automations as the list would rather
  * than falling through to the task behind it.
  */
-function AutomationsLoading({ onExit }: { onExit: () => void }): React.JSX.Element {
+function AutomationsLoading({
+  onExit,
+  narrow,
+}: {
+  onExit: () => void;
+  /** Whether the room is a phone's, whose tag is the experiment's glyph alone. */
+  narrow: boolean;
+}): React.JSX.Element {
   useAppCommand(APP_COMMAND.EXIT_AUTOMATIONS, onExit);
   return (
     <CollectionPage
@@ -234,7 +242,7 @@ function AutomationsLoading({ onExit }: { onExit: () => void }): React.JSX.Eleme
         <header className="desktop-toolbar">
           <div className="desktop-toolbar-heading">
             <h1 className="desktop-toolbar-title">Automations</h1>
-            <ExperimentTag />
+            <ExperimentTag narrow={narrow} />
           </div>
         </header>
       }
@@ -665,6 +673,10 @@ export function DesktopShell({
   const taskDrawn = planToggle && tasks.region.kind === DOCUMENT_REGION.READY;
   const calling = useCallingAgent();
   const callShown = taskDrawn && callTabShown(tasks, calling);
+  // A phone's task leads its own row with the way back to the page it was opened from, named for it (`task-pane-switcher.tsx`).
+  const awayLabel = awayBack(history.away, history.onLeave).label;
+  const { onLeave } = history;
+  const away = useMemo(() => ({ label: awayLabel, onPress: onLeave }), [awayLabel, onLeave]);
   if (gated) {
     const macAppLink = appPlatform().macAppLink?.();
     return (
@@ -787,7 +799,7 @@ export function DesktopShell({
   const automationsOpen = tasks.automationsView.open;
   const chatOpen = tasks.chatView.open && chatOn;
   const boardOpen = tasks.boardView.open;
-  // A phone's task is headed by its three views, which stand for the panel's toggle (`task-pane-switcher.tsx`).
+  // A phone's task is headed by a row of its own, whose ⋯ stands for the panel's toggle (`task-pane-switcher.tsx`).
   const panelToggle =
     (planToggle && room !== SHELL_ROOM.NARROW) ||
     pageAgent !== undefined ||
@@ -889,7 +901,14 @@ export function DesktopShell({
                 at={automationsPlaceKey(tasks.automationsView.place)}
                 active={tasks.shown}
               >
-                <Suspense fallback={<AutomationsLoading onExit={tasks.automationsView.onClose} />}>
+                <Suspense
+                  fallback={
+                    <AutomationsLoading
+                      onExit={tasks.automationsView.onClose}
+                      narrow={room === SHELL_ROOM.NARROW}
+                    />
+                  }
+                >
                   <AutomationsPage tasks={tasks} room={room} />
                 </Suspense>
               </PageFind>
@@ -900,6 +919,7 @@ export function DesktopShell({
                 notice={noticeInColumn ? NOTICE_STRIP : undefined}
                 summary={summary}
                 room={room}
+                away={away}
               />
             )}
           </ChipCards>
@@ -924,11 +944,14 @@ export function DesktopShell({
       ) : null}
       {/* Note that they follow the drag strips they cover, because a later drag region wins.
           Folded, the sidebar's offline pill stands here, as its New task does. */}
-      <div className="title-bar-controls" onPointerDown={keepOverlay}>
-        <SidebarToggle sidebar={sidebar} />
-        {sidebar.collapsed ? <TitleBarNewTask tasks={tasks} /> : null}
-        {sidebar.collapsed ? <OfflineMark /> : null}
-      </div>
+      {/* A phone's task heads itself with one row of its own, its way back where these stood (`task-pane-switcher.tsx`). */}
+      {room === SHELL_ROOM.NARROW && taskDrawn ? null : (
+        <div className="title-bar-controls" onPointerDown={keepOverlay}>
+          <SidebarToggle sidebar={sidebar} />
+          {sidebar.collapsed ? <TitleBarNewTask tasks={tasks} /> : null}
+          {sidebar.collapsed ? <OfflineMark /> : null}
+        </div>
+      )}
       {panelToggle ? (
         <div className="title-bar-controls" data-edge="end" inert={drawerOver}>
           <SidePanelToggle
