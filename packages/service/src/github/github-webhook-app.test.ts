@@ -139,8 +139,6 @@ function relayRepository(pull: PullRequestFixture, ref: string) {
 /** The environment a deployment holds, with the webhook's secret or without it. */
 function environment(secret: string | undefined): HostedEnvironmentValues {
   return {
-    openAiKey: undefined,
-    anthropicKey: undefined,
     posthogPersonalApiKey: undefined,
     posthogProjectId: undefined,
     posthogApiHost: undefined,

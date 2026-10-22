@@ -106,8 +106,6 @@ function openAi() {
 }
 
 const NO_KEYS: HostedEnvironmentValues = {
-  openAiKey: undefined,
-  anthropicKey: undefined,
   posthogPersonalApiKey: undefined,
   posthogProjectId: undefined,
   posthogApiHost: undefined,

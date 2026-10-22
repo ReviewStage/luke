@@ -83,8 +83,6 @@ function reliability(overrides: Partial<AdminReliability> = {}): AdminReliabilit
     systemHealth: {
       database: { reachable: true, latencyMs: 42 },
       integrations: adminIntegrations({
-        hostedTier: true,
-        codingAgents: true,
         githubApp: false,
         githubSignIn: true,
         googleSignIn: false,
@@ -245,7 +243,7 @@ test("system health reads the database and every provider's configuration in wor
 
   expect(cardOf(page, "Database")).toBe("DatabaseReachableprobe round-trip 42 ms");
   expect(states).toContain("GitHub App (installations and webhooks): Not configured");
-  expect(states).toContain("Coding agents on Luke's key (Anthropic): Configured");
+  expect(states).toContain("Encryption of accounts' own API keys: Configured");
   expect(states).toContain("Linear (Vercel Connect): Configured");
 });
 

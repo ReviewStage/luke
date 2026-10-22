@@ -98,8 +98,10 @@ repository.
   the service sets it at the sandbox's network firewall, so it never enters
   the sandbox. Each coding agent gets a sandbox of its own and pushes through
   the same App.
-- **Models.** Voice and Luke's reasoning run on OpenAI, on Luke's key. Coding
-  agents run on Anthropic or OpenAI, depending on the model you pick. Your
+- **Models.** Every model call runs on your own keys, added in Settings ›
+  Agents; Luke pays for none. Voice and dictation run on OpenAI, on your OpenAI
+  API key, and are off without one. Coding agents run on Anthropic or OpenAI,
+  depending on the model you pick, on your subscription or API key. Your
   voice streams to OpenAI and does not pass through Luke's service.
 - **Commands on your Mac.** Luke and coding agents can run shell commands on
   your Mac, in your login shell and without asking, and what they print goes
