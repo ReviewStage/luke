@@ -15,6 +15,7 @@ import {
   IconButton,
   ScrollArea,
   SearchField,
+  Swatch,
   TextField,
 } from "@luke/ui";
 import {
@@ -227,17 +228,7 @@ function GridChoice({
   onPress: () => void;
 }): React.JSX.Element {
   return (
-    <button
-      type="button"
-      className="section-icon-choice"
-      aria-label={label}
-      aria-pressed={pressed}
-      data-label={label}
-      tabIndex={stop ? 0 : -1}
-      onClick={onPress}
-    >
-      {face}
-    </button>
+    <IconButton icon={face} label={label} pressed={pressed} tabbable={stop} onClick={onPress} />
   );
 }
 
@@ -346,13 +337,11 @@ function ColorChoices({
   onColor: (color: TaskSectionIconColor | undefined) => void;
 }): React.JSX.Element {
   const swatch = (label: string, value: TaskSectionIconColor | undefined) => (
-    <button
+    <Swatch
       key={label}
-      type="button"
-      className="section-icon-color"
-      aria-label={label}
-      aria-pressed={color === value}
-      data-icon-color={value}
+      label={label}
+      color={value === undefined ? undefined : `var(--file-icon-${value})`}
+      pressed={color === value}
       onClick={() => onColor(value)}
     />
   );
@@ -397,7 +386,7 @@ function standTabStop(event: React.FocusEvent<HTMLFieldSetElement>): void {
 /** The name of the choice a pointer or the keyboard rests on, read off the button under it. */
 function restingLabel(event: React.SyntheticEvent): string | undefined {
   if (!(event.target instanceof Element)) return undefined;
-  return event.target.closest<HTMLElement>("[data-label]")?.dataset.label;
+  return event.target.closest("button")?.getAttribute("aria-label") ?? undefined;
 }
 
 /**

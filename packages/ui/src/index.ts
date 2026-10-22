@@ -54,6 +54,7 @@ export * from "./components/settings-section/settings-section.js";
 export * from "./components/skeleton/skeleton.js";
 export * from "./components/spinner/spinner.js";
 export * from "./components/split-button/split-button.js";
+export * from "./components/swatch/swatch.js";
 export * from "./components/switch/switch.js";
 export * from "./components/text/text.js";
 export * from "./components/text-button/text-button.js";

@@ -1368,32 +1368,6 @@ ul.actor-stack {
   gap: var(--luke-space-6);
 }
 
-/* A swatch is filled with the color it names, which its `data-icon-color` sets. */
-.section-icon-color {
-  width: 18px;
-  height: 18px;
-  padding: 0;
-  border: 1px solid var(--luke-color-border);
-  border-radius: 50%;
-  background: currentColor;
-}
-
-.section-icon-color:not([data-icon-color]) {
-  background: none;
-  background-image: linear-gradient(
-    135deg,
-    transparent calc(50% - 0.75px),
-    var(--luke-color-text-subtle) calc(50% - 0.75px),
-    var(--luke-color-text-subtle) calc(50% + 0.75px),
-    transparent calc(50% + 0.75px)
-  );
-}
-
-.section-icon-color[aria-pressed="true"] {
-  outline: 2px solid var(--luke-color-focus-ring);
-  outline-offset: 1px;
-}
-
 /* The grid's room, which its `ScrollArea` (`@luke/ui`) scrolls. */
 .section-icon-scroll {
   display: flex;
@@ -1409,12 +1383,6 @@ ul.actor-stack {
 
 .section-emoji-group + .section-emoji-group {
   margin-top: var(--luke-space-8);
-}
-
-/* An emoji is drawn in the text's own ink, nearly opaque, since Chromium
-   lays the ink's alpha over a color glyph too. */
-.section-emoji-group .section-icon-choice {
-  color: var(--luke-color-text);
 }
 
 .section-emoji-group-name {
@@ -1438,40 +1406,6 @@ ul.actor-stack {
   font-size: var(--luke-type-caption-size);
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.section-icon-choice {
-  display: grid;
-  width: 28px;
-  height: 28px;
-  flex: none;
-  place-items: center;
-  padding: 0;
-  border: 1px solid transparent;
-  border-radius: var(--luke-control-radius);
-  background: none;
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-control-icon);
-  line-height: 1;
-  transition:
-    background-color var(--duration-hover) ease,
-    border-color var(--duration-hover) ease;
-}
-
-.section-icon-choice svg {
-  width: var(--luke-control-icon);
-  height: var(--luke-control-icon);
-}
-
-.section-icon-choice:hover {
-  background: var(--luke-color-fill-hover);
-  color: var(--luke-color-text);
-}
-
-.section-icon-choice[aria-pressed="true"] {
-  border-color: var(--luke-color-focus-ring);
-  background: var(--luke-color-fill-hover);
-  color: var(--luke-color-text);
 }
 
 /* A pinned repository says so after its name, quietly, since the pin is
