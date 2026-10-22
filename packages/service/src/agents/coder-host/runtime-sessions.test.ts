@@ -470,7 +470,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
     );
 
     it.effect(
-      "a message to an agent Luke's key paid for is refused by name whatever its starter keeps now, and so is one to an agent on eve whose starter keeps no API key for its model, from before payers were recorded or on a key since removed; nothing reaches eve and no payer moves",
+      "a message to an agent Luke's key paid for is refused by name whatever its starter keeps now, and so is one to an agent on eve whose starter keeps no API key for its model, from before payers were recorded or on a key since removed, and one on Claude Code whose API key was since removed; nothing reaches eve and no payer moves",
       () =>
         Effect.gen(function* () {
           const { owner, taskId } = yield* openTeam;
@@ -479,7 +479,12 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
             organizationId: yield* openWorkspace(bare),
             name: "Invitations",
           });
-          const onEveAs = (starter: string, onTask: string, payer: CodingAgentPayer | undefined) =>
+          const onEveAs = (
+            starter: string,
+            onTask: string,
+            payer: CodingAgentPayer | undefined,
+            runtime: "eve" | "claude_code" = "eve",
+          ) =>
             Effect.map(
               createCodingAgent(starter, {
                 taskId: onTask,
@@ -489,7 +494,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
                 planSnapshot: "# Invitations\n",
                 prompt: null,
                 repository: null,
-                runtime: "eve",
+                runtime,
                 payer,
               }),
               (started) => Option.getOrThrow(started).agent,
@@ -497,6 +502,12 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
           const lukes = yield* onEveAs(owner, taskId, CODING_AGENT_PAYER.LUKE);
           const unrecorded = yield* onEveAs(bare, bareTask.id, undefined);
           const keyRemoved = yield* onEveAs(bare, bareTask.id, CODING_AGENT_PAYER.API_KEY);
+          const nativeKeyRemoved = yield* onEveAs(
+            bare,
+            bareTask.id,
+            CODING_AGENT_PAYER.API_KEY,
+            "claude_code",
+          );
           const { eve } = runtimes();
           const writer = storeWriter({ tools: CODER_TOOL_SET });
           const send = (starter: string, agent: CodingAgent) =>
@@ -512,6 +523,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
             ["Luke's key paid, an API key saved since", owner, lukes],
             ["no payer recorded, no API key", bare, unrecorded],
             ["its API key removed", bare, keyRemoved],
+            ["on Claude Code, its API key removed", bare, nativeKeyRemoved],
           ] as const) {
             const sent = yield* send(starter, agent);
             assert.ok(Result.isFailure(sent), name);
@@ -520,7 +532,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
             assert.deepEqual(
               [routing.runtime, routing.payer],
               [
-                "eve",
+                agent === nativeKeyRemoved ? "claude_code" : "eve",
                 agent === unrecorded
                   ? null
                   : agent === lukes
@@ -1359,7 +1371,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
     );
 
     it.effect(
-      "where the Claude plan is offered, Settings' choice alone decides: Subscription runs every Claude model on Claude Code, a fast version with its own fast mode, and API key runs on eve on the API key; with no API key saved and the plan not selected, or nothing connected, the Start is refused, never run on Luke's key",
+      "where the Claude plan is offered, Settings' choice alone decides: Subscription runs every Claude model on Claude Code, a fast version with its own fast mode, and API key runs on Claude Code on the API key, a fast version included; with no API key saved and the plan not selected, or nothing connected, the Start is refused, never run on Luke's key",
       () =>
         Effect.gen(function* () {
           const cases: readonly {
@@ -1392,7 +1404,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
               forAgents: false,
               apiKey: true,
               model: "anthropic/claude-opus-5.5",
-              recorded: ["eve", CODING_AGENT_PAYER.API_KEY],
+              recorded: ["claude_code", CODING_AGENT_PAYER.API_KEY],
             },
             {
               name: "API key, a fast version",
@@ -1400,7 +1412,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
               forAgents: false,
               apiKey: true,
               model: "anthropic/claude-opus-5.5-fast",
-              recorded: ["eve", CODING_AGENT_PAYER.API_KEY],
+              recorded: ["claude_code", CODING_AGENT_PAYER.API_KEY],
             },
             {
               name: "the plan off, no API key",
@@ -1416,7 +1428,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
               forAgents: true,
               apiKey: true,
               model: "anthropic/claude-opus-5.5",
-              recorded: ["eve", CODING_AGENT_PAYER.API_KEY],
+              recorded: ["claude_code", CODING_AGENT_PAYER.API_KEY],
             },
             {
               name: "no plan connected, a fast version",

@@ -17,7 +17,9 @@
  *
  * Settings' choice for that harness decides: the plan where its row's
  * `forAgents` is on (Subscription) and the plan is offered, the account's
- * own API key for the model's provider, on eve, otherwise. Luke's own key
+ * own API key for the model's provider otherwise: on Claude Code, as its
+ * documented `ANTHROPIC_API_KEY`, for a Claude model where this function
+ * reaches a harness, and on eve for anything else. Luke's own key
  * pays for no coding agent: an account with neither is refused by name
  * (`AgentCredentialMissing`, which names the provider), and connects one in
  * Settings › Agents. A brand-new account starts no coding agent until it
@@ -69,6 +71,12 @@ const ON_API_KEY: AgentRuntimeChoice = {
 const ON_CLAUDE_CODE: AgentRuntimeChoice = {
   runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
   payer: CODING_AGENT_PAYER.CLAUDE_SUBSCRIPTION,
+};
+
+/** Claude Code on the account's own Anthropic API key, the CLI's documented `ANTHROPIC_API_KEY`. */
+const ON_CLAUDE_CODE_API_KEY: AgentRuntimeChoice = {
+  runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
+  payer: CODING_AGENT_PAYER.API_KEY,
 };
 
 const ON_CODEX: AgentRuntimeChoice = {
@@ -156,7 +164,8 @@ const providerRuntimeChoice = Effect.fnUntraced(function* (
   const ring = Option.getOrUndefined(environment)?.providerKeyEncryptionKeys;
   const plan = harness ? yield* keptPlan(userId, provider, ring) : undefined;
   if (plan?.forAgents === true) return onPlanOf(provider);
-  return yield* onApiKey(userId, provider);
+  const onKey = yield* onApiKey(userId, provider);
+  return harness && provider === MODEL_PROVIDER.ANTHROPIC ? ON_CLAUDE_CODE_API_KEY : onKey;
 });
 
 /** The runtime and payer of a new agent of the account's on the model given, as above. */
@@ -174,13 +183,15 @@ export const agentRuntimeChoice = /* @__PURE__ */ Effect.fnUntraced(function* (
  * another payer, and any other agent on eve (its own API key, or from
  * before payers were recorded) needs its starter's API key for its model's
  * provider, which its steps run on (`account-keys.ts`). An agent on a native
- * harness is its plan's, which refuses by its own words.
+ * harness on its starter's API key needs that key as one on eve does; one
+ * on its plan is the plan's, which refuses by its own words.
  */
 export const messageCredentialMissing = /* @__PURE__ */ Effect.fnUntraced(function* (
   agent: { readonly userId: string; readonly model: string },
   routing: { readonly runtime: ConversationRuntime; readonly payer: CodingAgentPayer | null },
 ): Effect.fn.Return<ModelProvider | undefined, StoreFailure, DatabaseServices> {
-  if (routing.runtime !== CONVERSATION_RUNTIME.EVE) return undefined;
+  const onKey = routing.payer === CODING_AGENT_PAYER.API_KEY;
+  if (routing.runtime !== CONVERSATION_RUNTIME.EVE && !onKey) return undefined;
   const provider = yield* providerOfModel(agent.model);
   if (routing.payer === CODING_AGENT_PAYER.LUKE) return provider;
   return (yield* keepsApiKey(agent.userId, provider)) ? undefined : provider;

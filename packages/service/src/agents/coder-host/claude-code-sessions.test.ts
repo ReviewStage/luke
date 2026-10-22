@@ -22,12 +22,17 @@ import {
   updateCodingAgentChoice,
 } from "@luke/database/models/coding-agent-store";
 import { parseKeyRing, sealProviderKey } from "@luke/database/models/provider-key-seal";
-import { saveProviderKey, setPlanStatus } from "@luke/database/models/provider-key-store";
+import {
+  removeProviderKey,
+  saveProviderKey,
+  setPlanStatus,
+} from "@luke/database/models/provider-key-store";
 import { holdSandbox } from "@luke/database/models/sandbox-terminal-lease";
 import { storeWriter } from "@luke/database/models/writer";
 import { user } from "@luke/database/schemas/auth";
+import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
 import { getTestDB, startTask } from "@luke/database/testing";
-import { CODING_AGENT_FAILURE } from "@luke/features/coding-agent-wire";
+import { CODING_AGENT_FAILURE, CODING_AGENT_PAYER } from "@luke/features/coding-agent-wire";
 import {
   PROVIDER_KEY_KIND,
   PROVIDER_KEY_PROVIDER,
@@ -102,6 +107,7 @@ const MCP_URL = "https://luke.test/api/agents/mcp";
 const INSTRUCTIONS = "You are a Luke coding agent.";
 const BUNDLE = new TextEncoder().encode("// the runner, bundled\nconsole.log('runner');\n");
 const PLAN_TOKEN = "sk-ant-oat01-fixture-plan-token";
+const API_KEY = "sk-ant-api03-fixture-account-key";
 const RING = `1:${Buffer.alloc(32, 3).toString("base64")}`;
 const RELAY = { owner: "Acme", name: "Relay", defaultBranch: "trunk" } as const;
 const RELAY_FULL_NAME = `${RELAY.owner}/${RELAY.name}`;
@@ -474,6 +480,88 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
           planRefusal: PLAN_REFUSAL.SIGNED_OUT,
         });
         assert.deepEqual(refused.commands, []);
+      }),
+  );
+
+  it.effect(
+    "an agent its starter's API key pays for launches on ANTHROPIC_API_KEY, never the plan, takes messages whatever the plan says, and is refused once the key is gone",
+    () =>
+      Effect.gen(function* () {
+        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+        const userId = `user-${randomUUID()}`;
+        yield* Effect.flatMap(Database, (db) =>
+          db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` }),
+        );
+        const task = yield* startTask(userId, { name: "Teammate invitations" });
+        const started = yield* createCodingAgent(userId, {
+          taskId: task.id,
+          idempotencyKey: "start-key",
+          model: "anthropic/claude-opus-5.5",
+          effort: "high",
+          planSnapshot: "# Teammate invitations\n",
+          prompt: null,
+          repository: null,
+          runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
+          payer: CODING_AGENT_PAYER.API_KEY,
+        });
+        assert.ok(Option.isSome(started));
+        const agent = started.value.agent;
+        // The account keeps a plan too, refused: an agent on its key never asks it.
+        yield* savePlan(userId);
+        const now = yield* DateTime.nowAsDate;
+        yield* setPlanStatus(
+          userId,
+          PROVIDER_KEY_PROVIDER.ANTHROPIC,
+          PROVIDER_KEY_KIND.CLAUDE_SETUP_TOKEN,
+          PROVIDER_KEY_STATUS.INVALID,
+          undefined,
+          now,
+          now,
+        );
+        const ring = parseKeyRing(Redacted.make(RING));
+        assert.ok(Result.isSuccess(ring));
+        const owner = {
+          userId,
+          provider: PROVIDER_KEY_PROVIDER.ANTHROPIC,
+          kind: PROVIDER_KEY_KIND.API_KEY,
+        };
+        yield* saveProviderKey(
+          userId,
+          owner.provider,
+          owner.kind,
+          sealProviderKey(ring.success, owner, Redacted.make(API_KEY)),
+          "sk-ant-api…-key",
+          null,
+          new Date(0),
+        );
+
+        const api = runnerSandboxApi();
+        const sessions = yield* sessionsFor(userId, { next: 0 }).pipe(
+          Effect.provide(services(api)),
+        );
+        const opened = yield* sessions.open(message(agent, "Fix the invitations."));
+        assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+        const [command] = api.commands;
+        assert.ok(command !== undefined);
+        assert.equal(command.env[RUNNER_ENV.API_KEY], API_KEY);
+        assert.equal(command.env[RUNNER_ENV.CLAUDE_TOKEN], undefined);
+        const visible = JSON.stringify([command.args, command.stdin, api.sandboxes]);
+        assert.equal(visible.includes(API_KEY), false);
+
+        const sent = yield* sessions.send(opened.sessionId, message(agent, "Also the emails."));
+        assert.equal(sent.outcome, EVE_SEND_OUTCOME.ACCEPTED);
+
+        yield* removeProviderKey(
+          userId,
+          PROVIDER_KEY_PROVIDER.ANTHROPIC,
+          PROVIDER_KEY_KIND.API_KEY,
+        );
+        const gone = runnerSandboxApi();
+        const without = yield* sessionsFor(userId, { next: 0 }).pipe(
+          Effect.provide(services(gone)),
+        );
+        assert.equal((yield* without.open(message(agent, "Go."))).outcome, EVE_SEND_OUTCOME.FAILED);
+        assert.deepEqual(gone.commands, []);
       }),
   );
 

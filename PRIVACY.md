@@ -484,14 +484,15 @@ lost him, is deleted the same way, shortly after his conversation is removed.
 
 **A coding agent that runs on Claude Code.** For the accounts in the early
 test of Claude plans, a coding agent your Claude plan pays for runs on
-Anthropic's Claude Code, in that agent's own Vercel Sandbox, rather than on
+Anthropic's Claude Code, and so does a Claude coding agent your own Anthropic
+API key pays for, in that agent's own Vercel Sandbox, rather than on
 Luke's own agent. Its sandbox's disk holds the agent's checkout of the
 repository and Claude Code's own session files: its record of the session,
 which it picks up again from there when the agent is next messaged. Both stay
 on that disk between turns and in the snapshot Vercel keeps when the sandbox
 stops, and are deleted with the sandbox when the task is deleted, as above.
-Your plan's token is handed to Claude Code alone, in its process's
-environment: it is never written to that disk, a command Claude Code runs,
+Your plan's token, or your API key, is handed to Claude Code alone, in its
+process's environment: it is never written to that disk, a command Claude Code runs,
 or the conversation's record.
 
 **A coding agent that runs on Codex.** On the same terms, for the accounts in

@@ -28,12 +28,19 @@ import type { ServerNotification } from "./codex-protocol/index.js";
  * The environment the runner reads. The bearer authenticates it to Luke, its
  * events and its MCP server alike. The plan token is never read by the runner
  * itself: the CLI it launches inherits it, and the command sandbox denies it,
- * with the bearer, to every command the agent runs. Codex's token is never
+ * with the bearer, to every command the agent runs. An Anthropic API key
+ * stands in its place for an agent the account's key pays for. Codex's token is never
  * in it: app-server asks Luke for it through the runner's token command.
  */
 export const RUNNER_ENV = {
   BEARER: "LUKE_RUNNER_TOKEN",
   CLAUDE_TOKEN: "CLAUDE_CODE_OAUTH_TOKEN",
+  /**
+   * The account's Anthropic API key, in the plan token's place for an agent
+   * its key pays for: the CLI's documented variable
+   * (https://code.claude.com/docs/en/agent-sdk/quickstart), on the same terms.
+   */
+  API_KEY: "ANTHROPIC_API_KEY",
 } as const;
 
 /** The harness a launch runs, spelled as `conversations.runtime` spells it. */
