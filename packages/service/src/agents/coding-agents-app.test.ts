@@ -47,7 +47,10 @@ import {
   takeCodingAgentMentionedServers,
   updateCodingAgentBranch,
 } from "@luke/database/models/coding-agent-store";
-import { keepConversationPicture } from "@luke/database/models/conversation-pictures";
+import {
+  keepConversationPicture,
+  readConversationPicture,
+} from "@luke/database/models/conversation-pictures";
 import { childConversationId } from "@luke/database/models/ids";
 import { listMessagesPast, sentLineStands } from "@luke/database/models/message-reads";
 import { unreadOperatorNotices } from "@luke/database/models/operator-notices";
@@ -60,6 +63,7 @@ import { voiceWriter } from "@luke/database/models/voice-writer";
 import { ensurePersonalWorkspace } from "@luke/database/models/workspace-store";
 import { storeWriter } from "@luke/database/models/writer";
 import { agentPin } from "@luke/database/schemas";
+import { attachment } from "@luke/database/schemas/attachment";
 import { member, organization, user } from "@luke/database/schemas/auth";
 import { codingAgent } from "@luke/database/schemas/coding-agent";
 import { githubInstallation } from "@luke/database/schemas/github-installation";
@@ -121,6 +125,7 @@ import {
   chatAnswerSchema,
   chatNoticeAsksLine,
   chatNoticeReplyLine,
+  chatNoticeUnattachedLine,
   chatNoticeWords,
   chatWriteAnswerSchema,
   MEMBER_KIND,
@@ -220,6 +225,7 @@ import {
 import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
+import type { MessageReceivedPart } from "eve/client";
 import { afterEach, type TestContext, vi } from "vitest";
 import { requestUserId } from "../auth/bearer.js";
 import {
@@ -242,6 +248,7 @@ import {
 import { HostedEnvironment, type HostedEnvironmentValues } from "../environment.js";
 import { recordingProductAnalytics, SERVER_EVENT } from "../events/server-events.js";
 import { LINK_OUTCOME, linkInstallation } from "../github/github-installations.js";
+import { PULL_REQUEST_QUEUED_OPERATION } from "../github/pull-request-merging.js";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import { HOSTED_REFUSAL } from "../http/http-effect.js";
 import { inboxProcedures } from "../inbox/inbox-procedures.js";
@@ -279,6 +286,7 @@ import {
 } from "../testing/source-sandbox.js";
 import { agentPullRequestProcedures } from "./agent-pull-request-procedures.js";
 import { agentsProcedures } from "./agents-procedures.js";
+import { receivedMessage } from "./attached-files.js";
 import { BRAIN_HOST_TURN } from "./brain-host/bounds.js";
 import {
   type AgentSessions,
@@ -1987,6 +1995,10 @@ function graphqlAnswering(
   return (sent) => {
     if (new URL(sent.url).pathname !== "/graphql") return repository(sent);
     const { query, variables } = JSON.parse(sent.body);
+    // The published read's merge-queue ask rides with its REST reads on the App's token, as they do, and is no call the member made.
+    if (query.includes(PULL_REQUEST_QUEUED_OPERATION)) {
+      return Response.json({ data: { repository: { pullRequest: { mergeQueueEntry: null } } } });
+    }
     const call = { authorization: sent.headers.get("authorization"), query, variables };
     calls.push(call);
     return answer(call);
@@ -4402,6 +4414,66 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
   );
 
   it.effect(
+    "an image sent to an agent is kept once beside its conversation and handed to eve with a line naming its id, which reads back as the image and by which eve's receipt takes the line; a repeat under its key hands eve nothing, and the same image in a later message is named by the same row",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const { owner, agent, ask, target, writer, turnId } = yield* startedAgent(eve, {
+          running: true,
+        });
+        const shot = {
+          name: "flow.png",
+          mediaType: CODING_AGENT_ATTACHMENT_TYPE.PNG,
+          data: Buffer.from(SIZED_PNG).toString("base64"),
+        };
+        const body = { text: "Match this.", attachments: [shot], clientKey: randomUUID() };
+        const kept = Database.use((db) =>
+          db
+            .select({ id: attachment.id })
+            .from(attachment)
+            .where(eq(attachment.conversationId, target.conversationId)),
+        );
+
+        const sent = yield* ask(messageAs(owner, agent.id, body));
+        assert.equal(sent.status, HOSTED_HTTP_STATUS.ACCEPTED, JSON.stringify(sent.body));
+        const [row, ...more] = yield* kept;
+        assert.ok(row !== undefined && more.length === 0, "one picture is kept");
+        const handed = receiptOf(eve.sent.at(-1)?.message.message);
+        assert.deepEqual(
+          handed.map((part) => (part.type === "text" ? part.text : part.filename)),
+          ["Match this.", "flow.png", `Image flow.png is attachment ${row.id}`],
+        );
+        const picture = Option.getOrThrow(
+          yield* readConversationPicture(target.conversationId, row.id),
+        );
+        assert.equal(picture.contentType, CODING_AGENT_ATTACHMENT_TYPE.PNG);
+        assert.deepEqual(new Uint8Array(picture.bytes), SIZED_PNG);
+        // eve's receipt of the message, its image staged by name with no bytes, takes the line it was sent as.
+        const taken = yield* writer.takeAwaitingLine(target, {
+          text: receivedMessage({ message: "", parts: handed }).text,
+          turnId,
+        });
+        assert.ok(Result.isSuccess(taken));
+        assert.equal(taken.success.length, 1, "the receipt takes the one line awaiting it");
+
+        const sends = eve.sent.length;
+        assert.equal(
+          (yield* ask(messageAs(owner, agent.id, body))).status,
+          HOSTED_HTTP_STATUS.ACCEPTED,
+        );
+        assert.equal(eve.sent.length, sends, "a repeat reaches eve no second time");
+        yield* ask(
+          messageAs(owner, agent.id, { ...body, text: "Again.", clientKey: randomUUID() }),
+        );
+        assert.deepEqual(receiptOf(eve.sent.at(-1)?.message.message).at(-1), {
+          type: "text",
+          text: `Image flow.png is attachment ${row.id}`,
+        });
+        assert.deepEqual(yield* kept, [row]);
+      }),
+  );
+
+  it.effect(
     "over a browser's session cookie a Stop, an Archive, and the task's archive each cancel the turn under way as the deployment acting for the cookie's account",
     () =>
       Effect.gen(function* () {
@@ -5946,6 +6018,12 @@ const INBOX_READ = "/api/inbox/read";
 
 /** The first bytes of a PNG, as a screenshot's file starts. */
 const PNG = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13]);
+
+/** A PNG whose header states its size, 2 by 1, as a conversation keeps a picture. */
+const SIZED_PNG = Uint8Array.from([
+  ...PNG,
+  ...[0x49, 0x48, 0x44, 0x52, 0, 0, 0, 2, 0, 0, 0, 1, 8, 6, 0, 0, 0],
+]);
 
 it.layer(getTestDB())("the developer's inbox", (it) => {
   /** The owner's task with one agent started on it, its session claimed so a message reaches it, and the inbox as each side sees it. */
@@ -7722,6 +7800,103 @@ it.layer(getTestDB())("telling a chat message to the agents it addresses", (it) 
       }),
   );
 
+  /** The files of the line eve was handed last, by name, and the words of the notice row an agent's conversation holds. */
+  const steeredFiles = (eve: ReturnType<typeof fakeEve>) => {
+    const content = eve.sent.at(-1)?.message.message;
+    assert.ok(Array.isArray(content), "the line was handed over as parts");
+    return content.flatMap((part) => (part.type === "file" ? [part.filename] : []));
+  };
+
+  it.effect(
+    "a DM's picture steers the agent it tells with the picture itself, a file named by its attachment id that the line keeps, and the words name it by that id",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const chat = yield* openChat(eve);
+        const dm = Option.getOrThrow(
+          yield* findOrMakeDm(chat.owner, chat.workspace, chat.person.id, chat.second.member.id),
+        );
+        const attachmentId = randomUUID();
+        const sent = yield* postChat(
+          chat.telling,
+          {
+            authorMemberId: chat.person.id,
+            to: { channelId: dm.id },
+            blocks: [
+              { type: CHAT_BLOCK.MARKDOWN, text: "The new email." },
+              { type: CHAT_BLOCK.IMAGE, attachmentId, alt: "email.png" },
+            ],
+            clientKey: randomUUID(),
+          },
+          [{ id: attachmentId, contentType: CHAT_IMAGE_TYPE.PNG, bytes: PNG }],
+        ).pipe(Effect.provide(chat.github.layer));
+        assert.deepEqual(sent.receipt.told, [chat.links.second]);
+        assert.deepEqual(steeredFiles(eve), [`${attachmentId}.png`]);
+
+        const [notice] = yield* chat.rowsOf(chat.second.target);
+        assert.ok(notice !== undefined);
+        assert.deepEqual(
+          notice.message.parts.flatMap((part) =>
+            part.type === "file" ? [{ filename: part.filename, url: part.url }] : [],
+          ),
+          [
+            {
+              filename: `${attachmentId}.png`,
+              url: `data:${CHAT_IMAGE_TYPE.PNG};base64,${Buffer.from(PNG).toString("base64")}`,
+            },
+          ],
+        );
+        const [words] = notice.message.parts.flatMap((part) =>
+          part.type === "text" ? [part.text] : [],
+        );
+        assert.equal(
+          chatNoticeWords(words ?? ""),
+          `The new email.\n\n[image: email.png (attachment ${attachmentId})]`,
+        );
+      }),
+  );
+
+  it.effect(
+    "a post whose pictures go past what one message carries steers the agent with the first that fit, each once however often it is shown, and names the rest as not attached where a person reading the notice never sees it",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const chat = yield* openChat(eve);
+        // Three pictures each within a chat picture's bound, two of which fill one message's bytes.
+        const bytes = new Uint8Array(1_400_000);
+        bytes.set(PNG);
+        const ids = [randomUUID(), randomUUID(), randomUUID()];
+        const text = `${chat.links.second} the three screens.`;
+        yield* postChat(
+          chat.telling,
+          {
+            authorMemberId: chat.person.id,
+            to: { channelId: chat.channel.id },
+            blocks: [
+              { type: CHAT_BLOCK.MARKDOWN, text },
+              // The first picture shown twice, as two blocks of one sandbox path name one id, is still one file.
+              ...[ids[0] ?? "", ...ids].map((attachmentId, at) => ({
+                type: CHAT_BLOCK.IMAGE,
+                attachmentId,
+                alt: `screen ${at}`,
+              })),
+            ],
+            ...namedIn(text),
+            clientKey: randomUUID(),
+          },
+          ids.map((id) => ({ id, contentType: CHAT_IMAGE_TYPE.PNG, bytes })),
+        ).pipe(Effect.provide(chat.github.layer));
+        assert.deepEqual(steeredFiles(eve), [`${ids[0]}.png`, `${ids[1]}.png`]);
+
+        const [notice] = yield* chat.rowsOf(chat.second.target);
+        const [words = ""] = (notice?.message.parts ?? []).flatMap((part) =>
+          part.type === "text" ? [part.text] : [],
+        );
+        assert.ok(words.includes(chatNoticeUnattachedLine([ids[2] ?? ""])));
+        assert.ok(!chatNoticeWords(words).includes("Not attached"));
+      }),
+  );
+
   it.effect(
     "an account with Chat off reads nothing waiting in chat, a message addressed to its person among it",
     () =>
@@ -9289,6 +9464,17 @@ const transcriptRow = (
 
 const text = (words: string) => ({ type: "text", text: words });
 
+/** A message as eve's receipt lists it: each text part as it was handed, and each file staged, by its name and type with no bytes. */
+function receiptOf(handed: EveMessage["message"] | undefined): MessageReceivedPart[] {
+  assert.ok(Array.isArray(handed), "the message carried parts");
+  return handed.flatMap((part): MessageReceivedPart[] => {
+    if (part.type === "text") return [{ type: "text", text: part.text }];
+    if (part.type !== "file") return [];
+    const name = part.filename === undefined ? undefined : { filename: part.filename };
+    return [{ type: "file", mediaType: part.mediaType, ...name }];
+  });
+}
+
 /** The first message the newest session opened on, read back into its brief, its replay, and its note. */
 function openedParts(eve: ReturnType<typeof fakeEve>) {
   const message = eve.opened.at(-1)?.message.message;
@@ -10342,6 +10528,58 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
 
         assert.deepEqual(files, [...shots.slice(0, -1), "new.png"]);
         assert.match(parts.replay?.preamble ?? "", /could not be passed on: screen-9\.png\./u);
+      }),
+  );
+
+  it.effect(
+    "a continue attaches again the image its source's prompt carried, read from the picture kept beside the source's conversation, since the first message eve's receipt wrote names it by id with no bytes",
+    () =>
+      Effect.gen(function* () {
+        const { owner, task, ask, eve } = yield* openTask();
+        const data = Buffer.from(SIZED_PNG).toString("base64");
+        const source = readAnswer(
+          codingAgentAnswerSchema,
+          HOSTED_HTTP_STATUS.CREATED,
+          yield* ask(
+            startAs(owner, task.id, {
+              idempotencyKey: randomUUID(),
+              task: "Match this screen.",
+              attachments: [
+                { name: "flow.png", mediaType: CODING_AGENT_ATTACHMENT_TYPE.PNG, data },
+              ],
+            }),
+          ),
+        ).agent;
+        // The source's first message as the relay writes it from eve's receipt: its words, then its files by name.
+        const received = receivedMessage({
+          message: "",
+          parts: receiptOf(eve.opened.at(-1)?.message.message),
+        });
+        const stored = Option.getOrThrow(yield* readCodingAgent(owner, source.id));
+        yield* transcriptRow(stored, 1, MESSAGE_ROLE.USER, [
+          text(received.words),
+          ...received.files,
+        ]);
+        assert.deepEqual(
+          received.files.map((file) => file.url),
+          [""],
+          "eve's receipt carries no bytes of the image",
+        );
+
+        yield* ask(
+          startAs(owner, task.id, { idempotencyKey: randomUUID(), from: { agentId: source.id } }),
+        );
+        const opened = eve.opened.at(-1)?.message.message;
+        assert.ok(Array.isArray(opened));
+
+        assert.deepEqual(
+          opened.flatMap((part) => (part.type === "file" ? [[part.filename, part.data]] : [])),
+          [["flow.png", `data:${CODING_AGENT_ATTACHMENT_TYPE.PNG};base64,${data}`]],
+        );
+        assert.doesNotMatch(
+          openedWithFiles(eve).parts.replay?.preamble ?? "",
+          /could not be passed on/u,
+        );
       }),
   );
 

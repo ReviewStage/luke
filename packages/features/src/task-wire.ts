@@ -532,6 +532,8 @@ const taskPullRequestLineSchema = EffectSchema.Struct({
   url: EffectSchema.optionalKey(EffectSchema.String),
   /** The newest of the task's agents that opened it, whose Pull request tab a press on it opens; absent from a service before it was sent. */
   agentId: EffectSchema.optionalKey(wireUuidSchema),
+  /** True where it is open and GitHub holds it in its base's merge queue; absent otherwise, and from a service before it was sent. */
+  queued: EffectSchema.optionalKey(EffectSchema.Literal(true)),
 });
 
 export type TaskPullRequestLine = typeof taskPullRequestLineSchema.Type;

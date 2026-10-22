@@ -923,6 +923,8 @@ export const codingAgentPullRequestSchema = EffectSchema.Struct({
   additions: countedNumber,
   deletions: countedNumber,
   changedFiles: countedNumber,
+  /** True where the pull request is open and GitHub holds it in its base's merge queue; absent otherwise, and from a service before it was sent. */
+  queued: EffectSchema.optionalKey(EffectSchema.Literal(true)),
 });
 
 export type CodingAgentPullRequest = typeof codingAgentPullRequestSchema.Type;
@@ -970,6 +972,7 @@ export const tasklessAgentSchema = EffectSchema.Struct({
       url: codingAgentPullRequestSchema.fields.url,
       state: codingAgentPullRequestSchema.fields.state,
       checks: codingAgentPullRequestSchema.fields.checks,
+      queued: codingAgentPullRequestSchema.fields.queued,
     }),
   ),
 });

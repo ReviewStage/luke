@@ -81,7 +81,7 @@ import {
   validateModelChoice,
 } from "../../providers/model-catalog.js";
 import { admitsPlanWriter } from "../agent-reach.js";
-import { eveContent } from "../attached-files.js";
+import { eveContent, keptHandedImages } from "../attached-files.js";
 import { BRAIN_HOST_TURN } from "../brain-host/bounds.js";
 import {
   type AgentSessions,
@@ -1023,13 +1023,19 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
   const handed = brief.prompt ?? brief.planSnapshot;
   if (handed !== null) {
     const sessions = yield* eve;
+    // Each image is kept beside the new agent's conversation first, so the agent is told its id; one the
+    // store could not keep goes unnamed, as before, rather than failing a Start whose agent already stands.
+    const files = yield* keptHandedImages(
+      { userId: agent.userId, conversationId: agent.conversationId },
+      attachments,
+    ).pipe(Effect.catch((failure) => Effect.as(logStoreFailure(failure), attachments)));
     const opened = yield* sessions
       .open({
         conversationId: agent.conversationId,
         turn: BRAIN_HOST_TURN.TYPED,
         message: eveContent(
           handed,
-          attachments,
+          files,
           words === undefined ? undefined : mentionedContext(words, landing.task, reads),
         ),
       })

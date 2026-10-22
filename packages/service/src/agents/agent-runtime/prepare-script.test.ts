@@ -13,9 +13,11 @@ import { PREPARE_SCRIPT } from "./sandbox-image.js";
  * reads, and Codex's `CODEX_HOME` there, owned by `agent`, then checks
  * last that a command under the capability drop holds none. It keeps the
  * default user's sudo, which the sandbox's API runs the runner's launch
- * through, and touches no sudoers file. A preparation where a command under
- * the capability drop would still hold a capability, or where the Codex
- * installed does not print the pin, fails.
+ * through, and adds one sudoers drop-in, checked by `visudo`, so that sudo
+ * keeps the launch's environment as Vercel documents. A preparation where a
+ * command under the capability drop would still hold a capability, where
+ * the Codex installed does not print the pin, or where sudo still drops a
+ * variable, fails.
  *
  * The script runs in a real bash. Every program it would change the
  * machine with, or that a test machine may lack, is a stand-in on the
@@ -54,6 +56,7 @@ const STOOD_IN = [
   "gpasswd",
   "sed",
   "tee",
+  "visudo",
 ] as const;
 
 /**
@@ -73,6 +76,7 @@ const STAND_IN = [
   '  "claude --version") echo "2.1.304 (Claude Code)" ;;',
   '  "codex --version") echo "codex-cli $CODEX_PRINTS" ;;',
   '  setpriv*) exit "$SETPRIV_EXIT" ;;',
+  '  "sudo -n bash -c "*) exit "$SUDO_KEEPS_EXIT" ;;',
   "esac",
   "exit 0",
 ].join("\n");
@@ -82,6 +86,8 @@ interface Scenario {
   readonly setprivExit: number;
   /** The version the installed `codex` prints. */
   readonly codexPrints?: string;
+  /** How the check that `sudo` keeps a variable exits: 0 where it keeps it. */
+  readonly sudoKeepsExit?: number;
 }
 
 /** The script run once in a bash over the stand-ins: its exit, what it printed on stderr, and every call, in order. */
@@ -108,6 +114,7 @@ async function prepare(t: TestContext, scenario: Scenario) {
         PREPARE_LOG: log,
         SETPRIV_EXIT: String(scenario.setprivExit),
         CODEX_PRINTS: scenario.codexPrints ?? "0.163.0",
+        SUDO_KEEPS_EXIT: String(scenario.sudoKeepsExit ?? 0),
       },
     },
   );
@@ -167,4 +174,27 @@ test("the image fails where the Codex installed does not print the pin", async (
     assert.notEqual(exitCode, 0, codexPrints);
     assert.match(stderr, /codex does not print 0\.163\.0/);
   }
+});
+
+test("the image makes the runner's directory root's and keeps the sandbox user's sudo environment, as Vercel documents, through a drop-in visudo checks", async (t) => {
+  const { exitCode, stderr, calls } = await prepare(t, { setprivExit: 0 });
+  assert.equal(exitCode, 0, stderr);
+
+  const steps = [
+    "sudo -n install -d -o root -g root -m 0755 /opt/luke/agent-runner",
+    "sudo -n tee /etc/sudoers.d/luke-env",
+    "sudo -n chmod 0440 /etc/sudoers.d/luke-env",
+    "sudo -n visudo -c -q -f /etc/sudoers.d/luke-env",
+    "sudo -n bash -c ",
+  ].map((start) => indexOfCall(calls, start));
+  assert.deepEqual(
+    steps,
+    [...steps].sort((a, b) => a - b),
+  );
+});
+
+test("the image fails where sudo still drops a variable it was handed", async (t) => {
+  const { exitCode, stderr } = await prepare(t, { setprivExit: 0, sudoKeepsExit: 1 });
+  assert.notEqual(exitCode, 0);
+  assert.match(stderr, /sudo does not keep the environment/);
 });

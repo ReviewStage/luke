@@ -63,6 +63,7 @@ import {
   readAllTo,
   readAttachment,
   readAttachmentFor,
+  readMessagePictures,
   readPast,
   readThrough,
   readTo,
@@ -1857,6 +1858,47 @@ it.layer(getTestDB())("the chat store's pictures", (it) => {
         assert.deepEqual(yield* reads(room.teammate, room.ada, inDm.id), Option.none());
         assert.deepEqual(yield* reads(stranger, room.ada, inChannel.id), Option.none());
         assert.deepEqual(yield* reads(room.owner, room.first, kept.id), Option.none());
+      }),
+  );
+
+  it.effect(
+    "a message's pictures read back together, each under its id, none of another message's among them, and none to an account not in the workspace",
+    () =>
+      Effect.gen(function* () {
+        const room = yield* openRoom;
+        const stranger = yield* openAccount();
+        const png = {
+          id: randomUUID(),
+          contentType: CHAT_IMAGE_TYPE.PNG,
+          bytes: new Uint8Array([137, 80, 78, 71]),
+        };
+        const jpeg = {
+          id: randomUUID(),
+          contentType: CHAT_IMAGE_TYPE.JPEG,
+          bytes: new Uint8Array([255, 216, 255]),
+        };
+        const other = { ...png, id: randomUUID() };
+        const message = yield* pictured(room, [png.id, jpeg.id]);
+        const elsewhere = yield* pictured(room, [other.id]);
+        yield* attachMessageImages(room.owner, room.workspace, room.first.id, message.id, [
+          png,
+          jpeg,
+        ]);
+        yield* attachMessageImages(room.owner, room.workspace, room.first.id, elsewhere.id, [
+          other,
+        ]);
+        const read = (as: string) =>
+          Effect.map(readMessagePictures(as, room.workspace, message.id), (pictures) =>
+            pictures
+              .map((picture) => ({ ...picture, bytes: [...picture.bytes] }))
+              .sort((a, b) => a.id.localeCompare(b.id)),
+          );
+        const expected = [png, jpeg]
+          .map((picture) => ({ ...picture, bytes: [...picture.bytes] }))
+          .sort((a, b) => a.id.localeCompare(b.id));
+        assert.deepEqual(yield* read(room.owner), expected);
+        assert.deepEqual(yield* read(room.teammate), expected);
+        assert.deepEqual(yield* read(stranger), []);
       }),
   );
 
