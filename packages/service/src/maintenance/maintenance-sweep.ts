@@ -1,5 +1,6 @@
 import type { DatabaseServices } from "@luke/database/core/query";
-import { Clock, Effect, type Redacted } from "effect";
+import { causeKind } from "@luke/runtime/effect";
+import { Cause, Clock, Data, Effect, type Redacted } from "effect";
 import type { TemplateSweepOutcome } from "../agents/native-sandbox-template.js";
 import type { SessionSandboxSweepOutcome } from "../agents/session-sandboxes.js";
 import type { AutomationSweepOutcome } from "../automations/automation-sweep.js";
@@ -39,7 +40,8 @@ import type { TerminalLeaseSweepOutcome } from "./terminal-lease-sweep.js";
  * agents on a member's own GitHub token, which no webhook reaches, are polled
  * for what their agents are told of, and the native agents' image template
  * is moved on and the templates of older images deleted. Each is bounded on its own, and the
- * sweep runs them in turn.
+ * sweep runs them in turn, each kept from the others, so one that fails is
+ * logged and the rest still run.
  */
 
 /** One sweep of the cron's: a query against the store, so its requirement is the client the edge provides. */
@@ -98,58 +100,87 @@ export interface MaintenanceSweepOptions extends MaintenanceSweeps {
 
 interface MaintenanceSweepAnswer {
   /** Deleted conversations purged past their retention window. */
-  purged: number;
+  purged: Swept<number>;
   /** Ended calls of deleted tasks removed. */
-  purgedCalls: number;
+  purgedCalls: Swept<number>;
   /** Turns still running past their kind's bound, settled as failed for abandonment. */
-  abandoned: number;
+  abandoned: Swept<number>;
   /** What the sweep over the detached voice sessions did. */
-  voice: VoiceOrphanSweepOutcome;
+  voice: Swept<VoiceOrphanSweepOutcome>;
   /** What the sweep over the queued sessions' sandboxes did. */
-  sandboxes: SessionSandboxSweepOutcome;
+  sandboxes: Swept<SessionSandboxSweepOutcome>;
   /** What the sweep over the lapsed terminal leases did. */
-  terminals: TerminalLeaseSweepOutcome;
+  terminals: Swept<TerminalLeaseSweepOutcome>;
   /** What the sweep over the running native sandboxes did. */
-  nativeSandboxes: NativeSandboxSweepOutcome;
+  nativeSandboxes: Swept<NativeSandboxSweepOutcome>;
   /** What the sweep over the running eve sandboxes did. */
-  eveSandboxes: EveSandboxSweepOutcome;
+  eveSandboxes: Swept<EveSandboxSweepOutcome>;
   /** What the bound on the stopped sandboxes' snapshot retention did. */
-  sandboxRetention: SandboxRetentionSweepOutcome;
+  sandboxRetention: Swept<SandboxRetentionSweepOutcome>;
   /** What the delivery of the native agents' wakeups due did. */
-  nativeWakeups: NativeWakeupSweepOutcome;
+  nativeWakeups: Swept<NativeWakeupSweepOutcome>;
   /** What the wake of the operators whose member's agents failed did. */
-  operatorWakes: OperatorWakeSweepOutcome;
+  operatorWakes: Swept<OperatorWakeSweepOutcome>;
   /** What the sweep over the automations due did. */
-  automations: AutomationSweepOutcome;
+  automations: Swept<AutomationSweepOutcome>;
   /** Pictures pasted into plans that no save named, deleted. */
-  purgedPictures: number;
+  purgedPictures: Swept<number>;
   /** What the poll of the token agents' pull requests did. */
-  tokenPullRequests: TokenPullRequestSweepOutcome;
+  tokenPullRequests: Swept<TokenPullRequestSweepOutcome>;
   /** What the sweep over the native agents' image templates did. */
-  imageTemplates: TemplateSweepOutcome;
+  imageTemplates: Swept<TemplateSweepOutcome>;
 }
 
-/** The fifteen sweeps in turn, each handed the same instant. */
+/** What a sweep that failed answers in its place: the failure is logged, and the other sweeps run on. */
+export const SWEEP_FAILED = { failed: true } as const;
+
+type Swept<A> = A | typeof SWEEP_FAILED;
+
+/** A run in which at least one sweep failed: the cron check-in fails, and the answer still says what every sweep did. */
+class SweepsFailed extends Data.TaggedError("SweepsFailed")<{
+  readonly answer: MaintenanceSweepAnswer;
+}> {}
+
+/**
+ * One sweep, kept from the others: a failure or a defect of its own is
+ * logged by its kind and answered as `SWEEP_FAILED`, so the sweeps after it
+ * still run this minute rather than none of them, every minute, behind one
+ * that keeps failing. An interruption, the cron's own deadline, still ends
+ * the run.
+ */
+const isolated = <A>(name: string, sweep: SweepRead<A>): SweepRead<Swept<A>> =>
+  sweep.pipe(
+    Effect.catchCause((cause) =>
+      Cause.hasInterruptsOnly(cause)
+        ? Effect.failCause(cause)
+        : Effect.as(Effect.logError(`the ${name} sweep failed: ${causeKind(cause)}`), SWEEP_FAILED),
+    ),
+  );
+
+/** The fifteen sweeps in turn, each handed the same instant and each kept from the others (`isolated`). */
 const sweepAll = /* @__PURE__ */ Effect.fn("web/sweepAll")(function* (
   sweeps: MaintenanceSweeps,
 ): Effect.fn.Return<MaintenanceSweepAnswer, unknown, DatabaseServices> {
   const now = yield* Clock.currentTimeMillis;
   return {
-    purged: yield* sweeps.purgeCleared(now),
-    purgedCalls: yield* sweeps.purgeDeletedTaskCalls(now),
-    abandoned: yield* sweeps.sweepAbandonedTurns(now),
-    voice: yield* sweeps.sweepVoice(now),
-    sandboxes: yield* sweeps.sweepSandboxes(now),
-    terminals: yield* sweeps.sweepTerminalLeases(now),
-    nativeSandboxes: yield* sweeps.sweepNativeSandboxes(now),
-    eveSandboxes: yield* sweeps.sweepEveSandboxes(now),
-    sandboxRetention: yield* sweeps.sweepSandboxRetention(now),
-    nativeWakeups: yield* sweeps.sweepNativeWakeups(now),
-    operatorWakes: yield* sweeps.sweepOperatorWakes(now),
-    automations: yield* sweeps.sweepAutomations(now),
-    purgedPictures: yield* sweeps.purgeUnsavedPictures(now),
-    tokenPullRequests: yield* sweeps.sweepTokenPullRequests(now),
-    imageTemplates: yield* sweeps.sweepImageTemplates(now),
+    purged: yield* isolated("purgeCleared", sweeps.purgeCleared(now)),
+    purgedCalls: yield* isolated("purgeDeletedTaskCalls", sweeps.purgeDeletedTaskCalls(now)),
+    abandoned: yield* isolated("sweepAbandonedTurns", sweeps.sweepAbandonedTurns(now)),
+    voice: yield* isolated("sweepVoice", sweeps.sweepVoice(now)),
+    sandboxes: yield* isolated("sweepSandboxes", sweeps.sweepSandboxes(now)),
+    terminals: yield* isolated("sweepTerminalLeases", sweeps.sweepTerminalLeases(now)),
+    nativeSandboxes: yield* isolated("sweepNativeSandboxes", sweeps.sweepNativeSandboxes(now)),
+    eveSandboxes: yield* isolated("sweepEveSandboxes", sweeps.sweepEveSandboxes(now)),
+    sandboxRetention: yield* isolated("sweepSandboxRetention", sweeps.sweepSandboxRetention(now)),
+    nativeWakeups: yield* isolated("sweepNativeWakeups", sweeps.sweepNativeWakeups(now)),
+    operatorWakes: yield* isolated("sweepOperatorWakes", sweeps.sweepOperatorWakes(now)),
+    automations: yield* isolated("sweepAutomations", sweeps.sweepAutomations(now)),
+    purgedPictures: yield* isolated("purgeUnsavedPictures", sweeps.purgeUnsavedPictures(now)),
+    tokenPullRequests: yield* isolated(
+      "sweepTokenPullRequests",
+      sweeps.sweepTokenPullRequests(now),
+    ),
+    imageTemplates: yield* isolated("sweepImageTemplates", sweeps.sweepImageTemplates(now)),
   };
 });
 
@@ -172,7 +203,23 @@ export const handleMaintenanceSweep = /* @__PURE__ */ Effect.fn("web/handleMaint
       return errorResponse(HOSTED_HTTP_STATUS.UNAUTHORIZED, HOSTED_API_ERROR.INVALID_TOKEN);
     }
 
-    const answer = yield* options.monitor.run(sweepAll(options));
-    return jsonResponse(HOSTED_HTTP_STATUS.OK, answer);
+    // Note that a run in which any sweep failed fails its cron check-in, so the monitor still opens
+    // an issue on a sweep that keeps failing, while the sweeps after it ran and the answer says which.
+    const ran: MaintenanceSweepAnswer | SweepsFailed = yield* options.monitor
+      .run(
+        Effect.flatMap(sweepAll(options), (answer) =>
+          Object.values(answer).some((swept) => swept === SWEEP_FAILED)
+            ? Effect.fail(new SweepsFailed({ answer }))
+            : Effect.succeed(answer),
+        ),
+      )
+      .pipe(
+        Effect.catch((failure) =>
+          failure instanceof SweepsFailed ? Effect.succeed(failure) : Effect.fail(failure),
+        ),
+      );
+    return ran instanceof SweepsFailed
+      ? jsonResponse(HOSTED_HTTP_STATUS.INTERNAL_ERROR, ran.answer)
+      : jsonResponse(HOSTED_HTTP_STATUS.OK, ran);
   },
 );

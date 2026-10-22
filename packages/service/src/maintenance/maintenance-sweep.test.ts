@@ -1,13 +1,17 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { noDatabase } from "@luke/database/testing/no-database";
-import { Effect, Redacted } from "effect";
+import { Effect, Exit, Redacted } from "effect";
 import type { SessionSandboxSweepOutcome } from "../agents/session-sandboxes.js";
 import { HOSTED_API_ERROR } from "../http/http.js";
 import type { VoiceOrphanSweepOutcome } from "../voice/orphan-sweep.js";
 import type { EveSandboxSweepOutcome } from "./eve-sandbox-sweep.js";
 import { MAINTENANCE_SWEEP_PATH } from "./maintenance-bounds.js";
-import { handleMaintenanceSweep, type MaintenanceSweepOptions } from "./maintenance-sweep.js";
+import {
+  handleMaintenanceSweep,
+  type MaintenanceSweepOptions,
+  SWEEP_FAILED,
+} from "./maintenance-sweep.js";
 import type { NativeSandboxSweepOutcome } from "./native-sandbox-sweep.js";
 import type { SandboxRetentionSweepOutcome } from "./sandbox-retention-sweep.js";
 import type { TerminalLeaseSweepOutcome } from "./terminal-lease-sweep.js";
@@ -288,5 +292,36 @@ it.effect(
         tokenPullRequests: [instant],
         imageTemplates: [instant],
       });
+    }),
+);
+
+it.effect(
+  "a sweep that fails, or dies, answers failed in its place, the sweeps after it still run, the templates' last among them, and the run's cron check-in fails",
+  () =>
+    Effect.gen(function* () {
+      const checkIns: string[] = [];
+      const { options, recorded } = sweepOptions({
+        sweepVoice: () => Effect.fail(new Error("the voice upstream refused")),
+        sweepAutomations: () => Effect.die(new Error("an automation's row could not be read")),
+        // The cron monitor as Sentry's check-in reads the run: failed where its effect failed.
+        monitor: {
+          run: (run) =>
+            run.pipe(
+              Effect.onExit((exit) =>
+                Effect.sync(() => checkIns.push(Exit.isSuccess(exit) ? "ok" : "error")),
+              ),
+            ),
+        },
+      });
+      const answer = yield* sweep(options);
+
+      assert.equal(answer.status, 500);
+      assert.deepEqual(checkIns, ["error"]);
+      assert.deepEqual(answer.body.voice, SWEEP_FAILED);
+      assert.deepEqual(answer.body.automations, SWEEP_FAILED);
+      assert.deepEqual(answer.body.sandboxes, SANDBOXED);
+      assert.deepEqual(answer.body.imageTemplates, { current: "ready", deleted: 1 });
+      assert.equal(recorded.imageTemplates.length, 1);
+      assert.equal(recorded.pictures.length, 1);
     }),
 );
