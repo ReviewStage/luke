@@ -94,8 +94,8 @@ const INSTRUCTIONS =
 const SURROUNDING_QUOTES = /^["'“”‘’`]+|["'“”‘’`]+$/gu;
 const TRAILING_PUNCTUATION = /[.!?:;,]+$/u;
 
-/** A Markdown link, whose label alone a fallback title keeps. */
-const MARKDOWN_LINK = /\[([^[\]]*)\]\([^()]*\)/gu;
+/** A Markdown link, whose label alone a fallback title keeps; its address may hold one level of parentheses, as a page's name often does. */
+const MARKDOWN_LINK = /\[([^[\]]*)\]\((?:[^()]|\([^()]*\))*\)/gu;
 
 /** The Markdown marks a fallback title drops: a heading's, emphasis, code, and a quote's. */
 const MARKDOWN_MARKS = /[#*`>]+/gu;
@@ -130,7 +130,7 @@ function tidyAgentTitle(answer: string): Option.Option<string> {
  * words on it, its Markdown marks and links' addresses left out, tidied as
  * a model's answer is; nothing where no words stand. Note that the text is
  * cut to the excerpt first, and that a link's label holds no bracket and its
- * address no parenthesis, because the words are the developer's and a
+ * address parentheses one level deep at most, because the words are the developer's and a
  * pattern that may rescan them from every bracket would be slow on long ones.
  */
 function firstWordsTitle(text: string): Option.Option<string> {

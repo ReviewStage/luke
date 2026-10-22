@@ -225,7 +225,7 @@ it.layer(getTestDB())("an agent's title", (it) => {
         const agent = yield* startOnTask(
           owner,
           task.id,
-          "Retry the invite email when the provider times out.",
+          "Retry [the invite email](https://example.test/mail_(draft)) when the provider times out.",
         );
 
         yield* titleNativeAgent(
