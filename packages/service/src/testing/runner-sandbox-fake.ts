@@ -87,6 +87,8 @@ export function runnerSandboxApi() {
   /** How many deletes the API refuses next, as a passing outage. */
   const failDelete = { remaining: 0 };
   const commands: FakeCommand[] = [];
+  /** The snapshots Vercel no longer holds, which a create from one is refused for. */
+  const goneSnapshots = new Set<string>();
   const uploads: Map<string, string>[] = [];
   const policies: { readonly session: string; readonly policy: unknown }[] = [];
   const runs: { readonly session: string; readonly args: readonly string[] }[] = [];
@@ -115,6 +117,10 @@ export function runnerSandboxApi() {
       const asked = await body();
       assert.equal(asked.projectId, PROJECT);
       assert.equal(asked.persistent, true);
+      // As Vercel answers a create from a snapshot it no longer holds (the SDK's `isSnapshotNotFoundError`).
+      if (goneSnapshots.has(asked.source.snapshotId)) {
+        return Response.json({ error: { code: "snapshot_not_found" } }, { status: 410 });
+      }
       const sandbox: FakeSandbox = {
         name: asked.name,
         status: "running",
@@ -247,6 +253,7 @@ export function runnerSandboxApi() {
     respond,
     sandboxes,
     commands,
+    goneSnapshots,
     uploads,
     policies,
     runs,

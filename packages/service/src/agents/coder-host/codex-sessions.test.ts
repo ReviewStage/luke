@@ -47,9 +47,10 @@ import {
   EVE_SEND_OUTCOME,
   PLAN_REFUSAL,
 } from "../brain-host/eve-sessions.js";
+import { runnerTokenDigest } from "../luke-mcp/bearer.js";
 import { type CodexSessionsOptions, codexSessions } from "./codex-sessions.js";
 import { RunnerBundle } from "./runner-bundle.js";
-import { RUNNER_ENDED, runnerBearerDigest, runnerEnded } from "./runner-sessions.js";
+import { RUNNER_ENDED, runnerEnded } from "./runner-sessions.js";
 import { CODER_TOOL_SET } from "./tool-set.js";
 
 /**
@@ -132,7 +133,10 @@ function services(
     ),
     GITHUB_APP_WITH_TOKENS,
     Layer.succeed(HostedEnvironment, NO_KEYS),
-    Layer.succeed(AgentSandboxImage, { snapshotId: Effect.succeed(Option.some(SNAPSHOT)) }),
+    Layer.succeed(AgentSandboxImage, {
+      snapshotId: Effect.succeed(Option.some(SNAPSHOT)),
+      snapshotGone: () => Effect.void,
+    }),
     Layer.succeed(RunnerBundle, { contents: Effect.succeed(BUNDLE) }),
   );
 }
@@ -262,7 +266,7 @@ it.layer(getTestDB())("a coding agent's sessions on Codex", (it) => {
         const bearer = command.env[RUNNER_ENV.BEARER];
         assert.ok(bearer !== undefined && bearer.length > 20);
         const routing = Option.getOrThrow(yield* readCodingAgentRouting(userId, agent.id));
-        assert.equal(routing.runnerTokenHash, runnerBearerDigest(bearer));
+        assert.equal(routing.runnerTokenHash, runnerTokenDigest(bearer));
 
         const [config, first] = linesOf(command) as [CodexConfig, InputLine];
         assert.deepEqual(config, {
@@ -457,7 +461,7 @@ it.layer(getTestDB())("a coding agent's sessions on Codex", (it) => {
         const bearer = relaunch?.env[RUNNER_ENV.BEARER];
         assert.ok(bearer !== undefined && bearer !== firstBearer);
         const routing = Option.getOrThrow(yield* readCodingAgentRouting(userId, agent.id));
-        assert.equal(routing.runnerTokenHash, runnerBearerDigest(bearer));
+        assert.equal(routing.runnerTokenHash, runnerTokenDigest(bearer));
       }),
   );
 

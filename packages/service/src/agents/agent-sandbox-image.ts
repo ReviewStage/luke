@@ -12,13 +12,16 @@
  * which takes minutes. The seam waits on it a bounded while, then fails with
  * `ImagePreparing`, which a launch answers with `IMAGE_PREPARING_STATUS` for
  * its caller to show as the agent's status and to retry; the build goes on
- * meanwhile, moved on by the next launch or the scheduled sweep.
+ * meanwhile, moved on by the next launch or the scheduled sweep. A launch
+ * whose create finds the snapshot gone hands it back (`snapshotGone`), and
+ * answers `ImagePreparing` too.
  */
 
 import { Context, Data, type Duration, Effect, Layer, Option } from "effect";
 import type { HttpClient } from "effect/http";
 import {
   awaitTemplate,
+  forgetSnapshot,
   NATIVE_TEMPLATE,
   recordImageBuild,
   TEMPLATE_STATE,
@@ -42,6 +45,12 @@ export interface AgentSandboxImageService {
    * built; none where its preparation failed, which opens no sandbox.
    */
   readonly snapshotId: Effect.Effect<Option.Option<string>, ImagePreparing | SandboxUnavailable>;
+  /**
+   * The snapshot `snapshotId` answered, which a create found gone: the image
+   * prepared again, so the next launch waits on it rather than failing on the
+   * same snapshot.
+   */
+  readonly snapshotGone: (snapshotId: string) => Effect.Effect<void, SandboxUnavailable>;
 }
 
 export class AgentSandboxImage extends Context.Service<
@@ -72,6 +81,8 @@ export const agentSandboxImageFromTemplate = (
             ? Option.some(template.snapshotId)
             : Option.none();
         }),
+        snapshotGone: (snapshotId) =>
+          Effect.asVoid(Effect.flatMap(build, (built) => forgetSnapshot(api, built, snapshotId))),
       };
     }),
   );

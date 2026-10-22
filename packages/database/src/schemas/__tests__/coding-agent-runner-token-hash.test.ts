@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { eq } from "drizzle-orm";
 import { Effect, Option } from "effect";
 import * as SqlClient from "effect/sql/SqlClient";
 import { Database } from "../../core/query.js";
@@ -13,7 +12,6 @@ import {
 import { createTask } from "../../models/task-store.js";
 import { getTestDB, migrationStatements, openWorkspace } from "../../testing/index.js";
 import { user } from "../auth.js";
-import { conversations } from "../storage.js";
 
 /**
  * The migration that moves a runner's bearer digest from its conversation's
@@ -25,14 +23,19 @@ import { conversations } from "../storage.js";
 
 const MIGRATION = "20261021143346_coding_agent_runner_token_hash";
 
-/** The migration undone, so the database stands as one from before it. */
+/**
+ * The migration undone, so the database stands as one from before it: the
+ * conversation's column, which a later migration dropped, back, and the
+ * agent's gone.
+ */
 const UNDO = [
+  `ALTER TABLE "conversations" ADD COLUMN "runner_token_hash" text`,
   `DROP INDEX "coding_agent_runner_token_hash"`,
   `ALTER TABLE "coding_agent" DROP COLUMN "runner_token_hash"`,
 ];
 
-/** An account's coding agent, its conversation holding the digest given as one from before the migration held it. */
-const agentHolding = (digest: string | null) =>
+/** An account's coding agent, whose conversation's digest a test sets once the column is back. */
+const agentHolding = () =>
   Effect.gen(function* () {
     const db = yield* Database;
     const userId = `user-${randomUUID()}`;
@@ -50,10 +53,6 @@ const agentHolding = (digest: string | null) =>
         prompt: null,
       }),
     ).agent;
-    yield* db
-      .update(conversations)
-      .set({ runnerTokenHash: digest })
-      .where(eq(conversations.id, agent.conversationId));
     return { userId, agentId: agent.id, conversationId: agent.conversationId };
   });
 
@@ -65,9 +64,10 @@ it.layer(getTestDB())("coding_agent_runner_token_hash over a database from befor
         const sql = yield* SqlClient.SqlClient;
         // The agents are made by this build's code, then the column is taken away, as before the migration.
         const digest = randomUUID();
-        const holding = yield* agentHolding(digest);
-        const bare = yield* agentHolding(null);
+        const holding = yield* agentHolding();
+        const bare = yield* agentHolding();
         for (const statement of UNDO) yield* sql.unsafe(statement);
+        yield* sql`UPDATE conversations SET runner_token_hash = ${digest} WHERE id = ${holding.conversationId}`;
 
         const migration = yield* migrationStatements(MIGRATION);
         for (const statement of migration) yield* sql.unsafe(statement);

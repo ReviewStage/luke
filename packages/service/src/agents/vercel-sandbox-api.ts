@@ -48,7 +48,11 @@ export const RUNNING_STATUS = "running";
 /** Vercel's answer for a sandbox or session already gone. */
 const NOT_FOUND_STATUS = 404;
 
-/** Vercel's answer for a resume whose snapshot is gone: expired past `CODER.SANDBOX_SNAPSHOTS`'s expiration, or deleted. */
+/**
+ * Vercel's answer for a resume or a create whose snapshot is gone: expired
+ * past `CODER.SANDBOX_SNAPSHOTS`'s expiration, or deleted. Vercel's body
+ * names it `snapshot_not_found`, as the SDK's own check reads it.
+ */
 export const SNAPSHOT_GONE_STATUS = 410;
 
 const OK_STATUS = { FIRST: 200, LAST: 299 } as const;
@@ -288,6 +292,11 @@ export interface VercelSandboxApi {
    * refused, so of two snapshots asked at once only the first is taken.
    */
   readonly snapshot: (sandboxSessionId: string) => Effect.Effect<string, SandboxUnavailable>;
+  /**
+   * Whether the snapshot named still stands: false where Vercel answers it
+   * not found (404) or gone (410), or names it deleted or failed.
+   */
+  readonly snapshotExists: (snapshotId: string) => Effect.Effect<boolean, SandboxUnavailable>;
   /** Sets the timeout the named sandbox's next sessions open with; the running session keeps its own. */
   readonly updateTimeout: (
     name: string,
@@ -351,6 +360,14 @@ const SessionSchema = Schema.Struct({
 
 /** A snapshot's answer: the snapshot taken. */
 const SnapshotTakenSchema = Schema.Struct({ snapshot: Schema.Struct({ id: Schema.String }) });
+
+/** A snapshot lookup's answer: where the snapshot stands. */
+const SnapshotFoundSchema = Schema.Struct({
+  snapshot: Schema.Struct({ id: Schema.String, status: Schema.String }),
+});
+
+/** The statuses Vercel names a snapshot by once nothing can open from it. */
+const SNAPSHOT_UNUSABLE: ReadonlySet<string> = new Set(["deleted", "failed"]);
 
 /** A create's answer: the sandbox and the session it opened. */
 const CreatedSandboxSchema = Schema.Struct({
@@ -424,6 +441,7 @@ const readCreated = readEither(CreatedSandboxSchema, { excess: EXCESS_KEYS.DROP 
 const readCommand = readEither(CommandSchema, { excess: EXCESS_KEYS.DROP });
 const readStdin = readEither(StdinSchema, { excess: EXCESS_KEYS.DROP });
 const readSnapshot = readEither(SnapshotTakenSchema, { excess: EXCESS_KEYS.DROP });
+const readSnapshotFound = readEither(SnapshotFoundSchema, { excess: EXCESS_KEYS.DROP });
 const readSession = readEither(SessionSchema, { excess: EXCESS_KEYS.DROP });
 
 /** A session's answer as its lifetime, counted from its start, or from its creation where it names no start yet. */
@@ -955,6 +973,23 @@ export function vercelSandboxApi(
             return yield* new SandboxUnavailable({ status: taken.status });
           }
           return read.success.snapshot.id;
+        }),
+      snapshotExists: (snapshotId) =>
+        Effect.gen(function* () {
+          const asked = yield* credentials;
+          const url = apiUrl(`/snapshots/${encodeURIComponent(snapshotId)}`, asked.teamId);
+          const found = yield* callApi(
+            client,
+            HttpClientRequest.get(url, { headers: asked.headers }),
+          );
+          if (found.status === NOT_FOUND_STATUS || found.status === SNAPSHOT_GONE_STATUS) {
+            return false;
+          }
+          const read = readSnapshotFound(jsonOf(found.text));
+          if (!succeeded(found.status) || Result.isFailure(read)) {
+            return yield* new SandboxUnavailable({ status: found.status });
+          }
+          return !SNAPSHOT_UNUSABLE.has(read.success.snapshot.status);
         }),
       updateTimeout: (name, timeoutMs) =>
         Effect.gen(function* () {

@@ -51,13 +51,13 @@ import {
   EVE_SEND_OUTCOME,
   PLAN_REFUSAL,
 } from "../brain-host/eve-sessions.js";
+import { runnerTokenDigest } from "../luke-mcp/bearer.js";
 import { SESSION_TAG } from "../vercel-sandbox-api.js";
 import { CODER } from "./bounds.js";
 import {
   type ClaudeCodeSessionsOptions,
   claudeCodeSessions,
   RUNNER_ENDED,
-  runnerBearerDigest,
   runnerEnded,
 } from "./claude-code-sessions.js";
 import { RunnerBundle } from "./runner-bundle.js";
@@ -114,6 +114,7 @@ function services(api: ReturnType<typeof runnerSandboxApi>, snapshot: string | n
     Layer.succeed(HostedEnvironment, NO_KEYS),
     Layer.succeed(AgentSandboxImage, {
       snapshotId: Effect.succeed(Option.fromNullishOr(snapshot)),
+      snapshotGone: () => Effect.void,
     }),
     Layer.succeed(RunnerBundle, { contents: Effect.succeed(BUNDLE) }),
   );
@@ -228,7 +229,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         assert.equal(command.env[RUNNER_ENV.API_KEY], TEST_KEY);
         assert.equal(command.env[RUNNER_ENV.CLAUDE_TOKEN], undefined);
         const routing = Option.getOrThrow(yield* readCodingAgentRouting(userId, agent.id));
-        assert.equal(routing.runnerTokenHash, runnerBearerDigest(bearer));
+        assert.equal(routing.runnerTokenHash, runnerTokenDigest(bearer));
 
         const [config, first] = linesOf(command) as [ClaudeCodeConfig, InputLine];
         assert.deepEqual(config, {
@@ -544,7 +545,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         const bearer = relaunch?.env[RUNNER_ENV.BEARER];
         assert.ok(bearer !== undefined && bearer !== firstBearer);
         const routing = Option.getOrThrow(yield* readCodingAgentRouting(userId, agent.id));
-        assert.equal(routing.runnerTokenHash, runnerBearerDigest(bearer));
+        assert.equal(routing.runnerTokenHash, runnerTokenDigest(bearer));
 
         // The first launch's END, arriving late, stops nothing of the second's.
         const late = yield* runnerEnded({ target, sessionId: opened.sessionId, sequence: 41 }).pipe(
@@ -653,7 +654,10 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
           Effect.provide(
             Layer.merge(
               services(api),
-              Layer.succeed(AgentSandboxImage, { snapshotId: Effect.fail(new ImagePreparing()) }),
+              Layer.succeed(AgentSandboxImage, {
+                snapshotId: Effect.fail(new ImagePreparing()),
+                snapshotGone: () => Effect.void,
+              }),
             ),
           ),
         );
@@ -669,6 +673,34 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         assert.equal(retried.outcome, EVE_SEND_OUTCOME.ACCEPTED);
         assert.equal(expired.deleted, true);
         assert.equal(api.sandboxes.at(-1)?.status, "running");
+      }),
+  );
+
+  it.effect(
+    "a template snapshot Vercel answers gone (410 snapshot_not_found) is handed back to the image, and the launch answers as preparing",
+    () =>
+      Effect.gen(function* () {
+        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+        const api = runnerSandboxApi();
+        api.goneSnapshots.add(SNAPSHOT);
+        const { userId, agent } = yield* openAgent;
+        const handedBack: string[] = [];
+        const image = Layer.succeed(AgentSandboxImage, {
+          snapshotId: Effect.succeed(Option.some(SNAPSHOT)),
+          snapshotGone: (snapshotId) => Effect.sync(() => handedBack.push(snapshotId)),
+        });
+        const sessions = yield* sessionsFor(userId, { next: 0 }).pipe(
+          Effect.provide(Layer.merge(services(api), image)),
+        );
+
+        const opened = yield* sessions.open(message(agent, "Fix the invitations."));
+
+        assert.deepEqual(opened, {
+          outcome: EVE_SEND_OUTCOME.FAILED,
+          status: IMAGE_PREPARING_STATUS,
+        });
+        assert.deepEqual(handedBack, [SNAPSHOT]);
+        assert.equal(api.sandboxes.length, 0);
       }),
   );
 
@@ -765,7 +797,10 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
           Effect.provide(
             Layer.merge(
               services(api),
-              Layer.succeed(AgentSandboxImage, { snapshotId: Effect.fail(new ImagePreparing()) }),
+              Layer.succeed(AgentSandboxImage, {
+                snapshotId: Effect.fail(new ImagePreparing()),
+                snapshotGone: () => Effect.void,
+              }),
             ),
           ),
         );
@@ -946,6 +981,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
               Layer.succeed(HostedEnvironment, NO_KEYS),
               Layer.succeed(AgentSandboxImage, {
                 snapshotId: Effect.succeed(Option.some(SNAPSHOT)),
+                snapshotGone: () => Effect.void,
               }),
               Layer.succeed(RunnerBundle, { contents: Effect.succeed(BUNDLE) }),
             ),

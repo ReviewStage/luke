@@ -51,7 +51,7 @@ import {
 } from "./runner-sessions.js";
 import type { NativeSessions } from "./runtime-sessions.js";
 
-export { RUNNER_ENDED, runnerBearerDigest, runnerEnded } from "./runner-sessions.js";
+export { RUNNER_ENDED, runnerEnded } from "./runner-sessions.js";
 
 /** What the sessions reach. */
 export type ClaudeCodeServices = RunnerServices;
