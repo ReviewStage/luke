@@ -1109,7 +1109,7 @@ function datePicked(
   const { date } = picked;
   const moved =
     picked.changed && date !== undefined && (date.start !== was.start || date.end !== was.end);
-  if (moved) node.rename(dateMentionNode(date, place), keyed);
+  if (moved) node.rename(dateMentionNode(date, place, picked.zone), keyed);
   else if (keyed) node.focusAfter();
 }
 

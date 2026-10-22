@@ -1497,14 +1497,14 @@ export function useMentionPicker({
     datePicker.open({
       at: word.rect,
       date: undefined,
-      onClose: ({ date, changed, how }: DatePicked) => {
+      onClose: ({ date, zone, changed, how }: DatePicked) => {
         const kept = how === DATE_PICKER_CLOSE.CLEAR || !changed ? undefined : date;
         if (
           (kept !== undefined || how !== DATE_PICKER_CLOSE.LEAVE) &&
           editing instanceof HTMLElement
         )
           editing.focus();
-        if (kept !== undefined) onChoose(dateMentionNode(kept, place));
+        if (kept !== undefined) onChoose(dateMentionNode(kept, place, zone));
       },
     });
   };

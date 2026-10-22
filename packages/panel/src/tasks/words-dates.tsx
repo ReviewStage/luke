@@ -1,4 +1,4 @@
-import { type DateSpan, dateLabel, readerZone } from "@luke/features/date-mention";
+import { type DateSpan, dateLabel } from "@luke/features/date-mention";
 import { MENTION_KIND, type MentionPlace, mentionMarkdown } from "@luke/features/mention-link";
 import { createContext, type ReactNode, useContext, useRef } from "react";
 import type { MarkdownSpan } from "../markdown-message.js";
@@ -112,7 +112,7 @@ function wordsWithDate(
       ? ""
       : mentionMarkdown(
           { kind: MENTION_KIND.DATE, ...date },
-          dateLabel(date, readerZone()),
+          dateLabel(date, picked.zone),
           written.place,
         );
   return `${words.slice(0, at.from)}${named}${words.slice(at.to)}`;
