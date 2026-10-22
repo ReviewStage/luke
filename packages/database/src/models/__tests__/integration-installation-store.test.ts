@@ -140,6 +140,32 @@ it.layer(getTestDB())("the integration installation store", (it) => {
   );
 
   it.effect(
+    "a workspace's disconnect ends only an installation linked to it, and leaves another workspace's standing",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* openAccount;
+        const ours = yield* openWorkspace;
+        const theirs = yield* openWorkspace;
+        const externalId = randomUUID();
+        yield* linkIntegrationInstallation({
+          provider: SENTRY,
+          externalId,
+          organizationId: theirs,
+          userId: owner,
+        });
+
+        const fromOurs = yield* markIntegrationInstallationDeleted(SENTRY, externalId, ours);
+        const standing = yield* activeInstallationWorkspace(SENTRY, externalId);
+        const fromTheirs = yield* markIntegrationInstallationDeleted(SENTRY, externalId, theirs);
+
+        assert.equal(fromOurs, false);
+        assert.deepEqual(standing, Option.some(theirs));
+        assert.equal(fromTheirs, true);
+        assert.ok(Option.isNone(yield* activeInstallationWorkspace(SENTRY, externalId)));
+      }),
+  );
+
+  it.effect(
     "a re-link names the installation's account anew, and a link that read no name keeps the one standing",
     () =>
       Effect.gen(function* () {

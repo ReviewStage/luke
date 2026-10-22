@@ -76,6 +76,10 @@
     "dest": "/api/default.js?route=triggers/sentry"
   },
   {
+    "src": "/api/triggers/sentry/installed",
+    "dest": "/api/default.js?route=triggers/sentry/installed"
+  },
+  {
     "src": "/api/workspaces/chat/attachment",
     "dest": "/api/default.js?route=workspaces/chat/attachment"
   },
