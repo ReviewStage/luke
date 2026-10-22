@@ -665,22 +665,29 @@ const ThreadRow = memo(function ThreadRow({
   );
 });
 
+/** Whether a thread says what the one held said: each field the same, its replies each the one held. */
+function sameThread<Thread extends ChatThread>(standing: Thread, thread: Thread): boolean {
+  const keys = Object.keys(thread) as (keyof Thread)[];
+  return (
+    keys.length === Object.keys(standing).length &&
+    keys.every((key) => key === "replies" || standing[key] === thread[key]) &&
+    standing.replies.length === thread.replies.length &&
+    standing.replies.every((reply, at) => reply === thread.replies[at])
+  );
+}
+
 /**
- * The threads as drawn last, each kept where its root and replies are the
- * ones it held, so a row handed it holds while a push moves only others.
+ * The threads as drawn last, each kept where it says what the one held
+ * said, so a row handed it holds while a push moves only others: a
+ * channel's threads, and For you's entries alike.
  */
-function useKeptThreads(threads: readonly ChatThread[]): readonly ChatThread[] {
-  const held = useRef(new Map<string, ChatThread>());
+function useKeptThreads<Thread extends ChatThread>(threads: readonly Thread[]): readonly Thread[] {
+  const held = useRef(new Map<string, Thread>());
   return useMemo(() => {
     const before = held.current;
     const kept = threads.map((thread) => {
       const standing = before.get(thread.message.id);
-      return standing !== undefined &&
-        standing.message === thread.message &&
-        standing.replies.length === thread.replies.length &&
-        standing.replies.every((reply, at) => reply === thread.replies[at])
-        ? standing
-        : thread;
+      return standing !== undefined && sameThread(standing, thread) ? standing : thread;
     });
     held.current = new Map(kept.map((thread) => [thread.message.id, thread]));
     return kept;
@@ -997,8 +1004,8 @@ function PlaceView({
 }): React.JSX.Element {
   const { names, keywords, mentionsIn, doorsIn, onPost } = context;
   const channel = placeChannel(chat, place);
+  const entries = useKeptThreads(forYou(chat));
   if (place.kind === CHAT_PLACE.FOR_YOU || channel === undefined) {
-    const entries = forYou(chat);
     return (
       <section className="chat-stream ph-no-capture" aria-label="For you" hidden={hidden}>
         <PlaceHead title={FOR_YOU_TITLE} name={FOR_YOU_TITLE} meta={undefined} lead={lead} />

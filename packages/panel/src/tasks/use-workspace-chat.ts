@@ -602,6 +602,22 @@ export function useWorkspaceChat(input: {
     }
   }, [pause, account, workspaceId, write]);
 
+  // Another account or workspace, or the window letting the chat go, tells what waits untold at once, to the workspace it was read in.
+  useEffect(
+    () => () => {
+      const telling = untold.current;
+      untold.current = { ...telling, seqs: new Map() };
+      const { workspaceId: readIn } = telling;
+      if (readIn === undefined) return;
+      for (const [channelId, seq] of telling.seqs) {
+        void latest.current
+          .writeChat({ workspaceId: readIn, write: { readTo: seq, channelId } })
+          .catch(() => undefined);
+      }
+    },
+    [account, workspaceId],
+  );
+
   const chat = useMemo(() => withAhead(held.chat, aheadHere), [held.chat, aheadHere]);
 
   return {

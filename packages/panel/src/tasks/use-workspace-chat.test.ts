@@ -649,3 +649,20 @@ test("a push that changes nothing hands back the chat held, and one that adds a 
   assert.equal(three?.id, "m3");
   assert.equal(tab.control().chat?.members, first?.members, "the roster is the one held");
 });
+
+test("a read still waiting on its pause is told to the workspace it was read in as another workspace is shown", async () => {
+  vi.useFakeTimers();
+  const service = scriptedService();
+  const tab = mount(service, "acme", CHANNEL);
+  service.push("acme", answered([message(1), message(2)]));
+  await settle();
+  assert.equal(service.writes.length, 0, "the pause is still running");
+  tab.rerender({ workspaceId: "ledger", reading: undefined });
+  await settle();
+  assert.deepEqual(
+    service.writes.map((write) => write.params),
+    [{ workspaceId: "acme", write: { readTo: 2, channelId: CHANNEL } }],
+  );
+  await pauseRunsOut();
+  assert.equal(service.writes.length, 1, "nothing is told twice");
+});

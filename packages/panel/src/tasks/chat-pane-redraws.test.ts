@@ -22,7 +22,7 @@ import {
   type CodingAgentChatAnswerView,
   type CodingAgentChatWriteAnswerView,
 } from "@luke/features/coding-agent-view";
-import { CHAT_PLACE, type ChatPlace, chatNames } from "@luke/ui/chat-model";
+import { CHAT_PLACE, type ChatPlace, chatNames, FOR_YOU } from "@luke/ui/chat-model";
 import { Effect } from "effect";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -93,10 +93,10 @@ function message(seq: number, more: Partial<ChatMessage> = {}): ChatMessage {
 }
 
 /** The chat a push carries, read to its newest message so no read is told. */
-function answered(messages: readonly ChatMessage[]): ChatAnswer {
+function answered(messages: readonly ChatMessage[], readSeq = 100): ChatAnswer {
   return {
     self: ME,
-    readSeq: 100,
+    readSeq,
     members: [
       { id: ME, kind: MEMBER_KIND.HUMAN, name: "Dean", left: false },
       { id: AGENT, kind: MEMBER_KIND.AGENT, name: "Invite emails", left: false },
@@ -115,7 +115,7 @@ async function settle(): Promise<void> {
 }
 
 /** The channel drawn over the chat followed, and the way to push the chat down its stream as the host would, a new tree each time. */
-function drawChannel(): (chat: ChatAnswer) => Promise<void> {
+function drawChannel(place: ChatPlace = PLACE): (chat: ChatAnswer) => Promise<void> {
   let hear: ((chat: CodingAgentChatAnswerView) => void) | undefined;
   const followChat = (_workspaceId: string, heard: (chat: CodingAgentChatAnswerView) => void) => {
     hear = heard;
@@ -137,7 +137,7 @@ function drawChannel(): (chat: ChatAnswer) => Promise<void> {
     return createElement(ChatPane, {
       chat: control.chat,
       names: NAMES,
-      place: PLACE,
+      place,
       openLink,
       onPost: control.onPost,
       onAnswer: control.onAnswer,
@@ -170,4 +170,16 @@ test("a new message in the channel shown draws its own row, and an edited one it
   });
   await push(answered([message(1), edited, message(3), message(4)]));
   assert.deepEqual([...draws.keys()], ["message 2, edited"], "only the edited row is drawn");
+});
+
+test("a message that waits on no one, landing while For you is shown, draws none of For you's rows again", async () => {
+  const push = drawChannel(FOR_YOU);
+  const mentioning = (seq: number) => message(seq, { mentions: [ME] });
+  await push(answered([mentioning(1), mentioning(2)], 0));
+  assert.equal(document.querySelectorAll(".chat-message").length, 2);
+  draws.clear();
+
+  await push(answered([mentioning(1), mentioning(2), message(3)], 0));
+  assert.equal(document.querySelectorAll(".chat-message").length, 2);
+  assert.deepEqual([...draws.keys()], [], "no row of For you is drawn again");
 });
