@@ -20,7 +20,7 @@
  * than eve, so its calls are copied from the SDK's 3.8.0 client, the first
  * with stdin on a detached command: the create from a snapshot, a file
  * upload, a detached command started with its stdin held open, a write to
- * that stdin, a command's state, its kill, and a sandbox's tags updated;
+ * that stdin, a command's exit read as it waits for it, its kill, and a sandbox's tags updated;
  * and, for Luke's own template of that sandbox's image
  * (`native-sandbox-template.ts`), a sandbox looked up and listed by name,
  * one created on an image, and a running session snapshotted.
@@ -37,7 +37,7 @@
 import { gzipSync } from "node:zlib";
 import { readEither } from "@luke/wire/effect";
 import { getVercelOidcToken } from "@vercel/oidc";
-import { Data, Duration, Effect, Redacted, Result, Schedule, Schema, Stream } from "effect";
+import { Data, Duration, Effect, Option, Redacted, Result, Schedule, Schema, Stream } from "effect";
 import { HttpClient, HttpClientRequest, type HttpClientResponse } from "effect/http";
 import { EXCESS_KEYS, type UnparsedWireValue, unparsedWire } from "../core.js";
 
@@ -66,7 +66,20 @@ const SANDBOX_API = {
    * whole (`limit`'s maximum in Vercel's REST reference is 50).
    */
   PAGE: 50,
+  /**
+   * How long a read of a command's exit waits for it. Vercel records a
+   * command's exit only once a read that waits for it (`wait=true`) has seen
+   * it, and a plain read answers no exit forever, so the read waits, and one
+   * that outlasts this finds the command still running.
+   */
+  EXIT_WAIT: Duration.seconds(2),
 } as const;
+
+/** What a read of a command's exit answers for a command, or its session, Vercel no longer knows. */
+export const COMMAND_GONE = "gone";
+
+/** A command's exit code, null while it runs, or gone (`COMMAND_GONE`). */
+export type CommandExit = number | null | typeof COMMAND_GONE;
 
 /** Which of the API's calls was made, as a failure names it. */
 export const SANDBOX_CALL = {
@@ -347,11 +360,11 @@ export interface VercelSandboxApi {
     commandId: string,
     text: string,
   ) => Effect.Effect<void, SandboxUnavailable>;
-  /** A command's exit code, or null while it runs; a command or session gone is unavailable. */
+  /** A command's exit code, null while it runs, or gone where Vercel no longer knows the command or its session. */
   readonly commandExit: (
     sandboxSessionId: string,
     commandId: string,
-  ) => Effect.Effect<number | null, SandboxUnavailable>;
+  ) => Effect.Effect<CommandExit, SandboxUnavailable>;
   /** Ends a command with SIGTERM; one already gone counts as ended. */
   readonly kill: (
     sandboxSessionId: string,
@@ -1238,11 +1251,17 @@ export function vercelSandboxApi(
             `/sessions/${encodeURIComponent(sandboxSessionId)}/cmd/${encodeURIComponent(commandId)}`,
             asked.teamId,
           );
-          const found = yield* callApi(
+          // Note that the read waits for the exit, as the SDK's 3.8.0 `getCommand` with `wait` does,
+          // because Vercel records an exit only once such a read has seen it.
+          url.searchParams.set("wait", "true");
+          const waited = yield* callApi(
             client,
             SANDBOX_CALL.CMD,
             HttpClientRequest.get(url, { headers: asked.headers }),
-          );
+          ).pipe(Effect.timeoutOption(SANDBOX_API.EXIT_WAIT));
+          if (Option.isNone(waited)) return null;
+          const found = waited.value;
+          if (found.status === NOT_FOUND_STATUS) return COMMAND_GONE;
           const read = readCommand(jsonOf(found.text));
           if (!succeeded(found.status) || Result.isFailure(read)) {
             return yield* refused(SANDBOX_CALL.CMD, found);

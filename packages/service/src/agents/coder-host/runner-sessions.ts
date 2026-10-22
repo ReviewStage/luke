@@ -436,11 +436,17 @@ function runnerTags(sessionId: string, agentId: string, runner: TaggedRunner) {
   };
 }
 
-/** Whether the sandbox is up in the session its runner was started in, and that runner has not exited. */
+/**
+ * Whether the sandbox is up in the session its runner was started in, and
+ * that runner has not exited. Only an exit Vercel read, or a command it no
+ * longer knows, says the runner is down; Vercel not answering fails the
+ * call, so a passing outage neither relaunches a runner beside one still
+ * running nor drops a Stop.
+ */
 function liveRunner(
   api: VercelSandboxApi,
   sandbox: ListedSandbox,
-): Effect.Effect<TaggedRunner | undefined> {
+): Effect.Effect<TaggedRunner | undefined, SandboxUnavailable> {
   const runner = taggedRunner(sandbox);
   if (
     runner === undefined ||
@@ -449,10 +455,9 @@ function liveRunner(
   ) {
     return Effect.succeed(undefined);
   }
-  return api.commandExit(runner.sandboxSessionId, runner.commandId).pipe(
-    Effect.map((exit) => (exit === null ? runner : undefined)),
-    Effect.orElseSucceed(() => undefined),
-  );
+  return api
+    .commandExit(runner.sandboxSessionId, runner.commandId)
+    .pipe(Effect.map((exit) => (exit === null ? runner : undefined)));
 }
 
 /** The session's sandbox, the one its tag names: the newest, which is listed first (`listTagged`). */
@@ -878,7 +883,9 @@ export const runnerEnded = Effect.fn("web/runnerEnded")(function* (ending: Runne
   // Read last, just before the stop, so a developer who opened a Terminal during the turn keeps the sandbox.
   if (yield* sandboxHeld(ending.target.conversationId, yield* DateTime.nowAsDate))
     return RUNNER_ENDED.HELD;
-  yield* Effect.ignore(api.updateNetworkPolicy(running, OPEN_INTERNET_POLICY));
+  // The credential comes off first, and a sandbox it would not come off is left up rather than
+  // stopped with it: the call fails, and the sweep (`native-sandbox-sweep.ts`) tries again.
+  yield* api.updateNetworkPolicy(running, OPEN_INTERNET_POLICY);
   yield* api.stopSession(running);
   return RUNNER_ENDED.STOPPED;
 });

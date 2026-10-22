@@ -12,6 +12,7 @@ import { TURN_ORIGIN, TURN_STATUS, type TurnStatus } from "@luke/wire";
 import { fakeHttpClientLayer } from "@luke/wire/testing";
 import { Duration, Effect, Option } from "effect";
 import { afterEach, vi } from "vitest";
+import { commandRead, type ReadCommand } from "../testing/runner-sandbox-fake.js";
 import { sandboxListRefusal, sandboxStopRefusal } from "../testing/vercel-sandbox-fake.js";
 import { NATIVE_SANDBOX_SWEEP, sweepNativeSandboxes } from "./native-sandbox-sweep.js";
 
@@ -56,7 +57,7 @@ interface FakeSandbox {
 function vercel(options: { readonly refuseList?: boolean; readonly refusePolicy?: boolean } = {}) {
   const sandboxes: FakeSandbox[] = [];
   /** The detached commands, by id, with their exit code, or null while they run. */
-  const commands = new Map<string, number | null>();
+  const commands = new Map<string, ReadCommand>();
   const stopped: string[] = [];
   const policies: string[] = [];
   const pagesListed: { status: string | null; sortBy: string | null; order: string | null }[] = [];
@@ -98,9 +99,9 @@ function vercel(options: { readonly refuseList?: boolean; readonly refusePolicy?
     }
     const command = /^cmd\/([^/]+)$/u.exec(rest);
     if (command !== null) {
-      const id = command[1] ?? "";
-      if (!commands.has(id)) return new Response(null, { status: 404 });
-      return Response.json({ command: { id, exitCode: commands.get(id) ?? null } });
+      const found = commands.get(command[1] ?? "");
+      if (found === undefined) return new Response(null, { status: 404 });
+      return commandRead(found, parsed, init, false);
     }
     assert.equal(rest, "network-policy", `an unexpected call: ${method} ${parsed.pathname}`);
     if (options.refusePolicy === true) return new Response(null, { status: 502 });
@@ -338,7 +339,7 @@ it.layer(getTestDB())("the native sandbox sweep", (it) => {
     }),
   );
   it.effect(
-    "a sandbox whose ended run was followed by a newer runner keeps running, and one whose old runner exited is stopped",
+    "a sandbox whose ended run was followed by a newer runner keeps running, and one whose old runner exited or is gone is stopped",
     () =>
       Effect.gen(function* () {
         vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
@@ -351,17 +352,24 @@ it.layer(getTestDB())("the native sandbox sweep", (it) => {
           status: TURN_STATUS.SETTLED,
           at: minutesBefore(10),
         });
-        api.commands.set("cmd_live", null);
-        api.commands.set("cmd_exited", 0);
+        const vanished = yield* openAgent(CONVERSATION_RUNTIME.CLAUDE_CODE, {
+          status: TURN_STATUS.SETTLED,
+          at: minutesBefore(10),
+        });
+        api.commands.set("cmd_live", { id: "cmd_live", exitCode: null });
+        // Vercel has not recorded this exit yet, as no read waited for it: a plain read names none.
+        api.commands.set("cmd_exited", { id: "cmd_exited", exitCode: 0 });
         const live = nativeSandbox(relaunched.id, "cmd_live");
         const done = nativeSandbox(exited.id, "cmd_exited");
-        api.sandboxes.push(live, done);
+        const gone = nativeSandbox(vanished.id, "cmd_unknown");
+        api.sandboxes.push(live, done, gone);
 
         const outcome = yield* sweepNativeSandboxes(NOW).pipe(Effect.provide(api.layer));
 
-        assert.deepEqual(outcome, { stopped: 1, held: 0, failed: 0, deferred: 0 });
+        assert.deepEqual(outcome, { stopped: 2, held: 0, failed: 0, deferred: 0 });
         assert.equal(live.status, "running");
         assert.equal(done.status, "stopped");
+        assert.equal(gone.status, "stopped");
       }),
   );
 

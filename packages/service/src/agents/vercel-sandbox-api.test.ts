@@ -1,5 +1,5 @@
 /**
- * vercel-sandbox-api.test.ts -- what a failed call of Vercel Sandbox's REST API says of itself, against a scripted fake of it: the call, its status, and Vercel's error or the cause's; and a detached command's start and stdin tried again on a passing refusal alone.
+ * vercel-sandbox-api.test.ts -- what a failed call of Vercel Sandbox's REST API says of itself, against a scripted fake of it: the call, its status, and Vercel's error or the cause's; and a detached command's start and stdin tried again on a passing refusal alone; and a detached command's exit read as Vercel answers it, a plain read naming none until a read that waits has seen it.
  */
 
 import assert from "node:assert/strict";
@@ -7,8 +7,9 @@ import { it } from "@effect/vitest";
 import { fakeHttpClientLayer } from "@luke/wire/testing";
 import { Duration, Effect, Fiber } from "effect";
 import { TestClock } from "effect/testing";
-import { fixtureToken } from "../testing/runner-sandbox-fake.js";
+import { fixtureToken, runnerSandboxApi } from "../testing/runner-sandbox-fake.js";
 import {
+  COMMAND_GONE,
   SANDBOX_CALL,
   type SandboxCall,
   SandboxUnavailable,
@@ -232,5 +233,70 @@ it.effect("a passing refusal that outlasts the tries answers its last status", (
     assert.ok(failure instanceof SandboxUnavailable);
     assert.equal(failure.call, SANDBOX_CALL.STDIN);
     assert.equal(failure.status, 502);
+  }),
+);
+
+/** The API over a fresh fake, and a detached command started in it. */
+const commandStarted = Effect.gen(function* () {
+  const fake = runnerSandboxApi();
+  const api = yield* vercelSandboxApi(async () => fixtureToken()).pipe(Effect.provide(fake.layer));
+  const commandId = yield* api.start(SESSION, {
+    command: "node",
+    args: ["runner.js"],
+    sudo: false,
+  });
+  const command = fake.commands.find((each) => each.id === commandId);
+  assert.ok(command !== undefined);
+  return { fake, api, command };
+});
+
+it.effect("a command that exited reads as exited, though a plain read names no exit", () =>
+  Effect.gen(function* () {
+    const { fake, api, command } = yield* commandStarted;
+    command.exitCode = 0;
+    const plain = yield* Effect.promise(() =>
+      fake
+        .respond(
+          `https://vercel.com/api/v2/sandboxes/sessions/${SESSION}/cmd/${command.id}?teamId=team_fixture`,
+          { method: "GET" },
+        )
+        .then((response) => response.json()),
+    );
+
+    const exit = yield* api.commandExit(SESSION, command.id);
+
+    assert.equal(plain.command.exitCode, null);
+    assert.equal(exit, 0);
+  }),
+);
+
+it.effect("a command whose read outwaits the wait still runs", () =>
+  Effect.gen(function* () {
+    const { fake, api, command } = yield* commandStarted;
+    fake.waits.hold = true;
+
+    const reading = yield* Effect.forkChild(api.commandExit(SESSION, command.id));
+    yield* TestClock.adjust("2 seconds");
+
+    assert.equal(yield* Fiber.join(reading), null);
+  }),
+);
+
+it.effect("a command Vercel no longer knows is gone", () =>
+  Effect.gen(function* () {
+    const { api } = yield* commandStarted;
+
+    assert.equal(yield* api.commandExit(SESSION, "cmd_unknown"), COMMAND_GONE);
+  }),
+);
+
+it.effect("a command read Vercel refused is unavailable", () =>
+  Effect.gen(function* () {
+    const { fake, api, command } = yield* commandStarted;
+    fake.failCommandReads.remaining = 1;
+
+    const read = yield* Effect.flip(api.commandExit(SESSION, command.id));
+
+    assert.equal(read.status, 503);
   }),
 );
