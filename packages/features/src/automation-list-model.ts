@@ -21,6 +21,7 @@ import {
 } from "./automation-wire.js";
 import { agentFailureWords } from "./coding-agent-failure-words.js";
 import { CODING_AGENT_STATUS, type CodingAgentStatus } from "./coding-agent-wire.js";
+import { TRIGGER_CATALOG } from "./trigger-catalog.js";
 
 /**
  * automation-list-model.ts -- the Automations list as a window draws it: grouped by who owns each, with its trigger in words, where its newest run stands, and when it runs next.
@@ -65,6 +66,7 @@ const RUN_REASON_WORDS = {
   [AUTOMATION_RUN_REASON.PAUSED]: "It was turned off before the run could start.",
   [AUTOMATION_RUN_REASON.MISSED]: "It waited too long to start.",
   [AUTOMATION_RUN_REASON.AGENT_GONE]: "The agent its runs go to is gone or archived.",
+  [AUTOMATION_RUN_REASON.SAME_SUBJECT]: "Skipped: a run on the same issue started recently.",
 } as const satisfies Record<AutomationRunReason, string>;
 
 /** Each GitHub event as a trigger's sentence says what happens, after "When". */
@@ -105,6 +107,7 @@ const FIRING_WORDS = {
   [AUTOMATION_FIRING.MANUAL]: "Run now",
   [AUTOMATION_FIRING.GITHUB]: "GitHub event",
   [AUTOMATION_FIRING.WEBHOOK]: "Webhook called",
+  [AUTOMATION_FIRING.INTEGRATION]: "Integration event",
 } as const satisfies Record<AutomationRunSummary["firing"]["kind"], string>;
 
 /** Whose key a run's agent ran on, where it is not the reader's, as its line names it. */
@@ -229,7 +232,8 @@ function eitherOf(names: readonly string[]): string {
 /**
  * A trigger as one sentence, as a row and the editor say what fires it: a
  * schedule in words, a GitHub event with the repositories it is heard in and
- * the labels and branches it keeps to, and a webhook's call.
+ * the labels and branches it keeps to, a webhook's call, and an
+ * integration's event with the provider it comes from.
  */
 export function automationTriggerText(
   trigger: AutomationTrigger,
@@ -271,6 +275,10 @@ export function automationTriggerText(
     }
     case AUTOMATION_TRIGGER.WEBHOOK:
       return "When its webhook is called";
+    case AUTOMATION_TRIGGER.INTEGRATION: {
+      const provider = TRIGGER_CATALOG[trigger.provider];
+      return `When ${provider.events[trigger.event].words} in ${provider.name}`;
+    }
   }
 }
 
@@ -302,7 +310,12 @@ export function automationNext(automation: AutomationSummary): AutomationNext {
 
 /** A run's title: its agent's own, where it has one, else what fired it. */
 export function automationRunTitle(run: AutomationRunSummary): string {
-  return run.agent?.title ?? FIRING_WORDS[run.firing.kind];
+  if (run.agent !== null && run.agent.title !== null) return run.agent.title;
+  // An integration's run is titled by what it is about, as a GitHub event's agent is by its issue.
+  if (run.firing.kind === AUTOMATION_FIRING.INTEGRATION) {
+    return run.firing.subject.title ?? `${TRIGGER_CATALOG[run.firing.provider].name} event`;
+  }
+  return FIRING_WORDS[run.firing.kind];
 }
 
 /** What its owner is told of a run that failed to start: that it could not, and why, in its row's own words. */

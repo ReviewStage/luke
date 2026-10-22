@@ -71,6 +71,8 @@ const DECLARED_TABLES = [
   "inbox_item_read",
   "inbox_message",
   "integration_connection",
+  "integration_install_intent",
+  "integration_installation",
   "invitation",
   "jwks",
   "mac_command",
