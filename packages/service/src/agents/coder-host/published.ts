@@ -8,6 +8,7 @@ import {
   type WithRepository,
 } from "@luke/database/models/coding-agent-store";
 import type { StoredPullRequest } from "@luke/database/schemas/coding-agent";
+import { OPERATOR_NOTICE_KIND, type OperatorNoticeKind } from "@luke/database/storage-vocabulary";
 import {
   type CodingAgentPullRequest,
   type CodingAgentPullRequestAnswer,
@@ -31,6 +32,7 @@ import {
 import { agentMember, agentWorkspace } from "../../github/workspace-repository.js";
 import type { StoreFailure } from "../../http/store-failure.js";
 import { settleTaskIfFinished } from "../../tasks/task-finish.js";
+import { noticedForOperator } from "../operator-notice.js";
 import { CODER } from "./bounds.js";
 
 /**
@@ -62,7 +64,9 @@ import { CODER } from "./bounds.js";
  * that first finds the pull request merged, the row having kept it
  * unmerged or not at all, is one of the moments that may finish the
  * agent's task, so the task is asked to settle once the row is written
- * (`tasks/task-finish.ts`).
+ * (`tasks/task-finish.ts`); and a read that first finds it merged or
+ * closed is told the agent's member's operator as a notice
+ * (`../operator-notice.ts`), the webhook's read and the token sweep's alike.
  */
 
 /** The installation of the task's workspace no longer reaches the agent's repository, so nothing of it is read. */
@@ -75,11 +79,14 @@ type PublishedReadFailure = StoreFailure | GitHubWorkspaceReadFailure | Reposito
 
 type PublishedServices = DatabaseServices | HttpClient.HttpClient | GitHubApp;
 
-/** What one read found: the answer the wire carries, the pull request as the agent's row keeps it, null where none was found, and whether the read is the first to find it merged. */
+/** How a pull request ended: merged, or closed unmerged. */
+type PullRequestEnd = typeof PULL_REQUEST_STATE.MERGED | typeof PULL_REQUEST_STATE.CLOSED;
+
+/** What one read found: the answer the wire carries, the pull request as the agent's row keeps it, null where none was found, and how it ended where the read is the first to find it so. */
 interface Published {
   readonly answer: CodingAgentPullRequestAnswer;
   readonly stored: StoredPullRequest | null;
-  readonly merged: boolean;
+  readonly ended: PullRequestEnd | undefined;
 }
 
 /** The wire's pull request from GitHub's, with its head's checks as read. */
@@ -116,25 +123,35 @@ function withChecks(
     return {
       answer: { repository: agent.repository, branch: found.headRef, pullRequest },
       stored,
-      merged: firstSeenMerged(found, kept),
+      ended: firstSeenEnd(found, kept),
     };
   });
 }
 
-/** Whether the read is the first to find the pull request merged: GitHub says so, and the row kept it unmerged, or kept none. */
-function firstSeenMerged(found: GitHubPullRequest, kept: StoredPullRequest | null): boolean {
-  return (
-    found.state === PULL_REQUEST_STATE.MERGED &&
-    (kept === null || kept.number !== found.number || kept.state !== PULL_REQUEST_STATE.MERGED)
-  );
+/** How the pull request ended, where the read is the first to find it so: GitHub says merged or closed, and the row kept it otherwise, or kept none. */
+function firstSeenEnd(
+  found: GitHubPullRequest,
+  kept: StoredPullRequest | null,
+): PullRequestEnd | undefined {
+  if (found.state !== PULL_REQUEST_STATE.MERGED && found.state !== PULL_REQUEST_STATE.CLOSED) {
+    return undefined;
+  }
+  const seen = kept !== null && kept.number === found.number && kept.state === found.state;
+  return seen ? undefined : found.state;
 }
+
+/** The operator's notice of each end. */
+const END_NOTICE = {
+  [PULL_REQUEST_STATE.MERGED]: OPERATOR_NOTICE_KIND.PR_MERGED,
+  [PULL_REQUEST_STATE.CLOSED]: OPERATOR_NOTICE_KIND.PR_CLOSED,
+} as const satisfies Record<PullRequestEnd, OperatorNoticeKind>;
 
 /** Nothing published: neither a branch GitHub holds nor a pull request. */
 function nothing(agent: CodingAgent): Published {
   return {
     answer: { repository: agent.repository, branch: null, pullRequest: null },
     stored: null,
-    merged: false,
+    ended: undefined,
   };
 }
 
@@ -186,7 +203,7 @@ const publishedOnGitHub = /* @__PURE__ */ Effect.fnUntraced(function* (
     ? {
         answer: { repository: agent.repository, branch: agent.branch, pullRequest: null },
         stored: null,
-        merged: false,
+        ended: undefined,
       }
     : nothing(agent);
 });
@@ -201,10 +218,13 @@ export const agentPublished = /* @__PURE__ */ Effect.fn("web/agentPublished")(fu
   userId: string,
   agent: CodingAgent,
 ): Effect.fn.Return<CodingAgentPullRequestAnswer, PublishedReadFailure, PublishedServices> {
-  const { answer, stored, merged } = yield* publishedOnGitHub(userId, agent);
+  const { answer, stored, ended } = yield* publishedOnGitHub(userId, agent);
   yield* recordCodingAgentPublished(userId, agent.id, stored);
   // A merge first seen may have finished the task's work; the task is asked once the row says merged.
+  const merged = ended === PULL_REQUEST_STATE.MERGED;
   if (merged && agent.taskId !== null) yield* settleTaskIfFinished(userId, agent.taskId);
+  // An end first seen is told the agent's member's operator, whoever's read saw it.
+  if (ended !== undefined) yield* noticedForOperator(agent.id, END_NOTICE[ended]);
   return answer;
 });
 

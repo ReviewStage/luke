@@ -85,6 +85,8 @@ const DECLARED_TABLES = [
   "oauth_consent",
   "oauth_refresh_token",
   "oauth_resource",
+  "operator_notice",
+  "operator_wake",
   "organization",
   "personal_workspace",
   "plan_comment",

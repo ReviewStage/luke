@@ -31,6 +31,7 @@
     "./models/ids": "./src/models/ids.js",
     "./models/mac-command-store": "./src/models/mac-command-store.js",
     "./models/native-projection-store": "./src/models/native-projection-store.js",
+    "./models/operator-notices": "./src/models/operator-notices.js",
     "./models/message-reads": "./src/models/message-reads.js",
     "./models/plan-attachments": "./src/models/plan-attachments.js",
     "./models/plan-comments": "./src/models/plan-comments.js",

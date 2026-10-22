@@ -14,6 +14,7 @@ import {
   UI_PART_TYPE,
 } from "@luke/features/brain";
 import type { CodingAgentAttachment } from "@luke/features/coding-agent-wire";
+import { causeKind } from "@luke/runtime/effect";
 import {
   type AssistantMessageMetadata,
   type ChatNoticeMetadata,
@@ -57,7 +58,12 @@ import { SqlClient, SqlSchema } from "effect/sql";
 import { Database, type DatabaseServices, type QueryError, queryBuilder } from "../core/query.js";
 import { asks, conversations, messages, turns } from "../schemas/storage.js";
 import { voiceSessions } from "../schemas/voice.js";
-import { CONVERSATION_KIND, MESSAGE_SENDER } from "../storage-vocabulary.js";
+import {
+  CONVERSATION_KIND,
+  MESSAGE_SENDER,
+  OPERATOR_NOTICE_KIND,
+  type OperatorNoticeKind,
+} from "../storage-vocabulary.js";
 import { lineParts, receivedPartsOf } from "./attached-file-parts.js";
 import {
   EpochMillisColumnSchema,
@@ -67,6 +73,7 @@ import {
 } from "./columns.js";
 import { sentLineId } from "./ids.js";
 import { COALESCED_LINE_SEPARATOR, noReceiptOfLine } from "./message-reads.js";
+import { writeOperatorNotice } from "./operator-notices.js";
 
 /**
  * The store writer: the one path by which a `messages` or `turns` row is
@@ -1203,6 +1210,12 @@ interface WriterContext {
    * parts and its revision once however many of them grew it.
    */
   readonly journals: Map<string, HeldJournal>;
+  /**
+   * The notices this write's coding agent turns that settled leave for its
+   * member's operator, each written once the write's transaction is done
+   * (`noticesAfterSettle`), by the kind it is and when it settled.
+   */
+  readonly notices: { kind: OperatorNoticeKind; at: Date }[];
 }
 
 /** What one of this writer's statements answers: an effect over the transaction it runs in. */
@@ -1513,6 +1526,14 @@ const turnEnded = /* @__PURE__ */ Effect.fnUntraced(function* (
     ),
     responseIds: event.responseIds,
   });
+  // A coding agent's own turn that settled is told its member's operator, once the write is done.
+  if (context.kind === CONVERSATION_KIND.CODING_AGENT) {
+    const kind =
+      status === TURN_STATUS.FAILED
+        ? OPERATOR_NOTICE_KIND.TURN_FAILED
+        : OPERATOR_NOTICE_KIND.TURN_SETTLED;
+    context.notices.push({ kind, at: settledAt });
+  }
   // A journal still open here belongs to a turn that answered nothing. A
   // brain's keeps what it did and the words its steps formed leave it,
   // because a new session's seed reads them as said and the voice could
@@ -2596,6 +2617,36 @@ const requestTurnCancel = /* @__PURE__ */ Effect.fn("web/requestTurnCancel")(fun
 });
 
 /**
+ * The notices a write's settled coding agent turns leave for its member's
+ * operator (`operator-notices.ts`), written once the write's transaction is
+ * done, so the settle neither waits on them under its lock nor fails with
+ * them. Each runs in a transaction of its own, a savepoint where the write
+ * itself ran inside a caller's, so one that fails is rolled back alone and
+ * only logged: a notice never fails or holds the path it rides on.
+ */
+function noticesAfterSettle(
+  client: SqlClient.SqlClient,
+  target: ConversationTarget,
+  notices: WriterContext["notices"],
+): Effect.Effect<void, never, DatabaseServices> {
+  return Effect.forEach(
+    notices,
+    ({ kind, at }) =>
+      client
+        .withTransaction(writeOperatorNotice({ conversationId: target.conversationId }, kind, at))
+        .pipe(
+          Effect.catchCause((cause) =>
+            Effect.logWarning("an operator's notice of a settled turn was not written", {
+              kind,
+              failure: causeKind(cause),
+            }),
+          ),
+        ),
+    { discard: true },
+  );
+}
+
+/**
  * Composes the writer over one catalog, which is where the catalog is held to
  * the unknown outcome's envelope: a tool whose declared output schema refuses
  * it would leave a dispatched call's row unreadable, so the writer refuses to
@@ -2614,25 +2665,29 @@ export function storeWriter({ tools }: StoreWriterOptions): Effect.Effect<StoreW
     write: (context: WriterContext) => Write<A>,
     absent: () => A,
   ): Write<A> {
-    return Effect.flatMap(SqlClient.SqlClient, (client) =>
-      client.withTransaction(
-        Effect.gen(function* () {
-          const row = yield* lockConversation(target);
-          if (Option.isNone(row)) return absent();
-          const now = yield* DateTime.nowAsDate;
-          const context: WriterContext = {
-            tools,
-            now,
-            target,
-            kind: row.value.kind,
-            journals: new Map(),
-          };
-          const written = yield* write(context);
-          yield* landJournals(context);
-          return written;
-        }),
-      ),
-    );
+    return Effect.flatMap(SqlClient.SqlClient, (client) => {
+      const notices: WriterContext["notices"] = [];
+      return client
+        .withTransaction(
+          Effect.gen(function* () {
+            const row = yield* lockConversation(target);
+            if (Option.isNone(row)) return absent();
+            const now = yield* DateTime.nowAsDate;
+            const context: WriterContext = {
+              tools,
+              now,
+              target,
+              kind: row.value.kind,
+              journals: new Map(),
+              notices,
+            };
+            const written = yield* write(context);
+            yield* landJournals(context);
+            return written;
+          }),
+        )
+        .pipe(Effect.tap(() => noticesAfterSettle(client, target, notices)));
+    });
   }
 
   function underConversation<A, E>(

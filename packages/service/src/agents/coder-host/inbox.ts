@@ -1,5 +1,6 @@
 import { posix } from "node:path";
 import type { DatabaseServices } from "@luke/database/core/query";
+import { OPERATOR_NOTICE_KIND } from "@luke/database/storage-vocabulary";
 import { inboxSandboxPicturePaths } from "@luke/features/inbox-attachment-link";
 import {
   INBOX_ANSWER_LEAD,
@@ -37,6 +38,7 @@ import {
   type InboxPostRefusal,
   postInboxThread,
 } from "../../inbox/inbox-store.js";
+import { noticedForOperator } from "../operator-notice.js";
 import { CODER } from "./bounds.js";
 import { type InboxSandboxDoor, readSandboxImage, type SandboxImageTerms } from "./inbox-image.js";
 
@@ -487,11 +489,17 @@ export function postToInbox(
   if (refused !== undefined) return Effect.succeed(inboxRejected(refused));
   return Effect.flatMap(bodyPictures(post.body, sandbox), (pictures) => {
     if (Result.isFailure(pictures)) return Effect.succeed(inboxRejected(pictures.failure));
-    return Effect.flatMap(postInboxThread(agent, threadPost(post), pictures.success), (posted) =>
-      Result.isFailure(posted)
-        ? Effect.succeed(inboxRejected(storeRefusal(posted.failure)))
-        : accepted(agent),
-    );
+    return Effect.flatMap(postInboxThread(agent, threadPost(post), pictures.success), (posted) => {
+      if (Result.isFailure(posted)) {
+        return Effect.succeed(inboxRejected(storeRefusal(posted.failure)));
+      }
+      // A new ask waits on the member, so their operator is told of it once it is kept.
+      const noticed =
+        post.ask === undefined
+          ? Effect.void
+          : noticedForOperator(agent.agentId, OPERATOR_NOTICE_KIND.INBOX_ASK);
+      return Effect.andThen(noticed, accepted(agent));
+    });
   }).pipe(
     Effect.tapError(logStoreFailure),
     Effect.catch(() => Effect.succeed(inboxRejected(INBOX_REFUSAL.UNAVAILABLE))),

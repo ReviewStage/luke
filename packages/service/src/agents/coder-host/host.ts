@@ -80,7 +80,7 @@ import {
 } from "../brain-host/relay.js";
 import { rotationSeedText } from "../brain-host/seed.js";
 import { carryStop } from "../brain-host/stop-carrier.js";
-import { operatorDesk } from "../operator-desk.js";
+import { markDeskNoticesRead, type OperatorDesk, readOperatorDesk } from "../operator-desk.js";
 import {
   type ReadWebPageResult,
   ResearchBudget,
@@ -413,8 +413,9 @@ export interface CoderHost extends HostAdmission {
    * the session last handed (`handed`); and what the agent has not read in
    * its workspace's chat (`chat.ts`), where its starter turned Chat on and
    * the digest is not the one last handed; and an operator's desk, its
-   * member's open work (`../operator-desk.ts`), where it is not the one last
-   * handed. Answers what the session has
+   * member's open work (`../operator-desk.ts`), where its standing work is
+   * not what was last handed or it carries notices of what its member's
+   * agents did since, which are marked read once handed. Answers what the session has
    * handed once this message is, for the session to keep; nothing to hand
    * where the conversation is no agent's. A read that fails is logged and
    * leaves its part out, so the turn still opens.
@@ -696,9 +697,9 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
    */
   const deskOf = (
     agent: CodingAgent,
-  ): Effect.Effect<string | undefined, never, DatabaseServices> =>
+  ): Effect.Effect<OperatorDesk | undefined, never, DatabaseServices> =>
     isOperator(agent)
-      ? operatorDesk(agent).pipe(
+      ? readOperatorDesk(agent).pipe(
           Effect.tapError(logStoreFailure),
           Effect.orElseSucceed(() => undefined),
         )
@@ -1062,9 +1063,17 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
         // The digest is handed again only where it holds what the last one did not.
         const chatKey = digest === undefined ? handed.chat : contentKey(digest);
         const chat = digest !== undefined && chatKey !== handed.chat ? [digest] : [];
-        // An operator's desk is handed again only where it changed since the session last handed it.
-        const deskKey = desk === undefined ? handed.desk : contentKey(desk);
-        const desked = desk !== undefined && deskKey !== handed.desk ? [desk] : [];
+        // An operator's desk is handed again only where its standing work changed since the session
+        // last handed it, or where it carries notices, which are marked read once handed.
+        const deskKey = desk === undefined ? handed.desk : contentKey(desk.standing);
+        const fresh = desk !== undefined && (desk.notices.length > 0 || deskKey !== handed.desk);
+        const desked = fresh ? [desk.text] : [];
+        if (fresh && desk.notices.length > 0) {
+          yield* markDeskNoticesRead(agent, desk).pipe(
+            Effect.tapError(logStoreFailure),
+            Effect.orElseSucceed(() => undefined),
+          );
+        }
         const spoken = turn.kind === BRAIN_HOST_TURN.SPOKEN;
         const kind = turnKindWords(spoken, handed, agent.taskId !== null);
         const taskHanded = task === undefined ? handed.task : task.key;

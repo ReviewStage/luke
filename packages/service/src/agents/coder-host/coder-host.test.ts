@@ -29,13 +29,18 @@ import {
 import { readConversationPicture } from "@luke/database/models/conversation-pictures";
 import { childConversationId, hostTurnId } from "@luke/database/models/ids";
 import { listJournalsCalling } from "@luke/database/models/message-reads";
+import { unreadOperatorNotices, writeOperatorNotice } from "@luke/database/models/operator-notices";
 import { keepPlanAttachment, PLAN_ATTACHMENT_KEEP } from "@luke/database/models/plan-attachments";
 import { holdSandbox } from "@luke/database/models/sandbox-terminal-lease";
 import { readTask, updateTask } from "@luke/database/models/task-store";
 import { type ConversationTarget, storeWriter } from "@luke/database/models/writer";
 import { codingAgent } from "@luke/database/schemas/coding-agent";
 import { conversations, messages, turns } from "@luke/database/schemas/storage";
-import { CONVERSATION_KIND, MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
+import {
+  CONVERSATION_KIND,
+  MESSAGE_SENDER,
+  OPERATOR_NOTICE_KIND,
+} from "@luke/database/storage-vocabulary";
 import { getTestDB, joinWorkspace, leaveWorkspace, startTask } from "@luke/database/testing";
 import { ACCOUNT_CHAT_REASON } from "@luke/features/account-inbox-wire";
 import { CHAT_BLOCK, CHAT_TOOL, MEMBER_KIND } from "@luke/features/chat-wire";
@@ -2236,6 +2241,47 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
   );
 
   it.effect(
+    "an operator's desk hands what its member's agents did since its last turn once, marks it read, and hands nothing again while nothing new stands",
+    () =>
+      Effect.gen(function* () {
+        const host = yield* hostOverStore();
+        const { userId, agent, admitted: coderAdmitted, auth, sessionId } = yield* openAgent(host);
+        const workspace = Option.getOrThrow(yield* agentWorkspace(userId, agent.id));
+        const operator = yield* openOperator(host, userId, workspace);
+        const typed = (handed: TurnHanded) =>
+          host.turnMessage(
+            operator.admitted,
+            { kind: BRAIN_HOST_TURN.TYPED, turnId: undefined },
+            handed,
+          );
+        const noticed = (text: string | undefined) =>
+          text?.includes("New since your last turn") === true;
+        const first = yield* typed({});
+        assert.ok(!noticed(first.text), first.text ?? "");
+
+        // The member's agent ends a turn through the relay, and again: one notice of it.
+        const session = { id: sessionId, auth, turn: { id: "turn_0" } };
+        for (const turnId of ["turn_0", "turn_1"]) {
+          const state = memoryRelayState();
+          for (const event of codingTurn(turnId, "turn.completed")) {
+            // SAFETY: the relay reads the session's id and auth; eve's turn metadata is not read here.
+            yield* host.relay(event, coderAdmitted, session as never, state, {});
+          }
+        }
+        const told = yield* typed(first.handed);
+        const text = told.text ?? "";
+        assert.ok(noticed(text), text);
+        assert.ok(text.includes(`[@${agent.personaName ?? ""}]`), text);
+        assert.equal(text.split("a turn ended").length - 1, 1, text);
+
+        // Handed once: the notices are read, and a desk with nothing new hands nothing.
+        assert.deepEqual(yield* unreadOperatorNotices(operator.agent.id, 10), []);
+        const after = yield* typed(told.handed);
+        assert.ok(!after.text?.includes(DESK_LEAD), after.text ?? "");
+      }),
+  );
+
+  it.effect(
     "an operator's desk shows a section's newest rows and counts the rest, and leaves out a teammate's agents",
     () =>
       Effect.gen(function* () {
@@ -2266,6 +2312,14 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
         for (let index = 0; index < 9; index += 1) own.push(yield* started(userId));
         const teammates = yield* started(teammate);
         const operator = yield* openOperator(host, userId, task.workspaceId);
+        // Each of the member's agents opened an ask, the oldest first, so nine rows stand for the notices' eight.
+        for (const [index, each] of own.entries()) {
+          yield* writeOperatorNotice(
+            { agentId: each.id },
+            OPERATOR_NOTICE_KIND.INBOX_ASK,
+            new Date(Date.UTC(2026, 9, 22, 9, index)),
+          );
+        }
 
         const desk =
           (yield* host.turnMessage(
@@ -2279,6 +2333,12 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
         assert.ok(own.slice(1).every(named), desk);
         assert.ok(!named(own[0] ?? teammates), "the oldest is the one counted");
         assert.ok(!named(teammates), "a teammate's agent is no row of the desk");
+        // The notice only counted stays unread for the next turn; the eight shown are read.
+        const left = yield* unreadOperatorNotices(operator.agent.id, 20);
+        assert.deepEqual(
+          left.map(({ agentId }) => agentId),
+          [own[0]?.id],
+        );
       }),
   );
 

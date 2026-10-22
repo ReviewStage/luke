@@ -15,6 +15,7 @@ import type { VoiceOrphanSweepOutcome } from "../voice/orphan-sweep.js";
 import type { EveSandboxSweepOutcome } from "./eve-sandbox-sweep.js";
 import type { NativeSandboxSweepOutcome } from "./native-sandbox-sweep.js";
 import type { NativeWakeupSweepOutcome } from "./native-wakeup-sweep.js";
+import type { OperatorWakeSweepOutcome } from "./operator-wake-sweep.js";
 import type { TerminalLeaseSweepOutcome } from "./terminal-lease-sweep.js";
 
 /**
@@ -30,7 +31,8 @@ import type { TerminalLeaseSweepOutcome } from "./terminal-lease-sweep.js";
  * run's own end did not stop it, an eve agent's sandbox left running with
  * no turn and no terminal to hold it is stopped where its turn's end did
  * not stop it, the wakeups a native agent's released wait left are
- * delivered once due, the
+ * delivered once due, an operator whose member's agent failed is woken, at
+ * most once an hour for each agent, the
  * automations whose schedule is due are fired, a picture pasted into a
  * plan a day ago that no save ever named is deleted, and the pull requests of
  * agents on a member's own GitHub token, which no webhook reaches, are polled
@@ -42,7 +44,7 @@ import type { TerminalLeaseSweepOutcome } from "./terminal-lease-sweep.js";
 /** One sweep of the cron's: a query against the store, so its requirement is the client the edge provides. */
 type SweepRead<A> = Effect.Effect<A, unknown, DatabaseServices>;
 
-/** The thirteen sweeps, each answering an Effect over the store's own client the edge provides. */
+/** The fourteen sweeps, each answering an Effect over the store's own client the edge provides. */
 interface MaintenanceSweeps {
   /** Removes every conversation stamped deleted past its retention window, answering how many went. */
   purgeCleared: (now: number) => SweepRead<number>;
@@ -62,6 +64,8 @@ interface MaintenanceSweeps {
   sweepEveSandboxes: (now: number) => SweepRead<EveSandboxSweepOutcome>;
   /** Delivers the native agents' wakeups due, a sweep's worth, each as a message from Luke. */
   sweepNativeWakeups: (now: number) => SweepRead<NativeWakeupSweepOutcome>;
+  /** Wakes the operators whose member's agents failed with no wake in the hour before, a sweep's worth. */
+  sweepOperatorWakes: (now: number) => SweepRead<OperatorWakeSweepOutcome>;
   /** Fires the automations whose schedule is due, a sweep's worth, each once. */
   sweepAutomations: (now: number) => SweepRead<AutomationSweepOutcome>;
   /** Deletes the plans' pictures uploaded a day or more ago that no save named, a sweep's worth, answering how many went. */
@@ -73,7 +77,7 @@ interface MaintenanceSweeps {
 }
 
 /**
- * How a run is told to the sweep's cron monitor: around the thirteen sweeps once
+ * How a run is told to the sweep's cron monitor: around the fourteen sweeps once
  * the call is the cron's own. A call that is not the cron's, or one a
  * deployment without its secret cannot authenticate, is not a run and tells
  * it nothing, so a stranger cannot report a run that failed.
@@ -108,6 +112,8 @@ interface MaintenanceSweepAnswer {
   eveSandboxes: EveSandboxSweepOutcome;
   /** What the delivery of the native agents' wakeups due did. */
   nativeWakeups: NativeWakeupSweepOutcome;
+  /** What the wake of the operators whose member's agents failed did. */
+  operatorWakes: OperatorWakeSweepOutcome;
   /** What the sweep over the automations due did. */
   automations: AutomationSweepOutcome;
   /** Pictures pasted into plans that no save named, deleted. */
@@ -118,7 +124,7 @@ interface MaintenanceSweepAnswer {
   imageTemplates: TemplateSweepOutcome;
 }
 
-/** The thirteen sweeps in turn, each handed the same instant. */
+/** The fourteen sweeps in turn, each handed the same instant. */
 const sweepAll = /* @__PURE__ */ Effect.fn("web/sweepAll")(function* (
   sweeps: MaintenanceSweeps,
 ): Effect.fn.Return<MaintenanceSweepAnswer, unknown, DatabaseServices> {
@@ -133,6 +139,7 @@ const sweepAll = /* @__PURE__ */ Effect.fn("web/sweepAll")(function* (
     nativeSandboxes: yield* sweeps.sweepNativeSandboxes(now),
     eveSandboxes: yield* sweeps.sweepEveSandboxes(now),
     nativeWakeups: yield* sweeps.sweepNativeWakeups(now),
+    operatorWakes: yield* sweeps.sweepOperatorWakes(now),
     automations: yield* sweeps.sweepAutomations(now),
     purgedPictures: yield* sweeps.purgeUnsavedPictures(now),
     tokenPullRequests: yield* sweeps.sweepTokenPullRequests(now),

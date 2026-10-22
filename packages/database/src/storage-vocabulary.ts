@@ -38,3 +38,19 @@ export const INBOX_ATTACHMENT_KIND = {
 
 export type InboxAttachmentKind =
   (typeof INBOX_ATTACHMENT_KIND)[keyof typeof INBOX_ATTACHMENT_KIND];
+
+/**
+ * What an operator's notice tells of one of its member's agents: a turn
+ * that settled, a turn that failed or was abandoned, its pull request
+ * merged or closed unmerged, or a new ask it posted to the member's inbox
+ * (`schemas/operator-notice.ts`).
+ */
+export const OPERATOR_NOTICE_KIND = {
+  TURN_SETTLED: "turn_settled",
+  TURN_FAILED: "turn_failed",
+  PR_MERGED: "pr_merged",
+  PR_CLOSED: "pr_closed",
+  INBOX_ASK: "inbox_ask",
+} as const;
+
+export type OperatorNoticeKind = (typeof OPERATOR_NOTICE_KIND)[keyof typeof OPERATOR_NOTICE_KIND];

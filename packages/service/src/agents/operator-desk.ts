@@ -16,6 +16,18 @@
  * heading and its rows (`DeskSection`), so another kind of row joins the
  * desk as one more section (`readDeskSections`).
  *
+ * Beside the standing sections, the desk hands what is new since the
+ * operator's last turn: the notices its member's agents left
+ * (`@luke/database/models/operator-notices`), a turn that settled or
+ * failed, a pull request merged or closed, a new ask in the member's inbox,
+ * one row per agent with what happened to it, newest first and bounded
+ * (`readOperatorDesk`). Notices are handed once: the turn's message marks
+ * read those its rows showed (`markDeskNoticesRead`), and those of agents
+ * past the rows' cap, only counted, wait for the next turn; and whether the desk is
+ * handed again is keyed on its standing sections alone, so a desk whose
+ * notices were all read and whose work stands as it did hands nothing new
+ * and the history stays cached.
+ *
  * `list_open_asks` is the operator's read of every ask waiting on its member
  * across all their agents, where `read_inbox` reads only the caller's own
  * threads (`../inbox/inbox-store.ts`'s `memberOpenAsks`): only an operator is
@@ -32,11 +44,17 @@ import {
   listPublishedCodingAgentsById,
   listWorkspaceCodingAgents,
 } from "@luke/database/models/coding-agent-store";
+import {
+  markOperatorNoticesRead,
+  type UnreadOperatorNotice,
+  unreadOperatorNotices,
+} from "@luke/database/models/operator-notices";
+import { OPERATOR_NOTICE_KIND, type OperatorNoticeKind } from "@luke/database/storage-vocabulary";
 import { AGENT_TOOL } from "@luke/features/agent-tools";
 import { CODING_AGENT_STATUS, PULL_REQUEST_STATE } from "@luke/features/coding-agent-wire";
 import { MENTION_KIND } from "@luke/features/mention-link";
 import { ACTION_RESULT_STATUS, type UnparsedWireValue, type WireRecord } from "@luke/wire";
-import { Clock, Effect, Schema } from "effect";
+import { Clock, DateTime, Effect, Schema } from "effect";
 import type { StoreFailure } from "../http/store-failure.js";
 import { type MemberOpenAsk, memberOpenAsks } from "../inbox/inbox-store.js";
 import { codingAgentFailureOf, codingAgentStatusOf, startedBlank } from "./coder-host/status.js";
@@ -59,6 +77,8 @@ export const OPERATOR_DESK = {
   ASKS_LISTED: 100,
   /** The most characters of an ask's own words `list_open_asks` answers. */
   ASK_CHARS: 600,
+  /** The most unread notices, newest first, one desk reads and marks read; the rest wait for the next. */
+  NOTICES_READ: 50,
 } as const;
 
 /** The line the desk rides behind in a turn's message. */
@@ -97,7 +117,17 @@ const DESK_HEADING = {
   FAILED: "Failed",
   PULL_REQUESTS: "Pull requests awaiting them",
   ASKS: "Waiting on them in their inbox",
+  NOTICES: "New since your last turn",
 } as const;
+
+/** What each notice says happened to its agent, as the desk's row names it. */
+const NOTICE_WORDS = {
+  [OPERATOR_NOTICE_KIND.TURN_SETTLED]: "a turn ended",
+  [OPERATOR_NOTICE_KIND.TURN_FAILED]: "a turn failed",
+  [OPERATOR_NOTICE_KIND.PR_MERGED]: "its pull request merged",
+  [OPERATOR_NOTICE_KIND.PR_CLOSED]: "its pull request closed unmerged",
+  [OPERATOR_NOTICE_KIND.INBOX_ASK]: "it asked them in their inbox",
+} as const satisfies Record<OperatorNoticeKind, string>;
 
 /** The agent as a row names it: its human name, its title, or its model. */
 function agentName(agent: Pick<CodingAgent, "personaName" | "title" | "model">): string {
@@ -241,11 +271,84 @@ export const readDeskSections = (
     ];
   });
 
-/** The desk's text for the operator, as a turn's message carries it. */
-export const operatorDesk = (
+/**
+ * The notices as one section: one row per agent, the agent with the newest
+ * notice first, each naming what happened to it newest first.
+ */
+function noticesSection(notices: readonly UnreadOperatorNotice[], step: string): DeskSection {
+  const byAgent = new Map<
+    string,
+    { readonly newest: UnreadOperatorNotice; readonly kinds: OperatorNoticeKind[] }
+  >();
+  for (const notice of notices) {
+    const held = byAgent.get(notice.agentId);
+    if (held === undefined) byAgent.set(notice.agentId, { newest: notice, kinds: [notice.kind] });
+    else held.kinds.push(notice.kind);
+  }
+  const rows = [...byAgent.values()].map(({ newest, kinds }) => {
+    const name = newest.agentPersonaName ?? newest.agentTitle ?? newest.agentModel;
+    const mention = agentMention({ id: newest.agentId, taskId: newest.taskId }, name, step);
+    return `- ${mention}: ${kinds.map((kind) => NOTICE_WORDS[kind]).join(", ")}`;
+  });
+  return {
+    heading: DESK_HEADING.NOTICES,
+    rows,
+    more: "the rest are handed on your next turn.",
+  };
+}
+
+/**
+ * The notices the desk shows by row: those of the agents its section's
+ * first `OPERATOR_DESK.ROWS` rows name, every kind of each. The rest are
+ * only counted, so they stay unread and are handed on the next turn.
+ */
+function shownNotices(notices: readonly UnreadOperatorNotice[]): readonly UnreadOperatorNotice[] {
+  const shown = new Set<string>();
+  for (const { agentId } of notices) {
+    if (shown.size === OPERATOR_DESK.ROWS) break;
+    shown.add(agentId);
+  }
+  return notices.filter(({ agentId }) => shown.has(agentId));
+}
+
+/** The operator's desk as a turn opens, with what of it the turn's message hands once. */
+export interface OperatorDesk {
+  /** The whole desk, behind its lead: the standing sections and the notices. */
+  readonly text: string;
+  /** The standing sections alone, which say whether the desk changed since it was last handed. */
+  readonly standing: string;
+  /** The notices the desk shows by row, as read, which are marked read once it is handed unless an event moved one since; those only counted stay unread. */
+  readonly notices: readonly UnreadOperatorNotice[];
+}
+
+/** The desk for the operator, as a turn's message carries it, with the notices it hands. */
+export const readOperatorDesk = (
   operator: CodingAgent,
-): Effect.Effect<string, StoreFailure, DatabaseServices> =>
-  Effect.map(readDeskSections(operator), deskText);
+): Effect.Effect<OperatorDesk, StoreFailure, DatabaseServices> =>
+  Effect.gen(function* () {
+    const [sections, notices, step] = yield* Effect.all(
+      [
+        readDeskSections(operator),
+        unreadOperatorNotices(operator.id, OPERATOR_DESK.NOTICES_READ),
+        workspaceStepOf(operator.userId, operator.organizationId),
+      ],
+      { concurrency: "unbounded" },
+    );
+    return {
+      text: deskText([noticesSection(notices, step), ...sections]),
+      standing: deskText(sections),
+      notices: shownNotices(notices),
+    };
+  });
+
+/** Marks read the notices the desk handed, once its turn's message carries it. */
+export const markDeskNoticesRead = (
+  operator: CodingAgent,
+  desk: OperatorDesk,
+): Effect.Effect<void, StoreFailure, DatabaseServices> =>
+  Effect.flatMap(DateTime.nowAsDate, (now) =>
+    markOperatorNoticesRead(operator.id, desk.notices, now),
+  );
 
 /** An ask's own words, cut to the bound on a whole character. */
 function askWords(text: string | null): string | null {
