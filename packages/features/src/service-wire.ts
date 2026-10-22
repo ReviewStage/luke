@@ -142,6 +142,10 @@ export const HOSTED_API_ERROR = {
    * Nothing was written.
    */
   LINEAR_UNAVAILABLE: "linear-unavailable",
+  /** A skill of that name is already installed in the scope asked: the account's own, or the workspace's. Nothing was installed. */
+  SKILL_NAME_TAKEN: "skill-name-taken",
+  /** A skill's files were refused: past a skill's bounds, a `SKILL.md` that breaks the convention, or a credential-shaped literal. Nothing was installed. */
+  SKILL_FILES_REFUSED: "skill-files-refused",
 } as const;
 
 export type HostedApiError = (typeof HOSTED_API_ERROR)[keyof typeof HOSTED_API_ERROR];

@@ -3363,10 +3363,10 @@ function playListMotions() {
   const motions = playMotions();
   const root = document.documentElement.style;
   const tokens = {
-    "--duration-exit": "90ms",
-    "--motion-exit": "ease",
-    "--duration-shape": "460ms",
-    "--spring": "ease-out",
+    "--luke-duration-exit": "90ms",
+    "--luke-motion-exit": "ease",
+    "--luke-duration-shape": "460ms",
+    "--luke-spring": "ease-out",
   };
   for (const [name, value] of Object.entries(tokens)) root.setProperty(name, value);
   onTestFinished(() => {

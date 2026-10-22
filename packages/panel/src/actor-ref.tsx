@@ -23,9 +23,12 @@ import {
   ScrollArea,
   TEXT_BUTTON_LINES,
   TextButton,
+  TIME_LOOK,
+  Time,
   Tooltip,
   UNASSIGNED_WORDS,
   UnassignedAvatar,
+  useMinute,
   VisuallyHidden,
   WingFace,
 } from "@luke/ui";
@@ -48,9 +51,7 @@ import { automationNextText, automationOwnerName } from "./desktop/automation-wo
 import { PERSON_PAGE } from "./desktop/pages-on-demand.js";
 import { useActorDoor } from "./person-door.js";
 import { GLYPH_STATE, type GlyphState, StateGlyph } from "./state-glyph.js";
-import { RelativeTime } from "./tasks/relative-time.js";
 import { AgentMark } from "./tasks/tab-look.js";
-import { useMinute } from "./tasks/task-time.js";
 
 /**
  * actor-ref.tsx -- whoever did something, drawn one way wherever the window names them: a person on a circle, and Luke, an agent, or an automation by its glyph in a rounded square's box, on a solid tile in a facepile whose faces overlap.
@@ -603,7 +604,7 @@ export function AutomationCard({
       {lastRun === null ? null : (
         <HoverCardNote>
           {"Last ran "}
-          <RelativeTime at={lastRun.firedAt} now={now} hint={false} ago />
+          <Time at={lastRun.firedAt} now={now} hint={false} look={TIME_LOOK.AGO} />
           {` · ${automationRunLine(lastRun, automation.mine === true ? undefined : "its creator")}`}
         </HoverCardNote>
       )}

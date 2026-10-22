@@ -13,7 +13,7 @@ import {
   Text,
 } from "@luke/ui";
 import { ACCOUNTS_SORT_KEY, type AccountsDetailColumn } from "@luke/ui/accounts-sort";
-import { formatDate, formatNumber } from "@luke/ui/admin-format";
+import { formatCount, formatDate } from "@luke/ui/time-format";
 import { useEffect, useState } from "react";
 import { ACCOUNTS_TABLE_MIN_WIDTH, AccountsTable } from "../accounts-table/accounts-table.js";
 import { useAdminDoors } from "../admin-doors.js";
@@ -198,7 +198,7 @@ export function UsersScreen({
           <>
             {search}
             <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
-              {formatNumber(rows.length)} of {formatNumber(list.total)} accounts
+              {formatCount(rows.length)} of {formatCount(list.total)} accounts
               {list.search === undefined ? "" : " matching"}
             </Text>
           </>

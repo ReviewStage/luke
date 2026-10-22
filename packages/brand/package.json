@@ -7,8 +7,7 @@
   "exports": {
     ".": "./src/index.js",
     "./assets-directory": "./scripts/assets-directory.mjs",
-    "./dmg-window": "./scripts/dmg-window.mjs",
-    "./motion-tokens.css": "./src/generated/motion-tokens.css"
+    "./dmg-window": "./scripts/dmg-window.mjs"
   },
   "types": "./src/index.ts",
   "scripts": {

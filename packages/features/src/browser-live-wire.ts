@@ -169,7 +169,7 @@ const browserLivePageSchema = EffectSchema.Struct({
   loading: EffectSchema.Boolean,
 });
 
-/** Who drives the tab now: null while its agent has it; `yours` where it is this socket's member. */
+/** Who drives the tab now: null while its agent has it; `yours` where it is this socket's member and they may drive it, whichever of their sockets took it, so its input is taken. */
 const browserLiveDriverChangeSchema = EffectSchema.Struct({
   type: EffectSchema.Literal(BROWSER_LIVE_SERVER.DRIVER),
   driver: EffectSchema.NullOr(browserLiveDriverSchema),

@@ -2,6 +2,7 @@
 
 import assert from "node:assert/strict";
 import { PLAN_ACTOR, type Task } from "@luke/features/task-wire";
+import { Time } from "@luke/ui";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -13,7 +14,6 @@ import { DOCUMENT_TASK } from "../testing/document-task.js";
 import { restOn } from "../testing/hint-rest.js";
 import { tasksControl } from "../testing/tasks-control.js";
 import { PlanBody } from "./plan-body.js";
-import { RelativeTime } from "./relative-time.js";
 
 /**
  * relative-time.test.ts -- a save's age reads the same on the task's own
@@ -85,7 +85,7 @@ test("a plan's Edited line says its age as its sidebar row does, a month old as 
 
 test("a time hangs its full moment in the window's tooltip, not the system's", () => {
   const at = new Date(2026, 9, 14, 15, 42).getTime();
-  const container = mount(createElement(RelativeTime, { at, now: NOW }));
+  const container = mount(createElement(Time, { at, now: NOW }));
   const time = container.querySelector("time");
   assert.ok(time, "the age is a time");
   assert.equal(time.textContent, "2h");

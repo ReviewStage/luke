@@ -10,19 +10,19 @@ way to pass that review is to build from them.
 
 ## The vocabulary
 
-One spring drives everything that needs to travel: `--spring`, and
-`--spring-fast` (the same damping ratio at a higher frequency) for what is
+One spring drives everything that needs to travel: `--luke-spring`, and
+`--luke-spring-fast` (the same damping ratio at a higher frequency) for what is
 small or arrives over the window: a switch's thumb, and a menu, tooltip,
 dialog, palette, or toast rising into place. Settings pages change at once;
 task navigation does not travel. The window's panes are the one exception to
 the spring: the sidebar and the side panel open, close, and fill the window on
-`--motion-pane` over `--duration-pane`, a plain ease-out, because a pane
+`--luke-motion-pane` over `--luke-duration-pane`, a plain ease-out, because a pane
 stands on the window's own edge and a spring's overshoot would part the two
 for a frame. Durations and delays come only from the tokens in
-`packages/brand/src/generated/motion-tokens.css` (`--duration-shape`,
-`--duration-exit`, `--duration-quick`, `--duration-fast`, `--duration-hover`,
-`--duration-pane`, `--motion-exit`, `--motion-pane`, `--row-stagger`,
-`--hint-delay`, `--late-delay`). Never write a literal millisecond into a
+`packages/ui/src/tokens/motion-tokens.css` (`--luke-duration-shape`,
+`--luke-duration-exit`, `--luke-duration-quick`, `--luke-duration-fast`, `--luke-duration-hover`,
+`--luke-duration-pane`, `--luke-motion-exit`, `--luke-motion-pane`, `--luke-row-stagger`,
+`--luke-hint-delay`, `--luke-late-delay`). Never write a literal millisecond into a
 rule: reduced motion and capture runs zero the tokens, and a literal is a
 motion those runs cannot stop. The one sanctioned exception is an endless loop
 (a spinner, a breathing idle, the face's own motions) whose
@@ -56,8 +56,8 @@ native motion in place of the spring, so no renderer style sets
 `scroll-snap-type`.
 
 Content arriving rides the pair every arriving element rides — opacity over
-`--duration-quick`, any travel on `--spring` — and content leaving goes first,
-over `--duration-exit`. An element that unmounts is held mounted through its
+`--luke-duration-quick`, any travel on `--luke-spring` — and content leaving goes first,
+over `--luke-duration-exit`. An element that unmounts is held mounted through its
 own exit and taken out when the exit finishes, never on the frame the state
 changed.
 
@@ -76,7 +76,7 @@ a component tells the stylesheet a measured distance.
 
 A gesture that moves several elements gives each the same duration and
 spring and staggers only the delay, so the whole reads as one object. Stagger
-a list that arrives together by `--row-stagger` per step.
+a list that arrives together by `--luke-row-stagger` per step.
 
 ## Proving it
 

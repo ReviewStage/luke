@@ -46,6 +46,7 @@ import {
 } from "@luke/features/pull-request-write-wire";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
+import { timeRuntime } from "@luke/ui";
 import { Clock, Context, Effect } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -459,7 +460,10 @@ const NO_GITHUB: GitHubConnectControl = {
 /** A registry whose atoms count on this clock, as the window's count on its own. */
 function registryOn(clock: Clock.Clock): AtomRegistry.AtomRegistry {
   return AtomRegistry.make({
-    initialValues: [[rendererRuntime, AsyncResult.success(Context.make(Clock.Clock, clock))]],
+    initialValues: [
+      [rendererRuntime, AsyncResult.success(Context.make(Clock.Clock, clock))],
+      [timeRuntime, AsyncResult.success(Context.make(Clock.Clock, clock))],
+    ],
   });
 }
 

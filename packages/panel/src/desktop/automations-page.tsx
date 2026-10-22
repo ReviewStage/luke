@@ -49,8 +49,10 @@ import {
   Text,
   Tooltip,
   useMenu,
+  useMinute,
   VisuallyHidden,
 } from "@luke/ui";
+import { momentText } from "@luke/ui/time-format";
 import { ChevronRightIcon, GitPullRequestIcon, PlusIcon, ZapIcon } from "lucide-react";
 import { Fragment, useEffect, useRef, useState } from "react";
 import { useAct } from "../act.js";
@@ -61,7 +63,6 @@ import { NOT_FOUND_THING, NotFound } from "../not-found.js";
 import { useSentryRead } from "../settings/use-sentry-read.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { GLYPH_STATE, glyphStateWords, StateGlyph, stateEndMark } from "../state-glyph.js";
-import { momentText, useMinute } from "../tasks/task-time.js";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast.js";
 import { useExperiment } from "../use-app-state.js";

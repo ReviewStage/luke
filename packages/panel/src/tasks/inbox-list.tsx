@@ -41,8 +41,10 @@ import {
   Skeleton,
   SkeletonRegion,
   TaskStatusMark,
+  Time,
   Tooltip,
   useMenu,
+  useMinute,
   VisuallyHidden,
 } from "@luke/ui";
 import {
@@ -169,11 +171,9 @@ import {
   useLeaving,
 } from "./inbox-row-motion.js";
 import { ReadAgentModel } from "./mentioned-agent-card.js";
-import { RelativeTime } from "./relative-time.js";
 import { PlanGlyph } from "./tab-look.js";
 import { markReadItem } from "./task-menu-items.js";
 import { TASK_STATUS_WORDS, TaskKey } from "./task-standing.js";
-import { useMinute } from "./task-time.js";
 import { cardTitle, plainWords } from "./tool-call-model.js";
 import { useOpenPlace } from "./use-open-link.js";
 
@@ -501,7 +501,7 @@ function InboxItemCard({
             <span>{standingWords(item, needsYou, starter)}</span>
           </>
         }
-        corner={<RelativeTime at={item.updatedAt} now={now} hint={false} />}
+        corner={<Time at={item.updatedAt} now={now} hint={false} />}
       />
       {thread.ask === undefined ? (
         settled === undefined ? null : (
@@ -894,7 +894,7 @@ export function InboxItemRow({
                 </span>
               ) : null}
               <TaskStatusChip holder={holder} />
-              <RelativeTime at={item.updatedAt} now={now} hint={false} />
+              <Time at={item.updatedAt} now={now} hint={false} />
             </span>
           }
           metaAt={LIST_ROW_META.TITLE}

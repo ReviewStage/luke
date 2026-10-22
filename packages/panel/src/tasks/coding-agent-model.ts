@@ -74,6 +74,7 @@ import {
   personActor,
   SOMEONE_REASON,
 } from "@luke/ui/actor-model";
+import { dayAndTimeText } from "@luke/ui/time-format";
 import { callOfLine } from "@luke/voice/transcript-model";
 import {
   ACTION_RESULT_STATUS,
@@ -92,7 +93,6 @@ import { Option, Schema } from "effect";
 import { TOOL_STATE, type ToolState } from "../ai-elements/tool.js";
 import { GLYPH_STATE, type GlyphState, glyphStateWords } from "../state-glyph.js";
 import { drawnCall } from "./native-tool-calls.js";
-import { dayAndTimeText } from "./task-time.js";
 import {
   changesSidebar,
   remoteCallOf,

@@ -63,6 +63,10 @@ import {
 } from "../github/repository-pins-procedures.js";
 import { type InboxProcedureSeams, inboxProcedures } from "../inbox/inbox-procedures.js";
 import {
+  type InstalledSkillsProcedureSeams,
+  installedSkillsProcedures,
+} from "../installed-skills/installed-skills-procedures.js";
+import {
   type IntegrationsProcedureSeams,
   integrationsProcedures,
 } from "../integrations/integrations-procedures.js";
@@ -103,6 +107,7 @@ export type HostedRouterSeams = AccountProcedureSeams &
   GitHubProcedureSeams &
   GitHubTokenProcedureSeams &
   InboxProcedureSeams &
+  InstalledSkillsProcedureSeams &
   IntegrationsProcedureSeams &
   LiveProcedureSeams &
   MacCommandsProcedureSeams &
@@ -137,6 +142,7 @@ export function hostedRouter(seams: HostedRouterSeams) {
     github: githubProcedures(seams),
     githubToken: githubTokenProcedures(seams),
     inbox: inboxProcedures(seams),
+    installedSkills: installedSkillsProcedures(seams),
     integrations: integrationsProcedures(seams),
     live: liveProcedures(seams),
     macCommands: macCommandsProcedures(seams),

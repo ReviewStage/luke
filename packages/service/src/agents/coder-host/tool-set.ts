@@ -76,6 +76,10 @@ export const CODER_TOOL = {
   CREATE_SECTION: AGENT_TOOL.CREATE_SECTION,
   DELETE_SECTION: AGENT_TOOL.DELETE_SECTION,
   UPDATE_TASK: AGENT_TOOL.UPDATE_TASK,
+  LIST_AUTOMATIONS: AGENT_TOOL.LIST_AUTOMATIONS,
+  CREATE_AUTOMATION: AGENT_TOOL.CREATE_AUTOMATION,
+  UPDATE_AUTOMATION: AGENT_TOOL.UPDATE_AUTOMATION,
+  DELETE_AUTOMATION: AGENT_TOOL.DELETE_AUTOMATION,
   POST_CHAT: AGENT_TOOL.POST_CHAT,
   READ_CHAT: AGENT_TOOL.READ_CHAT,
   RESOLVE_ASK: AGENT_TOOL.RESOLVE_ASK,
@@ -199,14 +203,18 @@ export function repositoryToolsOf(
   ]);
 }
 
-/** The tools offered by what kind of agent it is: `list_open_asks` to an operator alone, and `delete_section` to every agent but an operator. */
-export type KindTool = typeof CODER_TOOL.LIST_OPEN_ASKS | typeof CODER_TOOL.DELETE_SECTION;
+/** The tools offered by what kind of agent it is: `list_open_asks` to an operator alone, and `delete_section` and `delete_automation` to every agent but an operator. */
+export type KindTool =
+  | typeof CODER_TOOL.LIST_OPEN_ASKS
+  | typeof CODER_TOOL.DELETE_SECTION
+  | typeof CODER_TOOL.DELETE_AUTOMATION;
 
 /**
  * The tools an agent is offered by its kind, on every turn: an operator
  * reads every open ask to its member across their agents, and deletes
  * nothing, under Dean's Steward policy (`../steward.ts`), so it is offered
- * `list_open_asks` and never `delete_section`; every other agent the reverse.
+ * `list_open_asks` and never `delete_section` or `delete_automation`; every
+ * other agent the reverse.
  * Note that each tool withheld is one its call would only be refused by,
  * since a native harness is offered every tool: an operator's delete by its
  * door (`agent-doors.ts`'s `runAgentTools`), and another agent's read of the
@@ -216,7 +224,7 @@ export type KindTool = typeof CODER_TOOL.LIST_OPEN_ASKS | typeof CODER_TOOL.DELE
 export function kindToolsOf(agent: Pick<CodingAgent, "kind">): ReadonlySet<KindTool> {
   return agent.kind === CODING_AGENT_KIND.OPERATOR
     ? new Set([CODER_TOOL.LIST_OPEN_ASKS])
-    : new Set([CODER_TOOL.DELETE_SECTION]);
+    : new Set([CODER_TOOL.DELETE_SECTION, CODER_TOOL.DELETE_AUTOMATION]);
 }
 
 /**

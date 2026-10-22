@@ -29,9 +29,11 @@ import {
   SCROLL_FADE,
   ScrollArea,
   SpinnerRegion,
+  Time,
   Tooltip,
   UnarchiveIcon,
   useMenu,
+  useMinute,
   VisuallyHidden,
 } from "@luke/ui";
 import { type Actor, actorName } from "@luke/ui/actor-model";
@@ -71,13 +73,11 @@ import type { InboxCodeDoors } from "../tasks/inbox-code-card.js";
 import { VIEW_OPTIONS } from "../tasks/inbox-columns.js";
 import { InboxListSkeleton, markAllEntries } from "../tasks/inbox-list.js";
 import { NEEDS_YOU } from "../tasks/inbox-model.js";
-import { RelativeTime } from "../tasks/relative-time.js";
 import { keptSkills } from "../tasks/repository-skills.js";
 import type { SkillSource } from "../tasks/skill-picker.js";
 import { agentEndMark, PlanGlyph } from "../tasks/tab-look.js";
 import { tasklessMentions } from "../tasks/task-mentions.js";
 import { markReadItem } from "../tasks/task-menu-items.js";
-import { useMinute } from "../tasks/task-time.js";
 import { useTaskStatus } from "../tasks/use-known-names.js";
 import { useOpenLink, useOpenTask } from "../tasks/use-open-link.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
@@ -705,7 +705,7 @@ function PlaceRow({
                 </span>
               ) : null}
               {end}
-              {at === undefined ? null : <RelativeTime at={at} hint={false} />}
+              {at === undefined ? null : <Time at={at} hint={false} />}
             </span>
           }
           metaAt={LIST_ROW_META.TITLE}

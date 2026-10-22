@@ -15,6 +15,7 @@ import {
 import { FAILURE_REASON } from "@luke/features/failure-remedy";
 import { MODEL_PROVIDER } from "@luke/features/models-wire";
 import { REPOSITORY_UNREACHED } from "@luke/features/repository-reach-wire";
+import { dayAndTimeText } from "@luke/ui/time-format";
 import { MESSAGE_ROLE, type WireRecord } from "@luke/wire";
 import { sentLineId } from "@luke/wire/host-ids";
 import { test } from "vitest";
@@ -55,7 +56,6 @@ import {
   unreadSentLines,
   withAgentRun,
 } from "./coding-agent-model.js";
-import { dayAndTimeText } from "./task-time.js";
 
 test("a model is named by the catalog where it has been read, else by its own id made readable, either way without Claude before its name", () => {
   const models = [

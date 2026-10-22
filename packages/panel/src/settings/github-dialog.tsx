@@ -21,10 +21,10 @@ import {
   TextLink,
   useConfirmDialog,
 } from "@luke/ui";
+import { dayText } from "@luke/ui/time-format";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { useState } from "react";
 import { useAct } from "../act.js";
-import { dayText } from "../tasks/task-time.js";
 import { useOpenLink } from "../tasks/use-open-link.js";
 
 /**

@@ -22,11 +22,14 @@ import {
   RowHint,
   RowHintOptions,
   TaskStatusMark as TaskStandingMark,
+  TIME_LOOK,
+  Time,
   Tooltip,
   TrashIcon,
   UnpinIcon,
   useConfirmDialog,
   useMenu,
+  useMinute,
   VisuallyHidden,
 } from "@luke/ui";
 import { type AssigneeFace, accountActor, assigneeFace, creatorActor } from "@luke/ui/actor-model";
@@ -58,7 +61,6 @@ import { FadingWords } from "../fading-words.js";
 import { useMemberDirectory } from "../member-directory.js";
 import { EditedBy, type EditPlace, useEditReader } from "../tasks/edit-ref.js";
 import { lastEditOf } from "../tasks/plan-body.js";
-import { RelativeTime } from "../tasks/relative-time.js";
 import {
   copyTaskLinkItem,
   markReadItem,
@@ -67,7 +69,6 @@ import {
   taskLinkPlace,
   versionHistoryItem,
 } from "../tasks/task-menu-items.js";
-import { useMinute } from "../tasks/task-time.js";
 import { useReadMarks } from "../tasks/use-task-looks.js";
 import { useTaskOrigin } from "../tasks/use-task-origin.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
@@ -370,14 +371,14 @@ function TaskMenuFooter({
         )}
         <ActorRef actor={creatorActor(task, reader, you)} sentence />
         {" · "}
-        <RelativeTime at={task.createdAt} now={now} ago />
+        <Time at={task.createdAt} now={now} look={TIME_LOOK.AGO} />
       </p>
       {edit === undefined && task.updatedAt <= task.createdAt ? null : (
         <p className="task-menu-note actor-line">
           {named ? "Last edited by " : "Last edited"}
           {edit === undefined ? null : <EditedBy edit={edit} place={place} sentence />}
           {" · "}
-          <RelativeTime at={edit?.at ?? task.updatedAt} now={now} ago />
+          <Time at={edit?.at ?? task.updatedAt} now={now} look={TIME_LOOK.AGO} />
         </p>
       )}
     </>
@@ -703,7 +704,7 @@ export function SidebarTask({
                 )}
                 {drafted ? <DraftMark /> : null}
                 <TaskStatusMark task={task} stranded={strandedHome(tasks, task)} />
-                <RelativeTime at={at} now={now} hint={false} />
+                <Time at={at} now={now} hint={false} />
               </span>
             )
           }

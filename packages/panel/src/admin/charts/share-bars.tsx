@@ -17,7 +17,7 @@ import {
   type ReachFeature,
 } from "@luke/features/admin-overview-vocabulary";
 import { TEXT_ELEMENT, TEXT_TONE, Text } from "@luke/ui";
-import { formatNumber } from "@luke/ui/admin-format";
+import { formatCount } from "@luke/ui/time-format";
 import { ChartEmpty, ChartFrame } from "./chart-frame.js";
 
 /** What each funnel step is called, in the words a maintainer reads it by. */
@@ -68,7 +68,7 @@ function ShareRow({
           style={{ width: `${percent}%` }}
         />
       </span>
-      <Text as={TEXT_ELEMENT.SPAN}>{formatNumber(count)}</Text>
+      <Text as={TEXT_ELEMENT.SPAN}>{formatCount(count)}</Text>
       <span className="text-right">
         <Text as={TEXT_ELEMENT.SPAN} tone={TEXT_TONE.MUTED}>
           {formatShare(share)}
@@ -119,7 +119,7 @@ export function FunnelChart({
 /** The share of this week's active developers who used each feature. */
 export function ReachChart({ reach }: { reach: AdminOverview["reach"] }): React.JSX.Element {
   const title = "Feature reach · this week";
-  const aside = `of ${formatNumber(reach.activeDevelopers)} active developers`;
+  const aside = `of ${formatCount(reach.activeDevelopers)} active developers`;
   if (reach.activeDevelopers === 0) {
     return (
       <ChartFrame title={title} aside={aside}>

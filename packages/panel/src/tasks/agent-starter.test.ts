@@ -208,7 +208,7 @@ function pass(ms: number): void {
   });
 }
 
-/** Longer than a card waits to show and lingers once left (`--hint-delay`, `CARD_LINGER`). */
+/** Longer than a card waits to show and lingers once left (`--luke-hint-delay`, `CARD_LINGER`). */
 const PAST_ANY_WAIT = 1_000;
 
 /** The agent's card and the starter's card over it, the pointer resting on the starter's, each shown past its wait. */

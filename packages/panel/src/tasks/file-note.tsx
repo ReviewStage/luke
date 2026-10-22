@@ -1,5 +1,13 @@
 import { LINK_PLACE, type LinkPlace } from "@luke/features/luke-link";
-import { DisclosureAction, IconButton, Tooltip, useMenu, WingFace } from "@luke/ui";
+import {
+  DisclosureAction,
+  IconButton,
+  Time,
+  Tooltip,
+  useMenu,
+  useMinute,
+  WingFace,
+} from "@luke/ui";
 import { lineRangeText } from "@luke/voice/code-pane-model";
 import { EllipsisIcon, MessagesSquareIcon } from "lucide-react";
 import { useCopyLinkItem } from "../copy-link-item.js";
@@ -8,9 +16,7 @@ import { MarkdownMessage } from "../markdown-message.js";
 import { AnnotationCard, AnnotationComment, AnnotationComments } from "./annotation-card.js";
 import type { FileNote } from "./file-tab-model.js";
 import { chipPress, MinimizedChip } from "./minimized-threads.js";
-import { RelativeTime } from "./relative-time.js";
 import { useMentionLink } from "./task-mentions.js";
-import { useMinute } from "./task-time.js";
 import { useOpenLink, useOpenPlace } from "./use-open-link.js";
 
 /**
@@ -166,7 +172,7 @@ function FileNoteCard({
           </span>
         }
         name={<span className="file-note-author">{author}</span>}
-        time={<RelativeTime className="annotation-card-time" at={note.shownAt} now={now} />}
+        time={<Time className="annotation-card-time" at={note.shownAt} now={now} />}
         menu={<NoteMenu place={place} />}
       >
         <AnnotationComments>

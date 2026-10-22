@@ -102,7 +102,7 @@ body,
   * {
     scrollbar-color: transparent transparent;
     scrollbar-width: thin;
-    transition: scrollbar-color var(--duration-quick) ease;
+    transition: scrollbar-color var(--luke-duration-quick) ease;
   }
 
   *:hover,
@@ -512,7 +512,7 @@ body,
   border-radius: var(--luke-control-radius);
   background: none;
   text-align: left;
-  transition: background-color var(--duration-hover) ease;
+  transition: background-color var(--luke-duration-hover) ease;
 }
 
 /* In the sidebar a row is a control's height, as New plan's is, its line set
@@ -861,7 +861,7 @@ ul.actor-stack {
 
 .desktop-sidebar :is(.sidebar-task-name, .sidebar-pinned-tab-name) {
   color: var(--luke-color-sidebar-ink);
-  transition: color var(--duration-hover) ease;
+  transition: color var(--luke-duration-hover) ease;
 }
 
 .desktop-sidebar
@@ -1022,9 +1022,9 @@ ul.actor-stack {
 .sidebar-tasks > li {
   position: relative;
   transition:
-    transform var(--duration-fast) var(--spring-fast),
-    background-color var(--duration-hover) ease,
-    opacity var(--duration-quick) var(--motion-exit);
+    transform var(--luke-duration-fast) var(--luke-spring-fast),
+    background-color var(--luke-duration-hover) ease,
+    opacity var(--luke-duration-quick) var(--luke-motion-exit);
 }
 
 /* A row being dragged stays in its list as its own placeholder, faded, and
@@ -1092,7 +1092,7 @@ ul.actor-stack {
   margin-bottom: var(--luke-list-gap);
   padding-right: var(--luke-space-4);
   border-radius: var(--luke-control-radius);
-  transition: background-color var(--duration-hover) ease;
+  transition: background-color var(--luke-duration-hover) ease;
 }
 
 [data-luke-profile="desktop"] .sidebar-repository-header {
@@ -1124,8 +1124,8 @@ ul.actor-stack {
 .sidebar-sections > .sidebar-sections-item {
   position: relative;
   transition:
-    transform var(--duration-fast) var(--spring-fast),
-    opacity var(--duration-quick) var(--motion-exit);
+    transform var(--luke-duration-fast) var(--luke-spring-fast),
+    opacity var(--luke-duration-quick) var(--luke-motion-exit);
 }
 
 .sidebar-sections > .sidebar-sections-item[data-lifted="true"] {
@@ -1337,7 +1337,7 @@ ul.actor-stack {
   flex: none;
   align-items: center;
   opacity: 0;
-  transition: opacity var(--duration-hover) ease;
+  transition: opacity var(--luke-duration-hover) ease;
 }
 
 .sidebar-repository-header:is(:focus-within, [data-menu-open="true"]) .sidebar-repository-actions {
@@ -1424,7 +1424,7 @@ ul.actor-stack {
   font-size: var(--luke-type-caption-size);
   font-weight: var(--luke-weight-semibold);
   white-space: nowrap;
-  animation: luke-menu-arrive var(--duration-quick) var(--motion-exit) backwards;
+  animation: luke-menu-arrive var(--luke-duration-quick) var(--luke-motion-exit) backwards;
 }
 
 [data-luke-profile="desktop"] .offline-mark {
@@ -1593,8 +1593,8 @@ ul.actor-stack {
   font-weight: var(--luke-weight-semibold);
   white-space: nowrap;
   transition:
-    background-color var(--duration-hover) ease,
-    color var(--duration-hover) ease;
+    background-color var(--luke-duration-hover) ease,
+    color var(--luke-duration-hover) ease;
 }
 
 .toolbar-button svg {
@@ -1626,8 +1626,8 @@ ul.actor-stack {
   opacity: 0;
   transform: scale(0.6);
   transition:
-    opacity var(--duration-quick) var(--motion-exit),
-    transform var(--duration-fast) var(--spring-fast);
+    opacity var(--luke-duration-quick) var(--luke-motion-exit),
+    transform var(--luke-duration-fast) var(--luke-spring-fast);
 }
 
 .copy-glyph[data-state="idle"] > [data-glyph="idle"],
@@ -2138,7 +2138,7 @@ ul.actor-stack {
    bracket on each top corner, since the video grows upward. */
 .agent-call-video-corner {
   opacity: 0;
-  transition: opacity var(--duration-hover) ease;
+  transition: opacity var(--luke-duration-hover) ease;
 }
 
 .agent-call-video[data-reveal="true"] .agent-call-video-corner,
@@ -2524,15 +2524,15 @@ ul.actor-stack {
 
 /* What pops up arrives on the pair every arriving element rides, the
    menu's (`@luke/ui`'s `luke-menu-arrive` and `luke-menu-drop`), its
-   opacity over `--duration-quick` and its travel on the spring, and leaves
-   first on the menu's `luke-menu-leave`, fading over `--duration-exit`
+   opacity over `--luke-duration-quick` and its travel on the spring, and leaves
+   first on the menu's `luke-menu-leave`, fading over `--luke-duration-exit`
    while its owner holds it drawn and inert (`use-disclosure.ts`; the
    palette's Radix dialog holds its own on `data-state`). A menu's own
    surface (`MenuSurface`) draws all three itself. */
 .task-summary-card[data-leaving="true"],
 :is(.command-palette, .command-palette-backdrop)[data-state="closed"] {
   pointer-events: none;
-  animation: luke-menu-leave var(--duration-exit) var(--motion-exit) forwards;
+  animation: luke-menu-leave var(--luke-duration-exit) var(--luke-motion-exit) forwards;
   /* Note that the hold waits on every motion the element runs, and losing
      focus would start the scrollbar's own fade (above), so the exit is the
      one motion it has. */
@@ -2849,8 +2849,8 @@ ul.actor-stack {
   min-width: 0;
   flex: 1;
   animation:
-    inbox-search-unfold var(--duration-pane) var(--motion-pane),
-    luke-menu-arrive var(--duration-quick) var(--motion-pane);
+    inbox-search-unfold var(--luke-duration-pane) var(--luke-motion-pane),
+    luke-menu-arrive var(--luke-duration-quick) var(--luke-motion-pane);
 }
 
 /* Opening, the field unfolds leftward from where the magnifier stood at its
@@ -3197,7 +3197,7 @@ ul.actor-stack {
   pointer-events: none;
   transform: scale(0.25);
   transform-origin: 0 0;
-  transition: opacity var(--duration-hover) ease;
+  transition: opacity var(--luke-duration-hover) ease;
 }
 
 .inbox-row-media-tile[data-loaded="true"] .inbox-row-media-frame {
@@ -3449,7 +3449,7 @@ ul.actor-stack {
   border: 1px solid var(--luke-color-border-strong);
   border-radius: var(--luke-control-radius);
   background: var(--luke-color-input);
-  transition: background-color var(--duration-hover) ease;
+  transition: background-color var(--luke-duration-hover) ease;
 }
 
 .inbox-field-composer:focus-within {
@@ -4463,7 +4463,7 @@ ul.actor-stack {
   padding: var(--luke-space-6) var(--luke-space-8);
   margin: 0 calc(-1 * var(--luke-space-8));
   border-radius: var(--luke-menu-row-radius);
-  transition: background-color var(--duration-hover) ease;
+  transition: background-color var(--luke-duration-hover) ease;
 }
 
 /* A post of the reader's on its way reads quieter until the chat holds it,
@@ -4868,8 +4868,8 @@ ul.actor-stack {
   background: var(--luke-color-overlay);
   box-shadow: var(--luke-menu-shadow);
   animation:
-    luke-menu-arrive var(--duration-quick) var(--motion-exit) both,
-    luke-menu-drop var(--duration-fast) var(--spring-fast) both;
+    luke-menu-arrive var(--luke-duration-quick) var(--luke-motion-exit) both,
+    luke-menu-drop var(--luke-duration-fast) var(--luke-spring-fast) both;
 }
 
 [data-luke-profile="desktop"] .find-bar {
@@ -5037,7 +5037,7 @@ ul.actor-stack {
   min-height: 0;
   flex-direction: column;
   padding-inline: var(--luke-focus-ring-reach);
-  transition: transform var(--duration-pane) var(--motion-pane);
+  transition: transform var(--luke-duration-pane) var(--luke-motion-pane);
 }
 
 /* The sections' pane is a scroller of the sidebar's kind, its reach already
@@ -5180,7 +5180,7 @@ ul.actor-stack {
 .desktop-task > .agent-page[hidden],
 .desktop-task > .page-find[hidden] {
   visibility: hidden;
-  transition: visibility 0s linear var(--duration-pane);
+  transition: visibility 0s linear var(--luke-duration-pane);
 }
 
 /* The plan's summary (`task-summary.tsx`) ----------------------------------- */
@@ -5301,8 +5301,8 @@ ul.actor-stack {
   outline: none; /* no ring: a card holding focus for its controls */
   transform-origin: top right;
   animation:
-    luke-menu-arrive var(--duration-quick) var(--motion-exit) both,
-    summary-card-grow var(--duration-fast) var(--spring-fast) both;
+    luke-menu-arrive var(--luke-duration-quick) var(--luke-motion-exit) both,
+    luke-card-grow var(--luke-duration-fast) var(--luke-spring-fast) both;
 }
 
 /* The card's rows, inside the `ScrollArea` that scrolls them where the
@@ -5327,9 +5327,9 @@ ul.actor-stack {
 .task-summary-collapse {
   opacity: 0;
   transition:
-    opacity var(--duration-hover) ease,
-    background-color var(--duration-hover) ease,
-    color var(--duration-hover) ease;
+    opacity var(--luke-duration-hover) ease,
+    background-color var(--luke-duration-hover) ease,
+    color var(--luke-duration-hover) ease;
 }
 
 .task-summary[data-mode="column"] > .task-summary-chevron {
@@ -5388,12 +5388,6 @@ ul.actor-stack {
 
 /* It grows out of the rail it stands over rather than dropping as a menu
    does, so its chevron never leaves the spot it shares with the rail's. */
-@keyframes summary-card-grow {
-  from {
-    transform: scale(0.97);
-  }
-}
-
 .task-summary-rows {
   display: flex;
   flex-direction: column;
@@ -5415,7 +5409,7 @@ ul.actor-stack {
   color: var(--luke-color-text);
   font-size: var(--luke-type-body-size);
   text-align: left;
-  transition: background-color var(--duration-hover) ease;
+  transition: background-color var(--luke-duration-hover) ease;
 }
 
 .task-summary-glyph {
@@ -5494,7 +5488,7 @@ ul.actor-stack {
 .task-summary-archived-agent:has(:focus-visible) > .task-summary-marks {
   opacity: 1;
   pointer-events: auto;
-  transition: opacity var(--duration-hover) ease;
+  transition: opacity var(--luke-duration-hover) ease;
 }
 
 .task-summary-archived-agent:has(:focus-visible) .failed-mark {
@@ -5509,7 +5503,7 @@ ul.actor-stack {
   .task-summary-archived-agent:hover > .task-summary-marks {
     opacity: 1;
     pointer-events: auto;
-    transition: opacity var(--duration-hover) ease;
+    transition: opacity var(--luke-duration-hover) ease;
   }
 
   .task-summary-archived-agent:hover .failed-mark {
@@ -5583,7 +5577,7 @@ ul.actor-stack {
   width: 6px;
   cursor: col-resize;
   outline: none; /* no ring: the edge fills in the focus colour */
-  transition: background-color var(--duration-hover) ease;
+  transition: background-color var(--luke-duration-hover) ease;
 }
 
 [data-luke-profile="desktop"] .side-panel-resize,
@@ -5999,12 +5993,6 @@ ul.actor-stack {
 /* Dialog parts ---------------------------------------------------------------- */
 
 /* The command palette's dimmed window fades in on this. */
-@keyframes confirm-dialog-dim {
-  from {
-    opacity: 0;
-  }
-}
-
 /* Command palette --------------------------------------------------------- */
 
 /* ⌘K over the window: the dialog's dimmed window and card, a third of the
@@ -6019,7 +6007,7 @@ ul.actor-stack {
   z-index: var(--luke-z-dialog);
   inset: 0;
   background: var(--luke-color-scrim);
-  animation: confirm-dialog-dim var(--duration-quick) ease-out;
+  animation: luke-dialog-fade var(--luke-duration-quick) ease-out;
 }
 
 [data-luke-profile="desktop"] .command-palette-backdrop {
@@ -6043,8 +6031,8 @@ ul.actor-stack {
   overflow: clip;
   transform: translateX(-50%);
   animation:
-    luke-menu-arrive var(--duration-quick) var(--motion-exit) backwards,
-    command-palette-rise var(--duration-fast) var(--spring-fast) backwards;
+    luke-menu-arrive var(--luke-duration-quick) var(--luke-motion-exit) backwards,
+    luke-scale-in-centered-x var(--luke-duration-fast) var(--luke-spring-fast) backwards;
 }
 
 [data-luke-profile="desktop"] .command-palette {
@@ -6157,12 +6145,6 @@ ul.actor-stack {
   padding: var(--luke-space-8) var(--row-inset) var(--luke-space-4);
 }
 
-@keyframes command-palette-rise {
-  from {
-    transform: translateX(-50%) scale(0.96);
-  }
-}
-
 /* In a narrow room, a phone's, the palette is a sheet hung from the top of
    what is seen rather than a card floating in it: the screen's whole width,
    its corners rounded only where it ends, and its filters one line that
@@ -6177,8 +6159,8 @@ ul.actor-stack {
   border-radius: 0 0 var(--luke-dialog-radius) var(--luke-dialog-radius);
   transform: none;
   animation:
-    luke-menu-arrive var(--duration-quick) var(--motion-exit) backwards,
-    command-palette-drop var(--duration-fast) var(--spring-fast) backwards;
+    luke-menu-arrive var(--luke-duration-quick) var(--luke-motion-exit) backwards,
+    luke-sheet-drop var(--luke-duration-fast) var(--luke-spring-fast) backwards;
 }
 
 /* The filters run to the sheet's edges, so one cut off at the edge reads as
@@ -6190,12 +6172,6 @@ ul.actor-stack {
 :root:has(.desktop-shell[data-room="narrow"]) .command-palette-filters [role="radiogroup"] {
   padding-inline: var(--luke-space-12);
   overscroll-behavior-x: contain;
-}
-
-@keyframes command-palette-drop {
-  from {
-    transform: translateY(-16px);
-  }
 }
 
 /* ⌃Tab's switcher (`tab-switcher.tsx`): the tabs and places stood on last
@@ -6211,7 +6187,7 @@ ul.actor-stack {
   z-index: var(--luke-z-dialog);
   inset: 0;
   background: var(--luke-color-scrim);
-  animation: confirm-dialog-dim var(--duration-quick) ease-out;
+  animation: luke-dialog-fade var(--luke-duration-quick) ease-out;
 }
 
 .tab-switcher {
@@ -6230,8 +6206,8 @@ ul.actor-stack {
   overflow: clip;
   transform: translate(-50%, -50%);
   animation:
-    luke-menu-arrive var(--duration-quick) var(--motion-exit) backwards,
-    tab-switcher-rise var(--duration-fast) var(--spring-fast) backwards;
+    luke-menu-arrive var(--luke-duration-quick) var(--luke-motion-exit) backwards,
+    luke-scale-in-centered var(--luke-duration-fast) var(--luke-spring-fast) backwards;
 }
 
 [data-luke-profile="desktop"] :is(.tab-switcher, .tab-switcher-backdrop) {
@@ -6280,12 +6256,6 @@ ul.actor-stack {
 
 .tab-switcher-footer {
   --luke-shortcut-ink: var(--luke-color-text-muted);
-}
-
-@keyframes tab-switcher-rise {
-  from {
-    transform: translate(-50%, -50%) scale(0.96);
-  }
 }
 
 /* Start ------------------------------------------------------------------ */
@@ -6914,11 +6884,11 @@ ul.actor-stack {
     0 12px 36px var(--luke-color-shadow);
   pointer-events: none;
   animation:
-    toast-fade var(--duration-quick) var(--motion-exit),
-    toast-rise var(--duration-fast) var(--spring-fast);
+    luke-menu-arrive var(--luke-duration-quick) var(--luke-motion-exit),
+    luke-toast-rise var(--luke-duration-fast) var(--luke-spring-fast);
   transition:
-    opacity var(--duration-exit) var(--motion-exit),
-    transform var(--duration-exit) var(--motion-exit);
+    opacity var(--luke-duration-exit) var(--luke-motion-exit),
+    transform var(--luke-duration-exit) var(--luke-motion-exit);
 }
 
 .toast[data-leaving="true"] {
@@ -6998,8 +6968,8 @@ body:has(.luke-dialog-backdrop) .toast[data-action="true"] {
   transform: scale(0.85);
   pointer-events: none;
   transition:
-    opacity var(--duration-hover) ease,
-    transform var(--duration-hover) ease;
+    opacity var(--luke-duration-hover) ease,
+    transform var(--luke-duration-hover) ease;
 }
 
 .toast:focus-within .toast-dismiss {
@@ -7031,18 +7001,6 @@ body:has(.luke-dialog-backdrop) .toast[data-action="true"] {
    by taking the pointer itself, past the card's own `none` above. */
 body:has(.luke-dialog-backdrop) .toast[data-action="true"] .toast-dismiss {
   pointer-events: none;
-}
-
-@keyframes toast-fade {
-  from {
-    opacity: 0;
-  }
-}
-
-@keyframes toast-rise {
-  from {
-    transform: translateY(var(--luke-space-12));
-  }
 }
 
 /* A server's line at a card's head (`server-card.tsx`), set as a card's
@@ -7134,8 +7092,8 @@ body:has(.luke-dialog-backdrop) .toast[data-action="true"] .toast-dismiss {
   border-radius: var(--luke-radius-10);
   background: var(--luke-color-well);
   transition:
-    background-color var(--duration-hover) ease,
-    border-color var(--duration-hover) ease;
+    background-color var(--luke-duration-hover) ease,
+    border-color var(--luke-duration-hover) ease;
 }
 
 /* The column a card is carried over (use-row-drag.ts) is ringed and washed,
@@ -7204,10 +7162,10 @@ body:has(.luke-dialog-backdrop) .toast[data-action="true"] .toast-dismiss {
   background: var(--luke-color-surface);
   box-shadow: 0 1px 2px var(--luke-color-shadow-soft);
   transition:
-    transform var(--duration-fast) var(--spring-fast),
-    border-color var(--duration-hover) ease,
-    box-shadow var(--duration-hover) ease,
-    opacity var(--duration-quick) var(--motion-exit);
+    transform var(--luke-duration-fast) var(--luke-spring-fast),
+    border-color var(--luke-duration-hover) ease,
+    box-shadow var(--luke-duration-hover) ease,
+    opacity var(--luke-duration-quick) var(--luke-motion-exit);
 }
 
 .tasks-board-card:hover,
@@ -7384,7 +7342,7 @@ body:has(.luke-dialog-backdrop) .toast[data-action="true"] .toast-dismiss {
 @media (hover: hover) {
   .tasks-board-card-more {
     opacity: 0;
-    transition: opacity var(--duration-hover) ease;
+    transition: opacity var(--luke-duration-hover) ease;
   }
 
   .tasks-board-card:hover .tasks-board-card-more,
@@ -7457,7 +7415,7 @@ body:has(.luke-dialog-backdrop) .toast[data-action="true"] .toast-dismiss {
 .tasks-list-group {
   row-gap: var(--luke-space-2);
   border-radius: var(--luke-radius-10);
-  transition: background-color var(--duration-hover) ease;
+  transition: background-color var(--luke-duration-hover) ease;
 }
 
 .tasks-list-group > :not(.tasks-list-rows) {
@@ -7495,7 +7453,7 @@ body:has(.luke-dialog-backdrop) .toast[data-action="true"] .toast-dismiss {
   display: inline-flex;
   flex: none;
   color: var(--luke-color-text-subtle);
-  transition: transform var(--duration-fast) var(--spring-fast);
+  transition: transform var(--luke-duration-fast) var(--luke-spring-fast);
 }
 
 .tasks-list-chevron > svg {
@@ -7534,9 +7492,9 @@ body:has(.luke-dialog-backdrop) .toast[data-action="true"] .toast-dismiss {
   border-radius: var(--luke-control-radius);
   color: var(--luke-color-text);
   transition:
-    transform var(--duration-fast) var(--spring-fast),
-    background-color var(--duration-hover) ease,
-    opacity var(--duration-quick) var(--motion-exit);
+    transform var(--luke-duration-fast) var(--luke-spring-fast),
+    background-color var(--luke-duration-hover) ease,
+    opacity var(--luke-duration-quick) var(--luke-motion-exit);
 }
 
 .tasks-list-row:hover,
@@ -7700,7 +7658,7 @@ body:has(.luke-dialog-backdrop) .toast[data-action="true"] .toast-dismiss {
 @media (hover: hover) {
   .tasks-list-cell[data-cell="more"] {
     opacity: 0;
-    transition: opacity var(--duration-hover) ease;
+    transition: opacity var(--luke-duration-hover) ease;
   }
 
   .tasks-list-row:hover .tasks-list-cell[data-cell="more"],

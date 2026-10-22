@@ -78,6 +78,8 @@ export * from "./components/text-button/text-button.js";
 export * from "./components/text-field/text-field.js";
 export * from "./components/text-link/text-link.js";
 export * from "./components/thinking-dots/thinking-dots.js";
+export * from "./components/time/time.js";
+export * from "./components/time/time-clock.js";
 export * from "./components/tooltip/hint.js";
 export * from "./components/tooltip/tooltip.js";
 export * from "./components/visually-hidden/visually-hidden.js";

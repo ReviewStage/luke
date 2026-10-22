@@ -35,6 +35,7 @@ import {
   InlineRef,
   ProviderMark,
   UserIcon,
+  useMinute,
 } from "@luke/ui";
 import { ACTOR_KIND, type Actor, LUKE_ACTOR } from "@luke/ui/actor-model";
 import { fileName } from "@luke/voice/code-pane-model";
@@ -82,7 +83,6 @@ import { OpenedNote, PullRequestCardNotes } from "./pull-request-card-notes.js";
 import { PullRequestMark } from "./pull-request-mark.js";
 import { ServerCard } from "./server-card.js";
 import { AgentMark, PlanGlyph } from "./tab-look.js";
-import { useMinute } from "./task-time.js";
 import { useKnownNames, useTaskStatus } from "./use-known-names.js";
 import {
   type ChipWhere,

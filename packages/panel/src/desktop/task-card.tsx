@@ -14,6 +14,8 @@ import {
   ProviderMark,
   TaskPriorityMark,
   TaskStatusMark as TaskStatusGlyph,
+  TIME_LOOK,
+  Time,
   VisuallyHidden,
 } from "@luke/ui";
 import { ACTOR_KIND, actorName, SOMEONE_REASON } from "@luke/ui/actor-model";
@@ -28,7 +30,6 @@ import { GLYPH_STATE, StateGlyph } from "../state-glyph.js";
 import { WorkspaceDirectory } from "../tasks/chip-cards.js";
 import { agentTabLabel, pullRequestNumberLabel } from "../tasks/coding-agent-model.js";
 import { PullRequestMark } from "../tasks/pull-request-mark.js";
-import { RelativeTime } from "../tasks/relative-time.js";
 import { AgentGlyph, agentEndMark } from "../tasks/tab-look.js";
 import {
   NO_ASSIGNEE_WORDS,
@@ -175,7 +176,7 @@ function CreatorDetail({
           {maker === undefined
             ? `Created by ${by} · `
             : `Created by ${actorName(maker.actor)} for ${by}${maker.fromTask === undefined ? "" : ` · from ${maker.fromTask}`} · `}
-          <RelativeTime at={task.createdAt} now={now} hint={false} ago />
+          <Time at={task.createdAt} now={now} hint={false} look={TIME_LOOK.AGO} />
         </>
       }
       onPress={door}
@@ -304,7 +305,7 @@ export function TaskCard({
       <TaskStanding task={task} workspaceName={workspaceName} />
       <HoverCardHead
         name={task.name}
-        corner={<RelativeTime at={taskTime(task, TASK_ORDER.UPDATED)} now={now} hint={false} />}
+        corner={<Time at={taskTime(task, TASK_ORDER.UPDATED)} now={now} hint={false} />}
       />
       {focus === undefined ? null : (
         <>

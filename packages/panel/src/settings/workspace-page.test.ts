@@ -43,13 +43,13 @@ import { HOST_CAPABILITY } from "@luke/settings";
 import { SETTINGS_SEARCH_ANCHOR_ATTRIBUTE } from "@luke/settings/settings-anchors";
 import { SETTINGS_SECTION } from "@luke/settings/settings-views";
 import { ProviderMark, SettingsPage } from "@luke/ui";
+import { dayAndTimeText } from "@luke/ui/time-format";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { OpenPersonProvider } from "../person-door.js";
-import { dayAndTimeText } from "../tasks/task-time.js";
 import {
   type AnyAct,
   FAKE_ANSWER,

@@ -1,3 +1,4 @@
+import { INSTALLED_SKILLS } from "@luke/agent-runner/protocol";
 import { MENTIONED_HEADING } from "@luke/database/models/attached-file-parts";
 import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
 import { CHAT_NOTICE_LEAD } from "@luke/features/chat-wire";
@@ -15,6 +16,7 @@ import { COMMAND_DESCRIPTION_INSTRUCTION } from "../command-description.js";
 import { CODER } from "./bounds.js";
 import { CHAT_TOOLS } from "./chat.js";
 import { INBOX_TOOLS } from "./inbox.js";
+import { NATIVE_SKILLS_PATH } from "./native-skills.js";
 import { EDIT_PLAN_TOOL } from "./plan-edit.js";
 import { TODOS_TOOL } from "./todos.js";
 import { CODER_TOOL } from "./tool-set.js";
@@ -198,7 +200,9 @@ function browserWords(shell: string): string {
  * Claude Code gives them, and never of Luke's that it is not offered; the
  * tools that touch Luke stay Luke's, over its MCP server, under their own
  * names. Codex likewise owns its shell, `apply_patch`, its plan tool for
- * to-dos, its subagents, its skills (`.agents/skills`), and web search, and
+ * to-dos, its subagents, its skills (`.agents/skills`, and the member's
+ * installed ones, which `native-skills.ts` writes beside the checkout), and
+ * web search, and
  * its shell waits on a long command inside the turn, so a Codex agent waits
  * on its checks with the command itself. A native agent's checkout is
  * fetched whole as it opens (`runner-sessions.ts`).
@@ -227,8 +231,7 @@ const TOOL_WORDS: Readonly<Record<CoderHarness, ToolWords>> = {
     readFile: "Read",
     glob: "Glob",
     searchWeb: "Search the public web with WebSearch and read a page with WebFetch",
-    skills:
-      "A word like `/name` in the developer's message names one of the repository's skills: load it with Claude Code's Skill tool before anything else, and follow what it answers. Where it knows no such skill, read the skill's `SKILL.md` from `.agents/skills/<name>/` or `.claude/skills/<name>/` on the default branch, and follow that instead.",
+    skills: `A word like \`/name\` in the developer's message names one of your skills: the repository's, or one your developer installed into Luke, which Claude Code lists as \`${INSTALLED_SKILLS.PLUGIN}:<name>\`. Load it with Claude Code's Skill tool before anything else, and follow what it answers. Where it knows no such skill, read the skill's \`SKILL.md\` from \`.agents/skills/<name>/\` or \`.claude/skills/<name>/\` on the default branch, and follow that instead.`,
     browser: browserWords("Bash"),
     todos:
       "For work of more than a couple of steps, keep your to-dos with TodoWrite, which the developer watches: write the list before you start, keep exactly one item in progress, and write it again as each item finishes.",
@@ -247,8 +250,7 @@ const TOOL_WORDS: Readonly<Record<CoderHarness, ToolWords>> = {
     readFile: "your shell (`cat`, or `sed -n` for a range), or Codex's `view_image` for a picture",
     glob: "your shell (`rg --files`, or `ls`)",
     searchWeb: "Search the public web with Codex's own web search",
-    skills:
-      "A word like `/name` in the developer's message names one of the repository's skills, which Codex finds under `.agents/skills`: read that skill's `SKILL.md` before anything else, and follow what it says. Where the checkout has no such skill, read `.agents/skills/<name>/SKILL.md` or `.claude/skills/<name>/SKILL.md` on the default branch, and follow that instead.",
+    skills: `A word like \`/name\` in the developer's message names one of your skills, which Codex finds under the checkout's \`.agents/skills\`, or, for one your developer installed into Luke, under \`${NATIVE_SKILLS_PATH.INSTALLED}/${INSTALLED_SKILLS.SKILLS}\`: read that skill's \`SKILL.md\` before anything else, and follow what it says. Where neither has such a skill, read \`.agents/skills/<name>/SKILL.md\` or \`.claude/skills/<name>/SKILL.md\` on the default branch, and follow that instead.`,
     browser: browserWords("your shell"),
     todos:
       "For work of more than a couple of steps, keep your to-dos with Codex's plan tool (`update_plan`), which the developer watches: write the list before you start, keep exactly one item in progress, and write it again as each item finishes.",

@@ -56,7 +56,12 @@ import {
   spawnAppServer,
 } from "./app-server.js";
 import type { ThreadStartParams, TurnStatus, UserInput } from "./codex-protocol/v2/index.js";
-import type { LaunchContext, LaunchOutcome, RunnerSelf } from "./launch.js";
+import {
+  installedSkillsPath,
+  type LaunchContext,
+  type LaunchOutcome,
+  type RunnerSelf,
+} from "./launch.js";
 import {
   CODEX_EFFORT,
   CODEX_ERROR_INFO,
@@ -66,6 +71,7 @@ import {
   type ContentBlock,
   codexErrorKind,
   INPUT_LINE,
+  INSTALLED_SKILLS,
   InputLineSchema,
   RUNNER_END,
   RUNNER_ENV,
@@ -122,6 +128,7 @@ const CLIENT_INFO = {
 const METHOD = {
   INITIALIZE: "initialize",
   INITIALIZED: "initialized",
+  SKILLS_EXTRA_ROOTS_SET: "skills/extraRoots/set",
   THREAD_START: "thread/start",
   THREAD_RESUME: "thread/resume",
   TURN_START: "turn/start",
@@ -398,6 +405,11 @@ const openAppServer = Effect.fn("agent-runner/openAppServer")(function* (
   const opened = Effect.gen(function* () {
     yield* server.request(METHOD.INITIALIZE, { clientInfo: CLIENT_INFO, capabilities: null });
     yield* server.notify(METHOD.INITIALIZED);
+    // The member's installed skills, beside the checkout's `.agents/skills`, before the thread lists them.
+    const skills = installedSkillsPath(config.installedSkills, INSTALLED_SKILLS.SKILLS);
+    if (skills !== undefined) {
+      yield* server.request(METHOD.SKILLS_EXTRA_ROOTS_SET, { extraRoots: [skills] });
+    }
     const thread = {
       cwd: config.cwd,
       model: launch.model,

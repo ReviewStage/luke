@@ -294,6 +294,7 @@ const SETTINGS_PAGES = [
   "Workspace",
   "Agents",
   "Integrations",
+  "Skills",
   "Plan template",
   "Voice",
   "Appearance",

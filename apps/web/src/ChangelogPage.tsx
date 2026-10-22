@@ -17,6 +17,7 @@ import {
   Text,
   TextLink,
 } from "@luke/ui";
+import { formatDayHeading } from "@luke/ui/time-format";
 import changelogMarkdown from "../../../CHANGELOG.md?raw";
 import {
   CHANGELOG_PATH,
@@ -37,17 +38,8 @@ import { REPOSITORY_URL, SITE_PAGE, SiteFooterLinks, SiteNavigation } from "./Si
  */
 export const RELEASES = parseReleases(changelogMarkdown);
 
-/* UTC, because the heading's date names a calendar day, not an instant — a
-   visitor west of Greenwich must not read the release as the evening before. */
-const RELEASE_DATE_FORMAT = new Intl.DateTimeFormat("en-US", {
-  year: "numeric",
-  month: "long",
-  day: "numeric",
-  timeZone: "UTC",
-});
-
 function formatReleaseDate(date: string): string {
-  return RELEASE_DATE_FORMAT.format(new Date(`${date}T00:00:00Z`));
+  return formatDayHeading(date);
 }
 
 /** The view's door to GitHub, the landing hero's secondary button, so the two GitHub doors read as the same control. */

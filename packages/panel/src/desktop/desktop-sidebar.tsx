@@ -44,6 +44,7 @@ import {
   UNASSIGNED_WORDS,
   UnpinIcon,
   useMenu,
+  useMinute,
   VisuallyHidden,
 } from "@luke/ui";
 import { actorName, creatorActor, personActor } from "@luke/ui/actor-model";
@@ -112,7 +113,6 @@ import { RepositoryPicture } from "../repository-picture.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { GLYPH_STATE, stateEndMark } from "../state-glyph.js";
 import { useChatOn } from "../tasks/chat-gate.js";
-import { useMinute } from "../tasks/task-time.js";
 import type { InboxListing } from "../tasks/use-inbox-listing.js";
 import { inColumn, type PinnedTab } from "../tasks/use-side-panel.js";
 import { useUnreadTasks } from "../tasks/use-task-looks.js";

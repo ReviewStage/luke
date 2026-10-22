@@ -1,6 +1,7 @@
 import type { CodeRef } from "@luke/features/task-wire";
 import type { TaskCodeShowing } from "@luke/features/tasks-view";
 import { IconButton, SCROLL_FADE_INSET, Tooltip } from "@luke/ui";
+import { callHeading, WORKED_SEPARATOR } from "@luke/ui/time-format";
 import {
   type CodeFeedCall,
   type CodeFeedCallSource,
@@ -20,8 +21,6 @@ import { CopyGlyph, copyHint, useCopyFeedback } from "../copy-feedback.js";
 import { CallEndMarker, CallStartMarker } from "./call-card.js";
 import { CodeSnippet, useSnippetNote } from "./code-snippet.js";
 import { FileRef } from "./file-ref.js";
-import { callHeading } from "./task-time.js";
-import { WORKED_SEPARATOR } from "./working-time.js";
 
 /**
  * code-pane.tsx -- the code a task's agents put on screen: the side panel's Code tab, every snippet they showed, one card each, in the order they showed them.

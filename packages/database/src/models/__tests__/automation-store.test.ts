@@ -858,4 +858,26 @@ it.layer(getTestDB())("the automation store's failed runs", (it) => {
         ]);
       }),
   );
+
+  it.effect(
+    "an automation made under an id the caller names keeps it and reads back under it, and a make run again under that id writes nothing",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* openAccount;
+        const taskId = yield* openTask(owner);
+        const id = randomUUID();
+
+        const made = Option.getOrThrow(yield* createAutomation(owner, { ...nightly(taskId), id }));
+
+        // A make run again under the same id writes nothing, and the first stands.
+        const again = yield* createAutomation(owner, { ...nightly(taskId), id, name: "Again" });
+
+        assert.equal(made.id, id);
+        assert.ok(Option.isNone(again));
+        assert.deepEqual(
+          Option.map(yield* readAutomation(owner, id), (read) => read.name),
+          Option.some("Nightly flaky-test sweep"),
+        );
+      }),
+  );
 });

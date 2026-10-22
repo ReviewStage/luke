@@ -11,6 +11,7 @@ import {
   ErrorState,
   SKELETON_SHAPE,
   Skeleton,
+  useMinute,
 } from "@luke/ui";
 import { openThread, PlanCommentsProvider, usePlanComments } from "@luke/ui/plan-comments";
 import { searchTokens } from "@luke/ui/search-tokens";
@@ -69,7 +70,6 @@ import {
   useMentionAgentsReader,
 } from "../tasks/task-mentions.js";
 import { taskLinkPlace } from "../tasks/task-menu-items.js";
-import { useMinute } from "../tasks/task-time.js";
 import { TerminalCommands } from "../tasks/terminal-commands.js";
 import { TOOL_TARGET, type ToolTarget } from "../tasks/tool-call-model.js";
 import { useHeldInboxList } from "../tasks/use-held-inbox-list.js";

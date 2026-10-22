@@ -22,6 +22,8 @@ export const SETTINGS_PAGE = {
   CODING_AGENTS: "coding-agents",
   /** The services the account connects for its agents, each the account's on the service rather than a stored setting. */
   INTEGRATIONS: "integrations",
+  /** The skills the account installs into Luke for its agents, its own and its workspace's, each the service's rather than a stored setting. */
+  SKILLS: "skills",
   /** A workspace the account is in: its name and the account's role, its members, and its GitHub repositories, each the service's rather than a stored setting. */
   WORKSPACE: "workspace",
   /** The stored switch that notifies as a coding agent ends or needs the developer. */

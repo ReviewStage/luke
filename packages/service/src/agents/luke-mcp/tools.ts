@@ -76,6 +76,12 @@ import {
 import { CODER_SHOW_PAGE_TOOL } from "../../tasks/page-tool.js";
 import { LOOK_AT_PICTURE_TOOL, PICTURE_LOOK_STATUS } from "../../tasks/picture-look.js";
 import { SHOW_CODE_TOOL } from "../../tasks/show-code.js";
+import {
+  CREATE_AUTOMATION_TOOL,
+  DELETE_AUTOMATION_TOOL,
+  LIST_AUTOMATIONS_TOOL,
+  UPDATE_AUTOMATION_TOOL,
+} from "../automation-tools.js";
 import type { AdmittedConversation } from "../brain-host/conversation.js";
 import type { AgentBrowser } from "../browser/agent-browser.js";
 import {
@@ -401,6 +407,11 @@ export const LUKE_MCP_TOOLS: ReadonlyMap<string, LukeMcpTool> = new Map<string, 
   agentTool(UPDATE_TASK_TOOL),
   agentTool(CREATE_SECTION_TOOL),
   agentTool(DELETE_SECTION_TOOL),
+  // Automations.
+  agentTool(LIST_AUTOMATIONS_TOOL),
+  agentTool(CREATE_AUTOMATION_TOOL),
+  agentTool(UPDATE_AUTOMATION_TOOL),
+  agentTool(DELETE_AUTOMATION_TOOL),
   // Chat.
   entry(CHAT_TOOLS.POST, (admitted, input, { seams, sandbox, callId }) =>
     runAgentChat(seams, admitted, {

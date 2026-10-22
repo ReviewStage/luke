@@ -4,7 +4,7 @@ import type { PageLine, PagePlace } from "@luke/features/page-wire";
 import { planSections } from "@luke/features/plan-document";
 import type { Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
-import { DocumentIcon, HoverCard, HoverCardHead, HoverCardNote } from "@luke/ui";
+import { DocumentIcon, HoverCard, HoverCardHead, HoverCardNote, Time, useMinute } from "@luke/ui";
 import { Effect } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as Atom from "effect/reactivity/Atom";
@@ -18,9 +18,7 @@ import { rendererRuntime } from "../renderer-runtime.js";
 import { APP_SLICE, useAppSlice } from "../use-app-state.js";
 import { useMentionedReader } from "./mentioned-agent-card.js";
 import { PageCard } from "./page-card.js";
-import { RelativeTime } from "./relative-time.js";
 import { useTaskMentions } from "./task-mentions.js";
-import { useMinute } from "./task-time.js";
 
 /**
  * chip-cards.tsx -- the cards the chips of places in Luke hang, each the card the window already hangs for what the chip names, read from what the window holds.
@@ -310,7 +308,7 @@ export function InboxItemChipCard({
       <HoverCardHead
         glyph={<InboxIcon aria-hidden="true" />}
         name={item.title}
-        corner={<RelativeTime at={item.postedAt} now={now} hint={false} />}
+        corner={<Time at={item.postedAt} now={now} hint={false} />}
       />
       <HoverCardNote>{WAITING_WORDS}</HoverCardNote>
     </HoverCard>

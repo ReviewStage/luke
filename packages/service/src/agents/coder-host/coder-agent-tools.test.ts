@@ -123,6 +123,7 @@ import {
 import { integrationConnectOver, NO_WORKSPACE_LINEAR } from "../../testing/integration-connect.js";
 import { nativeRelayFake } from "../../testing/native-relay-fake.js";
 import { sandboxDouble } from "../../testing/repository-sandbox.js";
+import { AUTOMATION_TOOL_REFUSAL } from "../automation-tools.js";
 import { BRAIN_HOST_ATTRIBUTE, BRAIN_HOST_HEADER, BRAIN_HOST_TURN } from "../brain-host/bounds.js";
 import { claimRuntimeSession } from "../brain-host/conversation.js";
 import {
@@ -3694,8 +3695,14 @@ test("an operator stops, renames, archives, and continues its member's own agent
     status: ACTION_RESULT_STATUS.REJECTED,
     reason: STEWARD_DELETE_REFUSAL,
   });
+  assert.deepEqual(
+    await call(CODER_TOOL.DELETE_AUTOMATION, { automationId: randomUUID() }, "delete-automation"),
+    { status: ACTION_RESULT_STATUS.REJECTED, reason: STEWARD_DELETE_REFUSAL },
+  );
   assert.ok(!kindToolsOf({ kind: CODING_AGENT_KIND.OPERATOR }).has(CODER_TOOL.DELETE_SECTION));
   assert.ok(kindToolsOf({ kind: CODING_AGENT_KIND.CODER }).has(CODER_TOOL.DELETE_SECTION));
+  assert.ok(!kindToolsOf({ kind: CODING_AGENT_KIND.OPERATOR }).has(CODER_TOOL.DELETE_AUTOMATION));
+  assert.ok(kindToolsOf({ kind: CODING_AGENT_KIND.CODER }).has(CODER_TOOL.DELETE_AUTOMATION));
   const coder = await peerCaller(hostOf(true), agents.caller, eve.services);
   const byCoder = await coder(
     CODER_TOOL.UPDATE_AGENT,
@@ -3916,4 +3923,166 @@ test("list_agents and read_agent name the member's operator Luke, in its name an
     assert.equal(named.name, "Luke");
     assert.match(String(named.mention), /^\[@Luke\]\(/u);
   }
+});
+
+test("list_automations, create_automation, update_automation, and delete_automation keep the automations of the caller's workspace as its starter may, under the automations page's own checks and access, once under the call's key, never as a webhook, and reach none of another workspace", async () => {
+  const { workspaceId, agents } = await openWorkspaces();
+  const eve = await fakeCoderEve(workspaceId);
+  const call = await peerCaller(hostOf(true), agents.caller, eve.services);
+  const teammate = await peerCaller(hostOf(true), agents.teammates, eve.services);
+  const stranger = await peerCaller(hostOf(true), agents.strangers, eve.services);
+  const weekly = { kind: "schedule", cron: "0 9 * * 1", timezone: "Europe/London" };
+  const prompt = `Audit our agents' tool sets. ${"Read every tool's description. ".repeat(20)}`;
+  const made = { name: " Agent audit ", prompt, trigger: weekly };
+  const automationOf = (answer: WireRecord) =>
+    isRecord(answer.automation) ? answer.automation : {};
+  const rejected = (reason: string) => ({ status: ACTION_RESULT_STATUS.REJECTED, reason });
+
+  assert.deepEqual(await call(CODER_TOOL.LIST_AUTOMATIONS, {}), {
+    status: ACTION_RESULT_STATUS.ACCEPTED,
+    automations: [],
+  });
+  const created = await call(CODER_TOOL.CREATE_AUTOMATION, made, "call-make");
+  assert.equal(created.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(created));
+  const automation = automationOf(created);
+  // It works in the repository the caller works in, lands on a new agent each run, and is due.
+  assert.deepEqual(
+    [
+      automation.name,
+      automation.enabled,
+      automation.prompt,
+      automation.repositories,
+      automation.runsLandOn,
+      automation.scope,
+      automation.madeByYourDeveloper,
+      typeof automation.nextRunAt,
+    ],
+    [
+      "Agent audit",
+      true,
+      prompt.trim(),
+      [RELAY_FULL_NAME],
+      "new-agent",
+      "personal",
+      true,
+      "string",
+    ],
+  );
+  assert.ok(isWireString(automation.id));
+  const id = automation.id;
+  // The same call run again names the automation it made, and makes no second one.
+  assert.equal(automationOf(await call(CODER_TOOL.CREATE_AUTOMATION, made, "call-make")).id, id);
+  const listed = await call(CODER_TOOL.LIST_AUTOMATIONS, {});
+  assert.ok(Array.isArray(listed.automations));
+  assert.deepEqual(
+    listed.automations.map((each) =>
+      isRecord(each) && isWireString(each.prompt)
+        ? [each.id, each.prompt.length, each.promptChars]
+        : [],
+    ),
+    [[id, 301, prompt.trim().length]],
+  );
+  const read = await call(CODER_TOOL.LIST_AUTOMATIONS, { automationId: id });
+  assert.deepEqual([automationOf(read).prompt, read.runs], [prompt.trim(), []]);
+
+  // What a write checks, said so the model can act on it; a webhook is never made here.
+  const make = (asked: WireRecord, key: string) =>
+    call(CODER_TOOL.CREATE_AUTOMATION, { ...made, ...asked } as WireBoundaryInput, key);
+  assert.deepEqual(
+    await make({ trigger: { kind: "webhook" } }, "webhook"),
+    rejected(AUTOMATION_TOOL_REFUSAL.UNREADABLE_CREATE),
+  );
+  assert.deepEqual(
+    await make({ trigger: { ...weekly, cron: "every monday" } }, "cron"),
+    rejected(AUTOMATION_TOOL_REFUSAL.CRON),
+  );
+  assert.deepEqual(
+    await make({ trigger: { ...weekly, cron: "* * * * *" } }, "often"),
+    rejected(AUTOMATION_TOOL_REFUSAL.TOO_FREQUENT),
+  );
+  assert.deepEqual(
+    await make({ trigger: { ...weekly, timezone: "Mars/Olympus" } }, "zone"),
+    rejected(AUTOMATION_TOOL_REFUSAL.TIMEZONE),
+  );
+  assert.deepEqual(
+    await make({ model: OPUS }, "half-choice"),
+    rejected(AUTOMATION_TOOL_REFUSAL.UNREADABLE_CREATE),
+  );
+  const unoffered = await make({ model: SOL, effort: "high" }, "unoffered");
+  assert.equal(unoffered.status, ACTION_RESULT_STATUS.REJECTED);
+  assert.ok(
+    isWireString(unoffered.reason) && unoffered.reason.includes(`${OPUS} (`),
+    JSON.stringify(unoffered),
+  );
+  assert.deepEqual(
+    await make({ repositories: ["Acme/Elsewhere"] }, "away"),
+    rejected(AUTOMATION_TOOL_REFUSAL.NOT_REACHABLE),
+  );
+  assert.deepEqual(
+    await make({ agentId: agents.otherWorkspaces.id }, "elsewhere-agent"),
+    rejected(AUTOMATION_TOOL_REFUSAL.NO_AGENT),
+  );
+  const afterRefusals = await call(CODER_TOOL.LIST_AUTOMATIONS, {});
+  assert.equal(Array.isArray(afterRefusals.automations) && afterRefusals.automations.length, 1);
+
+  // A change: paused, its next due cleared; a new prompt and model, and every run handed to one agent.
+  const update = (asked: WireRecord, by = call, key = "call-change") =>
+    by(CODER_TOOL.UPDATE_AUTOMATION, { automationId: id, ...asked } as WireBoundaryInput, key);
+  const paused = automationOf(await update({ enabled: false }));
+  assert.deepEqual([paused.enabled, paused.nextRunAt], [false, null]);
+  const changed = automationOf(
+    await update({
+      prompt: "Audit the prompts.",
+      model: OPUS,
+      effort: "max",
+      agentId: agents.teammates.id,
+    }),
+  );
+  assert.deepEqual(
+    [changed.prompt, changed.model, changed.effort, changed.runsLandOn, changed.name],
+    [
+      "Audit the prompts.",
+      OPUS,
+      "max",
+      { kind: "same-agent", agentId: agents.teammates.id },
+      "Agent audit",
+    ],
+  );
+  assert.deepEqual(await update({}), rejected(AUTOMATION_TOOL_REFUSAL.UNREADABLE_UPDATE));
+
+  // A teammate reads a personal automation of the starter's not at all, then a workspace's, which it may turn on but not change or delete.
+  assert.deepEqual((await teammate(CODER_TOOL.LIST_AUTOMATIONS, {})).automations, []);
+  assert.equal(
+    automationOf(await update({ scope: "workspace", agentId: null })).scope,
+    "workspace",
+  );
+  assert.deepEqual(
+    await update({ name: "Mine now" }, teammate, "teammate-change"),
+    rejected(AUTOMATION_TOOL_REFUSAL.NOT_PERMITTED),
+  );
+  assert.equal(
+    automationOf(await update({ enabled: true }, teammate, "teammate-toggle")).enabled,
+    true,
+  );
+  assert.deepEqual(
+    await teammate(CODER_TOOL.DELETE_AUTOMATION, { automationId: id }, "teammate-delete"),
+    rejected(AUTOMATION_TOOL_REFUSAL.NOT_PERMITTED),
+  );
+
+  // Another workspace's agent reaches none of it.
+  assert.deepEqual((await stranger(CODER_TOOL.LIST_AUTOMATIONS, {})).automations, []);
+  assert.deepEqual(
+    await stranger(CODER_TOOL.LIST_AUTOMATIONS, { automationId: id }),
+    rejected(AUTOMATION_TOOL_REFUSAL.NO_AUTOMATION),
+  );
+
+  assert.deepEqual(await call(CODER_TOOL.DELETE_AUTOMATION, { automationId: id }, "delete"), {
+    status: ACTION_RESULT_STATUS.ACCEPTED,
+    automation: { id, name: "Agent audit" },
+  });
+  assert.deepEqual((await call(CODER_TOOL.LIST_AUTOMATIONS, {})).automations, []);
+  assert.deepEqual(
+    await call(CODER_TOOL.DELETE_AUTOMATION, { automationId: id }, "delete-again"),
+    rejected(AUTOMATION_TOOL_REFUSAL.NO_AUTOMATION),
+  );
 });

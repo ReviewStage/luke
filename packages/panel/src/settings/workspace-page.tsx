@@ -54,6 +54,7 @@ import {
 } from "@luke/ui";
 import { ACTOR_KIND, memberActor, ROLE_WORDS, SOMEONE_REASON } from "@luke/ui/actor-model";
 import { githubAccountPictureUrl } from "@luke/ui/tasks-model";
+import { dayAndTimeText } from "@luke/ui/time-format";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import {
   CrownIcon,
@@ -76,7 +77,6 @@ import { sharedWords } from "../desktop/workspace-ref.js";
 import { TILE_SIZE, WorkspaceTile } from "../desktop/workspace-tile.js";
 import { encodeImage } from "../feedback-images.js";
 import { useOpenPerson } from "../person-door.js";
-import { dayAndTimeText } from "../tasks/task-time.js";
 import { useWorkspaceMembersRead } from "../tasks/use-workspace-members.js";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast.js";
 import { useCapability } from "../use-app-state.js";
