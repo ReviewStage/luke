@@ -32,6 +32,7 @@ import {
 } from "../agents/browser/sandbox-browser.js";
 import {
   RECORDER_SOURCE,
+  RECORDING_READ_EXIT,
   RECORDING_SCRIPT_NAME,
   RECORDING_START_OUTPUT,
   SANDBOX_RECORDING,
@@ -322,6 +323,12 @@ export function fakeSandboxApi(scenario: FakeSandboxScenario) {
             }
           );
         }
+        if (ask.args.includes(SANDBOX_RECORDING.VIDEO)) {
+          const video = scenario.recording?.video;
+          return video === undefined
+            ? { exitCode: RECORDING_READ_EXIT.NO_VIDEO, stdout: "", stderr: "" }
+            : { exitCode: 0, stdout: Buffer.from(video).toString("base64"), stderr: "" };
+        }
         // The stop is the recording's other script, named as the start is.
         if (ask.args.includes(RECORDING_SCRIPT_NAME)) {
           const stop = scenario.recording?.stop ?? `{"ok":false,"reason":"none"}`;
@@ -337,9 +344,6 @@ export function fakeSandboxApi(scenario: FakeSandboxScenario) {
       refused() ??
       Effect.succeed({ url: "wss://sbx-fixture.vercel.run/ws", token: Redacted.make("pty-token") }),
     updateTimeout: () => Effect.die("a sandbox the scenario opened is already within the timeout"),
-    readFile: (_sandboxSessionId, path) =>
-      refused() ??
-      Effect.succeed(path === SANDBOX_RECORDING.VIDEO ? scenario.recording?.video : undefined),
   };
   return { api, ran };
 }

@@ -276,6 +276,37 @@ export function stopRecording(): CommandAsk {
   };
 }
 
+/** How a read ends where there is no video to read. */
+export const RECORDING_READ_EXIT = { NO_VIDEO: 3 } as const;
+
+/**
+ * Reads the video back, up to the bytes given and one past them, as base64
+ * on one line, with every capability dropped as the sandbox's other file
+ * reads are (`luke-mcp/sandbox-door.ts`); read its run with
+ * `recordingBytesOf`.
+ */
+export function readRecording(maxBytes: number): CommandAsk {
+  return {
+    command: WITHOUT_CAPABILITIES.COMMAND,
+    args: [
+      ...WITHOUT_CAPABILITIES.ARGS,
+      "bash",
+      "-c",
+      `f="$HOME/$1"; [ -f "$f" ] || exit ${RECORDING_READ_EXIT.NO_VIDEO}; head -c "$2" -- "$f" | base64 | tr -d '\\n'`,
+      RECORDING_SCRIPT_NAME,
+      SANDBOX_RECORDING.VIDEO,
+      String(maxBytes + 1),
+    ],
+  };
+}
+
+/** The video's bytes as a read printed them; nothing where there was none, or where it ran past the bytes given. */
+export function recordingBytesOf(run: CommandRun, maxBytes: number): Uint8Array | undefined {
+  if (run.exitCode !== 0) return undefined;
+  const bytes = new Uint8Array(Buffer.from(run.stdout.trim(), "base64"));
+  return bytes.byteLength === 0 || bytes.byteLength > maxBytes ? undefined : bytes;
+}
+
 /** What a start's run says: a recording started, one already running, or which of its exits it ended on. */
 export type RecordingStart =
   | { readonly ok: true; readonly running: boolean }

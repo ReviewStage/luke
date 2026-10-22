@@ -76,9 +76,10 @@ import {
   RECORDING_FAILURE,
   type RecordingFailure,
   type RecordingStart,
+  readRecording,
+  recordingBytesOf,
   recordingStartOf,
   recordingStopOf,
-  SANDBOX_RECORDING,
   startRecording,
   stopRecording,
 } from "./sandbox-recorder.js";
@@ -451,7 +452,7 @@ export function browserSessionOf(session: {
 /** The calls of Vercel Sandbox's API the browser makes: a sandbox found, resumed, run in, and its PTY minted. */
 export type BrowserSandboxApi = Pick<
   VercelSandboxApi,
-  "listTagged" | "resume" | "run" | "openInteractive" | "updateTimeout" | "readFile"
+  "listTagged" | "resume" | "run" | "openInteractive" | "updateTimeout"
 >;
 
 /** The service over the REST calls the API makes and the PTY the sandbox serves. */
@@ -520,9 +521,10 @@ export function agentBrowserOver(
         .pipe(Effect.mapError(sandboxUnavailable));
       const stopped = recordingStopOf(run);
       if (!stopped.ok) return stopped;
-      const bytes = yield* api
-        .readFile(sandboxSessionId, SANDBOX_RECORDING.VIDEO, maxBytes)
+      const read = yield* api
+        .run(sandboxSessionId, readRecording(maxBytes))
         .pipe(Effect.mapError(sandboxUnavailable));
+      const bytes = recordingBytesOf(read, maxBytes);
       if (bytes === undefined) {
         return { ok: false, reason: RECORDING_FAILURE.ENCODER } satisfies BrowserRecordingRead;
       }

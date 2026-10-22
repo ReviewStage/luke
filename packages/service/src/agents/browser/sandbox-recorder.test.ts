@@ -3,8 +3,11 @@ import { test } from "vitest";
 import {
   RECORDER_SOURCE,
   RECORDING_FAILURE,
+  RECORDING_READ_EXIT,
   RECORDING_START_EXIT,
   RECORDING_START_OUTPUT,
+  readRecording,
+  recordingBytesOf,
   recordingStartOf,
   recordingStopOf,
   startRecording,
@@ -60,4 +63,18 @@ test("a stop's run is the video's length and size, a known failure, or an encode
   for (const odd of [run("not json"), run('{"ok":false,"reason":"gremlins"}'), run("", 1)]) {
     assert.deepEqual(recordingStopOf(odd), { ok: false, reason: RECORDING_FAILURE.ENCODER });
   }
+});
+
+test("a read prints the video as base64 under the capability drop, and its run is the bytes or nothing", () => {
+  const ask = readRecording(4_000_000);
+  const video = new Uint8Array([0x1a, 0x45, 0xdf, 0xa3, 1, 2, 3]);
+
+  assert.equal(ask.command, "setpriv");
+  assert.ok(
+    ask.args.includes("4000001"),
+    "it reads one byte past the bound, so a larger file shows",
+  );
+  assert.deepEqual(recordingBytesOf(run(Buffer.from(video).toString("base64")), 4_000_000), video);
+  assert.equal(recordingBytesOf(run("", RECORDING_READ_EXIT.NO_VIDEO), 4_000_000), undefined);
+  assert.equal(recordingBytesOf(run(Buffer.from(video).toString("base64")), 6), undefined);
 });
