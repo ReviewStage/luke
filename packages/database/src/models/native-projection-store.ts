@@ -1,5 +1,5 @@
 import { type WireValue, WireValueSchema } from "@luke/wire";
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import { Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
 import { Database, type DatabaseServices, type QueryError } from "../core/query.js";
@@ -173,4 +173,33 @@ export function readNativeProjection(
   return Effect.map(findProjection(target), (row) =>
     Option.flatMap(row, ({ projection }) => Option.fromNullishOr(projection)),
   );
+}
+
+const dropProjectionTurn = SqlSchema.void({
+  Request: Schema.Struct({ conversationId: Schema.String, turnIds: Schema.Array(Schema.String) }),
+  execute: ({ conversationId, turnIds }) =>
+    Database.use((db) =>
+      db
+        .update(conversations)
+        .set({ nativeProjection: sql`${conversations.nativeProjection} - 'turn'` })
+        .where(
+          and(
+            eq(conversations.id, conversationId),
+            inArray(sql<string>`${conversations.nativeProjection}->'turn'->>'id'`, [...turnIds]),
+          ),
+        ),
+    ),
+});
+
+/**
+ * Drops the turn the conversation's projection holds where it is one of the
+ * turns named, settled apart from the runner's own end, so the next launch's
+ * events open a turn of their own. Note that the projection's shape is the
+ * service's, and this reads of it only the held turn's id (`turn.id`).
+ */
+export function dropNativeProjectionTurns(
+  conversationId: string,
+  turnIds: readonly string[],
+): Effect.Effect<void, NativeProjectionFailure, DatabaseServices> {
+  return turnIds.length === 0 ? Effect.void : dropProjectionTurn({ conversationId, turnIds });
 }

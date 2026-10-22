@@ -7,6 +7,7 @@ import { SqlSchema } from "effect/sql";
 import { Database, type DatabaseServices, type QueryError } from "../core/query.js";
 import { conversations, turns } from "../schemas/storage.js";
 import { CONVERSATION_KIND } from "../storage-vocabulary.js";
+import { dropNativeProjectionTurns } from "./native-projection-store.js";
 import { STORE_WRITE_EFFECT, type StoreWriter } from "./writer.js";
 
 /**
@@ -161,7 +162,41 @@ type LostTurnEnd =
       readonly failure:
         | typeof BRAIN_REQUEST_FAILURE.ABANDONED
         | typeof BRAIN_REQUEST_FAILURE.SESSION_ENDED;
+    }
+  | {
+      readonly status: typeof BRAIN_REQUEST_STATUS.FAILED;
+      readonly failure: typeof BRAIN_REQUEST_FAILURE.MODEL;
+      readonly failureDetail: string;
     };
+
+/** What a native agent's turn whose runner went away says it failed of, as a runner's own failed end says why. */
+export const RUNNER_LOST_DETAIL = "the agent's runner stopped before its turn ended";
+
+/** The turns still queued or running of the standing coding agent's conversation named, oldest first. */
+const agentRunningTurns = SqlSchema.findAll({
+  Request: Schema.Struct({ conversationId: Schema.String }),
+  Result: LostTurnSchema,
+  execute: ({ conversationId }) =>
+    Database.use((db) =>
+      db
+        .select({
+          id: turns.id,
+          userId: turns.userId,
+          conversationId: turns.conversationId,
+        })
+        .from(turns)
+        .innerJoin(conversations, eq(conversations.id, turns.conversationId))
+        .where(
+          and(
+            eq(turns.conversationId, conversationId),
+            eq(conversations.kind, CONVERSATION_KIND.CODING_AGENT),
+            isNull(conversations.deletedAt),
+            inArray(turns.status, [TURN_STATUS.QUEUED, TURN_STATUS.RUNNING]),
+          ),
+        )
+        .orderBy(asc(turns.queuedAt), asc(turns.id)),
+    ),
+});
 
 /**
  * The turn settled as the end given, through the write the
@@ -302,3 +337,40 @@ export const settleEndedSession = /* @__PURE__ */ Effect.fn("web/settleEndedSess
     if (lost.length < limit) return settled;
   }
 });
+
+/**
+ * Settles every turn still queued or running of the native coding agent's
+ * conversation as failed, its runner gone with no end told, as a runner's
+ * own failed end settles one, so the agent reads failed and offers Continue
+ * rather than running for a day; answers how many this call settled. The
+ * turn the native projection holds is dropped with them, so the next
+ * launch's events open a turn of their own rather than one already ended.
+ */
+export const settleRunnerLostTurns = /* @__PURE__ */ Effect.fn("web/settleRunnerLostTurns")(
+  function* (
+    writer: Pick<StoreWriter, "consume">,
+    conversationId: string,
+    now: number,
+  ): Effect.fn.Return<number, QueryError | Schema.SchemaError, DatabaseServices> {
+    const lost = yield* agentRunningTurns({ conversationId });
+    let settled = 0;
+    for (const turn of lost) {
+      const written = yield* settledLost(
+        writer,
+        turn,
+        {
+          status: BRAIN_REQUEST_STATUS.FAILED,
+          failure: BRAIN_REQUEST_FAILURE.MODEL,
+          failureDetail: RUNNER_LOST_DETAIL,
+        },
+        now,
+      );
+      if (written) settled += 1;
+    }
+    yield* dropNativeProjectionTurns(
+      conversationId,
+      lost.map((turn) => turn.id),
+    );
+    return settled;
+  },
+);
