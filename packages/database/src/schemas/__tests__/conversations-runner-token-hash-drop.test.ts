@@ -11,7 +11,7 @@ import { getTestDB, migrationStatements } from "../../testing/index.js";
  * changes nothing.
  */
 
-const MIGRATION = "20261022022109_conversations_runner_token_hash_drop";
+const MIGRATION = "20261022031008_conversations_runner_token_hash_drop";
 
 /** The migration undone, so the database stands as one from before it. */
 const UNDO = [

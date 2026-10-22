@@ -1,14 +1,8 @@
 {
   "version": "8",
   "dialect": "postgres",
-  "id": "8835166b-b17f-43ed-aaed-f415f76d030d",
-  "prevIds": [
-    "99e1e0ee-b761-435e-a698-f8928d3f3a75",
-    "9a749aa2-7dce-4823-9971-4e75e0bd1c03",
-    "b35ab3e7-51e6-485c-a801-960f316a2db1",
-    "b7d1c1d7-c194-44cd-82ff-830d42914d15",
-    "f1482352-27c6-48be-8e6e-ef21eb1e426a"
-  ],
+  "id": "525a8ba2-c73e-4e74-8c61-ad5bd396819c",
+  "prevIds": ["64b6c2fa-fe36-4b36-91ac-13f3dcf6181b"],
   "ddl": [
     {
       "isRlsEnabled": false,
@@ -181,6 +175,12 @@
     {
       "isRlsEnabled": false,
       "name": "coding_agent_delegation",
+      "entityType": "tables",
+      "schema": "public"
+    },
+    {
+      "isRlsEnabled": false,
+      "name": "coding_agent_runner_lease",
       "entityType": "tables",
       "schema": "public"
     },
@@ -4879,6 +4879,45 @@
       "entityType": "columns",
       "schema": "public",
       "table": "coding_agent_delegation"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "agent_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "coding_agent_runner_lease"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "holder",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "coding_agent_runner_lease"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "held_until",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "coding_agent_runner_lease"
     },
     {
       "type": "uuid",
@@ -13913,6 +13952,19 @@
       "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
+      "name": "coding_agent_runner_lease_agent_id_coding_agent_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "coding_agent_runner_lease"
+    },
+    {
+      "nameExplicit": false,
+      "columns": ["agent_id"],
+      "schemaTo": "public",
+      "tableTo": "coding_agent",
+      "columnsTo": ["id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
       "name": "coding_agent_wakeup_agent_id_coding_agent_id_fkey",
       "entityType": "fks",
       "schema": "public",
@@ -15310,6 +15362,14 @@
       "name": "coding_agent_delegation_pkey",
       "schema": "public",
       "table": "coding_agent_delegation",
+      "entityType": "pks"
+    },
+    {
+      "columns": ["agent_id"],
+      "nameExplicit": false,
+      "name": "coding_agent_runner_lease_pkey",
+      "schema": "public",
+      "table": "coding_agent_runner_lease",
       "entityType": "pks"
     },
     {
