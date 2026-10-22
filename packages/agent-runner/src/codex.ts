@@ -198,6 +198,9 @@ interface TokenCommand {
   readonly tokenUrl: string;
 }
 
+/** The service tier a fast version runs on: Codex's documented `fast`, which it sends as the API's `priority`. */
+const FAST_TIER = "fast";
+
 /**
  * OpenAI's API as an API key pays for it: the same endpoint, its key read
  * from the launch's environment through the provider's documented `env_key`
@@ -251,6 +254,9 @@ function appServerArgs(config: CodexConfig, command: TokenCommand | undefined): 
     [`${provider}.wire_api`, toml("responses")],
     [`${provider}.requires_openai_auth`, "false"],
     [`${provider}.supports_websockets`, "false"],
+    // On an API key a fast version runs on the `fast` tier, which the documented feature turns on
+    // (https://learn.chatgpt.com/docs/agent-configuration/speed); the plan's launch runs none.
+    ...(command === undefined ? ([["features.fast_mode", "true"]] as const) : []),
     [`${mcp}.url`, toml(config.mcpUrl)],
     [`${mcp}.bearer_token_env_var`, toml(RUNNER_ENV.BEARER)],
     [`${mcp}.default_tools_approval_mode`, toml("approve")],
@@ -319,6 +325,8 @@ interface CodexLaunch {
   readonly tokenCommand: TokenCommand | undefined;
   model: string;
   effort: CodexEffort | undefined;
+  /** Whether the next turn runs on the `fast` service tier: a fast version on an API key alone. */
+  fast: boolean;
   stopping: boolean;
 }
 
@@ -454,6 +462,8 @@ const startTurn = Effect.fn("agent-runner/startTurn")(function* (
       input: [...outgoing.input],
       model: launch.model,
       effort: launch.effort ?? null,
+      // Note that a null tier is the standard one, which a fast version turned off goes back to.
+      ...(onApiKey(launch.context) ? { serviceTier: launch.fast ? FAST_TIER : null } : undefined),
     }),
   );
   if (Option.isNone(answer)) {
@@ -529,6 +539,7 @@ const takeLine = Effect.fn("agent-runner/codex/takeLine")(function* (
     }
     case INPUT_LINE.MODEL: {
       if (value.model !== undefined) launch.model = value.model;
+      if (value.fast !== undefined) launch.fast = value.fast;
       if (value.effort !== undefined && isCodexEffort(value.effort)) launch.effort = value.effort;
       else if (value.effort !== undefined) {
         yield* Effect.logWarning("agent-runner: skipped an effort Codex does not take");
@@ -649,6 +660,7 @@ export const runCodex = Effect.fn("agent-runner/runCodex")(function* (
     tokenCommand,
     model: config.model,
     effort: config.effort,
+    fast: config.fast === true,
     stopping: false,
   };
 

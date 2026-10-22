@@ -194,6 +194,7 @@ function codex(options: CodexSessionsOptions): RunnerHarness<{ readonly _tag: st
         executable: CODEX_PATH.EXECUTABLE,
         model,
         ...(effort === undefined ? undefined : { effort }),
+        ...(providerModelOf(agent.model)?.fast === true ? { fast: true } : undefined),
         developerInstructions: yield* options.instructions(agent),
         ...(resume === undefined ? undefined : { threadId: resume }),
         firstSequence,
@@ -210,7 +211,9 @@ function codex(options: CodexSessionsOptions): RunnerHarness<{ readonly _tag: st
     const effort = effortOf(agent.effort);
     const choice: InputLine = {
       type: INPUT_LINE.MODEL,
-      ...(model === undefined ? undefined : { model }),
+      ...(model === undefined
+        ? undefined
+        : { model, fast: providerModelOf(agent.model)?.fast === true }),
       ...(effort === undefined ? undefined : { effort }),
     };
     // Note that an agent on its API key has no plan to ask, and its runner holds the key it launched with.

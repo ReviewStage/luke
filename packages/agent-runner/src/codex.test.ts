@@ -54,7 +54,7 @@ const FIRST_SEQUENCE = 11;
 const THREAD = "00000000-0000-4000-8000-000000000002";
 
 it.effect(
-  "on an OpenAI API key, app-server reads it through the provider's env_key, no command inherits it, and no event carries it",
+  "on an OpenAI API key, app-server reads it through the provider's env_key, no command inherits it, no event carries it, and a fast version runs on the fast tier",
   () =>
     Effect.gen(function* () {
       const apiKey = "openai-api-key-for-tests";
@@ -66,7 +66,7 @@ it.effect(
         { ...ENV, [RUNNER_ENV.OPENAI_API_KEY]: apiKey },
         {},
       );
-      yield* write(CONFIG);
+      yield* write({ ...CONFIG, fast: true });
       yield* write(message("Run sleep 600.", LINE.FIRST));
       yield* luke.seen;
       yield* write({ type: INPUT_LINE.STOP });
@@ -91,6 +91,9 @@ it.effect(
           'shell_environment_policy.exclude=["LUKE_RUNNER_TOKEN", "OPENAI_API_KEY"]',
         ),
       );
+      // A fast version runs on Codex's documented fast tier, turned on for the provider.
+      assert.ok(overrides.includes("features.fast_mode=true"));
+      assert.equal(received(process, "turn/start")[0]?.serviceTier, "fast");
       assert.equal(process?.env[RUNNER_ENV.OPENAI_API_KEY], apiKey);
       assert.ok(!(process?.args ?? []).join(" ").includes(apiKey));
       assert.ok(!JSON.stringify(luke.applied).includes(apiKey));
@@ -311,6 +314,7 @@ it.effect(
       assert.equal(start?.clientUserMessageId, LINE.FIRST);
       assert.equal(start?.model, CONFIG.model);
       assert.equal(start?.effort, CODEX_EFFORT.HIGH);
+      assert.equal(start !== undefined && "serviceTier" in start, false);
       assert.deepEqual(start?.input, [
         { type: "text", text: "The probe's first turn.", text_elements: [] },
         { type: "image", url: "data:image/png;base64,iVBORw0K" },

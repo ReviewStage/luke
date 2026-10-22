@@ -443,13 +443,23 @@ it.layer(getTestDB())("the runner events route", (it) => {
   );
 
   it.effect(
-    "a plan's agent's transcript says its turns were the plan's, beside the tokens they took",
+    "a plan's agent's transcript says its turns were the plan's, beside the tokens they took, and names its payer before any turn settled",
     () =>
       Effect.gen(function* () {
         const post = yield* standing;
         const agent = yield* agentWithBearer;
-        yield* post(agent.bearer, workflowTurn(agent.lineId));
         const row = Option.getOrThrow(yield* readCodingAgent(agent.userId, agent.agentId));
+        // Before any turn settles, the page already names who pays.
+        const first = yield* transcriptPast(
+          agent.target,
+          CODER_TOOL_SET,
+          CURSOR_START,
+          row,
+          row,
+        ).pipe(Effect.provide(modelCatalogOf([])));
+        assert.equal(first.usage, undefined);
+        assert.equal(first.payer, CODING_AGENT_PAYER.CLAUDE_SUBSCRIPTION);
+        yield* post(agent.bearer, workflowTurn(agent.lineId));
 
         const page = yield* transcriptPast(
           agent.target,

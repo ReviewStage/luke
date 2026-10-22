@@ -2302,6 +2302,7 @@ function AgentTabView({
             models={models}
             readModels={readModels}
             usage={transcript.usage}
+            payer={transcript.payer}
             servers={servers}
             context={transcript.context}
             brief={agent.brief}

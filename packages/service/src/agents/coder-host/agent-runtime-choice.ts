@@ -10,8 +10,8 @@
  *   (`NativeAgentSessions`: a web function's own, or the eve app's relay to
  *   one, so a Start from an eve agent decides as the panel's does).
  * - Codex, paid for by the account's ChatGPT plan, on the same terms for a
- *   GPT model; Codex has no fast mode, so an account whose GPT agents run on
- *   it is offered no GPT fast version (`accountFastOffer`), where the account
+ *   GPT model; Codex runs no fast mode on the plan, so an account whose
+ *   ChatGPT plan pays is offered no GPT fast version (`accountFastOffer`), where the account
  *   keeps a ChatGPT sign-in (`chatgpt_oauth`)
  *   that OpenAI has not signed out and the deployment can still open.
  *
@@ -240,8 +240,8 @@ export const markedUnconnected = /* @__PURE__ */ Effect.fnUntraced(function* <
 
 /**
  * Which fast versions the account is offered (`offeredToAccount`): by the
- * Anthropic key its steps run on, and whether its GPT agents run on Codex,
- * as Start would choose it here, since Codex runs no fast mode
+ * Anthropic key its steps run on, and whether its ChatGPT plan pays for its
+ * GPT agents, as Start would choose it here, since Codex runs no fast mode on the plan
  * and a Fast it cannot run is never offered.
  */
 export const accountFastOffer = /* @__PURE__ */ Effect.fnUntraced(function* (
@@ -251,7 +251,5 @@ export const accountFastOffer = /* @__PURE__ */ Effect.fnUntraced(function* (
   const environment = yield* Effect.serviceOption(HostedEnvironment);
   const ring = Option.getOrUndefined(environment)?.providerKeyEncryptionKeys;
   const plan = yield* keptPlan(userId, MODEL_PROVIDER.OPENAI, ring);
-  // Note that where a harness is reached a GPT agent runs on Codex whichever credential pays.
-  const harness = Option.isSome(yield* Effect.serviceOption(NativeAgentSessions));
-  return { anthropic, gptOnCodex: harness || plan?.forAgents === true };
+  return { anthropic, chatGptPlan: plan?.forAgents === true };
 });

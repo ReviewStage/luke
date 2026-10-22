@@ -2136,6 +2136,13 @@ export const codingAgentMessagesAnswerSchema = EffectSchema.Struct({
   ),
   usage: EffectSchema.optionalKey(codingAgentUsageSchema),
   /**
+   * Who pays for the agent (`CODING_AGENT_PAYER`), as its row recorded it at
+   * Start, before any turn settled too, so the chip says whose plan pays,
+   * or none, from the first. Absent on a worker's page, for an agent from
+   * before payers were recorded, and from a service older than it.
+   */
+  payer: EffectSchema.optionalKey(EffectSchema.Literals(Object.values(CODING_AGENT_PAYER))),
+  /**
    * What the newest turn alone cost. No service sends it any more, since a
    * price the window draws means the whole run's (`usage`); it stays an
    * optional key so the answer's shape is the one older desktops read.

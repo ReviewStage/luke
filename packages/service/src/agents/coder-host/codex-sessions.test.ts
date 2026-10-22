@@ -299,7 +299,7 @@ it.layer(getTestDB())("a coding agent's sessions on Codex", (it) => {
   );
 
   it.effect(
-    "an agent its starter's OpenAI API key pays for launches with it as OPENAI_API_KEY, never asks the plan, and is refused once the key is gone",
+    "an agent its starter's OpenAI API key pays for launches with it as OPENAI_API_KEY, a fast version on the fast tier, never asks the plan, and is refused once the key is gone",
     () =>
       Effect.gen(function* () {
         vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
@@ -312,7 +312,7 @@ it.layer(getTestDB())("a coding agent's sessions on Codex", (it) => {
         const started = yield* createCodingAgent(userId, {
           taskId: task.id,
           idempotencyKey: "start-key",
-          model: "openai/gpt-6.1-sol",
+          model: "openai/gpt-6.1-sol-fast",
           effort: "xhigh",
           planSnapshot: "# Teammate invitations\n",
           prompt: null,
@@ -347,6 +347,10 @@ it.layer(getTestDB())("a coding agent's sessions on Codex", (it) => {
         assert.ok(command !== undefined);
         assert.equal(command.env[RUNNER_ENV.OPENAI_API_KEY], apiKey);
         assert.equal(command.env.CODEX_HOME, "/home/agent/.codex");
+        // A fast version runs its base model on Codex's fast tier.
+        const [config] = linesOf(command) as [CodexConfig];
+        assert.equal(config.model, "gpt-6.1-sol");
+        assert.equal(config.fast, true);
         const visible = JSON.stringify([command.args, command.stdin, api.sandboxes]);
         assert.equal(visible.includes(apiKey), false);
         assert.equal(
@@ -411,7 +415,12 @@ it.layer(getTestDB())("a coding agent's sessions on Codex", (it) => {
         assert.equal(sent.outcome, EVE_SEND_OUTCOME.ACCEPTED);
         assert.equal(cancelled.outcome, EVE_CANCEL_OUTCOME.ACCEPTED);
         const lines = linesOf(api.commands[0]).slice(2) as InputLine[];
-        assert.deepEqual(lines[0], { type: INPUT_LINE.MODEL, model: "gpt-4.1", effort: "low" });
+        assert.deepEqual(lines[0], {
+          type: INPUT_LINE.MODEL,
+          model: "gpt-4.1",
+          fast: false,
+          effort: "low",
+        });
         assert.equal(lines[1]?.type, INPUT_LINE.MESSAGE);
         assert.deepEqual(lines[2], { type: INPUT_LINE.STOP, launch: 0 });
 

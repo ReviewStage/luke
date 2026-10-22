@@ -7,7 +7,8 @@
  * CLI, and no choice of context window, since the CLI manages its context
  * itself: Claude Code takes Claude models, a fast version among them, which
  * it runs as the base model with its own fast mode on; Codex takes GPT
- * models, never a fast version, since it has no fast mode. A runtime's rule is one row of
+ * models, a fast version among them on an API key, which it runs on its
+ * `fast` service tier (the plan's account is offered none, `accountFastOffer`). A runtime's rule is one row of
  * `NATIVE_MODEL_RULE`; a runtime with no row is eve's, which offers everything.
  * Start is not narrowed here: it offers every model, and what it starts on
  * decides the runtime (`agent-runtime-choice.ts`).
@@ -46,7 +47,7 @@ const NATIVE_MODEL_RULE: Partial<Record<CodingAgentRuntime, RuntimeModelRule>> =
   },
   codex: {
     provider: MODEL_PROVIDER.OPENAI,
-    fast: false,
+    fast: true,
     contextWindow: false,
     name: "Codex",
   },

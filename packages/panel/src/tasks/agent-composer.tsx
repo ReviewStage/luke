@@ -4,6 +4,7 @@ import {
   CODING_AGENT_STATUS,
   type CodingAgentBrief,
   type CodingAgentContext,
+  type CodingAgentPayer,
   type CodingAgentPullRequestAnswer,
   type CodingAgentStatus,
   type CodingAgentUsage,
@@ -336,6 +337,7 @@ export function AgentComposer({
   models,
   readModels,
   usage,
+  payer,
   servers,
   context,
   brief,
@@ -373,6 +375,8 @@ export function AgentComposer({
   readModels: () => void;
   /** What the agent has cost, said at the chip's menu's foot; nothing before a turn settled. */
   usage: CodingAgentUsage | undefined;
+  /** Who pays for the agent, which the chip's menu names where a plan does; nothing where the page said none. */
+  payer?: CodingAgentPayer | undefined;
   /** The MCP servers the agent is handed and their switches; none where the box offers none, as New task's does. */
   servers: AgentServersControl | undefined;
   /** What the agent's model's context holds, which the ring draws; nothing before a step ended, which draws no ring. */
@@ -777,6 +781,7 @@ export function AgentComposer({
                     models={models}
                     readModels={readModels}
                     usage={usage}
+                    payer={payer}
                     narrow={folds(FOLD_WIDTH.MODEL)}
                   />
                 )}
