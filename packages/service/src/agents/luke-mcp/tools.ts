@@ -82,6 +82,7 @@ import {
   browserModelOutput,
   browserNotRun,
   runBrowserTool,
+  storedBrowserOutput,
 } from "../browser/browser-tool.js";
 import {
   type AgentDoorSeams,
@@ -301,20 +302,25 @@ function executedContent(result: LukeMcpToolResult): readonly McpContent[] {
 }
 
 /**
- * What the agent is shown of a browser call: what eve's model is shown of
- * it (`browserModelOutput`), its JSON with each screenshot beside it as an
- * image, in MCP's blocks.
+ * What the agent is shown of a browser call: its JSON with every
+ * screenshot's picture taken out (`storedBrowserOutput`) as one text block,
+ * then each screenshot as an image, in the order its steps name them. Note
+ * that no caption stands between them, because the native transcript joins
+ * a Luke tool's text blocks and reads them as one JSON value
+ * (`../native-events/runner-moments.ts`), so the one block keeps the result
+ * whole there.
  */
 function browserContent(result: LukeMcpToolResult): readonly McpContent[] {
-  const shown = browserModelOutput(unparsedWire(result));
-  if (shown.type !== "content") return [{ type: "text", text: JSON.stringify(result) }];
-  return shown.value.flatMap((part): readonly McpContent[] => {
-    if (part.type === "text") return [{ type: "text", text: part.text }];
-    if (part.type === "file" && part.data.type === "data" && typeof part.data.data === "string") {
-      return [{ type: "image", data: part.data.data, mimeType: part.mediaType }];
-    }
-    return [];
-  });
+  const output = unparsedWire(result);
+  const shown = browserModelOutput(output);
+  const text: McpContent = { type: "text", text: JSON.stringify(storedBrowserOutput(output)) };
+  if (shown.type !== "content") return [text];
+  const images = shown.value.flatMap((part): readonly McpContent[] =>
+    part.type === "file" && part.data.type === "data" && typeof part.data.data === "string"
+      ? [{ type: "image", data: part.data.data, mimeType: part.mediaType }]
+      : [],
+  );
+  return [text, ...images];
 }
 
 /**

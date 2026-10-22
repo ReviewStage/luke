@@ -834,15 +834,25 @@ it.layer(getTestDB())("Luke's MCP server", (it) => {
           data?: string;
           mimeType?: string;
         }[];
-        assert.deepEqual(content.at(-1), {
-          type: "image",
-          data: "/9j/AAAA",
-          mimeType: "image/jpeg",
-        });
+        // One JSON block, which the native transcript reads whole, then the picture.
+        assert.deepEqual(
+          content.map((block) => block.type),
+          ["text", "image"],
+        );
+        assert.deepEqual(content[1], { type: "image", data: "/9j/AAAA", mimeType: "image/jpeg" });
         assert.ok(
           content.every((block) => block.text === undefined || !block.text.includes("/9j/AAAA")),
         );
-        assert.equal(firstJson(called).status, "ran");
+        assert.deepEqual(
+          firstJson(called).steps.map((step: { action: string; status: string }) => [
+            step.action,
+            step.status,
+          ]),
+          [
+            ["list", "done"],
+            ["screenshot", "done"],
+          ],
+        );
         assert.deepEqual(
           (yield* listAgentBrowserTabs(agent.conversationId)).map((row) => row.targetId),
           ["tab-1"],
