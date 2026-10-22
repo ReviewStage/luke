@@ -213,7 +213,7 @@ function describeStopFailure(failure: {
  * because an agent unarchived and messaged since has resumed the sandbox
  * this would stop, and its turn must keep it; what is left of the race is
  * the moment between this read and the stop. The bearer goes only once the
- * sandbox stopped, and is read for once more, because a stop that failed
+ * sandbox stopped and the archive still stands, because a stop that failed
  * leaves its runner up, which a message after an unarchive is handed
  * (`coder-host/runner-sessions.ts`'s `sendHolding`), and a runner a later
  * unarchive launched holds a bearer of its own.
