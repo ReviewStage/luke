@@ -475,7 +475,8 @@ function checksSummaryOf(checks: readonly PullRequestCheck[]): CheckSummary {
  * replaced by the overview's own as its read lands, since that is the newest
  * and the page under the header says the same: where it stands by the pull request's read,
  * and its checks by theirs, the published checks standing only for the
- * pull request they were read on. None while neither has been read.
+ * pull request they were read on, else the merge read's word for them.
+ * None while neither has been read.
  */
 function headerPullRequestOf(
   pullRequest: CodingAgentOverviewPullRequest | undefined,
@@ -487,7 +488,9 @@ function headerPullRequestOf(
   const { number, state, url } = held;
   // Note that what was published says the checks of its own pull request only, never of a newer one the overview read.
   const heldChecks = published?.number === number ? published.checks : undefined;
-  const summary = checks === undefined ? heldChecks : checksSummaryOf(checks.checks);
+  // Note that the overview's merge read says its head's checks as one word too, so a pull request nothing published still shows them before its Checks tab is read.
+  const merged = pullRequest?.merging?.checks;
+  const summary = checks === undefined ? (heldChecks ?? merged) : checksSummaryOf(checks.checks);
   return { number, state, url, checks: summary ?? CHECK_SUMMARY.NONE };
 }
 

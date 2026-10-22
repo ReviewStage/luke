@@ -3494,6 +3494,35 @@ test("a tab naming another pull request of the agent's repository by its number 
   assert.deepEqual(changeNumbers, [41]);
 });
 
+test("a numbered pull request nothing published shows how its checks went on its Checks tab from the merge read, before they are read, where the merge control draws no chip for them", async () => {
+  const control = controlAnswering({
+    pullRequest: () =>
+      Promise.resolve({
+        pullRequest: {
+          ...PULL_REQUEST,
+          number: 41,
+          merge: MERGE_STATE.BLOCKED,
+          merging: { ...MERGING, checks: CHECK_SUMMARY.FAILING },
+        },
+      }),
+  });
+  const tab = await drawn(
+    createElement(AgentPullRequestTab, {
+      agentId: AGENT.id,
+      number: 41,
+      control,
+      shown: true,
+      repository: "acme/relay",
+      tree: { open: false, onToggle: () => undefined },
+      view: PULL_REQUEST_VIEW.CONVERSATION,
+      onView: () => undefined,
+    }),
+  );
+
+  assert.equal(checksGlyph(tab), "failing");
+  assert.equal(mergeShown(tab), undefined);
+});
+
 test("an open pull request's pill offers Close and a closed one's Reopen, each asked of the service for the agent", async () => {
   const open = await draw(controlAnswering());
   await pressAction(open, "Close pull request");
