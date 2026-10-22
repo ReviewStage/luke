@@ -297,15 +297,22 @@ account's name. A message is stored with its words, any links, references to
 lines of a repository (a path, the lines, and the commit, never the lines
 themselves), the members it mentions, who posted it, where, and when; it may
 also ask for an answer, with the answer and who gave it stored beside it. A
-message may carry a picture an agent took in its sandbox, which our service
-reads from the sandbox and keeps beside the message, up to 1.5 MB. Every
+message may carry pictures, each up to 1.5 MB, which our service keeps beside
+the message: one an agent took in its sandbox, which our service reads from
+the sandbox, one a person posted from Luke's window, or one an agent passes on
+from what it was sent. Every
 message is stored under the workspace and readable by our own
 operators, like an agent's transcript. Every person in the workspace can
 read every channel and every direct message, one between two other people
 included; a coding agent reads the channels and only its own direct
 messages, and only a direct message's two members post in it. A coding
 agent's turn may open with what was said in its chat since it last read,
-sent to its model provider with the rest of the turn. The member a plan's
+sent to its model provider with the rest of the turn. A coding agent told of a
+message, as a direct message, a mention, or a reply in a thread it is in
+tells it, is sent the message's pictures with its words, as files you attach
+are, up to ten and 3 MB together, each named by its id, and the rest named as
+not attached; they go to its model provider and stay in its transcript with
+the rest of the message. The member a plan's
 Luke was in its chat, before tasks lost him, is deleted.
 Deleting a plan deletes its channel with its messages, deleting your account
 deletes your messages (others' replies to them stay), and deleting the

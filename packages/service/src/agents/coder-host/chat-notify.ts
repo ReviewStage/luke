@@ -13,6 +13,7 @@ import {
   leave,
   markNoticed,
   postMessage,
+  readMessagePictures,
   readPast,
   roster,
   threadAuthors,
@@ -26,15 +27,18 @@ import {
   CHANNEL_KIND,
   CHAT_BLOCK,
   CHAT_BOUNDS,
+  CHAT_IMAGE_TYPE,
   CHAT_MEMBER_LABEL,
   CHAT_NOTICE_LEAD,
+  type ChatImageType,
   type ChatReadBlock,
   chatNoticeAsksLine,
   chatNoticeReplyLine,
+  chatNoticeUnattachedLine,
   MEMBER_KIND,
   type MemberKind,
 } from "@luke/features/chat-wire";
-import { CODING_AGENT_BOUNDS } from "@luke/features/coding-agent-wire";
+import { CODING_AGENT_BOUNDS, type CodingAgentAttachment } from "@luke/features/coding-agent-wire";
 import { mentionLinksIn } from "@luke/features/mention-link";
 import { CHAT_NOTICE_FROM_CHARS } from "@luke/wire";
 import { Effect, Option, Result } from "effect";
@@ -81,7 +85,10 @@ import { steerCodingAgent } from "./steer.js";
  * first send did not. A person is handed to a door of their own, told through their
  * window's account-wide read (`tellPerson`). A notice names who said it by their mention link, and
  * hands the words as they were written, every link in them whole
- * (`chat-names.ts`). What each member came to is the
+ * (`chat-names.ts`), and an agent the message's pictures as files of its
+ * line, as a composer's are, in the order the message shows them while
+ * they fit what one message carries; the rest are named in its words as
+ * not attached. What each member came to is the
  * receipt the poster reads, each member by its mention link: told, held,
  * left, and the labels of the links that named no one. A name marked
  * `@public` is what the coder's tools, the window's route, and its
@@ -122,6 +129,8 @@ export type ChatReceipt = {
 export interface ChatNotice {
   readonly message: ChatMessageRow;
   readonly text: string;
+  /** The message's pictures an agent is handed with the line, each named by its attachment id. */
+  readonly attachments: readonly CodingAgentAttachment[];
   readonly from: ChatMemberRow;
   readonly fromName: string;
 }
@@ -228,7 +237,7 @@ const AUTHOR_OF_KIND = {
   [MEMBER_KIND.HUMAN]: MESSAGE_AUTHOR.HUMAN,
 } as const;
 
-/** One block as a notice's line reads it, and a read of the chat: words as written, every mention link in them whole, anything else named by what it is. */
+/** One block as a notice's line reads it, and a read of the chat: words as written, every mention link in them whole, a picture by its alt and its attachment id, which an agent names it by, anything else named by what it is. */
 export function blockWords(block: ChatReadBlock): string {
   switch (block.type) {
     case CHAT_BLOCK.MARKDOWN:
@@ -240,7 +249,7 @@ export function blockWords(block: ChatReadBlock): string {
         ? `[code: ${block.repo} ${block.path}:${block.startLine}-${block.endLine} at ${block.sha}]`
         : "";
     case CHAT_BLOCK.IMAGE:
-      return "alt" in block ? `[image: ${block.alt}]` : "";
+      return "alt" in block ? `[image: ${block.alt} (attachment ${block.attachmentId})]` : "";
     default:
       return `[${block.type}]`;
   }
@@ -284,9 +293,15 @@ function noticeFrom(name: string, kind: MemberKind): string {
  * notice back always finds its closing lines in their whole shape
  * (`chatNoticeWords`).
  */
-function noticeText(from: string, channel: ChatChannelRow, message: ChatMessageRow): string {
+function noticeText(
+  from: string,
+  channel: ChatChannelRow,
+  message: ChatMessageRow,
+  unattached: readonly string[],
+): string {
   const header = `${CHAT_NOTICE_LEAD} · ${from} ${whereSaid(channel, message)} (m ${message.seq}):`;
   const closings = [
+    ...(unattached.length === 0 ? [] : [chatNoticeUnattachedLine(unattached)]),
     ...(message.ask === null ? [] : [chatNoticeAsksLine(message.ask.response.type)]),
     chatNoticeReplyLine(message.seq),
   ];
@@ -298,6 +313,62 @@ function noticeText(from: string, channel: ChatChannelRow, message: ChatMessageR
     .join(PARAGRAPH_BREAK);
   const cut = words.slice(0, wholeLinksEnd(words, Math.max(room, 0)));
   return [header, cut, ...closings].filter((part) => part !== "").join(PARAGRAPH_BREAK);
+}
+
+/** The extension a picture's file is named with, by the type its bytes were sniffed to be. */
+const PICTURE_EXTENSION = {
+  [CHAT_IMAGE_TYPE.PNG]: ".png",
+  [CHAT_IMAGE_TYPE.JPEG]: ".jpg",
+  [CHAT_IMAGE_TYPE.WEBP]: ".webp",
+} as const satisfies Record<ChatImageType, string>;
+
+/** The attachment ids a message's image blocks name, in the order it shows them. */
+function pictureIdsOf(message: ChatMessageRow): readonly string[] {
+  return message.blocks.flatMap((block) =>
+    block.type === CHAT_BLOCK.IMAGE && "attachmentId" in block ? [block.attachmentId] : [],
+  );
+}
+
+/**
+ * The pictures a notice hands an agent, and the ids of the rest: the
+ * message's pictures as files named by their attachment id, never a path,
+ * taken in the order it shows them while they fit what one message to an
+ * agent carries, its count and bytes together and each within an image's
+ * own bound. Note that the first that does not fit ends the taking, so what is
+ * attached is always the message's first pictures. A picture its blocks name
+ * whose bytes the store does not keep is among the rest.
+ */
+function noticePictures(
+  ids: readonly string[],
+  kept: readonly {
+    readonly id: string;
+    readonly contentType: ChatImageType;
+    readonly bytes: Uint8Array;
+  }[],
+): {
+  readonly attachments: readonly CodingAgentAttachment[];
+  readonly unattached: readonly string[];
+} {
+  const bytesOf = new Map(kept.map((picture) => [picture.id, picture]));
+  const attachments: CodingAgentAttachment[] = [];
+  let total = 0;
+  for (const id of ids) {
+    const picture = bytesOf.get(id);
+    if (picture === undefined) break;
+    const size = picture.bytes.byteLength;
+    const fits =
+      attachments.length < CODING_AGENT_BOUNDS.MAX_ATTACHMENTS &&
+      total + size <= CODING_AGENT_BOUNDS.MAX_ATTACHMENTS_BYTES &&
+      size <= CODING_AGENT_BOUNDS.MAX_IMAGE_BYTES;
+    if (!fits) break;
+    total += size;
+    attachments.push({
+      name: `${id}${PICTURE_EXTENSION[picture.contentType]}`,
+      mediaType: picture.contentType,
+      data: Buffer.from(picture.bytes).toString("base64"),
+    });
+  }
+  return { attachments, unattached: ids.slice(attachments.length) };
 }
 
 /**
@@ -371,6 +442,7 @@ function tellAgent(
     // Note that eve is the starter's, whose turn it steers, while the plan is read as the poster's, who may stay when the starter leaves.
     const steered = yield* steerCodingAgent(eve, telling.writer, userId, agent.value, {
       text: notice.text,
+      attachments: notice.attachments,
       clientKey: chatNoticeKey(notice.message.id, notice.message.askRevision ?? 0, member.id),
       sender,
       metadata: {
@@ -425,18 +497,27 @@ export function tellMessage(
     const names: ChatNames = yield* hostedStoreOrUnavailable(
       chatNamesOf(userId, organizationId, members.values()),
     );
-    const notice = {
-      message,
-      text: noticeText(names.mention(from), channel.value, message),
-      from,
-      fromName: names.name(from),
-    };
     const told = toldBy({
       authorMemberId: message.authorMemberId,
       mentions: message.mentions,
       channel: channel.value,
       threadAuthors: authors,
     }).flatMap((id) => Option.toArray(Option.fromNullishOr(members.get(id))));
+    // The pictures are read once, as the poster, and only where an agent is told, since a person's door reads none.
+    const ids = pictureIdsOf(message);
+    const tellsAgent = told.some((member) => member.kind === MEMBER_KIND.AGENT);
+    const kept =
+      ids.length === 0 || !tellsAgent
+        ? []
+        : yield* hostedStoreOrUnavailable(readMessagePictures(userId, organizationId, message.id));
+    const { attachments, unattached } = noticePictures(ids, kept);
+    const notice = {
+      message,
+      text: noticeText(names.mention(from), channel.value, message, tellsAgent ? unattached : []),
+      attachments,
+      from,
+      fromName: names.name(from),
+    };
     // Note that each member is told at once beside the others, because each claim and steer is its own member's, and an answer waited on three steers in a row.
     const outcomes = yield* Effect.forEach(
       told,
