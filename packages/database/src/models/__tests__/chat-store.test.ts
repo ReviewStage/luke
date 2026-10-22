@@ -16,7 +16,8 @@ import { CODING_AGENT_KIND } from "@luke/features/coding-agent-wire";
 import { encodeMention, MENTION_KIND } from "@luke/features/mention-link";
 import { EXPERIMENT } from "@luke/settings";
 import { and, eq } from "drizzle-orm";
-import { DateTime, Effect, Option, Result } from "effect";
+import { DateTime, Duration, Effect, Option, Result } from "effect";
+import { TestClock } from "effect/testing";
 import { Database } from "../../core/query.js";
 import { attachment } from "../../schemas/attachment.js";
 import { member, organization, user } from "../../schemas/auth.js";
@@ -26,6 +27,7 @@ import { getTestDB } from "../../testing/index.js";
 import { writeAccountPreferences } from "../account-store.js";
 import {
   agentMembersOf,
+  agentPostsSince,
   agentWorkspace,
   answerAsk,
   attachMessageImages,
@@ -2664,6 +2666,62 @@ it.layer(getTestDB())("the chat store's keyed member reads and the chat's stamp"
         yield* writeAccountPreferences(owner, { experiments: { [EXPERIMENT.CHAT]: false } });
         yield* moves("Chat turned off");
         assert.deepEqual(yield* workspaceChatStamp(stranger, ada), Option.none());
+      }),
+  );
+});
+
+it.layer(getTestDB())("the chat store's count of an agent's posts", (it) => {
+  it.effect(
+    "an agent's posts since a moment are its own posted from then on, another agent's and its earlier ones left out",
+    () =>
+      Effect.gen(function* () {
+        const room = yield* openRoom;
+        yield* room.posted(room.first, "Before the turn.");
+        yield* TestClock.adjust(Duration.minutes(5));
+        const opened = new Date(yield* DateTime.nowAsDate);
+        yield* room.posted(room.first, "Taking the invite table.");
+        yield* room.posted(room.second, "Taking the mailer.");
+        yield* room.posted(room.first, "Pushed.");
+
+        const agentOf = (row: ChatMemberRow) => row.agentId ?? "";
+        assert.equal(yield* agentPostsSince(agentOf(room.first), opened), 2);
+        assert.equal(yield* agentPostsSince(agentOf(room.second), opened), 1);
+        yield* TestClock.adjust(Duration.minutes(5));
+        assert.equal(yield* agentPostsSince(agentOf(room.first), yield* DateTime.nowAsDate), 0);
+      }),
+  );
+});
+
+it.layer(getTestDB())("the chat store's count of an agent's posts", (it) => {
+  it.effect(
+    "an agent's posts are counted from the moment given, its own alone, and an ask posted again under its key once",
+    () =>
+      Effect.gen(function* () {
+        const room = yield* openRoom;
+        yield* room.posted(room.first, "Before the turn.");
+        yield* TestClock.adjust("1 minute");
+        const opened = yield* DateTime.nowAsDate;
+        yield* room.posted(room.first, "Taking the invite table.");
+        yield* room.posted(room.second, "Taking the email job.");
+        yield* room.posted(room.first, "Pushed.");
+        const ask = {
+          authorMemberId: room.first.id,
+          to: { channelId: room.channel.id },
+          blocks: words("Which queue?"),
+          clientKey: randomUUID(),
+          key: "queue",
+          ask: EXPIRY,
+        };
+        Result.getOrThrow(yield* postAsk(room.owner, room.workspace, ask));
+        Result.getOrThrow(
+          yield* postAsk(room.owner, room.workspace, { ...ask, clientKey: randomUUID() }),
+        );
+
+        const agentOf = (row: ChatMemberRow) => row.agentId ?? "";
+        assert.equal(yield* agentPostsSince(agentOf(room.first), opened), 3);
+        assert.equal(yield* agentPostsSince(agentOf(room.second), opened), 1);
+        yield* TestClock.adjust("1 minute");
+        assert.equal(yield* agentPostsSince(agentOf(room.first), yield* DateTime.nowAsDate), 0);
       }),
   );
 });

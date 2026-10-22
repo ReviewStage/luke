@@ -16,7 +16,7 @@ import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
 import { getTestDB, startTask } from "@luke/database/testing";
 import { BOARD_ELEMENT_TYPE } from "@luke/features/board-vocabulary";
 import { BROWSER_AGENT_ACTION } from "@luke/features/browser-agent-actions";
-import { CHAT_TOOL } from "@luke/features/chat-wire";
+import { CHAT_BOUNDS, CHAT_TOOL } from "@luke/features/chat-wire";
 import { CODING_AGENT_PAYER } from "@luke/features/coding-agent-wire";
 import { INBOX_TOOL } from "@luke/features/inbox-wire";
 import { PICTURE_TYPE, type Picture } from "@luke/features/picture-wire";
@@ -31,6 +31,7 @@ import { Clock, Effect, Layer, Option, Redacted } from "effect";
 import { Base64 } from "effect/encoding";
 import { type HttpClient, HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
+import { TestClock } from "effect/testing";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../../environment.js";
 import { HOSTED_HTTP_STATUS } from "../../http/http.js";
 import { runConnectionExecute, runConnectionSearch } from "../../integrations/connection-door.js";
@@ -641,6 +642,58 @@ it.layer(getTestDB())("Luke's MCP server", (it) => {
           assert.equal(called.isError, refusedByDoor(direct), name);
         }
         yield* Effect.promise(() => client.close());
+      }),
+  );
+
+  it.effect(
+    "post_chat and edit_plan are held to eve's per-turn caps, counted from the native turn under way",
+    () =>
+      Effect.gen(function* () {
+        const fetch = yield* standing;
+        const agent = yield* agentWithBearer;
+        const { conversationId } = Option.getOrThrow(yield* admitRunnerBearer(agent.bearer)).target;
+        yield* writeAccountPreferences(agent.userId, { experiments: { [EXPERIMENT.CHAT]: true } });
+        const client = yield* connected(fetch, agent.bearer);
+        const call = (name: string, input: Record<string, unknown>) =>
+          Effect.promise(() => client.callTool({ name, arguments: input }));
+        const notes = (count: number, from: number) =>
+          Array.from({ length: count }, (_, at) => ({
+            kind: "add",
+            section: "Notes",
+            text: `- Point ${from + at}.`,
+          }));
+
+        // What the agent took before its turn opened counts toward no cap of this turn.
+        const before = yield* call(CHAT_TOOL.POST, { text: "before the turn" });
+        const notedBefore = yield* call("edit_plan", { notes: notes(1, 0) });
+        yield* TestClock.adjust("1 minute");
+        const openedAt = yield* Clock.currentTimeMillis;
+        yield* Database.use((db) =>
+          db
+            .update(conversations)
+            .set({
+              nativeProjection: { turn: { id: "turn-1", openedAt, told: 0, steps: 0, calls: {} } },
+            })
+            .where(eq(conversations.id, conversationId)),
+        );
+
+        const posted: boolean[] = [];
+        for (let at = 0; at < CHAT_BOUNDS.MAX_POSTS_PER_TURN; at += 1) {
+          posted.push((yield* call(CHAT_TOOL.POST, { text: `post ${at}` })).isError === false);
+        }
+        const pastPosts = yield* call(CHAT_TOOL.POST, { text: "one too many" });
+        const noted = yield* call("edit_plan", { notes: notes(30, 1) });
+        const pastNotes = yield* call("edit_plan", { notes: notes(11, 31) });
+        const lastNotes = yield* call("edit_plan", { notes: notes(10, 31) });
+        yield* Effect.promise(() => client.close());
+
+        assert.deepEqual([before.isError, notedBefore.isError], [false, false]);
+        assert.ok(posted.every(Boolean));
+        assert.equal(pastPosts.isError, true);
+        assert.match(firstJson(pastPosts).reason, /posted 50 times this turn/);
+        assert.equal(noted.isError, false);
+        assert.equal(pastNotes.isError, true);
+        assert.equal(lastNotes.isError, false);
       }),
   );
 

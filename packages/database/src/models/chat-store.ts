@@ -32,6 +32,7 @@ import {
   eq,
   exists,
   gt,
+  gte,
   inArray,
   isNotNull,
   isNull,
@@ -3987,4 +3988,24 @@ export function agentWorkspace(
       ? organizationId
       : Option.none();
   });
+}
+
+/**
+ * How many messages a coding agent has posted since the moment given, as
+ * its member in any workspace: what a native agent's turn has posted since
+ * it opened, which the chat's per-turn cap is held to. An ask posted again
+ * under its key writes its message in place, so it is counted once, as it
+ * was first posted.
+ */
+export function agentPostsSince(agentId: string, since: Date): ChatStoreEffect<number> {
+  return Effect.map(
+    Database.use((db) =>
+      db
+        .select({ posts: count() })
+        .from(chatMessage)
+        .innerJoin(chatMember, eq(chatMember.id, chatMessage.authorMemberId))
+        .where(and(eq(chatMember.agentId, agentId), gte(chatMessage.createdAt, since))),
+    ),
+    ([row]) => row?.posts ?? 0,
+  );
 }

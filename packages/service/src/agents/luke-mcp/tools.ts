@@ -26,11 +26,12 @@
  * here they keep eve's names, words, and schemas, and run through Luke's own
  * door over the same grants (`../../integrations/connection-door.ts`).
  *
- * Two things eve's tool files keep in the session's own state have none
- * here, since the server keeps no session: a call's id, which the agent
- * tools key a start or a message on and chat a post, is minted for each
- * call; and the turn's count of plan notes and chat posts, which each call
- * starts from nothing, so those caps hold per call. Nor is the list
+ * Two things eve's tool files keep in the session's own state are had
+ * otherwise here, since the server keeps no session: a call's id, which the
+ * agent tools key a start or a message on and chat a post, is minted for
+ * each call; and the turn's count of plan notes and chat posts is read from
+ * the store for the native turn under way (`turn-counts.ts`), so eve's
+ * per-turn caps hold. Nor is the list
  * narrowed per agent as eve narrows its own at each turn: a tool eve would
  * not offer (no plan, no repository) is refused by its door.
  */
@@ -122,6 +123,7 @@ import { LIST_OPEN_ASKS_TOOL } from "../operator-desk.js";
 import type { RepositorySandboxDoor } from "../repository-shell.js";
 import { CREATE_SECTION_TOOL, DELETE_SECTION_TOOL } from "../task-section-tools.js";
 import { CREATE_TASK_TOOL, READ_TASK_TOOL } from "../task-tools.js";
+import { notesInTurn, postsInTurn } from "./turn-counts.js";
 
 /** What a door answers: the tool's own result, the value its eve tool hands the model. */
 export type LukeMcpToolResult = { readonly status?: string } & object;
@@ -358,7 +360,9 @@ export const LUKE_MCP_TOOLS: ReadonlyMap<string, LukeMcpTool> = new Map<string, 
   // The pull request, the plan, and pages and pictures.
   entry(OPEN_PULL_REQUEST_TOOL, (admitted, input) => runAgentOpenPullRequest(admitted, input)),
   entry(EDIT_PLAN_TOOL, (admitted, input, { sandbox }) =>
-    runAgentEditPlan(admitted, input, 0, sandbox),
+    Effect.flatMap(notesInTurn(admitted), (taken) =>
+      runAgentEditPlan(admitted, input, taken, sandbox),
+    ),
   ),
   entry(
     LOOK_AT_PICTURE_TOOL,
@@ -401,13 +405,15 @@ export const LUKE_MCP_TOOLS: ReadonlyMap<string, LukeMcpTool> = new Map<string, 
   agentTool(DELETE_SECTION_TOOL),
   // Chat.
   entry(CHAT_TOOLS.POST, (admitted, input, { seams, sandbox, callId }) =>
-    runAgentChat(seams, admitted, {
-      tool: CHAT_TOOL.POST,
-      input,
-      clientKey: callId,
-      postsInTurn: 0,
-      sandbox,
-    }),
+    Effect.flatMap(postsInTurn(admitted), (posted) =>
+      runAgentChat(seams, admitted, {
+        tool: CHAT_TOOL.POST,
+        input,
+        clientKey: callId,
+        postsInTurn: posted,
+        sandbox,
+      }),
+    ),
   ),
   entry(CHAT_TOOLS.READ, (admitted, input, { seams }) =>
     runAgentChat(seams, admitted, { tool: CHAT_TOOL.READ, input }),
