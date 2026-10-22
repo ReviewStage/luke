@@ -1,0 +1,16 @@
+/* readable-controls.css -- the words of the controls inside a readable
+   region, which select as text does (readable-controls.tsx). */
+
+@layer components {
+  /* The region draws no box, so what holds it lays out its controls. */
+  .luke-readable-controls {
+    display: contents;
+  }
+
+  /* Note that the words select rather than the control around them, so a
+     badge, a key's number, and a box beside the words stay out of a copy. */
+  .luke-readable-controls :is(.luke-choice-label, .luke-choice-detail, .luke-checkbox-words) {
+    -webkit-user-select: text;
+    user-select: text;
+  }
+}
