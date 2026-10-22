@@ -42,6 +42,7 @@ import {
 import { LINK_PLACE, linkOf } from "@luke/features/luke-link";
 import { MENTION_KIND, mentionMarkdown } from "@luke/features/mention-link";
 import { pageFrameUrl } from "@luke/features/page-frame";
+import { PAGE_SHOWER, type PageLine } from "@luke/features/page-wire";
 import { TASK_STATUS, TASK_TREE_ENTRY, type TaskSummary } from "@luke/features/task-wire";
 import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
 import {
@@ -83,7 +84,7 @@ import {
   fakeAppPlatform,
   QUIET_PANEL,
 } from "../testing/app-platform.js";
-import { handState } from "../testing/app-state.js";
+import { handState, stateWith } from "../testing/app-state.js";
 import {
   composerEditor,
   editorBundleLanded,
@@ -216,6 +217,8 @@ const FUNNEL = {
 let root: Root | undefined;
 /** Each task's pages as a read of them answers. */
 let taskPages = new Map<string, readonly (typeof FUNNEL)[]>();
+/** Each agent with no task's own pages as a read of them answers, none for an agent the reader cannot reach. */
+let agentPages = new Map<string, readonly PageLine[]>();
 /** The task's agents as the service lists them, archived ones among them. */
 let listedAgents: readonly CodingAgentSummary[] = [AGENT];
 /** Each task's inbox as the service answers a read of it from the start. */
@@ -330,6 +333,7 @@ beforeEach(() => {
   ]);
   startRead = undefined;
   taskPages = new Map([[BILLING.id, [FUNNEL]]]);
+  agentPages = new Map();
   listedAgents = [AGENT];
   agentInboxes = new Map();
   agentReads = [];
@@ -406,7 +410,10 @@ beforeEach(() => {
         return Promise.resolve({
           status: FAKE_ANSWER.DONE,
           value: {
-            pages: "taskId" in request.payload ? (taskPages.get(request.payload.taskId) ?? []) : [],
+            pages:
+              "taskId" in request.payload
+                ? (taskPages.get(request.payload.taskId) ?? [])
+                : (agentPages.get(request.payload.agentId) ?? []),
           },
         });
       }
@@ -4286,6 +4293,72 @@ test("an item of an agent with no plan stands under the automation that started 
   assert.match(crumbs, /Nightly flake sweep/u);
   assert.equal(page.querySelector("[data-inbox-title]")?.textContent, "Quarantine the flaky test?");
   assert.deepEqual(asked.shownTasks, [], "the automation's crumb opens no plan");
+});
+
+test("a link alone on its line to a page an agent with no plan showed stands as the page's row, hanging the card a plan's page hangs, its title, version and the agent that showed it, read as it is first hung; one of an agent the reader cannot reach keeps the chip's own card", async () => {
+  const ledger: PageLine = {
+    id: "4a5b6c7d-8e9f-4a0b-8c1d-2e3f4a5b6c7d",
+    title: "Flake ledger",
+    version: 3,
+    at: 1_000,
+    shownBy: { kind: PAGE_SHOWER.AGENT, agentId: SWEEP_AGENT },
+  };
+  agentPages = new Map([[SWEEP_AGENT, [ledger]]]);
+  const shown = linkOf({ kind: LINK_PLACE.PAGE, agentId: SWEEP_AGENT, pageId: ledger.id }, "acme");
+  const hidden = linkOf({ kind: LINK_PLACE.PAGE, agentId: STRAY_AGENT, pageId: ledger.id }, "acme");
+  const words = {
+    type: INBOX_BLOCK.MARKDOWN,
+    text: [shown, `[@Their ledger](${hidden})`].join("\n\n"),
+  };
+  agentInboxes = new Map([[SWEEP_AGENT, [{ ...QUARANTINE, blocks: [words] }]]]);
+  const waiting: AppInboxTasklessItem = {
+    id: QUARANTINE.id,
+    agentId: SWEEP_AGENT,
+    title: QUARANTINE.title,
+    postedAt: QUARANTINE.postedAt,
+    agentTitle: "Sweep the flaky tests",
+    agentModel: "anthropic/claude-opus-5.5",
+    automationId: null,
+    automationName: null,
+    repository: "acme/relay",
+  };
+  // Main's document names the agent by what waits on it, as the window's names are read.
+  const held = stateWith({}, {});
+  handState({}, { inbox: { ...held.inbox, taskless: [waiting] } });
+  const { page } = mount([waiting]);
+  await settle();
+  act(() => rowNamed(page, "Quarantine the flaky test?").click());
+  await settle();
+
+  const rows = [...page.querySelectorAll('[data-inbox-markdown] [data-lone-link="page"]')];
+  assert.equal(rows.length, 2, "each link alone on its line stands as a page's row");
+  const [mine, theirs] = rows.map((row) => row.querySelector("button.luke-list-row-main"));
+  assert.ok(mine && theirs);
+  restOn(mine);
+  await settle();
+  const card = document.querySelector(".luke-tooltip-card [data-page-card]");
+  assert.ok(card, "the agent's page hangs the page's own card");
+  assert.equal(card.querySelector(".luke-hover-card-name")?.textContent, "Flake ledger");
+  assert.equal(
+    card.querySelector(".luke-hover-card-sub")?.textContent,
+    "Version 3 · Shown by Sweep the flaky tests",
+  );
+  assert.equal(
+    card.querySelector(".page-card-frame")?.getAttribute("src"),
+    pageFrameUrl({ agentId: SWEEP_AGENT, pageId: ledger.id, version: 3 }),
+  );
+  act(() => {
+    mine.dispatchEvent(new MouseEvent("pointerout", { bubbles: true }));
+  });
+
+  restOn(theirs);
+  await settle();
+  assert.equal(document.querySelector(".luke-tooltip-card [data-page-card]"), null);
+  assert.equal(
+    document.querySelector(".luke-tooltip-card [data-mention-card] .luke-hover-card-name")
+      ?.textContent,
+    "Their ledger",
+  );
 });
 
 /** The automation that started the agent with no task, as its workspace's list reads it. */

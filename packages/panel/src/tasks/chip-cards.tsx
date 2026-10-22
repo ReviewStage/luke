@@ -1,13 +1,20 @@
+import { useAtomValue } from "@effect/atom-react";
 import { sectionAnchors } from "@luke/features/mention-link";
-import type { PagePlace } from "@luke/features/page-wire";
+import type { PageLine, PagePlace } from "@luke/features/page-wire";
 import { planSections } from "@luke/features/plan-document";
 import type { Workspace } from "@luke/features/workspace-wire";
+import { ACT_KIND } from "@luke/host/acts";
 import { DocumentIcon, HoverCard, HoverCardHead, HoverCardNote } from "@luke/ui";
+import { Effect } from "effect";
+import * as AsyncResult from "effect/reactivity/AsyncResult";
+import * as Atom from "effect/reactivity/Atom";
 import { HashIcon, InboxIcon } from "lucide-react";
 import { createContext, type ReactNode, useContext } from "react";
+import { askAct } from "../act.js";
 import { AutomationCard, actorCard } from "../actor-ref.js";
 import { AutomationDirectory, useAutomation } from "../automation-directory.js";
 import { MemberDirectory, useMemberDirectory, usePerson } from "../member-directory.js";
+import { rendererRuntime } from "../renderer-runtime.js";
 import { APP_SLICE, useAppSlice } from "../use-app-state.js";
 import { useMentionedReader } from "./mentioned-agent-card.js";
 import { PageCard } from "./page-card.js";
@@ -24,14 +31,17 @@ import { useMinute } from "./task-time.js";
  * card (`../desktop/task-card.tsx`), and a section's or a version's the
  * same card's head with the section's heading or the version under it in
  * the agents' stead; a page's is its tab's, its title, its version, and
- * when it last moved over a preview of it (`page-card.tsx`); a person's is their card (`../actor-ref.tsx`); an Inbox item's is
+ * when it last moved over a preview of it (`page-card.tsx`), a plan's page
+ * read from what the window holds, and the page of an agent on no task,
+ * which the window holds nothing of, read as the card is first hung (`AgentPageChipCard`); a person's is their card (`../actor-ref.tsx`); an Inbox item's is
  * its question and that it waits on the team, and when it was asked; an
  * automation's is its card, the workspace's automations read as the card is
  * first hung where no directory around it reads them yet. Everything else
  * is read from main's document and the directories around the chip, so a
  * chip asks nothing as it is drawn. A place the window does not hold, a
  * plan of another account's or a page of a plan not open, keeps the chip's
- * own card, its glyph and name.
+ * own card, its glyph and name, as does an agent's page the read does not
+ * find, the page of an agent the reader cannot reach among them.
  */
 
 /** What a plan's card is made from where a chip hangs it: the window's plans, as the shell holds them. */
@@ -145,7 +155,61 @@ export function VersionChipCard({
   );
 }
 
-/** A page's card, its tab's, previewing it, where the page is one of the open plan's, the only ones the window holds; else `fallback`. */
+/** An agent's pages as the service answered them; nothing where it refused, or the agent is not the reader's to reach. */
+function agentPages(agentId: string): Effect.Effect<readonly PageLine[] | undefined> {
+  return Effect.promise(() =>
+    askAct(ACT_KIND.TASKS_PAGES, { agentId }).then(
+      (answer) => ("pages" in answer ? answer.pages : undefined),
+      () => undefined,
+    ),
+  );
+}
+
+/** One agent's pages, read once for every card hung of it while one stands. */
+const agentPagesAtom = Atom.family((agentId: string) => rendererRuntime.atom(agentPages(agentId)));
+
+/**
+ * The card of a page of an agent on no task, the page's own card as a
+ * plan's page hangs it, read by the agent's pages (`ACT_KIND.TASKS_PAGES`)
+ * as it is first hung and never as the chip is drawn, so words full of
+ * chips ask nothing until one is looked at; `fallback` while the read is
+ * out, and where it failed or holds no such page.
+ */
+function AgentPageChipCard({
+  agentId,
+  pageId,
+  fallback,
+}: {
+  agentId: string;
+  pageId: string;
+  fallback: ReactNode;
+}): ReactNode {
+  const read = useAtomValue(agentPagesAtom(agentId));
+  const page = AsyncResult.isSuccess(read)
+    ? read.value?.find((each) => each.id === pageId)
+    : undefined;
+  if (page === undefined) return fallback;
+  return <PageCard place={{ agentId }} page={page} />;
+}
+
+/** A page of a plan's card, where the page is one of the open plan's, the only ones the window holds; else `fallback`. */
+function TaskPageChipCard({
+  taskId,
+  pageId,
+  fallback,
+}: {
+  taskId: string;
+  pageId: string;
+  fallback: ReactNode;
+}): ReactNode {
+  const tasks = useAppSlice(APP_SLICE.TASKS);
+  const held = tasks?.activeTaskId === taskId ? tasks.pages : undefined;
+  const page = held?.find((each) => each.id === pageId);
+  if (page === undefined) return fallback;
+  return <PageCard place={{ taskId }} page={page} />;
+}
+
+/** A page's card, its tab's, previewing it: a plan's page's as the window holds it, an agent's read as it is hung; else `fallback`. */
 export function PageChipCard({
   place,
   pageId,
@@ -156,12 +220,11 @@ export function PageChipCard({
   pageId: string;
   fallback: ReactNode;
 }): ReactNode {
-  const tasks = useAppSlice(APP_SLICE.TASKS);
-  // Note that the window holds an agent's own pages beside its page alone, so a chip of one hangs its own card.
-  const held = "taskId" in place && tasks?.activeTaskId === place.taskId ? tasks.pages : undefined;
-  const page = held?.find((each) => each.id === pageId);
-  if (page === undefined) return fallback;
-  return <PageCard place={place} page={page} />;
+  return "taskId" in place ? (
+    <TaskPageChipCard taskId={place.taskId} pageId={pageId} fallback={fallback} />
+  ) : (
+    <AgentPageChipCard agentId={place.agentId} pageId={pageId} fallback={fallback} />
+  );
 }
 
 /** The workspace a link was written under, by its slug, or its id where it has none, as the account holds it; none where it holds no such workspace. */
