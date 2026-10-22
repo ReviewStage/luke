@@ -40,6 +40,7 @@ import {
   runBrowserTool,
   storedBrowserOutput,
 } from "./browser-tool.js";
+import { RECORDER_SOURCE, RECORDING_START_OUTPUT } from "./sandbox-recorder.js";
 
 /**
  * The `browser` tool over a fake Chromium behind the real CDP session and
@@ -47,9 +48,36 @@ import {
  * keeps the agent's tabs in step with the browser, an action on a tab a
  * member drives is refused with nothing after it run, a screenshot's
  * bounded copy reaches the model while its full-size copy is kept beside
- * the transcript and named by id, never as base64, and a browser that cannot
- * be reached answers why. Synthetic accounts and pages throughout.
+ * the transcript and named by id, never as base64, a recording started and
+ * stopped is kept beside the transcript as a video, and a browser that
+ * cannot be reached answers why. Synthetic accounts and pages throughout.
  */
+
+/** A WebM whose one video track states 1280 by 800, with no frames: what the sandbox's recorder leaves, as far as the service reads it. */
+const RECORDED_WEBM = (() => {
+  const ebml = (id: readonly number[], body: readonly number[]) => [
+    ...id,
+    0x80 | body.length,
+    ...body,
+  ];
+  const video = ebml([0xe0], [...ebml([0xb0], [0x05, 0x00]), ...ebml([0xba], [0x03, 0x20])]);
+  return new Uint8Array([
+    ...ebml([0x1a, 0x45, 0xdf, 0xa3], ebml([0x42, 0x82], [...Buffer.from("webm")])),
+    ...ebml([0x18, 0x53, 0x80, 0x67], ebml([0x16, 0x54, 0xae, 0x6b], ebml([0xae], video))),
+  ]);
+})();
+
+/** The fake sandbox's browser on the peer, recording as the scenario says, and the commands its sandbox ran. */
+function recordingBrowser(
+  peer: FakeCdpPeer,
+  recording: NonNullable<Parameters<typeof fakeSandboxApi>[0]["recording"]>,
+) {
+  const sandbox = fakeSandboxApi({ status: "running", sessionId: SESSION, recording });
+  return {
+    layer: Layer.succeed(AgentBrowser, agentBrowserOver(sandbox.api, fakeBridgePty(peer))),
+    ran: sandbox.ran,
+  };
+}
 
 const SESSION = "wrun_browser_tool_fixture";
 
@@ -907,6 +935,122 @@ it.layer(getTestDB())("the browser tool", (it) => {
           status: BROWSER_TOOL_STATUS.NOT_RUN,
           reason: BROWSER_TOOL_REFUSAL.NO_SANDBOX,
         });
+      }),
+  );
+
+  it.effect(
+    "a recording started in one call and stopped with its caption in the next is kept beside the transcript as a video, named by id",
+    () =>
+      Effect.gen(function* () {
+        const { conversationId } = yield* openConversation;
+        const { peer } = yield* browser();
+        const { layer, ran: commands } = recordingBrowser(peer, {
+          stop: JSON.stringify({ ok: true, seconds: 8.3, bytes: RECORDED_WEBM.byteLength }),
+          video: RECORDED_WEBM,
+        });
+
+        const started = ran(
+          yield* call(
+            conversationId,
+            { actions: [{ action: BROWSER_AGENT_ACTION.RECORD }] },
+            layer,
+          ),
+        );
+        const stopped = ran(
+          yield* call(
+            conversationId,
+            {
+              actions: [
+                { action: BROWSER_AGENT_ACTION.STOP_RECORDING, caption: "Inviting a member" },
+              ],
+            },
+            layer,
+          ),
+        );
+
+        assert.deepEqual(started.steps, [
+          {
+            action: BROWSER_AGENT_ACTION.RECORD,
+            status: BROWSER_STEP_STATUS.DONE,
+            maxSeconds: 120,
+          },
+        ]);
+        assert.ok(
+          commands.some(({ ask }) => ask.args.includes(RECORDER_SOURCE)),
+          "the recorder was started in the sandbox",
+        );
+        const [step] = stopped.steps;
+        assert.ok(step !== undefined && step.action === BROWSER_AGENT_ACTION.STOP_RECORDING);
+        assert.ok(step.status === BROWSER_STEP_STATUS.DONE && "picture" in step);
+        assert.equal(step.seconds, 8.3);
+        assert.equal(step.caption, "Inviting a member");
+        assert.ok(step.picture !== undefined);
+        assert.deepEqual(
+          [step.picture.mediaType, step.picture.width, step.picture.height],
+          ["video/webm", 1280, 800],
+        );
+        const kept = yield* readConversationPicture(conversationId, step.picture.id);
+        assert.deepEqual(
+          Option.map(kept, (picture) => [picture.contentType, [...picture.bytes]]),
+          Option.some(["video/webm", [...RECORDED_WEBM]]),
+        );
+        assert.doesNotMatch(JSON.stringify(storedBrowserOutput(unparsedWire(stopped))), /GkXfo/u);
+
+        // A stop asked again, as after a read that failed, keeps the same video once.
+        const again = ran(
+          yield* call(
+            conversationId,
+            { actions: [{ action: BROWSER_AGENT_ACTION.STOP_RECORDING }] },
+            layer,
+          ),
+        );
+        const [repeated] = again.steps;
+        assert.ok(
+          repeated !== undefined && "picture" in repeated && repeated.picture !== undefined,
+        );
+        assert.equal(repeated.picture.id, step.picture.id);
+      }),
+  );
+
+  it.effect(
+    "a record while one runs, and a stop with none running, fail in words the agent can act on",
+    () =>
+      Effect.gen(function* () {
+        const { conversationId } = yield* openConversation;
+        const { peer } = yield* browser();
+        const { layer } = recordingBrowser(peer, {
+          start: { exitCode: 0, stdout: `${RECORDING_START_OUTPUT.RUNNING}\n`, stderr: "" },
+        });
+
+        const again = ran(
+          yield* call(
+            conversationId,
+            { actions: [{ action: BROWSER_AGENT_ACTION.RECORD }] },
+            layer,
+          ),
+        );
+        const none = ran(
+          yield* call(
+            conversationId,
+            { actions: [{ action: BROWSER_AGENT_ACTION.STOP_RECORDING }] },
+            layer,
+          ),
+        );
+
+        assert.deepEqual(again.steps, [
+          {
+            action: BROWSER_AGENT_ACTION.RECORD,
+            status: BROWSER_STEP_STATUS.FAILED,
+            error: "a recording already runs: stop it with stop_recording first",
+          },
+        ]);
+        assert.deepEqual(none.steps, [
+          {
+            action: BROWSER_AGENT_ACTION.STOP_RECORDING,
+            status: BROWSER_STEP_STATUS.FAILED,
+            error: "no recording runs: start one with record",
+          },
+        ]);
       }),
   );
 

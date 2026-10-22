@@ -122,6 +122,33 @@ function screenshotsOf(output: UnparsedWireValue): readonly CalledPicture[] {
   return found;
 }
 
+/** The step a browser call's recording answers once stopped and kept. */
+const STOP_RECORDING_ACTION = "stop_recording";
+
+/** What a browser call's recording is named by where it has no caption, before its place among the call's: `recording-1`. */
+const RECORDING_NAME = "recording";
+
+/**
+ * The videos a browser call recorded and the transcript kept, in the order
+ * its steps stopped them, each with the caption it was stopped with; nothing
+ * for any other call, or a recording not kept.
+ */
+export function recordedVideosOf(
+  tool: string,
+  output: UnparsedWireValue,
+): readonly (ShownPicture & { readonly picture: KeptPicture })[] {
+  if (tool !== AGENT_TOOL.BROWSER || !isRecord(output) || !Array.isArray(output.steps)) return [];
+  const found: (ShownPicture & { readonly picture: KeptPicture })[] = [];
+  for (const step of output.steps) {
+    if (!isRecord(step) || step.action !== STOP_RECORDING_ACTION) continue;
+    const picture = keptPictureOf(step.picture);
+    if (picture === undefined) continue;
+    const caption = isWireString(step.caption) ? step.caption : "";
+    found.push({ picture, name: `${RECORDING_NAME}-${String(found.length + 1)}`, caption });
+  }
+  return found;
+}
+
 /**
  * The pictures a call answered, in order: a browser call's screenshots,
  * each named by its place (`screenshot-1`); an integration's pictures, each
