@@ -19,7 +19,7 @@
  */
 
 import { INSTALLED_SKILLS } from "@luke/agent-runner/protocol";
-import { readSkillFile, SKILL_KEY } from "@luke/features/skill-file";
+import { SKILL_KEY } from "@luke/features/skill-file";
 import type { AgentSkill } from "../agent-runtime/skills.js";
 import type { VercelSandboxApi } from "../vercel-sandbox-api.js";
 
@@ -43,24 +43,53 @@ const MANIFEST = {
 
 const encoder = new TextEncoder();
 
+/** The frontmatter's fences, as `@luke/features/skill-file` reads them. */
+const FRONTMATTER = /^---\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n|$)/u;
+
+/** A top-level key's line. */
+const TOP_LEVEL_KEY = /^([A-Za-z0-9_-]+):/u;
+
+/** The keys Luke writes from what it keeps of the skill, over whatever the file says. */
+const KEPT_KEYS: ReadonlySet<string> = new Set([SKILL_KEY.NAME, SKILL_KEY.DESCRIPTION]);
+
+/** The frontmatter's lines less the keys Luke writes and the lines that continue them, every other key kept as written. */
+function otherKeys(lines: readonly string[]): string[] {
+  const kept: string[] = [];
+  let dropping = false;
+  for (const line of lines) {
+    const key = TOP_LEVEL_KEY.exec(line);
+    // A blank or indented line continues the key above it; any other line ends it.
+    if (key !== null) dropping = KEPT_KEYS.has(key[1] ?? "");
+    else if (line.trim() !== "" && !/^[ \t]/u.test(line)) dropping = false;
+    if (!dropping) kept.push(line);
+  }
+  return kept;
+}
+
 /**
- * A skill's `SKILL.md` as the harness reads it: as installed, where its
- * frontmatter names the skill and describes it, since that keeps every key
- * a harness reads; otherwise its body under a frontmatter written from the
- * name and description Luke keeps, which both harnesses need to list it.
+ * A skill's `SKILL.md` as the harness reads it: its body and every key of
+ * its frontmatter as installed, under the name and description Luke keeps
+ * of it, which both harnesses list it by. Note that the two are written
+ * from the store rather than kept from the file, because a file may name
+ * none or describe it in words an update has since replaced.
  */
 function skillFileOf(skill: AgentSkill): Uint8Array {
   const text =
     skill.skillFile === undefined
       ? undefined
-      : new TextDecoder("utf-8", { fatal: false }).decode(skill.skillFile);
-  const read = text === undefined ? undefined : readSkillFile(text);
-  const named = read?.keys.get(SKILL_KEY.NAME) === skill.name;
-  const described = (read?.keys.get(SKILL_KEY.DESCRIPTION) ?? "") !== "";
-  if (skill.skillFile !== undefined && named && described) return skill.skillFile;
-  const body = read?.body ?? text?.replace(/^\uFEFF/u, "").trim() ?? skill.markdown;
+      : new TextDecoder("utf-8", { fatal: false }).decode(skill.skillFile).replace(/^\uFEFF/u, "");
+  const fenced = text === undefined ? null : FRONTMATTER.exec(text);
+  const rest = fenced === null ? [] : otherKeys((fenced[1] ?? "").split(/\r?\n/u));
+  const body =
+    text === undefined
+      ? skill.markdown
+      : (fenced === null ? text : text.slice(fenced[0].length)).trim();
   // A double-quoted scalar, which JSON spells as YAML reads it.
-  const frontmatter = `name: ${skill.name}\ndescription: ${JSON.stringify(skill.description)}`;
+  const frontmatter = [
+    `${SKILL_KEY.NAME}: ${skill.name}`,
+    `${SKILL_KEY.DESCRIPTION}: ${JSON.stringify(skill.description)}`,
+    ...rest,
+  ].join("\n");
   return encoder.encode(`---\n${frontmatter}\n---\n\n${body}\n`);
 }
 

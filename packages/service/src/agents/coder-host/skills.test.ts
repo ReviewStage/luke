@@ -21,6 +21,7 @@ import {
   openGithubUser,
 } from "../../testing/github-app-fake.js";
 import { offeredSkills, skillsOpenSandbox } from "../agent-runtime/skills.js";
+import { SKILL_ROOT } from "../repository-skills.js";
 import { agentSkills, nativeSkills } from "./skills.js";
 
 /**
@@ -247,7 +248,7 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("a coding agent's skills, unrea
 // Note that a database of its own, as the unread case has, because a second agent on the fixture's repository in one database is offered none of its skills.
 it.layer(Layer.mergeAll(getTestDB(), noNetwork))("a native harness's skills", (it) => {
   it.effect(
-    "hands a native harness the installed skills alone, with their SKILL.md as installed, an installed name the repository holds left to the repository",
+    "hands a native harness the installed skills alone, with their SKILL.md as installed, an installed name the repository holds where the harness reads it left to the repository",
     () =>
       Effect.gen(function* () {
         const { userId, agent, target, workspace } = yield* startAgent(REPOSITORY);
@@ -256,14 +257,24 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("a native harness's skills", (i
         yield* install(userId, PERSONAL, "release-notes", "My release notes.");
         yield* install(userId, PERSONAL, "pr-style", "My pr style.");
 
-        const skills = yield* nativeSkills(target, agent).pipe(
+        const readsAgents = yield* nativeSkills(target, agent, [SKILL_ROOT.AGENTS]).pipe(
+          Effect.provide(repositoryWithSkills(["testing"])),
+        );
+        const readsClaude = yield* nativeSkills(target, agent, [SKILL_ROOT.CLAUDE]).pipe(
           Effect.provide(repositoryWithSkills(["testing"])),
         );
 
+        // The repository's testing is in `.agents/skills`, which a harness reading it keeps.
         assert.deepEqual(
-          skills.map((skill) => skill.name),
+          readsAgents.map((skill) => skill.name),
           ["release-notes", "pr-style"],
         );
+        // A harness that never reads `.agents/skills` would offer no testing at all, so the installed one stays.
+        assert.deepEqual(
+          readsClaude.map((skill) => skill.name),
+          ["release-notes", "testing", "pr-style"],
+        );
+        const skills = readsAgents;
         const [notes] = skills;
         assert.equal(
           new TextDecoder().decode(notes?.skillFile),

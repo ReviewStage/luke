@@ -230,6 +230,8 @@ export interface RunnerHarness<E extends { readonly _tag: string }> {
     resume: string | undefined,
     firstSequence: number,
   ) => Effect.Effect<RunnerConfig, LaunchRefused>;
+  /** The checkout's folders the harness finds a repository's skills in, whose names it keeps over an installed skill's. */
+  readonly skillRoots: readonly string[];
   /** What goes ahead of a message to a runner already running. */
   readonly ahead: (
     agent: CodingAgent,
@@ -708,7 +710,7 @@ export const runnerSessions = <
       running: string,
     ) =>
       Effect.gen(function* () {
-        const files = nativeSkillFiles(yield* nativeSkills(target, agent));
+        const files = nativeSkillFiles(yield* nativeSkills(target, agent, harness.skillRoots));
         if (files.length === 0) return;
         yield* api.writeFiles(running, files);
       }).pipe(

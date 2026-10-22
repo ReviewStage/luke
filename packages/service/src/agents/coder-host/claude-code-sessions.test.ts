@@ -439,6 +439,22 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
             { path: "scripts/triage.sh", bytes: new TextEncoder().encode("echo triage\n") },
           ],
         });
+        // A file that names no skill and describes it in words its stored description has since replaced.
+        yield* installSkill(userId, {
+          owner: { scope: INSTALLED_SKILL_SCOPE.PERSONAL },
+          name: "incident-notes",
+          description: "Write incident notes.",
+          userInvocable: false,
+          source: { type: INSTALLED_SKILL_SOURCE.TEXT },
+          files: [
+            {
+              path: "SKILL.md",
+              bytes: new TextEncoder().encode(
+                "---\ndescription: >\n  Older words\n  over two lines.\nuser-invocable: false\n---\nWrite them.\n",
+              ),
+            },
+          ],
+        });
         const sessions = yield* sessionsFor(userId, { next: 0 }).pipe(
           Effect.provide(services(api)),
         );
@@ -450,9 +466,10 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
           [...upload.keys()].some((path) => path.startsWith("/tmp/luke-installed-skills/")),
         );
         assert.ok(skills !== undefined);
-        // A Claude Code local plugin named luke, its skill a whole folder, its SKILL.md as installed.
+        // A Claude Code local plugin named luke, each skill a whole folder.
         assert.deepEqual([...skills.keys()].sort(), [
           "/tmp/luke-installed-skills/.claude-plugin/plugin.json",
+          "/tmp/luke-installed-skills/skills/incident-notes/SKILL.md",
           "/tmp/luke-installed-skills/skills/sentry-triage/SKILL.md",
           "/tmp/luke-installed-skills/skills/sentry-triage/scripts/triage.sh",
         ]);
@@ -461,9 +478,14 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
             .name,
           "luke",
         );
+        // Every other key and the body as installed, under the name and description Luke keeps.
         assert.equal(
           skills.get("/tmp/luke-installed-skills/skills/sentry-triage/SKILL.md"),
-          skillFile,
+          '---\nname: sentry-triage\ndescription: "Triage a Sentry issue."\nallowed-tools: Bash\n---\n\nRun `scripts/triage.sh`.\n',
+        );
+        assert.equal(
+          skills.get("/tmp/luke-installed-skills/skills/incident-notes/SKILL.md"),
+          '---\nname: incident-notes\ndescription: "Write incident notes."\nuser-invocable: false\n---\n\nWrite them.\n',
         );
         // Nothing lands in the checkout, so nothing can be committed.
         assert.ok(![...skills.keys()].some((path) => path.startsWith(CODER.CHECKOUT_PATH)));

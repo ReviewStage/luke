@@ -40,6 +40,7 @@ function loadedMarkdown(skill: RepositorySkill): string {
 function sourcedSkills(
   target: ConversationTarget,
   agent: CodingAgent,
+  loaded: (skill: RepositorySkill) => string = loadedMarkdown,
 ): Effect.Effect<readonly [readonly AgentSkill[], readonly AgentSkill[]], never, CheckoutServices> {
   return Effect.gen(function* () {
     // The workspace is read once for both sources.
@@ -47,13 +48,7 @@ function sourcedSkills(
     return yield* Effect.all(
       [
         hasRepository(agent)
-          ? repositorySkills(
-              target,
-              workspaceOf,
-              agent.repository,
-              agentMember(agent),
-              loadedMarkdown,
-            )
+          ? repositorySkills(target, workspaceOf, agent.repository, agentMember(agent), loaded)
           : Effect.succeed([]),
         installedSkills(target, workspaceOf),
       ],
@@ -72,18 +67,27 @@ export function agentSkills(
 
 /**
  * The installed skills a native harness is handed (`runner-sessions.ts`):
- * the merge eve's session is offered, less the repository's, which the
- * harness finds in the checkout itself. Merged whole first, so an installed
- * skill a repository skill of its name shadows stays out too.
+ * the merge eve's session is offered, of the repository's skills the
+ * harness finds itself and the installed ones, less those repository
+ * skills, which the harness reads from the checkout. Merged whole first, so
+ * an installed skill a repository skill of its name shadows stays out too;
+ * a repository skill in a root the harness never reads (`roots`, such as
+ * `.claude/skills` for Codex) shadows nothing, since the harness would
+ * offer neither. Read from the default branch, as eve's are.
  */
 export function nativeSkills(
   target: ConversationTarget,
   agent: CodingAgent,
+  roots: readonly string[],
 ): Effect.Effect<readonly AgentSkill[], never, CheckoutServices> {
   return Effect.gen(function* () {
-    const [repository, installed] = yield* sourcedSkills(target, agent);
-    const merged = yield* mergedSkills(target, [repository, installed]);
-    const theirs = new Set(repository.map((skill) => skill.name));
-    return merged.filter((skill) => !theirs.has(skill.name));
+    const seen = new Set<string>();
+    const [repository, installed] = yield* sourcedSkills(target, agent, (skill) => {
+      if (roots.some((root) => skill.folder.startsWith(`${root}/`))) seen.add(skill.name);
+      return loadedMarkdown(skill);
+    });
+    const theirs = repository.filter((skill) => seen.has(skill.name));
+    const merged = yield* mergedSkills(target, [theirs, installed]);
+    return merged.filter((skill) => !seen.has(skill.name));
   });
 }
