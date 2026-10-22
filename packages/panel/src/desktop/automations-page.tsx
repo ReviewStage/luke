@@ -36,6 +36,9 @@ import {
   List,
   ListRow,
   NO_CONTEXT_MENU,
+  ONE_LINE_ELEMENT,
+  ONE_LINE_END,
+  OneLine,
   PAGE_FRAME,
   SETTINGS_SECTION_FRAME,
   SettingsRow,
@@ -446,7 +449,13 @@ function ListPage({
       toolbar={
         <header className="desktop-toolbar">
           <div className="desktop-toolbar-heading">
-            <h1 className="desktop-toolbar-title">Automations</h1>
+            <OneLine
+              as={ONE_LINE_ELEMENT.H1}
+              end={ONE_LINE_END.ELLIPSIS}
+              className="desktop-toolbar-title"
+            >
+              Automations
+            </OneLine>
           </div>
           <div className="desktop-toolbar-actions">
             <Button

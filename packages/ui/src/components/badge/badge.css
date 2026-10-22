@@ -57,6 +57,30 @@
     overflow-wrap: break-word;
   }
 
+  /* A badge given a step in a header too narrow for its words keeps them for
+     a reader, as `VisuallyHidden`'s `under` does. */
+  @container luke-room (max-width: 520px) {
+    .luke-badge-words[data-under="snug"] {
+      position: absolute;
+      overflow: hidden;
+      width: 1px;
+      height: 1px;
+      clip-path: inset(50%);
+      white-space: nowrap;
+    }
+  }
+
+  @container luke-room (max-width: 439px) {
+    .luke-badge-words[data-under="tight"] {
+      position: absolute;
+      overflow: hidden;
+      width: 1px;
+      height: 1px;
+      clip-path: inset(50%);
+      white-space: nowrap;
+    }
+  }
+
   /* A provider's colour, a GitHub label's, as a dot before the words, in the
      subtle ink until the badge names one it can paint. */
   .luke-badge-swatch {

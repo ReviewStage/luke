@@ -81,7 +81,7 @@ function Card({ startsOpen }: { startsOpen: boolean }): ReactNode {
 
 function draw(startsOpen: boolean, width = 900): HTMLElement {
   laid?.remove();
-  laid = layContainersAt({ annotation: width });
+  laid = layContainersAt({ annotation: width, "luke-room": width });
   const container = document.body.appendChild(document.createElement("div"));
   container.className = "pull-request-thread-slot";
   const root = createRoot(container);
@@ -164,15 +164,17 @@ test("folded, a card is its head alone, counting its comments and previewing non
 test("a narrow card drops the age, draws a state as a dot that still says its word, and counts without the word", () => {
   const wide = draw(false, 900);
   const time = () => wide.querySelector(".annotation-card-time") ?? assert.fail("an age");
-  const word = () => wide.querySelector(".annotation-card-chip-word") ?? assert.fail("a word");
+  const word = () =>
+    wide.querySelector(".annotation-card-chip .luke-visually-hidden") ?? assert.fail("a word");
   const countWord = () =>
-    wide.querySelector(".annotation-card-count-word") ?? assert.fail("the count's word");
+    wide.querySelector(".annotation-card-count .luke-visually-hidden") ??
+    assert.fail("the count's word");
   assert.equal(shown(time()), true);
   assert.notEqual(getComputedStyle(word()).position, "absolute", "wide, the state says its word");
   assert.notEqual(getComputedStyle(countWord()).position, "absolute");
 
   laid?.remove();
-  laid = layContainersAt({ annotation: 360 });
+  laid = layContainersAt({ annotation: 360, "luke-room": 360 });
   assert.equal(shown(time()), false, "narrow, the age steps out");
   const chip = wide.querySelector(".annotation-card-chip") ?? assert.fail("a chip");
   assert.equal(getComputedStyle(chip).width, "var(--luke-space-8)", "the state is a dot");

@@ -7,6 +7,9 @@ import {
   type DialogQuestion,
   ErrorState,
   Fill,
+  ONE_LINE_ELEMENT,
+  ONE_LINE_END,
+  OneLine,
   Skeleton,
   SkeletonRegion,
   Tooltip,
@@ -276,13 +279,17 @@ export function VersionView({
       <header className="desktop-toolbar">
         {lead}
         <div className="desktop-toolbar-heading">
-          <h1 className="desktop-toolbar-title">
+          <OneLine
+            as={ONE_LINE_ELEMENT.H1}
+            end={ONE_LINE_END.ELLIPSIS}
+            className="desktop-toolbar-title"
+          >
             <Tooltip label={momentText(line.lastEdit.at)}>
               <time dateTime={new Date(line.lastEdit.at).toISOString()}>
                 {dayAndTimeText(line.lastEdit.at)}
               </time>
             </Tooltip>
-          </h1>
+          </OneLine>
         </div>
         <div className="desktop-toolbar-actions">
           <Tooltip label={viewing.current ? CURRENT_HINT : undefined}>

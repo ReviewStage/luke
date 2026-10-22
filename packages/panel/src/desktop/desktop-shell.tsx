@@ -12,6 +12,9 @@ import {
   DetailPage,
   IconButton,
   NavItem,
+  ONE_LINE_ELEMENT,
+  ONE_LINE_END,
+  OneLine,
   PAGE_FRAME,
   ScrollArea,
   SettingsPage,
@@ -111,7 +114,13 @@ function TasksLoading({ onExit }: { onExit: () => void }): React.JSX.Element {
       toolbar={
         <header className="desktop-toolbar">
           <div className="desktop-toolbar-heading">
-            <h1 className="desktop-toolbar-title">Tasks</h1>
+            <OneLine
+              as={ONE_LINE_ELEMENT.H1}
+              end={ONE_LINE_END.ELLIPSIS}
+              className="desktop-toolbar-title"
+            >
+              Tasks
+            </OneLine>
           </div>
         </header>
       }
@@ -143,7 +152,13 @@ function AdminLoading({
           toolbar={
             <header className="desktop-toolbar">
               <div className="desktop-toolbar-heading">
-                <h1 className="desktop-toolbar-title">Overview</h1>
+                <OneLine
+                  as={ONE_LINE_ELEMENT.H1}
+                  end={ONE_LINE_END.ELLIPSIS}
+                  className="desktop-toolbar-title"
+                >
+                  Overview
+                </OneLine>
               </div>
             </header>
           }
@@ -171,9 +186,13 @@ function PersonLoading({
       toolbar={
         <header className="desktop-toolbar">
           <div className="desktop-toolbar-heading">
-            <h1 className="desktop-toolbar-title">
+            <OneLine
+              as={ONE_LINE_ELEMENT.H1}
+              end={ONE_LINE_END.ELLIPSIS}
+              className="desktop-toolbar-title"
+            >
               {name ?? <Skeleton width={PERSON_SKELETON_NAME} />}
-            </h1>
+            </OneLine>
           </div>
         </header>
       }
@@ -234,7 +253,13 @@ function AutomationsLoading({ onExit }: { onExit: () => void }): React.JSX.Eleme
       toolbar={
         <header className="desktop-toolbar">
           <div className="desktop-toolbar-heading">
-            <h1 className="desktop-toolbar-title">Automations</h1>
+            <OneLine
+              as={ONE_LINE_ELEMENT.H1}
+              end={ONE_LINE_END.ELLIPSIS}
+              className="desktop-toolbar-title"
+            >
+              Automations
+            </OneLine>
             <ExperimentTag />
           </div>
         </header>

@@ -1369,18 +1369,6 @@
   margin-left: auto;
 }
 
-/* A plan with no repository names the file plainly, cut from its left, in
-   the window's own type as the breadcrumbs are. */
-.file-view-path {
-  min-width: 0;
-  overflow: hidden;
-  color: var(--luke-color-text);
-  direction: rtl;
-  text-align: left;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 /* The commit a pinned read is at, quiet beside the path. */
 .file-view-commit {
   flex: 0 0 auto;
@@ -2867,7 +2855,7 @@
   position: relative;
   z-index: 1;
   flex: none;
-  container: pull-request-header / inline-size;
+  container: pull-request-header luke-room / inline-size;
   padding: var(--luke-space-8) var(--column-inset);
 }
 
@@ -3554,17 +3542,6 @@
   min-width: 0;
 }
 
-@container pull-request-header (max-width: 520px) {
-  .merge-chip .luke-badge-words {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    overflow: hidden;
-    clip-path: inset(50%);
-    white-space: nowrap;
-  }
-}
-
 .pull-request-section {
   margin-top: var(--luke-space-20);
 }
@@ -3747,7 +3724,7 @@
 /* A Conversation thread's card answers its own width, as one on a line does. */
 .pull-request-thread-slot {
   min-width: 0;
-  container: annotation / inline-size;
+  container: annotation luke-room / inline-size;
 }
 
 /* A review thread on its line in Files changed (agent-pull-request-tab.tsx's
@@ -3763,7 +3740,7 @@
     clamp(var(--luke-space-8), (100% - 440px) * 999, var(--luke-space-12));
   font-family: var(--luke-font-sans);
   white-space: normal;
-  container: annotation / inline-size;
+  container: annotation luke-room / inline-size;
 }
 
 /* A line's review threads minimized to one chip (minimized-threads.tsx), as
@@ -4124,16 +4101,6 @@
     padding: 0;
     background: var(--annotation-chip-ink);
   }
-
-  .annotation-card-chip-word,
-  .annotation-card-count-word {
-    position: absolute;
-    overflow: hidden;
-    width: 1px;
-    height: 1px;
-    clip-path: inset(50%);
-    white-space: nowrap;
-  }
 }
 
 /* A thread's ⋯ stands at the end of its head. */
@@ -4362,7 +4329,7 @@
    back, in the element Pierre keeps for it under a File tab's line or a
    Code card's (`.whole-file-note`, `.diff-note`), which insets it. */
 .file-note {
-  container: annotation / inline-size;
+  container: annotation luke-room / inline-size;
 }
 
 /* Luke is told by his wing mark and his name in his own colour, on the card a review thread wears. */
@@ -5197,12 +5164,9 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
 }
 
 .draft-fork-quote {
-  display: block;
   min-width: 4em;
   flex: 1 1 0;
-  overflow: hidden;
   color: var(--luke-color-text);
-  text-overflow: ellipsis;
 }
 
 .draft-fork-drop {
@@ -6453,20 +6417,16 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
 }
 
 .agent-servers-problem {
-  min-width: 0;
   flex: 1 1 auto;
-  overflow: hidden;
   color: var(--luke-color-attention);
   font-size: var(--luke-type-caption-size);
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 /* A sign-in's line in the same place is no problem: never finished, in the
    muted detail colour. One still waiting on the browser is the shared ring
    alone after the name, its words in its title, with Reopen and Cancel at
    the row's end, as Settings › Integrations draws them. */
-.agent-servers-problem[data-tone="quiet"] {
+.agent-servers-problem-quiet {
   color: var(--luke-color-text-muted);
 }
 

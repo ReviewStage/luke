@@ -1,4 +1,4 @@
-import { BADGE_TONE, Badge, CheckIcon, GAP, Inline, Text } from "@luke/ui";
+import { BADGE_TONE, Badge, CheckIcon, GAP, Inline, Text, VISUALLY_HIDDEN_UNDER } from "@luke/ui";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
@@ -59,6 +59,17 @@ function Badges(): React.JSX.Element {
             notarization step <Badge tone={BADGE_TONE.ATTENTION}>Needs you</Badge> before it can
             finish.
           </Text>
+        </div>
+      </CatalogSection>
+      <CatalogSection id="badge-room" title="Words given up in a narrow room">
+        <div className="catalog-narrow catalog-room">
+          <Badge
+            tone={BADGE_TONE.COMPLETE}
+            icon={<CheckIcon />}
+            hideWordsUnder={VISUALLY_HIDDEN_UNDER.SNUG}
+          >
+            Ready to merge
+          </Badge>
         </div>
       </CatalogSection>
       <CatalogSection id="badge-narrow" title="Narrow column, long words">

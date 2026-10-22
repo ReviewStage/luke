@@ -16,6 +16,9 @@ import {
   Fill,
   IconButton,
   InlineEdit,
+  ONE_LINE_ELEMENT,
+  ONE_LINE_END,
+  OneLine,
   SpinnerRegion,
   Tooltip,
   useMenu,
@@ -28,7 +31,6 @@ import { useAppCommand } from "../app-commands.js";
 import { appPlatform } from "../app-platform.js";
 import { AutomationDirectory } from "../automation-directory.js";
 import { LinkWorkspaceProvider } from "../copy-link-item.js";
-import { FADING_ELEMENT, FadingWords } from "../fading-words.js";
 import { FindScope } from "../find-in-tab.js";
 import { usePageWorkspace } from "../links-at-hand.js";
 import { MemberDirectory } from "../member-directory.js";
@@ -177,7 +179,11 @@ function AgentPageHeading({
     <>
       <div className="desktop-toolbar-heading">
         {rename?.editing === true ? (
-          <h1 className="desktop-toolbar-title">
+          <OneLine
+            as={ONE_LINE_ELEMENT.H1}
+            end={ONE_LINE_END.ELLIPSIS}
+            className="desktop-toolbar-title"
+          >
             <InlineEdit
               value={label}
               label={NAME_LABEL}
@@ -187,9 +193,11 @@ function AgentPageHeading({
                 rename.end(edit.value);
               }}
             />
-          </h1>
+          </OneLine>
         ) : (
-          <FadingWords as={FADING_ELEMENT.H1} className="desktop-toolbar-title" words={label} />
+          <OneLine as={ONE_LINE_ELEMENT.H1} className="desktop-toolbar-title">
+            {label}
+          </OneLine>
         )}
       </div>
       <div className="desktop-toolbar-actions">
