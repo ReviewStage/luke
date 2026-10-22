@@ -2846,6 +2846,7 @@ export function useTasksTab(input: {
     // service answers; a refusal opens the card again where it was left.
     const { handed, card } = from;
     const standingBefore = standIn;
+    const historyBefore = historyFor;
     if (handed !== undefined) {
       setStartingTask({
         line: openingLineOf({
@@ -2864,6 +2865,7 @@ export function useTasksTab(input: {
       if (handed !== undefined) {
         setStartingTask(undefined);
         setStandIn((now) => now ?? standingBefore);
+        setHistoryFor((now) => now ?? historyBefore);
         setNewTaskAsk({ preset: card === undefined ? undefined : { refused: { card, note } } });
       }
       return note;

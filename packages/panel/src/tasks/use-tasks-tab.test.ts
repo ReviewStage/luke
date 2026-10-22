@@ -3269,12 +3269,22 @@ test("New task's agent start opens its page at once on the words as its agent's 
   assert.equal(tab.control().agents.opening?.line.text, prompt);
 });
 
-test("New task's agent start refused after its page opened opens the card again on the issues, model, and press it held, saying why", async () => {
+test("New task's agent start refused after its page opened opens the card again on the issues, model, and press it held, saying why, over the version history it was asked from", async () => {
   const answers: Array<(answer: PortActResult<typeof ACT_KIND.TASKS_START>) => void> = [];
   const tab = mount(
     { shown: true, tasks: OPEN },
-    { [ACT_KIND.TASKS_START]: () => new Promise((resolve) => answers.push(resolve)) },
+    {
+      [ACT_KIND.TASKS_START]: () => new Promise((resolve) => answers.push(resolve)),
+      [ACT_KIND.TASKS_SELECT]: () => Promise.resolve(true),
+    },
   );
+  act(() =>
+    tab.control().onOpenLink({
+      workspace: "acme",
+      place: { kind: LINK_PLACE.VERSION, planId: TASK.id, revision: 3 },
+    }),
+  );
+  assert.equal(tab.control().history.open, true);
   const handed = {
     idempotencyKey: AGENT_KEY,
     prompt: "Make the sidebar keep its folds.",
@@ -3306,6 +3316,7 @@ test("New task's agent start refused after its page opened opens the card again 
   assert.equal(tab.control().starting, undefined, "the page gives way");
   assert.equal(tab.control().newTask.open, true, "the card opens again");
   assert.deepEqual(tab.control().newTask.preset?.refused, { card, note: refused });
+  assert.equal(tab.control().history.open, true, "the version history stands behind it again");
 });
 
 test("an agent refused as New task's Agent mode started its task opens the task on a draft holding the words, model, and why, whose Retry starts the agent on that task under the start's key", async () => {
