@@ -42,7 +42,6 @@ import {
 } from "effect";
 import {
   BUBBLEWRAP_STARTS,
-  DROP_SUDO,
   FIND_SESSION_FILES,
   INSTALL_CLAUDE_CODE,
   ROOT_TOKEN_SCAN,
@@ -474,7 +473,7 @@ const resumedLaunch = Effect.fn("probe/resumedLaunch")(function* (
   yield* endDriver(scrub, driver);
 });
 
-/** The image: today's `PREPARE_SCRIPT`, then Claude Code, the checkout, the probe's files, and the default user's sudo dropped last. */
+/** The image: today's `PREPARE_SCRIPT`, then Claude Code, the checkout, and the probe's files. */
 const prepareSandbox = Effect.fn("probe/prepareSandbox")(function* (
   scrub: Sanitizer,
   settings: Settings,
@@ -518,22 +517,11 @@ const prepareSandbox = Effect.fn("probe/prepareSandbox")(function* (
     ].join("\n"),
     as: RUN_AS.ROOT,
   });
-  yield* run(scrub, recording, sandbox, "drop the default user's sudo", {
-    script: DROP_SUDO,
-    args: [defaultUser],
+  recording.sudoApiUser = yield* run(scrub, recording, sandbox, "the Sandbox API's sudo", {
+    script: "id -un",
     as: RUN_AS.ROOT,
+    allowFailure: true,
   });
-  recording.sudoApiUser = yield* run(
-    scrub,
-    recording,
-    sandbox,
-    "the Sandbox API's sudo after the drop",
-    {
-      script: "id -un",
-      as: RUN_AS.ROOT,
-      allowFailure: true,
-    },
-  );
   const launched = yield* run(scrub, recording, sandbox, "the launch's drop to the agent user", {
     script: "id -un; awk '/^CapEff:/ { print $2 }' /proc/self/status",
     as: RUN_AS.AGENT,

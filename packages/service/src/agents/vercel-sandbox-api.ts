@@ -191,7 +191,8 @@ export interface CommandAsk {
 
 /**
  * A detached command: started as root where `sudo` asks it, which the
- * sandbox's API grants whatever the image's sudoers say, with its stdin held
+ * sandbox's API does by running the `sudo` binary as the default user, so
+ * it needs that user's sudoers entry, which the image keeps; its stdin held
  * open for `writeStdin`. Its `env` is handed to it by the API alone, so a
  * secret in it reaches no argv and no file.
  */

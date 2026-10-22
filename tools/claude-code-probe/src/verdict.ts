@@ -7,7 +7,7 @@
  * resumed, billed to the plan. Check two is that the token stays with the
  * CLI: neither a Terminal's shell nor a command the agent runs can read it
  * or call Anthropic with it, no file holds it, and Luke can still launch as
- * root after the image drops the default user's sudo.
+ * root through the Sandbox API's sudo.
  *
  * The sandbox's default user holds the full capability set without sudo
  * (P16's finding), so a Terminal's shell as it is today reads another
@@ -47,7 +47,7 @@ export const TURN_DONE = {
 export interface ProbeObservations {
   /** The run's own nonce, which names the file and branch the first turn makes. */
   readonly nonce: string;
-  /** The user a Sandbox API command with `sudo` reached after the image dropped the default user's sudo. */
+  /** The user a Sandbox API command with `sudo` reached. */
   readonly sudoApiUser: string | undefined;
   /** The user and effective capabilities the launch's drop answered with (`AS_AGENT`). */
   readonly launchUser: string | undefined;
@@ -272,7 +272,7 @@ function tokenConditions(seen: ProbeObservations): readonly Condition[] {
     ),
     condition(
       CHECK.TOKEN,
-      "the Sandbox API's sudo still reaches root once the default user's is gone",
+      "the Sandbox API's sudo reaches root",
       seen.sudoApiUser === "root",
       `a sudo command answered as ${seen.sudoApiUser ?? "nobody"}`,
     ),

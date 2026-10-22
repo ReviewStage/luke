@@ -477,6 +477,13 @@ access token, never your sign-in's refresh token, is handed to Codex, in its
 process's environment and on its input: it is never written to that disk, a
 command Codex runs, or the conversation's record.
 
+On either, what keeps the token from anyone with a Terminal in that sandbox
+is not a missing `sudo`: Claude Code or Codex runs as a user of its own,
+whose home no other user reads, and every Terminal shell, every command the
+agent runs, and Claude Code or Codex itself start with every Linux capability
+dropped, so none of them can read another process's environment or a file
+kept from it, or become root.
+
 **Code on screen during a call.** When a coding agent wants to
 show you code, it names a file and lines, and our service reads them from
 its sandbox checkout. The path, the commit the checkout read it at, the
