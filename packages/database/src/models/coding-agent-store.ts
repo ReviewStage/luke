@@ -2370,17 +2370,19 @@ const updateLiveOperatorArchived = SqlSchema.findAll({
   Request: Schema.Struct({
     userId: Schema.String,
     organizationId: Schema.String,
+    agentId: Schema.String,
     archivedAt: Schema.Date,
     archivedBy: ArchivedByColumnSchema,
   }),
   Result: IdRowSchema,
-  execute: ({ userId, organizationId, archivedAt, archivedBy }) =>
+  execute: ({ userId, organizationId, agentId, archivedAt, archivedBy }) =>
     Database.use((db) =>
       db
         .update(codingAgent)
         .set({ archivedAt, archivedBy })
         .where(
           and(
+            eq(codingAgent.id, agentId),
             liveOperatorOf(userId, organizationId),
             workspaceReachableBy(userId, codingAgent.organizationId),
           ),
@@ -2409,19 +2411,23 @@ export function operatorReplaced(userId: string, agentId: string): CodingAgentSt
 
 /**
  * The member's operator standing in the workspace archived by the member,
- * its conversation kept, as a Reset does before it ensures a fresh one;
- * answers the id of the one archived, or none where none stood or the
- * member is no member of the workspace.
+ * its conversation kept, as a Reset does before it ensures a fresh one; only
+ * the one named, read and stopped before, and only while it still stands,
+ * so two Resets that read the same one never archive the fresh one the
+ * other made. Answers its id where it was archived, or none where it no
+ * longer stood or the member is no member of the workspace.
  */
 export function archiveOperatorAgent(
   userId: string,
   organizationId: string,
+  agentId: string,
 ): CodingAgentStoreEffect<Option.Option<string>> {
   return Effect.flatMap(DateTime.nowAsDate, (now) =>
     Effect.map(
       updateLiveOperatorArchived({
         userId,
         organizationId,
+        agentId,
         archivedAt: now,
         archivedBy: { by: CODING_AGENT_ARCHIVER.MEMBER, userId },
       }),

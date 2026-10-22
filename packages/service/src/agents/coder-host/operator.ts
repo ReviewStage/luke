@@ -91,7 +91,9 @@ export const ensureOperator = /* @__PURE__ */ Effect.fn("web/ensureOperator")(fu
   if (Option.isSome(standing)) {
     // An archived operator works on unseen, so a turn still running is stopped before the stamp.
     yield* ensure.stopStanding(standing.value);
-    const archived = yield* hostedStoreOrUnavailable(archiveOperatorAgent(userId, workspaceId));
+    const archived = yield* hostedStoreOrUnavailable(
+      archiveOperatorAgent(userId, workspaceId, standing.value.id),
+    );
     retired = Option.isSome(archived) ? standing.value : undefined;
   }
   const started = yield* startCodingAgent(eve, userId, {

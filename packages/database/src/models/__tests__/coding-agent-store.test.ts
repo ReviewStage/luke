@@ -2324,8 +2324,9 @@ it.layer(getTestDB())("the coding-agent store's operators", (it) => {
             idempotencyKey: randomUUID(),
           })
           .pipe(Effect.result);
-        const archived = yield* archiveOperatorAgent(member, workspace);
+        const archived = yield* archiveOperatorAgent(member, workspace, made.agent.id);
         const fresh = Option.getOrThrow(yield* createCodingAgent(member, operatorStart(workspace)));
+        const stale = yield* archiveOperatorAgent(member, workspace, made.agent.id);
 
         assert.deepEqual(
           [made.created, found.created, found.agent.id],
@@ -2337,6 +2338,7 @@ it.layer(getTestDB())("the coding-agent store's operators", (it) => {
         );
         assert.ok(Result.isFailure(second), "a second standing operator breaks the index");
         assert.deepEqual(archived, Option.some(made.agent.id));
+        assert.ok(Option.isNone(stale), "an archive of the one read leaves the fresh one standing");
         assert.equal(fresh.created, true);
         assert.notEqual(fresh.agent.id, made.agent.id);
         const old = Option.getOrThrow(yield* readCodingAgent(member, made.agent.id));
@@ -2357,7 +2359,7 @@ it.layer(getTestDB())("the coding-agent store's operators", (it) => {
         const workspace = yield* openWorkspace(member);
         const coder = yield* tasklessAgent(member, workspace);
         const old = Option.getOrThrow(yield* createCodingAgent(member, operatorStart(workspace)));
-        yield* archiveOperatorAgent(member, workspace);
+        yield* archiveOperatorAgent(member, workspace, old.agent.id);
         const fresh = Option.getOrThrow(yield* createCodingAgent(member, operatorStart(workspace)));
         const archivedAt = Option.getOrThrow(
           yield* readCodingAgent(member, old.agent.id),
@@ -2378,7 +2380,7 @@ it.layer(getTestDB())("the coding-agent store's operators", (it) => {
         assert.equal(Option.getOrThrow(coderBack).archivedAt, null, "a coder comes back as before");
         assert.equal(yield* operatorReplaced(member, fresh.agent.id), false);
 
-        yield* archiveOperatorAgent(member, workspace);
+        yield* archiveOperatorAgent(member, workspace, fresh.agent.id);
         const back = yield* archiveCodingAgent(member, old.agent.id, false);
         assert.equal(Option.getOrThrow(back).archivedAt, null);
       }),
@@ -2393,7 +2395,7 @@ it.layer(getTestDB())("the coding-agent store's operators", (it) => {
       const made = Option.getOrThrow(yield* createCodingAgent(member, operatorStart(workspace)));
 
       assert.ok(Option.isNone(yield* createCodingAgent(outsider, operatorStart(workspace))));
-      assert.ok(Option.isNone(yield* archiveOperatorAgent(outsider, workspace)));
+      assert.ok(Option.isNone(yield* archiveOperatorAgent(outsider, workspace, made.agent.id)));
       assert.equal(
         Option.getOrThrow(yield* readCodingAgent(member, made.agent.id)).archivedAt,
         null,
