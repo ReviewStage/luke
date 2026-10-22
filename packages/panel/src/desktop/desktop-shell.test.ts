@@ -1341,7 +1341,7 @@ test("on a phone an open task leads its own row with the way back the window's h
 
   const fromInbox = render({ title: { label: "Inbox" } }, SHELL_ROOM.NARROW);
   await settle();
-  assert.equal(back(fromInbox).textContent, "Inbox");
+  assert.equal(back(fromInbox).getAttribute("aria-label"), "Back to Inbox");
   assert.equal(fromInbox.querySelector(".desktop-shell > .title-bar-controls"), null);
   act(() => back(fromInbox).click());
   assert.deepEqual(left, ["left"]);
@@ -1350,7 +1350,11 @@ test("on a phone an open task leads its own row with the way back the window's h
 
   const fromNowhere = render(undefined, SHELL_ROOM.NARROW);
   await settle();
-  assert.equal(back(fromNowhere).textContent, "Tasks", "with no page behind, the Tasks page");
+  assert.equal(
+    back(fromNowhere).getAttribute("aria-label"),
+    "Back to Tasks",
+    "with no page behind, the Tasks page",
+  );
   act(() => root?.unmount());
   document.body.innerHTML = "";
 

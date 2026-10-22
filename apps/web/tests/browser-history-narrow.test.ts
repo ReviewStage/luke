@@ -144,7 +144,7 @@ it.effect(
         const plan = await view("Plan");
         await act(async () => plan.click());
         await settle();
-        assert.equal(back().textContent, "Tasks");
+        assert.equal(back().getAttribute("aria-label"), "Back to Tasks");
         assert.equal(
           document.querySelector(".desktop-shell > .title-bar-controls"),
           null,

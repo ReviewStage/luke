@@ -1,9 +1,9 @@
 import { TASK_BOUNDS } from "@luke/features/task-wire";
-import { BackIcon, DocumentIcon, InlineEdit, type InlineEditEnd } from "@luke/ui";
+import { BackIcon, DocumentIcon, IconButton, InlineEdit, type InlineEditEnd } from "@luke/ui";
 import { BotIcon, ListIcon } from "lucide-react";
-import { FoldingButton } from "../folding-button.js";
 import type { AwayStep } from "../navigation-history.js";
 import { SIDE_PANEL_TAB, type SidePanelTab } from "../tasks/use-side-panel.js";
+import { Tooltip } from "../tooltip.js";
 import type { MenuAction } from "./action-menu.js";
 
 /**
@@ -18,10 +18,11 @@ import type { MenuAction } from "./action-menu.js";
  * chosen from that list. So the tabs a phone opens are the same tabs, kept
  * the same way (`use-side-panel.ts`), and Back walks them as it did.
  *
- * The row is a phone's standard header and holds nothing else: the way back
- * names where it goes, the list the task was opened from on the task's own
- * views, or Activity on a tab chosen there; the title names the task, or the
- * tab shown; and the ⋯ holds the views as a checked group, then what the tab
+ * The row is a phone's standard header and holds nothing else: the way back,
+ * its glyph alone, is named for where it goes, the list the task was opened
+ * from on the task's own views, or Activity on a tab chosen there; the
+ * title, centred between the two corners, names the task, or the tab shown;
+ * and the ⋯ holds the views as a checked group, then what the tab
  * shown offers, then the task's own actions (`task-actions.tsx`).
  */
 
@@ -96,7 +97,16 @@ interface TaskHeadRename {
   readonly onEnd: (end: InlineEditEnd) => void;
 }
 
-/** The row heading a task on a phone; see the module's head. */
+/** What the way back is called: where it goes, since its glyph alone says only that it goes back. */
+function backLabel(back: TaskHeadBack): string {
+  return `Back to ${back.label}`;
+}
+
+/**
+ * The row heading a task on a phone; see the module's head. Its corners are
+ * one control wide each, the way back at its start and the ⋯ at its end, so
+ * the title stands centred between them and truncates there.
+ */
 export function TaskHead({
   back,
   title,
@@ -114,7 +124,9 @@ export function TaskHead({
   return (
     <header className="desktop-toolbar task-head">
       <div className="task-head-back">
-        <FoldingButton label={back.label} icon={<BackIcon />} onClick={back.onPress} />
+        <Tooltip label={backLabel(back)}>
+          <IconButton icon={<BackIcon />} label={backLabel(back)} onClick={back.onPress} />
+        </Tooltip>
       </div>
       <div className="desktop-toolbar-heading">
         <h1 className="desktop-toolbar-title">

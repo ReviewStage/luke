@@ -6721,23 +6721,28 @@ ul.actor-stack {
 }
 
 /* A phone's task is headed by one row of its own (`task-pane-switcher.tsx`),
-   a phone's standard header: the way back at its start, the title of what is
-   on screen taking the rest and truncating, and one ⋯ at its end. It stands
-   in the title bar's buttons' place, which a phone's task does not draw, so
-   it starts at the column's inset as the way back of a Chat place does. The
-   way back gives up its words before the title does, never more than a share
-   of the row. The column's bar under it starts and ends at the column's own
-   inset, and the side panel draws no bar at all, the row standing for it. */
+   a phone's standard header: the way back's glyph in its start corner, one ⋯
+   in its end corner, and the title of what is on screen centred between them,
+   truncating. The corners are one control wide each, so the title's centre is
+   the row's. It stands in the title bar's buttons' place, which a phone's
+   task does not draw, so it starts at the column's inset as the way back of a
+   Chat place does. The column's bar under it starts and ends at the column's
+   own inset, and the side panel draws no bar at all, the row standing for
+   it. */
 .desktop-shell[data-room="narrow"] .desktop-main .desktop-toolbar.task-head {
+  display: grid;
+  grid-template-columns: var(--luke-control-height) minmax(0, 1fr) var(--luke-control-height);
   padding-right: var(--column-inset);
   padding-left: var(--column-inset);
 }
 
-.task-head-back {
-  display: flex;
+.task-head > .desktop-toolbar-heading {
   min-width: 0;
-  max-width: 40%;
-  flex: 0 1 auto;
+  text-align: center;
+}
+
+.task-head > .desktop-toolbar-actions {
+  justify-content: flex-end;
 }
 
 .desktop-shell[data-room="narrow"] .task-head ~ .desktop-task .desktop-task-main .desktop-toolbar {

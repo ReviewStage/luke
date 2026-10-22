@@ -204,7 +204,7 @@ function mount(
 
 test("on a phone a task is headed by one row, the way back named for the page it came from, the task's title, and one ⋯, whose menu leads with its views over the task's own actions", () => {
   const page = mount(SHELL_ROOM.NARROW);
-  assert.deepEqual(page.head(), { buttons: ["Inbox", "Task actions"], title: TASK.name });
+  assert.deepEqual(page.head(), { buttons: ["Back to Inbox", "Task actions"], title: TASK.name });
   assert.deepEqual(page.views(), ["*Plan", "Agents", "Activity"]);
   const menu = page.menu();
   assert.deepEqual(menu.slice(0, 3), ["*Plan", "Agents", "Activity"], "the views come first");
@@ -246,7 +246,7 @@ test("on a phone Agents shuts the panel by its own toggle, and Activity opens a 
 
   const shut = mount(SHELL_ROOM.NARROW, false);
   assert.deepEqual(shut.views(), ["Plan", "*Agents", "Activity"]);
-  assert.deepEqual(shut.head(), { buttons: ["Inbox", "Task actions"], title: TASK.name });
+  assert.deepEqual(shut.head(), { buttons: ["Back to Inbox", "Task actions"], title: TASK.name });
   assert.equal(
     shut.container.querySelectorAll('[aria-label="Task actions"]').length,
     1,
@@ -275,14 +275,14 @@ test("on a phone Activity asked over a shut panel lists the tabs whatever tab th
 
 test("on a phone a tab chosen from Activity names the row and leads it back to the list, and the ⋯ still leads with the views", () => {
   const page = mount(SHELL_ROOM.NARROW, true, SIDE_PANEL_TAB.BOARD);
-  assert.deepEqual(page.head(), { buttons: ["Activity", "Task actions"], title: "Board" });
+  assert.deepEqual(page.head(), { buttons: ["Back to Activity", "Task actions"], title: "Board" });
   assert.deepEqual(page.views(), ["Plan", "Agents", "*Activity"]);
 
   page.back();
   assert.deepEqual(page.rows(), ["Inbox", "Board"]);
   assert.deepEqual(
     page.head(),
-    { buttons: ["Inbox", "Task actions"], title: TASK.name },
+    { buttons: ["Back to Inbox", "Task actions"], title: TASK.name },
     "on the list the row names the task again and leads out of it",
   );
   assert.deepEqual(page.told, [], "going back to the list leaves the panel's tab as it stands");
