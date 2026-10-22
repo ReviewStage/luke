@@ -195,8 +195,6 @@ const RING = `1:${Buffer.alloc(32, 7).toString("base64")}`;
 /** The deployment's environment: its eve secret and the key ring. */
 function environment(): Layer.Layer<HostedEnvironment> {
   const values: HostedEnvironmentValues = {
-    openAiKey: undefined,
-    anthropicKey: undefined,
     posthogPersonalApiKey: undefined,
     posthogProjectId: undefined,
     posthogApiHost: undefined,

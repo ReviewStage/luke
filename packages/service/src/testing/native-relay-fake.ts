@@ -70,8 +70,6 @@ export interface NativeRelayFakeOptions {
 /** The deployment's environment, holding the eve secret given, and nothing else. */
 function environmentValues(secret: string | undefined): HostedEnvironmentValues {
   return {
-    openAiKey: undefined,
-    anthropicKey: undefined,
     posthogPersonalApiKey: undefined,
     posthogProjectId: undefined,
     posthogApiHost: undefined,

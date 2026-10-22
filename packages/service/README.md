@@ -1249,8 +1249,8 @@ the first turn in which the agent runs a sandbox tool of its own.
 The model is chosen at every step (`src/agents/coder-host/model.ts`): the agent's row
 names the catalog id and effort, `providerModelOf` turns the id into the
 provider's own, and the step is told `@ai-sdk/anthropic` on
-`ANTHROPIC_API_KEY` with `providerOptions.anthropic.effort`, or
-`@ai-sdk/openai`'s Responses model on `OPENAI_API_KEY` with
+the account's own Anthropic key with `providerOptions.anthropic.effort`, or
+`@ai-sdk/openai`'s Responses model on its own OpenAI key with
 `providerOptions.openai.reasoningEffort`, with the context window the
 catalog lists for the model (`CatalogModel.contextWindow`) or a fallback
 where it lists none. Each step also asks for its reasoning in words, so the
@@ -1262,8 +1262,8 @@ would start it thinking. Nothing goes through AI Gateway.
 
 The key a step runs on is read at every step too
 (`src/agents/coder-host/account-keys.ts`): the account's own key for the provider
-(above, "Accounts' own provider keys"), opened from its row, and never
-Luke's own `ANTHROPIC_API_KEY` or `OPENAI_API_KEY`. A provider it saved no
+(above, "Accounts' own provider keys"), opened from its row; the deployment
+holds no model key of its own. A provider it saved no
 key for refuses the step with `NO_PROVIDER_KEY`, and a row the deployment's
 ring cannot open, or a deployment holding no ring, with
 `ACCOUNT_KEY_UNREADABLE`, so nothing is quietly billed to Luke. A step on the account's key goes through a middleware that keeps the
@@ -1330,8 +1330,8 @@ work on a `luke/<slug>` branch and never push the default branch, and decide
 on a pull request and its draft state itself; the plan is the session's
 first message, or for an agent started on a developer's prompt, the prompt is,
 the agent is never handed the plan, and the instructions are worded for a
-prompt in the plan's place. The service needs `ANTHROPIC_API_KEY` and `OPENAI_API_KEY`,
-`DATABASE_URL`, the GitHub App's variables, and the Vercel Sandbox
+prompt in the plan's place. The service needs `PROVIDER_KEY_ENCRYPTION_KEYS`, under which each
+account's own keys are sealed, `DATABASE_URL`, the GitHub App's variables, and the Vercel Sandbox
 credentials its build prewarms under; `LUKE_CODER_MODEL_FIXTURE=scripted`
 selects the scripted model for `apps/dev/evals/coder.eval.ts`, which
 `pnpm --filter @luke/web test:agent` runs and which

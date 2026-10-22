@@ -14,8 +14,6 @@ import {
 const NOW = Date.parse("2026-08-19T12:00:00.000Z");
 
 const NO_ENVIRONMENT: HostedEnvironmentValues = {
-  openAiKey: undefined,
-  anthropicKey: undefined,
   posthogPersonalApiKey: undefined,
   posthogProjectId: undefined,
   posthogApiHost: undefined,

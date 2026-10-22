@@ -304,10 +304,8 @@ test("a fast step runs on the account's own key, and the key's row keeps what it
   assert.equal(await rowFastAccess(refused), FAST_ACCESS.NOT_ENABLED);
 });
 
-/** The deployment's environment as a call beside the agents reads it: the ring the account's keys open under, and no key of Luke's that anything here may read. */
+/** The deployment's environment as a call beside the agents reads it: the ring the account's keys open under, and no key of Luke's, which it holds none of. */
 const ENVIRONMENT: HostedEnvironmentValues = {
-  openAiKey: Redacted.make("sk-proj-luke-own-key-0000"),
-  anthropicKey: Redacted.make("sk-ant-luke-own-key-0000"),
   posthogPersonalApiKey: undefined,
   posthogProjectId: undefined,
   posthogApiHost: undefined,

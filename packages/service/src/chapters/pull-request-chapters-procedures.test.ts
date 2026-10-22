@@ -93,8 +93,6 @@ const CATALOG: readonly OfferedModel[] = [
 ];
 
 const ENVIRONMENT: HostedEnvironmentValues = {
-  openAiKey: undefined,
-  anthropicKey: undefined,
   posthogPersonalApiKey: undefined,
   posthogProjectId: undefined,
   posthogApiHost: undefined,

@@ -562,8 +562,6 @@ function fakeEve(
 
 /** The deployment's environment with no key of its own, which a test gives the one it reads. */
 const NO_KEYS: HostedEnvironmentValues = {
-  openAiKey: undefined,
-  anthropicKey: undefined,
   posthogPersonalApiKey: undefined,
   posthogProjectId: undefined,
   posthogApiHost: undefined,
@@ -624,7 +622,6 @@ const standing = (
   bearers: ReadonlyMap<string, string>,
   github: FakeGitHub,
   eve: ReturnType<typeof fakeEve>,
-  titles: boolean,
   summaryModel: SummaryModelOf = () => Effect.succeed(undefined),
   sessionSandboxes: SandboxStopReach["sessionSandboxes"] = sessionSandboxesLayer,
 ) =>
@@ -634,10 +631,7 @@ const standing = (
       Layer.succeed(SqlClient.SqlClient, client),
       Layer.succeed(Database, yield* Database),
       Layer.succeed(Clock.Clock, yield* Clock.Clock),
-      Layer.succeed(HostedEnvironment, {
-        ...NO_KEYS,
-        anthropicKey: titles ? Redacted.make("sk-ant-fixture") : undefined,
-      }),
+      Layer.succeed(HostedEnvironment, NO_KEYS),
       github.layer,
       modelCatalogOf(CATALOG),
       integrationConnectOf(() => CONNECTOR_ASKED_NOTHING),
@@ -854,8 +848,6 @@ const openTask = (
     readonly eve?: ReturnType<typeof fakeEve>;
     /** What the repository answers on its own paths, for a test of what an agent published. */
     readonly github?: RepositoryScript;
-    /** Whether the deployment holds the Anthropic key workers' titles are generated on. */
-    readonly titles?: boolean;
     /** The other account's GitHub token, or none where it holds no GitHub sign-in at all; the standing row's when unsaid. */
     readonly otherToken?: string | null;
     /** The model a replay's summary is written on; none unless a test names one. */
@@ -890,7 +882,6 @@ const openTask = (
       bearers,
       github,
       eve,
-      options.titles ?? false,
       options.summaryModel,
       options.sessionSandboxes,
     );
@@ -1465,7 +1456,6 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
           ]),
           githubReaching([installation]),
           eve,
-          false,
         );
 
         const byOwner = yield* ask(startAs(owner, task.id, { idempotencyKey: randomUUID() }));
@@ -1516,7 +1506,6 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
           new Map([[`Bearer ${owner}`, owner]]),
           githubReaching([installation]),
           fakeEve(),
-          false,
         );
 
         const started = yield* ask(startAs(owner, task.id, { idempotencyKey: randomUUID() }));
@@ -1557,7 +1546,6 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
           new Map([[`Bearer ${owner}`, owner]]),
           githubReaching([ledgerOnly]),
           eve,
-          false,
         );
 
         const started = yield* ask(startAs(owner, task.id, { idempotencyKey: randomUUID() }));

@@ -27,7 +27,7 @@ import { dictationProcedures } from "./dictation-procedures.js";
  * go to the transcription model on the account's own OpenAI key, never
  * Luke's, the text comes back, the account's day is metered, and nothing of
  * the clip or the text is logged. An account with no key of its own is
- * refused as missing one, though the deployment still holds a key of Luke's.
+ * refused as missing one.
  *
  * Synthetic accounts, bearers, clip bytes, and words throughout.
  */
@@ -36,8 +36,6 @@ const ORIGIN = "https://luke.test";
 const DICTATION_PATH = "/api/dictation";
 const TRANSCRIPTIONS_URL = "https://api.openai.com/v1/audio/transcriptions";
 const OPENAI_KEY = "sk-proj-account-test-key-0000000000000dict";
-/** A key of Luke's the deployment still holds, which no clip is ever sent on. */
-const LUKE_OPENAI_KEY = "sk-proj-luke-test-key-000000000000000000dict";
 /** The deployment's ring the account's key is sealed under: fixed bytes written for this file. */
 const RING = `1:${Buffer.alloc(32, 3).toString("base64")}`;
 
@@ -49,8 +47,6 @@ const SAID = "Run pnpm install in apps/web, then open useEffect.";
 const KEYWORDS = ["luke", "Composer dictation", "apps/web/server/dictation-app.ts"];
 
 const NO_ENVIRONMENT: HostedEnvironmentValues = {
-  openAiKey: undefined,
-  anthropicKey: undefined,
   posthogPersonalApiKey: undefined,
   posthogProjectId: undefined,
   posthogApiHost: undefined,
@@ -144,7 +140,6 @@ const answer = (
   Effect.gen(function* () {
     const environment: HostedEnvironmentValues = {
       ...NO_ENVIRONMENT,
-      openAiKey: Redacted.make(LUKE_OPENAI_KEY),
       providerKeyEncryptionKeys: seams.ring === undefined ? undefined : Redacted.make(seams.ring),
     };
     // Every line the procedure logs is kept, so the test can read what it says.
@@ -235,7 +230,7 @@ it.layer(getTestDB())("the dictation route", (it) => {
       yield* ask(clip(userId));
 
       assert.ok(logged.length > 0, "the failure is logged");
-      for (const secret of [SAID, CLIP_BASE64, OPENAI_KEY, LUKE_OPENAI_KEY, ...KEYWORDS]) {
+      for (const secret of [SAID, CLIP_BASE64, OPENAI_KEY, ...KEYWORDS]) {
         assert.ok(logged.every((line) => !line.includes(secret)));
       }
     }),

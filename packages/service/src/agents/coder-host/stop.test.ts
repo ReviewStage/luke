@@ -71,8 +71,6 @@ const OTHER_CONVERSATION = "0d1e2f3a-4b5c-4d6e-8f7a-9b0c1d2e3f4a";
 
 /** The deployment's environment with no key of its own, which a test gives the secret it reads. */
 const NO_KEYS: HostedEnvironmentValues = {
-  openAiKey: undefined,
-  anthropicKey: undefined,
   posthogPersonalApiKey: undefined,
   posthogProjectId: undefined,
   posthogApiHost: undefined,

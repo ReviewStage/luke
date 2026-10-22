@@ -394,10 +394,14 @@ operators who hold both could. Beside it we keep the provider, a hint (the
 characters, such as `sk-ant-…abcd`), when you last saved it, and whether, and
 when, the provider last accepted it, refused it, or said it was out of credit,
 or our service could no longer read it, updated when a coding agent call on it
-finds that changed. Only coding agents' and their workers' model calls use it;
-voice, dictation, titles, every web search,
-and Fast always run on our keys, and an account with its own Anthropic key is
-not offered Fast. After you save it, neither your Mac nor any answer from our
+finds that changed. Every model call Luke makes for you runs on your own keys
+and never on ours: a coding agent's and its workers' calls, Fast, and web
+search on the key of the provider the model is on; voice calls and dictation
+on your OpenAI key; and titles, pull request chapters, and the summary a
+Continue or Fork writes on whichever of your keys there is. Without an OpenAI
+key, calls and dictation are off; without any API key, an agent is titled from
+the first words of its first message, and no chapters or summaries are
+written. After you save it, neither your Mac nor any answer from our
 service holds the key again, and we never log it or send it to our analytics,
 crash reports, or screen recordings. Removing it in Settings, or deleting your
 account, deletes it.
@@ -705,9 +709,7 @@ when you choose one, and nobody's own GitHub account decides what a
 workspace reaches. We also keep the records
 that keep you signed in, each with the network address and the browser or app
 it was signed in from, and a daily count of your use of our service, one
-number a day: one for each voice session you opened; each model call made on
-our keys by a coding agent or a coding agent's workers (a call on your own
-key is not counted); each title; each web search; and each clip you
+number a day: one for each voice session you opened and each clip you
 dictated;
 beside it, how many seconds you dictated.
 
@@ -1250,11 +1252,10 @@ only when you press Send.
   call is counted in your daily usage. A
   development build run from a checkout can write a local trace of the voice
   traffic when its developer asks; a packaged build cannot.
-- OpenAI, for web search. Every coding agent and its workers search the web through our service, which sends
-  OpenAI's search the query alone (one line of at most 200 characters; a query
-  that looks like a credential is refused) on our key, whatever model or key
-  the agent runs on, and asks OpenAI not to store it; each search is counted
-  in your daily usage. A page an agent reads is fetched by our service itself,
+- Anthropic or OpenAI, for web search. A coding agent and its workers search
+  the web with the search tool of the provider its model is on (Anthropic's
+  for a Claude model, OpenAI's for a GPT one), inside that model call and on
+  your own key for that provider. A page an agent reads is fetched by our service itself,
   from a public HTTPS address, with no cookie or credential, so the site sees
   our service's address rather than your Mac's; up to a megabyte is read and
   20,000 characters kept. The query, what the search found, and the page's
@@ -1307,7 +1308,8 @@ only when you press Send.
   coding agent's Pull request tab sends the pull request's title, description,
   commit messages, and patches, except those of files a reader reads past, to
   the Claude model the member chose in Settings (Haiku 5.5 unless they changed
-  it) from our service, on our key and outside their usage, in at most two
+  it) from our service, on that member's own Anthropic API key (or, with only
+  an OpenAI key saved, on an OpenAI model and that key), never ours, in at most two
   calls (the second places the parts of the diff the first left out), as
   described under "A coding agent's pull request". Our service logs only how a
   generation failed, by its kind, and counts its outcome as described under
@@ -1318,12 +1320,12 @@ only when you press Send.
   task's repository checked out, and calls the model chosen (or your default)
   and whatever model it picks for each worker it hands work to, which may be
   the other provider's: Anthropic for a Claude model, OpenAI for a GPT model,
-  on your own key for that provider if you added one, and otherwise on ours. A
-  call on your own key is billed to you by the provider, and if our service
-  can no longer read your key the agent stops and asks you to replace it
-  rather than switching to ours. Fast, offered for Claude models only to an
-  account without its own Anthropic key, runs the same calls on Anthropic's
-  fast mode, always on our key. Each call carries the plan's text, the agent's
+  on the subscription or API key you added for that provider, never ours; with
+  neither, the agent does not start. A call on your own key is billed to you
+  by the provider, and if our service can no longer read your key the agent
+  stops and asks you to replace it. Fast, for Claude models, runs the same
+  calls on Anthropic's fast mode on your own Anthropic key, where Anthropic
+  grants that key fast mode. Each call carries the plan's text, the agent's
   conversation so far, any files you attached, and what it read of the
   repository, the web, your integrations, its skills, and your Mac; the
   provider keeps it under its own retention policy. The agent's workers can
@@ -1359,12 +1361,12 @@ only when you press Send.
   itself.
 - Anthropic, for titles. As a coding agent's turn completes, until it has a
   title and for its first three turns at most, our service asks a small Claude
-  model, on our key whatever key the agent runs on, for a short title, sending
+  model on your own Anthropic API key (or a small OpenAI model on your OpenAI
+  key where you saved only that), never ours, for a short title, sending
   your first message (for an agent started on the plan, the plan's text), your
   latest one, and the agent's latest answer, as text alone cut to 2,000
   characters each. A worker that a coding agent hands work to is
-  titled from the whole subagent task it was handed. Each title is counted
-  in your daily usage and stored with the agent or worker; Anthropic keeps the
+  titled from the whole subagent task it was handed. Each title is stored with the agent or worker; Anthropic keeps the
   request and its reply under its own retention policy.
 - GitHub, through the Luke GitHub App, for a coding agent's work. The agent
   checks the repository out and pushes its branch with an installation token

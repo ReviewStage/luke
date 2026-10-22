@@ -114,8 +114,6 @@ const PICTURE: Picture = {
 
 /** A deployment that names nothing of its environment: no eve to reach, no keys. */
 const NO_ENVIRONMENT: HostedEnvironmentValues = {
-  openAiKey: undefined,
-  anthropicKey: undefined,
   posthogPersonalApiKey: undefined,
   posthogProjectId: undefined,
   posthogApiHost: undefined,
