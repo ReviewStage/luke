@@ -1448,13 +1448,16 @@ const SEARCH_INBOX = "Search inbox";
  * caret in it. The field narrows the list as it is typed in, standing open
  * while it holds words; Escape empties and folds it, and so does the focus
  * leaving it empty, the keyboard then handed back to the magnifier where
- * Escape folded it.
+ * Escape folded it, or, on a phone's head, which draws no magnifier, to the
+ * ⋯ the search was opened from.
  */
 function useListSearch(search: InboxSearchHead | undefined) {
   const [asked, setAsked] = useState(false);
   const open = search !== undefined && (asked || search.query !== "");
   const field = useRef<HTMLInputElement | null>(null);
   const magnifier = useRef<HTMLButtonElement | null>(null);
+  // The ⋯ a phone's head opened the search from, which stands in the magnifier's place.
+  const opener = useRef<HTMLElement | null>(null);
   const backToMagnifier = useRef(false);
   useEffect(() => {
     if (open) {
@@ -1463,7 +1466,7 @@ function useListSearch(search: InboxSearchHead | undefined) {
     }
     if (!backToMagnifier.current) return;
     backToMagnifier.current = false;
-    magnifier.current?.focus();
+    (magnifier.current ?? opener.current)?.focus();
   }, [open]);
   const fold = (handBack: boolean) => {
     backToMagnifier.current = handBack;
@@ -1505,7 +1508,13 @@ function useListSearch(search: InboxSearchHead | undefined) {
   return {
     button,
     field: fieldDrawn,
-    onOpen: search === undefined ? undefined : () => setAsked(true),
+    onOpen:
+      search === undefined
+        ? undefined
+        : (from: HTMLElement) => {
+            opener.current = from;
+            setAsked(true);
+          },
   };
 }
 
@@ -1549,7 +1558,13 @@ function ListHead({
                 [
                   ...(onOpen === undefined
                     ? []
-                    : [{ label: SEARCH_INBOX, icon: <SearchIcon />, onSelect: onOpen }]),
+                    : [
+                        {
+                          label: SEARCH_INBOX,
+                          icon: <SearchIcon />,
+                          onSelect: () => onOpen(opener),
+                        },
+                      ]),
                   {
                     label: VIEW_OPTIONS,
                     icon: <SlidersHorizontalIcon />,

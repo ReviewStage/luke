@@ -1,5 +1,5 @@
 import { dropBelow, EllipsisIcon, IconButton, useMenu } from "@luke/ui";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Tooltip } from "../tooltip.js";
 import { ActionMenu, type MenuEntry } from "./action-menu.js";
 
@@ -26,13 +26,21 @@ export interface MenuAsk {
   readonly turn: number;
 }
 
-/** Opens `menu` under the ⋯ each time the ⋯ asks for it (`MenuAsk`). */
+/**
+ * Opens `menu` under the ⋯ each time the ⋯ asks for it (`MenuAsk`). Note
+ * that an ask standing as the menu mounts is one already answered, as when
+ * the page draws its menu anew on another view, so only an ask made after
+ * the mount opens it.
+ */
 export function useAskedMenu(
   show: (placement: ReturnType<typeof dropBelow>, opener: HTMLElement) => void,
   ask: MenuAsk | undefined,
 ): void {
+  const answered = useRef(ask);
   useEffect(() => {
-    if (ask !== undefined) show(dropBelow(ask.opener), ask.opener);
+    if (ask === undefined || ask === answered.current) return;
+    answered.current = ask;
+    show(dropBelow(ask.opener), ask.opener);
   }, [ask, show]);
 }
 

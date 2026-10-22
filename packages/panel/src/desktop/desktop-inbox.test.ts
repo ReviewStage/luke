@@ -8239,7 +8239,18 @@ test("on a phone the Inbox's list is headed by New task and one ⋯, its title c
     );
   });
   pick("Search inbox");
-  assert.ok(page.querySelector('.inbox-head input[aria-label="Search inbox"]'), "the search opens");
+  const field = page.querySelector<HTMLInputElement>(
+    '.inbox-head input[aria-label="Search inbox"]',
+  );
+  assert.ok(field, "the search opens");
+  act(() => {
+    field.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+  });
+  assert.equal(
+    document.activeElement,
+    more(),
+    "Escape folds it and hands the keyboard back to the ⋯",
+  );
 
   act(() => head.querySelector<HTMLButtonElement>('[aria-label="New task"]')?.click());
   assert.equal(asked.newTasks, 1);

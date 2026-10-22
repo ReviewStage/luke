@@ -424,6 +424,11 @@ test("on a phone the page is headed by New task and one ⋯, its title centred b
   openOptions(page, "More");
   choose("Board");
   assert.ok(page.querySelector("[data-task-column]"), "the Board's columns stand");
+  assert.equal(
+    document.querySelector('[role="menu"]:not([data-leaving])'),
+    null,
+    "a menu closed before is not opened again by the switch",
+  );
 });
 
 test("Escape closes the page from the List as from the Board", async () => {
