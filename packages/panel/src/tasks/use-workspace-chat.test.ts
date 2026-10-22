@@ -20,11 +20,13 @@ import {
   type CodingAgentChatWriteAnswerView,
   type CodingAgentInboxAttachmentView,
 } from "@luke/features/coding-agent-view";
+import { Duration } from "effect";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
 import {
   CHAT_NOT_TAKEN,
+  CHAT_READ_PAUSE,
   chatFollowerOf,
   useWorkspaceChat,
   type WorkspaceChatControl,
@@ -37,6 +39,7 @@ const CHANNEL = "00000000-0000-4000-8000-0000000000c1";
 let root: Root | undefined;
 
 afterEach(() => {
+  vi.useRealTimers();
   act(() => root?.unmount());
   root = undefined;
   document.body.innerHTML = "";
@@ -156,6 +159,14 @@ async function settle(): Promise<void> {
   await act(async () => {
     for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
   });
+}
+
+/** Lets the pause a read waits on run out, and what it tells go. */
+async function pauseRunsOut(): Promise<void> {
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(Duration.toMillis(CHAT_READ_PAUSE));
+  });
+  await settle();
 }
 
 test("the chat is followed and each push taken in, a newer word on a message taking its place and an older one setting nothing back", async () => {
@@ -340,14 +351,18 @@ test("an answer the service did not take, its ask changed first, says so and lea
   assert.equal(tab.control().chat?.messages[0]?.ask?.revision, 2);
 });
 
-test("while a channel is shown the developer has read it to its newest message, told of that channel once per place it moves to; For you moves nothing", async () => {
+test("while a channel is shown the developer has read it to its newest message, at once in the window and told of that channel once per place it moves to; For you moves nothing", async () => {
+  vi.useFakeTimers();
   const service = scriptedService();
   const tab = mount(service);
   service.push("acme", answered([message(1), message(2)]));
   await settle();
+  await pauseRunsOut();
   assert.equal(service.writes.length, 0);
   tab.rerender({ workspaceId: "acme", reading: CHANNEL });
   await settle();
+  assert.equal(tab.control().chat?.reads?.[0]?.readSeq, 2, "the window reads it at once");
+  await pauseRunsOut();
   assert.deepEqual(
     service.writes.map((write) => write.params.write),
     [{ readTo: 2, channelId: CHANNEL }],
@@ -358,6 +373,7 @@ test("while a channel is shown the developer has read it to its newest message, 
   service.writes[0]?.settle({ readSeq: 0, reads: [{ channelId: CHANNEL, readSeq: 2 }] });
   service.push("acme", answered([message(1), message(2), message(3)]));
   await settle();
+  await pauseRunsOut();
   assert.deepEqual(
     service.writes.map((write) => write.params.write),
     [
@@ -382,17 +398,23 @@ test("another workspace's chat starts from nothing of the last one's, which is l
   assert.equal(tab.control().chat, undefined);
 });
 
-test("a channel's read the service did not take is told again once the channel is shown again", async () => {
+test("a channel's read the service did not take is set back in the window, and told again once the channel is shown again", async () => {
+  vi.useFakeTimers();
   const service = scriptedService();
   const tab = mount(service, "acme", CHANNEL);
   service.push("acme", answered([message(1), message(2)]));
   await settle();
+  await pauseRunsOut();
   assert.equal(service.writes.length, 1);
   service.writes[0]?.settle({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
   await settle();
+  assert.equal(tab.control().chat?.reads, undefined, "the window's read is set back");
+  await pauseRunsOut();
+  assert.equal(service.writes.length, 1, "nothing is told again while the channel stands");
   tab.rerender({ workspaceId: "acme", reading: undefined });
   tab.rerender({ workspaceId: "acme", reading: CHANNEL });
   await settle();
+  await pauseRunsOut();
   assert.deepEqual(
     service.writes.map((write) => write.params.write),
     [
@@ -415,15 +437,18 @@ test("another account signed in to the same workspace starts from nothing of the
 });
 
 test("another account signed in with the same channel shown marks it read as its own, whatever the last account told", async () => {
+  vi.useFakeTimers();
   const service = scriptedService();
   const tab = mount(service, "acme", CHANNEL);
   service.push("acme", answered([message(1), message(2)]));
   await settle();
+  await pauseRunsOut();
   service.writes[0]?.settle({ readSeq: 2 });
   tab.rerender({ workspaceId: "acme", reading: CHANNEL, account: "ada@example.com" });
   await settle();
   service.push("acme", answered([message(1), message(2)]));
   await settle();
+  await pauseRunsOut();
   assert.deepEqual(
     service.writes.map((write) => write.params.write),
     [
@@ -587,4 +612,70 @@ test("a push carrying no channel's cursor, read before Mark as read landed, keep
   service.push("acme", stale);
   await settle();
   assert.deepEqual(tab.control().chat?.reads, [{ channelId: CHANNEL, readSeq: 2 }]);
+});
+
+test("a burst of messages in the channel shown is read in the window as each lands and told to the service once, at the newest", async () => {
+  vi.useFakeTimers();
+  const service = scriptedService();
+  const tab = mount(service, "acme", CHANNEL);
+  const held: ChatMessage[] = [];
+  for (let seq = 1; seq <= 5; seq += 1) {
+    held.push(message(seq));
+    service.push("acme", answered([...held]));
+    await settle();
+    assert.equal(tab.control().chat?.reads?.[0]?.readSeq, seq, "the window reads each as it lands");
+  }
+  assert.equal(service.writes.length, 0, "nothing is told while the burst runs");
+  await pauseRunsOut();
+  assert.deepEqual(
+    service.writes.map((write) => write.params.write),
+    [{ readTo: 5, channelId: CHANNEL }],
+  );
+});
+
+test("a push that changes nothing hands back the chat held, and one that adds a message keeps every message it held as the one held", async () => {
+  const service = scriptedService();
+  const tab = mount(service);
+  service.push("acme", answered([message(1), message(2)]));
+  await settle();
+  const first = tab.control().chat;
+  service.push("acme", answered([message(1), message(2)]));
+  await settle();
+  assert.equal(tab.control().chat, first, "the same chat is handed back");
+  service.push("acme", answered([message(1), message(2), message(3)]));
+  await settle();
+  const [one, two, three] = tab.control().chat?.messages ?? [];
+  assert.equal(one, first?.messages[0]);
+  assert.equal(two, first?.messages[1]);
+  assert.equal(three?.id, "m3");
+  assert.equal(tab.control().chat?.members, first?.members, "the roster is the one held");
+});
+
+test("a read still waiting on its pause is told to the workspace it was read in as another workspace is shown", async () => {
+  vi.useFakeTimers();
+  const service = scriptedService();
+  const tab = mount(service, "acme", CHANNEL);
+  service.push("acme", answered([message(1), message(2)]));
+  await settle();
+  assert.equal(service.writes.length, 0, "the pause is still running");
+  tab.rerender({ workspaceId: "ledger", reading: undefined });
+  await settle();
+  assert.deepEqual(
+    service.writes.map((write) => write.params),
+    [{ workspaceId: "acme", write: { readTo: 2, channelId: CHANNEL } }],
+  );
+  await pauseRunsOut();
+  assert.equal(service.writes.length, 1, "nothing is told twice");
+});
+
+test("a read still waiting on its pause as another account signs in is let go, never told as the new account's", async () => {
+  vi.useFakeTimers();
+  const service = scriptedService();
+  const tab = mount(service, "acme", CHANNEL);
+  service.push("acme", answered([message(1), message(2)]));
+  await settle();
+  tab.rerender({ workspaceId: "acme", reading: undefined, account: "ada@example.com" });
+  await settle();
+  await pauseRunsOut();
+  assert.deepEqual(service.writes, []);
 });

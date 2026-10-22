@@ -515,6 +515,9 @@ interface ChatViewControl {
   readonly readPicture: (messageId: string, attachmentId: string) => Promise<PictureAnswer>;
 }
 
+/** The agent lines a live chat read carries beyond the plans': none, since a read of each agent names it (`useChatNames`). */
+const NO_CHAT_AGENTS: FixtureChat["agents"] = [];
+
 /** The fixture's staging, as a fixture run imports it. */
 type ChatStager = typeof import("./chat-fixture.js");
 
@@ -1448,11 +1451,14 @@ export function useTasksTab(input: {
     readPicture: (params) => act(ACT_KIND.CODING_AGENTS_CHAT_ATTACHMENT, params),
   });
   const liveRun = fixture === undefined;
-  const shownChat: FixtureChat | undefined = liveRun
-    ? liveChat.chat === undefined
-      ? undefined
-      : { answer: liveChat.chat, agents: [] }
-    : chat;
+  // Note that the live chat is wrapped once per read, so everything named from it holds while the read does.
+  const liveAnswer = liveChat.chat;
+  const liveShown = useMemo(
+    (): FixtureChat | undefined =>
+      liveAnswer === undefined ? undefined : { answer: liveAnswer, agents: NO_CHAT_AGENTS },
+    [liveAnswer],
+  );
+  const shownChat = liveRun ? liveShown : chat;
   // A channel shown that a read answered since does not hold, as a stale link's, puts Chat back on For you, its root, and is read no more.
   const shownChannel =
     standIn?.kind === STAND_IN.CHAT && standIn.place.kind === CHAT_PLACE.CHANNEL

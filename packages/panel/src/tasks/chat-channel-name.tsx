@@ -17,7 +17,11 @@ import { useTaskStatus } from "./use-known-names.js";
  * channel's own name until the task is read, or a DM by who it is with,
  * both of its two's names where the reader is neither (`channelLabel`).
  */
-export function channelTitle(chat: ChatAnswer, names: ChatNames, channel: ChatChannel): string {
+export function channelTitle(
+  chat: Pick<ChatAnswer, "self" | "members">,
+  names: ChatNames,
+  channel: ChatChannel,
+): string {
   const label = channelLabel(chat, names, channel);
   if (channel.kind === CHANNEL_KIND.TASK) {
     return (channel.planId === undefined ? undefined : names.tasks.get(channel.planId)) ?? label;
@@ -31,7 +35,7 @@ export function ChannelName({
   names,
   channel,
 }: {
-  chat: ChatAnswer;
+  chat: Pick<ChatAnswer, "self" | "members">;
   names: ChatNames;
   channel: ChatChannel;
 }): React.JSX.Element {
