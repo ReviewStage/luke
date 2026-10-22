@@ -48,7 +48,7 @@ import {
   useMenu,
   VisuallyHidden,
 } from "@luke/ui";
-import { ChevronRightIcon, GitPullRequestIcon, PlusIcon, ZapIcon } from "lucide-react";
+import { BotIcon, ChevronRightIcon, GitPullRequestIcon, PlusIcon, ZapIcon } from "lucide-react";
 import { Fragment, useEffect, useRef, useState } from "react";
 import { useAppCommand } from "../app-commands.js";
 import { LinkWorkspaceProvider, useCopyLinkItem } from "../copy-link-item.js";
@@ -63,6 +63,7 @@ import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast.js";
 import { Tooltip } from "../tooltip.js";
 import { useExperiment } from "../use-app-state.js";
 import { ActionMenu } from "./action-menu.js";
+import { useAutomationAgentDialog } from "./automation-agent-dialog.js";
 import { AutomationEditor } from "./automation-editor.js";
 import { OWNER_MARK_SIZE, OwnerMark } from "./automation-owner.js";
 import { AutomationRunsPanel, FiringGlyph, STANDING_GLYPH } from "./automation-runs-panel.js";
@@ -88,7 +89,10 @@ import { useAutomations } from "./use-automations.js";
  * and an automation turned off reads "Off" where its next run would.
  * Under the list, or under the line saying there is none yet, stand the
  * suggested automations: a press opens a new automation's page filled in
- * from the suggestion's preset, to look over and Create. Code review, the
+ * from the suggestion's preset, to look over and Create. Beside New
+ * automation, Create with an agent asks what to automate in the member's
+ * own words and starts an agent on a new task to make it
+ * (`automation-agent-dialog.tsx`). Code review, the
  * one suggestion, is still an experiment (`EXPERIMENT.CODE_REVIEW`), so
  * nothing is suggested while the account has it off, and a page filled in
  * from it goes back to the list.
@@ -429,6 +433,11 @@ function ListPage({
     });
   };
   const openNew = () => view.onOpen({ kind: AUTOMATIONS_PAGE.NEW });
+  const withAgent = useAutomationAgentDialog(
+    workspace?.id,
+    tasks.newTask.repositoriesIn(workspace?.id),
+    tasks.newTask.start,
+  );
   const openSuggested = (preset: AutomationPresetName) =>
     view.onOpen({ kind: AUTOMATIONS_PAGE.NEW, preset });
   const groups =
@@ -440,19 +449,30 @@ function ListPage({
       label="Automations"
       toolbar={
         <header className="desktop-toolbar">
-          <div className="desktop-toolbar-heading">
-            <h1 className="desktop-toolbar-title">Automations</h1>
+          {/* The toolbar's own width, which a container query reads, folds Create with an agent to its glyph before it crowds the title. */}
+          <div className="automations-toolbar">
+            <div className="desktop-toolbar-heading">
+              <h1 className="desktop-toolbar-title">Automations</h1>
+            </div>
+            <div className="desktop-toolbar-actions">
+              <FoldingButton
+                label="Create with an agent"
+                icon={<BotIcon />}
+                variant={BUTTON_VARIANT.OUTLINE}
+                disabled={workspace === undefined}
+                onClick={withAgent.ask}
+              />
+              <Button
+                variant={BUTTON_VARIANT.OUTLINE}
+                icon={<PlusIcon />}
+                disabled={workspace === undefined}
+                onClick={openNew}
+              >
+                New automation
+              </Button>
+            </div>
           </div>
-          <div className="desktop-toolbar-actions">
-            <Button
-              variant={BUTTON_VARIANT.OUTLINE}
-              icon={<PlusIcon />}
-              disabled={workspace === undefined}
-              onClick={openNew}
-            >
-              New automation
-            </Button>
-          </div>
+          {withAgent.dialog}
         </header>
       }
       state={listState(workspacesUnread, read)}

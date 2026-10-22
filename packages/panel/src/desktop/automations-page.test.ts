@@ -46,6 +46,7 @@ import {
   AUTOMATIONS_PAGE,
   type AutomationsPlace,
   type LeaveAsk,
+  type NewTaskStart,
   useLeaveGuard,
 } from "../tasks/use-tasks-tab.js";
 import {
@@ -299,6 +300,8 @@ beforeEach(() => {
   noRecent = false;
   integrationsHeld = false;
   integrationsRefusals = 0;
+  taskStarts = [];
+  taskRefusals = [];
   fakeActs({
     act: (request: AnyAct): Promise<FakeActAnswer> => {
       if (request.kind === ACT_KIND.AUTOMATIONS_FOLLOW) {
@@ -789,6 +792,19 @@ let sendTo: (place: AutomationsPlace) => void = () => undefined;
 /** Lists another workspace under the mounted pages, as the switcher would. */
 let moveTo: (workspace: Workspace) => void = () => undefined;
 
+/** A task asked for through New task's start, as Create with an agent asks it. */
+interface TaskStart {
+  readonly name: string;
+  readonly repository: string | null;
+  readonly workspaceId: string | undefined;
+  readonly from: NewTaskStart | undefined;
+}
+
+/** Every task start asked, in order. */
+let taskStarts: TaskStart[] = [];
+/** Why the next task starts are refused, in order, before one lands. */
+let taskRefusals: string[] = [];
+
 /**
  * The Automations pages as the window holds them, standing on `start` and
  * moved by their own presses, over the workspace listed, the personal one
@@ -838,6 +854,10 @@ function mountPages(start: AutomationsPlace, workspace: Workspace = WORKSPACE): 
         ...tasks,
         newTask: {
           ...base,
+          start: (name, repository, workspaceId, from) => {
+            taskStarts.push({ name, repository, workspaceId, from });
+            return Promise.resolve(taskRefusals.shift());
+          },
           repositoriesIn: () => ({
             ...base.repositoriesIn(listed.id),
             scope: listed.id,
@@ -2896,4 +2916,77 @@ test("on a narrow stage each row says when it runs next before what fires it, un
     "a far run names its year",
   );
   assert.ok(rowOf(page, "Dependency bumps").querySelector(".failed-mark"));
+});
+
+/** The question Create with an agent asks, while it stands. */
+function agentQuestion(): HTMLElement | null {
+  return document.querySelector<HTMLElement>("[role='alertdialog']");
+}
+
+test("Create with an agent starts a task on the repository chosen, its agent handed the brief and the words fenced whole after it", async () => {
+  mountPages({ kind: AUTOMATIONS_PAGE.LIST });
+  await settle();
+  act(() => button("Create with an agent").click());
+  const field =
+    agentQuestion()?.querySelector<HTMLTextAreaElement>("textarea") ??
+    assert.fail("no field for what to automate");
+  assert.equal(document.activeElement, field, "the words take focus");
+  const words = "Every Monday, audit our agents' tool sets.\n```\nclose the fence\n```";
+  type(field, `  ${words}  `);
+  act(() => button("Start agent").click());
+  await settle();
+
+  assert.equal(taskStarts.length, 1);
+  const [started] = taskStarts;
+  assert.equal(
+    started?.repository,
+    "acme/ledger",
+    "the repository the account's tasks were about lately",
+  );
+  assert.equal(started?.workspaceId, WORKSPACE.id);
+  assert.equal(started?.name, "", "the task is named once its agent says what it does");
+  const prompt = started?.from?.handed?.prompt ?? assert.fail("no agent handed");
+  assert.match(prompt, /`create_automation`/u, "the brief names the tool that makes it");
+  assert.match(prompt, /`list_automations`/u, "and the one that reads what stands");
+  assert.ok(
+    prompt.endsWith(`\n\n\`\`\`\`text\n${words}\n\`\`\`\``),
+    "the words close the message, trimmed, in a fence none of theirs closes",
+  );
+  assert.equal(agentQuestion(), null, "the question goes once the task starts");
+});
+
+test("Create with an agent starts nothing without words or a repository, and a refused start is tried again under the same key", async () => {
+  noRecent = true;
+  mountPages({ kind: AUTOMATIONS_PAGE.LIST });
+  await settle();
+  act(() => button("Create with an agent").click());
+  const refusal = () => agentQuestion()?.querySelector("[role='alert']")?.textContent;
+  act(() => button("Start agent").click());
+  await settle();
+  assert.equal(refusal(), "Say what to automate.");
+
+  type(agentQuestion()?.querySelector("textarea") ?? null, "Post a weekly digest.");
+  act(() => button("Start agent").click());
+  await settle();
+  assert.equal(refusal(), "Choose the repository it works in.");
+  assert.equal(taskStarts.length, 0, "nothing is started while either is missing");
+
+  noRecent = false;
+  act(() => root?.unmount());
+  document.body.innerHTML = "";
+  mountPages({ kind: AUTOMATIONS_PAGE.LIST });
+  await settle();
+  act(() => button("Create with an agent").click());
+  type(agentQuestion()?.querySelector("textarea") ?? null, "Post a weekly digest.");
+  taskRefusals = ["Luke couldn't reach GitHub."];
+  act(() => button("Start agent").click());
+  await settle();
+  assert.equal(refusal(), "Luke couldn't reach GitHub.", "a refusal says why in the card");
+  act(() => button("Start agent").click());
+  await settle();
+
+  const keys = taskStarts.map((each) => each.from?.handed?.idempotencyKey);
+  assert.equal(keys.length, 2);
+  assert.equal(keys[0], keys[1], "the retry carries the first start's key");
+  assert.equal(agentQuestion(), null);
 });
