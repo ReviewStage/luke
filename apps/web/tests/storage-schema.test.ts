@@ -70,6 +70,8 @@ const DECLARED_TABLES = [
   "inbox_item",
   "inbox_item_read",
   "inbox_message",
+  "installed_skill",
+  "installed_skill_file",
   "integration_connection",
   "integration_install_intent",
   "integration_installation",
