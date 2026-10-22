@@ -514,12 +514,12 @@ function standsAt(view: LiveView, at: number): Effect.Effect<boolean> {
   );
 }
 
-/** The member hands back the takeover this socket holds: input stops at once, and a hand-back the store did not take is tried again as the socket closes. */
-function handBack(view: LiveView): Effect.Effect<void> {
+/** The member hands back the takeover this socket holds or stands on, one it reconnected to among them: input stops at once, and a hand-back the store did not take is tried again as the socket closes. */
+function handBack(view: LiveView, at: Date): Effect.Effect<void> {
   return Effect.gen(function* () {
-    if ((yield* Ref.get(view.driving)) === undefined && !(yield* Ref.get(view.releasePending))) {
-      return;
-    }
+    const wrote = (yield* Ref.get(view.driving)) !== undefined;
+    const pending = yield* Ref.get(view.releasePending);
+    if (!wrote && !pending && !(yield* adoptable(view, at))) return;
     yield* Ref.set(view.driving, undefined);
     const released = yield* Effect.result(view.deps.handBack(view.reached.tab.id, view.ask.userId));
     yield* Ref.set(view.releasePending, Result.isFailure(released));
@@ -612,7 +612,7 @@ function onMessage(view: LiveView, message: BrowserLiveClientMessage): Effect.Ef
       case BROWSER_LIVE_CLIENT.TAKE_OVER:
         return yield* takeOver(view, at);
       case BROWSER_LIVE_CLIENT.HAND_BACK:
-        return yield* handBack(view);
+        return yield* handBack(view, at);
       case BROWSER_LIVE_CLIENT.VIEWPORT:
         return yield* Ref.set(view.viewport, { width: message.width, height: message.height });
       default:

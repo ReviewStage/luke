@@ -1056,3 +1056,28 @@ it.effect(
       assert.deepEqual(store.handedBack, [MEMBER], "the last socket's close hands the tab back");
     }),
 );
+
+it.effect(
+  "a reconnecting socket of the takeover's member hands the tab back before it sends any input",
+  () =>
+    Effect.gen(function* () {
+      const { peer, browser, commands } = yield* liveBrowser();
+      const panel = yield* scriptedViewer;
+      const store = world(browser, { reached: drivenTab(MEMBER, AN_HOUR_IN) });
+      const { fiber } = yield* started(
+        peer,
+        commands,
+        Effect.scoped(relayBrowserTab(panel.viewer, ASK, reachedTab(undefined), store.deps)),
+      );
+      yield* until(() => panel.ofType(BROWSER_LIVE_SERVER.DRIVER).at(-1)?.yours === true);
+
+      yield* panel.push({ type: BROWSER_LIVE_CLIENT.HAND_BACK });
+      yield* until(() => store.handedBack.length === 1);
+      yield* until(() => panel.ofType(BROWSER_LIVE_SERVER.DRIVER).at(-1)?.driver === null);
+      yield* panel.push(KEY_A);
+      yield* until(() => panel.ofType(BROWSER_LIVE_SERVER.REFUSED).length === 1);
+      assert.deepEqual(inputs(commands), [], "input after the hand-back never reaches the page");
+      yield* panel.leave;
+      yield* Fiber.join(fiber);
+    }),
+);
