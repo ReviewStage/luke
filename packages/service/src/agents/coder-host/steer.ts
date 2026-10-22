@@ -44,7 +44,7 @@ import {
   hostedStoreOrUnavailable,
 } from "../../http/http-effect.js";
 import { admitsPlanWriter, controlsAgent } from "../agent-reach.js";
-import { eveContent } from "../attached-files.js";
+import { eveContent, keptHandedImages } from "../attached-files.js";
 import { BRAIN_HOST_TURN } from "../brain-host/bounds.js";
 import {
   type AgentSessions,
@@ -68,7 +68,8 @@ import { codingAgentStatusOf } from "./status.js";
  * lock, so the turn eve opens on the line finds the row standing when its
  * own first write takes the lock, and an eve that did not take the message
  * leaves no row behind. Files the developer attached go with the words,
- * to eve and onto the row (`attached-files.ts`), and so does what the words
+ * to eve and onto the row, each image kept beside the conversation first
+ * and named to eve by its id (`attached-files.ts`), and so does what the words
  * mention of the plan, as it stands now (`mentioned-context.ts`), and a
  * server it mentions is handed to the agent's next turn, unless the words
  * are another coding agent's or a reviewer's, which hand none, or an
@@ -331,6 +332,11 @@ export const steerCodingAgentWritten = /* @__PURE__ */ Effect.fn("web/steerCodin
   const mentioned = reviewers ? undefined : mentionedContext(pointed, task?.task, reads);
   // Read before eve is asked, so an ended session settles the turn it was running and never one begun since.
   const running = yield* runningTurnOf(agent);
+  // Each image is kept beside the agent's conversation before eve is handed it, so eve is told its id and the
+  // row names it; a repeat under the key was answered above, and the same bytes again keep nothing twice.
+  const attachments = yield* hostedStoreOrUnavailable(
+    keptHandedImages(target, line.attachments ?? []),
+  );
   // eve's refusal is kept beside the dispatch, since the write answers only whether a row landed,
   // and so is whether the session the record named had ended, whose running turn nothing else ends.
   let refused: HostedRefusal | undefined;
@@ -338,7 +344,7 @@ export const steerCodingAgentWritten = /* @__PURE__ */ Effect.fn("web/steerCodin
   const message = {
     conversationId: agent.conversationId,
     turn: BRAIN_HOST_TURN.TYPED,
-    message: eveContent(line.text, line.attachments ?? [], mentioned),
+    message: eveContent(line.text, attachments, mentioned),
     // The line's own id, which a native harness's runner names back as it takes the message; eve is never handed it.
     lineId: sentLineId(line.clientKey),
   };
@@ -416,7 +422,7 @@ export const steerCodingAgentWritten = /* @__PURE__ */ Effect.fn("web/steerCodin
   );
   const written = yield* hostedStoreOrUnavailable(
     Effect.flatMap(writer, (write) =>
-      write.writeAwaitingLine(target, { ...line, mentioned }, dispatch),
+      write.writeAwaitingLine(target, { ...line, attachments, mentioned }, dispatch),
     ),
   );
   if (Result.isFailure(written))

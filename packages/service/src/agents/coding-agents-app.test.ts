@@ -47,7 +47,10 @@ import {
   takeCodingAgentMentionedServers,
   updateCodingAgentBranch,
 } from "@luke/database/models/coding-agent-store";
-import { keepConversationPicture } from "@luke/database/models/conversation-pictures";
+import {
+  keepConversationPicture,
+  readConversationPicture,
+} from "@luke/database/models/conversation-pictures";
 import { childConversationId } from "@luke/database/models/ids";
 import { listMessagesPast, sentLineStands } from "@luke/database/models/message-reads";
 import { unreadOperatorNotices } from "@luke/database/models/operator-notices";
@@ -60,6 +63,7 @@ import { voiceWriter } from "@luke/database/models/voice-writer";
 import { ensurePersonalWorkspace } from "@luke/database/models/workspace-store";
 import { storeWriter } from "@luke/database/models/writer";
 import { agentPin } from "@luke/database/schemas";
+import { attachment } from "@luke/database/schemas/attachment";
 import { member, organization, user } from "@luke/database/schemas/auth";
 import { codingAgent } from "@luke/database/schemas/coding-agent";
 import { githubInstallation } from "@luke/database/schemas/github-installation";
@@ -220,6 +224,7 @@ import {
 import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
+import type { MessageReceivedPart } from "eve/client";
 import { afterEach, type TestContext, vi } from "vitest";
 import { requestUserId } from "../auth/bearer.js";
 import {
@@ -279,6 +284,7 @@ import {
 } from "../testing/source-sandbox.js";
 import { agentPullRequestProcedures } from "./agent-pull-request-procedures.js";
 import { agentsProcedures } from "./agents-procedures.js";
+import { receivedMessage } from "./attached-files.js";
 import { BRAIN_HOST_TURN } from "./brain-host/bounds.js";
 import {
   type AgentSessions,
@@ -4402,6 +4408,66 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
   );
 
   it.effect(
+    "an image sent to an agent is kept once beside its conversation and handed to eve with a line naming its id, which reads back as the image and by which eve's receipt takes the line; a repeat under its key hands eve nothing, and the same image in a later message is named by the same row",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const { owner, agent, ask, target, writer, turnId } = yield* startedAgent(eve, {
+          running: true,
+        });
+        const shot = {
+          name: "flow.png",
+          mediaType: CODING_AGENT_ATTACHMENT_TYPE.PNG,
+          data: Buffer.from(SIZED_PNG).toString("base64"),
+        };
+        const body = { text: "Match this.", attachments: [shot], clientKey: randomUUID() };
+        const kept = Database.use((db) =>
+          db
+            .select({ id: attachment.id })
+            .from(attachment)
+            .where(eq(attachment.conversationId, target.conversationId)),
+        );
+
+        const sent = yield* ask(messageAs(owner, agent.id, body));
+        assert.equal(sent.status, HOSTED_HTTP_STATUS.ACCEPTED, JSON.stringify(sent.body));
+        const [row, ...more] = yield* kept;
+        assert.ok(row !== undefined && more.length === 0, "one picture is kept");
+        const handed = receiptOf(eve.sent.at(-1)?.message.message);
+        assert.deepEqual(
+          handed.map((part) => (part.type === "text" ? part.text : part.filename)),
+          ["Match this.", "flow.png", `Image flow.png is attachment ${row.id}`],
+        );
+        const picture = Option.getOrThrow(
+          yield* readConversationPicture(target.conversationId, row.id),
+        );
+        assert.equal(picture.contentType, CODING_AGENT_ATTACHMENT_TYPE.PNG);
+        assert.deepEqual(new Uint8Array(picture.bytes), SIZED_PNG);
+        // eve's receipt of the message, its image staged by name with no bytes, takes the line it was sent as.
+        const taken = yield* writer.takeAwaitingLine(target, {
+          text: receivedMessage({ message: "", parts: handed }).text,
+          turnId,
+        });
+        assert.ok(Result.isSuccess(taken));
+        assert.equal(taken.success.length, 1, "the receipt takes the one line awaiting it");
+
+        const sends = eve.sent.length;
+        assert.equal(
+          (yield* ask(messageAs(owner, agent.id, body))).status,
+          HOSTED_HTTP_STATUS.ACCEPTED,
+        );
+        assert.equal(eve.sent.length, sends, "a repeat reaches eve no second time");
+        yield* ask(
+          messageAs(owner, agent.id, { ...body, text: "Again.", clientKey: randomUUID() }),
+        );
+        assert.deepEqual(receiptOf(eve.sent.at(-1)?.message.message).at(-1), {
+          type: "text",
+          text: `Image flow.png is attachment ${row.id}`,
+        });
+        assert.deepEqual(yield* kept, [row]);
+      }),
+  );
+
+  it.effect(
     "over a browser's session cookie a Stop, an Archive, and the task's archive each cancel the turn under way as the deployment acting for the cookie's account",
     () =>
       Effect.gen(function* () {
@@ -5946,6 +6012,12 @@ const INBOX_READ = "/api/inbox/read";
 
 /** The first bytes of a PNG, as a screenshot's file starts. */
 const PNG = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13]);
+
+/** A PNG whose header states its size, 2 by 1, as a conversation keeps a picture. */
+const SIZED_PNG = Uint8Array.from([
+  ...PNG,
+  ...[0x49, 0x48, 0x44, 0x52, 0, 0, 0, 2, 0, 0, 0, 1, 8, 6, 0, 0, 0],
+]);
 
 it.layer(getTestDB())("the developer's inbox", (it) => {
   /** The owner's task with one agent started on it, its session claimed so a message reaches it, and the inbox as each side sees it. */
@@ -9289,6 +9361,17 @@ const transcriptRow = (
 
 const text = (words: string) => ({ type: "text", text: words });
 
+/** A message as eve's receipt lists it: each text part as it was handed, and each file staged, by its name and type with no bytes. */
+function receiptOf(handed: EveMessage["message"] | undefined): MessageReceivedPart[] {
+  assert.ok(Array.isArray(handed), "the message carried parts");
+  return handed.flatMap((part): MessageReceivedPart[] => {
+    if (part.type === "text") return [{ type: "text", text: part.text }];
+    if (part.type !== "file") return [];
+    const name = part.filename === undefined ? undefined : { filename: part.filename };
+    return [{ type: "file", mediaType: part.mediaType, ...name }];
+  });
+}
+
 /** The first message the newest session opened on, read back into its brief, its replay, and its note. */
 function openedParts(eve: ReturnType<typeof fakeEve>) {
   const message = eve.opened.at(-1)?.message.message;
@@ -10342,6 +10425,58 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
 
         assert.deepEqual(files, [...shots.slice(0, -1), "new.png"]);
         assert.match(parts.replay?.preamble ?? "", /could not be passed on: screen-9\.png\./u);
+      }),
+  );
+
+  it.effect(
+    "a continue attaches again the image its source's prompt carried, read from the picture kept beside the source's conversation, since the first message eve's receipt wrote names it by id with no bytes",
+    () =>
+      Effect.gen(function* () {
+        const { owner, task, ask, eve } = yield* openTask();
+        const data = Buffer.from(SIZED_PNG).toString("base64");
+        const source = readAnswer(
+          codingAgentAnswerSchema,
+          HOSTED_HTTP_STATUS.CREATED,
+          yield* ask(
+            startAs(owner, task.id, {
+              idempotencyKey: randomUUID(),
+              task: "Match this screen.",
+              attachments: [
+                { name: "flow.png", mediaType: CODING_AGENT_ATTACHMENT_TYPE.PNG, data },
+              ],
+            }),
+          ),
+        ).agent;
+        // The source's first message as the relay writes it from eve's receipt: its words, then its files by name.
+        const received = receivedMessage({
+          message: "",
+          parts: receiptOf(eve.opened.at(-1)?.message.message),
+        });
+        const stored = Option.getOrThrow(yield* readCodingAgent(owner, source.id));
+        yield* transcriptRow(stored, 1, MESSAGE_ROLE.USER, [
+          text(received.words),
+          ...received.files,
+        ]);
+        assert.deepEqual(
+          received.files.map((file) => file.url),
+          [""],
+          "eve's receipt carries no bytes of the image",
+        );
+
+        yield* ask(
+          startAs(owner, task.id, { idempotencyKey: randomUUID(), from: { agentId: source.id } }),
+        );
+        const opened = eve.opened.at(-1)?.message.message;
+        assert.ok(Array.isArray(opened));
+
+        assert.deepEqual(
+          opened.flatMap((part) => (part.type === "file" ? [[part.filename, part.data]] : [])),
+          [["flow.png", `data:${CODING_AGENT_ATTACHMENT_TYPE.PNG};base64,${data}`]],
+        );
+        assert.doesNotMatch(
+          openedWithFiles(eve).parts.replay?.preamble ?? "",
+          /could not be passed on/u,
+        );
       }),
   );
 

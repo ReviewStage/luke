@@ -1,16 +1,31 @@
+import type { DatabaseServices } from "@luke/database/core/query";
 import {
   dataUrl,
   fileMark,
+  type HandedFile,
   inlinedFile,
   isMentionedText,
+  type KeptImage,
+  keptImageLine,
+  keptImageMetadata,
+  keptImageOfLine,
   textOf,
 } from "@luke/database/models/attached-file-parts";
+import { keepConversationPicture } from "@luke/database/models/conversation-pictures";
 import { COALESCED_LINE_SEPARATOR } from "@luke/database/models/message-reads";
+import type { TaskStoreFailure } from "@luke/database/models/task-store";
+import type { ConversationTarget } from "@luke/database/models/writer";
 import {
   CODING_AGENT_ATTACHMENT_TYPE,
   type CodingAgentAttachment,
 } from "@luke/features/coding-agent-wire";
+import {
+  CONVERSATION_PICTURE_BOUNDS,
+  PICTURE_OMISSION,
+} from "@luke/features/conversation-picture-wire";
+import { imageDimensions, sniffImageType } from "@luke/features/image-signature";
 import type { FileUIPart, UserContent } from "ai";
+import { Effect, Option } from "effect";
 import type { MessageReceivedPart } from "eve/client";
 
 /**
@@ -33,22 +48,80 @@ import type { MessageReceivedPart } from "eve/client";
  * row of its own, such as a task's, reads its text files back to file
  * parts by their heading, so the developer's bubble shows a name rather
  * than the file.
+ *
+ * Every image a coding agent is handed, whoever sent it, is first kept
+ * beside the agent's conversation as a tool's pictures are
+ * (`keptHandedImages`, `conversation-pictures.ts`), and eve is handed one
+ * more text part right after the image: the line naming the attachment it
+ * was kept as, or why it was not kept, which a native harness reads as
+ * text alike. The journal keeps that on the image's file part, a line is
+ * matched by the line in the place eve was handed it, and a receipt's own
+ * row reads the id back from it onto its file part, so a Start's first
+ * message, whose row eve's receipt writes with no bytes, still names the
+ * picture its Continue attaches again (`replay.ts`).
  */
 
 /** A text file as eve's receipt carries it: the heading's name, a fence, the file, and the same fence. */
 const INLINED_FILE = /^Attached file: ([^\n]+)\n(`{3,})\n([\s\S]*)\n\2$/u;
+
+/** The types an attached file is a picture under, which a conversation keeps. */
+const IMAGE_TYPES: ReadonlySet<string> = new Set([
+  CODING_AGENT_ATTACHMENT_TYPE.PNG,
+  CODING_AGENT_ATTACHMENT_TYPE.JPEG,
+  CODING_AGENT_ATTACHMENT_TYPE.WEBP,
+]);
+
+/** One image kept beside the conversation, as its bytes are sniffed and measured, or why it was not kept. */
+function keptImage(
+  target: ConversationTarget,
+  file: CodingAgentAttachment,
+): Effect.Effect<KeptImage, TaskStoreFailure, DatabaseServices> {
+  return Effect.gen(function* () {
+    const bytes = new Uint8Array(Buffer.from(file.data, "base64"));
+    if (bytes.byteLength > CONVERSATION_PICTURE_BOUNDS.MAX_BYTES) {
+      return { omitted: PICTURE_OMISSION.TOO_LARGE };
+    }
+    const contentType = sniffImageType(bytes);
+    const dimensions = contentType === undefined ? undefined : imageDimensions(bytes, contentType);
+    if (contentType === undefined || dimensions === undefined) {
+      return { omitted: PICTURE_OMISSION.UNSUPPORTED };
+    }
+    const kept = yield* keepConversationPicture(target, { bytes, contentType, ...dimensions });
+    return Option.isSome(kept) ? { id: kept.value.id } : { omitted: PICTURE_OMISSION.LIMIT };
+  });
+}
+
+/**
+ * The files a coding agent is handed, each image kept beside the
+ * conversation the agent runs in and named by what was kept of it, in the
+ * order given; a PDF or a text file is handed as it came, since a
+ * conversation keeps pictures alone. Note that the same bytes handed again,
+ * as a send repeated under its key, answer the row already kept, because a
+ * conversation's picture is keyed by its hash.
+ */
+export function keptHandedImages(
+  target: ConversationTarget,
+  files: readonly CodingAgentAttachment[],
+): Effect.Effect<readonly HandedFile[], TaskStoreFailure, DatabaseServices> {
+  return Effect.forEach(files, (file) =>
+    IMAGE_TYPES.has(file.mediaType)
+      ? Effect.map(keptImage(target, file), (kept): HandedFile => ({ ...file, kept }))
+      : Effect.succeed<HandedFile>(file),
+  );
+}
 
 /**
  * What eve is handed for a message: the words alone where nothing is
  * attached and nothing mentioned, as every message went before files, and
  * otherwise the words where there are any, what they mention that the agent
  * cannot read for itself (`mentioned-context.ts`), the text files inlined,
- * and the images and PDFs as file parts, so a model is never handed an
- * empty text part.
+ * and the images and PDFs as file parts, each image followed by the line
+ * naming what was kept of it where it was kept or refused, so a model is
+ * never handed an empty text part.
  */
 export function eveContent(
   text: string,
-  attachments: readonly CodingAgentAttachment[],
+  attachments: readonly HandedFile[],
   mentioned?: string,
 ): string | UserContent {
   if (attachments.length === 0 && mentioned === undefined) return text;
@@ -67,6 +140,9 @@ export function eveContent(
             mediaType: file.mediaType,
             filename: file.name,
           },
+          ...(file.kept === undefined
+            ? []
+            : [{ type: "text" as const, text: keptImageLine(file.name, file.kept) }]),
         ],
   );
   return [
@@ -97,15 +173,23 @@ function inlinedFileOf(text: string): FileUIPart | undefined {
   };
 }
 
+/** A receipt's image with what the text part right after it says was kept of it; nothing where that text says nothing of it. */
+function keptOnto(image: FileUIPart, text: string): FileUIPart | undefined {
+  const kept = keptImageOfLine(image.filename ?? "", text);
+  return kept === undefined ? undefined : { ...image, providerMetadata: keptImageMetadata(kept) };
+}
+
 /**
  * eve's receipt of a message read back. Its parts joined, each image and
  * PDF by its mark, are what a line is matched by; an eve that projects no
  * parts is read by its summary, which for words alone is the words. A text
- * part spelled as a text file's heading and fence is that file, and every
- * other is words, since a message may carry files with no words. A file
- * staged in the sandbox carries no URL, so its part keeps its name and no
- * bytes; eve stages every file a message carries, a task's included, so a
- * receipt's own row names each file and draws none.
+ * part right after an image that names what was kept of it is that, and
+ * goes onto the image's part; a text part spelled as a text file's heading
+ * and fence is that file, and every other is words, since a message may
+ * carry files with no words. A file staged in the sandbox carries no URL,
+ * so its part keeps its name and no bytes; eve stages every file a message
+ * carries, a task's included, so a receipt's own row names each file and
+ * draws none.
  */
 export function receivedMessage(received: {
   readonly message: string;
@@ -120,6 +204,13 @@ export function receivedMessage(received: {
   for (const [index, part] of received.parts.entries()) {
     if (part.type === "text") {
       texts.push(part.text);
+      // The line naming what was kept of the image just before it is that image's, and no words.
+      const image = received.parts[index - 1]?.type === "file" ? files.at(-1) : undefined;
+      const kept = image === undefined ? undefined : keptOnto(image, part.text);
+      if (kept !== undefined) {
+        files[files.length - 1] = kept;
+        continue;
+      }
       // The part a line's mentions were handed in matches the line, and is no
       // words of its own. Note that it always follows the words that named
       // them, so a first part spelled like it is the developer's words still.
