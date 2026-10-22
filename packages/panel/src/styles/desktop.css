@@ -1385,6 +1385,12 @@ ul.actor-stack {
   margin-top: var(--luke-space-8);
 }
 
+/* An emoji is drawn in the text's own ink, nearly opaque, since Chromium
+   lays the ink's alpha over a color glyph too. */
+.section-emoji-face {
+  color: var(--luke-color-text);
+}
+
 .section-emoji-group-name {
   margin: 0 0 var(--luke-space-4);
   color: var(--luke-color-text-subtle);

@@ -317,7 +317,7 @@ const EmojiPanel = memo(function EmojiPanel({
                 label={one.name}
                 pressed={chosenEmoji(icon, one.emoji)}
                 stop={one === stop}
-                face={one.emoji}
+                face={<span className="section-emoji-face">{one.emoji}</span>}
                 onPress={() => onIcon({ kind: TASK_SECTION_ICON_KIND.EMOJI, emoji: one.emoji })}
               />
             ))}
