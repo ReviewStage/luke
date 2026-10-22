@@ -567,9 +567,10 @@ Only GitHub sources are read for now.
 
 A skill is installed for one of two scopes. A personal skill is its
 installer's alone and follows them into every workspace they belong to. A
-workspace skill reaches every member's agents on that workspace's tasks, and
-only the workspace's owners and admins install, update, turn off, or remove
-one; a personal workspace has no workspace skills. Each skill has a switch,
+workspace skill reaches every member's agents on that workspace's tasks. Any
+member installs one; its installer, while still a member, and the
+workspace's owners and admins update, turn off, or remove it; a personal
+workspace has no workspace skills. Each skill has a switch,
 and one turned off is offered to no agent.
 
 Where two skills share a name, the repository's wins, then the workspace's,
