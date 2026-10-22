@@ -19,7 +19,7 @@
  * is drawn.
  */
 
-import { useCallback, useLayoutEffect, useState } from "react";
+import { createContext, useCallback, useLayoutEffect, useState } from "react";
 import { COARSE_POINTER, coarsePointerNow } from "./coarse-pointer.js";
 import { compactStage } from "./desktop/sidebar-collapse.js";
 import { narrowStage, SHELL_ROOM, type ShellRoom } from "./shell-room.js";
@@ -37,6 +37,13 @@ const ROOM_ATTRIBUTE = "data-luke-room";
 
 /** A stage not yet measured: wide, with the sidebar pinned as its choice says. */
 const UNMEASURED: StageLines = { narrow: false, compact: false };
+
+/**
+ * The room the stage gives, for what draws by it below the shell without
+ * being handed it: a tab strip, whose tabs keep their labels in a narrow room
+ * rather than turning to glyphs. Wide where nothing provides it.
+ */
+export const ShellRoomContext = createContext<ShellRoom>(SHELL_ROOM.WIDE);
 
 /** What the stage is measured by, and the room its width gives. */
 export interface StageRoom {

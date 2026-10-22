@@ -313,7 +313,8 @@ async function pressChip(container: HTMLElement, name: string): Promise<void> {
 
 /** How many tabs of the panel beside the Inbox stand as its preview. */
 function previewTabs(container: HTMLElement): number {
-  return container.querySelectorAll('aside[aria-label="Panel"] .tab[data-preview="true"]').length;
+  return container.querySelectorAll('aside[aria-label="Panel"] .luke-tab[data-preview="true"]')
+    .length;
 }
 
 /** The panel beside the Inbox as a reader hears it: each tab's label, `▸ ` before the one shown; nothing where no panel stands. */

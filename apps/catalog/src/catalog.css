@@ -857,3 +857,33 @@ body {
   border-radius: var(--luke-control-radius);
   background: var(--luke-color-ground);
 }
+
+/* A toolbar's row a tab strip stands in, at a pane's width and a narrow
+   one's, so its tabs give way and scroll along. */
+.catalog-tab-row {
+  display: flex;
+  align-items: center;
+  width: 640px;
+  max-width: 100%;
+  padding: var(--luke-space-8) var(--luke-space-12);
+  border: 1px dashed var(--luke-color-border-strong);
+  border-radius: var(--luke-radius-8);
+}
+
+.catalog-tab-row-narrow {
+  width: 320px;
+}
+
+/* A failure's mark at a tab's end, as an app draws its own: the alert in
+   the danger colour, a size under the glyph it follows. */
+.catalog-end-mark {
+  display: inline-flex;
+  width: 14px;
+  height: 14px;
+  color: var(--luke-color-danger);
+}
+
+.catalog-end-mark > svg {
+  width: 100%;
+  height: 100%;
+}

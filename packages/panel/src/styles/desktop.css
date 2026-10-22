@@ -948,14 +948,13 @@ ul.actor-stack {
 }
 
 /* The one unread mark: what the developer has not seen, a plan saved since
-   they last looked at it on this Mac, a tab that something arrived on while
-   another was chosen, reads in the heavier weight and the primary ink until they look, as a chat app's
+   they last looked at it on this Mac, as a tab that something arrived on
+   while another was chosen does (`@luke/ui`'s `tabs.css`), reads in the heavier weight and the primary ink until they look, as a chat app's
    channels do. What waits on them also wears the attention mark
    (`.inbox-row-attention`); an unread Inbox item wears the blue dot
    (`.inbox-row-unread`). In the sidebar, where a read name is in the
    quieter ink, the ink carries half the step, so a semibold is enough. */
-.sidebar-task[data-unread="true"] .sidebar-task-name,
-.tab[data-unread="true"] .tab-label {
+.sidebar-task[data-unread="true"] .sidebar-task-name {
   color: var(--luke-color-text);
   font-weight: var(--luke-weight-bold);
 }
@@ -963,12 +962,6 @@ ul.actor-stack {
 /* The wrapper that hears typing in a preview's content lays nothing out. */
 .side-panel-keeps {
   display: contents;
-}
-
-/* A preview tab, which the next link opened takes the place of, wears its
-   name in italics until it is kept, as VS Code draws one. */
-.tab[data-preview="true"] .tab-label {
-  font-style: italic;
 }
 
 .desktop-sidebar .sidebar-task[data-unread="true"] .sidebar-task-name {
@@ -5950,400 +5943,23 @@ ul.actor-stack {
 
 /* Tabs ------------------------------------------------------------------------ */
 
-/* One strip drawn alike in the plan's column and the side panel, the way an
-   editor draws its tabs: each a glyph and a label in a pill a toolbar
-   button's size, raised while chosen and plain and muted otherwise, with its
-   × standing on the chosen tab and shown on another while the pointer is on
-   it. It gives way as Safari's tab bar does, in the stylesheet alone, so the
-   strip measures nothing (tab-strip.tsx):
-   - every tab asks for an equal share, up to `--tab-widest`, and the strip
-     asks room for all of them at that width by their count (`--tab-count`,
-     the one thing it is told), giving way from there;
-   - the tabs other than the chosen one narrow together, and below 72px
-     each is its glyph alone (`@container tab`);
-   - the chosen tab keeps its glyph, its label, and its × at a share of its
-     own;
-   - past holding every glyph the strip scrolls along with no bar drawn, the
-     chosen tab pinned at whichever edge it would pass, and a fade where tabs
-     go on. The tab the strip brings into view glides there unless motion is
-     held still. */
-.tab-strip {
-  --tab-widest: 200px;
-  /* What the strip's fades and the pinned tab paint over the tabs passing
-     beneath them: the side panel's well, or the column's ground. */
-  --strip-ground: var(--luke-color-well);
-  position: relative;
-  display: flex;
-  min-width: 0;
-  flex: 0 1
-    calc(
-      var(--tab-count, 1) *
-      (var(--tab-widest) + var(--luke-list-gap)) +
-      2 *
-      var(--luke-focus-ring-reach)
-    );
-  align-items: center;
-  gap: var(--luke-list-gap);
-  overflow-x: auto;
-  overscroll-behavior-x: contain;
-  scroll-behavior: var(--scroll-glide);
-  scrollbar-width: none;
-  /* Room above and below the tabs, given back to the row, for the shadow
-     under a tab being dragged, which the strip's scrolling would clip, and
-     at either end for the keyboard's ring on the first tab and the last. */
-  margin: calc(-1 * var(--luke-space-8)) calc(-1 * var(--luke-focus-ring-reach));
-  padding: var(--luke-space-8) var(--luke-focus-ring-reach);
-}
-
-.main-tabs .tab-strip {
-  --strip-ground: var(--luke-color-ground);
-}
-
-/* A fade at either end where tabs go on past it, drawn over them in the
-   strip's ground rather than as a mask, because a mask would fade the
-   chosen tab pinned there too; each comes in as the strip scrolls from that
-   end, by the strip's own scroll. They stand at the ends, taking no room of
-   their own. Note that each is unseen at rest and drawn only by its scroll
-   timeline, because a strip that holds every tab has no scroll range, and a
-   timeline with none is inactive: its animation draws nothing, and the fade
-   would otherwise stand at full strength over the first tab and the last. An
-   engine with no scroll timelines draws no fade, rather than running the
-   animation once and keeping its last frame. */
-.tab-strip::before,
-.tab-strip::after {
-  position: sticky;
-  z-index: 1;
-  flex: 0 0 var(--luke-scroll-fade);
-  align-self: stretch;
-  content: "";
-  opacity: 0;
-  pointer-events: none;
-}
-
-.tab-strip::before {
-  left: calc(-1 * var(--luke-focus-ring-reach));
-  margin-right: calc(-1 * var(--luke-scroll-fade) - var(--luke-list-gap));
-  background: linear-gradient(to right, var(--strip-ground), transparent);
-}
-
-.tab-strip::after {
-  right: calc(-1 * var(--luke-focus-ring-reach));
-  margin-left: calc(-1 * var(--luke-scroll-fade) - var(--luke-list-gap));
-  background: linear-gradient(to left, var(--strip-ground), transparent);
-}
-
-@supports (animation-timeline: scroll()) {
-  .tab-strip::before,
-  .tab-strip::after {
-    animation-timing-function: linear;
-    animation-fill-mode: both;
-    animation-timeline: scroll(nearest inline);
-  }
-
-  .tab-strip::before {
-    animation-name: strip-fade-in;
-    animation-range: 0 var(--luke-scroll-fade);
-  }
-
-  .tab-strip::after {
-    animation-name: strip-fade-out;
-    animation-range: calc(100% - var(--luke-scroll-fade)) 100%;
-  }
-}
-
-@keyframes strip-fade-in {
-  from {
-    opacity: 0;
-  }
-
-  to {
-    opacity: 1;
-  }
-}
-
-@keyframes strip-fade-out {
-  from {
-    opacity: 1;
-  }
-
-  to {
-    opacity: 0;
-  }
-}
-
-.tab {
-  /* The pill's insets about its glyph and label, and the ×'s box with its
-     inset from the pill's end. */
-  --tab-start: var(--row-inset);
-  --tab-end: var(--luke-space-12);
-  --tab-gap: var(--luke-icon-gap);
-  --tab-close: var(--luke-space-24);
-  --tab-close-inset: var(--luke-space-4);
-  /* The mask that fades a label out beneath the × over its end; off-scale:
-     the fade runs 10px. */
-  --tab-close-fade: linear-gradient(
-    to left,
-    transparent calc(var(--tab-close) + var(--tab-close-inset)),
-    #000 calc(var(--tab-close) + var(--tab-close-inset) + 10px)
-  );
-  position: relative;
-  display: flex;
-  max-width: 200px;
-  flex: none;
-  align-items: center;
-  border-radius: var(--luke-control-radius);
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-label-size);
-  font-weight: var(--luke-weight-medium);
-  line-height: var(--luke-type-label-leading);
-  /* Its transform is a drag's (use-tab-drag.ts): sliding aside for a tab
-     dragged past it, and home again, on the bounce small elements ride. */
-  transition:
-    background-color var(--duration-hover) ease,
-    color var(--duration-hover) ease,
-    opacity var(--duration-hover) ease,
-    transform var(--duration-fast) var(--spring-fast);
-}
-
-[data-luke-profile="desktop"] .tab {
-  -webkit-app-region: no-drag;
-}
-
-/* Every tab asks for an equal share and narrows by it, down to a glyph's
-   width; each is a container of its own width, so it can stand as its glyph
-   alone once it is narrow (below). */
-.tab-strip .tab {
-  min-width: calc(2 * var(--luke-space-8) + var(--luke-control-icon));
-  max-width: var(--tab-widest);
-  flex: 0 1 var(--tab-widest);
-  container: tab / inline-size;
-}
-
-/* Narrower than 72px, a tab other than the chosen one is its
-   glyph alone, centred: its label, its detail, its end mark, and its × give
-   way, and its hint says its name. Note that under the pointer it wears no
-   fade at its end, because the fade makes room for a × it no longer has,
-   and is wider than the glyph's whole side of the pill. A narrow room's
-   tabs keep their labels (below), since a phone has no hint to name a
-   glyph and two agents' glyphs look alike. */
-@container tab (width < 72px) {
-  .desktop-shell:not([data-room="narrow"])
-    .tab-strip
-    .tab:not([data-selected="true"])
-    :is(.tab-label, .tab-end-mark, .tab-close) {
-    display: none;
-  }
-
-  .desktop-shell:not([data-room="narrow"]) .tab-strip .tab:not([data-selected="true"]) .tab-button {
-    justify-content: center;
-    padding: 0;
-  }
-
-  .tab-strip .tab[data-closable="true"][data-selected="false"]:hover .tab-button {
-    mask-image: none;
-  }
-
-  @media (hover: none) {
-    .tab-strip .tab[data-closable="true"][data-selected="false"][data-marked="false"] .tab-button {
-      mask-image: none;
-    }
-  }
-}
-
-/* A narrow room's tabs each keep a short label rather than turning to
-   glyphs: every tab stands at least a glyph and a few letters wide, its
-   label cut short with the fade, and the strip scrolls along past the ones
-   that do not fit, as a phone's browser scrolls its tabs. A tab other than
-   the chosen one gives its ×'s place to its label there, its Close standing
-   in its menu, and on it once chosen. */
-.desktop-shell[data-room="narrow"] .tab-strip .tab {
-  --tab-widest: 160px;
-  min-width: 96px;
-}
-
-@media (hover: none) {
-  .desktop-shell[data-room="narrow"] .tab-strip .tab[data-selected="false"] .tab-close {
-    visibility: hidden;
-  }
-
-  .desktop-shell[data-room="narrow"]
-    .tab-strip
-    .tab[data-closable="true"][data-selected="false"]
-    .tab-button {
-    mask-image: none;
-  }
-}
-
-/* The chosen tab keeps a share of its own, its glyph, its label, and its ×
-   at every width, and stands pinned at whichever edge of the strip it would
-   scroll past, on its ground, so the tabs passing beneath it are hidden. */
-.tab-strip .tab[data-selected="true"] {
-  position: sticky;
-  z-index: 2;
-  right: calc(-1 * var(--luke-focus-ring-reach));
-  left: calc(-1 * var(--luke-focus-ring-reach));
-  min-width: 0;
-  flex-grow: 0;
-  flex-shrink: 0;
-  flex-basis: clamp(96px, 60%, var(--tab-widest));
-  background: var(--strip-ground);
-  container: pinned / scroll-state;
-}
-
-/* A chosen tab alone in its strip keeps no share for others: it takes a
-   tab's own width, as any tab does. */
-.tab-strip .tab[data-selected="true"]:only-child {
-  flex-shrink: 1;
-  flex-basis: var(--tab-widest);
-}
-
-.tab-strip .tab[data-selected="true"]:not([data-quiet="true"]) {
-  background:
-    linear-gradient(var(--luke-color-fill-strong), var(--luke-color-fill-strong)),
-    var(--strip-ground);
-}
-
-/* A quiet chosen tab, drawn with no fill at rest, still stands on the
-   strip's ground, so no tab shows through it where it is pinned. */
-.tab-strip .tab[data-selected="true"][data-quiet="true"]:not(:hover) {
-  background: var(--strip-ground);
-}
-
-/* Pinned, it fades the tabs passing beneath its inner edge as the strip's
-   ends do. */
-@container pinned scroll-state(stuck: left) {
-  .tab-strip .tab-button::after {
-    position: absolute;
-    top: calc(-1 * var(--luke-space-8));
-    bottom: calc(-1 * var(--luke-space-8));
-    left: 100%;
-    width: var(--luke-scroll-fade);
-    background: linear-gradient(to right, var(--strip-ground), transparent);
-    content: "";
-    pointer-events: none;
-  }
-}
-
-@container pinned scroll-state(stuck: right) {
-  .tab-strip .tab-button::after {
-    position: absolute;
-    top: calc(-1 * var(--luke-space-8));
-    right: 100%;
-    bottom: calc(-1 * var(--luke-space-8));
-    width: var(--luke-scroll-fade);
-    background: linear-gradient(to left, var(--strip-ground), transparent);
-    content: "";
-    pointer-events: none;
-  }
-}
-
-.tab:hover {
-  background: var(--luke-color-fill-hover);
-  color: var(--luke-color-text);
-}
-
-/* The tab holding the keyboard stands over its neighbours, so the chosen
-   tab's fill beside it leaves its ring whole. */
-.tab:has(:focus-visible) {
-  z-index: 1;
-}
-
-.tab[data-selected="true"] {
-  background: var(--luke-color-fill-strong);
-  color: var(--luke-color-text);
-}
-
-/* A quiet tab, the plan's while it is its column's lone one, wears no fill
-   at rest even chosen, and the hover fill under the pointer, as a title
-   does. */
-.tab[data-quiet="true"]:not(:hover) {
-  background: none;
-}
-
-.tab[data-quiet="true"]:hover {
-  background: var(--luke-color-fill-hover);
-}
-
-/* A tab being dragged is lifted over the tabs it passes: the chosen tab's
-   fill made opaque on the panel's ground, and a shadow beneath. It follows
-   the pointer frame for frame, so its own transform eases nothing. */
-.tab[data-dragging="true"] {
-  z-index: 1;
-  background:
-    linear-gradient(var(--luke-color-fill-strong), var(--luke-color-fill-strong)),
-    var(--luke-color-well);
-  box-shadow: 0 4px 12px var(--luke-color-shadow);
-  color: var(--luke-color-text);
-  transition:
-    background-color var(--duration-hover) ease,
-    color var(--duration-hover) ease;
-}
-
-/* Only the chosen tab keeps room for its ×, so the strip holds more before
-   it scrolls; another tab's × comes over the end of its label, which fades
-   beneath it. */
-.tab[data-closable="true"][data-selected="true"] {
-  --tab-end: calc(var(--tab-close) + 2 * var(--tab-close-inset));
-}
-
-.tab-button {
-  position: relative;
-  display: flex;
-  min-width: 0;
-  flex: 1 1 auto;
-  align-items: center;
-  gap: var(--tab-gap);
-  height: var(--luke-control-height);
-  padding: 0 var(--tab-end) 0 var(--tab-start);
-  border-radius: inherit;
-  background: none;
-  color: inherit;
-}
-
-.tab[data-closable="true"][data-selected="false"]:hover .tab-button {
-  mask-image: var(--tab-close-fade);
-}
-
-/* A screen with no hover fades a label under its × at rest, as under the
-   pointer, but a marked tab's, which keeps room for its mark. */
-@media (hover: none) {
-  .tab[data-closable="true"][data-selected="false"][data-marked="false"] .tab-button {
-    mask-image: var(--tab-close-fade);
-  }
-}
-
-.tab-icon {
-  position: relative;
-  display: flex;
-  flex: 0 0 auto;
-  color: var(--luke-color-text-muted);
-}
-
-.tab-icon svg {
-  width: var(--luke-control-icon);
-  height: var(--luke-control-icon);
-}
+/* The window's one strip is `@luke/ui`'s Tabs (tab-strip.tsx), drawn alike
+   in the plan's column and the side panel, folding as the room says. */
 
 /* A glyph wearing where its work stands takes a glyph's footprint, so an
    agent's tab and a fixed tab line their labels up alike. */
-.tab-icon .state-glyph {
+.luke-tab-icon .state-glyph {
   --state-glyph-size: var(--luke-control-icon);
 }
 
-.tab-label {
-  overflow: hidden;
-  white-space: nowrap;
-}
-
 /* A label cut short fades out over its last `--label-fade` rather than
-   ending in an ellipsis, as a browser's tab does, and so does a subagent's
-   job, and every name, title, and place the shell and the sidebar cut to
+   ending in an ellipsis, as a browser's tab does (`@luke/ui`'s `tabs.css`),
+   and so does a subagent's job, and every name, title, and place the shell and the sidebar cut to
    their line (`fading-words.tsx`). Only a label measured cut short
    (use-clipped.ts) fades, so a short one ends on its last letter. The mask
    fades the words themselves, so it reads alike over every fill a tab or a
    row wears, at rest, hovered, chosen, or dragged. A toolbar's title not
    measured, a fixed word or a date, keeps its ellipsis (shell.css). */
-.tab-label[data-overflow="true"],
 .task-summary-label[data-overflow="true"],
 .subagent-job[data-overflow="true"],
 .desktop-toolbar-title[data-overflow="true"],
@@ -6433,105 +6049,15 @@ ul.actor-stack {
   list-style: none;
 }
 
-/* Renamed in place, the label gives way to a field in the same type,
-   ringed rather than bordered so nothing moves. */
-.tab-button[data-editing="true"] {
-  box-shadow: inset 0 0 0 1px var(--luke-color-border-selected);
-}
-
-/* The field stands at a name's width whatever the label was, its own
-   width the place's to say (`@luke/ui`'s InlineEdit). */
-.tab-rename {
-  display: grid;
-  width: 24ch;
-  min-width: 0;
-}
-
-/* The ×, a row's compact mark, stands at the pill's end, out of the
-   label's way. */
-.tab-close {
-  position: absolute;
-  top: 50%;
-  right: var(--tab-close-inset);
-  display: flex;
-  opacity: 0;
-  transform: translateY(-50%);
-  transition: opacity var(--duration-hover) ease;
-}
-
-.tab[data-selected="true"] .tab-close {
-  opacity: 1;
-}
-
-@media (hover: hover) {
-  .tab:hover .tab-close {
-    opacity: 1;
-  }
-}
-
 /* A close takes a finger's press up and down alone on a coarse pointer,
    never sideways, because beside it stand the words it would close, and a
-   tap meant for a tab's label that lands near its end must not close it:
-   the tab's ×, and a toast's (`.toast-dismiss`). Every other glyph button
+   tap meant for a toast's words that lands near its end must not close it,
+   as a tab's × keeps (`@luke/ui`'s `tabs.css`). Every other glyph button
    keeps its press a finger's width across (`@luke/ui`'s `button.css`). */
 @media (pointer: coarse) {
-  .tab-close .luke-button::before,
   .toast-dismiss .luke-button::before {
     width: 100%;
   }
-}
-
-/* A screen with no hover shows every tab's × at rest, over its label's
-   faded end as under the pointer, but a marked tab's, whose mark keeps the
-   place, its Close in its menu. */
-@media (hover: none) {
-  .tab[data-marked="false"] .tab-close {
-    opacity: 1;
-  }
-}
-
-/* A tab's end mark, a failed agent's, stands in the ×'s place with room
-   kept for it, as the chosen tab keeps it, and trades places with the ×
-   under the pointer, as an editor's tab trades its unsaved dot. */
-.tab[data-marked="true"] {
-  --tab-end: calc(var(--tab-close) + 2 * var(--tab-close-inset));
-}
-
-.tab-end-mark {
-  position: absolute;
-  top: 50%;
-  right: var(--tab-close-inset);
-  display: flex;
-  width: var(--tab-close);
-  height: var(--tab-close);
-  align-items: center;
-  justify-content: center;
-  transform: translateY(-50%);
-  transition: opacity var(--duration-hover) ease;
-}
-
-@media (hover: hover) {
-  .tab:hover .tab-end-mark {
-    opacity: 0;
-  }
-
-  .tab[data-marked="true"]:not(:hover) .tab-close {
-    opacity: 0;
-  }
-}
-
-/* Note that with no hover the swap never comes, so a marked tab's mark
-   keeps its place, the chosen tab's too. */
-@media (hover: none) {
-  .tab[data-marked="true"] .tab-close {
-    opacity: 0;
-  }
-}
-
-/* What follows a tab's label, the Inbox's count, is muted as a model's
-   effort is after its name (`.model-label-detail`). */
-.tab-detail {
-  color: var(--luke-color-text-muted);
 }
 
 /* The plan's column's tabs and their "+" take what the toolbar leaves
@@ -6638,22 +6164,6 @@ ul.actor-stack {
   min-width: var(--luke-control-height);
   flex: none;
   align-items: center;
-}
-
-/* A tab dragged in the plan's column is lifted on the column's ground. */
-.main-tabs .tab[data-dragging="true"] {
-  background:
-    linear-gradient(var(--luke-color-fill-strong), var(--luke-color-fill-strong)),
-    var(--luke-color-ground);
-}
-
-/* The plan's tab alone in its column takes the room the heading has rather
-   than a most of its own, giving way to the toolbar's buttons as any tab
-   gives way (`.tab-strip .tab`). Beside an agent's it is a tab like any
-   other. */
-
-.desktop-toolbar-heading .tab[data-quiet="true"] {
-  max-width: 100%;
 }
 
 /* Dialog parts ---------------------------------------------------------------- */
@@ -6862,8 +6372,8 @@ ul.actor-stack {
 /* ⌃Tab's switcher (`tab-switcher.tsx`): the tabs and places stood on last
    as a row of cards over the window, drawn as ⌘K's palette is, its ground,
    edge, corner, shadow, and scrim, and stood in the middle of the stage, as
-   ⌘Tab's are. A card is its preview over its glyph and name, its task and
-   strip under them; the card chosen is lit as a menu's row is, its edge
+   ⌘Tab's are. A card, `@luke/ui`'s TabCard, is its preview over its glyph
+   and name, its task and strip under them; the card chosen is lit as a menu's row is, its edge
    drawn in the selected border, and the card of the stop here is dimmed. A
    preview is a still of the tab, or its glyph large until it has one, and
    the session recording leaves it out by its class (`ph-no-capture`). */
@@ -6899,113 +6409,26 @@ ul.actor-stack {
   -webkit-app-region: no-drag;
 }
 
-.tab-switcher-cards {
-  display: flex;
-  gap: var(--luke-space-8);
-  padding: var(--luke-space-12);
-  overflow-x: auto;
-}
-
-.tab-switcher-card {
-  display: flex;
-  width: 176px;
-  min-width: 0;
-  flex: 0 0 auto;
-  flex-direction: column;
-  gap: var(--luke-space-4);
-  padding: var(--luke-space-6);
-  border: 1px solid transparent;
-  border-radius: var(--luke-radius-10);
-  cursor: default;
-}
-
-.tab-switcher-card[aria-selected="true"] {
-  border-color: var(--luke-color-border-selected);
-  background: var(--luke-color-fill-strong);
-}
-
-.tab-switcher-preview {
-  display: flex;
-  height: 110px;
-  align-items: center;
-  justify-content: center;
-  margin-bottom: var(--luke-space-2);
-  border: 1px solid var(--luke-color-border);
-  border-radius: var(--luke-radius-6);
-  background: var(--luke-color-surface);
-  overflow: hidden;
-}
-
-.tab-switcher-card[data-here="true"] .tab-switcher-preview {
-  opacity: 0.55;
-}
-
-/* A still fills the preview from its top left, as the tab it was taken of stands. */
-.tab-switcher-still {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  object-position: top left;
-}
-
-/* A stop with no still yet wears its glyph, large and quiet, in the preview's middle. */
-.tab-switcher-glyph {
-  display: inline-flex;
+/* The cards are `@luke/ui`'s TabCards; a glyph wearing where its work
+   stands takes each slot's footprint, as the glyphs beside it do. */
+.luke-tab-card-glyph .state-glyph {
   --state-glyph-size: 28px;
-  color: var(--luke-color-text-subtle);
-}
-
-.tab-switcher-glyph :is(svg, img, .state-glyph) {
   width: 28px;
   height: 28px;
 }
 
-.tab-switcher-name {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  gap: var(--luke-icon-gap);
-  padding: 0 var(--luke-space-2);
-  white-space: nowrap;
-}
-
-/* The glyph keeps its own ink, a task's status mark's among them, as the tab's does. */
-.tab-switcher-name > :is(svg, img, .state-glyph) {
+.luke-tab-card-name > .state-glyph {
+  --state-glyph-size: var(--luke-menu-glyph);
   width: var(--luke-menu-glyph);
   height: var(--luke-menu-glyph);
   flex: 0 0 auto;
-  --state-glyph-size: var(--luke-menu-glyph);
 }
 
-.tab-switcher-name > .luke-text {
-  min-width: 0;
-  flex: 1 1 auto;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-/* The task and strip under the name, inset to the name's words; the line stands empty where a place has none, so every card is one height. */
-.tab-switcher-detail {
-  display: flex;
-  align-items: center;
-  gap: var(--luke-space-4);
-  min-height: calc(var(--luke-type-caption-size) * 1.4);
-  padding-left: calc(var(--luke-space-2) + var(--luke-menu-glyph) + var(--luke-icon-gap));
-  white-space: nowrap;
-}
-
-/* The column's agent wears its glyph before the tabs' names, a step smaller than the name's. */
-.tab-switcher-detail > :is(svg, img, .state-glyph) {
+.luke-tab-card-detail > .state-glyph {
+  --state-glyph-size: var(--luke-type-caption-size);
   width: var(--luke-type-caption-size);
   height: var(--luke-type-caption-size);
   flex: 0 0 auto;
-  --state-glyph-size: var(--luke-type-caption-size);
-}
-
-.tab-switcher-detail > .luke-text {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 /* The keys' hints along the foot, as ⌘K's foot has them. */

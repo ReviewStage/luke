@@ -144,7 +144,7 @@ function press(): void {
 }
 
 function cards(): HTMLElement[] {
-  return [...document.querySelectorAll<HTMLElement>(".tab-switcher-card")];
+  return [...document.querySelectorAll<HTMLElement>(".luke-tab-card")];
 }
 
 const inboxOpen = () => ({ ...tasksControl().inboxView, open: true });
@@ -241,8 +241,8 @@ test("a task's card is named as Back's list names the screen: the task, then its
   tab();
   tab();
   const words = cards().map((card) => [
-    card.querySelector(".tab-switcher-name")?.textContent,
-    card.querySelector(".tab-switcher-detail")?.textContent,
+    card.querySelector(".luke-tab-card-name")?.textContent,
+    card.querySelector(".luke-tab-card-detail")?.textContent,
   ]);
   assert.deepEqual(words, [
     [DOCUMENT_TASK.name, "Code"],
@@ -302,7 +302,7 @@ test("the screen left is taken as a still of the work area for its card, drawn a
   });
 
   assert.deepEqual(taken, [{ x: 240, y: 0, width: 1040, height: 800 }]);
-  const preview = cards()[0]?.querySelector(".tab-switcher-preview");
+  const preview = cards()[0]?.querySelector(".luke-tab-card-preview");
   assert.ok(preview?.classList.contains("ph-no-capture"));
   assert.equal(preview?.querySelector("img")?.getAttribute("src"), STILL);
   assert.equal(cards()[1]?.querySelector("img"), null, "a stop with no still wears its glyph");
@@ -406,7 +406,7 @@ test("a tab closed on its task's page stays let go once the Inbox stands in the 
   tab();
   tab();
   assert.deepEqual(
-    cards().map((card) => card.querySelector(".tab-switcher-detail")?.textContent),
+    cards().map((card) => card.querySelector(".luke-tab-card-detail")?.textContent),
     ["", "Plan"],
   );
   key("keydown", { key: "Escape", code: "Escape", ctrlKey: true });

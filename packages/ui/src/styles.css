@@ -74,5 +74,7 @@
 @import "./components/skeleton/skeleton.css";
 /* After the button's, whose edge and corners it joins. */
 @import "./components/split-button/split-button.css";
+/* After the button's, whose glyph button its × is. */
+@import "./components/tabs/tabs.css";
 @import "./components/settings-row/settings-row.css";
 @import "./components/auth-page/auth-page.css";
