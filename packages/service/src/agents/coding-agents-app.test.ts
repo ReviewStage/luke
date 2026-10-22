@@ -10177,6 +10177,21 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
             },
             output: "ok",
           },
+          // A native harness's edits count as the agent's own file tools' do.
+          {
+            type: "tool-Edit",
+            toolCallId: "call-7",
+            state: "output-available",
+            input: { file_path: "src/claude.ts", old_string: "a", new_string: "b" },
+            output: "The file has been updated successfully.",
+          },
+          {
+            type: "tool-fileChange",
+            toolCallId: "call-8",
+            state: "output-available",
+            input: { changes: [{ path: "src/codex.ts", kind: { type: "update" }, diff: "" }] },
+            output: { status: "completed" },
+          },
         ]);
         const fork = (messageId: string) =>
           ask(
@@ -10206,7 +10221,7 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
         assert.match(parts.replay?.preamble ?? "", /You are a fork/u);
         assert.match(
           parts.replay?.preamble ?? "",
-          /may be ahead of the message you were forked at\. After that message it edited `src\/invites\.ts`, `src\/expiry\.ts`, `src\/mailer\.ts`, `src\/old\.ts`, `src\/new\.ts`; undo/u,
+          /may be ahead of the message you were forked at\. After that message it edited `src\/invites\.ts`, `src\/expiry\.ts`, `src\/mailer\.ts`, `src\/old\.ts`, `src\/new\.ts`, `src\/claude\.ts`, `src\/codex\.ts`; undo/u,
         );
         for (const named of [laterLine, randomUUID()]) {
           assert.deepEqual(
