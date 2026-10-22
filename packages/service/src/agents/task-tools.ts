@@ -15,6 +15,7 @@ import {
   taskStatusSchema,
 } from "@luke/features/task-wire";
 import { describeWire } from "@luke/wire/effect";
+import { cutOnLine } from "@luke/wire/text-cut";
 import { Effect, Option, Result, Schema } from "effect";
 import { SqlClient } from "effect/sql";
 import {
@@ -35,7 +36,6 @@ import {
   callerTask,
   callerUserId,
   callerWorkspace,
-  cutOnLine,
   orStoreRefusal,
   reachedRepository,
   TASK_PRIORITY_WORDS,

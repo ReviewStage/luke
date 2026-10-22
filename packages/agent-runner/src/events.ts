@@ -10,8 +10,17 @@
  * `RUNNER_HEARTBEAT` for as long as the launch runs, once each, since the
  * next is never far, so Luke keeps the sandbox alive through a harness's
  * long silence; it stops as the sink drains.
+ *
+ * No post tops what Luke's route reads (`RUNNER_EVENTS_MAX_BYTES`), since
+ * Luke refuses one that does for good and the launch would hear nothing
+ * more: the events a batch takes are posted in as many posts, in order, as
+ * keep each under it, and an event that alone would top it, a tool's
+ * answer of many megabytes, has its longest words cut on a line, as eve's
+ * reads cut a long text (`@luke/wire/text-cut`), each saying how much was
+ * left out, its secrets taken out first so no cut leaves half of one.
  */
 
+import { cutOnLine } from "@luke/wire/text-cut";
 import {
   Cause,
   Data,
@@ -27,14 +36,21 @@ import {
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import {
+  RUNNER_EVENTS_MAX_BYTES,
   RUNNER_HEARTBEAT,
   type RunnerEvent,
-  type RunnerEventBatch,
   type RunnerMessage,
 } from "./protocol.js";
 
 /** The most events one post carries. */
 const BATCH_MAX = 256;
+
+/** A post's body around its events, `{"events":[...]}`. */
+const BODY_OPEN = '{"events":[';
+const BODY_CLOSE = "]}";
+
+/** The most one event may weigh: a post's bound, less the body around it. */
+const EVENT_MAX_BYTES = RUNNER_EVENTS_MAX_BYTES - BODY_OPEN.length - BODY_CLOSE.length;
 
 /**
  * How long the sender waits after a post Luke did not take: the first wait,
@@ -106,30 +122,78 @@ function redacted(value: Json, secrets: readonly string[]): Json {
   );
 }
 
-/**
- * A batch as the text Luke is sent, with every secret the launch holds taken
- * out. Note that we scrub every event, the SDK's included, because a tool's
- * output or a CLI's error is text the runner never wrote; the command sandbox
- * keeps both secrets from the agent's commands, and this is the second fence.
- * Note too that we scrub the strings themselves, before they are spelled as
- * JSON, so no escape can hide a secret or be cut in half by its removal.
- */
-function batchText(batch: RunnerEventBatch, secrets: readonly Redacted.Redacted[]): string {
-  const values = secrets.map(Redacted.value).filter((value) => value !== "");
-  // Note that the batch is JSON already, as the SDK parsed it from the CLI's stdout.
-  const json: Json = JSON.parse(JSON.stringify(batch));
-  return JSON.stringify(redacted(json, values));
+/** A value with every string longer than the bound cut on a line, each saying how much of it was left out. */
+function cut(value: Json, bound: number): Json {
+  if (Predicate.isString(value)) {
+    const { text, leftOutChars } = cutOnLine(value, bound);
+    return leftOutChars === 0 ? value : `${text}\n… ${leftOutChars} characters left out`;
+  }
+  if (Array.isArray(value)) return value.map((each) => cut(each, bound));
+  if (!Predicate.isObject(value)) return value;
+  return Object.fromEntries(Object.entries(value).map(([key, each]) => [key, cut(each, bound)]));
 }
 
-/** One batch, posted once: taken, or why Luke did not take it. */
+/** How many bytes a text weighs as UTF-8, as the post's body carries it. */
+function bytesOf(text: string): number {
+  return Buffer.byteLength(text, "utf8");
+}
+
+/**
+ * An event as the text Luke is sent, with every secret the launch holds
+ * taken out, and its words cut where it alone would top a post: each string
+ * past a bound cut on a line, the bound halved until the event fits. Note
+ * that we scrub every event, the SDK's included, because a tool's output or
+ * a CLI's error is text the runner never wrote; the command sandbox keeps
+ * both secrets from the agent's commands, and this is the second fence.
+ * Note too that we scrub the strings themselves, before they are spelled as
+ * JSON or cut, so no escape can hide a secret and no cut halves one.
+ */
+function eventText(event: RunnerEvent, secrets: readonly string[]): string {
+  // Note that the event is JSON already, as the SDK parsed it from the CLI's stdout.
+  const json = redacted(JSON.parse(JSON.stringify(event)), secrets);
+  let text = JSON.stringify(json);
+  for (let bound = EVENT_MAX_BYTES; bytesOf(text) > EVENT_MAX_BYTES && bound > 0; ) {
+    bound = Math.floor(bound / 2);
+    text = JSON.stringify(cut(json, bound));
+  }
+  return text;
+}
+
+/** One post's body: the events' texts, in order. */
+function bodyOf(texts: readonly string[]): string {
+  return `${BODY_OPEN}${texts.join(",")}${BODY_CLOSE}`;
+}
+
+/** The events as the bodies they are posted in, in order, each as many events as keep it under a post's bound. */
+function bodiesOf(events: readonly RunnerEvent[], secrets: readonly Redacted.Redacted[]): string[] {
+  const values = secrets.map(Redacted.value).filter((value) => value !== "");
+  const bodies: string[] = [];
+  let texts: string[] = [];
+  let weight = BODY_OPEN.length + BODY_CLOSE.length;
+  for (const event of events) {
+    const text = eventText(event, values);
+    const added = bytesOf(text) + (texts.length > 0 ? 1 : 0);
+    if (texts.length > 0 && weight + added > RUNNER_EVENTS_MAX_BYTES) {
+      bodies.push(bodyOf(texts));
+      texts = [];
+      weight = BODY_OPEN.length + BODY_CLOSE.length;
+    }
+    weight += bytesOf(text) + (texts.length > 0 ? 1 : 0);
+    texts.push(text);
+  }
+  if (texts.length > 0) bodies.push(bodyOf(texts));
+  return bodies;
+}
+
+/** One post, sent once: taken, or why Luke did not take it. */
 function postOnce(
   client: HttpClient.HttpClient,
   options: SinkOptions,
-  batch: RunnerEventBatch,
+  body: string,
 ): Effect.Effect<void, EventsUndelivered> {
   const request = HttpClientRequest.post(options.url).pipe(
     HttpClientRequest.bearerToken(options.bearer),
-    HttpClientRequest.bodyText(batchText(batch, options.secrets), "application/json"),
+    HttpClientRequest.bodyText(body, "application/json"),
   );
   return client.execute(request).pipe(
     // Note that the error is not kept as the cause, because the request it
@@ -145,13 +209,13 @@ function postOnce(
   );
 }
 
-/** One batch, posted until Luke takes it or answers that it never will. */
+/** One post, sent until Luke takes it or answers that it never will. */
 const postBatch = Effect.fn("agent-runner/postBatch")(function* (
   client: HttpClient.HttpClient,
   options: SinkOptions,
-  batch: RunnerEventBatch,
+  body: string,
 ) {
-  return yield* postOnce(client, options, batch).pipe(
+  return yield* postOnce(client, options, body).pipe(
     Effect.retry({
       schedule: POST_BACKOFF,
       times: POST_RETRY.TIMES,
@@ -176,7 +240,9 @@ export const makeEventSink = Effect.fn("agent-runner/makeEventSink")(function* (
   const sendAll = Effect.gen(function* () {
     for (;;) {
       const events = yield* Queue.takeBetween(queue, 1, BATCH_MAX);
-      yield* postBatch(client, { ...options, secrets }, { events });
+      for (const body of bodiesOf(events, secrets)) {
+        yield* postBatch(client, { ...options, secrets }, body);
+      }
     }
   }).pipe(Effect.catchIf(Cause.isDone, () => Effect.void));
   const sender = yield* Effect.forkScoped(sendAll);
@@ -186,7 +252,7 @@ export const makeEventSink = Effect.fn("agent-runner/makeEventSink")(function* (
       Effect.andThen(
         Effect.sleep(Duration.millis(RUNNER_HEARTBEAT.EVERY_MS)),
         Effect.ignore(
-          Effect.suspend(() => postOnce(client, { ...options, secrets }, { events: [] })).pipe(
+          Effect.suspend(() => postOnce(client, { ...options, secrets }, bodyOf([]))).pipe(
             Effect.timeout(Duration.millis(RUNNER_HEARTBEAT.TIMEOUT_MS)),
           ),
         ),

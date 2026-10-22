@@ -429,3 +429,11 @@ export const RUNNER_HEARTBEAT = {
    */
   TIMEOUT_MS: 30 * 1_000,
 } as const;
+
+/**
+ * The most one post of events may weigh, in bytes of its JSON body: what
+ * Luke's events route reads (`runner-events-app.ts`), under the platform's
+ * own bound. The runner splits a batch so no post tops it, and cuts an event
+ * that alone would (`events.ts`).
+ */
+export const RUNNER_EVENTS_MAX_BYTES = 4 * 1024 * 1024;

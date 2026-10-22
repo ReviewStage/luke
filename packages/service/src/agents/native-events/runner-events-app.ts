@@ -1,4 +1,4 @@
-import { RUNNER_EVENT } from "@luke/agent-runner/protocol";
+import { RUNNER_EVENT, RUNNER_EVENTS_MAX_BYTES } from "@luke/agent-runner/protocol";
 import type { DatabaseServices } from "@luke/database/core/query";
 import {
   readCodingAgentOfConversation,
@@ -97,8 +97,8 @@ export const RUNNER_EVENTS_PATH = "/api/agents/runner-events";
 
 const HTTP_METHOD = { POST: "POST" } as const;
 
-/** The most a batch may hold: the runner's 256 events, a tool's whole answer among them, under the platform's own bound. */
-const MAX_BODY_BYTES = 4 * 1024 * 1024;
+/** The most a batch may hold, which the runner splits its batches and cuts its events to fit, under the platform's own bound. */
+const MAX_BODY_BYTES = RUNNER_EVENTS_MAX_BYTES;
 
 const RunnerEventBatchSchema = Schema.Struct({
   events: Schema.Array(

@@ -11,6 +11,7 @@
     "./effect": "./src/effect/index.js",
     "./host-ids": "./src/host-ids.js",
     "./testing": "./src/testing/index.js",
+    "./text-cut": "./src/text-cut.js",
     "./ui-messages": "./src/ui-messages/index.js",
     "./wire-guard": "./src/wire-guard.js"
   },

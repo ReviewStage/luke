@@ -79,6 +79,7 @@ import {
 } from "@luke/features/task-wire";
 import { taskKey } from "@luke/features/workspace-key";
 import { describeWire } from "@luke/wire/effect";
+import { cutOnLine } from "@luke/wire/text-cut";
 import { isTextUIPart } from "ai";
 import { Clock, Data, Effect, Option, Result, Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
@@ -2531,20 +2532,6 @@ export function runListModels(
 interface PageCut {
   readonly html: string;
   readonly leftOutChars: number;
-}
-
-/** A text as a read answers it, cut to a bound, and how many characters of it were left out. */
-export interface TextCut {
-  readonly text: string;
-  readonly leftOutChars: number;
-}
-
-/** A text cut on a line to a bound, and how many characters were left out; whole where it fits. */
-export function cutOnLine(text: string, maximumChars: number): TextCut {
-  if (text.length <= maximumChars) return { text, leftOutChars: 0 };
-  const lineEnd = text.lastIndexOf("\n", maximumChars);
-  const kept = text.slice(0, lineEnd > 0 ? lineEnd : maximumChars);
-  return { text: kept, leftOutChars: text.length - kept.length };
 }
 
 /** A page's HTML cut on a line to the read's bound, and how many characters were left out; whole where it fits. */

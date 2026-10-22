@@ -18,11 +18,11 @@
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "0.3.304",
     "@effect/platform-node": "catalog:",
+    "@luke/wire": "workspace:*",
     "effect": "catalog:"
   },
   "devDependencies": {
     "@effect/vitest": "catalog:",
-    "@luke/wire": "workspace:*",
     "@types/node": "catalog:",
     "esbuild": "0.28.2",
     "typescript": "catalog:",
