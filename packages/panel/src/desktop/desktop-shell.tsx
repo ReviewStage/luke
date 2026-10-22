@@ -55,7 +55,7 @@ import { WindowVoiceNotice } from "../window-voice.js";
 import { READING_AUTOMATIONS } from "./automation-words.js";
 import { useColumnDock } from "./column-dock.js";
 import { DesktopAgentPage } from "./desktop-agent-page.js";
-import { DesktopChat } from "./desktop-chat.js";
+import { DesktopChat, useChatSurface } from "./desktop-chat.js";
 import { DesktopInbox } from "./desktop-inbox.js";
 import type { SettingsStep } from "./desktop-settings.js";
 import { DesktopSidebar } from "./desktop-sidebar.js";
@@ -664,6 +664,8 @@ export function DesktopShell({
   const planToggle = tasks.page === TASKS_PAGE.DOCUMENT && !standingIn;
   const taskDrawn = planToggle && tasks.region.kind === DOCUMENT_REGION.READY;
   const calling = useCallingAgent();
+  // Chat is handed only what it reads of the tasks, so a delivery that moves the rest draws none of it.
+  const chatSurface = useChatSurface(tasks);
   const callShown = taskDrawn && callTabShown(tasks, calling);
   if (gated) {
     const macAppLink = appPlatform().macAppLink?.();
@@ -840,7 +842,7 @@ export function DesktopShell({
             {chatOpen ? (
               <PageFind page={FIND_PAGE.CHAT} active={tasks.shown}>
                 <DesktopChat
-                  tasks={tasks}
+                  tasks={chatSurface}
                   room={room}
                   accountName={
                     account.status === ACCOUNT_STATUS.SIGNED_IN ? account.name : undefined

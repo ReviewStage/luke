@@ -108,6 +108,7 @@ import {
   useLeaveGuard,
   useTasksTab,
 } from "./use-tasks-tab.js";
+import { CHAT_READ_PAUSE } from "./use-workspace-chat.js";
 
 const TASK: Task = {
   id: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
@@ -329,6 +330,7 @@ afterEach(() => {
   closeWindow();
   window.localStorage.clear();
   vi.restoreAllMocks();
+  vi.useRealTimers();
 });
 
 /** Lets the clipboard's answer, and the redraw it causes, land with no time passing. */
@@ -614,6 +616,14 @@ async function settle(): Promise<void> {
   await act(async () => {
     for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
   });
+}
+
+/** Lets the pause a chat read waits on before it is told run out, and the read go. */
+async function readPauseRunsOut(): Promise<void> {
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(Duration.toMillis(CHAT_READ_PAUSE));
+  });
+  await settle();
 }
 
 test("⇧⌘T opens the tabs closed again, the latest first, each in its strip at its place and a file's on the lines it showed, until none is left", async () => {
@@ -2939,6 +2949,7 @@ test("main is told a task's Chat tab on screen shows only its plan's channel, wh
 });
 
 test("the task's Chat tab on screen marks the task's plan channel read, as the window's Chat on that channel does", async () => {
+  vi.useFakeTimers();
   handState(experimentsOn(EXPERIMENT.CHAT));
   const me = "b1c2d3e4-0000-4000-8000-000000000001";
   const channelId = "c0ffee00-0000-4000-8000-000000000002";
@@ -2976,7 +2987,7 @@ test("the task's Chat tab on screen marks the task's plan channel read, as the w
   await settle();
   act(() => tab.control().onShowChat(TASK.id));
   await vi.waitFor(async () => {
-    await settle();
+    await readPauseRunsOut();
     const wrote = tab.payloads.filter((each) => each.kind === ACT_KIND.CODING_AGENTS_CHAT_POST);
     assert.deepEqual(
       wrote.map((each) => each.payload),
@@ -2986,6 +2997,7 @@ test("the task's Chat tab on screen marks the task's plan channel read, as the w
 });
 
 test("a channel hidden behind a narrow room's Chat rail is not marked read until it stands on screen again", async () => {
+  vi.useFakeTimers();
   handState(experimentsOn(EXPERIMENT.CHAT));
   const me = "b1c2d3e4-0000-4000-8000-000000000001";
   const channelId = "c0ffee00-0000-4000-8000-000000000002";
@@ -3031,16 +3043,16 @@ test("a channel hidden behind a narrow room's Chat rail is not marked read until
     assert.ok(tab.control().chatView.chat, "the chat landed");
   });
   act(() => tab.control().chatView.onShow(place));
-  await settle();
+  await readPauseRunsOut();
   assert.deepEqual(readTo(), [mark(4)], "the channel on screen is read");
 
   act(() => tab.control().chatView.onList());
   stream.push(answerAt(5));
-  await settle();
+  await readPauseRunsOut();
   assert.deepEqual(readTo(), [mark(4)], "a message landing behind the rail stays unread");
 
   act(() => tab.control().chatView.onChoose(place));
-  await settle();
+  await readPauseRunsOut();
   assert.deepEqual(readTo(), [mark(4), mark(5)]);
 });
 

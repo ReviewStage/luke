@@ -48,6 +48,14 @@ import type { TaskAgentLine, TaskSummary } from "@luke/features/task-wire";
  * standing by `#name`. Every member is named by who they are, never by a
  * handle: a person by their account's name, an agent by its title, and a
  * task's Luke as Luke.
+ *
+ * Every read here goes through one index of the answer (`chatIndex`), built
+ * the first time the answer is read and kept on it: its members and channels
+ * by id, each channel's messages in the order posted, each message's
+ * replies, and each channel's unread count and newest message. What is read
+ * of the roster alone (who a member is, what the composer offers, what a
+ * dictation listens for) is kept on the roster's own arrays, which a push
+ * keeps while the roster stands, so a new message reads none of it again.
  */
 
 /** The places the window's Chat shows: For you, or one channel. */
@@ -212,10 +220,124 @@ function bySeq(one: ChatMessage, other: ChatMessage): number {
   return one.seq - other.seq;
 }
 
+/** What is read of a chat's roster alone: the reader, every member, and every channel. */
+export type ChatRoster = Pick<ChatAnswer, "self" | "members" | "channels">;
+
+/** The value kept for a key, made the first time it is asked for. */
+function keptOn<Key extends object, Value>(
+  cache: WeakMap<Key, Value>,
+  key: Key,
+  make: () => Value,
+): Value {
+  const held = cache.get(key);
+  if (held !== undefined) return held;
+  const made = make();
+  cache.set(key, made);
+  return made;
+}
+
+/** Each roster's members by id, kept on its members' array. */
+const MEMBERS_BY_ID = new WeakMap<readonly ChatMember[], ReadonlyMap<string, ChatMember>>();
+
+/** Each roster's channels by id, kept on its channels' array. */
+const CHANNELS_BY_ID = new WeakMap<readonly ChatChannel[], ReadonlyMap<string, ChatChannel>>();
+
+/** The members by id, the first of any id held twice, as a search of the list would find it. */
+function membersById(members: readonly ChatMember[]): ReadonlyMap<string, ChatMember> {
+  return keptOn(MEMBERS_BY_ID, members, () => firstById(members));
+}
+
+function channelsById(channels: readonly ChatChannel[]): ReadonlyMap<string, ChatChannel> {
+  return keptOn(CHANNELS_BY_ID, channels, () => firstById(channels));
+}
+
+function firstById<Each extends { readonly id: string }>(
+  list: readonly Each[],
+): ReadonlyMap<string, Each> {
+  const byId = new Map<string, Each>();
+  for (const each of list) if (!byId.has(each.id)) byId.set(each.id, each);
+  return byId;
+}
+
+/**
+ * One answer read once: its members and channels by id, its messages in the
+ * order posted, each channel's and each message's replies in theirs, how far
+ * the reader has read each channel on its own cursor, and each channel's
+ * unread count and newest message.
+ */
+export interface ChatIndex {
+  readonly members: ReadonlyMap<string, ChatMember>;
+  readonly channels: ReadonlyMap<string, ChatChannel>;
+  /** Every message in the order posted. */
+  readonly posted: readonly ChatMessage[];
+  /** Each channel's messages in the order posted, by the channel's id; a channel holding none stands nowhere. */
+  readonly messages: ReadonlyMap<string, readonly ChatMessage[]>;
+  /** Each message's replies in the order posted, by the id of the message they reply to. */
+  readonly replies: ReadonlyMap<string, readonly ChatMessage[]>;
+  /** The reader's own cursor in each channel it read on its own, by the channel's id. */
+  readonly reads: ReadonlyMap<string, number>;
+  /** How many messages someone else posted or changed past the reader's cursor, by channel. */
+  readonly unread: ReadonlyMap<string, number>;
+  /** The newest message each channel holds, by the channel's id. */
+  readonly latest: ReadonlyMap<string, ChatMessage>;
+}
+
+/** Each answer's index, kept on the answer, which is never written to. */
+const INDEXES = new WeakMap<ChatAnswer, ChatIndex>();
+
+/** Adds a message to the list held under a key, in the order given. */
+function filed(lists: Map<string, ChatMessage[]>, key: string, message: ChatMessage): void {
+  const list = lists.get(key);
+  if (list === undefined) lists.set(key, [message]);
+  else list.push(message);
+}
+
+function builtIndex(chat: ChatAnswer): ChatIndex {
+  const reads = new Map<string, number>();
+  for (const each of chat.reads ?? []) {
+    if (!reads.has(each.channelId)) reads.set(each.channelId, each.readSeq);
+  }
+  const posted = chat.messages.toSorted(bySeq);
+  const messages = new Map<string, ChatMessage[]>();
+  const replies = new Map<string, ChatMessage[]>();
+  const unread = new Map<string, number>();
+  for (const message of posted) {
+    filed(messages, message.channelId, message);
+    if (message.parentId !== undefined) filed(replies, message.parentId, message);
+    const read = Math.max(chat.readSeq, reads.get(message.channelId) ?? 0);
+    if (message.touchedSeq > read && message.authorId !== chat.self) {
+      unread.set(message.channelId, (unread.get(message.channelId) ?? 0) + 1);
+    }
+  }
+  const latest = new Map<string, ChatMessage>();
+  for (const [channelId, list] of messages) {
+    const newest = list.at(-1);
+    if (newest !== undefined) latest.set(channelId, newest);
+  }
+  return {
+    members: membersById(chat.members),
+    channels: channelsById(chat.channels),
+    posted,
+    messages,
+    replies,
+    reads,
+    unread,
+    latest,
+  };
+}
+
+/**
+ * The answer's index, built the first time it is read and kept on it, so
+ * every read of one answer, the rail's, For you's, a channel's threads, and
+ * the sidebar's count alike, walks its messages once between them.
+ */
+export function chatIndex(chat: ChatAnswer): ChatIndex {
+  return keptOn(INDEXES, chat, () => builtIndex(chat));
+}
+
 /** How far the reader has read a channel: its own cursor there where it read further, else its cursor everywhere. */
 function readSeqIn(chat: ChatAnswer, channelId: string): number {
-  const own = chat.reads?.find((each) => each.channelId === channelId)?.readSeq ?? 0;
-  return Math.max(chat.readSeq, own);
+  return Math.max(chat.readSeq, chatIndex(chat).reads.get(channelId) ?? 0);
 }
 
 /** Whether the reader has yet to read a message: posted or changed past its cursor in the message's channel by someone else, as the service counts it. */
@@ -224,7 +346,7 @@ function unreadBy(chat: ChatAnswer, message: ChatMessage): boolean {
 }
 
 /** The member of a direct message who is not the reader, by id; none for a channel. */
-function otherOf(chat: ChatAnswer, channel: ChatChannel): string | undefined {
+function otherOf(chat: Pick<ChatAnswer, "self">, channel: ChatChannel): string | undefined {
   if (channel.kind !== CHANNEL_KIND.DM) return undefined;
   return channel.members?.find((id) => id !== chat.self) ?? channel.members?.[0];
 }
@@ -260,8 +382,12 @@ function agentMemberName(name: string | undefined): string {
  * else its model's name, a person by their account's name, the reader by
  * their own.
  */
-export function chatWho(chat: ChatAnswer, names: ChatNames, memberId: string): ChatWho {
-  const member = chat.members.find((each) => each.id === memberId);
+export function chatWho(
+  chat: Pick<ChatAnswer, "self" | "members">,
+  names: ChatNames,
+  memberId: string,
+): ChatWho {
+  const member = membersById(chat.members).get(memberId);
   const agent = member?.agentId === undefined ? undefined : names.agents.get(member.agentId);
   const taskName = member?.planId === undefined ? undefined : names.tasks.get(member.planId);
   const name =
@@ -276,7 +402,7 @@ export function chatWho(chat: ChatAnswer, names: ChatNames, memberId: string): C
 }
 
 /** Whether the reader is one of a direct message's two; a channel holds no such pair. */
-function inDm(chat: ChatAnswer, channel: ChatChannel): boolean {
+function inDm(chat: Pick<ChatAnswer, "self">, channel: ChatChannel): boolean {
   return channel.members?.includes(chat.self) ?? false;
 }
 
@@ -287,13 +413,17 @@ function inDm(chat: ChatAnswer, channel: ChatChannel): boolean {
  * no box to write in it, since a post there would open their own with
  * one of the two instead.
  */
-export function postsIn(chat: ChatAnswer, channel: ChatChannel): boolean {
+export function postsIn(chat: Pick<ChatAnswer, "self">, channel: ChatChannel): boolean {
   if (channel.archived) return false;
   return channel.kind !== CHANNEL_KIND.DM || inDm(chat, channel);
 }
 
 /** What a channel is called: a channel's own name, a direct message's other member's name, or both of its two's where the reader is neither. */
-export function channelLabel(chat: ChatAnswer, names: ChatNames, channel: ChatChannel): string {
+export function channelLabel(
+  chat: Pick<ChatAnswer, "self" | "members">,
+  names: ChatNames,
+  channel: ChatChannel,
+): string {
   if (channel.kind === CHANNEL_KIND.DM && !inDm(chat, channel)) {
     return (channel.members ?? []).map((id) => chatWho(chat, names, id).name).join(" ↔ ");
   }
@@ -306,10 +436,9 @@ export function channelLabel(chat: ChatAnswer, names: ChatNames, channel: ChatCh
 
 /** Every message of a channel's in the order posted. */
 function messagesIn(chat: ChatAnswer, channelId: string): readonly ChatMessage[] {
-  return chat.messages.filter((message) => message.channelId === channelId).toSorted(bySeq);
+  return chatIndex(chat).messages.get(channelId) ?? [];
 }
 
-/** The rail: For you's count, the channels in their order, and the direct messages, the latest spoken in first. */
 /**
  * The task channels grouped as the sidebar groups their tasks: the pinned
  * first, in the pins' order, then each section in its order, then the rest
@@ -364,33 +493,48 @@ function taskGroups(
   return groups;
 }
 
+/**
+ * The rail: For you's count, the channels in their order, and the direct
+ * messages, the latest spoken in first. Note that each channel's name and
+ * newest message are read once before the sort, never inside its
+ * comparisons, which run some thousands of times over a workspace's.
+ */
 export function chatRail(
   chat: ChatAnswer,
   names: ChatNames,
   grouping?: ChatTaskGrouping | undefined,
 ): ChatRail {
+  const index = chatIndex(chat);
   const waiting = forYou(chat);
+  const asks = new Map<string, number>();
+  for (const entry of waiting) {
+    if (entry.reason === FOR_YOU_REASON.ASK) {
+      asks.set(entry.channel.id, (asks.get(entry.channel.id) ?? 0) + 1);
+    }
+  }
+  const labels = new Map(
+    chat.channels.map((channel) => [channel, channelLabel(chat, names, channel)] as const),
+  );
+  const labelOf = (channel: ChatChannel) => labels.get(channel) ?? "";
   const row = (channel: ChatChannel): ChatRailRow => {
     const other = otherOf(chat, channel);
     const who = other === undefined ? undefined : chatWho(chat, names, other);
     return {
       channel,
-      label: channelLabel(chat, names, channel),
+      label: labelOf(channel),
       other: who,
       between:
         channel.kind === CHANNEL_KIND.DM && !inDm(chat, channel) ? (channel.members ?? []) : [],
-      unread: messagesIn(chat, channel.id).filter((message) => unreadBy(chat, message)).length,
-      asks: waiting.filter(
-        (entry) => entry.reason === FOR_YOU_REASON.ASK && entry.channel.id === channel.id,
-      ).length,
-      latest: messagesIn(chat, channel.id).at(-1),
+      unread: index.unread.get(channel.id) ?? 0,
+      asks: asks.get(channel.id) ?? 0,
+      latest: index.latest.get(channel.id),
     };
   };
   const shown = chat.channels.filter((channel) => !channel.archived);
-  const latest = (channel: ChatChannel) => messagesIn(chat, channel.id).at(-1)?.seq ?? 0;
+  const latest = (channel: ChatChannel) => index.latest.get(channel.id)?.seq ?? 0;
   const byName = (one: ChatChannel, other: ChatChannel) =>
     CHANNEL_ORDER[one.kind] - CHANNEL_ORDER[other.kind] ||
-    channelLabel(chat, names, one).localeCompare(channelLabel(chat, names, other));
+    labelOf(one).localeCompare(labelOf(other));
   const channels = shown
     .filter(
       (channel) => channel.kind === CHANNEL_KIND.GENERAL || channel.kind === CHANNEL_KIND.TOPIC,
@@ -413,22 +557,33 @@ export function chatRail(
   };
 }
 
+/** Each answer's threads, by channel, kept on the answer. */
+const THREADS = new WeakMap<ChatAnswer, Map<string, readonly ChatThread[]>>();
+
 /**
  * A channel's messages as threads: each root in the order posted, its
  * replies under it in theirs. A reply whose root is not among the messages
  * read stands as a root of its own, so nothing read goes undrawn.
  */
 export function channelThreads(chat: ChatAnswer, channelId: string): readonly ChatThread[] {
+  const threads = keptOn(THREADS, chat, () => new Map<string, readonly ChatThread[]>());
+  const held = threads.get(channelId);
+  if (held !== undefined) return held;
+  const index = chatIndex(chat);
   const messages = messagesIn(chat, channelId);
   const ids = new Set(messages.map((message) => message.id));
   const rooted = (message: ChatMessage) =>
     message.parentId !== undefined && ids.has(message.parentId);
-  return messages
+  const made = messages
     .filter((message) => !rooted(message))
     .map((message) => ({
       message,
-      replies: messages.filter((reply) => reply.parentId === message.id),
+      replies: (index.replies.get(message.id) ?? []).filter(
+        (reply) => reply.channelId === channelId,
+      ),
     }));
+  threads.set(channelId, made);
+  return made;
 }
 
 /** How long after a message its author's next one still reads as the same run, drawn under one name as Slack draws it. */
@@ -503,27 +658,35 @@ function waitingReason(chat: ChatAnswer, message: ChatMessage, channel: ChatChan
 }
 
 /** For you: every open ask someone else posted, the oldest first, then each unread direct message and mention of the reader, the oldest first. */
+/** Each answer's For you, kept on the answer, which the rail, the sidebar's count, and the pane all read. */
+const FOR_YOU_ENTRIES = new WeakMap<ChatAnswer, readonly ForYouEntry[]>();
+
 export function forYou(chat: ChatAnswer): readonly ForYouEntry[] {
-  const channels = new Map(chat.channels.map((channel) => [channel.id, channel]));
-  const entries = chat.messages.toSorted(bySeq).flatMap((message): ForYouEntry[] => {
-    const channel = channels.get(message.channelId);
-    // Note that nothing waits on the reader where they cannot answer it: an archived channel, or a direct message between two others.
-    if (channel === undefined || !postsIn(chat, channel)) return [];
-    const reason = waitingReason(chat, message, channel);
-    if (reason === undefined) return [];
-    const replies = chat.messages.filter((reply) => reply.parentId === message.id).toSorted(bySeq);
-    return [{ reason, channel, message, replies }];
+  return keptOn(FOR_YOU_ENTRIES, chat, () => {
+    const index = chatIndex(chat);
+    const entries = index.posted.flatMap((message): ForYouEntry[] => {
+      const channel = index.channels.get(message.channelId);
+      // Note that nothing waits on the reader where they cannot answer it: an archived channel, or a direct message between two others.
+      if (channel === undefined || !postsIn(chat, channel)) return [];
+      const reason = waitingReason(chat, message, channel);
+      if (reason === undefined) return [];
+      const replies = index.replies.get(message.id) ?? [];
+      return [{ reason, channel, message, replies }];
+    });
+    return [
+      ...entries.filter((entry) => entry.reason === FOR_YOU_REASON.ASK),
+      ...entries.filter((entry) => entry.reason !== FOR_YOU_REASON.ASK),
+    ];
   });
-  return [
-    ...entries.filter((entry) => entry.reason === FOR_YOU_REASON.ASK),
-    ...entries.filter((entry) => entry.reason !== FOR_YOU_REASON.ASK),
-  ];
 }
 
 /** The channel a place shows, or none for For you or a channel the chat no longer holds. */
-export function placeChannel(chat: ChatAnswer, place: ChatPlace): ChatChannel | undefined {
+export function placeChannel(
+  chat: Pick<ChatAnswer, "channels">,
+  place: ChatPlace,
+): ChatChannel | undefined {
   if (place.kind !== CHAT_PLACE.CHANNEL) return undefined;
-  return chat.channels.find((channel) => channel.id === place.channelId);
+  return channelsById(chat.channels).get(place.channelId);
 }
 
 /** Whether a mention names the member: a person by their account, an agent by its id. */
@@ -555,7 +718,10 @@ export function reachedIn(member: ChatMember, channel: ChatChannel): boolean {
 }
 
 /** The members a post in the channel reaches but the reader, each still here. */
-function toldIn(chat: ChatAnswer, channel: ChatChannel | undefined): readonly ChatMember[] {
+function toldIn(
+  chat: Pick<ChatAnswer, "self" | "members">,
+  channel: ChatChannel | undefined,
+): readonly ChatMember[] {
   return chat.members
     .filter((member) => !member.left && member.id !== chat.self)
     .filter((member) => channel === undefined || reachedIn(member, channel));
@@ -590,6 +756,12 @@ export interface ChatMentionables {
   readonly channels: readonly ChatMentionableChannel[];
 }
 
+/** What each roster offers, by the names it is read with and the channel posted in, kept on the roster. */
+const MENTIONABLES = new WeakMap<
+  ChatRoster,
+  WeakMap<ChatNames, Map<ChatChannel | undefined, ChatMentionables>>
+>();
+
 /**
  * What the composer offers to name: every member who has not left but the
  * reader, a person by their account and an agent by its id, each by name,
@@ -598,9 +770,23 @@ export interface ChatMentionables {
  * (`reachedIn`), so an agent is never named where it cannot hear it.
  */
 export function chatMentionables(
-  chat: ChatAnswer,
+  chat: ChatRoster,
   names: ChatNames,
   channel?: ChatChannel,
+): ChatMentionables {
+  const byNames = keptOn(MENTIONABLES, chat, () => new WeakMap());
+  const byChannel = keptOn(byNames, names, () => new Map());
+  const held = byChannel.get(channel);
+  if (held !== undefined) return held;
+  const made = mentionablesIn(chat, names, channel);
+  byChannel.set(channel, made);
+  return made;
+}
+
+function mentionablesIn(
+  chat: ChatRoster,
+  names: ChatNames,
+  channel: ChatChannel | undefined,
 ): ChatMentionables {
   const told = toldIn(chat, channel);
   const people = told.flatMap((member): readonly ChatMentionablePerson[] =>
@@ -636,7 +822,7 @@ export function chatMentionables(
  * message tells its other member alone, whatever it mentions.
  */
 export function toldPastBound(
-  chat: ChatAnswer,
+  chat: Pick<ChatAnswer, "self" | "members">,
   channel: ChatChannel,
   text: string,
   thread: readonly string[] = [],
@@ -653,13 +839,24 @@ export function toldPastBound(
 /** What the wire refuses in a dictation's word: a line break, or an angle bracket. */
 const REFUSED_KEYWORD = /[<>\r\n]/u;
 
+/** What each roster listens for, by the names it is read with, kept on the roster. */
+const KEYWORDS = new WeakMap<ChatRoster, WeakMap<ChatNames, readonly string[]>>();
+
 /**
  * The words a dictation in the chat is likely to say, which tell the
  * transcription model how to spell them: the name of every person and
  * agent still here, each agent's title, and every standing channel's name, each once
  * and within the wire's bounds, as `dictation-keywords.ts` holds a task's.
  */
-export function chatKeywords(chat: ChatAnswer, names: ChatNames): readonly string[] {
+export function chatKeywords(chat: ChatRoster, names: ChatNames): readonly string[] {
+  return keptOn(
+    keptOn(KEYWORDS, chat, () => new WeakMap()),
+    names,
+    () => keywordsOf(chat, names),
+  );
+}
+
+function keywordsOf(chat: ChatRoster, names: ChatNames): readonly string[] {
   const here = chat.members.filter((member) => !member.left);
   const named = [
     ...here.map((member) => member.name ?? ""),
