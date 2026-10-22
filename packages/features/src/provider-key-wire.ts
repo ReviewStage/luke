@@ -73,6 +73,45 @@ export const PROVIDER_KEY_STATUS = {
 
 export type ProviderKeyStatus = (typeof PROVIDER_KEY_STATUS)[keyof typeof PROVIDER_KEY_STATUS];
 
+/** A plan's status as it was written, with the reset its reached limit named, as a row (a `Date`) or a summary (epoch milliseconds) holds it. */
+export interface WrittenPlanStatus {
+  readonly status: ProviderKeyStatus;
+  readonly limitResetsAt?: Date | number | null | undefined;
+}
+
+/** A named reset in epoch milliseconds, or none. */
+function resetMillis(resetsAt: Date | number | null | undefined): number | undefined {
+  if (resetsAt === null || resetsAt === undefined) return undefined;
+  return typeof resetsAt === "number" ? resetsAt : resetsAt.getTime();
+}
+
+/**
+ * Where a plan stands at `now`, the one rule its harnesses, the service's
+ * answer, and the label read alike: its written status, but for a reached
+ * limit whose named reset has passed, which pays again, and reads as
+ * verified, because the provider that answered the limit took the
+ * credential. A limit with no reset named stands until a turn finds it
+ * lifted.
+ */
+export function planStanding(plan: WrittenPlanStatus, now: number): ProviderKeyStatus {
+  if (plan.status !== PROVIDER_KEY_STATUS.LIMIT_REACHED) return plan.status;
+  const resetsAt = resetMillis(plan.limitResetsAt);
+  return resetsAt !== undefined && resetsAt <= now
+    ? PROVIDER_KEY_STATUS.VERIFIED
+    : PROVIDER_KEY_STATUS.LIMIT_REACHED;
+}
+
+/**
+ * The named reset of a plan's limit that still stands at `now`, in epoch
+ * milliseconds: what a launch on the plan is refused until. Note that a
+ * limit with no reset named refuses nothing, because only a turn can find
+ * it lifted, and a turn needs a launch.
+ */
+export function planLimitResetsAt(plan: WrittenPlanStatus, now: number): number | undefined {
+  if (planStanding(plan, now) !== PROVIDER_KEY_STATUS.LIMIT_REACHED) return undefined;
+  return resetMillis(plan.limitResetsAt);
+}
+
 /**
  * Whether the organization behind a stored Anthropic key may run Anthropic's
  * fast mode, a research preview it grants organization by organization, as

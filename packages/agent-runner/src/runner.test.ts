@@ -3,12 +3,16 @@
  */
 
 import assert from "node:assert/strict";
-import { rmSync } from "node:fs";
+import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { Server } from "node:net";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { it } from "@effect/vitest";
 import { fakeHttpClientLayer } from "@luke/wire/testing";
-import { Cause, Duration, Effect, Exit, Fiber, Layer, Queue, Stream } from "effect";
+import { Cause, Deferred, Duration, Effect, Exit, Fiber, Layer, Queue, Stream } from "effect";
 import { TestClock } from "effect/testing";
+import { vi } from "vitest";
+import { claudeCodeLive } from "./claude-code.js";
 import { EventsUndelivered } from "./events.js";
 import { RunnerFailed } from "./launch.js";
 import { processTable } from "./processes.js";
@@ -568,7 +572,7 @@ it.effect("ends the launch, closing the CLI, when Luke refuses its bearer", () =
 );
 
 it.effect(
-  "starts the CLI with the plan's options, its bearer only in the MCP header, and both secrets denied to commands",
+  "starts the CLI with the plan's options, Luke's MCP server in process with no secret, and both secrets denied to commands",
   () =>
     Effect.gen(function* () {
       const luke = fakeLuke();
@@ -592,9 +596,9 @@ it.effect(
       assert.deepEqual(options.settingSources, ["project"]);
       assert.equal(options.permissionMode, "bypassPermissions");
       assert.equal(options.includePartialMessages, true);
-      assert.deepEqual(options.mcpServers, {
-        luke: { type: "http", url: CONFIG.mcpUrl, headers: { Authorization: `Bearer ${BEARER}` } },
-      });
+      const mcp = options.mcpServers?.luke;
+      assert.equal(mcp?.type, "sdk");
+      assert.ok(!JSON.stringify(options).includes(BEARER));
       assert.equal(options.sandbox?.enabled, true);
       assert.equal(options.sandbox?.failIfUnavailable, true);
       assert.equal(options.sandbox?.enableWeakerNestedSandbox, true);
@@ -606,6 +610,142 @@ it.effect(
       assert.ok(denied.includes(`${RUNNER_ENV.BEARER}:deny`));
       assert.equal(options.env?.[RUNNER_ENV.BEARER], undefined);
       assert.equal(options.env?.[RUNNER_ENV.CLAUDE_TOKEN], CLAUDE_TOKEN);
+    }),
+);
+
+/** The MCP route of a fake Luke: answers each request as its server does, notifications with 202, and keeps what each post carried. */
+function fakeMcpRoute(answer: "take" | "refuse" = "take") {
+  const calls: { authorization: string | null; body: unknown }[] = [];
+  const respond = async (_url: string, init: RequestInit) => {
+    const body = JSON.parse(String(init.body));
+    calls.push({ authorization: new Headers(init.headers).get("authorization"), body });
+    if (answer === "refuse") return new Response(null, { status: 401 });
+    if (!("id" in body)) return new Response(null, { status: 202 });
+    return Response.json({ jsonrpc: "2.0", id: body.id, result: { tools: [] } });
+  };
+  return { calls, respond };
+}
+
+/** The CLI's end of the control channel an SDK MCP server is connected to: what the server sent it, in order. */
+function fakeCliTransport() {
+  const sent: unknown[] = [];
+  const answered = Deferred.makeUnsafe<void>();
+  const transport = {
+    onmessage: undefined as
+      | ((message: { jsonrpc: "2.0"; method: string; id?: number }) => void)
+      | undefined,
+    start: async () => {},
+    close: async () => {},
+    send: async (message: unknown) => {
+      sent.push(message);
+      Deferred.doneUnsafe(answered, Exit.void);
+    },
+  };
+  return { transport, sent, answered };
+}
+
+/** A launch whose Luke answers its MCP route as `mcp` does, and the SDK server the CLI was handed, connected to a fake channel. */
+function launchWithMcp(mcp: ReturnType<typeof fakeMcpRoute>) {
+  return Effect.gen(function* () {
+    const luke = fakeLuke();
+    const routed: typeof luke = {
+      ...luke,
+      layer: fakeHttpClientLayer((url, init) =>
+        url === CONFIG.mcpUrl ? mcp.respond(url, init) : luke.respond(url, init),
+      ),
+    };
+    const launched = yield* launch(SHORT_TURN, routed);
+    yield* launched.write(CONFIG);
+    for (let step = 0; step < 500 && launched.cli.options === undefined; step += 1) {
+      yield* Effect.yieldNow;
+    }
+    const server = launched.cli.options?.mcpServers?.luke;
+    assert.ok(server?.type === "sdk" && "instance" in server);
+    const cli = fakeCliTransport();
+    // @ts-expect-error -- the fake stands in for the SDK's own control-channel transport.
+    yield* Effect.promise(() => server.instance.connect(cli.transport));
+    return { ...launched, channel: cli };
+  });
+}
+
+it.effect("relays the CLI's MCP messages to Luke under the runner's bearer, over no socket", () =>
+  Effect.gen(function* () {
+    const mcp = fakeMcpRoute();
+    const { channel, write, run } = yield* launchWithMcp(mcp);
+
+    channel.transport.onmessage?.({ jsonrpc: "2.0", method: "notifications/initialized" });
+    channel.transport.onmessage?.({ jsonrpc: "2.0", id: 1, method: "tools/list" });
+    yield* Deferred.await(channel.answered);
+    yield* write(FIRST_MESSAGE);
+    yield* Fiber.join(run);
+
+    assert.deepEqual(channel.sent, [{ jsonrpc: "2.0", id: 1, result: { tools: [] } }]);
+    assert.deepEqual(
+      mcp.calls.map(({ authorization }) => authorization),
+      [`Bearer ${BEARER}`, `Bearer ${BEARER}`],
+    );
+    assert.deepEqual(
+      mcp.calls.map(({ body }) => body),
+      [
+        { jsonrpc: "2.0", method: "notifications/initialized" },
+        { jsonrpc: "2.0", id: 1, method: "tools/list" },
+      ],
+    );
+  }),
+);
+
+it.effect("answers the CLI's MCP request with a JSON-RPC error where Luke refuses it", () =>
+  Effect.gen(function* () {
+    const { channel, write, run } = yield* launchWithMcp(fakeMcpRoute("refuse"));
+
+    channel.transport.onmessage?.({ jsonrpc: "2.0", id: 7, method: "tools/call" });
+    yield* Deferred.await(channel.answered);
+    yield* write(FIRST_MESSAGE);
+    yield* Fiber.join(run);
+
+    assert.deepEqual(channel.sent, [
+      { jsonrpc: "2.0", id: 7, error: { code: -32603, message: "Luke answered 401" } },
+    ]);
+  }),
+);
+
+it.effect(
+  "starts the claude process with no bearer or MCP address in its argv, and listens on no port",
+  () =>
+    Effect.gen(function* () {
+      const directory = mkdtempSync(join(tmpdir(), "agent-runner-argv-"));
+      const argvFile = join(directory, "argv");
+      const executable = join(directory, "claude");
+      // A CLI that writes down the argv it was started with and exits.
+      writeFileSync(executable, `#!/bin/sh\nprintf '%s\\0' "$@" > '${argvFile}'\n`);
+      chmodSync(executable, 0o755);
+      const listen = vi.spyOn(Server.prototype, "listen");
+      const luke = fakeLuke();
+      const stdin = yield* Queue.unbounded<string, Cause.Done>();
+      const run = yield* runAgent({ lines: Stream.fromQueue(stdin), env: ENV }).pipe(
+        Effect.scoped,
+        Effect.provide(
+          Layer.mergeAll(
+            claudeCodeLive,
+            luke.layer,
+            fakeAppServer([]).layer,
+            processTable(UNREAD_PROC, RUNNER_PID),
+          ),
+        ),
+        Effect.forkScoped,
+      );
+      yield* Queue.offer(stdin, JSON.stringify({ ...CONFIG, executable, cwd: directory }));
+      yield* Fiber.await(run);
+      const listened = listen.mock.calls.length;
+      vi.restoreAllMocks();
+
+      const argv = readFileSync(argvFile, "utf8").split("\0");
+      rmSync(directory, { recursive: true });
+      assert.ok(argv.includes("--input-format"), "the stub CLI was started");
+      assert.ok(argv.every((argument) => !argument.includes(BEARER)));
+      assert.ok(argv.every((argument) => !argument.includes(CONFIG.mcpUrl)));
+      assert.ok(!argv.includes("--mcp-config"));
+      assert.equal(listened, 0, "the launch opened no listening socket");
     }),
 );
 

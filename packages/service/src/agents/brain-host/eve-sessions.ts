@@ -251,15 +251,21 @@ export const RUNTIME_REFUSAL = {
 
 export type RuntimeRefusal = (typeof RUNTIME_REFUSAL)[keyof typeof RUNTIME_REFUSAL];
 
-/** A call that failed: the status for the operator, and the plan's or the runtime's refusal where that is why. */
-interface EveFailed {
-  readonly outcome: typeof EVE_SEND_OUTCOME.FAILED;
-  readonly status: number;
-  readonly planRefusal?: PlanRefusal;
+/**
+ * A call that failed: the status for the operator, and the plan's or the
+ * runtime's refusal where that is why. The one shape a failed open or send
+ * has, here and as the native relay reads it off the wire.
+ */
+export const EveFailedSchema = EffectSchema.Struct({
+  outcome: EffectSchema.Literal(EVE_SEND_OUTCOME.FAILED),
+  status: EffectSchema.Number,
+  planRefusal: EffectSchema.optionalKey(EffectSchema.Literals(Object.values(PLAN_REFUSAL))),
   /** When the plan's reached limit resets, in epoch milliseconds, where the provider said. */
-  readonly planResetsAt?: number;
-  readonly runtimeRefusal?: RuntimeRefusal;
-}
+  planResetsAt: EffectSchema.optionalKey(EffectSchema.Number),
+  runtimeRefusal: EffectSchema.optionalKey(EffectSchema.Literals(Object.values(RUNTIME_REFUSAL))),
+});
+
+export type EveFailed = typeof EveFailedSchema.Type;
 
 type EveOpened =
   | { readonly outcome: typeof EVE_SEND_OUTCOME.ACCEPTED; readonly sessionId: string }

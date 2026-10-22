@@ -202,7 +202,7 @@ const GONE_REFUSALS: ReadonlySet<string> = new Set([
 /**
  * What sent a notice, as the row keeps it: a person by their account, and
  * an agent by its name, its title or else its model's id
- * as `message_agent` names one, and, where the member still names one the
+ * as `list_agents` names one, and, where the member still names one the
  * poster reaches, its agent and the model it runs on as it posts, which its
  * line's mark is drawn by for good.
  */

@@ -1,3 +1,4 @@
+import { CODEX_ERROR_INFO, codexErrorKind } from "@luke/agent-runner/protocol";
 import { CODEX_LUKE_MCP_SERVER, CODEX_TOOL } from "@luke/features/agent-tools";
 import { redactCredentials } from "@luke/features/credential-redaction";
 import { type UnparsedWireValue, type WireValue, WireValueSchema } from "@luke/wire";
@@ -78,22 +79,31 @@ const TURN_FAILED = "failed";
 const TURN_COMPLETED = "completed";
 
 /**
- * The words of a failed turn that say how OpenAI found the plan, as P22
- * records them: Codex's `codexErrorInfo` word or a part of one of OpenAI's
- * codes. The first of these a failure holds names its status, so an account
- * not eligible is said before a sign-in refused, and that before a limit.
+ * The plan's refusals in the order a failure says them: an account not
+ * eligible before a sign-in refused, and that before a limit, so where a
+ * failure names two, the graver is its status.
  */
-const PLAN_REFUSAL_WORDS: readonly {
-  readonly status: PlanStatus;
-  readonly words: readonly string[];
-}[] = [
-  { status: PLAN_STATUS.INELIGIBLE, words: ["user_not_eligible"] },
-  { status: PLAN_STATUS.INVALID, words: ["unauthorized", "invalid_user"] },
-  { status: PLAN_STATUS.LIMIT_REACHED, words: ["usageLimitExceeded", "usage_limit"] },
+const PLAN_REFUSAL_ORDER: readonly PlanStatus[] = [
+  PLAN_STATUS.INELIGIBLE,
+  PLAN_STATUS.INVALID,
+  PLAN_STATUS.LIMIT_REACHED,
 ];
 
-/** The codes OpenAI answers a ChatGPT plan's refusal with, such as `subscription_sharing_usage_limit_exceeded`. */
-const PLAN_REFUSAL_CODE = /\b(?:subscription_sharing|chatpass_v2)_[a-z_]+\b/g;
+/**
+ * The codes OpenAI answers a ChatGPT plan's refusal with, such as
+ * `subscription_sharing_usage_limit_exceeded`: a prefix and a reason, which
+ * a turn's failure quotes in its message. Codex names no word of its own
+ * for an account not eligible (P22 recorded `codexErrorInfo: null`), so
+ * that refusal is read from OpenAI's reason alone.
+ */
+const PLAN_REFUSAL_CODE = /\b(subscription_sharing|chatpass_v2)_([a-z_]+)\b/g;
+
+/** OpenAI's reasons that say how it found the plan, as P22 records them, each with its status. */
+const PLAN_REASON_STATUS: ReadonlyMap<string, PlanStatus> = new Map([
+  ["user_not_eligible", PLAN_STATUS.INELIGIBLE],
+  ["invalid_user", PLAN_STATUS.INVALID],
+  ["usage_limit_exceeded", PLAN_STATUS.LIMIT_REACHED],
+]);
 
 const readEnvelope = Schema.decodeUnknownOption(
   Schema.Struct({ method: Schema.String, params: Schema.Unknown }),
@@ -450,6 +460,43 @@ function usageMoments(params: unknown): readonly NativeMoment[] {
   });
 }
 
+/**
+ * How a turn's `codexErrorInfo` found the plan: a usage limit, or a sign-in
+ * not accepted; every other kind says nothing of the plan. A kind this pin
+ * does not name says nothing either.
+ */
+function planStatusOfInfo(info: unknown): PlanStatus | undefined {
+  const kind = codexErrorKind(info);
+  if (kind === undefined) return undefined;
+  switch (kind) {
+    case CODEX_ERROR_INFO.USAGE_LIMIT_EXCEEDED:
+      return PLAN_STATUS.LIMIT_REACHED;
+    case CODEX_ERROR_INFO.UNAUTHORIZED:
+      return PLAN_STATUS.INVALID;
+    case CODEX_ERROR_INFO.CONTEXT_WINDOW_EXCEEDED:
+    case CODEX_ERROR_INFO.SESSION_BUDGET_EXCEEDED:
+    case CODEX_ERROR_INFO.RATE_LIMIT_EXCEEDED:
+    case CODEX_ERROR_INFO.FLEX_UNAVAILABLE:
+    case CODEX_ERROR_INFO.SERVER_OVERLOADED:
+    case CODEX_ERROR_INFO.CYBER_POLICY:
+    case CODEX_ERROR_INFO.MISALIGNMENT_POLICY_VIOLATION:
+    case CODEX_ERROR_INFO.TOO_MANY_DENIALS:
+    case CODEX_ERROR_INFO.HTTP_CONNECTION_FAILED:
+    case CODEX_ERROR_INFO.RESPONSE_STREAM_CONNECTION_FAILED:
+    case CODEX_ERROR_INFO.INTERNAL_SERVER_ERROR:
+    case CODEX_ERROR_INFO.BAD_REQUEST:
+    case CODEX_ERROR_INFO.THREAD_ROLLBACK_FAILED:
+    case CODEX_ERROR_INFO.SANDBOX_ERROR:
+    case CODEX_ERROR_INFO.RESPONSE_STREAM_DISCONNECTED:
+    case CODEX_ERROR_INFO.RESPONSE_TOO_MANY_FAILED_ATTEMPTS:
+    case CODEX_ERROR_INFO.ACTIVE_TURN_NOT_STEERABLE:
+    case CODEX_ERROR_INFO.OTHER:
+      return undefined;
+    default:
+      return kind satisfies never;
+  }
+}
+
 /** Codex's own word for why a turn failed: `usageLimitExceeded`, or `httpConnectionFailed 401`. */
 function errorInfoWords(info: unknown): readonly string[] {
   if (Predicate.isString(info)) return [info];
@@ -482,17 +529,20 @@ function turnCompletedMoments(params: unknown): readonly NativeMoment[] {
   }
   const error = read.value.turn.error ?? undefined;
   const said = [error?.message ?? "", error?.additionalDetails ?? ""].join(" ");
-  const codes = [...new Set(said.match(PLAN_REFUSAL_CODE) ?? [])];
+  const quoted = [...said.matchAll(PLAN_REFUSAL_CODE)];
+  const codes = [...new Set(quoted.map(([code]) => code))];
   // Note that OpenAI's codes are its own words, never a secret, though a credential's redaction would take one for it.
   const info = errorInfoWords(error?.codexErrorInfo).map((word) => redactCredentials(word));
   const words = [...info, ...codes];
   const failure = words.length === 0 ? "turn_failed" : words.join(" ");
-  const plan = PLAN_REFUSAL_WORDS.find((each) =>
-    each.words.some((part) => words.some((word) => word.includes(part))),
-  );
+  const found = new Set([
+    planStatusOfInfo(error?.codexErrorInfo),
+    ...quoted.map(([, , reason]) => PLAN_REASON_STATUS.get(reason ?? "")),
+  ]);
+  const plan = PLAN_REFUSAL_ORDER.find((status) => found.has(status));
   return [
     { kind: NATIVE_MOMENT.RESULT, failure: failure.slice(0, FAILURE_CHARS) },
-    ...(plan === undefined ? [] : [{ kind: NATIVE_MOMENT.PLAN, status: plan.status } as const]),
+    ...(plan === undefined ? [] : [{ kind: NATIVE_MOMENT.PLAN, status: plan } as const]),
   ];
 }
 

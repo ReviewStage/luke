@@ -448,11 +448,17 @@ function runnerTags(sessionId: string, agentId: string, runner: TaggedRunner) {
   };
 }
 
-/** Whether the sandbox is up in the session its runner was started in, and that runner has not exited. */
+/**
+ * Whether the sandbox is up in the session its runner was started in, and
+ * that runner has not exited. Only an exit Vercel read, or a command it no
+ * longer knows, says the runner is down; Vercel not answering fails the
+ * call, so a passing outage neither relaunches a runner beside one still
+ * running nor drops a Stop.
+ */
 function liveRunner(
   api: VercelSandboxApi,
   sandbox: ListedSandbox,
-): Effect.Effect<TaggedRunner | undefined> {
+): Effect.Effect<TaggedRunner | undefined, SandboxUnavailable> {
   const runner = taggedRunner(sandbox);
   if (
     runner === undefined ||
@@ -461,10 +467,9 @@ function liveRunner(
   ) {
     return Effect.succeed(undefined);
   }
-  return api.commandExit(runner.sandboxSessionId, runner.commandId).pipe(
-    Effect.map((exit) => (exit === null ? runner : undefined)),
-    Effect.orElseSucceed(() => undefined),
-  );
+  return api
+    .commandExit(runner.sandboxSessionId, runner.commandId)
+    .pipe(Effect.map((exit) => (exit === null ? runner : undefined)));
 }
 
 /** The session's sandbox, the one its tag names: the newest, which is listed first (`listTagged`). */
@@ -538,6 +543,16 @@ function failedStatus(failure: { readonly _tag: string }): number {
   return failure instanceof SandboxUnavailable
     ? (failure.status ?? FAILED_STATUS.UNAVAILABLE)
     : FAILED_STATUS.UNAVAILABLE;
+}
+
+/**
+ * A failure as the log says it: a sandbox's own words, which name the call
+ * that failed, its status, and Vercel's error or the cause's, never what was
+ * sent; the kind alone for any other, since a store failure's message may
+ * name a statement.
+ */
+function describeFailure(failure: { readonly _tag: string }): string {
+  return failure instanceof SandboxUnavailable ? failure.message : failure._tag;
 }
 
 /** The sessions for one account on the harness given, over the calling fiber's services. */
@@ -663,11 +678,11 @@ export const runnerSessions = <
       content: runnerContent(message.message, harness.name),
     });
 
-    /** A failure as the log says it and the caller reads it: the kind alone, never a value. */
+    /** A failure as the log says it and the caller reads it: a refusal's reason, a sandbox's own words, the kind alone for any other. */
     const failed = (call: string) => (failure: { readonly _tag: string }) =>
       Effect.as(
         Effect.logWarning(
-          `A ${harness.name} ${call} failed: ${failure instanceof LaunchRefused ? failure.reason : failure._tag}`,
+          `A ${harness.name} ${call} failed: ${failure instanceof LaunchRefused ? failure.reason : describeFailure(failure)}`,
         ),
         {
           outcome: EVE_SEND_OUTCOME.FAILED,
@@ -681,12 +696,15 @@ export const runnerSessions = <
         } as const,
       );
 
-    /** A cancel's or a reset's failure, as the log says it: the kind alone. */
+    /** A cancel's or a reset's failure, as the log says it: a sandbox's own words, the kind alone for any other. */
     const unavailable = (call: string) => (failure: { readonly _tag: string }) =>
-      Effect.as(Effect.logWarning(`A ${harness.name} ${call} failed: ${failure._tag}`), {
-        outcome: "failed" as const,
-        status: failedStatus(failure),
-      });
+      Effect.as(
+        Effect.logWarning(`A ${harness.name} ${call} failed: ${describeFailure(failure)}`),
+        {
+          outcome: "failed" as const,
+          status: failedStatus(failure),
+        },
+      );
 
     /**
      * A new sandbox opened under the session given, the agent's repository
@@ -954,7 +972,9 @@ export const runnerEnded = Effect.fn("web/runnerEnded")(function* (ending: Runne
   // Read last, just before the stop, so a developer who opened a Terminal during the turn keeps the sandbox.
   if (yield* sandboxHeld(ending.target.conversationId, yield* DateTime.nowAsDate))
     return RUNNER_ENDED.HELD;
-  yield* Effect.ignore(api.updateNetworkPolicy(running, OPEN_INTERNET_POLICY));
+  // The credential comes off first, and a sandbox it would not come off is left up rather than
+  // stopped with it: the call fails, and the sweep (`native-sandbox-sweep.ts`) tries again.
+  yield* api.updateNetworkPolicy(running, OPEN_INTERNET_POLICY);
   yield* api.stopSession(running);
   return RUNNER_ENDED.STOPPED;
 });

@@ -32,7 +32,18 @@ import {
   PROVIDER_KEY_STATUS,
 } from "@luke/features/provider-key-wire";
 import { fakeHttpClientLayer } from "@luke/wire/testing";
-import { Clock, DateTime, Duration, Effect, Fiber, Layer, Option, Redacted, Result } from "effect";
+import {
+  Clock,
+  DateTime,
+  Duration,
+  Effect,
+  Fiber,
+  Layer,
+  Logger,
+  Option,
+  Redacted,
+  Result,
+} from "effect";
 import { TestClock } from "effect/testing";
 import { afterEach, vi } from "vitest";
 import { TURN_ORIGIN } from "../../core.js";
@@ -952,6 +963,34 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
   );
 
   it.effect(
+    "a runner Vercel would not read is neither relaunched beside itself nor stopped in silence",
+    () =>
+      Effect.gen(function* () {
+        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+        const api = runnerSandboxApi();
+        const { userId, agent } = yield* openAgent;
+        const sessions = yield* sessionsFor(userId, { next: 0 }).pipe(
+          Effect.provide(services(api)),
+        );
+        const opened = yield* sessions.open(message(agent, "Fix the invitations."));
+        assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+        const turnId = yield* turnUnderWay(userId, agent);
+        const before = linesOf(api.commands[0]).length;
+        api.failCommandReads.remaining = 3;
+
+        const sent = yield* sessions.send(opened.sessionId, message(agent, "Again."));
+        const cancelled = yield* sessions.cancel(opened.sessionId, turnId);
+        const retuned = yield* sessions.retune(opened.sessionId, agent.conversationId);
+
+        assert.equal(sent.outcome, EVE_SEND_OUTCOME.FAILED);
+        assert.deepEqual(cancelled, { outcome: "failed", status: 503 });
+        assert.equal(retuned, RUNNER_CHOICE.FAILED);
+        assert.equal(api.commands.length, 1);
+        assert.equal(linesOf(api.commands[0]).length, before);
+      }),
+  );
+
+  it.effect(
     "a message waiting behind another call's lease is interrupted at once, holding nothing and launching nothing",
     () =>
       Effect.gen(function* () {
@@ -988,6 +1027,33 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         assert.equal(yield* claimCodingAgentRunnerLease(agent.id, randomUUID(), now, until), false);
         yield* releaseCodingAgentRunnerLease(agent.id, elsewhere);
         assert.equal(yield* claimCodingAgentRunnerLease(agent.id, randomUUID(), now, until), true);
+      }),
+  );
+
+  it.effect(
+    "a launch's end whose credential would not come off the firewall leaves the sandbox up for the sweep",
+    () =>
+      Effect.gen(function* () {
+        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+        const api = runnerSandboxApi();
+        const { userId, agent } = yield* openAgent;
+        const sessions = yield* sessionsFor(userId, { next: 0 }).pipe(
+          Effect.provide(services(api)),
+        );
+        const opened = yield* sessions.open(message(agent, "Fix the invitations."));
+        assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+        api.failPolicy.remaining = 1;
+
+        const ended = yield* Effect.result(
+          runnerEnded({
+            target: { userId, conversationId: agent.conversationId },
+            sessionId: opened.sessionId,
+            sequence: 5,
+          }).pipe(Effect.provide(api.layer)),
+        );
+
+        assert.ok(Result.isFailure(ended));
+        assert.equal(api.sandboxes[0]?.status, "running");
       }),
   );
 
@@ -1084,6 +1150,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         assert.ok(first !== undefined);
         first.exitCode = 0;
         api.failStdin.remaining = 1;
+        api.failStdin.status = 400;
 
         const failed = yield* sessions.send(opened.sessionId, message(agent, "Again."));
         const retried = yield* sessions.send(opened.sessionId, message(agent, "Again."));
@@ -1095,6 +1162,70 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         const [config, line] = linesOf(api.commands[2]) as [ClaudeCodeConfig, InputLine];
         assert.equal(config.harness, RUNNER_HARNESS.CLAUDE_CODE);
         assert.equal(line.type, INPUT_LINE.MESSAGE);
+      }),
+  );
+
+  it.effect("a message whose stdin write Vercel refused in passing is written again", () =>
+    Effect.gen(function* () {
+      vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+      const api = runnerSandboxApi();
+      const { userId, agent } = yield* openAgent;
+      const sessions = yield* sessionsFor(userId, { next: 0 }).pipe(Effect.provide(services(api)));
+      const opened = yield* sessions.open(message(agent, "Fix the invitations."));
+      assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+      api.failStdin.remaining = 1;
+      api.failStdin.status = 503;
+
+      const sending = yield* Effect.forkChild(
+        sessions.send(opened.sessionId, message(agent, "Now the emails.")),
+      );
+      yield* TestClock.adjust(Duration.seconds(5));
+      const sent = yield* Fiber.join(sending);
+
+      assert.equal(sent.outcome, EVE_SEND_OUTCOME.ACCEPTED);
+      assert.equal(api.commands.length, 1);
+      const last = (linesOf(api.commands[0]) as InputLine[]).at(-1);
+      assert.ok(last?.type === INPUT_LINE.MESSAGE);
+      assert.deepEqual(last.content, [{ type: "text", text: "Now the emails." }]);
+    }),
+  );
+
+  it.effect(
+    "a launch Vercel refused logs the call, its status, and Vercel's error, and no secret",
+    () =>
+      Effect.gen(function* () {
+        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+        const api = runnerSandboxApi();
+        const { userId, agent } = yield* openAgent;
+        const logged: string[] = [];
+        const logger = Logger.layer([
+          Logger.make((options) => {
+            logged.push([options.message].flat().map(String).join(" "));
+          }),
+        ]);
+        const sessions = yield* sessionsFor(userId, { next: 0 }).pipe(
+          Effect.provide(Layer.merge(services(api), logger)),
+        );
+        api.failStdin.remaining = 1;
+        api.failStdin.status = 400;
+
+        const opened = yield* sessions
+          .open(message(agent, "Fix the invitations."))
+          .pipe(Effect.provide(logger));
+
+        assert.equal(opened.outcome, EVE_SEND_OUTCOME.FAILED);
+        assert.ok(
+          logged.includes(
+            "A Claude Code open failed: Vercel Sandbox stdin answered 400: stdin_refused: the command's stdin was refused",
+          ),
+          logged.join("\n"),
+        );
+        const bearer = api.commands[0]?.env[RUNNER_ENV.BEARER];
+        assert.ok(bearer !== undefined);
+        const written = logged.join("\n");
+        for (const secret of [TEST_KEY, bearer, fixtureToken()]) {
+          assert.equal(written.includes(secret), false);
+        }
       }),
   );
 

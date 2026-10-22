@@ -16,6 +16,9 @@ import { dayAndTimeText } from "./task-time.js";
  * does not, its reached limit's reset among it. Synthetic keys throughout.
  */
 
+/** The time each label is read at: before every reset the tests name. */
+const NOW = Date.UTC(2026, 9, 21, 12);
+
 const keysWith = (status: ProviderKeyStatus, limitResetsAt?: number): ProviderKeysAnswer => ({
   keys: [],
   subscriptions: [
@@ -33,19 +36,19 @@ const keysWith = (status: ProviderKeyStatus, limitResetsAt?: number): ProviderKe
 
 test("a plan that serves, one not yet answered, or one the reader can't read the status of says it is in use, plainly", () => {
   const plain = { words: "Using ChatGPT plan", attention: false };
-  assert.deepEqual(chatGptPlanLabel(keysWith(PROVIDER_KEY_STATUS.VERIFIED)), plain);
-  assert.deepEqual(chatGptPlanLabel(keysWith(PROVIDER_KEY_STATUS.UNVERIFIED)), plain);
-  assert.deepEqual(chatGptPlanLabel(undefined), plain);
+  assert.deepEqual(chatGptPlanLabel(keysWith(PROVIDER_KEY_STATUS.VERIFIED), NOW), plain);
+  assert.deepEqual(chatGptPlanLabel(keysWith(PROVIDER_KEY_STATUS.UNVERIFIED), NOW), plain);
+  assert.deepEqual(chatGptPlanLabel(undefined, NOW), plain);
 });
 
 test("a plan that can't serve says why, a reached limit with its reset where OpenAI named one", () => {
   const resetsAt = Date.UTC(2026, 9, 22, 9);
   assert.deepEqual(
     [
-      chatGptPlanLabel(keysWith(PROVIDER_KEY_STATUS.LIMIT_REACHED, resetsAt)),
-      chatGptPlanLabel(keysWith(PROVIDER_KEY_STATUS.LIMIT_REACHED)),
-      chatGptPlanLabel(keysWith(PROVIDER_KEY_STATUS.INVALID)),
-      chatGptPlanLabel(keysWith(PROVIDER_KEY_STATUS.INELIGIBLE)),
+      chatGptPlanLabel(keysWith(PROVIDER_KEY_STATUS.LIMIT_REACHED, resetsAt), NOW),
+      chatGptPlanLabel(keysWith(PROVIDER_KEY_STATUS.LIMIT_REACHED), NOW),
+      chatGptPlanLabel(keysWith(PROVIDER_KEY_STATUS.INVALID), NOW),
+      chatGptPlanLabel(keysWith(PROVIDER_KEY_STATUS.INELIGIBLE), NOW),
     ],
     [
       { words: `Usage limit reached · Resets ${dayAndTimeText(resetsAt)}`, attention: true },
@@ -76,13 +79,13 @@ test("a Claude Code agent's label says the Claude plan pays, and its status wher
   const resetsAt = Date.UTC(2026, 9, 21, 15, 40);
   assert.deepEqual(
     [
-      claudePlanLabel(claudeKeysWith(PROVIDER_KEY_STATUS.VERIFIED)),
-      claudePlanLabel(undefined),
-      claudePlanLabel(claudeKeysWith(PROVIDER_KEY_STATUS.UNVERIFIED)),
-      claudePlanLabel(claudeKeysWith(PROVIDER_KEY_STATUS.LIMIT_REACHED, resetsAt)),
-      claudePlanLabel(claudeKeysWith(PROVIDER_KEY_STATUS.LIMIT_REACHED)),
-      claudePlanLabel(claudeKeysWith(PROVIDER_KEY_STATUS.INVALID)),
-      claudePlanLabel({ keys: [] }),
+      claudePlanLabel(claudeKeysWith(PROVIDER_KEY_STATUS.VERIFIED), NOW),
+      claudePlanLabel(undefined, NOW),
+      claudePlanLabel(claudeKeysWith(PROVIDER_KEY_STATUS.UNVERIFIED), NOW),
+      claudePlanLabel(claudeKeysWith(PROVIDER_KEY_STATUS.LIMIT_REACHED, resetsAt), NOW),
+      claudePlanLabel(claudeKeysWith(PROVIDER_KEY_STATUS.LIMIT_REACHED), NOW),
+      claudePlanLabel(claudeKeysWith(PROVIDER_KEY_STATUS.INVALID), NOW),
+      claudePlanLabel({ keys: [] }, NOW),
     ],
     [
       { words: "Using your Claude plan", attention: false },
@@ -95,6 +98,24 @@ test("a Claude Code agent's label says the Claude plan pays, and its status wher
       { words: "Claude plan limit reached", attention: true },
       { words: "Claude plan needs reconnecting in Settings", attention: true },
       { words: "Claude plan needs reconnecting in Settings", attention: true },
+    ],
+  );
+});
+
+test("a reached limit whose reset has passed reads as the plan serving again, for either harness", () => {
+  const resetsAt = Date.UTC(2026, 9, 21, 15, 40);
+  const after = resetsAt + 60_000;
+  assert.deepEqual(
+    [
+      chatGptPlanLabel(keysWith(PROVIDER_KEY_STATUS.LIMIT_REACHED, resetsAt), after),
+      claudePlanLabel(claudeKeysWith(PROVIDER_KEY_STATUS.LIMIT_REACHED, resetsAt), after),
+      chatGptPlanLabel(keysWith(PROVIDER_KEY_STATUS.LIMIT_REACHED), after),
+    ],
+    [
+      { words: "Using ChatGPT plan", attention: false },
+      { words: "Using your Claude plan", attention: false },
+      // A limit with no reset named stands until a turn finds it lifted.
+      { words: "Usage limit reached", attention: true },
     ],
   );
 });

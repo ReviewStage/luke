@@ -1,5 +1,4 @@
 import type { DatabaseServices } from "@luke/database/core/query";
-import { chatEnabledFor } from "@luke/database/models/account-store";
 import {
   archiveIdleCodingAgent,
   awaitingLinesOfReached,
@@ -37,15 +36,15 @@ import {
   type TaskChanges,
   updateTask,
 } from "@luke/database/models/task-store";
-import type { LineSender, StoreWriter } from "@luke/database/models/writer";
+import type { StoreWriter } from "@luke/database/models/writer";
 import type { StoredArchive } from "@luke/database/schemas/coding-agent";
-import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import { START_NOTE_HEADING } from "@luke/features/agent-replay";
 import {
   runtimeChoiceRefusal,
   runtimeChoiceRefusalWords,
   runtimeModels,
 } from "@luke/features/agent-runtime-models";
+import { CHAT_TOOL } from "@luke/features/chat-wire";
 import {
   CODING_AGENT_ARCHIVER,
   CODING_AGENT_BOUNDS,
@@ -132,7 +131,6 @@ import {
   lineAwaitsTurn,
   startedBlank,
 } from "./coder-host/status.js";
-import { steerCodingAgent } from "./coder-host/steer.js";
 import { cancelledTurn, standingsOf as turnStandingsOf } from "./coder-host/stop.js";
 import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
 import {
@@ -171,15 +169,15 @@ import {
 } from "./written-mentions.js";
 
 /**
- * coding-agent-tools.ts -- the tools every agent reaches the workspace's coding agents by: list them, read one's progress, message one, start one.
+ * coding-agent-tools.ts -- the tools every agent reaches the workspace's coding agents by: list them, read one's progress, start one.
  *
  * Luke on a call and every coding agent are offered the same `list_agents`,
- * `read_agent`, `message_agent`, and `start_agent`, one implementation each;
+ * `read_agent`, and `start_agent`, one implementation each;
  * the caller is what differs (`AgentCaller`):
  * Luke acting for the member on the call, on the call's task, or a coding
  * agent acting for its starter, on its own task, which the host read from
- * the session it admitted and never from the call. A list, a read, and a
- * message reach any agent of the caller's workspace, on any task or none
+ * the session it admitted and never from the call. A list and a read
+ * reach any agent of the caller's workspace, on any task or none
  * and by any member, read on the caller's standing on every call
  * (`workspace-agents.ts`); an agent of another workspace is none of them,
  * even one the member is also in. A list names each agent's task, narrows
@@ -194,16 +192,9 @@ import {
  * aloud, so his tail's entries are cut close and his words for the tool say
  * so; a coding agent reads its tail as text, to learn why an agent went
  * quiet, so each of its entries keeps more, and it may ask for a longer
- * tail, to a bound. A message takes the one
- * path the message box's does (`coder-host/steer.ts`), under the key eve
- * gave the tool call, so a call eve runs again after a lost answer sends
- * once, and answers as soon as the session took it, never waiting on a
- * reply; an archived agent takes none and is woken by none. Luke's line is
- * kept as Luke's; a coding agent's under its own name
- * (`MESSAGE_SENDER.AGENT`), its words opening with who sent it and the id
- * to answer it by, written here rather than by the model, so the receiving
- * agent reads it as a colleague's word and neither the developer's nor
- * Luke's. A start takes the one path the Start button's does
+ * tail, to a bound. One agent messages another in a direct message of
+ * the workspace's chat (`coder-host/chat.ts`), which `message_agent` once
+ * did here. A start takes the one path the Start button's does
  * (`coder-host/start.ts`), on the caller's own task or another of its workspace, under the
  * same key, so a call run again starts no second agent: the plan as the
  * agent's brief, or the prompt in its place, and the note the call carries
@@ -213,7 +204,7 @@ import {
  * lists is one a start takes, with its checkout cloned at the branch named
  * where one is, which GitHub must hold. An agent a
  * coding agent starts is told in that note which agent started it and how
- * to report back, and its choice leaves the member's default as it stood.
+ * to report back, in their task's chat or a direct message to it, and its choice leaves the member's default as it stood.
  * A start may name a new task instead, which is made as the member the
  * caller acts for would make it from the sidebar: in the caller's workspace,
  * owned by that member, with an empty plan, on the repository the caller
@@ -288,21 +279,9 @@ const CODING_AGENT_TOOL_BOUNDS = {
   ACTIVITY_CHARS: 160,
 } as const;
 
-/**
- * The room the heading a coding agent's message opens with takes
- * (`agentLine`), which its words leave free: a message's words may run to a
- * member's bound, as Luke's do, since he passes on the developer's own, but
- * a coding agent's whole line is held to that bound as it is composed, so
- * the line the other agent receives is never longer than one a member could
- * send.
- */
-const AGENT_HEADING_ROOM_CHARS = 1_000;
-
 /** Why a call ran nothing, or sent nothing, in words the model can act on. */
 export const CODING_AGENT_TOOL_REFUSAL = {
-  UNREADABLE:
-    `Not run: name the agent by the id ${AGENT_TOOL.LIST_AGENTS} answered, and a message as text of at ` +
-    `most ${CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS} characters.`,
+  UNREADABLE: `Not run: name the agent by the id ${AGENT_TOOL.LIST_AGENTS} answered.`,
   UNREADABLE_FILTER: "Not run: narrow the list by a taskId, by thisTask, or by neither.",
   UNREADABLE_TASKS:
     "Not run: narrow the tasks by words of their name, by a status " +
@@ -311,36 +290,7 @@ export const CODING_AGENT_TOOL_REFUSAL = {
   NO_AGENT: `Not run: no coding agent of your workspace has that id; ${AGENT_TOOL.LIST_AGENTS} names them.`,
   NO_WORKSPACE:
     "Not run: your workspace could not be read for you, so no agent is reached from here.",
-  SELF: "Not sent: that id is your own; message another agent.",
-  TOO_LONG:
-    `Not sent: with the heading naming you, the message runs over ${CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS} ` +
-    `characters; keep a message of yours under ${CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS - AGENT_HEADING_ROOM_CHARS}.`,
   STORE: "Not run: the agents could not be read just now. The call may be made again.",
-  NO_SERVICE: "Not sent: this deployment cannot reach the coding agents' service.",
-  NOT_REACHABLE:
-    "Not sent: the GitHub installation connected to the workspace no longer reaches that agent's repository.",
-  NOT_READY:
-    "Not sent: that agent's session is still coming up; the same message a moment later is taken.",
-  RETIRED:
-    "Not sent: that agent's session has ended for good, so nothing reaches it; it is idle now, and reads as failed " +
-    "where it was at work, so it may be archived, and only a new agent goes on from here.",
-  UNAVAILABLE: "Not sent: the service could not take the message just now.",
-  ARCHIVED:
-    "Not sent: that agent's task is archived, so its agents take no message until a member unarchives it.",
-  AGENT_ARCHIVED:
-    "Not sent: that agent is archived, so it takes no message and is not woken until a member unarchives it.",
-  IMAGE_PREPARING:
-    "Not sent: that agent's sandbox image is still being prepared; the same message in a minute or two is taken.",
-  NATIVE_NOT_HERE:
-    "Not sent: that agent runs on Claude Code or Codex, which cannot be reached from here yet; a member reaches it from the agent's own tab.",
-  PLAN_SIGNED_OUT:
-    "Not sent: the plan that pays for that agent is signed out, so it cannot run until its starter signs in again in Settings; it never turns to another payer.",
-  PLAN_UNREACHABLE:
-    "Not sent: the provider of the plan that pays for that agent did not answer; the same message in a minute or two may be taken.",
-  PLAN_LIMIT_REACHED:
-    "Not sent: the plan that pays for that agent has reached its usage limit; it waits until the limit resets, and never turns to another payer.",
-  PLAN_INELIGIBLE:
-    "Not sent: the plan that pays for that agent is not eligible to run it, its provider said; it never turns to another payer.",
 } as const;
 
 /** How the task tools word a priority. */
@@ -493,21 +443,6 @@ const START_REFUSAL_WORDS: ReadonlyMap<string, string> = new Map([
   [HOSTED_API_ERROR.AGENT_PLAN_INELIGIBLE, START_CODING_AGENT_REFUSAL.PLAN_INELIGIBLE],
 ]);
 
-/** The refusal's sentence for each hosted refusal a steer may answer; any other is the service down. */
-const REFUSAL_WORDS: ReadonlyMap<string, string> = new Map([
-  [HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE, CODING_AGENT_TOOL_REFUSAL.NOT_REACHABLE],
-  [HOSTED_API_ERROR.AGENT_NOT_READY, CODING_AGENT_TOOL_REFUSAL.NOT_READY],
-  [HOSTED_API_ERROR.AGENT_RETIRED, CODING_AGENT_TOOL_REFUSAL.RETIRED],
-  [HOSTED_API_ERROR.NOT_FOUND, CODING_AGENT_TOOL_REFUSAL.NO_AGENT],
-  [HOSTED_API_ERROR.TASK_ARCHIVED, CODING_AGENT_TOOL_REFUSAL.ARCHIVED],
-  [HOSTED_API_ERROR.AGENT_IMAGE_PREPARING, CODING_AGENT_TOOL_REFUSAL.IMAGE_PREPARING],
-  [HOSTED_API_ERROR.NATIVE_AGENT_NOT_HERE, CODING_AGENT_TOOL_REFUSAL.NATIVE_NOT_HERE],
-  [HOSTED_API_ERROR.AGENT_PLAN_SIGNED_OUT, CODING_AGENT_TOOL_REFUSAL.PLAN_SIGNED_OUT],
-  [HOSTED_API_ERROR.AGENT_PLAN_UNREACHABLE, CODING_AGENT_TOOL_REFUSAL.PLAN_UNREACHABLE],
-  [HOSTED_API_ERROR.AGENT_PLAN_LIMIT_REACHED, CODING_AGENT_TOOL_REFUSAL.PLAN_LIMIT_REACHED],
-  [HOSTED_API_ERROR.AGENT_PLAN_INELIGIBLE, CODING_AGENT_TOOL_REFUSAL.PLAN_INELIGIBLE],
-]);
-
 /** Who calls an agent tool: Luke on a call, or a coding agent from its own session. */
 export const AGENT_CALLER = {
   LUKE: "luke",
@@ -575,19 +510,6 @@ const CODER_READ_AGENT_INPUT = Schema.Struct({
         `${CODING_AGENT_TOOL_BOUNDS.TAIL_ENTRIES} when left out, at most ` +
         `${CODING_AGENT_TOOL_BOUNDS.MAX_TAIL_ENTRIES}.`,
     ),
-  ),
-});
-
-const MESSAGE_AGENT_INPUT = Schema.Struct({
-  agentId: AGENT_ID,
-  text: describeWire(
-    Schema.Trim.check(
-      Schema.isNonEmpty(),
-      Schema.isMaxLength(CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS),
-    ),
-    "What to tell the agent, as a message it reads in its own conversation; the developer's " +
-      `words where you pass on theirs. A coding agent's message opens with a heading naming it, so ` +
-      `keep one of yours under ${CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS - AGENT_HEADING_ROOM_CHARS} characters.`,
   ),
 });
 
@@ -760,7 +682,6 @@ const UPDATE_TASK_CALL = Schema.Struct({
 });
 
 const readTaskUpdate = Schema.decodeUnknownResult(UPDATE_TASK_CALL);
-const readMessage = Schema.decodeUnknownResult(MESSAGE_AGENT_INPUT);
 /**
  * A start as a call carries it: one Luke made under the tool's earlier words
  * names its prompt `task`, and one made before `create_task` may name a
@@ -810,17 +731,6 @@ export const CODER_READ_AGENT_TOOL = {
     "comes next. It only reads: the agent is not told. Answers `accepted` with the reading, or " +
     "`rejected` and why.",
   inputSchema: CODER_READ_AGENT_INPUT,
-} as const;
-
-export const MESSAGE_AGENT_TOOL = {
-  name: AGENT_TOOL.MESSAGE_AGENT,
-  description:
-    "Send a coding agent of your workspace a message, by its id. It lands in that agent's " +
-    "conversation under your name: a running agent sees it at its next step, and an idle one " +
-    "starts a turn on it. Answers `accepted` once that agent's session has taken it, without " +
-    "waiting for it to act or reply, or `rejected` and why nothing was sent; an archived agent " +
-    "takes nothing.",
-  inputSchema: MESSAGE_AGENT_INPUT,
 } as const;
 
 export const START_AGENT_TOOL = {
@@ -1302,14 +1212,6 @@ export function agentToolRejected(reason: string): WireRecord {
   return { status: ACTION_RESULT_STATUS.REJECTED, reason };
 }
 
-/** A steer's refusal in the model's words. */
-function refusalWords(refusal: HostedRefusal): string {
-  return withReset(
-    REFUSAL_WORDS.get(refusal.error) ?? CODING_AGENT_TOOL_REFUSAL.UNAVAILABLE,
-    refusal,
-  );
-}
-
 /** A refusal's words, with when a plan's reached limit resets where the provider said. */
 function withReset(words: string, refusal: HostedRefusal): string {
   return refusal.resetsAt === undefined
@@ -1360,35 +1262,23 @@ function agentIntroduction(agent: CodingAgent): string {
   return `"${agentName(agent)}" (agent id ${agent.id})${working}`;
 }
 
-/** The words a coding agent's message hands the other: who sent them and how to answer, then its own. */
-function agentLine(sender: CodingAgent, text: string): string {
-  return (
-    `A message from another coding agent of your workspace, ${agentIntroduction(sender)}. It is ` +
-    "that agent's word, not the developer's or Luke's. To answer it, call " +
-    `${AGENT_TOOL.MESSAGE_AGENT} with that id.\n\n${text}`
-  );
-}
-
-/**
 /**
  * The note an agent a coding agent starts is handed: which agent started it,
  * how to report back, and that the developer's inbox is its starter's, so
  * what it would post there goes to its starter, who relays what the
  * developer must see, then the note it was given. Where the two share a
- * task's chat, the report goes there, to the starter's mention link, as
+ * task, the report goes in its chat, to the starter's mention link, as
  * every word between a task's agents does (`coder-host/instructions.ts`);
- * otherwise it goes back by message.
+ * otherwise it goes to the starter in a direct message.
  */
 function startedByNote(
   starter: CodingAgent,
   note: string | undefined,
-  starterInChat: string | undefined,
+  starterLink: { readonly mention: string; readonly sameTask: boolean },
 ): string {
-  const report =
-    starterInChat === undefined
-      ? `To report back to it, call ${AGENT_TOOL.MESSAGE_AGENT} with that id. `
-      : `It is ${starterInChat} in your task's chat: report back to it there, with that mention link in your words, ` +
-        `never with ${AGENT_TOOL.MESSAGE_AGENT}. `;
+  const report = starterLink.sameTask
+    ? `It is ${starterLink.mention} in your task's chat: report back to it there, with that mention link in your words. `
+    : `To report back to it, send it a direct message: call ${CHAT_TOOL.POST} with to set to ${starterLink.mention}. `;
   const lead =
     `You were started by another coding agent of your workspace, ${agentIntroduction(starter)}, ` +
     `not by the developer. ${report}` +
@@ -1398,18 +1288,21 @@ function startedByNote(
   return note === undefined ? lead : `${lead}\n\n${note}`;
 }
 
-/**
- * The starter's mention link, as the task's chat names it, where an agent
- * it starts lands on its own task and Chat is on for the account both run
- * as, so the two share the task's chat; nothing otherwise.
- */
-function starterInChat(
+/** The starter's mention link, as the chat names it, and whether an agent it starts on the task given shares its task's chat. */
+function starterLinkOf(
   starter: CodingAgent,
-  taskId: string,
-): Effect.Effect<string | undefined, StoreFailure, DatabaseServices> {
+  taskId: string | null,
+): Effect.Effect<
+  { readonly mention: string; readonly sameTask: boolean },
+  StoreFailure,
+  DatabaseServices
+> {
   return Effect.gen(function* () {
-    if (starter.taskId !== taskId || !(yield* chatEnabledFor(starter.userId))) return undefined;
-    return agentMention(starter, yield* workspaceStepOf(starter.userId, starter.organizationId));
+    const mention = agentMention(
+      starter,
+      yield* workspaceStepOf(starter.userId, starter.organizationId),
+    );
+    return { mention, sameTask: taskId !== null && starter.taskId === taskId };
   });
 }
 
@@ -1579,80 +1472,6 @@ export function runReadAgent(
           ? undefined
           : { published: { branch: published.branch, pullRequest: published.pullRequest } }),
         tail,
-      };
-    }),
-  );
-}
-
-/** The line a message makes, and what sent it: Luke's words as they are, or a coding agent's opening with who sent them; nothing where a coding agent's line runs over the bound. */
-function messageLine(
-  caller: AgentCaller,
-  text: string,
-): { readonly text: string; readonly sender: LineSender } | undefined {
-  if (caller.kind === AGENT_CALLER.LUKE) return { text, sender: { kind: MESSAGE_SENDER.LUKE } };
-  const line = agentLine(caller.agent, text);
-  if (line.length > CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS) return undefined;
-  return {
-    text: line,
-    sender: {
-      kind: MESSAGE_SENDER.AGENT,
-      agentId: caller.agent.id,
-      name: agentName(caller.agent),
-      model: caller.agent.model,
-    },
-  };
-}
-
-/** One call of `message_agent`: the words handed to an agent of the caller's workspace, or why nothing was sent. */
-export function runMessageAgent(
-  call: CodingAgentCall,
-  input: UnparsedWireValue,
-): Effect.Effect<WireRecord, never, CodingAgentToolServices> {
-  const asked = readMessage(input);
-  if (Result.isFailure(asked)) {
-    return Effect.succeed(agentToolRejected(CODING_AGENT_TOOL_REFUSAL.UNREADABLE));
-  }
-  const { agentId, text } = asked.success;
-  const { caller, eve } = call;
-  if (caller.kind === AGENT_CALLER.AGENT && agentId === caller.agent.id) {
-    return Effect.succeed(agentToolRejected(CODING_AGENT_TOOL_REFUSAL.SELF));
-  }
-  const line = messageLine(caller, text);
-  if (line === undefined)
-    return Effect.succeed(agentToolRejected(CODING_AGENT_TOOL_REFUSAL.TOO_LONG));
-  if (eve === undefined)
-    return Effect.succeed(agentToolRejected(CODING_AGENT_TOOL_REFUSAL.NO_SERVICE));
-  return orStoreRefusal(
-    Effect.gen(function* () {
-      const found = yield* workspaceAgentOf(caller, agentId);
-      if (Option.isNone(found)) return agentToolRejected(CODING_AGENT_TOOL_REFUSAL.NO_AGENT);
-      const { agent } = found.value;
-      if (agent.archivedAt !== null)
-        return agentToolRejected(CODING_AGENT_TOOL_REFUSAL.AGENT_ARCHIVED);
-      if (!controlsAgent(callerUserId(caller), agent)) {
-        return agentToolRejected(`Not sent: only ${yield* agentStarterName(agent)} can do this.`);
-      }
-      if (!(yield* writesAsPlanPolicy(callerUserId(caller), agent))) {
-        return agentToolRejected(
-          `Not sent: ${yield* agentStarterName(agent)}'s own plan pays for that agent, so only they and their agents can message it.`,
-        );
-      }
-      const sent = yield* steerCodingAgent(eve, call.writer, callerUserId(caller), agent, {
-        ...line,
-        clientKey: call.clientKey,
-      }).pipe(Effect.result);
-      if (Result.isFailure(sent)) return agentToolRejected(refusalWords(sent.failure));
-      return {
-        status: ACTION_RESULT_STATUS.ACCEPTED,
-        delivery: sent.success,
-        agent: {
-          id: agent.id,
-          ...(agent.personaName === null ? undefined : { name: agent.personaName }),
-          title: agent.title ?? agent.model,
-          model: agent.model,
-          status: CODING_AGENT_STATUS.RUNNING,
-          onYourTask: agent.taskId !== null && agent.taskId === callerTask(caller),
-        },
       };
     }),
   );
@@ -1843,15 +1662,15 @@ export function runStartAgent(
         landing?.success.place ?? (taskId === null ? undefined : { taskId });
       if (place === undefined) return agentToolRejected(START_CODING_AGENT_REFUSAL.NO_TASK);
       // An agent a coding agent starts hears who started it, and where to report back: in the
-      // chat of the task they share, where Chat is on for the account both run as.
-      const byAgent = caller.kind === AGENT_CALLER.AGENT;
-      const shared =
-        byAgent && place.taskId !== null
-          ? yield* starterInChat(caller.agent, place.taskId)
-          : undefined;
-      const note = byAgent
-        ? startedByNote(caller.agent, asked.success.note, shared)
-        : asked.success.note;
+      // chat of the task they share, or in a direct message to it otherwise.
+      const note =
+        caller.kind === AGENT_CALLER.AGENT
+          ? startedByNote(
+              caller.agent,
+              asked.success.note,
+              yield* starterLinkOf(caller.agent, place.taskId),
+            )
+          : asked.success.note;
       const started = yield* startCodingAgent(Effect.succeed(eve), userId, {
         ...place,
         idempotencyKey: call.clientKey,
@@ -1862,7 +1681,9 @@ export function runStartAgent(
         branch: asked.success.branch,
         from,
         summaryModel: call.summaryModel,
-        ...(byAgent ? { noteHeading: START_NOTE_HEADING.AGENT } : undefined),
+        ...(caller.kind === AGENT_CALLER.AGENT
+          ? { noteHeading: START_NOTE_HEADING.AGENT }
+          : undefined),
       }).pipe(Effect.result);
       if (Result.isFailure(started)) {
         const refusal = started.failure;

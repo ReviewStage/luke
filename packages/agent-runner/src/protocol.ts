@@ -21,7 +21,7 @@ import type {
   SDKMessage,
   SessionCronSummary,
 } from "@anthropic-ai/claude-agent-sdk";
-import { Schema } from "effect";
+import { Option, Schema } from "effect";
 import type { ServerNotification } from "./codex-protocol/index.js";
 
 /**
@@ -366,6 +366,54 @@ export interface RunnerEndEvent {
  * (P22) picks what it shows.
  */
 export type CodexNotification = ServerNotification;
+
+/**
+ * The kinds of `CodexErrorInfo` the pinned protocol names
+ * (`codex-protocol/v2/CodexErrorInfo.ts`): a bare word, or the one key of an
+ * object that carries its details, such as `activeTurnNotSteerable`'s
+ * `turnKind`. A turn's failure and a refused request alike carry one.
+ */
+export const CODEX_ERROR_INFO = {
+  CONTEXT_WINDOW_EXCEEDED: "contextWindowExceeded",
+  SESSION_BUDGET_EXCEEDED: "sessionBudgetExceeded",
+  USAGE_LIMIT_EXCEEDED: "usageLimitExceeded",
+  RATE_LIMIT_EXCEEDED: "rateLimitExceeded",
+  FLEX_UNAVAILABLE: "flexUnavailable",
+  SERVER_OVERLOADED: "serverOverloaded",
+  CYBER_POLICY: "cyberPolicy",
+  MISALIGNMENT_POLICY_VIOLATION: "misalignmentPolicyViolation",
+  TOO_MANY_DENIALS: "tooManyDenials",
+  HTTP_CONNECTION_FAILED: "httpConnectionFailed",
+  RESPONSE_STREAM_CONNECTION_FAILED: "responseStreamConnectionFailed",
+  INTERNAL_SERVER_ERROR: "internalServerError",
+  UNAUTHORIZED: "unauthorized",
+  BAD_REQUEST: "badRequest",
+  THREAD_ROLLBACK_FAILED: "threadRollbackFailed",
+  SANDBOX_ERROR: "sandboxError",
+  RESPONSE_STREAM_DISCONNECTED: "responseStreamDisconnected",
+  RESPONSE_TOO_MANY_FAILED_ATTEMPTS: "responseTooManyFailedAttempts",
+  ACTIVE_TURN_NOT_STEERABLE: "activeTurnNotSteerable",
+  OTHER: "other",
+} as const;
+
+export type CodexErrorKind = (typeof CODEX_ERROR_INFO)[keyof typeof CODEX_ERROR_INFO];
+
+const CodexErrorKindSchema = Schema.Literals(Object.values(CODEX_ERROR_INFO));
+const decodeCodexErrorKind = Schema.decodeUnknownOption(CodexErrorKindSchema);
+
+/**
+ * The kind of a `codexErrorInfo` as Codex wrote it: its word, or its
+ * object's one key; none for a kind this pin does not name, or no info.
+ */
+export function codexErrorKind(info: unknown): CodexErrorKind | undefined {
+  const named =
+    typeof info === "string"
+      ? info
+      : typeof info === "object" && info !== null && Object.keys(info).length === 1
+        ? Object.keys(info)[0]
+        : undefined;
+  return Option.getOrUndefined(decodeCodexErrorKind(named));
+}
 
 /** What the runner posts: the SDK's message or Codex's notification as it was emitted, or one of the runner's own. */
 export type RunnerMessage =

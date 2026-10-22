@@ -2,6 +2,7 @@ import {
   PROVIDER_KEY_KIND,
   PROVIDER_KEY_STATUS,
   type ProviderKeysAnswer,
+  planStanding,
 } from "@luke/features/provider-key-wire";
 import { dayAndTimeText } from "./task-time.js";
 
@@ -21,7 +22,9 @@ import { dayAndTimeText } from "./task-time.js";
  * A Claude Code agent's composer says "Using your Claude plan" the same
  * way, or why the plan cannot serve: its limit reached with the reset
  * Claude Code named, or a setup-token that needs pasting again. A plan no
- * turn has run on yet reads as one that serves.
+ * turn has run on yet reads as one that serves. Either label reads the plan
+ * as it stands at `now` (`planStanding`), so a limit whose reset has passed
+ * reads as serving again without waiting on a new read.
  */
 
 /** Where OpenAI's guidelines send Manage usage: ChatGPT's own usage settings. */
@@ -42,14 +45,14 @@ export interface PlanLabel {
   readonly attention: boolean;
 }
 
-/** The label for a Codex agent, by its ChatGPT sign-in as the starter's keys hold it; the plain label where none is read. */
-export function chatGptPlanLabel(keys: ProviderKeysAnswer | undefined): PlanLabel {
+/** The label for a Codex agent, by its ChatGPT sign-in as the starter's keys hold it at `now`; the plain label where none is read. */
+export function chatGptPlanLabel(keys: ProviderKeysAnswer | undefined, now: number): PlanLabel {
   const plan = keys?.subscriptions?.find((one) => one.kind === PROVIDER_KEY_KIND.CHATGPT_OAUTH);
-  switch (plan?.status) {
+  switch (plan === undefined ? undefined : planStanding(plan, now)) {
     case PROVIDER_KEY_STATUS.LIMIT_REACHED:
       return {
         words:
-          plan.limitResetsAt === undefined
+          plan?.limitResetsAt === undefined
             ? PLAN_LABEL_WORDS.LIMIT_REACHED
             : `${PLAN_LABEL_WORDS.LIMIT_REACHED} · Resets ${dayAndTimeText(plan.limitResetsAt)}`,
         attention: true,
@@ -71,13 +74,13 @@ const CLAUDE_PLAN_LABEL_WORDS = {
   RECONNECT: "Claude plan needs reconnecting in Settings",
 } as const;
 
-/** The label for a Claude Code agent, by the setup-token as the starter's keys hold it; the plain label where none is read. */
-export function claudePlanLabel(keys: ProviderKeysAnswer | undefined): PlanLabel {
+/** The label for a Claude Code agent, by the setup-token as the starter's keys hold it at `now`; the plain label where none is read. */
+export function claudePlanLabel(keys: ProviderKeysAnswer | undefined, now: number): PlanLabel {
   if (keys === undefined) return { words: CLAUDE_PLAN_LABEL_WORDS.USING, attention: false };
   const plan = keys.subscriptions?.find((one) => one.kind === PROVIDER_KEY_KIND.CLAUDE_SETUP_TOKEN);
   // Note that a token removed since the agent started is one to paste again, as a refused one is.
   if (plan === undefined) return { words: CLAUDE_PLAN_LABEL_WORDS.RECONNECT, attention: true };
-  switch (plan.status) {
+  switch (planStanding(plan, now)) {
     case PROVIDER_KEY_STATUS.LIMIT_REACHED:
       return {
         words:

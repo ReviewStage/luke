@@ -36,9 +36,9 @@ import {
   EVE_CANCEL_OUTCOME,
   EVE_RESET_OUTCOME,
   EVE_SEND_OUTCOME,
+  EveFailedSchema,
   type EveMessage,
   EveUnreachable,
-  PLAN_REFUSAL,
   RUNTIME_REFUSAL,
 } from "../brain-host/eve-sessions.js";
 import { NATIVE_SESSION_PREFIX, type NativeRuntime } from "./native-runtime.js";
@@ -128,16 +128,9 @@ export function relayedMessage(
   };
 }
 
-const FailedSchema = Schema.Struct({
-  outcome: Schema.Literal(EVE_SEND_OUTCOME.FAILED),
-  status: Schema.Number,
-  planRefusal: Schema.optionalKey(Schema.Literals(Object.values(PLAN_REFUSAL))),
-  runtimeRefusal: Schema.optionalKey(Schema.Literals(Object.values(RUNTIME_REFUSAL))),
-});
-
 const OpenedSchema = Schema.Union([
   Schema.Struct({ outcome: Schema.Literal(EVE_SEND_OUTCOME.ACCEPTED), sessionId: SessionIdSchema }),
-  FailedSchema,
+  EveFailedSchema,
 ]);
 
 const SentSchema = Schema.Union([
@@ -148,7 +141,7 @@ const SentSchema = Schema.Union([
   }),
   Schema.Struct({ outcome: Schema.Literal(EVE_SEND_OUTCOME.RETIRED) }),
   Schema.Struct({ outcome: Schema.Literal(EVE_SEND_OUTCOME.NOT_READY) }),
-  FailedSchema,
+  EveFailedSchema,
 ]);
 
 const StoppedFailedSchema = Schema.Struct({

@@ -512,12 +512,13 @@ it.layer(getTestDB())("a coding agent's sessions on Codex", (it) => {
         const { userId, agent } = yield* openAgent;
         yield* signIn(userId, 60);
         const now = yield* DateTime.nowAsDate;
+        const resetsAt = new Date(now.getTime() + 30 * 60_000);
         yield* setPlanStatus(
           userId,
           PROVIDER_KEY_PROVIDER.OPENAI,
           PROVIDER_KEY_KIND.CHATGPT_OAUTH,
           PROVIDER_KEY_STATUS.LIMIT_REACHED,
-          new Date(now.getTime() + 30 * 60_000),
+          resetsAt,
           now,
           now,
         );
@@ -527,6 +528,7 @@ it.layer(getTestDB())("a coding agent's sessions on Codex", (it) => {
           outcome: EVE_SEND_OUTCOME.FAILED,
           status: 422,
           planRefusal: PLAN_REFUSAL.LIMIT_REACHED,
+          planResetsAt: resetsAt.getTime(),
         });
         assert.deepEqual(limited.commands, []);
 

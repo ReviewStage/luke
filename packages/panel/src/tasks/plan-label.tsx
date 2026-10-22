@@ -11,6 +11,7 @@ import {
   PLAN_LABEL_WORDS,
   type PlanLabel,
 } from "./plan-label-model.js";
+import { useMinute } from "./task-time.js";
 import { useOpenLink } from "./use-open-link.js";
 
 /**
@@ -20,7 +21,9 @@ import { useOpenLink } from "./use-open-link.js";
  * for. The words are `plan-label-model.ts`'s; the plan's status is read for
  * the starter alone, as the agent's status changes, since a turn's end is
  * what writes a new one, and as the window comes back to the front, as it
- * does from a reconnect in Settings. Manage usage opens ChatGPT's usage settings.
+ * does from a reconnect in Settings. The words are read against the minute's
+ * clock, so a reached limit gives way once its reset passes, with no new
+ * read. Manage usage opens ChatGPT's usage settings.
  */
 
 /** The starter's keys, read again each time the agent's status moves; none for anyone else, or before the read. */
@@ -77,7 +80,7 @@ export function ClaudePlanLabel({
   starter: boolean;
   status: CodingAgentStatus;
 }): React.JSX.Element {
-  const label = claudePlanLabel(useStarterKeys(starter, status));
+  const label = claudePlanLabel(useStarterKeys(starter, status), useMinute());
   return (
     <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
       <LabelWords label={label} />
@@ -95,7 +98,7 @@ export function ChatGptPlanLabel({
   status: CodingAgentStatus;
 }): React.JSX.Element {
   const openLink = useOpenLink();
-  const label = chatGptPlanLabel(useStarterKeys(starter, status));
+  const label = chatGptPlanLabel(useStarterKeys(starter, status), useMinute());
   return (
     <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
       <LabelWords label={label} />
