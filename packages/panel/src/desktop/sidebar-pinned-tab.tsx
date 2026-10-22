@@ -1,5 +1,7 @@
+import { useAtomValue } from "@effect/atom-react";
 import type { CodingAgentPullRequest } from "@luke/features/coding-agent-wire";
 import type { TaskAgentLine, TaskSummary } from "@luke/features/task-wire";
+import { ACT_KIND } from "@luke/host/acts";
 import {
   BUTTON_SIZE,
   CopyIcon,
@@ -21,11 +23,15 @@ import {
 } from "@luke/ui";
 import { isAgentTab, isChangesTab, isFileTab } from "@luke/ui/tab-strip-model";
 import { shownFiles } from "@luke/voice/code-pane-model";
+import { Duration, Effect } from "effect";
+import * as AsyncResult from "effect/reactivity/AsyncResult";
+import * as Atom from "effect/reactivity/Atom";
 import { ScrollTextIcon } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useRef } from "react";
+import { askAct } from "../act.js";
+import { rendererRuntime } from "../renderer-runtime.js";
 import { PlanGlyph, TAB_KIND, type TabSubject, tabLook } from "../tasks/tab-look.js";
 import { TRANSCRIPT_COPY } from "../tasks/transcript-copy.js";
-import type { PullRequestReader } from "../tasks/use-agent-pull-request.js";
 import { type PinnedTab, SIDE_PANEL_TAB } from "../tasks/use-side-panel.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { RowHint, RowHintOptions, Tooltip } from "../tooltip.js";
@@ -182,33 +188,50 @@ function pinAgent(
 }
 
 /**
- * The pull request the agent of an agent's pin or of a Changes pin opened,
- * read once from the service as the card opens, which keeps its own answer a
- * short while: nothing for any other pin, before the answer lands, where it
- * did not, or where the agent opened none.
+ * How long an agent's pull request a pin's card read is kept once no card
+ * of it stands: long enough that the pointer coming back over the pins
+ * shows it at once, short enough that a card hung later reads afresh.
  */
-function usePinPullRequest(
-  pin: PinnedTab,
-  read: PullRequestReader,
-): CodingAgentPullRequest | undefined {
-  const agentId = pinAgentId(pin);
-  const [held, setHeld] = useState<CodingAgentPullRequest | undefined>(undefined);
-  const reader = useRef(read);
-  reader.current = read;
-  useEffect(() => {
-    if (agentId === undefined) return;
-    let live = true;
-    reader.current(agentId).then(
-      (answer) => {
-        if (live && !("failure" in answer)) setHeld(answer.pullRequest ?? undefined);
-      },
-      () => undefined,
-    );
-    return () => {
-      live = false;
-    };
-  }, [agentId]);
-  return held;
+const PIN_PULL_REQUEST_KEPT = Duration.seconds(30);
+
+/**
+ * The pull request an agent opened, as a pin's card reads it: read once as
+ * the first card of the agent shows, never for a row only crossed, since a
+ * card is mounted only once the pointer has rested (`tooltip.tsx`), and
+ * shared by every card of it while one stands and for
+ * `PIN_PULL_REQUEST_KEPT` after. Note that it is the pin's own, apart from
+ * the open task's pull requests (`useTaskPullRequests`), so a pin's card
+ * landing an answer redraws the card alone, never the task's control and
+ * the sidebar with it. A read the service refused, or did not answer, is no
+ * pull request.
+ */
+const pinPullRequestAtom = Atom.family((agentId: string) =>
+  Atom.setIdleTTL(
+    rendererRuntime.atom(
+      Effect.promise(() =>
+        askAct(ACT_KIND.CODING_AGENTS_PULL_REQUEST, { agentId }).then(
+          (answer): CodingAgentPullRequest | undefined =>
+            "failure" in answer ? undefined : (answer.pullRequest ?? undefined),
+          () => undefined,
+        ),
+      ),
+    ),
+    PIN_PULL_REQUEST_KEPT,
+  ),
+);
+
+/** The pull request of `agentId`, once its read has landed; nothing before, or where the agent opened none. */
+function PinPullRequest({ agentId }: { agentId: string }): React.JSX.Element | null {
+  const read = useAtomValue(pinPullRequestAtom(agentId));
+  const pullRequest = AsyncResult.isSuccess(read) ? read.value : undefined;
+  return pullRequest === undefined ? null : (
+    <>
+      <HoverCardRule />
+      <HoverCardList label="Pull request">
+        <PullRequestLine pullRequest={pullRequest} />
+      </HoverCardList>
+    </>
+  );
 }
 
 /**
@@ -232,7 +255,7 @@ function PinnedTabCard({
   tasks: TasksControl;
   onOpenTask: () => void;
 }): React.JSX.Element {
-  const pullRequest = usePinPullRequest(pin, tasks.agents.readPullRequest);
+  const agentId = pinAgentId(pin);
   const { repository } = task;
   const { openGitHub, pictures } = tasks.repositories;
   return (
@@ -248,14 +271,7 @@ function PinnedTabCard({
         <RepositoryDetail repository={repository} pictures={pictures} onOpenGitHub={openGitHub} />
       )}
       {gone ? <HoverCardNote>{GONE_NOTE}</HoverCardNote> : null}
-      {pullRequest === undefined ? null : (
-        <>
-          <HoverCardRule />
-          <HoverCardList label="Pull request">
-            <PullRequestLine pullRequest={pullRequest} />
-          </HoverCardList>
-        </>
-      )}
+      {agentId === undefined ? null : <PinPullRequest agentId={agentId} />}
     </HoverCard>
   );
 }

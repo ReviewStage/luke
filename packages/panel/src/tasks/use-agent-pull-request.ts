@@ -6,6 +6,7 @@ import type {
   CodingAgentStatus,
   CodingAgentSummary,
 } from "@luke/features/coding-agent-wire";
+import { keepIdentity } from "@luke/wire";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { agentStillWriting, PUBLISHED_REREAD_MS } from "./coding-agent-model.js";
 
@@ -147,17 +148,25 @@ interface Visit {
  * kept is the visit's: opening the task again reads every agent afresh, an
  * answer to an ask made on an earlier visit is let go, and of two asks of
  * one agent out at once only the later one's answer is kept, so an earlier
- * read landing late never takes back a pull request a later one found.
+ * read landing late never takes back a pull request a later one found. An
+ * agent of another task, asked through `read` as a card naming it may, is
+ * answered but never kept, and an answer naming the pull request already
+ * kept leaves what is kept as it stood, so neither redraws the task.
  */
 export function useTaskPullRequests(
   taskId: string | undefined,
   agents: readonly Pick<CodingAgentSummary, "id" | "status">[] | undefined,
   readOnce: PullRequestReader,
+  /** Every agent of the task, an archived one among them, which alone its pull requests are kept for; `agents` where left out. */
+  owned: readonly Pick<CodingAgentSummary, "id">[] | undefined = agents,
 ): TaskPullRequests {
   const [held, setHeld] = useState({ taskId, pullRequests: NO_PULL_REQUESTS });
   if (held.taskId !== taskId) setHeld({ taskId, pullRequests: NO_PULL_REQUESTS });
   const latest = useRef(readOnce);
   latest.current = readOnce;
+  // The task's own agents, by id, which alone its pull requests are kept for.
+  const own = useRef<ReadonlySet<string>>(new Set());
+  own.current = new Set((owned ?? []).map((agent) => agent.id));
   const visit = useRef<Visit>({ taskId, asked: new Map(), latest: new Map() });
   if (visit.current.taskId !== taskId)
     visit.current = { taskId, asked: new Map(), latest: new Map() };
@@ -172,10 +181,19 @@ export function useTaskPullRequests(
       if ("failure" in answer || visit.current !== on || on.latest.get(agentId) !== ask) {
         return answer;
       }
+      // Note that an agent of another task is answered but never kept, so
+      // the task's pull requests name its own agents alone.
+      if (!own.current.has(agentId)) return answer;
       const opened = answer.pullRequest;
       setHeld((was) => {
         if (was.taskId !== on.taskId) return was;
-        if (opened === null && !was.pullRequests.has(agentId)) return was;
+        const kept = was.pullRequests.get(agentId);
+        if (opened === null && kept === undefined) return was;
+        // Note that an answer naming the pull request already kept keeps the
+        // map as it stood, so nothing drawn from it is drawn again.
+        if (opened !== null && kept !== undefined && keepIdentity(kept, opened) === kept) {
+          return was;
+        }
         const next = new Map(was.pullRequests);
         if (opened === null) next.delete(agentId);
         else next.set(agentId, opened);
