@@ -56,7 +56,7 @@ import {
   type StoredAutomationOrigin,
   type StoredPullRequest,
   type StoredStartedFrom,
-  type StoredTurnHanded,
+  type TurnHanded,
 } from "../schemas/coding-agent.js";
 import { asks, conversations, messages, turns } from "../schemas/storage.js";
 import { task } from "../schemas/task.js";
@@ -2945,7 +2945,7 @@ export function recordCodingAgentCompaction(
 export function readNativeTurnHanded(
   userId: string,
   agentId: string,
-): CodingAgentStoreEffect<StoredTurnHanded> {
+): CodingAgentStoreEffect<TurnHanded> {
   return Effect.map(findNativeTurnHanded({ userId, agentId }), (found) =>
     Option.match(found, { onNone: () => ({}), onSome: ({ handed }) => handed ?? {} }),
   );
@@ -2955,7 +2955,7 @@ export function readNativeTurnHanded(
 export function recordNativeTurnHanded(
   userId: string,
   agentId: string,
-  handed: StoredTurnHanded,
+  handed: TurnHanded,
 ): CodingAgentStoreEffect<void> {
   return updateNativeTurnHanded({ userId, agentId, handed });
 }

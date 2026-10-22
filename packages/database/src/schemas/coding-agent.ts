@@ -103,7 +103,7 @@ import { task } from "./task.js";
  *
  * `native_turn_handed` is what a native harness's session (Claude Code's,
  * Codex's) has been handed in its turns' messages so far
- * (`StoredTurnHanded`), which eve keeps in its own session state for an eve
+ * (`TurnHanded`), which eve keeps in its own session state for an eve
  * agent; null for an eve agent and before a native session's first message.
  * A launch that opens the harness's session afresh hands it again from
  * nothing.
@@ -143,16 +143,21 @@ export interface StoredAgentStep {
 }
 
 /**
- * What a native agent's session has been handed in its turns' messages, as
- * content addresses: the task, the chat digest, an operator's desk, and
- * whether its last turn was spoken and the call's words stand
- * (`@luke/service`'s `coder-host/turn-context.ts`'s `TurnHanded`).
+ * What an agent's session has handed it in its turns' messages, as content
+ * addresses: the task, by the parts of it no save of the plan changes, the
+ * chat digest, an operator's desk, and whether the call's words stand
+ * (`@luke/service`'s `coder-host/turn-context.ts`). eve keeps it in its
+ * session's durable state; a native agent's row keeps it here. Nothing yet
+ * for a session whose turns handed none, or whose history was compacted since.
  */
-export interface StoredTurnHanded {
+export interface TurnHanded {
   readonly task?: string;
   readonly chat?: string;
+  /** The operator's desk as last handed, so one unchanged is not handed again. */
   readonly desk?: string;
+  /** Whether the session's last turn was spoken, which a compaction leaves standing, so a typed turn after it says the call's words no longer hold. */
   readonly spoken?: boolean;
+  /** Whether the call's words stand in the history since the last compaction, so a spoken turn after a spoken one need not hand them again. */
   readonly callWords?: boolean;
 }
 
@@ -298,7 +303,7 @@ export const codingAgent = pgTable(
      */
     runnerTokenHash: text("runner_token_hash"),
     /** What the agent's native session has been handed in its turns' messages; null for an eve agent and before its first. */
-    nativeTurnHanded: jsonb("native_turn_handed").$type<StoredTurnHanded>(),
+    nativeTurnHanded: jsonb("native_turn_handed").$type<TurnHanded>(),
     /** What the agent is: a coder, or its member's operator; a coder for every row from before the column. */
     kind: text("kind").$type<CodingAgentKind>().notNull().default(CODING_AGENT_KIND.CODER),
     idempotencyKey: text("idempotency_key").notNull(),
