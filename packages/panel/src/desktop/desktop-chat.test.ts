@@ -114,6 +114,7 @@ function mount(
   posting: (
     land: () => Promise<string | undefined>,
     post: ChatPost,
+    clientKey: string,
   ) => Promise<string | undefined> = (land) => land(),
 ): HTMLElement {
   function Page() {
@@ -148,7 +149,8 @@ function mount(
           onShowMessage: () => undefined,
           listed: false,
           onList: () => undefined,
-          onPost: (post) => posting(() => stage((held) => stagedPost(held, post, AT)), post),
+          onPost: (post, clientKey) =>
+            posting(() => stage((held) => stagedPost(held, post, AT, clientKey)), post, clientKey),
           onAnswer: (answer) => stage((held) => stagedAnswer(held, answer, AT)),
           onChannel: (change) => stage((held) => stagedChannel(held, change)),
           onRead: (channelIds) => void stage((held) => stagedRead(held, channelIds)),
@@ -2422,6 +2424,7 @@ test("a member whose account is gone is named and drawn as one former member, in
 function heldPosts() {
   const held: {
     readonly post: ChatPost;
+    readonly clientKey: string;
     readonly land: () => Promise<string | undefined>;
     readonly answer: (refused: string | undefined) => void;
   }[] = [];
@@ -2431,9 +2434,9 @@ function heldPosts() {
     undefined,
     undefined,
     { tasks: [INVITATIONS] },
-    (land, post) =>
+    (land, post, clientKey) =>
       new Promise((answer) => {
-        held.push({ post, land, answer });
+        held.push({ post, clientKey, land, answer });
       }),
   );
   act(() => railRow(page, "teammate-invitations").click());
@@ -2443,6 +2446,20 @@ function heldPosts() {
     box,
     /** The words of each post handed to the service, in the order handed. */
     posted: () => held.map((each) => each.post.text),
+    /** The key each post handed to the service went under, in the order handed. */
+    keys: () => held.map((each) => each.clientKey),
+    /** The chat holds post `index`, as a push brings it, before its answer lands. */
+    push: async (index: number) => {
+      const each = held[index] ?? assert.fail(`no post ${index}`);
+      await act(async () => {
+        await each.land();
+      });
+      await settle();
+    },
+    answer: async (index: number) => {
+      act(() => held[index]?.answer(undefined));
+      await settle();
+    },
     /** The service takes the post `index`: the chat holds it as the answer lands, in the same draw. */
     land: async (index: number) => {
       const each = held[index] ?? assert.fail(`no post ${index}`);
@@ -2531,4 +2548,36 @@ test("a post refused while the box holds nothing newer comes back into it with w
   await chat.land(2);
   assert.equal(chat.page.querySelector(".chat-message[data-unsent]"), null);
   assert.equal(words(chat.page).at(-1), "Back to the box. Again.");
+});
+
+test("a post the chat holds before its answer lands is drawn once, as the chat's message, and the answer draws nothing more", async () => {
+  const chat = heldPosts();
+  const before = words(chat.page).length;
+  await chat.send("Pushed before the answer.");
+  assert.equal(chat.pending().length, 1);
+
+  await chat.push(0);
+  assert.equal(chat.pending().length, 0, "the post gives way to the message under its key");
+  assert.equal(words(chat.page).length, before + 1, "exactly one row");
+  assert.equal(words(chat.page).at(-1), "Pushed before the answer.");
+
+  await chat.answer(0);
+  assert.equal(words(chat.page).length, before + 1);
+});
+
+test("two posts of the same words go under keys of their own, and one taken back into the box goes again under its key", async () => {
+  const chat = heldPosts();
+  await chat.send("ok");
+  await chat.send("ok");
+  await chat.land(0);
+  await chat.land(1);
+  const [first, second] = chat.keys();
+  assert.notEqual(first, second);
+
+  await chat.send("Lost answer.");
+  await chat.refuse(2, "Chat could not be reached.");
+  assert.equal(boxWords(chat.box), "Lost answer.");
+  pressInComposer(chat.box, "Enter");
+  await settle();
+  assert.equal(chat.keys()[3], chat.keys()[2]);
 });

@@ -324,7 +324,7 @@ interface PendingPlace {
 
 /** A post the reader sent that the chat does not hold yet: on its way, or refused with why. */
 interface PendingPost extends PendingPlace {
-  /** The row's own id, which no message of the chat's spells. */
+  /** The key the post goes under, which the chat hands back on the message once it holds it (`ChatMessage.clientKey`), so the message stands in the post's place whichever lands first. */
   readonly id: string;
   readonly post: ChatPost;
   /** When it was sent, which its byline says. */
@@ -339,26 +339,40 @@ const RETRY_POST = "Retry";
 const DISCARD_POST = "Discard";
 
 /**
- * The reader's posts on their way, drawn in the stream as theirs at once
- * and let go as the post's answer puts the message in the chat, which the
- * same draw takes in, so the message stands in the post's place and never
- * beside it. Posts go one at a time in the order sent, each once the one
- * before it has answered, since the service places each as it takes it. A
- * post refused goes back to its box where the box holds nothing newer
- * (`ChatSend`), else it stays where it went, marked as not sent, with Retry,
- * which sends the same words under the same key, and Discard.
+ * The reader's posts on their way, drawn in the stream as theirs at once,
+ * each under the key it goes under, and drawn no more once the chat holds a
+ * message under that key, which the reader's own messages carry, so the
+ * message stands in the post's place and never beside it, whether the push
+ * or the post's answer brings it first. Posts go one at a time in the order
+ * sent, each once the one before it has answered, since the service places
+ * each as it takes it. A post refused goes back to its box where the box
+ * holds nothing newer (`ChatSend`), and the same words sent from there again
+ * go under the same key, so a post whose answer was lost is posted once;
+ * else it stays where it went, marked as not sent, with Retry, which sends
+ * it under its key, and Discard.
  */
-function usePendingPosts(onPost: (post: ChatPost) => Promise<string | undefined>) {
+/** A post's place and words, which the same post sent again is known by. */
+function postWords(entry: PendingPlace & { readonly post: ChatPost }): string {
+  return JSON.stringify([entry.channelId, entry.replyTo ?? null, entry.post]);
+}
+
+function usePendingPosts(
+  chat: ChatAnswer,
+  onPost: (post: ChatPost, clientKey: string) => Promise<string | undefined>,
+) {
   const [pending, setPending] = useState<readonly PendingPost[]>([]);
+  // The key of each post taken back into its box, by its place and words, which the same post sent again goes under.
+  const refusedKeys = useRef(new Map<string, string>());
   const latest = useRef(onPost);
   latest.current = onPost;
   const queue = useRef<Promise<void>>(Promise.resolve());
   const go = (entry: PendingPost, takeBack: (refused: string) => boolean) => {
     queue.current = queue.current.then(async () => {
       const refused = await latest
-        .current(entry.post)
+        .current(entry.post, entry.id)
         .catch((failed: unknown) => (failed instanceof Error ? failed.message : UNSENT));
       const back = refused !== undefined && takeBack(refused);
+      if (back) refusedKeys.current.set(postWords(entry), entry.id);
       setPending((was) =>
         refused === undefined || back
           ? was.filter((each) => each.id !== entry.id)
@@ -367,7 +381,10 @@ function usePendingPosts(onPost: (post: ChatPost) => Promise<string | undefined>
     });
   };
   const send = (place: PendingPlace, post: ChatPost, takeBack: (refused: string) => boolean) => {
-    const entry: PendingPost = { ...place, id: crypto.randomUUID(), post, at: Date.now() };
+    const words = postWords({ ...place, post });
+    const id = refusedKeys.current.get(words) ?? crypto.randomUUID();
+    refusedKeys.current.delete(words);
+    const entry: PendingPost = { ...place, id, post, at: Date.now() };
     setPending((was) => [...was, entry]);
     go(entry, takeBack);
   };
@@ -379,7 +396,10 @@ function usePendingPosts(onPost: (post: ChatPost) => Promise<string | undefined>
     go(again, () => false);
   };
   const onDiscardPost = (id: string) => setPending((was) => was.filter((each) => each.id !== id));
-  return { pending, send, onRetryPost, onDiscardPost };
+  // Note that a post the chat already holds is drawn as the chat's message alone, whether its answer has landed or not.
+  const held = new Set(chat.messages.flatMap((message) => message.clientKey ?? []));
+  const shown = pending.filter((each) => !held.has(each.id));
+  return { pending: shown, send, onRetryPost, onDiscardPost };
 }
 
 /** A post of the reader's the chat does not hold yet, drawn as their message is, quiet while it goes, and marked with why and Retry where it was refused. */
@@ -964,8 +984,8 @@ export function ChatPane({
   tasks?: readonly TaskSummary[];
   now: number;
   openLink: (url: string) => void;
-  /** Posts a message; answers why it was refused, or nothing once it is taken. */
-  onPost: (post: ChatPost) => Promise<string | undefined>;
+  /** Posts a message under the key the pane minted for it; answers why it was refused, or nothing once it is taken. */
+  onPost: (post: ChatPost, clientKey: string) => Promise<string | undefined>;
   /** Answers an ask; answers why it was refused, or nothing once it is taken. */
   onAnswer: (answer: ChatAskAnswer) => Promise<string | undefined>;
   /** Reads one picture a message carries, by the message and the attachment its block names. */
@@ -992,7 +1012,7 @@ export function ChatPane({
     if (home?.kind !== CHANNEL_KIND.TASK || home.planId === undefined) return undefined;
     return taskDoors?.(home.planId);
   };
-  const posting = usePendingPosts(onPost);
+  const posting = usePendingPosts(chat, onPost);
   const context: MessageContext = {
     actorOf,
     chat,

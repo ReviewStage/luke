@@ -535,12 +535,13 @@ it.layer(getTestDB())("the window's read of a workspace's chat", (it) => {
         const dm = Option.getOrThrow(
           yield* findOrMakeDm(room.owner, room.workspace, ada.id, grace.id),
         );
-        Result.getOrThrow(
+        const lunchKey = randomUUID();
+        const lunch = Result.getOrThrow(
           yield* postMessage(room.owner, room.workspace, {
             authorMemberId: ada.id,
             to: { channelId: dm.id },
             blocks: [{ type: CHAT_BLOCK.MARKDOWN, text: "Lunch?" }],
-            clientKey: randomUUID(),
+            clientKey: lunchKey,
           }),
         );
         const asked = Result.getOrThrow(
@@ -615,6 +616,20 @@ it.layer(getTestDB())("the window's read of a workspace's chat", (it) => {
         assert.ok(live?.channels.some((each) => each.purpose === "Ship notes."));
         assert.ok(live?.messages.some((each) => each.id === open.message.id));
         assert.ok(held.reads !== undefined && messages.some((each) => each.ask?.answer));
+        // The key a post went under is read by its author alone, in the held read and the live one alike.
+        for (const read of [messages, live?.messages ?? []]) {
+          assert.equal(read.find((each) => each.id === lunch.message.id)?.clientKey, lunchKey);
+          assert.deepEqual(
+            read.filter((each) => each.authorId !== ada.id && each.clientKey !== undefined),
+            [],
+          );
+        }
+        const graces = workspaceChatOfLiveRows(
+          yield* liveRowsOf(workspaceChatLiveStatements(room.teammate, grace)),
+        );
+        const seen = graces?.messages.find((each) => each.id === lunch.message.id);
+        assert.ok(seen, "the other side of the DM reads the post");
+        assert.equal(seen.clientKey, undefined, "without its author's key");
 
         for (const outside of [room.stranger, room.quiet]) {
           const rows = yield* liveRowsOf(workspaceChatLiveStatements(outside, ada));

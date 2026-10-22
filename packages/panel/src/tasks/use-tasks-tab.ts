@@ -503,7 +503,8 @@ interface ChatViewControl {
   /** Opens it on a place, from wherever the window stands: what a chat notice's Open in Chat asks. */
   readonly onShow: (place: ChatPlace) => void;
   /** Posts a message as the developer; answers why it was refused, or nothing once it is taken. */
-  readonly onPost: (post: ChatPost) => Promise<string | undefined>;
+  /** Posts under the key the box minted for the post, which the chat hands back on the message once it holds it. */
+  readonly onPost: (post: ChatPost, clientKey: string) => Promise<string | undefined>;
   /** Answers an ask as the developer; answers why it was refused, or nothing once it is taken. */
   readonly onAnswer: (answer: ChatAskAnswer) => Promise<string | undefined>;
   /** Opens or edits a topic channel as the developer; answers why it was refused, or nothing once it is taken. */
@@ -3581,10 +3582,10 @@ export function useTasksTab(input: {
         // Note that For you stands while the read is sought, since it lists the message, where the channel shown before need not.
         setStandIn({ kind: STAND_IN.CHAT, place: FOR_YOU, listed: false, seek: messageId });
       }),
-      onPost: (post) =>
+      onPost: (post, clientKey) =>
         liveRun
-          ? liveChat.onPost(post)
-          : stage((held, staging) => staging.stagedPost(held, post, Date.now())),
+          ? liveChat.onPost(post, clientKey)
+          : stage((held, staging) => staging.stagedPost(held, post, Date.now(), clientKey)),
       onAnswer: (answer) =>
         liveRun
           ? liveChat.onAnswer(answer)

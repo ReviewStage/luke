@@ -598,6 +598,13 @@ export const chatMessageSchema = EffectSchema.Struct({
   blocks: EffectSchema.Array(chatReadBlockSchema),
   mentions: EffectSchema.Array(wireUuidSchema),
   postedAt: countedNumber,
+  /**
+   * The key the reader's own post went under, which the window that posted
+   * it drew it under before the chat held it; absent on every other
+   * member's message, so no member reads another's key, and from a service
+   * older than it.
+   */
+  clientKey: EffectSchema.optionalKey(filledText(CHAT_BOUNDS.MAX_CLIENT_KEY_CHARS)),
   ask: EffectSchema.optionalKey(chatMessageAskSchema),
 });
 

@@ -126,8 +126,12 @@ function askOnWire(row: ChatMessageRow): Pick<ChatMessage, "ask"> | undefined {
   };
 }
 
-/** A message as the window reads one. */
-export function messageOnWire(row: ChatMessageRow): ChatMessage {
+/**
+ * A message as the window of the member `readerId` reads one: the key it was
+ * posted under on a message of the reader's own alone, so the window that
+ * posted it knows it however it lands, and no member reads another's key.
+ */
+export function messageOnWire(row: ChatMessageRow, readerId: string): ChatMessage {
   return {
     id: row.id,
     seq: row.seq,
@@ -138,6 +142,7 @@ export function messageOnWire(row: ChatMessageRow): ChatMessage {
     blocks: row.blocks,
     mentions: row.mentions,
     postedAt: row.createdAt.getTime(),
+    ...(row.authorMemberId === readerId ? { clientKey: row.clientKey } : undefined),
     ...askOnWire(row),
   };
 }
@@ -257,7 +262,7 @@ export function workspaceChatPast(
       ...readsPast(reader.readSeq, reads),
       members: members.map((member) => memberOnWire(member, agents, people)),
       channels: channels.map(channelOnWire),
-      messages: past.value.messages.map(messageOnWire),
+      messages: past.value.messages.map((message) => messageOnWire(message, reader.id)),
       cursor: chatCursorOf(past.value.cursor),
     });
   });
