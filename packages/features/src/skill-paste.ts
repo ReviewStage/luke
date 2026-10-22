@@ -252,7 +252,7 @@ function readAddArguments(words: readonly string[]): {
         : [word, undefined];
     if (SKILL_FLAGS.has(flag) || VALUED_FLAGS.has(flag)) {
       const take = SKILL_FLAGS.has(flag) ? name : () => undefined;
-      if (inline !== undefined) take(inline);
+      if (inline !== undefined) for (const part of inline.split(",")) take(part);
       // Note that both flags take several values, up to the next flag; a value with a slash is the source.
       while (at + 1 < words.length) {
         const next = words[at + 1] ?? "";
@@ -312,11 +312,21 @@ function readGitHubAddress(segments: readonly string[]): SourceRead {
   if (!GITHUB_NAME.test(owner) || !GITHUB_NAME.test(repo)) {
     return { reason: SKILL_PASTE_UNSUPPORTED.UNREADABLE_SOURCE };
   }
+  if (kind === undefined) return { owner, repo };
   if ((kind === "tree" || kind === "blob") && ref !== undefined && ref !== "") {
     const path = folderOf(rest.map(decodeSegment));
     return { owner, repo, ref: decodeSegment(ref), ...(path === undefined ? {} : { path }) };
   }
-  return { owner, repo };
+  // An archive, a release asset, or a raw file is a download; any other page names no skill.
+  return {
+    reason:
+      DOWNLOAD.test(segments.join("/")) ||
+      kind === "archive" ||
+      kind === "releases" ||
+      kind === "raw"
+        ? SKILL_PASTE_UNSUPPORTED.DOWNLOAD_URL
+        : SKILL_PASTE_UNSUPPORTED.UNREADABLE_SOURCE,
+  };
 }
 
 /** A path segment as written, its escapes read. */
@@ -435,18 +445,38 @@ function skillNameFrom(heading: string): string | undefined {
   return slug === "" ? undefined : slug;
 }
 
+/** A heading's words, an ATX heading's closing run of hashes taken off. */
+function headingWords(rest: string): string {
+  const words = rest.trim();
+  let end = words.length;
+  while (end > 0 && words.charAt(end - 1) === "#") end -= 1;
+  return end === 0 || /\s/u.test(words.charAt(end - 1)) ? words.slice(0, end).trim() : words;
+}
+
 /** The first ATX heading's words outside a code fence; nothing where the text holds none. */
 function firstHeading(markdown: string): string | undefined {
+  // Note that a fence closes only on a bare run of its own character at least as long as the one that opened it.
   let fence: string | undefined;
   for (const line of markdown.split(/\r?\n/u)) {
-    const opened = /^\s{0,3}(`{3,}|~{3,})/u.exec(line)?.[1];
-    if (opened !== undefined) {
-      if (fence === undefined) fence = opened.charAt(0);
-      else if (opened.charAt(0) === fence) fence = undefined;
+    const run = /^\s{0,3}(`{3,}|~{3,})(.*)$/u.exec(line);
+    if (fence === undefined && run !== null) {
+      fence = run[1] ?? "";
+      continue;
+    }
+    if (fence !== undefined && run !== null) {
+      const closing = run[1] ?? "";
+      if (
+        closing.charAt(0) === fence.charAt(0) &&
+        closing.length >= fence.length &&
+        (run[2] ?? "").trim() === ""
+      ) {
+        fence = undefined;
+      }
       continue;
     }
     if (fence !== undefined) continue;
-    const heading = /^\s{0,3}#{1,6}\s+(.*?)(?:\s+#+)?\s*$/u.exec(line)?.[1];
+    const rest = /^ {0,3}#{1,6}[ \t](.*)$/u.exec(line)?.[1];
+    const heading = rest === undefined ? undefined : headingWords(rest);
     if (heading !== undefined && heading !== "") return heading;
   }
   return undefined;

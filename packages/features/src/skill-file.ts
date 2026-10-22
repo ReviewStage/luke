@@ -42,7 +42,8 @@ export interface SkillFile {
 const FRONTMATTER = /^---\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n|$)/u;
 
 /** A top-level key and the rest of its line. */
-const TOP_LEVEL_KEY = /^([A-Za-z0-9_-]+):(?:[ \t]+(.*))?$/u;
+// Note that one blank opens the value and `scalarOf` trims the rest, so no two quantifiers compete for the same blanks.
+const TOP_LEVEL_KEY = /^([A-Za-z0-9_-]+):(?:[ \t](.*))?$/u;
 
 /** A JSON value read as a string, which a double-quoted scalar parses to. */
 const readJsonString = Schema.decodeUnknownOption(Schema.String);
@@ -95,7 +96,8 @@ function scalarOf(rest: string, continuation: readonly string[]): string {
     return folded.slice(1, -1).replaceAll("''", "'");
   }
   // Note that a plain scalar ends at a comment, which YAML opens with a space and a hash.
-  return folded.replace(/[ \t]+#.*$/u, "");
+  const comment = folded.search(/[ \t]#/u);
+  return comment === -1 ? folded : folded.slice(0, comment).trimEnd();
 }
 
 /** A `SKILL.md` read for its frontmatter's top-level keys and its body; nothing where it opens with no frontmatter. */
