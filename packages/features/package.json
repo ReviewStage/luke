@@ -36,6 +36,7 @@
     "./image-signature": "./src/image-signature.js",
     "./installed-skill-client": "./src/installed-skill-client.js",
     "./installed-skill-route-wire": "./src/installed-skill-route-wire.js",
+    "./installed-skill-view": "./src/installed-skill-view.js",
     "./installed-skill-wire": "./src/installed-skill-wire.js",
     "./video-signature": "./src/video-signature.js",
     "./agent-pictures-model": "./src/agent-pictures-model.js",

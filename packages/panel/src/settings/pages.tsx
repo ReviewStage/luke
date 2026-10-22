@@ -16,7 +16,7 @@ import {
   TerminalIcon,
   UserIcon,
 } from "@luke/ui";
-import { BellIcon, FlaskConicalIcon, InfoIcon, UsersIcon } from "lucide-react";
+import { BellIcon, BookOpenIcon, FlaskConicalIcon, InfoIcon, UsersIcon } from "lucide-react";
 import { settingsPageShown } from "./settings-rows.js";
 
 /** A page's name and glyph. */
@@ -42,6 +42,10 @@ const SETTINGS_PAGE = {
   },
   [SETTINGS_VIEW.CODING_AGENTS]: { title: "Agents", icon: <TerminalIcon /> },
   [SETTINGS_VIEW.INTEGRATIONS]: { title: "Integrations", icon: <PlugIcon /> },
+  [SETTINGS_VIEW.SKILLS]: {
+    title: "Skills",
+    icon: <BookOpenIcon className="settings-icon" />,
+  },
   [SETTINGS_VIEW.PLAN_TEMPLATE]: { title: "Plan template", icon: <DocumentIcon /> },
   [SETTINGS_VIEW.VOICE]: { title: "Voice", icon: <SpeakerIcon /> },
   [SETTINGS_VIEW.APPEARANCE]: { title: "Appearance", icon: <DisplayIcon /> },
