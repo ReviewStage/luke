@@ -24,6 +24,8 @@ import {
   TEXT_BUTTON_LINES,
   TextButton,
   Tooltip,
+  UNASSIGNED_WORDS,
+  UnassignedAvatar,
   VisuallyHidden,
   WingFace,
 } from "@luke/ui";
@@ -321,6 +323,43 @@ export function ActorMark({
       )}
     </span>
   );
+}
+
+/**
+ * No one, where a place says who is on something and nobody is: the shared
+ * dashed outline (`UnassignedAvatar`) at an actor's size, so it stands
+ * level with the faces around it, named Unassigned on hover and to a screen
+ * reader. Where the words stand beside it, or a row says them apart
+ * (`UnassignedHeard`), it is `decorative`: a reader hears it once; and
+ * where the words stand beside it it hangs no hint either (`hint`).
+ */
+export function UnassignedMark({
+  size = ACTOR_SIZE.INLINE,
+  decorative = false,
+  hint = !decorative,
+}: {
+  size?: ActorSize;
+  /** Whether a screen reader hears "Unassigned" elsewhere, so the mark is hidden from it. */
+  decorative?: boolean;
+  /** Whether a pointer resting on the mark is told "Unassigned". */
+  hint?: boolean;
+}): React.JSX.Element {
+  const mark = (
+    <span
+      className="actor-mark"
+      data-kind="unassigned"
+      data-size={size}
+      aria-hidden={decorative ? "true" : undefined}
+    >
+      <UnassignedAvatar size={AVATAR_OF_SIZE[size]} decorative={decorative} />
+    </span>
+  );
+  return hint ? <Tooltip label={UNASSIGNED_WORDS}>{mark}</Tooltip> : mark;
+}
+
+/** What a screen reader hears of a row no one is assigned to, whose dashed mark says it on screen. */
+export function UnassignedHeard(): React.JSX.Element {
+  return <VisuallyHidden>{`(${UNASSIGNED_WORDS.toLowerCase()})`}</VisuallyHidden>;
 }
 
 /**

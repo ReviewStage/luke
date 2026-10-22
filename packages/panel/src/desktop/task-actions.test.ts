@@ -327,8 +327,8 @@ test("the plan's ⋯ menu ends with who created the plan and who last edited it,
   assert.deepEqual(menuFooter(), ["Created by someone", "Last edited"]);
 });
 
-test("a sidebar task someone else created wears its creator's face before its time, and the reader's own wears none", () => {
-  /** The faces each row wears, by the task's name, read as Dean sees them. */
+test("a sidebar task wears its assignee's face where someone else is on it, the dashed unassigned mark where no one is, and nothing where the reader is, never its creator's", () => {
+  /** Each mark the row wears, by its kind and its letter, and what the row says of it, read as Dean sees them. */
   const faces = (task: TaskSummary) => {
     const { tasks, asked } = openTab();
     const container = mount(
@@ -338,28 +338,29 @@ test("a sidebar task someone else created wears its creator's face before its ti
         children: sidebarTask(tasks, task, asked),
       }),
     );
-    const marks = container.querySelectorAll(".sidebar-task-time .actor-mark");
+    const marks = container.querySelectorAll(".sidebar-task-time > .actor-mark");
     // What the row says while it holds the keyboard, its time stepped out for Pin and Archive.
     const line = container.querySelector(".luke-list-row-title");
     const said = [...(line?.childNodes ?? [])]
       .map(heard)
       .join("")
-      .match(/\(created by [^)]*\)/u)?.[0];
+      .match(/\((?:created by|assigned to|unassigned)[^)]*\)/u)?.[0];
     unmountAll();
-    return [[...marks].map((mark) => mark.textContent), said];
+    return [[...marks].map((mark) => [mark.getAttribute("data-kind"), mark.textContent]), said];
   };
 
-  assert.deepEqual(faces(SHARED_TASK), [["C"], "(created by Charles Pan)"]);
-  assert.deepEqual(faces({ ...SHARED_TASK, ownerId: DEAN.userId, createdBy: DEAN }), [
-    [],
-    undefined,
+  // Charles created it and no one is on it: the dashed mark, not his face.
+  assert.deepEqual(faces(SHARED_TASK), [[["unassigned", ""]], "(unassigned)"]);
+  assert.deepEqual(faces({ ...SHARED_TASK, assignee: CHARLES }), [
+    [["person", "C"]],
+    "(assigned to Charles Pan)",
   ]);
-  // A task from a service that named no creator can't be told apart, so it wears nothing.
-  assert.deepEqual(faces(OTHER), [[], undefined]);
+  assert.deepEqual(faces({ ...SHARED_TASK, assignee: DEAN }), [[], undefined]);
+  assert.deepEqual(faces(OTHER), [[["unassigned", ""]], "(unassigned)"]);
 });
 
-test("a sidebar task Luke or a coding agent made wears their square with its member's face on the corner, the reader's own task too, and its ⋯ says who made it for whom", () => {
-  /** Each mark the row wears, by its kind, and the kind of the face on its corner. */
+test("a sidebar task Luke or a coding agent made wears who is on it rather than their square, and its ⋯ says who made it for whom", () => {
+  /** Each mark the row wears, by its kind. */
   const marks = (task: TaskSummary) => {
     const { tasks, asked } = openTab();
     const container = mount(
@@ -369,21 +370,18 @@ test("a sidebar task Luke or a coding agent made wears their square with its mem
         children: sidebarTask(tasks, task, asked),
       }),
     );
-    const worn = [...container.querySelectorAll(".sidebar-task-time > .actor-mark")].map((mark) => [
+    const worn = [...container.querySelectorAll(".sidebar-task-time > .actor-mark")].map((mark) =>
       mark.getAttribute("data-kind"),
-      mark.querySelector(".actor-mark-for")?.getAttribute("data-kind") ?? null,
-    ]);
+    );
     unmountAll();
     return worn;
   };
   const deans = { ...SHARED_TASK, ownerId: DEAN.userId, createdBy: DEAN };
   const byAgent = { ...deans, origin: { actor: PLAN_ACTOR.AGENT, agentId: "agent-gone" } } as const;
-  assert.deepEqual(marks(byAgent), [["agent", "person"]]);
-  assert.deepEqual(marks({ ...deans, origin: { actor: PLAN_ACTOR.NOTETAKER } }), [
-    ["luke", "person"],
-  ]);
-  // A task the reader made by hand still wears nothing.
-  assert.deepEqual(marks(deans), []);
+  const byLuke = { ...deans, origin: { actor: PLAN_ACTOR.NOTETAKER } } as const;
+  assert.deepEqual(marks(byAgent), ["unassigned"]);
+  assert.deepEqual(marks({ ...byLuke, assignee: DEAN }), []);
+  assert.deepEqual(marks({ ...byLuke, assignee: CHARLES }), ["person"]);
 
   const { asked } = openTab();
   const listed = tasksControl({ me: DEAN.userId, tasks: [byAgent] });
