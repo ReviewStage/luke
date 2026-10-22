@@ -1418,6 +1418,38 @@ it.layer(getTestDB())("a pull request's overview", (it) => {
   );
 
   it.effect(
+    "each pull request of the stack GitHub's merge queue holds says it is queued, the one shown among them, as the open pull requests' listing names it",
+    () =>
+      Effect.gen(function* () {
+        const charles = yield* linkedAccount(CHARLES.id);
+        const workspace = yield* openWorkspace(charles);
+        const inQueue = { mergeQueueEntry: { position: 1 } };
+
+        const overview = yield* pullRequestPartOf(workspace).pipe(
+          answering(
+            repository({
+              pull: pull({ base: { ref: "luke/expiry-job" } }),
+              open: [
+                { ...openPull(9, "luke/invite-copy", "luke/invite-once"), mergeQueueEntry: null },
+                { ...openPull(NUMBER, "luke/invite-once", "luke/expiry-job"), ...inQueue },
+                { ...openPull(5, "luke/expiry-job", "main"), ...inQueue },
+              ],
+            }),
+          ),
+        );
+
+        assert.deepEqual(
+          overview?.stack?.map(({ number, queued }) => ({ number, queued })),
+          [
+            { number: 5, queued: true },
+            { number: NUMBER, queued: true },
+            { number: 9, queued: undefined },
+          ],
+        );
+      }),
+  );
+
+  it.effect(
     "the stack is worked out from every page of the open pull requests, so a second child on a later page unmakes the edge, and a pull request from a fork stands in none",
     () =>
       Effect.gen(function* () {

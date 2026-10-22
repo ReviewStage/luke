@@ -2,7 +2,12 @@ import type { PullRequestStackEntry } from "@luke/features/coding-agent-wire";
 import { LINK_PLACE, type LinkPlace } from "@luke/features/luke-link";
 import { ACT_KIND } from "@luke/host/acts";
 import { BUTTON_VARIANT, Button, dropBelowStart, useMenu } from "@luke/ui";
-import { GitPullRequestDraftIcon, GitPullRequestIcon, LayersIcon } from "lucide-react";
+import {
+  GitMergeIcon,
+  GitPullRequestDraftIcon,
+  GitPullRequestIcon,
+  LayersIcon,
+} from "lucide-react";
 import { useAct } from "../act.js";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu.js";
 import { Tooltip } from "../tooltip.js";
@@ -22,6 +27,16 @@ import { useOpenPlace } from "./use-open-link.js";
 
 /** What the menu says beside a pull request no agent owns, which opens on GitHub. */
 const ON_GITHUB = "Opens on GitHub";
+
+/** What an entry in GitHub's merge queue says, as its Pull request tab's pill says it. */
+const QUEUED = "Queued";
+
+/** The words under an entry: queued where the merge queue holds it, and that it opens on GitHub where no agent of the workspace opened it and it is not the one shown. */
+function entryDetail(entry: PullRequestStackEntry, current: boolean): string | undefined {
+  const onGitHub = current || entry.agent !== undefined ? undefined : ON_GITHUB;
+  if (entry.queued !== true) return onGitHub;
+  return onGitHub === undefined ? QUEUED : `${QUEUED} · ${onGitHub}`;
+}
 
 /** The place in Luke a stacked pull request's agent stands: its Pull request tab on its task, or its own page for an agent on none. */
 function placeOf(agent: NonNullable<PullRequestStackEntry["agent"]>): LinkPlace {
@@ -69,10 +84,12 @@ export function PullRequestStack({
       label: `#${entry.number} ${entry.title}`,
       icon: entry.draft ? (
         <GitPullRequestDraftIcon aria-hidden="true" />
+      ) : entry.queued === true ? (
+        <GitMergeIcon aria-hidden="true" />
       ) : (
         <GitPullRequestIcon aria-hidden="true" />
       ),
-      detail: current || entry.agent !== undefined ? undefined : ON_GITHUB,
+      detail: entryDetail(entry, current),
       ...(current ? { checked: true, disabled: true } : undefined),
       onSelect: () => open(entry),
     };
