@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import { act, createElement, type ReactElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, test } from "vitest";
+import { afterEach, beforeEach, test, vi } from "vitest";
 import { BADGE_TONE } from "../badge/badge.js";
 import {
   CHOICE_FLOW,
@@ -34,7 +34,18 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 const roots: Root[] = [];
 
+beforeEach(() => {
+  vi.stubGlobal(
+    "ResizeObserver",
+    class {
+      observe(): void {}
+      disconnect(): void {}
+    },
+  );
+});
+
 afterEach(() => {
+  vi.unstubAllGlobals();
   for (const root of roots.splice(0)) act(() => root.unmount());
   document.body.replaceChildren();
 });
@@ -58,6 +69,7 @@ function render(element: ReactElement): HTMLElement {
 /** A list whose value its caller holds, every change it was handed listed after it. */
 function Held({
   select,
+  options = OPTIONS,
   clearable = false,
   disabled = false,
   start = [],
@@ -66,6 +78,7 @@ function Held({
   readOnly = false,
 }: {
   select?: ChoiceSelect;
+  options?: readonly ChoiceOption<Retry>[];
   clearable?: boolean;
   disabled?: boolean;
   readOnly?: boolean;
@@ -80,7 +93,7 @@ function Held({
     null,
     createElement(ChoiceList<Retry>, {
       legend: "Retries",
-      options: OPTIONS,
+      options,
       value,
       select,
       clearable,
@@ -365,4 +378,61 @@ test("a settled list names each option, the pick beside its note and the rest wi
     ],
   );
   assert.equal(rows(page).length, 0);
+});
+
+test("a picture list is a radio group of faces the arrows walk, each face's picture its mark", () => {
+  const container = render(
+    createElement(Held, {
+      look: CHOICE_LOOK.PICTURE,
+      start: ["three"],
+      options: [
+        { value: "three", label: "Atlas", mark: createElement("img", { alt: "", src: "a.png" }) },
+        { value: "never", label: "Orion", mark: createElement("img", { alt: "", src: "o.png" }) },
+      ],
+    }),
+  );
+  const group = container.querySelector('[role="radiogroup"]');
+  assert.equal(group?.getAttribute("data-look"), "picture");
+  const faces = [...container.querySelectorAll<HTMLButtonElement>('[role="radio"]')];
+  assert.deepEqual(
+    faces.map((face) => face.textContent),
+    ["Atlas", "Orion"],
+  );
+  assert.ok(faces[0]?.querySelector(".luke-choice-mark img"));
+  act(() => faces[0]?.focus());
+  act(() => {
+    faces[0]?.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }));
+  });
+  assert.equal(faces[1]?.getAttribute("aria-checked"), "true");
+  assert.equal(document.activeElement, faces[1]);
+});
+
+test("a card list holds each option's controls under its radio, and a key pressed in them is theirs", () => {
+  const container = render(
+    createElement(Held, {
+      look: CHOICE_LOOK.CARD,
+      start: ["three"],
+      options: [
+        {
+          value: "three",
+          label: "Subscription",
+          aside: createElement("a", { href: "#key" }, "Get key"),
+          below: createElement("input", { "aria-label": "Token" }),
+        },
+        { value: "never", label: "API key" },
+      ],
+    }),
+  );
+  const cards = [...container.querySelectorAll(".luke-choice-card")];
+  assert.equal(cards.length, 2);
+  assert.ok(cards[0]?.querySelector(".luke-choice-aside a"));
+  const input = cards[0]?.querySelector("input");
+  assert.ok(input);
+  assert.equal(input.closest('[role="radio"]'), null);
+  act(() => {
+    input.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }));
+  });
+  const radios = [...container.querySelectorAll('[role="radio"]')];
+  assert.equal(radios[0]?.getAttribute("aria-checked"), "true");
+  assert.equal(radios[1]?.getAttribute("aria-checked"), "false");
 });

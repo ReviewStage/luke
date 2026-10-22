@@ -18,7 +18,10 @@ import {
   BUTTON_TYPE,
   BUTTON_VARIANT,
   Button,
+  CHOICE_LOOK,
   CheckIcon,
+  ChoiceList,
+  type ChoiceOption,
   ConfirmDialog,
   DIALOG_SIZE,
   Dialog,
@@ -362,67 +365,6 @@ function Saved(): React.JSX.Element {
     <span className="agent-auth-check">
       <CheckIcon />
     </span>
-  );
-}
-
-/** One radio card: its radio and label on its head, what it says at the head's end, and its credential's controls under them. */
-function CredentialCard({
-  label,
-  checked,
-  selectable,
-  saved,
-  disabled = false,
-  detail,
-  aside,
-  tabStop,
-  onSelect,
-  children,
-}: {
-  label: string;
-  checked: boolean;
-  /** Whether its credential is saved, so the radio may be pressed. */
-  selectable: boolean;
-  /** Whether its credential is connected, which its ✓ says. */
-  saved: boolean;
-  /** Whether the whole card is out of reach on this client. */
-  disabled?: boolean;
-  /** The one line under the label, why a disabled card is. */
-  detail?: string | undefined;
-  aside?: React.ReactNode;
-  tabStop: boolean;
-  onSelect: () => void;
-  children?: React.ReactNode;
-}): React.JSX.Element {
-  return (
-    <div className="agent-auth-card" data-checked={checked} data-disabled={disabled || undefined}>
-      <div className="agent-auth-card-head">
-        {/* biome-ignore lint/a11y/useSemanticElements: the radio is drawn as ChoiceList's rows are, a button holding the control's mark and the label, speaking as the radio it behaves as. */}
-        <button
-          type="button"
-          role="radio"
-          aria-checked={checked}
-          className="agent-auth-radio"
-          disabled={!selectable || disabled}
-          tabIndex={tabStop ? 0 : -1}
-          onClick={() => {
-            if (!checked) onSelect();
-          }}
-        >
-          <span className="luke-choice-control" data-shape="radio" aria-hidden="true" />
-          <span className="agent-auth-label">{label}</span>
-          {saved ? <Saved /> : null}
-        </button>
-        {aside === undefined ? null : <span className="agent-auth-aside">{aside}</span>}
-      </div>
-      {detail === undefined ? null : (
-        <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
-          {detail}
-        </Text>
-      )}
-      {children === undefined || children === null ? null : (
-        <div className="agent-auth-card-body">{children}</div>
-      )}
-    </div>
   );
 }
 
@@ -985,18 +927,40 @@ function AgentAuthDialog({
     [CREDENTIAL.SUBSCRIPTION]: plan !== undefined && !turning,
     [CREDENTIAL.API_KEY]: key !== undefined && !turning,
   };
-  const tabStop: Credential =
-    chosen ?? (selectable[CREDENTIAL.SUBSCRIPTION] ? CREDENTIAL.SUBSCRIPTION : CREDENTIAL.API_KEY);
-  // The arrows move the choice to the other card's radio where its credential is saved, as a radio group's do.
-  const onKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
-    if (!["ArrowDown", "ArrowUp", "ArrowLeft", "ArrowRight"].includes(event.key)) return;
-    const other = chosen === CREDENTIAL.SUBSCRIPTION ? CREDENTIAL.API_KEY : CREDENTIAL.SUBSCRIPTION;
-    event.preventDefault();
-    if (!selectable[other]) return;
-    choose(other);
-    const radios = event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="radio"]');
-    radios[other === CREDENTIAL.SUBSCRIPTION ? 0 : 1]?.focus();
-  };
+  const cards: readonly ChoiceOption<Credential>[] = [
+    {
+      value: CREDENTIAL.SUBSCRIPTION,
+      label: WORDS.SUBSCRIPTION,
+      after: plan !== undefined && standing(plan) ? <Saved /> : undefined,
+      disabled: !selectable[CREDENTIAL.SUBSCRIPTION] || planOutOfReach,
+      detail: planOutOfReach ? WORDS.DESKTOP_ONLY : undefined,
+      below: planOutOfReach ? null : claude ? (
+        <ClaudeTokenPanel plan={plan} onAnswer={onAnswer} />
+      ) : (
+        <ChatGptPanel plan={plan} offered={chatGptOffered} onAnswer={onAnswer} />
+      ),
+    },
+    {
+      value: CREDENTIAL.API_KEY,
+      label: WORDS.API_KEY,
+      after: key !== undefined ? <Saved /> : undefined,
+      disabled: !selectable[CREDENTIAL.API_KEY],
+      aside: (
+        <TextLink
+          look={TEXT_LINK_LOOK.UNDERLINED}
+          href={harness.keyUrl}
+          external
+          onClick={(event) => {
+            event.preventDefault();
+            openLink(harness.keyUrl);
+          }}
+        >
+          {WORDS.GET_KEY}
+        </TextLink>
+      ),
+      below: <ApiKeyPanel provider={provider} stored={key} onAnswer={onAnswer} />,
+    },
+  ];
 
   return (
     <Dialog
@@ -1010,52 +974,15 @@ function AgentAuthDialog({
       }
     >
       <div className={`agent-auth-dialog ${NO_CAPTURE}`}>
-        <div
-          role="radiogroup"
-          aria-label={`${harness.name} credential`}
-          className="agent-auth-cards"
-          onKeyDown={onKeyDown}
-        >
-          <CredentialCard
-            label={WORDS.SUBSCRIPTION}
-            checked={chosen === CREDENTIAL.SUBSCRIPTION}
-            selectable={selectable[CREDENTIAL.SUBSCRIPTION]}
-            saved={plan !== undefined && standing(plan)}
-            disabled={planOutOfReach}
-            detail={planOutOfReach ? WORDS.DESKTOP_ONLY : undefined}
-            tabStop={tabStop === CREDENTIAL.SUBSCRIPTION}
-            onSelect={() => choose(CREDENTIAL.SUBSCRIPTION)}
-          >
-            {planOutOfReach ? null : claude ? (
-              <ClaudeTokenPanel plan={plan} onAnswer={onAnswer} />
-            ) : (
-              <ChatGptPanel plan={plan} offered={chatGptOffered} onAnswer={onAnswer} />
-            )}
-          </CredentialCard>
-          <CredentialCard
-            label={WORDS.API_KEY}
-            checked={chosen === CREDENTIAL.API_KEY}
-            selectable={selectable[CREDENTIAL.API_KEY]}
-            saved={key !== undefined}
-            tabStop={tabStop === CREDENTIAL.API_KEY}
-            onSelect={() => choose(CREDENTIAL.API_KEY)}
-            aside={
-              <TextLink
-                look={TEXT_LINK_LOOK.UNDERLINED}
-                href={harness.keyUrl}
-                external
-                onClick={(event) => {
-                  event.preventDefault();
-                  openLink(harness.keyUrl);
-                }}
-              >
-                {WORDS.GET_KEY}
-              </TextLink>
-            }
-          >
-            <ApiKeyPanel provider={provider} stored={key} onAnswer={onAnswer} />
-          </CredentialCard>
-        </div>
+        <ChoiceList
+          legend={`${harness.name} credential`}
+          options={cards}
+          value={chosen === undefined ? [] : [chosen]}
+          look={CHOICE_LOOK.CARD}
+          onChange={([next]) => {
+            if (next !== undefined) choose(next);
+          }}
+        />
         {refused === undefined ? null : <State ok={false}>{refused}</State>}
       </div>
     </Dialog>
