@@ -85,7 +85,7 @@ import {
 } from "@luke/ui";
 import { actorName } from "@luke/ui/actor-model";
 import { PICTURE_STATE, usePicture } from "@luke/ui/picture-cache";
-import { formatCount, workingTime } from "@luke/ui/time-format";
+import { formatLocaleCount, workingTime } from "@luke/ui/time-format";
 import {
   BookOpenIcon,
   BotIcon,
@@ -338,7 +338,7 @@ const PULL_REQUEST_WORDS = {
   LEFT: "left",
   /** What the Files changed tab's hint says of every line the pull request changes. */
   total: (additions: number, deletions: number) =>
-    `+${formatCount(additions)} −${formatCount(deletions)} total`,
+    `+${formatLocaleCount(additions)} −${formatLocaleCount(deletions)} total`,
 } as const;
 
 /** The lines a review thread is on, as its head names them: where it stands now, else where it was made; none for a thread on the whole file. */
@@ -1409,7 +1409,7 @@ function Deployments({
 }): React.JSX.Element | null {
   if (deployments.length === 0) return null;
   return (
-    <Section title="Deployments" count={formatCount(deployments.length)}>
+    <Section title="Deployments" count={formatLocaleCount(deployments.length)}>
       <List label="Deployment list" variant={LIST_VARIANT.CARD} density={LIST_DENSITY.DENSE}>
         {deployments.map((deployment) => (
           <DeploymentRow key={deployment.environment} agentId={agentId} deployment={deployment} />
@@ -1639,7 +1639,7 @@ function checksCount(
 ): readonly CountPart[] | undefined {
   const glyph = SUMMARY_GLYPHS[summary];
   if (glyph === null && count === undefined) return undefined;
-  const text = count === undefined ? "" : formatCount(count);
+  const text = count === undefined ? "" : formatLocaleCount(count);
   const tone = SUMMARY_TONES[summary];
   return [
     glyph === null ? { text, tone } : { text, tone, glyph, glyphLabel: SUMMARY_WORDS[summary] },
@@ -1728,7 +1728,8 @@ function tabsOf(
       value: PULL_REQUEST_VIEW.CONVERSATION,
       icon: <MessagesSquareIcon />,
       label: "Conversation",
-      count: conversation === undefined ? undefined : formatCount(conversationCount(conversation)),
+      count:
+        conversation === undefined ? undefined : formatLocaleCount(conversationCount(conversation)),
     },
     {
       value: PULL_REQUEST_VIEW.CHECKS,
@@ -1746,7 +1747,7 @@ function tabsOf(
       value: PULL_REQUEST_VIEW.CHAPTERS,
       icon: <BookOpenIcon />,
       label: "Chapters",
-      count: chapterCount === undefined ? undefined : formatCount(chapterCount),
+      count: chapterCount === undefined ? undefined : formatLocaleCount(chapterCount),
     },
     {
       value: PULL_REQUEST_VIEW.FILES,
@@ -1787,7 +1788,7 @@ function ConversationFilter({
         <ChipName>{label}</ChipName>
         {count === undefined ? null : (
           <span className="pull-request-filter-count" aria-hidden="true">
-            {formatCount(count)}
+            {formatLocaleCount(count)}
           </span>
         )}
       </Chip>

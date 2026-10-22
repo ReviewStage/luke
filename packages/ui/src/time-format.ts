@@ -71,6 +71,9 @@ const UTC_INSTANT = new Intl.DateTimeFormat(LOCALE, {
 /** A count as every list says it, grouped by thousands: "1,234". */
 const COUNT = new Intl.NumberFormat(LOCALE);
 
+/** A count grouped as the reader's own region groups it, which no locale is named for. */
+const LOCAL_COUNT = new Intl.NumberFormat();
+
 /** What parts a span's start from its end. */
 const SPAN_ARROW = " → ";
 
@@ -169,9 +172,14 @@ export function workingTime(elapsedMs: number): string {
   return `${Math.floor(minutes / HOUR_MINUTES)}h ${minutes % HOUR_MINUTES}m`;
 }
 
-/** A count grouped by thousands, as every list and badge says it: "1,234". */
+/** A count grouped by thousands in the window's English, as the admin page says it: "1,234". */
 export function formatCount(value: number): string {
   return COUNT.format(value);
+}
+
+/** A count grouped in the reader's own locale, as `toLocaleString()` said it: "1.234" in Germany. */
+export function formatLocaleCount(value: number): string {
+  return LOCAL_COUNT.format(value);
 }
 
 /** An instant drawn as its UTC date alone, e.g. "Aug 3, 2026". */
