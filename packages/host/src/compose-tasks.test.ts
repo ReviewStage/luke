@@ -783,6 +783,9 @@ function fakeService(tasks: Task[]): FakeService {
             ? ({ ok: false, failure: WORKSPACE_CALL_FAILURE.LINEAR_UNAVAILABLE } as const)
             : ({ ok: true, answer: issues } as const);
         }),
+      sentryInstallations: () => Effect.succeed(UNANSWERED_WORKSPACE),
+      sentryInstall: () => Effect.succeed(UNANSWERED_WORKSPACE),
+      sentryDisconnect: () => Effect.succeed(UNANSWERED_WORKSPACE),
       people: (workspaceId) =>
         Effect.sync(() => {
           service.reads.push(`members:${workspaceId}`);

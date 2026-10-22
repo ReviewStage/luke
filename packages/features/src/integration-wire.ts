@@ -489,6 +489,8 @@ export const INTEGRATION_LANDING_STATUS = {
   EXPIRED: "expired",
   /** Luke could not reach Vercel Connect to settle the sign-in. */
   UNAVAILABLE: "unavailable",
+  /** The provider's account is already installed for another workspace, which keeps it. */
+  ALREADY_CONNECTED: "already-connected",
 } as const;
 
 export type IntegrationLandingStatus =

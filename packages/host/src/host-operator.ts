@@ -265,6 +265,8 @@ import {
   type TasksWorkspacePhotoParams,
   type TasksWorkspacePhotoSetParams,
   type TasksWorkspaceRenameParams,
+  type TasksWorkspaceSentryAnswer,
+  type TasksWorkspaceSentryDisconnectParams,
   type TasksWorkspaceTokenRepositoriesAnswer,
   type TasksWorkspaceTokenRepositoriesParams,
   type TasksWorkspaceTokenRepositorySetParams,
@@ -307,6 +309,7 @@ import {
   tasksWorkspaceLeaveAnswerSchema,
   tasksWorkspaceMembersAnswerSchema,
   tasksWorkspacePhotoAnswerSchema,
+  tasksWorkspaceSentryAnswerSchema,
   tasksWorkspaceTokenRepositoriesAnswerSchema,
   type WorkspaceInvitationsFollowed,
   type WorkspacePeopleFollow,
@@ -584,6 +587,16 @@ export interface HostOperator {
   workspaceLinearDisconnect(params: TasksWorkspaceParams): Effect.Effect<TasksWorkspaceAnswer>;
   /** The Linear issues a workspace's connection reaches; or why there are none. */
   workspaceLinearIssues(params: TasksLinearIssuesParams): Effect.Effect<TasksLinearIssuesAnswer>;
+  /** Whether the deployment holds Luke's Sentry integration, and a workspace's installations of it; or why there is no answer. */
+  workspaceSentry(params: TasksWorkspaceParams): Effect.Effect<TasksWorkspaceSentryAnswer>;
+  /** A workspace's Sentry install begun; Sentry's install address to open, or why there is none. */
+  workspaceSentryInstall(
+    params: TasksWorkspaceParams,
+  ): Effect.Effect<TasksWorkspaceGitHubConnectAnswer>;
+  /** One of a workspace's Sentry installations disconnected; the workspace's Sentry as it then stands, or why it is not. */
+  workspaceSentryDisconnect(
+    params: TasksWorkspaceSentryDisconnectParams,
+  ): Effect.Effect<TasksWorkspaceSentryAnswer>;
   /** One workspace's members; or why there are none. */
   workspaceMembers(params: TasksWorkspaceMembersParams): Effect.Effect<TasksWorkspaceMembersAnswer>;
   /** A workspace's people followed from now until let go, heard through `onWorkspacePeopleChanged`; following again starts over. */
@@ -1672,6 +1685,24 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           ...("identifier" in params ? { identifier: params.identifier } : undefined),
         }),
         workspaceAnswer(tasksLinearIssuesAnswerSchema),
+      ),
+    workspaceSentry: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.WORKSPACES_SENTRY, { workspaceId: params.workspaceId }),
+        workspaceAnswer(tasksWorkspaceSentryAnswerSchema),
+      ),
+    workspaceSentryInstall: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.WORKSPACES_SENTRY_INSTALL, { workspaceId: params.workspaceId }),
+        workspaceAnswer(tasksWorkspaceGitHubConnectAnswerSchema),
+      ),
+    workspaceSentryDisconnect: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.WORKSPACES_SENTRY_DISCONNECT, {
+          workspaceId: params.workspaceId,
+          installationId: params.installationId,
+        }),
+        workspaceAnswer(tasksWorkspaceSentryAnswerSchema),
       ),
     workspaceMembers: (params) =>
       Effect.map(
