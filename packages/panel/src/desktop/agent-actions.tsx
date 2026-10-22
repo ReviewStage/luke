@@ -26,9 +26,10 @@ import { type TabDoors, type TranscriptRead, useTranscriptCopier } from "./strip
  *
  * Every surface that draws an agent offers what this hook answers, and
  * nothing of its own beside it, so an agent with no task, as an
- * automation's run starts, is acted on as a task's is: Rename, which opens
- * its name's field where the surface draws its name, while nothing it
- * stands under is archived; Open terminal, where the platform runs one,
+ * automation's run starts, is acted on as a task's is: its tab, its page,
+ * and its sidebar row, which leaves out only what `NOT_ON_A_ROW` names.
+ * Rename, which opens its name's field where the surface draws its name,
+ * while neither it nor what it stands under is archived; Open terminal, where the platform runs one,
  * and none for an archived agent, whose sandbox takes no shell; Copy link; its transcript's
  * two copies, read whole from the service; Archive agent, asked first
  * while it works (`agent-archive.tsx`), or Unarchive once it is archived;
@@ -46,11 +47,32 @@ import { type TabDoors, type TranscriptRead, useTranscriptCopier } from "./strip
  * none, for its page.
  */
 
-/** What an agent offers on itself, as a tab's menu and a toolbar's ⋯ draw it (`strip-tabs.tsx`). */
+/** What an agent offers on itself, as a tab's menu and a toolbar's ⋯ draw it (`strip-tabs.tsx`), and its sidebar row (`RowDoors`). */
 type AgentDoors = Pick<
   TabDoors,
   "onCopy" | "onRename" | "onOpenTerminal" | "archive" | "deletion" | "copyLink"
 >;
+
+/**
+ * The doors an agent offers that its sidebar row leaves out, each with why,
+ * and the one place that says so. Every other door this hook answers
+ * stands in the row's menu (`sidebar-agent.tsx`), which
+ * `sidebar-agent.test.ts` holds: a door added to `AgentDoors` either is
+ * placed on the row or is named here, or that test fails.
+ */
+export const NOT_ON_A_ROW = {
+  onOpenTerminal: "The terminal opens in a side panel, and a sidebar row has none.",
+  onCopy: "A task's sidebar row offers no transcript copy either, so an agent's row offers none.",
+} as const satisfies Partial<Record<keyof AgentDoors, string>>;
+
+/** The doors an agent's sidebar row offers: every one but those `NOT_ON_A_ROW` names. */
+type RowDoors = Omit<AgentDoors, keyof typeof NOT_ON_A_ROW>;
+
+/** The doors a row offers of those an agent offers, `NOT_ON_A_ROW`'s left out. */
+export function rowDoors(doors: AgentDoors): RowDoors {
+  const offered = Object.entries(doors).filter(([door]) => !Object.hasOwn(NOT_ON_A_ROW, door));
+  return Object.fromEntries(offered) as RowDoors;
+}
 
 /** The doors a column opens an agent's terminals through, by the agent; each none where it is not offered. */
 export interface AgentTerminalDoors {
@@ -165,7 +187,18 @@ export function useAgentCallDoors(
 
 /** One agent's actions, as every surface that draws it offers them. */
 export function useAgentActions(
-  agent: CodingAgentSummary,
+  agent: Pick<
+    CodingAgentSummary,
+    | "id"
+    | "planId"
+    | "status"
+    | "title"
+    | "automationName"
+    | "model"
+    | "archivedAt"
+    | "brief"
+    | "kind"
+  >,
   agents: CodingAgentsControl,
   input: {
     /** The agent's name as the surface draws it, which a transcript copied is headed by. */
@@ -184,8 +217,9 @@ export function useAgentActions(
   const archive = useAgentArchive(agent, agents, shown);
   const unarchive = useAgentUnarchive(agent.id, agents);
   const deletion = useAgentDelete(agent, agents, { shown, onDeleted });
-  // Note that an Unarchive stands while the agent is archived, and it is not renamed then.
-  const renamable = agents.onUnarchive === undefined;
+  // Note that an Unarchive stands while what the agent stands under is archived, and neither it nor
+  // an archived agent is renamed then.
+  const renamable = agents.onUnarchive === undefined && agent.archivedAt === undefined;
   const { onOpenTerminal } = terminals;
   const read = agentTranscriptRead(
     agents.readTranscript,
