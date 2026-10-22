@@ -75,7 +75,7 @@ interface MaintenanceSweeps {
   purgeUnsavedPictures: (now: number) => SweepRead<number>;
   /** Polls the token agents' open pull requests due a poll, a sweep's worth, telling each agent what changed. */
   sweepTokenPullRequests: (now: number) => SweepRead<TokenPullRequestSweepOutcome>;
-  /** Moves the native agents' image template on, building it where some account connected a plan, and deletes older images' templates. */
+  /** Moves the native agents' image template on, building it where it is missing, and deletes older images' templates. */
   sweepImageTemplates: (now: number) => SweepRead<TemplateSweepOutcome>;
 }
 
