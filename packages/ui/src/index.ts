@@ -53,6 +53,7 @@ export * from "./components/progress/progress.js";
 export * from "./components/prose/prose.js";
 export * from "./components/provider-button/provider-button.js";
 export * from "./components/public-page/public-page.js";
+export * from "./components/readable-controls/readable-controls.js";
 export * from "./components/scroll-area/scroll-area.js";
 export * from "./components/search-field/search-field.js";
 export * from "./components/select/select.js";
