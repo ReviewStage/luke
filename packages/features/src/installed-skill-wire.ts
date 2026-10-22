@@ -19,7 +19,7 @@ import { Schema as EffectSchema } from "effect";
 export const INSTALLED_SKILL_SCOPE = {
   /** Its installer's alone, in every workspace they are a member of. */
   PERSONAL: "personal",
-  /** Its workspace's: every member's agents use it; its owners and admins change it. */
+  /** Its workspace's: every member installs one and their agents use it; its installer and the workspace's owners and admins change it. */
   WORKSPACE: "workspace",
 } as const;
 

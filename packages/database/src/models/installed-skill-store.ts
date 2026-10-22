@@ -25,10 +25,10 @@ import type { TaskStoreEffect, TaskStoreFailure } from "./task-store.js";
  * A personal skill is its installer's alone: only they read, change,
  * toggle, and remove it, in whichever workspace they work, since it names
  * none. A workspace skill is its workspace's: every current member reads
- * it and their agents use it, and only its current owners and admins
- * install, change, toggle, and remove it, its installer among them only
- * while they are one. A workspace skill outlives its installer, who is
- * kept for attribution alone. Every statement names the account beside the skill
+ * it, installs one, and has their agents use it, and its installer while
+ * still a member, or its current owners and admins, change, toggle, and
+ * remove it, as an automation is changed. A workspace skill outlives its
+ * installer's account, which is kept for attribution alone. Every statement names the account beside the skill
  * and gates on that rule in SQL, so a member who leaves a workspace reaches
  * none of its skills at once. A skill and its files are written in one
  * transaction: the files are checked first, at least `SKILL.md` and within
@@ -103,7 +103,7 @@ export interface InstalledSkillFileInput {
   readonly bytes: Uint8Array;
 }
 
-/** Whose a new skill is: the installer's own, or a workspace's they own or administer. */
+/** Whose a new skill is: the installer's own, or a workspace's they are a member of. */
 export type InstalledSkillOwner =
   | { readonly scope: typeof INSTALLED_SKILL_SCOPE.PERSONAL }
   | { readonly scope: typeof INSTALLED_SKILL_SCOPE.WORKSPACE; readonly organizationId: string };
@@ -173,19 +173,21 @@ function ownPersonal(userId: string): SQL | undefined {
 /**
  * The condition that the account may do `access` with the skill a
  * statement names: its own personal skill, or a skill of a workspace it is
- * a current member of, as an owner or admin to manage one.
+ * a current member of, which it manages where it installed it or is an
+ * owner or admin there.
  */
 function allowedTo(userId: string, access: InstalledSkillAccess, id?: string): SQL | undefined {
-  const roles = access === INSTALLED_SKILL_ACCESS.MANAGE ? MANAGING_ROLES : undefined;
+  const workspace = installedSkill.organizationId;
+  const rule =
+    access === INSTALLED_SKILL_ACCESS.MANAGE
+      ? or(
+          and(eq(installedSkill.installedByUserId, userId), memberOf(userId, workspace)),
+          memberOf(userId, workspace, MANAGING_ROLES),
+        )
+      : memberOf(userId, workspace);
   return and(
     id === undefined ? undefined : eq(installedSkill.id, id),
-    or(
-      ownPersonal(userId),
-      and(
-        eq(installedSkill.scope, INSTALLED_SKILL_SCOPE.WORKSPACE),
-        memberOf(userId, installedSkill.organizationId, roles),
-      ),
-    ),
+    or(ownPersonal(userId), and(eq(installedSkill.scope, INSTALLED_SKILL_SCOPE.WORKSPACE), rule)),
   );
 }
 
@@ -256,7 +258,7 @@ function checkedFiles(
   });
 }
 
-const findManagedWorkspace = SqlSchema.findAll({
+const findMembership = SqlSchema.findAll({
   Request: Schema.Struct({ userId: Schema.String, organizationId: Schema.String }),
   Result: Schema.Struct({ id: Schema.String }),
   execute: ({ userId, organizationId }) =>
@@ -264,13 +266,7 @@ const findManagedWorkspace = SqlSchema.findAll({
       db
         .select({ id: member.id })
         .from(member)
-        .where(
-          and(
-            eq(member.organizationId, organizationId),
-            eq(member.userId, userId),
-            roleAmong(MANAGING_ROLES),
-          ),
-        ),
+        .where(and(eq(member.organizationId, organizationId), eq(member.userId, userId))),
     ),
 });
 
@@ -478,8 +474,8 @@ export function readInstalledSkill(
 
 /**
  * Installs the skill with its files, enabled, in one transaction: nothing
- * where the account may not install in its scope (a workspace it does not
- * own or administer), `InstalledSkillNameTaken` where its scope holds the
+ * where the account may not install in its scope (a workspace it is not a
+ * current member of), `InstalledSkillNameTaken` where its scope holds the
  * name already, and `InstalledSkillFilesRefused` where its files break
  * the bounds.
  */
@@ -498,8 +494,8 @@ export function installSkill(
     return yield* inTransaction(
       Effect.gen(function* () {
         if (organizationId !== null) {
-          const managed = yield* findManagedWorkspace({ userId, organizationId });
-          if (managed.length === 0) return Option.none();
+          const membership = yield* findMembership({ userId, organizationId });
+          if (membership.length === 0) return Option.none();
         }
         const now = yield* DateTime.nowAsDate;
         const [row] = yield* insertSkill({

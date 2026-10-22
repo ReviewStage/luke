@@ -35,8 +35,9 @@ import {
 /**
  * The skills members install, through the store's public reads and writes
  * over a real dialect: a personal skill is its installer's alone in every
- * workspace, a workspace skill is read by every current member and managed
- * by its current owners and admins alone, a name is held once per scope,
+ * workspace, a workspace skill is installed and read by every current
+ * member and managed by its installer while a member or by its current
+ * owners and admins, a name is held once per scope,
  * and a skill's files are held to their bounds.
  *
  * Synthetic accounts, workspaces, and skills throughout.
@@ -144,31 +145,32 @@ it.layer(getTestDB())("the installed skill store", (it) => {
   );
 
   it.effect(
-    "a workspace skill is read by every current member and installed and managed by its owners and admins alone",
+    "a workspace skill is installed and read by every current member, and managed by its installer, owners, and admins alone",
     () =>
       Effect.gen(function* () {
         const owner = yield* openAccount;
         const admin = yield* openAccount;
+        const installer = yield* openAccount;
         const teammate = yield* openAccount;
         const outsider = yield* openAccount;
         const workspace = yield* openWorkspace(owner);
         yield* joinWorkspace(workspace, admin, WORKSPACE_ROLE.ADMIN);
+        yield* joinWorkspace(workspace, installer, WORKSPACE_ROLE.MEMBER);
         yield* joinWorkspace(workspace, teammate, WORKSPACE_ROLE.MEMBER);
 
-        assert.deepEqual(
-          yield* installSkill(teammate, skill(inWorkspace(workspace), "release-notes")),
-          Option.none(),
-          "a member installs none",
-        );
         assert.deepEqual(
           yield* installSkill(outsider, skill(inWorkspace(workspace), "release-notes")),
           Option.none(),
           "an outsider installs none",
         );
-        const id = yield* installed(admin, skill(inWorkspace(workspace), "release-notes"));
+        const id = yield* installed(installer, skill(inWorkspace(workspace), "release-notes"));
+        const byAdmin = yield* installed(admin, skill(inWorkspace(workspace), "sentry-triage"));
 
-        for (const account of [owner, admin, teammate]) {
-          assert.deepEqual(yield* namesSeen(account, workspace), ["workspace:release-notes"]);
+        for (const account of [owner, admin, installer, teammate]) {
+          assert.deepEqual(yield* namesSeen(account, workspace), [
+            "workspace:release-notes",
+            "workspace:sentry-triage",
+          ]);
           assert.equal(yield* readable(account, id), true);
         }
         assert.deepEqual(yield* namesSeen(outsider, workspace), []);
@@ -177,14 +179,22 @@ it.layer(getTestDB())("the installed skill store", (it) => {
         assert.deepEqual(yield* managedBy(teammate, id), { toggled: false, updated: false });
         assert.equal(yield* removeInstalledSkill(teammate, id), false);
         assert.deepEqual(yield* managedBy(outsider, id), { toggled: false, updated: false });
-        assert.deepEqual(yield* managedBy(owner, id), { toggled: true, updated: true });
+        assert.deepEqual(
+          yield* managedBy(installer, byAdmin),
+          { toggled: false, updated: false },
+          "a member manages no skill another installed",
+        );
+        assert.deepEqual(yield* managedBy(installer, id), { toggled: true, updated: true });
+        assert.deepEqual(yield* managedBy(admin, id), { toggled: true, updated: true });
+        assert.deepEqual(yield* managedBy(owner, byAdmin), { toggled: true, updated: true });
         assert.equal(yield* removeInstalledSkill(owner, id), true);
-        assert.deepEqual(yield* namesSeen(teammate, workspace), []);
+        assert.equal(yield* removeInstalledSkill(installer, byAdmin), false);
+        assert.deepEqual(yield* namesSeen(teammate, workspace), ["workspace:sentry-triage"]);
       }),
   );
 
   it.effect(
-    "a workspace skill's installer manages it only while an owner or admin, and reads nothing of it once gone",
+    "a workspace skill's installer manages it while a member whatever their role, and reaches nothing of it once gone",
     () =>
       Effect.gen(function* () {
         const owner = yield* openAccount;
@@ -194,15 +204,22 @@ it.layer(getTestDB())("the installed skill store", (it) => {
         const id = yield* installed(installer, skill(inWorkspace(workspace), "sentry-triage"));
 
         yield* setRole(workspace, installer, WORKSPACE_ROLE.MEMBER);
-        assert.deepEqual(yield* managedBy(installer, id), { toggled: false, updated: false });
-        assert.equal(yield* removeInstalledSkill(installer, id), false);
-        assert.equal(yield* readable(installer, id), true);
+        assert.deepEqual(yield* managedBy(installer, id), { toggled: true, updated: true });
 
         yield* leaveWorkspace(workspace, installer);
         assert.equal(yield* readable(installer, id), false);
+        assert.deepEqual(yield* managedBy(installer, id), { toggled: false, updated: false });
+        assert.equal(yield* removeInstalledSkill(installer, id), false);
         assert.deepEqual(yield* namesSeen(installer, workspace), []);
         assert.deepEqual(yield* sessionInstalledSkills(installer, workspace), []);
         assert.equal(yield* readable(owner, id), true, "the workspace keeps it");
+
+        yield* joinWorkspace(workspace, installer, WORKSPACE_ROLE.MEMBER);
+        assert.equal(
+          yield* removeInstalledSkill(installer, id),
+          true,
+          "back as a member, theirs again",
+        );
       }),
   );
 
