@@ -404,7 +404,7 @@
     opacity: 1;
   }
 
-  .luke-button[aria-disabled="true"]:not([aria-busy="true"]) {
+  .luke-button[aria-disabled="true"]:not([aria-busy="true"], [data-done="true"]) {
     --luke-button-fill-faded: color-mix(in srgb, var(--luke-button-fill) 45%, transparent);
     background: var(--luke-button-fill-faded);
     color: color-mix(in srgb, var(--luke-button-ink) 45%, transparent);
@@ -457,6 +457,46 @@
   @keyframes luke-button-turn {
     to {
       transform: rotate(1turn);
+    }
+  }
+
+  /* Done, its act landed: its words keep their room, hidden, and a check
+     springs in where they stood, at full strength, since nothing is
+     unavailable about an act that has landed. The check's one beat is what
+     its owner waits on (`button.tsx`), so a dialog closes as it settles. */
+  .luke-button[data-done="true"] {
+    cursor: default;
+  }
+
+  .luke-button[data-done="true"] .luke-button-face {
+    visibility: hidden;
+  }
+
+  .luke-button-done {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    animation:
+      luke-button-done-fade var(--luke-duration-quick) ease-out backwards,
+      luke-button-done-spring var(--luke-duration-fast) var(--luke-spring-fast) backwards;
+  }
+
+  /* Note that the check wears the button's ink, over the green a connected
+     line draws it in, because it stands on the act's own fill. */
+  .luke-button-done svg {
+    color: inherit;
+  }
+
+  @keyframes luke-button-done-fade {
+    from {
+      opacity: 0;
+    }
+  }
+
+  @keyframes luke-button-done-spring {
+    from {
+      transform: scale(0.5);
     }
   }
 }

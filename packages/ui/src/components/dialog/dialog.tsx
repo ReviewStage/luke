@@ -1,5 +1,6 @@
-import { useId, useLayoutEffect, useRef } from "react";
+import { type Ref, useId, useImperativeHandle, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { replayMotion } from "../../replay-motion.js";
 import { TEXT_ELEMENT, TEXT_VARIANT, Text } from "../text/text.js";
 import { useStagedFocus } from "./staged-focus.js";
 
@@ -21,7 +22,12 @@ import { useStagedFocus } from "./staged-focus.js";
  * The dialog stands only while it is open, so mounting it is opening and
  * unmounting it is closing, however it came to close. Asked away while it
  * is at work, by Escape or the dimmed window, the card swells for a moment,
- * so the press is answered even though the owner keeps it open. The card is the
+ * so the press is answered even though the owner keeps it open. A dialog
+ * whose act was refused shakes its card once as the refusal lands, so the
+ * failure reads before its words are read. A dialog holding a draft, words
+ * written and not yet sent, answers the first Escape or press on the dimmed
+ * window with the same swell and stays, its draft as it was, and is put away
+ * by the next one; a reader is told so, since a card that stays is otherwise a press gone nowhere. The card is the
  * profile's dialog card, its inset and its corners, at a question's
  * measure, wider for a note being written, or fitted edge to edge to a file
  * shown; what it holds lays itself out inside. A dialog that takes files dropped on the dimmed window rings its
@@ -88,8 +94,17 @@ type DialogName =
       labelledBy: string;
     };
 
+/** What an owner may ask of its dialog: to be put away as Escape would put it away, as a field that keeps Escape for itself asks. */
+export interface DialogHandle {
+  dismiss: () => void;
+}
+
+/** What a reader is told when a draft holds the card back. */
+const HELD_NOTICE = "Your draft is kept. Press Escape again to close.";
+
 /** What a dialog is told: who names it, whether it is at work, where focus lands, and how it is put away. */
 export type DialogProps = DialogName & {
+  ref?: Ref<DialogHandle> | undefined;
   role?: DialogRole | undefined;
   /** How wide the card stands, a question's measure unless asked. */
   size?: DialogSize | undefined;
@@ -97,6 +112,10 @@ export type DialogProps = DialogName & {
   describedBy?: string | undefined;
   /** Whether the dialog is at work, its controls stilled. */
   busy?: boolean | undefined;
+  /** Whether its act was refused and the refusal stands; each time it turns true the card shakes. */
+  refused?: boolean | undefined;
+  /** Whether it holds a draft, which the first Escape or press on the dimmed window keeps it open for. */
+  holding?: boolean | undefined;
   /** The control that takes focus as the card opens and again whenever the dialog is no longer busy. */
   initialFocus?: React.RefObject<HTMLElement | null> | undefined;
   /** Escape or a press on the dimmed window: the dialog decides what putting it away costs. */
@@ -149,21 +168,34 @@ function trappedTab(event: React.KeyboardEvent<HTMLElement>): void {
   (event.shiftKey ? controls.at(-1) : controls[0])?.focus();
 }
 
+/** What the card plays as it answers: a swell for a dismissal it holds back, a shake for an act refused. */
+const CARD_ANSWER = {
+  NUDGE: "data-nudge",
+  REFUSED: "data-refused",
+} as const;
+
 /**
- * Nudges the card, once per attempt, when it is asked away while at work: a
+ * Nudges the card, once per attempt, when it is asked away and stays: a
  * brief swell that says it heard and will not go yet, rather than a press
- * that went nowhere. The attribute is taken off and set again so a second
- * attempt restarts it, and it leaves as the nudge ends; it is the card's own,
- * which React never draws, so no render clears it mid-nudge.
+ * that went nowhere.
  */
 function nudge(card: HTMLDivElement | null): void {
-  if (card === null) return;
-  card.removeAttribute("data-nudge");
-  // Note that reading the layout here makes the engine see the attribute
-  // gone before it is set again, which is what starts the nudge anew.
-  void card.offsetWidth;
-  card.setAttribute("data-nudge", "true");
-  card.addEventListener("animationend", () => card.removeAttribute("data-nudge"), { once: true });
+  if (card !== null) replayMotion(card, CARD_ANSWER.NUDGE);
+}
+
+/**
+ * Shakes the card once each time `refused` turns true, so a refusal landing
+ * again after a retry shakes it again; one already standing as the card
+ * opens plays nothing over its entrance.
+ */
+function useRefusalShake(card: React.RefObject<HTMLDivElement | null>, refused: boolean): void {
+  const was = useRef(refused);
+  useLayoutEffect(() => {
+    if (refused && !was.current && card.current !== null) {
+      replayMotion(card.current, CARD_ANSWER.REFUSED);
+    }
+    was.current = refused;
+  }, [card, refused]);
 }
 
 /**
@@ -191,12 +223,15 @@ function useInvokerFocus(): void {
  * to the window behind.
  */
 export function Dialog({
+  ref,
   role = DIALOG_ROLE.DIALOG,
   size = DIALOG_SIZE.CONFIRM,
   title,
   labelledBy,
   describedBy,
   busy = false,
+  refused = false,
+  holding = false,
   initialFocus,
   onDismiss,
   onKeyDown,
@@ -209,18 +244,34 @@ export function Dialog({
   const card = useRef<HTMLDivElement | null>(null);
   const titleId = useId();
   const pressedBackdrop = useRef(false);
+  // Whether a draft has already held the card back once, which the next
+  // dismissal goes through.
+  const [held, setHeld] = useState(false);
+  if (held && !holding) setHeld(false);
 
   useInvokerFocus();
   useStagedFocus<HTMLElement>(initialFocus ?? card, !busy);
   useStagedFocus(card, busy);
+  useRefusalShake(card, refused);
 
-  // Note that the owner still hears the dismissal and decides what it costs;
-  // the nudge only answers one asked while the dialog is at work, which no
-  // owner takes.
+  // Note that the owner still hears a dismissal asked while the dialog is
+  // at work and decides what it costs; the nudge answers it, which no owner
+  // takes. A draft's hold is the dialog's own, so the owner hears only the
+  // dismissal that goes through.
   const dismiss = () => {
-    if (busy) nudge(card.current);
+    if (busy) {
+      nudge(card.current);
+      onDismiss();
+      return;
+    }
+    if (holding && !held) {
+      setHeld(true);
+      nudge(card.current);
+      return;
+    }
     onDismiss();
   };
+  useImperativeHandle(ref, () => ({ dismiss }));
 
   const keyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
     // Note that no key pressed in the card goes on to the window. A button's
@@ -279,6 +330,11 @@ export function Dialog({
           </Text>
         )}
         {children}
+        {holding ? (
+          <span className="luke-visually-hidden" role="status">
+            {held ? HELD_NOTICE : ""}
+          </span>
+        ) : null}
         {actions === undefined && actionsStart === undefined ? null : (
           <div className="luke-dialog-foot">
             {actionsStart}

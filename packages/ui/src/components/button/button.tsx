@@ -1,4 +1,13 @@
-import type { ButtonHTMLAttributes, MouseEvent, ReactNode, Ref } from "react";
+import {
+  type ButtonHTMLAttributes,
+  type MouseEvent,
+  type ReactNode,
+  type Ref,
+  useLayoutEffect,
+  useRef,
+} from "react";
+import { CheckIcon } from "../../face/glyphs.js";
+import { replayMotion } from "../../replay-motion.js";
 import { SpinnerRing } from "../spinner/spinner.js";
 
 /**
@@ -44,7 +53,10 @@ import { SpinnerRing } from "../spinner/spinner.js";
  * or a link drawn as one takes is answered with a pulse of its face, and a
  * submit's arrow lifts as it sends. A busy button keeps its width, its
  * words standing hidden under a turning ring, refuses its press, and is
- * named by `busyLabel` ("Saving") for as long as the ring stands. The ring
+ * named by `busyLabel` ("Saving") for as long as the ring stands. A labelled
+ * button whose act has landed may say so, `done`: a check springs in where
+ * its words stood, it refuses another press, and `onDone` hears once the
+ * check has been seen, at once where no motion runs. The ring
  * holds still on `--luke-loop-motion`, as every endless loop does under reduced
  * motion and a capture run. The keyboard's ring is the app's own, drawn by
  * its reset for every control alike.
@@ -192,34 +204,25 @@ function preventFocusMove(event: MouseEvent<HTMLButtonElement>): void {
   event.preventDefault();
 }
 
-/**
- * Plays `attribute`'s animation on `element` again from its start: the
- * attribute is taken off and set again, so a second press restarts it
- * rather than landing on one still running, and it leaves as the animation
- * ends. It is the element's own, which React never draws, so no render
- * clears it mid-play.
- */
-function replay(element: HTMLElement, attribute: string): void {
-  element.removeAttribute(attribute);
-  // Note that reading the layout here makes the engine see the attribute
-  // gone before it is set again, which is what starts it anew.
-  void element.offsetWidth;
-  element.setAttribute(attribute, "true");
-  element.addEventListener("animationend", () => element.removeAttribute(attribute), {
-    once: true,
-  });
-}
-
 /** What a button plays as it answers a press: a shake for one it refused, a pulse for one it took. */
 const PRESS_ANSWER = {
   DENIED: "data-denied",
   PULSE: "data-pulse",
 } as const;
 
-/** The attributes and handler a button carries for its state, shared by both kinds. */
-function stateProps(props: ButtonBase, name: string | undefined) {
-  const refusing =
-    props.busy === true || (props.disabled === true && props.focusableWhenDisabled === true);
+/** Plays a press's pulse on `pressable`, whose face is what moves. */
+function pulse(pressable: HTMLElement): void {
+  replayMotion(
+    pressable,
+    PRESS_ANSWER.PULSE,
+    pressable.querySelector(".luke-button-face") ?? pressable,
+  );
+}
+
+/** The attributes and handler a button carries for its state, shared by both kinds; `done` is a labelled one whose act has landed. */
+function stateProps(props: ButtonBase, name: string | undefined, done = false) {
+  const settled = props.busy === true || done;
+  const refusing = settled || (props.disabled === true && props.focusableWhenDisabled === true);
   const busyName = props.busy === true ? props.busyLabel : undefined;
   return {
     type: props.type ?? BUTTON_TYPE.BUTTON,
@@ -251,14 +254,53 @@ function stateProps(props: ButtonBase, name: string | undefined) {
     onClick: (event: MouseEvent<HTMLButtonElement>) => {
       if (refusing) {
         event.preventDefault();
-        // Note that a busy button's ring already says why it takes no press.
-        if (props.busy !== true) replay(event.currentTarget, PRESS_ANSWER.DENIED);
+        // Note that a busy button's ring, or a done one's check, already says why it takes no press.
+        if (!settled) replayMotion(event.currentTarget, PRESS_ANSWER.DENIED);
         return;
       }
-      replay(event.currentTarget, PRESS_ANSWER.PULSE);
+      pulse(event.currentTarget);
       props.onClick?.(event);
     },
   };
+}
+
+/** The motions an element runs. Note that a DOM with no animation engine, a test's, runs none. */
+function running(element: HTMLElement): Animation[] {
+  return "getAnimations" in element ? element.getAnimations() : [];
+}
+
+/**
+ * The check a done button wears over its hidden words, which tells `onShown`
+ * once its spring has played, or at once where it runs none, as under
+ * reduced motion's zeroed tokens or in a DOM with no animation engine.
+ */
+function DoneMark({ onShown }: { onShown: (() => void) | undefined }): React.JSX.Element {
+  const mark = useRef<HTMLSpanElement | null>(null);
+  const shown = useRef(onShown);
+  shown.current = onShown;
+  useLayoutEffect(() => {
+    const motions = mark.current === null ? [] : running(mark.current);
+    // Note that a motion cancelled counts as played, since nothing is left to wait for.
+    let left = motions.length;
+    let current = true;
+    const played = () => {
+      left -= 1;
+      if (current && left <= 0) shown.current?.();
+    };
+    if (left === 0) shown.current?.();
+    for (const motion of motions) {
+      motion.addEventListener("finish", played, { once: true });
+      motion.addEventListener("cancel", played, { once: true });
+    }
+    return () => {
+      current = false;
+    };
+  }, []);
+  return (
+    <span ref={mark} className="luke-button-done" aria-hidden="true">
+      <CheckIcon />
+    </span>
+  );
 }
 
 /** A labelled button: its words, after its glyph where it has one. */
@@ -269,6 +311,8 @@ export function Button({
   size,
   pressed,
   readOnly = false,
+  done = false,
+  onDone,
   children,
   ...props
 }: ButtonBase & {
@@ -283,6 +327,10 @@ export function Button({
   pressed?: boolean | undefined;
   /** Whether it records a press rather than offering one: it takes none, at full strength. */
   readOnly?: boolean | undefined;
+  /** Whether its act has landed: a check stands in its words' place and it takes no press. */
+  done?: boolean | undefined;
+  /** Heard once the check has been seen, as a dialog waits on it to close. */
+  onDone?: (() => void) | undefined;
   children: ReactNode;
 }): React.JSX.Element {
   return (
@@ -290,14 +338,16 @@ export function Button({
       className="luke-button"
       data-size={size === BUTTON_SIZE.COMPACT ? BUTTON_SIZE.COMPACT : undefined}
       data-read-only={readOnly || undefined}
+      data-done={done || undefined}
       aria-pressed={pressed}
-      {...stateProps(readOnly ? { ...props, disabled: true } : props, label)}
+      {...stateProps(readOnly ? { ...props, disabled: true } : props, label, done)}
     >
       <span className="luke-button-face">
         {icon}
         <span className="luke-button-words">{children}</span>
         {trailing === undefined ? null : <span className="luke-button-trailing">{trailing}</span>}
       </span>
+      {done ? <DoneMark onShown={onDone} /> : null}
     </button>
   );
 }
@@ -324,7 +374,7 @@ export function ButtonLink({
       data-variant={variant ?? BUTTON_VARIANT.QUIET}
       href={href}
       onClick={(event) => {
-        replay(event.currentTarget, PRESS_ANSWER.PULSE);
+        pulse(event.currentTarget);
         onClick?.(event);
       }}
     >
@@ -359,7 +409,7 @@ export function IconButtonLink({
       data-variant={variant ?? BUTTON_VARIANT.QUIET}
       href={href}
       aria-label={label}
-      onClick={(event) => replay(event.currentTarget, PRESS_ANSWER.PULSE)}
+      onClick={(event) => pulse(event.currentTarget)}
       target={newTab ? "_blank" : undefined}
       rel={newTab ? "noreferrer" : undefined}
     >
