@@ -2730,6 +2730,11 @@ ul.actor-stack {
   padding-bottom: var(--luke-menu-inset);
 }
 
+/* A note that starts where a row's label does, past the row's glyph slot. */
+.task-compose-menu-foot-note[data-aligned="true"] {
+  padding-left: calc(var(--row-inset) + var(--luke-menu-glyph) + var(--luke-icon-gap));
+}
+
 /* A submenu stands beside the pinned row that opened it, its top level
    with that row's and its near edge at the menu's own; it turns to the
    menu's other side where the window ends before it does, and stands up

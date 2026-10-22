@@ -1,5 +1,5 @@
 import { runtimeModelRule, runtimeModels } from "@luke/features/agent-runtime-models";
-import type { CodingAgentUsage } from "@luke/features/coding-agent-wire";
+import { CODING_AGENT_PAYER, type CodingAgentUsage } from "@luke/features/coding-agent-wire";
 import type { CatalogModel } from "@luke/features/models-wire";
 import {
   AnchoredPopover,
@@ -9,15 +9,18 @@ import {
   ChipName,
   type ChipWidth,
   POPOVER_ALIGN,
+  TEXT_LINK_LOOK,
+  TextLink,
 } from "@luke/ui";
 import { useDisclosure } from "@luke/ui/use-disclosure";
 import { useEffect, useId, useRef, useState } from "react";
 import { HarnessMark } from "../harness-marks.js";
 import { Tooltip } from "../tooltip.js";
-import { agentUsageLine, choiceLabel, providerOf } from "./coding-agent-model.js";
+import { agentUsageLine, choiceLabel, planPayerOf, providerOf } from "./coding-agent-model.js";
 import { ModelLabel } from "./model-label.js";
 import { ModelMenu, settledChoice } from "./model-menu.js";
 import type { AgentModelControl } from "./use-agent-model.js";
+import { useOpenLink } from "./use-open-link.js";
 
 /**
  * agent-model-chip.tsx -- the chip at the agent box's foot that names what the agent runs on, and the menu that changes it.
@@ -47,7 +50,41 @@ import type { AgentModelControl } from "./use-agent-model.js";
  * provider's own harness is offered only what that harness runs, the rule
  * `list_models` and `update_agent` read too (`agent-runtime-models.ts`): on
  * Claude Code, Claude models alone, with no Fast switch and no Context row.
+ * An agent its starter's ChatGPT plan pays for says so on the menu's last
+ * line, "Using ChatGPT plan · Manage usage", as OpenAI's UI guidelines ask
+ * (developers.openai.com/siwc/ui-ux-guidelines), Manage usage opening
+ * ChatGPT's usage settings.
  */
+
+/** Where OpenAI's guidelines send Manage usage: ChatGPT's own usage settings. */
+const CHATGPT_USAGE_URL = "https://chatgpt.com/settings/usage";
+
+const CHATGPT_PLAN_WORDS = {
+  USING: "Using ChatGPT plan",
+  MANAGE: "Manage usage",
+} as const;
+
+/** The menu's last line on an agent a ChatGPT plan pays for. */
+function ChatGptPlanNote(): React.JSX.Element {
+  const openLink = useOpenLink();
+  return (
+    <>
+      {CHATGPT_PLAN_WORDS.USING}
+      {" · "}
+      <TextLink
+        href={CHATGPT_USAGE_URL}
+        look={TEXT_LINK_LOOK.UNDERLINED}
+        external
+        onClick={(event) => {
+          event.preventDefault();
+          openLink(CHATGPT_USAGE_URL);
+        }}
+      >
+        {CHATGPT_PLAN_WORDS.MANAGE}
+      </TextLink>
+    </>
+  );
+}
 
 export function AgentModelChip({
   model,
@@ -130,6 +167,11 @@ export function AgentModelChip({
             offersFast={runtimeModelRule(model.runtime).fast}
             onChoose={model.choose}
             footNote={agentUsageLine(usage)}
+            planNote={
+              planPayerOf(model.runtime) === CODING_AGENT_PAYER.CHATGPT_SUBSCRIPTION ? (
+                <ChatGptPlanNote />
+              ) : undefined
+            }
             onClose={close}
             onLeave={(left) => {
               if (!(left instanceof Node && root.current?.contains(left))) setOpen(false);
