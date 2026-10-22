@@ -142,6 +142,7 @@ type TranscriptMessage = StoredUIMessage &
   TurnRecord & {
     readonly startedAt?: number;
     readonly finishedAt?: number;
+    readonly clientId?: string;
     readonly sentBy?: CodingAgentSender;
     readonly sentAt?: number;
     readonly arrivedIn?: LinePlace;
@@ -365,6 +366,7 @@ function transcriptMessageOf(
     const place = places.get(record.id);
     return {
       ...record.message,
+      clientId: record.clientId,
       ...(sent === undefined ? undefined : { sentBy: senderOf(sent) }),
       sentAt: record.placedAt.getTime(),
       ...(place === undefined ? undefined : { arrivedIn: place }),

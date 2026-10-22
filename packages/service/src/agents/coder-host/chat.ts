@@ -37,7 +37,7 @@ import {
   listCodingAgents,
   readCodingAgentRouting,
 } from "@luke/database/models/coding-agent-store";
-import { chatNoticeKey, sentLineId } from "@luke/database/models/ids";
+import { chatNoticeKey } from "@luke/database/models/ids";
 import { sentLineStands } from "@luke/database/models/message-reads";
 import { readTaskHeader } from "@luke/database/models/task-store";
 import { chatTargetMember } from "@luke/features/chat-mentions";
@@ -59,6 +59,7 @@ import {
   resolveAskInputSchema,
 } from "@luke/features/chat-wire";
 import { readEither } from "@luke/wire/effect";
+import { sentLineId } from "@luke/wire/host-ids";
 import { Data, Effect, Option, Result, Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import { SqlClient } from "effect/sql";
