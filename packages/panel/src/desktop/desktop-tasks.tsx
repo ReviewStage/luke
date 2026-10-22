@@ -1006,17 +1006,14 @@ function PlanDocument({
   const head = switched ? (
     <TaskHead
       back={onTab === undefined ? away : { label: ACTIVITY_BACK, onPress: () => onListed(true) }}
-      title={onTab?.label ?? task.name}
-      rename={
-        onTab === undefined
-          ? {
-              editing: rename.editing,
-              onEnd: (end) => {
-                void rename.end(end.value);
-              },
-            }
-          : undefined
-      }
+      // Note that the task's Rename opens the task's name in the title's place on a tab too, since the tab hides the plan's own title.
+      title={onTab === undefined || rename.editing ? task.name : onTab.label}
+      rename={{
+        editing: rename.editing,
+        onEnd: (end) => {
+          void rename.end(end.value);
+        },
+      }}
       actions={taskMenu}
     />
   ) : null;

@@ -319,3 +319,13 @@ test("a wide window keeps the panel's strip and the column's toolbar, and draws 
   assert.equal(page.container.querySelector(".side-panel[data-pane-switch]"), null);
   assert.ok(page.labelled("Task actions"), "the column's toolbar keeps the task's ⋯");
 });
+
+test("on a phone the ⋯'s Rename on a tab opens the task's name in the title's place, the tab hiding the plan's own title", async () => {
+  const page = mount(SHELL_ROOM.NARROW, true, SIDE_PANEL_TAB.BOARD);
+  assert.equal(page.head().title, "Board");
+  page.choose("Rename");
+  const field = page.container.querySelector<HTMLInputElement>(
+    '.task-head input[aria-label="Task name"]',
+  );
+  assert.equal(field?.value, TASK.name);
+});

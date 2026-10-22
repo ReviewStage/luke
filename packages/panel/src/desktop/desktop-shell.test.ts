@@ -1362,3 +1362,28 @@ test("on a phone an open task leads its own row with the way back the window's h
     "the sidebar's toggle stands",
   );
 });
+
+test("on a phone an open task, which draws no sidebar toggle, still answers the sidebar's chord with the drawer", async () => {
+  let toggled = 0;
+  const tasks = tasksControl({
+    page: TASKS_PAGE.DOCUMENT,
+    region: { kind: DOCUMENT_REGION.READY, task: DOCUMENT_TASK },
+  });
+  const container = document.body.appendChild(document.createElement("div"));
+  root = createRoot(container);
+  act(() =>
+    root?.render(
+      onRegistry(
+        AtomRegistry.make(),
+        createElement(DesktopShell, {
+          ...shellProps(tasks, PANEL_TAB.TASKS, ignore, { onToggle: () => (toggled += 1) }),
+          room: SHELL_ROOM.NARROW,
+        }),
+      ),
+    ),
+  );
+  await settle();
+  assert.equal(container.querySelector(".desktop-shell > .title-bar-controls"), null);
+  act(() => runAppCommand(APP_COMMAND.TOGGLE_SIDEBAR));
+  assert.equal(toggled, 1);
+});

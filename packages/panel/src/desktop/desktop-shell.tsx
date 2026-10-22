@@ -326,6 +326,12 @@ function SidebarToggle({ sidebar }: { sidebar: SidebarCollapse }): React.JSX.Ele
   );
 }
 
+/** The sidebar's chord alone, where its toggle is not drawn, as on a phone's task, whose header stands in its place, though the drawer is still there to open. */
+function SidebarChord({ sidebar }: { sidebar: SidebarCollapse }): null {
+  useAppCommand(APP_COMMAND.TOGGLE_SIDEBAR, sidebar.onToggle);
+  return null;
+}
+
 /**
  * The shortcuts that reach a place from anywhere past the sign-in: a new
  * task, Settings, the Inbox, the tab closed latest, opened again on its
@@ -945,7 +951,9 @@ export function DesktopShell({
       {/* Note that they follow the drag strips they cover, because a later drag region wins.
           Folded, the sidebar's offline pill stands here, as its New task does. */}
       {/* A phone's task heads itself with one row of its own, its way back where these stood (`task-pane-switcher.tsx`). */}
-      {room === SHELL_ROOM.NARROW && taskDrawn ? null : (
+      {room === SHELL_ROOM.NARROW && taskDrawn ? (
+        <SidebarChord sidebar={sidebar} />
+      ) : (
         <div className="title-bar-controls" onPointerDown={keepOverlay}>
           <SidebarToggle sidebar={sidebar} />
           {sidebar.collapsed ? <TitleBarNewTask tasks={tasks} /> : null}

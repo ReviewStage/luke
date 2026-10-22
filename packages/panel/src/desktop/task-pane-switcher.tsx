@@ -106,7 +106,7 @@ export function TaskHead({
   back: TaskHeadBack;
   /** What is on screen: the task's name, or the tab shown. */
   title: string;
-  /** The task's name as a field in the title's place while it is renamed; none on a tab, whose title is not the task's. */
+  /** The task's name as a field in the title's place while it is renamed, `title` then being the task's name. */
   rename?: TaskHeadRename | undefined;
   /** The row's one ⋯ (`TaskActions`). */
   actions: React.ReactNode;
