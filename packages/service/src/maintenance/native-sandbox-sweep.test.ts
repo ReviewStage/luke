@@ -5,11 +5,12 @@ import { Database } from "@luke/database/core/query";
 import { createCodingAgent } from "@luke/database/models/coding-agent-store";
 import { holdSandbox } from "@luke/database/models/sandbox-terminal-lease";
 import { user } from "@luke/database/schemas/auth";
-import { turns } from "@luke/database/schemas/storage";
+import { conversations, turns } from "@luke/database/schemas/storage";
 import { CONVERSATION_RUNTIME, type ConversationRuntime } from "@luke/database/storage-vocabulary";
 import { getTestDB, startTask } from "@luke/database/testing";
 import { TURN_ORIGIN, TURN_STATUS, type TurnStatus } from "@luke/wire";
 import { fakeHttpClientLayer } from "@luke/wire/testing";
+import { eq } from "drizzle-orm";
 import { Duration, Effect, Option } from "effect";
 import { afterEach, vi } from "vitest";
 import { commandRead, type ReadCommand } from "../testing/runner-sandbox-fake.js";
@@ -192,6 +193,64 @@ afterEach(() => {
 
 it.layer(getTestDB())("the native sandbox sweep", (it) => {
   it.effect(
+    "a runner that exited mid-turn has its turn settled failed and the projection's turn dropped, its sandbox stopped past the grace; a runner still up keeps its turn",
+    () =>
+      Effect.gen(function* () {
+        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+        const db = yield* Database;
+        const crashed = yield* openAgent(CONVERSATION_RUNTIME.CLAUDE_CODE, {
+          status: TURN_STATUS.RUNNING,
+          at: minutesBefore(10),
+        });
+        const working = yield* openAgent(CONVERSATION_RUNTIME.CODEX, {
+          status: TURN_STATUS.RUNNING,
+          at: minutesBefore(10),
+        });
+        const [lostTurn] = yield* db
+          .select({ id: turns.id })
+          .from(turns)
+          .where(eq(turns.conversationId, crashed.conversationId));
+        assert.ok(lostTurn !== undefined);
+        yield* db
+          .update(conversations)
+          .set({ nativeProjection: { session: "cli-session", turn: { id: lostTurn.id } } })
+          .where(eq(conversations.id, crashed.conversationId));
+        const api = vercel();
+        api.commands.set("cmd_killed", { id: "cmd_killed", exitCode: 137 });
+        api.commands.set("cmd_running", { id: "cmd_running", exitCode: null });
+        const dead = nativeSandbox(crashed.id, "cmd_killed");
+        const alive = nativeSandbox(working.id, "cmd_running");
+        api.sandboxes.push(dead, alive);
+
+        const outcome = yield* sweepNativeSandboxes(NOW).pipe(Effect.provide(api.layer));
+
+        assert.deepEqual(outcome, { stopped: 0, held: 0, failed: 0, deferred: 0, lost: 1 });
+        const statusOf = (conversationId: string) =>
+          db
+            .select({ status: turns.status, failureDetail: turns.failureDetail })
+            .from(turns)
+            .where(eq(turns.conversationId, conversationId));
+        const [settled] = yield* statusOf(crashed.conversationId);
+        assert.equal(settled?.status, TURN_STATUS.FAILED);
+        assert.match(settled?.failureDetail ?? "", /runner stopped before its turn ended/u);
+        assert.equal((yield* statusOf(working.conversationId))[0]?.status, TURN_STATUS.RUNNING);
+        const [projection] = yield* db
+          .select({ projection: conversations.nativeProjection })
+          .from(conversations)
+          .where(eq(conversations.id, crashed.conversationId));
+        assert.deepEqual(projection?.projection, { session: "cli-session" });
+
+        // Past the grace, the failed run's sandbox is stopped as any ended run's is.
+        const later = yield* sweepNativeSandboxes(new Date(NOW.getTime() + GRACE_MS + 60_000)).pipe(
+          Effect.provide(api.layer),
+        );
+        assert.equal(later.stopped, 1);
+        assert.deepEqual(api.stopped, [dead.currentSessionId]);
+        assert.equal(alive.status, "running");
+      }),
+  );
+
+  it.effect(
     "an ended sandbox no Terminal holds is stopped, credential first; a held, running, waiting, or just-ended one keeps running, and eve's is never asked after",
     () =>
       Effect.gen(function* () {
@@ -247,7 +306,7 @@ it.layer(getTestDB())("the native sandbox sweep", (it) => {
 
         const sessionOf = (agentId: string) => sandboxOf.get(agentId)?.currentSessionId;
         const stoppable = [sessionOf(ended.id), sessionOf(codexEnded.id)].sort();
-        assert.deepEqual(outcome, { stopped: 2, held: 1, failed: 0, deferred: 0 });
+        assert.deepEqual(outcome, { stopped: 2, held: 1, failed: 0, deferred: 0, lost: 0 });
         assert.deepEqual([...api.stopped].sort(), stoppable);
         assert.deepEqual([...api.policies].sort(), stoppable, "the credential goes first");
         for (const agent of [held, queued, waiting, justEnded]) {
@@ -287,9 +346,10 @@ it.layer(getTestDB())("the native sandbox sweep", (it) => {
           held: 0,
           failed: 0,
           deferred: 2,
+          lost: 0,
         });
         assert.equal(stoppedFirst, NATIVE_SANDBOX_SWEEP.MAX_STOPS);
-        assert.deepEqual(second, { stopped: 2, held: 0, failed: 0, deferred: 0 });
+        assert.deepEqual(second, { stopped: 2, held: 0, failed: 0, deferred: 0, lost: 0 });
         assert.ok(api.sandboxes.every((sandbox) => sandbox.status === "stopped"));
       }),
   );
@@ -319,14 +379,14 @@ it.layer(getTestDB())("the native sandbox sweep", (it) => {
         );
 
         assert.equal(pagesAsked, NATIVE_SANDBOX_SWEEP.MAX_PAGES);
-        assert.deepEqual(outcome, { stopped: 0, held: 0, failed: 0, deferred: 0 });
+        assert.deepEqual(outcome, { stopped: 0, held: 0, failed: 0, deferred: 0, lost: 0 });
         assert.equal(runningAfterFirst, "running");
         assert.equal(
           api.pagesListed.at(-1)?.order,
           "desc",
           "the next minute lists from the newest",
         );
-        assert.deepEqual(nextMinute, { stopped: 1, held: 0, failed: 0, deferred: 0 });
+        assert.deepEqual(nextMinute, { stopped: 1, held: 0, failed: 0, deferred: 0, lost: 0 });
         assert.equal(beyond.status, "stopped");
       }),
   );
@@ -392,7 +452,7 @@ it.layer(getTestDB())("the native sandbox sweep", (it) => {
 
       const outcome = yield* sweepNativeSandboxes(NOW).pipe(Effect.provide(api.layer));
 
-      assert.deepEqual(outcome, { stopped: 0, held: 0, failed: 0, deferred: 0 });
+      assert.deepEqual(outcome, { stopped: 0, held: 0, failed: 0, deferred: 0, lost: 0 });
       assert.deepEqual(api.stopped, []);
     }),
   );
@@ -424,7 +484,7 @@ it.layer(getTestDB())("the native sandbox sweep", (it) => {
 
         const outcome = yield* sweepNativeSandboxes(NOW).pipe(Effect.provide(api.layer));
 
-        assert.deepEqual(outcome, { stopped: 2, held: 0, failed: 0, deferred: 0 });
+        assert.deepEqual(outcome, { stopped: 2, held: 0, failed: 0, deferred: 0, lost: 0 });
         assert.equal(live.status, "running");
         assert.equal(done.status, "stopped");
         assert.equal(gone.status, "stopped");
@@ -446,7 +506,7 @@ it.layer(getTestDB())("the native sandbox sweep", (it) => {
 
         const outcome = yield* sweepNativeSandboxes(NOW).pipe(Effect.provide(api.layer));
 
-        assert.deepEqual(outcome, { stopped: 0, held: 0, failed: 1, deferred: 0 });
+        assert.deepEqual(outcome, { stopped: 0, held: 0, failed: 1, deferred: 0, lost: 0 });
         assert.deepEqual(api.stopped, []);
         assert.equal(sandbox.status, "running");
       }),

@@ -20,7 +20,13 @@ const SANDBOXED: SessionSandboxSweepOutcome = { deleted: 4, pending: 1 };
 /** What the sweep over the lapsed terminal leases answers. */
 const TERMINALS: TerminalLeaseSweepOutcome = { stopped: 2, released: 1, pending: 0 };
 /** What the sweep over the running native sandboxes answers. */
-const NATIVE: NativeSandboxSweepOutcome = { stopped: 1, held: 1, failed: 0, deferred: 0 };
+const NATIVE: NativeSandboxSweepOutcome = {
+  stopped: 1,
+  held: 1,
+  failed: 0,
+  deferred: 0,
+  lost: 0,
+};
 /** What the sweep over the running eve sandboxes answers. */
 const EVE: EveSandboxSweepOutcome = { stopped: 2, held: 0, failed: 1, deferred: 0, unmapped: 3 };
 /** What the bound on the stopped sandboxes' snapshot retention answers. */
