@@ -138,11 +138,16 @@
 
   /* Under a toolbar with no filters, the content opens the filters' gap
      below the toolbar's hairline, inside the scroll so the wheel works
-     right up to it. */
-  .luke-collection-page[data-frame="toolbar"] > .luke-collection-page-scroll:first-child,
+     right up to it. Note that the gap is the content's padding rather than
+     the scroll's, because a sticky head sticks inside its scroller's
+     padding, and would leave what scrolls under it showing above it. */
+  .luke-collection-page[data-frame="toolbar"]
+    > .luke-collection-page-scroll:first-child
+    > .luke-collection-page-content,
   .luke-collection-page[data-frame="toolbar"]
     > :not(.luke-collection-page-top)
-    + .luke-collection-page-scroll {
+    + .luke-collection-page-scroll
+    > .luke-collection-page-content {
     padding-top: var(--luke-section-gap);
   }
 
