@@ -4,12 +4,14 @@ import assert from "node:assert/strict";
 import type { AdminUserList, AdminUserListRow } from "@luke/features/admin-answer-wire";
 import { ADMIN_READ, ADMIN_REFUSED, type AdminReadAnswer } from "@luke/features/admin-wire";
 import { ACT_KIND } from "@luke/host/acts";
+import { APP_COMMAND } from "@luke/settings/shortcuts";
 import type { WireBoundaryInput } from "@luke/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, test } from "vitest";
+import { afterEach, beforeEach, test, vi } from "vitest";
 import type { AdminView } from "../admin/routing.js";
+import { runAppCommand } from "../app-commands.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { fakeActPortAnswering, type SentPortAct } from "../testing/app-bridge.js";
 import { fakeAppPlatform } from "../testing/app-platform.js";
@@ -81,6 +83,8 @@ afterEach(() => {
   act(() => root?.unmount());
   root = undefined;
   document.body.innerHTML = "";
+  // After the window is gone, since a find bar clears its highlights as it goes.
+  vi.unstubAllGlobals();
 });
 
 /** The place on `view`, in `room`, every view it was asked to open and every exit written down. */
@@ -219,4 +223,41 @@ test("a refusal of the service's gate stands as the app's failure, offering no s
 
   assert.match(page.textContent ?? "", /does not have the admin role/u);
   assert.doesNotMatch(page.textContent ?? "", /Sign in with/u);
+});
+
+test("⌘F finds in the view standing, its bar under the view's toolbar, and counts the words it matches", async () => {
+  // jsdom paints no highlights and lays nothing out; the find's are kept as a browser keeps them.
+  vi.stubGlobal("CSS", { highlights: new Map() });
+  vi.stubGlobal("Highlight", Set);
+  Range.prototype.getBoundingClientRect = () => new DOMRect();
+  const { page } = await open({ kind: "users" });
+
+  act(() => {
+    assert.ok(runAppCommand(APP_COMMAND.FIND), "⌘F is offered on the Admin place");
+  });
+  const field = page.querySelector<HTMLInputElement>(
+    '.admin-page .page-find > search.find-bar input[aria-label="Find"]',
+  );
+  assert.ok(field, "the find bar stands in the view's column");
+  act(() => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(
+      field,
+      "Lovelace",
+    );
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+
+  assert.equal(
+    page.querySelector('search[aria-label="Find"] [aria-live="polite"]')?.textContent,
+    "1 of 1",
+  );
+});
+
+test("on a narrow stage with the section list standing, ⌘F is offered nothing, since the view it would find in is hidden", async () => {
+  await open({ kind: "users" }, { room: SHELL_ROOM.NARROW, listed: true });
+
+  act(() => {
+    assert.equal(runAppCommand(APP_COMMAND.FIND), false);
+  });
+  assert.equal(document.querySelector('search[aria-label="Find"]'), null);
 });
