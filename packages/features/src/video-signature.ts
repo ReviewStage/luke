@@ -112,7 +112,10 @@ function docTypeOf(bytes: Uint8Array): string | undefined {
     const child = readHeader(bytes, at, header.end);
     if (child === undefined) return undefined;
     if (child.id === EBML_ID.DOC_TYPE) {
-      return String.fromCharCode(...bytes.subarray(child.body, child.end)).replace(/\0+$/u, "");
+      // A string element may be padded with zero bytes, which are no part of it.
+      let end = child.end;
+      while (end > child.body && bytes[end - 1] === 0) end -= 1;
+      return String.fromCharCode(...bytes.subarray(child.body, end));
     }
     at = child.end;
   }

@@ -72,6 +72,15 @@ test("a segment of unknown size is walked to the track that states the size", ()
   assert.deepEqual(webmDimensions(bytes), { width: 1280, height: 800 });
 });
 
+test("a doctype padded with zero bytes still names a WebM", () => {
+  const bytes = new Uint8Array([
+    ...element([0x1a, 0x45, 0xdf, 0xa3], element([0x42, 0x82], [...Buffer.from("webm"), 0, 0])),
+    ...liveSegment(element([...TRACKS], videoTrack(640, 480))),
+  ]);
+
+  assert.deepEqual(webmDimensions(bytes), { width: 640, height: 480 });
+});
+
 test("a Matroska file that is no WebM, and a WebM whose frames come before any track's size, state no size", () => {
   const matroska = new Uint8Array([
     ...ebmlHeader("matroska"),
