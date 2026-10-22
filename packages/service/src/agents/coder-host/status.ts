@@ -28,6 +28,7 @@ import {
   type NativeCodingAgentRuntime,
 } from "@luke/features/coding-agent-wire";
 import { BRAIN_REQUEST_FAILURE, TURN_STATUS } from "../../core.js";
+import { PLAN_FAILURE_WORD, planResetsAtOf } from "../native-events/native-moments.js";
 import { REPOSITORY_REFUSAL } from "../repository-shell.js";
 import { CODER_REFUSAL } from "./bounds.js";
 
@@ -156,6 +157,9 @@ const CONTEXT_OVERFLOW_WORDS: readonly string[] = [
 
 /** The host's refusal sentences, and a provider's words for a prompt past the window, a failed turn's detail may carry, by the word the wire says for each. */
 export const FAILURE_WORDS: readonly (readonly [CodingAgentFailure, readonly string[]])[] = [
+  // The plan's refusal a native turn met opens its detail, ahead of whatever the harness said of it.
+  [CODING_AGENT_FAILURE.PLAN_LIMIT, [PLAN_FAILURE_WORD.LIMIT]],
+  [CODING_AGENT_FAILURE.PLAN_SIGNED_OUT, [PLAN_FAILURE_WORD.SIGNED_OUT]],
   [
     CODING_AGENT_FAILURE.GITHUB,
     [
@@ -200,6 +204,14 @@ export function codingAgentFailureOf(
   const detail = turn.failureDetail ?? "";
   const named = FAILURE_WORDS.find(([, words]) => words.some((word) => detail.includes(word)));
   return named?.[0] ?? CODING_AGENT_FAILURE.MODEL;
+}
+
+/** When the plan limit that failed the turn resets, in epoch milliseconds, where its failure is a plan's limit and the harness said when. */
+export function planLimitResetsAtOf(
+  turn: Pick<CodingAgentLatestTurn, "status" | "failure" | "failureDetail"> | undefined,
+): number | undefined {
+  if (codingAgentFailureOf(turn) !== CODING_AGENT_FAILURE.PLAN_LIMIT) return undefined;
+  return planResetsAtOf(turn?.failureDetail ?? "");
 }
 
 /** What an agent's status is read from: its newest turn, and when the newest line of the developer's awaiting its turn was written. */

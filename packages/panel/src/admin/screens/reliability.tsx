@@ -86,6 +86,8 @@ const AGENT_FAILURE_LABEL = {
   [CODING_AGENT_FAILURE.FAST_NOT_ENABLED]: "Fast not enabled",
   [CODING_AGENT_FAILURE.CONTEXT_OVERFLOW]: "Context too long",
   [CODING_AGENT_FAILURE.SESSION_ENDED]: "Session ended",
+  [CODING_AGENT_FAILURE.PLAN_LIMIT]: "Plan limit",
+  [CODING_AGENT_FAILURE.PLAN_SIGNED_OUT]: "Plan signed out",
   [CODING_AGENT_FAILURE.OTHER]: "Other",
 } as const satisfies Record<CodingAgentFailure, string>;
 

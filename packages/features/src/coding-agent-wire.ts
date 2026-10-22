@@ -263,6 +263,10 @@ export const CODING_AGENT_FAILURE = {
   CONTEXT_OVERFLOW: "context_overflow",
   /** The agent's session ended for good while its turn ran, and eve no longer runs it: nothing reaches it again, and only a new agent, a continue of it among them, goes on. */
   SESSION_ENDED: "session_ended",
+  /** The plan paying for the agent reached its usage limit mid-turn; a message once it resets goes on in the same session. */
+  PLAN_LIMIT: "plan_limit",
+  /** The provider refused the plan's sign-in mid-turn, a token revoked or expired; it is reconnected in Settings. */
+  PLAN_SIGNED_OUT: "plan_signed_out",
   OTHER: "other",
 } as const;
 
@@ -2131,6 +2135,8 @@ export const codingAgentMessagesAnswerSchema = EffectSchema.Struct({
   failureReason: EffectSchema.optionalKey(
     EffectSchema.Literals(Object.values(CODING_AGENT_FAILURE)),
   ),
+  /** When the plan limit that failed the newest turn resets, in epoch milliseconds, where the failure is a plan's limit and the provider said; absent otherwise and from a service older than it. */
+  failureResetsAt: EffectSchema.optionalKey(countedNumber),
   usage: EffectSchema.optionalKey(codingAgentUsageSchema),
   /**
    * What the newest turn alone cost. No service sends it any more, since a

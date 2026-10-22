@@ -107,6 +107,8 @@ export interface AgentTranscriptControl {
   messages: readonly CodingAgentMessage[];
   /** Why the agent's newest turn failed, as the last page said; nothing while it did not. */
   failure: CodingAgentFailure | undefined;
+  /** When the plan limit that failed the agent's newest turn resets, as the last page said; nothing where that is not why or the provider did not say. */
+  failureResetsAt: number | undefined;
   /** What the agent has cost over every turn it settled, its workers' included, as the last page said; nothing before one settled. */
   usage: CodingAgentUsage | undefined;
   /** What the agent's model's context holds as its newest step left it, as the last page said; nothing before a step ended, and on a worker's. */
@@ -146,6 +148,7 @@ interface Held {
   transcript: CodingAgentTranscriptKey;
   messages: readonly CodingAgentMessage[];
   failure: CodingAgentFailure | undefined;
+  failureResetsAt: number | undefined;
   usage: CodingAgentUsage | undefined;
   context: CodingAgentContext | undefined;
   runStartedAt: number | undefined;
@@ -172,6 +175,7 @@ function fresh(transcript: CodingAgentTranscriptKey): Held {
     transcript,
     messages: [],
     failure: undefined,
+    failureResetsAt: undefined,
     usage: undefined,
     context: undefined,
     runStartedAt: undefined,
@@ -249,6 +253,7 @@ function joined(was: Held, page: CodingAgentTranscriptPage): Held {
     // Note that a failure is the failed cursor's, so a page that replaces the cursor lets it go.
     olderFailed: replaces ? false : was.olderFailed,
     failure: page.failureReason,
+    failureResetsAt: page.failureResetsAt,
     usage: page.usage,
     context: page.context,
     runStartedAt: page.runStartedAt,
@@ -420,6 +425,7 @@ export function useAgentTranscript(input: {
   return {
     messages: held.messages,
     failure: held.failure,
+    failureResetsAt: held.failureResetsAt,
     usage: held.usage,
     context: held.context,
     runStartedAt: held.runStartedAt,

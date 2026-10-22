@@ -155,6 +155,8 @@ function Seeded({
 async function drawnTab(input: {
   status: CodingAgentStatus;
   failure?: CodingAgentFailure;
+  /** When the plan limit that failed the turn resets, as the page says it. */
+  resetsAt?: number;
   others?: readonly CodingAgentSummary[];
   archived?: readonly CodingAgentSummary[];
   continues?: boolean;
@@ -210,6 +212,7 @@ async function drawnTab(input: {
         status: input.status,
         title: null,
         ...(input.failure === undefined ? undefined : { failureReason: input.failure }),
+        ...(input.resetsAt === undefined ? undefined : { failureResetsAt: input.resetsAt }),
         ...input.usage,
       },
     ]),
@@ -371,6 +374,17 @@ test("only a failed turn's end line continues the agent, and not one failed on t
   assert.equal(endLineContinues(CODING_AGENT_STATUS.FAILED, endLineReason(undefined)), true);
   assert.equal(endLineContinues(CODING_AGENT_STATUS.FAILED, key), false);
   assert.equal(endLineContinues(CODING_AGENT_STATUS.FAILED, other), true);
+  assert.equal(
+    endLineContinues(CODING_AGENT_STATUS.FAILED, endLineReason(CODING_AGENT_FAILURE.PLAN_LIMIT)),
+    false,
+  );
+  assert.equal(
+    endLineContinues(
+      CODING_AGENT_STATUS.FAILED,
+      endLineReason(CODING_AGENT_FAILURE.PLAN_SIGNED_OUT),
+    ),
+    false,
+  );
   assert.equal(endLineContinues(CODING_AGENT_STATUS.CANCELLED, endLineReason(undefined)), false);
   assert.equal(endLineContinues(CODING_AGENT_STATUS.COMPLETED, endLineReason(undefined)), false);
 });
@@ -449,6 +463,57 @@ test("no Continue stands on a turn failed on a refused API key, on an archived a
     const settled = await drawnTab({ status });
     assert.equal(settled.buttons(settled.container).length, 0, status);
   }
+});
+
+test("a turn its plan's limit failed says when the limit resets and that a message goes on, a plan's refused sign-in offers Settings, and neither offers Continue", async () => {
+  const limited = await drawnTab({
+    status: CODING_AGENT_STATUS.FAILED,
+    failure: CODING_AGENT_FAILURE.PLAN_LIMIT,
+    resetsAt: Date.now() + 60 * 60_000,
+  });
+  const words = limited.container.querySelector("[data-ended] .agent-end-words")?.textContent;
+  assert.match(
+    words ?? "",
+    /^Plan limit reached, resets \d{1,2}:\d{2}\s?[AP]M\. Send a message to go on\.$/,
+  );
+  assert.equal(limited.buttons(limited.container).length, 0, "a new agent meets the same limit");
+
+  const signedOut = await drawnTab({
+    status: CODING_AGENT_STATUS.FAILED,
+    failure: CODING_AGENT_FAILURE.PLAN_SIGNED_OUT,
+  });
+  assert.equal(signedOut.buttons(signedOut.container).length, 0, "Settings is the fix");
+  assert.match(
+    signedOut.endLine()?.textContent ?? "",
+    /Plan sign-in was refused\.\s*Reconnect in Settings/,
+  );
+});
+
+test("a plan limit's end line names the reset by its time within the day ahead and with its day past it, and says only to send a message where no reset was named", () => {
+  const now = new Date(2026, 9, 22, 20, 0).getTime();
+  const words = (resetsAt: number | undefined) =>
+    endLineParts(CODING_AGENT_STATUS.FAILED, CODING_AGENT_FAILURE.PLAN_LIMIT, undefined, false, {
+      resetsAt,
+      now,
+    });
+
+  assert.match(
+    words(new Date(2026, 9, 22, 23, 10).getTime())?.words ?? "",
+    /^Plan limit reached, resets 11:10\sPM\. Send a message to go on\.$/,
+  );
+  assert.match(
+    words(new Date(2026, 9, 26, 9, 0).getTime())?.words ?? "",
+    /resets Oct 26, 9:00\sAM\./,
+  );
+  assert.deepEqual(words(undefined), {
+    words: "Plan limit reached. Send a message once it resets.",
+    failed: true,
+  });
+  assert.equal(
+    endLineParts(CODING_AGENT_STATUS.FAILED, CODING_AGENT_FAILURE.PLAN_SIGNED_OUT, "Charles Pan")
+      ?.words,
+    "Charles Pan's plan sign-in was refused.",
+  );
 });
 
 test("a box closed on an ended agent offers Continue in new agent beside its note, carrying the box's words and files into the new agent and letting them go once it started", async () => {

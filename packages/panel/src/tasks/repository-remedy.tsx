@@ -74,6 +74,8 @@ export function useRepositoryRemedy(): (
         };
       case FAILURE_REASON.RECONNECT_INTEGRATION:
       case FAILURE_REASON.API_KEY:
+      case FAILURE_REASON.RECONNECT_PLAN:
+      case FAILURE_REASON.PLAN_LIMIT:
       case FAILURE_REASON.OTHER:
         return undefined;
     }

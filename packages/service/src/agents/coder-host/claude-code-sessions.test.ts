@@ -584,6 +584,55 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
   );
 
   it.effect(
+    "a message while the plan's limit stands is refused with its reset and launches nothing, and a plain message after the reset resumes the CLI's own session",
+    () =>
+      Effect.gen(function* () {
+        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+        const api = runnerSandboxApi();
+        const { userId, agent } = yield* openAgent;
+        const sessions = yield* sessionsFor(userId, { next: 0 }).pipe(
+          Effect.provide(services(api)),
+        );
+        const opened = yield* sessions.open(message(agent, "Fix the invitations."));
+        assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+        const target = { userId, conversationId: agent.conversationId };
+        assert.equal(yield* recordCodingAgentNativeSession(userId, agent.id, CLI_SESSION), true);
+        // The turn met the plan's limit, which the events route records with its reset, and the launch ended.
+        const now = yield* DateTime.nowAsDate;
+        const resetsAt = new Date(now.getTime() + 30 * 60_000);
+        yield* setPlanStatus(
+          userId,
+          PROVIDER_KEY_PROVIDER.ANTHROPIC,
+          PROVIDER_KEY_KIND.CLAUDE_SETUP_TOKEN,
+          PROVIDER_KEY_STATUS.LIMIT_REACHED,
+          resetsAt,
+          now,
+          now,
+        );
+        yield* runnerEnded({ target, sessionId: opened.sessionId, sequence: 1 }).pipe(
+          Effect.provide(api.layer),
+        );
+
+        const early = yield* sessions.send(opened.sessionId, message(agent, "Go on."));
+        yield* TestClock.adjust("31 minutes");
+        const after = yield* sessions.send(opened.sessionId, message(agent, "Go on."));
+
+        assert.deepEqual(early, {
+          outcome: EVE_SEND_OUTCOME.FAILED,
+          status: 422,
+          planRefusal: PLAN_REFUSAL.LIMIT_REACHED,
+          planResetsAt: resetsAt.getTime(),
+        });
+        assert.equal(after.outcome, EVE_SEND_OUTCOME.ACCEPTED);
+        assert.equal(api.commands.length, 2);
+        const [config, line] = linesOf(api.commands[1]) as [ClaudeCodeConfig, InputLine];
+        assert.equal(config.resume, CLI_SESSION);
+        assert.ok(line.type === INPUT_LINE.MESSAGE);
+        assert.deepEqual(line.content, [{ type: "text", text: "Go on." }]);
+      }),
+  );
+
+  it.effect(
     "a sandbox opens on the short timeout, and one opened before it was shortened has it lowered ahead of the resume a message makes",
     () =>
       Effect.gen(function* () {

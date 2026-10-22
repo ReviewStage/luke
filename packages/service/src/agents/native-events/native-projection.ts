@@ -21,6 +21,7 @@ import {
   type NativeWakeup,
   PLAN_STATUS,
   type PlanStatus,
+  planFailureDetail,
 } from "./native-moments.js";
 
 /**
@@ -92,6 +93,8 @@ const TurnSchema = Schema.Struct({
   usage: Schema.optionalKey(UsageSchema),
   /** Why the newest model turn failed, where it did. */
   failure: Schema.optionalKey(Schema.String),
+  /** How the plan paying for the agent last refused the turn, its limit or its sign-in, until a model turn runs on it again. */
+  plan: Schema.optionalKey(Schema.Literals([PLAN_STATUS.LIMIT_REACHED, PLAN_STATUS.INVALID])),
   /** The MCP servers mentioned to the agent that this turn took as it started, which its calls are handed whatever the switches say. */
   servers: Schema.optionalKey(Schema.Array(Schema.String)),
 });
@@ -359,7 +362,12 @@ class Fold {
     const turn = this.#closed(held);
     const status = statusOf(moment.ending, turn.failure);
     const failed = status === BRAIN_REQUEST_STATUS.FAILED;
-    const detail = [moment.detail, turn.failure, this.state.rateLimit]
+    // Note that a plan's refusal opens the detail, so the agent's failure is read as the plan's however the harness ended.
+    const plan =
+      failed && turn.plan !== undefined
+        ? planFailureDetail(turn.plan, this.state.rateLimitResetsAt)
+        : undefined;
+    const detail = [plan, moment.detail, turn.failure, this.state.rateLimit]
       .filter((word) => word !== undefined)
       .join("; ");
     const model = this.#context.model;
@@ -398,6 +406,18 @@ class Fold {
   #result(failure: string | undefined): void {
     const { failure: _held, ...turn } = this.#closed(this.turn());
     this.#setTurn(failure === undefined ? turn : { ...turn, failure });
+  }
+
+  /** How the plan answered, kept on the turn under way: a refusal it met, or a model turn that ran, which lifts it. */
+  #planFound(status: PlanStatus): void {
+    const turn = this.state.turn;
+    if (turn === undefined) return;
+    const { plan: _held, ...rest } = turn;
+    if (status === PLAN_STATUS.LIMIT_REACHED || status === PLAN_STATUS.INVALID) {
+      this.#setTurn({ ...rest, plan: status });
+      return;
+    }
+    if (status === PLAN_STATUS.VERIFIED) this.#setTurn(rest);
   }
 
   fold(moment: NativeMoment): void {
@@ -476,6 +496,7 @@ class Fold {
         const resetsAt =
           moment.status === PLAN_STATUS.LIMIT_REACHED ? this.state.rateLimitResetsAt : undefined;
         const turnOpenedAt = this.state.turn?.openedAt;
+        this.#planFound(moment.status);
         this.writes.push({
           kind: NATIVE_WRITE.PLAN_STATUS,
           status: moment.status,

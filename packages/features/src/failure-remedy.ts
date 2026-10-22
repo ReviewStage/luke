@@ -21,6 +21,10 @@ export const FAILURE_REASON = {
   GITHUB_TOKEN: "github-token",
   /** The member's own token is not authorized for an organization's SAML SSO: GitHub's own page authorizes it. */
   AUTHORIZE_TOKEN: "authorize-token",
+  /** The provider refused the sign-in of the plan paying for an agent: Settings › Coding agents connects it again. */
+  RECONNECT_PLAN: "reconnect-plan",
+  /** The plan paying for an agent reached its usage limit: a message once it resets goes on, so nothing is pressed. */
+  PLAN_LIMIT: "plan-limit",
   OTHER: "other",
 } as const;
 
@@ -70,6 +74,8 @@ export type Failure =
       readonly reason:
         | typeof FAILURE_REASON.API_KEY
         | typeof FAILURE_REASON.GITHUB_TOKEN
+        | typeof FAILURE_REASON.RECONNECT_PLAN
+        | typeof FAILURE_REASON.PLAN_LIMIT
         | typeof FAILURE_REASON.OTHER;
       readonly text: string;
     };
@@ -95,6 +101,9 @@ export function remedyLabel(failure: Failure): string | undefined {
       return "Update GitHub token";
     case FAILURE_REASON.AUTHORIZE_TOKEN:
       return `Authorize token for ${failure.organization}`;
+    case FAILURE_REASON.RECONNECT_PLAN:
+      return "Reconnect in Settings";
+    case FAILURE_REASON.PLAN_LIMIT:
     case FAILURE_REASON.OTHER:
       return undefined;
   }

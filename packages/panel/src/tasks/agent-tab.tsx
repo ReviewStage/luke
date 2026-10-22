@@ -1401,8 +1401,8 @@ export function AgentMessage({
 /**
  * The line a transcript ends on once its turn was stopped or failed: a
  * failure's mark and its words in the danger ink; a stop's words quiet.
- * A turn failed on the reader's own refused key offers its API keys after
- * them.
+ * A turn failed on the reader's own refused key, or on their plan's
+ * sign-in refused, offers Settings › Coding agents after them.
  */
 function AgentEndLine({
   ended,
@@ -1414,10 +1414,10 @@ function AgentEndLine({
   onOpenApiKeys: (() => void) | undefined;
 }): React.JSX.Element {
   const mark = ended.failed ? stateEndMark(GLYPH_STATE.FAILED, false) : null;
-  // Note that a key refused is mended in Settings, so its line offers the API keys after the words.
+  // Note that a key or a plan's sign-in refused is mended in Settings, so its line offers it after the words.
   const remedy =
-    endReason === FAILURE_REASON.API_KEY
-      ? remedyLabel({ reason: FAILURE_REASON.API_KEY, text: ended.words })
+    endReason === FAILURE_REASON.API_KEY || endReason === FAILURE_REASON.RECONNECT_PLAN
+      ? remedyLabel({ reason: endReason, text: ended.words })
       : undefined;
   return (
     <p
@@ -2145,6 +2145,8 @@ function AgentTabView({
     [transcript.messages, composer.sent],
   );
   const chatOn = useChatOn();
+  // Note that the clock is the minute's own, so a plan limit's reset reads as a time today or with its day.
+  const now = useMinute();
   const working = agentStillWriting(agent.status);
   const steering = useKept(
     new Set(composer.sent.filter((line) => line.steers).map((line) => line.id)),
@@ -2249,7 +2251,10 @@ function AgentTabView({
                     // Note that the end line waits for a page, so a stopped agent's tab never draws it over nothing.
                     transcript.pages === 0
                       ? undefined
-                      : endLineParts(agent.status, transcript.failure, starter, continuable)
+                      : endLineParts(agent.status, transcript.failure, starter, continuable, {
+                          resetsAt: transcript.failureResetsAt,
+                          now,
+                        })
                   }
                   endReason={endLineReason(transcript.failure, starter)}
                   onOpenApiKeys={onOpenApiKeys}

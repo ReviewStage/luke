@@ -71,6 +71,7 @@ import {
   codingAgentFailureOf,
   codingAgentRunStartedAt,
   codingAgentStatusOf,
+  planLimitResetsAtOf,
   statusClockEdge,
 } from "./status.js";
 import { usageOfTurns } from "./usage.js";
@@ -158,6 +159,8 @@ export interface TranscriptPage {
   /** When the run that status is read from began, as the agent's summary says it; absent while a line awaits its turn. */
   readonly runStartedAt?: number;
   readonly failureReason?: CodingAgentFailure;
+  /** When the plan limit that failed its newest turn resets, in epoch milliseconds, where that is why it failed and the harness said. */
+  readonly failureResetsAt?: number;
   /** What the agent has cost over every turn it and its workers settled; absent before one has. */
   readonly usage?: CodingAgentUsage;
   /** What the agent's model's context holds, on its own transcript; absent before its first step and on a worker's. */
@@ -208,8 +211,10 @@ const statusNow = (target: ConversationTarget, { createdAt, blank }: AgentStart)
     const runStartedAt = codingAgentRunStartedAt(turn, { createdAt, now, awaitingLineAt });
     const failureReason =
       status === CODING_AGENT_STATUS.FAILED ? codingAgentFailureOf(turn) : undefined;
+    const failureResetsAt =
+      status === CODING_AGENT_STATUS.FAILED ? planLimitResetsAtOf(turn) : undefined;
     const graceEdge = statusClockEdge(turn, { createdAt, now, awaitingLineAt, blank });
-    return { status, runStartedAt, failureReason, turn, graceEdge };
+    return { status, runStartedAt, failureReason, failureResetsAt, turn, graceEdge };
   });
 
 /** The agent's context as its row holds it, on its own transcript; nothing on a worker's. */
@@ -572,7 +577,7 @@ function pagePast(
       { concurrency: CODER.READ_CONCURRENCY },
     );
     const { read, cursor } = past;
-    const { status, runStartedAt, failureReason, turn, graceEdge } = standing;
+    const { status, runStartedAt, failureReason, failureResetsAt, turn, graceEdge } = standing;
     return {
       page: {
         messages: yield* transcriptMessagesOf(target, read.ok ? read.value : []),
@@ -580,6 +585,7 @@ function pagePast(
         status,
         ...(runStartedAt === undefined ? undefined : { runStartedAt }),
         ...(failureReason === undefined ? undefined : { failureReason }),
+        ...(failureResetsAt === undefined ? undefined : { failureResetsAt }),
       },
       turn,
       graceEdge,
@@ -875,13 +881,14 @@ export function transcriptNewest(
       { concurrency: CODER.READ_CONCURRENCY },
     );
     const { messages, before } = yield* olderPageOf(target, read);
-    const { status, runStartedAt, failureReason, turn } = standing;
+    const { status, runStartedAt, failureReason, failureResetsAt, turn } = standing;
     const page: TranscriptPage = {
       messages,
       cursor,
       status,
       ...(runStartedAt === undefined ? undefined : { runStartedAt }),
       ...(failureReason === undefined ? undefined : { failureReason }),
+      ...(failureResetsAt === undefined ? undefined : { failureResetsAt }),
     };
     return {
       page: yield* withUsage(target, tools, page, turn, own),

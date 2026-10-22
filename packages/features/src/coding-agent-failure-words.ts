@@ -26,6 +26,9 @@ const AGENT_FAILURE_WORDS = {
     "Fast mode isn't enabled for this Anthropic organization; choose the model with Fast off",
   [CODING_AGENT_FAILURE.CONTEXT_OVERFLOW]: "the conversation was too long for the model",
   [CODING_AGENT_FAILURE.SESSION_ENDED]: "the agent's session ended and can't be reached again",
+  [CODING_AGENT_FAILURE.PLAN_LIMIT]: "the plan's usage limit was reached",
+  [CODING_AGENT_FAILURE.PLAN_SIGNED_OUT]:
+    "the plan's sign-in was refused; reconnect it in Settings",
   [CODING_AGENT_FAILURE.OTHER]: undefined,
 } as const satisfies Record<CodingAgentFailure, string | undefined>;
 

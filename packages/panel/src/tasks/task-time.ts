@@ -120,6 +120,11 @@ export function dayAndTimeText(at: number): string {
   return DAY_AND_TIME.format(at);
 }
 
+/** A time to come, as a clock reads it within the day ahead, "11:10 PM", and with its day past that, "Oct 24, 11:10 PM". */
+export function comingTimeText(at: number, now: number): string {
+  return at - now < DAY ? TIME_OF_DAY.format(at) : DAY_AND_TIME.format(at);
+}
+
 /** A day alone, with its year: "Oct 11, 2026". */
 export function dayText(at: number): string {
   return DAY_WITH_YEAR.format(at);

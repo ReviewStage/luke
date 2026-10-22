@@ -26,7 +26,9 @@ import { CONVERSATION_RUNTIME, MESSAGE_SENDER } from "@luke/database/storage-voc
 import { getTestDB, startTask } from "@luke/database/testing";
 import {
   CHECK_SUMMARY,
+  CODING_AGENT_FAILURE,
   CODING_AGENT_PAYER,
+  CODING_AGENT_STATUS,
   type CodingAgentPayer,
   PULL_REQUEST_STATE,
 } from "@luke/features/coding-agent-wire";
@@ -587,6 +589,71 @@ it.layer(getTestDB())("the runner events route", (it) => {
   );
 
   it.effect(
+    "a Claude plan's limit reached mid-turn fails the turn as the plan's limit, with its reset, and a revoked token as its sign-in refused",
+    () =>
+      Effect.gen(function* () {
+        const post = yield* standing;
+        const agent = yield* agentWithBearer;
+        const top = { parent_tool_use_id: null, session_id: SESSION };
+        const pageOf = Effect.gen(function* () {
+          const row = Option.getOrThrow(yield* readCodingAgent(agent.userId, agent.agentId));
+          return yield* transcriptPast(agent.target, CODER_TOOL_SET, CURSOR_START, row, row).pipe(
+            Effect.provide(modelCatalogOf([])),
+          );
+        });
+        const limited = [
+          { type: RUNNER_EVENT.ACCEPTED, uuid: agent.lineId },
+          { type: "system", subtype: "init", ...top },
+          {
+            type: "rate_limit_event",
+            rate_limit_info: {
+              status: "rejected",
+              rateLimitType: "five_hour",
+              resetsAt: 1_800_000_000,
+            },
+            ...top,
+          },
+          { type: "result", subtype: "success", is_error: true, ...top },
+          { type: RUNNER_EVENT.END, reason: RUNNER_END.TURN_ENDED },
+        ];
+        // SAFETY: each message above is one the pinned SDK or the runner emits, written in its JSON shape.
+        yield* post(
+          agent.bearer,
+          limited.map((message, sequence) => ({ sequence, message }) as RunnerEvent),
+        );
+        const atLimit = yield* pageOf;
+        // Later, so the next launch's turn is the newest.
+        yield* TestClock.adjust("1 minute");
+
+        const revoked = [
+          { type: "system", subtype: "init", ...top },
+          {
+            type: "assistant",
+            error: "authentication_failed",
+            message: { id: "msg-revoked", content: [{ type: "text", text: "Invalid API key" }] },
+            ...top,
+          },
+          { type: "result", subtype: "success", is_error: true, ...top },
+          { type: RUNNER_EVENT.END, reason: RUNNER_END.TURN_ENDED },
+        ].map(
+          // SAFETY: as above.
+          (message, index) => ({ sequence: limited.length + index, message }) as RunnerEvent,
+        );
+        yield* post(agent.bearer, revoked);
+        const signedOut = yield* pageOf;
+
+        assert.deepEqual(
+          [atLimit.status, atLimit.failureReason, atLimit.failureResetsAt],
+          [CODING_AGENT_STATUS.FAILED, CODING_AGENT_FAILURE.PLAN_LIMIT, 1_800_000_000_000],
+        );
+        assert.deepEqual(
+          [signedOut.status, signedOut.failureReason, signedOut.failureResetsAt],
+          [CODING_AGENT_STATUS.FAILED, CODING_AGENT_FAILURE.PLAN_SIGNED_OUT, undefined],
+        );
+      }),
+  );
+
+  it.effect(
     "a compaction stamps the agent, and a launch the plan's limit refused fails its turn saying so",
     () =>
       Effect.gen(function* () {
@@ -630,11 +697,11 @@ it.layer(getTestDB())("the runner events route", (it) => {
         const context = yield* readCodingAgentContext(agent.userId, agent.agentId);
 
         assert.deepEqual(ended.map((turn) => [turn.status, turn.failureDetail]).sort(), [
+          [TURN_STATUS.FAILED, "input_closed"],
           [
             TURN_STATUS.FAILED,
-            "error_during_execution; rate_limit_rejected five_hour resets 2027-01-15T08:00:00.000Z",
+            "luke_plan_limit resets_at_ms 1800000000000; error_during_execution; rate_limit_rejected five_hour resets 2027-01-15T08:00:00.000Z",
           ],
-          [TURN_STATUS.FAILED, "input_closed"],
         ]);
         assert.notEqual(Option.getOrThrow(context).compactedAt, null);
       }),
@@ -1153,7 +1220,7 @@ it.layer(getTestDB())("the runner events route, on Codex", (it) => {
           [
             [
               TURN_STATUS.FAILED,
-              "failed the plan's limit; usageLimitExceeded subscription_sharing_usage_limit_exceeded",
+              "luke_plan_limit; failed the plan's limit; usageLimitExceeded subscription_sharing_usage_limit_exceeded",
             ],
           ],
         );
@@ -1275,6 +1342,66 @@ it.layer(getTestDB())("the runner events route, on Codex", (it) => {
           [PROVIDER_KEY_STATUS.LIMIT_REACHED, new Date(resetsAt).toISOString()],
           [PROVIDER_KEY_STATUS.INVALID, null],
           [PROVIDER_KEY_STATUS.INVALID, null],
+        ]);
+      }),
+  );
+
+  it.effect(
+    "a Codex turn its plan's usage limit failed reads as the plan's limit with the reset Codex heard, and one a 401 failed as its sign-in refused",
+    () =>
+      Effect.gen(function* () {
+        const post = yield* standing;
+        const failureAfter = (error: WireRecord, heard: readonly WireValue[] = []) =>
+          Effect.gen(function* () {
+            const agent = yield* agentOn(HARNESS.CODEX, ["Go on."]);
+            yield* post(agent.bearer, refusedLaunch(agent.lineId, 0, error, heard));
+            const row = Option.getOrThrow(yield* readCodingAgent(agent.userId, agent.agentId));
+            const page = yield* transcriptPast(
+              agent.target,
+              CODER_TOOL_SET,
+              CURSOR_START,
+              row,
+              row,
+            ).pipe(Effect.provide(modelCatalogOf([])));
+            return [page.status, page.failureReason, page.failureResetsAt] as const;
+          });
+        const resetsAt = Date.UTC(2026, 9, 22, 23, 10);
+
+        const limited = yield* failureAfter(
+          {
+            message:
+              'unexpected status 429: {"error":{"code":"subscription_sharing_usage_limit_exceeded"}}',
+            codexErrorInfo: "usageLimitExceeded",
+            additionalDetails: null,
+          },
+          [
+            {
+              method: "account/rateLimits/updated",
+              params: {
+                rateLimits: {
+                  primary: { usedPercent: 100, windowDurationMins: 300, resetsAt: resetsAt / 1000 },
+                  secondary: null,
+                  rateLimitReachedType: "rate_limit_reached",
+                },
+              },
+            },
+          ],
+        );
+        const revoked = yield* failureAfter({
+          message: "unexpected status 401: Unauthorized",
+          codexErrorInfo: "unauthorized",
+          additionalDetails: null,
+        });
+
+        assert.deepEqual(limited, [
+          CODING_AGENT_STATUS.FAILED,
+          CODING_AGENT_FAILURE.PLAN_LIMIT,
+          resetsAt,
+        ]);
+        assert.deepEqual(revoked, [
+          CODING_AGENT_STATUS.FAILED,
+          CODING_AGENT_FAILURE.PLAN_SIGNED_OUT,
+          undefined,
         ]);
       }),
   );

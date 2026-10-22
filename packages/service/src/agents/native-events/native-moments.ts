@@ -150,3 +150,34 @@ export interface NativeHeld {
   readonly session: string | undefined;
   readonly sequence: number;
 }
+
+/**
+ * The words a native turn's failure detail opens with where the plan that
+ * pays for the agent refused it mid-turn: its usage limit, with when it
+ * resets where the harness said, or its sign-in. The agent's failure is
+ * read from them (`../coder-host/status.ts`), in the service and in SQL
+ * alike, so each is a word no harness says of its own.
+ */
+export const PLAN_FAILURE_WORD = {
+  LIMIT: "luke_plan_limit",
+  SIGNED_OUT: "luke_plan_signed_out",
+} as const;
+
+/** What names a reached limit's reset after its word, in epoch milliseconds. */
+const RESETS_AT_WORD = "resets_at_ms";
+
+const RESETS_AT = new RegExp(`\\b${PLAN_FAILURE_WORD.LIMIT} ${RESETS_AT_WORD} (\\d+)\\b`);
+
+/** The failure detail's opening words for a plan refusal a turn met: its limit, with its reset where known, or its sign-in. */
+export function planFailureDetail(status: PlanStatus, resetsAt: number | undefined): string {
+  if (status !== PLAN_STATUS.LIMIT_REACHED) return PLAN_FAILURE_WORD.SIGNED_OUT;
+  return resetsAt === undefined
+    ? PLAN_FAILURE_WORD.LIMIT
+    : `${PLAN_FAILURE_WORD.LIMIT} ${RESETS_AT_WORD} ${Math.round(resetsAt)}`;
+}
+
+/** When the plan limit a failure detail names resets, in epoch milliseconds; none where it names none. */
+export function planResetsAtOf(detail: string): number | undefined {
+  const named = RESETS_AT.exec(detail)?.[1];
+  return named === undefined ? undefined : Number(named);
+}

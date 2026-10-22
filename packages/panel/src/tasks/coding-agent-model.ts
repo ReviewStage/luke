@@ -84,7 +84,7 @@ import { Option, Schema } from "effect";
 import { TOOL_STATE, type ToolState } from "../ai-elements/tool.js";
 import { GLYPH_STATE, type GlyphState, glyphStateWords } from "../state-glyph.js";
 import { drawnCall } from "./native-tool-calls.js";
-import { dayAndTimeText } from "./task-time.js";
+import { comingTimeText, dayAndTimeText } from "./task-time.js";
 import {
   changesSidebar,
   remoteCallOf,
@@ -328,13 +328,43 @@ export interface EndLineParts {
   readonly failed: boolean;
 }
 
+/** When a plan limit that failed a turn resets, where the provider said, and the time it is read at. */
+export interface PlanLimitReset {
+  readonly resetsAt: number | undefined;
+  readonly now: number;
+}
+
+/**
+ * A turn the plan paying for its agent refused mid-turn, as its end line
+ * says it: a limit reached, with its reset where the provider said, after
+ * which a message goes on in the same session; or a sign-in refused, which
+ * the reader reconnects in Settings, or names whose plan it was.
+ */
+function planEndWords(
+  failure: CodingAgentFailure,
+  starter: string | undefined,
+  limit: PlanLimitReset | undefined,
+): string | undefined {
+  if (failure === CODING_AGENT_FAILURE.PLAN_SIGNED_OUT) {
+    return starter === undefined
+      ? "Plan sign-in was refused."
+      : `${starter}'s plan sign-in was refused.`;
+  }
+  if (failure !== CODING_AGENT_FAILURE.PLAN_LIMIT) return undefined;
+  const resetsAt = limit?.resetsAt;
+  return resetsAt === undefined || limit === undefined
+    ? "Plan limit reached. Send a message once it resets."
+    : `Plan limit reached, resets ${comingTimeText(resetsAt, limit.now)}. Send a message to go on.`;
+}
+
 /**
  * The quiet line a transcript ends on once its turn failed or was stopped,
  * in parts, so its words and its failed mark can be drawn apart; nothing
  * for an agent still writing or one that completed. A teammate's agent
  * names its starter's key, since it runs on theirs and not the reader's.
  * An agent whose tab offers Continue, or that another already continued
- * (`continuable`), is not told to start a new one.
+ * (`continuable`), is not told to start a new one. A turn its plan refused
+ * says so alone (`planEndWords`), with when a reached limit resets.
  * Note that it names no price, because a price in the window means the
  * whole run's, which the model menu's foot says (`agentUsageLine`).
  */
@@ -343,11 +373,14 @@ export function endLineParts(
   failure: CodingAgentFailure | undefined,
   starter?: string,
   continuable = false,
+  limit?: PlanLimitReset,
 ): EndLineParts | undefined {
   switch (status) {
     case CODING_AGENT_STATUS.CANCELLED:
       return { words: "Stopped", failed: false };
     case CODING_AGENT_STATUS.FAILED: {
+      const plan = failure === undefined ? undefined : planEndWords(failure, starter, limit);
+      if (plan !== undefined) return { words: plan, failed: true };
       const words =
         failure === undefined ? undefined : agentFailureWords(failure, starter, continuable);
       return { words: words === undefined ? "Failed" : `Failed: ${words}`, failed: true };
@@ -359,16 +392,29 @@ export function endLineParts(
   }
 }
 
-/** What mends a failed turn from its end line: the API keys' page for a key refused; nothing else there is the developer's to mend. */
+/**
+ * What mends a failed turn from its end line: the API keys' page for a key
+ * refused, Settings for a plan's sign-in refused, and a message once a
+ * plan's limit resets; nothing else there is the developer's to mend.
+ */
 export function endLineReason(
   failure: CodingAgentFailure | undefined,
   starter?: string,
 ): FailureReason {
-  // A teammate's key is theirs to mend, so the reader is offered no Settings of their own.
-  return failure === CODING_AGENT_FAILURE.PROVIDER_KEY && starter === undefined
-    ? FAILURE_REASON.API_KEY
-    : FAILURE_REASON.OTHER;
+  if (failure === CODING_AGENT_FAILURE.PLAN_LIMIT) return FAILURE_REASON.PLAN_LIMIT;
+  // A teammate's key or plan is theirs to mend, so the reader is offered no Settings of their own.
+  if (starter !== undefined) return FAILURE_REASON.OTHER;
+  if (failure === CODING_AGENT_FAILURE.PROVIDER_KEY) return FAILURE_REASON.API_KEY;
+  if (failure === CODING_AGENT_FAILURE.PLAN_SIGNED_OUT) return FAILURE_REASON.RECONNECT_PLAN;
+  return FAILURE_REASON.OTHER;
 }
+
+/** The end reasons a new agent would meet the same: a key or a plan's sign-in refused, and a plan's limit, which only its reset lifts. */
+const NOT_CONTINUED: ReadonlySet<FailureReason> = new Set([
+  FAILURE_REASON.API_KEY,
+  FAILURE_REASON.RECONNECT_PLAN,
+  FAILURE_REASON.PLAN_LIMIT,
+]);
 
 /** The statuses an agent may still write under, which is when it can be stopped. */
 const FOLLOWED_STATUSES: ReadonlySet<CodingAgentStatus> = new Set([
@@ -487,9 +533,9 @@ export function continuedByTitles(agent: CodingAgentSummary): ReadonlyMap<string
   return new Map(titled);
 }
 
-/** Whether a turn's end line is where an agent may be continued: it failed, and not on a refused API key, which a new agent would meet the same. */
+/** Whether a turn's end line is where an agent may be continued: it failed, and not on what a new agent would meet the same (`NOT_CONTINUED`). */
 export function endLineContinues(status: CodingAgentStatus, endReason: FailureReason): boolean {
-  return status === CODING_AGENT_STATUS.FAILED && endReason !== FAILURE_REASON.API_KEY;
+  return status === CODING_AGENT_STATUS.FAILED && !NOT_CONTINUED.has(endReason);
 }
 
 /**
