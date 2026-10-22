@@ -116,27 +116,7 @@ const CODEX_ITEMS: readonly {
     line: ["Searched the web for", "banker's rounding in JavaScript"],
     body: ['"type": "search"'],
   },
-  {
-    name: "a subagent spawned",
-    tool: "collabAgentToolCall",
-    input: {
-      tool: "spawnAgent",
-      prompt: "Find every caller of invoiceTotal and say which round.",
-      model: "gpt-5.5",
-      receiverThreadIds: ["thread-sub"],
-    },
-    output: {
-      status: "completed",
-      agentsStates: {
-        "thread-sub": {
-          status: "completed",
-          message: "Two callers round: src/export.ts and src/print.ts.",
-        },
-      },
-    },
-    line: ["Find every caller of invoiceTotal and say which round."],
-    body: ["Find every caller of invoiceTotal", "Two callers round"],
-  },
+
   {
     name: "a wait on subagents",
     tool: "collabAgentToolCall",
@@ -196,22 +176,28 @@ test("a file change's update marks the lines Codex's diff changed, a file delete
   ]);
 });
 
-test("a subagent call that was interrupted keeps its row, its task on its line and why it stopped in its body", () => {
-  const { line, body } = opened({
+test("a spawned subagent is drawn as a subagent's row on the model and effort it asked for, and one interrupted says why under it", () => {
+  const input = {
+    tool: "spawnAgent",
+    prompt: "Find the queue.",
+    model: "gpt-5.5",
+    effort: "high",
+    receiverThreadIds: ["thread-sub"],
+  };
+  const running = drawn(storedPart("collabAgentToolCall", input)).container;
+  const row = running.querySelector("[data-subagent-row]") ?? assert.fail("a subagent's row");
+  assert.ok(row.textContent?.includes("Find the queue."), row.textContent ?? "");
+  assert.ok(row.textContent?.includes("GPT 5.5 High"), row.textContent ?? "");
+  const interrupted = drawn({
     type: "tool-collabAgentToolCall",
     toolCallId: "item_spawn",
     state: "output-error",
-    input: {
-      tool: "spawnAgent",
-      prompt: "Find the queue.",
-      model: "gpt-5.5",
-      receiverThreadIds: ["thread-sub"],
-    },
+    input,
     output: { status: "interrupted", agentsStates: { "thread-sub": { status: "interrupted" } } },
     errorText: "interrupted",
-  });
-  assert.ok(line.includes("Find the queue."), line);
-  assert.ok(body.includes("interrupted"), body);
+  }).container;
+  assert.ok(interrupted.querySelector("[data-subagent-row]"));
+  assert.equal(interrupted.querySelector(".subagent-error")?.textContent, "interrupted");
 });
 
 test("a command that failed says its exit code, and one still running draws its row from its input alone", () => {

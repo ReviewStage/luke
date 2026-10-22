@@ -15,8 +15,8 @@ import { isRecord, isWireNumber, isWireString, type WireValue } from "@luke/wire
  * key that tool answers its words in. Everything after the read (rows, the
  * to-do list, a loaded skill, a copy of the transcript) then draws it as it
  * draws eve's. A call to Luke's own MCP server is stored under Luke's tool's
- * name and needs no reading, and a subagent's call (`Agent`), which no eve tool
- * makes as one call, keeps its name for `tool-call-model.ts` to draw.
+ * name and needs no reading, and a subagent's call (`Agent`) keeps its name,
+ * which the tab draws as a delegation's row, as eve's `delegate` is drawn.
  *
  * Each harness has one table, keyed by the names its calls are stored under,
  * which no two harnesses share: Claude Code's and Codex's (`CODEX_TOOL`,
@@ -53,6 +53,21 @@ function terminalAnswer(output: WireValue | undefined): WireValue | undefined {
 /** The string under a key of the input, or nothing where it holds none. */
 function inputString(input: WireValue | undefined, key: string): string | undefined {
   return isRecord(input) && isWireString(input[key]) ? input[key] : undefined;
+}
+
+/** The makers a native subagent's model is named under, as the catalog's ids begin. */
+const ANTHROPIC = "anthropic";
+const OPENAI = "openai";
+
+/**
+ * A subagent call's input with its model named as the catalog names it
+ * (`anthropic/sonnet`), so its row wears its maker's mark; a model already
+ * so named, or none, as it is.
+ */
+function withMaker(input: WireValue | undefined, maker: string): WireValue | undefined {
+  const model = inputString(input, "model");
+  if (!isRecord(input) || model === undefined || model.includes("/")) return input;
+  return { ...input, model: `${maker}/${model}` };
 }
 
 /** Each line of some words behind a patch's mark for it, as a patch spells a removal or an addition; the newline that ends the words' last line opens no line of its own. */
@@ -188,8 +203,8 @@ const CLAUDE_CODE_CALLS: Record<
   }),
   // Note that a wakeup keeps its name, because it schedules a prompt for later rather than pausing the turn as `sleep` does: it is drawn as a plain call, its reason and prompt in its body.
   [CLAUDE_CODE_TOOL.SCHEDULE_WAKEUP]: (call) => call,
-  // Note that a subagent's call keeps its name, because no eve tool makes one as a single call: `tool-call-model.ts` draws it.
-  [CLAUDE_CODE_TOOL.AGENT]: (call) => call,
+  // Note that a subagent's call keeps its name, which the tab draws as a delegation's row, its model named as the catalog names Anthropic's.
+  [CLAUDE_CODE_TOOL.AGENT]: (call) => ({ ...call, input: withMaker(call.input, ANTHROPIC) }),
 };
 
 /** A Codex command's answer, `{output, exitCode}`, as eve's shell answers one; the exit code is none while it runs or once it was stopped. */
@@ -262,6 +277,23 @@ const CODEX_SUBAGENT_DOING: Readonly<Record<string, string>> = {
   resumeAgent: "Resume a subagent",
 };
 
+/** The collab tool that starts a subagent on a thread of its own, as `CollabAgentTool` spells it. */
+const CODEX_SPAWN_AGENT = "spawnAgent";
+
+/** A Codex spawn's input as Claude Code's `Agent` takes one: its task, and the model and effort it asked for, where it named them. */
+function codexSpawnInput(input: WireValue | undefined): WireValue | undefined {
+  const model = inputString(input, "model");
+  const effort = inputString(input, "effort");
+  return withMaker(
+    {
+      prompt: inputString(input, "prompt") ?? "",
+      ...(model === undefined ? undefined : { model }),
+      ...(effort === undefined ? undefined : { effort }),
+    },
+    OPENAI,
+  );
+}
+
 /** A Codex subagent call's input as a native subagent's is drawn: its task, and the words naming it where it has none. */
 function codexSubagentInput(input: WireValue | undefined): WireValue | undefined {
   if (!isRecord(input)) return input;
@@ -288,7 +320,9 @@ function codexSubagentAnswer(output: WireValue | undefined): WireValue | undefin
  * command as `bash`, a file change as an `apply_patch` of its files, a web
  * search as `search_web`, and the turn's plan as `write_todos`. A call to
  * an MCP server other than Luke's is named by its server and its tool, which
- * the generic row draws, its arguments as its input. A subagent's call keeps
+ * the generic row draws, its arguments as its input. A spawn of a subagent
+ * is read as Claude Code's `Agent`, the one name the tab draws a native
+ * subagent's delegation row by (`delegates`); any other subagent call keeps
  * its name for `tool-call-model.ts` to draw as one call, its task and its
  * subagents' words read as a native subagent's.
  */
@@ -319,11 +353,18 @@ const CODEX_CALLS: Record<(typeof CODEX_TOOL)[keyof typeof CODEX_TOOL], NativeCa
     input: isRecord(input) ? input.arguments : input,
     output,
   }),
-  [CODEX_TOOL.SUBAGENT]: ({ input, output }) => ({
-    tool: CODEX_TOOL.SUBAGENT,
-    input: codexSubagentInput(input),
-    output: codexSubagentAnswer(output),
-  }),
+  [CODEX_TOOL.SUBAGENT]: ({ input, output }) =>
+    inputString(input, "tool") === CODEX_SPAWN_AGENT
+      ? {
+          tool: CLAUDE_CODE_TOOL.AGENT,
+          input: codexSpawnInput(input),
+          output: codexSubagentAnswer(output),
+        }
+      : {
+          tool: CODEX_TOOL.SUBAGENT,
+          input: codexSubagentInput(input),
+          output: codexSubagentAnswer(output),
+        },
 };
 
 /** Every native harness's calls, by the names they are stored under. */

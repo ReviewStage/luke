@@ -589,6 +589,86 @@ it.layer(getTestDB())("the runner events route", (it) => {
   );
 
   it.effect(
+    "a background subagent's call stays running past Claude Code's launch notice, and its task notification settles it",
+    () =>
+      Effect.gen(function* () {
+        const post = yield* standing;
+        const agent = yield* agentWithBearer;
+        const top = { parent_tool_use_id: null, session_id: SESSION };
+        const launched =
+          "Async agent launched successfully. (This tool result is internal metadata, never quote it.) agentId: a1";
+        const first = [
+          { type: RUNNER_EVENT.ACCEPTED, uuid: agent.lineId },
+          {
+            type: "assistant",
+            message: {
+              id: "msg_1",
+              content: [
+                {
+                  type: "tool_use",
+                  id: "toolu_agent",
+                  name: "Agent",
+                  input: { description: "find the queue", prompt: "Find it." },
+                },
+              ],
+            },
+            ...top,
+          },
+          {
+            type: "user",
+            message: {
+              content: [{ type: "tool_result", tool_use_id: "toolu_agent", content: launched }],
+            },
+            tool_use_result: { status: "async_launched", agentId: "a1", prompt: "Find it." },
+            ...top,
+          },
+          { type: "result", subtype: "success", is_error: false, ...top },
+          { type: RUNNER_EVENT.WAITING, background_tasks: [], session_crons: [] },
+        ];
+        const second = [
+          {
+            type: "system",
+            subtype: "task_notification",
+            task_id: "a1",
+            tool_use_id: "toolu_agent",
+            status: "completed",
+            output_file: "/tmp/a1.output",
+            summary: "It is in queue.ts.",
+            ...top,
+          },
+          {
+            type: "assistant",
+            message: { id: "msg_2", content: [{ type: "text", text: "Found it." }] },
+            ...top,
+          },
+          { type: "result", subtype: "success", is_error: false, ...top },
+          { type: RUNNER_EVENT.END, reason: RUNNER_END.TURN_ENDED },
+        ];
+        // SAFETY: each message above is one the pinned SDK or the runner emits, written in its JSON shape.
+        const events = [...first, ...second].map(
+          (message, sequence) => ({ sequence, message }) as RunnerEvent,
+        );
+
+        yield* post(agent.bearer, events.slice(0, first.length));
+        const running = yield* transcriptOf(agent.target.conversationId);
+        yield* post(agent.bearer, events.slice(first.length));
+        const { rows } = yield* transcriptOf(agent.target.conversationId);
+
+        assert.deepEqual(running.rows.at(-1)?.parts.map(drawn), [
+          ["step-start"],
+          ["tool-Agent", "input-available"],
+        ]);
+        assert.deepEqual(rows.at(-1)?.parts.map(drawn), [
+          ["step-start"],
+          ["tool-Agent", "output-available", "It is in queue.ts."],
+          ["step-start"],
+          ["text", "Found it."],
+        ]);
+        assert.ok(!JSON.stringify(rows).includes("internal metadata"));
+      }),
+  );
+
+  it.effect(
     "a compaction stamps the agent, and a launch the plan's limit refused fails its turn saying so",
     () =>
       Effect.gen(function* () {
@@ -1161,6 +1241,128 @@ it.layer(getTestDB())("the runner events route, on Codex", (it) => {
         );
         assert.notEqual(Option.getOrThrow(context).compactedAt, null);
       }),
+  );
+
+  it.effect("a spawned subagent's call stays running until its thread's turn completes", () =>
+    Effect.gen(function* () {
+      const post = yield* standing;
+      const agent = yield* agentOn(HARNESS.CODEX, ["Find the queue."]);
+      const spawn = {
+        type: "collabAgentToolCall",
+        id: "call_spawn",
+        tool: "spawnAgent",
+        status: "inProgress",
+        senderThreadId: THREAD,
+        receiverThreadIds: [],
+        prompt: null,
+        model: null,
+        reasoningEffort: null,
+        agentsStates: {},
+      };
+      const first: WireValue[] = [
+        {
+          method: "thread/started",
+          params: { thread: { id: THREAD, parentThreadId: null } },
+        },
+        { type: RUNNER_EVENT.ACCEPTED, uuid: agent.lineId },
+        notification("turn/started", { turn: { id: "turn-1" } }),
+        notification("item/started", { item: spawn }),
+        notification("item/completed", {
+          item: {
+            ...spawn,
+            status: "completed",
+            receiverThreadIds: ["thread-sub"],
+            prompt: "Find the queue.",
+            model: "gpt-5.5",
+            reasoningEffort: "high",
+          },
+        }),
+      ];
+      const second: WireValue[] = [
+        {
+          method: "turn/completed",
+          params: { threadId: "thread-sub", turn: { id: "turn-sub", status: "completed" } },
+        },
+        notification("turn/completed", { turn: { id: "turn-1", status: "completed" } }),
+        { type: RUNNER_EVENT.END, reason: RUNNER_END.TURN_ENDED },
+      ];
+      // SAFETY: each message above is one app-server or the runner emits, written in its JSON shape.
+      const events = [...first, ...second].map(
+        (message, sequence) => ({ sequence, message }) as RunnerEvent,
+      );
+
+      yield* post(agent.bearer, events.slice(0, first.length));
+      const running = yield* transcriptOf(agent.target.conversationId);
+      yield* post(agent.bearer, events.slice(first.length));
+      const { rows } = yield* transcriptOf(agent.target.conversationId);
+
+      assert.deepEqual(running.rows.at(-1)?.parts.map(drawn), [
+        ["step-start"],
+        ["tool-collabAgentToolCall", "input-available"],
+      ]);
+      assert.deepEqual(rows.at(-1)?.parts.map(drawn), [
+        ["step-start"],
+        ["tool-collabAgentToolCall", "output-available", { status: "completed" }],
+      ]);
+      // The spawn settles with the task and the pair it completed with, which its start left out.
+      const call = rows.at(-1)?.parts.find((part) => part.type === "tool-collabAgentToolCall");
+      assert.deepEqual(call !== undefined && "input" in call ? call.input : undefined, {
+        tool: "spawnAgent",
+        prompt: "Find the queue.",
+        model: "gpt-5.5",
+        effort: "high",
+        receiverThreadIds: ["thread-sub"],
+      });
+    }),
+  );
+
+  it.effect("a subagent that ends before its spawn completes still settles it", () =>
+    Effect.gen(function* () {
+      const post = yield* standing;
+      const agent = yield* agentOn(HARNESS.CODEX, ["Find the queue."]);
+      const spawn = {
+        type: "collabAgentToolCall",
+        id: "call_spawn",
+        tool: "spawnAgent",
+        status: "inProgress",
+        senderThreadId: THREAD,
+        receiverThreadIds: ["thread-sub"],
+        prompt: null,
+        model: null,
+        agentsStates: {},
+      };
+      const messagesOfTurn: WireValue[] = [
+        {
+          method: "thread/started",
+          params: { thread: { id: THREAD, parentThreadId: null } },
+        },
+        { type: RUNNER_EVENT.ACCEPTED, uuid: agent.lineId },
+        notification("turn/started", { turn: { id: "turn-1" } }),
+        notification("item/started", { item: spawn }),
+        {
+          method: "turn/completed",
+          params: { threadId: "thread-sub", turn: { id: "turn-sub", status: "completed" } },
+        },
+        notification("item/completed", {
+          item: { ...spawn, status: "completed", prompt: "Find the queue.", model: "gpt-5.5" },
+        }),
+        notification("turn/completed", { turn: { id: "turn-1", status: "completed" } }),
+        { type: RUNNER_EVENT.END, reason: RUNNER_END.TURN_ENDED },
+      ];
+      // SAFETY: each message above is one app-server or the runner emits, written in its JSON shape.
+      const events = messagesOfTurn.map(
+        (message, sequence) => ({ sequence, message }) as RunnerEvent,
+      );
+
+      yield* post(agent.bearer, events);
+      const { rows } = yield* transcriptOf(agent.target.conversationId);
+
+      const call = rows.at(-1)?.parts.find((part) => part.type === "tool-collabAgentToolCall");
+      assert.deepEqual(
+        call !== undefined && "state" in call ? call.state : undefined,
+        "output-available",
+      );
+    }),
   );
 
   /** The account's ChatGPT sign-in, kept as connecting keeps it: sealed, and not yet answered. */

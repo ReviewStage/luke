@@ -1,5 +1,5 @@
 import { nativeTurnId, reasoningItemId } from "@luke/database/models/ids";
-import type { WireValue } from "@luke/wire";
+import { type WireValue, WireValueSchema } from "@luke/wire";
 import { Option, Schema } from "effect";
 import {
   addModelUsage,
@@ -78,6 +78,14 @@ const UsageSchema = Schema.Struct({
   cacheWriteTokens: Schema.optionalKey(Schema.Number),
 });
 
+/** A call whose subagent runs on in the background, and its input as it stood when it answered, which it settles with. */
+const SubagentSchema = Schema.Struct({
+  callId: Schema.String,
+  input: Schema.optionalKey(WireValueSchema),
+  /** Whether its call has settled, so a later word of the same subagent settles nothing twice. */
+  settled: Schema.optionalKey(Schema.Boolean),
+});
+
 const TurnSchema = Schema.Struct({
   /** The store's id for the turn. */
   id: Schema.String,
@@ -90,6 +98,8 @@ const TurnSchema = Schema.Struct({
   step: Schema.optionalKey(StepSchema),
   /** The calls the turn holds, by id, under the name each is stored under. */
   calls: Schema.Record(Schema.String, Schema.String),
+  /** The calls whose subagents run on in the background, by the key their end is named by (`NATIVE_MOMENT.SUBAGENT_RUNNING`). */
+  subagents: Schema.optionalKey(Schema.Record(Schema.String, SubagentSchema)),
   usage: Schema.optionalKey(UsageSchema),
   /** Why the newest model turn failed, where it did. */
   failure: Schema.optionalKey(Schema.String),
@@ -208,6 +218,19 @@ function tellable(draft: Draft): string {
   return draft.forming.length === 0
     ? draft.completed
     : finishedSentencesOf(joinedWords(draft.completed, draft.forming));
+}
+
+/** The turn with every subagent its call waited on marked settled, as the call is. */
+function withSettledSubagents(turn: Turn, callId: string): Turn {
+  const held = turn.subagents;
+  if (held === undefined) return turn;
+  const subagents = Object.fromEntries(
+    Object.entries(held).map(([key, subagent]) => [
+      key,
+      subagent.callId === callId ? { ...subagent, settled: true } : subagent,
+    ]),
+  );
+  return { ...turn, subagents };
 }
 
 /** Everything one event's moments do, gathered as they are folded. */
@@ -342,7 +365,7 @@ class Fold {
     const name = turn?.calls[moment.callId];
     if (turn === undefined || name === undefined) return;
     this.#setTurn(
-      this.#tell(turn, {
+      this.#tell(withSettledSubagents(turn, moment.callId), {
         kind: BRAIN_RUN_EVENT.TOOL_CALL_SETTLED,
         callId: moment.callId,
         name,
@@ -350,6 +373,34 @@ class Fold {
         ...(moment.input !== undefined ? { input: moment.input } : undefined),
       }),
     );
+  }
+
+  /** A subagent call kept open while its subagent runs, where the turn holds the call. */
+  #subagentRunning(
+    moment: Extract<NativeMoment, { kind: typeof NATIVE_MOMENT.SUBAGENT_RUNNING }>,
+  ): void {
+    const turn = this.state.turn;
+    if (turn?.calls[moment.callId] === undefined) return;
+    if (turn.subagents?.[moment.key]?.settled === true) return;
+    const { callId, input } = moment;
+    const subagent = input === undefined ? { callId } : { callId, input };
+    this.#setTurn({ ...turn, subagents: { ...turn.subagents, [moment.key]: subagent } });
+  }
+
+  /** A background subagent's end, settling the call it runs under; nothing for a key no held call waits on, such as a foreground subagent's, which its answer settled, or one whose call already settled. */
+  #subagentEnded(
+    moment: Extract<NativeMoment, { kind: typeof NATIVE_MOMENT.SUBAGENT_ENDED }>,
+  ): void {
+    const turn = this.state.turn;
+    const subagent = turn?.subagents?.[moment.key];
+    if (turn === undefined || subagent === undefined || subagent.settled === true) return;
+    const { callId, input } = subagent;
+    this.#toolSettled({
+      kind: NATIVE_MOMENT.TOOL_SETTLED,
+      callId,
+      settlement: moment.settlement,
+      ...(input === undefined ? undefined : { input }),
+    });
   }
 
   /** The turn's end: its words told whole, then its status, cost, and why it failed, where it did. */
@@ -449,6 +500,12 @@ class Fold {
         return;
       case NATIVE_MOMENT.TOOL_SETTLED:
         this.#toolSettled(moment);
+        return;
+      case NATIVE_MOMENT.SUBAGENT_RUNNING:
+        this.#subagentRunning(moment);
+        return;
+      case NATIVE_MOMENT.SUBAGENT_ENDED:
+        this.#subagentEnded(moment);
         return;
       case NATIVE_MOMENT.USAGE:
         this.#usage(moment.usage);

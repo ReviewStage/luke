@@ -1,6 +1,6 @@
 import type { BrainRunUsage, ToolCallSettlement } from "@luke/features/brain";
 import { PROVIDER_KEY_STATUS } from "@luke/features/provider-key-wire";
-import type { UnparsedWireValue } from "@luke/wire";
+import type { UnparsedWireValue, WireValue } from "@luke/wire";
 
 /**
  * native-moments.ts -- what a native harness's run amounts to for the transcript, said once for every harness.
@@ -37,6 +37,15 @@ export const NATIVE_MOMENT = {
   TOOL_STARTED: "tool_started",
   /** A tool answered. */
   TOOL_SETTLED: "tool_settled",
+  /**
+   * A subagent call answered that its subagent runs on in the background:
+   * the call stays open, as a delegation's row runs, until `SUBAGENT_ENDED`
+   * names the same key. `key` is what the harness names the subagent's end
+   * by: the call's own id on Claude Code, the child thread's on Codex.
+   */
+  SUBAGENT_RUNNING: "subagent_running",
+  /** A subagent that runs in the background ended: the call it runs under settles. */
+  SUBAGENT_ENDED: "subagent_ended",
   /** What a model turn of the harness cost. */
   USAGE: "usage",
   /**
@@ -111,6 +120,18 @@ export type NativeMoment =
       readonly settlement: ToolCallSettlement;
       /** The call's input as it stood when it answered, for a harness that fills it in after the start (Codex); it replaces the started one. */
       readonly input?: UnparsedWireValue;
+    }
+  | {
+      readonly kind: typeof NATIVE_MOMENT.SUBAGENT_RUNNING;
+      readonly callId: string;
+      readonly key: string;
+      /** The call's input as it stood when it answered, for a harness that fills it in after the start (Codex); the call settles with it. */
+      readonly input?: WireValue;
+    }
+  | {
+      readonly kind: typeof NATIVE_MOMENT.SUBAGENT_ENDED;
+      readonly key: string;
+      readonly settlement: ToolCallSettlement;
     }
   | { readonly kind: typeof NATIVE_MOMENT.USAGE; readonly usage: BrainRunUsage }
   | { readonly kind: typeof NATIVE_MOMENT.CONTEXT; readonly usage: NativeContextUsage }
