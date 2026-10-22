@@ -4,6 +4,7 @@ import {
   ComboboxList,
   type ComboboxOption,
   comboboxOptionId,
+  cssCustomProperties,
   LIST_DENSITY,
   List,
   ListRow,
@@ -137,10 +138,19 @@ type SubmenuStand = (typeof SUBMENU_STAND)[keyof typeof SUBMENU_STAND];
 /** Where a submenu stands, measured as it opens. */
 interface SubmenuPlace {
   side: SubmenuSide;
+  /** How far it is pushed back over the menu, where neither side holds it whole. */
+  shift: number;
   stand: SubmenuStand;
 }
 
-const SUBMENU_FIRST_PLACE: SubmenuPlace = { side: SUBMENU_SIDE.RIGHT, stand: SUBMENU_STAND.DOWN };
+const SUBMENU_FIRST_PLACE: SubmenuPlace = {
+  side: SUBMENU_SIDE.RIGHT,
+  shift: 0,
+  stand: SUBMENU_STAND.DOWN,
+};
+
+/** The gap a submenu keeps from its row's edge, which desktop.css's `.task-compose-submenu` draws. */
+const SUBMENU_GAP = 9;
 
 /** The matching rows cut into runs that share a heading, in their order. */
 function sectionsOf<Row extends MenuRow>(rows: readonly Row[]): Section<Row>[] {
@@ -399,25 +409,33 @@ export function SearchableMenu(props: {
     if (!leaving) (field.current ?? list.current)?.focus();
   }, [leaving]);
 
-  // A submenu opens to the right and down from its row, and turns to the
-  // left or stands up where the window ends before it does, or where the
-  // room its menu keeps to (`data-popover-room`, the side panel or an
-  // agent's pane) ends, so it never runs past a column and scrolls it
-  // sideways; measured before it is painted, and again as the pointer moves
-  // it to another row, whose submenu may stand taller.
+  // A submenu opens to the right and down from its row, turns to the left
+  // where the room ends before it does (the window, or the box its menu
+  // keeps to, `data-popover-room`, the side panel or an agent's pane), and
+  // where neither side holds it, takes the one it runs past less, pushed
+  // back over the menu so it never runs past a column; it stands up where
+  // the window's bottom would cut it. Measured before it is painted, and
+  // again as the pointer moves it to another row, whose submenu may stand taller.
   const openAt = open === undefined ? undefined : footAt;
   useLayoutEffect(() => {
-    if (openAt === undefined || panel.current === null) return;
+    const branch = panel.current?.parentElement;
+    if (openAt === undefined || panel.current === null || branch == null) return;
     const bounds = panel.current.getBoundingClientRect();
-    const room = document.documentElement;
-    const roomRight = Math.min(
-      panel.current.closest("[data-popover-room]")?.getBoundingClientRect().right ??
-        room.clientWidth,
-      room.clientWidth,
-    );
+    const row = branch.getBoundingClientRect();
+    const page = document.documentElement;
+    const marked = panel.current.closest("[data-popover-room]")?.getBoundingClientRect();
+    const roomLeft = Math.max(marked?.left ?? 0, 0);
+    const roomRight = Math.min(marked?.right ?? page.clientWidth, page.clientWidth);
+    const pastRight = Math.max(row.right + SUBMENU_GAP + bounds.width - roomRight, 0);
+    const pastLeft = Math.max(roomLeft - (row.left - SUBMENU_GAP - bounds.width), 0);
+    const side =
+      pastRight === 0 || (pastLeft > 0 && pastRight <= pastLeft)
+        ? SUBMENU_SIDE.RIGHT
+        : SUBMENU_SIDE.LEFT;
     setPlace({
-      side: bounds.right > roomRight ? SUBMENU_SIDE.LEFT : SUBMENU_SIDE.RIGHT,
-      stand: bounds.bottom > room.clientHeight ? SUBMENU_STAND.UP : SUBMENU_STAND.DOWN,
+      side,
+      shift: side === SUBMENU_SIDE.RIGHT ? pastRight : pastLeft,
+      stand: bounds.bottom > page.clientHeight ? SUBMENU_STAND.UP : SUBMENU_STAND.DOWN,
     });
   }, [openAt]);
 
@@ -606,6 +624,7 @@ export function SearchableMenu(props: {
                     className="menu-surface task-compose-submenu"
                     data-side={place.side}
                     data-stand={place.stand}
+                    style={cssCustomProperties({ "--submenu-shift": `${place.shift}px` })}
                     onMouseDown={(event) => event.preventDefault()}
                   >
                     <ComboboxList

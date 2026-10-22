@@ -2738,7 +2738,8 @@ ul.actor-stack {
 
 /* A submenu stands beside the pinned row that opened it, its top level
    with that row's and its near edge at the menu's own; it turns to the
-   menu's other side where the window ends before it does, and stands up
+   menu's other side where its room ends before it does, is pushed back
+   over the menu (`--submenu-shift`) where neither side holds it, and stands up
    from the row's foot where the window's bottom would cut it. */
 .task-compose-menu-branch {
   position: relative;
@@ -2748,13 +2749,13 @@ ul.actor-stack {
   position: absolute;
   z-index: 1;
   top: 0;
-  left: calc(100% + 9px);
+  left: calc(100% + 9px - var(--submenu-shift, 0px));
   width: 200px;
   padding: 0;
 }
 
 .task-compose-submenu[data-side="left"] {
-  right: calc(100% + 9px);
+  right: calc(100% + 9px - var(--submenu-shift, 0px));
   left: auto;
 }
 
