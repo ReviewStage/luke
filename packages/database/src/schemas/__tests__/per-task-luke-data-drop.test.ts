@@ -41,7 +41,8 @@ const UNDO = [
   `CREATE UNIQUE INDEX "chat_member_task" ON "chat_member" ("task_id") WHERE "task_id" is not null`,
   `ALTER TABLE "chat_member" DROP CONSTRAINT "chat_member_id_of_kind"`,
   `ALTER TABLE "chat_member" ADD CONSTRAINT "chat_member_id_of_kind" CHECK (("kind" = 'human') = ("user_id" is not null) and ("agent_id" is null or "kind" = 'agent') and ("task_id" is null or "kind" = 'planner'))`,
-  `DROP INDEX "chat_member_organization_handle"`,
+  // Note that the handle and its index were dropped after this migration (`20261022112904_chat_member_handle_drop`), so they are stood up again as this migration found them.
+  `ALTER TABLE "chat_member" ADD COLUMN "handle" text DEFAULT gen_random_uuid()::text NOT NULL`,
   `CREATE UNIQUE INDEX "chat_member_organization_handle" ON "chat_member" ("organization_id", "handle") WHERE "kind" <> 'planner'`,
 ];
 

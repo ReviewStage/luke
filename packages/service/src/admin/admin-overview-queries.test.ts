@@ -218,7 +218,6 @@ const postInChat = (userId: string, organizationId: string, when: string) =>
       organizationId,
       kind: MEMBER_KIND.HUMAN,
       userId,
-      handle: `human-${memberId}`,
       ordinal: 1,
       joinedAt: at(when),
     });

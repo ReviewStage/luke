@@ -84,13 +84,6 @@ export const chatMember = pgTable(
     userId: text("user_id").references(() => user.id, { onDelete: "cascade" }),
     /** The coding agent, on an agent's member; null once the agent is deleted. */
     agentId: uuid("agent_id").references(() => codingAgent.id, { onDelete: "set null" }),
-    /**
-     * Retired: nothing reads or writes a member's handle, since members are
-     * named by their mention links. A new row takes a random default, so a
-     * deployment from before the retirement still reads a string and the
-     * unique index below still holds; a later contract migration drops it.
-     */
-    handle: text("handle").notNull().default(sql`gen_random_uuid()::text`),
     /** The member's place among its workspace's members of its kind, from one: an agent's `N`. */
     ordinal: integer("ordinal").notNull(),
     /** How far through the workspace's chat sequence the member has read in every channel. */
@@ -106,8 +99,6 @@ export const chatMember = pgTable(
     leftAt: timestamptz("left_at"),
   },
   (table) => [
-    // Retired with the handle, and dropped with it.
-    uniqueIndex("chat_member_organization_handle").on(table.organizationId, table.handle),
     uniqueIndex("chat_member_organization_kind_ordinal").on(
       table.organizationId,
       table.kind,
