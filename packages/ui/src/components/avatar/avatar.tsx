@@ -20,10 +20,11 @@ import { UserIcon } from "../../face/glyphs.js";
  * around it, or on a quiet tile where it is `tiled`, as a facepile whose
  * faces overlap draws it so the face beneath never shows through.
  *
- * Nobody, where a place says who is on something and no one is, stands on
- * a dashed outline of the same box (`UnassignedAvatar`), as Linear draws a
- * task with no assignee, so the row reads level with its neighbours and
- * never passes for anyone's face.
+ * Nobody, where a place says who is on something and no one is, stands as
+ * a small figure in a dashed outline of the same box (`UnassignedAvatar`),
+ * as Linear draws a task with no assignee, so the row reads level with its
+ * neighbours, never passes for anyone's face, and the figure tells it from
+ * a status's ring beside it.
  */
 
 /** How large the disc is drawn: a mark at a row's time, in a line of words, at a control's glyph size, in a facepile, a list row's, the account's, a card head's, a page's head, a detail page's masthead, or a portrait beside a biography. */
@@ -179,7 +180,7 @@ export function Avatar(props: AvatarProps): React.JSX.Element {
   return <AvatarDisc key={props.src ?? ""} {...props} />;
 }
 
-/** No one, on a dashed outline of the disc's box at `size`, named Unassigned to a reader unless the words already stand beside it. */
+/** No one, a small figure in a dashed outline of the disc's box at `size`, named Unassigned to a reader unless the words already stand beside it. */
 export function UnassignedAvatar({
   size = AVATAR_SIZE.ROW,
   decorative = false,
@@ -198,6 +199,9 @@ export function UnassignedAvatar({
       <svg className="luke-avatar-unassigned" viewBox="0 0 16 16" fill="none" aria-hidden="true">
         <circle cx="8" cy="8" r="7.25" pathLength="40" />
       </svg>
+      <span className="luke-avatar-glyph">
+        <UserIcon />
+      </span>
     </span>
   );
 }
