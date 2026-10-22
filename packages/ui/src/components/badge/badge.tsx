@@ -69,7 +69,7 @@ export function Badge({
       {icon}
       <span
         className="luke-badge-words"
-        data-under={icon === undefined && swatch === undefined ? undefined : hideWordsUnder}
+        data-under={icon == null && swatch === undefined ? undefined : hideWordsUnder}
       >
         {children}
       </span>
