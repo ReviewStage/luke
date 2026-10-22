@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import type { HTMLAttributes, ReactNode } from "react";
 
 /**
  * text.tsx -- words set in one of the type roles every app shares, on whichever element their meaning asks for.
@@ -20,7 +20,7 @@ import type { ReactNode } from "react";
  * own box's edge, so it stands as a block or a flex item.
  */
 
-/** How words are set: body, a label, a caption, a section's or a dialog's heading, a page's title. */
+/** How words are set: body, a label, a caption, a section's or a dialog's heading, a page's title, or as their surroundings set them (`inherit`, for words cut to a line inside a row that has already set its type and ink). */
 export const TEXT_VARIANT = {
   BODY: "body",
   LABEL: "label",
@@ -28,6 +28,7 @@ export const TEXT_VARIANT = {
   SECTION: "section",
   DIALOG: "dialog",
   TITLE: "title",
+  INHERIT: "inherit",
 } as const;
 
 export type TextVariant = (typeof TEXT_VARIANT)[keyof typeof TEXT_VARIANT];
@@ -72,7 +73,9 @@ export function Text({
   font = TEXT_FONT.SANS,
   truncate = false,
   id,
+  className,
   children,
+  ...attributes
 }: {
   variant?: TextVariant;
   as?: TextElement;
@@ -82,11 +85,14 @@ export function Text({
   truncate?: boolean;
   /** The id a control or a region names itself by (`aria-labelledby`, `aria-describedby`). */
   id?: string | undefined;
+  /** A hook for the caller's own layout (a flex share, a margin), beside the shared class. */
+  className?: string | undefined;
   children: ReactNode;
-}): React.JSX.Element {
+} & Omit<HTMLAttributes<HTMLElement>, "children" | "className" | "id">): React.JSX.Element {
   return (
     <Element
-      className="luke-text"
+      {...attributes}
+      className={className === undefined ? "luke-text" : `luke-text ${className}`}
       data-variant={variant}
       data-tone={tone}
       data-font={font}

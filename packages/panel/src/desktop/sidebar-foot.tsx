@@ -22,6 +22,9 @@ import {
   NavItem,
   ProviderMark,
   riseAbove,
+  TEXT_ELEMENT,
+  TEXT_VARIANT,
+  Text,
   UpdateIcon,
   useConfirmDialog,
   useMenu,
@@ -163,9 +166,23 @@ function AccountHeading({
   return (
     <>
       {account.name === undefined ? null : (
-        <span className="account-menu-name">{account.name}</span>
+        <Text
+          as={TEXT_ELEMENT.SPAN}
+          variant={TEXT_VARIANT.INHERIT}
+          truncate
+          className="account-menu-name"
+        >
+          {account.name}
+        </Text>
       )}
-      <span className="account-menu-email">{account.email}</span>
+      <Text
+        as={TEXT_ELEMENT.SPAN}
+        variant={TEXT_VARIANT.INHERIT}
+        truncate
+        className="account-menu-email"
+      >
+        {account.email}
+      </Text>
     </>
   );
 }

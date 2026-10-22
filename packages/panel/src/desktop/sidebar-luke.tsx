@@ -12,6 +12,7 @@ import {
   ListRow,
   useConfirmDialog,
   useMenu,
+  VisuallyHidden,
   WingFace,
 } from "@luke/ui";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
@@ -140,7 +141,7 @@ export function SidebarLuke({
         title={
           <>
             {LUKE_NAME}
-            {isUnread ? <span className="luke-visually-hidden">(unread)</span> : null}
+            {isUnread ? <VisuallyHidden>(unread)</VisuallyHidden> : null}
           </>
         }
         meta={agent === undefined ? null : agentEndMark(agent, false)}

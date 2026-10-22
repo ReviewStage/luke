@@ -1315,11 +1315,8 @@ ul.actor-stack {
 .section-icon-resting {
   min-height: 16px;
   margin: 0;
-  overflow: hidden;
   color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 /* A pinned repository says so after its name, quietly, since the pin is
@@ -1678,13 +1675,6 @@ ul.actor-stack {
   overflow-clip-margin: var(--luke-focus-ring-room);
 }
 
-.account-menu-name,
-.account-menu-email {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .account-menu-name {
   color: var(--luke-color-text);
   font-weight: var(--luke-weight-semibold);
@@ -1825,15 +1815,6 @@ ul.actor-stack {
    the column. */
 .message-meta > .message-sender {
   min-width: 0;
-}
-
-/* A sender the window cannot place is named in plain words, cut short as an
-   inline ref's name is. */
-.message-sender-words {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .message-meta > :is(.message-actions, .message-sent-at) {
@@ -2264,12 +2245,9 @@ ul.actor-stack {
 /* Each line is cut short on one line, so a long command never wraps the row
    or pushes the controls, and the dots are never cut. */
 .call-status-word {
-  min-width: 0;
-  overflow: hidden;
   color: var(--luke-color-text);
   font-size: var(--luke-type-section-size);
   font-weight: var(--luke-weight-semibold);
-  text-overflow: ellipsis;
 }
 
 .call-status-word[data-muted="true"] {
@@ -2283,12 +2261,6 @@ ul.actor-stack {
   gap: var(--luke-space-8);
   color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
-}
-
-.call-backend-part {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 /* Luke's part is the one that gives way to a long command; the notetaker's
@@ -4052,12 +4024,6 @@ ul.actor-stack {
   justify-content: flex-end;
   gap: var(--luke-space-6);
   overflow: hidden;
-}
-
-.automation-row-when {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 /* A narrow room's row says when it runs next in the line under its name,
@@ -5838,9 +5804,7 @@ ul.actor-stack {
 .automation-crumb[data-overflow="true"],
 .chat-byline-where[data-overflow="true"],
 .version-row-author[data-overflow="true"],
-.new-task-issue-title[data-overflow="true"],
-.tasks-list-name[data-overflow="true"],
-.tasks-list-repository[data-overflow="true"] {
+.new-task-issue-title[data-overflow="true"] {
   mask-image: linear-gradient(to left, transparent, #000 var(--label-fade));
   text-overflow: clip;
 }
@@ -6385,14 +6349,10 @@ ul.actor-stack {
 }
 
 .feedback-dialog-identity {
-  overflow: hidden;
-  min-width: 0;
   margin-left: auto;
   color: var(--luke-color-text-subtle);
   font-size: var(--luke-type-caption-size);
   line-height: var(--luke-type-caption-leading);
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 /* A filled button's chord (a dialog's Send, the home
@@ -6840,13 +6800,6 @@ ul.actor-stack {
 
 .issue-picker-github-detail > :not(.issue-picker-github-said) {
   flex: none;
-}
-
-.issue-picker-github-said {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .issue-picker-github-detail > svg {
@@ -7329,11 +7282,7 @@ body:has(.luke-dialog-backdrop) .toast[data-action="true"] .toast-dismiss {
    agent, named muted before their square, cut short rather than pushing
    the key aside. */
 .tasks-board-maker {
-  overflow: hidden;
-  min-width: 0;
   color: var(--luke-color-text-subtle);
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 /* A card's name stands whole under its line, in the label's weight,
@@ -7406,14 +7355,10 @@ body:has(.luke-dialog-backdrop) .toast[data-action="true"] .toast-dismiss {
 }
 
 .tasks-board-repository {
-  min-width: 0;
-  overflow: hidden;
   margin-left: var(--luke-space-4);
   color: var(--luke-color-text-subtle);
   font-size: var(--luke-type-caption-size);
   line-height: var(--luke-type-caption-leading);
-  text-overflow: ellipsis;
-  white-space: nowrap;
   pointer-events: none;
 }
 
@@ -7721,13 +7666,6 @@ body:has(.luke-dialog-backdrop) .toast[data-action="true"] .toast-dismiss {
   font-weight: var(--luke-weight-medium);
 }
 
-.tasks-list-name {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .tasks-list-row[data-editing="true"] .tasks-list-press {
   font-weight: var(--luke-weight-regular);
 }
@@ -7749,15 +7687,7 @@ body:has(.luke-dialog-backdrop) .toast[data-action="true"] .toast-dismiss {
 /* Who made a row's task where its member did not by hand, Luke or an
    agent, named before their square, as a Board card names them. */
 .tasks-list-maker {
-  overflow: hidden;
   max-width: 16ch;
-  text-overflow: ellipsis;
-}
-
-.tasks-list-repository {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 /* With a pointer, the ⋯ comes in while the row is hovered, holds the

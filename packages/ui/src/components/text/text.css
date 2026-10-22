@@ -48,6 +48,11 @@
     font-weight: var(--luke-weight-bold);
   }
 
+  .luke-text[data-variant="inherit"] {
+    font: inherit;
+    color: inherit;
+  }
+
   .luke-text[data-tone="muted"] {
     color: var(--luke-color-text-muted);
   }

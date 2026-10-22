@@ -28,6 +28,7 @@ import {
   SplitButton,
   useConfirmDialog,
   useMenu,
+  VisuallyHidden,
 } from "@luke/ui";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { Schema } from "effect";
@@ -308,7 +309,7 @@ function MergeChip({ face, sentence }: { face: ChipFace; sentence: string }): Re
         <Badge tone={face.tone} icon={face.icon}>
           {face.label}
         </Badge>
-        <span className="visually-hidden">{`: ${sentence}`}</span>
+        <VisuallyHidden>{`: ${sentence}`}</VisuallyHidden>
       </span>
     </Tooltip>
   );

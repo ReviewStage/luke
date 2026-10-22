@@ -5,7 +5,7 @@ import type {
 } from "@luke/features/coding-agent-wire";
 import type { CatalogModel, ModelChoice } from "@luke/features/models-wire";
 import type { PlanEditor } from "@luke/features/task-wire";
-import { HoverCard, HoverCardHead, HoverCardNote, HoverCardRule } from "@luke/ui";
+import { HoverCard, HoverCardHead, HoverCardNote, HoverCardRule, VisuallyHidden } from "@luke/ui";
 import type { Actor } from "@luke/ui/actor-model";
 import {
   ACTOR_SIZE,
@@ -335,7 +335,7 @@ export function AgentTabCard({
       )}
       {corner.kind === CARD_CORNER.WORKING ? (
         // Note that the word is a reader's alone, because the tile that shows the work hides its mark from a reader and nothing drawn says it.
-        <span className="visually-hidden">{glyphStateWords(GLYPH_STATE.WORKING, false)}</span>
+        <VisuallyHidden>{glyphStateWords(GLYPH_STATE.WORKING, false)}</VisuallyHidden>
       ) : null}
       <StartedBy by={startedBy} automationId={automationId} />
       {archivedBy === undefined ? null : <ArchivedByNote archivedBy={archivedBy} />}

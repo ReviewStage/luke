@@ -13,7 +13,7 @@ import {
   type PlanSectionEdit,
   type Task,
 } from "@luke/features/task-wire";
-import { Button, EllipsisIcon, IconButton, TextButton, useMenu } from "@luke/ui";
+import { Button, EllipsisIcon, IconButton, TextButton, useMenu, VisuallyHidden } from "@luke/ui";
 import { actorName } from "@luke/ui/actor-model";
 import { commentSpansIn, usePlanCommentsControl } from "@luke/ui/plan-comments";
 import { LinkIcon } from "lucide-react";
@@ -372,9 +372,9 @@ function ChangedLine({
         {editors.length === 0 ? null : (
           <>
             <ActorStack actors={editors} />
-            <span className="visually-hidden">
+            <VisuallyHidden>
               {editors.map((actor) => actorName(actor, { sentence: true })).join(", ")}
-            </span>
+            </VisuallyHidden>
           </>
         )}
       </span>

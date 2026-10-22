@@ -897,3 +897,10 @@ body {
 .catalog-menu-crumb {
   padding: var(--luke-space-8) var(--luke-space-12) var(--luke-space-4);
 }
+
+/* A row that has set its own type and ink, for words that inherit them. */
+.catalog-inherited {
+  margin: 0;
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-caption-size);
+}

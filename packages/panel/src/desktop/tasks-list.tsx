@@ -33,13 +33,16 @@ import {
   FoldingButton,
   IconButton,
   InlineEdit,
+  OneLine,
   PAGE_FRAME,
   PAGE_WIDTH,
   TaskPriorityMark,
   TaskStatusMark,
+  TEXT_ELEMENT,
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
+  VisuallyHidden,
 } from "@luke/ui";
 import { actorName, creatorActor } from "@luke/ui/actor-model";
 import { repositoryLabel, TASK_ORDER, taskTime } from "@luke/ui/task-list-model";
@@ -76,7 +79,6 @@ import {
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref.js";
 import { useAppCommand } from "../app-commands.js";
-import { FadingWords } from "../fading-words.js";
 import { FIND_SKIP_ATTRIBUTE } from "../find-matches.js";
 import { useMemberDirectory } from "../member-directory.js";
 import { RepositoryPicture } from "../repository-picture.js";
@@ -609,11 +611,9 @@ function TaskListRow({
               contextMenu={actions.contextMenu(press)}
             >
               <span className="tasks-list-press">
-                <FadingWords className="tasks-list-name" words={task.name} />
+                <OneLine>{task.name}</OneLine>
                 {spoken === "" ? null : (
-                  <span className="visually-hidden" {...{ [FIND_SKIP_ATTRIBUTE]: "" }}>
-                    {spoken}
-                  </span>
+                  <VisuallyHidden {...{ [FIND_SKIP_ATTRIBUTE]: "" }}>{spoken}</VisuallyHidden>
                 )}
               </span>
             </CardPress>
@@ -653,7 +653,7 @@ function TaskListRow({
               }
             />
           )}
-          <FadingWords className="tasks-list-repository" words={repositoryName} />
+          <OneLine>{repositoryName}</OneLine>
         </>,
       )}
       {/* Note that a task Luke or an agent made names its maker before their square, the member it was made for worn on it, as every task surface does. */}
@@ -661,7 +661,14 @@ function TaskListRow({
         TASK_PROPERTY.CREATOR,
         <>
           {maker === undefined ? null : (
-            <span className="tasks-list-maker">{actorName(maker.actor)}</span>
+            <Text
+              as={TEXT_ELEMENT.SPAN}
+              variant={TEXT_VARIANT.INHERIT}
+              truncate
+              className="tasks-list-maker"
+            >
+              {actorName(maker.actor)}
+            </Text>
           )}
           <ActorMark
             actor={maker?.actor ?? creator}

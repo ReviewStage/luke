@@ -633,20 +633,6 @@ svg.working-mark[viewBox] {
 
 /* Session primitives ----------------------------------------------------- */
 
-/* Read by assistive tech and drawn nowhere: the rows carry state in colour and
-   glyphs, and this is how the words behind them stay spoken. */
-.visually-hidden {
-  position: absolute;
-  overflow: hidden;
-  width: 1px;
-  height: 1px;
-  margin: -1px;
-  padding: 0;
-  border: 0;
-  clip-path: inset(50%);
-  white-space: nowrap;
-}
-
 /* Evidence capture screenshots a fixed moment after the renderer reports ready,
    so without this a capture could land mid-transition and the PNGs would stop
    being reproducible.

@@ -961,11 +961,14 @@ function MentionCrumb({ crumb }: { crumb: Crumb }): React.JSX.Element {
       <MenuGlyph>
         {folder === undefined ? <KindGlyph kind={kind} /> : <FolderIcon aria-hidden="true" />}
       </MenuGlyph>
-      <span className="mention-menu-crumb-title">
-        <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.SECTION}>
-          {folder ?? kind.name}
-        </Text>
-      </span>
+      <Text
+        as={TEXT_ELEMENT.SPAN}
+        variant={TEXT_VARIANT.SECTION}
+        truncate
+        className="mention-menu-crumb-title"
+      >
+        {folder ?? kind.name}
+      </Text>
     </div>
   );
 }

@@ -39,6 +39,7 @@ import {
   SkeletonRegion,
   TaskStatusMark,
   useMenu,
+  VisuallyHidden,
 } from "@luke/ui";
 import {
   ACTOR_KIND,
@@ -872,7 +873,7 @@ export function InboxItemRow({
           }
           meta={
             <span className="home-row-meta">
-              {unread ? <span className="visually-hidden">{UNREAD}</span> : null}
+              {unread ? <VisuallyHidden>{UNREAD}</VisuallyHidden> : null}
               {context === undefined ? null : (
                 <FadingWords className="home-row-context" words={context} />
               )}
@@ -880,13 +881,13 @@ export function InboxItemRow({
                 <ActorMark actor={starter} size={ACTOR_SIZE.MARK} />
               )}
               {starter === undefined || item.status !== INBOX_STATUS.OPEN ? null : (
-                <span className="visually-hidden">{waitingOn(starter)}</span>
+                <VisuallyHidden>{waitingOn(starter)}</VisuallyHidden>
               )}
               {drafted ? <DraftMark /> : null}
               {needsYou ? (
                 <span className="inbox-row-attention">
                   <AttentionMark />
-                  <span className="visually-hidden">{NEEDS_YOU.LABEL}</span>
+                  <VisuallyHidden>{NEEDS_YOU.LABEL}</VisuallyHidden>
                 </span>
               ) : null}
               <TaskStatusChip holder={holder} />
@@ -961,7 +962,7 @@ function TaskStatusChip({ holder }: { holder: InboxHolder }): React.JSX.Element 
   return (
     <span className="inbox-row-task-status" data-task-status={status}>
       <TaskStatusMark status={status} />
-      <span className="visually-hidden">{TASK_STATUS_WORDS[status]}</span>
+      <VisuallyHidden>{TASK_STATUS_WORDS[status]}</VisuallyHidden>
     </span>
   );
 }
