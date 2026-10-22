@@ -666,3 +666,15 @@ test("a read still waiting on its pause is told to the workspace it was read in 
   await pauseRunsOut();
   assert.equal(service.writes.length, 1, "nothing is told twice");
 });
+
+test("a read still waiting on its pause as another account signs in is let go, never told as the new account's", async () => {
+  vi.useFakeTimers();
+  const service = scriptedService();
+  const tab = mount(service, "acme", CHANNEL);
+  service.push("acme", answered([message(1), message(2)]));
+  await settle();
+  tab.rerender({ workspaceId: "acme", reading: undefined, account: "ada@example.com" });
+  await settle();
+  await pauseRunsOut();
+  assert.deepEqual(service.writes, []);
+});
