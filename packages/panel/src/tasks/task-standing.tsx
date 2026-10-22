@@ -86,8 +86,8 @@ function priorityOf(id: string): TaskPriority | undefined {
 /** The row of the assignee's menu that assigns the task to no one, apart from every account's id. */
 const NO_ASSIGNEE = "no-assignee";
 
-/** What the assignee's chip and its first row say of a task no one is assigned to. */
-const NO_ASSIGNEE_WORDS = "No assignee";
+/** What the assignee's chip and its first row say of a task no one is assigned to, as its hover card does. */
+export const NO_ASSIGNEE_WORDS = "No assignee";
 
 /**
  * The assignee's menu: No assignee, then the workspace's members, the reader

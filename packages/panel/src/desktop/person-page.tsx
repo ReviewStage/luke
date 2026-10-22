@@ -1,6 +1,7 @@
 import { automationOwner, automationTriggerText } from "@luke/features/automation-list-model";
 import { AUTOMATION_SCOPE, type AutomationSummary } from "@luke/features/automation-wire";
 import { LINK_PLACE, linkOf } from "@luke/features/luke-link";
+import type { TaskSummary } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
 import { SETTINGS_SECTION, SETTINGS_VIEW } from "@luke/settings/settings-views";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
@@ -68,7 +69,8 @@ import { useAutomations } from "./use-automations.js";
  * who left. Its head is their face at the page's size, their name, and
  * their role and email as the members read lists them, or that they left.
  * Under it stand their agents at work, the Inbox
- * items their agents wait on, the tasks they created, and their other
+ * items their agents wait on, the tasks assigned to them, the rest of the
+ * tasks they created, and their other
  * agents, each from the listed workspace's task list and Inbox
  * (`@luke/ui/person-page-model`), and the workspace's automations they
  * made, a section with nothing in it left out.
@@ -229,7 +231,7 @@ function PersonActions({
   tasks: TasksControl;
   userId: string;
   person: Actor;
-  /** Whether the workspace is shared, which alone filters the sidebar by creator. */
+  /** Whether the workspace is shared, which alone filters the sidebar by person. */
   shared: boolean;
   onShowTasks: () => void;
 }): React.JSX.Element {
@@ -409,6 +411,49 @@ function PersonHeadSkeleton(): React.JSX.Element {
   );
 }
 
+/**
+ * One section of a person's tasks, the first `PERSON_TASKS_SHOWN` of them,
+ * newest first, wearing no face, since the page's head says whose they
+ * are; and under it, where it leaves some out and the sidebar filters by
+ * person, Show all, which lists every one there (`onShowAll`).
+ */
+function PersonTasks({
+  title,
+  listed,
+  tasks,
+  now,
+  onShowAll,
+}: {
+  title: string;
+  listed: readonly TaskSummary[];
+  tasks: TasksControl;
+  now: number;
+  onShowAll: (() => void) | undefined;
+}): React.JSX.Element | null {
+  if (listed.length === 0) return null;
+  return (
+    <>
+      <PersonSection title={title} count={listed.length}>
+        {listed.slice(0, PERSON_TASKS_SHOWN).map((task) => (
+          <RecentRow
+            key={task.id}
+            task={task}
+            pictures={tasks.repositories.pictures}
+            now={now}
+            face={false}
+            onOpen={() => tasks.onSelect(task.id)}
+          />
+        ))}
+      </PersonSection>
+      {listed.length > PERSON_TASKS_SHOWN && onShowAll !== undefined ? (
+        <p className="person-section-foot">
+          <Button onClick={onShowAll}>{`Show all ${listed.length} in sidebar`}</Button>
+        </p>
+      ) : null}
+    </>
+  );
+}
+
 /** The page inside the workspace's member directory, which names the person. */
 function PersonColumn({
   tasks,
@@ -431,11 +476,12 @@ function PersonColumn({
   const left = former?.find((each) => each.userId === userId);
   const ref = personRef(userId, listed) ?? member ?? known ?? left;
   const person = personActor(ref, members, readerId, former);
-  // The sidebar's own view, so their tasks are listed there as its Created by lists them, whoever they are assigned to.
+  // The sidebar's own view, so their tasks are listed there as its Assigned to lists them, whoever created them, and those they created as its Created by does.
   const taskView = useTaskListView(tasks.workspace?.id, staged);
   const memberCount = tasks.workspace?.memberCount;
   const shared = memberCount === undefined ? (members?.length ?? 0) > 1 : memberCount > 1;
-  const showTasks = () => taskView.onCreatedByAlone(userId);
+  const showTasks = () => taskView.onAssignedToAlone(userId);
+  const showCreated = () => taskView.onCreatedByAlone(userId);
   const page = personPage(userId, listed);
   const you = userId === tasks.me;
   const theirAutomations = usePersonAutomations(tasks.workspace?.id, userId);
@@ -536,25 +582,20 @@ function PersonColumn({
           ))}
         </PersonSection>
       )}
-      {page.created.length === 0 ? null : (
-        <PersonSection title={you ? "Created by you" : "Created"} count={page.created.length}>
-          {page.created.slice(0, PERSON_TASKS_SHOWN).map((task) => (
-            <RecentRow
-              key={task.id}
-              task={task}
-              pictures={tasks.repositories.pictures}
-              now={now}
-              face={false}
-              onOpen={() => tasks.onSelect(task.id)}
-            />
-          ))}
-        </PersonSection>
-      )}
-      {page.created.length > PERSON_TASKS_SHOWN && shared ? (
-        <p className="person-section-foot">
-          <Button onClick={showTasks}>{`Show all ${page.created.length} in sidebar`}</Button>
-        </p>
-      ) : null}
+      <PersonTasks
+        title={you ? "Assigned to you" : "Assigned"}
+        listed={page.assigned}
+        tasks={tasks}
+        now={now}
+        onShowAll={shared ? showTasks : undefined}
+      />
+      <PersonTasks
+        title={you ? "Created by you" : "Created"}
+        listed={page.created}
+        tasks={tasks}
+        now={now}
+        onShowAll={shared ? showCreated : undefined}
+      />
       {page.agents.length === 0 ? null : (
         <PersonSection title="Agents" count={page.agents.length}>
           {page.agents.map((each) => (

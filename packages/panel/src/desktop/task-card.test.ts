@@ -15,8 +15,8 @@ import { taskCardOf } from "./task-card.js";
 
 /**
  * task-card.test.ts -- a task's hover card leads with where the task stands,
- * its key, its status, and its priority, and keeps where it lives, its
- * repository, at its foot under what is moving on it.
+ * its key, its status, its priority, and who is on it, and keeps where it
+ * lives, its repository, at its foot under what is moving on it.
  */
 
 const ACME = {
@@ -66,7 +66,7 @@ function drawn(task: TaskSummary): HTMLElement {
   return card;
 }
 
-test("a task's card leads with its key, its status, and its priority, then its name, and keeps its repository at its foot", () => {
+test("a task's card leads with its key, its status, its priority, and who is on it, then its name, and keeps its repository at its foot", () => {
   const card = drawn(TASK);
   const parts = [...card.children];
   assert.deepEqual(
@@ -78,14 +78,30 @@ test("a task's card leads with its key, its status, and its priority, then its n
       ["key", "ACME-42"],
       ["task-card-chip", "In progress"],
       ["task-card-chip", "High"],
+      ["task-card-chip", "No assignee"],
     ],
-    "the key as plain words, as every place draws a key, then the status and priority chips",
+    "the key as plain words, as every place draws a key, then the status, priority, and assignee chips",
   );
   assert.equal(
     parts[1]?.querySelector(".luke-hover-card-name")?.textContent,
     "Teammate invitations",
   );
   assert.match(parts.at(-1)?.textContent ?? "", /acme\/app/u, "the repository stands last");
+});
+
+test("a task's card says who is on it by face and name, or the dashed mark where no one is, as a fact rather than a picker", () => {
+  const assignee = (task: TaskSummary) => {
+    const chip = drawn(task).querySelector<HTMLElement>("[data-task-card-assignee]");
+    assert.ok(chip, "the assignee's chip stands");
+    return [chip.textContent, chip.querySelector(".actor-mark")?.getAttribute("data-kind")];
+  };
+
+  assert.deepEqual(
+    assignee({ ...TASK, assignee: { userId: "user-charles", name: "Charles Pan" } }),
+    ["CCharles Pan", "person"],
+  );
+  assert.deepEqual(assignee(TASK), ["No assignee", "unassigned"]);
+  assert.equal(document.querySelector("[data-task-card] button[aria-haspopup]"), null);
 });
 
 test("a task with no key, status, or priority leads with its name", () => {

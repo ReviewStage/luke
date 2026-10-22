@@ -1072,10 +1072,11 @@ test("Search lists the listed workspace's plans first, then every other workspac
   );
 });
 
-test("a teammate's task wears its creator's face at its row's end, and is found by their name, which the row then says", () => {
+test("a task wears who is on it at its row's end, a teammate by face, no one on the dashed mark, the reader nothing, and is found by its assignee's name or its creator's, which the row then says", () => {
   const charles = { userId: "user-charles", name: "Charles Pan" };
   const dean = { userId: "user-dean", name: "Dean Stratakos" };
-  const task = (id: string, by: typeof dean) => ({
+  const priya = { userId: "user-priya", name: "Priya Raman" };
+  const task = (id: string, by: typeof dean, assignee?: typeof dean) => ({
     id,
     workspaceId: "workspace-personal",
     name: id,
@@ -1084,39 +1085,56 @@ test("a teammate's task wears its creator's face at its row's end, and is found 
     repository: "acme/relay",
     ownerId: by.userId,
     createdBy: by,
+    ...(assignee === undefined ? undefined : { assignee }),
   });
   openPalette(
     tasksControl({
       me: dean.userId,
-      tasks: [task("Retry budget", charles), task("Rate limits", dean)],
+      tasks: [
+        task("Retry budget", dean, charles),
+        task("Rate limits", charles, dean),
+        task("Cache keys", priya),
+      ],
     }),
   );
   chooseFilter("Tasks");
-  const faces = () =>
-    [...document.querySelectorAll('[role="option"]')].map(
-      (row) => row.querySelector(".luke-combobox-option-hint .actor-mark")?.textContent ?? null,
-    );
+  const marks = () =>
+    [...document.querySelectorAll('[role="option"]')].map((row) => {
+      const mark = row.querySelector(".luke-combobox-option-hint .actor-mark");
+      return mark === null ? null : [mark.getAttribute("data-kind"), mark.textContent];
+    });
 
-  assert.deepEqual(rows(), ["Retry budget · acme/relay", "Rate limits · acme/relay"]);
-  assert.deepEqual(faces(), ["C", null]);
-  assert.match(
-    document.querySelector(".luke-combobox-option-hint")?.textContent ?? "",
-    /\(created by Charles Pan\)/u,
+  assert.deepEqual(rows(), [
+    "Retry budget · acme/relay",
+    "Rate limits · acme/relay",
+    "Cache keys · acme/relay",
+  ]);
+  // Charles is on Retry budget, Dean, the reader, on Rate limits, though Charles made it, and no one on Cache keys.
+  assert.deepEqual(marks(), [["person", "C"], null, ["unassigned", ""]]);
+  const hints = [...document.querySelectorAll('[role="option"]')].map(
+    (row) => row.querySelector(".luke-combobox-option-hint")?.textContent ?? "",
   );
+  assert.match(hints[0] ?? "", /\(assigned to Charles Pan\)/u);
+  assert.match(hints[2] ?? "", /\(unassigned\)/u);
   type("charles");
-  assert.deepEqual(rows(), ["Retry budget · acme/relay · Charles Pan"]);
-  // A query the creator's name answers only loosely still shows the name it was found by,
+  assert.deepEqual(rows(), [
+    "Retry budget · acme/relay · Charles Pan",
+    "Rate limits · acme/relay · Charles Pan",
+  ]);
+  type("priya");
+  assert.deepEqual(rows(), ["Cache keys · acme/relay · Priya Raman"]);
+  // A query the name answers only loosely still shows the name it was found by,
   // and one the task's other words answer, however loosely, leaves the name unsaid.
   type("chrls");
-  assert.deepEqual(rows(), ["Retry budget · acme/relay · Charles Pan"]);
+  assert.equal(rows()[0], "Retry budget · acme/relay · Charles Pan");
   type("rtry");
   assert.equal(rows()[0], "Retry budget · acme/relay");
-  // A query running from the task's name into its creator's names them too.
+  // A query running from the task's name into its assignee's names them too.
   type("budgetch");
   assert.deepEqual(rows(), ["Retry budget · acme/relay · Charles Pan"]);
 });
 
-test("a task Luke or a coding agent made wears their square at its row's end, the reader's own too, says who in its detail, and is found by it", () => {
+test("a task Luke or a coding agent made says who in its detail and is found by it, but wears who is on it rather than its maker", () => {
   const dean = { userId: "user-dean", name: "Dean Stratakos" };
   const task = (id: string, origin?: TaskSummary["origin"]) => ({
     id,
@@ -1127,6 +1145,7 @@ test("a task Luke or a coding agent made wears their square at its row's end, th
     repository: "acme/relay",
     ownerId: dean.userId,
     createdBy: dean,
+    assignee: dean,
     ...(origin === undefined ? undefined : { origin }),
   });
   openPalette(
@@ -1152,7 +1171,7 @@ test("a task Luke or a coding agent made wears their square at its row's end, th
     "Audit log export · acme/relay · by Luke",
     "Rate limits · acme/relay",
   ]);
-  assert.deepEqual(marks(), ["agent", "luke", null]);
+  assert.deepEqual(marks(), [null, null, null]);
   type("coding agent");
   assert.deepEqual(rows(), ["Invite emails · acme/relay · by Coding agent"]);
 });
