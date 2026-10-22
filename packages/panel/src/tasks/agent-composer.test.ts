@@ -492,6 +492,34 @@ test("a dictation's words land where the caret stood as it began, spaced from th
   assert.equal(box.shown(), "Fix the bug in again this later", "the caret stands after the words");
 });
 
+test("a dictation the service refused for want of an OpenAI key says to add one in Settings, not that the recording failed", async () => {
+  stubMicrophone();
+  vi.stubGlobal("matchMedia", (query: string) => ({
+    matches: query === "(prefers-reduced-motion: reduce)",
+    addEventListener: ignore,
+    removeEventListener: ignore,
+  }));
+  fakeAppBridge({});
+  fakeActPort({
+    [ACT_KIND.MICROPHONE_REQUEST]: () => Promise.resolve(MICROPHONE_STATUS.GRANTED),
+    [ACT_KIND.MICROPHONE_ROUTE]: () => Promise.resolve(undefined),
+    [ACT_KIND.DICTATION_TRANSCRIBE]: () =>
+      Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.OPENAI_KEY_MISSING }),
+  });
+  const box = await mounted();
+  const dictate = box.button("Dictate");
+  assert.ok(dictate, "the microphone is offered");
+  act(() => dictate.click());
+  await settle();
+  pressInComposer(box.container, "Enter");
+  await settle();
+
+  const said = box.container.textContent ?? "";
+  assert.match(said, /Add an OpenAI API key in Settings/u);
+  assert.doesNotMatch(said, /couldn't be transcribed/u);
+  assert.equal(box.shown(), "", "nothing was put in the box");
+});
+
 /**
  * The box at an agent's tab's foot with the microphone stubbed, its Call
  * slot holding End call, every clip read as `transcribed` answers; `draw`

@@ -146,6 +146,7 @@ import { appPlatform } from "../app-platform.js";
 import { usePrefetchDiffBundle } from "../bundle-loader.js";
 import { useCopyToast } from "../copy-feedback.js";
 import { useChosenWorkspace } from "../desktop/chosen-workspace.js";
+import { useOpenAiKeyMissing } from "../openai-key.js";
 import { PANEL_SPAN, PANEL_SPAN_ATTRIBUTE, recordPanelSpan } from "../panel-spans.js";
 import { pressedWithCommand } from "../press-intent.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
@@ -2468,6 +2469,7 @@ export function useTasksTab(input: {
   // an agent's own page, so it goes the moment another opens, and its
   // surface is that page, which a version history covers.
   const callSurface = pageAgent ?? tasks.activeTaskId;
+  const openAiKeyMissing = useOpenAiKeyMissing();
   const [askedFor, setAskedFor] = useState<{
     surface: string;
     agentId: string;
@@ -2508,7 +2510,9 @@ export function useTasksTab(input: {
       listening: now.listening,
       call: now.call,
       voiceStatus: now.voiceStatus,
+      openAiKeyMissing,
     });
+    if (button.press === MICROPHONE_PRESS.ADD_OPENAI_KEY) input.onOpenApiKeys();
     if (button.press === MICROPHONE_PRESS.ASK_ACCESS) {
       tell(ACT_KIND.VOICE_COMMAND, { command: VOICE_COMMAND.REQUEST_MICROPHONE_ACCESS });
     }

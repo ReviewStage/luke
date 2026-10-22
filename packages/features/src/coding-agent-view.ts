@@ -89,7 +89,8 @@ import { taskTranscriptAnswerSchema } from "./transcript-wire.js";
  *
  * A clip dictated into an agent's message box travels here too, since the
  * box is an agent's: the clip and its words to listen for, and the text
- * back, or why there is none.
+ * back, or why there is none, the account having saved no OpenAI key among
+ * the reasons.
  *
  * The account's plan template travels here too, since it is the account's
  * own on the service as the default and the keys are, and Settings asks for
@@ -132,6 +133,8 @@ export const CODING_AGENT_CALL_FAILURE = {
   AGENT_PLAN_INELIGIBLE: "agent-plan-ineligible",
   /** The account keeps neither the model provider's subscription nor its API key, so no coding agent on that provider starts or takes a message until one is connected in Settings › Agents. */
   AGENT_CREDENTIAL_MISSING: "agent-credential-missing",
+  /** A dictated clip is heard on the account's own OpenAI API key, and the account saved none. */
+  OPENAI_KEY_MISSING: "openai-key-missing",
 } as const;
 
 export type CodingAgentCallFailure =

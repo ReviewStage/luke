@@ -76,9 +76,9 @@ export class VoiceCapabilityAssembler {
 
   /**
    * Where a GPT Live session comes from: the signed-in account through Luke's
-   * voice service, on Luke's key. Nothing when no account stands, or when the
-   * host handed no socket seam. No credential of the developer's own is ever
-   * what a session runs on.
+   * voice service, on the OpenAI API key the account saved there, never on
+   * Luke's. Nothing when no account stands, or when the host handed no socket
+   * seam. No credential reaches this process: the service opens the key.
    */
   get liveSessions(): LiveSessionSource | undefined {
     return this.#liveSessions;

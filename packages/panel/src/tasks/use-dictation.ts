@@ -1,12 +1,15 @@
 import { useAtomValue } from "@effect/atom-react";
+import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
 import { DICTATION_AUDIO_TYPE, DICTATION_BOUNDS } from "@luke/features/dictation-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { HOST_CAPABILITY } from "@luke/settings";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
+import { OPENAI_KEY_MISSING_NOTE } from "@luke/voice/microphone-access";
 import { Duration, Effect } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { type RefObject, useEffect, useRef, useState } from "react";
 import { useAct } from "../act.js";
+import { useOpenAiKeyMissing, useOpenApiKeys } from "../openai-key.js";
 import type { ComposerEditorHandle, ComposerMark } from "../plan-editor/contract.js";
 import { rendererRuntime } from "../renderer-runtime.js";
 import { appSettingsNow, appStateNow, capabilityNow } from "../use-app-state.js";
@@ -33,6 +36,9 @@ import { base64Of } from "./attached-files.js";
  * than on the recorder's events, which a hidden page may hold back. ✓ waits for the microphone
  * to open, since until then there is nothing to send. Whatever fails says
  * why in the box's note and keeps nothing, the microphone let go with it.
+ * A clip is heard on the account's own OpenAI key, so with none saved the
+ * press opens Settings › Agents rather than the microphone, and a clip the
+ * service refused for want of one says to add it (`../openai-key.tsx`).
  *
  * While a dictation stands the box takes no typing: Enter finishes and
  * Escape cancels, so neither sends the draft nor leaves the box.
@@ -54,6 +60,7 @@ const DICTATION_NOTE = {
   BOX_FULL: "There is no room for the dictated words.",
   NO_WORDS: "No words were heard.",
   FAILED: "The recording couldn't be transcribed. Try again.",
+  OPENAI_KEY_MISSING: OPENAI_KEY_MISSING_NOTE,
 } as const;
 
 /** What the recorder writes: Opus in WebM, the one container the wire carries. */
@@ -80,6 +87,8 @@ interface Recording {
 
 export interface DictationControl {
   phase: DictationPhase;
+  /** Whether the account is known to have no OpenAI API key, when `start` opens Settings › Agents instead. */
+  keyMissing: boolean;
   /** What the strip measures; nothing until the microphone is open. */
   analyser: AnalyserNode | undefined;
   /** When the recording began on the page's clock; nothing until the microphone is open, which is when ✓ takes a press. */
@@ -106,6 +115,8 @@ export function useDictation(input: {
   onNote: (note: string | undefined) => void;
 }): DictationControl {
   const { act } = useAct();
+  const keyMissing = useOpenAiKeyMissing();
+  const openApiKeys = useOpenApiKeys();
   const [phase, setPhase] = useState<DictationPhase>(DICTATION_PHASE.IDLE);
   const [analyser, setAnalyser] = useState<AnalyserNode | undefined>(undefined);
   const [startedAt, setStartedAt] = useState<number | undefined>(undefined);
@@ -170,6 +181,14 @@ export function useDictation(input: {
       keywords: latest.current.keywords,
     }).catch(() => undefined);
     if (generation.current !== clip.generation) return;
+    // A clip refused for want of the key says to add one, rather than that it failed.
+    if (
+      answer !== undefined &&
+      "failure" in answer &&
+      answer.failure === CODING_AGENT_CALL_FAILURE.OPENAI_KEY_MISSING
+    ) {
+      return settle(DICTATION_NOTE.OPENAI_KEY_MISSING);
+    }
     if (answer === undefined || "failure" in answer) return settle(DICTATION_NOTE.FAILED);
     const words = answer.text.trim();
     if (words === "") return settle(DICTATION_NOTE.NO_WORDS);
@@ -263,6 +282,7 @@ export function useDictation(input: {
   }, [deadlinePassed]);
 
   const start = () => {
+    if (keyMissing) return openApiKeys();
     const box = input.editor.current;
     if (phase !== DICTATION_PHASE.IDLE || box === undefined) return;
     marked.current = box.mark();
@@ -291,5 +311,5 @@ export function useDictation(input: {
     return false;
   };
 
-  return { phase, analyser, startedAt, start, finish, cancel, onFieldKey };
+  return { phase, keyMissing, analyser, startedAt, start, finish, cancel, onFieldKey };
 }

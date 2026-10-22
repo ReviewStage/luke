@@ -25,7 +25,11 @@ import {
 import type { LinearIssuesRequest, Workspace } from "@luke/features/workspace-wire";
 import { LIVE_STATUS, type LiveStatus } from "@luke/live";
 import { MICROPHONE_STATUS, type MicrophoneStatus } from "@luke/voice/audio";
-import { microphoneAccessRow, VOICE_KEYLESS_NOTE } from "@luke/voice/microphone-access";
+import {
+  microphoneAccessRow,
+  OPENAI_KEY_MISSING_NOTE,
+  VOICE_KEYLESS_NOTE,
+} from "@luke/voice/microphone-access";
 import type { VoiceCallAbout, VoiceView } from "@luke/voice/voice-view";
 import { matchesTokens, searchTokens } from "./search-tokens.js";
 
@@ -846,6 +850,8 @@ export const MICROPHONE_PRESS = {
   ASK_ACCESS: "ask-access",
   /** Opens System Settings, the one place a denial can be changed. */
   OPEN_SETTINGS: "open-settings",
+  /** Opens Settings › Agents, where the OpenAI API key a call runs on is saved. */
+  ADD_OPENAI_KEY: "add-openai-key",
   /** Talks to the agent: opens a call into it and hears it, or toggles its call's microphone. */
   TALK: "talk",
 } as const;
@@ -885,6 +891,10 @@ const CALL_STANDING: ReadonlySet<LiveStatus> = new Set([
  * rather than reading as a call not yet begun. An archived agent takes no
  * call, so its press is none until it is brought back; a call of its own
  * still standing, which only a race leaves, is still muted and heard again.
+ * A call runs on the account's own OpenAI key, so an account known to have
+ * none is sent to save one before anything else, even the microphone, which
+ * is worth asking for only once a call can run; a call of the agent's own
+ * still standing keeps its mute.
  */
 export function microphoneButton(input: {
   voiceAvailable: boolean;
@@ -897,9 +907,16 @@ export function microphoneButton(input: {
   /** What the standing call speaks into, as the voice window reports it. */
   call: VoiceCallAbout | undefined;
   voiceStatus: LiveStatus;
+  /** Whether the account is known to have no OpenAI API key; unknown is not missing. */
+  openAiKeyMissing?: boolean;
 }): MicrophoneButton {
   if (!input.voiceAvailable) {
     return { press: MICROPHONE_PRESS.NONE, label: VOICE_KEYLESS_NOTE, muted: false };
+  }
+  const ownCall = input.call?.agentId === input.agentId;
+  const ownCallStands = ownCall && (input.listening || CALL_STANDING.has(input.voiceStatus));
+  if (input.openAiKeyMissing === true && !ownCallStands) {
+    return { press: MICROPHONE_PRESS.ADD_OPENAI_KEY, label: OPENAI_KEY_MISSING_NOTE, muted: false };
   }
   const row = microphoneAccessRow({ voiceAvailable: true, status: input.microphoneStatus });
   if (row.offerAccess) {
@@ -915,7 +932,6 @@ export function microphoneButton(input: {
   if (!row.ready) {
     return { press: MICROPHONE_PRESS.NONE, label: row.detail ?? VOICE_KEYLESS_NOTE, muted: false };
   }
-  const ownCall = input.call?.agentId === input.agentId;
   if (ownCall && input.listening) {
     return { press: MICROPHONE_PRESS.TALK, label: "Mute the microphone", muted: false };
   }

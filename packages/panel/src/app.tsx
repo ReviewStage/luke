@@ -55,6 +55,7 @@ import { PageWorkspaceProvider, useCopyLink } from "./links-at-hand.js";
 import { throughHistory, useHistoryMouseButtons, useWindowHistory } from "./navigation-history.js";
 import { OpenFeedbackProvider } from "./open-feedback.js";
 import { OpenSettingsProvider } from "./open-settings.js";
+import { OpenAiKeyProvider } from "./openai-key.js";
 import { PANEL_TAB, type PanelTab } from "./panel-tabs.js";
 import { OpenPersonProvider } from "./person-door.js";
 import { installPressIntent } from "./press-intent.js";
@@ -244,7 +245,17 @@ function ChatToasts({
 export function App(): React.JSX.Element {
   const fixtureMode = useAppSlice(FIXTURE_MODE);
   const landed = useTasksFixtureLanded(fixtureMode);
-  return landed ? <AppWindow /> : <></>;
+  const account = useAppSlice(APP_SLICE.ACCOUNT);
+  // Note that the account's key is read above the window, because the window's own call press reads it too.
+  return (
+    <OpenAiKeyProvider
+      account={
+        account?.status === ACCOUNT_STATUS.SIGNED_IN ? (account.id ?? account.email) : undefined
+      }
+    >
+      {landed ? <AppWindow /> : null}
+    </OpenAiKeyProvider>
+  );
 }
 
 function AppWindow(): React.JSX.Element {

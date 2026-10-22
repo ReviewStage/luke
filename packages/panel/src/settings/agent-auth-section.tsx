@@ -54,6 +54,7 @@ import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { useAct } from "../act.js";
 import { ActionMenu } from "../desktop/action-menu.js";
 import { HarnessMark } from "../harness-marks.js";
+import { useSettleOpenAiKey } from "../openai-key.js";
 import { dayAndTimeText } from "../tasks/task-time.js";
 import { useOpenLink } from "../tasks/use-open-link.js";
 import { useCapability } from "../use-app-state.js";
@@ -71,7 +72,9 @@ import { useCapability } from "../use-app-state.js";
  * checked is off, and every agent Start makes on that provider's models
  * runs on the credential checked; there is no choice at Start. A radio is pressable only once its credential is saved; with
  * neither saved, no agent starts on that provider's models, since Luke's key
- * pays for no coding agent.
+ * pays for no coding agent. Calls and dictation run on the OpenAI API key
+ * alone, so every answer here is handed to the window too
+ * (`../openai-key.tsx`), and removing that key says they stop.
  *
  * The service never answers a key or a token, so nothing here holds one but
  * what is being pasted: it stands in the open field alone, is sent once on
@@ -867,7 +870,10 @@ function ApiKeyPanel({
         confirm={removal}
         question={{
           title: `Remove your ${name} API key?`,
-          body: `Agents on ${name} models won't start without a subscription.`,
+          body:
+            provider === PROVIDER_KEY_PROVIDER.OPENAI
+              ? `Agents on ${name} models won't start without a subscription. Calls and dictation will be off.`
+              : `Agents on ${name} models won't start without a subscription.`,
           verb: "Remove key",
           running: "Removing…",
         }}
@@ -1033,6 +1039,12 @@ export function AgentAuthSection({
   useEffect(() => {
     if (answer !== undefined || readFailed) onKeys(answer?.keys ?? []);
   }, [answer, readFailed, onKeys]);
+
+  // The window hears every answer too, so Call and Dictate turn as an OpenAI key is saved or removed.
+  const settleOpenAiKey = useSettleOpenAiKey();
+  useEffect(() => {
+    if (answer !== undefined) settleOpenAiKey(answer.keys);
+  }, [answer, settleOpenAiKey]);
 
   return (
     <div className={NO_CAPTURE}>

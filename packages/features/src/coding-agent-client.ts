@@ -248,6 +248,11 @@ const MESSAGE_REFUSALS = {
 /** The refusals an answer to the inbox can answer with: a message's own, since an answer the agent needs to hear reaches it as one. */
 const INBOX_ANSWER_REFUSALS = MESSAGE_REFUSALS;
 
+/** The refusals a dictated clip can answer with: the account saved no OpenAI key to hear it on. */
+const DICTATION_REFUSALS = {
+  [HOSTED_API_ERROR.OPENAI_KEY_MISSING]: CODING_AGENT_CALL_FAILURE.OPENAI_KEY_MISSING,
+} satisfies NamedRefusals;
+
 /** The refusals writing the default can answer with: a choice the catalog does not offer. */
 const DEFAULT_REFUSALS = {
   [HOSTED_API_ERROR.INVALID_REQUEST]: CODING_AGENT_CALL_FAILURE.INVALID_CHOICE,
@@ -629,7 +634,7 @@ export class HostedCodingAgentClient {
     if (admitted === undefined) return Effect.succeed(UNANSWERED);
     return hostedAnswer(
       askHosted(this.#hosted.dictation.transcribe, admitted, HOSTED_DEADLINE.HELD),
-      {},
+      DICTATION_REFUSALS,
     );
   }
 

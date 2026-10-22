@@ -528,6 +528,7 @@ export function chooseFailureNote(failure: CodingAgentCallFailure): string {
     case CODING_AGENT_CALL_FAILURE.INVALID_CHOICE:
       return "That model isn't offered any more. Choose another.";
     case CODING_AGENT_CALL_FAILURE.UNANSWERED:
+    case CODING_AGENT_CALL_FAILURE.OPENAI_KEY_MISSING:
     case CODING_AGENT_CALL_FAILURE.NO_REPOSITORY:
     case CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE:
     case CODING_AGENT_CALL_FAILURE.GITHUB_UNANSWERED:
@@ -784,7 +785,9 @@ function startFailureWords(failure: CodingAgentCallFailure): string {
       return "That model isn't offered any more. Choose another.";
     case CODING_AGENT_CALL_FAILURE.NOT_FOUND:
       return "This task no longer exists.";
+    // Note that only a dictated clip is refused for want of an OpenAI key, so a Start never hears it.
     case CODING_AGENT_CALL_FAILURE.UNANSWERED:
+    case CODING_AGENT_CALL_FAILURE.OPENAI_KEY_MISSING:
       return "The agent could not be started. Try again.";
     case CODING_AGENT_CALL_FAILURE.AGENT_RETIRED:
       return START_RETIRED;
@@ -830,9 +833,10 @@ export function messageFailureWords(failure: CodingAgentCallFailure): string {
   switch (failure) {
     case CODING_AGENT_CALL_FAILURE.NOT_FOUND:
       return "This agent no longer exists.";
-    // A message names no repository and no model, so neither refusal is its own.
+    // A message names no repository, no model, and no clip, so none of these refusals is its own.
     case CODING_AGENT_CALL_FAILURE.NO_REPOSITORY:
     case CODING_AGENT_CALL_FAILURE.INVALID_CHOICE:
+    case CODING_AGENT_CALL_FAILURE.OPENAI_KEY_MISSING:
       return "The message could not be sent. Try again.";
     // No answer is not a refusal: the words may have reached the agent, and Retry carries the same key, so they reach it once.
     case CODING_AGENT_CALL_FAILURE.UNANSWERED:
