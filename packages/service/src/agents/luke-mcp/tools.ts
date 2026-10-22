@@ -30,14 +30,21 @@
  * otherwise here, since the server keeps no session: a call's id, which the
  * agent tools key a start or a message on and chat a post, is minted for
  * each call; and the turn's count of plan notes and chat posts is read from
- * the store for the native turn under way (`turn-counts.ts`), so eve's
+ * the store for the native turn under way (`takenInTurn`), so eve's
  * per-turn caps hold. The list is narrowed per agent as eve narrows its own
  * (`offeredLukeMcpTool`), and a tool left out is still refused by its door
  * where a harness calls it anyway.
  */
 
 import type { DatabaseServices } from "@luke/database/core/query";
-import type { CodingAgent } from "@luke/database/models/coding-agent-store";
+import { agentPostsSince } from "@luke/database/models/chat-store";
+import {
+  type CodingAgent,
+  type CodingAgentHeader,
+  readCodingAgentHeaderOfConversation,
+} from "@luke/database/models/coding-agent-store";
+import { readNativeProjection } from "@luke/database/models/native-projection-store";
+import { readTask } from "@luke/database/models/task-store";
 import { CHAT_TOOL } from "@luke/features/chat-wire";
 import { CODING_AGENT_KIND } from "@luke/features/coding-agent-wire";
 import { INBOX_TOOL } from "@luke/features/inbox-wire";
@@ -50,7 +57,7 @@ import {
   WireValueSchema,
 } from "@luke/wire";
 import { emitJsonSchema } from "@luke/wire/effect";
-import { Effect, Schema } from "effect";
+import { Effect, Option, Schema } from "effect";
 import type { HttpClient } from "effect/http";
 import type { HostedEnvironment } from "../../environment.js";
 import type { GitHubApp } from "../../github/github-app.js";
@@ -121,11 +128,11 @@ import {
   UPDATE_TASK_TOOL,
 } from "../coding-agent-tools.js";
 import { RUN_ON_MAC_TOOL, runOnMacTool } from "../mac-command.js";
+import { heldProjection } from "../native-events/native-projection.js";
 import { LIST_OPEN_ASKS_TOOL } from "../operator-desk.js";
 import type { RepositorySandboxDoor } from "../repository-shell.js";
 import { CREATE_SECTION_TOOL, DELETE_SECTION_TOOL } from "../task-section-tools.js";
 import { CREATE_TASK_TOOL, READ_TASK_TOOL } from "../task-tools.js";
-import { notesInTurn, postsInTurn } from "./turn-counts.js";
 
 /** What a door answers: the tool's own result, the value its eve tool hands the model. */
 export type LukeMcpToolResult = { readonly status?: string } & object;
@@ -347,6 +354,49 @@ function runAgentBrowser(admitted: AdmittedConversation, input: UnparsedWireValu
   return runBrowserTool(call, input);
 }
 
+/**
+ * What the native turn under way has taken toward one of eve's per-turn
+ * caps, which eve keeps in its session's state and this server, keeping
+ * none, counts from the store: what the agent took since the turn the
+ * native projection holds open opened, and nothing where it holds none.
+ */
+function takenInTurn(
+  admitted: AdmittedConversation,
+  count: (
+    agent: CodingAgentHeader,
+    openedAt: number,
+  ) => Effect.Effect<number, unknown, DatabaseServices>,
+): Effect.Effect<number, unknown, DatabaseServices> {
+  return Effect.gen(function* () {
+    const { userId, conversationId } = admitted.target;
+    const saved = yield* readNativeProjection(admitted.target);
+    const openedAt = Option.flatMapNullishOr(saved, (held) => heldProjection(held).turn?.openedAt);
+    if (Option.isNone(openedAt)) return 0;
+    const agent = yield* readCodingAgentHeaderOfConversation(userId, conversationId);
+    if (Option.isNone(agent)) return 0;
+    return yield* count(agent.value, openedAt.value);
+  });
+}
+
+/** The chat messages the agent's member posted since the turn opened. */
+const postsTaken = (agent: CodingAgentHeader, openedAt: number) =>
+  agentPostsSince(agent.id, new Date(openedAt));
+
+/** The notes the agent's saves journaled on its plan since the turn opened, each picture one, read as the member whose turn this is. */
+const notesTaken =
+  (admitted: AdmittedConversation) => (agent: CodingAgentHeader, openedAt: number) =>
+    agent.taskId === null
+      ? Effect.succeed(0)
+      : Effect.map(readTask(admitted.caller, agent.taskId), (task) =>
+          Option.match(task, {
+            onNone: () => 0,
+            onSome: ({ agentEdits }) =>
+              agentEdits
+                .filter((edit) => edit.agentId === agent.id && edit.at >= openedAt)
+                .reduce((taken, edit) => taken + edit.notes.length, 0),
+          }),
+        );
+
 /** The tools served, by name, in the order `tools/list` names them. */
 export const LUKE_MCP_TOOLS: ReadonlyMap<string, LukeMcpTool> = new Map<string, LukeMcpTool>([
   // The inbox.
@@ -362,7 +412,7 @@ export const LUKE_MCP_TOOLS: ReadonlyMap<string, LukeMcpTool> = new Map<string, 
   // The pull request, the plan, and pages and pictures.
   entry(OPEN_PULL_REQUEST_TOOL, (admitted, input) => runAgentOpenPullRequest(admitted, input)),
   entry(EDIT_PLAN_TOOL, (admitted, input, { sandbox }) =>
-    Effect.flatMap(notesInTurn(admitted), (taken) =>
+    Effect.flatMap(takenInTurn(admitted, notesTaken(admitted)), (taken) =>
       runAgentEditPlan(admitted, input, taken, sandbox),
     ),
   ),
@@ -407,7 +457,7 @@ export const LUKE_MCP_TOOLS: ReadonlyMap<string, LukeMcpTool> = new Map<string, 
   agentTool(DELETE_SECTION_TOOL),
   // Chat.
   entry(CHAT_TOOLS.POST, (admitted, input, { seams, sandbox, callId }) =>
-    Effect.flatMap(postsInTurn(admitted), (posted) =>
+    Effect.flatMap(takenInTurn(admitted, postsTaken), (posted) =>
       runAgentChat(seams, admitted, {
         tool: CHAT_TOOL.POST,
         input,
