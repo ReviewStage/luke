@@ -14,6 +14,8 @@ import {
   AttachmentChip,
   type AttachmentChipState,
   PictureTile,
+  SPINNER_SIZE,
+  Spinner,
   TEXT_ELEMENT,
   TEXT_VARIANT,
   Text,

@@ -15,6 +15,7 @@ import {
   Tooltip,
   VisuallyHidden,
   ThinkingDots,
+  VisuallyHidden,
 } from "@luke/ui";
 import type { CallStatus } from "@luke/ui/tasks-model";
 import { ThinkingDots } from "../thinking-dots.js";
