@@ -73,6 +73,7 @@ import {
   type PlanRevisionsAnswer,
   type RepositoryPinsWritten,
   repositoryPinRequestSchema,
+  TASK_LIST_ARCHIVED,
   type Task,
   type TaskCreateRequest,
   type TaskFileAnswer,
@@ -327,7 +328,11 @@ export class HostedTaskClient {
     never,
     HttpClient.HttpClient
   > {
-    return hostedResult(askHosted(this.#hosted.plans.list, {}), {});
+    // Note that the query still asks for the archived, because the service reads it for the agents with no plan too, whose archive stands.
+    return hostedResult(
+      askHosted(this.#hosted.plans.list, { archived: TASK_LIST_ARCHIVED.INCLUDE }),
+      {},
+    );
   }
 
   /**

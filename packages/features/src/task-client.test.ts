@@ -294,7 +294,7 @@ it.effect(
 );
 
 it.effect(
-  "the list asks for the plans alone, an older service's archive stamp on one read past, and a revision is asked by its number",
+  "the list asks for the archived agents with no plan too, an older service's archive stamp on a plan read past, and a revision is asked by its number",
   () =>
     Effect.gen(function* () {
       const api = fakeCloudApi({
@@ -311,7 +311,7 @@ it.effect(
       assert.deepEqual(listed, { ok: true, answer: { plans: [SUMMARY] } });
       assert.equal(revision, undefined);
       assert.deepEqual(recordedRoutes(api.requests()), [
-        "GET /api/plans",
+        "GET /api/plans?archived=include",
         `GET /api/plans/${TASK_ID}/revisions/3`,
       ]);
     }),
