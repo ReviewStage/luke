@@ -841,7 +841,7 @@ export interface SentWords {
 }
 
 /**
- * What a `start_agent` or a `message_agent` call sent, whole, which its row's
+ * What a `start_agent` or a retired `message_agent` call sent, whole, which its row's
  * line cuts to its first line: a message's words, or a start's prompt (named
  * `task` by a start journaled before the prompt had its name) and its note;
  * nothing for any other call, or for a start on the plan with no note, which
@@ -849,7 +849,7 @@ export interface SentWords {
  */
 export function sentWords(tool: string, input: WireValue | undefined): SentWords | undefined {
   const words =
-    tool === AGENT_TOOL.MESSAGE_AGENT || tool === RETIRED_TOOL.MESSAGE_CODING_AGENT
+    tool === RETIRED_TOOL.MESSAGE_AGENT || tool === RETIRED_TOOL.MESSAGE_CODING_AGENT
       ? stringAt(input, "text")
       : tool === AGENT_TOOL.START_AGENT || tool === RETIRED_TOOL.START_CODING_AGENT
         ? (stringAt(input, "prompt") ?? stringAt(input, "task"))
@@ -906,7 +906,7 @@ function tasksToolView(
     case AGENT_TOOL.READ_AGENT:
     case RETIRED_TOOL.READ_CODING_AGENT:
       return namedCall(CALL_KIND.READ_AGENT, input, output, "agentId");
-    case AGENT_TOOL.MESSAGE_AGENT:
+    case RETIRED_TOOL.MESSAGE_AGENT:
     case RETIRED_TOOL.MESSAGE_CODING_AGENT:
       return namedCall(CALL_KIND.MESSAGE_AGENT, input, output, "text");
     case AGENT_TOOL.START_AGENT:
@@ -1168,7 +1168,7 @@ const TOOL_TARGETS: ReadonlyMap<string, (call: TargetedCall) => ToolTarget | und
   [AGENT_TOOL.DRAW_ON_BOARD, () => BOARD_TARGET],
   [AGENT_TOOL.LOOK_AT_BOARD, () => BOARD_TARGET],
   [AGENT_TOOL.READ_AGENT, namedAgent],
-  [AGENT_TOOL.MESSAGE_AGENT, namedAgent],
+  [RETIRED_TOOL.MESSAGE_AGENT, namedAgent],
   [AGENT_TOOL.START_AGENT, startedAgent],
   [RETIRED_TOOL.UNARCHIVE_AGENT, namedAgent],
   [AGENT_TOOL.STOP_AGENT, namedAgent],
@@ -1215,7 +1215,7 @@ export function toolTarget(call: TargetedCall): ToolTarget | undefined {
 /** The tools whose call is about one coding agent, under every name one was made under, which a row names by the agent's chip. */
 const AGENT_CALL_TOOLS: ReadonlySet<string> = new Set([
   AGENT_TOOL.READ_AGENT,
-  AGENT_TOOL.MESSAGE_AGENT,
+  RETIRED_TOOL.MESSAGE_AGENT,
   AGENT_TOOL.START_AGENT,
   RETIRED_TOOL.ARCHIVE_AGENT,
   RETIRED_TOOL.UNARCHIVE_AGENT,

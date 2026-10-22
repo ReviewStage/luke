@@ -678,9 +678,9 @@ test("every agent is told to look at a UI it built in the image's Chromium and s
 const TASK_LINK = "https://tryluke.dev/acme/task/5f3c2a1e-9b8d-4c7a-8e6f-1a2b3c4d5e6f";
 
 /**
- * Main's own instructions as they stood before Chat, recorded from main's
- * code for each brief, on a task and on none: what an agent whose starter
- * has not turned Chat on must still read, byte for byte.
+ * The instructions of an agent whose starter has not turned Chat on,
+ * recorded for each brief, on a task and on none, byte for byte: no team
+ * channel, and another agent messaged in a direct message.
  */
 const BEFORE_CHAT_PATH = fileURLToPath(
   new URL("../../../fixtures/coder-instructions/chat-off.json", import.meta.url),
@@ -711,25 +711,13 @@ const BEFORE_CHAT = Schema.decodeUnknownSync(
 /** What the instructions' opening adds with Chat on: that the agent is one of a team talking in its task's chat. */
 const TEAM_WORDS = / You are not working alone: [^\n]*?as its section below says\./u;
 
-/** How the instructions say an agent the agent starts reports back, with Chat on and with it off. */
-/** How an agent another started is told to send its starter what it would have posted in the inbox, with Chat on and with it off. */
-const STARTER_REACH_WORDS = {
-  on: "in your task's chat with that agent's mention link where you share a task, or with `message_agent` where you do not",
-  off: "with `message_agent`",
-} as const;
-
-const STARTED_REPORT_WORDS = {
-  on: "reports back in your task's chat, mentioning you, where it is on your task, and with a message where it is not",
-  off: "reports back with a message",
-} as const;
-
 /** What the instructions say of messaging another agent with Chat on, and with it off. */
 const MESSAGE_AGENT_WORDS = {
-  on: / Talk to the agents on your task in your task's chat, never with `message_agent`[^\n]*?keep each message short and complete\./u,
+  on: / Talk to the agents on your task in your task's chat, as its section says;[^\n]*?keep each message short and complete\./u,
   off: " Message another agent when its work meets yours, such as a change of yours it depends on or something only it knows, and keep each message short and complete.",
 } as const;
 
-test("with Chat off the instructions are main's own, byte for byte, and with it on they open on the team, add the chat section, and send the task's agents to it rather than message_agent", () => {
+test("with Chat off the instructions are the golden's, byte for byte, and message another agent in a direct message; with it on they open on the team, add the chat section, and send the task's agents to it rather than a direct message", () => {
   for (const brief of Object.values(CODING_AGENT_BRIEF)) {
     const before = BEFORE_CHAT[brief];
     assert.ok(before, brief);
@@ -751,15 +739,14 @@ test("with Chat off the instructions are main's own, byte for byte, and with it 
       on
         .replace(section.slice(0, end), "")
         .replace(MESSAGE_AGENT_WORDS.on, MESSAGE_AGENT_WORDS.off)
-        .replace(TEAM_WORDS, "")
-        .replace(STARTED_REPORT_WORDS.on, STARTED_REPORT_WORDS.off)
-        .replace(STARTER_REACH_WORDS.on, STARTER_REACH_WORDS.off),
+        .replace(TEAM_WORDS, ""),
       before.onTask,
       brief,
     );
-    for (const tool of Object.values(CHAT_TOOLS)) {
-      assert.ok(!off.onTask.includes(tool.name), `${brief} with Chat off names ${tool.name}`);
-    }
+    // With Chat off an agent still messages another in a direct message, and no agent is told of message_agent.
+    assert.ok(off.onTask.includes(`\`${CHAT_TOOLS.POST.name}\` with \`to\``), brief);
+    assert.ok(!off.onTask.includes("## Your team's chat"), brief);
+    assert.ok(!off.onTask.includes("message_agent") && !on.includes("message_agent"), brief);
   }
 });
 

@@ -610,6 +610,30 @@ function dmWith(
 }
 
 /**
+ * Why a post's place is refused, where telling needs no write: a channel
+ * other than the agent's own, a link that names no member, or the agent's
+ * own link; nothing where the place may stand, which `placeOf` settles.
+ */
+function placeRefusal(
+  seat: ChatSeat,
+  post: typeof postChatAskInputSchema.Type,
+): string | undefined {
+  const to = post.to;
+  if (post.replyTo !== undefined || to === undefined) return undefined;
+  if (to.startsWith(CHAT_TARGET_SIGIL.CHANNEL)) {
+    return to === `${CHAT_TARGET_SIGIL.CHANNEL}${seat.home.name ?? ""}`
+      ? undefined
+      : CHAT_TOOL_REFUSAL.ELSEWHERE;
+  }
+  const mention = chatTargetMember(to);
+  if (mention === undefined) return CHAT_TOOL_REFUSAL.NO_MEMBER;
+  const subject = subjectOf(mention);
+  return subject.kind === MEMBER_KIND.AGENT && standsFor(seat.self, subject)
+    ? CHAT_TOOL_REFUSAL.TO_SELF
+    : undefined;
+}
+
+/**
  * Where a post goes: the thread of the message it replies to, the agent's
  * own channel, which a `to` may name, or the DM with the member a `to`
  * names by its mention link; refused where `to` names any other channel,
@@ -787,6 +811,9 @@ export function postAsAgent(
   return Effect.gen(function* () {
     const seat = yield* seatOf(agent);
     if (Option.isNone(seat)) return chatRejected(CHAT_TOOL_REFUSAL.NO_AGENT);
+    // A place refused without a write is said before the pictures are read, so a bad picture never hides it.
+    const misplaced = placeRefusal(seat.value, post);
+    if (misplaced !== undefined) return chatRejected(misplaced);
     // The pictures are read before the place, since a DM the place makes must not stand where the post is refused.
     const pictures = yield* postPictures(post, call.clientKey, call.sandbox);
     if (Result.isFailure(pictures)) return chatRejected(pictures.failure);

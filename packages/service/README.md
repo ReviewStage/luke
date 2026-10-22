@@ -366,8 +366,8 @@ door holds the deployment to what its actor admits
 `CODER_DEPLOYMENT_TURNS` in `src/agents/coder-host/channel.ts`): a typed
 opening and line, which are an agent's Start, a message, an inbox answer, a
 manual automation run, a comment's hand-over to an agent it mentions
-(`src/tasks/comment-ask.ts`), and a coding agent's own `start_agent` and
-`message_agent`; a spoken ask, which a call hands the agent it speaks into;
+(`src/tasks/comment-ask.ts`), a coding agent's own `start_agent`, and a
+chat message told to an agent (`src/agents/coder-host/chat-notify.ts`); a spoken ask, which a call hands the agent it speaks into;
 a cancel, which is an agent's Stop, its Archive, and a task's archive; and a
 reset, which is how the two deletes, a task's and the account's, retire the
 eve sessions of what they delete (`src/agents/retire-sessions.ts`); each only
@@ -1121,11 +1121,7 @@ the agent tools (`src/agents/coding-agent-tools.ts`): `list_agents`, every other
 any task and by any member, each with its task, narrowed to one task or its
 own where asked, archived ones marked; `read_agent`, one agent of the
 workspace by its id, with what its branch published and a tail of its
-transcript, as many entries as asked, to a bound; `message_agent`, which takes the
-message box's own steer path under eve's id for the call, as the deployment
-acting for the agent's starter, kept under the sending agent's name
-(`MESSAGE_SENDER.AGENT`) and opening with who sent it, and which an archived
-agent or one of another workspace refuses; `start_agent`, which starts
+transcript, as many entries as asked, to a bound; `start_agent`, which starts
 another on its own task, or on another task of its workspace by the
 `taskId` that `list_tasks` answers, by the Start button's own path, telling
 it which agent started it; `stop_agent`, which stops the turn
@@ -2515,7 +2511,7 @@ tells an event rather than only on its 250 ms poll (the poll stays, for a
 stream refused or dropped); and nothing else: any other route or kind of
 turn carrying the secret is refused outright rather than passed to the
 account authenticator behind it. The table admits a typed message too,
-which a coding agent's own `start_agent` and `message_agent` send, and which
+which a coding agent's own `start_agent` and a chat message told to an agent send, and which
 a hosted route a browser reached on its session cookie alone carries for
 the member, a comment's hand-over to an agent it mentions among them
 (`src/tasks/comment-ask.ts`), minted the same way. The door admits that
