@@ -8367,31 +8367,6 @@ button.tasks-board-card-press:focus-visible::after {
   font-variant-numeric: tabular-nums;
 }
 
-.tasks-list-fold {
-  display: flex;
-  width: 100%;
-  min-height: var(--luke-control-height);
-  align-items: center;
-  gap: var(--luke-icon-gap);
-  padding: 0 var(--row-inset) 0 var(--luke-space-4);
-  border: 0;
-  border-radius: var(--luke-control-radius);
-  background: none;
-  color: inherit;
-  font: inherit;
-  text-align: left;
-  transition: background-color var(--duration-hover) ease;
-}
-
-.tasks-list-fold:hover {
-  background: var(--luke-color-fill-hover);
-}
-
-.tasks-list-fold:focus-visible {
-  outline: var(--luke-focus-ring-width) solid var(--luke-color-focus-ring);
-  outline-offset: calc(-1 * var(--luke-focus-ring-width));
-}
-
 .tasks-list-chevron {
   display: inline-flex;
   flex: none;
@@ -8404,7 +8379,7 @@ button.tasks-board-card-press:focus-visible::after {
   height: var(--luke-space-12);
 }
 
-.tasks-list-fold[aria-expanded="true"] .tasks-list-chevron {
+.tasks-list-chevron[data-open="true"] {
   transform: rotate(90deg);
 }
 

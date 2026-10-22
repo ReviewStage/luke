@@ -519,7 +519,7 @@ test("a group's head folds it, its count still standing, and the fold is kept on
     const head = [...page.querySelectorAll<HTMLElement>(".tasks-list-group")].find(
       (group) => group.getAttribute("aria-label") === "Todo",
     );
-    const button = head?.querySelector<HTMLButtonElement>(".tasks-list-fold");
+    const button = head?.querySelector<HTMLButtonElement>(".tasks-list-head button");
     assert.ok(button, "Todo's head folds it");
     return button;
   };
