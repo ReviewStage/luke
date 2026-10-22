@@ -242,6 +242,7 @@ import {
 import { HostedEnvironment, type HostedEnvironmentValues } from "../environment.js";
 import { recordingProductAnalytics, SERVER_EVENT } from "../events/server-events.js";
 import { LINK_OUTCOME, linkInstallation } from "../github/github-installations.js";
+import { PULL_REQUEST_QUEUED_OPERATION } from "../github/pull-request-merging.js";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import { HOSTED_REFUSAL } from "../http/http-effect.js";
 import { inboxProcedures } from "../inbox/inbox-procedures.js";
@@ -1987,6 +1988,10 @@ function graphqlAnswering(
   return (sent) => {
     if (new URL(sent.url).pathname !== "/graphql") return repository(sent);
     const { query, variables } = JSON.parse(sent.body);
+    // The published read's merge-queue ask rides with its REST reads on the App's token, as they do, and is no call the member made.
+    if (query.includes(PULL_REQUEST_QUEUED_OPERATION)) {
+      return Response.json({ data: { repository: { pullRequest: { mergeQueueEntry: null } } } });
+    }
     const call = { authorization: sent.headers.get("authorization"), query, variables };
     calls.push(call);
     return answer(call);

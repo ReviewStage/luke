@@ -7033,6 +7033,12 @@ summary:is(:hover, :focus-visible) button[data-tool-agent-ref] {
   --pull-request-tone: var(--luke-color-danger);
 }
 
+/* An open pull request GitHub holds in its merge queue, as its Pull request
+   tab's pill says it: in the attention tone. */
+[data-pull-request-state="queued"] {
+  --pull-request-tone: var(--luke-color-attention);
+}
+
 .pull-request-mark {
   width: 13px;
   height: 13px;

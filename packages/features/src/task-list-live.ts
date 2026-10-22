@@ -297,6 +297,7 @@ function agentsSummaryOf(rows: readonly AgentLiveRow[], now: number): TaskAgents
       deletions,
       url,
       agentId: row.id,
+      ...(published.queued === true ? { queued: true } : undefined),
     });
   }
   return {
@@ -448,8 +449,17 @@ function tasklessAgentOf(row: AgentLiveRow, now: number): TasklessAgent {
 /** An agent's pull request as its sidebar row carries it, where it opened one, as the held list projects it. */
 function pullRequestOf(published: AgentLiveRow["published"]) {
   if (published === null) return undefined;
-  const { number, title, url, state, checks } = published;
-  return { pullRequest: { number, title, url, state, checks } };
+  const { number, title, url, state, checks, queued } = published;
+  return {
+    pullRequest: {
+      number,
+      title,
+      url,
+      state,
+      checks,
+      ...(queued === true ? { queued } : undefined),
+    },
+  };
 }
 
 /** First started first, and by id among those started at one instant, as a plan's agents are listed. */
