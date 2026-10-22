@@ -3392,6 +3392,48 @@ const findAttachment = SqlSchema.findOneOption({
     ),
 });
 
+const ChatImageRowSchema = Schema.Struct({
+  contentType: chatImageTypeSchema,
+  bytes: Schema.Uint8Array,
+});
+
+/**
+ * The picture a chat message carries under its attachment id alone, where
+ * the reader may see the message's channel, as its reads of the chat do
+ * (`visibleTo`): a person every channel bar a DM with a teammate's
+ * operator, an agent its home and the DMs it is one of. Nothing where the
+ * account is not in the workspace, may not act as the reader, or the reader
+ * sees no message carrying a picture under the id, such as a picture kept
+ * beside a conversation rather than a message.
+ */
+export function readAttachmentFor(
+  userId: string,
+  organizationId: string,
+  readerId: string,
+  attachmentId: string,
+): ChatStoreEffect<Option.Option<ChatImage>> {
+  return Effect.gen(function* () {
+    const reader = yield* readerIn(userId, organizationId, readerId);
+    if (Option.isNone(reader) || !actsAs(userId, reader.value)) return Option.none();
+    const rows = yield* Database.use((db) =>
+      db
+        .select({ contentType: attachment.contentType, bytes: attachment.bytes })
+        .from(attachment)
+        .innerJoin(chatMessage, eq(chatMessage.id, attachment.chatMessageId))
+        .innerJoin(chatChannel, eq(chatChannel.id, chatMessage.channelId))
+        .where(
+          and(
+            eq(attachment.organizationId, organizationId),
+            eq(attachment.id, attachmentId),
+            visibleTo(reader.value),
+          ),
+        ),
+    );
+    const [row] = yield* Schema.decodeUnknownEffect(Schema.Array(ChatImageRowSchema))(rows);
+    return Option.fromNullishOr(row);
+  });
+}
+
 /** The message under its row's lock, with its author and the blocks that name its pictures. */
 const lockMessageInWorkspace = SqlSchema.findOneOption({
   Request: Schema.Struct({ organizationId: Schema.String, messageId: Schema.String }),

@@ -62,6 +62,7 @@ import {
   postMessage,
   readAllTo,
   readAttachment,
+  readAttachmentFor,
   readMessagePictures,
   readPast,
   readThrough,
@@ -77,7 +78,8 @@ import {
   withdrawAnswer,
   workspaceChatStamp,
 } from "../chat-store.js";
-import { createCodingAgent } from "../coding-agent-store.js";
+import { createCodingAgent, readCodingAgent } from "../coding-agent-store.js";
+import { keepConversationPicture } from "../conversation-pictures.js";
 import { createTask, updateTask } from "../task-store.js";
 
 /**
@@ -1770,6 +1772,93 @@ it.layer(getTestDB())("the chat store's pictures", (it) => {
       );
       assert.equal(kept.filter(Boolean).length, 1);
     }),
+  );
+
+  it.effect(
+    "a picture is read by its attachment id alone where its reader sees the message: an agent in its task's channel and the DMs it is one of, a person anywhere, and never one of a DM the agent is not in, another task's channel, a conversation's picture, or another person's member",
+    () =>
+      Effect.gen(function* () {
+        const room = yield* openRoom;
+        const stranger = yield* openAccount();
+        const elsewhere = yield* openTask(room.owner, room.workspace, "Invoices");
+        const third = Option.getOrThrow(
+          yield* ensureMember(room.owner, room.workspace, {
+            kind: MEMBER_KIND.AGENT,
+            agentId: yield* openAgent(room.owner, elsewhere),
+          }),
+        );
+        const image = (bytes: readonly number[]) => ({
+          id: randomUUID(),
+          contentType: CHAT_IMAGE_TYPE.PNG,
+          bytes: new Uint8Array(bytes),
+        });
+        const inChannel = image([137, 80, 78, 71, 1]);
+        yield* attachMessageImages(
+          room.owner,
+          room.workspace,
+          room.first.id,
+          (yield* pictured(room, [inChannel.id])).id,
+          [inChannel],
+        );
+        // A DM between the second agent and Ada, which the first agent is not one of.
+        const dm = Option.getOrThrow(
+          yield* findOrMakeDm(room.owner, room.workspace, room.second.id, room.ada.id),
+        );
+        const inDm = image([137, 80, 78, 71, 2]);
+        const dmPost = Result.getOrThrow(
+          yield* postMessage(room.owner, room.workspace, {
+            authorMemberId: room.second.id,
+            to: { channelId: dm.id },
+            blocks: [{ type: CHAT_BLOCK.IMAGE, attachmentId: inDm.id, alt: "The failing check." }],
+            clientKey: randomUUID(),
+          }),
+        ).message;
+        yield* attachMessageImages(room.owner, room.workspace, room.second.id, dmPost.id, [inDm]);
+        // A picture kept beside the first agent's conversation, as show_image keeps one.
+        const agentId = room.first.agentId;
+        assert.ok(agentId !== null);
+        const agent = Option.getOrThrow(yield* readCodingAgent(room.owner, agentId));
+        const kept = Option.getOrThrow(
+          yield* keepConversationPicture(
+            { userId: room.owner, conversationId: agent.conversationId },
+            {
+              bytes: new Uint8Array([137, 80, 78, 71, 3]),
+              contentType: CHAT_IMAGE_TYPE.PNG,
+              width: 1,
+              height: 1,
+            },
+          ),
+        );
+        const reads = (as: string, reader: ChatMemberRow, attachmentId: string) =>
+          Effect.map(
+            readAttachmentFor(as, room.workspace, reader.id, attachmentId),
+            Option.map((picture) => [...picture.bytes]),
+          );
+
+        for (const reader of [room.first, room.second, room.ada]) {
+          assert.deepEqual(
+            yield* reads(room.owner, reader, inChannel.id),
+            Option.some([...inChannel.bytes]),
+          );
+        }
+        assert.deepEqual(
+          yield* reads(room.teammate, room.grace, inChannel.id),
+          Option.some([...inChannel.bytes]),
+        );
+        assert.deepEqual(yield* reads(room.owner, third, inChannel.id), Option.none());
+
+        for (const [as, reader] of [
+          [room.owner, room.second],
+          [room.owner, room.ada],
+          [room.teammate, room.grace],
+        ] as const) {
+          assert.deepEqual(yield* reads(as, reader, inDm.id), Option.some([...inDm.bytes]));
+        }
+        assert.deepEqual(yield* reads(room.owner, room.first, inDm.id), Option.none());
+        assert.deepEqual(yield* reads(room.teammate, room.ada, inDm.id), Option.none());
+        assert.deepEqual(yield* reads(stranger, room.ada, inChannel.id), Option.none());
+        assert.deepEqual(yield* reads(room.owner, room.first, kept.id), Option.none());
+      }),
   );
 
   it.effect(

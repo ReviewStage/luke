@@ -968,7 +968,8 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
   const serverWords =
     ask.serverWords ??
     (from === undefined ? words : wordsOf(from.serverWords ?? from.prompt, ask.note));
-  // The files of the source's brief that fit, then those the note carries, which a fresh plan start has none of.
+  // The files of the source's brief that fit, then those the note carries; a fresh start's are its own,
+  // a prompt's or, on the plan, the note's, such as the pictures `start_agent` hands on.
   const attachments =
     from === undefined
       ? (ask.attachments ?? [])
@@ -1022,13 +1023,12 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
   const handed = brief.prompt ?? brief.planSnapshot;
   if (handed !== null) {
     const sessions = yield* eve;
-    const given = brief.prompt === null && from === undefined ? [] : attachments;
     // Each image is kept beside the new agent's conversation first, so the agent is told its id; one the
     // store could not keep goes unnamed, as before, rather than failing a Start whose agent already stands.
     const files = yield* keptHandedImages(
       { userId: agent.userId, conversationId: agent.conversationId },
-      given,
-    ).pipe(Effect.catch((failure) => Effect.as(logStoreFailure(failure), given)));
+      attachments,
+    ).pipe(Effect.catch((failure) => Effect.as(logStoreFailure(failure), attachments)));
     const opened = yield* sessions
       .open({
         conversationId: agent.conversationId,

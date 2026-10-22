@@ -119,9 +119,15 @@ read, and the tools it called, is visible in Luke only to you: no other
 member of the workspace can list it, open it, read its transcript, message
 it, call it, or find it in the chat, and your direct messages with it are
 left out of theirs. The agents, tasks, pull requests, and posts it makes
-are visible to the workspace as anyone's. Its conversation is stored on our
-service like any coding agent's, bound to your account and readable by our
-own operators. Deleting your account removes it.
+are visible to the workspace as anyone's. It may also hand on a picture of
+its own conversation, such as one it showed you, or of a chat message it
+can read, to an agent it starts, as an image on that agent's first message.
+A picture it hands on is then visible where it lands, as that agent's
+conversation is: kept in that agent's transcript, which every member of the
+workspace who can open the agent reads, and sent to that agent's model
+provider with the rest of its conversation. The operator's conversation is
+stored on our service like any coding agent's, bound to your account and
+readable by our own operators. Deleting your account removes it.
 
 **Tasks.** When you start a named task, our service stores it in a
 workspace: the first workspace made for your account unless you start it in
@@ -139,7 +145,9 @@ request, and how to message it, never its conversation. A coding agent can
 also list the other coding agents of its workspace, on any task and whichever
 member started them, send one a
 message, list the workspace's open tasks, and start a new one on its own
-task or another task of the workspace, without asking you first; a
+task or another task of the workspace, handing it pictures of its own
+conversation or of chat messages it can read as images on its first
+message, without asking you first; a
 message is kept in the receiving agent's transcript under the sending
 agent's title, opening with the sending agent's title and id, and goes to
 the receiving agent's model provider as the rest of its conversation does,
