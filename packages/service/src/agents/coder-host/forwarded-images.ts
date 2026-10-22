@@ -10,6 +10,7 @@ import {
   CODING_AGENT_BOUNDS,
   type CodingAgentAttachment,
 } from "@luke/features/coding-agent-wire";
+import { isVideoType } from "@luke/features/conversation-picture-wire";
 import type { InboxImageType } from "@luke/features/inbox-wire";
 import { Effect, Option, Result } from "effect";
 import type { StoreFailure } from "../../http/store-failure.js";
@@ -26,7 +27,9 @@ import { AGENT_TOOL } from "../agent-runtime/tools.js";
  * and the DMs it is one of, a person every channel. Any other id, another
  * conversation's picture or a DM the forwarder is not in among them, is
  * refused alike, so a refusal never says that a picture stands where the
- * forwarder cannot read it. Each picture is held to the bound one image of
+ * forwarder cannot read it. A video kept beside the conversation, as
+ * `show_image` keeps a recording, is refused by name, since a message
+ * carries pictures alone. Each picture is held to the bound one image of
  * a message is held to, and all of them to a message's bytes together
  * (`CODING_AGENT_BOUNDS`); one past them is refused rather than shrunk,
  * since a `show_image` picture may be larger than a message takes. A
@@ -39,6 +42,8 @@ import { AGENT_TOOL } from "../agent-runtime/tools.js";
 export const FORWARDED_IMAGE_REFUSAL = {
   /** The id names no picture the forwarder may hand on. */
   UNREACHED: "unreached",
+  /** The id names a video the forwarder recorded, which no message carries as a file. */
+  VIDEO: "video",
   /** The picture is past one image's bound. */
   TOO_LARGE: "too-large",
   /** The pictures together are past one message's bound. */
@@ -47,6 +52,7 @@ export const FORWARDED_IMAGE_REFUSAL = {
 
 export type ForwardedImageRefusal =
   | { readonly kind: typeof FORWARDED_IMAGE_REFUSAL.UNREACHED; readonly id: string }
+  | { readonly kind: typeof FORWARDED_IMAGE_REFUSAL.VIDEO; readonly id: string }
   | {
       readonly kind: typeof FORWARDED_IMAGE_REFUSAL.TOO_LARGE;
       readonly id: string;
@@ -126,6 +132,7 @@ export function forwardedImages(
         return Result.fail({ kind: FORWARDED_IMAGE_REFUSAL.UNREACHED, id });
       }
       const { contentType, bytes } = picture.value;
+      if (isVideoType(contentType)) return Result.fail({ kind: FORWARDED_IMAGE_REFUSAL.VIDEO, id });
       if (bytes.byteLength > CODING_AGENT_BOUNDS.MAX_IMAGE_BYTES) {
         return Result.fail({
           kind: FORWARDED_IMAGE_REFUSAL.TOO_LARGE,
@@ -154,6 +161,11 @@ export function forwardedImageRefusalWords(refusal: ForwardedImageRefusal): stri
       return (
         `attachment ${refusal.id} is no picture you can hand on. Name a picture of your own ` +
         `conversation, such as one ${AGENT_TOOL.SHOW_IMAGE} kept, or one of a chat message you can read.`
+      );
+    case FORWARDED_IMAGE_REFUSAL.VIDEO:
+      return (
+        `attachment ${refusal.id} is a video, and only a picture, a PNG, JPEG, or WebP, is ` +
+        "handed to another agent."
       );
     case FORWARDED_IMAGE_REFUSAL.TOO_LARGE:
       return (

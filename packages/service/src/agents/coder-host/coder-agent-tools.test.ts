@@ -872,12 +872,16 @@ function pngOf(size: number, mark: number): Uint8Array {
   return bytes;
 }
 
-/** A picture kept beside the agent's conversation, as `show_image` keeps one; answers its attachment id. */
-async function keptPicture(agent: ConversationTarget, bytes: Uint8Array): Promise<string> {
+/** A picture kept beside the agent's conversation, as `show_image` keeps one, a PNG unless another type is given; answers its attachment id. */
+async function keptPicture(
+  agent: ConversationTarget,
+  bytes: Uint8Array,
+  contentType: "image/png" | "video/webm" = "image/png",
+): Promise<string> {
   const kept = await database.run(
     keepConversationPicture(
       { userId: agent.userId, conversationId: agent.conversationId },
-      { bytes, contentType: "image/png", width: 1, height: 1 },
+      { bytes, contentType, width: 1, height: 1 },
     ),
   );
   return Option.getOrThrow(kept).id;
@@ -993,7 +997,7 @@ test("start_agent shows the model the recorded input, images among it", async ()
   await settleJsonSchemaGolden(GOLDEN_ROOT, "start-agent-input", START_AGENT_TOOL.inputSchema);
 });
 
-test("start_agent refuses, in words that say why and starting nothing, a picture of another agent's conversation, one of a DM the caller is not in, one past an image's bound, pictures past a message's bound together, and more ids than a start takes", async () => {
+test("start_agent refuses, in words that say why and starting nothing, a picture of another agent's conversation, one of a DM the caller is not in, a video the caller recorded, one past an image's bound, pictures past a message's bound together, and more ids than a start takes", async () => {
   const { workspaceId, plans: tasks, agents } = await openWorkspaces();
   const { caller, teammates } = agents;
   const eve = await fakeCoderEve(workspaceId);
@@ -1015,6 +1019,7 @@ test("start_agent refuses, in words that say why and starting nothing, a picture
   );
   const tooLarge = pngOf(CODING_AGENT_BOUNDS.MAX_IMAGE_BYTES + 1, 6);
   const tooLargeId = await keptPicture(caller, tooLarge);
+  const recording = await keptPicture(caller, pngOf(64, 10), "video/webm");
   const together = await Promise.all(
     [7, 8, 9].map((mark) => keptPicture(caller, pngOf(1_200_000, mark))),
   );
@@ -1025,6 +1030,11 @@ test("start_agent refuses, in words that say why and starting nothing, a picture
   for (const [images, reason] of [
     [[theirs], unreached(theirs)],
     [[notTheirs], unreached(notTheirs)],
+    [
+      [recording],
+      `Not started: attachment ${recording} is a video, and only a picture, a PNG, JPEG, or ` +
+        "WebP, is handed to another agent.",
+    ],
     [
       [tooLargeId],
       `Not started: attachment ${tooLargeId} is 1.6 MB, past the 1.5 MB an image handed to ` +
