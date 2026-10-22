@@ -1351,6 +1351,20 @@ emit(
   "Luke",
 );
 
+// And the mark in pure black on transparency: one ink, no tile, no grey,
+// with the face's shape carried by the alpha channel alone. This is the
+// monochrome glyph that partner surfaces tint themselves, such as an
+// integration's small icon on Sentry, which refuses any colour but black,
+// or a template image a host recolours for its own theme.
+emit(
+  "mark/luke-mark-square-monochrome.svg",
+  `${svgOpenAt(squareX, squareY, squareSide, squareSide)}${face()}</svg>`.replaceAll(
+    "currentColor",
+    "#000000",
+  ),
+  "Luke",
+);
+
 // Avatar: the face with room around it, for profile photos. The square marks
 // are cropped to the face itself, so the circle GitHub, X, Slack, and LinkedIn
 // cut from a profile photo takes the eyes and the end of the smile. Here the
