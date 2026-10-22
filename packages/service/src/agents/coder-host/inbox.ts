@@ -1,6 +1,7 @@
 import { posix } from "node:path";
 import type { DatabaseServices } from "@luke/database/core/query";
 import { OPERATOR_NOTICE_KIND } from "@luke/database/storage-vocabulary";
+import { sniffImageType } from "@luke/features/image-signature";
 import { inboxSandboxPicturePaths } from "@luke/features/inbox-attachment-link";
 import {
   INBOX_ANSWER_LEAD,
@@ -221,6 +222,7 @@ const readWithdraw = readEither(inboxWithdrawInputSchema, { excess: EXCESS_KEYS.
 /** How a post's picture is read from the sandbox: held to the inbox's picture bound, and refused in a post's own words. */
 const PICTURE_TERMS: SandboxImageTerms = {
   maxBytes: INBOX_BOUNDS.MAX_IMAGE_BYTES,
+  sniff: sniffImageType,
   refusals: {
     NO_FILE: "Not posted: a picture names no file in your sandbox:",
     NOT_IMAGE: "Not posted: a picture names a file that is not a PNG, JPEG, or WebP image:",

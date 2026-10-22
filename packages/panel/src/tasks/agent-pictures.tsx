@@ -5,7 +5,7 @@ import {
   shownPicturesOf,
 } from "@luke/features/agent-pictures-model";
 import type { FileChip } from "@luke/features/attachment-model";
-import type { KeptPicture } from "@luke/features/conversation-picture-wire";
+import { isVideoType, type KeptPicture } from "@luke/features/conversation-picture-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { ATTACHMENT_CHIP_STATE, AttachmentChip, type AttachmentChipState } from "@luke/ui";
 import {
@@ -49,8 +49,11 @@ import { AttachmentViewer, type ViewerAction } from "./attachment-viewer.js";
  * its row, open or closed: a thumbnail, the spinner while read, or the
  * glyph where gone. A press on any opens the window's file viewer
  * walking the set, or the call's pictures, from it, with Add to plan
- * beside Download where the transcript is drawn on a plan's page. Everything here is
- * left out of the screen recording, as the tab around it is.
+ * beside Download where the transcript is drawn on a plan's page. A WebM
+ * the agent recorded and showed as a picture is played instead, its own
+ * block above the call's pictures, with the player's own controls, and
+ * walks no viewer. Everything here is left out of the screen recording, as
+ * the tab around it is.
  */
 
 /** Where an agent's or a worker's pictures are read through: the scope the cache keeps them under, and the read. */
@@ -326,9 +329,94 @@ function setCount(count: number): string {
   return `${String(count)} pictures`;
 }
 
+/** What the player is named for a reader, its caption after it. */
+const VIDEO_LABEL = "Video";
+
 /**
- * A `show_image` call drawn as what it showed: one picture as its own block,
- * several as one set, each in its place while the call reads it.
+ * The `blob:` address a video's `data:` URL plays from, made from its bytes
+ * here and let go of as the player goes: neither window's policy lets media
+ * load from a `data:` address, nor fetch one, where both allow `blob:`.
+ */
+function useBlobUrl(dataUrl: string): string | undefined {
+  const [url, setUrl] = useState<string>();
+  useEffect(() => {
+    const comma = dataUrl.indexOf(",");
+    const type = dataUrl.slice(dataUrl.indexOf(":") + 1, dataUrl.indexOf(";"));
+    const binary = atob(dataUrl.slice(comma + 1));
+    const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
+    const made = URL.createObjectURL(new Blob([bytes], { type }));
+    setUrl(made);
+    return () => URL.revokeObjectURL(made);
+  }, [dataUrl]);
+  return url;
+}
+
+/** A video's player once its bytes are in: at its own shape up to the column's, with the player's own controls. */
+function VideoPlayer({
+  dataUrl,
+  picture,
+  caption,
+}: {
+  dataUrl: string;
+  picture: KeptPicture;
+  caption: string;
+}): ReactNode {
+  const url = useBlobUrl(dataUrl);
+  return (
+    <span
+      className="picture-frame"
+      style={{ aspectRatio: `${String(picture.width)} / ${String(picture.height)}` }}
+    >
+      {url === undefined ? null : (
+        // biome-ignore lint/a11y/useMediaCaption: an agent's recording of its screen has no sound to caption.
+        <video
+          className="picture-video"
+          src={url}
+          width={picture.width}
+          height={picture.height}
+          aria-label={caption === "" ? VIDEO_LABEL : `${VIDEO_LABEL}: ${caption}`}
+          controls
+          muted
+          playsInline
+          preload="metadata"
+        />
+      )}
+    </span>
+  );
+}
+
+/** A video the agent showed: its own block, played where its bytes are in, the picture's quiet box while read, its words where gone. */
+function ShownVideo({
+  door,
+  shown,
+}: {
+  door: AgentPictureDoor;
+  shown: ShownPicture & { readonly picture: KeptPicture };
+}): ReactNode {
+  const state = usePicture(door.owner, shown.picture.id, door.read);
+  const caption = shown.caption === "" ? undefined : shown.caption;
+  if (state.kind !== PICTURE_STATE.READY) {
+    return <PictureBlock state={state} alt={shown.caption} caption={caption} />;
+  }
+  return (
+    <span className="picture-block ph-no-capture" data-state={state.kind} data-video="">
+      <VideoPlayer dataUrl={state.url} picture={shown.picture} caption={shown.caption} />
+      {caption === undefined ? null : <span className="picture-caption">{caption}</span>}
+    </span>
+  );
+}
+
+/** Whether a shown file was kept as a video, played rather than drawn. */
+function isShownVideo(
+  shown: ShownPicture,
+): shown is ShownPicture & { readonly picture: KeptPicture } {
+  return shown.picture !== undefined && isVideoType(shown.picture.mediaType);
+}
+
+/**
+ * A `show_image` call drawn as what it showed: each video it showed as its
+ * own player, then one picture as its own block, several as one set, each
+ * in its place while the call reads it.
  */
 export function ShownPictures({
   input,
@@ -338,9 +426,30 @@ export function ShownPictures({
   output: Parameters<typeof shownPicturesOf>[1];
 }): ReactNode {
   const door = useContext(AgentPicturesContext);
+  const all = shownPicturesOf(input, output);
+  if (door === undefined || all.length === 0) return null;
+  const videos = all.filter(isShownVideo);
+  const stills = all.filter((each) => !isShownVideo(each));
+  return (
+    <>
+      {videos.map((each, index) => (
+        // Note that a video's place among the call's is its identity: a call never reorders.
+        <ShownVideo key={index} door={door} shown={each} />
+      ))}
+      {stills.length === 0 ? null : <ShownStills door={door} shown={stills} />}
+    </>
+  );
+}
+
+/** The pictures of a `show_image` call that are no video: one as its own block, several as one set. */
+function ShownStills({
+  door,
+  shown,
+}: {
+  door: AgentPictureDoor;
+  shown: readonly ShownPicture[];
+}): ReactNode {
   const { open, viewer } = useViewer(door);
-  const shown = shownPicturesOf(input, output);
-  if (door === undefined || shown.length === 0) return null;
   const kept = shown.flatMap((each) =>
     each.picture === undefined
       ? []
