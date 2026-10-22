@@ -47,6 +47,8 @@ export const SENTRY_LEVEL = {
   FATAL: "fatal",
 } as const;
 
+export type SentryLevel = (typeof SENTRY_LEVEL)[keyof typeof SENTRY_LEVEL];
+
 /** One field a trigger filters on: its words, and the values it may take where they are a fixed list rather than the developer's own. */
 interface TriggerFilterField {
   readonly field: IntegrationTriggerFilter;

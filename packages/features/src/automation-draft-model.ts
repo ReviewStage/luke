@@ -10,6 +10,8 @@ import type { AutomationChangeParams, AutomationCreateParams } from "./automatio
 import {
   AUTOMATION_ACTION,
   AUTOMATION_BOUNDS,
+  AUTOMATION_DEFAULT_GUARDS,
+  AUTOMATION_DEFAULT_SUBJECT_COOLDOWN_HOURS,
   AUTOMATION_SCOPE,
   AUTOMATION_TARGET,
   AUTOMATION_TRIGGER,
@@ -26,11 +28,16 @@ import {
   type GitHubSender,
   type GitHubTriggerEvent,
   type IntegrationTrigger,
+  type IntegrationTriggerFilters,
   PULL_REQUEST_DEFAULT_MOMENTS,
   type PullRequestMoment,
 } from "./automation-wire.js";
 import type { ModelChoice } from "./models-wire.js";
-import { SENTRY_TRIGGER_EVENT, TRIGGER_PROVIDER } from "./trigger-catalog.js";
+import {
+  SENTRY_TRIGGER_EVENT,
+  type SentryTriggerEvent,
+  TRIGGER_PROVIDER,
+} from "./trigger-catalog.js";
 
 /**
  * automation-draft-model.ts -- an automation as its editor holds it while it is written: its trigger, a schedule in the picker's terms, a GitHub event, or a webhook, the task, the repository, and the owner, with what stops it saving and the write that saves it.
@@ -40,7 +47,9 @@ import { SENTRY_TRIGGER_EVENT, TRIGGER_PROVIDER } from "./trigger-catalog.js";
  * as it was, so opening an automation made elsewhere never rewrites its
  * schedule. A GitHub event is chosen by its kind, any label or branch filter
  * it was given kept as it was, since the editor does not show them; a
- * webhook is its kind alone, its secret the service's. The repository the
+ * webhook is its kind alone, its secret the service's; an integration's
+ * event is chosen with the filters the editor shows, and the hours it waits
+ * before the same subject fires it again, which it writes into its guards. The repository the
  * editor shows is the first, where a run starts; any others it was given
  * are kept behind it. A save sends only what changed, so a field the editor does not
  * show, a model or a target, stands as the service holds it. Every word a
@@ -66,6 +75,10 @@ export const DRAFT_FIELD = {
   PROMPT: "prompt",
   REPOSITORY: "repository",
   AGENT: "agent",
+  /** An integration trigger's filters. */
+  FILTERS: "filters",
+  /** An integration trigger's subject cooldown. */
+  COOLDOWN: "cooldown",
 } as const;
 
 type DraftField = (typeof DRAFT_FIELD)[keyof typeof DRAFT_FIELD];
@@ -115,6 +128,8 @@ export interface AutomationDraft {
   readonly disabledServers: readonly string[];
   /** The guards it runs under: a saved one's, or a new one's where a preset set them, the service's defaults otherwise. */
   readonly guards: AutomationGuards | null;
+  /** The hours an integration trigger waits before the same subject fires it again, or nothing while its field holds no number. */
+  readonly subjectCooldownHours: number | undefined;
 }
 
 /** A GitHub trigger's settings as its editor holds them, each stated where the trigger leaves it to a default. */
@@ -264,6 +279,41 @@ function sameIntegrationTrigger(one: IntegrationTrigger, other: IntegrationTrigg
   );
 }
 
+/** A cooldown the guards take: a whole number of hours, from one to a week. */
+function cooldownAdmitted(hours: number | undefined): hours is number {
+  return (
+    hours !== undefined &&
+    Number.isInteger(hours) &&
+    hours >= 1 &&
+    hours <= AUTOMATION_BOUNDS.MAX_SUBJECT_COOLDOWN_HOURS
+  );
+}
+
+/** A saved automation's subject cooldown: its guards', or the service's default where they name none. */
+function cooldownOf(guards: AutomationGuards | null): number {
+  return guards?.subjectCooldownHours ?? AUTOMATION_DEFAULT_SUBJECT_COOLDOWN_HOURS;
+}
+
+/** The guards a draft writes: its own, with its subject cooldown where an integration fires it; none where it keeps the service's. */
+function guardsOf(draft: AutomationDraft): AutomationGuards | null {
+  if (draft.triggerKind !== AUTOMATION_TRIGGER.INTEGRATION) return draft.guards;
+  if (!cooldownAdmitted(draft.subjectCooldownHours)) return draft.guards;
+  return {
+    ...(draft.guards ?? AUTOMATION_DEFAULT_GUARDS),
+    subjectCooldownHours: draft.subjectCooldownHours,
+  };
+}
+
+/** Whether an integration trigger's filters are each within the wire's bounds: so many values, each so long. */
+function filtersAdmitted(filters: IntegrationTriggerFilters | undefined): boolean {
+  const fields = [filters?.project, filters?.environment, filters?.level];
+  return fields.every(
+    (values = []) =>
+      values.length <= AUTOMATION_BOUNDS.MAX_FILTER_VALUES &&
+      values.every((value) => value.length <= AUTOMATION_BOUNDS.MAX_FILTER_VALUE_CHARS),
+  );
+}
+
 /** The trigger a draft writes: its schedule's cron and zone, its GitHub event with the filters it kept, its webhook, or its integration's event. */
 export function draftTrigger(draft: AutomationDraft): AutomationTrigger {
   switch (draft.triggerKind) {
@@ -368,6 +418,7 @@ export function automationDraft(
       archiveSuccessful: false,
       disabledServers: [],
       guards: null,
+      subjectCooldownHours: AUTOMATION_DEFAULT_SUBJECT_COOLDOWN_HOURS,
     };
   }
   const { trigger } = automation;
@@ -399,6 +450,7 @@ export function automationDraft(
     archiveSuccessful: automation.archiveSuccessful ?? false,
     disabledServers: automation.action.disabledServers ?? [],
     guards: automation.guards,
+    subjectCooldownHours: cooldownOf(automation.guards),
   };
 }
 
@@ -427,7 +479,9 @@ export function repositoryHeld(
 /**
  * What stops a draft saving, at the field it is about: a name and a task
  * written, a schedule Luke reads and that fires no more often than its
- * floor, and a repository chosen where none is held (`repositoryHeld`).
+ * floor, an integration's filters within their bounds and its cooldown a
+ * whole number of hours up to a week, and a repository chosen where none
+ * is held (`repositoryHeld`).
  */
 export function draftProblems(draft: AutomationDraft, held: boolean, now: Date): DraftProblems {
   const name = textProblem(
@@ -449,6 +503,15 @@ export function draftProblems(draft: AutomationDraft, held: boolean, now: Date):
       : draft.triggerKind === AUTOMATION_TRIGGER.GITHUB
         ? githubSettingsProblem(draft)
         : undefined;
+  const integration = draft.triggerKind === AUTOMATION_TRIGGER.INTEGRATION;
+  const filters =
+    integration && !filtersAdmitted(draft.integrationTrigger.filters)
+      ? `Keep each filter to ${AUTOMATION_BOUNDS.MAX_FILTER_VALUES} values of up to ${AUTOMATION_BOUNDS.MAX_FILTER_VALUE_CHARS} characters.`
+      : undefined;
+  const cooldown =
+    integration && !cooldownAdmitted(draft.subjectCooldownHours)
+      ? `Wait a whole number of hours, from 1 to ${AUTOMATION_BOUNDS.MAX_SUBJECT_COOLDOWN_HOURS}.`
+      : undefined;
   const repository =
     !held && draft.repository === null ? "Choose the repository it works in." : undefined;
   const agent =
@@ -461,6 +524,8 @@ export function draftProblems(draft: AutomationDraft, held: boolean, now: Date):
   if (prompt !== undefined) problems[DRAFT_FIELD.PROMPT] = prompt;
   if (repository !== undefined) problems[DRAFT_FIELD.REPOSITORY] = repository;
   if (agent !== undefined) problems[DRAFT_FIELD.AGENT] = agent;
+  if (filters !== undefined) problems[DRAFT_FIELD.FILTERS] = filters;
+  if (cooldown !== undefined) problems[DRAFT_FIELD.COOLDOWN] = cooldown;
   return problems;
 }
 
@@ -496,6 +561,7 @@ export function createRequestOf(
   draft: AutomationDraft,
   workspaceId: string,
 ): AutomationCreateParams {
+  const guards = guardsOf(draft);
   const made = {
     workspaceId,
     name: draft.name.trim(),
@@ -504,7 +570,7 @@ export function createRequestOf(
     scope: draft.owner,
     target: targetOf(draft),
     archiveSuccessful: draft.archiveSuccessful,
-    ...(draft.guards === null ? undefined : { guards: draft.guards }),
+    ...(guards === null ? undefined : { guards }),
   } as const;
   return draft.repository === null ? made : { ...made, repositories: draftRepositories(draft) };
 }
@@ -521,7 +587,8 @@ export function sameDraft(one: AutomationDraft, other: AutomationDraft): boolean
         sameFilters(one.githubFilters, other.githubFilters) &&
         sameSettings(one.githubSettings, other.githubSettings))) &&
     (one.triggerKind !== AUTOMATION_TRIGGER.INTEGRATION ||
-      sameIntegrationTrigger(one.integrationTrigger, other.integrationTrigger)) &&
+      (sameIntegrationTrigger(one.integrationTrigger, other.integrationTrigger) &&
+        one.subjectCooldownHours === other.subjectCooldownHours)) &&
     // A new draft's guards, unset, are whatever the service sets, so they differ from none.
     (one.guards === null ||
       other.guards === null ||
@@ -566,6 +633,11 @@ export function changeOf(
     !sameIntegrationTrigger(draft.integrationTrigger, was.integrationTrigger);
   const triggerMoved =
     draft.triggerKind !== was.triggerKind || scheduleMoved || eventMoved || integrationMoved;
+  // Note that a cooldown is sent over the guards as saved, because a change's guards replace them whole.
+  const cooldownMoved =
+    draft.triggerKind === AUTOMATION_TRIGGER.INTEGRATION &&
+    cooldownAdmitted(draft.subjectCooldownHours) &&
+    draft.subjectCooldownHours !== was.subjectCooldownHours;
   const actionMoved =
     draft.prompt.trim() !== was.prompt ||
     !sameChoice(draft.choice, was.choice) ||
@@ -575,6 +647,9 @@ export function changeOf(
   const change: ChangeDraft = {};
   if (draft.name.trim() !== was.name) change.name = draft.name.trim();
   if (triggerMoved) change.trigger = draftTrigger(draft);
+  if (cooldownMoved) {
+    change.guards = { ...automation.guards, subjectCooldownHours: draft.subjectCooldownHours };
+  }
   // Note that a change names its servers even where none are off, because a change that names none keeps the saved ones.
   if (actionMoved) change.action = { ...actionOf(draft), disabledServers: draft.disabledServers };
   if (targetMoved && (draft.target === AUTOMATION_TARGET.NEW_AGENT || draft.agentId !== null)) {
@@ -626,7 +701,49 @@ export function presetDraft(draft: AutomationDraft, preset: AutomationPreset): A
     agentId: null,
     archiveSuccessful: preset.archiveSuccessful,
     guards: preset.guards,
+    subjectCooldownHours: preset.guards.subjectCooldownHours ?? draft.subjectCooldownHours,
   };
+}
+
+/**
+ * A draft moved to another event of its integration. The filters stay,
+ * since every event of a provider carries the same fields.
+ */
+export function withIntegrationEvent(
+  draft: AutomationDraft,
+  event: SentryTriggerEvent,
+): AutomationDraft {
+  return { ...draft, integrationTrigger: { ...draft.integrationTrigger, event } };
+}
+
+/**
+ * A draft whose integration trigger keeps to the filters given, merged over
+ * those it had. A field left empty keeps nothing out, so it is dropped
+ * rather than written empty, and a trigger with no field left names none.
+ */
+export function withIntegrationFilters(
+  draft: AutomationDraft,
+  filters: IntegrationTriggerFilters,
+): AutomationDraft {
+  const { filters: had, ...trigger } = draft.integrationTrigger;
+  const merged = { ...had, ...filters };
+  const kept: {
+    -readonly [Key in keyof IntegrationTriggerFilters]: IntegrationTriggerFilters[Key];
+  } = {};
+  if (merged.project !== undefined && merged.project.length > 0) kept.project = merged.project;
+  if (merged.environment !== undefined && merged.environment.length > 0) {
+    kept.environment = merged.environment;
+  }
+  if (merged.level !== undefined && merged.level.length > 0) kept.level = merged.level;
+  const integrationTrigger =
+    Object.keys(kept).length === 0 ? trigger : { ...trigger, filters: kept };
+  return { ...draft, integrationTrigger };
+}
+
+/** The values a filter's field spells, comma-separated, each trimmed, empty ones and repeats left out. */
+export function filterValuesOf(text: string): readonly string[] {
+  const values = text.split(",").map((value) => value.trim());
+  return values.filter((value, at) => value !== "" && values.indexOf(value) === at);
 }
 
 /**

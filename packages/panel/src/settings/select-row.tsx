@@ -30,8 +30,8 @@ export function SelectRow<Value extends string | number>({
   label: string;
   detail?: string | undefined;
   value: Value;
-  /** Each option's token and words. A set with faces is a `PictureChoiceRow` instead. */
-  options: readonly { value: Value; label: string }[];
+  /** Each option's token and words, and why it cannot be picked now where it cannot. A set with faces is a `PictureChoiceRow` instead. */
+  options: readonly { value: Value; label: string; disabled?: string | undefined }[];
   parse: (raw: string) => Value | undefined;
   /** The empty search field's words, for a set long enough that its menu searches; none reads it whole. */
   placeholder?: string | undefined;
@@ -65,7 +65,11 @@ export function SelectRow<Value extends string | number>({
       width={width}
       value={String(value)}
       valueLabel={chosen?.label ?? String(value)}
-      rows={options.map((option) => ({ id: String(option.value), label: option.label }))}
+      rows={options.map((option) => ({
+        id: String(option.value),
+        label: option.label,
+        disabled: option.disabled,
+      }))}
       placeholder={placeholder}
       noMatch={NO_MATCH}
       anchor={anchor}
