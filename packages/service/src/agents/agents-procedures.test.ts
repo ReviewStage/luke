@@ -6,6 +6,7 @@ import {
   archiveCodingAgent,
   createCodingAgent,
   readCodingAgent,
+  recordCodingAgentRunnerToken,
 } from "@luke/database/models/coding-agent-store";
 import { recordRepositoryReads } from "@luke/database/models/github-repository-reads";
 import { readGitHubTokenRow } from "@luke/database/models/github-token-store";
@@ -28,6 +29,7 @@ import type { WebServices } from "../runtime.js";
 import { openGithubUser, openTokenMember } from "../testing/github-app-fake.js";
 import { keepAwakeDetached, scriptedSessionSandboxes } from "../testing/session-sandboxes-fake.js";
 import { agentsProcedures } from "./agents-procedures.js";
+import { admitRunnerBearer, runnerTokenDigest } from "./luke-mcp/bearer.js";
 import { type SandboxStopReach, SessionSandboxes } from "./session-sandboxes.js";
 import { AgentSandbox, type AgentSandboxService, SHELL_REFUSAL } from "./terminal/agent-sandbox.js";
 import { SandboxUnavailable } from "./vercel-sandbox-api.js";
@@ -405,24 +407,31 @@ it.layer(getTestDB())("the agent terminals procedures", (it) => {
     }),
   );
 
-  it.effect("archiving the agent stops its sandbox without deleting it", () =>
-    Effect.gen(function* () {
-      const { userId, agent, sessionId } = yield* openAgent;
-      const sandboxes = yield* scriptedSessionSandboxes();
-      const call = yield* standing(
-        new Map([["Bearer owner", userId]]),
-        scriptedSandbox(SANDBOX_STATE.RUNNING).layer,
-        sandboxes.layer,
-      );
+  it.effect(
+    "archiving the agent stops its sandbox without deleting it, its runner's bearer retired first",
+    () =>
+      Effect.gen(function* () {
+        const { userId, agent, sessionId } = yield* openAgent;
+        const bearer = `runner-${randomUUID()}`;
+        yield* recordCodingAgentRunnerToken(userId, agent.id, runnerTokenDigest(bearer));
+        const admittedBefore = yield* admitRunnerBearer(bearer);
+        const sandboxes = yield* scriptedSessionSandboxes();
+        const call = yield* standing(
+          new Map([["Bearer owner", userId]]),
+          scriptedSandbox(SANDBOX_STATE.RUNNING).layer,
+          sandboxes.layer,
+        );
 
-      const archived = yield* call(agentOf(agent.id), "Bearer owner", {
-        method: "PATCH",
-        body: { archived: true },
-      });
+        const archived = yield* call(agentOf(agent.id), "Bearer owner", {
+          method: "PATCH",
+          body: { archived: true },
+        });
 
-      assert.equal(archived.status, 200);
-      assert.equal(yield* Queue.take(sandboxes.stops), sessionId);
-    }),
+        assert.equal(archived.status, 200);
+        assert.equal(yield* Queue.take(sandboxes.stops), sessionId);
+        assert.ok(Option.isSome(admittedBefore));
+        assert.ok(Option.isNone(yield* admitRunnerBearer(bearer)));
+      }),
   );
 
   it.effect(

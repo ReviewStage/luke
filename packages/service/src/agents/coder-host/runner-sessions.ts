@@ -107,6 +107,7 @@ import { runnerTokenDigest } from "../luke-mcp/bearer.js";
 import type { RepositorySandbox } from "../repository-shell.js";
 import { WITHOUT_CAPABILITIES } from "../sandbox-capabilities.js";
 import { capSandboxTimeout } from "../sandbox-keep-alive.js";
+import { stoppedWithoutCredential } from "../session-sandboxes.js";
 import {
   credentialPolicy,
   OPEN_INTERNET_POLICY,
@@ -987,7 +988,6 @@ export const runnerEnded = Effect.fn("web/runnerEnded")(function* (ending: Runne
     return RUNNER_ENDED.HELD;
   // The credential comes off first, and a sandbox it would not come off is left up rather than
   // stopped with it: the call fails, and the sweep (`native-sandbox-sweep.ts`) tries again.
-  yield* api.updateNetworkPolicy(running, OPEN_INTERNET_POLICY);
-  yield* api.stopSession(running);
+  yield* stoppedWithoutCredential(api, running);
   return RUNNER_ENDED.STOPPED;
 });

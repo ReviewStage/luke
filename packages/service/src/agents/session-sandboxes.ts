@@ -34,7 +34,11 @@
  */
 
 import type { DatabaseServices, QueryError } from "@luke/database/core/query";
-import { type CodingAgent, readCodingAgent } from "@luke/database/models/coding-agent-store";
+import {
+  type CodingAgent,
+  readCodingAgent,
+  recordCodingAgentRunnerToken,
+} from "@luke/database/models/coding-agent-store";
 import { recordedRuntimeSession } from "@luke/database/models/recorded-session";
 import {
   nextSessionSandboxes,
@@ -45,6 +49,7 @@ import { Clock, Context, Duration, Effect, Layer, Option, Result, type Schema } 
 import type { HttpClient } from "effect/http";
 import { capSandboxTimeout, keepAliveExtension } from "./sandbox-keep-alive.js";
 import { boundSnapshotRetention } from "./sandbox-retention.js";
+import { OPEN_INTERNET_POLICY } from "./terminal/agent-sandbox.js";
 import {
   deploymentOidcToken,
   RUNNING_STATUS,
@@ -83,13 +88,30 @@ export interface SessionSandboxesService {
   readonly keepAliveFor: (sessionId: string) => Effect.Effect<number, SandboxUnavailable>;
   /** Deletes every sandbox tagged with the session, with the snapshots no other sandbox uses; answers how many went. */
   readonly deleteFor: (sessionId: string) => Effect.Effect<number, SandboxUnavailable>;
-  /** Stops every running sandbox tagged with the session, keeping its filesystem for a later resume; answers how many were stopped. */
+  /** Stops every running sandbox tagged with the session, its repository credential taken off the firewall first (`stoppedWithoutCredential`), keeping its filesystem for a later resume; answers how many were stopped. */
   readonly stopFor: (sessionId: string) => Effect.Effect<number, SandboxUnavailable>;
 }
 
 export class SessionSandboxes extends Context.Service<SessionSandboxes, SessionSandboxesService>()(
   "SessionSandboxes",
 ) {}
+
+/**
+ * One running sandbox session stopped with its repository credential taken
+ * off the firewall first: the policy that injects it is replaced by an open
+ * one, so the snapshot the stop writes carries no credential, and a sandbox
+ * the credential would not come off is left up rather than stopped with it,
+ * the call failing for its caller to try again.
+ */
+export function stoppedWithoutCredential(
+  api: Pick<VercelSandboxApi, "updateNetworkPolicy" | "stopSession">,
+  running: string,
+): Effect.Effect<void, SandboxUnavailable> {
+  return Effect.andThen(
+    api.updateNetworkPolicy(running, OPEN_INTERNET_POLICY),
+    api.stopSession(running),
+  );
+}
 
 /** A session's sandboxes, deleted or stopped, over the REST calls `vercel-sandbox-api.ts` makes. */
 function sessionSandboxesOver(api: VercelSandboxApi): SessionSandboxesService {
@@ -129,7 +151,7 @@ function sessionSandboxesOver(api: VercelSandboxApi): SessionSandboxesService {
           if (sandbox.status === undefined || !UP_STATUSES.has(sandbox.status)) continue;
           // One up with no session named cannot be stopped from here, and is no sandbox stopped either.
           if (running === undefined) return yield* Effect.fail(new SandboxUnavailable({}));
-          yield* api.stopSession(running);
+          yield* stoppedWithoutCredential(api, running);
           stopped += 1;
         }
         return stopped;
@@ -183,11 +205,16 @@ function describeStopFailure(failure: {
 }
 
 /**
- * One archived agent's sandbox stopped, if it is still archived. Note that
- * the archive is read again just before the stop, because an agent
- * unarchived and messaged since has resumed the sandbox this would stop, and
- * its turn must keep it; what is left of the race is the moment between this
- * read and the stop.
+ * One archived agent's sandbox stopped, if it is still archived, as a native
+ * runner's end stops it (`coder-host/runner-sessions.ts`'s `runnerEnded`):
+ * its runner's bearer retired, then its credential off the firewall, then
+ * the stop. Note that the archive is read again just before the stop,
+ * because an agent unarchived and messaged since has resumed the sandbox
+ * this would stop, and its turn must keep it; what is left of the race is
+ * the moment between this read and the stop. The bearer goes first, as a
+ * reset retires it, so a runner still up is refused by Luke, its GitHub
+ * token among what it asks, before its sandbox is gone; an unarchive's next
+ * message launches a runner with a bearer of its own.
  */
 const stoppedWhileArchived = /* @__PURE__ */ Effect.fnUntraced(function* (
   agent: Pick<CodingAgent, "id" | "userId">,
@@ -195,6 +222,7 @@ const stoppedWhileArchived = /* @__PURE__ */ Effect.fnUntraced(function* (
 ) {
   const current = yield* readCodingAgent(agent.userId, agent.id);
   if (Option.isNone(current) || current.value.archivedAt === null) return;
+  yield* recordCodingAgentRunnerToken(agent.userId, agent.id, null);
   yield* (yield* SessionSandboxes).stopFor(sessionId);
 });
 

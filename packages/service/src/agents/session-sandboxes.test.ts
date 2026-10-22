@@ -13,7 +13,7 @@ import { SandboxUnavailable } from "./vercel-sandbox-api.js";
  * A session's sandboxes stopped through Vercel Sandbox's REST API, as the
  * deployment asks it under its own OIDC token: the sandboxes carrying the
  * session's tag are listed in the token's project, the one up has its
- * running session stopped by a POST sent as JSON, which Vercel refuses
+ * repository credential taken off the firewall and its running session stopped by a POST sent as JSON, which Vercel refuses
  * with 415 otherwise, one already stopped is left, and a stop Vercel
  * refused fails with its status alone. A running session is kept alive by
  * the timeout from now on the test clock, within the platform's maximum. The token is a synthetic one the
@@ -38,6 +38,7 @@ interface Asked {
   readonly method: string;
   readonly url: URL;
   readonly contentType: string | null;
+  readonly body: unknown;
 }
 
 /** Vercel answering the list with the sandboxes given and every stop with the status given, keeping what it was asked. */
@@ -48,7 +49,10 @@ function vercel(sandboxes: readonly object[], stopStatus = 200) {
     fakeHttpClientLayer((url, init) => {
       const parsed = new URL(url);
       const contentType = new Headers(init.headers).get("content-type");
-      asked.push({ method: init.method ?? "GET", url: parsed, contentType });
+      const text =
+        init.body instanceof Uint8Array ? new TextDecoder().decode(init.body) : init.body;
+      const body = typeof text === "string" && text.length > 0 ? JSON.parse(text) : undefined;
+      asked.push({ method: init.method ?? "GET", url: parsed, contentType, body });
       return parsed.pathname.endsWith("/stop")
         ? (sandboxStopRefusal(init) ?? new Response("{}", { status: stopStatus }))
         : (sandboxListRefusal(parsed) ?? Response.json({ sandboxes }));
@@ -77,9 +81,13 @@ it.effect(
       const stopped = yield* stopFor(SESSION).pipe(Effect.provide(api.layer));
 
       assert.equal(stopped, 1);
-      const [list, stop, ...rest] = api.asked;
-      assert.ok(list !== undefined && stop !== undefined);
+      const [list, policy, stop, ...rest] = api.asked;
+      assert.ok(list !== undefined && policy !== undefined && stop !== undefined);
       assert.deepEqual(rest, []);
+      // The repository credential comes off the firewall before the stop, so no snapshot keeps it.
+      assert.equal(policy.method, "POST");
+      assert.equal(policy.url.pathname, "/api/v2/sandboxes/sessions/sbs_up/network-policy");
+      assert.deepEqual(policy.body, { mode: "allow-all" });
       assert.equal(list.url.pathname, "/api/v2/sandboxes");
       assert.equal(list.url.searchParams.get("tags"), `sessionId:${SESSION}`);
       assert.equal(list.url.searchParams.get("project"), PROJECT);
@@ -148,7 +156,10 @@ function vercelSessions(
     fakeHttpClientLayer(async (url, init) => {
       const parsed = new URL(url);
       const contentType = new Headers(init.headers).get("content-type");
-      asked.push({ method: init.method ?? "GET", url: parsed, contentType });
+      const text =
+        init.body instanceof Uint8Array ? new TextDecoder().decode(init.body) : init.body;
+      const body = typeof text === "string" && text.length > 0 ? JSON.parse(text) : undefined;
+      asked.push({ method: init.method ?? "GET", url: parsed, contentType, body });
       if (init.method === "PATCH") {
         const name = decodeURIComponent(parsed.pathname.split("/").at(-1) ?? "");
         updates.push({ name, body: JSON.parse(String(init.body)) });
