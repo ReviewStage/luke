@@ -527,11 +527,7 @@ test("a group's head folds it, its count still standing, and the fold is kept on
   act(() => fold().click());
   assert.deepEqual(groups(page)[2], ["Todo", []]);
   assert.equal(fold().getAttribute("aria-expanded"), "false");
-  assert.match(
-    page.querySelector<HTMLElement>(".tasks-list-group[aria-label='Todo'] .tasks-list-head")
-      ?.textContent ?? "",
-    /2/,
-  );
+  assert.match(fold().textContent ?? "", /2/);
 
   act(() => {
     for (const root of roots.splice(0)) root.unmount();

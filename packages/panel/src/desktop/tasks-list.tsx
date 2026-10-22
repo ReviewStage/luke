@@ -34,7 +34,6 @@ import {
   PAGE_WIDTH,
   TaskPriorityMark,
   TaskStatusMark,
-  TEXT_ELEMENT,
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
@@ -738,6 +737,7 @@ function TasksListGroup({
             label={head.name}
             aria-expanded={!folded}
             onClick={onToggle}
+            trailing={group.tasks.length}
             icon={
               <>
                 <span
@@ -753,9 +753,6 @@ function TasksListGroup({
               </>
             }
           />
-          <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.SUBTLE}>
-            {group.tasks.length}
-          </Text>
         </h2>
       ) : null}
       {folded ? null : group.tasks.length === 0 ? (

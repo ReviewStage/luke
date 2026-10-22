@@ -8355,9 +8355,6 @@ button.tasks-board-card-press:focus-visible::after {
    holds, on a quiet band under its hairline, standing at the top of the page
    while its rows scroll beneath it. */
 .tasks-list-head {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  align-items: center;
   position: sticky;
   z-index: 3;
   top: 0;

@@ -53,6 +53,14 @@
     text-overflow: ellipsis;
   }
 
+  .luke-button-trailing {
+    flex: none;
+    color: var(--luke-color-text-subtle);
+    font-size: var(--luke-type-caption-size);
+    line-height: var(--luke-type-caption-leading);
+    font-variant-numeric: tabular-nums;
+  }
+
   .luke-button svg {
     flex: none;
     width: var(--luke-control-icon);

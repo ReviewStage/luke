@@ -235,6 +235,7 @@ function stateProps(props: ButtonBase, name: string | undefined) {
 /** A labelled button: its words, after its glyph where it has one. */
 export function Button({
   icon,
+  trailing,
   label,
   size,
   pressed,
@@ -244,6 +245,8 @@ export function Button({
 }: ButtonBase & {
   /** The glyph before its words. */
   icon?: ReactNode;
+  /** A count or note after its words, inside its fill, in the caption's quiet type (a fold's \"3\"). */
+  trailing?: ReactNode;
   /** Its accessible name where its words say less, which holds its words ("Start a coding agent" over "Start"). */
   label?: string | undefined;
   size?: ButtonSize | undefined;
@@ -264,6 +267,7 @@ export function Button({
       <span className="luke-button-face">
         {icon}
         <span className="luke-button-words">{children}</span>
+        {trailing === undefined ? null : <span className="luke-button-trailing">{trailing}</span>}
       </span>
     </button>
   );
