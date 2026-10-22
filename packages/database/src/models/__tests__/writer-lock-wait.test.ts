@@ -1,19 +1,22 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { sentLineId } from "@luke/wire/host-ids";
-import { Deferred, Effect, Option, Result } from "effect";
+import { Deferred, Effect, Layer, Option, Result } from "effect";
 import * as SqlClient from "effect/sql/SqlClient";
 import { afterAll, test } from "vitest";
 import { Database } from "../../core/query.js";
 import { conversations } from "../../schemas/storage.js";
 import { CONVERSATION_KIND, MESSAGE_SENDER } from "../../storage-vocabulary.js";
 import { openHostedStoreTestDatabase } from "../../testing/index.js";
+import { holdConversationDispatch } from "../dispatch-lock.js";
 import { readMessageByClientId } from "../message-reads.js";
 import { STORE_WRITE_REFUSAL, storeWriter } from "../writer.js";
 
 /**
- * A developer's line to a coding agent waits for its conversation's lock no
- * longer than its bound: where another transaction holds the lock past it,
+ * A developer's line to a coding agent waits for its conversation's dispatch
+ * lock (`dispatch-lock.ts`), which another send's hand-over to eve holds for
+ * as long as eve takes, no longer than its bound: where another transaction
+ * holds the lock past it,
  * the send is refused as busy, eve is told nothing, and nothing is written,
  * rather than the send hanging until its function is killed; and the same
  * send once the lock is free lands as it always did. The contended case
@@ -80,7 +83,7 @@ test("a line sent while nothing holds its conversation is handed to eve once and
 const anotherConnection = database.anotherConnection;
 if (anotherConnection !== undefined) {
   test(
-    "a line sent while another transaction holds its conversation's lock is refused as busy within the bound, with eve told nothing and nothing written, and lands once the lock is free",
+    "a line sent while another transaction holds its conversation's dispatch lock is refused as busy within the bound, with eve told nothing and nothing written, and lands once the lock is free",
     async () => {
       const target = await openTarget();
       const locked = await database.run(Deferred.make<void>());
@@ -90,13 +93,14 @@ if (anotherConnection !== undefined) {
           Effect.flatMap(SqlClient.SqlClient, (sql) =>
             sql.withTransaction(
               Effect.gen(function* () {
-                yield* sql`select id from conversations where id = ${target.conversationId} for update`;
+                yield* holdConversationDispatch(target.conversationId);
                 yield* Deferred.succeed(locked, undefined);
                 yield* Deferred.await(release);
               }),
             ),
           ),
-          anotherConnection(),
+          // Note that the layer is built fresh, or the memoized `Database` would run the lock on the test's own connection.
+          Layer.fresh(anotherConnection()),
         ),
       );
       await database.run(Deferred.await(locked));

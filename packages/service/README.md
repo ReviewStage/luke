@@ -1483,11 +1483,13 @@ sent again where one does, which is what makes a send repeated after a lost
 answer safe; then confirms the task's workspace still reaches the repository
 (`repository-not-reachable`, as a Start does),
 hands the words to the agent's eve session under the developer's own
-bearer inside the conversation's lock (`writeAwaitingLine`, which reads the
-key again under the lock so two sends racing under one key send once), and
-writes them as a user row with no turn yet once eve has taken them, so the
-transcript shows the line at once and the turn eve opens on it finds the
-row standing when its own first write takes the lock; the relay's receipt
+bearer under the conversation's dispatch lock (`writeAwaitingLine`, which
+reads the key again under that lock so two sends racing under one key send
+once; `dispatch-lock.ts`), and writes them as a user row with no turn yet
+once eve has taken them, under the conversation's row lock for that insert
+alone, so the run's journal never waits on eve. The transcript shows the
+line at once, and the turn eve opens on it finds the row standing, since
+every write but the journal waits a hand-over out first; the relay's receipt
 of the line (`message.received`) takes the oldest turnless row with those
 words into the turn in place, bumping its revision (`takeAwaitingLine`),
 rather than writing it again. An agent whose session has not claimed the
@@ -1495,9 +1497,9 @@ conversation, or whose session eve answers is still coming up past the
 client's twenty-second loop, is `agent-not-ready` (409, tried again); a
 session eve no longer runs is `agent-retired` (409), since the agent's
 sandbox lives with its session; any other answer is `unavailable`, and none
-of them leaves a row behind. The send waits for the conversation's lock five
-seconds at most (`lock_timeout`, set for that wait alone): a lock another
-write holds longer is `unavailable` too, with eve told nothing, and a wait of
+of them leaves a row behind. The send waits for the conversation's dispatch
+lock five seconds at most (`lock_timeout`, set for that wait alone): a
+hand-over another send holds longer is `unavailable` too, with eve told nothing, and a wait of
 a second or more is logged by the conversation's id. The client asks under a
 deadline (`HOSTED_DEADLINE.STEER`, 45 seconds) that outlasts that wait and
 eve's thirty-second hand-over, so a send that lands slowly is not shown as
