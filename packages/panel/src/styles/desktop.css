@@ -1999,6 +1999,7 @@ ul.actor-stack {
 }
 
 .desktop-agent .conversation-log,
+.desktop-agent .agent-log-skeleton,
 .desktop-agent .agent-todos-dock,
 .desktop-agent .agent-published-dock,
 .desktop-agent .draft-fork-dock,
@@ -6032,6 +6033,7 @@ ul.actor-stack {
    the log's column. A File tab spans the panel as an editor does: a file's
    lines are read across all the width the developer gave the panel. */
 .side-panel-content .conversation-log,
+.side-panel-content .agent-log-skeleton,
 .side-panel-content .agent-todos-dock,
 .side-panel-content .agent-published-dock,
 .side-panel-content .draft-fork-dock,
