@@ -1672,7 +1672,7 @@ it.layer(getTestDB())("the runner events route, on Codex", (it) => {
   );
 
   it.effect(
-    "a limit that only warns, or a Claude Code agent an API key pays for, leaves the setup-token as it stood",
+    "a limit that only warns, or a Claude Code agent an API key pays for, leaves the setup-token as it stood, and the refused API key is marked invalid as eve's step marks it",
     () =>
       Effect.gen(function* () {
         const post = yield* standing;
@@ -1699,6 +1699,15 @@ it.layer(getTestDB())("the runner events route, on Codex", (it) => {
           ["Fix the test."],
         );
         yield* pasted(onKey.userId);
+        yield* saveProviderKey(
+          onKey.userId,
+          PROVIDER_KEY_PROVIDER.ANTHROPIC,
+          PROVIDER_KEY_KIND.API_KEY,
+          { keyVersion: 1, sealedDataKey: "sealed-data-key", sealedKey: "sealed-api-key" },
+          "sk-ant-api03…fake",
+          null,
+          new Date(0),
+        );
         yield* post(
           onKey.bearer,
           numberedFrom(
@@ -1721,6 +1730,11 @@ it.layer(getTestDB())("the runner events route, on Codex", (it) => {
             [PROVIDER_KEY_STATUS.UNVERIFIED, null],
             [PROVIDER_KEY_STATUS.UNVERIFIED, null],
           ],
+        );
+        const keyRows = yield* listProviderKeyRows(onKey.userId, PROVIDER_KEY_KIND.API_KEY);
+        assert.deepEqual(
+          keyRows.map((row) => row.status),
+          [PROVIDER_KEY_STATUS.INVALID],
         );
       }),
   );

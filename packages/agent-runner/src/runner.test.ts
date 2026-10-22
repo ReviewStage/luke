@@ -424,6 +424,37 @@ it.effect("takes the launch's secrets out of every event it posts", () =>
   }),
 );
 
+it.effect(
+  "a launch on an Anthropic API key hands the key to the CLI alone: denied to commands and taken out of every event",
+  () =>
+    Effect.gen(function* () {
+      const apiKey = "account-api-key-for-tests";
+      const luke = fakeLuke();
+      const leak: Step = {
+        emit: {
+          type: "assistant",
+          message: { content: [{ type: "text", text: `key ${apiKey}` }] },
+          parent_tool_use_id: null,
+        },
+      };
+      const { cli, write, run } = yield* launch([leak, ...SHORT_TURN], luke, {
+        [RUNNER_ENV.BEARER]: BEARER,
+        [RUNNER_ENV.API_KEY]: apiKey,
+        PATH: "/usr/bin",
+      });
+      yield* write(CONFIG);
+      yield* write(FIRST_MESSAGE);
+      yield* Fiber.join(run);
+
+      assert.equal(cli.options?.env?.[RUNNER_ENV.API_KEY], apiKey);
+      const denied = (cli.options?.sandbox?.credentials?.envVars ?? []).map(
+        (rule: { name: string; mode: string }) => `${rule.name}:${rule.mode}`,
+      );
+      assert.ok(denied.includes(`${RUNNER_ENV.API_KEY}:deny`));
+      assert.ok(!JSON.stringify(luke.applied).includes(apiKey));
+    }),
+);
+
 it.effect("leaves an escape that only looks like a secret's spelling as it was", () =>
   Effect.gen(function* () {
     const luke = fakeLuke();

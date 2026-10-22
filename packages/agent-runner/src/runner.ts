@@ -85,7 +85,7 @@ const MCP_SERVER = "luke";
 const DENIED_VARIABLES = [
   RUNNER_ENV.CLAUDE_TOKEN,
   RUNNER_ENV.BEARER,
-  "ANTHROPIC_API_KEY",
+  RUNNER_ENV.API_KEY,
   "ANTHROPIC_AUTH_TOKEN",
   "CLAUDE_CODE_OAUTH_REFRESH_TOKEN",
 ] as const;
@@ -483,8 +483,11 @@ export const runAgent = Effect.fn("agent-runner/runAgent")(function* (input: Run
     return yield* new RunnerFailed({ detail: `${RUNNER_ENV.BEARER} is not set` });
   }
   const bearer = Redacted.make(bearerValue);
-  const token = input.env[RUNNER_ENV.CLAUDE_TOKEN];
-  const secrets = token === undefined || token === "" ? [bearer] : [bearer, Redacted.make(token)];
+  const tokens = [RUNNER_ENV.CLAUDE_TOKEN, RUNNER_ENV.API_KEY].flatMap((name) => {
+    const value = input.env[name];
+    return value === undefined || value === "" ? [] : [Redacted.make(value)];
+  });
+  const secrets = [bearer, ...tokens];
 
   // Stdin is read in a loop of its own from the first line on, so nothing
   // the session does can hold up a line Luke wrote.
