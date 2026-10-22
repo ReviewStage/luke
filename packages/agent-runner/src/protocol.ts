@@ -41,6 +41,13 @@ export const RUNNER_ENV = {
    * (https://code.claude.com/docs/en/agent-sdk/quickstart), on the same terms.
    */
   API_KEY: "ANTHROPIC_API_KEY",
+  /**
+   * The account's OpenAI API key, for a Codex launch its key pays for: the
+   * variable app-server's provider names as its `env_key`
+   * (https://developers.openai.com/codex/config-advanced/), which no command
+   * Codex runs inherits.
+   */
+  OPENAI_API_KEY: "OPENAI_API_KEY",
 } as const;
 
 /** The harness a launch runs, spelled as `conversations.runtime` spells it. */
@@ -170,7 +177,8 @@ export const CodexConfigSchema = Schema.Struct({
    * (`/api/agents/runner-token`). App-server takes its token from the
    * runner's `codex-token` command (Codex's provider `auth`), which Codex runs
    * again as its cached token ages and after a 401, so a turn outlives any
-   * one token.
+   * one token. Not asked where the launch's environment holds
+   * `OPENAI_API_KEY`: the account's API key pays, and app-server reads it.
    */
   tokenUrl: Schema.String,
 });

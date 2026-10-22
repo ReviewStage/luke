@@ -1,7 +1,12 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { CODING_AGENT_RUNTIME, type CodingAgentRuntime } from "@luke/features/coding-agent-wire";
+import {
+  CODING_AGENT_PAYER,
+  CODING_AGENT_RUNTIME,
+  type CodingAgentRuntime,
+  type CodingAgentUsage,
+} from "@luke/features/coding-agent-wire";
 import { type CatalogModel, MODEL_PROVIDER, type ModelChoice } from "@luke/features/models-wire";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -171,6 +176,7 @@ function openMenuOn(
   runtime: CodingAgentRuntime | undefined,
   choice: ModelChoice = { model: "anthropic/claude-opus-5.5", effort: "high" },
   models: readonly CatalogModel[] = RUNTIME_MODELS,
+  usage: CodingAgentUsage | undefined = undefined,
 ): {
   models: string[];
   foot: string;
@@ -191,7 +197,7 @@ function openMenuOn(
         },
         models,
         readModels: () => undefined,
-        usage: undefined,
+        usage,
       }),
     ),
   );
@@ -262,4 +268,15 @@ test("a Codex agent's menu ends on \"Using ChatGPT plan · Manage usage\", the l
   for (const runtime of [CODING_AGENT_RUNTIME.CLAUDE_CODE, undefined]) {
     assert.doesNotMatch(openMenuOn(runtime).foot, /plan|Manage usage/u);
   }
+});
+
+test("a Codex agent its OpenAI API key pays for names no plan, and its menu ends on what it cost", () => {
+  const onKey = openMenuOn(
+    CODING_AGENT_RUNTIME.CODEX,
+    { model: "openai/gpt-6.1-sol", effort: "low" },
+    RUNTIME_MODELS,
+    { inputTokens: 1000, outputTokens: 200, costUsd: 0.42, payer: CODING_AGENT_PAYER.API_KEY },
+  );
+  assert.doesNotMatch(onKey.foot, /plan|Manage usage/u);
+  assert.match(onKey.foot, /\$0\.42/u);
 });

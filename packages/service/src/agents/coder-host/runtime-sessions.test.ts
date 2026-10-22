@@ -1487,7 +1487,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
     );
 
     it.effect(
-      "where the ChatGPT plan is offered, Settings' choice alone decides: Subscription runs GPT models on Codex, and API key runs on eve on the OpenAI API key, and the Start is refused where none was saved",
+      "where the ChatGPT plan is offered, Settings' choice alone decides: Subscription runs GPT models on Codex on the plan, and API key on Codex on the OpenAI API key, and the Start is refused where none was saved",
       () =>
         Effect.gen(function* () {
           const cases: readonly {
@@ -1512,14 +1512,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
               forAgents: false,
               apiKey: PROVIDER_KEY_PROVIDER.OPENAI,
               model: "openai/gpt-5.5",
-              recorded: ["eve", CODING_AGENT_PAYER.API_KEY],
-            },
-            {
-              name: "API key, a fast version on eve",
-              forAgents: false,
-              apiKey: PROVIDER_KEY_PROVIDER.OPENAI,
-              model: "openai/gpt-5.5-fast",
-              recorded: ["eve", CODING_AGENT_PAYER.API_KEY],
+              recorded: ["codex", CODING_AGENT_PAYER.API_KEY],
             },
             {
               name: "the plan off, only an Anthropic API key saved",
@@ -1577,7 +1570,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
     );
 
     it.effect(
-      "with the ChatGPT plan selected no GPT fast version is offered and every GPT model says so, one the catalog lists no fast version of too, and a Start on one is refused, never run at standard speed; with API key selected it is offered as before",
+      "with GPT agents on Codex, the ChatGPT plan's or the API key's, no GPT fast version is offered and every GPT model says so, one the catalog lists no fast version of too, and a Start on one is refused, never run at standard speed; with no harness reached, an API key is offered it as before",
       () =>
         Effect.gen(function* () {
           for (const forAgents of [true, false]) {
@@ -1609,29 +1602,36 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
               ).pipe(Effect.provide(layers)),
             );
 
-            if (forAgents) {
-              assert.deepEqual(
-                gpt.map((model) => [model.id, model.fastWithheldByPlan]),
-                [
-                  ["openai/gpt-5.5", true],
-                  ["openai/gpt-6.1-sol", true],
-                ],
-              );
-              assert.ok(Result.isFailure(started));
-              assert.deepEqual([heard(eve), heard(codex)], [[], []]);
-            } else {
-              assert.deepEqual(
-                gpt.map((model) => [model.id, model.fastWithheldByPlan]),
-                [
-                  ["openai/gpt-5.5", undefined],
-                  ["openai/gpt-5.5-fast", undefined],
-                  ["openai/gpt-6.1-sol", undefined],
-                ],
-              );
-              assert.ok(Result.isSuccess(started));
-              assert.equal(started.success.agent.model, "openai/gpt-5.5-fast");
-            }
+            assert.deepEqual(
+              gpt.map((model) => [model.id, model.fastWithheldByPlan]),
+              [
+                ["openai/gpt-5.5", true],
+                ["openai/gpt-6.1-sol", true],
+              ],
+            );
+            assert.ok(Result.isFailure(started));
+            assert.deepEqual([heard(eve), heard(codex)], [[], []]);
           }
+
+          // Where no harness is reached, a GPT agent on its API key runs on eve, which runs Fast.
+          const { owner } = yield* openStarter(false);
+          yield* saveApiKey(owner, PROVIDER_KEY_PROVIDER.OPENAI);
+          const bare = Layer.mergeAll(
+            githubReaching(INSTALLATIONS).layer,
+            PLAN_CATALOG,
+            environment(),
+          );
+          const offered = yield* accountModelChoices(owner).pipe(Effect.provide(bare));
+          assert.deepEqual(
+            offered.offered
+              .filter((model) => model.provider === MODEL_PROVIDER.OPENAI)
+              .map((model) => [model.id, model.fastWithheldByPlan]),
+            [
+              ["openai/gpt-5.5", undefined],
+              ["openai/gpt-5.5-fast", undefined],
+              ["openai/gpt-6.1-sol", undefined],
+            ],
+          );
         }),
     );
 

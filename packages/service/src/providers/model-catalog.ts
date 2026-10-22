@@ -385,18 +385,18 @@ export function modelCatalogOf(models: readonly OfferedModel[]): Layer.Layer<Mod
 
 // ------------------------------------------------------------- the checks
 
-/** What decides which fast versions an account is offered: whether the Anthropic key its steps run on may run fast mode, and whether its ChatGPT plan pays for its GPT agents. */
+/** What decides which fast versions an account is offered: whether the Anthropic key its steps run on may run fast mode, and whether its GPT agents run on Codex, its ChatGPT plan's or its API key's. */
 export interface AccountFastOffer {
   readonly anthropic: FastAccess | undefined;
-  readonly chatGptPlan: boolean;
+  readonly gptOnCodex: boolean;
 }
 
 /**
  * The catalog as one account is offered it. Where Anthropic said the
  * organization of the Anthropic key its steps run on may not run fast mode,
  * Anthropic's fast versions are withheld and each base model says so
- * (`fastNotEnabled`). Where its ChatGPT plan pays for its GPT agents, which
- * Codex runs with no fast mode, OpenAI's fast versions are withheld and
+ * (`fastNotEnabled`). Where its GPT agents run on Codex, which has no fast
+ * mode, whether its ChatGPT plan or its OpenAI API key pays, OpenAI's fast versions are withheld and
  * every GPT model says so (`fastWithheldByPlan`), listed fast version or
  * not, so no Fast is drawn for it at all. Everything else as the catalog
  * lists it. Note that a key no fast
@@ -409,12 +409,12 @@ export function offeredToAccount(
   fast: AccountFastOffer,
 ): readonly OfferedModel[] {
   const anthropic = fast.anthropic === FAST_ACCESS.NOT_ENABLED;
-  if (!anthropic && !fast.chatGptPlan) return offered;
+  if (!anthropic && !fast.gptOnCodex) return offered;
   const notEnabled = new Set<string>();
   const kept: OfferedModel[] = [];
   for (const model of offered) {
     const isFast = providerModelOf(model.id)?.fast ?? false;
-    if (isFast && fast.chatGptPlan && model.provider === MODEL_PROVIDER.OPENAI) continue;
+    if (isFast && fast.gptOnCodex && model.provider === MODEL_PROVIDER.OPENAI) continue;
     if (isFast && anthropic && model.provider === MODEL_PROVIDER.ANTHROPIC) {
       notEnabled.add(standardModelIdOf(model.id));
     } else {
@@ -425,7 +425,7 @@ export function offeredToAccount(
     ...model,
     ...(notEnabled.has(model.id) ? { fastNotEnabled: true } : undefined),
     // Every GPT model says so, whether or not the catalog lists a fast version of it.
-    ...(fast.chatGptPlan && model.provider === MODEL_PROVIDER.OPENAI
+    ...(fast.gptOnCodex && model.provider === MODEL_PROVIDER.OPENAI
       ? { fastWithheldByPlan: true }
       : undefined),
   }));

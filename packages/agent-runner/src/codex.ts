@@ -39,7 +39,10 @@
  * what the command printed for the refresh interval, and runs it again past
  * that and after a 401, so a turn outlives any one token, and no token sits
  * in app-server's environment; what the command prints reaches app-server
- * alone.
+ * alone. A launch whose environment holds `OPENAI_API_KEY` (one the
+ * account's OpenAI API key pays for) asks no token: app-server reads the key
+ * from there, the provider's documented `env_key`, and no command it runs
+ * inherits it.
  */
 
 import { randomUUID } from "node:crypto";
@@ -195,8 +198,23 @@ interface TokenCommand {
   readonly tokenUrl: string;
 }
 
-/** How the provider is handed its token: from the runner's token command. */
-function providerAuth(provider: string, command: TokenCommand) {
+/**
+ * OpenAI's API as an API key pays for it: the same endpoint, its key read
+ * from the launch's environment through the provider's documented `env_key`
+ * (https://developers.openai.com/codex/config-advanced/).
+ */
+const API_KEY_PROVIDER = {
+  ID: "openai_api_key",
+  NAME: "OpenAI API key",
+} as const;
+
+/**
+ * How the provider is handed its token: from the runner's token command on
+ * the plan, or from `OPENAI_API_KEY` (the documented `env_key`) on an API key.
+ */
+function providerAuth(provider: string, command: TokenCommand | undefined) {
+  if (command === undefined)
+    return [[`${provider}.env_key`, toml(RUNNER_ENV.OPENAI_API_KEY)]] as const;
   const args = [command.self.script, CODEX_TOKEN_COMMAND, command.tokenUrl].map(toml).join(", ");
   return [
     [`${provider}.auth.command`, toml(command.self.executable)],
@@ -221,12 +239,13 @@ function providerAuth(provider: string, command: TokenCommand) {
  * the sandbox on: commands still never see the token, and app-server's own
  * git calls run with hooks and fsmonitor disabled.
  */
-function appServerArgs(config: CodexConfig, command: TokenCommand): string[] {
-  const provider = `model_providers.${CHATGPT_PROVIDER.ID}`;
+function appServerArgs(config: CodexConfig, command: TokenCommand | undefined): string[] {
+  const named = command === undefined ? API_KEY_PROVIDER : CHATGPT_PROVIDER;
+  const provider = `model_providers.${named.ID}`;
   const mcp = `mcp_servers.${MCP_SERVER}`;
   const overrides: (readonly [string, string])[] = [
-    ["model_provider", toml(CHATGPT_PROVIDER.ID)],
-    [`${provider}.name`, toml(CHATGPT_PROVIDER.NAME)],
+    ["model_provider", toml(named.ID)],
+    [`${provider}.name`, toml(named.NAME)],
     [`${provider}.base_url`, toml(CHATGPT_PROVIDER.BASE_URL)],
     ...providerAuth(provider, command),
     [`${provider}.wire_api`, toml("responses")],
@@ -242,7 +261,10 @@ function appServerArgs(config: CodexConfig, command: TokenCommand): string[] {
     ["sandbox_workspace_write.writable_roots", `[${toml(join(config.cwd, ".git"))}]`],
     ["shell_environment_policy.inherit", toml("core")],
     ["shell_environment_policy.ignore_default_excludes", "false"],
-    ["shell_environment_policy.exclude", `[${toml(RUNNER_ENV.BEARER)}]`],
+    [
+      "shell_environment_policy.exclude",
+      `[${[RUNNER_ENV.BEARER, ...(command === undefined ? [RUNNER_ENV.OPENAI_API_KEY] : [])].map(toml).join(", ")}]`,
+    ],
   ];
   return [
     "app-server",
@@ -293,8 +315,8 @@ interface CodexLaunch {
   waiting: Outgoing[];
   /** Luke's lines this launch has said app-server took, each said once. */
   readonly accepted: Set<string>;
-  /** The token command app-server runs. */
-  readonly tokenCommand: TokenCommand;
+  /** The token command app-server runs; none where it reads the account's API key from its environment. */
+  readonly tokenCommand: TokenCommand | undefined;
   model: string;
   effort: CodexEffort | undefined;
   stopping: boolean;
@@ -360,8 +382,8 @@ const openAppServer = Effect.fn("agent-runner/openAppServer")(function* (
       executable: config.executable,
       args: appServerArgs(config, launch.tokenCommand),
       cwd: config.cwd,
-      // Note that Claude Code's token, were it set, is no business of Codex's.
-      env: { ...env, [RUNNER_ENV.CLAUDE_TOKEN]: undefined },
+      // Note that Claude Code's credentials, were they set, are no business of Codex's.
+      env: { ...env, [RUNNER_ENV.CLAUDE_TOKEN]: undefined, [RUNNER_ENV.API_KEY]: undefined },
     },
     listenerFor(seen),
   ).pipe(Scope.provide(serverScope));
@@ -579,9 +601,15 @@ function takeSignal(
   }
 }
 
-/** The token command a launch's app-server runs: where the runner knows its own bundle. */
+/** Whether the launch's environment holds the account's OpenAI API key, which app-server then runs on in place of the plan's token. */
+function onApiKey(context: LaunchContext<CodexConfig>): boolean {
+  const key = context.env[RUNNER_ENV.OPENAI_API_KEY];
+  return key !== undefined && key !== "";
+}
+
+/** The token command a launch's app-server runs: on the plan, where the runner knows its own bundle. */
 function commandOf(context: LaunchContext<CodexConfig>): TokenCommand | undefined {
-  return context.self === undefined
+  return context.self === undefined || onApiKey(context)
     ? undefined
     : { self: context.self, tokenUrl: context.config.tokenUrl };
 }
@@ -595,7 +623,7 @@ export const runCodex = Effect.fn("agent-runner/runCodex")(function* (
 ) {
   const { config, sink } = context;
   const tokenCommand = commandOf(context);
-  if (tokenCommand === undefined) {
+  if (tokenCommand === undefined && !onApiKey(context)) {
     return ended(RUNNER_END.FAILED, "the runner was not started from its bundle");
   }
   const signals = yield* Queue.unbounded<Signal>();

@@ -168,7 +168,8 @@ export function AgentModelChip({
             onChoose={model.choose}
             footNote={agentUsageLine(usage)}
             planNote={
-              planPayerOf(model.runtime) === CODING_AGENT_PAYER.CHATGPT_SUBSCRIPTION ? (
+              planPayerOf(model.runtime) === CODING_AGENT_PAYER.CHATGPT_SUBSCRIPTION &&
+              usage?.payer !== CODING_AGENT_PAYER.API_KEY ? (
                 <ChatGptPlanNote />
               ) : undefined
             }
