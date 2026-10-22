@@ -14,9 +14,13 @@
  * `native_session`, which the events route records from what the runner
  * reports, and a relaunch resumes.
  *
- * `open` opens a sandbox from the coding agent's image (`agent-sandbox-image.ts`),
- * checks the agent's repository out into it exactly as eve's sandbox does
- * (`checkout.ts`, the same token at the firewall), and launches the runner.
+ * `open` reads the harness's credential and answers, as eve's open answers
+ * once eve took the message; past the answer (`after-response.ts`) it opens
+ * a sandbox from the coding agent's image (`agent-sandbox-image.ts`),
+ * waiting while the image is prepared, checks the agent's repository out
+ * into it exactly as eve's sandbox does (`checkout.ts`, the same token at
+ * the firewall, the history deepened before the runner starts), and
+ * launches the runner. A launch that fails there is the agent's failed turn.
  * A launch mints the runner's bearer and records its digest on the
  * agent's row, uploads the runner's bundle (`runner-bundle.ts`), and starts
  * it as a detached command of the sandbox's API as root, which installs the
@@ -73,6 +77,7 @@ import {
   RUNNER_ENV,
   type RunnerConfig,
 } from "@luke/agent-runner/protocol";
+import { settleRunnerLostTurns } from "@luke/database/models/abandoned-turns";
 import {
   claimCodingAgentRunnerLease,
   releaseCodingAgentRunnerLease,
@@ -89,10 +94,24 @@ import {
 } from "@luke/database/models/coding-agent-store";
 import { replaceCodingAgentWakeups } from "@luke/database/models/coding-agent-wakeups";
 import { sandboxHeld } from "@luke/database/models/sandbox-terminal-lease";
-import type { ConversationTarget } from "@luke/database/models/writer";
+import { type ConversationTarget, storeWriter } from "@luke/database/models/writer";
+import { causeKind } from "@luke/runtime/effect";
 import type { UserContent } from "ai";
-import { Clock, Data, DateTime, Duration, Effect, Option, Result, Stream } from "effect";
+import {
+  Clock,
+  Context,
+  Data,
+  DateTime,
+  Duration,
+  Effect,
+  Option,
+  Result,
+  Schedule,
+  Stream,
+} from "effect";
+import { TURN_ORIGIN } from "../../core.js";
 import type { HostedEnvironment } from "../../environment.js";
+import { AfterResponse, afterResponse } from "../../http/after-response.js";
 import {
   AgentSandboxImage,
   IMAGE_PREPARING_STATUS,
@@ -108,7 +127,8 @@ import {
   type PlanRefusal,
 } from "../brain-host/eve-sessions.js";
 import { runnerTokenDigest } from "../luke-mcp/bearer.js";
-import type { RepositorySandbox } from "../repository-shell.js";
+import { NATIVE_TEMPLATE } from "../native-sandbox-template.js";
+import { REPOSITORY_REFUSAL, type RepositorySandbox } from "../repository-shell.js";
 import { WITHOUT_CAPABILITIES } from "../sandbox-capabilities.js";
 import { capSandboxTimeout } from "../sandbox-keep-alive.js";
 import {
@@ -130,6 +150,7 @@ import {
 import { CODER } from "./bounds.js";
 import {
   agentRepositoryToken,
+  CheckoutRefused,
   type CheckoutServices,
   checkOutAgentRepository,
   deepenAgentCheckout,
@@ -137,6 +158,7 @@ import {
 } from "./checkout.js";
 import { RunnerBundle } from "./runner-bundle.js";
 import { type NativeSessions, RUNNER_CHOICE } from "./runtime-sessions.js";
+import { CODER_TOOL_SET } from "./tool-set.js";
 
 /** What the sessions reach: the store, GitHub, Vercel, the image, the runner's bundle, and the deployment's key ring. */
 export type RunnerServices =
@@ -291,6 +313,19 @@ const LAUNCH_NAME = "luke-agent-runner";
  * bundle).
  */
 const FAILED_STATUS = { UNAVAILABLE: 503, REFUSED: 422 } as const;
+
+/**
+ * How an open past its Start's answer waits on an image still being
+ * prepared, a template whose snapshot a create found gone among them, on
+ * the template's own wait (`NATIVE_TEMPLATE`): an open answers preparing
+ * before any sandbox stands, so making it again leaves nothing behind.
+ */
+const IMAGE_READY = {
+  schedule: Schedule.spaced(NATIVE_TEMPLATE.POLL).pipe(
+    Schedule.upTo({ duration: NATIVE_TEMPLATE.WAIT }),
+  ),
+  while: (failure: { readonly _tag: string }) => failure instanceof ImagePreparing,
+};
 
 /** The image types a message's file may carry to the harness as an image block. */
 const IMAGE_TYPES: ReadonlySet<string> = new Set([
@@ -667,9 +702,9 @@ export const runnerSessions = <
       sandbox: { readonly name: string; readonly running: string },
       first: RunnerMessage,
       resume: string | undefined,
+      credential: HarnessLaunch,
     ) =>
       Effect.gen(function* () {
-        const credential = yield* harness.launch(agent);
         yield* filesWritten(sandbox.running, first);
         const bundle = yield* (yield* RunnerBundle).contents;
         const digest = createHash("sha256").update(bundle).digest("hex");
@@ -785,7 +820,12 @@ export const runnerSessions = <
      * whose launch failed is deleted again, since no conversation records the
      * session that would find it.
      */
-    const openedSandbox = (agent: CodingAgent, sessionId: string, first: RunnerMessage) =>
+    const openedSandbox = (
+      agent: CodingAgent,
+      sessionId: string,
+      first: RunnerMessage,
+      credential: HarnessLaunch,
+    ) =>
       Effect.gen(function* () {
         const image = yield* AgentSandboxImage;
         const snapshot = yield* image.snapshotId;
@@ -831,7 +871,14 @@ export const runnerSessions = <
           } else {
             yield* openWorkingFolder(repositorySandbox);
           }
-          yield* launch(sessionId, agent, { name: opened.name, running }, first, undefined);
+          yield* launch(
+            sessionId,
+            agent,
+            { name: opened.name, running },
+            first,
+            undefined,
+            credential,
+          );
         }).pipe(Effect.tapError(() => Effect.ignore(api.deleteSandbox(opened.name))));
       });
 
@@ -883,7 +930,7 @@ export const runnerSessions = <
           // that fails (the image still preparing, a clone refused) leaves the session standing
           // for the next message to try again rather than retired; a delete that fails leaves
           // the expired one beside the fresh one, which `listTagged` lists after it as the older.
-          yield* openedSandbox(agent, sessionId, sent);
+          yield* openedSandbox(agent, sessionId, sent, yield* harness.launch(agent));
           yield* api
             .deleteSandbox(found.value.name)
             .pipe(
@@ -902,7 +949,15 @@ export const runnerSessions = <
         const resume = Option.getOrUndefined(
           Option.flatMapNullishOr(routing, (read) => read.nativeSession),
         );
-        yield* launch(sessionId, agent, { name: found.value.name, running }, sent, resume);
+        const credential = yield* harness.launch(agent);
+        yield* launch(
+          sessionId,
+          agent,
+          { name: found.value.name, running },
+          sent,
+          resume,
+          credential,
+        );
         return accepted;
       });
 
@@ -944,14 +999,74 @@ export const runnerSessions = <
         return RUNNER_CHOICE.WRITTEN;
       });
 
+    /**
+     * A launch that failed past its Start's answer: said in the log, and
+     * written as the agent's first turn, queued and settled failed as a turn
+     * whose runner was lost is (`settleRunnerLostTurns`), with why, so the
+     * agent reads failed at once rather than starting until its grace runs
+     * out. The line the Start wrote stands. A write that fails is logged.
+     */
+    const launchFailed = (agent: CodingAgent) => (failure: { readonly _tag: string }) =>
+      Effect.gen(function* () {
+        yield* Effect.logWarning(
+          `A ${harness.name} launch failed after its Start: ${failure instanceof LaunchRefused ? failure.reason : describeFailure(failure)}`,
+        );
+        const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
+        const turnId = randomUUID();
+        yield* writer.enqueueTurn(
+          { userId, conversationId: agent.conversationId },
+          { turnId, eveTurnId: turnId, origin: TURN_ORIGIN.TYPED },
+        );
+        // The checkout's own sentence names GitHub or the sandbox (`status.ts`'s `FAILURE_WORDS`);
+        // any other failure, a missing snapshot among them, reads as the sandbox's, with its reason.
+        const detail =
+          failure instanceof CheckoutRefused
+            ? failure.reason
+            : failure instanceof LaunchRefused
+              ? `${REPOSITORY_REFUSAL.SANDBOX_UNAVAILABLE}: ${failure.reason}`
+              : REPOSITORY_REFUSAL.SANDBOX_UNAVAILABLE;
+        yield* settleRunnerLostTurns(
+          writer,
+          agent.conversationId,
+          yield* Clock.currentTimeMillis,
+          detail,
+        );
+      }).pipe(
+        Effect.catchCause((cause) =>
+          Effect.logWarning(`A failed launch's turn was not written: ${causeKind(cause)}`),
+        ),
+      );
+
     const sessions: NativeSessions<Turn> = {
+      // An open answers once the plan's credential is read, so a plan refused or at its limit is
+      // refused at once, as before; the sandbox, the checkout, and the launch run past the answer of
+      // the request that asked (`after-response.ts`), under the runner lease, as eve's open hands its
+      // message over and returns. The caller's after-response door is kept beside the sessions' own
+      // services for that. A message sent meanwhile waits on the lease, then finds the runner.
       open: (message) =>
         Effect.gen(function* () {
-          const agent = yield* agentOf(message.conversationId);
-          const sessionId = sessionIdOf(harness.sessionPrefix, yield* Clock.currentTimeMillis);
-          yield* holdingRunner(agent.id, openedSandbox(agent, sessionId, messageLine(message)));
-          return { outcome: EVE_SEND_OUTCOME.ACCEPTED, sessionId } as const;
-        }).pipe(Effect.catch(failed("open")), Effect.provideContext(context)),
+          const after = yield* Effect.serviceOption(AfterResponse);
+          return yield* Effect.gen(function* () {
+            const agent = yield* agentOf(message.conversationId);
+            const credential = yield* harness.launch(agent);
+            const sessionId = sessionIdOf(harness.sessionPrefix, yield* Clock.currentTimeMillis);
+            yield* afterResponse(
+              `A ${harness.name} launch`,
+              holdingRunner(
+                agent.id,
+                openedSandbox(agent, sessionId, messageLine(message), credential).pipe(
+                  Effect.retry(IMAGE_READY),
+                ),
+              ).pipe(Effect.catch(launchFailed(agent))),
+            );
+            return { outcome: EVE_SEND_OUTCOME.ACCEPTED, sessionId } as const;
+          }).pipe(
+            Effect.catch(failed("open")),
+            Effect.provideContext(
+              Option.isSome(after) ? Context.add(context, AfterResponse, after.value) : context,
+            ),
+          );
+        }),
 
       send: (sessionId, message) =>
         Effect.gen(function* () {
