@@ -9,6 +9,8 @@
  * down is numbered after it.
  */
 
+import { existsSync } from "node:fs";
+import { join } from "node:path";
 import type { Cause, Queue, Redacted } from "effect";
 import { Data } from "effect";
 import type { EventSink } from "./events.js";
@@ -44,4 +46,16 @@ export interface LaunchOutcome {
   readonly end: RunnerEnd;
   readonly failure: string;
   readonly wakeups?: readonly RunnerWakeup[];
+}
+
+/**
+ * The path under the installed skills' folder a config names, where Luke
+ * wrote it; none where the config names no folder or the member installed
+ * no skills, since Luke writes the folder only where there are some. Read
+ * as each launch starts, so a relaunch finds what the sandbox's disk kept.
+ */
+export function installedSkillsPath(folder: string | undefined, entry: string): string | undefined {
+  if (folder === undefined) return undefined;
+  const path = join(folder, entry);
+  return existsSync(path) ? path : undefined;
 }

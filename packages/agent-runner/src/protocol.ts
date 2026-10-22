@@ -50,6 +50,23 @@ export const RUNNER_ENV = {
   OPENAI_API_KEY: "OPENAI_API_KEY",
 } as const;
 
+/**
+ * How the folder of the skills a member installed into Luke is laid out,
+ * which Luke writes into the sandbox as it opens and a config line names
+ * (`installedSkills`): a Claude Code local plugin, its manifest naming it,
+ * whose `skills/` holds one folder per skill, `SKILL.md` and its files, and
+ * which is Codex's extra skills root as it stands. Claude Code lists a
+ * plugin's skill as `<plugin>:<name>`.
+ */
+export const INSTALLED_SKILLS = {
+  /** The folder of skill folders, under the installed folder. */
+  SKILLS: "skills",
+  /** The plugin's manifest, under the installed folder. */
+  MANIFEST: ".claude-plugin/plugin.json",
+  /** The plugin's name, which leads each of its skills' names in Claude Code. */
+  PLUGIN: "luke",
+} as const;
+
 /** The harness a launch runs, spelled as `conversations.runtime` spells it. */
 export const RUNNER_HARNESS = {
   CLAUDE_CODE: "claude_code",
@@ -148,6 +165,8 @@ export const ClaudeCodeConfigSchema = Schema.Struct({
   mcpUrl: Schema.String,
   /** The hosts a command the agent runs may reach, besides nothing else. */
   allowedDomains: Schema.Array(Schema.String),
+  /** Where the member's installed skills are (`INSTALLED_SKILLS`), loaded as a local plugin where the folder holds one. */
+  installedSkills: Schema.optionalKey(Schema.String),
 });
 export type ClaudeCodeConfig = typeof ClaudeCodeConfigSchema.Type;
 
@@ -187,6 +206,8 @@ export const CodexConfigSchema = Schema.Struct({
    * `OPENAI_API_KEY`: the account's API key pays, and app-server reads it.
    */
   tokenUrl: Schema.String,
+  /** Where the member's installed skills are (`INSTALLED_SKILLS`), whose `skills/` is set as an extra skills root where it is there. */
+  installedSkills: Schema.optionalKey(Schema.String),
 });
 export type CodexConfig = typeof CodexConfigSchema.Type;
 
