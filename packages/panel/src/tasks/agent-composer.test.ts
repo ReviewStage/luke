@@ -98,13 +98,19 @@ function Box({
     send: sender,
     onStatus: ignore,
   });
-  return createElement(AgentComposer, {
-    ...QUIET_COMPOSER,
-    composer,
-    skills: reading,
-    call: call?.controls,
-    dictates: !(call?.onCall ?? false),
-  });
+  return createElement(
+    "div",
+    null,
+    createElement(AgentComposer, {
+      ...QUIET_COMPOSER,
+      composer,
+      skills: reading,
+      call: call?.controls,
+      dictates: !(call?.onCall ?? false),
+    }),
+    // What Continue would carry, as the tab hands it on.
+    createElement("output", { "data-unsent": composer.unsent.words }),
+  );
 }
 
 /** The box mounted, every message it sends written down and answered by `answer`. */
@@ -132,7 +138,7 @@ async function mounted(answer: () => Promise<CodingAgentAgentAnswer> = () => new
   };
 }
 
-test("the box takes the caret as it opens, Enter sends what was typed, and the box empties as the send is taken", async () => {
+test("the box takes the caret as it opens, Enter sends what was typed, and the box empties and keeps the caret before the send answers", async () => {
   const box = await mounted();
   assert.equal(document.activeElement, composerEditor(box.container));
   assert.equal(box.button("Send")?.disabled, true, "an empty box sends nothing");
@@ -149,9 +155,12 @@ test("the box takes the caret as it opens, Enter sends what was typed, and the b
   assert.equal(box.shown(), "");
   assert.equal(
     composerEditor(box.container).getAttribute("aria-disabled"),
-    "true",
-    "the box is held while the message is out",
+    null,
+    "the box takes words while the message is out",
   );
+  assert.equal(document.activeElement, composerEditor(box.container), "and keeps the caret");
+  typeInComposer(box.container, "and the next one");
+  assert.equal(box.shown(), "and the next one");
 });
 
 test("a message that did not go comes back into the box, the caret at its end, and Retry sends it again under its key", async () => {
@@ -206,19 +215,67 @@ async function answeredLater() {
   return { ...box, answer: (answered: CodingAgentAgentAnswer) => answer(answered) };
 }
 
-test("a message sent hands the caret back to the box as it opens again, after the field gave it up while held", async () => {
-  const box = await answeredLater();
-  typeInComposer(box.container, "Fix the bug");
+/** The box mounted, each send answered only as the test lets it, in the order they went. */
+async function answeredInTurn() {
+  const answers: ((answered: CodingAgentAgentAnswer) => void)[] = [];
+  const box = await mounted(
+    () =>
+      new Promise<CodingAgentAgentAnswer>((resolve) => {
+        answers.push(resolve);
+      }),
+  );
+  return {
+    ...box,
+    answer: async (index: number, answered: CodingAgentAgentAnswer) => {
+      answers[index]?.(answered);
+      await settle();
+    },
+  };
+}
+
+test("a message sent while one is out goes once the one before it answers, so the agent hears them in order", async () => {
+  const box = await answeredInTurn();
+  typeInComposer(box.container, "First");
   pressInComposer(box.container, "Enter");
   await settle();
-  // A field that takes no words can hold no caret, so the browser takes it off the held box.
-  act(() => composerEditor(box.container).blur());
-  assert.equal(document.activeElement === composerEditor(box.container), false);
-
-  box.answer(TAKEN);
+  typeInComposer(box.container, "Second");
+  pressInComposer(box.container, "Enter");
   await settle();
-  assert.equal(composerEditor(box.container).getAttribute("aria-disabled"), null);
-  assert.equal(document.activeElement === composerEditor(box.container), true);
+  assert.equal(box.shown(), "", "both left the box at once");
+  assert.deepEqual(
+    box.sent.map((each) => each.text),
+    ["First"],
+    "the second waits for the first's answer",
+  );
+
+  await box.answer(0, TAKEN);
+  assert.deepEqual(
+    box.sent.map((each) => each.text),
+    ["First", "Second"],
+  );
+  assert.notEqual(box.sent[0]?.clientKey, box.sent[1]?.clientKey);
+});
+
+test("a message refused after the developer wrote on keeps their words in the box, and Retry sends the refused one again under its key", async () => {
+  const box = await answeredInTurn();
+  typeInComposer(box.container, "First");
+  pressInComposer(box.container, "Enter");
+  await settle();
+  typeInComposer(box.container, "Still writing");
+
+  await box.answer(0, { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
+  assert.equal(box.shown(), "Still writing", "the newer words stay");
+  const retry =
+    [...box.container.querySelectorAll("button")].find((each) => each.textContent === "Retry") ??
+    assert.fail("Retry is offered");
+  act(() => retry.click());
+  await settle();
+  assert.deepEqual(
+    box.sent.map((each) => each.text),
+    ["First", "First"],
+  );
+  assert.equal(box.sent[1]?.clientKey, box.sent[0]?.clientKey);
+  assert.equal(box.shown(), "Still writing", "and are never sent over");
 });
 
 test("a message sent with Send hands the caret to the box as it opens again", async () => {
@@ -700,4 +757,22 @@ test("a message refused because the member's token is not authorized for the org
 
   assert.deepEqual(box.opened.github, [authorizeUrl]);
   assert.deepEqual(box.opened.settings, []);
+});
+
+test("messages still waiting to go as the agent refuses one for good are all kept for Continue, in the order sent", async () => {
+  const box = await answeredInTurn();
+  typeInComposer(box.container, "Fix tests");
+  pressInComposer(box.container, "Enter");
+  await settle();
+  typeInComposer(box.container, "Update docs");
+  pressInComposer(box.container, "Enter");
+  await settle();
+
+  await box.answer(0, { failure: CODING_AGENT_CALL_FAILURE.AGENT_RETIRED });
+  assert.deepEqual(
+    box.sent.map((each) => each.text),
+    ["Fix tests"],
+    "the one behind it is not sent",
+  );
+  assert.equal(box.container.querySelector("output")?.dataset.unsent, "Fix tests\n\nUpdate docs");
 });

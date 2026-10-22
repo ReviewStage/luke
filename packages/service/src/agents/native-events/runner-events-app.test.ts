@@ -13,7 +13,6 @@ import {
   recordCodingAgentRunnerToken,
 } from "@luke/database/models/coding-agent-store";
 import { claimDueCodingAgentWakeups } from "@luke/database/models/coding-agent-wakeups";
-import { sentLineId } from "@luke/database/models/ids";
 import {
   listProviderKeyRows,
   type ProviderKeyRow,
@@ -38,6 +37,7 @@ import {
 } from "@luke/features/provider-key-wire";
 import { TASK_STATUS } from "@luke/features/task-wire";
 import { TURN_STATUS, valueFromJsonText, type WireRecord, type WireValue } from "@luke/wire";
+import { sentLineId } from "@luke/wire/host-ids";
 import type { StoredUIMessage } from "@luke/wire/ui-messages";
 import { asc, eq } from "drizzle-orm";
 import { Clock, Effect, Layer, Option } from "effect";

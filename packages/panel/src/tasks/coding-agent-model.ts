@@ -2005,84 +2005,73 @@ export function messageWords(message: CodingAgentMessage): string {
     .join("\n\n");
 }
 
+/** Where a line the developer sent stands, before the service's row for it lands. */
+export const SENT_LINE_STATE = {
+  /** On its way, or taken and its row not yet read. */
+  PENDING: "pending",
+  /** Refused for now: the box has words of its own, so the line keeps its words where it went, with Retry. */
+  FAILED: "failed",
+  /** Refused for good, its session ended: it stands where it went marked as not delivered, and no row will read it back. */
+  UNDELIVERED: "undelivered",
+} as const;
+
+export type SentLineState = (typeof SENT_LINE_STATE)[keyof typeof SENT_LINE_STATE];
+
 /**
  * A line the developer sent that the transcript has not read back yet:
  * drawn as theirs the moment it goes, and let go once the service's own
  * row for it lands.
  */
 export interface SentLine {
-  /** The line's own id, which no row of the service's spells. */
+  /**
+   * The id the service writes the line's row under, its send key's
+   * (`sentLineId`), which the line is drawn under until that row lands, so
+   * the row is drawn in its place (`transcriptRowKey`).
+   */
   readonly id: string;
+  /** The key the line went under, which Retry sends it under again, so a send whose answer was lost reaches the agent once. */
+  readonly clientKey: string;
   /** The words as they went: trimmed, as the service keeps them. */
   readonly text: string;
   /** The files that went with them, drawn on the line as the service's row will draw them. */
   readonly attachments: readonly CodingAgentAttachment[];
-  /** The developer's rows the transcript held as the line went, which the row written for it is none of. */
-  readonly known: ReadonlySet<string>;
   /** Whether a turn ran as the line went, so it steers that turn rather than opening one. */
   readonly steers: boolean;
-  /** Whether the agent refused it for good, its session ended, so it stands where it went marked as not delivered, and no row will read it back. */
-  readonly undelivered?: boolean;
+  readonly state: SentLineState;
 }
 
-/**
- * Whether a user row is the developer's own words, typed or spoken by
- * them: never a chat notice, nor a line the voice model or the brain
- * wrote. A row whose metadata this build cannot read, or one written
- * before metadata was kept, is taken as the developer's, as it always was.
- */
-function developersOwn(message: CodingAgentMessage): boolean {
-  if (message.role !== MESSAGE_ROLE.USER) return false;
-  if (message.metadata === undefined) return true;
-  const read = Option.getOrUndefined(readUserMetadata(message.metadata));
-  if (read === undefined) return true;
-  return read.author === MESSAGE_AUTHOR.DEVELOPER && chatNoticeOf(message) === undefined;
-}
-
-/** The developer's own rows of a transcript, which a sent line is read back as one of; a chat notice of the same words never answers it. */
-function developerRows(messages: readonly CodingAgentMessage[]): readonly CodingAgentMessage[] {
-  return messages.filter(developersOwn);
-}
-
-/** The ids of the developer's rows a transcript holds now, for a line about to go. */
-export function knownDeveloperRows(messages: readonly CodingAgentMessage[]): ReadonlySet<string> {
-  return new Set(developerRows(messages).map((message) => message.id));
-}
-
-/** The sent lines read against the transcript: the ones still not read back, and the rows that have answered one. */
-export interface SentLinesRead {
-  readonly lines: readonly SentLine[];
-  /** Every row that has answered a line, this read's and earlier ones', which no later line of the same words is read back by. */
-  readonly taken: ReadonlySet<string>;
+/** The ids the developer's rows of a transcript were written under, which a sent line's row is one of once it lands. */
+function landedLines(messages: readonly CodingAgentMessage[]): ReadonlySet<string> {
+  return new Set(
+    messages.flatMap((message) =>
+      message.role === MESSAGE_ROLE.USER && message.clientId !== undefined
+        ? [message.clientId]
+        : [],
+    ),
+  );
 }
 
 /**
  * The sent lines the transcript has not read back yet. A line is read back
- * once a developer's row it did not know holds its words, each such row
- * answering one line in the order the lines went, so two lines of the same
- * words are read back one row at a time; the rows taken stay taken across
- * reads, so a line let go does not hand its row to the next of its words.
+ * by the row written under its id, which its send key names, so two lines
+ * of the same words are each read back by their own row alone; a line
+ * refused for good has no row to be read back by.
  */
 export function unreadSentLines(
   sent: readonly SentLine[],
   messages: readonly CodingAgentMessage[],
-  taken: ReadonlySet<string> = new Set(),
-): SentLinesRead {
-  const claimed = new Set(taken);
-  const lines = sent.filter((line) => {
-    // A line the agent refused for good has no row to be read back by.
-    if (line.undelivered === true) return true;
-    const row = developerRows(messages).find(
-      (message) =>
-        !line.known.has(message.id) &&
-        !claimed.has(message.id) &&
-        messageWords(message) === line.text,
-    );
-    if (row === undefined) return true;
-    claimed.add(row.id);
-    return false;
-  });
-  return { lines, taken: claimed };
+): readonly SentLine[] {
+  const landed = landedLines(messages);
+  return sent.filter((line) => line.state === SENT_LINE_STATE.UNDELIVERED || !landed.has(line.id));
+}
+
+/**
+ * The key a transcript's row is drawn and measured under: the id a
+ * developer's line was written under, which the line drew under before
+ * its row landed, so the row lands in its place; every other row's own id.
+ */
+export function transcriptRowKey(message: CodingAgentMessage): string {
+  return message.role === MESSAGE_ROLE.USER ? (message.clientId ?? message.id) : message.id;
 }
 
 /** A sent line as the tab draws it before the service's row lands: the developer's row. */
