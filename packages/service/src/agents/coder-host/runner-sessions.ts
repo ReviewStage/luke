@@ -158,6 +158,17 @@ export interface RunnerSessionsOptions {
   readonly mcpUrl: string;
   /** Luke's coder instructions for the agent, which the harness's config carries. */
   readonly instructions: (agent: CodingAgent) => Effect.Effect<string>;
+  /**
+   * What a message line opens with ahead of the message, as eve's turn opens
+   * with it (`turn-opening.ts`): the turn's own message, and the conversation
+   * so far where the harness's session opens afresh (`fresh`), with no
+   * session of its own to resume; nothing where there is none to hand.
+   */
+  readonly opening: (
+    agent: CodingAgent,
+    message: EveMessage,
+    fresh: boolean,
+  ) => Effect.Effect<string | undefined>;
   /** One past the last event the store applied of the conversation's runner, where a launch numbers its events from. */
   readonly nextSequence: (
     conversationId: string,
@@ -740,12 +751,32 @@ export const runnerSessions = <
         );
       });
 
-    /** The message as a line, under Luke's id for it where the caller named one, and the files it names. */
-    const messageLine = (message: EveMessage<Turn>): RunnerMessage => {
-      const uuid = message.lineId ?? randomUUID();
-      const { content, files } = runnerContent(message.message, harness.name, uuid);
-      return { line: { type: INPUT_LINE.MESSAGE, uuid, content }, files };
-    };
+    /**
+     * The message as a line under the id given, opening with what the
+     * session is handed ahead of it (`options.opening`), and the files it
+     * names: read where the line is written, since whether the session
+     * opens afresh is known only there.
+     */
+    const messageLine = (
+      agent: CodingAgent,
+      message: EveMessage<Turn>,
+      uuid: string,
+      fresh: boolean,
+    ) =>
+      Effect.map(options.opening(agent, message, fresh), (opening): RunnerMessage => {
+        const { content, files } = runnerContent(message.message, harness.name, uuid);
+        return {
+          line: {
+            type: INPUT_LINE.MESSAGE,
+            uuid,
+            content: [
+              ...(opening === undefined ? [] : [{ type: "text" as const, text: opening }]),
+              ...content,
+            ],
+          },
+          files,
+        };
+      });
 
     /** The files a message names written into the running session, before its line names them. */
     const filesWritten = (running: string, message: RunnerMessage) =>
@@ -846,11 +877,11 @@ export const runnerSessions = <
           return { outcome: EVE_SEND_OUTCOME.RETIRED } as const;
         }
         const target = { userId, conversationId: agent.conversationId };
-        const sent = messageLine(message);
+        const lineId = message.lineId ?? randomUUID();
         const accepted = {
           outcome: EVE_SEND_OUTCOME.ACCEPTED,
           sessionId,
-          deliveryId: sent.line.uuid,
+          deliveryId: lineId,
         } as const;
         const live = yield* liveRunner(api, found.value);
         if (live !== undefined) {
@@ -861,6 +892,7 @@ export const runnerSessions = <
           // by `retune`, which holds the same lease, so it is written after this line, never
           // undone by it.
           const ahead = yield* harness.ahead(agent);
+          const sent = yield* messageLine(agent, message, lineId, false);
           yield* filesWritten(live.sandboxSessionId, sent);
           yield* api.writeStdin(
             live.sandboxSessionId,
@@ -883,7 +915,7 @@ export const runnerSessions = <
           // that fails (the image still preparing, a clone refused) leaves the session standing
           // for the next message to try again rather than retired; a delete that fails leaves
           // the expired one beside the fresh one, which `listTagged` lists after it as the older.
-          yield* openedSandbox(agent, sessionId, sent);
+          yield* openedSandbox(agent, sessionId, yield* messageLine(agent, message, lineId, true));
           yield* api
             .deleteSandbox(found.value.name)
             .pipe(
@@ -902,6 +934,9 @@ export const runnerSessions = <
         const resume = Option.getOrUndefined(
           Option.flatMapNullishOr(routing, (read) => read.nativeSession),
         );
+        // Note that a relaunch with no session of the harness's to resume opens one afresh, which is
+        // handed the conversation so far, as a fresh one after an expired snapshot is.
+        const sent = yield* messageLine(agent, message, lineId, resume === undefined);
         yield* launch(sessionId, agent, { name: found.value.name, running }, sent, resume);
         return accepted;
       });
@@ -949,7 +984,8 @@ export const runnerSessions = <
         Effect.gen(function* () {
           const agent = yield* agentOf(message.conversationId);
           const sessionId = sessionIdOf(harness.sessionPrefix, yield* Clock.currentTimeMillis);
-          yield* holdingRunner(agent.id, openedSandbox(agent, sessionId, messageLine(message)));
+          const first = yield* messageLine(agent, message, message.lineId ?? randomUUID(), true);
+          yield* holdingRunner(agent.id, openedSandbox(agent, sessionId, first));
           return { outcome: EVE_SEND_OUTCOME.ACCEPTED, sessionId } as const;
         }).pipe(Effect.catch(failed("open")), Effect.provideContext(context)),
 

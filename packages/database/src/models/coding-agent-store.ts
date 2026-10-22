@@ -56,6 +56,7 @@ import {
   type StoredAutomationOrigin,
   type StoredPullRequest,
   type StoredStartedFrom,
+  type StoredTurnHanded,
 } from "../schemas/coding-agent.js";
 import { asks, conversations, messages, turns } from "../schemas/storage.js";
 import { task } from "../schemas/task.js";
@@ -1263,6 +1264,42 @@ const updateAgentCompaction = SqlSchema.void({
   execute: ({ userId, agentId, at }) =>
     Database.use((db) =>
       db.update(codingAgent).set({ compactedAt: at }).where(reachableAgent(userId, agentId)),
+    ),
+});
+
+const TurnHandedColumnSchema = Schema.Struct({
+  task: Schema.optionalKey(Schema.String),
+  chat: Schema.optionalKey(Schema.String),
+  desk: Schema.optionalKey(Schema.String),
+  spoken: Schema.optionalKey(Schema.Boolean),
+  callWords: Schema.optionalKey(Schema.Boolean),
+});
+
+const findNativeTurnHanded = SqlSchema.findOneOption({
+  Request: Schema.Struct({ userId: Schema.String, agentId: Schema.String }),
+  Result: Schema.Struct({ handed: Schema.NullOr(TurnHandedColumnSchema) }),
+  execute: ({ userId, agentId }) =>
+    Database.use((db) =>
+      db
+        .select({ handed: codingAgent.nativeTurnHanded })
+        .from(codingAgent)
+        .where(reachableAgent(userId, agentId))
+        .limit(1),
+    ),
+});
+
+const updateNativeTurnHanded = SqlSchema.void({
+  Request: Schema.Struct({
+    userId: Schema.String,
+    agentId: Schema.String,
+    handed: TurnHandedColumnSchema,
+  }),
+  execute: ({ userId, agentId, handed }) =>
+    Database.use((db) =>
+      db
+        .update(codingAgent)
+        .set({ nativeTurnHanded: handed })
+        .where(reachableAgent(userId, agentId)),
     ),
 });
 
@@ -2902,6 +2939,25 @@ export function recordCodingAgentCompaction(
   at: Date,
 ): CodingAgentStoreEffect<void> {
   return updateAgentCompaction({ userId, agentId, at });
+}
+
+/** What the agent's native session has been handed in its turns' messages; nothing before its first, or for an agent the account does not reach. */
+export function readNativeTurnHanded(
+  userId: string,
+  agentId: string,
+): CodingAgentStoreEffect<StoredTurnHanded> {
+  return Effect.map(findNativeTurnHanded({ userId, agentId }), (found) =>
+    Option.match(found, { onNone: () => ({}), onSome: ({ handed }) => handed ?? {} }),
+  );
+}
+
+/** What the agent's native session has been handed once a turn's message is, replacing what stood; nothing for an agent the account does not reach. */
+export function recordNativeTurnHanded(
+  userId: string,
+  agentId: string,
+  handed: StoredTurnHanded,
+): CodingAgentStoreEffect<void> {
+  return updateNativeTurnHanded({ userId, agentId, handed });
 }
 
 /** What the agent's own conversation holds in its model's context, or nothing for an agent of a workspace the account is not in. */

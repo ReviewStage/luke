@@ -101,6 +101,13 @@ import { task } from "./task.js";
  * checkout's own output is in the transcript, and the pull request on
  * GitHub records its base.
  *
+ * `native_turn_handed` is what a native harness's session (Claude Code's,
+ * Codex's) has been handed in its turns' messages so far
+ * (`StoredTurnHanded`), which eve keeps in its own session state for an eve
+ * agent; null for an eve agent and before a native session's first message.
+ * A launch that opens the harness's session afresh hands it again from
+ * nothing.
+ *
  * `kind` is what the agent is (`CODING_AGENT_KIND`): a coder, as every agent
  * started on work is and every row from before the column reads, or its
  * member's operator, started blank with no task and no repository, of which
@@ -133,6 +140,20 @@ export interface StoredAgentStep {
   readonly toolDefinitionTokens: number;
   readonly briefTokens: number;
   readonly at: number;
+}
+
+/**
+ * What a native agent's session has been handed in its turns' messages, as
+ * content addresses: the task, the chat digest, an operator's desk, and
+ * whether its last turn was spoken and the call's words stand
+ * (`@luke/service`'s `coder-host/turn-context.ts`'s `TurnHanded`).
+ */
+export interface StoredTurnHanded {
+  readonly task?: string;
+  readonly chat?: string;
+  readonly desk?: string;
+  readonly spoken?: boolean;
+  readonly callWords?: boolean;
 }
 
 /**
@@ -276,6 +297,8 @@ export const codingAgent = pgTable(
      * conversation's lock (`steer.ts`), from another function's connection where the eve apps relay.
      */
     runnerTokenHash: text("runner_token_hash"),
+    /** What the agent's native session has been handed in its turns' messages; null for an eve agent and before its first. */
+    nativeTurnHanded: jsonb("native_turn_handed").$type<StoredTurnHanded>(),
     /** What the agent is: a coder, or its member's operator; a coder for every row from before the column. */
     kind: text("kind").$type<CodingAgentKind>().notNull().default(CODING_AGENT_KIND.CODER),
     idempotencyKey: text("idempotency_key").notNull(),

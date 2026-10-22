@@ -74,11 +74,13 @@ import {
   readCodingAgentRouting,
   readEveRunStanding,
   readNativeRunStanding,
+  readNativeTurnHanded,
   readRunnerTokenConversation,
   recordCodingAgentAuthor,
   recordCodingAgentNativeSession,
   recordCodingAgentPublished,
   recordCodingAgentRunnerToken,
+  recordNativeTurnHanded,
   recordTurnFastRefused,
   renameCodingAgent,
   settleCodingAgentAuthor,
@@ -2525,6 +2527,42 @@ it.layer(getTestDB())("the coding-agent store's operator, private to its member"
           "low",
         );
         assert.ok(Option.isSome(yield* pinCodingAgent(owner, operator.id, true)));
+      }),
+  );
+});
+
+it.layer(getTestDB())("the coding-agent store's native turn handed", (it) => {
+  it.effect(
+    "a native session's handed state reads empty until recorded, then as recorded and replaced whole, and another account neither reads nor writes it",
+    () =>
+      Effect.gen(function* () {
+        const starter = yield* openAccount;
+        const other = yield* openAccount;
+        const workspace = yield* openWorkspace(starter);
+        const task = yield* createTask(starter, { organizationId: workspace, name: "Billing" });
+        const agent = Option.getOrThrow(
+          yield* createCodingAgent(starter, {
+            taskId: task.id,
+            planSnapshot: "# Billing",
+            prompt: null,
+            idempotencyKey: randomUUID(),
+            model: "anthropic/claude-opus-5.5",
+            effort: "high",
+            repository: "acme/api",
+          }),
+        ).agent;
+
+        assert.deepEqual(yield* readNativeTurnHanded(starter, agent.id), {});
+        yield* recordNativeTurnHanded(starter, agent.id, { task: "t1", chat: "c1", spoken: true });
+        assert.deepEqual(yield* readNativeTurnHanded(starter, agent.id), {
+          task: "t1",
+          chat: "c1",
+          spoken: true,
+        });
+        yield* recordNativeTurnHanded(starter, agent.id, { desk: "d1" });
+        yield* recordNativeTurnHanded(other, agent.id, { task: "theirs" });
+        assert.deepEqual(yield* readNativeTurnHanded(starter, agent.id), { desk: "d1" });
+        assert.deepEqual(yield* readNativeTurnHanded(other, agent.id), {});
       }),
   );
 });

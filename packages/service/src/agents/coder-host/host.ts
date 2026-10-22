@@ -2,7 +2,6 @@ import type { DatabaseServices, QueryError } from "@luke/database/core/query";
 import { settleEndedSession } from "@luke/database/models/abandoned-turns";
 import { chatEnabledFor } from "@luke/database/models/account-store";
 import { askRecord } from "@luke/database/models/asks";
-import { readBoard } from "@luke/database/models/board-store";
 import {
   type CodingAgent,
   codingAgentBriefOf,
@@ -15,18 +14,8 @@ import {
 } from "@luke/database/models/coding-agent-store";
 import { promptHashOf } from "@luke/database/models/content-addressed";
 import { childConversationId, hostTurnId } from "@luke/database/models/ids";
-import {
-  listRecentMessages,
-  type StoredMessageRecord,
-  turnsBefore,
-} from "@luke/database/models/message-reads";
-import { readPlanCommentThreads } from "@luke/database/models/plan-comments";
-import { listRevisions } from "@luke/database/models/plan-revisions";
 import { sandboxHeld } from "@luke/database/models/sandbox-terminal-lease";
-import { readTask } from "@luke/database/models/task-store";
-import type { ConversationTarget, StoreWriter } from "@luke/database/models/writer";
-import { EMPTY_BOARD } from "@luke/features/board-wire";
-import { MEMBER_KIND } from "@luke/features/chat-wire";
+import type { StoreWriter } from "@luke/database/models/writer";
 import { CONTEXT_WINDOW } from "@luke/features/coding-agent-wire";
 import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
 import { encodeMention, MENTION_KIND } from "@luke/features/mention-link";
@@ -36,7 +25,7 @@ import { Effect, Option, Result, type Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import type { MessageStreamEvent } from "eve/client";
 import type { SessionAuth, SessionContext } from "eve/context";
-import { MESSAGE_ROLE, type UnparsedWireValue, type WireRecord } from "../../core.js";
+import type { UnparsedWireValue, WireRecord } from "../../core.js";
 import type { GitHubApp } from "../../github/github-app.js";
 import { logStoreFailure } from "../../http/store-failure.js";
 import type { WorkspaceLinearConnect } from "../../integrations/integration-connect.js";
@@ -51,14 +40,8 @@ import { reopenTaskForWork, settleTaskIfFinished } from "../../tasks/task-finish
 import { delegatedChildOf, type HostAdmission, hostAdmission } from "../agent-runtime/host-core.js";
 import { endsTurn } from "../agent-runtime/sandbox.js";
 import type { AgentSkill } from "../agent-runtime/skills.js";
-import { type ChatSince, standingContext } from "../agent-runtime/standing-context.js";
 import { turnKindOf } from "../brain-host/auth.js";
-import {
-  BRAIN_HOST,
-  BRAIN_HOST_TURN,
-  type BrainHostTurn,
-  RELAY_TURN,
-} from "../brain-host/bounds.js";
+import { type BrainHostTurn, RELAY_TURN } from "../brain-host/bounds.js";
 import {
   type AdmittedConversation,
   admitConversation,
@@ -78,9 +61,7 @@ import {
   type RelayStateStore,
   StreamRelay,
 } from "../brain-host/relay.js";
-import { rotationSeedText } from "../brain-host/seed.js";
 import { carryStop } from "../brain-host/stop-carrier.js";
-import { markDeskNoticesRead, type OperatorDesk, readOperatorDesk } from "../operator-desk.js";
 import {
   type ReadWebPageResult,
   ResearchBudget,
@@ -89,7 +70,6 @@ import {
   type SearchWebResult,
 } from "../public-research.js";
 import { checkoutDeepened, type RepositorySandbox } from "../repository-shell.js";
-import { isOperator } from "../steward.js";
 import type { RepositoryCredential } from "../terminal/agent-sandbox.js";
 import { workspaceStepOf } from "../written-mentions.js";
 import {
@@ -109,7 +89,7 @@ import {
 } from "./agent-doors.js";
 import { accountFastOffer } from "./agent-runtime-choice.js";
 import { CODER, CODER_MODEL_FIXTURE, CODER_REFUSAL, type CoderRefusal } from "./bounds.js";
-import { type ChatToolResult, chatDigest } from "./chat.js";
+import type { ChatToolResult } from "./chat.js";
 import {
   agentCiReadable,
   agentCoAuthor,
@@ -135,16 +115,14 @@ import type { PullRequestToolResult } from "./pull-request.js";
 import { runShowImage, SHOW_IMAGE_REFUSAL, showImageRejected } from "./show-image.js";
 import { agentSkills } from "./skills.js";
 import { titleCodingAgent, titleSubagent } from "./title.js";
-import { CODER_TOOL, CODER_TOOL_SET } from "./tool-set.js";
+import { CODER_TOOL } from "./tool-set.js";
+import type { TurnHanded } from "./turn-context.js";
 import {
-  contentKey,
-  savedByAnotherSince,
-  type TurnHanded,
-  taskKey,
-  taskWithLead,
-  timeWithLead,
-  turnKindWords,
-} from "./turn-context.js";
+  type CoderTurn,
+  type CoderTurnMessage,
+  composeTurnMessage,
+  conversationSeed,
+} from "./turn-opening.js";
 
 /**
  * host.ts -- the coding-agent host composed over eve and the store: what the coder project's authored files call.
@@ -216,18 +194,6 @@ export interface CoderSessionPromptRecord {
   readonly coAuthor?: string;
   readonly workspace?: string;
   readonly chatOn?: boolean;
-}
-
-/** The turn opening: its kind, as its request named it, and its store id. */
-interface CoderTurn {
-  readonly kind: BrainHostTurn | undefined;
-  readonly turnId: string | undefined;
-}
-
-/** A turn's own message, where there is one to hand, and what the session has handed once it is. */
-export interface CoderTurnMessage {
-  readonly text: string | undefined;
-  readonly handed: TurnHanded;
 }
 
 /** The model a step runs on under the scripted fixture: whatever the authored file hands in, under the fixture's own id. */
@@ -517,12 +483,7 @@ export interface CoderHost extends HostAdmission {
 
 export type { AgentToolCall, BoardTool, ChatCall } from "./agent-doors.js";
 export type { InboxCall } from "./inbox-door.js";
-
-/** The newest turns read to find the agent's previous one: the turn opening, where the relay queued it already, and the one before. */
-const PREVIOUS_TURN_READ = 2;
-
-/** No chat in the task as it stands: the agent's own digest of the chat follows it (`chatDigest`). */
-const NO_CHAT: ChatSince = { messages: [], more: false };
+export type { CoderTurnMessage } from "./turn-opening.js";
 
 /** A failure as a log line carries it: the checkout's reason, or a store failure's kind alone, since its message may name a statement. */
 function describeFailure(failure: CheckoutFailure): string {
@@ -536,16 +497,6 @@ function asksTitle(event: MessageStreamEvent): boolean {
     event.type === "turn.completed" ||
     event.type === "turn.failed"
   );
-}
-
-/** Whether a stored row is a line awaiting its turn: a user's words no turn has taken yet (`writer.ts`'s `takeAwaitingLine`). */
-function awaitsTurn(record: StoredMessageRecord): boolean {
-  return record.message.role === MESSAGE_ROLE.USER && record.turnId === undefined;
-}
-
-/** A stored row's message, as the seed renders it. */
-function messageOf(record: StoredMessageRecord) {
-  return record.message;
 }
 
 /** The host over the deployment's seams. */
@@ -671,107 +622,6 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
     });
     return written.pipe(Effect.catch(logStoreFailure));
   };
-
-  /** What the agent has not read in its workspace's chat, as a turn opens with it (`chat.ts`); nothing where its starter has not turned Chat on, or the read failed. */
-  const digestOf = (admitted: AdmittedConversation, agent: CodingAgent) =>
-    Effect.gen(function* () {
-      // A turn opens with the chat only where the agent's starter turned Chat on.
-      if (!(yield* chatEnabledFor(admitted.target.userId))) return undefined;
-      return yield* chatDigest(
-        {
-          userId: admitted.target.userId,
-          taskId: agent.taskId,
-          self: { kind: MEMBER_KIND.AGENT, agentId: agent.id },
-        },
-        admitted.target.conversationId,
-      );
-    }).pipe(
-      Effect.tapError(logStoreFailure),
-      Effect.catch(() => Effect.succeed(undefined)),
-    );
-
-  /**
-   * The operator's desk as its turn opens (`../operator-desk.ts`), its
-   * member's open work as it stands; nothing for any other agent, or where
-   * a read failed, which is logged, so the turn still opens.
-   */
-  const deskOf = (
-    agent: CodingAgent,
-  ): Effect.Effect<OperatorDesk | undefined, never, DatabaseServices> =>
-    isOperator(agent)
-      ? readOperatorDesk(agent).pipe(
-          Effect.tapError(logStoreFailure),
-          Effect.orElseSucceed(() => undefined),
-        )
-      : Effect.succeed(undefined);
-
-  /**
-   * When the agent's turn before the one opening started, or nothing for its
-   * first turn: the newest of the conversation's turns but the one named,
-   * which the relay may have queued already as this one opens.
-   */
-  const previousTurnStart = (target: ConversationTarget, turnId: string | undefined) =>
-    Effect.map(
-      turnsBefore(target.userId, target.conversationId, PREVIOUS_TURN_READ, undefined),
-      (page) => {
-        const previous = page.turns.findLast((turn) => turn.id !== turnId);
-        return previous === undefined
-          ? undefined
-          : (previous.startedAt ?? previous.queuedAt).getTime();
-      },
-    );
-
-  /**
-   * The agent's task as the turn's message hands it (`turn-context.ts`), read
-   * as the member whose turn this is, and what the session has handed of it
-   * once this turn is (`taskKey`), or nothing for an agent on no task or one
-   * whose task is gone. The task is handed where a revision of the plan
-   * another writer made was saved after the agent's previous turn started,
-   * so a save made while that turn ran, which none of its steps may have
-   * read, is handed too; or where the rest of it is not what the session
-   * last handed; never on a typed first turn, whose first message the plan,
-   * or the prompt beside it, already is. The chat is left out, since the
-   * agent's own digest of it follows (`digestOf`). A read that fails is
-   * logged and hands nothing.
-   */
-  const taskOf = (
-    admitted: AdmittedConversation,
-    agent: CodingAgent,
-    turn: CoderTurn,
-    handed: TurnHanded,
-  ) =>
-    Effect.gen(function* () {
-      const { taskId } = agent;
-      if (taskId === null) return undefined;
-      const [stored, board, comments, since] = yield* Effect.all(
-        [
-          readTask(admitted.caller, taskId),
-          readBoard(admitted.caller, taskId),
-          readPlanCommentThreads(admitted.caller, taskId),
-          previousTurnStart(admitted.target, turn.turnId),
-        ],
-        { concurrency: "unbounded" },
-      );
-      if (Option.isNone(stored)) return undefined;
-      const drawn = Option.getOrElse(board, () => EMPTY_BOARD);
-      const threads = Option.getOrElse(comments, () => []);
-      const key = taskKey(stored.value, drawn, threads);
-      const opening = since === undefined && turn.kind !== BRAIN_HOST_TURN.SPOKEN;
-      const saved =
-        since !== undefined &&
-        savedByAnotherSince(
-          (yield* listRevisions(admitted.caller, taskId)).revisions,
-          since,
-          agent.id,
-        );
-      if (!saved && (opening || key === handed.task)) return { key: handed.task, text: undefined };
-      const clock = { now: seams.now(), timeZone: admitted.timeZone };
-      const text = taskWithLead(standingContext(stored.value, drawn, NO_CHAT, clock, threads));
-      return { key, text };
-    }).pipe(
-      Effect.tapError(logStoreFailure),
-      Effect.catch(() => Effect.succeed(undefined)),
-    );
 
   /**
    * The ask record every turn binds the voice's asks to: each ask eve delivered into the
@@ -925,20 +775,7 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
     skills: (admitted, agent) =>
       hasRepository(agent) ? agentSkills(admitted.target, agent) : Effect.succeed([]),
 
-    seed: (admitted) =>
-      Effect.map(
-        listRecentMessages(
-          admitted.target.userId,
-          admitted.target.conversationId,
-          CODER_TOOL_SET,
-          BRAIN_HOST.SEED_MESSAGES,
-        ),
-        (read) =>
-          rotationSeedText(
-            read.ok ? read.value.filter((record) => !awaitsTurn(record)).map(messageOf) : [],
-            seams.now(),
-          ),
-      ),
+    seed: (admitted) => conversationSeed(admitted.target, seams.now()),
 
     checkOut: (admitted, sandbox) =>
       Effect.flatMap(agentOrRefused(admitted), (agent) =>
@@ -1052,39 +889,7 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
           Effect.orElseSucceed(() => Result.fail(CODER_REFUSAL.NO_AGENT)),
         );
         if (Result.isFailure(found)) return { text: undefined, handed };
-        const agent = found.success;
-        const [task, digest, desk] = yield* Effect.all(
-          [taskOf(admitted, agent, turn, handed), digestOf(admitted, agent), deskOf(agent)],
-          { concurrency: "unbounded" },
-        );
-        const clock = { now: seams.now(), timeZone: admitted.timeZone };
-        const standing =
-          task?.text ?? timeWithLead(standingContext(undefined, EMPTY_BOARD, NO_CHAT, clock));
-        // The digest is handed again only where it holds what the last one did not.
-        const chatKey = digest === undefined ? handed.chat : contentKey(digest);
-        const chat = digest !== undefined && chatKey !== handed.chat ? [digest] : [];
-        // An operator's desk is handed again only where its standing work changed since the session
-        // last handed it, or where it carries notices, which are marked read once handed.
-        const deskKey = desk === undefined ? handed.desk : contentKey(desk.standing);
-        const fresh = desk !== undefined && (desk.notices.length > 0 || deskKey !== handed.desk);
-        const desked = fresh ? [desk.text] : [];
-        if (fresh && desk.notices.length > 0) {
-          yield* markDeskNoticesRead(agent, desk).pipe(
-            Effect.tapError(logStoreFailure),
-            Effect.orElseSucceed(() => undefined),
-          );
-        }
-        const spoken = turn.kind === BRAIN_HOST_TURN.SPOKEN;
-        const kind = turnKindWords(spoken, handed, agent.taskId !== null);
-        const taskHanded = task === undefined ? handed.task : task.key;
-        const next: TurnHanded = {
-          ...(taskHanded === undefined ? undefined : { task: taskHanded }),
-          ...(chatKey === undefined ? undefined : { chat: chatKey }),
-          ...(deskKey === undefined ? undefined : { desk: deskKey }),
-          ...(spoken ? { spoken: true, callWords: true } : undefined),
-        };
-        const parts = [...(kind === undefined ? [] : [kind]), standing, ...desked, ...chat];
-        return { text: parts.join("\n\n"), handed: next };
+        return yield* composeTurnMessage(admitted, found.success, turn, handed, seams.now());
       }),
 
     showPage: (admitted, input, sandbox) => runAgentShowPage(admitted, input, sandbox),

@@ -11,18 +11,29 @@
  * and runs under Luke's coder instructions, worded for the harness, which
  * names the tools it owns by its own names (`instructions.ts`): Claude
  * Code's appended to its prompt, Codex's as its `developer_instructions`.
+ * Each message line opens with what eve's turn opens with
+ * (`turn-opening.ts`): the turn's own message, what the session has handed
+ * kept on the agent's row as eve keeps it in its session's state, and the
+ * conversation so far where the harness's session opens afresh, a snapshot
+ * expired or a sandbox retired, so the agent goes on knowing what was said.
  */
 
 import { chatEnabledFor } from "@luke/database/models/account-store";
-import { type CodingAgent, hasRepository } from "@luke/database/models/coding-agent-store";
+import {
+  type CodingAgent,
+  hasRepository,
+  readNativeTurnHanded,
+  recordNativeTurnHanded,
+} from "@luke/database/models/coding-agent-store";
 import { readNativeSequence } from "@luke/database/models/native-projection-store";
 import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
 import { CODING_AGENT_BRIEF } from "@luke/features/coding-agent-wire";
 import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
 import { encodeMention, MENTION_KIND } from "@luke/features/mention-link";
-import { Effect, Layer, Option } from "effect";
+import { Clock, Effect, Layer, Option } from "effect";
 import { logStoreFailure } from "../../http/store-failure.js";
 import { deploymentEveOrigin } from "../brain-host/eve-origin.js";
+import type { EveMessage } from "../brain-host/eve-sessions.js";
 import { LUKE_MCP_PATH } from "../luke-mcp/app.js";
 import { RUNNER_EVENTS_PATH } from "../native-events/runner-events-app.js";
 import { RUNNER_TOKEN_PATH } from "../native-events/runner-token-app.js";
@@ -33,6 +44,7 @@ import { codexSessions } from "./codex-sessions.js";
 import { CODER_HARNESS, type CoderHarness, coderInstructions } from "./instructions.js";
 import type { RunnerServices, RunnerSessionsOptions, SandboxRunner } from "./runner-sessions.js";
 import { NativeAgentSessions } from "./runtime-sessions.js";
+import { composeTurnMessage, conversationSeed } from "./turn-opening.js";
 
 export interface NativeAgentSessionsOptions {
   /** Runs one effect on the function's runtime, which the checkout reaches the sandbox through. */
@@ -82,6 +94,38 @@ const nativeCoderInstructions = (userId: string, agent: CodingAgent, harness: Co
     );
   });
 
+/**
+ * What a native agent's message line opens with, as eve's turn opens
+ * (`turn-opening.ts`), read as the account the sessions act for: on a
+ * session opened afresh, the conversation so far and a turn's message
+ * composed as a new session's first, from nothing handed; otherwise a turn's
+ * message from what the session was handed before, which this one's replaces
+ * on the agent's row. The turn has no store id yet, since the events route
+ * queues it once the runner takes the line, so the previous turn is the
+ * conversation's newest. A read or a write that fails is logged and hands
+ * nothing, so the message still goes.
+ */
+const nativeOpening = (account: string, agent: CodingAgent, message: EveMessage, fresh: boolean) =>
+  Effect.gen(function* () {
+    const now = yield* Clock.currentTimeMillis;
+    const target = { userId: account, conversationId: agent.conversationId };
+    const handed = fresh ? {} : yield* readNativeTurnHanded(account, agent.id);
+    const turn = yield* composeTurnMessage(
+      { caller: account, target, timeZone: message.timeZone },
+      agent,
+      { kind: message.turn, turnId: undefined },
+      handed,
+      now,
+    );
+    yield* recordNativeTurnHanded(account, agent.id, turn.handed);
+    const seed = fresh ? yield* conversationSeed(target, now) : undefined;
+    const parts = [seed, turn.text].filter((part) => part !== undefined && part !== "");
+    return parts.length === 0 ? undefined : parts.join("\n\n");
+  }).pipe(
+    Effect.tapError(logStoreFailure),
+    Effect.orElseSucceed(() => undefined),
+  );
+
 /** The native harnesses over the function's services, as above. */
 export function nativeAgentSessionsLayer(
   options: NativeAgentSessionsOptions,
@@ -102,6 +146,8 @@ export function nativeAgentSessionsLayer(
         mcpUrl: new URL(LUKE_MCP_PATH, origin).href,
         instructions: (agent) =>
           nativeCoderInstructions(account, agent, harness).pipe(Effect.provideContext(context)),
+        opening: (agent, message, fresh) =>
+          nativeOpening(account, agent, message, fresh).pipe(Effect.provideContext(context)),
         // One past the last event the store applied, so a relaunch goes on numbering where the last launch stopped.
         nextSequence: (conversationId) =>
           readNativeSequence({ userId: account, conversationId }).pipe(

@@ -1,0 +1,1 @@
+ALTER TABLE "coding_agent" ADD COLUMN IF NOT EXISTS "native_turn_handed" jsonb;
