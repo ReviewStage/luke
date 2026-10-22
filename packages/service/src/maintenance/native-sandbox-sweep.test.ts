@@ -54,7 +54,13 @@ interface FakeSandbox {
 }
 
 /** Vercel Sandbox's REST API over the project's sandboxes, oldest first, keeping what it was asked. */
-function vercel(options: { readonly refuseList?: boolean; readonly refusePolicy?: boolean } = {}) {
+function vercel(
+  options: {
+    readonly refuseList?: boolean;
+    readonly refuseLaterPages?: boolean;
+    readonly refusePolicy?: boolean;
+  } = {},
+) {
   const sandboxes: FakeSandbox[] = [];
   /** The detached commands, by id, with their exit code, or null while they run. */
   const commands = new Map<string, ReadCommand>();
@@ -78,6 +84,9 @@ function vercel(options: { readonly refuseList?: boolean; readonly refusePolicy?
       const status = parsed.searchParams.get("status");
       const order = parsed.searchParams.get("sortOrder");
       pagesListed.push({ status, sortBy: parsed.searchParams.get("sortBy"), order });
+      if (options.refuseLaterPages === true && parsed.searchParams.has("cursor")) {
+        return new Response(null, { status: 503 });
+      }
       const from = Number(parsed.searchParams.get("cursor") ?? "0");
       const matching = sandboxes.filter((each) => status === null || each.status === status);
       if (order === "desc") matching.reverse();
@@ -320,6 +329,55 @@ it.layer(getTestDB())("the native sandbox sweep", (it) => {
         assert.deepEqual(nextMinute, { stopped: 1, held: 0, failed: 0, deferred: 0 });
         assert.equal(beyond.status, "stopped");
       }),
+  );
+
+  it.effect(
+    "an ended sandbox listed past the window at both ends, among sandboxes that keep running, is reached as the window moves along",
+    () =>
+      Effect.gen(function* () {
+        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+        const api = vercel();
+        // Sandboxes whose run goes on keep running sweep after sweep, as agents at work do.
+        const running = NATIVE_SANDBOX_SWEEP.MAX_SANDBOXES * 2 + 10;
+        for (let each = 0; each < running; each += 1)
+          api.sandboxes.push(nativeSandbox(randomUUID()));
+        const agent = yield* openAgent(CONVERSATION_RUNTIME.CLAUDE_CODE, {
+          status: TURN_STATUS.SETTLED,
+          at: minutesBefore(10),
+        });
+        const middle = nativeSandbox(agent.id);
+        api.sandboxes.splice(NATIVE_SANDBOX_SWEEP.MAX_SANDBOXES + 5, 0, middle);
+
+        const sweeps = 6;
+        for (let minute = 0; minute < sweeps && middle.status === "running"; minute += 1) {
+          yield* sweepNativeSandboxes(new Date(NOW.getTime() + minute * 60_000)).pipe(
+            Effect.provide(api.layer),
+          );
+        }
+
+        assert.equal(middle.status, "stopped");
+        assert.deepEqual(api.stopped, [middle.currentSessionId]);
+      }),
+  );
+
+  it.effect("a later page Vercel refused leaves the pages before it to be swept", () =>
+    Effect.gen(function* () {
+      vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+      const api = vercel({ refuseLaterPages: true });
+      const agent = yield* openAgent(CONVERSATION_RUNTIME.CLAUDE_CODE, {
+        status: TURN_STATUS.SETTLED,
+        at: minutesBefore(10),
+      });
+      const orphan = nativeSandbox(agent.id);
+      api.sandboxes.push(orphan);
+      for (let each = 0; each < PAGE; each += 1) api.sandboxes.push(nativeSandbox(randomUUID()));
+
+      const outcome = yield* sweepNativeSandboxes(NOW).pipe(Effect.provide(api.layer));
+
+      assert.equal(api.pagesListed.length, 2, "the second page was asked and refused");
+      assert.equal(outcome.stopped, 1);
+      assert.equal(orphan.status, "stopped");
+    }),
   );
 
   it.effect("a list Vercel refused sweeps nothing and fails nothing after it", () =>

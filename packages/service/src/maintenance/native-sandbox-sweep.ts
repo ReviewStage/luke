@@ -7,7 +7,8 @@
  * that failed there is logged and not retried, so the sandbox would idle
  * until its timeout. This sweep retries it: it pages through the project's
  * running sandboxes, from the oldest and the newest on alternate minutes, keeps the ones named as Luke names a
- * native sandbox and carrying an agent's tag, and stops each whose
+ * native sandbox and carrying an agent's tag, reads a window of them that
+ * moves along the list from one sweep to the next, and stops each whose
  * conversation is native, whose newest turn ended longer ago than a short
  * grace (which leaves the END's own stop to go first), and on which no
  * developer's Terminal holds a lease. eve's sandboxes are never looked at
@@ -18,8 +19,9 @@
  * credential would not come off, the sandbox is left for the next sweep.
  *
  * Every call is bounded so the sweep's minute holds: a few pages of the
- * list, a set number of sandboxes read against the store, and a set number
- * of stops. What is asked of Vercel is a page, a name, and a session; what
+ * list, a set number of sandboxes read against the store, taken from a
+ * window that moves along the list from one sweep to the next, and a set
+ * number of stops. What is asked of Vercel is a page, a name, and a session; what
  * is logged of a failure is its status.
  */
 
@@ -32,21 +34,20 @@ import { RUNNER_TAG, SANDBOX_NAME, taggedRunner } from "../agents/coder-host/run
 import { OPEN_INTERNET_POLICY } from "../agents/terminal/agent-sandbox.js";
 import {
   deploymentOidcToken,
-  LIST_ORDER,
   type ListedSandbox,
-  type ListOrder,
   RUNNING_STATUS,
   SESSION_TAG,
   type VercelSandboxApi,
   vercelSandboxApi,
 } from "../agents/vercel-sandbox-api.js";
+import { listOrderAt, listRunningSandboxes, windowAt } from "./sandbox-sweep-list.js";
 
 export const NATIVE_SANDBOX_SWEEP = {
   /** How long after its run's newest turn ended a sandbox waits for the END's own stop before the sweep stops it. */
   GRACE: Duration.minutes(2),
   /** The most pages of running sandboxes one sweep reads, each the API's widest. */
   MAX_PAGES: 4,
-  /** The most native sandboxes one sweep reads against the store; the rest wait for the next minute. */
+  /** The most native sandboxes one sweep reads against the store; the rest wait for a later sweep's window. */
   MAX_SANDBOXES: 40,
   /** The most sandboxes one sweep stops. */
   MAX_STOPS: 10,
@@ -91,34 +92,6 @@ function nativeSandboxOf(sandbox: ListedSandbox): NativeSandbox | undefined {
   if (agentId === undefined || sessionId === undefined) return undefined;
   return { sessionId, running: sandbox.currentSessionId, agentId };
 }
-
-/**
- * The order a sweep lists in: oldest first on an even minute and newest
- * first on an odd one, so the running sandboxes past one end's bound are
- * reached from the other's within two minutes.
- */
-export function listOrderAt(now: Date): ListOrder {
-  return Math.floor(now.getTime() / 60_000) % 2 === 0
-    ? LIST_ORDER.OLDEST_FIRST
-    : LIST_ORDER.NEWEST_FIRST;
-}
-
-/** The running native sandboxes, from at most `MAX_PAGES` pages and no more than `MAX_SANDBOXES`. */
-const runningNativeSandboxes = (api: VercelSandboxApi, order: ListOrder) =>
-  Effect.gen(function* () {
-    const found: NativeSandbox[] = [];
-    let cursor: string | undefined;
-    for (let page = 0; page < NATIVE_SANDBOX_SWEEP.MAX_PAGES; page += 1) {
-      const listed = yield* api.listRunning(cursor, order);
-      for (const sandbox of listed.sandboxes) {
-        const native = nativeSandboxOf(sandbox);
-        if (native !== undefined) found.push(native);
-      }
-      cursor = listed.next;
-      if (cursor === undefined || found.length >= NATIVE_SANDBOX_SWEEP.MAX_SANDBOXES) break;
-    }
-    return found.slice(0, NATIVE_SANDBOX_SWEEP.MAX_SANDBOXES);
-  });
 
 /**
  * Whether the sandbox, read afresh, has moved on from the list: gone, down,
@@ -209,14 +182,16 @@ export const sweepNativeSandboxes = /* @__PURE__ */ Effect.fn("web/sweepNativeSa
     DatabaseServices | HttpClient.HttpClient
   > {
     const api = yield* vercelSandboxApi(deploymentOidcToken);
-    const listed = yield* Effect.result(runningNativeSandboxes(api, listOrderAt(now)));
+    const listed = yield* Effect.result(
+      listRunningSandboxes(api, listOrderAt(now), NATIVE_SANDBOX_SWEEP.MAX_PAGES, nativeSandboxOf),
+    );
     if (Result.isFailure(listed)) {
       yield* Effect.logWarning(`the running sandboxes were not listed: ${listed.failure.message}`);
       return NOTHING_SWEPT;
     }
     const budget: StopBudget = { remaining: NATIVE_SANDBOX_SWEEP.MAX_STOPS };
     const endings = yield* Effect.forEach(
-      listed.success,
+      windowAt(listed.success, NATIVE_SANDBOX_SWEEP.MAX_SANDBOXES, now),
       (sandbox) => endSandbox(api, sandbox, now, budget),
       { concurrency: NATIVE_SANDBOX_SWEEP.CONCURRENCY },
     );
