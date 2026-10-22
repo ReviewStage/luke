@@ -34,11 +34,15 @@
     gap: var(--luke-space-6);
   }
 
+  /* Note that a pill's corners are half its one-line height rather than a
+     full round, so a long option that wraps in a narrow column stands as a
+     rounded box instead of swelling into an ellipse, while a short one is
+     the same capsule as ever. */
   .luke-choice-list[data-look="pill"] > .luke-choice {
     gap: var(--luke-icon-gap);
     min-height: var(--luke-control-height);
-    padding: 0 var(--luke-space-12);
-    border-radius: 999px;
+    padding: var(--luke-space-4) var(--luke-space-12);
+    border-radius: calc(var(--luke-control-height) / 2);
     box-shadow: inset 0 0 0 1px var(--luke-color-border);
     font-size: var(--luke-type-caption-size);
   }
@@ -50,7 +54,15 @@
 
   .luke-choice-list[data-look="pill"] .luke-choice-check {
     display: none;
+    flex: none;
     margin: 0;
+  }
+
+  /* A pill's badge stands beside its words while they fit on one line,
+     and drops under them once they would wrap, rather than squeezing them
+     into a column of a word a line. */
+  .luke-choice-list[data-look="pill"] .luke-choice-label {
+    flex: 0 1 auto;
   }
 
   .luke-choice-list[data-look="pill"] > .luke-choice[aria-checked="true"] .luke-choice-check {
@@ -123,17 +135,22 @@
     min-width: 0;
   }
 
-  /* The label gives the badge its room: it shrinks past its longest word,
-     and a word too long for what is left, a path or an identifier, breaks
-     anywhere rather than pushing the badge out past the row's edge. */
+  /* The badge stands at the label's top right while the label keeps a
+     readable measure beside it; in a column too narrow for both, a side
+     panel's or a phone's, the badge and the number drop to a line of
+     their own under the label rather than squeezing it to a word a line.
+     A word too long for its line, a path or an identifier, still breaks
+     anywhere rather than pushing past the row's edge. */
   .luke-choice-head {
     display: flex;
+    flex-wrap: wrap;
     align-items: flex-start;
     justify-content: space-between;
-    gap: var(--luke-space-8);
+    gap: var(--luke-space-4) var(--luke-space-8);
   }
 
   .luke-choice-label {
+    flex: 1 1 0;
     min-width: 0;
     font-weight: var(--luke-weight-medium);
     overflow-wrap: anywhere;
@@ -146,6 +163,15 @@
     flex: none;
     align-items: center;
     gap: var(--luke-space-8);
+  }
+
+  /* Note that only a badge asks a row's label for a measure, since a
+     number alone is narrow enough to stand beside any label; a pill sizes
+     to its words and asks none. */
+  .luke-choice-list:not([data-look="pill"])
+    .luke-choice-head:has(> .luke-choice-end .luke-badge)
+    > .luke-choice-label {
+    flex-basis: 10em;
   }
 
   .luke-choice-number {
