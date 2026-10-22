@@ -36,7 +36,9 @@ import {
  * token total meters the turn; a compaction stamps the agent; and a new
  * thread is the session a relaunch resumes. Codex sends a subagent's work
  * on a thread of its own, which its subagent call stands for, so anything
- * of a thread other than the session's is passed over. A call to Luke's own
+ * of a thread other than the session's is passed over but the end of its
+ * turn, which settles the spawn that started it: the spawn answers the
+ * moment the thread starts, so it is kept open until then. A call to Luke's own
  * MCP server is named as Luke's tool and its answer read as the JSON that
  * tool answers, a picture in it standing in for its bytes. Each shape is
  * read with a schema of the fields this reads alone, so a field Codex adds
@@ -179,6 +181,7 @@ const readSubagent = Schema.decodeUnknownOption(
     status: Schema.String,
     prompt: Schema.optionalKey(Schema.NullOr(Schema.String)),
     model: Schema.optionalKey(Schema.NullOr(Schema.String)),
+    reasoningEffort: Schema.optionalKey(Schema.NullOr(Schema.String)),
     receiverThreadIds: Schema.optionalKey(Schema.Array(Schema.String)),
     agentsStates: Schema.optionalKey(WireValueSchema),
   }),
@@ -337,6 +340,7 @@ function callOf(type: string, item: unknown): Option.Option<Answered> {
           tool: call.tool,
           prompt: call.prompt ?? null,
           model: call.model ?? null,
+          effort: call.reasoningEffort ?? null,
           receiverThreadIds: call.receiverThreadIds ?? [],
         },
         answer: {
@@ -371,6 +375,59 @@ function settled(call: Answered): readonly NativeMoment[] {
       input: call.input,
     },
     { kind: NATIVE_MOMENT.STEP_CLOSED },
+  ];
+}
+
+/** The collab tool that starts a subagent on a thread of its own, as `CollabAgentTool` spells it. */
+const SPAWN_AGENT = "spawnAgent";
+
+/**
+ * The child threads a completed collab call started a subagent on, which
+ * run on after the call answers; none for any other collab call, or one
+ * that did not do its work.
+ */
+function spawnedThreads(type: string, whole: unknown): readonly string[] {
+  if (type !== ITEM.SUBAGENT) return [];
+  return Option.match(readSubagent(whole), {
+    onSome: (call) =>
+      call.tool === SPAWN_AGENT && !FAILED_STATUSES.has(call.status)
+        ? (call.receiverThreadIds ?? [])
+        : [],
+    onNone: () => [],
+  });
+}
+
+/**
+ * A subagent's spawn completed: the call stands, and stays open while its
+ * subagent runs, as a delegation's row does, until its thread's turn
+ * completes (`childTurnMoments`). Note that the spawn answers the moment
+ * the thread starts, so its own answer says nothing of the subagent's work.
+ */
+function spawnMoments(call: Call, threads: readonly string[]): readonly NativeMoment[] {
+  return [
+    started(call),
+    ...threads.map(
+      (key): NativeMoment => ({ kind: NATIVE_MOMENT.SUBAGENT_RUNNING, callId: call.callId, key }),
+    ),
+    { kind: NATIVE_MOMENT.STEP_CLOSED },
+  ];
+}
+
+/** A subagent's thread finished its turn: the spawn it runs under settles, failed where the turn did not complete. */
+function childTurnMoments(threadId: string, params: unknown): readonly NativeMoment[] {
+  const read = readTurnCompleted(params);
+  if (Option.isNone(read)) return [];
+  const { status, error } = read.value.turn;
+  const text = error?.message ?? status;
+  return [
+    {
+      kind: NATIVE_MOMENT.SUBAGENT_ENDED,
+      key: threadId,
+      settlement: toolAnswerSettlement(
+        { lukeTool: false, text, output: { status } },
+        status !== TURN_COMPLETED,
+      ),
+    },
   ];
 }
 
@@ -415,8 +472,13 @@ function itemCompletedMoments(params: unknown): readonly NativeMoment[] {
       });
     case ITEM.COMPACTION:
       return [{ kind: NATIVE_MOMENT.COMPACTED }];
-    default:
-      return Option.match(callOf(type, whole), { onSome: settled, onNone: () => [] });
+    default: {
+      const threads = spawnedThreads(type, whole);
+      return Option.match(callOf(type, whole), {
+        onSome: (call) => (threads.length === 0 ? settled(call) : spawnMoments(call, threads)),
+        onNone: () => [],
+      });
+    }
   }
 }
 
@@ -608,7 +670,14 @@ export function codexMoments(message: WireValue, held: NativeHeld): readonly Nat
   if (Option.isNone(envelope)) return [];
   const { method, params } = envelope.value;
   if (method === NOTIFICATION.THREAD_STARTED) return threadStartedMoments(params);
-  if (elsewhere(params, held)) return [];
+  if (elsewhere(params, held)) {
+    // A subagent's thread is passed over but for its turn's end, which settles the spawn it runs under.
+    if (method !== NOTIFICATION.TURN_COMPLETED) return [];
+    return Option.match(readThreadOf(params), {
+      onSome: ({ threadId }) => childTurnMoments(threadId, params),
+      onNone: () => [],
+    });
+  }
   switch (method) {
     case NOTIFICATION.TURN_STARTED:
       return [{ kind: NATIVE_MOMENT.ACTIVE }];

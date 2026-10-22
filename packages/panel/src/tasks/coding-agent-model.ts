@@ -1,5 +1,11 @@
 import { recordedVideosOf } from "@luke/features/agent-pictures-model";
-import { AGENT_TOOL, CONNECTION_TOOL, EVE_TOOL, RETIRED_TOOL } from "@luke/features/agent-tools";
+import {
+  AGENT_TOOL,
+  CLAUDE_CODE_TOOL,
+  CONNECTION_TOOL,
+  EVE_TOOL,
+  RETIRED_TOOL,
+} from "@luke/features/agent-tools";
 import { agentFailureWords } from "@luke/features/coding-agent-failure-words";
 import {
   CODING_AGENT_CALL_FAILURE,
@@ -1418,9 +1424,28 @@ export function sidebarCallIds(messages: readonly CodingAgentMessage[]): readonl
     );
 }
 
-/** Whether a call is a delegation to a worker, a coding agent's or the brain's, which the tab draws as a subagent's row rather than a call's. */
+/**
+ * Whether a call is a delegation to a worker, a coding agent's, the brain's,
+ * or a native harness's subagent (`native-tool-calls.ts` draws Codex's spawn
+ * as Claude Code's `Agent`), which the tab draws as a subagent's row rather
+ * than a call's.
+ */
 export function delegates(part: Extract<AgentPart, { kind: typeof AGENT_PART.TOOL }>): boolean {
-  return part.tool === CODING_AGENT_DELEGATE_TOOL || part.tool === EVE_TOOL.WORKER;
+  return (
+    part.tool === CODING_AGENT_DELEGATE_TOOL ||
+    part.tool === EVE_TOOL.WORKER ||
+    nativeSubagent(part)
+  );
+}
+
+/**
+ * Whether a delegation is a native harness's subagent, whose own work Luke
+ * keeps no transcript of yet, so its row opens no worker's tab.
+ */
+export function nativeSubagent(
+  part: Extract<AgentPart, { kind: typeof AGENT_PART.TOOL }>,
+): boolean {
+  return part.tool === CLAUDE_CODE_TOOL.AGENT;
 }
 
 /** Whether a part is a delegation to a worker (`delegates`). */

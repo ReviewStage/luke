@@ -89,6 +89,8 @@ const TurnSchema = Schema.Struct({
   step: Schema.optionalKey(StepSchema),
   /** The calls the turn holds, by id, under the name each is stored under. */
   calls: Schema.Record(Schema.String, Schema.String),
+  /** The calls whose subagents run on in the background, by the key their end is named by (`NATIVE_MOMENT.SUBAGENT_RUNNING`). */
+  subagents: Schema.optionalKey(Schema.Record(Schema.String, Schema.String)),
   usage: Schema.optionalKey(UsageSchema),
   /** Why the newest model turn failed, where it did. */
   failure: Schema.optionalKey(Schema.String),
@@ -348,6 +350,27 @@ class Fold {
     );
   }
 
+  /** A subagent call kept open while its subagent runs, where the turn holds the call. */
+  #subagentRunning(
+    moment: Extract<NativeMoment, { kind: typeof NATIVE_MOMENT.SUBAGENT_RUNNING }>,
+  ): void {
+    const turn = this.state.turn;
+    if (turn?.calls[moment.callId] === undefined) return;
+    this.#setTurn({ ...turn, subagents: { ...turn.subagents, [moment.key]: moment.callId } });
+  }
+
+  /** A background subagent's end, settling the call it runs under; nothing for a key no held call waits on, such as a foreground subagent's, which its answer settled. */
+  #subagentEnded(
+    moment: Extract<NativeMoment, { kind: typeof NATIVE_MOMENT.SUBAGENT_ENDED }>,
+  ): void {
+    const turn = this.state.turn;
+    const callId = turn?.subagents?.[moment.key];
+    if (turn === undefined || callId === undefined) return;
+    const { [moment.key]: _ended, ...subagents } = turn.subagents ?? {};
+    this.#setTurn({ ...turn, subagents });
+    this.#toolSettled({ kind: NATIVE_MOMENT.TOOL_SETTLED, callId, settlement: moment.settlement });
+  }
+
   /** The turn's end: its words told whole, then its status, cost, and why it failed, where it did. */
   #ended(moment: Extract<NativeMoment, { kind: typeof NATIVE_MOMENT.ENDED }>): void {
     // Note that the wakeups are the launch's, written whether or not a turn was under way.
@@ -445,6 +468,12 @@ class Fold {
         return;
       case NATIVE_MOMENT.TOOL_SETTLED:
         this.#toolSettled(moment);
+        return;
+      case NATIVE_MOMENT.SUBAGENT_RUNNING:
+        this.#subagentRunning(moment);
+        return;
+      case NATIVE_MOMENT.SUBAGENT_ENDED:
+        this.#subagentEnded(moment);
         return;
       case NATIVE_MOMENT.USAGE:
         this.#usage(moment.usage);

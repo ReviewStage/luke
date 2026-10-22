@@ -131,6 +131,7 @@ import {
   lineSender,
   macOwnerOf,
   messageWords,
+  nativeSubagent,
   newestTodos,
   placedMessages,
   planPayerOf,
@@ -562,16 +563,20 @@ function DelegationRow({
   const choice =
     standing === undefined ? view.choice : { model: standing.model, effort: standing.effort };
   const status = standing?.status ?? workerStatusOf(part.state);
+  // A native harness's subagent has no worker's tab to open yet, so its row is the line alone.
+  const opens = onOpen !== undefined && !nativeSubagent(part);
   return (
     <TranscriptSubagent
       callId={part.callId}
-      job={cardTitle(view.task) || CALL_WORDS[CALL_KIND.WORKER].verb}
+      job={view.title ?? (cardTitle(view.task) || CALL_WORDS[CALL_KIND.WORKER].verb)}
       pair={choice === undefined ? undefined : { choice, models: doors?.models ?? [] }}
       state={standing === undefined ? part.state : workerToolState(standing.status)}
       startedAt={doors?.starts?.get(part.callId)}
       errorText={part.errorText}
-      onOpen={onOpen === undefined ? undefined : () => onOpen(part.callId, view.task, status)}
-      card={live?.cards?.worker({ callId: part.callId, task: view.task, status })}
+      onOpen={opens ? () => onOpen(part.callId, view.task, status) : undefined}
+      card={
+        opens ? live?.cards?.worker({ callId: part.callId, task: view.task, status }) : undefined
+      }
     />
   );
 }

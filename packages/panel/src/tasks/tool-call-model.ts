@@ -1251,11 +1251,17 @@ const DELEGATION_FIELD = {
   MODEL: "model",
   EFFORT: "effort",
   RESULT: "result",
+  /** A native harness's subagent's task (`claude-code-moments.ts`, `codex-moments.ts`). */
+  PROMPT: "prompt",
+  /** The few words a native harness's subagent is named by. */
+  DESCRIPTION: "description",
 } as const;
 
 /** What a delegation's row says and holds: the task, the pair the worker runs on, and its answer once it has one. */
 export interface DelegationView {
   readonly task: string;
+  /** The few words the agent named the job by, where it gave some (a native harness's subagent's `description`); the task's first line names it otherwise. */
+  readonly title?: string;
   /** The pair the worker runs on: the one it ran on once settled, else the one the agent chose, each half the agent's own where it chose none; nothing where no pair is known. */
   readonly choice: ModelChoice | undefined;
   readonly result: string | undefined;
@@ -1284,13 +1290,19 @@ export function delegationView(
   const effort = settled
     ? stringAt(part.output, DELEGATION_FIELD.EFFORT)
     : (stringAt(part.input, DELEGATION_FIELD.EFFORT) ?? own?.effort);
+  const title = stringAt(part.input, DELEGATION_FIELD.DESCRIPTION)?.trim();
   return {
     task:
       stringAt(part.input, DELEGATION_FIELD.TASK) ??
       stringAt(part.input, DELEGATION_FIELD.MESSAGE) ??
+      stringAt(part.input, DELEGATION_FIELD.PROMPT) ??
       "",
+    ...(title === undefined || title === "" ? undefined : { title }),
     choice: model !== undefined && effort !== undefined ? { model, effort } : undefined,
-    result: stringAt(part.output, DELEGATION_FIELD.RESULT),
+    // A native harness's subagent answers in the words its call settled with.
+    result:
+      stringAt(part.output, DELEGATION_FIELD.RESULT) ??
+      (isWireString(part.output) ? part.output : undefined),
   };
 }
 
