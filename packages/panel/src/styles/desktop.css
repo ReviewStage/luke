@@ -5917,16 +5917,13 @@ ul.actor-stack {
    transcript, so the two cards, the chips, and the transcript line up; the
    sticky call headers and the way back to the newest line already keep to
    the log's column. A File tab spans the panel as an editor does: a file's
-   lines are read across all the width the developer gave the panel. The
-   Inbox's reply box stands in its comment's body edge to edge, under the
-   words before it, as it does in the window's Inbox, so it pads in to
-   nothing here. */
+   lines are read across all the width the developer gave the panel. */
 .side-panel-content .conversation-log,
 .side-panel-content .agent-log-skeleton,
 .side-panel-content .agent-todos-dock,
 .side-panel-content .agent-published-dock,
 .side-panel-content .draft-fork-dock,
-.side-panel-content .agent-composer:not(.chat-composer, .inbox-comment *) {
+.side-panel-content .agent-tab-foot .agent-composer {
   padding-inline: max(var(--luke-space-16), var(--reading-room));
 }
 
