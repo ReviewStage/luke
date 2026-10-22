@@ -96,6 +96,7 @@ import { sidebarProps } from "../testing/desktop-sidebar.js";
 import { followedInboxes } from "../testing/followed-inboxes.js";
 import { focusRestOn, restOn } from "../testing/hint-rest.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
+import { playMotions } from "../testing/pane-motion.js";
 import { relayout } from "../testing/resize-observer.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { readSegmented, segment, segmentedGroup } from "../testing/segmented.js";
@@ -3334,6 +3335,106 @@ test("on To do, a focused row whose item is answered on another Mac leaves the k
     document.activeElement === page.querySelector('button[aria-label="View options"]'),
     "the keyboard is on View options",
   );
+});
+
+/** Gives the window the list's motion tokens beside the pane's, and an engine that records what is played; answers what was played. */
+function playListMotions() {
+  const motions = playMotions();
+  const root = document.documentElement.style;
+  const tokens = {
+    "--duration-exit": "90ms",
+    "--motion-exit": "ease",
+    "--duration-shape": "460ms",
+    "--spring": "ease-out",
+  };
+  for (const [name, value] of Object.entries(tokens)) root.setProperty(name, value);
+  onTestFinished(() => {
+    motions.remove();
+    for (const name of Object.keys(tokens)) root.removeProperty(name);
+  });
+  return motions.played;
+}
+
+/** Answers the Invites item on another Mac, as main hears of it. */
+async function answerExpiryElsewhere(): Promise<void> {
+  inboxes.set(INVITES.id, [
+    {
+      ...EXPIRY,
+      status: INBOX_STATUS.ANSWERED,
+      answer: { reply: INBOX_REPLY.CHOSE, choices: ["Retry once"] },
+      updatedAt: 6_000,
+    },
+  ]);
+  act(() =>
+    setHolding([
+      { taskId: INVITES.id, items: 1, updatedAt: 6_000 },
+      { taskId: BILLING.id, items: 2, updatedAt: 5_000 },
+    ]),
+  );
+  await settle();
+}
+
+test("on To do, an item answered on another Mac fades where its row stood, its task's group with it, out of reach while it fades, and leaves the list once the fade has played", async () => {
+  const played = playListMotions();
+  const { page } = mount();
+  await settle();
+  showScope(page, "To do");
+  await answerExpiryElsewhere();
+  // The settled row To do held leaves with it, from the group that stays.
+  const leaving = [...page.querySelectorAll<HTMLElement>("[data-leaving]")];
+  const group = leaving.find((each) => each.matches(".inbox-tasks-body > *"));
+  const row = leaving.find((each) => each.matches(".sidebar-tasks > li"));
+  assert.equal(leaving.length, 2);
+  assert.match(group?.textContent ?? "", /^Invites.*Expire after 7 days\?/);
+  assert.equal(row?.querySelector(ROW_TITLE)?.textContent, "How is a failed email retried?");
+  assert.ok(
+    leaving.every((each) => each.hasAttribute("inert")),
+    "each is drawn on out of reach",
+  );
+  const fades = played.filter((each) => leaving.includes(each.element as HTMLElement));
+  assert.deepEqual(
+    fades.map((each) => each.keyframes.at(-1)),
+    [{ opacity: 0 }, { opacity: 0 }],
+  );
+
+  act(() => {
+    for (const fade of fades) fade.finish();
+  });
+  assert.deepEqual(listed(page), ["# Billing usage alerts", "▸ *Alert at 80%?"]);
+  assert.equal(page.querySelector("[data-leaving]"), null);
+});
+
+test("a row leaving a list scrolled down holds the list as tall as its scroller shows it, so the rows in sight stand still, and gives the height back as the list is scrolled up, all of it at the top", async () => {
+  playListMotions();
+  const { page } = mount();
+  await settle();
+  showScope(page, "To do");
+  const body = page.querySelector<HTMLElement>(".inbox-tasks-body") ?? assert.fail("a body");
+  const scroller = body.parentElement ?? assert.fail("a scroller");
+  // Note that jsdom lays nothing out, so the scroller's place and the body's are given.
+  scroller.style.overflowY = "auto";
+  let scrolled = 120;
+  Object.defineProperty(scroller, "scrollTop", { configurable: true, get: () => scrolled });
+  Object.defineProperty(body, "offsetHeight", { configurable: true, value: 900 });
+  vi.spyOn(scroller, "getBoundingClientRect").mockImplementation(
+    () => ({ top: 0, bottom: 500 }) as DOMRect,
+  );
+  vi.spyOn(body, "getBoundingClientRect").mockImplementation(
+    () => ({ top: -scrolled, bottom: 900 - scrolled }) as DOMRect,
+  );
+  const held = () => body.style.getPropertyValue("--inbox-held-height");
+
+  await answerExpiryElsewhere();
+  assert.equal(held(), "620px", "as far down as the scroller shows it");
+  scrolled = 60;
+  act(() => scroller.dispatchEvent(new Event("scroll")));
+  assert.equal(held(), "560px");
+  scrolled = 90;
+  act(() => scroller.dispatchEvent(new Event("scroll")));
+  assert.equal(held(), "560px", "scrolling back down takes no height back");
+  scrolled = 0;
+  act(() => scroller.dispatchEvent(new Event("scroll")));
+  assert.equal(held(), "");
 });
 
 test("one column wide, the item's bar says where it stands in the list, and its arrows, K, and J step up and down the list in its order, a settled item among them, stopping at its ends", async () => {
