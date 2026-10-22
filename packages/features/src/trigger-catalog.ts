@@ -29,13 +29,13 @@ export const SENTRY_TRIGGER_EVENT = {
 export type SentryTriggerEvent = (typeof SENTRY_TRIGGER_EVENT)[keyof typeof SENTRY_TRIGGER_EVENT];
 
 /** The fields an integration trigger may filter its provider's events by. */
-const INTEGRATION_TRIGGER_FILTER = {
+export const INTEGRATION_TRIGGER_FILTER = {
   PROJECT: "project",
   ENVIRONMENT: "environment",
   LEVEL: "level",
 } as const;
 
-type IntegrationTriggerFilter =
+export type IntegrationTriggerFilter =
   (typeof INTEGRATION_TRIGGER_FILTER)[keyof typeof INTEGRATION_TRIGGER_FILTER];
 
 /** The levels Sentry gives an event, least severe first. */

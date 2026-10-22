@@ -59,9 +59,11 @@ Review places a module and a component alike under this rule.
   Dean on 2026-10-14, a Terminal tab's bytes go only to the tab that opened
   them: through the terminal relay (`apps/web/server/terminal/`) and the host
   to that panel's window, never into a trace, a counted event, a fixture, app
-  state, or the voice window. And, approved by Dean (automations D10), a webhook
-  body an automation's caller sends may reach that run's agent task, transcript
-  and traces. And, approved by Dean on 2026-10-15, an automation webhook secret
+  state, or the voice window. And, approved by Dean (automations D10) and by
+  Charles on 2026-10-19, a webhook body an automation's caller sends, or an
+  integration trigger's event (a Sentry issue or alert as Luke's Sentry
+  integration delivers it), may reach that run's agent task, transcript and
+  traces. And, approved by Dean on 2026-10-15, an automation webhook secret
   may be shown once, in the window that minted it, at creation or rotation;
   never anywhere else. And, approved
   on 2026-10-13: the Keyframe session token for a call's own avatar may reach
