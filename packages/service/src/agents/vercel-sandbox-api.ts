@@ -498,6 +498,9 @@ const PASSING_RETRY = Schedule.max([
  */
 const TOKEN_SHAPED = /[A-Za-z0-9._~+-]{20,}=*/gu;
 
+/** An error code as Vercel writes one: lowercase words joined by underscores. */
+const ERROR_CODE = /^[a-z]+(?:_[a-z]+){0,7}$/u;
+
 /** What a token-shaped run of a detail reads as. */
 const REDACTED_DETAIL = "[redacted]";
 
@@ -508,7 +511,11 @@ const REDACTED_DETAIL = "[redacted]";
  * detail reaches the logs.
  */
 function capped(text: string): string {
-  const line = text.replace(TOKEN_SHAPED, REDACTED_DETAIL).replace(/\s+/gu, " ").trim();
+  return clipped(text.replace(TOKEN_SHAPED, REDACTED_DETAIL).replace(/\s+/gu, " ").trim());
+}
+
+/** A line cut to `DETAIL_CHARS`. */
+function clipped(line: string): string {
   return line.length > DETAIL_CHARS ? `${line.slice(0, DETAIL_CHARS - 1)}…` : line;
 }
 
@@ -530,10 +537,16 @@ function causeDetail(cause: unknown): string {
 function errorDetail(text: string): string | undefined {
   const read = readErrorAnswer(jsonOf(text));
   if (Result.isFailure(read)) return undefined;
-  const said = [read.success.error.code, read.success.error.message].filter(
+  const { code, message } = read.success.error;
+  // Note that a code shaped as Vercel's are is kept whole, because one such as
+  // `unsupported_media_type` is token-shaped by length and names the refusal.
+  const named = code !== undefined && ERROR_CODE.test(code) ? code : undefined;
+  const said = [named === undefined ? code : undefined, message].filter(
     (each): each is string => each !== undefined && each.trim() !== "",
   );
-  return said.length === 0 ? undefined : capped(said.join(": "));
+  const rest = said.length === 0 ? undefined : capped(said.join(": "));
+  if (named === undefined) return rest;
+  return rest === undefined ? named : clipped(`${named}: ${rest}`);
 }
 
 /** An answer as the failure it is: the call, its status, and Vercel's own words, or that a 2xx could not be read. */

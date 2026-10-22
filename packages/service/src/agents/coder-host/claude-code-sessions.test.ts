@@ -932,10 +932,9 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
 
       assert.equal(sent.outcome, EVE_SEND_OUTCOME.ACCEPTED);
       assert.equal(api.commands.length, 1);
-      const lines = linesOf(api.commands[0]) as InputLine[];
-      assert.deepEqual(lines.at(-1)?.type === INPUT_LINE.MESSAGE && lines.at(-1)?.content, [
-        { type: "text", text: "Now the emails." },
-      ]);
+      const last = (linesOf(api.commands[0]) as InputLine[]).at(-1);
+      assert.ok(last?.type === INPUT_LINE.MESSAGE);
+      assert.deepEqual(last.content, [{ type: "text", text: "Now the emails." }]);
     }),
   );
 

@@ -140,6 +140,19 @@ it.effect("a secret Vercel or a cause echoes back is redacted from the detail", 
   }),
 );
 
+it.effect("a long error code of Vercel's own is kept whole", () =>
+  Effect.gen(function* () {
+    const api = yield* apiOver(() =>
+      Response.json(
+        { error: { code: "unsupported_media_type", message: "Unsupported Media Type" } },
+        { status: 415 },
+      ),
+    );
+    const failure = yield* Effect.flip(api.stopSession(SESSION));
+    assert.equal(failure.detail, "unsupported_media_type: Unsupported Media Type");
+  }),
+);
+
 it.effect("a call Vercel never answered names the call and the cause", () =>
   Effect.gen(function* () {
     const api = yield* apiOver(() => {
