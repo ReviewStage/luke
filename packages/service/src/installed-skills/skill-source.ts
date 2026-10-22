@@ -11,8 +11,9 @@
  *
  * Skill folders are found as the `skills` tool finds them in a repository
  * it was not told about: a `SKILL.md` at the root, and each folder of
- * `skills/`, `.agents/skills/`, and `.claude/skills/` that holds one, the
- * first root's where two hold a folder of one name. A source naming a
+ * `skills/`, `.agents/skills/`, and `.claude/skills/` that holds one, in
+ * that order, every copy of a name kept for its `SKILL.md` to settle which
+ * stands (`skill-paste-install.ts`). A source naming a
  * folder looks there alone: at the folder, where it holds a `SKILL.md`, or
  * else at each folder in it that does. The whole tree is listed in one
  * read, which also gives every file's size, so a folder past a skill's
@@ -39,9 +40,16 @@ import {
   send,
 } from "../github/github-app.js";
 import { githubReachOrRefusal } from "../github/github-refusal.js";
-import { readCommitSha, readRepositoryFile } from "../github/repository-file.js";
+import {
+  readCommitSha,
+  readRepositoryFile,
+  repositorySegments,
+} from "../github/repository-file.js";
 import { GIT_ENTRY, readRepositoryFolder } from "../github/repository-folder.js";
 import { HOSTED_REFUSAL, type HostedRefusal } from "../http/http-effect.js";
+
+/** The most skill folders read: a repository's skills, twice over for a name two roots hold. */
+const MAX_FOLDERS = TASK_SKILL_BOUNDS.MAX_SKILLS * 2;
 
 /** How many files of one skill are read at once. */
 const READ_CONCURRENCY = 8;
@@ -201,17 +209,8 @@ function skillFolderPaths(skillFiles: ReadonlySet<string>, within: string | unde
       .filter((folder) => folder !== "" && splitFolder(folder).parent === parent)
       .sort((a, b) => a.localeCompare(b));
   if (within !== undefined) return holding(within) ? [within] : childrenOf(within);
-  const named = new Set<string>();
-  const found: string[] = holding("") ? [""] : [];
-  for (const root of SKILL_FOLDER_ROOTS) {
-    for (const folder of childrenOf(root)) {
-      const { name } = splitFolder(folder);
-      if (named.has(name)) continue;
-      named.add(name);
-      found.push(folder);
-    }
-  }
-  return found;
+  // Note that a name two roots hold is kept twice here, since which copy stands is its `SKILL.md`'s to say.
+  return [...(holding("") ? [""] : []), ...SKILL_FOLDER_ROOTS.flatMap(childrenOf)];
 }
 
 /**
@@ -244,16 +243,19 @@ export const skillFolders = /* @__PURE__ */ Effect.fnUntraced(function* (
       `The tree of ${repository.fullName} was cut short; skills past it are not found`,
     );
   }
-  // A path holding a backslash is one no skill may keep (`installed_skill_file_relative`).
+  // A path holding a backslash or a step out of its folder is one no skill may keep (`installed_skill_file_relative`).
   const blobs = tree.entries.filter(
-    (entry) => entry.type === GIT_ENTRY.BLOB && !entry.name.includes("\\"),
+    (entry) =>
+      entry.type === GIT_ENTRY.BLOB &&
+      !entry.name.includes("\\") &&
+      repositorySegments(entry.name) !== undefined,
   );
   const skillFiles = new Set(
     blobs
       .map((blob) => blob.name)
       .filter((path) => splitFolder(path).name === INSTALLED_SKILL_MAIN_FILE),
   );
-  const folders = skillFolderPaths(skillFiles, within).slice(0, TASK_SKILL_BOUNDS.MAX_SKILLS);
+  const folders = skillFolderPaths(skillFiles, within).slice(0, MAX_FOLDERS);
   return folders.map((folder) => ({
     path: folder,
     files: blobs.flatMap((blob) => {

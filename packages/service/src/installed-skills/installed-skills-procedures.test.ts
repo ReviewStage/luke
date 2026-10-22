@@ -553,7 +553,7 @@ it.layer(getTestDB())("the installed skills routes", (it) => {
   );
 
   it.effect(
-    "a skill folder past a skill's bounds or holding a credential previews its problem and installs nothing",
+    "a skill folder past a skill's bounds, or holding a credential in any file, previews its problem and installs nothing",
     () =>
       Effect.gen(function* () {
         const big = fakeRepository("acme", "big");
@@ -583,7 +583,7 @@ it.layer(getTestDB())("the installed skills routes", (it) => {
         assert.deepEqual(
           previewed.skills.map(({ name, problems }) => ({ name, problems })),
           [
-            { name: "leaky", problems: [] },
+            { name: "leaky", problems: [INSTALLED_SKILL_PROBLEM.CREDENTIAL_SHAPED] },
             { name: "many", problems: [INSTALLED_SKILL_PROBLEM.TOO_MANY_FILES] },
           ],
         );
@@ -607,6 +607,37 @@ it.layer(getTestDB())("the installed skills routes", (it) => {
           skillName: "leaky",
           skillRefusal: INSTALLED_SKILL_FILES_REFUSAL.CREDENTIAL_SHAPED,
         });
+      }),
+  );
+
+  it.effect(
+    "a name two roots hold stands as the first copy that installs, a broken copy before it set aside",
+    () =>
+      Effect.gen(function* () {
+        const kit = fakeRepository("acme", "shadow");
+        commitTo(kit, "main", {
+          "skills/review/SKILL.md": "---\nname: review\n---\n\nNo description.",
+          ".agents/skills/review/SKILL.md": skillFile("review", "The copy that installs."),
+        });
+        const owner = yield* openGithubUser();
+        const workspace = yield* openWorkspace(owner);
+        const ask = yield* routes(githubReaching([], undefined, {}, repositoryScript(kit)));
+
+        const previewed = readAnswer(
+          installedSkillPreviewSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(`${SKILLS}/preview`, owner, preview(workspace, "npx skills add acme/shadow")),
+        );
+        assert.ok(previewed.kind === SKILL_PASTE_KIND.SOURCE);
+        assert.deepEqual(
+          previewed.skills.map(({ name, path, selected, problems }) => ({
+            name,
+            path,
+            selected,
+            problems,
+          })),
+          [{ name: "review", path: ".agents/skills/review", selected: true, problems: [] }],
+        );
       }),
   );
 
@@ -752,6 +783,24 @@ it.layer(getTestDB())("the installed skills routes", (it) => {
         assert.ok(updated.skill.source.type === INSTALLED_SKILL_SOURCE.GITHUB);
         assert.equal(updated.skill.source.sha, moved);
         assert.deepEqual(yield* check, { available: false, latestSha: moved });
+
+        // An update keeps the skill's name, so a `SKILL.md` that now names another is refused.
+        commitTo(kit, "main", {
+          ...kit.commits.get(moved),
+          "skills/notes/SKILL.md": skillFile("journal", "Renamed upstream."),
+        });
+        const renamed = yield* ask(`${installedSkillPath(skill.id)}/update`, owner, {
+          method: "POST",
+          body: { workspaceId: workspace },
+        });
+        assert.deepEqual(renamed, {
+          status: HOSTED_HTTP_STATUS.CONFLICT,
+          body: {
+            error: HOSTED_API_ERROR.SKILL_FILES_REFUSED,
+            skillName: "notes",
+            skillRefusal: INSTALLED_SKILL_FILES_REFUSAL.SKILL_FILE_INVALID,
+          },
+        });
 
         const other = yield* openGithubUser();
         yield* joinWorkspace(workspace, other, WORKSPACE_ROLE.MEMBER);

@@ -39,6 +39,7 @@ import {
   type SkillPasteSource,
   type SkillPasteText,
 } from "@luke/features/skill-paste";
+import { TASK_SKILL_BOUNDS } from "@luke/features/task-wire";
 import { Effect } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import type { GitHubApp } from "../github/github-app.js";
@@ -121,7 +122,7 @@ const candidateOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   return { folder, checked, problems: [...checked.problems, ...filesProblems(folder.files)] };
 });
 
-/** The source reached as the member, its ref pinned, and every candidate at that commit, each name once, the first folder's. */
+/** The source reached as the member, its ref pinned, and every candidate at that commit, each name once. */
 const pinnedSource = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
   workspaceId: string,
@@ -133,13 +134,20 @@ const pinnedSource = /* @__PURE__ */ Effect.fnUntraced(function* (
   const read = yield* Effect.forEach(folders, (folder) => candidateOf(repository, sha, folder), {
     concurrency: CANDIDATE_CONCURRENCY,
   });
-  const named = new Set<string>();
-  const candidates = read.filter((candidate) => {
-    const name = candidate.checked.name ?? candidate.folder.path;
-    if (named.has(name)) return false;
-    named.add(name);
-    return true;
-  });
+  // Note that a name stands once: the first copy that installs, else the first copy, as a session's skills fall back.
+  const byName = new Map<string, Candidate>();
+  for (const candidate of read) {
+    const standing = byName.get(nameOf(candidate));
+    if (
+      standing === undefined ||
+      (standing.problems.length > 0 && candidate.problems.length === 0)
+    ) {
+      byName.set(nameOf(candidate), candidate);
+    }
+  }
+  const candidates = read
+    .filter((candidate) => byName.get(nameOf(candidate)) === candidate)
+    .slice(0, TASK_SKILL_BOUNDS.MAX_SKILLS);
   return { repository, ref, sha, candidates };
 });
 
@@ -157,6 +165,17 @@ function askedNames(paste: SkillPasteSource, candidates: readonly Candidate[]): 
   const [only, ...rest] = candidates;
   return only !== undefined && rest.length === 0 ? [nameOf(only)] : [];
 }
+
+/** The candidate with every one of its files read and held to the credential scan, as an install will hold them. */
+const scannedWhole = /* @__PURE__ */ Effect.fnUntraced(function* (
+  source: PinnedSource,
+  candidate: Candidate,
+): Effect.fn.Return<Candidate, HostedRefusal, HttpClient.HttpClient | DatabaseServices> {
+  const files = yield* readSkillFolder(source.repository, source.sha, candidate.folder);
+  return files.some((file) => holdsCredentialShape(fileText(file.bytes)))
+    ? { ...candidate, problems: [INSTALLED_SKILL_PROBLEM.CREDENTIAL_SHAPED] }
+    : candidate;
+});
 
 /** The skill one candidate makes: its files read at the commit and held to every check again, refused for the first it breaks. */
 const madeFromCandidate = /* @__PURE__ */ Effect.fnUntraced(function* (
@@ -328,6 +347,15 @@ export const previewOfPaste = /* @__PURE__ */ Effect.fnUntraced(function* (
       const source = yield* pinnedSource(userId, workspaceId, paste);
       const asked = new Set(askedNames(paste, source.candidates));
       const found = new Set(source.candidates.map(nameOf));
+      // Note that only the skills asked for are read whole, so a preview of a large repository costs its `SKILL.md` files alone.
+      const scanned = yield* Effect.forEach(
+        source.candidates,
+        (candidate) =>
+          asked.has(nameOf(candidate)) && candidate.problems.length === 0
+            ? scannedWhole(source, candidate)
+            : Effect.succeed(candidate),
+        { concurrency: CANDIDATE_CONCURRENCY },
+      );
       return {
         kind: SKILL_PASTE_KIND.SOURCE,
         owner: source.repository.owner,
@@ -335,7 +363,7 @@ export const previewOfPaste = /* @__PURE__ */ Effect.fnUntraced(function* (
         ref: source.ref,
         sha: source.sha,
         missing: [...asked].filter((name) => !found.has(name)),
-        skills: source.candidates.map((candidate) => candidateSummary(candidate, asked)),
+        skills: scanned.map((candidate) => candidateSummary(candidate, asked)),
       };
     }
     case SKILL_PASTE_KIND.TEXT:
@@ -358,8 +386,8 @@ export const previewOfPaste = /* @__PURE__ */ Effect.fnUntraced(function* (
 /**
  * A GitHub skill's revision at the commit its ref stands at now: its
  * folder found there and read, its `SKILL.md` checked as an install checks
- * it but for its name, which an update keeps. Refused where the folder is
- * gone or breaks a check.
+ * it, under the name it was installed by, which an update keeps. Refused
+ * where the folder is gone, now names another skill, or breaks a check.
  */
 export const revisionAtRef = /* @__PURE__ */ Effect.fnUntraced(function* (
   repository: SkillRepository,
@@ -388,15 +416,13 @@ export const revisionAtRef = /* @__PURE__ */ Effect.fnUntraced(function* (
     );
   }
   const candidate = yield* candidateOf(repository, sha, folder);
-  // Note that the name stands, so what its `SKILL.md` now says of a name is no reason to refuse.
-  const keptName = candidate.problems.filter(
-    (problem) =>
-      problem !== INSTALLED_SKILL_PROBLEM.NAME_INVALID &&
-      problem !== INSTALLED_SKILL_PROBLEM.NAME_MISSING,
-  );
+  // Note that an update keeps the skill's name, so a `SKILL.md` that now names another is refused rather than stored beside it.
+  if (candidate.checked.name !== name) {
+    return yield* Effect.fail(refusedFor(name, INSTALLED_SKILL_PROBLEM.NAME_INVALID));
+  }
   const made = yield* madeFromCandidate(
     { repository, ref: source.ref, sha, candidates: [] },
-    { ...candidate, checked: { ...candidate.checked, name }, problems: keptName },
+    candidate,
   );
   return {
     description: made.description,
