@@ -11,7 +11,7 @@ import {
   signingKeysAnswer,
 } from "@luke/credentials/testing";
 import { Database } from "@luke/database/core/query";
-import { listProviderKeyRows } from "@luke/database/models/provider-key-store";
+import { listProviderKeyRows, setPlanStatus } from "@luke/database/models/provider-key-store";
 import { accountProviderKey } from "@luke/database/schemas/account-provider-key";
 import { user } from "@luke/database/schemas/auth";
 import { getTestDB } from "@luke/database/testing";
@@ -861,6 +861,43 @@ it.layer(getTestDB())("the provider keys route", (it) => {
           assert.ok(!stored.includes(secret));
           assert.ok(logged.every((line) => !line.includes(secret)));
         }
+      }),
+  );
+
+  it.effect(
+    "a plan's reached limit is answered with its reset until the reset passes, then as verified, with no write between",
+    () =>
+      Effect.gen(function* () {
+        const { owner, ask } = yield* openAccounts({ ring: KEK.ONE });
+        yield* TestClock.adjust("1 hour");
+        yield* ask(saveSignIn(owner));
+        const now = new Date(yield* Clock.currentTimeMillis);
+        const resetsAt = new Date(now.getTime() + 30 * 60_000);
+        yield* setPlanStatus(
+          owner,
+          PROVIDER_KEY_PROVIDER.OPENAI,
+          PROVIDER_KEY_KIND.CHATGPT_OAUTH,
+          PROVIDER_KEY_STATUS.LIMIT_REACHED,
+          resetsAt,
+          now,
+          now,
+        );
+        const standing = (read: Answer) =>
+          keysOf(read).subscriptions?.map(({ status, limitResetsAt }) => ({
+            status,
+            limitResetsAt,
+          }));
+
+        const limited = standing(yield* ask(request(owner)));
+        yield* TestClock.adjust("31 minutes");
+        const lifted = standing(yield* ask(request(owner)));
+
+        assert.deepEqual(limited, [
+          { status: PROVIDER_KEY_STATUS.LIMIT_REACHED, limitResetsAt: resetsAt.getTime() },
+        ]);
+        assert.deepEqual(lifted, [
+          { status: PROVIDER_KEY_STATUS.VERIFIED, limitResetsAt: undefined },
+        ]);
       }),
   );
 

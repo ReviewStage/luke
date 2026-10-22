@@ -65,11 +65,12 @@ import {
   type ProviderKeyProvider,
   type ProviderKeyRejection,
   type ProviderKeySummary,
+  planStanding,
   SUBSCRIPTION_KIND_PROVIDER,
   type SubscriptionKeySummary,
 } from "@luke/features/provider-key-wire";
 import { middlewareGen } from "@orpc/experimental-effect";
-import { DateTime, Duration, Effect, Redacted, Result } from "effect";
+import { Clock, DateTime, Duration, Effect, Redacted, Result } from "effect";
 import { HostedEnvironment } from "../environment.js";
 import {
   HOSTED_REFUSAL,
@@ -135,17 +136,20 @@ const summariesOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   ring: KeyRing,
 ) {
   const rows = yield* hostedStoreOrUnavailable(listProviderKeyRows(userId, kind));
+  const now = yield* Clock.currentTimeMillis;
   return rows.map((row) => {
     const readable = Result.isSuccess(
       openProviderKey(ring, { userId, provider: row.provider, kind }, row),
     );
+    // Note that a plan is answered as it stands now, so a limit whose reset has passed reads as lifted.
+    const status = readable ? planStanding(row, now) : PROVIDER_KEY_STATUS.UNREADABLE;
     const summary: ProviderKeySummary = {
       provider: row.provider,
       hint: row.hint,
       addedAt: row.createdAt.getTime(),
-      status: readable ? row.status : PROVIDER_KEY_STATUS.UNREADABLE,
+      status,
       statusAt: row.statusAt.getTime(),
-      ...(readable && row.limitResetsAt !== null
+      ...(status === PROVIDER_KEY_STATUS.LIMIT_REACHED && row.limitResetsAt !== null
         ? { limitResetsAt: row.limitResetsAt.getTime() }
         : undefined),
     };
