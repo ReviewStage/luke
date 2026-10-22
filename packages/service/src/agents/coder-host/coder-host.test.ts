@@ -1138,7 +1138,7 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
   );
 
   it.effect(
-    "a session opened afresh is seeded with the files the agent was handed by name, an image its row names by id with the attachment it was kept as, and one a row keeps the bytes of by its name",
+    "a session opened afresh is seeded with the files the agent was handed by name, an image its row names by id with the attachment it was kept as, one not kept saying so, and one a row keeps the bytes of by its name",
     () =>
       Effect.gen(function* () {
         const host = yield* hostOverStore();
@@ -1154,9 +1154,16 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
           mediaType: CODING_AGENT_ATTACHMENT_TYPE.PNG,
           data: shot.data,
         };
-        const [kept] = yield* keptHandedImages(target, [shot]);
+        // An image whose header states no size, which no picture is kept of.
+        const broken = {
+          name: "broken.png",
+          mediaType: CODING_AGENT_ATTACHMENT_TYPE.PNG,
+          data: Buffer.from(SIZED_PNG.slice(0, 12)).toString("base64"),
+        };
+        const [kept, refused] = yield* keptHandedImages(target, [shot, broken]);
         assert.ok(kept?.kept !== undefined && "id" in kept.kept);
-        const attachments = [kept, old];
+        assert.ok(refused?.kept !== undefined && "omitted" in refused.kept);
+        const attachments = [kept, refused, old];
         const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
         yield* writer.writeAwaitingLine(
           target,
@@ -1198,7 +1205,7 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
         assert.ok(seed !== undefined);
         assert.ok(
           seed.includes(
-            `Match these. [file: flow.png (image/png), attachment ${kept.kept.id}] [file: old.png (image/png)]`,
+            `Match these. [file: flow.png (image/png), attachment ${kept.kept.id}] [file: broken.png (image/png), not kept as an attachment] [file: old.png (image/png)]`,
           ),
           seed,
         );
