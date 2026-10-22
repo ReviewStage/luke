@@ -270,8 +270,8 @@ export const LIST_ORDER = { OLDEST_FIRST: "asc", NEWEST_FIRST: "desc" } as const
 
 export type ListOrder = (typeof LIST_ORDER)[keyof typeof LIST_ORDER];
 
-/** A page of the running sandboxes: the sandboxes, and the cursor of the next page where there is one. */
-interface RunningPage {
+/** A page of sandboxes: the sandboxes, and the cursor of the next page where there is one. */
+interface SandboxPage {
   readonly sandboxes: readonly ListedSandbox[];
   readonly next: string | undefined;
 }
@@ -296,7 +296,7 @@ export interface VercelSandboxApi {
   readonly listRunning: (
     cursor: string | undefined,
     order: ListOrder,
-  ) => Effect.Effect<RunningPage, SandboxUnavailable>;
+  ) => Effect.Effect<SandboxPage, SandboxUnavailable>;
   /** The named sandbox, resumed from its snapshot first where it was stopped. */
   readonly resume: (name: string) => Effect.Effect<ListedSandbox, SandboxUnavailable>;
   /** Stops the sandbox session named, keeping its filesystem; one already gone counts as stopped. */
@@ -349,6 +349,11 @@ export interface VercelSandboxApi {
   readonly listNamed: (
     prefix: string,
   ) => Effect.Effect<readonly ListedSandbox[], SandboxUnavailable>;
+  /** One page of the project's sandboxes whose names start with the prefix, by name, from the cursor a page before answered. */
+  readonly listNamedPage: (
+    prefix: string,
+    cursor: string | undefined,
+  ) => Effect.Effect<SandboxPage, SandboxUnavailable>;
   /**
    * Opens a persistent sandbox of that name on the image, on the open
    * internet. A name already taken is refused with Vercel's 409, which is
@@ -1140,6 +1145,31 @@ export function vercelSandboxApi(
           return session === undefined || session.id !== sandbox.currentSessionId
             ? sandbox
             : { ...sandbox, status: session.status ?? sandbox.status };
+        }),
+      listNamedPage: (prefix, cursor) =>
+        Effect.gen(function* () {
+          const asked = yield* credentials(SANDBOX_CALL.LIST);
+          const url = apiUrl("", asked.teamId, {
+            project: asked.projectId,
+            limit: String(SANDBOX_API.PAGE),
+            // Note that the API takes a name prefix only under a sort by name, and refuses it with a 400 otherwise.
+            sortBy: "name",
+            namePrefix: prefix,
+            ...(cursor === undefined ? undefined : { cursor }),
+          });
+          const listed = yield* callApi(
+            client,
+            SANDBOX_CALL.LIST,
+            HttpClientRequest.get(url, { headers: asked.headers }),
+          );
+          const page = readRunning(jsonOf(listed.text));
+          if (!succeeded(listed.status) || Result.isFailure(page)) {
+            return yield* refused(SANDBOX_CALL.LIST, listed);
+          }
+          return {
+            sandboxes: page.success.sandboxes,
+            next: page.success.pagination?.next ?? undefined,
+          };
         }),
       listNamed: (prefix) =>
         Effect.gen(function* () {

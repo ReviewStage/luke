@@ -19,9 +19,10 @@
  * "List sandboxes" takes (https://vercel.com/docs/rest-api/sandboxes/list-sandboxes).
  * Templates (`eve-sbx-tpl-vercel-`, `luke-native-template-`) are never in a
  * bucket, since a template's one snapshot is what every new sandbox opens
- * from. One page of each prefix is read, which holds the 50 sandboxes a
- * bucket has room for, and at most `MAX_UPDATES` are brought onto the bound,
- * the rest left for the bucket's next turn. What is asked of Vercel is a
+ * from. At most `MAX_PAGES` pages of each prefix are read, which holds
+ * 200 sandboxes a bucket, some 51,000 of each kind in all, and at most
+ * `MAX_UPDATES` are brought onto the bound, the rest left for the bucket's
+ * next turn. What is asked of Vercel is a
  * name and a snapshot's id; what is logged of a failure is its status.
  */
 
@@ -45,6 +46,8 @@ import { EVE_SESSION_SANDBOX_NAME } from "./eve-sandbox-sweep.js";
 export const SANDBOX_RETENTION_SWEEP = {
   /** How many buckets the sandboxes are read in, one a minute: every two-hex-digit name prefix. */
   BUCKETS: 256,
+  /** The most pages of one name prefix a sweep reads, each the API's widest. */
+  MAX_PAGES: 4,
   /** The most sandboxes one sweep brings onto the bound; the rest wait for their bucket's next turn. */
   MAX_UPDATES: 20,
   CONCURRENCY: 5,
@@ -71,20 +74,31 @@ function bucketAt(now: Date): string {
   return (minute % SANDBOX_RETENTION_SWEEP.BUCKETS).toString(16).padStart(2, "0");
 }
 
-/** The stopped sandboxes of the bucket whose retention is not the bound; a prefix Vercel did not list is logged and read as none. */
+/**
+ * The sandboxes whose names start with the prefix, on at most `MAX_PAGES`
+ * pages; a page Vercel did not answer ends the list at the pages already
+ * read, logged, and the rest wait for the bucket's next turn.
+ */
+const namedWith = (api: VercelSandboxApi, prefix: string) =>
+  Effect.gen(function* () {
+    const found: ListedSandbox[] = [];
+    let cursor: string | undefined;
+    for (let page = 0; page < SANDBOX_RETENTION_SWEEP.MAX_PAGES; page += 1) {
+      const listed = yield* Effect.result(api.listNamedPage(prefix, cursor));
+      if (Result.isFailure(listed)) {
+        yield* Effect.logWarning(`a bucket of sandboxes was not listed: ${listed.failure.message}`);
+        break;
+      }
+      found.push(...listed.success.sandboxes);
+      cursor = listed.success.next;
+      if (cursor === undefined) break;
+    }
+    return found;
+  });
+
+/** The stopped sandboxes of the bucket whose retention is not the bound. */
 const unboundIn = (api: VercelSandboxApi, bucket: string) =>
-  Effect.forEach(AGENT_SANDBOX_NAMES, (name) =>
-    Effect.result(api.listNamed(`${name}${bucket}`)).pipe(
-      Effect.flatMap((listed) =>
-        Result.isSuccess(listed)
-          ? Effect.succeed(listed.success)
-          : Effect.as(
-              Effect.logWarning(`a bucket of sandboxes was not listed: ${listed.failure.message}`),
-              [] as readonly ListedSandbox[],
-            ),
-      ),
-    ),
-  ).pipe(
+  Effect.forEach(AGENT_SANDBOX_NAMES, (name) => namedWith(api, `${name}${bucket}`)).pipe(
     Effect.map((pages) =>
       pages
         .flat()

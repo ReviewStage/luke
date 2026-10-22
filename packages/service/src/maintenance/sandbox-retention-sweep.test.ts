@@ -103,11 +103,15 @@ function vercel(
       assert.equal(parsed.searchParams.get("project"), PROJECT);
       const prefix = parsed.searchParams.get("namePrefix") ?? "";
       prefixes.push(prefix);
-      const page = sandboxes
+      const from = Number(parsed.searchParams.get("cursor") ?? "0");
+      const limit = Number(parsed.searchParams.get("limit"));
+      const matching = sandboxes
         .filter((each) => each.name.startsWith(prefix))
-        .toSorted((first, second) => first.name.localeCompare(second.name))
-        .slice(0, Number(parsed.searchParams.get("limit")));
+        .toSorted((first, second) => first.name.localeCompare(second.name));
+      const page = matching.slice(from, from + limit);
+      const next = from + limit < matching.length ? String(from + limit) : null;
       return Response.json({
+        pagination: { count: page.length, next },
         sandboxes: page.map(({ name, status, currentSnapshotId, keepLastSnapshots }) => ({
           name,
           status,
@@ -273,4 +277,27 @@ it.effect("every agent sandbox is bounded within the 256 minutes the buckets tak
       [...spread, native].map(({ name }) => name).toSorted(),
     );
   }),
+);
+
+it.effect(
+  "a bucket holding more than a page of sandboxes is read past its first page, so one listed after fifty bounded ones is still bounded",
+  () =>
+    Effect.gen(function* () {
+      vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+      const bounded = Array.from({ length: 50 }, (_, at) =>
+        sandbox(`eve-sbx-vercel-${BUCKET}${String(at).padStart(4, "0")}`, {
+          keepLastSnapshots: BOUND,
+        }),
+      );
+      const last = sandbox(`eve-sbx-vercel-${BUCKET}9999`);
+      const api = vercel([...bounded, last]);
+
+      const outcome = yield* sweepSandboxRetention(NOW).pipe(Effect.provide(api.layer));
+
+      assert.equal(outcome.applied, 1);
+      assert.deepEqual(
+        api.updated.map(({ name }) => name),
+        [last.name],
+      );
+    }),
 );
