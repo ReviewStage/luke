@@ -24,6 +24,7 @@ import {
   ERROR_STATE_PLACEMENT,
   ErrorState,
   ExpandIcon,
+  Fill,
   FoldingButton,
   HoverCard,
   HoverCardHead,
@@ -2282,11 +2283,11 @@ export function SidePanel({
         </FindScope>
       )}
       {listing ? (
-        <div ref={setActivitySlot} className="side-panel-content" />
+        <Fill ref={setActivitySlot} className="side-panel-content" />
       ) : tab === SIDE_PANEL_TAB.PLAN && plan !== undefined ? null : tab === undefined ? (
-        <div className="side-panel-content">
+        <Fill className="side-panel-content">
           {panel.closedTabs.length === 0 && !offersMore ? null : <NoTabs entries={offers} />}
-        </div>
+        </Fill>
       ) : (
         // The Board is drawn on a canvas, which keeps a find of its own, and
         // a page's words stand in a sandboxed frame no find of the window

@@ -12,6 +12,8 @@ import {
   EllipsisIcon,
   ERROR_STATE_PLACEMENT,
   ErrorState,
+  FILL_ELEMENT,
+  Fill,
   IconButton,
   InlineEdit,
   SpinnerRegion,
@@ -446,7 +448,7 @@ export function DesktopAgentPage({
   );
   if (agent === undefined) {
     return (
-      <section className="agent-page" aria-label="Agent">
+      <Fill as={FILL_ELEMENT.SECTION} className="agent-page" aria-label="Agent">
         {toolbar}
         {agents.listMissing ? (
           <NotFound thing={NOT_FOUND_THING.AGENT} />
@@ -457,7 +459,7 @@ export function DesktopAgentPage({
         ) : (
           <SpinnerRegion delay label="Loading agent" />
         )}
-      </section>
+      </Fill>
     );
   }
   return (
@@ -489,7 +491,8 @@ export function DesktopAgentPage({
                       data-panel-open={String(sidePanel.open)}
                     >
                       {/* Hidden rather than left out while the panel fills the window, as a plan's column is. */}
-                      <section
+                      <Fill
+                        as={FILL_ELEMENT.SECTION}
                         className="agent-page"
                         aria-label="Agent"
                         hidden={sidePanel.fullScreen}
@@ -518,7 +521,7 @@ export function DesktopAgentPage({
                             />
                           </CallNotice.Provider>
                         </FindScope>
-                      </section>
+                      </Fill>
                       {drawing.panel ? (
                         <SidePanel
                           {...drawing}

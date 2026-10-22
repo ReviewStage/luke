@@ -30,6 +30,7 @@ import {
   EmptyState,
   ERROR_STATE_PLACEMENT,
   ErrorState,
+  Fill,
   FoldingButton,
   LIST_VARIANT,
   List,
@@ -603,7 +604,7 @@ function ReadingPage({ onBack, room }: { onBack: () => void; room: ShellRoom }):
   useAppCommand(APP_COMMAND.EXIT_AUTOMATIONS, onBack);
   const runsPanel = useRunsPanel();
   return (
-    <div className="automations-view">
+    <Fill className="automations-view">
       <header className="desktop-toolbar">
         <div className="automation-toolbar">
           <div className="desktop-toolbar-heading automation-toolbar-reading">
@@ -633,7 +634,7 @@ function ReadingPage({ onBack, room }: { onBack: () => void; room: ShellRoom }):
           />
         )}
       </div>
-    </div>
+    </Fill>
   );
 }
 

@@ -16,6 +16,8 @@ import {
   EmptyState,
   ERROR_STATE_PLACEMENT,
   ErrorState,
+  FILL_ELEMENT,
+  Fill,
   FoldingButton,
   IconButton,
   LIST_ROW_ACTIONS,
@@ -568,11 +570,11 @@ function VersionPage({
             <Skeleton width="160px" />
           </div>
         </header>
-        <div className="desktop-document">
+        <Fill className="desktop-document">
           <DocumentScroll>
             <VersionSkeleton />
           </DocumentScroll>
-        </div>
+        </Fill>
       </>
     );
   }
@@ -583,7 +585,7 @@ function VersionPage({
       ) : (
         <header className="desktop-toolbar">{lead}</header>
       )}
-      <div className="desktop-empty-region">
+      <Fill className="desktop-empty-region">
         {list.kind === HISTORY_READ.FAILED ? (
           <ErrorState onRetry={versions.onRetry} placement={ERROR_STATE_PLACEMENT.CENTRED}>
             The history could not be read.
@@ -591,7 +593,7 @@ function VersionPage({
         ) : (
           <EmptyState>{NO_HISTORY_LINE}</EmptyState>
         )}
-      </div>
+      </Fill>
     </>
   );
 }
@@ -748,7 +750,7 @@ export function DesktopVersionHistory({
         <div className="version-log-track" data-opened={String(opened !== undefined)}>
           <div className="version-log-pane" inert={opened !== undefined}>
             <h1 className="version-log-title">Version history</h1>
-            <div className="sidebar-section">
+            <Fill className="sidebar-section">
               <ScrollArea ref={log} fade={SCROLL_FADE.BOTH}>
                 <div className="sidebar-section-body">
                   {list.kind === HISTORY_READ.READING ? <LogSkeleton /> : null}
@@ -798,9 +800,10 @@ export function DesktopVersionHistory({
                   ) : null}
                 </div>
               </ScrollArea>
-            </div>
+            </Fill>
           </div>
-          <section
+          <Fill
+            as={FILL_ELEMENT.SECTION}
             className="sidebar-section version-log-pane"
             aria-label="Sections changed"
             inert={opened === undefined}
@@ -836,7 +839,7 @@ export function DesktopVersionHistory({
                 )}
               </div>
             </ScrollArea>
-          </section>
+          </Fill>
         </div>
         <ColumnFoot />
         {/* Last, so the drag strip above the way back does not take the edge's top from it. */}

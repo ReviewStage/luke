@@ -6,6 +6,7 @@ import {
   type DialogConfirm,
   type DialogQuestion,
   ErrorState,
+  Fill,
   Skeleton,
   SkeletonRegion,
   Tooltip,
@@ -296,11 +297,11 @@ export function VersionView({
           </Tooltip>
         </div>
       </header>
-      <div className="desktop-document">
+      <Fill className="desktop-document">
         <DocumentScroll>
           <VersionContent viewing={viewing} title={title} section={section} task={task} />
         </DocumentScroll>
-      </div>
+      </Fill>
       <ConfirmDialog confirm={restore} question={restoreQuestion(line.lastEdit.at, noun)} />
     </>
   );

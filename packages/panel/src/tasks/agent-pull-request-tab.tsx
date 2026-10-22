@@ -56,6 +56,7 @@ import {
   DisclosureChevron,
   EmptyState,
   ErrorState,
+  Fill,
   IconButton,
   LIST_DENSITY,
   LIST_VARIANT,
@@ -2401,7 +2402,7 @@ function PullRequestTabBody({
     <ThreadWritesProvider value={{ agentId, onWritten: written }}>
       <ThreadJumpContext.Provider value={threadJumps.jumps}>
         <AnchorsContext.Provider value={anchors.open}>
-          <div
+          <Fill
             className="file-view pull-request-tab ph-no-capture"
             onScrollCapture={fold.onScrollCapture}
           >
@@ -2476,7 +2477,7 @@ function PullRequestTabBody({
                     />
                   ) : null}
                 </div>
-                <div
+                <Fill
                   className="pull-request-view"
                   role="tabpanel"
                   id={ids(PULL_REQUEST_VIEW.CONVERSATION).panel}
@@ -2491,8 +2492,8 @@ function PullRequestTabBody({
                     kept={kept}
                     landing={threadJumps.conversationLanding ?? anchors.landing}
                   />
-                </div>
-                <div
+                </Fill>
+                <Fill
                   className="pull-request-view"
                   role="tabpanel"
                   id={ids(PULL_REQUEST_VIEW.CHECKS).panel}
@@ -2510,8 +2511,8 @@ function PullRequestTabBody({
                       live={shown && view === PULL_REQUEST_VIEW.CHECKS}
                     />
                   </DetailPage>
-                </div>
-                <div
+                </Fill>
+                <Fill
                   className="pull-request-view"
                   role="tabpanel"
                   id={ids(PULL_REQUEST_VIEW.CHAPTERS).panel}
@@ -2535,10 +2536,10 @@ function PullRequestTabBody({
                       />
                     </Suspense>
                   ) : null}
-                </div>
+                </Fill>
               </>
             )}
-            <div
+            <Fill
               className="pull-request-view"
               role="tabpanel"
               id={ids(PULL_REQUEST_VIEW.FILES).panel}
@@ -2558,8 +2559,8 @@ function PullRequestTabBody({
                   reveal={threadJumps.filesReveal}
                 />
               </PendingSurfaceProvider>
-            </div>
-          </div>
+            </Fill>
+          </Fill>
         </AnchorsContext.Provider>
       </ThreadJumpContext.Provider>
     </ThreadWritesProvider>

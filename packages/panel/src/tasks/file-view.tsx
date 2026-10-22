@@ -4,6 +4,8 @@ import {
   ArrowLeftIcon,
   ArrowRightIcon,
   BreadcrumbBar,
+  FILL_FLOW,
+  Fill,
   IconButton,
   ProviderMark,
   SidePanelIcon,
@@ -660,7 +662,7 @@ export function FileView({
     onBrowse(path, newTab);
   };
   return (
-    <div className="file-view" {...tree.root}>
+    <Fill className="file-view" {...tree.root}>
       <FileViewBar
         history={history}
         lead={
@@ -690,7 +692,7 @@ export function FileView({
         }
         tree={browsing ? tree.toggles : undefined}
       />
-      <div className="file-view-body" {...tree.body}>
+      <Fill flow={FILL_FLOW.ROW} clip className="file-view-body" {...tree.body}>
         {/* Keyed by the file, then by the commit it is read at, so lines read
             at one commit are never laid beside another's. */}
         <Fragment key={file.path}>
@@ -717,7 +719,7 @@ export function FileView({
             edge={edge}
           />
         ) : null}
-      </div>
-    </div>
+      </Fill>
+    </Fill>
   );
 }

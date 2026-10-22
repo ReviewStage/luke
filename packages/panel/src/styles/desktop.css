@@ -365,10 +365,6 @@ body,
    column, standing the keyboard ring's reach past it on every side, its
    body padding that back, so a row's ring is whole at the area's edge. */
 .sidebar-section {
-  display: flex;
-  min-height: 0;
-  flex: 1;
-  flex-direction: column;
   margin: calc(-1 * var(--luke-focus-ring-reach));
 }
 
@@ -1692,14 +1688,6 @@ ul.actor-stack {
 
 /* Empty and waiting states ---------------------------------------------- */
 
-/* The room an empty or failed pane's state fills. */
-.desktop-empty-region {
-  display: flex;
-  min-height: 0;
-  flex: 1;
-  flex-direction: column;
-}
-
 /* A pane that scrolls a list lays its empty state out as a column the state
    fills, while it holds one. The Inbox's list is the body inside its
    `ScrollArea`, so it stands at least the area's height to give the state
@@ -1742,10 +1730,6 @@ ul.actor-stack {
    below), the room the summary's rail leaves it included. */
 .desktop-document {
   container: plan-document / inline-size;
-  display: flex;
-  min-height: 0;
-  flex: 1;
-  flex-direction: column;
 }
 
 /* Laid out still, but not drawn, while an agent's tab is the column's
@@ -1766,10 +1750,6 @@ ul.actor-stack {
 .desktop-inbox {
   --reading-room: calc((100% - var(--luke-page-measure)) / 2);
   position: relative;
-  display: flex;
-  min-height: 0;
-  flex: 1;
-  flex-direction: column;
 }
 
 .desktop-agent .conversation-log,
@@ -2600,14 +2580,6 @@ ul.actor-stack {
    attention tint, and under them what it is, the values it takes as chips,
    its default outlined; where the page is wide enough, the name and type
    stand in a column of their own beside the rest. */
-.integration-tool-detail {
-  display: flex;
-  min-width: 0;
-  min-height: 0;
-  flex: 1;
-  flex-direction: column;
-}
-
 .integration-tool-detail-head {
   display: flex;
   min-width: 0;
@@ -3815,16 +3787,6 @@ ul.actor-stack {
   white-space: nowrap;
 }
 
-/* One agent's page stands in the plan's place as the Inbox does: its toolbar
-   over the agent's tab, which fills the rest as it fills a plan's column. */
-.agent-page {
-  display: flex;
-  min-width: 0;
-  min-height: 0;
-  flex: 1;
-  flex-direction: column;
-}
-
 .inbox-view-items {
   display: flex;
   min-width: 0;
@@ -3922,14 +3884,6 @@ ul.actor-stack {
    its page. The list is a `CollectionPage` of each owner's automations in a
    Settings card, and an automation's page its toolbar over its setup (a
    `DetailPage`) and its Runs panel beside it. */
-.automations-view {
-  display: flex;
-  min-width: 0;
-  min-height: 0;
-  flex: 1;
-  flex-direction: column;
-}
-
 .automation-group + .automation-group {
   margin-top: var(--luke-space-24);
 }
@@ -4308,15 +4262,6 @@ ul.actor-stack {
    narrow room its runs, which stand one at a time the whole width, the other
    hidden (`hiddenColumns`). A wide room hides neither and draws no runs
    screen, its runs standing in their panel beside the setup. */
-.automation-editor-screen,
-.automation-runs-screen {
-  display: flex;
-  min-width: 0;
-  min-height: 0;
-  flex: 1;
-  flex-direction: column;
-}
-
 .automation-editor-screen[hidden],
 .automation-runs-screen[hidden] {
   display: none;
@@ -4376,15 +4321,6 @@ ul.actor-stack {
 /* The rail's places, inside the `ScrollArea` that scrolls them, on the Inbox list's insets. */
 .chat-rail-body {
   padding: var(--luke-space-8) var(--column-inset) var(--column-inset);
-}
-
-/* The task's own Chat tab fills its column as an agent's tab does, the
-   channel's head standing in for the column's bar. */
-.desktop-task-chat {
-  display: flex;
-  min-height: 0;
-  flex: 1;
-  flex-direction: column;
 }
 
 .chat-stream {
@@ -4838,14 +4774,6 @@ ul.actor-stack {
 /* A page standing in the plan's place finds as one scope (`PageFind`): it
    fills the place as the page did, and its bar stands under the page's
    toolbar, clear of the toolbar's own buttons. */
-.page-find {
-  display: flex;
-  min-width: 0;
-  min-height: 0;
-  flex: 1;
-  flex-direction: column;
-}
-
 .page-find > .find-bar {
   top: calc(var(--desktop-bar-height) + var(--luke-space-8));
 }
@@ -5165,14 +5093,6 @@ ul.actor-stack {
   --document-reserve: calc(280px + var(--sidebar-toggle-clearance) - var(--column-inset));
 }
 
-.desktop-task-main {
-  display: flex;
-  min-width: 0;
-  min-height: 0;
-  flex: 1;
-  flex-direction: column;
-}
-
 /* Hidden, not removed, while the panel fills the window: it keeps its layout
    beneath the panel, and is hidden only once the panel has grown over it. An
    agent's page and the window's Inbox beside their panel are hidden alike. */
@@ -5219,14 +5139,6 @@ ul.actor-stack {
   display: flex;
   min-height: 0;
   flex: 1;
-}
-
-.desktop-task-column {
-  display: flex;
-  min-width: 0;
-  min-height: 0;
-  flex: 1;
-  flex-direction: column;
 }
 
 /* Pinned, it stands as Cursor's does: no border and no fill of its own, on
@@ -5738,10 +5650,6 @@ ul.actor-stack {
      side-panel`, tasks.css), so one width lays out every tab narrow; it
      is the tab's find scope too, so it keeps that name (`.find-scope`). */
   container: side-panel find-scope / inline-size;
-  display: flex;
-  min-height: 0;
-  flex: 1;
-  flex-direction: column;
 }
 
 /* Every tab but the Board and a File tab keeps to a column centred in the
@@ -6337,15 +6245,6 @@ ul.actor-stack {
   margin-inline-start: var(--luke-icon-gap);
 }
 
-/* The page with no task open (`desktop-tasks.tsx`), which fills the column
-   for a new account's welcome (`desktop-welcome.tsx`). */
-.home {
-  display: flex;
-  min-height: 0;
-  flex: 1;
-  flex-direction: column;
-}
-
 /* New task's composer (`new-task-composer.tsx`) under the welcome's line,
    its head row and card as the dialog draws them. */
 .home-composer {
@@ -6517,10 +6416,6 @@ ul.actor-stack {
 /* A new account's welcome: Luke's face on a tile and a title, centred over
    New task's composer, the card as wide as the page's measure. */
 .home-welcome {
-  display: flex;
-  min-height: 0;
-  flex: 1;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: var(--luke-space-12);

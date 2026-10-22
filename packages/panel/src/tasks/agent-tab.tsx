@@ -27,6 +27,8 @@ import {
   DocumentIcon,
   ERROR_STATE_PLACEMENT,
   ErrorState,
+  FILL_ELEMENT,
+  Fill,
   INLINE_REF_LOOK,
   InlineRef,
   LineSummary,
@@ -2219,7 +2221,8 @@ function AgentTabView({
     [automationId, automationName, brief, run, tasked, openTarget, originStarter, steadyGitHub],
   );
   return (
-    <section
+    <Fill
+      as={FILL_ELEMENT.SECTION}
       ref={tab}
       className="agent-tab ph-no-capture"
       aria-label={agentTabLabel(agent, models)}
@@ -2332,7 +2335,7 @@ function AgentTabView({
       composer.sending ? null : (
         <ReplyToSelection scope={tab} onReply={(words) => replyDoor.current?.(words)} />
       )}
-    </section>
+    </Fill>
   );
 }
 
@@ -2382,7 +2385,7 @@ const NO_RETRY = () => undefined;
 export function StartingAgentTab({ line }: { line: SentLine }): React.JSX.Element {
   const messages = useMemo(() => agentLines([], [line]), [line]);
   return (
-    <section className="agent-tab ph-no-capture">
+    <Fill as={FILL_ELEMENT.SECTION} className="agent-tab ph-no-capture">
       <AgentTranscriptView
         messages={messages}
         brief={CODING_AGENT_BRIEF.PROMPT}
@@ -2396,7 +2399,7 @@ export function StartingAgentTab({ line }: { line: SentLine }): React.JSX.Elemen
       <footer className="agent-tab-foot">
         <ComposerSkeleton />
       </footer>
-    </section>
+    </Fill>
   );
 }
 
@@ -2749,7 +2752,11 @@ export function AgentSubagentTab({
     onHeld(callId, { ...held, subagentTitles: new Map() });
   }, [onHeld, callId, messages, pageStatus, runStartedAt, pageTitle]);
   return (
-    <section className="agent-tab ph-no-capture" aria-label={cardTitle(task)}>
+    <Fill
+      as={FILL_ELEMENT.SECTION}
+      className="agent-tab ph-no-capture"
+      aria-label={cardTitle(task)}
+    >
       <MacOwnerProvider value={macOwner}>
         <AgentPicturesProvider value={pictures}>
           <WholePartsProvider value={wholeParts}>
@@ -2771,6 +2778,6 @@ export function AgentSubagentTab({
           </WholePartsProvider>
         </AgentPicturesProvider>
       </MacOwnerProvider>
-    </section>
+    </Fill>
   );
 }

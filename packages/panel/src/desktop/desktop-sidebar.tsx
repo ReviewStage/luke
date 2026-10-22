@@ -22,6 +22,7 @@ import {
   dropBelowStart,
   EllipsisIcon,
   ErrorState,
+  Fill,
   FolderIcon,
   HoldPress,
   IconButton,
@@ -1883,7 +1884,7 @@ function SidebarColumn({
       {/* One scroller for both sections, so the pinned tasks scroll away
           with the rest rather than holding half the column; in a phone's
           drawer the pages' rows ride it too. */}
-      <div className="sidebar-section">
+      <Fill className="sidebar-section">
         <ScrollArea fade={SCROLL_FADE.BOTH}>
           <div className="sidebar-section-body">
             {narrow ? places : null}
@@ -2044,7 +2045,7 @@ function SidebarColumn({
             )}
           </div>
         </ScrollArea>
-      </div>
+      </Fill>
 
       <ColumnFoot docked={!sidebar.collapsed}>
         <SidebarFoot

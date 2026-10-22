@@ -8,7 +8,15 @@ import {
 import { type PageLine, type PagePlace, pagePlaceId } from "@luke/features/page-wire";
 import type { CodeLines, TasksPageSourceAnswer } from "@luke/features/tasks-view";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
-import { ERROR_STATE_PLACEMENT, ErrorState, IconButton, SpinnerRegion, Tooltip } from "@luke/ui";
+import {
+  ERROR_STATE_PLACEMENT,
+  ErrorState,
+  FILL_ELEMENT,
+  Fill,
+  IconButton,
+  SpinnerRegion,
+  Tooltip,
+} from "@luke/ui";
 import { useClipped } from "@luke/ui/use-clipped";
 import { Option, Schema } from "effect";
 import {
@@ -303,7 +311,7 @@ function PageSource({
     );
   }
   return (
-    <section className="file-tab" aria-label={`${title} source`}>
+    <Fill as={FILL_ELEMENT.SECTION} className="file-tab" aria-label={`${title} source`}>
       <WholeFile
         name={PAGE_SOURCE_NAME}
         text={text}
@@ -312,7 +320,7 @@ function PageSource({
         notes={NO_NOTES}
         findFrom={1}
       />
-    </section>
+    </Fill>
   );
 }
 
@@ -380,7 +388,7 @@ export function PagePane({
       active={findActive}
       subject={{ task: pagePlaceId(place), tab: { page: page.id } }}
     >
-      <div className="page-view file-view ph-no-capture">
+      <Fill className="page-view file-view ph-no-capture">
         <header className="file-view-bar">
           <Tooltip label={titleClipped ? page.title : undefined}>
             <span ref={titleBox} className="page-view-title" data-overflow={String(titleClipped)}>
@@ -452,7 +460,7 @@ export function PagePane({
             src={appPlatform().pageFrameUrl({ ...place, pageId: page.id, version })}
           />
         )}
-      </div>
+      </Fill>
     </FindScope>
   );
 }

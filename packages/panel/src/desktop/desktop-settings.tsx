@@ -14,6 +14,7 @@ import { APP_COMMAND, APP_SHORTCUTS } from "@luke/settings/shortcuts";
 import {
   BackIcon,
   commandKeyshortcuts,
+  Fill,
   FoldingButton,
   NAV_CURRENT,
   NavItem,
@@ -308,7 +309,7 @@ export function DesktopSettings({
           }}
         />
         <LinkWorkspaceProvider value={listed?.slug ?? listed?.id}>
-          <div className="sidebar-section">
+          <Fill className="sidebar-section">
             <ScrollArea fade={SCROLL_FADE.BOTH}>
               <div className="sidebar-section-body">
                 {search ? (
@@ -337,7 +338,7 @@ export function DesktopSettings({
                 )}
               </div>
             </ScrollArea>
-          </div>
+          </Fill>
         </LinkWorkspaceProvider>
         <ColumnFoot />
         {/* Last, so the drag strip above the way back does not take the edge's top from it. */}

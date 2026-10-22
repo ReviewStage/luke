@@ -1,6 +1,6 @@
 import { useAtomValue } from "@effect/atom-react";
 import type { TasksTreeAnswer } from "@luke/features/tasks-view";
-import { cssCustomProperties, IconButton, SearchField, Tooltip } from "@luke/ui";
+import { cssCustomProperties, Fill, IconButton, SearchField, Tooltip } from "@luke/ui";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { ListFilterIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -260,7 +260,7 @@ export function FileTreePane({
           {AsyncResult.isFailure(loaded) ? TREE_LOAD_FAILED : "Reading the files…"}
         </p>
       ) : (
-        <div className="file-tree-host" ref={host} />
+        <Fill className="file-tree-host" ref={host} />
       )}
     </aside>
   );

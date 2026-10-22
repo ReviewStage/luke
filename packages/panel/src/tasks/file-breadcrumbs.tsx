@@ -5,6 +5,7 @@ import {
   type BreadcrumbShown,
   Breadcrumbs,
   type Crumb,
+  Fill,
   MENU_DROP,
   MenuSurface,
 } from "@luke/ui";
@@ -199,7 +200,7 @@ function CrumbTree({
           {AsyncResult.isFailure(loaded) ? TREE_LOAD_FAILED : "Reading the files…"}
         </p>
       ) : (
-        <div className="file-tree-host" ref={host} />
+        <Fill className="file-tree-host" ref={host} />
       )}
     </MenuSurface>,
     document.body,

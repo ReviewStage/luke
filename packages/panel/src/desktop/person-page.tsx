@@ -9,6 +9,8 @@ import {
   Button,
   DetailPage,
   ErrorState,
+  FILL_ELEMENT,
+  Fill,
   IconButton,
   List,
   ListRow,
@@ -460,9 +462,9 @@ function PersonColumn({
   const unnamed = person.kind === ACTOR_KIND.SOMEONE && person.reason === SOMEONE_REASON.UNNAMED;
   if (unnamed && members !== undefined && former !== undefined) {
     return (
-      <section className="automations-view" aria-label={PROFILE}>
+      <Fill as={FILL_ELEMENT.SECTION} className="automations-view" aria-label={PROFILE}>
         <NotFound thing={NOT_FOUND_THING.PERSON} />
-      </section>
+      </Fill>
     );
   }
   // Note that someone nothing names yet is drawn as a placeholder, because only settled reads may say they are not in the workspace.
