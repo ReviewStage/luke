@@ -17,7 +17,7 @@ import { layContainersAt } from "../testing/container-width.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { playMotions } from "../testing/pane-motion.js";
 import { INBOX_COLUMNS, useInboxRowPresses } from "./inbox-columns.js";
-import { INBOX_SCOPES, InboxList } from "./inbox-list.js";
+import { InboxList } from "./inbox-list.js";
 import { INBOX_GROUPING, INBOX_HOLDER, type InboxListView } from "./inbox-model.js";
 
 /**
@@ -115,7 +115,6 @@ function mount(first: InboxListView) {
       head: {
         shown: true,
         show: { show: "all", onShow: () => undefined } as never,
-        scopes: INBOX_SCOPES.WINDOW,
         view: undefined,
       },
       note: null,
