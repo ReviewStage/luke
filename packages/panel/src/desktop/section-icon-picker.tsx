@@ -376,7 +376,7 @@ function standTabStop(event: React.FocusEvent<HTMLFieldSetElement>): void {
   const focused = event.target;
   if (!(focused instanceof HTMLButtonElement)) return;
   for (const stop of event.currentTarget.querySelectorAll<HTMLButtonElement>(
-    'button[tabindex="0"]',
+    'button:not([tabindex="-1"])',
   )) {
     stop.tabIndex = -1;
   }
@@ -441,7 +441,7 @@ export function SectionIconPicker({
   const toGrid = (event: React.KeyboardEvent<HTMLElement>) => {
     if (event.key !== "ArrowDown" || !(event.target instanceof HTMLInputElement)) return;
     event.preventDefault();
-    grid.current?.querySelector<HTMLButtonElement>('button[tabindex="0"]')?.focus();
+    grid.current?.querySelector<HTMLButtonElement>('button:not([tabindex="-1"])')?.focus();
   };
   return (
     <fieldset className="section-icon-picker" disabled={disabled}>
