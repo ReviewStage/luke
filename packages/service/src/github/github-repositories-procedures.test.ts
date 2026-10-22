@@ -322,22 +322,35 @@ const openAccounts = (github: FakeGitHub) =>
 
 const refusal = (status: number, error: string): Answer => ({ status, body: { error } });
 
-/** `acme/relay` keeping one skill, `release`, in `.agents/skills`, as GitHub answers its folder and its `SKILL.md`; nothing for any other read. */
+/** The `SKILL.md` of each skill `acme/relay` keeps in `.agents/skills`: `release`, and `review`, which the model alone loads. */
+const RELAY_SKILL_FILES = new Map([
+  ["release", "---\nname: release\ndescription: Cut a release.\n---\n# Release\n"],
+  [
+    "review",
+    "---\nname: review\ndescription: Review a change.\nuser-invocable: false\n---\n# Review\n",
+  ],
+]);
+
+/** `acme/relay`'s skills folder and each skill's `SKILL.md` as GitHub answers them; nothing for any other read. */
 function releaseSkillRead(sent: { readonly url: string }): Response | undefined {
-  const text = "---\nname: release\ndescription: Cut a release.\n---\n# Release\n";
   const path = new URL(sent.url).pathname;
   if (path === "/repos/acme/relay/git/trees/main%3A.agents%2Fskills") {
-    return Response.json({ tree: [{ path: "release", type: "tree" }], truncated: false });
-  }
-  if (path === "/repos/acme/relay/contents/.agents/skills/release/SKILL.md") {
     return Response.json({
-      type: "file",
-      size: text.length,
-      encoding: "base64",
-      content: Buffer.from(text).toString("base64"),
+      tree: [...RELAY_SKILL_FILES.keys()].map((name) => ({ path: name, type: "tree" })),
+      truncated: false,
     });
   }
-  return undefined;
+  const file = /^\/repos\/acme\/relay\/contents\/\.agents\/skills\/([a-z-]+)\/SKILL\.md$/u.exec(
+    path,
+  );
+  const text = file === null ? undefined : RELAY_SKILL_FILES.get(file[1] ?? "");
+  if (text === undefined) return undefined;
+  return Response.json({
+    type: "file",
+    size: text.length,
+    encoding: "base64",
+    content: Buffer.from(text).toString("base64"),
+  });
 }
 
 /** One repository's read answered, as the wire declares it, failing the test where it is not one. */
@@ -653,7 +666,7 @@ it.layer(getTestDB())("the repositories route", (it) => {
   );
 
   it.effect(
-    "the skills a member may choose are the repository's, then the workspace's installed ones, then their own, a name an earlier source holds left out, as are an installed skill turned off or the model's alone; with no repository named, the installed ones alone",
+    "the skills a member may choose are the repository's, then the workspace's installed ones, then their own, a name an earlier source holds left out, a repository skill the model alone loads holding its name too, as are an installed skill turned off or the model's alone; with no repository named, the installed ones alone",
     () =>
       Effect.gen(function* () {
         const github = githubReaching(
@@ -698,6 +711,7 @@ it.layer(getTestDB())("the repositories route", (it) => {
         };
         const mine: InstalledSkillOwner = { scope: INSTALLED_SKILL_SCOPE.PERSONAL };
         yield* install(shared, "release");
+        yield* install(shared, "review");
         yield* install(shared, "triage");
         yield* install(shared, "model-only", { userInvocable: false });
         yield* install(mine, "triage");
@@ -755,6 +769,11 @@ it.layer(getTestDB())("the repositories route", (it) => {
                 source: TASK_SKILL_SOURCE.WORKSPACE,
               },
               {
+                name: "review",
+                description: "Installed review.",
+                source: TASK_SKILL_SOURCE.WORKSPACE,
+              },
+              {
                 name: "triage",
                 description: "Installed triage.",
                 source: TASK_SKILL_SOURCE.WORKSPACE,
@@ -769,7 +788,7 @@ it.layer(getTestDB())("the repositories route", (it) => {
         });
         assert.deepEqual(
           "skills" in teammate ? teammate.skills.skills.map((skill) => skill.name) : teammate,
-          ["release", "triage"],
+          ["release", "review", "triage"],
         );
       }),
   );

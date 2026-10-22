@@ -58,10 +58,12 @@ const INSTALLED_ORDER = [TASK_SKILL_SOURCE.WORKSPACE, TASK_SKILL_SOURCE.PERSONAL
 /**
  * The installed skills a developer may choose beside the repository's: the
  * enabled ones a member may name, the workspace's and then their own, each
- * by name, any name an earlier one holds left out, as many as the list carries.
+ * by name, any name an earlier one or any repository skill holds left out,
+ * a model-only one included, as many as the list carries.
  */
 function mergedSkills(
   repository: readonly TaskSkill[],
+  reserved: ReadonlySet<string>,
   installed: readonly InstalledSkill[],
 ): readonly TaskSkill[] {
   const offered = installed
@@ -78,9 +80,11 @@ function mergedSkills(
       .filter((skill) => skill.source === source)
       .toSorted((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0)),
   );
-  const taken = new Set<string>();
-  const merged: TaskSkill[] = [];
-  for (const skill of [...repository, ...ordered]) {
+  // Note that a repository skill the model alone loads is not offered, but still holds its name, as the session's merge does.
+  const taken = new Set<string>(reserved);
+  const merged: TaskSkill[] = [...repository];
+  for (const skill of repository) taken.add(skill.name);
+  for (const skill of ordered) {
     if (taken.has(skill.name)) continue;
     taken.add(skill.name);
     merged.push(skill);
@@ -100,6 +104,7 @@ const readRepository = /* @__PURE__ */ Effect.fn("web/taskSkillsRead")(function*
   const skills = yield* readRepositorySkills(token, confirmed).pipe(markRefusedToken(access));
   return {
     branch: confirmed.defaultBranch,
+    reserved: new Set(skills.map((skill) => skill.name)),
     skills: skills
       .filter((skill) => skill.userInvocable)
       .map(
@@ -163,7 +168,7 @@ export function readWorkspaceSkills(
     if (repository === null && !installed) return refused(TASK_FILE_REFUSAL.NO_REPOSITORY);
     const read =
       repository === null
-        ? { branch: null, skills: [] }
+        ? { branch: null, reserved: new Set<string>(), skills: [] }
         : yield* readRepository(workspaceId, repository, member).pipe(
             Effect.catchTag("GitHubUnavailable", (failure) =>
               Effect.as(logGitHubReadFailure(failure), refused(TASK_FILE_REFUSAL.UNAVAILABLE)),
@@ -172,7 +177,11 @@ export function readWorkspaceSkills(
     if ("refusal" in read) return read;
     const offered = installed ? yield* listInstalledSkills(member, workspaceId) : [];
     return {
-      skills: { repository, branch: read.branch, skills: mergedSkills(read.skills, offered) },
+      skills: {
+        repository,
+        branch: read.branch,
+        skills: mergedSkills(read.skills, read.reserved, offered),
+      },
     } satisfies TaskSkillsAnswer;
   });
 }
