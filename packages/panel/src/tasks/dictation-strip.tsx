@@ -14,7 +14,6 @@ import {
 import { OPENAI_KEY_MISSING_NOTE } from "@luke/voice/microphone-access";
 import { CheckIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { Spinner } from "../spinner.js";
 import { usePrefersReducedMotion } from "../use-reduced-motion.js";
 import { frameLevel } from "../voice/voice-level-meter.js";
 import { DICTATION_PHASE, type DictationControl } from "./use-dictation.js";

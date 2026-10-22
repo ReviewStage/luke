@@ -45,14 +45,14 @@ import {
   SettingsSection,
   SettingsSectionsSkeleton,
   Shortcut,
+  SPINNER_SIZE,
+  SpinnerRing,
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
   TextButton,
   TrashIcon,
   useConfirmDialog,
-  SPINNER_SIZE,
-  SpinnerRing,
 } from "@luke/ui";
 import {
   namedServers,
@@ -77,7 +77,6 @@ import {
 } from "../integration-tool-list.js";
 import { useIntegrationTools } from "../integration-tools.js";
 import { focusSearchField, Highlighted } from "../search-field.js";
-import { SPINNER_SIZE, SpinnerRing } from "../spinner.js";
 import { MenuRow } from "./menu-row.js";
 
 /**

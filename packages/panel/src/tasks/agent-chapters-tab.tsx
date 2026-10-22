@@ -53,7 +53,6 @@ import {
 } from "lucide-react";
 import { type ReactNode, useId, useMemo, useRef, useState } from "react";
 import { PANE_EDGE, usePaneSlide } from "../desktop/pane-motion.js";
-import { SpinnerRegion } from "../spinner.js";
 import {
   AgentChangesTab,
   type ChangesReads,

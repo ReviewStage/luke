@@ -10,6 +10,7 @@ import type { DialogConfirm } from "@luke/ui";
 import {
   BackIcon,
   BUTTON_SIZE,
+  BusyLabel,
   commandKeyshortcuts,
   EllipsisIcon,
   EmptyState,
@@ -32,7 +33,6 @@ import {
   TextButton,
   Tooltip,
   useMenu,
-  BusyLabel,
 } from "@luke/ui";
 import { type Actor, actorName } from "@luke/ui/actor-model";
 import { DOCUMENT_REGION } from "@luke/ui/tasks-model";
@@ -46,7 +46,6 @@ import { FadingWords } from "../fading-words.js";
 import { FIND_PAGE, PageFind } from "../find-in-tab.js";
 import type { NavigationHistory } from "../navigation-history.js";
 import { hiddenColumns, SHELL_ROOM, type ShellRoom } from "../shell-room.js";
-import { BusyLabel } from "../spinner.js";
 import { centreWithin } from "../tasks/code-pane.js";
 import { DocumentScroll } from "../tasks/document-frame.js";
 import {

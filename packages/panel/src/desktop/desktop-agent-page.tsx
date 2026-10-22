@@ -14,9 +14,9 @@ import {
   ErrorState,
   IconButton,
   InlineEdit,
+  SpinnerRegion,
   Tooltip,
   useMenu,
-  SpinnerRegion,
 } from "@luke/ui";
 import { type StripTab, sameTab } from "@luke/ui/tab-strip-model";
 import { ACTION_RESULT_STATUS } from "@luke/wire";

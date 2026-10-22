@@ -52,7 +52,6 @@ import {
   type DiffSelection,
   FILE_NOTE_LINE,
 } from "../diff-view/contract.js";
-import { SpinnerRegion } from "../spinner.js";
 import {
   type ChangesList,
   FileHead,

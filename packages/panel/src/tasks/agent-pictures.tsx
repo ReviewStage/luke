@@ -20,8 +20,6 @@ import {
   TEXT_VARIANT,
   Text,
   Tooltip,
-  Spinner,
-  SPINNER_SIZE,
 } from "@luke/ui";
 import {
   PICTURE_STATE,
@@ -43,7 +41,6 @@ import {
 } from "react";
 import { useAct } from "../act.js";
 import { PictureBlock } from "../picture-block.js";
-import { SPINNER_SIZE, Spinner } from "../spinner.js";
 import { useAddToPlan } from "./add-to-plan.js";
 import { AttachedFileChips, messageFileChips } from "./attached-file-chips.js";
 import { AttachmentViewer, type ViewerAction } from "./attachment-viewer.js";

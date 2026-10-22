@@ -12,13 +12,11 @@ import {
   TEXT_ELEMENT,
   TEXT_VARIANT,
   Text,
-  Tooltip,
-  VisuallyHidden,
   ThinkingDots,
+  Tooltip,
   VisuallyHidden,
 } from "@luke/ui";
 import type { CallStatus } from "@luke/ui/tasks-model";
-import { ThinkingDots } from "../thinking-dots.js";
 
 /**
  * tasks-parts.tsx -- the open task's call bar, as a pure layout.
