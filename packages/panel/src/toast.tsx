@@ -54,6 +54,7 @@ import {
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
+  VisuallyHidden,
 } from "@luke/ui";
 import { visibleViewport } from "@luke/ui/visible-viewport";
 import { Clock, Duration, Effect } from "effect";
@@ -562,12 +563,12 @@ export function ToastHost(): React.JSX.Element {
           ))}
         </ol>
       </section>
-      <p className="visually-hidden" role="status">
+      <VisuallyHidden as="p" role="status">
         {newestSaying(shown, POLITE_TONES)}
-      </p>
-      <p className="visually-hidden" role="alert">
+      </VisuallyHidden>
+      <VisuallyHidden as="p" role="alert">
         {newestSaying(shown, ALERT_TONES)}
-      </p>
+      </VisuallyHidden>
     </>,
     document.body,
   );

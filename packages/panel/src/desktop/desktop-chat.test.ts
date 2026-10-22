@@ -616,7 +616,7 @@ test("a channel's composer offers the members a mention there tells under the ap
   assert.equal(
     [...page.querySelectorAll(".chat-message")]
       .at(-1)
-      ?.querySelector(".chat-byline .visually-hidden")?.textContent,
+      ?.querySelector(".chat-byline .luke-visually-hidden")?.textContent,
     "Dean Stratakos",
   );
   const last = [...page.querySelectorAll(".chat-message")].at(-1);

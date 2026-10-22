@@ -46,6 +46,9 @@ import {
   ErrorState,
   IconButton,
   ImageIcon,
+  TEXT_ELEMENT,
+  TEXT_VARIANT,
+  Text,
   TextArea,
   useFilePicker,
 } from "@luke/ui";
@@ -435,11 +438,17 @@ export function FeedbackDialog({
             >
               Include my name and email
             </Checkbox>
-            <span id={signatureId} className="feedback-dialog-identity">
+            <Text
+              as={TEXT_ELEMENT.SPAN}
+              variant={TEXT_VARIANT.INHERIT}
+              truncate
+              id={signatureId}
+              className="feedback-dialog-identity"
+            >
               {draft.signed
                 ? `Sending as ${[signature.name, signature.email].filter(Boolean).join(" · ")}`
                 : null}
-            </span>
+            </Text>
           </div>
         ) : null}
         {rejection === undefined ? null : <ErrorState>{rejection}</ErrorState>}

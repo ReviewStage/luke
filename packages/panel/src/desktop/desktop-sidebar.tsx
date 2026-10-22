@@ -40,6 +40,7 @@ import {
   UnpinIcon,
   useMenu,
   useTouchHold,
+  VisuallyHidden,
 } from "@luke/ui";
 import { actorName, creatorActor } from "@luke/ui/actor-model";
 import { forYou } from "@luke/ui/chat-model";
@@ -844,7 +845,7 @@ function RepositorySection({
           repository !== null && context.tasks.pinnedRepositories.includes(repository) ? (
             <span className="sidebar-repository-pinned">
               <PinIcon />
-              <span className="luke-visually-hidden">(pinned)</span>
+              <VisuallyHidden>(pinned)</VisuallyHidden>
             </span>
           ) : null
         }

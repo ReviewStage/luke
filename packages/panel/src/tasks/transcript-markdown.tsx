@@ -1,6 +1,6 @@
 import type { CodeLines, CodeToken } from "@luke/features/tasks-view";
 import { ACT_KIND, COLOURED_CODE_MAX_CHARS, FENCE_LANGUAGE_MAX_CHARS } from "@luke/host/acts";
-import { cssCustomProperties, IconButton } from "@luke/ui";
+import { cssCustomProperties, IconButton, TEXT_ELEMENT, TEXT_VARIANT, Text } from "@luke/ui";
 import { SUGGESTED_CHANGE_LANGUAGE } from "@luke/ui/github-html";
 import {
   type ComponentProps,
@@ -330,9 +330,14 @@ function TranscriptCodeBlock({ className, node }: ComponentProps<"code"> & Extra
         {suggesting ? (
           <span className="transcript-code-suggestion">{SUGGESTION.LABEL}</span>
         ) : (
-          <span className="transcript-code-language">
+          <Text
+            as={TEXT_ELEMENT.SPAN}
+            variant={TEXT_VARIANT.INHERIT}
+            truncate
+            className="transcript-code-language"
+          >
             {language === "" ? PLAIN_LANGUAGE : language}
-          </span>
+          </Text>
         )}
         <CopyCodeButton code={copied} />
       </div>

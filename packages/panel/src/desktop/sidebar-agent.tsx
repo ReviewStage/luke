@@ -12,6 +12,7 @@ import {
   UnarchiveIcon,
   UnpinIcon,
   useMenu,
+  VisuallyHidden,
 } from "@luke/ui";
 import { ACTOR_KIND, ACTOR_STATE, type Actor, teammateCreator } from "@luke/ui/actor-model";
 import { agentRow, taskRowName } from "@luke/ui/task-list-model";
@@ -261,7 +262,7 @@ export function SidebarAgent({
             ) : (
               <>
                 {name}
-                {isUnread ? <span className="luke-visually-hidden">(unread)</span> : null}
+                {isUnread ? <VisuallyHidden>(unread)</VisuallyHidden> : null}
               </>
             )
           }

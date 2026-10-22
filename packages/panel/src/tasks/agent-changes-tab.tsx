@@ -21,6 +21,9 @@ import {
   ErrorState,
   IconButton,
   TEXT_BUTTON_TONE,
+  TEXT_ELEMENT,
+  TEXT_VARIANT,
+  Text,
   TextButton,
 } from "@luke/ui";
 import {
@@ -255,13 +258,18 @@ function ViewedCount({
   return (
     <p className="files-viewed" aria-live="polite" data-complete={complete ? "" : undefined}>
       {complete ? <CheckIcon aria-hidden="true" /> : null}
-      <span className="files-viewed-words">
+      <Text
+        as={TEXT_ELEMENT.SPAN}
+        variant={TEXT_VARIANT.INHERIT}
+        truncate
+        className="files-viewed-words"
+      >
         {seen === undefined
           ? LIST_WORDS.filesOf(count)
           : complete
             ? LIST_WORDS.allViewed(count)
             : LIST_WORDS.viewedOf(seen, count)}
-      </span>
+      </Text>
     </p>
   );
 }

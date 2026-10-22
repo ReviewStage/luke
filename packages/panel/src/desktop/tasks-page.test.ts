@@ -417,7 +417,7 @@ test("find opened in the List is let go as the Board is chosen", async () => {
 test("a row's words said to a screen reader alone are left out of find, so a key searched is found once", async () => {
   const page = await mountPage();
   const press = rowOf(page, "ACME-44").querySelector("button");
-  const spoken = press?.querySelector(".visually-hidden");
+  const spoken = press?.querySelector(".luke-visually-hidden");
   assert.ok(spoken, "the key and status are said");
   assert.ok(spoken.hasAttribute("data-find-skip"), "find passes over them");
 });

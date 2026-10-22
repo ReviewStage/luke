@@ -1,5 +1,5 @@
 import { PULL_REQUEST_ACTION } from "@luke/features/pull-request-write-wire";
-import { BUTTON_VARIANT, Button } from "@luke/ui";
+import { BUTTON_VARIANT, Button, TEXT_ELEMENT, TEXT_VARIANT, Text } from "@luke/ui";
 import { useState } from "react";
 import { MarkdownField } from "./markdown-field.js";
 import {
@@ -64,7 +64,14 @@ export function PullRequestCommentBox({
       className="pull-request-section pull-request-comment-box"
       aria-label={COMMENT_WORDS.TITLE}
     >
-      <h3 className="pull-request-heading">{COMMENT_WORDS.TITLE}</h3>
+      <Text
+        as={TEXT_ELEMENT.H3}
+        variant={TEXT_VARIANT.INHERIT}
+        truncate
+        className="pull-request-heading"
+      >
+        {COMMENT_WORDS.TITLE}
+      </Text>
       <MarkdownField
         label={COMMENT_WORDS.FIELD}
         placeholder={COMMENT_WORDS.PLACEHOLDER}

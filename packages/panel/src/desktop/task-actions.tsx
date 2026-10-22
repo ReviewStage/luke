@@ -24,6 +24,7 @@ import {
   UnpinIcon,
   useConfirmDialog,
   useMenu,
+  VisuallyHidden,
 } from "@luke/ui";
 import {
   type Actor,
@@ -710,7 +711,7 @@ export function SidebarTask({
             ) : (
               <>
                 {task.name}
-                {unread ? <span className="visually-hidden">(unread)</span> : null}
+                {unread ? <VisuallyHidden>(unread)</VisuallyHidden> : null}
                 {worn === undefined ? null : worn.assigned ? (
                   <AssigneeHeard actor={worn.actor} />
                 ) : (
