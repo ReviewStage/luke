@@ -3,7 +3,7 @@ import { TASKS_PAGE } from "@luke/ui/tasks-model";
 import { InboxIcon, ListTodoIcon, MessagesSquareIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
-import type { TasksControl } from "../tasks/use-tasks-tab.js";
+import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
 import { SIDEBAR_OVERLAY, type SidebarCollapse } from "./sidebar-collapse.js";
 
 /**
@@ -25,7 +25,9 @@ export function mobileBarShown(room: ShellRoom, tasks: TasksControl, chatOn: boo
   if (chatView.open && chatOn) return chatView.listed;
   if (inboxView.open) return inboxView.listed || inboxView.chosen === undefined;
   if (agentView.agentId !== undefined || personView.userId !== undefined) return false;
-  if (boardView.open || automationsView.open) return true;
+  if (boardView.open) return true;
+  // Note that an automation's editor and its runs keep the whole screen, as an item does; only the list stands over the bar.
+  if (automationsView.open) return automationsView.place.kind === AUTOMATIONS_PAGE.LIST;
   return tasks.page === TASKS_PAGE.HOME;
 }
 
@@ -46,13 +48,9 @@ export function MobileBar({
   const inChat = chatView.open && chatOn;
   const inInbox = !inChat && inboxView.open;
   const inTasks = !inChat && !inInbox && boardView.open;
-  const openInbox = () => {
-    inboxView.onOpen();
-    inboxView.onListed(true);
-  };
   return (
     <nav className="mobile-bar" aria-label="Places">
-      <MobileBarItem icon={<InboxIcon />} current={inInbox} onPress={openInbox}>
+      <MobileBarItem icon={<InboxIcon />} current={inInbox} onPress={inboxView.onOpenList}>
         Inbox
       </MobileBarItem>
       <MobileBarItem icon={<ListTodoIcon />} current={inTasks} onPress={boardView.onOpen}>

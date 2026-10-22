@@ -193,6 +193,7 @@ async function inbox(options: {
           open: true,
           chosen,
           onOpen: () => undefined,
+          onOpenList: () => undefined,
           onClose: () => undefined,
           onChoose: setChosen,
           onOpenItem: () => undefined,

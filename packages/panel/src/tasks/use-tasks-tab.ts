@@ -274,6 +274,8 @@ interface InboxViewControl {
   /** The item chosen in it, none until one is, where the list's first stands in. */
   readonly chosen: InboxChoice | undefined;
   readonly onOpen: () => void;
+  /** Opens the Inbox on its list rather than the item last read, as a phone's places bar does; asked first where leaving would lose unsaved work. */
+  readonly onOpenList: () => void;
   readonly onClose: () => void;
   readonly onChoose: (chosen: InboxChoice) => void;
   /**
@@ -3504,6 +3506,22 @@ export function useTasksTab(input: {
                   workspaceId: listedWorkspaceId,
                 }),
                 listed: false,
+              },
+        );
+      }),
+      onOpenList: guard(() => {
+        setHistoryFor(undefined);
+        const remembered = lastInboxChoice.current;
+        setStandIn((held) =>
+          held?.kind === STAND_IN.INBOX
+            ? { ...held, listed: true }
+            : {
+                kind: STAND_IN.INBOX,
+                chosen: rememberedChoice(remembered, {
+                  account: input.account,
+                  workspaceId: listedWorkspaceId,
+                }),
+                listed: true,
               },
         );
       }),

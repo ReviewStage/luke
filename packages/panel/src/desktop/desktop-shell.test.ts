@@ -191,6 +191,7 @@ function mount(
         open: inboxOpen,
         chosen: undefined,
         onOpen: ignore,
+        onOpenList: () => undefined,
         onClose: ignore,
         onChoose: ignore,
         onOpenItem: () => undefined,
@@ -645,7 +646,7 @@ test("on a phone the Tasks page stands over a bar of the window's places, its ow
     inboxView: {
       ...tasksControl().inboxView,
       onOpen: () => asked.push("open"),
-      onListed: (listed) => asked.push(`listed ${listed}`),
+      onOpenList: () => asked.push("open on its list"),
     },
   });
   assert.deepEqual(
@@ -655,7 +656,7 @@ test("on a phone the Tasks page stands over a bar of the window's places, its ow
   assert.equal(barItem(page, "Tasks").getAttribute("aria-current"), "page");
   assert.equal(barItem(page, "Inbox").getAttribute("aria-current"), null);
   act(() => barItem(page, "Inbox").click());
-  assert.deepEqual(asked, ["open", "listed true"]);
+  assert.deepEqual(asked, ["open on its list"]);
 });
 
 test("on a phone the bar's More opens the sidebar's drawer, which holds every other place", async () => {
@@ -668,7 +669,7 @@ test("on a phone the bar's More opens the sidebar's drawer, which holds every ot
   assert.equal(toggled, 1);
 });
 
-test("the places bar stands only on a phone's lists: an open task, an Inbox item, and a wide window keep the whole screen", async () => {
+test("the places bar stands only on a phone's lists: an open task, an Inbox item, an automation's editor, and a wide window keep the whole screen", async () => {
   const onTask = await mountNarrow({ page: TASKS_PAGE.DOCUMENT });
   assert.deepEqual(barItems(onTask), [], "an open task keeps the screen");
   act(() => root?.unmount());
@@ -690,6 +691,17 @@ test("the places bar stands only on a phone's lists: an open task, an Inbox item
     inboxView: { ...tasksControl().inboxView, open: true, listed: true },
   });
   assert.equal(barItem(onList, "Inbox").getAttribute("aria-current"), "page");
+  act(() => root?.unmount());
+  document.body.innerHTML = "";
+
+  const editor = await mountNarrow({
+    automationsView: {
+      ...tasksControl().automationsView,
+      open: true,
+      place: { kind: AUTOMATIONS_PAGE.NEW },
+    },
+  });
+  assert.deepEqual(barItems(editor), [], "an automation's editor keeps the screen");
   act(() => root?.unmount());
   document.body.innerHTML = "";
 

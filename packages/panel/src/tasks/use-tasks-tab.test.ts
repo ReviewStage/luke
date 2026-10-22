@@ -1606,6 +1606,22 @@ test("an Inbox item chosen in one workspace gives way as another is listed, so m
   assert.equal(tab.shownInboxes.at(-1), null);
 });
 
+test("the Inbox opened on its list, as a phone's places bar opens it, stands its list over the item last chosen, from elsewhere and from the item alike", () => {
+  const tab = mount({ shown: true, tasks: TWO_WORKSPACES });
+
+  act(() => tab.control().inboxView.onOpen());
+  act(() => tab.control().inboxView.onChoose({ taskId: "notes", itemId: "notes-item-0" }));
+  act(() => tab.control().boardView.onOpen());
+  act(() => tab.control().inboxView.onOpenList());
+  assert.equal(tab.control().inboxView.open, true);
+  assert.equal(tab.control().inboxView.listed, true);
+  assert.deepEqual(tab.control().inboxView.chosen, { taskId: "notes", itemId: "notes-item-0" });
+
+  act(() => tab.control().inboxView.onListed(false));
+  act(() => tab.control().inboxView.onOpenList());
+  assert.equal(tab.control().inboxView.listed, true, "from the item it goes back to the list");
+});
+
 test("the Inbox opened again stands on the item last chosen in it, as a row's choice, and on none once another workspace is listed", () => {
   const tab = mount({ shown: true, tasks: TWO_WORKSPACES });
   const itemId = "5d1e2f3a-4b5c-4d6e-8f70-819203a4b5c6";
