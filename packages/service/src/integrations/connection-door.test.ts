@@ -250,7 +250,7 @@ it.layer(getTestDB())("the integrations' door", (it) => {
 
         const refusal = {
           status: "rejected",
-          error: integrationUnavailable(NOTION).NOT_CONNECTED,
+          error: `${integrationUnavailable(NOTION).NOT_CONNECTED} Luke cannot start a sign-in from here: ask the user to connect "${NOTION}" in Luke's Settings, then try again.`,
           connection: NOTION,
           requiresSignIn: true,
         };

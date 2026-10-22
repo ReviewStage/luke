@@ -93,7 +93,7 @@ const SearchInputSchema = Schema.Struct({
   offset: Schema.optionalKey(Schema.Number),
 });
 
-/** `connection_search` as eve declares it: its name, its words, and its input schema. */
+/** `connection_search` as eve declares it, its name, words, and input schema, but for `signIn`'s words: no sign-in starts here. */
 export const CONNECTION_SEARCH_TOOL = {
   name: CONNECTION_TOOL.SEARCH,
   description: [
@@ -101,10 +101,10 @@ export const CONNECTION_SEARCH_TOOL = {
     "Returns each matching tool's connection, name, description, and TypeScript signature.",
     "Omit `query` to list a connection's tools. Call a found tool with connection_execute.",
     "Connections the user has not signed in to are listed under `unavailable` with `requiresSignIn`;",
-    "when the request needs one, search it again with `connection` and `signIn: true` to ask the user to sign in.",
+    "Luke cannot start a sign-in: when the request needs one, ask the user to connect it in Luke's Settings, then search it again.",
     "Prefer connected services over web search or general knowledge when a request relates to them.",
   ].join(" "),
-  /** eve's own JSON Schema, as written: a model is shown these bytes. */
+  /** eve's own JSON Schema, `signIn`'s words aside: a model is shown these bytes. */
   inputSchema: {
     type: "object",
     properties: {
@@ -117,7 +117,7 @@ export const CONNECTION_SEARCH_TOOL = {
       signIn: {
         type: "boolean",
         description:
-          "Ask the user to sign in to `connection` first, then search it. Requires `connection`. Use only for a connection listed with `requiresSignIn` that the request needs.",
+          "Starts no sign-in: a connection the user has not connected is refused, and you ask the user to connect it in Luke's Settings. Requires `connection`.",
       },
       limit: {
         type: "integer",
@@ -261,6 +261,14 @@ function handedConnections(
   );
 }
 
+/** The refusal of a connection the member must connect: why, and plainly that the agent asks them to, since nothing here starts a sign-in. */
+function signInRefused(unavailable: UnavailableConnection): ConnectionRefusal {
+  return refused(
+    `${unavailable.error} Luke cannot start a sign-in from here: ask the user to connect "${unavailable.connection}" in Luke's Settings, then try again.`,
+    { connection: unavailable.connection, requiresSignIn: true },
+  );
+}
+
 /** The refusal of a connection the agent is not handed. */
 function notAvailable(name: string, handed: readonly HandedConnection[]): ConnectionRefusal {
   return refused(
@@ -394,7 +402,7 @@ export function runConnectionSearch(
     });
     const signIn = unavailable.find((each) => each.requiresSignIn === true);
     if (asked.signIn === true && signIn !== undefined) {
-      return refused(signIn.error, { connection: signIn.connection, requiresSignIn: true });
+      return signInRefused(signIn);
     }
     if (searched.length > 0 && terminal.length === searched.length) {
       return refused(terminal.map((each) => each.error).join("\n"));
@@ -497,10 +505,9 @@ export function runConnectionExecute(
     if (connection === undefined) return notAvailable(name, handed);
     const token = yield* connectionToken(admitted, connection);
     if (Result.isFailure(token)) {
-      return refused(token.failure.error, {
-        connection: name,
-        ...(token.failure.requiresSignIn ? { requiresSignIn: true as const } : {}),
-      });
+      return token.failure.requiresSignIn
+        ? signInRefused(token.failure)
+        : refused(token.failure.error, { connection: name });
     }
     const call = yield* Effect.result(
       callMcpTool(INTEGRATION[connection.provider].MCP_URL, token.success, toolName, toolInput),
