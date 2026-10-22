@@ -675,6 +675,8 @@ export const codingAgentSummarySchema = EffectSchema.Struct({
   title: EffectSchema.NullOr(EffectSchema.String),
   /** The human name the agent was given, which names it ahead of its title; absent for an agent from before names were given, and from a service before them. */
   personaName: EffectSchema.optionalKey(EffectSchema.String),
+  /** What kind of agent it is, said only of a member's operator, which the panel draws as Luke in a row of his own; absent for a coder, and from a service before operators. */
+  kind: EffectSchema.optionalKey(EffectSchema.Literals(Object.values(CODING_AGENT_KIND))),
   /** Epoch milliseconds the agent was started. */
   createdAt: countedNumber,
   status: EffectSchema.Literals(Object.values(CODING_AGENT_STATUS)),

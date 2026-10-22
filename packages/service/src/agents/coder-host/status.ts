@@ -17,6 +17,7 @@ import {
 import {
   CODING_AGENT_BRIEF,
   CODING_AGENT_FAILURE,
+  CODING_AGENT_KIND,
   CONTEXT_WINDOW,
   type CodingAgentArchivedBy,
   type CodingAgentFailure,
@@ -275,6 +276,8 @@ function summaryFields(
     ...(standing.runtime === undefined ? undefined : { runtime: standing.runtime }),
     title: agent.title,
     ...(agent.personaName === null ? undefined : { personaName: agent.personaName }),
+    // Note that only an operator says its kind, so a coder's summary is as it was.
+    ...(agent.kind === CODING_AGENT_KIND.OPERATOR ? { kind: agent.kind } : undefined),
     createdAt: agent.createdAt.getTime(),
     status: codingAgentStatusOf(standing.turn, {
       createdAt: agent.createdAt,

@@ -728,3 +728,28 @@ it.effect(
       }
     }),
 );
+
+it.effect(
+  "ensures the operator in a workspace with the reset as sent, and reads the experiment's 404 as not found",
+  () =>
+    Effect.gen(function* () {
+      const path = `PUT /api/workspaces/${WORKSPACE_ID}/operator`;
+      const api = fakeCloudApi({ [path]: { answer: () => ({ agentId: AGENT_ID, txid: "9103" }) } });
+      const refusing = fakeCloudApi({
+        [path]: { answer: () => ({ error: HOSTED_API_ERROR.NOT_FOUND }), status: 404 },
+      });
+
+      const ensured = yield* Effect.provide(
+        client().ensureOperator(WORKSPACE_ID, { reset: true }),
+        api.layer,
+      );
+      const refused = yield* Effect.provide(
+        client().ensureOperator(WORKSPACE_ID, {}),
+        refusing.layer,
+      );
+
+      assert.deepEqual(ensured, { agentId: AGENT_ID, txid: "9103" });
+      assert.deepEqual(JSON.parse(api.requests()[0]?.body ?? "{}"), { reset: true });
+      assert.deepEqual(refused, { failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND });
+    }),
+);

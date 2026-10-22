@@ -61,6 +61,7 @@ import {
   useAgentDraftDoors,
   useAgentTerminalDoors,
 } from "./agent-actions.js";
+import { isLuke, LUKE_NAME, useLukeOperator } from "./luke-operator.js";
 import { AgentPane } from "./main-tabs.js";
 import {
   COLUMN,
@@ -145,6 +146,7 @@ function AgentPageHeading({
   shown,
   terminals,
   onClose,
+  luke,
 }: {
   agent: CodingAgentSummary;
   agents: CodingAgentsControl;
@@ -152,18 +154,23 @@ function AgentPageHeading({
   terminals: Pick<AgentTerminalDoors, "onOpenTerminal">;
   /** Leaves the page, as Escape does, once the agent is deleted. */
   onClose: () => void;
+  /** Whether the agent is Luke, the account's operator, who is named Luke and is neither renamed, archived, nor deleted from here. */
+  luke: boolean;
 }): React.JSX.Element {
-  const label = agentTabLabel(agent, agents.models);
+  const label = luke ? LUKE_NAME : agentTabLabel(agent, agents.models);
   const actions = useAgentActions(agent, agents, { label, shown, terminals, onDeleted: onClose });
   const menu = useMenu(shown);
+  const doors = luke
+    ? { ...actions.doors, onRename: undefined, archive: undefined, deletion: undefined }
+    : actions.doors;
   const groups = contentActionGroups({
     chosen: true,
     onClose: undefined,
     onCloseOthers: undefined,
     pin: undefined,
-    ...actions.doors,
+    ...doors,
   });
-  const { rename } = actions;
+  const rename = luke ? undefined : actions.rename;
   return (
     <>
       <div className="desktop-toolbar-heading">
@@ -261,6 +268,8 @@ export function DesktopAgentPage({
     draftShown === undefined ? tasks.agentView.onClose : () => setDrafting(undefined),
   );
   const { act } = useAct();
+  // Luke's page is an agent's page in every way but his name and the actions he does not offer.
+  const operator = useLukeOperator({ accountId: tasks.me, workspaceId: tasks.workspace?.id });
   const views = useTabViews();
   const { sidePanel } = tasks;
   const drawing = useSidePanelDrawing(sidePanel);
@@ -285,6 +294,10 @@ export function DesktopAgentPage({
     me: tasks.me,
   });
   const agent = agents.agents?.[0] ?? agents.archived?.[0];
+  // Note that Luke is known by his kind, so one a Reset retired is still drawn as Luke, never as an agent to rename or delete.
+  const luke =
+    operator !== undefined &&
+    (operator.agentId === agentId || (agent !== undefined && isLuke(agent, operator)));
   useTaskAgentsFollow(tasks, agentId, agent);
   // Its Call names the agent's own task, or none, and an archived agent takes none.
   const calls = useAgentCallDoors(tasks.calls, {
@@ -426,6 +439,7 @@ export function DesktopAgentPage({
           shown={tasks.shown}
           terminals={terminalDoors}
           onClose={tasks.agentView.onClose}
+          luke={luke}
         />
       )}
     </header>
@@ -489,7 +503,7 @@ export function DesktopAgentPage({
                           <CallNotice.Provider value={notice}>
                             <AgentPane
                               call={calls}
-                              label={agentTabLabel(agent, control.models)}
+                              label={luke ? LUKE_NAME : agentTabLabel(agent, control.models)}
                               tabbed={false}
                               tab={paneTab}
                               agents={control}

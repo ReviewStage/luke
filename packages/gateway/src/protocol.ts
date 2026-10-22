@@ -214,6 +214,8 @@ export const GATEWAY_METHOD = {
   CODING_AGENTS_ARCHIVE: "codingAgents.archive",
   /** One agent pinned for the account alone, or unpinned; the agent as it then stands, or why it is unchanged. */
   CODING_AGENTS_PIN: "codingAgents.pin",
+  /** The account's operator in a workspace ensured, or reset and ensured afresh; its id, or why there is none. */
+  CODING_AGENTS_ENSURE_OPERATOR: "codingAgents.ensureOperator",
   /** One agent deleted for good, a turn it still runs stopped first; that it was, or why not. */
   CODING_AGENTS_DELETE: "codingAgents.delete",
   /** What one agent published: the branch it pushed and the pull request from it, as GitHub holds them now. */

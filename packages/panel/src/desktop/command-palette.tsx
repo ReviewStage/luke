@@ -85,6 +85,7 @@ import {
   TEXT_VARIANT,
   Text,
   UnpinIcon,
+  WingFace,
 } from "@luke/ui";
 import {
   ACTOR_KIND,
@@ -158,6 +159,7 @@ import {
 } from "../tasks/use-workspace-members.js";
 import { Tooltip } from "../tooltip.js";
 import { type AgentReadMarks, useAgentReadMarks } from "./agent-read-marks.js";
+import { LUKE_NAME, type LukeOperator, useLukeOperator, withoutLuke } from "./luke-operator.js";
 import { agentEntries, chatEntries, inboxEntries } from "./main-tabs.js";
 import { changesOffers, panelEntries } from "./side-panel.js";
 import { taskOf } from "./task-actions.js";
@@ -214,6 +216,9 @@ const KIND_ROWS = {
 
 /** The first row's value: rows are valued by their place in the list, from one. */
 const FIRST_ROW = "1";
+
+/** What the row that opens Luke says, as his chord's command names it. */
+const ASK_LUKE_LABEL = appCommandLabel(APP_COMMAND.ASK_LUKE);
 
 /** How far the read of the open task's files has come: asked, listed, or not listed and why. */
 const FILES_READ = {
@@ -874,6 +879,7 @@ function actionRows(run: (command: AppCommand) => void): readonly PaletteRow[] {
     (command) =>
       command !== APP_COMMAND.COMMAND_PALETTE &&
       command !== APP_COMMAND.COPY_LINK &&
+      command !== APP_COMMAND.ASK_LUKE &&
       appCommandOffered(command),
   ).map((command) => ({
     label: appCommandLabel(command),
@@ -1240,6 +1246,42 @@ function PaletteFooter({ typed }: { typed: boolean }): React.JSX.Element {
  * is something to run. A palette standing when that ends is taken down in
  * the render that finds it gone. It opens on All with nothing typed.
  */
+/** The window's tasks with Luke left out of the agents listed, since Ask Luke stands for him. */
+function withoutLukeIn(tasks: TasksControl, operator: LukeOperator | undefined): TasksControl {
+  if (operator === undefined) return tasks;
+  return {
+    ...tasks,
+    // Note that a Luke a Reset retired is left out too, since he is known by his kind and the row he stood in now opens his successor.
+    listedAgents: {
+      standing: withoutLuke(tasks.listedAgents.standing, operator),
+      archived: withoutLuke(tasks.listedAgents.archived, operator),
+    },
+  };
+}
+
+/**
+ * Ask Luke, the palette's first row while the account has Luke: it opens his
+ * page, or asks his ensure again where it failed, with his chord at its end.
+ */
+function askLukeRow(
+  operator: LukeOperator,
+  onTasks: (run: () => void) => void,
+  choose: (run: () => void) => void,
+  tasks: TasksControl,
+): PaletteRow {
+  const { agentId } = operator;
+  return {
+    icon: <WingFace />,
+    label: ASK_LUKE_LABEL,
+    command: APP_COMMAND.ASK_LUKE,
+    terms: [ASK_LUKE_LABEL, LUKE_NAME],
+    onChoose: () =>
+      agentId === undefined
+        ? choose(operator.retry)
+        : onTasks(() => tasks.agentView.onOpen(agentId)),
+  };
+}
+
 export function CommandPalette({
   available,
   tab,
@@ -1385,6 +1427,18 @@ export function CommandPalette({
   };
 
   const tokens = searchTokens(query);
+  // Luke leads the list as Ask Luke, so the rows that list agents leave him out.
+  const operator = useLukeOperator({
+    accountId: tasks.me,
+    workspaceId: tasks.signedIn ? tasks.workspace?.id : undefined,
+  });
+  const listedTasks = withoutLukeIn(tasks, operator);
+  const askLuke = operator === undefined ? undefined : askLukeRow(operator, onTasks, choose, tasks);
+  const askLukeShown =
+    open &&
+    askLuke !== undefined &&
+    (filter === PALETTE_FILTER.ALL || filter === PALETTE_FILTER.AGENTS) &&
+    (tokens.length === 0 || rowScore(askLuke, query, tokens) > 0);
   // The listed workspace's members, read once for it, name a teammate's task's creator by face.
   const membersRead = useWorkspaceMembersRead(tasks.workspace);
   const originOf = useTaskOrigin();
@@ -1445,7 +1499,7 @@ export function CommandPalette({
     [PALETTE_FILTER.TASKS]: () => [
       tasks.signedIn
         ? taskRows(
-            tasks,
+            listedTasks,
             members,
             (id) => onTasks(() => tasks.onSelect(id)),
             (id) => onTasks(() => tasks.agentView.onOpen(id)),
@@ -1475,9 +1529,9 @@ export function CommandPalette({
         ...actionRows((command) => choose(() => runAppCommand(command))),
         ...panelTabRows(tasks, onTasks),
         ...readMarkRows(tasks, reads, choose),
-        ...agentReadMarkRows(tasks, agentReads, choose),
+        ...agentReadMarkRows(listedTasks, agentReads, choose),
         ...taskPinRows(tasks, reads, choose),
-        ...agentPinRows(tasks, choose),
+        ...agentPinRows(listedTasks, choose),
       ],
     ],
     [PALETTE_FILTER.SETTINGS]: () => [
@@ -1517,7 +1571,7 @@ export function CommandPalette({
     [PALETTE_FILTER.SETTINGS]: () => undefined,
   } as const satisfies Record<PaletteKind, () => PaletteNotice | undefined>;
   const notice =
-    open && sections.length === 0
+    open && sections.length === 0 && !askLukeShown
       ? emptyNotice(
           filter,
           kinds.map((kind) => noticeOf[kind]()),
@@ -1528,7 +1582,8 @@ export function CommandPalette({
     filter === PALETTE_FILTER.FILES &&
     held?.read === FILES_READ.LISTED &&
     held.truncated;
-  let place = 0;
+  // Note that Ask Luke, where it stands, is the first row, so the first row chosen as the palette opens is his.
+  let place = askLukeShown ? 1 : 0;
 
   return (
     <Command.Dialog
@@ -1565,6 +1620,11 @@ export function CommandPalette({
           ) : (
             <NoticeLine notice={notice} />
           )}
+          {askLukeShown && askLuke !== undefined ? (
+            <Command.Group>
+              <PaletteItem row={askLuke} value={FIRST_ROW} query={query} tokens={tokens} />
+            </Command.Group>
+          ) : null}
           {sections.map((section) => (
             <Command.Group
               key={section.kind}

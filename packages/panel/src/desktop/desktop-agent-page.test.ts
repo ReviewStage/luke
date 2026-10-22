@@ -18,6 +18,7 @@ import {
   CHECK_SUMMARY,
   CODING_AGENT_ARCHIVER,
   CODING_AGENT_BRIEF,
+  CODING_AGENT_KIND,
   CODING_AGENT_SENDER,
   CODING_AGENT_STATUS,
   type CodingAgentPage,
@@ -34,8 +35,9 @@ import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import type { PortActResult } from "@luke/host/contract";
+import { EXPERIMENT } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
-import { appSettingsWire, settingsView } from "@luke/settings/testing";
+import { appSettingsWire, experimentsOn, settingsView } from "@luke/settings/testing";
 import { isMacTerminalTab, TAB_WORDS } from "@luke/ui/tab-strip-model";
 import { CALL_LABEL } from "@luke/ui/tasks-model";
 import { MESSAGE_ROLE } from "@luke/wire";
@@ -164,6 +166,8 @@ beforeAll(() => Effect.runPromise(markdownHtmlParserLanded));
 let openedOnGitHub: string[] = [];
 /** How the next reads of the agent's page answer, in order; the last stands for every read after it. */
 let pages: CodingAgentPageAnswerView[] = [];
+/** The operator an ensure answers, wherever the account has Luke on. */
+let ensured = AGENT_ID;
 /** Every agent whose page was read, in order. */
 let read: string[] = [];
 /** Whether a read of the agent's page is held open until the test answers it with `answerHeld`. */
@@ -208,6 +212,7 @@ beforeAll(() => Effect.runPromise(editorBundleLanded));
 
 beforeEach(() => {
   pages = [{ agent: PAGE }];
+  ensured = AGENT_ID;
   read = [];
   holdPage = false;
   answerHeld = () => undefined;
@@ -317,6 +322,10 @@ beforeEach(() => {
           agent: { ...PAGE, id: STARTED_ID, status: CODING_AGENT_STATUS.STARTING },
         };
         return Promise.resolve({ status: FAKE_ANSWER.DONE, value });
+      }
+      // Note that the page's agent is the account's operator, Luke, wherever the account has him on.
+      if (request.kind === ACT_KIND.CODING_AGENTS_ENSURE_OPERATOR) {
+        return Promise.resolve({ status: FAKE_ANSWER.DONE, value: { agentId: ensured } });
       }
       if (request.kind === ACT_KIND.CODING_AGENTS_WORKSPACE_LIST) {
         return Promise.resolve({ status: FAKE_ANSWER.DONE, value: { agents: workspace } });
@@ -1470,6 +1479,44 @@ test("the page's ⋯ offers what a task's agent's tab ⋯ does: Rename, Open ter
     "Archive agent",
     "Permanently delete",
   ]);
+});
+
+test("Luke's page is titled Luke, and its ⋯ offers neither Rename, Archive, nor Permanently delete", async () => {
+  handState(experimentsOn(EXPERIMENT.OPERATOR), {
+    run: { ...stateWith({}, {}).run, capabilities: DESKTOP_CAPABILITIES },
+  });
+  const page = mount(tasksControl({ workspace: ACME, workspaces: [ACME] }));
+  await settle();
+  const more = page.querySelector<HTMLButtonElement>('[aria-label="Agent actions"]');
+  assert.ok(more);
+  act(() => more.click());
+
+  assert.equal(page.querySelector("h1")?.textContent, "Luke");
+  assert.deepEqual(
+    [...document.querySelectorAll('[role="menuitem"]')].map((each) => each.textContent),
+    ["Open terminal⌘J", "Copy link", "Copy concise transcript", "Copy full transcript"],
+  );
+});
+
+test("a Luke a Reset retired is still known by his kind: titled Luke, offering neither Rename, Unarchive, nor Permanently delete", async () => {
+  pages = [{ agent: { ...PAGE, kind: CODING_AGENT_KIND.OPERATOR, archivedAt: 2 } }];
+  ensured = "0e9d8c7b-0000-4000-8000-0000000000ff";
+  handState(experimentsOn(EXPERIMENT.OPERATOR), {
+    run: { ...stateWith({}, {}).run, capabilities: DESKTOP_CAPABILITIES },
+  });
+  const page = mount(tasksControl({ workspace: ACME, workspaces: [ACME] }));
+  await settle();
+  const more = page.querySelector<HTMLButtonElement>('[aria-label="Agent actions"]');
+  assert.ok(more);
+  act(() => more.click());
+
+  assert.equal(page.querySelector("h1")?.textContent, "Luke");
+  const offered = [...document.querySelectorAll('[role="menuitem"]')].map(
+    (each) => each.textContent,
+  );
+  assert.ok(!offered.includes("Rename"));
+  assert.ok(!offered.includes("Unarchive"));
+  assert.ok(!offered.includes("Permanently delete"));
 });
 
 /** What a side panel is asked to show. */

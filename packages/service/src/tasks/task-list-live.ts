@@ -138,6 +138,7 @@ function agentsStatement(userId: string) {
           contextWindow: codingAgent.contextWindow,
           title: codingAgent.title,
           personaName: codingAgent.personaName,
+          kind: codingAgent.kind,
           brief: sql<string>`case when ${codingAgent.prompt} is not null then ${CODING_AGENT_BRIEF.PROMPT} when ${codingAgent.planSnapshot} is not null then ${CODING_AGENT_BRIEF.PLAN} else ${CODING_AGENT_BRIEF.BLANK} end`,
           repository: codingAgent.repository,
           starterId: codingAgent.userId,

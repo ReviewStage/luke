@@ -28,6 +28,8 @@ import {
   codingAgentMessagesAnswerViewSchema,
   codingAgentMessagesParamsSchema,
   codingAgentModelsAnswerSchema,
+  codingAgentOperatorEnsureAnswerViewSchema,
+  codingAgentOperatorEnsureParamsSchema,
   codingAgentOverviewChecksAnswerViewSchema,
   codingAgentOverviewConversationAnswerViewSchema,
   codingAgentOverviewPullRequestAnswerViewSchema,
@@ -162,6 +164,11 @@ export const agentActsContract = {
   [AGENT_ACT_KIND.CODING_AGENTS_PIN]: actProcedure("Could not pin the agent on this system.")
     .input(exactInput(codingAgentPinParamsSchema))
     .output(EffectSchema.flip(codingAgentAgentAnswerSchema)),
+  [AGENT_ACT_KIND.CODING_AGENTS_ENSURE_OPERATOR]: actProcedure(
+    "Could not reach Luke on this system.",
+  )
+    .input(exactInput(codingAgentOperatorEnsureParamsSchema))
+    .output(EffectSchema.flip(codingAgentOperatorEnsureAnswerViewSchema)),
   [AGENT_ACT_KIND.CODING_AGENTS_DELETE]: actProcedure("Could not delete the agent on this system.")
     .input(exactInput(codingAgentStopParamsSchema))
     .output(EffectSchema.flip(codingAgentDeleteAnswerViewSchema)),

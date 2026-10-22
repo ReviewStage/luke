@@ -127,6 +127,8 @@ export const AGENT_ACT_KIND = {
   CODING_AGENTS_STOP: "codingAgents.stop",
   CODING_AGENTS_ARCHIVE: "codingAgents.archive",
   CODING_AGENTS_PIN: "codingAgents.pin",
+  /** The account's operator in a workspace, Luke, ensured: the one standing, made where none stands, or, with a reset, a fresh one in place of it. */
+  CODING_AGENTS_ENSURE_OPERATOR: "codingAgents.ensureOperator",
   CODING_AGENTS_DELETE: "codingAgents.delete",
   /**
    * Which agent's tab the panel shows, or none, and which task's Inbox tab,

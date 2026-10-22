@@ -35,6 +35,7 @@ function labelsOf(template: MenuItemConstructorOptions[], menu: string): readonl
 describe("the menu bar's gate", () => {
   test("every item stands while every command does", () => {
     assert.deepEqual(labelsOf(appMenuTemplate("Luke"), "Go"), [
+      "Ask Luke",
       "Inbox",
       "Automations",
       "-",
@@ -50,7 +51,7 @@ describe("the menu bar's gate", () => {
     const withoutInbox = appMenuTemplate(
       "Luke",
       undefined,
-      (command) => command !== APP_COMMAND.INBOX,
+      (command) => command !== APP_COMMAND.INBOX && command !== APP_COMMAND.ASK_LUKE,
     );
     assert.deepEqual(labelsOf(withoutInbox, "Go"), [
       "Automations",
@@ -65,7 +66,10 @@ describe("the menu bar's gate", () => {
     const withoutPlaces = appMenuTemplate(
       "Luke",
       undefined,
-      (command) => command !== APP_COMMAND.INBOX && command !== APP_COMMAND.AUTOMATIONS,
+      (command) =>
+        command !== APP_COMMAND.ASK_LUKE &&
+        command !== APP_COMMAND.INBOX &&
+        command !== APP_COMMAND.AUTOMATIONS,
     );
     assert.deepEqual(labelsOf(withoutPlaces, "Go"), [
       "Back",
@@ -74,6 +78,17 @@ describe("the menu bar's gate", () => {
       "Next Recent Tab",
       "Previous Recent Tab",
     ]);
+  });
+});
+
+describe("the Ask Luke item", () => {
+  test("stands under Go only while the account has the operator on", () => {
+    const shownWith = (experiments: Parameters<typeof shortcutShown>[1]) =>
+      appMenuTemplate("Luke", undefined, (command) =>
+        shortcutShown(command, experiments, DESKTOP_CAPABILITIES),
+      );
+    assert.ok(!labelsOf(shownWith({}), "Go").includes("Ask Luke"));
+    assert.equal(labelsOf(shownWith(experimentsOn(EXPERIMENT.OPERATOR)), "Go")[0], "Ask Luke");
   });
 });
 

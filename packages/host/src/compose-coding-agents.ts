@@ -19,6 +19,7 @@ import {
   type CodingAgentListAnswer,
   type CodingAgentMessagesAnswerView,
   type CodingAgentModelsAnswer,
+  type CodingAgentOperatorEnsureAnswerView,
   type CodingAgentOverviewChecksAnswerView,
   type CodingAgentOverviewConversationAnswerView,
   type CodingAgentOverviewPullRequestAnswerView,
@@ -46,6 +47,7 @@ import {
   codingAgentListParamsSchema,
   codingAgentMessageParamsSchema,
   codingAgentMessagesParamsSchema,
+  codingAgentOperatorEnsureParamsSchema,
   codingAgentPageParamsSchema,
   codingAgentPartParamsSchema,
   codingAgentPictureParamsSchema,
@@ -178,6 +180,7 @@ export type CodingAgentClient = Pick<
   | "switchServers"
   | "archive"
   | "pin"
+  | "ensureOperator"
   | "stop"
   | "delete"
   | "agent"
@@ -728,6 +731,18 @@ function composed(
         const answer = yield* asked(client.pin(agentId, request));
         if ("txid" in answer) yield* listed(answer.txid);
         return carried<CodingAgentAgentAnswer>(answer);
+      }),
+    [GATEWAY_METHOD.CODING_AGENTS_ENSURE_OPERATOR]: (params) =>
+      Effect.gen(function* () {
+        const { workspaceId, ...request } = yield* read(
+          codingAgentOperatorEnsureParamsSchema,
+          params,
+          "ensuring the operator names its workspace",
+        );
+        const answer = yield* asked(client.ensureOperator(workspaceId, request));
+        // Note that a made operator is waited for on the list, so its row stands once the window hears its id.
+        if ("txid" in answer) yield* listed(answer.txid);
+        return carried<CodingAgentOperatorEnsureAnswerView>(answer);
       }),
     [GATEWAY_METHOD.CODING_AGENTS_STOP]: (params) =>
       Effect.gen(function* () {

@@ -118,6 +118,7 @@ import { useFailedRunsMark } from "./failed-runs.js";
 import { type FoldedGroups, useFoldedGroups } from "./folded-groups.js";
 import { type HoverPane, useHoverPane } from "./hover-pane.js";
 import { LukeIdentity } from "./luke-identity.js";
+import { isLuke, useLukeOperator, withoutLuke } from "./luke-operator.js";
 import { ADMIN_PLACE } from "./pages-on-demand.js";
 import { RowPlaced } from "./row-moves.js";
 import { SidebarAgent } from "./sidebar-agent.js";
@@ -125,6 +126,7 @@ import { SIDEBAR_WIDTH, type SidebarCollapse, sidebarInSight } from "./sidebar-c
 import { SidebarFoot } from "./sidebar-foot.js";
 import { type CountNoun, SidebarGroupHeader } from "./sidebar-group-header.js";
 import { SidebarInbox } from "./sidebar-inbox.js";
+import { SidebarLuke } from "./sidebar-luke.js";
 import { SidebarPinnedTab } from "./sidebar-pinned-tab.js";
 import {
   type DrawnSection,
@@ -1583,8 +1585,18 @@ function SidebarColumn({
     if (!onTasks) onTabChange(PANEL_TAB.TASKS);
     tasks.agentView.onOpen(agentId);
   };
+  // Luke stands in his own row at the list's head, so every other place leaves him out.
+  const operator = useLukeOperator({
+    accountId: tasks.me,
+    workspaceId: tasks.signedIn ? tasks.workspace?.id : undefined,
+  });
+  const lukeId = operator?.agentId;
   // The list is the chosen workspace's; the unread marks above read every task.
-  const { listed: listedRows, listedAgents } = tasks;
+  const { listed: listedRows } = tasks;
+  const listedAgents = {
+    standing: withoutLuke(tasks.listedAgents.standing, operator),
+    archived: tasks.listedAgents.archived,
+  };
   // Note that an archived task or agent, which the list no longer shows, counts for nothing here.
   const unlisted = listedRows.tasks.length === 0 && listedAgents.standing.length === 0;
   const pinned = tasks.listed.tasks.filter((task) => task.pinnedAt !== undefined);
@@ -1845,6 +1857,23 @@ function SidebarColumn({
         <ScrollArea fade={SCROLL_FADE.BOTH}>
           <div className="sidebar-section-body">
             {narrow ? places : null}
+            {operator === undefined ? null : (
+              <nav className="sidebar-group" aria-label="Luke">
+                <ul className="sidebar-tasks">
+                  <SidebarLuke
+                    operator={operator}
+                    agent={tasks.listedAgents.standing.find(
+                      (agent) =>
+                        agent.workspaceId === operator.workspaceId && isLuke(agent, operator),
+                    )}
+                    current={lukeId !== undefined && lukeId === agentShown}
+                    unread={lukeId !== undefined && context.unseenAgent(lukeId)}
+                    shown={tasks.shown && overlay.inSight}
+                    onOpen={chosen(openAgent)}
+                  />
+                </ul>
+              </nav>
+            )}
             {/* While the account keeps sections Pinned stands empty too, a place to drop the first pin, for a mouse: a finger, which drags no row, draws it only once it holds one. */}
             {tasks.signedIn && (pinnedSection.length > 0 || (sectionsShown && !coarse)) ? (
               <PinnedSection

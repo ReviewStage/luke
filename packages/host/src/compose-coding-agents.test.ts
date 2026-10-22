@@ -387,6 +387,11 @@ function fakeService() {
         asked.push(`pin:${agentId}:${String(request.pinned)}`);
         return pinTxid === undefined ? { agent: AGENT } : { agent: AGENT, txid: pinTxid };
       }),
+    ensureOperator: (workspaceId, request) =>
+      Effect.sync(() => {
+        asked.push(`ensureOperator:${workspaceId}:${String(request.reset === true)}`);
+        return { agentId: AGENT_ID, txid: "9103" };
+      }),
     agent: (agentId) =>
       Effect.sync(() => {
         asked.push(`page:${agentId}`);
@@ -804,6 +809,27 @@ it.effect(
         { agent: AGENT, txid: "9101" },
       );
       assert.deepEqual(waited, ["9101"]);
+    }),
+);
+
+it.effect(
+  "an ensure of the operator that made one waits for the task list to carry it before it answers",
+  () =>
+    Effect.gen(function* () {
+      const waited: (string | undefined)[] = [];
+      const { call, asked } = yield* subject({
+        listed: (txid) => Effect.sync(() => void waited.push(txid)),
+      });
+
+      assert.deepEqual(
+        yield* call(GATEWAY_METHOD.CODING_AGENTS_ENSURE_OPERATOR, {
+          workspaceId: "workspace-1",
+          reset: true,
+        }),
+        { agentId: AGENT_ID, txid: "9103" },
+      );
+      assert.deepEqual(waited, ["9103"]);
+      assert.ok(asked.includes("ensureOperator:workspace-1:true"));
     }),
 );
 
