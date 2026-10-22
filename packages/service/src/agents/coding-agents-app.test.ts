@@ -7699,7 +7699,7 @@ it.layer(getTestDB())("telling a chat message to the agents it addresses", (it) 
   );
 
   it.effect(
-    "a DM steers the other agent once as a chat-marked line of its own, a second while the first is unread is held, and one after it reads is told",
+    "a DM steers the other agent once as a chat-marked line of its own, and a second is steered too while the first is unread",
     () =>
       Effect.gen(function* () {
         const eve = fakeEve();
@@ -7778,12 +7778,8 @@ it.layer(getTestDB())("telling a chat message to the agents it addresses", (it) 
         assert.equal(again.repeated, true);
         assert.equal(eve.sent.length, 1);
 
-        const held = yield* chat.post(chat.first.member, "And the emails.", { channelId: dm.id });
-        assert.deepEqual(held.receipt.held, [chat.links.second]);
-        assert.equal(eve.sent.length, 1);
-        yield* unreadFor(chat.owner, chat.workspace, chat.second.member.id);
-        const told = yield* chat.post(chat.first.member, "Done now.", { channelId: dm.id });
-        assert.deepEqual(told.receipt.told, [chat.links.second]);
+        const second = yield* chat.post(chat.first.member, "And the emails.", { channelId: dm.id });
+        assert.deepEqual(second.receipt.told, [chat.links.second]);
         assert.equal(eve.sent.length, 2);
       }),
   );
@@ -7812,7 +7808,7 @@ it.layer(getTestDB())("telling a chat message to the agents it addresses", (it) 
   );
 
   it.effect(
-    "a person a message addresses is told through their account's read once, a second before they read is held, and the read carries who and where until they read past it, with none of its words",
+    "a person a message addresses is told through their account's read of each message, the newest standing, and the read carries who and where until they read past it, with none of its words",
     () =>
       Effect.gen(function* () {
         const chat = yield* openChat();
@@ -7834,7 +7830,7 @@ it.layer(getTestDB())("telling a chat message to the agents it addresses", (it) 
         const first = yield* say("Can I take the invite file too?");
         assert.deepEqual(first.receipt.told, [chat.links.person]);
         const second = yield* say("Or should I wait for #214?");
-        assert.deepEqual(second.receipt.held, [chat.links.person]);
+        assert.deepEqual(second.receipt.told, [chat.links.person]);
 
         const waiting = yield* accountInboxPast(chat.owner, before.cursor);
         assert.notEqual(waiting.cursor, before.cursor);
@@ -7847,14 +7843,14 @@ it.layer(getTestDB())("telling a chat message to the agents it addresses", (it) 
           })),
           [
             {
-              seq: first.message.seq,
+              seq: second.message.seq,
               reason: ACCOUNT_CHAT_REASON.DIRECT,
               from: chat.named.first.name,
               workspaceId: chat.workspace,
             },
           ],
         );
-        assert.ok(!JSON.stringify(waiting.chat).includes("invite file"));
+        assert.ok(!JSON.stringify(waiting.chat).includes("#214"));
 
         yield* readTo(
           chat.owner,
@@ -7898,6 +7894,23 @@ it.layer(getTestDB())("telling a chat message to the agents it addresses", (it) 
   );
 
   it.effect(
+    "a mention steers the agent it names straight away, even while an earlier notice is unread",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const chat = yield* openChat(eve);
+        const first = yield* chat.post(chat.person, `${chat.links.second} take the table.`);
+        assert.deepEqual(first.receipt.told, [chat.links.second]);
+        const second = yield* chat.post(chat.first.member, `${chat.links.second} and the emails.`);
+        assert.deepEqual(second.receipt.told, [chat.links.second]);
+        assert.deepEqual(
+          eve.sent.map((each) => each.sessionId),
+          [chat.second.sessionId, chat.second.sessionId],
+        );
+      }),
+  );
+
+  it.effect(
     "a thread reply tells the root's author and the earlier repliers, never its own author",
     () =>
       Effect.gen(function* () {
@@ -7911,11 +7924,11 @@ it.layer(getTestDB())("telling a chat message to the agents it addresses", (it) 
         });
         assert.deepEqual(
           [answer.receipt.told, answer.receipt.held],
-          [[], [chat.links.first, chat.links.person]],
+          [[chat.links.first], [chat.links.person]],
         );
         assert.deepEqual(
           eve.sent.map((each) => each.sessionId),
-          [chat.first.sessionId],
+          [chat.first.sessionId, chat.first.sessionId],
         );
       }),
   );
@@ -8013,8 +8026,36 @@ it.layer(getTestDB())("telling a chat message to the agents it addresses", (it) 
           { channelId: chat.channel.id },
           key,
         );
-        assert.deepEqual(again.receipt.held, [chat.links.second]);
+        // A mention is steered as it arrives, and the steer's key lands the repeat once.
+        assert.deepEqual(again.receipt.told, [chat.links.second]);
         assert.equal(eve.sent.length, 1);
+      }),
+  );
+
+  it.effect(
+    "a post sent again under its key after the agent read it steers nothing, since it is no news",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const chat = yield* openChat(eve);
+        const key = randomUUID();
+        // The first send landed and was never told, and the agent read it in the chat.
+        yield* postMessage(chat.owner, chat.workspace, {
+          authorMemberId: chat.first.member.id,
+          to: { channelId: chat.channel.id },
+          blocks: [{ type: CHAT_BLOCK.MARKDOWN, text: `${chat.links.second} the table is mine.` }],
+          subjects: chat.toSecond,
+          clientKey: key,
+        });
+        yield* unreadFor(chat.owner, chat.workspace, chat.second.member.id);
+        const retried = yield* chat.post(
+          chat.first.member,
+          `${chat.links.second} the table is mine.`,
+          { channelId: chat.channel.id },
+          key,
+        );
+        assert.deepEqual([retried.repeated, retried.receipt.held], [true, [chat.links.second]]);
+        assert.equal(eve.sent.length, 0);
       }),
   );
 
@@ -8323,8 +8364,10 @@ it.layer(getTestDB())("the coding agent's chat tools", (it) => {
         doors: HELD_DOORS,
       };
       const agents: ChatAgent[] = [];
+      const conversations: string[] = [];
       for (const at of [0, 1]) {
         const started = yield* startedAgent(opened.owner, opened.task.id, opened.ask);
+        conversations.push(started.target.conversationId);
         const sessionId = eve.opened[at]?.sessionId ?? "";
         assert.equal(
           yield* claimRuntimeSession(started.target, sessionId, yield* DateTime.nowAsDate),
@@ -8369,7 +8412,18 @@ it.layer(getTestDB())("the coding agent's chat tools", (it) => {
         first: (yield* memberNaming(yield* memberOf(first))).link,
         second: (yield* memberNaming(yield* memberOf(second))).link,
       };
-      return { ...opened, first, second, links, post, read, resolve, editChannel, memberOf };
+      return {
+        ...opened,
+        first,
+        second,
+        conversations,
+        links,
+        post,
+        read,
+        resolve,
+        editChannel,
+        memberOf,
+      };
     });
 
   it.effect(
@@ -9180,35 +9234,39 @@ it.layer(getTestDB())("the coding agent's chat tools", (it) => {
   );
 
   it.effect(
-    "a turn opens with the chat the agent has not read, once, leaving out the message a notice already told it, and with nothing once it has read",
+    "a turn opens with the chat the agent has not read, once, leaving out every message a notice already told it, and with nothing once it has read",
     () =>
       Effect.gen(function* () {
         const eve = fakeEve();
         const chat = yield* openAgents(eve);
         const { first: one, second: two } = chat.links;
-        assert.equal(yield* chatDigest(chat.second), undefined, "nothing waits yet");
+        const digest = () => chatDigest(chat.second, chat.conversations[1]);
+        assert.equal(yield* digest(), undefined, "nothing waits yet");
 
         const plain = yield* chat.post(chat.first, { text: "Starting on the emails." });
         const root = yield* chat.post(chat.first, QUEUE_ASK);
         const dm = yield* chat.post(chat.first, { text: `${two} is the table yours?` });
         assert.ok("seq" in plain && "seq" in root && "told" in dm);
         assert.deepEqual(dm.told, [two], "the mention is told as a notice");
+        const again = yield* chat.post(chat.first, { text: `${two} and the emails?` });
+        assert.ok("told" in again);
+        assert.deepEqual(again.told, [two], "a second mention is told while the first is unread");
         assert.equal(
-          yield* chatDigest(chat.second),
+          yield* digest(),
           [
             CHAT_DIGEST_HEADING,
             `m ${plain.seq} · ${one} in #teammate-invitations: Starting on the emails.`,
             `m ${root.seq} · ${one} in #teammate-invitations asks (${CHAT_ASK.CHOICE}): ${QUEUE_ASK.text}`,
           ].join("\n"),
         );
-        assert.equal(yield* chatDigest(chat.second), undefined, "a digest is a read");
+        assert.equal(yield* digest(), undefined, "a digest is a read");
 
         const long = "Every invitation carries its sender, its workspace, and its expiry. ".repeat(
           12,
         );
         const reply = yield* chat.post(chat.first, { text: long, replyTo: plain.seq });
         assert.ok("seq" in reply);
-        const cut = yield* chatDigest(chat.second);
+        const cut = yield* digest();
         assert.ok(cut !== undefined);
         assert.ok(
           cut.endsWith(`… (read_chat({ thread: ${plain.seq} }) reads the rest)`),
@@ -9222,7 +9280,7 @@ it.layer(getTestDB())("the coding agent's chat tools", (it) => {
         const read = yield* chat.read(chat.second);
         assert.ok("messages" in read);
         assert.equal(read.messages.length, 1);
-        assert.equal(yield* chatDigest(chat.second), undefined, "what a read took waits no more");
+        assert.equal(yield* digest(), undefined, "what a read took waits no more");
       }),
   );
 
@@ -11054,10 +11112,10 @@ it.layer(getTestDB())("a person's chat from the window", (it) => {
         const again = yield* chat.wrote(send);
         assert.ok("posted" in again);
         assert.equal(again.posted.id, sent.posted.id);
-        // Told again, the repeat finds the first notice still outstanding and steers nothing more.
+        // Told again, the repeat finds the first notice's line under its key and steers nothing more.
         assert.deepEqual(again.receipt, {
-          told: [],
-          held: [chat.agentLink],
+          told: [chat.agentLink],
+          held: [],
           left: [],
           unresolved: [],
         });

@@ -12,7 +12,7 @@ import {
   leave,
   markNoticed,
   postMessage,
-  releaseNotice,
+  readPast,
   roster,
   threadAuthors,
 } from "@luke/database/models/chat-store";
@@ -67,19 +67,17 @@ import { steerCodingAgent } from "./steer.js";
  * that the notice is minted for the receiving agent's starter, whoever
  * posted, because eve steers a running turn only with a message whose
  * principal is that turn's own (`coder-host/channel.ts`), and an agent's
- * turn runs as the member who started it. An agent
- * holds one notice at a time: another while it has not read past the first
- * is held, since the agent reads it with the rest when it next reads the
- * chat. An agent archived, on an archived plan, or whose starter has left
+ * turn runs as the member who started it. Every message that addresses
+ * an agent is steered into its session as it arrives, its key landing it
+ * once, unless the agent has already read past it. An agent archived, on an archived plan, or whose starter has left
  * the workspace, is said to have left and is steered nothing, though
  * nothing is stamped, since each can be undone: its session and transcript
  * are its starter's, and workspace chat reaches no one outside it; one whose session eve no longer runs has left for good and
  * is stamped so, and hears nothing more. A notice that could not be handed
- * over is let go, so the next one is told; one the deployment reaches no eve
- * for is held for the agent's next read. A post sent again under its key
- * is told again: the notice's key and the one outstanding notice keep that
- * from steering anyone twice, and it finishes a telling the first send did
- * not. A person is handed to a door of their own, told through their
+ * over, or that the deployment reaches no eve for, is held for the agent's
+ * next read. A post sent again under its key is told again: the notice's
+ * key keeps that from steering anyone twice, and it finishes a telling the
+ * first send did not. A person is handed to a door of their own, told through their
  * window's account-wide read (`tellPerson`). A notice names who said it by their mention link, and
  * hands the words as they were written, every link in them whole
  * (`chat-names.ts`). What each member came to is the
@@ -142,11 +140,10 @@ const hold = () => Effect.succeed(NOTICE_OUTCOME.HELD);
 export const HELD_DOORS: ChatNoticeDoors = { human: hold };
 
 /**
- * How a person is told: their member stamped with the message's place, one
- * at a time as an agent's notice is, which the account's held read carries
- * to every window they are signed in to and each announces once
- * (`chat-waiting.ts`); held where a notice already stands unread, which
- * they read with the rest, and where the stamp could not be made.
+ * How a person is told: their member stamped with the message's place,
+ * which the account's held read carries to every window they are signed in
+ * to and each announces once (`chat-waiting.ts`); held where the stamp
+ * could not be made, such as for a message told again.
  */
 function tellPerson(
   member: ChatMemberRow,
@@ -332,8 +329,7 @@ function toldBy(address: ChatAddress): readonly string[] {
 }
 
 /**
- * A coding agent told of a message, as the module's header says: held
- * where a notice is outstanding, left where it is archived, on an archived
+ * A coding agent told of a message, as the module's header says: left where it is archived, on an archived
  * plan, its starter gone from the workspace, or retired, the last stamped
  * for good, otherwise steered.
  */
@@ -348,7 +344,6 @@ function tellAgent(
 > {
   return Effect.gen(function* () {
     const { userId, organizationId } = telling;
-    const place = notice.message.touchedSeq;
     if (member.leftAt !== null) return NOTICE_OUTCOME.LEFT;
     const agent =
       member.agentId === null
@@ -360,15 +355,21 @@ function tellAgent(
       isWorkspaceMember(agent.value.userId, organizationId),
     );
     if (!starterStays) return NOTICE_OUTCOME.LEFT;
+    // A message the agent has read already, told again, is no news to it.
+    const read = yield* hostedStoreOrUnavailable(
+      readPast(
+        userId,
+        organizationId,
+        member.id,
+        notice.message.channelId,
+        notice.message.touchedSeq,
+      ),
+    );
+    if (read) return NOTICE_OUTCOME.HELD;
     // A deployment that reaches no eve steers nothing, so the agent reads the message when it next reads.
     const eve = telling.eveFor(agent.value.userId);
     if (eve === undefined) return NOTICE_OUTCOME.HELD;
-    // Note that who sent it is read before the notice is claimed, because a read that fails after the claim would hold the notice with nothing to release it.
     const sender = yield* senderOf(userId, notice.from, notice.fromName);
-    const claimed = yield* hostedStoreOrUnavailable(
-      markNoticed(userId, organizationId, member.id, notice.message.channelId, place),
-    );
-    if (!claimed) return NOTICE_OUTCOME.HELD;
     // Note that eve is the starter's, whose turn it steers, while the plan is read as the poster's, who may stay when the starter leaves.
     const steered = yield* steerCodingAgent(eve, telling.writer, userId, agent.value, {
       text: notice.text,
@@ -382,7 +383,6 @@ function tellAgent(
       },
     }).pipe(Effect.result);
     if (Result.isSuccess(steered)) return NOTICE_OUTCOME.TOLD;
-    yield* hostedStoreOrUnavailable(releaseNotice(userId, organizationId, member.id, place));
     if (steered.failure.error === HOSTED_REFUSAL.AGENT_RETIRED.error) {
       return yield* Effect.as(
         hostedStoreOrUnavailable(leave(userId, organizationId, member.id)),

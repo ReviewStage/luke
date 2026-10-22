@@ -1007,9 +1007,8 @@ function cursorIn(readerId: string, floor: Column | number, channelId: Column | 
 }
 
 /**
- * Stamps the notice told where none is outstanding: none stands, or the
- * member's cursor in its channel has passed it; and where the member has
- * not read the told channel past it already.
+ * Stamps the notice told where it is newer than any that stands, and
+ * where the member has not read the told channel past it already.
  */
 const claimNotice = SqlSchema.findAll({
   Request: Schema.Struct({ ...ReadKeySchema.fields, channelId: Schema.String, seq: Schema.Number }),
@@ -1025,13 +1024,30 @@ const claimNotice = SqlSchema.findAll({
             eq(chatMember.organizationId, key.organizationId),
             // A notice of something the member has read already is no notice at all.
             sql`${key.seq} > ${cursorIn(key.readerId, chatMember.readSeq, key.channelId)}`,
-            or(
-              isNull(chatMember.noticeSeq),
-              sql`${chatMember.noticeSeq} <= ${cursorIn(key.readerId, chatMember.readSeq, chatMember.noticeChannelId)}`,
-            ),
+            // Note that a newer message moves the notice on whether or not the last was read, and a message told again moves nothing.
+            or(isNull(chatMember.noticeSeq), lt(chatMember.noticeSeq, key.seq)),
           ),
         )
         .returning({ id: chatMember.id }),
+    ),
+});
+
+/** The member where its cursor in the channel has reached the place given. */
+const findReadPast = SqlSchema.findAll({
+  Request: Schema.Struct({ ...ReadKeySchema.fields, channelId: Schema.String, seq: Schema.Number }),
+  Result: Schema.Struct({ id: Schema.String }),
+  execute: (key) =>
+    Database.use((db) =>
+      db
+        .select({ id: chatMember.id })
+        .from(chatMember)
+        .where(
+          and(
+            eq(chatMember.id, key.readerId),
+            eq(chatMember.organizationId, key.organizationId),
+            sql`${key.seq} <= ${cursorIn(key.readerId, chatMember.readSeq, key.channelId)}`,
+          ),
+        ),
     ),
 });
 
@@ -2424,9 +2440,9 @@ export function history(
 
 /**
  * Stamps a notice told to a member of a message in the channel at the
- * place given, where none is outstanding: no notice stands, or its cursor
- * in that notice's channel has passed it. Answers whether this call stamped it, which a second before the
- * member reads does not.
+ * place given, where the member has not read past it and no notice at or
+ * past that place stands. Answers whether this call stamped it, which the
+ * same message told again does not.
  */
 export function markNoticed(
   userId: string,
@@ -2439,6 +2455,25 @@ export function markNoticed(
     if (!(yield* isWorkspaceMember(userId, organizationId))) return false;
     const claimed = yield* claimNotice({ readerId: memberId, organizationId, channelId, seq });
     return claimed.length > 0;
+  });
+}
+
+/**
+ * Whether a member has read the channel up to the place given, so a
+ * message there told again is no news to it; false where the account is
+ * not in the workspace.
+ */
+export function readPast(
+  userId: string,
+  organizationId: string,
+  memberId: string,
+  channelId: string,
+  seq: number,
+): ChatStoreEffect<boolean> {
+  return Effect.gen(function* () {
+    if (!(yield* isWorkspaceMember(userId, organizationId))) return false;
+    const rows = yield* findReadPast({ readerId: memberId, organizationId, channelId, seq });
+    return rows.length > 0;
   });
 }
 
@@ -3143,24 +3178,6 @@ const findThreadAuthors = SqlSchema.findAll({
     ),
 });
 
-/** Lets go of the notice stamped at the place given, where it still stands: one that could not be handed over is no notice outstanding. */
-const dropNotice = SqlSchema.void({
-  Request: Schema.Struct({ ...ReadKeySchema.fields, seq: Schema.Number }),
-  execute: (key) =>
-    Database.use((db) =>
-      db
-        .update(chatMember)
-        .set({ noticeSeq: null, noticeChannelId: null })
-        .where(
-          and(
-            eq(chatMember.id, key.readerId),
-            eq(chatMember.organizationId, key.organizationId),
-            eq(chatMember.noticeSeq, key.seq),
-          ),
-        ),
-    ),
-});
-
 /** The channel under its id in the workspace; nothing where the account is not in it or no such channel is. */
 export function channelOf(
   userId: string,
@@ -3188,19 +3205,6 @@ export function threadAuthors(
     if (!(yield* isWorkspaceMember(userId, organizationId))) return [];
     const rows = yield* findThreadAuthors({ organizationId, rootId, beforeSeq });
     return [...new Set(rows.map((row) => row.authorMemberId))];
-  });
-}
-
-/** Lets go of a notice stamped at the place given that could not be handed over, so the next one is told; nothing where another stands. */
-export function releaseNotice(
-  userId: string,
-  organizationId: string,
-  memberId: string,
-  seq: number,
-): ChatStoreEffect<void> {
-  return Effect.gen(function* () {
-    if (!(yield* isWorkspaceMember(userId, organizationId))) return;
-    yield* dropNotice({ readerId: memberId, organizationId, seq });
   });
 }
 
