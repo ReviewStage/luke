@@ -16,7 +16,10 @@ import { SpinnerRing } from "../spinner/spinner.js";
  * quiet one does. Two tinted looks carry news on a wash of their
  * colour rather than a fill: `working-tint` for an act something under way
  * offers (Restart, once a release is downloaded), and `danger-tint` for the
- * one a failure offers (Download, once installing it failed). Each is one control's height, corner, and glyph
+ * one a failure offers (Download, once installing it failed). `row` is an
+ * act standing as a row of a card's own, its words at the row's start and
+ * the row lit by the fill a menu's row is lit by, as a date picker's Clear
+ * is. Each is one control's height, corner, and glyph
  * in the profile it is drawn at, and owns its insides: it takes no class or
  * style, and its outer spacing is its container's. Its shape is square on
  * the control's corner, or `round`: a disc for a glyph alone, a pill for
@@ -94,6 +97,7 @@ export const BUTTON_VARIANT = {
   INK: "ink",
   WORKING_TINT: "working-tint",
   DANGER_TINT: "danger-tint",
+  ROW: "row",
 } as const;
 
 export type ButtonVariant = (typeof BUTTON_VARIANT)[keyof typeof BUTTON_VARIANT];
