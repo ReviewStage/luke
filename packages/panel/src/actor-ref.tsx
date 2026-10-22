@@ -37,6 +37,7 @@ import {
   ACTOR_STATE,
   type Actor,
   type ActorState,
+  type AssigneeFace,
   actorName,
   type GitHubActor,
   LUKE_ACTOR,
@@ -363,21 +364,29 @@ export function UnassignedHeard(): React.JSX.Element {
   return <VisuallyHidden>{`(${UNASSIGNED_WORDS.toLowerCase()})`}</VisuallyHidden>;
 }
 
-/**
- * What a screen reader hears of a teammate's task's creator, whose face the
- * row draws at its time: "(created by Charles Pan)". Note that a row says it
- * outside its time's slot, because the slot steps out while the row is
- * hovered or holds the keyboard.
- */
-export function CreatorHeard({ actor }: { actor: Actor }): React.JSX.Element {
-  const left = leftWithFace(actor) ? ", who left" : "";
-  return <VisuallyHidden>{`(created by ${actorName(actor)}${left})`}</VisuallyHidden>;
-}
-
 /** What a reader of the screen hears of a row's assignee, whose face says it on screen: their name, and that they left where they did. */
 export function AssigneeHeard({ actor }: { actor: Actor }): React.JSX.Element {
   const left = leftWithFace(actor) ? ", who left" : "";
   return <VisuallyHidden>{`(assigned to ${actorName(actor)}${left})`}</VisuallyHidden>;
+}
+
+/**
+ * The face a row wears at its end for who is on its task (`assigneeFace`):
+ * its assignee's, or the dashed unassigned mark, each with the words a
+ * screen reader hears of it.
+ */
+export function AssigneeFaceMark({ face }: { face: AssigneeFace }): React.JSX.Element {
+  return face.assignee === undefined ? (
+    <>
+      <UnassignedMark size={ACTOR_SIZE.MARK} decorative hint />
+      <UnassignedHeard />
+    </>
+  ) : (
+    <>
+      <ActorMark actor={face.assignee} size={ACTOR_SIZE.MARK} />
+      <AssigneeHeard actor={face.assignee} />
+    </>
+  );
 }
 
 /** The quiet badge the reader's own account wears beside its name. */

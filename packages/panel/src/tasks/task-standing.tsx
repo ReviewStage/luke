@@ -86,7 +86,7 @@ function priorityOf(id: string): TaskPriority | undefined {
 /** The row of the assignee's menu that assigns the task to no one, apart from every account's id. */
 export const NO_ASSIGNEE = "no-assignee";
 
-/** What the assignee's chip and its first row say of a task no one is assigned to, and what the Tasks page calls the tasks with none. */
+/** What the assignee's chip and its first row say of a task no one is assigned to, as its hover card does, and what the Tasks page calls the tasks with none. */
 export const NO_ASSIGNEE_WORDS = "No assignee";
 
 /**

@@ -21,9 +21,9 @@ import {
 import { ACTOR_KIND, actorName, SOMEONE_REASON } from "@luke/ui/actor-model";
 import { TASK_ORDER, taskTime } from "@luke/ui/task-list-model";
 import { repositoryPageUrl } from "@luke/ui/tasks-model";
-import { ACTOR_SIZE, ActorMark } from "../actor-ref.js";
+import { ACTOR_SIZE, ActorMark, UnassignedMark } from "../actor-ref.js";
 import { AttentionMark } from "../attention-mark.js";
-import { useCreator, useMemberDirectory } from "../member-directory.js";
+import { useCreator, useMemberDirectory, usePerson } from "../member-directory.js";
 import { useActorDoor } from "../person-door.js";
 import { RepositoryPicture } from "../repository-picture.js";
 import { GLYPH_STATE, StateGlyph } from "../state-glyph.js";
@@ -31,7 +31,12 @@ import { WorkspaceDirectory } from "../tasks/chip-cards.js";
 import { agentTabLabel, pullRequestNumberLabel } from "../tasks/coding-agent-model.js";
 import { PullRequestMark } from "../tasks/pull-request-mark.js";
 import { AgentGlyph, agentEndMark } from "../tasks/tab-look.js";
-import { TASK_PRIORITY_WORDS, TASK_STATUS_WORDS, TaskKey } from "../tasks/task-standing.js";
+import {
+  NO_ASSIGNEE_WORDS,
+  TASK_PRIORITY_WORDS,
+  TASK_STATUS_WORDS,
+  TaskKey,
+} from "../tasks/task-standing.js";
 import { useOpenLink } from "../tasks/use-open-link.js";
 import { useTaskMaker } from "../tasks/use-task-origin.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
@@ -376,7 +381,9 @@ export function TaskCard({
  * Where a task stands, as its card leads with it: its key in plain words, as
  * every place draws it (`TaskKey`), then its status and its priority, each a
  * small chip of its mark and its words; none it has not got, as a task from
- * a service before keys, statuses, or priorities.
+ * a service before keys, statuses, or priorities. Then who is on it, their
+ * face and name, or the dashed unassigned mark and No assignee, as the
+ * task's page's chip says it; the card only says, so it is no picker.
  */
 function TaskStanding({
   task,
@@ -386,7 +393,9 @@ function TaskStanding({
   workspaceName: string | undefined;
 }): React.JSX.Element | null {
   const keyed = task.number !== undefined && workspaceName !== undefined;
-  if (!keyed && task.status === undefined && task.priority === undefined) return null;
+  // Note that a task with nothing else to stand on and no one on it, as one from a service before keys, says nothing, rather than No assignee alone.
+  const bare = task.status === undefined && task.priority === undefined;
+  if (!keyed && bare && task.assignee === undefined) return null;
   return (
     <div className="task-card-standing">
       <TaskKey workspaceName={workspaceName} number={task.number} />
@@ -402,7 +411,23 @@ function TaskStanding({
           {TASK_PRIORITY_WORDS[task.priority]}
         </span>
       )}
+      <AssigneeChip assignee={task.assignee} />
     </div>
+  );
+}
+
+/** Who a task's card says is on it: the assignee's face and name, read against the members around the card, or the dashed unassigned mark and No assignee. */
+function AssigneeChip({ assignee }: { assignee: TaskSummary["assignee"] }): React.JSX.Element {
+  const person = usePerson(assignee);
+  return (
+    <span className="task-card-chip" data-task-card-assignee="">
+      {assignee === undefined ? (
+        <UnassignedMark size={ACTOR_SIZE.MARK} decorative />
+      ) : (
+        <ActorMark actor={person} size={ACTOR_SIZE.MARK} />
+      )}
+      {assignee === undefined ? NO_ASSIGNEE_WORDS : assignee.name}
+    </span>
   );
 }
 
