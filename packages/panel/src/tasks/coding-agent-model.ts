@@ -1,4 +1,5 @@
 import { recordedVideosOf } from "@luke/features/agent-pictures-model";
+import { harnessNameOf } from "@luke/features/agent-runtime-models";
 import {
   AGENT_TOOL,
   CLAUDE_CODE_TOOL,
@@ -540,6 +541,7 @@ export function chooseFailureNote(failure: CodingAgentCallFailure): string {
     case CODING_AGENT_CALL_FAILURE.AGENT_PLAN_UNREACHABLE:
     case CODING_AGENT_CALL_FAILURE.AGENT_PLAN_LIMIT_REACHED:
     case CODING_AGENT_CALL_FAILURE.AGENT_PLAN_INELIGIBLE:
+    case CODING_AGENT_CALL_FAILURE.AGENT_CREDENTIAL_MISSING:
       return MODEL_CHANGE_FAILED;
   }
 }
@@ -585,11 +587,41 @@ export function archiveWords(archived: boolean): {
   return archived ? ARCHIVED_WORDS : UNARCHIVED_WORDS;
 }
 
-/** A refused start or message as the view hears it: why, why the repository is out of reach where it is and the service said, and when a plan's reached limit resets where it is that and the provider said. */
+/** A refused start or message as the view hears it: why, why the repository is out of reach where it is and the service said, when a plan's reached limit resets where it is that and the provider said, and the provider whose credential is missing where it is that. */
 export interface RefusedCall {
   readonly failure: CodingAgentCallFailure;
   readonly unreached?: RepositoryUnreached | undefined;
   readonly resetsAt?: number | undefined;
+  readonly provider?: ModelProvider | undefined;
+}
+
+/** What a missing credential keeps the developer from: starting an agent, or messaging one. */
+const ACTION = { START: "start an agent", MESSAGE: "message this agent" } as const;
+
+/** What a model menu says beside a model whose provider no subscription or API key of the account's pays for, which it draws disabled. */
+export const MODEL_NOT_CONNECTED = "Not connected";
+
+/** What an agent Luke's key paid for says to a message, since it never moves to another payer. */
+export const LUKE_PAID_REFUSAL = "Luke's key no longer runs agents. Continue in a new one.";
+
+/** The one sentence a missing credential says: the harness to connect, by the provider the service named, and what it unblocks. */
+function credentialMissingWords(
+  provider: ModelProvider | undefined,
+  action: (typeof ACTION)[keyof typeof ACTION],
+): string {
+  const harness = provider === undefined ? "Claude Code or Codex" : harnessNameOf(provider);
+  return `Connect ${harness} in Settings to ${action}.`;
+}
+
+/** A missing credential's note, whose press opens Settings › Agents. */
+function credentialMissingFailure(
+  refused: RefusedCall,
+  action: (typeof ACTION)[keyof typeof ACTION],
+): Failure {
+  return {
+    reason: FAILURE_REASON.CONNECT_AGENTS,
+    text: credentialMissingWords(refused.provider, action),
+  };
 }
 
 /**
@@ -647,6 +679,9 @@ function planRefusalWords(
 export function startFailureNote(refused: RefusedCall, taskId: string | null): Failure {
   if (refused.failure === CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE) {
     return unreachedFailure(refused.unreached, taskId);
+  }
+  if (refused.failure === CODING_AGENT_CALL_FAILURE.AGENT_CREDENTIAL_MISSING) {
+    return credentialMissingFailure(refused, ACTION.START);
   }
   return callFailure(planRefusalWords(refused, undefined) ?? startFailureWords(refused.failure));
 }
@@ -765,6 +800,8 @@ function startFailureWords(failure: CodingAgentCallFailure): string {
     case CODING_AGENT_CALL_FAILURE.AGENT_PLAN_LIMIT_REACHED:
     case CODING_AGENT_CALL_FAILURE.AGENT_PLAN_INELIGIBLE:
       return SHARED_FAILURE_NOTE[failure];
+    case CODING_AGENT_CALL_FAILURE.AGENT_CREDENTIAL_MISSING:
+      return credentialMissingWords(undefined, ACTION.START);
   }
 }
 
@@ -779,6 +816,12 @@ export function messageFailureNote(
   }
   // Note that the box's note stands beside Continue in new agent, so it tells no one to continue.
   if (refused.failure === CODING_AGENT_CALL_FAILURE.AGENT_RETIRED) return callFailure(BOX_RETIRED);
+  // Note that an agent Luke's key paid for is refused whatever is connected now, so Settings mends nothing.
+  if (refused.failure === CODING_AGENT_CALL_FAILURE.AGENT_CREDENTIAL_MISSING) {
+    return payer === CODING_AGENT_PAYER.LUKE
+      ? callFailure(LUKE_PAID_REFUSAL)
+      : credentialMissingFailure(refused, ACTION.MESSAGE);
+  }
   return callFailure(planRefusalWords(refused, payer) ?? messageFailureWords(refused.failure));
 }
 
@@ -808,6 +851,8 @@ export function messageFailureWords(failure: CodingAgentCallFailure): string {
     case CODING_AGENT_CALL_FAILURE.AGENT_PLAN_LIMIT_REACHED:
     case CODING_AGENT_CALL_FAILURE.AGENT_PLAN_INELIGIBLE:
       return SHARED_FAILURE_NOTE[failure];
+    case CODING_AGENT_CALL_FAILURE.AGENT_CREDENTIAL_MISSING:
+      return credentialMissingWords(undefined, ACTION.MESSAGE);
   }
 }
 

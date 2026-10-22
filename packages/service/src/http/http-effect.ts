@@ -1,3 +1,4 @@
+import type { ModelProvider } from "@luke/features/models-wire";
 import type { RepositoryUnreached } from "@luke/features/repository-reach-wire";
 import { type Cause, Effect, type Layer, type Option, Stream } from "effect";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
@@ -48,6 +49,7 @@ export const HOSTED_REFUSAL_STATUS = {
   [HOSTED_API_ERROR.AGENT_PLAN_UNREACHABLE]: HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE,
   [HOSTED_API_ERROR.AGENT_PLAN_LIMIT_REACHED]: HOSTED_HTTP_STATUS.CONFLICT,
   [HOSTED_API_ERROR.AGENT_PLAN_INELIGIBLE]: HOSTED_HTTP_STATUS.CONFLICT,
+  [HOSTED_API_ERROR.AGENT_CREDENTIAL_MISSING]: HOSTED_HTTP_STATUS.CONFLICT,
   [HOSTED_API_ERROR.TASK_ARCHIVED]: HOSTED_HTTP_STATUS.CONFLICT,
   [HOSTED_API_ERROR.NOT_PERMITTED]: HOSTED_HTTP_STATUS.FORBIDDEN,
   [HOSTED_API_ERROR.ALREADY_INVITED]: HOSTED_HTTP_STATUS.CONFLICT,
@@ -63,6 +65,7 @@ export type HostedRefusal = {
   readonly unreached?: RepositoryUnreached;
   readonly upstreamStatus?: number;
   readonly resetsAt?: number;
+  readonly provider?: ModelProvider;
 };
 
 /**
@@ -123,6 +126,8 @@ export const HOSTED_REFUSAL = {
   AGENT_PLAN_LIMIT_REACHED: { error: HOSTED_API_ERROR.AGENT_PLAN_LIMIT_REACHED },
   /** The agent runs on its starter's plan, which its provider said is not eligible to run it; nothing was written, and nothing turned to another payer. */
   AGENT_PLAN_INELIGIBLE: { error: HOSTED_API_ERROR.AGENT_PLAN_INELIGIBLE },
+  /** The account keeps neither the model provider's subscription nor its API key, and Luke's key pays for no coding agent; nothing was written. */
+  AGENT_CREDENTIAL_MISSING: { error: HOSTED_API_ERROR.AGENT_CREDENTIAL_MISSING },
   /** The chat channel is archived, so it takes no post; nothing was written. Named for the task archive it once answered too, which no task has any more. */
   TASK_ARCHIVED: { error: HOSTED_API_ERROR.TASK_ARCHIVED },
   /** The account's role in the workspace does not allow this; nothing was written. */
@@ -140,6 +145,11 @@ export function planLimitReached(resetsAt: number | undefined): HostedRefusal {
   return resetsAt === undefined
     ? HOSTED_REFUSAL.AGENT_PLAN_LIMIT_REACHED
     : { ...HOSTED_REFUSAL.AGENT_PLAN_LIMIT_REACHED, resetsAt };
+}
+
+/** No credential of the account's pays for a coding agent on the provider's models, named so the words can say which to connect. */
+export function credentialMissing(provider: ModelProvider): HostedRefusal {
+  return { ...HOSTED_REFUSAL.AGENT_CREDENTIAL_MISSING, provider };
 }
 
 /** The repository out of reach, with why, so the desktop can offer what mends it. */

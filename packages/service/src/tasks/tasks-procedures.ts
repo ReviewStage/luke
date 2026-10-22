@@ -375,6 +375,7 @@ const startedAgentOn = (
         const agentRefusal = {
           error: refusal.error,
           ...(refusal.resetsAt === undefined ? undefined : { resetsAt: refusal.resetsAt }),
+          ...(refusal.provider === undefined ? undefined : { provider: refusal.provider }),
         };
         return { plan: task, agentRefusal } satisfies TaskStartAnswer;
       }),

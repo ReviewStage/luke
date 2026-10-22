@@ -33,6 +33,7 @@ import { TURN_ORIGIN } from "../../core.js";
 import { HOSTED_API_ERROR } from "../../http/http.js";
 import { HOSTED_REFUSAL } from "../../http/http-effect.js";
 import { modelCatalogOf } from "../../providers/model-catalog.js";
+import { connectAgentApiKeys } from "../../testing/agent-credentials.js";
 import {
   connectWorkspaceGitHub,
   githubReaching,
@@ -129,7 +130,9 @@ const OPUS = "anthropic/claude-opus-5.5";
 /** A workspace with its owner and a teammate, and a task of the owner's on no repository. */
 const openTeam = Effect.gen(function* () {
   const owner = yield* openGithubUser();
+  yield* connectAgentApiKeys(owner);
   const teammate = yield* openGithubUser();
+  yield* connectAgentApiKeys(teammate);
   const workspaceId = yield* openWorkspace(owner);
   yield* joinWorkspace(workspaceId, teammate);
   const task = yield* createTask(owner, { organizationId: workspaceId, name: "Invitations" });
@@ -371,6 +374,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
 
           // A Start from a cohort account with a setup-token decides Claude Code, and opens through the relay.
           const starter = yield* openGithubUser();
+          yield* connectAgentApiKeys(starter);
           const workspaceId = yield* openWorkspace(starter);
           const installation = INSTALLATIONS[installationsConnected++];
           assert.ok(installation);
@@ -522,6 +526,7 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
           const onClaudeCode = yield* agentOn(owner, taskId, "claude_code");
           const session = yield* nativeSessionOf(owner, onClaudeCode);
           const stranger = yield* openGithubUser();
+          yield* connectAgentApiKeys(stranger);
           const relay = yield* nativeRelayFake();
           yield* Effect.addFinalizer(() => Effect.promise(relay.dispose));
           const send = {

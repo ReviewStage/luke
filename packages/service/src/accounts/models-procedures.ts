@@ -17,7 +17,7 @@
 
 import { failureKind } from "@luke/runtime/effect";
 import { Effect } from "effect";
-import { accountFastOffer } from "../agents/coder-host/agent-runtime-choice.js";
+import { accountFastOffer, markedUnconnected } from "../agents/coder-host/agent-runtime-choice.js";
 import {
   HOSTED_REFUSAL,
   hostedStoreOrUnavailable,
@@ -46,7 +46,10 @@ export function modelsProcedures(seams: ModelsProcedureSeams) {
         Effect.mapError(() => HOSTED_REFUSAL.UNAVAILABLE),
       );
       const fastOffer = yield* hostedStoreOrUnavailable(accountFastOffer(context.userId));
-      return { models: offeredToAccount(models, fastOffer) };
+      const offered = offeredToAccount(models, fastOffer);
+      return {
+        models: yield* hostedStoreOrUnavailable(markedUnconnected(context.userId, offered)),
+      };
     }),
   };
 }

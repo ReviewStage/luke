@@ -62,6 +62,7 @@ import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import { HOSTED_REFUSAL } from "../http/http-effect.js";
 import { hostedFetch } from "../orpc/handler.js";
 import type { WebServices } from "../runtime.js";
+import { connectAgentApiKeys } from "../testing/agent-credentials.js";
 import { announcingClock, driven } from "../testing/clock-driven.js";
 import {
   connectWorkspaceGitHub,
@@ -126,6 +127,7 @@ const openAccount = (name: string, chat = true) =>
     const id = `user-${randomUUID()}`;
     yield* db.insert(user).values({ id, name, email: `${id}@luke.test` });
     if (chat) yield* chooseChat(id, true);
+    yield* connectAgentApiKeys(id);
     return id;
   });
 
@@ -657,6 +659,7 @@ it.layer(getTestDB())("a person's chat post told to an agent through eve", (it) 
     () =>
       Effect.gen(function* () {
         const owner = yield* openGithubUser();
+        yield* connectAgentApiKeys(owner);
         yield* chooseChat(owner, true);
         const task = yield* startTask(owner, { name: "Invites", repository: RELAY_FULL_NAME });
         const workspace = task.workspaceId;

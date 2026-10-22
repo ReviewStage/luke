@@ -42,6 +42,7 @@ import type { StoreWriter } from "@luke/database/models/writer";
 import type { StoredArchive } from "@luke/database/schemas/coding-agent";
 import { START_NOTE_HEADING } from "@luke/features/agent-replay";
 import {
+  harnessNameOf,
   runtimeChoiceRefusal,
   runtimeChoiceRefusalWords,
   runtimeModels,
@@ -398,6 +399,8 @@ export const START_CODING_AGENT_REFUSAL = {
     "Not started: the plan that would pay for it has reached its usage limit; start it after the limit resets, or its starter chooses the API key in Settings.",
   PLAN_INELIGIBLE:
     "Not started: the plan's provider said the account is not eligible to run it; its starter chooses the API key in Settings.",
+  CREDENTIAL_MISSING:
+    "Not started: no subscription or API key of its starter's pays for that model, and Luke's key pays for no coding agent; its starter connects one in Settings › Agents, or start it on a model whose provider is connected.",
   NO_SOURCE:
     "Not started: no coding agent of your workspace has that id to start from; " +
     `${AGENT_TOOL.LIST_AGENTS} names them.`,
@@ -444,6 +447,7 @@ const START_REFUSAL_WORDS: ReadonlyMap<string, string> = new Map([
   [HOSTED_API_ERROR.AGENT_PLAN_UNREACHABLE, START_CODING_AGENT_REFUSAL.PLAN_UNREACHABLE],
   [HOSTED_API_ERROR.AGENT_PLAN_LIMIT_REACHED, START_CODING_AGENT_REFUSAL.PLAN_LIMIT_REACHED],
   [HOSTED_API_ERROR.AGENT_PLAN_INELIGIBLE, START_CODING_AGENT_REFUSAL.PLAN_INELIGIBLE],
+  [HOSTED_API_ERROR.AGENT_CREDENTIAL_MISSING, START_CODING_AGENT_REFUSAL.CREDENTIAL_MISSING],
 ]);
 
 /** Who calls an agent tool: Luke on a call, or a coding agent from its own session. */
@@ -1244,8 +1248,11 @@ function stewardRefused(
   return stewardRefusal(caller.kind === AGENT_CALLER.AGENT ? caller.agent : undefined, agent, act);
 }
 
-/** A refusal's words, with when a plan's reached limit resets where the provider said. */
+/** A refusal's words, with when a plan's reached limit resets where the provider said, and which harness to connect where a credential is missing. */
 function withReset(words: string, refusal: HostedRefusal): string {
+  if (refusal.provider !== undefined) {
+    return `${words} The model's provider is connected as ${harnessNameOf(refusal.provider)}.`;
+  }
   return refusal.resetsAt === undefined
     ? words
     : `${words} It resets at ${new Date(refusal.resetsAt).toISOString()}.`;
