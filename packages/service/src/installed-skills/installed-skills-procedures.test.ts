@@ -642,16 +642,18 @@ it.layer(getTestDB())("the installed skills routes", (it) => {
   );
 
   it.effect(
-    "a workspace skill is installed and managed by owners and admins, read by members, refused in a personal workspace, and hidden from strangers",
+    "any member installs a workspace skill, which its installer and the owners and admins manage, every member reads, a personal workspace refuses, and strangers never see",
     () =>
       Effect.gen(function* () {
         const owner = yield* openGithubUser();
         const admin = yield* openGithubUser();
         const member = yield* openGithubUser();
+        const peer = yield* openGithubUser();
         const stranger = yield* openGithubUser();
         const workspace = yield* openWorkspace(owner);
         yield* joinWorkspace(workspace, admin, WORKSPACE_ROLE.ADMIN);
         yield* joinWorkspace(workspace, member, WORKSPACE_ROLE.MEMBER);
+        yield* joinWorkspace(workspace, peer, WORKSPACE_ROLE.MEMBER);
         const personal = yield* openWorkspace(owner);
         yield* Database.use((db) =>
           db
@@ -669,27 +671,30 @@ it.layer(getTestDB())("the installed skills routes", (it) => {
               text: skillFile(name, "Shared with everyone."),
             }),
           );
+        const installedBy = (by: string, name: string) =>
+          Effect.map(shared(by, workspace, name), (answer) => {
+            const [made] = readAnswer(installedSkillInstallAnswerSchema, 201, answer).skills;
+            assert.ok(made);
+            return made;
+          });
 
         assert.equal(
           (yield* shared(owner, personal, "mine")).status,
           HOSTED_HTTP_STATUS.BAD_REQUEST,
         );
         assert.equal(
-          (yield* shared(member, workspace, "nope")).status,
-          HOSTED_HTTP_STATUS.FORBIDDEN,
-        );
-        assert.equal(
           (yield* shared(stranger, workspace, "nope")).status,
           HOSTED_HTTP_STATUS.NOT_FOUND,
         );
-        const [skill] = readAnswer(
-          installedSkillInstallAnswerSchema,
-          201,
-          yield* shared(admin, workspace, "team-style"),
-        ).skills;
-        assert.ok(skill);
-        assert.equal(skill.workspaceId, workspace);
-        assert.equal(skill.installedBy, admin);
+        const team = yield* installedBy(admin, "team-style");
+        const notes = yield* installedBy(member, "member-notes");
+        assert.deepEqual(
+          [team, notes].map(({ workspaceId, installedBy }) => ({ workspaceId, installedBy })),
+          [
+            { workspaceId: workspace, installedBy: admin },
+            { workspaceId: workspace, installedBy: member },
+          ],
+        );
 
         const seenBy = (userId: string) =>
           Effect.map(ask(`${SKILLS}?workspaceId=${workspace}`, userId), (answer) =>
@@ -697,32 +702,46 @@ it.layer(getTestDB())("the installed skills routes", (it) => {
               ({ name, manageable }) => ({ name, manageable }),
             ),
           );
-        assert.deepEqual(yield* seenBy(member), [{ name: "team-style", manageable: false }]);
-        assert.deepEqual(yield* seenBy(owner), [{ name: "team-style", manageable: true }]);
+        assert.deepEqual(yield* seenBy(member), [
+          { name: "member-notes", manageable: true },
+          { name: "team-style", manageable: false },
+        ]);
+        assert.deepEqual(yield* seenBy(peer), [
+          { name: "member-notes", manageable: false },
+          { name: "team-style", manageable: false },
+        ]);
+        assert.deepEqual(yield* seenBy(owner), [
+          { name: "member-notes", manageable: true },
+          { name: "team-style", manageable: true },
+        ]);
         assert.equal(
           (yield* ask(`${SKILLS}?workspaceId=${workspace}`, stranger)).status,
           HOSTED_HTTP_STATUS.NOT_FOUND,
         );
 
-        const toggle = (userId: string, enabled: boolean) =>
-          ask(installedSkillPath(skill.id), userId, { method: "PATCH", body: { enabled } });
-        assert.equal((yield* toggle(member, false)).status, HOSTED_HTTP_STATUS.FORBIDDEN);
-        assert.equal((yield* toggle(stranger, false)).status, HOSTED_HTTP_STATUS.NOT_FOUND);
+        const toggle = (userId: string, id: string, enabled: boolean) =>
+          ask(installedSkillPath(id), userId, { method: "PATCH", body: { enabled } });
+        assert.equal((yield* toggle(peer, notes.id, false)).status, HOSTED_HTTP_STATUS.FORBIDDEN);
+        assert.equal((yield* toggle(member, team.id, false)).status, HOSTED_HTTP_STATUS.FORBIDDEN);
+        assert.equal(
+          (yield* toggle(stranger, notes.id, false)).status,
+          HOSTED_HTTP_STATUS.NOT_FOUND,
+        );
         const off = readAnswer(
           installedSkillAnswerSchema,
           HOSTED_HTTP_STATUS.OK,
-          yield* toggle(owner, false),
+          yield* toggle(member, notes.id, false),
         ).skill;
         assert.equal(off.enabled, false);
 
-        const removing = (userId: string) =>
-          ask(installedSkillPath(skill.id), userId, { method: "DELETE" });
-        assert.equal((yield* removing(member)).status, HOSTED_HTTP_STATUS.FORBIDDEN);
-        assert.deepEqual(yield* removing(admin), {
+        const removing = (userId: string, id: string) =>
+          ask(installedSkillPath(id), userId, { method: "DELETE" });
+        assert.equal((yield* removing(peer, notes.id)).status, HOSTED_HTTP_STATUS.FORBIDDEN);
+        assert.deepEqual(yield* removing(admin, notes.id), {
           status: HOSTED_HTTP_STATUS.OK,
-          body: { id: skill.id },
+          body: { id: notes.id },
         });
-        assert.deepEqual(yield* seenBy(member), []);
+        assert.deepEqual(yield* seenBy(peer), [{ name: "team-style", manageable: false }]);
         assert.equal(
           (yield* ask(installedSkillPath("not-a-uuid"), owner, { method: "DELETE" })).status,
           HOSTED_HTTP_STATUS.NOT_FOUND,

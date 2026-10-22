@@ -4,8 +4,10 @@
  * Every procedure resolves the caller (`accountMiddleware`, on the
  * resource so it runs before an input is read) before it touches a row.
  * The store gates every row in SQL (`installed-skill-store.ts`): a personal
- * skill is its owner's alone, and a workspace skill is read by the
- * workspace's members and managed by its owners and admins, so a skill
+ * skill is its owner's alone, and a workspace skill is installed and read
+ * by any of the workspace's members and managed by its installer while
+ * still a member or by its owners and admins, as an automation is
+ * changed, so a skill
  * the account cannot read answers as not found, and one it reads but may
  * not manage as not permitted. A workspace named in a request must be one
  * the account is a member of, and a workspace skill is refused in the
@@ -104,8 +106,8 @@ const memberWorkspace = /* @__PURE__ */ Effect.fnUntraced(function* (
 
 /**
  * The scope the account may install in: its own, anywhere; the
- * workspace's, as one of its owners or admins and never in its personal
- * workspace, where a workspace skill would be a personal one by another name.
+ * workspace's, as any member, but never in its personal workspace, where
+ * a workspace skill would be a personal one by another name.
  */
 const checkedScope = /* @__PURE__ */ Effect.fnUntraced(function* (
   workspace: MemberWorkspace,
@@ -113,7 +115,6 @@ const checkedScope = /* @__PURE__ */ Effect.fnUntraced(function* (
 ): Effect.fn.Return<void, HostedRefusal> {
   if (scope === INSTALLED_SKILL_SCOPE.PERSONAL) return;
   if (workspace.personal) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
-  if (!MANAGING_ROLES.has(workspace.role)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
 });
 
 /** One skill for the wire, whether the account may manage it said by the caller, which knows its role. */
@@ -134,14 +135,20 @@ function summaryOf(skill: InstalledSkill, manageable: boolean): InstalledSkillSu
   };
 }
 
-/** Whether the account manages the skill, as the store's rule reads: its own personal one, or its workspace's as an owner or admin. */
+/**
+ * Whether the account manages the skill, as the store's rule reads: its
+ * own personal one, or its workspace's as the skill's installer or as an
+ * owner or admin, a member of the workspace either way.
+ */
 function managedBy(userId: string, workspace: MemberWorkspace, skill: InstalledSkill): boolean {
-  return skill.scope === INSTALLED_SKILL_SCOPE.PERSONAL
-    ? skill.ownerUserId === userId
-    : skill.organizationId === workspace.id && MANAGING_ROLES.has(workspace.role);
+  if (skill.scope === INSTALLED_SKILL_SCOPE.PERSONAL) return skill.ownerUserId === userId;
+  return (
+    skill.organizationId === workspace.id &&
+    (skill.installedByUserId === userId || MANAGING_ROLES.has(workspace.role))
+  );
 }
 
-/** An install the store refused, since the account no longer manages the workspace it installs in; it undoes the transaction it stands in. */
+/** An install the store refused, since the account is no longer a member of the workspace it installs in; it undoes the transaction it stands in. */
 class InstallNotPermitted extends Data.TaggedError("InstallNotPermitted") {}
 
 /** A write's value, or the refusal the store's own error became. */
