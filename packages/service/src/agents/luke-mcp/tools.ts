@@ -30,13 +30,15 @@
  * here, since the server keeps no session: a call's id, which the agent
  * tools key a start or a message on and chat a post, is minted for each
  * call; and the turn's count of plan notes and chat posts, which each call
- * starts from nothing, so those caps hold per call. Nor is the list
- * narrowed per agent as eve narrows its own at each turn: a tool eve would
- * not offer (no plan, no repository) is refused by its door.
+ * starts from nothing, so those caps hold per call. The list is narrowed
+ * per agent as eve narrows its own (`offeredLukeMcpTool`), and a tool left
+ * out is still refused by its door where a harness calls it anyway.
  */
 
 import type { DatabaseServices } from "@luke/database/core/query";
+import type { CodingAgent } from "@luke/database/models/coding-agent-store";
 import { CHAT_TOOL } from "@luke/features/chat-wire";
+import { CODING_AGENT_KIND } from "@luke/features/coding-agent-wire";
 import { INBOX_TOOL } from "@luke/features/inbox-wire";
 import {
   ACTION_RESULT_STATUS,
@@ -105,7 +107,7 @@ import type { InboxSandboxDoor } from "../coder-host/inbox-image.js";
 import { EDIT_PLAN_TOOL } from "../coder-host/plan-edit.js";
 import { OPEN_PULL_REQUEST_TOOL } from "../coder-host/pull-request.js";
 import { SHOW_IMAGE_TOOL } from "../coder-host/show-image.js";
-import { CODER_TOOL } from "../coder-host/tool-set.js";
+import { CODER_TOOL, kindToolsOf, repositoryToolsOf, taskToolsOf } from "../coder-host/tool-set.js";
 import {
   CODER_READ_AGENT_TOOL,
   LIST_AGENTS_TOOL,
@@ -442,6 +444,33 @@ export const LUKE_MCP_TOOLS: ReadonlyMap<string, LukeMcpTool> = new Map<string, 
     executedContent,
   ),
 ]);
+
+/** What of an agent decides which tools it is offered, as eve decides it (`../coder-host/tool-set.ts`). */
+export type LukeMcpOfferedTo = Pick<CodingAgent, "taskId" | "repository" | "kind">;
+
+/** The tools eve offers some agents and not others: each one some agent's task, repository, or kind withholds. */
+const NARROWED_TOOLS: ReadonlySet<string> = new Set<string>([
+  ...taskToolsOf({ taskId: "any" }),
+  ...repositoryToolsOf({ repository: "any" }),
+  ...kindToolsOf({ kind: CODING_AGENT_KIND.OPERATOR }),
+  ...kindToolsOf({ kind: CODING_AGENT_KIND.CODER }),
+]);
+
+/**
+ * Whether the server lists a tool to an agent: every tool eve offers every
+ * agent, and each narrowed one where eve offers it to this agent, by its
+ * task, its repository, and its kind, the same rules eve's tool files read
+ * at each turn. Note that a harness reads the list as its launch begins, so
+ * an agent is narrowed launch by launch, as eve's is turn by turn.
+ */
+export function offeredLukeMcpTool(agent: LukeMcpOfferedTo): (name: string) => boolean {
+  const offered: ReadonlySet<string> = new Set<string>([
+    ...taskToolsOf(agent),
+    ...repositoryToolsOf(agent),
+    ...kindToolsOf(agent),
+  ]);
+  return (name) => !NARROWED_TOOLS.has(name) || offered.has(name);
+}
 
 /** The prefix of every status a door answers for a call it did not carry out (`not-run`, `not-looked`, `not-saved`, …). */
 const NOT_DONE_PREFIX = "not-";
