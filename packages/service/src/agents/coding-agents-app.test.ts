@@ -7780,7 +7780,7 @@ it.layer(getTestDB())("telling a chat message to the agents it addresses", (it) 
   );
 
   it.effect(
-    "a post whose pictures go past what one message carries steers the agent with the first that fit, and names the rest as not attached where a person reading the notice never sees it",
+    "a post whose pictures go past what one message carries steers the agent with the first that fit, each once however often it is shown, and names the rest as not attached where a person reading the notice never sees it",
     () =>
       Effect.gen(function* () {
         const eve = fakeEve();
@@ -7797,7 +7797,8 @@ it.layer(getTestDB())("telling a chat message to the agents it addresses", (it) 
             to: { channelId: chat.channel.id },
             blocks: [
               { type: CHAT_BLOCK.MARKDOWN, text },
-              ...ids.map((attachmentId, at) => ({
+              // The first picture shown twice, as two blocks of one sandbox path name one id, is still one file.
+              ...[ids[0] ?? "", ...ids].map((attachmentId, at) => ({
                 type: CHAT_BLOCK.IMAGE,
                 attachmentId,
                 alt: `screen ${at}`,

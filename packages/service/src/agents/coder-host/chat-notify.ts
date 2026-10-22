@@ -322,11 +322,12 @@ const PICTURE_EXTENSION = {
   [CHAT_IMAGE_TYPE.WEBP]: ".webp",
 } as const satisfies Record<ChatImageType, string>;
 
-/** The attachment ids a message's image blocks name, in the order it shows them. */
+/** The attachment ids a message's image blocks name, each once, in the order it first shows them: two blocks of one picture name one id. */
 function pictureIdsOf(message: ChatMessageRow): readonly string[] {
-  return message.blocks.flatMap((block) =>
+  const ids = message.blocks.flatMap((block) =>
     block.type === CHAT_BLOCK.IMAGE && "attachmentId" in block ? [block.attachmentId] : [],
   );
+  return [...new Set(ids)];
 }
 
 /**
