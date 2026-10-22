@@ -62,10 +62,12 @@ import type { ThreadStartParams, TurnStatus, UserInput } from "./codex-protocol/
 import type { LaunchContext, LaunchOutcome, RunnerSelf } from "./launch.js";
 import {
   CODEX_EFFORT,
+  CODEX_ERROR_INFO,
   CODEX_TOKEN_COMMAND,
   type CodexConfig,
   type CodexEffort,
   type ContentBlock,
+  codexErrorKind,
   INPUT_LINE,
   InputLineSchema,
   RUNNER_END,
@@ -122,6 +124,9 @@ const METHOD = {
   ITEM_STARTED: "item/started",
 } as const;
 
+/** JSON-RPC's code for a request the receiver refuses as it stands. */
+const INVALID_REQUEST = -32600;
+
 /** What the controller acts on, one at a time. */
 const SIGNAL = {
   LINE: "line",
@@ -163,6 +168,10 @@ const TurnAnswerSchema = Schema.Struct({ turn: Schema.Struct({ id: Schema.String
 const decodeThreadAnswer = Schema.decodeUnknownOption(ThreadAnswerSchema);
 const decodeTurnAnswer = Schema.decodeUnknownOption(TurnAnswerSchema);
 const decodeLine = Schema.decodeUnknownOption(Schema.fromJsonString(InputLineSchema));
+/** The field of a refusal's `data` read here: the `TurnError`'s info, where app-server sent one. */
+const decodeRefusalData = Schema.decodeUnknownOption(
+  Schema.Struct({ codexErrorInfo: Schema.optionalKey(Schema.NullOr(Schema.Unknown)) }),
+);
 
 const CODEX_EFFORTS: ReadonlySet<string> = new Set(Object.values(CODEX_EFFORT));
 
@@ -245,6 +254,23 @@ function appServerArgs(config: CodexConfig, command: TokenCommand | undefined): 
     "stdio://",
     ...overrides.flatMap(([key, value]) => ["-c", `${key}=${value}`]),
   ];
+}
+
+/**
+ * Whether a steer app-server refused waits for the next turn: the turn it
+ * runs cannot take one (a review or a compaction, `activeTurnNotSteerable`
+ * in the refusal's `TurnError`), or the turn ended under the steer, which
+ * app-server refuses as an invalid request with no data (no active turn, or
+ * another turn's id). Any other refusal, or no answer in time, fails the
+ * launch rather than holding a message no turn may ever take.
+ */
+function steerWaits(error: AppServerError): boolean {
+  if (error.data === undefined || error.data === null) return error.code === INVALID_REQUEST;
+  const read = decodeRefusalData(error.data);
+  return (
+    Option.isSome(read) &&
+    codexErrorKind(read.value.codexErrorInfo) === CODEX_ERROR_INFO.ACTIVE_TURN_NOT_STEERABLE
+  );
 }
 
 /** A message line's blocks as Codex's `UserInput`: text as text, a base64 image as a data URL. */
@@ -458,7 +484,7 @@ const takeLine = Effect.fn("agent-runner/codex/takeLine")(function* (
         yield* startTurn(launch, [outgoing]);
         return undefined;
       }
-      // A steer app-server refuses (the turn has just ended) waits for the next turn.
+      // A steer the turn cannot take waits for the next turn; any other refusal fails the launch.
       const steered = yield* launch.server
         .request(METHOD.TURN_STEER, {
           threadId: launch.threadId,
@@ -466,8 +492,11 @@ const takeLine = Effect.fn("agent-runner/codex/takeLine")(function* (
           clientUserMessageId: outgoing.clientId,
           input: [...outgoing.input],
         })
-        .pipe(Effect.option);
-      if (Option.isNone(steered)) {
+        .pipe(
+          Effect.as(true),
+          Effect.catchIf(steerWaits, () => Effect.succeed(false)),
+        );
+      if (!steered) {
         launch.waiting.push(outgoing);
         return undefined;
       }
@@ -483,10 +512,16 @@ const takeLine = Effect.fn("agent-runner/codex/takeLine")(function* (
       }
       if (launch.turnId === undefined) return ended(RUNNER_END.STOPPED);
       launch.stopping = true;
-      yield* launch.server
+      // Note that a turn app-server did not interrupt ends with the launch, which closes app-server, so a stop never waits on a hung one.
+      const interrupted = yield* launch.server
         .request(METHOD.TURN_INTERRUPT, { threadId: launch.threadId, turnId: launch.turnId })
-        .pipe(Effect.catch(() => Effect.logWarning("agent-runner: turn/interrupt failed")));
-      return undefined;
+        .pipe(
+          Effect.as(true),
+          Effect.catch(() =>
+            Effect.logWarning("agent-runner: turn/interrupt failed").pipe(Effect.as(false)),
+          ),
+        );
+      return interrupted ? undefined : ended(RUNNER_END.STOPPED);
     }
     case INPUT_LINE.MODEL: {
       if (value.model !== undefined) launch.model = value.model;
