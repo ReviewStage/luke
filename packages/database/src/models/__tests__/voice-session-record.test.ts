@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
+import { CODING_AGENT_KIND } from "@luke/features/coding-agent-wire";
 import { Effect, Option } from "effect";
 import { Database } from "../../core/query.js";
 import { user } from "../../schemas/auth.js";
@@ -19,6 +20,7 @@ import { voiceSessionRecord } from "../voice-session-record.js";
  * names the agent and a re-attach reads it back; and what a new call into
  * the agent reads back, as the transcript the agent's calls read, is what was
  * said on its own calls alone, never a sibling agent's on the same task.
+ * A member's operator is held, and its calls read, by that member alone.
  *
  * Synthetic accounts, tasks, agents, and sessions throughout.
  */
@@ -209,6 +211,43 @@ it.layer(getTestDB())("a call that names its agent", (it) => {
           ["Ship the CSV first.", "Starting on it."],
         );
         assert.ok(Option.isNone(yield* readAgentTranscript(stranger, agent.id)));
+      }),
+  );
+});
+
+it.layer(getTestDB())("a call into a member's operator", (it) => {
+  it.effect(
+    "the operator is held for a call, and its calls' transcript read, by its member alone and by no teammate",
+    () =>
+      Effect.gen(function* () {
+        const member = yield* openAccount;
+        const teammate = yield* openAccount;
+        const { workspaceId } = yield* startTask(member, { name: "Billing export" });
+        yield* joinWorkspace(workspaceId, teammate);
+        const operator = Option.getOrThrow(
+          yield* createCodingAgent(member, {
+            taskId: null,
+            organizationId: workspaceId,
+            planSnapshot: null,
+            prompt: null,
+            kind: CODING_AGENT_KIND.OPERATOR,
+            idempotencyKey: randomUUID(),
+            model: "anthropic/claude-opus-5.5",
+            effort: "high",
+            repository: null,
+          }),
+        ).agent;
+
+        assert.equal(
+          (yield* record.heldAgent({ userId: member, agentId: operator.id }))?.agentId,
+          operator.id,
+        );
+        assert.ok(Option.isSome(yield* readAgentTranscript(member, operator.id)));
+        assert.equal(
+          yield* record.heldAgent({ userId: teammate, agentId: operator.id }),
+          undefined,
+        );
+        assert.ok(Option.isNone(yield* readAgentTranscript(teammate, operator.id)));
       }),
   );
 });

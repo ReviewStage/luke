@@ -21,6 +21,7 @@ import {
   MEMBER_KIND,
   replyWords,
 } from "@luke/features/chat-wire";
+import { CODING_AGENT_KIND } from "@luke/features/coding-agent-wire";
 import { EXPERIMENT } from "@luke/settings";
 import {
   and,
@@ -55,7 +56,12 @@ import { codingAgent } from "../schemas/coding-agent.js";
 import { accountPreference } from "../schemas/preferences.js";
 import { task } from "../schemas/task.js";
 import { InstantColumnSchema } from "./columns.js";
-import { isWorkspaceMember, taskReachableBy, workspaceReachableBy } from "./workspace-store.js";
+import {
+  agentNoTeammatesOperator,
+  isWorkspaceMember,
+  taskReachableBy,
+  workspaceReachableBy,
+} from "./workspace-store.js";
 
 /**
  * chat-store.ts -- a workspace's chat as the store keeps it: its members and its channels.
@@ -80,10 +86,13 @@ import { isWorkspaceMember, taskReachableBy, workspaceReachableBy } from "./work
  * under the `workspace_chat` row's lock, so the places posts take are
  * contiguous however many land at once and a post rolled back takes none.
  * A person reads every channel of the workspace, every DM included, so
- * the people of a workspace can follow its agents talking. An agent is
+ * the people of a workspace can follow its agents talking, bar a
+ * teammate's operator: it is private to its member, so no one else reads
+ * it in the roster, a DM it is one of, or a mention (`memberSeenBy`,
+ * `channelSeenBy`). An agent is
  * scoped to its task: it reads and posts in its task's channel
- * alone, or an agent on no task in the general channel, and the DMs it is
- * one of, so the agents of one task never talk across into another's; a
+ * alone, or a coder on no task in the general channel, and the DMs it is
+ * one of, an operator in those DMs alone, so the agents of one task never talk across into another's; a
  * mention of one outside the channel it is posted in names no one. Only a
  * DM's two members post in it. A member's
  * unread is what it may see that someone else posted or changed past its
@@ -385,15 +394,145 @@ const findMemberOfSubject = SqlSchema.findOneOption({
     ),
 });
 
-const findMembers = SqlSchema.findAll({
-  Request: OrganizationKeySchema,
+/** The workspace and the account a read is for, which a teammate's operator is left out of. */
+const SeenKeySchema = Schema.Struct({ organizationId: Schema.String, userId: Schema.String });
+
+/**
+ * The condition that the member a statement reads is one the account may
+ * name: a person, or an agent that is no teammate's operator. Note that an
+ * operator is private to its member, because it reads their inbox, DMs, and
+ * every agent they reach, so another member's roster, mentions, and DMs
+ * leave it out.
+ */
+function memberSeenBy(userId: string): SQL {
+  return notExists(
+    queryBuilder
+      .select({ one: codingAgent.id })
+      .from(codingAgent)
+      .where(
+        and(eq(codingAgent.id, chatMember.agentId), sql`not ${agentNoTeammatesOperator(userId)}`),
+      ),
+  );
+}
+
+/** The condition that the channel a statement reads is no DM with a teammate's operator (`memberSeenBy`); every other channel is. */
+function channelSeenBy(userId: string): SQL {
+  const side = alias(chatMember, "dm_side");
+  return notExists(
+    queryBuilder
+      .select({ one: side.id })
+      .from(side)
+      .innerJoin(codingAgent, eq(codingAgent.id, side.agentId))
+      .where(
+        and(
+          or(eq(side.id, chatChannel.dmAMemberId), eq(side.id, chatChannel.dmBMemberId)),
+          sql`not ${agentNoTeammatesOperator(userId)}`,
+        ),
+      ),
+  );
+}
+
+/** The agent's member, where the account may name it (`memberSeenBy`): what a mention or a DM by link reaches. */
+const findSeenMemberOfSubject = SqlSchema.findOneOption({
+  Request: Schema.Struct({ ...SeenKeySchema.fields, agentId: Schema.String }),
   Result: ChatMemberRowSchema,
   execute: (key) =>
     Database.use((db) =>
       db
         .select(MEMBER_COLUMNS)
         .from(chatMember)
-        .where(eq(chatMember.organizationId, key.organizationId))
+        .where(
+          and(
+            eq(chatMember.organizationId, key.organizationId),
+            eq(chatMember.agentId, key.agentId),
+            memberSeenBy(key.userId),
+          ),
+        ),
+    ),
+});
+
+/** The member of the workspace under its id, where the account may name it (`memberSeenBy`). */
+const findSeenMemberInWorkspace = SqlSchema.findOneOption({
+  Request: Schema.Struct({ ...SeenKeySchema.fields, memberId: Schema.String }),
+  Result: ChatMemberRowSchema,
+  execute: (key) =>
+    Database.use((db) =>
+      db
+        .select(MEMBER_COLUMNS)
+        .from(chatMember)
+        .where(
+          and(
+            eq(chatMember.organizationId, key.organizationId),
+            eq(chatMember.id, key.memberId),
+            memberSeenBy(key.userId),
+          ),
+        ),
+    ),
+});
+
+/** The account a member stands for: a person's own, or the account that started an agent; none for an agent whose row is gone. */
+const findMemberAccount = SqlSchema.findOneOption({
+  Request: Schema.Struct({ organizationId: Schema.String, memberId: Schema.String }),
+  Result: Schema.Struct({ userId: Schema.String }),
+  execute: (key) =>
+    Database.use((db) =>
+      db
+        .select({ userId: sql<string>`coalesce(${chatMember.userId}, ${codingAgent.userId})` })
+        .from(chatMember)
+        .leftJoin(codingAgent, eq(codingAgent.id, chatMember.agentId))
+        .where(
+          and(
+            eq(chatMember.organizationId, key.organizationId),
+            eq(chatMember.id, key.memberId),
+            or(isNotNull(chatMember.userId), isNotNull(codingAgent.userId)),
+          ),
+        ),
+    ),
+});
+
+/** The member's operator, where the agent is one the account started; nothing for a coder or another member's operator. */
+const findOwnOperator = SqlSchema.findAll({
+  Request: Schema.Struct({ userId: Schema.String, agentId: Schema.String }),
+  Result: Schema.Struct({ id: Schema.String }),
+  execute: (key) =>
+    Database.use((db) =>
+      db
+        .select({ id: codingAgent.id })
+        .from(codingAgent)
+        .where(
+          and(
+            eq(codingAgent.id, key.agentId),
+            eq(codingAgent.userId, key.userId),
+            eq(codingAgent.kind, CODING_AGENT_KIND.OPERATOR),
+          ),
+        ),
+    ),
+});
+
+/** Whether the account may name the agent, its row standing or not: it is no teammate's operator (`agentNoTeammatesOperator`). */
+const findTeammatesOperator = SqlSchema.findAll({
+  Request: Schema.Struct({ userId: Schema.String, agentId: Schema.String }),
+  Result: Schema.Struct({ id: Schema.String }),
+  execute: (key) =>
+    Database.use((db) =>
+      db
+        .select({ id: codingAgent.id })
+        .from(codingAgent)
+        .where(
+          and(eq(codingAgent.id, key.agentId), sql`not ${agentNoTeammatesOperator(key.userId)}`),
+        ),
+    ),
+});
+
+const findMembers = SqlSchema.findAll({
+  Request: SeenKeySchema,
+  Result: ChatMemberRowSchema,
+  execute: (key) =>
+    Database.use((db) =>
+      db
+        .select(MEMBER_COLUMNS)
+        .from(chatMember)
+        .where(and(eq(chatMember.organizationId, key.organizationId), memberSeenBy(key.userId)))
         .orderBy(asc(chatMember.joinedAt), asc(chatMember.kind), asc(chatMember.ordinal)),
     ),
 });
@@ -573,15 +712,30 @@ const findDm = SqlSchema.findOneOption({
 });
 
 const findChannels = SqlSchema.findAll({
-  Request: OrganizationKeySchema,
+  Request: SeenKeySchema,
   Result: ChatChannelRowSchema,
   execute: (key) =>
     Database.use((db) =>
       db
         .select(CHANNEL_COLUMNS)
         .from(chatChannel)
-        .where(eq(chatChannel.organizationId, key.organizationId))
+        .where(and(eq(chatChannel.organizationId, key.organizationId), channelSeenBy(key.userId)))
         .orderBy(asc(chatChannel.createdAt), asc(chatChannel.id)),
+    ),
+});
+
+/** Every name the workspace's channels hold, whoever may see each, which a new channel's name is picked apart from. */
+const findChannelNames = SqlSchema.findAll({
+  Request: OrganizationKeySchema,
+  Result: Schema.Struct({ name: Schema.String }),
+  execute: (key) =>
+    Database.use((db) =>
+      db
+        .select({ name: sql<string>`${chatChannel.name}` })
+        .from(chatChannel)
+        .where(
+          and(eq(chatChannel.organizationId, key.organizationId), isNotNull(chatChannel.name)),
+        ),
     ),
 });
 
@@ -1094,6 +1248,14 @@ function actsAs(userId: string, member: ChatMemberRow): boolean {
   return member.kind !== MEMBER_KIND.HUMAN || member.userId === userId;
 }
 
+/** Every name the workspace's channels hold (`findChannelNames`). */
+function channelNamesOf(organizationId: string): ChatStoreEffect<ReadonlySet<string>> {
+  return Effect.map(
+    findChannelNames({ organizationId }),
+    (rows) => new Set(rows.map((row) => row.name)),
+  );
+}
+
 /** The workspace's general channel, by its name and its kind. */
 function generalOf(organizationId: string): ChatStoreEffect<Option.Option<ChatChannelRow>> {
   return Effect.map(
@@ -1112,11 +1274,14 @@ function lockedFor(userId: string, organizationId: string): ChatStoreEffect<bool
 
 /**
  * The condition that the reader may see the channel a statement reads:
- * every channel for a person; its home (`homeOf`), and a DM it is one of,
- * for an agent.
+ * every channel for a person bar a DM with a teammate's operator
+ * (`channelSeenBy`); its home (`homeOf`), and a DM it is one of, for an
+ * agent.
  */
 function visibleTo(reader: ChatMemberRow): SQL {
-  if (reader.kind === MEMBER_KIND.HUMAN) return sql`true`;
+  if (reader.kind === MEMBER_KIND.HUMAN) {
+    return reader.userId === null ? sql`false` : channelSeenBy(reader.userId);
+  }
   return (
     or(
       homeOf(reader),
@@ -1135,11 +1300,14 @@ function agentRowWhere(agentId: Column | string, condition: SQL): SQL {
   return sql`exists (select 1 from ${codingAgent} where ${codingAgent.id} = ${agentId} and ${condition})`;
 }
 
+/** The condition that an agent row is a coder on no task, whose home is the general channel; an operator has no home, and talks in its DMs alone, since what it says is its member's. */
+const TASKLESS_CODER = sql`(${codingAgent.taskId} is null and ${codingAgent.kind} <> ${CODING_AGENT_KIND.OPERATOR})`;
+
 /**
  * The condition that the channel a statement reads is the home of an
  * agent, the one channel of the workspace's it talks in: its task's
- * channel, or the general channel for an agent on no task, as its row
- * reads when the statement runs.
+ * channel, or the general channel for a coder on no task, as its row
+ * reads when the statement runs. An operator has none (`TASKLESS_CODER`).
  */
 function homeOf(member: ChatMemberRow): SQL {
   if (member.agentId === null) return sql`false`;
@@ -1151,19 +1319,19 @@ function homeOf(member: ChatMemberRow): SQL {
       ),
       and(
         eq(chatChannel.kind, CHANNEL_KIND.GENERAL),
-        agentRowWhere(member.agentId, isNull(codingAgent.taskId)),
+        agentRowWhere(member.agentId, TASKLESS_CODER),
       ),
     ) ?? sql`false`
   );
 }
 
-/** The condition that a member is one the channel is home to, as `homeOf` reads each: its plan's agents, or the agents on no plan for the general channel; none for another. */
+/** The condition that a member is one the channel is home to, as `homeOf` reads each: its plan's agents, or the coders on no plan for the general channel; none for another. */
 function homeTo(channel: Pick<ChatChannelRow, "kind" | "taskId">): SQL {
   if (channel.kind === CHANNEL_KIND.GENERAL) {
     return (
       and(
         eq(chatMember.kind, MEMBER_KIND.AGENT),
-        agentRowWhere(chatMember.agentId, isNull(codingAgent.taskId)),
+        agentRowWhere(chatMember.agentId, TASKLESS_CODER),
       ) ?? sql`false`
     );
   }
@@ -1180,6 +1348,7 @@ function homeTo(channel: Pick<ChatChannelRow, "kind" | "taskId">): SQL {
 const findHomeMembers = SqlSchema.findAll({
   Request: Schema.Struct({
     organizationId: Schema.String,
+    userId: Schema.String,
     kind: Schema.Literals(Object.values(CHANNEL_KIND)),
     taskId: Schema.NullOr(Schema.String),
   }),
@@ -1193,6 +1362,7 @@ const findHomeMembers = SqlSchema.findAll({
           and(
             eq(chatMember.organizationId, key.organizationId),
             or(eq(chatMember.kind, MEMBER_KIND.HUMAN), homeTo(key)),
+            memberSeenBy(key.userId),
           ),
         )
         .orderBy(asc(chatMember.joinedAt), asc(chatMember.kind), asc(chatMember.ordinal)),
@@ -1269,7 +1439,7 @@ function subjectMember(
   subject: ChatMemberSubject,
 ): ChatStoreEffect<Option.Option<ChatMemberRow>> {
   if (subject.kind !== MEMBER_KIND.AGENT) return ensureMember(userId, organizationId, subject);
-  return findMemberOfSubject({ organizationId, kind: subject.kind, subjectId: subject.agentId });
+  return findSeenMemberOfSubject({ organizationId, userId, agentId: subject.agentId });
 }
 
 /** The reader as a member of the workspace; nothing where the account is not in it or no such member is. */
@@ -1312,6 +1482,13 @@ export function ensureMember(
   return transaction(
     Effect.gen(function* () {
       if (!(yield* lockedFor(userId, organizationId))) return Option.none();
+      // A teammate's operator is private to its member, so no one else seats it or reaches its member.
+      if (
+        subject.kind === MEMBER_KIND.AGENT &&
+        (yield* findTeammatesOperator({ userId, agentId: subject.agentId })).length > 0
+      ) {
+        return Option.none();
+      }
       const key = { organizationId, kind: subject.kind, subjectId: subjectId(subject) };
       // A person is asked of again each time, because one who left the workspace keeps a row for the messages they wrote.
       const standing = yield* findMemberOfSubject(key);
@@ -1343,12 +1520,12 @@ export function roster(
 ): ChatStoreEffect<readonly ChatMemberRow[]> {
   return Effect.gen(function* () {
     if (!(yield* isWorkspaceMember(userId, organizationId))) return [];
-    return yield* findMembers({ organizationId });
+    return yield* findMembers({ organizationId, userId });
   });
 }
 
 const findAgentMembers = SqlSchema.findAll({
-  Request: OrganizationKeySchema,
+  Request: SeenKeySchema,
   Result: Schema.Struct({
     agentId: Schema.String,
     taskId: Schema.NullOr(Schema.String),
@@ -1356,7 +1533,7 @@ const findAgentMembers = SqlSchema.findAll({
     personaName: Schema.NullOr(Schema.String),
     model: Schema.String,
   }),
-  execute: ({ organizationId }) =>
+  execute: ({ organizationId, userId }) =>
     Database.use((db) =>
       db
         .select({
@@ -1372,6 +1549,7 @@ const findAgentMembers = SqlSchema.findAll({
           and(
             eq(chatMember.organizationId, organizationId),
             eq(chatMember.kind, MEMBER_KIND.AGENT),
+            agentNoTeammatesOperator(userId),
           ),
         ),
     ),
@@ -1397,7 +1575,7 @@ export function agentMembersOf(
 ): ChatStoreEffect<ReadonlyMap<string, ChatAgentMember>> {
   return Effect.gen(function* () {
     if (!(yield* isWorkspaceMember(userId, organizationId))) return new Map();
-    const rows = yield* findAgentMembers({ organizationId });
+    const rows = yield* findAgentMembers({ organizationId, userId });
     return new Map(
       rows.map((row) => [
         row.agentId,
@@ -1421,7 +1599,7 @@ export function homeRoster(
   return Effect.gen(function* () {
     const { organizationId, kind, taskId } = channel;
     if (!(yield* isWorkspaceMember(userId, organizationId))) return [];
-    return yield* findHomeMembers({ organizationId, kind, taskId });
+    return yield* findHomeMembers({ organizationId, userId, kind, taskId });
   });
 }
 
@@ -1432,7 +1610,7 @@ export function channelsOf(
 ): ChatStoreEffect<readonly ChatChannelRow[]> {
   return Effect.gen(function* () {
     if (!(yield* isWorkspaceMember(userId, organizationId))) return [];
-    return yield* findChannels({ organizationId });
+    return yield* findChannels({ organizationId, userId });
   });
 }
 
@@ -1480,11 +1658,7 @@ export function ensureTaskChannel(
       yield* lockWorkspace(organizationId);
       const again = yield* findTaskChannel(taskId);
       if (Option.isSome(again)) return again;
-      const held = new Set(
-        (yield* findChannels({ organizationId })).flatMap((row) =>
-          row.name === null ? [] : [row.name],
-        ),
-      );
+      const held = yield* channelNamesOf(organizationId);
       const stem = slugOf(reached.value.name, CHAT_BOUNDS.MAX_KEY_CHARS - 4) || "plan";
       const name = firstFree(
         stem,
@@ -1671,9 +1845,24 @@ export function findOrMakeDm(
     if (!(yield* isWorkspaceMember(userId, organizationId))) return Option.none();
     const from = yield* findMemberInWorkspace({ organizationId, memberId: fromMemberId });
     if (Option.isNone(from) || !actsAs(userId, from.value)) return Option.none();
-    const to = yield* findMemberInWorkspace({ organizationId, memberId: toMemberId });
+    // Note that a teammate's operator reads as no member, so no DM is opened with it.
+    const to = yield* findSeenMemberInWorkspace({ organizationId, userId, memberId: toMemberId });
     // A member that left hears nothing more, so no DM is opened with it on either side.
     if (Option.isNone(to) || from.value.leftAt !== null || to.value.leftAt !== null) {
+      return Option.none();
+    }
+    // Note that the other side must name the first too, so an operator opens no DM a teammate could never read.
+    const toAccount = yield* findMemberAccount({ organizationId, memberId: toMemberId });
+    if (
+      Option.isSome(toAccount) &&
+      Option.isNone(
+        yield* findSeenMemberInWorkspace({
+          organizationId,
+          userId: toAccount.value.userId,
+          memberId: fromMemberId,
+        }),
+      )
+    ) {
       return Option.none();
     }
     // Note that the pair is stored in uuid order, because that is what makes one pair one row.
@@ -1692,6 +1881,34 @@ export function findOrMakeDm(
       now,
     });
     return yield* madeOrStanding(made, findDm(pair));
+  });
+}
+
+/** Where an operator talks unless told otherwise: its DM with its member, and that member. */
+export interface ChatOperatorHome {
+  readonly channel: ChatChannelRow;
+  readonly with: ChatMemberRow;
+}
+
+/**
+ * The operator's home, its DM with the member who started it, made the
+ * first time it is asked for: an operator talks in its DMs alone
+ * (`TASKLESS_CODER`), so its default place is the one its member reads.
+ * Nothing for an agent that is no operator of the account's, or a
+ * workspace the account is not in.
+ */
+export function operatorHome(
+  userId: string,
+  organizationId: string,
+  agentId: string,
+): ChatStoreEffect<Option.Option<ChatOperatorHome>> {
+  return Effect.gen(function* () {
+    if ((yield* findOwnOperator({ userId, agentId })).length === 0) return Option.none();
+    const person = yield* ensureMember(userId, organizationId, { kind: MEMBER_KIND.HUMAN, userId });
+    const self = yield* ensureMember(userId, organizationId, { kind: MEMBER_KIND.AGENT, agentId });
+    if (Option.isNone(person) || Option.isNone(self)) return Option.none();
+    const channel = yield* findOrMakeDm(userId, organizationId, self.value.id, person.value.id);
+    return Option.map(channel, (row) => ({ channel: row, with: person.value }));
   });
 }
 
@@ -2896,7 +3113,7 @@ export function workspaceChatLiveStatements(
       and(eq(codingAgent.id, chatMember.agentId), eq(chatMember.kind, MEMBER_KIND.AGENT)),
     )
     .leftJoin(user, eq(user.id, chatMember.userId))
-    .where(and(eq(chatMember.organizationId, organizationId), reached));
+    .where(and(eq(chatMember.organizationId, organizationId), memberSeenBy(userId), reached));
   const channels = queryBuilder
     .select(
       liveSelection(
@@ -2914,7 +3131,7 @@ export function workspaceChatLiveStatements(
       ),
     )
     .from(chatChannel)
-    .where(and(eq(chatChannel.organizationId, organizationId), reached));
+    .where(and(eq(chatChannel.organizationId, organizationId), channelSeenBy(userId), reached));
   const messages = queryBuilder
     .select(
       liveSelection(
@@ -3011,6 +3228,7 @@ const deleteOtherAttachments = SqlSchema.void({
 const findAttachment = SqlSchema.findOneOption({
   Request: Schema.Struct({
     organizationId: Schema.String,
+    userId: Schema.String,
     messageId: Schema.String,
     attachmentId: Schema.String,
   }),
@@ -3020,11 +3238,15 @@ const findAttachment = SqlSchema.findOneOption({
       db
         .select({ contentType: attachment.contentType, bytes: attachment.bytes })
         .from(attachment)
+        .innerJoin(chatMessage, eq(chatMessage.id, attachment.chatMessageId))
+        .innerJoin(chatChannel, eq(chatChannel.id, chatMessage.channelId))
         .where(
           and(
             eq(attachment.organizationId, key.organizationId),
             eq(attachment.chatMessageId, key.messageId),
             eq(attachment.id, key.attachmentId),
+            // A picture in a DM with a teammate's operator is as private as the DM.
+            channelSeenBy(key.userId),
           ),
         ),
     ),
@@ -3114,7 +3336,7 @@ export function readAttachment(
 ): ChatStoreEffect<Option.Option<ChatImage>> {
   return Effect.gen(function* () {
     if (!(yield* isWorkspaceMember(userId, organizationId))) return Option.none();
-    return yield* findAttachment({ organizationId, messageId, attachmentId });
+    return yield* findAttachment({ organizationId, userId, messageId, attachmentId });
   });
 }
 
@@ -3450,11 +3672,7 @@ export function moveTaskChat(taskId: string, organizationId: string): ChatStoreE
         const moved = yield* memberAcross(member, ofTask, organizationId);
         if (Option.isSome(moved)) across.set(member.id, moved.value.id);
       }
-      const held = new Set(
-        (yield* findChannels({ organizationId })).flatMap((row) =>
-          row.name === null ? [] : [row.name],
-        ),
-      );
+      const held = yield* channelNamesOf(organizationId);
       const name = firstFree(
         channel.value.name ?? "plan",
         (candidate) => held.has(candidate) || candidate === GENERAL_CHANNEL,

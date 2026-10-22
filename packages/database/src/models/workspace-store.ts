@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { pinnedPictureUrl } from "@luke/features/account-picture";
+import { CODING_AGENT_KIND } from "@luke/features/coding-agent-wire";
 import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
 import { GITHUB_TOKEN_STATUS } from "@luke/features/github-token-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
@@ -550,9 +551,21 @@ export function agentSeenBy(userId: string): SQL {
   });
 }
 
-/** The condition that the account may read and write the coding agent row a statement reads: it is a member of the agent's workspace, an agent with no task as much as one on a task, and sees it as its GitHub access allows. */
+/**
+ * The condition that the account may read and write the coding agent row a
+ * statement reads: it is a member of the agent's workspace, an agent with no
+ * task as much as one on a task, sees it as its GitHub access allows, and the
+ * agent is no teammate's operator. Note that an operator is private to its
+ * member, because it reads their inbox, DMs, and every agent they reach, so
+ * every read and write gated here refuses or leaves out another member's.
+ */
 export function agentReachableBy(userId: string): SQL {
-  return sql`(${memberOfWorkspace(userId, AGENT_WORKSPACE)} and ${agentSeenBy(userId)})`;
+  return sql`(${memberOfWorkspace(userId, AGENT_WORKSPACE)} and ${agentSeenBy(userId)} and ${agentNoTeammatesOperator(userId)})`;
+}
+
+/** The condition that the coding agent row is no operator but the account's own: a coder, or an operator the account started. */
+export function agentNoTeammatesOperator(userId: string): SQL {
+  return sql`(${codingAgent.kind} <> ${CODING_AGENT_KIND.OPERATOR} or ${eq(codingAgent.userId, userId)})`;
 }
 
 /** The condition that the account sees the task row as its GitHub access allows (`seenThroughGitHub`), for a statement that gates its workspace already. */

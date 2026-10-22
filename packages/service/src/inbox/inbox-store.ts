@@ -21,6 +21,7 @@ import {
 import { InstantColumnSchema } from "@luke/database/models/columns";
 import {
   AGENT_WORKSPACE,
+  agentNoTeammatesOperator,
   agentReachableBy,
   agentSeenBy,
   taskReachableBy,
@@ -548,13 +549,19 @@ const AgentKeySchema = Schema.Struct({ userId: Schema.String, agentId: Schema.St
 /** An item row's workspace: the column itself, never null since `20261015062923_organization_not_null`, so a membership check reaches its indexes. */
 const ITEM_WORKSPACE = sql<string>`${inboxItem.organizationId}`;
 
-/** The condition that the item a statement reads names no agent, or one the account sees as its GitHub access allows (`agentSeenBy`). */
+/** The condition that the item a statement reads names no agent, or one the account sees as its GitHub access allows (`agentSeenBy`) and that is no teammate's operator, whose asks are its member's alone (`agentNoTeammatesOperator`). */
 function itemAgentSeenBy(userId: string): SQL {
   const seen = exists(
     queryBuilder
       .select({ one: codingAgent.id })
       .from(codingAgent)
-      .where(and(eq(codingAgent.id, inboxItem.agentId), agentSeenBy(userId))),
+      .where(
+        and(
+          eq(codingAgent.id, inboxItem.agentId),
+          agentSeenBy(userId),
+          agentNoTeammatesOperator(userId),
+        ),
+      ),
   );
   return sql`(${isNull(inboxItem.agentId)} or ${seen})`;
 }

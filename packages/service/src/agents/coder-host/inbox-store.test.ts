@@ -39,6 +39,7 @@ import {
 import { CHAT_ASK, CHAT_BLOCK, MEMBER_KIND } from "@luke/features/chat-wire";
 import {
   CODING_AGENT_ATTACHMENT_TYPE,
+  CODING_AGENT_KIND,
   type CodingAgentAttachment,
 } from "@luke/features/coding-agent-wire";
 import {
@@ -72,6 +73,7 @@ import {
   accountInboxLiveStatements,
   accountInboxTasks,
   accountWaitingItems,
+  accountWaitingStamps,
   answerInboxAsk,
   answerInboxItem,
   closeInboxItem,
@@ -109,7 +111,8 @@ import { accountInboxPast, taskInboxPast } from "./inbox-page.js";
  * workspace's members as one on a task does to its task's, a member writes
  * on an item's thread whatever its status, which moves the item's last
  * change and nothing else of it, and nothing of a workspace the account is
- * not in is read or written.
+ * not in is read or written. A member's operator's items are that member's
+ * alone.
  *
  * Synthetic accounts, tasks, and words throughout.
  */
@@ -1691,6 +1694,66 @@ it.layer(getTestDB())("a member's writes on an item", (it) => {
         assert.ok(
           Option.isNone(yield* closeInboxItemAsMember(teammate, closedId, 1, randomUUID())),
           "a close that finds the item settled writes nothing, so nothing is waited for",
+        );
+      }),
+  );
+});
+
+it.layer(getTestDB())("the inbox store's operator, private to its member", (it) => {
+  it.effect(
+    "a teammate reads, counts, answers, closes, and writes on none of a member's operator's items, while its member reads and answers them",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* openUser;
+        const teammate = yield* openUser;
+        const workspaceId = yield* openWorkspace(owner);
+        yield* joinWorkspace(workspaceId, teammate);
+        const operator = Option.getOrThrow(
+          yield* createCodingAgent(owner, {
+            taskId: null,
+            organizationId: workspaceId,
+            planSnapshot: null,
+            prompt: null,
+            kind: CODING_AGENT_KIND.OPERATOR,
+            idempotencyKey: randomUUID(),
+            model: "anthropic/claude-opus-5.5",
+            effort: "high",
+            repository: null,
+          }),
+        ).agent;
+        const posted = Result.getOrThrow(
+          yield* postInboxItem({ userId: owner, taskId: null, agentId: operator.id }, SETTINGS),
+        );
+        const stampIds = (userId: string) =>
+          Effect.map(accountWaitingStamps(userId), (stamps) => stamps.map((stamp) => stamp.id));
+
+        assert.deepEqual(
+          [
+            Option.isNone(yield* readInboxItem(teammate, posted.id)),
+            (yield* stampIds(teammate)).includes(posted.id),
+            Option.isNone(
+              yield* postInboxMessage(teammate, posted.id, {
+                text: "Done it for you.",
+                clientKey: randomUUID(),
+              }),
+            ),
+            Option.isNone(
+              yield* closeInboxItemAsMember(teammate, posted.id, posted.revision, randomUUID()),
+            ),
+            Option.isNone(
+              yield* answerInboxItem(teammate, posted.id, posted.revision, DONE, randomUUID()),
+            ),
+          ],
+          [true, false, true, true, true],
+        );
+
+        assert.ok((yield* stampIds(owner)).includes(posted.id));
+        const read = Option.getOrThrow(yield* readInboxItem(owner, posted.id));
+        assert.equal(read.item.status, INBOX_STATUS.OPEN, "nothing the teammate tried landed");
+        assert.ok(
+          Option.isSome(
+            yield* answerInboxItem(owner, posted.id, posted.revision, DONE, randomUUID()),
+          ),
         );
       }),
   );

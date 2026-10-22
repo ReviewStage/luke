@@ -42,7 +42,7 @@ import {
   startTask,
 } from "@luke/database/testing";
 import { START_NOTE_HEADING } from "@luke/features/agent-replay";
-import { CHAT_TOOL, MEMBER_KIND } from "@luke/features/chat-wire";
+import { CHANNEL_KIND, CHAT_TOOL, MEMBER_KIND } from "@luke/features/chat-wire";
 import {
   CHECK_SUMMARY,
   CODING_AGENT_ARCHIVER,
@@ -62,6 +62,7 @@ import { FAST_ACCESS } from "@luke/features/provider-key-wire";
 import { TASK_ISSUE_PROVIDER, TASK_ISSUE_RELATION } from "@luke/features/task-issue-wire";
 import { TASK_SECTION_WRITE } from "@luke/features/task-section-wire";
 import { PLAN_ACTOR, TASK_BOUNDS, TASK_PRIORITY, TASK_STATUS } from "@luke/features/task-wire";
+import { EXPERIMENT } from "@luke/settings";
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { MockLanguageModelV4 } from "ai/test";
 import { eq } from "drizzle-orm";
@@ -126,6 +127,7 @@ import {
   CODER_DEPLOYMENT_TURNS,
   coderChannelInput,
 } from "./channel.js";
+import { CHAT_TOOL_REFUSAL } from "./chat.js";
 import { type AgentToolCall, type CoderHost, coderHost } from "./host.js";
 import { NATIVE_SESSION_PREFIX } from "./native-runtime.js";
 import type { CoderHostSeams } from "./production.js";
@@ -150,6 +152,7 @@ import { CODER_TOOL, CODER_TOOL_SET, kindToolsOf } from "./tool-set.js";
  * agent's turn by the Stop button's own cancel, once, and the list then reads
  * it cancelled; an idle agent is answered as idle, and the caller itself, an
  * archived agent, and an agent of another workspace are not stopped.
+ * A member's operator is that member's alone: no teammate's agent reaches it.
  * Synthetic accounts, plans, and words throughout.
  */
 
@@ -3541,4 +3544,120 @@ test("list_open_asks lists every ask waiting on the operator's member across the
     status: ACTION_RESULT_STATUS.REJECTED,
     reason: LIST_OPEN_ASKS_REFUSAL.NOT_OPERATOR,
   });
+});
+
+test("a teammate's agent lists, reads, messages, stops, updates, continues, and forks none of a member's operator, while the member's own agent does each and both still reach each other's coders", async () => {
+  const { workspaceId, agents } = await openWorkspaces();
+  const bob = agents.teammates.userId;
+  const operator = await operatorOn(bob, workspaceId);
+  await saidTurnOn(operator, "Two PRs wait on you.");
+  const own = await tasklessAgentOn(bob, workspaceId);
+  const eve = await fakeCoderEve(workspaceId);
+  const host = hostOf(true);
+  const teammate = await peerCaller(host, agents.caller, eve.services);
+  const member = await peerCaller(host, own, eve.services);
+  const listed = async (call: typeof teammate) => {
+    const list = await call(CODER_TOOL.LIST_AGENTS, {});
+    assert.ok(Array.isArray(list.agents), JSON.stringify(list));
+    return list.agents.map((agent) => (isRecord(agent) ? agent.id : undefined));
+  };
+  const rejected = (reason: string) => ({ status: ACTION_RESULT_STATUS.REJECTED, reason });
+  const noAgent = rejected(CODING_AGENT_TOOL_REFUSAL.NO_AGENT);
+  const [messageId] = tailMessageIds(await member(CODER_TOOL.READ_AGENT, { agentId: operator.id }));
+  assert.ok(messageId !== undefined);
+
+  assert.ok(!(await listed(teammate)).includes(operator.id));
+  assert.ok((await listed(teammate)).includes(own.id), "the member's coder stays in view");
+  assert.deepEqual(await teammate(CODER_TOOL.READ_AGENT, { agentId: operator.id }), noAgent);
+  assert.deepEqual(await teammate(CODER_TOOL.STOP_AGENT, { agentId: operator.id }), noAgent);
+  assert.deepEqual(
+    await teammate(CODER_TOOL.UPDATE_AGENT, { agentId: operator.id, title: "Mine now" }),
+    noAgent,
+  );
+  for (const from of [{ agentId: operator.id }, { agentId: operator.id, messageId }]) {
+    assert.deepEqual(
+      await teammate(CODER_TOOL.START_AGENT, { from }, `call-${randomUUID()}`),
+      rejected(START_CODING_AGENT_REFUSAL.NO_SOURCE),
+    );
+  }
+  const refusedDm = await directMessage(host, agents.caller, operator, eve.services);
+  assert.equal(refusedDm.status, ACTION_RESULT_STATUS.REJECTED, JSON.stringify(refusedDm));
+  assert.deepEqual(openingsOf(eve), [], "nothing reached the operator");
+  assert.equal(
+    (await member(CODER_TOOL.READ_AGENT, { agentId: agents.caller.id })).status,
+    ACTION_RESULT_STATUS.ACCEPTED,
+  );
+
+  assert.ok((await listed(member)).includes(operator.id));
+  assert.equal(
+    (await member(CODER_TOOL.READ_AGENT, { agentId: operator.id })).status,
+    ACTION_RESULT_STATUS.ACCEPTED,
+  );
+  const stopped = await member(CODER_TOOL.STOP_AGENT, { agentId: operator.id });
+  assert.deepEqual([stopped.status, stopped.stopped], [ACTION_RESULT_STATUS.ACCEPTED, false]);
+  assert.equal(
+    (await member(CODER_TOOL.UPDATE_AGENT, { agentId: operator.id, title: "Luke" })).status,
+    ACTION_RESULT_STATUS.ACCEPTED,
+  );
+  assert.equal(
+    Option.getOrThrow(await database.run(readCodingAgent(bob, operator.id))).title,
+    "Luke",
+  );
+  // The member's Continue and Fork find the operator, and only then refuse it for having no checkout.
+  for (const from of [{ agentId: operator.id }, { agentId: operator.id, messageId }]) {
+    assert.deepEqual(
+      await member(CODER_TOOL.START_AGENT, { from }, `call-${randomUUID()}`),
+      rejected(START_CODING_AGENT_REFUSAL.SOURCE_NO_REPOSITORY),
+    );
+  }
+  const sent = await directMessage(host, own, operator, eve.services);
+  assert.equal(sent.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(sent));
+});
+
+test("an operator's post_chat with no place lands in its DM with its member once that member has Chat on, which its read lists as its home with the two of them alone, and #general takes nothing of it", async () => {
+  const { workspaceId, agents } = await openWorkspaces();
+  const operator = await operatorOn(agents.teammates.userId, workspaceId);
+  const eve = await fakeCoderEve(workspaceId);
+  const host = hostOf(true);
+  const admitted = await database.run(host.admit(seat(operator), operator.sessionId));
+  if (Result.isFailure(admitted)) return assert.fail(admitted.failure);
+  const chat = (tool: (typeof CHAT_TOOL)[keyof typeof CHAT_TOOL], input: WireBoundaryInput) =>
+    database.run(
+      host
+        .chat(admitted.success, {
+          tool,
+          input: unparsedWire(input),
+          clientKey: `call-${randomUUID()}`,
+          postsInTurn: 0,
+          sandbox: () => Promise.reject(new Error("a post with words alone opens no sandbox")),
+        })
+        .pipe(Effect.provide(Layer.mergeAll(eve.services, ANALYTICS.layer))),
+    );
+
+  // A member with Chat off would never read the DM, so the post is refused rather than lost.
+  assert.deepEqual(await chat(CHAT_TOOL.POST, { text: "Two PRs wait on you." }), {
+    status: ACTION_RESULT_STATUS.REJECTED,
+    reason: CHAT_TOOL_REFUSAL.PERSON_CHAT_OFF,
+  });
+  await database.run(
+    writeAccountPreferences(agents.teammates.userId, { experiments: { [EXPERIMENT.CHAT]: true } }),
+  );
+  const posted = await chat(CHAT_TOOL.POST, { text: "Two PRs wait on you." });
+  assert.equal(posted.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(posted));
+  assert.equal(
+    (await chat(CHAT_TOOL.POST, { text: "Hi all.", to: "#general" })).status,
+    ACTION_RESULT_STATUS.REJECTED,
+  );
+  const read = await chat(CHAT_TOOL.READ, {});
+  assert.ok("channels" in read, JSON.stringify(read));
+  assert.deepEqual(
+    read.channels.map((channel) => channel.kind),
+    [CHANNEL_KIND.DM],
+    "its DM with its member is its one channel, listed first as its home",
+  );
+  assert.deepEqual(
+    read.members.map((member) => member.kind).toSorted(),
+    [MEMBER_KIND.AGENT, MEMBER_KIND.HUMAN].toSorted(),
+    "its read names the DM's two members alone, not the workspace's other people",
+  );
 });

@@ -24,6 +24,7 @@ import {
   homeRoster,
   memberOfSubject,
   openAsksOf,
+  operatorHome,
   postAsk,
   postMessage,
   resolveAsk,
@@ -326,6 +327,8 @@ export interface ChatAgent extends ChatReader {
 interface ChatSeat {
   readonly organizationId: string;
   readonly home: ChatChannelRow;
+  /** The member on the other side where the home is a DM, an operator's with its member; none for a channel. */
+  readonly homeWith: ChatMemberRow | undefined;
   readonly self: ChatMemberRow;
 }
 
@@ -441,18 +444,38 @@ function inTransaction<A, E, R>(
   return Effect.flatMap(SqlClient.SqlClient, (client) => client.withTransaction(body));
 }
 
+/** Where an agent posts unless it names a place, and the member on its other side where that is a DM. */
+interface ChatHome {
+  readonly channel: ChatChannelRow;
+  readonly with: ChatMemberRow | undefined;
+}
+
 /**
  * Where the agent posts unless it names a place: its plan's channel, made
- * where none stands yet, which names the workspace; or for a planless
- * agent the general channel of the workspace its row names.
+ * where none stands yet, which names the workspace; for an operator its
+ * DM with its member, since it talks in its DMs alone (`operatorHome`); or
+ * for any other planless agent the general channel of the workspace its
+ * row names.
  */
-function homeOf(agent: ChatReader): ChatStoreEffect<Option.Option<ChatChannelRow>> {
+function homeOf(agent: ChatReader): ChatStoreEffect<Option.Option<ChatHome>> {
   return Effect.gen(function* () {
-    if (agent.taskId !== null) return yield* ensureTaskChannel(agent.userId, agent.taskId);
+    const atChannel = Option.map((channel: ChatChannelRow) => ({ channel, with: undefined }));
+    if (agent.taskId !== null) {
+      return atChannel(yield* ensureTaskChannel(agent.userId, agent.taskId));
+    }
     const workspace = yield* agentWorkspace(agent.userId, agent.self.agentId);
     if (Option.isNone(workspace)) return Option.none();
-    return yield* ensureGeneral(agent.userId, workspace.value);
+    const dm = yield* operatorHome(agent.userId, workspace.value, agent.self.agentId);
+    if (Option.isSome(dm)) return dm;
+    return atChannel(yield* ensureGeneral(agent.userId, workspace.value));
   });
+}
+
+/** The name a post's `to` gives the agent's home: its channel's `#name`; none for a DM home, which its member's link names. */
+function homeName(seat: ChatSeat): string | undefined {
+  return seat.homeWith === undefined
+    ? `${CHAT_TARGET_SIGIL.CHANNEL}${seat.home.name ?? ""}`
+    : undefined;
 }
 
 /**
@@ -469,7 +492,7 @@ function seatOf(
     const { userId, taskId } = agent;
     const home = yield* homeOf(agent);
     if (Option.isNone(home)) return Option.none();
-    const { organizationId } = home.value;
+    const { organizationId } = home.value.channel;
     const members = new Set((yield* roster(userId, organizationId)).map((row) => row.agentId));
     const onTask = taskId === null ? [] : yield* listCodingAgents(userId, taskId);
     const unminted = onTask.filter((each) => !members.has(each.id));
@@ -477,7 +500,12 @@ function seatOf(
       ensureMember(userId, organizationId, { kind: MEMBER_KIND.AGENT, agentId: each.id }),
     );
     const self = yield* ensureMember(userId, organizationId, agent.self);
-    return Option.map(self, (member) => ({ organizationId, home: home.value, self: member }));
+    return Option.map(self, (member) => ({
+      organizationId,
+      home: home.value.channel,
+      homeWith: home.value.with,
+      self: member,
+    }));
   });
 }
 
@@ -621,9 +649,7 @@ function placeRefusal(
   const to = post.to;
   if (post.replyTo !== undefined || to === undefined) return undefined;
   if (to.startsWith(CHAT_TARGET_SIGIL.CHANNEL)) {
-    return to === `${CHAT_TARGET_SIGIL.CHANNEL}${seat.home.name ?? ""}`
-      ? undefined
-      : CHAT_TOOL_REFUSAL.ELSEWHERE;
+    return to === homeName(seat) ? undefined : CHAT_TOOL_REFUSAL.ELSEWHERE;
   }
   const mention = chatTargetMember(to);
   if (mention === undefined) return CHAT_TOOL_REFUSAL.NO_MEMBER;
@@ -631,6 +657,27 @@ function placeRefusal(
   return subject.kind === MEMBER_KIND.AGENT && standsFor(seat.self, subject)
     ? CHAT_TOOL_REFUSAL.TO_SELF
     : undefined;
+}
+
+/**
+ * Where a post goes when it names no place: the agent's home. A DM home, an
+ * operator's with its member, is named as any DM is, by its member's link,
+ * and refused where that member has Chat off, as a DM to them is
+ * (`dmMemberOf`), since they would never read it.
+ */
+function homePlace(
+  seat: ChatSeat,
+  name: string | undefined,
+): Effect.Effect<Result.Result<PostPlace, string>, StoreFailure, DatabaseServices> {
+  return Effect.gen(function* () {
+    const to = { channelId: seat.home.id };
+    const person = seat.homeWith;
+    if (person === undefined) return Result.succeed({ to, named: { in: name ?? "" } });
+    if (person.userId !== null && !(yield* chatEnabledFor(person.userId))) {
+      return Result.fail(CHAT_TOOL_REFUSAL.PERSON_CHAT_OFF);
+    }
+    return Result.succeed({ to, named: { with: person, to: "" } });
+  });
 }
 
 /**
@@ -649,10 +696,10 @@ function placeOf(
       Result.succeed({ to: { replyTo: post.replyTo }, named: { thread: post.replyTo } }),
     );
   }
-  const name = `${CHAT_TARGET_SIGIL.CHANNEL}${seat.home.name ?? ""}`;
+  const name = homeName(seat);
   const to = post.to;
   if (to === undefined || to === name) {
-    return Effect.succeed(Result.succeed({ to: { channelId: seat.home.id }, named: { in: name } }));
+    return homePlace(seat, name);
   }
   if (to.startsWith(CHAT_TARGET_SIGIL.CHANNEL)) {
     return Effect.succeed(Result.fail(CHAT_TOOL_REFUSAL.ELSEWHERE));
@@ -1112,8 +1159,14 @@ export function readAsAgent(
       }
       const { messages, more } = yield* messagesOf(agent, seat, query, named?.id);
       const members = yield* roster(userId, seat.organizationId);
-      // The roster a read lists is the task's chat alone: its people and its agents, archived ones among them, and a Luke minted while the task had one.
-      const team = yield* homeRoster(userId, seat.home);
+      // The roster a read lists is the task's chat alone: its people and its agents, archived ones among them, and a Luke minted while the task had one;
+      // for a DM home, an operator's, the DM's two members alone.
+      const team =
+        seat.homeWith === undefined
+          ? yield* homeRoster(userId, seat.home)
+          : [seat.homeWith, seat.self].flatMap((row) =>
+              members.filter((each) => each.id === row.id),
+            );
       const byId = new Map(members.map((row) => [row.id, row]));
       const self = byId.get(seat.self.id) ?? seat.self;
       const past = yield* chatPast(userId, seat.organizationId, self.id, self.readSeq);

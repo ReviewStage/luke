@@ -12,6 +12,7 @@ import {
   CHAT_REPLY,
   MEMBER_KIND,
 } from "@luke/features/chat-wire";
+import { CODING_AGENT_KIND } from "@luke/features/coding-agent-wire";
 import { encodeMention, MENTION_KIND } from "@luke/features/mention-link";
 import { and, eq } from "drizzle-orm";
 import { DateTime, Effect, Option, Result } from "effect";
@@ -51,6 +52,7 @@ import {
   moveTaskChat,
   openAsksOf,
   openTopicChannel,
+  operatorHome,
   peekUnread,
   postAsk,
   postMessage,
@@ -76,7 +78,8 @@ import { createTask, updateTask } from "../task-store.js";
  * A workspace's chat members and channels, over a real dialect: a member
  * minted once under its workspace's lock with a handle it keeps, a channel
  * found or made by what names it, and nothing of a workspace the account
- * is not in.
+ * is not in. And a member's operator, which no teammate reads, names, or
+ * DMs.
  *
  * Synthetic accounts, workspaces, plans, and agents throughout.
  */
@@ -2225,6 +2228,150 @@ it.layer(getTestDB())("the chat store's writes", (it) => {
           [renamed.name, renamed.purpose, renamed.txid !== undefined, renamed.txid === topic.txid],
           ["ship", "Release notes.", true, false],
         );
+      }),
+  );
+});
+
+it.layer(getTestDB())("the chat store's operator, private to its member", (it) => {
+  it.effect(
+    "a teammate's roster, agent names, channels, history, mentions, and DMs leave out a member's operator and its DM with them, while the member reads and DMs it, the operator talks in its DMs alone, and a teammate's planless coder stays in view",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* openAccount("Ada Lovelace");
+        const teammate = yield* openAccount("Grace Hopper");
+        const workspace = yield* openWorkspace(owner);
+        yield* joinWorkspace(workspace, teammate);
+        const general = Option.getOrThrow(yield* ensureGeneral(owner, workspace));
+        const operatorId = Option.getOrThrow(
+          yield* createCodingAgent(owner, {
+            taskId: null,
+            organizationId: workspace,
+            planSnapshot: null,
+            prompt: null,
+            kind: CODING_AGENT_KIND.OPERATOR,
+            idempotencyKey: randomUUID(),
+            model: "anthropic/claude-opus-5.5",
+            effort: "high",
+            repository: null,
+          }),
+        ).agent.id;
+        const coderId = Option.getOrThrow(
+          yield* createCodingAgent(teammate, {
+            taskId: null,
+            organizationId: workspace,
+            planSnapshot: null,
+            prompt: "Sweep the flaky tests.",
+            idempotencyKey: randomUUID(),
+            model: "anthropic/claude-opus-5.5",
+            effort: "high",
+            repository: "acme/api",
+          }),
+        ).agent.id;
+        const seat = (userId: string, subject: ChatMemberSubject) =>
+          Effect.map(ensureMember(userId, workspace, subject), Option.getOrThrow);
+        const ada = yield* seat(owner, { kind: MEMBER_KIND.HUMAN, userId: owner });
+        const grace = yield* seat(teammate, { kind: MEMBER_KIND.HUMAN, userId: teammate });
+        const operator = yield* seat(owner, { kind: MEMBER_KIND.AGENT, agentId: operatorId });
+        const coder = yield* seat(teammate, { kind: MEMBER_KIND.AGENT, agentId: coderId });
+        const dm = Option.getOrThrow(yield* findOrMakeDm(owner, workspace, ada.id, operator.id));
+        const said = (userId: string, author: ChatMemberRow, channelId: string, text: string) =>
+          Effect.map(
+            postMessage(userId, workspace, {
+              authorMemberId: author.id,
+              to: { channelId },
+              blocks: words(text),
+              subjects: subjectsIn(text),
+              clientKey: randomUUID(),
+            }),
+            (result) => Result.getOrThrow(result),
+          );
+        yield* said(owner, ada, dm.id, "What's on my plate?");
+        const operatorSubject = { kind: MEMBER_KIND.AGENT, agentId: operatorId } as const;
+        const memberIds = (rows: readonly ChatMemberRow[]) => rows.map((row) => row.id).toSorted();
+        const channelIds = (rows: readonly { readonly id: string }[]) =>
+          rows.map((row) => row.id).toSorted();
+
+        assert.deepEqual(
+          memberIds(yield* roster(teammate, workspace)),
+          [ada.id, grace.id, coder.id].toSorted(),
+        );
+        assert.deepEqual(
+          [...(yield* agentMembersOf(teammate, workspace)).keys()],
+          [coderId],
+          "a teammate names the coder alone",
+        );
+        assert.deepEqual(channelIds(yield* channelsOf(teammate, workspace)), [general.id]);
+        assert.deepEqual(
+          Option.getOrThrow(yield* history(teammate, workspace, grace.id, {})),
+          [],
+          "the DM's words are its member's alone",
+        );
+        assert.deepEqual(
+          memberIds(yield* homeRoster(teammate, general)),
+          [ada.id, grace.id, coder.id].toSorted(),
+          "the teammate's planless coder reads the general channel without the operator",
+        );
+        assert.ok(Option.isNone(yield* memberOfSubject(teammate, workspace, operatorSubject)));
+        assert.ok(Option.isNone(yield* ensureMember(teammate, workspace, operatorSubject)));
+        assert.ok(Option.isNone(yield* findOrMakeDm(teammate, workspace, grace.id, operator.id)));
+        assert.ok(Option.isNone(yield* findOrMakeDm(teammate, workspace, coder.id, operator.id)));
+        const mention = yield* said(teammate, grace, general.id, `${agentLink(operator)} hi`);
+        assert.deepEqual([mention.message.mentions, mention.unresolved], [[], ["@Agent"]]);
+
+        assert.deepEqual(
+          memberIds(yield* roster(owner, workspace)),
+          [ada.id, grace.id, operator.id, coder.id].toSorted(),
+        );
+        assert.deepEqual(
+          [...(yield* agentMembersOf(owner, workspace)).keys()].toSorted(),
+          [operatorId, coderId].toSorted(),
+        );
+        assert.deepEqual(
+          channelIds(yield* channelsOf(owner, workspace)),
+          [general.id, dm.id].toSorted(),
+        );
+        assert.deepEqual(
+          textsOf(
+            Option.getOrThrow(yield* history(owner, workspace, ada.id, { channelId: dm.id })),
+          ),
+          textsOf([{ blocks: words("What's on my plate?") }]),
+        );
+        assert.deepEqual(
+          Option.map(yield* memberOfSubject(owner, workspace, operatorSubject), (row) => row.id),
+          Option.some(operator.id),
+        );
+        assert.ok(Option.isSome(yield* findOrMakeDm(teammate, workspace, grace.id, coder.id)));
+
+        // The operator talks in its DMs alone: the general channel is no home of its, even as its member.
+        const answer = (channelId: string) =>
+          postMessage(owner, workspace, {
+            authorMemberId: operator.id,
+            to: { channelId },
+            blocks: words("Two PRs wait on you."),
+            clientKey: randomUUID(),
+          });
+        assert.ok(Result.isSuccess(yield* answer(dm.id)));
+        assert.deepEqual(yield* answer(general.id), Result.fail(CHAT_REFUSAL.NOT_FOUND));
+        assert.ok(!memberIds(yield* homeRoster(owner, general)).includes(operator.id));
+        const inGeneral = yield* said(owner, ada, general.id, `${agentLink(operator)} hi`);
+        assert.deepEqual(
+          inGeneral.message.mentions,
+          [],
+          "a mention in a channel it never reads names no one",
+        );
+
+        // It opens no DM a teammate could never read, and its home is its DM with its member.
+        assert.ok(Option.isNone(yield* findOrMakeDm(owner, workspace, operator.id, grace.id)));
+        assert.ok(Option.isNone(yield* findOrMakeDm(owner, workspace, operator.id, coder.id)));
+        assert.deepEqual(
+          Option.map(yield* operatorHome(owner, workspace, operatorId), (home) => [
+            home.channel.id,
+            home.with.id,
+          ]),
+          Option.some([dm.id, ada.id]),
+        );
+        assert.ok(Option.isNone(yield* operatorHome(teammate, workspace, operatorId)));
+        assert.ok(Option.isNone(yield* operatorHome(teammate, workspace, coderId)));
       }),
   );
 });
