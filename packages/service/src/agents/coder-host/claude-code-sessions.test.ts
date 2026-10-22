@@ -10,6 +10,10 @@ import {
 } from "@luke/agent-runner/protocol";
 import { Database } from "@luke/database/core/query";
 import {
+  claimCodingAgentRunnerLease,
+  releaseCodingAgentRunnerLease,
+} from "@luke/database/models/coding-agent-runner-lease";
+import {
   type CodingAgent,
   createCodingAgent,
   readCodingAgentRouting,
@@ -28,7 +32,7 @@ import {
   PROVIDER_KEY_STATUS,
 } from "@luke/features/provider-key-wire";
 import { fakeHttpClientLayer } from "@luke/wire/testing";
-import { DateTime, Effect, Fiber, Layer, Option, Redacted, Result } from "effect";
+import { Clock, DateTime, Duration, Effect, Fiber, Layer, Option, Redacted, Result } from "effect";
 import { TestClock } from "effect/testing";
 import { afterEach, vi } from "vitest";
 import { TURN_ORIGIN } from "../../core.js";
@@ -944,6 +948,46 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
             { type: "text", text: "Two." },
           ],
         );
+      }),
+  );
+
+  it.effect(
+    "a message waiting behind another call's lease is interrupted at once, holding nothing and launching nothing",
+    () =>
+      Effect.gen(function* () {
+        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+        const api = runnerSandboxApi();
+        const { userId, agent } = yield* openAgent;
+        const sessions = yield* sessionsFor(userId, { next: 3 }).pipe(
+          Effect.provide(services(api)),
+        );
+        const opened = yield* sessions.open(message(agent, "Fix the invitations."));
+        assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+        const first = api.commands[0];
+        assert.ok(first !== undefined);
+        first.exitCode = 0;
+        // Another instance's call holds the lease, as a launch elsewhere does.
+        const now = new Date(yield* Clock.currentTimeMillis);
+        const elsewhere = randomUUID();
+        const until = new Date(now.getTime() + Duration.toMillis(CODER.RUNNER_LEASE.HOLD));
+        assert.equal(yield* claimCodingAgentRunnerLease(agent.id, elsewhere, now, until), true);
+
+        const waiting = yield* Effect.forkChild(
+          sessions.send(opened.sessionId, message(agent, "Again.")),
+        );
+        yield* Effect.promise(async () => {
+          for (let turn = 0; turn < 50; turn += 1) {
+            await new Promise<void>((settle) => setImmediate(settle));
+          }
+        });
+        yield* TestClock.adjust("5 seconds");
+        yield* Fiber.interrupt(waiting);
+
+        assert.equal(api.commands.length, 1);
+        // The lease is still the other call's alone, and free once it lets go.
+        assert.equal(yield* claimCodingAgentRunnerLease(agent.id, randomUUID(), now, until), false);
+        yield* releaseCodingAgentRunnerLease(agent.id, elsewhere);
+        assert.equal(yield* claimCodingAgentRunnerLease(agent.id, randomUUID(), now, until), true);
       }),
   );
 

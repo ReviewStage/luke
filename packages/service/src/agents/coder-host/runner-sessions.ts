@@ -473,10 +473,20 @@ function sandboxOf(api: VercelSandboxApi, sessionId: string) {
 }
 
 /** Another call held the agent's runner lease for as long as a call waits on it. */
-export class RunnerLeaseBusy extends Data.TaggedError("RunnerLeaseBusy")<{}> {}
+class RunnerLeaseBusy extends Data.TaggedError("RunnerLeaseBusy") {}
 
-/** The agent's runner lease taken, waiting behind another call's for at most `CODER.RUNNER_LEASE.WAIT`: the holder's id, which lets it go. */
-const claimRunnerLease = (agentId: string) =>
+/**
+ * The agent's runner lease taken, waiting behind another call's for at most
+ * `CODER.RUNNER_LEASE.WAIT`: the holder's id, which lets it go. Run where
+ * nothing interrupts, so a claim that landed is always handed back to be let
+ * go; only the waits between claims are given to `restore`, so a caller's
+ * deadline interrupts a call waiting behind another's lease at once, holding
+ * nothing.
+ */
+const claimRunnerLease = (
+  agentId: string,
+  restore: <A, E, R>(effect: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R>,
+) =>
   Effect.gen(function* () {
     const holder = randomUUID();
     const hold = Duration.toMillis(CODER.RUNNER_LEASE.HOLD);
@@ -491,24 +501,29 @@ const claimRunnerLease = (agentId: string) =>
       if (now - startedAt >= Duration.toMillis(CODER.RUNNER_LEASE.WAIT)) {
         return yield* new RunnerLeaseBusy();
       }
-      yield* Effect.sleep(CODER.RUNNER_LEASE.POLL);
+      yield* restore(Effect.sleep(CODER.RUNNER_LEASE.POLL));
     }
   });
 
 /**
  * The body run holding the agent's runner lease, let go as it ends however
- * it ends. A release that fails leaves the lease to lapse at its `HOLD`.
+ * it ends, an interruption included. A release that fails leaves the lease
+ * to lapse at its `HOLD`.
  */
 const holdingRunner = <A, E, R>(agentId: string, body: Effect.Effect<A, E, R>) =>
-  Effect.acquireUseRelease(
-    claimRunnerLease(agentId),
-    () => body,
-    (holder) =>
-      releaseCodingAgentRunnerLease(agentId, holder).pipe(
-        Effect.catch((failure) =>
-          Effect.logWarning(`a runner lease was not let go: ${failure._tag}`),
+  Effect.uninterruptibleMask((restore) =>
+    Effect.gen(function* () {
+      const holder = yield* claimRunnerLease(agentId, restore);
+      return yield* restore(body).pipe(
+        Effect.ensuring(
+          releaseCodingAgentRunnerLease(agentId, holder).pipe(
+            Effect.catch((failure) =>
+              Effect.logWarning(`a runner lease was not let go: ${failure._tag}`),
+            ),
+          ),
         ),
-      ),
+      );
+    }),
   );
 
 /** The status a failure answers as. */
