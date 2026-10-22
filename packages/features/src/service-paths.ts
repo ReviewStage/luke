@@ -299,6 +299,25 @@ export const HOSTED_SERVICE_PATH = {
   WORKSPACE_LINEAR_DISCONNECT: "/api/workspaces/linear/disconnect",
   /** The Linear issues a member of a workspace may start a plan from, or those a search matches (POST). */
   WORKSPACE_LINEAR_ISSUES: "/api/workspaces/linear/issues",
+  /**
+   * Where an owner or admin installs Luke's Sentry integration for a
+   * workspace (POST): answers Sentry's install address, carrying a
+   * single-use intent Sentry returns to `SENTRY_INSTALLED` with
+   * (`sentry-install-wire.ts`).
+   */
+  WORKSPACE_SENTRY_INSTALL: "/api/workspaces/sentry/install",
+  /** Whether the deployment holds Luke's Sentry integration, and a workspace's active installations of it, to a member (GET, `WORKSPACE_SENTRY_QUERY`). */
+  WORKSPACE_SENTRY_INSTALLATIONS: "/api/workspaces/sentry/installations",
+  /** One of a workspace's Sentry installations disconnected by an owner or admin (POST), answering the installations as they then stand. */
+  WORKSPACE_SENTRY_DISCONNECT: "/api/workspaces/sentry/disconnect",
+  /**
+   * The Sentry integration's Redirect URL (GET): Sentry lands the browser
+   * here after an install with the code, the installation's id, the
+   * organization's slug, and the intent's state; the route proves the
+   * installation with Sentry, links it, and lands on the integrations
+   * landing page.
+   */
+  SENTRY_INSTALLED: "/api/triggers/sentry/installed",
   /** A workspace renamed by an owner or an admin (POST), answering the workspace; its slug stays as it was. */
   WORKSPACES_RENAME: "/api/workspaces/rename",
   /** A workspace's photo set as a `data:` URL, or removed with null, by an owner or an admin (POST), answering the workspace. */

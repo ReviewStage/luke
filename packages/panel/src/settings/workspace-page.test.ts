@@ -14,6 +14,7 @@ import {
 } from "@luke/features/github-repositories-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import type { MacRepository } from "@luke/features/mac-terminal-wire";
+import type { WorkspaceSentry } from "@luke/features/sentry-install-wire";
 import type {
   TasksWorkspaceInvitationsAnswer,
   TasksWorkspaceMembersAnswer,
@@ -141,6 +142,8 @@ let inviteHeld: Promise<void> | undefined;
 let refuseGitHubOpen = false;
 /** Where the next Linear sign-in waits before the browser is sent, so a test can hold it on the wire. */
 let linearConnectHeld: Promise<void> | undefined;
+/** The workspace's Sentry as the service answers it; none where the read is refused. */
+let sentry: WorkspaceSentry | undefined;
 /** Whether the service refuses a rename for the account's role. */
 let refuseRename = false;
 /** Whether the service refuses a photo for the account's role. */
@@ -281,6 +284,22 @@ function answer(request: Asked): Promise<Answered> {
         return held.then(() => done(undefined));
       }
       return Promise.resolve({ status: FAKE_ANSWER.UNKNOWN_ACT });
+    case ACT_KIND.WORKSPACE_SENTRY_READ:
+      if (sentry === undefined) {
+        return Promise.resolve({ status: FAKE_ANSWER.REFUSED, reason: "Could not read." });
+      }
+      return Promise.resolve(done(sentry));
+    case ACT_KIND.WORKSPACE_SENTRY_INSTALL:
+      return Promise.resolve(done(undefined));
+    case ACT_KIND.WORKSPACE_SENTRY_DISCONNECT: {
+      const { installationId } = request.payload;
+      const was: WorkspaceSentry = sentry ?? { configured: true, installations: [] };
+      sentry = {
+        ...was,
+        installations: was.installations.filter((one) => one.installationId !== installationId),
+      };
+      return Promise.resolve(done(sentry));
+    }
     case ACT_KIND.WORKSPACE_GITHUB_CONNECT:
       if (refuseGitHubOpen) {
         return Promise.resolve({
@@ -498,6 +517,7 @@ beforeEach(() => {
   inviteHeld = undefined;
   refuseGitHubOpen = false;
   linearConnectHeld = undefined;
+  sentry = undefined;
   refuseRename = false;
   refusePhoto = false;
   refuseRole = false;
@@ -948,7 +968,12 @@ test("the chosen team workspace's members are listed with their email and role, 
   const { page } = await mount(ACME);
 
   assert.deepEqual(
-    sent.filter((request) => request.kind.startsWith("workspace.")).map((request) => request.kind),
+    sent
+      .filter(
+        (request) =>
+          request.kind.startsWith("workspace.") && request.kind !== ACT_KIND.WORKSPACE_SENTRY_READ,
+      )
+      .map((request) => request.kind),
     [
       ACT_KIND.WORKSPACE_TOKEN_REPOSITORIES_READ,
       ACT_KIND.WORKSPACE_PEOPLE,
@@ -1874,6 +1899,7 @@ test("the owner invites an address as a role, sees it pending with its link to c
           request.kind !== ACT_KIND.WORKSPACE_MEMBERS_READ &&
           request.kind !== ACT_KIND.WORKSPACE_PEOPLE &&
           request.kind !== ACT_KIND.WORKSPACE_TOKEN_REPOSITORIES_READ &&
+          request.kind !== ACT_KIND.WORKSPACE_SENTRY_READ &&
           !MAC_GROUP_READS.has(request.kind),
       )
       .map((request) => [request.kind, "payload" in request ? request.payload : undefined]),
@@ -2202,6 +2228,123 @@ test("a connected workspace's Linear reads connected for everyone and stands qui
     "Linear",
     "Not connected. Ask an owner or admin.",
   ]);
+});
+
+/** The workspace Sentry installs and disconnects sent, by their payloads. */
+const sentrySent = () =>
+  sent.flatMap((request) =>
+    request.kind === ACT_KIND.WORKSPACE_SENTRY_INSTALL ||
+    request.kind === ACT_KIND.WORKSPACE_SENTRY_DISCONNECT
+      ? [[request.kind, request.payload]]
+      : [],
+  );
+
+const SENTRY_INSTALLED: WorkspaceSentry = {
+  configured: true,
+  installations: [{ installationId: "installation-1", account: "acme" }],
+};
+
+test("the Sentry row reads again as the window comes forward: an install made on Sentry shows, and a read that then fails hides the row rather than keep what may be gone", async () => {
+  sentry = { configured: true, installations: [] };
+  const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.ADMIN });
+  const before = rowWords(rowNamed(githubGroup(page), "Sentry"));
+
+  sentry = SENTRY_INSTALLED;
+  act(() => {
+    window.dispatchEvent(new Event("focus"));
+  });
+  await settle();
+  const installed = rowWords(rowNamed(githubGroup(page), "Sentry"));
+  sentry = undefined;
+  act(() => {
+    window.dispatchEvent(new Event("focus"));
+  });
+  await settle();
+
+  assert.deepEqual(before, [
+    "Sentry",
+    "Not installed. Alerts and new issues can trigger this workspace's automations.",
+  ]);
+  assert.deepEqual(installed, ["Sentry", "Installed · acme"]);
+  assert.equal([...githubGroup(page).querySelectorAll(ROWS)].map(nameOf).includes("Sentry"), false);
+});
+
+test("a Disconnect still being asked is dismissed once a read finds its installation gone", async () => {
+  sentry = SENTRY_INSTALLED;
+  const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.ADMIN });
+
+  await chooseAction(rowNamed(githubGroup(page), "Sentry"), "Disconnect acme");
+  const asked = document.querySelector('[role="alertdialog"]') !== null;
+  sentry = { configured: true, installations: [] };
+  act(() => {
+    window.dispatchEvent(new Event("focus"));
+  });
+  await settle();
+
+  assert.equal(asked, true);
+  assert.equal(document.querySelector('[role="alertdialog"]'), null);
+  assert.deepEqual(sentrySent(), []);
+});
+
+test("Integrations draws no Sentry row where the service holds no Sentry integration, or its read failed", async () => {
+  sentry = { configured: false, installations: [] };
+  const unconfigured = await mount({ ...ACME, role: WORKSPACE_ROLE.ADMIN });
+  const hidden = [...githubGroup(unconfigured.page).querySelectorAll(ROWS)].map(nameOf);
+  for (const root of roots.splice(0)) act(() => root.unmount());
+  sentry = undefined;
+  const unread = await mount({ ...ACME, role: WORKSPACE_ROLE.ADMIN });
+
+  assert.equal(hidden.includes("Sentry"), false);
+  assert.equal(
+    [...githubGroup(unread.page).querySelectorAll(ROWS)].map(nameOf).includes("Sentry"),
+    false,
+  );
+});
+
+test("an admin installs Sentry for the workspace from its row, which opens Sentry at once", async () => {
+  sentry = { configured: true, installations: [] };
+  const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.ADMIN });
+  const row = rowNamed(githubGroup(page), "Sentry");
+  const before = rowWords(row);
+
+  act(() => button(row, "Install for workspace").click());
+  await settle();
+
+  assert.deepEqual(before, [
+    "Sentry",
+    "Not installed. Alerts and new issues can trigger this workspace's automations.",
+  ]);
+  assert.equal(document.querySelector('[role="alertdialog"]'), null);
+  assert.deepEqual(sentrySent(), [[ACT_KIND.WORKSPACE_SENTRY_INSTALL, { workspaceId: ACME.id }]]);
+});
+
+test("an installed workspace's Sentry names its organization, its ⋯ disconnects it after asking, and a member sees it read only", async () => {
+  sentry = SENTRY_INSTALLED;
+  const admin = await mount({ ...ACME, role: WORKSPACE_ROLE.ADMIN });
+  const row = rowNamed(githubGroup(admin.page), "Sentry");
+  const words = rowWords(row);
+
+  await chooseAction(row, "Disconnect acme");
+  await confirm("Disconnect");
+  const after = rowWords(rowNamed(githubGroup(admin.page), "Sentry"));
+  for (const root of roots.splice(0)) act(() => root.unmount());
+  sentry = SENTRY_INSTALLED;
+  const member = await mount({ ...ACME, role: WORKSPACE_ROLE.MEMBER });
+  const memberRow = rowNamed(githubGroup(member.page), "Sentry");
+
+  assert.deepEqual(words, ["Sentry", "Installed · acme"]);
+  assert.deepEqual(sentrySent(), [
+    [
+      ACT_KIND.WORKSPACE_SENTRY_DISCONNECT,
+      { workspaceId: ACME.id, installationId: "installation-1" },
+    ],
+  ]);
+  assert.deepEqual(after, [
+    "Sentry",
+    "Not installed. Alerts and new issues can trigger this workspace's automations.",
+  ]);
+  assert.deepEqual(rowWords(memberRow), ["Sentry", "Installed · acme"]);
+  assert.deepEqual(rowButtons(memberRow), []);
 });
 
 test("in the window, each member's ⋯ opens their profile first, in the workspace the page shows", async () => {

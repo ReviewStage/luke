@@ -8,8 +8,9 @@ import { BarItem } from "./bar-item.js";
 /**
  * bar-item.test.ts -- a bar item is a button named by its words; the place
  * shown is announced as the page; one that opens something says whether it
- * stands open; a press and a pointer's press reach the caller; and an inert
- * one is inert.
+ * stands open; a press and a pointer's press reach the caller; an inert
+ * one is inert; and a count is drawn and said with its name, and stands
+ * nowhere at none.
  */
 
 const roots: Root[] = [];
@@ -74,4 +75,35 @@ test("an inert item is inert", () => {
     createElement(BarItem, { icon: null, inert: true, onPress: () => {}, children: "Inbox" }),
   );
   expect(button.hasAttribute("inert")).toBe(true);
+});
+
+/** What a reader hears an item named: its words, less what is drawn for the eye alone. */
+function spokenName(button: HTMLButtonElement): string {
+  const heard = button.cloneNode(true) as HTMLElement;
+  for (const unheard of heard.querySelectorAll("[aria-hidden='true']")) unheard.remove();
+  return heard.textContent ?? "";
+}
+
+test("a count is drawn on the glyph and said after the name with its noun, and stands nowhere at none", () => {
+  const counted = mount(
+    createElement(BarItem, {
+      icon: null,
+      count: { value: 3, noun: "need you" },
+      onPress: () => {},
+      children: "Inbox",
+    }),
+  );
+  expect(spokenName(counted)).toBe("Inbox, 3 need you");
+  expect(counted.querySelector("[aria-hidden='true']")?.textContent).toBe("3");
+
+  const none = mount(
+    createElement(BarItem, {
+      icon: null,
+      count: { value: 0, noun: "need you" },
+      onPress: () => {},
+      children: "Chat",
+    }),
+  );
+  expect(spokenName(none)).toBe("Chat");
+  expect(none.textContent).toBe("Chat");
 });
