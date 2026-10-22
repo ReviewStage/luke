@@ -17,6 +17,7 @@ import { BRAIN_HOST_TURN, BRAIN_HOST_TURN_KIND } from "../brain-host/bounds.js";
 import {
   NATIVE_ENDING,
   NATIVE_MOMENT,
+  type NativeContextUsage,
   type NativeMoment,
   type NativeWakeup,
   PLAN_STATUS,
@@ -154,6 +155,8 @@ export const NATIVE_WRITE = {
   PLAN_STATUS: "plan_status",
   /** Replace the wakeups Luke delivers to the agent once due (`coding-agent-wakeups.ts`). */
   WAKEUPS: "wakeups",
+  /** Record what the newest model call read on the agent's row, which its context ring reads. */
+  CONTEXT: "context",
 } as const;
 
 export type NativeWrite =
@@ -167,6 +170,7 @@ export type NativeWrite =
   | { readonly kind: typeof NATIVE_WRITE.SESSION; readonly sessionId: string }
   | { readonly kind: typeof NATIVE_WRITE.WAKEUPS; readonly wakeups: readonly NativeWakeup[] }
   | { readonly kind: typeof NATIVE_WRITE.COMPACTED }
+  | { readonly kind: typeof NATIVE_WRITE.CONTEXT; readonly usage: NativeContextUsage }
   | {
       readonly kind: typeof NATIVE_WRITE.PLAN_STATUS;
       readonly status: PlanStatus;
@@ -451,6 +455,12 @@ class Fold {
         return;
       case NATIVE_MOMENT.USAGE_TOTAL:
         this.#usageTotal(moment.total);
+        return;
+      case NATIVE_MOMENT.CONTEXT:
+        // Note that a call that read nothing, as an error the CLI makes up does, leaves the last one standing.
+        if (moment.usage.inputTokens > 0) {
+          this.writes.push({ kind: NATIVE_WRITE.CONTEXT, usage: moment.usage });
+        }
         return;
       case NATIVE_MOMENT.RESULT:
         this.#result(moment.failure);

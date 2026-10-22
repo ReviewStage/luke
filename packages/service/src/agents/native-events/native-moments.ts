@@ -40,6 +40,12 @@ export const NATIVE_MOMENT = {
   /** What a model turn of the harness cost. */
   USAGE: "usage",
   /**
+   * What the newest model call read and wrote, as the agent's context ring
+   * reads it (`coding_agent.last_step`): Claude Code's per-message usage, or
+   * the last request Codex reports beside its running total.
+   */
+  CONTEXT: "context",
+  /**
    * What the harness's session has cost in all, for a harness that reports
    * its running total rather than each call's (Codex): the turn is metered
    * what the total grew by since last metered, and a total reported again,
@@ -107,6 +113,7 @@ export type NativeMoment =
       readonly input?: UnparsedWireValue;
     }
   | { readonly kind: typeof NATIVE_MOMENT.USAGE; readonly usage: BrainRunUsage }
+  | { readonly kind: typeof NATIVE_MOMENT.CONTEXT; readonly usage: NativeContextUsage }
   | { readonly kind: typeof NATIVE_MOMENT.USAGE_TOTAL; readonly total: BrainRunUsage }
   | { readonly kind: typeof NATIVE_MOMENT.RESULT; readonly failure?: string }
   | { readonly kind: typeof NATIVE_MOMENT.COMPACTED }
@@ -132,6 +139,17 @@ export type NativeMoment =
        */
       readonly wakeups?: readonly NativeWakeup[];
     };
+
+/**
+ * What one model call read and wrote: its input whole, the prefix cache's
+ * reads and writes among it, and its output, as eve's step reports them.
+ */
+export interface NativeContextUsage {
+  readonly inputTokens: number;
+  readonly outputTokens: number;
+  readonly cachedInputTokens: number;
+  readonly cacheWriteTokens: number;
+}
 
 /** A wakeup Luke delivers to a native agent as a message once it comes due. */
 export interface NativeWakeup {

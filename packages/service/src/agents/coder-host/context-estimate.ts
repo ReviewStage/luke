@@ -44,6 +44,7 @@ import { bashStartingIn } from "./shell.js";
 import { SHOW_IMAGE_TOOL } from "./show-image.js";
 import { SLEEP_TOOL } from "./sleep.js";
 import { TODOS_TOOL } from "./todos.js";
+import { estimatedTokens } from "./token-estimate.js";
 import { CODER_TOOL } from "./tool-set.js";
 
 /**
@@ -61,9 +62,6 @@ import { CODER_TOOL } from "./tool-set.js";
  * is in eve's service alone: this module reaches eve's tools, which no
  * route may load.
  */
-
-/** The bytes a token stands for in eve's own estimate. */
-const BYTES_PER_TOKEN = 4;
 
 /** A tool as the model is shown it: its words and its input's JSON Schema. */
 interface ShownTool {
@@ -266,11 +264,6 @@ type StepUsage = Extract<MessageStreamEvent, { type: "step.completed" }>["data"]
 export interface StepText {
   readonly instructions: string;
   readonly brief: string;
-}
-
-/** The tokens of a value's JSON as eve's compaction estimates them: its bytes over four, rounded up. */
-function estimatedTokens(json: string): number {
-  return Math.ceil(new TextEncoder().encode(json).byteLength / BYTES_PER_TOKEN);
 }
 
 /** The definitions of the authored tools, estimated once: the same for every agent and every turn. */

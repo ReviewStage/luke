@@ -35,10 +35,11 @@ import {
   PROVIDER_KEY_PROVIDER,
   PROVIDER_KEY_STATUS,
 } from "@luke/features/provider-key-wire";
-import { TASK_STATUS } from "@luke/features/task-wire";
+import { TASK_STATUS, UNTITLED_TASK_NAME } from "@luke/features/task-wire";
 import { TURN_STATUS, valueFromJsonText, type WireRecord, type WireValue } from "@luke/wire";
 import { sentLineId } from "@luke/wire/host-ids";
 import type { StoredUIMessage } from "@luke/wire/ui-messages";
+import { MockLanguageModelV4 } from "ai/test";
 import { asc, eq } from "drizzle-orm";
 import { Clock, Effect, Layer, Option } from "effect";
 import { HttpRouter } from "effect/http";
@@ -47,6 +48,7 @@ import { TestClock } from "effect/testing";
 import { HOSTED_HTTP_STATUS } from "../../http/http.js";
 import { modelCatalogOf } from "../../providers/model-catalog.js";
 import { CODER } from "../coder-host/bounds.js";
+import { titleCodingAgent } from "../coder-host/title.js";
 import { CODER_TOOL_SET } from "../coder-host/tool-set.js";
 import { CURSOR_START, transcriptPast } from "../coder-host/transcript.js";
 import { runnerTokenDigest } from "../luke-mcp/bearer.js";
@@ -1518,6 +1520,155 @@ it.layer(getTestDB())("the runner events route, on Codex", (it) => {
             [PROVIDER_KEY_STATUS.UNVERIFIED, null],
           ],
         );
+      }),
+  );
+});
+
+/** A title model answering every call with `title`, counting the calls. */
+function scriptedTitleModel(title: string) {
+  const asked = { calls: 0 };
+  const model = new MockLanguageModelV4({
+    doGenerate: async () => {
+      asked.calls += 1;
+      return {
+        content: [{ type: "text", text: title }],
+        finishReason: { unified: "stop", raw: "stop" },
+        usage: {
+          inputTokens: { total: 1, noCache: 1, cacheRead: 0, cacheWrite: 0 },
+          outputTokens: { total: 1, text: 1, reasoning: 0 },
+        },
+        warnings: [],
+      };
+    },
+  });
+  return { model, asked };
+}
+
+it.layer(getTestDB())("the runner events route, as eve's relay keeps an agent", (it) => {
+  const top = { parent_tool_use_id: null, session_id: SESSION };
+  const numbered = (messagesOfLaunch: readonly unknown[], from = 0) =>
+    // SAFETY: each message is one the pinned SDK, app-server, or the runner emits, written in its JSON shape.
+    messagesOfLaunch.map((message, index) => ({ sequence: from + index, message }) as RunnerEvent);
+  /** A model call's answer carrying the usage the Messages API counts for it. */
+  const answered = (
+    id: string,
+    text: string,
+    input: number,
+    cacheRead: number,
+    output: number,
+  ) => ({
+    type: "assistant",
+    message: {
+      id,
+      content: [{ type: "text", text }],
+      usage: {
+        input_tokens: input,
+        output_tokens: output,
+        cache_read_input_tokens: cacheRead,
+        cache_creation_input_tokens: 10,
+      },
+    },
+    uuid: randomUUID(),
+    ...top,
+  });
+
+  it.effect(
+    "a Claude Code agent's ring reads its newest model call, cache and all, and its brief's estimate",
+    () =>
+      Effect.gen(function* () {
+        const post = yield* standing;
+        const agent = yield* agentOn(HARNESS.CLAUDE_CODE, ["Fix the test."]);
+        const before = yield* readCodingAgentContext(agent.userId, agent.agentId);
+        yield* post(
+          agent.bearer,
+          numbered([
+            { type: RUNNER_EVENT.ACCEPTED, uuid: agent.lineId },
+            { type: "system", subtype: "init", ...top },
+            answered("msg_1", "Reading the test.", 3, 2000, 40),
+            answered("msg_2", "Fixed it.", 5, 2400, 60),
+          ]),
+        );
+        const step = Option.getOrThrow(
+          yield* readCodingAgentContext(agent.userId, agent.agentId),
+        ).lastStep;
+
+        assert.equal(Option.getOrThrow(before).lastStep, null);
+        assert.deepEqual(step === null ? null : { ...step, at: 0 }, {
+          inputTokens: 5 + 2400 + 10,
+          outputTokens: 60,
+          cachedInputTokens: 2400,
+          cacheWriteTokens: 10,
+          systemPromptTokens: 0,
+          toolDefinitionTokens: 0,
+          // The brief, "# Teammate invitations\n", is 26 bytes of JSON: seven tokens.
+          briefTokens: 7,
+          at: 0,
+        });
+      }),
+  );
+
+  it.effect("a Codex agent's ring reads the last request beside the thread's total", () =>
+    Effect.gen(function* () {
+      const post = yield* standing;
+      const agent = yield* agentOn(HARNESS.CODEX, ["Fix the test."]);
+      const breakdown = (input: number, cached: number, output: number) => ({
+        totalTokens: input + output,
+        inputTokens: input,
+        cachedInputTokens: cached,
+        cacheWriteInputTokens: 0,
+        outputTokens: output,
+        reasoningOutputTokens: 0,
+      });
+      yield* post(
+        agent.bearer,
+        numbered([
+          notification("thread/tokenUsage/updated", {
+            tokenUsage: {
+              total: breakdown(9000, 6000, 500),
+              last: breakdown(4000, 3500, 200),
+              modelContextWindow: 400_000,
+            },
+          }),
+        ]),
+      );
+      const step = Option.getOrThrow(
+        yield* readCodingAgentContext(agent.userId, agent.agentId),
+      ).lastStep;
+
+      assert.deepEqual(
+        step === null ? null : [step.inputTokens, step.cachedInputTokens, step.outputTokens],
+        [4000, 3500, 200],
+      );
+    }),
+  );
+
+  it.effect(
+    "a turn's start names an untitled agent and its untitled task, once, and a titled agent is never asked",
+    () =>
+      Effect.gen(function* () {
+        const { model, asked } = scriptedTitleModel("Fix the flaky invite test");
+        const post = yield* standingWith({
+          title: (target, agent) => Effect.orDie(titleCodingAgent(model, target, agent)),
+        });
+        const agent = yield* agentOn(HARNESS.CLAUDE_CODE, ["Fix the flaky invite test."]);
+        yield* updateTask(agent.userId, agent.taskId, { name: UNTITLED_TASK_NAME });
+        const turn = [
+          { type: RUNNER_EVENT.ACCEPTED, uuid: agent.lineId },
+          { type: "system", subtype: "init", ...top },
+          answered("msg_1", "On it.", 3, 0, 4),
+        ];
+        yield* post(agent.bearer, numbered(turn));
+        const named = Option.getOrThrow(yield* readCodingAgent(agent.userId, agent.agentId));
+        const task = Option.getOrThrow(yield* readTask(agent.userId, agent.taskId)).task;
+        // The turn's end asks again, and the title now standing is kept.
+        yield* post(
+          agent.bearer,
+          numbered([{ type: RUNNER_EVENT.END, reason: RUNNER_END.TURN_ENDED }], turn.length),
+        );
+
+        assert.equal(named.title, "Fix the flaky invite test");
+        assert.equal(task.name, "Fix the flaky invite test");
+        assert.equal(asked.calls, 1);
       }),
   );
 });

@@ -720,10 +720,14 @@ const replayFitterOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   );
   const lowest = offered.find((model) => model.id === choice.model)?.efforts[0] ?? choice.effort;
   const measured = yield* measuredStepOf(userId, from.lineage);
-  const instructions =
+  // Note that a native harness's step estimates no instructions (`runner-events-app.ts`), since
+  // the CLI composes its own, so it is told the fallback as a source that measured none is.
+  const estimated =
     measured === undefined
-      ? REPLAY_FIT.INSTRUCTIONS_FALLBACK_TOKENS
-      : fromEveEstimate(measured.step.systemPromptTokens + measured.step.toolDefinitionTokens);
+      ? 0
+      : measured.step.systemPromptTokens + measured.step.toolDefinitionTokens;
+  const instructions =
+    estimated === 0 ? REPLAY_FIT.INSTRUCTIONS_FALLBACK_TOKENS : fromEveEstimate(estimated);
   const bound = measuredBoundBytes(
     measured === undefined
       ? undefined

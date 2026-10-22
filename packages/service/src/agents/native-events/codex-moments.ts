@@ -200,7 +200,9 @@ const BREAKDOWN = Schema.Struct({
   reasoningOutputTokens: Schema.Number,
 });
 const readTokenUsage = Schema.decodeUnknownOption(
-  Schema.Struct({ tokenUsage: Schema.Struct({ total: BREAKDOWN }) }),
+  Schema.Struct({
+    tokenUsage: Schema.Struct({ total: BREAKDOWN, last: Schema.optionalKey(BREAKDOWN) }),
+  }),
 );
 const readTurnCompleted = Schema.decodeUnknownOption(
   Schema.Struct({
@@ -438,13 +440,27 @@ function planMoments(params: unknown, sequence: number): readonly NativeMoment[]
 }
 
 /**
- * The thread's running total, as the meter reads one. Note that OpenAI
- * counts the cache's reads within the input and the reasoning within the
- * output, as the record counts them.
+ * The thread's running total, as the meter reads one, and its last request,
+ * as the context ring reads one. Note that OpenAI counts the cache's reads
+ * within the input and the reasoning within the output, as the record
+ * counts them.
  */
 function usageMoments(params: unknown): readonly NativeMoment[] {
   return Option.match(readTokenUsage(params), {
-    onSome: ({ tokenUsage: { total } }): readonly NativeMoment[] => [
+    onSome: ({ tokenUsage: { total, last } }): readonly NativeMoment[] => [
+      ...(last === undefined
+        ? []
+        : [
+            {
+              kind: NATIVE_MOMENT.CONTEXT,
+              usage: {
+                inputTokens: last.inputTokens,
+                outputTokens: last.outputTokens,
+                cachedInputTokens: last.cachedInputTokens,
+                cacheWriteTokens: last.cacheWriteInputTokens ?? 0,
+              },
+            } as const,
+          ]),
       {
         kind: NATIVE_MOMENT.USAGE_TOTAL,
         total: {
