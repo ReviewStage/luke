@@ -74,6 +74,10 @@ export const NATIVE_TEMPLATE = {
   WAIT: Duration.minutes(3),
   /** How old another key's template must be before the sweep deletes it, so a Preview's lasts its testing. */
   SWEEP_AFTER: Duration.days(1),
+  /** How often the sweep asks Vercel whether a ready template's snapshot still stands. */
+  SNAPSHOT_CHECK: Duration.minutes(10),
+  /** How often the sweep runs (`MAINTENANCE_SWEEP.CRONTAB`): the window of each `SNAPSHOT_CHECK` one sweep falls in. */
+  SWEEP_PERIOD: Duration.minutes(1),
 } as const;
 
 /** The template's tags beside its key: where its build runs, and how the build ended. */
@@ -311,6 +315,45 @@ export const advanceTemplate = (api: VercelSandboxApi, build: ImageBuild): Templ
   });
 
 /**
+ * The template built again because the snapshot it answered is gone: only
+ * where it still holds that snapshot, so a reader that finds one another
+ * reader built since moves that one on instead.
+ */
+export const forgetSnapshot = (
+  api: VercelSandboxApi,
+  build: ImageBuild,
+  snapshotId: string,
+): TemplateRead =>
+  Effect.gen(function* () {
+    const found = yield* api.getNamed(build.name);
+    if (found?.currentSnapshotId !== snapshotId) return yield* advanceTemplate(api, build);
+    yield* Effect.logWarning(
+      `the native agents' image ${build.key} lost its snapshot, so it is prepared again`,
+    );
+    return yield* rebuild(api, build, found);
+  });
+
+/** Whether this sweep is the one of its `SNAPSHOT_CHECK` window that asks after the snapshot. */
+function checksSnapshot(now: number): boolean {
+  return (
+    now % Duration.toMillis(NATIVE_TEMPLATE.SNAPSHOT_CHECK) <
+    Duration.toMillis(NATIVE_TEMPLATE.SWEEP_PERIOD)
+  );
+}
+
+/** The current template moved on, and, where it is ready and this sweep checks, built again if its snapshot is gone. */
+const sweepCurrent = (api: VercelSandboxApi, build: ImageBuild): TemplateRead =>
+  Effect.gen(function* () {
+    const read = yield* advanceTemplate(api, build);
+    if (read.state !== TEMPLATE_STATE.READY || !checksSnapshot(yield* Clock.currentTimeMillis)) {
+      return read;
+    }
+    return (yield* api.snapshotExists(read.snapshotId))
+      ? read
+      : yield* forgetSnapshot(api, build, read.snapshotId);
+  });
+
+/**
  * The template as a launch waits on it: read every `POLL` while it is
  * being prepared, for at most `wait` (`WAIT` unless the caller names less),
  * and answered as it then stands.
@@ -338,8 +381,9 @@ export interface TemplateSweepOutcome {
 
 /**
  * The sweep's turn at the templates: the current one moved on, where native
- * agents are admitted at all, and every other key's deleted once it is old
- * enough, with the snapshots only it kept.
+ * agents are admitted at all, its snapshot checked every `SNAPSHOT_CHECK`,
+ * and every other key's deleted once it is old enough, with the snapshots
+ * only it kept.
  */
 export const sweepTemplates = (
   api: VercelSandboxApi,
@@ -347,7 +391,7 @@ export const sweepTemplates = (
   advance: boolean,
 ): Effect.Effect<TemplateSweepOutcome, SandboxUnavailable> =>
   Effect.gen(function* () {
-    const current = advance ? (yield* advanceTemplate(api, build)).state : "unread";
+    const current = advance ? (yield* sweepCurrent(api, build)).state : "unread";
     const now = yield* Clock.currentTimeMillis;
     const listed = yield* api.listNamed(NATIVE_TEMPLATE.NAME_PREFIX);
     let deleted = 0;

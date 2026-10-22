@@ -11,6 +11,7 @@
  * What the image carries, and why, is told in `sandbox.ts`.
  */
 
+import { AGENT_USER, CLAUDE_CODE_PIN, CLAUDE_EXECUTABLE, CODEX_PIN } from "@luke/agent-runner/pins";
 import { installCodeTooling } from "eve/extensions/code/sandbox";
 import type { SandboxSession } from "eve/sandbox";
 import { WITHOUT_CAPABILITIES } from "../sandbox-capabilities.js";
@@ -79,21 +80,13 @@ const INSTALL_BUBBLEWRAP = [
 ];
 
 /**
- * The Claude Agent SDK, pinned exactly, and the `claude` binary its
- * platform package carries (the SDK's own `claudeCodeVersion`), so
- * installing the one installs the other. The pair is the one the Claude
- * Code probe proved in a sandbox, and the runner that drives the binary
- * pins the same SDK; a bump moves both on purpose. Installed as root in a
- * directory only root writes, so no shell of the sandbox's user changes the
- * binary Claude Code runs as `agent`. The binary is the Linux x86-64 build,
- * the Vercel sandbox's architecture.
+ * The Claude Agent SDK and the `claude` binary it carries, as the runner
+ * pins them (`@luke/agent-runner/pins`): the pair the Claude Code probe
+ * proved in a sandbox, installed as root in a directory only root writes, so
+ * no shell of the sandbox's user changes the binary Claude Code runs as
+ * `agent`.
  */
-const CLAUDE_CODE = {
-  SDK_VERSION: "0.3.304",
-  VERSION: "2.1.304",
-  DIRECTORY: "/opt/luke/claude-agent-sdk",
-  BINARY: "node_modules/@anthropic-ai/claude-agent-sdk-linux-x64/claude",
-} as const;
+const CLAUDE_CODE = CLAUDE_CODE_PIN;
 
 /**
  * Installs the SDK where its binary does not already print the pin, links
@@ -105,13 +98,10 @@ const INSTALL_CLAUDE_CODE = [
   `if ! ${CLAUDE_CODE.DIRECTORY}/${CLAUDE_CODE.BINARY} --version 2>/dev/null | grep -q '^${CLAUDE_CODE.VERSION} '; then`,
   `  $SUDO env HOME=/root npm install --prefix ${CLAUDE_CODE.DIRECTORY} --no-audit --no-fund --save-exact @anthropic-ai/claude-agent-sdk@${CLAUDE_CODE.SDK_VERSION}`,
   "fi",
-  `$SUDO ln -sfn ${CLAUDE_CODE.DIRECTORY}/${CLAUDE_CODE.BINARY} /usr/local/bin/claude`,
+  `$SUDO ln -sfn ${CLAUDE_EXECUTABLE} ${CLAUDE_CODE.LINK}`,
   "claude --version",
   `claude --version | grep -q '^${CLAUDE_CODE.VERSION} ' || { echo 'claude does not print ${CLAUDE_CODE.VERSION}' >&2; exit 1; }`,
 ];
-
-/** The unprivileged user Claude Code runs as, apart from the sandbox's default user. */
-const AGENT_USER = "agent";
 
 /**
  * Creates `agent` where it is missing, with a home only it reads, and in
@@ -127,19 +117,14 @@ const CREATE_AGENT_USER = [
 ];
 
 /**
- * Codex, pinned exactly, the release the Codex probe proved in a sandbox
- * and the runner's Codex mode drives; a bump moves them together. Installed
- * as root under a prefix only root writes, beside the Claude Agent SDK, so
- * no shell of the sandbox's user changes the binary Codex runs as `agent`.
- * Its `CODEX_HOME` is in `agent`'s home, on the sandbox's persisted disk, so
- * the threads it keeps there outlive a stop and `thread/resume` finds them;
- * Codex refuses to start where it is missing, so the image makes it.
+ * Codex, as the runner pins it (`@luke/agent-runner/pins`): the release the
+ * Codex probe proved in a sandbox, which the runner's Codex mode drives and
+ * its protocol types are generated from. Installed as root under a prefix
+ * only root writes, beside the Claude Agent SDK. Its `CODEX_HOME` is in
+ * `agent`'s home, so `thread/resume` finds the threads it keeps there after
+ * a stop; Codex refuses to start where it is missing, so the image makes it.
  */
-const CODEX = {
-  VERSION: "0.163.0",
-  DIRECTORY: "/opt/luke/codex",
-  HOME: `/home/${AGENT_USER}/.codex`,
-} as const;
+const CODEX = CODEX_PIN;
 
 /**
  * Installs Codex where it does not already print the pin, links it as
@@ -150,7 +135,7 @@ const INSTALL_CODEX = [
   `if ! ${CODEX.DIRECTORY}/bin/codex --version 2>/dev/null | grep -Fxq 'codex-cli ${CODEX.VERSION}'; then`,
   `  $SUDO env HOME=/root npm install --global --prefix ${CODEX.DIRECTORY} --no-audit --no-fund @openai/codex@${CODEX.VERSION}`,
   "fi",
-  `$SUDO ln -sfn ${CODEX.DIRECTORY}/bin/codex /usr/local/bin/codex`,
+  `$SUDO ln -sfn ${CODEX.DIRECTORY}/bin/codex ${CODEX.LINK}`,
   "codex --version",
   `codex --version | grep -Fxq 'codex-cli ${CODEX.VERSION}' || { echo 'codex does not print ${CODEX.VERSION}' >&2; exit 1; }`,
   `$SUDO install -d -o ${AGENT_USER} -g ${AGENT_USER} -m 0700 ${CODEX.HOME}`,

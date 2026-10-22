@@ -40,6 +40,7 @@
  * argv, the config line, a tag, or a log.
  */
 
+import { CODEX_PIN } from "@luke/agent-runner/pins";
 import {
   CODEX_EFFORT,
   type CodexConfig,
@@ -62,7 +63,6 @@ import { PLAN_REFUSAL, type PlanRefusal } from "../brain-host/eve-sessions.js";
 import { CODER } from "./bounds.js";
 import { NATIVE_SESSION_PREFIX } from "./native-runtime.js";
 import {
-  AGENT_USER,
   LaunchRefused,
   type RunnerHarness,
   type RunnerServices,
@@ -81,11 +81,8 @@ export interface CodexSessionsOptions extends RunnerSessionsOptions {
   readonly tokenUrl?: string | undefined;
 }
 
-/** Where the image keeps Codex (`agent-runtime/sandbox.ts`'s `INSTALL_CODEX`): the binary, and the `CODEX_HOME` it made for `agent`. */
-const CODEX_PATH = {
-  EXECUTABLE: "/usr/local/bin/codex",
-  HOME: `/home/${AGENT_USER}/.codex`,
-} as const;
+/** Where the image keeps Codex (`agent-runtime/sandbox-image.ts`'s `INSTALL_CODEX`): the binary, and the `CODEX_HOME` it made for `agent`. */
+const CODEX_PATH = { EXECUTABLE: CODEX_PIN.LINK, HOME: CODEX_PIN.HOME } as const;
 
 /** The variable Codex reads its home from. */
 const CODEX_HOME_ENV = "CODEX_HOME";

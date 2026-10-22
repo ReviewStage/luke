@@ -22,6 +22,7 @@ import {
   advanceTemplate,
   awaitTemplate,
   EVE_BASE_IMAGE,
+  forgetSnapshot,
   type ImageBuild,
   NATIVE_TEMPLATE,
   recordImageBuild,
@@ -92,6 +93,8 @@ function vercel() {
   const commands: FakeCommand[] = [];
   const uploads: Map<string, string>[] = [];
   const snapshots: string[] = [];
+  /** The snapshots Vercel lost, deleted under the template that still names one. */
+  const goneSnapshots = new Set<string>();
   const clock = { now: 0 };
   /** What the test does once, the next time a sandbox is read by name, before the read is answered. */
   const hooks: { onceOnRead?: (() => Promise<void>) | undefined } = {};
@@ -157,6 +160,14 @@ function vercel() {
       await hook?.();
       return Response.json(answer);
     }
+    const snapshotLookup = /^\/api\/v2\/sandboxes\/snapshots\/([^/]+)$/u.exec(path);
+    if (method === "GET" && snapshotLookup !== null) {
+      const snapshotId = decodeURIComponent(snapshotLookup[1] ?? "");
+      if (goneSnapshots.has(snapshotId) || !snapshots.includes(snapshotId)) {
+        return Response.json({ error: { code: "not_found" } }, { status: 404 });
+      }
+      return Response.json({ snapshot: { id: snapshotId, status: "created" } });
+    }
     const session = /^\/api\/v2\/sandboxes\/sessions\/([^/]+)\/(.+)$/u.exec(path);
     assert.ok(session !== null, `an unexpected call: ${method} ${path}`);
     const [, sessionId = "", rest = ""] = session;
@@ -212,6 +223,7 @@ function vercel() {
     commands,
     uploads,
     snapshots,
+    goneSnapshots,
     clock,
     hooks,
     /** The build of the template named ends with the exit code given. */
@@ -471,4 +483,84 @@ it.effect("the template starts from the base image of the eve this repository in
     const { version } = JSON.parse(readFileSync(manifest, "utf8")) as { version: string };
     assert.equal(EVE_BASE_IMAGE, `vcr.vercel.com/vercel/eve/base:${version.split("+")[0]}`);
   }),
+);
+
+it.effect(
+  "a snapshot a launch hands back as gone has the template prepared again, and launches wait on the new build",
+  () =>
+    Effect.gen(function* () {
+      const fake = vercel();
+      const { api, build } = yield* setUp(fake);
+      yield* advanceTemplate(api, build);
+      fake.finishBuild(0);
+      const ready = yield* advanceTemplate(api, build);
+      assert.ok(ready.state === TEMPLATE_STATE.READY);
+      fake.goneSnapshots.add(ready.snapshotId);
+      const image = yield* AgentSandboxImage.pipe(
+        Effect.provide(
+          Layer.provide(agentSandboxImageFromTemplate(fixtureToken, Duration.zero), fake.layer),
+        ),
+      );
+
+      yield* image.snapshotGone(ready.snapshotId);
+      const next = yield* Effect.result(image.snapshotId);
+
+      assert.ok(Result.isFailure(next) && next.failure instanceof ImagePreparing);
+      assert.equal(fake.sandboxes.filter((each) => !each.deleted).length, 1);
+      assert.equal(fake.sandboxes[0]?.deleted, true);
+      assert.equal(fake.commands.length, 2);
+      fake.finishBuild(0);
+      assert.deepEqual(yield* image.snapshotId, Option.some(fake.snapshots[1]));
+    }),
+);
+
+it.effect(
+  "a gone snapshot handed back after another reader already prepared the template again leaves the new one be",
+  () =>
+    Effect.gen(function* () {
+      const fake = vercel();
+      const { api, build } = yield* setUp(fake);
+      yield* advanceTemplate(api, build);
+      fake.finishBuild(0);
+      const first = yield* advanceTemplate(api, build);
+      assert.ok(first.state === TEMPLATE_STATE.READY);
+      yield* forgetSnapshot(api, build, first.snapshotId);
+      fake.finishBuild(0);
+      const second = yield* advanceTemplate(api, build);
+
+      const late = yield* forgetSnapshot(api, build, first.snapshotId);
+
+      assert.deepEqual(late, second);
+      assert.equal(fake.commands.length, 2);
+    }),
+);
+
+it.effect(
+  "the sweep finds a ready template's lost snapshot at its next check and prepares the image again",
+  () =>
+    Effect.gen(function* () {
+      const fake = vercel();
+      const { api, build } = yield* setUp(fake);
+      yield* advanceTemplate(api, build);
+      fake.finishBuild(0);
+      assert.deepEqual(yield* sweepTemplates(api, build, true), {
+        current: TEMPLATE_STATE.READY,
+        deleted: 0,
+      });
+      const lost = fake.snapshots[0];
+      assert.ok(lost !== undefined);
+      fake.goneSnapshots.add(lost);
+
+      // A sweep between checks reads the template's record alone, which still names the snapshot.
+      yield* TestClock.adjust(NATIVE_TEMPLATE.SWEEP_PERIOD);
+      const between = yield* sweepTemplates(api, build, true);
+      yield* TestClock.adjust(
+        Duration.subtract(NATIVE_TEMPLATE.SNAPSHOT_CHECK, NATIVE_TEMPLATE.SWEEP_PERIOD),
+      );
+      const checked = yield* sweepTemplates(api, build, true);
+
+      assert.equal(between.current, TEMPLATE_STATE.READY);
+      assert.equal(checked.current, TEMPLATE_STATE.PREPARING);
+      assert.equal(fake.commands.length, 2);
+    }),
 );

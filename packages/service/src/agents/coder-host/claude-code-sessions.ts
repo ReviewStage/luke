@@ -18,6 +18,7 @@
  * events route records from the runner's `init`, and a relaunch resumes.
  */
 
+import { CLAUDE_EXECUTABLE } from "@luke/agent-runner/pins";
 import {
   type ClaudeCodeConfig,
   EFFORT,
@@ -52,7 +53,7 @@ import {
 } from "./runner-sessions.js";
 import type { NativeSessions } from "./runtime-sessions.js";
 
-export { RUNNER_ENDED, runnerBearerDigest, runnerEnded } from "./runner-sessions.js";
+export { RUNNER_ENDED, runnerEnded } from "./runner-sessions.js";
 
 /** What the sessions reach. */
 export type ClaudeCodeServices = RunnerServices;
@@ -61,10 +62,6 @@ export interface ClaudeCodeSessionsOptions extends RunnerSessionsOptions {
   /** An Anthropic API key the CLI runs on in place of the account's plan: test mode alone. */
   readonly testApiKey?: Redacted.Redacted | undefined;
 }
-
-/** The image's `claude`, the binary the bundled SDK cannot find on its own (`agent-runtime/sandbox.ts`). */
-const CLAUDE_EXECUTABLE =
-  "/opt/luke/claude-agent-sdk/node_modules/@anthropic-ai/claude-agent-sdk-linux-x64/claude";
 
 /** The hosts a command the agent runs may reach through Claude Code's command sandbox: GitHub and the package registries. */
 const ALLOWED_DOMAINS = [

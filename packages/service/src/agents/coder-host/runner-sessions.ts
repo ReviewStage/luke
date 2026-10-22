@@ -18,7 +18,7 @@
  * checks the agent's repository out into it exactly as eve's sandbox does
  * (`checkout.ts`, the same token at the firewall), and launches the runner.
  * A launch mints the runner's bearer and records its digest on the
- * conversation, uploads the runner's bundle (`runner-bundle.ts`), and starts
+ * agent's row, uploads the runner's bundle (`runner-bundle.ts`), and starts
  * it as a detached command of the sandbox's API as root, which installs the
  * bundle where only root writes, checks its digest, shares the checkout with
  * the `agent` user, and drops to that user with every capability gone
@@ -63,6 +63,7 @@
  */
 
 import { createHash, randomBytes, randomUUID } from "node:crypto";
+import { AGENT_USER } from "@luke/agent-runner/pins";
 import {
   type ContentBlock,
   INPUT_LINE,
@@ -104,6 +105,7 @@ import {
   PLAN_REFUSAL,
   type PlanRefusal,
 } from "../brain-host/eve-sessions.js";
+import { runnerTokenDigest } from "../luke-mcp/bearer.js";
 import type { RepositorySandbox } from "../repository-shell.js";
 import { WITHOUT_CAPABILITIES } from "../sandbox-capabilities.js";
 import { capSandboxTimeout } from "../sandbox-keep-alive.js";
@@ -239,9 +241,6 @@ const RUNNER_PATH = {
   INSTALLED: "/opt/luke/agent-runner/agent-runner.mjs",
 } as const;
 
-/** The unprivileged user the harness runs as, which the image creates. */
-export const AGENT_USER = "agent";
-
 /** The variables the sandbox opens with, as eve's coding-agent environment sets them. */
 const SANDBOX_ENV = { NO_COLOR: "1", GH_STACK_NO_UPDATE_NOTIFIER: "1" } as const;
 
@@ -300,11 +299,6 @@ function sessionIdOf(prefix: string, mintedAt: number): string {
 
 /** The bearer's bytes before it is spelled, as many as a session key. */
 const BEARER_BYTES = 32;
-
-/** The digest the store keeps of a runner's bearer: its SHA-256, in hex, as the MCP server compares it. */
-export function runnerBearerDigest(bearer: string): string {
-  return createHash("sha256").update(bearer).digest("hex");
-}
 
 /** A message's content as the runner's lines carry it: words as text, an image as an image block, any other file named. */
 function runnerContent(message: string | UserContent, harness: string): readonly ContentBlock[] {
@@ -615,7 +609,7 @@ export const runnerSessions = <
         const bundle = yield* (yield* RunnerBundle).contents;
         const digest = createHash("sha256").update(bundle).digest("hex");
         const bearer = randomBytes(BEARER_BYTES).toString("base64url");
-        yield* recordCodingAgentRunnerToken(userId, agent.id, runnerBearerDigest(bearer));
+        yield* recordCodingAgentRunnerToken(userId, agent.id, runnerTokenDigest(bearer));
         yield* api.writeFiles(sandbox.running, [
           { path: RUNNER_PATH.UPLOAD, contents: bundle, mode: 0o644 },
         ]);
@@ -714,23 +708,37 @@ export const runnerSessions = <
      */
     const openedSandbox = (agent: CodingAgent, sessionId: string, first: InputLine) =>
       Effect.gen(function* () {
-        const snapshot = yield* (yield* AgentSandboxImage).snapshotId;
+        const image = yield* AgentSandboxImage;
+        const snapshot = yield* image.snapshotId;
         if (Option.isNone(snapshot))
           return yield* Effect.fail(new LaunchRefused({ reason: "no snapshot" }));
         const target: ConversationTarget = { userId, conversationId: agent.conversationId };
-        const opened = yield* api.create({
-          name: `${SANDBOX_NAME}${randomUUID()}`,
-          snapshotId: snapshot.value,
-          tags: { [SESSION_TAG]: sessionId, [RUNNER_TAG.AGENT]: agent.id },
-          timeoutMs: CODER.SANDBOX_TIMEOUT_MS,
-          vcpus: CODER.SANDBOX_VCPUS,
-          keepLastSnapshots: {
-            count: CODER.SANDBOX_SNAPSHOTS.count,
-            expiration: Duration.toMillis(CODER.SANDBOX_SNAPSHOTS.expiration),
-            deleteEvicted: CODER.SANDBOX_SNAPSHOTS.deleteEvicted,
-          },
-          env: SANDBOX_ENV,
-        });
+        const opened = yield* api
+          .create({
+            name: `${SANDBOX_NAME}${randomUUID()}`,
+            snapshotId: snapshot.value,
+            tags: { [SESSION_TAG]: sessionId, [RUNNER_TAG.AGENT]: agent.id },
+            timeoutMs: CODER.SANDBOX_TIMEOUT_MS,
+            vcpus: CODER.SANDBOX_VCPUS,
+            keepLastSnapshots: {
+              count: CODER.SANDBOX_SNAPSHOTS.count,
+              expiration: Duration.toMillis(CODER.SANDBOX_SNAPSHOTS.expiration),
+              deleteEvicted: CODER.SANDBOX_SNAPSHOTS.deleteEvicted,
+            },
+            env: SANDBOX_ENV,
+          })
+          .pipe(
+            // Note that a template's snapshot gone under it is handed back, so the image is
+            // prepared again, because otherwise every launch would fail on it until someone
+            // deleted the template by hand; this launch answers as preparing meanwhile.
+            Effect.catchIf(
+              (failure) => failure.status === SNAPSHOT_GONE_STATUS,
+              () =>
+                Effect.flatMap(image.snapshotGone(snapshot.value), () =>
+                  Effect.fail(new ImagePreparing()),
+                ),
+            ),
+          );
         yield* Effect.gen(function* () {
           const running = opened.currentSessionId;
           if (running === undefined) return yield* new SandboxUnavailable({});
