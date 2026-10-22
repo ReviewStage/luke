@@ -52,6 +52,7 @@ export * from "./components/settings-page/settings-page.js";
 export * from "./components/settings-row/settings-row.js";
 export * from "./components/settings-section/settings-section.js";
 export * from "./components/skeleton/skeleton.js";
+export * from "./components/slider/slider.js";
 export * from "./components/spinner/spinner.js";
 export * from "./components/split-button/split-button.js";
 export * from "./components/switch/switch.js";
