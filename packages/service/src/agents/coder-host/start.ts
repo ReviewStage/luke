@@ -59,7 +59,7 @@ import {
 import type { Task } from "@luke/features/task-wire";
 import { failureKind } from "@luke/runtime/effect";
 import { sentLineId } from "@luke/wire/host-ids";
-import { Clock, Effect, Option } from "effect";
+import { Clock, Effect, Option, Result } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import {
   recordServerEvent,
@@ -913,11 +913,12 @@ const openingLine = (
   text: string,
   files: readonly HandedFile[],
   mentioned: string | undefined,
+  automation: StoredAutomationOrigin | undefined,
 ) =>
   Effect.gen(function* () {
     const clientKey = randomUUID();
     const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
-    yield* hostedStoreOrUnavailable(
+    const written = yield* hostedStoreOrUnavailable(
       writer.writeAwaitingLine(
         { userId: agent.userId, conversationId: agent.conversationId },
         {
@@ -925,11 +926,19 @@ const openingLine = (
           clientKey,
           attachments: files,
           mentioned,
-          sender: { kind: MESSAGE_SENDER.MEMBER, userId: agent.userId },
+          // An automation's run says its prompt as the automation, as its later lines do (`automation-runs.ts`).
+          sender:
+            automation === undefined
+              ? { kind: MESSAGE_SENDER.MEMBER, userId: agent.userId }
+              : { kind: MESSAGE_SENDER.AUTOMATION, name: automation.name },
         },
         Effect.succeed(true),
       ),
     );
+    // A line refused, or one the store never landed, is no line the runner could name back.
+    if (Result.isFailure(written) || Option.isNone(written.success)) {
+      return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
+    }
     return sentLineId(clientKey);
   });
 
@@ -1070,8 +1079,14 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
     // eve writes the first message into the transcript as its session takes it; a native harness's
     // runner only names its line back as it takes it (`native-events/`), so the line is written here,
     // awaiting its turn, before the runner can name it. A launch refused discards the agent, line and all.
+    // A line that could not be written discards the agent, as a refused launch does, so a retry
+    // under the same key starts it afresh rather than finding an agent that was never launched.
     const line = isNativeRuntime(runtime.runtime)
-      ? yield* openingLine(agent, handed, files, mentioned)
+      ? yield* openingLine(agent, handed, files, mentioned, ask.automationOrigin).pipe(
+          Effect.tapError(() =>
+            Effect.ignore(hostedStoreOrUnavailable(discardCodingAgent(userId, agent.id))),
+          ),
+        )
       : undefined;
     const opened = yield* sessions
       .open({
