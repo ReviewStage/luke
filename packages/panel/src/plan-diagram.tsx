@@ -1,5 +1,5 @@
 import { useAtomValue } from "@effect/atom-react";
-import { Button } from "@luke/ui";
+import { Button, PictureTile } from "@luke/ui";
 import { drawnDark, onDrawnThemeChange } from "@luke/ui/appearance";
 import {
   DIAGRAM_APPEARANCE,
@@ -133,24 +133,12 @@ function opensFullScreen(element: Element): boolean {
   return coarsePointerNow() || element.closest(NARROW_ROOM) !== null;
 }
 
-/** A diagram's picture, at its own size up to the column's; a press opens it over the window where `onPress` lets it. */
-function DiagramPicture({
-  url,
-  onPress,
-}: {
-  url: string;
-  onPress?: (event: React.MouseEvent<HTMLImageElement>) => void;
-}): React.JSX.Element {
-  return (
-    // biome-ignore lint/a11y/useKeyWithClickEvents: the tap is a finger's way to the head's Full screen, which is the keyboard's.
-    <img
-      className="plan-diagram-picture"
-      src={url}
-      alt="Diagram"
-      decoding="async"
-      onClick={onPress}
-    />
-  );
+/** What a diagram's picture says it is, and what its press is named for after "Enlarge". */
+const DIAGRAM_ALT = "Diagram";
+
+/** A diagram's picture, at its own size up to the column's. */
+function DiagramPicture({ url }: { url: string }): React.JSX.Element {
+  return <img className="plan-diagram-picture" src={url} alt={DIAGRAM_ALT} decoding="async" />;
 }
 
 /** The line a refused fence stands under. */
@@ -222,15 +210,20 @@ export function PlanDiagram({
       </div>
       {drawingNow?.kind === DIAGRAM_DRAWING.REFUSED ? <RefusedLine /> : null}
       {pictureShown ? (
-        <DiagramPicture
-          url={picture}
-          onPress={(event) => {
-            if (!opensFullScreen(event.currentTarget)) return;
+        <PictureTile
+          name={DIAGRAM_ALT}
+          onOpen={(event) => {
+            // Note that a key's press (no pointer's click count) opens it in any room, because the
+            // head's Full screen stands only where a finger's tap would open it too.
+            const keyed = event.detail === 0;
+            if (!keyed && !opensFullScreen(event.currentTarget)) return;
             // The press is the picture's, so the section around it does not open to be edited.
             event.stopPropagation();
             setFullScreen(true);
           }}
-        />
+        >
+          <DiagramPicture url={picture} />
+        </PictureTile>
       ) : (
         source
       )}

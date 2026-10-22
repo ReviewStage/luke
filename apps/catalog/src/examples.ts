@@ -35,6 +35,7 @@ import { MENU_EXAMPLE } from "./examples/menu";
 import { NAV_ITEMS_EXAMPLE } from "./examples/nav-items";
 import { ONE_LINE_EXAMPLE } from "./examples/one-line";
 import { PAGINATION_EXAMPLE } from "./examples/pagination";
+import { PICTURE_TILES_EXAMPLE } from "./examples/picture-tiles";
 import { POPOVER_PANELS_EXAMPLE } from "./examples/popover-panels";
 import { PROGRESS_EXAMPLE } from "./examples/progress";
 import { PROSE_EXAMPLE } from "./examples/prose";
@@ -117,6 +118,7 @@ export const EXAMPLES: readonly Example[] = [
   NAV_ITEMS_EXAMPLE,
   ONE_LINE_EXAMPLE,
   PAGINATION_EXAMPLE,
+  PICTURE_TILES_EXAMPLE,
   POPOVER_PANELS_EXAMPLE,
   PROGRESS_EXAMPLE,
   PROSE_EXAMPLE,

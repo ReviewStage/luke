@@ -1,3 +1,4 @@
+import { PictureTile } from "@luke/ui";
 import { PICTURE_STATE, type PictureState } from "@luke/ui/picture-cache";
 import { ImageOffIcon } from "lucide-react";
 import { Spinner } from "./spinner.js";
@@ -14,9 +15,6 @@ import { Spinner } from "./spinner.js";
  * masked. Nothing here knows whose picture it is; the place drawing one
  * hands its state and what a press does.
  */
-
-/** What a picture's press is named for a reader, its alt text after it. */
-const ENLARGE_LABEL = "Enlarge";
 
 /** What a picture that is not there says, after its alt text where it has any. */
 const MISSING_WORDS = "not available";
@@ -67,24 +65,24 @@ export function PictureBlock({
     const open = onOpen;
     return (
       <span ref={ref} className="picture-block ph-no-capture" data-state={state.kind}>
-        <button
-          type="button"
-          className="picture-frame"
-          aria-label={alt === "" ? ENLARGE_LABEL : `${ENLARGE_LABEL} ${alt}`}
-          onClick={(event) => {
+        <PictureTile
+          name={alt}
+          onOpen={(event) => {
             // Note that the press stops here, because a click into a section opens its editor.
             event.stopPropagation();
             open?.();
           }}
         >
-          <img
-            className="picture-image"
-            src={state.url}
-            alt={alt}
-            decoding="async"
-            draggable={false}
-          />
-        </button>
+          <span className="picture-frame">
+            <img
+              className="picture-image"
+              src={state.url}
+              alt={alt}
+              decoding="async"
+              draggable={false}
+            />
+          </span>
+        </PictureTile>
         {said}
       </span>
     );

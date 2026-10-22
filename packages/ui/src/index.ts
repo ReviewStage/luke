@@ -41,6 +41,7 @@ export * from "./components/nav-item/nav-item.js";
 export * from "./components/one-line/one-line.js";
 export * from "./components/page-frame/page-frame.js";
 export * from "./components/pagination/pagination.js";
+export * from "./components/picture-tile/picture-tile.js";
 export * from "./components/popover-panel/popover-panel.js";
 export * from "./components/progress/progress.js";
 export * from "./components/prose/prose.js";

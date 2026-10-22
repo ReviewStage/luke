@@ -309,7 +309,7 @@ test("a refused set is a row that failed, its reason read in it, and nothing wai
 test("the viewer over a set of eight walks all eight, the two the turn did not draw among them", async () => {
   const pictures = Array.from({ length: 8 }, () => picture(800, 450));
   const { container } = await drawn(finished([shown("call-eight", pictures), text("All eight.")]));
-  const first = container.querySelector<HTMLButtonElement>(".picture-set-tile");
+  const first = container.querySelector<HTMLButtonElement>(".picture-set-tile button");
   assert.ok(first);
 
   await act(async () => first.click());
@@ -362,7 +362,7 @@ test("the viewer opened on the first picture to land reaches the rest as their r
             held.push(() => resolve({ contentType: INBOX_IMAGE_TYPE.PNG, base64: "iVBORw==" }));
           }),
   );
-  const tile = container.querySelector<HTMLButtonElement>(".picture-set-tile");
+  const tile = container.querySelector<HTMLButtonElement>(".picture-set-tile button");
   assert.ok(tile);
 
   await act(async () => tile.click());

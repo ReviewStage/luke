@@ -36,7 +36,8 @@ import { landedBundles, onSideBundles } from "./testing/side-bundles.js";
  * its one boundary, the bundle's importer, answering a picture named by the
  * code and the appearance it was asked in. On a finger's device, or in a
  * phone's narrow room, a tap on a diagram opens it over the window, which
- * its Close or Escape shuts; with a mouse in a wide room a tap opens nothing.
+ * its Close or Escape shuts; with a mouse in a wide room a tap opens nothing,
+ * while the keyboard's press on the picture opens it in any room.
  * Synthetic plan.
  */
 
@@ -268,6 +269,19 @@ function picture(container: HTMLElement): HTMLImageElement {
   );
 }
 
+/** A pointer's press on `element`, which counts its clicks, as a key's press does not. */
+function tap(element: HTMLElement): void {
+  element.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, detail: 1 }));
+}
+
+/** The press around the diagram's picture, which the keyboard reaches. */
+function press(container: HTMLElement): HTMLButtonElement {
+  return (
+    picture(container).closest<HTMLButtonElement>("button") ??
+    assert.fail("the diagram is a press the keyboard reaches")
+  );
+}
+
 test("on a finger's device a tap on a diagram opens it over the window at its own pixels, and Close shuts it", async () => {
   device.finger = true;
   const code = "flowchart LR\n  Invite --> Join";
@@ -275,7 +289,7 @@ test("on a finger's device a tap on a diagram opens it over the window at its ow
     createElement(PlanBody, { task: taskWith(mermaidFence(code)), live: false }),
   );
 
-  act(() => picture(page).click());
+  act(() => tap(picture(page)));
 
   const open = viewer() ?? assert.fail("the diagram opens over the window");
   assert.equal(open.dataset.opening, "own-pixels");
@@ -300,7 +314,7 @@ test("in a phone's narrow room a tap on a diagram opens it, and Escape shuts it"
   );
   room.append(page);
 
-  act(() => picture(page).click());
+  act(() => tap(picture(page)));
 
   const card =
     document.querySelector<HTMLElement>('[role="dialog"]') ??
@@ -317,7 +331,21 @@ test("with a mouse in a wide room a tap on a diagram opens nothing over the wind
     createElement(PlanBody, { task: taskWith(mermaidFence(code)), live: false }),
   );
 
-  act(() => picture(page).click());
+  act(() => tap(picture(page)));
 
   assert.equal(viewer(), null);
+});
+
+test("in a wide room the keyboard's press on a diagram, named for what it does, opens it over the window", async () => {
+  const code = "flowchart LR\n  Invite --> Join";
+  const page = await drawn(
+    createElement(PlanBody, { task: taskWith(mermaidFence(code)), live: false }),
+  );
+  const enlarge = press(page);
+  assert.equal(enlarge.getAttribute("aria-label"), "Enlarge Diagram");
+
+  act(() => enlarge.click());
+
+  const open = viewer() ?? assert.fail("the diagram opens over the window");
+  assert.equal(open.dataset.opening, "own-pixels");
 });

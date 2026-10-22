@@ -775,8 +775,22 @@
   display: flex;
 }
 
-.desktop-shell[data-room="narrow"] .plan-diagram-picture {
-  cursor: zoom-in;
+/* The picture's press stands centred where the picture did. With a mouse in a
+   wide room a pointer's press opens nothing and falls through to the
+   section, so there the press wears the plain pointer and does not sink; a
+   key's press still opens it. */
+.plan-diagram > .luke-picture-tile {
+  margin-inline: auto;
+}
+
+@media (pointer: fine) {
+  .desktop-shell:not([data-room="narrow"]) .plan-diagram > .luke-picture-tile {
+    cursor: auto;
+  }
+
+  .desktop-shell:not([data-room="narrow"]) .plan-diagram .luke-picture-tile-face {
+    transform: none;
+  }
 }
 
 @media (pointer: coarse) {
@@ -7396,10 +7410,6 @@ button.subagent-line:hover {
   overflow: clip;
 }
 
-button.picture-frame {
-  cursor: zoom-in;
-}
-
 .picture-image {
   display: block;
   max-width: 100%;
@@ -7570,20 +7580,12 @@ button.picture-frame {
   gap: var(--luke-space-6);
 }
 
+/* A tile's room in the row, its shape set where it is drawn; the tile fills it. */
 .picture-set-tile {
-  position: relative;
   display: flex;
   min-width: 0;
   max-width: 100%;
   flex-direction: column;
-  gap: var(--luke-space-4);
-  padding: 0;
-  border: 0;
-  background: none;
-  color: inherit;
-  cursor: zoom-in;
-  font: inherit;
-  text-align: left;
 }
 
 .picture-set-frame {

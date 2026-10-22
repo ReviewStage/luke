@@ -144,7 +144,7 @@ async function drawn(page: TaskMentionsValue | undefined) {
 
 /** The viewer opened over the picture, by a press on it. */
 async function opened(container: HTMLElement) {
-  const picture = container.querySelector<HTMLButtonElement>(".picture-frame");
+  const picture = container.querySelector<HTMLButtonElement>(".picture-block button");
   assert.ok(picture, "the picture is drawn, its bytes read");
   await act(async () => picture.click());
 }
