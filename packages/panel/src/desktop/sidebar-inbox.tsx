@@ -52,6 +52,7 @@ export function SidebarInbox({
     taskless,
     onRetry,
     openAutomation,
+    compose,
   } = listing;
   // Note that only the item the Inbox shows is the sidebar's current row; while another place stands, none is.
   const shownItem = tasks.inboxView.open ? chosen?.item.id : undefined;
@@ -72,6 +73,12 @@ export function SidebarInbox({
             onMarkAll: () => marks.onMarkAll(standing.flatMap(({ items }) => items)),
           },
           search,
+          onCompose: tasks.signedIn
+            ? () => {
+                compose.onStart();
+                tasks.inboxView.onOpen();
+              }
+            : undefined,
         }}
         models={named.models}
         readerId={tasks.me}
@@ -88,7 +95,10 @@ export function SidebarInbox({
             searched={searched}
           />
         }
-        onChoose={(listed: InboxListed) => onOpen(choiceOf(listed))}
+        onChoose={(listed: InboxListed) => {
+          compose.onEnd();
+          onOpen(choiceOf(listed));
+        }}
         onMark={(listed, unread) => marks.onMark(listed.item, unread)}
         onClose={closeItem}
       />

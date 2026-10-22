@@ -44,6 +44,7 @@ import {
   inboxMessageRequestSchema,
   inboxReadAllSchema,
   inboxReadStateSchema,
+  inboxStartRequestSchema,
 } from "./inbox-wire.js";
 import { catalogModelSchema, modelChoiceSchema, modelProviderSchema } from "./models-wire.js";
 import {
@@ -680,6 +681,11 @@ export type CodingAgentInboxMessageParams = typeof codingAgentInboxMessageParams
 export const codingAgentInboxMessagedViewSchema = EffectSchema.Union([inboxMessagedSchema, failed]);
 
 export type CodingAgentInboxMessagedView = typeof codingAgentInboxMessagedViewSchema.Type;
+
+/** A thread the window starts with one agent: the start request the service takes whole, its key the window's own. It is heard as a message on a thread is (`codingAgentInboxMessagedViewSchema`). */
+export const codingAgentInboxStartParamsSchema = inboxStartRequestSchema;
+
+export type CodingAgentInboxStartParams = typeof codingAgentInboxStartParamsSchema.Type;
 
 /** One item marked read or unread for the account, as the window asks it: the item, and whether it is to read as unread. */
 export const codingAgentInboxReadStateParamsSchema = EffectSchema.Struct({

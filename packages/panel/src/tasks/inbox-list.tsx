@@ -117,6 +117,7 @@ import {
   listHeadControl,
   VIEW_OPTIONS,
 } from "./inbox-columns.js";
+import { NEW_THREAD } from "./inbox-compose.js";
 import {
   EVERYONES,
   holderKey,
@@ -1522,6 +1523,11 @@ function ListHead({
   const search = useListSearch(head.search);
   const options = (
     <>
+      {head.onCompose === undefined ? null : (
+        <Tooltip label={NEW_THREAD}>
+          <IconButton icon={<ComposeIcon />} label={NEW_THREAD} onClick={head.onCompose} />
+        </Tooltip>
+      )}
       {search.button}
       <ViewOptions
         shown={shown}
@@ -1655,6 +1661,8 @@ export interface InboxListHead {
   readonly readAll?: InboxReadAll | undefined;
   /** The list's search, which its head's magnifier opens, on the window's Inbox and a task's own alike; none where the list offers none. */
   readonly search?: InboxSearchHead | undefined;
+  /** Opens a New thread in the pane, from the head's compose button; none where the list offers none. */
+  readonly onCompose?: (() => void) | undefined;
 }
 
 /** The words a list's search holds, and the change that narrows the list to them. */

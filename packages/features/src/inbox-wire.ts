@@ -933,6 +933,26 @@ export type InboxMessageRequest = typeof inboxMessageRequestSchema.Type;
 /** What a member's message comes back as: the item as it then stands, its thread with the message on it, and, where the message answered the thread's open ask, the transaction it was taken in. */
 export const inboxMessagedSchema = EffectSchema.Struct({ item: inboxItemSchema, ...writtenIn });
 
+/**
+ * A thread a member starts with an agent, as a new mail is written: the
+ * agent it goes to, its subject, and its first message, which is a member's
+ * message as `inboxMessageRequestSchema` bounds one, words or files or both
+ * and never neither. The service mints the thread's key from its subject, so
+ * a member never names one the agent already keeps.
+ */
+export const inboxStartRequestSchema = EffectSchema.Struct({
+  agentId: wireUuidSchema,
+  title: EffectSchema.Trim.check(
+    EffectSchema.isNonEmpty(),
+    EffectSchema.isMaxLength(INBOX_BOUNDS.MAX_TITLE_CHARS),
+  ),
+  text: inboxMessageRequestSchema.fields.text,
+  attachments: inboxMessageRequestSchema.fields.attachments,
+  clientKey: inboxMessageRequestSchema.fields.clientKey,
+}).check(EffectSchema.makeFilter(({ text, attachments }) => hasWordsOrFiles(text, attachments)));
+
+export type InboxStartRequest = typeof inboxStartRequestSchema.Type;
+
 /** One item's read state for the member who marked it, as marking it read or unread answers it. */
 export const inboxReadStateSchema = EffectSchema.Struct({
   id: wireUuidSchema,

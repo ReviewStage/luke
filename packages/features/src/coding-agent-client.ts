@@ -107,11 +107,13 @@ import {
   type InboxCloseRequest,
   type InboxMessageRequest,
   type InboxReadAllRequest,
+  type InboxStartRequest,
   inboxAnswerRequestSchema,
   inboxCloseRequestSchema,
   inboxImageTypeSchema,
   inboxMessageRequestSchema,
   inboxReadAllRequestSchema,
+  inboxStartRequestSchema,
 } from "./inbox-wire.js";
 import type { AccountInboxLiveAnswer, ScopeInboxLiveAnswer } from "./live-wire.js";
 import {
@@ -1448,6 +1450,23 @@ export class HostedCodingAgentClient {
         { params: { id: itemId }, body },
         HOSTED_DEADLINE.STEER,
       ),
+      INBOX_ANSWER_REFUSALS,
+    );
+  }
+
+  /**
+   * A thread the account starts with one agent, as a new mail is written:
+   * the thread as it then stands, its first message on it, where the
+   * service wrote it and handed it to the agent; the refusals a message to
+   * the agent answers with otherwise, since it reaches the agent as one.
+   */
+  startInboxThread(
+    request: InboxStartRequest,
+  ): Effect.Effect<CodingAgentInboxMessagedView, never, HttpClient.HttpClient> {
+    const body = wireRequestOf(inboxStartRequestSchema, request);
+    if (body === undefined) return Effect.succeed(UNANSWERED);
+    return hostedAnswer(
+      askHosted(this.#hosted.inbox.start, body, HOSTED_DEADLINE.STEER),
       INBOX_ANSWER_REFUSALS,
     );
   }

@@ -15,6 +15,7 @@ import {
   type CodingAgentInboxAnswerView,
   type CodingAgentInboxMessagedView,
   type CodingAgentInboxMessageParams,
+  type CodingAgentInboxStartParams,
   type CodingAgentListAnswer,
   INBOX_SCOPE_KIND,
 } from "@luke/features/coding-agent-view";
@@ -8275,4 +8276,128 @@ test("with the inbox-first sidebar, a press on View options while the search sta
 
   assert.equal(options.isConnected, true, "the button pressed is the one still standing");
   assert.equal(viewItem("To do").getAttribute("role")?.startsWith("menuitem"), true);
+});
+
+/** The thread a New thread starts, as the service hands it back: the reader's words its first message, settled on their own nod. */
+const STARTED: InboxItem = {
+  ...item("a1b2c3d4-0000-4000-8000-0000000000f1", "Annual plan copy", 9_000),
+  key: "annual-plan-copy",
+  response: { type: INBOX_RESPONSE.NONE },
+  needsReply: false,
+  status: INBOX_STATUS.ANSWERED,
+  answer: { reply: INBOX_REPLY.ACKNOWLEDGED },
+  settledAt: 9_000,
+  thread: [
+    {
+      id: "e1b2c3d4-0000-4000-8000-0000000000f2",
+      author: INBOX_MESSAGE_AUTHOR.MEMBER,
+      member: READER,
+      text: "Draft the annual plan's line too.",
+      createdAt: 9_000,
+    },
+  ],
+};
+
+/** Every thread the pane starts, written down and answered as the service starts it, the task's inbox then holding it; the workspace's agents read as `agents`. */
+function heldStarts(agents: readonly CodingAgentSummary[]): CodingAgentInboxStartParams[] {
+  const sent: CodingAgentInboxStartParams[] = [];
+  const bridge = appBridge();
+  const previous = fakeActsAnswer();
+  fakeActs({
+    ...bridge,
+    act: (request: AnyAct): Promise<FakeActAnswer> => {
+      if (request.kind === ACT_KIND.CODING_AGENTS_WORKSPACE_LIST) {
+        return Promise.resolve({ status: FAKE_ANSWER.DONE, value: { agents } });
+      }
+      if (request.kind !== ACT_KIND.CODING_AGENTS_INBOX_START) return previous(request);
+      sent.push(request.payload);
+      inboxes.set(BILLING.id, [STARTED, ...(inboxes.get(BILLING.id) ?? [])]);
+      pushAgain();
+      return Promise.resolve({ status: FAKE_ANSWER.DONE, value: { item: STARTED } });
+    },
+  });
+  return sent;
+}
+
+test("New thread in the Inbox's head opens a draft in the pane, To naming the agent of the item read; Send starts the thread with that agent, once however often it is pressed, and the Inbox then opens the thread it started, the reader's words its first message", async () => {
+  listedWorkspace = ACME;
+  inboxes = new Map([[BILLING.id, [THRESHOLD]]]);
+  const starts = heldStarts([AGENT]);
+  const { page } = mount();
+  await settle();
+
+  const compose = page.querySelector<HTMLButtonElement>('button[aria-label="New thread"]');
+  assert.ok(compose, "the head offers New thread");
+  act(() => compose.click());
+  await settle();
+  const pane = itemPane(page);
+  assert.equal(pane.getAttribute("aria-label"), "New thread");
+  assert.equal(
+    pane.querySelector('[aria-label^="To: "]')?.getAttribute("aria-label"),
+    `To: Alerts · ${BILLING.name}`,
+    "To names the agent of the item that was read",
+  );
+  const send = () =>
+    pane.querySelector<HTMLButtonElement>("form.inbox-answer button[type='submit']") ??
+    assert.fail("the box has a Send");
+  typeInComposer(pane, "Draft the annual plan's line too.");
+  assert.equal(send().disabled, true, "a thread with no subject sends nothing");
+
+  const subject =
+    pane.querySelector<HTMLInputElement>('input[aria-label="Subject"]') ??
+    assert.fail("the draft has a Subject");
+  const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+  act(() => {
+    setValue?.call(subject, "Annual plan copy");
+    subject.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  assert.equal(send().disabled, false, "To, a subject, and words light Send");
+  act(() => send().click());
+  await settle();
+
+  assert.deepEqual(
+    starts.map(({ agentId, title, text, attachments }) => ({ agentId, title, text, attachments })),
+    [
+      {
+        agentId: AGENT.id,
+        title: "Annual plan copy",
+        text: "Draft the annual plan's line too.",
+        attachments: undefined,
+      },
+    ],
+  );
+  const opened = itemPane(page);
+  assert.equal(
+    opened.getAttribute("aria-label"),
+    "Annual plan copy",
+    "the thread it started opens",
+  );
+  assert.match(opened.textContent ?? "", /Draft the annual plan's line too\./u);
+});
+
+test("Discard takes a New thread away and shows the item it stood over again, as pressing a row does", async () => {
+  listedWorkspace = ACME;
+  inboxes = new Map([[BILLING.id, [THRESHOLD, RETRY]]]);
+  heldStarts([AGENT]);
+  const { page } = mount();
+  await settle();
+  const compose = () =>
+    page.querySelector<HTMLButtonElement>('button[aria-label="New thread"]') ??
+    assert.fail("the head offers New thread");
+
+  act(() => compose().click());
+  await settle();
+  const discard = [...itemPane(page).querySelectorAll("button")].find(
+    (button) => button.textContent === "Discard",
+  );
+  assert.ok(discard);
+  act(() => discard.click());
+  await settle();
+  assert.equal(itemPane(page).getAttribute("aria-label"), THRESHOLD.title);
+
+  act(() => compose().click());
+  await settle();
+  act(() => rowNamed(page, RETRY.title).click());
+  await settle();
+  assert.equal(itemPane(page).getAttribute("aria-label"), RETRY.title);
 });

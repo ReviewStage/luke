@@ -6753,6 +6753,119 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
       }),
   );
 
+  it.effect(
+    "a member starts a thread with an agent that stopped: it stands under a key minted from its subject past the agent's own, their words first, and wakes the agent under the message lead naming that key; the agent's post under the key answers on it, a repeat under the client's key reaches the agent once, and an outsider, an agent of no workspace of theirs, no subject, and no words are refused",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const { owner, other, task, agent, target, ask, post, read, transcript } =
+          yield* openInbox(eve);
+        const theirs = yield* post({ ...QUESTION, key: "annual-plan-copy" });
+        assert.ok(Result.isSuccess(theirs));
+        yield* turnEnded(target);
+        const before = eve.sent.length;
+        const start = (body: WireBoundaryInput, bearer = owner) =>
+          ask(request(ACCOUNT_INBOX, bearer, { method: "POST", body }));
+        const body = {
+          agentId: agent.id,
+          title: "Annual plan copy",
+          text: "Draft the annual plan's line too.",
+          clientKey: randomUUID(),
+        };
+
+        const started = readAnswer(inboxMessagedSchema, HOSTED_HTTP_STATUS.OK, yield* start(body));
+        assert.deepEqual(
+          [started.item.key, started.item.title, started.item.status],
+          ["annual-plan-copy-2", body.title, INBOX_STATUS.ANSWERED],
+        );
+        assert.deepEqual(
+          started.item.thread?.map((each) => [each.author, each.member?.userId, each.text]),
+          [[INBOX_MESSAGE_AUTHOR.MEMBER, owner, body.text]],
+        );
+        const handed = JSON.stringify(eve.sent.slice(before).map((each) => each.message.message));
+        assert.ok(
+          handed.includes(`${INBOX_MESSAGE_LEAD} on \\"${body.title}\\" (key annual-plan-copy-2)`),
+        );
+        assert.ok(handed.includes(body.text), "it carries the words");
+        assert.equal((yield* transcript()).status, CODING_AGENT_STATUS.RUNNING);
+
+        const again = readAnswer(inboxMessagedSchema, HOSTED_HTTP_STATUS.OK, yield* start(body));
+        assert.equal(again.item.id, started.item.id);
+        assert.equal(eve.sent.length, before + 1, "a repeat under the key reaches the agent once");
+        assert.deepEqual(
+          (yield* read()).items
+            .filter((item) => item.key.startsWith("annual-plan-copy"))
+            .map((item) => [item.key, item.title])
+            .sort(),
+          [
+            ["annual-plan-copy", QUESTION.title],
+            ["annual-plan-copy-2", body.title],
+          ],
+          "the agent's own thread under the subject's key stands as it was",
+        );
+
+        yield* TestClock.adjust(Duration.seconds(1));
+        const reply = "Two months free, billed yearly.";
+        const replied = yield* postInboxThread(
+          { userId: owner, taskId: task.id, agentId: agent.id },
+          { key: "annual-plan-copy-2", body: reply },
+        );
+        assert.ok(Result.isSuccess(replied));
+        assert.deepEqual(
+          replied.success.thread?.map((each) => [each.author, each.text]),
+          [
+            [INBOX_MESSAGE_AUTHOR.MEMBER, body.text],
+            [INBOX_MESSAGE_AUTHOR.AGENT, reply],
+          ],
+        );
+
+        assert.deepEqual(
+          yield* start({ ...body, clientKey: randomUUID() }, other),
+          refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
+        );
+        assert.deepEqual(
+          yield* start({ ...body, agentId: randomUUID(), clientKey: randomUUID() }),
+          refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
+        );
+        assert.deepEqual(
+          yield* start({ ...body, title: "  ", clientKey: randomUUID() }),
+          refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
+        );
+        assert.deepEqual(
+          yield* start({ ...body, text: "  ", clientKey: randomUUID() }),
+          refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
+        );
+      }),
+  );
+
+  it.effect(
+    "a thread the agent's session did not take is taken back whole, so the Inbox never shows a thread the agent was not told",
+    () =>
+      Effect.gen(function* () {
+        const { owner, agent, ask, read } = yield* openInbox(
+          fakeEve({ sends: EVE_SEND_OUTCOME.FAILED }),
+        );
+
+        const sent = yield* ask(
+          request(ACCOUNT_INBOX, owner, {
+            method: "POST",
+            body: {
+              agentId: agent.id,
+              title: "Still there?",
+              text: "Ping.",
+              clientKey: randomUUID(),
+            },
+          }),
+        );
+
+        assert.equal(sent.status, HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE);
+        assert.deepEqual(
+          (yield* read()).items.filter((item) => item.title === "Still there?"),
+          [],
+        );
+      }),
+  );
+
   /** A thread that ends with an ask to decide, as the tool from version 5 posts one, waiting to hear the answer back. */
   const DEPLOY = {
     key: "deploy-window",

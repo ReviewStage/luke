@@ -1,5 +1,5 @@
 /**
- * inbox-procedures.ts -- what an agent posted for the developer, read, answered, messaged, and marked read.
+ * inbox-procedures.ts -- what an agent posted for the developer, read, answered, messaged, and marked read, and a thread a member starts.
  *
  * The inbox resource of the hosted oRPC router (`@luke/features/contract`'s
  * `inbox.ts`), each procedure answering the bytes its old `HttpRouter`
@@ -35,7 +35,7 @@ import {
 } from "@luke/features/inbox-wire";
 import { readEither } from "@luke/wire/effect";
 import { Effect, Option, Result } from "effect";
-import type { AccountResolving } from "../agents/agent-reach.js";
+import { type AccountResolving, controlsAgent } from "../agents/agent-reach.js";
 import type { EveTypedTurn } from "../agents/brain-host/eve-sessions.js";
 import {
   accountInboxPast,
@@ -68,9 +68,11 @@ import {
   postInboxMessage,
   readInboxItem,
   type StoredInboxItem,
+  startInboxThread,
   withdrawInboxAnswer,
   withdrawInboxClose,
   withdrawInboxMessage,
+  withdrawInboxThread,
 } from "./inbox-store.js";
 
 /** What the inbox asks of the deployment: who the caller is, and how eve is reached to hand an answer or a message to an agent. */
@@ -445,6 +447,63 @@ const messaged = /* @__PURE__ */ Effect.fnUntraced(function* (
 });
 
 /**
+ * A thread a member starts with an agent, written and handed to the agent
+ * as a message on it is (`messaged`): the agent hears the member's words
+ * under the thread's key, which it answers on with its own posts. Refused
+ * before anything is written where the member may not message the agent,
+ * so a thread the agent could never hear never stands; a hand-off that
+ * fails all the same takes the thread back whole, and one started again
+ * under its key is the one already written, handed off again, which the
+ * steer's own key makes reach the agent once.
+ */
+const started = /* @__PURE__ */ Effect.fnUntraced(function* (
+  seams: InboxProcedureSeams,
+  writer: Effect.Effect<StoreWriter>,
+  request: Request,
+  userId: string,
+  asked: {
+    readonly agentId: string;
+    readonly title: string;
+    readonly text: string;
+    readonly clientKey: string;
+    readonly attachments: readonly CodingAgentAttachment[];
+  },
+) {
+  const { agentId, title, text, clientKey, attachments } = asked;
+  const agent = yield* hostedStoreOrUnavailable(readCodingAgent(userId, agentId));
+  if (Option.isNone(agent)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+  if (!controlsAgent(userId, agent.value)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
+  const { userId: starterId, taskId } = agent.value;
+  const written = yield* hostedStoreOrUnavailable(
+    startInboxThread(
+      userId,
+      { userId: starterId, taskId, agentId: agent.value.id },
+      { title, text, clientKey, files: attachments },
+    ),
+  );
+  if (Option.isNone(written)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+  const { item, outcome } = written.value;
+  // Note that a repeat leaves the thread standing on failure, because the write that wrote it decides whether it stays.
+  const unheard =
+    outcome === INBOX_MESSAGE_OUTCOME.WRITTEN
+      ? withdrawInboxThread(userId, item.id, clientKey)
+      : Effect.void;
+  const handedOver = Effect.gen(function* () {
+    const eve = yield* eveFor<EveTypedTurn>(seams, request, userId);
+    yield* steerCodingAgent(eve, writer, userId, agent.value, {
+      text: inboxThreadMessage(item, text),
+      attachments,
+      clientKey,
+      sender: { kind: MESSAGE_SENDER.MEMBER, userId },
+    });
+  });
+  yield* handedOver.pipe(
+    Effect.onError(() => unheard.pipe(Effect.tapError(logStoreFailure), Effect.ignore)),
+  );
+  return { item };
+});
+
+/**
  * The inbox resource, to a signed-in caller: the three held reads, an
  * item answered or closed without an answer, a message on its thread, and the member's own read state,
  * which no other member's moves. Marking an item read is what opening it
@@ -503,6 +562,20 @@ export function inboxProcedures(seams: InboxProcedureSeams) {
         attachments,
         answers,
         revision,
+      });
+    }),
+    start: hosted.inbox.use(accountMiddleware(seams.resolveUserId)).start.effect(function* ({
+      input,
+      context,
+    }) {
+      const agentId = yield* rowIdOf(input.agentId);
+      const { title, text, clientKey, attachments = [] } = input;
+      return yield* started(seams, writer, context.request, context.userId, {
+        agentId,
+        title,
+        text,
+        clientKey,
+        attachments,
       });
     }),
     close: hosted.inbox.use(accountMiddleware(seams.resolveUserId)).close.effect(function* ({
