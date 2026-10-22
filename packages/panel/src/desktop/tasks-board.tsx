@@ -29,6 +29,7 @@ import {
   PROVIDER_MARK_SIZE,
   ProviderMark,
   SCROLL_FADE,
+  SCROLL_OVERSCROLL,
   SCROLL_SIZE,
   ScrollArea,
   TaskPriorityMark,
@@ -442,9 +443,11 @@ function TaskBoardColumnView({
         ) : null
       ) : (
         <div className="tasks-board-column-scroll">
+          {/* Note that the cards hand a swipe on, because a contained area swallows a sideways one it cannot scroll, and the board scrolls sideways under them. */}
           <ScrollArea
             size={narrow ? SCROLL_SIZE.FILL : SCROLL_SIZE.CONTENT}
             fade={SCROLL_FADE.BOTH}
+            overscroll={SCROLL_OVERSCROLL.CHAIN}
           >
             <ul className="tasks-board-cards" onPointerDown={narrow ? undefined : drag}>
               {column.tasks.map((task) => (
