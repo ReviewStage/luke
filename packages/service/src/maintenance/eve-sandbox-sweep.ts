@@ -56,7 +56,7 @@ import { listOrderAt, listRunningSandboxes, windowAt } from "./sandbox-sweep-lis
  * `vercelSessionName`); its templates are `eve-sbx-tpl-vercel-`, which this
  * leaves out, and a native agent's are Luke's own `luke-agent-`.
  */
-const EVE_SESSION_SANDBOX_NAME = "eve-sbx-vercel-";
+export const EVE_SESSION_SANDBOX_NAME = "eve-sbx-vercel-";
 
 export const EVE_SANDBOX_SWEEP = {
   /**
