@@ -153,7 +153,7 @@ function mount(
     return groups;
   };
   const views = () =>
-    menu().filter((each) => ["Plan", "Agents", "Activity"].includes(each.replace("*", "")));
+    menu().filter((each) => ["Plan", "Agents", "Activity"].includes(each.replace(/^\*/, "")));
   const choose = (name: string) => {
     act(() => more().click());
     const found = [...document.querySelectorAll<HTMLElement>('[role="menu"] button')].find(
