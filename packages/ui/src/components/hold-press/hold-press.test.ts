@@ -34,23 +34,20 @@ function mount(options: { disabled?: boolean; contextMenu?: boolean } = {}) {
   const done: string[] = [];
   function Back(): React.JSX.Element {
     const [, redraw] = useState(0);
-    return createElement(
-      HoldPress,
-      {
-        mouse: true,
-        disabled: options.disabled,
-        onHold: () => {
-          done.push("held");
-          redraw((count) => count + 1);
-        },
-        onContextMenu: options.contextMenu === true ? () => done.push("menu") : undefined,
+    return createElement(HoldPress, {
+      mouse: true,
+      disabled: options.disabled,
+      onHold: () => {
+        done.push("held");
+        redraw((count) => count + 1);
       },
-      createElement(IconButton, {
+      onContextMenu: options.contextMenu === true ? () => done.push("menu") : undefined,
+      children: createElement(IconButton, {
         icon: null,
         label: "Back",
         onClick: () => done.push("pressed"),
       }),
-    );
+    });
   }
   const container = document.createElement("div");
   document.body.append(container);

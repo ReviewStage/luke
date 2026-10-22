@@ -42,16 +42,15 @@ test("only a ⌘-click or a Ctrl-click opens, and never one on a button among th
   roots.push(root);
   act(() =>
     root.render(
-      createElement(
-        CommandLink,
-        {
-          as: COMMAND_LINK_ELEMENT.H2,
-          className: "title",
-          onOpen: () => opened.push("GitHub"),
-        },
-        "Fix token refresh ",
-        createElement("button", { type: "button" }, "Edit"),
-      ),
+      createElement(CommandLink, {
+        as: COMMAND_LINK_ELEMENT.H2,
+        className: "title",
+        onOpen: () => opened.push("GitHub"),
+        children: [
+          "Fix token refresh ",
+          createElement("button", { key: "edit", type: "button" }, "Edit"),
+        ],
+      }),
     ),
   );
   const heading = container.querySelector("h2.title") ?? expect.unreachable("the heading stands");
