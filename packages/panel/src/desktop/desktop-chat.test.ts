@@ -1677,7 +1677,7 @@ test("a channel's box takes pictures picked or dropped as chips, says why a file
   assert.equal(alone?.querySelector(".picture-block img")?.getAttribute("alt"), "second.png");
   assert.equal(new Set(asked).size, 2, "each picture is read under its own message");
 
-  act(() => alone?.querySelector<HTMLButtonElement>("button.picture-frame")?.click());
+  act(() => alone?.querySelector<HTMLButtonElement>(".picture-block button")?.click());
   assert.ok(
     document.querySelector('[role="dialog"] img[src^="data:image/png"]'),
     "a press opens the picture over the window",

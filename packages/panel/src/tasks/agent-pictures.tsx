@@ -9,7 +9,12 @@ import type { FileChip } from "@luke/features/attachment-model";
 import type { CodingAgentMessage } from "@luke/features/coding-agent-wire";
 import { isVideoType, type KeptPicture } from "@luke/features/conversation-picture-wire";
 import { ACT_KIND } from "@luke/host/acts";
-import { ATTACHMENT_CHIP_STATE, AttachmentChip, type AttachmentChipState } from "@luke/ui";
+import {
+  ATTACHMENT_CHIP_STATE,
+  AttachmentChip,
+  type AttachmentChipState,
+  PictureTile,
+} from "@luke/ui";
 import {
   PICTURE_STATE,
   type PictureAnswer,
@@ -300,27 +305,29 @@ function SetTile({
     ? { flex: "0 0 auto", width: `${String(Math.round(ratio * SET_ROW_PX.MANY))}px` }
     : { flexGrow: ratio, flexBasis: `${String(Math.round(ratio * SET_ROW_PX.FEW))}px` };
   return (
-    <Tooltip label={many ? words : undefined}>
-      <button
-        type="button"
-        className="picture-set-tile"
-        style={shape}
-        aria-label={`Enlarge ${words}`}
-        onClick={onOpen}
-      >
-        <span className="picture-set-frame" data-focus-ring="" style={{ aspectRatio: aspect }}>
-          {shown.picture === undefined ? (
-            <TileFace state={undefined} words={words} />
-          ) : (
-            <TilePicture door={door} picture={shown.picture} words={words} />
-          )}
-          {more > 0 ? <span className="picture-set-more">+{more}</span> : null}
-        </span>
-        {many || shown.caption === "" ? null : (
-          <span className="picture-set-caption">{shown.caption}</span>
-        )}
-      </button>
-    </Tooltip>
+    <span className="picture-set-tile" style={shape}>
+      <Tooltip label={many ? words : undefined}>
+        <PictureTile
+          name={words}
+          fill
+          onOpen={onOpen}
+          caption={
+            many || shown.caption === "" ? null : (
+              <span className="picture-set-caption">{shown.caption}</span>
+            )
+          }
+        >
+          <span className="picture-set-frame" style={{ aspectRatio: aspect }}>
+            {shown.picture === undefined ? (
+              <TileFace state={undefined} words={words} />
+            ) : (
+              <TilePicture door={door} picture={shown.picture} words={words} />
+            )}
+            {more > 0 ? <span className="picture-set-more">+{more}</span> : null}
+          </span>
+        </PictureTile>
+      </Tooltip>
+    </span>
   );
 }
 
