@@ -218,6 +218,8 @@ export interface InboxStamp {
   readonly updatedAt: number;
   /** Whether the item is unread for the member the stamps were read for. */
   readonly unread: boolean;
+  /** The member the item waits on: its task's assignee, else its agent's starter. */
+  readonly waitsOn: string;
 }
 
 /** An item as the service holds it, beyond what the wire carries: the key its answer was taken under. */
@@ -386,6 +388,20 @@ function unreadFor(readerId: string): SQL<boolean> {
 }
 
 /**
+ * The member an item waits on: its task's assignee, or the member who
+ * started its agent where the task has nobody assigned or the agent works on
+ * no task. A scalar read rather than a join, because `returning` projects it
+ * too and joins nothing, and every name is qualified, because it is nested in
+ * reads that join the task themselves.
+ */
+const WAITS_ON = sql<string>`coalesce((select ${qualified(task, task.assigneeId)} from ${task} where ${qualified(task, task.id)} = ${qualified(inboxItem, inboxItem.taskId)}), ${qualified(inboxItem, inboxItem.userId)})`;
+
+/** The name of the member an item waits on (`WAITS_ON`), as their account holds it; none once the account is gone. */
+const WAITS_ON_NAME = sql<
+  string | null
+>`(select "name" from ${user} where ${user.id} = ${WAITS_ON})`;
+
+/**
  * When a settled item was settled, in epoch milliseconds: the instant kept,
  * or, on an item settled before it was kept, its last change, which no
  * message has moved yet, since the first one keeps that instant first.
@@ -418,6 +434,8 @@ const INBOX_ITEM_COLUMNS = {
   startedByName: sql<
     string | null
   >`(select "name" from ${user} where ${user.id} = ${inboxItem.userId})`,
+  waitsOn: WAITS_ON,
+  waitsOnName: WAITS_ON_NAME,
   answer: inboxItem.answer,
   answerFiles: ANSWER_FILES,
   answerKey: inboxItem.answerKey,
@@ -488,6 +506,8 @@ const InboxRowSchema = Schema.Struct({
   status: Schema.Literals(Object.values(INBOX_STATUS)),
   startedBy: Schema.String,
   startedByName: Schema.NullOr(Schema.String),
+  waitsOn: Schema.String,
+  waitsOnName: Schema.NullOr(Schema.String),
   answer: Schema.NullOr(inboxReplySchema),
   answerFiles: Schema.Array(FileRowSchema),
   answerKey: Schema.NullOr(Schema.String),
@@ -525,6 +545,9 @@ function storedItem(row: InboxRow): StoredInboxItem {
       ...(row.startedByName === null
         ? undefined
         : { startedBy: { userId: row.startedBy, name: row.startedByName } }),
+      ...(row.waitsOnName === null
+        ? undefined
+        : { waitsOn: { userId: row.waitsOn, name: row.waitsOnName } }),
       ...(row.answer === null ? undefined : { answer: row.answer }),
       ...(row.answerFiles.length === 0 ? undefined : { answerFiles: row.answerFiles }),
       ...(row.answeredBy === null || row.answeredByName === null
@@ -1102,9 +1125,10 @@ const StampRowSchema = Schema.Struct({
   status: Schema.Literals(Object.values(INBOX_STATUS)),
   updatedAt: InstantColumnSchema,
   unread: Schema.Boolean,
+  waitsOn: Schema.String,
 });
 
-/** Where an item stands for the reader: its own stamp, and whether it is unread for them, so their marker moving wakes their held reads. */
+/** Where an item stands for the reader: its own stamp, whether it is unread for them, so their marker moving wakes their held reads, and who it waits on, so its task's assignee changing does too. */
 function stampColumns(readerId: string) {
   return {
     id: inboxItem.id,
@@ -1112,6 +1136,7 @@ function stampColumns(readerId: string) {
     status: inboxItem.status,
     updatedAt: inboxItem.updatedAt,
     unread: unreadFor(readerId),
+    waitsOn: WAITS_ON,
   };
 }
 
@@ -1181,13 +1206,13 @@ const WITHIN_SETTLED_READ = sql<boolean>`((select count(*) from (select 1 from $
 
 /**
  * Whether the item is the reader's to do, as the Inbox's To do lists it:
- * posted by an agent they started, and open, or unread for them and among
+ * waiting on them (`WAITS_ON`), and open, or unread for them and among
  * the settled items its task's read carries (`WITHIN_SETTLED_READ`). Note
  * that a settled item counts while it is unread, such as a thread its agent
  * wrote on again after it was answered.
  */
 function toDoFor(userId: string): SQL<boolean> {
-  return sql<boolean>`(${eq(inboxItem.userId, userId)} and (${eq(inboxItem.status, INBOX_STATUS.OPEN)} or (${unreadFor(userId)} and ${WITHIN_SETTLED_READ})))`;
+  return sql<boolean>`(${WAITS_ON} = ${userId} and (${eq(inboxItem.status, INBOX_STATUS.OPEN)} or (${unreadFor(userId)} and ${WITHIN_SETTLED_READ})))`;
 }
 
 /** How many of a group's items are the reader's to do (`toDoFor`), as a number rather than a `bigint`. */
@@ -1196,16 +1221,21 @@ function toDoCount(userId: string): SQL<number> {
 }
 
 /**
- * The reader's own settled items still unread on the tasks of their
- * workspaces: what To do lists beside the open items, so their read marks
- * and their agents' new messages move the account's cursor as an open
- * item's change does.
+ * The settled items still unread that wait on the reader (`WAITS_ON`) on
+ * the tasks of their workspaces: what To do lists beside the open items, so
+ * their read marks and new messages on those items move the account's cursor
+ * as an open item's change does. Note that who it waits on is spelled out
+ * against the joined task rather than read through `WAITS_ON`, because the
+ * starter's side then reaches the items by the reader's own index
+ * (`inbox_item_user_status_updated`) and the assignee's by the task's,
+ * where a `coalesce` would read every settled item of their workspaces on
+ * each look.
  */
 function accountUnreadSettled(userId: string) {
   return and(
     isNotNull(inboxItem.taskId),
     taskReachableBy(userId),
-    eq(inboxItem.userId, userId),
+    or(and(eq(inboxItem.userId, userId), isNull(task.assigneeId)), eq(task.assigneeId, userId)),
     ne(inboxItem.status, INBOX_STATUS.OPEN),
     unreadFor(userId),
   );
@@ -1221,6 +1251,7 @@ const WaitingRowSchema = Schema.Struct({
   agentTitle: Schema.NullOr(Schema.String),
   agentModel: Schema.String,
   startedBy: Schema.String,
+  waitsOn: Schema.String,
   title: Schema.String,
   revision: Schema.Number,
   status: Schema.Literals(Object.values(INBOX_STATUS)),
@@ -1245,6 +1276,7 @@ const findWaitingItems = SqlSchema.findAll({
           >`coalesce(${agentGivenNameSql(codingAgent)}, ${codingAgent.title})`,
           agentModel: codingAgent.model,
           startedBy: codingAgent.userId,
+          waitsOn: WAITS_ON,
           title: inboxItem.title,
           revision: inboxItem.revision,
           status: inboxItem.status,
@@ -1437,6 +1469,7 @@ export function accountInboxLiveStatements(
           >`coalesce(${agentGivenNameSql(codingAgent)}, ${codingAgent.title})`,
           agentModel: codingAgent.model,
           startedBy: codingAgent.userId,
+          waitsOn: WAITS_ON,
           title: inboxItem.title,
           revision: inboxItem.revision,
           unread: unreadFor(userId),
@@ -1611,6 +1644,8 @@ function scopeLiveStatements(scope: InboxScope): Option.Option<ScopeInboxLiveSta
             status: inboxItem.status,
             startedBy: inboxItem.userId,
             startedByName: INBOX_ITEM_COLUMNS.startedByName,
+            waitsOn: WAITS_ON,
+            waitsOnName: WAITS_ON_NAME,
             answer: inboxItem.answer,
             answeredBy: inboxItem.answeredBy,
             answeredByName: INBOX_ITEM_COLUMNS.answeredByName,

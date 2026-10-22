@@ -5,6 +5,7 @@ import {
   ConfirmDialog,
   type DialogQuestion,
   IconButton,
+  Tooltip,
   UnarchiveIcon,
   useConfirmDialog,
   useMenu,
@@ -17,7 +18,6 @@ import { agentStillWriting, agentTabLabel } from "../tasks/coding-agent-model.js
 import { AgentGlyph, agentEndMark } from "../tasks/tab-look.js";
 import type { CodingAgentsControl } from "../tasks/use-coding-agents.js";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast.js";
-import { Tooltip } from "../tooltip.js";
 import { ActionMenu, type MenuAction } from "./action-menu.js";
 import { type CountNoun, SidebarGroupHeader } from "./sidebar-group-header.js";
 

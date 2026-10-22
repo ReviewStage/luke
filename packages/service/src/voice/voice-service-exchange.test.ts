@@ -8,7 +8,6 @@ import { createCodingAgent } from "@luke/database/models/coding-agent-store";
 import { voiceSessionRecord } from "@luke/database/models/voice-session-record";
 import { type ConversationTarget, storeWriter } from "@luke/database/models/writer";
 import { accountProviderKey } from "@luke/database/schemas/account-provider-key";
-import { conversations } from "@luke/database/schemas/storage";
 import { CONVERSATION_RUNTIME, type ConversationRuntime } from "@luke/database/storage-vocabulary";
 import {
   insertMessage,
@@ -36,15 +35,23 @@ import { isRecord, unparsedWire, type WireRecord } from "@luke/wire";
 import { eq } from "drizzle-orm";
 import { Effect, Exit, Option, Redacted, Schema, Scope, Stream } from "effect";
 import { afterAll } from "vitest";
-import { BRAIN_HOST_TURN } from "../agents/brain-host/bounds.js";
+import { BRAIN_HOST_TURN, type BrainHostTurn } from "../agents/brain-host/bounds.js";
 import {
   type AgentSessions,
+  EVE_CANCEL_OUTCOME,
   EVE_MOUNT,
+  EVE_RESET_OUTCOME,
   EVE_SEND_OUTCOME,
   type EveMessage,
   type EveMount,
 } from "../agents/brain-host/eve-sessions.js";
 import { memoryRelayState, StreamRelay } from "../agents/brain-host/relay.js";
+import { NATIVE_SESSION_PREFIX } from "../agents/coder-host/native-runtime.js";
+import {
+  NativeAgentSessions,
+  type NativeSessions,
+  RUNNER_CHOICE,
+} from "../agents/coder-host/runtime-sessions.js";
 import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
 import { HOSTED_API_ERROR, MESSAGE_ROLE } from "../core.js";
 import { connectAgentApiKeys } from "../testing/agent-credentials.js";
@@ -290,6 +297,8 @@ interface Stand {
   readonly taskId: string;
   readonly agentId: string;
   readonly eve: FakeEve;
+  /** The native harness a call into an agent on Claude Code reaches. */
+  readonly native: ReturnType<typeof fakeNative>;
   /** Every account eve was reached as the deployment for, in order. */
   readonly eveAccounts: string[];
   /** The mount eve was reached under for each of those, in the same order. */
@@ -318,11 +327,40 @@ const OFFER = {
 
 type Offer = (typeof OFFER)[keyof typeof OFFER];
 
+/** A native harness's sessions as a call reaches them: every message it is handed, each answered by its line's own id as a runner names it back. */
+function fakeNative() {
+  const opened: EveMessage<BrainHostTurn>[] = [];
+  const sent: EveMessage<BrainHostTurn>[] = [];
+  const sessionId = `${NATIVE_SESSION_PREFIX.claude_code}${randomUUID()}`;
+  const sessions: NativeSessions<BrainHostTurn> = {
+    open: (message) =>
+      Effect.sync(() => {
+        opened.push(message);
+        return { outcome: EVE_SEND_OUTCOME.ACCEPTED, sessionId };
+      }),
+    send: (session, message) =>
+      Effect.sync(() => {
+        sent.push(message);
+        return {
+          outcome: EVE_SEND_OUTCOME.ACCEPTED,
+          sessionId: session,
+          deliveryId: message.lineId ?? "",
+        };
+      }),
+    cancel: () => Effect.succeed({ outcome: EVE_CANCEL_OUTCOME.NO_ACTIVE_TURN }),
+    reset: () => Effect.succeed({ outcome: EVE_RESET_OUTCOME.NO_ACTIVE_SESSION }),
+    stream: () => Stream.empty,
+    retune: () => Effect.succeed(RUNNER_CHOICE.NOT_LIVE),
+  };
+  return { opened, sent, sessions };
+}
+
 /** The service for one account, with the exchange offered as the route would offer it, or nothing, or one that cannot stand. */
 async function stand(offer: Offer): Promise<Stand> {
   const { target, taskId, agentId } = await account();
   const openAi = await startFakeOpenAi();
   const eve = fakeEve();
+  const native = fakeNative();
   const eveAccounts: string[] = [];
   const eveMounts: EveMount[] = [];
   const log: LogEntry[] = [];
@@ -382,7 +420,12 @@ async function stand(offer: Offer): Promise<Stand> {
           ...(exchange === undefined ? undefined : { exchange }),
         });
         return listener;
-      }),
+      }).pipe(
+        // The function's native harnesses, which a call into an agent one runs on reaches.
+        Effect.provideService(NativeAgentSessions, {
+          sessions: () => Option.some(Effect.succeed(native.sessions)),
+        }),
+      ),
       scope,
     ),
   );
@@ -391,6 +434,7 @@ async function stand(offer: Offer): Promise<Stand> {
     taskId,
     agentId,
     eve,
+    native,
     eveAccounts,
     eveMounts,
     log,
@@ -872,25 +916,25 @@ it.effect(
 );
 
 it.effect(
-  "a call into an agent that runs on Claude Code or Codex is refused by name before anything is counted or created, and eve is never reached",
+  "a call into an agent that runs on Claude Code or Codex is admitted, and its spoken ask reaches the agent's harness under the ask's own line, never eve",
   () =>
     Effect.promise(async () => {
       const context = await stand(OFFER.EXCHANGE);
       for (const runtime of [CONVERSATION_RUNTIME.CLAUDE_CODE, CONVERSATION_RUNTIME.CODEX]) {
         const native = await startAgent(context.target.userId, context.taskId, runtime);
-        const refused = await connect(context.url(VOICE_SERVICE_PATH.SESSIONS), {
-          authorization: BEARER,
-        });
-        assert.ok("reader" in refused);
-        await send(refused.reader.socket, createFrame(context.taskId, native.id));
-        assert.equal(
-          record(await refused.reader.next()).error,
-          HOSTED_API_ERROR.NATIVE_AGENT_NOT_HERE,
+        const call = await openSession(context, context.taskId, [], undefined, native.id);
+        assert.equal(call.created.type, VOICE_SERVICE_FRAME.SESSION_CREATED);
+        const sessionId = context.openAi.attaches.at(-1)?.sessionId ?? "";
+        await speak(call.attach.socket, sessionId);
+        await until(
+          () => context.native.opened.some((each) => each.conversationId === native.conversationId),
+          () => `the ask to reach the harness; reports ${JSON.stringify(context.reports)}`,
         );
+        await hangUpConnection(call.desktop, call.attach, call.upstream);
       }
-      assert.deepEqual(context.accounts.spent, []);
-      assert.equal(context.openAi.creates.length, 0);
-      assert.deepEqual(context.offered, []);
+      const [opened] = context.native.opened;
+      assert.equal(opened?.turn, BRAIN_HOST_TURN.SPOKEN);
+      assert.ok(opened?.lineId !== undefined);
       assert.deepEqual(context.eve.opened, []);
       await context.stop();
     }),
@@ -933,37 +977,6 @@ it.effect(
       assert.deepEqual(context.accounts.spent, []);
       assert.equal(context.openAi.creates.length, 0);
       assert.deepEqual(context.eve.opened, []);
-      await context.stop();
-    }),
-);
-
-it.effect(
-  "a session admitted into an eve agent whose conversation a native harness answers by the time the exchange stands is refused, and eve is never reached",
-  () =>
-    Effect.promise(async () => {
-      const context = await stand(OFFER.GATED);
-      const agent = await startAgent(context.target.userId, context.taskId);
-      const opened = await connect(context.url(VOICE_SERVICE_PATH.SESSIONS), {
-        authorization: BEARER,
-      });
-      assert.ok("reader" in opened);
-      await send(opened.reader.socket, createFrame(context.taskId, agent.id));
-      await until(
-        () => context.offered.length === 1,
-        () => "the attachment to be offered the session",
-      );
-      await database.run(
-        Database.use((db) =>
-          db
-            .update(conversations)
-            .set({ runtime: CONVERSATION_RUNTIME.CLAUDE_CODE })
-            .where(eq(conversations.id, agent.conversationId)),
-        ),
-      );
-      context.release();
-      assert.equal(record(await opened.reader.next()).error, HOSTED_API_ERROR.UNAVAILABLE);
-      assert.deepEqual(context.eve.opened, []);
-      assert.deepEqual(context.eveAccounts, []);
       await context.stop();
     }),
 );

@@ -20,8 +20,13 @@ import {
   ERROR_STATE_PLACEMENT,
   ErrorState,
   IconButton,
+  SpinnerRegion,
   TEXT_BUTTON_TONE,
+  TEXT_ELEMENT,
+  TEXT_VARIANT,
+  Text,
   TextButton,
+  Tooltip,
 } from "@luke/ui";
 import {
   CheckIcon,
@@ -47,8 +52,6 @@ import {
   type DiffSelection,
   FILE_NOTE_LINE,
 } from "../diff-view/contract.js";
-import { SpinnerRegion } from "../spinner.js";
-import { Tooltip } from "../tooltip.js";
 import {
   type ChangesList,
   FileHead,
@@ -255,13 +258,18 @@ function ViewedCount({
   return (
     <p className="files-viewed" aria-live="polite" data-complete={complete ? "" : undefined}>
       {complete ? <CheckIcon aria-hidden="true" /> : null}
-      <span className="files-viewed-words">
+      <Text
+        as={TEXT_ELEMENT.SPAN}
+        variant={TEXT_VARIANT.INHERIT}
+        truncate
+        className="files-viewed-words"
+      >
         {seen === undefined
           ? LIST_WORDS.filesOf(count)
           : complete
             ? LIST_WORDS.allViewed(count)
             : LIST_WORDS.viewedOf(seen, count)}
-      </span>
+      </Text>
     </p>
   );
 }
@@ -1551,7 +1559,7 @@ function FilesList({
         </div>
       )}
       {list.kept.length === 0 ? (
-        <p className="side-panel-empty">{LIST_WORDS.NONE_KEPT}</p>
+        <EmptyState>{LIST_WORDS.NONE_KEPT}</EmptyState>
       ) : (
         <ThreadLandingProvider value={landing.provided}>
           <PierreDiffList
@@ -1764,7 +1772,7 @@ export function AgentChangesTab({
   }, [revealGone, revealAsk]);
   // A failure gives way to the wait as soon as it is asked again; files drawn stand until the answer lands.
   if (answer === undefined || (out && "failure" in answer)) {
-    return <SpinnerRegion label={CHANGES_WORDS.READING} />;
+    return <SpinnerRegion delay label={CHANGES_WORDS.READING} />;
   }
   if ("failure" in answer) {
     return (

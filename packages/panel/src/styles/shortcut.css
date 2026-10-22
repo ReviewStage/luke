@@ -1,44 +1,10 @@
-/* A chord as glyphs (`shortcut.tsx`): muted, set tight, and in the line of the
-   words beside it, the way a menu prints a key equivalent. Every place that
-   shows a chord draws this one look and sizes it with `--shortcut-text` and
-   `--shortcut-ink` rather than restyling it. */
-
-.shortcut {
-  display: inline-flex;
-  flex: 0 0 auto;
-  align-items: center;
-  /* A hair between the keys, as a menu sets ⇧⌘I, without spacing it into
-     keycaps; a gap rather than letter-spacing, which would leave the hair
-     after the last key too and push a right-aligned chord off its edge. */
-  gap: 0.04em;
-  color: var(--shortcut-ink, var(--luke-color-text-subtle));
-  /* The window's own type rather than the user agent's monospace for `kbd`:
-     the glyphs are the menu bar's, and a menu prints them in the system face,
-     whose ⌘, ⇧, ⌥, arrows, ⌫, and ⏎ stand on the capitals' line. */
-  font-family: inherit;
-  font-size: var(--shortcut-text, var(--luke-type-caption-size));
-  font-weight: var(--luke-weight-regular);
-  /* Digits and letters at one advance, so ⌘1 and ⌘5 are one width. */
-  font-variant-numeric: tabular-nums;
-  line-height: 1;
-  white-space: nowrap;
-}
-
-/* Under a finger there is no keyboard to press a chord on, so a chord shown
-   as a hint is not drawn, nor words that only point at one
-   (`shortcut-hint`); a chord that is a row's whole value (`shortcut-value`)
-   still is. Both features are asked, so a tablet worked with a trackpad
-   keeps its hints. */
+/* Words that only point at a chord (`shortcut-hint`), as the view settings'
+   "Or press … over the code" do. Under a finger there is no keyboard to
+   press one on, so they are not drawn, as `@luke/ui`'s `Shortcut` draws no
+   chord shown as a hint there. Both features are asked, so a tablet worked
+   with a trackpad keeps its hints. */
 @media (hover: none) and (pointer: coarse) {
-  .shortcut:not(.shortcut-value),
   .shortcut-hint {
     display: none;
   }
-}
-
-/* One key's glyph, its box cut to the capitals' height, so a row that centres
-   its children centres the chord's capitals on its own words, whatever size
-   either is set in, and every glyph stands on one baseline. */
-.shortcut-glyph {
-  text-box: trim-both cap alphabetic;
 }

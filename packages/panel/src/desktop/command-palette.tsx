@@ -16,7 +16,8 @@
  * what its shortcut would, Delete task's question included, and it opens a
  * task through the same select the sidebar does, which takes its ask back
  * when the host does not open the task. Each task names its repository
- * beside it, so two tasks of one name can be told apart. An agent opens its tab as the column's "+" would, hanging
+ * beside it, so two tasks of one name can be told apart, and hangs the
+ * task's card beside its row, as its sidebar row does. An agent opens its tab as the column's "+" would, hanging
  * its tab's card beside its row while the pointer rests on it, as every
  * place naming an agent does (`agent-ref.tsx`), and an archived agent, which
  * says so, its own page, a subagent
@@ -78,13 +79,17 @@ import {
   ComboboxOptionItem,
   ErrorState,
   GearIcon,
+  NoteLine,
   PinIcon,
   SearchIcon,
+  Shortcut,
   TEXT_ELEMENT,
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
+  Tooltip,
   UnpinIcon,
+  VisuallyHidden,
   WingFace,
 } from "@luke/ui";
 import {
@@ -128,7 +133,6 @@ import {
   type SettingsSearchInput,
   settingsSearchEntries,
 } from "../settings-search.js";
-import { Shortcut } from "../shortcut.js";
 import { AgentCard, agentSubject, NOTHING_HELD } from "../tasks/agent-ref.js";
 import { useChatOn } from "../tasks/chat-gate.js";
 import { agentTabLabel } from "../tasks/coding-agent-model.js";
@@ -144,6 +148,7 @@ import {
 } from "../tasks/inbox-model.js";
 import { agentEndMark, openPlanStanding, TAB_KIND, tabLook } from "../tasks/tab-look.js";
 import { markReadItem } from "../tasks/task-menu-items.js";
+import { useMinute } from "../tasks/task-time.js";
 import { cardTitle } from "../tasks/tool-call-model.js";
 import type { CodingAgentsControl } from "../tasks/use-coding-agents.js";
 import { choiceOf } from "../tasks/use-inbox-listing.js";
@@ -156,12 +161,12 @@ import {
   useWorkspaceMembersRead,
   type WorkspaceMembersRead,
 } from "../tasks/use-workspace-members.js";
-import { Tooltip } from "../tooltip.js";
 import { type AgentReadMarks, useAgentReadMarks } from "./agent-read-marks.js";
 import { LUKE_NAME, type LukeOperator, useLukeOperator, withoutLuke } from "./luke-operator.js";
 import { agentEntries, chatEntries, inboxEntries } from "./main-tabs.js";
 import { changesOffers, panelEntries } from "./side-panel.js";
 import { taskOf } from "./task-actions.js";
+import { homeTaskCardOf } from "./task-card.js";
 import { WorkspaceRef } from "./workspace-ref.js";
 
 /** The kinds of row the palette lists, each a filter of its own after All, in the order the filters stand. */
@@ -354,7 +359,7 @@ interface PaletteRow {
   endMark?: React.JSX.Element | undefined;
   /** A task's assignee's and creator's names, the one the query found it by said after the detail. */
   people?: readonly string[] | undefined;
-  /** The card the row hangs beside it while the pointer rests on it: an agent's tab's. */
+  /** The card the row hangs beside it while the pointer rests on it: a task's, an agent's tab's, or a file's. */
   card?: React.ReactNode;
   /** The chord an action's row draws as keys. */
   command?: KeyedCommand | undefined;
@@ -506,21 +511,12 @@ function emptyNotice(
 function NoticeLine({ notice }: { notice: PaletteNotice }): React.JSX.Element {
   if (notice.kind === PALETTE_NOTICE.FAILED) {
     return (
-      <div className="command-palette-empty">
+      <div className="command-palette-notice-slot">
         <ErrorState onRetry={notice.onRetry}>{notice.line}</ErrorState>
       </div>
     );
   }
-  return (
-    <div
-      className="command-palette-empty"
-      role={notice.kind === PALETTE_NOTICE.READING ? "status" : undefined}
-    >
-      <Text as={TEXT_ELEMENT.SPAN} tone={TEXT_TONE.MUTED}>
-        {notice.line}
-      </Text>
-    </div>
-  );
+  return <NoteLine status={notice.kind === PALETTE_NOTICE.READING}>{notice.line}</NoteLine>;
 }
 
 /** A file's row, as every place names a file (`file-ref.tsx`): its type's icon, its name, and its folder after it, hanging the file's card with Luke's note on its newest lines where he showed it. */
@@ -564,6 +560,17 @@ const MADE_BY_WORDS: Partial<Record<Actor["kind"], string>> = {
   [ACTOR_KIND.AUTOMATION]: "automation",
 };
 
+/** A task's row's card, as its sidebar row hangs it, its times counted back from the minute it is hung. */
+function PaletteTaskCard({
+  tasks,
+  task,
+}: {
+  tasks: TasksControl;
+  task: TaskSummary;
+}): React.JSX.Element {
+  return homeTaskCardOf(tasks, task, useMinute());
+}
+
 /** A task's muted words: its repository. */
 function taskDetail(task: TaskSummary): string | undefined {
   return task.repository ?? undefined;
@@ -578,16 +585,20 @@ function taskDetail(task: TaskSummary): string | undefined {
  * them, naming its workspace and found by its name, since opening one
  * switches the window to it. A task wears who is on it at its end, as its
  * sidebar row does (`assigneeFace`), and is found by its assignee's name and
- * its creator's. An agent opens on its own page, as its sidebar row does.
+ * its creator's. An agent opens on its own page, as its sidebar row does. An
+ * agent's line on a task's card opens the task on its tab through
+ * `showAgent`, which leaves the palette as a row does.
  */
 function taskRows(
   tasks: TasksControl,
   members: readonly WorkspaceMember[] | undefined,
   open: (taskId: string) => void,
   openAgent: (agentId: string) => void,
+  showAgent: TasksControl["onShowAgent"],
   originOf: (task: TaskSummary) => Actor | undefined,
 ): readonly PaletteRow[] {
   const listedId = tasks.workspace?.id;
+  const carded = { ...tasks, onShowAgent: showAgent };
   // Note that only the listed workspace's members are read, so another workspace's assignee stands by the wire's name, never as having left.
   const listedMembers = (task: TaskSummary) =>
     task.workspaceId === listedId ? members : undefined;
@@ -612,6 +623,7 @@ function taskRows(
           ? detail
           : [detail, `by ${madeBy}`].filter((words) => words !== undefined).join(" · "),
       workspace: elsewhere,
+      card: <PaletteTaskCard tasks={carded} task={task} />,
       endMark: worn === undefined ? undefined : <AssigneeFaceMark face={worn} />,
       people: [...new Set([assignedTo, createdBy])].filter((name) => name !== null),
       terms: [
@@ -845,7 +857,7 @@ function inboxRows(
       endMark: needsYou(listed, seams.readerId) ? (
         <span className="inbox-row-attention">
           <AttentionMark />
-          <span className="visually-hidden">{NEEDS_YOU.LABEL}</span>
+          <VisuallyHidden>{NEEDS_YOU.LABEL}</VisuallyHidden>
         </span>
       ) : undefined,
       terms: [title, name],
@@ -1498,6 +1510,7 @@ export function CommandPalette({
             members,
             (id) => onTasks(() => tasks.onSelect(id)),
             (id) => onTasks(() => tasks.agentView.onOpen(id)),
+            (taskId, agentId) => onTasks(() => tasks.onShowAgent(taskId, agentId)),
             originOf,
           )
         : [],
@@ -1607,10 +1620,8 @@ export function CommandPalette({
       <Command.List asChild label="Results">
         <ComboboxListBox height={COMBOBOX_LIST_HEIGHT.FILL}>
           {notice === undefined ? (
-            <Command.Empty className="command-palette-empty">
-              <Text as={TEXT_ELEMENT.SPAN} tone={TEXT_TONE.MUTED}>
-                Nothing matches.
-              </Text>
+            <Command.Empty>
+              <NoteLine>Nothing matches.</NoteLine>
             </Command.Empty>
           ) : (
             <NoticeLine notice={notice} />

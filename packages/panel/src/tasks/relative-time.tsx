@@ -1,4 +1,4 @@
-import { Tooltip } from "../tooltip.js";
+import { Tooltip } from "@luke/ui";
 import { agoText, momentText, sinceText, useMinute } from "./task-time.js";
 
 /**

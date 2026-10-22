@@ -604,7 +604,7 @@ test("an @ in the box offers the repository's skills, a pick written as the /nam
   );
   pressInComposer(container, "Enter");
   await settle();
-  const chips = [...composerEditor(container).querySelectorAll(".skill-chip")];
+  const chips = [...composerEditor(container).querySelectorAll(".luke-skill-chip")];
   pressInComposer(container, "Enter");
   await settle();
 

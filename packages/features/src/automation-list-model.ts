@@ -21,7 +21,7 @@ import {
 } from "./automation-wire.js";
 import { agentFailureWords } from "./coding-agent-failure-words.js";
 import { CODING_AGENT_STATUS, type CodingAgentStatus } from "./coding-agent-wire.js";
-import { TRIGGER_CATALOG } from "./trigger-catalog.js";
+import { SENTRY_LEVEL, TRIGGER_CATALOG } from "./trigger-catalog.js";
 
 /**
  * automation-list-model.ts -- the Automations list as a window draws it: grouped by who owns each, with its trigger in words, where its newest run stands, and when it runs next.
@@ -31,7 +31,8 @@ import { TRIGGER_CATALOG } from "./trigger-catalog.js";
  * account's personal ones, and each row names its owner besides. A schedule
  * is said in words where its cron is one the picker writes, and as its cron
  * otherwise, with its zone named by its city; a GitHub event as what happens
- * and where, and a webhook as its call. Nothing here formats a date:
+ * and where, a webhook as its call, and an integration's event with the
+ * projects, environments, and levels it keeps to. Nothing here formats a date:
  * when a row's next run falls is handed back as an instant for the window to
  * say on its own clock.
  */
@@ -67,7 +68,8 @@ const RUN_REASON_WORDS = {
   [AUTOMATION_RUN_REASON.PAUSED]: "It was turned off before the run could start.",
   [AUTOMATION_RUN_REASON.MISSED]: "It waited too long to start.",
   [AUTOMATION_RUN_REASON.AGENT_GONE]: "The agent its runs go to is gone or archived.",
-  [AUTOMATION_RUN_REASON.SAME_SUBJECT]: "Skipped: a run on the same issue started recently.",
+  // Note that the cooldown is not named, because a run does not keep the one it was skipped under.
+  [AUTOMATION_RUN_REASON.SAME_SUBJECT]: "Skipped: already ran for this issue within its cooldown.",
 } as const satisfies Record<AutomationRunReason, string>;
 
 /** Each GitHub event as a trigger's sentence says what happens, after "When". */
@@ -278,7 +280,13 @@ export function automationTriggerText(
       return "When its webhook is called";
     case AUTOMATION_TRIGGER.INTEGRATION: {
       const provider = TRIGGER_CATALOG[trigger.provider];
-      return `When ${provider.events[trigger.event].words} in ${provider.name}`;
+      // Levels are said least severe first, whatever order they were picked in.
+      const picked = trigger.filters?.level ?? [];
+      const levels = Object.values(SENTRY_LEVEL).filter((level) => picked.includes(level));
+      const kept = [trigger.filters?.project ?? [], trigger.filters?.environment ?? [], levels]
+        .filter((values) => values.length > 0)
+        .map((values) => ` · ${values.join(", ")}`);
+      return `When ${provider.events[trigger.event].words} in ${provider.name}${kept.join("")}`;
     }
   }
 }

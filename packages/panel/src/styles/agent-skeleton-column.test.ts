@@ -7,7 +7,8 @@ import { afterEach, beforeAll, test } from "vitest";
 /**
  * agent-skeleton-column.test.ts -- an agent's tab while it is read stands its
  * placeholder lines in the column its transcript and composer keep to, in the
- * task's column and the side panel alike, rather than at the pane's edge.
+ * task's column and the side panel alike, rather than at the pane's edge,
+ * while an Inbox reply's box stands in its comment's body edge to edge.
  * jsdom lays nothing out, so the padding each rule declares is read.
  */
 
@@ -43,5 +44,17 @@ for (const pane of ["desktop-agent", "side-panel-content"]) {
     // jsdom resolves no padding drawn from a custom property, so the declared column is read.
     assert.notEqual(composer.paddingInline, "");
     assert.equal(lines.paddingInline, composer.paddingInline);
+  });
+}
+
+for (const pane of ["desktop-task-main", "side-panel-content"]) {
+  test(`in .${pane} an Inbox reply's box stands on its comment's column, not the reading column`, () => {
+    const thread = element("inbox-thread", element("desktop-inbox", element(pane, document.body)));
+    const comment = element("inbox-comment", thread);
+    comment.dataset.inboxComment = "draft";
+    const box = getComputedStyle(element("agent-composer", element("inbox-comment-body", comment)));
+    // jsdom maps no logical side onto a physical one, so each is read as declared.
+    assert.equal(box.paddingLeft, "0px");
+    assert.doesNotMatch(box.paddingInline, /--reading-room/);
   });
 }

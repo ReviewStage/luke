@@ -3212,6 +3212,113 @@ test("New task's Agent mode sends one start carrying the agent, its words and mo
   assert.deepEqual(tab.control().mainTabs.tab, { agent: AGENT_ID }, "the task opens on its tab");
 });
 
+test("New task's agent stands on its task with the words it started on as its first line before the task's agents or its transcript are read", async () => {
+  const started = { ...RUNNING_AGENT, planId: OTHER_TASK_ID };
+  const tab = mount(
+    { shown: true, tasks: OPEN },
+    {
+      [ACT_KIND.TASKS_START]: () =>
+        Promise.resolve({ planId: OTHER_TASK_ID, agentStart: { agent: started } }),
+      // The task's agents are still being read.
+      [ACT_KIND.CODING_AGENTS_LIST]: () => new Promise(() => undefined),
+    },
+  );
+  const { prompt } = await startAgentTask(tab);
+
+  const agents = tab.control().agents;
+  assert.deepEqual(
+    agents.agents?.map((agent) => agent.id),
+    [AGENT_ID],
+    "the agent stands as the task's list",
+  );
+  assert.deepEqual(tab.control().mainTabs.tab, { agent: AGENT_ID }, "the task opens on its tab");
+  assert.equal(agents.opening?.agentId, AGENT_ID);
+  assert.equal(agents.opening?.line.text, prompt, "its first line is the words it started on");
+});
+
+test("New task's agent start opens its page at once on the words as its agent's first line, before the service answers, which opens the agent's own tab in its place", async () => {
+  const started = { ...RUNNING_AGENT, planId: OTHER_TASK_ID };
+  const answers: Array<(answer: PortActResult<typeof ACT_KIND.TASKS_START>) => void> = [];
+  const tab = mount(
+    { shown: true, tasks: OPEN },
+    {
+      [ACT_KIND.TASKS_START]: () => new Promise((resolve) => answers.push(resolve)),
+      [ACT_KIND.CODING_AGENTS_LIST]: () => Promise.resolve({ agents: [started] }),
+    },
+  );
+  const prompt = "Make the sidebar keep its folds.";
+  act(() => tab.control().onNewTask());
+  let note: Promise<string | undefined> = Promise.resolve("unsent");
+  act(() => {
+    note = tab.control().newTask.start("", "acme/web", undefined, {
+      handed: { idempotencyKey: AGENT_KEY, prompt, attachments: [], choice: undefined },
+    });
+  });
+
+  assert.equal(tab.control().newTask.open, false, "the dialog closes as Start is pressed");
+  assert.equal(tab.control().starting?.text, prompt, "the page stands on the words at once");
+
+  await act(async () => {
+    answers[0]?.({ planId: OTHER_TASK_ID, agentStart: { agent: started } });
+    await note;
+  });
+  tab.stand({ tasks: AGENT_TASK });
+  await settle();
+  assert.equal(tab.control().starting, undefined, "the task's own page takes its place");
+  assert.deepEqual(tab.control().mainTabs.tab, { agent: AGENT_ID });
+  assert.equal(tab.control().agents.opening?.line.text, prompt);
+});
+
+test("New task's agent start refused after its page opened opens the card again on the issues, model, and press it held, saying why, over the version history it was asked from", async () => {
+  const answers: Array<(answer: PortActResult<typeof ACT_KIND.TASKS_START>) => void> = [];
+  const tab = mount(
+    { shown: true, tasks: OPEN },
+    {
+      [ACT_KIND.TASKS_START]: () => new Promise((resolve) => answers.push(resolve)),
+      [ACT_KIND.TASKS_SELECT]: () => Promise.resolve(true),
+    },
+  );
+  act(() =>
+    tab.control().onOpenLink({
+      workspace: "acme",
+      place: { kind: LINK_PLACE.VERSION, planId: TASK.id, revision: 3 },
+    }),
+  );
+  assert.equal(tab.control().history.open, true);
+  const handed = {
+    idempotencyKey: AGENT_KEY,
+    prompt: "Make the sidebar keep its folds.",
+    attachments: [],
+    choice: undefined,
+  };
+  const card = {
+    repository: "acme/web",
+    links: [],
+    choice: { model: "anthropic/claude-opus-5.5", effort: "high" },
+    press: {
+      key: AGENT_KEY,
+      ask: { name: "", repository: "acme/web", workspaceId: undefined, issues: [], agent: handed },
+    },
+  };
+  act(() => tab.control().onNewTask());
+  let note: Promise<string | undefined> = Promise.resolve(undefined);
+  act(() => {
+    note = tab.control().newTask.start("", "acme/web", undefined, { handed, card });
+  });
+  assert.equal(tab.control().newTask.open, false);
+
+  let refused: string | undefined;
+  await act(async () => {
+    answers[0]?.({ failure: TASK_CALL_FAILURE.REPOSITORY_NOT_REACHABLE });
+    refused = await note;
+  });
+  assert.ok(refused !== undefined);
+  assert.equal(tab.control().starting, undefined, "the page gives way");
+  assert.equal(tab.control().newTask.open, true, "the card opens again");
+  assert.deepEqual(tab.control().newTask.preset?.refused, { card, note: refused });
+  assert.equal(tab.control().history.open, true, "the version history stands behind it again");
+});
+
 test("an agent refused as New task's Agent mode started its task opens the task on a draft holding the words, model, and why, whose Retry starts the agent on that task under the start's key", async () => {
   const started = { ...RUNNING_AGENT, planId: OTHER_TASK_ID };
   // The service holds the agent once its own Start made it.

@@ -12,6 +12,7 @@ import {
   IconButton,
   TEXT_FIELD_SIZE,
   TextField,
+  Tooltip,
 } from "@luke/ui";
 import { ArrowLeftIcon, ArrowRightIcon, ExternalLinkIcon, RotateCwIcon, XIcon } from "lucide-react";
 import {
@@ -25,7 +26,6 @@ import {
 } from "react";
 import { useAct } from "../act.js";
 import { appBridge } from "../app-bridge.js";
-import { Tooltip } from "../tooltip.js";
 import type { OpenBrowser } from "./use-side-panel.js";
 
 /**

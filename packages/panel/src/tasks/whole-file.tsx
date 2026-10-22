@@ -1,5 +1,5 @@
 import { useAtomValue } from "@effect/atom-react";
-import { ScrollArea } from "@luke/ui";
+import { EmptyState, ScrollArea, SpinnerRegion } from "@luke/ui";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { type ReactNode, type RefObject, useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -15,7 +15,6 @@ import {
   selectedWords,
   watchText,
 } from "../find-matches.js";
-import { SpinnerRegion } from "../spinner.js";
 import { useDiffLook } from "./file-diff.js";
 import { type FileMatch, fileMatches, matchFrom } from "./file-find.js";
 
@@ -349,12 +348,12 @@ export function WholeFile({
   }
 
   if (AsyncResult.isFailure(loaded)) {
-    return <p className="side-panel-empty">{FILE_LOAD_FAILED}</p>;
+    return <EmptyState>{FILE_LOAD_FAILED}</EmptyState>;
   }
   return (
     <div className="whole-file">
       <ScrollArea ref={host}>{null}</ScrollArea>
-      {module === undefined ? <SpinnerRegion label="Loading file" /> : null}
+      {module === undefined ? <SpinnerRegion delay label="Loading file" /> : null}
       {notes.map((note) => createPortal(note.content, elementFor(note.key), note.key))}
     </div>
   );

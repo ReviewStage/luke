@@ -84,7 +84,7 @@ test("a sidebar plan's row, an agent's tab, and a running call draw one working 
   );
   assert.deepEqual(names, ["Working", "Working", "Working"]);
   const marks = Object.values(surfaces).map(namedMark);
-  assert.ok(marks[0]?.includes("working-mark"), "the mark is the working mark");
+  assert.ok(marks[0]?.includes("luke-working-mark"), "the mark is the working mark");
   assert.deepEqual(marks, [marks[0], marks[0], marks[0]]);
 });
 

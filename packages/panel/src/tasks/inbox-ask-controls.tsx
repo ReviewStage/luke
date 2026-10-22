@@ -21,6 +21,7 @@ import {
   type FieldControl,
   FormField,
   GAP,
+  ReadableControls,
   Stack,
   TEXT_FIELD_TYPE,
   TextField,
@@ -57,8 +58,10 @@ import { SentWords } from "./skill-chip.js";
  * answered ask's stand as the answer left them, read-only and at full
  * strength. Enter on an option or in a field sends the box the controls
  * stand in (`DraftQuestion`), and a send lacking something takes the
- * keyboard to it (`focusMissing`). Nothing here knows where the ask came
- * from: an Inbox item's thread or a chat message.
+ * keyboard to it (`focusMissing`). An ask's words, its options and its
+ * steps, select and copy whether it is open or not (`ReadableControls`), a
+ * drag over them picking and ticking nothing. Nothing here knows where the
+ * ask came from: an Inbox item's thread or a chat message.
  */
 
 /** The words a choice's open options are named by, for a reader that does not see the question over them. */
@@ -472,13 +475,26 @@ function AskPress({
  * filled, with no press, a form filled in part sending what was filled;
  * nothing for an `answer` of words alone, whose reply's words are the answer.
  */
-export function AskControls({
+export function AskControls(props: {
+  ask: InboxAsk;
+  /** The item's title, which stands as the one step of a to-do that names none; none where nothing names that step. */
+  title: string | undefined;
+  doors: AskDoors;
+}): React.JSX.Element {
+  return (
+    <ReadableControls>
+      <OpenControls {...props} />
+    </ReadableControls>
+  );
+}
+
+/** An open ask's controls, as `AskControls` holds them. */
+function OpenControls({
   ask,
   title,
   doors,
 }: {
   ask: InboxAsk;
-  /** The item's title, which stands as the one step of a to-do that names none; none where nothing names that step. */
   title: string | undefined;
   doors: AskDoors;
 }): React.JSX.Element | null {
@@ -617,13 +633,26 @@ function AnsweredPress({
  * with the one `draft` pressed marked; an `answer`'s fields, each holding
  * what `draft` gives it. An `answer` of no fields has none, and draws nothing.
  */
-export function HeldControls({
+export function HeldControls(props: {
+  ask: InboxAsk;
+  /** The item's title, which stands as the one step of a to-do that names none; none where nothing names that step. */
+  title: string | undefined;
+  draft: InboxDraft;
+}): React.JSX.Element {
+  return (
+    <ReadableControls>
+      <LeftControls {...props} />
+    </ReadableControls>
+  );
+}
+
+/** An ask's controls as they were left, as `HeldControls` holds them. */
+function LeftControls({
   ask,
   title,
   draft,
 }: {
   ask: InboxAsk;
-  /** The item's title, which stands as the one step of a to-do that names none; none where nothing names that step. */
   title: string | undefined;
   draft: InboxDraft;
 }): React.JSX.Element | null {

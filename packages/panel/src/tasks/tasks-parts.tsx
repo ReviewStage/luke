@@ -9,10 +9,14 @@ import {
   MicrophoneOffIcon,
   SpeakerIcon,
   SpeakerOffIcon,
+  TEXT_ELEMENT,
+  TEXT_VARIANT,
+  Text,
+  ThinkingDots,
+  Tooltip,
+  VisuallyHidden,
 } from "@luke/ui";
 import type { CallStatus } from "@luke/ui/tasks-model";
-import { ThinkingDots } from "../thinking-dots.js";
-import { Tooltip } from "../tooltip.js";
 
 /**
  * tasks-parts.tsx -- the open task's call bar, as a pure layout.
@@ -61,15 +65,26 @@ function CallStatusLines({
   const notes = status?.backend.notes ?? false;
   return (
     <span className="call-status">
-      <span className="call-status-word" data-muted={String(muted)}>
+      <Text
+        as={TEXT_ELEMENT.SPAN}
+        variant={TEXT_VARIANT.INHERIT}
+        truncate
+        className="call-status-word"
+        data-muted={String(muted)}
+      >
         {status?.voiceWord}
-      </span>
+      </Text>
       {brain !== undefined || notes ? (
         <span className="call-backend">
-          <ThinkingDots />
+          <span className="call-backend-dots">
+            <ThinkingDots />
+          </span>
           {brain === undefined ? null : (
             // Note that this keeps the system's title, because the floating call window is too short for a pill.
-            <span
+            <Text
+              as={TEXT_ELEMENT.SPAN}
+              variant={TEXT_VARIANT.INHERIT}
+              truncate
               className="call-backend-part"
               data-part="brain"
               title={titled ? brain.action : undefined}
@@ -80,16 +95,20 @@ function CallStatusLines({
               ) : (
                 <span className="call-backend-action">{brain.action}</span>
               )}
-            </span>
+            </Text>
           )}
           {notes ? (
-            <span className="call-backend-part" data-part="notes">
+            <Text
+              as={TEXT_ELEMENT.SPAN}
+              variant={TEXT_VARIANT.INHERIT}
+              truncate
+              className="call-backend-part"
+              data-part="notes"
+            >
               {NOTETAKER_WRITING}
-            </span>
+            </Text>
           ) : null}
-          <span className="visually-hidden" role="status">
-            {TASK_WORKING_LABEL}
-          </span>
+          <VisuallyHidden role="status">{TASK_WORKING_LABEL}</VisuallyHidden>
         </span>
       ) : null}
     </span>

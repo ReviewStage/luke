@@ -1,4 +1,4 @@
-import { TEXT_ELEMENT, TEXT_FONT, TEXT_TONE, TEXT_VARIANT, Text } from "@luke/ui";
+import { TEXT_ELEMENT, TEXT_FONT, TEXT_TONE, TEXT_VARIANT, Text, VisuallyHidden } from "@luke/ui";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
@@ -67,7 +67,18 @@ function Typography(): React.JSX.Element {
           <Text tone={TEXT_TONE.MUTED} truncate>
             {LONG}
           </Text>
+          <p className="catalog-inherited">
+            <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.INHERIT} truncate>
+              {LONG}
+            </Text>
+          </p>
         </div>
+      </CatalogSection>
+      <CatalogSection id="typography-hidden" title="Spoken and not drawn">
+        <p className="catalog-stack">
+          A glyph says its state
+          <VisuallyHidden> (unread: this is read aloud and drawn nowhere)</VisuallyHidden>
+        </p>
       </CatalogSection>
     </>
   );

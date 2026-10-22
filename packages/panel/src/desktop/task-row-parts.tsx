@@ -19,6 +19,7 @@ import {
   dropBelowStart,
   TaskPriorityMark,
   TaskStatusMark,
+  Tooltip,
   useMenu,
 } from "@luke/ui";
 import { GLYPH_STATE, StateGlyph } from "../state-glyph.js";
@@ -28,7 +29,6 @@ import { PullRequestMark, pullRequestMarkState } from "../tasks/pull-request-mar
 import { TASK_PRIORITY_WORDS, TASK_STATUS_WORDS } from "../tasks/task-standing.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast.js";
-import { Tooltip } from "../tooltip.js";
 import { ActionMenu } from "./action-menu.js";
 
 /**
@@ -224,14 +224,18 @@ function markedPullRequests(task: TaskSummary) {
  * GitHub's colour for where it stands and its number, those still standing
  * first, at most `most` of them and a count of the rest; nothing where it has
  * neither. The marks are facts, its card's rows being where a pull request
- * opens.
+ * opens. Where `steady`, as in the List's column, a task whose agents rest
+ * keeps the working mark's room before its pull requests, so they line up
+ * with those of a task whose agent works.
  */
 export function TaskWorkMarks({
   task,
   most = MARKED_PULL_REQUESTS,
+  steady = false,
 }: {
   task: TaskSummary;
   most?: number;
+  steady?: boolean;
 }): React.JSX.Element | null {
   const working = (task.agents?.working ?? 0) > 0;
   const pullRequests = markedPullRequests(task);
@@ -240,7 +244,9 @@ export function TaskWorkMarks({
   if (!working && shown.length === 0) return null;
   return (
     <span className="task-work-marks">
-      {working ? <StateGlyph state={GLYPH_STATE.WORKING} /> : null}
+      {working || steady ? (
+        <StateGlyph state={working ? GLYPH_STATE.WORKING : GLYPH_STATE.REST} />
+      ) : null}
       {shown.map((pullRequest) => (
         <span
           key={pullRequest.url ?? pullRequest.number}

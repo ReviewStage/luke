@@ -976,7 +976,7 @@ test("a sandbox that stops under a connected shell is read again, and the list s
   main.listed = { sandbox: SANDBOX_STATE.STOPPED, terminals: [] };
   port.say({ type: "state", state: "stopped" });
   await settle();
-  assert.equal(tab.container.querySelector(".terminal-shells-none")?.textContent, "No shells.");
+  assert.equal(tab.container.querySelector(".luke-note-line")?.textContent, "No shells.");
   assert.equal(
     tab.container.querySelector(".terminal-shells-foot")?.textContent,
     "Sandbox stopped",

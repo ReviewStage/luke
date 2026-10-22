@@ -27,6 +27,12 @@ import {
   type IntegrationProvider,
   type IntegrationStatus,
 } from "@luke/features/integration-wire";
+import type { WorkspaceSentry } from "@luke/features/sentry-install-wire";
+import {
+  SENTRY_LEVEL,
+  SENTRY_TRIGGER_EVENT,
+  TRIGGER_PROVIDER,
+} from "@luke/features/trigger-catalog";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import type { AppStateSnapshot } from "@luke/host/app-state";
@@ -253,6 +259,13 @@ let noRecent = false;
 let integrationsHeld = false;
 /** How many reads of the account's integrations are refused before one answers. */
 let integrationsRefusals = 0;
+/** The workspace's Sentry as its read answers it: the deployment holds the integration, installed once, unless a test says otherwise. */
+let sentryRead: WorkspaceSentry = {
+  configured: true,
+  installations: [{ installationId: "a1b2c3d4-0000-4000-8000-000000000001" }],
+};
+/** Every workspace a Sentry install was asked for. */
+let sentryInstalls: string[] = [];
 /** What a change answers: the automation as changed, or why not. */
 let changeRefusal:
   | (typeof AUTOMATION_CALL_FAILURE)[keyof typeof AUTOMATION_CALL_FAILURE]
@@ -299,6 +312,11 @@ beforeEach(() => {
   noRecent = false;
   integrationsHeld = false;
   integrationsRefusals = 0;
+  sentryRead = {
+    configured: true,
+    installations: [{ installationId: "a1b2c3d4-0000-4000-8000-000000000001" }],
+  };
+  sentryInstalls = [];
   fakeActs({
     act: (request: AnyAct): Promise<FakeActAnswer> => {
       if (request.kind === ACT_KIND.AUTOMATIONS_FOLLOW) {
@@ -416,6 +434,13 @@ beforeEach(() => {
             ? { failure: AUTOMATION_CALL_FAILURE.NOT_FOUND }
             : { automation, webhookSecret: ROTATED_SECRET };
         return Promise.resolve({ status: FAKE_ANSWER.DONE, value });
+      }
+      if (request.kind === ACT_KIND.WORKSPACE_SENTRY_READ) {
+        return Promise.resolve({ status: FAKE_ANSWER.DONE, value: sentryRead });
+      }
+      if (request.kind === ACT_KIND.WORKSPACE_SENTRY_INSTALL) {
+        sentryInstalls.push(request.payload.workspaceId);
+        return Promise.resolve({ status: FAKE_ANSWER.DONE, value: undefined });
       }
       if (request.kind === ACT_KIND.AUTOMATIONS_DELETE) {
         deletes.push(request.payload.automationId);
@@ -1283,7 +1308,7 @@ test("the Owner picker draws Personal by the account's picture and the workspace
     row.querySelector(".luke-combobox-option-label")?.textContent,
     row.querySelector(".actor-mark") !== null
       ? "person"
-      : row.querySelector(".workspace-tile") !== null
+      : row.querySelector(".luke-avatar[data-shape='tile']") !== null
         ? "tile"
         : "none",
   ]);
@@ -1297,7 +1322,10 @@ test("the Owner picker draws Personal by the account's picture and the workspace
   );
   assert.ok(acme, "the menu offers the workspace");
   act(() => acme.click());
-  assert.ok(picker(page, "Owner").querySelector(".workspace-tile"), "the workspace wears its tile");
+  assert.ok(
+    picker(page, "Owner").querySelector(".luke-avatar[data-shape='tile']"),
+    "the workspace wears its tile",
+  );
 });
 
 test("another's personal automation's Owner picker draws its owner unnamed, never as the reader", async () => {
@@ -1324,7 +1352,7 @@ test("the list's Owner column draws the workspace by its tile, the account's own
 
   const markOf = (name: string) => {
     const owner = rowOf(page, name).querySelector(".automation-owner");
-    if (owner?.querySelector(".workspace-tile")) return "tile";
+    if (owner?.querySelector(".luke-avatar[data-shape='tile']")) return "tile";
     return owner?.querySelector(".actor-mark")?.getAttribute("data-kind") ?? "none";
   };
   assert.equal(markOf(SWEEP.name), "tile");
@@ -1992,6 +2020,7 @@ test("Same agent is chosen from the workspace's agents on the automation's repos
 /** What each row's glyph draws, in order: GitHub's mark, or the lucide icon's name. */
 function glyphs(rows: readonly Element[]): string[] {
   return rows.map((row) => {
+    if (row.querySelector(".integration-mark-sentry") !== null) return "sentry";
     if (row.querySelector(".luke-provider-mark") !== null) return "github";
     const icon = row.querySelector(".state-glyph svg");
     const named = [...(icon?.classList ?? [])].find(
@@ -2893,4 +2922,191 @@ test("on a narrow stage each row says when it runs next before what fires it, un
     "a far run names its year",
   );
   assert.ok(rowOf(page, "Dependency bumps").querySelector(".failed-mark"));
+});
+
+/** An automation fired by Sentry alerts from two projects at the error level, waiting six hours before the same issue runs again. */
+const SENTRY_ALERTS = automation(11, {
+  name: "Fix Sentry errors",
+  trigger: {
+    kind: AUTOMATION_TRIGGER.INTEGRATION,
+    provider: TRIGGER_PROVIDER.SENTRY,
+    event: SENTRY_TRIGGER_EVENT.ALERT_TRIGGERED,
+    filters: { project: ["web", "api"], level: [SENTRY_LEVEL.ERROR] },
+  },
+  guards: { ...AUTOMATION_DEFAULT_GUARDS, subjectCooldownHours: 6 },
+});
+
+/** A Sentry issue's firing, as its run keeps it. Synthetic. */
+const ISSUE_FIRING = {
+  kind: AUTOMATION_FIRING.INTEGRATION,
+  provider: TRIGGER_PROVIDER.SENTRY,
+  event: SENTRY_TRIGGER_EVENT.ALERT_TRIGGERED,
+  subject: {
+    id: "4711",
+    title: "TypeError: cart is undefined",
+    url: "https://acme.sentry.io/issues/4711/",
+  },
+} as const;
+
+test("a Sentry automation and its runs wear Sentry's mark, its row says its event and filters, and a skipped run says its issue and opens it", async () => {
+  const opened: string[] = [];
+  fakeAppPlatform({ ...QUIET_PANEL, openWeb: (url: string) => opened.push(url) });
+  standing = [SENTRY_ALERTS];
+  const list = mountPages({ kind: AUTOMATIONS_PAGE.LIST });
+  await settle();
+  assert.deepEqual(glyphs(automationRows(list)), ["sentry"]);
+  assert.ok(
+    says(rowOf(list, "Fix Sentry errors"), "When an alert fires in Sentry · web, api · error"),
+  );
+  act(() => root?.unmount());
+  document.body.innerHTML = "";
+
+  runs = [
+    {
+      id: "1c2d3e4f-5a6b-4c7d-8e9f-000000000011",
+      firing: ISSUE_FIRING,
+      status: AUTOMATION_RUN_STATUS.SKIPPED,
+      reason: "same-subject",
+      agent: null,
+      firedAt: 1,
+      settledAt: 1,
+    },
+  ];
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SENTRY_ALERTS.id });
+  await settle();
+  const [row] = runRows(page);
+  assert.ok(row, "the run is listed");
+  assert.deepEqual(glyphs([row]), ["sentry"]);
+  assert.ok(says(row, "TypeError: cart is undefined"));
+  assert.ok(says(row, "Skipped: already ran for this issue within its cooldown."));
+  act(() => row.querySelector<HTMLButtonElement>("button")?.click());
+  assert.deepEqual(opened, ["https://acme.sentry.io/issues/4711/"]);
+});
+
+test("a new Sentry automation is made on the event, filters, levels, and cooldown picked, the alert recommended and how to send it said", async () => {
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.NEW });
+  await settle();
+
+  pick(page, "Type", "Sentry");
+  assert.equal(picked(page, "Event"), "Alert triggered (recommended)");
+  assert.match(pickerDetail(page, "Event") ?? "", /alert rule's action/u);
+  pick(page, "Event", "New issue");
+  type(page.querySelector("input[aria-label='Projects']"), "web, api,");
+  type(page.querySelector("input[aria-label='Environments']"), "production");
+  act(() => button("Fatal").click());
+  act(() => button("Error").click());
+  assert.equal(
+    pickerDetail(page, "Type"),
+    "When a new issue is created in Sentry · web, api · production · error, fatal",
+  );
+  assert.equal(
+    page.querySelector<HTMLInputElement>("input[aria-label='Projects']")?.value,
+    "web, api,",
+    "a comma still to be followed stands as typed",
+  );
+
+  type(page.querySelector("input[aria-label='Hours before the same issue runs again']"), "0");
+  type(page.querySelector("input[aria-label='Automation name']"), "Fix new issues");
+  type(page.querySelector("textarea[aria-label='Prompt']"), "Fix the issue Sentry opened.");
+  act(() => button("Create").click());
+  await settle();
+  assert.equal(creates.length, 0);
+  assert.match(page.textContent ?? "", /Wait a whole number of hours, from 1 to 168\./u);
+
+  type(page.querySelector("input[aria-label='Hours before the same issue runs again']"), "12");
+  act(() => button("Create").click());
+  await settle();
+
+  assert.equal(creates.length, 1);
+  assert.deepEqual(creates[0]?.trigger, {
+    kind: AUTOMATION_TRIGGER.INTEGRATION,
+    provider: TRIGGER_PROVIDER.SENTRY,
+    event: SENTRY_TRIGGER_EVENT.ISSUE_CREATED,
+    filters: {
+      project: ["web", "api"],
+      environment: ["production"],
+      level: [SENTRY_LEVEL.FATAL, SENTRY_LEVEL.ERROR],
+    },
+  });
+  assert.deepEqual(creates[0]?.guards, { ...AUTOMATION_DEFAULT_GUARDS, subjectCooldownHours: 12 });
+});
+
+test("a saved Sentry automation opens on its filters and cooldown, and a cooldown changed saves over its guards alone", async () => {
+  standing = [SENTRY_ALERTS];
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SENTRY_ALERTS.id });
+  await settle();
+
+  assert.equal(picked(page, "Type"), "Sentry");
+  assert.equal(
+    page.querySelector<HTMLInputElement>("input[aria-label='Projects']")?.value,
+    "web, api",
+  );
+  assert.equal(button("Error").getAttribute("aria-checked"), "true");
+  const hours = page.querySelector<HTMLInputElement>(
+    "input[aria-label='Hours before the same issue runs again']",
+  );
+  assert.equal(hours?.value, "6");
+
+  type(hours, "48");
+  act(() => button("Save").click());
+  await settle();
+
+  assert.deepEqual(changes, [
+    {
+      automationId: SENTRY_ALERTS.id,
+      change: { guards: { ...AUTOMATION_DEFAULT_GUARDS, subjectCooldownHours: 48 } },
+    },
+  ]);
+});
+
+test("where the workspace has no Sentry installed, a Sentry trigger offers Install Sentry in its rows' place, which installs on the workspace", async () => {
+  sentryRead = { configured: true, installations: [] };
+  standing = [SENTRY_ALERTS];
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SENTRY_ALERTS.id });
+  await settle();
+
+  assert.match(page.textContent ?? "", /Sentry isn't installed/u);
+  assert.equal(page.querySelector("button[aria-label^='Event: ']"), null);
+  assert.equal(page.querySelector("input[aria-label='Projects']"), null);
+  act(() => button("Install Sentry").click());
+  await settle();
+  assert.deepEqual(sentryInstalls, [WORKSPACE.id]);
+});
+
+test("Sentry stays listed but unpickable, saying why, where this deployment holds no Sentry integration, and one already fired by it keeps its rows", async () => {
+  sentryRead = { configured: false, installations: [] };
+  standing = [SENTRY_ALERTS];
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.NEW });
+  await settle();
+  act(() => picker(page, "Type").click());
+  const sentry = [...document.querySelectorAll<HTMLElement>("[role=option]")].find(
+    (row) => row.querySelector(".luke-combobox-option-label")?.textContent === "Sentry",
+  );
+  assert.ok(sentry, "Sentry is listed");
+  assert.equal(sentry.getAttribute("aria-disabled"), "true");
+  assert.match(sentry.textContent ?? "", /Not set up on this deployment yet/u);
+  act(() => sentry.click());
+  assert.equal(picked(page, "Type"), "Schedule");
+  act(() => root?.unmount());
+  document.body.innerHTML = "";
+
+  const saved = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SENTRY_ALERTS.id });
+  await settle();
+  assert.equal(picked(saved, "Type"), "Sentry");
+});
+
+test("Sentry chosen before the read says the deployment holds no Sentry integration is held back from saving", async () => {
+  sentryRead = { configured: false, installations: [] };
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.NEW });
+  // Chosen before the read answers.
+  pick(page, "Type", "Sentry");
+  await settle();
+
+  assert.match(page.textContent ?? "", /Sentry isn't available/u);
+  type(page.querySelector("input[aria-label='Automation name']"), "Fix new issues");
+  type(page.querySelector("textarea[aria-label='Prompt']"), "Fix the issue Sentry opened.");
+  act(() => button("Create").click());
+  await settle();
+  assert.equal(creates.length, 0);
+  assert.match(page.textContent ?? "", /Luke can't receive Sentry events here/u);
 });

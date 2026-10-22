@@ -15,6 +15,7 @@ import {
 import { taskKey } from "@luke/features/workspace-key";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
+  AVATAR_SIZE,
   BUTTON_SIZE,
   BUTTON_VARIANT,
   CARD_PRESS_SELECTOR,
@@ -32,13 +33,17 @@ import {
   FoldingButton,
   IconButton,
   InlineEdit,
+  OneLine,
   PAGE_FRAME,
   PAGE_WIDTH,
   TaskPriorityMark,
   TaskStatusMark,
+  TEXT_ELEMENT,
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
+  Tooltip,
+  VisuallyHidden,
 } from "@luke/ui";
 import { actorName, creatorActor } from "@luke/ui/actor-model";
 import { repositoryLabel, TASK_ORDER, taskTime } from "@luke/ui/task-list-model";
@@ -75,7 +80,6 @@ import {
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref.js";
 import { useAppCommand } from "../app-commands.js";
-import { FadingWords } from "../fading-words.js";
 import { FIND_SKIP_ATTRIBUTE } from "../find-matches.js";
 import { useMemberDirectory } from "../member-directory.js";
 import { RepositoryPicture } from "../repository-picture.js";
@@ -87,7 +91,6 @@ import { useMinute } from "../tasks/task-time.js";
 import { useReadMarks } from "../tasks/use-task-looks.js";
 import { useTaskMaker } from "../tasks/use-task-origin.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
-import { Tooltip } from "../tooltip.js";
 import { readKept, writeKept } from "./folded-groups.js";
 import { sectionGlyph } from "./section-icon-picker.js";
 import { useTaskMenu } from "./task-actions.js";
@@ -382,6 +385,7 @@ function groupHead(
                 repository={head.repository}
                 pictures={tasks.repositories.pictures}
                 fallback={<FolderGitIcon />}
+                size={AVATAR_SIZE.GLYPH}
               />
             ),
             name: repositoryLabel(head.repository, repositories),
@@ -607,11 +611,9 @@ function TaskListRow({
               contextMenu={actions.contextMenu(press)}
             >
               <span className="tasks-list-press">
-                <FadingWords className="tasks-list-name" words={task.name} />
+                <OneLine>{task.name}</OneLine>
                 {spoken === "" ? null : (
-                  <span className="visually-hidden" {...{ [FIND_SKIP_ATTRIBUTE]: "" }}>
-                    {spoken}
-                  </span>
+                  <VisuallyHidden {...{ [FIND_SKIP_ATTRIBUTE]: "" }}>{spoken}</VisuallyHidden>
                 )}
               </span>
             </CardPress>
@@ -651,7 +653,7 @@ function TaskListRow({
               }
             />
           )}
-          <FadingWords className="tasks-list-repository" words={repositoryName} />
+          <OneLine>{repositoryName}</OneLine>
         </>,
       )}
       {/* Note that a task Luke or an agent made names its maker before their square, the member it was made for worn on it, as every task surface does. */}
@@ -659,7 +661,14 @@ function TaskListRow({
         TASK_PROPERTY.CREATOR,
         <>
           {maker === undefined ? null : (
-            <span className="tasks-list-maker">{actorName(maker.actor)}</span>
+            <Text
+              as={TEXT_ELEMENT.SPAN}
+              variant={TEXT_VARIANT.INHERIT}
+              truncate
+              className="tasks-list-maker"
+            >
+              {actorName(maker.actor)}
+            </Text>
           )}
           <ActorMark
             actor={maker?.actor ?? creator}
@@ -668,7 +677,7 @@ function TaskListRow({
           />
         </>,
       )}
-      {cell(TASK_PROPERTY.AGENTS, <TaskWorkMarks task={task} most={1} />)}
+      {cell(TASK_PROPERTY.AGENTS, <TaskWorkMarks task={task} most={1} steady />)}
       {cell(
         TASK_PROPERTY.UPDATED,
         <RelativeTime at={taskTime(task, TASK_ORDER.UPDATED)} now={now} hint={false} />,

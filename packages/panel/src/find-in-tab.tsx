@@ -1,5 +1,12 @@
 import { APP_COMMAND } from "@luke/settings/shortcuts";
-import { CloseIcon, DisclosureFind, IconButton, SearchField, useDisclosureFinding } from "@luke/ui";
+import {
+  CloseIcon,
+  DisclosureFind,
+  IconButton,
+  SearchField,
+  Tooltip,
+  useDisclosureFinding,
+} from "@luke/ui";
 import { type StripTab, sameTab } from "@luke/ui/tab-strip-model";
 import { ChevronDownIcon, ChevronUpIcon } from "lucide-react";
 import {
@@ -24,7 +31,6 @@ import {
   selectedWords,
   watchText,
 } from "./find-matches.js";
-import { Tooltip } from "./tooltip.js";
 
 /**
  * find-in-tab.tsx -- ⌘F inside the tab that holds the window's focus: a find bar at the tab's top right, its matches tinted in the tab's own text and stepped through one at a time.

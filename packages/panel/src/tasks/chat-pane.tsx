@@ -27,6 +27,7 @@ import {
   Text,
   TextButton,
   useConfirmDialog,
+  VisuallyHidden,
 } from "@luke/ui";
 import { ACTOR_KIND, type Actor, actorName, distinctActors } from "@luke/ui/actor-model";
 import {
@@ -711,7 +712,7 @@ function Byline({
     // The author stays named for a screen reader, which may land on this message alone.
     return (
       <div className="chat-byline" data-continued="true">
-        <span className="visually-hidden">{actorName(actor)}</span>
+        <VisuallyHidden>{actorName(actor)}</VisuallyHidden>
         {action}
       </div>
     );

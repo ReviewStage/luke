@@ -463,8 +463,8 @@ export type CodingAgentStartFrom = typeof codingAgentStartFromSchema.Type;
  * prompt, files, source, or note; its first words come later, typed or
  * spoken, and it may start on a task with no repository, where it works in
  * none. A Start `call` is one a Call opens a call into as it lands, from a
- * draft's composer: it runs on eve whatever the account's routing would
- * choose, as a blank one does, since a call reaches eve alone.
+ * draft's composer: it runs where the account's routing chooses, as any
+ * Start does, eve or the provider's own harness alike.
  */
 export const codingAgentStartRequestFields = {
   idempotencyKey: trimmedText(CODING_AGENT_BOUNDS.MAX_KEY_CHARS),
@@ -2135,6 +2135,13 @@ export const codingAgentMessagesAnswerSchema = EffectSchema.Struct({
     EffectSchema.Literals(Object.values(CODING_AGENT_FAILURE)),
   ),
   usage: EffectSchema.optionalKey(codingAgentUsageSchema),
+  /**
+   * Who pays for the agent (`CODING_AGENT_PAYER`), as its row recorded it at
+   * Start, before any turn settled too, so the chip says whose plan pays,
+   * or none, from the first. Absent on a worker's page, for an agent from
+   * before payers were recorded, and from a service older than it.
+   */
+  payer: EffectSchema.optionalKey(EffectSchema.Literals(Object.values(CODING_AGENT_PAYER))),
   /**
    * What the newest turn alone cost. No service sends it any more, since a
    * price the window draws means the whole run's (`usage`); it stays an

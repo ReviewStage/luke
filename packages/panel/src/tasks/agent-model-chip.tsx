@@ -1,5 +1,9 @@
 import { runtimeModelRule, runtimeModels } from "@luke/features/agent-runtime-models";
-import { CODING_AGENT_PAYER, type CodingAgentUsage } from "@luke/features/coding-agent-wire";
+import {
+  CODING_AGENT_PAYER,
+  type CodingAgentPayer,
+  type CodingAgentUsage,
+} from "@luke/features/coding-agent-wire";
 import type { CatalogModel } from "@luke/features/models-wire";
 import {
   AnchoredPopover,
@@ -11,11 +15,11 @@ import {
   POPOVER_ALIGN,
   TEXT_LINK_LOOK,
   TextLink,
+  Tooltip,
 } from "@luke/ui";
 import { useDisclosure } from "@luke/ui/use-disclosure";
 import { useEffect, useId, useRef, useState } from "react";
 import { HarnessMark } from "../harness-marks.js";
-import { Tooltip } from "../tooltip.js";
 import { agentUsageLine, choiceLabel, planPayerOf, providerOf } from "./coding-agent-model.js";
 import { ModelLabel } from "./model-label.js";
 import { ModelMenu, settledChoice } from "./model-menu.js";
@@ -91,6 +95,7 @@ export function AgentModelChip({
   models,
   readModels,
   usage,
+  payer,
   look = CHIP_LOOK.TOOLBAR,
   width,
   narrow = false,
@@ -102,6 +107,8 @@ export function AgentModelChip({
   readModels: () => void;
   /** What the agent has cost, as its transcript's last page said; nothing before a turn settled. */
   usage: CodingAgentUsage | undefined;
+  /** Who pays for the agent, as its transcript's last page said, before a turn settled too; nothing where it said none. */
+  payer?: CodingAgentPayer | undefined;
   /** The chip's look: the agent box's toolbar chip, or a form row's field (`@luke/ui`'s `Chip`). */
   look?: ChipLook;
   /** How wide the chip stands; its words' own width where none is named. */
@@ -168,7 +175,8 @@ export function AgentModelChip({
             onChoose={model.choose}
             footNote={agentUsageLine(usage)}
             planNote={
-              planPayerOf(model.runtime) === CODING_AGENT_PAYER.CHATGPT_SUBSCRIPTION ? (
+              planPayerOf(model.runtime) === CODING_AGENT_PAYER.CHATGPT_SUBSCRIPTION &&
+              (payer ?? usage?.payer) !== CODING_AGENT_PAYER.API_KEY ? (
                 <ChatGptPlanNote />
               ) : undefined
             }

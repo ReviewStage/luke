@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import { it } from "@effect/vitest";
 import { RUNNER_END, RUNNER_EVENT, type RunnerEvent } from "@luke/agent-runner/protocol";
 import { Database } from "@luke/database/core/query";
+import { askRecord } from "@luke/database/models/asks";
 import {
   createCodingAgent,
   readCodingAgent,
@@ -18,12 +19,14 @@ import {
   type ProviderKeyRow,
   saveProviderKey,
 } from "@luke/database/models/provider-key-store";
+import { claimRuntimeSession } from "@luke/database/models/recorded-session";
 import { readTask, updateTask } from "@luke/database/models/task-store";
 import { storeWriter } from "@luke/database/models/writer";
 import { user } from "@luke/database/schemas/auth";
 import { conversations, messages, turns } from "@luke/database/schemas/storage";
 import { CONVERSATION_RUNTIME, MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import { getTestDB, startTask } from "@luke/database/testing";
+import { ASK_ORIGIN } from "@luke/features";
 import {
   CHECK_SUMMARY,
   CODING_AGENT_PAYER,
@@ -41,13 +44,16 @@ import { sentLineId } from "@luke/wire/host-ids";
 import type { StoredUIMessage } from "@luke/wire/ui-messages";
 import { MockLanguageModelV4 } from "ai/test";
 import { asc, eq } from "drizzle-orm";
-import { Clock, Effect, Layer, Option } from "effect";
+import { Clock, Effect, Layer, Option, Stream } from "effect";
 import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
 import { HOSTED_HTTP_STATUS } from "../../http/http.js";
 import { modelCatalogOf } from "../../providers/model-catalog.js";
+import { EVE_CANCEL_OUTCOME } from "../brain-host/eve-sessions.js";
 import { CODER } from "../coder-host/bounds.js";
+import { NATIVE_SESSION_PREFIX } from "../coder-host/native-runtime.js";
+import { NativeAgentSessions, RUNNER_CHOICE } from "../coder-host/runtime-sessions.js";
 import { titleCodingAgent } from "../coder-host/title.js";
 import { CODER_TOOL_SET } from "../coder-host/tool-set.js";
 import { CURSOR_START, transcriptPast } from "../coder-host/transcript.js";
@@ -76,12 +82,16 @@ const SESSION = "00000000-0000-4000-8000-000000000001";
 const NONCE = "a1b2c3d4e5f6";
 
 /** The route's group over the test's database, as a fetch. */
-const standingWith = (options: RunnerEventsOptions) =>
+const standingWith = (
+  options: RunnerEventsOptions,
+  native: Layer.Layer<NativeAgentSessions> = Layer.empty as Layer.Layer<NativeAgentSessions>,
+) =>
   Effect.gen(function* () {
     const services = Layer.mergeAll(
       Layer.succeed(SqlClient.SqlClient, yield* SqlClient.SqlClient),
       Layer.succeed(Database, yield* Database),
       Layer.succeed(Clock.Clock, yield* Clock.Clock),
+      native,
     );
     const web = HttpRouter.toWebHandler(
       runnerEventsApp(options).pipe(HttpRouter.provideRequest(services)),
@@ -290,6 +300,130 @@ function drawn(part: StoredUIMessage["parts"][number]): readonly WireValue[] {
 
 it.layer(getTestDB())("the runner events route", (it) => {
   it.effect(
+    "a call's ask whose line a native runner takes is bound to the turn that took it, as its whole turn where it opened it and from the step it joined at where it joined one under way, before its first step among them, and the turn's first line its whole turn though the harness opened the turn just before naming it, so the call follows that turn",
+    () =>
+      Effect.gen(function* () {
+        const post = yield* standing;
+        const agent = yield* agentOn(HARNESS.CLAUDE_CODE, []);
+        const asks = askRecord();
+        const delivered = (clientId: string) =>
+          Effect.gen(function* () {
+            const ask = yield* asks.record({
+              userId: agent.userId,
+              conversationId: agent.target.conversationId,
+              clientId,
+              origin: ASK_ORIGIN.SPOKEN,
+              createdAt: new Date(yield* Clock.currentTimeMillis),
+            });
+            // The ask stands on its own line, as `acceptAsk` records one a native session took.
+            yield* asks.dispatchOnce(agent.target, ask.id, () =>
+              Effect.succeed({ sessionId: `${SESSION}-luke`, deliveryId: ask.id }),
+            );
+            return ask.id;
+          });
+        const opening = yield* delivered("dl_1");
+        const early = yield* delivered("dl_3");
+        const joining = yield* delivered("dl_2");
+        const envelope = { parent_tool_use_id: null, session_id: SESSION, uuid: randomUUID() };
+        const step = (text: string) => ({
+          type: "assistant",
+          message: { content: [{ type: "text", text }] },
+          ...envelope,
+        });
+        const batch = [
+          // The harness may open the turn a moment before it names the line that opened it, as Codex does.
+          { type: "system", subtype: "init", ...envelope },
+          { type: RUNNER_EVENT.ACCEPTED, uuid: opening },
+          // Taken into the turn the first line opened, before its first step.
+          { type: RUNNER_EVENT.ACCEPTED, uuid: early },
+          step("Looking."),
+          { type: RUNNER_EVENT.ACCEPTED, uuid: joining },
+          step("Found it."),
+        ];
+        // SAFETY: each message above is one the pinned SDK or the runner emits, written in its JSON shape.
+        yield* post(
+          agent.bearer,
+          batch.map((message, sequence) => ({ sequence, message }) as RunnerEvent),
+        );
+
+        const [turn] = (yield* transcriptOf(agent.target.conversationId)).turns;
+        assert.ok(turn !== undefined);
+        const opened = yield* asks.named(agent.userId, opening);
+        const joinedEarly = yield* asks.named(agent.userId, early);
+        const joined = yield* asks.named(agent.userId, joining);
+        assert.ok(opened?.turnId !== undefined);
+        assert.deepEqual([joinedEarly?.turnId, joined?.turnId], [opened.turnId, opened.turnId]);
+        assert.deepEqual(
+          [opened.joinedAfterStep, joinedEarly?.joinedAfterStep, joined?.joinedAfterStep],
+          [undefined, 0, 1],
+        );
+      }),
+  );
+
+  it.effect(
+    "a call's ask stopped before the runner took its line stops the turn its line opened once it is taken: the runner is told to stop that turn, and the turn's row carries the Stop",
+    () =>
+      Effect.gen(function* () {
+        const cancels: string[] = [];
+        const native = Layer.succeed(NativeAgentSessions, {
+          sessions: () =>
+            Option.some(
+              Effect.succeed({
+                open: () => Effect.die(new Error("this test opens no session")),
+                send: () => Effect.die(new Error("this test sends nothing")),
+                cancel: (sessionId: string, turnId?: string) =>
+                  Effect.sync(() => {
+                    cancels.push(`${sessionId}:${turnId}`);
+                    return { outcome: EVE_CANCEL_OUTCOME.ACCEPTED } as const;
+                  }),
+                reset: () => Effect.die(new Error("this test resets nothing")),
+                stream: () => Stream.empty,
+                retune: () => Effect.succeed(RUNNER_CHOICE.NOT_LIVE),
+              }),
+            ),
+        });
+        const post = yield* standingWith({}, native);
+        const agent = yield* agentOn(HARNESS.CLAUDE_CODE, []);
+        const session = `${NATIVE_SESSION_PREFIX.claude_code}${randomUUID()}`;
+        yield* claimRuntimeSession(agent.target, session, new Date(yield* Clock.currentTimeMillis));
+        const asks = askRecord();
+        const ask = yield* asks.record({
+          userId: agent.userId,
+          conversationId: agent.target.conversationId,
+          clientId: "dl_1",
+          origin: ASK_ORIGIN.SPOKEN,
+          createdAt: new Date(yield* Clock.currentTimeMillis),
+        });
+        yield* asks.dispatchOnce(agent.target, ask.id, () =>
+          Effect.succeed({ sessionId: session, deliveryId: ask.id }),
+        );
+        // The developer stopped the ask on the call before its runner took its line.
+        yield* asks.cancelRequested(ask.id, new Date(yield* Clock.currentTimeMillis));
+
+        const envelope = { parent_tool_use_id: null, session_id: SESSION, uuid: randomUUID() };
+        const batch = [
+          { type: RUNNER_EVENT.ACCEPTED, uuid: ask.id },
+          { type: "system", subtype: "init", ...envelope },
+        ];
+        // SAFETY: each message above is one the pinned SDK or the runner emits, written in its JSON shape.
+        yield* post(
+          agent.bearer,
+          batch.map((message, sequence) => ({ sequence, message }) as RunnerEvent),
+        );
+
+        const bound = yield* asks.named(agent.userId, ask.id);
+        assert.ok(bound?.turnId !== undefined);
+        assert.deepEqual(cancels, [`${session}:${bound.turnId}`]);
+        const db = yield* Database;
+        const [stamped] = yield* db
+          .select({ cancelRequestedAt: turns.cancelRequestedAt })
+          .from(turns)
+          .where(eq(turns.id, bound.turnId));
+        assert.ok(stamped?.cancelRequestedAt !== null && stamped?.cancelRequestedAt !== undefined);
+      }),
+  );
+
+  it.effect(
     "P00's workflow turn lands as one turn: the line it took, each call settled, the words, and its cost",
     () =>
       Effect.gen(function* () {
@@ -443,13 +577,23 @@ it.layer(getTestDB())("the runner events route", (it) => {
   );
 
   it.effect(
-    "a plan's agent's transcript says its turns were the plan's, beside the tokens they took",
+    "a plan's agent's transcript says its turns were the plan's, beside the tokens they took, and names its payer before any turn settled",
     () =>
       Effect.gen(function* () {
         const post = yield* standing;
         const agent = yield* agentWithBearer;
-        yield* post(agent.bearer, workflowTurn(agent.lineId));
         const row = Option.getOrThrow(yield* readCodingAgent(agent.userId, agent.agentId));
+        // Before any turn settles, the page already names who pays.
+        const first = yield* transcriptPast(
+          agent.target,
+          CODER_TOOL_SET,
+          CURSOR_START,
+          row,
+          row,
+        ).pipe(Effect.provide(modelCatalogOf([])));
+        assert.equal(first.usage, undefined);
+        assert.equal(first.payer, CODING_AGENT_PAYER.CLAUDE_SUBSCRIPTION);
+        yield* post(agent.bearer, workflowTurn(agent.lineId));
 
         const page = yield* transcriptPast(
           agent.target,

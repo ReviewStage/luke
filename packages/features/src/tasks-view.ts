@@ -37,6 +37,10 @@ import {
 } from "./plan-comment-wire.js";
 import { PLAN_EDIT_REFUSAL, planEditRequestSchema, planEditValueSchema } from "./plan-edit.js";
 import {
+  workspaceSentryAnswerSchema,
+  workspaceSentryDisconnectRequestSchema,
+} from "./sentry-install-wire.js";
+import {
   taskIssueChoiceSchema,
   taskIssueLinkAnswerSchema,
   taskIssueLinkChangedAnswerSchema,
@@ -947,6 +951,20 @@ export const tasksWorkspaceGitHubConnectAnswerSchema = EffectSchema.Union([
 ]);
 
 export type TasksWorkspaceGitHubConnectAnswer = typeof tasksWorkspaceGitHubConnectAnswerSchema.Type;
+
+/** One of a workspace's Sentry installations disconnected, as the window asks it: the workspace and Sentry's id for the installation. */
+export const tasksWorkspaceSentryDisconnectParamsSchema = workspaceSentryDisconnectRequestSchema;
+
+export type TasksWorkspaceSentryDisconnectParams =
+  typeof tasksWorkspaceSentryDisconnectParamsSchema.Type;
+
+/** A workspace's Sentry as the window hears it after a read or a disconnect: whether the deployment holds the integration and the workspace's installations, or why there is no answer. */
+export const tasksWorkspaceSentryAnswerSchema = EffectSchema.Union([
+  EffectSchema.Struct({ sentry: workspaceSentryAnswerSchema }),
+  workspaceCallFailureSchema,
+]);
+
+export type TasksWorkspaceSentryAnswer = typeof tasksWorkspaceSentryAnswerSchema.Type;
 
 /** The Linear issues a window asks for, to start a plan from one: the workspace, and a search where one is typed. */
 export const tasksLinearIssuesParamsSchema = linearIssuesRequestSchema;

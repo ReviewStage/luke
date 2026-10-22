@@ -1,3 +1,4 @@
+import { VisuallyHidden } from "@luke/ui";
 /**
  * copy-feedback.tsx -- the window's one answer to a copy: a button's glyph turning to a check for a moment, or a toast for a copy made from a menu.
  *
@@ -152,9 +153,9 @@ export function CopyGlyph({ state }: { state: CopyState }): React.JSX.Element {
       <CopyIcon aria-hidden="true" data-glyph={COPY_STATE.IDLE} />
       <CheckIcon aria-hidden="true" data-glyph={COPY_STATE.COPIED} />
       <CircleAlertIcon aria-hidden="true" data-glyph={COPY_STATE.FAILED} />
-      <span className="visually-hidden" role="status">
+      <VisuallyHidden role="status">
         {state === COPY_STATE.IDLE ? "" : COPY_HINT[state]}
-      </span>
+      </VisuallyHidden>
     </span>
   );
 }

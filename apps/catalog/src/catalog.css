@@ -266,12 +266,6 @@ body {
   list-style: none;
 }
 
-/* The pointer's room over a line held to one line, as wide as the column. */
-.catalog-one-line {
-  display: block;
-  min-width: 0;
-}
-
 /* A column narrower than a phone, where long words have to wrap. */
 .catalog-narrow {
   display: flex;
@@ -488,7 +482,13 @@ body {
   flex: 1 1 var(--luke-select-field-width);
 }
 
-/* The tooltip and hover card examples' control, whose wrapper is the hint's anchor and so wraps it exactly. */
+/* The tooltips example's row, whose name's card hangs beside the whole row. */
+.catalog-carded-row {
+  display: inline-flex;
+  gap: var(--luke-space-4);
+}
+
+/* The hover card example's control, whose wrapper is the hint's anchor and so wraps it exactly. */
 .catalog-hinted {
   display: inline-flex;
 }
@@ -856,4 +856,59 @@ body {
   border: 1px solid var(--luke-color-border);
   border-radius: var(--luke-control-radius);
   background: var(--luke-color-ground);
+}
+
+/* A toolbar's row a tab strip stands in, at a pane's width and a narrow
+   one's, so its tabs give way and scroll along. */
+.catalog-tab-row {
+  display: flex;
+  align-items: center;
+  width: 640px;
+  max-width: 100%;
+  padding: var(--luke-space-8) var(--luke-space-12);
+  border: 1px dashed var(--luke-color-border-strong);
+  border-radius: var(--luke-radius-8);
+}
+
+.catalog-tab-row-narrow {
+  width: 320px;
+}
+
+/* A failure's mark at a tab's end, as an app draws its own: the alert in
+   the danger colour, a size under the glyph it follows. */
+.catalog-end-mark {
+  display: inline-flex;
+  width: 14px;
+  height: 14px;
+  color: var(--luke-color-danger);
+}
+
+.catalog-end-mark > svg {
+  width: 100%;
+  height: 100%;
+}
+
+/* A list an app hangs on the menu's surface (`MenuSurface`), at an `@`
+   list's width, its crumb inset as the rows' words are. */
+.catalog-menu-surface {
+  width: 280px;
+}
+
+.catalog-menu-crumb {
+  padding: var(--luke-space-8) var(--luke-space-12) var(--luke-space-4);
+}
+
+/* A row that has set its own type and ink, for words that inherit them. */
+.catalog-inherited {
+  margin: 0;
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-caption-size);
+}
+
+/* The box a hidden rail's strip stands in, as tall as a few rows. */
+.catalog-mark-strip {
+  display: flex;
+  width: var(--luke-space-12);
+  height: 160px;
+  border-right: 1px solid var(--luke-color-border);
 }

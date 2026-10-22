@@ -23,7 +23,7 @@
  * A count is words, or parts each in
  * its own tone (`CountPart`), which holds chosen or not; a diff's lines are
  * `linesCount`'s, always green and red. An option may say more in the
- * app's hint over it (`hint`), such as the whole a count leaves out.
+ * hint over it (`hint`), such as the whole a count leaves out.
  *
  * `look` is how the chosen option stands out. `fill` is the window's own
  * selected state, a sidebar row's and an open tab's: plain words at the
@@ -57,6 +57,7 @@ import {
 import { CHOICE_ROLE, type ChoiceRole } from "../choice/choice-keys.js";
 import { type CountPart, CountParts } from "../choice/count-part.js";
 import { type ChoiceKeys, useChoiceKeys } from "../choice/use-choice-keys.js";
+import { Tooltip } from "../tooltip/hint.js";
 
 /** How the bar draws its chosen option: a fill under it, or a thumb raised in a trough. */
 export const CHOICE_BAR_LOOK = {
@@ -354,7 +355,7 @@ export interface ChoiceItem<Value extends string> {
   readonly icon?: ReactNode;
   /** Words drawn quiet after the name, or parts each in its own tone. */
   readonly count?: string | readonly CountPart[] | undefined;
-  /** What the app's hint over the option says beyond its name and count (the whole a count leaves out); none raises nothing. */
+  /** What the hint over the option says beyond its name and count (the whole a count leaves out); none raises nothing. */
   readonly hint?: string | undefined;
   readonly disabled?: boolean | undefined;
 }
@@ -388,7 +389,7 @@ interface ChoiceBarBase<Value extends string> {
   focus?: ChoiceBarFocus | undefined;
   inset?: ChoiceBarInset | undefined;
   fold?: ChoiceBarFold | undefined;
-  /** The app's hint, hung from each option that says one (`ChoiceItem.hint`). */
+  /** The hint hung from each option that says one (`ChoiceItem.hint`): the window's tooltip, unless the caller hangs one of its own. */
   hint?: ChoiceBarHint | undefined;
   disabled?: boolean | undefined;
 }
@@ -471,7 +472,7 @@ export function ChoiceBar<Value extends string>(props: ChoiceBarProps<Value>): R
     focus = CHOICE_BAR_FOCUS.ROVING,
     inset = CHOICE_BAR_INSET.NONE,
     fold = CHOICE_BAR_FOLD.OWN,
-    hint: Hint,
+    hint: Hint = Tooltip,
     disabled = false,
     clearable: _,
     onChange: __,
@@ -553,7 +554,7 @@ export function ChoiceBar<Value extends string>(props: ChoiceBarProps<Value>): R
             {count === undefined ? null : <span className="luke-choice-bar-count">{count}</span>}
           </button>
         );
-        return Hint === undefined || item.hint === undefined ? (
+        return item.hint === undefined ? (
           option
         ) : (
           <Hint key={item.value} label={item.hint}>

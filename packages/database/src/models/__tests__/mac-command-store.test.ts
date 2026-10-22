@@ -88,8 +88,8 @@ const queueOtherKind = (userId: string) =>
     const id = randomUUID();
     const queuedAt = (yield* now).toISOString();
     yield* db.execute(
-      sql`INSERT INTO mac_command (id, user_id, kind, params, timeout_seconds, queued_at)
-          VALUES (${id}, ${userId}, 'browser', '{}'::jsonb, 30, ${queuedAt})`,
+      sql`INSERT INTO mac_command (id, user_id, kind, timeout_seconds, queued_at)
+          VALUES (${id}, ${userId}, 'browser', 30, ${queuedAt})`,
     );
     return id;
   });

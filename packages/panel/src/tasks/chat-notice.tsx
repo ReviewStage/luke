@@ -6,7 +6,15 @@ import {
   chatNoticeWords,
   knownBlock,
 } from "@luke/features/chat-wire";
-import { HoverCard, HoverCardHead, HoverCardNote, HoverCardRule } from "@luke/ui";
+import {
+  HoverCard,
+  HoverCardHead,
+  HoverCardNote,
+  HoverCardRule,
+  TEXT_ELEMENT,
+  TEXT_VARIANT,
+  Text,
+} from "@luke/ui";
 import { CHAT_PLACE, type ChatNames, type ChatPlace, chatWho } from "@luke/ui/chat-model";
 import { type ChatNoticeMetadata, MESSAGE_AUTHOR } from "@luke/wire";
 import { MessagesSquareIcon } from "lucide-react";
@@ -195,7 +203,14 @@ export function ChatNoticeCard({
         <span className="message-sender">
           {from ??
             (who?.member === undefined ? (
-              <span className="message-sender-words">{notice.from}</span>
+              <Text
+                as={TEXT_ELEMENT.SPAN}
+                variant={TEXT_VARIANT.INHERIT}
+                truncate
+                className="message-sender-words"
+              >
+                {notice.from}
+              </Text>
             ) : (
               <ActorRef actor={actorOf(who.member.id)} />
             ))}

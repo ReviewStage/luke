@@ -47,6 +47,7 @@ import {
   type CodingAgentStartRequest,
   type CodingAgentSummary,
 } from "@luke/features/coding-agent-wire";
+import type { GitHubAccess } from "@luke/features/github-repositories-wire";
 import { decodeMention, mentionMarkdown } from "@luke/features/mention-link";
 import { CODING_AGENT_DEFAULT_CHOICE, type ModelChoice } from "@luke/features/models-wire";
 import { planMarkdown } from "@luke/features/plan-markdown";
@@ -101,8 +102,6 @@ import {
   accountFastOffer,
   agentRuntimeChoice,
   markedUnconnected,
-  onApiKey,
-  providerOfModel,
 } from "./agent-runtime-choice.js";
 import { CODER } from "./bounds.js";
 import { contextWindowOf } from "./context.js";
@@ -409,9 +408,17 @@ export type StartAsk = StartPlace & {
   readonly serverWords?: string | undefined;
   /** The branch the agent's checkout is cloned at, such as a stacked pull request's; none for the repository's default branch. */
   readonly branch?: string | undefined;
-  /** Whether a call is opened into the agent as it lands, which pins it to eve as a blank Start is (`startRuntimeOf`). */
+  /** Whether a call is opened into the agent as it lands; it runs where any Start would (`startRuntimeOf`). */
   readonly call?: boolean | undefined;
+  /** The repository the task's own start reached in the same request, which the agent's Start takes rather than asking GitHub again; none for every other Start. */
+  readonly reached?: StartReach | undefined;
 };
+
+/** A repository as a task's start reached it: the full name its row keeps, and how it was reached. */
+export interface StartReach {
+  readonly repository: string;
+  readonly access: GitHubAccess;
+}
 
 /** What a Start came to: the agent, and whether this ask made it or found it under its key. */
 export interface CodingAgentStart {
@@ -909,19 +916,14 @@ export const startCredentialStands = (userId: string, model: string) =>
 /**
  * The runtime a new agent's conversation is recorded on, with its payer,
  * by the account's routing (`agentRuntimeChoice`): the credential Settings
- * chose, a blank Start, a continue and a fork alike. A Start a Call opens a
- * call into as it lands (`call`) is eve's whatever the routing would choose,
- * since a call reaches eve alone (`voice/opening.ts` refuses an agent on any
- * other runtime), so it runs on the account's own API key. Where no
- * credential of the account's pays, the Start is refused by name, the
- * provider beside it, and nothing is written.
+ * chose, a blank Start, one a Call opens a call into (`call`), a continue
+ * and a fork alike, since a call reaches a native harness's agent as it
+ * reaches eve's (`voice/deployment-exchange.ts`). Where no credential of
+ * the account's pays, the Start is refused by name, the provider beside
+ * it, and nothing is written.
  */
-function startRuntimeOf(userId: string, ask: StartAsk, model: string) {
-  const choice =
-    ask.call === true
-      ? Effect.flatMap(providerOfModel(model), (provider) => onApiKey(userId, provider))
-      : agentRuntimeChoice(userId, model);
-  return Effect.catch(choice, (failure) =>
+function startRuntimeOf(userId: string, model: string) {
+  return Effect.catch(agentRuntimeChoice(userId, model), (failure) =>
     failure instanceof AgentCredentialMissing
       ? Effect.fail(credentialMissing(failure.provider))
       : hostedStoreOrUnavailable(Effect.fail(failure)),
@@ -1018,11 +1020,20 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
   const landing = yield* landingOf(userId, ask, fitter, noteFiles);
   // An automation's agent reaches through the workspace's installation alone; a Start by hand, on the starter's token too.
   // A blank agent on a task with no repository reaches none.
+  // Note that a task started with its agent reached the repository a moment ago, in the same
+  // request and as the same member, so that reach stands rather than a second round of GitHub reads.
   const member = ask.automationOrigin === undefined ? userId : undefined;
   const reached =
     landing.repository === null
       ? undefined
-      : yield* workspaceRepository(landing.workspaceId, landing.repository, member, landing.mover);
+      : ask.reached !== undefined && ask.reached.repository === landing.repository
+        ? ask.reached
+        : yield* workspaceRepository(
+            landing.workspaceId,
+            landing.repository,
+            member,
+            landing.mover,
+          );
   // An agent started from another goes on from the branch that one was started on.
   const branch = yield* startBranchOf(
     userId,
@@ -1061,7 +1072,7 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
   const continued = from !== undefined && from.told.messageId === undefined;
   const title = ask.title ?? (continued ? continuedTitle(from.source.title) : undefined);
   // The runtime and the payer are decided as the agent is made, by the starter's account and model, and never change.
-  const runtime = yield* startRuntimeOf(userId, ask, choice.model);
+  const runtime = yield* startRuntimeOf(userId, choice.model);
   const started = yield* hostedStoreOrUnavailable(
     createCodingAgent(userId, {
       ...brief,
@@ -1235,6 +1246,7 @@ export const startRequestedAgent = /* @__PURE__ */ Effect.fnUntraced(function* (
   where: StartWhere,
   request: CodingAgentStartRequest,
   summaryModel?: SummaryModelOf,
+  reached?: StartReach,
 ): Effect.fn.Return<RequestedStart, HostedRefusal, StartServices> {
   const { note } = request;
   const choice = yield* requestedChoice(request);
@@ -1250,6 +1262,7 @@ export const startRequestedAgent = /* @__PURE__ */ Effect.fnUntraced(function* (
     blank: request.blank,
     call: request.call,
     summaryModel,
+    reached,
   }).pipe(Effect.catchTag("ModelChoiceRefused", () => Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST)));
   if (!created) return { agent: yield* summaryOf(userId, agent), created };
   const names = yield* hostedStoreOrUnavailable(readAccountNames(summaryAccounts(agent)));

@@ -25,12 +25,12 @@ import {
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
+  Tooltip,
 } from "@luke/ui";
 import { cloneElement, createContext, useContext } from "react";
 import { FADING_ELEMENT, FadingWords } from "./fading-words.js";
 import { MarkdownMessage } from "./markdown-message.js";
 import { Highlighted } from "./search-field.js";
-import { Tooltip } from "./tooltip.js";
 
 /**
  * integration-tool-list.tsx -- one integration's tools as a list draws them, and one tool's page, in the MCP popover and in Settings › Integrations alike.

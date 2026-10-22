@@ -1,4 +1,4 @@
-import { LineSummary, useDisclosureBodyDrawn } from "@luke/ui";
+import { LineSummary, TEXT_ELEMENT, TEXT_VARIANT, Text, useDisclosureBodyDrawn } from "@luke/ui";
 import { BrainIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { Fold, FoldBody, type FoldProps } from "./fold.js";
@@ -44,10 +44,15 @@ export function ReasoningTrigger({ preview = "" }: ReasoningTriggerProps): React
   return (
     <LineSummary brightens>
       <BrainIcon className="reasoning-icon" aria-hidden="true" />
-      <span className="reasoning-preview">
+      <Text
+        as={TEXT_ELEMENT.SPAN}
+        variant={TEXT_VARIANT.INHERIT}
+        truncate
+        className="reasoning-preview"
+      >
         <span className="reasoning-label">{REASONING_LINE}</span>
         {drawn || preview === "" ? null : ` ${preview}`}
-      </span>
+      </Text>
     </LineSummary>
   );
 }

@@ -1,4 +1,8 @@
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
+import type {
+  WorkspaceSentry,
+  WorkspaceSentryInstallation,
+} from "@luke/features/sentry-install-wire";
 import {
   INVITATION_ROLE,
   type WorkspaceInvitation,
@@ -46,6 +50,7 @@ import {
   useConfirmDialog,
   useFilePicker,
   useMenu,
+  wholeWordsHint,
 } from "@luke/ui";
 import { ACTOR_KIND, memberActor, ROLE_WORDS, SOMEONE_REASON } from "@luke/ui/actor-model";
 import { githubAccountPictureUrl } from "@luke/ui/tasks-model";
@@ -74,11 +79,11 @@ import { useOpenPerson } from "../person-door.js";
 import { dayAndTimeText } from "../tasks/task-time.js";
 import { useWorkspaceMembersRead } from "../tasks/use-workspace-members.js";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast.js";
-import { wholeWordsHint } from "../tooltip.js";
 import { useCapability } from "../use-app-state.js";
 import { MacRepositoriesGroup } from "./mac-repository-settings.js";
 import { MenuRow } from "./menu-row.js";
 import { shownWorkspace } from "./settings-rows.js";
+import { useSentryRead } from "./use-sentry-read.js";
 import {
   AddTokenRepository,
   TokenRepositoryRows,
@@ -248,6 +253,20 @@ const LINEAR_MARK = (
     <ProviderMark provider={INTEGRATION_PROVIDER.LINEAR} />
   </span>
 );
+
+/** Sentry's own mark, which leads its row as Linear's leads Linear's. */
+const SENTRY_MARK = (
+  <span className="settings-row-mark">
+    <ProviderMark provider={INTEGRATION_PROVIDER.SENTRY} />
+  </span>
+);
+
+/** What the Sentry row's line says, by whether an installation stands and who is reading it. */
+const SENTRY_LINE = {
+  INSTALLED: (accounts: string) => (accounts === "" ? "Installed" : `Installed · ${accounts}`),
+  MANAGES: "Not installed. Alerts and new issues can trigger this workspace's automations.",
+  MEMBER: "Not installed. Ask an owner or admin.",
+} as const;
 
 /** One connected GitHub account as the page lists it: its login, whether its installation is active, and its id where the service named it. */
 type ShownConnection = Pick<WorkspaceGithubInstallation, "login" | "active"> &
@@ -1075,13 +1094,14 @@ function ConnectionRow({ connection }: { connection: ShownConnection }): React.J
     <SettingsRow
       indent={SETTINGS_ROW_INDENT.MARK}
       leading={
-        <span className="settings-row-mark workspace-github-account-mark">
+        <span className="settings-row-mark">
           <WorkspaceTile
             workspace={{
               id: `github:${connection.login}`,
               name: connection.login,
               pictureUrl: githubAccountPictureUrl(connection.login),
             }}
+            size={TILE_SIZE.NESTED}
           />
         </span>
       }
@@ -1321,6 +1341,136 @@ function WorkspaceLinear({ workspace }: { workspace: Workspace }): React.JSX.Ele
       label="Linear"
       description={linearLine(workspace.linear, false)}
     >
+      {() => null}
+    </SettingsRow>
+  );
+}
+
+/** The Sentry row's line: the organizations it is installed on, or the ask to install it. */
+function sentryLine(sentry: WorkspaceSentry, manages: boolean): React.ReactNode {
+  if (sentry.installations.length === 0) return manages ? SENTRY_LINE.MANAGES : SENTRY_LINE.MEMBER;
+  const accounts = sentry.installations.flatMap((one) =>
+    one.account === undefined ? [] : [one.account],
+  );
+  return (
+    <span className="settings-state" data-state="connected">
+      {SENTRY_LINE.INSTALLED(accounts.join(", "))}
+    </span>
+  );
+}
+
+/**
+ * The workspace's Sentry, for an owner or an admin: Install for workspace
+ * while none stands, which opens Sentry's install page in the browser, an
+ * install that could not be begun saying why under the row; and once one
+ * stands, a ⋯ whose menu disconnects each installation, which asks first.
+ * A disconnect stops its alerts firing this workspace's automations; the
+ * integration stays installed on Sentry until the organization removes it
+ * there, which the dialog says.
+ */
+function ManagedSentry({
+  workspace,
+  sentry,
+  onChanged,
+}: {
+  workspace: Workspace;
+  sentry: WorkspaceSentry;
+  onChanged: (sentry: WorkspaceSentry) => void;
+}): React.JSX.Element {
+  const { act } = useAct();
+  const workspaceId = workspace.id;
+  const [refusal, setRefusal] = useState<string>();
+  const [installing, setInstalling] = useState(false);
+  const underWay = useRef(false);
+  const [leaving, setLeaving] = useState<WorkspaceSentryInstallation>();
+  const install = () => {
+    if (underWay.current) return;
+    underWay.current = true;
+    setInstalling(true);
+    setRefusal(undefined);
+    act(ACT_KIND.WORKSPACE_SENTRY_INSTALL, { workspaceId })
+      .catch((refused: Error) => setRefusal(refused.message))
+      .finally(() => {
+        underWay.current = false;
+        setInstalling(false);
+      });
+  };
+  // Note that the question stands only while its installation is still listed, so a read that drops it dismisses it.
+  const stillListed =
+    leaving !== undefined &&
+    sentry.installations.some((one) => one.installationId === leaving.installationId);
+  const disconnect = useConfirmDialog({ subject: stillListed, surfaceOpen: true }, () =>
+    leaving === undefined
+      ? Promise.resolve(ACCEPTED)
+      : act(ACT_KIND.WORKSPACE_SENTRY_DISCONNECT, {
+          workspaceId,
+          installationId: leaving.installationId,
+        }).then((now) => {
+          onChanged(now);
+          return ACCEPTED;
+        }, refusedWith),
+  );
+  const actions = [
+    sentry.installations.map((installation) => ({
+      label:
+        installation.account === undefined ? "Disconnect" : `Disconnect ${installation.account}`,
+      icon: <TrashIcon />,
+      danger: true,
+      onSelect: () => {
+        setLeaving(installation);
+        disconnect.ask();
+      },
+    })),
+  ].filter((group) => group.length > 0);
+  return (
+    <div className="workspace-sentry">
+      <MenuRow
+        label="Sentry actions"
+        actions={actions}
+        row={{
+          leading: SENTRY_MARK,
+          label: "Sentry",
+          description: sentryLine(sentry, true),
+          error: refusal,
+          control:
+            sentry.installations.length > 0 ? null : (
+              <Button
+                variant={BUTTON_VARIANT.OUTLINE}
+                busy={installing}
+                busyLabel="Opening Sentry"
+                onClick={install}
+              >
+                Install for workspace
+              </Button>
+            ),
+        }}
+      />
+      <ConfirmDialog
+        confirm={disconnect}
+        question={{
+          title: `Disconnect Sentry from ${workspace.name}?`,
+          body: "Its alerts and new issues stop triggering this workspace's automations. Uninstall Luke in Sentry's settings to remove it there too.",
+          verb: "Disconnect",
+          running: "Disconnecting",
+        }}
+      />
+    </div>
+  );
+}
+
+/**
+ * The workspace's Sentry: drawn only where the deployment holds Luke's
+ * Sentry integration, an owner's or an admin's to install for everyone,
+ * and for a member, read only, where it is installed or the ask to have it.
+ */
+function WorkspaceSentryRow({ workspace }: { workspace: Workspace }): React.JSX.Element | null {
+  const { read, changed } = useSentryRead(workspace.id);
+  if (read === undefined || !read.configured) return null;
+  if (managesWorkspace(workspace)) {
+    return <ManagedSentry workspace={workspace} sentry={read} onChanged={changed} />;
+  }
+  return (
+    <SettingsRow leading={SENTRY_MARK} label="Sentry" description={sentryLine(read, false)}>
       {() => null}
     </SettingsRow>
   );
@@ -1608,6 +1758,7 @@ function ShownWorkspace({
       <SettingsSection title="Integrations" anchor={SETTINGS_SECTION.GITHUB_REPOSITORIES}>
         <WorkspaceGitHub workspace={workspace} />
         <WorkspaceLinear workspace={workspace} />
+        <WorkspaceSentryRow workspace={workspace} />
       </SettingsSection>
       {macTerminalOffered ? <MacRepositoriesGroup workspaceId={workspace.id} /> : null}
       <LeaveGroup

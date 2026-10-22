@@ -33,6 +33,7 @@ import {
   IconButton,
   LINE_BUTTON_LOOK,
   LineButton,
+  MenuSurface,
   SCROLL_FADE,
   ScrollArea,
   SUBMIT_STATE,
@@ -44,9 +45,11 @@ import {
   TEXT_VARIANT,
   Text,
   TextArea,
+  Tooltip,
   TrashIcon,
   useConfirmDialog,
   useMenu,
+  VisuallyHidden,
 } from "@luke/ui";
 import { type Actor, LUKE_ACTOR } from "@luke/ui/actor-model";
 import {
@@ -95,7 +98,6 @@ import {
   type PlanEditorHandle,
   type PlanEditorModule,
 } from "../plan-editor/contract.js";
-import { Tooltip } from "../tooltip.js";
 import { AgentActorRef, agentSubject, NOTHING_HELD } from "./agent-ref.js";
 import { AttachFilesButton } from "./attach-files-button.js";
 import { AttachedFileChips, attachmentChips } from "./attached-file-chips.js";
@@ -951,7 +953,7 @@ function ThreadCard({
           onPress={() => onOpen?.()}
         >
           {replies.length === 0 ? (
-            <span className="luke-visually-hidden">{COMMENT_WORDS.OPEN_THREAD}</span>
+            <VisuallyHidden>{COMMENT_WORDS.OPEN_THREAD}</VisuallyHidden>
           ) : (
             <span className="comment-replies">
               <span className="comment-faces">
@@ -1616,8 +1618,8 @@ export function PlanCommentLayer({
     );
   const bubbleDrawn =
     bubble === undefined ? null : (
-      <div
-        className="comment-bubble menu-surface"
+      <MenuSurface
+        className="comment-bubble"
         data-below={bubble.below ? "" : undefined}
         style={{ top: bubble.top, left: bubble.left }}
       >
@@ -1626,7 +1628,7 @@ export function PlanCommentLayer({
             {COMMENT_WORDS.COMMENT}
           </Button>
         </Tooltip>
-      </div>
+      </MenuSurface>
     );
   if (wide) {
     return (

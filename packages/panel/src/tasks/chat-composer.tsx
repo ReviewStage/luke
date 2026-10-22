@@ -13,6 +13,7 @@ import {
   TEXT_VARIANT,
   Text,
   TextArea,
+  Tooltip,
 } from "@luke/ui";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { useEffect, useRef, useState } from "react";
@@ -34,7 +35,6 @@ import {
   type MentionNode,
   type PlanEditorModule,
 } from "../plan-editor/contract.js";
-import { Tooltip } from "../tooltip.js";
 import { AttachFilesButton } from "./attach-files-button.js";
 import { AttachedFileChips, attachmentChips } from "./attached-file-chips.js";
 import { readFiles, withFiles } from "./attached-files.js";

@@ -24,6 +24,12 @@ import {
 import { type ImageBody, imageBodyOf } from "./image-body.js";
 import type { LinearIssueSummary } from "./linear-wire.js";
 import { LIVE_SIGNED_OUT, LIVE_USER_QUERY } from "./live-wire.js";
+import {
+  WORKSPACE_SENTRY_QUERY,
+  type WorkspaceSentry,
+  workspaceSentryDisconnectRequestSchema,
+  workspaceSentryRequestSchema,
+} from "./sentry-install-wire.js";
 import { workspacePhotoPath } from "./service-paths.js";
 import {
   HOSTED_API_ERROR,
@@ -355,6 +361,51 @@ export class HostedWorkspaceClient {
     return hostedResult(
       askHosted(this.#hosted.workspaceLinear.disconnect, admitted),
       (answer) => answer.workspace,
+    );
+  }
+
+  /** Whether the deployment holds Luke's Sentry integration, and the workspace's active installations of it. */
+  sentryInstallations(
+    workspaceId: string,
+  ): Effect.Effect<WorkspaceCallResult<WorkspaceSentry>, never, HttpClient.HttpClient> {
+    const admitted = Result.getOrUndefined(
+      readEither(workspaceSentryRequestSchema)({ workspaceId }),
+    );
+    if (admitted === undefined) return Effect.succeed(UNANSWERED);
+    return hostedResult(
+      askHosted(this.#hosted.workspaceSentry.installations, {
+        [WORKSPACE_SENTRY_QUERY.WORKSPACE_ID]: admitted.workspaceId,
+      }),
+      (answer) => answer,
+    );
+  }
+
+  /** Where the browser goes to install Luke's Sentry integration for the workspace: Sentry's install address, carrying a single-use intent. */
+  sentryInstall(
+    workspaceId: string,
+  ): Effect.Effect<WorkspaceCallResult<string>, never, HttpClient.HttpClient> {
+    const admitted = Result.getOrUndefined(
+      readEither(workspaceSentryRequestSchema)({ workspaceId }),
+    );
+    if (admitted === undefined) return Effect.succeed(UNANSWERED);
+    return hostedResult(
+      askHosted(this.#hosted.workspaceSentry.install, admitted),
+      (answer) => answer.url,
+    );
+  }
+
+  /** One of the workspace's Sentry installations disconnected, answering the workspace's Sentry as it then stands. */
+  sentryDisconnect(
+    workspaceId: string,
+    installationId: string,
+  ): Effect.Effect<WorkspaceCallResult<WorkspaceSentry>, never, HttpClient.HttpClient> {
+    const admitted = Result.getOrUndefined(
+      readEither(workspaceSentryDisconnectRequestSchema)({ workspaceId, installationId }),
+    );
+    if (admitted === undefined) return Effect.succeed(UNANSWERED);
+    return hostedResult(
+      askHosted(this.#hosted.workspaceSentry.disconnect, admitted),
+      (answer) => answer,
     );
   }
 

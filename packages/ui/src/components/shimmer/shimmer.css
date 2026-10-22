@@ -1,0 +1,33 @@
+/* shimmer.css -- words with a light passing along them: the muted gray with
+   the highlight in the text's own ink. Its duration is a literal as an endless
+   loop with no end of its own may have, because it answers
+   --luke-loop-motion with its play state. */
+
+@layer components {
+  .luke-shimmer {
+    display: inline-block;
+    background-image: linear-gradient(
+      90deg,
+      var(--luke-color-text-muted) 0%,
+      var(--luke-color-text-muted) 40%,
+      var(--luke-color-text) 50%,
+      var(--luke-color-text-muted) 60%,
+      var(--luke-color-text-muted) 100%
+    );
+    background-size: 300% 100%;
+    background-clip: text;
+    color: transparent;
+    animation: luke-shimmer 2s linear infinite;
+    animation-play-state: var(--luke-loop-motion);
+  }
+
+  @keyframes luke-shimmer {
+    from {
+      background-position: 100% center;
+    }
+
+    to {
+      background-position: 0% center;
+    }
+  }
+}

@@ -1,7 +1,6 @@
-import { PictureTile } from "@luke/ui";
+import { PictureTile, Spinner } from "@luke/ui";
 import { PICTURE_STATE, type PictureState } from "@luke/ui/picture-cache";
 import { ImageOffIcon } from "lucide-react";
-import { Spinner } from "./spinner.js";
 
 /**
  * picture-block.tsx -- a picture drawn in written words: its own block, at its own size up to the column's, its caption under it, a press opening it over the window.
@@ -91,7 +90,7 @@ export function PictureBlock({
     return (
       <span ref={ref} className="picture-block ph-no-capture" data-state={state.kind}>
         <span className="picture-frame picture-pending">
-          <Spinner label={READING_LABEL} />
+          <Spinner delay label={READING_LABEL} />
         </span>
         {said}
       </span>

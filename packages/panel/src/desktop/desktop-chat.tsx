@@ -24,10 +24,15 @@ import {
   ListRow,
   PencilIcon,
   PlusIcon,
+  RowHint,
+  RowHintOptions,
   SCROLL_FADE,
   ScrollArea,
+  SpinnerRegion,
+  Tooltip,
   UnarchiveIcon,
   useMenu,
+  VisuallyHidden,
 } from "@luke/ui";
 import { type Actor, actorName } from "@luke/ui/actor-model";
 import {
@@ -58,7 +63,6 @@ import { LinkWorkspaceProvider, useCopyLinkItem } from "../copy-link-item.js";
 import { ExperimentTag, SendFeedbackButton } from "../experiment-marks.js";
 import { MemberDirectory } from "../member-directory.js";
 import { hiddenColumns, SHELL_ROOM, type ShellRoom } from "../shell-room.js";
-import { SpinnerRegion } from "../spinner.js";
 import { AgentCard, lineSubject } from "../tasks/agent-ref.js";
 import { useChatActor, useChatNames } from "../tasks/chat-actors.js";
 import { channelTitle } from "../tasks/chat-channel-name.js";
@@ -77,7 +81,6 @@ import { useMinute } from "../tasks/task-time.js";
 import { useTaskStatus } from "../tasks/use-known-names.js";
 import { useOpenLink, useOpenTask } from "../tasks/use-open-link.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
-import { RowHint, RowHintOptions, Tooltip } from "../tooltip.js";
 import { ActionMenu, type MenuAction } from "./action-menu.js";
 import { type ChannelDialogs, useChannelDialogs } from "./chat-channel-dialogs.js";
 import { previewWords } from "./chat-preview.js";
@@ -694,11 +697,11 @@ function PlaceRow({
           description={preview}
           meta={
             <span className="home-row-meta">
-              {unread ? <span className="visually-hidden">{UNREAD_WORDS}</span> : null}
+              {unread ? <VisuallyHidden>{UNREAD_WORDS}</VisuallyHidden> : null}
               {needsYou ? (
                 <span className="inbox-row-attention">
                   <AttentionMark />
-                  <span className="visually-hidden">{NEEDS_YOU.LABEL}</span>
+                  <VisuallyHidden>{NEEDS_YOU.LABEL}</VisuallyHidden>
                 </span>
               ) : null}
               {end}
@@ -1345,7 +1348,7 @@ export function TaskChatTab({
             {CHAT_FAILED}
           </ErrorState>
         ) : read === undefined && view.available ? (
-          <SpinnerRegion label="Loading chat" />
+          <SpinnerRegion delay label="Loading chat" />
         ) : (
           <EmptyState icon={<MessagesSquareIcon />}>{NO_TASK_CHANNEL}</EmptyState>
         )}

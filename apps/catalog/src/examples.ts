@@ -34,12 +34,15 @@ import { INLINE_REFS_EXAMPLE } from "./examples/inline-refs";
 import { LAYOUT_EXAMPLE } from "./examples/layout";
 import { LINE_BUTTONS_EXAMPLE } from "./examples/line-buttons";
 import { LIST_ROW_EXAMPLE } from "./examples/list-row";
+import { LOADING_INDICATORS_EXAMPLE } from "./examples/loading-indicators";
 import { MENU_EXAMPLE } from "./examples/menu";
 import { NAV_ITEMS_EXAMPLE } from "./examples/nav-items";
+import { NOTE_LINES_EXAMPLE } from "./examples/note-lines";
 import { ONE_LINE_EXAMPLE } from "./examples/one-line";
 import { PAGINATION_EXAMPLE } from "./examples/pagination";
 import { PICTURE_TILES_EXAMPLE } from "./examples/picture-tiles";
 import { POPOVER_PANELS_EXAMPLE } from "./examples/popover-panels";
+import { PRESS_SHORTCUTS_EXAMPLE } from "./examples/press-shortcuts";
 import { PROGRESS_EXAMPLE } from "./examples/progress";
 import { PROSE_EXAMPLE } from "./examples/prose";
 import { PROVIDER_BUTTONS_EXAMPLE } from "./examples/provider-buttons";
@@ -50,12 +53,14 @@ import { SELECT_EXAMPLE } from "./examples/select";
 import { SETTINGS_PAGE_EXAMPLE } from "./examples/settings-page";
 import { SETTINGS_ROW_EXAMPLE } from "./examples/settings-row";
 import { SETTINGS_SECTION_EXAMPLE } from "./examples/settings-section";
+import { SHORTCUTS_EXAMPLE } from "./examples/shortcuts";
 import { SKELETONS_EXAMPLE } from "./examples/skeletons";
 import { SLIDER_EXAMPLE } from "./examples/slider";
 import { SPINNERS_EXAMPLE } from "./examples/spinners";
 import { SPLIT_BUTTONS_EXAMPLE } from "./examples/split-buttons";
 import { SWATCHES_EXAMPLE } from "./examples/swatches";
 import { SWITCHES_EXAMPLE } from "./examples/switches";
+import { TABS_EXAMPLE } from "./examples/tabs";
 import { TEXT_BUTTONS_EXAMPLE } from "./examples/text-buttons";
 import { TEXT_FIELDS_EXAMPLE } from "./examples/text-fields";
 import { TEXT_LINKS_EXAMPLE } from "./examples/text-links";
@@ -117,15 +122,19 @@ export const EXAMPLES: readonly Example[] = [
   TEXT_LINKS_EXAMPLE,
   LINE_BUTTONS_EXAMPLE,
   TOOLTIPS_EXAMPLE,
+  SHORTCUTS_EXAMPLE,
   CHECKBOXES_EXAMPLE,
   SWITCHES_EXAMPLE,
+  TABS_EXAMPLE,
   LIST_ROW_EXAMPLE,
   MENU_EXAMPLE,
   NAV_ITEMS_EXAMPLE,
+  NOTE_LINES_EXAMPLE,
   ONE_LINE_EXAMPLE,
   PAGINATION_EXAMPLE,
   PICTURE_TILES_EXAMPLE,
   POPOVER_PANELS_EXAMPLE,
+  PRESS_SHORTCUTS_EXAMPLE,
   PROGRESS_EXAMPLE,
   PROSE_EXAMPLE,
   PROVIDER_BUTTONS_EXAMPLE,
@@ -136,6 +145,7 @@ export const EXAMPLES: readonly Example[] = [
   SETTINGS_PAGE_EXAMPLE,
   SETTINGS_SECTION_EXAMPLE,
   SPINNERS_EXAMPLE,
+  LOADING_INDICATORS_EXAMPLE,
   SPLIT_BUTTONS_EXAMPLE,
   SKELETONS_EXAMPLE,
   SLIDER_EXAMPLE,

@@ -4,6 +4,7 @@ import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { TASK_CALL_FAILURE, type TasksRepositoriesAnswer } from "@luke/features/tasks-view";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
 import {
+  AVATAR_SIZE,
   Badge,
   BUTTON_VARIANT,
   Button,
@@ -15,6 +16,7 @@ import {
   ErrorState,
   GearIcon,
   ProviderMark,
+  Spinner,
   TEXT_ELEMENT,
   TEXT_TONE,
   TEXT_VARIANT,
@@ -27,7 +29,6 @@ import { OPEN_SETTINGS_LABEL, useOpenSettings } from "../open-settings.js";
 import { RepositoryPicture } from "../repository-picture.js";
 import { type MenuRow, SearchableMenu } from "../searchable-menu.js";
 import { PICKER_ALIGN, type PickerAlign, usePickerPlacement } from "../settings/picker-row.js";
-import { Spinner } from "../spinner.js";
 
 /**
  * repository-chip.tsx -- the chip that names a task's GitHub repository, and the menu that picks one.
@@ -334,7 +335,7 @@ export function RepositoryChip(props: {
         ) : null}
       </>
     ) : list === undefined ? (
-      <Spinner label="Loading repositories" />
+      <Spinner delay label="Loading repositories" />
     ) : rows.length === 0 && listed?.installed ? (
       MENU_NOTE.NONE_REACHED
     ) : undefined;
@@ -361,6 +362,7 @@ export function RepositoryChip(props: {
               repository={props.value}
               pictures={chooser.pictures}
               fallback={<ProviderMark provider={INTEGRATION_PROVIDER.GITHUB} />}
+              size={AVATAR_SIZE.GLYPH}
             />
           )}
           <ChipName>{label}</ChipName>

@@ -34,11 +34,13 @@ function render(element: ReactElement): HTMLElement {
   return container;
 }
 
-test("a wait's status line stands empty until it shows, and then says the wait", () => {
-  const waiting = render(createElement(Spinner, { label: "Loading transcript", shown: false }));
-  assert.equal(waiting.querySelector('[role="status"]')?.textContent, "");
-  const shown = render(createElement(SpinnerRegion, { label: "Loading transcript" }));
-  assert.equal(shown.querySelector('[role="status"]')?.textContent, "Loading transcript");
+test("a wait's status line stands from the start, and a delayed one is marked for its CSS delay", () => {
+  const delayed = render(createElement(Spinner, { label: "Loading transcript", delay: true }));
+  assert.equal(delayed.querySelector('[role="status"]')?.textContent, "Loading transcript");
+  assert.equal(delayed.querySelector(".luke-spinner")?.getAttribute("data-delay"), "true");
+  const prompt = render(createElement(SpinnerRegion, { label: "Loading transcript" }));
+  assert.equal(prompt.querySelector('[role="status"]')?.textContent, "Loading transcript");
+  assert.equal(prompt.querySelector(".luke-spinner")?.getAttribute("data-delay"), null);
 });
 
 test("a busy control keeps its words and says what it is doing; at rest it says its words alone", () => {

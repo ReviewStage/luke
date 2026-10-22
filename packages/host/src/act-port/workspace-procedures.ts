@@ -22,6 +22,8 @@ import type {
   TasksWorkspacePhotoParams,
   TasksWorkspacePhotoSetParams,
   TasksWorkspaceRenameParams,
+  TasksWorkspaceSentryAnswer,
+  TasksWorkspaceSentryDisconnectParams,
   TasksWorkspaceTokenRepositoriesAnswer,
   TasksWorkspaceTokenRepositoriesParams,
   TasksWorkspaceTokenRepositorySetParams,
@@ -64,6 +66,13 @@ export interface WorkspaceProceduresDependencies {
     ): Effect.Effect<TasksWorkspaceGitHubConnectAnswer>;
     workspaceLinearDisconnect(params: TasksWorkspaceParams): Effect.Effect<TasksWorkspaceAnswer>;
     workspaceLinearIssues(params: TasksLinearIssuesParams): Effect.Effect<TasksLinearIssuesAnswer>;
+    workspaceSentry(params: TasksWorkspaceParams): Effect.Effect<TasksWorkspaceSentryAnswer>;
+    workspaceSentryInstall(
+      params: TasksWorkspaceParams,
+    ): Effect.Effect<TasksWorkspaceGitHubConnectAnswer>;
+    workspaceSentryDisconnect(
+      params: TasksWorkspaceSentryDisconnectParams,
+    ): Effect.Effect<TasksWorkspaceSentryAnswer>;
     tasksGitHubIssues(params: TasksGitHubIssuesParams): Effect.Effect<TasksGitHubIssuesAnswer>;
     workspaceMembers(
       params: TasksWorkspaceMembersParams,
@@ -133,6 +142,14 @@ function refusedWorkspace<E>(refused: Refused<E>, failure: WorkspaceCallFailure)
     default:
       return Effect.fail(refused());
   }
+}
+
+/** Sentry's own origin, the one a Sentry install is opened on. */
+const SENTRY_ORIGIN = "https://sentry.io";
+
+/** Whether an address the host answered parses and stands on Sentry's own origin. */
+function isSentryAddress(url: string): boolean {
+  return URL.canParse(url) && new URL(url).origin === SENTRY_ORIGIN;
 }
 
 /** Whether an address the host answered parses and is https, the one kind a browser is sent to unnamed. */
@@ -351,6 +368,33 @@ export function workspaceProcedures(dependencies: WorkspaceProceduresDependencie
       yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
       const answer = yield* host.workspaceLinearIssues(input);
       if ("issues" in answer) return answer.issues;
+      return yield* refusedWorkspace(errors.REFUSED, answer.failure);
+    }),
+    [WORKSPACE_ACT_KIND.WORKSPACE_SENTRY_READ]: actPort[
+      WORKSPACE_ACT_KIND.WORKSPACE_SENTRY_READ
+    ].effect(function* ({ input, context, errors }) {
+      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+      const answer = yield* host.workspaceSentry(input);
+      if ("sentry" in answer) return answer.sentry;
+      return yield* refusedWorkspace(errors.REFUSED, answer.failure);
+    }),
+    // Note that the address the service answered opens only where it is
+    // Sentry's own, because it is the one address here the panel did not name.
+    [WORKSPACE_ACT_KIND.WORKSPACE_SENTRY_INSTALL]: actPort[
+      WORKSPACE_ACT_KIND.WORKSPACE_SENTRY_INSTALL
+    ].effect(function* ({ input, context, errors }) {
+      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+      const answer = yield* host.workspaceSentryInstall(input);
+      if ("failure" in answer) return yield* refusedWorkspace(errors.REFUSED, answer.failure);
+      if (!isSentryAddress(answer.url)) return yield* Effect.fail(errors.REFUSED());
+      yield* Effect.promise(() => openExternal(answer.url));
+    }),
+    [WORKSPACE_ACT_KIND.WORKSPACE_SENTRY_DISCONNECT]: actPort[
+      WORKSPACE_ACT_KIND.WORKSPACE_SENTRY_DISCONNECT
+    ].effect(function* ({ input, context, errors }) {
+      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+      const answer = yield* host.workspaceSentryDisconnect(input);
+      if ("sentry" in answer) return answer.sentry;
       return yield* refusedWorkspace(errors.REFUSED, answer.failure);
     }),
     // A repository's issues, or that its installation grants none, which the picker says rather than listing none.

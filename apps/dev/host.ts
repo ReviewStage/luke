@@ -1,8 +1,9 @@
 import { hostTurnId } from "@luke/database/models/ids";
+import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
 import type { ModelChoice } from "@luke/features/models-wire";
 import { edgeKit } from "@luke/service/agents/agent-runtime/edge";
 import { AGENT_ROLE } from "@luke/service/agents/agent-runtime/role";
-import { environment } from "@luke/service/agents/agent-runtime/sandbox";
+import { environment, type SandboxRecord } from "@luke/service/agents/agent-runtime/sandbox";
 import type { AgentSkill } from "@luke/service/agents/agent-runtime/skills";
 import { browserSessionOf } from "@luke/service/agents/browser/agent-browser";
 import {
@@ -74,7 +75,7 @@ import {
 } from "@luke/wire";
 import { emitJsonSchema } from "@luke/wire/effect";
 import { Effect, Result, Schema } from "effect";
-import type { SessionAuth } from "eve/context";
+import type { SessionAuth, StateHandle } from "eve/context";
 import { defineTool, type ToolContext } from "eve/tools";
 import { runAgent } from "./runtime.js";
 
@@ -115,7 +116,7 @@ export function stepTurnId(sessionId: string, started: typeof StepStartedSchema.
  * The doors this project's authored files open onto the agent runtime
  * (`packages/service/src/agents/agent-runtime/edge.ts`), run here on the edge's runner. A
  * session is offered skills only once its conversation is read as an
- * agent's, whose repository they are read from.
+ * agent's, whose repository and member they are read for.
  */
 const edge = edgeKit(runAgent, {
   host,
@@ -544,14 +545,57 @@ export function runResearchTool(
 
 /**
  * The skills the session is offered as it starts, for the agent's own
- * `skills/repository.ts`: the ones its repository keeps, or none for a
- * session the host does not admit or whose conversation is no agent's.
+ * `skills/repository.ts`: the ones its repository keeps and its member
+ * installed, or none for a session the host does not admit or whose
+ * conversation is no agent's.
  */
 export function sessionSkills(
   auth: SessionAuth,
   sessionId: string,
 ): Promise<readonly AgentSkill[]> {
   return edge.sessionSkills(AGENT_ROLE.CODER, auth, sessionId);
+}
+
+/** Whether the agent's credential is its starter's own GitHub token; a session the host does not admit, and a read that fails, are not. */
+function onMemberToken(auth: SessionAuth, sessionId: string): Promise<boolean> {
+  return runAgent(
+    Effect.gen(function* () {
+      const admitted = yield* host.admit(auth, sessionId);
+      if (Result.isFailure(admitted)) return false;
+      const agent = yield* host.agent(admitted.success);
+      return Result.isSuccess(agent) && agent.success.githubAccess === GITHUB_ACCESS.TOKEN;
+    }).pipe(
+      Effect.catch((failure) =>
+        Effect.as(
+          Effect.logWarning(
+            `The GitHub access of session ${sessionId} was not read: ${failure._tag}`,
+          ),
+          false,
+        ),
+      ),
+    ),
+  );
+}
+
+/**
+ * The session's sandbox recorded as opened now, on a shallow checkout, with
+ * whether its credential will be its starter's own token, where nothing
+ * recorded it opened yet: by the store hook at the first call that opens
+ * it, and by the skill resolver where eve opens it to write the files of
+ * the skills it is handed (`skills/repository.ts`). The record is what the
+ * store hook stops the sandbox at a turn's end by.
+ */
+export async function recordSandboxOpened(
+  record: StateHandle<SandboxRecord>,
+  auth: SessionAuth,
+  sessionId: string,
+): Promise<void> {
+  if (record.get().openedAt !== undefined) return;
+  const openedAt = seams.now();
+  const memberToken = await onMemberToken(auth, sessionId);
+  record.update((held) =>
+    held.openedAt !== undefined ? held : { ...held, openedAt, openedShallow: true, memberToken },
+  );
 }
 
 /**

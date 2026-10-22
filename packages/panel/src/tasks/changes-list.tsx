@@ -14,7 +14,11 @@ import {
   DisclosureAction,
   DisclosureSummary,
   IconButton,
+  TEXT_ELEMENT,
+  TEXT_VARIANT,
+  Text,
   TextButton,
+  Tooltip,
 } from "@luke/ui";
 import { ChevronRightIcon } from "lucide-react";
 import {
@@ -30,7 +34,6 @@ import {
 } from "react";
 import { coarsePointerNow } from "../coarse-pointer.js";
 import { useCopyToast } from "../copy-feedback.js";
-import { Tooltip } from "../tooltip.js";
 import { LinesChanged } from "./agent-published.js";
 import {
   filterFiles,
@@ -410,13 +413,23 @@ function PathParts({ path }: { path: string }): React.JSX.Element {
   return (
     <>
       {cut === 0 ? null : (
-        <span className="diff-list-folder">
+        <Text
+          as={TEXT_ELEMENT.SPAN}
+          variant={TEXT_VARIANT.INHERIT}
+          truncate
+          className="diff-list-folder"
+        >
           <bdi>{path.slice(0, cut)}</bdi>
-        </span>
+        </Text>
       )}
-      <span className="diff-list-name">
+      <Text
+        as={TEXT_ELEMENT.SPAN}
+        variant={TEXT_VARIANT.INHERIT}
+        truncate
+        className="diff-list-name"
+      >
         <bdi>{path.slice(cut)}</bdi>
-      </span>
+      </Text>
     </>
   );
 }
@@ -566,9 +579,15 @@ export function FileHead({
                   PATH_COPY_WORDS.COPY_OLD_PATH,
                   true,
                 )}
-                <span className="diff-list-folder" aria-hidden="true">
+                <Text
+                  as={TEXT_ELEMENT.SPAN}
+                  variant={TEXT_VARIANT.INHERIT}
+                  truncate
+                  className="diff-list-folder"
+                  aria-hidden="true"
+                >
                   {"\u00a0\u2192\u00a0"}
-                </span>
+                </Text>
                 {pathCopy(
                   file.path,
                   3,

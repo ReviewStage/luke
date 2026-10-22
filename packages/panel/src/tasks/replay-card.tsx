@@ -236,7 +236,14 @@ function LineSender({
   return (
     <div className="message-meta">
       <span className="message-sender">
-        <span className="message-sender-words">{view.sender}</span>
+        <Text
+          as={TEXT_ELEMENT.SPAN}
+          variant={TEXT_VARIANT.INHERIT}
+          truncate
+          className="message-sender-words"
+        >
+          {view.sender}
+        </Text>
       </span>
     </div>
   );

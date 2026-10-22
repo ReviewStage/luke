@@ -25,11 +25,14 @@ import {
   CHIP_TONE,
   Chip,
   ChipName,
+  COMMAND_LINK_ELEMENT,
+  CommandLink,
   ErrorState,
   IconButton,
   INLINE_EDIT_LOOK,
   InlineEdit,
   type InlineEditEnd,
+  Tooltip,
   useMenu,
 } from "@luke/ui";
 import { useClipped } from "@luke/ui/use-clipped";
@@ -44,7 +47,6 @@ import { useCallback, useRef, useState } from "react";
 import { useAct } from "../act.js";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu.js";
 import { useGitHubConnection } from "../github-connect.js";
-import { Tooltip } from "../tooltip.js";
 import { PULL_REQUEST_TONE, PullRequestMark } from "./pull-request-mark.js";
 import { pullRequestAsked, usePullRequestNumber } from "./pull-request-number.js";
 
@@ -429,21 +431,16 @@ export function PullRequestTitle({
       </h2>
     );
   }
-  // Note that only a ⌘-click (Ctrl elsewhere) opens it, so a plain press still selects the title's words, and one on the pencil is the pencil's.
-  const open = (event: React.MouseEvent<HTMLHeadingElement>) => {
-    if (onOpen === undefined || !(event.metaKey || event.ctrlKey)) return;
-    if (event.target instanceof Element && event.target.closest("button") !== null) return;
-    event.preventDefault();
-    onOpen();
-  };
   const numberWords = <span className="pull-request-number">{number}</span>;
   return (
-    // biome-ignore lint/a11y/useKeyWithClickEvents: the ⌘-click is a pointer's shortcut alone; the header's ⋯ offers Open on GitHub to the keyboard.
-    <h2
+    // Only a ⌘-click (Ctrl elsewhere) opens it, so a plain press still selects the title's words,
+    // and one on the pencil is the pencil's; the header's ⋯ offers Open on GitHub to the keyboard.
+    <CommandLink
+      as={COMMAND_LINK_ELEMENT.H2}
       ref={titleBox}
       className="pull-request-title pull-request-title-editable"
       data-overflow={String(titleClipped)}
-      onClick={open}
+      onOpen={onOpen}
     >
       {title}
       {/* Note that the space before the number stands inside the end that never wraps, so the number and the pencil keep to the title's last word, and the number never stands alone on a line. */}
@@ -466,6 +463,6 @@ export function PullRequestTitle({
           </Tooltip>
         </span>
       </span>
-    </h2>
+    </CommandLink>
   );
 }

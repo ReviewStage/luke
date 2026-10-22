@@ -19,11 +19,15 @@ import {
   MarkDoneIcon,
   PinIcon,
   ProviderMark,
+  RowHint,
+  RowHintOptions,
   TaskStatusMark as TaskStandingMark,
+  Tooltip,
   TrashIcon,
   UnpinIcon,
   useConfirmDialog,
   useMenu,
+  VisuallyHidden,
 } from "@luke/ui";
 import { type AssigneeFace, accountActor, assigneeFace, creatorActor } from "@luke/ui/actor-model";
 import { confirmAsked } from "@luke/ui/confirm-state";
@@ -67,7 +71,6 @@ import { useMinute } from "../tasks/task-time.js";
 import { useReadMarks } from "../tasks/use-task-looks.js";
 import { useTaskOrigin } from "../tasks/use-task-origin.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
-import { RowHint, RowHintOptions, Tooltip } from "../tooltip.js";
 import { APP_SLICE, useAppSlice } from "../use-app-state.js";
 import { ActionMenu, type MenuAction, type MenuEntry } from "./action-menu.js";
 import { strandedHome, useMoveTaskDialog } from "./move-task-dialog.js";
@@ -677,7 +680,7 @@ export function SidebarTask({
             ) : (
               <>
                 {task.name}
-                {unread ? <span className="visually-hidden">(unread)</span> : null}
+                {unread ? <VisuallyHidden>(unread)</VisuallyHidden> : null}
                 {worn === undefined ? null : worn.assignee === undefined ? (
                   <UnassignedHeard />
                 ) : (

@@ -19,11 +19,14 @@ import {
   LIST_ROW_CURRENT,
   List,
   ListRow,
+  NOTE_LINE_LOOK,
+  NoteLine,
   PlusIcon,
   ScrollArea,
   SKELETON_SHAPE,
   Skeleton,
   SkeletonRegion,
+  Tooltip,
   useConfirmDialog,
   useMenu,
 } from "@luke/ui";
@@ -31,7 +34,6 @@ import { PencilIcon, TerminalIcon, Trash2Icon } from "lucide-react";
 import { type RefObject, useRef, useState } from "react";
 import { ActionMenu } from "../desktop/action-menu.js";
 import type { FloatingBox } from "../desktop/hover-pane.js";
-import { Tooltip } from "../tooltip.js";
 import { AgentRef, type AgentSubject } from "./agent-ref.js";
 import { AgentGlyph } from "./tab-look.js";
 import type { TerminalSession } from "./use-terminal-session.js";
@@ -128,7 +130,11 @@ function ShellsSkeleton(): React.JSX.Element {
 function UnlistedShells({ state }: { state: TerminalState }): React.JSX.Element {
   // A sandbox stopped before the list answered holds no shells until it is resumed.
   if (state.kind === TERMINAL_STATE.STOPPED)
-    return <p className="terminal-shells-none">No shells.</p>;
+    return (
+      <NoteLine look={NOTE_LINE_LOOK.LIST} fill>
+        No shells.
+      </NoteLine>
+    );
   if (state.kind !== TERMINAL_STATE.UNREACHABLE) return <ShellsSkeleton />;
   return (
     <div className="terminal-shells-wait" data-failed="">
@@ -147,7 +153,12 @@ function ListedShells({
   session: TerminalSession;
   surfaceOpen: boolean;
 }): React.JSX.Element {
-  if (listed.terminals.length === 0) return <p className="terminal-shells-none">No shells.</p>;
+  if (listed.terminals.length === 0)
+    return (
+      <NoteLine look={NOTE_LINE_LOOK.LIST} fill>
+        No shells.
+      </NoteLine>
+    );
   return (
     <ScrollArea>
       <div className="terminal-shells-rows">
