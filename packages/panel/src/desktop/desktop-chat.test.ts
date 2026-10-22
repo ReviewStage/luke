@@ -32,7 +32,7 @@ import { type ChatPlace, type ChatPost, FOR_YOU } from "@luke/ui/chat-model";
 import type { PictureAnswer } from "@luke/ui/picture-cache";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
-import { act, createElement, useState } from "react";
+import { act, createElement, useRef, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { sideBundles } from "../bundle-loader.js";
@@ -92,6 +92,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  readingAs = undefined;
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
   vi.useRealTimers();
@@ -115,19 +116,34 @@ function mount(
     land: () => Promise<string | undefined>,
     post: ChatPost,
     clientKey: string,
+    reader: string | undefined,
   ) => Promise<string | undefined> = (land) => land(),
 ): HTMLElement {
   function Page() {
     const [place, setPlace] = useState<ChatPlace>(FOR_YOU);
     const [chat, setChat] = useState<FixtureChat | undefined>(() => {
       const staged = fixtureChat({ fixtureMode: true }, AT);
-      return staged === undefined ? undefined : change(staged);
+      if (staged === undefined) return undefined;
+      // Another reader signed in to the same window reads the chat as their own member.
+      const reader = readingAs;
+      return change(
+        reader === undefined ? staged : { ...staged, answer: { ...staged.answer, self: reader } },
+      );
     });
+    // Note that a write is staged on the chat as it stands when it lands, as the window's own chat takes it, not as it stood when the post was sent.
+    const now = useRef(chat);
+    now.current = chat;
     const stage = (staged: (held: FixtureChat) => Staged) => {
-      const landed = chat === undefined ? { refused: "No chat." } : staged(chat);
-      if ("chat" in landed) setChat(landed.chat);
+      const held = now.current;
+      const landed = held === undefined ? { refused: "No chat." } : staged(held);
+      if ("chat" in landed) {
+        now.current = landed.chat;
+        setChat(landed.chat);
+      }
       return Promise.resolve("refused" in landed ? landed.refused : undefined);
     };
+    // The reader this draw's posts go as, as the window's chat hook binds its post to its account and workspace.
+    const sentAs = readingAs;
     return createElement(DesktopChat, {
       room: SHELL_ROOM.WIDE,
       accountName: "Dean Stratakos",
@@ -150,7 +166,12 @@ function mount(
           listed: false,
           onList: () => undefined,
           onPost: (post, clientKey) =>
-            posting(() => stage((held) => stagedPost(held, post, AT, clientKey)), post, clientKey),
+            posting(
+              () => stage((held) => stagedPost(held, post, AT, clientKey)),
+              post,
+              clientKey,
+              sentAs,
+            ),
           onAnswer: (answer) => stage((held) => stagedAnswer(held, answer, AT)),
           onChannel: (change) => stage((held) => stagedChannel(held, change)),
           onRead: (channelIds) => void stage((held) => stagedRead(held, channelIds)),
@@ -182,6 +203,9 @@ function mount(
 
 /** Closes the mounted Chat and opens it again in the same window. */
 let reopen: () => void = () => undefined;
+
+/** The member the next draw of Chat reads as, where another reader stands in the window; the fixture's own where none. */
+let readingAs: string | undefined;
 
 /** The rail as a reader hears it: each group's name, then each place's name, `▸ ` where shown and ` •` where something waits unread in it. */
 function rail(page: HTMLElement): string[] {
@@ -2434,6 +2458,7 @@ function heldPosts() {
   const held: {
     readonly post: ChatPost;
     readonly clientKey: string;
+    readonly reader: string | undefined;
     readonly land: () => Promise<string | undefined>;
     readonly answer: (refused: string | undefined) => void;
   }[] = [];
@@ -2443,9 +2468,9 @@ function heldPosts() {
     undefined,
     undefined,
     { tasks: [INVITATIONS] },
-    (land, post, clientKey) =>
+    (land, post, clientKey, reader) =>
       new Promise((answer) => {
-        held.push({ post, clientKey, land, answer });
+        held.push({ post, clientKey, reader, land, answer });
       }),
   );
   act(() => railRow(page, "teammate-invitations").click());
@@ -2454,7 +2479,8 @@ function heldPosts() {
     page,
     box,
     /** Chat closed and opened again on the channel, the box drawn anew. */
-    reopen: () => {
+    reopen: (as?: string) => {
+      readingAs = as;
       reopen();
       act(() => railRow(page, "teammate-invitations").click());
       return boxNamed(page, "Message #teammate-invitations");
@@ -2463,6 +2489,8 @@ function heldPosts() {
     posted: () => held.map((each) => each.post.text),
     /** The key each post handed to the service went under, in the order handed. */
     keys: () => held.map((each) => each.clientKey),
+    /** The reader each post handed to the service went as, in the order handed. */
+    readers: () => held.map((each) => each.reader),
     /** The chat holds post `index`, as a push brings it, before its answer lands. */
     push: async (index: number) => {
       const each = held[index] ?? assert.fail(`no post ${index}`);
@@ -2627,5 +2655,26 @@ test("a refused post left in the stream waits there while Chat is closed and ope
     ].find((each) => each.textContent === "Discard") ?? assert.fail("Discard asks first");
   await act(async () => confirm.click());
   await settle();
+  assert.equal(chat.page.querySelector(".chat-message[data-unsent]"), null);
+});
+
+test("a reader signed in to the window after another reads none of their posts, and a post queued before the switch goes as the reader who wrote it", async () => {
+  const chat = heldPosts();
+  await chat.send("Written by the first reader.");
+  await chat.send("Queued behind it.");
+  typeInComposer(chat.box, "Newer");
+  // Another account's member, signed in to the same window.
+  const other = "0f1e2d3c-4b5a-4697-8877-665544332211";
+
+  chat.reopen(other);
+  assert.equal(chat.pending().length, 0, "the new reader draws none of the first's posts");
+  assert.equal(chat.page.querySelector(".chat-message[data-unsent]"), null);
+
+  await chat.refuse(0, "Chat could not be reached.");
+  assert.deepEqual(
+    chat.readers(),
+    [undefined, undefined],
+    "both went as the reader who wrote them",
+  );
   assert.equal(chat.page.querySelector(".chat-message[data-unsent]"), null);
 });

@@ -340,6 +340,8 @@ interface PendingPlace {
 
 /** A post the reader sent that the chat does not hold yet: on its way, or refused with why. */
 interface PendingPost extends PendingPlace {
+  /** The reader's member who sent it, which names the account and the workspace at once, so only that reader's chat draws it. */
+  readonly self: string;
   /** The key the post goes under, which the chat hands back on the message once it holds it (`ChatMessage.clientKey`), so the message stands in the post's place whichever lands first. */
   readonly id: string;
   readonly post: ChatPost;
@@ -377,8 +379,10 @@ const DISCARD_QUESTION: DialogQuestion = {
  * it under its key, and Discard.
  */
 /** A post's place and words, which the same post sent again is known by. */
-function postWords(entry: PendingPlace & { readonly post: ChatPost }): string {
-  return JSON.stringify([entry.channelId, entry.replyTo ?? null, entry.post]);
+function postWords(
+  entry: PendingPlace & { readonly self: string; readonly post: ChatPost },
+): string {
+  return JSON.stringify([entry.self, entry.channelId, entry.replyTo ?? null, entry.post]);
 }
 
 /**
@@ -392,8 +396,8 @@ const pendingPostsAtom = Atom.keepAlive(Atom.make<readonly PendingPost[]>([]));
 interface Outbox {
   queue: Promise<void>;
   readonly refusedKeys: Map<string, string>;
-  /** How a post is sent, as the pane last handed it, which a post sent before the pane closed still goes through. */
-  onPost: (post: ChatPost, clientKey: string) => Promise<string | undefined>;
+  /** How each post is sent, by its key, as the pane handed it when the post was sent, so it goes to the account and workspace it was written in whatever the window reads by then. */
+  readonly senders: Map<string, (post: ChatPost, clientKey: string) => Promise<string | undefined>>;
 }
 
 const outboxes = new WeakMap<AtomRegistry.AtomRegistry, Outbox>();
@@ -407,19 +411,20 @@ function usePendingPosts(
   const outbox: Outbox = outboxes.get(registry) ?? {
     queue: Promise.resolve(),
     refusedKeys: new Map(),
-    onPost,
+    senders: new Map(),
   };
   outboxes.set(registry, outbox);
-  outbox.onPost = onPost;
   const change = (next: (was: readonly PendingPost[]) => readonly PendingPost[]) =>
     registry.set(pendingPostsAtom, next(registry.get(pendingPostsAtom)));
   const go = (entry: PendingPost, takeBack: (refused: string) => boolean) => {
     outbox.queue = outbox.queue.then(async () => {
-      const refused = await outbox
-        .onPost(entry.post, entry.id)
-        .catch((failed: unknown) => (failed instanceof Error ? failed.message : UNSENT));
+      const sender = outbox.senders.get(entry.id) ?? onPost;
+      const refused = await sender(entry.post, entry.id).catch((failed: unknown) =>
+        failed instanceof Error ? failed.message : UNSENT,
+      );
       const back = refused !== undefined && takeBack(refused);
       if (back) outbox.refusedKeys.set(postWords(entry), entry.id);
+      if (refused === undefined || back) outbox.senders.delete(entry.id);
       change((was) =>
         refused === undefined || back
           ? was.filter((each) => each.id !== entry.id)
@@ -428,10 +433,11 @@ function usePendingPosts(
     });
   };
   const send = (place: PendingPlace, post: ChatPost, takeBack: (refused: string) => boolean) => {
-    const words = postWords({ ...place, post });
+    const words = postWords({ ...place, self: chat.self, post });
     const id = outbox.refusedKeys.get(words) ?? crypto.randomUUID();
     outbox.refusedKeys.delete(words);
-    const entry: PendingPost = { ...place, id, post, at: Date.now() };
+    const entry: PendingPost = { ...place, self: chat.self, id, post, at: Date.now() };
+    outbox.senders.set(id, onPost);
     change((was) => [...was, entry]);
     go(entry, takeBack);
   };
@@ -442,10 +448,14 @@ function usePendingPosts(
     change((was) => was.map((each) => (each.id === id ? again : each)));
     go(again, () => false);
   };
-  const onDiscardPost = (id: string) => change((was) => was.filter((each) => each.id !== id));
+  const onDiscardPost = (id: string) => {
+    outbox.senders.delete(id);
+    change((was) => was.filter((each) => each.id !== id));
+  };
   // Note that a post the chat already holds is drawn as the chat's message alone, whether its answer has landed or not.
   const held = new Set(chat.messages.flatMap((message) => message.clientKey ?? []));
-  const shown = pending.filter((each) => !held.has(each.id));
+  // Note that only the reader's own posts in this workspace are drawn, so another account signed in to the window reads none.
+  const shown = pending.filter((each) => each.self === chat.self && !held.has(each.id));
   return { pending: shown, send, onRetryPost, onDiscardPost };
 }
 
