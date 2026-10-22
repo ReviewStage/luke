@@ -7520,24 +7520,23 @@ body:has(.luke-dialog-backdrop) .toast[data-action="true"] .toast-dismiss {
 }
 
 /* The group a row is carried over (use-row-drag.ts) is washed and its head
-   ringed, so it reads as the one the row will land in. */
+   underlined, so it reads as the one the row will land in. */
 .tasks-list-group[data-drop-target="true"] {
   background: var(--luke-color-fill-hover);
 }
 
 .tasks-list-group[data-drop-target="true"] > .tasks-list-head {
-  border-color: var(--luke-color-focus-ring);
+  box-shadow: inset 0 -1px var(--luke-color-focus-ring);
 }
 
 /* A group's head: the fold's chevron, its glyph, its name, and how many it
-   holds, on a quiet band under its hairline, standing at the top of the page
-   while its rows scroll beneath it. */
+   holds, on a quiet band with no rule under it, standing at the top of the
+   page while its rows scroll beneath it. */
 .tasks-list-head {
   position: sticky;
   z-index: 3;
   top: 0;
   margin: 0;
-  border-bottom: 1px solid var(--luke-color-border);
   background: var(--luke-color-ground);
   color: var(--luke-color-text-muted);
   font-variant-numeric: tabular-nums;
