@@ -184,7 +184,7 @@ const CLI_CALLS: readonly {
     input: { delaySeconds: 270, reason: "Wait for CI", prompt: "Check CI", noop: false },
     output: "Next wakeup scheduled for 18:53:12 (in 270s).",
     line: ["Will check back", "in 4 minutes 30 seconds"],
-    body: ["Wait for CI", "Check CI", "Next wakeup scheduled"],
+    body: ["Wait for CI", "Check CI"],
   },
   {
     tool: "Monitor",
@@ -289,7 +289,7 @@ test("an Edit the CLI reported its hunks for draws them with the lines around th
 
 test("a wakeup the CLI reported the time of says when it checks back, on the reader's own clock", () => {
   const scheduledFor = new Date(2026, 9, 22, 18, 53, 12).getTime();
-  const { line } = opened(
+  const { line, body } = opened(
     storedPart(
       "ScheduleWakeup",
       { delaySeconds: 270, reason: "Wait for CI", prompt: "Check CI", noop: false },
@@ -297,6 +297,7 @@ test("a wakeup the CLI reported the time of says when it checks back, on the rea
     ),
   );
   assert.ok(line.includes("Will check back") && line.includes("at 6:53 PM"), line);
+  assert.ok(body.includes("Wait for CI") && !body.includes("Next wakeup scheduled"), body);
 });
 
 test("connection_execute is drawn as the integration's own call it ran, its input and answer the tool's own", () => {

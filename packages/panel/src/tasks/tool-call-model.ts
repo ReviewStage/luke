@@ -753,10 +753,8 @@ function knownToolView(
         kind: CALL_KIND.WAKEUP,
         subject: wakeupSubject(input, output),
         input: wakeupInput(input),
-        output:
-          output === undefined
-            ? undefined
-            : wordsOutput(isWireString(output) ? { text: output } : output, "text"),
+        // Note that the CLI's answer is left out, because it is the CLI telling the model how to end its turn, on the sandbox's clock.
+        output: undefined,
       };
     case AGENT_TOOL.SLEEP: {
       const seconds = isRecord(input) && isWireNumber(input.seconds) ? input.seconds : undefined;
