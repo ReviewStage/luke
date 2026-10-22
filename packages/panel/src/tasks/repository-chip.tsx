@@ -4,6 +4,7 @@ import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { TASK_CALL_FAILURE, type TasksRepositoriesAnswer } from "@luke/features/tasks-view";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
 import {
+  AVATAR_SIZE,
   Badge,
   BUTTON_VARIANT,
   Button,
@@ -361,6 +362,7 @@ export function RepositoryChip(props: {
               repository={props.value}
               pictures={chooser.pictures}
               fallback={<ProviderMark provider={INTEGRATION_PROVIDER.GITHUB} />}
+              size={AVATAR_SIZE.GLYPH}
             />
           )}
           <ChipName>{label}</ChipName>

@@ -14,6 +14,7 @@ import { APP_COMMAND, APP_SHORTCUTS } from "@luke/settings/shortcuts";
 import {
   ArrowLeftIcon,
   ArrowRightIcon,
+  AVATAR_SIZE,
   BUTTON_SIZE,
   Button,
   ComposeIcon,
@@ -832,6 +833,7 @@ function RepositorySection({
               repository={repository}
               pictures={context.tasks.repositories.pictures}
               fallback={<FolderIcon />}
+              size={AVATAR_SIZE.GLYPH}
             />
           )
         }
