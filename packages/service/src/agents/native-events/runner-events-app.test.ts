@@ -441,7 +441,7 @@ it.layer(getTestDB())("the runner events route", (it) => {
   );
 
   it.effect(
-    "a Luke tool's answer the CLI flagged an error settles by its status, an Edit keeps the hunks the CLI reported, and a wakeup when it fires",
+    "a Luke tool's answer the CLI flagged an error settles by its status, an Edit keeps the hunks the CLI reported, a wakeup when it fires, and a connection_execute the integration's own call nested under it",
     () =>
       Effect.gen(function* () {
         const post = yield* standing;
@@ -496,6 +496,12 @@ it.layer(getTestDB())("the runner events route", (it) => {
             clampedDelaySeconds: 270,
             wasClamped: false,
           }),
+          toolUse("toolu_linear", "mcp__luke__connection_execute", {
+            connection: "linear",
+            tool: "list_issues",
+            input: { team: "ENG" },
+          }),
+          toolResult("toolu_linear", '{"status":"accepted","output":{"issues":[]}}', false),
           { type: "result", subtype: "success", is_error: false, ...envelope },
           { type: RUNNER_EVENT.END, reason: RUNNER_END.TURN_ENDED },
         ];
@@ -522,8 +528,20 @@ it.layer(getTestDB())("the runner events route", (it) => {
               "output-available",
               { text: "Next wakeup scheduled for 18:53:12 (in 270s).", scheduledFor },
             ],
+            [
+              "tool-connection_execute",
+              "output-available",
+              { status: "accepted", output: { issues: [] } },
+            ],
+            ["tool-linear_remote", "output-available", { issues: [] }],
           ],
         );
+        const remote = parts.find((part) => part.type === "tool-linear_remote");
+        assert.deepEqual(remote && "input" in remote ? remote.input : undefined, {
+          remoteTool: "list_issues",
+          parentCallId: "toolu_linear",
+          input: { team: "ENG" },
+        });
         const refused = parts.find((part) => part.type === "tool-read_task");
         assert.equal(
           refused && "errorText" in refused ? refused.errorText : undefined,

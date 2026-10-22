@@ -300,19 +300,6 @@ test("a wakeup the CLI reported the time of says when it checks back, on the rea
   assert.ok(body.includes("Wait for CI") && !body.includes("Next wakeup scheduled"), body);
 });
 
-test("connection_execute is drawn as the integration's own call it ran, its input and answer the tool's own", () => {
-  const { line, body } = opened(
-    storedPart(
-      "connection_execute",
-      { connection: "linear", tool: "list_issues", input: { team: "ENG" } },
-      { status: "accepted", output: { issues: [{ identifier: "ENG-42" }] } },
-    ),
-  );
-  assert.ok(line.includes("list_issues") && !line.includes("connection_execute"), line);
-  assert.ok(body.includes('"team": "ENG"') && body.includes("ENG-42"), body);
-  assert.ok(!body.includes('"status": "accepted"'), body);
-});
-
 test("Claude Code's TodoWrite is drawn as the agent's to-do list, a completed item done", () => {
   const { container } = drawn(
     storedPart(

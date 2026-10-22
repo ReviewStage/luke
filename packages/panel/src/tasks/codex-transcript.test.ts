@@ -251,9 +251,7 @@ test("a command Codex settled as failed is an answer ending in its exit code, it
 
 const WRAPPED_COMMANDS: readonly { readonly ran: string; readonly said: string }[] = [
   { ran: "/bin/bash -lc 'pnpm test --filter web'", said: "pnpm test --filter web" },
-  { ran: 'bash -lc "rg -n \\"total\\" src"', said: 'rg -n "total" src' },
-  { ran: "/bin/zsh -lc 'echo '\\''hi'\\'''", said: "echo 'hi'" },
-  { ran: "/bin/bash -lc ls", said: "ls" },
+  { ran: "/bin/bash -lc 'echo '\\''hi'\\'''", said: "echo 'hi'" },
   { ran: "/bin/bash -lc 'a' && 'b'", said: "/bin/bash -lc 'a' && 'b'" },
 ];
 

@@ -1,5 +1,7 @@
-import { nativeTurnId, reasoningItemId } from "@luke/database/models/ids";
-import type { WireValue } from "@luke/wire";
+import { nativeTurnId, reasoningItemId, remoteCallId } from "@luke/database/models/ids";
+import { CONNECTION_TOOL } from "@luke/features/agent-tools";
+import { TOOL_CALL_SETTLEMENT, type ToolCallSettlement } from "@luke/features/brain";
+import { isRecord, isWireString, type UnparsedWireValue, type WireValue } from "@luke/wire";
 import { Option, Schema } from "effect";
 import {
   addModelUsage,
@@ -13,6 +15,7 @@ import {
   finishedSentencesOf,
   sessionKey,
 } from "../../core.js";
+import { storedConnectionCall } from "../../integrations/connection-tools.js";
 import { BRAIN_HOST_TURN, BRAIN_HOST_TURN_KIND } from "../brain-host/bounds.js";
 import {
   NATIVE_ENDING,
@@ -206,6 +209,15 @@ function tellable(draft: Draft): string {
     : finishedSentencesOf(joinedWords(draft.completed, draft.forming));
 }
 
+/** A `connection_execute`'s settlement as its integration's call settles: the tool's own result where it answered one, and as it is otherwise. */
+function remoteSettlement(settlement: ToolCallSettlement): ToolCallSettlement {
+  const { output } = settlement;
+  if (settlement.state !== TOOL_CALL_SETTLEMENT.OUTPUT_AVAILABLE || !isRecord(output)) {
+    return settlement;
+  }
+  return output.output === undefined ? settlement : { ...settlement, output: output.output };
+}
+
 /** Everything one event's moments do, gathered as they are folded. */
 class Fold {
   state: NativeProjection;
@@ -331,14 +343,51 @@ class Fold {
       input: moment.input,
     });
     this.#setTurn({ ...told, calls: { ...told.calls, [moment.callId]: moment.name } });
+    if (moment.name === CONNECTION_TOOL.EXECUTE) this.#remoteStarted(moment.callId, moment.input);
+  }
+
+  /**
+   * The integration's own call a `connection_execute` runs, told nested
+   * under it as eve's relay tells it (`storedConnectionCall`), so the
+   * transcript draws the integration's call with its mark; nothing for a
+   * connection that is no integration's.
+   */
+  #remoteStarted(parentCallId: string, input: UnparsedWireValue): void {
+    const turn = this.state.turn;
+    const connection = isRecord(input) ? input.connection : undefined;
+    const tool = isRecord(input) ? input.tool : undefined;
+    if (turn === undefined || !isWireString(connection) || !isWireString(tool)) return;
+    const sent = isRecord(input) ? input.input : undefined;
+    const stored = storedConnectionCall(connection, tool, sent, parentCallId);
+    if (stored === undefined) return;
+    const callId = remoteCallId(this.#context.conversationId, parentCallId);
+    const told = this.#tell(turn, {
+      kind: BRAIN_RUN_EVENT.TOOL_CALL_STARTED,
+      callId,
+      name: stored.name,
+      input: stored.input,
+    });
+    this.#setTurn({ ...told, calls: { ...told.calls, [callId]: stored.name } });
   }
 
   #toolSettled(moment: Extract<NativeMoment, { kind: typeof NATIVE_MOMENT.TOOL_SETTLED }>): void {
     const turn = this.state.turn;
     const name = turn?.calls[moment.callId];
     if (turn === undefined || name === undefined) return;
+    const remote = remoteCallId(this.#context.conversationId, moment.callId);
+    const remoteName = name === CONNECTION_TOOL.EXECUTE ? turn.calls[remote] : undefined;
+    // Note that the nested call settles first, with the tool's own result, as eve's relay settles it before the wrapper.
+    const settled =
+      remoteName === undefined
+        ? turn
+        : this.#tell(turn, {
+            kind: BRAIN_RUN_EVENT.TOOL_CALL_SETTLED,
+            callId: remote,
+            name: remoteName,
+            settlement: remoteSettlement(moment.settlement),
+          });
     this.#setTurn(
-      this.#tell(turn, {
+      this.#tell(settled, {
         kind: BRAIN_RUN_EVENT.TOOL_CALL_SETTLED,
         callId: moment.callId,
         name,

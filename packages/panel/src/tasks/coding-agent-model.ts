@@ -83,7 +83,7 @@ import {
 import { Option, Schema } from "effect";
 import { TOOL_STATE, type ToolState } from "../ai-elements/tool.js";
 import { GLYPH_STATE, type GlyphState, glyphStateWords } from "../state-glyph.js";
-import { connectionCall, drawnCall, failedCommandCall } from "./native-tool-calls.js";
+import { drawnCall, failedCommandCall } from "./native-tool-calls.js";
 import { dayAndTimeText } from "./task-time.js";
 import {
   changesSidebar,
@@ -1582,19 +1582,6 @@ function listOf(value: UnparsedWireValue, key: string): readonly WireValue[] {
   return Array.isArray(list) ? list : [];
 }
 
-/**
- * A `connection_execute` with no integration's own call beside it, as a
- * native agent's always is, since Luke's MCP server answers it whole: drawn
- * as the integration's call it ran (`connectionCall`), as eve's is. Nothing
- * for any other part, or for one that failed, whose row is where its error
- * is read.
- */
-function remoteStandIn(part: AgentPart): ToolPart | undefined {
-  if (part.kind !== AGENT_PART.TOOL || part.state === TOOL_STATE.OUTPUT_ERROR) return undefined;
-  const remote = connectionCall(part);
-  return remote === undefined ? undefined : { ...part, ...remote };
-}
-
 /** Two shown sets as one: the first's call, both sets' pictures in order. */
 function joinedSets(first: ToolPart, second: ToolPart): ToolPart {
   return {
@@ -1650,9 +1637,9 @@ function drawnParts(
       continue;
     }
     const last = drawn.at(-1);
-    const standIn = refusedSet(part) ?? remoteStandIn(part);
-    if (standIn !== undefined) {
-      drawn.push(standIn);
+    const refusal = refusedSet(part);
+    if (refusal !== undefined) {
+      drawn.push(refusal);
       continue;
     }
     if (last !== undefined && isShownSet(last) && isShownSet(part)) {

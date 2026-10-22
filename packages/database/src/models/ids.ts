@@ -20,6 +20,7 @@ const ID_KIND = {
   CHAT_NOTICE: "chat-notice",
   CHAT_ATTACHMENT: "chat-attachment",
   NATIVE_TURN: "native-turn",
+  REMOTE_CALL: "remote-call",
 } as const;
 
 /**
@@ -50,6 +51,11 @@ export function receivedMessageId(sessionId: string, eveTurnId: string, ordinal 
  */
 export function nativeTurnId(conversationId: string, openingSequence: number): string {
   return brainHostId([ID_KIND.NATIVE_TURN, conversationId, String(openingSequence)]);
+}
+
+/** The id a native agent's integration call is told under, nested in the `connection_execute` that ran it, since the harness names only the wrapper. */
+export function remoteCallId(conversationId: string, parentCallId: string): string {
+  return brainHostId([ID_KIND.REMOTE_CALL, conversationId, parentCallId]);
 }
 
 /** The client id of the assistant message a turn completes; the turn's id is its journal's client id already, so this is another. */

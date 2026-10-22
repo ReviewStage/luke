@@ -754,24 +754,10 @@ test("a call of an integration's tool is one row wearing the integration's mark,
   assert.ok(!body.includes("parentCallId"), "the body holds no envelope around it");
 });
 
-test("a connection_execute with no integration's call under it, as a native agent's always is, is drawn as the integration's call it ran", () => {
+test("a connection_execute with no integration's call under it keeps its own row", () => {
   const [execute] = LINEAR_RUN;
   assert.ok(execute);
   const { container } = drawn(assistant([execute]), true);
-  const row = container.querySelector('[data-call-id="call-connection_execute"] summary');
-  assert.match(row?.textContent ?? "", /^Used\s*list_issues/u);
-  assert.equal(
-    row?.querySelector("svg")?.outerHTML,
-    renderToStaticMarkup(createElement(ProviderMark, { provider: INTEGRATION_PROVIDER.LINEAR })),
-    "the row wears Linear's mark",
-  );
-});
-
-test("a connection_execute of a connection that is no integration's keeps its own row", () => {
-  const [execute] = LINEAR_RUN;
-  assert.ok(execute);
-  const other = { ...execute, input: { connection: "acme-api", tool: "ping" } };
-  const { container } = drawn(assistant([other]), true);
   const row = container.querySelector('[data-call-id="call-connection_execute"] summary');
   assert.match(row?.textContent ?? "", /^Used\s*connection_execute/u);
 });

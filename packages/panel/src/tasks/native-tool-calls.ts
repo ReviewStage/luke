@@ -1,11 +1,5 @@
-import {
-  AGENT_TOOL,
-  CLAUDE_CODE_TOOL,
-  CODEX_TOOL,
-  CONNECTION_TOOL,
-} from "@luke/features/agent-tools";
+import { AGENT_TOOL, CLAUDE_CODE_TOOL, CODEX_TOOL } from "@luke/features/agent-tools";
 import { CODING_AGENT_TODO_STATUS } from "@luke/features/coding-agent-wire";
-import { INTEGRATION_REMOTE_TOOL, integrationConnectionOf } from "@luke/features/integration-wire";
 import { isRecord, isWireNumber, isWireString, type WireValue } from "@luke/wire";
 
 /**
@@ -233,25 +227,17 @@ function codexTerminalAnswer(output: WireValue | undefined): WireValue | undefin
   return { stdout: output.output, stderr: "", exitCode };
 }
 
-/** A login shell's wrapper around a command, as Codex runs every one (`/bin/bash -lc '…'`): the shell, its flags, and the command as one quoted word. */
-const SHELL_WRAPPER = /^(?:\S*\/)?(?:bash|zsh|sh) -l?c ([\s\S]+)$/u;
+/** The login shell Codex runs every command in, the command one single-quoted word: `/bin/bash -lc '…'`. */
+const SHELL_WRAPPER = /^\/bin\/bash -lc '([\s\S]*)'$/u;
 
-/** A shell word's text: a single-quoted word as it is, `'\''` its quote, and a double-quoted one with its escapes undone; nothing for a word that is not one quoted whole. */
-function unquoted(word: string): string | undefined {
-  const inner = word.slice(1, -1);
-  if (word.length >= 2 && word.startsWith("'") && word.endsWith("'")) {
-    return inner.replaceAll("'\\''", "").includes("'") ? undefined : inner.replaceAll("'\\''", "'");
-  }
-  if (word.length >= 2 && word.startsWith('"') && word.endsWith('"')) {
-    return /(?<!\\)"/u.test(inner) ? undefined : inner.replace(/\\([\\"$`])/gu, "$1");
-  }
-  return /^[^\s'"\\]+$/u.test(word) ? word : undefined;
-}
+/** How a single-quoted word holds a quote of its own: closed, escaped, and opened again. */
+const QUOTED_QUOTE = "'\\''";
 
-/** A Codex command as the model wrote it, without the login shell Codex wraps it in; a command it did not wrap, or one whose wrapper does not read, as it is. */
+/** A Codex command as the model wrote it, without the login shell Codex wraps it in; a command it did not wrap, or one whose word is not quoted whole, as it is. */
 function unwrappedCommand(command: string): string {
-  const word = SHELL_WRAPPER.exec(command.trim())?.[1];
-  return (word === undefined ? undefined : unquoted(word)) ?? command;
+  const word = SHELL_WRAPPER.exec(command)?.[1];
+  if (word === undefined || word.replaceAll(QUOTED_QUOTE, "").includes("'")) return command;
+  return word.replaceAll(QUOTED_QUOTE, "'");
 }
 
 /** The header `apply_patch` opens a file's change with, for each kind of change Codex reports. */
@@ -454,34 +440,4 @@ export function failedCommandCall(
   return answer === undefined
     ? undefined
     : { ...drawnCall({ ...call, output: undefined }), output: answer };
-}
-
-/**
- * A native agent's `connection_execute`, which Luke's MCP server answers
- * whole, drawn as eve draws the integration's own call it ran: under the
- * integration's remote name, its input the envelope of the tool's own name
- * and what it was sent, and its answer the tool's own result. Nothing for a
- * call of a connection that is no integration's, or one whose input does
- * not name a tool.
- */
-export function connectionCall(
-  call: DrawnCall & { readonly callId: string },
-): DrawnCall | undefined {
-  if (call.tool !== CONNECTION_TOOL.EXECUTE) return undefined;
-  const connection = inputString(call.input, "connection");
-  const remoteTool = inputString(call.input, "tool");
-  const account = connection === undefined ? undefined : integrationConnectionOf(connection);
-  if (account === undefined || remoteTool === undefined) return undefined;
-  const sent = isRecord(call.input) && isRecord(call.input.input) ? call.input.input : {};
-  return {
-    tool: INTEGRATION_REMOTE_TOOL[account.provider],
-    input: {
-      remoteTool,
-      parentCallId: call.callId,
-      input: sent,
-      ...(account.place > 1 && connection !== undefined ? { connection } : undefined),
-    },
-    output:
-      isRecord(call.output) && call.output.output !== undefined ? call.output.output : call.output,
-  };
 }

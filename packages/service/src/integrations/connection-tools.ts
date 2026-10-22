@@ -70,8 +70,11 @@ export function isRemoteToolName(name: string): boolean {
   return name.includes(QUALIFIED_SEPARATOR);
 }
 
-/** The integration and account whose connection eve qualified a remote tool's name with, and the tool's own name. */
-function remoteToolOf(toolName: string):
+/** The integration and account a connection is named for, and a remote tool's own name; nothing for a connection that is no integration's or a name no tool's. */
+function remoteToolAt(
+  connection: string,
+  remoteTool: string,
+):
   | {
       readonly provider: IntegrationProvider;
       readonly connection: string;
@@ -79,29 +82,26 @@ function remoteToolOf(toolName: string):
       readonly remoteTool: string;
     }
   | undefined {
-  const separator = toolName.indexOf(QUALIFIED_SEPARATOR);
-  if (separator < 0) return undefined;
-  const connection = toolName.slice(0, separator);
   // Note that a connection is named for its account, the first after its provider (`agent-runtime/connections.ts`).
   const account = integrationConnectionOf(connection);
-  const remoteTool = toolName.slice(separator + QUALIFIED_SEPARATOR.length);
   if (account === undefined || !isRemoteToolWord(remoteTool)) return undefined;
   return { ...account, connection, remoteTool };
 }
 
 /**
- * A nested call as the record keeps it: an integration's tool's call under
- * that integration's fixed name and its envelope, or nothing for a name that
- * is no integration's tool. Only integrations are connected, so any other
- * connection's call has no name to be stored under and is left out rather
- * than refused.
+ * A nested call of a connection's tool as the record keeps it: an
+ * integration's tool's call under that integration's fixed name and its
+ * envelope, or nothing for a connection that is no integration's. Only
+ * integrations are connected, so any other connection's call has no name to
+ * be stored under and is left out rather than refused.
  */
-export function storedRemoteCall(
-  toolName: string,
+export function storedConnectionCall(
+  connection: string,
+  remoteTool: string,
   input: UnparsedWireValue,
   parentCallId: string,
 ): { readonly name: string; readonly input: UnparsedWireValue } | undefined {
-  const remote = remoteToolOf(toolName);
+  const remote = remoteToolAt(connection, remoteTool);
   if (remote === undefined) return undefined;
   return {
     name: INTEGRATION_REMOTE_TOOL[remote.provider],
@@ -113,4 +113,20 @@ export function storedRemoteCall(
       ...(remote.place > 1 ? { connection: remote.connection } : undefined),
     },
   };
+}
+
+/** A nested call eve told under its qualified name (`linear__list_issues`), as the record keeps it (`storedConnectionCall`). */
+export function storedRemoteCall(
+  toolName: string,
+  input: UnparsedWireValue,
+  parentCallId: string,
+): { readonly name: string; readonly input: UnparsedWireValue } | undefined {
+  const separator = toolName.indexOf(QUALIFIED_SEPARATOR);
+  if (separator < 0) return undefined;
+  return storedConnectionCall(
+    toolName.slice(0, separator),
+    toolName.slice(separator + QUALIFIED_SEPARATOR.length),
+    input,
+    parentCallId,
+  );
 }
