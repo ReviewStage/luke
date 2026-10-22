@@ -276,6 +276,7 @@ it.layer(getTestDB())("a coding agent's sessions on Codex", (it) => {
           eventsUrl: EVENTS_URL,
           mcpUrl: MCP_URL,
           tokenUrl: TOKEN_URL,
+          installedSkills: "/opt/luke/installed-skills",
         });
         assert.deepEqual(first, {
           type: INPUT_LINE.MESSAGE,

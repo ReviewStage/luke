@@ -40,7 +40,9 @@ import {
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
+  Time,
   Tooltip,
+  useMinute,
 } from "@luke/ui";
 import { actorName, creatorActor } from "@luke/ui/actor-model";
 import { TASK_ORDER, taskTime } from "@luke/ui/task-list-model";
@@ -62,7 +64,6 @@ import { useAppCommand } from "../app-commands.js";
 import { useMemberDirectory } from "../member-directory.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { useSettledWaiting } from "../tasks/inbox-settling.js";
-import { RelativeTime } from "../tasks/relative-time.js";
 import { issueTagWords } from "../tasks/task-issue-links-model.js";
 import {
   NO_ASSIGNEE_WORDS,
@@ -70,7 +71,6 @@ import {
   TASK_STATUS_WORDS,
   TaskKey,
 } from "../tasks/task-standing.js";
-import { useMinute } from "../tasks/task-time.js";
 import { useOpenLink } from "../tasks/use-open-link.js";
 import { useReadMarks } from "../tasks/use-task-looks.js";
 import { useTaskMaker } from "../tasks/use-task-origin.js";
@@ -252,7 +252,7 @@ function TaskBoardCard({
       <span className="tasks-board-card-marks">
         {drawn(TASK_PROPERTY.WAITING) ? <WaitingBadge count={waiting} /> : null}
         {drawn(TASK_PROPERTY.UPDATED) ? (
-          <RelativeTime at={taskTime(task, TASK_ORDER.UPDATED)} now={now} hint={false} />
+          <Time at={taskTime(task, TASK_ORDER.UPDATED)} now={now} hint={false} />
         ) : null}
         {drawn(TASK_PROPERTY.CREATOR) ? (
           <span className="tasks-board-face">

@@ -86,6 +86,14 @@ export const CALL_KIND = {
   CREATE_SECTION: "create-section",
   /** A section of the member's sidebar deleted (`delete_section`), its row naming its title once answered. */
   DELETE_SECTION: "delete-section",
+  /** The workspace's automations listed, or one read whole (`list_automations`). */
+  LIST_AUTOMATIONS: "list-automations",
+  /** An automation made (`create_automation`), its row naming it. */
+  CREATE_AUTOMATION: "create-automation",
+  /** An automation changed, paused, or resumed (`update_automation`), its row naming it once answered. */
+  UPDATE_AUTOMATION: "update-automation",
+  /** An automation deleted (`delete_automation`), its row naming it once answered. */
+  DELETE_AUTOMATION: "delete-automation",
   /** A task moved into a section of the member's sidebar or out of them (`move_task`), its row naming the task once answered. */
   MOVE_TASK: "move-task",
   /** A task of the workspace changed (`update_task`), its row naming the task once answered; an older transcript's archive of one reads as a change too. */
@@ -150,6 +158,10 @@ export const CALL_WORDS = {
   [CALL_KIND.READ_TASK]: { verb: "Read the task", code: false },
   [CALL_KIND.CREATE_SECTION]: { verb: "Made the section", code: false },
   [CALL_KIND.DELETE_SECTION]: { verb: "Deleted the section", code: false },
+  [CALL_KIND.LIST_AUTOMATIONS]: { verb: "Listed the automations", code: false },
+  [CALL_KIND.CREATE_AUTOMATION]: { verb: "Made the automation", code: false },
+  [CALL_KIND.UPDATE_AUTOMATION]: { verb: "Changed the automation", code: false },
+  [CALL_KIND.DELETE_AUTOMATION]: { verb: "Deleted the automation", code: false },
   [CALL_KIND.MOVE_TASK]: { verb: "Moved the task", code: false },
   [CALL_KIND.UPDATE_TASK]: { verb: "Updated the task", code: false },
   [CALL_KIND.LIST_ISSUES]: { verb: "Listed the issues", code: false },

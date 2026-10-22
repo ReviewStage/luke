@@ -51,6 +51,7 @@ import {
   repositoryNotReachableDataSchema,
 } from "./contract/errors.js";
 import { hostedContract } from "./contract/index.js";
+import { installedSkillRefusedDataSchema } from "./installed-skill-route-wire.js";
 import {
   HOSTED_API_ERROR,
   type HostedApiError,
@@ -106,7 +107,8 @@ interface HostedLinkContext {
 /** The fields a refusal carries beside its slug, by the declared error that carries them. */
 type HostedRefusalData = typeof repositoryNotReachableDataSchema.Type &
   typeof planLimitReachedDataSchema.Type &
-  typeof credentialMissingDataSchema.Type;
+  typeof credentialMissingDataSchema.Type &
+  typeof installedSkillRefusedDataSchema.Type;
 
 /** The service refused the procedure: its slug, and the fields its declared error carries where they read. */
 export class HostedRefused extends Data.TaggedError("HostedRefused")<{
@@ -204,6 +206,9 @@ function refusalOf(payload: UnparsedWireValue): HostedRefused | undefined {
         ? planLimitReachedDataSchema
         : refusal === HOSTED_API_ERROR.AGENT_CREDENTIAL_MISSING
           ? credentialMissingDataSchema
+        : refusal === HOSTED_API_ERROR.SKILL_NAME_TAKEN ||
+            refusal === HOSTED_API_ERROR.SKILL_FILES_REFUSED
+          ? installedSkillRefusedDataSchema
           : undefined;
   if (schema === undefined) return new HostedRefused({ refusal });
   const data = Result.getOrUndefined(readServiceAnswer(schema)(payload));

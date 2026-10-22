@@ -3,12 +3,7 @@
  */
 
 import { type AdminCostDay, COST_SOURCE, type CostSource } from "@luke/features/admin-cost-wire";
-import {
-  formatCompact,
-  formatDayTick,
-  formatTooltipDay,
-  PARTIAL_DAY_OPACITY,
-} from "@luke/ui/admin-format";
+import { formatCompact, formatTooltipDay, PARTIAL_DAY_OPACITY } from "@luke/ui/admin-format";
 import {
   type ChartConfig,
   ChartContainer,
@@ -16,6 +11,7 @@ import {
   ChartTooltipContent,
 } from "@luke/ui/chart";
 import { partialDayKey, seriesHasNoData } from "@luke/ui/daily-series";
+import { formatDayTick } from "@luke/ui/time-format";
 import { Bar, BarChart, CartesianGrid, Cell, XAxis, YAxis } from "recharts";
 import { barTopRadius } from "./bar-radius.js";
 import { ChartEmpty, ChartFrame, LEGEND, LEGEND_ENTRY } from "./chart-frame.js";

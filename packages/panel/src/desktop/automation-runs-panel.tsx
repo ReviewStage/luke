@@ -36,13 +36,14 @@ import {
   Text,
   Tooltip,
   useMenu,
+  useMinute,
 } from "@luke/ui";
+import { momentText, sinceText } from "@luke/ui/time-format";
 import { ClockIcon, ExternalLinkIcon, PlayIcon, WebhookIcon } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { useCopyLinkItem } from "../copy-link-item.js";
 import { GLYPH_STATE, type GlyphState, StateGlyph, stateEndMark } from "../state-glyph.js";
 import { centreWithin, scrollerOf } from "../tasks/code-pane.js";
-import { momentText, sinceText, useMinute } from "../tasks/task-time.js";
 import { useOpenLink } from "../tasks/use-open-link.js";
 import { ActionMenu, type MenuAction } from "./action-menu.js";
 import { RUNS_PANEL_WIDTH, type RunsPanel } from "./folded-groups.js";

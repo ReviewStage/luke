@@ -1,3 +1,4 @@
+import type { InstalledSkillFilesRefusal } from "@luke/features/installed-skill-route-wire";
 import type { ModelProvider } from "@luke/features/models-wire";
 import type { RepositoryUnreached } from "@luke/features/repository-reach-wire";
 import { type Cause, Effect, type Layer, type Option, Stream } from "effect";
@@ -56,17 +57,21 @@ export const HOSTED_REFUSAL_STATUS = {
   [HOSTED_API_ERROR.ALREADY_INVITED]: HOSTED_HTTP_STATUS.CONFLICT,
   [HOSTED_API_ERROR.SANDBOX_STOPPED]: HOSTED_HTTP_STATUS.CONFLICT,
   [HOSTED_API_ERROR.LINEAR_UNAVAILABLE]: HOSTED_HTTP_STATUS.CONFLICT,
+  [HOSTED_API_ERROR.SKILL_NAME_TAKEN]: HOSTED_HTTP_STATUS.CONFLICT,
+  [HOSTED_API_ERROR.SKILL_FILES_REFUSED]: HOSTED_HTTP_STATUS.CONFLICT,
 } as const;
 
 type HostedRefusalSlug = keyof typeof HOSTED_REFUSAL_STATUS;
 
-/** A refusal: its slug, for a repository out of reach, why (`repositoryNotReachable`), for an upstream that refused, its status (`upstreamRefused`), and for a plan's reached limit, when it resets (`planLimitReached`). */
+/** A refusal: its slug, for a repository out of reach, why (`repositoryNotReachable`), for an upstream that refused, its status (`upstreamRefused`), for a plan's reached limit, when it resets (`planLimitReached`), and for a skill refused, which and why (`installedSkillRefused`). */
 export type HostedRefusal = {
   readonly error: HostedRefusalSlug;
   readonly unreached?: RepositoryUnreached;
   readonly upstreamStatus?: number;
   readonly resetsAt?: number;
   readonly provider?: ModelProvider;
+  readonly skillName?: string;
+  readonly skillRefusal?: InstalledSkillFilesRefusal;
 };
 
 /**
@@ -141,6 +146,10 @@ export const HOSTED_REFUSAL = {
   SANDBOX_STOPPED: { error: HOSTED_API_ERROR.SANDBOX_STOPPED },
   /** The workspace's Linear could not be read: none connected, its grant refused, or no such issue; nothing was written. */
   LINEAR_UNAVAILABLE: { error: HOSTED_API_ERROR.LINEAR_UNAVAILABLE },
+  /** A skill of that name is already installed in the scope asked; nothing was installed. */
+  SKILL_NAME_TAKEN: { error: HOSTED_API_ERROR.SKILL_NAME_TAKEN },
+  /** A skill's files were refused; nothing was installed. */
+  SKILL_FILES_REFUSED: { error: HOSTED_API_ERROR.SKILL_FILES_REFUSED },
 } as const satisfies Record<string, HostedRefusal>;
 
 /** A plan's usage limit reached, with when it resets in epoch milliseconds where the provider said, so the words can name it. */
@@ -153,6 +162,19 @@ export function planLimitReached(resetsAt: number | undefined): HostedRefusal {
 /** No credential of the account's pays for a coding agent on the provider's models, named so the words can say which to connect. */
 export function credentialMissing(provider: ModelProvider): HostedRefusal {
   return { ...HOSTED_REFUSAL.AGENT_CREDENTIAL_MISSING, provider };
+}
+
+/** A skill refused, by name where one was read, and why its files were where they were. */
+export function installedSkillRefused(
+  refusal: typeof HOSTED_REFUSAL.SKILL_NAME_TAKEN | typeof HOSTED_REFUSAL.SKILL_FILES_REFUSED,
+  skillName: string | undefined,
+  skillRefusal?: InstalledSkillFilesRefusal,
+): HostedRefusal {
+  return {
+    ...refusal,
+    ...(skillName === undefined ? undefined : { skillName }),
+    ...(skillRefusal === undefined ? undefined : { skillRefusal }),
+  };
 }
 
 /** The repository out of reach, with why, so the desktop can offer what mends it. */

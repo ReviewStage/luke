@@ -6,10 +6,10 @@ import {
 } from "@luke/features/coding-agent-wire";
 import type { CatalogModel } from "@luke/features/models-wire";
 import { HoverCard, HoverCardHead, HoverCardNote, HoverCardRule } from "@luke/ui";
+import { spanText } from "@luke/ui/time-format";
 import { HarnessMark } from "../harness-marks.js";
 import { providerOf } from "./coding-agent-model.js";
 import { ModelLabel } from "./model-label.js";
-import { spanText } from "./task-time.js";
 
 /**
  * turn-card.tsx -- the card a finished turn's "Worked for" line hangs while the pointer rests on it, and a call's closing line hangs too: what the run ran on, when, how it ended, and what it spent.

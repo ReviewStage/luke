@@ -1,12 +1,11 @@
 import type { TaskSummary } from "@luke/features/task-wire";
-import { FolderIcon, ListRow } from "@luke/ui";
+import { FolderIcon, ListRow, Time } from "@luke/ui";
 import { creatorActor, teammateCreator } from "@luke/ui/actor-model";
 import { TASK_ORDER, taskTime } from "@luke/ui/task-list-model";
 import { ACTOR_SIZE, ActorMark, CreatorHeard } from "../actor-ref.js";
 import { FadingWords } from "../fading-words.js";
 import { useMemberDirectory } from "../member-directory.js";
 import { RepositoryPicture } from "../repository-picture.js";
-import { RelativeTime } from "../tasks/relative-time.js";
 import { useTaskOrigin } from "../tasks/use-task-origin.js";
 import { TaskStatusMark } from "./task-card.js";
 
@@ -59,7 +58,7 @@ export function RecentRow({
             <ActorMark actor={creator} size={ACTOR_SIZE.MARK} forWhom={forWhom} />
           )}
           <TaskStatusMark task={task} />
-          <RelativeTime at={taskTime(task, TASK_ORDER.UPDATED)} now={now} />
+          <Time at={taskTime(task, TASK_ORDER.UPDATED)} now={now} />
         </span>
       }
       onPress={onOpen}

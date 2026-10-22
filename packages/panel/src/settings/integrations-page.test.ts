@@ -24,7 +24,7 @@ import { ACT_KIND } from "@luke/host/acts";
 import type { PortActKind, PortActPayload } from "@luke/host/contract";
 import type { SettingsLink } from "@luke/settings/settings-views";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
-import { SettingsPage } from "@luke/ui";
+import { SettingsPage, timeRuntime } from "@luke/ui";
 import { Clock, Context, Effect } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -269,7 +269,10 @@ async function mount(registry?: AtomRegistry.AtomRegistry, framed = false): Prom
 /** A registry whose atoms wait on this clock, as the window's would on its own. */
 function registryOn(clock: Clock.Clock): AtomRegistry.AtomRegistry {
   const registry = AtomRegistry.make({
-    initialValues: [[rendererRuntime, AsyncResult.success(Context.make(Clock.Clock, clock))]],
+    initialValues: [
+      [rendererRuntime, AsyncResult.success(Context.make(Clock.Clock, clock))],
+      [timeRuntime, AsyncResult.success(Context.make(Clock.Clock, clock))],
+    ],
   });
   registries.push(registry);
   return registry;

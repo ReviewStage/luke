@@ -3,8 +3,8 @@ import {
   type CodingAgentBrief,
   type CodingAgentContext,
 } from "@luke/features/coding-agent-wire";
+import { agoText } from "@luke/ui/time-format";
 import { compactCount } from "./coding-agent-model.js";
-import { agoText } from "./task-time.js";
 
 /**
  * agent-context-model.ts -- what the agent box's context ring and its popover say of the agent's model's context.

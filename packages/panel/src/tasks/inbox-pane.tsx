@@ -45,8 +45,10 @@ import {
   Stack,
   TEXT_TONE,
   Text,
+  Time,
   Tooltip,
   useMenu,
+  useMinute,
 } from "@luke/ui";
 import {
   ACTOR_KIND,
@@ -144,13 +146,11 @@ import { type InboxNext, InboxNextUp, type InboxPager, InboxPagerControls } from
 import { InboxPicture, InboxPictures } from "./inbox-pictures.js";
 import { InboxStamp } from "./inbox-stamp.js";
 import { LoneLinkCards } from "./lone-link-card.js";
-import { RelativeTime } from "./relative-time.js";
 import { REPLY_SCOPE } from "./reply-to-selection.js";
 import { SentWords } from "./skill-chip.js";
 import { TAB_KIND, tabLook } from "./tab-look.js";
 import { TaskMentions, type TaskMentionsValue } from "./task-mentions.js";
 import { markReadItem } from "./task-menu-items.js";
-import { useMinute } from "./task-time.js";
 import { cardTitle } from "./tool-call-model.js";
 import { TranscriptWords } from "./transcript-blocks.js";
 import type { CodingAgentsControl } from "./use-coding-agents.js";
@@ -954,11 +954,7 @@ function Answered({
             <ActorRef actor={answerer} />
           </CommentName>
           <span className="inbox-comment-when">
-            <RelativeTime
-              className={THREAD_TIME_CLASS}
-              at={settledAt(item) ?? item.updatedAt}
-              now={now}
-            />{" "}
+            <Time className={THREAD_TIME_CLASS} at={settledAt(item) ?? item.updatedAt} now={now} />{" "}
             · <Delivered item={item} by={by} />
           </span>
         </>
@@ -1015,11 +1011,7 @@ function Withdrawn({
           </CommentName>
           <span className="inbox-comment-when">
             withdrew this{" "}
-            <RelativeTime
-              className={THREAD_TIME_CLASS}
-              at={settledAt(item) ?? item.updatedAt}
-              now={now}
-            />
+            <Time className={THREAD_TIME_CLASS} at={settledAt(item) ?? item.updatedAt} now={now} />
           </span>
         </>
       }
@@ -1054,11 +1046,7 @@ function Closed({
             <ActorRef actor={closer} />
           </CommentName>
           <span className="inbox-comment-when">
-            <RelativeTime
-              className={THREAD_TIME_CLASS}
-              at={settledAt(item) ?? item.updatedAt}
-              now={now}
-            />{" "}
+            <Time className={THREAD_TIME_CLASS} at={settledAt(item) ?? item.updatedAt} now={now} />{" "}
             · <Delivered item={item} by={by} />
           </span>
         </>
@@ -1109,7 +1097,7 @@ function Message({
             {fromAgent ? <AgentName by={by} /> : <ActorRef actor={member} />}
           </CommentName>
           <span className="inbox-comment-when">
-            <RelativeTime className={THREAD_TIME_CLASS} at={message.createdAt} now={now} />
+            <Time className={THREAD_TIME_CLASS} at={message.createdAt} now={now} />
           </span>
         </>
       }
@@ -1536,7 +1524,7 @@ function ThreadMessage({
             {fromAgent ? <AgentName by={by} /> : <ActorRef actor={member} />}
           </CommentName>
           <span className="inbox-comment-when">
-            <RelativeTime className={THREAD_TIME_CLASS} at={message.createdAt} now={now} />
+            <Time className={THREAD_TIME_CLASS} at={message.createdAt} now={now} />
           </span>
         </>
       }
@@ -2021,11 +2009,7 @@ export function InboxPane({
                                 <AgentName by={by} />
                               </CommentName>
                               <span className="inbox-comment-when">
-                                <RelativeTime
-                                  className={THREAD_TIME_CLASS}
-                                  at={item.postedAt}
-                                  now={now}
-                                />
+                                <Time className={THREAD_TIME_CLASS} at={item.postedAt} now={now} />
                               </span>
                             </>
                           }

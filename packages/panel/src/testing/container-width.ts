@@ -1,4 +1,3 @@
-import motionTokens from "@luke/brand/motion-tokens.css?raw";
 import base from "@luke/panel/styles/base.css?raw";
 import call from "@luke/panel/styles/call.css?raw";
 import desktop from "@luke/panel/styles/desktop.css?raw";
@@ -46,7 +45,6 @@ import tokens from "@luke/ui/tokens.css?inline";
 /** Each stylesheet the panel's `index.css` imports, by the specifier it imports it by. */
 const SHEET_BY_IMPORT = {
   "@luke/ui/tokens.css": tokens,
-  "@luke/brand/motion-tokens.css": motionTokens,
   "./settings.css": settings,
   "./base.css": base,
   "@luke/ui/styles.css": ui,
@@ -161,6 +159,10 @@ function resolvedAt(css: string, resolution: Resolution): string {
   return resolved + css.slice(from);
 }
 
+/** jsdom plays no animation, so the sheets are laid with their motion held still, as a capture run holds it: a test that wants motion hands the window its own tokens inline, as `playMotions` does. */
+const STILL_MOTION =
+  ":root { --luke-duration-shape: 0s; --luke-duration-exit: 0s; --luke-duration-quick: 0s; --luke-duration-fast: 0s; --luke-duration-pane: 0s; }";
+
 /** Lays the stylesheets into the document for named containers of the widths given, the nearest one's, and the device given, answering the style element, which the caller removes. */
 export function layContainersAt(
   widths: Readonly<Record<string, number>>,
@@ -169,7 +171,7 @@ export function layContainersAt(
   const resolution: Resolution = { widths, layout, layers: new Map() };
   const unlayered = SHEETS.map((css) => resolvedAt(css, resolution));
   const style = document.head.appendChild(document.createElement("style"));
-  style.textContent = [...[...resolution.layers.values()].flat(), ...unlayered].join("\n");
+  style.textContent = [...[...resolution.layers.values()].flat(), ...unlayered, STILL_MOTION].join("\n");
   return style;
 }
 

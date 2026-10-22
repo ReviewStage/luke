@@ -1,8 +1,7 @@
-import { SCROLL_FADE, SCROLL_GUTTER, ScrollArea } from "@luke/ui";
+import { SCROLL_FADE, SCROLL_GUTTER, ScrollArea, TIME_LOOK, Time } from "@luke/ui";
 import type { Actor } from "@luke/ui/actor-model";
 import type { ReactNode } from "react";
 import { ActorRef } from "../actor-ref.js";
-import { RelativeTime } from "./relative-time.js";
 
 /**
  * document-frame.tsx -- what every document of the window is drawn in, a plan's, a version's, and an issue's alike: the column it scrolls in, and the line under its title.
@@ -78,7 +77,7 @@ export function DocumentByline({
         )}
         {creator === undefined ? null : <ActorRef actor={creator} sentence />}
         {" · "}
-        <RelativeTime at={createdAt} now={now} ago />
+        <Time at={createdAt} now={now} look={TIME_LOOK.AGO} />
       </span>
       {/* Note that where it came from is a phrase of its own, so a long line wraps between phrases rather than cutting a name short. */}
       {maker?.fromTask === undefined ? null : (

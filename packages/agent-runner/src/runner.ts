@@ -50,7 +50,13 @@ import {
 import { ClaudeCode, type ClaudeCodeSession } from "./claude-code.js";
 import { runCodex } from "./codex.js";
 import { type EventSink, makeEventSink } from "./events.js";
-import { type LaunchContext, type LaunchOutcome, RunnerFailed, type RunnerSelf } from "./launch.js";
+import {
+  installedSkillsPath,
+  type LaunchContext,
+  type LaunchOutcome,
+  RunnerFailed,
+  type RunnerSelf,
+} from "./launch.js";
 import { openMcpRelay } from "./mcp-relay.js";
 import { ProcessTable } from "./processes.js";
 import {
@@ -58,6 +64,7 @@ import {
   EFFORT,
   type Effort,
   INPUT_LINE,
+  INSTALLED_SKILLS,
   type InputLine,
   InputLineSchema,
   RUNNER_END,
@@ -153,6 +160,12 @@ function queryOptions(
   // Note that a headless CLI runs fast mode only where its flag settings opt in.
   if (config.fast === true) options.settings = { fastMode: true };
   if (config.resume !== undefined) options.resume = config.resume;
+  // The member's installed skills load as a local plugin, which leaves the checkout and the
+  // settings Claude Code reads (`project` alone) as they stand; Luke holds its MCP servers.
+  const manifest = installedSkillsPath(config.installedSkills, INSTALLED_SKILLS.MANIFEST);
+  if (manifest !== undefined && config.installedSkills !== undefined) {
+    options.plugins = [{ type: "local", path: config.installedSkills, skipMcpDiscovery: true }];
+  }
   return options;
 }
 

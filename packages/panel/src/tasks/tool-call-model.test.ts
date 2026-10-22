@@ -735,6 +735,49 @@ test("the section calls read as theirs, a made section by the title asked and a 
   assert.equal(toolCallView({ ...moved, output: undefined }).subject, "");
 });
 
+test("the automation calls read as theirs, a made one by the name asked and a changed or deleted one by the name its answer names, and open nothing", () => {
+  const automation = { id: "automation-1", name: "Agent audit" };
+  const calls = [
+    {
+      tool: "list_automations",
+      callId: "call-1",
+      input: {},
+      output: { status: "accepted", automations: [] },
+    },
+    {
+      tool: "create_automation",
+      callId: "call-2",
+      input: { name: "Agent audit" },
+      output: { status: "accepted", automation },
+    },
+    {
+      tool: "update_automation",
+      callId: "call-3",
+      input: { automationId: "automation-1", enabled: false },
+      output: { status: "accepted", automation },
+    },
+    {
+      tool: "delete_automation",
+      callId: "call-4",
+      input: { automationId: "automation-1" },
+      output: { status: "accepted", automation },
+    },
+  ];
+
+  assert.deepEqual(
+    calls.map((call) => {
+      const view = toolCallView(call);
+      return [view.kind, view.subject, toolTarget(call)];
+    }),
+    [
+      [CALL_KIND.LIST_AUTOMATIONS, "", undefined],
+      [CALL_KIND.CREATE_AUTOMATION, "Agent audit", undefined],
+      [CALL_KIND.UPDATE_AUTOMATION, "Agent audit", undefined],
+      [CALL_KIND.DELETE_AUTOMATION, "Agent audit", undefined],
+    ],
+  );
+});
+
 test("the issue calls read as theirs, an issue by the identifier and title its answer names and by the name or title asked before then, and open nothing", () => {
   const issue = { id: "issue-1", identifier: "ACME-4", title: "Flaky invite test" };
   const calls = [

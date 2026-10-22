@@ -8,7 +8,7 @@ import { RETENTION_BASIS, type RetentionBasis } from "@luke/features/admin-overv
 import { ADMIN_READ, type AdminMetricsWindow } from "@luke/features/admin-wire";
 import { CHOICE_BAR_LOOK, ChoiceBar } from "@luke/ui";
 import { ACCOUNTS_SORT_KEY, type AccountsDetailColumn } from "@luke/ui/accounts-sort";
-import { formatDate, formatNumber } from "@luke/ui/admin-format";
+import { formatCount, formatDate } from "@luke/ui/time-format";
 import { useState } from "react";
 import { ACCOUNTS_TABLE_MIN_WIDTH, AccountsTable } from "../accounts-table/accounts-table.js";
 import { useAdminDoors } from "../admin-doors.js";
@@ -66,25 +66,25 @@ const OVERVIEW_ACCOUNT_COLUMNS: readonly AccountsDetailColumn<AdminOverviewAccou
   {
     key: ACCOUNTS_SORT_KEY.TASKS,
     label: "Tasks",
-    cell: (row) => formatNumber(row.tasks),
+    cell: (row) => formatCount(row.tasks),
     sortValue: (row) => row.tasks,
   },
   {
     key: ACCOUNTS_SORT_KEY.AGENTS,
     label: "Agents",
-    cell: (row) => formatNumber(row.agents),
+    cell: (row) => formatCount(row.agents),
     sortValue: (row) => row.agents,
   },
   {
     key: ACCOUNTS_SORT_KEY.PRS_MERGED,
     label: "PRs merged",
-    cell: (row) => formatNumber(row.prsMerged),
+    cell: (row) => formatCount(row.prsMerged),
     sortValue: (row) => row.prsMerged,
   },
   {
     key: ACCOUNTS_SORT_KEY.CALL_MINUTES,
     label: "Call min",
-    cell: (row) => formatNumber(row.callMinutes),
+    cell: (row) => formatCount(row.callMinutes),
     sortValue: (row) => row.callMinutes,
   },
   {
@@ -112,14 +112,14 @@ function TrendTile({
   return (
     <StatCard
       label={label}
-      value={formatNumber(trend.recent)}
+      value={formatCount(trend.recent)}
       hint={
         <>
           <TrendMove trend={trend} /> vs the {trend.days} days before
           {detail === undefined ? null : ` · ${detail}`}
         </>
       }
-      title={`against ${formatNumber(trend.prior)} in the ${trend.days} days before`}
+      title={`against ${formatCount(trend.prior)} in the ${trend.days} days before`}
       grouped
     />
   );
@@ -160,7 +160,7 @@ function HeadlineTiles({ headline }: { headline: AdminOverview["headline"] }): R
         detail={
           prsOpened.opened === 0
             ? undefined
-            : `${percentOf(prsOpened.merged, prsOpened.opened)} of this week's agents' ${formatNumber(prsOpened.opened)} PRs merged`
+            : `${percentOf(prsOpened.merged, prsOpened.opened)} of this week's agents' ${formatCount(prsOpened.opened)} PRs merged`
         }
       />
     </StatGroup>

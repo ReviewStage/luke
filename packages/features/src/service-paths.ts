@@ -150,6 +150,15 @@ export const HOSTED_SERVICE_PATH = {
    * declares the bodies.
    */
   AUTOMATIONS: "/api/automations",
+  /**
+   * The skills members install into Luke: the ones the account sees in a
+   * workspace under `?workspaceId=` (GET), or skills installed from a
+   * paste (POST); `/preview` reads a paste as an install would (POST), and
+   * `/{id}` turns one on or off (PATCH) or removes it (DELETE), and its
+   * `/update` says whether its source moved (GET) or updates it (POST).
+   * `installed-skill-route-wire.ts` declares the bodies.
+   */
+  INSTALLED_SKILLS: "/api/installed-skills",
   /** The models a coding agent may run on, as the service offers them now (GET). `models-wire.ts` declares the answer. */
   MODELS: "/api/models",
   /**
@@ -369,6 +378,11 @@ export const VOICE_SERVICE_PATH = {
 /** One of the account's automations: change it (PATCH) or delete it with its history (DELETE). */
 export function automationPath(automationId: string): string {
   return `${HOSTED_SERVICE_PATH.AUTOMATIONS}/${encodeURIComponent(automationId)}`;
+}
+
+/** One installed skill: turn it on or off (PATCH) or remove it (DELETE). */
+export function installedSkillPath(skillId: string): string {
+  return `${HOSTED_SERVICE_PATH.INSTALLED_SKILLS}/${encodeURIComponent(skillId)}`;
 }
 
 /**

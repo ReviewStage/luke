@@ -5,7 +5,7 @@
  */
 
 import type { AdminReliabilityDay } from "@luke/features/admin-answer-wire";
-import { formatDayTick, formatShare, formatTooltipDay } from "@luke/ui/admin-format";
+import { formatShare, formatTooltipDay } from "@luke/ui/admin-format";
 import {
   type ChartConfig,
   ChartContainer,
@@ -13,6 +13,7 @@ import {
   ChartTooltipContent,
 } from "@luke/ui/chart";
 import { partialDayKey } from "@luke/ui/daily-series";
+import { formatDayTick } from "@luke/ui/time-format";
 import { CartesianGrid, Line, LineChart, XAxis, YAxis } from "recharts";
 import { ChartEmpty, ChartFrame, SeriesLegend } from "./chart-frame.js";
 

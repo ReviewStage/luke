@@ -33,10 +33,10 @@ const ROW = 50;
 
 /** The motion tokens the list reads, as the window's sheets set them. */
 const TOKENS = {
-  "--duration-exit": "90ms",
-  "--motion-exit": "ease",
-  "--duration-shape": "460ms",
-  "--spring": "ease-out",
+  "--luke-duration-exit": "90ms",
+  "--luke-motion-exit": "ease",
+  "--luke-duration-shape": "460ms",
+  "--luke-spring": "ease-out",
 } as const;
 
 let root: Root | undefined;

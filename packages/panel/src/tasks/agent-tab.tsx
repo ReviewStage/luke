@@ -35,6 +35,7 @@ import {
   TEXT_TONE,
   Text,
   TextLink,
+  useMinute,
 } from "@luke/ui";
 import { ACTOR_KIND, ACTOR_STATE, type Actor } from "@luke/ui/actor-model";
 import type { VirtualRowsHandle } from "@luke/ui/virtual-rows";
@@ -174,7 +175,6 @@ import type { SkillSource } from "./skill-picker.js";
 import { SkillCard } from "./skill-ref.js";
 import { PlanGlyph } from "./tab-look.js";
 import { useMentionDoors } from "./task-mentions.js";
-import { useMinute } from "./task-time.js";
 import {
   calledAgent,
   cardTitle,

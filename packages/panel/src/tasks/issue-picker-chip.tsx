@@ -16,8 +16,10 @@ import {
   TEXT_VARIANT,
   Text,
   Tooltip,
+  useMinute,
 } from "@luke/ui";
 import { type LinearIssuesAsk, linearIssuesAskOf, offeredIssues } from "@luke/ui/tasks-model";
+import { sinceText } from "@luke/ui/time-format";
 import { useDisclosure } from "@luke/ui/use-disclosure";
 import { Duration, Effect } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
@@ -32,7 +34,6 @@ import {
   type GitHubIssuesStanding,
   useGitHubIssues,
 } from "./github-issues-read.js";
-import { sinceText, useMinute } from "./task-time.js";
 import type { TasksControl } from "./use-tasks-tab.js";
 
 /**

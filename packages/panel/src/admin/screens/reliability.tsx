@@ -32,7 +32,8 @@ import {
   Text,
   TextLink,
 } from "@luke/ui";
-import { formatDate, formatNumber, formatShare } from "@luke/ui/admin-format";
+import { formatShare } from "@luke/ui/admin-format";
+import { formatCount, formatDate } from "@luke/ui/time-format";
 import { AccountCell } from "../accounts-table/accounts-table.js";
 import { useAdminDoors } from "../admin-doors.js";
 import { BreakdownChart, type BreakdownSeries } from "../charts/breakdown-chart.js";
@@ -165,7 +166,7 @@ function IntegrationRow({ integration }: { integration: AdminIntegration }): Rea
 function ofHint(count: { failed: number; total: number }, noun: string, windowDays: number) {
   return count.total === 0
     ? `no ${noun} ended in ${windowDays} days`
-    : `${formatNumber(count.failed)} of ${formatNumber(count.total)} ${noun}`;
+    : `${formatCount(count.failed)} of ${formatCount(count.total)} ${noun}`;
 }
 
 function share(count: { failed: number; total: number }): number | null {
@@ -204,7 +205,7 @@ function attentionColumns(
       key: "failed-agents",
       label: `Agents failed · ${ADMIN_ATTENTION_AGENT_DAYS}d`,
       kind: DATA_TABLE_COLUMN_KIND.NUMERIC,
-      cell: (row) => formatNumber(row.failedAgents),
+      cell: (row) => formatCount(row.failedAgents),
     },
   ];
 }
@@ -246,7 +247,7 @@ function ReliabilityRecords({
           />
           <StatCard
             label="Abandoned by the sweep"
-            value={formatNumber(headline.abandonedTurns)}
+            value={formatCount(headline.abandonedTurns)}
             hint="turns past their bound"
             grouped
           />
@@ -323,7 +324,7 @@ function ReliabilityRecords({
           finished also moves. Agents failed counts the account's coding agents with a failed run in
           the last {ADMIN_ATTENTION_AGENT_DAYS} days.
           {reliability.attention.total > reliability.attention.accounts.length
-            ? ` Only the ${formatNumber(reliability.attention.accounts.length)} newest of ${formatNumber(reliability.attention.total)} are listed.`
+            ? ` Only the ${formatCount(reliability.attention.accounts.length)} newest of ${formatCount(reliability.attention.total)} are listed.`
             : ""}
         </Text>
       </AdminSection>
@@ -361,7 +362,7 @@ function ReliabilityBody({
 
       <AdminSection title="System health">
         <div className={`grid ${CARD_GAP} min-[720px]:grid-cols-[1fr_1.4fr]`}>
-          <MetricCard label="Database" hint={`probe round-trip ${formatNumber(db.latencyMs)} ms`}>
+          <MetricCard label="Database" hint={`probe round-trip ${formatCount(db.latencyMs)} ms`}>
             <div>
               <Badge tone={db.reachable ? BADGE_TONE.COMPLETE : BADGE_TONE.ATTENTION}>
                 {db.reachable ? "Reachable" : "Unreachable"}

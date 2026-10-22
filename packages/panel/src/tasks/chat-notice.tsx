@@ -16,6 +16,7 @@ import {
   Text,
 } from "@luke/ui";
 import { CHAT_PLACE, type ChatNames, type ChatPlace, chatWho } from "@luke/ui/chat-model";
+import { momentText } from "@luke/ui/time-format";
 import { type ChatNoticeMetadata, MESSAGE_AUTHOR } from "@luke/wire";
 import { MessagesSquareIcon } from "lucide-react";
 import type { ReactNode } from "react";
@@ -32,7 +33,6 @@ import { ChannelName, channelTitle } from "./chat-channel-name.js";
 import { CopyMessageAction } from "./copy-message.js";
 import { SentTime } from "./sent-time.js";
 import { SentWords } from "./skill-chip.js";
-import { momentText } from "./task-time.js";
 import { TranscriptWords } from "./transcript-blocks.js";
 
 /**
