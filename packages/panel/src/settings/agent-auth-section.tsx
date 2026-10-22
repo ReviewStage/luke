@@ -934,7 +934,6 @@ function AgentAuthDialog({
   const { act } = useAct();
   const openLink = useOpenLink();
   const chatGptOffered = useCapability(HOST_CAPABILITY.CHATGPT_SIGN_IN);
-  const subtitleId = useId();
   const harness = HARNESS[provider];
   const plan = planOf(answer, provider);
   const key = keyOf(answer, provider);
@@ -986,7 +985,6 @@ function AgentAuthDialog({
   return (
     <Dialog
       title={harness.name}
-      describedBy={subtitleId}
       size={DIALOG_SIZE.WIDE}
       onDismiss={onClose}
       actions={
@@ -996,9 +994,6 @@ function AgentAuthDialog({
       }
     >
       <div className={`agent-auth-dialog ${NO_CAPTURE}`}>
-        <Text id={subtitleId} tone={TEXT_TONE.MUTED}>
-          {`How ${harness.name} authenticates in cloud workspaces.`}
-        </Text>
         <div
           role="radiogroup"
           aria-label={`${harness.name} credential`}

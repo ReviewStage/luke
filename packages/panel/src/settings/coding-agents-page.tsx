@@ -425,9 +425,7 @@ export function CodingAgentsPage({ signedIn }: { signedIn: boolean }): React.JSX
   }, []);
   return (
     <>
-      <Text tone={TEXT_TONE.MUTED}>
-        For your agents. Other users connect their own subscriptions or API keys.
-      </Text>
+      <Text tone={TEXT_TONE.MUTED}>Other members connect their own subscriptions or API keys.</Text>
       <AgentAuthSection signedIn={signedIn} onKeys={onKeys} />
       <CodingAgentsSection signedIn={signedIn} ownKeys={ownKeys} keysAnswered={keysAnswered} />
       <ChaptersModelSection signedIn={signedIn} />
