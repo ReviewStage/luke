@@ -2146,10 +2146,17 @@ export function pullRequestNumberLabel(
   return `#${pullRequest.number}`;
 }
 
-/** The word the row says where the pull request stands, only where that changes what the developer would do: a draft, merged, or closed; nothing for one open. */
-export function pullRequestStateWord(state: PullRequestState): string | undefined {
-  return state === PULL_REQUEST_STATE.OPEN ? undefined : PULL_REQUEST_STATE_LABEL[state];
+/** The word the row says where the pull request stands, only where that changes what the developer would do: a draft, merged, closed, or open in GitHub's merge queue, queued; nothing for one open otherwise. */
+export function pullRequestStateWord(
+  pullRequest: Pick<CodingAgentPullRequest, "state" | "queued">,
+): string | undefined {
+  const { state } = pullRequest;
+  if (state !== PULL_REQUEST_STATE.OPEN) return PULL_REQUEST_STATE_LABEL[state];
+  return pullRequest.queued === true ? QUEUED_LABEL : undefined;
 }
+
+/** What the row says of an open pull request GitHub's merge queue holds, as its tab's pill says it. */
+const QUEUED_LABEL = "Queued";
 
 /** The chip's own words for a reader who cannot see it: the number and where it stands. */
 export function pullRequestPillLabel(

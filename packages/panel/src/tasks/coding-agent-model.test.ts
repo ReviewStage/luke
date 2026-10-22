@@ -276,13 +276,13 @@ test("the checkout command fetches and switches to the branch, and the chip open
   );
 });
 
-test("the row says where the pull request stands only once it is a draft, merged, or closed, and the mark says it to a reader without its colour", () => {
-  assert.deepEqual(Object.values(PULL_REQUEST_STATE).map(pullRequestStateWord), [
-    undefined,
-    "Draft",
-    "Merged",
-    "Closed",
-  ]);
+test("the row says where the pull request stands only once it is a draft, merged, closed, or queued, and the mark says it to a reader without its colour", () => {
+  assert.deepEqual(
+    Object.values(PULL_REQUEST_STATE).map((state) => pullRequestStateWord({ state })),
+    [undefined, "Draft", "Merged", "Closed"],
+  );
+  assert.equal(pullRequestStateWord({ state: PULL_REQUEST_STATE.OPEN, queued: true }), "Queued");
+  assert.equal(pullRequestStateWord({ state: PULL_REQUEST_STATE.MERGED, queued: true }), "Merged");
   assert.equal(
     pullRequestPillLabel({ ...PULL_REQUEST, state: PULL_REQUEST_STATE.MERGED }),
     "Pull request #123, merged",

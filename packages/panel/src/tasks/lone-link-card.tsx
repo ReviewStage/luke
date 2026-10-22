@@ -135,7 +135,7 @@ function PullRequestRowCard({
   const known = standing?.pullRequest;
   const number = numberWords(pullRequest, standing, repository);
   const title = standing?.title ?? writtenWords(target, words);
-  const state = known === undefined ? undefined : pullRequestStateWord(known.state);
+  const state = known === undefined ? undefined : pullRequestStateWord(known);
   const named = title === undefined ? number : `${number} · ${title}`;
   return (
     <OneRowCard label={CARD_LABEL.PULL_REQUEST} kind={LONE_LINK.PULL_REQUEST}>
