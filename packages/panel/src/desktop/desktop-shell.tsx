@@ -61,6 +61,7 @@ import type { SettingsStep } from "./desktop-settings.js";
 import { DesktopSidebar } from "./desktop-sidebar.js";
 import { DesktopTasks } from "./desktop-tasks.js";
 import { useFloatDismiss } from "./hover-pane.js";
+import { MobileBar, mobileBarShown } from "./mobile-bar.js";
 import { OfflineMark, useOffline } from "./offline-mark.js";
 import { ADMIN_PLACE, PERSON_PAGE, VERSION_HISTORY } from "./pages-on-demand.js";
 import { PaneGlide } from "./pane-motion.js";
@@ -783,6 +784,8 @@ export function DesktopShell({
   // keyboard reaches what the drawer covers, and a press there only puts it
   // away. Its toggle stays, the way to close it.
   const drawerOver = room === SHELL_ROOM.NARROW && sidebar.overlay !== SIDEBAR_OVERLAY.CLOSED;
+  // A phone goes between its places by a bar at the screen's foot, standing on their lists alone (`mobile-bar.tsx`).
+  const barShown = mobileBarShown(room, tasks, chatOn);
   return (
     <div
       ref={shell}
@@ -792,6 +795,7 @@ export function DesktopShell({
       data-sidebar-overlay={sidebar.overlay}
       data-panel-toggle={String(panelToggle)}
       data-offline={String(offline)}
+      data-mobile-bar={String(barShown)}
     >
       <DesktopSidebar
         sidebar={sidebar}
@@ -877,6 +881,9 @@ export function DesktopShell({
           </ChipCards>
         </MentionedAgents>
       </main>
+      {barShown ? (
+        <MobileBar tasks={tasks} chatOn={chatOn} sidebar={sidebar} onPressMore={keepOverlay} />
+      ) : null}
       {noticeInColumn ? null : NOTICE_STRIP}
       {/* Folded, the sidebar's card floats in the corner it would have stood over. */}
       <StandingCallCardDock docked={sidebar.collapsed} surface={CALL_CARD_SURFACE.FLOATING} />

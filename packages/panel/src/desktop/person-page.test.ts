@@ -285,6 +285,7 @@ function mountWith(
       open: false,
       chosen: undefined,
       onOpen: () => opened.inbox.push("inbox"),
+      onOpenList: () => undefined,
       onClose: () => undefined,
       onChoose: (chosen) => opened.inbox.push(chosen),
       onOpenItem: () => undefined,

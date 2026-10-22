@@ -189,6 +189,7 @@ test("the Inbox's list says a plan it could not read as the sidebar does, and Re
           open: true,
           chosen: undefined,
           onOpen: ignore,
+          onOpenList: () => undefined,
           onClose: ignore,
           onChoose: ignore,
           onOpenItem: () => undefined,
