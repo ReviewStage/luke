@@ -180,7 +180,7 @@ export const CODER_REFUSAL = {
   NO_AGENT: "Not run: this conversation is no coding agent's.",
   NO_REPOSITORY: "Not run: the agent works in no repository.",
   UNKNOWN_PROVIDER: "Not run: the agent's model is outside the providers Luke runs agents on.",
-  NO_PROVIDER_KEY: "Not run: this deployment holds no key for the agent's model provider.",
+  NO_PROVIDER_KEY: "Not run: the account saved no API key for the agent's model provider.",
   NO_FAST_VERSION:
     "Not run: Luke cannot run the fast version of the agent's model at its provider. Choose the model with Fast off.",
   /** No step is refused this way since Fast runs on an account's own key; kept for the turns that were refused so before, which still read as this. */

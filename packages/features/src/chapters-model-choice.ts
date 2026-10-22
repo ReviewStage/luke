@@ -7,9 +7,10 @@ import { Schema } from "effect";
  * Each member picks it in Settings › Coding agents, and a Generate reads the
  * choice of the member who pressed it. The chapters stay the workspace's,
  * and the row they land in names the model that told them. Every choice
- * runs on Luke's own Anthropic key and outside the account's usage, so the
- * set is Claude's alone, at Anthropic's own ids (the ones an agent's title
- * model and the catalog's provider ids use). A stored value outside the set,
+ * runs on the member's own API key, OpenAI's model of the same tier standing
+ * in where they saved only an OpenAI key, and the set is Claude's alone, at
+ * Anthropic's own ids (the ones an agent's title model and the catalog's
+ * provider ids use). A stored value outside the set,
  * one a later build dropped or a row never written, reads as Haiku.
  */
 

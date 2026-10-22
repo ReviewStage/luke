@@ -103,6 +103,7 @@ import { DRAW_ON_BOARD_STATUS } from "../../tasks/board-tool.js";
 import { PICTURE_LOOK_STATUS } from "../../tasks/picture-look.js";
 import { saveNotes } from "../../tasks/plan-notes.js";
 import { shownCodeOf } from "../../tasks/show-code.js";
+import { connectAgentApiKeys } from "../../testing/agent-credentials.js";
 import { stampedEveEvent } from "../../testing/eve-events.js";
 import { githubReaching, openGithubUser } from "../../testing/github-app-fake.js";
 import { sandboxDouble } from "../../testing/repository-sandbox.js";
@@ -209,7 +210,7 @@ const hostOverStore = (titleModel?: LanguageModel, now: () => number = () => NOW
       eveOrigin: () => undefined,
       keys: () => Effect.succeed(KEYS),
       fastRefused: async () => undefined,
-      titleModel: () => titleModel,
+      titleModel: () => Effect.succeed(titleModel),
       scriptedModel: () => false,
       now,
     };
@@ -831,7 +832,8 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
     "a transcript's live statements move at every write a page past the reader's cursor says something of, the agent's own and a worker's alike, and hold nothing for an account outside the agent's workspace, nor for a member once removed",
     () =>
       Effect.gen(function* () {
-        const host = yield* hostOverStore();
+        // A title model that names nothing, so the agent ends untitled and a read may hold on its title.
+        const host = yield* hostOverStore(scriptedTitleModel([]).model);
         const { userId, agent, target, auth, sessionId, admitted } = yield* openAgent(host);
         const state = memoryRelayState();
         const prompt = yield* composedPrompt(host, admitted, agent);
@@ -1222,21 +1224,24 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
   );
 
   it.effect(
-    "a worker asked for on a fast version is refused as no model Luke offers where Anthropic never granted the key's organization fast mode, and recorded on it where Anthropic did",
+    "a worker asked for on a fast version is refused as no model Luke offers where Anthropic never granted the organization of the account's own key fast mode, and recorded on it where Anthropic did",
     () =>
       Effect.gen(function* () {
         const host = yield* hostOverStore();
-        const { admitted } = yield* openAgent(host);
+        const notGranted = yield* openAgent(host);
+        yield* connectAgentApiKeys(notGranted.userId, { anthropicFast: FAST_ACCESS.NOT_ENABLED });
+        const granted = yield* openAgent(host);
+        yield* connectAgentApiKeys(granted.userId, { anthropicFast: FAST_ACCESS.ENABLED });
         const fast: OfferedModel = { ...OPUS, id: "anthropic/claude-opus-5.5-fast" };
-        const catalog = [...CATALOG, fast];
+        const catalog = modelCatalogOf([...CATALOG, fast]);
         const asked = { model: fast.id };
 
         const refused = yield* host
-          .delegate(admitted, "call-fast-refused", asked)
-          .pipe(Effect.provide(modelCatalogOf(catalog, FAST_ACCESS.NOT_ENABLED)));
+          .delegate(notGranted.admitted, "call-fast-refused", asked)
+          .pipe(Effect.provide(catalog));
         const accepted = yield* host
-          .delegate(admitted, "call-fast-accepted", asked)
-          .pipe(Effect.provide(modelCatalogOf(catalog, FAST_ACCESS.ENABLED)));
+          .delegate(granted.admitted, "call-fast-accepted", asked)
+          .pipe(Effect.provide(catalog));
 
         assert.ok(Result.isFailure(refused));
         assert.match(refused.failure, /is no model Luke offers/u);
@@ -1831,7 +1836,8 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
     "a chat notice steered into an agent is taken into the turn that received it as the chat's line, and the agent's title is named from the developer's words alone",
     () =>
       Effect.gen(function* () {
-        const host = yield* hostOverStore();
+        // A title model that names nothing as the turns relay, so the agent is still untitled when it is asked below.
+        const host = yield* hostOverStore(scriptedTitleModel([]).model);
         const { userId, agent, target, auth, sessionId, admitted } = yield* openAgent(host);
         const state = memoryRelayState();
         const prompt = yield* composedPrompt(host, admitted, agent);

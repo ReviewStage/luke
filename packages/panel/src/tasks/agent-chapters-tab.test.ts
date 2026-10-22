@@ -736,7 +736,10 @@ test("a generation that failed says why with Retry, chapters someone else is mak
         Promise.resolve(answering({ status: PULL_REQUEST_CHAPTERS_STATE.NONE }, false)),
     }),
   );
-  assert.match(unavailable.textContent ?? "", /Chapters aren't available on this deployment\./u);
+  assert.match(
+    unavailable.textContent ?? "",
+    /Save an API key in Settings › Agents to generate chapters\./u,
+  );
   assert.equal(
     [...unavailable.querySelectorAll("button")].some(
       (each) => each.textContent === "Generate chapters",

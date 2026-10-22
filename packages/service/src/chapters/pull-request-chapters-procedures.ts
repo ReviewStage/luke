@@ -19,10 +19,13 @@
  * head as stale. The Generate (`POST /api/agents/{id}/chapters`) reads the
  * pull request's files, title, description, and commit messages, claims the
  * generation for its head, and tells the chapters in one model call on
- * Luke's own key (`chapters-generator.ts`), on the Claude model the member
- * who pressed it chose in Settings (Haiku where they never chose, or where
- * what they stored is no model this build offers), then answers as the read
- * does. A claim another request holds answers as generating, without reading the
+ * the API key the member who pressed it saved, never Luke's
+ * (`chapters-generator.ts`), on the Claude model they chose in Settings
+ * (Haiku where they never chose, or where what they stored is no model this
+ * build offers), or OpenAI's of its tier where they saved only an OpenAI
+ * key, then answers as the read does. A member who saved no API key, as one
+ * on a subscription alone, is answered `generatable: false` and their
+ * Generate is refused as unavailable. A claim another request holds answers as generating, without reading the
  * diff or asking the model; a head pushed while the diff is read is answered
  * as it now stands rather than told under the head it no longer is, since
  * GitHub serves a pull request's files by its number, not its head; a generation that fails lands its kind on the row, and any other
@@ -55,6 +58,7 @@ import {
   type PullRequestChaptersFailure,
 } from "@luke/database/pull-request-chapters-vocabulary";
 import { CHAPTERS_MODEL_DEFAULT, type ChaptersModelId } from "@luke/features/chapters-model-choice";
+import { MODEL_PROVIDER } from "@luke/features/models-wire";
 import { chapterSchema } from "@luke/features/pull-request-chapters";
 import {
   PULL_REQUEST_CHAPTERS_STATE,
@@ -65,6 +69,8 @@ import { Cause, Clock, Effect, Option, type Redacted, Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import { reachedAgentById } from "../agents/agent-reach.js";
 import { askedPullRequest, pullRequestNumberOf } from "../agents/asked-pull-request.js";
+import { ownKeyOf } from "../agents/coder-host/account-keys.js";
+import type { OwnKey } from "../agents/coder-host/model.js";
 import {
   agentPullRequestReach,
   instancePublishedCache,
@@ -103,11 +109,8 @@ import {
 
 export interface PullRequestChaptersProcedureSeams extends PublishedReach {
   resolveUserId: UserIdResolver;
-  /** The model chapters are told on, the one named, from the deployment's own Anthropic key; none where it holds none. A test hands in a scripted one. */
-  chaptersModel?: (
-    anthropicKey: Redacted.Redacted | undefined,
-    modelId: ChaptersModelId,
-  ) => ChaptersModel | undefined;
+  /** The model chapters are told on, the one named, on the member's own key. A test hands in a scripted one. */
+  chaptersModel?: (own: OwnKey, modelId: ChaptersModelId) => ChaptersModel;
 }
 
 /** The stored chapters as their wire schema decodes them. */
@@ -256,11 +259,18 @@ const generatingNow = /* @__PURE__ */ Effect.fnUntraced(function* (subject: Chap
   );
 });
 
-/** The model named, as this deployment tells chapters on it, or none where it holds no key for one. */
-const modelOf = (seams: PullRequestChaptersProcedureSeams, modelId: ChaptersModelId) =>
+/** The model named, on the member's own API key, Anthropic's first, or none where they saved none. */
+const modelOf = (
+  seams: PullRequestChaptersProcedureSeams,
+  userId: string,
+  modelId: ChaptersModelId,
+) =>
   Effect.gen(function* () {
     const environment = yield* HostedEnvironment;
-    return (seams.chaptersModel ?? chaptersModelOf)(environment.anthropicKey, modelId);
+    const own = yield* hostedStoreOrUnavailable(
+      ownKeyOf(userId, MODEL_PROVIDER.ANTHROPIC, environment.providerKeyEncryptionKeys),
+    );
+    return own === undefined ? undefined : (seams.chaptersModel ?? chaptersModelOf)(own, modelId);
   });
 
 /** The model the member chose in Settings, Haiku where they never chose (the store reads one no build offers as Haiku too). */
@@ -384,15 +394,15 @@ export function pullRequestChaptersProcedures(seams: PullRequestChaptersProcedur
       const agent = yield* reachedAgent(context.userId, input.id);
       const subject = yield* subjectOf(published, context.userId, agent, input.number);
       if (Option.isNone(subject)) return { pullRequest: null };
-      // Whether the deployment can generate at all, which no member's choice changes.
-      const model = yield* modelOf(seams, CHAPTERS_MODEL_DEFAULT);
+      // Whether the reader can generate at all, on a key of their own, which their choice of model never changes.
+      const model = yield* modelOf(seams, context.userId, CHAPTERS_MODEL_DEFAULT);
       return yield* answerOf(subject.value, model !== undefined);
     }),
 
     generate: signedIn.generate.effect(function* ({ input, context }) {
       const agent = yield* reachedAgent(context.userId, input.params.id);
       // The model is the presser's own choice, while the chapters it tells are the workspace's.
-      const model = yield* modelOf(seams, yield* chosenModelOf(context.userId));
+      const model = yield* modelOf(seams, context.userId, yield* chosenModelOf(context.userId));
       if (model === undefined) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
       const subject = yield* subjectOf(published, context.userId, agent, input.query?.number);
       if (Option.isNone(subject)) return { pullRequest: null };

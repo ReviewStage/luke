@@ -16,6 +16,7 @@ import { getTestDB, joinWorkspace, startTask } from "@luke/database/testing";
 import { HOSTED_API_ERROR } from "@luke/features";
 import { CHAPTERS_MODEL } from "@luke/features/chapters-model-choice";
 import { CODING_AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@luke/features/models-wire";
+import { PROVIDER_KEY_PROVIDER, type ProviderKeyProvider } from "@luke/features/provider-key-wire";
 import { CHAPTER_KIND, CHAPTER_RISK } from "@luke/features/pull-request-chapters";
 import {
   PULL_REQUEST_CHAPTERS_FAILURE_KIND,
@@ -36,6 +37,7 @@ import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import { hostedFetch } from "../orpc/handler.js";
 import { modelCatalogOf, type OfferedModel } from "../providers/model-catalog.js";
 import type { WebServices } from "../runtime.js";
+import { AGENT_KEY_RING, connectAgentApiKeys } from "../testing/agent-credentials.js";
 import {
   connectWorkspaceGitHub,
   githubReaching,
@@ -43,7 +45,7 @@ import {
   openGithubUser,
   type RepositoryScript,
 } from "../testing/github-app-fake.js";
-import type { ChaptersModel } from "./chapters-generator.js";
+import { type ChaptersModel, chaptersModelOf } from "./chapters-generator.js";
 import { pullRequestChaptersProcedures } from "./pull-request-chapters-procedures.js";
 
 /**
@@ -101,7 +103,7 @@ const ENVIRONMENT: HostedEnvironmentValues = {
   cronSecret: undefined,
   eveDeploymentSecret: undefined,
   githubWebhookSecret: undefined,
-  providerKeyEncryptionKeys: undefined,
+  providerKeyEncryptionKeys: AGENT_KEY_RING,
 };
 
 /** The one file the pull request changes, one hunk starting at old line 1. */
@@ -200,13 +202,14 @@ interface Answer {
 /**
  * An owner's agent on a task of the repository, a teammate in its workspace
  * and a stranger outside it, and the chapters procedures over the test's own
- * database, GitHub, and model, on a deployment holding a model key unless
- * told otherwise.
+ * database, GitHub, and model, the owner and the teammate each holding API
+ * keys of their own, Anthropic's and OpenAI's unless told which, or none.
  */
 const standing = (
   options: {
     readonly refuses?: boolean;
-    readonly keyless?: boolean;
+    /** The providers the owner and the teammate saved an API key for; both where none are named, and none at all for an account on a subscription alone. */
+    readonly keys?: readonly ProviderKeyProvider[];
     /** A head pushed while the files are read, as a developer pushing mid-Generate would. */
     readonly pushedDuringFiles?: string;
   } = {},
@@ -217,6 +220,12 @@ const standing = (
     const stranger = yield* openGithubUser();
     const task = yield* startTask(owner, { name: "Invitations", repository: RELAY_FULL_NAME });
     yield* joinWorkspace(task.workspaceId, teammate);
+    for (const member of [owner, teammate]) {
+      yield* connectAgentApiKeys(
+        member,
+        options.keys === undefined ? {} : { providers: options.keys },
+      );
+    }
     const installation = INSTALLATIONS[installationsConnected++];
     assert.ok(installation !== undefined, "the suite ran out of installations");
     yield* connectWorkspaceGitHub(task.workspaceId, installation);
@@ -273,9 +282,11 @@ const standing = (
             },
             () => Effect.succeed(Option.none()),
           ),
-        // The scripted model answers under the id it was asked for, as the store then names it.
-        chaptersModel: (_key, modelId) =>
-          options.keyless ? undefined : { ...model.chaptersModel, id: modelId },
+        // The scripted model answers under the provider's id production would reach on the member's key, as the store then names it.
+        chaptersModel: (own, modelId) => ({
+          ...model.chaptersModel,
+          id: chaptersModelOf(own, modelId).id,
+        }),
       }),
     });
     const ask = (
@@ -366,7 +377,7 @@ it.layer(getTestDB())("a pull request's chapters", (it) => {
   );
 
   it.effect(
-    "a read before any Generate answers the pull request's head and no chapters, and whether the deployment can generate them",
+    "a read before any Generate answers the pull request's head and no chapters, and whether the reader can generate them: not where they saved no API key, since Luke's own key tells no chapters",
     () =>
       Effect.gen(function* () {
         const { owner, ask } = yield* standing();
@@ -378,7 +389,7 @@ it.layer(getTestDB())("a pull request's chapters", (it) => {
             chapters: { status: PULL_REQUEST_CHAPTERS_STATE.NONE },
           },
         });
-        const keyless = yield* standing({ keyless: true });
+        const keyless = yield* standing({ keys: [] });
         const read = chaptersOf(yield* keyless.ask(keyless.owner, { number: NUMBER }));
         assert.equal(read.pullRequest?.generatable, false);
       }),
@@ -501,10 +512,10 @@ it.layer(getTestDB())("a pull request's chapters", (it) => {
   );
 
   it.effect(
-    "a Generate on a deployment with no model key is refused as unavailable, and a body that names a key is refused as invalid",
+    "a Generate by a member who saved no API key is refused as unavailable, and a body that names a key is refused as invalid",
     () =>
       Effect.gen(function* () {
-        const keyless = yield* standing({ keyless: true });
+        const keyless = yield* standing({ keys: [] });
         assert.deepEqual(
           yield* keyless.ask(keyless.owner, { method: "POST", number: NUMBER }),
           refused(HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE, HOSTED_API_ERROR.UNAVAILABLE),
@@ -549,6 +560,21 @@ it.layer(getTestDB())("a pull request's chapters", (it) => {
         assert.equal("model" in chapters ? chapters.model : undefined, CHAPTERS_MODEL.OPUS);
         // The chapters stay the workspace's: the owner reads the ones the teammate's model told.
         assert.deepEqual(chaptersOf(yield* ask(owner, { number: NUMBER })), answer);
+      }),
+  );
+
+  it.effect(
+    "a Generate by a member who saved only an OpenAI key runs on OpenAI's model of the tier they chose, and the chapters name it",
+    () =>
+      Effect.gen(function* () {
+        const { owner, ask } = yield* standing({ keys: [PROVIDER_KEY_PROVIDER.OPENAI] });
+        yield* writeAccountPreferences(owner, { chaptersModel: CHAPTERS_MODEL.SONNET });
+        const read = chaptersOf(yield* ask(owner, { number: NUMBER }));
+        assert.equal(read.pullRequest?.generatable, true);
+        const answer = chaptersOf(yield* ask(owner, { method: "POST", number: NUMBER }));
+        const chapters = answer.pullRequest?.chapters;
+        assert.equal(chapters?.status, PULL_REQUEST_CHAPTERS_STATE.READY);
+        assert.equal("model" in chapters ? chapters.model : undefined, "gpt-6.1-sol");
       }),
   );
 

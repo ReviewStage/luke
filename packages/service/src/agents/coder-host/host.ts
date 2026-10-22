@@ -1104,8 +1104,10 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
 
     delegationTitle: (admitted, callId, task) =>
       Effect.gen(function* () {
-        const model = seams.titleModel(admitted.target.userId);
-        if (model === undefined) return;
+        const found = yield* agentOf(admitted);
+        const chosen = Result.isSuccess(found) ? found.success.model : undefined;
+        // No model, as for an account that saved no API key, titles the worker from its task's first words.
+        const model = yield* seams.titleModel(admitted.target.userId, chosen);
         // A call no delegation was recorded for opened no child, so the fill finds no row to write.
         const childId = childConversationId(admitted.target.conversationId, callId);
         yield* titleSubagent(model, admitted.target, childId, task);
@@ -1149,11 +1151,13 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
         if (agent.taskId !== null && endsTurn(event)) {
           yield* settleTaskIfFinished(admitted.target.userId, agent.taskId);
         }
-        const titleModel = seams.titleModel(admitted.target.userId);
-        if (titleModel === undefined || !asksTitle(event)) return;
+        if (agent.title !== null || !asksTitle(event)) return;
         // Note that the title is awaited here rather than forked, because eve's step, and the
         // function instance under it, end when the hook returns and take a detached call with them.
-        yield* titleCodingAgent(titleModel, admitted.target, agent).pipe(
+        // No model, as for an account that saved no API key, titles the agent from its opening's first words.
+        yield* Effect.flatMap(seams.titleModel(admitted.target.userId, agent.model), (titleModel) =>
+          titleCodingAgent(titleModel, admitted.target, agent),
+        ).pipe(
           Effect.catch((failure) =>
             Effect.logWarning(`The agent's title was not written: ${failure._tag}`),
           ),
