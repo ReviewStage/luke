@@ -22,7 +22,8 @@ import { TASK_ORDER, taskTime } from "./task-list-model.js";
  * groups them (the Board's columns), how each group orders them, whether a
  * group with no task still stands, which of the settled, Done and Canceled,
  * stand beside the open work (none, those finished in the past week or
- * month, or all, as Linear's "completed issues" option reads), whether the pins and the account's sections
+ * month, or all, as Linear's "completed issues" option reads, though a
+ * settled status the filter names stands in full), whether the pins and the account's sections
  * lead the List, and which of a task's properties its row or card draws.
  * The List and the Board each keep a display of their own, because a board
  * wants every column in sight and the finished work in its last one, where a
@@ -414,10 +415,18 @@ interface StandingTasks {
   readonly older: readonly TaskSummary[];
 }
 
+/** Whether the filter names a status itself, so the completed window holds none of its tasks back. */
+function namedByFilter(filter: TasksFilter, status: TaskStatus): boolean {
+  return filterValues(filter, TASKS_FILTER_FIELD.STATUS).includes(status);
+}
+
 /**
- * The tasks that stand: those in the filter, every open one and the settled
- * the completed window keeps; and beside them the settled it leaves out as
- * older, none where it keeps no settled task at all.
+ * The tasks that stand: those in the filter, every open one, every settled
+ * one of a status the filter names, and the other settled the completed
+ * window keeps; and beside them the settled it leaves out as older, none
+ * where it keeps no settled task at all. A Status filter of Done is asked
+ * for its Done tasks, so the window, which keeps finished work out of the
+ * way of the open, never empties it.
  */
 function standingTasks(
   tasks: readonly TaskSummary[],
@@ -429,7 +438,12 @@ function standingTasks(
   const older: TaskSummary[] = [];
   for (const task of tasks) {
     if (!inFilter(task, filter)) continue;
-    if (!isSettled(statusOf(task)) || inWindow(display.completed, finishedAt(task), now)) {
+    const status = statusOf(task);
+    if (
+      !isSettled(status) ||
+      namedByFilter(filter, status) ||
+      inWindow(display.completed, finishedAt(task), now)
+    ) {
       standing.push(task);
     } else if (display.completed !== COMPLETED_WINDOW.NONE) {
       older.push(task);
@@ -493,7 +507,10 @@ function groupingRule(grouping: TasksGrouping, context: GroupingContext): Groupi
       const statuses = finiteValues(
         statusOrder,
         filterValues(filter, TASKS_FILTER_FIELD.STATUS),
-        (status) => !isSettled(status) || display.completed !== COMPLETED_WINDOW.NONE,
+        (status) =>
+          !isSettled(status) ||
+          namedByFilter(filter, status) ||
+          display.completed !== COMPLETED_WINDOW.NONE,
       );
       return {
         keyOf: statusOf,
