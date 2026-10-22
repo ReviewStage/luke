@@ -370,7 +370,9 @@ body,
 
 .sidebar-section-body {
   display: flex;
-  min-height: 100%;
+  /* At least the column, and as tall as its list motion holds it while a row
+     leaves near the scroller's end (`ListMotion`). */
+  min-height: max(100%, var(--luke-list-held-height, 0px));
   flex-direction: column;
   padding: var(--luke-focus-ring-reach);
 }

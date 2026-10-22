@@ -277,3 +277,28 @@ test("a list whose rows scale rather than slide scales a leaving row out where i
     ],
   ]);
 });
+
+test("a row leaving a list scrolled down holds the root as tall as its scroller shows it, through the property the root's minimum reads", () => {
+  const show = draw([["A", "B", "C"]]);
+  const box = document.querySelector<HTMLElement>("[data-motion-root]");
+  const scroller = box?.parentElement;
+  if (box === null || box === undefined || scroller === null || scroller === undefined) {
+    throw new Error("the root and its scroller are drawn");
+  }
+  // Note that jsdom lays nothing out, so the scroller's place and the root's are given.
+  scroller.style.overflowY = "auto";
+  Object.defineProperty(scroller, "scrollTop", { configurable: true, value: 80 });
+  Object.defineProperty(box, "offsetHeight", { configurable: true, value: 300 });
+  Object.defineProperty(scroller, "getBoundingClientRect", {
+    configurable: true,
+    value: () => new DOMRect(0, 0, 200, 120),
+  });
+  Object.defineProperty(box, "getBoundingClientRect", {
+    configurable: true,
+    value: () => new DOMRect(0, -80, 200, 300),
+  });
+
+  show([["A", "B"]]);
+
+  expect(box.style.getPropertyValue("--luke-list-held-height")).toBe("200px");
+});
