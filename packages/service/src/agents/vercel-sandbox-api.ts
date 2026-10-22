@@ -833,7 +833,7 @@ export function vercelSandboxApi(
           const url = apiUrl("", asked.teamId, {
             project: asked.projectId,
             limit: String(SANDBOX_API.PAGE),
-            // Note that the API takes a status filter only under a sort by creation.
+            // Note that the API takes a status filter only under a sort by creation, and `sortOrder` is `asc` or `desc`, `desc` where left out; its cursor is opaque, the `pagination.next` of the page before (https://vercel.com/docs/rest-api/sandboxes/list-sandboxes).
             sortBy: "createdAt",
             sortOrder: order,
             status: RUNNING_STATUS,
