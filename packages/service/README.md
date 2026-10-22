@@ -1495,7 +1495,13 @@ conversation, or whose session eve answers is still coming up past the
 client's twenty-second loop, is `agent-not-ready` (409, tried again); a
 session eve no longer runs is `agent-retired` (409), since the agent's
 sandbox lives with its session; any other answer is `unavailable`, and none
-of them leaves a row behind.
+of them leaves a row behind. The send waits for the conversation's lock five
+seconds at most (`lock_timeout`, set for that wait alone): a lock another
+write holds longer is `unavailable` too, with eve told nothing, and a wait of
+a second or more is logged by the conversation's id. The client asks under a
+deadline (`HOSTED_DEADLINE.STEER`, 45 seconds) that outlasts that wait and
+eve's thirty-second hand-over, so a send that lands slowly is not shown as
+unanswered.
 `GET /api/agents/{id}/subagents/{callId}/messages?after=` reads a worker's
 transcript the same way, under the agent and eve's id for the `delegate`
 call that started it, which the call's tool part carries as `toolCallId`:
