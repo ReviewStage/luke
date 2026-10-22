@@ -89,6 +89,8 @@ interface PullRequestFixture {
   state: "open" | "closed";
   merged: boolean;
   conclusion: string;
+  /** Whether the base's merge queue holds it, as GitHub's GraphQL API answers; held by none where absent. */
+  queued?: boolean;
 }
 
 /** The repository's pull request from the agent's branch, read by number or by its head, with its head's one check run. */
@@ -111,6 +113,10 @@ function relayRepository(pull: PullRequestFixture, ref: string) {
     // eve's coding-agent service, which a wake reaches over the same client, takes every follow-up.
     if (url.origin === EVE_ORIGIN) {
       return Response.json({ sessionId: "wrun_eve", deliveryId: "delivery-1" }, { status: 202 });
+    }
+    if (url.pathname === "/graphql" && sent.method === "POST") {
+      const mergeQueueEntry = pull.queued === true ? { position: 1 } : null;
+      return Response.json({ data: { repository: { pullRequest: { mergeQueueEntry } } } });
     }
     if (!url.pathname.startsWith(base)) return undefined;
     const path = url.pathname.slice(base.length);
@@ -288,6 +294,38 @@ it.layer(getTestDB())("the GitHub App's webhook", (it) => {
           yield* answer(github, SECRET, new Request(new URL(WEBHOOK, ORIGIN))),
           refusal(HOSTED_HTTP_STATUS.METHOD_NOT_ALLOWED, HOSTED_API_ERROR.METHOD_NOT_ALLOWED),
         );
+      }),
+  );
+
+  it.effect(
+    "a pull request entering and leaving the merge queue is read again onto the agent's row, which keeps it queued while GitHub holds it there",
+    () =>
+      Effect.gen(function* () {
+        const pull: PullRequestFixture = { state: "open", merged: false, conclusion: "success" };
+        const { github, kept, ref } = yield* openAgent(pull);
+        const deliver = (action: string) =>
+          Effect.map(
+            answer(github, SECRET, delivery("pull_request", pullRequestDelivery(action, ref))),
+            (got) => got.body,
+          );
+
+        yield* deliver("opened");
+        const opened = yield* kept();
+        pull.queued = true;
+        const enqueued = yield* deliver("enqueued");
+        const inQueue = yield* kept();
+        pull.queued = false;
+        const dequeued = yield* deliver("dequeued");
+        const left = yield* kept();
+
+        assert.equal(opened?.queued, undefined);
+        assert.deepEqual(
+          [enqueued, dequeued],
+          [1, 1].map((read) => ({ read, queued: 0, told: 0 })),
+        );
+        assert.equal(inQueue?.state, "open");
+        assert.equal(inQueue?.queued, true);
+        assert.equal(left?.queued, undefined);
       }),
   );
 

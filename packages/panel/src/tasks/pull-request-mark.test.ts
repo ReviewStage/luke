@@ -133,3 +133,24 @@ test("a pull request's mark wears the colour of where it stands whatever its che
     }
   }
 });
+
+test("an open pull request the merge queue holds is drawn queued wherever it is drawn, as its pill says it", () => {
+  const drawn = places({
+    ...pullRequest(PULL_REQUEST_STATE.OPEN, CHECK_SUMMARY.PASSING),
+    queued: true,
+  });
+  for (const [place, element] of drawn) {
+    assert.equal(markOf(element), "Pull request #42, queued", place);
+    assert.ok(lookOf(markElementOf(element))?.includes("data-pull-request-state=queued"), place);
+  }
+});
+
+test("a pull request no longer open is drawn where it stands, whatever the queue last said of it", () => {
+  const drawn = places({
+    ...pullRequest(PULL_REQUEST_STATE.MERGED, CHECK_SUMMARY.PASSING),
+    queued: true,
+  });
+  for (const [place, element] of drawn) {
+    assert.equal(markOf(element), "Pull request #42, merged", place);
+  }
+});
