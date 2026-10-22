@@ -14,8 +14,8 @@ import { diffView } from "./index.js";
 
 /**
  * whole-file.test.ts -- a whole file drawn by the diff bundle with no diff,
- * as a File tab draws one (`mountFile`), and a patch drawn alone with notes
- * under its lines (`mount`): Pierre draws them in jsdom on the window's own
+ * as a File tab draws one (`mountFile`), a patch drawn alone with notes
+ * under its lines (`mount`), and a list's notes (`mountList`): Pierre draws them in jsdom on the window's own
  * thread, since no worker text was built in, and the tests read what it drew
  * in the shadow root and what the view's own elements hold.
  */
@@ -213,4 +213,35 @@ test("a patch drawn alone draws each note in the view's own element under its li
   mounted.push(handle);
   await nextFrame();
   assert.equal(kept.get("t1")?.parentElement?.getAttribute("slot"), "annotation-additions-11");
+});
+
+test("a list draws each file's notes in the view's own element for that file and note", async () => {
+  const host = document.createElement("div");
+  document.body.append(host);
+  const asked: Array<{ path: string; key: string }> = [];
+  const patch =
+    "--- a/src/seats.ts\n+++ b/src/seats.ts\n@@ -10,2 +10,2 @@\n const kept = 1;\n-const gone = 2;\n+const come = 2;\n";
+  const handle = diffView.mountList(host, {
+    files: [
+      {
+        path: "src/seats.ts",
+        patch,
+        collapsed: false,
+        annotations: [{ key: "t1", side: "additions", line: 11 }],
+        lead: false,
+        expandable: false,
+      },
+    ],
+    look: LOOK,
+    renderHeader: () => document.createElement("div"),
+    renderAnnotation: (path, key) => {
+      asked.push({ path, key });
+      return noteElement(key);
+    },
+    onTopFile: () => undefined,
+  });
+  mounted.push(handle);
+  await nextFrame();
+  await nextFrame();
+  assert.deepEqual(asked.at(-1), { path: "src/seats.ts", key: "t1" });
 });

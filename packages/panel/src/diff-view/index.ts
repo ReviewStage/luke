@@ -774,8 +774,12 @@ function listOptions(
       _drawn: FileDiffMetadata | FileContents,
       context: { item: { id: string } },
     ) => latest().renderHeader(context.item.id),
-    renderAnnotation: (note: { metadata: string }, context: { item: { id: string } }) =>
-      latest().renderAnnotation(context.item.id, note.metadata),
+    // Note that Pierre hands the file drawn before the item it stands in, as it does a header.
+    renderAnnotation: (
+      note: { metadata: string },
+      _drawn: FileDiffMetadata | FileContents,
+      context: { item: { id: string } },
+    ) => latest().renderAnnotation(context.item.id, note.metadata),
     onPostRender: (
       node: HTMLElement,
       instance: PierreFileDiff<string, undefined> | PierreFile<string, undefined>,
