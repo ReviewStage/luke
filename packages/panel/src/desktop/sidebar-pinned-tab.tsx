@@ -1,4 +1,4 @@
-import { useAtomValue } from "@effect/atom-react";
+import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import type { CodingAgentPullRequest } from "@luke/features/coding-agent-wire";
 import type { TaskAgentLine, TaskSummary } from "@luke/features/task-wire";
 import { ACT_KIND } from "@luke/host/acts";
@@ -27,7 +27,7 @@ import { Duration, Effect } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as Atom from "effect/reactivity/Atom";
 import { ScrollTextIcon } from "lucide-react";
-import { useCallback, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { askAct } from "../act.js";
 import { rendererRuntime } from "../renderer-runtime.js";
 import { PlanGlyph, TAB_KIND, type TabSubject, tabLook } from "../tasks/tab-look.js";
@@ -202,27 +202,39 @@ const PIN_PULL_REQUEST_KEPT = Duration.seconds(30);
  * `PIN_PULL_REQUEST_KEPT` after. Note that it is the pin's own, apart from
  * the open task's pull requests (`useTaskPullRequests`), so a pin's card
  * landing an answer redraws the card alone, never the task's control and
- * the sidebar with it. A read the service refused, or did not answer, is no
- * pull request.
+ * the sidebar with it. A read the service refused, or did not answer, is
+ * kept as the failure it is, which the next card asks again over
+ * (`PinPullRequest`), so a pull request is never hidden for the read's
+ * lifetime by a read that failed.
  */
 const pinPullRequestAtom = Atom.family((agentId: string) =>
   Atom.setIdleTTL(
     rendererRuntime.atom(
-      Effect.promise(() =>
-        askAct(ACT_KIND.CODING_AGENTS_PULL_REQUEST, { agentId }).then(
-          (answer): CodingAgentPullRequest | undefined =>
-            "failure" in answer ? undefined : (answer.pullRequest ?? undefined),
-          () => undefined,
-        ),
+      Effect.flatMap(
+        Effect.tryPromise(() => askAct(ACT_KIND.CODING_AGENTS_PULL_REQUEST, { agentId })),
+        (answer) =>
+          "failure" in answer
+            ? Effect.fail(answer.failure)
+            : Effect.succeed<CodingAgentPullRequest | undefined>(answer.pullRequest ?? undefined),
       ),
     ),
     PIN_PULL_REQUEST_KEPT,
   ),
 );
 
-/** The pull request of `agentId`, once its read has landed; nothing before, or where the agent opened none. */
+/**
+ * The pull request of `agentId`, once its read has landed; nothing before,
+ * where it failed, or where the agent opened none. A card that finds a
+ * failed read standing as it mounts asks again, once.
+ */
 function PinPullRequest({ agentId }: { agentId: string }): React.JSX.Element | null {
-  const read = useAtomValue(pinPullRequestAtom(agentId));
+  const atom = pinPullRequestAtom(agentId);
+  const read = useAtomValue(atom);
+  const retry = useAtomRefresh(atom);
+  const failedAtMount = useRef(AsyncResult.isFailure(read));
+  useEffect(() => {
+    if (failedAtMount.current) retry();
+  }, [retry]);
   const pullRequest = AsyncResult.isSuccess(read) ? read.value : undefined;
   return pullRequest === undefined ? null : (
     <>

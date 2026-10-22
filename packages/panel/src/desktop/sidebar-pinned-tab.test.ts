@@ -20,7 +20,8 @@ import { SidebarPinnedTab } from "./sidebar-pinned-tab.js";
  * sidebar-pinned-tab.test.ts -- an agent's pin in the sidebar reads the pull
  * request its agent opened only once its card shows: a pointer crossing the
  * row asks the service nothing, and a card hung again soon after shows what
- * the first read without asking again. The service is a script at the act
+ * the first read without asking again, while one hung after a read that
+ * failed asks again. The service is a script at the act
  * boundary; synthetic ids throughout.
  */
 
@@ -39,14 +40,21 @@ const PIN: PinnedTab = { task: TASK.id, tab: { agent: AGENT }, label: "Expiry jo
 
 /** Each pull request read the service was asked, by agent. */
 let reads: string[] = [];
+/** How many pull request reads the service refuses before it answers. */
+let refusing = 0;
 let root: Root | undefined;
 
 beforeEach(() => {
   reads = [];
+  refusing = 0;
   fakeActs({
     act: (request: AnyAct): Promise<FakeActAnswer> => {
       if (request.kind === ACT_KIND.CODING_AGENTS_PULL_REQUEST) {
         reads.push(request.payload.agentId);
+        if (refusing > 0) {
+          refusing -= 1;
+          return Promise.resolve({ status: FAKE_ANSWER.REFUSED, reason: "Unreachable." });
+        }
         const pullRequest = {
           number: 42,
           title: "Expire invitations",
@@ -149,4 +157,23 @@ test("a pinned agent's card reads its pull request as it shows, and hung again s
   await settled();
   assert.match(card()?.textContent ?? "", /Expire invitations/u);
   assert.deepEqual(reads, [AGENT], "one read for both cards");
+});
+
+test("a pinned agent's card hung again after its read failed asks again, and shows the pull request the service now answers", async () => {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "performance"] });
+  refusing = 1;
+  const press = drawPin();
+  restOn(press);
+  await settled();
+  assert.ok(card() !== null, "the card stands");
+  assert.doesNotMatch(card()?.textContent ?? "", /Expire invitations/u);
+
+  leave(press);
+  act(() => {
+    vi.advanceTimersByTime(2 * MOTION_DELAY_MS.HINT);
+  });
+  restOn(press);
+  await settled();
+  assert.deepEqual(reads, [AGENT, AGENT]);
+  assert.match(card()?.textContent ?? "", /Expire invitations/u);
 });
