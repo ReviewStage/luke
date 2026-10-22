@@ -615,3 +615,145 @@ test("the tasks' channels stand as the sidebar groups their tasks: pinned in the
     [["Tasks", 4]],
   );
 });
+
+/** A number written in three digits, so names sort as their numbers do. */
+const three = (at: number) => String(at).padStart(3, "0");
+
+/**
+ * A workspace's chat at the size the service holds one at: 400 people, 100
+ * agents on 50 tasks, 60 topics named out of order, 10 archived, 50 tasks'
+ * channels, and 120 direct messages, each holding a message or a few, some
+ * past the reader's cursor of 1000.
+ */
+function crowdedChat() {
+  const people = Array.from({ length: 400 }, (_, at) => ({
+    id: `person-${three(at)}`,
+    kind: MEMBER_KIND.HUMAN,
+    name: `Person ${three(at)}`,
+    userId: `user-${three(at)}`,
+    // Every tenth person has left the workspace.
+    left: at % 10 === 9,
+  }));
+  const agents = Array.from({ length: 100 }, (_, at) => ({
+    id: `agent-member-${three(at)}`,
+    kind: MEMBER_KIND.AGENT,
+    name: `Agent ${three(at)}`,
+    agentId: `agent-${three(at)}`,
+    planId: `task-${three(at % 50)}`,
+    left: false,
+  }));
+  // Note that the topics are listed in a scrambled order, so the rail's order is its own sort.
+  const topics: ChatChannel[] = Array.from({ length: 70 }, (_, at) => {
+    const named = (at * 37) % 70;
+    return {
+      id: `topic-${three(named)}`,
+      kind: CHANNEL_KIND.TOPIC,
+      name: `topic-${three(named)}`,
+      archived: named >= 60,
+    };
+  });
+  const tasks: ChatChannel[] = Array.from({ length: 50 }, (_, at) => ({
+    id: `task-channel-${three(at)}`,
+    kind: CHANNEL_KIND.TASK,
+    name: `plan-${three((at * 7) % 50)}`,
+    planId: `task-${three(49 - at)}`,
+    archived: false,
+  }));
+  const direct: ChatChannel[] = Array.from({ length: 120 }, (_, at) => ({
+    id: `dm-${three(at)}`,
+    kind: CHANNEL_KIND.DM,
+    members: [ME, `person-${three(at)}`],
+    archived: false,
+  }));
+  // Each direct message's one message is posted in a scrambled order, its seq telling which was spoken in last.
+  const said = direct.map((channel, at) =>
+    message(1 + ((at * 53) % 120), `person-${three(at)}`, channel.id),
+  );
+  // Topic n holds n % 4 messages, each from a person, seqs past the reader's cursor for an odd topic.
+  const talk = topics.flatMap((channel, at) =>
+    Array.from({ length: at % 4 }, (_, each) =>
+      message((at % 2 === 1 ? 2000 : 500) + at * 4 + each, `person-${three(each)}`, channel.id),
+    ),
+  );
+  const names: ChatNames = {
+    ...NAMES,
+    tasks: new Map(tasks.map((channel, at) => [channel.planId ?? "", `Task ${three(49 - at)}`])),
+  };
+  const chat: ChatAnswer = {
+    self: ME,
+    readSeq: 1000,
+    members: [
+      { id: ME, kind: MEMBER_KIND.HUMAN, name: "Dean", userId: "user-dean", left: false },
+      ...people,
+      ...agents,
+    ],
+    channels: [GENERAL, ...topics, ...tasks, ...direct],
+    messages: [...said, ...talk],
+    cursor: "1000",
+  };
+  return { chat, names, people, agents, topics, direct, said };
+}
+
+test("over a workspace of hundreds of members and channels, the rail lists #general and the topics by name, the tasks' channels by name, the archived apart, and the direct messages the latest spoken in first, each counting its unread", () => {
+  const { chat, names, topics, direct, said } = crowdedChat();
+  const rail = chatRail(chat, names);
+  const standing = topics.filter((channel) => !channel.archived);
+  assert.deepEqual(
+    rail.channels.map((row) => row.label),
+    ["general", ...Array.from({ length: 60 }, (_, at) => `topic-${three(at)}`)],
+  );
+  assert.deepEqual(
+    rail.tasks.map((group) => [group.title, group.rows.map((row) => row.label)]),
+    [["Tasks", Array.from({ length: 50 }, (_, at) => `plan-${three(at)}`)]],
+  );
+  assert.deepEqual(
+    rail.archived.map((row) => row.label),
+    Array.from({ length: 10 }, (_, at) => `topic-${three(60 + at)}`),
+  );
+  // The direct message whose message has the highest seq is spoken in last, so it leads.
+  const latestFirst = direct
+    .map((channel, at) => ({ id: channel.id, seq: said[at]?.seq ?? 0 }))
+    .toSorted((one, other) => other.seq - one.seq)
+    .map((each) => each.id);
+  assert.deepEqual(
+    rail.direct.map((row) => row.channel.id),
+    latestFirst,
+  );
+  assert.equal(
+    rail.direct[0]?.label,
+    "Person 043",
+    "43 × 53 is 119 past a multiple of 120, the highest seq",
+  );
+  // A direct message's one message predates the cursor, so none is unread; an odd topic's messages all are.
+  assert.ok(rail.direct.every((row) => row.unread === 0));
+  const unread = new Map(rail.channels.map((row) => [row.channel.id, row.unread]));
+  for (const [at, channel] of topics.entries()) {
+    if (channel.archived) continue;
+    assert.equal(unread.get(channel.id), at % 2 === 1 ? at % 4 : 0, channel.id);
+  }
+  assert.equal(standing.length, 60);
+  assert.equal(rail.forYou, 0);
+});
+
+test("over a workspace of hundreds of members, a task's channel offers every person still here and that task's agents alone, the general channel the people alone, each by name in the roster's order", () => {
+  const { chat, names, people, agents } = crowdedChat();
+  const here = people.filter((person) => !person.left);
+  const inTask = chat.channels.find((channel) => channel.id === "task-channel-000");
+  assert.ok(inTask?.planId === "task-049");
+  const offered = chatMentionables(chat, names, inTask);
+  assert.deepEqual(
+    offered.people.map((person) => person.name),
+    here.map((person) => person.name),
+  );
+  assert.deepEqual(
+    offered.agents.map((agent) => [agent.name, agent.task]),
+    agents
+      .filter((agent) => agent.planId === "task-049")
+      .map((agent) => [agent.name, { id: "task-049", name: "Task 049" }]),
+  );
+  const general = chatMentionables(chat, names, GENERAL);
+  assert.equal(general.people.length, here.length);
+  assert.deepEqual(general.agents, []);
+  // Every standing channel that is no DM is offered by `#`: #general, 60 topics, and 50 tasks'.
+  assert.equal(general.channels.length, 111);
+});

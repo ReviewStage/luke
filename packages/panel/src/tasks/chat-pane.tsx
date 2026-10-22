@@ -22,13 +22,13 @@ import {
   type ChatNames,
   type ChatPlace,
   type ChatPost,
+  type ChatRoster,
   type ChatThread,
   channelLabel,
   channelThreads,
   chatKeywords,
   chatWho,
   continuesRun,
-  type ForYouEntry,
   firstUnreadSeq,
   forYou,
   messageMarkdown,
@@ -38,7 +38,17 @@ import {
 import { PICTURE_STATE, type PictureAnswer, usePicture } from "@luke/ui/picture-cache";
 import type { SkillOption } from "@luke/ui/skill-mention";
 import { AtSignIcon, HashIcon } from "lucide-react";
-import { Fragment, useCallback, useLayoutEffect, useRef, useState } from "react";
+import {
+  createContext,
+  Fragment,
+  memo,
+  useCallback,
+  useContext,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { ACTOR_SIZE, ActorMark, ActorRef, ActorStack } from "../actor-ref.js";
 import {
   Conversation,
@@ -66,6 +76,7 @@ import { RelativeTime } from "./relative-time.js";
 import { SentWords, SkillFiles } from "./skill-chip.js";
 import type { SkillSource } from "./skill-picker.js";
 import { TaskMentions, type TaskMentionsValue } from "./task-mentions.js";
+import { useMinute } from "./task-time.js";
 import { TranscriptWords } from "./transcript-blocks.js";
 
 /**
@@ -110,6 +121,13 @@ import { TranscriptWords } from "./transcript-blocks.js";
  * (`ArchivedComposerNote`). Every word an agent, Luke, or a person wrote draws through the
  * panel, so the masking keeps all of it out of a session recording, and
  * the stream is out of it whole besides (`ph-no-capture`).
+ *
+ * A row is drawn again only for what it draws: its message, its replies, or
+ * the roster and the doors every row shares (`RowDoors`), which stand across
+ * a push that only brings a message, so a new message draws its own row and
+ * the pane around it, and no other. A row's time counts the minute itself
+ * (`RelativeTime`), and an ask's card, which reads the chat whole, alone
+ * reads it as it moves (`ChatReadContext`).
  */
 
 /** The tasks of a window that lists none. */
@@ -283,12 +301,16 @@ export interface ChatTaskDoors {
     | undefined;
 }
 
-/** What the window draws a message with: the chat, the names, the moment, what the composer offers, and the doors a link, a post, and an answer go through. */
+/**
+ * What every row of a place is drawn with: the roster and the names, what
+ * the composer offers, and the doors a link, a post, and an answer go
+ * through. Note that none of it reads a message, so it stands across a push
+ * that only brings one, and a row holds (`memo`) unless its own message or
+ * replies moved.
+ */
 interface MessageContext {
-  readonly chat: ChatAnswer;
+  readonly roster: ChatRoster;
   readonly names: ChatNames;
-  readonly now: number;
-  /** What a composer posting in the channel offers to name: the members a post there reaches, its task, and the channels. */
   /** What a composer posting in the channel offers, a reply's by the members of its thread, its root's author and repliers. */
   readonly mentionsIn: (channelId: string, thread?: readonly string[]) => ChatComposerMentions;
   /** The words a dictation in the chat is likely to say. */
@@ -306,10 +328,20 @@ interface MessageContext {
   readonly onOpen: ((place: ChatPlace) => void) | undefined;
 }
 
+/** The chat whole, as last read, for what reads it as it moves: an ask's card, which counts its replies. */
+const ChatReadContext = createContext<ChatAnswer | undefined>(undefined);
+
 /** Whether a person wrote the message, whose words are drawn as typed and whose pictures lead them. */
-function byPerson(message: ChatMessage, chat: ChatAnswer): boolean {
-  const author = chat.members.find((member) => member.id === message.authorId);
-  return author?.kind === MEMBER_KIND.HUMAN;
+function byPerson(message: ChatMessage, context: MessageContext): boolean {
+  return (
+    chatWho(context.roster, context.names, message.authorId).member?.kind === MEMBER_KIND.HUMAN
+  );
+}
+
+/** Whether the reader may post in the channel a message stands in: one the roster no longer holds is taken as one they may. */
+function postsWhere(message: ChatMessage, roster: ChatRoster): boolean {
+  const home = placeChannel(roster, { kind: CHAT_PLACE.CHANNEL, channelId: message.channelId });
+  return home === undefined || postsIn(roster, home);
 }
 
 /**
@@ -321,10 +353,10 @@ function byPerson(message: ChatMessage, chat: ChatAnswer): boolean {
  */
 function drawnBlocks(
   message: ChatMessage,
-  chat: ChatAnswer,
+  typed: boolean,
 ): readonly { readonly block: ChatReadBlock; readonly index: number }[] {
   const placed = message.blocks.map((block, index) => ({ block, index }));
-  if (!byPerson(message, chat)) return placed;
+  if (!typed) return placed;
   const picture = (block: ChatReadBlock) => knownBlock(block) && block.type === CHAT_BLOCK.IMAGE;
   return [
     ...placed.filter(({ block }) => picture(block)),
@@ -367,9 +399,9 @@ function Body({
   message: ChatMessage;
   context: MessageContext;
 }): React.JSX.Element {
-  const typed = byPerson(message, context.chat);
+  const typed = byPerson(message, context);
   const code = context.doorsIn(message.channelId)?.code;
-  const blocks = drawnBlocks(message, context.chat).map(({ block, index }) => (
+  const blocks = drawnBlocks(message, typed).map(({ block, index }) => (
     // Blocks have no key of their own, so each keeps its place in the message as its key.
     <Block
       key={index}
@@ -382,17 +414,34 @@ function Body({
   ));
   const { ask } = message;
   if (ask === undefined) return <>{blocks}</>;
-  const home = context.chat.channels.find((channel) => channel.id === message.channelId);
+  return <AskBody message={message} ask={ask} blocks={blocks} context={context} />;
+}
+
+/** A message's ask, as its card draws it, read against the chat as it moves and the minute. */
+function AskBody({
+  message,
+  ask,
+  blocks,
+  context,
+}: {
+  message: ChatMessage;
+  ask: NonNullable<ChatMessage["ask"]>;
+  blocks: React.ReactNode;
+  context: MessageContext;
+}): React.JSX.Element | null {
+  const chat = useContext(ChatReadContext);
+  const now = useMinute();
+  if (chat === undefined) return null;
   return (
     <AskCard
       message={message}
       ask={ask}
-      chat={context.chat}
-      answers={home === undefined || postsIn(context.chat, home)}
+      chat={chat}
+      answers={postsWhere(message, context.roster)}
       blocks={blocks}
       actorOf={context.actorOf}
       keywords={context.keywords}
-      now={context.now}
+      now={now}
       onAnswer={context.onAnswer}
     />
   );
@@ -403,7 +452,6 @@ function Byline({
   actor,
   at,
   where,
-  now,
   action,
   continued = false,
 }: {
@@ -411,7 +459,6 @@ function Byline({
   at: number;
   /** Where it was said, as For you names a message's channel; none in the channel itself. */
   where: React.ReactNode;
-  now: number;
   /** The presses at the line's end, shown while the message is hovered or one has the keyboard. */
   action?: React.ReactNode;
   /** Whether the message continues its author's run, so the line names no one and holds its press alone. */
@@ -438,7 +485,7 @@ function Byline({
       {where === undefined ? null : (
         <FadingWords className="chat-byline-where">{where}</FadingWords>
       )}
-      <RelativeTime className="chat-time" at={at} now={now} />
+      <RelativeTime className="chat-time" at={at} />
       {action}
     </div>
   );
@@ -454,17 +501,15 @@ function Face({
   actor,
   continued = false,
   at,
-  now,
 }: {
   actor: Actor;
   continued?: boolean;
   at: number;
-  now: number;
 }): React.JSX.Element {
   if (continued) {
     return (
       <span className="chat-face" data-continued="true">
-        <RelativeTime className="chat-time" at={at} now={now} />
+        <RelativeTime className="chat-time" at={at} />
       </span>
     );
   }
@@ -500,47 +545,59 @@ function RowActions({
   );
 }
 
-/** One message of a thread: its face, its byline with its Copy, and its body. */
-function Reply({ message, context }: { message: ChatMessage; context: MessageContext }) {
+/** One message of a thread: its face, its byline with its Copy, and its body; drawn again only as its message moves. */
+const Reply = memo(function Reply({
+  message,
+  context,
+}: {
+  message: ChatMessage;
+  context: MessageContext;
+}): React.JSX.Element {
   const actor = context.actorOf(message.authorId);
   return (
     <li className="chat-reply" data-seq={message.seq}>
-      <Face actor={actor} at={message.postedAt} now={context.now} />
+      <Face actor={actor} at={message.postedAt} />
       <div className="chat-message-body">
         <Byline
           actor={actor}
           at={message.postedAt}
           where={undefined}
-          now={context.now}
           action={<RowActions message={message} />}
         />
         <Body message={message} context={context} />
       </div>
     </li>
   );
-}
+});
 
-/** A root message, its thread folded under it until a press opens it with the box to reply in. */
-function ThreadRow({
-  thread,
-  where,
+/**
+ * A root message, its thread folded under it until a press opens it with
+ * the box to reply in; drawn again only as its message, its replies, or
+ * what every row shares moves.
+ */
+const ThreadRow = memo(function ThreadRow({
+  message,
+  replies,
+  posted,
   context,
   continued = false,
 }: {
-  thread: ChatThread;
-  where: React.ReactNode;
+  message: ChatMessage;
+  replies: readonly ChatMessage[];
+  /** The channel For you names the message as posted in; none in the channel itself. */
+  posted?: ChatChannel | undefined;
   context: MessageContext;
   /** Whether the root continues its author's run, drawn under the name the run began with (`continuesRun`). */
   continued?: boolean;
 }): React.JSX.Element {
   const [open, setOpen] = useState(false);
-  const { message, replies } = thread;
   const actor = context.actorOf(message.authorId);
-  const home = context.chat.channels.find((channel) => channel.id === message.channelId);
   // The thread's repliers lead its press by their faces, each once, as a comment thread at rest names them.
   const repliers = distinctActors(replies.map((reply) => context.actorOf(reply.authorId)));
   // A thread in a channel the reader cannot post in reads as it stands, with no box to reply in.
-  const canReply = home === undefined || postsIn(context.chat, home);
+  const canReply = postsWhere(message, context.roster);
+  const where =
+    posted === undefined ? undefined : <ForYouWhere channel={posted} context={context} />;
   const toggle = (
     <TextButton
       tone={TEXT_BUTTON_TONE.ACCENT}
@@ -554,13 +611,12 @@ function ThreadRow({
   const quiet = replies.length === 0 && !open;
   return (
     <li className="chat-message" data-seq={message.seq} data-continued={String(continued)}>
-      <Face actor={actor} continued={continued} at={message.postedAt} now={context.now} />
+      <Face actor={actor} continued={continued} at={message.postedAt} />
       <div className="chat-message-body">
         <Byline
           actor={actor}
           at={message.postedAt}
           where={where}
-          now={context.now}
           continued={continued}
           action={<RowActions message={message} extra={quiet && canReply ? toggle : undefined} />}
         />
@@ -607,6 +663,28 @@ function ThreadRow({
       </div>
     </li>
   );
+});
+
+/**
+ * The threads as drawn last, each kept where its root and replies are the
+ * ones it held, so a row handed it holds while a push moves only others.
+ */
+function useKeptThreads(threads: readonly ChatThread[]): readonly ChatThread[] {
+  const held = useRef(new Map<string, ChatThread>());
+  return useMemo(() => {
+    const before = held.current;
+    const kept = threads.map((thread) => {
+      const standing = before.get(thread.message.id);
+      return standing !== undefined &&
+        standing.message === thread.message &&
+        standing.replies.length === thread.replies.length &&
+        standing.replies.every((reply, at) => reply === thread.replies[at])
+        ? standing
+        : thread;
+    });
+    held.current = new Map(kept.map((thread) => [thread.message.id, thread]));
+    return kept;
+  }, [threads]);
 }
 
 /** What the line before a channel's first unread message says. */
@@ -625,21 +703,22 @@ const UNREAD_LINE = "New";
  * log lets go of its newest line.
  */
 function ChannelStream({
+  chat,
   channelId,
-  threads,
   context,
 }: {
+  chat: ChatAnswer;
   channelId: string;
-  threads: readonly ChatThread[];
   context: MessageContext;
 }): React.JSX.Element {
+  const threads = useKeptThreads(channelThreads(chat, channelId));
   // The first unread message as the channel opened, taken again as another opens in its place.
   const [opened, setOpened] = useState(() => ({
     channelId,
-    unreadFrom: firstUnreadSeq(context.chat, channelId),
+    unreadFrom: firstUnreadSeq(chat, channelId),
   }));
   if (opened.channelId !== channelId) {
-    setOpened({ channelId, unreadFrom: firstUnreadSeq(context.chat, channelId) });
+    setOpened({ channelId, unreadFrom: firstUnreadSeq(chat, channelId) });
   }
   const unreadFrom = opened.channelId === channelId ? opened.unreadFrom : undefined;
   const list = useRef<HTMLDivElement>(null);
@@ -670,8 +749,8 @@ function ChannelStream({
                   </li>
                 ) : null}
                 <ThreadRow
-                  thread={thread}
-                  where={undefined}
+                  message={thread.message}
+                  replies={thread.replies}
                   context={context}
                   continued={!first && continuesRun(threads[index - 1], thread)}
                 />
@@ -695,20 +774,19 @@ function postOf(text: string, attachments: readonly CodingAgentAttachment[]): Ch
 
 /** Where For you says a message was posted: in its channel, or a direct message, pressed to open it there. */
 function ForYouWhere({
-  entry,
+  channel,
   context,
 }: {
-  entry: ForYouEntry;
+  channel: ChatChannel;
   context: MessageContext;
 }): React.JSX.Element {
-  const { channel } = entry;
   const { onOpen } = context;
   // Note that the channel decides, not the reason, since an ask in a direct message is listed as an ask.
   const direct = channel.kind === CHANNEL_KIND.DM;
   const name = direct ? (
     DIRECT_MESSAGE
   ) : (
-    <ChannelName chat={context.chat} names={context.names} channel={channel} />
+    <ChannelName chat={context.roster} names={context.names} channel={channel} />
   );
   return (
     <>
@@ -793,14 +871,13 @@ function composerLabel(chat: ChatAnswer, names: ChatNames, channel: ChatChannel)
   return channel.kind === CHANNEL_KIND.DM ? `Message ${label}` : `Message #${label}`;
 }
 
-/** The pane: the place's head, then its messages, or a line saying there are none, and a channel's composer. */
-export function ChatPane({
+/** The pane: the place's head, then its messages, or a line saying there are none, and a channel's composer; drawn again only as what it is handed moves. */
+export const ChatPane = memo(function ChatPane({
   chat,
   names,
   place,
   mentionPlace,
   tasks = NO_TASKS,
-  now,
   openLink,
   onPost,
   onAnswer,
@@ -819,7 +896,6 @@ export function ChatPane({
   mentionPlace?: MentionPlace | undefined;
   /** The tasks the window lists, whose channels' composers offer them. */
   tasks?: readonly TaskSummary[];
-  now: number;
   openLink: (url: string) => void;
   /** Posts a message; answers why it was refused, or nothing once it is taken. */
   onPost: (post: ChatPost) => Promise<string | undefined>;
@@ -840,29 +916,86 @@ export function ChatPane({
   /** The doors of a task, by its id, that its channel's messages read their code and open their files through; none where the task is not at hand. */
   taskDoors?: ((taskId: string) => ChatTaskDoors | undefined) | undefined;
 }): React.JSX.Element {
-  const keywords = chatKeywords(chat, names);
-  const actorOf = useChatActor(chat, names);
+  // Note that the roster stands while a push keeps its arrays, so what is read of it alone stands with it.
+  const { self, members, channels } = chat;
+  const roster = useMemo(
+    (): ChatRoster => ({ self, members, channels }),
+    [self, members, channels],
+  );
+  const keywords = chatKeywords(roster, names);
+  const actorOf = useChatActor(roster, names);
   // A composer offers only the members a post in its own channel reaches, as the service holds the chat to its tasks.
-  const mentionsIn = useChatMentions({ chat, names, place: mentionPlace, tasks, actorOf });
-  const doorsIn = (channelId: string) => {
-    const home = chat.channels.find((each) => each.id === channelId);
-    if (home?.kind !== CHANNEL_KIND.TASK || home.planId === undefined) return undefined;
-    return taskDoors?.(home.planId);
-  };
-  const context: MessageContext = {
-    actorOf,
-    chat,
-    names,
-    now,
-    mentionsIn,
-    keywords,
-    openLink,
-    onPost,
-    onAnswer,
-    readPicture,
-    doorsIn,
-    onOpen,
-  };
+  const mentionsIn = useChatMentions({ chat: roster, names, place: mentionPlace, tasks, actorOf });
+  const doorsIn = useCallback(
+    (channelId: string) => {
+      const home = placeChannel(roster, { kind: CHAT_PLACE.CHANNEL, channelId });
+      if (home?.kind !== CHANNEL_KIND.TASK || home.planId === undefined) return undefined;
+      return taskDoors?.(home.planId);
+    },
+    [roster, taskDoors],
+  );
+  const context = useMemo(
+    (): MessageContext => ({
+      actorOf,
+      roster,
+      names,
+      mentionsIn,
+      keywords,
+      openLink,
+      onPost,
+      onAnswer,
+      readPicture,
+      doorsIn,
+      onOpen,
+    }),
+    [
+      actorOf,
+      roster,
+      names,
+      mentionsIn,
+      keywords,
+      openLink,
+      onPost,
+      onAnswer,
+      readPicture,
+      doorsIn,
+      onOpen,
+    ],
+  );
+  return (
+    <ChatReadContext.Provider value={chat}>
+      <PlaceView
+        chat={chat}
+        place={place}
+        context={context}
+        lead={lead}
+        hidden={hidden}
+        channelActions={channelActions}
+        onBringBack={onBringBack}
+      />
+    </ChatReadContext.Provider>
+  );
+});
+
+/** The place shown: For you, or a channel with its head, its messages, and its foot. */
+function PlaceView({
+  chat,
+  place,
+  context,
+  lead,
+  hidden,
+  channelActions,
+  onBringBack,
+}: {
+  chat: ChatAnswer;
+  place: ChatPlace;
+  context: MessageContext;
+  lead: React.ReactNode;
+  hidden: boolean | undefined;
+  channelActions: ((channel: ChatChannel) => React.ReactNode) | undefined;
+  onBringBack: ((channel: ChatChannel) => void) | undefined;
+}): React.JSX.Element {
+  const { names, keywords, mentionsIn, doorsIn, onPost } = context;
   const channel = placeChannel(chat, place);
   if (place.kind === CHAT_PLACE.FOR_YOU || channel === undefined) {
     const entries = forYou(chat);
@@ -879,8 +1012,9 @@ export function ChatPane({
                   // Each row is of its own channel, so each reads through its own task.
                   <TaskDoorsScope key={entry.message.id} doors={doorsIn(entry.channel.id)}>
                     <ThreadRow
-                      thread={entry}
-                      where={<ForYouWhere entry={entry} context={context} />}
+                      message={entry.message}
+                      replies={entry.replies}
+                      posted={entry.channel}
                       context={context}
                     />
                   </TaskDoorsScope>
@@ -911,7 +1045,7 @@ export function ChatPane({
         </EmptyState>
       ) : (
         <TaskDoorsScope doors={doors}>
-          <ChannelStream channelId={channel.id} threads={threads} context={context} />
+          <ChannelStream chat={chat} channelId={channel.id} context={context} />
         </TaskDoorsScope>
       )}
       {/* Note that the composer is keyed by its channel, so words typed for one are never sent to another, and each channel's draft waits under its own. */}

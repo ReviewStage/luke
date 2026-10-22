@@ -1,5 +1,5 @@
 import { Tooltip } from "../tooltip.js";
-import { agoText, momentText, sinceText } from "./task-time.js";
+import { agoText, momentText, sinceText, useMinute } from "./task-time.js";
 
 /**
  * relative-time.tsx -- how long ago a moment was, as every row, card, and thread in the window draws it: a `<time>` in a row's few letters, the moment in full in the window's own tooltip.
@@ -16,8 +16,29 @@ import { agoText, momentText, sinceText } from "./task-time.js";
  * which steps out of sight while its row is hovered, so no pointer rests on it.
  */
 
-/** A moment as long ago as `now` counts it, in a line's words where `ago` asks, its full moment on hover where `hint` is left on. */
-export function RelativeTime({
+/**
+ * A moment as long ago as `now` counts it, in a line's words where `ago`
+ * asks, its full moment on hover where `hint` is left on. With no `now`, it
+ * counts from the window's minute itself (`useMinute`), so a row drawing it
+ * need not be drawn again each minute for its time to move.
+ */
+export function RelativeTime(props: {
+  at: number;
+  now?: number | undefined;
+  className?: string;
+  hint?: boolean;
+  ago?: boolean;
+}): React.JSX.Element {
+  const { now } = props;
+  return now === undefined ? <TickingTime {...props} /> : <TimeAt {...props} now={now} />;
+}
+
+/** A time counted from the window's minute, which alone is drawn again as the minute moves. */
+function TickingTime(props: Omit<React.ComponentProps<typeof TimeAt>, "now">): React.JSX.Element {
+  return <TimeAt {...props} now={useMinute()} />;
+}
+
+function TimeAt({
   at,
   now,
   className,
@@ -26,9 +47,9 @@ export function RelativeTime({
 }: {
   at: number;
   now: number;
-  className?: string;
-  hint?: boolean;
-  ago?: boolean;
+  className?: string | undefined;
+  hint?: boolean | undefined;
+  ago?: boolean | undefined;
 }): React.JSX.Element {
   const time = (
     <time className={className} dateTime={new Date(at).toISOString()}>

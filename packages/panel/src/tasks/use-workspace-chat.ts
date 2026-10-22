@@ -1,3 +1,4 @@
+import { useAtom } from "@effect/atom-react";
 import type {
   ChatAnswer,
   ChatChannel,
@@ -15,8 +16,12 @@ import {
 } from "@luke/features/coding-agent-view";
 import { ACT_KIND } from "@luke/host/acts";
 import type { ChatAskAnswer, ChatChannelChange, ChatPost } from "@luke/ui/chat-model";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { keepIdentity } from "@luke/wire";
+import { Duration, Effect } from "effect";
+import { AsyncResult } from "effect/reactivity";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { askAct } from "../act.js";
+import { rendererRuntime } from "../renderer-runtime.js";
 import { messageFailureWords } from "./coding-agent-model.js";
 
 /**
@@ -42,9 +47,17 @@ import { messageFailureWords } from "./coding-agent-model.js";
  * tells no one twice; the service answers with the message as it then
  * stands, which is put in place at once. An answer to an ask its poster
  * changed first, or one no longer open, is not taken, and the card says so.
+ * Each push keeps every message, channel, and member it says the same of as
+ * the one held, by id, so a part drawn from an unchanged one holds, and a
+ * push that changes nothing hands back the chat held. A message is matched
+ * by its id alone, so a message the window wrote and the push that holds it
+ * are one message, never two.
  * While a channel is shown the developer has read to the newest message
- * held, which is told to the service once per place it moves to. For you
- * moves no cursor, since what waits there is what has not been read.
+ * held: the cursor moves in the window at once, and the service is told
+ * once `CHAT_READ_PAUSE` after the first move of a burst, of the newest place
+ * each channel moved to by then, so a run of messages costs one read, not
+ * one each. For you moves no cursor, since what waits there is what has
+ * not been read.
  * Mark as read, from a rail row or a group's head, reads each channel it
  * names to its newest message held, on that channel's cursor alone.
  * A picture a message carries is read on its own, by the message and the
@@ -150,8 +163,31 @@ function fresh(account: string | undefined, workspaceId: string | undefined): He
 
 const UNANSWERED = { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED } as const;
 
+/** No cursor moved ahead of the service. */
+const NOTHING_AHEAD: ReadonlyMap<string, number> = new Map();
+
 /** How long what the window wrote is laid over pushes that may predate it, at most: a held poll answers a change within about a second. */
 const OVERLAY_HOLD_MS = 30_000;
+
+/** How long after a channel's cursor first moves in a burst the service is told where it moved to. */
+export const CHAT_READ_PAUSE = Duration.seconds(1);
+
+/**
+ * A message as delivered again, kept as the one held where it says the same:
+ * the newer word of the two, sharing what the held one says alike, and the
+ * held one itself where they are equal.
+ */
+function keptMessage(standing: ChatMessage | undefined, message: ChatMessage): ChatMessage {
+  if (standing === undefined) return message;
+  if (standing.touchedSeq > message.touchedSeq) return standing;
+  return keepIdentity(standing, message);
+}
+
+/** The list handed back as the one held where each item is the held one at its place. */
+function keptList<Each>(held: readonly Each[] | undefined, next: readonly Each[]): readonly Each[] {
+  if (held === undefined || held.length !== next.length) return next;
+  return next.every((each, at) => each === held[at]) ? held : next;
+}
 
 /** The messages held with each newer word on one put in place by id, in the order posted. */
 function withMessages(
@@ -159,13 +195,11 @@ function withMessages(
   newer: readonly ChatMessage[],
 ): readonly ChatMessage[] {
   const byId = new Map(held.map((message) => [message.id, message]));
-  for (const message of newer) {
-    const standing = byId.get(message.id);
-    if (standing === undefined || standing.touchedSeq <= message.touchedSeq) {
-      byId.set(message.id, message);
-    }
-  }
-  return [...byId.values()].toSorted((one, other) => one.seq - other.seq);
+  for (const message of newer) byId.set(message.id, keptMessage(byId.get(message.id), message));
+  return keptList(
+    held,
+    [...byId.values()].toSorted((one, other) => one.seq - other.seq),
+  );
 }
 
 /** The channels given with each one written since put in its place by id, or after them where the push had none yet. */
@@ -192,23 +226,48 @@ function withRead(
   written: { readonly channels: readonly ChatChannel[]; readonly messages: readonly ChatMessage[] },
 ): ChatAnswer {
   const held = new Map((chat?.messages ?? []).map((message) => [message.id, message]));
-  const pushed = answer.messages.map((message) => {
-    const standing = held.get(message.id);
-    return standing !== undefined && standing.touchedSeq > message.touchedSeq ? standing : message;
-  });
+  const pushed = keptList(
+    chat?.messages,
+    answer.messages.map((message) => keptMessage(held.get(message.id), message)),
+  );
   // Note that a cursor never moves back, so a push read before a read's answer sets nothing back.
   // A push with no channel past its floor carries no `reads`, which says nothing of the cursors held.
   const reads =
     chat === undefined || (chat.reads === undefined && answer.reads === undefined)
       ? answer.reads
       : furthestReads(chat, answer.reads ?? []);
-  return {
+  const taken: ChatAnswer = {
     ...answer,
     readSeq: Math.max(chat?.readSeq ?? 0, answer.readSeq),
     ...(reads === undefined ? undefined : { reads }),
     channels: withChannels(answer.channels, written.channels),
     messages: withMessages(pushed, written.messages),
   };
+  return chat === undefined ? taken : keptChat(chat, taken);
+}
+
+/**
+ * A chat taken in, kept as the one held where it says the same: its roster,
+ * channels, and cursors kept where equal, its messages as already kept by
+ * id, and the held chat itself where nothing moved. Note that the messages
+ * are never matched by place, since a message fallen out between two pushes
+ * would pair every one after it with its neighbour.
+ */
+function keptChat(held: ChatAnswer, taken: ChatAnswer): ChatAnswer {
+  const kept: ChatAnswer = {
+    ...taken,
+    members: keepIdentity(held.members, taken.members),
+    channels: keepIdentity(held.channels, taken.channels),
+    messages: keptList(held.messages, taken.messages),
+    ...(taken.reads === undefined
+      ? undefined
+      : { reads: held.reads === undefined ? taken.reads : keepIdentity(held.reads, taken.reads) }),
+  };
+  const keys = Object.keys(kept) as (keyof ChatAnswer)[];
+  const same =
+    keys.length === Object.keys(held).length &&
+    keys.every((key) => Object.hasOwn(held, key) && held[key] === kept[key]);
+  return same ? held : kept;
 }
 
 /** What the window wrote, a channel or a message: what the write answered, the account and workspace it went as and to, and when it was answered. */
@@ -274,7 +333,8 @@ function withWrite(chat: ChatAnswer, answer: ChatWriteAnswer): ChatAnswer {
   }
   const message =
     "posted" in answer ? answer.posted : "ask" in answer ? answer.ask : answer.resolved;
-  return { ...chat, messages: withMessages(chat.messages, [message]) };
+  const messages = withMessages(chat.messages, [message]);
+  return messages === chat.messages ? chat : { ...chat, messages };
 }
 
 /** A write as it landed: the service's answer, or why there is none. */
@@ -311,6 +371,30 @@ function newestSeqIn(chat: ChatAnswer | undefined, channelId: string): number {
 function readSeqIn(chat: ChatAnswer | undefined, channelId: string): number {
   const own = chat?.reads?.find((each) => each.channelId === channelId)?.readSeq ?? 0;
   return Math.max(chat?.readSeq ?? 0, own);
+}
+
+/** The chat with each cursor the window moved ahead of the service laid over it; the chat itself where none is ahead. */
+function withAhead(
+  chat: ChatAnswer | undefined,
+  ahead: ReadonlyMap<string, number>,
+): ChatAnswer | undefined {
+  if (chat === undefined) return undefined;
+  const moved = [...ahead].filter(([channelId, seq]) => seq > readSeqIn(chat, channelId));
+  if (moved.length === 0) return chat;
+  return {
+    ...chat,
+    reads: furthestReads(
+      chat,
+      moved.map(([channelId, readSeq]) => ({ channelId, readSeq })),
+    ),
+  };
+}
+
+/** The cursors moved ahead of the service, by channel, for the account and workspace they were moved in. */
+interface Ahead {
+  readonly account: string | undefined;
+  readonly workspaceId: string | undefined;
+  readonly seqs: ReadonlyMap<string, number>;
 }
 
 export function useWorkspaceChat(input: {
@@ -358,11 +442,12 @@ export function useWorkspaceChat(input: {
         channels: ours.flatMap((each) => (each.channel === undefined ? [] : [each.channel])),
         messages: ours.flatMap((each) => (each.message === undefined ? [] : [each.message])),
       };
-      setHeld((was) =>
-        heldFor(was, account, workspaceId)
-          ? { ...was, chat: withRead(was.chat, pushed, since) }
-          : was,
-      );
+      // A push that changes nothing hands back what is held, so nothing drawn from it is drawn again.
+      setHeld((was) => {
+        if (!heldFor(was, account, workspaceId)) return was;
+        const chat = withRead(was.chat, pushed, since);
+        return chat === was.chat ? was : { ...was, chat };
+      });
     });
     // Note that the account is a dependency, so another account's push starts over rather than landing in its chat.
   }, [following, account, workspaceId, attempt]);
@@ -446,9 +531,20 @@ export function useWorkspaceChat(input: {
     [held.chat, write],
   );
 
-  // While a channel is shown, the developer has read it to the newest message it holds: told once per place, of that channel alone.
+  // While a channel is shown, the developer has read it to the newest message it holds: moved in the window at once, told after a pause.
   const newest = reading === undefined ? 0 : newestSeqIn(held.chat, reading);
   const readSeq = reading === undefined ? 0 : readSeqIn(held.chat, reading);
+  const [ahead, setAhead] = useState<Ahead>(() => ({ account, workspaceId, seqs: new Map() }));
+  const aheadHere =
+    ahead.account === account && ahead.workspaceId === workspaceId ? ahead.seqs : NOTHING_AHEAD;
+  // The places each channel moved to that the service is yet to be told, for the account and workspace they were read in.
+  const untold = useRef<Ahead>({ account, workspaceId, seqs: new Map() });
+  const [pauseAtom] = useState(() =>
+    rendererRuntime.fn((stamp: number) => Effect.as(Effect.sleep(CHAT_READ_PAUSE), stamp)),
+  );
+  const [pause, startPause] = useAtom(pauseAtom);
+  const pauses = useRef({ started: 0, ended: 0 });
+  // The place the channel shown last moved to, so a draw that moves nothing tells nothing.
   const told = useRef<{
     readonly account: string | undefined;
     readonly workspaceId: string | undefined;
@@ -457,23 +553,59 @@ export function useWorkspaceChat(input: {
   }>({ account, workspaceId, channelId: undefined, seq: 0 });
   useEffect(() => {
     if (reading === undefined) return;
-    // Note that a read is the account's own, so what another account told says nothing of this one's.
+    // Note that a read is the account's own, so what another account moved says nothing of this one's.
     const same =
       told.current.account === account &&
       told.current.workspaceId === workspaceId &&
       told.current.channelId === reading;
     const already = same ? told.current.seq : 0;
     if (newest <= readSeq || newest <= already) return;
-    const telling = { account, workspaceId, channelId: reading, seq: newest };
-    told.current = telling;
-    // A read that did not land is forgotten, so the channel shown again tells it again.
-    void write({ readTo: newest, channelId: reading }).then((landed) => {
-      if ("refused" in landed && told.current === telling) told.current = { ...telling, seq: 0 };
+    told.current = { account, workspaceId, channelId: reading, seq: newest };
+    const here = untold.current.account === account && untold.current.workspaceId === workspaceId;
+    const waiting = here ? untold.current.seqs : NOTHING_AHEAD;
+    untold.current = { account, workspaceId, seqs: new Map(waiting).set(reading, newest) };
+    setAhead((was) => {
+      const kept = was.account === account && was.workspaceId === workspaceId;
+      const seqs = new Map(kept ? was.seqs : NOTHING_AHEAD).set(reading, newest);
+      return { account, workspaceId, seqs };
     });
-  }, [reading, newest, readSeq, account, workspaceId, write]);
+    // Note that a pause already running takes this move with it, so a burst is told once.
+    if (pauses.current.started === pauses.current.ended) {
+      pauses.current.started += 1;
+      startPause(pauses.current.started);
+    }
+  }, [reading, newest, readSeq, account, workspaceId, startPause]);
+
+  // A pause run out tells the service where each channel moved to; a read that did not land is let go, so the channel shown again tells it again.
+  useEffect(() => {
+    if (!AsyncResult.isSuccess(pause) || pause.waiting) return;
+    if (pause.value !== pauses.current.started || pauses.current.ended === pause.value) return;
+    pauses.current.ended = pause.value;
+    const telling = untold.current;
+    untold.current = { ...telling, seqs: new Map() };
+    if (telling.account !== account || telling.workspaceId !== workspaceId) return;
+    for (const [channelId, seq] of telling.seqs) {
+      void write({ readTo: seq, channelId }).then((landed) => {
+        if (!("refused" in landed)) return;
+        const { current } = told;
+        if (current.channelId === channelId && current.seq === seq) {
+          told.current = { ...current, seq: 0 };
+        }
+        setAhead((was) =>
+          was.account === account &&
+          was.workspaceId === workspaceId &&
+          was.seqs.get(channelId) === seq
+            ? { ...was, seqs: new Map([...was.seqs].filter(([id]) => id !== channelId)) }
+            : was,
+        );
+      });
+    }
+  }, [pause, account, workspaceId, write]);
+
+  const chat = useMemo(() => withAhead(held.chat, aheadHere), [held.chat, aheadHere]);
 
   return {
-    chat: held.chat,
+    chat,
     failed: held.failed,
     onRetry,
     onPost,
