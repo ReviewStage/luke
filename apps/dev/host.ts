@@ -519,14 +519,13 @@ export function runDelegatedShowImageTool(
 }
 
 /**
- * One public read of the agent's or a worker's, for its `search_web` or
- * `read_web_page` tool, under the admission that agent's model runs under,
+ * One public page read of the agent's or a worker's, for its `read_web_page` tool, under the admission that agent's model runs under,
  * which runs here rather than at an edge of its own; a session the host
  * does not admit is refused in the read's own words.
  */
 export function runResearchTool(
   admit: (auth: SessionAuth, sessionId: string) => ReturnType<CoderHost["admit"]>,
-  tool: typeof CODER_TOOL.SEARCH_WEB | typeof CODER_TOOL.READ_WEB_PAGE,
+  tool: typeof CODER_TOOL.READ_WEB_PAGE,
   context: { readonly auth: SessionAuth; readonly sessionId: string; readonly turnId: string },
   input: UnparsedWireValue,
 ): Promise<UnparsedWireValue> {

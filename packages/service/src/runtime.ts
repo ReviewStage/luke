@@ -22,6 +22,7 @@ import {
 import { liveSealingFromEnvironment } from "./live/realtime.js";
 import { sentryLogger } from "./observability/sentry.js";
 import { modelCatalogLayer } from "./providers/model-catalog.js";
+import { sentryAppFromEnvironment } from "./triggers/sentry/sentry-app-config.js";
 
 /**
  * The deployment's own environment, read as these services are built rather
@@ -90,6 +91,7 @@ export const webServices = Layer.mergeAll(
   webSqlClient,
   hostedEnvironment,
   githubAppFromEnvironment.pipe(Layer.provide(hostedEnvironment)),
+  sentryAppFromEnvironment,
   integrationConnectFromEnvironment,
   workspaceLinearConnectFromEnvironment,
   webLogger,

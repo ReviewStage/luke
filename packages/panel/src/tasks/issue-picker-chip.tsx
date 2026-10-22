@@ -355,7 +355,7 @@ export function IssuePickerChip({
   const menuId = useId();
   const box = useRef<HTMLDivElement>(null);
   const button = useRef<HTMLButtonElement>(null);
-  const placement = usePickerPlacement(open, button, align);
+  const placement = usePickerPlacement(open, button, align, menuId);
   /** What held focus as the menu opened, which closing hands it back to. */
   const opener = useRef<HTMLElement | null>(null);
   // A switch of workspace closes the menu, in the render that brings it,

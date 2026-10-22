@@ -14,7 +14,6 @@ import { accountMeter } from "../agent-runtime/meter.js";
 import { conversationReachableBy, runtimeSessionReachableBy } from "../brain-host/conversation.js";
 import type { SessionOwnership } from "../brain-host/door.js";
 import { deploymentEveOrigin } from "../brain-host/eve-origin.js";
-import { MeterUnavailable, type ResearchAccess, researchOpenAiOf } from "../public-research.js";
 import { accountProviderKeys } from "./account-keys.js";
 import { CODER_ENVIRONMENT, CODER_MODEL_FIXTURE } from "./bounds.js";
 import { type LukeKeys, type ProviderKeys, titleModel } from "./model.js";
@@ -50,8 +49,6 @@ export interface CoderHostSeams {
   readonly fastRefused: (userId: string, turnId: string) => Promise<void>;
   /** The model one account's agent's title is generated on, behind that account's meter; nothing leaves every agent untitled. */
   readonly titleModel: (userId: string) => LanguageModel | undefined;
-  /** What one account's public search runs on and counts against: Luke's OpenAI access, nothing while the deployment holds no key, and the account's meter. */
-  readonly research: (userId: string) => ResearchAccess;
   /** Whether the deployment asked for the scripted fixture model in place of the providers. */
   readonly scriptedModel: () => boolean;
   /** How an agent this one starts from another summarizes the steps its replay cannot keep, as the Start route's does; none leaves them out. */
@@ -106,13 +103,6 @@ export const productionCoderHostSeams = /* @__PURE__ */ Effect.fn("web/productio
           console.warn(`A turn's Fast refusal was not recorded: ${failureKind(cause)}`);
         }),
       titleModel: (userId) => titleModel(luke, meter(userId)),
-      research: (userId) => ({
-        openAi: researchOpenAiOf(environment.openAiKey),
-        spend: Effect.tryPromise({
-          try: () => spend(userId),
-          catch: (cause) => new MeterUnavailable({ cause }),
-        }),
-      }),
       scriptedModel: () =>
         process.env[CODER_ENVIRONMENT.MODEL_FIXTURE] === CODER_MODEL_FIXTURE.SCRIPTED,
       summaryModel: (owner, chosen, effort) =>

@@ -39,6 +39,7 @@ import {
 } from "../../github/workspace-repository.js";
 import { HOSTED_HTTP_STATUS } from "../../http/http.js";
 import {
+  credentialMissing,
   HOSTED_REFUSAL,
   type HostedRefusal,
   hostedStoreOrUnavailable,
@@ -55,6 +56,7 @@ import {
 } from "../brain-host/eve-sessions.js";
 import { mentionedContext, mentionedServers, NO_MENTIONED_READS } from "../mentioned-context.js";
 import { readMentioned } from "../mentioned-reads.js";
+import { messageCredentialMissing } from "./agent-runtime-choice.js";
 import { isNativeRuntime } from "./native-runtime.js";
 import { failedCallRefusal } from "./runtime-sessions.js";
 import { codingAgentStatusOf } from "./status.js";
@@ -286,6 +288,16 @@ export const steerCodingAgentWritten = /* @__PURE__ */ Effect.fn("web/steerCodin
   if (!controlsAgent(userId, agent)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
   // An agent its starter's plan pays for takes words from those the plan's policy admits.
   yield* admitsPlanWriter(userId, agent);
+  // Note that Luke's key pays for no coding agent, so one it paid for, or one on eve whose starter
+  // keeps no API key for its model now, is refused by name and never moved to another payer.
+  const routing = yield* hostedStoreOrUnavailable(readCodingAgentRouting(userId, agent.id));
+  const missing = yield* hostedStoreOrUnavailable(
+    messageCredentialMissing(agent, {
+      runtime: Option.isSome(routing) ? routing.value.runtime : CONVERSATION_RUNTIME.EVE,
+      payer: Option.isSome(routing) ? routing.value.payer : null,
+    }),
+  );
+  if (missing !== undefined) return yield* Effect.fail(credentialMissing(missing));
   // The line is written in the agent's conversation, which is its starter's whichever member sends it.
   const target = { userId: agent.userId, conversationId: agent.conversationId };
   const repeated = yield* hostedStoreOrUnavailable(

@@ -52,6 +52,7 @@ import {
   type CountTone,
   DETAIL_PAGE_INSET,
   DetailPage,
+  DisclosureAction,
   DisclosureChevron,
   EmptyState,
   ErrorState,
@@ -94,7 +95,6 @@ import {
 import {
   createContext,
   lazy,
-  type MouseEvent,
   type ReactNode,
   Suspense,
   useCallback,
@@ -475,7 +475,8 @@ function checksSummaryOf(checks: readonly PullRequestCheck[]): CheckSummary {
  * replaced by the overview's own as its read lands, since that is the newest
  * and the page under the header says the same: where it stands by the pull request's read,
  * and its checks by theirs, the published checks standing only for the
- * pull request they were read on. None while neither has been read.
+ * pull request they were read on, else the merge read's word for them.
+ * None while neither has been read.
  */
 function headerPullRequestOf(
   pullRequest: CodingAgentOverviewPullRequest | undefined,
@@ -487,7 +488,9 @@ function headerPullRequestOf(
   const { number, state, url } = held;
   // Note that what was published says the checks of its own pull request only, never of a newer one the overview read.
   const heldChecks = published?.number === number ? published.checks : undefined;
-  const summary = checks === undefined ? heldChecks : checksSummaryOf(checks.checks);
+  // Note that the overview's merge read says its head's checks as one word too, so a pull request nothing published still shows them before its Checks tab is read.
+  const merged = pullRequest?.merging?.checks;
+  const summary = checks === undefined ? (heldChecks ?? merged) : checksSummaryOf(checks.checks);
   return { number, state, url, checks: summary ?? CHECK_SUMMARY.NONE };
 }
 
@@ -567,11 +570,9 @@ function Section({
           <DisclosureChevron />
           {heading}
           {end === undefined ? null : (
-            // biome-ignore lint/a11y/noStaticElementInteractions: the wrapper only keeps its controls' presses from folding the section whose head they stand in; the controls inside are the presses.
-            // biome-ignore lint/a11y/useKeyWithClickEvents: a key on a control inside reaches it as a click, which the wrapper keeps the same way.
-            <span className="pull-request-section-end" onClick={keptInHead}>
-              {end}
-            </span>
+            <DisclosureAction>
+              <span className="pull-request-section-end">{end}</span>
+            </DisclosureAction>
           )}
         </FoldSummary>
         <FoldBody className="pull-request-section-body">{children}</FoldBody>
@@ -830,12 +831,6 @@ function useThreadJump(
     : () => jumps.jump(thread, view);
 }
 
-/** A press on something in a thread's head that keeps it for itself, rather than folding the thread. */
-function keptInHead(event: MouseEvent<HTMLElement>): void {
-  event.preventDefault();
-  event.stopPropagation();
-}
-
 /**
  * A thread's ⋯ at the end of its head: View in the tab's other view, where
  * the thread is found by its id, and Copy link, the thread's Luke link in
@@ -880,16 +875,16 @@ function ThreadMenu({
   if (actions.length === 0) return null;
   const label = THREAD_REVEAL_WORDS.MENU;
   return (
-    // biome-ignore lint/a11y/noStaticElementInteractions: the wrapper only keeps the ⋯'s press from folding the thread whose head it stands in; the button inside is the control.
-    // biome-ignore lint/a11y/useKeyWithClickEvents: a key on the button inside reaches it as a click, which the wrapper keeps the same way.
-    <span className="pull-request-thread-menu" onClick={keptInHead}>
-      <Tooltip label={label}>
-        <IconButton icon={<EllipsisIcon />} label={label} {...menu.trigger()} />
-      </Tooltip>
-      {menu.drawn === undefined ? null : (
-        <ActionMenu label={label} menu={menu.drawn} groups={[actions]} onClose={menu.close} />
-      )}
-    </span>
+    <DisclosureAction>
+      <span className="pull-request-thread-menu">
+        <Tooltip label={label}>
+          <IconButton icon={<EllipsisIcon />} label={label} {...menu.trigger()} />
+        </Tooltip>
+        {menu.drawn === undefined ? null : (
+          <ActionMenu label={label} menu={menu.drawn} groups={[actions]} onClose={menu.close} />
+        )}
+      </span>
+    </DisclosureAction>
   );
 }
 
@@ -974,7 +969,12 @@ function useThreadHead(thread: ReviewThread, now: number, pending: boolean) {
         ? PULL_REQUEST_WORDS.THREAD
         : `${PULL_REQUEST_WORDS.THREAD} ${PULL_REQUEST_WORDS.BY} ${actorName(writer)}`,
     face: writer === undefined ? null : <ActorMark actor={writer} size={ACTOR_SIZE.ROW} />,
-    name: writer === undefined ? null : <ActorRef actor={writer} nameOnly />,
+    name:
+      writer === undefined ? null : (
+        <DisclosureAction>
+          <ActorRef actor={writer} nameOnly />
+        </DisclosureAction>
+      ),
     time:
       first === undefined ? undefined : (
         <RelativeTime className="annotation-card-time" at={first.at} now={now} />

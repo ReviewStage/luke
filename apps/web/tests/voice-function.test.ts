@@ -16,6 +16,7 @@ import { PROVIDER_KEY_KIND, PROVIDER_KEY_PROVIDER } from "@luke/features/provide
 import { LIVE_VOICE } from "@luke/live";
 import { BRAIN_HOST_ENVIRONMENT, BRAIN_HOST_HEADER } from "@luke/service/agents/brain-host/bounds";
 import { CRON_ENVIRONMENT } from "@luke/service/maintenance/maintenance-bounds";
+import { connectAgentApiKeys } from "@luke/service/testing/agent-credentials";
 import { delegated, heard, sessionStarted } from "@luke/service/testing/live-events";
 import {
   connect,
@@ -179,6 +180,8 @@ it.effect(
       Effect.gen(function* () {
         yield* Effect.sync(() => stubSecrets({ cron: CRON_SECRET, eve: EVE_DEPLOYMENT_SECRET }));
         const userId = yield* Effect.promise(() => database.createUser());
+        // A call's turns run on the account's own key, since Luke's pays for no coding agent.
+        yield* Effect.promise(() => database.run(connectAgentApiKeys(userId)));
         yield* Effect.promise(() => saveCallerKey(userId));
         const task = yield* Effect.promise(() =>
           database.run(startTask(userId, { name: "Teammate invitations" })),

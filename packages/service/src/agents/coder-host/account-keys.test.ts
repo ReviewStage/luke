@@ -13,7 +13,7 @@ import { jsonResponse } from "@luke/wire/testing";
 import { generateText } from "ai";
 import { Redacted, Result } from "effect";
 import { afterAll, test } from "vitest";
-import { accountProviderKeys } from "./account-keys.js";
+import { accountProviderKeys, spendingKeyOf } from "./account-keys.js";
 import { CODER_REFUSAL } from "./bounds.js";
 import { coderModel, type LukeKeys } from "./model.js";
 
@@ -173,6 +173,21 @@ test("a step runs on the account's own key where it saved one, and on Luke's for
 
   assert.deepEqual(anthropic.keys, [ACCOUNT_KEY.ANTHROPIC]);
   assert.deepEqual(openAi.keys, [Redacted.value(LUKE.openAi ?? Redacted.make(""))]);
+});
+
+test("a call beside an account's agents that is no coding agent, such as a replay's summary, still spends Luke's key where the account saved none, counted as Luke's", async () => {
+  const userId = await accountWithKeys({});
+
+  const spending = await database.run(
+    spendingKeyOf(userId, PROVIDER_KEY_PROVIDER.ANTHROPIC, LUKE, Redacted.make(RING.HELD)),
+  );
+
+  assert.deepEqual(
+    spending === undefined
+      ? undefined
+      : { key: Redacted.value(spending.key), lukes: spending.lukes },
+    { key: Redacted.value(LUKE.anthropic ?? Redacted.make("")), lukes: true },
+  );
 });
 
 test("a Claude setup-token is no key a step runs on: an account holding only one runs on Luke's key", async () => {

@@ -19,6 +19,7 @@ import { BRAIN_HOST_ENVIRONMENT, BRAIN_HOST_HEADER } from "../agents/brain-host/
 import { HostedEnvironment, type HostedEnvironmentValues } from "../environment.js";
 import { GitHubApp } from "../github/github-app.js";
 import { type ModelCatalog, modelCatalogOf } from "../providers/model-catalog.js";
+import { connectAgentApiKeys } from "../testing/agent-credentials.js";
 import {
   connectWorkspaceGitHub,
   githubReaching,
@@ -186,6 +187,7 @@ const MODEL = "openai/gpt-6.1-sol";
 /** An owner, a task on the installation's repository, and an automation on it due a minute ago. */
 const openDueAutomation = Effect.gen(function* () {
   const owner = yield* openGithubUser();
+  yield* connectAgentApiKeys(owner);
   const task = yield* startTask(owner, {
     name: "Flaky tests",
     repository: `${RELAY.owner}/${RELAY.name}`,

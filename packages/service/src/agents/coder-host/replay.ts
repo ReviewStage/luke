@@ -28,6 +28,7 @@ import {
   type StartNoteHeading,
   toolStep,
 } from "@luke/features/agent-replay";
+import { CLAUDE_CODE_TOOL, CODEX_TOOL } from "@luke/features/agent-tools";
 import {
   base64Bytes,
   CODING_AGENT_ATTACHMENT_TYPE,
@@ -130,7 +131,11 @@ interface CallWords {
   readonly key: string;
 }
 
-/** Each coding tool's words; a patch names its files in its own headers and stands apart. */
+/**
+ * Each coding tool's words, eve's and those a native harness calls under its
+ * own names (`../native-events/`); a patch, and a Codex file change, name
+ * their files in their own input and stand apart.
+ */
 const CALL_WORDS: ReadonlyMap<string, CallWords> = new Map([
   [CODER_TOOL.BASH, { verb: "Ran", key: "command" }],
   [CODER_TOOL.READ_FILE, { verb: "Read", key: "filePath" }],
@@ -138,9 +143,28 @@ const CALL_WORDS: ReadonlyMap<string, CallWords> = new Map([
   [CODER_TOOL.GLOB, { verb: "Searched", key: "pattern" }],
   [CODER_TOOL.GREP, { verb: "Searched", key: "pattern" }],
   [CODER_TOOL.READ_WEB_PAGE, { verb: "Fetched", key: "url" }],
-  [CODER_TOOL.SEARCH_WEB, { verb: "Searched the web for", key: "query" }],
+  [CODER_TOOL.WEB_SEARCH, { verb: "Searched the web for", key: "query" }],
   [RETIRED_CODER_TOOL.WEB_FETCH, { verb: "Fetched", key: "url" }],
-  [RETIRED_CODER_TOOL.WEB_SEARCH, { verb: "Searched the web for", key: "query" }],
+  [RETIRED_CODER_TOOL.SEARCH_WEB, { verb: "Searched the web for", key: "query" }],
+  [CLAUDE_CODE_TOOL.BASH, { verb: "Ran", key: "command" }],
+  [CLAUDE_CODE_TOOL.READ, { verb: "Read", key: "file_path" }],
+  [CLAUDE_CODE_TOOL.WRITE, { verb: "Wrote", key: "file_path" }],
+  [CLAUDE_CODE_TOOL.EDIT, { verb: "Edited", key: "file_path" }],
+  [CLAUDE_CODE_TOOL.NOTEBOOK_EDIT, { verb: "Edited", key: "notebook_path" }],
+  [CLAUDE_CODE_TOOL.GLOB, { verb: "Searched", key: "pattern" }],
+  [CLAUDE_CODE_TOOL.GREP, { verb: "Searched", key: "pattern" }],
+  [CLAUDE_CODE_TOOL.WEB_FETCH, { verb: "Fetched", key: "url" }],
+  [CLAUDE_CODE_TOOL.WEB_SEARCH, { verb: "Searched the web for", key: "query" }],
+  [CODEX_TOOL.COMMAND_EXECUTION, { verb: "Ran", key: "command" }],
+  [CODEX_TOOL.WEB_SEARCH, { verb: "Searched the web for", key: "query" }],
+]);
+
+/** The tools that edit the one file their input names: eve's own, and Claude Code's. */
+const ONE_FILE_EDITS: ReadonlySet<string> = new Set([
+  CODER_TOOL.WRITE_FILE,
+  CLAUDE_CODE_TOOL.WRITE,
+  CLAUDE_CODE_TOOL.EDIT,
+  CLAUDE_CODE_TOOL.NOTEBOOK_EDIT,
 ]);
 
 /** A patch header naming a file, as `apply_patch` spells one: a file added, updated, or deleted, or where an update moves it to. */
@@ -194,9 +218,28 @@ function patchFiles(input: UnparsedWireValue): readonly string[] {
   return patch.split("\n").flatMap((line) => PATCH_FILE_HEADER.exec(line.trimEnd())?.[1] ?? []);
 }
 
+/** The files a Codex file change names, each change's path and where an update moves it to, in the order written. */
+function changedFiles(input: UnparsedWireValue): readonly string[] {
+  const changes = isRecord(input) && Array.isArray(input.changes) ? input.changes : [];
+  return changes.flatMap((change: UnparsedWireValue) => {
+    if (!isRecord(change) || !isWireString(change.path)) return [];
+    const moved = isRecord(change.kind) ? change.kind.move_path : undefined;
+    return isWireString(moved) ? [change.path, moved] : [change.path];
+  });
+}
+
+/** The files a patch or a Codex file change edits; none for any other call. */
+function patchedFiles(name: string, input: UnparsedWireValue): readonly string[] {
+  if (name === CODER_TOOL.APPLY_PATCH) return patchFiles(input);
+  if (name === CODEX_TOOL.FILE_CHANGE) return changedFiles(input);
+  return [];
+}
+
 /** What a call was done to, read from its input alone. */
 function subjectOf(name: string, input: UnparsedWireValue): string {
-  if (name === CODER_TOOL.APPLY_PATCH) return patchFiles(input).join(", ");
+  if (name === CODER_TOOL.APPLY_PATCH || name === CODEX_TOOL.FILE_CHANGE) {
+    return patchedFiles(name, input).join(", ");
+  }
   const words = CALL_WORDS.get(name);
   if (words === undefined || !isRecord(input)) return "";
   const subject = input[words.key];
@@ -207,7 +250,7 @@ function subjectOf(name: string, input: UnparsedWireValue): string {
 export function callEntry(part: StoredToolPart): string {
   const name = part.type.slice("tool-".length);
   const verb =
-    name === CODER_TOOL.APPLY_PATCH
+    name === CODER_TOOL.APPLY_PATCH || name === CODEX_TOOL.FILE_CHANGE
       ? CALL_ENTRY_WORDS.EDITED
       : (CALL_WORDS.get(name)?.verb ?? CALL_ENTRY_WORDS.USED);
   // SAFETY: a stored part's input is the JSON the row carried; the read names one field of it and trusts no other.
@@ -794,14 +837,15 @@ export function replayOf(
   };
 }
 
-/** The files a call edited through the agent's own file tools: a patch's, or the one file written; none for a call that failed, which edited nothing. */
+/** The files a call edited through the agent's own file tools, or a native harness's: a patch's or a file change's, or the one file written or edited; none for a call that failed, which edited nothing. */
 function editedFiles(part: StoredToolPart): readonly string[] {
   if (part.state === "output-error") return [];
   const name = part.type.slice("tool-".length);
   // SAFETY: a stored part's input is the JSON the row carried; the read names one field of it and trusts no other.
   const input = part.input as UnparsedWireValue;
-  if (name === CODER_TOOL.APPLY_PATCH) return patchFiles(input);
-  if (name !== CODER_TOOL.WRITE_FILE) return [];
+  const patched = patchedFiles(name, input);
+  if (patched.length > 0) return patched;
+  if (!ONE_FILE_EDITS.has(name)) return [];
   const file = subjectOf(name, input);
   return file === "" ? [] : [file];
 }

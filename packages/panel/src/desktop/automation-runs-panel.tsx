@@ -9,6 +9,7 @@ import {
   AUTOMATION_FIRING,
   type AutomationFiring,
   type AutomationRunSummary,
+  type AutomationTrigger,
 } from "@luke/features/automation-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { LINK_PLACE } from "@luke/features/luke-link";
@@ -63,9 +64,6 @@ import { EDGE_SIDE, useResizableEdge } from "./use-resizable-edge.js";
  * under a way back to the setup.
  */
 
-/** What may fire a run: its automation's trigger, or Run now. */
-type AutomationFiringKind = AutomationFiring["kind"];
-
 /** Whose key a run ran on where the automation is another's, as its line names it. */
 const CREATOR = "its creator";
 
@@ -98,9 +96,13 @@ export const STANDING_GLYPH = {
   [AUTOMATION_RUN_STANDING.REST]: GLYPH_STATE.REST,
 } as const satisfies Record<AutomationRunStanding, GlyphState>;
 
-/** What fires an automation or fired a run, as its row's glyph: a schedule's clock, GitHub's mark, a webhook's hook, or Run now's play. */
-export function FiringGlyph({ kind }: { kind: AutomationFiringKind }): React.JSX.Element {
-  switch (kind) {
+/** What fires an automation or fired a run, as its row's glyph: a schedule's clock, GitHub's or an integration's mark, a webhook's hook, or Run now's play. */
+export function FiringGlyph({
+  of,
+}: {
+  of: AutomationFiring | AutomationTrigger;
+}): React.JSX.Element {
+  switch (of.kind) {
     case AUTOMATION_FIRING.GITHUB:
       return <ProviderMark provider={INTEGRATION_PROVIDER.GITHUB} />;
     case AUTOMATION_FIRING.WEBHOOK:
@@ -109,6 +111,8 @@ export function FiringGlyph({ kind }: { kind: AutomationFiringKind }): React.JSX
       return <PlayIcon />;
     case AUTOMATION_FIRING.SCHEDULE:
       return <ClockIcon />;
+    case AUTOMATION_FIRING.INTEGRATION:
+      return <ProviderMark provider={of.provider} />;
   }
 }
 
@@ -151,7 +155,7 @@ function RunRow({
         ref={(node) => {
           row.current = node;
         }}
-        leading={<StateGlyph glyph={<FiringGlyph kind={run.firing.kind} />} state={state} />}
+        leading={<StateGlyph glyph={<FiringGlyph of={run.firing} />} state={state} />}
         title={automationRunTitle(run)}
         description={
           <Tooltip label={line}>

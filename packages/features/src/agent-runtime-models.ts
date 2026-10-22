@@ -52,6 +52,13 @@ const NATIVE_MODEL_RULE: Partial<Record<CodingAgentRuntime, RuntimeModelRule>> =
   },
 };
 
+/** The harness Settings › Agents names the row of the provider's credentials by: Claude Code for Anthropic's, Codex for OpenAI's. */
+export function harnessNameOf(provider: ModelProvider): string {
+  return provider === MODEL_PROVIDER.ANTHROPIC
+    ? (NATIVE_MODEL_RULE.claude_code?.name ?? "Claude Code")
+    : (NATIVE_MODEL_RULE.codex?.name ?? "Codex");
+}
+
 /** The suffix AI Gateway gives a model's fast version's id: `anthropic/claude-opus-5.5-fast`. */
 const FAST_ID_SUFFIX = "-fast";
 

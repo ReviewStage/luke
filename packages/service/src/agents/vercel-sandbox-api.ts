@@ -250,7 +250,7 @@ interface ImageSandboxCreate {
 }
 
 /** A file written into a sandbox: its absolute path, its bytes, and its mode. */
-interface SandboxFile {
+export interface SandboxFile {
   readonly path: string;
   readonly contents: Uint8Array;
   readonly mode: number;

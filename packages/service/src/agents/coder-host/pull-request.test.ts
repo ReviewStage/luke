@@ -200,7 +200,7 @@ it.layer(getTestDB())("a coding agent's pull request", (it) => {
   );
 
   it.effect(
-    "an agent writing as its developer has its pull request opened on their token, once, against the default branch, ending on Luke's line, its branch recorded on the agent as it opens",
+    "an agent writing as its developer has its pull request opened on their token, once, against the default branch, its description as the agent wrote it, its branch recorded on the agent as it opens",
     () =>
       Effect.gen(function* () {
         const agent = yield* openAgent(21, CODING_AGENT_AUTHOR.DEVELOPER);
@@ -221,7 +221,7 @@ it.layer(getTestDB())("a coding agent's pull request", (it) => {
           head: INPUT.head,
           base: RELAY.defaultBranch,
           title: INPUT.title,
-          body: `${INPUT.body}\n\nMade with [Luke](https://tryluke.dev)`,
+          body: INPUT.body,
           draft: false,
         });
         assert.equal(author, CODING_AGENT_AUTHOR.DEVELOPER);

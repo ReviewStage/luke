@@ -21,6 +21,7 @@ import {
   EVE_SEND_OUTCOME,
   type EveMessage,
 } from "../agents/brain-host/eve-sessions.js";
+import { connectAgentApiKeys } from "../testing/agent-credentials.js";
 import {
   GITHUB_APP_WITH_TOKENS,
   GITHUB_FIXTURE_MEMBER,
@@ -150,6 +151,7 @@ const openTokenAgent = (
 ) =>
   Effect.gen(function* () {
     const owner = yield* openTokenMember();
+    yield* connectAgentApiKeys(owner);
     const task = yield* startTask(owner, {
       name: "Invitations",
       ...(repository === null ? undefined : { repository }),

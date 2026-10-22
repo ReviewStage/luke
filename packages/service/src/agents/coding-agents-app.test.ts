@@ -264,6 +264,7 @@ import { hostedFetch } from "../orpc/handler.js";
 import { modelCatalogOf, type OfferedModel } from "../providers/model-catalog.js";
 import type { WebServices } from "../runtime.js";
 import { tasksProcedures } from "../tasks/tasks-procedures.js";
+import { connectAgentApiKeys } from "../testing/agent-credentials.js";
 import { openedPagePolicy, SANDBOXED_PAGE } from "../testing/content-policy.js";
 import {
   connectWorkspaceGitHub,
@@ -866,6 +867,9 @@ const openTask = (
   Effect.gen(function* () {
     const owner = yield* openGithubUser();
     const other = yield* otherAccount(options.otherToken);
+    // Luke's key pays for no coding agent, so both accounts start and message theirs on their own keys.
+    yield* connectAgentApiKeys(owner);
+    yield* connectAgentApiKeys(other);
     const task = yield* startTask(owner, {
       name: "Teammate invitations",
       repository: options.repository === undefined ? RELAY_FULL_NAME : options.repository,
@@ -8547,6 +8551,7 @@ it.layer(getTestDB())("the coding agent's chat tools", (it) => {
           userId: opened.owner,
           taskId: opened.task.id,
           self: { kind: MEMBER_KIND.AGENT, agentId: started.agent.id },
+          conversationId: started.target.conversationId,
           repository: RELAY_FULL_NAME,
           telling,
         });
@@ -9417,6 +9422,80 @@ it.layer(getTestDB())("the coding agent's chat tools", (it) => {
   );
 
   it.effect(
+    "an image block naming an attachment hands on a picture kept beside the poster's own conversation in a DM, copied into a picture of the new message, and the sandbox is never opened",
+    () =>
+      Effect.gen(function* () {
+        const chat = yield* openAgents();
+        const target = { userId: chat.owner, conversationId: chat.conversations[0] ?? "" };
+        const shown = Option.getOrThrow(
+          yield* keepConversationPicture(target, {
+            bytes: PNG,
+            contentType: CHAT_IMAGE_TYPE.PNG,
+            width: 1,
+            height: 1,
+          }),
+        );
+        const posted = yield* chat.post(chat.first, {
+          text: "The developer's screenshot of the invite form.",
+          to: chat.links.second,
+          blocks: [{ type: CHAT_BLOCK.IMAGE, attachmentId: shown.id, alt: "The invite form." }],
+        });
+        assert.ok(posted.status === ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(posted));
+        const poster = yield* chat.memberOf(chat.first);
+        const [message] = Option.getOrThrow(
+          yield* history(chat.owner, chat.task.workspaceId, poster.id, {}),
+        );
+        const image = message?.blocks.find((block) => block.type === CHAT_BLOCK.IMAGE);
+        assert.ok(message !== undefined && image !== undefined && "attachmentId" in image);
+        assert.equal(image.alt, "The invite form.");
+        assert.notEqual(image.attachmentId, shown.id, "the message keeps a picture of its own");
+        const kept = Option.getOrThrow(
+          yield* readAttachment(chat.owner, chat.task.workspaceId, message.id, image.attachmentId),
+        );
+        assert.deepEqual([kept.contentType, kept.bytes], [CHAT_IMAGE_TYPE.PNG, PNG]);
+      }),
+  );
+
+  it.effect(
+    "an image block naming another agent's picture is refused in words that say so, and one naming both a path and an attachment, or neither, is refused, posting nothing",
+    () =>
+      Effect.gen(function* () {
+        const chat = yield* openAgents();
+        const theirs = Option.getOrThrow(
+          yield* keepConversationPicture(
+            { userId: chat.owner, conversationId: chat.conversations[1] ?? "" },
+            { bytes: PNG, contentType: CHAT_IMAGE_TYPE.PNG, width: 1, height: 1 },
+          ),
+        );
+        const refused = (reason: string) => ({ status: ACTION_RESULT_STATUS.REJECTED, reason });
+        const post = (block: Record<string, string>) =>
+          chat.post(chat.first, {
+            text: "See.",
+            to: chat.links.second,
+            blocks: [{ type: CHAT_BLOCK.IMAGE, alt: "The form.", ...block }],
+          });
+        assert.deepEqual(
+          yield* post({ attachmentId: theirs.id }),
+          refused(
+            `Not posted: attachment ${theirs.id} is no picture you can hand on. Name a picture of your own ` +
+              "conversation, such as one show_image kept, or one of a chat message you can read.",
+          ),
+        );
+        assert.deepEqual(
+          yield* post({ path: "shot.png", attachmentId: theirs.id }),
+          refused(CHAT_TOOL_REFUSAL.IMAGE_SOURCE),
+        );
+        assert.deepEqual(yield* post({}), refused(CHAT_TOOL_REFUSAL.IMAGE_SOURCE));
+        const poster = yield* chat.memberOf(chat.first);
+        assert.deepEqual(
+          yield* history(chat.owner, chat.task.workspaceId, poster.id, {}),
+          Option.some([]),
+          "nothing was posted",
+        );
+      }),
+  );
+
+  it.effect(
     "a turn opens with the chat the agent has not read, once, leaving out every message a notice already told it, and with nothing once it has read",
     () =>
       Effect.gen(function* () {
@@ -10102,6 +10181,21 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
             },
             output: "ok",
           },
+          // A native harness's edits count as the agent's own file tools' do.
+          {
+            type: "tool-Edit",
+            toolCallId: "call-7",
+            state: "output-available",
+            input: { file_path: "src/claude.ts", old_string: "a", new_string: "b" },
+            output: "The file has been updated successfully.",
+          },
+          {
+            type: "tool-fileChange",
+            toolCallId: "call-8",
+            state: "output-available",
+            input: { changes: [{ path: "src/codex.ts", kind: { type: "update" }, diff: "" }] },
+            output: { status: "completed" },
+          },
         ]);
         const fork = (messageId: string) =>
           ask(
@@ -10131,7 +10225,7 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
         assert.match(parts.replay?.preamble ?? "", /You are a fork/u);
         assert.match(
           parts.replay?.preamble ?? "",
-          /may be ahead of the message you were forked at\. After that message it edited `src\/invites\.ts`, `src\/expiry\.ts`, `src\/mailer\.ts`, `src\/old\.ts`, `src\/new\.ts`; undo/u,
+          /may be ahead of the message you were forked at\. After that message it edited `src\/invites\.ts`, `src\/expiry\.ts`, `src\/mailer\.ts`, `src\/old\.ts`, `src\/new\.ts`, `src\/claude\.ts`, `src\/codex\.ts`; undo/u,
         );
         for (const named of [laterLine, randomUUID()]) {
           assert.deepEqual(
@@ -11220,6 +11314,31 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
         assert.ok((bounded.from?.steps ?? LONG_TURNS) < LONG_TURNS);
         assert.ok(stepsBytes(replay?.steps ?? []) <= measured * 2);
         assert.match(replay?.steps.at(-1)?.summary ?? "", /^Said: Step 29\./u);
+      }),
+  );
+
+  it.effect(
+    "a native source, whose steps estimate no instructions of their own, is fitted with the fallback's room for them, as a source that measured nothing is",
+    () =>
+      Effect.gen(function* () {
+        const { owner, first, continueFrom } = yield* longSource();
+        const unmeasured = yield* continueFrom(first.id, {
+          model: SMALL_WINDOW.model,
+          effort: "low",
+        });
+        // The runner's events record what Claude Code read, and nothing of instructions the CLI composed.
+        yield* recordCodingAgentStep(owner, first.id, {
+          inputTokens: LONG_TURNS * 2_600,
+          outputTokens: 500,
+          systemPromptTokens: 0,
+          toolDefinitionTokens: 0,
+          briefTokens: 100,
+          at: 1_000,
+        });
+        const native = yield* continueFrom(first.id, { model: SMALL_WINDOW.model, effort: "low" });
+
+        assert.ok((unmeasured.from?.steps ?? LONG_TURNS) < LONG_TURNS);
+        assert.equal(native.from?.steps, unmeasured.from?.steps);
       }),
   );
 

@@ -269,6 +269,34 @@ while production's `GITHUB_APP_CLIENT_ID` and `GITHUB_APP_CLIENT_SECRET`
 hold the App's client id and secret, a Vercel project setting rather than anything in
 this repository. Nothing on the branch is Preview-specific.
 
+## The Luke Sentry integration
+
+Automations fire on Sentry's events (an issue alert whose action is Luke, a
+new issue) through Luke's own Sentry public integration, which a Sentry
+organization's owner installs on one Luke workspace; a delivery fires only
+the automations of the workspace its installation stands for
+(`integration_installation`, `@luke/database/models/integration-installation-store`).
+`src/triggers/sentry/sentry-app-config.ts`'s `SentryApp` is the integration
+as the web runtime builds it from `SENTRY_APP_SLUG` (the integration's slug,
+which its install address names), `SENTRY_APP_CLIENT_ID`, and
+`SENTRY_APP_CLIENT_SECRET` (the client secret, which both exchanges an
+install's code and signs every webhook delivery). A deployment missing any
+of them still builds the service, and every read of it answers
+`SentryAppNotConfigured` naming what was missing.
+
+To register the integration, in Sentry's Settings › Developer Settings ›
+Custom Integrations › Create New Integration, choose a public integration and set:
+
+- **Webhook URL**: `https://<deployment>/api/triggers/sentry`.
+- **Redirect URL**: `https://<deployment>/api/triggers/sentry/installed`.
+- **Verify Installation**: on, so an install completes only once Luke has exchanged its code.
+- **Permissions**: Issue & Event › Read, and Project › Read; nothing else.
+- **Webhooks**: Issue on.
+- **Alert Rule Action**: on, so an alert rule can name Luke as its action.
+
+Then copy the integration's slug, client id, and client secret into the three
+variables above for every environment that receives its deliveries.
+
 ## The admin resource
 
 `src/admin/admin-procedures.ts` is the dashboard's resource on the hosted
@@ -1101,10 +1129,10 @@ deployment for the cookie's account, a Stop and a delete's retire with it. The a
 tools and authors its own under `apps/dev/tools/`, which is exactly the set the
 store writer registers (`src/agents/coder-host/tool-set.ts`): eve's `bash`, `read_file`,
 `write_file`, and `glob`, its own `apply_patch` and `grep`
-(`apps/dev/tools/`), Luke's own `search_web` and
-`read_web_page` (`public-research.ts`: the search screened, cited, and
-budgeted per turn on Luke's key and counted on the account's meter, the page
-read refusing any address off the public internet), and two of Luke's own: `delegate`, the hand-off to a worker (below), and
+(`apps/dev/tools/`), eve's provider-run `web_search` (Anthropic's server
+search on a Claude model, OpenAI's on a GPT one, inside the agent's own model
+call and so on its own key), Luke's own `read_web_page`
+(`public-research.ts`: refusing any address off the public internet), and two of Luke's own: `delegate`, the hand-off to a worker (below), and
 `edit_plan` (`src/agents/coder-host/plan-edit.ts`), which takes notes
 (`@luke/features/plan-template`'s `planNotesSchema`)
 into the agent's plan through the plan's one write (`plan-notes.ts`): an open
@@ -1179,7 +1207,7 @@ The worker (`apps/dev/subagents/worker/`) is the agent's own declared
 subagent: read-only in the
 agent's own sandbox and checkout, uncommitted edits included
 (`defineParentSandbox`), authored exactly the agent's reads
-(`WORKER_TOOL_NAMES`: `bash`, `read_file`, `glob`, `grep`, `search_web`,
+(`WORKER_TOOL_NAMES`: `bash`, `read_file`, `glob`, `grep`, `web_search`,
 `read_web_page`), told to change nothing, and uncapped in tokens, as the
 agent it runs under is. It is declared
 hidden (`tool: false`), because eve's own subagent tool carries a message
@@ -1964,31 +1992,17 @@ and loaded with `load_skill`; each body says where the skill stands in the
 agent's checkout. A task with no repository, one the App does not reach, or
 a read that fails offers none.
 
-The research reads (`src/agents/public-research.ts`) are `search_web`,
-one query sent to OpenAI's Responses API with its own `web_search` tool on
-Luke's key and its default OpenAI model (`BRAIN_OPENAI_DEFAULTS`) at low reasoning effort and low search
-context, since the turn waits on it, asked to store nothing, and
-`read_web_page`, one public HTTPS page fetched and reduced to its text.
-Neither knows the account or the task: what leaves is the query and fixed
-instructions, or a GET for one URL with no credential of the account's, and
-the result goes back only to the call that asked. A query is one line of at
-most 200 characters with nothing shaped like a credential; keeping private
-repository text out of it is the agents' instructions' rule, since plain
-words cannot be told apart by code. A search is `found` only with a cited
-public URL, each with the answer's words that cited it; a finished uncited
-answer is `no-results` and its words go no further, one the token bound cut
-short before it cited anything is `not-searched`, and every failure is `not-searched`
-or `not-read` in words that say nothing was found. A page read refuses any
-host whose address, resolved before each request and again on every redirect
-hop it follows by hand, is private, loopback, link-local, CGNAT, unique-local,
-or reserved; the check is a lookup ahead of the request, so a DNS answer that
-changes between the two is the case it does not cover. A turn gets at most
-4 searches and 6 page reads, 5 sources a search, and 20,000 characters of a
-page from at most 1 MB read (`PUBLIC_RESEARCH_BOUNDS`). A search is a paid
-inference on Luke's key, so each one is counted as one of the calling account's
-hosted uses before it is sent; a count that cannot be written is logged and stops
-nothing.
-`src/agents/public-research.test.ts` holds both against scripted HTTP and DNS.
+The page read (`src/agents/public-research.ts`) is `read_web_page`, one
+public HTTPS page fetched and reduced to its text, with no credential of the
+account's, the result going back only to the call that asked. A search is no
+tool of Luke's: it is eve's provider-run `web_search`, paid for by the agent's
+own model call. A page read refuses any host whose address, resolved before
+each request and again on every redirect hop it follows by hand, is private,
+loopback, link-local, CGNAT, unique-local, or reserved; the check is a lookup
+ahead of the request, so a DNS answer that changes between the two is the case
+it does not cover. A turn gets at most 6 page reads, and 20,000 characters of
+a page from at most 1 MB read (`PUBLIC_RESEARCH_BOUNDS`).
+`src/agents/public-research.test.ts` holds it against scripted HTTP and DNS.
 The developer talks to an agent through the ordinary voice
 session. Every call is a `/api/voice/sessions` session whose
 `session.create` names the task (`planId`) and the agent of it the call

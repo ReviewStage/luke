@@ -5,6 +5,7 @@ import { AUTH_PAGE_EXAMPLE } from "./examples/auth-page";
 import { AVATARS_EXAMPLE } from "./examples/avatars";
 import { BADGES_EXAMPLE } from "./examples/badges";
 import { BANNERS_EXAMPLE } from "./examples/banners";
+import { BAR_ITEMS_EXAMPLE } from "./examples/bar-items";
 import { BREADCRUMBS_EXAMPLE } from "./examples/breadcrumbs";
 import { BUTTONS_EXAMPLE } from "./examples/buttons";
 import { CALENDAR_EXAMPLE } from "./examples/calendar";
@@ -46,8 +47,10 @@ import { SETTINGS_PAGE_EXAMPLE } from "./examples/settings-page";
 import { SETTINGS_ROW_EXAMPLE } from "./examples/settings-row";
 import { SETTINGS_SECTION_EXAMPLE } from "./examples/settings-section";
 import { SKELETONS_EXAMPLE } from "./examples/skeletons";
+import { SLIDER_EXAMPLE } from "./examples/slider";
 import { SPINNERS_EXAMPLE } from "./examples/spinners";
 import { SPLIT_BUTTONS_EXAMPLE } from "./examples/split-buttons";
+import { SWATCHES_EXAMPLE } from "./examples/swatches";
 import { SWITCHES_EXAMPLE } from "./examples/switches";
 import { TEXT_BUTTONS_EXAMPLE } from "./examples/text-buttons";
 import { TEXT_FIELDS_EXAMPLE } from "./examples/text-fields";
@@ -84,6 +87,7 @@ export const EXAMPLES: readonly Example[] = [
   CALENDAR_EXAMPLE,
   CARDS_EXAMPLE,
   CHIPS_EXAMPLE,
+  BAR_ITEMS_EXAMPLE,
   CHOICE_BAR_EXAMPLE,
   CHOICE_LIST_EXAMPLE,
   COLLECTION_PAGE_EXAMPLE,
@@ -101,6 +105,7 @@ export const EXAMPLES: readonly Example[] = [
   HOVER_CARDS_EXAMPLE,
   INLINE_EDITS_EXAMPLE,
   INLINE_REFS_EXAMPLE,
+  SWATCHES_EXAMPLE,
   TEXT_BUTTONS_EXAMPLE,
   TEXT_FIELDS_EXAMPLE,
   TEXT_LINKS_EXAMPLE,
@@ -125,6 +130,7 @@ export const EXAMPLES: readonly Example[] = [
   SPINNERS_EXAMPLE,
   SPLIT_BUTTONS_EXAMPLE,
   SKELETONS_EXAMPLE,
+  SLIDER_EXAMPLE,
   SETTINGS_ROW_EXAMPLE,
   AUTH_PAGE_EXAMPLE,
 ];

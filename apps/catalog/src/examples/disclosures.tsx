@@ -1,8 +1,11 @@
 import {
   DISCLOSURE_BODY,
   Disclosure,
+  DisclosureAction,
   DisclosureBody,
   DisclosureSummary,
+  EllipsisIcon,
+  IconButton,
   Stack,
   Text,
 } from "@luke/ui";
@@ -13,8 +16,31 @@ import { CatalogSection } from "../section";
 /**
  * disclosures.tsx -- a fold closed and open, its body indented under the
  * summary's words or flush with the row, a fold whose holder keeps its
- * state, and a summary long enough to wrap in a pane narrower than its words.
+ * state, a summary long enough to wrap in a pane narrower than its words,
+ * and a summary holding a control that is pressed without folding it.
  */
+
+/** A fold whose summary ends with a ⋯ in its action slot, which counts its presses rather than folding the row. */
+function ActionDisclosure(): React.JSX.Element {
+  const [presses, setPresses] = useState(0);
+  return (
+    <Disclosure>
+      <DisclosureSummary>
+        <span>Review thread · ⋯ pressed {presses}×</span>
+        <DisclosureAction>
+          <IconButton
+            icon={<EllipsisIcon />}
+            label="More"
+            onClick={() => setPresses((count) => count + 1)}
+          />
+        </DisclosureAction>
+      </DisclosureSummary>
+      <DisclosureBody>
+        <Text>Pressing the ⋯ leaves this fold as it stood; the rest of the row folds it.</Text>
+      </DisclosureBody>
+    </Disclosure>
+  );
+}
 
 /** A fold whose open state its holder keeps, as a tab keeps which of its notes it folded. */
 function HeldDisclosure(): React.JSX.Element {
@@ -76,6 +102,11 @@ function Disclosures(): React.JSX.Element {
       <CatalogSection id="disclosure-held" title="Held by its holder">
         <div className="catalog-frame catalog-frame-wide">
           <HeldDisclosure />
+        </div>
+      </CatalogSection>
+      <CatalogSection id="disclosure-action" title="Control in the summary">
+        <div className="catalog-frame">
+          <ActionDisclosure />
         </div>
       </CatalogSection>
       <CatalogSection id="disclosure-long" title="Long summary, narrow pane">

@@ -17,7 +17,7 @@ import {
 } from "@luke/features/coding-agent-wire";
 import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
 import { it } from "vitest";
-import { replayOf, type StartFrom } from "./replay.js";
+import { callEntry, replayOf, type StartFrom } from "./replay.js";
 import { SNAPSHOT_MISS } from "./snapshot.js";
 
 /** A step of the agent's own words. */
@@ -174,5 +174,45 @@ it("a source that never made a branch of its own sends the new agent to the work
   assert.match(
     replayOf(from, from.steps, undefined).replay.preamble,
     /start from the repository's default branch/u,
+  );
+});
+
+it("a native harness's calls replay named as eve's are, its edits by the files they touched", () => {
+  const settled = (tool: string, input: Record<string, unknown>) =>
+    callEntry({
+      type: `tool-${tool}`,
+      toolCallId: tool,
+      state: "output-available",
+      input,
+      output: "",
+    });
+
+  assert.deepEqual(
+    [
+      settled("Bash", { command: "pnpm test" }),
+      settled("Read", { file_path: "src/a.ts" }),
+      settled("Edit", { file_path: "src/a.ts", old_string: "a", new_string: "b" }),
+      settled("Write", { file_path: "src/b.ts", content: "b" }),
+      settled("Grep", { pattern: "invite" }),
+      settled("commandExecution", { command: "pnpm lint", cwd: "/vercel/sandbox" }),
+      settled("fileChange", {
+        changes: [
+          { path: "src/c.ts", kind: { type: "update" }, diff: "" },
+          { path: "src/d.ts", kind: { type: "add" }, diff: "" },
+          { path: "src/e.ts", kind: { type: "update", move_path: "src/f.ts" }, diff: "" },
+        ],
+      }),
+      settled("ScheduleWakeup", { delaySeconds: 60 }),
+    ],
+    [
+      "Ran: pnpm test",
+      "Read: src/a.ts",
+      "Edited: src/a.ts",
+      "Wrote: src/b.ts",
+      "Searched: invite",
+      "Ran: pnpm lint",
+      "Edited: src/c.ts, src/d.ts, src/e.ts, src/f.ts",
+      "Used: ScheduleWakeup",
+    ],
   );
 });

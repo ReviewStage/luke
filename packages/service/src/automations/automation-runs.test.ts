@@ -60,6 +60,7 @@ import { steerCodingAgent } from "../agents/coder-host/steer.js";
 import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
 import { closeInboxItem, postInboxItem } from "../inbox/inbox-store.js";
 import { modelCatalogOf, type OfferedModel } from "../providers/model-catalog.js";
+import { connectAgentApiKeys } from "../testing/agent-credentials.js";
 import {
   connectWorkspaceGitHub,
   githubReaching,
@@ -161,6 +162,7 @@ const openAutomation = (
 ) =>
   Effect.gen(function* () {
     const owner = yield* openGithubUser();
+    yield* connectAgentApiKeys(owner);
     const task = yield* startTask(owner, {
       name: "Flaky tests",
       repository: options.repository === undefined ? `${RELAY.owner}/${RELAY.name}` : null,
@@ -516,6 +518,7 @@ it.layer(getTestDB())("an automation's runs", (it) => {
         const eve = fakeEve();
         const { owner, automation, workspaceId } = yield* openAutomation();
         const teammate = yield* openGithubUser();
+        yield* connectAgentApiKeys(teammate);
         yield* joinWorkspace(workspaceId, teammate);
         const made = yield* createCodingAgent(teammate, {
           taskId: null,
@@ -1102,6 +1105,7 @@ it.layer(getTestDB())("an automation's runs", (it) => {
     () =>
       Effect.gen(function* () {
         const owner = yield* openGithubUser();
+        yield* connectAgentApiKeys(owner);
         const task = yield* startTask(owner, { name: "Reviews", repository: null });
         const installation = INSTALLATIONS[installationsConnected++];
         assert.ok(installation);

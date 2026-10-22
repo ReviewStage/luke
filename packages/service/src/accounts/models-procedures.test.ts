@@ -167,13 +167,23 @@ const wire = (models: readonly CatalogModel[]) =>
   models.map((model) => ({ ...model, efforts: [...model.efforts] }));
 
 it.layer(getTestDB())("the models route", (it) => {
-  it.effect("the signed-in desktop reads the offered models, each with its efforts", () =>
-    Effect.gen(function* () {
-      assert.deepEqual(yield* answer(modelCatalogOf(CATALOG), request(MODELS)), {
-        status: HOSTED_HTTP_STATUS.OK,
-        body: { models: wire(CATALOG) },
-      });
-    }),
+  it.effect(
+    "the signed-in desktop reads the offered models, each with its efforts, every one marked unconnected while the account connects nothing, and a provider whose API key it saved unmarked",
+    () =>
+      Effect.gen(function* () {
+        assert.deepEqual(yield* answer(modelCatalogOf(CATALOG), request(MODELS)), {
+          status: HOSTED_HTTP_STATUS.OK,
+          body: { models: wire(CATALOG).map((model) => ({ ...model, credentialMissing: true })) },
+        });
+        yield* accountWithAnthropicKey("user-keyed", null);
+        assert.deepEqual(
+          yield* answer(modelCatalogOf(CATALOG), request(MODELS, { userId: "user-keyed" })),
+          {
+            status: HOSTED_HTTP_STATUS.OK,
+            body: { models: [...wire([OPUS]), { ...wire([SOL])[0], credentialMissing: true }] },
+          },
+        );
+      }),
   );
 
   it.effect("an unsigned caller reads nothing", () =>
@@ -194,7 +204,9 @@ it.layer(getTestDB())("the models route", (it) => {
       Effect.gen(function* () {
         const catalog = modelCatalogOf([OPUS]);
         const json = "application/json";
-        assert.deepEqual(yield* bytes(catalog, request(MODELS)), {
+        // An account whose Anthropic key pays reads the catalog's models unmarked, as before.
+        yield* accountWithAnthropicKey("user-bytes", null);
+        assert.deepEqual(yield* bytes(catalog, request(MODELS, { userId: "user-bytes" })), {
           status: HOSTED_HTTP_STATUS.OK,
           contentType: json,
           cacheControl: "private, no-store",

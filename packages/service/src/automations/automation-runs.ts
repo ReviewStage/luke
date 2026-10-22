@@ -45,6 +45,7 @@ import {
   CODING_AGENT_STATUS,
   type CodingAgentStatus,
 } from "@luke/features/coding-agent-wire";
+import { TRIGGER_CATALOG } from "@luke/features/trigger-catalog";
 import { failureKind } from "@luke/runtime/effect";
 import { sentLineId } from "@luke/wire/host-ids";
 import { Clock, Duration, Effect, Option, Result } from "effect";
@@ -176,6 +177,8 @@ function firingSentence(automation: Automation, run: ActedRun): string {
       return `${GITHUB_EVENT_WORDS[firing.event]} on GitHub`;
     case AUTOMATION_FIRING.WEBHOOK:
       return "its webhook was called";
+    case AUTOMATION_FIRING.INTEGRATION:
+      return TRIGGER_CATALOG[firing.provider].events[firing.event].sentence;
   }
 }
 
@@ -321,6 +324,8 @@ function reasonOfRefusal(refusal: HostedRefusal | ModelChoiceRefused): Automatio
       return AUTOMATION_RUN_REASON.NO_REPOSITORY;
     case HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE:
       return AUTOMATION_RUN_REASON.REPOSITORY_UNREACHABLE;
+    case HOSTED_API_ERROR.AGENT_CREDENTIAL_MISSING:
+      return AUTOMATION_RUN_REASON.CREDENTIAL_MISSING;
     default:
       return AUTOMATION_RUN_REASON.UNAVAILABLE;
   }
@@ -341,6 +346,8 @@ function reasonOfSteerRefusal(refusal: HostedRefusal): AutomationRunReason {
       return AUTOMATION_RUN_REASON.TASK_UNREACHABLE;
     case HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE:
       return AUTOMATION_RUN_REASON.REPOSITORY_UNREACHABLE;
+    case HOSTED_API_ERROR.AGENT_CREDENTIAL_MISSING:
+      return AUTOMATION_RUN_REASON.CREDENTIAL_MISSING;
     default:
       return AUTOMATION_RUN_REASON.UNAVAILABLE;
   }

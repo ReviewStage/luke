@@ -26,6 +26,7 @@ import {
   EveUnreachable,
 } from "../agents/brain-host/eve-sessions.js";
 import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
+import { connectAgentApiKeys } from "../testing/agent-credentials.js";
 import { githubReaching } from "../testing/github-app-fake.js";
 import { OPERATOR_WAKE_SWEEP, sweepOperatorWakes } from "./operator-wake-sweep.js";
 
@@ -85,6 +86,7 @@ const openMember = Effect.gen(function* () {
   const db = yield* Database;
   const member = `user-${randomUUID()}`;
   yield* db.insert(user).values({ id: member, name: "Test User", email: `${member}@luke.test` });
+  yield* connectAgentApiKeys(member);
   const workspace = yield* openWorkspace(member);
   const operator = Option.getOrThrow(
     yield* createCodingAgent(member, {

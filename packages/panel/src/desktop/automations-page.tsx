@@ -215,7 +215,7 @@ function AutomationRow({
         }}
         leading={
           <span className="automation-row-glyph">
-            <StateGlyph glyph={<FiringGlyph kind={automation.trigger.kind} />} state={state} />
+            <StateGlyph glyph={<FiringGlyph of={automation.trigger} />} state={state} />
           </span>
         }
         title={

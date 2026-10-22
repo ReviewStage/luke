@@ -252,13 +252,20 @@ test("on a desktop, New task's dialog keeps the dimmed window's margins", () => 
   assert.equal(pixels(dialog, style.marginRight), 0);
 });
 
-test("on a 390px screen, the repository menu opened from Home's chip is no wider than the room to the screen's edge", async () => {
+test("on a 390px screen, the repository menu opened from Home's chip stands inside the screen", async () => {
   layContainersAt({}, { touch: true });
   vi.spyOn(window, "innerWidth", "get").mockReturnValue(PHONE.SCREEN);
   const chipLeft = 85;
   vi.spyOn(HTMLButtonElement.prototype, "getBoundingClientRect").mockReturnValue(
     DOMRect.fromRect({ x: chipLeft, y: 300, width: 120, height: 44 }),
   );
+  // The menu at its own width, which jsdom lays out as none.
+  const menuWidth = 340;
+  vi.spyOn(HTMLElement.prototype, "offsetWidth", "get").mockImplementation(function (
+    this: HTMLElement,
+  ) {
+    return this.classList.contains("searchable-menu") ? menuWidth : 0;
+  });
   const container = await draw(
     createElement(RepositoryChip, {
       value: "acme/web",
@@ -274,8 +281,10 @@ test("on a 390px screen, the repository menu opened from Home's chip is no wider
   await act(async () => chip.click());
   const menu = container.querySelector(".searchable-menu") ?? assert.fail("the menu opens");
 
-  const widest = pixels(menu, getComputedStyle(menu).maxWidth);
-  assert.ok(chipLeft + widest <= PHONE.SCREEN, `${chipLeft} + ${widest} stays inside the screen`);
+  const style = getComputedStyle(menu);
+  const start = chipLeft + pixels(menu, style.left);
+  const end = start + Math.min(menuWidth, pixels(menu, style.maxWidth));
+  assert.ok(start >= 0 && end <= PHONE.SCREEN, `the menu stands from ${start} to ${end}`);
 });
 
 /** The `@` list's foot, which names the keys it hears. */

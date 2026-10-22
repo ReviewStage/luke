@@ -1368,32 +1368,6 @@ ul.actor-stack {
   gap: var(--luke-space-6);
 }
 
-/* A swatch is filled with the color it names, which its `data-icon-color` sets. */
-.section-icon-color {
-  width: 18px;
-  height: 18px;
-  padding: 0;
-  border: 1px solid var(--luke-color-border);
-  border-radius: 50%;
-  background: currentColor;
-}
-
-.section-icon-color:not([data-icon-color]) {
-  background: none;
-  background-image: linear-gradient(
-    135deg,
-    transparent calc(50% - 0.75px),
-    var(--luke-color-text-subtle) calc(50% - 0.75px),
-    var(--luke-color-text-subtle) calc(50% + 0.75px),
-    transparent calc(50% + 0.75px)
-  );
-}
-
-.section-icon-color[aria-pressed="true"] {
-  outline: 2px solid var(--luke-color-focus-ring);
-  outline-offset: 1px;
-}
-
 /* The grid's room, which its `ScrollArea` (`@luke/ui`) scrolls. */
 .section-icon-scroll {
   display: flex;
@@ -1413,7 +1387,7 @@ ul.actor-stack {
 
 /* An emoji is drawn in the text's own ink, nearly opaque, since Chromium
    lays the ink's alpha over a color glyph too. */
-.section-emoji-group .section-icon-choice {
+.section-emoji-face {
   color: var(--luke-color-text);
 }
 
@@ -1438,40 +1412,6 @@ ul.actor-stack {
   font-size: var(--luke-type-caption-size);
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.section-icon-choice {
-  display: grid;
-  width: 28px;
-  height: 28px;
-  flex: none;
-  place-items: center;
-  padding: 0;
-  border: 1px solid transparent;
-  border-radius: var(--luke-control-radius);
-  background: none;
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-control-icon);
-  line-height: 1;
-  transition:
-    background-color var(--duration-hover) ease,
-    border-color var(--duration-hover) ease;
-}
-
-.section-icon-choice svg {
-  width: var(--luke-control-icon);
-  height: var(--luke-control-icon);
-}
-
-.section-icon-choice:hover {
-  background: var(--luke-color-fill-hover);
-  color: var(--luke-color-text);
-}
-
-.section-icon-choice[aria-pressed="true"] {
-  border-color: var(--luke-color-focus-ring);
-  background: var(--luke-color-fill-hover);
-  color: var(--luke-color-text);
 }
 
 /* A pinned repository says so after its name, quietly, since the pin is
@@ -2600,20 +2540,20 @@ ul.actor-stack {
    menu hangs from the chip's trailing edge, where the column is, or from its
    leading edge where the chip leads its line. */
 .repository-chip[data-place="field"] .searchable-menu {
-  right: 0;
+  right: var(--settings-picker-inset, 0px);
   left: auto;
 }
 
 .repository-chip[data-place="field"][data-align="start"] .searchable-menu {
   right: auto;
-  left: 0;
+  left: var(--settings-picker-inset, 0px);
 }
 
 /* Wherever it stands, the menu is placed as a Settings picker's is
    (`usePickerPlacement`): above the chip where the window leaves more room
    there, its list capped to the room on the side it took, and no wider than
-   the room from the chip's edge it hangs from, so on a phone it never runs
-   past the screen's edge and scrolls the shell sideways. */
+   the room, pushed back over the chip where it would run past it, so on a
+   phone it never runs past the screen's edge and scrolls the shell sideways. */
 .repository-chip .searchable-menu {
   max-width: var(--settings-picker-width-max, 340px);
 }
@@ -2639,12 +2579,13 @@ ul.actor-stack {
 }
 
 .issue-picker-chip .searchable-menu {
+  left: var(--settings-picker-inset, 0px);
   width: 420px;
   max-width: var(--settings-picker-width-max, 420px);
 }
 
 .issue-picker-chip[data-align="end"] .searchable-menu {
-  right: 0;
+  right: var(--settings-picker-inset, 0px);
   left: auto;
 }
 
@@ -2737,7 +2678,8 @@ ul.actor-stack {
 
 /* A submenu stands beside the pinned row that opened it, its top level
    with that row's and its near edge at the menu's own; it turns to the
-   menu's other side where the window ends before it does, and stands up
+   menu's other side where its room ends before it does, is pushed back
+   over the menu (`--submenu-shift`) where neither side holds it, and stands up
    from the row's foot where the window's bottom would cut it. */
 .task-compose-menu-branch {
   position: relative;
@@ -2747,13 +2689,13 @@ ul.actor-stack {
   position: absolute;
   z-index: 1;
   top: 0;
-  left: calc(100% + 9px);
+  left: calc(100% + 9px - var(--submenu-shift, 0px));
   width: 200px;
   padding: 0;
 }
 
 .task-compose-submenu[data-side="left"] {
-  right: calc(100% + 9px);
+  right: calc(100% + 9px - var(--submenu-shift, 0px));
   left: auto;
 }
 
@@ -7459,9 +7401,10 @@ ul.actor-stack {
 /* A picker's menu here is as wide as its widest value, within a bound,
    since the chip it hangs from grew to name its whole value: an owner's
    long workspace name reads whole in the menu, not faded at its check.
-   The bound is also the room the scroller leaves from the chip's edge the
-   menu hangs from (`picker-row.tsx`), so a menu beside the runs never runs
-   past the form's edge and loses the start of its rows. */
+   The bound is also the room the scroller leaves (`picker-row.tsx`), which
+   pushes the menu back over the chip where it would run past it, so a menu
+   beside the runs never runs past the form's edge and loses the start of its
+   rows. */
 .automation-form .settings-picker .settings-picker-menu {
   width: max-content;
   min-width: min(max(280px, 100%), var(--settings-picker-width-max, 280px));
@@ -8365,31 +8308,6 @@ button.tasks-board-card-press:focus-visible::after {
   font-variant-numeric: tabular-nums;
 }
 
-.tasks-list-fold {
-  display: flex;
-  width: 100%;
-  min-height: var(--luke-control-height);
-  align-items: center;
-  gap: var(--luke-icon-gap);
-  padding: 0 var(--row-inset) 0 var(--luke-space-4);
-  border: 0;
-  border-radius: var(--luke-control-radius);
-  background: none;
-  color: inherit;
-  font: inherit;
-  text-align: left;
-  transition: background-color var(--duration-hover) ease;
-}
-
-.tasks-list-fold:hover {
-  background: var(--luke-color-fill-hover);
-}
-
-.tasks-list-fold:focus-visible {
-  outline: var(--luke-focus-ring-width) solid var(--luke-color-focus-ring);
-  outline-offset: calc(-1 * var(--luke-focus-ring-width));
-}
-
 .tasks-list-chevron {
   display: inline-flex;
   flex: none;
@@ -8402,7 +8320,7 @@ button.tasks-board-card-press:focus-visible::after {
   height: var(--luke-space-12);
 }
 
-.tasks-list-fold[aria-expanded="true"] .tasks-list-chevron {
+.tasks-list-chevron[data-open="true"] {
   transform: rotate(90deg);
 }
 

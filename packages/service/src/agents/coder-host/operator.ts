@@ -75,6 +75,7 @@ import {
   type CodingAgentStart,
   type StartServices,
   startCodingAgent,
+  startCredentialStands,
 } from "./start.js";
 
 /** What an ensure asks beyond the member and the workspace: whether the standing operator is archived first, and how its turn is stopped before it is. */
@@ -221,6 +222,8 @@ export const ensureOperator = /* @__PURE__ */ Effect.fn("web/ensureOperator")(fu
   const choice = yield* acceptedAgentChoice(userId, undefined).pipe(
     Effect.catchTag("ModelChoiceRefused", () => Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST)),
   );
+  // So is a credential to pay for it, so a member who removed theirs keeps the operator a Reset would replace.
+  yield* startCredentialStands(userId, choice.model);
   // A Reset retires only the member's own operator, and only in a workspace they are a member of.
   const standing = ensure.reset
     ? yield* hostedStoreOrUnavailable(readStandingOperator(userId, workspaceId))

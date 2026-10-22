@@ -1,0 +1,30 @@
+/* swatch.css -- Swatch: a small colour dot that is a toggle, ringed while
+   its colour is the one chosen. The keyboard's ring is the app's reset's. */
+
+@layer components {
+  .luke-swatch {
+    width: 18px;
+    height: 18px;
+    padding: 0;
+    border: 1px solid var(--luke-color-border);
+    border-radius: 50%;
+    background: var(--luke-swatch);
+    cursor: pointer;
+  }
+
+  .luke-swatch[data-none] {
+    background: none;
+    background-image: linear-gradient(
+      135deg,
+      transparent calc(50% - 0.75px),
+      var(--luke-color-text-subtle) calc(50% - 0.75px),
+      var(--luke-color-text-subtle) calc(50% + 0.75px),
+      transparent calc(50% + 0.75px)
+    );
+  }
+
+  .luke-swatch[aria-pressed="true"] {
+    outline: 2px solid var(--luke-color-focus-ring);
+    outline-offset: 1px;
+  }
+}

@@ -2369,7 +2369,7 @@ async function answerQuestion(label: string): Promise<void> {
   await settle();
 }
 
-test("the merge control is a chip saying what holds the merge up, GitHub's sentence for a reader, beside the one press that may be made now, in the look of what it does", async () => {
+test("the merge control is a chip saying what holds the merge up, GitHub's sentence for a reader, beside the one press that may be made now, in the look of what it does; checks alone holding it up draw no chip, the Checks tab saying them", async () => {
   const draft = controlAnswering(
     {
       pullRequest: () =>
@@ -2407,14 +2407,7 @@ test("the merge control is a chip saying what holds the merge up, GitHub's sente
     [
       "checks running",
       merging(MERGE_STATE.BLOCKED, { checks: CHECK_SUMMARY.PENDING }),
-      {
-        chip: "Checks running",
-        tone: "working",
-        sentence: "Waiting on required checks",
-        press: "Enable auto-merge",
-        look: "outline",
-        chevron: true,
-      },
+      { ...none, press: "Enable auto-merge", look: "outline", chevron: true },
     ],
     [
       "a merge queue's base",
@@ -2462,10 +2455,14 @@ test("the merge control is a chip saying what holds the merge up, GitHub's sente
       merging(MERGE_STATE.BLOCKED, { review: REVIEW_DECISION.REVIEW_REQUIRED }),
       held("Review required", "attention", "A required review is missing"),
     ],
+    ["checks failing", merging(MERGE_STATE.BLOCKED, { checks: CHECK_SUMMARY.FAILING }), undefined],
     [
-      "checks failing",
-      merging(MERGE_STATE.BLOCKED, { checks: CHECK_SUMMARY.FAILING }),
-      held("Checks failing", "danger", "Required checks are failing"),
+      "checks failing and a review required",
+      merging(MERGE_STATE.BLOCKED, {
+        checks: CHECK_SUMMARY.FAILING,
+        review: REVIEW_DECISION.REVIEW_REQUIRED,
+      }),
+      held("Review required", "attention", "A required review is missing"),
     ],
     [
       "changes requested",
@@ -3120,6 +3117,42 @@ test("the stack it stands in sits beside its branches; its menu lists it tip fir
   assert.deepEqual(opened, ["https://github.com/acme/relay/pull/46"]);
 });
 
+test("a pull request of the stack GitHub's merge queue holds says Queued in the stack's menu, and one it does not says nothing of it", async () => {
+  const entry = (number: number, queued: boolean) => ({
+    number,
+    title: `Step ${number}`,
+    url: `https://github.com/acme/relay/pull/${number}`,
+    draft: false,
+    ...(queued ? { queued: true as const } : undefined),
+  });
+  const tab = await draw(
+    controlAnswering({
+      pullRequest: () =>
+        Promise.resolve({
+          pullRequest: { ...PULL_REQUEST, stack: [entry(40, true), entry(42, false)] },
+        }),
+    }),
+    PULL_REQUEST_VIEW.CONVERSATION,
+  );
+  const button =
+    tab.querySelector<HTMLButtonElement>(
+      '.pull-request-branch-row button[aria-label="Stack, 2 of 2"]',
+    ) ?? assert.fail("the stack stands beside the branches");
+
+  act(() => button.click());
+  const items = [
+    ...document.querySelectorAll<HTMLButtonElement>(
+      ':is([role="menuitem"], [role="menuitemcheckbox"])',
+    ),
+  ];
+
+  assert.deepEqual(
+    items.map((item) => item.textContent),
+    ["#42 Step 42", "#40 Step 40Queued · Opens on GitHub"],
+  );
+  act(() => button.click());
+});
+
 test("a pull request in no stack draws no stack", async () => {
   const tab = await draw(
     controlAnswering({
@@ -3495,6 +3528,35 @@ test("a tab naming another pull request of the agent's repository by its number 
   await pressAction(tab, "Close pull request");
   assert.deepEqual(changes, [[AGENT.id, { action: PULL_REQUEST_ACTION.CLOSE }]]);
   assert.deepEqual(changeNumbers, [41]);
+});
+
+test("a numbered pull request nothing published shows how its checks went on its Checks tab from the merge read, before they are read, where the merge control draws no chip for them", async () => {
+  const control = controlAnswering({
+    pullRequest: () =>
+      Promise.resolve({
+        pullRequest: {
+          ...PULL_REQUEST,
+          number: 41,
+          merge: MERGE_STATE.BLOCKED,
+          merging: { ...MERGING, checks: CHECK_SUMMARY.FAILING },
+        },
+      }),
+  });
+  const tab = await drawn(
+    createElement(AgentPullRequestTab, {
+      agentId: AGENT.id,
+      number: 41,
+      control,
+      shown: true,
+      repository: "acme/relay",
+      tree: { open: false, onToggle: () => undefined },
+      view: PULL_REQUEST_VIEW.CONVERSATION,
+      onView: () => undefined,
+    }),
+  );
+
+  assert.equal(checksGlyph(tab), "failing");
+  assert.equal(mergeShown(tab), undefined);
 });
 
 test("an open pull request's pill offers Close and a closed one's Reopen, each asked of the service for the agent", async () => {

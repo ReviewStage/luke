@@ -32,6 +32,7 @@ import {
   EVE_SEND_OUTCOME,
   type EveMessage,
 } from "../agents/brain-host/eve-sessions.js";
+import { connectAgentApiKeys } from "../testing/agent-credentials.js";
 import {
   connectWorkspaceGitHub,
   githubReaching,
@@ -161,6 +162,7 @@ function fakeEve() {
 /** An account whose plan's workspace reaches the repository, with one agent standing on a branch of its own, its session opened. */
 const openAgent = Effect.gen(function* () {
   const owner = yield* openGithubUser();
+  yield* connectAgentApiKeys(owner);
   const task = yield* startTask(owner, {
     name: "Teammate invitations",
     repository: RELAY_FULL_NAME,

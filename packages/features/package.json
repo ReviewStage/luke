@@ -146,7 +146,8 @@
     "./terminal-model": "./src/terminal-model.js",
     "./automation-list-model": "./src/automation-list-model.js",
     "./automation-draft-model": "./src/automation-draft-model.js",
-    "./terminal-store": "./src/terminal-store.js"
+    "./terminal-store": "./src/terminal-store.js",
+    "./trigger-catalog": "./src/trigger-catalog.js"
   },
   "types": "./src/index.ts",
   "scripts": {

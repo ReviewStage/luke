@@ -445,11 +445,23 @@
   pointer-events: auto;
 }
 
-/* Its foot, ruled off from the switches, holds Clear as a quiet word that
-   lines up with the fields and the rows' names above it. */
+/* Its foot, ruled off from the switches across the card's whole width,
+   holds Clear as a menu's row (`@luke/ui`'s row Button): the row stands
+   out in the card's inset by its own, so its word lines up with the fields
+   and the rows' names above it, and its fill keeps a row's inset from the
+   card's edges, as a menu's pinned foot does. */
 .date-picker-foot {
-  padding-top: var(--luke-space-12);
+  margin: 0 calc(-1 * var(--luke-space-16)) calc(-1 * var(--luke-space-8));
+  padding: var(--luke-space-4) var(--luke-space-8) 0;
   border-top: 1px solid var(--luke-color-border);
+}
+
+/* The date picker's zones (`date-picker.tsx`'s Time zone) stand in the
+   room its card stood in, as wide as the card, rather than hung under a
+   field: the popover already places them. */
+.searchable-menu.date-zone-menu {
+  position: static;
+  width: auto;
 }
 
 /* A narrowed list stands under its kind's crumb, as an MCP server's page
@@ -2476,10 +2488,6 @@
   grid-area: 1 / 1;
   border: 0;
   background-color: var(--code-ground);
-}
-
-.image-diff-slider {
-  width: min(320px, 100%);
 }
 
 .image-diff-note {
