@@ -5,6 +5,7 @@ import { AUTH_PAGE_EXAMPLE } from "./examples/auth-page";
 import { AVATARS_EXAMPLE } from "./examples/avatars";
 import { BADGES_EXAMPLE } from "./examples/badges";
 import { BANNERS_EXAMPLE } from "./examples/banners";
+import { BAR_ITEMS_EXAMPLE } from "./examples/bar-items";
 import { BREADCRUMBS_EXAMPLE } from "./examples/breadcrumbs";
 import { BUTTONS_EXAMPLE } from "./examples/buttons";
 import { CALENDAR_EXAMPLE } from "./examples/calendar";
@@ -85,6 +86,7 @@ export const EXAMPLES: readonly Example[] = [
   CALENDAR_EXAMPLE,
   CARDS_EXAMPLE,
   CHIPS_EXAMPLE,
+  BAR_ITEMS_EXAMPLE,
   CHOICE_BAR_EXAMPLE,
   CHOICE_LIST_EXAMPLE,
   COLLECTION_PAGE_EXAMPLE,

@@ -1,7 +1,6 @@
-import { EllipsisIcon } from "@luke/ui";
+import { BarItem, EllipsisIcon } from "@luke/ui";
 import { TASKS_PAGE } from "@luke/ui/tasks-model";
 import { InboxIcon, ListTodoIcon, MessagesSquareIcon } from "lucide-react";
-import type { ReactNode } from "react";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
 import { SIDEBAR_OVERLAY, type SidebarCollapse } from "./sidebar-collapse.js";
@@ -53,33 +52,33 @@ export function MobileBar({
   const drawerOpen = sidebar.overlay !== SIDEBAR_OVERLAY.CLOSED;
   return (
     <nav className="mobile-bar" aria-label="Places">
-      <MobileBarItem
+      <BarItem
         icon={<InboxIcon />}
         current={inInbox}
         inert={drawerOpen}
         onPress={inboxView.onOpenList}
       >
         Inbox
-      </MobileBarItem>
-      <MobileBarItem
+      </BarItem>
+      <BarItem
         icon={<ListTodoIcon />}
         current={inTasks}
         inert={drawerOpen}
         onPress={boardView.onOpen}
       >
         Tasks
-      </MobileBarItem>
+      </BarItem>
       {chatOn && chatView.available ? (
-        <MobileBarItem
+        <BarItem
           icon={<MessagesSquareIcon />}
           current={inChat}
           inert={drawerOpen}
           onPress={chatView.onOpen}
         >
           Chat
-        </MobileBarItem>
+        </BarItem>
       ) : null}
-      <MobileBarItem
+      <BarItem
         icon={<EllipsisIcon />}
         current={false}
         expanded={sidebar.overlay === SIDEBAR_OVERLAY.OPEN}
@@ -87,42 +86,7 @@ export function MobileBar({
         onPress={sidebar.onToggle}
       >
         More
-      </MobileBarItem>
+      </BarItem>
     </nav>
-  );
-}
-
-function MobileBarItem({
-  icon,
-  current,
-  expanded,
-  inert = false,
-  onPointerDown,
-  onPress,
-  children,
-}: {
-  icon: ReactNode;
-  current: boolean;
-  inert?: boolean;
-  expanded?: boolean;
-  onPointerDown?: () => void;
-  onPress: () => void;
-  children: ReactNode;
-}): React.JSX.Element {
-  return (
-    <button
-      type="button"
-      className="mobile-bar-item"
-      aria-current={current ? "page" : undefined}
-      aria-expanded={expanded}
-      inert={inert}
-      onPointerDown={onPointerDown}
-      onClick={onPress}
-    >
-      <span className="mobile-bar-icon" aria-hidden="true">
-        {icon}
-      </span>
-      <span>{children}</span>
-    </button>
   );
 }

@@ -1,0 +1,33 @@
+/* bar-item.css -- BarItem: a place in a phone's bar, its glyph over its name. */
+
+@layer components {
+  .luke-bar-item {
+    display: flex;
+    min-height: var(--luke-space-48);
+    flex: 1 1 0;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--luke-space-2);
+    border: 0;
+    background: none;
+    color: var(--luke-color-text-muted);
+    font: inherit;
+    font-size: var(--luke-type-caption-size);
+    line-height: var(--luke-type-caption-leading);
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .luke-bar-item[aria-current="page"] {
+    color: var(--luke-color-accent-text);
+  }
+
+  .luke-bar-item-icon {
+    display: flex;
+  }
+
+  .luke-bar-item-icon svg {
+    width: 20px;
+    height: 20px;
+  }
+}
