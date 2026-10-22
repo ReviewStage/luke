@@ -99,7 +99,7 @@ export function automationsProcedures(seams: AutomationsProcedureSeams) {
         ...(created.webhookSecret === undefined
           ? undefined
           : { webhookSecret: created.webhookSecret }),
-        txid: created.txid,
+        ...(created.txid === undefined ? undefined : { txid: created.txid }),
       };
     }),
 
@@ -125,7 +125,7 @@ export function automationsProcedures(seams: AutomationsProcedureSeams) {
         ...(written.webhookSecret === undefined
           ? undefined
           : { webhookSecret: written.webhookSecret }),
-        txid: written.txid,
+        ...(written.txid === undefined ? undefined : { txid: written.txid }),
       };
     }),
 

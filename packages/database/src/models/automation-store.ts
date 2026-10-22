@@ -139,7 +139,7 @@ export const AUTOMATION_COLUMNS = {
 
 /** What making an automation takes: the task, what fires it and what it starts, its guards, when a schedule is first due, and a webhook's secret hash. */
 export interface NewAutomation {
-  /** The id to make it under, such as one drawn from an agent's call key so a call run again finds the one it made; a fresh one where left out. */
+  /** The id to make it under, such as one drawn from an agent's call key so a call run again finds the one it made; a fresh one where left out. A make under an id already standing writes nothing and answers none. */
   readonly id?: string;
   /** The task it stands on, whose workspace and repository it takes; null for one made on a workspace with repositories of its own. */
   readonly taskId: string | null;
@@ -409,6 +409,8 @@ const insertAutomation = SqlSchema.findAll({
           createdAt: row.now,
           updatedAt: row.now,
         })
+        // A caller that names the id may run its make again, which then finds the row standing and writes nothing.
+        .onConflictDoNothing({ target: automation.id })
         .returning({ id: automation.id, txid: TXID }),
     ),
 });

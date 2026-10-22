@@ -8,6 +8,7 @@ import {
   createAutomationCommitted,
   deleteAutomationCommitted,
   listAutomationRuns,
+  readAutomation,
   updateAutomationCommitted,
 } from "@luke/database/models/automation-store";
 import { readCodingAgent } from "@luke/database/models/coding-agent-store";
@@ -431,11 +432,11 @@ const changesOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   return { changes, webhookSecret: webhook?.secret };
 });
 
-/** A write as it answers: the automation as it then stands, a webhook secret the write minted, and the transaction it committed in. */
+/** A write as it answers: the automation as it then stands, a webhook secret the write minted, and the transaction it committed in; none where a make under an id the caller named found it already made. */
 export interface AutomationWritten {
   readonly automation: AutomationSummary;
   readonly webhookSecret: string | undefined;
-  readonly txid: string;
+  readonly txid: string | undefined;
 }
 
 /**
@@ -481,7 +482,19 @@ export const createAutomationAs = /* @__PURE__ */ Effect.fnUntraced(function* (
       archiveSuccessful: made.archiveSuccessful ?? false,
     }),
   );
-  if (Option.isNone(created)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+  if (Option.isNone(created)) {
+    // A make run again under the id it named, beside or after the one that wrote, answers the automation it made.
+    const standing =
+      id === undefined
+        ? Option.none()
+        : yield* hostedStoreOrUnavailable(readAutomation(userId, id));
+    if (Option.isNone(standing)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+    return {
+      automation: yield* summaryOf(userId, standing.value),
+      webhookSecret: undefined,
+      txid: undefined,
+    };
+  }
   yield* recordServerEvent(SERVER_EVENT.AUTOMATION_CREATE, userId, {
     trigger_kind: made.trigger.kind,
   });

@@ -610,6 +610,10 @@ export function runCreateAutomation(
         }
         return agentToolRejected(refusalWords(refusal));
       }
+      // A make run again beside the one that wrote answers that automation, which must be this workspace's.
+      if (written.success.automation.workspaceId !== workspace.value) {
+        return agentToolRejected(AUTOMATION_TOOL_REFUSAL.UNAVAILABLE);
+      }
       return {
         status: ACTION_RESULT_STATUS.ACCEPTED,
         automation: automationReading(written.success.automation, true),
