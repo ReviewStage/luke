@@ -706,7 +706,7 @@ it.layer(getTestDB())("Luke's MCP server", (it) => {
   );
 
   it.effect(
-    "every tool declares the bound Claude Code takes its result whole to, and a result past it comes back cut to it, both ends kept",
+    "every tool declares the bound Claude Code takes its result whole to, and a provider's answer past Luke's own bound comes back cut to it, both ends kept",
     () =>
       Effect.gen(function* () {
         const agent = yield* agentWithBearer;
@@ -738,16 +738,22 @@ it.layer(getTestDB())("Luke's MCP server", (it) => {
         yield* Effect.promise(() => client.close());
 
         for (const tool of listed.tools) {
-          assert.equal(tool._meta?.["anthropic/maxResultSizeChars"], 200_000, tool.name);
+          assert.equal(tool._meta?.["anthropic/maxResultSizeChars"], 500_000, tool.name);
         }
         assert.equal(exported.isError, false);
-        // SAFETY: the whole export is one text block (`integration-mcp-fake.ts`).
-        const [block] = exported.content as readonly { type: string; text: string }[];
+        // SAFETY: the export answers a text, a picture, and a text (`integration-mcp-fake.ts`).
+        const [block, picture, ...rest] = exported.content as readonly {
+          type: string;
+          text: string;
+        }[];
         const text = block?.text ?? "";
         assert.equal(text.length, 200_000);
         assert.ok(text.startsWith("FIRST issue"));
         assert.ok(text.endsWith("issue LAST"));
         assert.match(text, /… \d+ characters of this result were left out here …/);
+        // The picture stays, and the words past the bound go rather than stand past it.
+        assert.equal(picture?.type, "image");
+        assert.deepEqual(rest, []);
         assert.ok(LINEAR_EXPORT.length > 200_000);
       }),
   );

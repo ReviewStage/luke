@@ -74,7 +74,7 @@ const LINEAR_TOOLS = [
   { name: "attach", description: "Attaches files.", inputSchema: { type: "object" } },
 ];
 
-/** What `list_issues` answers for the team `EVERYTHING`: more words than any agent is handed whole, their two ends marked. */
+/** What `list_issues` answers first for the team `EVERYTHING`, before a chart and a line more: more words than any agent is handed whole, their two ends marked. */
 export const LINEAR_EXPORT_TEAM = "EVERYTHING";
 export const LINEAR_EXPORT = `FIRST ${"issue ".repeat(50_000)}LAST`;
 
@@ -108,7 +108,13 @@ export function linearServer(bearer: string, heard: Heard) {
       switch (request.params.name) {
         case "list_issues":
           if (request.params.arguments?.team === LINEAR_EXPORT_TEAM) {
-            return { content: [{ type: "text", text: LINEAR_EXPORT }] };
+            return {
+              content: [
+                { type: "text", text: LINEAR_EXPORT },
+                { type: "image", data: "iVBORw0KGgo=", mimeType: "image/png" },
+                { type: "text", text: "LIN-1 to LIN-50000." },
+              ],
+            };
           }
           return {
             content: [{ type: "text", text: JSON.stringify({ issues: [{ id: "LIN-1" }] }) }],
