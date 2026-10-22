@@ -83,7 +83,7 @@ import {
 import { Option, Schema } from "effect";
 import { TOOL_STATE, type ToolState } from "../ai-elements/tool.js";
 import { GLYPH_STATE, type GlyphState, glyphStateWords } from "../state-glyph.js";
-import { drawnCall } from "./native-tool-calls.js";
+import { connectionCall, drawnCall, failedCommandCall } from "./native-tool-calls.js";
 import { dayAndTimeText } from "./task-time.js";
 import {
   changesSidebar,
@@ -1292,18 +1292,32 @@ export function agentPart(part: WireValue): AgentPart {
   }
   if (part.type === AGENT_PART.STEP_START) return { kind: AGENT_PART.STEP_START };
   if (part.type.startsWith(TOOL_PART_TYPE_PREFIX)) {
-    // A native harness's call is read as the eve call that draws it (`native-tool-calls.ts`).
-    const call = drawnCall({
+    const stored = {
       tool: part.type.slice(TOOL_PART_TYPE_PREFIX.length),
       input: part.input,
       output: part.output,
-    });
+    };
+    const state = toolState(part.state);
+    const errorText = isWireString(part.errorText) ? part.errorText : undefined;
+    // A native command that exited non-zero is an answer, as eve's shell's is, not a failed call.
+    const failed =
+      state === TOOL_STATE.OUTPUT_ERROR ? failedCommandCall(stored, errorText) : undefined;
+    if (failed !== undefined) {
+      return {
+        kind: AGENT_PART.TOOL,
+        ...failed,
+        callId: isWireString(part.toolCallId) ? part.toolCallId : "",
+        state: TOOL_STATE.OUTPUT_AVAILABLE,
+        errorText: undefined,
+      };
+    }
+    // A native harness's call is read as the eve call that draws it (`native-tool-calls.ts`).
     return {
       kind: AGENT_PART.TOOL,
-      ...call,
+      ...drawnCall(stored),
       callId: isWireString(part.toolCallId) ? part.toolCallId : "",
-      state: toolState(part.state),
-      errorText: isWireString(part.errorText) ? part.errorText : undefined,
+      state,
+      errorText,
     };
   }
   return { kind: AGENT_PART.OTHER };
@@ -1562,6 +1576,19 @@ function listOf(value: UnparsedWireValue, key: string): readonly WireValue[] {
   return Array.isArray(list) ? list : [];
 }
 
+/**
+ * A `connection_execute` with no integration's own call beside it, as a
+ * native agent's always is, since Luke's MCP server answers it whole: drawn
+ * as the integration's call it ran (`connectionCall`), as eve's is. Nothing
+ * for any other part, or for one that failed, whose row is where its error
+ * is read.
+ */
+function remoteStandIn(part: AgentPart): ToolPart | undefined {
+  if (part.kind !== AGENT_PART.TOOL || part.state === TOOL_STATE.OUTPUT_ERROR) return undefined;
+  const remote = connectionCall(part);
+  return remote === undefined ? undefined : { ...part, ...remote };
+}
+
 /** Two shown sets as one: the first's call, both sets' pictures in order. */
 function joinedSets(first: ToolPart, second: ToolPart): ToolPart {
   return {
@@ -1617,9 +1644,9 @@ function drawnParts(
       continue;
     }
     const last = drawn.at(-1);
-    const refusal = refusedSet(part);
-    if (refusal !== undefined) {
-      drawn.push(refusal);
+    const standIn = refusedSet(part) ?? remoteStandIn(part);
+    if (standIn !== undefined) {
+      drawn.push(standIn);
       continue;
     }
     if (last !== undefined && isShownSet(last) && isShownSet(part)) {

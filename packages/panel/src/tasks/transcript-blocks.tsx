@@ -873,6 +873,7 @@ const CALL_ICON = {
   [CALL_KIND.READ_PAGE]: AppWindowIcon,
   [CALL_KIND.SHOW_IMAGE]: ImageIcon,
   [CALL_KIND.SLEEP]: TimerIcon,
+  [CALL_KIND.WAKEUP]: TimerIcon,
   [CALL_KIND.OTHER]: WrenchIcon,
 } as const satisfies Record<CallKind, LucideIcon>;
 

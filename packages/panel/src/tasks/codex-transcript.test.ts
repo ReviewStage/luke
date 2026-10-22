@@ -102,7 +102,11 @@ const CODEX_ITEMS: readonly {
     },
     output: { status: "completed" },
     line: ["Edited", `${CHECKOUT}/src/export.ts`],
-    body: [`*** Add File: ${CHECKOUT}/src/export.ts`, "+export {};", "completed"],
+    body: [
+      `*** Add File: ${CHECKOUT}/src/export.ts`,
+      "+export {};",
+      `add ${CHECKOUT}/src/export.ts`,
+    ],
   },
   {
     name: "a web search",
@@ -229,6 +233,38 @@ test("a command that failed says its exit code, and one still running draws its 
   const running = opened(storedPart("commandExecution", { command: "sleep 600", cwd: CHECKOUT }));
   assert.ok(running.line.includes("sleep 600"));
 });
+
+test("a command Codex settled as failed is an answer ending in its exit code, its row not failed", () => {
+  const { container } = drawn({
+    type: "tool-commandExecution",
+    toolCallId: "item_cmd",
+    state: "output-error",
+    input: { command: "pnpm lint", cwd: CHECKOUT },
+    output: { output: "lint failed\n", exitCode: 1 },
+    errorText: "lint failed\n",
+  });
+  const line = container.querySelector("summary") ?? assert.fail("the call is a fold's line");
+  act(() => line.click());
+  assert.equal(container.querySelector('[role="alert"]'), null, "no error is drawn");
+  assert.ok(container.textContent?.includes("lint failed\nexit 1"), container.textContent ?? "");
+});
+
+const WRAPPED_COMMANDS: readonly { readonly ran: string; readonly said: string }[] = [
+  { ran: "/bin/bash -lc 'pnpm test --filter web'", said: "pnpm test --filter web" },
+  { ran: 'bash -lc "rg -n \\"total\\" src"', said: 'rg -n "total" src' },
+  { ran: "/bin/zsh -lc 'echo '\\''hi'\\'''", said: "echo 'hi'" },
+  { ran: "/bin/bash -lc ls", said: "ls" },
+  { ran: "/bin/bash -lc 'a' && 'b'", said: "/bin/bash -lc 'a' && 'b'" },
+];
+
+for (const { ran, said } of WRAPPED_COMMANDS) {
+  test(`Codex's command ${ran} is drawn as the command the model wrote`, () => {
+    const { line } = opened(
+      storedPart("commandExecution", { command: ran, cwd: CHECKOUT }, { output: "", exitCode: 0 }),
+    );
+    assert.ok(line.includes(said), line);
+  });
+}
 
 test("Codex's plan is drawn as the agent's to-do list, a completed step done", () => {
   const plan = {

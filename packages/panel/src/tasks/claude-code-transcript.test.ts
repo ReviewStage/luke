@@ -43,12 +43,12 @@ function storedPart(tool: string, input: WireRecord, output?: WireValue): WireRe
   };
 }
 
-/** The part drawn as a turn of the agent's, every target its row opens recorded. */
-function drawn(part: WireRecord) {
+/** The parts drawn as a turn of the agent's, every target its rows open recorded. */
+function drawn(...parts: WireRecord[]) {
   const message: CodingAgentMessage = {
     id: "turn",
     role: MESSAGE_ROLE.ASSISTANT,
-    parts: [part],
+    parts,
   };
   const opened: ToolTarget[] = [];
   const container = document.createElement("div");
@@ -112,7 +112,7 @@ const CLI_CALLS: readonly {
     },
     output: "The file has been updated successfully.",
     line: ["Edited", `${CHECKOUT}/src/invoice.ts`],
-    body: ["-const invoice = 1;", "+const invoice = 2;", "updated successfully"],
+    body: ["-const invoice = 1;", "+const invoice = 2;", `update ${CHECKOUT}/src/invoice.ts`],
   },
   {
     tool: "Write",
@@ -182,9 +182,9 @@ const CLI_CALLS: readonly {
   {
     tool: "ScheduleWakeup",
     input: { delaySeconds: 270, reason: "Wait for CI", prompt: "Check CI", noop: false },
-    output: "Wakeup scheduled in 270 seconds.",
-    line: ["ScheduleWakeup"],
-    body: ["Wait for CI", "Wakeup scheduled"],
+    output: "Next wakeup scheduled for 18:53:12 (in 270s).",
+    line: ["Will check back", "in 4 minutes 30 seconds"],
+    body: ["Wait for CI", "Check CI", "Next wakeup scheduled"],
   },
   {
     tool: "Monitor",
@@ -229,16 +229,87 @@ test("a call still running draws its row from its input alone", () => {
   assert.ok(line.includes(`${CHECKOUT}/src/invoice.ts`));
 });
 
-test("a failed Bash call shows the error the CLI answered", () => {
-  const { body } = opened({
+test("a Bash command that exited non-zero is an answer ending in its exit code, its row and its fold not failed", () => {
+  const failed = {
     type: "tool-Bash",
     toolCallId: "toolu_Bash",
     state: "output-error",
-    input: { command: "pnpm lint" },
-    output: "Exit code 1\nlint failed",
-    errorText: "Exit code 1\nlint failed",
-  });
-  assert.ok(body.includes("lint failed"));
+    input: { command: "pnpm lint", description: "Lint the web app" },
+    output: null,
+    errorText: "Exit code 2\nlint failed",
+  };
+  const { container } = drawn(failed, storedPart("Read", { file_path: `${CHECKOUT}/a.ts` }, "a"));
+  const fold = container.querySelector("summary") ?? assert.fail("the calls are one fold");
+  assert.ok(
+    !(fold.getAttribute("aria-label") ?? "").includes("failed"),
+    "the fold names no failure",
+  );
+  act(() => fold.click());
+  assert.equal(container.querySelector('[role="alert"]'), null, "no error is drawn");
+  const row = [...container.querySelectorAll("summary")].find((each) =>
+    each.textContent?.includes("Lint the web app"),
+  );
+  act(() => row?.click());
+  assert.ok(container.textContent?.includes("lint failed\nexit 2"), container.textContent ?? "");
+});
+
+test("an Edit the CLI reported its hunks for draws them with the lines around them, and answers the file it updated", () => {
+  const { container } = drawn(
+    storedPart(
+      "Edit",
+      {
+        file_path: `${CHECKOUT}/src/a.ts`,
+        old_string: "b;\n",
+        new_string: "c;\n",
+        replace_all: false,
+        structuredPatch: [
+          {
+            oldStart: 4,
+            oldLines: 3,
+            newStart: 4,
+            newLines: 3,
+            lines: [" a;", "-b;", "+c;", " d;"],
+          },
+        ],
+      },
+      "The file has been updated successfully.",
+    ),
+  );
+  const line = container.querySelector("summary") ?? assert.fail("the call is a fold's line");
+  act(() => line.click());
+  const body = container.textContent ?? "";
+  const marked = (kind: string) =>
+    [...container.querySelectorAll(`[data-line="${kind}"]`)].map((each) => each.textContent);
+  assert.deepEqual(marked("removed"), ["-b;"]);
+  assert.deepEqual(marked("added"), ["+c;"]);
+  assert.ok(body.includes("@@ -4,3 +4,3 @@") && body.includes(" a;") && body.includes(" d;"), body);
+  assert.ok(body.includes(`update ${CHECKOUT}/src/a.ts`), body);
+  assert.ok(!body.includes("updated successfully"), body);
+});
+
+test("a wakeup the CLI reported the time of says when it checks back, on the reader's own clock", () => {
+  const scheduledFor = new Date(2026, 9, 22, 18, 53, 12).getTime();
+  const { line } = opened(
+    storedPart(
+      "ScheduleWakeup",
+      { delaySeconds: 270, reason: "Wait for CI", prompt: "Check CI", noop: false },
+      { text: "Next wakeup scheduled for 01:53:12 (in 270s).", scheduledFor },
+    ),
+  );
+  assert.ok(line.includes("Will check back") && line.includes("at 6:53 PM"), line);
+});
+
+test("connection_execute is drawn as the integration's own call it ran, its input and answer the tool's own", () => {
+  const { line, body } = opened(
+    storedPart(
+      "connection_execute",
+      { connection: "linear", tool: "list_issues", input: { team: "ENG" } },
+      { status: "accepted", output: { issues: [{ identifier: "ENG-42" }] } },
+    ),
+  );
+  assert.ok(line.includes("list_issues") && !line.includes("connection_execute"), line);
+  assert.ok(body.includes('"team": "ENG"') && body.includes("ENG-42"), body);
+  assert.ok(!body.includes('"status": "accepted"'), body);
 });
 
 test("Claude Code's TodoWrite is drawn as the agent's to-do list, a completed item done", () => {

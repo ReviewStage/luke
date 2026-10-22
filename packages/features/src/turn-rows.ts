@@ -105,6 +105,8 @@ export const CALL_KIND = {
   SHOW_IMAGE: "show-image",
   /** A pause a coding agent took (`sleep`) before it checked again on what takes time, its row naming how long. */
   SLEEP: "sleep",
+  /** A wakeup a native coding agent scheduled (`ScheduleWakeup`) to check again later, its row naming when. */
+  WAKEUP: "wakeup",
   OTHER: "other",
 } as const;
 
@@ -162,6 +164,7 @@ export const CALL_WORDS = {
   [CALL_KIND.READ_PAGE]: { verb: "Read the page", code: false },
   [CALL_KIND.SHOW_IMAGE]: { verb: "Showed", code: true },
   [CALL_KIND.SLEEP]: { verb: "Waited", code: false },
+  [CALL_KIND.WAKEUP]: { verb: "Will check back", code: false },
   [CALL_KIND.OTHER]: { verb: "Used", code: true },
 } as const satisfies Record<CallKind, { verb: string; code: boolean }>;
 

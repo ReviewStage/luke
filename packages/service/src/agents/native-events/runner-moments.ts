@@ -128,11 +128,15 @@ export function runnerMoments(message: WireValue): Option.Option<readonly Native
 }
 
 /**
- * A tool's answer as the transcript settles its call: an error the harness
- * flagged is a refusal carrying the text, and any other answer is available.
- * A Luke tool's answer is read as the JSON it answers, so its status word
- * counts as the eve relay counts it; any other tool's is kept as `output`,
- * the text the model read or what the harness reported of the call.
+ * A tool's answer as the transcript settles its call. A Luke tool's answer
+ * is read as the JSON it answers, so its status word counts as the eve
+ * relay counts it, whether or not the harness flagged it an error: Luke's
+ * MCP server flags every answer that did not do what was asked, a Mac that
+ * ran nothing (`not-run`) or a page it could not find (`not-found`) among
+ * them, and only a refusal's status settles one as an error, its reason
+ * the error's words. Any other flagged error is a refusal carrying the
+ * text, and any other answer is available, kept as `output`, the text the
+ * model read or what the harness reported of the call.
  */
 export function toolAnswerSettlement(
   answer:
@@ -143,6 +147,9 @@ export function toolAnswerSettlement(
   const output: UnparsedWireValue = answer.lukeTool
     ? valueFromJsonText(answer.text)
     : answer.output;
+  const status =
+    answer.lukeTool && isRecord(output) && isWireString(output.status) ? output.status : undefined;
+  if (status !== undefined) return toolCallSettlementOf(answer.text, status);
   if (isError) {
     return {
       state: TOOL_CALL_SETTLEMENT.OUTPUT_ERROR,
@@ -151,7 +158,7 @@ export function toolAnswerSettlement(
       status: ACTION_RESULT_STATUS.REJECTED,
     };
   }
-  if (!answer.lukeTool) return toolCallSettlementOf(JSON.stringify(answer.output), undefined);
-  const status = isRecord(output) && isWireString(output.status) ? output.status : undefined;
-  return toolCallSettlementOf(answer.text, status);
+  return answer.lukeTool
+    ? toolCallSettlementOf(answer.text, undefined)
+    : toolCallSettlementOf(JSON.stringify(answer.output), undefined);
 }

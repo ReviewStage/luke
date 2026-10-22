@@ -53,6 +53,7 @@ import { Option, Schema } from "effect";
 import { TOOL_BLOCK, type ToolBlock } from "../ai-elements/tool.js";
 import { shortCommit } from "./file-tab-model.js";
 import { askHeadWords } from "./inbox-ask-words.js";
+import { timeOfDayText } from "./task-time.js";
 
 /**
  * tool-call-model.ts -- what a coding agent's tool call says on its one row, and what its body shows, decided from the part's own input and output.
@@ -557,6 +558,28 @@ function sleepOutput(output: WireValue): ToolBlock {
 }
 
 /**
+ * When a scheduled wakeup checks back, as its row says it: at the time the
+ * CLI reported it fires, in the reader's own zone, or, where it reported
+ * none, in how long the agent asked to wait.
+ */
+function wakeupSubject(input: WireValue | undefined, output: WireValue | undefined): string {
+  const at =
+    isRecord(output) && isWireNumber(output.scheduledFor) ? output.scheduledFor : undefined;
+  if (at !== undefined) return `at ${timeOfDayText(at)}`;
+  const delay =
+    isRecord(input) && isWireNumber(input.delaySeconds) ? input.delaySeconds : undefined;
+  return delay === undefined ? "" : `in ${spanText(delay)}`;
+}
+
+/** A wakeup's input as its body shows it: why the agent set it, and what it will be told then. */
+function wakeupInput(input: WireValue | undefined): ToolBlock {
+  const words = [stringAt(input, "reason"), stringAt(input, "prompt")].filter(
+    (line): line is string => line !== undefined && line.trim() !== "",
+  );
+  return words.length === 0 && input !== undefined ? jsonBlock(input) : textBlock(words.join("\n"));
+}
+
+/**
  * A native harness's subagent, whose inner work its transcript folds under
  * the one call that started it (`claude-code-moments.ts`, `codex-moments.ts`): drawn as one call,
  * named by the few words the agent gave it, or its task's first line, its
@@ -725,6 +748,16 @@ function knownToolView(
     case CLAUDE_CODE_TOOL.AGENT:
     case CODEX_TOOL.SUBAGENT:
       return subagentCallView(input, output);
+    case CLAUDE_CODE_TOOL.SCHEDULE_WAKEUP:
+      return {
+        kind: CALL_KIND.WAKEUP,
+        subject: wakeupSubject(input, output),
+        input: wakeupInput(input),
+        output:
+          output === undefined
+            ? undefined
+            : wordsOutput(isWireString(output) ? { text: output } : output, "text"),
+      };
     case AGENT_TOOL.SLEEP: {
       const seconds = isRecord(input) && isWireNumber(input.seconds) ? input.seconds : undefined;
       return {

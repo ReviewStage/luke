@@ -115,6 +115,11 @@ export function spanText(startedAt: number, endedAt: number): string {
   return `${MOMENT.format(startedAt)}${SPAN_ARROW}${ended}`;
 }
 
+/** A time of day alone, as a moment later today is named: "6:53 PM". */
+export function timeOfDayText(at: number): string {
+  return TIME_OF_DAY.format(at);
+}
+
 /** A day and a time in the fewest words, as a version is named: "Oct 11, 2:14 PM". */
 export function dayAndTimeText(at: number): string {
   return DAY_AND_TIME.format(at);

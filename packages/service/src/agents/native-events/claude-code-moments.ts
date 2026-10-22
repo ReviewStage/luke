@@ -1,7 +1,7 @@
 import { CLAUDE_CODE_LUKE_TOOL_PREFIX, CLAUDE_CODE_TOOL } from "@luke/features/agent-tools";
-import type { ToolCallSettlement } from "@luke/features/brain";
+import { TOOL_CALL_SETTLEMENT, type ToolCallSettlement } from "@luke/features/brain";
 import { redactCredentials } from "@luke/features/credential-redaction";
-import { type WireValue, WireValueSchema } from "@luke/wire";
+import { isWireString, type UnparsedWireValue, type WireValue, WireValueSchema } from "@luke/wire";
 import { Option, Predicate, Schema } from "effect";
 import {
   NATIVE_MOMENT,
@@ -91,8 +91,31 @@ const readUser = Schema.decodeUnknownOption(
     message: Schema.Struct({
       content: Schema.Union([Schema.String, Schema.Array(Schema.Unknown)]),
     }),
+    tool_use_result: Schema.optionalKey(Schema.Unknown),
   }),
 );
+
+/** What the CLI reports of an `Edit` it made, beside the sentence the model read: the edit, and the hunks it changed with the lines around them. */
+const readEditResult = Schema.decodeUnknownOption(
+  Schema.Struct({
+    filePath: Schema.String,
+    oldString: Schema.String,
+    newString: Schema.String,
+    replaceAll: Schema.optionalKey(Schema.Boolean),
+    structuredPatch: Schema.Array(
+      Schema.Struct({
+        oldStart: Schema.Number,
+        oldLines: Schema.Number,
+        newStart: Schema.Number,
+        newLines: Schema.Number,
+        lines: Schema.Array(Schema.String),
+      }),
+    ),
+  }),
+);
+
+/** What the CLI reports of a `ScheduleWakeup` it set: when the wakeup fires, in milliseconds since the epoch. */
+const readWakeupResult = Schema.decodeUnknownOption(Schema.Struct({ scheduledFor: Schema.Number }));
 
 const readStreamEvent = Schema.decodeUnknownOption(
   Schema.Struct({
@@ -240,22 +263,65 @@ function assistantMoments(message: WireValue): readonly NativeMoment[] {
   return moments;
 }
 
-/** The tools' answers a user message carries, each settling the call the projection holds; the step that asked for them is over. */
+/**
+ * An `Edit`'s input as the CLI reports the edit it made: the edit, and the
+ * hunks it changed with the lines around them (`structuredPatch`), so the
+ * transcript draws the change in its context; nothing where the report does
+ * not read.
+ */
+function editInput(report: unknown): UnparsedWireValue | undefined {
+  return Option.match(readEditResult(report), {
+    onSome: (edit) => ({
+      file_path: edit.filePath,
+      old_string: edit.oldString,
+      new_string: edit.newString,
+      replace_all: edit.replaceAll ?? false,
+      structuredPatch: edit.structuredPatch.map((hunk) => ({ ...hunk, lines: [...hunk.lines] })),
+    }),
+    onNone: () => undefined,
+  });
+}
+
+/** A `ScheduleWakeup`'s answer with when it fires beside the words the model read, so the transcript says the time in the reader's own zone; the settlement as it is where the report does not read. */
+function wakeupSettlement(settlement: ToolCallSettlement, report: unknown): ToolCallSettlement {
+  if (settlement.state !== TOOL_CALL_SETTLEMENT.OUTPUT_AVAILABLE) return settlement;
+  return Option.match(readWakeupResult(report), {
+    onSome: ({ scheduledFor }) => ({
+      ...settlement,
+      output: { text: isWireString(settlement.output) ? settlement.output : "", scheduledFor },
+    }),
+    onNone: () => settlement,
+  });
+}
+
+/**
+ * The tools' answers a user message carries, each settling the call the
+ * projection holds; the step that asked for them is over. Note that the
+ * CLI's own report of a call (`tool_use_result`) is read only where the
+ * message answers one call, because it names no call of its own.
+ */
 function userMoments(message: WireValue, held: NativeHeld): readonly NativeMoment[] {
   const read = readUser(message);
   if (Option.isNone(read)) return [];
   const { content } = read.value.message;
   if (Predicate.isString(content)) return [];
+  const answers = content.flatMap((block) => Option.toArray(readToolResultBlock(block)));
+  const report = answers.length === 1 ? read.value.tool_use_result : undefined;
   const moments: NativeMoment[] = [];
-  for (const block of content) {
-    const answer = readToolResultBlock(block);
-    if (Option.isNone(answer)) continue;
-    const name = held.callName(answer.value.tool_use_id);
+  for (const answer of answers) {
+    const name = held.callName(answer.tool_use_id);
     if (name === undefined) continue;
+    const failed = answer.is_error === true;
+    const settlement = settlementOf(name, answer.content, failed);
+    const input = name === CLAUDE_CODE_TOOL.EDIT && !failed ? editInput(report) : undefined;
     moments.push({
       kind: NATIVE_MOMENT.TOOL_SETTLED,
-      callId: answer.value.tool_use_id,
-      settlement: settlementOf(name, answer.value.content, answer.value.is_error === true),
+      callId: answer.tool_use_id,
+      settlement:
+        name === CLAUDE_CODE_TOOL.SCHEDULE_WAKEUP
+          ? wakeupSettlement(settlement, report)
+          : settlement,
+      ...(input === undefined ? undefined : { input }),
     });
   }
   return moments.length === 0 ? [] : [...moments, { kind: NATIVE_MOMENT.STEP_CLOSED }];

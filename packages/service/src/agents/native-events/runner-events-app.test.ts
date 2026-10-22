@@ -441,6 +441,106 @@ it.layer(getTestDB())("the runner events route", (it) => {
   );
 
   it.effect(
+    "a Luke tool's answer the CLI flagged an error settles by its status, an Edit keeps the hunks the CLI reported, and a wakeup when it fires",
+    () =>
+      Effect.gen(function* () {
+        const post = yield* standing;
+        const agent = yield* agentWithBearer;
+        const envelope = { parent_tool_use_id: null, session_id: SESSION, uuid: randomUUID() };
+        const toolUse = (id: string, name: string, input: WireRecord) => ({
+          type: "assistant",
+          message: { content: [{ type: "tool_use", id, name, input }] },
+          ...envelope,
+        });
+        const toolResult = (id: string, text: string, isError: boolean, report?: WireValue) => ({
+          type: "user",
+          message: {
+            role: "user",
+            content: [{ type: "tool_result", tool_use_id: id, content: text, is_error: isError }],
+          },
+          ...(report === undefined ? undefined : { tool_use_result: report }),
+          ...envelope,
+        });
+        const hunk = {
+          oldStart: 4,
+          oldLines: 3,
+          newStart: 4,
+          newLines: 3,
+          lines: [" a;", "-b;", "+c;", " d;"],
+        };
+        const scheduledFor = 1_792_695_192_000;
+        const turn = [
+          { type: RUNNER_EVENT.ACCEPTED, uuid: agent.lineId },
+          { type: "system", subtype: "init", ...envelope },
+          toolUse("toolu_mac", "mcp__luke__run_on_mac", { command: "ls" }),
+          toolResult("toolu_mac", '{"status":"not-run","reason":"The Mac is offline."}', true),
+          toolUse("toolu_refused", "mcp__luke__read_task", { taskId: "x" }),
+          toolResult("toolu_refused", '{"status":"rejected","reason":"No such task."}', true),
+          toolUse("toolu_edit", "Edit", { file_path: "a.ts", old_string: "b;", new_string: "c;" }),
+          toolResult("toolu_edit", "The file has been updated successfully.", false, {
+            filePath: "a.ts",
+            oldString: "b;",
+            newString: "c;",
+            originalFile: "a;\nb;\nd;\n",
+            replaceAll: false,
+            userModified: false,
+            structuredPatch: [hunk],
+          }),
+          toolUse("toolu_wake", "ScheduleWakeup", {
+            delaySeconds: 270,
+            reason: "CI",
+            prompt: "go",
+          }),
+          toolResult("toolu_wake", "Next wakeup scheduled for 18:53:12 (in 270s).", false, {
+            scheduledFor,
+            clampedDelaySeconds: 270,
+            wasClamped: false,
+          }),
+          { type: "result", subtype: "success", is_error: false, ...envelope },
+          { type: RUNNER_EVENT.END, reason: RUNNER_END.TURN_ENDED },
+        ];
+        // SAFETY: each message above is one the pinned SDK or the runner emits, written in its JSON shape.
+        yield* post(
+          agent.bearer,
+          turn.map((message, sequence) => ({ sequence, message }) as RunnerEvent),
+        );
+        const { rows } = yield* transcriptOf(agent.target.conversationId);
+        const parts = rows.at(-1)?.parts ?? [];
+
+        assert.deepEqual(
+          parts.map(drawn).filter((part) => part[0] !== "step-start"),
+          [
+            [
+              "tool-run_on_mac",
+              "output-available",
+              { status: "not-run", reason: "The Mac is offline." },
+            ],
+            ["tool-read_task", "output-error"],
+            ["tool-Edit", "output-available", "The file has been updated successfully."],
+            [
+              "tool-ScheduleWakeup",
+              "output-available",
+              { text: "Next wakeup scheduled for 18:53:12 (in 270s).", scheduledFor },
+            ],
+          ],
+        );
+        const refused = parts.find((part) => part.type === "tool-read_task");
+        assert.equal(
+          refused && "errorText" in refused ? refused.errorText : undefined,
+          "No such task.",
+        );
+        const edit = parts.find((part) => part.type === "tool-Edit");
+        assert.deepEqual(edit && "input" in edit ? edit.input : undefined, {
+          file_path: "a.ts",
+          old_string: "b;",
+          new_string: "c;",
+          replace_all: false,
+          structuredPatch: [hunk],
+        });
+      }),
+  );
+
+  it.effect(
     "a plan's agent's transcript says its turns were the plan's, beside the tokens they took",
     () =>
       Effect.gen(function* () {

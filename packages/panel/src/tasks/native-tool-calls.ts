@@ -1,5 +1,11 @@
-import { AGENT_TOOL, CLAUDE_CODE_TOOL, CODEX_TOOL } from "@luke/features/agent-tools";
+import {
+  AGENT_TOOL,
+  CLAUDE_CODE_TOOL,
+  CODEX_TOOL,
+  CONNECTION_TOOL,
+} from "@luke/features/agent-tools";
 import { CODING_AGENT_TODO_STATUS } from "@luke/features/coding-agent-wire";
+import { INTEGRATION_REMOTE_TOOL, integrationConnectionOf } from "@luke/features/integration-wire";
 import { isRecord, isWireNumber, isWireString, type WireValue } from "@luke/wire";
 
 /**
@@ -68,6 +74,41 @@ function patchOf(path: string, hunk: string, removed: readonly string[], added: 
   return [`*** Update File: ${path}`, hunk, ...removed, ...added].join("\n");
 }
 
+/** The hunks the CLI reports an edit changed, each with the lines around it, as a patch spells them; nothing where it reported none. */
+function reportedHunks(input: WireValue | undefined): readonly string[] | undefined {
+  const hunks = isRecord(input) ? input.structuredPatch : undefined;
+  if (!Array.isArray(hunks) || hunks.length === 0) return undefined;
+  return hunks.flatMap((hunk: WireValue) => {
+    if (!isRecord(hunk) || !Array.isArray(hunk.lines)) return [];
+    const { oldStart, oldLines, newStart, newLines } = hunk;
+    const lines = hunk.lines.filter(isWireString);
+    return [`@@ -${oldStart},${oldLines} +${newStart},${newLines} @@`, ...lines];
+  });
+}
+
+/** An edit's patch: the hunks the CLI reported, with their context, where it reported them, and otherwise the lines replaced and their replacement. */
+function editPatch(input: WireValue | undefined): string {
+  const path = inputString(input, "file_path") ?? "";
+  const hunks = reportedHunks(input);
+  if (hunks !== undefined) return [`*** Update File: ${path}`, ...hunks].join("\n");
+  return patchOf(
+    path,
+    isRecord(input) && input.replace_all === true ? "@@ every occurrence" : "@@",
+    patchLines("-", inputString(input, "old_string")),
+    patchLines("+", inputString(input, "new_string")),
+  );
+}
+
+/** How `apply_patch` names what it did to a file, as its answer lists each. */
+const PATCH_OPERATION = { ADD: "add", DELETE: "delete", UPDATE: "update" } as const;
+
+/** A file edit's answer as `apply_patch` answers one, a line naming each file it changed; an answer that is not the CLI's words, or none yet, as it is. */
+function editAnswer(output: WireValue | undefined, path: string): WireValue | undefined {
+  return answerWords(output) === undefined
+    ? output
+    : { files: [{ operation: PATCH_OPERATION.UPDATE, path }] };
+}
+
 /** A to-do's status as the wire spells it: Claude Code's `completed` is done, and the rest are spelled alike. */
 function todoStatus(status: WireValue | undefined): WireValue | undefined {
   return status === "completed" ? CODING_AGENT_TODO_STATUS.DONE : status;
@@ -130,15 +171,8 @@ const CLAUDE_CODE_CALLS: Record<
   }),
   [CLAUDE_CODE_TOOL.EDIT]: ({ input, output }) => ({
     tool: AGENT_TOOL.APPLY_PATCH,
-    input: {
-      patchText: patchOf(
-        inputString(input, "file_path") ?? "",
-        isRecord(input) && input.replace_all === true ? "@@ every occurrence" : "@@",
-        patchLines("-", inputString(input, "old_string")),
-        patchLines("+", inputString(input, "new_string")),
-      ),
-    },
-    output,
+    input: { patchText: editPatch(input) },
+    output: editAnswer(output, inputString(input, "file_path") ?? ""),
   }),
   [CLAUDE_CODE_TOOL.NOTEBOOK_EDIT]: ({ input, output }) => {
     const mode = inputString(input, "edit_mode") ?? "replace";
@@ -153,7 +187,7 @@ const CLAUDE_CODE_CALLS: Record<
           mode === "delete" ? [] : patchLines("+", inputString(input, "new_source")),
         ),
       },
-      output,
+      output: editAnswer(output, inputString(input, "notebook_path") ?? ""),
     };
   },
   [CLAUDE_CODE_TOOL.GLOB]: ({ input, output }) => ({
@@ -186,7 +220,7 @@ const CLAUDE_CODE_CALLS: Record<
     input: { skill: inputString(input, "skill") ?? "" },
     output,
   }),
-  // Note that a wakeup keeps its name, because it schedules a prompt for later rather than pausing the turn as `sleep` does: it is drawn as a plain call, its reason and prompt in its body.
+  // Note that a wakeup keeps its name, because it schedules a prompt for later rather than pausing the turn as `sleep` does: `tool-call-model.ts` draws it as the time it checks back at.
   [CLAUDE_CODE_TOOL.SCHEDULE_WAKEUP]: (call) => call,
   // Note that a subagent's call keeps its name, because no eve tool makes one as a single call: `tool-call-model.ts` draws it.
   [CLAUDE_CODE_TOOL.AGENT]: (call) => call,
@@ -197,6 +231,27 @@ function codexTerminalAnswer(output: WireValue | undefined): WireValue | undefin
   if (!isRecord(output) || !isWireString(output.output)) return output;
   const exitCode = isWireNumber(output.exitCode) ? output.exitCode : 0;
   return { stdout: output.output, stderr: "", exitCode };
+}
+
+/** A login shell's wrapper around a command, as Codex runs every one (`/bin/bash -lc '…'`): the shell, its flags, and the command as one quoted word. */
+const SHELL_WRAPPER = /^(?:\S*\/)?(?:bash|zsh|sh) -l?c ([\s\S]+)$/u;
+
+/** A shell word's text: a single-quoted word as it is, `'\''` its quote, and a double-quoted one with its escapes undone; nothing for a word that is not one quoted whole. */
+function unquoted(word: string): string | undefined {
+  const inner = word.slice(1, -1);
+  if (word.length >= 2 && word.startsWith("'") && word.endsWith("'")) {
+    return inner.replaceAll("'\\''", "").includes("'") ? undefined : inner.replaceAll("'\\''", "'");
+  }
+  if (word.length >= 2 && word.startsWith('"') && word.endsWith('"')) {
+    return /(?<!\\)"/u.test(inner) ? undefined : inner.replace(/\\([\\"$`])/gu, "$1");
+  }
+  return /^[^\s'"\\]+$/u.test(word) ? word : undefined;
+}
+
+/** A Codex command as the model wrote it, without the login shell Codex wraps it in; a command it did not wrap, or one whose wrapper does not read, as it is. */
+function unwrappedCommand(command: string): string {
+  const word = SHELL_WRAPPER.exec(command.trim())?.[1];
+  return (word === undefined ? undefined : unquoted(word)) ?? command;
 }
 
 /** The header `apply_patch` opens a file's change with, for each kind of change Codex reports. */
@@ -226,6 +281,22 @@ function codexFilePatch(change: WireValue): readonly string[] {
     ...(moved === undefined ? [] : [`*** Move to: ${moved}`]),
     ...patchLines("", diff),
   ];
+}
+
+/** A Codex file change's answer as `apply_patch` answers one, each file and what was done to it, once it completed; any other answer as its status. */
+function codexPatchAnswer(input: WireValue | undefined, output: WireValue | undefined) {
+  const status = inputString(output, "status");
+  const changes = isRecord(input) ? input.changes : undefined;
+  if (status !== "completed" || !Array.isArray(changes)) return status ?? output;
+  return {
+    files: changes.map((change: WireValue) => {
+      const type = inputString(isRecord(change) ? change.kind : undefined, "type");
+      return {
+        operation: type === "add" || type === "delete" ? type : PATCH_OPERATION.UPDATE,
+        path: inputString(change, "path") ?? "",
+      };
+    }),
+  };
 }
 
 /** A Codex file change's files as one `apply_patch`, which the edit renderer reads each file and its coloured lines from. */
@@ -295,13 +366,13 @@ function codexSubagentAnswer(output: WireValue | undefined): WireValue | undefin
 const CODEX_CALLS: Record<(typeof CODEX_TOOL)[keyof typeof CODEX_TOOL], NativeCallReading> = {
   [CODEX_TOOL.COMMAND_EXECUTION]: ({ input, output }) => ({
     tool: AGENT_TOOL.BASH,
-    input: { command: inputString(input, "command") ?? "" },
+    input: { command: unwrappedCommand(inputString(input, "command") ?? "") },
     output: codexTerminalAnswer(output),
   }),
   [CODEX_TOOL.FILE_CHANGE]: ({ input, output }) => ({
     tool: AGENT_TOOL.APPLY_PATCH,
     input: codexPatch(input),
-    output: inputString(output, "status") ?? output,
+    output: codexPatchAnswer(input, output),
   }),
   [CODEX_TOOL.WEB_SEARCH]: ({ input, output }) => ({
     tool: AGENT_TOOL.SEARCH_WEB,
@@ -335,4 +406,71 @@ const NATIVE_TOOL_CALLS: ReadonlyMap<string, NativeCallReading> = new Map([
 /** A stored call as the transcript draws it: a native harness's as the eve call that does the same, and any other as it is. */
 export function drawnCall(call: DrawnCall): DrawnCall {
   return NATIVE_TOOL_CALLS.get(call.tool)?.(call) ?? call;
+}
+
+/** The native tools that run a command in the sandbox, whose failure is the command's exit rather than the call's. */
+const COMMAND_TOOLS: ReadonlySet<string> = new Set([
+  CLAUDE_CODE_TOOL.BASH,
+  CLAUDE_CODE_TOOL.MONITOR,
+  CODEX_TOOL.COMMAND_EXECUTION,
+]);
+
+/** The line Claude Code tells a command's non-zero exit in, among its words. */
+const EXIT_LINE = /^(?:Error: )?Exit code (\d+)$/u;
+
+/** A Claude Code command's failure, its words as the CLI told them, as eve's shell answers one: its output, and the exit code it named. */
+function claudeCodeFailure(words: string): WireValue {
+  const lines = words.split("\n");
+  const exit = lines.findIndex((line) => EXIT_LINE.test(line.trim()));
+  const exitCode = Number(EXIT_LINE.exec(lines[exit]?.trim() ?? "")?.[1] ?? 1);
+  const stdout = lines.filter((_line, index) => index !== exit).join("\n");
+  return { stdout, stderr: "", exitCode };
+}
+
+/**
+ * A native command that ended in error, as eve's shell answers a command
+ * that exited non-zero: its output, ending in its exit code, as an answer
+ * rather than a failed call, since a failing exit is what the command said
+ * and not something the tool could not do. The words are the error's, which
+ * the harness told the model in place of an answer; Codex's own answer
+ * already holds its output and its exit. Nothing for any other call.
+ */
+export function failedCommandCall(
+  call: DrawnCall,
+  errorText: string | undefined,
+): DrawnCall | undefined {
+  if (!COMMAND_TOOLS.has(call.tool)) return undefined;
+  if (call.tool === CODEX_TOOL.COMMAND_EXECUTION && isRecord(call.output)) return drawnCall(call);
+  const words = errorText ?? answerWords(call.output) ?? "";
+  return { ...drawnCall({ ...call, output: undefined }), output: claudeCodeFailure(words) };
+}
+
+/**
+ * A native agent's `connection_execute`, which Luke's MCP server answers
+ * whole, drawn as eve draws the integration's own call it ran: under the
+ * integration's remote name, its input the envelope of the tool's own name
+ * and what it was sent, and its answer the tool's own result. Nothing for a
+ * call of a connection that is no integration's, or one whose input does
+ * not name a tool.
+ */
+export function connectionCall(
+  call: DrawnCall & { readonly callId: string },
+): DrawnCall | undefined {
+  if (call.tool !== CONNECTION_TOOL.EXECUTE) return undefined;
+  const connection = inputString(call.input, "connection");
+  const remoteTool = inputString(call.input, "tool");
+  const account = connection === undefined ? undefined : integrationConnectionOf(connection);
+  if (account === undefined || remoteTool === undefined) return undefined;
+  const sent = isRecord(call.input) && isRecord(call.input.input) ? call.input.input : {};
+  return {
+    tool: INTEGRATION_REMOTE_TOOL[account.provider],
+    input: {
+      remoteTool,
+      parentCallId: call.callId,
+      input: sent,
+      ...(account.place > 1 && connection !== undefined ? { connection } : undefined),
+    },
+    output:
+      isRecord(call.output) && call.output.output !== undefined ? call.output.output : call.output,
+  };
 }
