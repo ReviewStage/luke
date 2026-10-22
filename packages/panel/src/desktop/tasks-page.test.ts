@@ -513,6 +513,50 @@ test("a row draws the pull requests its agents opened, each its mark and its num
   assert.match(agents?.textContent ?? "", /#4222/);
 });
 
+test("a row whose agents rest keeps the working mark's room before its pull request, so its pull request lines up with a working row's", async () => {
+  const pullRequest = (number: number) => ({
+    number,
+    title: "Rate limit search",
+    state: "open" as const,
+    checks: "passing" as const,
+    additions: 10,
+    deletions: 2,
+  });
+  const resting: TaskSummary = {
+    ...task(39, "Rate limit search", TASK_STATUS.TODO, TASK_PRIORITY.HIGH),
+    agents: {
+      total: 1,
+      working: 0,
+      agents: [],
+      pullRequestTotal: 1,
+      pullRequests: [pullRequest(4222)],
+    },
+  };
+  const working: TaskSummary = {
+    ...task(38, "Billing after downgrade", TASK_STATUS.TODO, TASK_PRIORITY.HIGH),
+    agents: {
+      total: 1,
+      working: 1,
+      agents: [],
+      pullRequestTotal: 1,
+      pullRequests: [pullRequest(4223)],
+    },
+  };
+  const page = await mountPage([resting, working, ...TASKS.slice(2)]);
+  const lead = (key: string) =>
+    [...(rowOf(page, key).querySelector("[data-cell='agents'] .task-work-marks")?.children ?? [])]
+      .map((mark) => mark.className)
+      .slice(0, 2);
+
+  assert.deepEqual(lead("ACME-38"), ["state-glyph", "task-work-pull-request"]);
+  assert.deepEqual(lead("ACME-39"), ["state-glyph", "task-work-pull-request"]);
+  assert.equal(
+    rowOf(page, "ACME-39").querySelector("[data-cell='agents'] [data-state='working']"),
+    null,
+    "a resting row draws no working mark",
+  );
+});
+
 test("a group's head folds it, its count still standing, and the fold is kept on this Mac", async () => {
   const page = await mountPage();
   const fold = () => {

@@ -670,7 +670,7 @@ function TaskListRow({
           />
         </>,
       )}
-      {cell(TASK_PROPERTY.AGENTS, <TaskWorkMarks task={task} most={1} />)}
+      {cell(TASK_PROPERTY.AGENTS, <TaskWorkMarks task={task} most={1} steady />)}
       {cell(
         TASK_PROPERTY.UPDATED,
         <RelativeTime at={taskTime(task, TASK_ORDER.UPDATED)} now={now} hint={false} />,
