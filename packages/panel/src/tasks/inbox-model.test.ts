@@ -1418,7 +1418,7 @@ test("an item's media are its pictures and the pages it names, by any link outsi
     ],
   });
   assert.deepEqual(inboxMedia(carrying), [
-    { kind: INBOX_MEDIA.PAGE, taskId: task, pageId: funnel },
+    { kind: INBOX_MEDIA.PAGE, place: { taskId: task }, pageId: funnel },
     { kind: INBOX_MEDIA.IMAGE, attachmentId: shot },
     { kind: INBOX_MEDIA.IMAGE, attachmentId: answered },
   ]);
@@ -1435,10 +1435,10 @@ test("an item's media are its pictures and the pages it names, by any link outsi
     ],
   } satisfies InboxItem;
   assert.deepEqual(inboxMedia(threaded), [
-    { kind: INBOX_MEDIA.PAGE, taskId: task, pageId: funnel },
+    { kind: INBOX_MEDIA.PAGE, place: { taskId: task }, pageId: funnel },
     { kind: INBOX_MEDIA.IMAGE, attachmentId: shot },
     { kind: INBOX_MEDIA.IMAGE, attachmentId: answered },
-    { kind: INBOX_MEDIA.PAGE, taskId: task, pageId: pricing },
+    { kind: INBOX_MEDIA.PAGE, place: { taskId: task }, pageId: pricing },
   ]);
   const elsewhere = "9d2b7b5a-4e3f-4e9c-9c77-7a5d8b3f4c32";
   const twoTasks = item({
@@ -1453,10 +1453,43 @@ test("an item's media are its pictures and the pages it names, by any link outsi
     ],
   });
   assert.deepEqual(inboxMedia(twoTasks), [
-    { kind: INBOX_MEDIA.PAGE, taskId: task, pageId: funnel },
-    { kind: INBOX_MEDIA.PAGE, taskId: elsewhere, pageId: funnel },
+    { kind: INBOX_MEDIA.PAGE, place: { taskId: task }, pageId: funnel },
+    { kind: INBOX_MEDIA.PAGE, place: { taskId: elsewhere }, pageId: funnel },
   ]);
   assert.deepEqual(inboxMedia(item({ id: "m2" })), []);
+});
+
+test("an item's media take the page of an agent with no task as they take a task's, by its place, each page of each place once, in a thread's words too", () => {
+  const agent = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
+  const task = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
+  const ledger = "3c4d5e6f-0000-4000-8000-000000000003";
+  const agentLink = linkOf({ kind: LINK_PLACE.PAGE, agentId: agent, pageId: ledger }, "acme");
+  const taskLink = linkOf({ kind: LINK_PLACE.PAGE, planId: task, pageId: ledger }, "acme");
+  const carrying = item({
+    id: "m4",
+    blocks: [
+      { type: INBOX_BLOCK.MARKDOWN, text: `[@Flake ledger](${agentLink}) and ${taskLink}` },
+      { type: INBOX_BLOCK.LINK, url: agentLink, label: "Ledger again" },
+    ],
+  });
+  assert.deepEqual(inboxMedia(carrying), [
+    { kind: INBOX_MEDIA.PAGE, place: { agentId: agent }, pageId: ledger },
+    { kind: INBOX_MEDIA.PAGE, place: { taskId: task }, pageId: ledger },
+  ]);
+  const threaded = {
+    ...item({ id: "m5" }),
+    thread: [
+      {
+        id: "n2",
+        author: INBOX_MESSAGE_AUTHOR.AGENT,
+        text: `Here: ${agentLink} and again ${agentLink}`,
+        createdAt: 1_000,
+      },
+    ],
+  } satisfies InboxItem;
+  assert.deepEqual(inboxMedia(threaded), [
+    { kind: INBOX_MEDIA.PAGE, place: { agentId: agent }, pageId: ledger },
+  ]);
 });
 
 /** The agent's message ending with `ask`, open unless it says otherwise. */
@@ -1833,7 +1866,7 @@ test("a thread's row media are the pictures its messages' words draw by address 
     thread: [standing(asked, INBOX_ASK_STATUS.ANSWERED), answer],
   });
   assert.deepEqual(inboxMedia(threaded), [
-    { kind: INBOX_MEDIA.PAGE, taskId: task, pageId: funnel },
+    { kind: INBOX_MEDIA.PAGE, place: { taskId: task }, pageId: funnel },
     { kind: INBOX_MEDIA.IMAGE, attachmentId: chart },
     { kind: INBOX_MEDIA.IMAGE, attachmentId: after },
     { kind: INBOX_MEDIA.IMAGE, attachmentId: sent },
