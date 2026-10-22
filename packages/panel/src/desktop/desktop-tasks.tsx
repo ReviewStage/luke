@@ -459,10 +459,17 @@ function PlanDocument({
   const { region } = tasks;
   // A phone's Activity lists the panel's tabs until one is chosen, from it or by anything else, such as
   // an arrival the panel shows, on the task it was asked on alone (`task-pane-switcher.tsx`).
+  // Asked over a shut panel, it holds whatever tab the panel opens on, which a shut panel with every tab closed chooses as it opens.
   const [activityAsked, setActivityAsked] = useState<{
     taskId: string;
     tab: SidePanelTab | undefined;
+    opening: boolean;
   }>();
+  const { open: panelOpen, tab: panelTab } = tasks.sidePanel;
+  useEffect(() => {
+    if (activityAsked?.opening && panelOpen)
+      setActivityAsked({ ...activityAsked, tab: panelTab, opening: false });
+  }, [activityAsked, panelOpen, panelTab]);
   const drawing = useSidePanelDrawing(tasks.sidePanel);
   const views = useTabViews();
   const chatOn = useChatOn();
@@ -931,11 +938,14 @@ function PlanDocument({
   const activityListed =
     activityAsked !== undefined &&
     activityAsked.taskId === task.id &&
-    (activityAsked.tab === undefined
-      ? sidePanel.tab === undefined
-      : sidePanel.tab !== undefined && sameTab(activityAsked.tab, sidePanel.tab));
+    (activityAsked.opening ||
+      (activityAsked.tab === undefined
+        ? sidePanel.tab === undefined
+        : sidePanel.tab !== undefined && sameTab(activityAsked.tab, sidePanel.tab)));
   const onListed = (asked: boolean) =>
-    setActivityAsked(asked ? { taskId: task.id, tab: sidePanel.tab } : undefined);
+    setActivityAsked(
+      asked ? { taskId: task.id, tab: sidePanel.tab, opening: !sidePanel.open } : undefined,
+    );
   const pane = taskPaneOf({ open: sidePanel.open, tab: sidePanel.tab, listed: activityListed });
   const choosePane = (chosen: TaskPane) => {
     if (chosen === TASK_PANE.AGENTS) {
@@ -945,7 +955,10 @@ function PlanDocument({
       return;
     }
     onListed(chosen === TASK_PANE.ACTIVITY);
-    if (chosen === TASK_PANE.PLAN) sidePanel.onChoose(SIDE_PANEL_TAB.PLAN);
+    // Note that a shut panel already on the plan opens by its own toggle, as Show panel opened it, so the window's history steps as it did.
+    if (chosen === TASK_PANE.PLAN && !sidePanel.open && sidePanel.tab === SIDE_PANEL_TAB.PLAN)
+      sidePanel.onToggle();
+    else if (chosen === TASK_PANE.PLAN) sidePanel.onChoose(SIDE_PANEL_TAB.PLAN);
     else if (!sidePanel.open) sidePanel.onToggle();
   };
   return (

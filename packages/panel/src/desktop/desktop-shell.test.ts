@@ -669,6 +669,28 @@ test("on a phone the bar's More opens the sidebar's drawer, which holds every ot
   assert.equal(toggled, 1);
 });
 
+test("on a phone the places bar stands over the Tasks page though the task left behind it holds its panel open, which is not on screen", async () => {
+  const page = await mountNarrow({
+    boardView: { ...tasksControl().boardView, open: true },
+    sidePanel: { ...tasksControl().sidePanel, open: true, fullScreen: true, fullScreenOnly: true },
+  });
+  assert.deepEqual(
+    barItems(page).map((item) => item.textContent),
+    ["Inbox", "Tasks", "More"],
+  );
+});
+
+test("on a phone the drawer More opened leaves the bar's other places inert, as the work it covers is, and More still puts it away", async () => {
+  const page = await mountNarrow(
+    { boardView: { ...tasksControl().boardView, open: true } },
+    { overlay: SIDEBAR_OVERLAY.OPEN },
+  );
+  assert.equal(barItem(page, "Inbox").hasAttribute("inert"), true);
+  assert.equal(barItem(page, "Tasks").hasAttribute("inert"), true);
+  assert.equal(barItem(page, "More").hasAttribute("inert"), false);
+  assert.equal(barItem(page, "More").getAttribute("aria-expanded"), "true");
+});
+
 test("the places bar stands only on a phone's lists: an open task, an Inbox item, an automation's editor, and a wide window keep the whole screen", async () => {
   const onTask = await mountNarrow({ page: TASKS_PAGE.DOCUMENT });
   assert.deepEqual(barItems(onTask), [], "an open task keeps the screen");

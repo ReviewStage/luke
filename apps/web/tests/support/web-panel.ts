@@ -60,7 +60,7 @@ export async function travel(go: () => void): Promise<void> {
 }
 
 /** Lets every promise settled so far run its continuations, the panel's state among them. */
-async function settle(): Promise<void> {
+export async function settle(): Promise<void> {
   await act(async () => {
     for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
   });

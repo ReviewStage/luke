@@ -1119,7 +1119,13 @@ function ActivityList({
                 title={entry.look.label}
                 meta={entry.look.detail}
                 unread={entry.look.unread}
-                chevron
+                actions={
+                  <IconButton
+                    icon={<CloseIcon />}
+                    label={`Close ${entry.look.label}`}
+                    onClick={entry.close}
+                  />
+                }
                 onPress={() => {
                   onListed(false);
                   entry.look.onSelect();
