@@ -22,14 +22,18 @@
  * single hyphens), whose `SKILL.md` names another, or which carries no
  * description is left out, since the convention refuses all three.
  *
- * The frontmatter is read for the few keys the convention names, as the
- * YAML a `SKILL.md` actually holds spells them: a plain, quoted, or block
- * scalar at the top level. Anything richer is a key this reader ignores,
- * which is what a harness does with a key it does not know.
+ * The frontmatter is read by `@luke/features/skill-file`, which a skill a
+ * member pastes is read by too.
  */
 
+import {
+  readSkillFile,
+  SKILL_FILE_BOUNDS,
+  SKILL_KEY,
+  SKILL_NAME_RULE,
+} from "@luke/features/skill-file";
 import { TASK_SKILL_BOUNDS } from "@luke/features/task-wire";
-import { Effect, Option, type Redacted, Schema } from "effect";
+import { Effect, type Redacted } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import type { GitHubUnavailable } from "../github/github-app.js";
 import { readRepositoryFile } from "../github/repository-file.js";
@@ -50,7 +54,7 @@ const REPOSITORY_SKILLS = {
   /** The most `SKILL.md` files read, across every root: a skill's in each root, twice the skills. */
   MAX_READS: 128,
   /** The largest `SKILL.md` read; a larger one is left out. */
-  MAX_FILE_BYTES: 64 * 1024,
+  MAX_FILE_BYTES: SKILL_FILE_BOUNDS.MAX_FILE_BYTES,
   /** The convention's bound on a description, past which it is cut, which the desktop's read holds it to. */
   MAX_DESCRIPTION_CHARS: TASK_SKILL_BOUNDS.MAX_DESCRIPTION_CHARS,
   /** How many `SKILL.md` reads stand at once. */
@@ -59,25 +63,6 @@ const REPOSITORY_SKILLS = {
 
 /** The file a skill's folder holds it in. */
 const SKILL_FILE = "SKILL.md";
-
-/** The convention's rule for a skill's name: up to 64 lowercase letters and digits, in words joined by single hyphens. */
-const SKILL_NAME = /^(?=.{1,64}$)[a-z0-9]+(?:-[a-z0-9]+)*$/u;
-
-/** The frontmatter's fences: `---` on the first line and again on a line of its own. */
-const FRONTMATTER = /^---\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n|$)/u;
-
-/** A top-level key and the rest of its line. */
-const TOP_LEVEL_KEY = /^([A-Za-z0-9_-]+):(?:[ \t]+(.*))?$/u;
-
-/** A JSON value read as a string, which a double-quoted scalar parses to. */
-const readJsonString = Schema.decodeUnknownOption(Schema.String);
-
-/** The frontmatter keys this reader reads. */
-const SKILL_KEY = {
-  NAME: "name",
-  DESCRIPTION: "description",
-  USER_INVOCABLE: "user-invocable",
-} as const;
 
 /** One skill a repository keeps. */
 export interface RepositorySkill {
@@ -89,87 +74,6 @@ export interface RepositorySkill {
   readonly userInvocable: boolean;
   /** The body of its `SKILL.md`, the frontmatter taken off. */
   readonly markdown: string;
-}
-
-/** What a `SKILL.md` says of itself: its frontmatter's keys, each as text, and the body under it. */
-interface SkillFile {
-  readonly keys: ReadonlyMap<string, string>;
-  readonly body: string;
-}
-
-/* ----- Frontmatter ----- */
-
-/** The lines under a key that continue its value: indented or blank, up to the next top-level key. */
-function continuationOf(lines: readonly string[], from: number): readonly string[] {
-  const taken: string[] = [];
-  for (let at = from; at < lines.length; at += 1) {
-    const line = lines[at] ?? "";
-    if (line.trim() !== "" && !/^[ \t]/u.test(line)) break;
-    taken.push(line);
-  }
-  return taken;
-}
-
-/** A block scalar's lines (`|` keeps line breaks, `>` folds them into spaces), dedented by the first line's indent. */
-function blockScalar(style: string, lines: readonly string[]): string {
-  const first = lines.find((line) => line.trim() !== "") ?? "";
-  const indent = first.length - first.trimStart().length;
-  const kept = lines.map((line) => line.slice(indent).trimEnd());
-  if (style === "|") return kept.join("\n").trim();
-  return kept
-    .join("\n")
-    .split(/\n{2,}/u)
-    .map((paragraph) => paragraph.split("\n").join(" "))
-    .join("\n")
-    .trim();
-}
-
-/** A double-quoted scalar's text, its escapes read as JSON reads them; the bare text where JSON cannot. */
-function doubleQuoted(text: string): string {
-  try {
-    return Option.getOrElse(readJsonString(JSON.parse(text)), () => text.slice(1, -1));
-  } catch {
-    return text.slice(1, -1);
-  }
-}
-
-/** One key's value as text: the first line's rest, folded with the lines that continue it. */
-function scalarOf(rest: string, continuation: readonly string[]): string {
-  const head = rest.trim();
-  if (/^[|>][+-]?$/u.test(head)) return blockScalar(head.charAt(0), continuation);
-  const folded = [head, ...continuation.map((line) => line.trim())]
-    .filter((part) => part !== "")
-    .join(" ");
-  if (folded.startsWith('"') && folded.endsWith('"') && folded.length > 1) {
-    return doubleQuoted(folded);
-  }
-  if (folded.startsWith("'") && folded.endsWith("'") && folded.length > 1) {
-    return folded.slice(1, -1).replaceAll("''", "'");
-  }
-  // Note that a plain scalar ends at a comment, which YAML opens with a space and a hash.
-  return folded.replace(/[ \t]+#.*$/u, "");
-}
-
-/** A `SKILL.md` read for its frontmatter's top-level keys and its body; nothing where it opens with no frontmatter. */
-function readSkillFile(text: string): SkillFile | undefined {
-  const fenced = FRONTMATTER.exec(text.replace(/^\uFEFF/u, ""));
-  if (fenced === null) return undefined;
-  const lines = (fenced[1] ?? "").split(/\r?\n/u);
-  const keys = new Map<string, string>();
-  for (let at = 0; at < lines.length; at += 1) {
-    const key = TOP_LEVEL_KEY.exec(lines[at] ?? "");
-    if (key === null) continue;
-    const continuation = continuationOf(lines, at + 1);
-    keys.set(key[1] ?? "", scalarOf(key[2] ?? "", continuation));
-    at += continuation.length;
-  }
-  return {
-    keys,
-    body: text
-      .replace(/^\uFEFF/u, "")
-      .slice(fenced[0].length)
-      .trim(),
-  };
 }
 
 /** The skill a `SKILL.md` in the folder named describes, or nothing where it breaks the convention. */
@@ -206,7 +110,7 @@ function rootFolders(
   return Effect.map(readRepositoryFolder(token, repository, root), (folder) =>
     folder.found
       ? folder.entries
-          .filter((entry) => entry.type === GIT_ENTRY.TREE && SKILL_NAME.test(entry.name))
+          .filter((entry) => entry.type === GIT_ENTRY.TREE && SKILL_NAME_RULE.test(entry.name))
           .map((entry) => ({ root, name: entry.name }))
           .sort((a, b) => a.name.localeCompare(b.name))
       : [],
