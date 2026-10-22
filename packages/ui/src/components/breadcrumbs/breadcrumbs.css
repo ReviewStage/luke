@@ -40,6 +40,12 @@
     align-items: center;
   }
 
+  /* A crumb that keeps its size, so a narrow bar cuts the crumbs after it
+     short first. */
+  .luke-breadcrumbs li[data-fixed="true"] {
+    flex-shrink: 0;
+  }
+
   .luke-breadcrumb-separator {
     display: flex;
     flex: none;

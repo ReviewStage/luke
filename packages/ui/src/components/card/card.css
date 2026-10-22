@@ -24,4 +24,24 @@
   .luke-card[data-padding="compact"] {
     padding: var(--luke-card-inset-compact) var(--luke-card-inset);
   }
+
+  .luke-card[data-look="raised"] {
+    border-color: var(--luke-color-border-strong);
+    border-radius: var(--luke-radius-8);
+    background: var(--luke-color-overlay);
+  }
+
+  .luke-card-head {
+    display: flex;
+    min-width: 0;
+    min-height: var(--luke-control-height);
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--luke-space-4) var(--luke-space-8);
+    padding: var(--luke-space-4) var(--luke-space-12);
+    color: var(--luke-color-text-muted);
+    font-size: var(--luke-type-caption-size);
+    line-height: var(--luke-type-caption-leading);
+  }
 }

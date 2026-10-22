@@ -1689,10 +1689,10 @@ ul.actor-stack {
 /* Empty and waiting states ---------------------------------------------- */
 
 /* A pane that scrolls a list lays its empty state out as a column the state
-   fills, while it holds one. The Inbox's list is the body inside its
+   fills, while it holds no item. The Inbox's list is the body inside its
    `ScrollArea`, so it stands at least the area's height to give the state
    the room. */
-.inbox-tasks-body:has(.luke-empty-state) {
+.inbox-tasks-body[data-empty="true"] {
   display: flex;
   min-height: 100%;
   flex-direction: column;
@@ -3074,57 +3074,6 @@ ul.actor-stack {
   height: 12px;
 }
 
-/* The pictures and pages an Inbox item carries, drawn small under its row's
-   preview where the view's menu shows them (`inbox-row-media.tsx`): each a
-   tile of a page's shape, a picture filling it and a page laid out four
-   times its width and scaled down to it, as a page's card draws its
-   preview; a quiet ground holds its place until it lands. */
-.inbox-row-media-tile {
-  position: relative;
-  display: inline-flex;
-  height: var(--inbox-row-media-height);
-  flex: none;
-  align-items: center;
-  justify-content: center;
-  overflow: hidden;
-  aspect-ratio: 16 / 10;
-  border: 1px solid var(--luke-color-border);
-  border-radius: var(--luke-control-radius);
-  background: var(--luke-color-fill-hover);
-  color: var(--luke-color-text-muted);
-
-  --inbox-row-media-height: 48px;
-}
-
-.inbox-row-media-tile[data-missing] svg {
-  width: var(--luke-control-icon);
-  height: var(--luke-control-icon);
-}
-
-.inbox-row-media-image {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.inbox-row-media-frame {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 400%;
-  height: 400%;
-  border: 0;
-  opacity: 0;
-  pointer-events: none;
-  transform: scale(0.25);
-  transform-origin: 0 0;
-  transition: opacity var(--luke-duration-hover) ease;
-}
-
-.inbox-row-media-tile[data-loaded="true"] .inbox-row-media-frame {
-  opacity: 1;
-}
-
 /* The item's thread leads with its subject (`inbox-pane.tsx`'s `Subject`),
    as a plan leads with its title: the title alone at a document heading's
    size, over a hairline that parts it from the comments. */
@@ -3242,8 +3191,13 @@ ul.actor-stack {
    joining the faces. A bare square, or someone's outline, is filled with
    the ground too, so the line never shows through its glyph; a member who
    left keeps their own tile. */
+/* Under the pointer the chip's wash (`InlineRef`'s own, handed on as
+   `--luke-inline-ref-wash`) runs on over the face's ring, so the ring reads
+   as the wash's own rather than a halo of the ground in it. */
 .inbox-comment-name .actor-mark {
-  box-shadow: 0 0 0 3px var(--luke-color-ground); /* off-scale: the ring that masks the line */
+  box-shadow:
+    0 0 0 3px var(--luke-inline-ref-wash, transparent),
+    0 0 0 3px var(--luke-color-ground); /* off-scale: the ring that masks the line */
 }
 
 .inbox-comment-name .actor-mark:not([data-left="true"]) {
@@ -3253,21 +3207,7 @@ ul.actor-stack {
 .inbox-comment-name .actor-mark[data-kind="someone"] {
   box-shadow:
     inset 0 0 0 1px var(--luke-color-border-strong),
-    0 0 0 3px var(--luke-color-ground); /* off-scale: the ring that masks the line */
-}
-
-/* Under the pointer the chip's wash runs on over the face's ring, so the
-   ring reads as the wash's own rather than a halo of the ground in it. */
-.inbox-comment-name .luke-inline-ref:hover .actor-mark {
-  box-shadow:
-    0 0 0 3px var(--luke-color-fill-hover),
-    0 0 0 3px var(--luke-color-ground); /* off-scale: the ring that masks the line */
-}
-
-.inbox-comment-name .luke-inline-ref:hover .actor-mark[data-kind="someone"] {
-  box-shadow:
-    inset 0 0 0 1px var(--luke-color-border-strong),
-    0 0 0 3px var(--luke-color-fill-hover),
+    0 0 0 3px var(--luke-inline-ref-wash, transparent),
     0 0 0 3px var(--luke-color-ground); /* off-scale: the ring that masks the line */
 }
 
@@ -3446,43 +3386,18 @@ ul.actor-stack {
 }
 
 /* An answer as a stamp (`inbox-stamp.tsx`), at the head of the reply that
-   sent it or over the box it is attached to: a chip of the strong fill in
-   the thread's ink, its glyph green going ahead and red holding back. */
+   sent it or over the box it is attached to: a `Badge`, or a removable
+   `Chip` once attached, standing at the start of the reply's column. */
 .inbox-stamp {
   display: inline-flex;
   max-width: 100%;
   align-self: flex-start;
-  align-items: center;
-  gap: var(--luke-space-4);
-  min-height: var(--luke-space-24);
-  padding-inline: var(--luke-space-6);
-  border-radius: var(--luke-radius-6);
-  background: var(--luke-color-fill-strong);
-  color: var(--luke-color-text);
-  font-size: var(--luke-type-caption-size);
-  font-weight: var(--luke-weight-medium);
 }
 
-.inbox-stamp-words {
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-
-.inbox-stamp > svg,
-.inbox-ask-standing > svg,
-.inbox-ask-settled > svg {
+.inbox-ask-standing > svg {
   width: 12px;
   height: 12px;
   flex: none;
-}
-
-.inbox-stamp[data-tone="ahead"] > svg,
-.inbox-ask-settled > svg {
-  color: var(--luke-color-complete);
-}
-
-.inbox-stamp[data-tone="back"] > svg {
-  color: var(--luke-color-danger-text);
 }
 
 /* The ask closing the message that asks it, once it no longer waits: a
@@ -3490,26 +3405,7 @@ ul.actor-stack {
    answered, its controls alone head the reply that answered it, as the
    answer left them, with no card around them. */
 .inbox-ask {
-  display: flex;
   min-width: 0;
-  flex-direction: column;
-  border: 1px solid var(--luke-color-border-strong);
-  border-radius: var(--luke-radius-8);
-  background: var(--luke-color-overlay);
-}
-
-.inbox-ask-head {
-  display: flex;
-  min-width: 0;
-  min-height: var(--luke-control-height);
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--luke-space-4) var(--luke-space-8);
-  padding: var(--luke-space-4) var(--luke-space-12);
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-caption-size);
-  line-height: var(--luke-type-caption-leading);
 }
 
 .inbox-ask-kind {
@@ -3554,41 +3450,6 @@ ul.actor-stack {
   opacity: 0.55;
 }
 
-/* An answered ask of words alone, which draws no card, ends the agent's
-   message with a small pill saying it was answered, its check in the
-   complete ink; a replaced or withdrawn ask with the same pill saying so,
-   in the muted ink alone. */
-.inbox-ask-settled {
-  display: inline-flex;
-  max-width: 100%;
-  align-self: flex-start;
-  align-items: flex-start;
-  gap: var(--luke-space-6);
-  min-height: var(--luke-space-24);
-  padding: var(--luke-space-4) var(--luke-space-8);
-  border: 1px solid var(--luke-color-border);
-  /* Note that the corners are half a one-line pill's height rather than a
-     full round, so a long reason that wraps in a narrow column stands as a
-     rounded box rather than a bubble. */
-  border-radius: calc(var(--luke-space-24) / 2);
-  overflow-wrap: anywhere;
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-caption-size);
-  line-height: var(--luke-type-caption-leading);
-}
-
-.inbox-ask-settled .inbox-ask-standing {
-  align-items: flex-start;
-}
-
-.inbox-ask-settled > svg,
-.inbox-ask-settled .inbox-ask-standing > svg {
-  margin-top: calc(
-    (var(--luke-type-caption-leading) - 12px) /
-    2
-  ); /* off-scale: centres the glyph on the first line */
-}
-
 /* The press an answer gave wears its glyph in the tone of what it did,
    green going ahead and red holding back, as the answer's stamp does. */
 .inbox-ask-pressed {
@@ -3604,49 +3465,6 @@ ul.actor-stack {
   display: flex;
   flex-wrap: wrap;
   gap: var(--luke-control-gap);
-}
-
-.inbox-ask-steps {
-  display: flex;
-  flex-direction: column;
-  gap: var(--luke-space-8);
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-/* An open ask's marker ending the agent's message (`inbox-pane.tsx`'s
-   AskMarker): a small pill saying which teammate it waits on, after a dot
-   in the muted ink. An ask waiting on the reader draws none. */
-.inbox-ask-marker {
-  display: inline-flex;
-  max-width: 100%;
-  align-self: flex-start;
-  align-items: flex-start;
-  gap: var(--luke-space-6);
-  min-height: var(--luke-space-24);
-  padding: var(--luke-space-4) var(--luke-space-8);
-  border: 1px solid var(--luke-color-border);
-  /* Half a one-line marker's height, as the settled pill's, so a long name
-     that wraps stands as a rounded box rather than a bubble. */
-  border-radius: calc(var(--luke-space-24) / 2);
-  overflow-wrap: anywhere;
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-caption-size);
-  line-height: var(--luke-type-caption-leading);
-}
-
-.inbox-ask-marker::before {
-  width: 6px; /* off-scale: the marker's dot */
-  height: 6px; /* off-scale: the marker's dot */
-  flex: none;
-  margin-top: calc(
-    (var(--luke-type-caption-leading) - 6px) /
-    2
-  ); /* off-scale: centres the dot on the first line */
-  border-radius: var(--luke-radius-full);
-  background: var(--luke-color-text-subtle);
-  content: "";
 }
 
 /* The reader's draft reply, the thread's last comment: the box stands in
@@ -3677,13 +3495,6 @@ ul.actor-stack {
   display: flex;
   min-width: 0;
   flex: 0 1 auto;
-}
-
-/* Once the item's title joins the path, its last words (`inbox-pane.tsx`'s
-   `Crumbs`), the agent's crumb before it keeps its size, so a narrow bar cuts
-   the task's crumb short first and then the title. */
-.inbox-crumbs .luke-breadcrumbs li:has(+ li[data-words="true"]:last-child) {
-  flex-shrink: 0;
 }
 
 /* A settled item's foot, over its box: the next item that needs the

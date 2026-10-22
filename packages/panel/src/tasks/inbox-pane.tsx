@@ -24,8 +24,14 @@ import { LINK_PLACE } from "@luke/features/luke-link";
 import type { CatalogModel } from "@luke/features/models-wire";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
+  BADGE_TONE,
   BackIcon,
+  Badge,
   Breadcrumbs,
+  CARD_LOOK,
+  CARD_PADDING,
+  Card,
+  CardHead,
   CHOICE_FLOW,
   CHOICE_LOOK,
   CHOICE_TONE,
@@ -1307,9 +1313,10 @@ const REPLACED = {
  */
 function AnsweredMarker(): React.JSX.Element {
   return (
-    <span className="inbox-ask-settled" data-inbox-settled="answered">
-      <CheckIcon aria-hidden="true" />
-      {ANSWERED}
+    <span data-inbox-settled="answered">
+      <Badge tone={BADGE_TONE.COMPLETE} icon={<CheckIcon aria-hidden="true" />}>
+        {ANSWERED}
+      </Badge>
     </span>
   );
 }
@@ -1362,8 +1369,8 @@ function ReplacedMarker({
     .slice(at + 1)
     .some((said) => said.author === INBOX_MESSAGE_AUTHOR.AGENT && said.ask !== undefined);
   return (
-    <span className="inbox-ask-settled" data-inbox-settled="replaced">
-      {asked ? REPLACED.BY_QUESTION : REPLACED.BY_MESSAGE}
+    <span data-inbox-settled="replaced">
+      <Badge>{asked ? REPLACED.BY_QUESTION : REPLACED.BY_MESSAGE}</Badge>
     </span>
   );
 }
@@ -1378,8 +1385,10 @@ function WithdrawnMarker({
 }): React.JSX.Element {
   const closer = usePerson(item.closedBy);
   return (
-    <span className="inbox-ask-settled" data-inbox-settled="withdrawn">
-      <WithdrawnWords reason={reason} closer={item.closedBy === undefined ? undefined : closer} />
+    <span data-inbox-settled="withdrawn">
+      <Badge>
+        <WithdrawnWords reason={reason} closer={item.closedBy === undefined ? undefined : closer} />
+      </Badge>
     </span>
   );
 }
@@ -1427,10 +1436,12 @@ function AskBox({
   if (!knownAsk(ask)) {
     return (
       <div className="inbox-ask" data-inbox-ask="newer">
-        <div className="inbox-ask-head">
-          <Text tone={TEXT_TONE.MUTED}>{NEWER_LUKE_ASK}</Text>
-          {ask.status === INBOX_ASK_STATUS.OPEN ? <Waiting on={waitingOn} /> : null}
-        </div>
+        <Card look={CARD_LOOK.RAISED} padding={CARD_PADDING.FLUSH}>
+          <CardHead>
+            <Text tone={TEXT_TONE.MUTED}>{NEWER_LUKE_ASK}</Text>
+            {ask.status === INBOX_ASK_STATUS.OPEN ? <Waiting on={waitingOn} /> : null}
+          </CardHead>
+        </Card>
       </div>
     );
   }
@@ -1463,10 +1474,12 @@ function AskBox({
   }
   return (
     <div className="inbox-ask" data-inbox-ask={ask.status}>
-      <div className="inbox-ask-head">
-        <span className="inbox-ask-kind">{askHeadWords(ask, undefined)}</span>
-        <span className="inbox-ask-standing">{ANSWERED}</span>
-      </div>
+      <Card look={CARD_LOOK.RAISED} padding={CARD_PADDING.FLUSH}>
+        <CardHead>
+          <span className="inbox-ask-kind">{askHeadWords(ask, undefined)}</span>
+          <span className="inbox-ask-standing">{ANSWERED}</span>
+        </CardHead>
+      </Card>
     </div>
   );
 }
@@ -1818,6 +1831,8 @@ function Crumbs({
       hint: name,
       card: <AgentCard subject={by.subject} models={by.models} />,
       onPress: () => by.onOpen(),
+      // Note that once the title joins the path the agent's crumb keeps its size, so a narrow bar cuts the task's crumb short first and then the title.
+      fixed: titleShown,
     },
     { label: title, current: true, shown: titleShown, end: ONE_LINE_END.ELLIPSIS },
   ].filter((crumb) => crumb !== undefined);

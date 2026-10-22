@@ -866,7 +866,7 @@ test("an ask its poster resolved says it was withdrawn and why, and one asking n
   }));
   const notice = openAsk(page, UNIQUE_INDEX);
   assert.equal(
-    notice.querySelector(".inbox-ask-head"),
+    notice.querySelector(".luke-card-head"),
     null,
     "a notice asks nothing, so wears no head",
   );
@@ -874,7 +874,7 @@ test("an ask its poster resolved says it was withdrawn and why, and one asking n
   await settle();
   act(() => railRow(page, "teammate-invitations").click());
   assert.equal(
-    settledAsk(page, 46).querySelector(".inbox-ask-head")?.textContent,
+    settledAsk(page, 46).querySelector(".luke-card-head")?.textContent,
     "Pick oneWithdrawn: Settled in the plan.",
   );
   assert.equal(settledAsk(page, 46).querySelector('[role="radio"]'), null);

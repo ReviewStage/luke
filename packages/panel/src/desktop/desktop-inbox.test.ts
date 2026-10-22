@@ -4465,7 +4465,7 @@ test("a link alone on its line to a page an agent with no plan showed stands as 
     "Version 3 · Shown by Sweep the flaky tests",
   );
   assert.equal(
-    card.querySelector(".page-card-frame")?.getAttribute("src"),
+    card.querySelector(".luke-page-thumb-frame")?.getAttribute("src"),
     pageFrameUrl({ agentId: SWEEP_AGENT, pageId: ledger.id, version: 3 }),
   );
   act(() => {
@@ -6551,7 +6551,7 @@ function subjectParts(pane: HTMLElement): (string | null)[] {
 function askBoxes(pane: HTMLElement): (string | null | undefined)[][] {
   return [...pane.querySelectorAll<HTMLElement>(".inbox-ask")].map((box) => [
     box.dataset.inboxAsk,
-    wordsOf(box.querySelector(".inbox-ask-head")),
+    wordsOf(box.querySelector(".luke-card-head")),
   ]);
 }
 
@@ -6561,7 +6561,7 @@ function answeredCard(reply: Element): string | null | undefined {
   if (card === null) return undefined;
   assert.equal(card.closest(".inbox-ask"), null, "no card stands around the controls");
   assert.ok(card.parentElement?.matches(".inbox-comment-body"), "they stand in the reply's body");
-  assert.equal(card.querySelector(".inbox-ask-head"), null, "they have no head");
+  assert.equal(card.querySelector(".luke-card-head"), null, "they have no head");
   return wordsOf(card);
 }
 

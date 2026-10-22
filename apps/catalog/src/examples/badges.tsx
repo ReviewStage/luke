@@ -39,6 +39,7 @@ function Badges(): React.JSX.Element {
           <Badge tone={BADGE_TONE.COMPLETE} icon={<CheckIcon />}>
             Signed in
           </Badge>
+          <Badge dot>Waiting on a teammate</Badge>
         </Inline>
       </CatalogSection>
       <CatalogSection id="badge-swatch" title="A provider's colours">
