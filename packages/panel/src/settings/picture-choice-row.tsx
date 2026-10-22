@@ -74,6 +74,8 @@ export function PictureChoiceRow<Value extends string>({
             <ChoiceList
               legend={label}
               describedBy={control["aria-describedby"]}
+              invalid={control["aria-invalid"]}
+              busy={busy}
               options={options.map((option) => ({
                 value: option.value,
                 label: option.label,

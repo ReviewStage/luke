@@ -155,6 +155,10 @@ export interface ChoiceListOpen<Value extends string> extends ChoiceListBase<Val
   disabled?: boolean | undefined;
   /** The id of the words that describe the whole group, a settings row's description. */
   describedBy?: string | undefined;
+  /** Whether the group's last write was refused. */
+  invalid?: boolean | undefined;
+  /** Whether a write is in flight, which rests the group without disabling it. */
+  busy?: boolean | undefined;
   /** Whether it records a choice made, drawn as it was open and taking nothing. */
   readOnly?: boolean | undefined;
   /** Whether each row leads with its radio or its checkbox. */
@@ -352,6 +356,8 @@ function OpenChoices<Value extends string>(props: ChoiceListOpen<Value>): React.
     disabled = false,
     readOnly = false,
     describedBy,
+    invalid,
+    busy,
     focusRef,
     select = CHOICE_SELECT.ONE,
     look = CHOICE_LOOK.PLAIN,
@@ -420,6 +426,8 @@ function OpenChoices<Value extends string>(props: ChoiceListOpen<Value>): React.
       <fieldset
         aria-label={legend}
         aria-describedby={describedBy}
+        aria-invalid={invalid}
+        aria-busy={busy}
         className="luke-choice-list"
         data-flow={flow}
         data-look={look}
@@ -435,6 +443,8 @@ function OpenChoices<Value extends string>(props: ChoiceListOpen<Value>): React.
       role="radiogroup"
       aria-label={legend}
       aria-describedby={describedBy}
+      aria-invalid={invalid}
+      aria-busy={busy}
       aria-readonly={readOnly || undefined}
       className="luke-choice-list"
       data-flow={flow}
