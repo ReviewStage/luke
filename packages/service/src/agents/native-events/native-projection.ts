@@ -95,7 +95,8 @@ const TurnSchema = Schema.Struct({
   told: Schema.Number,
   /** How many steps the turn has opened. */
   steps: Schema.Number,
-  /** Whether a line of Luke's was already taken into the turn, so a later one joined it; absent before the first. */
+  /** Whether a line of Luke's was already taken into the turn, so a later one joined it: false from its opening until the
+   * first, and absent on a turn saved before this was kept, which is read as taken, as every such turn was bound. */
   taken: Schema.optionalKey(Schema.Boolean),
   step: Schema.optionalKey(StepSchema),
   /** The calls the turn holds, by id, under the name each is stored under. */
@@ -276,7 +277,7 @@ class Fold {
     this.writes.push({ kind: NATIVE_WRITE.ENQUEUE, turnId: id });
     const { origin, trigger } = BRAIN_HOST_TURN_KIND[BRAIN_HOST_TURN.TYPED];
     const opened = this.#tell(
-      { id, told: 0, steps: 0, calls: {}, openedAt: this.#context.now },
+      { id, told: 0, steps: 0, calls: {}, taken: false, openedAt: this.#context.now },
       { kind: BRAIN_RUN_EVENT.TURN_STARTED, origin, trigger, at: this.#context.now },
     );
     this.#setTurn(opened);
@@ -465,9 +466,10 @@ class Fold {
         // Note that a line taken into a turn another line already opened joined it at the steps begun so
         // far, none among them, which is where a call's ask that joined it is told from and what keeps its
         // Stop its own, as eve's relay binds one (`brain-host/relay.ts`). The turn's first line has none,
-        // though the harness may have opened the turn a moment before it named the line (Codex does).
+        // though the harness may have opened the turn a moment before it named the line (Codex does). A turn saved
+        // before `taken` was kept reads as taken, so a call joining it after a deploy still stops only its own ask.
         const before = this.state.turn;
-        const joined = before?.taken === true ? before.steps : undefined;
+        const joined = before === undefined || before.taken === false ? undefined : before.steps;
         const turn = this.turn();
         this.#setTurn({ ...turn, taken: true });
         this.writes.push({
