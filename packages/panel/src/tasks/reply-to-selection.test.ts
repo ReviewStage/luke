@@ -46,7 +46,7 @@ import { type MessageSender, useAgentComposer } from "./use-agent-composer.js";
  * way off takes it out, and a typed `>` line alone sends; on a touch
  * screen, whose handles may let go with no pointerup, Reply stands under a
  * selection once it rests, and with a mouse only once the pointer lets it
- * go; and on the agent's own tab, Reply stands down while a message is out;
+ * go; and on the agent's own tab, Reply stands while a message is out;
  * and R does what Reply does while it stands, and nothing while it does not.
  */
 
@@ -384,7 +384,7 @@ const AGENT: CodingAgentSummary = {
   brief: CODING_AGENT_BRIEF.PROMPT,
 };
 
-test("on the agent's tab, Reply quotes its words into the tab's own box, and stands down while a message is out", async () => {
+test("on the agent's tab, Reply quotes its words into the tab's own box, and stands while a message is out, since the box takes words", async () => {
   const sent: string[] = [];
   const control = codingAgentsControl({
     agents: [AGENT],
@@ -456,6 +456,11 @@ test("on the agent's tab, Reply quotes its words into the tab's own box, and sta
   await settle();
   assert.deepEqual(sent, ["> Option A ships today.\n\nShip it"]);
 
+  // Note that the box takes words while the message is out, so Reply stands as well.
   select("Option B", "review.");
-  assert.equal(reply() === undefined, true, "no reply is taken while the box is held");
+  const again = reply();
+  assert.ok(again, "Reply stands while the message is out");
+  act(() => again.click());
+  await settle();
+  assert.equal(composerEditor(container).textContent?.includes("Option B waits for review."), true);
 });
