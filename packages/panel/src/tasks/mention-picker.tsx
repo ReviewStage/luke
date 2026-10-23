@@ -16,8 +16,10 @@ import {
   type MentionPlace,
   sectionAnchors,
 } from "@luke/features/mention-link";
+import type { PageLine } from "@luke/features/page-wire";
 import { planSections } from "@luke/features/plan-document";
 import { TASK_TREE_ENTRY } from "@luke/features/task-wire";
+import type { TaskCodeShowing } from "@luke/features/tasks-view";
 import type { WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import {
@@ -38,6 +40,7 @@ import {
   TEXT_ELEMENT,
   TEXT_VARIANT,
   Text,
+  Time,
   UserIcon,
   useComboboxField,
   useMinute,
@@ -72,7 +75,9 @@ import {
   dateMentionNode,
   useDatePicker,
 } from "./date-picker.js";
+import { FileCard, newestFileNote } from "./file-ref.js";
 import { FileTypeIcon } from "./file-type-icon.js";
+import { PageCard } from "./page-card.js";
 import { PullRequestMark } from "./pull-request-mark.js";
 import { AgentMark, PlanGlyph } from "./tab-look.js";
 import { NO_TASK } from "./task-mentions.js";
@@ -96,7 +101,9 @@ import { useTaskStatus } from "./use-known-names.js";
  * mention, and the keys go to the editor as they would anywhere.
  * The repository's paths are read once per task, the first time an `@` is
  * typed, through the same listing ⌘K finds files with
- * (`ACT_KIND.TASKS_TREE`, the whole tree at the default branch).
+ * (`ACT_KIND.TASKS_TREE`, the whole tree at the default branch). Each
+ * file's row wears its type's icon and hangs the file's card, with Luke's
+ * newest note on it read where a tab of it is open (`MentionSource.openFiles`).
  *
  * Where the editor's words go to an agent, the list offers the repository's
  * skills too, a pick written as the `/name` chip the `/` list writes
@@ -108,7 +115,8 @@ import { useTaskStatus } from "./use-known-names.js";
  *
  * On a plan's page the list offers what the plan holds beside its words
  * too: the pages agents showed on it, each by its title and its tab's
- * glyph, and the pull requests its agents published, each by its number
+ * glyph, its version or how long ago it was written beside it, hanging its
+ * card, and the pull requests its agents published, each by its number
  * and title and its mark, a pick written as the pull request's GitHub
  * address, the link mention a pasted one becomes. And wherever the words go, it offers the coding agents of the
  * whole workspace, each drawn as every agent menu draws it
@@ -230,8 +238,10 @@ interface Closed {
   readonly start: number;
 }
 
-/** What a page's row says beside its title. */
-const PAGE_DETAIL = "Page";
+/** What a page's row says of a version past its first, as its card says it. */
+function versionWords(version: number): string {
+  return `Version ${version}`;
+}
 
 /** What the reader's own row says beside their name. */
 const YOU_DETAIL = "You";
@@ -326,6 +336,8 @@ type MentionRow = {
   readonly actor?: Actor | undefined;
   /** An agent's row as every agent menu draws it (`agent-menu-row.tsx`): its tab's glyph, its end, and its card; none for any other row. */
   readonly look?: Pick<MenuRow, "icon" | "end" | "card"> | undefined;
+  /** The card a page's row hangs beside it, its tab's; none for any other row, a file's being drawn as its row is (`comboboxGroups`). */
+  readonly card?: React.ReactNode | undefined;
   /** A pull request, whose mark its row wears for where it stands; none for any other row. */
   readonly pullRequest?: MentionablePullRequest | undefined;
 } & (
@@ -502,14 +514,20 @@ function taskRows(taskId: string, taskName: string, text: string): MentionRow[] 
   ];
 }
 
-/** Each of the plan's pages' rows, by its title; none where no plan stands. */
-function pageRows(taskId: string, pages: readonly MentionablePage[]): MentionRow[] {
+/**
+ * Each of the plan's pages' rows, by its title, its version where it has
+ * more than one and else how long ago it was written, as its card says
+ * them, hanging that card; none where no plan stands.
+ */
+function pageRows(taskId: string, pages: readonly MentionablePage[], now: number): MentionRow[] {
   if (taskId === NO_TASK) return [];
   return pages.map((page) => ({
     mention: { kind: MENTION_KIND.PAGE, taskId: taskId, pageId: page.id },
     name: page.title,
-    detail: PAGE_DETAIL,
+    detail:
+      page.version > 1 ? versionWords(page.version) : <Time at={page.at} now={now} hint={false} />,
     terms: page.title,
+    card: <PageCard place={{ taskId }} page={page} />,
   }));
 }
 
@@ -904,8 +922,11 @@ function rowKey(row: MentionRow): string {
   return JSON.stringify("from" in row ? row.from.narrow : row.mention);
 }
 
-/** The groups as the list draws them: each row its glyph, its name, its detail, an agent's end and card, and a chevron where it opens. */
-function comboboxGroups(groups: readonly MentionGroup[]): ComboboxGroup[] {
+/** The card a file's row hangs, drawn for the path as the list draws it; none for a row that is no file. */
+type FileCardOf = (row: MentionRow) => React.ReactNode;
+
+/** The groups as the list draws them: each row its glyph, its name, its detail, an agent's end, its card, and a chevron where it opens. */
+function comboboxGroups(groups: readonly MentionGroup[], fileCard: FileCardOf): ComboboxGroup[] {
   return groups.map((group) => ({
     label: group.label,
     options: group.rows.map((row) => ({
@@ -914,7 +935,7 @@ function comboboxGroups(groups: readonly MentionGroup[]): ComboboxGroup[] {
       icon: row.look?.icon ?? <RowGlyph row={row} />,
       detail: row.detail,
       hint: row.look?.end,
-      card: row.look?.card,
+      card: row.look?.card ?? row.card ?? fileCard(row),
       opens: "from" in row,
     })),
   }));
@@ -965,6 +986,7 @@ function MentionMenu({
   keys,
   place,
   reading,
+  fileCard,
   onHover,
   onChoose,
 }: {
@@ -976,6 +998,7 @@ function MentionMenu({
   place: MenuPlace;
   /** Whether a read the list offers rows from is still out, which the list says in place of "no match". */
   reading: boolean;
+  fileCard: FileCardOf;
   onHover: (index: number) => void;
   onChoose: (row: MentionRow) => void;
 }): React.JSX.Element {
@@ -990,7 +1013,7 @@ function MentionMenu({
       <ComboboxList
         id={id}
         label={MENU_LABEL}
-        groups={comboboxGroups(groups)}
+        groups={comboboxGroups(groups, fileCard)}
         active={at}
         onActiveChange={onHover}
         onChoose={(index) => {
@@ -1026,11 +1049,8 @@ export const MENTION_MENU_SIDE = {
 
 export type MentionMenuSide = (typeof MENTION_MENU_SIDE)[keyof typeof MENTION_MENU_SIDE];
 
-/** A page an agent showed on the plan, as the list offers it: its id and its newest version's title. */
-export interface MentionablePage {
-  readonly id: string;
-  readonly title: string;
-}
+/** A page an agent showed on the plan, as the list offers it: as the plan lists it, its id, its newest version's title and number, and when that version was written, which its row and its card say. */
+export type MentionablePage = PageLine;
 
 /** One of the workspace's coding agents, as the list offers it: its id, its tab's name, its tile, which its row wears, its task, and whether it is archived. */
 export interface MentionableAgent {
@@ -1096,6 +1116,8 @@ export type MentionAgentsReader = (
 const NO_PAGES: readonly MentionablePage[] = [];
 const NO_AGENTS: readonly MentionableAgent[] = [];
 const NO_PULL_REQUESTS: readonly MentionablePullRequest[] = [];
+const NO_SHOWN_CODE: readonly TaskCodeShowing[] = [];
+const NO_OPEN_FILES: readonly MentionOpenFile[] = [];
 
 /** The plan whose sections and repository the list offers, the workspace it stands in, and its text as it stands now; `NO_TASK` for a page no task holds, which offers its repository alone. */
 export interface MentionSource {
@@ -1116,6 +1138,16 @@ export interface MentionSource {
   readonly readAgents?: MentionAgentsReader | undefined;
   /** The pull requests the plan's agents published, as its page holds them now; none where the place offers none. */
   readonly pullRequests?: readonly MentionablePullRequest[] | undefined;
+  /** Every code Luke showed on the plan, whose newest note on a file its row's card says; none where the place knows none. */
+  readonly shownCode?: readonly TaskCodeShowing[] | undefined;
+  /** The plan's open File tabs, whose pinned commit a file's card is read at; none where the place holds none. */
+  readonly openFiles?: readonly MentionOpenFile[] | undefined;
+}
+
+/** A File tab the plan holds open: its path and the commit it is pinned to, none for the default branch's head. */
+export interface MentionOpenFile {
+  readonly path: string;
+  readonly commit?: string | undefined;
 }
 
 /** What a repository's paths are read by: the plan whose repository it is, or, with no plan, the workspace and the repository; none where neither names one. */
@@ -1410,7 +1442,7 @@ export function useMentionPicker({
           read,
           {
             plan: taskRows(taskId, source.taskName, source.text()),
-            pages: pageRows(taskId, source.pages ?? NO_PAGES),
+            pages: pageRows(taskId, source.pages ?? NO_PAGES, now),
             // The members a mention tells are each named by their own task, so none is offered as the plan's own.
             agents:
               members === undefined
@@ -1587,6 +1619,16 @@ export function useMentionPicker({
       ? { left, top: word.rect.bottom - at.top + MENU_GAP }
       : { left, top: "auto", bottom: at.bottom - word.rect.top + MENU_GAP };
   };
+  // Note that a file's card is made as its row is drawn, because the repository's paths are thousands and only the few listed hang one.
+  const shownCode = source?.shownCode ?? NO_SHOWN_CODE;
+  const openFiles = source?.openFiles ?? NO_OPEN_FILES;
+  const fileCard: FileCardOf = (row) => {
+    if (!("mention" in row) || row.mention.kind !== MENTION_KIND.FILE) return undefined;
+    const { path } = row.mention;
+    // Note that the note read is of the revision a row opens: the open tab's, else the default branch's head.
+    const commit = openFiles.find((file) => file.path === path)?.commit;
+    return <FileCard path={path} note={newestFileNote(shownCode, path, { repository, commit })} />;
+  };
   const list =
     !shown || box === null || placed === undefined ? null : (
       <MentionMenu
@@ -1601,6 +1643,7 @@ export function useMentionPicker({
         keys={keys}
         place={placeOf(trigger, placed, box.clientWidth)}
         reading={reading}
+        fileCard={fileCard}
         onHover={(index) => setHighlight({ start: trigger.start, query: trigger.query, at: index })}
         onChoose={choose}
       />

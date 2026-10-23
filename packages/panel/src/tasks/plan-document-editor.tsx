@@ -880,6 +880,8 @@ export function PlanDocumentEditor({
       agents: page?.agents,
       readAgents: page?.readAgents,
       pullRequests: page?.pullRequests,
+      shownCode: page?.shownCode,
+      openFiles: page?.openFiles,
     },
     room,
     side: MENTION_MENU_SIDE.BELOW,
