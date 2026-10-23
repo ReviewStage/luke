@@ -348,7 +348,7 @@ body {
 
 /* A transcript's column, as wide as a narrow panel's, which a line spans. */
 .catalog-transcript {
-  width: 360px;
+  width: min(360px, 100%);
   padding: var(--luke-space-8);
   border: 1px dashed var(--luke-color-border-strong);
   border-radius: var(--luke-radius-8);
@@ -861,7 +861,7 @@ body {
 /* A list an app hangs on the menu's surface (`MenuSurface`), at an `@`
    list's width, its crumb inset as the rows' words are. */
 .catalog-menu-surface {
-  width: 280px;
+  width: calc(100% - var(--luke-space-48));
 }
 
 .catalog-menu-crumb {
@@ -894,6 +894,46 @@ body {
   transform: translateZ(0);
 }
 
+/* A phone's stage for the drawer swipe (`drawer-swipes.tsx`): the drawer
+   stands on its left edge over the work, slid away until opened, on the
+   pane's beat, and while a finger drags it, at the share open the swipe
+   writes, playing nothing. */
+.catalog-drawer-stage {
+  position: relative;
+  width: min(360px, 100%);
+  height: 480px;
+  overflow: clip;
+  border: 1px solid var(--luke-color-border);
+  border-radius: var(--luke-radius-14);
+}
+
+.catalog-drawer-work {
+  padding: var(--luke-space-48) var(--luke-space-24);
+}
+
+.catalog-drawer {
+  position: absolute;
+  z-index: 2;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: calc(100% - var(--luke-space-48));
+  padding: var(--luke-space-16);
+  background: var(--luke-color-ground);
+  box-shadow: var(--luke-menu-shadow);
+  transform: translateX(-100%);
+  transition: transform var(--luke-duration-pane) var(--luke-motion-pane);
+}
+
+.catalog-drawer-stage[data-open="true"] .catalog-drawer {
+  transform: none;
+}
+
+.catalog-drawer-stage[data-luke-drawer-drag] .catalog-drawer {
+  transform: translateX(calc((var(--luke-drawer-progress, 0) - 1) * 100%));
+  transition: none;
+}
+
 /* A box the words inside answer the width of (`under`), as a card or a header does. */
 .catalog-room {
   container: luke-room / inline-size;
@@ -904,7 +944,7 @@ body {
 .catalog-band-card {
   display: flex;
   overflow: clip;
-  width: 360px;
+  width: min(360px, 100%);
   max-width: 100%;
   flex-direction: column;
   gap: var(--luke-space-8);
@@ -950,7 +990,7 @@ body {
    (`ResizeEdge`) straddling the border between them. */
 .catalog-edged-box {
   display: flex;
-  width: 360px;
+  width: min(360px, 100%);
   height: 96px;
   border: 1px dashed var(--luke-color-border-strong);
   border-radius: var(--luke-radius-8);

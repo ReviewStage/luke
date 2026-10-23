@@ -25,6 +25,7 @@ import { DATA_TABLE_EXAMPLE } from "./examples/data-table";
 import { DETAIL_PAGE_EXAMPLE } from "./examples/detail-page";
 import { DIALOGS_EXAMPLE } from "./examples/dialogs";
 import { DISCLOSURES_EXAMPLE } from "./examples/disclosures";
+import { DRAWER_SWIPES_EXAMPLE } from "./examples/drawer-swipes";
 import { EDITABLE_DOCUMENT_EXAMPLE } from "./examples/editable-document";
 import { EMPTY_STATES_EXAMPLE } from "./examples/empty-states";
 import { ERROR_STATES_EXAMPLE } from "./examples/error-states";
@@ -130,6 +131,7 @@ export const EXAMPLES: readonly Example[] = [
   DETAIL_PAGE_EXAMPLE,
   DIALOGS_EXAMPLE,
   DISCLOSURES_EXAMPLE,
+  DRAWER_SWIPES_EXAMPLE,
   EMPTY_STATES_EXAMPLE,
   ERROR_STATES_EXAMPLE,
   FACTS_EXAMPLE,

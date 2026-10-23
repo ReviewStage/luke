@@ -141,6 +141,19 @@
   overflow-y: clip;
 }
 
+/* A finger swiping the drawer in or out (`@luke/ui`'s `use-drawer-swipe.ts`)
+   holds it at the share open the swipe writes on the shell, standing over
+   the dimmed window as it does open, with its transition off, so it stays
+   under the finger; let go, the mark comes off and it travels the rest of
+   the way on its own transition from there. */
+.desktop-shell[data-room="narrow"][data-luke-drawer-drag] .desktop-sidebar {
+  z-index: 2;
+  box-shadow: var(--luke-menu-shadow);
+  opacity: 1;
+  transform: translateX(calc((var(--luke-drawer-progress, 0) - 1) * 100%));
+  transition: none;
+}
+
 /* A phone's places bar (`mobile-bar.tsx`) stands in the shell's last row,
    under the work, which keeps the row above it whole, so nothing in it is
    measured against the bar. The stage already stops above the home
