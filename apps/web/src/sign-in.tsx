@@ -26,10 +26,10 @@ function providerHint(): SocialProvider | undefined {
 }
 
 /**
- * The card opens on the provider's mark joined to Luke's, or Luke's full mark
- * alone when the address names no provider. The closing note is its own line
- * rather than a run-on: with no provider to continue with there is no action
- * block between it and the copy above.
+ * The card opens on the provider's mark joined to Luke's. An address that
+ * names no provider is a sign-in that cannot go on, so it wears Luke's full
+ * mark alone and the consent page's failure wording, and drops the closing
+ * note, which promises a confirmation that will never come.
  */
 function SignIn(): React.JSX.Element {
   const [provider] = useState(providerHint);
@@ -58,14 +58,10 @@ function SignIn(): React.JSX.Element {
           </span>
         )
       }
-      title="Sign in to Luke"
-      description={
-        provider
-          ? undefined
-          : "Luke could not verify which provider you chose. Return to Luke and try again."
-      }
+      title={provider ? "Sign in to Luke" : "Luke could not continue"}
+      description={provider ? undefined : "Return to Luke and start sign-in again."}
       error={failed ? SIGN_IN_FAILURE : undefined}
-      footnote="You can close this window after Luke confirms the sign-in."
+      footnote={provider ? "You can close this window after Luke confirms the sign-in." : undefined}
     >
       {provider ? (
         <SocialProviderButton
