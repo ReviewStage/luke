@@ -413,10 +413,10 @@ function ShownSkills({
         held.kind === LIST.READ ? { kind: LIST.READ, skills: [...held.skills, ...made] } : held,
       );
       setLanded(new Set(made.map((each) => each.id)));
-      const notice = installedNotice(made);
+      const notice = installedNotice(made, workspace);
       if (notice !== undefined) toast({ ...notice, tone: TOAST_TONE.DONE, hold: TOAST_HOLD.DONE });
     },
-    [toast],
+    [toast, workspace],
   );
 
   const groups = skills === undefined ? undefined : skillGroups(skills, readerId, members);

@@ -268,17 +268,20 @@ function namesText(names: readonly string[]): string {
  * What the page says once an install lands: which skills, one or two by
  * name and the rest counted, and, under it, how to call the first one a
  * member can call, since that is what they will want to do next. Nothing
- * where nothing was installed.
+ * where nothing was installed. Note that a workspace's skill is offered
+ * only to agents in that workspace, while a personal one follows its owner
+ * into every workspace, so the hint names the workspace for the first.
  */
 export function installedNotice(
-  made: readonly Pick<InstalledSkillSummary, "name" | "userInvocable">[],
+  made: readonly Pick<InstalledSkillSummary, "name" | "userInvocable" | "scope">[],
+  workspace: Pick<Workspace, "name">,
 ): { readonly words: string; readonly detail?: string } | undefined {
   if (made.length === 0) return undefined;
   const words = `Installed ${namesText(made.map((each) => each.name))}`;
   const callable = made.find((each) => each.userInvocable);
-  return callable === undefined
-    ? { words }
-    : { words, detail: `Type /${callable.name} in any new agent` };
+  if (callable === undefined) return { words };
+  const where = callable.scope === INSTALLED_SKILL_SCOPE.WORKSPACE ? ` in ${workspace.name}` : "";
+  return { words, detail: `Type /${callable.name} in any new agent${where}` };
 }
 
 /* ----- Words for what went wrong ----- */

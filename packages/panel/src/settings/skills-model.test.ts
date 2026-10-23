@@ -376,17 +376,36 @@ test("Share asks in plain words who gets the skill and that it leaves the accoun
 });
 
 test("an install names one or two skills and counts the rest, and says how to call the first one a member can call", () => {
-  const made = (name: string, userInvocable = true) => ({ name, userInvocable });
-  assert.deepEqual(installedNotice([made("grill-me"), made("grilling")]), {
+  const made = (name: string, userInvocable = true) => ({
+    name,
+    userInvocable,
+    scope: INSTALLED_SKILL_SCOPE.PERSONAL,
+  });
+  assert.deepEqual(installedNotice([made("grill-me"), made("grilling")], workspace()), {
     words: "Installed grill-me and grilling",
     detail: "Type /grill-me in any new agent",
   });
-  assert.deepEqual(installedNotice([made("grilling", false), made("grill-me"), made("tdd")]), {
-    words: "Installed grilling, grill-me, and 1 more",
-    detail: "Type /grill-me in any new agent",
+  assert.deepEqual(
+    installedNotice([made("grilling", false), made("grill-me"), made("tdd")], workspace()),
+    {
+      words: "Installed grilling, grill-me, and 1 more",
+      detail: "Type /grill-me in any new agent",
+    },
+  );
+  assert.deepEqual(installedNotice([made("helper", false)], workspace()), {
+    words: "Installed helper",
   });
-  assert.deepEqual(installedNotice([made("helper", false)]), { words: "Installed helper" });
-  assert.equal(installedNotice([]), undefined);
+  assert.equal(installedNotice([], workspace()), undefined);
+});
+
+test("a skill installed for the workspace is called only in that workspace's agents, as its hint says", () => {
+  assert.deepEqual(
+    installedNotice(
+      [{ name: "grill-me", userInvocable: true, scope: INSTALLED_SKILL_SCOPE.WORKSPACE }],
+      workspace(),
+    ),
+    { words: "Installed grill-me", detail: "Type /grill-me in any new agent in Stage" },
+  );
 });
 
 test("View draws a skill's text in one fence nothing inside it can close, ending on its last line", () => {
