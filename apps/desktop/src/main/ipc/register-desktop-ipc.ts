@@ -160,6 +160,7 @@ export function registerDesktopIpc(services: DesktopServices): void {
         whenGone: whenPageGone,
       },
       start: startMacTerminal,
+      fork: (effect) => void run(effect),
     }),
     ...terminalProcedures<WebContents>({
       host: operator.host,

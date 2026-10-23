@@ -1009,6 +1009,22 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
   let sidebarTxWait: TxWait | undefined;
 
   /**
+   * A sidebar write run under the serial lock, its answer drawn there, then
+   * confirmed once its transaction reaches the followed sidebar, outside the
+   * lock, as `writtenThenListed` confirms a task write, so no task open, save,
+   * or read waits on Realtime behind a pin or a section.
+   */
+  const writtenThenSidebar = <E, R>(
+    write: Effect.Effect<{ changed: boolean; txid?: string | undefined }, E, R>,
+  ): Effect.Effect<{ changed: boolean }, E, R> =>
+    Effect.flatMap(serial(write), ({ changed, txid }) =>
+      Effect.as(
+        Effect.suspend(() => confirmWrite(sidebarTxWait, txid)),
+        { changed },
+      ),
+    );
+
+  /**
    * Follows the account's sidebar over Realtime where nothing follows it
    * yet (`workspaces-follow.ts`), polled while Realtime fails it, drawing
    * each change as it lands, a section or a pin made on another Mac among
@@ -2196,8 +2212,9 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         );
       }),
     // The service answers the pins as they then stand, so the view takes its
-    // word rather than the window's guess, once the followed sidebar has the
-    // pin's transaction, so a delivery from before it draws nothing back.
+    // word rather than the window's guess, and the write answers once the
+    // followed sidebar has the pin's transaction, which carries those pins
+    // over any delivery from before it.
     [GATEWAY_METHOD.TASKS_PIN_REPOSITORY]: (params) =>
       Effect.gen(function* () {
         const read = readEither(tasksPinRepositoryParamsSchema)(unparsedWire(params));
@@ -2206,17 +2223,16 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         }
         if (!gate()) return { changed: false };
         const { repository, pinned } = read.success;
-        return yield* serial(
+        return yield* writtenThenSidebar(
           Effect.gen(function* () {
             const answer = yield* served(client.pinRepository(repository, pinned));
             if (answer === undefined) return { changed: false };
-            yield* confirmWrite(sidebarTxWait, answer.txid);
             write({ repositoryPins: answer.pins });
-            return { changed: true };
+            return { changed: true, txid: answer.txid };
           }),
         );
       }),
-    // The service answers the sections as they then stand, as it does the pins, and waits on the followed sidebar as a pin does.
+    // The service answers the sections as they then stand, as it does the pins, and confirms on the followed sidebar as a pin does.
     [GATEWAY_METHOD.TASKS_WRITE_SECTION]: (params) =>
       Effect.gen(function* () {
         const read = readEither(tasksWriteSectionParamsSchema)(unparsedWire(params));
@@ -2225,14 +2241,13 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         }
         if (!gate()) return { changed: false };
         const asked = read.success;
-        return yield* serial(
+        return yield* writtenThenSidebar(
           Effect.gen(function* () {
             const written = yield* served(client.writeTaskSection(asked));
             if (written === undefined) return { changed: false };
             const { txid, ...sections } = written;
-            yield* confirmWrite(sidebarTxWait, txid);
             write({ taskSections: sections });
-            return { changed: true };
+            return { changed: true, txid };
           }),
         );
       }),

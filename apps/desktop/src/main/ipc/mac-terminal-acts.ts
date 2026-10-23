@@ -69,6 +69,8 @@ export interface MacTerminalActsDependencies {
   openInTerminal: (folder: string) => void;
   /** Whether a folder stands on this Mac; the file system's own, or a test's. */
   exists: (folder: string) => boolean;
+  /** Forks a terminal's close, from an act or a page's end, on the platform's runtime, so nothing waits on its hang-up. */
+  fork: (effect: Effect.Effect<void>) => void;
 }
 
 /** How much of a terminal's latest output is kept for its tab drawn again: about a screenful of scrollback many times over. */
@@ -106,7 +108,8 @@ function refuseUnlessPanel<E>(actor: ActSender, refused: () => E): Effect.Effect
 export function macTerminalProcedures(
   dependencies: MacTerminalActsDependencies,
 ): Pick<PlatformActProcedures<WebContents>, MacTerminalActKind> {
-  const { host, worktreesRoot, stateRoot, ports, start, openInTerminal, exists } = dependencies;
+  const { host, worktreesRoot, stateRoot, ports, start, openInTerminal, exists, fork } =
+    dependencies;
   /**
    * Each panel's terminals, by the agent whose branch each opened, and the
    * newest open asked for each agent while it reads the settings, which a
@@ -116,7 +119,7 @@ export function macTerminalProcedures(
   let asks = 0;
 
   const closed = (drawn: Drawn) => {
-    drawn.terminal.close();
+    fork(drawn.terminal.close());
     drawn.port?.close();
     drawn.port = undefined;
   };
@@ -264,7 +267,8 @@ export function macTerminalProcedures(
     ].effect(function* ({ input, context, errors }) {
       yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
       // Note that a stop keeps the port, so the tab hears the run end and draws it stopped.
-      panels.get(context.actor.sender)?.terminals.get(input.agentId)?.terminal.close();
+      const drawn = panels.get(context.actor.sender)?.terminals.get(input.agentId);
+      if (drawn !== undefined) fork(drawn.terminal.close());
     }),
     [MAC_TERMINAL_ACT_KIND.MAC_TERMINAL_REVEAL]: macTerminalPort[
       MAC_TERMINAL_ACT_KIND.MAC_TERMINAL_REVEAL

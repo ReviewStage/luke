@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
+import { it } from "@effect/vitest";
+import { Effect, Fiber } from "effect";
 import { test } from "vitest";
 import { closeEveryMacTerminal, type MacTerminalTools, startMacTerminal } from "./mac-terminal.js";
 
@@ -20,7 +22,11 @@ const LINUX_TOOLS: MacTerminalTools = {
 };
 
 /** A terminal running the script, and a promise of each output marker and of its end. */
-function open(script: (ttyFile: string) => string, stopGraceMs?: number) {
+function open(
+  script: (ttyFile: string) => string,
+  stopGraceMs?: number,
+  tools?: Partial<MacTerminalTools>,
+) {
   let printed = "";
   const waiters: { text: string; resolve: () => void }[] = [];
   let exited: (code: number | null) => void = () => undefined;
@@ -30,7 +36,7 @@ function open(script: (ttyFile: string) => string, stopGraceMs?: number) {
   const terminal = startMacTerminal({
     build: script,
     // On a Mac, its own tools as Luke starts them; elsewhere, the Linux ones.
-    tools: process.platform === "darwin" ? undefined : LINUX_TOOLS,
+    tools: { ...(process.platform === "darwin" ? {} : LINUX_TOOLS), ...tools },
     onOutput: (bytes) => {
       printed += Buffer.from(bytes).toString("utf8");
       for (const waiter of waiters.splice(0)) {
@@ -88,72 +94,114 @@ test("the script runs on a real terminal, takes what is typed, follows a resize,
   assert.equal(code, 5);
 });
 
-test("a close hangs up what the terminal started", async () => {
-  const { terminal, until, ended, printed } = open((ttyFile) =>
-    [`tty > ${ttyFile}`, 'sleep 60 & echo "child:$!"', "wait", ""].join("\n"),
-  );
+it.effect("a close hangs up what the terminal started", () =>
+  Effect.gen(function* () {
+    const { terminal, until, ended, printed } = open((ttyFile) =>
+      [`tty > ${ttyFile}`, 'sleep 60 & echo "child:$!"', "wait", ""].join("\n"),
+    );
 
-  await until("child:");
-  const child = Number(/child:(\d+)/u.exec(printed())?.[1]);
-  assert.ok(alive(child));
-  terminal.close();
-  await ended;
-  execFileSync("sleep", ["0.2"]);
+    yield* Effect.promise(() => until("child:"));
+    const child = Number(/child:(\d+)/u.exec(printed())?.[1]);
+    assert.ok(alive(child));
+    yield* terminal.close();
+    yield* Effect.promise(() => ended);
+    execFileSync("sleep", ["0.2"]);
 
-  assert.equal(alive(child), false);
-});
+    assert.equal(alive(child), false);
+  }),
+);
 
-test("closing every terminal ends what each still open started", async () => {
-  const one = open((ttyFile) =>
-    [`tty > ${ttyFile}`, 'sleep 60 & echo "child:$!"', "wait", ""].join("\n"),
-  );
-  await one.until("child:");
-  const child = Number(/child:(\d+)/u.exec(one.printed())?.[1]);
+it.effect("closing every terminal ends what each still open started", () =>
+  Effect.gen(function* () {
+    const one = open((ttyFile) =>
+      [`tty > ${ttyFile}`, 'sleep 60 & echo "child:$!"', "wait", ""].join("\n"),
+    );
+    yield* Effect.promise(() => one.until("child:"));
+    const child = Number(/child:(\d+)/u.exec(one.printed())?.[1]);
 
-  closeEveryMacTerminal();
-  await one.ended;
-  execFileSync("sleep", ["0.2"]);
+    yield* closeEveryMacTerminal;
+    yield* Effect.promise(() => one.ended);
+    execFileSync("sleep", ["0.2"]);
 
-  assert.equal(alive(child), false);
-});
+    assert.equal(alive(child), false);
+  }),
+);
 
-test("a close hangs up a job in a process group of its own on the terminal", async () => {
-  const { terminal, until, ended, printed } = open((ttyFile) =>
-    [`tty > ${ttyFile}`, "set -m", 'sleep 60 & echo "child:$!"', "wait", ""].join("\n"),
-  );
+it.effect(
+  "a close waits on the commands it runs rather than blocking for them, so the terminal's output still arrives meanwhile",
+  () =>
+    Effect.gen(function* () {
+      // Note that the processes are listed only after a pause, as a busy Mac's `ps` may take, so the close stands while the script still prints.
+      const slowList: MacTerminalTools["processes"] = (tty) => [
+        "/bin/sh",
+        ["-c", 'sleep 0.5; ps -o pid= -t "$1"', "sh", tty.replace(/^\/dev\//u, "")],
+      ];
+      const { terminal, until, ended, printed } = open(
+        (ttyFile) =>
+          [
+            `tty > ${ttyFile}`,
+            "i=0",
+            'while :; do i=$((i + 1)); echo "tick:$i"; sleep 0.05; done',
+            "",
+          ].join("\n"),
+        undefined,
+        { processes: slowList },
+      );
+      yield* Effect.promise(() => until("tick:2"));
 
-  await until("child:");
-  const child = Number(/child:(\d+)/u.exec(printed())?.[1]);
-  assert.ok(alive(child));
-  terminal.close();
-  await ended;
-  execFileSync("sleep", ["0.2"]);
+      const closing = yield* Effect.forkChild(terminal.close());
+      yield* Effect.yieldNow;
+      const ticks = () => [...printed().matchAll(/tick:(\d+)/gu)].length;
+      const heard = ticks();
+      yield* Effect.promise(() => until(`tick:${heard + 2}`));
+      assert.equal(closing.pollUnsafe(), undefined, "the close still waits on its listing");
 
-  assert.equal(alive(child), false);
-});
+      yield* Fiber.join(closing);
+      yield* Effect.promise(() => ended);
+    }),
+);
 
-test("a close kills what ignores the hang-up and the terminate once its grace is up", async () => {
-  const { terminal, until, printed } = open(
-    (ttyFile) =>
-      [
-        `tty > ${ttyFile}`,
-        "set -m",
-        `bash -c 'trap "" HUP TERM; echo "child:$$"; while :; do sleep 0.1; done' &`,
-        "wait",
-        "",
-      ].join("\n"),
-    300,
-  );
+it.effect("a close hangs up a job in a process group of its own on the terminal", () =>
+  Effect.gen(function* () {
+    const { terminal, until, ended, printed } = open((ttyFile) =>
+      [`tty > ${ttyFile}`, "set -m", 'sleep 60 & echo "child:$!"', "wait", ""].join("\n"),
+    );
 
-  await until("child:");
-  const child = Number(/child:(\d+)/u.exec(printed())?.[1]);
-  assert.ok(alive(child));
-  terminal.close();
-  // Note that the job is a real process on a real terminal, so its end is waited for as the system reports it, up to a bound, rather than on a clock of the test's.
-  for (let tries = 0; tries < 100 && alive(child); tries += 1) execFileSync("sleep", ["0.1"]);
+    yield* Effect.promise(() => until("child:"));
+    const child = Number(/child:(\d+)/u.exec(printed())?.[1]);
+    assert.ok(alive(child));
+    yield* terminal.close();
+    yield* Effect.promise(() => ended);
+    execFileSync("sleep", ["0.2"]);
 
-  assert.equal(alive(child), false);
-});
+    assert.equal(alive(child), false);
+  }),
+);
+
+it.effect("a close kills what ignores the hang-up and the terminate once its grace is up", () =>
+  Effect.gen(function* () {
+    const { terminal, until, printed } = open(
+      (ttyFile) =>
+        [
+          `tty > ${ttyFile}`,
+          "set -m",
+          `bash -c 'trap "" HUP TERM; echo "child:$$"; while :; do sleep 0.1; done' &`,
+          "wait",
+          "",
+        ].join("\n"),
+      300,
+    );
+
+    yield* Effect.promise(() => until("child:"));
+    const child = Number(/child:(\d+)/u.exec(printed())?.[1]);
+    assert.ok(alive(child));
+    yield* terminal.close();
+    // Note that the job is a real process on a real terminal, so its end is waited for as the system reports it, up to a bound, rather than on a clock of the test's.
+    for (let tries = 0; tries < 100 && alive(child); tries += 1) execFileSync("sleep", ["0.1"]);
+
+    assert.equal(alive(child), false);
+  }),
+);
 
 test("a terminal that cannot start says why and ends, and Luke goes on", async () => {
   let printed = "";
