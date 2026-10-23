@@ -43,7 +43,7 @@ import { Clock, Effect, Option, Redacted, Result } from "effect";
 import { HostedEnvironment } from "../../environment.js";
 import { providerModelOf } from "../../providers/model-catalog.js";
 import type { BrainHostTurn } from "../brain-host/bounds.js";
-import { PLAN_REFUSAL } from "../brain-host/eve-sessions.js";
+import { KEY_REFUSAL, PLAN_REFUSAL } from "../brain-host/eve-sessions.js";
 import { SKILL_ROOT } from "../repository-skills.js";
 import { CODER } from "./bounds.js";
 import { NATIVE_SESSION_PREFIX } from "./native-runtime.js";
@@ -143,13 +143,20 @@ function claudeCode(options: ClaudeCodeSessionsOptions): RunnerHarness<{ readonl
     const ring = yield* keyRing;
     const rows = yield* listProviderKeyRows(userId, PROVIDER_KEY_KIND.API_KEY);
     const row = rows.find((each) => each.provider === PROVIDER_KEY_PROVIDER.ANTHROPIC);
-    if (row === undefined) return yield* new LaunchRefused({ reason: "no API key" });
+    if (row === undefined) {
+      return yield* new LaunchRefused({ reason: "no API key", keyRefusal: KEY_REFUSAL.MISSING });
+    }
     const opened = openProviderKey(
       ring,
       { userId, provider: PROVIDER_KEY_PROVIDER.ANTHROPIC, kind: PROVIDER_KEY_KIND.API_KEY },
       row,
     );
-    if (Result.isFailure(opened)) return yield* new LaunchRefused({ reason: "API key unreadable" });
+    if (Result.isFailure(opened)) {
+      return yield* new LaunchRefused({
+        reason: "API key unreadable",
+        keyRefusal: KEY_REFUSAL.UNREADABLE,
+      });
+    }
     const env: Readonly<Record<string, string>> = {
       [RUNNER_ENV.API_KEY]: Redacted.value(opened.success),
     };

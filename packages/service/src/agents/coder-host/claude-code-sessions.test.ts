@@ -75,6 +75,7 @@ import {
   EVE_CANCEL_OUTCOME,
   EVE_RESET_OUTCOME,
   EVE_SEND_OUTCOME,
+  KEY_REFUSAL,
   PLAN_REFUSAL,
 } from "../brain-host/eve-sessions.js";
 import { runnerTokenDigest } from "../luke-mcp/bearer.js";
@@ -662,8 +663,67 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         const without = yield* sessionsFor(userId, { next: 0 }).pipe(
           Effect.provide(services(gone)),
         );
-        assert.equal((yield* without.open(message(agent, "Go."))).outcome, EVE_SEND_OUTCOME.FAILED);
+        assert.deepEqual(yield* without.open(message(agent, "Go.")), {
+          outcome: EVE_SEND_OUTCOME.FAILED,
+          status: 422,
+          keyRefusal: KEY_REFUSAL.MISSING,
+        });
         assert.deepEqual(gone.commands, []);
+      }),
+  );
+
+  it.effect(
+    "an agent its starter's API key pays for, whose saved key does not open under this deployment's ring, is refused as unreadable and starts nothing",
+    () =>
+      Effect.gen(function* () {
+        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+        const userId = `user-${randomUUID()}`;
+        yield* Effect.flatMap(Database, (db) =>
+          db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` }),
+        );
+        const task = yield* startTask(userId, { name: "Teammate invitations" });
+        const started = yield* createCodingAgent(userId, {
+          taskId: task.id,
+          idempotencyKey: "start-key",
+          model: "anthropic/claude-opus-5.5",
+          effort: "high",
+          planSnapshot: "# Teammate invitations\n",
+          prompt: null,
+          repository: null,
+          runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
+          payer: CODING_AGENT_PAYER.API_KEY,
+        });
+        assert.ok(Option.isSome(started));
+        // The key was sealed under another deployment's ring, as a Preview's database holds production's.
+        const elsewhere = parseKeyRing(
+          Redacted.make(`1:${Buffer.alloc(32, 9).toString("base64")}`),
+        );
+        assert.ok(Result.isSuccess(elsewhere));
+        const owner = {
+          userId,
+          provider: PROVIDER_KEY_PROVIDER.ANTHROPIC,
+          kind: PROVIDER_KEY_KIND.API_KEY,
+        };
+        yield* saveProviderKey(
+          userId,
+          owner.provider,
+          owner.kind,
+          sealProviderKey(elsewhere.success, owner, Redacted.make(API_KEY)),
+          "sk-ant-api…-key",
+          null,
+          new Date(0),
+        );
+
+        const api = runnerSandboxApi();
+        const sessions = yield* sessionsFor(userId, { next: 0 }).pipe(
+          Effect.provide(services(api)),
+        );
+        assert.deepEqual(yield* sessions.open(message(started.value.agent, "Go.")), {
+          outcome: EVE_SEND_OUTCOME.FAILED,
+          status: 422,
+          keyRefusal: KEY_REFUSAL.UNREADABLE,
+        });
+        assert.deepEqual(api.commands, []);
       }),
   );
 

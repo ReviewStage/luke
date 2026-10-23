@@ -121,6 +121,13 @@ export const HOSTED_API_ERROR = {
    */
   AGENT_CREDENTIAL_MISSING: "agent-credential-missing",
   /**
+   * The agent runs on its starter's API key, which is saved but cannot be
+   * opened under this deployment's key ring, as on a Preview whose database
+   * holds keys sealed under production's. No retry opens it: the starter
+   * saves the key again in Settings › Agents. Nothing was written.
+   */
+  AGENT_API_KEY_UNREADABLE: "agent-api-key-unreadable",
+  /**
    * The task is archived: it is read, and takes nothing — no edit, no call,
    * no agent started or sent a message — until it is brought back. Nothing
    * was written.
