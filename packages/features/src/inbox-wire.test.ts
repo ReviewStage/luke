@@ -66,6 +66,23 @@ test("a thread started with no subject is titled by its message's first line tha
   );
   assert.equal(inboxStartTitle({ text: "", attachments: [PDF] }), "invoice.pdf");
   assert.equal(
+    inboxStartTitle({
+      text: "",
+      attachments: [{ ...PDF, name: `${"q3 board report ".repeat(12)}.pdf` }],
+    }).length <= 61,
+    true,
+    "a long file name is cut as a long line is",
+  );
+  assert.equal(
+    inboxStartTitle({ text: "```typescript\nconst total = 1;\n```" }),
+    "const total = 1;",
+    "a code fence's language is no title",
+  );
+  assert.equal(
+    inboxStartTitle({ text: "_Why_ does get_user_id return null in __init__.py?" }),
+    "Why does get_user_id return null in init.py?",
+  );
+  assert.equal(
     inboxStartTitle({ text: "[](".repeat(2_000) }).length <= 61,
     true,
     "a line of unclosed links is cut as any other",

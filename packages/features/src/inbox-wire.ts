@@ -962,22 +962,41 @@ const STARTED_TITLE_CHARS = 60;
 /** The title of a thread started with no subject where its message holds neither words nor a file. */
 const STARTED_TITLE_FALLBACK = "New thread";
 
-/** A line of Markdown as plain words: its heading, quote, or list mark, its links' labels for the links, and no emphasis or code marks. */
+/** A code fence's line, which opens or closes a block and says nothing itself, its language among it. */
+const CODE_FENCE = /^\s*(?:```|~~~)/u;
+
+/**
+ * A line of Markdown as plain words: its heading, quote, or list mark, its
+ * links' labels for the links, and no emphasis or code marks, an underscore
+ * inside a word, as an identifier's, kept; nothing for a code fence's line.
+ */
 function plainLine(line: string): string {
-  return line
-    .replace(/^\s*(?:#{1,6}|>+|[-*+]|\d+[.)])\s+/u, "")
-    // Note that a label holds no bracket and an address no parenthesis, so a failed match stops at the next one and the scan stays linear.
-    .replace(/!?\[([^[\]]*)\]\([^()]*\)/gu, "$1")
-    .replace(/[*_`~]/gu, "")
-    .replace(/\s+/gu, " ")
-    .trim();
+  if (CODE_FENCE.test(line)) return "";
+  return (
+    line
+      .replace(/^\s*(?:#{1,6}|>+|[-*+]|\d+[.)])\s+/u, "")
+      // Note that a label holds no bracket and an address no parenthesis, so a failed match stops at the next one and the scan stays linear.
+      .replace(/!?\[([^[\]]*)\]\([^()]*\)/gu, "$1")
+      .replace(/[*`~]/gu, "")
+      .replace(/(?<![\p{L}\p{N}])_+|_+(?![\p{L}\p{N}])/gu, "")
+      .replace(/\s+/gu, " ")
+      .trim()
+  );
+}
+
+/** Words cut to a title's short line, on a word where one ends near the cut. */
+function shortTitle(words: string): string {
+  if (words.length <= STARTED_TITLE_CHARS) return words;
+  const cut = words.slice(0, STARTED_TITLE_CHARS);
+  const space = cut.lastIndexOf(" ");
+  return `${(space > STARTED_TITLE_CHARS / 2 ? cut.slice(0, space) : cut).trimEnd()}…`;
 }
 
 /**
  * The title of a thread a member started: the subject they wrote, or,
  * where they wrote none, the first line of their message that says
- * anything, as plain words cut to a short line on a word, or the name of
- * its first file where it holds no words.
+ * anything, as plain words, or the name of its first file where it holds
+ * no words, each cut to a short line on a word.
  */
 export function inboxStartTitle(
   request: Pick<InboxStartRequest, "title" | "text" | "attachments">,
@@ -987,11 +1006,7 @@ export function inboxStartTitle(
     .split("\n")
     .map(plainLine)
     .find((each) => each !== "");
-  if (line === undefined) return request.attachments?.[0]?.name ?? STARTED_TITLE_FALLBACK;
-  if (line.length <= STARTED_TITLE_CHARS) return line;
-  const cut = line.slice(0, STARTED_TITLE_CHARS);
-  const space = cut.lastIndexOf(" ");
-  return `${(space > STARTED_TITLE_CHARS / 2 ? cut.slice(0, space) : cut).trimEnd()}…`;
+  return shortTitle(line ?? request.attachments?.[0]?.name ?? STARTED_TITLE_FALLBACK);
 }
 
 /** One item's read state for the member who marked it, as marking it read or unread answers it. */
