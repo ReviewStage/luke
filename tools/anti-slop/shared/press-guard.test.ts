@@ -92,6 +92,20 @@ describe("ignoredFiles", () => {
     );
   });
 
+  it("finds a wildcard that hides a dotfile or a file in a dot folder", () => {
+    const dotfile = "packages/panel/src/.private.tsx";
+    const inDotFolder = "packages/panel/.hidden/row.tsx";
+    expect(ignoredFiles({ ignorePatterns: ["packages/panel/**"] }, [dotfile, inDotFolder])).toEqual(
+      new Map([["packages/panel/**", [dotfile, inDotFolder]]]),
+    );
+    expect(ignoredFiles({ ignorePatterns: ["*.tsx"] }, [dotfile])).toEqual(
+      new Map([["*.tsx", [dotfile]]]),
+    );
+    expect(ignoredFiles({ ignorePatterns: [".private.tsx"] }, [dotfile, panel])).toEqual(
+      new Map([[".private.tsx", [dotfile]]]),
+    );
+  });
+
   it("passes patterns that hide no watched file, and a file a later ! brings back", () => {
     expect(
       ignoredFiles({ ignorePatterns: [".claude/**", "tools/anti-slop/**"] }, [panel, ui]),
