@@ -7,10 +7,12 @@ import { noNodeTestRule } from "./rules/no-node-test.ts";
 import { noRawAsyncPrimitivesRule } from "./rules/no-raw-async-primitives.ts";
 import { noRawPressOutsideUiRule } from "./rules/no-raw-press-outside-ui.ts";
 import { noRunPromiseOutsideEdgesRule } from "./rules/no-run-promise-outside-edges.ts";
+import { skeletonThroughComponentsRule } from "./rules/skeleton-through-components.ts";
 
 /**
  * Oxlint rules that catch code or tests that silently do nothing or wipe data,
- * and the design system's guard against controls built outside `@luke/ui`.
+ * and the design system's guards against controls built outside `@luke/ui` and
+ * loading skeletons that copy the surface they stand for.
  */
 const antiSlopPlugin = eslintCompatPlugin({
   meta: { name: "anti-slop" },
@@ -22,6 +24,7 @@ const antiSlopPlugin = eslintCompatPlugin({
     "no-raw-async-primitives": noRawAsyncPrimitivesRule,
     "no-raw-press-outside-ui": noRawPressOutsideUiRule,
     "no-run-promise-outside-edges": noRunPromiseOutsideEdgesRule,
+    "skeleton-through-components": skeletonThroughComponentsRule,
   },
 });
 
