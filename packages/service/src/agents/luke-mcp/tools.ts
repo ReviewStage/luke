@@ -62,6 +62,7 @@ import {
 import { CODER_SHOW_PAGE_TOOL } from "../../tasks/page-tool.js";
 import { LOOK_AT_PICTURE_TOOL, PICTURE_LOOK_STATUS } from "../../tasks/picture-look.js";
 import { SHOW_CODE_TOOL } from "../../tasks/show-code.js";
+import type { SentryApp } from "../../triggers/sentry/sentry-app-config.js";
 import {
   CREATE_AUTOMATION_TOOL,
   DELETE_AUTOMATION_TOOL,
@@ -128,7 +129,8 @@ export type LukeMcpServices =
   | ModelCatalog
   | WorkspaceLinearConnect
   | IntegrationConnect
-  | HostedEnvironment;
+  | HostedEnvironment
+  | SentryApp;
 
 /** What a tool runs against: the doors' services, and the agent's browser, which the server provides itself (`app.ts`). */
 export type LukeMcpToolServices = LukeMcpServices | AgentBrowser;

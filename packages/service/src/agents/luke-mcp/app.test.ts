@@ -60,6 +60,7 @@ import {
   linearServer,
   linearTokenOf,
 } from "../../testing/integration-mcp-fake.js";
+import { SentryApp, sentryAppService } from "../../triggers/sentry/sentry-app-config.js";
 import type { AdmittedConversation } from "../brain-host/conversation.js";
 import { BROWSER_TOOL_REFUSAL } from "../browser/browser-tool.js";
 import {
@@ -142,6 +143,7 @@ const doorServices = Effect.gen(function* () {
     modelCatalogOf([]),
     NO_INTEGRATIONS,
     Layer.succeed(HostedEnvironment, NO_ENVIRONMENT),
+    Layer.succeed(SentryApp, sentryAppService(undefined, [])),
   );
 });
 

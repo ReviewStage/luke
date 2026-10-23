@@ -1,13 +1,16 @@
 import type { DatabaseServices } from "@luke/database/core/query";
+import { INTEGRATION_INSTALLATION_STATUS } from "@luke/database/integration-vocabulary";
 import {
   listAutomationRuns,
   listAutomations,
   readAutomation,
 } from "@luke/database/models/automation-store";
+import { workspaceIntegrationInstallations } from "@luke/database/models/integration-installation-store";
 import { readSchedule, SCHEDULE_REFUSAL } from "@luke/features/automation-schedule";
 import {
   AUTOMATION_ACTION,
   AUTOMATION_BOUNDS,
+  AUTOMATION_DEFAULT_SUBJECT_COOLDOWN_HOURS,
   AUTOMATION_SCOPE,
   AUTOMATION_TARGET,
   AUTOMATION_TRIGGER,
@@ -21,9 +24,11 @@ import {
   automationScopeSchema,
   githubTriggerSchema,
   scheduleTriggerSchema,
+  sentryTriggerSchema,
 } from "@luke/features/automation-wire";
 import { disabledServersSchema } from "@luke/features/coding-agent-wire";
 import { type ModelChoice, modelChoiceSchema } from "@luke/features/models-wire";
+import { TRIGGER_PROVIDER } from "@luke/features/trigger-catalog";
 import { describeWire } from "@luke/wire/effect";
 import { Clock, Effect, Option, Result, Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
@@ -45,6 +50,7 @@ import type { GitHubApp } from "../github/github-app.js";
 import { type HostedRefusal, hostedStoreOrUnavailable } from "../http/http-effect.js";
 import type { StoreFailure } from "../http/store-failure.js";
 import type { ModelCatalog } from "../providers/model-catalog.js";
+import { SentryApp } from "../triggers/sentry/sentry-app-config.js";
 import { AGENT_TOOL } from "./agent-runtime/tools.js";
 import { calledId } from "./called-id.js";
 import { acceptedAgentChoice } from "./coder-host/start.js";
@@ -72,7 +78,9 @@ import { workspaceAgent } from "./workspace-agents.js";
  * admins'. A run starts as the automation's creator, so an automation an
  * agent makes runs as the member who started that agent. A webhook trigger
  * is never made or set here: its secret is shown once, in the window that
- * minted it (`AGENTS.md`), and no agent's answer may carry it. An automation
+ * minted it (`AGENTS.md`), and no agent's answer may carry it. A Sentry
+ * trigger is refused where this deployment configures no Sentry integration
+ * or the workspace installed none, since nothing would ever fire it. An automation
  * is made under an id drawn from eve's key for the call (`called-id.ts`),
  * so a call eve runs again names the one it made. Every answer is data the
  * model reads, never a credential.
@@ -89,8 +97,10 @@ export const AUTOMATION_TOOL_REFUSAL = {
   UNREADABLE_CREATE:
     `Not made: give a name of at most ${AUTOMATION_BOUNDS.MAX_NAME_CHARS} characters, a prompt ` +
     `of at most ${AUTOMATION_BOUNDS.MAX_PROMPT_CHARS}, and a trigger: a schedule as ` +
-    '{"kind":"schedule","cron":"<five-field cron>","timezone":"<IANA zone>"}, or a GitHub event ' +
-    'as {"kind":"github","event":"<event>"}; and a model with its effort, both or neither.',
+    '{"kind":"schedule","cron":"<five-field cron>","timezone":"<IANA zone>"}, a GitHub event ' +
+    'as {"kind":"github","event":"<event>"}, or a Sentry event as ' +
+    '{"kind":"integration","provider":"sentry","event":"alert-triggered"}; and a model with its ' +
+    "effort, both or neither.",
   UNREADABLE_UPDATE:
     `Not run: name the automation by the id ${AGENT_TOOL.LIST_AUTOMATIONS} answered, and at ` +
     "least one change, a model with its effort, both or neither.",
@@ -115,6 +125,13 @@ export const AUTOMATION_TOOL_REFUSAL = {
   TIMEZONE:
     "Not run: the schedule's time zone is not one the IANA database names, such as Europe/London.",
   TOO_FREQUENT: "Not run: a schedule may fire at most once every fifteen minutes.",
+  SENTRY_UNCONFIGURED:
+    "Not run: this deployment of Luke has no Sentry integration configured, so no automation " +
+    "here may fire on Sentry's events; use a schedule or a GitHub event instead.",
+  SENTRY_NOT_INSTALLED:
+    "Not run: the workspace has not installed Luke's Sentry integration, so no Sentry event " +
+    "would fire it. A workspace owner or admin installs it in Workspace settings › " +
+    "Integrations › Sentry; make it once that is done.",
   NO_AGENT:
     "Not run: no coding agent of your workspace has that agentId to hand each run to; " +
     `${AGENT_TOOL.LIST_AGENTS} names them, or leave agentId out for a new agent each run.`,
@@ -147,13 +164,20 @@ const PROMPT = describeWire(
 );
 
 const TRIGGER = describeWire(
-  Schema.Union([scheduleTriggerSchema, githubTriggerSchema]),
+  Schema.Union([scheduleTriggerSchema, githubTriggerSchema, sentryTriggerSchema]),
   "What fires it: a schedule, five-field cron read in an IANA time zone, at most once every " +
     'fifteen minutes, such as {"kind":"schedule","cron":"0 9 * * 1","timezone":"Europe/London"}; ' +
-    "or an event of its repositories the Luke GitHub App hears, such as " +
+    "an event of its repositories the Luke GitHub App hears, such as " +
     '{"kind":"github","event":"pull-request-opened"}, narrowed by labels, branches, senders ' +
-    "(people alone where left out), moments, drafts, and forks. A webhook is made only on the " +
-    "automations page, which shows its secret once.",
+    "(people alone where left out), moments, drafts, and forks; or an event of the Sentry " +
+    "organization that installed Luke's Sentry integration on the workspace (Workspace settings " +
+    '› Integrations › Sentry), such as {"kind":"integration","provider":"sentry",' +
+    '"event":"alert-triggered","filters":{"project":["web"],"level":["error","fatal"]}}. ' +
+    "alert-triggered, the one to prefer, fires when a Sentry issue alert rule whose action is " +
+    '"Send a notification via Luke" fires; issue-created fires on every new issue in that ' +
+    "organization. Its filters keep it to the projects (by slug), environments, and levels " +
+    "named: any value within a field matches, every field named must, case aside. A webhook is " +
+    "made only on the automations page, which shows its secret once.",
 );
 
 const REPOSITORIES = describeWire(
@@ -186,7 +210,9 @@ const GUARDS = describeWire(
   "How far it may go: maxConcurrentRuns, its agents at work at once (1 to " +
     `${AUTOMATION_BOUNDS.MAX_CONCURRENT_RUNS}), past which a firing is skipped, and dailyRunCap, ` +
     `the runs it may start in a day (1 to ${AUTOMATION_BOUNDS.MAX_DAILY_RUNS}); 1 and 10 where ` +
-    "left out.",
+    "left out. A Sentry trigger also takes subjectCooldownHours, the hours before the same " +
+    `Sentry issue may start another run (1 to ${AUTOMATION_BOUNDS.MAX_SUBJECT_COOLDOWN_HOURS}), ` +
+    `${AUTOMATION_DEFAULT_SUBJECT_COOLDOWN_HOURS} where left out.`,
 );
 
 const SCOPE = describeWire(
@@ -282,9 +308,9 @@ export const LIST_AUTOMATIONS_TOOL = {
     "model and effort its runs take, its repositories, where its runs land, its guards, scope, " +
     "when it is next due, its newest run, and whether the developer made it. Name an " +
     "automationId to read that one whole, its prompt in full and its newest runs, each with why " +
-    "it was skipped or failed and the agent it started. An automation fires on a schedule or a " +
-    "GitHub event and starts a coding agent on its prompt, as its creator. Answers `accepted` " +
-    "with them, or `rejected` and why.",
+    "it was skipped or failed and the agent it started. An automation fires on a schedule, a " +
+    "GitHub event, a webhook, or a Sentry event, and starts a coding agent on its prompt, as " +
+    "its creator. Answers `accepted` with them, or `rejected` and why.",
   inputSchema: LIST_AUTOMATIONS_INPUT,
 } as const;
 
@@ -295,6 +321,7 @@ export const CREATE_AUTOMATION_TOOL = {
     "page would: each time its trigger fires, Luke starts a coding agent on its prompt, in its " +
     "repositories, on its creator's keys and connections, with no task and no one watching, or " +
     "hands the run to the one agent named. It is on as it is made, and runs as the developer. " +
+    "One fired by Sentry needs Luke's Sentry integration installed on the workspace first. " +
     "Make one when the developer asks for it, never otherwise on your own, and read " +
     `${AGENT_TOOL.LIST_AUTOMATIONS} first so you make none they already have. Answers ` +
     "`accepted` with the automation as it stands, or `rejected` and why.",
@@ -308,8 +335,10 @@ export const UPDATE_AUTOMATION_TOOL = {
     `${AGENT_TOOL.LIST_AUTOMATIONS} answered it, as its editor on the automations page would: ` +
     "pause or resume it, rename it, or give it a new prompt, trigger, repositories, model and " +
     "effort, switched-off connections, the agent its runs land on, guards, scope, or archiving; " +
-    "what you leave out stands. Change one only where the developer asked for it. Answers " +
-    "`accepted` with the automation as it now stands, or `rejected` and why.",
+    "what you leave out stands, and a trigger given replaces the one standing whole, a switch " +
+    "to Sentry needing Luke's Sentry integration installed on the workspace. Change one only " +
+    "where the developer asked for it. Answers `accepted` with the automation as it now " +
+    "stands, or `rejected` and why.",
   inputSchema: UPDATE_AUTOMATION_INPUT,
 } as const;
 
@@ -324,8 +353,13 @@ export const DELETE_AUTOMATION_TOOL = {
   inputSchema: DELETE_AUTOMATION_INPUT,
 } as const;
 
-/** What the automation tools reach: the store, the catalog a model is checked against, and GitHub through the workspace's installation. */
-type AutomationToolServices = DatabaseServices | ModelCatalog | GitHubApp | HttpClient.HttpClient;
+/** What the automation tools reach: the store, the catalog a model is checked against, GitHub through the workspace's installation, and Luke's Sentry integration. */
+type AutomationToolServices =
+  | DatabaseServices
+  | ModelCatalog
+  | GitHubApp
+  | HttpClient.HttpClient
+  | SentryApp;
 
 /** A refusal of the shared writes in the model's words. */
 function refusalWords(refusal: HostedRefusal): string {
@@ -431,6 +465,24 @@ const scheduleRefused = (
         return AUTOMATION_TOOL_REFUSAL.CRON;
     }
   });
+
+/** Sentry's refusal in the model's words, where the trigger is Sentry's and this deployment configures no Sentry integration or the workspace installed none. */
+const sentryRefused = Effect.fn("agents/automationSentryRefused")(function* (
+  workspaceId: string,
+  trigger: { readonly kind: string },
+) {
+  if (trigger.kind !== AUTOMATION_TRIGGER.INTEGRATION) return undefined;
+  const app = yield* SentryApp;
+  const configured = yield* Effect.result(app.settings);
+  if (Result.isFailure(configured)) return AUTOMATION_TOOL_REFUSAL.SENTRY_UNCONFIGURED;
+  const installations = yield* workspaceIntegrationInstallations(workspaceId);
+  const installed = installations.some(
+    (row) =>
+      row.provider === TRIGGER_PROVIDER.SENTRY &&
+      row.status === INTEGRATION_INSTALLATION_STATUS.ACTIVE,
+  );
+  return installed ? undefined : AUTOMATION_TOOL_REFUSAL.SENTRY_NOT_INSTALLED;
+});
 
 /** The model and effort named, both or neither; undefined for neither, and null where one came without the other. */
 function namedChoice(asked: {
@@ -564,6 +616,8 @@ export function runCreateAutomation(
       }
       const schedule = yield* scheduleRefused(made.trigger);
       if (schedule !== undefined) return agentToolRejected(schedule);
+      const sentry = yield* sentryRefused(workspace.value, made.trigger);
+      if (sentry !== undefined) return agentToolRejected(sentry);
       const model = yield* choiceRefused(userId, choice, "Not made");
       if (model !== undefined) return agentToolRejected(model);
       const landing = yield* landingNamed(userId, workspace.value, made.agentId);
@@ -658,6 +712,8 @@ export function runUpdateAutomation(
       if (rest.trigger !== undefined) {
         const schedule = yield* scheduleRefused(rest.trigger);
         if (schedule !== undefined) return agentToolRejected(schedule);
+        const sentry = yield* sentryRefused(workspace.value, rest.trigger);
+        if (sentry !== undefined) return agentToolRejected(sentry);
       }
       const model = yield* choiceRefused(userId, choice, "Not changed");
       if (model !== undefined) return agentToolRejected(model);
