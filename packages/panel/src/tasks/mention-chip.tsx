@@ -42,6 +42,7 @@ import {
   useMinute,
 } from "@luke/ui";
 import { ACTOR_KIND, ACTOR_STATE, type Actor, LUKE_ACTOR } from "@luke/ui/actor-model";
+import { pullRequestLabelOf } from "@luke/ui/tab-strip-model";
 import { fileName } from "@luke/voice/code-pane-model";
 import {
   AppWindowIcon,
@@ -686,23 +687,21 @@ function chipName(
 
 /**
  * What a pull request's or a GitHub issue's chip is called once GitHub
- * answered for it, whatever words its link was written with: its number,
- * and its repository's name before it where that is not `repository`, the
- * task's; nothing for any other mention, or one GitHub answered nothing for.
+ * answered for it, whatever words its link was written with: its number and
+ * its live title, `#42 Fix the refresh`, as a pull request's tab and row are
+ * named. Never its repository, which its card says; nothing for any other
+ * mention, or one GitHub answered nothing for, which keeps the words it was
+ * written with.
  */
-function githubName(
+export function githubName(
   mention: Mention,
   standing: LinkStanding | undefined,
-  repository: string | null,
 ): string | undefined {
   if (mention.kind !== MENTION_KIND.LINK || standing === undefined) return undefined;
   if (standing.pullRequest === undefined && standing.issue === undefined) return undefined;
   const address = pullRequestAddressOf(mention.url) ?? issueAddressOf(mention.url);
-  const own =
-    address !== undefined &&
-    repository !== null &&
-    address.repository.toLowerCase() === repository.toLowerCase();
-  return own ? `#${address.number}` : standing.key;
+  if (address === undefined) return undefined;
+  return pullRequestLabelOf({ number: address.number, title: standing.title });
 }
 
 /** A mention in words: its chip, a button that opens what it names where it can, hanging its card. */
@@ -732,8 +731,7 @@ function MentionChip({
   const heading = useSectionHeading(section?.taskId, section?.anchor ?? "");
   useTaskNameCatchUp(mention.kind === MENTION_KIND.TASK ? mention.taskId : undefined);
   const name =
-    githubName(mention, standing, doors.place.repository) ??
-    chipName(mention, written, bare, known, standing, heading);
+    githubName(mention, standing) ?? chipName(mention, written, bare, known, standing, heading);
   const state = mentionState(mention, doors);
   const press = pressOf(mention, target, state, doors, openLink);
   const card = (
