@@ -3923,7 +3923,7 @@ export function accountInboxAutomations(
   );
 }
 
-/** One open item of a member's own agent as an operator reads it: the item, its agent, its task, the ask that waits where one does, and what an item from before version 5 asked. */
+/** One open item of a member's own agent as an operator reads it: the item, its agent, its task, and the ask that waits where one does. */
 const MemberAskRowSchema = Schema.Struct({
   id: Schema.String,
   key: Schema.String,
@@ -3935,15 +3935,13 @@ const MemberAskRowSchema = Schema.Struct({
   taskName: Schema.NullOr(Schema.String),
   askType: Schema.NullOr(Schema.String),
   askText: Schema.NullOr(Schema.String),
-  version: Schema.Number,
-  response: Schema.Unknown,
   updatedAt: InstantColumnSchema,
 });
 
 type MemberAskRow = typeof MemberAskRowSchema.Type;
 
 /** One open item of a member's own agent, as `memberOpenAsks` answers it: the ask that waits by its kind, null for a notice that waits only to be read, and its agent's words. */
-export type MemberOpenAsk = Omit<MemberAskRow, "version" | "response" | "askType"> & {
+export type MemberOpenAsk = Omit<MemberAskRow, "askType"> & {
   readonly askType: InboxAsk["type"] | null;
 };
 
@@ -3951,42 +3949,20 @@ export type MemberOpenAsk = Omit<MemberAskRow, "version" | "response" | "askType
 const LATEST = "latest";
 const latest = alias(inboxMessage, LATEST);
 
-/** The ask a response from before version 5 stands for, named as a version 5 ask is; none for one that asks nothing. */
-const LEGACY_ASK = {
-  [INBOX_RESPONSE.CHOICE]: INBOX_ASK.DECIDE,
-  [INBOX_RESPONSE.APPROVAL]: INBOX_ASK.DECIDE,
-  [INBOX_RESPONSE.TODO]: INBOX_ASK.DO,
-  [INBOX_RESPONSE.TEXT]: INBOX_ASK.ANSWER,
-  [INBOX_RESPONSE.FORM]: INBOX_ASK.ANSWER,
-  [INBOX_RESPONSE.NONE]: null,
-} as const satisfies Record<InboxResponse["type"], InboxAsk["type"] | null>;
-
 const ASK_TYPES: ReadonlySet<string> = new Set(Object.values(INBOX_ASK));
 
 /** Whether a version 5 ask's type read from its JSON is one the wire names. */
 const isAskType = (type: string): type is InboxAsk["type"] => ASK_TYPES.has(type);
 
-const readLegacyResponse = Schema.decodeUnknownOption(
-  Schema.Struct({ type: Schema.Literals(Object.values(INBOX_RESPONSE)) }),
-);
-
-/** The ask an open item waits on: its open ask message's, or, on an item from before version 5, which holds none, its response's. */
+/** The ask an open item waits on, by the type its open ask message names; none for a notice, and for a type a newer deployment wrote. */
 function askTypeOf(row: MemberAskRow): InboxAsk["type"] | null {
-  if (row.askType !== null && isAskType(row.askType)) return row.askType;
-  if (row.version >= INBOX_WIRE_VERSION) return null;
-  return Option.match(readLegacyResponse(row.response), {
-    onNone: () => null,
-    onSome: (legacy) => LEGACY_ASK[legacy.type],
-  });
+  return row.askType !== null && isAskType(row.askType) ? row.askType : null;
 }
 
-/** A Markdown block's words, as an item from before version 5 wrote them. */
-const BLOCK_TEXT = sql.raw("block->>'text'");
-
-/** The words an open item waits with: its open ask's, else its agent's latest on its thread, as a notice's, else its Markdown blocks, as an item's from before version 5 with no message. */
+/** The words an open item waits with: its open ask's, else its agent's latest on its thread, as a notice's. */
 const ASK_WORDS = sql<
   string | null
->`coalesce(${inboxMessage.text}, (select ${latest.text} from ${inboxMessage} as ${sql.identifier(LATEST)} where ${latest.itemId} = ${ITEM_ID} and ${latest.author} = ${INBOX_MESSAGE_AUTHOR.AGENT} order by ${latest.createdAt} desc limit 1), (select string_agg(${BLOCK_TEXT}, E'\n\n') from jsonb_array_elements(${inboxItem.blocks}) as block where block->>'type' = ${INBOX_BLOCK.MARKDOWN}))`;
+>`coalesce(${inboxMessage.text}, (select ${latest.text} from ${inboxMessage} as ${sql.identifier(LATEST)} where ${latest.itemId} = ${ITEM_ID} and ${latest.author} = ${INBOX_MESSAGE_AUTHOR.AGENT} order by ${latest.createdAt} desc limit 1))`;
 
 const findMemberOpenAsks = SqlSchema.findAll({
   Request: Schema.Struct({
@@ -4012,8 +3988,6 @@ const findMemberOpenAsks = SqlSchema.findAll({
           taskName: task.name,
           askType: sql<string | null>`${inboxMessage.ask}->>'type'`,
           askText: ASK_WORDS,
-          version: inboxItem.version,
-          response: inboxItem.response,
           updatedAt: inboxItem.updatedAt,
         })
         .from(inboxItem)
@@ -4040,9 +4014,8 @@ const findMemberOpenAsks = SqlSchema.findAll({
  * an agent's own read reads only its own threads. An item is the member's
  * where an agent they started posted it, which is whose inbox it waits in;
  * a teammate's agent's item is never among them, nor one of a workspace the
- * member has left. A notice, which asks nothing, and an item from before
- * version 5, which holds its ask as its response, are read with their
- * agent's latest words.
+ * member has left. A notice, which asks nothing, is read with its agent's
+ * latest words.
  */
 export function memberOpenAsks(
   userId: string,
@@ -4050,9 +4023,6 @@ export function memberOpenAsks(
   limit: number,
 ): InboxStoreEffect<readonly MemberOpenAsk[]> {
   return Effect.map(findMemberOpenAsks({ userId, workspaceId, limit }), (rows) =>
-    rows.map((row) => {
-      const { version: _version, response: _response, ...rest } = row;
-      return { ...rest, askType: askTypeOf(row) };
-    }),
+    rows.map((row) => ({ ...row, askType: askTypeOf(row) })),
   );
 }
