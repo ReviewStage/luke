@@ -2,7 +2,16 @@
 
 import assert from "node:assert/strict";
 import type { AgentBrowserTab } from "@luke/features/agent-browser-tab-wire";
-import { BROWSER_LIVE_CLIENT, BROWSER_LIVE_SERVER } from "@luke/features/browser-live-wire";
+import {
+  BROWSER_LIVE_CLIENT,
+  BROWSER_LIVE_HISTORY,
+  BROWSER_LIVE_REFUSAL,
+  BROWSER_LIVE_SERVER,
+} from "@luke/features/browser-live-wire";
+import {
+  BROWSER_TAB_OPEN_FAILURE,
+  type TasksBrowserTabOpenParams,
+} from "@luke/features/tasks-view";
 import { ACT_KIND } from "@luke/host/acts";
 import type { WireBoundaryInput } from "@luke/wire";
 import { Duration } from "effect";
@@ -10,12 +19,16 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
-import { fakeActPortAnswering, type SentPortAct } from "../testing/app-bridge.js";
+import { fakeActPort, fakeActPortAnswering, type SentPortAct } from "../testing/app-bridge.js";
 import { fakeAppPlatform } from "../testing/app-platform.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import type { BrowserLiveListener } from "./cloud-browser-live.js";
-import { CloudBrowserPane } from "./cloud-browser-pane.js";
-import { CLOUD_BROWSER_TABS_AGAIN, useCloudBrowserTabs } from "./cloud-browser-tabs.js";
+import { CloudBrowserDraftPane, CloudBrowserPane } from "./cloud-browser-pane.js";
+import {
+  CLOUD_BROWSER_TABS_AGAIN,
+  noteOpenedCloudTab,
+  useCloudBrowserTabs,
+} from "./cloud-browser-tabs.js";
 import {
   type OpenTask,
   SIDE_PANEL_TAB,
@@ -29,9 +42,16 @@ import {
  * them, read only while the Browser tab experiment is on; each drawn in the
  * strip, kept chosen while the list is on its way, and closed in this window
  * alone; and one tab's pane, which waits quietly for the page, draws it once
- * a frame arrives, and takes the tab over and hands it back. A synthetic
- * task and tab throughout, the live view over a fake door.
+ * a frame arrives, takes the tab over and hands it back, and steers it from
+ * its bar; and a draft, which opens nothing until its bar's Enter. A
+ * synthetic task and tab throughout, the live view over a fake door.
  */
+
+/** Luke, whose browser a tab is in, wearing a plain glyph. */
+const LUKE_OWNER = { name: "Luke", icon: createElement("span") };
+
+/** An agent whose browser a draft opens in. */
+const AGENT_ID = "0b5f8c1e-4d3a-4e6b-8f2c-9a1d7e3b5c40";
 
 const TASK = "2e4a6c8e-0b1d-4f3a-8c5e-7a9b1c3d5e7f";
 const TAB = "5a0e1f2b-3c4d-4e5f-9a6b-7c8d9e0f1a2b";
@@ -268,13 +288,15 @@ test("a cloud Browser tab's pane spins while it waits for the page, draws it onc
     assert.ok(button, `a ${name} button`);
     await act(async () => button.click());
   };
-  const status = () => document.querySelector('[role="status"]')?.textContent;
+  // What stands over the page, apart from the line under the bar saying who has the tab.
+  const status = () =>
+    document.querySelector('.cloud-browser-body [role="status"]')?.textContent ?? undefined;
 
   draw(
     createElement(CloudBrowserPane, {
       taskId: TASK,
       tab: LISTED,
-      owner: "Luke",
+      owner: LUKE_OWNER,
       shown: true,
       memberName: () => undefined,
     }),
@@ -333,7 +355,7 @@ test("while the member drives, a paste reaches the page as text, Control-V and â
     createElement(CloudBrowserPane, {
       taskId: TASK,
       tab: LISTED,
-      owner: "Luke",
+      owner: LUKE_OWNER,
       shown: true,
       memberName: () => undefined,
     }),
@@ -380,5 +402,246 @@ test("while the member drives, a paste reaches the page as text, Control-V and â
         message.type === BROWSER_LIVE_CLIENT.KEY || message.type === BROWSER_LIVE_CLIENT.TEXT,
     ),
     [{ type: BROWSER_LIVE_CLIENT.TEXT, text: "hello" }],
+  );
+});
+
+test("a tab the member opened here is listed before the service lists it, and let go once it does", async () => {
+  const opened: AgentBrowserTab = {
+    ...LISTED,
+    id: OTHER_TAB,
+    openedBy: { kind: "member", userId: "user-dean" },
+    driver: { userId: "user-dean", heldUntil: 60_000 },
+  };
+  const follow = pushedFollow<{ tabs: readonly AgentBrowserTab[] } | { failure: string }>();
+  fakeActPortAnswering((request) => {
+    if (request.kind === ACT_KIND.TASKS_BROWSER_TABS_FOLLOW) {
+      // SAFETY: the window reads oRPC's stream as an async iterator alone, which this is.
+      return Promise.resolve(follow.stream as unknown as WireBoundaryInput);
+    }
+    return Promise.resolve({ tabs: [LISTED] });
+  });
+  let read: readonly AgentBrowserTab[] | undefined;
+  function Probe() {
+    read = useCloudBrowserTabs(TASK, true);
+    return null;
+  }
+
+  noteOpenedCloudTab(TASK, opened);
+  draw(createElement(Probe));
+  await settle();
+  assert.deepEqual(
+    read?.map((tab) => tab.id),
+    [TAB, OTHER_TAB],
+    "listed beside what the service listed, before it lists it",
+  );
+
+  // The service lists it, and later its agent's browser closes it: it goes, as any listed tab would.
+  await act(async () => follow.push({ tabs: [LISTED, opened] }));
+  await settle();
+  await act(async () => follow.push({ tabs: [LISTED] }));
+  await settle();
+  assert.deepEqual(
+    read?.map((tab) => tab.id),
+    [TAB],
+  );
+});
+
+/** The bar's address field. */
+function addressField(): HTMLInputElement {
+  const field = document.querySelector<HTMLInputElement>('input[aria-label="Address"]');
+  assert.ok(field, "the bar's address");
+  return field;
+}
+
+/** Types `value` into the bar's address as the page would hand it to React. */
+function typeAddress(value: string): void {
+  const field = addressField();
+  const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+  act(() => {
+    setter?.call(field, value);
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+}
+
+/** Presses Enter in the bar's address, which submits its form. */
+async function pressEnter(): Promise<void> {
+  await act(async () => addressField().form?.requestSubmit());
+  await settle();
+}
+
+test("a draft opens nothing until its bar's Enter, then opens the tab in its agent's browser and hands it on; a refusal stays in words, and Escape discards it", async () => {
+  const asked: TasksBrowserTabOpenParams[] = [];
+  let answer: WireBoundaryInput = { failure: BROWSER_TAB_OPEN_FAILURE.NOT_READY };
+  fakeActPort({
+    [ACT_KIND.TASKS_BROWSER_TAB_OPEN]: (payload) => {
+      asked.push(payload);
+      // SAFETY: the test hands back the wire's own answer, a tab or a failure.
+      return Promise.resolve(answer as never);
+    },
+  });
+  const handed: AgentBrowserTab[] = [];
+  let discarded = 0;
+  const owner = { name: "Invite expiry", icon: createElement("span") };
+  draw(
+    createElement(CloudBrowserDraftPane, {
+      taskId: TASK,
+      draft: { id: "draft-1", agentId: AGENT_ID },
+      owner,
+      onOpened: (tab) => handed.push(tab),
+      onDiscard: () => {
+        discarded += 1;
+      },
+    }),
+  );
+  await settle();
+  assert.equal(document.activeElement, addressField(), "the bar's address is focused");
+  assert.ok(
+    document.body.textContent?.includes("Type an address to open it in Invite expiry's browser."),
+    "the draft says whose browser it opens in",
+  );
+
+  typeAddress("localhost:3000");
+  await settle();
+  assert.deepEqual(asked, [], "typing opens nothing");
+
+  await pressEnter();
+  assert.deepEqual(asked, [{ taskId: TASK, agentId: AGENT_ID, address: "http://localhost:3000/" }]);
+  assert.ok(
+    document.querySelector('[role="alert"]')?.textContent?.includes("hasn't opened its sandbox"),
+    "a refusal is said under the bar",
+  );
+  assert.deepEqual(handed, []);
+
+  const opened: AgentBrowserTab = {
+    ...LISTED,
+    agentId: AGENT_ID,
+    address: "http://localhost:3000/",
+    openedBy: { kind: "member", userId: "user-dean" },
+  };
+  answer = { tab: opened };
+  await pressEnter();
+  assert.deepEqual(handed, [opened]);
+
+  await act(async () =>
+    addressField().dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })),
+  );
+  assert.equal(discarded, 1);
+});
+
+test("a live tab's bar opens a typed address and steps back, forward, and reload over the live view, and says so where another member holds the tab", async () => {
+  const sent: { type: string }[] = [];
+  let listener: BrowserLiveListener | undefined;
+  fakeAppPlatform({
+    openBrowserLive: (_target, heard) => {
+      listener = heard;
+      return { send: (text) => sent.push(JSON.parse(text)), close: () => undefined };
+    },
+  });
+  const say = async (message: object) => {
+    await act(async () => listener?.message(JSON.stringify(message)));
+    await settle();
+  };
+  const press = async (label: string) => {
+    const button = document.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`);
+    assert.ok(button, `a ${label} step`);
+    await act(async () => button.click());
+  };
+  draw(
+    createElement(CloudBrowserPane, {
+      taskId: TASK,
+      tab: LISTED,
+      owner: LUKE_OWNER,
+      shown: true,
+      memberName: (userId) => (userId === "user-ada" ? "Ada" : undefined),
+    }),
+  );
+  await settle();
+  await say({ type: BROWSER_LIVE_SERVER.DRIVER, driver: null, yours: false });
+
+  typeAddress("example.com/pricing");
+  await pressEnter();
+  await press("Back");
+  await press("Forward");
+  await press("Reload");
+
+  assert.deepEqual(
+    sent.filter((message) => message.type !== BROWSER_LIVE_CLIENT.VIEWPORT),
+    [
+      { type: BROWSER_LIVE_CLIENT.NAVIGATE, address: "https://example.com/pricing" },
+      { type: BROWSER_LIVE_CLIENT.HISTORY, step: BROWSER_LIVE_HISTORY.BACK },
+      { type: BROWSER_LIVE_CLIENT.HISTORY, step: BROWSER_LIVE_HISTORY.FORWARD },
+      { type: BROWSER_LIVE_CLIENT.HISTORY, step: BROWSER_LIVE_HISTORY.RELOAD },
+    ],
+    "the bar steers the page without a Take over pressed first",
+  );
+
+  await say({
+    type: BROWSER_LIVE_SERVER.DRIVER,
+    driver: { userId: "user-ada", heldUntil: 60_000 },
+    yours: false,
+  });
+  await say({ type: BROWSER_LIVE_SERVER.REFUSED, reason: BROWSER_LIVE_REFUSAL.HELD });
+  assert.ok(
+    document.body.textContent?.includes("Ada is driving this tab. Wait until they hand it back."),
+  );
+});
+
+test("plain words typed in a cloud tab's bar search the web, in a draft and on a live tab alike", async () => {
+  const asked: TasksBrowserTabOpenParams[] = [];
+  fakeActPort({
+    [ACT_KIND.TASKS_BROWSER_TAB_OPEN]: (payload) => {
+      asked.push(payload);
+      return Promise.resolve({ failure: BROWSER_TAB_OPEN_FAILURE.UNANSWERED });
+    },
+  });
+  const sent: { type: string }[] = [];
+  let listener: BrowserLiveListener | undefined;
+  fakeAppPlatform({
+    openBrowserLive: (_target, heard) => {
+      listener = heard;
+      return { send: (text) => sent.push(JSON.parse(text)), close: () => undefined };
+    },
+  });
+  const search = "https://www.google.com/search?q=acme%20pricing";
+
+  const draft = draw(
+    createElement(CloudBrowserDraftPane, {
+      taskId: TASK,
+      draft: { id: "draft-1", agentId: AGENT_ID },
+      owner: { name: "Invite emails", icon: createElement("span") },
+      onOpened: () => undefined,
+      onDiscard: () => undefined,
+    }),
+  );
+  await settle();
+  assert.ok(
+    document.body.textContent?.includes("Invite emails' browser"),
+    "a name ending in an s takes the apostrophe alone",
+  );
+  typeAddress("acme pricing");
+  await pressEnter();
+  assert.deepEqual(asked, [{ taskId: TASK, agentId: AGENT_ID, address: search }]);
+
+  draft.rerender(
+    createElement(CloudBrowserPane, {
+      taskId: TASK,
+      tab: LISTED,
+      owner: LUKE_OWNER,
+      shown: true,
+      memberName: () => undefined,
+    }),
+  );
+  await settle();
+  await act(async () =>
+    listener?.message(
+      JSON.stringify({ type: BROWSER_LIVE_SERVER.DRIVER, driver: null, yours: false }),
+    ),
+  );
+  await settle();
+  typeAddress("acme pricing");
+  await pressEnter();
+  assert.deepEqual(
+    sent.filter((message) => message.type === BROWSER_LIVE_CLIENT.NAVIGATE),
+    [{ type: BROWSER_LIVE_CLIENT.NAVIGATE, address: search }],
   );
 });

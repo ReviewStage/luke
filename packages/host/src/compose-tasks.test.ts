@@ -78,6 +78,7 @@ import {
   type TaskTreeAnswer,
 } from "@luke/features/task-wire";
 import {
+  BROWSER_TAB_OPEN_FAILURE,
   GITHUB_DISCONNECT_FAILURE,
   PICTURE_KEEP_FAILURE,
   type RepositoryCallFailure,
@@ -956,6 +957,7 @@ function fakeService(tasks: Task[]): FakeService {
         return service.repositoryIssues[place.workspaceId]?.[place.repository];
       }),
     readBrowserTabs: () => Effect.succeed({ tabs: [] }),
+    openBrowserTab: () => Effect.succeed({ failure: BROWSER_TAB_OPEN_FAILURE.UNANSWERED }),
     readIssueLinks: (taskId) =>
       Effect.sync(() => {
         const issues = service.issueLinks[taskId];

@@ -5,6 +5,7 @@ import type { InboxCodeBlock } from "@luke/features/inbox-wire";
 import { LINK_PLACE, type ReadLink } from "@luke/features/luke-link";
 import { TASK_FILE_REFUSAL } from "@luke/features/task-wire";
 import type { TaskCodeShowing, TasksFileAnswer } from "@luke/features/tasks-view";
+import { getSharedHighlighter } from "@pierre/diffs";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactElement } from "react";
@@ -12,6 +13,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
 import { type SideBundles, sideBundles, usePrefetchDiffBundle } from "../bundle-loader.js";
 import { LinkWorkspaceProvider } from "../copy-link-item.js";
+import { preferredHighlighter } from "../diff-view/highlight-pool.js";
 import { diffView } from "../diff-view/index.js";
 import { FindScope } from "../find-in-tab.js";
 import { copyingInto, DESKTOP_LINKS, fakeAppPlatform } from "../testing/app-platform.js";
@@ -68,6 +70,14 @@ const roots: Root[] = [];
 
 beforeAll(async () => {
   bundles = await Effect.runPromise(landedBundles({ diffView: () => Promise.resolve(diffView) }));
+  // Note that the highlighter is loaded first, in the default themes and on the
+  // highlighter the bundle picks, so Pierre draws the first card within the
+  // test's own ticks rather than whenever a cold load lets it on a busy machine.
+  await getSharedHighlighter({
+    themes: ["github-dark-default", "github-light-default"],
+    langs: ["typescript"],
+    preferredHighlighter: preferredHighlighter(),
+  });
 });
 
 beforeEach(() => handSettings());
@@ -155,7 +165,10 @@ test("an agent's note stands under the last line it pointed at, headed by the ag
     "annotation-additions-14",
   );
   assert.ok(drawnRoot(container).querySelector('slot[name="annotation-additions-14"]'));
-  assert.match(note.querySelector(".annotation-card-head")?.textContent ?? "", /^Invite emails/u);
+  assert.match(
+    note.querySelector(".annotation-card-fold > summary")?.textContent ?? "",
+    /^Invite emails/u,
+  );
   assert.equal((container.textContent ?? "").split(NOTE).length - 1, 1, "the note is said once");
 });
 

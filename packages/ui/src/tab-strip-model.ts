@@ -7,9 +7,9 @@
  * its column names it by, such as the plan's own or the side panel's Board,
  * or an object naming what it shows: one coding agent, a draft agent not yet
  * started, one subagent, one file, one agent's changes, one agent's
- * terminal, one page, or one Browser tab's web page. Two tabs are the
- * same where they name the same thing, so a tab rebuilt on every render is
- * still the tab it was.
+ * terminal, one page, or one Browser tab in an agent's cloud browser. Two
+ * tabs are the same where they name the same thing, so a tab rebuilt on
+ * every render is still the tab it was.
  *
  * Each strip keeps, per task, the order the developer moved its tabs into
  * and the tabs they viewed, the latest last. What follows is how both
@@ -113,11 +113,6 @@ export interface MacTerminalStripTab {
   readonly asked: number;
 }
 
-/** One Browser tab, named by the id it was opened under, which names its page's view to main. */
-export interface BrowserStripTab {
-  readonly browser: string;
-}
-
 /** One Browser tab in an agent's cloud browser, named by the id the service keeps it under. */
 export interface CloudBrowserStripTab {
   readonly cloudBrowser: string;
@@ -140,7 +135,6 @@ export type StripTab =
   | TerminalStripTab
   | PageStripTab
   | MacTerminalStripTab
-  | BrowserStripTab
   | CloudBrowserStripTab;
 
 /**
@@ -196,11 +190,6 @@ export function isCloudBrowserTab(tab: StripTab): tab is CloudBrowserStripTab {
   return tab instanceof Object && "cloudBrowser" in tab;
 }
 
-/** Whether a tab is a Browser tab. */
-export function isBrowserTab(tab: StripTab): tab is BrowserStripTab {
-  return tab instanceof Object && "browser" in tab;
-}
-
 /**
  * The agent whose tab follows its run now: the one the plan's column
  * shows, while the column is on screen, the plan's page shown and no panel
@@ -249,7 +238,6 @@ export function sameTab(a: StripTab | undefined, b: StripTab | undefined): boole
   if (isTerminalTab(a)) return isTerminalTab(b) && a.terminal === b.terminal;
   if (isPageTab(a)) return isPageTab(b) && a.page === b.page;
   if (isMacTerminalTab(a)) return isMacTerminalTab(b) && a.macTerminal === b.macTerminal;
-  if (isBrowserTab(a)) return isBrowserTab(b) && a.browser === b.browser;
   if (isCloudBrowserTab(a)) return isCloudBrowserTab(b) && a.cloudBrowser === b.cloudBrowser;
   return a === b;
 }
@@ -305,8 +293,7 @@ function numberedKey(agentId: string, number: number): string {
  * of the side panel, the one strip it stands in, is keyed by, one naming a
  * pull request by its number by a key made for the two (`numberedKey`), a Terminal tab
  * by a key made for its agent (`terminalKey`), a page's by the page's
- * own id, a Browser tab's by the id it was opened under, and a cloud Browser
- * tab's by the id the service keeps it under.
+ * own id, and a cloud Browser tab's by the id the service keeps it under.
  */
 export function tabKey(tab: StripTab): string {
   if (isAgentTab(tab)) return tab.agent;
@@ -319,7 +306,6 @@ export function tabKey(tab: StripTab): string {
     return tab.number === undefined ? tab.changes : numberedKey(tab.changes, tab.number);
   }
   if (isPageTab(tab)) return tab.page;
-  if (isBrowserTab(tab)) return tab.browser;
   if (isCloudBrowserTab(tab)) return tab.cloudBrowser;
   return isSubagentTab(tab) ? tab.subagent : tab;
 }

@@ -1,5 +1,6 @@
-import type { ReactNode } from "react";
-import { RemoveIcon } from "../../face/glyphs.js";
+import { type ReactNode, useState } from "react";
+import { cssCustomProperties } from "../../css.js";
+import { CheckIcon, RemoveIcon } from "../../face/glyphs.js";
 import { pulseOnPress } from "../../press-pulse.js";
 import { motionKey as motionKeyAttribute } from "../list-motion/list-motion.js";
 import { ClippedLine, ONE_LINE_ELEMENT, ONE_LINE_END } from "../one-line/clipped-line.js";
@@ -27,14 +28,23 @@ import { SPINNER_SIZE, Spinner } from "../spinner/spinner.js";
  * why in words where the caller says (`failure`, "Not kept") and what more
  * it says of it (its size). Neither opens anything.
  *
+ * A file on its way up is drawn as it will stand, with a meter along its
+ * foot: filling to `progress` where its caller can say how far the bytes
+ * have gone, and sweeping where it cannot, as a send that carries its files
+ * inside one request cannot. It opens nothing until it is up. One that goes
+ * up while drawn takes a check that springs in on its corner and, after a
+ * beat, fades, so a file seen going up is seen landing; one drawn up already
+ * stands still.
+ *
  * A chip is one item of a list its caller draws and names, so the caller
  * owns the row's layout; the chip takes no class or style.
  */
 
-/** Where a chip's file stands: here to open, still read, or failed to come. */
+/** Where a chip's file stands: here to open, still read, on its way up, or failed to come. */
 export const ATTACHMENT_CHIP_STATE = {
   READY: "ready",
   LOADING: "loading",
+  UPLOADING: "uploading",
   FAILED: "failed",
 } as const;
 
@@ -60,7 +70,8 @@ function ChipFace({
   if (state === ATTACHMENT_CHIP_STATE.LOADING) {
     return <Spinner label={`Reading ${name}`} size={SPINNER_SIZE.INLINE} />;
   }
-  if (state === ATTACHMENT_CHIP_STATE.READY && image !== undefined) {
+  const drawn = state === ATTACHMENT_CHIP_STATE.READY || state === ATTACHMENT_CHIP_STATE.UPLOADING;
+  if (drawn && image !== undefined) {
     return <img src={image} alt={name} />;
   }
   const words = state === ATTACHMENT_CHIP_STATE.FAILED ? failure : name;
@@ -82,6 +93,56 @@ function ChipFace({
   );
 }
 
+/** The share of an upload done, as a fraction held to 0–1, a value that is not a number read as none. */
+function fractionOf(progress: number): number {
+  if (!Number.isFinite(progress)) return 0;
+  return Math.min(100, Math.max(0, progress)) / 100;
+}
+
+/** The meter along an uploading chip's foot: filled to its share where one is known, else sweeping. */
+function UploadMeter({
+  name,
+  progress,
+}: {
+  name: string;
+  progress: number | undefined;
+}): React.JSX.Element {
+  const fraction = progress === undefined ? undefined : fractionOf(progress);
+  return (
+    <span
+      className="luke-attachment-chip-meter"
+      role="progressbar"
+      aria-label={`Uploading ${name}`}
+      aria-valuemin={fraction === undefined ? undefined : 0}
+      aria-valuemax={fraction === undefined ? undefined : 100}
+      aria-valuenow={fraction === undefined ? undefined : Math.round(fraction * 100)}
+      data-indeterminate={fraction === undefined ? "true" : undefined}
+    >
+      <span
+        className="luke-attachment-chip-meter-fill"
+        style={
+          fraction === undefined
+            ? undefined
+            : cssCustomProperties({ "--luke-attachment-chip-share": fraction })
+        }
+      />
+    </span>
+  );
+}
+
+/** Whether the chip's file went up while it was drawn: true from the render that sees it land. */
+function useLanded(state: AttachmentChipState): boolean {
+  const [was, setWas] = useState(state);
+  const [landed, setLanded] = useState(false);
+  // Note that the change is taken in the render that sees it, so the check
+  // springs in on the frame the meter goes.
+  if (state !== was) {
+    setWas(state);
+    setLanded(was === ATTACHMENT_CHIP_STATE.UPLOADING && state === ATTACHMENT_CHIP_STATE.READY);
+  }
+  return landed;
+}
+
 /** A file as a chip: a thumbnail or a glyph and name, with its open and its way off where given. */
 export function AttachmentChip({
   name,
@@ -92,6 +153,7 @@ export function AttachmentChip({
   onRemove,
   removeDisabled,
   state = ATTACHMENT_CHIP_STATE.READY,
+  progress,
   failure,
   motionKey,
 }: {
@@ -109,14 +171,18 @@ export function AttachmentChip({
   onRemove?: (() => void) | undefined;
   /** Whether the way off stands unavailable, while what the file is for is busy. */
   removeDisabled?: boolean | undefined;
-  /** Where the file stands; a chip still read or failed opens nothing. */
+  /** Where the file stands; a chip still read, uploading, or failed opens nothing. */
   state?: AttachmentChipState;
+  /** How far an upload has come, in percent, where its transport can say; an uploading chip without it sweeps. */
+  progress?: number | undefined;
   /** Why a failed file is not there, in words ("Not kept"); its glyph alone says so where none is given. */
   failure?: string | undefined;
   /** The key a `ListMotion` around its list follows it by, which plays its arrival and its exit. */
   motionKey?: string | undefined;
 }): React.JSX.Element {
   const ready = state === ATTACHMENT_CHIP_STATE.READY;
+  const uploading = state === ATTACHMENT_CHIP_STATE.UPLOADING;
+  const landed = useLanded(state);
   const face = (
     <ChipFace
       state={state}
@@ -129,7 +195,7 @@ export function AttachmentChip({
   );
   // A thumbnail's place: a picture, a wait, or a failure with no words.
   const thumbnail =
-    (ready && image !== undefined) ||
+    ((ready || uploading) && image !== undefined) ||
     state === ATTACHMENT_CHIP_STATE.LOADING ||
     (state === ATTACHMENT_CHIP_STATE.FAILED && failure === undefined && detail === undefined);
   return (
@@ -153,6 +219,12 @@ export function AttachmentChip({
           {face}
         </button>
       )}
+      {uploading ? <UploadMeter name={name} progress={progress} /> : null}
+      {landed ? (
+        <span className="luke-attachment-chip-landed" aria-hidden="true">
+          <CheckIcon />
+        </span>
+      ) : null}
       {onRemove === undefined ? null : (
         <button
           type="button"

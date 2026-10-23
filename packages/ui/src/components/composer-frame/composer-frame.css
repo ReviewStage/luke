@@ -1,0 +1,36 @@
+/* composer-frame.css -- a composer's edge, corner, and ground for each look,
+   and its edge while files are dragged over it; what it holds lays itself
+   out. */
+
+@layer components {
+  .luke-composer-frame {
+    border: 1px solid var(--luke-color-border);
+    border-radius: var(--luke-card-radius);
+    background: var(--luke-color-sidebar);
+  }
+
+  .luke-composer-frame[data-look="field"] {
+    border-radius: var(--luke-control-radius);
+    background: var(--luke-color-ground);
+  }
+
+  .luke-composer-frame[data-look="input"] {
+    border-color: var(--luke-color-border-strong);
+    border-radius: var(--luke-control-radius);
+    background: var(--luke-color-input);
+    transition: background-color var(--luke-duration-hover) ease;
+  }
+
+  .luke-composer-frame[data-look="input"]:focus-within {
+    background: var(--luke-color-input-focus);
+  }
+
+  .luke-composer-frame[data-look="bare"] {
+    border: 0;
+    background: none;
+  }
+
+  .luke-composer-frame[data-dropping="true"] {
+    border-color: var(--luke-color-border-selected);
+  }
+}

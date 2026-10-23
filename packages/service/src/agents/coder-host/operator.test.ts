@@ -198,14 +198,14 @@ it.layer(getTestDB())("the member's operator", (it) => {
               0,
               new Map(),
             );
-            return [agent.personaName, summary.personaName, agentTabLabel(summary)];
+            return agentTabLabel(summary);
           });
 
         const ensured = yield* ensure(member, workspaceId);
         const reset = yield* ensure(member, workspaceId, true);
 
-        assert.deepEqual(yield* named(ensured.agent.id), [null, undefined, "Luke"]);
-        assert.deepEqual(yield* named(reset.agent.id), [null, undefined, "Luke"]);
+        assert.equal(yield* named(ensured.agent.id), "Luke");
+        assert.equal(yield* named(reset.agent.id), "Luke");
       }),
   );
 

@@ -12,12 +12,14 @@ import {
   DIALOG_TONE,
   type DialogConfirm,
   EllipsisIcon,
+  GAP,
   IconButton,
+  LAYOUT_ELEMENT,
   MarkDoneIcon,
-  motionRows,
   NOTE_LINE_LOOK,
   NoteLine,
   PencilIcon,
+  Stack,
   TextField,
   Tooltip,
   TrashIcon,
@@ -480,10 +482,12 @@ function SidebarSection({
         )
       ) : (
         // A folded section's rows are only the open one, so a drop over it lands on top rather than among them.
-        <ul
+        <Stack
+          as={LAYOUT_ELEMENT.UL}
+          gap={GAP.ROW}
           className="sidebar-tasks"
           data-row-drop-rows={folded ? undefined : ""}
-          {...motionRows()}
+          moves
           onPointerDown={drag}
         >
           {shown.map(({ key, value: row }) => (
@@ -491,7 +495,7 @@ function SidebarSection({
               {context.row(row)}
             </RowPlaced>
           ))}
-        </ul>
+        </Stack>
       )}
     </div>
   );
@@ -522,7 +526,13 @@ export function SidebarSections({
   const drag = useRowDrag(move, { handle: SECTION_HANDLE });
   return (
     <nav className="sidebar-group" aria-label="Sections">
-      <ul className="sidebar-sections" {...motionRows()} onPointerDown={drag}>
+      <Stack
+        as={LAYOUT_ELEMENT.UL}
+        gap={GAP.CONTROL}
+        className="sidebar-sections"
+        moves
+        onPointerDown={drag}
+      >
         {sections.map((drawn, at) => (
           <li key={drawn.section.id} className="sidebar-sections-item">
             <SidebarSection
@@ -532,7 +542,7 @@ export function SidebarSections({
             />
           </li>
         ))}
-      </ul>
+      </Stack>
     </nav>
   );
 }

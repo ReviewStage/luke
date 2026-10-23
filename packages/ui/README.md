@@ -117,7 +117,9 @@ import { BUTTON_VARIANT, Button, GAP, Inline, TEXT_ELEMENT, TEXT_VARIANT, Text }
   constant, never a string.
 - **No `className` or `style`.** A control owns its height, padding, type, and
   states. Where it stands, and the room around it, is its container's: a
-  `Stack` or `Inline` with a `GAP` role, or a page pattern.
+  `Stack` or `Inline` with a `GAP` role, or a page pattern. A frame that is
+  no control, a `Fill` or a `Card`, keeps its owner's class only to be named
+  and placed by it, never to be drawn.
 - **Data and callbacks in.** A component never reaches an app's bridge, its
   network, or its shortcuts; the app's adapter hands it values and handlers.
 - **A row a list engine owns.** Where a library of the app's owns a list's

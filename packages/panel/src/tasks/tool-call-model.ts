@@ -302,10 +302,16 @@ export function todosView(input: WireValue | undefined): CodingAgentTodos["todos
   return Option.getOrUndefined(readTodos(input))?.todos;
 }
 
+/** How many of a list's items are done, and how many it holds. */
+export function todosCount(todos: CodingAgentTodos["todos"]): { done: number; total: number } {
+  const done = todos.filter((todo) => todo.status === CODING_AGENT_TODO_STATUS.DONE).length;
+  return { done, total: todos.length };
+}
+
 /** How far a list has got: "2 of 5 done". */
 export function todosSummary(todos: CodingAgentTodos["todos"]): string {
-  const done = todos.filter((todo) => todo.status === CODING_AGENT_TODO_STATUS.DONE).length;
-  return `${done} of ${todos.length} done`;
+  const { done, total } = todosCount(todos);
+  return `${done} of ${total} done`;
 }
 
 /** The item a list is at: the one in progress, else the first still pending; nothing once every item is done. */

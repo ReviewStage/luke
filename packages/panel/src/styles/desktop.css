@@ -407,6 +407,26 @@ body,
   font-weight: var(--luke-weight-medium);
 }
 
+/* The Tasks page's filter line: a chip for each field filtered and Clear
+   after them, laid out as the collection page's filter line lays out what
+   it holds, standing hidden while nothing is filtered so a chip arriving
+   arrives into it (`tasks-page-options.tsx`). */
+.tasks-filter-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--luke-control-gap);
+  min-width: 0;
+}
+
+.tasks-filter-line[hidden] {
+  display: none;
+}
+
+.tasks-filter-clear {
+  display: inline-flex;
+}
+
 /* The sidebar's View options and the Tasks page's Filter wear a dot while
    the view leaves tasks out, so a filtered list never passes for the whole
    of it: drawn by the box around the button, over its corner. */
@@ -490,15 +510,6 @@ body,
   padding: var(--luke-space-6) var(--row-inset);
   font-size: var(--luke-type-body-size);
   line-height: var(--luke-type-label-leading);
-}
-
-.sidebar-tasks {
-  display: flex;
-  flex-direction: column;
-  gap: var(--luke-list-gap);
-  margin: 0;
-  padding: 0;
-  list-style: none;
 }
 
 /* Every row of the plans is one line, whatever section it stands in: what
@@ -754,15 +765,6 @@ ul.actor-stack {
   display: flex;
   max-height: min(240px, calc(var(--luke-stage-height) * 0.4));
   flex-direction: column;
-}
-
-.actor-more-list {
-  display: flex;
-  flex-direction: column;
-  gap: var(--luke-space-6);
-  margin: 0;
-  padding: 0;
-  list-style: none;
 }
 
 .actor-more-row {
@@ -1046,8 +1048,9 @@ ul.actor-stack {
 
 /* The copy itself, lifted: the open row's fill made opaque on the ground it
    was dragged from, ringed so it reads over either pane, and a shadow
-   beneath. The sidebar's rows, its sections, and the board's cards share it. */
-[data-lifted="true"] {
+   beneath. The sidebar's rows and its sections share it; a board's card is
+   a card (`Card`), whose copy keeps the card's own frame. */
+[data-lifted="true"]:not(.luke-card) {
   border-radius: var(--luke-control-radius);
   background:
     linear-gradient(var(--luke-color-fill-strong), var(--luke-color-fill-strong)),
@@ -1122,15 +1125,6 @@ ul.actor-stack {
 /* The account's own sections, between Pinned and Tasks (sidebar-sections.tsx).
    Each is dragged among the others by its header, on the rows' own timing,
    and carried as a copy while held as a row is. */
-.sidebar-sections {
-  display: flex;
-  flex-direction: column;
-  gap: var(--luke-space-8);
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
 .sidebar-sections > .sidebar-sections-item {
   position: relative;
   transition:
@@ -1168,8 +1162,9 @@ ul.actor-stack {
 }
 
 /* The section, or Tasks, a row is carried over is washed while it is, and a
-   line stands where the row would land among a section's tasks. */
-[data-row-drop][data-drop-target="true"] {
+   line stands where the row would land among a section's tasks. A board's
+   column is a card (`Card`), which rings and washes itself. */
+[data-row-drop][data-drop-target="true"]:not(.luke-card) {
   border-radius: var(--luke-radius-8);
   background: var(--luke-color-fill-hover);
 }
@@ -1832,7 +1827,7 @@ ul.actor-stack {
   min-width: 0;
 }
 
-.message-meta > :is(.message-actions, .message-sent-at) {
+.message-meta > :is(.luke-message-actions, .message-sent-at) {
   flex: none;
 }
 
@@ -1854,7 +1849,7 @@ ul.actor-stack {
    so it lines up with a long sent message's left edge rather than a width of
    its own: the measure is the sent message's (`Message`'s `is-user`), and a
    card folded or open spans all of it. */
-.agent-origin > .plan-card {
+.agent-origin > :is([data-task-card], [data-replay-card]) {
   width: 100%;
 }
 
@@ -2044,32 +2039,32 @@ ul.actor-stack {
   margin-top: var(--luke-space-6);
 }
 
-.desktop-document .markdown-heading {
+.desktop-document .luke-markdown-heading {
   color: var(--luke-color-text);
 }
 
-.desktop-document .markdown-heading[data-level="1"] {
+.desktop-document .luke-markdown-heading[data-level="1"] {
   font-size: 1.9em;
   font-weight: var(--luke-weight-bold);
   letter-spacing: -0.02em;
   line-height: 1.2;
 }
 
-.desktop-document .markdown-heading[data-level="2"] {
+.desktop-document .luke-markdown-heading[data-level="2"] {
   margin-top: 0.6em;
   padding-bottom: 0.35em;
   border-bottom: 1px solid var(--luke-color-border);
   font-size: 1.3em;
 }
 
-.desktop-document .markdown-heading[data-level="3"] {
+.desktop-document .luke-markdown-heading[data-level="3"] {
   font-size: 1.05em;
 }
 
 /* In a column under 400px the title steps down to a section's size and a
    half, so it no longer fills the first screen a few words a line. */
 @container plan-document (width < 400px) {
-  .desktop-document .task-title .markdown-heading[data-level="1"] {
+  .desktop-document .task-title .luke-markdown-heading[data-level="1"] {
     font-size: 1.5em;
   }
 }
@@ -2480,10 +2475,25 @@ ul.actor-stack {
 }
 
 /* A searchable menu hung from its own button (`@luke/ui`'s
-   `AnchoredPopover`) stands in the layer's place. */
+   `AnchoredPopover`) stands in the layer's place, and is what a listed
+   row's submenu stands against. */
 .luke-anchored-popover > .searchable-menu {
-  position: static;
+  position: relative;
   width: auto;
+}
+
+/* A listed row's submenu stands beside the row as the list scrolled it
+   (`searchable-menu.tsx` places the branch over the row), taking no
+   pointer itself, so the rows under it stay the pointer's. */
+.searchable-menu-row-branch {
+  position: absolute;
+  right: 0;
+  left: 0;
+  pointer-events: none;
+}
+
+.searchable-menu-row-branch > * {
+  pointer-events: auto;
 }
 
 /* What pops up arrives on the pair every arriving element rides, the
@@ -2609,15 +2619,6 @@ ul.actor-stack {
   padding: var(--luke-space-8) var(--luke-space-12) var(--luke-space-12);
 }
 
-.integration-tool-hints {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--luke-space-4);
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
 .integration-tool-description-whole {
   color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
@@ -2626,11 +2627,11 @@ ul.actor-stack {
   cursor: text;
 }
 
-.integration-tool-description-whole :is(strong, .markdown-heading, code) {
+.integration-tool-description-whole :is(strong, .luke-markdown-heading, code) {
   color: var(--luke-color-text);
 }
 
-.integration-tool-description-whole .markdown-heading {
+.integration-tool-description-whole .luke-markdown-heading {
   margin-top: 0.9em;
   font-size: 1em;
 }
@@ -3105,11 +3106,8 @@ ul.actor-stack {
   --inbox-face: 20px;
   /* The chip's face, an actor's in a line (`ACTOR_SIZE.INLINE`). */
   --inbox-mark: 16px;
-  display: flex;
-  flex-direction: column;
-  margin: 0;
-  padding: 0;
-  list-style: none;
+  /* Note that the thread stands flush on what the log says under it, rather than a log line's step apart. */
+  margin-block-end: 0;
 }
 
 .inbox-comment {
@@ -3303,21 +3301,9 @@ ul.actor-stack {
   max-width: calc(10 * var(--luke-space-16));
 }
 
-/* A form's text field is the composer's own field (`inbox-form-text.tsx`)
-   drawn at a text field's size: a field's ground in a hairline, its line
-   at the field's insets, growing a line at a time to eight, and the
-   focused field's ground once the caret is in it, as a text field's is. */
-.inbox-field-composer {
-  border: 1px solid var(--luke-color-border-strong);
-  border-radius: var(--luke-control-radius);
-  background: var(--luke-color-input);
-  transition: background-color var(--luke-duration-hover) ease;
-}
-
-.inbox-field-composer:focus-within {
-  background: var(--luke-color-input-focus);
-}
-
+/* A form's text field is the composer's own field (`inbox-form-text.tsx`) in
+   a field's frame, its line at the field's insets, growing a line at a time
+   to eight. */
 .inbox-field-composer .agent-composer-field {
   --agent-composer-field-block: calc(2 * var(--luke-space-6));
 }
@@ -3334,19 +3320,6 @@ ul.actor-stack {
   box-sizing: border-box;
   padding: var(--luke-space-6) var(--luke-control-inset);
   overflow-wrap: anywhere;
-}
-
-/* A settled form's values, a field a line in the form's order: its name in
-   the muted ink, then what was put in it, a text field's words drawn as a
-   sent message's are, their mentions chips. */
-.inbox-values {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  gap: var(--luke-space-4);
-  margin: 0;
-  padding: 0;
-  list-style: none;
 }
 
 /* A value too long to stand beside its name in a narrow column drops to a
@@ -3905,6 +3878,24 @@ ul.actor-stack {
   }
 }
 
+/* The Automations list's toolbar: where its two acts' words would crowd the
+   title, Create with an agent folds to its glyph, named by its pill
+   (`folding-button.tsx`), and New automation keeps its words. */
+.automations-toolbar {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  align-items: center;
+  gap: var(--luke-control-gap);
+  container: automations-toolbar / inline-size;
+}
+
+@container automations-toolbar (max-width: 559px) {
+  .automations-toolbar > * {
+    --luke-fold: folded;
+  }
+}
+
 .automation-editor {
   display: flex;
   flex-direction: column;
@@ -4277,7 +4268,7 @@ ul.actor-stack {
 
 /* The presses show as their row does, so a message's Copy stands with its
    Reply rather than waiting on a transcript's hover of its own. */
-.chat-byline-action > .message-actions {
+.chat-byline-action > .luke-message-actions {
   opacity: 1;
   pointer-events: auto;
 }
@@ -4547,24 +4538,13 @@ ul.actor-stack {
 
 /* Home has no toolbar, so its bar stands at the page's top, clear of the
    greeting and its New task. */
-/* The bar floats as a menu does, on the menu's ground, edge, and entrance,
-   and claims its presses back from any drag strip beneath it. */
+/* The bar floats on the menu's surface (`MenuSurface`, a row of its field
+   and buttons), and claims its presses back from any drag strip beneath it. */
 .find-bar {
   position: absolute;
   z-index: 3;
   top: var(--luke-space-8);
   right: var(--column-inset);
-  display: flex;
-  align-items: center;
-  gap: var(--luke-space-2);
-  padding: var(--luke-menu-inset);
-  border: 1px solid var(--luke-color-border-strong);
-  border-radius: var(--luke-menu-radius);
-  background: var(--luke-color-overlay);
-  box-shadow: var(--luke-menu-shadow);
-  animation:
-    luke-menu-arrive var(--luke-duration-quick) var(--luke-motion-exit) both,
-    luke-menu-drop var(--luke-duration-fast) var(--luke-spring-fast) both;
 }
 
 [data-luke-profile="desktop"] .find-bar {
@@ -4602,16 +4582,6 @@ ul.actor-stack {
   display: flex;
   flex-direction: column;
   gap: var(--luke-section-gap);
-}
-
-.settings-pages ul,
-.admin-sections ul {
-  display: flex;
-  flex-direction: column;
-  gap: var(--luke-list-gap);
-  margin: 0;
-  padding: 0;
-  list-style: none;
 }
 
 /* The page list's three groups, a section's gap apart, each under its
@@ -4664,7 +4634,7 @@ ul.actor-stack {
 
 /* The template's name in the page title role, where a Settings page's
    title stands. */
-.template-document .task-page-head .markdown-heading[data-level="1"] {
+.template-document .task-page-head .luke-markdown-heading[data-level="1"] {
   font-size: var(--luke-type-title-size);
   font-weight: var(--luke-weight-bold);
   letter-spacing: -0.015em;
@@ -4957,7 +4927,7 @@ ul.actor-stack {
 /* Expanded where it cannot be pinned, the whole summary stands in a card
    over the rail's own footprint, its top and right edges the rail's, or the
    column's where the column is too narrow for a rail (`SUMMARY_RAILED`), drawn
-   as a menu is, and its chevron, shown while the pointer is on it, stands
+   as a menu is (`Card`, raised on a menu's corner and shadow), and its chevron, shown while the pointer is on it, stands
    on the very spot of the rail's: as far in from the card's outer edges as
    the rail's padding, less the card's border. Its first line is that
    chevron's height, so the heading on it stands level with it, as the
@@ -4973,10 +4943,6 @@ ul.actor-stack {
   width: var(--summary-width);
   max-height: 100%;
   flex-direction: column;
-  border: var(--card-edge) solid var(--luke-color-border);
-  border-radius: var(--luke-radius-14);
-  background: var(--luke-color-overlay);
-  box-shadow: 0 16px 40px var(--luke-color-shadow);
   outline: none; /* no ring: a card holding focus for its controls */
   transform-origin: top right;
   animation:
@@ -5067,15 +5033,6 @@ ul.actor-stack {
 
 /* It grows out of the rail it stands over rather than dropping as a menu
    does, so its chevron never leaves the spot it shares with the rail's. */
-.task-summary-rows {
-  display: flex;
-  flex-direction: column;
-  gap: var(--luke-list-gap);
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
 .task-summary-row {
   display: flex;
   width: 100%;
@@ -5245,31 +5202,10 @@ ul.actor-stack {
   bottom: 0;
 }
 
-/* A resize edge straddles its pane's border, wider than it looks: the side
-   panel's left border, the sidebar's right. */
-.side-panel-resize,
-.sidebar-resize {
-  position: absolute;
-  z-index: 2;
-  top: 0;
-  bottom: 0;
-  width: 6px;
-  cursor: col-resize;
-  outline: none; /* no ring: the edge fills in the focus colour */
-  transition: background-color var(--luke-duration-hover) ease;
-}
-
-[data-luke-profile="desktop"] .side-panel-resize,
-[data-luke-profile="desktop"] .sidebar-resize {
-  -webkit-app-region: no-drag;
-}
-
-.side-panel-resize {
-  left: -3px;
-}
-
 /* A drag the edge's snap took away from under the pointer is still the
-   edge's, so the whole window wears its cursor and selects nothing. */
+   edge's (`@luke/ui`'s ResizeEdge marks the root), so the whole window wears
+   its cursor and selects nothing. Note that this stays out of the layers,
+   so it wins over every cursor the window draws. */
 :root[data-edge-drag] {
   cursor: col-resize;
   user-select: none;
@@ -5279,27 +5215,14 @@ ul.actor-stack {
   cursor: inherit;
 }
 
-.sidebar-resize {
-  right: -3px;
-}
-
-.side-panel-resize:hover,
-.side-panel-resize:active,
-.side-panel-resize:focus-visible,
-.sidebar-resize:hover,
-.sidebar-resize:active,
-.sidebar-resize:focus-visible {
-  background: color-mix(in srgb, var(--luke-color-accent) 55%, transparent);
-}
-
 /* A finger takes an edge across both columns' gutters, centred on the strip
    it draws, which keeps its width and its place. Note that the edge stops at
    the gutters rather than reaching a finger's full width, because past them
    it would stand over the rows and controls either column holds there, and
-   a press on one would start a drag instead. */
+   a press on one would start a drag instead. The gutters are the panel's,
+   so this stays here beside them rather than in `@luke/ui`'s ResizeEdge. */
 @media (pointer: coarse) {
-  .side-panel-resize::before,
-  .sidebar-resize::before {
+  .luke-resize-edge::before {
     position: absolute;
     top: 0;
     bottom: 0;
@@ -5457,7 +5380,7 @@ ul.actor-stack {
 }
 
 /* A pull request's branches on its card stand as inline code does in words
-   (`.markdown code`): mono on a tint, rounded. */
+   (`.luke-markdown code`): mono on a tint, rounded. */
 .card-code {
   padding: 0.08em 0.36em;
   border-radius: 0.36em;
@@ -5499,18 +5422,6 @@ ul.actor-stack {
   width: 12px;
   height: 12px;
   flex: none;
-}
-
-/* A pull request's labels (`tasks/pull-request-card-notes.tsx`), each
-   `@luke/ui`'s badge wearing the colour GitHub gives it as a dot, wrapping
-   where they run past the card's width. */
-.card-labels {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--luke-space-4);
-  margin: 0;
-  padding: 0;
-  list-style: none;
 }
 
 /* The plan's column's tabs and their "+" take what the toolbar leaves
@@ -5832,28 +5743,6 @@ ul.actor-stack {
   -webkit-app-region: no-drag;
 }
 
-/* The keys' hints along the foot, as ⌘K's foot has them. */
-.tab-switcher-footer {
-  display: flex;
-  align-items: center;
-  gap: var(--luke-space-16);
-  height: 36px;
-  padding: 0 var(--luke-space-16);
-  border-top: 1px solid var(--luke-color-border);
-  color: var(--luke-color-text-subtle);
-  font-size: var(--luke-type-caption-size);
-}
-
-.tab-switcher-footer-hint {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--luke-space-4);
-}
-
-.tab-switcher-footer {
-  --luke-shortcut-ink: var(--luke-color-text-muted);
-}
-
 /* Start ------------------------------------------------------------------ */
 
 /* The toolbar's Start, a shared SplitButton, and the note beside it. */
@@ -5898,15 +5787,6 @@ ul.actor-stack {
   min-height: 0;
   flex-direction: column;
   gap: var(--luke-space-12);
-}
-
-.feedback-dialog-images {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--luke-space-8);
-  margin: 0;
-  padding: 0;
-  list-style: none;
 }
 
 /* The signature as one line: the choice at its start, and who the note is
@@ -6274,9 +6154,9 @@ ul.actor-stack {
   }
 }
 
-/* The issue picked, over the words inside the card: one outlined line,
-   its mark, its key, its title cut short, a Linear issue's state, and the
-   × at its end. */
+/* The issue picked, over the words inside the card: one outlined line
+   (`Card`), its mark, its key, its title cut short, a Linear issue's state,
+   and the × at its end. */
 .new-task-issue {
   display: flex;
   min-width: 0;
@@ -6284,8 +6164,6 @@ ul.actor-stack {
   gap: var(--luke-space-6);
   margin: var(--luke-space-8) var(--luke-space-8) 0;
   padding: 0 0 0 var(--luke-space-8);
-  border: 1px solid var(--luke-color-border);
-  border-radius: var(--luke-radius-8);
   color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
 }
@@ -6466,6 +6344,8 @@ ul.actor-stack {
   line-height: normal;
 }
 
+/* A column: a well (`Card`), which rings and washes itself while a card is
+   carried over it (use-row-drag.ts), its head over its cards. */
 .tasks-board-column {
   display: flex;
   width: 320px; /* off-scale: a card's width, as Linear's board stands it */
@@ -6473,21 +6353,6 @@ ul.actor-stack {
   flex: 0 0 auto;
   flex-direction: column;
   padding: var(--luke-space-4) var(--luke-space-6) var(--luke-space-6);
-  border: 1px solid transparent;
-  border-radius: var(--luke-radius-10);
-  background: var(--luke-color-well);
-  transition:
-    background-color var(--luke-duration-hover) ease,
-    border-color var(--luke-duration-hover) ease;
-}
-
-/* The column a card is carried over (use-row-drag.ts) is ringed and washed,
-   so it reads as the one the card will land in. */
-.tasks-board-column[data-drop-target="true"] {
-  border-color: var(--luke-color-focus-ring);
-  background:
-    linear-gradient(var(--luke-color-fill-hover), var(--luke-color-fill-hover)),
-    var(--luke-color-well);
 }
 
 /* A column's head: its status's mark, its name, and how many it holds, on
@@ -6518,41 +6383,15 @@ ul.actor-stack {
   margin: 0 calc(-1 * var(--luke-focus-ring-reach)) calc(-1 * var(--luke-focus-ring-reach));
 }
 
-.tasks-board-cards {
-  display: flex;
-  flex-direction: column;
-  gap: var(--luke-space-6);
-  margin: 0;
-  padding: var(--luke-focus-ring-reach);
-  list-style: none;
-}
-
-/* A card: raised off its column's well on the page's own surface, inside a
-   hairline, with a soft shadow beneath that deepens under the pointer. Its
-   press covers the whole card, its foot's chips standing over it, so the
-   card opens wherever it is pressed but on a chip. Its transform is a
-   drag's (use-row-drag.ts), on the motion tokens as a sidebar row's is. */
+/* A card: raised off its column's well, lifting under the pointer and while
+   its menu is open (`Card`). Its press covers the whole card, its foot's
+   chips standing over it, so the card opens wherever it is pressed but on a
+   chip. Its transform is a drag's (use-row-drag.ts), timed by the card. */
 .tasks-board-card {
-  position: relative;
   display: flex;
   flex-direction: column;
   gap: var(--luke-space-6);
   padding: var(--luke-space-8) var(--luke-space-8) var(--luke-space-6) var(--luke-space-12);
-  border: 1px solid var(--luke-color-border);
-  border-radius: var(--luke-radius-8);
-  background: var(--luke-color-surface);
-  box-shadow: 0 1px 2px var(--luke-color-shadow-soft);
-  transition:
-    transform var(--luke-duration-fast) var(--luke-spring-fast),
-    border-color var(--luke-duration-hover) ease,
-    box-shadow var(--luke-duration-hover) ease,
-    opacity var(--luke-duration-quick) var(--luke-motion-exit);
-}
-
-.tasks-board-card:hover,
-.tasks-board-card[data-menu-open="true"] {
-  border-color: var(--luke-color-border-strong);
-  box-shadow: 0 2px 6px var(--luke-color-shadow-soft);
 }
 
 /* The card holding the keyboard, or whose menu is open, stands over its
@@ -6571,10 +6410,6 @@ ul.actor-stack {
 
 .tasks-board-cards[data-dragging="true"] {
   cursor: grabbing;
-}
-
-.tasks-board-card[data-lifted="true"] {
-  border-radius: var(--luke-radius-8);
 }
 
 /* What a card's press shows, or its field while it is renamed: its first

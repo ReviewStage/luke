@@ -1,9 +1,14 @@
 import type { CodingAgentBrief, CodingAgentContext } from "@luke/features/coding-agent-wire";
 import {
   AnchoredPopover,
+  Fact,
+  Facts,
+  GAP,
   IconButton,
+  LAYOUT_ELEMENT,
   POPOVER_ALIGN,
   PopoverPanel,
+  Stack,
   Tooltip,
   useMinute,
 } from "@luke/ui";
@@ -112,7 +117,7 @@ function ContextPopover({
           />
         ))}
       </div>
-      <ul className="agent-context-legend">
+      <Stack as={LAYOUT_ELEMENT.UL} gap={GAP.ITEM}>
         {rows.map((row) => (
           <li key={row.part} className="agent-context-row" data-part={row.part}>
             <span className="agent-context-swatch" aria-hidden="true" />
@@ -120,15 +125,14 @@ function ContextPopover({
             <span className="agent-context-count">{rowCount(row)}</span>
           </li>
         ))}
-      </ul>
-      <dl className="agent-context-stats">
+      </Stack>
+      <Facts ruled>
         {contextStats(context, now).map((stat) => (
-          <div key={stat.label} className="agent-context-row">
-            <dt className="agent-context-label">{stat.label}</dt>
-            <dd className="agent-context-count">{stat.value}</dd>
-          </div>
+          <Fact key={stat.label} label={stat.label}>
+            {stat.value}
+          </Fact>
         ))}
-      </dl>
+      </Facts>
       <p className="agent-context-note">As of the agent's last step. ~ marks an estimate.</p>
     </PopoverPanel>
   );

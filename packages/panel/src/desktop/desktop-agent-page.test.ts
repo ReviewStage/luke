@@ -48,6 +48,7 @@ import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
 import { runAppCommand } from "../app-commands.js";
+import { SIDE_BUNDLES } from "../bundle-loader.js";
 import type { AgentCallPlace } from "../tasks/agent-call.js";
 import { archiveWords } from "../tasks/coding-agent-model.js";
 import { SIDE_PANEL_TAB, type SidePanelControl, useSidePanel } from "../tasks/use-side-panel.js";
@@ -81,6 +82,7 @@ import {
 import { onRegistry } from "../testing/copy-feedback.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
+import { bundleLanded } from "../testing/side-bundles.js";
 import { codingAgentsControl, tasksControl } from "../testing/tasks-control.js";
 import { newestToastSays } from "../testing/toast.js";
 import { ToastHost } from "../toast.js";
@@ -210,6 +212,14 @@ let gitHub: ReadonlyMap<number, { title: string; url: string; state: PullRequest
 
 // Landed before any box renders, as the panel lands it after its first paint.
 beforeAll(() => Effect.runPromise(editorBundleLanded));
+
+// Note that the terminal bundle is read here first, as the panel reads it once a
+// terminal has opened, so the Mac terminal Run opens mounts within the test's own
+// ticks rather than whenever a busy machine lets the import land.
+beforeAll(() => Effect.runPromise(bundleLanded(SIDE_BUNDLES.terminal)));
+
+/** What `standTerminalDocument` stood in, taken down once the page is gone. */
+let takeDownTerminal: (() => void) | undefined;
 
 beforeEach(() => {
   pages = [{ agent: PAGE }];
@@ -352,6 +362,8 @@ afterEach(() => {
   act(() => root?.unmount());
   root = undefined;
   document.body.innerHTML = "";
+  takeDownTerminal?.();
+  takeDownTerminal = undefined;
 });
 
 /** The page of the agent, standing in the task's place, as the window's tasks control holds it. */
@@ -421,7 +433,7 @@ test("the page draws the task column's agent pane, at its reading width, and ⌘
   assert.ok(page.querySelector(".desktop-agent [role='log']"), "the transcript is the pane's");
   assert.equal(offered, true);
   assert.ok(page.querySelector(".desktop-agent")?.closest(".find-scope"), "the pane finds");
-  assert.ok(page.querySelector("search[aria-label='Find']"), "⌘F opens the find bar");
+  assert.ok(page.querySelector("[role='search'][aria-label='Find']"), "⌘F opens the find bar");
 });
 
 test("Fork to new agent on the page's agent opens the page's draft in its place, which starts the fork where that agent is, naming no task, and the new agent opens on its own page", async () => {
@@ -1573,7 +1585,40 @@ test("an archived agent's page offers no terminal, from its ⋯ or ⌘J, its san
   assert.deepEqual(chosen, []);
 });
 
+/**
+ * Stands in what a Mac terminal tab's surface reads from the window and jsdom
+ * has not, constructed sheets and media queries (as `mac-terminal-tab.test.ts`
+ * does), so the terminal Run opens mounts; answers the way to take them down
+ * again, which waits for the page to go.
+ */
+function standTerminalDocument(): () => void {
+  const sheets = Object.getOwnPropertyDescriptor(document, "adoptedStyleSheets");
+  const media = Object.getOwnPropertyDescriptor(window, "matchMedia");
+  Object.defineProperty(document, "adoptedStyleSheets", {
+    configurable: true,
+    writable: true,
+    value: [],
+  });
+  Object.defineProperty(window, "matchMedia", {
+    configurable: true,
+    value: () => ({
+      matches: false,
+      addEventListener: () => undefined,
+      removeEventListener: () => undefined,
+      addListener: () => undefined,
+      removeListener: () => undefined,
+    }),
+  });
+  return () => {
+    if (sheets === undefined) Reflect.deleteProperty(document, "adoptedStyleSheets");
+    else Object.defineProperty(document, "adoptedStyleSheets", sheets);
+    if (media === undefined) Reflect.deleteProperty(window, "matchMedia");
+    else Object.defineProperty(window, "matchMedia", media);
+  };
+}
+
 test("Run in the header of the agent's Pull request tab runs its branch on this Mac in the side panel, from its own repository", async () => {
+  takeDownTerminal = standTerminalDocument();
   pages = [{ agent: { ...PAGE, status: CODING_AGENT_STATUS.RUNNING } }];
   published = {
     repository: "acme/relay",

@@ -4,8 +4,8 @@
    an app's own sources stop at its own directory. These lines are resolved
    against this file, so an app that imports it reads the panel's sources as
    well as its own, and a utility a panel module spells is not dropped. The
-   second is the markdown renderer the panel draws a reply with, Streamdown,
-   whose own components are written in the same utilities and live in the
-   panel's dependencies, not the app's. */
+   second is the markdown renderer the panel draws a reply with, Streamdown
+   under `@luke/ui/markdown`, whose own components are written in the same
+   utilities and live in `@luke/ui`'s dependencies, not the app's. */
 @source "./";
-@source "../node_modules/streamdown/dist/*.js";
+@source "../../ui/node_modules/streamdown/dist/*.js";

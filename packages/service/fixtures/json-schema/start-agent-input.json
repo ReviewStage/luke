@@ -33,7 +33,7 @@
       "type": "string",
       "minLength": 1,
       "maxLength": 80,
-      "description": "The agent's title from the start, what it works on, shown beside the human name it is given, such as the pull request it will open; leave it out to have it named from what it is told."
+      "description": "The agent's title from the start, how the developer sees it named, such as the pull request it will open; leave it out to have it named from what it is told."
     },
     "branch": {
       "type": "string",

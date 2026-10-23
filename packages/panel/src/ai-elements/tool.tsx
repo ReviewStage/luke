@@ -1,5 +1,11 @@
 import {
   Badge,
+  CARD_CORNER,
+  CARD_LOOK,
+  CARD_PADDING,
+  Card,
+  DISCLOSURE_BODY,
+  DisclosureBody,
   GlyphSlot,
   LineSummary,
   OneLine,
@@ -9,7 +15,7 @@ import {
 import { type ReactNode, useState } from "react";
 import { GLYPH_STATE, StateGlyph, stateEndMark } from "../state-glyph.js";
 import { CodeBlock } from "./code-block.js";
-import { Fold, FoldBody, type FoldProps } from "./fold.js";
+import { Fold, type FoldProps } from "./fold.js";
 
 /**
  * tool.tsx -- AI Elements' Tool: one tool call as a compact row, with its input and its answer under it once opened.
@@ -218,8 +224,26 @@ export function ToolHeader({
 }
 
 /** The body under an open row: a card holding the blocks, a hairline between them, clipped to its corners, so what is in it rings inside itself. */
-export function ToolContent({ children }: { children: ReactNode }): ReactNode {
-  return <FoldBody className="tool-body">{children}</FoldBody>;
+export function ToolContent({
+  name,
+  children,
+}: {
+  /** The class its place names what it holds by, beside the body's own. */
+  name?: string | undefined;
+  children: ReactNode;
+}): ReactNode {
+  return (
+    <DisclosureBody inset={DISCLOSURE_BODY.NONE}>
+      <Card
+        look={CARD_LOOK.TINT}
+        corner={CARD_CORNER.CONTROL}
+        padding={CARD_PADDING.FLUSH}
+        className={name === undefined ? "tool-body" : `tool-body ${name}`}
+      >
+        {children}
+      </Card>
+    </DisclosureBody>
+  );
 }
 
 /** A block's words drawn by its kind. */

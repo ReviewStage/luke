@@ -167,7 +167,7 @@ function cardOf(
 test("the saved body is drawn as Markdown", () => {
   const markup = renderToStaticMarkup(createElement(PlanBody, { task: TASK, live: false }));
 
-  assert.match(markup, /<p class="markdown-heading" data-level="2">Goal<\/p>/u);
+  assert.match(markup, /<p class="luke-markdown-heading" data-level="2">Goal<\/p>/u);
   assert.match(markup, /Invite a teammate by email\./u);
 });
 
@@ -421,7 +421,7 @@ test("a title long enough to fill its line wraps short of its ⋯, as a section'
       },
     },
   );
-  const title = view.querySelector(".plan-unit-attributed .task-title > .markdown-heading");
+  const title = view.querySelector(".plan-unit-attributed .task-title > .luke-markdown-heading");
   const titleRow = title?.closest(".plan-unit-attributed")?.querySelector(".plan-unit-more");
   // Note that jsdom resolves no custom property, so the room reads as the length it is declared by.
   const room = title === null || title === undefined ? "" : getComputedStyle(title).paddingRight;

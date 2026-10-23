@@ -87,7 +87,10 @@ test("folded, a note is its head alone, and a find through the tab still finds i
   const heard: [string, boolean][] = [];
   const folded = draw(noteOf(notes(["call-1"], heard)));
   assert.equal(said(folded), 0, "no preview of its words");
-  assert.match(folded.querySelector(".annotation-card-head")?.textContent ?? "", /^Invite emails/u);
+  assert.match(
+    folded.querySelector(".annotation-card-fold > summary")?.textContent ?? "",
+    /^Invite emails/u,
+  );
   const finding = draw(
     createElement(DisclosureFind, {
       finding: true,

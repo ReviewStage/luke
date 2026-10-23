@@ -213,6 +213,8 @@ import {
   type TaskPagesFollow,
   type TaskPagesFollowed,
   type TasksBoardSaveParams,
+  type TasksBrowserTabOpenAnswer,
+  type TasksBrowserTabOpenParams,
   type TasksBrowserTabsAnswer,
   type TasksBrowserTabsParams,
   type TasksCommentActParams,
@@ -299,6 +301,7 @@ import {
   taskBrowserTabsFollowedSchema,
   taskHistoryFollowedSchema,
   taskPagesFollowedSchema,
+  tasksBrowserTabOpenAnswerSchema,
   tasksBrowserTabsAnswerSchema,
   tasksCommentAnswerSchema,
   tasksCommentsAnswerSchema,
@@ -527,6 +530,8 @@ export interface HostOperator {
   tasksIssueLinks(params: TasksIssueLinksParams): Effect.Effect<TasksIssueLinksAnswer>;
   /** The Browser tabs open in a task's agents' browsers, the oldest first; or that the service did not answer. */
   tasksBrowserTabs(params: TasksBrowserTabsParams): Effect.Effect<TasksBrowserTabsAnswer>;
+  /** A Browser tab opened at an address in a task's coding agent's browser, taken over by the account; or why none opened. */
+  tasksBrowserTabOpen(params: TasksBrowserTabOpenParams): Effect.Effect<TasksBrowserTabOpenAnswer>;
   /** One more issue linked to a task, read from its provider by the service; or why none was. */
   tasksIssueLink(params: TasksIssueLinkParams): Effect.Effect<TasksIssueLinkAnswer>;
   /** Which keyword a task's pull requests write of one of its links; or why it stands as it was. */
@@ -1480,6 +1485,15 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       Effect.map(
         client.call(GATEWAY_METHOD.TASKS_BROWSER_TABS, { taskId: params.taskId }),
         taskIssueAnswer(tasksBrowserTabsAnswerSchema),
+      ),
+    tasksBrowserTabOpen: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.TASKS_BROWSER_TAB_OPEN, {
+          taskId: params.taskId,
+          agentId: params.agentId,
+          address: params.address,
+        }),
+        taskIssueAnswer(tasksBrowserTabOpenAnswerSchema),
       ),
     tasksIssueLink: (params) =>
       Effect.map(

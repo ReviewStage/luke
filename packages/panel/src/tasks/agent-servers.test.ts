@@ -306,7 +306,7 @@ test("on a server's page the arrows move the highlight, and Enter opens the tool
     [...page.querySelectorAll(".integration-tool-hints li")].map((hint) => hint.textContent),
     ["Read-only", "Only Vercel's own data"],
   );
-  assert.equal(page.querySelector(".markdown-heading")?.textContent, "Returns");
+  assert.equal(page.querySelector(".luke-markdown-heading")?.textContent, "Returns");
   assert.equal(
     page.querySelector(".integration-tool-description-whole code")?.textContent,
     "framework",

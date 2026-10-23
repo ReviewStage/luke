@@ -496,7 +496,6 @@ function EditorChatComposer({
       ref={card}
       className="agent-composer chat-composer"
       data-compact={String(compact === true)}
-      data-dropping={dropping ? "" : undefined}
       onDragOver={(event) => {
         if (!carriesFiles(event)) return;
         event.preventDefault();
@@ -515,6 +514,7 @@ function EditorChatComposer({
       }}
     >
       <PromptInput
+        dropping={dropping}
         onSubmit={() => {
           refocus.current = card.current?.contains(document.activeElement) === true;
           send();

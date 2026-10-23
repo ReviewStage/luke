@@ -43,6 +43,22 @@ entry in `knip.json`, a `runtimeEdges` row in
 `tools/anti-slop/effect-edges.json`, or a deployment or test-support file.
 Review places a module and a component alike under this rule.
 
+Lint holds the UI half of this (`anti-slop/no-raw-press-outside-ui`): outside
+`packages/ui`, every app, test, and the catalog included, an intrinsic
+(lowercase) JSX element is never a control. A raw `button`, `input` (bar
+`type="hidden"`), `select`, `textarea`, or `summary`, a pressable `role`
+(`button`, `tab`, `option`, `menuitem*`, `radio`, `checkbox`, `switch`,
+`slider`, `link` off an `<a>`, or one that is no literal), and a press event (`onClick`, `onDoubleClick`,
+`onAuxClick`, `onContextMenu`, `onMouseDown`/`Up`, `onPointerDown`/`Up`,
+`onTouchStart`/`End`, and their `Capture` forms) are errors, as is
+`onKeyDown`/`onKeyUp` on an element with `tabIndex` or `contentEditable`.
+Hover, drag and drop, focus, wheel, scroll, and clipboard events, keys on a
+container that takes no focus, and a spread from a ui helper
+(`menu.contextMenu()`) stay allowed. There is no escape hatch: `pnpm lint` runs
+`tools/anti-slop/press-guard-check.ts`, which fails on a disable comment that
+would silence the rule and on an `.oxlintrc.json` that weakens it. Where it
+fires, use a `@luke/ui` component, or add the component or variant there.
+
 ## Never
 
 - Never let a credential or account secret enter a Gateway answer or event, the
@@ -69,12 +85,6 @@ Review places a module and a component alike under this rule.
   on 2026-10-13: the Keyframe session token for a call's own avatar may reach
   the panel window, which runs that session, and never the voice window,
   a Gateway answer or event, app state, a counted event, a trace, or a fixture.
-  And, approved by Dean on 2026-10-16, a Browser tab's page, its address,
-  title, and a still of it go only to the panel that opened the tab, from its
-  view in main (`apps/desktop/src/main/window/browser-views.ts`), never into a
-  trace, a counted event, a fixture, app state, the service, or the voice
-  window; the still is left out of the screen recording, and the title and
-  address the tab draws are masked there as every word is.
   And, approved by Dean on 2026-10-20, an agent's cloud browser, a Chromium
   in that agent's own Vercel Sandbox, shows its pages, their live-view frames,
   address, title, screenshots, and text snapshots to that agent and its workers,

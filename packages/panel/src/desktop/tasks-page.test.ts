@@ -332,6 +332,75 @@ test("the Filter narrows the List to the values chosen, several in one visit, a 
   assert.equal(again.querySelector("[data-filtered='true']"), null);
 });
 
+/** The list motion's tokens, as the app's sheets set them, and an engine that records each motion rather than playing it; answers what was played and a way to take both away. */
+function recordMotions() {
+  const tokens = {
+    "--luke-duration-exit": "90ms",
+    "--luke-motion-exit": "ease",
+    "--luke-duration-quick": "140ms",
+    "--luke-duration-shape": "460ms",
+    "--luke-spring": "ease-out",
+    "--luke-row-stagger": "32ms",
+  };
+  for (const [name, value] of Object.entries(tokens)) {
+    document.documentElement.style.setProperty(name, value);
+  }
+  const played: { element: Element; keyframes: Keyframe[]; finish: () => void }[] = [];
+  Object.defineProperty(Element.prototype, "animate", {
+    configurable: true,
+    value(this: Element, keyframes: Keyframe[]) {
+      const motion = { onfinish: null as (() => void) | null, cancel: () => undefined };
+      played.push({ element: this, keyframes, finish: () => motion.onfinish?.() });
+      return motion;
+    },
+  });
+  return {
+    played,
+    scaled: (element: Element | null | undefined) =>
+      played.some(
+        (motion) =>
+          motion.element === element &&
+          motion.keyframes.some((frame) => String(frame.transform).includes("scale")),
+      ),
+    remove: () => {
+      for (const name of Object.keys(tokens)) document.documentElement.style.removeProperty(name);
+      Reflect.deleteProperty(Element.prototype, "animate");
+    },
+  };
+}
+
+test("a field's chip scales in as it is filtered, and lifted, the list widens at once while the chip scales out out of reach", async () => {
+  const motion = recordMotions();
+  try {
+    const page = await mountPage();
+    const line = () => page.querySelector<HTMLElement>(".tasks-filter-line");
+    assert.equal(line()?.hidden, true, "the line stands ready, hidden");
+    openOptions(page, "Filter");
+    choose("Priority", "High");
+    closeMenus();
+    const chip = page.querySelector("[data-motion-key='priority']");
+    assert.ok(motion.scaled(chip), "the first chip scales in");
+
+    const lift = page.querySelector<HTMLButtonElement>(
+      "button[aria-label='Clear the priority filter']",
+    );
+    act(() => (lift ?? assert.fail("a way to lift it")).click());
+    assert.equal(groups(page).length, 4, "the list widens on the press");
+    const leaving = page.querySelector("[data-motion-key='priority']");
+    assert.equal(leaving?.hasAttribute("data-leaving"), true, "drawn through its exit");
+    assert.equal(leaving?.hasAttribute("inert"), true);
+    assert.ok(motion.scaled(leaving), "it scales out");
+
+    act(() => {
+      for (const each of motion.played.splice(0)) each.finish();
+    });
+    assert.equal(page.querySelector("[data-motion-key='priority']"), null);
+    assert.equal(line()?.hidden, true);
+  } finally {
+    motion.remove();
+  }
+});
+
 test("a filter chosen here keeps another workspace's filter that another tab kept meanwhile", async () => {
   const page = await mountPage();
   const elsewhere = { "workspace-beta": { priority: [TASK_PRIORITY.LOW] } };
@@ -412,9 +481,9 @@ test("find opened in the List is let go as the Board is chosen", async () => {
   act(() => {
     assert.ok(runAppCommand(APP_COMMAND.FIND), "the List offers find");
   });
-  assert.ok(page.querySelector("search[aria-label='Find']"), "the List's find bar stands");
+  assert.ok(page.querySelector("[role='search'][aria-label='Find']"), "the List's find bar stands");
   act(() => buttonNamed(page, "Board").click());
-  assert.equal(page.querySelector("search[aria-label='Find']"), null);
+  assert.equal(page.querySelector("[role='search'][aria-label='Find']"), null);
 });
 
 test("a row's words said to a screen reader alone are left out of find, so a key searched is found once", async () => {

@@ -12,6 +12,11 @@ import { CHAPTERS_KEY, CHAPTERS_SHORTCUTS, chaptersKeyFor } from "@luke/settings
 import {
   BUTTON_VARIANT,
   Button,
+  CARD_CORNER,
+  CARD_ELEMENT,
+  CARD_LOOK,
+  CARD_PADDING,
+  Card,
   CHIP_LOOK,
   CHIP_SIZE,
   CHIP_TONE,
@@ -25,10 +30,13 @@ import {
   FILL_ELEMENT,
   FILL_FLOW,
   Fill,
+  GAP,
   HoverCard,
   HoverCardHead,
   HoverCardNote,
   IconButton,
+  INSET,
+  LAYOUT_ELEMENT,
   MarkStrip,
   NAV_CURRENT,
   NavItem,
@@ -37,6 +45,7 @@ import {
   Skeleton,
   SkeletonRegion,
   SpinnerRegion,
+  Stack,
   TEXT_BUTTON_TONE,
   TEXT_ELEMENT,
   TEXT_TONE,
@@ -377,7 +386,12 @@ function ChapterRail({
       inert={leaving}
     >
       <ScrollArea>
-        <ol className="chapter-rail-list">
+        <Stack
+          as={LAYOUT_ELEMENT.OL}
+          gap={GAP.NONE}
+          inset={INSET.COLUMN}
+          className="chapter-rail-list"
+        >
           {rows.map((row, index) => {
             const risk = row.chapter.risk === null ? undefined : RISK_WORDS[row.chapter.risk];
             const done = viewed(row.paths);
@@ -407,7 +421,7 @@ function ChapterRail({
               </li>
             );
           })}
-        </ol>
+        </Stack>
       </ScrollArea>
     </nav>
   );
@@ -452,7 +466,13 @@ function KeyChangeItem({
 }): React.JSX.Element {
   const first = firstLineRef(change.lineRefs, paths);
   return (
-    <li className="chapter-key-change">
+    <Card
+      as={CARD_ELEMENT.LI}
+      look={CARD_LOOK.OUTLINE}
+      corner={CARD_CORNER.CONTROL}
+      padding={CARD_PADDING.NONE}
+      className="chapter-key-change"
+    >
       <div className="chapter-key-change-words">
         <TranscriptWords text={change.content} />
       </div>
@@ -463,7 +483,7 @@ function KeyChangeItem({
           {lineRefLabel(first)}
         </TextButton>
       )}
-    </li>
+    </Card>
   );
 }
 
@@ -705,7 +725,7 @@ function ChaptersReading({
                     <Text as={TEXT_ELEMENT.H4} variant={TEXT_VARIANT.CAPTION}>
                       {CHAPTERS_WORDS.WHAT_TO_REVIEW}
                     </Text>
-                    <ul>
+                    <Stack as={LAYOUT_ELEMENT.UL} gap={GAP.CONTROL}>
                       {chapter.keyChanges.map((change, index) => (
                         <KeyChangeItem
                           // oxlint-disable-next-line react/no-array-index-key -- a chapter's key changes never move.
@@ -729,7 +749,7 @@ function ChaptersReading({
                           }
                         />
                       ))}
-                    </ul>
+                    </Stack>
                   </section>
                 )}
               </div>

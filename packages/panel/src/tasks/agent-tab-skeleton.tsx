@@ -1,4 +1,11 @@
-import { FILL_ELEMENT, Fill, SKELETON_SHAPE, Skeleton, SkeletonRegion } from "@luke/ui";
+import {
+  ComposerFrame,
+  FILL_ELEMENT,
+  Fill,
+  SKELETON_SHAPE,
+  Skeleton,
+  SkeletonRegion,
+} from "@luke/ui";
 
 /**
  * agent-tab-skeleton.tsx -- an agent's tab in the shape it lands in, while what it draws is on its way.
@@ -47,13 +54,13 @@ export function TranscriptSkeleton({
 export function ComposerSkeleton(): React.JSX.Element {
   return (
     <div className="agent-composer" aria-hidden="true">
-      <div className="prompt-input">
+      <ComposerFrame className="prompt-input">
         <div className="agent-composer-input" />
         <div className="prompt-input-footer">
           <Skeleton shape={SKELETON_SHAPE.CONTROL} width={COMPOSER_CONTROL_WIDTHS.lead} />
           <Skeleton shape={SKELETON_SHAPE.CONTROL} width={COMPOSER_CONTROL_WIDTHS.trail} />
         </div>
-      </div>
+      </ComposerFrame>
     </div>
   );
 }

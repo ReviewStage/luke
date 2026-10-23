@@ -1,10 +1,17 @@
 import type { CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import {
+  CARD_CORNER,
+  CARD_LOOK,
+  CARD_PADDING,
+  CARD_SHADOW,
+  Card,
   type ContextMenuProps,
+  GAP,
   HoverCard,
   HoverCardHead,
   HoverCardNote,
   IconButton,
+  LAYOUT_ELEMENT,
   LIST_DENSITY,
   List,
   ListRow,
@@ -13,6 +20,7 @@ import {
   SCROLL_FADE,
   SCROLL_SIZE,
   ScrollArea,
+  Stack,
   Tooltip,
   useMenu,
 } from "@luke/ui";
@@ -686,9 +694,9 @@ function SummaryCard({
   /** Hands the card's element to the hold that draws it through its exit. */
   ref: (element: HTMLElement | null) => void;
 }): React.JSX.Element {
-  const card = useRef<HTMLDivElement>(null);
+  const card = useRef<HTMLElement>(null);
   const drawn = useCallback(
-    (node: HTMLDivElement | null) => {
+    (node: HTMLElement | null) => {
       card.current = node;
       hold(node);
     },
@@ -736,7 +744,11 @@ function SummaryCard({
     };
   }, [collapse, onDismiss, leaving]);
   return (
-    <div
+    <Card
+      look={CARD_LOOK.RAISED}
+      corner={CARD_CORNER.MENU}
+      padding={CARD_PADDING.NONE}
+      shadow={CARD_SHADOW.MENU}
       ref={drawn}
       id={id}
       className="task-summary-card"
@@ -760,7 +772,7 @@ function SummaryCard({
           <SummaryList sections={sections} agents={agents} shown onPicked={onDismiss} />
         </div>
       </ScrollArea>
-    </div>
+    </Card>
   );
 }
 
@@ -857,11 +869,16 @@ export function TaskSummary({
               {layout.mode === SUMMARY_MODE.COLUMN ? (
                 <SummaryList sections={sections} agents={tasks.agents} shown={tasks.shown} />
               ) : kinds.length === 0 ? null : (
-                <ul className="task-summary-rows" aria-label={TABS_SECTION}>
+                <Stack
+                  as={LAYOUT_ELEMENT.UL}
+                  gap={GAP.ROW}
+                  className="task-summary-rows"
+                  aria-label={TABS_SECTION}
+                >
                   {kinds.map((entry) => (
                     <RailRow key={entry.row.id} entry={entry} />
                   ))}
-                </ul>
+                </Stack>
               )}
             </div>
           </ScrollArea>

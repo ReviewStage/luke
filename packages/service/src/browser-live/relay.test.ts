@@ -6,6 +6,7 @@ import {
   BROWSER_LIVE_CLIENT,
   BROWSER_LIVE_CLOSE_CODE,
   BROWSER_LIVE_CLOSE_REASON,
+  BROWSER_LIVE_HISTORY,
   BROWSER_LIVE_KEY_ACTION,
   BROWSER_LIVE_MOUSE_ACTION,
   BROWSER_LIVE_MOUSE_BUTTON,
@@ -26,12 +27,8 @@ import {
   fakeCdpPeer,
   fakeSandboxApi,
 } from "../testing/agent-browser-fake.js";
-import {
-  BROWSER_LIVE_BOUNDS,
-  type BrowserLiveDependencies,
-  type BrowserLiveViewer,
-  relayBrowserTab,
-} from "./relay.js";
+import { BROWSER_LIVE_BOUNDS } from "./bounds.js";
+import { type BrowserLiveDependencies, type BrowserLiveViewer, relayBrowserTab } from "./relay.js";
 
 /**
  * One live view of one tab, over a fake Chromium behind the real browser
@@ -135,6 +132,9 @@ function liveBrowser(
         if (command.method === "Target.attachToTarget")
           return { result: { sessionId: TARGET_SESSION } };
         if (command.method === "Target.getTargets") return undefined;
+        if (command.method === "Page.getNavigationHistory") {
+          return { result: { currentIndex: 1, entries: [{ id: 10 }, { id: 11 }, { id: 12 }] } };
+        }
         if (options.mouseHangs === true && command.method === "Input.dispatchMouseEvent") {
           return { silent: true };
         }
@@ -156,6 +156,7 @@ function world(
   const holds: number[] = [];
   const keptAlive: { readonly sessionId: string; readonly at: number }[] = [];
   const handedBack: string[] = [];
+  const notedPages: { readonly targetId: string; readonly address: string }[] = [];
   const setDriver = (driverUserId: string | null, heldUntil: Date | null) => {
     if (row !== undefined) row = { ...row, tab: { ...row.tab, driverUserId, heldUntil } };
   };
@@ -188,6 +189,8 @@ function world(
         setDriver(null, null);
         return true;
       }),
+    notePage: (_tab, targetId, page) =>
+      Effect.sync(() => void notedPages.push({ targetId, address: page.address })),
     hold: (_conversation, heldUntil) => Effect.sync(() => void holds.push(heldUntil.getTime())),
     keepAlive: (sessionId) =>
       Effect.flatMap(Clock.currentTimeMillis, (at) =>
@@ -199,6 +202,7 @@ function world(
     holds,
     keptAlive,
     handedBack,
+    notedPages,
     close: () => {
       row = undefined;
     },
@@ -369,6 +373,40 @@ it.effect("the tab's address, title, and loading state reach the panel as they c
   }),
 );
 
+/** The tab's page moved to the address and title given, as Chromium tells it. */
+const pageMoved = (targetId: string, url: string, title: string) => ({
+  method: "Target.targetInfoChanged",
+  params: { targetInfo: { targetId, url, title, type: "page" } },
+});
+
+it.effect(
+  "each move of the tab's page the view sees is kept on the tab's own target, for a restart to reopen it there, but a blank page and another tab's",
+  () =>
+    Effect.gen(function* () {
+      const { peer, browser, commands } = yield* liveBrowser();
+      const panel = yield* scriptedViewer;
+      const store = world(browser);
+      const { fiber } = yield* started(
+        peer,
+        commands,
+        Effect.scoped(relayBrowserTab(panel.viewer, ASK, reachedTab(undefined), store.deps)),
+      );
+
+      yield* peer.emit(pageMoved(TARGET, "https://example.test/dashboard", "Dashboard"));
+      yield* peer.emit(pageMoved("page-other", "https://example.test/other", "Other"));
+      yield* peer.emit(pageMoved(TARGET, "about:blank", ""));
+      yield* until(() =>
+        panel.ofType(BROWSER_LIVE_SERVER.PAGE).some((message) => message.address === "about:blank"),
+      );
+
+      assert.deepEqual(store.notedPages, [
+        { targetId: TARGET, address: "https://example.test/dashboard" },
+      ]);
+      yield* panel.leave;
+      yield* Fiber.join(fiber);
+    }),
+);
+
 const VIEWPORT = { type: BROWSER_LIVE_CLIENT.VIEWPORT, width: 640, height: 400 } as const;
 const CLICK = {
   type: BROWSER_LIVE_CLIENT.MOUSE,
@@ -438,6 +476,93 @@ it.effect(
         params: { text: "pässword" },
         sessionId: TARGET_SESSION,
       });
+      yield* panel.leave;
+      yield* Fiber.join(fiber);
+    }),
+);
+
+/** The commands that move the tab's page, as a step from its bar sends them. */
+const steering = (commands: readonly FakeCdpCommand[]) =>
+  commands.filter((command) =>
+    ["Page.navigate", "Page.reload", "Page.navigateToHistoryEntry"].includes(command.method),
+  );
+
+it.effect(
+  "a step from the bar takes a tab nobody drives over for the member, then opens the address, steps back and forward, and reloads",
+  () =>
+    Effect.gen(function* () {
+      const { peer, browser, commands } = yield* liveBrowser();
+      const panel = yield* scriptedViewer;
+      const { fiber } = yield* started(
+        peer,
+        commands,
+        Effect.scoped(
+          relayBrowserTab(panel.viewer, ASK, reachedTab(undefined), world(browser).deps),
+        ),
+      );
+
+      yield* panel.push({
+        type: BROWSER_LIVE_CLIENT.NAVIGATE,
+        address: "https://example.test/next",
+      });
+      yield* panel.push({ type: BROWSER_LIVE_CLIENT.HISTORY, step: BROWSER_LIVE_HISTORY.BACK });
+      yield* panel.push({ type: BROWSER_LIVE_CLIENT.HISTORY, step: BROWSER_LIVE_HISTORY.FORWARD });
+      yield* panel.push({ type: BROWSER_LIVE_CLIENT.HISTORY, step: BROWSER_LIVE_HISTORY.RELOAD });
+      yield* until(() => steering(commands).length === 4);
+
+      assert.equal(panel.ofType(BROWSER_LIVE_SERVER.DRIVER).at(-1)?.yours, true);
+      assert.deepEqual(panel.ofType(BROWSER_LIVE_SERVER.REFUSED), []);
+      assert.deepEqual(steering(commands), [
+        {
+          method: "Page.navigate",
+          params: { url: "https://example.test/next" },
+          sessionId: TARGET_SESSION,
+        },
+        {
+          method: "Page.navigateToHistoryEntry",
+          params: { entryId: 10 },
+          sessionId: TARGET_SESSION,
+        },
+        {
+          method: "Page.navigateToHistoryEntry",
+          params: { entryId: 12 },
+          sessionId: TARGET_SESSION,
+        },
+        { method: "Page.reload", params: {}, sessionId: TARGET_SESSION },
+      ]);
+      yield* panel.leave;
+      yield* Fiber.join(fiber);
+    }),
+);
+
+it.effect(
+  "a step from the bar is refused while another member holds the tab, and an address no Browser tab loads is passed over",
+  () =>
+    Effect.gen(function* () {
+      const { peer, browser, commands } = yield* liveBrowser();
+      const panel = yield* scriptedViewer;
+      const store = world(browser);
+      const { fiber } = yield* started(
+        peer,
+        commands,
+        Effect.scoped(relayBrowserTab(panel.viewer, ASK, reachedTab(undefined), store.deps)),
+      );
+
+      yield* panel.push({ type: BROWSER_LIVE_CLIENT.NAVIGATE, address: "file:///etc/hosts" });
+      store.driveAs("member-2", AN_HOUR_IN);
+      yield* panel.push({
+        type: BROWSER_LIVE_CLIENT.NAVIGATE,
+        address: "https://example.test/next",
+      });
+      yield* panel.push({ type: BROWSER_LIVE_CLIENT.HISTORY, step: BROWSER_LIVE_HISTORY.RELOAD });
+      yield* until(() => panel.ofType(BROWSER_LIVE_SERVER.REFUSED).length === 2);
+
+      assert.deepEqual(
+        panel.ofType(BROWSER_LIVE_SERVER.REFUSED).map((message) => message.reason),
+        [BROWSER_LIVE_REFUSAL.HELD, BROWSER_LIVE_REFUSAL.HELD],
+      );
+      assert.equal(panel.ofType(BROWSER_LIVE_SERVER.DRIVER).at(-1)?.driver?.userId, "member-2");
+      assert.deepEqual(steering(commands), [], "nothing moved the page another member drives");
       yield* panel.leave;
       yield* Fiber.join(fiber);
     }),

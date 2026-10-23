@@ -38,6 +38,9 @@ import {
   AVATAR_SHAPE,
   AVATAR_SIZE,
   Avatar,
+  BLOCK_LIST_ELEMENT,
+  BlockList,
+  BlockListItem,
   BUTTON_VARIANT,
   Button,
   CHIP_LOOK,
@@ -53,12 +56,16 @@ import {
   type CountTone,
   DETAIL_PAGE_INSET,
   DetailPage,
+  DISCLOSURE_SUMMARY,
   DisclosureAction,
   DisclosureChevron,
+  DisclosureSummary,
   EmptyState,
   ErrorState,
   Fill,
+  GAP,
   IconButton,
+  LAYOUT_ELEMENT,
   LINE_BUTTON_LOOK,
   LIST_DENSITY,
   LIST_VARIANT,
@@ -75,6 +82,7 @@ import {
   Skeleton,
   SkeletonRegion,
   SpinnerRegion,
+  Stack,
   TEXT_BUTTON_TONE,
   TEXT_ELEMENT,
   TEXT_VARIANT,
@@ -120,7 +128,7 @@ import {
   useState,
 } from "react";
 import { ACTOR_SIZE, ActorMark, ActorRef } from "../actor-ref.js";
-import { Fold, FoldBody, FoldSummary } from "../ai-elements/fold.js";
+import { Fold, FoldBody } from "../ai-elements/fold.js";
 import { appPlatform } from "../app-platform.js";
 import { useCopyLinkItem } from "../copy-link-item.js";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu.js";
@@ -581,8 +589,8 @@ function Section({
   }
   return (
     <section className="pull-request-section" aria-label={title}>
-      <Fold open={fold.open} onOpenChange={fold.onOpenChange}>
-        <FoldSummary className="pull-request-section-head">
+      <Fold className="pull-request-section-fold" open={fold.open} onOpenChange={fold.onOpenChange}>
+        <DisclosureSummary look={DISCLOSURE_SUMMARY.TRANSCRIPT}>
           <DisclosureChevron />
           {heading}
           {end === undefined ? null : (
@@ -590,7 +598,7 @@ function Section({
               <span className="pull-request-section-end">{end}</span>
             </DisclosureAction>
           )}
-        </FoldSummary>
+        </DisclosureSummary>
         <FoldBody className="pull-request-section-body">{children}</FoldBody>
       </Fold>
     </section>
@@ -1118,9 +1126,9 @@ function PendingList({
   picture: GitHubPictureDrawer;
 }): React.JSX.Element {
   return (
-    <ol className="pull-request-pending-list" aria-label={PENDING_WORDS.PENDING}>
+    <BlockList as={BLOCK_LIST_ELEMENT.OL} label={PENDING_WORDS.PENDING}>
       {drafts.map((draft) => (
-        <li key={draft.id} className="pull-request-thread-comment">
+        <BlockListItem key={draft.id}>
           <Text
             as={TEXT_ELEMENT.SPAN}
             variant={TEXT_VARIANT.INHERIT}
@@ -1142,9 +1150,9 @@ function PendingList({
             }
             words={<EntryWords entry={draft} picture={picture} />}
           />
-        </li>
+        </BlockListItem>
       ))}
-    </ol>
+    </BlockList>
   );
 }
 
@@ -1272,7 +1280,7 @@ function EntryCard({
       <EntryWords entry={entry} picture={picture} />
       <Reactions reactions={entry.reactions} subject={entry.subject} />
       {threads.length === 0 ? null : (
-        <ol className="pull-request-threads">
+        <Stack as={LAYOUT_ELEMENT.OL} gap={GAP.ITEM} className="pull-request-threads">
           {threads.map((thread, at) => (
             // Note that a thread is keyed by its first comment's page, which no other thread shares, or its place.
             <ThreadCard
@@ -1282,7 +1290,7 @@ function EntryCard({
               picture={picture}
             />
           ))}
-        </ol>
+        </Stack>
       )}
     </li>
   );
@@ -1566,11 +1574,11 @@ function ConversationPart({
       ) : shown.length === 0 ? (
         <p className="pull-request-quiet pull-request-none">{PULL_REQUEST_WORDS.NO_MATCHING}</p>
       ) : (
-        <ol className="pull-request-conversation">
+        <Stack as={LAYOUT_ELEMENT.OL} gap={GAP.CONTROL} className="pull-request-conversation">
           {shown.map((entry) => (
             <EntryCard key={entry.url} entry={entry} now={now} picture={picture} />
           ))}
-        </ol>
+        </Stack>
       )}
     </Section>
   );

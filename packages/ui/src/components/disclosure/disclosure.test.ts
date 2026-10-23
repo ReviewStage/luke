@@ -6,10 +6,13 @@ import { createPortal } from "react-dom";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import {
+  DISCLOSURE_BODY,
+  DISCLOSURE_LOOK,
   DISCLOSURE_SUMMARY,
   Disclosure,
   DisclosureAction,
   DisclosureBody,
+  DisclosureChevron,
   DisclosureFind,
   DisclosureSummary,
 } from "./disclosure.js";
@@ -18,8 +21,9 @@ import {
  * disclosure.test.ts -- a fold draws its body only once its summary is
  * pressed, says whether it is open on the summary, starts open when asked,
  * follows the element's own toggle (a find's), and draws a closed body,
- * still closed, while a find looks through it; and a control in its
- * summary's action slot is pressed without folding it.
+ * still closed, while a find looks through it; a control in its
+ * summary's action slot is pressed without folding it; and a card's head
+ * leaves its chevron where the caller puts it, at its line's end.
  */
 
 declare global {
@@ -222,4 +226,36 @@ test("a row summary draws no chevron of its own, stays out of the tab order, and
   assert.equal(summary.getAttribute("aria-expanded"), "true");
   act(() => summary.click());
   assert.equal(summary.getAttribute("aria-expanded"), "false");
+});
+
+test("a card's head draws its chevron where its caller puts it, and its body only once a press opens it", () => {
+  const root = render(
+    createElement(Disclosure, {
+      look: DISCLOSURE_LOOK.CARD,
+      "aria-label": "To-dos",
+      children: [
+        createElement(DisclosureSummary, {
+          key: "head",
+          look: DISCLOSURE_SUMMARY.HEAD,
+          children: [
+            createElement("span", { key: "words" }, "2 of 5 done"),
+            createElement(DisclosureChevron, { key: "chevron" }),
+          ],
+        }),
+        createElement(DisclosureBody, {
+          key: "body",
+          inset: DISCLOSURE_BODY.CARD,
+          children: "Write the failing test",
+        }),
+      ],
+    }),
+  );
+  const card = root.querySelector("[aria-label='To-dos']") ?? assert.fail("the card stands");
+  const summary = card.querySelector("summary") ?? assert.fail("the head stands");
+  assert.equal(summary.querySelectorAll(".luke-disclosure-turn").length, 1);
+  assert.equal(summary.lastElementChild?.className, "luke-disclosure-turn");
+  assert.equal(card.textContent, "2 of 5 done");
+  act(() => summary.click());
+  assert.equal(summary.getAttribute("aria-expanded"), "true");
+  assert.equal(card.textContent, "2 of 5 doneWrite the failing test");
 });

@@ -1,10 +1,15 @@
 import { useAtomValue } from "@effect/atom-react";
-import { BUTTON_SIZE, cn, IconButton, Tooltip } from "@luke/ui";
+import { BUTTON_SIZE, cn, IconButton, MessageFrame, Tooltip } from "@luke/ui";
+import {
+  MARKDOWN_LOOK,
+  Markdown,
+  type MarkdownComponents,
+  type MarkdownProps,
+} from "@luke/ui/markdown";
 import { QUOTE_CLASS } from "@luke/ui/quote-face";
 import type { UIMessage } from "ai";
 import { AsyncResult } from "effect/reactivity";
-import { type ComponentProps, type HTMLAttributes, memo, type ReactNode, useState } from "react";
-import { type Components, Streamdown } from "streamdown";
+import { type HTMLAttributes, memo, type ReactNode } from "react";
 import { markdownHtmlParserAtom } from "../markdown-html-parser.js";
 
 /**
@@ -14,10 +19,10 @@ import { markdownHtmlParserAtom } from "../markdown-html-parser.js";
  * restyled to Luke's tokens: the developer's turn stands at the right in a
  * raised bubble, Luke's at the left in plain text across the whole column,
  * as a chat app draws them. The actions on a message are the
- * registry's, each one a quiet icon button that shows while the pointer or
- * the keyboard is on the message, floated to its corner rather than drawn
- * in a row under it, with the window's own hover hint in place of the
- * registry's tooltip. The registry's branches, attachments, and toolbar are
+ * registry's, each one a quiet icon button in `@luke/ui`'s `MessageActions`,
+ * which shows while the pointer or the keyboard is on the message, floated
+ * to its corner rather than drawn in a row under it, with the window's own
+ * hover hint in place of the registry's tooltip. The registry's branches, attachments, and toolbar are
  * not here, because nothing draws them yet; each arrives with the surface
  * that first does.
  *
@@ -32,41 +37,20 @@ import { markdownHtmlParserAtom } from "../markdown-html-parser.js";
  * a reply holds, so it clips past the ring instead (base.css's room).
  */
 
-export type MessageProps = HTMLAttributes<HTMLDivElement> & {
+export type MessageProps = Omit<HTMLAttributes<HTMLDivElement>, "onClick"> & {
   from: UIMessage["role"];
 };
 
-/** What a tap may land on in a message that is a control of its own, which a tap works rather than showing the message's actions. */
-const OWN_CONTROL =
-  "a, button, summary, input, textarea, select, label, [role='button'], [role='tab']";
-
-/** The media query a screen with no hover answers, the one the stylesheet shows a tapped message's actions under. */
-const NO_HOVER = "(hover: none)";
-
 /**
- * A screen with no hover has none to show a message's actions by, so a tap
- * on the message, anywhere but a control of its own, shows them, and another
- * hides them again (`.transcript-message[data-actions-shown]`, tasks.css,
- * under the same `(hover: none)`). The screen is asked at the tap, never
- * kept, so a mouse changes nothing, and a press that ends a selection of the
- * message's words leaves them be.
+ * A turn, `@luke/ui`'s `MessageFrame` in the transcript's skin
+ * (`.transcript-message`, tasks.css), whose actions a tap shows on a screen
+ * with no hover.
  */
-export function Message({ className, from, onClick, ...props }: MessageProps): ReactNode {
-  const [actionsShown, setActionsShown] = useState(false);
+export function Message({ className, from, ...props }: MessageProps): ReactNode {
   return (
-    // biome-ignore lint/a11y/noStaticElementInteractions: a tap stands in for the hover a finger lacks; the keyboard reaches the actions themselves, which show while they hold it.
-    // biome-ignore lint/a11y/useKeyWithClickEvents: as above, the keyboard needs no key here, since focusing an action shows the bar.
-    <div
+    <MessageFrame
+      revealActionsOnTap
       className={cn("transcript-message", from === "user" ? "is-user" : "is-assistant", className)}
-      data-actions-shown={actionsShown ? "true" : undefined}
-      onClick={(event) => {
-        onClick?.(event);
-        // A tap spent on something of the message's own, a hint it opened, shows nothing more.
-        if (event.defaultPrevented || !window.matchMedia(NO_HOVER).matches) return;
-        if (window.getSelection()?.isCollapsed === false) return;
-        if (event.target instanceof Element && event.target.closest(OWN_CONTROL) !== null) return;
-        setActionsShown((shown) => !shown);
-      }}
       {...props}
     />
   );
@@ -78,44 +62,6 @@ export type MessageContentProps = HTMLAttributes<HTMLDivElement>;
 export function MessageContent({ children, className, ...props }: MessageContentProps): ReactNode {
   return (
     <div className={cn("message-content", className)} {...props}>
-      {children}
-    </div>
-  );
-}
-
-/** Where a message's actions stand: floated on a card over its corner, or set in the line under it. */
-export const MESSAGE_ACTIONS_PLACEMENT = {
-  FLOATING: "floating",
-  INLINE: "inline",
-} as const;
-
-export type MessageActionsPlacement =
-  (typeof MESSAGE_ACTIONS_PLACEMENT)[keyof typeof MESSAGE_ACTIONS_PLACEMENT];
-
-export type MessageActionsProps = Omit<ComponentProps<"div">, "className"> & {
-  placement?: MessageActionsPlacement;
-};
-
-/**
- * The actions on a message, shown while the pointer rests on the message
- * or the keyboard is on one of them, and hidden the rest of the time so a
- * transcript of hundreds of lines is not a column of buttons. The registry
- * draws them in a row under the message; here they float at the message's
- * top right corner on a small raised card, as a comment's toolbar does, so
- * a turn takes no room for a bar nobody is looking at and the column keeps
- * one rhythm whether a turn offers actions or not. Hidden, the bar takes no
- * pointer either, so the words under it stay selectable. A sent message
- * sets them inline, in a line under its bubble beside who sent it
- * (`agent-tab.tsx`'s `AgentMessage`). Each placement is drawn by
- * `.message-actions` (tasks.css).
- */
-export function MessageActions({
-  placement = MESSAGE_ACTIONS_PLACEMENT.FLOATING,
-  children,
-  ...props
-}: MessageActionsProps): ReactNode {
-  return (
-    <div className="message-actions" data-placement={placement} {...props}>
       {children}
     </div>
   );
@@ -156,7 +102,7 @@ export function MessageAction({
 }
 
 /**
- * Markdown drawn at the panel's own scale. Streamdown's headings and lists
+ * Markdown drawn at the panel's own scale (`@luke/ui/markdown`'s transcript look). Streamdown's headings and lists
  * are a page's, sized for a document a reader sits down to; a transcript's
  * are a note's, a step above the words around them and no more, a
  * list keeps to the column's own indent, and a quote is the one every
@@ -164,7 +110,7 @@ export function MessageAction({
  * Streamdown's, which stood the browser's 40px in from the column. Each is
  * drawn by its class in tasks.css, a heading by its level.
  */
-export const PANEL_MARKDOWN_COMPONENTS: Components = {
+export const PANEL_MARKDOWN_COMPONENTS: MarkdownComponents = {
   h1: ({ children }) => (
     <h1 className="transcript-heading" data-level={1}>
       {children}
@@ -201,7 +147,7 @@ export const PANEL_MARKDOWN_COMPONENTS: Components = {
   blockquote: ({ children }) => <blockquote className={QUOTE_CLASS}>{children}</blockquote>,
 };
 
-export type MessageResponseProps = Omit<ComponentProps<typeof Streamdown>, "className">;
+export type MessageResponseProps = Omit<MarkdownProps, "look" | "className">;
 
 /**
  * A reply's markdown, drawn as it streams, in `.transcript-markdown`
@@ -214,7 +160,7 @@ export type MessageResponseProps = Omit<ComponentProps<typeof Streamdown>, "clas
 export const MessageResponse = memo((props: MessageResponseProps): ReactNode => {
   const parser = useAtomValue(markdownHtmlParserAtom);
   if (AsyncResult.isInitial(parser)) return null;
-  return <Streamdown className="transcript-markdown" {...props} />;
+  return <Markdown look={MARKDOWN_LOOK.TRANSCRIPT} className="transcript-markdown" {...props} />;
 });
 
 MessageResponse.displayName = "MessageResponse";

@@ -1,6 +1,14 @@
 import type { InboxCodeBlock } from "@luke/features/inbox-wire";
 import type { CodeRef } from "@luke/features/task-wire";
-import { ErrorState, SpinnerRegion } from "@luke/ui";
+import {
+  CARD_CORNER,
+  CARD_ELEMENT,
+  CARD_LOOK,
+  CARD_PADDING,
+  Card,
+  ErrorState,
+  SpinnerRegion,
+} from "@luke/ui";
 import { copiedLines, fileRefText } from "@luke/voice/code-pane-model";
 import { useEffect, useRef, useState } from "react";
 import { CodeCardHeader } from "./code-pane.js";
@@ -82,7 +90,11 @@ export function InboxCodeCard({
   const shown: CodeRead =
     unread === undefined ? read : { kind: CODE_READ.NOTICE, line: unread, again: false };
   return (
-    <article
+    <Card
+      as={CARD_ELEMENT.ARTICLE}
+      look={CARD_LOOK.CODE}
+      corner={CARD_CORNER.CONTROL}
+      padding={CARD_PADDING.FLUSH}
       className="code-card ph-no-capture"
       aria-label={fileRefText(codeRef)}
       data-inbox-code=""
@@ -107,6 +119,6 @@ export function InboxCodeCard({
           )}
         </div>
       )}
-    </article>
+    </Card>
   );
 }

@@ -8,18 +8,14 @@ import {
   LIST_ROW_META,
   List,
   ListRow,
+  MESSAGE_ACTIONS_PLACEMENT,
+  MessageActions,
+  type MessageActionsPlacement,
 } from "@luke/ui";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
-import {
-  MESSAGE_ACTIONS_PLACEMENT,
-  Message,
-  MessageAction,
-  MessageActions,
-  type MessageActionsPlacement,
-  MessageContent,
-} from "../ai-elements/message.js";
+import { Message, MessageAction, MessageContent } from "../ai-elements/message.js";
 import { layContainersAt } from "../testing/container-width.js";
 
 /**
@@ -297,7 +293,7 @@ function tappableMessage(placement: MessageActionsPlacement) {
   const part = (selector: string) =>
     container.querySelector<HTMLElement>(selector) ?? assert.fail(selector);
   return {
-    actions: () => part(".message-actions"),
+    actions: () => part(".luke-message-actions"),
     tap: (selector: string) => act(() => part(selector).click()),
   };
 }

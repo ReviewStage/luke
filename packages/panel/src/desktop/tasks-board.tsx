@@ -9,7 +9,14 @@ import {
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
   BUTTON_SIZE,
+  CARD_CORNER,
+  CARD_ELEMENT,
+  CARD_HOVER,
+  CARD_LOOK,
+  CARD_PADDING,
   CARD_PRESS_SELECTOR,
+  CARD_SHADOW,
+  Card,
   CardPress,
   CHIP_LOOK,
   CHIP_SIZE,
@@ -24,13 +31,15 @@ import {
   EmptyState,
   ERROR_STATE_PLACEMENT,
   ErrorState,
+  GAP,
   GLYPH_INK,
   GlyphSlot,
   IconButton,
+  INSET,
   InlineEdit,
+  LAYOUT_ELEMENT,
   ListMotion,
   motionKey,
-  motionRows,
   PAGE_FRAME,
   PAGE_WIDTH,
   PROVIDER_MARK_SIZE,
@@ -39,6 +48,7 @@ import {
   SCROLL_OVERSCROLL,
   SCROLL_SIZE,
   ScrollArea,
+  Stack,
   TaskPriorityMark,
   TaskStatusMark,
   TEXT_ELEMENT,
@@ -288,7 +298,13 @@ function TaskBoardCard({
     </span>
   );
   return (
-    <li
+    <Card
+      as={CARD_ELEMENT.LI}
+      corner={CARD_CORNER.CONTROL}
+      padding={CARD_PADDING.NONE}
+      shadow={CARD_SHADOW.SOFT}
+      hover={CARD_HOVER.LIFT}
+      lit={actions.open}
       className="tasks-board-card"
       data-task-id={task.id}
       {...motionKey(task.id)}
@@ -370,7 +386,7 @@ function TaskBoardCard({
       </div>
       {actions.menu}
       {actions.dialog}
-    </li>
+    </Card>
   );
 }
 
@@ -496,7 +512,11 @@ function TaskBoardColumnView({
       : properties;
   const cards = useLeaving(column.tasks, taskIdOf);
   return (
-    <section
+    <Card
+      as={CARD_ELEMENT.SECTION}
+      look={CARD_LOOK.WELL}
+      corner={CARD_CORNER.CONTROL}
+      padding={CARD_PADDING.NONE}
       className="tasks-board-column"
       data-task-column={value}
       data-row-drop={value}
@@ -529,9 +549,12 @@ function TaskBoardColumnView({
             fade={SCROLL_FADE.BOTH}
             overscroll={SCROLL_OVERSCROLL.CHAIN}
           >
-            <ul
+            <Stack
+              as={LAYOUT_ELEMENT.UL}
+              gap={GAP.ITEM}
+              inset={INSET.RING}
               className="tasks-board-cards"
-              {...motionRows()}
+              moves
               onPointerDown={narrow ? undefined : drag}
             >
               {cards.map(({ value: task }) => (
@@ -548,12 +571,12 @@ function TaskBoardColumnView({
                   onStanding={(standing) => onStanding(task, standing)}
                 />
               ))}
-            </ul>
+            </Stack>
           </ScrollArea>
         </div>
       )}
       <OlderCompleted older={column.older} onShow={onShowOlder} />
-    </section>
+    </Card>
   );
 }
 

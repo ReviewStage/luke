@@ -14,9 +14,17 @@ import {
 import { isVideoType, type KeptPicture } from "@luke/features/conversation-picture-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import {
+  ALIGN,
   ATTACHMENT_CHIP_STATE,
   AttachmentChip,
   type AttachmentChipState,
+  CARD_CORNER,
+  CARD_ELEMENT,
+  CARD_PADDING,
+  Card,
+  GAP,
+  Inline,
+  LAYOUT_ELEMENT,
   PictureTile,
   SPINNER_SIZE,
   Spinner,
@@ -332,14 +340,20 @@ function SetTile({
             )
           }
         >
-          <span className="picture-set-frame" style={{ aspectRatio: aspect }}>
+          <Card
+            as={CARD_ELEMENT.SPAN}
+            corner={CARD_CORNER.CONTROL}
+            padding={CARD_PADDING.FLUSH}
+            className="picture-set-frame"
+            style={{ aspectRatio: aspect }}
+          >
             {shown.picture === undefined ? (
               <TileFace state={undefined} words={words} />
             ) : (
               <TilePicture door={door} picture={shown.picture} words={words} />
             )}
             {more > 0 ? <span className="picture-set-more">+{more}</span> : null}
-          </span>
+          </Card>
         </PictureTile>
       </Tooltip>
     </span>
@@ -391,7 +405,10 @@ function VideoPlayer({
 }): ReactNode {
   const url = useBlobUrl(dataUrl);
   return (
-    <span
+    <Card
+      as={CARD_ELEMENT.SPAN}
+      corner={CARD_CORNER.CONTROL}
+      padding={CARD_PADDING.FLUSH}
       className="picture-frame"
       style={{ aspectRatio: `${String(picture.width)} / ${String(picture.height)}` }}
     >
@@ -409,7 +426,7 @@ function VideoPlayer({
           preload="metadata"
         />
       )}
-    </span>
+    </Card>
   );
 }
 
@@ -600,7 +617,10 @@ export function CallPictures({
     each.kept ? [{ picture: each.picture, words: each.name }] : [],
   );
   const list = (
-    <ul
+    <Inline
+      as={LAYOUT_ELEMENT.UL}
+      gap={GAP.CONTROL}
+      align={ALIGN.STRETCH}
       className="attached-files call-pictures ph-no-capture"
       aria-label="Pictures the call answered"
     >
@@ -626,7 +646,7 @@ export function CallPictures({
         ),
       )}
       {viewer}
-    </ul>
+    </Inline>
   );
   return (
     <>
@@ -674,8 +694,16 @@ export function useMessageAttachments(
  * row carries, and an image its row names by the picture it was kept as
  * read through the agent's door, so it draws its thumbnail and opens once
  * the read lands, and is its name alone while read or where it is gone.
+ * A line still on its way draws its files going up.
  */
-export function MessageFileChips({ message }: { message: CodingAgentMessage }): ReactNode {
+export function MessageFileChips({
+  message,
+  sending = false,
+}: {
+  message: CodingAgentMessage;
+  /** Whether the line is still on its way, its row not yet read back. */
+  sending?: boolean;
+}): ReactNode {
   const door = useContext(AgentPicturesContext);
   const [, redraw] = useReducer((count: number) => count + 1, 0);
   const files = messageFileChips(message);
@@ -694,7 +722,7 @@ export function MessageFileChips({ message }: { message: CodingAgentMessage }): 
               <PictureWatch key={index} door={door} id={pictureId} onSettled={redraw} />
             ),
           )}
-      <AttachedFileChips files={chips} />
+      <AttachedFileChips files={chips} uploading={sending} />
     </>
   );
 }

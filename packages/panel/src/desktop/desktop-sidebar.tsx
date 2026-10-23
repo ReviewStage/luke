@@ -24,8 +24,10 @@ import {
   ErrorState,
   Fill,
   FolderIcon,
+  GAP,
   HoldPress,
   IconButton,
+  LAYOUT_ELEMENT,
   ListMotion,
   MarkDoneIcon,
   motionKey,
@@ -35,21 +37,27 @@ import {
   NavItem,
   NOTE_LINE_LOOK,
   NoteLine,
+  PanePin,
   PinIcon,
   PlusIcon,
   ProviderMark,
+  RESIZE_EDGE_SIDE,
+  ResizeEdge,
+  type ResizeEdgeHandle,
   SCROLL_FADE,
   ScrollArea,
   SearchIcon,
   Shortcut,
   Skeleton,
   SkeletonRegion,
+  Stack,
   Tooltip,
   UNASSIGNED_WORDS,
   UnpinIcon,
   useLeaving,
   useMenu,
   useMinute,
+  useResizeEdge,
   VisuallyHidden,
 } from "@luke/ui";
 import { actorName, creatorActor, personActor } from "@luke/ui/actor-model";
@@ -160,7 +168,6 @@ import {
 } from "./sidebar-task-view.js";
 import { type RowFaces, SidebarTask } from "./task-actions.js";
 import { useTaskListView } from "./task-list-view.js";
-import { EDGE_SIDE, type ResizableEdgeProps, useResizableEdge } from "./use-resizable-edge.js";
 import { useRowDrag } from "./use-row-drag.js";
 import { WorkspaceSwitcher } from "./workspace-switcher.js";
 
@@ -185,9 +192,9 @@ const LIST_SKELETON = ["72%", "54%", "64%", "46%"] as const;
 export function useSidebarEdge(
   sidebar: SidebarCollapse,
   onToggleCollapsed?: () => void,
-): ResizableEdgeProps {
-  return useResizableEdge({
-    side: EDGE_SIDE.RIGHT,
+): ResizeEdgeHandle {
+  return useResizeEdge({
+    side: RESIZE_EDGE_SIDE.RIGHT,
     width: sidebar.width,
     bounds: SIDEBAR_WIDTH,
     reserve: () => WORK_RESERVE,
@@ -195,14 +202,6 @@ export function useSidebarEdge(
     onResize: sidebar.onResize,
     onToggleCollapsed,
   });
-}
-
-/**
- * The left column's right edge, dragged to resize it; double-clicked, it goes
- * back to the default width.
- */
-export function SidebarResizeEdge({ edge }: { edge: ResizableEdgeProps }): React.JSX.Element {
-  return <div className="sidebar-resize" {...edge} />;
 }
 
 /** The display a browser tab answers, as against an installed web app's own window, which draws no Back of its own. */
@@ -427,7 +426,13 @@ function TaskRows({
   });
   const drawn = useLeaving(rows, taskRowKey);
   return (
-    <ul className="sidebar-tasks" {...motionRows()} onPointerDown={drag}>
+    <Stack
+      as={LAYOUT_ELEMENT.UL}
+      gap={GAP.ROW}
+      className="sidebar-tasks"
+      moves
+      onPointerDown={drag}
+    >
       {drawn.map(({ value: row }) =>
         row.kind === TASK_ROW.TASK ? (
           <SidebarTask
@@ -462,7 +467,7 @@ function TaskRows({
           />
         ),
       )}
-    </ul>
+    </Stack>
   );
 }
 
@@ -642,10 +647,12 @@ function PinnedRows({
   const drawn = useLeaving(rows, pinnedRowKey);
   return (
     // An open Pinned keeps an order a row carried in lands at a place in; a folded one draws only some of its rows, so a drop lands on top.
-    <ul
+    <Stack
+      as={LAYOUT_ELEMENT.UL}
+      gap={GAP.ROW}
       className="sidebar-tasks"
       data-row-drop-rows={onDropOut !== undefined && movable ? "" : undefined}
-      {...motionRows()}
+      moves
       onPointerDown={drag}
     >
       {drawn.map(({ key, value: row }) => {
@@ -696,7 +703,7 @@ function PinnedRows({
           </RowPlaced>
         );
       })}
-    </ul>
+    </Stack>
   );
 }
 
@@ -1911,12 +1918,12 @@ function SidebarColumn({
     </>
   );
   return (
-    <aside
+    <PanePin
       ref={overlay.ref}
       className="desktop-sidebar"
       data-row-drop-scope=""
       inert={!overlay.inSight}
-      onPointerDown={onPressWithin}
+      onPin={onPressWithin}
       onPointerLeave={overlay.onPointerLeave}
       onKeyDown={overlay.onKeyDown}
     >
@@ -1942,7 +1949,7 @@ function SidebarColumn({
               {narrow ? places : null}
               {operator === undefined ? null : (
                 <nav className="sidebar-group" aria-label="Luke">
-                  <ul className="sidebar-tasks">
+                  <Stack as={LAYOUT_ELEMENT.UL} gap={GAP.ROW} className="sidebar-tasks">
                     <SidebarLuke
                       operator={operator}
                       agent={tasks.listedAgents.standing.find(
@@ -1954,7 +1961,7 @@ function SidebarColumn({
                       shown={tasks.shown && overlay.inSight}
                       onOpen={chosen(openAgent)}
                     />
-                  </ul>
+                  </Stack>
                 </nav>
               )}
               {/* While the account keeps sections Pinned stands empty too, a place to drop the first pin, for a mouse: a finger, which drags no row, draws it only once it holds one. */}
@@ -2115,8 +2122,8 @@ function SidebarColumn({
       </ColumnFoot>
       {sectionDialogs.dialog}
       {/* Last, so the drag strip above Luke does not take the edge's top from it. */}
-      {sidebar.collapsed ? null : <SidebarResizeEdge edge={edge} />}
-    </aside>
+      {sidebar.collapsed ? null : <ResizeEdge edge={edge} />}
+    </PanePin>
   );
 }
 

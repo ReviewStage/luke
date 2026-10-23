@@ -213,9 +213,7 @@ test("a transcript of two thousand messages opens on its newest and draws a boun
 
 /** Types into the find bar's field as the keyboard does, which React hears as an input. */
 function typeFind(text: string): void {
-  const field = document.querySelector<HTMLInputElement>(
-    'search.find-bar input[aria-label="Find"]',
-  );
+  const field = document.querySelector<HTMLInputElement>('.find-bar input[aria-label="Find"]');
   assert.ok(field, "the find bar stands open");
   act(() => {
     Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(field, text);
@@ -225,7 +223,8 @@ function typeFind(text: string): void {
 
 /** What the find bar's tally says. */
 function findTally(): string | null | undefined {
-  return document.querySelector('search[aria-label="Find"] [aria-live="polite"]')?.textContent;
+  return document.querySelector('[role="search"][aria-label="Find"] [aria-live="polite"]')
+    ?.textContent;
 }
 
 test("⌘F finds words in a row the log has not drawn, scrolls the log to it, and lights the match there", async () => {

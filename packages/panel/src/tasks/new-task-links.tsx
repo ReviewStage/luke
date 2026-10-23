@@ -8,6 +8,10 @@ import {
   type TaskIssueRelation,
 } from "@luke/features/task-issue-wire";
 import {
+  CARD_CORNER,
+  CARD_LOOK,
+  CARD_PADDING,
+  Card,
   CHIP_LOOK,
   CHIP_SIZE,
   Chip,
@@ -110,7 +114,14 @@ function LinkChip({
 }): React.JSX.Element {
   const github = link.provider === TASK_ISSUE_PROVIDER.GITHUB;
   return (
-    <div className="new-task-issue" data-issue-chip="" data-provider={link.provider}>
+    <Card
+      look={CARD_LOOK.OUTLINE}
+      corner={CARD_CORNER.CONTROL}
+      padding={CARD_PADDING.NONE}
+      className="new-task-issue"
+      data-issue-chip=""
+      data-provider={link.provider}
+    >
       {github ? (
         <CircleDotIcon className="new-task-issue-github" />
       ) : (
@@ -145,7 +156,7 @@ function LinkChip({
           />
         </Tooltip>
       </span>
-    </div>
+    </Card>
   );
 }
 

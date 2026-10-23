@@ -3,6 +3,7 @@
 import assert from "node:assert/strict";
 import type { FileChip } from "@luke/features/attachment-model";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
+import { IMAGE_OPENING, type ImageOpening } from "@luke/ui";
 import type { ImageView } from "@luke/ui/image-zoom";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
@@ -16,7 +17,6 @@ import { onRegistry } from "../testing/copy-feedback.js";
 import { relayout } from "../testing/resize-observer.js";
 import { wholeFileDrawn, wholeFileLines } from "../testing/whole-file.js";
 import { AttachmentViewer } from "./attachment-viewer.js";
-import { IMAGE_OPENING, type ImageOpening } from "./use-image-zoom.js";
 
 /**
  * attachment-viewer.test.ts -- a picture opened over the window zooms as
@@ -105,7 +105,7 @@ function opened(opening: ImageOpening = IMAGE_OPENING.FITTED) {
   draw();
   const picture = () => {
     const image =
-      document.querySelector<HTMLImageElement>(".attachment-viewer-image") ??
+      document.querySelector<HTMLImageElement>(".luke-zoom-image") ??
       assert.fail("the viewer draws the picture");
     const frame = image.parentElement ?? assert.fail("the picture stands in its frame");
     laidOut(frame, {
@@ -438,7 +438,7 @@ test("a text file opened over a tab leaves the tab's find its own, the file's wo
     runAppCommand(APP_COMMAND.FIND);
   });
   const field =
-    document.querySelector<HTMLInputElement>('search.find-bar input[aria-label="Find"]') ??
+    document.querySelector<HTMLInputElement>('.find-bar input[aria-label="Find"]') ??
     assert.fail("the tab's find bar stands open");
   act(() => {
     Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(field, "seat");
@@ -446,7 +446,7 @@ test("a text file opened over a tab leaves the tab's find its own, the file's wo
   });
 
   assert.equal(
-    document.querySelector('search[aria-label="Find"] [aria-live="polite"]')?.textContent,
+    document.querySelector('[role="search"][aria-label="Find"] [aria-live="polite"]')?.textContent,
     "1 of 1",
   );
   act(() => {

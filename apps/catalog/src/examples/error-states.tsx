@@ -6,7 +6,13 @@
  * and a list's foot that is itself the retry.
  */
 
-import { ERROR_STATE_PLACEMENT, ErrorState, RetryRowLabel } from "@luke/ui";
+import {
+  ERROR_STATE_PLACEMENT,
+  ErrorState,
+  RetryRowLabel,
+  TEXT_BUTTON_LINES,
+  TextButton,
+} from "@luke/ui";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
@@ -87,9 +93,9 @@ function ErrorStates(): React.JSX.Element {
       </CatalogSection>
       <CatalogSection id="error-state-row" title="A row that is itself the retry">
         <div className="catalog-frame catalog-error-narrow">
-          <button type="button" className="catalog-retry-row" onClick={stay}>
+          <TextButton lines={TEXT_BUTTON_LINES.TWO} onClick={stay}>
             <RetryRowLabel failure="Could not read older versions." />
-          </button>
+          </TextButton>
         </div>
       </CatalogSection>
     </>

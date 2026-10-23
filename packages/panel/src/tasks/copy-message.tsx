@@ -1,11 +1,7 @@
+import { MESSAGE_ACTIONS_PLACEMENT, MessageActions, type MessageActionsPlacement } from "@luke/ui";
 import { LinkIcon } from "lucide-react";
 import type { ReactNode } from "react";
-import {
-  MESSAGE_ACTIONS_PLACEMENT,
-  MessageAction,
-  MessageActions,
-  type MessageActionsPlacement,
-} from "../ai-elements/message.js";
+import { MessageAction } from "../ai-elements/message.js";
 import { CopyGlyph, copyHint, LINK_COPY, useCopyFeedback } from "../copy-feedback.js";
 import { useCopyLink } from "../copy-link-item.js";
 import { ForkMessageAction } from "./fork-action.js";

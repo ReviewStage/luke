@@ -538,7 +538,8 @@ test("the tree's search narrows the list, said over it while the tree is hidden,
 test("with the file stood on filtered out, the tree marks the file the list scrolls to", async () => {
   files = [changed("src/a.ts"), changed("lib/b.ts"), changed("lib/c.ts")];
   await drawTab({ treeOpen: true });
-  act(() => header("src/a.ts").dispatchEvent(new MouseEvent("pointerdown", { bubbles: true })));
+  const row = header("src/a.ts").querySelector("summary") ?? assert.fail("the header is a row");
+  act(() => row.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true })));
   assert.ok(header("src/a.ts").hasAttribute("data-standing"));
 
   typeSearch("lib");
@@ -617,17 +618,19 @@ test("while the tree is hidden a strip stands in its place, a mark for each file
   const { tree } = heldTree(false);
   await drawTab({ tree });
 
-  const strip = document.querySelector<HTMLElement>(".file-tree-strip") ?? assert.fail("a strip");
+  const strip =
+    document.querySelector<HTMLElement>(".file-tree-strip .luke-mark-strip") ??
+    assert.fail("a strip");
   assert.deepEqual(
     [...strip.children].map((mark) => [
-      mark.getAttribute("data-status"),
+      mark.getAttribute("data-tone"),
       mark.hasAttribute("data-viewed"),
       mark.hasAttribute("data-current"),
     ]),
     [
-      ["added", true, true],
-      ["deleted", false, false],
-      ["modified", false, false],
+      ["complete", true, true],
+      ["danger", false, false],
+      ["attention", false, false],
     ],
   );
   assert.equal(document.querySelector(".file-tree-pane"), null);

@@ -15,6 +15,7 @@ import {
   EmptyState,
   type EmptyStateAction,
   ErrorState,
+  GAP,
   HOVER_CARD_ROW_LOOK,
   HoverCard,
   HoverCardHead,
@@ -25,6 +26,7 @@ import {
   IconButton,
   INLINE_REF_LOOK,
   InlineRef,
+  LAYOUT_ELEMENT,
   LIST_LEAVING_SELECTOR,
   LIST_ROW_ACTIONS,
   LIST_ROW_CURRENT,
@@ -38,6 +40,8 @@ import {
   ONE_LINE_ELEMENT,
   ONE_LINE_END,
   OneLine,
+  RESIZE_EDGE_SIDE,
+  ResizeEdge,
   RowHint,
   RowHintOptions,
   SCROLL_FADE,
@@ -47,12 +51,14 @@ import {
   SKELETON_SHAPE,
   Skeleton,
   SkeletonRegion,
+  Stack,
   TaskStatusMark,
   Time,
   Tooltip,
   useLeaving,
   useMenu,
   useMinute,
+  useResizeEdge,
   VisuallyHidden,
 } from "@luke/ui";
 import {
@@ -97,7 +103,6 @@ import { useAutomation } from "../automation-directory.js";
 import { useInboxItemDraft, useInboxItemDrafted } from "../composer-drafts.js";
 import { useCopyLinkItem } from "../copy-link-item.js";
 import { ActionMenu, type MenuAction, type MenuEntry } from "../desktop/action-menu.js";
-import { SidebarResizeEdge } from "../desktop/desktop-sidebar.js";
 import {
   INBOX_LIST_WIDTH,
   type InboxShowChoice,
@@ -108,7 +113,6 @@ import {
 } from "../desktop/folded-groups.js";
 import { SidebarGroupHeader } from "../desktop/sidebar-group-header.js";
 import { SidebarSectionHead } from "../desktop/sidebar-task-view.js";
-import { EDGE_SIDE, useResizableEdge } from "../desktop/use-resizable-edge.js";
 import { DraftMark } from "../draft-mark.js";
 import { useMemberDirectory } from "../member-directory.js";
 import { GLYPH_STATE, StateGlyph } from "../state-glyph.js";
@@ -1740,9 +1744,9 @@ function InboxRows({
 }): React.JSX.Element {
   const drawn = useLeaving(items, (listed) => listed.item.id);
   return (
-    <ul className="sidebar-tasks" {...motionRows()}>
+    <Stack as={LAYOUT_ELEMENT.UL} gap={GAP.ROW} className="sidebar-tasks" moves>
       {drawn.map(({ value, leaving }) => row(value, leaving))}
-    </ul>
+    </Stack>
   );
 }
 
@@ -1770,6 +1774,7 @@ export function InboxList({
   readerId,
   columns,
   rows,
+  reading = false,
   placement = INBOX_LIST_PLACEMENT.PAGE,
   onChoose,
   onMark,
@@ -1785,6 +1790,8 @@ export function InboxList({
   head: InboxListHead;
   /** What stands under the rows: the list's empty line, placeholder rows while it is read, or a read that did not answer. */
   note: React.ReactNode;
+  /** Whether the list is still being read, as its reads land one after another while the window opens, so a row arriving fades in where it stands rather than sliding in as a new one does. */
+  reading?: boolean;
   /** Which of the Inbox's columns stand. */
   columns: InboxColumnsShown;
   /** Where each row's press is kept, by the item it opens. */
@@ -1808,8 +1815,8 @@ export function InboxList({
     previews ? listedItems(view).map(({ item }) => item.id) : NO_ITEMS,
   );
   const media = previews ? mediaReads : undefined;
-  const edge = useResizableEdge({
-    side: EDGE_SIDE.RIGHT,
+  const edge = useResizeEdge({
+    side: RESIZE_EDGE_SIDE.RIGHT,
     width,
     bounds: INBOX_LIST_WIDTH,
     reserve: () => PANE_RESERVE,
@@ -1935,10 +1942,10 @@ export function InboxList({
       style={sidebar ? undefined : { width: drawnWidth(width, columns !== INBOX_COLUMNS.BOTH) }}
     >
       <ListHead head={head} readerId={readerId} placement={placement} />
-      <ListMotion root={bodyRef} change={view}>
+      <ListMotion root={bodyRef} change={view} reading={reading}>
         {sidebar ? body : <ScrollArea fade={SCROLL_FADE.START}>{body}</ScrollArea>}
       </ListMotion>
-      {!sidebar && columns === INBOX_COLUMNS.BOTH ? <SidebarResizeEdge edge={edge} /> : null}
+      {!sidebar && columns === INBOX_COLUMNS.BOTH ? <ResizeEdge edge={edge} /> : null}
     </nav>
   );
 }

@@ -198,9 +198,7 @@ test("a source the service did not answer says so in its place, and Retry reads 
 
 /** Types into the find bar's field as the keyboard does, which React hears as an input. */
 function typeFind(text: string): void {
-  const field = document.querySelector<HTMLInputElement>(
-    'search.find-bar input[aria-label="Find"]',
-  );
+  const field = document.querySelector<HTMLInputElement>('.find-bar input[aria-label="Find"]');
   assert.ok(field, "the find bar stands open");
   act(() => {
     Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(field, text);
@@ -210,7 +208,8 @@ function typeFind(text: string): void {
 
 /** What the find bar's tally says. */
 function findTally(): string | null | undefined {
-  return document.querySelector('search[aria-label="Find"] [aria-live="polite"]')?.textContent;
+  return document.querySelector('[role="search"][aria-label="Find"] [aria-live="polite"]')
+    ?.textContent;
 }
 
 /** What the panel asks of a frame's find, each ask in the order it was posted. */
@@ -263,9 +262,7 @@ test("⌘F over the page is seeded with the words selected in its frame", () => 
     runAppCommand(APP_COMMAND.FIND);
   });
 
-  const field = document.querySelector<HTMLInputElement>(
-    'search.find-bar input[aria-label="Find"]',
-  );
+  const field = document.querySelector<HTMLInputElement>('.find-bar input[aria-label="Find"]');
   assert.equal(field?.value, "funnel");
 });
 
@@ -292,9 +289,7 @@ test("⌘F and ⌘G pressed in the page, which the window's keys never hear, ope
   postFrom(frame().contentWindow, { type: "luke-page-find", key: "find" });
   postFrom(frame().contentWindow, { type: "luke-page-find", key: "next" });
 
-  const field = document.querySelector<HTMLInputElement>(
-    'search.find-bar input[aria-label="Find"]',
-  );
+  const field = document.querySelector<HTMLInputElement>('.find-bar input[aria-label="Find"]');
   assert.equal(field?.value, "funnel");
   assert.deepEqual(posted, [
     { type: "luke-page-find", act: "search", query: "funnel" },
@@ -329,7 +324,7 @@ test("⌘F over the source finds in its lines, the window's own, rather than thr
 
   assert.equal(offered, true);
   assert.equal(container.querySelector("iframe"), null);
-  assert.ok(container.querySelector("search[aria-label='Find']"));
+  assert.ok(container.querySelector("[role='search'][aria-label='Find']"));
 });
 
 test("a source read before a Reload that answers after it does not replace the fresh read", async () => {

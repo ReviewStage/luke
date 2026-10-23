@@ -11,13 +11,17 @@ import {
   toolTitle,
 } from "@luke/features/integration-tool-model";
 import {
+  ALIGN,
   ArrowLeftIcon,
   BADGE_TONE,
   Badge,
   type BadgeTone,
   FILL_ELEMENT,
   Fill,
+  GAP,
   IconButton,
+  Inline,
+  LAYOUT_ELEMENT,
   LIST_DENSITY,
   LIST_ROW_CURRENT,
   List,
@@ -336,7 +340,10 @@ export function IntegrationToolDetail({
       <ScrollArea ref={bodyRef} tabIndex={-1} onKeyDown={onBodyKeyDown}>
         <div className="integration-tool-detail-body">
           {hints.length > 0 ? (
-            <ul
+            <Inline
+              as={LAYOUT_ELEMENT.UL}
+              gap={GAP.TIGHT}
+              align={ALIGN.STRETCH}
               className="integration-tool-hints"
               aria-label={`What ${server}'s server says of this tool`}
             >
@@ -345,7 +352,7 @@ export function IntegrationToolDetail({
                   <Badge tone={hintTone(hint)}>{toolHintWords(hint, server)}</Badge>
                 </li>
               ))}
-            </ul>
+            </Inline>
           ) : null}
           {tool.description === "" ? (
             <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.SUBTLE}>

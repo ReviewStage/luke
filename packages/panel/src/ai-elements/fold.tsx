@@ -1,21 +1,14 @@
-import {
-  cn,
-  DISCLOSURE_BODY,
-  DisclosureBody,
-  DisclosureScope,
-  useDisclosureFold,
-  useDisclosureState,
-  useDisclosureSummaryClick,
-} from "@luke/ui";
-import type { ComponentProps, MouseEvent, ReactNode } from "react";
+import { cn, DISCLOSURE_BODY, DisclosureBody, DisclosureScope, useDisclosureFold } from "@luke/ui";
+import type { ComponentProps, ReactNode } from "react";
 
 /**
  * fold.tsx -- the transcript's own skins of `@luke/ui`'s Disclosure: a tool call's line, a reasoning block, a plan card, the to-do dock, each drawing its summary and body in classes of its own.
  *
  * The state, the motion, and the find's reveal are the package's
  * (`useDisclosureFold`); what is here is only where each part wears its
- * caller's classes; its chevron and its body are the package's own
- * (`DisclosureChevron`, `DisclosureBody`). A fold that draws the quiet
+ * caller's classes; its summary, chevron, and body are the package's own
+ * (`DisclosureSummary`'s transcript look, whose line the fold's classes
+ * draw, `DisclosureChevron`, `DisclosureBody`). A fold that draws the quiet
  * summary row is `Disclosure` itself, not this.
  */
 
@@ -53,38 +46,6 @@ export function Fold({
         {children}
       </details>
     </DisclosureScope>
-  );
-}
-
-export type FoldSummaryProps = ComponentProps<"summary">;
-
-/** The one line a closed fold shows, which opens and closes it. */
-export function FoldSummary({
-  className,
-  children,
-  onClick,
-  ...props
-}: FoldSummaryProps): ReactNode {
-  const { open } = useDisclosureState();
-  const toggle = useDisclosureSummaryClick();
-  const click = (event: MouseEvent<HTMLElement>) => {
-    onClick?.(event);
-    toggle(event);
-  };
-  return (
-    // biome-ignore lint/a11y/noStaticElementInteractions: a summary is the platform's own disclosure control, focusable and opened by Enter and Space; the click it already takes is routed to React's state.
-    // biome-ignore lint/a11y/useAriaPropsSupportedByRole: a summary is exposed as its details' disclosure button, which takes aria-expanded; the rule's table gives the element no role.
-    <summary
-      className={cn(
-        "cursor-default list-none select-none [&::-webkit-details-marker]:hidden",
-        className,
-      )}
-      aria-expanded={open}
-      onClick={click}
-      {...props}
-    >
-      {children}
-    </summary>
   );
 }
 

@@ -1,5 +1,14 @@
 import { useAtomValue } from "@effect/atom-react";
-import { Button, PictureTile } from "@luke/ui";
+import {
+  Button,
+  CARD_CORNER,
+  CARD_ELEMENT,
+  CARD_PADDING,
+  Card,
+  IMAGE_OPENING,
+  PictureTile,
+  PortalFence,
+} from "@luke/ui";
 import { drawnDark, onDrawnThemeChange } from "@luke/ui/appearance";
 import {
   DIAGRAM_APPEARANCE,
@@ -22,7 +31,6 @@ import { coarsePointerNow, useCoarsePointer } from "./coarse-pointer.js";
 import { SHELL_ROOM } from "./shell-room.js";
 import { ShellRoomContext } from "./stage-room.js";
 import { AttachmentViewer } from "./tasks/attachment-viewer.js";
-import { IMAGE_OPENING } from "./tasks/use-image-zoom.js";
 
 /**
  * plan-diagram.tsx -- a plan's ```` ```mermaid ```` fence drawn as its diagram: the diagram bundle loaded the first time one is shown, each picture kept by its code and appearance, and the figure the read view and the editor's preview draw it in.
@@ -155,22 +163,12 @@ function RefusedLine(): React.JSX.Element {
   return <p className="plan-diagram-failed">{DIAGRAM_REFUSED_LINE}</p>;
 }
 
-/** What reaches the viewer stays there: React carries a portal's events up the tree it was drawn in, where the section would open to be edited at a press, or step its blocks at an arrow. */
-function stopped(event: React.SyntheticEvent): void {
-  event.stopPropagation();
-}
-
 /** A diagram opened over the window at its own pixels, until it is closed. */
 function OpenDiagram({ url, onClose }: { url: string; onClose: () => void }): React.JSX.Element {
   return (
-    // biome-ignore lint/a11y/noStaticElementInteractions: the span takes nothing itself; it keeps what the viewer it holds took from reaching the section around it.
-    <span
-      className="plan-diagram-viewer"
-      onClick={stopped}
-      onKeyDown={stopped}
-      onPointerDown={stopped}
-      onMouseDown={stopped}
-    >
+    // Note that what the viewer takes stays there: React carries a portal's events up the tree it
+    // was drawn in, where the section would open to be edited at a press, or step its blocks at an arrow.
+    <PortalFence>
       <AttachmentViewer
         files={[{ name: DIAGRAM_FILE, mediaType: "image/svg+xml", url }]}
         at={0}
@@ -178,7 +176,7 @@ function OpenDiagram({ url, onClose }: { url: string; onClose: () => void }): Re
         onClose={onClose}
         opening={IMAGE_OPENING.OWN_PIXELS}
       />
-    </span>
+    </PortalFence>
   );
 }
 
@@ -205,7 +203,13 @@ export function PlanDiagram({
   const room = useContext(ShellRoomContext);
   const pointerOpens = coarse || room === SHELL_ROOM.NARROW;
   return (
-    <figure className="plan-diagram ph-no-capture" aria-busy={drawingNow === undefined}>
+    <Card
+      as={CARD_ELEMENT.FIGURE}
+      corner={CARD_CORNER.CONTROL}
+      padding={CARD_PADDING.NONE}
+      className="plan-diagram ph-no-capture"
+      aria-busy={drawingNow === undefined}
+    >
       <div className="plan-diagram-head">
         <span>Diagram</span>
         {picture === undefined ? null : (
@@ -246,7 +250,7 @@ export function PlanDiagram({
       {fullScreen && picture !== undefined ? (
         <OpenDiagram url={picture} onClose={() => setFullScreen(false)} />
       ) : null}
-    </figure>
+    </Card>
   );
 }
 

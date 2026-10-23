@@ -48,6 +48,7 @@ import {
   type FoldingButtonHint,
   GAP,
   IconButton,
+  LAYOUT_ELEMENT,
   ONE_LINE_END,
   Stack,
   TEXT_TONE,
@@ -902,7 +903,7 @@ function AnswerValues({
 }): React.JSX.Element | null {
   if (values.length === 0) return null;
   return (
-    <ul className="inbox-values" data-inbox-values="">
+    <Stack as={LAYOUT_ELEMENT.UL} gap={GAP.TIGHT} className="inbox-values" data-inbox-values="">
       {values.map(({ label, value }) => (
         <li key={label} className="inbox-value">
           <span className="inbox-value-label">{label}</span>
@@ -915,7 +916,7 @@ function AnswerValues({
           </div>
         </li>
       ))}
-    </ul>
+    </Stack>
   );
 }
 
@@ -2016,7 +2017,12 @@ export function InboxPane({
                   {thread === undefined ? (
                     <>
                       <Subject item={item} heading={setHeading} />
-                      <ol className="inbox-thread" aria-label="Thread">
+                      <Stack
+                        as={LAYOUT_ELEMENT.OL}
+                        gap={GAP.NONE}
+                        className="inbox-thread"
+                        aria-label="Thread"
+                      >
                         <Comment
                           kind={COMMENT.ASKED}
                           head={
@@ -2039,13 +2045,18 @@ export function InboxPane({
                         </Comment>
                         <ThreadAfter item={item} by={by} now={now} control={control} />
                         {draftReply}
-                      </ol>
+                      </Stack>
                     </>
                   ) : (
                     <>
                       <Subject item={item} heading={setHeading} />
                       <AnswerMentions value={mentions}>
-                        <ol className="inbox-thread" aria-label="Thread">
+                        <Stack
+                          as={LAYOUT_ELEMENT.OL}
+                          gap={GAP.NONE}
+                          className="inbox-thread"
+                          aria-label="Thread"
+                        >
                           {thread.map((message, at) => (
                             <Fragment key={message.id}>
                               <ThreadMessage
@@ -2064,7 +2075,7 @@ export function InboxPane({
                             </Fragment>
                           ))}
                           {draftReply}
-                        </ol>
+                        </Stack>
                       </AnswerMentions>
                     </>
                   )}

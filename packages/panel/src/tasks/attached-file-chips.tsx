@@ -7,7 +7,17 @@ import {
 } from "@luke/features/attachment-model";
 import type { CodingAgentAttachment, CodingAgentMessage } from "@luke/features/coding-agent-wire";
 import { keptPictureIdOf } from "@luke/features/conversation-picture-wire";
-import { AttachmentChip, LIST_MOTION_WAY, ListMotion, motionRows, useLeaving } from "@luke/ui";
+import {
+  ALIGN,
+  ATTACHMENT_CHIP_STATE,
+  AttachmentChip,
+  GAP,
+  Inline,
+  LAYOUT_ELEMENT,
+  LIST_MOTION_WAY,
+  ListMotion,
+  useLeaving,
+} from "@luke/ui";
 import { isRecord, isWireString } from "@luke/wire";
 import { type ReactNode, type RefObject, useRef, useState } from "react";
 import { AttachmentViewer } from "./attachment-viewer.js";
@@ -36,6 +46,11 @@ import { FileTypeIcon } from "./file-type-icon.js";
  * kept no bytes of, one eve staged in the sandbox before the row was
  * written, is drawn by its name alone, with nothing to open and nothing to
  * walk to.
+ *
+ * A line's files go up inside the one request that sends it, which says
+ * nothing of how far its bytes have gone, so a line still on its way draws
+ * its files going up without a share (`uploading`), and each takes its
+ * check as the line's row lands.
  */
 
 /** How the AI SDK spells a file part's type. */
@@ -84,11 +99,14 @@ function FileChipOf({
   motionKey,
   onOpen,
   onRemove,
+  uploading = false,
 }: {
   file: FileChip;
   motionKey?: string | undefined;
   onOpen: (() => void) | undefined;
   onRemove: (() => void) | undefined;
+  /** Whether the file is on its way up with the line it came on. */
+  uploading?: boolean;
 }): React.JSX.Element {
   const base64 = chipBase64(file);
   const thumbnail = base64 !== "" && attachmentView(file) === ATTACHMENT_VIEW.IMAGE;
@@ -101,6 +119,7 @@ function FileChipOf({
       onOpen={base64 === "" ? undefined : onOpen}
       onRemove={onRemove}
       motionKey={motionKey}
+      state={uploading ? ATTACHMENT_CHIP_STATE.UPLOADING : ATTACHMENT_CHIP_STATE.READY}
     />
   );
 }
@@ -137,12 +156,15 @@ function BoxRow({
   };
   const drawn = useLeaving(files, idOf);
   return (
-    <ul
+    <Inline
+      as={LAYOUT_ELEMENT.UL}
+      gap={GAP.CONTROL}
+      align={ALIGN.STRETCH}
       ref={row}
       className="attached-files"
       aria-label="Attached files"
       hidden={drawn.length === 0}
-      {...motionRows()}
+      moves
     >
       {drawn.map((entry) => {
         const index = files.indexOf(entry.value);
@@ -156,7 +178,7 @@ function BoxRow({
           />
         );
       })}
-    </ul>
+    </Inline>
   );
 }
 
@@ -181,10 +203,13 @@ function BoxFileChips({
 export function AttachedFileChips({
   files,
   onRemove,
+  uploading = false,
 }: {
   files: readonly FileChip[];
   /** Takes one file off the message, by its place; nothing in the transcript, whose files are sent. */
   onRemove?: ((index: number) => void) | undefined;
+  /** Whether the files are on their way up with the line they came on. */
+  uploading?: boolean;
 }): ReactNode {
   // The file open over the window, by its place among those that carry bytes.
   const [viewing, setViewing] = useState<number | undefined>(undefined);
@@ -209,16 +234,23 @@ export function AttachedFileChips({
   }
   if (files.length === 0) return null;
   return (
-    <ul className="attached-files" aria-label="Attached files">
+    <Inline
+      as={LAYOUT_ELEMENT.UL}
+      gap={GAP.CONTROL}
+      align={ALIGN.STRETCH}
+      className="attached-files"
+      aria-label="Attached files"
+    >
       {files.map((file, index) => (
         <FileChipOf
           key={`${String(index)}-${file.name}`}
           file={file}
           onOpen={() => open(file)}
           onRemove={undefined}
+          uploading={uploading}
         />
       ))}
       {viewer}
-    </ul>
+    </Inline>
   );
 }

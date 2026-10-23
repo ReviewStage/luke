@@ -94,7 +94,7 @@ async function paneOf(tab: AgentBrowserTab): Promise<{
       createElement(CloudBrowserPane, {
         taskId: TASK,
         tab: shown,
-        owner: "Luke",
+        owner: { name: "Luke", icon: createElement("span") },
         shown: true,
         memberName: () => undefined,
       }),

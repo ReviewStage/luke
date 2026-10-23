@@ -14,7 +14,6 @@ import {
   DEFAULT_LIST_DISPLAY,
   EARLIER_BOARD_PROPERTIES,
   EARLIER_LIST_PROPERTIES,
-  filteredFields,
   keptTasksDisplay,
   NO_TASKS_FILTER,
   TASK_MAKER_ORDER,
@@ -224,10 +223,8 @@ export function TasksPage({
       </div>
     </header>
   );
-  const chips =
-    filteredFields(filter).length === 0 ? null : (
-      <TasksFilterChips tasks={listed} filter={filter} onFilter={onFilter} />
-    );
+  // Note that the line stands while nothing is filtered, hidden, so its first chip scales in and its last scales out.
+  const chips = <TasksFilterChips tasks={listed} filter={filter} onFilter={onFilter} />;
   const frame = { toolbar, chips, filter, display, onDisplay };
   // Note that find's subject is the view shown, so a search in one view is let go as the other is chosen.
   return (

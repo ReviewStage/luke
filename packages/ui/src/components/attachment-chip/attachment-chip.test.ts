@@ -11,6 +11,9 @@ import { ATTACHMENT_CHIP_STATE, AttachmentChip } from "./attachment-chip.js";
  * or a key, one without presses nothing, its way off takes the file off by
  * pointer or keyboard and refuses while unavailable, a reader hears each
  * control by the file's name, and a file still read or failed opens nothing.
+ * A file on its way up is heard as uploading, at its share where one is
+ * known, opens nothing until it is up, and takes a check once it lands
+ * while drawn.
  * A file's name fades out at its end only while the chip cuts it short.
  */
 
@@ -67,6 +70,19 @@ function drawn(props: Parameters<typeof AttachmentChip>[0]): HTMLElement {
   roots.push(root);
   act(() => root.render(createElement(AttachmentChip, props)));
   return list;
+}
+
+/** One chip drawn into a list of the page, and a way to draw it again as it changes. */
+function redrawn(props: Parameters<typeof AttachmentChip>[0]): {
+  list: HTMLElement;
+  to: (next: Parameters<typeof AttachmentChip>[0]) => void;
+} {
+  const list = document.createElement("ul");
+  document.body.append(list);
+  const root = createRoot(list);
+  roots.push(root);
+  act(() => root.render(createElement(AttachmentChip, props)));
+  return { list, to: (next) => act(() => root.render(createElement(AttachmentChip, next))) };
 }
 
 /** The button a reader hears by `name`. */
@@ -187,4 +203,37 @@ test("a file's name fades out at its end only while the chip cuts it short", () 
   assert.equal(name()?.getAttribute("data-overflow"), "false");
   resize(160);
   assert.equal(name()?.getAttribute("data-overflow"), "true");
+});
+
+test("a file going up is heard as uploading at its share, and opens nothing until it is up", () => {
+  const list = drawn({
+    name: "spec.pdf",
+    state: ATTACHMENT_CHIP_STATE.UPLOADING,
+    progress: 62.6,
+    onOpen: () => assert.fail("a chip on its way up opens nothing"),
+  });
+  const meter = list.querySelector('[role="progressbar"]') ?? assert.fail("a progress bar");
+  assert.equal(meter.getAttribute("aria-label"), "Uploading spec.pdf");
+  assert.equal(meter.getAttribute("aria-valuenow"), "63");
+  assert.deepEqual(buttonNames(list), []);
+  assert.ok(list.textContent?.includes("spec.pdf"), "drawn as it will stand");
+});
+
+test("a file going up with no share known is an indeterminate meter", () => {
+  const list = drawn({ name: "shot.png", image: PICTURE, state: ATTACHMENT_CHIP_STATE.UPLOADING });
+  const meter = list.querySelector('[role="progressbar"]') ?? assert.fail("a progress bar");
+  assert.equal(meter.getAttribute("aria-label"), "Uploading shot.png");
+  assert.equal(meter.hasAttribute("aria-valuenow"), false);
+  assert.equal(list.querySelector("img")?.getAttribute("alt"), "shot.png");
+});
+
+test("a file that lands while drawn takes its check and opens; one drawn up already takes none", () => {
+  const { list, to } = redrawn({ name: "spec.pdf", state: ATTACHMENT_CHIP_STATE.UPLOADING });
+  assert.equal(list.querySelector(".luke-attachment-chip-landed"), null);
+  to({ name: "spec.pdf", state: ATTACHMENT_CHIP_STATE.READY, onOpen: () => {} });
+  assert.equal(list.querySelector('[role="progressbar"]'), null);
+  assert.notEqual(list.querySelector(".luke-attachment-chip-landed"), null);
+  assert.deepEqual(buttonNames(list), ["Open spec.pdf"]);
+  const standing = drawn({ name: "spec.pdf", onOpen: () => {} });
+  assert.equal(standing.querySelector(".luke-attachment-chip-landed"), null);
 });
