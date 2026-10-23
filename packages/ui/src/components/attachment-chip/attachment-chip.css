@@ -17,9 +17,10 @@
   }
 
   /* A chip with a way off was added to what it comes along with, so it
-     springs in as a removable chip does (`chip.css`'s keyframes); its exit
-     is the list's that draws it. */
-  .luke-attachment-chip[data-removable="true"] {
+     springs in as a removable chip does (`chip.css`'s keyframes), unless a
+     `ListMotion` follows it (`data-motion-key`), which plays its arrival
+     and its exit instead. */
+  .luke-attachment-chip[data-removable="true"]:not([data-motion-key]) {
     animation:
       luke-chip-fade-in var(--luke-duration-quick) ease-out backwards,
       luke-chip-pop var(--luke-duration-fast) var(--luke-spring-fast) backwards;

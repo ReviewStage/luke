@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { RemoveIcon } from "../../face/glyphs.js";
 import { pulseOnPress } from "../../press-pulse.js";
+import { motionKey as motionKeyAttribute } from "../list-motion/list-motion.js";
 import { ClippedLine, ONE_LINE_ELEMENT, ONE_LINE_END } from "../one-line/clipped-line.js";
 import { SPINNER_SIZE, Spinner } from "../spinner/spinner.js";
 
@@ -16,7 +17,8 @@ import { SPINNER_SIZE, Spinner } from "../spinner/spinner.js";
  * "Remove <name>", unavailable while `removeDisabled` holds, which its
  * caller answers at once, so the file is off on the press. A chip with a way
  * off was added to what it comes along with, so it springs in as it arrives;
- * its exit is the list's that draws it (`ListMotion`), since its caller has
+ * its exit is the list's that draws it, a `ListMotion` following it by its
+ * `motionKey`, which plays its arrival in its place, since its caller has
  * already let it go.
  *
  * A file whose bytes are still read stands as a thumbnail's place holding
@@ -91,6 +93,7 @@ export function AttachmentChip({
   removeDisabled,
   state = ATTACHMENT_CHIP_STATE.READY,
   failure,
+  motionKey,
 }: {
   /** The file's name, which names the chip, its open, and its way off. */
   name: string;
@@ -110,6 +113,8 @@ export function AttachmentChip({
   state?: AttachmentChipState;
   /** Why a failed file is not there, in words ("Not kept"); its glyph alone says so where none is given. */
   failure?: string | undefined;
+  /** The key a `ListMotion` around its list follows it by, which plays its arrival and its exit. */
+  motionKey?: string | undefined;
 }): React.JSX.Element {
   const ready = state === ATTACHMENT_CHIP_STATE.READY;
   const face = (
@@ -132,6 +137,7 @@ export function AttachmentChip({
       className="luke-attachment-chip"
       data-image={thumbnail ? "true" : undefined}
       data-removable={onRemove === undefined ? undefined : "true"}
+      {...(motionKey === undefined ? {} : motionKeyAttribute(motionKey))}
       data-state={state}
       title={name}
     >
