@@ -15,7 +15,12 @@
    A colour belongs here when a shared component draws with it or the
    window's own frame does (its sidebar, its wells). One that only one surface
    spends (a terminal's sixteen inks, a file icon's) stays in that app's
-   stylesheet. */
+   stylesheet.
+
+   Every palette is Nordic: warm paper and birch grounds in the light, a slate
+   night in the dark, ink a warm charcoal rather than black, and one muted
+   fjord blue for the accent, with the states in the same quiet key (sage,
+   ochre, lingonberry, heather). */
 
 [data-luke-theme="dark"] {
   color-scheme: dark;
@@ -38,87 +43,87 @@
 }
 
 [data-luke-profile="desktop"] {
-  --luke-color-text: light-dark(rgba(0, 0, 0, 0.88), rgba(255, 255, 255, 0.95));
-  --luke-color-text-muted: light-dark(rgba(0, 0, 0, 0.6), rgba(255, 255, 255, 0.56));
-  --luke-color-text-subtle: light-dark(rgba(0, 0, 0, 0.56), rgba(255, 255, 255, 0.5));
+  --luke-color-text: light-dark(rgba(38, 36, 32, 0.9), rgba(240, 236, 228, 0.94));
+  --luke-color-text-muted: light-dark(rgba(38, 36, 32, 0.64), rgba(240, 236, 228, 0.58));
+  --luke-color-text-subtle: light-dark(rgba(38, 36, 32, 0.6), rgba(240, 236, 228, 0.52));
   /* A document's running text, a step under the text so a page of it does not glare. */
-  --luke-color-text-body: light-dark(rgba(0, 0, 0, 0.8), rgba(255, 255, 255, 0.86));
+  --luke-color-text-body: light-dark(rgba(38, 36, 32, 0.82), rgba(240, 236, 228, 0.86));
   /* The text at full strength, for the one control drawn in it. */
-  --luke-color-ink: light-dark(#000, #fff);
+  --luke-color-ink: light-dark(#1f1d1a, #f6f3ec);
   /* Words on a fill of the text's own ink, which read in the ground's colour. */
   --luke-color-ink-inverse: var(--luke-color-ground);
   /* Links' and text buttons' ink: in the light a step darker than the working
-     teal-blue, at its hue, so it reads at AA on the sidebar's current row
+     fjord blue, at its hue, so it reads at AA on the sidebar's current row
      (`tokens.test.ts`). */
-  --luke-color-accent-text: light-dark(#00689b, #5cd5ff);
+  --luke-color-accent-text: light-dark(#2e5873, #9cc3dc);
 
-  --luke-color-ground: light-dark(#fcfcfc, #0c0c0e);
+  --luke-color-ground: light-dark(#f6f4ef, #15171a);
   /* A settings group's ground, a card's. */
-  --luke-color-surface: light-dark(#fff, rgba(255, 255, 255, 0.022));
+  --luke-color-surface: light-dark(#fdfcfa, rgba(240, 236, 228, 0.025));
   /* What floats over the window: the sidebar's step above the ground in the
      dark, where lighter is nearer, and white in the light, where a shadow
      says it instead. */
-  --luke-color-overlay: light-dark(#fff, #111114);
+  --luke-color-overlay: light-dark(#fdfcfa, #1b1e21);
   /* The sidebar's column: a step darker than the ground in the light, and the
      overlay's step above it in the dark. Its words at rest sit a step under
      the text, so the open, hovered, and unread rows stand out by going up. */
-  --luke-color-sidebar: light-dark(#f3f3f4, #111114);
-  --luke-color-sidebar-ink: light-dark(rgba(0, 0, 0, 0.68), rgba(255, 255, 255, 0.7));
+  --luke-color-sidebar: light-dark(#eeebe4, #1b1e21);
+  --luke-color-sidebar-ink: light-dark(rgba(38, 36, 32, 0.7), rgba(240, 236, 228, 0.7));
   /* A sunk ground, a step off the window's: a code block's, a strip's, a well's. */
-  --luke-color-well: light-dark(#f8f8f9, #0f0f12);
-  --luke-color-fill-hover: light-dark(rgba(0, 0, 0, 0.035), rgba(255, 255, 255, 0.05));
-  --luke-color-fill-strong: light-dark(rgba(0, 0, 0, 0.06), rgba(255, 255, 255, 0.09));
-  --luke-color-fill-selected: light-dark(rgba(0, 0, 0, 0.07), rgba(255, 255, 255, 0.2));
-  --luke-color-fill-pressed: light-dark(rgba(0, 0, 0, 0.11), rgba(255, 255, 255, 0.26));
-  --luke-color-border: light-dark(rgba(0, 0, 0, 0.08), rgba(255, 255, 255, 0.08));
-  --luke-color-border-strong: light-dark(rgba(0, 0, 0, 0.1), rgba(255, 255, 255, 0.12));
-  --luke-color-border-selected: light-dark(rgba(0, 0, 0, 0.3), rgba(255, 255, 255, 0.32));
+  --luke-color-well: light-dark(#f1eee8, #121417);
+  --luke-color-fill-hover: light-dark(rgba(60, 50, 35, 0.04), rgba(240, 236, 228, 0.05));
+  --luke-color-fill-strong: light-dark(rgba(60, 50, 35, 0.065), rgba(240, 236, 228, 0.09));
+  --luke-color-fill-selected: light-dark(rgba(60, 50, 35, 0.08), rgba(240, 236, 228, 0.18));
+  --luke-color-fill-pressed: light-dark(rgba(60, 50, 35, 0.12), rgba(240, 236, 228, 0.24));
+  --luke-color-border: light-dark(rgba(60, 50, 35, 0.09), rgba(240, 236, 228, 0.08));
+  --luke-color-border-strong: light-dark(rgba(60, 50, 35, 0.12), rgba(240, 236, 228, 0.12));
+  --luke-color-border-selected: light-dark(rgba(60, 50, 35, 0.32), rgba(240, 236, 228, 0.32));
   /* A chip's own face, opaque so it reads the same on any ground: its fill
      at rest, under the pointer, and standing chosen, and its hairline, the
      strong one round a chosen chip. */
-  --luke-color-chip: light-dark(#ffffff, #18181b);
-  --luke-color-chip-hover: light-dark(#f5f5f6, #202024);
-  --luke-color-chip-selected: light-dark(#ececee, #2c2c31);
-  --luke-color-chip-edge: light-dark(#dfdfe3, #2b2b30);
-  --luke-color-chip-edge-strong: light-dark(#b9b9c0, #45454c);
-  --luke-color-input: light-dark(#fff, rgba(0, 0, 0, 0.4));
-  --luke-color-input-focus: light-dark(#fff, rgba(0, 0, 0, 0.55));
-  --luke-color-match: light-dark(rgba(0, 0, 0, 0.09), rgba(255, 255, 255, 0.16));
-  --luke-color-scrollbar: light-dark(rgba(0, 0, 0, 0.2), rgba(255, 255, 255, 0.18));
+  --luke-color-chip: light-dark(#fdfcfa, #1f2226);
+  --luke-color-chip-hover: light-dark(#f4f1eb, #262a2e);
+  --luke-color-chip-selected: light-dark(#ebe7df, #30353a);
+  --luke-color-chip-edge: light-dark(#e0dbd1, #2d3136);
+  --luke-color-chip-edge-strong: light-dark(#bdb6a9, #474d54);
+  --luke-color-input: light-dark(#fdfcfa, rgba(0, 0, 0, 0.3));
+  --luke-color-input-focus: light-dark(#fff, rgba(0, 0, 0, 0.45));
+  --luke-color-match: light-dark(rgba(60, 50, 35, 0.1), rgba(240, 236, 228, 0.16));
+  --luke-color-scrollbar: light-dark(rgba(60, 50, 35, 0.22), rgba(240, 236, 228, 0.18));
 
   /* The accent the primary button, a switch that is on, and the keyboard's
-     ring draw in: the system's own default blue, in either appearance. */
-  --luke-color-accent: #0071e3;
+     ring draw in: the fjord blue, in either appearance, which holds white words at AA. */
+  --luke-color-accent: #3e6a87;
   --luke-color-on-accent: #fff;
   --luke-color-on-accent-muted: rgba(255, 255, 255, 0.65);
-  --luke-color-focus-ring: #0071e3;
+  --luke-color-focus-ring: #3e6a87;
 
   /* The one destructive colour: a ground it can sit on, the words that read
      on that ground, and a destructive button's fill deep enough for white. */
-  --luke-color-danger: light-dark(#e0383e, #ff7e7e);
-  --luke-color-danger-text: light-dark(#b8232a, #ff9b9b);
-  --luke-color-danger-fill: #d4373a;
+  --luke-color-danger: light-dark(#b84c41, #e8897d);
+  --luke-color-danger-text: light-dark(#9c3a30, #f0a296);
+  --luke-color-danger-fill: #a8443a;
   --luke-color-on-danger: #fff;
-  --luke-color-attention: light-dark(#a65400, #ffa049);
+  --luke-color-attention: light-dark(#8f5714, #e3a75c);
   /* The attention ink deepened into a fill white words hold on, in the dark
      as in the light, where the ink is deep already. */
-  --luke-color-attention-fill: light-dark(#a65400, #c4620c);
+  --luke-color-attention-fill: light-dark(#8f5714, #a8661c);
   --luke-color-on-attention: #fff;
-  --luke-color-complete: light-dark(#18794e, #6fdca4);
+  --luke-color-complete: light-dark(#3d7356, #8fcba8);
   /* A state's ink as the ground of a pill that carries it. */
   --luke-color-attention-tint: color-mix(in srgb, var(--luke-color-attention) 14%, transparent);
   --luke-color-complete-tint: color-mix(in srgb, var(--luke-color-complete) 14%, transparent);
-  --luke-color-working: light-dark(#0a72a8, #5cd5ff);
-  --luke-color-merged: light-dark(#8250df, #c3a0ff);
+  --luke-color-working: light-dark(#3e6a87, #9cc3dc);
+  --luke-color-merged: light-dark(#6f5a9a, #b8a6dc);
 
-  --luke-color-switch-track: light-dark(rgba(0, 0, 0, 0.14), rgba(255, 255, 255, 0.09));
-  --luke-color-switch-on: #0071e3;
-  --luke-color-switch-thumb: light-dark(#fff, rgba(255, 255, 255, 0.95));
+  --luke-color-switch-track: light-dark(rgba(60, 50, 35, 0.14), rgba(240, 236, 228, 0.09));
+  --luke-color-switch-on: #3e6a87;
+  --luke-color-switch-thumb: light-dark(#fdfcfa, rgba(240, 236, 228, 0.95));
   /* A segmented control's chosen option, raised on its trough: white in the
      light, a lighter step of the trough in the dark. */
-  --luke-color-thumb: light-dark(#fff, rgba(255, 255, 255, 0.13));
+  --luke-color-thumb: light-dark(#fdfcfa, rgba(240, 236, 228, 0.13));
   /* A hint is a dark pill in either appearance, as the system's own are. */
-  --luke-color-tooltip: #0b0b0c;
+  --luke-color-tooltip: #24231f;
   --luke-color-tooltip-edge: rgba(255, 255, 255, 0.1);
   --luke-color-tooltip-text: rgba(255, 255, 255, 0.95);
   --luke-color-tooltip-chord: rgba(255, 255, 255, 0.5);
@@ -133,10 +138,10 @@
   --luke-color-find-current: #ff9f0a;
   --luke-color-on-find-current: #000;
 
-  --luke-color-scrim: light-dark(rgba(0, 0, 0, 0.25), rgba(0, 0, 0, 0.55));
-  --luke-color-shadow-soft: light-dark(rgba(0, 0, 0, 0.08), rgba(0, 0, 0, 0.4));
-  --luke-color-shadow: light-dark(rgba(0, 0, 0, 0.12), rgba(0, 0, 0, 0.5));
-  --luke-color-shadow-deep: light-dark(rgba(0, 0, 0, 0.2), rgba(0, 0, 0, 0.6));
+  --luke-color-scrim: light-dark(rgba(30, 26, 20, 0.22), rgba(0, 0, 0, 0.5));
+  --luke-color-shadow-soft: light-dark(rgba(60, 45, 25, 0.06), rgba(0, 0, 0, 0.35));
+  --luke-color-shadow: light-dark(rgba(60, 45, 25, 0.09), rgba(0, 0, 0, 0.45));
+  --luke-color-shadow-deep: light-dark(rgba(60, 45, 25, 0.15), rgba(0, 0, 0, 0.55));
   /* The system's own switch lifts a white thumb off a grey track in the light, and draws none in the dark. */
   --luke-shadow-switch-thumb:
     0 1px 2px light-dark(rgba(0, 0, 0, 0.25), transparent),
@@ -144,89 +149,89 @@
 
   /* A person's disc (`avatar.tsx`) and a workspace's tile: six muted hues
      read off an id, each holding its white letter at AA on either ground. */
-  --luke-color-identity-1: light-dark(#4a5fc0, #4f63b8);
-  --luke-color-identity-2: light-dark(#23766f, #2b7f78);
-  --luke-color-identity-3: light-dark(#94631a, #9a6a1e);
-  --luke-color-identity-4: light-dark(#a8435f, #a24a63);
-  --luke-color-identity-5: light-dark(#6a4fbd, #6c55b3);
-  --luke-color-identity-6: light-dark(#3f7434, #477a3a);
+  --luke-color-identity-1: light-dark(#4e6a8c, #4f6888);
+  --luke-color-identity-2: light-dark(#3f7268, #3f7469);
+  --luke-color-identity-3: light-dark(#856532, #8a6a37);
+  --luke-color-identity-4: light-dark(#9a5560, #97575f);
+  --luke-color-identity-5: light-dark(#6d5f93, #6b5e8e);
+  --luke-color-identity-6: light-dark(#56703f, #557041);
   --luke-color-on-identity: #fff;
 
   /* A chart's series, in the order a chart takes them: each mark holds 3:1
      on either ground, so a stack of them reads apart by hue alone. */
-  --luke-color-chart-1: #2f9bd8;
-  --luke-color-chart-2: #8b6cd9;
-  --luke-color-chart-3: #2e9e6a;
-  --luke-color-chart-4: #c97a1a;
-  --luke-color-chart-5: #868b94;
+  --luke-color-chart-1: #4f86ab;
+  --luke-color-chart-2: #8b77b8;
+  --luke-color-chart-3: #5a9478;
+  --luke-color-chart-4: #a97536;
+  --luke-color-chart-5: #8e8a82;
 }
 
-/* The site's light ground is shadcn/ui's stock light theme warmed off pure
-   white, its accent Luke's cyan as a fill and darkened to a teal as ink. A
-   page without a theme of its own is this one. */
+/* The site's light ground is the desktop's light half: warm paper, birch
+   for the sidebar, the fjord blue as fill and, a step darker, as ink. A page
+   without a theme of its own is this one. */
 [data-luke-profile="web"],
 [data-luke-profile="web"][data-luke-theme="light"] {
-  --luke-color-text: oklch(0.145 0 0);
-  /* The quieter words, one ink: a step under shadcn's stock muted gray, so a
+  --luke-color-text: #26241f;
+  /* The quieter words, one ink: a warm grey dark enough that a
      caption reads at AA on the sidebar's current row (`tokens.test.ts`). */
-  --luke-color-text-muted: oklch(0.5 0 0);
-  --luke-color-text-subtle: oklch(0.5 0 0);
-  --luke-color-text-body: oklch(0.145 0 0);
-  --luke-color-ink: #000;
+  --luke-color-text-muted: #5f5b53;
+  --luke-color-text-subtle: #5f5b53;
+  --luke-color-text-body: #26241f;
+  --luke-color-ink: #1f1d1a;
   --luke-color-ink-inverse: var(--luke-color-ground);
-  --luke-color-accent-text: #0d6e80;
+  --luke-color-accent-text: #2e5873;
 
-  --luke-color-ground: #fbfbfa;
-  --luke-color-surface: oklch(1 0 0);
-  --luke-color-overlay: oklch(1 0 0);
-  --luke-color-sidebar: #f3f3f4;
-  --luke-color-sidebar-ink: rgba(0, 0, 0, 0.68);
-  --luke-color-well: oklch(0.97 0 0);
+  --luke-color-ground: #f6f4ef;
+  --luke-color-surface: #fdfcfa;
+  --luke-color-overlay: #fdfcfa;
+  --luke-color-sidebar: #eeebe4;
+  --luke-color-sidebar-ink: rgba(38, 36, 32, 0.7);
+  --luke-color-well: #f1eee8;
   /* The site had one fill, its muted ground; a control's states need a
      step each past it, the desktop's light steps, so a chosen segment or a
      pressed button reads apart from one merely hovered. */
-  --luke-color-fill-hover: oklch(0.97 0 0);
-  --luke-color-fill-strong: rgba(0, 0, 0, 0.06);
-  --luke-color-fill-selected: rgba(0, 0, 0, 0.07);
-  --luke-color-fill-pressed: rgba(0, 0, 0, 0.11);
-  --luke-color-border: oklch(0.922 0 0);
-  --luke-color-border-strong: oklch(0.922 0 0);
-  --luke-color-border-selected: oklch(0.145 0 0);
-  --luke-color-chip: #ffffff;
-  --luke-color-chip-hover: #f5f5f5;
-  --luke-color-chip-selected: #ebebeb;
-  --luke-color-chip-edge: #e5e5e5;
-  --luke-color-chip-edge-strong: #b5b5b5;
-  --luke-color-input: oklch(1 0 0);
-  --luke-color-input-focus: oklch(1 0 0);
-  --luke-color-match: rgba(0, 0, 0, 0.09);
-  --luke-color-scrollbar: rgba(0, 0, 0, 0.2);
+  --luke-color-fill-hover: rgba(60, 50, 35, 0.04);
+  --luke-color-fill-strong: rgba(60, 50, 35, 0.065);
+  --luke-color-fill-selected: rgba(60, 50, 35, 0.08);
+  --luke-color-fill-pressed: rgba(60, 50, 35, 0.12);
+  --luke-color-border: #e4e0d8;
+  --luke-color-border-strong: #e4e0d8;
+  --luke-color-border-selected: #26241f;
+  --luke-color-chip: #fdfcfa;
+  --luke-color-chip-hover: #f4f1eb;
+  --luke-color-chip-selected: #ebe7df;
+  --luke-color-chip-edge: #e0dbd1;
+  --luke-color-chip-edge-strong: #bdb6a9;
+  --luke-color-input: #fdfcfa;
+  --luke-color-input-focus: #fff;
+  --luke-color-match: rgba(60, 50, 35, 0.1);
+  --luke-color-scrollbar: rgba(60, 50, 35, 0.22);
 
-  --luke-color-accent: #5cd5ff;
-  --luke-color-on-accent: #04121a;
-  --luke-color-on-accent-muted: rgba(4, 18, 26, 0.65);
-  /* The ring owes 3:1 against the ground (WCAG 2.2, 1.4.11), which the cyan
-     cannot pay on a light page. */
-  --luke-color-focus-ring: oklch(0.145 0 0);
+  --luke-color-accent: #3e6a87;
+  --luke-color-on-accent: #fff;
+  --luke-color-on-accent-muted: rgba(255, 255, 255, 0.65);
+  /* The ring owes 3:1 against the ground (WCAG 2.2, 1.4.11); the charcoal
+     ink pays it with room to spare. */
+  --luke-color-focus-ring: #26241f;
 
-  --luke-color-danger: #e0383e;
-  --luke-color-danger-text: #b8232a;
-  --luke-color-danger-fill: #d4373a;
+  --luke-color-danger: #b84c41;
+  --luke-color-danger-text: #9c3a30;
+  --luke-color-danger-fill: #a8443a;
   --luke-color-on-danger: #fff;
-  --luke-color-attention: #9a5300;
-  --luke-color-attention-fill: #9a5300;
+  --luke-color-attention: #8f5714;
+  --luke-color-attention-fill: #8f5714;
   --luke-color-on-attention: #fff;
-  --luke-color-complete: #0f7a4e;
-  --luke-color-attention-tint: #fdf0e2;
-  --luke-color-complete-tint: #e6f5ed;
-  --luke-color-working: #0d6e80;
-  --luke-color-merged: #8250df;
+  --luke-color-complete: #3d7356;
+  --luke-color-attention-tint: #f6ecdd;
+  --luke-color-complete-tint: #e5efe8;
+  --luke-color-working: #3e6a87;
+  --luke-color-merged: #6f5a9a;
 
-  --luke-color-switch-track: rgba(0, 0, 0, 0.14);
-  --luke-color-switch-on: #0d6e80;
-  --luke-color-switch-thumb: #fff;
-  --luke-color-thumb: oklch(1 0 0);
-  --luke-color-tooltip: #0b0b0c;
+  --luke-color-switch-track: rgba(60, 50, 35, 0.14);
+  --luke-color-switch-on: #3e6a87;
+  --luke-color-switch-thumb: #fdfcfa;
+  --luke-color-thumb: #fdfcfa;
+  --luke-color-tooltip: #24231f;
   --luke-color-tooltip-edge: rgba(255, 255, 255, 0.1);
   --luke-color-tooltip-text: rgba(255, 255, 255, 0.95);
   --luke-color-tooltip-chord: rgba(255, 255, 255, 0.5);
@@ -237,91 +242,91 @@
   --luke-color-find-current: #ff9f0a;
   --luke-color-on-find-current: #000;
 
-  --luke-color-scrim: rgba(0, 0, 0, 0.25);
-  --luke-color-shadow-soft: rgba(0, 0, 0, 0.08);
-  --luke-color-shadow: rgba(0, 0, 0, 0.12);
-  --luke-color-shadow-deep: rgba(0, 0, 0, 0.2);
+  --luke-color-scrim: rgba(30, 26, 20, 0.22);
+  --luke-color-shadow-soft: rgba(60, 45, 25, 0.06);
+  --luke-color-shadow: rgba(60, 45, 25, 0.09);
+  --luke-color-shadow-deep: rgba(60, 45, 25, 0.15);
   --luke-shadow-switch-thumb: 0 1px 2px rgba(0, 0, 0, 0.25), 0 0 0 0.5px rgba(0, 0, 0, 0.08);
 
   /* A person's disc (`avatar.tsx`): six muted hues read off their id, each
      holding its white letter at AA on the light ground. */
-  --luke-color-identity-1: #4a5fc0;
-  --luke-color-identity-2: #23766f;
-  --luke-color-identity-3: #94631a;
-  --luke-color-identity-4: #a8435f;
-  --luke-color-identity-5: #6a4fbd;
-  --luke-color-identity-6: #3f7434;
+  --luke-color-identity-1: #4e6a8c;
+  --luke-color-identity-2: #3f7268;
+  --luke-color-identity-3: #856532;
+  --luke-color-identity-4: #9a5560;
+  --luke-color-identity-5: #6d5f93;
+  --luke-color-identity-6: #56703f;
   --luke-color-on-identity: #fff;
 
   /* A chart's series, in the order a chart takes them: each mark holds 3:1
      on either ground, so a stack of them reads apart by hue alone. */
-  --luke-color-chart-1: #2f9bd8;
-  --luke-color-chart-2: #8b6cd9;
-  --luke-color-chart-3: #2e9e6a;
-  --luke-color-chart-4: #c97a1a;
-  --luke-color-chart-5: #868b94;
+  --luke-color-chart-1: #4f86ab;
+  --luke-color-chart-2: #8b77b8;
+  --luke-color-chart-3: #5a9478;
+  --luke-color-chart-4: #a97536;
+  --luke-color-chart-5: #8e8a82;
 }
 
 /* The site's dark ground, worn where the account's Theme setting (or the
    machine, under System) asks for it, as the app and the admin dashboard do,
    and where a page asks for it itself, as the OAuth cards do. The product's state palette on it verbatim. */
 [data-luke-profile="web"][data-luke-theme="dark"] {
-  --luke-color-text: rgba(255, 255, 255, 0.92);
-  --luke-color-text-muted: rgba(255, 255, 255, 0.56);
-  --luke-color-text-subtle: rgba(255, 255, 255, 0.56);
-  --luke-color-text-body: rgba(255, 255, 255, 0.92);
-  --luke-color-ink: #fff;
+  --luke-color-text: rgba(240, 236, 228, 0.92);
+  --luke-color-text-muted: rgba(240, 236, 228, 0.58);
+  --luke-color-text-subtle: rgba(240, 236, 228, 0.58);
+  --luke-color-text-body: rgba(240, 236, 228, 0.92);
+  --luke-color-ink: #f6f3ec;
   --luke-color-ink-inverse: var(--luke-color-ground);
-  /* Luke's teal lifted to read on the dark grounds, AA against each (`tokens.test.ts`). */
-  --luke-color-accent-text: #15b3d0;
+  /* The fjord blue lifted to frost to read on the dark grounds, AA against each (`tokens.test.ts`). */
+  --luke-color-accent-text: #9cc3dc;
 
-  --luke-color-ground: #08090b;
+  --luke-color-ground: #15171a;
   /* A step above the page (1.06:1) lets a card read before its border does. */
-  --luke-color-surface: #101114;
-  --luke-color-overlay: #101114;
-  --luke-color-sidebar: #101114;
-  --luke-color-sidebar-ink: rgba(255, 255, 255, 0.7);
-  --luke-color-well: #0c0d10;
-  --luke-color-fill-hover: rgba(255, 255, 255, 0.05);
-  --luke-color-fill-strong: rgba(255, 255, 255, 0.09);
-  --luke-color-fill-selected: rgba(255, 255, 255, 0.2);
-  --luke-color-fill-pressed: rgba(255, 255, 255, 0.26);
-  --luke-color-border: rgba(255, 255, 255, 0.08);
-  --luke-color-border-strong: rgba(255, 255, 255, 0.08);
-  --luke-color-border-selected: rgba(255, 255, 255, 0.92);
-  --luke-color-chip: #16171b;
-  --luke-color-chip-hover: #1d1e23;
-  --luke-color-chip-selected: #272930;
-  --luke-color-chip-edge: #26272c;
-  --luke-color-chip-edge-strong: #3f4148;
-  --luke-color-input: #101114;
-  --luke-color-input-focus: #101114;
-  --luke-color-match: rgba(255, 255, 255, 0.16);
-  --luke-color-scrollbar: rgba(255, 255, 255, 0.18);
+  --luke-color-surface: #1c1f22;
+  --luke-color-overlay: #1c1f22;
+  --luke-color-sidebar: #1c1f22;
+  --luke-color-sidebar-ink: rgba(240, 236, 228, 0.7);
+  --luke-color-well: #121417;
+  --luke-color-fill-hover: rgba(240, 236, 228, 0.05);
+  --luke-color-fill-strong: rgba(240, 236, 228, 0.09);
+  --luke-color-fill-selected: rgba(240, 236, 228, 0.18);
+  --luke-color-fill-pressed: rgba(240, 236, 228, 0.24);
+  --luke-color-border: rgba(240, 236, 228, 0.08);
+  --luke-color-border-strong: rgba(240, 236, 228, 0.08);
+  --luke-color-border-selected: rgba(240, 236, 228, 0.92);
+  --luke-color-chip: #1f2226;
+  --luke-color-chip-hover: #262a2e;
+  --luke-color-chip-selected: #30353a;
+  --luke-color-chip-edge: #2d3136;
+  --luke-color-chip-edge-strong: #474d54;
+  --luke-color-input: #1c1f22;
+  --luke-color-input-focus: #1c1f22;
+  --luke-color-match: rgba(240, 236, 228, 0.16);
+  --luke-color-scrollbar: rgba(240, 236, 228, 0.18);
 
-  --luke-color-accent: #5cd5ff;
-  --luke-color-on-accent: #04121a;
-  --luke-color-on-accent-muted: rgba(4, 18, 26, 0.65);
-  --luke-color-focus-ring: rgba(255, 255, 255, 0.92);
+  --luke-color-accent: #9cc3dc;
+  --luke-color-on-accent: #10202b;
+  --luke-color-on-accent-muted: rgba(16, 32, 43, 0.65);
+  --luke-color-focus-ring: rgba(240, 236, 228, 0.92);
 
-  --luke-color-danger: #ff7e7e;
-  --luke-color-danger-text: #ff9b9b;
-  --luke-color-danger-fill: #d4373a;
+  --luke-color-danger: #e8897d;
+  --luke-color-danger-text: #f0a296;
+  --luke-color-danger-fill: #a8443a;
   --luke-color-on-danger: #fff;
-  --luke-color-attention: #ffa049;
-  --luke-color-attention-fill: #c4620c;
+  --luke-color-attention: #e3a75c;
+  --luke-color-attention-fill: #a8661c;
   --luke-color-on-attention: #fff;
-  --luke-color-complete: #6fdca4;
-  --luke-color-attention-tint: rgba(255, 160, 73, 0.14);
-  --luke-color-complete-tint: rgba(111, 220, 164, 0.14);
-  --luke-color-working: #5cd5ff;
-  --luke-color-merged: #c3a0ff;
+  --luke-color-complete: #8fcba8;
+  --luke-color-attention-tint: rgba(227, 167, 92, 0.14);
+  --luke-color-complete-tint: rgba(143, 203, 168, 0.14);
+  --luke-color-working: #9cc3dc;
+  --luke-color-merged: #b8a6dc;
 
-  --luke-color-switch-track: rgba(255, 255, 255, 0.09);
-  --luke-color-switch-on: #2f9bd8;
-  --luke-color-switch-thumb: rgba(255, 255, 255, 0.95);
-  --luke-color-thumb: rgba(255, 255, 255, 0.13);
-  --luke-color-tooltip: #0b0b0c;
+  --luke-color-switch-track: rgba(240, 236, 228, 0.09);
+  --luke-color-switch-on: #4f86ab;
+  --luke-color-switch-thumb: rgba(240, 236, 228, 0.95);
+  --luke-color-thumb: rgba(240, 236, 228, 0.13);
+  --luke-color-tooltip: #24231f;
   --luke-color-tooltip-edge: rgba(255, 255, 255, 0.1);
   --luke-color-tooltip-text: rgba(255, 255, 255, 0.95);
   --luke-color-tooltip-chord: rgba(255, 255, 255, 0.5);
@@ -332,29 +337,27 @@
   --luke-color-find-current: #ff9f0a;
   --luke-color-on-find-current: #000;
 
-  --luke-color-scrim: rgba(0, 0, 0, 0.55);
-  --luke-color-shadow-soft: rgba(0, 0, 0, 0.4);
-  --luke-color-shadow: rgba(0, 0, 0, 0.5);
-  --luke-color-shadow-deep: rgba(0, 0, 0, 0.6);
+  --luke-color-scrim: rgba(0, 0, 0, 0.5);
+  --luke-color-shadow-soft: rgba(0, 0, 0, 0.35);
+  --luke-color-shadow: rgba(0, 0, 0, 0.45);
+  --luke-color-shadow-deep: rgba(0, 0, 0, 0.55);
   --luke-shadow-switch-thumb: none;
 
   /* A person's disc (`avatar.tsx`): six muted hues read off their id, each
      holding its white letter at AA on the dark ground. */
-  --luke-color-identity-1: #4f63b8;
-  --luke-color-identity-2: #2b7f78;
-  --luke-color-identity-3: #9a6a1e;
-  --luke-color-identity-4: #a24a63;
-  --luke-color-identity-5: #6c55b3;
-  --luke-color-identity-6: #477a3a;
+  --luke-color-identity-1: #4f6888;
+  --luke-color-identity-2: #3f7469;
+  --luke-color-identity-3: #8a6a37;
+  --luke-color-identity-4: #97575f;
+  --luke-color-identity-5: #6b5e8e;
+  --luke-color-identity-6: #557041;
   --luke-color-on-identity: #fff;
 
-  /* The chart series on the dark ground. The accent cyan sits too light for a
-     mark on the dark card, so the slot is a darker step of the same hue
-     family, validated against the card at #101114 (6.1:1, ≥ 3:1); the series
-     after it hold the same bound there (4.7:1 to 5.7:1). */
-  --luke-color-chart-1: #2f9bd8;
-  --luke-color-chart-2: #8b6cd9;
-  --luke-color-chart-3: #2e9e6a;
-  --luke-color-chart-4: #c97a1a;
-  --luke-color-chart-5: #868b94;
+  /* The chart series on the dark ground, the light's own: each holds 3:1
+     against the card at #1c1f22 (4.2:1 to 5.5:1) as on the light card. */
+  --luke-color-chart-1: #4f86ab;
+  --luke-color-chart-2: #8b77b8;
+  --luke-color-chart-3: #5a9478;
+  --luke-color-chart-4: #a97536;
+  --luke-color-chart-5: #8e8a82;
 }

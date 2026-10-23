@@ -85,7 +85,7 @@ const DESKTOP_WINDOW = {
   MARGIN: 24,
   // The window's ground before the renderer paints, one per appearance; each
   // is the desktop palette's `--luke-color-ground` for that appearance.
-  BACKGROUND: { DARK: "#0c0c0e", LIGHT: "#fcfcfc" },
+  BACKGROUND: { DARK: "#15171a", LIGHT: "#f6f4ef" },
 } as const;
 
 /** The first frame of the window, centred in the display's work area. */
