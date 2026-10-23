@@ -701,7 +701,9 @@ function lift(target: HTMLElement, pointerType: string, x = 40, y = 20): boolean
 async function hungAt(): Promise<[string, string] | undefined> {
   await placed();
   const menu = openMenu();
-  const at = /translate\((-?[\d.]+px), (-?[\d.]+px)\)/u.exec(menu?.parentElement?.style.transform ?? "");
+  const at = /translate\((-?[\d.]+px), (-?[\d.]+px)\)/u.exec(
+    menu?.parentElement?.style.transform ?? "",
+  );
   return at === null ? undefined : [at[1] ?? "", at[2] ?? ""];
 }
 
@@ -880,7 +882,8 @@ test("a switch in the row that keeps its menu opens nothing, held or right-click
 /** Whether `element` is a menu or the positioner holding one, which a browser lays out the menu's size. */
 function menuBox(element: HTMLElement): boolean {
   return (
-    element.getAttribute("role") === "menu" || element.querySelector(':scope > [role="menu"]') !== null
+    element.getAttribute("role") === "menu" ||
+    element.querySelector(':scope > [role="menu"]') !== null
   );
 }
 

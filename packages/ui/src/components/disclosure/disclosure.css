@@ -178,7 +178,7 @@
 
   /* Under a card's head, past the hairline under it, at the head's inset. */
   .luke-disclosure-body[data-inset="card"] {
-    padding: var(--luke-space-8) var(--luke-space-12);
+    padding: var(--luke-row-inset) var(--luke-list-inset);
     border-top: 1px solid var(--luke-color-border);
   }
 

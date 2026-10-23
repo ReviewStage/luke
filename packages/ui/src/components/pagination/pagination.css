@@ -48,7 +48,7 @@
     border-color: var(--luke-color-border);
     background: var(--luke-color-fill-hover);
     color: var(--luke-color-text);
-    font-weight: var(--luke-weight-semibold);
+    font-weight: var(--luke-type-emphasis-weight);
   }
 
   .luke-pagination-item[data-idle="true"] {

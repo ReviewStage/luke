@@ -12,7 +12,7 @@
     font-family: var(--luke-font-sans);
     font-size: var(--luke-type-caption-size);
     line-height: var(--luke-type-caption-leading);
-    font-weight: var(--luke-weight-regular);
+    font-weight: var(--luke-type-caption-weight);
     font-variant-numeric: tabular-nums;
     white-space: nowrap;
     animation: luke-length-counter-in var(--luke-duration-quick) ease-out backwards;

@@ -21,7 +21,7 @@
     font-family: var(--luke-font-sans);
     font-size: var(--luke-type-body-size);
     line-height: var(--luke-type-body-leading);
-    font-weight: var(--luke-weight-regular);
+    font-weight: var(--luke-type-body-weight);
     transition:
       border-color var(--luke-duration-hover) ease,
       background-color var(--luke-duration-hover) ease;
@@ -59,7 +59,8 @@
     border: 0;
     background: none;
     font-size: var(--luke-type-title-size);
-    font-weight: var(--luke-weight-bold);
+    font-weight: var(--luke-type-title-weight);
+    letter-spacing: var(--luke-type-title-tracking);
     line-height: var(--luke-type-title-leading);
     outline: none;
   }
