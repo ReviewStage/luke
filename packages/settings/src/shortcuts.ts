@@ -197,7 +197,16 @@ export const SHORTCUT_KEY = {
   V: { accelerator: "V", glyph: "V", key: "v", code: "KeyV" },
   // ⌘L is New task's own, opening its Linear chip from the name field; no app command holds it.
   L: { accelerator: "L", glyph: "L", key: "l", code: "KeyL" },
+  // ⌘E, ⇧⌘X, and the digits but 0 are the writing chords' own (`WRITING_SHORTCUTS`); no app command holds them.
+  E: { accelerator: "E", glyph: "E", key: "e", code: "KeyE" },
+  X: { accelerator: "X", glyph: "X", key: "x", code: "KeyX" },
   ZERO: { accelerator: "0", glyph: "0", key: "0", code: "Digit0" },
+  ONE: { accelerator: "1", glyph: "1", key: "1", code: "Digit1" },
+  TWO: { accelerator: "2", glyph: "2", key: "2", code: "Digit2" },
+  THREE: { accelerator: "3", glyph: "3", key: "3", code: "Digit3" },
+  SEVEN: { accelerator: "7", glyph: "7", key: "7", code: "Digit7" },
+  EIGHT: { accelerator: "8", glyph: "8", key: "8", code: "Digit8" },
+  NINE: { accelerator: "9", glyph: "9", key: "9", code: "Digit9" },
   // ⌘+ answers ⌘= as well, so zooming in never needs Shift, as in Chrome and
   // VS Code.
   PLUS: { accelerator: "Plus", glyph: "+", key: "+", code: "Equal", unshifted: "=", aria: "Plus" },
@@ -780,6 +789,151 @@ export const CHAPTERS_GROUP_TITLE = "Chapters";
 
 /** Every one of Chapters' keys, in the order the table declares them, which the Keyboard shortcuts page lists. */
 export const CHAPTERS_KEYS: readonly ChaptersKey[] = Object.values(CHAPTERS_KEY);
+
+/** A mark laid on words as they are written: what the selection toolbar and every box's chords toggle. */
+export const WRITING_MARK = {
+  BOLD: "writing-bold",
+  ITALIC: "writing-italic",
+  STRIKE: "writing-strike",
+  CODE: "writing-code",
+  LINK: "writing-link",
+} as const;
+
+type WritingMark = (typeof WRITING_MARK)[keyof typeof WRITING_MARK];
+
+/** A block a line of text is turned into: what Turn into and the `/` menu offer, in their order. */
+export const WRITING_BLOCK = {
+  TEXT: "writing-text",
+  HEADING_1: "writing-heading-1",
+  HEADING_2: "writing-heading-2",
+  HEADING_3: "writing-heading-3",
+  BULLETED_LIST: "writing-bulleted-list",
+  NUMBERED_LIST: "writing-numbered-list",
+  TODO_LIST: "writing-todo-list",
+  QUOTE: "writing-quote",
+  CODE_BLOCK: "writing-code-block",
+} as const;
+
+type WritingBlock = (typeof WRITING_BLOCK)[keyof typeof WRITING_BLOCK];
+
+/** A block laid in between lines rather than one a line is turned into. */
+export const WRITING_INSERT = {
+  DIVIDER: "writing-divider",
+} as const;
+
+type WritingInsert = (typeof WRITING_INSERT)[keyof typeof WRITING_INSERT];
+
+/** Anything a writing chord or a Markdown rule does to text. */
+export type WritingAction = WritingMark | WritingBlock | WritingInsert;
+
+/**
+ * One writing action as every surface names it: its label, the chord that
+ * runs it while an editor has the caret, where it has one, and the Markdown
+ * typed in text that makes it, where there is one, `x` standing for the words.
+ */
+export interface WritingShortcut {
+  label: string;
+  chord?: ShortcutChord;
+  markdown?: string;
+}
+
+/**
+ * The writing vocabulary: the one table the editors bind their chords from,
+ * and the Keyboard shortcuts page, the toolbars, and the menus list. The
+ * chords are TipTap's own, which are Google Docs' for the most part, with two
+ * moved off the window's: Strikethrough takes ⇧⌘X, as Google Docs has it,
+ * rather than ⇧⌘S, which is Toggle speaker, and Code block takes none rather
+ * than ⌥⌘C, which is Copy link, since ``` makes one as quickly. Bold's ⌘B is
+ * Toggle sidebar's key too, and is Bold's only while an editor has the caret:
+ * an editor stops the chords it answers on their way to the window's keymap
+ * (`writing-keys.ts` in `@luke/panel`).
+ */
+export const WRITING_SHORTCUTS = {
+  [WRITING_MARK.BOLD]: {
+    label: "Bold",
+    chord: { key: SHORTCUT_KEY.B },
+    markdown: "**x**",
+  },
+  [WRITING_MARK.ITALIC]: {
+    label: "Italic",
+    chord: { key: SHORTCUT_KEY.I },
+    markdown: "*x*",
+  },
+  [WRITING_MARK.STRIKE]: {
+    label: "Strikethrough",
+    chord: { key: SHORTCUT_KEY.X, shift: true },
+    markdown: "~~x~~",
+  },
+  [WRITING_MARK.CODE]: {
+    label: "Code",
+    chord: { key: SHORTCUT_KEY.E },
+    markdown: "`x`",
+  },
+  [WRITING_MARK.LINK]: { label: "Link" },
+  [WRITING_BLOCK.TEXT]: {
+    label: "Text",
+    chord: { key: SHORTCUT_KEY.ZERO, option: true },
+  },
+  [WRITING_BLOCK.HEADING_1]: {
+    label: "Heading 1",
+    chord: { key: SHORTCUT_KEY.ONE, option: true },
+    markdown: "#",
+  },
+  [WRITING_BLOCK.HEADING_2]: {
+    label: "Heading 2",
+    chord: { key: SHORTCUT_KEY.TWO, option: true },
+    markdown: "##",
+  },
+  [WRITING_BLOCK.HEADING_3]: {
+    label: "Heading 3",
+    chord: { key: SHORTCUT_KEY.THREE, option: true },
+    markdown: "###",
+  },
+  [WRITING_BLOCK.BULLETED_LIST]: {
+    label: "Bulleted list",
+    chord: { key: SHORTCUT_KEY.EIGHT, shift: true },
+    markdown: "-",
+  },
+  [WRITING_BLOCK.NUMBERED_LIST]: {
+    label: "Numbered list",
+    chord: { key: SHORTCUT_KEY.SEVEN, shift: true },
+    markdown: "1.",
+  },
+  [WRITING_BLOCK.TODO_LIST]: {
+    label: "To-do list",
+    chord: { key: SHORTCUT_KEY.NINE, shift: true },
+    markdown: "[]",
+  },
+  [WRITING_BLOCK.QUOTE]: {
+    label: "Quote",
+    chord: { key: SHORTCUT_KEY.B, shift: true },
+    markdown: ">",
+  },
+  [WRITING_BLOCK.CODE_BLOCK]: { label: "Code block", markdown: "```" },
+  [WRITING_INSERT.DIVIDER]: { label: "Divider", markdown: "---" },
+} as const satisfies Record<WritingAction, WritingShortcut>;
+
+/** Every mark, in the order a toolbar lays them out. */
+const WRITING_MARKS: readonly WritingMark[] = Object.values(WRITING_MARK);
+
+/** Every block a line is turned into, in the order Turn into lists them. */
+const WRITING_BLOCKS: readonly WritingBlock[] = Object.values(WRITING_BLOCK);
+
+/** Every writing action, the marks, then the blocks, then what is laid in. */
+export const WRITING_ACTIONS: readonly WritingAction[] = [
+  ...WRITING_MARKS,
+  ...WRITING_BLOCKS,
+  ...Object.values(WRITING_INSERT),
+];
+
+/** The Keyboard shortcuts page's group of the writing chords and Markdown rules, and its settings search's words for them. */
+export const WRITING_GROUP_TITLE = "Writing";
+
+/** The writing actions the Keyboard shortcuts page lists: each one a chord or a Markdown rule reaches, in the vocabulary's order. */
+export const WRITING_ACTIONS_LISTED: readonly WritingAction[] = WRITING_ACTIONS.filter((action) => {
+  const shortcut: WritingShortcut = WRITING_SHORTCUTS[action];
+  return shortcut.chord !== undefined || shortcut.markdown !== undefined;
+});
 
 /** Every command, in the order the table declares them. */
 const APP_COMMANDS: readonly AppCommand[] = Object.values(APP_COMMAND);
