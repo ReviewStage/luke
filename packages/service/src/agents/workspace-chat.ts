@@ -77,7 +77,7 @@ import { deploymentEve } from "./deployment-eve.js";
  *
  * `GET /api/workspaces/chat?workspaceId=&after=` answers what a person in
  * the workspace sees of its chat past the cursor, held open while nothing
- * moved (`hosted/coder-host/chat-page.ts`): the roster, the channels, the
+ * moved (`coder-host/chat-page.ts`): the roster, the channels, the
  * messages posted or changed past the cursor, and the cursor to read on
  * from. A read writes nothing: the person joins the workspace's chat first,
  * `POST {join: true}`, which makes their member and `#general` where they
@@ -90,7 +90,7 @@ import { deploymentEve } from "./deployment-eve.js";
  * place of the message it replies to, answered once it is committed and
  * told to the members it addresses after the answer has left, through the
  * one door a coding agent's post goes through too
- * (`hosted/coder-host/chat-notify.ts`); an answer to an ask, at the
+ * (`coder-host/chat-notify.ts`); an answer to an ask, at the
  * revision the window drew, posted as the person's reply in its thread and
  * told to the ask's poster where it asked to hear back; a resolve of an
  * ask of the person's own; and how far the person has read. A post may

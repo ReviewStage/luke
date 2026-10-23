@@ -87,7 +87,7 @@ import { runAgent } from "./runtime.js";
  * because eve loads the authored files as modules and the environment read
  * is a `Config` over `process.env`, which suspends on nothing. The edge's
  * own runner is handed down too: eve's door holds a promise, and it runs on
- * it, so nothing under `server/hosted/` keeps a runner of its own. The
+ * it, so nothing under `packages/service/` keeps a runner of its own. The
  * worker's authored files and the delegation tool run what they need
  * through the doors below rather than at edges of their own.
  */

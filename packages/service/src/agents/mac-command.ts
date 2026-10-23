@@ -44,7 +44,7 @@ import { COMMAND_DESCRIPTION } from "./command-description.js";
  * a call that died left behind is never run later. An ask the Mac's read
  * would refuse is refused before it is queued. The Mac's side is `GET /api/mac-commands`, held open while
  * nothing waits and answered with every waiting command claimed for it,
- * and `POST`, its result (`../mac-commands-app.ts`).
+ * and `POST`, its result (`mac-commands-procedures.ts`).
  *
  * A command is of a kind (`MAC_COMMAND_KIND`), and a Mac is handed only
  * the kinds its read named: shell, which every Mac runs, an older one's

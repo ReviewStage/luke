@@ -119,7 +119,7 @@ export function createElectronBuilderConfig(env = process.env) {
       minimumSystemVersion: MACOS_DEPLOYMENT_TARGET,
       binaries: NATIVE_HELPERS.map(macBinaryPath),
       // The app's own scheme, which a Luke link's "Open in Luke" page hands
-      // the plan to (`src/main/window/app-links.ts`): written into the
+      // the plan to (`src/main/services/window-service.ts`): written into the
       // bundle's CFBundleURLTypes, which macOS registers the app for.
       protocols: [{ name: "Luke link", schemes: ["tryluke"], role: "Viewer" }],
       extendInfo: {
