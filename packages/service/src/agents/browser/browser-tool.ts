@@ -89,7 +89,7 @@ import { imageDimensions, sniffImageType } from "@luke/features/image-signature"
 import { webmDimensions } from "@luke/features/video-signature";
 import { isRecord, type UnparsedWireValue, unparsedWire } from "@luke/wire";
 import { describeWire, readEither } from "@luke/wire/effect";
-import { Clock, Duration, Effect, Option, Result, Schema } from "effect";
+import { DateTime, Duration, Effect, Option, Result, Schema } from "effect";
 import type { ToolModelOutput } from "eve/tools";
 import { logStoreFailure } from "../../http/store-failure.js";
 import { AGENT_TOOL } from "../agent-runtime/tools.js";
@@ -678,7 +678,7 @@ export function runBrowserTool(
         Effect.gen(function* () {
           const cdp = yield* browserFor(call);
           const rows = yield* listAgentBrowserTabs(call.conversationId);
-          const now = new Date(yield* Clock.currentTimeMillis);
+          const now = yield* DateTime.nowAsDate;
           const refused = firstDriven(actions, drivenTabs(rows, now));
           const runnable = refused === undefined ? actions : actions.slice(0, refused.index);
           const kept = new Set(rows.map((row) => row.targetId));

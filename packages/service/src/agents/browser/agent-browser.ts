@@ -62,6 +62,7 @@ import { capSandboxTimeout } from "../sandbox-keep-alive.js";
 import { SandboxPty, type SandboxPtyService, sandboxPtyLayer } from "../sandbox-pty.js";
 import {
   deploymentOidcToken,
+  SANDBOX_STATUS,
   type SandboxUnavailable,
   type VercelSandboxApi,
   vercelSandboxApi,
@@ -108,9 +109,6 @@ const AGENT_BROWSER = {
   /** The PTY the bridge runs in: its size is nothing to it, and its text is UTF-8. */
   PTY: { COLS: 80, ROWS: 24, CWD: "/", ENV: ["TERM=dumb", "LANG=C.UTF-8"] },
 } as const;
-
-/** Vercel's state of a sandbox that runs. */
-const RUNNING_STATUS = "running";
 
 /** Why an agent's browser could not be reached. */
 export const BROWSER_UNREACHABLE = {
@@ -465,7 +463,7 @@ export function agentBrowserOver(
     Effect.gen(function* () {
       const [sandbox] = yield* api.listTagged(sessionId).pipe(Effect.mapError(sandboxUnavailable));
       if (sandbox === undefined) return yield* unreachable(BROWSER_UNREACHABLE.NOT_OPENED);
-      if (sandbox.status === RUNNING_STATUS && sandbox.currentSessionId !== undefined) {
+      if (sandbox.status === SANDBOX_STATUS.RUNNING && sandbox.currentSessionId !== undefined) {
         return sandbox.currentSessionId;
       }
       // Note that each try asks the resume again, which answers a sandbox already coming up as it stands,
@@ -476,7 +474,7 @@ export function agentBrowserOver(
       const resumed = api.resume(sandbox.name).pipe(
         Effect.mapError(sandboxUnavailable),
         Effect.flatMap((found) =>
-          found.status === RUNNING_STATUS && found.currentSessionId !== undefined
+          found.status === SANDBOX_STATUS.RUNNING && found.currentSessionId !== undefined
             ? Effect.succeed(found.currentSessionId)
             : Effect.fail(unreachable(BROWSER_UNREACHABLE.NOT_RESUMED)),
         ),

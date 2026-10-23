@@ -7,7 +7,7 @@ import { recordVoiceSeconds } from "@luke/database/models/quota";
 import { voiceSessionRecord } from "@luke/database/models/voice-session-record";
 import { storeWriter } from "@luke/database/models/writer";
 import { PROVIDER_KEY_PROVIDER } from "@luke/features/provider-key-wire";
-import { Effect, Layer, Redacted } from "effect";
+import { Clock, Effect, Layer, Redacted } from "effect";
 import { HttpClient, HttpRouter } from "effect/http";
 import { ownApiKeyOf } from "../accounts/own-api-key.js";
 import { deploymentEveOrigin } from "../agents/brain-host/eve-origin.js";
@@ -147,7 +147,9 @@ const maintenanceSweepEffect = /* @__PURE__ */ Effect.fn("web/maintenanceSweepEf
           upstreamOf: voiceUpstreamOf,
           record: voiceSessionRecord(),
           recordSeconds: (input) =>
-            Effect.suspend(() => recordVoiceSeconds({ ...input, now: Date.now() })),
+            Effect.flatMap(Clock.currentTimeMillis, (at) =>
+              recordVoiceSeconds({ ...input, now: at }),
+            ),
         },
         { now },
       ),
