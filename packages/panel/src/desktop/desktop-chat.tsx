@@ -22,12 +22,21 @@ import {
   LIST_ROW_INK,
   LIST_ROW_META,
   ListRow,
+  ONE_LINE_ELEMENT,
+  ONE_LINE_END,
+  OneLine,
   PencilIcon,
   PlusIcon,
+  RowHint,
+  RowHintOptions,
   SCROLL_FADE,
   ScrollArea,
+  SpinnerRegion,
+  Time,
+  Tooltip,
   UnarchiveIcon,
   useMenu,
+  useMinute,
   VisuallyHidden,
 } from "@luke/ui";
 import { type Actor, actorName } from "@luke/ui/actor-model";
@@ -40,7 +49,6 @@ import {
   chatRail,
   FOR_YOU,
 } from "@luke/ui/chat-model";
-import type { SkillOption } from "@luke/ui/skill-mention";
 import { sectionTaskIds, workspaceSections } from "@luke/ui/task-sections-model";
 import {
   AtSignIcon,
@@ -59,7 +67,6 @@ import { LinkWorkspaceProvider, useCopyLinkItem } from "../copy-link-item.js";
 import { ExperimentTag, SendFeedbackButton } from "../experiment-marks.js";
 import { MemberDirectory } from "../member-directory.js";
 import { hiddenColumns, SHELL_ROOM, type ShellRoom } from "../shell-room.js";
-import { SpinnerRegion } from "../spinner.js";
 import { AgentCard, lineSubject } from "../tasks/agent-ref.js";
 import { useChatActor, useChatNames } from "../tasks/chat-actors.js";
 import { channelTitle } from "../tasks/chat-channel-name.js";
@@ -68,17 +75,15 @@ import type { InboxCodeDoors } from "../tasks/inbox-code-card.js";
 import { VIEW_OPTIONS } from "../tasks/inbox-columns.js";
 import { InboxListSkeleton, markAllEntries } from "../tasks/inbox-list.js";
 import { NEEDS_YOU } from "../tasks/inbox-model.js";
-import { RelativeTime } from "../tasks/relative-time.js";
 import { keptSkills } from "../tasks/repository-skills.js";
 import type { SkillSource } from "../tasks/skill-picker.js";
+import type { SkillWithFile } from "../tasks/skill-ref.js";
 import { agentEndMark, PlanGlyph } from "../tasks/tab-look.js";
 import { tasklessMentions } from "../tasks/task-mentions.js";
 import { markReadItem } from "../tasks/task-menu-items.js";
-import { useMinute } from "../tasks/task-time.js";
 import { useTaskStatus } from "../tasks/use-known-names.js";
 import { useOpenLink, useOpenTask } from "../tasks/use-open-link.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
-import { RowHint, RowHintOptions, Tooltip } from "../tooltip.js";
 import { ActionMenu, type MenuAction } from "./action-menu.js";
 import { type ChannelDialogs, useChannelDialogs } from "./chat-channel-dialogs.js";
 import { previewWords } from "./chat-preview.js";
@@ -235,13 +240,13 @@ function useTaskDoors(
   const { tasks: listed } = tasks;
   // Note that each task's skills are read once and kept while its repository and workspace stand, because a source made anew, as a change to any listed task would make it, reads them again and draws its chips as words until it lands.
   const skillSources = useRef(
-    new Map<string, { repository: string; workspaceId: string; source: SkillSource }>(),
+    new Map<string, { repository: string | null; workspaceId: string; source: SkillSource }>(),
   );
   const doors = useMemo(() => {
     const held = new Map<string, ChatTaskDoors>();
     const kept = skillSources.current;
     const reading = new Set<string>();
-    const skillSourceOf = (taskId: string, repository: string, workspaceId: string) => {
+    const skillSourceOf = (taskId: string, repository: string | null, workspaceId: string) => {
       reading.add(taskId);
       const standing = kept.get(taskId);
       if (standing?.repository === repository && standing.workspaceId === workspaceId) {
@@ -269,21 +274,18 @@ function useTaskDoors(
         lines === undefined
           ? showFile({ path }, undefined)
           : showFile({ path, startLine: lines.startLine, endLine: lines.endLine }, lines.commit);
-      // A skill's file opens in its task, as the task's page opens it.
-      const skills =
-        repository === null
-          ? undefined
-          : {
-              source: skillSourceOf(task.id, repository, workspaceId),
-              onOpen: (skill: SkillOption) => showFile({ path: skill.path }, undefined),
-            };
+      // A skill's file opens in its task, as the task's page opens it; a task with no repository offers its member's installed skills alone.
+      const skills = {
+        source: skillSourceOf(task.id, repository, workspaceId),
+        onOpen: (skill: SkillWithFile) => showFile({ path: skill.path }, undefined),
+      };
       held.set(task.id, {
         code,
         mentions: { ...taskless, taskName: task.name, doors: { ...taskless.doors, onOpenFile } },
         skills,
       });
     }
-    // A task no longer listed, or listed with no repository, lets its skills go, so a repository chosen again is read afresh.
+    // A task no longer listed lets its skills go, so a task listed again is read afresh.
     for (const taskId of kept.keys()) if (!reading.has(taskId)) kept.delete(taskId);
     return held;
   }, [listed, act, openTask, workspace, mentions]);
@@ -703,7 +705,7 @@ function PlaceRow({
                 </span>
               ) : null}
               {end}
-              {at === undefined ? null : <RelativeTime at={at} hint={false} />}
+              {at === undefined ? null : <Time at={at} hint={false} />}
             </span>
           }
           metaAt={LIST_ROW_META.TITLE}
@@ -1184,7 +1186,13 @@ function RailBar({
   return (
     <header className="desktop-toolbar chat-rail-bar">
       <div className="desktop-toolbar-heading">
-        <h1 className="desktop-toolbar-title">{CHAT_LIST}</h1>
+        <OneLine
+          as={ONE_LINE_ELEMENT.H1}
+          end={ONE_LINE_END.ELLIPSIS}
+          className="desktop-toolbar-title"
+        >
+          {CHAT_LIST}
+        </OneLine>
         <ExperimentTag />
       </div>
       <div className="desktop-toolbar-actions">
@@ -1346,7 +1354,7 @@ export function TaskChatTab({
             {CHAT_FAILED}
           </ErrorState>
         ) : read === undefined && view.available ? (
-          <SpinnerRegion label="Loading chat" />
+          <SpinnerRegion delay label="Loading chat" />
         ) : (
           <EmptyState icon={<MessagesSquareIcon />}>{NO_TASK_CHANNEL}</EmptyState>
         )}

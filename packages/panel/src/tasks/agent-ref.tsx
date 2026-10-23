@@ -6,14 +6,12 @@ import {
 import { LINK_PLACE } from "@luke/features/luke-link";
 import type { CatalogModel } from "@luke/features/models-wire";
 import type { TaskAgentLine } from "@luke/features/task-wire";
-import { HoverCard, HoverCardHead, INLINE_REF_LOOK } from "@luke/ui";
+import { HoverCard, HoverCardHead, INLINE_REF_LOOK, InlineRef, Tooltip } from "@luke/ui";
 import { ACTOR_KIND, ACTOR_STATE, type Actor } from "@luke/ui/actor-model";
 import { TAB_WORDS } from "@luke/ui/tab-strip-model";
 import { ACTOR_SIZE, ActorMark, ActorRef } from "../actor-ref.js";
 import type { HeldTranscripts } from "../desktop/strip-tabs.js";
-import { InlineRef } from "../inline-ref.js";
 import { useMemberDirectory } from "../member-directory.js";
-import { Tooltip } from "../tooltip.js";
 import {
   AgentTabCard,
   type CardReading,

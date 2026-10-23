@@ -11,6 +11,7 @@ import {
   accountActor,
   activityWords,
   actorName,
+  assigneeFace,
   creatorActor,
   distinctActors,
   type EditReader,
@@ -262,6 +263,21 @@ test("a task wears its creator only where someone other than the reader created 
   // Nobody is worn where the row cannot tell the task is someone else's.
   assert.equal(teammateCreator({}, SAM_READS), undefined);
   assert.equal(teammateCreator(dana, { members: [DANA, SAM], readerId: undefined }), undefined);
+});
+
+test("a task wears who is on it: a teammate assigned by their face, no one on the unassigned mark, and the reader's own nothing, whoever created it", () => {
+  const assigned = { assignee: DANA_REF, createdBy: SAM, ownerId: SAM.userId };
+  assert.equal(called(assigneeFace(assigned, SAM_READS)?.assignee), "Dana Reyes");
+  assert.equal(assigneeFace(assigned, { ...SAM_READS, readerId: DANA.userId }), undefined);
+  // A task no one is on wears the unassigned mark, the reader's own included.
+  assert.deepEqual(assigneeFace({ assignee: undefined }, SAM_READS), { assignee: undefined });
+  // An assignee who left is drawn as having left.
+  assert.deepEqual(assigneeFace(assigned, { members: [SAM], readerId: SAM.userId })?.assignee, {
+    kind: ACTOR_KIND.SOMEONE,
+    reason: SOMEONE_REASON.FORMER,
+    name: "Dana Reyes",
+    userId: DANA.userId,
+  });
 });
 
 test("the signed-in account is drawn as the reader, by the name, address, and picture their sign-in holds", () => {

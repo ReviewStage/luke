@@ -1,10 +1,18 @@
 import { type TerminalAction, type TerminalBar, terminalLook } from "@luke/features/terminal-model";
 import { SHORTCUT_KEY } from "@luke/settings/shortcuts";
-import { TEXT_BUTTON_TONE, TEXT_ELEMENT, TEXT_VARIANT, Text, TextButton } from "@luke/ui";
+import {
+  FILL_FLOW,
+  Fill,
+  Shortcut,
+  TEXT_BUTTON_TONE,
+  TEXT_ELEMENT,
+  TEXT_VARIANT,
+  Text,
+  TextButton,
+} from "@luke/ui";
 import { useMemo } from "react";
 import { TERMINAL_LOAD_FAILED } from "../bundle-loader.js";
 import { FIND_STEP, type FindSource, useFindSource } from "../find-in-tab.js";
-import { Shortcut } from "../shortcut.js";
 import { TERMINAL_FIND, type TerminalFind } from "../terminal/contract.js";
 import { AgentRef, agentSubject, NOTHING_HELD } from "./agent-ref.js";
 import { TreeToggle, usePaneRoom } from "./file-view.js";
@@ -132,7 +140,7 @@ export function TerminalTab({
   const look = terminalLook(session.state);
   const room = usePaneRoom(shells);
   return (
-    <div
+    <Fill
       className="terminal-tab file-view ph-no-capture"
       data-state={session.state.kind}
       {...room.root}
@@ -154,7 +162,7 @@ export function TerminalTab({
           <TreeToggle toggles={room.toggles} words={SHELLS_TOGGLE} />
         </div>
       </header>
-      <div className="terminal-tab-body" {...room.body}>
+      <Fill flow={FILL_FLOW.ROW} clip className="terminal-tab-body" {...room.body}>
         <div className="terminal-tab-host">
           {look.bar === undefined ? null : <StateBar bar={look.bar} onAction={session.onAction} />}
           {session.failed ? (
@@ -187,7 +195,7 @@ export function TerminalTab({
             surfaceOpen={shown}
           />
         ) : null}
-      </div>
-    </div>
+      </Fill>
+    </Fill>
   );
 }

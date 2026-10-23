@@ -1,18 +1,4 @@
-/* The settings tab: pages of rows, credentials, and the controls that write them. */
-
-/* A glyph's own size wherever the window draws it bare, in the `base`
-   layer under the shared components, so a control, a menu, or a row that
-   holds one sizes it as its own contract says and the window's own markup
-   is all these reach. Sized to the heading it labels rather than to a grid:
-   the glyph is a letter in the line, not an element beside it. */
-@layer base {
-  .settings-icon {
-    width: 14px;
-    height: 14px;
-    flex: 0 0 auto;
-    opacity: 0.85;
-  }
-}
+/* The settings tab's own layout: what no shared component draws. */
 
 /* Every row stands at the height a label-and-subtext pair needs, whether or
    not it carries the subtext: a list where the short rows sit shorter reads as
@@ -23,113 +9,6 @@
   align-items: center;
   justify-content: space-between;
   gap: var(--luke-space-12);
-}
-
-/* Where the query's words landed, so a result says why it matched. A wash
-   rather than the engine's yellow: the mark identifies text, and the row's
-   own colours keep saying everything else. No padding — these lines
-   ellipsize, and a mark that widened its text would push the truncation
-   around as the query changed. */
-.search-match {
-  border-radius: var(--luke-radius-6);
-  background: var(--luke-color-match);
-  color: inherit;
-}
-
-/* The row a search result just landed on, ringed once so the eye finds it
-   after the view moved. An outline rather than a fill, so it draws over
-   whatever the row already wears and takes no room; it fades out on its own
-   and leaves nothing behind. Held long enough to read, on the shared
-   vocabulary so a capture and reduced motion settle it at once. */
-[data-search-landed] {
-  outline-offset: 3px;
-  animation: search-landed calc(var(--duration-shape) * 3) var(--motion-exit);
-}
-
-@keyframes search-landed {
-  from,
-  40% {
-    outline: 2px solid var(--luke-color-border-selected);
-  }
-
-  to {
-    outline: 2px solid transparent;
-  }
-}
-
-/* A chevron the window draws bare; a chip, a menu item, and a picker's
-   option draw their own over this (`chip.css`, `menu.css`, `combobox.css`). */
-@layer base {
-  .settings-chevron {
-    width: 11px;
-    height: 11px;
-    flex: 0 0 auto;
-    color: var(--luke-color-text-subtle);
-  }
-}
-
-.settings-copy {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  gap: var(--luke-space-2);
-  /* Note that a word longer than the room, a commit or an address, breaks
-     rather than running under the control beside it. */
-  overflow-wrap: break-word;
-}
-
-/* A row's words take what the row leaves once its mark and controls stand,
-   so its controls end at the row's edge however many stand beside them. */
-.settings-row > .settings-copy {
-  flex: 1;
-}
-
-.settings-copy strong {
-  color: var(--luke-color-text);
-  font-size: var(--luke-type-label-size);
-  font-weight: var(--luke-weight-medium);
-  line-height: var(--luke-type-label-leading);
-}
-
-/* The word a row wears while its value differs from the default, riding the
-   name's line (the row's adornment) in the small tertiary type of a caption.
-   The tertiary colour rather than a state colour on purpose — changed is a
-   fact about a preference, never an urgency. */
-.settings-changed {
-  color: var(--luke-color-text-subtle);
-  font-size: var(--luke-type-caption-size);
-  line-height: var(--luke-type-caption-leading);
-  font-weight: var(--luke-weight-medium);
-}
-
-/* The mark a name wears while the feature it belongs to still needs a hand —
-   the front-page Voice row, the key or permission that supplies the missing
-   thing, and a shortcut whose chord answers nothing until it is supplied. The
-   attention tint on purpose: unlike the changed word this is an urgency, the
-   same standing a session waiting on a person has. The words are the hover's
-   and the hidden text's; the shared alert glyph alone is the mark. */
-.settings-attention {
-  display: inline-flex;
-  flex: 0 0 auto;
-  color: var(--luke-color-attention);
-}
-
-.settings-attention > svg {
-  width: 16px;
-  height: 16px;
-}
-
-.settings-copy small {
-  margin: 0;
-  color: var(--luke-color-text-subtle);
-  font-size: var(--luke-type-caption-size);
-  line-height: var(--luke-type-caption-leading);
-}
-
-.settings-copy small a {
-  color: inherit;
-  text-decoration: underline;
-  text-underline-offset: 2px;
 }
 
 /* A row's picker: the chip naming the value, and the app's own menu under
@@ -176,39 +55,6 @@
   --luke-combobox-list-max: min(280px, var(--settings-picker-list-max, 280px));
 }
 
-/* A row holding a segmented control (`@luke/ui`'s `ChoiceBar`, segmented) wraps, so a
-   narrow page drops the control under its label rather than clipping it or
-   running it under the chip column. */
-.settings-row-wrapping {
-  flex-wrap: wrap;
-}
-
-.settings-row-wrapping .settings-copy {
-  flex: 1 1 200px;
-}
-
-/* The one green thing on the line, in the same palette a finished session
-   uses, so connected reads the same way complete does. A menu item and a
-   picker's option draw their own check over this (`menu.css`,
-   `combobox.css`). */
-@layer base {
-  .credential-check {
-    width: 12px;
-    height: 12px;
-    flex: 0 0 auto;
-    color: var(--luke-color-complete);
-    opacity: 1;
-  }
-}
-
-/* A name and what is true of it, on one line: the same gap the credential rows
-   put between a provider's mark, its name, and its check. */
-.settings-name {
-  display: flex;
-  align-items: center;
-  gap: var(--luke-icon-gap);
-}
-
 /* The provider the account signed in with, its mark beside its name as the
    sign-in button drew them, at the size of the line's own words, each part
    kept whole, so a narrow row wraps the line between them, never inside. */
@@ -220,151 +66,14 @@
   white-space: nowrap;
 }
 
-.settings-input {
-  width: 100%;
-  padding: var(--luke-space-8) var(--luke-space-12);
-  border: 1px solid var(--luke-color-border);
-  border-radius: var(--luke-control-radius);
-  background: var(--luke-color-input);
-  color: var(--luke-color-text);
-  font-family: inherit;
-  font-size: var(--luke-type-body-size);
-  letter-spacing: 0.4px;
-  transition:
-    border-color var(--duration-hover) ease,
-    background-color var(--duration-hover) ease;
-}
-
-.settings-input::placeholder {
-  color: var(--luke-color-text-subtle);
-  letter-spacing: 0;
-}
-
-.settings-input:focus {
-  background: var(--luke-color-input-focus);
-}
-
-.settings-input:disabled {
-  color: var(--luke-color-text-subtle);
-  cursor: not-allowed;
-}
-
-/* A row's words that say something failed, in the failure's red over the
-   muted ink every other detail wears. */
-.settings-copy .error-message {
-  color: var(--luke-color-danger-text);
-}
-
-/* Settings › Coding agents › API keys: a key being added or edited grows its
-   row a field, Cancel, and Save under the row's words (the row's `below`),
-   and a refused save says why under them. The field takes the line's room,
-   and takes the whole line, its presses under it, where the row is too
-   narrow for the field's least width beside them. The hint is the key's own
-   characters, so it reads in the code face. */
-.api-key,
-.workspace-identity,
-.workspace-member,
-.workspace-invite-row,
-.workspace-github,
-.workspace-linear,
-.integration-row {
-  display: flex;
-  flex-direction: column;
-}
-
-.api-key-form {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: flex-end;
-  gap: var(--luke-control-gap);
-}
-
-.api-key-form > :first-child {
-  min-width: 0;
-  flex: 1 1 var(--luke-select-field-width);
-}
-
-.api-key-hint {
-  font-family: var(--luke-font-mono);
-}
-
-/* Settings › Profile's GitHub personal access token (`github-dialog.tsx`):
-   a saved token's facts on one line, its press at the line's end, and the
-   login in the text's own ink. */
-.github-dialog-panel {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--luke-control-gap);
-  min-height: var(--luke-control-height);
-}
-
-.github-dialog-facts {
-  display: inline-flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--luke-space-4);
-  min-width: 0;
-  color: var(--luke-color-text-muted);
-}
-
-.github-dialog-login {
-  color: var(--luke-color-text);
-  font-weight: var(--luke-weight-medium);
-}
-
-.github-dialog-token {
-  display: flex;
-  flex-direction: column;
-  gap: var(--luke-space-6);
-}
-
 /* Settings › Workspace › Invitations (`.workspace-invite-row`, a refusal
-   standing under the form in a line of its own): the invite form, a row's height and inset, an
-   address field taking its room, then the role's chip and Invite, the field
-   taking the whole line and the chip and Invite dropping under it where the
-   row is too narrow for the field's least width beside them. The chip is a
-   field chip of one width, as every Settings picker shares one, so the row
-   does not reshape as the role changes. */
+   standing under the form in a line of its own): the invite form at a row's
+   height and inset. */
 .workspace-invite {
   display: flex;
-  flex-wrap: wrap;
   min-height: var(--luke-settings-row-min-height);
   align-items: center;
-  justify-content: flex-end;
-  gap: var(--luke-control-gap);
   padding: var(--luke-settings-row-block) var(--luke-settings-row-inline);
-}
-
-.workspace-invite > .luke-text-field {
-  flex: 1 1 var(--luke-select-field-width);
-}
-
-.workspace-invite-role {
-  display: flex;
-  flex: none;
-}
-
-/* Settings › Workspace › Members (`.workspace-member`, a role change's
-   refusal standing under it as API keys' does): a member's role standing in
-   a column of its own at the row's end, in the value's ink at the body's
-   size, as the Keyboard shortcuts page sets a chord. */
-.settings-row-value {
-  min-width: 64px;
-  flex: none;
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-body-size);
-  line-height: var(--luke-type-body-leading);
-  text-align: right;
-}
-
-/* The ⋯'s room on a row with none, in a list where other rows have one, so
-   every row's value ends in one column. */
-.settings-act-slot {
-  width: var(--luke-control-height);
-  flex: none;
 }
 
 /* The handover dialog's admin to make the owner: the field chip leading
@@ -391,71 +100,13 @@
   margin-top: var(--luke-space-4);
 }
 
-/* A chord that is a Keyboard shortcuts row's whole value: set at the row's
-   label size in the value's ink, the way System Settings lists its keyboard
-   shortcuts. */
-.shortcut-value {
-  --shortcut-text: var(--luke-type-label-size);
-  --shortcut-ink: var(--luke-color-text-muted);
-}
-
-/* What leads a row that stands for something of its own, a provider's or a
-   service's mark, in one box whatever the artwork's proportions. */
-.settings-row-mark {
-  display: grid;
-  width: 20px;
-  height: 20px;
-  flex: none;
-  place-items: center;
-}
-
-.settings-row-mark > :is(svg, img) {
-  width: 20px;
-  height: 20px;
-}
-
-/* Where a row's subject stands, under its name: connected with the dot a
-   finished session wears, and what needs a hand in the attention tint. */
-.settings-state {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--luke-space-6);
-}
-
-.settings-state[data-state="connected"]::before {
-  width: 6px;
-  height: 6px;
-  flex: none;
-  border-radius: 50%;
-  background: var(--luke-color-complete);
-  content: "";
-}
-
-.settings-state[data-state="attention"] {
-  color: var(--luke-color-attention);
-}
-
-/* A state that stands on a line of its own under a row's description:
-   Settings › Notifications' word of what macOS last showed. */
-.settings-state-line {
-  display: flex;
-  width: fit-content;
-}
-
 /* Settings › Integrations: a connected row's tools opened in place under
    it, over a hairline. The chevron that opens a row, after its count, turns
    down while its tools show. The tools stand in a column of their own,
    which scrolls, and the page of the one it holds beside them, which
    scrolls apart; where the page is too narrow for both, the column stands
    above the page, which still scrolls within its own bound. */
-/* A connected row's line, its state and its count, wraps between them,
-   never inside either, on a row too narrow for both. */
-.integration-tools-line {
-  flex-wrap: wrap;
-  white-space: nowrap;
-}
-
-.integration-row > .integration-tools-panel {
+.integration-tools-panel {
   border-top: 1px solid var(--luke-color-border);
   container: integration-tools / inline-size;
 }
@@ -590,66 +241,4 @@
     width: min(100%, 200px);
     justify-self: center;
   }
-}
-
-/* Settings › Agents' harnesses (`agent-auth-section.tsx`): a connected row's
-   button and a saved credential's label each end in the complete green's
-   check. The dialog stands its subtitle over `@luke/ui`'s `ChoiceList` in its
-   card look, a radio card per credential. */
-.agent-auth-check {
-  display: inline-flex;
-  color: var(--luke-color-complete);
-}
-
-.agent-auth-check > svg {
-  width: 12px;
-  height: 12px;
-}
-
-.agent-auth-dialog {
-  display: flex;
-  flex-direction: column;
-  gap: var(--luke-space-12);
-}
-
-.agent-auth-line {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--luke-control-gap);
-  min-height: var(--luke-control-height);
-}
-
-.agent-auth-facts {
-  display: inline-flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--luke-space-8);
-  min-width: 0;
-  color: var(--luke-color-text-muted);
-}
-
-.agent-auth-presses {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--luke-control-gap);
-}
-
-/* The field takes the line's room, its eye or pencil and ⋯ beside it. */
-.agent-auth-field {
-  display: flex;
-  flex: 1 1 var(--luke-select-field-width);
-  align-items: center;
-  gap: var(--luke-space-4);
-  min-width: 0;
-}
-
-.agent-auth-field > :first-child {
-  flex: 1 1 auto;
-  min-width: 0;
-}
-
-.luke-button .agent-auth-check {
-  margin-left: var(--luke-space-4);
 }

@@ -63,6 +63,10 @@ import {
 } from "../github/repository-pins-procedures.js";
 import { type InboxProcedureSeams, inboxProcedures } from "../inbox/inbox-procedures.js";
 import {
+  type InstalledSkillsProcedureSeams,
+  installedSkillsProcedures,
+} from "../installed-skills/installed-skills-procedures.js";
+import {
   type IntegrationsProcedureSeams,
   integrationsProcedures,
 } from "../integrations/integrations-procedures.js";
@@ -84,6 +88,10 @@ import {
   taskSectionsProcedures,
 } from "../tasks/task-sections-procedures.js";
 import { type TasksProcedureSeams, tasksProcedures } from "../tasks/tasks-procedures.js";
+import {
+  type SentryInstallProcedureSeams,
+  sentryInstallProcedures,
+} from "../triggers/sentry/sentry-install-procedures.js";
 import { hosted } from "./base.js";
 
 /** What the resources ask of the deployment: one line per resource, in alphabetical order. */
@@ -99,6 +107,7 @@ export type HostedRouterSeams = AccountProcedureSeams &
   GitHubProcedureSeams &
   GitHubTokenProcedureSeams &
   InboxProcedureSeams &
+  InstalledSkillsProcedureSeams &
   IntegrationsProcedureSeams &
   LiveProcedureSeams &
   MacCommandsProcedureSeams &
@@ -113,6 +122,7 @@ export type HostedRouterSeams = AccountProcedureSeams &
   WorkspaceGithubProcedureSeams &
   WorkspaceInvitationsProcedureSeams &
   WorkspaceLinearProcedureSeams &
+  SentryInstallProcedureSeams &
   WorkspacesProcedureSeams;
 
 /** The hosted router: one line per resource, in alphabetical order. */
@@ -132,6 +142,7 @@ export function hostedRouter(seams: HostedRouterSeams) {
     github: githubProcedures(seams),
     githubToken: githubTokenProcedures(seams),
     inbox: inboxProcedures(seams),
+    installedSkills: installedSkillsProcedures(seams),
     integrations: integrationsProcedures(seams),
     live: liveProcedures(seams),
     macCommands: macCommandsProcedures(seams),
@@ -146,6 +157,7 @@ export function hostedRouter(seams: HostedRouterSeams) {
     workspaceGithub: workspaceGithubProcedures(seams),
     workspaceInvitations: workspaceInvitationsProcedures(seams),
     workspaceLinear: workspaceLinearProcedures(seams),
+    workspaceSentry: sentryInstallProcedures(seams),
     workspaces: workspacesProcedures(seams),
   });
 }

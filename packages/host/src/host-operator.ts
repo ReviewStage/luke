@@ -151,6 +151,29 @@ import {
 } from "@luke/features/coding-agent-view";
 import type { InboxReadAllRequest } from "@luke/features/inbox-wire";
 import {
+  INSTALLED_SKILL_CALL_FAILURE,
+  type InstalledSkillIdParams,
+  type InstalledSkillInstallParams,
+  type InstalledSkillInstallView,
+  type InstalledSkillListParams,
+  type InstalledSkillListView,
+  type InstalledSkillPreviewParams,
+  type InstalledSkillPreviewView,
+  type InstalledSkillRemovedView,
+  type InstalledSkillToggleParams,
+  type InstalledSkillUpdateCheckView,
+  type InstalledSkillUpdatedView,
+  type InstalledSkillUpdateParams,
+  type InstalledSkillView,
+  installedSkillInstallViewSchema,
+  installedSkillListViewSchema,
+  installedSkillPreviewViewSchema,
+  installedSkillRemovedViewSchema,
+  installedSkillUpdateCheckViewSchema,
+  installedSkillUpdatedViewSchema,
+  installedSkillViewSchema,
+} from "@luke/features/installed-skill-view";
+import {
   INTEGRATION_CALL_FAILURE,
   type IntegrationAccountView,
   type IntegrationConnectView,
@@ -265,6 +288,8 @@ import {
   type TasksWorkspacePhotoParams,
   type TasksWorkspacePhotoSetParams,
   type TasksWorkspaceRenameParams,
+  type TasksWorkspaceSentryAnswer,
+  type TasksWorkspaceSentryDisconnectParams,
   type TasksWorkspaceTokenRepositoriesAnswer,
   type TasksWorkspaceTokenRepositoriesParams,
   type TasksWorkspaceTokenRepositorySetParams,
@@ -307,6 +332,7 @@ import {
   tasksWorkspaceLeaveAnswerSchema,
   tasksWorkspaceMembersAnswerSchema,
   tasksWorkspacePhotoAnswerSchema,
+  tasksWorkspaceSentryAnswerSchema,
   tasksWorkspaceTokenRepositoriesAnswerSchema,
   type WorkspaceInvitationsFollowed,
   type WorkspacePeopleFollow,
@@ -584,6 +610,16 @@ export interface HostOperator {
   workspaceLinearDisconnect(params: TasksWorkspaceParams): Effect.Effect<TasksWorkspaceAnswer>;
   /** The Linear issues a workspace's connection reaches; or why there are none. */
   workspaceLinearIssues(params: TasksLinearIssuesParams): Effect.Effect<TasksLinearIssuesAnswer>;
+  /** Whether the deployment holds Luke's Sentry integration, and a workspace's installations of it; or why there is no answer. */
+  workspaceSentry(params: TasksWorkspaceParams): Effect.Effect<TasksWorkspaceSentryAnswer>;
+  /** A workspace's Sentry install begun; Sentry's install address to open, or why there is none. */
+  workspaceSentryInstall(
+    params: TasksWorkspaceParams,
+  ): Effect.Effect<TasksWorkspaceGitHubConnectAnswer>;
+  /** One of a workspace's Sentry installations disconnected; the workspace's Sentry as it then stands, or why it is not. */
+  workspaceSentryDisconnect(
+    params: TasksWorkspaceSentryDisconnectParams,
+  ): Effect.Effect<TasksWorkspaceSentryAnswer>;
   /** One workspace's members; or why there are none. */
   workspaceMembers(params: TasksWorkspaceMembersParams): Effect.Effect<TasksWorkspaceMembersAnswer>;
   /** A workspace's people followed from now until let go, heard through `onWorkspacePeopleChanged`; following again starts over. */
@@ -712,6 +748,28 @@ export interface HostOperator {
   chaptersModelRead(): Effect.Effect<ChaptersModelAnswerView>;
   /** The account's chapters model written to the service; the model as kept, or why it is unchanged. */
   chaptersModelWrite(params: ChaptersModelWriteParams): Effect.Effect<ChaptersModelAnswerView>;
+  /** The skills the account sees in a workspace, the workspace's then its own; or why there are none. */
+  installedSkillsList(params: InstalledSkillListParams): Effect.Effect<InstalledSkillListView>;
+  /** What a paste would install, read by the service; or why it did not say. */
+  installedSkillsPreview(
+    params: InstalledSkillPreviewParams,
+  ): Effect.Effect<InstalledSkillPreviewView>;
+  /** The skills a paste makes, installed all or none; or why none were. */
+  installedSkillsInstall(
+    params: InstalledSkillInstallParams,
+  ): Effect.Effect<InstalledSkillInstallView>;
+  /** One installed skill turned on or off; the skill as it then stands, or why it is unchanged. */
+  installedSkillsSetEnabled(params: InstalledSkillToggleParams): Effect.Effect<InstalledSkillView>;
+  /** Whether a GitHub skill's folder moved at its ref; or why that is unknown. */
+  installedSkillsCheckUpdate(
+    params: InstalledSkillUpdateParams,
+  ): Effect.Effect<InstalledSkillUpdateCheckView>;
+  /** A GitHub skill's files read again at its ref; the skill as it then stands, or why it is unchanged. */
+  installedSkillsUpdate(
+    params: InstalledSkillUpdateParams,
+  ): Effect.Effect<InstalledSkillUpdatedView>;
+  /** One installed skill removed; or why it stands. */
+  installedSkillsRemove(params: InstalledSkillIdParams): Effect.Effect<InstalledSkillRemovedView>;
   /** One agent's changes: its pull request's files as GitHub holds them; or why there are none. */
   codingAgentChanges(
     params: CodingAgentPullRequestReadParams,
@@ -1001,6 +1059,9 @@ const TASK_ISSUES_UNANSWERED = { failure: TASK_CALL_FAILURE.UNANSWERED } as cons
 /** What an integration call the host could not answer is drawn as. */
 const INTEGRATION_UNANSWERED = { failure: INTEGRATION_CALL_FAILURE.UNANSWERED } as const;
 
+/** An installed skills call that reached no answer, as every installed skills method answers one. */
+const INSTALLED_SKILL_UNANSWERED = { failure: INSTALLED_SKILL_CALL_FAILURE.UNANSWERED } as const;
+
 export function createHostOperator(options: HostOperatorOptions): HostOperator {
   const { client } = options;
 
@@ -1057,6 +1118,14 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       (answer.ok
         ? Result.getOrUndefined(readEither(schema, { excess: EXCESS_KEYS.DROP })(answer.result))
         : undefined) ?? AUTOMATION_UNANSWERED;
+
+  /** An installed skills answer as the host's method documents it, or unanswered, on the same terms as a coding-agent answer. */
+  const installedSkillAnswer =
+    <Answer, Encoded>(schema: EffectSchema.Codec<Answer, Encoded>) =>
+    (answer: GatewayCallResult): Answer | typeof INSTALLED_SKILL_UNANSWERED =>
+      (answer.ok
+        ? Result.getOrUndefined(readEither(schema, { excess: EXCESS_KEYS.DROP })(answer.result))
+        : undefined) ?? INSTALLED_SKILL_UNANSWERED;
 
   /** The account an integration ask is about, as the gateway carries it: the provider, and the account and an add where the window named them. */
   const integrationTarget = (params: IntegrationProviderParams) => ({
@@ -1338,7 +1407,12 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           GATEWAY_METHOD.TASKS_SKILLS,
           "planId" in params
             ? { planId: params.planId }
-            : { workspaceId: params.workspaceId, repository: params.repository },
+            : {
+                workspaceId: params.workspaceId,
+                ...(params.repository === undefined
+                  ? undefined
+                  : { repository: params.repository }),
+              },
         ),
         (answer): TasksSkillsAnswer =>
           (answer.ok
@@ -1672,6 +1746,24 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           ...("identifier" in params ? { identifier: params.identifier } : undefined),
         }),
         workspaceAnswer(tasksLinearIssuesAnswerSchema),
+      ),
+    workspaceSentry: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.WORKSPACES_SENTRY, { workspaceId: params.workspaceId }),
+        workspaceAnswer(tasksWorkspaceSentryAnswerSchema),
+      ),
+    workspaceSentryInstall: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.WORKSPACES_SENTRY_INSTALL, { workspaceId: params.workspaceId }),
+        workspaceAnswer(tasksWorkspaceGitHubConnectAnswerSchema),
+      ),
+    workspaceSentryDisconnect: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.WORKSPACES_SENTRY_DISCONNECT, {
+          workspaceId: params.workspaceId,
+          installationId: params.installationId,
+        }),
+        workspaceAnswer(tasksWorkspaceSentryAnswerSchema),
       ),
     workspaceMembers: (params) =>
       Effect.map(
@@ -2062,6 +2154,41 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       Effect.map(
         client.call(GATEWAY_METHOD.CHAPTERS_MODEL_WRITE, { model: params.model }),
         codingAgentAnswer(chaptersModelAnswerViewSchema),
+      ),
+    installedSkillsList: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.INSTALLED_SKILLS_LIST, params),
+        installedSkillAnswer(installedSkillListViewSchema),
+      ),
+    installedSkillsPreview: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.INSTALLED_SKILLS_PREVIEW, params),
+        installedSkillAnswer(installedSkillPreviewViewSchema),
+      ),
+    installedSkillsInstall: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.INSTALLED_SKILLS_INSTALL, params),
+        installedSkillAnswer(installedSkillInstallViewSchema),
+      ),
+    installedSkillsSetEnabled: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.INSTALLED_SKILLS_SET_ENABLED, params),
+        installedSkillAnswer(installedSkillViewSchema),
+      ),
+    installedSkillsCheckUpdate: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.INSTALLED_SKILLS_CHECK_UPDATE, params),
+        installedSkillAnswer(installedSkillUpdateCheckViewSchema),
+      ),
+    installedSkillsUpdate: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.INSTALLED_SKILLS_UPDATE, params),
+        installedSkillAnswer(installedSkillUpdatedViewSchema),
+      ),
+    installedSkillsRemove: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.INSTALLED_SKILLS_REMOVE, params),
+        installedSkillAnswer(installedSkillRemovedViewSchema),
       ),
     codingAgentChanges: (params) =>
       Effect.map(

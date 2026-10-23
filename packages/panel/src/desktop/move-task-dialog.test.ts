@@ -374,9 +374,10 @@ test("a stranded plan's banner stands over every tab of the plan: its Call besid
   assert.deepEqual(
     [inbox, agent, full].map((page) => {
       const banner = strandedBanner(page);
+      const region = banner?.closest(".desktop-task-main, .side-panel");
       return [
         banner === null ? undefined : heard(banner),
-        banner?.closest(".desktop-task-main, .side-panel")?.className,
+        ["desktop-task-main", "side-panel"].find((name) => region?.classList.contains(name)),
       ];
     }),
     [

@@ -762,6 +762,17 @@ function namedCall(
   };
 }
 
+/** A chat call named by a field that may hold a member's mention link, said by the name its chip says rather than its address (`linkLabels`). */
+function chatCall(
+  kind: CallKind,
+  input: WireValue | undefined,
+  output: WireValue | undefined,
+  field: string,
+): ToolCallView {
+  const call = namedCall(kind, input, output, field);
+  return { ...call, subject: linkLabels(call.subject) };
+}
+
 /** A call about one agent named by the agent's title its answer gives, as the agent's tab names it; nothing before the answer, whose input holds only an id. */
 function answeredAgentCall(
   kind: CallKind,
@@ -928,6 +939,14 @@ function tasksToolView(
       return namedCall(CALL_KIND.CREATE_SECTION, input, output, "title");
     case AGENT_TOOL.DELETE_SECTION:
       return answeredCall(CALL_KIND.DELETE_SECTION, input, output, "section", "title");
+    case AGENT_TOOL.LIST_AUTOMATIONS:
+      return namedCall(CALL_KIND.LIST_AUTOMATIONS, input, output, undefined);
+    case AGENT_TOOL.CREATE_AUTOMATION:
+      return namedCall(CALL_KIND.CREATE_AUTOMATION, input, output, "name");
+    case AGENT_TOOL.UPDATE_AUTOMATION:
+      return answeredCall(CALL_KIND.UPDATE_AUTOMATION, input, output, "automation", "name");
+    case AGENT_TOOL.DELETE_AUTOMATION:
+      return answeredCall(CALL_KIND.DELETE_AUTOMATION, input, output, "automation", "name");
     case RETIRED_TOOL.MOVE_TASK:
       return answeredCall(CALL_KIND.MOVE_TASK, input, output, "task", "name");
     case AGENT_TOOL.UPDATE_TASK:
@@ -944,6 +963,14 @@ function tasksToolView(
       return namedCall(CALL_KIND.CREATE_TASK, input, output, "name");
     case AGENT_TOOL.END_CALL:
       return namedCall(CALL_KIND.END_CALL, input, output, undefined);
+    case CHAT_TOOL.POST:
+      return chatCall(CALL_KIND.CHAT_POST, input, output, "text");
+    case CHAT_TOOL.READ:
+      return chatCall(CALL_KIND.CHAT_READ, input, output, "channel");
+    case CHAT_TOOL.RESOLVE:
+      return namedCall(CALL_KIND.CHAT_RESOLVE, input, output, "key");
+    case CHAT_TOOL.EDIT_CHANNEL:
+      return namedCall(CALL_KIND.CHAT_EDIT_CHANNEL, input, output, "channel");
     case EVE_TOOL.TASK_WAIT:
       return namedCall(CALL_KIND.WORKER_WAIT, input, output, undefined);
     case EVE_TOOL.TASK_CANCEL:

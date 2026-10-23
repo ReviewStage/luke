@@ -45,7 +45,7 @@ export function disclosureMotion(opened: boolean, leaving: boolean): DisclosureM
 }
 
 /** The motions an element runs. Note that a DOM with no animation engine, a test's, runs none. */
-function running(element: HTMLElement): Animation[] {
+export function runningMotions(element: HTMLElement): Animation[] {
   return "getAnimations" in element ? element.getAnimations() : [];
 }
 
@@ -65,7 +65,7 @@ export function useDisclosure(open: boolean): Disclosure {
 
   useLayoutEffect(() => {
     if (!leaving) return undefined;
-    const exits = held.current === null ? [] : running(held.current);
+    const exits = held.current === null ? [] : runningMotions(held.current);
     if (exits.length === 0) {
       setLeaving(false);
       return undefined;

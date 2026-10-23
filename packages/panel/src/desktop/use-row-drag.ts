@@ -63,8 +63,8 @@ const EDGE_REACH = 32;
 /** The most the column runs along in a frame, in CSS pixels, with the pointer at its edge or past it. */
 const EDGE_SPEED = 12;
 
-/** The list's rows that move. */
-const ROW = ":scope > li";
+/** The list's rows that move; one on its way out (`ListMotion`) is no longer one of them. */
+const ROW = ":scope > li:not([data-leaving])";
 
 /** What a row and its list wear while a drag lasts; desktop.css fades the one to a placeholder and slides the others. */
 const DRAGGING_ATTRIBUTE = "data-dragging";
@@ -85,7 +85,7 @@ const CARRIED_ATTRIBUTE = "data-carried";
 const LIFTED_ATTRIBUTE = "data-lifted";
 
 /** A drop zone's rows, where it keeps an order of its own that a drop lands at a place in. */
-const ZONE_ROWS = "[data-row-drop-rows] > li";
+const ZONE_ROWS = "[data-row-drop-rows] > li:not([data-leaving])";
 
 /** What the zone a row is carried over wears while it is. */
 const DROP_TARGET = "data-drop-target";
@@ -395,7 +395,7 @@ function lengthOf(token: string): number {
  */
 function land(copy: HTMLElement, row: HTMLElement, list: HTMLElement): void {
   const look = getComputedStyle(list);
-  const duration = lengthOf(look.getPropertyValue("--duration-fast"));
+  const duration = lengthOf(look.getPropertyValue("--luke-duration-fast"));
   if (duration <= 0) {
     copy.remove();
     return;
@@ -404,7 +404,7 @@ function land(copy: HTMLElement, row: HTMLElement, list: HTMLElement): void {
   const across = home.left - Number.parseFloat(copy.style.left);
   const down = home.top - Number.parseFloat(copy.style.top);
   row.setAttribute(DRAGGING_ATTRIBUTE, "true");
-  const easing = look.getPropertyValue("--spring-fast").trim() || "ease-out";
+  const easing = look.getPropertyValue("--luke-spring-fast").trim() || "ease-out";
   const landed = copy.animate(
     [{ transform: copy.style.transform }, { transform: `translate(${across}px, ${down}px)` }],
     { duration, easing, fill: "forwards" },

@@ -37,6 +37,10 @@ import {
 } from "./plan-comment-wire.js";
 import { PLAN_EDIT_REFUSAL, planEditRequestSchema, planEditValueSchema } from "./plan-edit.js";
 import {
+  workspaceSentryAnswerSchema,
+  workspaceSentryDisconnectRequestSchema,
+} from "./sentry-install-wire.js";
+import {
   taskIssueChoiceSchema,
   taskIssueLinkAnswerSchema,
   taskIssueLinkChangedAnswerSchema,
@@ -558,10 +562,13 @@ export const tasksTreeAnswerSchema = EffectSchema.Union([
 
 export type TasksTreeAnswer = typeof tasksTreeAnswerSchema.Type;
 
-/** The skills a developer may choose of a repository, as the window asks the host for them: the plan whose repository it is, or the workspace and the repository where no plan names it. */
+/** The skills a developer may choose, as the window asks the host for them: the plan they are chosen on, or the workspace and the repository where no plan names it, or the workspace alone for an agent with no repository, which is offered its installed skills alone. */
 export const tasksSkillsParamsSchema = EffectSchema.Union([
   EffectSchema.Struct({ planId: EffectSchema.NonEmptyString }),
-  EffectSchema.Struct(repositoryPlaceFields),
+  EffectSchema.Struct({
+    workspaceId: repositoryPlaceFields.workspaceId,
+    repository: EffectSchema.optionalKey(repositoryPlaceFields.repository),
+  }),
 ]);
 
 export type TasksSkillsParams = typeof tasksSkillsParamsSchema.Type;
@@ -947,6 +954,20 @@ export const tasksWorkspaceGitHubConnectAnswerSchema = EffectSchema.Union([
 ]);
 
 export type TasksWorkspaceGitHubConnectAnswer = typeof tasksWorkspaceGitHubConnectAnswerSchema.Type;
+
+/** One of a workspace's Sentry installations disconnected, as the window asks it: the workspace and Sentry's id for the installation. */
+export const tasksWorkspaceSentryDisconnectParamsSchema = workspaceSentryDisconnectRequestSchema;
+
+export type TasksWorkspaceSentryDisconnectParams =
+  typeof tasksWorkspaceSentryDisconnectParamsSchema.Type;
+
+/** A workspace's Sentry as the window hears it after a read or a disconnect: whether the deployment holds the integration and the workspace's installations, or why there is no answer. */
+export const tasksWorkspaceSentryAnswerSchema = EffectSchema.Union([
+  EffectSchema.Struct({ sentry: workspaceSentryAnswerSchema }),
+  workspaceCallFailureSchema,
+]);
+
+export type TasksWorkspaceSentryAnswer = typeof tasksWorkspaceSentryAnswerSchema.Type;
 
 /** The Linear issues a window asks for, to start a plan from one: the workspace, and a search where one is typed. */
 export const tasksLinearIssuesParamsSchema = linearIssuesRequestSchema;

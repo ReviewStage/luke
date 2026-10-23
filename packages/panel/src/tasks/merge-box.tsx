@@ -26,8 +26,10 @@ import {
   SPINNER_SIZE,
   SpinnerRing,
   SplitButton,
+  Tooltip,
   useConfirmDialog,
   useMenu,
+  VISUALLY_HIDDEN_UNDER,
   VisuallyHidden,
 } from "@luke/ui";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
@@ -42,7 +44,6 @@ import {
 import { type ReactNode, useState } from "react";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu.js";
 import { readKept, writeKept } from "../desktop/folded-groups.js";
-import { Tooltip } from "../tooltip.js";
 import type { PullRequestWrites } from "./pull-request-writes.js";
 
 /**
@@ -306,7 +307,7 @@ function MergeChip({ face, sentence }: { face: ChipFace; sentence: string }): Re
   return (
     <Tooltip label={sentence}>
       <span className="merge-chip">
-        <Badge tone={face.tone} icon={face.icon}>
+        <Badge tone={face.tone} icon={face.icon} hideWordsUnder={VISUALLY_HIDDEN_UNDER.SNUG}>
           {face.label}
         </Badge>
         <VisuallyHidden>{`: ${sentence}`}</VisuallyHidden>

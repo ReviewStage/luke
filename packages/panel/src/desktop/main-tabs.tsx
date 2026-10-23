@@ -8,6 +8,8 @@ import { LINK_PLACE, type LinkPlace } from "@luke/features/luke-link";
 import { TASK_BOUNDS, type TaskSummary } from "@luke/features/task-wire";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
+  FILL_ELEMENT,
+  Fill,
   INLINE_EDIT_LOOK,
   InlineEdit,
   SKELETON_SHAPE,
@@ -642,13 +644,14 @@ export const AgentPane = memo(function AgentPane({
   tabbed: boolean;
 }): React.JSX.Element {
   return (
-    <section
+    <Fill
+      as={FILL_ELEMENT.SECTION}
       className="desktop-agent"
       role={tabbed ? "tabpanel" : undefined}
       aria-label={label}
       data-popover-room=""
     >
       <MainTabContent {...content} />
-    </section>
+    </Fill>
   );
 });

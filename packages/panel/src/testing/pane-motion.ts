@@ -23,8 +23,8 @@ interface RecordedMotion {
 export function playMotions() {
   const played: Played[] = [];
   const root = document.documentElement.style;
-  root.setProperty("--duration-pane", "240ms");
-  root.setProperty("--motion-pane", "ease-out");
+  root.setProperty("--luke-duration-pane", "240ms");
+  root.setProperty("--luke-motion-pane", "ease-out");
   Object.defineProperty(Element.prototype, "animate", {
     configurable: true,
     value(this: Element, keyframes: Keyframe[]) {
@@ -44,8 +44,8 @@ export function playMotions() {
   return {
     played,
     remove: () => {
-      root.removeProperty("--duration-pane");
-      root.removeProperty("--motion-pane");
+      root.removeProperty("--luke-duration-pane");
+      root.removeProperty("--luke-motion-pane");
       Reflect.deleteProperty(Element.prototype, "animate");
       Reflect.deleteProperty(Element.prototype, "getAnimations");
     },

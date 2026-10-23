@@ -57,8 +57,10 @@ import { HostedEnvironment } from "../../environment.js";
 import { providerModelOf } from "../../providers/model-catalog.js";
 import type { BrainHostTurn } from "../brain-host/bounds.js";
 import { PLAN_REFUSAL, type PlanRefusal } from "../brain-host/eve-sessions.js";
+import { SKILL_ROOT } from "../repository-skills.js";
 import { CODER } from "./bounds.js";
 import { NATIVE_SESSION_PREFIX } from "./native-runtime.js";
+import { NATIVE_SKILLS_PATH } from "./native-skills.js";
 import {
   LaunchRefused,
   type RunnerHarness,
@@ -200,7 +202,9 @@ function codex(options: CodexSessionsOptions): RunnerHarness<{ readonly _tag: st
         firstSequence,
         eventsUrl: options.eventsUrl,
         mcpUrl: options.mcpUrl,
+        integrations: yield* options.integrations(agent),
         tokenUrl,
+        installedSkills: NATIVE_SKILLS_PATH.INSTALLED,
       };
       return written;
     });
@@ -226,6 +230,8 @@ function codex(options: CodexSessionsOptions): RunnerHarness<{ readonly _tag: st
     sessionPrefix: NATIVE_SESSION_PREFIX[CONVERSATION_RUNTIME.CODEX],
     launch,
     config,
+    // Note that Codex reads a checkout's skills from `.agents/skills` alone.
+    skillRoots: [SKILL_ROOT.AGENTS],
     ahead,
   };
 }

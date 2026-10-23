@@ -1,10 +1,25 @@
-import { ALIGN, GAP, Inline, JUSTIFY, Stack, TEXT_TONE, TEXT_VARIANT, Text } from "@luke/ui";
+import {
+  ALIGN,
+  Button,
+  FILL_FLOW,
+  Fill,
+  GAP,
+  Inline,
+  JUSTIFY,
+  LAYOUT_ELEMENT,
+  Stack,
+  TEXT_TONE,
+  TEXT_VARIANT,
+  Text,
+} from "@luke/ui";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
 /**
  * layout.tsx -- Stack and Inline at every gap role, along and across their
- * room, and an Inline of long labels in a narrow column, wrapping and held.
+ * room, an Inline of long labels in a narrow column, wrapping and held, and
+ * a Fill taking the room a pane's head leaves, down the pane and across it,
+ * clipping what stands past its edge.
  */
 
 const LABELS = ["Repository", "Model", "A label long enough to need its own line", "Effort"];
@@ -75,8 +90,46 @@ function Layout(): React.JSX.Element {
           </div>
         </Stack>
       </CatalogSection>
+      <CatalogSection id="layout-fill" title="Fill">
+        <Inline gap={GAP.CONTROL} align={ALIGN.START}>
+          <div className="catalog-fill-pane">
+            <Swatch>Head</Swatch>
+            <Fill>
+              <Swatch>Column body</Swatch>
+            </Fill>
+          </div>
+          <div className="catalog-fill-pane">
+            <Swatch>Head</Swatch>
+            <Fill flow={FILL_FLOW.ROW} clip>
+              <Swatch>A row body whose words run past its edge and are cut there</Swatch>
+            </Fill>
+          </div>
+        </Inline>
+      </CatalogSection>
+      <CatalogSection id="layout-grow" title="A form whose first item takes the room">
+        <Stack gap={GAP.CONTROL}>
+          {[false, true].map((narrow) => (
+            <div key={String(narrow)} className={narrow ? "catalog-narrow" : "catalog-frame"}>
+              <Inline
+                as={LAYOUT_ELEMENT.FORM}
+                justify={JUSTIFY.END}
+                growFirst
+                onSubmit={(event) => event.preventDefault()}
+              >
+                <Swatch>A field that fills what the buttons leave</Swatch>
+                <Button>Cancel</Button>
+                <Button>Save</Button>
+              </Inline>
+            </div>
+          ))}
+        </Stack>
+      </CatalogSection>
     </>
   );
 }
 
-export const LAYOUT_EXAMPLE: Example = { id: "layout", title: "Stack and Inline", Render: Layout };
+export const LAYOUT_EXAMPLE: Example = {
+  id: "layout",
+  title: "Stack, Inline, and Fill",
+  Render: Layout,
+};

@@ -8,6 +8,7 @@ import {
   Tabs,
   type TabsControls,
   type TabsGround,
+  Tooltip,
   tabMenuPlacement,
   useMenu,
 } from "@luke/ui";
@@ -15,7 +16,6 @@ import { createContext, useContext, useRef, useState } from "react";
 import { useAppCommand } from "../app-commands.js";
 import { SHELL_ROOM } from "../shell-room.js";
 import { ShellRoomContext } from "../stage-room.js";
-import { Tooltip } from "../tooltip.js";
 import { ActionMenu, type MenuAction } from "./action-menu.js";
 import { ROW_RUN, withRowMoves } from "./row-moves.js";
 

@@ -10,6 +10,7 @@
  * `hostedRefusalResponse` answered.
  */
 
+import { installedSkillRefusedDataSchema } from "@luke/features/installed-skill-route-wire";
 import { MODEL_PROVIDER } from "@luke/features/models-wire";
 import { repositoryUnreachedSchema } from "@luke/features/repository-reach-wire";
 import { COMMON_ERROR_STATUS_MAP } from "@orpc/openapi";
@@ -50,6 +51,7 @@ const isHostedRefusal = Schema.is(
     upstreamStatus: Schema.optionalKey(Schema.Int),
     resetsAt: Schema.optionalKey(Schema.Number),
     provider: Schema.optionalKey(Schema.Literals(Object.values(MODEL_PROVIDER))),
+    ...installedSkillRefusedDataSchema.fields,
   }),
 );
 

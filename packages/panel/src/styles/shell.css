@@ -197,11 +197,6 @@
   display: flex;
 }
 
-/* Back's and Forward's hold-to-list wrapper lays nothing out of its own. */
-.title-bar-history {
-  display: contents;
-}
-
 /* The buttons over the open sidebar, or the floating one, stand on its
    ground. */
 .desktop-shell[data-sidebar-collapsed="false"] .title-bar-controls:not([data-edge]),
@@ -359,12 +354,9 @@
 .desktop-toolbar-title {
   margin: 0 0 0 calc(-1 * var(--luke-space-6));
   padding-left: var(--luke-space-6);
-  overflow: hidden;
   font-size: var(--luke-type-dialog-size);
   font-weight: var(--luke-weight-bold);
   letter-spacing: -0.01em;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .desktop-toolbar-actions {

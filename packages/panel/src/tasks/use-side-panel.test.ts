@@ -9,6 +9,8 @@ import { afterEach, test } from "vitest";
 import { installPressIntent } from "../press-intent.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import {
+  drawsChanges,
+  drawsTerminal,
   type OpenTask,
   SIDE_PANEL_TAB,
   SIDE_PANEL_TABS,
@@ -728,4 +730,13 @@ test("an agent's transcript stands in a panel beside the Inbox alone, once the t
     !panel().strip.some((tab) => typeof tab === "object" && "transcript" in tab),
     "a task's own page draws its agents in its column, never beside",
   );
+});
+
+test("an archived agent's Pull request tab is drawn as a live agent's, while its Terminal tab is not", () => {
+  const drawn = { taskAgents: ["live"], heldAgents: ["live", "archived"] };
+  assert.equal(drawsChanges({ changes: "archived" }, drawn), true);
+  assert.equal(drawsChanges({ changes: "other" }, drawn), false);
+  assert.equal(drawsTerminal({ terminal: "archived" }, drawn), false);
+  // A place that names no held agents draws Pull request tabs by its live ones, as before.
+  assert.equal(drawsChanges({ changes: "archived" }, { taskAgents: ["live"] }), false);
 });

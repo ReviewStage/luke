@@ -150,6 +150,15 @@ export const HOSTED_SERVICE_PATH = {
    * declares the bodies.
    */
   AUTOMATIONS: "/api/automations",
+  /**
+   * The skills members install into Luke: the ones the account sees in a
+   * workspace under `?workspaceId=` (GET), or skills installed from a
+   * paste (POST); `/preview` reads a paste as an install would (POST), and
+   * `/{id}` turns one on or off (PATCH) or removes it (DELETE), and its
+   * `/update` says whether its source moved (GET) or updates it (POST).
+   * `installed-skill-route-wire.ts` declares the bodies.
+   */
+  INSTALLED_SKILLS: "/api/installed-skills",
   /** The models a coding agent may run on, as the service offers them now (GET). `models-wire.ts` declares the answer. */
   MODELS: "/api/models",
   /**
@@ -299,6 +308,25 @@ export const HOSTED_SERVICE_PATH = {
   WORKSPACE_LINEAR_DISCONNECT: "/api/workspaces/linear/disconnect",
   /** The Linear issues a member of a workspace may start a plan from, or those a search matches (POST). */
   WORKSPACE_LINEAR_ISSUES: "/api/workspaces/linear/issues",
+  /**
+   * Where an owner or admin installs Luke's Sentry integration for a
+   * workspace (POST): answers Sentry's install address, carrying a
+   * single-use intent Sentry returns to `SENTRY_INSTALLED` with
+   * (`sentry-install-wire.ts`).
+   */
+  WORKSPACE_SENTRY_INSTALL: "/api/workspaces/sentry/install",
+  /** Whether the deployment holds Luke's Sentry integration, and a workspace's active installations of it, to a member (GET, `WORKSPACE_SENTRY_QUERY`). */
+  WORKSPACE_SENTRY_INSTALLATIONS: "/api/workspaces/sentry/installations",
+  /** One of a workspace's Sentry installations disconnected by an owner or admin (POST), answering the installations as they then stand. */
+  WORKSPACE_SENTRY_DISCONNECT: "/api/workspaces/sentry/disconnect",
+  /**
+   * The Sentry integration's Redirect URL (GET): Sentry lands the browser
+   * here after an install with the code, the installation's id, the
+   * organization's slug, and the intent's state; the route proves the
+   * installation with Sentry, links it, and lands on the integrations
+   * landing page.
+   */
+  SENTRY_INSTALLED: "/api/triggers/sentry/installed",
   /** A workspace renamed by an owner or an admin (POST), answering the workspace; its slug stays as it was. */
   WORKSPACES_RENAME: "/api/workspaces/rename",
   /** A workspace's photo set as a `data:` URL, or removed with null, by an owner or an admin (POST), answering the workspace. */
@@ -352,6 +380,11 @@ export function automationPath(automationId: string): string {
   return `${HOSTED_SERVICE_PATH.AUTOMATIONS}/${encodeURIComponent(automationId)}`;
 }
 
+/** One installed skill: turn it on or off (PATCH) or remove it (DELETE). */
+export function installedSkillPath(skillId: string): string {
+  return `${HOSTED_SERVICE_PATH.INSTALLED_SKILLS}/${encodeURIComponent(skillId)}`;
+}
+
 /**
  * An automation's webhook address (POST), called by the sender the developer
  * hands it to under the trigger's secret rather than an account bearer.
@@ -369,6 +402,12 @@ function taskPath(taskId: string): string {
 export interface RepositoryPlace {
   readonly workspaceId: string;
   readonly repository: string;
+}
+
+/** Where the skills a developer may choose are read: a workspace, and the repository whose skills lead them where there is one. */
+export interface SkillsPlace {
+  readonly workspaceId: string;
+  readonly repository?: string;
 }
 
 /** One plan's pictures, under which each is served as its bytes (`planAttachmentPath`). */

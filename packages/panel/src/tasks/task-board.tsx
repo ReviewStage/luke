@@ -4,7 +4,7 @@ import { LOOK_AT_BOARD_TOOL_NAME } from "@luke/features/board-vocabulary";
 import type { Board } from "@luke/features/board-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import type { PortActPayload } from "@luke/host/contract";
-import { ERROR_STATE_PLACEMENT, ErrorState } from "@luke/ui";
+import { ERROR_STATE_PLACEMENT, ErrorState, FILL_ELEMENT, Fill, SpinnerRegion } from "@luke/ui";
 import { Duration, Effect } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as Atom from "effect/reactivity/Atom";
@@ -12,7 +12,6 @@ import { Fragment, useEffect, useRef } from "react";
 import { askAct } from "../act.js";
 import { BOARD_LOAD_FAILED, useSideBundles } from "../bundle-loader.js";
 import { rendererRuntime } from "../renderer-runtime.js";
-import { SpinnerRegion } from "../spinner.js";
 import { APP_SLICE, useAppSlice } from "../use-app-state.js";
 import type { WhiteboardHandle, WhiteboardModule } from "../whiteboard/contract.js";
 
@@ -159,7 +158,7 @@ export function TaskBoard({
   const loaded = useAtomValue(useSideBundles().whiteboard);
   const module = AsyncResult.isSuccess(loaded) ? loaded.value : undefined;
   return (
-    <section className="task-board ph-no-capture" aria-label="Whiteboard">
+    <Fill as={FILL_ELEMENT.SECTION} className="task-board ph-no-capture" aria-label="Whiteboard">
       {AsyncResult.isFailure(loaded) ? (
         <ErrorState placement={ERROR_STATE_PLACEMENT.CENTRED}>{BOARD_LOAD_FAILED}</ErrorState>
       ) : null}
@@ -176,8 +175,8 @@ export function TaskBoard({
         </Fragment>
       ) : null}
       {!AsyncResult.isFailure(loaded) && (module === undefined || board === undefined) ? (
-        <SpinnerRegion label="Loading board" />
+        <SpinnerRegion delay label="Loading board" />
       ) : null}
-    </section>
+    </Fill>
   );
 }

@@ -40,7 +40,7 @@ import { readRepositoryFile } from "../github/repository-file.js";
 import { GIT_ENTRY, readRepositoryFolder } from "../github/repository-folder.js";
 
 /** Where a repository keeps its skills, in the order a name is looked for. */
-const SKILL_ROOT = {
+export const SKILL_ROOT = {
   AGENTS: ".agents/skills",
   CLAUDE: ".claude/skills",
 } as const;

@@ -436,7 +436,7 @@ test("a chip of a page an agent on no task showed hangs the same card as a plan'
   assert.equal(page.sub, "Version 2 · Shown by Sweep the flaky tests");
   assert.ok(page.corner, "the corner says when the page last moved");
   assert.equal(
-    document.querySelector(".luke-tooltip-card .page-card-frame")?.getAttribute("src"),
+    document.querySelector(".luke-tooltip-card .luke-page-thumb-frame")?.getAttribute("src"),
     pageFrameUrl({ agentId: SWEEP_AGENT, pageId: SWEEP_PAGE.id, version: 2 }),
     "the preview is the agent's page at its newest version",
   );

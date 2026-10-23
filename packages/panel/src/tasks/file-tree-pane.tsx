@@ -1,6 +1,6 @@
 import { useAtomValue } from "@effect/atom-react";
 import type { TasksTreeAnswer } from "@luke/features/tasks-view";
-import { cssCustomProperties, IconButton, SearchField } from "@luke/ui";
+import { cssCustomProperties, Fill, IconButton, SearchField, Tooltip } from "@luke/ui";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { ListFilterIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -8,7 +8,6 @@ import { TREE_LOAD_FAILED, useSideBundles } from "../bundle-loader.js";
 import type { FloatingBox } from "../desktop/hover-pane.js";
 import type { ResizableEdgeProps } from "../desktop/use-resizable-edge.js";
 import type { FileMark, FileTreeHandle, FolderEntry, ReadFolder } from "../file-tree/contract.js";
-import { Tooltip } from "../tooltip.js";
 import { entriesOf } from "./folder-listings.js";
 
 /**
@@ -237,13 +236,15 @@ export function FileTreePane({
     >
       {edge === undefined ? null : <div className="side-panel-resize" {...edge} />}
       <search className="file-tree-search">
-        <TreeSearch
-          field={field}
-          query={query}
-          scope={scope}
-          floating={float?.floating ?? false}
-          onQuery={setQuery}
-        />
+        <Fill>
+          <TreeSearch
+            field={field}
+            query={query}
+            scope={scope}
+            floating={float?.floating ?? false}
+            onQuery={setQuery}
+          />
+        </Fill>
         {shown === undefined ? null : (
           <Tooltip label={shown.length === 0 ? "Luke has shown no files yet" : filterLabel}>
             <IconButton
@@ -261,7 +262,7 @@ export function FileTreePane({
           {AsyncResult.isFailure(loaded) ? TREE_LOAD_FAILED : "Reading the files…"}
         </p>
       ) : (
-        <div className="file-tree-host" ref={host} />
+        <Fill className="file-tree-host" ref={host} />
       )}
     </aside>
   );

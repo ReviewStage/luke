@@ -14,10 +14,9 @@
  * main"), so the keyboard reaches it and a reader hears it.
  */
 
-import { CHIP_CUT, CHIP_LOOK, CHIP_SIZE, Chip, ChipName } from "@luke/ui";
+import { CHIP_CUT, CHIP_LOOK, CHIP_SIZE, Chip, ChipName, Tooltip } from "@luke/ui";
 import { GitBranchIcon } from "lucide-react";
 import { CopyGlyph, copyHint, useCopyFeedback } from "../copy-feedback.js";
-import { Tooltip } from "../tooltip.js";
 
 /** What a branch's chip is named, for what its press copies. */
 function copyLabel(name: string): string {

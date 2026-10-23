@@ -920,6 +920,43 @@ it.effect(
 );
 
 it.effect(
+  "an item on a task waits on whoever the service says it waits on, its assignee, rather than its agent's starter, and moves to the account's count and badge when the task is assigned to it",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture();
+      yield* f.notices;
+      f.focus(false);
+      const teammate = "user-charles";
+      const teamTask = "9d2b7b5a-4e3f-4e9c-9c77-7a5d8b3f4c32";
+      const answer = (reassigned: string, cursor: string) =>
+        f.answerInbox({
+          items: [
+            waitingItem(ITEM_A, { startedBy: teammate, waitsOn: ACCOUNT_ID }),
+            waitingItem(ITEM_B, { planId: teamTask, startedBy: ACCOUNT_ID, waitsOn: reassigned }),
+          ],
+          cursor,
+          readAt: READ_AT,
+        });
+      answer(teammate, "1");
+      yield* settled;
+      const before = { badge: f.badges.at(-1), waiting: f.waiting.at(-1) };
+      answer(ACCOUNT_ID, "2");
+      yield* settled;
+
+      assert.equal(before.badge, 1);
+      assert.deepEqual(
+        before.waiting?.map((task) => task.taskId),
+        [TASK_ID],
+      );
+      assert.equal(f.badges.at(-1), 2);
+      assert.deepEqual(
+        f.waiting.at(-1)?.map((task) => task.taskId),
+        [TASK_ID, teamTask],
+      );
+    }),
+);
+
+it.effect(
   "a task's To do count is handed the window, and one moving alone, as the reader's read of a settled item moves it, is written again while the Dock's badge stays on what waits",
   () =>
     Effect.gen(function* () {

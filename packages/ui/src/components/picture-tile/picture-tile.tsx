@@ -1,4 +1,5 @@
 import type { ButtonHTMLAttributes, MouseEvent, ReactNode } from "react";
+import { PRESS_PULSE, pulsePress } from "../../press-pulse.js";
 
 /**
  * picture-tile.tsx -- a picture that opens when pressed: the press that enlarges a picture over the window, around the picture as its place draws it.
@@ -20,7 +21,11 @@ import type { ButtonHTMLAttributes, MouseEvent, ReactNode } from "react";
  * place's (`onOpen`), handed the click so it can keep the press from the
  * element around it, or let it through; an app's hint wraps it as it wraps
  * a Button, handing it the pointer, press, and focus handlers it shows and
- * goes on by, each heard before the tile's own.
+ * goes on by, each heard before the tile's own. A place whose pointer's
+ * press opens nothing, and falls through to what is around the tile, says
+ * so (`pointerOpens`): a pointer's press then opens nothing and passes on
+ * to the place around it, the tile wearing the plain pointer and not
+ * sinking, while a key's press still opens it.
  */
 
 /** What a press is named for, the picture's words after it. */
@@ -45,6 +50,7 @@ export function PictureTile({
   name,
   onOpen,
   fill = false,
+  pointerOpens = true,
   caption,
   children,
   onClick,
@@ -56,6 +62,8 @@ export function PictureTile({
   onOpen: (event: MouseEvent<HTMLButtonElement>) => void;
   /** Whether it fills the room its container gives it rather than hugging its picture. */
   fill?: boolean | undefined;
+  /** Whether a pointer's press opens it, so it wears the zooming pointer and sinks; a key's press always does. */
+  pointerOpens?: boolean | undefined;
   /** Words under the picture that the press takes with it. */
   caption?: ReactNode;
   /** The picture, in its place's own frame. */
@@ -66,10 +74,16 @@ export function PictureTile({
       type="button"
       className="luke-picture-tile"
       data-fill={fill}
+      data-pointer-opens={pointerOpens}
       aria-label={name === "" ? ENLARGE_LABEL : `${ENLARGE_LABEL} ${name}`}
       {...hinted}
       onClick={(event) => {
         onClick?.(event);
+        // Note that a key's press is a click the pointer counts none of, so a click count says a pointer pressed it.
+        if (!pointerOpens && event.detail > 0) return;
+        // Note that the face is what a press sinks, so it is what gives as the press lands.
+        const face = event.currentTarget.querySelector<HTMLElement>(".luke-picture-tile-face");
+        if (face !== null) pulsePress(face, PRESS_PULSE.QUIET);
         onOpen(event);
       }}
     >

@@ -19,7 +19,8 @@
  * a sandbox from the coding agent's image (`agent-sandbox-image.ts`),
  * waiting while the image is prepared, checks the agent's repository out
  * into it exactly as eve's sandbox does (`checkout.ts`, the same token at
- * the firewall, the history deepened before the runner starts), and
+ * the firewall, the history deepened before the runner starts), writes the
+ * skills its member installed into Luke beside it (`native-skills.ts`), and
  * launches the runner. A launch that fails there is the agent's failed turn.
  * A launch mints the runner's bearer and records its digest on the
  * agent's row, uploads the runner's bundle (`runner-bundle.ts`), and starts
@@ -74,6 +75,7 @@ import {
   type ContentBlock,
   INPUT_LINE,
   type InputLine,
+  type IntegrationServer,
   RUNNER_ENV,
   type RunnerConfig,
 } from "@luke/agent-runner/protocol";
@@ -156,8 +158,10 @@ import {
   deepenAgentCheckout,
   openWorkingFolder,
 } from "./checkout.js";
+import { NATIVE_SKILLS_PATH, nativeSkillFiles } from "./native-skills.js";
 import { RunnerBundle } from "./runner-bundle.js";
 import { type NativeSessions, RUNNER_CHOICE } from "./runtime-sessions.js";
+import { nativeSkills } from "./skills.js";
 import { CODER_TOOL_SET } from "./tool-set.js";
 
 /** What the sessions reach: the store, GitHub, Vercel, the image, the runner's bundle, and the deployment's key ring. */
@@ -178,6 +182,8 @@ export interface RunnerSessionsOptions {
   readonly eventsUrl: string;
   /** The Luke MCP server's endpoint (P06), which the composing edge names. */
   readonly mcpUrl: string;
+  /** The integrations the agent is handed as its launch starts, each an MCP server of its own beside Luke's. */
+  readonly integrations: (agent: CodingAgent) => Effect.Effect<readonly IntegrationServer[]>;
   /** Luke's coder instructions for the agent, which the harness's config carries. */
   readonly instructions: (agent: CodingAgent) => Effect.Effect<string>;
   /** One past the last event the store applied of the conversation's runner, where a launch numbers its events from. */
@@ -227,6 +233,8 @@ export interface RunnerHarness<E extends { readonly _tag: string }> {
     resume: string | undefined,
     firstSequence: number,
   ) => Effect.Effect<RunnerConfig, LaunchRefused>;
+  /** The checkout's folders the harness finds a repository's skills in, whose names it keeps over an installed skill's. */
+  readonly skillRoots: readonly string[];
   /** What goes ahead of a message to a runner already running. */
   readonly ahead: (
     agent: CodingAgent,
@@ -261,7 +269,9 @@ const SANDBOX_ENV = { NO_COLOR: "1", GH_STACK_NO_UPDATE_NOTIFIER: "1" } as const
 
 /**
  * The launch, run by bash as root: the uploaded bundle installed where only
- * root writes and checked against the digest Luke computed, the checkout
+ * root writes and checked against the digest Luke computed, the member's
+ * installed skills, where the sandbox's opening uploaded them, moved where
+ * only root writes and every user reads (`native-skills.ts`), the checkout
  * marked safe for git and shared with `agent`'s group, then the runner in
  * place of the shell as `agent`, every capability dropped. `$1` is the
  * digest; the secrets are in the environment the API hands the command, and
@@ -272,6 +282,7 @@ const LAUNCH_SCRIPT = [
   `install -D -o root -g root -m 0444 ${RUNNER_PATH.UPLOAD} ${RUNNER_PATH.INSTALLED}`,
   `rm -f ${RUNNER_PATH.UPLOAD}`,
   `echo "$1  ${RUNNER_PATH.INSTALLED}" | sha256sum --check --status`,
+  `if [ -d ${NATIVE_SKILLS_PATH.UPLOAD} ]; then rm -rf ${NATIVE_SKILLS_PATH.INSTALLED} && mkdir -p $(dirname ${NATIVE_SKILLS_PATH.INSTALLED}) && mv ${NATIVE_SKILLS_PATH.UPLOAD} ${NATIVE_SKILLS_PATH.INSTALLED} && chown -R root:root ${NATIVE_SKILLS_PATH.INSTALLED} && chmod -R u=rwX,go=rX ${NATIVE_SKILLS_PATH.INSTALLED}; fi`,
   `git config --system --get-all safe.directory 2>/dev/null | grep -Fxq ${CODER.CHECKOUT_PATH} || git config --system --add safe.directory ${CODER.CHECKOUT_PATH}`,
   `if [ -d ${CODER.CHECKOUT_PATH}/.git ]; then git -C ${CODER.CHECKOUT_PATH} config core.sharedRepository group; fi`,
   `chmod -R g+rwX ${CODER.CHECKOUT_PATH}`,
@@ -691,6 +702,29 @@ export const runnerSessions = <
       });
 
     /**
+     * The member's installed skills, less the repository's, uploaded for the
+     * launch to install (`native-skills.ts`), as a new sandbox opens; nothing
+     * where there are none. A write that fails is logged, and the agent opens
+     * without them rather than not at all.
+     */
+    const writeInstalledSkills = (
+      target: ConversationTarget,
+      agent: CodingAgent,
+      running: string,
+    ) =>
+      Effect.gen(function* () {
+        const files = nativeSkillFiles(yield* nativeSkills(target, agent, harness.skillRoots));
+        if (files.length === 0) return;
+        yield* api.writeFiles(running, files);
+      }).pipe(
+        Effect.catch((failure) =>
+          Effect.logWarning(
+            `The installed skills of a ${harness.name} agent were not written: ${describeFailure(failure)}`,
+          ),
+        ),
+      );
+
+    /**
      * One launch of the runner in the running session: a fresh bearer
      * recorded, the bundle uploaded, the command started, the runner's
      * place kept in the sandbox's tags, and its config line and first
@@ -871,6 +905,7 @@ export const runnerSessions = <
           } else {
             yield* openWorkingFolder(repositorySandbox);
           }
+          yield* writeInstalledSkills(target, agent, running);
           yield* launch(
             sessionId,
             agent,

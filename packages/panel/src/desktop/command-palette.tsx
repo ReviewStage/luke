@@ -16,7 +16,8 @@
  * what its shortcut would, Delete task's question included, and it opens a
  * task through the same select the sidebar does, which takes its ask back
  * when the host does not open the task. Each task names its repository
- * beside it, so two tasks of one name can be told apart. An agent opens its tab as the column's "+" would, hanging
+ * beside it, so two tasks of one name can be told apart, and hangs the
+ * task's card beside its row, as its sidebar row does. An agent opens its tab as the column's "+" would, hanging
  * its tab's card beside its row while the pointer rests on it, as every
  * place naming an agent does (`agent-ref.tsx`), and an archived agent, which
  * says so, its own page, a subagent
@@ -40,7 +41,7 @@
  * included, and no chord changes what stands behind it. Closing hands focus
  * back to whatever had it, and only then runs what was chosen, so a command
  * acts from where the developer was, as its shortcut would have. It then
- * fades out over `--duration-exit`, held by Radix's dialog through the exit
+ * fades out over `--luke-duration-exit`, held by Radix's dialog through the exit
  * its `data-state` plays, and inert while it does.
  *
  * Every row's value is its place in the list, never words: cmdk writes it
@@ -81,11 +82,14 @@ import {
   NoteLine,
   PinIcon,
   SearchIcon,
+  Shortcut,
   TEXT_ELEMENT,
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
+  Tooltip,
   UnpinIcon,
+  useMinute,
   VisuallyHidden,
   WingFace,
 } from "@luke/ui";
@@ -93,10 +97,9 @@ import {
   ACTOR_KIND,
   type Actor,
   actorName,
-  creatorActor,
+  assigneeFace,
   memberActor,
   ROLE_WORDS,
-  teammateCreator,
 } from "@luke/ui/actor-model";
 import { matchesTokens, matchRanges, searchTokens } from "@luke/ui/search-tokens";
 import {
@@ -109,10 +112,11 @@ import {
   taskRowName,
 } from "@luke/ui/task-list-model";
 import { DOCUMENT_REGION, TASK_MARK } from "@luke/ui/tasks-model";
+import { formatCount } from "@luke/ui/time-format";
 import { Command, defaultFilter } from "cmdk";
 import { LinkIcon } from "lucide-react";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { ACTOR_SIZE, ActorMark, CreatorHeard } from "../actor-ref.js";
+import { ActorMark, AssigneeFaceMark } from "../actor-ref.js";
 import {
   appCommandOffered,
   runAppCommand,
@@ -131,7 +135,6 @@ import {
   type SettingsSearchInput,
   settingsSearchEntries,
 } from "../settings-search.js";
-import { Shortcut } from "../shortcut.js";
 import { AgentCard, agentSubject, NOTHING_HELD } from "../tasks/agent-ref.js";
 import { useChatOn } from "../tasks/chat-gate.js";
 import { agentTabLabel } from "../tasks/coding-agent-model.js";
@@ -159,12 +162,12 @@ import {
   useWorkspaceMembersRead,
   type WorkspaceMembersRead,
 } from "../tasks/use-workspace-members.js";
-import { Tooltip } from "../tooltip.js";
 import { type AgentReadMarks, useAgentReadMarks } from "./agent-read-marks.js";
 import { LUKE_NAME, type LukeOperator, useLukeOperator, withoutLuke } from "./luke-operator.js";
 import { agentEntries, chatEntries, inboxEntries } from "./main-tabs.js";
 import { changesOffers, panelEntries } from "./side-panel.js";
 import { taskOf } from "./task-actions.js";
+import { homeTaskCardOf } from "./task-card.js";
 import { WorkspaceRef } from "./workspace-ref.js";
 
 /** The kinds of row the palette lists, each a filter of its own after All, in the order the filters stand. */
@@ -285,7 +288,7 @@ type PaletteNotice =
     };
 
 /** What the Files filter says under a listing cut short at the wire's bound. */
-const TRUNCATED_LINE = `Only the repository's first ${TASK_TREE_BOUNDS.MAX_RECURSIVE_ENTRIES.toLocaleString("en-US")} entries are searched.`;
+const TRUNCATED_LINE = `Only the repository's first ${formatCount(TASK_TREE_BOUNDS.MAX_RECURSIVE_ENTRIES)} entries are searched.`;
 
 /** A footer hint: the chords it names and what they do. */
 interface FooterHint {
@@ -353,11 +356,11 @@ interface PaletteRow {
   detail?: string | undefined;
   /** The workspace a task is in where that is not the one listed, named by its tile and name before the detail. */
   workspace?: Workspace | undefined;
-  /** The mark at the row's end: a failed agent's, or a teammate's task's creator's face. */
+  /** The mark at the row's end: a failed agent's, or the face of who is on a task (`assigneeFace`). */
   endMark?: React.JSX.Element | undefined;
-  /** A task's creator's name, said after the detail where the query found it. */
-  creator?: string | undefined;
-  /** The card the row hangs beside it while the pointer rests on it: an agent's tab's. */
+  /** A task's assignee's and creator's names, the one the query found it by said after the detail. */
+  people?: readonly string[] | undefined;
+  /** The card the row hangs beside it while the pointer rests on it: a task's, an agent's tab's, or a file's. */
   card?: React.ReactNode;
   /** The chord an action's row draws as keys. */
   command?: KeyedCommand | undefined;
@@ -558,6 +561,17 @@ const MADE_BY_WORDS: Partial<Record<Actor["kind"], string>> = {
   [ACTOR_KIND.AUTOMATION]: "automation",
 };
 
+/** A task's row's card, as its sidebar row hangs it, its times counted back from the minute it is hung. */
+function PaletteTaskCard({
+  tasks,
+  task,
+}: {
+  tasks: TasksControl;
+  task: TaskSummary;
+}): React.JSX.Element {
+  return homeTaskCardOf(tasks, task, useMinute());
+}
+
 /** A task's muted words: its repository. */
 function taskDetail(task: TaskSummary): string | undefined {
   return task.repository ?? undefined;
@@ -570,31 +584,36 @@ function taskDetail(task: TaskSummary): string | undefined {
  * its tab's look, an archived one saying so in its detail. Within each, the
  * listed workspace's come first and every other workspace's tasks after
  * them, naming its workspace and found by its name, since opening one
- * switches the window to it. An agent opens on its own page, as its
- * sidebar row does.
+ * switches the window to it. A task wears who is on it at its end, as its
+ * sidebar row does (`assigneeFace`), and is found by its assignee's name and
+ * its creator's. An agent opens on its own page, as its sidebar row does. An
+ * agent's line on a task's card opens the task on its tab through
+ * `showAgent`, which leaves the palette as a row does.
  */
 function taskRows(
   tasks: TasksControl,
   members: readonly WorkspaceMember[] | undefined,
   open: (taskId: string) => void,
   openAgent: (agentId: string) => void,
+  showAgent: TasksControl["onShowAgent"],
   originOf: (task: TaskSummary) => Actor | undefined,
 ): readonly PaletteRow[] {
   const listedId = tasks.workspace?.id;
-  // Note that only the listed workspace's members are read, so another workspace's creator stands by the wire's name, never as having left.
+  const carded = { ...tasks, onShowAgent: showAgent };
+  // Note that only the listed workspace's members are read, so another workspace's assignee stands by the wire's name, never as having left.
   const listedMembers = (task: TaskSummary) =>
     task.workspaceId === listedId ? members : undefined;
-  const creatorOf = (task: TaskSummary) =>
-    teammateCreator(task, { members: listedMembers(task), readerId: tasks.me });
+  const readerOf = (task: TaskSummary) => ({ members: listedMembers(task), readerId: tasks.me });
   const elsewhereOf = (task: TaskSummary): Workspace | undefined =>
     listedId === undefined || task.workspaceId === listedId
       ? undefined
       : tasks.workspaces.find((each) => each.id === task.workspaceId);
   const taskOf = (task: TaskSummary): PaletteRow => {
     const elsewhere = elsewhereOf(task);
-    const creator = creatorOf(task);
+    const worn = assigneeFace(task, readerOf(task));
     const createdBy = task.createdBy?.name ?? null;
-    // Note that a task Luke or an agent made wears its maker on the reader's own task too, and says them in its detail, so it is found by them.
+    const assignedTo = task.assignee?.name ?? null;
+    // Note that a task Luke or an agent made says them in its detail, so it is found by them.
     const origin = originOf(task);
     const madeBy = origin === undefined ? null : actorName(origin);
     const detail = taskDetail(task);
@@ -605,31 +624,14 @@ function taskRows(
           ? detail
           : [detail, `by ${madeBy}`].filter((words) => words !== undefined).join(" · "),
       workspace: elsewhere,
-      endMark:
-        origin !== undefined ? (
-          <>
-            <ActorMark
-              actor={origin}
-              size={ACTOR_SIZE.MARK}
-              forWhom={creatorActor(
-                task,
-                { members: listedMembers(task), readerId: tasks.me },
-                undefined,
-              )}
-            />
-            <CreatorHeard actor={origin} />
-          </>
-        ) : creator === undefined ? undefined : (
-          <>
-            <ActorMark actor={creator} size={ACTOR_SIZE.MARK} />
-            <CreatorHeard actor={creator} />
-          </>
-        ),
-      creator: createdBy ?? undefined,
+      card: <PaletteTaskCard tasks={carded} task={task} />,
+      endMark: worn === undefined ? undefined : <AssigneeFaceMark face={worn} />,
+      people: [...new Set([assignedTo, createdBy])].filter((name) => name !== null),
       terms: [
         task.name,
         task.repository,
         elsewhere?.name ?? null,
+        assignedTo,
         createdBy,
         madeBy,
         origin === undefined ? null : MADE_BY_WORDS[origin.kind],
@@ -1093,17 +1095,28 @@ function settingRows(
 }
 
 /**
- * Whether a row's creator explains why the query found it: their name holds a
- * word of the query, or the query reaches the row only with the name among
- * its words, as a loose match on the name, or one running from the task's
- * name into its creator's, does.
+ * The person whose name explains why the query found a row, its assignee
+ * before its creator: the one whose name holds the most words of the query,
+ * else, where the query reaches the row only with the names among its words,
+ * as a loose match on a name, or one running from the task's name into a
+ * person's, does, the name it answers best; none where the row's own words
+ * explain it.
  */
-function creatorExplains(row: PaletteRow, query: string, tokens: readonly string[]): boolean {
-  const { creator } = row;
-  if (creator === undefined || tokens.length === 0) return false;
-  if (matchRanges(creator, tokens).length > 0) return true;
-  const others = row.terms.filter((term) => term !== creator).join(" ");
-  return defaultFilter(others, query) === 0;
+function personFound(
+  row: PaletteRow,
+  query: string,
+  tokens: readonly string[],
+): string | undefined {
+  const people = row.people ?? [];
+  if (people.length === 0 || tokens.length === 0) return undefined;
+  // The name holding the most of the query's words, so a first name two people share never hides the one the whole query names.
+  const held = (name: string) =>
+    tokens.filter((token) => matchRanges(name, [token]).length > 0).length;
+  const named = people.reduce((best, name) => (held(name) > held(best) ? name : best));
+  if (held(named) > 0) return named;
+  const others = row.terms.filter((term) => !people.includes(term)).join(" ");
+  if (defaultFilter(others, query) !== 0) return undefined;
+  return people.toSorted((a, b) => defaultFilter(b, query) - defaultFilter(a, query))[0];
 }
 
 function PaletteItem({
@@ -1117,10 +1130,12 @@ function PaletteItem({
   query: string;
   tokens: readonly string[];
 }): React.JSX.Element {
-  // A task found by its creator's name says the name after its detail, so the match is in sight.
-  const detail = creatorExplains(row, query, tokens)
-    ? [row.detail, row.creator].filter((words) => words !== undefined).join(" · ")
-    : row.detail;
+  // A task found by its assignee's or its creator's name says the name after its detail, so the match is in sight.
+  const found = personFound(row, query, tokens);
+  const detail =
+    found === undefined
+      ? row.detail
+      : [row.detail, found].filter((words) => words !== undefined).join(" · ");
   const words =
     detail === undefined && row.workspace === undefined ? undefined : (
       <>
@@ -1432,7 +1447,7 @@ export function CommandPalette({
     askLuke !== undefined &&
     (filter === PALETTE_FILTER.ALL || filter === PALETTE_FILTER.AGENTS) &&
     (tokens.length === 0 || rowScore(askLuke, query, tokens) > 0);
-  // The listed workspace's members, read once for it, name a teammate's task's creator by face.
+  // The listed workspace's members, read once for it, name a task's assignee by face.
   const membersRead = useWorkspaceMembersRead(tasks.workspace);
   const originOf = useTaskOrigin();
   const { members } = membersRead;
@@ -1496,6 +1511,7 @@ export function CommandPalette({
             members,
             (id) => onTasks(() => tasks.onSelect(id)),
             (id) => onTasks(() => tasks.agentView.onOpen(id)),
+            (taskId, agentId) => onTasks(() => tasks.onShowAgent(taskId, agentId)),
             originOf,
           )
         : [],

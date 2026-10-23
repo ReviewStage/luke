@@ -16,6 +16,7 @@ import { AUTOMATION_CALL_FAILURE, type AutomationView } from "@luke/features/aut
 import type { AutomationScope, AutomationSummary } from "@luke/features/automation-wire";
 import { LINK_PLACE } from "@luke/features/luke-link";
 import type { Workspace } from "@luke/features/workspace-wire";
+import { ACT_KIND } from "@luke/host/acts";
 import { EXPERIMENT } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
@@ -29,10 +30,15 @@ import {
   EmptyState,
   ERROR_STATE_PLACEMENT,
   ErrorState,
+  Fill,
+  FoldingButton,
   LIST_VARIANT,
   List,
   ListRow,
   NO_CONTEXT_MENU,
+  ONE_LINE_ELEMENT,
+  ONE_LINE_END,
+  OneLine,
   PAGE_FRAME,
   SETTINGS_SECTION_FRAME,
   SettingsRow,
@@ -45,26 +51,27 @@ import {
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
+  Tooltip,
   useMenu,
+  useMinute,
   VisuallyHidden,
 } from "@luke/ui";
+import { momentText } from "@luke/ui/time-format";
 import { BotIcon, ChevronRightIcon, GitPullRequestIcon, PlusIcon, ZapIcon } from "lucide-react";
 import { Fragment, useEffect, useRef, useState } from "react";
+import { useAct } from "../act.js";
 import { useAppCommand } from "../app-commands.js";
 import { LinkWorkspaceProvider, useCopyLinkItem } from "../copy-link-item.js";
 import { FadingWords } from "../fading-words.js";
-import { FoldingButton } from "../folding-button.js";
 import { NOT_FOUND_THING, NotFound } from "../not-found.js";
+import { useSentryRead } from "../settings/use-sentry-read.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { GLYPH_STATE, glyphStateWords, StateGlyph, stateEndMark } from "../state-glyph.js";
-import { AutomationAgentDialog } from "../tasks/new-task-dialog.js";
-import { momentText, useMinute } from "../tasks/task-time.js";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast.js";
-import { Tooltip } from "../tooltip.js";
 import { useExperiment } from "../use-app-state.js";
 import { ActionMenu } from "./action-menu.js";
-import { AutomationEditor } from "./automation-editor.js";
+import { AutomationEditor, type SentryOffer } from "./automation-editor.js";
 import { OWNER_MARK_SIZE, OwnerMark } from "./automation-owner.js";
 import { AutomationRunsPanel, FiringGlyph, STANDING_GLYPH } from "./automation-runs-panel.js";
 import {
@@ -93,7 +100,7 @@ import { useAutomations } from "./use-automations.js";
  * automation, Create with an agent opens New task's own card for the agent
  * that makes one: what to automate in the member's own words, the
  * repository and the model, then Start agent, a new task's agent handed the
- * brief to make it (`new-task-dialog.tsx`). Code review, the
+ * brief to make it (`new-task-composer.tsx`). Code review, the
  * one suggestion, is still an experiment (`EXPERIMENT.CODE_REVIEW`), so
  * nothing is suggested while the account has it off, and a page filled in
  * from it goes back to the list.
@@ -434,7 +441,6 @@ function ListPage({
     });
   };
   const openNew = () => view.onOpen({ kind: AUTOMATIONS_PAGE.NEW });
-  const [withAgent, setWithAgent] = useState(false);
   const openSuggested = (preset: AutomationPresetName) =>
     view.onOpen({ kind: AUTOMATIONS_PAGE.NEW, preset });
   const groups =
@@ -449,7 +455,13 @@ function ListPage({
           {/* The toolbar's own width, which a container query reads, folds Create with an agent to its glyph before it crowds the title. */}
           <div className="automations-toolbar">
             <div className="desktop-toolbar-heading">
-              <h1 className="desktop-toolbar-title">Automations</h1>
+              <OneLine
+                as={ONE_LINE_ELEMENT.H1}
+                end={ONE_LINE_END.ELLIPSIS}
+                className="desktop-toolbar-title"
+              >
+                Automations
+              </OneLine>
             </div>
             <div className="desktop-toolbar-actions">
               <FoldingButton
@@ -457,7 +469,7 @@ function ListPage({
                 icon={<BotIcon />}
                 variant={BUTTON_VARIANT.OUTLINE}
                 disabled={workspace === undefined}
-                onClick={() => setWithAgent(true)}
+                onClick={tasks.onNewAutomationAgent}
               />
               <Button
                 variant={BUTTON_VARIANT.OUTLINE}
@@ -469,11 +481,6 @@ function ListPage({
               </Button>
             </div>
           </div>
-          <AutomationAgentDialog
-            newTask={tasks.newTask}
-            open={withAgent && workspace !== undefined}
-            onClose={() => setWithAgent(false)}
-          />
         </header>
       }
       state={listState(workspacesUnread, read)}
@@ -620,7 +627,7 @@ function ReadingPage({ onBack, room }: { onBack: () => void; room: ShellRoom }):
   useAppCommand(APP_COMMAND.EXIT_AUTOMATIONS, onBack);
   const runsPanel = useRunsPanel();
   return (
-    <div className="automations-view">
+    <Fill className="automations-view">
       <header className="desktop-toolbar">
         <div className="automation-toolbar">
           <div className="desktop-toolbar-heading automation-toolbar-reading">
@@ -650,7 +657,7 @@ function ReadingPage({ onBack, room }: { onBack: () => void; room: ShellRoom }):
           />
         )}
       </div>
-    </div>
+    </Fill>
   );
 }
 
@@ -674,6 +681,47 @@ export function AutomationsPage({
       <AutomationsPages tasks={tasks} room={room} />
     </LinkWorkspaceProvider>
   );
+}
+
+/** The workspace's Sentry while no workspace is listed: unread, with nothing to install on. */
+const SENTRY_UNREAD: SentryOffer = {
+  read: undefined,
+  installing: false,
+  refusal: undefined,
+  onInstall: () => undefined,
+};
+
+/**
+ * A listed workspace's Sentry as its automations' editor offers it: read as
+ * the page opens and each time the window comes forward, which is how the
+ * developer comes back from installing on Sentry, and installed in the
+ * browser, a refusal (only owners and admins install) said at its row.
+ */
+function useWorkspaceSentry(workspaceId: string): SentryOffer {
+  const { act } = useAct();
+  const { read } = useSentryRead(workspaceId);
+  const [installing, setInstalling] = useState(false);
+  const [refusal, setRefusal] = useState<string | undefined>(undefined);
+  const onInstall = () => {
+    if (installing) return;
+    setInstalling(true);
+    setRefusal(undefined);
+    act(ACT_KIND.WORKSPACE_SENTRY_INSTALL, { workspaceId })
+      .catch((refused: Error) => setRefusal(refused.message))
+      .finally(() => setInstalling(false));
+  };
+  return { read, installing, refusal, onInstall };
+}
+
+/** The editor over a listed workspace, offered that workspace's Sentry. */
+function WorkspaceEditor({
+  workspaceId,
+  editor,
+}: {
+  workspaceId: string;
+  editor: (sentry: SentryOffer) => React.JSX.Element;
+}): React.JSX.Element {
+  return editor(useWorkspaceSentry(workspaceId));
 }
 
 /** The Automations pages themselves, under the workspace their links are written in. */
@@ -735,32 +783,40 @@ function AutomationsPages({
   // Code review, the one preset, is an experiment, so no page is filled in from it while it is off.
   const preset = place.kind === AUTOMATIONS_PAGE.NEW && codeReviewOn ? place.preset : undefined;
   const editing = opened === undefined || opened.id === made ? AUTOMATIONS_PAGE.NEW : opened.id;
+  const editor = (sentry: SentryOffer) => (
+    <AutomationEditor
+      key={editing}
+      automation={opened}
+      preset={preset}
+      workspace={workspace}
+      offersOwner={offersOwner}
+      repositories={tasks.newTask.repositoriesIn(workspace?.id)}
+      writes={automations}
+      onBack={back}
+      onOpenAgent={(agentId) => tasks.agentView.onOpen(agentId)}
+      linked={place.kind === AUTOMATIONS_PAGE.EDIT ? place : undefined}
+      leaveGuard={tasks.leaveGuard}
+      room={room}
+      runsShown={view.runs}
+      onRuns={view.onRuns}
+      sentry={sentry}
+      onDeleted={(automationId) =>
+        view.onOpen({ kind: AUTOMATIONS_PAGE.LIST, deleted: automationId })
+      }
+      onCreated={(automationId) => {
+        setMade(automationId);
+        view.onOpen({ kind: AUTOMATIONS_PAGE.EDIT, automationId, created: true });
+      }}
+    />
+  );
   return (
     // Keyed by the workspace, then by what it edits, so another workspace's page or another automation's holds nothing of the last's draft.
     <Fragment key={workspace?.id}>
-      <AutomationEditor
-        key={editing}
-        automation={opened}
-        preset={preset}
-        workspace={workspace}
-        offersOwner={offersOwner}
-        repositories={tasks.newTask.repositoriesIn(workspace?.id)}
-        writes={automations}
-        onBack={back}
-        onOpenAgent={(agentId) => tasks.agentView.onOpen(agentId)}
-        linked={place.kind === AUTOMATIONS_PAGE.EDIT ? place : undefined}
-        leaveGuard={tasks.leaveGuard}
-        room={room}
-        runsShown={view.runs}
-        onRuns={view.onRuns}
-        onDeleted={(automationId) =>
-          view.onOpen({ kind: AUTOMATIONS_PAGE.LIST, deleted: automationId })
-        }
-        onCreated={(automationId) => {
-          setMade(automationId);
-          view.onOpen({ kind: AUTOMATIONS_PAGE.EDIT, automationId, created: true });
-        }}
-      />
+      {workspace === undefined ? (
+        editor(SENTRY_UNREAD)
+      ) : (
+        <WorkspaceEditor workspaceId={workspace.id} editor={editor} />
+      )}
     </Fragment>
   );
 }

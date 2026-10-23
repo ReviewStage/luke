@@ -24,8 +24,7 @@ import {
   Text,
 } from "@luke/ui";
 import { memberActor } from "@luke/ui/actor-model";
-import { UserRoundIcon } from "lucide-react";
-import { ACTOR_SIZE, ActorMark } from "../actor-ref.js";
+import { ACTOR_SIZE, ActorMark, UnassignedMark } from "../actor-ref.js";
 import { useMemberDirectory, usePerson } from "../member-directory.js";
 import type { MenuRow } from "../searchable-menu.js";
 import { PICKER_ALIGN, Picker } from "../settings/picker-row.js";
@@ -38,7 +37,8 @@ import { PICKER_ALIGN, Picker } from "../settings/picker-row.js";
  * the title stand three chips, each dropping the window's own menu
  * (`picker-row.tsx`): the status, each of the five with its mark, the
  * priority, each with its bars, and the assignee, each member of the
- * workspace by face and name, the reader first, and No assignee. A pick is handed back for the page to send;
+ * workspace by face and name, the reader first, and No assignee on the
+ * dashed unassigned mark. A pick is handed back for the page to send;
  * without a door to send it, as on an archived task, the chips only say.
  * A task from a service before statuses has no key and no chips.
  */
@@ -84,18 +84,18 @@ function priorityOf(id: string): TaskPriority | undefined {
 }
 
 /** The row of the assignee's menu that assigns the task to no one, apart from every account's id. */
-const NO_ASSIGNEE = "no-assignee";
+export const NO_ASSIGNEE = "no-assignee";
 
-/** What the assignee's chip and its first row say of a task no one is assigned to. */
-const NO_ASSIGNEE_WORDS = "No assignee";
+/** What the assignee's chip and its first row say of a task no one is assigned to, as its hover card does, and what the Tasks page calls the tasks with none. */
+export const NO_ASSIGNEE_WORDS = "No assignee";
 
 /**
  * The assignee's menu: No assignee, then the workspace's members, the reader
  * first and the rest by name, each by face and name with their email as
  * detail, which a search matches too; only No assignee while the members are
- * unread.
+ * unread. The Tasks page's compact assignee chip drops the same rows.
  */
-function assigneeRows(
+export function assigneeRows(
   members: readonly WorkspaceMember[] | undefined,
   readerId: string | undefined,
 ): readonly MenuRow[] {
@@ -105,7 +105,11 @@ function assigneeRows(
       one.name.localeCompare(other.name),
   );
   return [
-    { id: NO_ASSIGNEE, label: NO_ASSIGNEE_WORDS, icon: <UserRoundIcon aria-hidden /> },
+    {
+      id: NO_ASSIGNEE,
+      label: NO_ASSIGNEE_WORDS,
+      icon: <UnassignedMark size={ACTOR_SIZE.INLINE} decorative />,
+    },
     ...ordered.map((member) => ({
       id: member.userId,
       label: member.name,
@@ -138,7 +142,7 @@ function TaskAssigneePicker({
       valueLabel={assignee?.name ?? NO_ASSIGNEE_WORDS}
       valueIcon={
         assignee === undefined ? (
-          <UserRoundIcon aria-hidden />
+          <UnassignedMark size={ACTOR_SIZE.INLINE} decorative />
         ) : (
           <ActorMark actor={person} size={ACTOR_SIZE.INLINE} />
         )

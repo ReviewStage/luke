@@ -1084,15 +1084,19 @@ function unreadable(status: number): GitHubUnavailable {
   return new GitHubUnavailable({ reason: GITHUB_FAILURE.UNREADABLE, status });
 }
 
-/** One read of the API under the bearer given, the path rooted at the API's origin. */
+/**
+ * One read of the API under the bearer given, the path rooted at the API's
+ * origin; with none (`null`), an anonymous read, which GitHub answers for a
+ * public repository alone and at its unauthenticated rate.
+ */
 export function githubRead(
   path: string,
-  bearer: Redacted.Redacted,
+  bearer: Redacted.Redacted | null,
 ): HttpClientRequest.HttpClientRequest {
-  return HttpClientRequest.get(`${GITHUB_API}${path}`).pipe(
-    HttpClientRequest.bearerToken(bearer),
+  const request = HttpClientRequest.get(`${GITHUB_API}${path}`).pipe(
     HttpClientRequest.setHeaders(GITHUB_HEADERS),
   );
+  return bearer === null ? request : HttpClientRequest.bearerToken(request, bearer);
 }
 
 /** One write of the API under the bearer given, its JSON body as given, the path rooted at the API's origin. */

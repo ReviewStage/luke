@@ -13,11 +13,16 @@ import {
   BUTTON_SIZE,
   BUTTON_VARIANT,
   Button,
+  FILL_ELEMENT,
+  Fill,
+  SPINNER_SIZE,
+  Spinner,
   TEXT_ELEMENT,
   TEXT_FONT,
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
+  Tooltip,
 } from "@luke/ui";
 import { Duration } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
@@ -36,8 +41,6 @@ import {
 } from "react";
 import { appPlatform } from "../app-platform.js";
 import { rendererRuntime } from "../renderer-runtime.js";
-import { SPINNER_SIZE, Spinner } from "../spinner.js";
-import { Tooltip } from "../tooltip.js";
 import { CloudBrowserCursor, cursorPlacement } from "./cloud-browser-cursor.js";
 import {
   CLOUD_BROWSER_PHASE,
@@ -404,7 +407,8 @@ export function CloudBrowserPane({
   const address = view.page?.address ?? tab.address;
   const driven = (view.driver?.driver ?? tab.driver) !== null;
   return (
-    <section
+    <Fill
+      as={FILL_ELEMENT.SECTION}
       className="browser-view cloud-browser-view file-view ph-no-capture"
       aria-label="Browser"
     >
@@ -458,7 +462,7 @@ export function CloudBrowserPane({
           Only whoever started this agent can take its tab over.
         </Text>
       ) : null}
-      <div ref={body} className="browser-view-body cloud-browser-body">
+      <Fill clip ref={body} className="browser-view-body cloud-browser-body">
         <div className="cloud-browser-stage" style={{ width: size.width, height: size.height }}>
           <canvas
             ref={canvas}
@@ -490,7 +494,7 @@ export function CloudBrowserPane({
         </div>
         {notice === undefined ? null : notice.waiting ? (
           <div className="cloud-browser-notice">
-            <Spinner label={notice.label} size={SPINNER_SIZE.REGION} />
+            <Spinner delay label={notice.label} size={SPINNER_SIZE.REGION} />
           </div>
         ) : (
           <div className="cloud-browser-notice" role="status">
@@ -508,7 +512,7 @@ export function CloudBrowserPane({
             ) : null}
           </div>
         )}
-      </div>
-    </section>
+      </Fill>
+    </Fill>
   );
 }

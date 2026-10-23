@@ -46,6 +46,7 @@ import {
 } from "@luke/features/pull-request-write-wire";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
+import { timeRuntime } from "@luke/ui";
 import { Clock, Context, Effect } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -459,7 +460,10 @@ const NO_GITHUB: GitHubConnectControl = {
 /** A registry whose atoms count on this clock, as the window's count on its own. */
 function registryOn(clock: Clock.Clock): AtomRegistry.AtomRegistry {
   return AtomRegistry.make({
-    initialValues: [[rendererRuntime, AsyncResult.success(Context.make(Clock.Clock, clock))]],
+    initialValues: [
+      [rendererRuntime, AsyncResult.success(Context.make(Clock.Clock, clock))],
+      [timeRuntime, AsyncResult.success(Context.make(Clock.Clock, clock))],
+    ],
   });
 }
 
@@ -540,14 +544,11 @@ function waiting(tab: HTMLElement): string[] {
     .map((each) => each.textContent ?? "");
 }
 
-/** The header's pill, which follows the title in its row's markup; none where the row holds none. */
+/** The header's pill, in its seat after the title in its row's markup; none where the row holds none. */
 function pillOf(tab: HTMLElement): Element | undefined {
-  const next = tab.querySelector(
-    ".pull-request-title-row > .pull-request-title",
-  )?.nextElementSibling;
-  return next === null || next === undefined || next.matches(".pull-request-title-actions")
-    ? undefined
-    : next;
+  return (
+    tab.querySelector(".pull-request-title-row > .pull-request-state > :first-child") ?? undefined
+  );
 }
 
 /** What the header says of where the pull request stands: its pill's words. */
@@ -2614,7 +2615,7 @@ test("Review stands at the end of the tabs' row however the pull request stands,
     assert.equal(review !== undefined, offered, state);
     const before = review?.closest(".pull-request-review")?.previousElementSibling;
     assert.equal(
-      before?.getAttribute("role") ?? null,
+      before?.firstElementChild?.getAttribute("role") ?? null,
       offered ? "tablist" : null,
       "Review follows the tabs",
     );
@@ -4944,7 +4945,7 @@ test("every review thread's head leads with its chevron and ends with its ⋯, i
       root.querySelector<HTMLElement>("summary.annotation-card-head") ??
       assert.fail(`the thread on ${where} has a head`);
     assert.ok(
-      head.firstElementChild?.classList.contains("luke-disclosure-turn"),
+      head.firstElementChild?.querySelector(".luke-disclosure-turn"),
       `on ${where}, the chevron leads the head`,
     );
     assert.ok(

@@ -43,12 +43,12 @@ import {
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
+  Tooltip,
 } from "@luke/ui";
 import { useSettingWrite } from "@luke/ui/use-setting-write";
 import type { ActionResult } from "@luke/wire";
 import { useLayoutEffect, useRef, useState } from "react";
-import { Tooltip } from "../tooltip.js";
-import { ChangedMark } from "./marks.js";
+import { SettingMarks } from "./marks.js";
 import { type SamplePlayer, useSamplePlayer } from "./sample-player.js";
 
 /** Each value's token, its name, the path of its clip, and where it has them, its heading and its tag. */
@@ -237,13 +237,13 @@ export function SampledChoiceRow({
   options: readonly SampledChoiceOption[];
   onChange: (value: string) => Promise<ActionResult>;
 }): React.JSX.Element {
-  const { busy, rejection, run } = useSettingWrite(onChange);
+  const { busy, rejection, saves, run } = useSettingWrite(onChange);
   const [open, setOpen] = useState(false);
   const chosen = options.find((option) => option.value === value)?.label ?? value;
   return (
     <SettingsRow
       label={label}
-      adornment={changed ? <ChangedMark /> : null}
+      adornment={<SettingMarks changed={changed} saves={saves} />}
       description={detail}
       error={rejection}
     >

@@ -10,10 +10,12 @@ import {
   NavItem,
   TaskStatusMark,
   TextButton,
+  Tooltip,
   useMenu,
 } from "@luke/ui";
 import { type Actor, actorName, creatorActor, memberActor } from "@luke/ui/actor-model";
 import {
+  drawnGrouping,
   type HiddenStatus,
   TASK_GROUPING,
   TASK_ORDER,
@@ -36,7 +38,6 @@ import { ACTOR_SIZE, ActorMark } from "../actor-ref.js";
 import { useAppCommand } from "../app-commands.js";
 import { useMemberDirectory } from "../member-directory.js";
 import { TASK_STATUS_WORDS } from "../tasks/task-standing.js";
-import { Tooltip } from "../tooltip.js";
 import { ActionMenu, type MenuAction, type MenuEntry } from "./action-menu.js";
 import type { CountNoun } from "./sidebar-group-header.js";
 import type { TaskListViewControl } from "./task-list-view.js";
@@ -50,8 +51,9 @@ import type { TaskListViewControl } from "./task-list-view.js";
  * section, and folded it counts what it holds. View options is the Inbox's
  * own sliders at the Tasks head's end, always in sight, dropping the
  * window's menu: Group by and Order by, each a submenu with its choice
- * checked, and in a shared workspace Created by: Anyone, Me, or each member
- * by face. While the view lists one member's tasks, a chip under the head
+ * checked, Group by offering Assignee and Creator in a shared workspace
+ * alone, and in a shared workspace Assigned to and Created by: Anyone, Me,
+ * or each member by face. While the view lists one member's tasks, a chip under the head
  * says so, its × lifts it, and the button wears a dot, so a filtered list
  * never passes for the whole of it.
  *
@@ -180,7 +182,7 @@ function memberEntries(
   ];
 }
 
-/** The menu's choices: how the list groups, Creator only where the workspace is shared, how it orders, and whose tasks it lists and who they are assigned to, where shared. */
+/** The menu's choices: how the list groups, Assignee and Creator only where the workspace is shared, how it orders, and who the tasks it lists are assigned to and who created them, where shared. */
 function viewEntries(
   control: TaskListViewControl,
   shared: boolean,
@@ -214,7 +216,12 @@ function viewEntries(
         icon: <ListIcon />,
         items: [
           grouping("Repository", <FolderGitIcon />, TASK_GROUPING.REPOSITORY),
-          ...(shared ? [grouping("Creator", <UserIcon />, TASK_GROUPING.CREATOR)] : []),
+          ...(shared
+            ? [
+                grouping("Assignee", <UserCheckIcon />, TASK_GROUPING.ASSIGNEE),
+                grouping("Creator", <UserIcon />, TASK_GROUPING.CREATOR),
+              ]
+            : []),
           grouping("None", <ListIcon />, TASK_GROUPING.NONE),
         ],
       },
@@ -232,14 +239,14 @@ function viewEntries(
       ? [
           [
             {
-              label: "Created by",
-              icon: <UsersIcon />,
-              items: memberEntries(view.createdBy, control.onCreatedBy, reader),
-            },
-            {
               label: "Assigned to",
               icon: <UserCheckIcon />,
               items: memberEntries(view.assignedTo, control.onAssignedTo, reader),
+            },
+            {
+              label: "Created by",
+              icon: <UsersIcon />,
+              items: memberEntries(view.createdBy, control.onCreatedBy, reader),
             },
           ],
         ]
@@ -260,7 +267,7 @@ export function TaskViewOptions({
   /** Whether the sidebar is on screen, for the menu not to outlive it. */
   shown: boolean;
   control: TaskListViewControl;
-  /** Whether the workspace is shared, which alone groups and filters by creator. */
+  /** Whether the workspace is shared, which alone groups and filters by person. */
   shared: boolean;
   /** Whether the view leaves any task out, which the button's dot says. */
   filtered: boolean;
@@ -387,9 +394,9 @@ function ViewChip({
 
 /**
  * The chips under the Tasks head, while the view leaves tasks out: one
- * member's face and "Created by me" or "Created by" their name, whose ×
- * lists everyone's again; and one member's face and "Assigned to me" or
- * "Assigned to" their name, whose × lists anyone's again.
+ * member's face and "Assigned to me" or "Assigned to" their name, whose ×
+ * lists anyone's again; then one member's face and "Created by me" or
+ * "Created by" their name, whose × lists everyone's again.
  */
 export function ViewChips({
   createdBy,
@@ -411,14 +418,6 @@ export function ViewChips({
   const assignee = assignedTo === undefined ? undefined : filteredActor(assignedTo, reader, tasks);
   return (
     <div className="sidebar-view-chips">
-      {actor === undefined ? null : (
-        <ViewChip
-          glyph={<ActorMark actor={actor} size={ACTOR_SIZE.MARK} />}
-          words={createdBy === reader.readerId ? "Created by me" : `Created by ${actorName(actor)}`}
-          lift="Show everyone's tasks"
-          onLift={onClearCreatedBy}
-        />
-      )}
       {assignee === undefined ? null : (
         <ViewChip
           glyph={<ActorMark actor={assignee} size={ACTOR_SIZE.MARK} />}
@@ -427,6 +426,14 @@ export function ViewChips({
           }
           lift="Show tasks assigned to anyone"
           onLift={onClearAssignedTo}
+        />
+      )}
+      {actor === undefined ? null : (
+        <ViewChip
+          glyph={<ActorMark actor={actor} size={ACTOR_SIZE.MARK} />}
+          words={createdBy === reader.readerId ? "Created by me" : `Created by ${actorName(actor)}`}
+          lift="Show everyone's tasks"
+          onLift={onClearCreatedBy}
         />
       )}
     </div>
@@ -459,12 +466,9 @@ export function useTaskViewCommands({
   readerId: string | undefined;
 }): void {
   const { order, createdBy, assignedTo } = control.view;
-  // A grouping by creator kept for a workspace nobody shares now is drawn by
+  // A grouping by person kept for a workspace nobody shares now is drawn by
   // repository, so that is the grouping the commands read as standing.
-  const grouping =
-    !shared && control.view.grouping === TASK_GROUPING.CREATOR
-      ? TASK_GROUPING.REPOSITORY
-      : control.view.grouping;
+  const grouping = drawnGrouping(control.view.grouping, shared);
   const group = (to: typeof grouping, allowed = true) =>
     offer(offered && allowed, grouping !== to, () => control.onGrouping(to));
   const orderBy = (to: typeof order) => offer(offered, order !== to, () => control.onOrder(to));

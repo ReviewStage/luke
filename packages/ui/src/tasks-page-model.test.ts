@@ -12,13 +12,17 @@ import {
   clearedField,
   DEFAULT_BOARD_DISPLAY,
   DEFAULT_LIST_DISPLAY,
+  EARLIER_BOARD_PROPERTIES,
+  EARLIER_LIST_PROPERTIES,
   keptTasksDisplay,
   NO_TASKS_FILTER,
   TASK_MAKER,
+  TASK_PROPERTY,
   TASKS_FILTER_FIELD,
   TASKS_GROUP,
   TASKS_GROUPING,
   TASKS_ORDER,
+  type TaskProperty,
   type TasksDisplay,
   type TasksFilter,
   type TasksGroup,
@@ -34,12 +38,15 @@ import {
  * each field it keeps, and-ed; its display groups them, orders each group,
  * stands empty groups or not, shows the settled finished within a window
  * (ending a settled group on how many older it leaves out), and leads the List
- * with the pins and sections; the Board stands columns by status or by
- * priority alone.
+ * with the pins and sections; the Board stands columns by status, by
+ * priority, or by assignee alone; and a display an earlier build kept draws
+ * the properties offered since as the view's own display does.
  */
 
 const DEAN = "user-dean";
 const MAYA = "user-maya";
+const ARLO = "user-arlo";
+const ZOE = "user-zoe";
 
 /** The instant the page is read at. */
 const NOW = Date.UTC(2026, 9, 21, 12);
@@ -49,6 +56,8 @@ const DAY = 24 * 60 * 60 * 1000;
 const NAMES = new Map([
   [DEAN, "Dean Stratakos"],
   [MAYA, "Maya Okafor"],
+  [ARLO, "Arlo Finch"],
+  [ZOE, "Zoe Park"],
 ]);
 
 /** A task by name, with what it stands at; `updatedAt` doubles as its start where none is given. */
@@ -59,6 +68,7 @@ function task(
     priority,
     repository = "acme/relay",
     creator,
+    assignee,
     updatedAt = 1,
     createdAt = updatedAt,
     completedAt,
@@ -67,6 +77,7 @@ function task(
     priority?: TaskPriority;
     repository?: string | null;
     creator?: string;
+    assignee?: string;
     updatedAt?: number;
     createdAt?: number;
     completedAt?: number;
@@ -85,6 +96,9 @@ function task(
     ...(creator === undefined
       ? undefined
       : { ownerId: creator, createdBy: { userId: creator, name: NAMES.get(creator) ?? "" } }),
+    ...(assignee === undefined
+      ? undefined
+      : { assignee: { userId: assignee, name: NAMES.get(assignee) ?? "" } }),
   };
 }
 
@@ -102,6 +116,8 @@ function headOf(head: TasksGroupHead): readonly (string | null)[] {
       return [head.kind, head.priority];
     case TASKS_GROUP.REPOSITORY:
       return [head.kind, head.repository];
+    case TASKS_GROUP.ASSIGNEE:
+      return [head.kind, head.assigneeId];
     case TASKS_GROUP.CREATOR:
       return [head.kind, head.creatorId];
   }
@@ -124,7 +140,8 @@ const listed = (
       pinned: [],
       sections: [],
       readerId: DEAN,
-      creatorName: (userId) => NAMES.get(userId) ?? "",
+      personName: (userId) => NAMES.get(userId) ?? "",
+      members: [],
       now: NOW,
     }),
   );
@@ -224,6 +241,9 @@ test("a settled status the filter names stands in full whatever the completed wi
   const board = tasksBoardColumns(tasks, {
     filter: done,
     display: { ...DEFAULT_BOARD_DISPLAY, order: TASKS_ORDER.NAME, emptyGroups: false },
+    readerId: DEAN,
+    personName: () => "",
+    members: [],
     now: NOW,
   }).map((column) => [headOf(column.head), column.tasks.map((each) => each.name), column.older]);
   expect(board).toEqual([[["status", "done"], ["Shipped in spring", "Shipped Monday"], undefined]]);
@@ -286,7 +306,8 @@ test("the List leads with the pins, then each section, one holding no task among
           { sectionId: "empty", taskIds: [] },
         ],
         readerId: DEAN,
-        creatorName: () => "",
+        personName: () => "",
+        members: [],
         now: NOW,
       }),
     );
@@ -316,6 +337,9 @@ test("the Board stands a column for every status at first, empty ones too, the s
       tasksBoardColumns(tasks, {
         filter: NO_TASKS_FILTER,
         display: { ...DEFAULT_BOARD_DISPLAY, ...display },
+        readerId: DEAN,
+        personName: () => "",
+        members: [],
         now: NOW,
       }),
     );
@@ -373,7 +397,8 @@ test("the completed window keeps the settled finished within it, by when each wa
       pinned: [],
       sections: [],
       readerId: DEAN,
-      creatorName: () => "",
+      personName: () => "",
+      members: [],
       now: NOW,
     }).map((group) => [headOf(group.head), group.tasks.map((each) => each.name), group.older]);
 
@@ -416,7 +441,14 @@ test("the older count leaves out the tasks the filter does, and a Board column h
     }),
   ];
   const filter = toggledFilter(NO_TASKS_FILTER, TASKS_FILTER_FIELD.REPOSITORY, "acme/relay");
-  const done = tasksBoardColumns(tasks, { filter, display: DEFAULT_BOARD_DISPLAY, now: NOW }).find(
+  const done = tasksBoardColumns(tasks, {
+    filter,
+    display: DEFAULT_BOARD_DISPLAY,
+    readerId: DEAN,
+    personName: () => "",
+    members: [],
+    now: NOW,
+  }).find(
     (column) => column.head.kind === TASKS_GROUP.STATUS && column.head.status === TASK_STATUS.DONE,
   );
 
@@ -424,28 +456,47 @@ test("the older count leaves out the tasks the filter does, and a Board column h
 });
 
 test("a display kept before the completed window reads its Done and Canceled switches as the past week or none, and one kept since reads as kept", () => {
-  expect(keptTasksDisplay({ done: true, canceled: false }, DEFAULT_LIST_DISPLAY).completed).toBe(
-    COMPLETED_WINDOW.PAST_WEEK,
-  );
-  expect(keptTasksDisplay({ done: false, canceled: true }, DEFAULT_LIST_DISPLAY).completed).toBe(
-    COMPLETED_WINDOW.PAST_WEEK,
-  );
-  expect(keptTasksDisplay({ done: false, canceled: false }, DEFAULT_BOARD_DISPLAY)).toEqual({
+  expect(
+    keptTasksDisplay({ done: true, canceled: false }, DEFAULT_LIST_DISPLAY, EARLIER_LIST_PROPERTIES)
+      .completed,
+  ).toBe(COMPLETED_WINDOW.PAST_WEEK);
+  expect(
+    keptTasksDisplay({ done: false, canceled: true }, DEFAULT_LIST_DISPLAY, EARLIER_LIST_PROPERTIES)
+      .completed,
+  ).toBe(COMPLETED_WINDOW.PAST_WEEK);
+  expect(
+    keptTasksDisplay(
+      { done: false, canceled: false },
+      DEFAULT_BOARD_DISPLAY,
+      EARLIER_BOARD_PROPERTIES,
+    ),
+  ).toEqual({
     ...DEFAULT_BOARD_DISPLAY,
     completed: COMPLETED_WINDOW.NONE,
   });
   expect(
-    keptTasksDisplay({ grouping: TASKS_GROUPING.PRIORITY, done: true }, DEFAULT_BOARD_DISPLAY),
+    keptTasksDisplay(
+      { grouping: TASKS_GROUPING.PRIORITY, done: true },
+      DEFAULT_BOARD_DISPLAY,
+      EARLIER_BOARD_PROPERTIES,
+    ),
   ).toEqual({
     ...DEFAULT_BOARD_DISPLAY,
     grouping: TASKS_GROUPING.PRIORITY,
     completed: COMPLETED_WINDOW.PAST_WEEK,
   });
-  expect(keptTasksDisplay({}, DEFAULT_LIST_DISPLAY)).toEqual(DEFAULT_LIST_DISPLAY);
-  expect(keptTasksDisplay({}, DEFAULT_BOARD_DISPLAY).completed).toBe(COMPLETED_WINDOW.PAST_WEEK);
+  expect(keptTasksDisplay({}, DEFAULT_LIST_DISPLAY, EARLIER_LIST_PROPERTIES)).toEqual(
+    DEFAULT_LIST_DISPLAY,
+  );
+  expect(keptTasksDisplay({}, DEFAULT_BOARD_DISPLAY, EARLIER_BOARD_PROPERTIES).completed).toBe(
+    COMPLETED_WINDOW.PAST_WEEK,
+  );
   expect(
-    keptTasksDisplay({ completed: COMPLETED_WINDOW.ALL, done: false }, DEFAULT_LIST_DISPLAY)
-      .completed,
+    keptTasksDisplay(
+      { completed: COMPLETED_WINDOW.ALL, done: false },
+      DEFAULT_LIST_DISPLAY,
+      EARLIER_LIST_PROPERTIES,
+    ).completed,
   ).toBe(COMPLETED_WINDOW.ALL);
 });
 test("Made by keeps the tasks a person made by hand, those a coding agent made, or those Luke made on a call, a task from before origins as made by hand", () => {
@@ -467,4 +518,153 @@ test("Made by keeps the tasks a person made by hand, those a coding agent made, 
     [TASK_MAKER.AGENT, 1],
     [TASK_MAKER.LUKE, 1],
   ]);
+});
+
+test("an Assignee filter keeps the tasks assigned to the members chosen, No assignee keeping those assigned to no one, whoever created them", () => {
+  const tasks = [
+    task("Maya's, made by Dean", { creator: DEAN, assignee: MAYA }),
+    task("Dean's own", { creator: DEAN, assignee: DEAN }),
+    task("Nobody's", { creator: MAYA }),
+  ];
+  const maya = toggledFilter(NO_TASKS_FILTER, TASKS_FILTER_FIELD.ASSIGNEE, MAYA);
+
+  expect(listed(tasks, { grouping: TASKS_GROUPING.NONE }, maya)).toEqual([
+    [["all"], ["Maya's, made by Dean"]],
+  ]);
+  expect(
+    listed(
+      tasks,
+      { grouping: TASKS_GROUPING.NONE, order: TASKS_ORDER.NAME },
+      toggledFilter(maya, TASKS_FILTER_FIELD.ASSIGNEE, null),
+    ),
+  ).toEqual([[["all"], ["Maya's, made by Dean", "Nobody's"]]]);
+  expect([...valueCounts(tasks, TASKS_FILTER_FIELD.ASSIGNEE)]).toEqual([
+    [MAYA, 1],
+    [DEAN, 1],
+    [null, 1],
+  ]);
+});
+
+test("grouped by assignee the reader's own run first, then teammates' by name, then No assignee last; with empty groups every member and No assignee stand, narrowed to an Assignee filter", () => {
+  const tasks = [
+    task("Maya's", { assignee: MAYA }),
+    task("Nobody's"),
+    task("Arlo's", { assignee: ARLO }),
+    task("Dean's", { assignee: DEAN, creator: MAYA }),
+  ];
+  const grouped = (display: Partial<TasksDisplay>, filter: TasksFilter = NO_TASKS_FILTER) =>
+    drawn(
+      tasksListGroups(tasks, {
+        filter,
+        display: { ...DEFAULT_LIST_DISPLAY, grouping: TASKS_GROUPING.ASSIGNEE, ...display },
+        pinned: [],
+        sections: [],
+        readerId: DEAN,
+        personName: (userId) => NAMES.get(userId) ?? "",
+        members: [MAYA, DEAN, ZOE],
+        now: NOW,
+      }),
+    );
+
+  expect(grouped({})).toEqual([
+    [["assignee", DEAN], ["Dean's"]],
+    [["assignee", ARLO], ["Arlo's"]],
+    [["assignee", MAYA], ["Maya's"]],
+    [["assignee", null], ["Nobody's"]],
+  ]);
+  expect(grouped({ emptyGroups: true }).map(([head]) => head)).toEqual([
+    ["assignee", DEAN],
+    ["assignee", ARLO],
+    ["assignee", MAYA],
+    ["assignee", ZOE],
+    ["assignee", null],
+  ]);
+  const mine = toggledFilter(NO_TASKS_FILTER, TASKS_FILTER_FIELD.ASSIGNEE, DEAN);
+  expect(
+    grouped({ emptyGroups: true }, toggledFilter(mine, TASKS_FILTER_FIELD.ASSIGNEE, null)),
+  ).toEqual([
+    [["assignee", DEAN], ["Dean's"]],
+    [["assignee", null], ["Nobody's"]],
+  ]);
+});
+
+test("the Board stands a column for each assignee where asked, the reader's first and No assignee last, an empty one for each member where empty columns stand", () => {
+  const tasks = [task("Maya's", { assignee: MAYA }), task("Nobody's")];
+  const board = (emptyGroups: boolean) =>
+    drawn(
+      tasksBoardColumns(tasks, {
+        filter: NO_TASKS_FILTER,
+        display: { ...DEFAULT_BOARD_DISPLAY, grouping: TASKS_GROUPING.ASSIGNEE, emptyGroups },
+        readerId: DEAN,
+        personName: (userId) => NAMES.get(userId) ?? "",
+        members: [DEAN, MAYA],
+        now: NOW,
+      }),
+    );
+
+  expect(board(false)).toEqual([
+    [["assignee", MAYA], ["Maya's"]],
+    [["assignee", null], ["Nobody's"]],
+  ]);
+  expect(board(true)).toEqual([
+    [["assignee", DEAN], []],
+    [["assignee", MAYA], ["Maya's"]],
+    [["assignee", null], ["Nobody's"]],
+  ]);
+});
+
+test("the List and the Board draw each task's assignee at first and not its creator", () => {
+  for (const display of [DEFAULT_LIST_DISPLAY, DEFAULT_BOARD_DISPLAY]) {
+    expect(display.properties).toContain(TASK_PROPERTY.ASSIGNEE);
+    expect(display.properties).not.toContain(TASK_PROPERTY.CREATOR);
+  }
+});
+
+test("a display kept before rows offered the assignee draws it, and keeps its creator as it was kept, on or off", () => {
+  const without = (left: readonly TaskProperty[], ...out: TaskProperty[]) =>
+    left.filter((property) => !out.includes(property));
+  const listKept = without(EARLIER_LIST_PROPERTIES, TASK_PROPERTY.UPDATED);
+  const boardKept = without(EARLIER_BOARD_PROPERTIES, TASK_PROPERTY.STATUS);
+
+  // A List display kept by a build that said what it offered, and one kept before builds said so.
+  for (const offered of [EARLIER_LIST_PROPERTIES, undefined]) {
+    const kept = keptTasksDisplay(
+      { properties: listKept, ...(offered === undefined ? {} : { offered }) },
+      DEFAULT_LIST_DISPLAY,
+      EARLIER_LIST_PROPERTIES,
+    ).properties;
+    expect(kept).toContain(TASK_PROPERTY.ASSIGNEE);
+    expect(kept).toContain(TASK_PROPERTY.CREATOR);
+    expect(kept).not.toContain(TASK_PROPERTY.UPDATED);
+  }
+  const board = keptTasksDisplay(
+    { properties: boardKept },
+    DEFAULT_BOARD_DISPLAY,
+    EARLIER_BOARD_PROPERTIES,
+  ).properties;
+  expect(board).toContain(TASK_PROPERTY.ASSIGNEE);
+  expect(board).toContain(TASK_PROPERTY.CREATOR);
+  expect(board).not.toContain(TASK_PROPERTY.STATUS);
+  const creatorOff = keptTasksDisplay(
+    { properties: without(listKept, TASK_PROPERTY.CREATOR), offered: EARLIER_LIST_PROPERTIES },
+    DEFAULT_LIST_DISPLAY,
+    EARLIER_LIST_PROPERTIES,
+  ).properties;
+  expect(creatorOff).toContain(TASK_PROPERTY.ASSIGNEE);
+  expect(creatorOff).not.toContain(TASK_PROPERTY.CREATOR);
+});
+
+test("a display kept since rows offered the assignee keeps it off where its reader turned it off", () => {
+  const offAgain = keptTasksDisplay(
+    {
+      properties: DEFAULT_LIST_DISPLAY.properties.filter(
+        (property) => property !== TASK_PROPERTY.ASSIGNEE,
+      ),
+      offered: DEFAULT_LIST_DISPLAY.properties.concat(TASK_PROPERTY.CREATOR),
+    },
+    DEFAULT_LIST_DISPLAY,
+    EARLIER_LIST_PROPERTIES,
+  ).properties;
+
+  expect(offAgain).not.toContain(TASK_PROPERTY.ASSIGNEE);
 });

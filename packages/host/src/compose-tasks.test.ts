@@ -69,6 +69,7 @@ import {
   type PlanRevisionsAnswer,
   type RepositoryPin,
   TASK_PRIORITY,
+  TASK_SKILL_SOURCE,
   TASK_STATUS,
   type Task,
   type TaskAgentsSummary,
@@ -783,6 +784,9 @@ function fakeService(tasks: Task[]): FakeService {
             ? ({ ok: false, failure: WORKSPACE_CALL_FAILURE.LINEAR_UNAVAILABLE } as const)
             : ({ ok: true, answer: issues } as const);
         }),
+      sentryInstallations: () => Effect.succeed(UNANSWERED_WORKSPACE),
+      sentryInstall: () => Effect.succeed(UNANSWERED_WORKSPACE),
+      sentryDisconnect: () => Effect.succeed(UNANSWERED_WORKSPACE),
       people: (workspaceId) =>
         Effect.sync(() => {
           service.reads.push(`members:${workspaceId}`);
@@ -930,7 +934,11 @@ function fakeService(tasks: Task[]): FakeService {
         () => service.places[place.workspaceId]?.[place.repository]?.folders[folder.path],
       ),
     readRepositorySkills: (place) =>
-      Effect.sync(() => service.places[place.workspaceId]?.[place.repository]?.skills),
+      Effect.sync(() =>
+        place.repository === undefined
+          ? undefined
+          : service.places[place.workspaceId]?.[place.repository]?.skills,
+      ),
     readRepositoryPullRequest: (place, number) =>
       Effect.gen(function* () {
         if (service.pullRequestGate !== undefined) yield* Deferred.await(service.pullRequestGate);
@@ -3012,7 +3020,14 @@ it.effect(
         skills: {
           repository: "acme/relay",
           branch: "main",
-          skills: [{ name, description: "", path: `.agents/skills/${name}/SKILL.md` }],
+          skills: [
+            {
+              name,
+              description: "",
+              source: TASK_SKILL_SOURCE.REPOSITORY,
+              path: `.agents/skills/${name}/SKILL.md`,
+            },
+          ],
         },
       });
       service.places[ACME.id] = {

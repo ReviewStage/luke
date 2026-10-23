@@ -6,6 +6,8 @@ import {
   Button,
   CheckIcon,
   ExternalIcon,
+  GAP,
+  Inline,
   Progress,
   SettingsRow,
   SettingsSection,
@@ -87,10 +89,10 @@ export function UpdatesSection({
         <div {...searchAnchorProps(SETTINGS_SEARCH_ROW.UPDATES)}>
           <SettingsRow
             label={
-              <span className="settings-name">
+              <Inline gap={GAP.ICON} wrap={false}>
                 {row.title}
                 {row.current ? <CheckIcon /> : null}
-              </span>
+              </Inline>
             }
             description={
               row.failed ? undefined : (

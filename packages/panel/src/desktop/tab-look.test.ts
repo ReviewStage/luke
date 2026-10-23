@@ -16,6 +16,7 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
+import { ChipCards } from "../tasks/chip-cards.js";
 import { SIDE_PANEL_TAB } from "../tasks/use-side-panel.js";
 import { NO_LOOKS } from "../tasks/use-task-looks.js";
 import { fakeAppPlatform } from "../testing/app-platform.js";
@@ -25,6 +26,7 @@ import { restOn } from "../testing/hint-rest.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { codingAgentsControl, tasksControl, UNPINNED_SUMMARY } from "../testing/tasks-control.js";
 import { DesktopTasks } from "./desktop-tasks.js";
+import { taskCardOf } from "./task-card.js";
 
 /**
  * tab-look.test.ts -- a tab wears one look wherever it is offered: the
@@ -177,11 +179,22 @@ async function mount(): Promise<HTMLElement> {
       ]),
     }),
   });
+  // The window's tasks' cards, as the shell hands them to everything it holds.
+  const chipCards = {
+    taskCard: (taskId: string, now: number) => {
+      const task = tasks.tasks.find((each) => each.id === taskId);
+      return task === undefined ? undefined : taskCardOf(tasks, task, now);
+    },
+  };
   act(() =>
     root.render(
       onRegistry(
         AtomRegistry.make(),
-        createElement(DesktopTasks, { summary: UNPINNED_SUMMARY, looks: NO_LOOKS, tasks }),
+        createElement(
+          ChipCards,
+          { value: chipCards },
+          createElement(DesktopTasks, { summary: UNPINNED_SUMMARY, looks: NO_LOOKS, tasks }),
+        ),
       ),
     ),
   );
@@ -273,6 +286,19 @@ test("the side panel's Plan tab is named for the task and wears its status's mar
     "the Plan tab wears the task's status as the list holds it",
   );
   assert.deepEqual(rows.get(TASK.name), tabs.get(TASK.name), "the Plan looks the same in the +");
+});
+
+test("the side panel's Plan tab hangs the task's card, as its sidebar row does", async () => {
+  const panel = (await mount()).querySelector(".side-panel-tabs");
+  const tab = [...(panel?.querySelectorAll<HTMLElement>('[role="tab"]') ?? [])].find(
+    (each) => each.querySelector(".luke-tab-label")?.textContent === TASK.name,
+  );
+  assert.ok(tab, "the strip has the Plan tab");
+  restOn(tab);
+  const card = document.querySelector(".luke-tooltip-card [data-task-card]");
+  assert.ok(card, "the task's card is hung");
+  assert.equal(card.querySelector(".luke-hover-card-name")?.textContent, TASK.name);
+  assert.match(card.textContent ?? "", /Invite flow/u, "the card lists the task's agents");
 });
 
 test("a Terminal tab wears its agent's glyph, says Terminal with the agent's name beside it, and hangs the agent's card saying whose sandbox it is in", async () => {

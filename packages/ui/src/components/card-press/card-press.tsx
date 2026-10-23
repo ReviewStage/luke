@@ -8,6 +8,7 @@ import {
   useEffect,
   useRef,
 } from "react";
+import { PRESS_PULSE, pulsePress } from "../../press-pulse.js";
 import { type ContextMenuProps, withContextMenu } from "../menu/menu.js";
 
 /**
@@ -96,6 +97,18 @@ type CardPressHintProps = Pick<
   | "aria-keyshortcuts"
 >;
 
+/**
+ * Plays a press's pulse on the card `press` reaches, the box its reach
+ * covers, a little, as a wide shape gives; on the press itself where no box
+ * stands around it but the page's.
+ */
+function pulseCard(press: HTMLElement): void {
+  const reach = press.querySelector(":scope > .luke-card-press-reach");
+  const card = reach instanceof HTMLElement ? reach.offsetParent : null;
+  const moved = card instanceof HTMLElement && card !== press.ownerDocument.body ? card : press;
+  pulsePress(moved, PRESS_PULSE.QUIET);
+}
+
 /** What is a control of its own inside a card, whose press is its own rather than the card's. */
 const CONTROL = "a, button, input, select, textarea, summary, [role='button'], [role='menuitem']";
 
@@ -159,6 +172,7 @@ export function CardPress({
       const pressesCard = through !== undefined && target.closest(through) !== null;
       const control = target.closest(CONTROL);
       if (!pressesCard && control !== null && card.contains(control)) return;
+      if (own.current !== null) pulseCard(own.current);
       press(event);
     };
     card.addEventListener("click", heard, true);
@@ -175,6 +189,7 @@ export function CardPress({
       aria-label={label}
       disabled={disabled}
       onClick={(event: ReactMouseEvent<HTMLButtonElement>) => {
+        pulseCard(event.currentTarget);
         onPress(event);
         onClick?.(event);
       }}

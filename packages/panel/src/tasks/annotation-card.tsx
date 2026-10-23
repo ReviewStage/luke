@@ -1,8 +1,13 @@
-import { DisclosureChevron, useDisclosureState } from "@luke/ui";
+import {
+  DisclosureChevron,
+  Tooltip,
+  useDisclosureState,
+  VISUALLY_HIDDEN_UNDER,
+  VisuallyHidden,
+} from "@luke/ui";
 import { MessageSquareIcon } from "lucide-react";
 import type { AnimationEvent, ReactNode } from "react";
 import { Fold, FoldBody, FoldSummary } from "../ai-elements/fold.js";
-import { Tooltip } from "../tooltip.js";
 
 /**
  * annotation-card.tsx -- one card for whatever is written on lines of code: a review thread in Files changed and in the Conversation, and an agent's note on lines of a File tab.
@@ -57,7 +62,7 @@ function StateChip({ state }: { state: AnnotationState }): React.JSX.Element {
   return (
     <Tooltip label={state.word}>
       <span className="annotation-card-chip" data-tone={state.tone}>
-        <span className="annotation-card-chip-word">{state.word}</span>
+        <VisuallyHidden under={VISUALLY_HIDDEN_UNDER.TIGHT}>{state.word}</VisuallyHidden>
       </span>
     </Tooltip>
   );
@@ -71,7 +76,10 @@ function FoldedCount({ count }: { count: number }): React.JSX.Element | null {
     <span className="annotation-card-count">
       <MessageSquareIcon aria-hidden="true" />
       {count}
-      <span className="annotation-card-count-word"> {COUNT_WORDS.word(count)}</span>
+      <VisuallyHidden under={VISUALLY_HIDDEN_UNDER.TIGHT}>
+        {" "}
+        {COUNT_WORDS.word(count)}
+      </VisuallyHidden>
     </span>
   );
 }
@@ -141,7 +149,9 @@ export function AnnotationCard({
       {where === undefined ? null : <div className="annotation-card-where">{where}</div>}
       <Fold className="annotation-card-fold" open={open} onOpenChange={onOpenChange}>
         <FoldSummary className="annotation-card-head">
-          <DisclosureChevron />
+          <span className="annotation-card-turn">
+            <DisclosureChevron />
+          </span>
           <span className="annotation-card-face">{face}</span>
           <span className="annotation-card-name">{name}</span>
           {time === undefined ? null : <span className="annotation-card-time">{time}</span>}

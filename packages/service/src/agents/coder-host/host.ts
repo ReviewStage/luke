@@ -48,6 +48,7 @@ import {
 import type { CommentToolName } from "../../tasks/comment-tools.js";
 import type { PictureLookResult } from "../../tasks/picture-look.js";
 import { reopenTaskForWork, settleTaskIfFinished } from "../../tasks/task-finish.js";
+import type { SentryApp } from "../../triggers/sentry/sentry-app-config.js";
 import { delegatedChildOf, type HostAdmission, hostAdmission } from "../agent-runtime/host-core.js";
 import { endsTurn } from "../agent-runtime/sandbox.js";
 import type { AgentSkill } from "../agent-runtime/skills.js";
@@ -167,8 +168,9 @@ import {
  * starter's, the conversation's owner, whoever is speaking to it.
  * An agent with no repository runs too: its sandbox opens with an empty
  * working folder and no credential, it is told of no checkout, branch,
- * commit, or pull request, and it is offered no repository skills and none
- * of the repository's tools (`tool-set.ts`'s `repositoryToolsOf`). A session
+ * commit, or pull request, and it is offered no repository skills, only
+ * the ones its member installed, and none of the repository's tools
+ * (`tool-set.ts`'s `repositoryToolsOf`). A session
  * opened afresh over a conversation whose last session retired is seeded
  * with what was said in it, as the brain's rotation is (`seed`).
  */
@@ -279,7 +281,7 @@ export interface CoderHost extends HostAdmission {
     admitted: AdmittedConversation,
     agent: CodingAgent,
   ): Effect.Effect<CoderSessionPrompt, never, CheckoutServices>;
-  /** The skills the agent's repository keeps, offered to the session as it starts; none for an agent with no repository, or where they could not be read (`skills.ts`). */
+  /** The skills offered to the session as it starts: its repository's, none for an agent with no repository, then those its member installed, each source none where it could not be read (`skills.ts`). */
   skills(
     admitted: AdmittedConversation,
     agent: CodingAgent,
@@ -495,7 +497,12 @@ export interface CoderHost extends HostAdmission {
   ): Effect.Effect<
     WireRecord,
     never,
-    DatabaseServices | HttpClient.HttpClient | GitHubApp | ModelCatalog | WorkspaceLinearConnect
+    | DatabaseServices
+    | HttpClient.HttpClient
+    | GitHubApp
+    | ModelCatalog
+    | WorkspaceLinearConnect
+    | SentryApp
   >;
   /** Folds an event the store need hear nothing of into the session's relay state and answers whether it did, so the caller admits the session and relays only the rest: the relay's own quiet events (`foldedQuietly`), bar a compaction's end, which the agent's row records. */
   relaysQuietly(event: MessageStreamEvent, state: RelayStateStore): boolean;
@@ -916,8 +923,7 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
           promptOf(agent, ciReadable, coAuthor, workspace, chatOn),
       ),
 
-    skills: (admitted, agent) =>
-      hasRepository(agent) ? agentSkills(admitted.target, agent) : Effect.succeed([]),
+    skills: (admitted, agent) => agentSkills(admitted.target, agent),
 
     seed: (admitted) =>
       Effect.map(

@@ -27,6 +27,7 @@ import {
   PlusIcon,
   riseAboveEnd,
   SUBMIT_STATE,
+  Tooltip,
   useMenu,
 } from "@luke/ui";
 import { lapsedServer, SERVER_HANDED } from "@luke/ui/agent-servers-model";
@@ -46,7 +47,6 @@ import { imageFiles } from "../feedback-images.js";
 import { GRANT_OUTCOME, useIntegrationGrant } from "../integration-grant.js";
 import { useIntegrationStatuses } from "../integration-statuses.js";
 import { COMPOSER_INPUT, type ComposerEditorHandle } from "../plan-editor/contract.js";
-import { Tooltip } from "../tooltip.js";
 import { AgentContextRing } from "./agent-context.js";
 import { contextHint } from "./agent-context-model.js";
 import { AgentModelChip } from "./agent-model-chip.js";

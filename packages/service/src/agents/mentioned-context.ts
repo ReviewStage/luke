@@ -313,8 +313,10 @@ function handedMention(mention: Mention, task: Task | undefined): Handed | undef
     case MENTION_KIND.PERSON:
     case MENTION_KIND.SERVER:
     case MENTION_KIND.TOOL:
-    case MENTION_KIND.LINK:
       return mention;
+    // A well-known site's page has no server to read it through, and its address is in the words already.
+    case MENTION_KIND.LINK:
+      return "provider" in mention ? mention : undefined;
     // A whole file is the agent's to read; only lines the developer picked are handed a note.
     case MENTION_KIND.FILE:
       return mention.lines === undefined ? undefined : mention;
@@ -423,7 +425,7 @@ export function mentionedServers(words: string, repository: string | null): read
       return [mention.connection ?? mention.provider];
     }
     // A page names its provider and no account, so it brings in the provider's first.
-    return mention.kind === MENTION_KIND.LINK ? [mention.provider] : [];
+    return mention.kind === MENTION_KIND.LINK && "provider" in mention ? [mention.provider] : [];
   });
   return [...new Set(connections)];
 }

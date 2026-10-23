@@ -26,8 +26,11 @@ import {
   ListRow,
   type ListRowHint,
   McpIcon,
+  ONE_LINE_END,
+  OneLine,
   POPOVER_ALIGN,
   POPOVER_PANEL_LOOK,
+  PopoverPanel,
   PROVIDER_MARK_SIZE,
   ProviderMark,
   SCROLL_SIZE,
@@ -40,6 +43,8 @@ import {
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
+  Tooltip,
+  wholeWordsHint,
 } from "@luke/ui";
 import {
   namedServers,
@@ -77,9 +82,7 @@ import {
   keepInView,
 } from "../integration-tool-list.js";
 import { useIntegrationTools } from "../integration-tools.js";
-import { PopoverPanel } from "../popover-panel.js";
 import { Highlighted } from "../search-field.js";
-import { Tooltip } from "../tooltip.js";
 
 /**
  * agent-servers.tsx -- the MCP button at an agent box's foot, and the popover that lists the servers the agent is handed with a switch for each, and each server's tools.
@@ -233,16 +236,22 @@ export function ServerRowWords({ row }: { row: ServerRow }): React.JSX.Element {
         </Tooltip>
       ) : null}
       {row.problem !== undefined ? (
-        <Tooltip label={row.problem}>
-          <span className="agent-servers-problem">{row.problem}</span>
-        </Tooltip>
+        <OneLine
+          end={ONE_LINE_END.ELLIPSIS}
+          hint={wholeWordsHint(row.problem)}
+          className="agent-servers-problem"
+        >
+          {row.problem}
+        </OneLine>
       ) : null}
       {row.note !== undefined && row.kind !== SERVER_ROW.SIGNING_IN ? (
-        <Tooltip label={row.note}>
-          <span className="agent-servers-problem" data-tone="quiet">
-            {row.note}
-          </span>
-        </Tooltip>
+        <OneLine
+          end={ONE_LINE_END.ELLIPSIS}
+          hint={wholeWordsHint(row.note)}
+          className="agent-servers-problem agent-servers-problem-quiet"
+        >
+          {row.note}
+        </OneLine>
       ) : null}
     </span>
   );

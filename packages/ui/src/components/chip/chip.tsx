@@ -1,5 +1,6 @@
 import type { ComponentPropsWithRef, ReactNode } from "react";
 import { ChevronDownIcon, RemoveIcon } from "../../face/glyphs.js";
+import { PRESS_FACE, PRESS_PULSE, pulseOnPress } from "../../press-pulse.js";
 import { useClipped } from "../../use-clipped.js";
 
 /**
@@ -29,8 +30,11 @@ import { useClipped } from "../../use-clipped.js";
  * request's state is; stand at a width its place shares (`width`); and draw its mark
  * alone where its place has no room for its words (`iconOnly`), its words
  * still read as its name. A removable chip (`onRemove`) is no button of its
- * own: it names what stands, a filter applied, and ends in a × named for
- * what lifting it does.
+ * own: it names what stands, a filter applied, a mention or a label added to
+ * a field, and ends in a × named for what lifting it does, which its caller
+ * answers at once, so what it named is gone on the press. It springs in as
+ * it arrives; its exit is the list's that draws it (`ListMotion`), since
+ * its caller has already let it go.
  *
  * A chip comes at the control's size, or compact (`size`), a caption
  * line's pill, where it is one of a row of small counts (a pull request's
@@ -188,7 +192,7 @@ function RemovableChip({
         type="button"
         className="luke-chip-remove"
         aria-label={removeLabel}
-        onClick={onRemove}
+        onClick={pulseOnPress(onRemove)}
       >
         <RemoveIcon />
       </button>
@@ -207,8 +211,10 @@ export function Chip(props: ChipProps): React.JSX.Element {
       className="luke-chip"
       aria-busy={busy === true ? true : undefined}
       {...faceAttributes({ look, tone, width, size, iconOnly })}
+      // Note that a busy chip's face is already moving, as its wait, so a press plays nothing over it.
+      onClick={busy === true ? button.onClick : pulseOnPress(button.onClick, PRESS_PULSE.FACE)}
     >
-      <span className="luke-chip-face">
+      <span className="luke-chip-face" {...PRESS_FACE}>
         {children}
         {chevron ? <ChevronDownIcon /> : null}
       </span>
@@ -254,6 +260,21 @@ export function ChipName(props: ChipNameProps): React.JSX.Element {
           <span className="luke-chip-name-end">{kept}</span>
         </>
       )}
+    </span>
+  );
+}
+
+/**
+ * The quiet count after a chip's words, what a filter would leave out: in the
+ * subtle ink at fixed figures, and on a pressed filter stepped back from the
+ * ground's colour its words are in, rather than the subtle ink it would
+ * vanish into there. A reader hears the count where the chip's name or its
+ * description says it, so it is hidden from them here.
+ */
+export function ChipCount({ children }: { children: string }): React.JSX.Element {
+  return (
+    <span className="luke-chip-count" aria-hidden="true">
+      {children}
     </span>
   );
 }

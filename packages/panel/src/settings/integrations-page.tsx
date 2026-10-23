@@ -33,16 +33,26 @@ import {
   ChevronDownIcon,
   ChevronRightIcon,
   ConfirmDialog,
+  commandKeyshortcuts,
   ErrorState,
+  GAP,
   INLINE_EDIT_LOOK,
   InlineEdit,
   type InlineEditEnd,
   ProviderMark,
   ScrollArea,
+  SETTINGS_ROW_STATE,
   SearchField,
   SettingsLine,
+  SettingsRowMark,
+  type SettingsRowState,
+  SettingsRowStateLine,
   SettingsSection,
   SettingsSectionsSkeleton,
+  Shortcut,
+  SPINNER_SIZE,
+  SpinnerRing,
+  Stack,
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
@@ -73,9 +83,6 @@ import {
 } from "../integration-tool-list.js";
 import { useIntegrationTools } from "../integration-tools.js";
 import { focusSearchField, Highlighted } from "../search-field.js";
-import { Shortcut } from "../shortcut.js";
-import { SPINNER_SIZE, SpinnerRing } from "../spinner.js";
-import { commandKeyshortcuts } from "../tooltip.js";
 import { MenuRow } from "./menu-row.js";
 
 /**
@@ -191,6 +198,14 @@ const LINE_STATE = {
 
 type LineState = (typeof LINE_STATE)[keyof typeof LINE_STATE];
 
+/** How `@luke/ui`'s state line stands for each line, a wait and a plain line alike unmarked. */
+const ROW_STATE: Record<LineState, SettingsRowState> = {
+  [LINE_STATE.CONNECTED]: SETTINGS_ROW_STATE.CONNECTED,
+  [LINE_STATE.ATTENTION]: SETTINGS_ROW_STATE.ATTENTION,
+  [LINE_STATE.WAITING]: SETTINGS_ROW_STATE.PLAIN,
+  [LINE_STATE.PLAIN]: SETTINGS_ROW_STATE.PLAIN,
+};
+
 /** The line under a row's name, and how it looks. */
 interface RowLine {
   readonly text: string;
@@ -262,10 +277,10 @@ function grantLabel(status: IntegrationStatus | undefined, signIn: SignIn | unde
 /** A row's line, with the ring before a wait's words. */
 function RowLineText({ line }: { line: RowLine }): React.JSX.Element {
   return (
-    <span className="settings-state" data-state={line.state}>
+    <SettingsRowStateLine state={ROW_STATE[line.state]}>
       {line.state === LINE_STATE.WAITING ? <SpinnerRing size={SPINNER_SIZE.SMALL} /> : null}
       {line.text}
-    </span>
+    </SettingsRowStateLine>
   );
 }
 
@@ -298,7 +313,7 @@ function ToolsLine({
   tools: RowTools;
 }): React.JSX.Element {
   return (
-    <span className="settings-state integration-tools-line" data-state={LINE_STATE.CONNECTED}>
+    <SettingsRowStateLine state={SETTINGS_ROW_STATE.CONNECTED} wrap>
       {`${PAGE_LINE.CONNECTED} · `}
       <TextButton
         aria-label={`${tools.expanded ? "Hide" : "Show"} ${name} tools`}
@@ -311,7 +326,7 @@ function ToolsLine({
           : toolsCount(tools.all.length)}
         {tools.expanded ? <ChevronDownIcon /> : <ChevronRightIcon />}
       </TextButton>
-    </span>
+    </SettingsRowStateLine>
   );
 }
 
@@ -593,7 +608,7 @@ function IntegrationRow({
       ].filter((group) => group.length > 0)
     : [];
   return (
-    <div className="integration-row">
+    <Stack gap={GAP.NONE}>
       <MenuRow
         label={`${name} actions`}
         actions={actions}
@@ -601,9 +616,9 @@ function IntegrationRow({
         {...(bySignIn ? { heading: PAGE_LINE.GITHUB_SIGN_IN } : undefined)}
         row={{
           leading: (
-            <span className="settings-row-mark">
+            <SettingsRowMark>
               <ProviderMark provider={provider} />
-            </span>
+            </SettingsRowMark>
           ),
           label: (
             <InlineEdit
@@ -660,7 +675,7 @@ function IntegrationRow({
           running: "Disconnecting…",
         }}
       />
-    </div>
+    </Stack>
   );
 }
 

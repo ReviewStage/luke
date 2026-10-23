@@ -1,9 +1,10 @@
 import type { AdminDailyUsage } from "@luke/features/admin-answer-wire";
 import { TEXT_ELEMENT, TEXT_TONE, TEXT_VARIANT, Text } from "@luke/ui";
 import { calendarWeeks, DAYS_PER_WEEK, lastWeeks, monthLabels } from "@luke/ui/activity-calendar";
-import { formatNumber, formatTooltipDay } from "@luke/ui/admin-format";
+import { formatTooltipDay } from "@luke/ui/admin-format";
 import { ChartTooltipFrame } from "@luke/ui/chart";
 import { partialDayKey } from "@luke/ui/daily-series";
+import { formatCount } from "@luke/ui/time-format";
 import { Fragment, useCallback, useLayoutEffect, useRef, useState } from "react";
 import { ChartFrame } from "./chart-frame.js";
 import { USAGE_CHART } from "./usage-chart.js";
@@ -48,7 +49,7 @@ function CalendarDayCell({
   return (
     <div
       role="img"
-      aria-label={`${formatTooltipDay(day.day, partialDay)} — ${formatNumber(day.calls)} hosted calls`}
+      aria-label={`${formatTooltipDay(day.day, partialDay)} — ${formatCount(day.calls)} hosted calls`}
       data-calendar-day={day.day}
       className={`outline-offset-2 ${day.calls === 0 ? "bg-(--luke-color-fill-hover)/60" : ""}${provisional}`}
       style={{
@@ -210,7 +211,7 @@ export function ActivityCalendar({
                   key: "calls",
                   color: USAGE_CHART.calls.color,
                   name: USAGE_CHART.calls.label,
-                  value: formatNumber(anchor.day.calls),
+                  value: formatCount(anchor.day.calls),
                 },
               ]}
             />

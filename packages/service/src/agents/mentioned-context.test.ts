@@ -307,6 +307,13 @@ test("the servers the words mention, by themselves or by a tool, are named each 
   assert.deepEqual(mentionedServers(`See ${section("Rollout")}.`, TASK.repository), []);
 });
 
+test("a Google Maps page names no server and hands no note, since its address is in the words", () => {
+  const words = "Meet at [@Ferry Building](https://www.google.com/maps/place/Ferry+Building).";
+
+  assert.deepEqual(mentionedServers(words, TASK.repository), []);
+  assert.equal(mentionedContext(words, TASK), undefined);
+});
+
 test("an agent with no plan is handed a server's note, and nothing for a mention of a plan", () => {
   const part = mentionedContext(`Use ${LINEAR} for ${section("Rollout")}.`, undefined) ?? "";
 

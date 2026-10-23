@@ -37,6 +37,7 @@ import {
   Text,
   UserIcon,
   useComboboxField,
+  useMinute,
 } from "@luke/ui";
 import { type Actor, LUKE_ACTOR, memberActor } from "@luke/ui/actor-model";
 import type { NamedServer } from "@luke/ui/agent-servers-model";
@@ -69,7 +70,6 @@ import { FileTypeIcon } from "./file-type-icon.js";
 import { PullRequestMark } from "./pull-request-mark.js";
 import { AgentMark, PlanGlyph } from "./tab-look.js";
 import { NO_TASK } from "./task-mentions.js";
-import { useMinute } from "./task-time.js";
 import { useTaskStatus } from "./use-known-names.js";
 
 /**
@@ -888,8 +888,9 @@ function RowGlyph({ row }: { row: MentionRow }): React.JSX.Element {
       return <PlanGlyph status={taskStatus} />;
     case MENTION_KIND.SERVER:
     case MENTION_KIND.TOOL:
-    case MENTION_KIND.LINK:
       return <ProviderMark provider={mention.provider} />;
+    case MENTION_KIND.LINK:
+      return <ProviderMark provider={"site" in mention ? mention.site : mention.provider} />;
     case MENTION_KIND.PAGE:
       return <AppWindowIcon aria-hidden="true" />;
     case MENTION_KIND.AGENT:

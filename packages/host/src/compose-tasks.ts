@@ -72,6 +72,7 @@ import {
   type TasksWorkspaceLeaveAnswer,
   type TasksWorkspaceMembersAnswer,
   type TasksWorkspacePhotoAnswer,
+  type TasksWorkspaceSentryAnswer,
   type TasksWorkspaceTokenRepositoriesAnswer,
   taskBrowserTabsFollowSchema,
   taskHistoryFollowSchema,
@@ -118,6 +119,7 @@ import {
   tasksWorkspacePhotoParamsSchema,
   tasksWorkspacePhotoSetParamsSchema,
   tasksWorkspaceRenameParamsSchema,
+  tasksWorkspaceSentryDisconnectParamsSchema,
   tasksWorkspaceTokenRepositoriesParamsSchema,
   tasksWorkspaceTokenRepositorySetParamsSchema,
   tasksWorkspaceTransferParamsSchema,
@@ -356,6 +358,9 @@ export type TasksClient = Pick<
     | "linearConnect"
     | "linearDisconnect"
     | "linearIssues"
+    | "sentryInstallations"
+    | "sentryInstall"
+    | "sentryDisconnect"
     | "people"
     | "peopleLive"
     | "invitationsLive"
@@ -2457,6 +2462,47 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         const listed = yield* served(client.workspaces.linearIssues(read.success));
         return carried<TasksLinearIssuesAnswer>(
           listed.ok ? { issues: listed.answer } : { failure: listed.failure },
+        );
+      }),
+    // A workspace's Sentry is answered to the window that asked and held
+    // nowhere: the row reads it as it opens and as the window comes forward.
+    [GATEWAY_METHOD.WORKSPACES_SENTRY]: (params) =>
+      Effect.gen(function* () {
+        const read = readEither(tasksWorkspaceParamsSchema)(unparsedWire(params));
+        if (Result.isFailure(read)) return yield* invalid("reading Sentry names a workspace");
+        if (!gate()) return carried<TasksWorkspaceSentryAnswer>(WORKSPACE_UNANSWERED);
+        const sentry = yield* served(
+          client.workspaces.sentryInstallations(read.success.workspaceId),
+        );
+        return carried<TasksWorkspaceSentryAnswer>(
+          sentry.ok ? { sentry: sentry.answer } : { failure: sentry.failure },
+        );
+      }),
+    // Sentry's install address is answered to the caller that opens it and
+    // held nowhere: the install lands in the browser.
+    [GATEWAY_METHOD.WORKSPACES_SENTRY_INSTALL]: (params) =>
+      Effect.gen(function* () {
+        const read = readEither(tasksWorkspaceParamsSchema)(unparsedWire(params));
+        if (Result.isFailure(read)) return yield* invalid("installing Sentry names a workspace");
+        if (!gate()) return carried<TasksWorkspaceGitHubConnectAnswer>(WORKSPACE_UNANSWERED);
+        const begun = yield* served(client.workspaces.sentryInstall(read.success.workspaceId));
+        return carried<TasksWorkspaceGitHubConnectAnswer>(
+          begun.ok ? { url: begun.answer } : { failure: begun.failure },
+        );
+      }),
+    [GATEWAY_METHOD.WORKSPACES_SENTRY_DISCONNECT]: (params) =>
+      Effect.gen(function* () {
+        const read = readEither(tasksWorkspaceSentryDisconnectParamsSchema)(unparsedWire(params));
+        if (Result.isFailure(read)) {
+          return yield* invalid("disconnecting Sentry names a workspace and an installation");
+        }
+        if (!gate()) return carried<TasksWorkspaceSentryAnswer>(WORKSPACE_UNANSWERED);
+        const { workspaceId, installationId } = read.success;
+        const sentry = yield* served(
+          client.workspaces.sentryDisconnect(workspaceId, installationId),
+        );
+        return carried<TasksWorkspaceSentryAnswer>(
+          sentry.ok ? { sentry: sentry.answer } : { failure: sentry.failure },
         );
       }),
     // The members, and who the workspace's work names but left, are answered to the window that asked and held nowhere:

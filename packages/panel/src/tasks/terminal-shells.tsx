@@ -12,6 +12,7 @@ import {
   CloseIcon,
   ConfirmDialog,
   ErrorState,
+  Fill,
   IconButton,
   InlineEdit,
   LIST_DENSITY,
@@ -26,6 +27,7 @@ import {
   SKELETON_SHAPE,
   Skeleton,
   SkeletonRegion,
+  Tooltip,
   useConfirmDialog,
   useMenu,
 } from "@luke/ui";
@@ -33,7 +35,6 @@ import { PencilIcon, TerminalIcon, Trash2Icon } from "lucide-react";
 import { type RefObject, useRef, useState } from "react";
 import { ActionMenu } from "../desktop/action-menu.js";
 import type { FloatingBox } from "../desktop/hover-pane.js";
-import { Tooltip } from "../tooltip.js";
 import { AgentRef, type AgentSubject } from "./agent-ref.js";
 import { AgentGlyph } from "./tab-look.js";
 import type { TerminalSession } from "./use-terminal-session.js";
@@ -100,7 +101,7 @@ function shellDetail(shell: TerminalSummary): string {
  */
 function ShellsSkeleton(): React.JSX.Element {
   return (
-    <div className="terminal-shells-wait">
+    <Fill className="terminal-shells-wait">
       <SkeletonRegion label={READING_SHELLS}>
         <ScrollArea>
           <div className="terminal-shells-rows">
@@ -117,7 +118,7 @@ function ShellsSkeleton(): React.JSX.Element {
           </div>
         </ScrollArea>
       </SkeletonRegion>
-    </div>
+    </Fill>
   );
 }
 
@@ -137,9 +138,9 @@ function UnlistedShells({ state }: { state: TerminalState }): React.JSX.Element 
     );
   if (state.kind !== TERMINAL_STATE.UNREACHABLE) return <ShellsSkeleton />;
   return (
-    <div className="terminal-shells-wait" data-failed="">
+    <Fill className="terminal-shells-wait" data-failed="">
       <ErrorState>{SHELLS_UNREAD}</ErrorState>
-    </div>
+    </Fill>
   );
 }
 

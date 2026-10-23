@@ -1,5 +1,13 @@
 import { APP_COMMAND } from "@luke/settings/shortcuts";
-import { CloseIcon, DisclosureFind, IconButton, SearchField, useDisclosureFinding } from "@luke/ui";
+import {
+  CloseIcon,
+  DisclosureFind,
+  Fill,
+  IconButton,
+  SearchField,
+  Tooltip,
+  useDisclosureFinding,
+} from "@luke/ui";
 import { type StripTab, sameTab } from "@luke/ui/tab-strip-model";
 import { ChevronDownIcon, ChevronUpIcon } from "lucide-react";
 import {
@@ -24,7 +32,6 @@ import {
   selectedWords,
   watchText,
 } from "./find-matches.js";
-import { Tooltip } from "./tooltip.js";
 
 /**
  * find-in-tab.tsx -- ⌘F inside the tab that holds the window's focus: a find bar at the tab's top right, its matches tinted in the tab's own text and stepped through one at a time.
@@ -353,7 +360,7 @@ export function FindScope({
   active: boolean;
   subject: FindSubject;
 }): React.JSX.Element {
-  const [root, setRoot] = useState<HTMLDivElement | null>(null);
+  const [root, setRoot] = useState<HTMLElement | null>(null);
   const [query, setQuery] = useState("");
   const [bar, setBar] = useState<OpenBar | undefined>(undefined);
   const back = useRef<HTMLElement | null>(null);
@@ -407,7 +414,7 @@ export function FindScope({
   }));
 
   return (
-    <div
+    <Fill
       ref={setRoot}
       className={className === undefined ? "find-scope" : `${className} find-scope`}
       {...props}
@@ -425,7 +432,7 @@ export function FindScope({
       <FindScopeContext.Provider value={doors}>
         <DisclosureFind finding={open}>{children}</DisclosureFind>
       </FindScopeContext.Provider>
-    </div>
+    </Fill>
   );
 }
 

@@ -3,6 +3,9 @@
  */
 
 import assert from "node:assert/strict";
+import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { it } from "@effect/vitest";
 import { fakeHttpClientLayer } from "@luke/wire/testing";
 import {
@@ -27,6 +30,7 @@ import {
   type CodexConfig,
   IMAGE_MEDIA_TYPE,
   INPUT_LINE,
+  INSTALLED_SKILLS,
   type InputLine,
   RUNNER_END,
   RUNNER_ENV,
@@ -122,6 +126,7 @@ const CONFIG: CodexConfig = {
   firstSequence: FIRST_SEQUENCE,
   eventsUrl: EVENTS_URL,
   mcpUrl: "https://luke.test/runner/mcp",
+  integrations: [{ name: "linear", url: "https://luke.test/runner/mcp/integrations/linear" }],
   tokenUrl: TOKEN_URL,
 };
 
@@ -223,6 +228,82 @@ function fakeLuke(watchFor?: string) {
 }
 
 it.effect(
+  "sets the member's installed skills as an extra skills root before the thread opens, and none where Luke wrote none",
+  () =>
+    Effect.gen(function* () {
+      const folder = mkdtempSync(join(tmpdir(), "luke-installed-skills-"));
+      yield* Effect.addFinalizer(() => Effect.sync(() => rmSync(folder, { recursive: true })));
+      const skills = join(folder, INSTALLED_SKILLS.SKILLS);
+      mkdirSync(join(skills, "pr-style"), { recursive: true });
+      const extraRoots: Exchange = {
+        method: "skills/extraRoots/set",
+        reply: [{ id: 0, result: {} }],
+      };
+      const withRoot: Script = {
+        exchanges: [
+          exchange(FIRST, 0),
+          exchange(FIRST, 1),
+          extraRoots,
+          ...WORKFLOW.exchanges.slice(2),
+        ],
+      };
+
+      const turn = (script: Script, installedSkills: string) =>
+        Effect.gen(function* () {
+          const luke = fakeLuke("ci-watch");
+          const { spawned, write, run } = yield* launch([script], luke);
+          yield* write({ ...CONFIG, installedSkills });
+          yield* write(message("The probe's first turn.", LINE.FIRST));
+          yield* luke.seen;
+          yield* write(message("Also, before your final reply, append the line.", LINE.STEERED));
+          assert.equal(yield* Fiber.join(run), RUNNER_END.TURN_ENDED);
+          return spawned[0];
+        });
+
+      const withSkills = yield* turn(withRoot, folder);
+      const withNone = yield* turn(WORKFLOW, join(folder, "never-written"));
+
+      assert.deepEqual(withSkills?.unexpected, []);
+      assert.deepEqual(received(withSkills, "skills/extraRoots/set"), [{ extraRoots: [skills] }]);
+      // Set before the thread is opened, so the thread's first turn lists them.
+      assert.deepEqual(withSkills?.received.map((each) => each.method).slice(0, 4), [
+        "initialize",
+        "initialized",
+        "skills/extraRoots/set",
+        "thread/start",
+      ]);
+      assert.deepEqual(withNone?.unexpected, []);
+      assert.deepEqual(received(withNone, "skills/extraRoots/set"), []);
+
+      // The roots are app-server's process-wide, so a relaunch's new app-server is set them again before its thread resumes.
+      const relaunched = yield* launch(
+        [
+          {
+            exchanges: [
+              exchange(RESUMED, 0),
+              exchange(RESUMED, 1),
+              extraRoots,
+              exchange(RESUMED, 2),
+            ],
+          },
+        ],
+        fakeLuke(),
+      );
+      yield* relaunched.write({ ...CONFIG, threadId: THREAD, installedSkills: folder });
+      yield* relaunched.closeStdin;
+      assert.equal(yield* Fiber.join(relaunched.run), RUNNER_END.INPUT_CLOSED);
+      const [resumed] = relaunched.spawned;
+      assert.deepEqual(resumed?.unexpected, []);
+      assert.deepEqual(resumed?.received.map((each) => each.method).slice(0, 4), [
+        "initialize",
+        "initialized",
+        "skills/extraRoots/set",
+        "thread/resume",
+      ]);
+    }),
+);
+
+it.effect(
   "starts app-server with the plan's provider, steers the running turn, and ends at its completion",
   () =>
     Effect.gen(function* () {
@@ -284,6 +365,11 @@ it.effect(
         'mcp_servers.luke.bearer_token_env_var="LUKE_RUNNER_TOKEN"',
         'mcp_servers.luke.default_tools_approval_mode="approve"',
         "mcp_servers.luke.tool_timeout_sec=600.0",
+        'mcp_servers.linear.url="https://luke.test/runner/mcp/integrations/linear"',
+        'mcp_servers.linear.bearer_token_env_var="LUKE_RUNNER_TOKEN"',
+        'mcp_servers.linear.default_tools_approval_mode="approve"',
+        "mcp_servers.linear.startup_timeout_sec=20.0",
+        "mcp_servers.linear.tool_timeout_sec=600.0",
         'approval_policy="never"',
         'sandbox_mode="workspace-write"',
         "sandbox_workspace_write.network_access=true",

@@ -32,8 +32,10 @@ import {
   HoverCardHead,
   HoverCardNote,
   INLINE_REF_LOOK,
+  InlineRef,
   ProviderMark,
   UserIcon,
+  useMinute,
 } from "@luke/ui";
 import { ACTOR_KIND, type Actor, LUKE_ACTOR } from "@luke/ui/actor-model";
 import { fileName } from "@luke/voice/code-pane-model";
@@ -52,7 +54,6 @@ import {
 } from "lucide-react";
 import type { ReactNode } from "react";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref.js";
-import { InlineRef } from "../inline-ref.js";
 import type { LinkDrawer, MarkdownSpan } from "../markdown-message.js";
 import { usePerson } from "../member-directory.js";
 import type { HeadingsChange, MentionNode, MentionNodeDoors } from "../plan-editor/contract.js";
@@ -82,7 +83,6 @@ import { OpenedNote, PullRequestCardNotes } from "./pull-request-card-notes.js";
 import { PullRequestMark } from "./pull-request-mark.js";
 import { ServerCard } from "./server-card.js";
 import { AgentMark, PlanGlyph } from "./tab-look.js";
-import { useMinute } from "./task-time.js";
 import { useKnownNames, useTaskStatus } from "./use-known-names.js";
 import {
   type ChipWhere,
@@ -364,8 +364,9 @@ function MentionGlyph({
       return <FolderIcon aria-hidden="true" />;
     case MENTION_KIND.SERVER:
     case MENTION_KIND.TOOL:
-    case MENTION_KIND.LINK:
       return <ProviderMark provider={mention.provider} />;
+    case MENTION_KIND.LINK:
+      return <ProviderMark provider={"site" in mention ? mention.site : mention.provider} />;
     case MENTION_KIND.PAGE:
       return <AppWindowIcon aria-hidden="true" />;
     case MENTION_KIND.AGENT: {

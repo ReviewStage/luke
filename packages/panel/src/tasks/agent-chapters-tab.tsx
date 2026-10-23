@@ -22,22 +22,30 @@ import {
   EmptyState,
   ERROR_STATE_PLACEMENT,
   ErrorState,
+  FILL_ELEMENT,
+  FILL_FLOW,
+  Fill,
   HoverCard,
   HoverCardHead,
   HoverCardNote,
   IconButton,
+  MarkStrip,
   NAV_CURRENT,
   NavItem,
   SCROLL_SIZE,
   ScrollArea,
   Skeleton,
   SkeletonRegion,
+  SpinnerRegion,
   TEXT_BUTTON_TONE,
   TEXT_ELEMENT,
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
   TextButton,
+  TIME_LOOK,
+  Time,
+  Tooltip,
 } from "@luke/ui";
 import {
   ArrowLeftIcon,
@@ -51,8 +59,6 @@ import {
 } from "lucide-react";
 import { type ReactNode, useId, useMemo, useRef, useState } from "react";
 import { PANE_EDGE, usePaneSlide } from "../desktop/pane-motion.js";
-import { SpinnerRegion } from "../spinner.js";
-import { Tooltip } from "../tooltip.js";
 import {
   AgentChangesTab,
   type ChangesReads,
@@ -82,7 +88,6 @@ import { BarMenu } from "./file-menu.js";
 import type { TreeShown } from "./file-view.js";
 import { TranscriptWords } from "./transcript-blocks.js";
 import type { CodingAgentsControl } from "./use-coding-agents.js";
-import { useWorkingNow, workingTime } from "./working-time.js";
 
 /**
  * agent-chapters-tab.tsx -- the Chapters view of an agent's Pull request tab (`agent-pull-request-tab.tsx`): its pull request's diff told as chapters to review in order, each read as its title, risk, and summary over its own hunks, drawn by Files changed's own list.
@@ -210,17 +215,6 @@ const RISK_TONES = {
 /** The rail's toggle that opens it beside the chapter, which the stylesheet draws only where it has room there. */
 const BESIDE_TOGGLE = '.chapter-rail-toggle[data-place="beside"]';
 
-/** How long chapters have been generating, moving each second on the window's own clock; a timer to a reader, never announced. */
-function Elapsed({ startedAt }: { startedAt: number }): React.JSX.Element | null {
-  const now = useWorkingNow();
-  if (now === undefined) return null;
-  return (
-    <span role="timer" aria-live="off">
-      {workingTime(now - startedAt)}
-    </span>
-  );
-}
-
 /** The widths of the blocks standing for the rail's rows, and for the chapter's lines. */
 const SKELETON_ROWS = ["80%", "65%", "72%", "50%"] as const;
 const SKELETON_LINES = ["40%", "92%", "86%", "60%"] as const;
@@ -246,14 +240,14 @@ function Generating({
 }): React.JSX.Element {
   const words = ours ? CHAPTERS_WORDS.GENERATING : CHAPTERS_WORDS.ELSEWHERE;
   return (
-    <div className="chapters-generating">
+    <Fill className="chapters-generating">
       <p className="chapters-generating-line">
         <span>
           {words}
           {live ? (
             <>
               {" · "}
-              <Elapsed startedAt={startedAt} />
+              <Time at={startedAt} look={TIME_LOOK.DURATION} />
             </>
           ) : null}
         </span>
@@ -277,7 +271,7 @@ function Generating({
           </div>
         </div>
       </SkeletonRegion>
-    </div>
+    </Fill>
   );
 }
 
@@ -419,7 +413,7 @@ function ChapterRail({
   );
 }
 
-/** The strip the rail leaves in its place while hidden: a mark for each chapter in its risk's colour, dimmed once viewed, the one shown standing out; a press shows the rail. A picture of the rail, hidden from assistive technology, which reaches the rail through its toggle. */
+/** The strip the rail leaves in its place while hidden: a mark for each chapter in its risk's colour, dimmed once viewed, the one shown standing out; a press shows the rail (`MarkStrip`). Its box is the stylesheet's to draw only while the rail is hidden. */
 function ChapterStrip({
   rows,
   at,
@@ -432,16 +426,15 @@ function ChapterStrip({
   onOpen: () => void;
 }): React.JSX.Element {
   return (
-    <div className="chapter-strip" aria-hidden="true" onClick={onOpen}>
-      {rows.map((row, index) => (
-        <span
-          key={index}
-          className="chapter-strip-mark"
-          data-risk={row.chapter.risk ?? undefined}
-          data-viewed={viewed(row.paths) ? "" : undefined}
-          data-current={index === at ? "" : undefined}
-        />
-      ))}
+    <div className="chapter-strip">
+      <MarkStrip
+        marks={rows.map((row, index) => ({
+          tone: row.chapter.risk ? RISK_TONES[row.chapter.risk] : undefined,
+          viewed: viewed(row.paths),
+          current: index === at,
+        }))}
+        onPress={onOpen}
+      />
     </div>
   );
 }
@@ -608,8 +601,8 @@ function ChaptersReading({
   const previous = chapters[at - 1];
   const next = chapters[at + 1];
   return (
-    // biome-ignore lint/a11y/noStaticElementInteractions: the view hears its chapter keys from whatever in it has the focus, past the list's own.
-    <div
+    // The view hears its chapter keys from whatever in it has the focus, past the list's own.
+    <Fill
       ref={root}
       className="chapters-view"
       data-rail-beside={String(slide.drawn)}
@@ -631,7 +624,7 @@ function ChaptersReading({
           {CHAPTERS_WORDS.madeBy(chaptersModelLabel(model))}
         </Text>
       </p>
-      <div className="chapters-body">
+      <Fill flow={FILL_FLOW.ROW} clip className="chapters-body">
         {slide.drawn || over ? (
           <ChapterRail
             rows={rows}
@@ -644,7 +637,7 @@ function ChaptersReading({
           />
         ) : null}
         <ChapterStrip rows={rows} at={at} viewed={viewed} onOpen={toggleRail} />
-        <section className="chapter-reading" aria-labelledby={headingId}>
+        <Fill as={FILL_ELEMENT.SECTION} className="chapter-reading" aria-labelledby={headingId}>
           <header className="chapter-head">
             <ScrollArea size={SCROLL_SIZE.CONTENT}>
               <div className="chapter-head-body">
@@ -655,7 +648,12 @@ function ChaptersReading({
                     onBeside={() => setBeside((was) => !was)}
                     onOver={() => setOver((was) => !was)}
                   />
-                  <Text as={TEXT_ELEMENT.H3} variant={TEXT_VARIANT.SECTION} id={headingId}>
+                  <Text
+                    as={TEXT_ELEMENT.H3}
+                    variant={TEXT_VARIANT.SECTION}
+                    id={headingId}
+                    className="chapter-head-title"
+                  >
                     {at + 1}. {chapter.title}
                   </Text>
                   {chapter.risk === null ? null : (
@@ -786,9 +784,9 @@ function ChaptersReading({
               </Button>
             </Tooltip>
           </footer>
-        </section>
-      </div>
-    </div>
+        </Fill>
+      </Fill>
+    </Fill>
   );
 }
 
@@ -800,7 +798,7 @@ function chaptersState(
 ): ReactNode {
   switch (state.kind) {
     case CHAPTERS_SHOWN.READING:
-      return <SpinnerRegion label={CHAPTERS_WORDS.READING} />;
+      return <SpinnerRegion delay label={CHAPTERS_WORDS.READING} />;
     case CHAPTERS_SHOWN.FAILED:
       return (
         <ErrorState onRetry={read.ask} placement={ERROR_STATE_PLACEMENT.CENTRED}>
@@ -882,7 +880,7 @@ export function AgentChaptersTab({
   // The chapters wait on the files as Files changed does: a failure gives way to the wait once asked again.
   const { answer, out, pullRequest } = changes;
   if (answer === undefined || (out && "failure" in answer)) {
-    return <SpinnerRegion label={CHANGES_WORDS.READING} />;
+    return <SpinnerRegion delay label={CHANGES_WORDS.READING} />;
   }
   if ("failure" in answer) {
     return (

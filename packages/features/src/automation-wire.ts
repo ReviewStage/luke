@@ -113,7 +113,7 @@ const filterValuesSchema = EffectSchema.Array(
  * (`automation-schedule.ts` beside this module), since it is the one
  * that reads them.
  */
-const scheduleTriggerSchema = EffectSchema.Struct({
+export const scheduleTriggerSchema = EffectSchema.Struct({
   kind: EffectSchema.Literal(AUTOMATION_TRIGGER.SCHEDULE),
   cron: EffectSchema.Trim.check(
     EffectSchema.isNonEmpty(),
@@ -165,7 +165,7 @@ export const PULL_REQUEST_DEFAULT_MOMENTS: readonly PullRequestMoment[] =
  * on, every one where absent. A draft pull request fires it only where
  * `drafts` is true, and one from a fork only where `forks` is.
  */
-const githubTriggerSchema = EffectSchema.Struct({
+export const githubTriggerSchema = EffectSchema.Struct({
   kind: EffectSchema.Literal(AUTOMATION_TRIGGER.GITHUB),
   event: EffectSchema.Literals(Object.values(GITHUB_TRIGGER_EVENT)),
   labels: EffectSchema.optionalKey(filterValuesSchema),
@@ -204,7 +204,7 @@ const sentryTriggerFiltersSchema = EffectSchema.Struct({
  * An event of the Sentry organization installed on the automation's
  * workspace; only deliveries from that workspace's installation fire it.
  */
-const sentryTriggerSchema = EffectSchema.Struct({
+export const sentryTriggerSchema = EffectSchema.Struct({
   kind: EffectSchema.Literal(AUTOMATION_TRIGGER.INTEGRATION),
   provider: EffectSchema.Literal(TRIGGER_PROVIDER.SENTRY),
   event: EffectSchema.Literals(Object.values(SENTRY_TRIGGER_EVENT)),

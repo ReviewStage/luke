@@ -14,6 +14,7 @@
     "./activity-calendar": "./src/activity-calendar.js",
     "./admin-animations": "./src/admin-animations.js",
     "./admin-format": "./src/admin-format.js",
+    "./time-format": "./src/time-format.js",
     "./daily-series": "./src/daily-series.js",
     "./chart": "./src/chart/chart.js",
     "./virtual-rows": "./src/components/virtual-rows/virtual-rows.js",
@@ -63,6 +64,7 @@
     "typecheck": "tsc --project tsconfig.json"
   },
   "dependencies": {
+    "@effect/atom-react": "catalog:",
     "@luke/brand": "workspace:*",
     "@luke/features": "workspace:*",
     "@luke/live": "workspace:*",

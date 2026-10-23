@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { PRESS_PULSE, pulseOnPress } from "../../press-pulse.js";
 import { useLinkAddress } from "../menu/link-address.js";
 import { ClippedLine, ONE_LINE_ELEMENT, ONE_LINE_END } from "../one-line/clipped-line.js";
 
@@ -163,7 +164,7 @@ export function HoverCardRow({
       className="luke-hover-card-row"
       data-look={look}
       ref={linkAddress}
-      onClick={onPress}
+      onClick={pulseOnPress(onPress, PRESS_PULSE.QUIET)}
     >
       {row}
     </button>

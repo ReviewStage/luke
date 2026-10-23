@@ -31,6 +31,7 @@
 
 import type { FocusEventHandler, MouseEvent, PointerEventHandler, ReactNode } from "react";
 import { ArrowUpRightIcon } from "../../face/glyphs.js";
+import { PRESS_PULSE, pulseOnPress } from "../../press-pulse.js";
 import type { TextFont, TextVariant } from "../text/text.js";
 import { TEXT_LINK_LOOK, type TextLinkLook } from "./text-link-look.js";
 
@@ -122,7 +123,7 @@ export function TextLink({
       aria-current={current}
       target={newTab ? "_blank" : undefined}
       rel={newTab ? "noreferrer" : undefined}
-      onClick={onClick}
+      onClick={pulseOnPress(onClick, PRESS_PULSE.WORDS)}
     >
       {words}
     </a>

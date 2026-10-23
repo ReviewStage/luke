@@ -244,7 +244,7 @@ function cardOf(board: HTMLElement, taskId: string): HTMLButtonElement {
   return card;
 }
 
-test("each status has its column, its cards the most pressing first, each its key, priority, name, and creator's face", async () => {
+test("each status has its column, its cards the most pressing first, each its key, priority, name, and assignee, its creator's face left off at first", async () => {
   const board = await mountBoard(TASKS, SHELL_ROOM.WIDE, {
     ...DEFAULT_BOARD_DISPLAY,
     completed: COMPLETED_WINDOW.ALL,
@@ -265,7 +265,11 @@ test("each status has its column, its cards the most pressing first, each its ke
     TASK_PRIORITY.HIGH,
   );
   assert.equal(card.querySelector(".tasks-board-name")?.textContent, "Rate limit search");
-  assert.ok(card.querySelector(".actor-mark"), "the card wears its creator's face");
+  assert.equal(
+    chipOf(board, "t-39", "Assignee").getAttribute("aria-label"),
+    "Assignee: No assignee",
+  );
+  assert.equal(card.querySelector(".actor-mark"), null, "the card wears no creator's face");
 });
 
 test("a task from a service before statuses stands under Todo", async () => {
@@ -387,6 +391,71 @@ test("by priority, a card dragged onto Urgent's column is sent urgent", async ()
   dragCard(board, "t-39", { x: 150, y: 120 });
 
   assert.deepEqual(sent, [["t-39", { priority: TASK_PRIORITY.URGENT }]]);
+});
+
+/** A task of `TASKS` assigned to Charles. */
+function charles(taskId: string): TaskSummary {
+  const held = TASKS.find((each) => each.id === taskId) ?? assert.fail(`no ${taskId}`);
+  return { ...held, assignee: { userId: CHARLES, name: "Charles Pan" } };
+}
+
+test("by assignee, the reader's column stands first, then each teammate's, then No assignee's; a card dragged onto one is assigned to its person, onto No assignee's to no one, and wears no assignee chip there", async () => {
+  const tasks = [charles("t-39"), ...TASKS.filter((each) => each.id !== "t-39")];
+  const board = await mountBoard(tasks, SHELL_ROOM.WIDE, {
+    ...DEFAULT_BOARD_DISPLAY,
+    grouping: TASKS_GROUPING.ASSIGNEE,
+  });
+  layCardsOut(board);
+
+  assert.deepEqual(
+    columns(board).map(([name]) => name),
+    ["You", "Charles Pan", "No assignee"],
+  );
+  assert.equal(
+    board.querySelector('li[data-task-id="t-39"] button[aria-label^="Assignee:"]'),
+    null,
+    "a card under its assignee's column leaves its chip off",
+  );
+  dragCard(board, "t-40", { x: 150, y: 120 });
+  dragCard(board, "t-39", { x: 750, y: 120 });
+
+  assert.deepEqual(sent, [
+    ["t-40", { assigneeId: DEAN }],
+    ["t-39", { assigneeId: null }],
+  ]);
+});
+
+test("in a narrow room grouped by assignee, a card keeps its Assignee chip, which moves it without a drag", async () => {
+  const deans = { ...(TASKS.find((each) => each.id === "t-40") ?? assert.fail("no t-40")) };
+  const board = await mountBoard(
+    [{ ...deans, assignee: { userId: DEAN, name: "Dean Stratakos" } }],
+    SHELL_ROOM.NARROW,
+    { ...DEFAULT_BOARD_DISPLAY, grouping: TASKS_GROUPING.ASSIGNEE },
+  );
+
+  act(() => chipOf(board, "t-40", "Assignee").click());
+  pick("Charles Pan");
+
+  assert.deepEqual(sent, [["t-40", { assigneeId: CHARLES }]]);
+});
+
+test("a card's Assignee chip drops No assignee and the members, the reader first, and sends the one picked", async () => {
+  const board = await mountBoard([charles("t-39"), ...TASKS.filter((each) => each.id !== "t-39")]);
+
+  act(() => chipOf(board, "t-40", "Assignee").click());
+  assert.deepEqual(
+    [...document.querySelectorAll(".luke-menu-item-label")].map((label) => label.textContent),
+    ["No assignee", "Dean Stratakos", "Charles Pan"],
+  );
+  pick("Charles Pan");
+  act(() => chipOf(board, "t-39", "Assignee").click());
+  pick("No assignee");
+
+  assert.deepEqual(sent, [
+    ["t-40", { assigneeId: CHARLES }],
+    ["t-39", { assigneeId: null }],
+  ]);
+  assert.deepEqual(opened, [], "a pick opens no task");
 });
 
 test("a card dragged onto Done whose change the service refused says so", async () => {

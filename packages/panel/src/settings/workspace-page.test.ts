@@ -14,6 +14,7 @@ import {
 } from "@luke/features/github-repositories-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import type { MacRepository } from "@luke/features/mac-terminal-wire";
+import type { WorkspaceSentry } from "@luke/features/sentry-install-wire";
 import type {
   TasksWorkspaceInvitationsAnswer,
   TasksWorkspaceMembersAnswer,
@@ -42,13 +43,13 @@ import { HOST_CAPABILITY } from "@luke/settings";
 import { SETTINGS_SEARCH_ANCHOR_ATTRIBUTE } from "@luke/settings/settings-anchors";
 import { SETTINGS_SECTION } from "@luke/settings/settings-views";
 import { ProviderMark, SettingsPage } from "@luke/ui";
+import { dayAndTimeText } from "@luke/ui/time-format";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { OpenPersonProvider } from "../person-door.js";
-import { dayAndTimeText } from "../tasks/task-time.js";
 import {
   type AnyAct,
   FAKE_ANSWER,
@@ -141,6 +142,8 @@ let inviteHeld: Promise<void> | undefined;
 let refuseGitHubOpen = false;
 /** Where the next Linear sign-in waits before the browser is sent, so a test can hold it on the wire. */
 let linearConnectHeld: Promise<void> | undefined;
+/** The workspace's Sentry as the service answers it; none where the read is refused. */
+let sentry: WorkspaceSentry | undefined;
 /** Whether the service refuses a rename for the account's role. */
 let refuseRename = false;
 /** Whether the service refuses a photo for the account's role. */
@@ -281,6 +284,22 @@ function answer(request: Asked): Promise<Answered> {
         return held.then(() => done(undefined));
       }
       return Promise.resolve({ status: FAKE_ANSWER.UNKNOWN_ACT });
+    case ACT_KIND.WORKSPACE_SENTRY_READ:
+      if (sentry === undefined) {
+        return Promise.resolve({ status: FAKE_ANSWER.REFUSED, reason: "Could not read." });
+      }
+      return Promise.resolve(done(sentry));
+    case ACT_KIND.WORKSPACE_SENTRY_INSTALL:
+      return Promise.resolve(done(undefined));
+    case ACT_KIND.WORKSPACE_SENTRY_DISCONNECT: {
+      const { installationId } = request.payload;
+      const was: WorkspaceSentry = sentry ?? { configured: true, installations: [] };
+      sentry = {
+        ...was,
+        installations: was.installations.filter((one) => one.installationId !== installationId),
+      };
+      return Promise.resolve(done(sentry));
+    }
     case ACT_KIND.WORKSPACE_GITHUB_CONNECT:
       if (refuseGitHubOpen) {
         return Promise.resolve({
@@ -498,6 +517,7 @@ beforeEach(() => {
   inviteHeld = undefined;
   refuseGitHubOpen = false;
   linearConnectHeld = undefined;
+  sentry = undefined;
   refuseRename = false;
   refusePhoto = false;
   refuseRole = false;
@@ -645,7 +665,7 @@ const rowNamed = (page: HTMLElement, name: string) =>
 
 /** The Members row naming `name`, the reader's own beside its You. */
 const memberNamed = (page: HTMLElement, name: string) =>
-  [...page.querySelectorAll<HTMLElement>(".workspace-member > .menu-row")].find(
+  [...page.querySelectorAll<HTMLElement>(".menu-row")].find(
     (row) => row.querySelector('[id$="label"]')?.firstChild?.firstChild?.textContent === name,
   ) ?? assert.fail(`no ${name} member`);
 
@@ -690,6 +710,15 @@ async function chooseAction(row: HTMLElement, label: string): Promise<void> {
 /** The confirm dialog a press raised. */
 function dialog(): HTMLElement {
   return document.querySelector<HTMLElement>('[role="alertdialog"]') ?? assert.fail("no question");
+}
+
+/** Types `words` into the standing question's gate, as a reader typing the subject's name does. */
+function typeGate(words: string): void {
+  const field = dialog().querySelector<HTMLInputElement>("input") ?? assert.fail("no gate");
+  act(() => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(field, words);
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+  });
 }
 
 /** Answers the standing question with its dangerous answer. */
@@ -948,7 +977,12 @@ test("the chosen team workspace's members are listed with their email and role, 
   const { page } = await mount(ACME);
 
   assert.deepEqual(
-    sent.filter((request) => request.kind.startsWith("workspace.")).map((request) => request.kind),
+    sent
+      .filter(
+        (request) =>
+          request.kind.startsWith("workspace.") && request.kind !== ACT_KIND.WORKSPACE_SENTRY_READ,
+      )
+      .map((request) => request.kind),
     [
       ACT_KIND.WORKSPACE_TOKEN_REPOSITORIES_READ,
       ACT_KIND.WORKSPACE_PEOPLE,
@@ -958,7 +992,7 @@ test("the chosen team workspace's members are listed with their email and role, 
   assert.equal(emailOf(memberNamed(page, "Dana")), "dana@example.com");
   assert.deepEqual(
     ["Dana", "Sam"].map(
-      (name) => memberNamed(page, name).querySelector(".settings-row-value")?.textContent,
+      (name) => memberNamed(page, name).querySelector(".luke-settings-row-value")?.textContent,
     ),
     ["Owner", "Member"],
   );
@@ -1096,7 +1130,7 @@ test("an admin is offered Remove for a member but not for the owner, and Remove 
     [{ workspaceId: ACME.id, userId: MEMBER.userId }],
   );
   assert.equal(
-    [...page.querySelectorAll(".workspace-member")].some((each) =>
+    [...page.querySelectorAll(".menu-row")].some((each) =>
       each.textContent?.includes("Sam"),
     ),
     false,
@@ -1164,7 +1198,7 @@ test("the owner makes a member an admin from the member's ⋯ at once, and the r
       { workspaceId: ACME.id, userId: MEMBER.userId, role: WORKSPACE_ROLE.ADMIN },
     ],
   ]);
-  assert.equal(memberNamed(page, "Sam").querySelector(".settings-row-value")?.textContent, "Admin");
+  assert.equal(memberNamed(page, "Sam").querySelector(".luke-settings-row-value")?.textContent, "Admin");
   assert.equal(document.querySelector('[role="alertdialog"]'), null, "nothing asked first");
 });
 
@@ -1187,7 +1221,7 @@ test("the owner's ⋯ on an admin holds Make member, Make owner, and Remove, and
   assert.deepEqual(roleSent(), [
     [ACT_KIND.WORKSPACE_TRANSFER, { workspaceId: ACME.id, userId: ADMIN_OLA.userId }],
   ]);
-  assert.equal(memberNamed(page, "Ola").querySelector(".settings-row-value")?.textContent, "Owner");
+  assert.equal(memberNamed(page, "Ola").querySelector(".luke-settings-row-value")?.textContent, "Owner");
 });
 
 test("an admin of the account's own first workspace is never offered Make owner, since it is named for its creator", async () => {
@@ -1218,7 +1252,7 @@ const leaveGroup = (page: HTMLElement) =>
 const leaveLine = (group: HTMLElement) =>
   rowWords(group.querySelector<HTMLElement>(ROWS) ?? assert.fail("no leave row"))[1];
 
-test("the owner cannot leave until the workspace is handed over: its row says so and Transfer ownership hands it to the admin chosen, the first unless another is", async () => {
+test("the owner cannot leave until the workspace is handed over: its row says so and Transfer ownership hands it to the admin chosen, the first unless another is, once the workspace's name is typed", async () => {
   const other: WorkspaceMember = {
     ...ADMIN_OLA,
     userId: "user-kim",
@@ -1239,6 +1273,12 @@ test("the owner cannot leave until the workspace is handed over: its row says so
   const names = offered.map((item) => item.textContent);
   act(() => offered.find((item) => item.textContent?.includes("kim@example.com"))?.click());
   await confirm("Transfer ownership");
+  const refusedUntilNamed = roleSent();
+  typeGate(ACME.name.toUpperCase());
+  await confirm("Transfer ownership");
+  const refusedMisnamed = roleSent();
+  typeGate(ACME.name);
+  await confirm("Transfer ownership");
 
   assert.equal(line, "You're its owner. Make an admin the owner first, then you can leave.");
   assert.deepEqual(buttons(group, "Leave"), []);
@@ -1247,6 +1287,8 @@ test("the owner cannot leave until the workspace is handed over: its row says so
     names.map((name) => name?.replace(/^[A-Z]/u, "")),
     ["Olaola@example.com", "Kimkim@example.com"],
   );
+  assert.deepEqual(refusedUntilNamed, [], "the act waits on the workspace's name");
+  assert.deepEqual(refusedMisnamed, [], "a name typed otherwise is not the name");
   assert.deepEqual(roleSent(), [
     [ACT_KIND.WORKSPACE_TRANSFER, { workspaceId: ACME.id, userId: "user-kim" }],
   ]);
@@ -1358,7 +1400,7 @@ test("a members read sent before a role change and landing after it does not put
   release();
   await settle();
 
-  assert.equal(memberNamed(page, "Sam").querySelector(".settings-row-value")?.textContent, "Admin");
+  assert.equal(memberNamed(page, "Sam").querySelector(".luke-settings-row-value")?.textContent, "Admin");
 });
 
 test("an admin's leave says the invitations they sent stay valid, and a member's, who sends none, says nothing of them", async () => {
@@ -1415,7 +1457,7 @@ test("a member leaves after confirming, which names what stays and what stops, s
     "Your own workspace, Dana, isn't affected.",
   ]);
   assert.equal(
-    document.querySelector(".toast-stack")?.textContent?.includes("You left acme."),
+    document.querySelector(".luke-toast-stack")?.textContent?.includes("You left acme."),
     true,
   );
 
@@ -1519,7 +1561,7 @@ test("an owner or an admin of a connected workspace sees GitHub's row, led by it
 
     assert.equal(group.querySelector("h2")?.textContent, "Integrations");
     assert.equal(
-      row.querySelector(".settings-row-mark")?.innerHTML,
+      row.querySelector(".luke-settings-row-mark")?.innerHTML,
       renderToStaticMarkup(createElement(ProviderMark, { provider: INTEGRATION_PROVIDER.GITHUB })),
     );
     assert.deepEqual(
@@ -1806,7 +1848,7 @@ function chooseRole(form: HTMLElement, words: string): void {
 
 /** Types an address, chooses a role, and presses Invite in the page's form, as many times as asked before any answer. */
 async function invite(page: HTMLElement, email: string, role: string, presses = 1): Promise<void> {
-  const form = page.querySelector<HTMLFormElement>(".workspace-invite") ?? assert.fail("no form");
+  const form = page.querySelector<HTMLFormElement>(".workspace-invite form") ?? assert.fail("no form");
   const address = form.querySelector("input") ?? assert.fail("no address field");
   const roleWords = role === WORKSPACE_ROLE.ADMIN ? "Admin" : "Member";
   act(() => {
@@ -1874,6 +1916,7 @@ test("the owner invites an address as a role, sees it pending with its link to c
           request.kind !== ACT_KIND.WORKSPACE_MEMBERS_READ &&
           request.kind !== ACT_KIND.WORKSPACE_PEOPLE &&
           request.kind !== ACT_KIND.WORKSPACE_TOKEN_REPOSITORIES_READ &&
+          request.kind !== ACT_KIND.WORKSPACE_SENTRY_READ &&
           !MAC_GROUP_READS.has(request.kind),
       )
       .map((request) => [request.kind, "payload" in request ? request.payload : undefined]),
@@ -1895,7 +1938,7 @@ test("the owner invites an address as a role, sees it pending with its link to c
 
 test("an invitation's role is a field chip, Member by default, whose menu checks the role and says what each may do, and the invitation is sent as the role chosen", async () => {
   const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.OWNER });
-  const form = page.querySelector<HTMLFormElement>(".workspace-invite") ?? assert.fail("no form");
+  const form = page.querySelector<HTMLFormElement>(".workspace-invite form") ?? assert.fail("no form");
   const before = roleChip(form).textContent;
   act(() => roleChip(form).click());
   const offered = roleItems().map((item) => [item.textContent, item.getAttribute("aria-checked")]);
@@ -1918,7 +1961,7 @@ test("an invitation's role is a field chip, Member by default, whose menu checks
 
 test("an admin's role menu offers Admin dimmed, since only the owner invites admins, and an admin invites a member", async () => {
   const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.ADMIN });
-  const form = page.querySelector<HTMLFormElement>(".workspace-invite") ?? assert.fail("no form");
+  const form = page.querySelector<HTMLFormElement>(".workspace-invite form") ?? assert.fail("no form");
   act(() => roleChip(form).click());
   const admin = roleItems().find((item) => item.textContent?.startsWith("Admin"));
   const offered = [
@@ -2202,6 +2245,123 @@ test("a connected workspace's Linear reads connected for everyone and stands qui
     "Linear",
     "Not connected. Ask an owner or admin.",
   ]);
+});
+
+/** The workspace Sentry installs and disconnects sent, by their payloads. */
+const sentrySent = () =>
+  sent.flatMap((request) =>
+    request.kind === ACT_KIND.WORKSPACE_SENTRY_INSTALL ||
+    request.kind === ACT_KIND.WORKSPACE_SENTRY_DISCONNECT
+      ? [[request.kind, request.payload]]
+      : [],
+  );
+
+const SENTRY_INSTALLED: WorkspaceSentry = {
+  configured: true,
+  installations: [{ installationId: "installation-1", account: "acme" }],
+};
+
+test("the Sentry row reads again as the window comes forward: an install made on Sentry shows, and a read that then fails hides the row rather than keep what may be gone", async () => {
+  sentry = { configured: true, installations: [] };
+  const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.ADMIN });
+  const before = rowWords(rowNamed(githubGroup(page), "Sentry"));
+
+  sentry = SENTRY_INSTALLED;
+  act(() => {
+    window.dispatchEvent(new Event("focus"));
+  });
+  await settle();
+  const installed = rowWords(rowNamed(githubGroup(page), "Sentry"));
+  sentry = undefined;
+  act(() => {
+    window.dispatchEvent(new Event("focus"));
+  });
+  await settle();
+
+  assert.deepEqual(before, [
+    "Sentry",
+    "Not installed.",
+  ]);
+  assert.deepEqual(installed, ["Sentry", "Installed · acme"]);
+  assert.equal([...githubGroup(page).querySelectorAll(ROWS)].map(nameOf).includes("Sentry"), false);
+});
+
+test("a Disconnect still being asked is dismissed once a read finds its installation gone", async () => {
+  sentry = SENTRY_INSTALLED;
+  const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.ADMIN });
+
+  await chooseAction(rowNamed(githubGroup(page), "Sentry"), "Disconnect acme");
+  const asked = document.querySelector('[role="alertdialog"]') !== null;
+  sentry = { configured: true, installations: [] };
+  act(() => {
+    window.dispatchEvent(new Event("focus"));
+  });
+  await settle();
+
+  assert.equal(asked, true);
+  assert.equal(document.querySelector('[role="alertdialog"]'), null);
+  assert.deepEqual(sentrySent(), []);
+});
+
+test("Integrations draws no Sentry row where the service holds no Sentry integration, or its read failed", async () => {
+  sentry = { configured: false, installations: [] };
+  const unconfigured = await mount({ ...ACME, role: WORKSPACE_ROLE.ADMIN });
+  const hidden = [...githubGroup(unconfigured.page).querySelectorAll(ROWS)].map(nameOf);
+  for (const root of roots.splice(0)) act(() => root.unmount());
+  sentry = undefined;
+  const unread = await mount({ ...ACME, role: WORKSPACE_ROLE.ADMIN });
+
+  assert.equal(hidden.includes("Sentry"), false);
+  assert.equal(
+    [...githubGroup(unread.page).querySelectorAll(ROWS)].map(nameOf).includes("Sentry"),
+    false,
+  );
+});
+
+test("an admin installs Sentry for the workspace from its row, which opens Sentry at once", async () => {
+  sentry = { configured: true, installations: [] };
+  const { page } = await mount({ ...ACME, role: WORKSPACE_ROLE.ADMIN });
+  const row = rowNamed(githubGroup(page), "Sentry");
+  const before = rowWords(row);
+
+  act(() => button(row, "Install for workspace").click());
+  await settle();
+
+  assert.deepEqual(before, [
+    "Sentry",
+    "Not installed.",
+  ]);
+  assert.equal(document.querySelector('[role="alertdialog"]'), null);
+  assert.deepEqual(sentrySent(), [[ACT_KIND.WORKSPACE_SENTRY_INSTALL, { workspaceId: ACME.id }]]);
+});
+
+test("an installed workspace's Sentry names its organization, its ⋯ disconnects it after asking, and a member sees it read only", async () => {
+  sentry = SENTRY_INSTALLED;
+  const admin = await mount({ ...ACME, role: WORKSPACE_ROLE.ADMIN });
+  const row = rowNamed(githubGroup(admin.page), "Sentry");
+  const words = rowWords(row);
+
+  await chooseAction(row, "Disconnect acme");
+  await confirm("Disconnect");
+  const after = rowWords(rowNamed(githubGroup(admin.page), "Sentry"));
+  for (const root of roots.splice(0)) act(() => root.unmount());
+  sentry = SENTRY_INSTALLED;
+  const member = await mount({ ...ACME, role: WORKSPACE_ROLE.MEMBER });
+  const memberRow = rowNamed(githubGroup(member.page), "Sentry");
+
+  assert.deepEqual(words, ["Sentry", "Installed · acme"]);
+  assert.deepEqual(sentrySent(), [
+    [
+      ACT_KIND.WORKSPACE_SENTRY_DISCONNECT,
+      { workspaceId: ACME.id, installationId: "installation-1" },
+    ],
+  ]);
+  assert.deepEqual(after, [
+    "Sentry",
+    "Not installed.",
+  ]);
+  assert.deepEqual(rowWords(memberRow), ["Sentry", "Installed · acme"]);
+  assert.deepEqual(rowButtons(memberRow), []);
 });
 
 test("in the window, each member's ⋯ opens their profile first, in the workspace the page shows", async () => {

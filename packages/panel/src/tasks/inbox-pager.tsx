@@ -5,13 +5,19 @@ import {
   type ShortcutChord,
   shortcutAria,
 } from "@luke/settings/shortcuts";
-import { IconButton, LIST_VARIANT, List, ListRow, type ListRowHint } from "@luke/ui";
+import {
+  IconButton,
+  LIST_VARIANT,
+  List,
+  ListRow,
+  type ListRowHint,
+  Shortcut,
+  Tooltip,
+} from "@luke/ui";
 import { ChevronDownIcon, ChevronUpIcon } from "lucide-react";
 import { cloneElement, useState } from "react";
 import { useAppCommand } from "../app-commands.js";
 import { FadingWords } from "../fading-words.js";
-import { Shortcut } from "../shortcut.js";
-import { Tooltip } from "../tooltip.js";
 import {
   INBOX_DIRECTION,
   type InboxDirection,

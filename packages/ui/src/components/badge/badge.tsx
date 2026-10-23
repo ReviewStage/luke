@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import type { VisuallyHiddenUnder } from "../visually-hidden/visually-hidden.js";
 
 /**
  * badge.tsx -- a short word saying where something stands, in the state palette: working, needing you, done, merged, failed, or nothing in particular.
@@ -38,6 +39,8 @@ export function Badge({
   tone = BADGE_TONE.NEUTRAL,
   icon,
   swatch,
+  dot = false,
+  hideWordsUnder,
   children,
 }: {
   tone?: BadgeTone;
@@ -45,8 +48,12 @@ export function Badge({
   icon?: ReactNode;
   /** A provider's colour for what the badge names, drawn as a dot before its words; any colour but six hex digits is drawn subtle. */
   swatch?: string | undefined;
+  /** Whether a muted dot leads the words, as a marker of something standing open. */
+  dot?: boolean;
+  /** Give the words up, to a reader alone, once the room around the badge (a `luke-room` container) is narrower than this step; kept drawn where no `icon` or `swatch` says the state in their place. */
+  hideWordsUnder?: VisuallyHiddenUnder | undefined;
   /** The state's words, which the colour only repeats. */
-  children: string;
+  children: ReactNode;
 }): React.JSX.Element {
   const colour = swatch === undefined ? undefined : SWATCH_COLOUR.exec(swatch)?.[1];
   return (
@@ -58,8 +65,14 @@ export function Badge({
           style={colour === undefined ? undefined : { background: `#${colour}` }}
         />
       )}
+      {dot ? <span className="luke-badge-swatch" aria-hidden="true" /> : null}
       {icon}
-      <span className="luke-badge-words">{children}</span>
+      <span
+        className="luke-badge-words"
+        data-under={icon == null && swatch === undefined ? undefined : hideWordsUnder}
+      >
+        {children}
+      </span>
     </span>
   );
 }

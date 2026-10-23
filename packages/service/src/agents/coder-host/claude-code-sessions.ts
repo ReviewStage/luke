@@ -44,8 +44,10 @@ import { HostedEnvironment } from "../../environment.js";
 import { providerModelOf } from "../../providers/model-catalog.js";
 import type { BrainHostTurn } from "../brain-host/bounds.js";
 import { PLAN_REFUSAL } from "../brain-host/eve-sessions.js";
+import { SKILL_ROOT } from "../repository-skills.js";
 import { CODER } from "./bounds.js";
 import { NATIVE_SESSION_PREFIX } from "./native-runtime.js";
+import { NATIVE_SKILLS_PATH } from "./native-skills.js";
 import {
   LaunchRefused,
   type RunnerHarness,
@@ -196,7 +198,9 @@ function claudeCode(options: ClaudeCodeSessionsOptions): RunnerHarness<{ readonl
         firstSequence,
         eventsUrl: options.eventsUrl,
         mcpUrl: options.mcpUrl,
+        integrations: yield* options.integrations(agent),
         allowedDomains: [...ALLOWED_DOMAINS],
+        installedSkills: NATIVE_SKILLS_PATH.INSTALLED,
       };
       return written;
     });
@@ -227,6 +231,8 @@ function claudeCode(options: ClaudeCodeSessionsOptions): RunnerHarness<{ readonl
     launch: (agent) =>
       Effect.flatMap(onApiKey(agent), (keyed) => (keyed ? apiKeyCredential : planCredential)),
     config,
+    // Note that Claude Code reads a checkout's skills from `.claude/skills` alone.
+    skillRoots: [SKILL_ROOT.CLAUDE],
     ahead,
   };
 }

@@ -37,13 +37,14 @@ import {
   IconButton,
   POPOVER_ALIGN,
   POPOVER_PANEL_LOOK,
+  PopoverPanel,
+  Tooltip,
 } from "@luke/ui";
 import { ACTOR_KIND, actorName, githubActor } from "@luke/ui/actor-model";
+import { formatLocaleCount } from "@luke/ui/time-format";
 import { SmilePlusIcon } from "lucide-react";
 import { useId, useRef, useState } from "react";
 import { useMemberDirectory } from "../member-directory.js";
-import { PopoverPanel } from "../popover-panel.js";
-import { Tooltip } from "../tooltip.js";
 import { noop, useThreadWriting } from "./pull-request-thread-actions.js";
 import { PullRequestWriteNote, usePullRequestWrites } from "./pull-request-writes.js";
 
@@ -176,7 +177,7 @@ function ReactionPill({
     <>
       <span aria-hidden="true">{face.emoji}</span>
       <span className="pull-request-reaction-count" aria-hidden="true">
-        {reaction.count.toLocaleString()}
+        {formatLocaleCount(reaction.count)}
       </span>
     </>
   );

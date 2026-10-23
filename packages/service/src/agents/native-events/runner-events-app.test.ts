@@ -19,6 +19,7 @@ import {
   type ProviderKeyRow,
   saveProviderKey,
 } from "@luke/database/models/provider-key-store";
+import { claimRuntimeSession } from "@luke/database/models/recorded-session";
 import { readTask, updateTask } from "@luke/database/models/task-store";
 import { storeWriter } from "@luke/database/models/writer";
 import { user } from "@luke/database/schemas/auth";
@@ -43,13 +44,16 @@ import { sentLineId } from "@luke/wire/host-ids";
 import type { StoredUIMessage } from "@luke/wire/ui-messages";
 import { MockLanguageModelV4 } from "ai/test";
 import { asc, eq } from "drizzle-orm";
-import { Clock, Effect, Layer, Option } from "effect";
+import { Clock, Effect, Layer, Option, Stream } from "effect";
 import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
 import { HOSTED_HTTP_STATUS } from "../../http/http.js";
 import { modelCatalogOf } from "../../providers/model-catalog.js";
+import { EVE_CANCEL_OUTCOME } from "../brain-host/eve-sessions.js";
 import { CODER } from "../coder-host/bounds.js";
+import { NATIVE_SESSION_PREFIX } from "../coder-host/native-runtime.js";
+import { NativeAgentSessions, RUNNER_CHOICE } from "../coder-host/runtime-sessions.js";
 import { titleCodingAgent } from "../coder-host/title.js";
 import { CODER_TOOL_SET } from "../coder-host/tool-set.js";
 import { CURSOR_START, transcriptPast } from "../coder-host/transcript.js";
@@ -78,12 +82,16 @@ const SESSION = "00000000-0000-4000-8000-000000000001";
 const NONCE = "a1b2c3d4e5f6";
 
 /** The route's group over the test's database, as a fetch. */
-const standingWith = (options: RunnerEventsOptions) =>
+const standingWith = (
+  options: RunnerEventsOptions,
+  native: Layer.Layer<NativeAgentSessions> = Layer.empty as Layer.Layer<NativeAgentSessions>,
+) =>
   Effect.gen(function* () {
     const services = Layer.mergeAll(
       Layer.succeed(SqlClient.SqlClient, yield* SqlClient.SqlClient),
       Layer.succeed(Database, yield* Database),
       Layer.succeed(Clock.Clock, yield* Clock.Clock),
+      native,
     );
     const web = HttpRouter.toWebHandler(
       runnerEventsApp(options).pipe(HttpRouter.provideRequest(services)),
@@ -349,6 +357,69 @@ it.layer(getTestDB())("the runner events route", (it) => {
           [opened.joinedAfterStep, joinedEarly?.joinedAfterStep, joined?.joinedAfterStep],
           [undefined, 0, 1],
         );
+      }),
+  );
+
+  it.effect(
+    "a call's ask stopped before the runner took its line stops the turn its line opened once it is taken: the runner is told to stop that turn, and the turn's row carries the Stop",
+    () =>
+      Effect.gen(function* () {
+        const cancels: string[] = [];
+        const native = Layer.succeed(NativeAgentSessions, {
+          sessions: () =>
+            Option.some(
+              Effect.succeed({
+                open: () => Effect.die(new Error("this test opens no session")),
+                send: () => Effect.die(new Error("this test sends nothing")),
+                cancel: (sessionId: string, turnId?: string) =>
+                  Effect.sync(() => {
+                    cancels.push(`${sessionId}:${turnId}`);
+                    return { outcome: EVE_CANCEL_OUTCOME.ACCEPTED } as const;
+                  }),
+                reset: () => Effect.die(new Error("this test resets nothing")),
+                stream: () => Stream.empty,
+                retune: () => Effect.succeed(RUNNER_CHOICE.NOT_LIVE),
+              }),
+            ),
+        });
+        const post = yield* standingWith({}, native);
+        const agent = yield* agentOn(HARNESS.CLAUDE_CODE, []);
+        const session = `${NATIVE_SESSION_PREFIX.claude_code}${randomUUID()}`;
+        yield* claimRuntimeSession(agent.target, session, new Date(yield* Clock.currentTimeMillis));
+        const asks = askRecord();
+        const ask = yield* asks.record({
+          userId: agent.userId,
+          conversationId: agent.target.conversationId,
+          clientId: "dl_1",
+          origin: ASK_ORIGIN.SPOKEN,
+          createdAt: new Date(yield* Clock.currentTimeMillis),
+        });
+        yield* asks.dispatchOnce(agent.target, ask.id, () =>
+          Effect.succeed({ sessionId: session, deliveryId: ask.id }),
+        );
+        // The developer stopped the ask on the call before its runner took its line.
+        yield* asks.cancelRequested(ask.id, new Date(yield* Clock.currentTimeMillis));
+
+        const envelope = { parent_tool_use_id: null, session_id: SESSION, uuid: randomUUID() };
+        const batch = [
+          { type: RUNNER_EVENT.ACCEPTED, uuid: ask.id },
+          { type: "system", subtype: "init", ...envelope },
+        ];
+        // SAFETY: each message above is one the pinned SDK or the runner emits, written in its JSON shape.
+        yield* post(
+          agent.bearer,
+          batch.map((message, sequence) => ({ sequence, message }) as RunnerEvent),
+        );
+
+        const bound = yield* asks.named(agent.userId, ask.id);
+        assert.ok(bound?.turnId !== undefined);
+        assert.deepEqual(cancels, [`${session}:${bound.turnId}`]);
+        const db = yield* Database;
+        const [stamped] = yield* db
+          .select({ cancelRequestedAt: turns.cancelRequestedAt })
+          .from(turns)
+          .where(eq(turns.id, bound.turnId));
+        assert.ok(stamped?.cancelRequestedAt !== null && stamped?.cancelRequestedAt !== undefined);
       }),
   );
 
@@ -922,6 +993,67 @@ it.layer(getTestDB())("the runner events route", (it) => {
   );
 
   it.effect(
+    "a call to an integration's own server is stored as that integration's tool, the account named past its first, and its answer kept as the text the model read",
+    () =>
+      Effect.gen(function* () {
+        const post = yield* standing;
+        const agent = yield* agentWithBearer;
+        const top = { parent_tool_use_id: null, session_id: SESSION };
+        const messagesOfTurn = [
+          { type: RUNNER_EVENT.ACCEPTED, uuid: agent.lineId },
+          {
+            type: "assistant",
+            message: {
+              id: "msg_1",
+              content: [
+                {
+                  type: "tool_use",
+                  id: "toolu_fetch",
+                  name: "mcp__notion-2__notion-fetch",
+                  input: { id: "page-1" },
+                },
+              ],
+            },
+            ...top,
+          },
+          {
+            type: "user",
+            message: {
+              content: [
+                {
+                  type: "tool_result",
+                  tool_use_id: "toolu_fetch",
+                  content: [{ type: "text", text: '{"title":"Launch plan"}' }],
+                },
+              ],
+            },
+            ...top,
+          },
+        ];
+        // SAFETY: each message above is one the pinned SDK or the runner emits, written in its JSON shape.
+        const events = messagesOfTurn.map(
+          (message, sequence) => ({ sequence, message }) as RunnerEvent,
+        );
+
+        yield* post(agent.bearer, events);
+        const { rows } = yield* transcriptOf(agent.target.conversationId);
+        const parts = rows.at(-1)?.parts ?? [];
+
+        assert.deepEqual(parts.map(drawn), [
+          ["step-start"],
+          ["tool-notion_remote", "output-available", '{"title":"Launch plan"}'],
+        ]);
+        const call = parts[1];
+        assert.deepEqual(call !== undefined && "input" in call ? call.input : undefined, {
+          remoteTool: "notion-fetch",
+          parentCallId: "toolu_fetch",
+          input: { id: "page-1" },
+          connection: "notion-2",
+        });
+      }),
+  );
+
+  it.effect(
     "the last event applied is kept on the conversation, for a relaunch to number after",
     () =>
       Effect.gen(function* () {
@@ -1313,6 +1445,67 @@ it.layer(getTestDB())("the runner events route, on Codex", (it) => {
           ],
         );
         assert.notEqual(Option.getOrThrow(context).compactedAt, null);
+      }),
+  );
+
+  it.effect(
+    "a call to an integration's own server is stored as that integration's tool, its answer kept as the text the model read",
+    () =>
+      Effect.gen(function* () {
+        const post = yield* standing;
+        const agent = yield* agentOn(HARNESS.CODEX, ["List the issues."]);
+        const listed = {
+          type: "mcpToolCall",
+          id: "mcp_linear",
+          server: "linear",
+          tool: "list_issues",
+          status: "inProgress",
+          arguments: { team: "ENG" },
+          result: null,
+          error: null,
+        };
+        const messagesOfTurn: WireValue[] = [
+          {
+            method: "thread/started",
+            params: { thread: { id: THREAD, parentThreadId: null } },
+          },
+          { type: RUNNER_EVENT.ACCEPTED, uuid: agent.lineId },
+          notification("turn/started", { turn: { id: "turn-1" } }),
+          notification("item/started", { item: listed }),
+          notification("item/completed", {
+            item: {
+              ...listed,
+              status: "completed",
+              result: {
+                content: [{ type: "text", text: '{"issues":[{"id":"LIN-1"}]}' }],
+                structuredContent: null,
+                _meta: null,
+              },
+            },
+          }),
+          notification("turn/completed", {
+            turn: { id: "turn-1", status: "completed", error: null },
+          }),
+          { type: RUNNER_EVENT.END, reason: RUNNER_END.TURN_ENDED },
+        ];
+        // SAFETY: each message above is one app-server or the runner emits, written in its JSON shape.
+        const events = messagesOfTurn.map(
+          (message, sequence) => ({ sequence, message }) as RunnerEvent,
+        );
+        yield* post(agent.bearer, events);
+        const { rows } = yield* transcriptOf(agent.target.conversationId);
+        const parts = rows.at(-1)?.parts ?? [];
+
+        assert.deepEqual(parts.map(drawn), [
+          ["step-start"],
+          ["tool-linear_remote", "output-available", '{"issues":[{"id":"LIN-1"}]}'],
+        ]);
+        const call = parts[1];
+        assert.deepEqual(call !== undefined && "input" in call ? call.input : undefined, {
+          remoteTool: "list_issues",
+          parentCallId: "mcp_linear",
+          input: { team: "ENG" },
+        });
       }),
   );
 

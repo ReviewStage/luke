@@ -1,8 +1,13 @@
 import type { CodingAgentBrief, CodingAgentContext } from "@luke/features/coding-agent-wire";
-import { AnchoredPopover, IconButton, POPOVER_ALIGN } from "@luke/ui";
+import {
+  AnchoredPopover,
+  IconButton,
+  POPOVER_ALIGN,
+  PopoverPanel,
+  Tooltip,
+  useMinute,
+} from "@luke/ui";
 import { useId, useRef, useState } from "react";
-import { PopoverPanel } from "../popover-panel.js";
-import { Tooltip } from "../tooltip.js";
 import {
   contextFullLine,
   contextHint,
@@ -14,7 +19,6 @@ import {
   rowCount,
   rowWidth,
 } from "./agent-context-model.js";
-import { useMinute } from "./task-time.js";
 
 /**
  * agent-context.tsx -- the ring at the agent box's foot that shows how full the agent's model's context is, and the popover that says what fills it.

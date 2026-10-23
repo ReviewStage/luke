@@ -266,12 +266,6 @@ body {
   list-style: none;
 }
 
-/* The pointer's room over a line held to one line, as wide as the column. */
-.catalog-one-line {
-  display: block;
-  min-width: 0;
-}
-
 /* A column narrower than a phone, where long words have to wrap. */
 .catalog-narrow {
   display: flex;
@@ -372,6 +366,18 @@ body {
 
 .catalog-frame-wide {
   width: 160px;
+}
+
+/* A pane a Fill stands in: its head, then the room the Fill takes. */
+.catalog-fill-pane {
+  display: flex;
+  width: 160px;
+  height: 120px;
+  flex-direction: column;
+  gap: var(--luke-space-4);
+  padding: var(--luke-space-8);
+  border: 1px dashed var(--luke-color-border-strong);
+  border-radius: var(--luke-radius-8);
 }
 
 /* A transcript's column, as wide as a narrow panel's, which a line spans. */
@@ -488,7 +494,13 @@ body {
   flex: 1 1 var(--luke-select-field-width);
 }
 
-/* The tooltip and hover card examples' control, whose wrapper is the hint's anchor and so wraps it exactly. */
+/* The tooltips example's row, whose name's card hangs beside the whole row. */
+.catalog-carded-row {
+  display: inline-flex;
+  gap: var(--luke-space-4);
+}
+
+/* The hover card example's control, whose wrapper is the hint's anchor and so wraps it exactly. */
 .catalog-hinted {
   display: inline-flex;
 }
@@ -903,4 +915,75 @@ body {
   margin: 0;
   color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
+}
+
+/* The box a hidden rail's strip stands in, as tall as a few rows. */
+.catalog-mark-strip {
+  display: flex;
+  width: var(--luke-space-12);
+  height: 160px;
+  border-right: 1px solid var(--luke-color-border);
+}
+
+/* The room a toast stack stands in: its transform makes it the containing
+   block of the stack's fixed corner, so the stack stands in the box rather
+   than the window. */
+.catalog-toast-stage {
+  position: relative;
+  height: 340px;
+  border: 1px solid var(--luke-color-border);
+  border-radius: var(--luke-radius-14);
+  transform: translateZ(0);
+}
+
+/* A box the words inside answer the width of (`under`), as a card or a header does. */
+.catalog-room {
+  container: luke-room / inline-size;
+}
+
+/* A card a band stands across the top of, as a review thread's card names
+   the lines it is on (`LineButton`'s band). */
+.catalog-band-card {
+  display: flex;
+  overflow: clip;
+  width: 360px;
+  max-width: 100%;
+  flex-direction: column;
+  gap: var(--luke-space-8);
+  padding-bottom: var(--luke-space-8);
+  border: 1px solid var(--luke-color-border);
+  border-radius: var(--luke-card-radius);
+  background: var(--luke-color-surface);
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
+}
+
+.catalog-band-body {
+  padding-inline: var(--luke-space-12);
+}
+
+.catalog-band-words {
+  padding: var(--luke-space-4) var(--luke-space-12);
+}
+
+/* A glyph's seat before its line's words (`GlyphSlot`), as a call's line
+   lays one out; one before words that wrap stands at their first line. */
+.catalog-glyph-line {
+  display: flex;
+  align-items: center;
+  gap: var(--luke-icon-gap);
+}
+
+.catalog-glyph-line-top {
+  align-items: flex-start;
+}
+
+.catalog-glyph-line-accent {
+  color: var(--luke-color-accent-text);
+}
+
+/* A container sizing the glyphs it seats, as a review card does its face. */
+.catalog-glyph-large {
+  --luke-glyph-size: var(--luke-space-24);
 }

@@ -4,17 +4,29 @@ import {
   BUTTON_TYPE,
   BUTTON_VARIANT,
   Button,
+  Inline,
+  JUSTIFY,
   MARK_PROVIDER,
   PROVIDER_MARK_SIZE,
   ProviderMark,
   SETTINGS_ROW_DENSITY,
   SETTINGS_ROW_INDENT,
+  SETTINGS_ROW_STATE,
+  SettingsAttentionMark,
+  SettingsChangedMark,
+  SettingsFacts,
   SettingsRow,
+  SettingsRowActSlot,
   type SettingsRowControl,
+  SettingsRowMark,
+  SettingsRowStateLine,
+  SettingsRowValue,
+  SettingsSavedMark,
   SettingsSection,
   Switch,
   TEXT_ELEMENT,
   TEXT_FIELD_TYPE,
+  TEXT_FONT,
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
@@ -161,6 +173,81 @@ function SlottedRows(): React.JSX.Element {
   );
 }
 
+/** What a row's line says about its subject, a mark led by its own box, and a value ending in a column. */
+function StateRows(): React.JSX.Element {
+  return (
+    <SettingsSection>
+      <SettingsRow
+        label="GitHub"
+        leading={
+          <SettingsRowMark>
+            <Mark provider={MARK_PROVIDER.GITHUB} />
+          </SettingsRowMark>
+        }
+        description={
+          <SettingsRowStateLine state={SETTINGS_ROW_STATE.CONNECTED}>
+            Connected
+          </SettingsRowStateLine>
+        }
+      >
+        {() => <Button variant={BUTTON_VARIANT.OUTLINE}>Manage</Button>}
+      </SettingsRow>
+      <SettingsRow
+        label="Linear"
+        leading={
+          <SettingsRowMark>
+            <Mark provider={MARK_PROVIDER.LINEAR} />
+          </SettingsRowMark>
+        }
+        description={
+          <SettingsRowStateLine state={SETTINGS_ROW_STATE.ATTENTION} wrap>
+            The key expired · Reconnect
+          </SettingsRowStateLine>
+        }
+      >
+        {() => null}
+      </SettingsRow>
+      <SettingsRow
+        label="Voice"
+        adornment={
+          <>
+            <SettingsChangedMark />
+            <SettingsAttentionMark note="Needs an API key" />
+          </>
+        }
+      >
+        {() => null}
+      </SettingsRow>
+      <SettingsRow label="Ada Lovelace" description="ada@example.com">
+        {() => (
+          <>
+            <SettingsRowValue>Admin</SettingsRowValue>
+            <SettingsRowActSlot />
+          </>
+        )}
+      </SettingsRow>
+    </SettingsSection>
+  );
+}
+
+/** A saved credential's facts beside its presses, wrapping where the line is narrow. */
+function FactsLine(): React.JSX.Element {
+  return (
+    <Inline justify={JUSTIFY.BETWEEN}>
+      <SettingsFacts>
+        <SettingsRowStateLine state={SETTINGS_ROW_STATE.CONNECTED}>Connected</SettingsRowStateLine>
+        <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.INHERIT} font={TEXT_FONT.MONO}>
+          sk-…a1b2
+        </Text>
+      </SettingsFacts>
+      <Button variant={BUTTON_VARIANT.OUTLINE}>
+        Connected
+        <SettingsSavedMark />
+      </Button>
+    </Inline>
+  );
+}
+
 /** Compact rows, bare in a popover that insets them, as a pane's view settings stand. */
 function CompactRows(): React.JSX.Element {
   return (
@@ -229,6 +316,17 @@ function SettingsRows(): React.JSX.Element {
       <CatalogSection id="settings-row-slots-narrow" title="The slots narrower than 380px">
         <div className="catalog-settings catalog-settings-narrow">
           <SlottedRows />
+        </div>
+      </CatalogSection>
+      <CatalogSection id="settings-row-state" title="State, mark, and value">
+        <div className="catalog-settings">
+          <StateRows />
+        </div>
+      </CatalogSection>
+      <CatalogSection id="settings-row-facts" title="Facts beside presses">
+        <FactsLine />
+        <div className="catalog-narrow">
+          <FactsLine />
         </div>
       </CatalogSection>
       <CatalogSection id="settings-row-compact" title="Compact, in a popover">

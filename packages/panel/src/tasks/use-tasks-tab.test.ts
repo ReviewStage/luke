@@ -45,6 +45,7 @@ import { LIVE_STATUS } from "@luke/live";
 import { EXPERIMENT, HOST_CAPABILITY } from "@luke/settings";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
 import { experimentsOn } from "@luke/settings/testing";
+import { timeRuntime } from "@luke/ui";
 import { CHAT_PLACE, FOR_YOU } from "@luke/ui/chat-model";
 import { memoryHistory } from "@luke/ui/history-adapter";
 import { SECTION_WRITE_FAILED_NOTE } from "@luke/ui/task-sections-model";
@@ -97,6 +98,7 @@ import { onRegistry } from "../testing/copy-feedback.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { newestToastAction, newestToastSays } from "../testing/toast.js";
 import { ToastHost } from "../toast.js";
+import { NEW_TASK_PURPOSE } from "./new-task-purpose.js";
 import { ofPullRequestTab } from "./pull-request-number.js";
 import { CHIP_PLACE, RepositoryChip } from "./repository-chip.js";
 import { loadTasksFixture } from "./tasks-fixture-loader.js";
@@ -3236,6 +3238,135 @@ test("New task's agent stands on its task with the words it started on as its fi
   assert.equal(agents.opening?.line.text, prompt, "its first line is the words it started on");
 });
 
+test("New task's agent start opens its page at once on the words as its agent's first line, before the service answers, which opens the agent's own tab in its place", async () => {
+  const started = { ...RUNNING_AGENT, planId: OTHER_TASK_ID };
+  const answers: Array<(answer: PortActResult<typeof ACT_KIND.TASKS_START>) => void> = [];
+  const tab = mount(
+    { shown: true, tasks: OPEN },
+    {
+      [ACT_KIND.TASKS_START]: () => new Promise((resolve) => answers.push(resolve)),
+      [ACT_KIND.CODING_AGENTS_LIST]: () => Promise.resolve({ agents: [started] }),
+    },
+  );
+  const prompt = "Make the sidebar keep its folds.";
+  act(() => tab.control().onNewTask());
+  let note: Promise<string | undefined> = Promise.resolve("unsent");
+  act(() => {
+    note = tab.control().newTask.start("", "acme/web", undefined, {
+      handed: { idempotencyKey: AGENT_KEY, prompt, attachments: [], choice: undefined },
+    });
+  });
+
+  assert.equal(tab.control().newTask.open, false, "the dialog closes as Start is pressed");
+  assert.equal(tab.control().starting?.text, prompt, "the page stands on the words at once");
+
+  await act(async () => {
+    answers[0]?.({ planId: OTHER_TASK_ID, agentStart: { agent: started } });
+    await note;
+  });
+  tab.stand({ tasks: AGENT_TASK });
+  await settle();
+  assert.equal(tab.control().starting, undefined, "the task's own page takes its place");
+  assert.deepEqual(tab.control().mainTabs.tab, { agent: AGENT_ID });
+  assert.equal(tab.control().agents.opening?.line.text, prompt);
+});
+
+test("New task's agent start refused after its page opened opens the card again on the issues, model, and press it held, saying why, over the version history it was asked from", async () => {
+  const answers: Array<(answer: PortActResult<typeof ACT_KIND.TASKS_START>) => void> = [];
+  const tab = mount(
+    { shown: true, tasks: OPEN },
+    {
+      [ACT_KIND.TASKS_START]: () => new Promise((resolve) => answers.push(resolve)),
+      [ACT_KIND.TASKS_SELECT]: () => Promise.resolve(true),
+    },
+  );
+  act(() =>
+    tab.control().onOpenLink({
+      workspace: "acme",
+      place: { kind: LINK_PLACE.VERSION, planId: TASK.id, revision: 3 },
+    }),
+  );
+  assert.equal(tab.control().history.open, true);
+  const handed = {
+    idempotencyKey: AGENT_KEY,
+    prompt: "Make the sidebar keep its folds.",
+    attachments: [],
+    choice: undefined,
+  };
+  const card = {
+    repository: "acme/web",
+    links: [],
+    choice: { model: "anthropic/claude-opus-5.5", effort: "high" },
+    press: {
+      key: AGENT_KEY,
+      ask: { name: "", repository: "acme/web", workspaceId: undefined, issues: [], agent: handed },
+    },
+  };
+  act(() => tab.control().onNewTask());
+  let note: Promise<string | undefined> = Promise.resolve(undefined);
+  act(() => {
+    note = tab.control().newTask.start("", "acme/web", undefined, { handed, card });
+  });
+  assert.equal(tab.control().newTask.open, false);
+
+  let refused: string | undefined;
+  await act(async () => {
+    answers[0]?.({ failure: TASK_CALL_FAILURE.REPOSITORY_NOT_REACHABLE });
+    refused = await note;
+  });
+  assert.ok(refused !== undefined);
+  assert.equal(tab.control().starting, undefined, "the page gives way");
+  assert.equal(tab.control().newTask.open, true, "the card opens again");
+  assert.deepEqual(tab.control().newTask.preset?.refused, { card, note: refused });
+  assert.equal(tab.control().history.open, true, "the version history stands behind it again");
+});
+
+test("Create with an agent opens New task's card for an automation's agent over the Automations page, and a start refused after it closed opens the same card again, the page behind it", async () => {
+  const answers: Array<(answer: PortActResult<typeof ACT_KIND.TASKS_START>) => void> = [];
+  const tab = mount(
+    { shown: true, tasks: OPEN },
+    { [ACT_KIND.TASKS_START]: () => new Promise((resolve) => answers.push(resolve)) },
+  );
+  act(() => tab.control().automationsView.onOpen());
+  act(() => tab.control().onNewAutomationAgent());
+  assert.equal(tab.control().newTask.open, true);
+  assert.deepEqual(tab.control().newTask.preset, { purpose: NEW_TASK_PURPOSE.AUTOMATION });
+  assert.equal(tab.control().automationsView.open, true, "the page stands behind the card");
+
+  const handed = {
+    idempotencyKey: AGENT_KEY,
+    prompt: "# Create an automation",
+    attachments: [],
+    choice: undefined,
+  };
+  const card = {
+    purpose: NEW_TASK_PURPOSE.AUTOMATION,
+    repository: "acme/web",
+    links: [],
+    choice: undefined,
+    press: {
+      key: AGENT_KEY,
+      ask: { name: "", repository: "acme/web", workspaceId: undefined, issues: [], agent: handed },
+    },
+  };
+  let note: Promise<string | undefined> = Promise.resolve(undefined);
+  act(() => {
+    note = tab.control().newTask.start("", "acme/web", undefined, { handed, card });
+  });
+  assert.equal(tab.control().newTask.open, false);
+  await act(async () => {
+    answers[0]?.({ failure: TASK_CALL_FAILURE.REPOSITORY_NOT_REACHABLE });
+    await note;
+  });
+  assert.equal(tab.control().newTask.open, true, "the card opens again");
+  assert.equal(
+    tab.control().newTask.preset?.purpose,
+    NEW_TASK_PURPOSE.AUTOMATION,
+    "for an automation's agent",
+  );
+  assert.equal(tab.control().automationsView.open, true, "the page stands behind it again");
+});
+
 test("an agent refused as New task's Agent mode started its task opens the task on a draft holding the words, model, and why, whose Retry starts the agent on that task under the start's key", async () => {
   const started = { ...RUNNING_AGENT, planId: OTHER_TASK_ID };
   // The service holds the agent once its own Start made it.
@@ -3550,7 +3681,10 @@ test("Mark done's Undo leaves a status chosen since alone, though that choice is
 /** A registry whose atoms count on this clock, as the window's count on its own. */
 function registryOn(clock: Clock.Clock): AtomRegistry {
   return AtomRegistryModule.make({
-    initialValues: [[rendererRuntime, AsyncResult.success(Context.make(Clock.Clock, clock))]],
+    initialValues: [
+      [rendererRuntime, AsyncResult.success(Context.make(Clock.Clock, clock))],
+      [timeRuntime, AsyncResult.success(Context.make(Clock.Clock, clock))],
+    ],
   });
 }
 

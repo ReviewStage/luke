@@ -20,6 +20,7 @@ import {
   EmptyState,
   ERROR_STATE_PLACEMENT,
   ErrorState,
+  Fill,
   GAP,
   IconButton,
   ResetIcon,
@@ -31,6 +32,7 @@ import {
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
+  Tooltip,
   useConfirmDialog,
 } from "@luke/ui";
 import type { PersonActor } from "@luke/ui/actor-model";
@@ -42,7 +44,6 @@ import type { TaskReader } from "../tasks/edit-ref.js";
 import { PlanBody } from "../tasks/plan-body.js";
 import type { PlanEditDoor } from "../tasks/use-plan-editing.js";
 import { TOAST_TONE, useToast } from "../toast.js";
-import { Tooltip } from "../tooltip.js";
 
 /**
  * plan-template-page.tsx -- Settings › Plan template: the Markdown every new plan starts as a copy of, drawn and edited as a plan is.
@@ -372,7 +373,7 @@ function TemplateDocument({
   const reset = useConfirmDialog({ subject: template.custom, surfaceOpen: true }, template.reset);
   return (
     <>
-      <div className="desktop-document template-document ph-no-capture">
+      <Fill className="desktop-document template-document ph-no-capture">
         <PlanBody
           task={templateDocument(template.text, template.lastEdit)}
           live={false}
@@ -390,7 +391,7 @@ function TemplateDocument({
             note: <TemplateNote />,
           }}
         />
-      </div>
+      </Fill>
       <ConfirmDialog confirm={reset} question={RESET_QUESTION} />
     </>
   );
@@ -441,18 +442,18 @@ function TemplateState({
 }): React.JSX.Element {
   if (!signedIn) {
     return (
-      <div className="desktop-empty-region">
+      <Fill className="desktop-empty-region">
         <EmptyState>{PAGE_LINE.SIGNED_OUT}</EmptyState>
-      </div>
+      </Fill>
     );
   }
   if (template.read === TEMPLATE_READ.FAILED) {
     return (
-      <div className="desktop-empty-region">
+      <Fill className="desktop-empty-region">
         <ErrorState onRetry={template.retry} placement={ERROR_STATE_PLACEMENT.CENTRED}>
           {PAGE_LINE.READ_FAILED}
         </ErrorState>
-      </div>
+      </Fill>
     );
   }
   // While the read is out the page's name stands where every page's does, the template's blocks under it.

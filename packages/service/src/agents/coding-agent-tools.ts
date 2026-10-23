@@ -1267,7 +1267,7 @@ function startRefusalWords(refusal: HostedRefusal): string {
 }
 
 /** A choice the catalog refused, the one named or the member's stored default, said with every model offered and the efforts each lists, so the model can try again or ask. */
-function choiceRefusal(
+export function choiceRefusal(
   choice: ModelChoice | undefined,
   offered: readonly OfferedModel[],
   lead = "Not started",
@@ -1936,11 +1936,18 @@ const sectionAsked = (
     });
   });
 
-/** Whether every change named already stands on the task as its member reads it. */
-function changesStand(task: StoredTask["task"], changes: TaskChanges): boolean {
+/**
+ * Whether every change named already stands on the task as its member reads
+ * it. Note that a repository confirmed again stands only where it is reached
+ * as the task records it, because the write records the access it was reached
+ * through.
+ */
+function changesStand(stored: StoredTask, changes: TaskChanges): boolean {
+  const { task } = stored;
   return (
     (changes.name === undefined || changes.name === task.name) &&
     (changes.repository === undefined || changes.repository === task.repository) &&
+    (changes.githubAccess === undefined || changes.githubAccess === stored.githubAccess) &&
     (changes.pinned === undefined || changes.pinned === (task.pinnedAt !== undefined)) &&
     (changes.status === undefined || changes.status === task.status) &&
     (changes.priority === undefined || changes.priority === task.priority) &&
@@ -2104,7 +2111,7 @@ export function runUpdateTask(
         return agentToolRejected(relinked.failure);
       }
       const already =
-        changesStand(read.value.task, asWritten) &&
+        changesStand(read.value, asWritten) &&
         (placing?.success.stands ?? true) &&
         (relinked === undefined || issueChangesStand(relinked.success));
       // The task's change and its place in the sidebar are one transaction, so a place refused, its

@@ -13,9 +13,21 @@ import {
   type PlanSectionEdit,
   type Task,
 } from "@luke/features/task-wire";
-import { Button, EllipsisIcon, IconButton, TextButton, useMenu, VisuallyHidden } from "@luke/ui";
+import {
+  Button,
+  EllipsisIcon,
+  IconButton,
+  SavedTick,
+  TEXT_BUTTON_LINES,
+  TextButton,
+  Tooltip,
+  useMenu,
+  useMinute,
+  VisuallyHidden,
+} from "@luke/ui";
 import { actorName } from "@luke/ui/actor-model";
 import { commentSpansIn, usePlanCommentsControl } from "@luke/ui/plan-comments";
+import { agoText, momentText, sinceText } from "@luke/ui/time-format";
 import { LinkIcon } from "lucide-react";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ActorStack } from "../actor-ref.js";
@@ -33,7 +45,6 @@ import {
 import { useCreator } from "../member-directory.js";
 import type { PlanEditorHandle } from "../plan-editor/contract.js";
 import { useSteadyDoor } from "../steady-door.js";
-import { Tooltip } from "../tooltip.js";
 import { prefersReducedMotion } from "../use-reduced-motion.js";
 import { DocumentByline, DocumentScroll } from "./document-frame.js";
 import {
@@ -73,7 +84,6 @@ import {
   type UnitView,
 } from "./task-reveal.js";
 import { TaskKeyLine, TaskStandingChips, type TaskStandingDoor } from "./task-standing.js";
-import { agoText, momentText, sinceText, useMinute } from "./task-time.js";
 import { TaskTitle } from "./task-title.js";
 import { useOpenLink } from "./use-open-link.js";
 import { EDITOR_PLACE, type PlanEditDoor, usePlanEditing } from "./use-plan-editing.js";
@@ -229,12 +239,15 @@ function EditTime({
   label,
   onShow,
   short = false,
+  whole = false,
 }: {
   at: number;
   /** What the press is called, from how long ago the edit was, "2 hours ago". */
   label: (ago: string) => string;
   onShow: (() => void) | undefined;
   short?: boolean;
+  /** Whether its press is drawn whole, a finger's press on a coarse pointer, as the byline's is. */
+  whole?: boolean;
 }): React.JSX.Element {
   // Note that the time reads the minute itself, so the minute draws it again and not the section it stands in.
   const now = useMinute();
@@ -244,6 +257,7 @@ function EditTime({
       <span>{words}</span>
     ) : (
       <TextButton
+        lines={whole ? TEXT_BUTTON_LINES.WHOLE : TEXT_BUTTON_LINES.ONE}
         aria-label={label(agoText(at, now))}
         // The pointer on the time is the way to the history, so its chunk is read now rather than at the press.
         onPointerEnter={VERSION_HISTORY.prefetch}
@@ -308,11 +322,14 @@ function PlanByline({
   task,
   edit,
   place,
+  saves,
   onShowHistory,
 }: {
   task: Task;
   edit: PlanLastEdit | undefined;
   place: EditPlace;
+  /** How many of the reader's saves of this plan landed, which its Saved tick confirms. */
+  saves: number;
   onShowHistory: ShowHistory | undefined;
 }): React.JSX.Element {
   // Note that the creator is named as the task's ⋯ names them, so a task the service names by its owner's id alone is still the reader's own.
@@ -335,10 +352,12 @@ function PlanByline({
               at={edit.at}
               label={editedLabel}
               onShow={onShowHistory === undefined ? undefined : () => onShowHistory(undefined)}
+              whole
             />
           </>
         )
       }
+      saved={<SavedTick saves={saves} />}
     />
   );
 }
@@ -1325,7 +1344,13 @@ export const PlanBody = memo(function PlanBody({
                   <TaskStandingChips task={task} onSet={taskStanding.onSet} />
                 )}
                 {underTitle}
-                <PlanByline task={task} edit={edited} place={place} onShowHistory={onShowHistory} />
+                <PlanByline
+                  task={task}
+                  edit={edited}
+                  place={place}
+                  saves={editing.saves}
+                  onShowHistory={onShowHistory}
+                />
                 <ChangedLine looks={looks} marks={marks} />
               </>
             ) : null}

@@ -53,7 +53,7 @@ import {
   planCommentStartRequestSchema,
 } from "./plan-comment-wire.js";
 import { type PlanEditAnswer, type PlanEditRequest, planEditRequestSchema } from "./plan-edit.js";
-import { planAttachmentPath, type RepositoryPlace } from "./service-paths.js";
+import { planAttachmentPath, type RepositoryPlace, type SkillsPlace } from "./service-paths.js";
 import {
   HOSTED_API_ERROR,
   type HostedApiError,
@@ -74,6 +74,7 @@ import {
   type RepositoryPinsWritten,
   repositoryPinRequestSchema,
   TASK_LIST_ARCHIVED,
+  TASK_SKILLS_INSTALLED,
   type Task,
   type TaskCreateRequest,
   type TaskFileAnswer,
@@ -621,7 +622,9 @@ export class HostedTaskClient {
   readSkills(
     taskId: string,
   ): Effect.Effect<TaskSkillsAnswer | undefined, never, HttpClient.HttpClient> {
-    return orNothing(askHosted(this.#hosted.taskFiles.skills, { id: taskId }));
+    return orNothing(
+      askHosted(this.#hosted.taskFiles.skills, { id: taskId, installed: TASK_SKILLS_INSTALLED }),
+    );
   }
 
   /**
@@ -649,9 +652,14 @@ export class HostedTaskClient {
 
   /** The skills a developer may choose of a repository the workspace's installation reaches, as `readSkills` reads a plan's; nothing where the service did not answer. */
   readRepositorySkills(
-    place: RepositoryPlace,
+    place: SkillsPlace,
   ): Effect.Effect<TaskSkillsAnswer | undefined, never, HttpClient.HttpClient> {
-    return orNothing(askHosted(this.#hosted.github.repositorySkills, { ...place }));
+    return orNothing(
+      askHosted(this.#hosted.github.repositorySkills, {
+        ...place,
+        installed: TASK_SKILLS_INSTALLED,
+      }),
+    );
   }
 
   /** One pull request of a repository the workspace's installation reaches, by its number, or null where there is none to draw; nothing where the service did not answer. */

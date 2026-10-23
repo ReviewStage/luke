@@ -5,6 +5,7 @@ import {
   type BreadcrumbShown,
   Breadcrumbs,
   type Crumb,
+  Fill,
   MENU_DROP,
   MenuSurface,
 } from "@luke/ui";
@@ -14,7 +15,6 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { TREE_LOAD_FAILED, useSideBundles } from "../bundle-loader.js";
 import type { ReadFolder } from "../file-tree/contract.js";
-import { Tooltip } from "../tooltip.js";
 
 /**
  * file-breadcrumbs.tsx -- a File tab's path as breadcrumbs: the repository, then each folder the file stands in, then the file, each a press that opens the tree where it stands.
@@ -200,7 +200,7 @@ function CrumbTree({
           {AsyncResult.isFailure(loaded) ? TREE_LOAD_FAILED : "Reading the files…"}
         </p>
       ) : (
-        <div className="file-tree-host" ref={host} />
+        <Fill className="file-tree-host" ref={host} />
       )}
     </MenuSurface>,
     document.body,
@@ -299,7 +299,7 @@ export function FileBreadcrumbs({
 
   return (
     <>
-      <Breadcrumbs label="Path" crumbs={crumbs} hint={Tooltip} />
+      <Breadcrumbs label="Path" crumbs={crumbs} />
       {opened === undefined ? null : (
         <CrumbTree
           key={opened.at}

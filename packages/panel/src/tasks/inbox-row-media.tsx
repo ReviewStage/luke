@@ -1,5 +1,6 @@
 import { type PageLine, type PagePlace, pagePlaceId } from "@luke/features/page-wire";
 import { ACT_KIND } from "@luke/host/acts";
+import { PAGE_THUMB_SIZE, PageThumb } from "@luke/ui";
 import { AppWindowIcon, ImageOffIcon } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAct } from "../act.js";
@@ -159,19 +160,9 @@ export function useRowMediaReads(
 
 /** One picture's tile: the picture once read, its glyph where the read did not answer. */
 function ImageTile({ image }: { image: InboxImage | undefined }): React.JSX.Element {
-  if (image === undefined) return <span className="inbox-row-media-tile" />;
-  if ("failed" in image) {
-    return (
-      <span className="inbox-row-media-tile" data-missing="">
-        <ImageOffIcon />
-      </span>
-    );
-  }
-  return (
-    <span className="inbox-row-media-tile">
-      <img className="inbox-row-media-image" src={image.url} alt="" draggable={false} />
-    </span>
-  );
+  if (image === undefined) return <PageThumb size={PAGE_THUMB_SIZE.ROW} />;
+  if ("failed" in image) return <PageThumb size={PAGE_THUMB_SIZE.ROW} glyph={<ImageOffIcon />} />;
+  return <PageThumb size={PAGE_THUMB_SIZE.ROW} image={image.url} />;
 }
 
 /** One page's tile: its newest version drawn small and inert once its place's pages are read, its glyph where they hold no such page. */
@@ -184,33 +175,19 @@ function PageTile({
   pageId: string;
   read: PageRead | undefined;
 }): React.JSX.Element {
-  // Note that what loaded is kept by its address, so a newer version's frame holds its place again until it loads.
-  const [loadedFrom, setLoadedFrom] = useState<string | undefined>(undefined);
-  if (read === undefined) return <span className="inbox-row-media-tile" />;
+  if (read === undefined) return <PageThumb size={PAGE_THUMB_SIZE.ROW} />;
   const page = read === "failed" ? undefined : read.find((each) => each.id === pageId);
-  if (page === undefined) {
-    return (
-      <span className="inbox-row-media-tile" data-missing="">
-        <AppWindowIcon />
-      </span>
-    );
-  }
-  const src = appPlatform().pageFrameUrl({ ...place, pageId, version: page.version });
+  if (page === undefined) return <PageThumb size={PAGE_THUMB_SIZE.ROW} glyph={<AppWindowIcon />} />;
   return (
-    <span className="inbox-row-media-tile ph-no-capture" data-loaded={String(loadedFrom === src)}>
-      <iframe
-        className="inbox-row-media-frame"
-        title={page.title}
-        src={src}
-        sandbox={PAGE_SANDBOX}
-        allow=""
-        referrerPolicy="no-referrer"
-        loading="lazy"
-        tabIndex={-1}
-        aria-hidden="true"
-        onLoad={() => setLoadedFrom(src)}
-      />
-    </span>
+    <PageThumb
+      size={PAGE_THUMB_SIZE.ROW}
+      frame={{
+        title: page.title,
+        src: appPlatform().pageFrameUrl({ ...place, pageId, version: page.version }),
+        sandbox: PAGE_SANDBOX,
+        lazy: true,
+      }}
+    />
   );
 }
 

@@ -3,7 +3,15 @@ import { planAttachmentAddress, planAttachmentOf } from "@luke/features/plan-att
 import { PICTURE_KEEP_FAILURE } from "@luke/features/tasks-view";
 import { ACT_KIND } from "@luke/host/acts";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
-import { BUTTON_VARIANT, ErrorState, FormField, TextField, useFilePicker } from "@luke/ui";
+import {
+  BUTTON_VARIANT,
+  ErrorState,
+  FoldingButton,
+  FormField,
+  Spinner,
+  TextField,
+  useFilePicker,
+} from "@luke/ui";
 import { keepPictureRead, PICTURE_STATE, usePicture } from "@luke/ui/picture-cache";
 import { CaptionsIcon, Maximize2Icon, TextCursorInputIcon, Trash2Icon } from "lucide-react";
 import { type ReactNode, useCallback, useLayoutEffect, useRef, useState } from "react";
@@ -11,7 +19,6 @@ import { createPortal } from "react-dom";
 import { useAct } from "../act.js";
 import { useAppCommand } from "../app-commands.js";
 import { encodeImage } from "../feedback-images.js";
-import { FoldingButton } from "../folding-button.js";
 import { PictureBlock } from "../picture-block.js";
 import type {
   PictureNode,
@@ -20,7 +27,6 @@ import type {
   PlanEditorHandle,
   PlanEditorPictures,
 } from "../plan-editor/contract.js";
-import { Spinner } from "../spinner.js";
 import { documentScrollerOf } from "./document-frame.js";
 import { type PlanPicturesDoor, usePlanPicturesDoor } from "./plan-pictures.js";
 
@@ -143,7 +149,7 @@ function UploadingPicture({
       </span>
       {upload?.kind === UPLOAD.SENDING ? (
         <span className="picture-status">
-          <Spinner label={UPLOAD_WORDS.SENDING} />
+          <Spinner delay label={UPLOAD_WORDS.SENDING} />
           <span>{UPLOAD_WORDS.SENDING}</span>
         </span>
       ) : (

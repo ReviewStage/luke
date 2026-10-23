@@ -6,19 +6,23 @@ import {
   type DialogConfirm,
   type DialogQuestion,
   ErrorState,
+  Fill,
+  ONE_LINE_ELEMENT,
+  ONE_LINE_END,
+  OneLine,
   Skeleton,
   SkeletonRegion,
+  Tooltip,
   useConfirmDialog,
 } from "@luke/ui";
+import { dayAndTimeText, momentText } from "@luke/ui/time-format";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import { MarkdownMessage } from "../markdown-message.js";
 import { TOAST_HOLD, TOAST_TONE, type ToastNotice, UNDO_LABEL } from "../toast.js";
-import { Tooltip } from "../tooltip.js";
 import { DocumentScroll } from "./document-frame.js";
 import { VERSION_CHANGE, type VersionDiff, versionDiff } from "./plan-history-model.js";
 import { PlanPictures, usePlanPictureDrawer } from "./plan-pictures.js";
 import { type MentionedTask, useMentionLink } from "./task-mentions.js";
-import { dayAndTimeText, momentText } from "./task-time.js";
 import { TaskTitle } from "./task-title.js";
 import { useOpenLink } from "./use-open-link.js";
 import { HISTORY_READ, type PlanHistoryControl, type ViewedVersion } from "./use-plan-history.js";
@@ -275,13 +279,17 @@ export function VersionView({
       <header className="desktop-toolbar">
         {lead}
         <div className="desktop-toolbar-heading">
-          <h1 className="desktop-toolbar-title">
+          <OneLine
+            as={ONE_LINE_ELEMENT.H1}
+            end={ONE_LINE_END.ELLIPSIS}
+            className="desktop-toolbar-title"
+          >
             <Tooltip label={momentText(line.lastEdit.at)}>
               <time dateTime={new Date(line.lastEdit.at).toISOString()}>
                 {dayAndTimeText(line.lastEdit.at)}
               </time>
             </Tooltip>
-          </h1>
+          </OneLine>
         </div>
         <div className="desktop-toolbar-actions">
           <Tooltip label={viewing.current ? CURRENT_HINT : undefined}>
@@ -296,11 +304,11 @@ export function VersionView({
           </Tooltip>
         </div>
       </header>
-      <div className="desktop-document">
+      <Fill className="desktop-document">
         <DocumentScroll>
           <VersionContent viewing={viewing} title={title} section={section} task={task} />
         </DocumentScroll>
-      </div>
+      </Fill>
       <ConfirmDialog confirm={restore} question={restoreQuestion(line.lastEdit.at, noun)} />
     </>
   );

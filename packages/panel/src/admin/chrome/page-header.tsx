@@ -7,6 +7,9 @@ import {
   CollectionPage,
   type CollectionState,
   DetailPage,
+  ONE_LINE_ELEMENT,
+  ONE_LINE_END,
+  OneLine,
   PAGE_FRAME,
   TEXT_ELEMENT,
   TEXT_TONE,
@@ -119,7 +122,13 @@ function AdminToolbar({
       {lead}
       <div className="desktop-toolbar-heading flex items-baseline gap-(--luke-space-8) in-data-[room=narrow]:min-h-(--luke-control-height) in-data-[room=narrow]:basis-auto! in-data-[room=narrow]:items-center">
         {back === undefined ? (
-          <h1 className="desktop-toolbar-title">{title}</h1>
+          <OneLine
+            as={ONE_LINE_ELEMENT.H1}
+            end={ONE_LINE_END.ELLIPSIS}
+            className="desktop-toolbar-title"
+          >
+            {title}
+          </OneLine>
         ) : (
           <WayBackHeading title={title} back={back} />
         )}

@@ -1,5 +1,5 @@
 import type { Element as HastElement, Nodes, Properties, RootContent } from "hast";
-import { toHtml as hastToHtml } from "hast-util-to-html";
+import { toHtml as writeHast } from "hast-util-to-html";
 
 /**
  * inline-styles.ts -- the styles Pierre's diffs writes as markup, carried and applied through the CSSOM, which the panel's policy admits.
@@ -57,12 +57,21 @@ function restyledContent(node: RootContent): RootContent {
 }
 
 /** `toHtml`, with every inline style written in `INLINE_STYLE_ATTRIBUTE`. */
-export function toHtml(tree: Tree, options?: Parameters<typeof hastToHtml>[1]): string {
-  if (Array.isArray(tree)) return hastToHtml(tree.map(restyledContent), options);
+export function toHtml(tree: Tree, options?: Parameters<typeof writeHast>[1]): string {
+  if (Array.isArray(tree)) return writeHast(tree.map(restyledContent), options);
   if (tree.type === "root") {
-    return hastToHtml({ ...tree, children: tree.children.map(restyledContent) }, options);
+    return writeHast({ ...tree, children: tree.children.map(restyledContent) }, options);
   }
-  return hastToHtml(tree.type === "element" ? restyledElement(tree) : tree, options);
+  return writeHast(tree.type === "element" ? restyledElement(tree) : tree, options);
+}
+
+/**
+ * Pierre's own writer (`@pierre/diffs`'s `utils/hastToHtml.js`), answered
+ * with `toHtml`, since Pierre's writes most elements itself, styles as
+ * markup, and hands `hast-util-to-html` only what it does not.
+ */
+export function hastToHtml(tree: Tree): string {
+  return toHtml(tree);
 }
 
 /** Sets the inline style written at and under `element` through the CSSOM. */

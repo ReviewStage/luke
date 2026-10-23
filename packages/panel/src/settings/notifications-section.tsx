@@ -1,5 +1,13 @@
 import { SETTINGS_PAGE as SCHEMA_SETTINGS_PAGE, type SettingsRowsInput } from "@luke/settings";
-import { BUTTON_VARIANT, Button, ExternalIcon, SettingsRow, SettingsSection } from "@luke/ui";
+import {
+  BUTTON_VARIANT,
+  Button,
+  ExternalIcon,
+  SETTINGS_ROW_STATE,
+  SettingsRow,
+  SettingsRowStateLine,
+  SettingsSection,
+} from "@luke/ui";
 import {
   NOTIFICATIONS_GRANTOR,
   NOTIFICATIONS_STATUS,
@@ -76,9 +84,9 @@ export function NotificationsSection({
           <>
             {words.when}
             {control.status === NOTIFICATIONS_STATUS.ON ? (
-              <span className="settings-state settings-state-line" data-state="connected">
+              <SettingsRowStateLine state={SETTINGS_ROW_STATE.CONNECTED} block>
                 {words.on}
-              </span>
+              </SettingsRowStateLine>
             ) : null}
           </>
         }
@@ -95,9 +103,9 @@ export function NotificationsSection({
         <SettingsRow
           label={null}
           description={
-            <span className="settings-state" data-state="attention">
+            <SettingsRowStateLine state={SETTINGS_ROW_STATE.ATTENTION}>
               {words.off}
-            </span>
+            </SettingsRowStateLine>
           }
         >
           {opensSettings

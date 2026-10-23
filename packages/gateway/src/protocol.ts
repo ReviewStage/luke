@@ -127,6 +127,12 @@ export const GATEWAY_METHOD = {
   WORKSPACES_LINEAR_DISCONNECT: "workspaces.linearDisconnect",
   /** The Linear issues a workspace's connection reaches, read from the service now; answered to the caller, never held in the view. */
   WORKSPACES_LINEAR_ISSUES: "workspaces.linearIssues",
+  /** Whether the deployment holds Luke's Sentry integration, and a workspace's installations of it, read from the service now; answered to the caller, never held in the view. */
+  WORKSPACES_SENTRY: "workspaces.sentry",
+  /** A workspace's Sentry install begun on the service by an owner or admin: Sentry's install address, for the caller to open. */
+  WORKSPACES_SENTRY_INSTALL: "workspaces.sentryInstall",
+  /** One of a workspace's Sentry installations disconnected on the service, answered with the workspace's Sentry as it then stands. */
+  WORKSPACES_SENTRY_DISCONNECT: "workspaces.sentryDisconnect",
   /** One workspace's members, read from the service now; answered to the caller, never held in the view. */
   WORKSPACES_MEMBERS: "workspaces.members",
   /**
@@ -239,6 +245,20 @@ export const GATEWAY_METHOD = {
   AUTOMATIONS_FOLLOW: "automations.follow",
   /** A followed list or history let go: no more `AUTOMATIONS_CHANGED` events of it until it is followed again. */
   AUTOMATIONS_UNFOLLOW: "automations.unfollow",
+  /** The skills the account sees in a workspace, the workspace's then its own, read from the service now; or why there are none. */
+  INSTALLED_SKILLS_LIST: "installedSkills.list",
+  /** What a pasted `skills add` command or skill text would install, read by the service; nothing is written. */
+  INSTALLED_SKILLS_PREVIEW: "installedSkills.preview",
+  /** The skills a paste makes, installed for the account or its workspace, all or none; or why none were. */
+  INSTALLED_SKILLS_INSTALL: "installedSkills.install",
+  /** One installed skill turned on or off; the skill as it then stands, or why it is unchanged. */
+  INSTALLED_SKILLS_SET_ENABLED: "installedSkills.setEnabled",
+  /** Whether a GitHub skill's folder moved at its ref since it was installed. */
+  INSTALLED_SKILLS_CHECK_UPDATE: "installedSkills.checkUpdate",
+  /** A GitHub skill's files read again at its ref; the skill as it then stands, or why it is unchanged. */
+  INSTALLED_SKILLS_UPDATE: "installedSkills.update",
+  /** One installed skill removed with its files; or why it stands. */
+  INSTALLED_SKILLS_REMOVE: "installedSkills.remove",
   CODING_AGENTS_PULL_REQUEST: "codingAgents.pullRequest",
   /** One agent's changes: the files of its pull request as GitHub holds them now, each with its patch. */
   CODING_AGENTS_CHANGES: "codingAgents.changes",

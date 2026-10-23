@@ -46,6 +46,7 @@ import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { handState } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { followedInboxes } from "../testing/followed-inboxes.js";
+import { restOn } from "../testing/hint-rest.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { tasksControl, waitingOf } from "../testing/tasks-control.js";
 import { DesktopInbox } from "./desktop-inbox.js";
@@ -249,6 +250,9 @@ async function inbox(
       [],
       [FUNNEL.id],
       taskAgents.agentIds,
+      undefined,
+      undefined,
+      taskAgents.heldIds,
     );
     control = sidePanel;
     // The window's keymap, which hears a chord as the window's root mounts it.
@@ -443,9 +447,9 @@ test("a click into a Browser tab's page beside the Inbox hands the panel the key
   assert.deepEqual(panelTabs(container), ["▸ invites.ts"]);
 });
 
-test("closing the last tab drawn beside the Inbox shuts the panel, as on a task's page, though the task keeps an archived agent's Pull request tab", async () => {
+test("an archived agent's Pull request tab stands beside the Inbox as any other, and closing the last tab drawn shuts the panel, as on a task's page", async () => {
   const { container, panel } = await inbox();
-  // The archived agent's tab, as one opened on the task's page before the agent was archived, which no strip draws.
+  // The archived agent's tab, as one opened on the task's page before the agent was archived, which still draws its pull request.
   act(() => panel().onChoose({ changes: ARCHIVED.id }));
   await settle();
   await pressChip(container, "relay#42");
@@ -522,4 +526,15 @@ test("an agent the item names reads beside the Inbox as the panel's preview, its
   } finally {
     stop();
   }
+});
+
+test("an agent's tab beside the Inbox hangs the agent's card, as its tab in the task's column does", async () => {
+  const { container } = await inbox();
+  await pressChip(container, "Batch the invitations");
+  const tab = container.querySelector<HTMLElement>('aside[aria-label="Panel"] [role="tab"]');
+  assert.ok(tab, "the agent's tab stands beside the Inbox");
+  restOn(tab);
+  const card = document.querySelector(".luke-tooltip-card [data-tab-card]");
+  assert.ok(card, "the agent's card is hung");
+  assert.equal(card.querySelector(".luke-hover-card-name")?.textContent, "Batch the invitations");
 });

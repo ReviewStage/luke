@@ -46,7 +46,7 @@ test("a version written while the card stands is hidden until it loads, never th
         onRegistry(AtomRegistry.make(), createElement(PageCard, { place: { taskId: TASK }, page })),
       ),
     );
-  const preview = () => container.querySelector<HTMLElement>(".page-card-preview");
+  const preview = () => container.querySelector<HTMLElement>(".luke-page-thumb");
   const load = () =>
     act(() => {
       container.querySelector("iframe")?.dispatchEvent(new Event("load"));

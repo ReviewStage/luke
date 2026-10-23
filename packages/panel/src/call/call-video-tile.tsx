@@ -34,13 +34,13 @@ import {
   ResetIcon,
   SKELETON_SHAPE,
   Skeleton,
+  ThinkingDots,
   VideoIcon,
   VideoOffIcon,
   WingFace,
 } from "@luke/ui";
 import { AVATAR_STATUS, type AvatarStatus } from "@luke/voice/avatar";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ThinkingDots } from "../thinking-dots.js";
 
 /** What the tile says, for a reader and on screen. */
 export const CALL_VIDEO_LABEL = {
@@ -151,7 +151,12 @@ function AvatarStill({
   return (
     <div className="call-video-still">
       <span className="call-video-face" aria-hidden="true">
-        <WingFace motion={waiting ? FACE_MOTION.MONITORING : undefined} repeat={waiting} />
+        <WingFace
+          motion={waiting ? FACE_MOTION.MONITORING : undefined}
+          repeat={waiting}
+          muted
+          fill
+        />
       </span>
       {children}
     </div>

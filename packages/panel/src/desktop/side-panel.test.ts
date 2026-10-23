@@ -125,6 +125,29 @@ test("a pull request named by its number opens a Pull request tab of its own for
   });
 });
 
+test("an archived agent's merged pull request is offered as any other, in the order its agent started", () => {
+  const read = agents();
+  const merged = { ...pullRequest(40, "Invite emails"), state: PULL_REQUEST_STATE.MERGED };
+  const gone = {
+    ...agent("2f4d6b8c-0e3a-4c7f-9b2d-4f6a8c0e2b4d", "Invite emails", 0),
+    archivedAt: 5,
+  };
+  const control = {
+    ...read,
+    archived: [gone],
+    pullRequests: new Map([...read.pullRequests, [gone.id, merged]]),
+  };
+  assert.deepEqual(
+    changesOffers(control).map((offer) => [offer.agentId, offer.pullRequest.state]),
+    [
+      [gone.id, PULL_REQUEST_STATE.MERGED],
+      [FIRST.id, PULL_REQUEST_STATE.OPEN],
+      [THIRD.id, PULL_REQUEST_STATE.OPEN],
+    ],
+  );
+  assert.deepEqual(changesTabOf(control, gone.id, []), { changes: gone.id });
+});
+
 test("a shared pull request whose later agent's tab opened before the earlier agent's read landed keeps that one tab", () => {
   // Read apart, the later agent's snapshot of the shared pull request is the newer one.
   const newer = { ...pullRequest(41, "Teammate invitations, with expiry"), changedFiles: 9 };

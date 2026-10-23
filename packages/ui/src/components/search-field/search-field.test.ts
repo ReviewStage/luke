@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import { act, createElement, type ReactElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
+import { holdExits } from "../../testing/held-exits.js";
 import { ComboboxList, comboboxOptionId } from "../combobox/combobox.js";
 import { useComboboxField } from "../combobox/use-combobox-field.js";
 import { SEARCH_FIELD_LOOK, SearchField, type SearchTally } from "./search-field.js";
@@ -14,7 +15,8 @@ import { SEARCH_FIELD_LOOK, SearchField, type SearchTally } from "./search-field
  * caller's callbacks and never while an input method is composing, keeps an
  * Escape it answers from the surface behind it, says its tally while a query
  * stands, shows its chord while empty, and clears a query through its clear
- * button, handing the caret back. A search that steers a list under it
+ * button, handing the caret back, the clear held out of reach through its
+ * exit and the chord back once it is gone. A search that steers a list under it
  * is named as that list's combobox and hands its keys to it.
  */
 
@@ -192,6 +194,29 @@ test("Clear search empties the query and hands the caret back to the field", () 
   assert.equal(field.value, "");
   assert.equal(document.activeElement, field);
   assert.equal(clear(), null);
+});
+
+test("the clear leaves out of reach through its exit once the field is empty, and the chord comes back after", () => {
+  const exits = holdExits();
+  try {
+    const page = render(createElement(Held, { clears: true }));
+    const field = fieldOf(page);
+    const clear = () => page.querySelector<HTMLButtonElement>('button[aria-label="Clear search"]');
+    const chord = () => page.querySelector("kbd");
+
+    type(field, "d");
+    assert.equal(clear()?.getAttribute("data-leaving"), null, "arrives with the first character");
+    type(field, "");
+    assert.equal(clear()?.getAttribute("data-leaving"), "true", "drawn through its exit");
+    assert.equal(clear()?.hasAttribute("inert"), true);
+    assert.equal(chord(), null);
+
+    act(() => exits.finish());
+    assert.equal(clear(), null);
+    assert.equal(chord()?.textContent, "⌘F");
+  } finally {
+    exits.restore();
+  }
 });
 
 /** A menu's search over two rows, steering them while the caret stays in it, writing down what it chose. */

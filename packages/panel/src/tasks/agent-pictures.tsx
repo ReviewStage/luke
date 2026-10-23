@@ -14,9 +14,12 @@ import {
   AttachmentChip,
   type AttachmentChipState,
   PictureTile,
+  SPINNER_SIZE,
+  Spinner,
   TEXT_ELEMENT,
   TEXT_VARIANT,
   Text,
+  Tooltip,
 } from "@luke/ui";
 import {
   PICTURE_STATE,
@@ -38,8 +41,6 @@ import {
 } from "react";
 import { useAct } from "../act.js";
 import { PictureBlock } from "../picture-block.js";
-import { SPINNER_SIZE, Spinner } from "../spinner.js";
-import { Tooltip } from "../tooltip.js";
 import { useAddToPlan } from "./add-to-plan.js";
 import { AttachedFileChips, messageFileChips } from "./attached-file-chips.js";
 import { AttachmentViewer, type ViewerAction } from "./attachment-viewer.js";
@@ -265,7 +266,7 @@ function TileFace({ state, words }: { state: PictureState | undefined; words: st
     );
   }
   if (state?.kind === PICTURE_STATE.MISSING) return <ImageOffIcon aria-hidden="true" />;
-  return <Spinner label="Reading the picture" size={SPINNER_SIZE.INLINE} />;
+  return <Spinner delay label="Reading the picture" size={SPINNER_SIZE.INLINE} />;
 }
 
 /** A tile's picture read through the cache; none for a picture the call has not answered yet. */

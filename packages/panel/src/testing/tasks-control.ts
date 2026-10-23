@@ -198,6 +198,7 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
   return {
     page: TASKS_PAGE.HOME,
     restoring: false,
+    starting: undefined,
     resting: false,
     shown: true,
     signedIn: true,
@@ -417,6 +418,7 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
     onRetryDocument: ignore,
     onNewTask: ignore,
     onNewTaskIn: ignore,
+    onNewAutomationAgent: ignore,
     newTask: {
       open: false,
       preset: undefined,

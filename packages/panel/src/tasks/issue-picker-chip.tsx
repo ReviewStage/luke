@@ -15,8 +15,11 @@ import {
   TEXT_ELEMENT,
   TEXT_VARIANT,
   Text,
+  Tooltip,
+  useMinute,
 } from "@luke/ui";
 import { type LinearIssuesAsk, linearIssuesAskOf, offeredIssues } from "@luke/ui/tasks-model";
+import { sinceText } from "@luke/ui/time-format";
 import { useDisclosure } from "@luke/ui/use-disclosure";
 import { Duration, Effect } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
@@ -26,13 +29,11 @@ import { appPlatform } from "../app-platform.js";
 import { rendererRuntime } from "../renderer-runtime.js";
 import { type MenuRow, SearchableMenu } from "../searchable-menu.js";
 import { PICKER_ALIGN, type PickerAlign, usePickerPlacement } from "../settings/picker-row.js";
-import { Tooltip } from "../tooltip.js";
 import {
   GITHUB_ISSUES_STANDING,
   type GitHubIssuesStanding,
   useGitHubIssues,
 } from "./github-issues-read.js";
-import { sinceText, useMinute } from "./task-time.js";
 import type { TasksControl } from "./use-tasks-tab.js";
 
 /**

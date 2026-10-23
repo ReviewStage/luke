@@ -1,6 +1,13 @@
 import type { CodeLines, CodeToken } from "@luke/features/tasks-view";
 import { ACT_KIND, COLOURED_CODE_MAX_CHARS, FENCE_LANGUAGE_MAX_CHARS } from "@luke/host/acts";
-import { cssCustomProperties, IconButton, TEXT_ELEMENT, TEXT_VARIANT, Text } from "@luke/ui";
+import {
+  cssCustomProperties,
+  IconButton,
+  TEXT_ELEMENT,
+  TEXT_VARIANT,
+  Text,
+  Tooltip,
+} from "@luke/ui";
 import { SUGGESTED_CHANGE_LANGUAGE } from "@luke/ui/github-html";
 import {
   type ComponentProps,
@@ -15,7 +22,6 @@ import {
 import type { Components, ExtraProps } from "streamdown";
 import { type ActHandle, useAct } from "../act.js";
 import { CopyGlyph, copyHint, useCopyFeedback } from "../copy-feedback.js";
-import { Tooltip } from "../tooltip.js";
 
 /**
  * transcript-markdown.tsx -- a transcript's code and tables: a fenced block drawn as the Code tab draws code, a table as a quiet grid, and an inline span on a subtle fill.

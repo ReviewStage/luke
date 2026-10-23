@@ -24,16 +24,22 @@ import {
   ERROR_STATE_PLACEMENT,
   ErrorState,
   ExpandIcon,
+  Fill,
   FoldingButton,
+  HoverCard,
+  HoverCardHead,
   IconButton,
+  LIST_DENSITY,
   List,
   ListRow,
   SCROLL_SIZE,
   ScrollArea,
   SidePanelIcon,
+  SpinnerRegion,
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
+  Tooltip,
 } from "@luke/ui";
 import {
   agentOfTab,
@@ -79,7 +85,6 @@ import { drawnVisibly, focusSeek } from "../focus-seek.js";
 import { panelTabPlace } from "../links-at-hand.js";
 import { useMemberDirectory } from "../member-directory.js";
 import { type MenuRow, MenuRowList } from "../searchable-menu.js";
-import { SpinnerRegion } from "../spinner.js";
 import { GLYPH_STATE, type GlyphState, stateEndMark } from "../state-glyph.js";
 import { AgentActorRef, AgentCard, agentSubject, NOTHING_HELD } from "../tasks/agent-ref.js";
 import { AgentSubagentTab, type BriefTask, type TranscriptCards } from "../tasks/agent-tab.js";
@@ -93,6 +98,7 @@ import {
 } from "../tasks/agent-tab-card.js";
 import { BrowserPane, browserTitleOf, useBrowserPages } from "../tasks/browser-pane.js";
 import { ChangesCard, peopleOf } from "../tasks/changes-card.js";
+import { TaskChipCard } from "../tasks/chip-cards.js";
 import { CloudBrowserPane } from "../tasks/cloud-browser-pane.js";
 import { useCloudBrowserTabs } from "../tasks/cloud-browser-tabs.js";
 import { CodePane, centreWithin } from "../tasks/code-pane.js";
@@ -141,7 +147,6 @@ import {
   type SidePanelControl,
   type SidePanelTab,
 } from "../tasks/use-side-panel.js";
-import { Tooltip } from "../tooltip.js";
 import { useCapability, useExperiment } from "../use-app-state.js";
 import type { MenuAction } from "./action-menu.js";
 import { useAgentTerminalDoors } from "./agent-actions.js";
@@ -403,6 +408,23 @@ function cloudBrowserTitleOf(tab: AgentBrowserTab): string {
 const NO_OPEN_CHANGES: readonly ChangesStripTab[] = [];
 
 /**
+ * The task's agents in the order started, an archived one among them, since
+ * the pull request an agent opened, merged or not, stays the task's once the
+ * agent is archived.
+ */
+function everyTaskAgent(
+  agents: Pick<CodingAgentsControl, "agents" | "archived">,
+): readonly CodingAgentSummary[] {
+  const listed = agents.agents ?? [];
+  // Note that an agent's own page lists its agent among `agents` archived or not, so each is taken once.
+  const archived = (agents.archived ?? []).filter(
+    (agent) => !listed.some((each) => each.id === agent.id),
+  );
+  if (archived.length === 0) return listed;
+  return [...listed, ...archived].sort((one, other) => one.createdAt - other.createdAt);
+}
+
+/**
  * The agent whose Changes tab stands for the agent's pull request: among the
  * agents on that pull request, in the order started, the first whose tab is
  * open on the task (`open`), else the first; the agent itself where its pull
@@ -417,7 +439,7 @@ function changesAgentOf(
 ): string {
   const url = agents.pullRequests.get(agentId)?.url;
   if (url === undefined) return agentId;
-  const sharing = (agents.agents ?? []).filter(
+  const sharing = everyTaskAgent(agents).filter(
     (agent) => agents.pullRequests.get(agent.id)?.url === url,
   );
   const opened = sharing.find((agent) =>
@@ -428,7 +450,8 @@ function changesAgentOf(
 
 /**
  * The task's agents' Changes tabs on offer, in the order the agents
- * started: one for each agent with a pull request, its tab open in the
+ * started, an archived one among them (`everyTaskAgent`): one for each
+ * agent with a pull request, merged or not, its tab open in the
  * task's column or not, and none for an agent that has opened none yet,
  * whose tab would only say so. Note that two agents on one pull request
  * offer it once, under the agent whose tab stands for it (`changesAgentOf`),
@@ -440,12 +463,13 @@ export function changesOffers(
   open: readonly ChangesStripTab[] = NO_OPEN_CHANGES,
 ): readonly ChangesOffer[] {
   const offered = new Set<string>();
-  return (agents.agents ?? []).flatMap((each) => {
+  const every = everyTaskAgent(agents);
+  return every.flatMap((each) => {
     const pullRequest = agents.pullRequests.get(each.id);
     if (pullRequest === undefined || offered.has(pullRequest.url)) return [];
     offered.add(pullRequest.url);
     const agentId = changesAgentOf(agents, each.id, open);
-    const agent = agents.agents?.find((other) => other.id === agentId) ?? each;
+    const agent = every.find((other) => other.id === agentId) ?? each;
     // The row shows the pull request as the agent its tab stands for last read it, as its tab's card does.
     const shown = agents.pullRequests.get(agent.id) ?? pullRequest;
     const label = agentTabLabel(agent, agents.models);
@@ -600,6 +624,26 @@ export function panelEntries(input: {
   return [...kinds, ...fileRows, ...changesRows, ...pageRows, ...terminalRows, ...browserRows];
 }
 
+/**
+ * The Plan tab's card: the task's own card, as its sidebar row and a chip
+ * naming it hang it (`TaskChipCard`), or its glyph and name where the
+ * window lists no such task; none where the panel knows no task. The plan's
+ * summary row hangs the same (`task-summary.tsx`).
+ */
+export function planTabCard(
+  planId: string | undefined,
+  plan: PlanStanding | undefined,
+): React.ReactNode {
+  if (planId === undefined || plan === undefined) return undefined;
+  const { icon, label } = tabLook({ kind: TAB_KIND.PLAN, ...plan });
+  const fallback = (
+    <HoverCard>
+      <HoverCardHead glyph={icon} name={label} />
+    </HoverCard>
+  );
+  return <TaskChipCard taskId={planId} fallback={fallback} />;
+}
+
 /** A Pull request tab's look, named by its pull request's number and title as the task's agents last read it, wearing its mark for where it stands. */
 function changesLook(tab: ChangesStripTab, agents: CodingAgentsControl): KindLook {
   return tabLook({ kind: TAB_KIND.CHANGES, pullRequest: pullRequestOfTab(agents, tab) });
@@ -678,6 +722,8 @@ function stripTabs(input: {
   pagePlace: PagePlace;
   /** The task the panel stands beside, whose name and status its Plan tab wears; none where it is not known. */
   plan: PlanStanding | undefined;
+  /** The task's id, whose card its Plan tab hangs; none beside an agent's own page. */
+  planId: string | undefined;
   /** How many of the task's inbox items wait on the developer, which its Inbox tab counts. */
   inboxWaiting: number;
   /** Whether a card of the task's Inbox holds a draft, which its tab marks while another is chosen. */
@@ -709,6 +755,7 @@ function stripTabs(input: {
       detail: tab === SIDE_PANEL_TAB.INBOX && inboxWaiting > 0 ? String(inboxWaiting) : undefined,
       endMark:
         tab === SIDE_PANEL_TAB.INBOX && inboxDrafted && !chosen(tab) ? <DraftMark /> : undefined,
+      card: tab === SIDE_PANEL_TAB.PLAN ? planTabCard(input.planId, input.plan) : undefined,
     }),
     close: () => panel.onClose(tab),
   }));
@@ -842,15 +889,17 @@ function stripTabs(input: {
       },
     ];
   });
-  // An agent's transcript beside the Inbox wears the agent's tab as its column draws it.
+  // An agent's transcript beside the Inbox wears the agent's tab as its column draws it, and hangs its card.
   const transcriptTabs = panel.strip.filter(isTranscriptTab).flatMap((tab) => {
     const agent = agents.agents?.find((each) => each.id === tab.transcript);
     if (agent === undefined) return [];
+    const { name, read } = agentSubject(agents, agent.id, held, chosen(tab));
     return [
       {
         tab,
         look: look(tab, {
-          ...tabLook({ kind: TAB_KIND.AGENT, name: agentTabLabel(agent, models), agent }),
+          ...tabLook({ kind: TAB_KIND.AGENT, name, agent }),
+          card: <AgentTabCard name={name} models={models} read={read} />,
         }),
         close: () => panel.onClose(tab),
       },
@@ -873,7 +922,8 @@ function stripTabs(input: {
 /**
  * The strip of tabs across the panel's top: the open fixed tabs, then the
  * subagents and the files, then the "+". A fixed tab's own word is all it
- * needs to say, so it hangs no pill, while a subagent's hangs a card naming
+ * needs to say, so it hangs no pill, but the Plan tab, which hangs the
+ * task's card as its sidebar row does (`planTabCard`), while a subagent's hangs a card naming
  * it whole with when it last moved and its latest step
  * (`agent-tab-card.tsx`), and a Changes tab its pull request's, naming the
  * agent whose it is (`ChangesCard`), and a page's a preview of the page
@@ -993,6 +1043,7 @@ function PanelTabs({
     shownAgent,
     pagePlace: pagePlaceOf(holder, taskId),
     plan: task,
+    planId: holder === SIDE_PANEL_HOLDER.TASK ? taskId : undefined,
     inboxWaiting,
     inboxDrafted,
   });
@@ -1111,7 +1162,8 @@ function ActivityList({
             </Text>
           </div>
         ) : (
-          <List label="Activity">
+          // Note that the open tabs are dense rows, as the offers under them (`MenuRowList`) are, so both read down one edge in one type.
+          <List label="Activity" density={LIST_DENSITY.DENSE}>
             {open.map((entry) => (
               <ListRow
                 key={tabKey(entry.tab)}
@@ -1522,7 +1574,7 @@ function TabContent({
     const open = browsers.find((each) => sameTab(each.tab, tab));
     // The tab stands for one no longer open only until the panel moves on, a render away.
     return open === undefined ? (
-      <SpinnerRegion label="Loading page" />
+      <SpinnerRegion delay label="Loading page" />
     ) : (
       <BrowserPane
         key={tab.browser}
@@ -1536,7 +1588,7 @@ function TabContent({
     const drawn = cloudBrowsers.find((each) => each.tab.id === tab.cloudBrowser);
     // The tab stands for one the service no longer lists only until the panel moves on, a render away.
     return drawn === undefined ? (
-      <SpinnerRegion label="Loading page" />
+      <SpinnerRegion delay label="Loading page" />
     ) : (
       <CloudBrowserPane
         key={tab.cloudBrowser}
@@ -1565,7 +1617,7 @@ function TabContent({
     const page = pages.find((each) => each.id === tab.page);
     // The tab stands for a page the plan no longer lists only until the panel moves on, a render away.
     return page === undefined ? (
-      <SpinnerRegion label="Loading page" />
+      <SpinnerRegion delay label="Loading page" />
     ) : (
       <PagePane
         key={page.id}
@@ -1583,7 +1635,7 @@ function TabContent({
     return (
       <PullRequestsOnGitHub key={tabKey(tab)}>
         {/* The tab is a chunk of its own, read the first time one is drawn or its card hangs (`pages-on-demand.ts`). */}
-        <Suspense fallback={<SpinnerRegion label="Loading pull request" />}>
+        <Suspense fallback={<SpinnerRegion delay label="Loading pull request" />}>
           <PULL_REQUEST_TAB.Route
             agentId={tab.changes}
             number={tab.number}
@@ -1612,7 +1664,7 @@ function TabContent({
     // Note that the task given another repository draws the file afresh,
     // because the lines held were read from the one before.
     return file === undefined ? (
-      <SpinnerRegion label="Loading file" />
+      <SpinnerRegion delay label="Loading file" />
     ) : (
       <Fragment key={repository ?? undefined}>
         <FileView
@@ -1669,7 +1721,7 @@ function TabContent({
       );
     }
     // A tab no delegation started, a task's own Luke's worker's, stands only until the panel moves back to the board, a render away.
-    return <SpinnerRegion label="Loading subagent" />;
+    return <SpinnerRegion delay label="Loading subagent" />;
   }
   switch (tab) {
     case SIDE_PANEL_TAB.PLAN:
@@ -1693,7 +1745,7 @@ function TabContent({
           </ErrorState>
         );
       }
-      if (shownCode === undefined) return <SpinnerRegion label="Loading code" />;
+      if (shownCode === undefined) return <SpinnerRegion delay label="Loading code" />;
       return shownCode.length === 0 ? (
         <EmptyState icon={tabLook({ kind: TAB_KIND.PANEL, tab: SIDE_PANEL_TAB.CODE }).icon}>
           {NO_CODE_LINE}
@@ -2071,9 +2123,9 @@ export function SidePanel({
   const files = panel.files.filter(
     (file) => file.browsedOn === taskId || offered.some((ref) => ref.path === file.path),
   );
-  // An agent's Changes tab stands while the agent is the task's.
+  // An agent's Changes tab stands while the agent is the task's, archived or not, as its pull request does.
   const changes = panel.changes.filter((each) =>
-    drawsChanges(each, { taskAgents: agents.agentIds }),
+    drawsChanges(each, { taskAgents: agents.heldIds }),
   );
   // An agent's Terminal tab stands while the agent is the task's, as its Changes tab does, and never beside the Inbox or where the platform runs no terminals.
   const terminalsOffered = useCapability(HOST_CAPABILITY.TERMINALS);
@@ -2252,11 +2304,11 @@ export function SidePanel({
         </FindScope>
       )}
       {listing ? (
-        <div ref={setActivitySlot} className="side-panel-content" />
+        <Fill ref={setActivitySlot} className="side-panel-content" />
       ) : tab === SIDE_PANEL_TAB.PLAN && plan !== undefined ? null : tab === undefined ? (
-        <div className="side-panel-content">
+        <Fill className="side-panel-content">
           {panel.closedTabs.length === 0 && !offersMore ? null : <NoTabs entries={offers} />}
-        </div>
+        </Fill>
       ) : (
         // The Board is drawn on a canvas, which keeps a find of its own, and
         // a page's words stand in a sandboxed frame no find of the window

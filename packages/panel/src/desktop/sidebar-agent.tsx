@@ -9,6 +9,9 @@ import {
   ListRow,
   PencilIcon,
   PinIcon,
+  RowHint,
+  RowHintOptions,
+  Time,
   UnarchiveIcon,
   UnpinIcon,
   useMenu,
@@ -24,11 +27,9 @@ import { DraftMark } from "../draft-mark.js";
 import { FadingWords } from "../fading-words.js";
 import { useMemberDirectory } from "../member-directory.js";
 import { AgentCard, tasklessRowSubject } from "../tasks/agent-ref.js";
-import { RelativeTime } from "../tasks/relative-time.js";
 import { agentEndMark, TAB_KIND, tabLook } from "../tasks/tab-look.js";
 import { markReadItem } from "../tasks/task-menu-items.js";
 import { type CodingAgentsControl, readAgentById } from "../tasks/use-coding-agents.js";
-import { RowHint, RowHintOptions } from "../tooltip.js";
 import { useCallingAgent } from "../use-voice-view.js";
 import { ActionMenu, type MenuAction, type MenuEntry } from "./action-menu.js";
 import { rowDoors, useAgentActions } from "./agent-actions.js";
@@ -239,6 +240,7 @@ export function SidebarAgent({
       <RowHintOptions card={card} cardBeside cardRegion={item}>
         <ListRow
           ref={hold}
+          motionKey={agent.id}
           density={LIST_DENSITY.DENSE}
           ink={LIST_ROW_INK.SIDEBAR}
           leading={
@@ -277,7 +279,7 @@ export function SidebarAgent({
                 )}
                 {drafted ? <DraftMark /> : null}
                 {agentEndMark(agent, false)}
-                <RelativeTime at={at} now={now} hint={false} />
+                <Time at={at} now={now} hint={false} />
               </span>
             )
           }

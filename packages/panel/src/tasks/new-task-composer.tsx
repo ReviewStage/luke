@@ -26,8 +26,8 @@ import {
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
+  Tooltip,
 } from "@luke/ui";
-import type { SkillOption } from "@luke/ui/skill-mention";
 import { agentPromptOf, taskNameOfIssue, workspaceReaches } from "@luke/ui/tasks-model";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useAct } from "../act.js";
@@ -41,7 +41,6 @@ import {
 } from "../composer-drafts.js";
 import { automationAgentBrief } from "../desktop/automation-agent-brief.js";
 import { PICKER_ALIGN } from "../settings/picker-row.js";
-import { Tooltip } from "../tooltip.js";
 import { AgentComposer, type ComposerWords } from "./agent-composer.js";
 import { ISSUE_CHORD, IssuePickerChip } from "./issue-picker-chip.js";
 import type { MentionMenuSide } from "./mention-picker.js";
@@ -53,9 +52,11 @@ import {
   type NewTaskLink,
   NewTaskLinks,
 } from "./new-task-links.js";
+import { NEW_TASK_PURPOSE, type NewTaskPurpose } from "./new-task-purpose.js";
 import { CHIP_PLACE, RepositoryChip } from "./repository-chip.js";
 import { keptSkills } from "./repository-skills.js";
 import { SkillFiles } from "./skill-chip.js";
+import type { SkillWithFile } from "./skill-ref.js";
 import { TaskMentions, tasklessMentions, useMentionAgentsReader } from "./task-mentions.js";
 import type { AgentComposerControl } from "./use-agent-composer.js";
 import type { NewTaskAgent, NewTaskStart, TasksControl } from "./use-tasks-tab.js";
@@ -137,24 +138,16 @@ import type { NewTaskAgent, NewTaskStart, TasksControl } from "./use-tasks-tab.j
  * mounts it afresh to start those over; the workspace it starts in is the
  * owner's.
  *
- * The Automations page's Create with an agent is this same card for another
- * purpose (`NEW_TASK_PURPOSE.AUTOMATION`), so making an automation's helper
- * looks and works as starting any agent does. Its title says so, its words
- * are what to automate, kept as a draft of their own, and the agent is handed
+ * The Automations page's Create with an agent opens this same card for the
+ * agent that makes an automation (`NEW_TASK_PURPOSE.AUTOMATION`), so making
+ * one looks and works as starting any agent does. Its title and placeholder
+ * say so, its words are kept as a draft of their own, and the agent is handed
  * the fixed brief with the words fenced after it (`automation-agent-brief.ts`),
  * refused here where that would pass an agent's first message's bound. It
- * starts on words alone: it offers no Issue chip and no File for later, a
- * repository group's + chooses nothing for it, and ⌘Return on an empty box
- * starts no bare task.
+ * starts on words alone: it offers no Issue chip and no File for later, and
+ * ⌘Return on an empty box starts no bare task. A start refused after the card
+ * closed opens it again for the same purpose.
  */
-
-/** What a card starts: a task's coding agent, or the agent that makes an automation. */
-export const NEW_TASK_PURPOSE = {
-  TASK: "task",
-  AUTOMATION: "automation",
-} as const;
-
-export type NewTaskPurpose = (typeof NEW_TASK_PURPOSE)[keyof typeof NEW_TASK_PURPOSE];
 
 /** ⌘Return: a bare task from a box with nothing in it. */
 const BARE_CHORD: ShortcutChord = { key: SHORTCUT_KEY.ENTER };
@@ -179,7 +172,7 @@ const PURPOSE_WORDS = {
   },
 } as const satisfies Record<NewTaskPurpose, ComposerWords>;
 
-/** Why an automation's helper did not start where the brief and the words pass an agent's first message's bound. */
+/** Why an automation's agent did not start where the brief and the words pass an agent's first message's bound. */
 const TOO_LONG = "That request is too long.";
 
 /** Why Start is held without a repository, and File for later's words. */
@@ -207,12 +200,18 @@ function filedName(issueName: string | undefined, said: string): string {
 }
 
 /** What one Agent-mode press asked beside its key: the task's name, repository, workspace, and issues, and the agent's words, files, and model. */
-interface AgentAsk {
+export interface AgentAsk {
   readonly name: string;
   readonly repository: string | null;
   readonly workspaceId: string | undefined;
   readonly issues: readonly TaskIssueChoice[];
   readonly agent: Omit<NewTaskAgent, "idempotencyKey">;
+}
+
+/** One Agent-mode press: what it asked, and the key it carried. */
+export interface NewTaskPress {
+  readonly ask: AgentAsk;
+  readonly key: string;
 }
 
 /** Whether two presses link the same issues, in the same order and with the same relations. */
@@ -254,8 +253,9 @@ function newTaskPlace(workspaceId: string | undefined, purpose: NewTaskPurpose):
 /** The account's default model as read, and the chip's pick, which runs this one agent and leaves the default as it stands. */
 function useDefaultChoice(
   newTask: TasksControl["newTask"],
+  kept: ModelChoice | undefined,
 ): readonly [ModelChoice | undefined, (next: ModelChoice) => void] {
-  const [choice, setChoice] = useState<ModelChoice | undefined>(undefined);
+  const [choice, setChoice] = useState<ModelChoice | undefined>(kept);
   // Note that the control is read through a ref, because the tab hands a
   // new one on every render and the default is read once, as the card opens.
   const latest = useRef(newTask);
@@ -270,6 +270,15 @@ function useDefaultChoice(
     };
   }, []);
   return [choice, setChoice];
+}
+
+/** Whether a card's draft for `purpose` in `workspaceId` holds words or files, which its card keeps from a stray dismissal. */
+export function useNewTaskHolding(
+  workspaceId: string | undefined,
+  purpose: NewTaskPurpose = NEW_TASK_PURPOSE.TASK,
+): boolean {
+  const { text, attachments } = useDraft(newTaskPlace(workspaceId, purpose)).draft;
+  return hasWordsOrFiles(text, attachments);
 }
 
 export function NewTaskComposer({
@@ -310,16 +319,20 @@ export function NewTaskComposer({
     writer.update(newTaskPlace(workspaceId, purpose), () => loose);
     writer.update(newTaskPlace(undefined, purpose), () => EMPTY_DRAFT);
   }, [workspaceId, loose, writer, purpose]);
+  // A card opened again on a start refused after it closed starts where it was left, saying why.
+  const refused = newTask.preset?.refused;
   // The GitHub and Linear issues picked from the Issue chip, in the order picked.
-  const [picks, setLinks] = useState<readonly NewTaskLink[]>([]);
+  const [picks, setLinks] = useState<readonly NewTaskLink[]>(refused?.card.links ?? []);
   const [chosen, setChosen] = useState<string | null | undefined>(
-    forAutomation ? undefined : newTask.preset?.repository,
+    refused === undefined ? newTask.preset?.repository : refused.card.repository,
   );
-  const [choice, choose] = useDefaultChoice(newTask);
+  const [choice, choose] = useDefaultChoice(newTask, refused?.card.choice);
   const [starting, setStarting] = useState(false);
-  const [note, setNote] = useState<Failure | undefined>(undefined);
+  const [note, setNote] = useState<Failure | undefined>(
+    refused === undefined ? undefined : { reason: FAILURE_REASON.OTHER, text: refused.note },
+  );
   // The last agent press's key and what it asked, until a start lands.
-  const pressed = useRef<{ ask: AgentAsk; key: string } | undefined>(undefined);
+  const pressed = useRef<NewTaskPress | undefined>(refused?.card.press);
   // How many times ⌘L asked the Issue chip to open its menu.
   const [issueAsks, setIssueAsks] = useState(0);
   const { linearIssuesIn, githubIssuesIn } = newTask;
@@ -366,7 +379,7 @@ export function NewTaskComposer({
   }
   const links = picks.filter((link) => !linkedElsewhere(link, repository));
   const said = words.trim();
-  // Note that an automation's helper starts on words alone, since the brief fences them as the request.
+  // Note that an automation's agent starts on words alone, since the brief fences them as the request.
   const filled = forAutomation ? said !== "" : hasWordsOrFiles(said, attachments);
   // An agent needs a repository to work in, and something to work on:
   // words, files, or a GitHub or Linear issue.
@@ -395,20 +408,28 @@ export function NewTaskComposer({
   );
   const skills = useMemo(
     () =>
-      workspaceId === undefined || repository === null
+      workspaceId === undefined
         ? undefined
-        : keptSkills(() => act(ACT_KIND.TASKS_SKILLS, { workspaceId, repository })),
+        : keptSkills(() =>
+            act(
+              ACT_KIND.TASKS_SKILLS,
+              repository === null ? { workspaceId } : { workspaceId, repository },
+            ),
+          ),
     [act, workspaceId, repository],
   );
   // A skill's chip opens its `SKILL.md` on GitHub, as on an agent's page no task holds, since no File tab stands here.
-  const openSkill = (skill: SkillOption) => {
+  const openSkill = (skill: SkillWithFile) => {
     if (mentions === undefined || repository === null) return;
     appPlatform().openGitHub(
       encodeMention({ kind: MENTION_KIND.FILE, path: skill.path }, mentions.doors.place),
     );
   };
 
-  const begin = (name: string, handing: Pick<NewTaskStart, "handed" | "brief" | "status"> = {}) => {
+  const begin = (
+    name: string,
+    handing: Pick<NewTaskStart, "handed" | "brief" | "status" | "card"> = {},
+  ) => {
     if (starting) return;
     setStarting(true);
     onStarting?.(true);
@@ -453,8 +474,12 @@ export function NewTaskComposer({
     };
     const held = pressed.current;
     const key = held !== undefined && sameAsk(held.ask, ask) ? held.key : crypto.randomUUID();
-    pressed.current = { ask, key };
-    begin(name, { handed: { idempotencyKey: key, ...ask.agent } });
+    const press = { ask, key };
+    pressed.current = press;
+    begin(name, {
+      handed: { idempotencyKey: key, ...ask.agent },
+      card: { ...(forAutomation ? { purpose } : undefined), repository, links, choice, press },
+    });
   };
   // ⌘Return on a box with nothing in it starts a bare task: no call and no agent.
   const bare = () => {

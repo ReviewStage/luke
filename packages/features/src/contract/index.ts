@@ -17,6 +17,7 @@ import { eventsContract } from "./events.js";
 import { githubContract } from "./github.js";
 import { githubTokenContract } from "./github-token.js";
 import { inboxContract } from "./inbox.js";
+import { installedSkillsContract } from "./installed-skills.js";
 import { integrationsContract } from "./integrations.js";
 import { liveContract } from "./live.js";
 import { macCommandsContract } from "./mac-commands.js";
@@ -31,6 +32,7 @@ import { tasksContract } from "./tasks.js";
 import { workspaceGithubContract } from "./workspace-github.js";
 import { workspaceInvitationsContract } from "./workspace-invitations.js";
 import { workspaceLinearContract } from "./workspace-linear.js";
+import { workspaceSentryContract } from "./workspace-sentry.js";
 import { workspacesContract } from "./workspaces.js";
 
 export { AGENT_START_STATUS } from "./agents.js";
@@ -54,6 +56,7 @@ export const hostedContract = {
   github: githubContract,
   githubToken: githubTokenContract,
   inbox: inboxContract,
+  installedSkills: installedSkillsContract,
   integrations: integrationsContract,
   live: liveContract,
   macCommands: macCommandsContract,
@@ -68,5 +71,6 @@ export const hostedContract = {
   workspaceGithub: workspaceGithubContract,
   workspaceInvitations: workspaceInvitationsContract,
   workspaceLinear: workspaceLinearContract,
+  workspaceSentry: workspaceSentryContract,
   workspaces: workspacesContract,
 };
