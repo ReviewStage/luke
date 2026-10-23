@@ -457,6 +457,15 @@ test("Select all ticks every skill shown that may install, and unticks them all 
   assert.deepEqual(installPlan(MATT_SKILLS, cleared, scope).install, []);
 });
 
+test("Select all ticks each skill it shows itself, so one another pulls in stays when that other is unticked", () => {
+  const scope = INSTALLED_SKILL_SCOPE.PERSONAL;
+  const none = withTick(MATT_SKILLS, initialTicks(MATT), scope, "grill-me", false);
+  const all = withEvery(MATT_SKILLS, none, scope, ["grill-me", "grilling", "tdd"], true);
+
+  const left = withTick(MATT_SKILLS, all, scope, "grill-me", false);
+  assert.deepEqual(installPlan(MATT_SKILLS, left, scope).install, ["grilling", "tdd"]);
+});
+
 test("the browse list sorts by name, groups only where the repository's plugins group any with the rest under Other last, and searches names and descriptions", () => {
   const plain = skillList(MATT_SKILLS, "");
   assert.deepEqual(

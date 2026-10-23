@@ -191,6 +191,8 @@ let missingNames: string[] = [];
 let nameTaken = false;
 /** What the next source preview answers. */
 let sourcePreview: InstalledSkillPreview = SOURCE;
+/** How many of the next file reads go unanswered. */
+let unansweredFiles = 0;
 
 const roots: Root[] = [];
 
@@ -202,6 +204,7 @@ beforeEach(() => {
   missingNames = [];
   nameTaken = false;
   sourcePreview = SOURCE;
+  unansweredFiles = 0;
   fakeActPort({
     [ACT_KIND.WORKSPACE_MEMBERS_READ]: () =>
       Promise.resolve([
@@ -254,13 +257,17 @@ beforeEach(() => {
     [ACT_KIND.INSTALLED_SKILLS_PREVIEW]: (payload) => {
       sent.push({ kind: ACT_KIND.INSTALLED_SKILLS_PREVIEW, payload });
       return Promise.resolve(
-        payload.text.startsWith("npx")
+        /^(?:npx|https:)/u.test(payload.text)
           ? { ...sourcePreview, missing: missingNames }
           : textPreview(payload.text),
       );
     },
     [ACT_KIND.INSTALLED_SKILLS_PREVIEW_FILE]: (payload) => {
       sent.push({ kind: ACT_KIND.INSTALLED_SKILLS_PREVIEW_FILE, payload });
+      if (unansweredFiles > 0) {
+        unansweredFiles -= 1;
+        return Promise.resolve({ failure: INSTALLED_SKILL_CALL_FAILURE.UNANSWERED });
+      }
       return Promise.resolve({ markdown: "# Grilling" });
     },
     [ACT_KIND.INSTALLED_SKILLS_INSTALL]: (payload) => {
@@ -677,6 +684,40 @@ test("a skill that hands off to another brings it along ticked, which can be unt
     (sentOf(ACT_KIND.INSTALLED_SKILLS_INSTALL)[0] as { skills: string[] } | undefined)?.skills,
     ["grill-me", "grilling"],
   );
+});
+
+test("a GitHub link to a skill's folder pasted alone is previewed as its repository, not read as text", async () => {
+  const link = "https://github.com/vercel-labs/agent-skills/tree/main/skills/web";
+  await mountDialog();
+  await paste(link);
+
+  assert.deepEqual(sentOf(ACT_KIND.INSTALLED_SKILLS_PREVIEW), [
+    { workspaceId: "workspace-stage", text: link },
+  ]);
+  assert.match(document.body.textContent ?? "", /Add web-design-guidelines/u);
+  assert.equal(primary().textContent, "Install web-design-guidelines");
+});
+
+test("a browsed skill's SKILL.md opens beside its box, and a read that failed is asked again", async () => {
+  sourcePreview = GRILL;
+  unansweredFiles = 1;
+  await mountDialog();
+  await paste(COMMAND);
+  act(() => button("Browse them").click());
+
+  const view = () =>
+    [...document.querySelectorAll<HTMLButtonElement>("button")].filter(
+      (each) => each.textContent === "View SKILL.md" || each.textContent === "Hide SKILL.md",
+    )[2] ?? assert.fail("no View for tdd");
+  act(() => view().click());
+  await settle();
+  assert.match(document.body.textContent ?? "", /Luke couldn't reach the service/u);
+  act(() => view().click());
+  act(() => view().click());
+  await settle();
+  assert.equal(sentOf(ACT_KIND.INSTALLED_SKILLS_PREVIEW_FILE).length, 2);
+  assert.equal(document.querySelector('[aria-label="tdd\'s SKILL.md"]')?.textContent, "# Grilling");
+  assert.equal(checkboxOf("tdd").checked, false);
 });
 
 test("a skill already installed for the scope chosen is marked and not counted, and Everyone in the workspace counts it again", async () => {

@@ -16,6 +16,7 @@ import { parseSkillPaste, SKILL_PASTE_KIND } from "@luke/features/skill-paste";
 import type { Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import {
+  ALIGN,
   BADGE_TONE,
   Badge,
   type BadgeTone,
@@ -239,6 +240,33 @@ function AuditLine({
   );
 }
 
+/** The words a found skill's View SKILL.md toggles between. */
+function viewWords(candidate: InstalledSkillCandidate, files: SkillFiles): string {
+  return files.opened.has(candidate.name)
+    ? SKILLS_LINE.HIDE_SKILL_FILE
+    : SKILLS_LINE.VIEW_SKILL_FILE;
+}
+
+/** A found skill's `SKILL.md` once opened: as the preview carried it, while it is read, or why it could not be. */
+function SkillFile({
+  candidate,
+  files,
+}: {
+  candidate: InstalledSkillCandidate;
+  files: SkillFiles;
+}): React.JSX.Element | null {
+  const read: FileRead | undefined =
+    candidate.markdown === undefined
+      ? files.read.get(candidate.name)
+      : { markdown: candidate.markdown };
+  if (!files.opened.has(candidate.name) || read === undefined) return null;
+  if ("reading" in read) return <Spinner label={`Reading ${candidate.name}'s SKILL.md`} />;
+  if ("failed" in read) {
+    return <DetectedText line={{ text: read.failed, tone: DETECTED_TONE.PROBLEM }} />;
+  }
+  return <FileText text={read.markdown} label={`${candidate.name}'s SKILL.md`} />;
+}
+
 /** A found skill's facts, its View SKILL.md, and the file under them once opened. */
 function SkillDetail({
   candidate,
@@ -248,11 +276,6 @@ function SkillDetail({
   context: SkillContext;
 }): React.JSX.Element {
   const { files } = context;
-  const opened = files.opened.has(candidate.name);
-  const read: FileRead | undefined =
-    candidate.markdown === undefined
-      ? files.read.get(candidate.name)
-      : { markdown: candidate.markdown };
   const note = candidateNote(candidate, context.scope);
   return (
     <Stack gap={GAP.ITEM}>
@@ -261,18 +284,12 @@ function SkillDetail({
           {candidateFacts(candidate)}
         </Text>
         <TextButton tone={TEXT_BUTTON_TONE.ACCENT} onClick={() => files.onView(candidate)}>
-          {opened ? SKILLS_LINE.HIDE_SKILL_FILE : SKILLS_LINE.VIEW_SKILL_FILE}
+          {viewWords(candidate, files)}
         </TextButton>
       </Inline>
       <AuditLine candidate={candidate} />
       {note === undefined ? null : <DetectedText line={note} />}
-      {!opened || read === undefined ? null : "reading" in read ? (
-        <Spinner label={`Reading ${candidate.name}'s SKILL.md`} />
-      ) : "failed" in read ? (
-        <DetectedText line={{ text: read.failed, tone: DETECTED_TONE.PROBLEM }} />
-      ) : (
-        <FileText text={read.markdown} label={`${candidate.name}'s SKILL.md`} />
-      )}
+      <SkillFile candidate={candidate} files={files} />
     </Stack>
   );
 }
@@ -385,7 +402,7 @@ function ConfirmSkills({
   );
 }
 
-/** One skill of the browse list: its box, its name and marks, its description on one line, and who pulls it in. */
+/** One skill of the browse list: its box, its name and marks, its description on one line, who pulls it in, and its View SKILL.md beside the box. */
 function SkillRow({
   candidate,
   install,
@@ -409,30 +426,38 @@ function SkillRow({
     .filter((each) => each !== undefined)
     .join(" · ");
   return (
-    <Checkbox
-      checked={ticked}
-      disabled={context.disabled || !may}
-      onChange={(on) => onTick(candidate.name, on)}
-    >
-      <Stack gap={GAP.NONE}>
-        <SkillName candidate={candidate} context={context} ratings />
-        {line === "" ? null : (
-          <Text
-            variant={TEXT_VARIANT.CAPTION}
-            tone={TEXT_TONE.MUTED}
-            as={TEXT_ELEMENT.SPAN}
-            truncate
-          >
-            {line}
-          </Text>
-        )}
-        {note === undefined ? null : (
-          <span className="settings-state" data-state={LINE_STATE[note.tone]}>
-            {note.text}
-          </span>
-        )}
-      </Stack>
-    </Checkbox>
+    <Stack gap={GAP.ITEM}>
+      <Inline gap={GAP.CONTROL} align={ALIGN.START} wrap={false} growFirst>
+        <Checkbox
+          checked={ticked}
+          disabled={context.disabled || !may}
+          onChange={(on) => onTick(candidate.name, on)}
+        >
+          <Stack gap={GAP.NONE}>
+            <SkillName candidate={candidate} context={context} ratings />
+            {line === "" ? null : (
+              <Text
+                variant={TEXT_VARIANT.CAPTION}
+                tone={TEXT_TONE.MUTED}
+                as={TEXT_ELEMENT.SPAN}
+                truncate
+              >
+                {line}
+              </Text>
+            )}
+            {note === undefined ? null : (
+              <span className="settings-state" data-state={LINE_STATE[note.tone]}>
+                {note.text}
+              </span>
+            )}
+          </Stack>
+        </Checkbox>
+        <TextButton tone={TEXT_BUTTON_TONE.LINK} onClick={() => context.files.onView(candidate)}>
+          {viewWords(candidate, context.files)}
+        </TextButton>
+      </Inline>
+      <SkillFile candidate={candidate} files={context.files} />
+    </Stack>
   );
 }
 
@@ -729,7 +754,9 @@ export function AddSkillDialog({
     if (next.has(candidate.name)) next.delete(candidate.name);
     else next.add(candidate.name);
     setOpened(next);
-    const fetched = candidate.markdown !== undefined || read.has(candidate.name);
+    // Note that a read that failed is asked again, since what failed it may have passed.
+    const held = read.get(candidate.name);
+    const fetched = candidate.markdown !== undefined || (held !== undefined && !("failed" in held));
     if (fetched || preview?.kind !== SKILL_PASTE_KIND.SOURCE) return;
     const { name } = candidate;
     const sought = { owner: preview.owner, repo: preview.repo, sha: preview.sha };

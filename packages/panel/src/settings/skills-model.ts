@@ -776,7 +776,12 @@ export function withTick(
   return { ticked, declined };
 }
 
-/** The choice once every one of some skills is ticked, or every one unticked: Select all over what the search shows. */
+/**
+ * The choice once every one of some skills is ticked, or every one
+ * unticked: Select all over what the search shows. Note that Select all
+ * ticks each skill itself, so one it shows that another pulls in stays
+ * ticked when that other is unticked later.
+ */
 export function withEvery(
   skills: readonly InstalledSkillCandidate[],
   ticks: SkillTicks,
@@ -784,7 +789,10 @@ export function withEvery(
   names: readonly string[],
   on: boolean,
 ): SkillTicks {
-  return names.reduce((held, name) => withTick(skills, held, scope, name, on), ticks);
+  if (!on) return names.reduce((held, name) => withTick(skills, held, scope, name, false), ticks);
+  const ticked = new Set([...ticks.ticked, ...names]);
+  const declined = new Set([...ticks.declined].filter((name) => !names.includes(name)));
+  return { ticked, declined };
 }
 
 /** Select all's box over the skills shown that may install: ticked once every one is, mixed while some are. */
