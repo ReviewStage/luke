@@ -825,7 +825,7 @@ export const WRITING_INSERT = {
   DIVIDER: "writing-divider",
 } as const;
 
-type WritingInsert = (typeof WRITING_INSERT)[keyof typeof WRITING_INSERT];
+export type WritingInsert = (typeof WRITING_INSERT)[keyof typeof WRITING_INSERT];
 
 /** Anything a writing chord or a Markdown rule does to text. */
 export type WritingAction = WritingMark | WritingBlock | WritingInsert;
