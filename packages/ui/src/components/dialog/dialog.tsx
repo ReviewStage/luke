@@ -1,7 +1,8 @@
+import type { DialogRoot } from "@base-ui/react/dialog";
 import { type Ref, useId, useImperativeHandle, useLayoutEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
 import type { PictureExpand } from "../../picture-expand.js";
 import { replayMotion } from "../../replay-motion.js";
+import { DialogContent, Dialog as ShadcnDialog } from "../../shadcn/dialog.js";
 import { TEXT_ELEMENT, TEXT_VARIANT, Text } from "../text/text.js";
 import { useStagedFocus } from "./staged-focus.js";
 
@@ -101,6 +102,36 @@ type DialogName =
 export interface DialogHandle {
   dismiss: () => void;
 }
+
+/** What Base UI hears as a dismissal: Escape, and a press on the dimmed window. */
+const DISMISSAL: ReadonlySet<DialogRoot.ChangeEventReason> = new Set([
+  "escape-key",
+  "outside-press",
+]);
+
+/**
+ * The card's own looks over the shadcn card: its measures by size (a
+ * composer's, on a phone, reaching back half the dimmed window's margin at
+ * a card's snug inset), a picture's grow standing its entrance down, the
+ * ring a drag it would take draws, the swell and the shake, and no ring of
+ * its own, since it holds focus for its controls. `luke-dialog` names it
+ * for what finds a card in the page.
+ */
+const CARD_LOOK = [
+  "luke-dialog focus:outline-none",
+  "data-[size=wide]:w-dialog-wide data-[size=wide]:gap-3",
+  "data-[size=composer]:w-dialog-composer data-[size=composer]:gap-3",
+  "room-narrow:data-[size=composer]:-mx-3 room-narrow:data-[size=composer]:w-[calc(100%+--spacing(6))] room-narrow:data-[size=composer]:p-card-inset-snug",
+  "data-[size=media]:w-auto data-[size=media]:min-w-dialog-media-min data-[size=media]:max-w-dialog-media-max data-[size=media]:gap-0 data-[size=media]:overflow-hidden data-[size=media]:p-0",
+  "data-[expanding=true]:animate-none",
+  "data-[dropping=true]:shadow-dialog-drop",
+  "data-[nudge=true]:animate-dialog-nudge",
+  "data-[refused=true]:animate-dialog-shake",
+].join(" ");
+
+/** The foot: a tool of the dialog's own at its start, the answers at its end at a common width. */
+const FOOT = "flex min-w-0 shrink-0 items-center gap-dialog-action-gap mt-3";
+const ACTIONS = "ml-auto flex shrink-0 gap-dialog-action-gap [&>.luke-button]:min-w-dialog-action";
 
 /** What a reader is told when a draft holds the card back. */
 const HELD_NOTICE = "Your draft is kept. Press Escape again to close.";
@@ -221,8 +252,9 @@ function useInvokerFocus(): void {
 }
 
 /**
- * The dimmed window and the card over it, drawn over `document.body` so no
- * stacking context of the surface that opened it can clip or cover it.
+ * The dimmed window and the card over it, drawn in Base UI's portal over
+ * `document.body` so no stacking context of the surface that opened it can
+ * clip or cover it.
  * Focus lands on `initialFocus`, or on the card itself where there is none,
  * and goes to the card while `busy` stills the controls, so it never falls
  * to the window behind.
@@ -248,22 +280,25 @@ export function Dialog({
   children,
 }: DialogProps): React.JSX.Element {
   const card = useRef<HTMLDivElement | null>(null);
+  // Note that the card stands a render after the dialog mounts, because
+  // Base UI's portal makes its node first, so what reaches the card waits
+  // for it to stand.
+  const [drawn, setDrawn] = useState(false);
   const titleId = useId();
-  const pressedBackdrop = useRef(false);
   // Whether a draft has already held the card back once, which the next
   // dismissal goes through.
   const [held, setHeld] = useState(false);
   if (held && !holding) setHeld(false);
 
   useInvokerFocus();
-  useStagedFocus<HTMLElement>(initialFocus ?? card, !busy);
-  useStagedFocus(card, busy);
+  useStagedFocus<HTMLElement>(initialFocus ?? card, drawn && !busy);
+  useStagedFocus(card, drawn && busy);
   useRefusalShake(card, refused);
   // Note that this runs before the card's first paint, so its own entrance
   // is stood down before a frame of it is drawn.
   useLayoutEffect(() => {
-    if (expand !== undefined && card.current !== null) expand.grow(card.current);
-  }, [expand]);
+    if (drawn && expand !== undefined && card.current !== null) expand.grow(card.current);
+  }, [drawn, expand]);
 
   // Note that the owner still hears a dismissal asked while the dialog is
   // at work and decides what it costs; the nudge answers it, which no owner
@@ -294,46 +329,52 @@ export function Dialog({
       trappedTab(event);
       return;
     }
-    // The card is the nearest layer, so Escape puts it away alone and leaves
-    // the window behind it as it was.
-    if (event.key === "Escape") {
-      event.preventDefault();
-      dismiss();
-      return;
-    }
+    // Note that Escape is Base UI's, heard on the nearest card alone and
+    // handed to `dismiss` (`onOpenChange`), so the window behind it stays as
+    // it was.
+    if (event.key === "Escape") return;
     onKeyDown?.(event);
   };
 
-  return createPortal(
-    // biome-ignore lint/a11y/noStaticElementInteractions: the dimmed window is a pointer and drop target alone; the keys it hears come from the card's own focus.
-    <div
-      className="luke-dialog-backdrop"
-      onPointerDown={(event) => {
-        pressedBackdrop.current = event.target === event.currentTarget;
+  return (
+    <ShadcnDialog
+      open
+      // Note that the card traps focus without locking the page's scroll,
+      // as it always has: the dimmed window already takes every press
+      // outside the card, and a lock would shift a page with a scrollbar.
+      modal="trap-focus"
+      onOpenChange={(open, details) => {
+        if (!open && DISMISSAL.has(details.reason)) dismiss();
       }}
-      onClick={(event) => {
-        // Note that a press goes no further than the dialog, because the
-        // surface that opened it is its parent in React's tree and may take
-        // presses of its own.
-        event.stopPropagation();
-        if (pressedBackdrop.current && event.target === event.currentTarget) dismiss();
-        pressedBackdrop.current = false;
-      }}
-      onKeyDown={keyDown}
-      {...dropTarget}
     >
-      {/* biome-ignore lint/a11y/useAriaPropsSupportedByRole: the role is a dialog or an alert dialog, and both are modal. */}
-      <div
+      <DialogContent
+        ref={(node: HTMLDivElement | null) => {
+          card.current = node;
+          setDrawn(node !== null);
+        }}
+        className={CARD_LOOK}
         data-size={size}
         data-dropping={dropping}
-        ref={card}
-        className="luke-dialog"
         role={role}
         aria-modal="true"
         aria-labelledby={labelledBy ?? titleId}
         aria-describedby={describedBy}
         aria-busy={busy}
         tabIndex={-1}
+        initialFocus={() => (busy ? card.current : (initialFocus?.current ?? card.current))}
+        // Note that focus goes back to what opened the card through
+        // `useInvokerFocus`, because the card closes by being unmounted, which
+        // a close of Base UI's own never sees.
+        finalFocus={false}
+        onKeyDown={keyDown}
+        viewport={{
+          className: "luke-dialog-backdrop",
+          // Note that a press goes no further than the dialog, because the
+          // surface that opened it is its parent in React's tree and may take
+          // presses of its own.
+          onClick: (event) => event.stopPropagation(),
+          ...dropTarget,
+        }}
       >
         {title === undefined ? null : (
           <Text variant={TEXT_VARIANT.DIALOG} as={TEXT_ELEMENT.H2} id={titleId}>
@@ -347,13 +388,12 @@ export function Dialog({
           </span>
         ) : null}
         {actions === undefined && actionsStart === undefined ? null : (
-          <div className="luke-dialog-foot">
+          <div className={FOOT}>
             {actionsStart}
-            <div className="luke-dialog-actions">{actions}</div>
+            <div className={ACTIONS}>{actions}</div>
           </div>
         )}
-      </div>
-    </div>,
-    document.body,
+      </DialogContent>
+    </ShadcnDialog>
   );
 }

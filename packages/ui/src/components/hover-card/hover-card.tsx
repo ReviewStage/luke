@@ -38,6 +38,43 @@ import { ClippedLine, ONE_LINE_ELEMENT, ONE_LINE_END } from "../one-line/clipped
  * open what they name, another thing than the card's subject.
  */
 
+/**
+ * The card's parts in one type scale, each still named by its `luke-hover-
+ * card-*` class for what finds a part in the page. The head's glyph takes a
+ * menu glyph's footprint on the name's first line, so the rows listed under
+ * the head start their words on the name's column, and sizes whatever it
+ * holds bar a face, which brings its own. The name is in the medium weight,
+ * wrapped to two lines or on one faded at its end; the line under it and
+ * the corner a size down, never under 12px under a finger. Notes wrap to
+ * three lines, or one faded. A row is set as a menu's row is: its height
+ * and corner, its wash off the card's edge by a menu's inset under the
+ * pointer, its glyph on the head's glyph column.
+ */
+const CARD = "luke-hover-card flex flex-col gap-1";
+const HEAD = "luke-hover-card-head flex items-baseline gap-icon-gap";
+const GLYPH =
+  "luke-hover-card-glyph inline-flex h-lh w-menu-glyph flex-none items-center justify-center self-start [&>:not(.luke-avatar,:has(.luke-avatar))]:size-hover-card-glyph";
+const TITLE = "luke-hover-card-title flex min-w-0 flex-1 flex-col gap-0.5";
+const NAME = "luke-hover-card-name overflow-hidden text-hover-card-name font-medium wrap-anywhere";
+const SUB =
+  "luke-hover-card-sub flex min-w-0 items-center gap-1 text-hover-card-sub text-muted-foreground tabular-nums pointer-coarse:text-hover-card-coarse [&>span]:min-w-0 [&>span]:wrap-anywhere";
+const CORNER =
+  "luke-hover-card-corner flex-none whitespace-nowrap text-hover-card-sub text-subtle-foreground tabular-nums pointer-coarse:text-hover-card-coarse";
+const NOTE =
+  "luke-hover-card-note m-0 overflow-hidden text-muted-foreground wrap-anywhere [&_code]:font-mono [&_code]:text-hover-card-code pointer-coarse:[&_code]:text-hover-card-coarse";
+const RULE = "luke-hover-card-rule m-0 h-px w-full flex-none border-0 bg-border";
+const ROW =
+  "luke-hover-card-row group/row -mx-2 box-border flex h-menu-row w-[calc(100%+--spacing(4))] min-w-0 items-center gap-icon-gap rounded-menu-row border-0 bg-transparent px-2 text-left text-body leading-[inherit] text-foreground transition-colors duration-(--luke-duration-hover) ease-[ease] data-[look=detail]:text-caption data-[look=detail]:leading-[inherit] data-[look=detail]:text-muted-foreground";
+const ROW_PRESS =
+  "[font-family:inherit] [font-style:inherit] [font-weight:inherit] cursor-pointer hover:bg-secondary focus-visible:bg-secondary focus-visible:outline-none";
+const ROW_GLYPH =
+  "luke-hover-card-row-glyph inline-flex w-menu-glyph flex-none justify-center [&>:not(.luke-avatar,:has(.luke-avatar))]:size-menu-glyph group-data-[look=detail]/row:[&>img]:size-hover-card-glyph";
+const ROW_LABEL = "luke-hover-card-row-label min-w-0 flex-1 overflow-hidden whitespace-nowrap";
+const ROW_END =
+  "luke-hover-card-row-end flex-none whitespace-nowrap text-caption leading-[inherit] text-subtle-foreground tabular-nums";
+const MORE =
+  "luke-hover-card-more flex h-hover-card-more items-center whitespace-nowrap pl-hover-card-indent text-caption leading-[inherit] text-subtle-foreground tabular-nums";
+
 /** The data attributes a card's root carries, which name the card for a test or a capture. */
 type HoverCardMarks = { readonly [mark: `data-${string}`]: string | undefined };
 
@@ -55,7 +92,7 @@ export function HoverCard({
   ...marks
 }: { children: ReactNode } & HoverCardMarks): React.JSX.Element {
   return (
-    <div {...marks} className="luke-hover-card">
+    <div {...marks} className={CARD}>
       {children}
     </div>
   );
@@ -79,23 +116,23 @@ export function HoverCardHead({
   corner?: ReactNode;
 }): React.JSX.Element {
   return (
-    <div className="luke-hover-card-head">
-      {glyph === undefined ? null : <span className="luke-hover-card-glyph">{glyph}</span>}
-      <div className="luke-hover-card-title">
+    <div className={HEAD}>
+      {glyph === undefined ? null : <span className={GLYPH}>{glyph}</span>}
+      <div className={TITLE}>
         {oneLine ? (
           <ClippedLine
-            className="luke-hover-card-name"
+            className={`${NAME} block`}
             as={ONE_LINE_ELEMENT.SPAN}
             end={ONE_LINE_END.FADE}
           >
             {name}
           </ClippedLine>
         ) : (
-          <span className="luke-hover-card-name">{name}</span>
+          <span className={`${NAME} line-clamp-2`}>{name}</span>
         )}
-        {sub === undefined ? null : <span className="luke-hover-card-sub">{sub}</span>}
+        {sub === undefined ? null : <span className={SUB}>{sub}</span>}
       </div>
-      {corner === undefined ? null : <span className="luke-hover-card-corner">{corner}</span>}
+      {corner === undefined ? null : <span className={CORNER}>{corner}</span>}
     </div>
   );
 }
@@ -109,17 +146,17 @@ export function HoverCardNote({
   children: ReactNode;
 }): React.JSX.Element {
   return oneLine ? (
-    <ClippedLine className="luke-hover-card-note" as={ONE_LINE_ELEMENT.P} end={ONE_LINE_END.FADE}>
+    <ClippedLine className={`${NOTE} block`} as={ONE_LINE_ELEMENT.P} end={ONE_LINE_END.FADE}>
       {children}
     </ClippedLine>
   ) : (
-    <p className="luke-hover-card-note">{children}</p>
+    <p className={`${NOTE} line-clamp-3`}>{children}</p>
   );
 }
 
 /** The hairline before what a card lists under its head. */
 export function HoverCardRule(): React.JSX.Element {
-  return <hr className="luke-hover-card-rule" />;
+  return <hr className={RULE} />;
 }
 
 /** A row of a card: its glyph, its words on one line, and what stands at its end; a button where a press opens what it names. */
@@ -144,25 +181,21 @@ export function HoverCardRow({
   const linkAddress = useLinkAddress(linkHref);
   const row = (
     <>
-      <span className="luke-hover-card-row-glyph">{glyph}</span>
-      <ClippedLine
-        className="luke-hover-card-row-label"
-        as={ONE_LINE_ELEMENT.SPAN}
-        end={ONE_LINE_END.FADE}
-      >
+      <span className={ROW_GLYPH}>{glyph}</span>
+      <ClippedLine className={ROW_LABEL} as={ONE_LINE_ELEMENT.SPAN} end={ONE_LINE_END.FADE}>
         {label}
       </ClippedLine>
-      {end === undefined ? null : <span className="luke-hover-card-row-end">{end}</span>}
+      {end === undefined ? null : <span className={ROW_END}>{end}</span>}
     </>
   );
   return onPress === undefined ? (
-    <span className="luke-hover-card-row" data-look={look}>
+    <span className={ROW} data-look={look}>
       {row}
     </span>
   ) : (
     <button
       type="button"
-      className="luke-hover-card-row"
+      className={`${ROW} ${ROW_PRESS}`}
       data-look={look}
       ref={linkAddress}
       onClick={pulseOnPress(onPress, PRESS_PULSE.QUIET)}
@@ -186,7 +219,7 @@ export function HoverCardList({
   return (
     <Stack as={LAYOUT_ELEMENT.UL} gap={GAP.NONE} aria-label={label}>
       {children}
-      {more === undefined ? null : <li className="luke-hover-card-more">{more}</li>}
+      {more === undefined ? null : <li className={MORE}>{more}</li>}
     </Stack>
   );
 }
