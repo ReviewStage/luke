@@ -6545,6 +6545,68 @@ test("a thread that grows while the reader is at its end, a message or a picture
   assert.equal(board.scrollTop, 300, "scrolled up, the reader's place stands");
 });
 
+/** Selects the words drawn under `within` as `words`, from `from` through `to`, as a drag lets them go. */
+function selectWithin(within: Element, words: string, from: string, to: string): void {
+  const walker = document.createTreeWalker(within, NodeFilter.SHOW_TEXT);
+  let text: Node | null = walker.nextNode();
+  while (text !== null && !(text.textContent ?? "").includes(words)) text = walker.nextNode();
+  assert.ok(text instanceof Text, `${words} is drawn`);
+  const range = document.createRange();
+  range.setStart(text, text.data.indexOf(from));
+  range.setEnd(text, text.data.indexOf(to) + to.length);
+  window.getSelection()?.removeAllRanges();
+  window.getSelection()?.addRange(range);
+  act(() => {
+    text.parentElement?.dispatchEvent(new Event("pointerup", { bubbles: true }));
+  });
+}
+
+/** The quotes the item's box holds, in order. */
+function boxQuotes(pane: HTMLElement): (string | null)[] {
+  const box = pane.querySelector(".inbox-answer") ?? assert.fail("the box is drawn");
+  return [...box.querySelectorAll(".composer-editor .composer-quote-words")].map(
+    (quote) => quote.textContent,
+  );
+}
+
+test("words selected in what an open ask offers, an option's words, quote into its box as the agent's message's do", async () => {
+  const pane = await mountThread(threadItem([askingMessage(EXPIRY_ASK)]));
+
+  selectWithin(pane, "What most teams use.", "What", "use.");
+  const reply = replyPress() ?? assert.fail("Reply stands over an option's words");
+  act(() => reply.click());
+  await settle();
+
+  assert.deepEqual(boxQuotes(pane), ["What most teams use."]);
+  assert.equal(replyPress() === undefined, true, "Reply goes once pressed");
+});
+
+test("a field's name in an open ask quotes into its box, and words typed into a field offer no Reply, being the reader's own", async () => {
+  const pane = await mountThread(
+    threadItem([
+      askingMessage({
+        type: INBOX_ASK.ANSWER,
+        fields: [{ type: INBOX_FIELD.TEXT, label: "Reason for the change", required: true }],
+      }),
+    ]),
+  );
+  const field = pane.querySelector(".inbox-field-composer") ?? assert.fail("the field is drawn");
+  typeInComposer(field, "Teams abroad miss the window");
+
+  selectWithin(field, "Teams abroad", "Teams", "abroad");
+  assert.equal(
+    replyPress() === undefined,
+    true,
+    "the reader's own typing is not the agent's words",
+  );
+
+  selectWithin(pane, "Reason for the change", "Reason", "change");
+  const reply = replyPress() ?? assert.fail("Reply stands over a field's name");
+  act(() => reply.click());
+  await settle();
+  assert.deepEqual(boxQuotes(pane), ["Reason for the change"]);
+});
+
 /** Everything the thread's subject draws, a part a child: its title alone. */
 function subjectParts(pane: HTMLElement): (string | null)[] {
   const subject = pane.querySelector(".inbox-subject") ?? assert.fail("the subject is drawn");

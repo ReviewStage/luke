@@ -3476,6 +3476,12 @@ ul.actor-stack {
   padding: 0;
 }
 
+/* An ask's controls as words a Reply may quote, which draw no box, so what
+   holds them lays them out (`inbox-ask-controls.tsx`'s `AskWords`). */
+.inbox-ask-words {
+  display: contents;
+}
+
 /* The open question's controls as the draft's card's body, over its foot,
    with no card, border, or head of their own, since the agent's message
    says what it asks. */
