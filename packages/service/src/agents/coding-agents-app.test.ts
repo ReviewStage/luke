@@ -218,6 +218,7 @@ import {
   Duration,
   Effect,
   Fiber,
+  Latch,
   Layer,
   Option,
   Queue,
@@ -492,8 +493,11 @@ function fakeEve(
     readonly reachable?: boolean;
     readonly cancels?: boolean;
     readonly sends?: SendAnswer;
+    /** How many cancels eve holds every cancel's answer for, so a caller asking them one at a time never hears back. */
+    readonly cancelsTogether?: number;
   } = {},
 ) {
+  const together = Latch.makeUnsafe(options.cancelsTogether === undefined);
   const opened: Opened[] = [];
   const sent: Sent[] = [];
   const cancelled: (readonly [string, string])[] = [];
@@ -545,12 +549,16 @@ function fakeEve(
         }
       }),
     cancel: (sessionId, eveTurnId) =>
-      Effect.sync(() => {
+      Effect.suspend(() => {
         cancelled.push([sessionId, eveTurnId]);
         cancelledAs.push(authorization);
-        return options.cancels === false
-          ? { outcome: EVE_CANCEL_OUTCOME.FAILED, status: 403 }
-          : { outcome: EVE_CANCEL_OUTCOME.ACCEPTED };
+        if (cancelled.length >= (options.cancelsTogether ?? 0)) together.openUnsafe();
+        return Effect.as(
+          together.await,
+          options.cancels === false
+            ? { outcome: EVE_CANCEL_OUTCOME.FAILED, status: 403 }
+            : { outcome: EVE_CANCEL_OUTCOME.ACCEPTED },
+        );
       }),
     reset: (sessionId) =>
       Effect.sync(() => {
@@ -4304,11 +4312,21 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
     turn: { readonly running: boolean } | undefined,
     sessionSandboxes?: SandboxStopReach["sessionSandboxes"],
   ) =>
-    Effect.gen(function* () {
-      const opened = yield* openTask({
+    Effect.flatMap(
+      openTask({
         eve,
         ...(sessionSandboxes === undefined ? undefined : { sessionSandboxes }),
-      });
+      }),
+      (opened) => agentStartedOn(opened, eve, turn),
+    );
+
+  /** Another agent the owner starts on the task opened, its turn running or ended as `turn` says, as `startedAgent` starts the first. */
+  const agentStartedOn = (
+    opened: Effect.Success<ReturnType<typeof openTask>>,
+    eve: ReturnType<typeof fakeEve>,
+    turn: { readonly running: boolean } | undefined,
+  ) =>
+    Effect.gen(function* () {
       const agent = readAnswer(
         codingAgentAnswerSchema,
         HOSTED_HTTP_STATUS.CREATED,
@@ -4317,7 +4335,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
       const stored = yield* readCodingAgent(opened.owner, agent.id);
       assert.ok(Option.isSome(stored));
       const target = { userId: opened.owner, conversationId: stored.value.conversationId };
-      const sessionId = eve.opened[0]?.sessionId ?? "";
+      const sessionId = eve.opened.at(-1)?.sessionId ?? "";
       assert.equal(yield* claimRuntimeSession(target, sessionId, new Date()), true);
       const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
       const turnId = randomUUID();
@@ -4626,6 +4644,32 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         assert.deepEqual(eve.reset, [sessionId]);
         assert.deepEqual(eve.resetAs, [deploymentFor(owner)]);
         assert.ok(Option.isNone(yield* readTask(owner, task.id)));
+      }),
+  );
+
+  it.effect(
+    "a task's delete stops its running agents at once, eve answering no cancel until both have asked",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve({ cancelsTogether: 2 });
+        const first = yield* startedAgent(eve, { running: true });
+        const second = yield* agentStartedOn(first, eve, { running: true });
+
+        const deleted = yield* first.ask(
+          request(TASK(first.task.id), first.owner, { method: "DELETE" }),
+        );
+
+        assert.equal(
+          readAnswer(taskDeleteAnswerSchema, HOSTED_HTTP_STATUS.OK, deleted).deleted,
+          true,
+        );
+        assert.deepEqual(
+          eve.cancelled.toSorted(([one], [other]) => one.localeCompare(other)),
+          [
+            [first.sessionId, "turn_0"],
+            [second.sessionId, "turn_0"],
+          ].toSorted(([one], [other]) => (one ?? "").localeCompare(other ?? "")),
+        );
       }),
   );
 

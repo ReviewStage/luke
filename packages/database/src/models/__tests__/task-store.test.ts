@@ -811,10 +811,10 @@ it.layer(getTestDB())("a task's work finishing", (it) => {
         // Merged, but the guard reads one standing agent at work, and sees only the standing ones.
         yield* recordCodingAgentPublished(dean, merged, pullRequestIn(PULL_REQUEST_STATE.MERGED));
         const seen: string[] = [];
-        const readerBusy = (agent: { readonly id: string }) =>
+        const readerBusy = (agents: readonly { readonly id: string }[]) =>
           Effect.sync(() => {
-            seen.push(agent.id);
-            return agent.id !== reader;
+            seen.push(...agents.map(({ id }) => id));
+            return !agents.some(({ id }) => id === reader);
           });
         assert.equal(yield* finishTaskWork(dean, taskId, readerBusy), false);
         assert.deepEqual(seen.toSorted(), [merged, reader].toSorted());

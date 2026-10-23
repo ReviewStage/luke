@@ -83,8 +83,8 @@ import { type StartReach, startRequestedAgent } from "../agents/coder-host/start
 import {
   type EveReach,
   eveFor,
-  stoppedForGood,
-  stopsForGood,
+  everyStoppedForGood,
+  everyStopsForGood,
   summaryOf,
 } from "../agents/coder-host/stop.js";
 import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
@@ -572,13 +572,10 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
       if (archiving) {
         const agents = yield* hostedStoreOrUnavailable(listCodingAgents(userId, taskId));
         // Every agent is read before any is stopped, so an archive refused as not ready cancels no one's work.
-        const ready = yield* Effect.forEach(agents, stopsForGood);
-        if (ready.includes(false)) return yield* Effect.fail(HOSTED_REFUSAL.AGENT_NOT_READY);
-        yield* Effect.forEach(
-          agents,
-          (agent) => stoppedForGood(seams, writer, request, userId, agent),
-          { discard: true },
-        );
+        if (!(yield* everyStopsForGood(agents))) {
+          return yield* Effect.fail(HOSTED_REFUSAL.AGENT_NOT_READY);
+        }
+        yield* everyStoppedForGood(seams, writer, request, userId, agents);
       }
       // Note that the archive stamp is never written, because a task is archived no longer: the request settles the task, or puts it back to work.
       const status =
@@ -646,11 +643,7 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
       const agents = yield* hostedStoreOrUnavailable(
         listCodingAgents(userId, taskId, { includeArchived: true }),
       );
-      yield* Effect.forEach(
-        agents,
-        (agent) => stoppedForGood(seams, writer, request, userId, agent),
-        { discard: true },
-      );
+      yield* everyStoppedForGood(seams, writer, request, userId, agents);
       const stopped = new Set(agents.map(({ id }) => id));
       const deleted = yield* hostedStoreOrUnavailable(
         deleteTaskCommitted(userId, taskId, {

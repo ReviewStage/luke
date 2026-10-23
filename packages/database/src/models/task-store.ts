@@ -131,12 +131,13 @@ export interface TaskStandingAgent {
 }
 
 /**
- * What a finish of a task's work runs under the task's lock: whether each
- * of its standing agents stands idle, neither starting nor running, read
- * under its conversation's lock.
+ * What a finish of a task's work runs under the task's lock: whether every
+ * one of its standing agents stands idle, neither starting nor running, read
+ * under their conversations' locks, all of them at once, since they share
+ * the transaction's one connection.
  */
 export type TaskFinishGuard<R> = (
-  agent: TaskStandingAgent,
+  agents: readonly TaskStandingAgent[],
 ) => Effect.Effect<boolean, QueryError | Schema.SchemaError, R>;
 
 /** One save a coding agent made, with the agent named as its row names it now. */
@@ -1590,8 +1591,7 @@ export function finishTaskWork<R = never>(
         if (!pullRequests.some(({ state }) => state === PULL_REQUEST_STATE.MERGED)) return false;
         if (Option.isSome(yield* findOpenQuestion({ taskId }))) return false;
         const agents = yield* lockStandingAgentsAfterHandOvers(taskId);
-        const standings = yield* Effect.forEach(agents, idle);
-        if (standings.includes(false)) return false;
+        if (!(yield* idle(agents))) return false;
         const now = yield* DateTime.nowAsDate;
         const finished = yield* finishTask({ taskId, now });
         return Option.isSome(finished);
