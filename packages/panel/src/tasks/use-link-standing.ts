@@ -208,7 +208,8 @@ function githubAskedOf(url: string): Asked | undefined {
 
 /** What a mention asks its provider for, where it is a link to a Linear issue, a pull request, or a GitHub issue. */
 function askedOf(mention: Mention): Asked | undefined {
-  if (mention.kind !== MENTION_KIND.LINK) return undefined;
+  // Note that a well-known site's page names no provider to ask.
+  if (mention.kind !== MENTION_KIND.LINK || !("provider" in mention)) return undefined;
   if (mention.provider === INTEGRATION_PROVIDER.LINEAR) {
     const identifier = linearIssueIdentifierOf(mention.url);
     return identifier === undefined ? undefined : { provider: mention.provider, identifier };

@@ -66,6 +66,7 @@
     "./linear-wire": "./src/linear-wire.js",
     "./sentry-install-wire": "./src/sentry-install-wire.js",
     "./link-home": "./src/link-home.js",
+    "./link-site": "./src/link-site.js",
     "./link-open": "./src/link-open.js",
     "./luke-link": "./src/luke-link.js",
     "./mention-link": "./src/mention-link.js",
