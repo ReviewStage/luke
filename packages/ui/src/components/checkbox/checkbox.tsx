@@ -80,6 +80,7 @@ export function Checkbox({
   const words = label === undefined;
   const box = useRef<HTMLElement | null>(null);
   return (
+    // biome-ignore lint/a11y/noLabelWithoutControl: the box inside is Base UI's checkbox, whose native input the label's press reaches, which the rule cannot see through a component.
     <label
       className={cn(
         CHECKBOX,

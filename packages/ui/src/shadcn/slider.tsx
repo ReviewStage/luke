@@ -63,7 +63,6 @@ function Slider({
         {Array.from({ length: _values.length }, (_, index) => (
           <SliderPrimitive.Thumb
             data-slot="slider-thumb"
-            // biome-ignore lint/suspicious/noArrayIndexKey: a thumb is its index, as shadcn keys it
             key={index}
             getAriaLabel={thumbLabel === undefined ? undefined : () => thumbLabel}
             getAriaValueText={thumbValueText === undefined ? undefined : () => thumbValueText}
