@@ -8,7 +8,9 @@ import { countedNumber, memberRefSchema, wireUuidSchema } from "./service-wire.j
  * worth carrying into the workspace's later work, and corrects one in place
  * when its developer contradicts it; nothing asks first. The memory is
  * the workspace's, shared by every member, and no agent in another workspace
- * recalls it. Settings is where a member reads what the agents kept and forgets
+ * recalls it, unless it was kept private: then it is the keeper's alone, only
+ * their own agents recall it, only they read and forget it here, and it leaves
+ * with their account. Settings is where a member reads what the agents kept and forgets
  * what is wrong. `/api/account/memories?workspaceId=` answers the
  * workspace's memories to a member of it, most recently kept or corrected
  * first (GET), and forgets one by its id named in the query (DELETE), which
@@ -46,6 +48,8 @@ export const memorySummarySchema = EffectSchema.Struct({
   keptBy: EffectSchema.NullOr(memberRefSchema),
   /** Whether the reader may forget it: its words are theirs, or they own or administer the workspace. */
   forgettable: EffectSchema.Boolean,
+  /** Whether it is the reader's alone, which only their own agents recall; no other member is ever answered one. */
+  private: EffectSchema.Boolean,
   /** When it was kept, in epoch milliseconds. */
   createdAt: countedNumber,
   /** When it was last kept or corrected, in epoch milliseconds. */

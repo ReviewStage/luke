@@ -4280,10 +4280,13 @@ test("a coding agent remembers for its workspace, as its starter's words: a team
   ]);
   assert.deepEqual(recalledWords(await asOtherWorkspace(CODER_TOOL.RECALL, {})), []);
   assert.deepEqual(
-    (await database.run(listMemories(workspaceId))).map((memory) => [memory.text, memory.userId]),
+    (await database.run(listMemories(workspaceId, agents.caller.userId))).map((memory) => [
+      memory.text,
+      memory.userId,
+    ]),
     [[fact, agents.caller.userId]],
   );
-  assert.deepEqual(await database.run(listMemories(elsewhere)), []);
+  assert.deepEqual(await database.run(listMemories(elsewhere, agents.caller.userId)), []);
 });
 
 test("a teammate's agent corrects a memory in place as its own starter's words, and a credential is never kept", async () => {
@@ -4307,7 +4310,10 @@ test("a teammate's agent corrects a memory in place as its own starter's words, 
   assert.equal(corrected.outcome, "corrected");
   assert.equal(refused.status, ACTION_RESULT_STATUS.REJECTED);
   assert.deepEqual(
-    (await database.run(listMemories(workspaceId))).map((memory) => [memory.text, memory.userId]),
+    (await database.run(listMemories(workspaceId, agents.caller.userId))).map((memory) => [
+      memory.text,
+      memory.userId,
+    ]),
     [["Deploys go out from the release branch.", agents.teammates.userId]],
   );
 });
@@ -4328,7 +4334,9 @@ test("while its starter has Memory off, a coding agent's remember and recall are
   assert.equal(recalled.status, ACTION_RESULT_STATUS.REJECTED);
   assert.equal(recalled.memories, undefined);
   assert.deepEqual(
-    (await database.run(listMemories(workspaceId))).map((memory) => memory.text),
+    (await database.run(listMemories(workspaceId, agents.caller.userId))).map(
+      (memory) => memory.text,
+    ),
     ["Deploys go out from main."],
   );
 });
@@ -4363,7 +4371,10 @@ test("the member's operator keeps memories in its workspace as its member's word
     fact,
   ]);
   assert.deepEqual(
-    (await database.run(listMemories(workspaceId))).map((memory) => [memory.text, memory.userId]),
+    (await database.run(listMemories(workspaceId, agents.caller.userId))).map((memory) => [
+      memory.text,
+      memory.userId,
+    ]),
     [[fact, agents.caller.userId]],
   );
 });

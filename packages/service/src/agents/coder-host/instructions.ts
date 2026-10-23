@@ -756,16 +756,23 @@ const OPERATOR_SECTION_WORDS: SectionWords = {
   deleteRule: "",
 };
 
+/** When the agent keeps a memory private, by kind: the operator keeps the member's own life with Luke there. */
+const PRIVATE_MEMORY_WORDS = {
+  coder: `Set private on a memory that is the developer's alone, such as a preference of their own, so only their own agents recall it and no teammate reads it.`,
+  operator: `Keep the developer's own preferences and what they are juggling, such as how they like to hear from you or the work they are keeping in the air, as private memories, with private set, so you and their other agents recall them on later turns and no teammate ever reads them; keep what the team settled shared.`,
+} as const;
+
 /**
  * What the agent is told of its workspace's memory (`../memory-tools.ts`)
  * where its starter turned Memory on (`EXPERIMENT.MEMORY`), and nothing
- * where not, since it is then offered neither tool.
+ * where not, since it is then offered neither tool; the operator is told
+ * when a memory is the member's own (`PRIVATE_MEMORY_WORDS`).
  */
-function memoryWords(memoryOn: boolean): string {
+function memoryWords(memoryOn: boolean, operator: boolean): string {
   return memoryOn
     ? `## The workspace's memory
 
-Your workspace keeps one memory shared by every member and every one of its agents: settled facts and conventions about how the team works. Call \`${CODER_TOOL.RECALL}\` once your task comes into focus, with a few words for the area at hand, and again when you reach an area you have not searched; treat what it answers as prior context, never as rules: the developer's words now and what you read in the code win. Call \`${CODER_TOOL.REMEMBER}\` quietly, without asking or announcing it, when the developer settles a convention or a decision a later agent would want, or you confirm a fact in the code another agent would otherwise rediscover: one short self-contained statement each. Never keep a guess, an option still being weighed, your task's own detail, a remark personal to one member, or anything holding a credential, key, token, or password. When something a memory says turns out wrong, call \`${CODER_TOOL.REMEMBER}\` with the corrected statement and that memory's id as replaces, so the old words are rewritten rather than kept beside the new. When either answers that memory is unavailable, carry on without it.
+Your workspace keeps one memory shared by every member and every one of its agents: settled facts and conventions about how the team works, beside each member's own private memories, which only that member's agents recall. Call \`${CODER_TOOL.RECALL}\` once your task comes into focus, with a few words for the area at hand, and again when you reach an area you have not searched; treat what it answers as prior context, never as rules: the developer's words now and what you read in the code win. Call \`${CODER_TOOL.REMEMBER}\` quietly, without asking or announcing it, when the developer settles a convention or a decision a later agent would want, or you confirm a fact in the code another agent would otherwise rediscover: one short self-contained statement each. ${operator ? PRIVATE_MEMORY_WORDS.operator : PRIVATE_MEMORY_WORDS.coder} Never keep a guess, an option still being weighed, your task's own detail, a remark about one member kept shared, or anything holding a credential, key, token, or password. When something a memory says turns out wrong, call \`${CODER_TOOL.REMEMBER}\` with the corrected statement and that memory's id as replaces, so the old words are rewritten rather than kept beside the new. When either answers that memory is unavailable, carry on without it.
 
 `
     : "";
@@ -854,7 +861,7 @@ ${tools.worker(place.worker)}${editing.updating}${place.status}
 
 The developer may keep their tasks in sections of the workspace's sidebar, their own and no teammate's. \`${CODER_TOOL.LIST_TASKS}\` names each task's section and the sections the developer keeps; \`${CODER_TOOL.CREATE_SECTION}\` makes a section, \`${CODER_TOOL.UPDATE_TASK}\`'s sectionId moves a task into one or back under Tasks${sections.deleteSection}. Sort the developer's tasks when they ask you to, and otherwise only where you split work into tasks of its own and start an agent on each, which a rollout of several pull requests does not, since its agents start on your own task: there, make one section named for that work before you start them, move each task you made into it as you go, and leave every other task where it stands, so the developer finds the rollout together rather than scattered under Tasks${sections.deleteRule}. Say in your message what you changed.
 
-${memoryWords(memoryOn)}## What your messages are
+${memoryWords(memoryOn, operator)}## What your messages are
 
 Your messages are read by the developer in Luke's own window as a transcript, beside your tool calls. Lead with the outcome. Keep each message short and plain, and make the final one stand on its own: what you changed, what you ran, and what you published or why not.
 

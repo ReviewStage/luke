@@ -30,7 +30,8 @@ import {
  * the service's own record of the agent (`runAgentRemember`,
  * `runAgentRecall`); the model names neither, so no input carries a
  * workspace or an account. Every member's agents in the workspace share the
- * one memory, and no agent of another workspace reads it. Only a root coding
+ * one memory, but for a memory kept `private`, which only its member's own
+ * agents recall, and no agent of another workspace reads it. Only a root coding
  * agent is offered them, never a worker handed one job, since what the
  * workspace keeps is the judgment of an agent that heard its developer. A
  * memory is prior context, not a rule: the developer's words now win, and a
@@ -124,6 +125,13 @@ const REMEMBER_INPUT = Schema.Struct({
       "The id of the memory this one corrects, as recall answered it; leave it out for a new memory.",
     ),
   ),
+  private: Schema.optionalKey(
+    describeWire(
+      Schema.Boolean,
+      "True to keep it for the developer alone, such as their own preferences or what they are " +
+        "juggling, so only their own agents recall it; leave it out for what the workspace shares.",
+    ),
+  ),
 });
 
 const RECALL_INPUT = Schema.Struct({
@@ -163,12 +171,14 @@ export const REMEMBER_TOOL = {
     "Keep a fact or convention for the workspace's later work, in any repository. Every member " +
     "of the workspace shares what you keep: a decision the team settled, how the team builds, " +
     "tests, or ships, a constraint someone stated, or a fact you confirmed in the code that a " +
-    "later agent would otherwise have to rediscover. Keep only what was settled, will still hold " +
-    "next time, and helps the team, never a guess, an idea still being weighed, this task's own " +
-    "detail, a remark personal to one member, or anything that would be a credential, key, " +
-    "token, or password. When what was said contradicts a memory recall answered, pass that " +
-    "memory's id as replaces with the corrected statement, so the old one is rewritten rather " +
-    "than kept beside it. Do it quietly: never ask the developer whether to keep something and " +
+    "later agent would otherwise have to rediscover. Set private for what is the developer's " +
+    "alone, such as their own preferences or what they are juggling: only their own agents " +
+    "recall it. Keep only what was settled, will still hold next time, and helps the team or, " +
+    "kept private, the developer, never a guess, an idea still being weighed, this task's own " +
+    "detail, a remark about one member kept shared, or anything that would be a credential, " +
+    "key, token, or password. When what was said contradicts a memory recall answered, pass " +
+    "that memory's id as replaces with the corrected statement, so the old one is rewritten " +
+    "rather than kept beside it; a correction stays as private or shared as the memory it replaces. Do it quietly: never ask the developer whether to keep something and " +
     "never mention a memory you kept unless they ask. Answers `accepted` with the outcome " +
     "(kept, already_kept, corrected) and the memory, or `rejected` with the reason.",
   inputSchema: REMEMBER_INPUT,
@@ -177,8 +187,8 @@ export const REMEMBER_TOOL = {
 export const RECALL_TOOL = {
   name: AGENT_TOOL.RECALL,
   description:
-    "Search what the workspace's agents remembered, any member's: settled facts and conventions " +
-    "about the team's work. Call it once the task comes into focus, with a few words for the " +
+    "Search what the workspace's agents remembered: the settled facts and conventions every " +
+    "member shares, and the developer's own private memories, each marked private. Call it once the task comes into focus, with a few words for the " +
     "area at hand, and again when a new area comes up; with no query it answers the memories " +
     "kept most recently. Treat what it answers as prior context, not as rules: the developer's " +
     "words now win, and a memory they contradict is corrected with " +
@@ -205,7 +215,12 @@ function rejected(reason: string): WireRecord {
 
 /** A memory as the model reads it. */
 function memoryRecord(memory: StoredMemory): WireRecord {
-  return { id: memory.id, text: memory.text, updatedAt: new Date(memory.updatedAt).toISOString() };
+  return {
+    id: memory.id,
+    text: memory.text,
+    private: memory.privateTo !== null,
+    updatedAt: new Date(memory.updatedAt).toISOString(),
+  };
 }
 
 /** Whether words look like they hold a credential, so they are never kept. */
@@ -262,11 +277,11 @@ export function runRemember(
 ): Effect.Effect<WireRecord, never, DatabaseServices> {
   const asked = readRemember(input);
   if (Result.isFailure(asked)) return Effect.succeed(rejected(MEMORY_REFUSAL.UNREADABLE_REMEMBER));
-  const { text, replaces } = asked.success;
+  const { text, replaces, private: privately = false } = asked.success;
   if (looksLikeCredential(text)) return Effect.succeed(rejected(MEMORY_REFUSAL.CREDENTIAL));
   return orUnavailable(
     Effect.map(
-      rememberMemory(call.workspaceId, call.userId, text, replaces),
+      rememberMemory(call.workspaceId, call.userId, text, replaces, privately),
       (outcome): WireRecord => {
         switch (outcome.kind) {
           case MEMORY_OUTCOME.NOT_FOUND:
@@ -293,7 +308,7 @@ export function runRecall(
   const asked = readRecall(input);
   if (Result.isFailure(asked)) return Effect.succeed(rejected(MEMORY_REFUSAL.UNREADABLE_RECALL));
   return orUnavailable(
-    Effect.map(listMemories(call.workspaceId), (memories) => ({
+    Effect.map(listMemories(call.workspaceId, call.userId), (memories) => ({
       status: ACTION_RESULT_STATUS.ACCEPTED,
       memories: rankMemories(memories, asked.success.query).map(memoryRecord),
       total: memories.length,
