@@ -1,6 +1,7 @@
 import { INBOX_SCOPE_KIND } from "@luke/features/coding-agent-view";
 import type { TasklessAgent } from "@luke/features/coding-agent-wire";
-import { useMinute } from "@luke/ui";
+import type { AppInboxWaitingItem } from "@luke/host/app-state";
+import { HoverCard, HoverCardHead, HoverCardNote, Time, useMinute } from "@luke/ui";
 import { InboxIcon } from "lucide-react";
 import { type ReactNode, useMemo } from "react";
 import { APP_SLICE, useAppSlice } from "../use-app-state.js";
@@ -24,7 +25,9 @@ import { useFollowedInboxes, windowInboxFollower } from "./use-followed-inboxes.
  * and the item is drawn as the Inbox draws it: its agent's tile
  * (`ItemMark`) and the card its row hangs (`InboxItemCard`), waiting or
  * answered. Until the inbox is read, or where the window holds nothing of
- * the task or agent, the chip draws the Inbox's glyph and its own card.
+ * the task or agent, the chip draws the Inbox's glyph, and the card main's
+ * brief makes of an item still waiting, else its own card. An
+ * inbox whose follow failed is followed again each time the card is hung.
  */
 
 /** Where a link to an item says it stands: under a task, or under an agent with no task. */
@@ -53,7 +56,7 @@ function tasklessAgentOf(
   };
 }
 
-/** The item a link names as the Inbox lists it, its holder named as its group's header is; none until its inbox is read, or where the window holds neither its task nor its agent. */
+/** The item a link names as the Inbox lists it, its holder named as its group's header is; none until its inbox is read, where that read failed, or where the window holds neither its task nor its agent. */
 function useLinkedItem(place: InboxItemPlace): InboxListed | undefined {
   const planId = "planId" in place ? place.planId : undefined;
   const agentId = "agentId" in place ? place.agentId : undefined;
@@ -82,6 +85,37 @@ function useLinkedItem(place: InboxItemPlace): InboxListed | undefined {
   }, [held, place.itemId, planId, agentId, tasks, inbox]);
 }
 
+/** The brief main holds of an item that waits, by its id; none for one settled or unknown. */
+function useWaitingBrief(itemId: string): AppInboxWaitingItem | undefined {
+  const inbox = useAppSlice(APP_SLICE.INBOX);
+  return [...(inbox?.waiting ?? []).flatMap((task) => task.items), ...(inbox?.taskless ?? [])].find(
+    (each) => each.id === itemId,
+  );
+}
+
+/** What an item still waiting says of where it stands, before its inbox is read. */
+const WAITING_WORDS = "Waiting for an answer";
+
+/** An item's card from main's brief alone: its question, that it waits for an answer, and when it was asked. */
+function WaitingItemCard({
+  item,
+  now,
+}: {
+  item: AppInboxWaitingItem;
+  now: number;
+}): React.JSX.Element {
+  return (
+    <HoverCard data-inbox-item-card="">
+      <HoverCardHead
+        glyph={<InboxIcon aria-hidden="true" />}
+        name={item.title}
+        corner={<Time at={item.postedAt} now={now} hint={false} />}
+      />
+      <HoverCardNote>{WAITING_WORDS}</HoverCardNote>
+    </HoverCard>
+  );
+}
+
 /** An item's glyph on its chip: its agent's tile, as its row leads with it; the Inbox's own glyph until the item is read. */
 export function InboxItemChipGlyph({ place }: { place: InboxItemPlace }): ReactNode {
   const listed = useLinkedItem(place);
@@ -98,7 +132,7 @@ export function InboxItemChipGlyph({ place }: { place: InboxItemPlace }): ReactN
   );
 }
 
-/** An item's card on its chip: the card its Inbox row hangs, whether it waits or not; else `fallback`. */
+/** An item's card on its chip: the card its Inbox row hangs, whether it waits or not; while its inbox is read, or where that failed, the brief card of an item still waiting; else `fallback`. */
 export function InboxItemChipCard({
   place,
   fallback,
@@ -109,6 +143,9 @@ export function InboxItemChipCard({
   const listed = useLinkedItem(place);
   const { models, me } = useMentionedPlace();
   const now = useMinute();
-  if (listed === undefined) return fallback;
+  const waiting = useWaitingBrief(place.itemId);
+  if (listed === undefined) {
+    return waiting === undefined ? fallback : <WaitingItemCard item={waiting} now={now} />;
+  }
   return <InboxItemCard listed={listed} now={now} models={models} readerId={me} />;
 }

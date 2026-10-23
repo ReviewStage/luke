@@ -8,7 +8,7 @@ import {
   AUTOMATION_TRIGGER,
   type AutomationSummary,
 } from "@luke/features/automation-wire";
-import { INBOX_SCOPE_KIND } from "@luke/features/coding-agent-view";
+import { CODING_AGENT_CALL_FAILURE, INBOX_SCOPE_KIND } from "@luke/features/coding-agent-view";
 import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
 import {
   INBOX_REPLY,
@@ -250,8 +250,12 @@ const SWEPT: InboxItem = {
   title: "Quarantine the flaky test?",
 };
 
+/** Whether the host refuses the inbox streams, as it does while the service cannot be reached. */
+let inboxRefused = false;
+
 /** The host's side of the inbox streams: the plan's items and the agent on no task's, each followed as a chip's glyph or card reads them. */
 const inboxes = followedInboxes((scope) => {
+  if (inboxRefused) return { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED };
   if (scope.kind === INBOX_SCOPE_KIND.PLAN && scope.id === TASK_ID) {
     return { items: [WAITING, ANSWERED] };
   }
@@ -279,6 +283,7 @@ afterEach(() => {
   told.length = 0;
   automationReads.length = 0;
   agentPageReads.length = 0;
+  inboxRefused = false;
 });
 
 /** The plan's card as the window's plans make it, with what a chip hangs it for. */
@@ -592,6 +597,25 @@ test("an Inbox item's chip wears its agent's tile and hangs its Inbox row's own 
   assert.match(settled.sub ?? "", /^Answered/u);
   assert.equal(sweep.card, "data-inbox-row-card");
   assert.equal(sweep.name, "Quarantine the flaky test?");
+});
+
+test("an Inbox item's chip whose inbox could not be read keeps the card main's brief makes of a waiting item, and the chip's own for an item it does not hold", async () => {
+  inboxRefused = true;
+  const container = await drawn(
+    [
+      `[waiting](${HOME}/plan/${TASK_ID}/inbox/${ITEM_ID})`,
+      `[answered](${HOME}/plan/${TASK_ID}/inbox/${ANSWERED_ITEM})`,
+    ].join(" "),
+  );
+  const [waiting, answered] = chipsOf(container);
+
+  const brief = await cardOf(waiting);
+  const own = await cardOf(answered);
+
+  assert.equal(brief.card, "data-inbox-item-card");
+  assert.equal(brief.name, "Keep expired links?");
+  assert.deepEqual(brief.notes, ["Waiting for an answer"]);
+  assert.equal(own.card, "data-mention-card");
 });
 
 test("a member's chip hangs their card", async () => {
