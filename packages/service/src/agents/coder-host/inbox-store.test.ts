@@ -462,14 +462,14 @@ it.layer(getTestDB())("the inbox store", (it) => {
           shelvedRead.items.some((item) => item.planId === shelved.id),
           "its item waits like any other",
         );
-        // The notices name their sender by the human name it was given.
+        // The notices name their sender by its title, or its model before it has one.
         const [authorRow] = yield* Database.use((db) =>
           db
-            .select({ personaName: codingAgent.personaName })
+            .select({ title: codingAgent.title, model: codingAgent.model })
             .from(codingAgent)
             .where(eq(codingAgent.id, onTask.agent.agentId)),
         );
-        const author = authorRow?.personaName;
+        const author = authorRow?.title ?? authorRow?.model;
         const read = yield* accountInboxPast(teammate, INBOX_CURSOR_START);
         assert.equal(read.items.length + (read.planless?.length ?? 0), 4);
         const unreadOf = (answer: typeof read) =>
