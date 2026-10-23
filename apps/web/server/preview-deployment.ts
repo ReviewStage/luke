@@ -185,17 +185,12 @@ const readPreview = /* @__PURE__ */ Effect.fn("web/readPreview")(
   }),
 );
 
-export interface PreviewWait {
-  readonly intervalMs: number;
-  readonly attempts: number;
-}
-
 /**
  * Twenty minutes. On 2026-09-12 a preview's record appeared about 25 s after
  * the push and reached success 85–115 s later; the rest of the budget is
  * Vercel's build queue on a day with many open branches.
  */
-const DEFAULT_PREVIEW_WAIT: PreviewWait = { intervalMs: 15_000, attempts: 80 };
+const PREVIEW_WAIT = { intervalMs: 15_000, attempts: 80 } as const;
 
 export class PreviewNotReady extends Schema.TaggedError<PreviewNotReady>()("PreviewNotReady", {
   sha: Schema.String,
@@ -210,7 +205,6 @@ export class PreviewNotReady extends Schema.TaggedError<PreviewNotReady>()("Prev
 export function waitForPreview(
   source: PreviewSource,
   options: {
-    readonly wait?: PreviewWait;
     /** Told each reading as it lands, so a log shows the wait rather than silence. */
     readonly onReading?: (reading: PreviewReading) => Effect.Effect<void>;
   } = {},
@@ -219,12 +213,11 @@ export function waitForPreview(
   PreviewNotReady | HttpClientError.HttpClientError | Schema.SchemaError,
   HttpClient.HttpClient
 > {
-  const wait = options.wait ?? DEFAULT_PREVIEW_WAIT;
   const onReading = options.onReading ?? (() => Effect.void);
   return Effect.gen(function* () {
     const reading = yield* Effect.repeat(readPreview(source).pipe(Effect.tap(onReading)), {
-      schedule: Schedule.spaced(Duration.millis(wait.intervalMs)).pipe(
-        Schedule.upTo({ times: wait.attempts }),
+      schedule: Schedule.spaced(Duration.millis(PREVIEW_WAIT.intervalMs)).pipe(
+        Schedule.upTo({ times: PREVIEW_WAIT.attempts }),
       ),
       // Annotated as a plain boolean rather than left to inference: a budget
       // spent before the record settles answers with a waiting reading, which
@@ -234,7 +227,7 @@ export function waitForPreview(
     if (reading.kind === PREVIEW_STATE.WAITING) {
       return yield* new PreviewNotReady({
         sha: source.sha,
-        waitedMs: wait.intervalMs * wait.attempts,
+        waitedMs: PREVIEW_WAIT.intervalMs * PREVIEW_WAIT.attempts,
       });
     }
     return reading;
