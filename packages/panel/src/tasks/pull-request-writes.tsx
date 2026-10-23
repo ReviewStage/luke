@@ -15,6 +15,7 @@ import {
   PULL_REQUEST_WRITE_OUTCOME,
   type PullRequestAction,
   type PullRequestActionRequest,
+  type PullRequestRefusal,
 } from "@luke/features/pull-request-write-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import {
@@ -146,7 +147,12 @@ export const WRITE_NOTE = {
 
 export type WriteNote =
   | { readonly kind: typeof WRITE_NOTE.SIGN_IN }
-  | { readonly kind: typeof WRITE_NOTE.WORDS; readonly words: string };
+  | {
+      readonly kind: typeof WRITE_NOTE.WORDS;
+      readonly words: string;
+      /** Why the service refused it, where the control that sent it does more than say its words. */
+      readonly reason?: PullRequestRefusal | undefined;
+    };
 
 /** How a change went, for a press that waits on it, such as a question's answer: made, or not, in the words the line says why. */
 type WriteOutcome = { readonly done: true } | { readonly done: false; readonly words: string };
@@ -188,7 +194,12 @@ export function noteOf(
     case PULL_REQUEST_WRITE_OUTCOME.SIGN_IN_REQUIRED:
       return { kind: WRITE_NOTE.SIGN_IN };
     case PULL_REQUEST_WRITE_OUTCOME.REFUSED:
-      return { kind: WRITE_NOTE.WORDS, words: WRITE_WORDS.refused(answer.words) };
+      return {
+        kind: WRITE_NOTE.WORDS,
+        words: WRITE_WORDS.refused(answer.words),
+        // Note that only a change's answer names why; a viewed mark's never does.
+        reason: "reason" in answer ? answer.reason : undefined,
+      };
   }
 }
 

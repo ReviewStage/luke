@@ -189,6 +189,7 @@ import {
   PullRequestCommentBox,
   usePullRequestComment,
 } from "./pull-request-comment-box.js";
+import { PullRequestDescription } from "./pull-request-description.js";
 import { PullRequestLabels } from "./pull-request-labels.js";
 import { PullRequestNumberProvider, pullRequestOfTab } from "./pull-request-number.js";
 import {
@@ -1651,15 +1652,20 @@ function ChecksPart({
   );
 }
 
-/** The description, as the pull request's read carries it, with the reactions it wears once the conversation's read, which carries them, lands; a skeleton while its read is out, and nothing where it failed, whose failure stands under the title. */
+/** The description, as the pull request's read carries it, edited in place where the member may edit it (`./pull-request-description.tsx`), with the reactions it wears once the conversation's read, which carries them, lands; a skeleton while its read is out, and nothing where it failed, whose failure stands under the title. */
 function DescriptionPart({
+  agentId,
   part,
+  onRead,
   reactions,
   subject,
   picture,
   fold,
 }: {
+  agentId: string;
   part: Part<CodingAgentOverviewPullRequest>;
+  /** Asks the pull request's read again, as an edit of the description does once GitHub answered it. */
+  onRead: () => void;
   reactions: readonly ReactionGroup[] | undefined;
   /** The GraphQL id a reaction is given to the description by, which the conversation's read names. */
   subject: string | undefined;
@@ -1667,6 +1673,16 @@ function DescriptionPart({
   fold: SectionFold;
 }): React.JSX.Element | null {
   if (part.kind === PART.FAILED || part.kind === PART.NONE) return null;
+  const words =
+    part.kind !== PART.LANDED || part.value.html === "" ? undefined : (
+      <div className="pull-request-words">
+        <EntryPictures html={part.value.html}>
+          <Anchored>
+            <GitHubWords html={part.value.html} picture={picture} />
+          </Anchored>
+        </EntryPictures>
+      </div>
+    );
   return (
     <Section title="Description" fold={fold}>
       {part.kind === PART.PENDING ? (
@@ -1674,16 +1690,22 @@ function DescriptionPart({
           label={PULL_REQUEST_WORDS.READING_DESCRIPTION}
           widths={["90%", "75%", "82%", "40%"]}
         />
-      ) : part.value.html === "" ? (
-        <p className="pull-request-quiet pull-request-none">{PULL_REQUEST_WORDS.NO_DESCRIPTION}</p>
+      ) : part.value.canEditDescription === true && part.value.body !== undefined ? (
+        // Note that it is keyed by its pull request, so words left in one pull request's editor are never another's.
+        <PullRequestDescription
+          key={part.value.number}
+          agentId={agentId}
+          pullRequest={part.value}
+          body={part.value.body}
+          drawn={words}
+          onRead={onRead}
+        />
       ) : (
-        <div className="pull-request-words">
-          <EntryPictures html={part.value.html}>
-            <Anchored>
-              <GitHubWords html={part.value.html} picture={picture} />
-            </Anchored>
-          </EntryPictures>
-        </div>
+        (words ?? (
+          <p className="pull-request-quiet pull-request-none">
+            {PULL_REQUEST_WORDS.NO_DESCRIPTION}
+          </p>
+        ))
       )}
       {part.kind === PART.PENDING ? null : <Reactions reactions={reactions} subject={subject} />}
     </Section>
@@ -2071,7 +2093,9 @@ function ConversationView({
     >
       <div className="pull-request-page">
         <DescriptionPart
+          agentId={agentId}
           part={parts.pullRequest}
+          onRead={parts.ask.pullRequest}
           reactions={landed(parts.conversation)?.descriptionReactions}
           subject={landed(parts.conversation)?.descriptionSubject}
           picture={picture}

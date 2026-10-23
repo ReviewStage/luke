@@ -30,8 +30,11 @@ import {
   documentOpened,
   documentTook,
   type HeldSources,
+  lineEndingOf,
   RawBlock,
   sourcesOf,
+  withLf,
+  withLineEnding,
 } from "./document-source.js";
 import { mentionNode, pastedMention } from "./mention-node.js";
 import {
@@ -405,7 +408,11 @@ export function mountPlanEditor(host: HTMLElement, props: PlanEditorProps): Plan
     blocks === undefined
       ? undefined
       : planSlash(blocks, (markdown) => manager.parse(markdown).content ?? []);
-  const opened = documentOpened(manager, markdown);
+  // Note that the text is read with LF line endings and written back with its own, so a body saved with CRLF comes back as it was.
+  const ending = lineEndingOf(markdown);
+  const source = withLf(markdown);
+  const written = () => withLineEnding(documentMarkdown(manager, editor.state.doc, held), ending);
+  const opened = documentOpened(manager, source);
   held = { sources: new Map(), lead: opened.lead, ending: opened.ending };
   // The threads the editor carries marks for, and whether they are being laid on, which hands over no draft.
   let carried: readonly string[] = [];
@@ -462,15 +469,16 @@ export function mountPlanEditor(host: HTMLElement, props: PlanEditorProps): Plan
     onUpdate: ({ editor: updated }) => {
       if (laying) return;
       const markdown = documentMarkdown(manager, updated.state.doc, held);
+      // Note that the threads' words are counted in the text as the editor writes it, a plan's, whose lines end in LF alone.
       onDraft(
-        markdown,
+        withLineEnding(markdown, ending),
         anchors === undefined ? undefined : anchorsOf(updated.state.doc, markdown, carried),
       );
     },
   });
   // Note that the threads' marks are laid on before each block's source is known by its node, so a block marked as it opens still writes its source.
   laying = true;
-  carried = anchors === undefined ? [] : anchorsLaidIn(editor, markdown, anchors);
+  carried = anchors === undefined ? [] : anchorsLaidIn(editor, source, anchors);
   laying = false;
   if (picking !== undefined) editor.registerPlugin(picking.plugin);
   if (slash !== undefined) editor.registerPlugin(slash.plugin);
@@ -485,13 +493,13 @@ export function mountPlanEditor(host: HTMLElement, props: PlanEditorProps): Plan
   return {
     ...editorFormatting(editor),
     take: (sent, merged) => {
-      const answer = documentTook(editor, manager, held, sent, merged);
+      const answer = documentTook(editor, manager, held, withLf(sent), withLf(merged));
       held = answer.held;
-      return { base: answer.base, text: documentMarkdown(manager, editor.state.doc, held) };
+      return { base: withLineEnding(answer.base, ending), text: written() };
     },
     chooseMention: (mention) => picking?.choose(editor, mention),
     insertBlock: (block) => slash?.insert(editor, block),
-    markdown: () => documentMarkdown(manager, editor.state.doc, held),
+    markdown: written,
     focusAt: (placement) => {
       onWordsAs = undefined;
       const selection = placedOnWords(editor, placement) ?? placed(editor, placement);
