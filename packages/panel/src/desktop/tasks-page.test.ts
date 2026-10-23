@@ -618,11 +618,11 @@ test("a row whose agents rest keeps the working mark's room before its pull requ
   const page = await mountPage([resting, working, ...TASKS.slice(2)]);
   const lead = (key: string) =>
     [...(rowOf(page, key).querySelector("[data-cell='agents'] .task-work-marks")?.children ?? [])]
-      .map((mark) => mark.className)
+      .map((mark) => mark.getAttribute("data-task-work"))
       .slice(0, 2);
 
-  assert.deepEqual(lead("ACME-38"), ["task-work-agents", "task-work-pull-request"]);
-  assert.deepEqual(lead("ACME-39"), ["task-work-agents", "task-work-pull-request"]);
+  assert.deepEqual(lead("ACME-38"), ["agents", "pull-request"]);
+  assert.deepEqual(lead("ACME-39"), ["agents", "pull-request"]);
   assert.equal(
     rowOf(page, "ACME-39").querySelector("[data-cell='agents'] [data-state='working']"),
     null,
@@ -1004,7 +1004,7 @@ test("a row hangs no card for its whole task; its pull request's mark hangs that
   assert.equal(document.querySelector("[data-task-card]"), null, "the row hangs no task card");
 
   restOn(
-    row.querySelector("[data-cell='agents'] .task-work-pull-request") ??
+    row.querySelector("[data-cell='agents'] [data-task-work='pull-request']") ??
       assert.fail("the row wears its pull request"),
   );
   const card = document.querySelector(".luke-tooltip-card [data-pull-request-card]");
@@ -1013,4 +1013,34 @@ test("a row hangs no card for its whole task; its pull request's mark hangs that
     "Rate limit the search endpoint",
   );
   assert.match(card?.textContent ?? "", /acme\/web#4222 · Merged/u);
+});
+
+test("a row's pull request mark and its count are presses: one from a service before it sent its page opens the task, and so does the count", async () => {
+  const line = (number: number) => ({
+    number,
+    title: `Change ${number}`,
+    state: "open" as const,
+    checks: "passing" as const,
+    additions: 1,
+    deletions: 1,
+  });
+  const withPullRequests: TaskSummary = {
+    ...task(39, "Rate limit search", TASK_STATUS.TODO, TASK_PRIORITY.HIGH),
+    agents: {
+      total: 1,
+      working: 0,
+      agents: [],
+      pullRequestTotal: 2,
+      pullRequests: [line(4222), line(4223)],
+    },
+  };
+  const page = await mountPage([withPullRequests, ...TASKS.slice(2)]);
+  const part = (kind: string) =>
+    rowOf(page, "ACME-39").querySelector<HTMLButtonElement>(
+      `[data-cell='agents'] button[data-task-work='${kind}']`,
+    ) ?? assert.fail(`the row wears its ${kind}`);
+
+  act(() => part("pull-request").click());
+  act(() => part("more").click());
+  assert.deepEqual(opened, ["t-39", "t-39"]);
 });

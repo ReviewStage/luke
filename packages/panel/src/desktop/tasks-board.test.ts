@@ -842,3 +842,26 @@ test("a card's assignee hangs the person's card", async () => {
   const card = document.querySelector(".luke-tooltip-card [data-actor-card]");
   assert.match(card?.textContent ?? "", /Charles Pan/u);
 });
+
+test("a card's pull request from a service before it sent its page opens the task, so its pill is never a dead press", async () => {
+  const { url: _, ...unaddressed } = pullRequestLine(4120);
+  const board = await mountBoard([
+    {
+      ...task(42, "Fix Safari login", TASK_STATUS.IN_PROGRESS, TASK_PRIORITY.HIGH),
+      agents: {
+        total: 1,
+        working: 0,
+        agents: [],
+        pullRequestTotal: 1,
+        pullRequests: [unaddressed],
+      },
+    },
+  ]);
+  const pill = board.querySelector<HTMLButtonElement>(
+    'li[data-task-id="t-42"] [data-task-work="pull-request"]',
+  );
+
+  act(() => (pill ?? assert.fail("the card wears its pull request")).click());
+  assert.deepEqual(opened, ["t-42"]);
+  assert.deepEqual(pages, []);
+});

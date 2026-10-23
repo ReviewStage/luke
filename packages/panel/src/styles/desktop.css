@@ -6520,12 +6520,11 @@ ul.actor-stack {
   gap: var(--luke-space-4);
 }
 
-/* The creator's face stands over the card's press, so the pointer resting
-   on it hangs their card. */
-.tasks-board-creator {
+/* The creator's face, a press of its own that hangs their card
+   (`CreatorFace`), stands over the card's press. */
+.tasks-board-card-head [data-task-creator] {
   position: relative;
   z-index: 1;
-  display: inline-flex;
 }
 
 /* The status's mark before the name, on the name's first line, standing
@@ -6940,15 +6939,13 @@ ul.actor-stack {
   height: var(--luke-space-16);
 }
 
-/* A row's creator's face, and each of its agents' and pull requests' marks
-   (`task-row-parts.tsx`), stand over the row's press in a cell that lets
-   the pointer through, so resting on one hangs its own card while a press
-   beside it still opens the task. */
-.tasks-list-creator,
-.task-work-marks > [data-carded] {
+/* A row's creator's face and each of its agents' and pull requests' marks
+   (`task-row-parts.tsx`) are presses of their own, each hanging its card,
+   standing over the row's press in a cell that lets the pointer through, so
+   a press beside them still opens the task. */
+.tasks-list-cell :is([data-task-creator], button[data-task-work]) {
   position: relative;
   z-index: 1;
-  display: inline-flex;
   pointer-events: auto;
 }
 
@@ -6975,29 +6972,27 @@ ul.actor-stack {
   }
 }
 
-/* What a task's agents are doing and the pull requests they opened
-   (`task-row-parts.tsx`): the working mark, then each pull request's mark in
-   GitHub's colour for where it stands and its number, then how many more. */
+/* What a task's agents are doing and the pull requests they opened in the
+   List's column (`task-row-parts.tsx`): the working mark, then each pull
+   request's mark in GitHub's colour for where it stands and its number, then
+   how many more, each a quiet chip. */
 .task-work-marks {
   display: inline-flex;
   min-width: 0;
   flex: none;
   align-items: center;
-  gap: var(--luke-space-6);
-  color: var(--luke-color-text-subtle);
-  font-size: var(--luke-type-caption-size);
-  line-height: var(--luke-type-caption-leading);
+  gap: var(--luke-space-2);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 
-.task-work-agents,
-.task-work-pull-request {
+/* A resting task keeps the working mark's chip's room, so its pull
+   requests line up with a working task's. */
+.task-work-agents {
   display: inline-flex;
+  width: var(--luke-space-20);
+  height: var(--luke-space-20);
+  flex: none;
   align-items: center;
-  gap: var(--luke-space-2);
-}
-
-.task-work-pull-request > .task-mark-glyph {
-  vertical-align: baseline;
+  justify-content: center;
 }

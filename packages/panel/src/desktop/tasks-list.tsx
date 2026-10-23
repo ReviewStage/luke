@@ -89,7 +89,7 @@ import {
   UserXIcon,
 } from "lucide-react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
-import { ACTOR_SIZE, ActorMark, actorCard, UnassignedMark } from "../actor-ref.js";
+import { ACTOR_SIZE, ActorMark, UnassignedMark } from "../actor-ref.js";
 import { useAppCommand } from "../app-commands.js";
 import { FIND_SKIP_ATTRIBUTE } from "../find-matches.js";
 import { useMemberDirectory } from "../member-directory.js";
@@ -110,6 +110,7 @@ import { sectionGlyph } from "./section-icon-picker.js";
 import { useTaskMenu } from "./task-actions.js";
 import {
   AssigneeChip,
+  CreatorFace,
   PriorityChip,
   StatusChip,
   statusOf,
@@ -598,7 +599,6 @@ function TaskListRow({
   onOpen: () => void;
   onStanding: (standing: TaskStanding) => void;
 }): React.JSX.Element {
-  const creator = creatorActor(task, useMemberDirectory(), undefined);
   const maker = useTaskMaker(task);
   const reads = useReadMarks();
   const rename = useInlineRename(task.id, tasks.onRenameTask);
@@ -615,7 +615,6 @@ function TaskListRow({
     press.current?.focus();
   }, [rename.editing]);
   const drawn = (property: TaskProperty) => properties.includes(property);
-  const shownBy = maker?.actor ?? creator;
   const key = task.number === undefined ? undefined : taskKey(workspaceName, task.number);
   // Note that the marks before the name are a control and decoration to a screen reader, so the key and status are said in the press, and left out of find, which finds them drawn.
   const spoken = [
@@ -729,18 +728,13 @@ function TaskListRow({
               {actorName(maker.actor)}
             </Text>
           )}
-          <Tooltip label={actorName(shownBy)} card={actorCard(shownBy)}>
-            <span className="tasks-list-creator">
-              <ActorMark
-                actor={shownBy}
-                size={ACTOR_SIZE.MARK}
-                forWhom={maker === undefined ? undefined : creator}
-              />
-            </span>
-          </Tooltip>
+          <CreatorFace task={task} onOpen={onOpen} />
         </>,
       )}
-      {cell(TASK_PROPERTY.AGENTS, <TaskWorkMarks task={task} tasks={tasks} most={1} steady />)}
+      {cell(
+        TASK_PROPERTY.AGENTS,
+        <TaskWorkMarks task={task} tasks={tasks} most={1} steady onOpen={onOpen} />,
+      )}
       {cell(
         TASK_PROPERTY.UPDATED,
         <Time at={taskTime(task, TASK_ORDER.UPDATED)} now={now} hint={false} />,

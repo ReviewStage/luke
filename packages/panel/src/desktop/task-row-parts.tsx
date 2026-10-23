@@ -23,9 +23,11 @@ import {
   Tooltip,
   useMenu,
 } from "@luke/ui";
+import { actorName, creatorActor } from "@luke/ui/actor-model";
 import type { ReactNode } from "react";
 import { ACTOR_SIZE, ActorMark, actorCard } from "../actor-ref.js";
 import { useMemberDirectory, usePerson } from "../member-directory.js";
+import { useActorDoor } from "../person-door.js";
 import { GLYPH_STATE, StateGlyph } from "../state-glyph.js";
 import { agentStillWriting, pullRequestNumberLabel } from "../tasks/coding-agent-model.js";
 import { NEEDS_YOU } from "../tasks/inbox-model.js";
@@ -38,6 +40,7 @@ import {
   TASK_STATUS_WORDS,
 } from "../tasks/task-standing.js";
 import { useOpenLink } from "../tasks/use-open-link.js";
+import { useTaskMaker } from "../tasks/use-task-origin.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast.js";
 import { ActionMenu } from "./action-menu.js";
@@ -310,15 +313,16 @@ function workingWords(working: number): string {
  * working mark while one works, then its pull requests, each its mark in
  * GitHub's colour for where it stands and its number, those still standing
  * first, at most `most` of them and a count of the rest; nothing where it has
- * neither. Each hangs its own card (`task-part-cards.tsx`): the working mark
- * the task's agents, a pull request itself, and the count those it counts.
- * As the List's marks (`WORK_LOOK.MARKS`) they are facts, the card's rows
- * being where a pull request or an agent opens; as a Board card's pills
- * (`WORK_LOOK.PILLS`) each is a press of its own, a pull request opening it
- * as a link to it does, the working mark the agent at work, and the count the
- * task. Where `steady`, as in the List's column, a task whose agents rest
- * keeps the working mark's room before its pull requests, so they line up
- * with those of a task whose agent works.
+ * neither. Each is a press of its own and hangs its own card
+ * (`task-part-cards.tsx`): the working mark opens the agent at work and hangs
+ * the task's agents, a pull request opens it as a link to it does and hangs
+ * it, and the count opens the task and hangs those it counts. A pull request
+ * from a service before it sent its page opens the task instead, so no part
+ * is a press that does nothing. As the List's marks (`WORK_LOOK.MARKS`) they
+ * are quiet toolbar chips that light under the pointer; as a Board card's
+ * (`WORK_LOOK.PILLS`), pills. Where `steady`, as in the List's column, a task
+ * whose agents rest keeps the working mark's room before its pull requests,
+ * so they line up with those of a task whose agent works.
  */
 export function TaskWorkMarks({
   task,
@@ -333,8 +337,8 @@ export function TaskWorkMarks({
   look?: WorkLook;
   most?: number;
   steady?: boolean;
-  /** Opens the task, as a Board card's count of pull requests does. */
-  onOpen?: () => void;
+  /** Opens the task, as the count of pull requests does. */
+  onOpen: () => void;
 }): React.JSX.Element | null {
   const openLink = useOpenLink();
   const working = task.agents?.working ?? 0;
@@ -343,7 +347,10 @@ export function TaskWorkMarks({
   const total = task.agents?.pullRequestTotal ?? pullRequests.length;
   const more = total - shown.length;
   if (working === 0 && shown.length === 0) return null;
+  const chip = look === WORK_LOOK.PILLS ? CHIP_LOOK.PILL : CHIP_LOOK.TOOLBAR;
   const agents = task.agents?.agents ?? [];
+  // Note that the working mark opens the agent at work the row names, else the task, which shows its agents.
+  const atWork = agents.find((agent) => agentStillWriting(agent.status)) ?? agents[0];
   const agentsCard =
     agents.length === 0 ? undefined : (
       <TaskAgentsCard
@@ -353,100 +360,106 @@ export function TaskWorkMarks({
         tasks={tasks}
       />
     );
-  const moreCard = (
-    <MorePullRequestsCard pullRequests={pullRequests.slice(shown.length)} total={more} />
-  );
-  if (look === WORK_LOOK.PILLS) {
-    // Note that the working pill opens the agent at work the row names, else the task, which shows its agents.
-    const atWork = agents.find((agent) => agentStillWriting(agent.status)) ?? agents[0];
-    return (
-      <>
-        {working === 0 ? null : (
-          <Tooltip label={workingWords(working)} card={agentsCard}>
-            <Chip
-              look={CHIP_LOOK.PILL}
-              size={CHIP_SIZE.COMPACT}
-              aria-label={workingWords(working)}
-              data-task-work="agents"
-              onClick={atWork === undefined ? onOpen : () => tasks.onShowAgent(task.id, atWork.id)}
-            >
-              <StateGlyph state={GLYPH_STATE.WORKING} />
-              <ChipName>{`${working} working`}</ChipName>
-            </Chip>
-          </Tooltip>
-        )}
-        {shown.map((pullRequest) => {
-          const { url } = pullRequest;
-          return (
-            <Tooltip
-              key={url ?? pullRequest.number}
-              label={pullRequest.title}
-              card={<PullRequestCard pullRequest={pullRequest} />}
-            >
-              <Chip
-                look={CHIP_LOOK.PILL}
-                size={CHIP_SIZE.COMPACT}
-                data-task-work="pull-request"
-                data-pull-request-state={pullRequestMarkState(pullRequest)}
-                onClick={url === undefined ? undefined : () => openLink(url)}
-              >
-                <PullRequestMark pullRequest={pullRequest} />
-                <ChipName>{pullRequestNumberLabel(pullRequest)}</ChipName>
-              </Chip>
-            </Tooltip>
-          );
-        })}
-        {more > 0 ? (
-          <Tooltip label={moreWords(more)} card={moreCard}>
-            <Chip
-              look={CHIP_LOOK.PILL}
-              size={CHIP_SIZE.COMPACT}
-              data-task-work="more"
-              onClick={onOpen}
-            >
-              <ChipName>{`+${more}`}</ChipName>
-            </Chip>
-          </Tooltip>
-        ) : null}
-      </>
-    );
-  }
-  return (
-    <span className="task-work-marks">
+  const parts = (
+    <>
       {working > 0 ? (
         <Tooltip label={workingWords(working)} card={agentsCard}>
-          <span className="task-work-agents" data-carded="">
+          <Chip
+            look={chip}
+            size={CHIP_SIZE.COMPACT}
+            iconOnly={look === WORK_LOOK.MARKS}
+            aria-label={workingWords(working)}
+            data-task-work="agents"
+            onClick={atWork === undefined ? onOpen : () => tasks.onShowAgent(task.id, atWork.id)}
+          >
             <StateGlyph state={GLYPH_STATE.WORKING} />
-          </span>
+            <ChipName>{`${working} working`}</ChipName>
+          </Chip>
         </Tooltip>
       ) : steady ? (
-        <span className="task-work-agents">
+        <span className="task-work-agents" data-task-work="agents">
           <StateGlyph state={GLYPH_STATE.REST} />
         </span>
       ) : null}
-      {shown.map((pullRequest) => (
-        <Tooltip
-          key={pullRequest.url ?? pullRequest.number}
-          label={pullRequest.title}
-          card={<PullRequestCard pullRequest={pullRequest} />}
-        >
-          <span
-            className="task-work-pull-request"
-            data-carded=""
-            data-pull-request-state={pullRequestMarkState(pullRequest)}
+      {shown.map((pullRequest) => {
+        const { url } = pullRequest;
+        return (
+          <Tooltip
+            key={url ?? pullRequest.number}
+            label={pullRequest.title}
+            card={<PullRequestCard pullRequest={pullRequest} />}
           >
-            <PullRequestMark pullRequest={pullRequest} className="task-mark-glyph" />
-            <span aria-hidden="true">{pullRequestNumberLabel(pullRequest)}</span>
-          </span>
-        </Tooltip>
-      ))}
+            <Chip
+              look={chip}
+              size={CHIP_SIZE.COMPACT}
+              data-task-work="pull-request"
+              data-pull-request-state={pullRequestMarkState(pullRequest)}
+              onClick={url === undefined ? onOpen : () => openLink(url)}
+            >
+              <PullRequestMark pullRequest={pullRequest} />
+              <ChipName>{pullRequestNumberLabel(pullRequest)}</ChipName>
+            </Chip>
+          </Tooltip>
+        );
+      })}
       {more > 0 ? (
-        <Tooltip label={moreWords(more)} card={moreCard}>
-          <span className="task-work-more" data-carded="">
-            {`+${more}`}
-          </span>
+        <Tooltip
+          label={moreWords(more)}
+          card={
+            <MorePullRequestsCard pullRequests={pullRequests.slice(shown.length)} total={more} />
+          }
+        >
+          <Chip
+            look={chip}
+            size={CHIP_SIZE.COMPACT}
+            aria-label={moreWords(more)}
+            data-task-work="more"
+            onClick={onOpen}
+          >
+            <ChipName>{`+${more}`}</ChipName>
+          </Chip>
         </Tooltip>
       ) : null}
-    </span>
+    </>
+  );
+  return look === WORK_LOOK.PILLS ? parts : <span className="task-work-marks">{parts}</span>;
+}
+
+/**
+ * Who made a task, by their face: the member's, or the square of Luke or the
+ * agent that made it for them with the member's face on its corner, as every
+ * task surface draws it. It hangs their card, and a press opens the member's
+ * page where the window offers one, else the task, so it is never a press
+ * that does nothing.
+ */
+export function CreatorFace({
+  task,
+  onOpen,
+}: {
+  task: TaskSummary;
+  onOpen: () => void;
+}): React.JSX.Element {
+  const creator = creatorActor(task, useMemberDirectory(), undefined);
+  const maker = useTaskMaker(task);
+  const shown = maker?.actor ?? creator;
+  // Note that the face opens the member it stands for, whoever made the task for them, since Luke and an agent have no page.
+  const door = useActorDoor(creator);
+  return (
+    <Tooltip label={actorName(shown)} card={actorCard(shown)}>
+      <Chip
+        look={CHIP_LOOK.TOOLBAR}
+        size={CHIP_SIZE.COMPACT}
+        iconOnly
+        data-task-creator=""
+        onClick={door ?? onOpen}
+      >
+        <ActorMark
+          actor={shown}
+          size={ACTOR_SIZE.MARK}
+          forWhom={maker === undefined ? undefined : creator}
+        />
+        <ChipName>{actorName(shown)}</ChipName>
+      </Chip>
+    </Tooltip>
   );
 }

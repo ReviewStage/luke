@@ -63,7 +63,7 @@ import {
   useMinute,
   VisuallyHidden,
 } from "@luke/ui";
-import { actorName, creatorActor } from "@luke/ui/actor-model";
+import { actorName } from "@luke/ui/actor-model";
 import { TASK_ORDER, taskTime } from "@luke/ui/task-list-model";
 import { RENAME_FAILED_NOTE, repositoryPageUrl } from "@luke/ui/tasks-model";
 import {
@@ -79,7 +79,7 @@ import {
 import { useInlineRename } from "@luke/ui/use-inline-rename";
 import { FolderGitIcon, SquareKanbanIcon } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
-import { ACTOR_SIZE, ActorMark, actorCard, UnassignedMark } from "../actor-ref.js";
+import { ACTOR_SIZE, ActorMark, UnassignedMark } from "../actor-ref.js";
 import { useAppCommand } from "../app-commands.js";
 import { FIND_SKIP_ATTRIBUTE } from "../find-matches.js";
 import { useMemberDirectory } from "../member-directory.js";
@@ -100,6 +100,7 @@ import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { useTaskMenu } from "./task-actions.js";
 import {
   AssigneeChip,
+  CreatorFace,
   PriorityChip,
   StatusChip,
   standsAt,
@@ -297,7 +298,6 @@ function TaskBoardCard({
   onOpen: () => void;
   onStanding: (standing: TaskStanding) => void;
 }): React.JSX.Element {
-  const creator = creatorActor(task, useMemberDirectory(), undefined);
   const maker = useTaskMaker(task);
   const reads = useReadMarks();
   const rename = useInlineRename(task.id, tasks.onRenameTask);
@@ -323,7 +323,6 @@ function TaskBoardCard({
       onStanding={onStanding}
     />
   ) : null;
-  const shownBy = maker?.actor ?? creator;
   return (
     <Card
       as={CARD_ELEMENT.LI}
@@ -364,15 +363,7 @@ function TaskBoardCard({
                   {actorName(maker.actor)}
                 </Text>
               )}
-              <Tooltip label={actorName(shownBy)} card={actorCard(shownBy)}>
-                <span className="tasks-board-creator">
-                  <ActorMark
-                    actor={shownBy}
-                    size={ACTOR_SIZE.MARK}
-                    forWhom={maker === undefined ? undefined : creator}
-                  />
-                </span>
-              </Tooltip>
+              <CreatorFace task={task} onOpen={onOpen} />
             </span>
           ) : null}
         </span>
