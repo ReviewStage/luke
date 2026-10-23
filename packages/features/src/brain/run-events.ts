@@ -1,4 +1,4 @@
-import type { CompactionSource, SessionKey } from "@luke/runtime/vocabulary";
+import type { SessionKey } from "@luke/runtime/vocabulary";
 import {
   ACTION_RESULT_STATUS,
   isRecord,
@@ -29,7 +29,7 @@ import type { BrainTurnTrigger } from "./turn.js";
  * start and origin, each step as an inference answers and opens it, each
  * tool call before it runs and its output or error after, each reasoning
  * item's summary beside the provider's opaque item, the
- * messages the turn completed as AI SDK `UIMessage`s, a compaction it folded,
+ * messages the turn completed as AI SDK `UIMessage`s,
  * and its end with the status, the usage split four ways, and the response
  * ids. Every event carries the conversation's key, the turn's id, and its
  * place in the turn's sequence, numbered from one by the turn's one teller,
@@ -68,8 +68,6 @@ export const BRAIN_RUN_EVENT = {
   MESSAGE_COMPLETED: "message_completed",
   /** A step's words so far, cut at their last finished sentence, while the turn still runs; the completed answer carries them whole. */
   TEXT_DRAFTED: "text_drafted",
-  /** The context was folded, before the turn's first inference or inside the run. */
-  COMPACTION_COMPLETED: "compaction_completed",
   /** The turn's execution is over, however it ended. */
   TURN_ENDED: "turn_ended",
 } as const;
@@ -154,13 +152,6 @@ export type ToolCallSettlement =
       readonly errorText: string;
       readonly status: ToolRefusalStatus;
     };
-
-/** A compaction as the turn reports it: which way it folded, how much, and the summary where one was written. */
-interface TurnCompaction {
-  readonly source: CompactionSource;
-  readonly dropped: number;
-  readonly summary?: string;
-}
 
 /** What every event of the stream carries beside its own fields. */
 interface BrainRunEventBase {
@@ -271,10 +262,6 @@ export type BrainRunEventBody =
       readonly step: number;
       /** Every word the step has formed so far, through its last finished sentence; it only grows. */
       readonly text: string;
-    }
-  | {
-      readonly kind: typeof BRAIN_RUN_EVENT.COMPACTION_COMPLETED;
-      readonly compaction: TurnCompaction;
     }
   | {
       readonly kind: typeof BRAIN_RUN_EVENT.TURN_ENDED;
