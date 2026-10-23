@@ -100,7 +100,7 @@ export function InboxFormText({
   });
   return (
     <ComposerFrame
-      look={COMPOSER_LOOK.FIELD}
+      look={COMPOSER_LOOK.INPUT}
       className="inbox-field-composer"
       data-disabled={disabled ? "" : undefined}
     >
