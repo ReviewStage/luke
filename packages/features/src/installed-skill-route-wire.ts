@@ -9,7 +9,7 @@ import { SKILL_FILE_BOUNDS } from "./skill-file.js";
 import { SKILL_PASTE_KIND, SKILL_PASTE_UNSUPPORTED, SKILL_TEXT_PROBLEM } from "./skill-paste.js";
 
 /**
- * installed-skill-route-wire.ts -- what the installed skills routes take and answer: a paste previewed, skills installed from it, and one listed, toggled, updated, or removed.
+ * installed-skill-route-wire.ts -- what the installed skills routes take and answer: a paste previewed, skills installed from it, and one listed, read, toggled, updated, shared, or removed.
  *
  * A member installs a skill by pasting a `skills add` command or a skill's
  * text into one box (`skill-paste.ts`). The preview reads the paste as the
@@ -173,7 +173,23 @@ export const installedSkillListAnswerSchema = EffectSchema.Struct({
   skills: EffectSchema.Array(installedSkillSummarySchema),
 });
 
-/* ----- Install, toggle, update ----- */
+/** One file of an installed skill as a read lists it: its path from the skill's folder and its size. */
+const installedSkillFileEntrySchema = EffectSchema.Struct({
+  path: EffectSchema.String,
+  bytes: countedNumber,
+});
+
+/** One installed skill read whole, for a member to see what it says before they trust it: its `SKILL.md` text and every file, in path order. */
+export const installedSkillContentSchema = EffectSchema.Struct({
+  id: wireUuidSchema,
+  /** Its `SKILL.md`, read as UTF-8. */
+  skillFile: EffectSchema.String,
+  files: EffectSchema.Array(installedSkillFileEntrySchema),
+});
+
+export type InstalledSkillContent = typeof installedSkillContentSchema.Type;
+
+/* ----- Install, toggle, update, share ----- */
 
 /**
  * An install: the paste, read afresh; whose the skills are; for a source,
@@ -213,6 +229,11 @@ export const installedSkillUpdateRequestSchema = EffectSchema.Struct({
 export const installedSkillUpdatedAnswerSchema = EffectSchema.Struct({
   skill: installedSkillSummarySchema,
   changed: EffectSchema.Boolean,
+});
+
+/** A personal skill shared with the workspace named, which it moves into. */
+export const installedSkillShareRequestSchema = EffectSchema.Struct({
+  workspaceId: EffectSchema.NonEmptyString,
 });
 
 /**

@@ -2,6 +2,7 @@ import { Schema as EffectSchema } from "effect";
 import {
   INSTALLED_SKILL_FILES_REFUSAL,
   installedSkillAnswerSchema,
+  installedSkillContentSchema,
   installedSkillInstallAnswerSchema,
   installedSkillInstallRequestSchema,
   installedSkillListAnswerSchema,
@@ -100,6 +101,14 @@ export const installedSkillIdParamsSchema = EffectSchema.Struct({ skillId: wireU
 
 export type InstalledSkillIdParams = typeof installedSkillIdParamsSchema.Type;
 
+/** One personal skill shared with the workspace named, which it moves into. */
+export const installedSkillShareParamsSchema = EffectSchema.Struct({
+  workspaceId: EffectSchema.NonEmptyString,
+  skillId: wireUuidSchema,
+});
+
+export type InstalledSkillShareParams = typeof installedSkillShareParamsSchema.Type;
+
 /* ----- Views ----- */
 
 /** The skills the account sees in a workspace, or why there are none. */
@@ -109,6 +118,14 @@ export const installedSkillListViewSchema = EffectSchema.Union([
 ]);
 
 export type InstalledSkillListView = typeof installedSkillListViewSchema.Type;
+
+/** One skill read whole, or why it was not. */
+export const installedSkillContentViewSchema = EffectSchema.Union([
+  installedSkillContentSchema,
+  failed,
+]);
+
+export type InstalledSkillContentView = typeof installedSkillContentViewSchema.Type;
 
 /** What a paste would install, or why the service did not say. */
 export const installedSkillPreviewViewSchema = EffectSchema.Union([
@@ -126,7 +143,7 @@ export const installedSkillInstallViewSchema = EffectSchema.Union([
 
 export type InstalledSkillInstallView = typeof installedSkillInstallViewSchema.Type;
 
-/** One skill as a toggle left it, or why it is unchanged. */
+/** One skill as a toggle or a share left it, or why it is unchanged. */
 export const installedSkillViewSchema = EffectSchema.Union([installedSkillAnswerSchema, failed]);
 
 export type InstalledSkillView = typeof installedSkillViewSchema.Type;

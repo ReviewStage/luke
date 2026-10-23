@@ -1,4 +1,5 @@
 import {
+  installedSkillContentViewSchema,
   installedSkillIdParamsSchema,
   installedSkillInstallParamsSchema,
   installedSkillInstallViewSchema,
@@ -7,6 +8,7 @@ import {
   installedSkillPreviewParamsSchema,
   installedSkillPreviewViewSchema,
   installedSkillRemovedViewSchema,
+  installedSkillShareParamsSchema,
   installedSkillToggleParamsSchema,
   installedSkillUpdateCheckViewSchema,
   installedSkillUpdatedViewSchema,
@@ -30,6 +32,11 @@ export const installedSkillActsContract = {
   )
     .input(exactInput(installedSkillListParamsSchema))
     .output(EffectSchema.flip(installedSkillListViewSchema)),
+  [INSTALLED_SKILL_ACT_KIND.INSTALLED_SKILLS_READ]: actProcedure(
+    "Could not read the skill on this system.",
+  )
+    .input(exactInput(installedSkillIdParamsSchema))
+    .output(EffectSchema.flip(installedSkillContentViewSchema)),
   [INSTALLED_SKILL_ACT_KIND.INSTALLED_SKILLS_PREVIEW]: actProcedure(
     "Could not read what that paste would install on this system.",
   )
@@ -55,6 +62,11 @@ export const installedSkillActsContract = {
   )
     .input(exactInput(installedSkillUpdateParamsSchema))
     .output(EffectSchema.flip(installedSkillUpdatedViewSchema)),
+  [INSTALLED_SKILL_ACT_KIND.INSTALLED_SKILLS_SHARE]: actProcedure(
+    "Could not share the skill with the workspace on this system.",
+  )
+    .input(exactInput(installedSkillShareParamsSchema))
+    .output(EffectSchema.flip(installedSkillViewSchema)),
   [INSTALLED_SKILL_ACT_KIND.INSTALLED_SKILLS_REMOVE]: actProcedure(
     "Could not remove the skill on this system.",
   )
