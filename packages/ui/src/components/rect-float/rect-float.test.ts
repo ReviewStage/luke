@@ -110,3 +110,16 @@ test("a scroll that moves the box moves the layer with it", () => {
 
   assert.equal(layer.style.top, "150px");
 });
+
+test("a margin its owner's rule gives the layer, as one spacing a box's children does, moves it nowhere", () => {
+  const style = document.head.appendChild(document.createElement("style"));
+  style.textContent = ".luke-rect-float { margin-top: 6px; margin-left: 3px; }";
+  try {
+    const layer = mount(() => boxAt(200, 300));
+
+    assert.equal(layer.style.left, "97px");
+    assert.equal(layer.style.top, "244px");
+  } finally {
+    style.remove();
+  }
+});

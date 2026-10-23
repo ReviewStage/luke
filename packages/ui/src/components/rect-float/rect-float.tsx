@@ -67,25 +67,40 @@ function roomOf(clip: HTMLElement | undefined): Box {
 }
 
 /**
- * Where the layer of this size stands by `anchor` in `room`, in the
- * coordinates of `frame`, the box it is laid in: its top is the anchor's
- * edge on its side, and the stylesheet moves it the gap off and, above, its
- * own height up.
+ * Where `drawn` stands by `anchor` in `room`, in the coordinates of
+ * `frame`, the box it is laid in: its top is the anchor's edge on its side,
+ * and the stylesheet moves it the gap off and, above, its own height up.
+ * Note that a margin an owner's rule gives it, as a rule spacing a box's
+ * children does, is taken off, because a box laid absolutely stands by its
+ * margin's edge.
  */
 function placeIn(
+  drawn: HTMLElement,
   frame: HTMLElement,
   anchor: Box,
   room: Box,
-  size: { width: number; height: number },
   side: PopoverSide,
 ): FloatPlace {
+  const size = { width: drawn.offsetWidth, height: drawn.offsetHeight };
   const place = popoverPlace({ anchor, room, ...size, align: POPOVER_ALIGN.START, side });
   const own = frame.getBoundingClientRect();
+  const margin = getComputedStyle(drawn);
   const edge = place.side === POPOVER_SIDE.ABOVE ? anchor.top : anchor.bottom;
   return {
     side: place.side,
-    left: anchor.left + place.inset - own.left - frame.clientLeft + frame.scrollLeft,
-    top: edge - own.top - frame.clientTop + frame.scrollTop,
+    left:
+      anchor.left +
+      place.inset -
+      own.left -
+      frame.clientLeft +
+      frame.scrollLeft -
+      (Number.parseFloat(margin.marginLeft) || 0),
+    top:
+      edge -
+      own.top -
+      frame.clientTop +
+      frame.scrollTop -
+      (Number.parseFloat(margin.marginTop) || 0),
     width: place.width,
   };
 }
@@ -114,8 +129,7 @@ export function RectFloat({
     const frame = drawn?.offsetParent;
     const box = anchor();
     if (drawn === null || !(frame instanceof HTMLElement) || box === undefined) return;
-    const size = { width: drawn.offsetWidth, height: drawn.offsetHeight };
-    const next = placeIn(frame, box, roomOf(clipOf(drawn)), size, side);
+    const next = placeIn(drawn, frame, box, roomOf(clipOf(drawn)), side);
     setPlace((last) => (samePlace(last, next) ? last : next));
   };
   // Note that it is measured on every draw, because what it stands by moves with its owner's state, words selected anew say, and nothing else tells it.
