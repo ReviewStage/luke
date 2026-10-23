@@ -3,10 +3,11 @@ import { type ConversationMediaType, isVideoType } from "@luke/features/conversa
 import { SIGNATURE_BYTES } from "@luke/features/image-signature";
 import { INBOX_BOUNDS, type InboxImageType } from "@luke/features/inbox-wire";
 import { mediaDimensions, sniffMediaType } from "@luke/features/media-signature";
+import { webmTitle } from "@luke/features/video-signature";
 import { Effect, Result } from "effect";
 import type { SandboxSession } from "eve/sandbox";
 import type { InboxImage } from "../../inbox/inbox-store.js";
-import { SANDBOX_RECORDING } from "../browser/sandbox-recorder.js";
+import { BROWSER_RECORDING_TITLE, SANDBOX_RECORDING } from "../browser/sandbox-recorder.js";
 
 /**
  * inbox-image.ts -- a picture read from the agent's sandbox, an image block's or one `show_image` shows: the file at the path the agent named, bounded, and sniffed for what it is.
@@ -177,6 +178,11 @@ function inBrowserRecording(resolved: string): boolean {
   return `${resolved}/`.includes(`/${SANDBOX_RECORDING.DIRECTORY}/`);
 }
 
+/** Whether a read file is a video the cloud browser's recorder encoded, by the title it stamps, wherever the file now stands. */
+function isBrowserRecording(media: InboxImage): boolean {
+  return isVideoType(media.contentType) && webmTitle(media.bytes) === BROWSER_RECORDING_TITLE;
+}
+
 /** The most bytes a posted file of the type may be: a still's bound, or a recording's. */
 function postedBytesOf(type: ConversationMediaType): number {
   return isVideoType(type) ? INBOX_BOUNDS.MAX_VIDEO_BYTES : INBOX_BOUNDS.MAX_IMAGE_BYTES;
@@ -190,8 +196,10 @@ function postedBytesOf(type: ConversationMediaType): number {
  * Note that the stream is read to the larger bound and a still is held to
  * its own once its type is known, because the type is sniffed from bytes
  * the bound has already let in. A file of the cloud browser's recorder is
- * refused before it is read, because its recording is kept beside the
- * transcript alone (`BROWSER_RECORDING_REFUSAL`).
+ * refused, because its recording is kept beside the transcript alone
+ * (`BROWSER_RECORDING_REFUSAL`): by its path before it is read, and by the
+ * title the recorder stamps once it is, which a copy, a link, or a
+ * re-encode still carries.
  */
 export function readSandboxMedia(
   door: InboxSandboxDoor,
@@ -214,6 +222,9 @@ export function readSandboxMedia(
         mediaDimensions(media.bytes, media.contentType) === undefined
       ) {
         return refused<ConversationMediaType>(refusals.NOT_IMAGE, path);
+      }
+      if (isBrowserRecording(media)) {
+        return refused<ConversationMediaType>(BROWSER_RECORDING_REFUSAL, path);
       }
       return Result.succeed(media);
     }),

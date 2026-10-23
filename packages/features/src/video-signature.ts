@@ -27,6 +27,8 @@ const EBML_MAGIC = [0x1a, 0x45, 0xdf, 0xa3] as const;
 const EBML_ID = {
   DOC_TYPE: 0x4282,
   SEGMENT: 0x18538067,
+  INFO: 0x1549a966,
+  TITLE: 0x7ba9,
   TRACKS: 0x1654ae6b,
   TRACK_ENTRY: 0xae,
   VIDEO: 0xe0,
@@ -103,6 +105,13 @@ export function startsLikeWebm(bytes: Uint8Array): boolean {
   return EBML_MAGIC.every((byte, index) => bytes[index] === byte);
 }
 
+/** A string element's value, without the zero bytes it may be padded with. */
+function readString(bytes: Uint8Array, from: number, to: number): string {
+  let end = to;
+  while (end > from && bytes[end - 1] === 0) end -= 1;
+  return new TextDecoder().decode(bytes.subarray(from, end));
+}
+
 /** The doctype the EBML header at the start names, or nothing where there is none. */
 function docTypeOf(bytes: Uint8Array): string | undefined {
   if (!startsLikeWebm(bytes)) return undefined;
@@ -111,12 +120,7 @@ function docTypeOf(bytes: Uint8Array): string | undefined {
   for (let at = header.body; at < header.end; ) {
     const child = readHeader(bytes, at, header.end);
     if (child === undefined) return undefined;
-    if (child.id === EBML_ID.DOC_TYPE) {
-      // A string element may be padded with zero bytes, which are no part of it.
-      let end = child.end;
-      while (end > child.body && bytes[end - 1] === 0) end -= 1;
-      return String.fromCharCode(...bytes.subarray(child.body, end));
-    }
+    if (child.id === EBML_ID.DOC_TYPE) return readString(bytes, child.body, child.end);
     at = child.end;
   }
   return undefined;
@@ -154,6 +158,35 @@ export function webmDimensions(bytes: Uint8Array): VideoDimensions | undefined {
     } else {
       at = element.end;
     }
+  }
+  return undefined;
+}
+
+/**
+ * The title a WebM's segment states in its info, as an encoder's `title`
+ * metadata writes it; nothing where the bytes are no WebM or no title stands
+ * before its first cluster. Note that an encoder carries a file's title on
+ * to what it encodes from it, so a title marks a recording through a copy,
+ * a link, or a re-encode alike.
+ */
+export function webmTitle(bytes: Uint8Array): string | undefined {
+  if (docTypeOf(bytes) !== WEBM_DOC_TYPE) return undefined;
+  const header = readHeader(bytes, 0, bytes.length);
+  const segment = header === undefined ? undefined : readHeader(bytes, header.end, bytes.length);
+  if (segment?.id !== EBML_ID.SEGMENT) return undefined;
+  for (let at = segment.body; at < segment.end; ) {
+    const element = readHeader(bytes, at, segment.end);
+    if (element === undefined || element.id === EBML_ID.CLUSTER) return undefined;
+    if (element.id === EBML_ID.INFO) {
+      for (let inner = element.body; inner < element.end; ) {
+        const child = readHeader(bytes, inner, element.end);
+        if (child === undefined) return undefined;
+        if (child.id === EBML_ID.TITLE) return readString(bytes, child.body, child.end);
+        inner = child.end;
+      }
+      return undefined;
+    }
+    at = element.end;
   }
   return undefined;
 }

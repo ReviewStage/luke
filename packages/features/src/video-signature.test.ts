@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { startsLikeWebm, webmDimensions } from "./video-signature.js";
+import { startsLikeWebm, webmDimensions, webmTitle } from "./video-signature.js";
 
 /**
  * video-signature.test.ts -- a WebM told from its own bytes and its size
@@ -106,4 +106,35 @@ test("a picture, and a WebM cut short inside its header, are no WebM of any size
   assert.equal(startsLikeWebm(png), false);
   assert.equal(webmDimensions(png), undefined);
   assert.equal(webmDimensions(cut), undefined);
+});
+
+/** The browser recorder's encoder over four frames, with the title it stamps, up to its tracks: the EBML header, then the segment's seek head and info. */
+const RECORDER_HEAD = [
+  "GkXfo59ChoEBQveBAULygQRC84EIQoKEd2VibUKHgQJChYECGFOAZwEAAAAAAAj7EU2bdLpNu4tTq4QVSalmU6yBoU27",
+  "i1OrhBZUrmtTrIHvTbuMU6uEElTDZ1OsggFCTbuMU6uEHFO7a1Osggjl7AEAAAAAAABZAAAAAAAAAAAAAAAAAAAAAAAA",
+  "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+  "AAAVSalmySrXsYMPQkB7qZZsdWtlLWJyb3dzZXItcmVjb3JkaW5nTYCMTGF2ZjYxLjEuMTAwV0GMTGF2ZjYxLjEuMTAw",
+  "RImIQHkAAAAAAAA=",
+].join("");
+
+test("a WebM's title is read off its segment's info, as the browser recorder's encoder writes it, and a file with none, or no WebM, has none", () => {
+  assert.equal(webmTitle(decoded(RECORDER_HEAD)), "luke-browser-recording");
+  assert.equal(webmTitle(decoded(PLAYWRIGHT_800_BY_600)), undefined, "recordVideo stamps no title");
+  const titled = [
+    ...element([0x15, 0x49, 0xa9, 0x66], element([0x7b, 0xa9], [...Buffer.from("A flow")])),
+    ...element([0x16, 0x54, 0xae, 0x6b], element([0xae], videoTrack(640, 480))),
+  ];
+  assert.equal(
+    webmTitle(
+      new Uint8Array([...ebmlHeader("webm"), ...element([0x18, 0x53, 0x80, 0x67], titled)]),
+    ),
+    "A flow",
+  );
+  assert.equal(
+    webmTitle(
+      new Uint8Array([...ebmlHeader("matroska"), ...element([0x18, 0x53, 0x80, 0x67], titled)]),
+    ),
+    undefined,
+    "a Matroska file is no WebM",
+  );
 });
