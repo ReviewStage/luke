@@ -30,18 +30,25 @@
   }
 
   /* Note that it stands over the video's top, clear of the player's own
-     controls along its foot, and only while the video is pointed at or
-     tabbed into, as the player's controls show themselves. */
+     controls along its foot. With a pointer it comes in only while the
+     video is pointed at or tabbed into, as the player's controls show
+     themselves; on a touch screen it always stands, so a first tap presses
+     it rather than being spent as a hover. */
   .luke-video-player-expand {
     position: absolute;
     top: var(--luke-space-6);
     right: var(--luke-space-6);
-    opacity: 0;
     transition: opacity var(--luke-duration-fast) ease;
   }
 
-  .luke-video-player:hover .luke-video-player-expand,
-  .luke-video-player:focus-within .luke-video-player-expand {
-    opacity: 1;
+  @media (hover: hover) {
+    .luke-video-player-expand {
+      opacity: 0;
+    }
+
+    .luke-video-player:hover .luke-video-player-expand,
+    .luke-video-player:focus-within .luke-video-player-expand {
+      opacity: 1;
+    }
   }
 }
