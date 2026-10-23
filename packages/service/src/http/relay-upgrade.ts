@@ -80,7 +80,7 @@ export function relayCredential(
 }
 
 /** Refuses one upgrade before any socket stands, with the status given. */
-export function refuseUpgrade(socket: Duplex, status: number): void {
+function refuseUpgrade(socket: Duplex, status: number): void {
   socket.end(`HTTP/1.1 ${status} Refused\r\nConnection: close\r\n\r\n`);
 }
 

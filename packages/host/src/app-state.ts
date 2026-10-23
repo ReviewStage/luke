@@ -195,7 +195,7 @@ export interface AppInboxSlice {
  * draws. Main's, because the host holds the command whichever window is
  * open, and empty wherever this platform runs no commands.
  */
-export interface AppMacCommandsSlice {
+interface AppMacCommandsSlice {
   asks: readonly MacCommandAsk[];
 }
 

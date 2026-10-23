@@ -524,7 +524,7 @@ test("a skill chosen from the / list is its chip, which opens its SKILL.md in th
   pressInComposer(document, "Enter");
   await settle();
   const chip =
-    composerEditor(document).querySelector<HTMLElement>(".luke-skill-chip[data-opens]") ??
+    composerEditor(document).querySelector<HTMLElement>("[data-skill-ref]") ??
     assert.fail("the skill is a chip that opens");
   act(() => chip.click());
 

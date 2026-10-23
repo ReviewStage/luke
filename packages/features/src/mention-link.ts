@@ -8,7 +8,7 @@ import {
   integrationProviderSchema,
 } from "./integration-wire.js";
 import { isLinkHome, LINK_ORIGIN } from "./link-home.js";
-import { LINK_SITE_LIST, type LinkSite, linkSiteName, linkSiteOf } from "./link-site.js";
+import { LINK_SITE_LIST, linkSiteName, linkSiteOf } from "./link-site.js";
 import { parsedUrl } from "./parsed-url.js";
 import { PLAN_SECTION_BOUNDS } from "./task-wire.js";
 
@@ -392,9 +392,6 @@ export type PersonMention = Extract<Mention, { readonly kind: typeof MENTION_KIN
 
 /** A mention of an MCP server or one of its tools, or a page of its provider's. */
 export type ServerMention = Extract<Mention, { readonly provider: string }>;
-
-/** A mention of a page of a well-known site no integration stands behind. */
-export type SiteMention = Extract<Mention, { readonly site: LinkSite }>;
 
 /** Whether a tool's name, as an MCP server lists it, is one a mention of the tool can carry. */
 export function isMentionableTool(name: string): boolean {
@@ -858,6 +855,21 @@ export function encodeMention(mention: Mention, place: MentionPlace): string {
 export function decodeMention(target: string, repository: string | null): Mention | undefined {
   if (target.length > MENTION_BOUNDS.MAX_TARGET_CHARS) return undefined;
   return Option.getOrUndefined(readMention(fieldsOf(target, repository)));
+}
+
+/**
+ * The repository a GitHub page of a file or a folder is of, `owner/name` as
+ * its own address spells it, for words of no repository to read the page
+ * as that file or folder by (`decodeMention`), rather than as a page of
+ * GitHub's; nothing for any other target, a branch's page among them.
+ */
+export function pageRepositoryOf(target: string): string | undefined {
+  const url = parsedUrl(target);
+  if (url?.origin !== GITHUB.ORIGIN) return undefined;
+  const [, owner, name] = url.pathname.split("/");
+  if (owner === undefined || owner === "" || name === undefined || name === "") return undefined;
+  const repository = `${owner}/${name}`;
+  return repositoryFields(url, repository) === undefined ? undefined : repository;
 }
 
 /** Words with each control character, a line break among them, made a space, so a name stays one line of a link's label. */

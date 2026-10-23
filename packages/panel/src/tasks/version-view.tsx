@@ -10,6 +10,7 @@ import {
   ONE_LINE_ELEMENT,
   ONE_LINE_END,
   OneLine,
+  PageToolbar,
   SKELETON_SHAPE,
   Skeleton,
   SkeletonRegion,
@@ -167,7 +168,7 @@ function VersionBody({
  * sections in a note's own type, each heading at a section's level over its
  * lines, a section apart.
  */
-export function VersionSkeleton({
+function VersionSkeleton({
   title,
   section,
 }: {
@@ -301,9 +302,9 @@ function VersionPageFrame({
 }): React.JSX.Element {
   return (
     <>
-      <header className="desktop-toolbar">
-        {lead}
-        <div className="desktop-toolbar-heading">
+      <PageToolbar
+        lead={lead}
+        heading={
           <OneLine
             as={ONE_LINE_ELEMENT.H1}
             end={ONE_LINE_END.ELLIPSIS}
@@ -311,9 +312,9 @@ function VersionPageFrame({
           >
             {title}
           </OneLine>
-        </div>
-        <div className="desktop-toolbar-actions">{actions}</div>
-      </header>
+        }
+        actions={actions ?? null}
+      />
       <Fill className="desktop-document">
         <DocumentScroll>{children}</DocumentScroll>
       </Fill>

@@ -1925,7 +1925,7 @@ export function waitsOnReader(
 }
 
 /** Whether an item needs the reader: open, and theirs (`readersItem`); a teammate's open item waits on the teammate. */
-export function needsReader(item: InboxItem, readerId: string | undefined): boolean {
+function needsReader(item: InboxItem, readerId: string | undefined): boolean {
   return item.status === INBOX_STATUS.OPEN && readersItem(item, readerId);
 }
 

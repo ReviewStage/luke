@@ -226,6 +226,13 @@ function plainWords(words: ReactNode): string | undefined {
  */
 const ListDensityContext = createContext<ListDensity>(LIST_DENSITY.REGULAR);
 
+/**
+ * How the `List` a row stands in stands, so a row in a card, edge to edge
+ * on the card's ground, answers a press inside its fill rather than pulling
+ * that fill back from the card's edges.
+ */
+const ListVariantContext = createContext<ListVariant>(LIST_VARIANT.PLAIN);
+
 /** The act of a row that offers no swipe. */
 const NO_ACT = (): void => undefined;
 
@@ -266,7 +273,9 @@ export function List({
       aria-label={label}
       {...(moves ? motionRows() : {})}
     >
-      <ListDensityContext.Provider value={density}>{children}</ListDensityContext.Provider>
+      <ListVariantContext.Provider value={variant}>
+        <ListDensityContext.Provider value={density}>{children}</ListDensityContext.Provider>
+      </ListVariantContext.Provider>
     </ul>
   );
 }
@@ -381,6 +390,8 @@ export function ListRow({
   // as the stylesheet reads it, so a list made dense or regular again
   // measures its rows' descriptions or lets them go.
   const listDensity = useContext(ListDensityContext);
+  const pressPulse =
+    useContext(ListVariantContext) === LIST_VARIANT.CARD ? PRESS_PULSE.FLUSH : PRESS_PULSE.QUIET;
   const describedDense = (density ?? listDensity) === LIST_DENSITY.DENSE;
   const described = useCallback(
     (element: HTMLElement | null) => {
@@ -462,7 +473,7 @@ export function ListRow({
       onClick={(event) => {
         // Note that the row around the press is what is pressed, its fill and its actions with it.
         const row = event.currentTarget.closest<HTMLElement>(".luke-list-row");
-        pulsePress(row ?? event.currentTarget, PRESS_PULSE.QUIET);
+        pulsePress(row ?? event.currentTarget, pressPulse);
         onPress(event);
       }}
       onKeyDown={onKeyDown}

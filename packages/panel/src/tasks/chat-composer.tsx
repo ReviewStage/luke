@@ -132,7 +132,7 @@ export interface ChatComposerMentions {
 }
 
 /** A quote handed to a box before it could take it, and what is told once it is in. */
-export interface PendingQuote {
+interface PendingQuote {
   readonly words: string;
   readonly onQuoted: () => void;
 }
@@ -221,7 +221,7 @@ function chatPlace(channelId: string, replyTo: number | undefined): ChatDraftPla
  * where they are refused, `takeBack`, handed why, which answers whether the
  * box took them back, as it does where it holds nothing newer.
  */
-export type ChatSend = (
+type ChatSend = (
   text: string,
   attachments: readonly CodingAgentAttachment[],
   takeBack: (refused: string) => boolean,

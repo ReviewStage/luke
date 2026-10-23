@@ -1155,6 +1155,9 @@ importers:
       '@types/ws':
         specifier: 8.18.1
         version: 8.18.1
+      jsdom:
+        specifier: ^30.0.1
+        version: 30.0.1(@noble/hashes@2.3.0)
       typescript:
         specifier: 'catalog:'
         version: 7.0.2
