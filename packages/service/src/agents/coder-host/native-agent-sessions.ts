@@ -19,9 +19,6 @@ import { chatEnabledFor } from "@luke/database/models/account-store";
 import { type CodingAgent, hasRepository } from "@luke/database/models/coding-agent-store";
 import { readNativeSequence } from "@luke/database/models/native-projection-store";
 import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
-import { CODING_AGENT_BRIEF } from "@luke/features/coding-agent-wire";
-import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
-import { encodeMention, MENTION_KIND } from "@luke/features/mention-link";
 import { Effect, Layer, Option } from "effect";
 import { logStoreFailure } from "../../http/store-failure.js";
 import {
@@ -37,7 +34,7 @@ import { workspaceStepOf } from "../written-mentions.js";
 import { agentCiReadable, agentCoAuthor } from "./checkout.js";
 import { claudeCodeSessions } from "./claude-code-sessions.js";
 import { codexSessions } from "./codex-sessions.js";
-import { CODER_HARNESS, type CoderHarness, coderInstructions } from "./instructions.js";
+import { agentCoderInstructions, CODER_HARNESS, type CoderHarness } from "./instructions.js";
 import type { RunnerServices, RunnerSessionsOptions, SandboxRunner } from "./runner-sessions.js";
 import { NativeAgentSessions } from "./runtime-sessions.js";
 
@@ -69,26 +66,14 @@ const nativeCoderInstructions = (userId: string, agent: CodingAgent, harness: Co
       Effect.orElseSucceed(() => false),
     );
     const memoryOn = yield* memoryOnFor(userId);
-    const taskLink =
-      agent.taskId === null
-        ? null
-        : encodeMention(
-            { kind: MENTION_KIND.TASK, taskId: agent.taskId },
-            { workspace, repository: null },
-          );
-    return coderInstructions(
-      agent.repository,
-      agent.prompt === null ? CODING_AGENT_BRIEF.PLAN : CODING_AGENT_BRIEF.PROMPT,
+    return agentCoderInstructions(agent, {
       ciReadable,
-      taskLink,
       coAuthor,
+      workspace,
       chatOn,
-      agent.startBranch,
-      agent.githubAccess === GITHUB_ACCESS.TOKEN,
-      harness,
-      agent.kind,
       memoryOn,
-    );
+      harness,
+    });
   });
 
 /** The integrations an agent is handed as its launch starts, each an MCP server of its own at Luke, read as its starter's conversation reads them. */

@@ -21,54 +21,19 @@
 @import "@fontsource-variable/jetbrains-mono/wght.css";
 @import "@fontsource-variable/bricolage-grotesque/wght.css";
 
-/* Only the tokens the page actually draws with. shadcn/ui's contract is a
-   superset — popover, secondary, destructive, sidebar — and a token nothing
-   reads is drift waiting to happen. Every value is a shared role's, the one the
-   plain-CSS blocks further down read too, and merely aliased here, so the
-   utilities and those blocks draw the same vocabulary. The chart slots stay out of this block for the
-   same reason: the admin dashboard's chart configs read `--luke-color-chart-*`
-   directly, and no utility class does. */
+/* Only the tokens the page actually draws with, and a token nothing reads is
+   drift waiting to happen. Every value is a shared role's, merely aliased
+   here, so the utilities and the plain-CSS blocks draw the same vocabulary.
+   No colour is aliased: the page and the admin dashboard spell a role
+   directly (`text-(--luke-color-text-muted)`), and the chart configs read
+   `--luke-color-chart-*`. */
 @theme inline {
-  --color-background: var(--luke-color-ground);
-  --color-foreground: var(--luke-color-text);
-  --color-card: var(--luke-color-surface);
-  --color-muted: var(--luke-color-fill-hover);
-  --color-muted-foreground: var(--luke-color-text-muted);
-  --color-primary: var(--luke-color-accent);
-  --color-primary-foreground: var(--luke-color-on-accent);
-  --color-accent-ink: var(--luke-color-accent-text);
-  --color-attention: var(--luke-color-attention);
-  --color-complete: var(--luke-color-complete);
-  --color-border: var(--luke-color-border);
-  --color-ring: var(--luke-color-focus-ring);
-
   --radius-sm: var(--luke-radius-6);
   --radius-md: var(--luke-control-radius);
-  --radius-lg: var(--luke-radius-14);
 
   --font-sans: var(--luke-font-sans);
   --font-mono: var(--luke-font-mono);
   --font-brand: var(--luke-font-display);
-}
-
-/* A line that waits a moment before it fades in, as the Open in Luke page's
-   "Didn't open?" does after a press: the wait is the time a browser takes to
-   hand the link to the app, and a fade rather than a slide, so reduced motion
-   need not hold it still. Note that it is hidden, not only transparent, while
-   it waits, because a hidden line is out of the accessibility tree, so a
-   screen reader announces it when it shows rather than when it was drawn. */
-@theme {
-  --animate-arrive-late: arrive-late 240ms ease-out 2s both;
-
-  @keyframes arrive-late {
-    from {
-      opacity: 0;
-      visibility: hidden;
-    }
-    to {
-      opacity: 1;
-    }
-  }
 }
 
 :root {

@@ -6,19 +6,9 @@ import {
   accountInboxOfLiveRows,
   nextFailedRunExpiry,
 } from "@luke/features/live-wire";
-import {
-  Clock,
-  Duration,
-  Effect,
-  Option,
-  RcMap,
-  Schema,
-  type Scope,
-  Stream,
-  SubscriptionRef,
-} from "effect";
+import { Clock, Duration, Effect, RcMap, type Scope, Stream, SubscriptionRef } from "effect";
 import type { InboxTxWaits } from "./inbox-tx-waits.js";
-import { LiveBroken, type LiveClient, liveRows, liveShown } from "./live-follow.js";
+import { decodedLiveRows, type LiveClient, liveShown } from "./live-follow.js";
 
 /**
  * account-inbox-follow.ts -- what waits on the developer across the account, followed over Neon Realtime and told to main each time it moves.
@@ -91,7 +81,6 @@ function answersOf(rows: AccountInboxLiveRows): Stream.Stream<AccountInboxAnswer
 export function accountInboxes(
   dependencies: AccountInboxDependencies,
 ): Effect.Effect<AccountInboxes, never, Scope.Scope> {
-  const decode = Schema.decodeUnknownOption(accountInboxLiveRowsSchema);
   return RcMap.make({
     idleTimeToLive: IDLE,
     lookup: (userId: string) =>
@@ -99,7 +88,7 @@ export function accountInboxes(
         const first = yield* dependencies.seal(userId, false);
         if ("failure" in first) return { kind: "broken" } as const;
         const inbox = yield* SubscriptionRef.make<LiveState>({ kind: "waiting" });
-        const rows = liveRows(
+        const rows = decodedLiveRows(
           {
             openLive: dependencies.openLive,
             reseal: () => dependencies.seal(userId, false),
@@ -108,13 +97,7 @@ export function accountInboxes(
             onTxWait: dependencies.txWaits.hook(),
           },
           first,
-        ).pipe(
-          Stream.mapEffect((read) =>
-            Option.match(decode(read), {
-              onNone: () => Effect.fail(new LiveBroken({ reason: "a row did not decode" })),
-              onSome: Effect.succeed,
-            }),
-          ),
+          accountInboxLiveRowsSchema,
         );
         yield* Effect.forkScoped(
           Stream.runForEach(liveShown(Stream.switchMap(rows, answersOf)), (answer) =>

@@ -41,6 +41,7 @@ import { PanelManager } from "../window/panel-manager";
 import { reportRendererErrors } from "../window/renderer-errors";
 import { followResponsiveness } from "../window/renderer-health";
 import { VoiceWindow } from "../window/voice-window";
+import { windowMaterialFor } from "../window/window-material";
 import { windowPushes } from "../window/window-pushes";
 import { PanelWindows, zoomFactorOf, zoomSteer } from "../window/zoom";
 import type { DesktopConfig } from "./desktop-config";
@@ -172,6 +173,7 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
 
   const panels = new PanelManager({
     runMode,
+    material: windowMaterialFor(process.getSystemVersion()),
     instance: config.instance,
     mediaDuck: native.mediaDuck,
     preloadPath,

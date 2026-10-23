@@ -88,10 +88,11 @@ import {
   PinIcon,
   UserXIcon,
 } from "lucide-react";
-import { type ReactNode, useEffect, useRef, useState } from "react";
+import { type ReactNode, useRef, useState } from "react";
 import { ACTOR_SIZE, ActorMark, UnassignedMark } from "../actor-ref.js";
 import { useAppCommand } from "../app-commands.js";
 import { FIND_SKIP_ATTRIBUTE } from "../find-matches.js";
+import { readKept, writeKept } from "../kept-storage.js";
 import { useMemberDirectory } from "../member-directory.js";
 import { RepositoryPicture } from "../repository-picture.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
@@ -105,7 +106,7 @@ import {
 import { useReadMarks } from "../tasks/use-task-looks.js";
 import { useTaskMaker } from "../tasks/use-task-origin.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
-import { readKept, writeKept } from "./folded-groups.js";
+import { useRefocusAfterEdit } from "../use-refocus-after-edit.js";
 import { sectionGlyph } from "./section-icon-picker.js";
 import { useTaskMenu } from "./task-actions.js";
 import {
@@ -608,12 +609,7 @@ function TaskListRow({
     unread: reads.markedUnread(task.id),
   });
   const press = useRef<HTMLButtonElement | null>(null);
-  const refocus = useRef(false);
-  useEffect(() => {
-    if (rename.editing || !refocus.current) return;
-    refocus.current = false;
-    press.current?.focus();
-  }, [rename.editing]);
+  const endedByKey = useRefocusAfterEdit(rename.editing, press);
   const drawn = (property: TaskProperty) => properties.includes(property);
   const key = task.number === undefined ? undefined : taskKey(workspaceName, task.number);
   // Note that the marks before the name are a control and decoration to a screen reader, so the key and status are said in the press, and left out of find, which finds them drawn.
@@ -647,7 +643,7 @@ function TaskListRow({
               maxLength={TASK_BOUNDS.MAX_NAME_CHARS}
               editing
               onEnd={(edit) => {
-                refocus.current = edit.byKey;
+                endedByKey(edit.byKey);
                 void rename.end(edit.value);
               }}
             />

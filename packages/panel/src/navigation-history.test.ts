@@ -19,6 +19,7 @@ import {
   installWindowHistory,
   MOUSE_BUTTON,
   type StepTitle,
+  sameHistoryPage,
   throughHistory,
   useHistoryMouseButtons,
   useWindowHistory,
@@ -1080,8 +1081,10 @@ test("Back's and Forward's steps are listed the nearest first, each named as the
       { label: "Home", detail: undefined },
     ],
   );
-  assert.equal(listed[0]?.page, listed[1]?.page, "a task's steps are one page's");
-  assert.notEqual(listed[1]?.page, listed[2]?.page);
+  const [first, second, third] = listed;
+  assert.ok(first !== undefined && second !== undefined && third !== undefined);
+  assert.ok(sameHistoryPage(first.page, second.page), "a task's steps are one page's");
+  assert.ok(!sameHistoryPage(second.page, third.page));
   assert.deepEqual(window.history().steps.forward, []);
 
   const toA = listed[1]?.at;

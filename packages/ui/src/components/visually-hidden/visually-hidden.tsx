@@ -20,7 +20,6 @@ import type { HTMLAttributes, ReactNode } from "react";
 export const VISUALLY_HIDDEN_ELEMENT = {
   SPAN: "span",
   P: "p",
-  H2: "h2",
   LEGEND: "legend",
 } as const;
 

@@ -9,12 +9,12 @@ import {
   taskPullRequestsOfLiveRows,
 } from "@luke/features/task-list-live";
 import type { TaskListAnswer, TaskPullRequests } from "@luke/features/task-wire";
-import { Clock, Duration, Effect, Option, Schema, Stream } from "effect";
+import { Clock, Duration, Effect, Stream } from "effect";
 import {
+  decodedLiveRows,
   LIVE_GONE,
-  LiveBroken,
+  type LiveBroken,
   type LiveClient,
-  liveRows,
   liveShown,
   type TxWait,
 } from "./live-follow.js";
@@ -90,23 +90,16 @@ function liveLists(
   dependencies: TaskListFollowDependencies,
   first: TaskListLiveAnswer,
 ): Stream.Stream<LiveTaskList, LiveBroken> {
-  const decode = Schema.decodeUnknownOption(taskListLiveRowsSchema);
-  const rows = liveRows(
+  const rows = decodedLiveRows(
     {
       openLive: dependencies.openLive,
       reseal: () => dependencies.live(false),
       poll: (after) => dependencies.live(true, after),
       now: dependencies.now,
-      ...(dependencies.onTxWait === undefined ? undefined : { onTxWait: dependencies.onTxWait }),
+      onTxWait: dependencies.onTxWait,
     },
     first,
-  ).pipe(
-    Stream.mapEffect((read) =>
-      Option.match(decode(read), {
-        onNone: () => Effect.fail(new LiveBroken({ reason: "a row did not decode" })),
-        onSome: Effect.succeed,
-      }),
-    ),
+    taskListLiveRowsSchema,
   );
   return Stream.switchMap(rows, listsOf);
 }
