@@ -538,3 +538,20 @@ test("a server that is not connected hangs its card too, though its press is no 
     "only the two servers with tools say they open a page",
   );
 });
+
+test("a connected server that lists no tools has no page to open, so a press on its row flips its switch", async () => {
+  fakeActPort({
+    [ACT_KIND.INTEGRATIONS_TOOLS]: (payload) =>
+      Promise.resolve({
+        tools:
+          (payload.connection ?? payload.provider) === LINEAR
+            ? []
+            : (TOOLS.get(payload.connection ?? payload.provider) ?? []),
+      }),
+  });
+  const { container, switched } = await opened();
+
+  act(() => serverPress(container, "Linear")?.click());
+
+  assert.deepEqual(switched, [[LINEAR]]);
+});

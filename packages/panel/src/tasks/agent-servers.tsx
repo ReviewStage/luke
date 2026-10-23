@@ -659,6 +659,15 @@ function ServersPopover({
     );
   };
 
+  /** What a press on a server's row does: open its page, flip a switch with no page to open, or what Enter does; none for a row the keys pass over. */
+  const rowPress = (row: ServerRow): (() => void) | undefined => {
+    if (opensTools(row)) return () => open(row);
+    if (row.kind === SERVER_ROW.SWITCH) {
+      return () => servers.onSwitch(switchedServers(servers.disabled, row.connection, !row.on));
+    }
+    return pickIndex(row) < 0 ? undefined : () => choose({ row });
+  };
+
   const serverRow = (row: ServerRow) =>
     homeRow({
       key: row.connection,
@@ -669,11 +678,7 @@ function ServersPopover({
       actions: end(row),
       opens: opensTools(row),
       // Note that a row the keys can choose takes the press as Enter does, because a row hangs its card from its press and a row with none would hang nothing.
-      onPress: opensTools(row)
-        ? () => open(row)
-        : pickIndex(row) < 0
-          ? undefined
-          : () => choose({ row }),
+      onPress: rowPress(row),
     });
 
   const toolRow = ({ row, tool }: ToolHit) =>
