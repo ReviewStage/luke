@@ -20,7 +20,7 @@ import {
   type GatewayShutdownSteps,
   NODE_CAPABILITY_STATUS,
 } from "@luke/gateway";
-import { APP_SETTING_SCHEMA } from "@luke/settings";
+import { APP_SETTING_SCHEMA, MAC_COMMAND_MODE } from "@luke/settings";
 import { LIVE_SESSION_END_CAUSE } from "@luke/voice/live-session";
 import type { VoiceCallAbout } from "@luke/voice/voice-view";
 import { Effect, Layer } from "effect";
@@ -223,9 +223,18 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
           kernel,
           account,
           accountId,
-          enabled: Effect.map(
+          mode: Effect.map(
             Effect.orDie(settings.store.snapshot()),
             (snapshot) => snapshot.stored.macCommands ?? APP_SETTING_SCHEMA.macCommands.default,
+          ),
+          allowAlways: Effect.asVoid(
+            settings.settingsWrite(
+              () =>
+                settings.store.set(APP_SETTING_SCHEMA.macCommands.field, MAC_COMMAND_MODE.ALWAYS),
+              () => Effect.void,
+              "Could not save that setting on this system.",
+              undefined,
+            ),
           ),
           client: new HostedMacCommandClient({
             serviceBaseUrl: kernel.hostedServiceBaseUrl,

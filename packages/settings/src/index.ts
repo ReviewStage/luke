@@ -12,6 +12,13 @@ export {
   NO_EXPERIMENTS,
 } from "./experiments.js";
 export {
+  isMacCommandMode,
+  MAC_COMMAND_MODE,
+  MAC_COMMAND_MODE_LABEL,
+  MAC_COMMAND_MODE_LIST,
+  type MacCommandMode,
+} from "./mac-commands.js";
+export {
   APP_SETTING_ID,
   APP_SETTING_SCHEMA,
   isAppSettingId,

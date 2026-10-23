@@ -12,23 +12,36 @@ import {
   type MacCommandKind,
   type MacCommandResult,
 } from "@luke/features/mac-command-wire";
+import {
+  GATEWAY_CLIENT_ROLE,
+  GATEWAY_EVENT,
+  GATEWAY_METHOD,
+  type GatewayEventKind,
+} from "@luke/gateway";
+import { MAC_COMMAND_MODE, type MacCommandMode } from "@luke/settings";
+import { isRecord, type WireValue } from "@luke/wire";
 import { noNetwork } from "@luke/wire/testing";
 import { ConfigProvider, Duration, Effect, Layer } from "effect";
 import { TestClock } from "effect/testing";
 import { composeMacCommands, type MacCommandClient } from "./compose-mac-commands.js";
 import { Environment, reporterLayer } from "./effect/seams.js";
+import { MAC_COMMAND_DECISION, type MacCommandDecision } from "./mac-command-ask.js";
 import { scriptedSpawner } from "./testing/scripted-spawner.js";
 
 /**
  * The concern that runs on this Mac what the account's agents queue for it,
  * against a scripted service and spawner, with Realtime off, as the
  * deployment runs without `LUKE_REALTIME`: the live read answered polled and
- * held until the rows move. With the setting off, or no account, the
+ * held until the rows move. With the setting on Never, or no account, the
  * service is never read; otherwise every read names the account and the
  * kinds this Mac runs, each command waiting is claimed by its id, the
  * earliest first, and run or refused by its kind, one queued later is heard
  * within the poll's hold, and the Mac says it listens every fifteen
- * seconds until the setting is switched off.
+ * seconds until the setting is switched to Never. Under Always allow a
+ * command runs as claimed; under Ask every time it is told as an ask and
+ * runs only once the developer allows it, Always allow writing the setting
+ * too, while Deny, or no answer before the command's own timeout, answers
+ * the call as not run, and one ask holds up neither the follow nor another.
  *
  * Synthetic commands and accounts throughout.
  */
@@ -163,30 +176,77 @@ const machine = (spawner: ReturnType<typeof scriptedSpawner>) =>
     noNetwork,
   );
 
-/** The concern composed over the scripted service, the gate as `gate` holds it. */
+/** The operator a test answers an ask as. */
+const CONTEXT = { client: { clientId: "panel", role: GATEWAY_CLIENT_ROLE.OPERATOR } } as const;
+
+/** The gate as a test holds it: the setting, whether an account is signed in, and which. */
+interface Gate {
+  mode: MacCommandMode;
+  signedIn: boolean;
+  account?: string;
+}
+
+/**
+ * The concern composed over the scripted service, the gate as `gate` holds
+ * it, with the asks it tells, as the panel would hear them, the modes the
+ * prompt's Always allow wrote, and one ask answered as the panel answers it.
+ */
 const subject = (
   service: ReturnType<typeof scriptedService>,
   spawner: ReturnType<typeof scriptedSpawner>,
-  gate: { enabled: boolean; signedIn: boolean; account?: string },
-) =>
-  composeMacCommands({
-    kernel: { runMode: { sendsNetwork: true }, now: () => NOW },
-    account: { capabilitiesActive: () => gate.signedIn },
-    accountId: () => gate.account ?? ACCOUNT,
-    enabled: Effect.sync(() => gate.enabled),
-    client: service.client,
-  }).pipe(Effect.provide(machine(spawner)));
+  gate: Gate,
+) => {
+  const told: { readonly id: string; readonly command: string }[][] = [];
+  const written: MacCommandMode[] = [];
+  const emit = (kind: GatewayEventKind, payload: WireValue) => {
+    if (kind !== GATEWAY_EVENT.MAC_COMMAND_ASKS_CHANGED || !isRecord(payload)) return;
+    const asks = Array.isArray(payload.asks) ? payload.asks : [];
+    told.push(
+      asks.flatMap((ask) =>
+        isRecord(ask) && typeof ask.id === "string" && typeof ask.command === "string"
+          ? [{ id: ask.id, command: ask.command }]
+          : [],
+      ),
+    );
+  };
+  return Effect.map(
+    composeMacCommands({
+      kernel: { runMode: { sendsNetwork: true }, now: () => NOW, emit },
+      account: { capabilitiesActive: () => gate.signedIn },
+      accountId: () => gate.account ?? ACCOUNT,
+      mode: Effect.sync(() => gate.mode),
+      allowAlways: Effect.sync(() => {
+        written.push(MAC_COMMAND_MODE.ALWAYS);
+        gate.mode = MAC_COMMAND_MODE.ALWAYS;
+      }),
+      client: service.client,
+    }).pipe(Effect.provide(machine(spawner))),
+    (composer) => ({
+      composer,
+      told,
+      written,
+      /** The asks waiting as last told. */
+      asks: () => told.at(-1) ?? [],
+      answer: (id: string, decision: MacCommandDecision) =>
+        Effect.gen(function* () {
+          const method = composer.methods[GATEWAY_METHOD.MAC_COMMAND_ANSWER];
+          assert.ok(method);
+          return yield* method({ id, decision }, CONTEXT);
+        }),
+    }),
+  );
+};
 
-it.effect("with the setting off, or no account signed in, the service is never read", () =>
+it.effect("with the setting on Never, or no account signed in, the service is never read", () =>
   Effect.gen(function* () {
     for (const gate of [
-      { enabled: false, signedIn: true },
-      { enabled: true, signedIn: false },
+      { mode: MAC_COMMAND_MODE.NEVER, signedIn: true },
+      { mode: MAC_COMMAND_MODE.ALWAYS, signedIn: false },
     ]) {
       const spawner = scriptedSpawner(() => ({ exitCode: 0 }));
       const service = scriptedService();
       service.queue(COMMAND, NOW);
-      const composer = yield* subject(service, spawner, gate);
+      const { composer } = yield* subject(service, spawner, gate);
 
       yield* Effect.scoped(Effect.andThen(composer.lifetime, TestClock.adjust("1 minute")));
 
@@ -205,7 +265,10 @@ it.effect(
       const service = scriptedService();
       service.queue(SECOND, NOW - 1_000);
       service.queue(COMMAND, NOW - 2_000);
-      const composer = yield* subject(service, spawner, { enabled: true, signedIn: true });
+      const { composer } = yield* subject(service, spawner, {
+        mode: MAC_COMMAND_MODE.ALWAYS,
+        signedIn: true,
+      });
 
       yield* Effect.scoped(
         Effect.gen(function* () {
@@ -237,13 +300,13 @@ it.effect(
 );
 
 it.effect(
-  "the Mac says it listens for shell at once and every fifteen seconds, well inside the service's forty-five, and once the setting is switched off it stops",
+  "the Mac says it listens for shell at once and every fifteen seconds, well inside the service's forty-five, and once the setting is switched to Never it stops",
   () =>
     Effect.gen(function* () {
       const spawner = scriptedSpawner(() => ({ exitCode: 0 }));
       const service = scriptedService();
-      const gate = { enabled: true, signedIn: true };
-      const composer = yield* subject(service, spawner, gate);
+      const gate: Gate = { mode: MAC_COMMAND_MODE.ALWAYS, signedIn: true };
+      const { composer } = yield* subject(service, spawner, gate);
 
       yield* Effect.scoped(
         Effect.gen(function* () {
@@ -255,7 +318,7 @@ it.effect(
           assert.equal(service.beats.length, 4);
           for (const kinds of service.beats) assert.deepEqual(kinds, [MAC_COMMAND_KIND.SHELL]);
 
-          gate.enabled = false;
+          gate.mode = MAC_COMMAND_MODE.NEVER;
           yield* TestClock.adjust("15 seconds");
           yield* settled;
           const reads = service.reads.length;
@@ -273,7 +336,10 @@ it.effect("a read the service signs out follows nothing, and is asked again afte
     const spawner = scriptedSpawner(() => ({ exitCode: 0 }));
     const service = scriptedService({ signedOut: true });
     service.queue(COMMAND, NOW);
-    const composer = yield* subject(service, spawner, { enabled: true, signedIn: true });
+    const { composer } = yield* subject(service, spawner, {
+      mode: MAC_COMMAND_MODE.ALWAYS,
+      signedIn: true,
+    });
 
     yield* Effect.scoped(
       Effect.gen(function* () {
@@ -296,7 +362,10 @@ it.effect("a claim the service never heard is asked again, and the command runs"
     const spawner = scriptedSpawner(() => ({ exitCode: 0 }));
     const service = scriptedService({ unansweredClaims: 2 });
     service.queue(COMMAND, NOW);
-    const composer = yield* subject(service, spawner, { enabled: true, signedIn: true });
+    const { composer } = yield* subject(service, spawner, {
+      mode: MAC_COMMAND_MODE.ALWAYS,
+      signedIn: true,
+    });
 
     yield* Effect.scoped(
       Effect.gen(function* () {
@@ -313,22 +382,22 @@ it.effect("a claim the service never heard is asked again, and the command runs"
 );
 
 it.effect(
-  "a command granted as the setting is switched off is answered as not run, though the follow ends mid-claim",
+  "a command granted as the setting is switched to Never is answered as not run, though the follow ends mid-claim",
   () =>
     Effect.gen(function* () {
       const spawner = scriptedSpawner(() => ({ exitCode: 0 }));
-      const gate = { enabled: true, signedIn: true };
+      const gate: Gate = { mode: MAC_COMMAND_MODE.ALWAYS, signedIn: true };
       const service = scriptedService({
         // The setting goes off as the claim leaves, and the service is slow to grant it, so a beat sees the gate shut first.
         duringClaim: Effect.andThen(
           Effect.sync(() => {
-            gate.enabled = false;
+            gate.mode = MAC_COMMAND_MODE.NEVER;
           }),
           Effect.sleep("20 seconds"),
         ),
       });
       service.queue(COMMAND, NOW);
-      const composer = yield* subject(service, spawner, gate);
+      const { composer } = yield* subject(service, spawner, gate);
 
       yield* Effect.scoped(
         Effect.gen(function* () {
@@ -352,8 +421,8 @@ it.effect(
     Effect.gen(function* () {
       const spawner = scriptedSpawner(() => ({ exitCode: 0 }));
       const service = scriptedService();
-      const gate = { enabled: true, signedIn: true, account: ACCOUNT };
-      const composer = yield* subject(service, spawner, gate);
+      const gate: Gate = { mode: MAC_COMMAND_MODE.ALWAYS, signedIn: true, account: ACCOUNT };
+      const { composer } = yield* subject(service, spawner, gate);
 
       yield* Effect.scoped(
         Effect.gen(function* () {
@@ -369,5 +438,158 @@ it.effect(
 
       assert.equal(service.reads[0]?.userId, ACCOUNT);
       assert.ok(service.reads.some((read) => read.userId === "user-other"));
+    }),
+);
+
+/** The ask a claimed command is told as, under Ask every time, once the follow has claimed it. */
+const askedFor = (
+  service: ReturnType<typeof scriptedService>,
+  spawner: ReturnType<typeof scriptedSpawner>,
+  commands: readonly MacCommand[],
+) =>
+  Effect.gen(function* () {
+    for (const command of commands) service.queue(command, NOW);
+    const built = yield* subject(service, spawner, { mode: MAC_COMMAND_MODE.ASK, signedIn: true });
+    yield* built.composer.lifetime;
+    yield* settled;
+    return built;
+  });
+
+it.effect(
+  "under Ask every time, a claimed command is told as an ask and runs only once the developer allows it once",
+  () =>
+    Effect.gen(function* () {
+      const spawner = scriptedSpawner(() => ({ stdout: "v24.0.0\n", exitCode: 0 }));
+      const service = scriptedService();
+      yield* Effect.scoped(
+        Effect.gen(function* () {
+          const built = yield* askedFor(service, spawner, [COMMAND]);
+          assert.deepEqual(built.asks(), [{ id: COMMAND.id, command: COMMAND.command }]);
+          assert.deepEqual(spawner.spawned, [], "nothing runs before the answer");
+          yield* TestClock.adjust("30 seconds");
+          yield* settled;
+          assert.deepEqual(spawner.spawned, [], "nor while the ask waits inside the timeout");
+
+          assert.deepEqual(yield* built.answer(COMMAND.id, MAC_COMMAND_DECISION.ALLOW_ONCE), {
+            answered: true,
+          });
+          yield* settled;
+          assert.deepEqual(built.asks(), [], "the ask goes as it is answered");
+          assert.deepEqual(built.written, [], "allowing once writes no setting");
+          assert.equal(spawner.spawned.length, 1);
+          assert.deepEqual(service.settledResults.get(COMMAND.id), {
+            exitCode: 0,
+            stdout: "v24.0.0\n",
+            stderr: "",
+            truncated: false,
+            timedOut: false,
+          });
+        }),
+      );
+    }),
+);
+
+it.effect("Always allow writes the setting, runs the command, and the next runs unasked", () =>
+  Effect.gen(function* () {
+    const spawner = scriptedSpawner(() => ({ exitCode: 0 }));
+    const service = scriptedService();
+    yield* Effect.scoped(
+      Effect.gen(function* () {
+        const built = yield* askedFor(service, spawner, [COMMAND]);
+        yield* built.answer(COMMAND.id, MAC_COMMAND_DECISION.ALLOW_ALWAYS);
+        yield* settled;
+        assert.deepEqual(built.written, [MAC_COMMAND_MODE.ALWAYS]);
+        assert.ok(service.settledResults.has(COMMAND.id), "the command asked for ran");
+
+        service.queue(SECOND, NOW);
+        yield* TestClock.adjust("2 seconds");
+        yield* settled;
+        assert.ok(service.settledResults.has(SECOND.id), "the next ran");
+        assert.equal(built.told.length, 2, "nothing was asked for it");
+        assert.equal(spawner.spawned.length, 2);
+      }),
+    );
+  }),
+);
+
+it.effect("Deny answers the call as not run, declined, and runs nothing", () =>
+  Effect.gen(function* () {
+    const spawner = scriptedSpawner(() => ({ exitCode: 0 }));
+    const service = scriptedService();
+    yield* Effect.scoped(
+      Effect.gen(function* () {
+        const built = yield* askedFor(service, spawner, [COMMAND]);
+        yield* built.answer(COMMAND.id, MAC_COMMAND_DECISION.DENY);
+        yield* settled;
+        assert.deepEqual(built.asks(), []);
+        assert.deepEqual(yield* built.answer(COMMAND.id, MAC_COMMAND_DECISION.ALLOW_ONCE), {
+          answered: false,
+        });
+      }),
+    );
+    const answered = service.settledResults.get(COMMAND.id);
+    assert.ok(answered !== undefined && "refused" in answered, "the call hears it was not run");
+    assert.match(answered.refused, /declined/u);
+    assert.deepEqual(spawner.spawned, []);
+  }),
+);
+
+it.effect(
+  "no answer by the command's own timeout answers the call as not run, and the ask goes",
+  () =>
+    Effect.gen(function* () {
+      const spawner = scriptedSpawner(() => ({ exitCode: 0 }));
+      const service = scriptedService();
+      yield* Effect.scoped(
+        Effect.gen(function* () {
+          const built = yield* askedFor(service, spawner, [SECOND]);
+          yield* TestClock.adjust(Duration.seconds(SECOND.timeoutSeconds - 1));
+          yield* settled;
+          assert.deepEqual(built.asks(), [{ id: SECOND.id, command: SECOND.command }]);
+          yield* TestClock.adjust("1 second");
+          yield* settled;
+          assert.deepEqual(built.asks(), []);
+        }),
+      );
+      const answered = service.settledResults.get(SECOND.id);
+      assert.ok(answered !== undefined && "refused" in answered, "the call hears it was not run");
+      assert.match(answered.refused, /did not answer/u);
+      assert.deepEqual(spawner.spawned, []);
+    }),
+);
+
+it.effect(
+  "an ask waiting holds up neither another ask nor the follow, and each is answered on its own",
+  () =>
+    Effect.gen(function* () {
+      const spawner = scriptedSpawner(() => ({ exitCode: 0 }));
+      const service = scriptedService();
+      yield* Effect.scoped(
+        Effect.gen(function* () {
+          const built = yield* askedFor(service, spawner, [COMMAND, SECOND]);
+          assert.deepEqual(
+            built.asks().map((ask) => ask.id),
+            [COMMAND.id, SECOND.id],
+          );
+
+          service.queue(LATER, NOW);
+          yield* TestClock.adjust("2 seconds");
+          yield* settled;
+          assert.deepEqual(
+            built.asks().map((ask) => ask.id),
+            [COMMAND.id, SECOND.id, LATER.id],
+            "a command queued later is claimed and asked for while the first still waits",
+          );
+
+          yield* built.answer(SECOND.id, MAC_COMMAND_DECISION.ALLOW_ONCE);
+          yield* settled;
+          assert.deepEqual(
+            built.asks().map((ask) => ask.id),
+            [COMMAND.id, LATER.id],
+          );
+          assert.ok(service.settledResults.has(SECOND.id), "the one allowed ran");
+          assert.equal(service.settledResults.has(COMMAND.id), false, "the first still waits");
+        }),
+      );
     }),
 );
