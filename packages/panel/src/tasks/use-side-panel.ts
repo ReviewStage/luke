@@ -81,12 +81,11 @@ plan); an item has not
  * window's rather than any task's, so a chosen tab the open task does not
  * have reads as the first it does.
  *
- * The three fixed kinds are a constant. A subagent's tab, opened from its
- * call in the Call tab, from the "+", or from a delegation's row in an
- * agent's tab, is held to the open task's work, or to the task's open
- * agent tabs where one of them delegated, so closing the
- * agent's tab takes its workers' with it; it closes, and it is kept
- * nowhere, so a launch opens none. An agent's Pull request tab, kept as
+ * The three fixed kinds are a constant. A subagent's tab, opened from the
+ * "+" or from a delegation's row in an agent's tab, is held to the open
+ * task's work, or to the task's open agent tabs where one of them
+ * delegated, so closing the agent's tab takes its workers' with it; it
+ * closes, and it is kept nowhere, so a launch opens none. An agent's Pull request tab, kept as
  * `changes` for the tab that once showed its files alone, opened from the
  * pull request's chip at its tab's foot, the "+", the
  * task's summary, or ⌘K, shows the pull request's conversation, its checks, its chapters,

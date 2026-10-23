@@ -265,7 +265,7 @@ export function AvatarVoice({
   useEffect(() => {
     if (sound.current) sound.current.muted = speakerMuted;
   }, [speakerMuted]);
-  // biome-ignore lint/a11y/useMediaCaption: the avatar's voice is captioned in the Call tab's transcript.
+  // biome-ignore lint/a11y/useMediaCaption: the avatar's voice is captioned in the agent's transcript.
   return <audio ref={soundElement} autoPlay hidden />;
 }
 

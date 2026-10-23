@@ -223,7 +223,7 @@ interface StripActivity {
  * opened, at the strip's end, and a task that has used none, and has no agent, says
  * so in the panel's body under the "+". The task's coding agents follow, one tab each, named by model and wearing
  * its harness's mark for where the agent stands; after them stand the subagents opened from
- * the Call tab, the "+", or a delegation's row in an agent's tab, one tab
+ * the "+" or a delegation's row in an agent's tab, one tab
  * each, named by job. A draft agent opened from the "+" stands after the
  * agents until its first message starts it. Every tab closes, and closing
  * an agent's or a subagent's closes only the view: the agent goes on as it

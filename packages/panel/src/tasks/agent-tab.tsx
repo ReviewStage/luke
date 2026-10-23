@@ -232,9 +232,8 @@ import { WorkedFor, WorkingLine } from "./working-time.js";
  * agent-tab.tsx -- one coding agent's tab in the task's column: its transcript live, and the message box under it wearing what it runs on and what it published.
  *
  * The transcript is drawn as every transcript is (`transcript-blocks.tsx`
- * over `../ai-elements/`), the Call tab alike, from the
- * agent's stored `UIMessage`s as they are, and reads as a devtool's agent
- * pane: what it was handed opens it as a message sent to it, at a sent
+ * over `../ai-elements/`), from the agent's stored `UIMessage`s as they
+ * are, and reads as a devtool's agent pane: what it was handed opens it as a message sent to it, at a sent
  * message's measure under the line naming who sent it, a card folded under
  * its title: the plan, sent by its task, which opens the plan, beside the
  * teammate who started the agent; an automation's prompt alone, sent by the
@@ -246,7 +245,7 @@ import { WorkedFor, WorkingLine } from "./working-time.js";
  * collapsible row saying what it did (`tool-call-model.ts`), with the
  * input and the answer under the row once opened and a call that ended in
  * an error marked in red, each delegation to a worker a subagent's row on
- * a line of its own, as the Call tab draws its worker's, saying the task
+ * a line of its own, saying the task
  * and the model and effort the worker runs on, the whole line the one
  * button that opens the worker's own tab in the side panel (`AgentSubagentTab`),
  * each call about something the window draws in a tab of its own, a page,
@@ -255,8 +254,8 @@ import { WorkedFor, WorkingLine } from "./working-time.js";
  * of its to-do list the list on a row of its own where it landed, open
  * while it is the newest and folded once a newer one stands, the newest
  * docked over the composer instead while the agent works through it, and its
- * runs of calls and its finished lead folded as the Call tab folds Luke's; a message the developer sent it after the plan
- * is the developer's bubble, as the Call tab draws one, each skill it
+ * runs of calls and its finished lead folded (`turn-rows.ts`); a message
+ * the developer sent it after the plan is the developer's bubble, each skill it
  * names the chip that opens the skill's file (`skill-chip.tsx`), as a
  * "Loaded skill" row opens it too, hanging the same card; and while
  * the agent may still write, a shimmering line stands at the end saying
@@ -309,7 +308,7 @@ interface TranscriptLead {
   startingLine: string;
 }
 
-/** An agent's transcript: the plan it was handed, and the agent starting; the brain's turns on the Call tab, which open on no card, alike. */
+/** An agent's transcript: the plan it was handed, and the agent starting. */
 export const AGENT_LEAD: TranscriptLead = {
   label: "Plan",
   icon: <DocumentIcon />,

@@ -3757,9 +3757,8 @@ export function useTasksTab(input: {
       onClose: guard(() => setStandIn(undefined)),
     },
     onShowFile: showFile,
-    // A version's Open lands where its writer wrote it: an agent's tab as a
-    // notification opens it, or the task's Call tab, asked to
-    // bring the call or the turn into view once it draws.
+    // A version's Open lands where its writer wrote it: an agent's tab, as a
+    // notification opens it.
     onShowSource: guard(showSource),
     // The call card's way back lands where the task's call bar is in sight.
     secondCall: {
