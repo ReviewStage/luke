@@ -5,6 +5,7 @@ import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import { defineConfig, type PluginOption } from "vite";
 import { panelBuild } from "./scripts/panel-build";
+import { siteMarkdown } from "./scripts/site-markdown";
 
 const resolveEntry = (path: string) => fileURLToPath(new URL(path, import.meta.url));
 
@@ -65,6 +66,7 @@ export default defineConfig(({ isSsrBuild }) => {
       react(),
       tailwindcss(),
       ...panelBuild(),
+      siteMarkdown(),
       // Sentry's plugin goes after all others.
       ...sentrySourceMaps(sourceMapToken),
     ],

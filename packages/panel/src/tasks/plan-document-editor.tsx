@@ -7,13 +7,13 @@ import {
 } from "@luke/features/plan-edit-model";
 import { PLAN_ACTOR, TASK_BOUNDS, type Task } from "@luke/features/task-wire";
 import { Button } from "@luke/ui";
+import { MARKDOWN_CLASS, markdownClass } from "@luke/ui/markdown-class";
 import { openThread, usePlanCommentsControl } from "@luke/ui/plan-comments";
 import { Duration, Effect } from "effect";
 import { AsyncResult } from "effect/reactivity";
 import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { usePrefetchEditorBundle, useSideBundles } from "../bundle-loader.js";
-import { markdownClass } from "../markdown-message.js";
 import { DiagramPreview } from "../plan-diagram.js";
 import {
   type EditorAnchors,
@@ -574,11 +574,11 @@ export function EditableTitle({
         caretAtEnd(text.current);
       }}
     >
-      <div className="markdown task-title ph-no-capture">
+      <div className={`${MARKDOWN_CLASS.ROOT} task-title ph-no-capture`}>
         {/* biome-ignore lint/a11y/useSemanticElements: the title is edited in the heading's own look, which wraps as a heading does; an input cannot. */}
         <div
           ref={text}
-          className="markdown-heading task-title-text"
+          className={`${MARKDOWN_CLASS.HEADING} task-title-text`}
           data-level="1"
           contentEditable="plaintext-only"
           suppressContentEditableWarning

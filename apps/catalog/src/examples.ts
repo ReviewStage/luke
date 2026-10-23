@@ -42,6 +42,7 @@ import { LINE_BUTTONS_EXAMPLE } from "./examples/line-buttons";
 import { LIST_MOTION_EXAMPLE } from "./examples/list-motion";
 import { LIST_ROW_EXAMPLE } from "./examples/list-row";
 import { LOADING_INDICATORS_EXAMPLE } from "./examples/loading-indicators";
+import { MARKDOWN_EXAMPLE } from "./examples/markdown";
 import { MENU_EXAMPLE } from "./examples/menu";
 import { MESSAGES_EXAMPLE } from "./examples/messages";
 import { NAV_ITEMS_EXAMPLE } from "./examples/nav-items";
@@ -189,4 +190,5 @@ export const EXAMPLES: readonly Example[] = [
   KEEP_FOCUS_EXAMPLE,
   PORTAL_FENCE_EXAMPLE,
   REMOTE_SURFACE_EXAMPLE,
+  MARKDOWN_EXAMPLE,
 ];

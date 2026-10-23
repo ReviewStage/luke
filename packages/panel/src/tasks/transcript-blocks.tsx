@@ -53,6 +53,13 @@ import {
 import { ACTOR_KIND, ACTOR_STATE, type Actor, actorName } from "@luke/ui/actor-model";
 import { githubShapes, wholeRendering } from "@luke/ui/github-html";
 import { gluedRun, LINK_GLUE } from "@luke/ui/link-glue";
+import {
+  MARKDOWN_HTML_STEP,
+  type MarkdownComponents,
+  type MarkdownNodeProps,
+  type MarkdownSteps,
+  TRANSCRIPT_REMARK_STEPS,
+} from "@luke/ui/markdown";
 import { TAB_WORDS } from "@luke/ui/tab-strip-model";
 import {
   AppWindowIcon,
@@ -115,12 +122,6 @@ import {
   useState,
 } from "react";
 import remarkBreaks from "remark-breaks";
-import {
-  type Components,
-  defaultRehypePlugins,
-  defaultRemarkPlugins,
-  type ExtraProps,
-} from "streamdown";
 import { ACTOR_SIZE, ActorLine, ActorMark, ActorRef } from "../actor-ref.js";
 import { FoldBody } from "../ai-elements/fold.js";
 import { MessageResponse, PANEL_MARKDOWN_COMPONENTS } from "../ai-elements/message.js";
@@ -438,7 +439,7 @@ const UNNAMED_PICTURE = "Picture";
  * (`inbox-pictures.tsx`); any other a link to where it points, with the
  * picture's glyph, never drawn.
  */
-function PictureElement({ node }: ExtraProps): ReactNode {
+function PictureElement({ node }: MarkdownNodeProps): ReactNode {
   const planPicture = usePlanPictureDrawer();
   const inboxPicture = useInboxPictureDrawer();
   const address = String(node?.properties[PICTURE_ELEMENT.ADDRESS] ?? "");
@@ -476,10 +477,10 @@ function markDocumentStep(): (tree: MarkdownNode) => void {
 }
 
 /** The markdown steps a transcript is read with: the library's own, then the mark on its links. */
-const TRANSCRIPT_REMARK_PLUGINS = [...Object.values(defaultRemarkPlugins), markLinksStep];
+const TRANSCRIPT_REMARK_PLUGINS = [...TRANSCRIPT_REMARK_STEPS, markLinksStep];
 
 /** The steps words drawn as a document are read with: a transcript's, with the document's own marks. */
-const DOCUMENT_REMARK_PLUGINS = [...Object.values(defaultRemarkPlugins), markDocumentStep];
+const DOCUMENT_REMARK_PLUGINS = [...TRANSCRIPT_REMARK_STEPS, markDocumentStep];
 
 /**
  * The steps a message someone typed is read with: a transcript's, with each
@@ -488,11 +489,11 @@ const DOCUMENT_REMARK_PLUGINS = [...Object.values(defaultRemarkPlugins), markDoc
  * and wrong for words a person typed line by line into a box whose Enter is
  * a new line, as GitHub keeps a comment's line breaks for the same reason.
  */
-const TYPED_REMARK_PLUGINS = [...Object.values(defaultRemarkPlugins), remarkBreaks, markLinksStep];
+const TYPED_REMARK_PLUGINS = [...TRANSCRIPT_REMARK_STEPS, remarkBreaks, markLinksStep];
 
 /** The steps a document someone typed is read with: a typed message's, with the document's own marks. */
 const TYPED_DOCUMENT_REMARK_PLUGINS = [
-  ...Object.values(defaultRemarkPlugins),
+  ...TRANSCRIPT_REMARK_STEPS,
   remarkBreaks,
   markDocumentStep,
 ];
@@ -509,7 +510,7 @@ function remarkPluginsFor(typed: boolean, asDocument: boolean) {
  * task's page it is drawn on, or the window's doors off one; a link as any
  * other is where it names none.
  */
-function MentionElement({ node, children }: ExtraProps & { children?: ReactNode }): ReactNode {
+function MentionElement({ node, children }: MarkdownNodeProps & { children?: ReactNode }): ReactNode {
   const doors = useMentionDoors();
   const target = String(node?.properties[MENTION_ELEMENT.TARGET] ?? "");
   const words = node === undefined ? "" : wordsOf(node);
@@ -524,19 +525,19 @@ function MentionElement({ node, children }: ExtraProps & { children?: ReactNode 
 }
 
 /** A link standing alone in its paragraph of a document: the card of what it names, or the paragraph as it was where it earns none (`lone-link-card.tsx`). */
-function LoneLinkElement({ node, children }: ExtraProps & { children?: ReactNode }): ReactNode {
+function LoneLinkElement({ node, children }: MarkdownNodeProps & { children?: ReactNode }): ReactNode {
   const target = String(node?.properties[LONE_LINK_ELEMENT.TARGET] ?? "");
   const words = String(node?.properties[LONE_LINK_ELEMENT.WORDS] ?? "");
   return <LoneLinkCard target={target} words={words} fallback={<p>{children}</p>} />;
 }
 
 /** A document's paragraph of pictures alone: the pictures side by side, sharing its width. */
-function PictureRowElement({ children }: ExtraProps & { children?: ReactNode }): ReactNode {
+function PictureRowElement({ children }: MarkdownNodeProps & { children?: ReactNode }): ReactNode {
   return <div className={PICTURE_ROW_ELEMENT.CLASS}>{children}</div>;
 }
 
 /** A mention held with the punctuation written against it, in the box no line breaks inside (`link-glue.ts`). */
-function LinkGlueElement({ children }: ExtraProps & { children?: ReactNode }): ReactNode {
+function LinkGlueElement({ children }: MarkdownNodeProps & { children?: ReactNode }): ReactNode {
   return <span className={LINK_GLUE.CLASS}>{children}</span>;
 }
 
@@ -548,7 +549,7 @@ function LinkGlueElement({ children }: ExtraProps & { children?: ReactNode }): R
  * request to wherever its address points the moment the tab opens, and
  * nothing said on a call or written by a model should make one.
  */
-const TRANSCRIPT_COMPONENTS: Components = {
+const TRANSCRIPT_COMPONENTS: MarkdownComponents = {
   ...PANEL_MARKDOWN_COMPONENTS,
   ...TRANSCRIPT_CODE_AND_TABLE_COMPONENTS,
   a: ({ href, children, node }) => (
@@ -611,12 +612,12 @@ export function GitHubPictureLink({ src, alt }: { src: string; alt: string }): R
  * still say what each part is (`@luke/ui/github-html`), then the library's
  * own sanitizer, GitHub's own allowlist, and its link hardening.
  */
-const GITHUB_REHYPE_PLUGINS = [
-  defaultRehypePlugins.raw,
+const GITHUB_REHYPE_PLUGINS: MarkdownSteps = [
+  MARKDOWN_HTML_STEP.PARSE,
   githubShapes,
-  defaultRehypePlugins.sanitize,
-  defaultRehypePlugins.harden,
-].filter((plugin) => plugin !== undefined);
+  MARKDOWN_HTML_STEP.SANITIZE,
+  MARKDOWN_HTML_STEP.HARDEN,
+];
 
 /** The one markdown step GitHub's rendering takes: handed over whole, as HTML. */
 const GITHUB_REMARK_PLUGINS = [wholeRendering];
@@ -636,7 +637,7 @@ export function GitHubWords({
   html: string;
   picture: GitHubPictureDrawer;
 }): ReactNode {
-  const components = useMemo<Components>(
+  const components = useMemo<MarkdownComponents>(
     () => ({
       ...TRANSCRIPT_COMPONENTS,
       a: ({ href, children, node }) => (
@@ -654,14 +655,12 @@ export function GitHubWords({
   );
   return (
     <MessageResponse
-      mode="static"
+      words={html}
       components={components}
       remarkPlugins={GITHUB_REMARK_PLUGINS}
       rehypePlugins={GITHUB_REHYPE_PLUGINS}
       normalizeHtmlIndentation={false}
-    >
-      {html}
-    </MessageResponse>
+    />
   );
 }
 
@@ -676,18 +675,12 @@ export interface TranscriptElement {
   readonly markdown: string;
   readonly tag: string;
   readonly attributes: readonly string[];
-  readonly components: Components;
+  readonly components: MarkdownComponents;
 }
-
-/** How Streamdown reads words: block by block as they still stream in, an unclosed fence or emphasis drawn as written so far, or as a whole once settled. */
-const WORDS_MODE = {
-  STREAMING: "streaming",
-  STATIC: "static",
-} as const;
 
 /** The components and tags an element of the transcript's own is drawn with beside the transcript's own, the same objects while the element names the same. */
 function useElementDraw(element: TranscriptElement | undefined): {
-  components: Components;
+  components: MarkdownComponents;
   allowedTags: Record<string, string[]>;
   literal: string[] | undefined;
 } {
@@ -735,14 +728,13 @@ export function TranscriptWords({
   return (
     <TranscriptMarkdownSource markdown={text}>
       <MessageResponse
-        mode={streaming ? WORDS_MODE.STREAMING : WORDS_MODE.STATIC}
+        words={element === undefined ? text : element.markdown}
+        streaming={streaming}
         components={components}
         remarkPlugins={remarkPlugins}
         allowedTags={allowedTags}
-        {...(literal === undefined ? {} : { literalTagContent: literal })}
-      >
-        {element === undefined ? text : element.markdown}
-      </MessageResponse>
+        literalTagContent={literal}
+      />
     </TranscriptMarkdownSource>
   );
 }

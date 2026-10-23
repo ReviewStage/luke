@@ -179,8 +179,8 @@ function smallTargets(): ReadonlyMap<string, Element> {
     [
       "a plan's task box",
       markup(
-        '<ul class="markdown"><li class="task-list-item"><span class="task-list-box"><label class="luke-checkbox" data-words="false"><input class="luke-checkbox-box" type="checkbox"></label></span></li></ul>',
-        ".task-list-box > label",
+        '<ul class="luke-markdown"><li class="task-list-item"><span class="luke-markdown-task"><label class="luke-checkbox" data-words="false"><input class="luke-checkbox-box" type="checkbox"></label></span></li></ul>',
+        ".luke-markdown-task > label",
       ),
     ],
     [

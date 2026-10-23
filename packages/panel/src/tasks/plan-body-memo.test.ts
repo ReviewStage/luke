@@ -24,15 +24,21 @@ import type { PlanEditDoor } from "./use-plan-editing.js";
 
 const parsed = vi.hoisted((): string[] => []);
 
-vi.mock("react-markdown", async (importOriginal) => {
-  const engine = await importOriginal<typeof import("react-markdown")>();
-  const Markdown = engine.default;
+// Note that the whole parse a note is drawn by (`@luke/ui/markdown`) is Streamdown's `Block`, wrapped here under the memo it keeps.
+vi.mock("streamdown", async (importOriginal) => {
+  const engine = await importOriginal<typeof import("streamdown")>();
+  const { memo } = await import("react");
+  // SAFETY: `Block` is a memo, which React keeps as the component it wraps and the comparison it is memoised by.
+  const block = engine.Block as unknown as {
+    type: (props: Parameters<typeof engine.Block>[0]) => ReturnType<typeof engine.Block>;
+    compare: Parameters<typeof memo>[1];
+  };
   return {
     ...engine,
-    default: (options: Parameters<typeof Markdown>[0]) => {
-      parsed.push(options.children ?? "");
-      return Markdown(options);
-    },
+    Block: memo((props: Parameters<typeof engine.Block>[0]) => {
+      parsed.push(props.content);
+      return block.type(props);
+    }, block.compare),
   };
 });
 

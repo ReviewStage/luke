@@ -1,3 +1,4 @@
+import releases from "virtual:luke/changelog-releases";
 import {
   BUTTON_VARIANT,
   ButtonLink,
@@ -18,25 +19,24 @@ import {
   TextLink,
 } from "@luke/ui";
 import { formatDayHeading } from "@luke/ui/time-format";
-import changelogMarkdown from "../../../CHANGELOG.md?raw";
 import {
   CHANGELOG_PATH,
   CHANGELOG_VIEW,
   type ChangelogView,
   changelogPagePath,
   changelogReleasePath,
-  parseReleases,
   type Release,
 } from "./changelog-releases";
 import { REPOSITORY_URL, SITE_PAGE, SiteFooterLinks, SiteNavigation } from "./SiteChrome";
 
 /**
  * The changelog's pages and its per-release pages, drawn from CHANGELOG.md
- * (`changelog-releases.ts` reads it and decides which releases an address
- * shows). Every release keeps the same rail and body wherever it appears, so
- * a release read on its own page looks as it does in the list.
+ * (`site-markdown.tsx` draws its releases when the site is built, and
+ * `changelog-releases.ts` decides which releases an address shows). Every
+ * release keeps the same rail and body wherever it appears, so a release
+ * read on its own page looks as it does in the list.
  */
-export const RELEASES = parseReleases(changelogMarkdown);
+export const RELEASES: readonly Release[] = releases;
 
 function formatReleaseDate(date: string): string {
   return formatDayHeading(date);

@@ -2,7 +2,6 @@ import base from "@luke/panel/styles/base.css?raw";
 import call from "@luke/panel/styles/call.css?raw";
 import desktop from "@luke/panel/styles/desktop.css?raw";
 import entry from "@luke/panel/styles/index.css?raw";
-import markdown from "@luke/panel/styles/markdown.css?raw";
 import search from "@luke/panel/styles/search.css?raw";
 import settings from "@luke/panel/styles/settings.css?raw";
 import shell from "@luke/panel/styles/shell.css?raw";
@@ -50,7 +49,6 @@ const SHEET_BY_IMPORT = {
   "./settings.css": settings,
   "./base.css": base,
   "@luke/ui/styles.css": ui,
-  "./markdown.css": markdown,
   "./shortcut.css": shortcut,
   "./tasks.css": tasks,
   "./shell.css": shell,

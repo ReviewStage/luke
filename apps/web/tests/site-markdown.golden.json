@@ -1,0 +1,38 @@
+{
+  "releases": [
+    {
+      "version": "1.1.0",
+      "date": "2026-10-13",
+      "html": "<h3>The Call tab</h3>\n<p>Calls read as <strong>one thread</strong>, with <code>code</code> and a <a href=\"https://example.com\">link</a>.</p>\n<p><a href=\"/changelog/1.1.0/the-call-tab.png\" target=\"_blank\" rel=\"noreferrer\"><img src=\"/changelog/1.1.0/the-call-tab.png\" alt=\"The Call tab.\" loading=\"lazy\"/></a></p>\n<p>Hold <kbd>⌥</kbd><kbd>S</kbd> to speak, and read the <a href=\"https://github.com/ReviewStage/luke/blob/main/PRIVACY.md\">Privacy</a> file.</p>\n<h3>Fixes</h3>\n<ul>\n<li>Fixed a thing in <a href=\"https://github.com/acme/acme/pull/42\">#42</a>\n<ul>\n<li>and a nested one</li>\n</ul>\n</li>\n</ul>",
+      "headline": "The Call tab",
+      "summary": "Calls read as one thread, with code and a link.",
+      "image": {
+        "src": "/changelog/1.1.0/the-call-tab.png",
+        "alt": "The Call tab."
+      }
+    },
+    {
+      "version": "1.0.0",
+      "date": "2026-10-01",
+      "html": "<h3>Misc</h3>\n<ul>\n<li>Updated the <em>words</em></li>\n</ul>",
+      "summary": "Updated the words"
+    }
+  ],
+  "policy": {
+    "title": "Privacy",
+    "sections": [
+      {
+        "title": null,
+        "html": "<p>Acme keeps what you say for <strong>thirty days</strong>.</p>"
+      },
+      {
+        "title": "What we collect",
+        "html": "<ol>\n<li>Your words</li>\n<li>Your plans, with <code>code</code></li>\n</ol>"
+      },
+      {
+        "title": "Who sees it",
+        "html": "<p>Nobody but you. See <a href=\"/privacy\">the policy</a>.</p>"
+      }
+    ]
+  }
+}

@@ -539,12 +539,7 @@ function CommentWords({ words }: { words: string }): React.JSX.Element {
   const link = useMentionLink();
   const openLink = useOpenLink();
   return (
-    <MarkdownMessage
-      words={words}
-      className="comment-words markdown"
-      link={link}
-      openLink={openLink}
-    />
+    <MarkdownMessage words={words} className="comment-words" link={link} openLink={openLink} />
   );
 }
 
