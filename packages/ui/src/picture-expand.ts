@@ -159,10 +159,15 @@ export function usePictureExpand(onOpened: boolean): PictureExpand {
   const card = useRef<HTMLElement | null>(null);
   const grown = useRef(false);
   const closing = useRef(false);
+  // Stops a wait for the viewer's picture to load, the card shown as every card is.
+  const stopWaiting = useRef<(() => void) | undefined>(undefined);
 
   // The tile's picture stands hidden while its own is shown over it, and
-  // comes back as soon as the viewer shows another or is gone.
+  // comes back as soon as the viewer shows another or is gone. Note that a
+  // wait for the picture opened on ends as the viewer walks off it, because
+  // the picture it waits on is taken out and never loads.
   useLayoutEffect(() => {
+    if (!onOpened) stopWaiting.current?.();
     if (face !== undefined && grown.current) face.style.visibility = onOpened ? "hidden" : "";
   }, [face, onOpened]);
   useLayoutEffect(
@@ -202,13 +207,20 @@ export function usePictureExpand(onOpened: boolean): PictureExpand {
     // to, so the card stands unseen until it has one, then flies; one that
     // fails to load opens as every card does.
     const waiting = standing.animate([{ opacity: 0 }, { opacity: 0 }], { fill: "forwards" });
-    const settle = (event: Event) => {
+    const stop = () => {
+      stopWaiting.current = undefined;
       picture.removeEventListener("load", settle);
       picture.removeEventListener("error", settle);
       waiting.cancel();
-      if (closing.current) return;
-      if (event.type === "load") fly(standing, face, timing);
+    };
+    const settle = (event: Event) => {
+      stop();
+      if (event.type === "load" && !closing.current) fly(standing, face, timing);
       else standing.removeAttribute(EXPANDING_ATTRIBUTE);
+    };
+    stopWaiting.current = () => {
+      stop();
+      standing.removeAttribute(EXPANDING_ATTRIBUTE);
     };
     picture.addEventListener("load", settle);
     picture.addEventListener("error", settle);

@@ -75,9 +75,15 @@ afterEach(() => {
 });
 
 /** A picture shown over the window as the viewer shows it, put away through its flight. */
-function Viewer({ onClosed }: { onClosed: () => void }): React.JSX.Element {
+function Viewer({
+  onClosed,
+  onOpened = true,
+}: {
+  onClosed: () => void;
+  onOpened?: boolean;
+}): React.JSX.Element {
   const titleId = useId();
-  const expand = usePictureExpand(true);
+  const expand = usePictureExpand(onOpened);
   return createElement(Dialog, {
     size: DIALOG_SIZE.MEDIA,
     labelledBy: titleId,
@@ -98,6 +104,7 @@ function Viewer({ onClosed }: { onClosed: () => void }): React.JSX.Element {
 function Page({ closed }: { closed: string[] }): React.JSX.Element {
   const [open, setOpen] = useState(false);
   const [tiled, setTiled] = useState(true);
+  const [walked, setWalked] = useState(false);
   return createElement(
     "div",
     null,
@@ -109,8 +116,10 @@ function Page({ closed }: { closed: string[] }): React.JSX.Element {
         })
       : null,
     createElement("button", { type: "button", onClick: () => setTiled(false) }, "Withdraw"),
+    createElement("button", { type: "button", onClick: () => setWalked(true) }, "Walk"),
     open
       ? createElement(Viewer, {
+          onOpened: !walked,
           onClosed: () => {
             closed.push("closed");
             setOpen(false);
@@ -134,6 +143,12 @@ function mountPage(closed: string[]) {
     tile,
     face,
     card: () => document.querySelector<HTMLElement>(".luke-dialog"),
+    walk: () => {
+      const button = [...container.querySelectorAll("button")].find(
+        (each) => each.textContent === "Walk",
+      );
+      act(() => button?.click());
+    },
     withdraw: () => {
       const button = [...container.querySelectorAll("button")].find(
         (each) => each.textContent === "Withdraw",
@@ -195,6 +210,25 @@ test("a picture the viewer has yet to load flies from its tile once it has, the 
 
   expect(cardFlights()[1]?.frames[0]?.transform).toBe("translate(-160px, 192px) scale(0.2, 0.2)");
   expect(page.face.style.visibility).toBe("hidden");
+});
+
+test("a viewer walked off a picture still loading shows the card as every card is", () => {
+  vi.spyOn(HTMLImageElement.prototype, "complete", "get").mockReturnValue(false);
+  const cancelled: Element[] = [];
+  const animate = HTMLElement.prototype.animate;
+  HTMLElement.prototype.animate = function (this: HTMLElement, ...args) {
+    const animation = animate.apply(this, args);
+    animation.cancel = () => cancelled.push(this);
+    return animation;
+  };
+  const page = mountPage([]);
+  act(() => page.tile.click());
+
+  page.walk();
+
+  expect(cancelled).toEqual([page.card()]);
+  expect(page.card()?.hasAttribute("data-expanding")).toBe(false);
+  expect(page.face.style.visibility).toBe("");
 });
 
 test("a picture that fails to load opens with the dialog's own entrance", () => {
