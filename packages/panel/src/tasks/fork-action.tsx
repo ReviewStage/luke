@@ -1,6 +1,16 @@
 import type { CodingAgentAttachment, CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import { LINK_PLACE } from "@luke/features/luke-link";
-import { IconButton, ONE_LINE_END, OneLine, TextButton, Tooltip } from "@luke/ui";
+import {
+  CARD_CORNER,
+  CARD_LOOK,
+  CARD_PADDING,
+  Card,
+  IconButton,
+  ONE_LINE_END,
+  OneLine,
+  TextButton,
+  Tooltip,
+} from "@luke/ui";
 import { ACTOR_KIND, ACTOR_STATE, type Actor } from "@luke/ui/actor-model";
 import { TAB_WORDS } from "@luke/ui/tab-strip-model";
 import { ArrowRightIcon, SplitIcon, XIcon } from "lucide-react";
@@ -253,7 +263,10 @@ export function ForkChip({
   const drop = messageId === undefined ? FORK_WORDS.DROP_CONTINUE : FORK_WORDS.DROP;
   return (
     <div className="draft-fork-dock">
-      <div
+      <Card
+        look={CARD_LOOK.TINT}
+        corner={CARD_CORNER.CONTROL}
+        padding={CARD_PADDING.NONE}
         className="draft-fork-chip"
         data-fork-chip=""
         data-continue={messageId === undefined ? "" : undefined}
@@ -290,7 +303,7 @@ export function ForkChip({
             <IconButton icon={<XIcon />} label={drop} onClick={onDrop} />
           </Tooltip>
         </span>
-      </div>
+      </Card>
     </div>
   );
 }

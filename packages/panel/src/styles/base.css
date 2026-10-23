@@ -32,9 +32,9 @@
      profile's `--luke-focus-ring-*` (`tokens/profiles.css`). */
   /* The voice's notice line's ground, opaque because the document scrolls on beneath it. */
   --surface-notice: var(--luke-color-overlay);
-  /* The code on screen, in the ground and inks of GitHub's themes, and the
-     mark beside a line changed in that theme's blue. */
-  --code-ground: light-dark(#fff, #0d1117);
+  /* The code on screen, in the inks of GitHub's themes on its ground
+     (`--luke-color-code-ground`), and the mark beside a line changed in that
+     theme's blue. */
   --code-text: light-dark(#1f2328, #e6edf3);
   --code-pointed-edge: light-dark(#0969da, #388bfd);
   /* A diff's lines on the code's ground, wherever one is drawn: a line

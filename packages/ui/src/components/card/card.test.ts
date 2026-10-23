@@ -3,12 +3,13 @@
 import { act, createElement, createRef } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, test } from "vitest";
-import { CARD_PADDING, Card } from "./card.js";
+import { CARD_ELEMENT, CARD_PADDING, Card } from "./card.js";
 
 /**
  * card.test.ts -- a card shows what it holds at every padding, offers its
- * hint to a pointer resting on it, and hands its element to what measures
- * against it.
+ * hint to a pointer resting on it, hands its element to what measures
+ * against it, and is the element its place reads it as, named by its
+ * owner's class.
  */
 
 declare global {
@@ -58,4 +59,26 @@ test("a card's hint is the whole card's, and its element reaches what measures i
   const paragraph = container.querySelector("p");
   expect(paragraph?.closest("[title]")?.getAttribute("title")).toBe("Counted since launch");
   expect(ref.current?.contains(paragraph ?? null)).toBe(true);
+});
+
+test("a card in running words is a span inside its paragraph, named and labelled by its owner", () => {
+  const container = draw(
+    createElement(
+      "p",
+      null,
+      "The screen: ",
+      createElement(Card, {
+        as: CARD_ELEMENT.SPAN,
+        className: "picture-frame",
+        role: "img",
+        "aria-label": "Login screen",
+        children: "missing",
+      }),
+    ),
+  );
+  const frame = container.querySelector(".picture-frame");
+  expect(frame?.tagName).toBe("SPAN");
+  expect(frame?.parentElement?.tagName).toBe("P");
+  expect(frame?.getAttribute("role")).toBe("img");
+  expect(frame?.getAttribute("aria-label")).toBe("Login screen");
 });

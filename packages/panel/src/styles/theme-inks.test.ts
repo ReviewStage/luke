@@ -24,14 +24,14 @@ import { layContainersAt } from "../testing/container-width.js";
 /** Light and dark, each ink as the GitHub theme the panel draws code in names it, and an integration's as its brand does. */
 const INKS = {
   light: {
-    "--code-ground": "#fff",
+    "--luke-color-code-ground": "#fff",
     "--code-text": "#1f2328",
     "--terminal-red": "#cf222e",
     "--integration-ink-notion": "#000",
     "--integration-ink-sentry": "#181225",
   },
   dark: {
-    "--code-ground": "#0d1117",
+    "--luke-color-code-ground": "#0d1117",
     "--code-text": "#e6edf3",
     "--terminal-red": "#ff7b72",
     "--integration-ink-notion": "#fff",

@@ -44,16 +44,21 @@ import { type DisclosureMotion, disclosureMotion, useDisclosure } from "../../us
  * element's own toggle, so its state is the element's again at once.
  *
  * `Disclosure` draws the quiet summary row: a chevron, then the caller's
- * glyph and words, muted until the pointer is over it. A control standing in
+ * glyph and words, muted until the pointer is over it. Drawn as a card
+ * (`DISCLOSURE_LOOK.CARD`), as what a transcript opens on is, it stands on
+ * the hover's wash inside a hairline, its head the one line a closed card
+ * shows (`DISCLOSURE_SUMMARY.HEAD`) and its body under a hairline
+ * (`DISCLOSURE_BODY.CARD`). A control standing in
  * a summary sits in a `DisclosureAction`, so pressing it leaves the fold be.
  * A surface that skins its fold its own way builds on `useDisclosureFold`
  * and `DisclosureScope` instead, so the state and the motion live here once.
  */
 
-/** Where an open body stands: under the summary's words, past its chevron, flush with the row, or wherever the caller's own skin inside it sets it. */
+/** Where an open body stands: under the summary's words, past its chevron, flush with the row, inset under a card's head and the hairline below it, or wherever the caller's own skin inside it sets it. */
 export const DISCLOSURE_BODY = {
   INDENTED: "indented",
   FLUSH: "flush",
+  CARD: "card",
   NONE: "none",
 } as const;
 export type DisclosureBodyInset = (typeof DISCLOSURE_BODY)[keyof typeof DISCLOSURE_BODY];
@@ -232,7 +237,15 @@ export function useDisclosureSummaryClick(): (event: MouseEvent<HTMLElement>) =>
  * holder keeps its state says `open` and hears `onOpenChange`, because the
  * element's own `open` is drawn from the fold's state rather than set.
  */
+/** How a fold stands: bare among its lines, or as a card, on the hover's wash inside a hairline, clipped at its corner. */
+export const DISCLOSURE_LOOK = {
+  PLAIN: "plain",
+  CARD: "card",
+} as const;
+export type DisclosureLook = (typeof DISCLOSURE_LOOK)[keyof typeof DISCLOSURE_LOOK];
+
 type DisclosureProps = {
+  look?: DisclosureLook;
   defaultOpen?: boolean;
   /** Whether it is open, where its holder keeps that; `onOpenChange` hears each press and toggle. */
   open?: boolean | undefined;
@@ -242,6 +255,7 @@ type DisclosureProps = {
 
 /** A fold drawn as the quiet summary row and its body. */
 export function Disclosure({
+  look = DISCLOSURE_LOOK.PLAIN,
   defaultOpen = false,
   open,
   onOpenChange,
@@ -259,6 +273,7 @@ export function Disclosure({
         {...props}
         {...details}
         className="luke-disclosure"
+        data-look={look === DISCLOSURE_LOOK.PLAIN ? undefined : look}
         onToggle={(event) => {
           details.onToggle(event);
           onToggle?.(event);
@@ -273,18 +288,21 @@ export function Disclosure({
 /**
  * How a summary is drawn: the quiet row with its chevron; the file row, whose
  * own controls stand in it and which a rule closes under while the fold is
- * open; or a chip at the end of its row, on the surface inside a hairline,
- * saying in its glyphs and a count what it folds (a line's review threads).
+ * open; a chip at the end of its row, on the surface inside a hairline,
+ * saying in its glyphs and a count what it folds (a line's review threads);
+ * or a card's head, the one line a closed card shows, in its holder's ink,
+ * finger-tall on a coarse pointer.
  */
 export const DISCLOSURE_SUMMARY = {
   QUIET: "quiet",
   ROW: "row",
   CHIP: "chip",
+  HEAD: "head",
 } as const;
 export type DisclosureSummaryLook = (typeof DISCLOSURE_SUMMARY)[keyof typeof DISCLOSURE_SUMMARY];
 
 type DisclosureSummaryProps = {
-  /** `ROW` draws no chevron of its own, since the row holds its fold control; it also stays out of the tab order, since that control is the keyboard's. `CHIP` draws none either, its glyphs saying what it folds. */
+  /** `ROW` draws no chevron of its own, since the row holds its fold control; it also stays out of the tab order, since that control is the keyboard's. `CHIP` draws none either, its glyphs saying what it folds, and `HEAD` leaves its `DisclosureChevron` to the caller, at either end of its line. */
   look?: DisclosureSummaryLook;
   children: ReactNode;
 } & Omit<ComponentPropsWithoutRef<"summary">, "className" | "style" | "children" | "aria-expanded">;

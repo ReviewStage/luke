@@ -8,6 +8,7 @@ import {
   HoldPress,
   IconButton,
   Inline,
+  MARK_STRIP_LOOK,
   MARK_STRIP_TONE,
   MarkStrip,
   Menu,
@@ -97,6 +98,16 @@ const MARKS: readonly StripMark[] = [
   {},
 ];
 
+/** A changed file's bar for each of a pull request's files, a renamed one in the working tone, the file shown standing wider. */
+const BARS: readonly StripMark[] = [
+  { tone: MARK_STRIP_TONE.COMPLETE, viewed: true },
+  { tone: MARK_STRIP_TONE.ATTENTION },
+  { tone: MARK_STRIP_TONE.ATTENTION, current: true },
+  { tone: MARK_STRIP_TONE.WORKING },
+  { tone: MARK_STRIP_TONE.DANGER },
+  ...Array.from({ length: 40 }, () => ({ tone: MARK_STRIP_TONE.ATTENTION })),
+];
+
 function PressShortcuts(): React.JSX.Element {
   const [done, setDone] = useState("Nothing yet");
   const said = (
@@ -122,6 +133,22 @@ function PressShortcuts(): React.JSX.Element {
         <Inline gap={GAP.CONTROL}>
           <div className="catalog-mark-strip">
             <MarkStrip marks={MARKS} onPress={() => setDone("Showed the rail")} />
+          </div>
+          {said}
+        </Inline>
+      </CatalogSection>
+      <CatalogSection
+        id="press-strip-bars"
+        title="Bars sharing the strip, rested on rather than pressed"
+      >
+        <Inline gap={GAP.CONTROL}>
+          <div className="catalog-mark-strip">
+            <MarkStrip
+              look={MARK_STRIP_LOOK.BARS}
+              marks={BARS}
+              onPointerEnter={() => setDone("Peeked the tree")}
+              onPointerLeave={() => setDone("Put the tree away")}
+            />
           </div>
           {said}
         </Inline>

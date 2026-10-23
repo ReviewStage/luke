@@ -689,14 +689,11 @@
 
 /* A Mermaid fence drawn as its diagram (`plan-diagram.tsx`): a picture the
    diagram bundle drew, on the section's fill, its code a press away. The
-   picture is an `<img>`, so its own size holds it and the column bounds it. */
+   picture is an `<img>`, so its own size holds it and the column bounds it.
+   Its frame is `@luke/ui`'s Card. */
 .plan-diagram {
-  display: block;
   margin: var(--luke-space-12) 0;
   padding: var(--luke-space-12) var(--luke-space-16);
-  border: 1px solid var(--luke-color-border);
-  border-radius: var(--luke-control-radius);
-  background: var(--luke-color-surface);
 }
 
 .plan-diagram-head {
@@ -1235,19 +1232,10 @@
   background: var(--luke-color-well);
 }
 
-/* The card clips at its rounded edge, against which its header's actions
-   stand flush, so a ring inside it is drawn inside its control. */
-.code-card {
-  --luke-focus-ring-offset: var(--luke-focus-ring-inset);
-  overflow: hidden;
-  border: 1px solid var(--luke-color-border);
-  border-radius: var(--luke-radius-10);
-  background: var(--code-ground);
-}
-
-/* The file at the left and the card's actions flush with its right edge,
-   so the header is the buttons' height and no more, as a transcript
-   fence's is. */
+/* A Code card is `@luke/ui`'s Card on the code's ground, clipped at its
+   rounded edge, against which its header's actions stand flush: the file
+   at the left and the card's actions at its right edge, so the header is
+   the buttons' height and no more, as a transcript fence's is. */
 .code-card-header {
   display: flex;
   min-width: 0;
@@ -1269,7 +1257,7 @@
 /* A File tab: its file, or the lines Luke showed of it under why the file
    is not shown, filling the tab. */
 .file-tab {
-  background: var(--code-ground);
+  background: var(--luke-color-code-ground);
 }
 
 /* The tree slides in past the view's right edge and out over the file, so
@@ -1428,11 +1416,10 @@
   display: none;
 }
 
-/* While Files changed's tree is hidden, a strip stands in its place, one
-   mark for each changed file, coloured as its letter is in the tree, dimmed
-   once viewed, the file stood on standing out (changes-strip.tsx);
-   the pointer resting on it peeks the tree out over the list, as a pane
-   floats where the panel is too narrow for it (below). */
+/* While Files changed's tree is hidden, a strip stands in its place
+   (changes-strip.tsx, `@luke/ui`'s MarkStrip); the pointer resting on it
+   peeks the tree out over the list, as a pane floats where the panel is too
+   narrow for it (below). This box says when it is drawn and its edge. */
 .file-tree-strip {
   display: none;
 }
@@ -1441,46 +1428,7 @@
   display: flex;
   width: var(--luke-space-12);
   flex: none;
-  flex-direction: column;
-  align-items: center;
-  padding-block: var(--luke-space-12);
   border-left: 1px solid var(--luke-color-border);
-}
-
-/* Each mark is a share of the strip's height, at most a line's mark, its
-   colour filling the top of its share so the gap between marks shrinks
-   with them: a pull request of thousands of files draws every mark, however
-   thin, and the file stood on never thinner than a line. */
-.file-tree-strip-mark {
-  --strip-mark-colour: var(--luke-color-attention);
-  width: var(--luke-space-6);
-  min-height: 0;
-  max-height: var(--luke-space-6);
-  flex: 1 1 0;
-  background: linear-gradient(var(--strip-mark-colour) 0 66%, transparent 66%);
-}
-
-.file-tree-strip-mark[data-status="added"] {
-  --strip-mark-colour: var(--luke-color-complete);
-}
-
-.file-tree-strip-mark[data-status="deleted"] {
-  --strip-mark-colour: var(--luke-color-danger-text);
-}
-
-.file-tree-strip-mark[data-status="renamed"] {
-  --strip-mark-colour: var(--luke-color-working);
-}
-
-.file-tree-strip-mark[data-viewed] {
-  opacity: 0.35;
-}
-
-.file-tree-strip-mark[data-current] {
-  width: var(--luke-space-12);
-  min-height: var(--luke-space-2);
-  opacity: 1;
-  box-shadow: 0 0 0 1px var(--luke-color-text);
 }
 
 /* The tree peeked from the strip, or opened over the list, floats over the
@@ -2250,7 +2198,7 @@
   height: 100%;
   grid-area: 1 / 1;
   border: 0;
-  background-color: var(--code-ground);
+  background-color: var(--luke-color-code-ground);
 }
 
 .image-diff-note {
@@ -2657,15 +2605,14 @@
   list-style: none;
 }
 
-/* The words take the card's width; the press to its lines hugs its own. */
+/* A key change's card, `@luke/ui`'s outlined Card: the words take its
+   width; the press to its lines hugs its own. */
 .chapter-key-change {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
   gap: var(--luke-space-2);
   padding: var(--luke-space-6) var(--luke-space-8);
-  border: 1px solid var(--luke-color-border);
-  border-radius: var(--luke-control-radius);
 }
 
 .chapter-key-change-words {
@@ -3126,9 +3073,6 @@
   min-height: 96px;
   max-height: 240px;
   flex-direction: column;
-  overflow: clip;
-  border: 1px solid var(--luke-color-border);
-  border-radius: var(--luke-radius-10);
 }
 
 .markdown-field-preview-words {
@@ -3688,16 +3632,14 @@
 /* A comment being written on lines of a file (`line-comment.tsx`), under
    the last of them as a review thread stands: a card of the thread's own
    face, its head naming the lines, the words with their preview, GitHub's
-   refusal, and what GitHub's own line comment offers at its foot. */
+   refusal, and what GitHub's own line comment offers at its foot. Its frame
+   is `@luke/ui`'s Card, which leaves its room to it. */
 .line-comment {
   display: flex;
   flex-direction: column;
   gap: var(--luke-space-8);
   max-width: 720px;
   padding: var(--luke-space-8) var(--luke-space-12) var(--luke-space-12);
-  border: 1px solid var(--luke-color-border);
-  border-radius: var(--luke-control-radius);
-  background: var(--luke-color-surface);
 }
 
 .line-comment-head {
@@ -3732,8 +3674,8 @@
 
 /* One card for what is written on lines of code (`annotation-card.tsx`): a
    review thread in Files changed and the Conversation, and Luke's note in a
-   File tab. The review thread's quiet card, as wide as its words up to a
-   reading measure. Its columns are the custom properties below: the head's
+   File tab. The review thread's quiet card (`@luke/ui`'s Card), as wide as
+   its words up to a reading measure. Its columns are the custom properties below: the head's
    chevron in a file header's 24px slot at its inset, the faces' column
    after it, and the words' column after the faces, which the head's face
    and name and every comment's face and words read alike. */
@@ -3752,13 +3694,8 @@
     var(--annotation-face) +
     var(--annotation-gap)
   );
-  --luke-focus-ring-offset: var(--luke-focus-ring-inset);
   min-width: 0;
   max-width: min(48rem, 100%);
-  overflow: clip;
-  border: 1px solid var(--luke-color-border);
-  border-radius: var(--luke-radius-10);
-  background: var(--luke-color-surface);
   color: var(--luke-color-text);
   font-family: var(--luke-font-sans);
   font-size: var(--luke-type-body-size);
@@ -3942,7 +3879,7 @@
   overflow-y: visible;
   margin-bottom: var(--luke-space-8);
   border-block: 1px solid var(--luke-color-border);
-  background: var(--code-ground);
+  background: var(--luke-color-code-ground);
 }
 
 /* A pending comment the Review panel lists, under its file and lines. */
@@ -4342,17 +4279,10 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
   flex: none;
 }
 
-/* The body under an open line, set in past its icon: a card holding the
-   input and the answer, a hairline between them, clipped to its corners so
-   a focus ring draws inside it. */
+/* The body under an open line, set in past its icon: `@luke/ui`'s tinted
+   card holding the input and the answer, a hairline between them. */
 .tool-body {
-  --luke-focus-ring-offset: var(--luke-focus-ring-inset);
-
   margin: var(--luke-space-4) 0 var(--luke-space-4) var(--transcript-gutter);
-  overflow: hidden;
-  border: 1px solid var(--luke-color-border);
-  border-radius: var(--luke-radius-8);
-  background: var(--luke-color-fill-hover);
 }
 
 .tool-body > * + * {
@@ -4403,43 +4333,9 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
 }
 
 /* A plan's card (../ai-elements/plan.tsx), and what else a transcript opens
-   on drawn as one: a card on the raised ground inside a hairline, clipped to
-   its corners so the header's hover fill follows them and what is in it
-   rings inside itself. The header is the one line a closed card shows, its
-   chevron and icon in the muted ink and the title cut to the line behind
-   its quieter label; open, the plan stands under a hairline in the body
-   type, its words running or, for a replay, its blocks stacked. */
-.plan-card {
-  --luke-focus-ring-offset: var(--luke-focus-ring-inset);
-
-  overflow: clip;
-  border: 1px solid var(--luke-color-border);
-  border-radius: var(--luke-radius-8);
-  background: var(--luke-color-fill-hover);
-  font-size: var(--luke-type-caption-size);
-}
-
-.plan-card-head {
-  display: flex;
-  height: 32px;
-  align-items: center;
-  gap: var(--luke-icon-gap);
-  padding-inline: var(--luke-space-12);
-  border-radius: inherit;
-  transition:
-    color var(--luke-duration-quick) var(--luke-spring),
-    background-color var(--luke-duration-quick) var(--luke-spring);
-}
-
-.plan-card-head:hover {
-  background: var(--luke-color-fill-strong);
-}
-
-.plan-card[open] > .plan-card-head {
-  border-bottom-left-radius: 0;
-  border-bottom-right-radius: 0;
-}
-
+   on drawn as one: `@luke/ui`'s card fold. Its head's title is cut to the
+   line behind its quieter label; open, the plan stands under its hairline in
+   the body type, its words running or, for a replay, its blocks stacked. */
 .plan-card-title {
   min-width: 0;
   flex: 1;
@@ -4456,8 +4352,6 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
 }
 
 .plan-card-body {
-  padding: var(--luke-space-8) var(--luke-space-12);
-  border-top: 1px solid var(--luke-color-border);
   font-size: var(--luke-type-body-size);
   line-height: var(--luke-type-body-leading);
 }
@@ -4507,7 +4401,7 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
   overflow: hidden;
   border: 1px solid var(--luke-color-border);
   border-radius: var(--luke-radius-8);
-  background: var(--code-ground);
+  background: var(--luke-color-code-ground);
 }
 
 .transcript-code-header {
@@ -4853,8 +4747,8 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
 
 /* A forked draft's chip over its box: what it forks, the message's opening
    words, and the × that lets the fork go, docked on the composer's own
-   inset as the to-do list is and drawn as its card is (`.todos-dock`): one
-   line on the raised fill, at least the card's 32px and as tall as the
+   inset as the to-do list is and drawn as its card is (`@luke/ui`'s tinted
+   Card): one line, at least the card's 32px head and as tall as the
    profile's × where that stands taller, the glyph in the muted ink, the
    source's chip and the quote cut short rather than wrapped, and the × held
    to the line's end by its seat (fork-action.tsx). */
@@ -4870,9 +4764,6 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
   align-items: center;
   gap: var(--luke-space-4);
   padding-inline: var(--luke-space-12) var(--luke-space-4);
-  border: 1px solid var(--luke-color-border);
-  border-radius: var(--luke-radius-8);
-  background: var(--luke-color-fill-hover);
   color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
   white-space: nowrap;
@@ -4959,53 +4850,9 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
 }
 
 /* The docked list's card (transcript-blocks.tsx's `TranscriptTodosDock`),
-   on the task card's look (`.plan-card`): one line saying how far the list
-   has got, the item it is at cut to the line, and the chevron at its end,
-   which opens onto the whole list under a hairline. */
-.todos-dock {
-  --luke-focus-ring-offset: var(--luke-focus-ring-inset);
-
-  overflow: clip;
-  border: 1px solid var(--luke-color-border);
-  border-radius: var(--luke-radius-8);
-  background: var(--luke-color-fill-hover);
-  font-size: var(--luke-type-caption-size);
-}
-
-.todos-dock-head {
-  display: flex;
-  height: 32px;
-  align-items: center;
-  gap: var(--luke-icon-gap);
-  padding-inline: var(--luke-space-12);
-  border-radius: inherit;
-  cursor: pointer;
-  transition:
-    color var(--luke-duration-quick) var(--luke-spring),
-    background-color var(--luke-duration-quick) var(--luke-spring);
-}
-
-.todos-dock-head:hover {
-  background: var(--luke-color-fill-strong);
-}
-
-/* A finger's press is 44px tall, so on a coarse pointer a transcript's rows
-   that open something, the docked to-do list's head and the agent's pull
-   request's row (`List`'s `fingerTall`), stand that tall, their words still
-   centred, as a call's line (a LineButton's row) does of its own; a mouse
-   keeps their compact heights. */
-@media (pointer: coarse) {
-  .todos-dock-head {
-    height: auto;
-    min-height: 44px;
-  }
-}
-
-.todos-dock[open] > .todos-dock-head {
-  border-bottom-left-radius: 0;
-  border-bottom-right-radius: 0;
-}
-
+   `@luke/ui`'s card fold as the task card is (`plan.tsx`): one line saying
+   how far the list has got, the item it is at cut to the line, and the
+   chevron at its end, which opens onto the whole list under a hairline. */
 .todos-dock-summary {
   flex-shrink: 0;
   color: var(--luke-color-text-muted);
@@ -5018,11 +4865,6 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
 .todos-dock-chevron {
   display: flex;
   margin-left: auto;
-}
-
-.todos-dock-body {
-  padding: var(--luke-space-8) var(--luke-space-12);
-  border-top: 1px solid var(--luke-color-border);
 }
 
 /* One write of the list, as a call's row opens onto it: set bare at the
@@ -5089,24 +4931,12 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
   animation: todos-dock-rise var(--luke-duration-pane) var(--luke-motion-pane) backwards;
 }
 
-[data-todos-dock][data-disclosure="opening"] > .todos-dock-body {
-  animation:
-    luke-disclosure-fade var(--luke-duration-quick) var(--luke-motion-pane) backwards,
-    todos-dock-rise var(--luke-duration-pane) var(--luke-motion-pane) backwards;
-}
-
 [data-todos-dock][data-disclosure="closing"] {
   animation: todos-dock-roll-up var(--luke-duration-exit) var(--luke-motion-exit) forwards;
 }
 
 [data-todos-dock][data-disclosure="closing"] > summary {
   animation: todos-dock-sink var(--luke-duration-exit) var(--luke-motion-exit) forwards;
-}
-
-[data-todos-dock][data-disclosure="closing"] > .todos-dock-body {
-  animation:
-    luke-disclosure-leave var(--luke-duration-exit) var(--luke-motion-exit) forwards,
-    todos-dock-sink var(--luke-duration-exit) var(--luke-motion-exit) forwards;
 }
 
 /* Note that each clip names both ends, because a clip cannot be interpolated
@@ -5758,7 +5588,7 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
 .attachment-viewer-lines {
   display: flex;
   flex-direction: column;
-  background: var(--code-ground);
+  background: var(--luke-color-code-ground);
 }
 
 .attachment-viewer-other {
@@ -6644,16 +6474,10 @@ svg.lucide {
   margin: var(--luke-space-12) 0;
 }
 
+/* The frame is `@luke/ui`'s Card, hugging the picture. */
 .picture-frame {
-  position: relative;
-  display: block;
   width: fit-content;
   max-width: 100%;
-  padding: 0;
-  border: 1px solid var(--luke-color-border);
-  border-radius: var(--luke-control-radius);
-  background: var(--luke-color-surface);
-  overflow: clip;
 }
 
 .picture-image {
@@ -6701,7 +6525,6 @@ svg.lucide {
   gap: var(--luke-space-8);
   width: 480px;
   padding: var(--luke-space-12);
-  border-style: dashed;
   color: var(--luke-color-text-muted);
   cursor: default;
   font-size: 0.92em;
@@ -6834,16 +6657,12 @@ svg.lucide {
   flex-direction: column;
 }
 
+/* A tile's frame, `@luke/ui`'s Card, filling the tile's room. */
 .picture-set-frame {
-  position: relative;
   display: grid;
   width: 100%;
   place-items: center;
-  border: 1px solid var(--luke-color-border);
-  border-radius: var(--luke-control-radius);
-  background: var(--luke-color-surface);
   color: var(--luke-color-text-muted);
-  overflow: clip;
 }
 
 .picture-set-image {

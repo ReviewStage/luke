@@ -1,4 +1,4 @@
-import { PictureTile, Spinner } from "@luke/ui";
+import { CARD_CORNER, CARD_ELEMENT, CARD_PADDING, Card, PictureTile, Spinner } from "@luke/ui";
 import { PICTURE_STATE, type PictureState } from "@luke/ui/picture-cache";
 import { ImageOffIcon } from "lucide-react";
 
@@ -47,7 +47,12 @@ export function PictureBlock({
   if (state.kind === PICTURE_STATE.READY && onOpen === undefined) {
     return (
       <span ref={ref} className="picture-block ph-no-capture" data-state={state.kind}>
-        <span className="picture-frame">
+        <Card
+          as={CARD_ELEMENT.SPAN}
+          corner={CARD_CORNER.CONTROL}
+          padding={CARD_PADDING.FLUSH}
+          className="picture-frame"
+        >
           <img
             className="picture-image"
             src={state.url}
@@ -55,7 +60,7 @@ export function PictureBlock({
             decoding="async"
             draggable={false}
           />
-        </span>
+        </Card>
         {said}
       </span>
     );
@@ -72,7 +77,12 @@ export function PictureBlock({
             open?.();
           }}
         >
-          <span className="picture-frame">
+          <Card
+            as={CARD_ELEMENT.SPAN}
+            corner={CARD_CORNER.CONTROL}
+            padding={CARD_PADDING.FLUSH}
+            className="picture-frame"
+          >
             <img
               className="picture-image"
               src={state.url}
@@ -80,7 +90,7 @@ export function PictureBlock({
               decoding="async"
               draggable={false}
             />
-          </span>
+          </Card>
         </PictureTile>
         {said}
       </span>
@@ -89,19 +99,32 @@ export function PictureBlock({
   if (state.kind === PICTURE_STATE.READING) {
     return (
       <span ref={ref} className="picture-block ph-no-capture" data-state={state.kind}>
-        <span className="picture-frame picture-pending">
+        <Card
+          as={CARD_ELEMENT.SPAN}
+          corner={CARD_CORNER.CONTROL}
+          padding={CARD_PADDING.FLUSH}
+          className="picture-frame picture-pending"
+        >
           <Spinner delay label={READING_LABEL} />
-        </span>
+        </Card>
         {said}
       </span>
     );
   }
   return (
     <span ref={ref} className="picture-block ph-no-capture" data-state={state.kind}>
-      <span className="picture-frame picture-missing" role="img" aria-label={alt}>
+      <Card
+        as={CARD_ELEMENT.SPAN}
+        corner={CARD_CORNER.CONTROL}
+        padding={CARD_PADDING.NONE}
+        dashed
+        role="img"
+        aria-label={alt}
+        className="picture-frame picture-missing"
+      >
         <ImageOffIcon aria-hidden="true" />
         <span>{alt === "" ? `This picture is ${MISSING_WORDS}` : `${alt} · ${MISSING_WORDS}`}</span>
-      </span>
+      </Card>
       {said}
     </span>
   );

@@ -2,6 +2,10 @@ import {
   BADGE_TONE,
   Badge,
   type BadgeTone,
+  CARD_CORNER,
+  CARD_ELEMENT,
+  CARD_PADDING,
+  Card,
   DisclosureChevron,
   Tooltip,
   useDisclosureState,
@@ -149,7 +153,10 @@ export function AnnotationCard({
   children: ReactNode;
 }): React.JSX.Element {
   return (
-    <article
+    <Card
+      as={CARD_ELEMENT.ARTICLE}
+      corner={CARD_CORNER.CONTROL}
+      padding={CARD_PADDING.FLUSH}
       ref={landing?.ref}
       className={className === undefined ? "annotation-card" : `annotation-card ${className}`}
       aria-label={label}
@@ -181,7 +188,7 @@ export function AnnotationCard({
           {footer}
         </FoldBody>
       </Fold>
-    </article>
+    </Card>
   );
 }
 

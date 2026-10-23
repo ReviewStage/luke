@@ -5,6 +5,10 @@ import { ACT_KIND } from "@luke/host/acts";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
   BUTTON_VARIANT,
+  CARD_CORNER,
+  CARD_ELEMENT,
+  CARD_PADDING,
+  Card,
   ErrorState,
   FoldingButton,
   FormField,
@@ -140,13 +144,18 @@ function UploadingPicture({
   const url = upload?.url;
   return (
     <span className="picture-block ph-no-capture" data-upload={upload?.kind ?? UPLOAD.FAILED}>
-      <span className="picture-frame">
+      <Card
+        as={CARD_ELEMENT.SPAN}
+        corner={CARD_CORNER.CONTROL}
+        padding={CARD_PADDING.FLUSH}
+        className="picture-frame"
+      >
         {url === undefined ? (
           <span className="picture-pending" />
         ) : (
           <img className="picture-image" src={url} alt={alt} draggable={false} />
         )}
-      </span>
+      </Card>
       {upload?.kind === UPLOAD.SENDING ? (
         <span className="picture-status">
           <Spinner delay label={UPLOAD_WORDS.SENDING} />

@@ -617,17 +617,19 @@ test("while the tree is hidden a strip stands in its place, a mark for each file
   const { tree } = heldTree(false);
   await drawTab({ tree });
 
-  const strip = document.querySelector<HTMLElement>(".file-tree-strip") ?? assert.fail("a strip");
+  const strip =
+    document.querySelector<HTMLElement>(".file-tree-strip .luke-mark-strip") ??
+    assert.fail("a strip");
   assert.deepEqual(
     [...strip.children].map((mark) => [
-      mark.getAttribute("data-status"),
+      mark.getAttribute("data-tone"),
       mark.hasAttribute("data-viewed"),
       mark.hasAttribute("data-current"),
     ]),
     [
-      ["added", true, true],
-      ["deleted", false, false],
-      ["modified", false, false],
+      ["complete", true, true],
+      ["danger", false, false],
+      ["attention", false, false],
     ],
   );
   assert.equal(document.querySelector(".file-tree-pane"), null);

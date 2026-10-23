@@ -1,5 +1,5 @@
 import { useAtomValue } from "@effect/atom-react";
-import { Button, PictureTile } from "@luke/ui";
+import { Button, CARD_CORNER, CARD_ELEMENT, CARD_PADDING, Card, PictureTile } from "@luke/ui";
 import { drawnDark, onDrawnThemeChange } from "@luke/ui/appearance";
 import {
   DIAGRAM_APPEARANCE,
@@ -205,7 +205,13 @@ export function PlanDiagram({
   const room = useContext(ShellRoomContext);
   const pointerOpens = coarse || room === SHELL_ROOM.NARROW;
   return (
-    <figure className="plan-diagram ph-no-capture" aria-busy={drawingNow === undefined}>
+    <Card
+      as={CARD_ELEMENT.FIGURE}
+      corner={CARD_CORNER.CONTROL}
+      padding={CARD_PADDING.NONE}
+      className="plan-diagram ph-no-capture"
+      aria-busy={drawingNow === undefined}
+    >
       <div className="plan-diagram-head">
         <span>Diagram</span>
         {picture === undefined ? null : (
@@ -246,7 +252,7 @@ export function PlanDiagram({
       {fullScreen && picture !== undefined ? (
         <OpenDiagram url={picture} onClose={() => setFullScreen(false)} />
       ) : null}
-    </figure>
+    </Card>
   );
 }
 
