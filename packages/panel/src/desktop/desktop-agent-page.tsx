@@ -421,7 +421,8 @@ export function DesktopAgentPage({
     chosen: (opened) =>
       sameTab(opened, tab) || (sidePanel.tab !== undefined && sameTab(opened, sidePanel.tab)),
     shownCode: shownCode ?? [],
-    pages: { agentId },
+    // Note that an agent on a task shows its pages on the task, so its rows read them there.
+    pages: agent?.planId == null ? { agentId } : { taskId: agent.planId },
   });
   // A skill's file opens where a file the agent names does: its page on GitHub.
   const openSkill = (skill: { readonly path: string }) => {

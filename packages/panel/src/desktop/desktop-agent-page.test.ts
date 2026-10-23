@@ -80,6 +80,7 @@ import {
   typeInComposer,
 } from "../testing/composer.js";
 import { onRegistry } from "../testing/copy-feedback.js";
+import { focusRestOn } from "../testing/hint-rest.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { bundleLanded } from "../testing/side-bundles.js";
@@ -100,6 +101,9 @@ import { DesktopAgentPage } from "./desktop-agent-page.js";
  */
 
 const AGENT_ID = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
+
+/** The task an agent on a task stands on, whose pages it shows. */
+const PAGE_TASK = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 
 /** The agent a Continue or a Fork on the page starts. */
 const STARTED_ID = "1d2e3f40-5a6b-4c7d-8e9f-0a1b2c3d4e5f";
@@ -341,6 +345,14 @@ beforeEach(() => {
       }
       if (request.kind === ACT_KIND.CODING_AGENTS_WORKSPACE_LIST) {
         return Promise.resolve({ status: FAKE_ANSWER.DONE, value: { agents: workspace } });
+      }
+      // Only the task the agents here stand on holds a page; an agent's own pages hold none.
+      if (request.kind === ACT_KIND.TASKS_PAGES) {
+        const onTask = "taskId" in request.payload && request.payload.taskId === PAGE_TASK;
+        return Promise.resolve({
+          status: FAKE_ANSWER.DONE,
+          value: { pages: onTask ? [FUNNEL] : [] },
+        });
       }
       if (request.kind === ACT_KIND.CODING_AGENTS_PAGE) {
         read.push(request.payload.agentId);
@@ -751,6 +763,48 @@ test("the row of a page the agent showed opens it in the panel beside the agent'
   act(() => row.click());
 
   assert.deepEqual(chosen, [{ page: FUNNEL.id }]);
+});
+
+test("the row of a page an agent on a task showed hangs the page's card, read from the task the page stands on", async () => {
+  pages = [{ agent: { ...PAGE, planId: PAGE_TASK } }];
+  transcript = {
+    messages: [
+      {
+        id: "answer",
+        role: MESSAGE_ROLE.ASSISTANT,
+        parts: [
+          {
+            type: "tool-show_page",
+            toolCallId: "call-1",
+            state: "output-available",
+            input: { title: FUNNEL.title, path: "funnel.html" },
+            output: { status: "accepted", page: { id: FUNNEL.id, version: 2 } },
+          },
+        ],
+      },
+    ],
+    cursor: "1:0",
+    status: CODING_AGENT_STATUS.COMPLETED,
+    title: null,
+  };
+  const page = mount();
+  await settle();
+
+  const row =
+    [...page.querySelectorAll<HTMLButtonElement>(".desktop-agent button")].find((each) =>
+      (each.textContent ?? "").includes(FUNNEL.title),
+    ) ?? assert.fail("the call's row names the page it showed");
+  document.documentElement.dataset.keyboard = "true";
+  focusRestOn(row);
+  await settle();
+
+  const card = document.querySelector(".luke-tooltip-card [data-page-card]");
+  assert.equal(card?.querySelector(".luke-hover-card-name")?.textContent, FUNNEL.title);
+  assert.equal(
+    card?.querySelector(".luke-page-thumb-frame")?.getAttribute("src"),
+    pageFrameUrl({ taskId: PAGE_TASK, pageId: FUNNEL.id, version: 2 }),
+    "the preview is the task's page",
+  );
 });
 
 /** The page drawn over the window's own side panel, held by the agent. */
