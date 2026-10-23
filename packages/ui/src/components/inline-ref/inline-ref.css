@@ -47,14 +47,23 @@
     min-width: 0;
     align-self: baseline;
     overflow: hidden;
-    text-overflow: ellipsis;
   }
 
-  /* A path is cut from its left, so its last part stays in sight; the `bdi`
-     inside keeps the path itself reading left to right. */
+  /* A name measured cut short fades out over its last few pixels, as a
+     chip's does, so a short one ends on its last letter. */
+  .luke-inline-ref-label[data-overflow="true"] {
+    mask-image: linear-gradient(to left, transparent, #000 var(--luke-label-fade));
+  }
+
+  /* A path is cut from its left, so its last part stays in sight, and fades
+     there; the `bdi` inside keeps the path itself reading left to right. */
   .luke-inline-ref-label[data-name="path"] {
     direction: rtl;
     font-family: var(--luke-font-mono);
+  }
+
+  .luke-inline-ref-label[data-name="path"][data-overflow="true"] {
+    mask-image: linear-gradient(to right, transparent, #000 var(--luke-label-fade));
   }
 
   .luke-inline-ref-state {
