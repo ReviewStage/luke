@@ -2706,6 +2706,11 @@
   margin-inline-start: auto;
 }
 
+/* The header's Preview where several deployments serve, holding the menu it drops. */
+.pull-request-preview {
+  display: flex;
+}
+
 /* A narrow header, a phone's or the side panel's at its least, gives the
    title a line of its own over the pill and the controls, which stand
    under it at the row's two ends; beside them it would wrap a word to a
@@ -2724,6 +2729,16 @@
   .pull-request-title-row > .pull-request-title-wait {
     flex-basis: 100%;
     padding-block: 0;
+  }
+
+  /* Note that Preview, Run, and the merge control together may outgrow the
+     side panel at its least, so they wrap onto lines of their own, held to
+     the row's end, rather than run past an edge that clips them. */
+  .pull-request-title-actions {
+    min-width: 0;
+    flex: 0 1 auto;
+    flex-wrap: wrap;
+    justify-content: flex-end;
   }
 }
 

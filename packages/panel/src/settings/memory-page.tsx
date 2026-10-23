@@ -3,6 +3,8 @@ import type { Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { SETTINGS_SEARCH_ROW } from "@luke/settings/settings-anchors";
 import {
+  BADGE_TONE,
+  Badge,
   ConfirmDialog,
   ErrorState,
   SettingsLine,
@@ -31,9 +33,10 @@ import { MenuRow } from "./menu-row.js";
  * member sees what was kept and takes back what is wrong or no longer true.
  * A note says what the memories are for and who shares them, then one row
  * per memory, most recently kept first, with whose words it holds and when
- * it was last kept, and Forget behind the row's ⋯ and a right-click where
- * the reader may forget it: its words are theirs, or they own or administer
- * the workspace. Forget asks first, in the confirm dialog, and removes the
+ * it was last kept, a private one, the reader's alone, marked Only you,
+ * and Forget behind the row's ⋯ and a right-click where the reader may
+ * forget it: its words are theirs, or they own or administer the workspace,
+ * or for a private one, it is theirs. Forget asks first, in the confirm dialog, and removes the
  * memory for good: no later call recalls it. One forget runs at a time,
  * since every answer is the workspace's memories whole and two in flight
  * could land out of order. The whole page is kept out of the screen
@@ -47,6 +50,7 @@ const PAGE_LINE = {
   NO_WORKSPACE: "Luke's memory belongs to a workspace, and none is open yet.",
   EMPTY: "Luke hasn't remembered anything yet.",
   FORGET_FAILED: "The memory could not be forgotten. Try again.",
+  PRIVATE: "Only you",
 } as const;
 
 /** What the page says the memories are for, and who shares them. */
@@ -54,8 +58,9 @@ function noteFor(workspace: Workspace): string {
   return (
     `As they work in ${workspace.name}, Luke's coding agents keep the facts and conventions ` +
     "you settle and recall them in the workspace's later tasks. Everyone in the workspace " +
-    "shares these memories. What you say now always wins, and an agent corrects a memory it " +
-    "contradicts. Forget anything that is wrong or no longer true."
+    "shares these memories, except those marked Only you, which only your Luke recalls. " +
+    "What you say now always wins, and an agent corrects a memory it contradicts. Forget " +
+    "anything that is wrong or no longer true."
   );
 }
 
@@ -105,6 +110,9 @@ function MemoryRow({
         actions={actions}
         row={{
           label: <span className="memory-text">{memory.text}</span>,
+          adornment: memory.private ? (
+            <Badge tone={BADGE_TONE.NEUTRAL}>{PAGE_LINE.PRIVATE}</Badge>
+          ) : undefined,
           description: `Kept by ${keeperOf(memory, readerId)} · ${dayText(memory.updatedAt)}`,
         }}
       />
@@ -112,7 +120,9 @@ function MemoryRow({
         confirm={forgetting}
         question={{
           title: "Forget this memory?",
-          body: "No agent will recall it in any later task in this workspace, for anyone.",
+          body: memory.private
+            ? "Your Luke will not recall it again in this workspace."
+            : "No agent will recall it in any later task in this workspace, for anyone.",
           verb: "Forget",
           running: "Forgetting…",
         }}

@@ -83,6 +83,26 @@ const CHECKOUT_SCRIPT = [
 ].join("\n");
 
 /**
+ * A whole checkout a repository snapshot holds (`repository-snapshot.ts`)
+ * brought up to its branch as GitHub has it now: the branch fetched through
+ * the credential the caller set at the firewall and checked out at what was
+ * fetched, and the record rewritten under the name the caller keeps. Note
+ * that a checkout that is missing, or whose record names another repository
+ * than the refresh variable, exits before any fetch, so a sandbox opened
+ * from the wrong snapshot never reads GitHub on it.
+ */
+const REFRESH_SCRIPT = [
+  "set -e",
+  "test -d repository/.git",
+  `test "$(cat ${SANDBOX_PATH.CHECKOUT_RECORD} 2>/dev/null)" = "$${SANDBOX_VARIABLE.REFRESH}"`,
+  "cd repository",
+  `git fetch --quiet origin "$${SANDBOX_VARIABLE.BRANCH}"`,
+  `git checkout --quiet -B "$${SANDBOX_VARIABLE.BRANCH}" FETCH_HEAD`,
+  "cd ..",
+  `printf '%s' "$${SANDBOX_VARIABLE.REPOSITORY}" > ${SANDBOX_PATH.CHECKOUT_RECORD}`,
+].join("\n");
+
+/**
  * The commit identity set in the checkout's own config, so the agent's
  * commits are by whoever the checkout names wherever git reads them.
  */
@@ -295,6 +315,45 @@ export const cloneRepository = /* @__PURE__ */ Effect.fn("web/cloneRepository")(
     REPOSITORY_REFUSAL.CHECKOUT_FAILED,
   );
   yield* underCloneCredential(sandbox, confirmed.fullName, token, access, clone);
+});
+
+/**
+ * What a repository snapshot's checkout records it is of: the repository as
+ * GitHub spells it, lower-cased, so a snapshot and the refresh of it agree
+ * whatever case a row spells the repository in.
+ */
+export function snapshotRecordOf(fullName: string): string {
+  return fullName.toLowerCase();
+}
+
+/**
+ * The checkout a repository snapshot holds brought up to the branch named,
+ * with the token at the firewall for the fetch alone, as for a clone
+ * (`underCloneCredential`), and recorded under the name the caller keeps;
+ * refused, in git's own words where it said any, where the checkout is not
+ * the snapshot's of that repository or the fetch failed.
+ */
+export const refreshRepository = /* @__PURE__ */ Effect.fn("web/refreshRepository")(function* (
+  sandbox: RepositorySandbox,
+  confirmed: CheckoutRepository,
+  token: Redacted.Redacted,
+  access: GitHubTokenAccess = { kind: GITHUB_ACCESS.APP },
+): Effect.fn.Return<void, RepositoryRefusal> {
+  const refresh = runInSandbox(
+    sandbox,
+    {
+      command: REFRESH_SCRIPT,
+      workingDirectory: SANDBOX_PATH.WORKSPACE,
+      env: {
+        ...COMMAND_ENVIRONMENT,
+        [SANDBOX_VARIABLE.REFRESH]: snapshotRecordOf(confirmed.fullName),
+        [SANDBOX_VARIABLE.REPOSITORY]: confirmed.recordedAs ?? confirmed.fullName,
+        [SANDBOX_VARIABLE.BRANCH]: confirmed.defaultBranch,
+      },
+    },
+    REPOSITORY_REFUSAL.CHECKOUT_FAILED,
+  );
+  yield* underCloneCredential(sandbox, confirmed.fullName, token, access, refresh);
 });
 
 /** One step of a deepen, run from the workspace root under the step's own mark (`DEEPEN_STEP`). */

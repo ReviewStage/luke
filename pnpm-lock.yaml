@@ -135,6 +135,9 @@ importers:
       '@fontsource-variable/jetbrains-mono':
         specifier: 5.3.0
         version: 5.3.0
+      '@luke/features':
+        specifier: workspace:*
+        version: link:../../packages/features
       '@luke/settings':
         specifier: workspace:*
         version: link:../../packages/settings

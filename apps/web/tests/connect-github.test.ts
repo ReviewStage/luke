@@ -11,7 +11,8 @@ import { appTab, closeAppTabs } from "./support/connect-app-tab";
  * offered the providers, each named for its provider, a press says which
  * sign-in is opening and holds the other choice, and a sign-in that cannot
  * start is announced and gives the choices back; an expired intent has
- * nothing to press; and a link GitHub refused offers the same intent again.
+ * nothing to press off a Mac; and a link GitHub refused offers the same
+ * intent again.
  * A connect the web app's tab handed off is answered, and its page closes,
  * once GitHub is connected, and never while the page is still on its way
  * there; a same-tab connect that failed offers the way back too.
@@ -142,7 +143,7 @@ test("a browser signed in to another account is offered the providers", async ()
   expect(buttonNames(page)).toEqual(["Continue with Google", "Continue with GitHub"]);
 });
 
-test("an expired intent sends the developer back to Luke with nothing to press", async () => {
+test("an expired intent says to connect again, with nothing to press off a Mac", async () => {
   const page = await openPage(
     new Map([
       [SESSION_PATH, () => SIGNED_IN],
@@ -153,8 +154,8 @@ test("an expired intent sends the developer back to Luke with nothing to press",
     ]),
   );
 
-  await titled(page, "This link has expired");
-  expect(page.textContent).toContain("Return to Luke and choose Connect GitHub again.");
+  await titled(page, "This link to connect GitHub has expired");
+  expect(page.textContent).toContain("Connect GitHub again from Luke.");
   expect(buttonNames(page)).toEqual([]);
 });
 
@@ -172,11 +173,11 @@ test("a link GitHub refused says why and offers the same intent again", async ()
   expect(retry?.getAttribute("href")).toBe("/connect-github.html?intent=intent-1");
 });
 
-test("a connected account is told to return to Luke", async () => {
+test("a connected account is told the tab can go", async () => {
   const page = await openPage(new Map(), "/connect-github.html?done=1");
 
-  await titled(page, "GitHub connected");
-  expect(page.textContent).toContain("Return to Luke. You can close this tab.");
+  await titled(page, "GitHub is connected");
+  expect(page.textContent).toContain("You can close this tab.");
   expect(buttonNames(page)).toEqual([]);
 });
 
@@ -198,10 +199,10 @@ test("a connect the app's tab handed off closes once GitHub is connected, and no
 
   const page = await openPage(new Map(), "/connect-github.html?done=1");
 
-  await titled(page, "GitHub connected");
+  await titled(page, "GitHub is connected");
   await vi.waitFor(async () => {
     await act(() => new Promise((resolve) => setImmediate(resolve)));
-    expect(links(page)).toEqual([["Back to Luke", "/app"]]);
+    expect(links(page)).toEqual([["Open Luke", "/app"]]);
   });
   expect(closed).toHaveBeenCalled();
 });
@@ -220,6 +221,6 @@ test("a same-tab connect GitHub refused says why and offers the way back", async
   );
   expect(links(page)).toEqual([
     ["Try again", "/connect-github.html?intent=intent-1"],
-    ["Back to Luke", "/settings/integrations"],
+    ["Open Luke", "/settings/integrations"],
   ]);
 });

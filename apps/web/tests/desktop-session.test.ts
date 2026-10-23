@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { desktopSessionPageUrl } from "@luke/features/desktop-session-wire";
+import { APP_HOME_LINK } from "@luke/features/link-home";
 import { act } from "react";
 import { afterEach, expect, test, vi } from "vitest";
 
@@ -7,7 +8,8 @@ import { afterEach, expect, test, vi } from "vitest";
  * desktop-session.test.ts -- the desktop-session page says where the Mac's
  * hand-off stands: under way while the transfer is asked for and once it is
  * sent on, a link that did not come from Luke or a transfer Luke refused
- * with nothing to press, and a signed-out browser offered the providers,
+ * with Open Luke on a Mac and nothing to press elsewhere, and a signed-out
+ * browser offered the providers,
  * whose failure to start is announced. The page runs as it does in the
  * browser, mounted on its own `#root`; the network, the HTTP boundary to
  * Better Auth, is a fake.
@@ -72,8 +74,14 @@ async function titled(page: HTMLElement, title: string): Promise<void> {
   await vi.waitFor(() => expect(page.querySelector("h1")?.textContent).toBe(title));
 }
 
+/** The links the page offers, as their words and where they go. */
+function links(page: HTMLElement): (string | null)[][] {
+  return Array.from(page.querySelectorAll("a")).map((a) => [a.textContent, a.getAttribute("href")]);
+}
+
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
   document.body.replaceChildren();
 });
 
@@ -84,20 +92,36 @@ test("the hand-off says it is finishing and offers nothing to press while the tr
   expect(buttonNames(page)).toEqual([]);
 });
 
-test("a link that did not come from Luke says so and offers nothing to press", async () => {
+test("a link that did not come from Luke says so and offers nothing to press off a Mac", async () => {
   const page = await openPage(new Map(), "/desktop-session.html?state=state-1");
 
   await titled(page, "This link did not come from Luke");
-  expect(page.textContent).toContain("Return to Luke and sign in again.");
+  expect(page.textContent).toContain("Sign in again.");
   expect(buttonNames(page)).toEqual([]);
+  expect(links(page)).toEqual([]);
 });
 
-test("a transfer Luke refuses sends the developer back to Luke with nothing to press", async () => {
+test("a transfer Luke refuses says to sign in again, with nothing to press off a Mac", async () => {
   const page = await openPage(new Map([[TRANSFER_PATH, () => ({ status: 500 })]]));
 
   await titled(page, "Luke could not be reached");
-  expect(page.textContent).toContain("Return to Luke and sign in again.");
-  expect(buttonNames(page)).toEqual([]);
+  expect(page.textContent).toContain("Sign in again.");
+  expect(links(page)).toEqual([]);
+});
+
+test("on a Mac, a hand-off that ended short offers Open Luke, and one still finishing offers nothing", async () => {
+  vi.stubGlobal("navigator", {
+    userAgent:
+      "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+    maxTouchPoints: 0,
+  });
+  const finishing = await openPage(new Map());
+  await titled(finishing, "Finishing sign-in…");
+  expect(links(finishing)).toEqual([]);
+
+  const refused = await openPage(new Map([[TRANSFER_PATH, () => ({ status: 500 })]]));
+  await titled(refused, "Luke could not be reached");
+  expect(links(refused)).toEqual([["Open Luke", APP_HOME_LINK]]);
 });
 
 test("a signed-out browser is offered the providers, and a sign-in that cannot start is announced", async () => {

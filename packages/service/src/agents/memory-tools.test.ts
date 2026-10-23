@@ -4,7 +4,7 @@ import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
 import { listMemories, MEMORY_OUTCOME } from "@luke/database/models/memory-store";
 import { user } from "@luke/database/schemas/auth";
-import { getTestDB, openWorkspace } from "@luke/database/testing";
+import { getTestDB, joinWorkspace, openWorkspace } from "@luke/database/testing";
 import { noDatabase } from "@luke/database/testing/no-database";
 import { MEMORY_BOUNDS } from "@luke/features/memory-wire";
 import { Duration, Effect } from "effect";
@@ -16,19 +16,29 @@ import { type MemoryCall, runRecall, runRemember } from "./memory-tools.js";
  * The coding agent's `remember` and `recall` through their public
  * functions, over a real dialect: a memory kept is recalled by the words it
  * holds, best match first, a correction leaves only the corrected words to
- * recall, words that look like a credential are never kept, an input that
+ * recall, a memory kept private is recalled by its member's operator alone and
+ * marked so, while a coder neither recalls nor keeps one, words that look like a credential are never kept, an input that
  * does not read keeps and recalls nothing, and a store that cannot be
  * reached answers the model rather than failing the turn.
  *
  * Synthetic accounts, workspaces, and words throughout.
  */
 
-/** A call in a workspace of its own, as the member who owns it. */
-const openCall = Effect.gen(function* () {
+const openAccount = Effect.gen(function* () {
   const db = yield* Database;
   const userId = `user-${randomUUID()}`;
   yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
-  const call: MemoryCall = { workspaceId: yield* openWorkspace(userId), userId };
+  return userId;
+});
+
+/** A call in a workspace of its own, as the member who owns it. */
+const openCall = Effect.gen(function* () {
+  const userId = yield* openAccount;
+  const call: MemoryCall = {
+    workspaceId: yield* openWorkspace(userId),
+    userId,
+    readsPrivate: false,
+  };
   return call;
 });
 
@@ -105,7 +115,49 @@ it.layer(getTestDB())("the coding agent's memory tools", (it) => {
         assert.equal(late.status, ACTION_RESULT_STATUS.REJECTED);
         assert.equal(past.status, ACTION_RESULT_STATUS.REJECTED);
         assert.notEqual(late.reason, past.reason);
-        assert.equal((yield* listMemories(call.workspaceId)).length, MEMORY_BOUNDS.MAX_MEMORIES);
+        assert.equal(
+          (yield* listMemories(call.workspaceId, call.userId)).length,
+          MEMORY_BOUNDS.MAX_MEMORIES,
+        );
+      }),
+  );
+
+  it.effect(
+    "a memory kept private is recalled by its member's operator alone, marked private, and neither a teammate's recall nor the member's own coder's answers it",
+    () =>
+      Effect.gen(function* () {
+        const coder = yield* openCall;
+        const call: MemoryCall = { ...coder, readsPrivate: true };
+        const teammate: MemoryCall = { ...call, userId: yield* openAccount };
+        yield* joinWorkspace(call.workspaceId, teammate.userId);
+        const preference = "Dean wants a summary before any merge.";
+
+        const kept = yield* runRemember(call, { text: preference, private: true });
+        yield* TestClock.adjust(Duration.seconds(1));
+        yield* runRemember(teammate, { text: DEPLOYS });
+
+        assert.equal(kept.outcome, MEMORY_OUTCOME.KEPT);
+        const own = yield* runRecall(call, {});
+        assert.ok(Array.isArray(own.memories));
+        assert.deepEqual(
+          own.memories.map((memory) => (isRecord(memory) ? [memory.text, memory.private] : memory)),
+          [
+            [DEPLOYS, false],
+            [preference, true],
+          ],
+        );
+        const theirs = yield* runRecall(teammate, { query: "summary before merge" });
+        assert.deepEqual(recalledWords(theirs), []);
+        assert.deepEqual(recalledWords(yield* runRecall(teammate, {})), [DEPLOYS]);
+        assert.equal((yield* runRecall(teammate, {})).total, 1);
+        assert.deepEqual(recalledWords(yield* runRecall(coder, {})), [DEPLOYS]);
+        const refused = yield* runRemember(coder, { text: "Prefers tabs.", private: true });
+        assert.equal(refused.status, ACTION_RESULT_STATUS.REJECTED);
+        assert.equal(
+          (yield* runRemember(coder, { text: DEPLOYS_CORRECTED, replaces: keptId(kept) })).status,
+          ACTION_RESULT_STATUS.REJECTED,
+        );
+        assert.deepEqual(recalledWords(yield* runRecall(call, { query: "summary" })), [preference]);
       }),
   );
 
@@ -131,7 +183,7 @@ it.layer(getTestDB())("the coding agent's memory tools", (it) => {
       assert.equal((yield* runRemember(call, { text: fact })).outcome, MEMORY_OUTCOME.KEPT);
 
       assert.deepEqual(
-        (yield* listMemories(call.workspaceId)).map((kept) => kept.text),
+        (yield* listMemories(call.workspaceId, call.userId)).map((kept) => kept.text),
         [fact],
       );
     }),
@@ -152,7 +204,7 @@ it.layer(getTestDB())("the coding agent's memory tools", (it) => {
         unread.map((answer) => answer.status),
         unread.map(() => ACTION_RESULT_STATUS.REJECTED),
       );
-      assert.deepEqual(yield* listMemories(call.workspaceId), []);
+      assert.deepEqual(yield* listMemories(call.workspaceId, call.userId), []);
     }),
   );
 });
@@ -161,7 +213,7 @@ it.effect(
   "a store that cannot be reached answers the model that memory is unavailable, and fails nothing",
   () =>
     Effect.gen(function* () {
-      const call = { workspaceId: randomUUID(), userId: "user-unreached" };
+      const call = { workspaceId: randomUUID(), userId: "user-unreached", readsPrivate: false };
 
       const remembered = yield* runRemember(call, { text: DEPLOYS });
       const recalled = yield* runRecall(call, { query: "deployments" });

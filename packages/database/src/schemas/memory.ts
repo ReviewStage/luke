@@ -18,6 +18,11 @@ import { organization, user } from "./auth.js";
  * them too, `user_id` null, read as nobody the service can name, as
  * `plan_revision` keeps its writer. Forgetting one, from Settings, deletes the
  * row, and the row leaves with its workspace.
+ *
+ * A private memory is the one exception to all of that: `private_to` names
+ * the one member whose operator recalls it, the member's own preferences and
+ * what they are juggling, and no teammate reads, corrects, or forgets it. It
+ * is that member's, not the workspace's, so it leaves with their account.
  */
 export const memory = pgTable(
   "memory",
@@ -29,6 +34,8 @@ export const memory = pgTable(
     /** Null once the member's account is gone, which reads as nobody the service can name. */
     userId: text("user_id").references(() => user.id, { onDelete: "set null" }),
     text: text("text").notNull(),
+    /** The one member who recalls it, null for a memory shared by the workspace; gone with that member's account. */
+    privateTo: text("private_to").references(() => user.id, { onDelete: "cascade" }),
     createdAt: timestamptz("created_at").notNull(),
     updatedAt: timestamptz("updated_at").notNull(),
   },

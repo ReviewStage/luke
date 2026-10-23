@@ -208,6 +208,7 @@ const MEMORY: MemorySummary = {
   text: "Deployments go out from the release branch.",
   keptBy: { userId: "user-1", name: "Dean" },
   forgettable: true,
+  private: false,
   createdAt: 1,
   updatedAt: 2,
 };

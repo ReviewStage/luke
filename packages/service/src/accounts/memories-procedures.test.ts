@@ -23,6 +23,8 @@ import { memoriesProcedures } from "./memories-procedures.js";
  * what the workspace's agents kept, most recently kept first, each named by
  * the member whose words it holds; a member forgets their own memories, and
  * owners and admins any, while a member's forget of a teammate's is refused;
+ * a private memory is read, marked private, and forgotten by its member
+ * alone, and an owner neither reads nor forgets it;
  * a deleted member's memory stays the workspace's, named by nobody; a
  * forgotten memory leaves the list and is never recalled again; an account
  * outside the workspace reads and forgets nothing; and the bearer names the
@@ -68,7 +70,8 @@ const openTeam = Effect.gen(function* () {
       ),
   });
   const ask = (request: Request) => answer(procedures, request);
-  const keep = (userId: string, text: string) => runRemember({ workspaceId, userId }, { text });
+  const keep = (userId: string, text: string) =>
+    runRemember({ workspaceId, userId, readsPrivate: false }, { text });
   return { owner, teammate, outsider, workspaceId, ask, keep };
 });
 
@@ -146,6 +149,41 @@ it.layer(getTestDB())("the memories procedures", (it) => {
   );
 
   it.effect(
+    "a private memory is its member's alone: marked private and forgettable to them, and an owner neither reads nor forgets it",
+    () =>
+      Effect.gen(function* () {
+        const { owner, teammate, workspaceId, ask, keep } = yield* openTeam;
+        yield* keep(owner, TESTS_RUN);
+        yield* runRemember(
+          { workspaceId, userId: teammate, readsPrivate: true },
+          { text: DEPLOYS, private: true },
+        );
+
+        const asTeammate = memoriesOf(yield* ask(readMemories(teammate, workspaceId))).memories;
+        const privateOne = asTeammate.find((memory) => memory.private);
+        assert.ok(privateOne !== undefined);
+        const byOwner = yield* ask(forget(owner, workspaceId, privateOne.id));
+
+        assert.deepEqual(
+          asTeammate.map((memory) => [memory.text, memory.private, memory.forgettable]).toSorted(),
+          [
+            [DEPLOYS, true, true],
+            [TESTS_RUN, false, false],
+          ].toSorted(),
+        );
+        assert.deepEqual(wordsOf(yield* ask(readMemories(owner, workspaceId))), [TESTS_RUN]);
+        assert.deepEqual(wordsOf(byOwner), [TESTS_RUN]);
+        assert.deepEqual(
+          wordsOf(yield* ask(readMemories(teammate, workspaceId))).toSorted(),
+          [DEPLOYS, TESTS_RUN].toSorted(),
+        );
+        assert.deepEqual(wordsOf(yield* ask(forget(teammate, workspaceId, privateOne.id))), [
+          TESTS_RUN,
+        ]);
+      }),
+  );
+
+  it.effect(
     "a member forgets their own memory and an owner any, a member's forget of a teammate's memory is refused and keeps it, and a forgotten memory is never recalled",
     () =>
       Effect.gen(function* () {
@@ -162,7 +200,7 @@ it.layer(getTestDB())("the memories procedures", (it) => {
         const ownForgotten = yield* ask(forget(teammate, workspaceId, deploys.id));
         const again = yield* ask(forget(teammate, workspaceId, deploys.id));
         const recalled = yield* runRecall(
-          { workspaceId, userId: owner },
+          { workspaceId, userId: owner, readsPrivate: false },
           { query: "deployments release" },
         );
         const byOwner = yield* ask(forget(owner, workspaceId, testsRun.id));

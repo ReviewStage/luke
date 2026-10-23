@@ -32,6 +32,13 @@ export const LINK_ORIGIN = `https://${LINK_HOME.HOST}`;
 /** The scheme a link is written in for the desktop, its colon after it, as `URL.protocol` spells one. */
 const APP_LINK_PROTOCOL = `${LINK_HOME.APP_SCHEME}:`;
 
+/**
+ * Luke's home in the desktop's own scheme. It names no place, so the app
+ * opens nothing of it (`app-links.ts`), but macOS still brings the app
+ * forward to take it: the link a page hands a Mac to open Luke at all.
+ */
+export const APP_HOME_LINK = `${APP_LINK_PROTOCOL}//${LINK_HOME.HOST}/`;
+
 const HOSTS: ReadonlySet<string> = new Set([LINK_HOME.HOST, ...HOST_ALIASES]);
 
 const APP_PROTOCOLS: ReadonlySet<string> = new Set(

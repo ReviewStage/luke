@@ -65,67 +65,63 @@ fires, use a `@luke/ui` component, or add the component or variant there.
   voice window, a counted event, a trace, or a fixture. The repository check
   (`scripts/repository-checks.sh`) refuses a tracked literal shaped like a
   provider's credential; nothing else scans for secrets, so past that this rule
-  is the whole of the check. Two carve-outs,
-  approved by Dean on 2026-10-13: the output of `run_on_mac`, a command an agent
-  ran on the developer's own Mac, may reach the conversation, the model, and the
-  tool's events as it printed; a trace, a counted event, and a fixture still never
-  carry it where that can be avoided. And an integration's MCP tool calls and
-  results, a credential its provider answers among them, may reach the
-  conversation, the model, an agent's transcript, and its traces. And, approved by
-  Dean on 2026-10-14, a Terminal tab's bytes go only to the tab that opened
-  them: through the terminal relay (`apps/web/server/terminal/`) and the host
-  to that panel's window, never into a trace, a counted event, a fixture, app
-  state, or the voice window. And, approved by Dean (automations D10) and by
-  Charles on 2026-10-19, a webhook body an automation's caller sends, or an
+  is the whole of the check. The carve-outs: the output of `run_on_mac`, a
+  command an agent ran on the developer's own Mac, may reach the conversation,
+  the model, and the tool's events as it printed; a trace, a counted event, and
+  a fixture still never carry it where that can be avoided. And an integration's
+  MCP tool calls and results, a credential its provider answers among them, may
+  reach the conversation, the model, an agent's transcript, and its traces. And
+  a Terminal tab's bytes go only to the tab that opened them: through the
+  terminal relay (`apps/web/server/terminal/`) and the host to that panel's
+  window, never into a trace, a counted event, a fixture, app state, or the
+  voice window. And a webhook body an automation's caller sends, or an
   integration trigger's event (a Sentry issue or alert as Luke's Sentry
   integration delivers it), may reach that run's agent task, transcript and
-  traces. And, approved by Dean on 2026-10-15, an automation webhook secret
-  may be shown once, in the window that minted it, at creation or rotation;
-  never anywhere else. And, approved
-  on 2026-10-13: the Keyframe session token for a call's own avatar may reach
-  the panel window, which runs that session, and never the voice window,
-  a Gateway answer or event, app state, a counted event, a trace, or a fixture.
-  And, approved by Dean on 2026-10-20, an agent's cloud browser, a Chromium
-  in that agent's own Vercel Sandbox, shows its pages, their live-view frames,
-  address, title, screenshots, and text snapshots to that agent and its workers,
-  the model, the agent's transcript, and the panels of the workspace members who
-  open the task; the service keeps the tab list, each tab's address and title.
-  Amended, approved by Dean on 2026-10-22: the model is handed a small copy of
-  each screenshot, whose base64 is left out of the stored conversation, and the
-  service keeps a full-size copy beside the transcript the call is written to,
-  the agent's or its worker's, as `show_image`'s pictures are
+  traces. And an automation webhook secret may be shown once, in the window that
+  minted it, at creation or rotation; never anywhere else. And the Keyframe
+  session token for a call's own avatar may reach the panel window, which runs
+  that session, and never the voice window, a Gateway answer or event, app
+  state, a counted event, a trace, or a fixture. And an agent's cloud browser, a
+  Chromium in that agent's own Vercel Sandbox, shows its pages, their live-view
+  frames, address, title, screenshots, and text snapshots to that agent and its
+  workers, the model, the agent's transcript, and the panels of the workspace
+  members who open the task; the service keeps the tab list, each tab's address
+  and title. The model is handed a small copy of each screenshot, whose base64
+  is left out of the stored conversation, and the service keeps a full-size copy
+  beside the transcript the call is written to, the agent's or its worker's, as
+  `show_image`'s pictures are
   (`packages/service/src/agents/browser/browser-tool.ts`), which the stored
   conversation names by id, which that transcript shows to the members who can
   open the task, and which is deleted with the conversation, by its purge thirty
   days after a delete or at once with the account. None of it ever goes into a
-  trace, a counted event, a fixture, or the voice window, and session replay masks
-  the live view and the transcript's screenshots; the cookies a member types into
-  it stay in that agent's sandbox, and its snapshots, for the sandbox's life.
-  Amended, approved by Dean on 2026-10-22: an agent may record its browser as a
-  video (`record` and `stop_recording`), whose frames the recorder in its
-  sandbox writes to that sandbox's disk until the next recording clears them,
-  and whose WebM the service keeps beside the transcript the call is written to
-  as it keeps a screenshot (`packages/service/src/agents/browser/browser-tool.ts`),
-  shown and deleted on the same terms; the model is never handed the video, the
+  trace, a counted event, a fixture, or the voice window, and session replay
+  masks the live view and the transcript's screenshots; the cookies a member
+  types into it stay in that agent's sandbox, and its snapshots, for the
+  sandbox's life. An agent may record its browser as a video (`record` and
+  `stop_recording`), whose frames the recorder in its sandbox writes to that
+  sandbox's disk until the next recording clears them, and whose WebM the
+  service keeps beside the transcript the call is written to as it keeps a
+  screenshot (`packages/service/src/agents/browser/browser-tool.ts`), shown and
+  deleted on the same terms; the model is never handed the video, the
   transcript's player is left out of session replay, and none of it goes into a
-  trace, a counted event, a fixture, or the voice window.
-  Amended, approved by Dean on 2026-10-23: an agent may also post such a
-  recording, or any WebM it recorded in its sandbox, to its task's inbox or its
-  workspace's chat (`packages/service/src/agents/coder-host/inbox-image.ts`),
-  kept beside the inbox item or the chat message, up to 4 MB, as a picture
-  posted there is, shown to whoever may read that item or message and deleted
-  with it; an agent told of a chat message is never handed the video, only told
-  it is there (`coder-host/chat-notify.ts`), the inbox's and the chat's players
-  are left out of session replay, and none of it goes into a trace, a counted
-  event, a fixture, or the voice window.
-  And, approved by Charles on 2026-10-16: Sentry's SDKs run with their default
-  data collection (`packages/service/src/observability/sentry.ts`, the eve
-  roots' `instrumentation/sentry.ts`, the desktop's `Sentry.init`, and the web
-  app's browser SDK, `apps/web/src/app/web-sentry-sdk.ts`, with the desktop
-  renderer's token filters, `@luke/features/sentry-breadcrumbs`), so what a
-  request, a log line, a local variable, or an agent's prompt, reply, or tool
-  result carries may reach Sentry; a credential among it is replaced only
-  where Sentry's denylist catches it by name, and `PRIVACY.md` says so.
+  trace, a counted event, a fixture, or the voice window. An agent may also
+  post such a recording, or any WebM it recorded in its sandbox, to its task's
+  inbox or its workspace's chat
+  (`packages/service/src/agents/coder-host/inbox-image.ts`), kept beside the
+  inbox item or the chat message, up to 4 MB, as a picture posted there is,
+  shown to whoever may read that item or message and deleted with it; an agent
+  told of a chat message is never handed the video, only told it is there
+  (`coder-host/chat-notify.ts`), the inbox's and the chat's players are left
+  out of session replay, and none of it goes into a trace, a counted event, a
+  fixture, or the voice window. And Sentry's SDKs run
+  with their default data collection
+  (`packages/service/src/observability/sentry.ts`, the eve roots'
+  `instrumentation/sentry.ts`, the desktop's `Sentry.init`, and the web app's
+  browser SDK, `apps/web/src/app/web-sentry-sdk.ts`, with the desktop renderer's
+  token filters, `@luke/features/sentry-breadcrumbs`), so what a request, a log
+  line, a local variable, or an agent's prompt, reply, or tool result carries
+  may reach Sentry; a credential among it is replaced only where Sentry's
+  denylist catches it by name, and `PRIVACY.md` says so.
 - Session replay records the rendered panel with every word masked
   (`packages/panel/src/session-replay.ts`), so what leaves the machine is
   layout, not text; an unmasked attribute or a new way of drawing words is what
@@ -165,9 +161,8 @@ touched (`pnpm exec vitest run <path>`) or `pnpm check:affected` before a push
 is optional. `check.sh` is the full local run, for a release, a broad
 refactor, or on request, and must exit 0 when it is run.
 
-The vendored `testing` skill (`.agents/skills/testing`, lobehub's) is the
-testing guide, and the rules below agree with it. Its `bunx vitest` is
-`pnpm exec vitest` here.
+The rules below are the testing guide; every test runs on vitest, through
+`pnpm exec vitest`.
 
 - Every behavior change ships with a test that fails without it, same PR.
 - Use the smallest layer that catches the bug: a type or lint rule, then a
@@ -307,13 +302,12 @@ reads it: `packages/host/src/acts.ts`,
 
 - Schema at the boundary a value crosses, never a hand-written parser beside a
   hand-written shape.
-- Drizzle follows the vendored `drizzle` and `db-migrations` skills
-  (lobehub's): the `db.select()` builder, never `db.query`; the schema module
+- Drizzle: the `db.select()` builder, never `db.query`; the schema module
   under `packages/database/src/schemas/` first, then
   `pnpm db:generate --name=<what_it_does>` for its migration folder, which
   Drizzle's migrator applies by name and `drizzle-kit check` (run by
   `check.sh`) holds to commuting with every other branch's
-  (`packages/database/README.md`). Two things differ from lobehub's examples. A row is decoded
+  (`packages/database/README.md`). Two things differ from stock Drizzle usage. A row is decoded
   by an Effect `Schema` through `SqlSchema`, never `drizzle-zod`, because
   Effect takes no zod schema and a second validation library would split the
   one way a boundary value is declared. A statement is an `Effect` from
