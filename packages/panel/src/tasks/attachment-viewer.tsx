@@ -27,12 +27,23 @@ import {
 import {
   ChevronLeftIcon,
   ChevronRightIcon,
+  CopyIcon,
   DownloadIcon,
   ZoomInIcon,
   ZoomOutIcon,
 } from "lucide-react";
 import { useId, useState } from "react";
-import { CopyGlyph, type CopyState, copyHint, useCopyFeedback } from "../copy-feedback.js";
+import {
+  CopyGlyph,
+  type CopyState,
+  copyHint,
+  useCopyFeedback,
+  useCopyToast,
+  useImageCopyToast,
+} from "../copy-feedback.js";
+import type { MenuAction } from "../desktop/action-menu.js";
+import { PhoneHead, PlaceMore } from "../desktop/phone-head.js";
+import { usePhoneRoom } from "../stage-room.js";
 import { FileTypeIcon } from "./file-type-icon.js";
 import { WholeFile, type WholeFileNote } from "./whole-file.js";
 
@@ -62,6 +73,11 @@ import { WholeFile, type WholeFileNote } from "./whole-file.js";
  * read back with the transcript open the same. A message's files are its
  * developer's own, so everything the card holds is left out of the screen
  * recording (`ph-no-capture`) as a second line behind the masking.
+ *
+ * On a phone the header is a phone's (`phone-head.tsx`): Close alone at its
+ * start, the file's name centred over its size and note, and one ⋯ at its
+ * end holding every other button of the header, the arrow keys still
+ * walking the files.
  *
  * Note that a PDF is shown by its icon rather than drawn, because the
  * window's policy refuses the frames and objects Chromium draws one in.
@@ -156,6 +172,90 @@ function HeaderButton({
   );
 }
 
+/** What a phone's ⋯ copies the file shown as, and what its toast says once it is copied. */
+const COPIED = { TEXT: "Text copied", IMAGE: "Image copied" } as const;
+
+/**
+ * The header's buttons but Close as the groups of a phone's ⋯: the walk
+ * through the message's files, saying how far along it the file shown is;
+ * the copy and the zoom; then the place's own action and Download.
+ */
+function viewerGroups(input: {
+  readonly file: FileChip;
+  readonly at: number;
+  readonly count: number;
+  readonly walk: (step: number) => void;
+  readonly text: string | undefined;
+  readonly image: boolean;
+  /** Whether the file is a video, which the place's action is offered for as a picture is. */
+  readonly video: boolean;
+  readonly zoom: ImageZoom;
+  readonly action: ViewerAction | undefined;
+  readonly copyText: (words: string, label: string) => void;
+  readonly copyImage: (url: string, label: string) => void;
+}): MenuAction[][] {
+  const { file, at, count, walk, text, image, video, zoom, action } = input;
+  const place = `${String(at + 1)} of ${String(count)}`;
+  const walking: MenuAction[] =
+    count > 1
+      ? [
+          {
+            label: VIEWER_LABEL.PREVIOUS,
+            icon: <ChevronLeftIcon aria-hidden="true" />,
+            detail: place,
+            onSelect: () => walk(-1),
+          },
+          {
+            label: VIEWER_LABEL.NEXT,
+            icon: <ChevronRightIcon aria-hidden="true" />,
+            detail: place,
+            onSelect: () => walk(1),
+          },
+        ]
+      : [];
+  const looking: MenuAction[] = [
+    ...(text === undefined
+      ? []
+      : [
+          {
+            label: VIEWER_LABEL.COPY,
+            icon: <CopyIcon />,
+            onSelect: () => input.copyText(text, COPIED.TEXT),
+          },
+        ]),
+    ...(image
+      ? [
+          {
+            label: VIEWER_LABEL.COPY_IMAGE,
+            icon: <CopyIcon />,
+            onSelect: () => input.copyImage(file.url, COPIED.IMAGE),
+          },
+          {
+            label: VIEWER_LABEL.ZOOM_OUT,
+            icon: <ZoomOutIcon aria-hidden="true" />,
+            onSelect: () => zoom.step(-1),
+          },
+          {
+            label: VIEWER_LABEL.ZOOM_IN,
+            icon: <ZoomInIcon aria-hidden="true" />,
+            onSelect: () => zoom.step(1),
+          },
+        ]
+      : []),
+  ];
+  const keeping: MenuAction[] = [
+    ...(action === undefined || !(image || video)
+      ? []
+      : [{ label: action.label, icon: <>{action.icon}</>, onSelect: () => action.onPress(file) }]),
+    {
+      label: VIEWER_LABEL.DOWNLOAD,
+      icon: <DownloadIcon aria-hidden="true" />,
+      onSelect: () => download(file),
+    },
+  ];
+  return [walking, looking, keeping].filter((group) => group.length > 0);
+}
+
 /** The file shown: the picture, the video playing, its text drawn as every code is, or the icon, name, and size over Download. */
 function AttachmentBody({
   file,
@@ -236,6 +336,9 @@ export function AttachmentViewer({
   opening?: ImageOpening;
 }): React.JSX.Element | null {
   const titleId = useId();
+  const phone = usePhoneRoom();
+  const copyText = useCopyToast();
+  const copyImage = useImageCopyToast();
   const file = files[at];
   const zoom = useImageZoom(file?.name ?? "", file?.url ?? "", opening);
   // A picture opened from its tile grows from it, and goes back into it
@@ -286,62 +389,102 @@ export function AttachmentViewer({
         data-view={attachmentView(file)}
         data-opening={opening}
       >
-        <header className="attachment-viewer-header">
-          <FileTypeIcon name={file.name} />
-          <h2 id={titleId} className="attachment-viewer-title">
-            <OneLine>{file.name}</OneLine>
-          </h2>
-          <span className="attachment-viewer-size">{sizeLabel(base64)}</span>
-          {note === undefined || note === null ? null : (
-            <span className="attachment-viewer-note">{note}</span>
-          )}
-          {files.length > 1 ? (
-            <div className="attachment-viewer-walk">
-              <HeaderButton
-                label={VIEWER_LABEL.PREVIOUS}
-                onClick={() => walk(-1)}
-                icon={<ChevronLeftIcon aria-hidden="true" />}
-              />
-              <span className="attachment-viewer-place">
-                {`${String(at + 1)} of ${String(files.length)}`}
+        {phone ? (
+          <PhoneHead
+            place="attachment-viewer"
+            start={<HeaderButton label={VIEWER_LABEL.CLOSE} onClick={close} icon={<CloseIcon />} />}
+            title={
+              <span className="attachment-viewer-heading">
+                <h2 id={titleId} className="attachment-viewer-title">
+                  <OneLine>{file.name}</OneLine>
+                </h2>
+                <span className="attachment-viewer-about">
+                  <span className="attachment-viewer-size">{sizeLabel(base64)}</span>
+                  {note === undefined || note === null ? null : (
+                    <span className="attachment-viewer-note">{note}</span>
+                  )}
+                </span>
               </span>
-              <HeaderButton
-                label={VIEWER_LABEL.NEXT}
-                onClick={() => walk(1)}
-                icon={<ChevronRightIcon aria-hidden="true" />}
+            }
+            end={
+              <PlaceMore
+                shown
+                groups={() =>
+                  viewerGroups({
+                    file,
+                    at,
+                    count: files.length,
+                    walk,
+                    text,
+                    image,
+                    video,
+                    zoom,
+                    action,
+                    copyText,
+                    copyImage,
+                  })
+                }
               />
-            </div>
-          ) : null}
-          {text === undefined ? null : <CopyTextButton text={text} />}
-          {image ? (
-            <>
-              <CopyImageButton url={file.url} />
-              <HeaderButton
-                label={VIEWER_LABEL.ZOOM_OUT}
-                chord={ZOOM_CHORD.OUT}
-                onClick={() => zoom.step(-1)}
-                icon={<ZoomOutIcon aria-hidden="true" />}
-              />
-              <HeaderButton
-                label={VIEWER_LABEL.ZOOM_IN}
-                chord={ZOOM_CHORD.IN}
-                onClick={() => zoom.step(1)}
-                icon={<ZoomInIcon aria-hidden="true" />}
-              />
-            </>
-          ) : null}
-          {action === undefined || !(image || video) ? null : (
-            <Button icon={action.icon} onClick={() => action.onPress(file)}>
-              {action.label}
-            </Button>
-          )}
-          <HeaderButton
-            label={VIEWER_LABEL.DOWNLOAD}
-            onClick={() => download(file)}
-            icon={<DownloadIcon aria-hidden="true" />}
+            }
           />
-          <HeaderButton label={VIEWER_LABEL.CLOSE} onClick={close} icon={<CloseIcon />} />
-        </header>
+        ) : (
+          <header className="attachment-viewer-header">
+            <FileTypeIcon name={file.name} />
+            <h2 id={titleId} className="attachment-viewer-title">
+              <OneLine>{file.name}</OneLine>
+            </h2>
+            <span className="attachment-viewer-size">{sizeLabel(base64)}</span>
+            {note === undefined || note === null ? null : (
+              <span className="attachment-viewer-note">{note}</span>
+            )}
+            {files.length > 1 ? (
+              <div className="attachment-viewer-walk">
+                <HeaderButton
+                  label={VIEWER_LABEL.PREVIOUS}
+                  onClick={() => walk(-1)}
+                  icon={<ChevronLeftIcon aria-hidden="true" />}
+                />
+                <span className="attachment-viewer-place">
+                  {`${String(at + 1)} of ${String(files.length)}`}
+                </span>
+                <HeaderButton
+                  label={VIEWER_LABEL.NEXT}
+                  onClick={() => walk(1)}
+                  icon={<ChevronRightIcon aria-hidden="true" />}
+                />
+              </div>
+            ) : null}
+            {text === undefined ? null : <CopyTextButton text={text} />}
+            {image ? (
+              <>
+                <CopyImageButton url={file.url} />
+                <HeaderButton
+                  label={VIEWER_LABEL.ZOOM_OUT}
+                  chord={ZOOM_CHORD.OUT}
+                  onClick={() => zoom.step(-1)}
+                  icon={<ZoomOutIcon aria-hidden="true" />}
+                />
+                <HeaderButton
+                  label={VIEWER_LABEL.ZOOM_IN}
+                  chord={ZOOM_CHORD.IN}
+                  onClick={() => zoom.step(1)}
+                  icon={<ZoomInIcon aria-hidden="true" />}
+                />
+              </>
+            ) : null}
+            {action === undefined || !(image || video) ? null : (
+              <Button icon={action.icon} onClick={() => action.onPress(file)}>
+                {action.label}
+              </Button>
+            )}
+            <HeaderButton
+              label={VIEWER_LABEL.DOWNLOAD}
+              onClick={() => download(file)}
+              icon={<DownloadIcon aria-hidden="true" />}
+            />
+            <HeaderButton label={VIEWER_LABEL.CLOSE} onClick={close} icon={<CloseIcon />} />
+          </header>
+        )}
         <AttachmentBody key={at} file={file} base64={base64} text={text} zoom={zoom} />
       </div>
     </Dialog>

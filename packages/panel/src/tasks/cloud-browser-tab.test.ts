@@ -22,6 +22,7 @@ import { afterEach, test, vi } from "vitest";
 import { fakeActPort, fakeActPortAnswering, type SentPortAct } from "../testing/app-bridge.js";
 import { fakeAppPlatform } from "../testing/app-platform.js";
 import { onRegistry } from "../testing/copy-feedback.js";
+import { onPhone } from "../testing/phone-tab.js";
 import type { BrowserLiveListener } from "./cloud-browser-live.js";
 import { CloudBrowserDraftPane, CloudBrowserPane } from "./cloud-browser-pane.js";
 import {
@@ -644,4 +645,29 @@ test("plain words typed in a cloud tab's bar search the web, in a draft and on a
     sent.filter((message) => message.type === BROWSER_LIVE_CLIENT.NAVIGATE),
     [{ type: BROWSER_LIVE_CLIENT.NAVIGATE, address: search }],
   );
+});
+
+test("on a phone a Browser tab's bar keeps its address alone, the task's header's ⋯ offering its Back, Forward, and Reload, dimmed where the page cannot step", async () => {
+  fakeActPort({});
+  const { element, handed } = onPhone(
+    createElement(CloudBrowserDraftPane, {
+      taskId: TASK,
+      draft: { id: "draft-1", agentId: AGENT_ID },
+      owner: { name: "Invite expiry", icon: createElement("span") },
+      onOpened: () => undefined,
+      onDiscard: () => undefined,
+    }),
+  );
+  draw(element);
+  await settle();
+
+  assert.ok(addressField(), "the address stands as the page's own field");
+  assert.deepEqual(
+    [...document.querySelectorAll(".cloud-browser-bar button")]
+      .map((button) => button.getAttribute("aria-label"))
+      .filter((label) => label === "Back" || label === "Forward" || label === "Reload"),
+    [],
+  );
+  assert.deepEqual(handed.labels(), ["Back", "Forward", "Reload"]);
+  assert.deepEqual(handed.item("Reload"), { disabled: true });
 });

@@ -174,16 +174,19 @@ import {
   type AddEntry,
   AddTabButton,
   AddTabSkeleton,
-  contentActionGroups,
   DoorsTab,
   entryRow,
+  HandTabActionsContext,
   type HeldTranscripts,
+  type TabActionGroups,
   type TabDoors,
   type TabLook,
   type TabPin,
   TabSkeleton,
   type TabViews,
   type TranscriptCopier,
+  tabActionItems,
+  tabContentGroups,
   useTranscriptCopier,
   type WorkerStandings,
 } from "./strip-tabs.js";
@@ -198,7 +201,8 @@ import { TabStrip } from "./tab-strip.js";
  */
 export interface ShownTab {
   readonly label: string;
-  readonly groups: () => MenuAction[][];
+  /** Its actions as the ⋯ at `opener` drops them, an item opening a menu of the tab's own under it. */
+  readonly groups: (opener: HTMLElement) => MenuAction[][];
 }
 
 /** A phone's Activity, as the panel's strip is handed it: where it lists the tabs, how a row's press leaves the list, and where the tab shown is handed on. */
@@ -412,7 +416,7 @@ export interface ChangesOffer {
 /** What the chosen tab's body hands its toolbar's ⋯ (`useHandedTabActions`), and the tab it was drawn for, which alone offers them. */
 interface HandedTabActions {
   readonly tab: SidePanelTab;
-  readonly actions: MenuAction[];
+  readonly actions: TabActionGroups;
 }
 
 /** What the "+" calls the row that opens a Browser tab. */
@@ -1289,14 +1293,18 @@ function useShownTab(
 ): void {
   const at = strip.findIndex((entry) => entry.look.selected);
   const chosen = strip[at];
-  const groups = useRef<MenuAction[][]>([]);
+  const groups = useRef<TabActionGroups>([]);
   useLayoutEffect(() => {
-    groups.current = chosen === undefined ? [] : contentActionGroups(doorsOf(chosen, at));
+    groups.current = chosen === undefined ? [] : tabContentGroups(doorsOf(chosen, at));
   });
   const label =
     chosen === undefined || chosen.tab === SIDE_PANEL_TAB.PLAN ? undefined : chosen.look.label;
   useEffect(() => {
-    onShown?.(label === undefined ? undefined : { label, groups: () => groups.current });
+    onShown?.(
+      label === undefined
+        ? undefined
+        : { label, groups: (opener) => tabActionItems(groups.current, opener) },
+    );
   }, [onShown, label]);
   useEffect(() => () => onShown?.(undefined), [onShown]);
 }
@@ -1767,7 +1775,7 @@ function TabContent({
   /** An agent's transcript and composer, drawn by the panel's holder: the Inbox's, beside an item. */
   transcript: ((agentId: string) => React.ReactNode) | undefined;
   /** Hears what a tab's body offers its toolbar's ⋯, under the tab it is drawn for (`useHandedTabActions`). */
-  onTabActions: (tab: SidePanelTab, actions: MenuAction[] | undefined) => void;
+  onTabActions: (tab: SidePanelTab, actions: TabActionGroups | undefined) => void;
   /** Runs a branch in an agent's terminal of this Mac in this panel, which every Pull request tab's Run offers: the agent's own, or the head of the pull request `number` names; none where no repository is known or the platform has no Mac terminal. */
   onRunOnMac: ((agentId: string, number?: number) => void) | undefined;
 }): React.JSX.Element {
@@ -2269,7 +2277,7 @@ export function SidePanel({
   const listing = switched && activity.listed;
   // What the chosen tab's body offers that ⋯ beyond what the strip does, let go only by the tab that handed it.
   const [handed, setHanded] = useState<HandedTabActions | undefined>(undefined);
-  const handTabActions = useCallback((tab: SidePanelTab, actions: MenuAction[] | undefined) => {
+  const handTabActions = useCallback((tab: SidePanelTab, actions: TabActionGroups | undefined) => {
     setHanded((was) =>
       actions !== undefined
         ? { tab, actions }
@@ -2567,42 +2575,45 @@ export function SidePanel({
               if (panel.preview !== undefined && sameTab(panel.preview, tab)) panel.onKeep(tab);
             }}
           >
-            <TabContent
-              tab={tab}
-              taskId={taskId}
-              codeFilesRead={holder === SIDE_PANEL_HOLDER.TASK}
-              pagePlace={pagePlaceOf(holder, taskId)}
-              repository={repository}
-              board={board}
-              shownCode={shownCode}
-              codeFailed={codeFailed}
-              files={files}
-              pages={taskPages}
-              agents={agents}
-              standings={standings}
-              shown={keys}
-              findActive={keys && focused}
-              onOpenTarget={onOpenTarget}
-              onWorkerStatus={views.onWorkerStatus}
-              onWorkerHeld={views.onWorkerHeld}
-              onOpenFile={panel.onPreviewFile}
-              fileTree={fileTree}
-              onBrowseFile={panel.onBrowseFile}
-              onFileHistory={panel.onFileHistory}
-              onFoldNote={panel.onFoldNote}
-              onCloseTab={panel.onClose}
-              pullRequestViews={panel.pullRequestViews}
-              onPullRequestView={panel.onPullRequestView}
-              shellsList={shellsList}
-              cloudBrowsers={cloudBrowsers}
-              cloudDrafts={cloudDrafts}
-              plan={plan}
-              inbox={inbox?.body}
-              chat={chat}
-              transcript={transcript}
-              onTabActions={handTabActions}
-              onRunOnMac={macTerminalDoors.onOpenOnMac}
-            />
+            {/* Note that whatever the tab's body hands its ⋯ is handed for this tab, at any depth of the body (`useTabActions`). */}
+            <HandTabActionsContext.Provider value={(actions) => handTabActions(tab, actions)}>
+              <TabContent
+                tab={tab}
+                taskId={taskId}
+                codeFilesRead={holder === SIDE_PANEL_HOLDER.TASK}
+                pagePlace={pagePlaceOf(holder, taskId)}
+                repository={repository}
+                board={board}
+                shownCode={shownCode}
+                codeFailed={codeFailed}
+                files={files}
+                pages={taskPages}
+                agents={agents}
+                standings={standings}
+                shown={keys}
+                findActive={keys && focused}
+                onOpenTarget={onOpenTarget}
+                onWorkerStatus={views.onWorkerStatus}
+                onWorkerHeld={views.onWorkerHeld}
+                onOpenFile={panel.onPreviewFile}
+                fileTree={fileTree}
+                onBrowseFile={panel.onBrowseFile}
+                onFileHistory={panel.onFileHistory}
+                onFoldNote={panel.onFoldNote}
+                onCloseTab={panel.onClose}
+                pullRequestViews={panel.pullRequestViews}
+                onPullRequestView={panel.onPullRequestView}
+                shellsList={shellsList}
+                cloudBrowsers={cloudBrowsers}
+                cloudDrafts={cloudDrafts}
+                plan={plan}
+                inbox={inbox?.body}
+                chat={chat}
+                transcript={transcript}
+                onTabActions={handTabActions}
+                onRunOnMac={macTerminalDoors.onOpenOnMac}
+              />
+            </HandTabActionsContext.Provider>
           </div>
         </FindScope>
       )}

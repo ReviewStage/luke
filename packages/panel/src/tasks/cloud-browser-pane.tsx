@@ -48,7 +48,9 @@ import {
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useAct } from "../act.js";
 import { appPlatform } from "../app-platform.js";
+import { useTabActions } from "../desktop/strip-tabs.js";
 import { rendererRuntime } from "../renderer-runtime.js";
+import { usePhoneRoom } from "../stage-room.js";
 import { CloudBrowserCursor, cursorPlacement } from "./cloud-browser-cursor.js";
 import {
   CLOUD_BROWSER_PHASE,
@@ -213,35 +215,65 @@ function CloudBrowserBar({
     }
     onOpen(opened);
   };
+  // A phone keeps the address as the page's own field, its steps items of the task's header's ⋯.
+  const phone = usePhoneRoom();
+  useTabActions(
+    phone
+      ? [
+          [
+            {
+              label: "Back",
+              icon: <ArrowLeftIcon aria-hidden="true" />,
+              disabled: onStep === undefined,
+              onSelect: () => onStep?.(BROWSER_LIVE_HISTORY.BACK),
+            },
+            {
+              label: "Forward",
+              icon: <ArrowRightIcon aria-hidden="true" />,
+              disabled: onStep === undefined,
+              onSelect: () => onStep?.(BROWSER_LIVE_HISTORY.FORWARD),
+            },
+            {
+              label: "Reload",
+              icon: <RotateCwIcon aria-hidden="true" />,
+              disabled: onStep === undefined,
+              onSelect: () => onStep?.(BROWSER_LIVE_HISTORY.RELOAD),
+            },
+          ],
+        ]
+      : undefined,
+  );
   return (
     <header className="file-view-bar browser-view-bar cloud-browser-bar">
-      <div className="file-view-history">
-        <Tooltip label="Back">
-          <IconButton
-            icon={<ArrowLeftIcon aria-hidden="true" />}
-            label="Back"
-            disabled={onStep === undefined}
-            onClick={() => onStep?.(BROWSER_LIVE_HISTORY.BACK)}
-          />
-        </Tooltip>
-        <Tooltip label="Forward">
-          <IconButton
-            icon={<ArrowRightIcon aria-hidden="true" />}
-            label="Forward"
-            disabled={onStep === undefined}
-            onClick={() => onStep?.(BROWSER_LIVE_HISTORY.FORWARD)}
-          />
-        </Tooltip>
-        <Tooltip label="Reload">
-          <IconButton
-            icon={<RotateCwIcon aria-hidden="true" />}
-            label="Reload"
-            turns
-            disabled={onStep === undefined}
-            onClick={() => onStep?.(BROWSER_LIVE_HISTORY.RELOAD)}
-          />
-        </Tooltip>
-      </div>
+      {phone ? null : (
+        <div className="file-view-history">
+          <Tooltip label="Back">
+            <IconButton
+              icon={<ArrowLeftIcon aria-hidden="true" />}
+              label="Back"
+              disabled={onStep === undefined}
+              onClick={() => onStep?.(BROWSER_LIVE_HISTORY.BACK)}
+            />
+          </Tooltip>
+          <Tooltip label="Forward">
+            <IconButton
+              icon={<ArrowRightIcon aria-hidden="true" />}
+              label="Forward"
+              disabled={onStep === undefined}
+              onClick={() => onStep?.(BROWSER_LIVE_HISTORY.FORWARD)}
+            />
+          </Tooltip>
+          <Tooltip label="Reload">
+            <IconButton
+              icon={<RotateCwIcon aria-hidden="true" />}
+              label="Reload"
+              turns
+              disabled={onStep === undefined}
+              onClick={() => onStep?.(BROWSER_LIVE_HISTORY.RELOAD)}
+            />
+          </Tooltip>
+        </div>
+      )}
       <AddressField
         ref={field}
         value={typed ?? address}

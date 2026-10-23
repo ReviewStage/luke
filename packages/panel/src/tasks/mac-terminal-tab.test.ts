@@ -20,6 +20,7 @@ import {
   type SentPortAct,
 } from "../testing/app-bridge.js";
 import { onRegistry } from "../testing/copy-feedback.js";
+import { onPhone } from "../testing/phone-tab.js";
 import { bundleLanded, onSideBundles } from "../testing/side-bundles.js";
 import { MacTerminalTab } from "./mac-terminal-tab.js";
 import { OpenHereProvider } from "./use-open-link.js";
@@ -117,33 +118,27 @@ async function settle(): Promise<void> {
 }
 
 /** The tab drawn for the agent's press, with what it draws and does. */
-async function mount(asked: number, number?: number) {
+async function mount(asked: number, number?: number, phone = false) {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
   const registry = AtomRegistry.make();
-  act(() =>
-    root.render(
-      onRegistry(
-        registry,
-        onSideBundles(
-          SIDE_BUNDLES,
-          createElement(MacTerminalTab, {
-            tab: {
-              macTerminal: AGENT,
-              repository: "acme/app",
-              asked,
-              ...(number === undefined ? undefined : { number }),
-            },
-          }),
-        ),
-      ),
-    ),
-  );
+  const tab = createElement(MacTerminalTab, {
+    tab: {
+      macTerminal: AGENT,
+      repository: "acme/app",
+      asked,
+      ...(number === undefined ? undefined : { number }),
+    },
+  });
+  // On a phone the tab is drawn as its panel draws it there, what it hands the task's header's ⋯ held.
+  const { element, handed } = onPhone(tab);
+  act(() => root.render(onRegistry(registry, onSideBundles(SIDE_BUNDLES, phone ? element : tab))));
   await settle();
   const buttons = () => [...container.querySelectorAll<HTMLButtonElement>("button")];
   return {
+    handed,
     unmount: () => act(() => root.unmount()),
     /** Where the bar says the run stands. */
     bar: () => container.querySelector(".terminal-tab-standing")?.textContent ?? "",
@@ -310,4 +305,23 @@ test("the tab drawn again with a new link opener keeps its run, starting the ter
   await settle();
 
   assert.equal(opens().length, 1);
+});
+
+test("on a phone the tab draws no bar, and the task's header's ⋯ stops, runs, and opens the run in Terminal, saying where it stands and what it runs", async () => {
+  const tab = await mount(9, undefined, true);
+  tab.post();
+  await settle();
+
+  assert.equal(tab.bar(), "", "no bar stands over the screen");
+  assert.deepEqual(tab.offered(), []);
+  assert.deepEqual(tab.handed.labels(), ["Stop", "Open in Terminal"]);
+  assert.deepEqual(tab.handed.item("Stop"), { disabled: false, detail: "Running" });
+  assert.deepEqual(tab.handed.item("Open in Terminal"), {
+    disabled: false,
+    detail: "acme/app · luke/add-thing · this Mac",
+  });
+
+  tab.handed.press("Stop");
+  await settle();
+  assert.equal(sent.at(-1)?.kind, ACT_KIND.MAC_TERMINAL_STOP);
 });

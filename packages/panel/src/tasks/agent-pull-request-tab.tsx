@@ -135,9 +135,14 @@ import { Fold, FoldBody } from "../ai-elements/fold.js";
 import { appPlatform } from "../app-platform.js";
 import { useCopyLinkItem } from "../copy-link-item.js";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu.js";
-import { type HandTabActions, useHandedTabActions } from "../desktop/strip-tabs.js";
+import {
+  type HandTabActions,
+  HandTabActionsContext,
+  type TabActionGroups,
+  useHandedTabActions,
+} from "../desktop/strip-tabs.js";
 import { SHELL_ROOM } from "../shell-room.js";
-import { ShellRoomContext } from "../stage-room.js";
+import { ShellRoomContext, usePhoneRoom } from "../stage-room.js";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast.js";
 import {
   AgentChangesTab,
@@ -1560,6 +1565,50 @@ function servingOf(
   );
 }
 
+/** The header's Preview as items of a phone's ⋯: each deployment serving an address, named for its environment as Preview's menu names it, Preview said under it. */
+function previewActions(
+  checks: CodingAgentOverviewChecks | undefined,
+  openLink: (url: string) => void,
+): MenuAction[] {
+  return servingOf(checks).map((deployment) => ({
+    label: deployment.environment,
+    icon: <ScanSearchIcon />,
+    detail: PULL_REQUEST_WORDS.PREVIEW,
+    onSelect: () => openLink(deployment.url),
+  }));
+}
+
+/**
+ * What a view of the tab hands its ⋯ (`useTabActions`), Files changed's bar
+ * on a phone, and the view it was drawn for, which alone offers them while
+ * it is the view shown.
+ */
+interface HandedViewActions {
+  readonly view: PullRequestView;
+  readonly actions: TabActionGroups;
+}
+
+/**
+ * The tab's own hands for what its views offer its ⋯, each view's heard
+ * under that view, let go only by the view that handed it, so a hidden
+ * view letting go takes nothing of the shown one's.
+ */
+function useViewActions(): {
+  readonly held: HandedViewActions | undefined;
+  readonly handFor: (view: PullRequestView) => HandTabActions;
+} {
+  const [held, setHeld] = useState<HandedViewActions | undefined>(undefined);
+  const handFor = useCallback(
+    (view: PullRequestView): HandTabActions =>
+      (actions) =>
+        setHeld((was) =>
+          actions !== undefined ? { view, actions } : was?.view === view ? undefined : was,
+        ),
+    [],
+  );
+  return { held, handFor };
+}
+
 /**
  * The header's Preview, as stage-cli's header offers a pull request's
  * previews: one deployment serving an address opens at a press, and several
@@ -2518,10 +2567,36 @@ function PullRequestTabBody({
   const url = none ? undefined : held?.url;
   const handed = useMemo(
     () =>
-      url === undefined ? undefined : pullRequestActions(url, reading, () => refreshNow.current()),
+      url === undefined
+        ? undefined
+        : [pullRequestActions(url, reading, () => refreshNow.current())],
     [url, reading],
   );
-  useHandedTabActions(onActions, handed);
+  // A phone draws no actions beside the title: its header's ⋯ offers Preview and Run after the
+  // pull request's own, and whatever the view shown hands up, Files changed's bar among them.
+  const phone = usePhoneRoom();
+  const openLink = useOpenLink();
+  const viewActions = useViewActions();
+  const checksLanded = landed(parts.checks);
+  // Note that Run waits on the overview as the title's Run does, and a fork's pull request offers none.
+  const head = landed(parts.pullRequest);
+  const runs =
+    onRun !== undefined && held !== undefined && head !== undefined && head.headOwner === undefined;
+  useHandedTabActions(
+    onActions,
+    phone && handed !== undefined
+      ? [
+          ...handed,
+          [
+            ...previewActions(checksLanded, openLink),
+            ...(runs
+              ? [{ label: PULL_REQUEST_WORDS.RUN_LABEL, icon: <PlayIcon />, onSelect: onRun }]
+              : []),
+          ],
+          ...(viewActions.held?.view === view ? viewActions.held.actions : []),
+        ].filter((group) => group.length > 0)
+      : handed,
+  );
   // Files changed's reads, held here so its tab's count reads the same marks it draws, and the
   // Chapters view draws the same files and marks; asked as either is first shown.
   const changes = useChangesReads(
@@ -2627,9 +2702,12 @@ function PullRequestTabBody({
                       </div>
                     )}
                     <div className="pull-request-title-actions">
-                      <PreviewControl checks={landed(parts.checks)} shown={shown} />
+                      {phone ? null : (
+                        <PreviewControl checks={landed(parts.checks)} shown={shown} />
+                      )}
                       {/* Note that Run waits for the overview to say the head is the base repository's own, and a fork's pull request offers none, because a run makes its worktree on the head's branch name in the base repository's clone, where a fork's name could be another branch's. */}
-                      {onRun === undefined ||
+                      {phone ||
+                      onRun === undefined ||
                       held === undefined ||
                       overview === undefined ||
                       overview.headOwner !== undefined ? null : (
@@ -2729,17 +2807,21 @@ function PullRequestTabBody({
                     <Suspense
                       fallback={<SpinnerRegion delay label={PULL_REQUEST_WORDS.READING_CHAPTERS} />}
                     >
-                      <AgentChaptersTab
-                        agentId={agentId}
-                        control={control}
-                        shown={shown && view === PULL_REQUEST_VIEW.CHAPTERS}
-                        repository={repository}
-                        tree={tree}
-                        chapters={chapters}
-                        changes={changes}
-                        threads={changesThreads}
-                        lineComments={{ pending: pendingReview, onWritten: written }}
-                      />
+                      <HandTabActionsContext.Provider
+                        value={viewActions.handFor(PULL_REQUEST_VIEW.CHAPTERS)}
+                      >
+                        <AgentChaptersTab
+                          agentId={agentId}
+                          control={control}
+                          shown={shown && view === PULL_REQUEST_VIEW.CHAPTERS}
+                          repository={repository}
+                          tree={tree}
+                          chapters={chapters}
+                          changes={changes}
+                          threads={changesThreads}
+                          lineComments={{ pending: pendingReview, onWritten: written }}
+                        />
+                      </HandTabActionsContext.Provider>
                     </Suspense>
                   ) : null}
                 </Fill>
@@ -2753,17 +2835,21 @@ function PullRequestTabBody({
               hidden={none || view !== PULL_REQUEST_VIEW.FILES}
             >
               <PendingSurfaceProvider value={shown && !none && view === PULL_REQUEST_VIEW.FILES}>
-                <AgentChangesTab
-                  agentId={agentId}
-                  control={control}
-                  shown={shown && !none && view === PULL_REQUEST_VIEW.FILES}
-                  repository={repository}
-                  tree={tree}
-                  threads={changesThreads}
-                  lineComments={{ pending: pendingReview, onWritten: written }}
-                  reads={changes}
-                  reveal={threadJumps.filesReveal}
-                />
+                <HandTabActionsContext.Provider
+                  value={viewActions.handFor(PULL_REQUEST_VIEW.FILES)}
+                >
+                  <AgentChangesTab
+                    agentId={agentId}
+                    control={control}
+                    shown={shown && !none && view === PULL_REQUEST_VIEW.FILES}
+                    repository={repository}
+                    tree={tree}
+                    threads={changesThreads}
+                    lineComments={{ pending: pendingReview, onWritten: written }}
+                    reads={changes}
+                    reveal={threadJumps.filesReveal}
+                  />
+                </HandTabActionsContext.Provider>
               </PendingSurfaceProvider>
             </Fill>
           </Fill>

@@ -15,8 +15,11 @@ import {
 import { FILES_CHANGED_KEY, FILES_CHANGED_SHORTCUTS } from "@luke/settings/shortcuts";
 import {
   AnchoredPopover,
+  BUTTON_VARIANT,
+  Button,
   CHOICE_BAR_LOOK,
   ChoiceBar,
+  Dialog,
   IconButton,
   POPOVER_ALIGN,
   PopoverPanel,
@@ -28,6 +31,7 @@ import {
 import { drawnDark } from "@luke/ui/appearance";
 import { SlidersHorizontalIcon } from "lucide-react";
 import { useId, useRef, useState } from "react";
+import type { MenuAction } from "../desktop/action-menu.js";
 import { ChangedMark } from "../settings/marks.js";
 import { PickerRow } from "../settings/picker-row.js";
 import { SelectRow } from "../settings/select-row.js";
@@ -406,6 +410,23 @@ function DiffSettingsRows({ roomy }: { roomy: boolean }): React.JSX.Element {
   );
 }
 
+/** The rows a View settings scope sets: a diff's every setting, or only those its lines follow. */
+function ViewSettingsRows({ scope }: { scope: ViewSettingsScope }): React.JSX.Element {
+  return scope.kind === VIEW_SETTINGS_SCOPE.DIFF ? (
+    <DiffSettingsRows roomy={scope.roomy} />
+  ) : (
+    <>
+      <SettingsGroup title={GROUP_TITLE.LINES}>
+        <LinesRows notes={scope.notes} />
+      </SettingsGroup>
+      <SettingsGroup title={GROUP_TITLE.TEXT}>
+        <ThemeRows />
+        <TypeRows />
+      </SettingsGroup>
+    </>
+  );
+}
+
 /** The popover: its title and ×, then the rows (`PopoverPanel`). */
 function ViewSettingsPopover({
   id,
@@ -428,21 +449,44 @@ function ViewSettingsPopover({
       onDismiss={onClose}
       onLeave={onLeave}
     >
-      {scope.kind === VIEW_SETTINGS_SCOPE.DIFF ? (
-        <DiffSettingsRows roomy={scope.roomy} />
-      ) : (
-        <>
-          <SettingsGroup title={GROUP_TITLE.LINES}>
-            <LinesRows notes={scope.notes} />
-          </SettingsGroup>
-          <SettingsGroup title={GROUP_TITLE.TEXT}>
-            <ThemeRows />
-            <TypeRows />
-          </SettingsGroup>
-        </>
-      )}
+      <ViewSettingsRows scope={scope} />
     </PopoverPanel>
   );
+}
+
+/**
+ * View settings as a phone offers it, where the bar it stands in is not
+ * drawn: an item of the task's header's ⋯ (`useTabActions`), which opens
+ * the same rows in a dialog over the screen, since no button stands for
+ * the popover to hang from, and Done, Escape, or a press on the dimmed
+ * screen puts it away.
+ */
+export function useViewSettingsSheet(scope: ViewSettingsScope): {
+  readonly action: MenuAction;
+  readonly sheet: React.ReactNode;
+} {
+  const [open, setOpen] = useState(false);
+  const close = () => setOpen(false);
+  return {
+    action: {
+      label: VIEW_SETTINGS_LABEL,
+      icon: <SlidersHorizontalIcon aria-hidden="true" />,
+      onSelect: () => setOpen(true),
+    },
+    sheet: open ? (
+      <Dialog
+        title={VIEW_SETTINGS_LABEL}
+        onDismiss={close}
+        actions={
+          <Button variant={BUTTON_VARIANT.PRIMARY} onClick={close}>
+            Done
+          </Button>
+        }
+      >
+        <ViewSettingsRows scope={scope} />
+      </Dialog>
+    ) : null,
+  };
 }
 
 /** A bar's View settings button, and its popover while open: a diff's every setting, or only those its lines follow, so no row sets what the tab does not draw. */

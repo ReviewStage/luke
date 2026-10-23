@@ -5355,6 +5355,13 @@ ul.actor-stack {
   display: none;
 }
 
+/* A task's Chat tab on a phone is headed by the task's header alone: the
+   channel's own head would only say the task's name again under it, and
+   holds no control (`desktop-chat.tsx`'s `TaskChatTab`). */
+.desktop-shell[data-room="narrow"] .desktop-task-chat .chat-head {
+  display: none;
+}
+
 .side-panel-activity {
   display: flex;
   flex-direction: column;

@@ -51,6 +51,8 @@ import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } fro
 import { useAct } from "../act.js";
 import { appPlatform } from "../app-platform.js";
 import { useCopyToast } from "../copy-feedback.js";
+import type { MenuAction } from "../desktop/action-menu.js";
+import { useTabActions } from "../desktop/strip-tabs.js";
 import {
   DIFF_SELECTION_SIDE,
   type DiffFileTexts,
@@ -59,6 +61,7 @@ import {
   type DiffSelection,
   FILE_NOTE_LINE,
 } from "../diff-view/contract.js";
+import { usePhoneRoom } from "../stage-room.js";
 import {
   type ChangesList,
   FileHead,
@@ -112,7 +115,14 @@ import {
 import { useDiffLook, useSplitRoom } from "./file-diff.js";
 import { BarMenu, useSaveText } from "./file-menu.js";
 import { FileTreePane } from "./file-tree-pane.js";
-import { FileViewBar, type TreeShown, usePaneRoom, useTreeEdge } from "./file-view.js";
+import {
+  FileViewBar,
+  gitHubAction,
+  paneToggleAction,
+  type TreeShown,
+  usePaneRoom,
+  useTreeEdge,
+} from "./file-view.js";
 import { useFileViewSettings } from "./file-view-settings.js";
 import { FilesChangedKeysSheet } from "./files-changed-keys.js";
 import { ImageDiff, type ImageSides, imageDrawable } from "./image-diff.js";
@@ -122,7 +132,7 @@ import { usePullRequestNumber } from "./pull-request-number.js";
 import { PullRequestWriteNote } from "./pull-request-writes.js";
 import { landable, type ThreadLanding, ThreadLandingProvider } from "./thread-reveal.js";
 import type { CodingAgentsControl } from "./use-coding-agents.js";
-import { VIEW_SETTINGS_SCOPE, ViewSettingsButton } from "./view-settings.js";
+import { useViewSettingsSheet, VIEW_SETTINGS_SCOPE, ViewSettingsButton } from "./view-settings.js";
 import { useViewedFiles, type ViewedFiles } from "./viewed-files.js";
 
 /**
@@ -259,9 +269,7 @@ function ViewedCount({
   /** Whether the read stopped short of every file of the pull request. */
   truncated: boolean;
 }): React.JSX.Element {
-  const count = files.length;
-  const seen = viewed === undefined ? undefined : files.filter((file) => viewed(file.path)).length;
-  const complete = seen === count && !truncated;
+  const { words, complete } = viewedOf(files, viewed, truncated);
   return (
     <p className="files-viewed" aria-live="polite" data-complete={complete ? "" : undefined}>
       {complete ? <CheckIcon aria-hidden="true" /> : null}
@@ -271,14 +279,28 @@ function ViewedCount({
         truncate
         className="files-viewed-words"
       >
-        {seen === undefined
-          ? LIST_WORDS.filesOf(count)
-          : complete
-            ? LIST_WORDS.allViewed(count)
-            : LIST_WORDS.viewedOf(seen, count)}
+        {words}
       </Text>
     </p>
   );
+}
+
+/** How many of the files are viewed, in the bar's words (`ViewedCount`), and whether every one is. */
+function viewedOf(
+  files: readonly CodingAgentChangedFile[],
+  viewed: ((path: string) => boolean) | undefined,
+  truncated: boolean,
+): { readonly words: string; readonly complete: boolean } {
+  const count = files.length;
+  const seen = viewed === undefined ? undefined : files.filter((file) => viewed(file.path)).length;
+  const complete = seen === count && !truncated;
+  const words =
+    seen === undefined
+      ? LIST_WORDS.filesOf(count)
+      : complete
+        ? LIST_WORDS.allViewed(count)
+        : LIST_WORDS.viewedOf(seen, count);
+  return { words, complete };
 }
 
 /** What the bar's ⋯ says. */
@@ -298,63 +320,80 @@ const CHANGES_MENU_WORDS = {
  * in the list's order (`pullRequestPatch`), and the changes read again. The
  * patch is not offered, and says why, where the read stopped short of every
  * file, since it would not be the pull request's. A file's own path is
- * copied from its header (`FileHead`).
+ * copied from its header (`FileHead`). A phone offers the same in its
+ * header's ⋯, where the bar is not drawn.
  */
-function ChangesMenu({
-  pullRequest,
-  reading,
-  onRefresh,
-}: {
-  pullRequest: {
-    readonly url: string;
-    readonly truncated: boolean;
-    readonly files: readonly CodingAgentChangedFile[];
-  };
-  /** Whether a read is out, which a refresh would only repeat. */
-  reading: boolean;
-  onRefresh: () => void;
-}): React.JSX.Element {
+function useChangesActions(
+  pullRequest:
+    | {
+        readonly url: string;
+        readonly truncated: boolean;
+        readonly files: readonly CodingAgentChangedFile[];
+      }
+    | null
+    | undefined,
+  reading: boolean,
+  onRefresh: () => void,
+): MenuAction[] {
   const copyWithToast = useCopyToast();
   const saveText = useSaveText();
+  if (pullRequest === null || pullRequest === undefined) return [];
   const patch = pullRequest.truncated ? undefined : pullRequestPatch(treeOrder(pullRequest.files));
   const why = pullRequest.truncated
     ? CHANGES_MENU_WORDS.TRUNCATED
     : patch === undefined
       ? CHANGES_MENU_WORDS.NO_PATCH
       : undefined;
-  return (
-    <BarMenu
-      label="Changes actions"
-      actions={[
-        {
-          label: CHANGES_MENU_WORDS.COPY_PATCH,
-          icon: <ClipboardCopyIcon aria-hidden="true" />,
-          detail: why,
-          disabled: patch === undefined,
-          onSelect: () => {
-            if (patch !== undefined) copyWithToast(patch, CHANGES_MENU_WORDS.PATCH_COPIED);
-          },
-        },
-        {
-          label: CHANGES_MENU_WORDS.DOWNLOAD_PATCH,
-          icon: <DownloadIcon />,
-          detail: why,
-          disabled: patch === undefined,
-          onSelect: () => {
-            if (patch !== undefined) {
-              saveText(pullRequestPatchName(pullRequest.url), patch).catch(() => undefined);
-            }
-          },
-        },
-        {
-          label: "Refresh changes",
-          icon: <RotateCwIcon aria-hidden="true" />,
-          disabled: reading,
-          onSelect: onRefresh,
-        },
-      ]}
-    />
-  );
+  return [
+    {
+      label: CHANGES_MENU_WORDS.COPY_PATCH,
+      icon: <ClipboardCopyIcon aria-hidden="true" />,
+      detail: why,
+      disabled: patch === undefined,
+      onSelect: () => {
+        if (patch !== undefined) copyWithToast(patch, CHANGES_MENU_WORDS.PATCH_COPIED);
+      },
+    },
+    {
+      label: CHANGES_MENU_WORDS.DOWNLOAD_PATCH,
+      icon: <DownloadIcon />,
+      detail: why,
+      disabled: patch === undefined,
+      onSelect: () => {
+        if (patch !== undefined) {
+          saveText(pullRequestPatchName(pullRequest.url), patch).catch(() => undefined);
+        }
+      },
+    },
+    {
+      label: "Refresh changes",
+      icon: <RotateCwIcon aria-hidden="true" />,
+      disabled: reading,
+      onSelect: onRefresh,
+    },
+  ];
+}
+
+/** The bar's ⋯ over the diffs (`useChangesActions`). */
+function ChangesMenu({ actions }: { actions: MenuAction[] }): React.JSX.Element {
+  return <BarMenu label="Changes actions" actions={actions} />;
+}
+
+/** What a phone's ⋯ calls Files changed's own Open on GitHub, told from the pull request's beside it. */
+const OPEN_FILES_ON_GITHUB = "Open files on GitHub";
+
+/** Collapse all or Expand all as an item of a phone's ⋯, as the bar's button is. */
+function foldAllAction(list: ChangesList): MenuAction {
+  return {
+    label: list.allCollapsed ? LIST_WORDS.EXPAND_ALL : LIST_WORDS.COLLAPSE_ALL,
+    icon: list.allCollapsed ? (
+      <ChevronsUpDownIcon aria-hidden="true" />
+    ) : (
+      <ChevronsDownUpIcon aria-hidden="true" />
+    ),
+    disabled: list.kept.length === 0,
+    onSelect: list.toggleAll,
+  };
 }
 
 /** A pull request's review threads as Files changed draws them on their lines: the threads, and the door that draws one. */
@@ -1504,6 +1543,14 @@ function FoldAllButton({ list }: { list: ChangesList }): React.JSX.Element {
   );
 }
 
+/** The file the list stands on, or its first where it stands on none. */
+function shownFileOf(
+  files: readonly CodingAgentChangedFile[],
+  current: string | undefined,
+): CodingAgentChangedFile | undefined {
+  return files.find((file) => file.path === current) ?? files[0];
+}
+
 /** The list of files, or the words saying the filter keeps none, and over it the filter where the tree that holds it is hidden. */
 function FilesList({
   list,
@@ -1758,11 +1805,36 @@ export function AgentChangesTab({
     fileReveal?.lines === undefined
       ? undefined
       : { ask: fileReveal.ask, range: { path: fileReveal.path, ...fileReveal.lines } };
-  const shownFile = changed.files.find((file) => file.path === list.current) ?? changed.files[0];
+  const shownFile = shownFileOf(changed.files, list.current);
   const refresh = () => {
     ask();
     threads?.refresh?.();
   };
+  const changesActions = useChangesActions(pullRequest, out, refresh);
+  const settings = useViewSettingsSheet({ kind: VIEW_SETTINGS_SCOPE.DIFF, roomy });
+  // A phone draws no bar over the diffs: the task's header's ⋯ offers every control of it while the view is shown, the count of files viewed said under Show files.
+  const phone = usePhoneRoom();
+  const url = pullRequest?.url;
+  useTabActions(
+    phone && shown && url !== undefined && shownFileOf(changed.files, list.current) !== undefined
+      ? [
+          [
+            paneToggleAction(
+              room,
+              undefined,
+              viewedOf(changed.files, list.viewed, pullRequest?.truncated === true).words,
+            ),
+            {
+              ...gitHubAction(() => appPlatform().openGitHub(`${url}/files`)),
+              label: OPEN_FILES_ON_GITHUB,
+            },
+            settings.action,
+            foldAllAction(list),
+          ],
+          changesActions,
+        ]
+      : undefined,
+  );
   const taskId = control.agents?.find((each) => each.id === agentId)?.planId ?? null;
   const texts = useFileTexts(taskId, repository, pullRequest, changed.files);
   const commenting = useListCommenting(
@@ -1810,24 +1882,28 @@ export function AgentChangesTab({
         list.onKeyDown(event);
       }}
     >
-      <FileViewBar
-        lead={
-          <ViewedCount
-            files={changed.files}
-            viewed={list.viewed}
-            truncated={pullRequest.truncated}
-          />
-        }
-        onGitHub={() => appPlatform().openGitHub(`${pullRequest.url}/files`)}
-        menu={
-          <>
-            <ViewSettingsButton scope={{ kind: VIEW_SETTINGS_SCOPE.DIFF, roomy }} />
-            <FoldAllButton list={list} />
-            <ChangesMenu pullRequest={pullRequest} reading={out} onRefresh={refresh} />
-          </>
-        }
-        tree={room.toggles}
-      />
+      {phone ? (
+        settings.sheet
+      ) : (
+        <FileViewBar
+          lead={
+            <ViewedCount
+              files={changed.files}
+              viewed={list.viewed}
+              truncated={pullRequest.truncated}
+            />
+          }
+          onGitHub={() => appPlatform().openGitHub(`${pullRequest.url}/files`)}
+          menu={
+            <>
+              <ViewSettingsButton scope={{ kind: VIEW_SETTINGS_SCOPE.DIFF, roomy }} />
+              <FoldAllButton list={list} />
+              <ChangesMenu actions={changesActions} />
+            </>
+          }
+          tree={room.toggles}
+        />
+      )}
       <PullRequestWriteNote writes={viewedFiles} />
       {pullRequest.truncated ? (
         <div className="file-tab-notice">

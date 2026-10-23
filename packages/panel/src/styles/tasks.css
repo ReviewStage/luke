@@ -1491,13 +1491,17 @@
 /* A Terminal tab's shells float the same way below a 480px panel, so the
    screen beside them never falls under forty columns: at the panel's
    default width the screen has the whole tab, the shells a hover away. */
+.terminal-tab {
+  --terminal-shells-over: min(264px, calc(100% - var(--luke-space-48)));
+}
+
 @container side-panel (max-width: 479px) {
   .terminal-tab .terminal-shells {
     position: absolute;
     z-index: 1;
     inset-block: 0;
     right: 0;
-    width: min(264px, calc(100% - var(--luke-space-48)));
+    width: var(--terminal-shells-over);
     box-shadow: var(--luke-menu-shadow);
   }
 
@@ -1521,6 +1525,29 @@
   .terminal-tab .file-tree-toggle[data-place="over"] {
     display: flex;
   }
+}
+
+/* On a phone the shells float over the screen at any width, a phone on its
+   side included, since the task's header's ⋯ opens them over it alone
+   (`terminal-tab.tsx`), as a file's tree floats there. */
+.desktop-shell[data-room="narrow"] .terminal-tab .terminal-shells {
+  position: absolute;
+  z-index: 1;
+  inset-block: 0;
+  right: 0;
+  width: var(--terminal-shells-over);
+  box-shadow: var(--luke-menu-shadow);
+}
+
+.desktop-shell[data-room="narrow"]
+  .terminal-tab:is([data-pane-over="peek"], [data-pane-over="open"])
+  .terminal-shells {
+  display: flex;
+  animation: pane-over-in var(--luke-duration-pane) var(--luke-motion-pane) backwards;
+}
+
+.desktop-shell[data-room="narrow"] .terminal-tab[data-pane-over="closed"] .terminal-shells {
+  display: none;
 }
 
 @keyframes pane-over-in {
@@ -5289,6 +5316,44 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
   height: var(--luke-control-icon);
   flex: none;
   margin-right: var(--luke-space-4);
+}
+
+/* A phone's header over the file (`attachment-viewer.tsx`, `phone-head.tsx`):
+   Close and the ⋯ in its corners, one control wide each, so the file's
+   name, over its size and note, is centred on the card. */
+.attachment-viewer > .phone-head {
+  display: grid;
+  flex: none;
+  grid-template-columns: var(--luke-control-height) minmax(0, 1fr) var(--luke-control-height);
+  align-items: center;
+  gap: var(--luke-space-4);
+  padding: var(--luke-space-6);
+  border-bottom: 1px solid var(--luke-color-border);
+}
+
+.attachment-viewer-heading {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  align-items: center;
+}
+
+.attachment-viewer-heading > .attachment-viewer-title {
+  max-width: 100%;
+}
+
+.attachment-viewer-about {
+  display: flex;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.attachment-viewer-about > .attachment-viewer-size {
+  margin: 0;
+}
+
+.attachment-viewer-about > .attachment-viewer-note {
+  margin: 0 0 0 var(--luke-space-8);
 }
 
 .attachment-viewer-title {

@@ -11,6 +11,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { runAppCommand } from "../app-commands.js";
 import { fakeAppPlatform } from "../testing/app-platform.js";
+import { onPhone } from "../testing/phone-tab.js";
 import { wholeFileDrawn, wholeFileLines, wholeFileRoot } from "../testing/whole-file.js";
 import { PagePane, type ReadPageSource } from "./page-pane.js";
 
@@ -340,4 +341,46 @@ test("a source read before a Reload that answers after it does not replace the f
   await act(async () => answers[0]?.("<h1>Stale</h1>"));
 
   assert.deepEqual(await sourceLines(), ["1 <h1>Fresh</h1>"]);
+});
+
+test("on a phone the page draws no bar, and the task's header's ⋯ offers every control of it, the version said under its steps", async () => {
+  const { element, handed } = onPhone(
+    createElement(PagePane, {
+      place: { taskId: TASK },
+      page: FUNNEL,
+      readSource,
+      findActive: true,
+    }),
+  );
+  const container = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(container);
+  roots.push(root);
+  act(() => root.render(element));
+
+  assert.equal(container.querySelector(".file-view-bar"), null);
+  assert.equal(container.querySelectorAll("button").length, 0, "nothing over the page presses");
+  assert.deepEqual(handed.labels(), [
+    "Earlier version",
+    "Later version",
+    "View source",
+    "Reload page",
+  ]);
+  assert.deepEqual(handed.item("Later version"), { disabled: true, detail: "Version 3 of 3" });
+
+  handed.press("Earlier version");
+  assert.equal(container.querySelector("iframe")?.getAttribute("src"), versionUrl(2));
+
+  handed.press("View source");
+  await act(async () => undefined);
+  assert.deepEqual(handed.labels(), [
+    "Earlier version",
+    "Later version",
+    "View page",
+    "Reload page",
+    "View settings",
+    "Copy source",
+  ]);
+  handed.press("View settings");
+  const sheet = document.querySelector<HTMLElement>('[role="dialog"]') ?? assert.fail();
+  assert.match(sheet.textContent ?? "", /View settings.*Word wrap/);
 });

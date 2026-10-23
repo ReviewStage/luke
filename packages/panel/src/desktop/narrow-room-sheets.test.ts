@@ -12,7 +12,9 @@ import { layContainersAt, shown } from "../testing/container-width.js";
  * is its `data-room`, which `shell-room.ts` sets; the palette is drawn at
  * the body, outside the shell. jsdom lays nothing out, so the stylesheets
  * are laid (`testing/container-width.ts`) and what each draws is read from
- * its computed style. Synthetic throughout.
+ * its computed style. A task's Chat tab, headed on a phone by the task's
+ * header alone, draws no channel head under it, where the window's Chat
+ * keeps its own. Synthetic throughout.
  */
 
 let laid: HTMLStyleElement | undefined;
@@ -54,4 +56,51 @@ test("in a wide room the history buttons stand and the palette floats centred, a
   assert.equal(wide.history, true);
   assert.equal(wide.palette.left, "50%");
   assert.equal(wide.palette.transform, "translateX(-50%)");
+});
+
+/** A channel's head in the room given: a task's Chat tab's, and the window's Chat's beside it. */
+function chatHeadsIn(room: "narrow" | "wide") {
+  laid?.remove();
+  document.body.innerHTML = "";
+  laid = layContainersAt({});
+  const shell = document.body.appendChild(document.createElement("div"));
+  shell.className = "desktop-shell";
+  shell.dataset.room = room;
+  const head = (inside: HTMLElement) => {
+    const header = inside.appendChild(document.createElement("header"));
+    header.className = "desktop-toolbar chat-head";
+    return header;
+  };
+  const tab = shell.appendChild(document.createElement("section"));
+  tab.className = "desktop-task-chat";
+  const place = shell.appendChild(document.createElement("section"));
+  place.className = "chat-stream";
+  return { tab: shown(head(tab)), place: shown(head(place)) };
+}
+
+test("in a narrow room a task's Chat tab draws no channel head under the task's header, and the window's Chat keeps its own", () => {
+  assert.deepEqual(chatHeadsIn("narrow"), { tab: false, place: true });
+  assert.deepEqual(chatHeadsIn("wide"), { tab: true, place: true });
+});
+
+/** A Terminal tab's shells in the room given, its panel as wide as a phone on its side leaves it, shut or floated open over the screen. */
+function shellsIn(room: "narrow" | "wide", over: "closed" | "open") {
+  laid?.remove();
+  document.body.innerHTML = "";
+  laid = layContainersAt({ "side-panel": 800 });
+  const shell = document.body.appendChild(document.createElement("div"));
+  shell.className = "desktop-shell";
+  shell.dataset.room = room;
+  const tab = shell.appendChild(document.createElement("section"));
+  tab.className = "terminal-tab file-view";
+  tab.dataset.paneOver = over;
+  const shells = tab.appendChild(document.createElement("aside"));
+  shells.className = "terminal-shells";
+  return { shown: shown(shells), floats: getComputedStyle(shells).position === "absolute" };
+}
+
+test("on a phone on its side, wider than the panel's own line, a Terminal tab's shells still float over the screen, shut until asked, and a wide room docks them as before", () => {
+  assert.deepEqual(shellsIn("narrow", "closed"), { shown: false, floats: true });
+  assert.deepEqual(shellsIn("narrow", "open"), { shown: true, floats: true });
+  assert.equal(shellsIn("wide", "open").floats, false);
 });
