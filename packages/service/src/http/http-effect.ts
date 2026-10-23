@@ -387,6 +387,12 @@ export const readBodyBytesEffect = /* @__PURE__ */ Effect.fn("web/readBodyBytesE
   return joined;
 });
 
+/** A text's JSON, or nothing a reader takes where it is none, as a PTY's stray output or a body that is no JSON is. */
+export function jsonOf(text: string): UnparsedWireValue {
+  const parsed = Result.try(() => JSON.parse(text));
+  return unparsedWire(Result.isSuccess(parsed) ? parsed.success : undefined);
+}
+
 /** Bytes read as UTF-8 JSON, the unparsed wire value a schema reads next; anything else is an invalid request. */
 export function parseJsonBytes(bytes: Uint8Array): Effect.Effect<UnparsedWireValue, HostedRefusal> {
   return Effect.try({
