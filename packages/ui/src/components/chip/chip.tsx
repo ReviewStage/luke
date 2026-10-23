@@ -29,8 +29,11 @@ import { useClipped } from "../../use-clipped.js";
  * request's state is; stand at a width its place shares (`width`); and draw its mark
  * alone where its place has no room for its words (`iconOnly`), its words
  * still read as its name. A removable chip (`onRemove`) is no button of its
- * own: it names what stands, a filter applied, and ends in a × named for
- * what lifting it does.
+ * own: it names what stands, a filter applied, a mention or a label added to
+ * a field, and ends in a × named for what lifting it does, which its caller
+ * answers at once, so what it named is gone on the press. It springs in as
+ * it arrives; its exit is the list's that draws it (`ListMotion`), since
+ * its caller has already let it go.
  *
  * A chip comes at the control's size, or compact (`size`), a caption
  * line's pill, where it is one of a row of small counts (a pull request's

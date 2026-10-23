@@ -22,7 +22,8 @@ for a frame. Durations and delays come only from the tokens in
 `packages/ui/src/tokens/motion-tokens.css` (`--luke-duration-shape`,
 `--luke-duration-exit`, `--luke-duration-quick`, `--luke-duration-fast`, `--luke-duration-hover`,
 `--luke-duration-pane`, `--luke-motion-exit`, `--luke-motion-pane`, `--luke-row-stagger`,
-`--luke-hint-delay`, `--luke-late-delay`). Never write a literal millisecond into a
+`--luke-hint-delay`, `--luke-late-delay`, and `--luke-confirm-delay`, how long an
+autosave's Saved stands). Never write a literal millisecond into a
 rule: reduced motion and capture runs zero the tokens, and a literal is a
 motion those runs cannot stop. The one sanctioned exception is an endless loop
 (a spinner, a breathing idle, the face's own motions) whose

@@ -232,6 +232,28 @@
     --luke-chip-ink: var(--luke-color-text);
   }
 
+  /* A removable chip was added to the field it stands in, so it springs in
+     from a smaller size as it arrives, its opacity over the quick beat and
+     its scale on the fast spring. Its exit is the list's that draws it
+     (`ListMotion`), since its caller lets it go on the press. */
+  .luke-chip[data-removable="true"] {
+    animation:
+      luke-chip-fade-in var(--luke-duration-quick) ease-out backwards,
+      luke-chip-pop var(--luke-duration-fast) var(--luke-spring-fast) backwards;
+  }
+
+  @keyframes luke-chip-fade-in {
+    from {
+      opacity: 0;
+    }
+  }
+
+  @keyframes luke-chip-pop {
+    from {
+      transform: scale(0.6);
+    }
+  }
+
   .luke-chip-remove {
     display: grid;
     flex: none;

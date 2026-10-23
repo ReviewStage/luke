@@ -50,6 +50,7 @@ import { PROSE_EXAMPLE } from "./examples/prose";
 import { PROVIDER_BUTTONS_EXAMPLE } from "./examples/provider-buttons";
 import { PUBLIC_PAGE_EXAMPLE } from "./examples/public-page";
 import { RESIZE_CORNERS_EXAMPLE } from "./examples/resize-corners";
+import { SAVED_TICKS_EXAMPLE } from "./examples/saved-ticks";
 import { SCROLL_AREA_EXAMPLE } from "./examples/scroll-area";
 import { SEARCH_FIELDS_EXAMPLE } from "./examples/search-fields";
 import { SELECT_EXAMPLE } from "./examples/select";
@@ -148,6 +149,7 @@ export const EXAMPLES: readonly Example[] = [
   PROVIDER_BUTTONS_EXAMPLE,
   PUBLIC_PAGE_EXAMPLE,
   SCROLL_AREA_EXAMPLE,
+  SAVED_TICKS_EXAMPLE,
   SEARCH_FIELDS_EXAMPLE,
   SELECT_EXAMPLE,
   SETTINGS_PAGE_EXAMPLE,

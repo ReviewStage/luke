@@ -19,6 +19,16 @@
     overflow-wrap: anywhere;
   }
 
+  /* A label with its count at the line's far end, on the label's
+     baseline. */
+  .luke-field-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--luke-control-gap);
+    min-width: 0;
+  }
+
   :is(.luke-field-description, .luke-field-error) {
     margin: 0;
     font-family: var(--luke-font-sans);

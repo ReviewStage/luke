@@ -12,7 +12,11 @@ import { SPINNER_SIZE, Spinner } from "../spinner/spinner.js";
  * the file where `onOpen` is given, named "Open <name>"; a file with nothing
  * to open is drawn the same, pressing nothing. Where `onRemove` is given the
  * chip carries its way off on its corner, a real button named
- * "Remove <name>", unavailable while `removeDisabled` holds.
+ * "Remove <name>", unavailable while `removeDisabled` holds, which its
+ * caller answers at once, so the file is off on the press. A chip with a way
+ * off was added to what it comes along with, so it springs in as it arrives;
+ * its exit is the list's that draws it (`ListMotion`), since its caller has
+ * already let it go.
  *
  * A file whose bytes are still read stands as a thumbnail's place holding
  * the spinner, said to a reader as reading the file. One that failed to
@@ -126,6 +130,7 @@ export function AttachmentChip({
     <li
       className="luke-attachment-chip"
       data-image={thumbnail ? "true" : undefined}
+      data-removable={onRemove === undefined ? undefined : "true"}
       data-state={state}
       title={name}
     >
