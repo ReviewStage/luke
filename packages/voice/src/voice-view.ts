@@ -61,7 +61,9 @@ export interface VoiceCallTranscript {
  * Applied twice it is applied once, so a report heard again changes nothing.
  */
 const voiceCallTranscriptChangeSchema = Schema.Struct({
-  voiceSessionId: Schema.UndefinedOr(Schema.String),
+  // Note that a session not yet named may cross as no key at all, because a
+  // window's push is JSON and JSON keeps no key whose value is undefined.
+  voiceSessionId: Schema.optional(Schema.String),
   from: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
   lines: Schema.Array(voiceCallLineSchema),
 });

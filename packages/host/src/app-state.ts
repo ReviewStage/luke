@@ -320,15 +320,18 @@ type AppStateEntry = Exclude<keyof AppStateSnapshot, "version" | "callTranscript
 
 /**
  * One push of the document to a window: what moved in it since the last that
- * window was handed, under the version it moved to. Each entry it names is
- * replaced whole, one it names as undefined is gone, and every entry it does
- * not name is the one the window holds. The call transcript is carried as
- * the change that moved it, never whole after the first, since it grows for
- * the whole call. A window's first delivery names every entry it draws.
+ * window was handed, under the version it moved to. Each entry in `entries`
+ * is replaced whole, each in `gone` is no longer held, and every entry named
+ * in neither is the one the window holds. An entry that went is named in a
+ * list of its own rather than as undefined, because the push is JSON and
+ * JSON keeps no key whose value is undefined. The call transcript is carried
+ * as the change that moved it, never whole after the first, since it grows
+ * for the whole call. A window's first delivery names every entry it draws.
  */
 export interface AppStateDelivery {
   readonly version: number;
   readonly entries: { readonly [Entry in AppStateEntry]?: AppStateSnapshot[Entry] };
+  readonly gone?: readonly AppStateEntry[];
   readonly callTranscript?: VoiceCallTranscriptChange;
 }
 
@@ -347,11 +350,15 @@ export function appStateDelivery(
     (name) => name !== "version" && name !== "callTranscript",
   ) as AppStateEntry[];
   const moved = names.filter((name) => sent === undefined || !Equal.equals(sent[name], next[name]));
+  const gone = moved.filter((name) => next[name] === undefined);
   const callTranscript = callTranscriptChangeBetween(sent?.callTranscript, next.callTranscript);
   if (sent !== undefined && moved.length === 0 && callTranscript === undefined) return undefined;
   return {
     version: next.version,
-    entries: Object.fromEntries(moved.map((name) => [name, next[name]])),
+    entries: Object.fromEntries(
+      moved.filter((name) => next[name] !== undefined).map((name) => [name, next[name]]),
+    ),
+    ...(gone.length === 0 ? undefined : { gone }),
     ...(callTranscript === undefined ? undefined : { callTranscript }),
   };
 }
@@ -359,8 +366,9 @@ export function appStateDelivery(
 /**
  * The document a window holds once a delivery lands on it: each entry named
  * replaced, keeping the identity of every part of it that did not move, so a
- * memo keyed on a part the delivery left alone still holds; every other
- * entry the very object held; and the transcript with its change applied.
+ * memo keyed on a part the delivery left alone still holds; each entry gone
+ * held no more; every other entry the very object held; and the transcript
+ * with its change applied.
  */
 export function withAppStateDelivery(
   held: AppStateSnapshot,
@@ -378,12 +386,15 @@ export function withAppStateDelivery(
     delivery.callTranscript === undefined
       ? heldTranscript
       : withCallTranscriptChange(heldTranscript, delivery.callTranscript);
-  return {
+  const next: AppStateSnapshot = {
     ...rest,
     ...entries,
     ...(callTranscript === undefined ? undefined : { callTranscript }),
     version: delivery.version,
   };
+  // Note that an entry gone is held as no key at all, as the document holds it.
+  for (const name of delivery.gone ?? []) Reflect.deleteProperty(next, name);
+  return next;
 }
 
 /**
@@ -402,6 +413,7 @@ const appStateDeliverySchema = Schema.Struct({
     ),
     window: Schema.optional(Schema.Struct({ fullScreen: Schema.Boolean })),
   }),
+  gone: Schema.optional(Schema.Array(Schema.String)),
 });
 
 const readAppStateDelivery = readEither(appStateDeliverySchema, { excess: EXCESS_KEYS.DROP });
