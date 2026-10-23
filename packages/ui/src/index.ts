@@ -44,6 +44,7 @@ export * from "./components/facts/facts.js";
 export * from "./components/file-picker/file-picker.js";
 export * from "./components/file-text/file-text.js";
 export * from "./components/folding-button/folding-button.js";
+export * from "./components/folding-search/folding-search.js";
 export * from "./components/form-field/form-field.js";
 export * from "./components/form-section/form-section.js";
 export * from "./components/format-toolbar/format-toolbar.js";
