@@ -20,6 +20,7 @@ import {
   taskIssueChoiceSchema,
   taskIssueTagSchema,
 } from "./task-issue-wire.js";
+import { trimmedText } from "./text-schema.js";
 
 /**
  * task-wire.ts -- a named feature task and its one saved document, as the Tasks tab and the service read them.
@@ -138,11 +139,6 @@ export const taskAssigneeIdSchema = EffectSchema.String.check(
 
 /** A task's number in its workspace, counted from one; its key is the workspace's prefix and this (`workspace-key.ts`). */
 const taskNumberSchema = EffectSchema.Int.check(EffectSchema.isGreaterThanOrEqualTo(1));
-
-/** A text settled with its ends trimmed, refused when nothing but whitespace stands, and bounded. */
-function trimmedText(maximumChars: number) {
-  return EffectSchema.Trim.check(EffectSchema.isNonEmpty(), EffectSchema.isMaxLength(maximumChars));
-}
 
 /**
  * A workspace's id as the service minted it: Better Auth's own generated

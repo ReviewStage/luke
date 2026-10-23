@@ -1,5 +1,6 @@
 import { isLinkHome, LINK_HOME } from "./link-home.js";
 import { encodeMention, insideCode, MENTION_KIND } from "./mention-link.js";
+import { parsedUrl } from "./parsed-url.js";
 
 /**
  * plan-attachment-link.ts -- a plan's picture as its address on tryluke.dev: written, read back, and found in a plan's text.
@@ -57,15 +58,6 @@ const MAX_ADDRESS_CHARS = 512;
 export interface PlanAttachmentRef {
   readonly taskId: string;
   readonly attachmentId: string;
-}
-
-/** The address parsed, or nothing for text that is no URL; a constructor, since `URL.canParse` is missing from Safari before 17. */
-function parsedUrl(address: string): URL | undefined {
-  try {
-    return new URL(address);
-  } catch {
-    return undefined;
-  }
 }
 
 /** The picture's address, under the workspace the plan's own address names. */

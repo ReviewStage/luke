@@ -1,4 +1,5 @@
 import type { ClipboardEvent, KeyboardEvent, Ref } from "react";
+import { isComposingKey } from "../../composing-key.js";
 import { cssCustomProperties } from "../../css.js";
 import type { FieldControl } from "../form-field/form-field.js";
 
@@ -192,13 +193,6 @@ function entryAttributes(props: TextEntryProps) {
 /** What a busy text area does with a key it takes: nothing. */
 function noop(): void {}
 
-/** Whether a key went to an input method composing text rather than to the field. */
-function composing(event: KeyboardEvent): boolean {
-  // Note that Safari reports the composition's last key with `isComposing`
-  // already false, and code 229 still, so both are read.
-  return event.nativeEvent.isComposing || event.keyCode === 229;
-}
-
 /**
  * Marks an Escape taken where `onEscape` is given, and answers it unless an
  * input method is composing. Note that the press still reaches the window,
@@ -210,12 +204,12 @@ function composing(event: KeyboardEvent): boolean {
 function answerEscape(event: KeyboardEvent, onEscape: (() => void) | undefined): void {
   if (event.key !== "Escape" || onEscape === undefined) return;
   event.preventDefault();
-  if (!composing(event)) onEscape();
+  if (!isComposingKey(event)) onEscape();
 }
 
 /** Whether a key is the one that submits a text area, and not an input method's. */
 function submitting(event: KeyboardEvent, key: TextAreaSubmit): boolean {
-  if (event.key !== "Enter" || composing(event)) return false;
+  if (event.key !== "Enter" || isComposingKey(event)) return false;
   return key === TEXT_AREA_SUBMIT.ENTER ? !event.shiftKey : event.metaKey || event.ctrlKey;
 }
 
@@ -262,7 +256,7 @@ export function TextField({
       }}
       onKeyDown={(event) => {
         answerEscape(event, props.onEscape);
-        if (event.key !== "Enter" || onEnter === undefined || composing(event)) return;
+        if (event.key !== "Enter" || onEnter === undefined || isComposingKey(event)) return;
         event.preventDefault();
         onEnter();
       }}
