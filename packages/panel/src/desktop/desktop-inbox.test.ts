@@ -2272,6 +2272,14 @@ test("a recording an agent's words draw plays in its own player, left out of the
     assert.equal(player.getAttribute("aria-label"), "Video: The invite flow");
     assert.ok(player.closest(".ph-no-capture"), "the player is left out of the replay");
     assert.deepEqual(created, [INBOX_FILE_TYPE.WEBM]);
+    assert.equal(pane.querySelectorAll("video").length, 1, "the recording stands once");
+    assert.deepEqual(
+      [...pane.querySelectorAll('[aria-label="Attached files"] > *')].map(
+        (each) => each.textContent,
+      ),
+      [],
+      "the recording the words draw is not named again as a file over them",
+    );
     assert.equal(
       pane.querySelector('button[aria-label="Enlarge Inviting a member"]'),
       null,
