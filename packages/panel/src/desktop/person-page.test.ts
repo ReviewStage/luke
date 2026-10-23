@@ -17,7 +17,7 @@ import {
   INBOX_WIRE_VERSION,
   type InboxItem,
 } from "@luke/features/inbox-wire";
-import type { TaskAgentLine, TaskSummary } from "@luke/features/task-wire";
+import { TASK_STATUS, type TaskAgentLine, type TaskSummary } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
@@ -32,6 +32,7 @@ import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platfo
 import { handState } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { followedInboxes } from "../testing/followed-inboxes.js";
+import { restOn } from "../testing/hint-rest.js";
 import { tasksControl, waitingOf } from "../testing/tasks-control.js";
 import { PersonPage } from "./person-page.js";
 
@@ -503,6 +504,30 @@ test("a person's tasks assigned to them stand above those they created, a task b
 
   button(page, "Show all 7 in sidebar").click();
   assert.equal(keptViews()[ACME.id]?.assignedTo, CHARLES.userId);
+});
+
+test("a person's task leads with its glyph as its sidebar row does, keeps its repository as context, and hangs its card where its time raises no pill", async () => {
+  const started = { ...DASHBOARD, status: TASK_STATUS.IN_PROGRESS };
+  const listed = [RETRIES, CACHE, started, SHIM];
+  const { page } = mountWith(
+    { tasks: listed, listed: { tasks: listed, ...HOLDING } },
+    CHARLES.userId,
+  );
+  await settle();
+  const row = (name: string) =>
+    [...page.querySelectorAll('section[aria-label="Created"] li')].find((each) =>
+      each.querySelector(".luke-list-row-title")?.textContent?.includes(name),
+    ) ?? assert.fail(`${name} is listed`);
+  const lead = (name: string) => row(name).querySelector(".luke-list-row-leading > svg");
+
+  assert.equal(lead(started.name)?.getAttribute("data-status"), TASK_STATUS.IN_PROGRESS);
+  assert.equal(lead(RETRIES.name)?.getAttribute("class"), "icon-button-glyph");
+  assert.equal(row(RETRIES.name).querySelector(".home-row-context")?.textContent, "acme/relay");
+
+  restOn(row(RETRIES.name).querySelector("time") ?? assert.fail("the row says its time"));
+  const card = document.querySelector(".luke-tooltip-card [data-task-card]");
+  assert.equal(card?.querySelector(".luke-hover-card-name")?.textContent, RETRIES.name);
+  assert.equal(document.querySelector(".luke-tooltip:not(.luke-tooltip-card)"), null);
 });
 
 test("a workspace of one offers no sidebar filter, since its sidebar filters by nobody", async () => {

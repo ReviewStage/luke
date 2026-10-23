@@ -1068,6 +1068,56 @@ test("a task's row hangs the task's card beside it while the pointer rests on it
   assert.equal(card.querySelector(".luke-hover-card-name")?.textContent, "Billing usage alerts");
 });
 
+test("a task's row ends as its sidebar row does, who is on it then an agent at work, and is found by its key", () => {
+  const acme = { id: "workspace-acme", name: "Acme", role: WORKSPACE_ROLE.OWNER, github: null };
+  const listed = (number: number, name: string): TaskSummary => ({
+    id: `plan-${number}`,
+    workspaceId: acme.id,
+    name,
+    number,
+    createdAt: 1,
+    updatedAt: number,
+    repository: "acme/billing",
+  });
+  const worked: TaskSummary = {
+    ...listed(12, "Billing usage alerts"),
+    agents: {
+      total: 1,
+      working: 1,
+      agents: [
+        {
+          id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
+          title: "Alerts",
+          model: "anthropic/claude-opus-5.5",
+          effort: "high",
+          status: CODING_AGENT_STATUS.RUNNING,
+        },
+      ],
+      pullRequestTotal: 0,
+      pullRequests: [],
+    },
+  };
+  openPalette(
+    tasksControl({
+      workspace: acme,
+      workspaces: [acme],
+      tasks: [worked, listed(7, "Invoice export")],
+    }),
+  );
+  chooseFilter("Tasks");
+  /** Each row's end, its marks in order: the face's kind, then the working mark. */
+  const ends = () =>
+    [...document.querySelectorAll('[role="option"] .luke-combobox-option-hint')].map((hint) =>
+      [...hint.querySelectorAll(".actor-mark, .state-glyph")].map(
+        (mark) => mark.getAttribute("data-kind") ?? mark.getAttribute("data-state"),
+      ),
+    );
+
+  assert.deepEqual(ends(), [["unassigned", "working"], ["unassigned"]]);
+  type("ACME-12");
+  assert.deepEqual(rows(), ["Billing usage alerts · acme/billing"]);
+});
+
 test("an agent pressed on a task's card in ⌘K over Settings leaves the palette for the tasks and opens the agent's tab, as a row does", () => {
   const shown: [string, string][] = [];
   const sent = openPalette(
