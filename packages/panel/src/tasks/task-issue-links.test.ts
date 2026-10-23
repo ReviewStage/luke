@@ -219,7 +219,7 @@ test("each link is drawn with its key, title, live state, and keyword, and its m
 
   assert.deepEqual(rows(container), [
     {
-      key: "acme/web#312",
+      key: "#312",
       title: "Login fails on Safari 18",
       says: "Not planned · Closes",
       keyword: "Closes",
@@ -252,7 +252,7 @@ test("a keyword switched and an issue unlinked from a chip's menu reach the host
   ]);
   assert.deepEqual(
     rows(container).map(({ key, keyword }) => [key, keyword]),
-    [["acme/web#312", "Part of"]],
+    [["#312", "Part of"]],
   );
 });
 
@@ -281,7 +281,7 @@ test("Link issue opens the picker over the task's repository, the linked issue d
   ]);
   assert.deepEqual(
     rows(container).map(({ key }) => key),
-    ["acme/web#312", "acme/web#301"],
+    ["#312", "#301"],
   );
 });
 
@@ -349,7 +349,7 @@ test("a first read that did not land says so in the row's place, and Try again r
   assert.equal(said, "Luke didn't answer. Try again.");
   assert.deepEqual(
     rows(container).map(({ key }) => key),
-    ["acme/web#312"],
+    ["#312"],
   );
   assert.equal(container.querySelector('[role="alert"]'), null);
 });
