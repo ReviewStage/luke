@@ -587,6 +587,47 @@ test("an agent's row hangs its tab's card beside it while the pointer rests on i
   assert.deepEqual(shown, [["plan-1", "agent-7"]]);
 });
 
+test("an agent with no task hangs its card beside its row and is named as its tab is, by the model catalog", () => {
+  const agent = {
+    id: "agent-5",
+    planId: null,
+    title: null,
+    model: "anthropic/claude-opus-5.5",
+    effort: "high",
+    createdAt: 1,
+    status: CODING_AGENT_STATUS.COMPLETED,
+    turnId: null,
+    automationId: null,
+    workspaceId: "workspace-1",
+    repository: null,
+    activityAt: 2,
+  };
+  openPalette(
+    tasksControl({
+      agents: codingAgentsControl({
+        models: [
+          {
+            id: "anthropic/claude-opus-5.5",
+            name: "Cataloged Opus",
+            provider: "anthropic",
+            efforts: ["high"],
+          },
+        ],
+      }),
+      listedAgents: { standing: [agent], archived: [] },
+    }),
+  );
+  chooseFilter("Tasks");
+  assert.ok(rows().includes("Cataloged Opus"), "named by the catalog, as its tab is");
+  const row = [...document.querySelectorAll<HTMLElement>('[role="option"]')].find((option) =>
+    option.textContent?.includes("Cataloged Opus"),
+  );
+  assert.ok(row, "the agent is listed");
+  restOn(row);
+  const card = document.querySelector(".luke-tooltip-card [data-tab-card]");
+  assert.equal(card?.querySelector(".luke-hover-card-name")?.textContent, "Cataloged Opus");
+});
+
 test("an archived agent of the open task is still found, after the standing ones, saying it is archived, and choosing it opens its own page", () => {
   const shown: string[] = [];
   const agent = (id: string, title: string) => ({
