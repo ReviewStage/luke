@@ -27,6 +27,7 @@ import {
 import { ACTOR_SIZE, ActorMark, UnassignedMark } from "../actor-ref.js";
 import { useMemberDirectory, usePerson } from "../member-directory.js";
 import { memberRows } from "../member-rows.js";
+import { Highlighted } from "../search-field.js";
 import type { MenuRow } from "../searchable-menu.js";
 import { PICKER_ALIGN, Picker } from "../settings/picker-row.js";
 
@@ -167,7 +168,8 @@ export interface TaskStandingDoor {
 /**
  * A task's key, “ACME-42”, as every place in the window draws it: the task's
  * page over its title, its hover card and an Inbox row's card at the head,
- * the Tasks list's row, and the board's card. Plain caption-size words in the
+ * the Tasks list's row, the board's card, and ⌘K's row, where the words
+ * typed that found it are marked in it. Plain caption-size words in the
  * subtle ink, monospace with even figures, never a chip, and never shrunk by
  * what stands beside it, so a chip there gives way instead. Nothing for a
  * task from a service before keys, or where the window holds no such
@@ -177,11 +179,14 @@ export function TaskKey({
   workspaceName,
   number,
   decorative = false,
+  tokens,
 }: {
   workspaceName: string | undefined;
   number: number | undefined;
   /** Hidden from a screen reader, where the row says the key in words of its own. */
   decorative?: boolean;
+  /** The words a search typed, marked where the key holds them. */
+  tokens?: readonly string[] | undefined;
 }): React.JSX.Element | null {
   if (workspaceName === undefined || number === undefined) return null;
   return (
@@ -192,7 +197,7 @@ export function TaskKey({
         font={TEXT_FONT.MONO}
         as={TEXT_ELEMENT.SPAN}
       >
-        {taskKey(workspaceName, number)}
+        <Highlighted text={taskKey(workspaceName, number)} tokens={tokens} />
       </Text>
     </span>
   );

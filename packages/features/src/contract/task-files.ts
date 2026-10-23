@@ -34,8 +34,10 @@ import {
 import { taskCodeAnswerSchema } from "../tasks-view.js";
 import { bodyCap, exactBodyInput, hostedProcedure } from "./base.js";
 
-/** An upload is one picture as a `data:` URL at its byte bound, base64 being four characters for every three bytes, with room for its type and key. */
-const PICTURE_BODY_BYTES = Math.ceil(PICTURE_BOUNDS.MAX_BYTES / 3) * 4 + 1_024;
+/** An upload is one picture or video as a `data:` URL at the larger of their byte bounds, base64 being four characters for every three bytes, with room for its type and key. */
+const PICTURE_BODY_BYTES =
+  Math.ceil(Math.max(PICTURE_BOUNDS.MAX_BYTES, PICTURE_BOUNDS.MAX_SENT_VIDEO_BYTES) / 3) * 4 +
+  1_024;
 
 /** The value a query flag is set to, as a File tab's `raw` and a tree's `recursive` are; any other is refused. */
 export const TASK_FILE_QUERY_FLAG = "1";

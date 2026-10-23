@@ -60,7 +60,6 @@ export type { AutomationProceduresDependencies } from "./automation-procedures.j
 export { type ActPortContext, type ActSender, actPortFor } from "./base.js";
 export { browserLiveProcedures } from "./browser-live-procedures.js";
 export type { IntegrationProceduresDependencies } from "./integration-procedures.js";
-export type { MacCommandProceduresDependencies } from "./mac-command-procedures.js";
 export { pushProcedures, WindowPushes } from "./push-procedures.js";
 export type {
   ClientSettingSideEffects,
