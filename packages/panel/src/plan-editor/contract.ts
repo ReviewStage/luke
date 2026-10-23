@@ -292,9 +292,9 @@ export interface HeadingsChange {
  * the caret ends reported (`onTrigger`), the keys a list over it takes first
  * (`onKey`), each mention the text holds drawn into its node's own element
  * (`drawMention`), and a target named again where the edit changed the
- * headings of the text (`retarget`), answering the new target under the
- * section's new heading, or nothing where the section it names kept its
- * anchor, or names none.
+ * headings of the text (`retarget`), answering the target under the
+ * section's heading now, or nothing where the section it names kept its
+ * heading and its anchor, or names none.
  */
 export interface PlanEditorMentions {
   readonly onTrigger: (trigger: ComposerTrigger | undefined) => void;

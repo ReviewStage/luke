@@ -151,9 +151,9 @@ import { useWordsDates } from "./words-dates.js";
  * agent's as its tab names it, Luke for Luke, the member's, the item's, so
  * a chip never keeps a name its card no longer says. What it was written
  * with stands in only where the window cannot read it, a task deleted, of
- * another workspace, or not the reader's, and a task the window lists not,
- * or lists still Untitled, has the list read again once so its name catches
- * up (`useTaskNameCatchUp`). A press opens the
+ * another workspace, or not the reader's; and a task named before the
+ * window ever read its task list has the list followed, once between every
+ * chip, so its name lands (`useTaskNameCatchUp`). A press opens the
  * place as any Luke link opens, in the window. Its card, hung while the pointer rests
  * on it, names it whole: a file's is the card every place naming the file
  * hangs, and a file's lines open at the commit the mention pins them to.
@@ -212,12 +212,12 @@ interface MentionedAgentLook {
 }
 
 /**
- * A mention named again where an edit of the plan it names moved the
- * anchor of the section it names (`../plan-editor/plan-mentions.ts`): the
- * new target, under the section's new heading, so the words the plan is
- * saved with call it what its chip does; or nothing where the target names
- * no section of the plan, or one whose anchor the edit left where it was,
- * or one of a section the edit did not keep.
+ * A mention named again where an edit of the plan it names renamed the
+ * section it names or moved its anchor (`../plan-editor/plan-mentions.ts`):
+ * the target at its anchor now, under the section's heading now, so the
+ * words the plan is saved with call it what its chip does; or nothing where
+ * the target names no section of the plan, or one whose heading and anchor
+ * the edit left as they were, or one of a section the edit did not keep.
  */
 export function retargetedMention(
   taskId: string,
@@ -233,9 +233,9 @@ export function retargetedMention(
   const kept = change.kept.get(at) ?? -1;
   const now = is[kept];
   const heading = change.after[kept];
-  if (now === undefined || now === "" || now === mention.anchor || heading === undefined) {
-    return undefined;
-  }
+  if (now === undefined || now === "" || heading === undefined) return undefined;
+  // Note that a heading renamed in case or punctuation alone keeps its anchor and still renames its mentions.
+  if (now === mention.anchor && heading === change.before[at]) return undefined;
   return { name: heading, target: encodeMention({ ...mention, anchor: now }, place) };
 }
 
@@ -719,7 +719,7 @@ function MentionChip({
   });
   const section = mention.kind === MENTION_KIND.SECTION ? mention : undefined;
   const heading = useSectionHeading(section?.taskId, section?.anchor ?? "");
-  useTaskNameCatchUp(mention.kind === MENTION_KIND.TASK ? mention.taskId : undefined, known);
+  useTaskNameCatchUp(mention.kind === MENTION_KIND.TASK ? mention.taskId : undefined);
   const name =
     githubName(mention, standing, doors.place.repository) ??
     chipName(mention, written, bare, known, standing, heading);
@@ -957,7 +957,7 @@ function PlaceChip({
   const held = useKnownNames("automationId" in place ? place.automationId : undefined);
   const known = read === undefined ? held : read(held);
   const planned = place.kind === LINK_PLACE.TASK || place.kind === LINK_PLACE.VERSION;
-  useTaskNameCatchUp(planned ? place.planId : undefined, held);
+  useTaskNameCatchUp(planned ? place.planId : undefined);
   const { name, under } = placeChipLook(place, label, known);
   const glyph = <PlaceGlyph place={place} name={name} workspace={workspace} known={known} />;
   const own = (

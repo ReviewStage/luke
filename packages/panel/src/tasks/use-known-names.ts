@@ -1,7 +1,7 @@
 import { useAtomValue } from "@effect/atom-react/Hooks";
 import { agentTabLabel } from "@luke/features/model-label";
 import type { KnownNames } from "@luke/features/place-chip-model";
-import { type TaskStatus, UNTITLED_TASK_NAME } from "@luke/features/task-wire";
+import type { TaskStatus } from "@luke/features/task-wire";
 import { TASKS_READ } from "@luke/features/tasks-view";
 import { ACT_KIND } from "@luke/host/acts";
 import type { AppStateSnapshot } from "@luke/host/app-state";
@@ -23,8 +23,9 @@ import { appStateDerivedAtom } from "../use-app-state.js";
  * pages, the Inbox items waiting, and the agents an automation started with
  * no task; and from the directories standing around the caller, the members
  * and the automation asked for. Nothing is fetched, so a name the window
- * does not hold is not here; a chip naming a task the list does not hold,
- * or holds Untitled, asks the list read again once (`useTaskNameCatchUp`).
+ * does not hold is not here; a chip naming a task before the list was ever
+ * read asks for it once (`useTaskNameCatchUp`), and the follow that read
+ * starts brings each task's name as the service gives it.
  *
  * The document's names are built once per delivery in an atom every chip
  * shares, rather than once per chip, so a transcript of a hundred chips
@@ -107,39 +108,33 @@ const heldStatusesAtom: Atom.Atom<ReadonlyMap<string, TaskStatus>> = Atom.map(
     ),
 );
 
-/** Whether the window's task list landed, so a task it does not list is one it cannot read rather than one not read yet. */
-const listReadAtom: Atom.Atom<boolean> = appStateDerivedAtom(
-  (state) => state?.tasks.listStatus === TASKS_READ.READY,
+/** Whether main's document holds no read of the task list yet, so nothing follows it and no task's name can land. */
+const listUnreadAtom: Atom.Atom<boolean> = appStateDerivedAtom(
+  (state) => state?.tasks.listStatus === TASKS_READ.IDLE,
 );
 
-/**
- * The tasks a chip has asked the list read again for, each once in the
- * window's life, and the names the last read was asked over, so the chips
- * of one transcript drawn together ask one read between them.
- */
-const caughtUp: { readonly asked: Set<string>; over: ReadonlyMap<string, string> | undefined } = {
-  asked: new Set(),
-  over: undefined,
-};
+/** Whether a chip has asked for the list since it was last unread, so the chips of one transcript ask once between them. */
+const listAsked = { asked: false };
 
 /**
- * Asks the task list read again where a chip names the task `taskId` names
- * and the list does not hold it, or holds it Untitled, once for each task,
- * since a task takes its name on the service and the window hears no push
- * for a task's row; nothing for none asked for, or before the list landed.
+ * Asks the window to follow its task list where a chip names a task and no
+ * read of the list has started yet, once between every chip, so the task's
+ * name lands. The list is followed live from its first read
+ * (`compose-tasks.ts`), so a task the list holds Untitled or not at all
+ * takes its name as the service names it, and asking again would read
+ * nothing new; nothing for none asked for.
  */
-export function useTaskNameCatchUp(taskId: string | undefined, known: KnownNames): void {
-  const listRead = useAtomValue(listReadAtom);
-  const held = taskId === undefined ? undefined : known.tasks.get(taskId);
-  const behind =
-    listRead && taskId !== undefined && (held ?? UNTITLED_TASK_NAME) === UNTITLED_TASK_NAME;
+export function useTaskNameCatchUp(taskId: string | undefined): void {
+  const unread = useAtomValue(listUnreadAtom);
   useEffect(() => {
-    if (!behind || taskId === undefined || caughtUp.asked.has(taskId)) return;
-    caughtUp.asked.add(taskId);
-    if (caughtUp.over === known.tasks) return;
-    caughtUp.over = known.tasks;
+    if (!unread) {
+      listAsked.asked = false;
+      return;
+    }
+    if (taskId === undefined || listAsked.asked) return;
+    listAsked.asked = true;
     tellAct(ACT_KIND.TASKS_REFRESH);
-  }, [behind, taskId, known.tasks]);
+  }, [unread, taskId]);
 }
 
 /**

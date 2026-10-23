@@ -26,8 +26,9 @@ import { TranscriptWords } from "./transcript-blocks.js";
  * Untitled by its name, an agent by its tab's name (Luke for an operator,
  * its model for one untitled), a page by its title, a section by its
  * heading; one the window cannot read keeps the words it was written with.
- * A chip naming a plan the window lists not, or lists still Untitled, has
- * the list read again, once between every chip and every draw. Synthetic
+ * A chip naming a plan before the window ever read its task list has the
+ * list followed, once between every chip and every draw, so the name lands;
+ * a window already following it asks nothing. Synthetic
  * workspace, plans, agents, and page.
  */
 
@@ -139,11 +140,14 @@ afterEach(() => {
 });
 
 /** The words drawn on the plan's page in a window holding `STATE`, every read of the task list counted. */
-async function drawn(text: string): Promise<{ container: HTMLElement; refreshes: () => number }> {
+async function drawn(
+  text: string,
+  state: AppStateSnapshot = STATE,
+): Promise<{ container: HTMLElement; refreshes: () => number }> {
   let refreshes = 0;
   fakeAppBridge({
     onAppState: () => () => undefined,
-    requestAppState: () => Promise.resolve(STATE),
+    requestAppState: () => Promise.resolve(state),
   });
   fakeActPort({
     [ACT_KIND.TASKS_REFRESH]: () => {
@@ -210,22 +214,26 @@ test("a chip written under an old name is called by the name the window holds no
   ]);
 });
 
-test("chips naming a plan the window lists not, or lists still Untitled, read the task list again once between them, however often they are drawn", async () => {
+test("chips naming plans before the window ever read its task list ask it to follow the list, once between them, however often they are drawn", async () => {
+  const unread: AppStateSnapshot = {
+    ...STATE,
+    tasks: { ...STATE.tasks, listStatus: TASKS_READ.IDLE, tasks: [] },
+  };
   const { refreshes } = await drawn(
     [
       `[@Untitled](${HOME}/plan/${UNTITLED_TASK})`,
       `[@Later](${HOME}/plan/${LATER_TASK})`,
-      `[@Later](${HOME}/plan/${LATER_TASK})`,
       `[@Untitled](${PLAN})`,
     ].join(" "),
+    unread,
   );
 
   assert.equal(refreshes(), 1);
 });
 
-test("a chip naming only plans the window lists by name reads nothing", async () => {
+test("a window already following its task list asks nothing, even for a plan it lists Untitled or not at all, whose name the follow brings", async () => {
   const { refreshes } = await drawn(
-    `[@Untitled](${PLAN}) and [@Wire it](${PLAN}/agent/${TITLED_AGENT})`,
+    `[@Untitled](${HOME}/plan/${UNTITLED_TASK}) and [@Later](${HOME}/plan/${LATER_TASK})`,
   );
 
   assert.equal(refreshes(), 0);

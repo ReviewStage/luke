@@ -197,6 +197,17 @@ test("renaming a heading in the editor renames the text's own mentions of it, ta
   );
 });
 
+test("renaming a heading in a way that keeps its anchor renames the text's own mentions of it, under the same target", () => {
+  const task = mounted(TEXT);
+
+  task.typeAfter("Rollout", "!");
+
+  assert.equal(
+    task.last(),
+    `## Goal\n\nShip as ${named("rollout", "Rollout!")} says.\n\n## Rollout!\n\nStore first.\n`,
+  );
+});
+
 test("renaming a heading renames a mention of it written before the link was settled, into the settled form", () => {
   const task = mounted(
     `## Goal\n\nShip as [@Rollout](luke://plan/${TASK_ID}#Rollout) says.\n\n## Rollout\n\nStore first.\n`,
