@@ -613,7 +613,7 @@ export const CODING_AGENT_LIST_QUERY = {
   ARCHIVED: "archived",
 } as const;
 
-/** The query a workspace's agents are listed by: the workspace, the repository they are narrowed to, where one is named, words their title or task's name holds, where some are given, and `archived=include` for the archived ones among the rest, as a plan's list takes it. */
+/** The query a workspace's agents are listed by: the workspace, the repository they are narrowed to, where one is named, words their shown name (`agentTabLabel`) or task's name holds, where some are given, and `archived=include` for the archived ones among the rest, as a plan's list takes it. */
 export const CODING_AGENT_WORKSPACE_QUERY = {
   WORKSPACE_ID: "workspaceId",
   REPOSITORY: "repository",
