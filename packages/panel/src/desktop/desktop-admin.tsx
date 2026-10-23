@@ -12,7 +12,10 @@
  *
  * A narrow room shows the list or the view, one at a time
  * (`hiddenColumns`): the place opens on its list, a section chosen there
- * stands alone the whole width, its toolbar led by a way back to the list.
+ * stands alone the whole width, and each is headed as a phone heads every
+ * page (`phone-head.tsx`): the list by its way out and its name, with no
+ * back and forward, and a view's toolbar by one way back, to the list or to
+ * the section a page stands under, its title, and its View options.
  * A view's toolbar stands in the title bar's row, as a page's does beside
  * the plans' sidebar, rather than under a drag strip of its own, and ⌘F
  * finds in the view standing (`PageFind`). The views themselves are
@@ -24,7 +27,6 @@ import {
   BackIcon,
   commandKeyshortcuts,
   Fill,
-  FoldingButton,
   GAP,
   LAYOUT_ELEMENT,
   NAV_CURRENT,
@@ -38,7 +40,7 @@ import {
 } from "@luke/ui";
 import { ExternalLinkIcon } from "lucide-react";
 import { AdminPlace, adminSectionOf, adminSectionView } from "../admin/admin-place.js";
-import { AdminToolbarLead } from "../admin/chrome/page-header.js";
+import { AdminListBack } from "../admin/chrome/page-header.js";
 import { ADMIN_PLACES } from "../admin/chrome/places.js";
 import { ADMIN_PAGE, ADMIN_TAB, type AdminView } from "../admin/routing.js";
 import { useAppCommand } from "../app-commands.js";
@@ -49,6 +51,7 @@ import type { NavigationHistory } from "../navigation-history.js";
 import { hiddenColumns, SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { HistoryButtons, useSidebarEdge } from "./desktop-sidebar.js";
 import { useNarrowFocus } from "./narrow-focus.js";
+import { backStepName, PhoneBack, PhoneHead } from "./phone-head.js";
 import type { SidebarCollapse } from "./sidebar-collapse.js";
 
 /** The place's name, at the list's head and on the way back to it in a narrow room. */
@@ -110,20 +113,32 @@ export function DesktopAdmin({
   const hidden = hiddenColumns(room, listed);
   const screen = useNarrowFocus(room, listed);
   const current = adminSectionOf(view);
+  const narrow = room === SHELL_ROOM.NARROW;
   return (
     <div ref={screen} className="desktop-admin">
       <nav className="admin-sections" aria-label="Admin sections" hidden={hidden.list}>
-        <div className="desktop-drag-strip" />
-        <HistoryButtons history={history} room={room} />
-        <NavItem
-          icon={<BackIcon />}
-          aria-keyshortcuts={commandKeyshortcuts(APP_COMMAND.EXIT_ADMIN)}
-          shortcut={<Shortcut chord={APP_SHORTCUTS[APP_COMMAND.EXIT_ADMIN].chord} />}
-          onClick={onExit}
-        >
-          Back
-        </NavItem>
-        <h1 className="admin-sections-title">{ADMIN_TITLE}</h1>
+        {narrow ? (
+          <PhoneHead
+            place="admin-sections"
+            start={<PhoneBack back={{ to: backStepName(history, undefined), onPress: onExit }} />}
+            title={<h1 className="desktop-toolbar-title">{ADMIN_TITLE}</h1>}
+            end={null}
+          />
+        ) : (
+          <>
+            <div className="desktop-drag-strip" />
+            <HistoryButtons history={history} room={room} />
+            <NavItem
+              icon={<BackIcon />}
+              aria-keyshortcuts={commandKeyshortcuts(APP_COMMAND.EXIT_ADMIN)}
+              shortcut={<Shortcut chord={APP_SHORTCUTS[APP_COMMAND.EXIT_ADMIN].chord} />}
+              onClick={onExit}
+            >
+              Back
+            </NavItem>
+            <h1 className="admin-sections-title">{ADMIN_TITLE}</h1>
+          </>
+        )}
         <Fill className="sidebar-section">
           <ScrollArea fade={SCROLL_FADE.BOTH}>
             <div className="sidebar-section-body">
@@ -156,19 +171,13 @@ export function DesktopAdmin({
       <section className="admin-page" aria-label={ADMIN_TITLE} hidden={hidden.item}>
         {/* The view's own toolbar stands in the title bar's row, as a page's
             does beside the plans' sidebar, so no drag strip stands over it;
-            a narrow room leads it with the way back to the list. */}
-        <AdminToolbarLead
-          value={
-            room === SHELL_ROOM.NARROW ? (
-              <FoldingButton label={ADMIN_TITLE} icon={<BackIcon />} onClick={onList} />
-            ) : undefined
-          }
-        >
+            a narrow room makes it a phone's header, led by the way back to the list. */}
+        <AdminListBack value={narrow ? { to: ADMIN_TITLE, onPress: onList } : undefined}>
           {/* Each view is found in as one scope, its bar under the view's toolbar; another view closes it. */}
           <PageFind page={FIND_PAGE.ADMIN} at={adminViewKey(view)} active={!hidden.item}>
             <AdminPlace view={view} onOpen={onOpen} />
           </PageFind>
-        </AdminToolbarLead>
+        </AdminListBack>
       </section>
     </div>
   );

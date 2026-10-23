@@ -2,7 +2,12 @@
 
 import assert from "node:assert/strict";
 import type { AdminUserList, AdminUserListRow } from "@luke/features/admin-answer-wire";
-import { ADMIN_READ, ADMIN_REFUSED, type AdminReadAnswer } from "@luke/features/admin-wire";
+import {
+  ADMIN_READ,
+  ADMIN_REFUSED,
+  ADMIN_UNANSWERED,
+  type AdminReadAnswer,
+} from "@luke/features/admin-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import type { WireBoundaryInput } from "@luke/wire";
@@ -12,11 +17,13 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import type { AdminView } from "../admin/routing.js";
 import { runAppCommand } from "../app-commands.js";
+import type { NavigationHistory } from "../navigation-history.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { fakeActPortAnswering, type SentPortAct } from "../testing/app-bridge.js";
 import { fakeAppPlatform } from "../testing/app-platform.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { sidebarProps } from "../testing/desktop-sidebar.js";
+import { menuItems, pressInPhoneHead, readPhoneHead } from "../testing/phone-head.js";
 import { tasksControl } from "../testing/tasks-control.js";
 import { DesktopAdmin } from "./desktop-admin.js";
 
@@ -87,15 +94,17 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-/** The place on `view`, in `room`, every view it was asked to open and every exit written down. */
+/** The place on `view`, in `room`, over `history` where one is named, every view it was asked to open and every exit written down. */
 async function open(
   view: AdminView,
-  options: { room?: ShellRoom; listed?: boolean } = {},
+  options: { room?: ShellRoom; listed?: boolean; history?: NavigationHistory } = {},
 ): Promise<{ page: HTMLElement; opened: AdminView[]; exits: number[]; listings: number[] }> {
   const opened: AdminView[] = [];
   const exits: number[] = [];
   const listings: number[] = [];
-  const { sidebar, history } = sidebarProps(tasksControl());
+  const props = sidebarProps(tasksControl());
+  const { sidebar } = props;
+  const history = options.history ?? props.history;
   const page = document.body.appendChild(document.createElement("div"));
   root = createRoot(page);
   act(() =>
@@ -175,6 +184,82 @@ test("a narrow room shows the list or the view, one at a time, and the view's he
   assert.ok(back, "the view's head offers the way back to the list");
   act(() => back.click());
   assert.equal(alone.listings.length, 1);
+});
+
+test("on a phone the list is headed by its way out alone, named for the step Back goes to, and the place's name centred, with no Back and Forward, and the way out steps back as Back did", async () => {
+  const { history } = sidebarProps(tasksControl());
+  const { page, exits } = await open(
+    { kind: "users" },
+    {
+      room: SHELL_ROOM.NARROW,
+      listed: true,
+      history: {
+        ...history,
+        canGoBack: true,
+        steps: {
+          back: [{ at: 0, title: { label: "Inbox" }, page: { kind: "inbox", of: undefined } }],
+          forward: [],
+        },
+      },
+    },
+  );
+
+  assert.deepEqual(readPhoneHead(page, "admin-sections"), {
+    start: ["Back to Inbox"],
+    title: "Admin",
+    end: [],
+  });
+  const names = [...page.querySelectorAll("button")].map((each) => each.getAttribute("aria-label"));
+  assert.ok(!names.includes("Back") && !names.includes("Forward"), "no Back and Forward stand");
+  assert.deepEqual(
+    rows(page).map((each) => each.querySelector(".luke-nav-item-name")?.textContent),
+    ["Overview", "Cost", "Reliability", "Workspaces", "Users", "Open in browser"],
+  );
+  pressInPhoneHead(page, "admin-sections", "Back to Inbox");
+  assert.equal(exits.length, 1);
+});
+
+test("on a phone a view is headed by the way back to the list, its title and range centred, and its View options alone at the end, which still opens its menu", async () => {
+  const { page, listings } = await open({ kind: "users" }, { room: SHELL_ROOM.NARROW });
+
+  assert.deepEqual(readPhoneHead(page, "admin"), {
+    start: ["Back to Admin"],
+    title: "Users",
+    end: ["View options"],
+  });
+  assert.match(page.querySelector(".admin-head")?.textContent ?? "", /Last 30 days/u);
+  pressInPhoneHead(page, "admin", "View options");
+  assert.deepEqual(
+    menuItems().map((item) => item.label),
+    ["Time range", "Include admins"],
+  );
+  pressInPhoneHead(page, "admin", "Back to Admin");
+  assert.equal(listings.length, 1);
+});
+
+test("on a phone an account's page has one way back, to the section it stands under, in place of the list's and the crumb's two", async () => {
+  // An account whose read is not answered stands its page and head over the failure.
+  answer = { refused: ADMIN_UNANSWERED };
+  const { page, opened, listings } = await open(
+    { kind: "account", id: ADA.id },
+    { room: SHELL_ROOM.NARROW },
+  );
+
+  const head = readPhoneHead(page, "admin");
+  assert.deepEqual(head.start, ["Back to Users"]);
+  assert.ok(head.end.length <= 1, "one control at most in the end corner");
+  assert.equal(page.querySelector('.admin-head nav[aria-label="Path"]'), null, "no crumb");
+  pressInPhoneHead(page, "admin", "Back to Users");
+  assert.deepEqual([opened, listings], [[{ kind: "users" }], []]);
+});
+
+test("a wide room keeps the list's Back row and title and a view's crumb, with no phone's header", async () => {
+  answer = { refused: ADMIN_UNANSWERED };
+  const { page } = await open({ kind: "account", id: ADA.id });
+
+  assert.equal(page.querySelector("header.phone-head"), null);
+  assert.equal(page.querySelector(".admin-sections-title")?.textContent, "Admin");
+  assert.ok(page.querySelector('nav[aria-label="Path"]'), "the view's crumb leads back");
 });
 
 test("the Users view reads its roster through the window's host and draws its accounts", async () => {

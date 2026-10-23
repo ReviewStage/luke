@@ -8,6 +8,7 @@ import { ACTION_RESULT_STATUS } from "@luke/wire";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
+import { SHELL_ROOM } from "../shell-room.js";
 import { DESKTOP_CAPABILITIES } from "../testing/app-state.js";
 import { newestToastSays } from "../testing/toast.js";
 import { ToastHost } from "../toast.js";
@@ -67,6 +68,7 @@ test("a refused reset says why in a toast and can be pressed again", async () =>
           settings,
           writes,
           rowsOn(settings, DESKTOP_CAPABILITIES),
+          SHELL_ROOM.WIDE,
         ),
         createElement(ToastHost),
       ),
@@ -89,7 +91,13 @@ test("a zoom changed in a browser, which draws no Zoom row, offers no reset on A
   const browser = DESKTOP_CAPABILITIES.filter((each) => each !== HOST_CAPABILITY.DESKTOP_APP);
 
   assert.equal(
-    pageResetControl(SETTINGS_VIEW.APPEARANCE, zoomed, writes, rowsOn(zoomed, browser)),
+    pageResetControl(
+      SETTINGS_VIEW.APPEARANCE,
+      zoomed,
+      writes,
+      rowsOn(zoomed, browser),
+      SHELL_ROOM.WIDE,
+    ),
     undefined,
   );
   assert.notEqual(
@@ -98,6 +106,7 @@ test("a zoom changed in a browser, which draws no Zoom row, offers no reset on A
       zoomed,
       writes,
       rowsOn(zoomed, DESKTOP_CAPABILITIES),
+      SHELL_ROOM.WIDE,
     ),
     undefined,
   );
@@ -112,11 +121,18 @@ test("media ducking turned off while the Voice page holds only its way in offers
       unducked,
       writes,
       rowsOn(unducked, DESKTOP_CAPABILITIES, false),
+      SHELL_ROOM.WIDE,
     ),
     undefined,
   );
   assert.notEqual(
-    pageResetControl(SETTINGS_VIEW.VOICE, unducked, writes, rowsOn(unducked, DESKTOP_CAPABILITIES)),
+    pageResetControl(
+      SETTINGS_VIEW.VOICE,
+      unducked,
+      writes,
+      rowsOn(unducked, DESKTOP_CAPABILITIES),
+      SHELL_ROOM.WIDE,
+    ),
     undefined,
   );
 });
@@ -163,7 +179,13 @@ test("a browser's Appearance reset returns the theme it draws to its default and
       createElement(
         "div",
         null,
-        pageResetControl(SETTINGS_VIEW.APPEARANCE, start, store.writes, rowsOn(start, browser)),
+        pageResetControl(
+          SETTINGS_VIEW.APPEARANCE,
+          start,
+          store.writes,
+          rowsOn(start, browser),
+          SHELL_ROOM.WIDE,
+        ),
         createElement(ToastHost),
       ),
     ),
@@ -195,7 +217,13 @@ test("Undo after a browser's reset puts back the theme it reset and leaves the z
       createElement(
         "div",
         null,
-        pageResetControl(SETTINGS_VIEW.APPEARANCE, start, store.writes, rowsOn(start, browser)),
+        pageResetControl(
+          SETTINGS_VIEW.APPEARANCE,
+          start,
+          store.writes,
+          rowsOn(start, browser),
+          SHELL_ROOM.WIDE,
+        ),
         createElement(ToastHost),
       ),
     ),

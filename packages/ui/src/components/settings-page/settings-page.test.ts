@@ -10,13 +10,14 @@ import {
   SettingsRowsSkeleton,
   SettingsSection,
 } from "../settings-section/settings-section.js";
-import { SettingsPage } from "./settings-page.js";
+import { SETTINGS_PAGE_TITLE, SettingsPage } from "./settings-page.js";
 
 /**
  * settings-page.test.ts -- the page's title is its one `h1`, each headed
  * section under it is a region its `h2` names, what acts on the whole
- * page stands in the page's head beside the title, and a section still
- * reading leaves the rest of the page drawn, its placeholder alone busy.
+ * page stands in the page's head beside the title, or in the bar that names
+ * the page, and a section still reading leaves the rest of the page drawn,
+ * its placeholder alone busy.
  */
 
 const roots: Root[] = [];
@@ -106,6 +107,22 @@ test("a page with no actions holds only its title in its head", async () => {
   const head = container.querySelector("header");
   expect(head?.textContent).toBe("Voice");
   expect(head?.querySelector("button")).toBeNull();
+});
+
+test("a page under a bar that names it draws neither its title nor its actions, its sections standing at its top", async () => {
+  const container = await render(
+    createElement(SettingsPage, {
+      title: "Voice",
+      place: SETTINGS_PAGE_TITLE.IN_BAR,
+      actions: createElement(Button, { children: "Reset" }),
+      children: section("Microphone"),
+    }),
+  );
+  expect(container.querySelector("h1")).toBeNull();
+  expect([...container.querySelectorAll("button")].map((each) => each.textContent)).toEqual([
+    "Change",
+  ]);
+  expect(container.querySelector("h2")?.textContent).toBe("Microphone");
 });
 
 /** A page whose one section reads its rows until `read`, placeholder rows standing in their place, under a section already drawn. */

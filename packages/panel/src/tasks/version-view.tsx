@@ -20,6 +20,8 @@ import {
 import { MARKDOWN_CLASS, markdownClass } from "@luke/ui/markdown-class";
 import { dayAndTimeText, momentText } from "@luke/ui/time-format";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
+import { RotateCcwIcon } from "lucide-react";
+import { PhoneBack, type PhoneBackDoor, PhoneHead, PlaceMore } from "../desktop/phone-head.js";
 import { MarkdownMessage } from "../markdown-message.js";
 import { TOAST_HOLD, TOAST_TONE, type ToastNotice, UNDO_LABEL } from "../toast.js";
 import { DocumentScroll } from "./document-frame.js";
@@ -55,7 +57,9 @@ import { HISTORY_READ, type PlanHistoryControl, type ViewedVersion } from "./use
  * itself a version the history keeps and can be undone by restoring the
  * one before it. Everything drawn is the plan's words, so the root is left
  * out of the screen recording (`ph-no-capture`) as a second line behind the
- * recording's text masking.
+ * recording's text masking. Standing alone on a phone, the page is headed
+ * as a phone heads every page (`../desktop/phone-head.tsx`): the way back to
+ * the versions, when the version was saved, and a ⋯ holding its restore.
  */
 
 /** What the view says over a version that changed nothing from the one before it. */
@@ -73,8 +77,12 @@ const PAGE_SKELETON = [
 /** The level a plan's section heading stands at (`##`), which a placeholder section's heading is drawn in. */
 const SECTION_LEVEL = "2";
 
-/** How wide the placeholder bar's moment and its restore stand: a day and a time in the title's type, and Restore this version. */
-const BAR_SKELETON = { MOMENT: "160px", RESTORE: "148px" } as const;
+/** How wide the placeholder bar's moment and its restore stand: a day and a time in the title's type, and Restore this version, or on a phone the ⋯. */
+const BAR_SKELETON = {
+  MOMENT: "160px",
+  RESTORE: "148px",
+  MORE: "var(--luke-control-height)",
+} as const;
 
 /** What the toast says once a version is restored, and why its Undo did nothing. */
 const VERSION_RESTORED_NOTE = "Version restored";
@@ -82,6 +90,9 @@ const RESTORE_UNDO_REFUSED_NOTE = "The restore could not be undone. Try again.";
 
 /** Why Restore this version is unavailable over the newest version. */
 const CURRENT_HINT = "This version is already current";
+
+/** What the version's restore says. */
+const RESTORE_LABEL = "Restore this version";
 
 /** The question Restore this version asks, naming the version and what it is of. */
 function restoreQuestion(at: number, noun: string): DialogQuestion {
@@ -288,33 +299,47 @@ export function sayRestored(
   });
 }
 
-/** The page a version stands on: its bar, led by `lead`, naming the version in `title` with `actions` at its end, over the version's document. */
+/**
+ * The page a version stands on: its bar naming the version in `title` with
+ * `actions` at its end, or on a phone its header, led by `back`, with
+ * `more`, the ⋯ holding the same actions, over the version's document.
+ */
 function VersionPageFrame({
-  lead,
+  back,
   title,
   actions,
+  more,
   children,
 }: {
-  lead?: React.ReactNode;
+  back: PhoneBackDoor | undefined;
   title: React.ReactNode;
   actions: React.ReactNode;
+  more: React.ReactNode;
   children: React.ReactNode;
 }): React.JSX.Element {
   return (
     <>
-      <PageToolbar
-        lead={lead}
-        heading={
-          <OneLine
-            as={ONE_LINE_ELEMENT.H1}
-            end={ONE_LINE_END.ELLIPSIS}
-            className="desktop-toolbar-title"
-          >
-            {title}
-          </OneLine>
-        }
-        actions={actions ?? null}
-      />
+      {back === undefined ? (
+        <PageToolbar
+          heading={
+            <OneLine
+              as={ONE_LINE_ELEMENT.H1}
+              end={ONE_LINE_END.ELLIPSIS}
+              className="desktop-toolbar-title"
+            >
+              {title}
+            </OneLine>
+          }
+          actions={actions}
+        />
+      ) : (
+        <PhoneHead
+          place="version"
+          start={<PhoneBack back={back} />}
+          title={<h1 className="desktop-toolbar-title">{title}</h1>}
+          end={more}
+        />
+      )}
       <Fill className="desktop-document">
         <DocumentScroll>{children}</DocumentScroll>
       </Fill>
@@ -333,7 +358,7 @@ export function VersionView({
   noun = "plan",
   section,
   task,
-  lead,
+  back,
 }: {
   viewing: ViewedVersion;
   /** The restore's question, held by the history around the page (`useVersionRestore`). */
@@ -346,14 +371,14 @@ export function VersionView({
   section?: number | undefined;
   /** The task the versions are of, which their mentions are read against; none for the account's template. */
   task?: MentionedTask | undefined;
-  /** What leads the bar, as the way back to the list where the version stands alone. */
-  lead?: React.ReactNode;
+  /** The way back to the list, where the version stands alone on a phone, whose header it leads. */
+  back?: PhoneBackDoor | undefined;
 }): React.JSX.Element {
   const { line } = viewing;
   return (
     <>
       <VersionPageFrame
-        lead={lead}
+        back={back}
         title={
           <Tooltip label={momentText(line.lastEdit.at)}>
             <time dateTime={new Date(line.lastEdit.at).toISOString()}>
@@ -369,9 +394,25 @@ export function VersionView({
               focusableWhenDisabled
               onClick={restore.ask}
             >
-              Restore this version
+              {RESTORE_LABEL}
             </Button>
           </Tooltip>
+        }
+        more={
+          <PlaceMore
+            shown
+            groups={() => [
+              [
+                {
+                  label: RESTORE_LABEL,
+                  icon: <RotateCcwIcon />,
+                  detail: viewing.current ? CURRENT_HINT : undefined,
+                  disabled: viewing.current,
+                  onSelect: restore.ask,
+                },
+              ],
+            ]}
+          />
         }
       >
         <VersionContent viewing={viewing} title={title} section={section} task={task} />
@@ -387,19 +428,20 @@ export function VersionView({
  * quiet blocks, so the page lands where they stood.
  */
 export function VersionPageSkeleton({
-  lead,
+  back,
   title,
   section,
 }: {
-  lead?: React.ReactNode;
+  back: PhoneBackDoor | undefined;
   title: string | undefined;
   section: number | undefined;
 }): React.JSX.Element {
   return (
     <VersionPageFrame
-      lead={lead}
+      back={back}
       title={<Skeleton width={BAR_SKELETON.MOMENT} />}
       actions={<Skeleton shape={SKELETON_SHAPE.CONTROL} width={BAR_SKELETON.RESTORE} />}
+      more={<Skeleton shape={SKELETON_SHAPE.CONTROL} width={BAR_SKELETON.MORE} />}
     >
       <VersionSkeleton title={title} section={section} />
     </VersionPageFrame>

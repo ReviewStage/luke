@@ -3,7 +3,9 @@ import {
   Button,
   EmptyState,
   PlugIcon,
+  SETTINGS_PAGE_TITLE,
   SettingsPage,
+  type SettingsPageTitle,
   SettingsRow,
   SettingsSection,
   Switch,
@@ -16,8 +18,9 @@ import { CatalogSection } from "../section";
  * settings-page.tsx -- a page of sections with a Reset at the end of its
  * title's line, tall enough to scroll inside its frame; and the same page
  * in a frame narrower than the 480px a desktop page insets less under, its
- * long title pushing the Reset below it; and a page whose content is an
- * empty state, standing in the room under its title.
+ * long title pushing the Reset below it; a page whose content is an
+ * empty state, standing in the room under its title; and a page under a
+ * phone's header, which names it, so it draws no head of its own.
  */
 
 function HeldSwitch({ label, describedBy }: { label: string; describedBy: string | undefined }) {
@@ -33,9 +36,13 @@ function SwitchRow({ label, description }: { label: string; description?: string
   );
 }
 
-function Page({ title }: { title: string }): React.JSX.Element {
+function Page({ title, place }: { title: string; place?: SettingsPageTitle }): React.JSX.Element {
   return (
-    <SettingsPage title={title} actions={<Button variant={BUTTON_VARIANT.QUIET}>Reset</Button>}>
+    <SettingsPage
+      title={title}
+      place={place}
+      actions={<Button variant={BUTTON_VARIANT.QUIET}>Reset</Button>}
+    >
       <SettingsSection title="General">
         <SwitchRow
           label="Launch at login"
@@ -79,6 +86,11 @@ function SettingsPages(): React.JSX.Element {
       <CatalogSection id="settings-page-narrow" title="Narrower than 480px, a long title">
         <div className="catalog-settings-frame catalog-settings-frame-narrow">
           <Page title="Coding agents and their pull requests" />
+        </div>
+      </CatalogSection>
+      <CatalogSection id="settings-page-in-bar" title="Titled in a bar above it, a phone's">
+        <div className="catalog-settings-frame catalog-settings-frame-narrow">
+          <Page title="General" place={SETTINGS_PAGE_TITLE.IN_BAR} />
         </div>
       </CatalogSection>
       <CatalogSection id="settings-page-empty" title="An empty state filling the page">
