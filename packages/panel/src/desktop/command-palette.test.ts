@@ -18,9 +18,11 @@ import {
   PULL_REQUEST_STATE,
 } from "@luke/features/coding-agent-wire";
 import {
+  INBOX_ASK,
+  INBOX_ASK_STATUS,
+  INBOX_FIELD,
   INBOX_MESSAGE_AUTHOR,
   INBOX_REPLY,
-  INBOX_RESPONSE,
   INBOX_STATUS,
   INBOX_WIRE_VERSION,
   type InboxItem,
@@ -267,10 +269,11 @@ function heard(node: Node): string {
   return [...node.childNodes].map(heard).join("");
 }
 
-/** Each row the palette lists, as its name and the muted words after it. */
+/** Each row the palette lists, as what leads it, its name, and the muted words after it. */
 function rows(): string[] {
   return [...document.querySelectorAll('[role="option"]')].map((row) =>
     [
+      row.querySelector(".luke-combobox-option-lead"),
       row.querySelector(".luke-combobox-option-label"),
       row.querySelector(".luke-combobox-option-detail"),
     ]
@@ -1156,7 +1159,7 @@ test("a task's row ends as its sidebar row does, who is on it then an agent at w
 
   assert.deepEqual(ends(), [["unassigned", "working"], ["unassigned"]]);
   type("ACME-12");
-  assert.deepEqual(rows(), ["Billing usage alerts · ACME-12 · acme/billing"]);
+  assert.deepEqual(rows(), ["ACME-12 · Billing usage alerts · billing"]);
 });
 
 test("an agent pressed on a task's card in ⌘K over Settings leaves the palette for the tasks and opens the agent's tab, as a row does", () => {
@@ -1244,8 +1247,8 @@ test("Search lists the listed workspace's plans first, then every other workspac
   const listed = rows();
   type("northwind");
 
-  assert.deepEqual(listed, ["Dotfiles sync", "Checkout retries · Northwind · northwind/shop"]);
-  assert.deepEqual(rows(), ["Checkout retries · Northwind · northwind/shop"]);
+  assert.deepEqual(listed, ["Dotfiles sync", "Checkout retries · Northwind · shop"]);
+  assert.deepEqual(rows(), ["Checkout retries · Northwind · shop"]);
   assert.equal(
     document.querySelector(
       ".luke-combobox-option-detail .workspace-ref .luke-avatar[data-shape='tile']",
@@ -1255,7 +1258,38 @@ test("Search lists the listed workspace's plans first, then every other workspac
   );
 });
 
-test("a task's row says its key, which marks what the query typed, a key typed whole in any case lists its task first, ahead of a longer key it begins, and choosing it opens the task", () => {
+test("a task's row says its repository by its name, as the Tasks list's row does, both owner and name where two listed repositories share the name", () => {
+  const acme = { id: "workspace-acme", name: "Acme", role: WORKSPACE_ROLE.OWNER, github: null };
+  const task = (number: number, name: string, repository: string) => ({
+    id: `task-${number}`,
+    workspaceId: acme.id,
+    number,
+    name,
+    createdAt: 1,
+    updatedAt: 10 - number,
+    repository,
+  });
+  openPalette(
+    tasksControl({
+      workspaces: [acme],
+      workspace: acme,
+      tasks: [
+        task(1, "Invoice export", "acme/billing"),
+        task(2, "Login page", "acme/web"),
+        task(3, "Docs site", "oss/web"),
+      ],
+    }),
+  );
+  chooseFilter("Tasks");
+
+  assert.deepEqual(rows(), [
+    "ACME-1 · Invoice export · billing",
+    "ACME-2 · Login page · acme/web",
+    "ACME-3 · Docs site · oss/web",
+  ]);
+});
+
+test("a task's row leads with its key, which marks what the query typed, a key typed whole in any case lists its task first, ahead of a longer key it begins, and choosing it opens the task", () => {
   const stage = { id: "workspace-stage", name: "Stage", role: WORKSPACE_ROLE.OWNER, github: null };
   const task = (number: number, name: string) => ({
     id: `task-${number}`,
@@ -1281,17 +1315,17 @@ test("a task's row says its key, which marks what the query typed, a key typed w
   type("stag-42");
 
   assert.deepEqual(rows(), [
-    "Billing usage alerts from the meter · STAG-42 · stage/luke",
-    "Cut the release · STAG-421 · stage/luke",
+    "STAG-42 · Billing usage alerts from the meter · luke",
+    "STAG-421 · Cut the release · luke",
   ]);
   type("STAG-421");
-  assert.deepEqual(rows()[0], "Cut the release · STAG-421 · stage/luke");
+  assert.deepEqual(rows()[0], "STAG-421 · Cut the release · luke");
   assert.equal(
     document.querySelector('[role="option"] [data-task-key] .search-match')?.textContent,
     "STAG-421",
     "the key the query typed is marked in the row, so it says why the task was found",
   );
-  press("Cut the release · STAG-421 · stage/luke");
+  press("STAG-421 · Cut the release · luke");
   assert.deepEqual(sent, ["task-421"]);
 });
 
@@ -1327,11 +1361,7 @@ test("a task wears who is on it at its row's end, a teammate by face, no one on 
       return mark === null ? null : [mark.getAttribute("data-kind"), mark.textContent];
     });
 
-  assert.deepEqual(rows(), [
-    "Retry budget · acme/relay",
-    "Rate limits · acme/relay",
-    "Cache keys · acme/relay",
-  ]);
+  assert.deepEqual(rows(), ["Retry budget · relay", "Rate limits · relay", "Cache keys · relay"]);
   // Charles is on Retry budget, Dean, the reader, on Rate limits, though Charles made it, and no one on Cache keys.
   assert.deepEqual(marks(), [["person", "C"], null, ["unassigned", ""]]);
   const hints = [...document.querySelectorAll('[role="option"]')].map(
@@ -1341,20 +1371,20 @@ test("a task wears who is on it at its row's end, a teammate by face, no one on 
   assert.match(hints[2] ?? "", /\(unassigned\)/u);
   type("charles");
   assert.deepEqual(rows(), [
-    "Retry budget · acme/relay · Charles Pan",
-    "Rate limits · acme/relay · Charles Pan",
+    "Retry budget · relay · Charles Pan",
+    "Rate limits · relay · Charles Pan",
   ]);
   type("priya");
-  assert.deepEqual(rows(), ["Cache keys · acme/relay · Priya Raman"]);
+  assert.deepEqual(rows(), ["Cache keys · relay · Priya Raman"]);
   // A query the name answers only loosely still shows the name it was found by,
   // and one the task's other words answer, however loosely, leaves the name unsaid.
   type("chrls");
-  assert.equal(rows()[0], "Retry budget · acme/relay · Charles Pan");
+  assert.equal(rows()[0], "Retry budget · relay · Charles Pan");
   type("rtry");
-  assert.equal(rows()[0], "Retry budget · acme/relay");
+  assert.equal(rows()[0], "Retry budget · relay");
   // A query running from the task's name into its assignee's names them too.
   type("budgetch");
-  assert.deepEqual(rows(), ["Retry budget · acme/relay · Charles Pan"]);
+  assert.deepEqual(rows(), ["Retry budget · relay · Charles Pan"]);
 });
 
 test("a task whose assignee and creator share a first name says the one the whole query names", () => {
@@ -1381,9 +1411,9 @@ test("a task whose assignee and creator share a first name says the one the whol
   chooseFilter("Tasks");
 
   type("charles pan");
-  assert.deepEqual(rows(), ["Audit trail · acme/relay · Charles Pan"]);
+  assert.deepEqual(rows(), ["Audit trail · relay · Charles Pan"]);
   type("charles");
-  assert.deepEqual(rows(), ["Audit trail · acme/relay · Charles Ward"]);
+  assert.deepEqual(rows(), ["Audit trail · relay · Charles Ward"]);
 });
 
 test("a task Luke or a coding agent made says who in its detail and is found by it, but wears who is on it rather than its maker", () => {
@@ -1419,13 +1449,13 @@ test("a task Luke or a coding agent made says who in its detail and is found by 
     );
 
   assert.deepEqual(rows(), [
-    "Invite emails · acme/relay · by Coding agent",
-    "Audit log export · acme/relay · by Luke",
-    "Rate limits · acme/relay",
+    "Invite emails · relay · by Coding agent",
+    "Audit log export · relay · by Luke",
+    "Rate limits · relay",
   ]);
   assert.deepEqual(marks(), [null, null, null]);
   type("coding agent");
-  assert.deepEqual(rows(), ["Invite emails · acme/relay · by Coding agent"]);
+  assert.deepEqual(rows(), ["Invite emails · relay · by Coding agent"]);
 });
 
 /** Offers ⌘K's own Show my tasks, as the sidebar does while it would change the list, and records each run. */
@@ -2306,7 +2336,7 @@ const ROTATION: TaskSummary = {
   agents: { total: 1, working: 1, agents: [ASKER], pullRequestTotal: 0, pullRequests: [] },
 };
 
-/** An open item of the agent's, asking a choice, its thread one message of the agent's words. */
+/** An open item of the agent's, its thread one message of the agent's words. */
 function askedItem(id: string, title: string, said: string, updatedAt: number): InboxItem {
   return {
     id,
@@ -2315,8 +2345,6 @@ function askedItem(id: string, title: string, said: string, updatedAt: number): 
     revision: 1,
     version: INBOX_WIRE_VERSION,
     title,
-    blocks: [],
-    response: { type: INBOX_RESPONSE.APPROVAL },
     needsReply: true,
     status: INBOX_STATUS.OPEN,
     thread: [
@@ -2460,7 +2488,30 @@ test("an Inbox item is found by a form's field and the value it was answered wit
       4_000,
     ),
     status: INBOX_STATUS.ANSWERED,
-    answer: { reply: INBOX_REPLY.ANSWERED, values: [{ label: "SMTP port", value: 587 }] },
+    thread: [
+      {
+        id: "a1b2c3d4-0000-4000-8000-00000000ff13",
+        author: INBOX_MESSAGE_AUTHOR.AGENT,
+        text: "Fill in the relay.",
+        ask: {
+          type: INBOX_ASK.ANSWER,
+          fields: [{ label: "SMTP port", type: INBOX_FIELD.NUMBER }],
+          status: INBOX_ASK_STATUS.ANSWERED,
+        },
+        createdAt: 4_000,
+      },
+      {
+        id: "a1b2c3d4-0000-4000-8000-00000000fe13",
+        author: INBOX_MESSAGE_AUTHOR.MEMBER,
+        text: "",
+        answers: {
+          ask: "a1b2c3d4-0000-4000-8000-00000000ff13",
+          reply: INBOX_REPLY.SUBMITTED,
+          values: [{ label: "SMTP port", value: 587 }],
+        },
+        createdAt: 4_000,
+      },
+    ],
     settledAt: 4_000,
   };
   paletteOverInbox(() => ({ items: [PORT] }));

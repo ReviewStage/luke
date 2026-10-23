@@ -1469,8 +1469,9 @@ export type PullRequestStackEntry = typeof stackEntrySchema.Type;
 /**
  * The pull request itself as its Pull request tab's overview draws it (GET),
  * the first of the overview's three reads, each of which lands on its own:
- * where it stands, its title, number, and page; its description as GitHub
- * renders it (`body_html`), empty where it has none; the branch it merges
+ * where it stands, its title, number, and page; its description as
+ * written and as GitHub renders it (`body_html`), each empty where it has
+ * none, and whether the member reading may edit it; the branch it merges
  * into and the one it merges from, with the account whose fork that one
  * stands on where it is not the repository's own (absent from a service
  * before it); when it was opened, and merged where it
@@ -1489,7 +1490,11 @@ export const codingAgentOverviewPullRequestAnswerSchema = EffectSchema.Struct({
       title: EffectSchema.String,
       url: EffectSchema.String,
       state: EffectSchema.Literals(Object.values(PULL_REQUEST_STATE)),
+      /** Its description as written, Markdown, which an edit of it begins from; absent from a service before it. */
+      body: EffectSchema.optionalKey(EffectSchema.String),
       html: EffectSchema.String,
+      /** Whether the member reading may edit its description on their own GitHub sign-in; absent from a service before it. */
+      canEditDescription: EffectSchema.optionalKey(EffectSchema.Boolean),
       base: overviewName,
       head: overviewName,
       headOwner: EffectSchema.optionalKey(overviewName),

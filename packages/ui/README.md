@@ -111,9 +111,17 @@ at a time, each behind the props it already has, so no call site changes
 as it moves. A vendored shadcn component lives in `src/shadcn/`, generated
 by the shadcn CLI (style `base-nova`, base `base`) and drawn in the Tailwind
 theme above; the `@luke/ui` component an app imports wraps it. Moved so far:
-`Switch`; and the text entries and form pieces, `TextField`, `TextArea`,
+`Switch`; `Menu` and its submenus, on Base UI's menu (`useMenu`'s
+`contextMenu` stays a spread, the same menu hung at the pointer); and
+`Combobox` and `Calendar`, drawn in shadcn's combobox and calendar classes
+over engines of their own, since each one's caller owns what Base UI's
+combobox or react-day-picker would (the open list, its filter and
+highlight; a controlled `YYYY-MM-DD` month in UTC). What a component's
+classes cannot say (keyframes other surfaces share, a rule a finger's
+media query must outrank, the keyboard's ring) stays in its own sheet.
+The text entries and form pieces, `TextField`, `TextArea`,
 `SearchField`, `AddressField`, `FormField`, `InlineEdit`, and
-`LengthCounter`, over shadcn's Input, Textarea, Label, and Field. A name the
+`LengthCounter`, stand on shadcn's Input, Textarea, Label, and Field. A name the
 theme adds that tailwind-merge cannot read as a size is listed in `cn.ts`, or
 `cn` drops it as a second colour.
 

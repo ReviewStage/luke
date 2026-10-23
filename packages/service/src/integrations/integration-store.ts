@@ -8,8 +8,7 @@
  * name, so every read and write here names the row by the Luke account and
  * that name. A sign-in begins by writing its one-time state beside whatever
  * the row already said, so an account signing in again keeps working while
- * it does, with the handle Connect answered it with, which goes with the
- * state; the sign-in completes by setting the row connected and clearing the
+ * it does; the sign-in completes by setting the row connected and clearing the
  * state, or ends without a grant by clearing the state alone (a first
  * sign-in's row with it); a Disconnect deletes the row. Every function here
  * is an effect over the ambient `SqlClient`.
@@ -28,7 +27,7 @@ import {
   integrationProviderSchema,
 } from "@luke/features/integration-wire";
 import { and, eq, isNull, sql } from "drizzle-orm";
-import { DateTime, Effect, Option, Redacted, Schema } from "effect";
+import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
 
 export type IntegrationStoreEffect<A> = Effect.Effect<
@@ -54,8 +53,6 @@ export interface IntegrationConnectionRow {
   readonly state: string | undefined;
   /** When the sign-in under way began; nothing when none is. */
   readonly stateIssuedAt: Date | undefined;
-  /** Connect's handle on the sign-in under way, which asks it how that sign-in ended; nothing when none is. */
-  readonly verifier: Redacted.Redacted | undefined;
   /** When a sign-in last completed, which names the grant the row stands for; nothing until one has. */
   readonly connectedAt: Date | undefined;
 }
@@ -77,7 +74,6 @@ const IntegrationRowSchema = Schema.Struct({
   status: Schema.Literals(Object.values(INTEGRATION_ROW_STATUS)),
   state: Schema.NullOr(Schema.String),
   stateIssuedAt: Schema.NullOr(InstantColumnSchema),
-  connectVerifier: Schema.NullOr(Schema.String),
   connectedAt: Schema.NullOr(InstantColumnSchema),
 });
 
@@ -91,7 +87,6 @@ const ROW_COLUMNS = {
   status: integrationConnection.status,
   state: integrationConnection.state,
   stateIssuedAt: integrationConnection.stateIssuedAt,
-  connectVerifier: integrationConnection.connectVerifier,
   connectedAt: integrationConnection.connectedAt,
 };
 
@@ -106,7 +101,6 @@ function rowOf(row: typeof IntegrationRowSchema.Type): IntegrationConnectionRow 
     status: row.status,
     state: row.state ?? undefined,
     stateIssuedAt: row.stateIssuedAt ?? undefined,
-    verifier: row.connectVerifier === null ? undefined : Redacted.make(row.connectVerifier),
     connectedAt: row.connectedAt ?? undefined,
   };
 }
@@ -187,7 +181,6 @@ const BeginSchema = Schema.Struct({
   connectionName: Schema.String,
   connectSubject: Schema.String,
   state: Schema.String,
-  verifier: Schema.String,
   at: Schema.Date,
 });
 
@@ -201,7 +194,7 @@ const BeginSchema = Schema.Struct({
 const upsertSignIn = SqlSchema.findAll({
   Request: BeginSchema,
   Result: Schema.Struct({ id: Schema.String }),
-  execute: ({ id, userId, provider, connectionName, connectSubject, state, verifier, at }) =>
+  execute: ({ id, userId, provider, connectionName, connectSubject, state, at }) =>
     Database.use((db) =>
       db
         .insert(integrationConnection)
@@ -214,12 +207,11 @@ const upsertSignIn = SqlSchema.findAll({
           status: INTEGRATION_ROW_STATUS.PENDING,
           state,
           stateIssuedAt: at,
-          connectVerifier: verifier,
           updatedAt: at,
         })
         .onConflictDoUpdate({
           target: [integrationConnection.userId, integrationConnection.connectionName],
-          set: { state, stateIssuedAt: at, connectVerifier: verifier, updatedAt: at },
+          set: { state, stateIssuedAt: at, updatedAt: at },
           setWhere: eq(integrationConnection.connectSubject, connectSubject),
         })
         .returning({ id: integrationConnection.id }),
@@ -228,15 +220,13 @@ const upsertSignIn = SqlSchema.findAll({
 
 /**
  * Records a sign-in under way for one account at a provider, under the
- * state only its callback carries back and the handle Connect answered it
- * with; answers whether it took, which it does not where the name already
+ * state only its callback carries back; answers whether it took, which it does not where the name already
  * stands for another subject's account.
  */
 export function beginIntegrationSignIn(
   userId: string,
   account: IntegrationAccountKey,
   state: string,
-  verifier: Redacted.Redacted,
 ): IntegrationStoreEffect<boolean> {
   return Effect.gen(function* () {
     const at = yield* DateTime.nowAsDate;
@@ -247,7 +237,6 @@ export function beginIntegrationSignIn(
       connectionName: account.connectionName,
       connectSubject: account.connectSubject,
       state,
-      verifier: Redacted.value(verifier),
       at,
     });
     return taken.length > 0;
@@ -286,7 +275,6 @@ const updateConnected = SqlSchema.findAll({
           status: INTEGRATION_ROW_STATUS.CONNECTED,
           state: null,
           stateIssuedAt: null,
-          connectVerifier: null,
           // A label the account already carries, the developer's own among them, is kept over the grant's; an empty one, which a grant that named nothing left, is not.
           label: sql`coalesce(nullif(${integrationConnection.label}, ''), ${label})`,
           connectedAt: at,
@@ -483,7 +471,7 @@ const clearState = SqlSchema.void({
     Database.use((db) =>
       db
         .update(integrationConnection)
-        .set({ state: null, stateIssuedAt: null, connectVerifier: null, updatedAt: at })
+        .set({ state: null, stateIssuedAt: null, updatedAt: at })
         .where(and(ofAccount(account), eq(integrationConnection.state, state))),
     ),
 });

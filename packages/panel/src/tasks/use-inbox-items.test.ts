@@ -2,7 +2,13 @@
 
 import assert from "node:assert/strict";
 import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
-import { INBOX_RESPONSE, INBOX_STATUS, type InboxItem } from "@luke/features/inbox-wire";
+import {
+  INBOX_ASK,
+  INBOX_ASK_STATUS,
+  INBOX_MESSAGE_AUTHOR,
+  INBOX_STATUS,
+  type InboxItem,
+} from "@luke/features/inbox-wire";
 import type { AppInboxTaskHolding } from "@luke/host/app-state";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -41,8 +47,19 @@ const ITEM: InboxItem = {
   revision: 1,
   version: 1,
   title: "Deploy tonight?",
-  blocks: [],
-  response: { type: INBOX_RESPONSE.APPROVAL },
+  thread: [
+    {
+      id: "4e4f5a6b-7c8d-4e9f-8a0b-1c2d3e4f5a6b",
+      author: INBOX_MESSAGE_AUTHOR.AGENT,
+      text: "Approve or decline.",
+      ask: {
+        type: INBOX_ASK.DECIDE,
+        options: [{ label: "Approve" }, { label: "Decline" }],
+        status: INBOX_ASK_STATUS.OPEN,
+      },
+      createdAt: 1,
+    },
+  ],
   needsReply: true,
   status: INBOX_STATUS.OPEN,
   postedAt: 1,

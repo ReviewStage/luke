@@ -36,13 +36,9 @@
   --color-well: var(--luke-color-well);
   --color-field: var(--luke-color-input);
   --color-field-focus: var(--luke-color-input-focus);
-  --color-destructive: var(--luke-color-danger);
   --color-ground: var(--luke-color-ground);
-  --color-fill-selected: var(--luke-color-fill-selected);
   --color-fill-pressed: var(--luke-color-fill-pressed);
   --font-body: var(--luke-font-sans);
-  --text-label: var(--luke-type-label-size);
-  --text-label--line-height: var(--luke-type-label-leading);
   --text-title: var(--luke-type-title-size);
   --text-title--line-height: var(--luke-type-title-leading);
   /* A field set a size under the body's keeps the body's line. */
@@ -52,17 +48,11 @@
   /* A finger's field takes 16px words at least, or iOS zooms into it. */
   --text-touch: max(16px, 1em);
   --text-caption-touch: max(16px, var(--luke-type-caption-size));
-  /* The base scale by name, because Tailwind's numbered steps are rems of a
-     root the window sets at the body's size, not 16px. */
-  --spacing-luke-2: var(--luke-space-2);
-  --spacing-luke-4: var(--luke-space-4);
-  --spacing-luke-6: var(--luke-space-6);
-  --spacing-luke-8: var(--luke-space-8);
-  --spacing-luke-12: var(--luke-space-12);
-  --spacing-luke-16: var(--luke-space-16);
+  /* The base scale's larger steps by name (the smaller stand with the menus'
+     roles below), because Tailwind's numbered steps are rems of a root the
+     window sets at the body's size, not 16px. */
   --spacing-luke-20: var(--luke-space-20);
   --spacing-luke-24: var(--luke-space-24);
-  --spacing-control: var(--luke-control-height);
   --spacing-control-inset: var(--luke-control-inset);
   --spacing-control-icon: var(--luke-control-icon);
   /* A field a step under a control, among a bar's controls. */
@@ -106,7 +96,6 @@
   /* off-scale: a 24px box over an 18px label line stands 3px past it each side. */
   --spacing-inline-edit-lift: 3px;
   --spacing-inline-edit-reach: calc(-1 * var(--luke-space-8) - 1px);
-  --radius-control: var(--luke-control-radius);
   --radius-control-compact: calc(var(--luke-control-radius) - var(--luke-space-2));
   --radius-inline-edit: calc(var(--luke-radius-6) - 1px);
   --shadow-selected-edge: inset 0 0 0 1px var(--luke-color-border-selected);
@@ -327,6 +316,50 @@
       opacity: 0;
     }
   }
+
+  /* The menu and picker roles (`../shadcn/dropdown-menu.tsx`,
+     `../shadcn/combobox.ts`, `../shadcn/calendar.ts`) the overlays' above
+     leave out: the inks, the corners, and the sizes a menu's surface and its
+     rows, a list, and a month are drawn at, each set per profile. */
+  --color-secondary: var(--luke-color-fill-strong);
+  --color-destructive: var(--luke-color-danger);
+  --color-input: var(--luke-color-input);
+  /* A picked day's fill and ink, and the wash of a range between its ends. */
+  --color-accent-fill: var(--luke-color-accent);
+  --color-accent-ink: var(--luke-color-accent-text);
+  --color-on-accent: var(--luke-color-on-accent);
+  --color-fill-selected: var(--luke-color-fill-selected);
+  /* A toolbar floated on the menu's surface: a row's round, a hair out. */
+  --radius-menu-toolbar: calc(var(--luke-menu-row-radius) + var(--luke-space-2));
+  --radius-control: var(--luke-control-radius);
+  --spacing-control: var(--luke-control-height);
+  /* The base scale, as `p-luke-8` (`tokens/scale.css`), because the window's
+     root type is 13px and Tailwind's own numbered steps are rems of it. */
+  --spacing-luke-2: var(--luke-space-2);
+  --spacing-luke-4: var(--luke-space-4);
+  --spacing-luke-6: var(--luke-space-6);
+  --spacing-luke-8: var(--luke-space-8);
+  --spacing-luke-12: var(--luke-space-12);
+  --spacing-luke-16: var(--luke-space-16);
+  --spacing-luke-40: var(--luke-space-40);
+  /* off-scale: a menu's least and most width, and a settings chevron in a row's end */
+  --spacing-menu-least: 196px;
+  --spacing-menu-most: 280px;
+  --spacing-menu-chevron: 14px;
+  /* A menu as tall as can be seen, a margin short of either edge, so a long
+     one scrolls above a phone's keyboard (`tokens/viewport.css`). */
+  --spacing-menu-max: calc(var(--luke-stage-height) - 2 * var(--luke-space-8));
+  /* A list's cap, an app's placement hook (README's "Placement hooks"). */
+  --spacing-combobox-list: var(--luke-combobox-list-max, 280px);
+  /* off-scale: the column a list's leads stand in, wide enough for a task's long key */
+  --spacing-combobox-lead: 9ch;
+  --text-label: var(--luke-type-label-size);
+  --text-label--line-height: var(--luke-type-label-leading);
+  /* A menu's exit, a fade, over `menu.css`'s keyframes; its entrance is the
+     overlays' `--animate-menu-in` above. */
+  --animate-menu-leave: luke-menu-leave var(--luke-duration-exit) var(--luke-motion-exit) forwards;
+  --z-index-menu: var(--luke-z-menu);
+  --z-index-menu-over-dialog: calc(var(--luke-z-dialog) + 1);
 
   /* Motion comes from the motion tokens alone (docs/DESIGN.md): a `transition`
      utility runs on the quick duration and the spring, never on Tailwind's

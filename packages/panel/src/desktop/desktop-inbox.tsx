@@ -42,7 +42,7 @@ import { TOOL_TARGET, type ToolTarget } from "../tasks/tool-call-model.js";
 import type { CodingAgentsControl } from "../tasks/use-coding-agents.js";
 import { type InboxListing, useInboxListing } from "../tasks/use-inbox-listing.js";
 import { useNodOnOpen, useReadOnOpen } from "../tasks/use-inbox-read-marks.js";
-import { type OpenHere, OpenHereProvider, useOpenLink } from "../tasks/use-open-link.js";
+import { type OpenHere, OpenHereProvider } from "../tasks/use-open-link.js";
 import { PULL_REQUEST_VIEW, type SidePanelControl } from "../tasks/use-side-panel.js";
 import { AUTOMATIONS_PAGE, type InboxChoice, type TasksControl } from "../tasks/use-tasks-tab.js";
 import { useAgentCallDoors } from "./agent-actions.js";
@@ -207,7 +207,6 @@ function InboxShown({
   } = listing;
   // New task is the way on from an Inbox with nothing in it, wherever an account can start one.
   const newTask = tasks.signedIn ? tasks.onNewTask : undefined;
-  const openLink = useOpenLink();
   const now = useMinute();
   // A missing item's pane stands where its item would, so a narrow Inbox shows the notice rather than the list.
   // Note that the window keeps whether the list was asked for, so its history can go back to it.
@@ -390,9 +389,6 @@ function InboxShown({
         return true;
     }
   };
-  const openItemLink = (href: string) => {
-    if (!openHere(href)) openLink(href);
-  };
   return (
     <LinkWorkspaceProvider value={listedWorkspace?.slug ?? listedWorkspace?.id}>
       <MemberDirectory workspace={tasks.workspace} readerId={tasks.me}>
@@ -527,7 +523,6 @@ function InboxShown({
                           doors={{
                             ...paneDoors(tasks, chosen.holder, {
                               act,
-                              openLink: openItemLink,
                               now,
                               panelFor,
                               besideAgents: named.agentIds,
@@ -713,7 +708,6 @@ function paneDoors(
   holder: InboxHolder,
   seams: {
     act: ReturnType<typeof useAct>["act"];
-    openLink: (url: string) => void;
     now: number;
     /** The task, or the agent, the panel beside the Inbox stands for. */
     panelFor: string | undefined;
@@ -734,7 +728,6 @@ function paneDoors(
         !pressedWithCommand()
           ? tasks.sidePanel.onPreview({ transcript: agentId })
           : tasks.onShowAgent(task.id, agentId),
-      openLink: seams.openLink,
       code: {
         repository: task.repository,
         readFile: (window) => seams.act(ACT_KIND.TASKS_FILE, { taskId: task.id, ...window }),
@@ -754,7 +747,6 @@ function paneDoors(
         : undefined,
     taskCard: undefined,
     onOpenAgent: (agentId) => tasks.agentView.onOpen(agentId),
-    openLink: seams.openLink,
     code: { repository: null, readFile: UNREAD_FILE, onOpenFile: () => undefined },
   };
 }
