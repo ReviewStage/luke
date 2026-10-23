@@ -7,6 +7,7 @@ import {
   type PlanEditorBlocks,
   SLASH_INSERT,
   type SlashBlock,
+  sameTrigger,
 } from "./contract.js";
 import { turnInto } from "./writing-format.js";
 
@@ -111,18 +112,6 @@ function slashAt(view: EditorView): SlashWord | undefined {
     from,
     to: selection.from + rest,
   };
-}
-
-/** Whether two reports say the same, so an unchanged word is not reported again. */
-function sameTrigger(a: ComposerTrigger | undefined, b: ComposerTrigger | undefined): boolean {
-  if (a === undefined || b === undefined) return a === b;
-  return (
-    a.start === b.start &&
-    a.query === b.query &&
-    a.rect.left === b.rect.left &&
-    a.rect.top === b.rect.top &&
-    a.rect.bottom === b.rect.bottom
-  );
 }
 
 /** The `/` word found again, and reported where it changed. */

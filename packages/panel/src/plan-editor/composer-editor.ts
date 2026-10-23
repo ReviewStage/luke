@@ -50,6 +50,7 @@ import {
   type ComposerQuote,
   type ComposerTrigger,
   type MentionNode,
+  sameTrigger,
 } from "./contract.js";
 import {
   MENTION_NODE,
@@ -513,18 +514,6 @@ function triggerAt(
     from: whole.from,
     to: whole.to,
   };
-}
-
-/** Whether two reports say the same, so an unchanged word is not reported again. */
-function sameTrigger(a: ComposerTrigger | undefined, b: ComposerTrigger | undefined): boolean {
-  if (a === undefined || b === undefined) return a === b;
-  return (
-    a.start === b.start &&
-    a.query === b.query &&
-    a.rect.left === b.rect.left &&
-    a.rect.top === b.rect.top &&
-    a.rect.bottom === b.rect.bottom
-  );
 }
 
 /** The `skill` chip: an atom read out as `/name`, its look the panel's (`drawChip`), its name in the node and never in the DOM's attributes. */
