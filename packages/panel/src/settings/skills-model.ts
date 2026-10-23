@@ -36,7 +36,11 @@ import {
   type SkillPaste,
   type SkillPasteUnsupportedReason,
 } from "@luke/features/skill-paste";
-import { TASK_SKILL_BOUNDS } from "@luke/features/task-wire";
+import {
+  TASK_SKILL_BOUNDS,
+  TASK_SKILL_SOURCE,
+  type TaskSkillSource,
+} from "@luke/features/task-wire";
 import type { Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
 
 /**
@@ -66,8 +70,6 @@ export const SKILLS_LINE = {
   ABOUT:
     "Repository skills come from each repository's .agents/skills folder. Changes here reach only agents started afterwards.",
   PERSONAL: "Personal",
-  WORKSPACE_BADGE: "Workspace",
-  PERSONAL_BADGE: "Personal",
   PASTED: "pasted",
   NONE: "No skills installed yet.",
   READ_FAILED: "Your skills could not be read.",
@@ -133,8 +135,8 @@ export function sourceLine(source: InstalledSkillSource): string {
 /** One skill's row as the page draws it. */
 export interface SkillRow {
   readonly skill: InstalledSkillSummary;
-  /** The badge beside its name. */
-  readonly badge: string;
+  /** Whose it is, which its source badge says at its end and its card's head. */
+  readonly source: TaskSkillSource;
   /** Where its files came from, and who installed it where that is someone else. */
   readonly line: string;
   /** Whether it is read from GitHub, so may have an update. */
@@ -158,7 +160,7 @@ function installerOf(
   return members?.find((each) => each.userId === skill.installedBy)?.name;
 }
 
-/** One skill's row: its badge and its line, the source then who installed it. */
+/** One skill's row: its source and its line, where its files came from then who installed it. */
 function rowOf(
   skill: InstalledSkillSummary,
   readerId: string | undefined,
@@ -168,7 +170,7 @@ function rowOf(
   const installer = workspace ? installerOf(skill, readerId, members) : undefined;
   return {
     skill,
-    badge: workspace ? SKILLS_LINE.WORKSPACE_BADGE : SKILLS_LINE.PERSONAL_BADGE,
+    source: workspace ? TASK_SKILL_SOURCE.WORKSPACE : TASK_SKILL_SOURCE.PERSONAL,
     line:
       installer === undefined
         ? sourceLine(skill.source)

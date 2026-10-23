@@ -26,13 +26,14 @@ import {
   ListRow,
   type ListRowHint,
   McpIcon,
-  ONE_LINE_END,
   OneLine,
   POPOVER_ALIGN,
   POPOVER_PANEL_LOOK,
   PopoverPanel,
   PROVIDER_MARK_SIZE,
   ProviderMark,
+  RowHint,
+  RowHintOptions,
   SCROLL_SIZE,
   ScrollArea,
   SEARCH_FIELD_LOOK,
@@ -81,6 +82,7 @@ import {
 } from "../integration-tool-list.js";
 import { useIntegrationTools } from "../integration-tools.js";
 import { Highlighted } from "../search-field.js";
+import { ServerCard } from "./server-card.js";
 
 /**
  * agent-servers.tsx -- the MCP button at an agent box's foot, and the popover that lists the servers the agent is handed with a switch for each, and each server's tools.
@@ -224,17 +226,12 @@ export function ServerRowWords({ row }: { row: ServerRow }): React.JSX.Element {
         </Tooltip>
       ) : null}
       {row.problem !== undefined ? (
-        <OneLine
-          end={ONE_LINE_END.ELLIPSIS}
-          hint={wholeWordsHint(row.problem)}
-          className="agent-servers-problem"
-        >
+        <OneLine hint={wholeWordsHint(row.problem)} className="agent-servers-problem">
           {row.problem}
         </OneLine>
       ) : null}
       {row.note !== undefined && row.kind !== SERVER_ROW.SIGNING_IN ? (
         <OneLine
-          end={ONE_LINE_END.ELLIPSIS}
           hint={wholeWordsHint(row.note)}
           className="agent-servers-problem agent-servers-problem-quiet"
         >
@@ -339,17 +336,22 @@ const RowHighlight = createContext<(() => void) | undefined>(undefined);
 
 /**
  * The pointer coming onto a row's press makes it the highlighted one, as a
- * menu's highlight follows the pointer. Note that it rides the row's hint
- * slot, the one door to its press's pointer handlers, and raises no words.
+ * menu's highlight follows the pointer, and the press hangs the card its
+ * row's `RowHintOptions` hand it (`RowHint`). Note that it rides the row's
+ * hint slot, the one door to its press's pointer handlers.
  */
-const PointerHighlight: ListRowHint = ({ children }) => {
+const PointerHighlight: ListRowHint = ({ label, children }) => {
   const highlight = useContext(RowHighlight);
-  return cloneElement(children, {
-    onPointerEnter: (event) => {
-      children.props.onPointerEnter?.(event);
-      highlight?.();
-    },
-  });
+  return (
+    <RowHint label={label}>
+      {cloneElement(children, {
+        onPointerEnter: (event) => {
+          children.props.onPointerEnter?.(event);
+          highlight?.();
+        },
+      })}
+    </RowHint>
+  );
 };
 
 function ServersPopover({
@@ -626,6 +628,8 @@ function ServersPopover({
     title: React.ReactNode;
     meta?: React.ReactNode;
     actions?: React.ReactNode;
+    /** The server's card, or the card of the tool a search found, hung beside the row. */
+    card: React.ReactNode;
     onPress: (() => void) | undefined;
   }) => {
     const { index } = input;
@@ -634,19 +638,21 @@ function ServersPopover({
         key={input.key}
         value={index < 0 || index === at ? undefined : () => setHighlight(index)}
       >
-        <ListRow
-          id={index < 0 ? undefined : `${rowsId}-${index}`}
-          leading={<ProviderMark provider={input.row.provider} />}
-          title={input.title}
-          meta={input.meta}
-          actions={input.actions}
-          current={index >= 0 && index === at ? LIST_ROW_CURRENT.ITEM : undefined}
-          chevron={input.onPress !== undefined}
-          keepFocus
-          tabbable={false}
-          onPress={input.onPress}
-          hint={{ Hint: PointerHighlight, label: input.row.name }}
-        />
+        <RowHintOptions card={input.card} cardBeside>
+          <ListRow
+            id={index < 0 ? undefined : `${rowsId}-${index}`}
+            leading={<ProviderMark provider={input.row.provider} size={PROVIDER_MARK_SIZE.ICON} />}
+            title={input.title}
+            meta={input.meta}
+            actions={input.actions}
+            current={index >= 0 && index === at ? LIST_ROW_CURRENT.ITEM : undefined}
+            chevron={input.onPress !== undefined}
+            keepFocus
+            tabbable={false}
+            onPress={input.onPress}
+            hint={{ Hint: PointerHighlight, label: input.row.name }}
+          />
+        </RowHintOptions>
       </RowHighlight.Provider>
     );
   };
@@ -657,6 +663,7 @@ function ServersPopover({
       index: pickIndex(row),
       row,
       title: <ServerRowWords row={row} />,
+      card: <ServerCard provider={row.provider} connection={row.connection} />,
       actions: end(row),
       onPress: opensTools(row) ? () => open(row) : undefined,
     });
@@ -672,6 +679,7 @@ function ServersPopover({
         </OneLine>
       ),
       meta: row.name,
+      card: <ServerCard provider={row.provider} connection={row.connection} tool={tool.name} />,
       onPress: () => open(row, query),
     });
 

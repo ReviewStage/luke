@@ -10,8 +10,6 @@ import { INSTALLED_SKILL_SOURCE } from "@luke/features/installed-skill-wire";
 import type { Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import {
-  BADGE_TONE,
-  Badge,
   BUTTON_VARIANT,
   Button,
   ConfirmDialog,
@@ -24,9 +22,11 @@ import {
   Facts,
   GAP,
   PlusIcon,
+  SETTINGS_ROW_MARK_WIDTH,
   SETTINGS_SKELETON_CONTROL,
   SettingsLine,
   SettingsRow,
+  SettingsRowMark,
   type SettingsRowSkeletonShape,
   SettingsRowsSkeleton,
   SettingsSection,
@@ -38,15 +38,19 @@ import {
   TEXT_ELEMENT,
   TEXT_VARIANT,
   Text,
+  Tooltip,
   TrashIcon,
   UpdateIcon,
   useConfirmDialog,
 } from "@luke/ui";
+import type { SkillOption } from "@luke/ui/skill-mention";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { FolderInputIcon } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAct } from "../act.js";
 import { MarkdownMessage } from "../markdown-message.js";
+import { SkillCard, SkillMark } from "../tasks/skill-ref.js";
+import { SkillSourceBadge } from "../tasks/skill-source-badge.js";
 import { useWorkspaceMembersRead } from "../tasks/use-workspace-members.js";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast.js";
 import { AddSkillDialog } from "./add-skill-dialog.js";
@@ -75,9 +79,11 @@ import type { WorkspaceSettingsControl } from "./workspace-page.js";
  *
  * The page lists the workspace the sidebar lists, its skills first under
  * its name, then the account's own under Personal, as the Automations list
- * groups (`skills-model.ts`). Each row is the skill's name, its scope's
- * badge, and under them its description, where its files came from, and who
- * installed it; at its end its switch and a ⋯ (`skillActions`): View, which
+ * groups (`skills-model.ts`). Each row leads with the book every skill leads
+ * with (`skill-ref.tsx`) and is the skill's name and under it its
+ * description, where its files came from, and who installed it, and it
+ * hangs the skill's card beside it; at its end its scope's badge, its
+ * switch and a ⋯ (`skillActions`): View, which
  * opens its `SKILL.md` and its files over the window; Share with workspace,
  * for the account's own skill outside a personal workspace, which asks
  * first because it moves the skill; Update, where a GitHub skill's folder
@@ -94,10 +100,11 @@ import type { WorkspaceSettingsControl } from "./workspace-page.js";
  * update, once.
  */
 
-/** An installed skill's row while the skills are read: its words over its source, its switch, and its ⋯. */
+/** An installed skill's row while the skills are read: its book, its words over its source, its switch, and its ⋯. */
 const SKILL_ROW_SKELETON: SettingsRowSkeletonShape = {
   described: true,
   controls: [SETTINGS_SKELETON_CONTROL.SWITCH, SETTINGS_SKELETON_CONTROL.MORE],
+  mark: SETTINGS_ROW_MARK_WIDTH,
 };
 
 /** A group of skills while it is read, one row standing for however many land. */
@@ -246,6 +253,12 @@ function SkillRowView({
 }): React.JSX.Element {
   const { act } = useAct();
   const { skill } = row;
+  // Note that an installed skill names no file of a repository's, so its card says where it comes from and what it is for alone.
+  const cardSkill: SkillOption = {
+    name: skill.name,
+    description: skill.description,
+    source: row.source,
+  };
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | undefined>(undefined);
   const [viewing, setViewing] = useState(false);
@@ -314,31 +327,45 @@ function SkillRowView({
 
   return (
     <>
-      <MenuRow
-        label={`${skill.name} actions`}
-        actions={actions}
-        row={{
-          label: skill.name,
-          adornment: <Badge tone={BADGE_TONE.NEUTRAL}>{row.badge}</Badge>,
-          description: `${skill.description} · ${row.line}`,
-          error,
-          landed,
-          describedControl: (control) => (
-            <Switch
-              checked={skill.enabled}
-              label={`Use ${skill.name}`}
-              describedBy={control["aria-describedby"]}
-              disabled={!skill.manageable || busy}
-              onChange={(enabled) =>
-                write(
-                  act(ACT_KIND.INSTALLED_SKILLS_SET_ENABLED, { skillId: skill.id, enabled }),
-                  false,
-                )
-              }
-            />
-          ),
-        }}
-      />
+      {/* Note that the card hangs from the row's own box, which the settings row draws no hint of, as the chip's card hangs from its pill. */}
+      <Tooltip
+        label={skill.name}
+        card={<SkillCard subject={{ skill: cardSkill, onOpen: () => undefined }} />}
+        cardBeside
+      >
+        <div>
+          <MenuRow
+            label={`${skill.name} actions`}
+            actions={actions}
+            row={{
+              leading: (
+                <SettingsRowMark>
+                  <SkillMark />
+                </SettingsRowMark>
+              ),
+              label: skill.name,
+              description: `${skill.description} · ${row.line}`,
+              error,
+              landed,
+              control: <SkillSourceBadge source={row.source} />,
+              describedControl: (control) => (
+                <Switch
+                  checked={skill.enabled}
+                  label={`Use ${skill.name}`}
+                  describedBy={control["aria-describedby"]}
+                  disabled={!skill.manageable || busy}
+                  onChange={(enabled) =>
+                    write(
+                      act(ACT_KIND.INSTALLED_SKILLS_SET_ENABLED, { skillId: skill.id, enabled }),
+                      false,
+                    )
+                  }
+                />
+              ),
+            }}
+          />
+        </div>
+      </Tooltip>
       <ConfirmDialog
         confirm={removal}
         question={{

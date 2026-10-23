@@ -4,7 +4,10 @@ import assert from "node:assert/strict";
 import type { IntegrationTool } from "@luke/features/integration-health";
 import {
   INTEGRATION_PROVIDER,
+  INTEGRATION_PROVIDER_LIST,
   INTEGRATION_STATUS,
+  INTEGRATION_TOOLS_PROBLEM,
+  type IntegrationProvider,
   type IntegrationStatus,
 } from "@luke/features/integration-wire";
 import { ACT_KIND } from "@luke/host/acts";
@@ -13,6 +16,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import type { IntegrationStatuses } from "../integration-statuses.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
+import { restOn } from "../testing/hint-rest.js";
 import { AgentServersButton } from "./agent-servers.js";
 
 /**
@@ -458,4 +462,61 @@ test("two accounts at a provider stand as two rows, each named by its label, and
       ?.click(),
   );
   assert.deepEqual(switched, [["notion-2"]]);
+});
+
+/** The act port answering where each provider stands and each server's tools, Linear's refused, as the service would. */
+function answerLinearRefused(): void {
+  fakeActPort({
+    [ACT_KIND.INTEGRATIONS_STATUS]: () =>
+      Promise.resolve({
+        // SAFETY: the entries are made from INTEGRATION_PROVIDER_LIST, one for every provider, which is the record's every key.
+        integrations: Object.fromEntries(
+          INTEGRATION_PROVIDER_LIST.map((provider) => [
+            provider,
+            STANDING.get(provider) ?? INTEGRATION_STATUS.UNAVAILABLE,
+          ]),
+        ) as Record<IntegrationProvider, IntegrationStatus>,
+      }),
+    [ACT_KIND.INTEGRATIONS_TOOLS]: (payload) =>
+      Promise.resolve(
+        (payload.connection ?? payload.provider) === LINEAR
+          ? { problem: { reason: INTEGRATION_TOOLS_PROBLEM.REFUSED } }
+          : { tools: TOOLS.get(payload.connection ?? payload.provider) ?? [] },
+      ),
+  });
+}
+
+test("a server's problem fades where its row cuts it short, as every cut line of the app does, rather than ending in an ellipsis", async () => {
+  answerLinearRefused();
+  const { container } = await opened();
+
+  const problem = container.querySelector(".agent-servers-problem");
+  assert.equal(problem?.textContent, "Linear refused the sign-in.");
+  assert.equal(problem?.getAttribute("data-end"), "fade");
+});
+
+test("a server's row hangs the server's card beside it, and a tool a search found hangs the card of its tool", async () => {
+  answerLinearRefused();
+  const { container, type } = await opened();
+
+  restOn(serverPress(container, "Vercel") ?? assert.fail("no Vercel row"));
+  await act(async () => {
+    for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
+  });
+  const card = [...document.querySelectorAll(".luke-tooltip-card > [data-server-card]")].at(-1);
+  assert.equal(card?.querySelector(".agent-servers-name")?.textContent, "Vercel");
+  assert.equal(card?.querySelector(".agent-servers-count")?.textContent, "4 tools");
+
+  type("get_deployment");
+  restOn(
+    [...container.querySelectorAll<HTMLElement>(".agent-servers-list li")]
+      .find((row) => row.textContent?.includes("get_deployment"))
+      ?.querySelector<HTMLElement>("button") ?? assert.fail("no tool row"),
+  );
+  await act(async () => {
+    for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
+  });
+  const toolCard = [...document.querySelectorAll(".luke-tooltip-card > [data-server-card]")].at(-1);
+  assert.equal(toolCard?.querySelector(".agent-servers-name")?.textContent, "Vercel");
+  assert.equal(toolCard?.querySelectorAll('ul[aria-label$=" tools"] > li').length, 1);
 });

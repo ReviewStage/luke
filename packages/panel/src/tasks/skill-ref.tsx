@@ -1,4 +1,5 @@
 import {
+  type ComboboxOption,
   HOVER_CARD_ROW_LOOK,
   HoverCard,
   HoverCardHead,
@@ -17,7 +18,9 @@ import { SkillSourceBadge } from "./skill-source-badge.js";
  *
  * A skill is named as the words that load it, `/name`, wherever it is
  * drawn: a sent message's chip, the composer's chip, the composer's list,
- * the card, and a coding agent's "Loaded skill" row. Each place that can
+ * the card, and a coding agent's "Loaded skill" row. Wherever a list draws
+ * one it leads with the same book (`SkillMark`), as Settings › Skills does
+ * and the Add skill dialog, and hangs this card. Each place that can
  * open the skill's file hangs the one card while the pointer rests on the
  * name, drawn from every card's parts (`@luke/ui`'s `HoverCard`) and a task card's
  * rows (`task-card.tsx`): the skill's mark and name at its head, with where
@@ -31,6 +34,11 @@ import { SkillSourceBadge } from "./skill-source-badge.js";
  * which hangs the same card (`agent-tab.tsx`), as a row that opens an
  * agent's tab hangs that tab's card.
  */
+
+/** The book every skill leads with, in a menu's row, a settings row, and its card's head. */
+export function SkillMark(): React.JSX.Element {
+  return <BookOpenIcon aria-hidden="true" />;
+}
 
 /** A skill of the repository's, which names its `SKILL.md`. */
 export type SkillWithFile = SkillOption & { readonly path: string };
@@ -52,7 +60,7 @@ export function SkillCard({ subject }: { subject: SkillSubject }): React.JSX.Ele
   return (
     <HoverCard data-skill-card="">
       <HoverCardHead
-        glyph={<BookOpenIcon aria-hidden="true" />}
+        glyph={<SkillMark />}
         name={skillWord(skill.name)}
         corner={<SkillSourceBadge source={skill.source} />}
       />
@@ -66,6 +74,23 @@ export function SkillCard({ subject }: { subject: SkillSubject }): React.JSX.Ele
       )}
     </HoverCard>
   );
+}
+
+/**
+ * A skill as a menu draws its row: the book, its `/name`, what it is for as
+ * the detail, where it comes from at the end, and the card the chip hangs
+ * beside it. Note that a row opens nothing from its card, since a press on
+ * the row is the menu's own choice.
+ */
+export function skillOption(skill: SkillOption): ComboboxOption {
+  return {
+    id: skill.name,
+    label: skillWord(skill.name),
+    icon: <SkillMark />,
+    detail: skill.description,
+    hint: <SkillSourceBadge source={skill.source} />,
+    card: <SkillCard subject={{ skill, onOpen: () => undefined }} />,
+  };
 }
 
 /** A skill named in place: its `/name` as a mention's pill, one button that hangs its card and opens its file. */
