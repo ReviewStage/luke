@@ -41,7 +41,7 @@ beforeEach(() => {
   document.documentElement.setAttribute("data-luke-theme", "light");
   const meta = document.head.appendChild(document.createElement("meta"));
   meta.name = "theme-color";
-  meta.content = "#f6f4ef";
+  meta.content = "#fbfaf7";
   document.head.appendChild(document.createElement("style")).textContent = tokens;
 });
 

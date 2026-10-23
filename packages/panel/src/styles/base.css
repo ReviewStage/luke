@@ -33,10 +33,11 @@
   /* The voice's notice line's ground, opaque because the document scrolls on beneath it. */
   --surface-notice: var(--luke-color-overlay);
   /* The code on screen, in the ground and inks of GitHub's themes, and the
-     mark beside a line changed in that theme's blue. */
+     mark beside a line changed in oak, which the lines Luke points at are
+     lit in a pale wash of, as a pencil's highlighter on paper. */
   --code-ground: light-dark(#fff, #0d1117);
   --code-text: light-dark(#1f2328, #e6edf3);
-  --code-pointed-edge: light-dark(#0969da, #388bfd);
+  --code-pointed-edge: light-dark(#b08442, #d6b276);
   /* A diff's lines on the code's ground, wherever one is drawn: a line
      added tinted in the palette's green and one removed in its red, the
      words a changed line changed in a deeper tint of the same, and the mark
@@ -145,6 +146,13 @@
 diffs-container,
 file-tree-container {
   color-scheme: inherit;
+}
+
+/* Every Lucide glyph is drawn a step finer than the library's own stroke,
+   so the window's marks read as pencil rather than marker beside its light
+   headings. The stroke is the glyph's own attribute, which a style outranks. */
+.lucide {
+  stroke-width: 1.5;
 }
 
 .app-stage {

@@ -47,6 +47,7 @@ Every token is a `--luke-*` custom property under `src/tokens/`.
   | `--luke-type-body-*` (size / leading) | 13 / 20 | 16 / 24 | 14 / 20 |
   | `--luke-type-label-*` | 13 / 18 | 14 / 20 | 13 / 18 |
   | `--luke-type-caption-*` | 12 / 16 | 12 / 16 | 12 / 16 |
+  | `--luke-type-eyebrow-*` (size / tracking) | 11 / 0.08em | 11 / 0.08em | 11 / 0.08em |
   | `--luke-type-section-*` | 13 / 18 | 16 / 24 | 16 / 24 |
   | `--luke-type-dialog-*` | 15 / 20 | 20 / 28 | 20 / 28 |
   | `--luke-type-title-*` | 26 / 34 | 28 / 36 | 22 / 30 |
@@ -69,6 +70,9 @@ Every token is a `--luke-*` custom property under `src/tokens/`.
   The settings-row, card, dialog, and menu roles beside them (`--luke-settings-row-*`,
   `--luke-card-*`, `--luke-dialog-*`, `--luke-menu-*`) are set the same way. `tokens.test.ts`
   holds both profiles to one set of names.
+- **Faces** (`profiles.css`): `--luke-font-sans`, `--luke-font-mono`,
+  `--luke-font-display`, and `--luke-font-serif`, the serif a plan's title is
+  set in (the Mac's New York on the desktop, the platform's `ui-serif` on the web).
 - **Palette** (`palettes.css`): semantic colours, `--luke-color-*` (`text`,
   `text-muted`, `ground`, `surface`, `overlay`, `fill-*`, `border*`, `accent*`,
   `danger*`, `focus-ring`, …), set by both profiles in both themes.

@@ -396,13 +396,22 @@ body,
   -webkit-app-region: no-drag;
 }
 
+/* A section's head is an eyebrow, small, spaced, and upper case, whether it
+   folds or not, so it names the groups under it without competing with
+   them; a group's own head keeps its name as written. */
+.sidebar-section-head > .luke-nav-item[data-variant="head"],
+.sidebar-section-head-name {
+  font-size: var(--luke-type-eyebrow-size);
+  font-weight: var(--luke-weight-semibold);
+  letter-spacing: var(--luke-type-eyebrow-tracking);
+  text-transform: uppercase;
+}
+
 .sidebar-section-head-name {
   min-width: 0;
   flex: 1;
   padding-left: var(--row-inset);
   color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-caption-size);
-  font-weight: var(--luke-weight-medium);
 }
 
 /* The sidebar's View options and the Tasks page's Filter wear a dot while
@@ -539,8 +548,13 @@ body,
   background: var(--luke-color-fill-hover);
 }
 
+/* The open plan's row is a slip of the sheet's paper laid on the birch,
+   lifted by its hairline and a breath of shadow, as the sheet is. */
 .sidebar-task[aria-current="page"] {
-  background: var(--luke-color-fill-strong);
+  background: var(--luke-color-ground);
+  box-shadow:
+    0 0 0 1px var(--luke-color-border),
+    0 1px 2px var(--luke-color-shadow-soft);
 }
 
 /* Whoever did something (`actor-ref.tsx`): a person on a circle, their
@@ -2013,22 +2027,31 @@ ul.actor-stack {
   color: var(--luke-color-text);
 }
 
+/* A plan reads as a page of a quiet magazine: its title set large in the
+   serif at the regular weight, each section named by a small, spaced,
+   upper-case label with room above it rather than a rule under it, and
+   what stands under a section a step of medium sans. */
 .desktop-document .markdown-heading[data-level="1"] {
-  font-size: 1.9em;
-  font-weight: var(--luke-weight-medium);
-  letter-spacing: -0.02em;
-  line-height: 1.2;
+  font-family: var(--luke-font-serif);
+  font-size: 2.15em;
+  font-weight: var(--luke-weight-regular);
+  letter-spacing: -0.015em;
+  line-height: 1.15;
 }
 
 .desktop-document .markdown-heading[data-level="2"] {
-  margin-top: 0.6em;
-  padding-bottom: 0.35em;
-  border-bottom: 1px solid var(--luke-color-border);
-  font-size: 1.3em;
+  margin-top: 2.2em;
+  margin-bottom: 0.9em;
+  color: var(--luke-color-text-muted);
+  font-size: 0.72em;
+  font-weight: var(--luke-weight-semibold);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
 }
 
 .desktop-document .markdown-heading[data-level="3"] {
   font-size: 1.05em;
+  font-weight: var(--luke-weight-medium);
 }
 
 /* In a column under 400px the title steps down to a section's size and a
@@ -5314,19 +5337,10 @@ ul.actor-stack {
   gap: var(--luke-control-gap);
   min-height: var(--desktop-bar-height);
   padding: var(--luke-space-8) var(--panel-toggle-clearance) var(--luke-space-8) var(--column-inset);
-  border-bottom: 1px solid var(--luke-color-border);
 }
 
 [data-luke-profile="desktop"] .side-panel-bar {
   -webkit-app-region: drag;
-}
-
-/* A bar inside the panel, an Inbox item's, draws its own hairline and no
-   more: the toolbar's hairline running past both sides (shell.css) is the
-   work column's, for a pane sliding in beside it, and from the panel it
-   would run on across the column's transcript at the item bar's height. */
-.side-panel .desktop-toolbar::before {
-  content: none;
 }
 
 /* Full screen with the sidebar folded, the row starts where the plan's
