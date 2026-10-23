@@ -62,6 +62,7 @@ function restOn(target: Element): void {
 afterEach(() => {
   vi.useRealTimers();
   vi.unstubAllGlobals();
+  vi.restoreAllMocks();
   for (const root of roots.splice(0)) act(() => root.unmount());
   document.body.innerHTML = "";
 });
@@ -92,7 +93,7 @@ function Row(): React.JSX.Element {
   );
 }
 
-test("a card hung from a row hangs past the row's end, not its press's, which the row's acts cut short", () => {
+test("a card hung from a row hangs past the row's end, not its press's, which the row's acts cut short", async () => {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
@@ -103,16 +104,28 @@ test("a card hung from a row hangs past the row's end, not its press's, which th
   assert.ok(row && press);
   boxed(row, 8, 260);
   boxed(press, 8, 200);
+  // A window as wide as jsdom says it is, which its root's box, read for the
+  // room a card keeps inside, otherwise answers as none.
+  vi.spyOn(Element.prototype, "clientWidth", "get").mockImplementation(function (this: Element) {
+    return this === document.documentElement ? window.innerWidth : 0;
+  });
+  vi.spyOn(Element.prototype, "clientHeight", "get").mockImplementation(function (this: Element) {
+    return this === document.documentElement ? window.innerHeight : 0;
+  });
 
   restOn(press);
 
+  // Note that the card is placed once its place has been worked out, a few
+  // microtasks after it mounts, by the positioner it stands in.
+  await act(async () => {
+    for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
+  });
   const card = document.querySelector<HTMLElement>(".luke-tooltip-card");
   assert.ok(card, "the card hangs");
-  assert.equal(card.dataset.side, "end");
-  assert.ok(
-    Number.parseFloat(card.style.left) > 260,
-    `the card stands past the row's end, at ${card.style.left}`,
-  );
+  const placed = card.parentElement?.style.transform ?? "";
+  const left = Number.parseFloat(/translate\(([-\d.]+)px/u.exec(placed)?.[1] ?? "");
+  assert.equal(card.dataset.side, "inline-end");
+  assert.ok(left > 260, `the card stands past the row's end, at ${placed}`);
 });
 
 /** Draws `element` into the document, on a registry of its own. */

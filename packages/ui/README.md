@@ -113,6 +113,14 @@ by the shadcn CLI (style `base-nova`, base `base`) and drawn in the Tailwind
 theme above; the `@luke/ui` component an app imports wraps it. Moved so far:
 `Switch`.
 
+The overlays: `Dialog` and `ConfirmDialog` stand on shadcn's dialog, and
+`TooltipPill` and `TooltipCard` on its tooltip and hover card, placed by
+Base UI. When a hint shows and goes stays `Tooltip`'s own (`hint.tsx`), and
+`AnchoredPopover` keeps its own placement (`popover-place.ts`), which holds
+an open menu by the edge of the button it hangs from as that button grows;
+it, `PopoverPanel`, the hover card's parts, `DrawerScrim`, and `PortalFence`
+are drawn in the theme's utilities.
+
 ## Using a component
 
 Import from the barrel:
