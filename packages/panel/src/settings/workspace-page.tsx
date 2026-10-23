@@ -94,6 +94,7 @@ import { useOpenPerson } from "../person-door.js";
 import { useWorkspaceMembersRead } from "../tasks/use-workspace-members.js";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast.js";
 import { useCapability } from "../use-app-state.js";
+import { useRefocusAfterEdit } from "../use-refocus-after-edit.js";
 import { MacRepositoriesGroup } from "./mac-repository-settings.js";
 import { MenuRow } from "./menu-row.js";
 import { shownWorkspace } from "./settings-rows.js";
@@ -1617,7 +1618,6 @@ function WorkspaceIdentity({ workspace }: { workspace: Workspace }): React.JSX.E
   const [uploading, setUploading] = useState(false);
   const [refusal, setRefusal] = useState<string>();
   const button = useRef<HTMLButtonElement | null>(null);
-  const refocus = useRef(false);
   const set = workspace.photoVersion !== undefined;
   const remove = useConfirmDialog({ subject: manages && set, surfaceOpen: true }, () =>
     act(ACT_KIND.WORKSPACE_PHOTO_SET, { workspaceId, photo: null }).then(
@@ -1627,13 +1627,9 @@ function WorkspaceIdentity({ workspace }: { workspace: Workspace }): React.JSX.E
   );
   // Note that focus goes back to Rename once the rename has settled, because
   // the button is disabled while it is out and a disabled one takes no focus.
-  useEffect(() => {
-    if (editing || renaming || !refocus.current) return;
-    refocus.current = false;
-    button.current?.focus();
-  }, [editing, renaming]);
+  const endedByKey = useRefocusAfterEdit(editing || renaming, button);
   const end = ({ value: name, byKey }: InlineEditEnd) => {
-    refocus.current = byKey;
+    endedByKey(byKey);
     setEditing(false);
     if (name === undefined) return;
     setRenaming(true);

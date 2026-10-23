@@ -1,5 +1,6 @@
-import { Option, Schema } from "effect";
+import { Schema } from "effect";
 import { useCallback, useState } from "react";
+import { readKept, writeKept } from "../kept-storage.js";
 import {
   EVERYONES,
   INBOX_GROUPING,
@@ -182,39 +183,6 @@ interface Folds {
 }
 
 const OPEN: Folds = { groups: [], creators: [], assignees: [], pinned: false, sections: [] };
-
-/**
- * A kept value, or `fallback` where none was kept, it no longer reads, or
- * storage refuses the read. Note that a value an earlier version kept under
- * `earlier` is read where `key` holds none, because the key was renamed and
- * the developer's choice should not be forgotten for it; the next write
- * keeps it under `key`.
- */
-export function readKept<A>(
-  key: string,
-  schema: Schema.Codec<A, string>,
-  fallback: A,
-  earlier?: string,
-): A {
-  try {
-    const held = window.localStorage.getItem(key);
-    const text =
-      held === null && earlier !== undefined ? window.localStorage.getItem(earlier) : held;
-    const decoded = Schema.decodeUnknownOption(schema)(text);
-    return Option.getOrElse(decoded, () => fallback);
-  } catch {
-    return fallback;
-  }
-}
-
-/** Keeps a value; a write that fails costs only a group open again next launch, so it is not worth a word. */
-export function writeKept<A>(key: string, schema: Schema.Codec<A, string>, value: A): void {
-  try {
-    window.localStorage.setItem(key, Schema.encodeSync(schema)(value));
-  } catch {
-    // The group opens again on the next launch.
-  }
-}
 
 /** The kept folds, each open where none was kept. */
 function readFolds(): Folds {

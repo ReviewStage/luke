@@ -135,8 +135,3 @@ export function useCommentAttaching(): CommentAttaching {
     },
   };
 }
-
-/** Whether a drag carries files, which is all a comment's field takes from one. */
-export function carriesFiles(event: React.DragEvent): boolean {
-  return event.dataTransfer.types.includes("Files");
-}

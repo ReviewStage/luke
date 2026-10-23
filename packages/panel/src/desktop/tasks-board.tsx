@@ -92,6 +92,7 @@ import { useOpenLink } from "../tasks/use-open-link.js";
 import { useReadMarks } from "../tasks/use-task-looks.js";
 import { useTaskMaker } from "../tasks/use-task-origin.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
+import { useRefocusAfterEdit } from "../use-refocus-after-edit.js";
 import { useTaskMenu } from "./task-actions.js";
 import { taskCardOf } from "./task-card.js";
 import {
@@ -256,13 +257,8 @@ function TaskBoardCard({
   });
   const press = useRef<HTMLButtonElement | null>(null);
   const item = useRef<HTMLElement | null>(null);
-  const refocus = useRef(false);
   const drawn = (property: TaskProperty) => properties.includes(property);
-  useEffect(() => {
-    if (rename.editing || !refocus.current) return;
-    refocus.current = false;
-    press.current?.focus();
-  }, [rename.editing]);
+  const endedByKey = useRefocusAfterEdit(rename.editing, press);
   const head = (
     <span className="tasks-board-card-head">
       {drawn(TASK_PROPERTY.KEY) ? (
@@ -324,7 +320,7 @@ function TaskBoardCard({
               maxLength={TASK_BOUNDS.MAX_NAME_CHARS}
               editing
               onEnd={(edit) => {
-                refocus.current = edit.byKey;
+                endedByKey(edit.byKey);
                 void rename.end(edit.value);
               }}
             />
