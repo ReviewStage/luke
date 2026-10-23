@@ -1668,18 +1668,15 @@ it.effect(
 );
 
 it.effect(
-  "switching back to a task opened a moment ago draws its document, board, code, and pages at once, answers before any read does, and lays the read over it in place",
+  "an open answers and draws the task as reading before any of its reads answers, then lays them in one view",
   () =>
     Effect.gen(function* () {
       const invites = task(INVITES, "Teammate invitations", "# Teammate invitations", 10);
-      const billing = task(BILLING, "Billing export", "# Billing export", 20);
-      const service = fakeService([billing, invites]);
+      const service = fakeService([invites]);
       const board = { elements: [], appliedDrawing: 0 };
       service.boards[INVITES] = board;
       service.codes[INVITES] = [];
-      const { call, last, settled, openTask } = yield* subject(service);
-      yield* openTask(INVITES);
-      yield* openTask(BILLING);
+      const { call, last, settled } = yield* subject(service);
 
       // Every read of the task is held from here, as a service that has not answered yet.
       const answered = yield* Deferred.make<void>();
@@ -1691,22 +1688,18 @@ it.effect(
       service.open = held(open);
       service.readBoard = held(readBoard);
       service.readCode = held(readCode);
-      service.tasks = [billing, { ...invites, document: { ...invites.document, body: "# Newer" } }];
 
-      const switching = yield* Effect.forkChild(
-        call(GATEWAY_METHOD.TASKS_OPEN, { taskId: INVITES }),
-      );
+      const opening = yield* Effect.forkChild(call(GATEWAY_METHOD.TASKS_OPEN, { taskId: INVITES }));
       yield* settled;
-      assert.deepEqual(switching.pollUnsafe(), Exit.succeed({ opened: true }), "the open answered");
+      assert.deepEqual(opening.pollUnsafe(), Exit.succeed({ opened: true }), "the open answered");
       assert.equal(last()?.activeTaskId, INVITES);
-      assert.deepEqual(last()?.document, { status: TASKS_READ.READY, task: invites });
-      assert.deepEqual(last()?.board, board);
-      assert.equal(last()?.codeStatus, TASKS_READ.READY);
-      assert.deepEqual(last()?.shownCode, []);
+      assert.deepEqual(last()?.document, { status: TASKS_READ.READING });
 
       yield* Deferred.succeed(answered, undefined);
       yield* settled;
-      assert.equal(last()?.document.task?.document.body, "# Newer");
+      assert.deepEqual(last()?.document, { status: TASKS_READ.READY, task: invites });
+      assert.deepEqual(last()?.board, board);
+      assert.deepEqual(last()?.shownCode, []);
     }),
 );
 
@@ -1760,37 +1753,6 @@ it.effect("a press on the task already open reads nothing again", () =>
 );
 
 it.effect(
-  "an open's document read that left before a rename answered never lands over the renamed document",
-  () =>
-    Effect.gen(function* () {
-      const invites = task(INVITES, "Teammate invitations", "# Teammate invitations", 10);
-      const billing = task(BILLING, "Billing export", "# Billing export", 20);
-      const service = fakeService([billing, invites]);
-      const { call, last, settled, openTask } = yield* subject(service);
-      yield* openTask(INVITES);
-      yield* openTask(BILLING);
-
-      // The read takes the task as it stands when asked, and answers only once let go.
-      const answered = yield* Deferred.make<void>();
-      const { open } = service;
-      service.open = (taskId) =>
-        Effect.flatMap(open(taskId), (read) => Effect.as(Deferred.await(answered), read));
-      yield* call(GATEWAY_METHOD.TASKS_OPEN, { taskId: INVITES });
-      yield* settled;
-      assert.deepEqual(
-        yield* call(GATEWAY_METHOD.TASKS_RENAME, { taskId: INVITES, name: "Invitations" }),
-        { renamed: true },
-        "the rename is not held behind the read",
-      );
-
-      yield* Deferred.succeed(answered, undefined);
-      yield* settled;
-      assert.equal(last()?.document.task?.name, "Invitations");
-      assert.equal(last()?.document.task?.document.body, "# Invitations");
-    }),
-);
-
-it.effect(
   "a rename answered while the task it opened on is still read draws the renamed document, which the read then never lands over",
   () =>
     Effect.gen(function* () {
@@ -1823,45 +1785,23 @@ it.effect(
       const invites = task(INVITES, "Teammate invitations", "# Teammate invitations", 10);
       const billing = task(BILLING, "Billing export", "# Billing export", 20);
       const service = fakeService([billing, invites]);
-      const { call, last, settled, openTask } = yield* subject(service);
-      yield* openTask(INVITES);
-      yield* openTask(BILLING);
+      const { call, last, settled, listed } = yield* subject(service);
+      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      yield* listed();
 
+      // The read takes the task as it stands when asked, and answers only once let go.
       const answered = yield* Deferred.make<void>();
       const { open } = service;
       service.open = (taskId) =>
         Effect.flatMap(open(taskId), (read) => Effect.as(Deferred.await(answered), read));
-      service.tasks = [billing, { ...invites, document: { ...invites.document, body: "# Newer" } }];
       yield* call(GATEWAY_METHOD.TASKS_OPEN, { taskId: INVITES });
       yield* settled;
       yield* call(GATEWAY_METHOD.TASKS_PIN, { taskId: INVITES, pinned: true });
-      assert.equal(last()?.document.task?.pinnedAt, MARKED_AT);
 
       yield* Deferred.succeed(answered, undefined);
       yield* settled;
       assert.equal(last()?.document.task?.pinnedAt, MARKED_AT);
-      assert.equal(last()?.document.task?.document.body, "# Newer");
-    }),
-);
-
-it.effect(
-  "a rename of a task left a moment ago reaches the copy kept of it, which opening it again draws though the read fails",
-  () =>
-    Effect.gen(function* () {
-      const invites = task(INVITES, "Teammate invitations", "# Teammate invitations", 10);
-      const billing = task(BILLING, "Billing export", "# Billing export", 20);
-      const service = fakeService([billing, invites]);
-      const { call, last, openTask } = yield* subject(service);
-      yield* openTask(INVITES);
-      yield* openTask(BILLING);
-
-      yield* call(GATEWAY_METHOD.TASKS_RENAME, { taskId: INVITES, name: "Invitations" });
-      service.open = () => Effect.succeed({ ok: false, failure: TASK_CALL_FAILURE.UNANSWERED });
-      yield* openTask(INVITES);
-
-      assert.equal(last()?.document.status, TASKS_READ.READY);
-      assert.equal(last()?.document.task?.name, "Invitations");
-      assert.equal(last()?.document.task?.document.body, "# Invitations");
+      assert.equal(last()?.document.task?.document.body, "# Teammate invitations");
     }),
 );
 
