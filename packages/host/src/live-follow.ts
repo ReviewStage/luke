@@ -698,3 +698,13 @@ export function restarting<E, R>(attempt: Effect.Effect<boolean, E, R>): Effect.
     Effect.repeat(attempt, { schedule: Schedule.spaced(LIVE_RESTART), while: (again) => again }),
   );
 }
+
+/** Where a follow held in a map stands: its entry live or refused, and its state waiting, standing, broken, or unsealed. */
+export const LIVE_STATE = {
+  WAITING: "waiting",
+  STANDING: "standing",
+  BROKEN: "broken",
+  LIVE: "live",
+  REFUSED: "refused",
+  UNSEALED: "unsealed",
+} as const;
