@@ -21,7 +21,12 @@ import type { Composer } from "./composer.js";
 import { Environment, Reporter } from "./effect/seams.js";
 import type { HOST_PLATFORM_CONCERN, PlatformConcernMethods } from "./host-concerns.js";
 import type { HostKernel } from "./host-kernel.js";
-import { decodedLiveRows, type LiveClient, openRealtimeClient } from "./live-follow.js";
+import {
+  decodedLiveRows,
+  LIVE_RESTART,
+  type LiveClient,
+  openRealtimeClient,
+} from "./live-follow.js";
 import { type MacShell, runMacCommand } from "./mac-command-runner.js";
 import type { RunMode } from "./run-mode.js";
 
@@ -57,8 +62,6 @@ import type { RunMode } from "./run-mode.js";
 const IDLE = Duration.seconds(5);
 /** How often a Mac following its commands says it listens: a third of the service's forty-five-second freshness window. */
 const LISTENING_EVERY = Duration.seconds(15);
-/** How long after a read went unanswered, or a follow stopped for good, it is asked again. */
-const LIVE_RESTART = Duration.seconds(5);
 /**
  * How a claim the service did not answer is asked again: a second apart, a
  * few times, well inside the service's thirty-second claim window, since

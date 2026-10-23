@@ -13,7 +13,7 @@ import {
 import { Data, Duration, Effect, RcMap, type Scope, Stream, SubscriptionRef } from "effect";
 import { Hex } from "effect/encoding";
 import type { InboxTxWaits } from "./inbox-tx-waits.js";
-import { decodedLiveRows, type LiveClient } from "./live-follow.js";
+import { decodedLiveRows, type LiveClient, restarting } from "./live-follow.js";
 
 /**
  * scope-inbox-follow.ts -- a plan's inbox, or one agent's, followed for main from a Neon Realtime subscription the host holds while it is followed, and told whole as it changes.
@@ -27,8 +27,6 @@ import { decodedLiveRows, type LiveClient } from "./live-follow.js";
 
 /** How long a subscription no follow holds is kept, so a window coming back finds it standing. */
 const IDLE = Duration.seconds(30);
-/** How long after a seal went unanswered, or a subscription stopped, a followed scope is sealed again. */
-const LIVE_RESTART = Duration.seconds(5);
 
 /** Which inbox: one plan's, or one agent's, by its id. */
 export class InboxScopeKey extends Data.Class<{
@@ -177,9 +175,10 @@ export function followInbox(
       return false;
     }),
   );
-  const again = Effect.andThen(RcMap.invalidate(inboxes, scope), Effect.sleep(LIVE_RESTART));
-  const loop: Effect.Effect<void> = Effect.flatMap(attempt, (ended) =>
-    ended ? Effect.void : Effect.andThen(again, loop),
+  // Note that a follow that goes on is let go before the wait, so the next run seals it afresh.
+  return restarting(
+    Effect.flatMap(attempt, (ended) =>
+      ended ? Effect.succeed(false) : Effect.as(RcMap.invalidate(inboxes, scope), true),
+    ),
   );
-  return loop;
 }

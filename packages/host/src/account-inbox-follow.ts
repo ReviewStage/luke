@@ -8,7 +8,7 @@ import {
 } from "@luke/features/live-wire";
 import { Clock, Duration, Effect, RcMap, type Scope, Stream, SubscriptionRef } from "effect";
 import type { InboxTxWaits } from "./inbox-tx-waits.js";
-import { decodedLiveRows, type LiveClient, liveShown } from "./live-follow.js";
+import { decodedLiveRows, type LiveClient, liveShown, restarting } from "./live-follow.js";
 
 /**
  * account-inbox-follow.ts -- what waits on the developer across the account, followed over Neon Realtime and told to main each time it moves.
@@ -26,8 +26,6 @@ import { decodedLiveRows, type LiveClient, liveShown } from "./live-follow.js";
 
 /** How long a subscription no follow holds is kept, so a follow started again soon finds it standing. */
 const IDLE = Duration.seconds(30);
-/** How long a subscription that stopped, or a seal refused, waits before it is sealed again. */
-const LIVE_RESTART = Duration.seconds(5);
 
 /** A seal the service did not answer, `gone` where it never will again. */
 type SealFailure = { readonly failure: string; readonly gone?: boolean };
@@ -122,7 +120,7 @@ export function followAccountInbox(
   inboxes: AccountInboxes,
   userId: string,
   tell: (answer: AccountInboxAnswer) => Effect.Effect<void>,
-): Effect.Effect<never> {
+): Effect.Effect<void> {
   const attempt = Effect.scoped(
     Effect.gen(function* () {
       const standing = yield* RcMap.get(inboxes, userId);
@@ -134,10 +132,7 @@ export function followAccountInbox(
       );
     }),
   );
-  return Effect.forever(
-    attempt.pipe(
-      Effect.andThen(RcMap.invalidate(inboxes, userId)),
-      Effect.andThen(Effect.sleep(LIVE_RESTART)),
-    ),
+  return restarting(
+    attempt.pipe(Effect.andThen(RcMap.invalidate(inboxes, userId)), Effect.as(true)),
   );
 }
