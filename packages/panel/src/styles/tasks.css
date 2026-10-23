@@ -2730,6 +2730,16 @@
     flex-basis: 100%;
     padding-block: 0;
   }
+
+  /* Note that Preview, Run, and the merge control together may outgrow the
+     side panel at its least, so they wrap onto lines of their own, held to
+     the row's end, rather than run past an edge that clips them. */
+  .pull-request-title-actions {
+    min-width: 0;
+    flex: 0 1 auto;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
 }
 
 /* On a phone the header would hold half the screen over the view under it,
