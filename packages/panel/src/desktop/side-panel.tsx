@@ -704,14 +704,17 @@ export function panelEntries(input: {
   // Note that a file's row is named by its place in the list, because a path
   // may spell a kind's word or another row's id, and the list only grows.
   const fileRows = files.map((ref, at) => {
-    const open = panel.files.some((file) => file.path === ref.path);
+    const tab = panel.files.find((file) => file.path === ref.path);
+    const open = tab !== undefined;
+    // Note that the card's note is of the revision the row opens: the open tab's, else the one shown.
+    const commit = open ? tab.commit : ref.commit;
     const card =
       cards === undefined ? undefined : (
         <FileCard
           path={ref.path}
           note={newestFileNote(cards.shown, ref.path, {
             repository: cards.repository,
-            commit: undefined,
+            commit,
           })}
         />
       );

@@ -177,3 +177,44 @@ test("a Terminal row in the side panel's \"+\" wears its agent's failed mark, an
   const card = document.querySelector(".luke-tooltip-card [data-tab-card]");
   assert.equal(card?.querySelector(".luke-hover-card-name")?.textContent, "Billing export");
 });
+
+test("a file's row hangs Luke's note of the revision its pick opens, the open tab's pinned commit rather than a newer showing's", async () => {
+  const path = "src/invites/accept.ts";
+  const shownAt = (commit: string, note: string, at: number): TaskCodeShowing => ({
+    callId: `c-${commit}`,
+    turnId: "t",
+    shownAt: at,
+    code: {
+      ref: { path, startLine: 3, endLine: 5 },
+      repository: "acme/relay",
+      commit,
+      firstLine: 1,
+      lineCount: 9,
+      lines: [],
+      note,
+    },
+  });
+  const shown = [
+    shownAt("aaaa111", "Fix parsing", 1_000),
+    shownAt("bbbb222", "Add logging", 2_000),
+  ];
+  const base = tasksControl();
+  const panel = {
+    ...base.sidePanel,
+    files: [{ path, range: { startLine: 3, endLine: 5 }, opened: 1, commit: "aaaa111" }],
+  };
+  const cards: PanelCards = {
+    agents: codingAgentsControl(),
+    held: NOTHING_HELD,
+    shown,
+    repository: "acme/relay",
+    pagePlace: { taskId: "plan-1" },
+    shownAgent: undefined,
+    onOpenAgent: ignore,
+  };
+  const options = await opened(panelEntries({ panel, kinds: [], files: shownFiles(shown), cards }));
+
+  restOn(options.get("accept.ts") ?? assert.fail("the file is listed"));
+  const card = document.querySelector(".luke-tooltip-card [data-file-card]");
+  assert.equal(card?.querySelector(".luke-hover-card-note")?.textContent, "Fix parsing");
+});
