@@ -1073,7 +1073,6 @@ function SentryRows({
     return (
       <SettingsRow
         label="Sentry isn't installed"
-        description="Install Luke's Sentry integration on this workspace so its alerts and issues can start runs."
         error={sentry.refusal}
       >
         {() => (
