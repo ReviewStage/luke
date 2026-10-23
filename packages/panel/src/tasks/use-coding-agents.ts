@@ -157,14 +157,14 @@ const NO_KEYWORDS: readonly string[] = [];
  */
 
 /** The words New task started an agent on: the key its start carried, the prompt, and the files. */
-export interface StartedWords {
+interface StartedWords {
   readonly key: string;
   readonly prompt: string;
   readonly attachments: readonly CodingAgentAttachment[];
 }
 
 /** The line an agent was started on, by the agent. */
-export interface OpeningLine {
+interface OpeningLine {
   readonly agentId: string;
   readonly line: SentLine;
 }

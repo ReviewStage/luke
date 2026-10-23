@@ -81,7 +81,7 @@ export function PhoneHead({
 }
 
 /** What a place's ⋯ is called. */
-export const MORE = "More";
+const MORE = "More";
 
 /**
  * A place's ⋯ and the menu it drops: `groups`, made as the menu is drawn

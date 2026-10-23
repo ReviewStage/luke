@@ -39,7 +39,7 @@ import { TurnBudget } from "./turn-budget.js";
  * cannot spend the service's bandwidth past the bound.
  */
 
-export const PUBLIC_RESEARCH_BOUNDS = {
+const PUBLIC_RESEARCH_BOUNDS = {
   MAX_URL_CHARS: 2_000,
   PAGE_TIMEOUT: Duration.seconds(15),
   /** The most bytes of one page read off the wire; past it the rest is never read. */

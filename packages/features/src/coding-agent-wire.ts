@@ -557,8 +557,6 @@ export const codingAgentRewindRequestSchema = EffectSchema.Struct({
   messageId: trimmedText(CODING_AGENT_BOUNDS.MAX_KEY_CHARS),
 });
 
-export type CodingAgentRewindRequest = typeof codingAgentRewindRequestSchema.Type;
-
 /**
  * Renaming an agent (PATCH): the title as the tab should show it, trimmed
  * and bounded; empty clears it, so the tab falls back to the model's name.
@@ -839,8 +837,6 @@ export const operatorEnsureAnswerSchema = EffectSchema.Struct({
   agentId: EffectSchema.String,
   txid: EffectSchema.optionalKey(codingAgentTxidSchema),
 });
-
-export type OperatorEnsureAnswer = typeof operatorEnsureAnswerSchema.Type;
 
 /** An agent deleted for good (DELETE), as a task's delete answers: with the transaction its row went in, which the host waits to see on the followed list. */
 export const codingAgentDeleteAnswerSchema = EffectSchema.Struct({

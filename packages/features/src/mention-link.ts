@@ -8,7 +8,7 @@ import {
   integrationProviderSchema,
 } from "./integration-wire.js";
 import { isLinkHome, LINK_ORIGIN } from "./link-home.js";
-import { LINK_SITE_LIST, type LinkSite, linkSiteName, linkSiteOf } from "./link-site.js";
+import { LINK_SITE_LIST, linkSiteName, linkSiteOf } from "./link-site.js";
 import { parsedUrl } from "./parsed-url.js";
 import { PLAN_SECTION_BOUNDS } from "./task-wire.js";
 
@@ -392,9 +392,6 @@ export type PersonMention = Extract<Mention, { readonly kind: typeof MENTION_KIN
 
 /** A mention of an MCP server or one of its tools, or a page of its provider's. */
 export type ServerMention = Extract<Mention, { readonly provider: string }>;
-
-/** A mention of a page of a well-known site no integration stands behind. */
-export type SiteMention = Extract<Mention, { readonly site: LinkSite }>;
 
 /** Whether a tool's name, as an MCP server lists it, is one a mention of the tool can carry. */
 export function isMentionableTool(name: string): boolean {
