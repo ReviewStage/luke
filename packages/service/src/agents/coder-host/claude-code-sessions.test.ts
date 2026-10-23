@@ -94,6 +94,7 @@ import {
   RUNNER_ENDED,
   RUNNER_TAG,
   type RunnerSessionsOptions,
+  retireWarmRunner,
   runnerEnded,
 } from "./runner-sessions.js";
 import { RUNNER_CHOICE } from "./runtime-sessions.js";
@@ -504,6 +505,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
           integrations: [LINEAR_SERVER],
           allowedDomains: config.allowedDomains,
           installedSkills: "/opt/luke/installed-skills",
+          warm: true,
         });
         assert.deepEqual(first, {
           type: INPUT_LINE.MESSAGE,
@@ -1714,6 +1716,81 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
 
         assert.equal(yield* Fiber.join(ending), RUNNER_ENDED.STALE);
         assert.equal(sandbox.status, "running");
+      }),
+  );
+
+  it.effect(
+    "a message sent once the sweep retired a warm runner relaunches it rather than landing behind the retire",
+    () =>
+      Effect.gen(function* () {
+        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+        const api = runnerSandboxApi();
+        const { userId, agent } = yield* openAgent;
+        const sequence = { next: 0 };
+        const sessions = yield* sessionsFor(userId, sequence).pipe(Effect.provide(services(api)));
+        const opened = yield* sessions.open(message(agent, "Fix the invitations."));
+        assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+        const [sandbox] = api.sandboxes;
+        assert.ok(sandbox !== undefined);
+        const retired = yield* retireWarmRunner({
+          sessionId: opened.sessionId,
+          agentId: agent.id,
+          running: sandbox.currentSessionId,
+        }).pipe(Effect.provide(api.layer));
+        assert.equal(retired, true);
+        sequence.next = 5;
+
+        // The retired runner has not exited yet: Vercel still reads its command as running.
+        const sent = yield* sessions.send(opened.sessionId, message(agent, "Now the emails."));
+
+        assert.equal(sent.outcome, EVE_SEND_OUTCOME.ACCEPTED);
+        const [first, second] = api.commands;
+        assert.ok(first !== undefined && second !== undefined);
+        assert.deepEqual(linesOf(first).at(-1), { type: INPUT_LINE.RETIRE });
+        assert.ok(!first.stdin.includes("Now the emails."));
+        assert.ok(second.stdin.includes("Now the emails."));
+      }),
+  );
+
+  it.effect(
+    "a warm runner whose integrations changed since its launch is ended and relaunched for the next message, and one at work keeps going on what it has",
+    () =>
+      Effect.gen(function* () {
+        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+        const api = runnerSandboxApi();
+        const { userId, agent } = yield* openAgent;
+        const handed = { servers: [LINEAR_SERVER] };
+        const sessions = yield* claudeCodeSessions({
+          userId,
+          eventsUrl: EVENTS_URL,
+          mcpUrl: MCP_URL,
+          integrations: () => Effect.sync(() => handed.servers),
+          instructions: () => Effect.succeed(INSTRUCTIONS),
+          nextSequence: () => Effect.succeed(0),
+          run: (effect) => Effect.runPromise(effect),
+        }).pipe(Effect.provide(services(api)));
+        const opened = yield* sessions.open(message(agent, "Fix the invitations."));
+        assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+        handed.servers = [LINEAR_SERVER, { name: "notion", url: `${MCP_URL}/integrations/notion` }];
+
+        const sent = yield* sessions.send(opened.sessionId, message(agent, "Use Notion now."));
+
+        assert.equal(sent.outcome, EVE_SEND_OUTCOME.ACCEPTED);
+        const [first, second] = api.commands;
+        assert.ok(first !== undefined && second !== undefined);
+        assert.notEqual(first.exitCode, null);
+        assert.ok(!first.stdin.includes("Use Notion now."));
+        const [config] = linesOf(second);
+        assert.ok(typeof config === "object" && config !== null && "integrations" in config);
+        assert.deepEqual(config.integrations, handed.servers);
+        assert.ok(second.stdin.includes("Use Notion now."));
+
+        // A turn under way keeps its runner, which goes on with the servers it has.
+        handed.servers = [LINEAR_SERVER];
+        yield* turnUnderWay(userId, agent);
+        yield* sessions.send(opened.sessionId, message(agent, "Also the docs."));
+        assert.equal(api.commands.length, 2);
+        assert.ok(second.stdin.includes("Also the docs."));
       }),
   );
 
