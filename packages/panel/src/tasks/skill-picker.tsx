@@ -34,16 +34,16 @@ import type {
   ComposerTrigger,
 } from "../plan-editor/contract.js";
 import { MENTION_MENU_SIDE, type MentionMenuSide } from "./mention-picker.js";
-import { opensFile, SkillCard, type SkillWithFile } from "./skill-ref.js";
-import { SkillSourceBadge } from "./skill-source-badge.js";
+import { opensFile, SkillCard, type SkillWithFile, skillOption } from "./skill-ref.js";
 
 /**
  * skill-picker.tsx -- the list a `/` in the composer opens, of the skills the task's repository keeps, and the chips the chosen ones are drawn as.
  *
  * The list opens the way an @-mention list does in every chat: at the
  * caret, as soon as a `/` starts a word (`skill-mention.ts`), with one row
- * per skill, its name and a muted line of what it is for, narrowed as the
- * name is typed. ↑ and ↓ move the highlight, Enter or Tab writes the
+ * per skill (`skillOption`): the book, its name, a muted line of what it is
+ * for, and where it comes from, with the skill's card beside it, narrowed as
+ * the name is typed. ↑ and ↓ move the highlight, Enter or Tab writes the
  * highlighted skill into the message as its chip, and Escape closes the
  * list until the caret leaves that word; the caret stays in the box
  * throughout, so the keys the list does not take are the box's own. The
@@ -163,12 +163,7 @@ function SkillMenu({
   onHover: (index: number) => void;
   onChoose: (skill: SkillOption) => void;
 }): React.JSX.Element {
-  const options = rows.map((skill) => ({
-    id: skill.name,
-    label: skillWord(skill.name),
-    detail: skill.description,
-    hint: <SkillSourceBadge source={skill.source} />,
-  }));
+  const options = rows.map(skillOption);
   return (
     <MenuSurface
       className="searchable-menu skill-menu"

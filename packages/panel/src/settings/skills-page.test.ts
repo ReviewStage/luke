@@ -20,6 +20,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { fakeActPort } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
+import { restOn } from "../testing/hint-rest.js";
 import { ToastHost } from "../toast.js";
 import { AddSkillDialog } from "./add-skill-dialog.js";
 import { SkillsPage } from "./skills-page.js";
@@ -443,11 +444,26 @@ test("the workspace's skills stand before the account's own, each with its sourc
   const headings = [...document.querySelectorAll("h2")].map((each) => each.textContent);
   assert.deepEqual(headings, ["Stage", "Personal"]);
   const text = document.body.textContent ?? "";
-  assert.match(text, /release-notesWorkspace/u);
-  assert.match(text, /release-notes described · acme\/agent-skills @ 3f9c2e1 · by Dean/u);
-  assert.match(text, /pr-stylePersonal/u);
-  assert.match(text, /pr-style described · pasted/u);
+  assert.match(text, /release-notes described · acme\/agent-skills @ 3f9c2e1 · by DeanWorkspace/u);
+  assert.match(text, /pr-style described · pastedPersonal/u);
   assert.match(text, /\.agents\/skills.*only agents started afterwards/u);
+});
+
+test("a skill's row leads with the book in the settings mark slot, and hangs the skill's card, which says whose it is and names no file", async () => {
+  await mountPage();
+
+  const row = [...document.querySelectorAll<HTMLElement>(".luke-settings-row")].find((each) =>
+    each.textContent?.startsWith("release-notes"),
+  );
+  assert.ok(row, "the skill has its row");
+  assert.ok(row.querySelector(".luke-settings-row-mark svg"), "the row leads with a book");
+
+  restOn(row);
+
+  const card = document.querySelector<HTMLElement>(".luke-tooltip-card > [data-skill-card]");
+  assert.equal(card?.querySelector(".luke-hover-card-name")?.textContent, "/release-notes");
+  assert.equal(card?.querySelector(".luke-hover-card-corner")?.textContent, "Workspace");
+  assert.equal(card?.querySelector('.luke-hover-card-row[data-look="detail"]'), null);
 });
 
 test("a GitHub skill whose folder moved offers Update in its ⋯, which updates it and goes", async () => {
@@ -483,7 +499,7 @@ test("the account's own skill offers Share with workspace, which asks in plain w
   ]);
   assert.equal(document.querySelector('[role="alertdialog"]'), null);
   const [, shared, personal] = [...document.querySelectorAll("section")];
-  assert.match(shared?.textContent ?? "", /pr-styleWorkspace/u);
+  assert.match(shared?.textContent ?? "", /pr-style described · pasted · by youWorkspace/u);
   assert.match(personal?.textContent ?? "", /No skills installed yet\./u);
 });
 
@@ -499,7 +515,7 @@ test("a share the workspace already has the name for is refused in the question,
     dialog("alertdialog").textContent ?? "",
     /Stage already has a skill named pr-style\. Remove one of them first\./u,
   );
-  assert.match(rowOf("pr-style").textContent ?? "", /pr-stylePersonal/u);
+  assert.match(rowOf("pr-style").textContent ?? "", /pastedPersonal/u);
 });
 
 test("Share is never offered in a personal workspace", async () => {

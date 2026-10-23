@@ -31,6 +31,7 @@ import {
   typeInComposer,
 } from "../testing/composer.js";
 import { onRegistry } from "../testing/copy-feedback.js";
+import { restOn } from "../testing/hint-rest.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { AgentComposer } from "./agent-composer.js";
 import { type RepositoryRemedyDoors, RepositoryRemedyProvider } from "./repository-remedy.js";
@@ -405,6 +406,26 @@ test("a / opens the repository's skills over the caret, the keys move through th
     box.sent.map((each) => each.text),
     ["Ship it with /deploy now"],
   );
+});
+
+test("a row of the skills' list leads with a book, says what it is for and where it comes from, and hangs the skill's card beside it", async () => {
+  const box = await mounted();
+  typeInComposer(box.container, "Ship it with /");
+  await settle();
+  const [row] = box.container.querySelectorAll('[role="listbox"] [role="option"]');
+  assert.ok(row, "the list offers the skills");
+  assert.ok(row.querySelector(".luke-combobox-option-glyph svg"), "the row leads with a book");
+  assert.equal(
+    row.querySelector(".luke-combobox-option-detail")?.textContent,
+    SKILLS[0]?.description,
+  );
+  assert.equal(row.querySelector(".luke-combobox-option-hint")?.textContent, "Repo");
+
+  restOn(row);
+
+  const card = document.querySelector<HTMLElement>(".luke-tooltip-card > [data-skill-card]");
+  assert.equal(card?.querySelector(".luke-hover-card-name")?.textContent, "/release");
+  assert.equal(card?.querySelector(".luke-hover-card-note")?.textContent, SKILLS[0]?.description);
 });
 
 test("Escape closes the skills' list without leaving the box, and the list stays closed while the word is typed on", async () => {
