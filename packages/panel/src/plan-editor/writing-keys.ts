@@ -5,7 +5,8 @@
  * the window's (⇧⌘S Toggle speaker, ⌥⌘C Copy link). `chordless` takes
  * those away from a writing extension, keeping its keys that are no chord
  * (Enter, Tab, Backspace), and `writingKeys` binds the vocabulary's in their
- * place. A chord the editor answers goes no further than the editor, as the
+ * place, every one of them or the ones an editor names (`actions`), as a
+ * message box names its marks' alone. A chord the editor answers goes no further than the editor, as the
  * pull request box's own do (`markdown-field.tsx`), so it is the editor's
  * alone while it has the caret and the window's keymap never hears it; every
  * other key, one the editor handled or not, reaches the window as before.
@@ -105,11 +106,14 @@ export function withoutTipTapChords(extension: AnyExtension): AnyExtension {
  * otherwise run the command sharing its key as well: ⌘B would bold and
  * toggle the sidebar.
  */
-export const writingKeys = Extension.create({
+export const writingKeys = Extension.create<{ actions: readonly WritingAction[] }>({
   name: "writingKeys",
+  addOptions() {
+    return { actions: WRITING_ACTIONS };
+  },
   addProseMirrorPlugins() {
     const bound: Record<string, () => boolean> = {};
-    for (const action of WRITING_ACTIONS) {
+    for (const action of this.options.actions) {
       const shortcut: WritingShortcut = WRITING_SHORTCUTS[action];
       if (shortcut.chord === undefined || !runsHere(action)) continue;
       bound[keymapName(shortcut.chord)] = () => WRITING_RUN[action](this.editor);

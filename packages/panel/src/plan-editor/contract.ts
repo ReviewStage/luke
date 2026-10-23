@@ -360,6 +360,8 @@ export interface ComposerEditorProps {
   readonly drawQuote?: ((element: HTMLElement, quote: ComposerQuote) => () => void) | undefined;
   /** What the box's mentions are picked and drawn with: an `@` word reported as `/` words are, and each mention drawn into its node's element; none where the box takes no mentions. */
   readonly mentions?: ComposerMentions | undefined;
+  /** The format toolbar's doors, the selection told to it and ⌘K over words handed to it, where one stands over the box. */
+  readonly format?: EditorFormatDoors | undefined;
 }
 
 /** The caret as it stood when marked, carried through every change since, and the words put in there. */
@@ -373,8 +375,8 @@ export interface ComposerMark {
   readonly release: () => void;
 }
 
-/** A composer's editor as mounted: every change from outside goes through one of these, never through the words handed back. */
-export interface ComposerEditorHandle {
+/** A composer's editor as mounted: every change from outside goes through one of these, never through the words handed back, a format toolbar's presses among them. Note that the box holds no block, so its toolbar offers no Turn into. */
+export interface ComposerEditorHandle extends EditorFormatting {
   /** Empties the words, as a send that was taken does. */
   readonly clear: () => void;
   /** Lays in words whole, the caret at their end, as Retry's restored message does. */
@@ -404,7 +406,6 @@ export interface ComposerEditorHandle {
   readonly setInput: (input: ComposerInput) => void;
   /** The editor element's attributes that tie it to an open list, for assistive technology. */
   readonly setAria: (aria: Readonly<Record<string, string | undefined>>) => void;
-  readonly focus: () => void;
   readonly blur: () => void;
   readonly destroy: () => void;
 }

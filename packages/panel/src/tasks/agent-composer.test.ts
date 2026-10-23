@@ -171,6 +171,32 @@ test("the box takes the caret as it opens, Enter sends what was typed, and the b
   assert.equal(box.shown(), "and the next one");
 });
 
+test("words selected raise the format toolbar, its marks alone, and a message bolded from it is sent as its Markdown", async () => {
+  const box = await mounted();
+  typeInComposer(box.container, "Ship it now");
+  const editor = composerEditor(box.container).editor ?? assert.fail("the editor is running");
+
+  act(() => {
+    editor.commands.setTextSelection({ from: 1 + "Ship ".length, to: 1 + "Ship it".length });
+  });
+  const toolbar =
+    box.container.querySelector<HTMLElement>('[role="toolbar"][aria-label="Formatting"]') ??
+    assert.fail("the toolbar stands over the words");
+  const presses = [...toolbar.querySelectorAll("button")].map((each) =>
+    each.getAttribute("aria-label"),
+  );
+  assert.deepEqual(presses, ["Bold", "Italic", "Strikethrough", "Code", "Link"]);
+
+  act(() => toolbar.querySelector<HTMLButtonElement>('button[aria-label="Bold"]')?.click());
+  pressInComposer(box.container, "Enter");
+  await settle();
+
+  assert.deepEqual(
+    box.sent.map((each) => each.text),
+    ["Ship **it** now"],
+  );
+});
+
 test("a message that did not go comes back into the box, the caret at its end, and Retry sends it again under its key", async () => {
   const box = await mounted(() =>
     Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),

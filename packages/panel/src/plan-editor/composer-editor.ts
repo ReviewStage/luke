@@ -1,3 +1,5 @@
+import { WRITING_MARK } from "@luke/settings/shortcuts";
+import { TEXT_LINK_MARK_ATTRIBUTES } from "@luke/ui/link-face";
 import {
   cutReply,
   MESSAGE_BLOCK,
@@ -14,7 +16,13 @@ import {
   type TextRange,
 } from "@luke/ui/skill-mention";
 import { type AnyExtension, Editor, Extension, Node } from "@tiptap/core";
-import { type Fragment, type Node as PmNode, type Schema, Slice } from "@tiptap/pm/model";
+import {
+  type Fragment,
+  type Mark,
+  type Node as PmNode,
+  type Schema,
+  Slice,
+} from "@tiptap/pm/model";
 import {
   type EditorState,
   Plugin,
@@ -25,6 +33,14 @@ import {
 import type { EditorProps, EditorView } from "@tiptap/pm/view";
 import StarterKit from "@tiptap/starter-kit";
 import { enterKeyHint, enterSends } from "../enter-sends.js";
+import {
+  INLINE_MARK,
+  INLINE_SPAN,
+  type InlineMark,
+  type InlineMarkName,
+  readInline,
+  writeInline,
+} from "./composer-markdown.js";
 import {
   COMPOSER_INPUT,
   type ComposerEditorHandle,
@@ -44,14 +60,23 @@ import {
   mentionTokens,
   pastedMention,
 } from "./mention-node.js";
+import { editorFormatting, formatReports } from "./writing-format.js";
+import { withoutTipTapChords, writingKeys } from "./writing-keys.js";
 
 /**
- * composer-editor.ts -- an agent's message box on TipTap: plain words, a line break, a chosen skill as a chip, and a quote of the agent's words as a block, read out as the one string the message is.
+ * composer-editor.ts -- an agent's message box on TipTap: words and their inline marks, a line break, a chosen skill as a chip, and a quote of the agent's words as a block, read out as the one string the message is.
  *
- * The box holds nothing a textarea would not, so its schema is StarterKit
- * cut down to a document of paragraphs, text, a hard break, and undo: no
- * mark, no list, no input rule turns what is typed into anything but the
- * words typed. One node is added, the `skill` chip, an atom that one
+ * The box holds lines of words and nothing a block would make of them, so
+ * its schema is StarterKit cut down to a document of paragraphs, text, a
+ * hard break, undo, and the inline marks: bold, italic, strikethrough,
+ * code, and a link. A mark is typed as its Markdown, by its chord from the
+ * writing vocabulary (`./writing-keys.ts`, its marks' chords alone), or from
+ * the format toolbar its owner stands over the words selected
+ * (`./writing-format.ts`), and is read out and back as the Markdown it is
+ * (`./composer-markdown.ts`); words wearing none read out exactly as typed.
+ * No list, heading, or quote is typed into being, and no link is made of
+ * an address as it is typed. A chip wears no mark, so words selected
+ * around one and bolded leave it as it was. One node is added, the `skill` chip, an atom that one
  * Backspace takes out whole and that reads out as `/name`; and the quote,
  * a block of the agent's words laid in by Reply where the caret stands
  * (`insertQuote`), never edited, that one Backspace on the line under it
@@ -114,7 +139,25 @@ interface TextRun {
   readonly length: number;
 }
 
-/** The words an inline node stands for. */
+/** The marks the box holds, by name. */
+const INLINE_MARKS: ReadonlySet<string> = new Set(Object.values(INLINE_MARK));
+
+/** The writing actions the box answers: its marks', and no block's. */
+const MARK_ACTIONS = Object.values(WRITING_MARK);
+
+/** Whether a mark's name is one the box holds. */
+function isInlineMark(name: string): name is InlineMarkName {
+  return INLINE_MARKS.has(name);
+}
+
+/** A mark as the box writes it: its name, and a link's address. */
+function inlineMark(mark: Mark): InlineMark[] {
+  const { name } = mark.type;
+  if (!isInlineMark(name)) return [];
+  return [{ name, href: name === INLINE_MARK.LINK ? String(mark.attrs.href) : undefined }];
+}
+
+/** The words an inline node stands for, its marks aside. */
 function inlineText(node: PmNode): string {
   if (node.isText) return node.text ?? "";
   if (node.type.name === SKILL_NODE) return skillWord(String(node.attrs.name));
@@ -134,18 +177,29 @@ function quoteWords(node: PmNode): string {
   return String(node.attrs.words);
 }
 
-/** The words a fragment stands for: its paragraphs a line each and its quotes each a blockquote set apart, or its inline nodes run together. */
+/** Inline nodes written as one line of Markdown: the line, and where each text node's words landed in it, by the node's index. */
+function writtenLine(nodes: readonly PmNode[]): ReturnType<typeof writeInline> {
+  return writeInline(
+    nodes.map((node) => ({
+      text: inlineText(node),
+      marks: node.isText ? node.marks.flatMap(inlineMark) : [],
+      atom: !node.isText,
+    })),
+  );
+}
+
+/** The words a fragment stands for: its paragraphs a line each and its quotes each a blockquote set apart, or its inline nodes written as one line. */
 function fragmentText(fragment: Fragment): string {
   const blocks: ({ kind: "quote"; words: string } | { kind: "words"; lines: string[] })[] = [];
-  let inline = "";
+  const inline: PmNode[] = [];
   fragment.forEach((node) => {
     const last = blocks.at(-1);
     if (isQuote(node)) blocks.push({ kind: MESSAGE_BLOCK.QUOTE, words: quoteWords(node) });
-    else if (!node.isBlock) inline += inlineText(node);
+    else if (!node.isBlock) inline.push(node);
     else if (last?.kind === MESSAGE_BLOCK.WORDS) last.lines.push(fragmentText(node.content));
     else blocks.push({ kind: MESSAGE_BLOCK.WORDS, lines: [fragmentText(node.content)] });
   });
-  return blocks.length === 0 ? inline : messageText(blocks);
+  return blocks.length === 0 ? writtenLine(inline).text : messageText(blocks);
 }
 
 /** The words the document stands for, as the message sends them. */
@@ -153,7 +207,7 @@ function textOf(doc: PmNode): string {
   return fragmentText(doc.content);
 }
 
-/** Every run of plain text in the document, in order, each with where it stands in the words. */
+/** Every run of words in the document, in order, each with where it stands in the words, a mark's delimiters around it. */
 function textRuns(doc: PmNode): TextRun[] {
   const runs: TextRun[] = [];
   let offset = 0;
@@ -167,11 +221,18 @@ function textRuns(doc: PmNode): TextRun[] {
       offset += quoteOf(quoteWords(paragraph)).length;
       return;
     }
+    const children: PmNode[] = [];
+    const starts: number[] = [];
     paragraph.forEach((child, childStart) => {
-      const length = inlineText(child).length;
-      if (child.isText) runs.push({ offset, pos: start + 1 + childStart, length });
-      offset += length;
+      children.push(child);
+      starts.push(start + 1 + childStart);
     });
+    const line = writtenLine(children);
+    for (const segment of line.segments) {
+      const pos = (starts[segment.piece] ?? 0) + segment.from;
+      runs.push({ offset: offset + segment.offset, pos, length: segment.length });
+    }
+    offset += line.text.length;
   });
   return runs;
 }
@@ -193,9 +254,15 @@ function textBetween(doc: PmNode, from: number, to: number): string {
   return textOf(doc.cut(from, to));
 }
 
-/** Where a place in the document stands in the words. */
+/**
+ * Where a place in the document stands in the words: in a run of words, by
+ * the run, inside the delimiters of the marks it wears; anywhere else, as
+ * the words before it read, since no mark stays open past a chip, a line,
+ * or a quote.
+ */
 function offsetAt(doc: PmNode, pos: number): number {
-  return textBetween(doc, 0, pos).length;
+  const run = textRuns(doc).find((each) => pos >= each.pos && pos <= each.pos + each.length);
+  return run === undefined ? textBetween(doc, 0, pos).length : run.offset + pos - run.pos;
 }
 
 /** A chip written in plain words: where it stands, and the node it becomes. */
@@ -236,21 +303,29 @@ function chipTokens(
   return [...mentions, ...skilled].sort((first, second) => first.start - second.start);
 }
 
-/** The paragraphs lines of words stand for: one per line, each `/name` of a known skill and each mention its chip. */
+/** A mark the words wear as the schema holds it. */
+function schemaMark(schema: Schema, mark: InlineMark): Mark {
+  return schema.mark(mark.name, mark.href === undefined ? null : { href: mark.href });
+}
+
+/** The paragraphs lines of words stand for: one per line, its Markdown read into marks, each `/name` of a known skill and each mention its chip. */
 function paragraphsOf(schema: Schema, text: string, chipping: Chipping): PmNode[] {
   const tokens = chipTokens(text, chipping);
   const paragraphs: PmNode[] = [];
   let lineStart = 0;
   for (const line of text.split(NEWLINE)) {
     const lineEnd = lineStart + line.length;
-    const children: PmNode[] = [];
-    let at = lineStart;
-    for (const token of tokens.filter((each) => each.start >= lineStart && each.end <= lineEnd)) {
-      if (token.start > at) children.push(schema.text(text.slice(at, token.start)));
-      children.push(token.node(schema));
-      at = token.end;
-    }
-    if (lineEnd > at) children.push(schema.text(text.slice(at, lineEnd)));
+    const chips = tokens.filter((each) => each.start >= lineStart && each.end <= lineEnd);
+    const atoms = chips.map((each) => ({ start: each.start - lineStart, end: each.end - lineStart }));
+    const children = readInline(line, atoms).map((span) =>
+      span.kind === INLINE_SPAN.ATOM
+        ? (chips.find((each) => each.start === lineStart + span.from)?.node(schema) ??
+          schema.text(line.slice(span.from, span.to)))
+        : schema.text(
+            line.slice(span.from, span.to),
+            span.marks.map((mark) => schemaMark(schema, mark)),
+          ),
+    );
     paragraphs.push(schema.node("paragraph", null, children));
     lineStart = lineEnd + NEWLINE.length;
   }
@@ -544,33 +619,56 @@ function quoteNode(drawQuote: ComposerEditorProps["drawQuote"]) {
   });
 }
 
-/** What the box may hold: paragraphs, text, a hard break, and undo, StarterKit's and nothing more, the chips, and the quote block. */
+/**
+ * What the box may hold: paragraphs, text, a hard break, undo, and the
+ * inline marks, StarterKit's and nothing more, the chips, and the quote
+ * block; the marks' chords the writing vocabulary's, and the selection told
+ * to a format toolbar where one stands over the box. Note that a link is
+ * made only on purpose, never of an address as it is typed, since an
+ * address typed is sent as the words typed, and that a press on one opens
+ * nothing, since the box's own right-click opens it.
+ */
 function composerExtensions(
-  drawChip: ComposerEditorProps["drawChip"],
+  props: ComposerEditorProps,
   known: (name: string) => boolean,
-  drawMention: MentionDrawer | undefined,
-  drawQuote: ComposerEditorProps["drawQuote"],
 ): AnyExtension[] {
   const kit = StarterKit.configure({
     blockquote: false,
-    bold: false,
     bulletList: false,
-    code: false,
     codeBlock: false,
     dropcursor: false,
     gapcursor: false,
     heading: false,
     horizontalRule: false,
-    italic: false,
     listItem: false,
     listKeymap: false,
-    link: false,
+    link: { autolink: false, openOnClick: false, HTMLAttributes: TEXT_LINK_MARK_ATTRIBUTES },
     orderedList: false,
-    strike: false,
     underline: false,
     trailingNode: false,
   });
-  return [kit, skillNode(drawChip, known), mentionNode(drawMention), quoteNode(drawQuote)];
+  return [
+    withoutTipTapChords(kit),
+    writingKeys.configure({ actions: MARK_ACTIONS }),
+    ...formatReports(props.format),
+    skillNode(props.drawChip, known),
+    mentionNode(props.mentions?.drawMention),
+    quoteNode(props.drawQuote),
+  ];
+}
+
+/** Whether a node is a chip, a skill's or a mention's. */
+function isChip(node: PmNode): boolean {
+  return node.type.name === SKILL_NODE || node.type.name === MENTION_NODE;
+}
+
+/** Every chip a mark was laid on, as words selected around it and marked lay one, made to wear none again. */
+function unmarkedChips(tr: Transaction): Transaction {
+  tr.doc.descendants((node, pos) => {
+    if (isChip(node) && node.marks.length > 0) tr.removeMark(pos, pos + node.nodeSize);
+    return !node.isInline;
+  });
+  return tr;
 }
 
 /** What a mounted box keeps between its events: the skills it chips, whether it takes words, the last words and word it reported, and its marks. */
@@ -617,8 +715,8 @@ function reported(view: EditorView, state: ComposerState, props: ComposerEditorP
 
 /**
  * The box's guard: no change past the bound and none while read-only but a
- * command's, each completed `/name` made its chip, and the `/` word
- * reported as the editor's state moves.
+ * command's, each completed `/name` made its chip, no chip wearing a mark,
+ * and the `/` word reported as the editor's state moves.
  */
 function guardPlugin(state: ComposerState, props: ComposerEditorProps): Plugin {
   return new Plugin({
@@ -633,8 +731,9 @@ function guardPlugin(state: ComposerState, props: ComposerEditorProps): Plugin {
       return length <= props.maxLength || length <= textOf(before.doc).length;
     },
     appendTransaction: (transactions, _old, now) => {
-      if (transactions.some((tr) => tr.getMeta(CHIPPED_META) === true)) return undefined;
-      return chipped(now, state.skills, true);
+      const chipping = transactions.some((tr) => tr.getMeta(CHIPPED_META) === true);
+      const tr = unmarkedChips((chipping ? undefined : chipped(now, state.skills, true)) ?? now.tr);
+      return tr.docChanged ? tr : undefined;
     },
     view: () => ({ update: (view) => reported(view, state, props) }),
   });
@@ -749,6 +848,14 @@ function laidIn(editor: Editor, state: ComposerState, text: string): void {
   commanded(editor, tr.setSelection(TextSelection.atEnd(tr.doc)).setMeta(CHIPPED_META, true));
 }
 
+/** Whether words put in beside an inline node need a space from it: it ends, or starts where it stands after them, in a character that is no space. */
+function needsSpace(node: PmNode | null | undefined, after: boolean): boolean {
+  if (node === null || node === undefined) return false;
+  const words = inlineText(node);
+  const character = after ? words[0] : words.at(-1);
+  return character !== undefined && !/\s/u.test(character);
+}
+
 /** The words put in at a place, spaced from a word either side and cut to the room left, the caret after them; answers whether any went in. */
 function insertedAt(
   editor: Editor,
@@ -758,11 +865,10 @@ function insertedAt(
   words: string,
 ): boolean {
   const { doc, schema } = editor.state;
-  const text = textOf(doc);
-  const offset = offsetAt(doc, pos);
-  const lead = offset === 0 || /\s/u.test(text[offset - 1] ?? "") ? "" : SPACE;
-  const trail = offset === text.length || /\s/u.test(text[offset] ?? "") ? "" : SPACE;
-  const room = Math.max(0, maxLength - text.length - lead.length - trail.length);
+  const $pos = doc.resolve(pos);
+  const lead = needsSpace($pos.nodeBefore, false) ? SPACE : "";
+  const trail = needsSpace($pos.nodeAfter, true) ? SPACE : "";
+  const room = Math.max(0, maxLength - textOf(doc).length - lead.length - trail.length);
   const fitting = words.slice(0, room).trim();
   if (fitting === "") return false;
   const tr = editor.state.tr.replace(pos, pos, sliceOf(schema, `${lead}${fitting}${trail}`, state));
@@ -928,12 +1034,7 @@ export function mountComposer(host: HTMLElement, props: ComposerEditorProps): Co
     // Note that TipTap's own base rules would go in as an inline `<style>`, which the panel's policy (`style-src 'self'`: the desktop's `renderer/index.html` and the web's `vercel.json`) refuses; the owner's stylesheet styles the box instead.
     injectCSS: false,
     extensions: [
-      ...composerExtensions(
-        props.drawChip,
-        (name) => state.skills.has(name),
-        props.mentions?.drawMention,
-        props.drawQuote,
-      ),
+      ...composerExtensions(props, (name) => state.skills.has(name)),
       Extension.create({ name: "composerGuard", addProseMirrorPlugins: () => [guard] }),
     ],
     editorProps: composerProps(state, props),
@@ -948,6 +1049,7 @@ export function mountComposer(host: HTMLElement, props: ComposerEditorProps): Co
   laidIn(editor, state, props.text);
   if (props.focus) editor.view.focus();
   return {
+    ...editorFormatting(editor),
     clear: () => laidIn(editor, state, ""),
     replace: (text) => laidIn(editor, state, text),
     mark: () => marked(editor, state, props.maxLength),
@@ -978,7 +1080,6 @@ export function mountComposer(host: HTMLElement, props: ComposerEditorProps): Co
       });
     },
     setAria: (aria) => attributed(editor, aria),
-    focus: () => editor.view.focus(),
     blur: () => editor.view.dom.blur(),
     destroy: () => editor.destroy(),
   };
