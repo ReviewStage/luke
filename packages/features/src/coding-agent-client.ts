@@ -986,6 +986,21 @@ export class HostedCodingAgentClient {
     return hostedAnswer(askHosted(this.#hosted.agents.stop, { id: agentId }), ROW_REFUSALS);
   }
 
+  /** Takes one agent back to just before one of the developer's lines, stopping it first where it still works, answering it as it then stands. */
+  rewind(
+    agentId: string,
+    messageId: string,
+  ): Effect.Effect<CodingAgentAgentAnswer, never, HttpClient.HttpClient> {
+    return hostedAnswer(
+      askHosted(
+        this.#hosted.agents.rewind,
+        { params: { id: agentId }, body: { messageId } },
+        HOSTED_DEADLINE.STEER,
+      ),
+      ROW_REFUSALS,
+    );
+  }
+
   /** One agent read whole as its own page by its id, on a task or with none. */
   agent(agentId: string): Effect.Effect<CodingAgentPageAnswerView, never, HttpClient.HttpClient> {
     return hostedAnswer(askHosted(this.#hosted.agents.read, { id: agentId }), ROW_REFUSALS);

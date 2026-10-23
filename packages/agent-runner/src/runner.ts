@@ -47,7 +47,7 @@ import {
   Semaphore,
   Stream,
 } from "effect";
-import { ClaudeCode, type ClaudeCodeSession } from "./claude-code.js";
+import { ClaudeCode, type ClaudeCodeSession, type ClaudeCodeShape } from "./claude-code.js";
 import { runCodex } from "./codex.js";
 import { type EventSink, makeEventSink } from "./events.js";
 import {
@@ -118,12 +118,45 @@ export interface RunnerInput {
 const decodeConfig = Schema.decodeUnknownEffect(Schema.fromJsonString(RunnerConfigSchema));
 const decodeLine = Schema.decodeUnknownOption(Schema.fromJsonString(InputLineSchema));
 
+/** Where a launch resumes the CLI's session: the session, and the chain entry it is cut after, where a rewind cut it; none for a fresh session. */
+interface ResumePoint {
+  readonly resume?: string;
+  readonly at?: string;
+}
+
+/**
+ * Where the launch resumes: the config's session as it stands, or, where a
+ * rewind dropped one of its prompts, cut at the entry just before that
+ * prompt, and a fresh session where the prompt was its first. A session
+ * holding no such prompt, or one that cannot be read, is resumed whole, as
+ * a rewind the CLI never heard of leaves nothing of its own to cut.
+ */
+const resumePointOf = Effect.fn("agent-runner/resumePointOf")(function* (
+  claudeCode: ClaudeCodeShape,
+  config: ClaudeCodeConfig,
+) {
+  const { resume, rewindBefore } = config;
+  if (resume === undefined) return {} satisfies ResumePoint;
+  if (rewindBefore === undefined) return { resume } satisfies ResumePoint;
+  const unread: readonly string[] = [];
+  const chain = yield* Effect.tryPromise(() => claudeCode.sessionChain(resume, config.cwd)).pipe(
+    Effect.catch(() =>
+      Effect.as(Effect.logWarning("agent-runner: the session to rewind could not be read"), unread),
+    ),
+  );
+  const cut = chain.indexOf(rewindBefore);
+  if (cut === 0) return {} satisfies ResumePoint;
+  const at = cut > 0 ? chain[cut - 1] : undefined;
+  return at === undefined ? ({ resume } satisfies ResumePoint) : { resume, at };
+});
+
 /** The documented options a launch runs `query()` with (the plan's P05). */
 function queryOptions(
   config: ClaudeCodeConfig,
   env: RunnerInput["env"],
   luke: McpSdkServerConfigWithInstance,
   onStop: HookCallback,
+  from: ResumePoint,
 ): Options {
   const options: Options = {
     cwd: config.cwd,
@@ -159,7 +192,8 @@ function queryOptions(
   if (config.effort !== undefined) options.effort = config.effort;
   // Note that a headless CLI runs fast mode only where its flag settings opt in.
   if (config.fast === true) options.settings = { fastMode: true };
-  if (config.resume !== undefined) options.resume = config.resume;
+  if (from.resume !== undefined) options.resume = from.resume;
+  if (from.at !== undefined) options.resumeSessionAt = from.at;
   // The member's installed skills load as a local plugin, which leaves the checkout and the
   // settings Claude Code reads (`project` alone) as they stand; Luke holds its MCP servers.
   const manifest = installedSkillsPath(config.installedSkills, INSTALLED_SKILLS.MANIFEST);
@@ -428,9 +462,10 @@ const runClaudeCode = Effect.fn("agent-runner/runClaudeCode")(function* (
   };
   const luke = yield* openMcpRelay(MCP_SERVER, config.mcpUrl, bearer);
   const prompts = yield* Queue.unbounded<SDKUserMessage, Cause.Done>();
+  const from = yield* resumePointOf(claudeCode, config);
   const session = claudeCode.query({
     prompt: Stream.toAsyncIterable(Stream.fromQueue(prompts)),
-    options: queryOptions(config, context.env, luke, onStop),
+    options: queryOptions(config, context.env, luke, onStop, from),
   });
   const launch: Launch = {
     session,

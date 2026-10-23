@@ -56,6 +56,7 @@ import {
   codingAgentPullRequestParamsSchema,
   codingAgentPullRequestReadParamsSchema,
   codingAgentRenameParamsSchema,
+  codingAgentRewindParamsSchema,
   codingAgentServersParamsSchema,
   codingAgentStartParamsSchema,
   codingAgentStopParamsSchema,
@@ -182,6 +183,7 @@ export type CodingAgentClient = Pick<
   | "pin"
   | "ensureOperator"
   | "stop"
+  | "rewind"
   | "delete"
   | "agent"
   | "calls"
@@ -755,6 +757,16 @@ function composed(
           "stopping an agent names one agent",
         );
         const answer = yield* asked(client.stop(agentId));
+        return carried<CodingAgentAgentAnswer>(answer);
+      }),
+    [GATEWAY_METHOD.CODING_AGENTS_REWIND]: (params) =>
+      Effect.gen(function* () {
+        const { agentId, messageId } = yield* read(
+          codingAgentRewindParamsSchema,
+          params,
+          "rewinding an agent names one agent and one of its lines",
+        );
+        const answer = yield* asked(client.rewind(agentId, messageId));
         return carried<CodingAgentAgentAnswer>(answer);
       }),
     [GATEWAY_METHOD.CODING_AGENTS_DELETE]: (params) =>

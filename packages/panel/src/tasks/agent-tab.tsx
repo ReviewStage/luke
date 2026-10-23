@@ -171,6 +171,7 @@ import { PlanPictures } from "./plan-pictures.js";
 import { ReplayCard, type ReplayPlace, replayPlace } from "./replay-card.js";
 import { briefAgent, replayOpening } from "./replay-card-model.js";
 import { REPLY_SCOPE, ReplyToSelection } from "./reply-to-selection.js";
+import { EditChip, REWIND_ACTION, RewindProvider, rewindPoints } from "./rewind-action.js";
 import { SentTime } from "./sent-time.js";
 import { MentionedServers, SentToAgent } from "./server-card.js";
 import { SentWords, useSkill } from "./skill-chip.js";
@@ -1317,6 +1318,7 @@ export function AgentMessage({
                 words={shown}
                 messageId={message.id}
                 placement={MESSAGE_ACTIONS_PLACEMENT.INLINE}
+                rewind={REWIND_ACTION.EDIT}
               />
             )}
             {named}
@@ -1365,6 +1367,7 @@ export function AgentMessage({
             forkable={forks}
             forkCut={forkCut}
             placement={MESSAGE_ACTIONS_PLACEMENT.INLINE}
+            rewind={REWIND_ACTION.REVERT}
           />
         ) : null
       }
@@ -2153,9 +2156,26 @@ function AgentTabView({
 }): React.JSX.Element {
   const call = offeredCall;
   const onCall = useAgentOnCall(agent.id) && call !== undefined;
-  const lines = useMemo(
-    () => agentLines(transcript.messages, composer.sent),
-    [transcript.messages, composer.sent],
+  // Note that the messages a rewind drops are hidden at once, until the transcript reads back without them.
+  const { cut } = composer;
+  const kept = useMemo(
+    () =>
+      cut === undefined
+        ? transcript.messages
+        : transcript.messages.filter((message) => !cut.has(message.id)),
+    [transcript.messages, cut],
+  );
+  const lines = useMemo(() => agentLines(kept, composer.sent), [kept, composer.sent]);
+  // A rewind writes in the box, so it is offered only while the box takes words.
+  const boxOpen =
+    onUnarchive === undefined && continuedNote === undefined && composer.closed === undefined;
+  const onEdit = useSteady(boxOpen ? composer.edit : undefined);
+  const onRevert = useSteady(boxOpen ? composer.revert : undefined);
+  const points = useMemo(() => rewindPoints(kept), [kept]);
+  const rewind = useMemo(
+    () =>
+      onEdit === undefined || onRevert === undefined ? undefined : { onEdit, onRevert, ...points },
+    [onEdit, onRevert, points],
   );
   const chatOn = useChatOn();
   const working = agentStillWriting(agent.status);
@@ -2232,50 +2252,52 @@ function AgentTabView({
           <WholePartsProvider value={wholeParts}>
             <MentionedServers value={mentioned}>
               <UndeliveredLines value={marks}>
-                <AgentTranscriptView
-                  messages={lines}
-                  quietReplies={agent.kind === CODING_AGENT_KIND.OPERATOR}
-                  brief={agent.brief}
-                  briefSender={starter === undefined ? undefined : starterActor}
-                  origin={origin}
-                  readerId={readerId}
-                  taskId={agent.planId ?? undefined}
-                  replay={replay}
-                  delegation={{
-                    models,
-                    own: { model: agent.model, effort: agent.effort },
-                    starts:
-                      delegationStarts && workerStarts(delegationStarts, transcript.subagents),
-                    onOpen: openSubagent,
-                    onOpenTarget: openTarget,
-                    cards,
-                    standings: transcript.subagents,
-                    chat,
-                    chatOn,
-                  }}
-                  reading={transcript.reading || holding}
-                  holding={holding}
-                  failed={transcript.failed}
-                  working={working}
-                  sessionStarting={agent.status === CODING_AGENT_STATUS.STARTING}
-                  startedAt={startedAt}
-                  ended={
-                    // Note that the end line waits for a page, so a stopped agent's tab never draws it over nothing.
-                    transcript.pages === 0
-                      ? undefined
-                      : endLineParts(agent.status, transcript.failure, starter, continuable)
-                  }
-                  endReason={endLineReason(transcript.failure, starter)}
-                  onOpenApiKeys={onOpenApiKeys}
-                  endPress={endPress}
-                  endTrail={endTrail}
-                  onRetry={transcript.onRetry}
-                  onOlder={transcript.hasOlder ? transcript.loadOlder : undefined}
-                  olderFailed={transcript.olderFailed}
-                  overComposer
-                  calls={calls}
-                  bringIn={bringIn}
-                />
+                <RewindProvider value={rewind}>
+                  <AgentTranscriptView
+                    messages={lines}
+                    quietReplies={agent.kind === CODING_AGENT_KIND.OPERATOR}
+                    brief={agent.brief}
+                    briefSender={starter === undefined ? undefined : starterActor}
+                    origin={origin}
+                    readerId={readerId}
+                    taskId={agent.planId ?? undefined}
+                    replay={replay}
+                    delegation={{
+                      models,
+                      own: { model: agent.model, effort: agent.effort },
+                      starts:
+                        delegationStarts && workerStarts(delegationStarts, transcript.subagents),
+                      onOpen: openSubagent,
+                      onOpenTarget: openTarget,
+                      cards,
+                      standings: transcript.subagents,
+                      chat,
+                      chatOn,
+                    }}
+                    reading={transcript.reading || holding}
+                    holding={holding}
+                    failed={transcript.failed}
+                    working={working}
+                    sessionStarting={agent.status === CODING_AGENT_STATUS.STARTING}
+                    startedAt={startedAt}
+                    ended={
+                      // Note that the end line waits for a page, so a stopped agent's tab never draws it over nothing.
+                      transcript.pages === 0
+                        ? undefined
+                        : endLineParts(agent.status, transcript.failure, starter, continuable)
+                    }
+                    endReason={endLineReason(transcript.failure, starter)}
+                    onOpenApiKeys={onOpenApiKeys}
+                    endPress={endPress}
+                    endTrail={endTrail}
+                    onRetry={transcript.onRetry}
+                    onOlder={transcript.hasOlder ? transcript.loadOlder : undefined}
+                    olderFailed={transcript.olderFailed}
+                    overComposer
+                    calls={calls}
+                    bringIn={bringIn}
+                  />
+                </RewindProvider>
               </UndeliveredLines>
             </MentionedServers>
           </WholePartsProvider>
@@ -2298,34 +2320,39 @@ function AgentTabView({
         ) : continuedNote !== undefined ? (
           continuedNote
         ) : (
-          <AgentComposer
-            agentId={agent.id}
-            status={agent.status}
-            composer={composer}
-            model={model}
-            models={models}
-            readModels={readModels}
-            usage={transcript.usage}
-            payer={transcript.payer}
-            servers={servers}
-            context={transcript.context}
-            brief={agent.brief}
-            published={published}
-            doors={doors}
-            onStop={onStop}
-            // Note that a started agent's conversation always opens on its plan or
-            // task, so the box takes a follow up even before the transcript is read.
-            followsUp
-            keywords={keywords}
-            skills={skills}
-            replyDoor={replyDoor}
-            closedRemedy={closedRemedy}
-            call={
-              call === undefined ? undefined : <AgentCallControls agentId={agent.id} doors={call} />
-            }
-            // Note that a call holds the microphone, so its own mute stands where Dictate would.
-            dictates={!onCall}
-          />
+          <>
+            {composer.editing === undefined ? null : <EditChip onDrop={composer.dropEdit} />}
+            <AgentComposer
+              agentId={agent.id}
+              status={agent.status}
+              composer={composer}
+              model={model}
+              models={models}
+              readModels={readModels}
+              usage={transcript.usage}
+              payer={transcript.payer}
+              servers={servers}
+              context={transcript.context}
+              brief={agent.brief}
+              published={published}
+              doors={doors}
+              onStop={onStop}
+              // Note that a started agent's conversation always opens on its plan or
+              // task, so the box takes a follow up even before the transcript is read.
+              followsUp
+              keywords={keywords}
+              skills={skills}
+              replyDoor={replyDoor}
+              closedRemedy={closedRemedy}
+              call={
+                call === undefined ? undefined : (
+                  <AgentCallControls agentId={agent.id} doors={call} />
+                )
+              }
+              // Note that a call holds the microphone, so its own mute stands where Dictate would.
+              dictates={!onCall}
+            />
+          </>
         )}
       </footer>
       {/* Note that Reply stands only while the box takes a change, as a file's + does. */}
@@ -2513,6 +2540,7 @@ function AgentTabBody({
     messages: transcript.messages,
     running: agent.status === CODING_AGENT_STATUS.RUNNING,
     send: control.onMessage,
+    rewind: control.onRewind,
     payer: planPayerOf(agent.runtime),
     onStatus: control.onStatus,
   });

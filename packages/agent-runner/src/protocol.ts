@@ -158,6 +158,8 @@ export const ClaudeCodeConfigSchema = Schema.Struct({
   append: Schema.String,
   /** The CLI's session id to resume, where this launch continues one. */
   resume: Schema.optionalKey(Schema.String),
+  /** Luke's id of a prompt a rewind dropped: the resumed session is cut just before it, and resumed whole where it holds no such prompt. */
+  rewindBefore: Schema.optionalKey(Schema.String),
   firstSequence: SequenceSchema,
   /** Where the runner posts its events. */
   eventsUrl: Schema.String,
@@ -194,6 +196,8 @@ export const CodexConfigSchema = Schema.Struct({
   /** Luke's coder instructions, as the thread's `developer_instructions`. */
   developerInstructions: Schema.String,
   threadId: Schema.optionalKey(Schema.String),
+  /** Luke's id of a message a rewind dropped: the resumed thread is reverted to before the turn that took it, and resumed whole where none did. */
+  rewindBefore: Schema.optionalKey(Schema.String),
   firstSequence: SequenceSchema,
   eventsUrl: Schema.String,
   mcpUrl: Schema.String,

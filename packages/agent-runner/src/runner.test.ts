@@ -121,9 +121,10 @@ function launch(
   luke: ReturnType<typeof fakeLuke>,
   env: Record<string, string> = ENV,
   proc: string = UNREAD_PROC,
+  chain: readonly string[] = [],
 ) {
   return Effect.gen(function* () {
-    const cli = yield* fakeClaudeCode(steps);
+    const cli = yield* fakeClaudeCode(steps, chain);
     const stdin = yield* Queue.unbounded<string, Cause.Done>();
     const writeText = (text: string) => Queue.offer(stdin, text);
     const write = (line: RunnerConfig | InputLine) => writeText(JSON.stringify(line));
@@ -950,5 +951,45 @@ it.effect("keeps a waiting launch whose wait a message from Luke turned into a t
     assert.equal(run.pollUnsafe(), undefined);
     yield* release;
     assert.equal(yield* Fiber.join(run), RUNNER_END.TURN_ENDED);
+  }),
+);
+
+/** The stored session a rewind cuts: two answered prompts, each followed by the answer's entries. */
+const REWOUND_CHAIN = [
+  "10000000-0000-4000-8000-000000000001",
+  "10000000-0000-4000-8000-000000000002",
+  "10000000-0000-4000-8000-000000000003",
+  "10000000-0000-4000-8000-000000000004",
+];
+
+it.effect.each([
+  {
+    case: "cut just before the prompt the rewind dropped",
+    rewindBefore: "10000000-0000-4000-8000-000000000003",
+    resume: CONFIG.resume,
+    at: "10000000-0000-4000-8000-000000000002",
+  },
+  {
+    case: "started afresh where the dropped prompt was the session's first",
+    rewindBefore: "10000000-0000-4000-8000-000000000001",
+    resume: undefined,
+    at: undefined,
+  },
+  {
+    case: "resumed whole where the session never held the prompt",
+    rewindBefore: "10000000-0000-4000-8000-000000000009",
+    resume: CONFIG.resume,
+    at: undefined,
+  },
+])("resumes a rewound session $case", ({ rewindBefore, resume, at }) =>
+  Effect.gen(function* () {
+    const luke = fakeLuke();
+    const { cli, write, run } = yield* launch(SHORT_TURN, luke, ENV, UNREAD_PROC, REWOUND_CHAIN);
+    yield* write({ ...CONFIG, rewindBefore });
+    yield* write(FIRST_MESSAGE);
+    yield* Fiber.join(run);
+
+    assert.equal(cli.options?.resume, resume);
+    assert.equal(cli.options?.resumeSessionAt, at);
   }),
 );

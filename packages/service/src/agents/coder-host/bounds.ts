@@ -161,6 +161,13 @@ export const CODER = {
     WAIT: Duration.minutes(2),
     POLL: Duration.millis(250),
   },
+  /**
+   * How long a rewind waits for a native agent's runner to end on its Stop
+   * before ending its command: a turn interrupted mid-step settles in a
+   * second or two, and a runner that never does is ended rather than left
+   * to write to the session the rewind cuts.
+   */
+  RUNNER_HALT: Duration.seconds(15),
 } as const;
 
 /** The environment the coding-agent host reads beside the names every hosted route already honours. */

@@ -2121,6 +2121,8 @@ export interface SentLine {
   /** Whether a turn ran as the line went, so it steers that turn rather than opening one. */
   readonly steers: boolean;
   readonly state: SentLineState;
+  /** The developer's line it was written in place of, by its message id, which the agent is taken back to just before as it goes; none for a line sent after the rest. */
+  readonly rewinds?: string | undefined;
 }
 
 /** The ids the developer's rows of a transcript were written under, which a sent line's row is one of once it lands. */

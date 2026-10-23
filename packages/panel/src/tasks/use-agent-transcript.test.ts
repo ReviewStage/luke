@@ -487,3 +487,24 @@ test("a newest page that meets what is held joins it, older pages and all; one t
   );
   assert.equal(seen.current?.olderFailed, false);
 });
+
+test("a newest page read at another rewind takes the place of what is held, though it meets it, so the messages the rewind dropped go", () => {
+  const { follower, push } = scriptedFollower();
+  const { seen, draw } = drawn(follower);
+
+  draw(true);
+  push(AGENT, newestOf(["m-1", "m-2", "m-3", "m-4"]));
+  push(AGENT, { ...newestOf(["m-1", "m-2"]), rewound: 7 });
+  assert.deepEqual(
+    seen.current?.messages.map((message) => message.id),
+    ["m-1", "m-2"],
+  );
+
+  // A page past the cursor of the same rewind joins what is held as any does.
+  push(AGENT, { ...pageOf("m-5", "Writing."), rewound: 7 });
+  push(AGENT, { ...newestOf(["m-2", "m-5"]), rewound: 7 });
+  assert.deepEqual(
+    seen.current?.messages.map((message) => message.id),
+    ["m-1", "m-2", "m-5"],
+  );
+});
