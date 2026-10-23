@@ -156,9 +156,14 @@ export interface BrowserStanding {
   readonly started: boolean;
 }
 
-/** A recording stopped, as the sandbox answered it: the video's length and bytes, or why there is none. */
+/** A recording stopped, as the sandbox answered it: the video's length, its bytes, and the absolute path it stays at in the sandbox; or why there is none. */
 export type BrowserRecordingRead =
-  | { readonly ok: true; readonly seconds: number; readonly bytes: Uint8Array }
+  | {
+      readonly ok: true;
+      readonly seconds: number;
+      readonly bytes: Uint8Array;
+      readonly path: string;
+    }
   | { readonly ok: false; readonly reason: RecordingFailure; readonly bytes?: number };
 
 export interface AgentBrowserService {
@@ -524,11 +529,11 @@ export function agentBrowserOver(
       const read = yield* api
         .run(sandboxSessionId, readRecording(maxBytes))
         .pipe(Effect.mapError(sandboxUnavailable));
-      const bytes = recordingBytesOf(read, maxBytes);
-      if (bytes === undefined) {
+      const file = recordingBytesOf(read, maxBytes);
+      if (file === undefined) {
         return { ok: false, reason: RECORDING_FAILURE.ENCODER } satisfies BrowserRecordingRead;
       }
-      return { ok: true, seconds: stopped.seconds, bytes } satisfies BrowserRecordingRead;
+      return { ok: true, seconds: stopped.seconds, ...file } satisfies BrowserRecordingRead;
     });
 
   return {
