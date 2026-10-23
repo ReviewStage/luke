@@ -465,21 +465,20 @@ export function runAgentTools(
     const compose = yield* eveSessionsComposer;
     // Each agent the tools reach is answered by the runtime its conversation runs on (`runtime-sessions.ts`).
     const route = yield* sessionsRouter;
-    const eve =
+    const eveAs =
       secret === undefined || origin === undefined
         ? undefined
-        : route(
-            compose({
-              origin,
-              caller: { secret, account: sender.userId },
-              mount: EVE_MOUNT.CODER,
-            }),
-            sender.userId,
-          );
+        : (account: string) =>
+            route(
+              compose({ origin, caller: { secret, account }, mount: EVE_MOUNT.CODER }),
+              account,
+            );
+    const eve = eveAs?.(sender.userId);
     const caller = { kind: AGENT_CALLER.AGENT, agent: sender } as const;
     const toolCall = {
       caller,
       eve,
+      eveAs,
       writer: seams.writer(),
       clientKey: call.callId,
       summaryModel: seams.summaryModel,

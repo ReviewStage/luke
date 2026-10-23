@@ -470,6 +470,8 @@ export interface CodingAgentCall {
   readonly caller: AgentCaller;
   /** eve's coding-agent service as the deployment acting for the caller's member; nothing where the deployment names no secret or no origin for eve, which sends and starts nothing. */
   readonly eve: AgentSessions | undefined;
+  /** eve as the deployment acting for any account, such as the creator an automation's run starts as, whoever fired it; nothing where the deployment names no secret or no origin for eve. */
+  readonly eveAs?: ((account: string) => AgentSessions) | undefined;
   readonly writer: Effect.Effect<StoreWriter>;
   /** The key a message or a start is made under: eve's own id for the tool call, so a call run again sends or starts once. */
   readonly clientKey: string;

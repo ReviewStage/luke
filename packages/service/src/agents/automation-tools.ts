@@ -843,9 +843,10 @@ export function runRunAutomation(
     return Effect.succeed(agentToolRejected(AUTOMATION_TOOL_REFUSAL.UNREADABLE_ID));
   }
   const { automationId } = asked.success;
-  const { eve } = call;
-  if (eve === undefined)
+  const { eveAs } = call;
+  if (eveAs === undefined) {
     return Effect.succeed(agentToolRejected(AUTOMATION_TOOL_REFUSAL.NO_SERVICE));
+  }
   return orStoreRefusal(
     Effect.gen(function* () {
       const workspace = yield* callerWorkspace(call.caller);
@@ -856,12 +857,12 @@ export function runRunAutomation(
       if (Option.isNone(found)) return agentToolRejected(AUTOMATION_TOOL_REFUSAL.NO_AUTOMATION);
       const runnable = yield* readAutomation(userId, automationId, AUTOMATION_ACCESS.RUN);
       if (Option.isNone(runnable)) return agentToolRejected(AUTOMATION_TOOL_REFUSAL.NOT_RUNNABLE);
-      // Note that the run reaches eve as the deployment acting for the caller's member, as a Run now reaches it as its caller.
+      // Note that the run reaches eve as the deployment acting for the account it starts as, its creator, whoever fired it, as the sweep's runs do.
       const ran = yield* runAutomationNowAs(
         userId,
         runnable.value,
         calledId(userId, call.clientKey),
-        () => Effect.succeed(eve),
+        (account) => Effect.succeed(eveAs(account)),
       ).pipe(Effect.result);
       if (Result.isFailure(ran)) return agentToolRejected(refusalWords(ran.failure));
       return {

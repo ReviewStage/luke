@@ -4110,7 +4110,13 @@ test("list_automations, create_automation, update_automation, and delete_automat
   // A teammate reads a personal automation of the starter's not at all, then a workspace's, which it may turn on but not change or delete.
   assert.deepEqual((await teammate(CODER_TOOL.LIST_AUTOMATIONS, {})).automations, []);
   assert.equal(
-    automationOf(await update({ scope: "workspace", agentId: null })).scope,
+    automationOf(
+      await update({
+        scope: "workspace",
+        agentId: null,
+        guards: { maxConcurrentRuns: 5, dailyRunCap: 50 },
+      }),
+    ).scope,
     "workspace",
   );
   assert.deepEqual(
@@ -4121,6 +4127,23 @@ test("list_automations, create_automation, update_automation, and delete_automat
     automationOf(await update({ enabled: true }, teammate, "teammate-toggle")).enabled,
     true,
   );
+  // A teammate runs a workspace's automation as its creator: the run starts the creator's agent.
+  const teammateRan = await teammate(
+    CODER_TOOL.RUN_AUTOMATION,
+    { automationId: id },
+    "teammate-run",
+  );
+  assert.ok(
+    isRecord(teammateRan.run) && isRecord(teammateRan.run.agent),
+    JSON.stringify(teammateRan),
+  );
+  assert.equal(teammateRan.run.status, "started");
+  const started = await database.run(
+    readCodingAgent(agents.caller.userId, String(teammateRan.run.agent.id)),
+  );
+  assert.ok(Option.isSome(started) && started.value.userId === agents.caller.userId);
+  // eve is reached as the creator the run starts as, not as the teammate who fired it.
+  assert.equal(eve.sent.at(-1)?.headers.get(BRAIN_HOST_HEADER.ACCOUNT), agents.caller.userId);
   assert.deepEqual(
     await teammate(CODER_TOOL.DELETE_AUTOMATION, { automationId: id }, "teammate-delete"),
     rejected(AUTOMATION_TOOL_REFUSAL.NOT_PERMITTED),
