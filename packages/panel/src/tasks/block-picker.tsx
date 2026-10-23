@@ -27,17 +27,19 @@ import {
   type EditorBox,
   SLASH_INSERT,
   type SlashBlock,
+  type SlashChoice,
 } from "../plan-editor/contract.js";
 
 /**
- * block-picker.tsx -- the plan editor's `/` menu: which blocks the words after the `/` match, the menu drawn under the `/`, and the keys it takes from the editor.
+ * block-picker.tsx -- a Markdown document's `/` menu: which blocks the words after the `/` match, the menu drawn under the `/`, and the keys it takes from the editor.
  *
  * The editor reports the `/` word the caret ends (`onTrigger`,
  * `../plan-editor/plan-slash.ts`), and hands the menu its keys first
  * (`onKey`), as it hands the `@` list its own. The menu offers the
  * vocabulary's blocks, its names and Markdown, and the menu's own inserts
- * beside them, a picture and a mention only where the text takes them;
- * the words typed after the `/` narrow it to the blocks whose name, or an
+ * beside them, a picture and a mention only where the text takes them,
+ * and a document's own blocks under the group each names, less any block
+ * the document drops; the words typed after the `/` narrow it to the blocks whose name, or an
  * alias the vocabulary does not hold (`/h2`, `/todo`, `/mermaid`), begins
  * with them, and a run that matches nothing closes it, as a space does.
  * ↑ and ↓ move its highlight, Enter or Tab chooses, the caret staying in
@@ -49,7 +51,7 @@ import {
 
 /** One block the menu offers: what choosing it lays in, its row, and the words it answers beside its name. */
 interface SlashEntry {
-  readonly block: SlashBlock;
+  readonly block: SlashChoice;
   readonly row: BlockMenuRow;
   readonly aliases: readonly string[];
 }
@@ -65,6 +67,27 @@ export interface BlockPickerOffers {
   readonly pictures: boolean;
   readonly mentions: boolean;
 }
+
+/**
+ * A block of a document's own the menu offers beside its own, as a review
+ * comment offers a suggestion: its row, the group it stands at the end of,
+ * the words it answers beside its name, and the Markdown it lays in.
+ */
+export interface OwnBlock {
+  readonly group: BlockMenuGroupLabel;
+  readonly row: BlockMenuRow;
+  readonly aliases: readonly string[];
+  readonly markdown: string;
+}
+
+/** The rows a document changes in its menu: its own blocks added, and the menu's blocks that do not apply to it dropped. */
+export interface BlockPickerRows {
+  readonly added: readonly OwnBlock[];
+  readonly dropped: ReadonlySet<SlashBlock>;
+}
+
+/** The menu's rows as a document that changes none of them offers them. */
+const SLASH_ROWS: BlockPickerRows = { added: [], dropped: new Set() };
 
 /** A writing block or the divider, as the vocabulary names it, answering the aliases given. */
 function vocabulary(block: WritingBlock | WritingInsert, aliases: readonly string[]): SlashEntry {
@@ -150,18 +173,32 @@ function answers(entry: SlashEntry, query: string): boolean {
   return terms.some((term) => term.startsWith(asked));
 }
 
-/** Whether the text takes what a block lays in. */
-function offered(entry: SlashEntry, offers: BlockPickerOffers): boolean {
+/** Whether the text takes what a block lays in, and the document keeps its row. */
+function offered(entry: SlashEntry, offers: BlockPickerOffers, rows: BlockPickerRows): boolean {
+  if (typeof entry.block !== "string") return true;
+  if (rows.dropped.has(entry.block)) return false;
   if (entry.block === SLASH_INSERT.PICTURE) return offers.pictures;
   if (entry.block === SLASH_INSERT.MENTION) return offers.mentions;
   return true;
 }
 
-/** The groups that answer `query`, each with only its blocks that do, and none left empty. */
-function slashGroups(query: string, offers: BlockPickerOffers): readonly SlashGroup[] {
+/** A document's own block as the menu offers it. */
+function documentEntry(block: OwnBlock): SlashEntry {
+  return { block: { markdown: block.markdown }, row: block.row, aliases: block.aliases };
+}
+
+/** The groups that answer `query`, each with only its blocks that do, a document's own at the end of theirs, and none left empty. */
+function slashGroups(
+  query: string,
+  offers: BlockPickerOffers,
+  rows: BlockPickerRows,
+): readonly SlashGroup[] {
   return SLASH_GROUPS.map((group) => ({
     label: group.label,
-    entries: group.entries.filter((entry) => offered(entry, offers) && answers(entry, query)),
+    entries: [
+      ...group.entries,
+      ...rows.added.filter((added) => added.group === group.label).map(documentEntry),
+    ].filter((entry) => offered(entry, offers, rows) && answers(entry, query)),
   })).filter((group) => group.entries.length > 0);
 }
 
@@ -186,17 +223,19 @@ export interface BlockPicker {
   readonly onKey: (event: KeyboardEvent) => boolean;
 }
 
-/** The `/` menu over the editor standing in `room`, offering what `offers` says the text takes, held off while `held`; `onChoose` lays the block in. */
+/** The `/` menu over the editor standing in `room`, offering what `offers` says the text takes, with the document's `rows` changed, held off while `held`; `onChoose` lays the block in. */
 export function useBlockPicker({
   room,
   offers,
+  rows = SLASH_ROWS,
   held,
   onChoose,
 }: {
   room: RefObject<HTMLElement | null>;
   offers: BlockPickerOffers;
+  rows?: BlockPickerRows | undefined;
   held: boolean;
-  onChoose: (block: SlashBlock) => void;
+  onChoose: (block: SlashChoice) => void;
 }): BlockPicker {
   const listId = useId();
   const [said, setSaid] = useState<Said | undefined>(undefined);
@@ -209,7 +248,7 @@ export function useBlockPicker({
     if (!inWord) setClosed(undefined);
   }, [inWord]);
 
-  const groups = trigger === undefined ? [] : slashGroups(trigger.query, offers);
+  const groups = trigger === undefined ? [] : slashGroups(trigger.query, offers, rows);
   const entries = groups.flatMap((group) => group.entries);
   const open = trigger !== undefined && closed !== trigger.start && entries.length > 0 && !held;
   const kept =
