@@ -9,8 +9,8 @@ import { InboxListSkeleton } from "../tasks/inbox-list.js";
 
 /**
  * skeleton-rows.test.ts -- a list's placeholder rows stand their blocks
- * where the rows that replace them draw: an Inbox row's tile after the
- * gutter its unread dot stands in, and a pull request part's lines a step
+ * where the rows that replace them draw: an Inbox row's words after the
+ * gutter its unread dot stands in, and no tile, and a pull request part's lines a step
  * apart, as the boxes' own rules space them. jsdom lays nothing out, so
  * what each rule declares is read.
  */
@@ -30,19 +30,21 @@ afterEach(() => {
   document.body.replaceChildren();
 });
 
-test("an Inbox placeholder row stands its tile after the unread dot's gutter, as every item's row does", () => {
+test("an Inbox placeholder row leads with the unread dot's gutter alone, no tile after it, as every item's row does", () => {
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
   roots.push(root);
   act(() => root.render(createElement(InboxListSkeleton)));
-  const marks = [...container.querySelectorAll('.luke-skeleton[data-shape="circle"]')];
-  assert.ok(marks.length > 0);
-  for (const mark of marks) {
-    const gutter = mark.parentElement?.previousElementSibling;
+  const leadings = [...container.querySelectorAll(".luke-list-row-leading")];
+  assert.ok(leadings.length > 0);
+  for (const leading of leadings) {
+    const [gutter, ...rest] = [...leading.children];
+    assert.ok(gutter?.classList.contains("inbox-row-gutter"), "the gutter leads");
     assert.ok(gutter);
-    assert.ok(gutter.classList.contains("inbox-row-gutter"), "the tile's box follows the gutter");
+    assert.deepEqual(rest, [], "no tile stands after the gutter");
     assert.equal(getComputedStyle(gutter).flexShrink, "0");
   }
+  assert.equal(container.querySelector('.luke-skeleton[data-shape="circle"]'), null);
 });
 
 test("a pull request part's placeholder lines stand a step apart", () => {

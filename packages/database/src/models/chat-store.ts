@@ -2912,6 +2912,9 @@ function waitingOnAccount(userId: string): SQL | undefined {
       .from(chatMember)
       .where(and(eq(chatMember.id, memberId), eq(chatMember.userId, userId)));
   return and(
+    // Note that the ask's key is named though an open status implies it, because the partial
+    // index over asks is used only by a read that names its predicate itself.
+    isNotNull(chatMessage.askKey),
     eq(chatMessage.askStatus, ASK_STATUS.OPEN),
     exists(
       queryBuilder
