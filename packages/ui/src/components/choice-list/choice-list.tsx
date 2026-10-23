@@ -89,9 +89,8 @@ export const CHOICE_FLOW = {
 
 export type ChoiceFlow = (typeof CHOICE_FLOW)[keyof typeof CHOICE_FLOW];
 
-/** What a marked row's control fills with once checked: the accent, or what picking it means, going ahead or holding back. */
+/** What a marked row's control fills with once checked where not the accent: what picking it means, going ahead or holding back. */
 export const CHOICE_TONE = {
-  ACCENT: "accent",
   COMPLETE: "complete",
   DANGER: "danger",
 } as const;

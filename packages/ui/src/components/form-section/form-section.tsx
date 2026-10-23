@@ -71,7 +71,7 @@ export function FormSection({
       }}
     >
       {headed || described ? (
-        <div className="flex min-w-0 flex-col gap-1">
+        <div className="flex min-w-0 flex-col gap-luke-4">
           {headed ? (
             <Text variant={TEXT_VARIANT.SECTION} as={TEXT_ELEMENT.H2} id={titleId}>
               {title}

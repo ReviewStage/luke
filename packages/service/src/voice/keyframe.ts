@@ -33,6 +33,18 @@ const KEYFRAME_DEFAULTS = {
 const KEYFRAME_SESSIONS_PATH = "/v1/sessions";
 
 /**
+ * The call avatar's Keyframe pair as the deployment's environment names it,
+ * read by the voice function (`apps/web/server/voice/function.ts`) and by the
+ * admin dashboard's health list (`admin/admin-route.ts`).
+ */
+export const AVATAR_ENVIRONMENT = {
+  /** Luke's Keyframe Labs key, which mints each call's avatar session. */
+  KEYFRAME_API_KEY: "KEYFRAME_API_KEY",
+  /** The stock persona every call's avatar is minted as. */
+  KEYFRAME_PERSONA_ID: "LUKE_KEYFRAME_PERSONA_ID",
+} as const;
+
+/**
  * Keyframe's id for each stock avatar a Mac may choose, as Keyframe's avatar
  * library lists them for `persona-1.5-live`
  * (https://docs.keyframelabs.com/guides/resources/avatar-library). The

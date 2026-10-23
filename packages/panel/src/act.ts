@@ -81,7 +81,7 @@ export function tellAct<Kind extends PortActKind>(
 
 /**
  * An act whose answer a caller outside React reads: a read an atom holds
- * for every card that hangs it (`planning/mentioned-agent-card.tsx`).
+ * for every card that hangs it (`tasks/mentioned-agent-card.tsx`).
  */
 export function askAct<Kind extends PortActKind>(
   kind: Kind,

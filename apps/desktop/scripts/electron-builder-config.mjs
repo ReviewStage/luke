@@ -16,7 +16,7 @@ import {
   resolveSigningMode,
   SIGNING_MODE,
 } from "./package-config.mjs";
-import { NATIVE_HELPERS, PACKAGED_ARCHITECTURE } from "./package-layout.mjs";
+import { LIQUID_GLASS_ADDON, NATIVE_HELPERS, PACKAGED_ARCHITECTURE } from "./package-layout.mjs";
 import { builderReleaseArtifactDirectory, RELEASE_VOLUME_NAME } from "./release-config.mjs";
 
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
@@ -117,9 +117,9 @@ export function createElectronBuilderConfig(env = process.env) {
       entitlements: packageAssets.entitlementsPath,
       entitlementsInherit: packageAssets.entitlementsPath,
       minimumSystemVersion: MACOS_DEPLOYMENT_TARGET,
-      binaries: NATIVE_HELPERS.map(macBinaryPath),
+      binaries: [...NATIVE_HELPERS, LIQUID_GLASS_ADDON].map(macBinaryPath),
       // The app's own scheme, which a Luke link's "Open in Luke" page hands
-      // the plan to (`src/main/window/app-links.ts`): written into the
+      // the plan to (`src/main/services/window-service.ts`): written into the
       // bundle's CFBundleURLTypes, which macOS registers the app for.
       protocols: [{ name: "Luke link", schemes: ["tryluke"], role: "Viewer" }],
       extendInfo: {

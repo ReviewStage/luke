@@ -55,7 +55,8 @@ import {
   Stream,
 } from "effect";
 import type { HttpClient } from "effect/http";
-import { EXCESS_KEYS, type UnparsedWireValue, unparsedWire, WireValueSchema } from "../../core.js";
+import { EXCESS_KEYS, type UnparsedWireValue, WireValueSchema } from "../../core.js";
+import { jsonOf } from "../../http/http-effect.js";
 import type { RelayFrame, RelaySocket } from "../../terminal/relay.js";
 import { capSandboxTimeout } from "../sandbox-keep-alive.js";
 import { SandboxPty, type SandboxPtyService, sandboxPtyLayer } from "../sandbox-pty.js";
@@ -237,12 +238,6 @@ const readLine = readEither(BridgeLineSchema, { excess: EXCESS_KEYS.DROP });
 const readPages = readEither(PagesSchema, { excess: EXCESS_KEYS.DROP });
 const readCreated = readEither(CreatedSchema, { excess: EXCESS_KEYS.DROP });
 const readPtyExit = readEither(PtyExitSchema, { excess: EXCESS_KEYS.DROP });
-
-/** A line's JSON, or nothing a reader takes where it is none, as a PTY's stray output is. */
-function jsonOf(text: string): UnparsedWireValue {
-  const parsed = Result.try(() => JSON.parse(text));
-  return unparsedWire(Result.isSuccess(parsed) ? parsed.success : undefined);
-}
 
 const unreachable = (reason: BrowserUnreachableReason, status?: number) =>
   new BrowserUnreachable(status === undefined ? { reason } : { reason, status });

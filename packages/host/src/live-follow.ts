@@ -12,8 +12,10 @@ import {
   Duration,
   Effect,
   Fiber,
+  Option,
   Queue,
   Schedule,
+  Schema,
   Stream,
 } from "effect";
 
@@ -655,5 +657,29 @@ export function liveRows<Part extends string>(
         ),
       ).pipe(Stream.ensuring(Effect.sync(() => at?.ledgers.delete(shown))));
     }),
+  );
+}
+
+/**
+ * Every part's rows as `liveRows` delivers them, each decoded under
+ * `schema` at this boundary. It fails where the read is gone or a delivery
+ * does not decode, which the caller answers by sealing it again.
+ */
+export function decodedLiveRows<Part extends string, Rows>(
+  dependencies: Omit<LiveFollowDependencies<Part>, "onTxWait"> & {
+    readonly onTxWait?: LiveFollowDependencies<Part>["onTxWait"] | undefined;
+  },
+  first: SealedRead<Part>,
+  schema: Schema.Decoder<Rows>,
+): Stream.Stream<Rows, LiveBroken> {
+  const decode = Schema.decodeUnknownOption(schema);
+  const { onTxWait, ...rest } = dependencies;
+  return liveRows({ ...rest, ...(onTxWait === undefined ? undefined : { onTxWait }) }, first).pipe(
+    Stream.mapEffect((read) =>
+      Option.match(decode(read), {
+        onNone: () => Effect.fail(new LiveBroken({ reason: "a row did not decode" })),
+        onSome: Effect.succeed,
+      }),
+    ),
   );
 }

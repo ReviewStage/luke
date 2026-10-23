@@ -18,6 +18,7 @@ import {
 } from "@luke/credentials/snapshot";
 import { Option, Schema } from "effect";
 import { useEffect, useState } from "react";
+import { readKeptOption, writeKept } from "./kept-storage.js";
 
 /** Where the provider is kept in the renderer's storage. */
 const STORAGE_KEY = "luke.lastSignInProvider";
@@ -26,24 +27,8 @@ const STORAGE_KEY = "luke.lastSignInProvider";
 const storedProvider = Schema.Literals(Object.values(ACCOUNT_PROVIDER));
 
 /** The kept provider, or none where none was kept, it no longer reads, or storage refuses the read. */
-function readKept(): AccountProvider | undefined {
-  try {
-    const decoded = Schema.decodeUnknownOption(storedProvider)(
-      window.localStorage.getItem(STORAGE_KEY),
-    );
-    return Option.getOrUndefined(decoded);
-  } catch {
-    return undefined;
-  }
-}
-
-/** Keeps the provider; a write that fails costs only the chip, so it is not worth a word. */
-function writeKept(provider: AccountProvider): void {
-  try {
-    window.localStorage.setItem(STORAGE_KEY, provider);
-  } catch {
-    // The gate offers its default emphasis instead.
-  }
+function readProvider(): AccountProvider | undefined {
+  return Option.getOrUndefined(readKeptOption(STORAGE_KEY, storedProvider));
 }
 
 /** The provider this Mac last signed in with, kept as the account signs in, unless the run is `staged`. */
@@ -51,11 +36,11 @@ export function useLastSignIn(
   account: AccountSnapshot | undefined,
   staged: boolean,
 ): AccountProvider | undefined {
-  const [kept, setKept] = useState(readKept);
+  const [kept, setKept] = useState(readProvider);
   const signedIn = account?.status === ACCOUNT_STATUS.SIGNED_IN ? account.provider : undefined;
   useEffect(() => {
     if (staged || signedIn === undefined) return;
-    writeKept(signedIn);
+    writeKept(STORAGE_KEY, storedProvider, signedIn);
     setKept(signedIn);
   }, [signedIn, staged]);
   return staged ? undefined : kept;

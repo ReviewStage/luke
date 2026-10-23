@@ -1,5 +1,6 @@
-import type { KeyboardEvent, ReactNode } from "react";
+import type { ReactNode } from "react";
 import { useLayoutEffect, useRef } from "react";
+import { isComposingKey } from "../../composing-key.js";
 import { ShadcnInput } from "../../shadcn/input.js";
 
 /**
@@ -56,21 +57,14 @@ export type InlineEditLook = (typeof INLINE_EDIT_LOOK)[keyof typeof INLINE_EDIT_
  */
 const INLINE_EDIT =
   "luke-inline-edit pointer-coarse:data-[look]:text-touch " +
-  "data-[look=field]:inline-block data-[look=field]:h-auto data-[look=field]:w-auto data-[look=field]:rounded-inline-edit data-[look=field]:border-0 data-[look=field]:bg-ground data-[look=field]:focus:bg-ground data-[look=field]:px-1 data-[look=field]:py-px data-[look=field]:shadow-selected-edge data-[look=field]:text-body-size data-[look=field]:[font-family:inherit] data-[look=field]:[font-weight:inherit] data-[look=field]:[line-height:inherit] " +
-  "data-[look=input]:-my-0.75 data-[look=input]:ms-inline-edit-reach data-[look=input]:h-6 data-[look=input]:border-border data-[look=input]:px-2 data-[look=input]:tracking-normal data-[look=input]:[font:inherit] " +
+  "data-[look=field]:inline-block data-[look=field]:h-auto data-[look=field]:w-auto data-[look=field]:rounded-inline-edit data-[look=field]:border-0 data-[look=field]:bg-ground data-[look=field]:focus:bg-ground data-[look=field]:px-luke-4 data-[look=field]:py-px data-[look=field]:shadow-selected-edge data-[look=field]:text-body-size data-[look=field]:[font-family:inherit] data-[look=field]:[font-weight:inherit] data-[look=field]:[line-height:inherit] " +
+  "data-[look=input]:-my-inline-edit-lift data-[look=input]:ms-inline-edit-reach data-[look=input]:h-luke-24 data-[look=input]:border-border data-[look=input]:px-luke-8 data-[look=input]:tracking-normal data-[look=input]:[font:inherit] " +
   "data-[look=well]:inline-block data-[look=well]:h-auto data-[look=well]:w-auto data-[look=well]:rounded-none data-[look=well]:border-0 data-[look=well]:bg-transparent data-[look=well]:focus:bg-transparent data-[look=well]:p-0 data-[look=well]:text-inherit data-[look=well]:outline-none data-[look=well]:[font:inherit]";
 
 /** How an edit ended: the words to keep, if any changed, and whether a key ended it. */
 export interface InlineEditEnd {
   readonly value: string | undefined;
   readonly byKey: boolean;
-}
-
-/** Whether a key went to an input method composing text rather than to the field. */
-function composing(event: KeyboardEvent): boolean {
-  // Note that Safari reports the composition's last key with `isComposing`
-  // already false, and code 229 still, so both are read.
-  return event.nativeEvent.isComposing || event.keyCode === 229;
 }
 
 /** The field, opened over `value`; it ends once, by Return, Escape, or the focus leaving. */
@@ -116,9 +110,9 @@ function InlineEditField({
         if (event.key === "Escape") {
           event.preventDefault();
           event.stopPropagation();
-          if (!composing(event)) end(false, true);
+          if (!isComposingKey(event)) end(false, true);
         }
-        if (event.key === "Enter" && !composing(event)) {
+        if (event.key === "Enter" && !isComposingKey(event)) {
           event.preventDefault();
           end(true, true);
         }

@@ -16,6 +16,7 @@ import {
   commitShaSchema,
   workspaceIdSchema,
 } from "./task-wire.js";
+import { boundedText, filledText } from "./text-schema.js";
 import { WEBM_TYPE } from "./video-signature.js";
 
 /**
@@ -341,17 +342,6 @@ export const INBOX_APPROVAL_OPTION = {
   APPROVE: "Approve",
   DECLINE: "Decline",
 } as const;
-
-function boundedText(maximumChars: number) {
-  return EffectSchema.String.check(EffectSchema.isMaxLength(maximumChars));
-}
-
-function filledText(maximumChars: number) {
-  return EffectSchema.String.check(
-    EffectSchema.isNonEmpty(),
-    EffectSchema.isMaxLength(maximumChars),
-  );
-}
 
 /** An item's key as the agent spells it: a short slug, the same each time it means the same item. */
 export const inboxKeySchema = EffectSchema.String.check(

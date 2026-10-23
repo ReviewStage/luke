@@ -3,6 +3,7 @@ import {
   type HttpMethod,
   positiveInteger,
   text,
+  type WireBoundaryInput,
   withoutTrailingSlash,
 } from "@luke/wire";
 import { webResponseFromClientResponse } from "@luke/wire/effect";
@@ -90,6 +91,11 @@ export type CallAnswer = CallResponse | CallFailure;
 /** Whether the service answered at all, as distinct from the call never reaching it. */
 export function callAnswered(answer: CallAnswer): answer is CallResponse {
   return "response" in answer;
+}
+
+/** A response's body as JSON, or nothing where it is not JSON at all. */
+export function jsonOf(response: Response): Effect.Effect<WireBoundaryInput> {
+  return Effect.promise((): Promise<WireBoundaryInput> => response.json().catch(() => undefined));
 }
 
 /** One request, as the build fixes it: nothing here is composed from what a service answered. */

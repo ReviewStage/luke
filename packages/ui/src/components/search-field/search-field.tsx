@@ -1,6 +1,7 @@
 import type { KeyboardEvent, ReactNode, Ref } from "react";
 import { useImperativeHandle, useRef } from "react";
 import { cn } from "../../cn.js";
+import { isComposingKey } from "../../composing-key.js";
 import { CloseIcon, SearchIcon } from "../../face/glyphs.js";
 import { pulseOnPress } from "../../press-pulse.js";
 import { ShadcnInput } from "../../shadcn/input.js";
@@ -62,13 +63,13 @@ export type SearchFieldLook = (typeof SEARCH_FIELD_LOOK)[keyof typeof SEARCH_FIE
 
 /** The well: a control tall on the hover fill inside a hairline, the magnifier leading at a control's glyph size. */
 const SEARCH_WELL =
-  "luke-search-field group/search box-border flex h-control min-w-0 cursor-text items-center gap-icon-gap rounded-control border border-border bg-muted pr-0.5 pl-search-lead text-subtle-foreground transition-[border-color] duration-(--luke-duration-hover) ease-plain [&>svg]:size-control-icon [&>svg]:flex-none";
+  "luke-search-field group/search box-border flex h-control min-w-0 cursor-text items-center gap-icon-gap rounded-control border border-border bg-muted pr-luke-2 pl-search-lead text-subtle-foreground transition-[border-color] duration-(--luke-duration-hover) ease-plain [&>svg]:size-control-icon [&>svg]:flex-none";
 
 /** Each look's classes over the well's: a menu's head row is a menu row tall, with only a hairline under it and no ring. */
 const SEARCH_LOOK_CLASS = {
   [SEARCH_FIELD_LOOK.WELL]: undefined,
   [SEARCH_FIELD_LOOK.MENU]:
-    "h-menu-search rounded-none border-0 border-b bg-transparent px-3 outline-none [&>svg]:size-menu-glyph",
+    "h-menu-search rounded-none border-0 border-b bg-transparent px-luke-12 outline-none [&>svg]:size-menu-glyph",
 } as const satisfies Record<SearchFieldLook, string | undefined>;
 
 /** The field, bare in the well and taking the room left. */
@@ -77,11 +78,11 @@ const SEARCH_INPUT =
 
 /** The tally in a caption's tabular figures, said rather than drawn where the bar is folded. */
 const SEARCH_TALLY =
-  "flex-none pr-1.5 text-caption tabular-nums [@container_style(--luke-fold:folded)]:sr-only";
+  "flex-none pr-luke-6 text-caption tabular-nums [@container_style(--luke-fold:folded)]:sr-only";
 
 /** The chord, standing until the caret arrives, and never under a finger, which has no key to summon with. */
 const SEARCH_SHORTCUT =
-  "inline-flex flex-none pr-1.5 group-focus-within/search:hidden [@media(hover:none)_and_(pointer:coarse)]:hidden";
+  "inline-flex flex-none pr-luke-6 group-focus-within/search:hidden [@media(hover:none)_and_(pointer:coarse)]:hidden";
 
 /** The clear, nested in the well as far inside its edge on every side as from the end; it grows in and shrinks out. */
 const SEARCH_CLEAR =
@@ -106,13 +107,6 @@ function tallyLine(tally: SearchTally): string {
   if (tally.count === 0) return "No results";
   const count = tally.more === true ? `${tally.count}+` : String(tally.count);
   return tally.at === undefined ? `${count} results` : `${tally.at + 1} of ${count}`;
-}
-
-/** Whether a key went to an input method composing text rather than to the field. */
-function composing(event: KeyboardEvent): boolean {
-  // Note that Safari reports the composition's last key with `isComposing`
-  // already false, and code 229 still, so both are read.
-  return event.nativeEvent.isComposing || event.keyCode === 229;
 }
 
 /** A search named `label`, holding `value`, answering its keys with the callbacks given. */
@@ -174,7 +168,7 @@ export function SearchField({
       return;
     }
     if (event.key === "Escape" && onEscape !== undefined) event.stopPropagation();
-    if (composing(event)) return;
+    if (isComposingKey(event)) return;
     if (event.key === "Escape") onEscape?.();
     if (event.key !== "Enter") return;
     const answer = event.shiftKey ? onShiftEnter : onEnter;

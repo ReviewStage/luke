@@ -13,7 +13,7 @@ import {
 /**
  * side-bundles.ts -- the panel's own bundles under jsdom: one landed as a window that has shown it holds it, and stand-ins for others at their importers.
  *
- * A surface reaches each bundle through its importer (`../renderer/bundle-loader.ts`).
+ * A surface reaches each bundle through its importer (`../bundle-loader.ts`).
  * A test hands its own importers, answering a stand-in or failing, and draws
  * the surface over the bundles they make with `onSideBundles`; a bundle
  * landed before the surface is drawn is had at once, as one is in a window

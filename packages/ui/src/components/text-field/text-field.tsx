@@ -1,5 +1,6 @@
 import type { ClipboardEvent, KeyboardEvent, Ref } from "react";
 import { cn } from "../../cn.js";
+import { isComposingKey } from "../../composing-key.js";
 import { cssCustomProperties } from "../../css.js";
 import { ShadcnInput } from "../../shadcn/input.js";
 import { ShadcnTextarea } from "../../shadcn/textarea.js";
@@ -39,10 +40,9 @@ import type { FieldControl } from "../form-field/form-field.js";
  * whole, in Tailwind utilities over the theme's field roles.
  */
 
-/** What a one-line field holds: words, a search, an address, a secret, a time of day, or a number. */
+/** What a one-line field holds: words, an address, a secret, a time of day, or a number. */
 export const TEXT_FIELD_TYPE = {
   TEXT: "text",
-  SEARCH: "search",
   EMAIL: "email",
   URL: "url",
   PASSWORD: "password",
@@ -124,7 +124,7 @@ const TEXT_FIELD_SIZE_CLASS = {
     "h-auto p-0 border-0 bg-transparent focus:bg-transparent text-title font-bold outline-none",
   /** A step under a control, on the well's ground, its edge lighting while it holds the caret; 16px words under a finger. */
   [TEXT_FIELD_SIZE.COMPACT]:
-    "h-control-compact rounded-control-compact border-border bg-well px-1.5 text-caption leading-body text-ellipsis focus:border-subtle-foreground focus:bg-well focus:outline-none pointer-coarse:text-caption-touch",
+    "h-control-compact rounded-control-compact border-border bg-well px-luke-6 text-caption leading-body text-ellipsis focus:border-subtle-foreground focus:bg-well focus:outline-none pointer-coarse:text-caption-touch",
   /** Words written in place in the body's type: no well, no edge, and no ring. */
   [TEXT_FIELD_SIZE.INLINE]: "h-auto p-0 border-0 bg-transparent focus:bg-transparent outline-none",
 } as const satisfies Record<TextFieldSize, string | undefined>;
@@ -241,13 +241,6 @@ function entryAttributes(props: TextEntryProps) {
 /** What a busy text area does with a key it takes: nothing. */
 function noop(): void {}
 
-/** Whether a key went to an input method composing text rather than to the field. */
-function composing(event: KeyboardEvent): boolean {
-  // Note that Safari reports the composition's last key with `isComposing`
-  // already false, and code 229 still, so both are read.
-  return event.nativeEvent.isComposing || event.keyCode === 229;
-}
-
 /**
  * Marks an Escape taken where `onEscape` is given, and answers it unless an
  * input method is composing. Note that the press still reaches the window,
@@ -259,12 +252,12 @@ function composing(event: KeyboardEvent): boolean {
 function answerEscape(event: KeyboardEvent, onEscape: (() => void) | undefined): void {
   if (event.key !== "Escape" || onEscape === undefined) return;
   event.preventDefault();
-  if (!composing(event)) onEscape();
+  if (!isComposingKey(event)) onEscape();
 }
 
 /** Whether a key is the one that submits a text area, and not an input method's. */
 function submitting(event: KeyboardEvent, key: TextAreaSubmit): boolean {
-  if (event.key !== "Enter" || composing(event)) return false;
+  if (event.key !== "Enter" || isComposingKey(event)) return false;
   return key === TEXT_AREA_SUBMIT.ENTER ? !event.shiftKey : event.metaKey || event.ctrlKey;
 }
 
@@ -315,7 +308,7 @@ export function TextField({
       }}
       onKeyDown={(event) => {
         answerEscape(event, props.onEscape);
-        if (event.key !== "Enter" || onEnter === undefined || composing(event)) return;
+        if (event.key !== "Enter" || onEnter === undefined || isComposingKey(event)) return;
         event.preventDefault();
         onEnter();
       }}

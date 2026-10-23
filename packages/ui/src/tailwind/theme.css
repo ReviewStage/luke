@@ -13,16 +13,9 @@
   --color-foreground: var(--luke-color-text);
   --color-muted: var(--luke-color-fill-hover);
   --color-muted-foreground: var(--luke-color-text-muted);
-  --color-secondary: var(--luke-color-fill-strong);
-  --color-secondary-foreground: var(--luke-color-text);
   --color-primary: var(--luke-color-text);
   --color-primary-foreground: var(--luke-color-ink-inverse);
   --color-border: var(--luke-color-border);
-  --color-selected-edge: var(--luke-color-border-selected);
-  --color-card: var(--luke-color-sidebar);
-  --color-well: var(--luke-color-well);
-  --color-luke: var(--voice-luke);
-  --color-danger: var(--luke-color-danger-text);
   /* The switch's own inks, which the palette keeps apart from the accent. */
   --color-switch-track: var(--luke-color-switch-track);
   --color-switch-on: var(--luke-color-switch-on);
@@ -35,6 +28,8 @@
      field's grounds and edges, the type roles its words are set in, and the
      lengths it stands at, each a profile's role. A name added here that
      tailwind-merge cannot read is listed in `../cn.ts`. */
+  --color-well: var(--luke-color-well);
+  --color-danger: var(--luke-color-danger-text);
   --color-field: var(--luke-color-input);
   --color-field-focus: var(--luke-color-input-focus);
   --color-border-strong: var(--luke-color-border-strong);
@@ -59,6 +54,16 @@
   /* A finger's field takes 16px words at least, or iOS zooms into it. */
   --text-touch: max(16px, 1em);
   --text-caption-touch: max(16px, var(--luke-type-caption-size));
+  /* The base scale by name, because Tailwind's numbered steps are rems of a
+     root the window sets at the body's size, not 16px. */
+  --spacing-luke-2: var(--luke-space-2);
+  --spacing-luke-4: var(--luke-space-4);
+  --spacing-luke-6: var(--luke-space-6);
+  --spacing-luke-8: var(--luke-space-8);
+  --spacing-luke-12: var(--luke-space-12);
+  --spacing-luke-16: var(--luke-space-16);
+  --spacing-luke-20: var(--luke-space-20);
+  --spacing-luke-24: var(--luke-space-24);
   --spacing-control: var(--luke-control-height);
   --spacing-control-inset: var(--luke-control-inset);
   --spacing-control-icon: var(--luke-control-icon);
@@ -104,6 +109,8 @@
   /* A menu's search row: a menu row, its inset, and its hairline. */
   --spacing-menu-search: calc(var(--luke-menu-row-height) + 2 * var(--luke-space-2) + 2px);
   /* A settings label renamed in place overhangs the label by its inset and edge. */
+  /* off-scale: a 24px box over an 18px label line stands 3px past it each side. */
+  --spacing-inline-edit-lift: 3px;
   --spacing-inline-edit-reach: calc(-1 * var(--luke-space-8) - 1px);
   --radius-control: var(--luke-control-radius);
   --radius-control-compact: calc(var(--luke-control-radius) - var(--luke-space-2));

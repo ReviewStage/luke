@@ -26,7 +26,11 @@ import { Label } from "./label.js";
 
 export function Field({ className, ...props }: React.ComponentProps<"div">) {
   return (
-    <div data-slot="field" className={cn("flex min-w-0 flex-col gap-1.5", className)} {...props} />
+    <div
+      data-slot="field"
+      className={cn("flex min-w-0 flex-col gap-luke-6", className)}
+      {...props}
+    />
   );
 }
 
@@ -63,7 +67,7 @@ export function FieldError({ className, ...props }: React.ComponentProps<"p">) {
       aria-live="polite"
       data-slot="field-error"
       className={cn(
-        "m-0 font-body text-caption font-normal text-danger wrap-anywhere not-empty:animate-drop-in empty:-mt-1.5",
+        "m-0 font-body text-caption font-normal text-danger wrap-anywhere not-empty:animate-drop-in empty:-mt-luke-6",
         className,
       )}
       {...props}

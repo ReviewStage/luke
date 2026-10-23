@@ -710,15 +710,6 @@ export function CodeIcon(): React.JSX.Element {
   );
 }
 
-/** A telephone handset: the call, and the tab that shows what was said on it. */
-export function CallIcon(): React.JSX.Element {
-  return (
-    <Glyph className="icon-button-glyph">
-      <path d="M13.58 15.93a.86.86 0 0 0 1.043-.261l.305-.4A1.72 1.72 0 0 1 16.3 14.58h2.58a1.72 1.72 0 0 1 1.72 1.72v2.58a1.72 1.72 0 0 1-1.72 1.72A15.48 15.48 0 0 1 3.4 5.12a1.72 1.72 0 0 1 1.72-1.72h2.58a1.72 1.72 0 0 1 1.72 1.72v2.58a1.72 1.72 0 0 1-.688 1.376l-.402.302a.86.86 0 0 0-.251 1.06 12.04 12.04 0 0 0 5.497 5.49" />
-    </Glyph>
-  );
-}
-
 /**
  * A sound wave's bars: a call into an agent, which starts one where none is
  * up. Its path is Lucide's `audio-lines` (ISC licence), drawn in our stroke.

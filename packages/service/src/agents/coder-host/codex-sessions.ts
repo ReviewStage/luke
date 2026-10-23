@@ -70,9 +70,6 @@ import {
 } from "./runner-sessions.js";
 import type { NativeSessions } from "./runtime-sessions.js";
 
-/** What the sessions reach: the shared launch's services, OpenAI's token endpoint among them. */
-export type CodexServices = RunnerServices;
-
 export interface CodexSessionsOptions extends RunnerSessionsOptions {
   /** Luke's token route, which the runner asks for the plan's token mid-turn (`RUNNER_TOKEN_PATH`). */
   readonly tokenUrl: string;
@@ -245,5 +242,5 @@ function codex(options: CodexSessionsOptions): RunnerHarness<{ readonly _tag: st
 /** The sessions for one account, over the calling fiber's services. */
 export const codexSessions = <Turn extends BrainHostTurn = BrainHostTurn>(
   options: CodexSessionsOptions,
-): Effect.Effect<NativeSessions<Turn>, never, CodexServices> =>
+): Effect.Effect<NativeSessions<Turn>, never, RunnerServices> =>
   runnerSessions<{ readonly _tag: string }, Turn>(codex(options), options);

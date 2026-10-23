@@ -1,9 +1,7 @@
 import { CODER_TOOL } from "@luke/service/agents/coder-host/tool-set";
 import { RECALL_TOOL } from "@luke/service/agents/memory-tools";
-import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
-import { emitJsonSchema } from "@luke/wire/effect";
-import { defineDynamic, defineTool } from "eve/tools";
-import { memoryOffered, runAgentTool } from "../host.js";
+import { defineDynamic } from "eve/tools";
+import { agentToolFor, memoryOffered } from "../host.js";
 
 /**
  * recall.ts -- the agent searches its workspace's shared memory for what the workspace's agents kept.
@@ -19,17 +17,7 @@ export default defineDynamic({
   events: {
     "turn.started": async (_event, ctx) =>
       (await memoryOffered(ctx.session.auth, ctx.session.id))
-        ? defineTool({
-            description: RECALL_TOOL.description,
-            inputSchema: emitJsonSchema(RECALL_TOOL.inputSchema),
-            execute: async (input, toolContext) =>
-              // SAFETY: eve hands a tool the JSON object the model emitted; the host parses it as wire input.
-              runAgentTool(toolContext.session.auth, toolContext.session.id, {
-                tool: CODER_TOOL.RECALL,
-                input: unparsedWire(input as WireBoundaryInput),
-                callId: toolContext.callId,
-              }),
-          })
+        ? agentToolFor(CODER_TOOL.RECALL, RECALL_TOOL)
         : null,
   },
 });

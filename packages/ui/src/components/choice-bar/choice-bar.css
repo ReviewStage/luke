@@ -201,12 +201,6 @@
     padding-inline: max(var(--luke-space-12), calc((100% - var(--luke-page-measure)) / 2));
   }
 
-  /* A narrow column's row stands its options in from its edges as far as
-     the column's own rows stand their words. */
-  .luke-choice-bar[data-look="fill"][data-inset="column"] {
-    padding-inline: var(--luke-space-12);
-  }
-
   /* Narrower than its options need, a fill bar shows an option other than
      the chosen one by its glyph alone. Note that it does so only while one
      is chosen, because a clearable bar with none chosen would otherwise

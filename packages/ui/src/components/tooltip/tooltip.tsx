@@ -49,14 +49,6 @@ const TOOLTIP_SIDE = {
 
 type TooltipSide = (typeof TOOLTIP_SIDE)[keyof typeof TOOLTIP_SIDE];
 
-/** How a hint is on its way out: fading, having been seen, or at once, having never been. */
-export const TOOLTIP_LEAVING = {
-  SEEN: "seen",
-  UNSEEN: "unseen",
-} as const;
-
-export type TooltipLeaving = (typeof TOOLTIP_LEAVING)[keyof typeof TOOLTIP_LEAVING];
-
 /** How a hint hangs: a pill centred on its control, a card from its start, or a card beside it. */
 const TOOLTIP_HANG = {
   PILL: "pill",
@@ -72,8 +64,8 @@ interface TooltipBase {
   id: string;
   /** The control it hangs from. */
   anchor: HTMLElement;
-  /** How it is on its way out, while it is: inert, and fading or already hidden. */
-  leaving?: TooltipLeaving | undefined;
+  /** Whether it is on its way out: inert, and fading. */
+  leaving?: boolean | undefined;
   /** Its element, for the hold that draws it through its exit. */
   ref?: ((element: HTMLElement | null) => void) | undefined;
 }
@@ -173,8 +165,8 @@ function hintMarks(base: TooltipBase, at: TooltipPlace | undefined) {
     id: base.id,
     "data-placed": String(at !== undefined),
     "data-side": at?.side ?? TOOLTIP_SIDE.BELOW,
-    "data-leaving": base.leaving,
-    inert: base.leaving !== undefined,
+    "data-leaving": base.leaving === true ? "" : undefined,
+    inert: base.leaving === true,
     style: at === undefined ? undefined : { left: at.left, top: at.top },
   } as const;
 }

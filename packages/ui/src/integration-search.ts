@@ -18,7 +18,7 @@ import { matchesTokens, searchTokens } from "./search-tokens.js";
  * than the tools that happen to repeat its name, so it finds no tool by
  * itself. Settings' own search finds an integration's row by these same
  * lines, and by a few words naming every integration alike
- * (the desktop's `renderer/settings-search.tsx`).
+ * (`packages/panel/src/settings-search.tsx`).
  */
 
 /** What each integration is for, in the words someone looking for it would type. */

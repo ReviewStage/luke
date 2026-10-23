@@ -66,6 +66,7 @@ import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { useAct } from "./act.js";
 import { encodeImage, imageFiles } from "./feedback-images.js";
 import { TOAST_TONE, type ToastNotice, useToast } from "./toast.js";
+import { DROP_LEAVE, useFileDrop } from "./use-file-drop.js";
 
 /**
  * Each kind in its own words: the title its dialog carries, the field's
@@ -169,11 +170,6 @@ function feedbackImageUrl(image: FeedbackImage): string {
   return `data:${image.mediaType};base64,${image.base64}`;
 }
 
-/** Whether a drag carries files, which is all the card offers to take. */
-function carriesFiles(event: React.DragEvent): boolean {
-  return event.dataTransfer.types.includes("Files");
-}
-
 /**
  * Encodes picked, pasted, or dropped files on this machine — scaled and
  * re-written where a screenshot would not fit the request a submission
@@ -228,7 +224,9 @@ export function FeedbackDialog({
   shownKind.current = kind;
   const [busy, setBusy, latestBusy] = useStateWithRef(false);
   const [rejection, setRejection] = useState<string>();
-  const [dropping, setDropping] = useState(false);
+  const fileDrop = useFileDrop((files) => void attach(imageFiles(files)), {
+    leave: DROP_LEAVE.WINDOW,
+  });
   const showToast = useToast();
   const open = kind !== undefined;
   const field = useRef<HTMLTextAreaElement | null>(null);
@@ -254,7 +252,7 @@ export function FeedbackDialog({
 
   // Closing puts a drop's highlight away, whatever became of the drag.
   useEffect(() => {
-    if (!open) setDropping(false);
+    if (!open) fileDrop.clear();
   }, [open]);
 
   const draft = drafts[kind ?? FEEDBACK_KIND.FEEDBACK];
@@ -350,23 +348,8 @@ export function FeedbackDialog({
       initialFocus={field}
       onDismiss={() => close(false)}
       onKeyDown={sendKey}
-      dropping={dropping}
-      dropTarget={{
-        onDragOver: (event) => {
-          if (!carriesFiles(event)) return;
-          event.preventDefault();
-          setDropping(true);
-        },
-        onDragLeave: (event) => {
-          if (event.relatedTarget === null) setDropping(false);
-        },
-        onDrop: (event) => {
-          if (!carriesFiles(event)) return;
-          event.preventDefault();
-          setDropping(false);
-          void attach(imageFiles(event.dataTransfer.files));
-        },
-      }}
+      dropping={fileDrop.dropping}
+      dropTarget={fileDrop.target}
       actionsStart={
         <>
           <Tooltip label="Attach screenshot">

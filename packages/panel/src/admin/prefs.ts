@@ -1,5 +1,7 @@
 import { ACCOUNTS_SORT_KEY, type AccountsSort } from "@luke/ui/accounts-sort";
 import { SORT_DIRECTION } from "@luke/ui/sort-direction";
+import { Option, Schema, SchemaTransformation } from "effect";
+import { forgetKept, readKeptOption, writeKept } from "../kept-storage.js";
 
 interface RememberedFlag {
   read(): boolean;
@@ -15,19 +17,11 @@ interface RememberedFlag {
 function rememberedFlag(key: string, absentMeans = false): RememberedFlag {
   return {
     read(): boolean {
-      try {
-        return (window.localStorage.getItem(key) === null) === absentMeans;
-      } catch {
-        return absentMeans;
-      }
+      return Option.isSome(readKeptOption(key, Schema.String)) !== absentMeans;
     },
     write(value: boolean): void {
-      try {
-        if (value === absentMeans) window.localStorage.removeItem(key);
-        else window.localStorage.setItem(key, String(value));
-      } catch {
-        // Storage refused: the flag opens at its default on the next visit.
-      }
+      if (value === absentMeans) forgetKept(key);
+      else writeKept(key, Schema.String, String(value));
     },
   };
 }
@@ -70,36 +64,34 @@ interface RememberedValue<T> {
 }
 
 /**
- * A value kept as a localStorage string. A stored string `decode` does not
- * recognise reads as nothing at all, never as a guess at what an old build
+ * A value kept as a localStorage string. A stored string `schema` does not
+ * read reads as nothing at all, never as a guess at what an old build
  * meant by it.
  */
-function rememberedValue<T>(
-  key: string,
-  encode: (value: T) => string,
-  decode: (stored: string) => T | undefined,
-): RememberedValue<T> {
+function rememberedValue<T>(key: string, schema: Schema.Codec<T, string>): RememberedValue<T> {
   return {
-    read(): T | undefined {
-      try {
-        const stored = window.localStorage.getItem(key);
-        return stored === null ? undefined : decode(stored);
-      } catch {
-        return undefined;
-      }
-    },
-    write(value: T): void {
-      try {
-        window.localStorage.setItem(key, encode(value));
-      } catch {
-        // Storage refused: the value opens at its default on the next visit.
-      }
-    },
+    read: () => Option.getOrUndefined(readKeptOption(key, schema)),
+    write: (value) => writeKept(key, schema, value),
   };
 }
 
-/** No sort key contains the separator, so the stored token splits back apart. */
-const ACCOUNTS_SORT_SEPARATOR = ":";
+/** A roster sort as kept: its key and its direction, joined by a separator no key contains. */
+const storedAccountsSort = Schema.TemplateLiteralParser([
+  Schema.Literals(Object.values(ACCOUNTS_SORT_KEY)),
+  ":",
+  Schema.Literals(Object.values(SORT_DIRECTION)),
+]).pipe(
+  Schema.decodeTo(
+    Schema.Struct({
+      key: Schema.Literals(Object.values(ACCOUNTS_SORT_KEY)),
+      direction: Schema.Literals(Object.values(SORT_DIRECTION)),
+    }),
+    SchemaTransformation.transform({
+      decode: ([key, , direction]) => ({ key, direction }),
+      encode: ({ key, direction }) => [key, ":", direction] as const,
+    }),
+  ),
+);
 
 /**
  * The last roster sort chosen, so a refresh reopens it in the order it was
@@ -108,15 +100,5 @@ const ACCOUNTS_SORT_SEPARATOR = ":";
  */
 export const ACCOUNTS_SORT: RememberedValue<AccountsSort> = rememberedValue(
   "luke-admin-users-sort",
-  (sort) => `${sort.key}${ACCOUNTS_SORT_SEPARATOR}${sort.direction}`,
-  (stored) => {
-    const [key, direction] = stored.split(ACCOUNTS_SORT_SEPARATOR);
-    const knownKey = Object.values(ACCOUNTS_SORT_KEY).find((candidate) => candidate === key);
-    const knownDirection = Object.values(SORT_DIRECTION).find(
-      (candidate) => candidate === direction,
-    );
-    return knownKey === undefined || knownDirection === undefined
-      ? undefined
-      : { key: knownKey, direction: knownDirection };
-  },
+  storedAccountsSort,
 );

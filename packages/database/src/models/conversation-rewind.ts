@@ -2,7 +2,7 @@ import { MESSAGE_ROLE, TURN_STATUS } from "@luke/wire";
 import { and, asc, eq, gte, inArray, isNull, lt, or, sql } from "drizzle-orm";
 import { Effect, Option, Result, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
-import { Database, type DatabaseServices, type QueryError } from "../core/query.js";
+import { Database, type DatabaseServices, type StoreFailure } from "../core/query.js";
 import { conversations, messages, turns } from "../schemas/storage.js";
 import { holdConversationDispatch } from "./dispatch-lock.js";
 import type { ConversationTarget } from "./writer.js";
@@ -42,8 +42,6 @@ export interface ConversationRewound {
   readonly clientId: string;
   readonly turnIds: readonly string[];
 }
-
-type RewindFailure = QueryError | Schema.SchemaError;
 
 const lockConversation = SqlSchema.findOneOption({
   Request: Schema.Struct({ userId: Schema.String, conversationId: Schema.String }),
@@ -347,7 +345,7 @@ export function rewindConversation(
   messageId: string,
 ): Effect.Effect<
   Result.Result<ConversationRewound, RewindRefusal>,
-  RewindFailure,
+  StoreFailure,
   DatabaseServices
 > {
   return Effect.flatMap(SqlClient.SqlClient, (client) =>
@@ -358,7 +356,7 @@ export function rewindConversation(
 /** The client id of the line a harness's session is still to be cut before, where a rewind left one; none otherwise. */
 export function readNativeRewind(
   target: ConversationTarget,
-): Effect.Effect<Option.Option<string>, RewindFailure, DatabaseServices> {
+): Effect.Effect<Option.Option<string>, StoreFailure, DatabaseServices> {
   return Effect.map(findNativeRewind(target), (row) =>
     Option.flatMap(row, ({ nativeRewind }) => Option.fromNullishOr(nativeRewind)),
   );
@@ -368,14 +366,14 @@ export function readNativeRewind(
 export function clearNativeRewindHanded(
   conversationId: string,
   clientId: string,
-): Effect.Effect<void, RewindFailure, DatabaseServices> {
+): Effect.Effect<void, StoreFailure, DatabaseServices> {
   return clearNativeRewind({ conversationId, clientId });
 }
 
 /** The journal revision the conversation was last rewound at, which a cursor read before it is stale past; none for one never rewound. */
 export function readRewoundRevision(
   target: ConversationTarget,
-): Effect.Effect<number | undefined, RewindFailure, DatabaseServices> {
+): Effect.Effect<number | undefined, StoreFailure, DatabaseServices> {
   return Effect.map(findRewoundRevision(target), (row) =>
     Option.getOrUndefined(
       Option.flatMap(row, ({ rewoundRevision }) => Option.fromNullishOr(rewoundRevision)),
@@ -391,7 +389,7 @@ export function readRewoundRevision(
 export function readRewindable(
   target: ConversationTarget,
   messageId: string,
-): Effect.Effect<Result.Result<void, RewindRefusal>, RewindFailure, DatabaseServices> {
+): Effect.Effect<Result.Result<void, RewindRefusal>, StoreFailure, DatabaseServices> {
   return Effect.gen(function* () {
     const standing = yield* findRewoundRevision(target);
     if (Option.isNone(standing)) return Result.fail(REWIND_REFUSAL.NOT_FOUND);
