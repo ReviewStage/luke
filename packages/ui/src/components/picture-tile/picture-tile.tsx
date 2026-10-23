@@ -22,8 +22,9 @@ import type { ButtonHTMLAttributes, MouseEvent, ReactNode } from "react";
  * a Button, handing it the pointer, press, and focus handlers it shows and
  * goes on by, each heard before the tile's own. A place whose pointer's
  * press opens nothing, and falls through to what is around the tile, says
- * so (`pointerOpens`): the tile then wears the plain pointer and does not
- * sink, while a key's press still opens it.
+ * so (`pointerOpens`): a pointer's press then opens nothing and passes on
+ * to the place around it, the tile wearing the plain pointer and not
+ * sinking, while a key's press still opens it.
  */
 
 /** What a press is named for, the picture's words after it. */
@@ -77,6 +78,8 @@ export function PictureTile({
       {...hinted}
       onClick={(event) => {
         onClick?.(event);
+        // Note that a key's press is a click the pointer counts none of, so a click count says a pointer pressed it.
+        if (!pointerOpens && event.detail > 0) return;
         onOpen(event);
       }}
     >
