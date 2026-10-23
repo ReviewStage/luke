@@ -19,7 +19,7 @@ import {
   type IntegrationProvider,
   type IntegrationStatus,
 } from "@luke/features/integration-wire";
-import { LINK_PLACE, type ReadLink } from "@luke/features/luke-link";
+import { LINK_PLACE, type ReadLink } from "@luke/features/link-grammar";
 import {
   encodeMention,
   MENTION_KIND,

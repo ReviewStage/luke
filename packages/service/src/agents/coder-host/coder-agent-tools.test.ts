@@ -57,6 +57,7 @@ import {
   startTask,
 } from "@luke/database/testing";
 import { START_NOTE_HEADING } from "@luke/features/agent-replay";
+import { AUTOMATION_FIRING } from "@luke/features/automation-wire";
 import { CHANNEL_KIND, CHAT_BLOCK, CHAT_TOOL, MEMBER_KIND } from "@luke/features/chat-wire";
 import {
   CHECK_SUMMARY,
@@ -3724,7 +3725,19 @@ test("list_open_asks lists every ask waiting on the operator's member across the
   const { workspaceId, plans: tasks, agents } = await openWorkspaces();
   const eve = await fakeCoderEve(workspaceId);
   const member = agents.caller.userId;
-  const second = await agentOn(member, tasks.invitations);
+  // Started by an automation's run, it has no title yet, and its tab names it by its automation.
+  const second = await claimed(member, {
+    ...AGENT_CHOICE,
+    idempotencyKey: randomUUID(),
+    taskId: tasks.invitations,
+    planSnapshot: "# Teammate invitations",
+    prompt: null,
+    automationOrigin: {
+      name: "Invite sweep",
+      firing: { kind: AUTOMATION_FIRING.MANUAL },
+      prompt: "Sweep expired invites.",
+    },
+  });
   const ask = (agent: StartedAgent, taskId: string, key: string, title: string) =>
     database.run(
       postInboxThread(
@@ -3763,6 +3776,14 @@ test("list_open_asks lists every ask waiting on the operator's member across the
   assert.equal(deploy.agent.id, agents.caller.id);
   assert.equal(deploy.ask, INBOX_ASK.DECIDE);
   assert.deepEqual(deploy.task, { id: tasks.invitations, name: "Teammate invitations" });
+  // Note that the agent is named as its tab names it, by its automation, never by its model's id.
+  const expiry = byKey.get("token-expiry");
+  assert.ok(isRecord(expiry) && isRecord(expiry.agent));
+  assert.equal(expiry.agent.name, "Invite sweep");
+  assert.ok(
+    String(expiry.agent.mention).startsWith("[@Invite sweep]("),
+    String(expiry.agent.mention),
+  );
 
   assert.ok(kindToolsOf({ kind: CODING_AGENT_KIND.OPERATOR }).has(CODER_TOOL.LIST_OPEN_ASKS));
   assert.ok(!kindToolsOf({ kind: CODING_AGENT_KIND.CODER }).has(CODER_TOOL.LIST_OPEN_ASKS));

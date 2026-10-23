@@ -19,7 +19,7 @@ import {
   LINK_PLACE,
   PULL_REQUEST_THREAD_VIEW,
   type PullRequestThreadView,
-} from "@luke/features/luke-link";
+} from "@luke/features/link-grammar";
 import { MENTION_KIND } from "@luke/features/mention-link";
 import { TASK_ISSUE_PROVIDER } from "@luke/features/task-issue-wire";
 import { TASK_SECTION_WRITE } from "@luke/features/task-section-wire";

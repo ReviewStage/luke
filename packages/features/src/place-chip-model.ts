@@ -1,4 +1,4 @@
-import { LINK_PLACE, type LinkPlace } from "./luke-link.js";
+import { LINK_PLACE, type LinkPlace } from "./link-grammar.js";
 
 /**
  * place-chip-model.ts -- a Luke link drawn in words as its chip says it: the name of the place it opens, as the window already knows it, and the task it stands under.

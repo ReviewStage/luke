@@ -38,7 +38,7 @@ import {
   inboxReplyRefusal,
   recommendedLabels,
 } from "@luke/features/inbox-wire";
-import { LINK_PLACE, type ReadLink, readLink } from "@luke/features/luke-link";
+import { LINK_PLACE, type ReadLink, readLink } from "@luke/features/link-grammar";
 import { insideCode, linksIn } from "@luke/features/mention-link";
 import { type PagePlace, pagePlaceId } from "@luke/features/page-wire";
 import type { TaskFileRequest, TaskSummary } from "@luke/features/task-wire";

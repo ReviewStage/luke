@@ -16,7 +16,7 @@ import {
   type InboxItem,
   recommendedLabels,
 } from "@luke/features/inbox-wire";
-import { LINK_PLACE } from "@luke/features/luke-link";
+import { LINK_PLACE } from "@luke/features/link-grammar";
 import type { CatalogModel } from "@luke/features/models-wire";
 import {
   BADGE_TONE,

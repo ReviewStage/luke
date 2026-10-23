@@ -1,3 +1,5 @@
+import { escapedLabel } from "@luke/features/link-grammar";
+
 /**
  * markdown-edits.ts -- what each press of a comment field's formatting toolbar writes into its words, and what it leaves selected, as GitHub's own comment toolbar writes them.
  *
@@ -134,7 +136,7 @@ function linkEdit(field: FieldSelection): MarkdownEdit {
     return replacing(start, end, `[${words}](${selected})`, [1, 1 + words.length]);
   }
   // Note that a bracket or a backslash in the words is escaped, so neither can end the link's words early.
-  const words = selected === "" ? PLACEHOLDER.LINK_TEXT : selected.replace(/[\\[\]]/gu, "\\$&");
+  const words = selected === "" ? PLACEHOLDER.LINK_TEXT : escapedLabel(selected);
   const at = words.length + 3;
   return replacing(start, end, `[${words}](${PLACEHOLDER.LINK_URL})`, [
     selected === "" ? 1 : at,

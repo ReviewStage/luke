@@ -12,7 +12,7 @@ import {
   type AutomationTrigger,
 } from "@luke/features/automation-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
-import { LINK_PLACE } from "@luke/features/luke-link";
+import { LINK_PLACE } from "@luke/features/link-grammar";
 import { TRIGGER_CATALOG } from "@luke/features/trigger-catalog";
 import {
   BackIcon,
@@ -107,11 +107,7 @@ export const STANDING_GLYPH = {
 } as const satisfies Record<AutomationRunStanding, GlyphState>;
 
 /** What fires an automation or fired a run, as its row's glyph: a schedule's clock, GitHub's or an integration's mark, a webhook's hook, or Run now's play. */
-function FiringGlyph({
-  of,
-}: {
-  of: AutomationFiring | AutomationTrigger;
-}): React.JSX.Element {
+function FiringGlyph({ of }: { of: AutomationFiring | AutomationTrigger }): React.JSX.Element {
   switch (of.kind) {
     case AUTOMATION_FIRING.GITHUB:
       return <ProviderMark provider={INTEGRATION_PROVIDER.GITHUB} />;

@@ -1,6 +1,6 @@
 import { useAtomValue } from "@effect/atom-react";
 import type { CodingAgentAttachment } from "@luke/features/coding-agent-wire";
-import { LINK_PLACE } from "@luke/features/luke-link";
+import { LINK_PLACE } from "@luke/features/link-grammar";
 import { textChange } from "@luke/features/plan-comment-anchor";
 import {
   PLAN_COMMENT_ACTION,

@@ -116,11 +116,11 @@ import {
   type AgentPartCut,
   agentLines,
   agentListCallIds,
+  agentName,
   agentPart,
   agentParts,
   agentRows,
   agentStillWriting,
-  agentTabLabel,
   agentWorkingPhase,
   archivedByReading,
   CONTINUE_AGAIN_LABEL,
@@ -2313,7 +2313,7 @@ function AgentTabView({
     [automationId, automationName, brief, run, tasked, openTarget, originStarter, steadyGitHub],
   );
   return (
-    <AgentTabFrame ref={tab} label={agentTabLabel(agent, models)}>
+    <AgentTabFrame ref={tab} label={agentName(agent, models)}>
       <MacOwnerProvider value={macOwner}>
         <AgentPicturesProvider value={pictures}>
           <WholePartsProvider value={wholeParts}>

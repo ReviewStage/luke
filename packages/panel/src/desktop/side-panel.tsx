@@ -6,7 +6,7 @@ import {
   type CodingAgentStatus,
   type CodingAgentSummary,
 } from "@luke/features/coding-agent-wire";
-import { LINK_PLACE } from "@luke/features/luke-link";
+import { LINK_PLACE } from "@luke/features/link-grammar";
 import type { ModelChoice } from "@luke/features/models-wire";
 import type { PageLine, PagePlace } from "@luke/features/page-wire";
 import type { CodeRef } from "@luke/features/task-wire";
@@ -115,8 +115,8 @@ import {
 import { CodePane, centreWithin } from "../tasks/code-pane.js";
 import {
   agentGlyphState,
+  agentName,
   agentStateWords,
-  agentTabLabel,
   subagentActor,
 } from "../tasks/coding-agent-model.js";
 import { fileLook, newestFileNote } from "../tasks/file-ref.js";
@@ -513,7 +513,7 @@ export function changesOffers(
     const agent = every.find((other) => other.id === agentId) ?? each;
     // The row shows the pull request as the agent its tab stands for last read it, as its tab's card does.
     const shown = agents.pullRequests.get(agent.id) ?? pullRequest;
-    const label = agentTabLabel(agent, agents.models);
+    const label = agentName(agent, agents.models);
     return [{ agentId: agent.id, agent, label, pullRequest: shown }];
   });
 }
@@ -820,7 +820,7 @@ function terminalOffers(
   const chord = target.kind === TERMINAL_TARGET.AGENT ? target.agentId : undefined;
   return listed.map((agent) => ({
     agent,
-    label: agentTabLabel(agent, agents.models),
+    label: agentName(agent, agents.models),
     showsOnChord: agent.id === chord,
   }));
 }
@@ -1665,7 +1665,7 @@ export function taskCards(input: {
 /** An agent on the task as its tab names it, which heads the code it showed and its notes on it; none for an agent the task does not list. */
 function taskAgentLabel(agents: CodingAgentsControl, agentId: string): string | undefined {
   const agent = agents.agents?.find((each) => each.id === agentId);
-  return agent === undefined ? undefined : agentTabLabel(agent, agents.models);
+  return agent === undefined ? undefined : agentName(agent, agents.models);
 }
 
 /** What the chosen tab shows. */

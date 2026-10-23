@@ -2,7 +2,7 @@
 
 import assert from "node:assert/strict";
 import type { InboxCodeBlock } from "@luke/features/inbox-wire";
-import { LINK_PLACE, type ReadLink } from "@luke/features/luke-link";
+import { LINK_PLACE, type ReadLink } from "@luke/features/link-grammar";
 import { TASK_FILE_REFUSAL } from "@luke/features/task-wire";
 import type { TaskCodeShowing, TasksFileAnswer } from "@luke/features/tasks-view";
 import { getSharedHighlighter } from "@pierre/diffs";

@@ -6,8 +6,13 @@ import {
   dateWhole,
   readerZone,
 } from "@luke/features/date-mention";
-import { issueAddressOf, pullRequestAddressOf } from "@luke/features/github-repositories-wire";
-import { LINK_PLACE, type LinkPlace, readLink } from "@luke/features/luke-link";
+import {
+  issueAddressOf,
+  LINK_PLACE,
+  type LinkPlace,
+  pullRequestAddressOf,
+  readLink,
+} from "@luke/features/link-grammar";
 import {
   decodeMention,
   encodeMention,
@@ -144,7 +149,7 @@ import { useWordsDates } from "./words-dates.js";
  * having left, as the workspace's members around the chip say
  * (`../member-directory.tsx`), and opens their page in the workspace. A
  * link to any other place in Luke, an Inbox item, an
- * automation, an agent's message (`@luke/features/luke-link`), is drawn as
+ * automation, an agent's message (`@luke/features/link-grammar`), is drawn as
  * the same chip, wearing the place's glyph and named as the window already
  * knows it (`@luke/features/place-chip-model`): the words it was labelled
  * with, else the place's own name, else its kind; and a bare plan's, page's,

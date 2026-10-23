@@ -130,7 +130,7 @@ import {
 } from "../settings-search.js";
 import { AgentCard, agentSubject, NOTHING_HELD, tasklessRowSubject } from "../tasks/agent-ref.js";
 import { useChatOn } from "../tasks/chat-gate.js";
-import { agentTabLabel } from "../tasks/coding-agent-model.js";
+import { agentName } from "../tasks/coding-agent-model.js";
 import { FileCard, fileLook, newestFileNote } from "../tasks/file-ref.js";
 import { refusalLine } from "../tasks/file-tab-model.js";
 import { InboxItemCard, InboxItemEnd, ItemMark } from "../tasks/inbox-item-parts.js";
@@ -664,7 +664,7 @@ function taskRows(
     };
   };
   const agentOf = (agent: TasklessAgent, archived: boolean): PaletteRow => {
-    const name = agentTabLabel(agent, tasks.agents.models);
+    const name = agentName(agent, tasks.agents.models);
     const words = [agent.repository, archived ? ARCHIVED_WORD : null].filter(
       (word) => word !== null,
     );
@@ -673,10 +673,7 @@ function taskRows(
       detail: words.length === 0 ? undefined : words.join(" · "),
       endMark: agentEndMark(agent, archived),
       card: (
-        <AgentCard
-          subject={tasklessRowSubject(agent, tasks.agents)}
-          models={tasks.agents.models}
-        />
+        <AgentCard subject={tasklessRowSubject(agent, tasks.agents)} models={tasks.agents.models} />
       ),
       terms: [name, agent.repository, agent.automationName ?? null].filter((term) => term !== null),
       onChoose: () => openAgent(agent.id),
@@ -786,7 +783,7 @@ function archivedAgentRows(
   return (agents.archived ?? []).map((agent) => {
     const look = tabLook({
       kind: TAB_KIND.AGENT,
-      name: agentTabLabel(agent, agents.models),
+      name: agentName(agent, agents.models),
       agent,
     });
     return {

@@ -32,7 +32,7 @@ import {
   type LinkPlace,
   PULL_REQUEST_THREAD_VIEW,
   type PullRequestThreadView,
-} from "@luke/features/luke-link";
+} from "@luke/features/link-grammar";
 import { INLINE_DIFF } from "@luke/settings/diff-view";
 import {
   AVATAR_SHAPE,

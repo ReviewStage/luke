@@ -40,7 +40,7 @@ import { AgentTabSkeleton } from "../tasks/agent-tab-skeleton.js";
 import { peopleOf } from "../tasks/changes-card.js";
 import { useChatNames } from "../tasks/chat-actors.js";
 import { useChatOn } from "../tasks/chat-gate.js";
-import { agentActor, agentTabLabel, type SentLine } from "../tasks/coding-agent-model.js";
+import { agentActor, agentName, type SentLine } from "../tasks/coding-agent-model.js";
 import { useInboxCloser } from "../tasks/inbox-close.js";
 import type { InboxCodeDoors } from "../tasks/inbox-code-card.js";
 import { INBOX_COLUMNS, useInboxColumns } from "../tasks/inbox-columns.js";
@@ -902,7 +902,7 @@ function PlanDocument({
       text: () => opened.document.body,
       pages,
       agents: (agents.agents ?? []).map((agent) => {
-        const name = agentTabLabel(agent, agents.models);
+        const name = agentName(agent, agents.models);
         return { id: agent.id, name, actor: agentActor(agent, name), summary: agent };
       }),
       readAgents: readMentionAgents,

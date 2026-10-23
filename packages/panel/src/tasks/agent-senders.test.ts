@@ -9,7 +9,7 @@ import {
   type CodingAgentSender,
   type CodingAgentSummary,
 } from "@luke/features/coding-agent-wire";
-import { LINK_PLACE, type LinkPlace, type ReadLink } from "@luke/features/luke-link";
+import { LINK_PLACE, type LinkPlace, type ReadLink } from "@luke/features/link-grammar";
 import { MODEL_PROVIDER } from "@luke/features/models-wire";
 import {
   WORKSPACE_ROLE,

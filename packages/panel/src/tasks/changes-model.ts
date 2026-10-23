@@ -16,6 +16,7 @@ import {
   LOCKFILE_NAMES,
   patchHunks,
 } from "@luke/features/diff-hunks";
+import { pullRequestAddressOf } from "@luke/features/link-grammar";
 import { isSecretFile } from "@luke/features/task-wire";
 import {
   DIFF_SELECTION_SIDE,
@@ -554,12 +555,10 @@ export function pullRequestPatch(files: readonly CodingAgentChangedFile[]): stri
 
 /** What a pull request's patch is saved as, from its page on GitHub: `<repository>-pr-<number>.patch`, or a plain name where the page names neither. */
 export function pullRequestPatchName(url: string): string {
-  const [, name, kind, number] = URL.canParse(url)
-    ? new URL(url).pathname.split("/").filter((segment) => segment !== "")
-    : [];
-  return name === undefined || kind !== "pull" || number === undefined
-    ? "pull-request.patch"
-    : `${name}-pr-${number}.patch`;
+  const address = pullRequestAddressOf(url);
+  if (address === undefined) return "pull-request.patch";
+  const name = address.repository.slice(address.repository.indexOf("/") + 1);
+  return `${name}-pr-${address.number}.patch`;
 }
 
 /** A file's header as git writes one, with no hunks under it: what the list draws for a file whose place shows no lines. */

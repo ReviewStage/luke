@@ -1,4 +1,4 @@
-import { LINK_PLACE, type LinkPlace, type ReadLink, readLink } from "@luke/features/luke-link";
+import { LINK_PLACE, type LinkPlace, type ReadLink, readLink } from "@luke/features/link-grammar";
 import { decodeMention, MENTION_KIND, type PlanMention } from "@luke/features/mention-link";
 import { isGitHubAddress, isWebAddress } from "@luke/host/acts";
 import {
@@ -21,7 +21,7 @@ import { useSteadyDoor } from "../steady-door.js";
  * use-open-link.ts -- how a link in written words opens: a transcript's, an agent tab's, or an Inbox item's.
  *
  * A Luke link, the address of a task, a section, an agent, an Inbox item,
- * or any other place in Luke (`@luke/features/luke-link`), opens in the
+ * or any other place in Luke (`@luke/features/link-grammar`), opens in the
  * window, on that place, never the browser, as Linear's and Slack's own
  * links open in their apps; one written before the link was settled
  * (`luke://plan/<id>`) still opens its task. The window's opener for a

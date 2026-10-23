@@ -2,7 +2,7 @@ import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
 import type { AccountFailedRun } from "@luke/features/account-inbox-wire";
 import { PRODUCT_SURFACE_EVENT } from "@luke/features/analytics";
 import { FEEDBACK_KIND, type FeedbackKind } from "@luke/features/feedback";
-import { LINK_PLACE, type ReadLink } from "@luke/features/luke-link";
+import { LINK_PLACE, type ReadLink } from "@luke/features/link-grammar";
 import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
 import { ACT_KIND } from "@luke/host/acts";
 import {

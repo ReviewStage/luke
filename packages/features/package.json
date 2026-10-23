@@ -71,7 +71,7 @@
     "./link-home": "./src/link-home.js",
     "./link-site": "./src/link-site.js",
     "./link-open": "./src/link-open.js",
-    "./luke-link": "./src/luke-link.js",
+    "./link-grammar": "./src/link-grammar.js",
     "./mention-link": "./src/mention-link.js",
     "./open-address": "./src/open-address.js",
     "./integration-row-wire": "./src/integration-row-wire.js",
