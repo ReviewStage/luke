@@ -1553,7 +1553,7 @@ export function dockedTodos(
   return open ? standing : undefined;
 }
 
-/** How the fold reads a part: its words, its reasoning as a note, a delegation as a subagent and a to-do list each on a row of its own, a start that began a coding agent counted apart, and every other call grouped with the calls beside it. */
+/** How the fold reads a part: its words, its reasoning as a note, a delegation as a subagent, a to-do list and a set of pictures or a recording shown each on a row of its own, a start that began a coding agent counted apart, and every other call grouped with the calls beside it. */
 const AGENT_READING: RowReading<AgentPart> = {
   key: (part, index) => {
     if (part.kind === AGENT_PART.TOOL) return part.callId;
@@ -1565,7 +1565,10 @@ const AGENT_READING: RowReading<AgentPart> = {
     if (part.kind !== AGENT_PART.TOOL) return ROW_PART.NOTE;
     if (isDelegation(part)) return ROW_PART.SUBAGENT;
     if (startedAgentOf(part) !== undefined) return ROW_PART.CODING_AGENT;
-    return isTodos(part) ? ROW_PART.LONE_CALL : ROW_PART.CALL;
+    // Note that what the agent showed is never grouped, because a group folds closed once the agent moves on and would fold the pictures with it.
+    return isTodos(part) || isShownSet(part) || keptRecording(part)
+      ? ROW_PART.LONE_CALL
+      : ROW_PART.CALL;
   },
   running: (part) =>
     part.kind === AGENT_PART.TOOL &&

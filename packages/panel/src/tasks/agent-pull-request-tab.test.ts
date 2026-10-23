@@ -906,6 +906,80 @@ test("the Checks tab lists the head's deployments over its checks: each environm
   assert.equal(none.querySelector('[aria-label="Deployments"]'), null);
 });
 
+test("the header offers Preview once the checks land, before their tab is shown: one deployment serving an address opens at a press, several drop a menu of their environments, and one still deploying or naming no address offers none", async () => {
+  const preview = (tab: HTMLElement) =>
+    [...tab.querySelectorAll<HTMLButtonElement>(".pull-request-title-actions button")].find(
+      (button) => button.textContent?.startsWith("Preview"),
+    );
+  const ready = (environment: string, url: string) => ({
+    environment,
+    state: DEPLOYMENT_STATE.READY,
+    url,
+  });
+  const one = await draw(
+    controlAnswering({
+      checks: () =>
+        Promise.resolve({
+          pullRequest: {
+            ...CHECKS,
+            deployments: [
+              ready("Preview – luke-web", "https://luke-web-git-expiry.vercel.app"),
+              { environment: "docs", state: DEPLOYMENT_STATE.PENDING, url: null },
+              { environment: "staging", state: DEPLOYMENT_STATE.FAILED, url: null },
+            ],
+          },
+        }),
+    }),
+  );
+  const single = preview(one) ?? assert.fail("the header offers Preview");
+  assert.equal(single.getAttribute("aria-haspopup"), null, "one deployment opens at once");
+  act(() => single.click());
+  await settle();
+  assert.deepEqual(opened, ["https://luke-web-git-expiry.vercel.app"]);
+
+  act(() => root?.unmount());
+  opened = [];
+  const several = await draw(
+    controlAnswering({
+      checks: () =>
+        Promise.resolve({
+          pullRequest: {
+            ...CHECKS,
+            deployments: [
+              ready("Preview – luke-web", "https://luke-web-git-expiry.vercel.app"),
+              ready("Preview – docs", "https://docs-git-expiry.vercel.app"),
+            ],
+          },
+        }),
+    }),
+  );
+  const menuButton = preview(several) ?? assert.fail("the header offers Preview");
+  assert.equal(menuButton.getAttribute("aria-haspopup"), "menu");
+  act(() => menuButton.click());
+  const items = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')];
+  assert.deepEqual(
+    items.map((item) => item.textContent),
+    ["Preview – luke-web", "Preview – docs"],
+  );
+  act(() => items[1]?.click());
+  await settle();
+  assert.deepEqual(opened, ["https://docs-git-expiry.vercel.app"]);
+
+  act(() => root?.unmount());
+  const none = await draw(
+    controlAnswering({
+      checks: () =>
+        Promise.resolve({
+          pullRequest: {
+            ...CHECKS,
+            deployments: [{ environment: "docs", state: DEPLOYMENT_STATE.PENDING, url: null }],
+          },
+        }),
+    }),
+  );
+  assert.equal(preview(none), undefined, "nothing serving offers no Preview");
+});
+
 test("every check is listed, however many there are, those that failed first, then those still running, then the rest, with no control folding any away", async () => {
   const passing = Array.from({ length: 6 }, (_, at) => check(`test ${at}`, CHECK_STATE.PASSED));
   const many: CodingAgentOverviewChecks = {
@@ -1713,7 +1787,8 @@ test("an App's bot stands by the logo GitHub gives it at its App's address, in t
 });
 
 test("each tab counts what Luke holds of it: the conversation its comments, reviews, and threads; the checks how they went as published from the first frame, and how many once read; the files the lines published", async () => {
-  const tab = await draw(controlAnswering());
+  const checks = held<CodingAgentOverviewChecksAnswerView>();
+  const tab = await draw(controlAnswering({ checks: checks.read }));
   assert.equal(tabCount(tab, "Conversation"), "2");
   assert.equal(
     checksGlyph(tab),
@@ -1723,8 +1798,14 @@ test("each tab counts what Luke holds of it: the conversation its comments, revi
   assert.equal(tabCount(tab, "Checks"), "", "how many waits on their read");
   assert.equal(tabCount(tab, "Files changed"), "+4 −1");
 
+  checks.answer({ pullRequest: CHECKS });
+  await settle();
+  assert.equal(
+    tabCount(tab, "Checks"),
+    "1",
+    "beside a failure, how many failed, read with the header",
+  );
   await choose(tab, "Checks");
-  assert.equal(tabCount(tab, "Checks"), "1", "beside a failure, how many failed");
   assert.equal(checksGlyph(tab), "failing");
 
   act(() => option(tab, "Checks").focus());
@@ -1808,10 +1889,6 @@ test("a merged pull request says so on its pill, as its overview read it, says n
   );
   assert.equal(standing(tab), "Merged");
   assert.equal(mergeControl(tab), null, "a merged pull request has no merge control");
-  assert.deepEqual(words(tab, ".pull-request-none"), [
-    "No description provided.",
-    "Nobody has commented yet.",
-  ]);
   await choose(tab, "Checks");
   assert.deepEqual(words(tab, ".pull-request-none"), [
     "No description provided.",

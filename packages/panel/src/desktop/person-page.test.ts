@@ -426,6 +426,24 @@ test("each row opens what it names: an agent its tab, an item the Inbox on it, a
   assert.deepEqual(opened.tasks, [DASHBOARD.id]);
 });
 
+test("an agent's row says its failure at its end and hangs the agent's card while rested on, as the sidebar's row does", async () => {
+  const broken = agent(9, "Flaky retry", CHARLES, CODING_AGENT_STATUS.FAILED, 5 * MINUTE);
+  const failing = task(9, "Retry flake hunt", CHARLES, 5 * MINUTE, [broken]);
+  const { page } = mountWith(
+    { tasks: [...TASKS, failing], listed: { tasks: [...TASKS, failing], ...HOLDING } },
+    CHARLES.userId,
+  );
+  await settle();
+
+  const row = button(page, "Flaky retry");
+  assert.ok(row.querySelector(".failed-mark"));
+  assert.equal(button(page, "Jittered backoff").querySelector(".failed-mark"), null);
+
+  restOn(row);
+  const card = document.querySelector(".luke-tooltip-card [data-tab-card]");
+  assert.equal(card?.querySelector(".luke-hover-card-name")?.textContent, "Flaky retry");
+});
+
 test("a person's tasks wear no face of theirs, since the page's head already says whose they are", async () => {
   const { page } = mount(CHARLES.userId);
   await settle();

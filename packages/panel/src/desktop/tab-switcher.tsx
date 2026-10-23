@@ -76,7 +76,7 @@ import type { StepTitle } from "../navigation-history.js";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs.js";
 import { rendererRuntime } from "../renderer-runtime.js";
 import { tasklessRowSubject } from "../tasks/agent-ref.js";
-import { type KindLook, PlanGlyph, TAB_KIND, tabLook } from "../tasks/tab-look.js";
+import { agentEndMark, type KindLook, PlanGlyph, TAB_KIND, tabLook } from "../tasks/tab-look.js";
 import type { MainTab } from "../tasks/use-main-tabs.js";
 import type { SidePanelTab } from "../tasks/use-side-panel.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
@@ -228,6 +228,7 @@ function cardLook(stop: Stop, tasks: TasksControl, title: StepTitle | undefined)
       return {
         ...tabLook({ kind: TAB_KIND.AGENT, name: subject.name, agent: subject.agent }),
         detail: undefined,
+        endMark: agentEndMark(agent, false),
       };
     }
     case STOP_KIND.PERSON:

@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { CODING_AGENT_STATUS, type TasklessAgent } from "@luke/features/coding-agent-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { HOST_CAPABILITY } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
@@ -556,4 +557,53 @@ test("a screen picked with its panel shut shuts the panel, and one with the pane
   letGo();
   assert.deepEqual(told.shown, ["panel the task: code", 'column the task: {"agent":"x"}']);
   assert.deepEqual(panel, ["full screen turned", "shut"]);
+});
+
+/** An agent with no task, listed in the window, as the sidebar lists it. */
+function listedAgent(status: TasklessAgent["status"]): TasklessAgent {
+  return {
+    id: "0a1b2c3d-0000-4000-8000-200000000001",
+    planId: null,
+    model: "anthropic/claude-opus-5.5",
+    effort: "high",
+    title: "Sweep flaky tests",
+    createdAt: 1,
+    status,
+    turnId: null,
+    startedBy: { userId: "user-ada", name: "Ada Lovelace" },
+    automationId: null,
+    workspaceId: "workspace-acme",
+    repository: "acme/relay",
+    activityAt: 1,
+  };
+}
+
+/** The switcher's cards, held over the agent's page and then the Inbox, so the agent is the stop behind. */
+async function agentCardAfter(status: TasklessAgent["status"]): Promise<HTMLElement | undefined> {
+  handCapabilities(DESKTOP_CAPABILITIES);
+  const agent = listedAgent(status);
+  const listed = { listedAgents: { standing: [agent], archived: [] } };
+  const base = tasksControl();
+  const window = await mounted();
+  await window.draw({
+    ...base,
+    ...listed,
+    agentView: { ...base.agentView, agentId: agent.id },
+  });
+  press();
+  await window.draw({ ...base, ...listed, inboxView: inboxOpen() });
+  tab();
+  tab();
+  return cards().find((card) => card.textContent?.includes(agent.title ?? ""));
+}
+
+test("an agent's stop whose turn failed says so at its end, as its row and its tab do", async () => {
+  const card = await agentCardAfter(CODING_AGENT_STATUS.FAILED);
+  assert.ok(card?.querySelector(".failed-mark"));
+});
+
+test("an agent's stop that finished says nothing at its end", async () => {
+  const card = await agentCardAfter(CODING_AGENT_STATUS.COMPLETED);
+  assert.ok(card);
+  assert.equal(card.querySelector(".failed-mark"), null);
 });
