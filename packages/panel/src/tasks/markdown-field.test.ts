@@ -100,3 +100,59 @@ it.effect(
       assert.notEqual(bold(field), null);
     }),
 );
+
+/** Presses `chord` in the field's textarea over `selected` of its words, answering whether the window's keymap would still hear it. */
+function chord(
+  field: HTMLElement,
+  selected: [number, number],
+  press: { key: string; code?: string; shiftKey?: boolean },
+): boolean {
+  const area = field.querySelector("textarea") ?? assert.fail("no text area");
+  area.focus();
+  area.setSelectionRange(...selected);
+  const event = new KeyboardEvent("keydown", {
+    ...press,
+    metaKey: true,
+    bubbles: true,
+    cancelable: true,
+  });
+  act(() => {
+    area.dispatchEvent(event);
+  });
+  return !event.defaultPrevented;
+}
+
+const WRITING_CHORDS = [
+  { name: "⇧⌘X strikes through", press: { key: "x", shiftKey: true }, written: "~~word~~" },
+  { name: "⌘E writes code", press: { key: "e" }, written: "`word`" },
+  { name: "⌘B bolds", press: { key: "b" }, written: "**word**" },
+  { name: "⇧⌘8 bullets", press: { key: "*", code: "Digit8", shiftKey: true }, written: "- word" },
+  { name: "⇧⌘7 numbers", press: { key: "&", code: "Digit7", shiftKey: true }, written: "1. word" },
+  {
+    name: "⇧⌘9 lists tasks",
+    press: { key: "(", code: "Digit9", shiftKey: true },
+    written: "- [ ] word",
+  },
+] as const;
+
+for (const { name, press, written } of WRITING_CHORDS) {
+  test(`${name} the selection and is the field's alone`, () => {
+    const field = mount("word");
+
+    const reachedWindow = chord(field, [0, 4], press);
+
+    assert.equal(field.querySelector("textarea")?.value, written);
+    assert.equal(reachedWindow, false, "the window's keymap never hears the chord");
+  });
+}
+
+test("Strikethrough stands among the presses, writing its mark over an empty field", () => {
+  const field = mount("");
+  const strike = field.querySelector<HTMLButtonElement>(
+    '[role="toolbar"] button[aria-label="Strikethrough"]',
+  );
+
+  act(() => strike?.click());
+
+  assert.equal(field.querySelector("textarea")?.value, "~~struck text~~");
+});

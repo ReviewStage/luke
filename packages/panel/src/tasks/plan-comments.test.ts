@@ -336,6 +336,10 @@ test("the Comments tab draws a skeleton while its threads are read, then neither
   );
   assert.equal(reading.container.querySelector(".comments-list .luke-empty-state"), null);
   assert.equal(reading.container.querySelector(".comments-list[data-empty]"), null);
+  assert.ok(
+    reading.container.querySelectorAll('[role="status"] .comment-card .luke-skeleton').length > 0,
+    "the placeholder's blocks stand in a thread's own card, where the threads land",
+  );
 });
 
 test("a page that is not the plan's own marks no comment", () => {

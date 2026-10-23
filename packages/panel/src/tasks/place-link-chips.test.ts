@@ -338,3 +338,27 @@ test("an archived agent's chip, which no list the window holds names, wears the 
   // Codex's mark is its picture, Claude Code's its Clawd drawn as an SVG.
   assert.deepEqual(marks, ["img", "svg"]);
 });
+
+test("an automation's chip and its run's wear its clock tile, and only the Automations place keeps the lightning bolt", async () => {
+  const container = await drawn(
+    [
+      `${HOME}/automation/${TRIAGE}`,
+      `${HOME}/automation/${TRIAGE}/run/run_1`,
+      `${HOME}/automations`,
+    ].join(" and "),
+    [],
+  );
+
+  const [automation, run, place] = [
+    ...container.querySelectorAll<HTMLElement>("[data-mention-ref]"),
+  ];
+  assert.ok(
+    automation?.querySelector('.actor-mark[data-kind="automation"]'),
+    "the automation's tile",
+  );
+  assert.ok(run?.querySelector('.actor-mark[data-kind="automation"]'), "the run's tile");
+  assert.equal(automation?.querySelector(".lucide-zap"), null);
+  assert.equal(run?.querySelector(".lucide-zap"), null);
+  assert.ok(place?.querySelector(".lucide-zap"), "the Automations page keeps its bolt");
+  assert.equal(place?.querySelector(".actor-mark"), null);
+});
