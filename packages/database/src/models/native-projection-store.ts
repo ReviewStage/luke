@@ -5,7 +5,6 @@ import { SqlClient, SqlSchema } from "effect/sql";
 import { Database, type DatabaseServices, type StoreFailure } from "../core/query.js";
 import { codingAgent } from "../schemas/coding-agent.js";
 import { conversations } from "../schemas/storage.js";
-import { waitOutConversationDispatch } from "./dispatch-lock.js";
 import type { ConversationTarget } from "./writer.js";
 
 /**
@@ -136,8 +135,6 @@ export function withNativeProjection<A, E, R>(
   apply: (held: NativeProjectionRow) => Effect.Effect<NativeProjectionApplied<A>, E, R>,
 ): Effect.Effect<Option.Option<A>, E | StoreFailure, R | DatabaseServices> {
   const locked = Effect.gen(function* () {
-    // A line's hand-over to the runner under way is waited out, so the events it starts take the line in.
-    yield* waitOutConversationDispatch(target.conversationId);
     const held = yield* lockProjectionRow({ ...target, runnerTokenHash });
     if (Option.isNone(held)) return Option.none<A>();
     const applied = yield* apply(held.value);

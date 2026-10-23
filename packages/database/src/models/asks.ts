@@ -1,12 +1,20 @@
 import { ASK_ORIGIN, type AskOrigin } from "@luke/features";
 import { MESSAGE_CHANNEL } from "@luke/wire";
-import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, sql } from "drizzle-orm";
-import { Effect, Option, Schema } from "effect";
+import { and, asc, desc, eq, gt, gte, inArray, isNotNull, isNull, or, sql } from "drizzle-orm";
+import { DateTime, Duration, Effect, Exit, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
 import { Database, type DatabaseServices, type StoreFailure } from "../core/query.js";
 import { asks, conversations, messages } from "../schemas/storage.js";
 import { InstantColumnSchema } from "./columns.js";
-import { holdConversationDispatch } from "./dispatch-lock.js";
+import {
+  claimRetry,
+  DISPATCH_CLAIM,
+  DispatchClaimHeld,
+  dispatchClaimStands,
+  releaseDispatchClaim,
+  takeDispatchClaim,
+  waitingOutDispatchClaim,
+} from "./dispatch-claim.js";
 import { recordedRuntimeSession } from "./recorded-session.js";
 import type { ConversationTarget } from "./writer.js";
 
@@ -89,9 +97,16 @@ interface AskDispatch {
   readonly turnId?: string;
 }
 
-/** The one answer a dispatch gives besides the row: the conversation it would run in no longer stands, a deletion having landed between the ask's admission and the dispatch's lock. */
+/**
+ * The answers a dispatch gives besides the row: the conversation it would run
+ * in no longer stands, a deletion having landed between the ask's admission
+ * and the dispatch's claim; or another hand-over's claim stood on the
+ * conversation for as long as the dispatch waits for it, and nothing was
+ * handed over.
+ */
 export const ASK_DISPATCH_REFUSAL = {
   NO_CONVERSATION: "no_conversation",
+  BUSY: "busy",
 } as const;
 
 type AskDispatchRefusal = (typeof ASK_DISPATCH_REFUSAL)[keyof typeof ASK_DISPATCH_REFUSAL];
@@ -105,10 +120,11 @@ export interface AskRecord {
   /** The newest eve session any of the conversation's asks was handed to, by eve's own sortable ids, ahead of the conversation row recording it. */
   latestSession(userId: string, conversationId: string): AskEffect<string | undefined>;
   /**
-   * Runs the dispatch under the conversation's dispatch lock unless a session is already written, handing it
-   * the conversation's newest session as read under that lock, and writes what eve answered; answers
-   * the row after, or `NO_CONVERSATION` when the conversation no longer stands, so a deletion landing
-   * between the ask's admission and its dispatch is the caller's refusal and not a failure.
+   * Runs the dispatch under the conversation's dispatch claim unless a session is already written, handing
+   * it the conversation's newest session as read as the claim is taken, and writes what eve answered;
+   * answers the row after, `NO_CONVERSATION` when the conversation no longer stands, so a deletion
+   * landing between the ask's admission and its dispatch is the caller's refusal and not a failure, or
+   * `BUSY` where another hand-over's claim outlasted the wait for it.
    */
   dispatchOnce(
     target: ConversationTarget,
@@ -146,6 +162,12 @@ export interface AskDeliveryBinding {
     turnId: string,
     joinedAfterStep?: number,
   ): AskEffect<readonly AskRow[]>;
+  /**
+   * Waits, holding nothing, until no ask of the conversation is being handed to eve, no longer than a
+   * claim stands: a delivery eve names is written onto its ask only once eve's answer is, so a binding
+   * read before that would miss the ask (`dispatch-claim.ts`).
+   */
+  handOversSettled(target: ConversationTarget): AskEffect<void>;
   /**
    * The conversation's asks bound to the turn that carry a Stop: the ask that opened the session is
    * bound at its dispatch with no delivery, and a follow-up's stamp may land after its binding, so the
@@ -339,6 +361,7 @@ const markDispatched = SqlSchema.void({
           sessionId: dispatch.sessionId,
           deliveryId: sql`coalesce(${dispatch.deliveryId}, ${asks.deliveryId})`,
           turnId: sql`coalesce(${dispatch.turnId}::uuid, ${asks.turnId})`,
+          dispatchClaim: null,
         })
         .where(eq(asks.id, dispatch.id)),
     ),
@@ -517,7 +540,9 @@ const findStoppedOn = SqlSchema.findAll({
 /**
  * Only an ask not yet bound takes the turn: a start eve emits again names the same deliveries and
  * changes nothing. A spoken ask keeps the place it joined a typed turn at, and a typed ask none,
- * since it is a line of the turn's own kind.
+ * since it is a line of the turn's own kind. A native runner names an ask's line by the ask's own
+ * id, which is its delivery too (`brain-ask.ts`), so the ask is matched by that id as well: it binds
+ * though the runner took its line before its dispatch wrote the delivery.
  */
 const bindDeliveredAsks = SqlSchema.findAll({
   Request: BindSchema,
@@ -534,7 +559,10 @@ const bindDeliveredAsks = SqlSchema.findAll({
           and(
             eq(asks.userId, bind.userId),
             eq(asks.conversationId, bind.conversationId),
-            inArray(asks.deliveryId, [...bind.deliveryIds]),
+            or(
+              inArray(asks.deliveryId, [...bind.deliveryIds]),
+              inArray(sql`${asks.id}::text`, [...bind.deliveryIds]),
+            ),
             isNull(asks.turnId),
           ),
         )
@@ -547,7 +575,7 @@ const ConversationLockSchema = Schema.Struct({
   conversationId: Schema.String,
 });
 
-/** The conversation row, unless Clear stamped it, read under the conversation's dispatch lock rather than its row lock. */
+/** The conversation row, unless Clear stamped it, read as the dispatch claim is taken. */
 const readConversation = SqlSchema.findOneOption({
   Request: ConversationLockSchema,
   Result: Schema.Struct({ id: Schema.String }),
@@ -566,29 +594,165 @@ const readConversation = SqlSchema.findOneOption({
     ),
 });
 
-/** The ask's row, read inside the conversation's lock. */
+/** The ask's row, with the claim it was handed over under, read once the conversation's row is locked. */
 const readAsk = SqlSchema.findOneOption({
   Request: Schema.String,
-  Result: AskRowSchema,
-  execute: (id) => Database.use((db) => db.select(ASK_COLUMNS).from(asks).where(eq(asks.id, id))),
+  Result: Schema.Struct({ ...AskRowSchema.fields, dispatchClaim: Schema.NullOr(Schema.String) }),
+  execute: (id) =>
+    Database.use((db) =>
+      db
+        .select({ ...ASK_COLUMNS, dispatchClaim: asks.dispatchClaim })
+        .from(asks)
+        .where(eq(asks.id, id)),
+    ),
+});
+
+const AskClaimSchema = Schema.Struct({ id: Schema.String, claim: Schema.String });
+
+const markAskClaimed = SqlSchema.void({
+  Request: AskClaimSchema,
+  execute: ({ id, claim }) =>
+    Database.use((db) => db.update(asks).set({ dispatchClaim: claim }).where(eq(asks.id, id))),
+});
+
+/** A hand-over that answered nothing leaves the ask as it was, for a retry. */
+const clearAskClaim = SqlSchema.void({
+  Request: AskClaimSchema,
+  execute: ({ id, claim }) =>
+    Database.use((db) =>
+      db
+        .update(asks)
+        .set({ dispatchClaim: null })
+        .where(and(eq(asks.id, id), eq(asks.dispatchClaim, claim))),
+    ),
+});
+
+/** An ask of the conversation whose hand-over's claim still stands. */
+const findAskHandOver = SqlSchema.findAll({
+  Request: Schema.Struct({
+    userId: Schema.String,
+    conversationId: Schema.String,
+    claimedAfter: Schema.Date,
+  }),
+  Result: Schema.Struct({ id: Schema.String }),
+  execute: (key) =>
+    Database.use((db) =>
+      db
+        .select({ id: asks.id })
+        .from(asks)
+        .innerJoin(conversations, eq(conversations.id, asks.conversationId))
+        .where(
+          and(
+            eq(asks.userId, key.userId),
+            eq(asks.conversationId, key.conversationId),
+            eq(asks.dispatchClaim, conversations.dispatchClaim),
+            gt(conversations.dispatchClaimedAt, key.claimedAfter),
+          ),
+        )
+        .limit(1),
+    ),
 });
 
 /**
- * One dispatch at a time per conversation: the conversation's dispatch lock
- * is held (`dispatch-lock.ts`), the ask row is read under it, a session
+ * The longest an ask's dispatch waits for another hand-over's claim to clear:
+ * as long as the dispatch may take at all (`brain-ask.ts`'s
+ * `ASK_DISPATCH_DEADLINE`), since an ask asked while another is handed over
+ * waited that long for the lock before the claim replaced it.
+ */
+const ASK_CLAIM_WAIT = Duration.seconds(30);
+
+/** What the dispatch came to: the row as it then stands, or the refusal, and what eve answered, where it was handed anything. */
+interface AskDispatched {
+  readonly row: AskRow | AskDispatchRefusal;
+  readonly answered: AskDispatch | undefined;
+}
+
+/** Where taking the claim left the dispatch: answered already, or holding the claim with the session to hand the ask to. */
+type AskClaimed =
+  | { readonly answered: AskRow | AskDispatchRefusal }
+  | { readonly standing: AskRow; readonly session: string | undefined; readonly claim: string };
+
+/**
+ * The claim taken for the ask's hand-over, in one short transaction: the
+ * conversation's row locked, the ask read under it, and the claim written on
+ * both. A session already written ends the dispatch with nothing handed
+ * over, and so does a claim already on the ask: an earlier hand-over's whose
+ * holder died before writing what eve answered, which eve may have taken and
+ * is never handed it again (`dispatch-claim.ts`).
+ */
+const claimAsk = /* @__PURE__ */ Effect.fnUntraced(function* (
+  target: ConversationTarget,
+  id: string,
+): Effect.fn.Return<AskClaimed, StoreFailure | DispatchClaimHeld, DatabaseServices> {
+  const standingConversation = yield* readConversation(target);
+  if (Option.isNone(standingConversation)) {
+    return { answered: ASK_DISPATCH_REFUSAL.NO_CONVERSATION };
+  }
+  if (yield* dispatchClaimStands(target.conversationId)) return yield* new DispatchClaimHeld();
+  const read = yield* readAsk(id);
+  if (Option.isNone(read)) throw new Error("the ask to dispatch is not standing");
+  const standing = askRow(read.value);
+  if (standing.sessionId !== undefined) return { answered: standing };
+  if (read.value.dispatchClaim !== null) {
+    yield* Effect.logWarning("an ask whose hand-over was never recorded is not handed over again", {
+      askId: id,
+    });
+    return { answered: standing };
+  }
+  const session = newestSession(
+    yield* recordedRuntimeSession(target),
+    yield* latestSessionOf(target),
+  );
+  const claim = yield* takeDispatchClaim(target.conversationId);
+  yield* markAskClaimed({ id, claim });
+  return { standing, session, claim };
+});
+
+/**
+ * What eve answered, written in a second short transaction once the
+ * hand-over ended however it ended: the claim released, then the session
+ * and delivery written, or, for a hand-over that answered nothing or was
+ * interrupted, the ask's claim cleared for a retry.
+ */
+function recordedAsk(
+  target: ConversationTarget,
+  id: string,
+  claim: string,
+  answered: AskDispatch | undefined,
+): Effect.Effect<void, StoreFailure, DatabaseServices> {
+  return Effect.flatMap(SqlClient.SqlClient, (client) =>
+    client.withTransaction(
+      Effect.gen(function* () {
+        yield* releaseDispatchClaim(target.conversationId, claim);
+        if (answered === undefined) return yield* clearAskClaim({ id, claim });
+        yield* markDispatched({
+          id,
+          sessionId: answered.sessionId,
+          deliveryId: answered.deliveryId ?? null,
+          turnId: answered.turnId ?? null,
+        });
+      }),
+    ),
+  );
+}
+
+/**
+ * One dispatch at a time per conversation: the conversation's dispatch claim
+ * is taken (`dispatch-claim.ts`) with the ask read as it is, a session
  * already written ends the call with nothing dispatched, and otherwise the
- * caller's dispatch runs under the lock and what eve answered is written
- * before it is released. The lock is the conversation's rather than the
- * ask's on purpose: two first asks of different client ids on a conversation
- * with no session would each open one, and the ask bound to the session the
- * forward-only claim loses would never read a turn; under the conversation's
- * lock the second waits, reads the session the first opened, and sends into
- * it. It is the dispatch lock rather than the row lock so the journal of the
- * turn under way keeps landing while eve answers; the relay's take of a line
- * into a turn waits it out, so the binding after it reads the delivery
- * written here. A dispatch that answers nothing leaves the row as it was, for
- * a retry. The order is the one every lock here keeps: the user's row, then
- * the conversation's dispatch lock, then its row, and never an ask's row
+ * caller's dispatch runs with no transaction open and what eve answered is
+ * written as the claim is released. The claim is the conversation's rather
+ * than the ask's on purpose: two first asks of different client ids on a
+ * conversation with no session would each open one, and the ask bound to the
+ * session the forward-only claim loses would never read a turn; under the
+ * conversation's claim the second waits, reads the session the first opened,
+ * and sends into it. It is a claim rather than a lock so the journal of the
+ * turn under way, and every other write of the conversation, keeps landing
+ * while eve answers; the relay's binding of a delivery waits out an ask's
+ * claim (`handOversSettled`), so it reads the delivery written here. A
+ * dispatch that answers nothing, or is interrupted, leaves the row as it
+ * was, for a retry. The order is the one every lock here keeps: the user's
+ * row, then the conversation's row, then an ask's, and never an ask's row
  * held while a conversation's is wanted.
  */
 function dispatchAskOnce(
@@ -596,31 +760,54 @@ function dispatchAskOnce(
   id: string,
   dispatch: (sessionId: string | undefined) => Effect.Effect<AskDispatch | undefined>,
 ): Effect.Effect<AskRow | AskDispatchRefusal, StoreFailure, DatabaseServices> {
-  return Effect.flatMap(SqlClient.SqlClient, (client) =>
-    client.withTransaction(
-      Effect.gen(function* () {
-        yield* holdConversationDispatch(target.conversationId);
-        const standingConversation = yield* readConversation(target);
-        if (Option.isNone(standingConversation)) return ASK_DISPATCH_REFUSAL.NO_CONVERSATION;
-        const read = yield* readAsk(id);
-        if (Option.isNone(read)) throw new Error("the ask to dispatch is not standing");
-        const standing = askRow(read.value);
-        if (standing.sessionId !== undefined) return standing;
-        const session = newestSession(
-          yield* recordedRuntimeSession(target),
-          yield* latestSessionOf(target),
-        );
-        const answered = yield* dispatch(session);
-        if (answered === undefined) return standing;
-        yield* markDispatched({
-          id,
-          sessionId: answered.sessionId,
-          deliveryId: answered.deliveryId ?? null,
-          turnId: answered.turnId ?? null,
-        });
-        return { ...standing, ...answered };
-      }),
+  const claimed = Effect.flatMap(SqlClient.SqlClient, (client) =>
+    waitingOutDispatchClaim(
+      target.conversationId,
+      client.withTransaction(claimAsk(target, id)),
+      ASK_CLAIM_WAIT,
+    ).pipe(
+      Effect.catchTag("DispatchClaimHeld", () =>
+        Effect.succeed<AskClaimed>({ answered: ASK_DISPATCH_REFUSAL.BUSY }),
+      ),
     ),
+  );
+  return Effect.acquireUseRelease(
+    claimed,
+    (held): Effect.Effect<AskDispatched> =>
+      "answered" in held
+        ? Effect.succeed({ row: held.answered, answered: undefined })
+        : Effect.map(dispatch(held.session), (answered) => ({
+            row: answered === undefined ? held.standing : { ...held.standing, ...answered },
+            answered,
+          })),
+    (held, exit) =>
+      "answered" in held
+        ? Effect.void
+        : recordedAsk(
+            target,
+            id,
+            held.claim,
+            Exit.isSuccess(exit) ? exit.value.answered : undefined,
+          ),
+  ).pipe(Effect.map(({ row }) => row));
+}
+
+/** Waits until no ask of the conversation is being handed over, as `handOversSettled` says. */
+function askHandOversSettled(target: ConversationTarget): AskEffect<void> {
+  const underWay = Effect.flatMap(DateTime.nowAsDate, (now) =>
+    Effect.map(
+      findAskHandOver({
+        ...target,
+        claimedAfter: new Date(now.getTime() - Duration.toMillis(DISPATCH_CLAIM.EXPIRY)),
+      }),
+      (rows) => rows.length > 0,
+    ),
+  );
+  return Effect.asVoid(
+    Effect.repeat(underWay, {
+      schedule: claimRetry(DISPATCH_CLAIM.EXPIRY),
+      until: (standing) => !standing,
+    }),
   );
 }
 
@@ -667,6 +854,7 @@ export function askRecord(): AskRecord & AskDeliveryBinding {
             }),
             (rows) => rows.map(askRow),
           ),
+    handOversSettled: (target) => askHandOversSettled(target),
     stoppedOn: (target, turnId) =>
       Effect.map(findStoppedOn({ ...target, turnId }), (rows) => rows.map(askRow)),
   };

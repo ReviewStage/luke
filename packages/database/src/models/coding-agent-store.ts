@@ -67,7 +67,6 @@ import {
 } from "../storage-vocabulary.js";
 import { agentGivenNameSql } from "./agent-name.js";
 import { InstantColumnSchema } from "./columns.js";
-import { waitOutConversationDispatch } from "./dispatch-lock.js";
 import {
   awaitingLinesOf,
   awaitingLinesOfReached,
@@ -1903,10 +1902,9 @@ const deleteAgentCallWords = SqlSchema.void({
  * task's delete does; none where the account reaches no such agent.
  *
  * Everything runs under the agent's conversation lock, the one every write
- * of its lines and turns takes, taken once any hand-over to eve under way
- * has been waited out (`dispatch-lock.ts`), and the agent is read again
- * under it, so a message handed over after the caller stopped it either
- * landed first, and
+ * of its lines and turns takes, and the agent is read again under it, so a
+ * message handed over after the caller stopped it either landed first, its
+ * line standing from before eve hears it (`dispatch-claim.ts`), and
  * `standsStopped` refuses with `TaskAgentUnstopped`, nothing written, or
  * waits on the lock and finds no agent.
  */
@@ -1924,8 +1922,6 @@ export function deleteCodingAgent<R = never>(
       Effect.gen(function* () {
         const found = yield* findAgent({ userId, agentId });
         if (Option.isNone(found)) return Option.none();
-        // A hand-over to eve under way is waited out first, so its line stands awaiting when the guard reads.
-        yield* waitOutConversationDispatch(found.value.conversationId);
         const locked = yield* lockAgentConversation({
           conversationId: found.value.conversationId,
         });
@@ -2248,10 +2244,11 @@ export function updateCodingAgentServers(
  * The hand-over of a message mentioning MCP servers to eve, run with those
  * servers standing among the ones the agent's next turn takes whatever its
  * switches say, and left standing only where the hand-over answers that eve
- * took the message. The row is locked, the servers added, the hand-over
- * run, and the servers as they stood put back for one that answered
- * nothing, so a refused send leaves no server for a later turn. Note that
- * the caller runs this as the dispatch under the conversation's dispatch lock
+ * took the message. The servers are added, the hand-over run, and the
+ * servers as they stood put back for one that answered nothing, so a
+ * refused send leaves no server for a later turn; no transaction is open
+ * across the hand-over, so each statement holds the agent's row alone. Note that
+ * the caller runs this as the dispatch under the conversation's dispatch claim
  * (`writeAwaitingLine`), after its repeat check, so a send's servers are
  * added only for a send eve hears, and no other send's hand-over stands
  * between this one's servers and its message. Nothing is added for no
@@ -2514,8 +2511,6 @@ export function archiveIdleCodingAgent(
       Effect.gen(function* () {
         const found = yield* findAgent({ userId, agentId });
         if (Option.isNone(found)) return IDLE_ARCHIVE.NOT_FOUND;
-        // A hand-over to eve under way is waited out first, so its line stands awaiting when `idle` reads.
-        yield* waitOutConversationDispatch(found.value.conversationId);
         const locked = yield* lockAgentConversation({
           conversationId: found.value.conversationId,
         });
