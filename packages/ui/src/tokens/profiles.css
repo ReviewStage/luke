@@ -116,13 +116,17 @@
 
   /* A hover card's words, off the type scale as they were drawn before they
      were shared: its name, the line under it and its corner, code in its
-     note, its own glyph, a count's line under its rows, and the least size
-     any of them stands at under a finger. */
+     note, its own glyph, the most a list under a rule stands before it
+     scrolls within the card (some seven rows, less in a short window), and
+     the least size any of them stands at under a finger. */
   --luke-hover-card-name-size: 12.5px;
   --luke-hover-card-sub-size: 11.5px;
   --luke-hover-card-code-size: 11px;
   --luke-hover-card-glyph: 14px;
-  --luke-hover-card-more-height: 22px;
+  --luke-hover-card-list-height: min(
+    calc(7.5 * var(--luke-menu-row-height)),
+    calc(var(--luke-stage-height) * 0.4)
+  );
   --luke-hover-card-coarse-size: 12px;
 
   --luke-menu-row-height: 32px;
@@ -265,13 +269,17 @@
 
   /* A hover card's words, off the type scale as they were drawn before they
      were shared: its name, the line under it and its corner, code in its
-     note, its own glyph, a count's line under its rows, and the least size
-     any of them stands at under a finger. */
+     note, its own glyph, the most a list under a rule stands before it
+     scrolls within the card (some seven rows, less in a short window), and
+     the least size any of them stands at under a finger. */
   --luke-hover-card-name-size: 12.5px;
   --luke-hover-card-sub-size: 11.5px;
   --luke-hover-card-code-size: 11px;
   --luke-hover-card-glyph: 14px;
-  --luke-hover-card-more-height: 22px;
+  --luke-hover-card-list-height: min(
+    calc(7.5 * var(--luke-menu-row-height)),
+    calc(var(--luke-stage-height) * 0.4)
+  );
   --luke-hover-card-coarse-size: 12px;
 
   /* A web menu's rows are its controls' height, a finger's target. */

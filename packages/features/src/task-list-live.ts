@@ -31,6 +31,7 @@ import {
   type TaskListAnswer,
   type TaskOrigin,
   type TaskPullRequestLine,
+  type TaskPullRequests,
   type TaskSummary,
   taskPrioritySchema,
   taskStatusSchema,
@@ -260,21 +261,14 @@ function agentLine(row: AgentLiveRow, now: number): TaskAgentLine {
 }
 
 /**
- * One plan's agents in brief, as the held read sums them: those at work
- * named first, then the rest, newest started first within each; each pull
- * request once by its page, those still open first, newest agent's first
- * within a rank; and the latest settled activity of every agent, archived
- * or not.
+ * Every pull request a plan's agents opened, the archived agents' left out,
+ * each once by its page: those still open first, the newest agent's first
+ * within a rank. Uncapped, so a card can name every one; the plan's row
+ * names the first few.
  */
-function agentsSummaryOf(rows: readonly AgentLiveRow[], now: number): TaskAgentsSummary {
-  const newest = rows
-    .filter((row) => row.archivedAt === null)
-    .toSorted(newestStarted)
-    .map((row) => ({ row, line: agentLine(row, now) }));
-  const working = newest.filter(({ line }) => WORKING_STATUSES.has(line.status));
-  const resting = newest.filter(({ line }) => !WORKING_STATUSES.has(line.status));
+function pullRequestLinesOf(rows: readonly AgentLiveRow[]): readonly TaskPullRequestLine[] {
   const pullRequests = new Map<string, TaskPullRequestLine>();
-  for (const { row } of newest) {
+  for (const row of rows.filter((each) => each.archivedAt === null).toSorted(newestStarted)) {
     const { published } = row;
     if (published === null || pullRequests.has(published.url)) continue;
     const { number, title, state, checks, additions, deletions, url } = published;
@@ -290,6 +284,26 @@ function agentsSummaryOf(rows: readonly AgentLiveRow[], now: number): TaskAgents
       ...(published.queued === true ? { queued: true } : undefined),
     });
   }
+  return [...pullRequests.values()].toSorted(
+    (a, b) => PULL_REQUEST_RANK[a.state] - PULL_REQUEST_RANK[b.state],
+  );
+}
+
+/**
+ * One plan's agents in brief, as the held read sums them: those at work
+ * named first, then the rest, newest started first within each; each pull
+ * request once by its page, those still open first, newest agent's first
+ * within a rank; and the latest settled activity of every agent, archived
+ * or not.
+ */
+function agentsSummaryOf(rows: readonly AgentLiveRow[], now: number): TaskAgentsSummary {
+  const pullRequests = pullRequestLinesOf(rows);
+  const newest = rows
+    .filter((row) => row.archivedAt === null)
+    .toSorted(newestStarted)
+    .map((row) => ({ row, line: agentLine(row, now) }));
+  const working = newest.filter(({ line }) => WORKING_STATUSES.has(line.status));
+  const resting = newest.filter(({ line }) => !WORKING_STATUSES.has(line.status));
   return {
     total: newest.length,
     working: working.length,
@@ -297,10 +311,8 @@ function agentsSummaryOf(rows: readonly AgentLiveRow[], now: number): TaskAgents
     agents: [...working, ...resting]
       .slice(0, TASK_AGENTS_BOUNDS.MAX_AGENTS)
       .map(({ line }) => line),
-    pullRequestTotal: pullRequests.size,
-    pullRequests: [...pullRequests.values()]
-      .toSorted((a, b) => PULL_REQUEST_RANK[a.state] - PULL_REQUEST_RANK[b.state])
-      .slice(0, TASK_AGENTS_BOUNDS.MAX_PULL_REQUESTS),
+    pullRequestTotal: pullRequests.length,
+    pullRequests: pullRequests.slice(0, TASK_AGENTS_BOUNDS.MAX_PULL_REQUESTS),
   };
 }
 
@@ -471,6 +483,23 @@ export function taskAgentsOfLiveRows(
     .filter((row) => row.planId !== null && row.archivedAt === null)
     .toSorted(firstStarted)
     .map((row) => agentSummaryOf(row, now));
+}
+
+/**
+ * Every pull request of each plan that has one, uncapped, in the order its
+ * row names them (`pullRequestLinesOf`): what a card naming a plan's pull
+ * requests reads, where its row names only the first few.
+ */
+export function taskPullRequestsOfLiveRows(rows: TaskListLiveRows): readonly TaskPullRequests[] {
+  const byTask = new Map<string, AgentLiveRow[]>();
+  for (const row of rows.agents) {
+    if (row.planId === null) continue;
+    byTask.set(row.planId, [...(byTask.get(row.planId) ?? []), row]);
+  }
+  return [...byTask].flatMap(([taskId, agents]) => {
+    const pullRequests = pullRequestLinesOf(agents);
+    return pullRequests.length === 0 ? [] : [{ taskId, pullRequests }];
+  });
 }
 
 /**

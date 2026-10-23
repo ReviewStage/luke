@@ -69,8 +69,7 @@
   --spacing-tooltip-card-inline: calc(var(--luke-menu-inset) + var(--luke-space-8));
   --spacing-popover-room: var(--luke-popover-room, none);
   --spacing-hover-card-glyph: var(--luke-hover-card-glyph);
-  --spacing-hover-card-more: var(--luke-hover-card-more-height);
-  --spacing-hover-card-indent: calc(var(--luke-menu-glyph) + var(--luke-icon-gap));
+  --spacing-hover-card-list: var(--luke-hover-card-list-height);
   --container-dialog-confirm: min(var(--luke-dialog-confirm-width), 100%);
   --container-dialog-wide: min(var(--luke-dialog-wide-width), 100%);
   --container-dialog-composer: min(var(--luke-dialog-composer-width), 100%);

@@ -51,9 +51,6 @@ const MOMENT_WORDS = {
 /** What parts the pieces of a card's line. */
 const SEPARATOR = " · ";
 
-/** The most labels a card names, so one with many stays a card's height; the rest are counted in a last pill. */
-const MAX_LABELS = 6;
-
 /** A count and the noun it counts, the noun in the plural unless the count is one. */
 function counted(count: number, one: string, many: string): string {
   return `${count} ${count === 1 ? one : many}`;
@@ -196,16 +193,11 @@ export function PullRequestCardNotes({
           className="card-labels"
           aria-label="Labels"
         >
-          {labels.slice(0, MAX_LABELS).map((label) => (
+          {labels.map((label) => (
             <li key={label.name}>
               <Badge swatch={label.color}>{label.name}</Badge>
             </li>
           ))}
-          {labels.length > MAX_LABELS ? (
-            <li>
-              <Badge>{`+${labels.length - MAX_LABELS}`}</Badge>
-            </li>
-          ) : null}
         </Inline>
       )}
       <CountsNote comments={comments} commits={commits} />

@@ -6,8 +6,9 @@ import {
   taskListGraceEdge,
   taskListLiveRowsSchema,
   taskListOfLiveRows,
+  taskPullRequestsOfLiveRows,
 } from "@luke/features/task-list-live";
-import type { TaskListAnswer } from "@luke/features/task-wire";
+import type { TaskListAnswer, TaskPullRequests } from "@luke/features/task-wire";
 import { Clock, Duration, Effect, Stream } from "effect";
 import {
   decodedLiveRows,
@@ -45,6 +46,7 @@ type Sealed = TaskListLiveAnswer | { readonly failure: string; readonly gone?: b
 interface LiveTaskList {
   readonly list: TaskListAnswer;
   readonly taskAgents: readonly CodingAgentSummary[];
+  readonly taskPullRequests: readonly TaskPullRequests[];
 }
 
 export interface TaskListFollowDependencies {
@@ -68,6 +70,7 @@ function listsOf(rows: TaskListLiveRows): Stream.Stream<LiveTaskList> {
       const now = Stream.succeed({
         list: taskListOfLiveRows(rows, at),
         taskAgents: taskAgentsOfLiveRows(rows, at),
+        taskPullRequests: taskPullRequestsOfLiveRows(rows),
       });
       const edge = taskListGraceEdge(rows, at);
       if (edge === undefined) return now;

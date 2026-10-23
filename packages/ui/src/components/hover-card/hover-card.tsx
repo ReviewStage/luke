@@ -3,6 +3,7 @@ import { PRESS_PULSE, pulseOnPress } from "../../press-pulse.js";
 import { GAP, LAYOUT_ELEMENT, Stack } from "../layout/layout.js";
 import { useLinkAddress } from "../menu/link-address.js";
 import { ClippedLine, ONE_LINE_ELEMENT, ONE_LINE_END } from "../one-line/clipped-line.js";
+import { SCROLL_FADE, SCROLL_SIZE, ScrollArea } from "../scroll-area/scroll-area.js";
 
 /**
  * hover-card.tsx -- the parts every hover card is drawn from: its head, its notes, and its rule, in one type scale.
@@ -24,8 +25,10 @@ import { ClippedLine, ONE_LINE_ELEMENT, ONE_LINE_END } from "../one-line/clipped
  * the subject lives or who made it; a row of a list under a rule (`LINE`)
  * names one of the things the subject holds. Either is a button where a
  * press opens what it names and text where nothing does, in the same place
- * either way, washed under the pointer as a menu row is. A list counts what
- * it leaves out on a last line of its own.
+ * either way, washed under the pointer as a menu row is. A list names every
+ * thing it holds, never a count of the rest: past a few rows' height it
+ * scrolls within the card, fading at the edge where more stands
+ * (`HoverCardScroll`), so whatever the subject holds can be reached.
  *
  * What is drawn here is the card's words alone. The surface it stands on,
  * when it shows, how long it lingers for the pointer to cross onto it, and
@@ -72,8 +75,8 @@ const ROW_GLYPH =
 const ROW_LABEL = "luke-hover-card-row-label min-w-0 flex-1 overflow-hidden whitespace-nowrap";
 const ROW_END =
   "luke-hover-card-row-end flex-none whitespace-nowrap text-caption leading-[inherit] text-subtle-foreground tabular-nums";
-const MORE =
-  "luke-hover-card-more flex h-hover-card-more items-center whitespace-nowrap pl-hover-card-indent text-caption leading-[inherit] text-subtle-foreground tabular-nums";
+const SCROLL = "luke-hover-card-scroll -mx-2 flex max-h-hover-card-list flex-col";
+const SCROLL_BODY = "luke-hover-card-scroll-body px-2";
 
 /** The data attributes a card's root carries, which name the card for a test or a capture. */
 type HoverCardMarks = { readonly [mark: `data-${string}`]: string | undefined };
@@ -205,21 +208,34 @@ export function HoverCardRow({
   );
 }
 
-/** A list a card holds under a rule, named by `label`: its rows, each an `li` of the caller's, and a last line counting what it leaves out. */
+/**
+ * What a card holds past a few rows' height, scrolling within the card and
+ * fading at the edge where more stands, so a long list is read whole rather
+ * than cut short. Its rows keep their wash to the card's edges.
+ */
+export function HoverCardScroll({ children }: { children: ReactNode }): React.JSX.Element {
+  return (
+    <div className={SCROLL}>
+      <ScrollArea size={SCROLL_SIZE.CONTENT} fade={SCROLL_FADE.BOTH}>
+        <div className={SCROLL_BODY}>{children}</div>
+      </ScrollArea>
+    </div>
+  );
+}
+
+/** A list a card holds under a rule, named by `label`: every row it holds, each an `li` of the caller's, scrolling past a few rows' height. */
 export function HoverCardList({
   label,
-  more,
   children,
 }: {
   label: string;
-  /** How many it leaves out, in words ("2 more"); nothing where it leaves nothing out. */
-  more?: string | undefined;
   children: ReactNode;
 }): React.JSX.Element {
   return (
-    <Stack as={LAYOUT_ELEMENT.UL} gap={GAP.NONE} aria-label={label}>
-      {children}
-      {more === undefined ? null : <li className={MORE}>{more}</li>}
-    </Stack>
+    <HoverCardScroll>
+      <Stack as={LAYOUT_ELEMENT.UL} gap={GAP.NONE} aria-label={label}>
+        {children}
+      </Stack>
+    </HoverCardScroll>
   );
 }

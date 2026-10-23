@@ -1,6 +1,6 @@
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import type { CatalogModel } from "@luke/features/models-wire";
-import { moreText, TASK_ROW_MARK, taskRowMark } from "@luke/features/task-agents-model";
+import { TASK_ROW_MARK, taskRowMark } from "@luke/features/task-agents-model";
 import type { TaskAgentLine, TaskPullRequestLine, TaskSummary } from "@luke/features/task-wire";
 import type { Workspace } from "@luke/features/workspace-wire";
 import {
@@ -40,6 +40,7 @@ import {
 } from "../tasks/task-standing.js";
 import { useOpenLink } from "../tasks/use-open-link.js";
 import { useTaskMaker } from "../tasks/use-task-origin.js";
+import { useTaskWork } from "../tasks/use-task-work.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { strandedHome } from "./move-task-dialog.js";
 import { WorkspaceRef } from "./workspace-ref.js";
@@ -52,13 +53,14 @@ import { WorkspaceRef } from "./workspace-ref.js";
  * request's mark (`pull-request-mark.tsx`), else nothing
  * (`task-agents-model.ts`). The card names the task, its repository, and
  * how long ago it was updated at its head, in a workspace others share who
- * created it, then a row for each of a few
+ * created it, then a row for each of its
  * agents, drawn as its tab draws it: its harness's mark wearing where it
  * stands, its tab's label, and a failure's mark at its end, with no word for where it stands, since no
- * agent anywhere else in the window says one. Then a row for each of a few
+ * agent anywhere else in the window says one. Then a row for each of its
  * pull requests, its mark, and its size.
- * Each list counts what it leaves out. Everything is read from the task
- * list's row, so the card fetches nothing.
+ * Each list names every one, scrolling past a few rows' height rather than
+ * counting the rest. Everything is read from the task list and what the
+ * window holds beside it (`use-task-work.ts`), so the card fetches nothing.
  *
  * Three of its lines are buttons, as a GitHub hover card's are: the
  * repository opens its page on GitHub, a pull request its agent's Pull
@@ -70,12 +72,6 @@ import { WorkspaceRef } from "./workspace-ref.js";
  * (`sidebar-pinned-tab.tsx`) is drawn from the same rows
  * (`RepositoryDetail`, `PullRequestLine`).
  */
-
-/** The most rows each of the card's lists draws before it counts the rest. */
-const CARD_ROWS = {
-  AGENTS: 3,
-  PULL_REQUESTS: 2,
-} as const;
 
 /**
  * The one mark at a task row's end, before its time: the attention mark on
@@ -186,7 +182,7 @@ function CreatorDetail({
 }
 
 /** One agent's row, as its tab draws it (`main-tabs.tsx`): its harness's mark wearing where it stands (`AgentGlyph`), its tab's label, and a failure at its end (`agentEndMark`). */
-function AgentLine({
+export function AgentLine({
   agent,
   models,
   onShow,
@@ -248,8 +244,8 @@ export function PullRequestLine({
  * The card a sidebar task hangs: its name, wrapped to two lines, and how
  * long ago it was updated at the head's right; its repository under the
  * name, and, where others share its workspace and the list names its
- * creator, who created it; then its agents and its pull requests, a few rows each
- * (`CARD_ROWS`), each list counting the rest the task holds. A card hung
+ * creator, who created it; then every one of its agents and its pull
+ * requests, each list scrolling past a few rows' height. A card hung
  * from a place within the task, a section or a version a chip names
  * (`../tasks/chip-cards.tsx`), says that place on its own line in their
  * stead.
@@ -293,10 +289,9 @@ export function TaskCard({
   /** The workspace the task's repository belongs to, where the reader may move it there, which the card names under the repository. */
   stranded?: Workspace | undefined;
 }): React.JSX.Element {
-  const { agents, repository } = task;
+  const { repository } = task;
   const { members } = useMemberDirectory();
-  const agentRows = agents?.agents.slice(0, CARD_ROWS.AGENTS) ?? [];
-  const pullRequestRows = agents?.pullRequests.slice(0, CARD_ROWS.PULL_REQUESTS) ?? [];
+  const { agents: agentRows, pullRequests: pullRequestRows } = useTaskWork(task);
   // Note that a task Luke or an agent made says so in a workspace of one too, where its member's own needs no saying.
   const creatorShown =
     (task.origin !== undefined || (shared ?? (members !== undefined && members.length > 1))) &&
@@ -316,10 +311,10 @@ export function TaskCard({
           </div>
         </>
       )}
-      {focus !== undefined || agents === undefined || agentRows.length === 0 ? null : (
+      {focus !== undefined || agentRows.length === 0 ? null : (
         <>
           <HoverCardRule />
-          <HoverCardList label="Agents" more={moreText(agents.total, agentRows.length)}>
+          <HoverCardList label="Agents">
             {agentRows.map((agent) => (
               <AgentLine
                 key={agent.id}
@@ -331,13 +326,10 @@ export function TaskCard({
           </HoverCardList>
         </>
       )}
-      {focus !== undefined || agents === undefined || pullRequestRows.length === 0 ? null : (
+      {focus !== undefined || pullRequestRows.length === 0 ? null : (
         <>
           <HoverCardRule />
-          <HoverCardList
-            label="Pull requests"
-            more={moreText(agents.pullRequestTotal, pullRequestRows.length)}
-          >
+          <HoverCardList label="Pull requests">
             {pullRequestRows.map((pullRequest) => (
               <PullRequestLine
                 key={pullRequest.url ?? pullRequest.number}
