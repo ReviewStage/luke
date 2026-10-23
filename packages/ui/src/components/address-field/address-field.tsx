@@ -12,7 +12,8 @@ import { TEXT_FIELD_SIZE, TextField } from "../text-field/text-field.js";
  * caret arrives, so typing replaces the address as a browser's bar does.
  * It stands in a form of its own, so Enter, or a phone keyboard's Go,
  * submits it as the caller's open; Escape is its leaving the bar, and a
- * blur its putting back what the bar showed.
+ * blur its putting back what the bar showed. Its form fills the room its row
+ * leaves and may shrink past its words rather than push its row wider.
  */
 
 /** What the field asks for while it is empty. */
@@ -40,7 +41,7 @@ export function AddressField({
 }): React.JSX.Element {
   return (
     <form
-      className="luke-address-field"
+      className="flex min-w-0 flex-1"
       onSubmit={(event) => {
         event.preventDefault();
         onOpen();
