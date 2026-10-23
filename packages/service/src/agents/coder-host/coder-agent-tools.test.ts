@@ -3754,11 +3754,7 @@ test("list_open_asks lists every ask waiting on the operator's member across the
   assert.equal(listed.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(listed));
   const asks = Array.isArray(listed.asks) ? listed.asks : [];
   const byKey = new Map(asks.flatMap((each) => (isRecord(each) ? [[each.key, each]] : [])));
-  assert.deepEqual([...byKey.keys()].sort(), [
-    "deploy-region",
-    "preview-live",
-    "token-expiry",
-  ]);
+  assert.deepEqual([...byKey.keys()].sort(), ["deploy-region", "preview-live", "token-expiry"]);
   const notice = byKey.get("preview-live");
   assert.ok(isRecord(notice));
   assert.deepEqual([notice.ask, notice.words], [null, "It deployed to iad1."]);

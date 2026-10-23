@@ -18,9 +18,11 @@ import {
   PULL_REQUEST_STATE,
 } from "@luke/features/coding-agent-wire";
 import {
+  INBOX_ASK,
+  INBOX_ASK_STATUS,
+  INBOX_FIELD,
   INBOX_MESSAGE_AUTHOR,
   INBOX_REPLY,
-  INBOX_RESPONSE,
   INBOX_STATUS,
   INBOX_WIRE_VERSION,
   type InboxItem,
@@ -2334,7 +2336,7 @@ const ROTATION: TaskSummary = {
   agents: { total: 1, working: 1, agents: [ASKER], pullRequestTotal: 0, pullRequests: [] },
 };
 
-/** An open item of the agent's, asking a choice, its thread one message of the agent's words. */
+/** An open item of the agent's, its thread one message of the agent's words. */
 function askedItem(id: string, title: string, said: string, updatedAt: number): InboxItem {
   return {
     id,
@@ -2343,8 +2345,6 @@ function askedItem(id: string, title: string, said: string, updatedAt: number): 
     revision: 1,
     version: INBOX_WIRE_VERSION,
     title,
-    blocks: [],
-    response: { type: INBOX_RESPONSE.APPROVAL },
     needsReply: true,
     status: INBOX_STATUS.OPEN,
     thread: [
@@ -2488,7 +2488,30 @@ test("an Inbox item is found by a form's field and the value it was answered wit
       4_000,
     ),
     status: INBOX_STATUS.ANSWERED,
-    answer: { reply: INBOX_REPLY.ANSWERED, values: [{ label: "SMTP port", value: 587 }] },
+    thread: [
+      {
+        id: "a1b2c3d4-0000-4000-8000-00000000ff13",
+        author: INBOX_MESSAGE_AUTHOR.AGENT,
+        text: "Fill in the relay.",
+        ask: {
+          type: INBOX_ASK.ANSWER,
+          fields: [{ label: "SMTP port", type: INBOX_FIELD.NUMBER }],
+          status: INBOX_ASK_STATUS.ANSWERED,
+        },
+        createdAt: 4_000,
+      },
+      {
+        id: "a1b2c3d4-0000-4000-8000-00000000fe13",
+        author: INBOX_MESSAGE_AUTHOR.MEMBER,
+        text: "",
+        answers: {
+          ask: "a1b2c3d4-0000-4000-8000-00000000ff13",
+          reply: INBOX_REPLY.SUBMITTED,
+          values: [{ label: "SMTP port", value: 587 }],
+        },
+        createdAt: 4_000,
+      },
+    ],
     settledAt: 4_000,
   };
   paletteOverInbox(() => ({ items: [PORT] }));

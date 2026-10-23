@@ -38,19 +38,20 @@ const MIGRATION = "20261023183614_inbox_item_pre_v5_threads";
 /** A PNG's signature and nothing after it: bytes enough for a picture row. */
 const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 
-/** A migrations folder holding every migration named before this one, and none after. */
-const foldersBefore = Effect.gen(function* () {
-  const fileSystem = yield* FileSystem;
-  const path = yield* Path;
-  const folder = yield* fileSystem.makeTempDirectoryScoped({ prefix: "luke-before-pre-v5-" });
-  const names = (yield* fileSystem.readDirectory(MIGRATIONS_FOLDER)).filter(
-    (name) => name.localeCompare(MIGRATION) < 0,
-  );
-  for (const name of names) {
-    yield* fileSystem.copy(path.join(MIGRATIONS_FOLDER, name), path.join(folder, name));
-  }
-  return folder;
-});
+/** A migrations folder holding every migration named before this one, and this one too where asked, and none after. */
+const foldersUpTo = (through: boolean) =>
+  Effect.gen(function* () {
+    const fileSystem = yield* FileSystem;
+    const path = yield* Path;
+    const folder = yield* fileSystem.makeTempDirectoryScoped({ prefix: "luke-before-pre-v5-" });
+    const names = (yield* fileSystem.readDirectory(MIGRATIONS_FOLDER)).filter((name) =>
+      through ? name.localeCompare(MIGRATION) <= 0 : name.localeCompare(MIGRATION) < 0,
+    );
+    for (const name of names) {
+      yield* fileSystem.copy(path.join(MIGRATIONS_FOLDER, name), path.join(folder, name));
+    }
+    return folder;
+  });
 
 const openUser = (id: string) =>
   Database.use((db) => db.insert(user).values({ id, name: id, email: `${id}@luke.test` }));
@@ -61,7 +62,7 @@ it.effect(
     Effect.scoped(
       Effect.gen(function* () {
         const sql = yield* SqlClient.SqlClient;
-        yield* runWebMigrations(yield* foldersBefore);
+        yield* runWebMigrations(yield* foldersUpTo(false));
         yield* openUser("dean");
         yield* openUser("charles");
         // The task and its agent are written as the schema of then holds them, since the store writes columns later migrations add.
@@ -143,8 +144,11 @@ it.effect(
           { answer: { reply: "approved" }, version: 5 },
         );
 
-        yield* runWebMigrations();
+        // Note that it runs twice before a later migration drops the columns it reads.
+        const through = yield* foldersUpTo(true);
+        yield* runWebMigrations(through);
         yield* sql`delete from __drizzle_migrations where name = ${MIGRATION}`;
+        yield* runWebMigrations(through);
         yield* runWebMigrations();
 
         const read = (itemId: string) =>

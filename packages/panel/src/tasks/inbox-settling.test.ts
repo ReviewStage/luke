@@ -6,7 +6,6 @@ import {
   INBOX_ASK_STATUS,
   INBOX_MESSAGE_AUTHOR,
   INBOX_REPLY,
-  INBOX_RESPONSE,
   INBOX_STATUS,
   INBOX_WIRE_VERSION,
   type InboxItem,
@@ -28,7 +27,7 @@ import {
 } from "./inbox-settling.js";
 
 /**
- * inbox-settling.test.ts -- an answer the window sent stands over main's
+ * inbox-settling.test.ts -- an answer or a nod the window sent stands over main's
  * read of what waits from the moment it is sent, so the sidebar's count
  * drops at once, until main no longer lists the item, and over every read
  * until one holds the item changed since; it comes back where the service
@@ -49,10 +48,17 @@ const ASKED: InboxItem = {
   revision: 1,
   version: INBOX_WIRE_VERSION,
   title: "Alert at 80%?",
-  blocks: [],
-  response: { type: INBOX_RESPONSE.TEXT },
   needsReply: true,
   status: INBOX_STATUS.OPEN,
+  // A notice: the agent's words, asking nothing, which Got it settles.
+  thread: [
+    {
+      id: "d1b2c3d4-0000-4000-8000-0000000000aa",
+      author: INBOX_MESSAGE_AUTHOR.AGENT,
+      text: "Alerts fire at 80% now.",
+      createdAt: 1_000,
+    },
+  ],
   postedAt: 1_000,
   updatedAt: 1_000,
 };
@@ -101,21 +107,21 @@ function mount(): Mounted {
   return { probe, render };
 }
 
-const NOTE = { reply: INBOX_REPLY.ANSWERED, note: "Use 90%" } as const;
-
-test("an answer drops its item from main's count the moment it is sent, until main no longer lists it, and a read asked before it that lands after every read caught up never brings it back", () => {
+test("a nod drops its notice from main's count the moment it is sent, its thread as it was, until main no longer lists it, and a read asked before it that lands after every read caught up never brings it back", () => {
   const { probe, render } = mount();
   render(waitingOn(ASKED, OTHER), [ASKED, OTHER]);
   assert.equal(probe.count, 2);
 
   let sent: symbol | undefined;
   act(() => {
-    sent = probe.settler?.answer(ASKED, NOTE);
+    sent = probe.settler?.acknowledge(ASKED);
   });
   assert.equal(probe.count, 1);
-  assert.equal(probe.drawn.find((each) => each.id === ASKED.id)?.status, INBOX_STATUS.ANSWERED);
+  const laid = probe.drawn.find((each) => each.id === ASKED.id);
+  assert.equal(laid?.status, INBOX_STATUS.ANSWERED);
+  assert.deepEqual(laid?.thread, ASKED.thread, "a nod writes nothing on the thread");
 
-  const answered = { ...ASKED, status: INBOX_STATUS.ANSWERED, answer: NOTE, updatedAt: 2_000 };
+  const answered = { ...ASKED, status: INBOX_STATUS.ANSWERED, updatedAt: 2_000 };
   act(() => {
     if (sent !== undefined) probe.settler?.take(sent, answered);
   });
@@ -135,12 +141,12 @@ test("an answer drops its item from main's count the moment it is sent, until ma
   assert.equal(probe.count, 2, "main's word stands once it caught up");
 });
 
-test("an answer the service refused brings its item back into main's count and the reads", () => {
+test("a nod the service refused brings its notice back into main's count and the reads", () => {
   const { probe, render } = mount();
   render(waitingOn(ASKED), [ASKED]);
   let sent: symbol | undefined;
   act(() => {
-    sent = probe.settler?.answer(ASKED, NOTE);
+    sent = probe.settler?.acknowledge(ASKED);
   });
   assert.equal(probe.count, 0);
   act(() => {
@@ -150,11 +156,11 @@ test("an answer the service refused brings its item back into main's count and t
   assert.equal(probe.drawn[0]?.status, INBOX_STATUS.OPEN);
 });
 
-test("a read holding the item at a newer revision, the agent having posted it again, wins over an answer laid over it, and main's count with it", () => {
+test("a read holding the item at a newer revision, the agent having posted it again, wins over a nod laid over it, and main's count with it", () => {
   const { probe, render } = mount();
   render(waitingOn(ASKED), [ASKED]);
   act(() => {
-    probe.settler?.answer(ASKED, NOTE);
+    probe.settler?.acknowledge(ASKED);
   });
   assert.equal(probe.count, 0);
   const again = { ...ASKED, revision: 2, title: "Alert at 85%?", updatedAt: 3_000 };
@@ -166,22 +172,22 @@ test("a read holding the item at a newer revision, the agent having posted it ag
 
 test("a message the service took stands over a read that lacks it, though the read changed in the same millisecond, until a read holds the message", () => {
   const { probe, render } = mount();
-  const answered = { ...ASKED, status: INBOX_STATUS.ANSWERED, answer: NOTE };
+  const answered = { ...ASKED, status: INBOX_STATUS.ANSWERED };
   const message = {
     id: "c1b2c3d4-0000-4000-8000-000000000001",
     author: INBOX_MESSAGE_AUTHOR.MEMBER,
     text: "Page on-call at night too.",
     createdAt: answered.updatedAt,
   };
-  const written = { ...answered, messages: [message] };
+  const written = { ...answered, thread: [...(answered.thread ?? []), message] };
   render([], [answered]);
   act(() => probe.settler?.message(written));
-  assert.deepEqual(probe.drawn[0]?.messages, [message]);
+  assert.deepEqual(probe.drawn[0]?.thread?.at(-1), message);
   render([], [{ ...written, unread: false }]);
   assert.equal(probe.drawn[0]?.unread, false, "a read holding the message is drawn as it holds it");
 });
 
-test("the window keeps only its latest answers: the oldest taken gives way once more were sent, and its read is drawn as it holds it", () => {
+test("the window keeps only its latest sends: the oldest taken gives way once more were sent, and its read is drawn as it holds it", () => {
   const { probe, render } = mount();
   const items = Array.from({ length: 201 }, (_, at) => ({
     ...ASKED,
@@ -190,13 +196,13 @@ test("the window keeps only its latest answers: the oldest taken gives way once 
   render([], items);
   act(() => {
     for (const each of items) {
-      const sent = probe.settler?.answer(each, NOTE);
-      const taken = { ...each, status: INBOX_STATUS.ANSWERED, answer: NOTE, updatedAt: 2_000 };
+      const sent = probe.settler?.acknowledge(each);
+      const taken = { ...each, status: INBOX_STATUS.ANSWERED, updatedAt: 2_000 };
       if (sent !== undefined) probe.settler?.take(sent, taken);
     }
   });
   render([], items);
-  assert.equal(probe.drawn[0]?.status, INBOX_STATUS.OPEN, "the oldest answer was let go");
+  assert.equal(probe.drawn[0]?.status, INBOX_STATUS.OPEN, "the oldest nod was let go");
   assert.equal(probe.drawn[200]?.status, INBOX_STATUS.ANSWERED);
 });
 
@@ -218,7 +224,7 @@ test("another account signed in to the window draws its reads as they hold them,
   signIn("dana");
   let sent: symbol | undefined;
   act(() => {
-    sent = probe.settler?.answer(ASKED, NOTE);
+    sent = probe.settler?.acknowledge(ASKED);
   });
   assert.equal(probe.drawn[0]?.status, INBOX_STATUS.ANSWERED);
 
@@ -298,7 +304,7 @@ test("a read mark the window made stands over the item as it was marked, and giv
   ]);
 });
 
-/** A thread from version 5: the agent's message ending with a decide, open. */
+/** A thread whose agent's message ends with a decide, open. */
 const ASKING: InboxMessage = {
   id: "d1b2c3d4-0000-4000-8000-000000000001",
   author: INBOX_MESSAGE_AUTHOR.AGENT,
@@ -326,11 +332,7 @@ test("a reply that answers a thread's ask stands over every read as the thread w
   const answers = { ask: ASKING.id, reply: INBOX_REPLY.CHOSE, choices: ["90%"] };
   let sent: symbol | undefined;
   act(() => {
-    sent = probe.settler?.answer(
-      THREAD,
-      { reply: INBOX_REPLY.CHOSE, choices: ["90%"], note: "Night too" },
-      answers,
-    );
+    sent = probe.settler?.answer(THREAD, { text: "Night too", answers });
   });
   const laid = probe.drawn[0];
   assert.equal(laid?.status, INBOX_STATUS.ANSWERED);

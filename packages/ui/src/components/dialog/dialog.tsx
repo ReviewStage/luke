@@ -4,7 +4,7 @@ import type { PictureExpand } from "../../picture-expand.js";
 import { replayMotion } from "../../replay-motion.js";
 import { DialogContent, Dialog as ShadcnDialog } from "../../shadcn/dialog.js";
 import { TEXT_ELEMENT, TEXT_VARIANT, Text } from "../text/text.js";
-import { useStagedFocus } from "./staged-focus.js";
+import { useHeldFocus } from "./held-focus.js";
 
 /**
  * dialog.tsx -- the window dimmed under one card that holds the keyboard
@@ -303,8 +303,8 @@ export function Dialog({
   if (held && !holding) setHeld(false);
 
   useInvokerFocus();
-  useStagedFocus<HTMLElement>(initialFocus ?? card, drawn && !busy);
-  useStagedFocus(card, drawn && busy);
+  useHeldFocus<HTMLElement>(initialFocus ?? card, drawn && !busy);
+  useHeldFocus(card, drawn && busy);
   useRefusalShake(card, refused);
   // Note that this runs before the card's first paint, so its own entrance
   // is stood down before a frame of it is drawn.
