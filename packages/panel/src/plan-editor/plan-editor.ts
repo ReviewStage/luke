@@ -42,14 +42,16 @@ import {
   settledPicture,
 } from "./picture-node.js";
 import { planMentions } from "./plan-mentions.js";
+import { withoutTipTapChords, writingKeys } from "./writing-keys.js";
 
 /**
  * plan-editor.ts -- a plan's text, edited in place on TipTap, drawn exactly as the document draws it.
  *
- * What the text may hold, and every shortcut for writing it, is TipTap's
- * own: StarterKit, `@tiptap/markdown`, task lists, tables, and pictures
- * (`./picture-node.ts`), each inline in a paragraph even where it stands
- * alone on its line;
+ * What the text may hold, and every Markdown rule for writing it, is
+ * TipTap's own: StarterKit, `@tiptap/markdown`, task lists, tables, and
+ * pictures (`./picture-node.ts`), each inline in a paragraph even where it
+ * stands alone on its line; its chords are the writing vocabulary's
+ * (`./writing-keys.ts`), in place of TipTap's;
  * underline alone is left out, because Markdown cannot store it and the
  * document could not draw it. A heading wears the read view's own class and
  * level, so the editor's words stand where the drawn words stood and opening
@@ -181,17 +183,18 @@ export function markdownExtensions(
     link: { openOnClick: false },
   });
   return [
-    kit,
-    DocumentParagraph,
-    DocumentHeading,
+    withoutTipTapChords(kit),
+    withoutTipTapChords(DocumentParagraph),
+    withoutTipTapChords(DocumentHeading),
     Markdown,
-    TaskList,
+    withoutTipTapChords(TaskList),
     DocumentTaskItem,
     TableKit,
     pictureNode(pictures),
     RawBlock,
     mentionNode(drawMention),
     linkLook(namesMention),
+    writingKeys,
   ];
 }
 
