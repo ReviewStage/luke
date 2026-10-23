@@ -1,10 +1,9 @@
 {
   "version": "8",
   "dialect": "postgres",
-  "id": "1221e0ae-cabb-407d-b60b-b061ffb4a4be",
+  "id": "2ee5269d-e87c-4fd5-a12c-e321a5f40d3f",
   "prevIds": [
-    "0ba31cdb-3103-44df-b080-52d70b2dc83f",
-    "556fe822-7ab9-49fb-b10e-a74cc0014634"
+    "74e93e71-a64e-4af1-ac7e-b646ea4f5349"
   ],
   "ddl": [
     {
@@ -286,6 +285,12 @@
     {
       "isRlsEnabled": false,
       "name": "mac_command_listener",
+      "entityType": "tables",
+      "schema": "public"
+    },
+    {
+      "isRlsEnabled": false,
+      "name": "memory",
       "entityType": "tables",
       "schema": "public"
     },
@@ -6686,6 +6691,97 @@
       "name": "id",
       "entityType": "columns",
       "schema": "public",
+      "table": "memory"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "organization_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "memory"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "user_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "memory"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "text",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "memory"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "private_to",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "memory"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "memory"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "updated_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "memory"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "gen_random_uuid()",
+      "generated": null,
+      "identity": null,
+      "name": "id",
+      "entityType": "columns",
+      "schema": "public",
       "table": "operator_notice"
     },
     {
@@ -12618,6 +12714,34 @@
       "nameExplicit": true,
       "columns": [
         {
+          "value": "organization_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "updated_at",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "memory_organization_updated",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "memory"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
           "value": "operator_id",
           "isExpression": false,
           "asc": true,
@@ -15484,6 +15608,57 @@
     {
       "nameExplicit": false,
       "columns": [
+        "organization_id"
+      ],
+      "schemaTo": "public",
+      "tableTo": "organization",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "name": "memory_organization_id_organization_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "memory"
+    },
+    {
+      "nameExplicit": false,
+      "columns": [
+        "user_id"
+      ],
+      "schemaTo": "public",
+      "tableTo": "user",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "SET NULL",
+      "name": "memory_user_id_user_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "memory"
+    },
+    {
+      "nameExplicit": false,
+      "columns": [
+        "private_to"
+      ],
+      "schemaTo": "public",
+      "tableTo": "user",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "name": "memory_private_to_user_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "memory"
+    },
+    {
+      "nameExplicit": false,
+      "columns": [
         "operator_id"
       ],
       "schemaTo": "public",
@@ -17143,6 +17318,16 @@
       "name": "mac_command_listener_pkey",
       "schema": "public",
       "table": "mac_command_listener",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "memory_pkey",
+      "schema": "public",
+      "table": "memory",
       "entityType": "pks"
     },
     {

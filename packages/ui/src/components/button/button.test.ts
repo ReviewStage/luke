@@ -30,7 +30,10 @@ import {
  * its words. An unavailable button that keeps its Tab stop shakes at a
  * press it refuses, and stops once the shake ends; one that takes a press
  * pulses instead. A done button wears its check, refuses a press without a
- * shake, and is heard done once its check has been seen. A submit sends its form while it takes a press, sends nothing
+ * shake, and is heard done once its check has been seen. A busy button
+ * whose press succeeded wears the check until its hold ends, then its words;
+ * one that failed wears none. A button that turns turns its glyph once at a
+ * press it takes. A submit sends its form while it takes a press, sends nothing
  * while it is unavailable, and made a Stop does its own act without
  * sending the form.
  */
@@ -499,4 +502,98 @@ test("a done button wears its check in its words' place, refuses its press witho
   act(() => root.render(draw(false)));
   act(() => root.render(draw(true)));
   expect(heard).toEqual(["done", "done"]);
+});
+
+test("a busy button whose press succeeded wears a check where its ring stood, refusing a press, until the check's hold finishes, then its words come back; one that failed just stops", () => {
+  const hold = new EventTarget();
+  Object.defineProperty(HTMLElement.prototype, "getAnimations", {
+    configurable: true,
+    value(this: HTMLElement) {
+      return this.classList.contains("luke-button-done") ? [hold] : [];
+    },
+  });
+  let pressed = 0;
+  const draw = (busy: boolean, succeeded: boolean) =>
+    createElement(
+      "div",
+      null,
+      createElement(Button, {
+        variant: BUTTON_VARIANT.PRIMARY,
+        busy,
+        busyLabel: "Saving",
+        succeeded,
+        // Note that what landed may leave it unavailable, as a Save with nothing left to save is.
+        disabled: !busy,
+        onClick: () => {
+          pressed += 1;
+        },
+        children: "Save",
+      }),
+      createElement(IconButton, {
+        icon: createElement("svg"),
+        label: "Upload",
+        busy,
+        busyLabel: "Uploading",
+        succeeded,
+      }),
+    );
+  const container = mount(draw(true, false));
+  const root = roots.at(-1) ?? expect.fail("no root");
+  const [save, upload] = [...container.querySelectorAll("button")];
+  act(() => root.render(draw(false, true)));
+  const landed = [save, upload].map((button) => ({
+    check: button?.querySelector(".luke-button-done svg") !== null,
+    busy: button?.getAttribute("aria-busy") ?? null,
+    disabled: button?.disabled,
+  }));
+  act(() => save?.click());
+  act(() => hold.dispatchEvent(new Event("finish")));
+  Reflect.deleteProperty(HTMLElement.prototype, "getAnimations");
+
+  expect(landed).toEqual([
+    { check: true, busy: null, disabled: false },
+    { check: true, busy: null, disabled: false },
+  ]);
+  expect(pressed).toBe(0);
+  expect(save?.querySelector(".luke-button-done")).toBeNull();
+  expect(upload?.querySelector(".luke-button-done")).toBeNull();
+  expect(save?.disabled).toBe(true);
+  expect(save?.getAttribute("aria-label")).toBeNull();
+  expect(save?.textContent).toBe("Save");
+
+  // A press that failed stops its ring with no check.
+  act(() => root.render(draw(true, false)));
+  act(() => root.render(draw(false, false)));
+  expect(container.querySelector(".luke-button-done")).toBeNull();
+});
+
+test("a button that turns turns its glyph once at each press it takes, until the turn ends, and one that does not, or refuses the press, turns nothing", () => {
+  const container = mount(
+    createElement(
+      "div",
+      null,
+      createElement(IconButton, { icon: createElement("svg"), label: "Reload", turns: true }),
+      createElement(Button, { icon: createElement("svg"), turns: true, children: "Retry" }),
+      createElement(IconButton, { icon: createElement("svg"), label: "More" }),
+      createElement(IconButton, {
+        icon: createElement("svg"),
+        label: "Refresh",
+        turns: true,
+        disabled: true,
+        focusableWhenDisabled: true,
+      }),
+    ),
+  );
+  const buttons = [...container.querySelectorAll("button")];
+  for (const button of buttons) act(() => button.click());
+  const turned = buttons.map((button) => button.getAttribute("data-turn"));
+  const [reload] = buttons;
+  act(() =>
+    reload
+      ?.querySelector(".luke-button-face > svg")
+      ?.dispatchEvent(new Event("animationend", { bubbles: true })),
+  );
+
+  expect(turned).toEqual(["true", "true", null, null]);
+  expect(reload?.hasAttribute("data-turn")).toBe(false);
 });

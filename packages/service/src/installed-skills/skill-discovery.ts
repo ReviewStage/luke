@@ -31,6 +31,11 @@
  * by its folder's name, and a `SKILL.md` that fails to read still counts
  * as found; which copy of a name stands, and which skills are hidden, is
  * `skill-paste-install.ts`'s to say from each `SKILL.md`.
+ *
+ * The plugin a skill is grouped under is read from the same manifests as
+ * `src/plugin-manifest.ts`'s `getPluginGroupings` reads them: each skill
+ * folder a named plugin lists by a `./` path, `plugin.json`'s over a
+ * marketplace's where both name one.
  */
 
 import { INSTALLED_SKILL_MAIN_FILE } from "@luke/features/installed-skill-wire";
@@ -197,6 +202,76 @@ function manifestFolders(search: string, input: DiscoveryInput): string[] {
         });
   const plugin = Option.getOrUndefined(Schema.decodeUnknownOption(PluginJson)(input.plugin));
   return [...cataloged, ...(plugin === undefined ? [] : pluginFolders(search, [], plugin.skills))];
+}
+
+/** A plugin manifest's name and skills, as far as grouping reads them; a name that is no string names no group. */
+const GroupedPluginSchema = Schema.Struct({
+  name: Schema.optional(Schema.Unknown),
+  source: Schema.optional(Schema.Unknown),
+  skills: Schema.optional(Schema.Array(Schema.Unknown)),
+});
+
+/** A marketplace manifest, as far as grouping reads it. */
+const GroupedMarketplaceJson = Schema.fromJsonString(
+  Schema.Struct({
+    metadata: Schema.optional(Schema.Struct({ pluginRoot: Schema.optional(Schema.Unknown) })),
+    plugins: Schema.optional(Schema.Array(GroupedPluginSchema)),
+  }),
+);
+
+/** A single plugin's manifest, as far as grouping reads it. */
+const GroupedPluginJson = Schema.fromJsonString(GroupedPluginSchema);
+
+/** The plugin's name where it is a non-empty string. */
+function pluginName(plugin: typeof GroupedPluginSchema.Type): string | undefined {
+  return typeof plugin.name === "string" && plugin.name !== "" ? plugin.name : undefined;
+}
+
+/** Each skill folder the plugin lists by a `./` path under its base, set to its name; one that leaves the folder searched is passed over. */
+function groupInto(
+  groups: Map<string, string>,
+  search: string,
+  base: readonly string[],
+  plugin: typeof GroupedPluginSchema.Type,
+): void {
+  const name = pluginName(plugin);
+  if (name === undefined || pathWithin(search, ...base) === undefined) return;
+  for (const skill of plugin.skills ?? []) {
+    if (typeof skill !== "string" || !relative(skill)) continue;
+    const folder = pathWithin(search, ...base, skill);
+    if (folder !== undefined) groups.set(folder, name);
+  }
+}
+
+/**
+ * The plugin each skill folder is grouped under, by its path from the
+ * repository's root, as `getPluginGroupings` reads the manifests at the
+ * folder searched; a manifest that does not read groups nothing.
+ */
+export function pluginGroups(
+  marketplace: string | undefined,
+  plugin: string | undefined,
+  within: string | undefined,
+): ReadonlyMap<string, string> {
+  const search = within ?? "";
+  const groups = new Map<string, string>();
+  const catalog = Option.getOrUndefined(
+    Schema.decodeUnknownOption(GroupedMarketplaceJson)(marketplace),
+  );
+  const pluginRoot = catalog?.metadata?.pluginRoot;
+  const rootReads =
+    pluginRoot === undefined || (typeof pluginRoot === "string" && relative(pluginRoot));
+  if (catalog !== undefined && rootReads) {
+    for (const entry of catalog.plugins ?? []) {
+      if (entry.source !== undefined && typeof entry.source !== "string") continue;
+      if (typeof entry.source === "string" && !relative(entry.source)) continue;
+      const root = typeof pluginRoot === "string" ? pluginRoot : "";
+      groupInto(groups, search, [root, entry.source ?? ""], entry);
+    }
+  }
+  const single = Option.getOrUndefined(Schema.decodeUnknownOption(GroupedPluginJson)(plugin));
+  if (single !== undefined) groupInto(groups, search, [], single);
+  return groups;
 }
 
 /** The names the lock holds, folded as the tool folds them; none where it does not read or is older than the tool reads. */

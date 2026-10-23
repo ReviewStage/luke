@@ -12,10 +12,10 @@ import {
   UPDATE_ACT_KIND,
   WINDOW_SURFACE_ACT_KIND,
 } from "@luke/host/contract";
-import { HOST_CAPABILITY, type HostCapability } from "@luke/settings";
+import { EXPERIMENT, HOST_CAPABILITY, type HostCapability } from "@luke/settings";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsView } from "@luke/settings/settings-views";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
-import { settingsView } from "@luke/settings/testing";
+import { experimentsOn, settingsView } from "@luke/settings/testing";
 import { UPDATE_STATUS } from "@luke/settings/update";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
 import { NOTIFICATIONS_GRANTOR, NOTIFICATIONS_STATUS } from "@luke/voice/settings-controls";
@@ -39,7 +39,7 @@ import {
   refusedOnPort,
 } from "../testing/app-bridge.js";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
-import { DESKTOP_CAPABILITIES } from "../testing/app-state.js";
+import { DESKTOP_CAPABILITIES, handState } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { DesktopSettings } from "./desktop-settings.js";
 import { SIDEBAR_OVERLAY } from "./sidebar-collapse.js";
@@ -320,6 +320,24 @@ test("the sidebar's first group is headed by the listed workspace's name, over i
     ["Acme", "Account", "This Mac"],
   );
   assert.deepEqual(pageGroups(page)[0]?.rows, ["Workspace"]);
+});
+
+test("the sidebar lists Memory under Workspace and its search finds it only while the account has the Memory experiment on", async () => {
+  const off = mount(createElement(SettingsHarness));
+  assert.deepEqual(pageGroups(off)[0]?.rows, ["Workspace"]);
+  // While off, the search finds only the experiment's own switch, where Memory is turned on.
+  assert.deepEqual(foundUnder(off, "Memory"), ["Experimental"]);
+
+  handState(experimentsOn(EXPERIMENT.MEMORY));
+  const on = mount(createElement(SettingsHarness));
+  await act(async () => {
+    for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
+  });
+
+  assert.deepEqual(pageGroups(on)[0]?.rows, ["Workspace", "Memory"]);
+  assert.equal(shownTitle(on), "Profile");
+  openPage(on, "Memory");
+  assert.equal(shownTitle(on), "Memory");
 });
 
 test("the Workspace page is titled with the workspace the sidebar lists, and follows the sidebar when it lists another", () => {

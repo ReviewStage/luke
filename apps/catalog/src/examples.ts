@@ -31,6 +31,7 @@ import { EMPTY_STATES_EXAMPLE } from "./examples/empty-states";
 import { ERROR_STATES_EXAMPLE } from "./examples/error-states";
 import { FACTS_EXAMPLE } from "./examples/facts";
 import { FILE_PICKERS_EXAMPLE } from "./examples/file-picker";
+import { FILE_TEXT_EXAMPLE } from "./examples/file-text";
 import { FOLDING_BUTTONS_EXAMPLE } from "./examples/folding-buttons";
 import { FORM_FIELD_EXAMPLE } from "./examples/form-field";
 import { FORM_SECTION_EXAMPLE } from "./examples/form-section";
@@ -64,6 +65,7 @@ import { PUBLIC_PAGE_EXAMPLE } from "./examples/public-page";
 import { REMOTE_SURFACE_EXAMPLE } from "./examples/remote-surface";
 import { RESIZE_CORNERS_EXAMPLE } from "./examples/resize-corners";
 import { RESIZE_EDGES_EXAMPLE } from "./examples/resize-edges";
+import { REVEALS_EXAMPLE } from "./examples/reveals";
 import { ROLLING_NUMBER_EXAMPLE } from "./examples/rolling-number";
 import { SAVED_TICKS_EXAMPLE } from "./examples/saved-ticks";
 import { SCROLL_AREA_EXAMPLE } from "./examples/scroll-area";
@@ -136,6 +138,7 @@ export const EXAMPLES: readonly Example[] = [
   ERROR_STATES_EXAMPLE,
   FACTS_EXAMPLE,
   FILE_PICKERS_EXAMPLE,
+  FILE_TEXT_EXAMPLE,
   FOLDING_BUTTONS_EXAMPLE,
   FORM_FIELD_EXAMPLE,
   FORM_SECTION_EXAMPLE,
@@ -187,6 +190,7 @@ export const EXAMPLES: readonly Example[] = [
   GLYPH_SLOTS_EXAMPLE,
   CORNER_COUNTS_EXAMPLE,
   RESIZE_EDGES_EXAMPLE,
+  REVEALS_EXAMPLE,
   ZOOM_IMAGES_EXAMPLE,
   MESSAGES_EXAMPLE,
   PANE_PINS_EXAMPLE,

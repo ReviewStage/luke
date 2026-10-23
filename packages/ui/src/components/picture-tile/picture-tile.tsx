@@ -1,4 +1,5 @@
 import type { ButtonHTMLAttributes, MouseEvent, ReactNode } from "react";
+import { notePictureOrigin } from "../../picture-expand.js";
 import { PRESS_PULSE, pulsePress } from "../../press-pulse.js";
 
 /**
@@ -25,7 +26,9 @@ import { PRESS_PULSE, pulsePress } from "../../press-pulse.js";
  * press opens nothing, and falls through to what is around the tile, says
  * so (`pointerOpens`): a pointer's press then opens nothing and passes on
  * to the place around it, the tile wearing the plain pointer and not
- * sinking, while a key's press still opens it.
+ * sinking, while a key's press still opens it. A viewer the press opens
+ * that asks for it (`usePictureExpand`) grows from the face's own rect and
+ * shrinks back into it.
  */
 
 /** What a press is named for, the picture's words after it. */
@@ -83,7 +86,11 @@ export function PictureTile({
         if (!pointerOpens && event.detail > 0) return;
         // Note that the face is what a press sinks, so it is what gives as the press lands.
         const face = event.currentTarget.querySelector<HTMLElement>(".luke-picture-tile-face");
-        if (face !== null) pulsePress(face, PRESS_PULSE.QUIET);
+        if (face !== null) {
+          pulsePress(face, PRESS_PULSE.QUIET);
+          // The picture opened grows from this one (`picture-expand.ts`).
+          notePictureOrigin(face);
+        }
         onOpen(event);
       }}
     >

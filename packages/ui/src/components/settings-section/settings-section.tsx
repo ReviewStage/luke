@@ -1,5 +1,6 @@
 import { searchAnchorProps } from "@luke/settings/settings-anchors";
-import { type ReactNode, useId } from "react";
+import { type ReactNode, useId, useRef } from "react";
+import { RevealArea, revealArea } from "../reveal/reveal.js";
 import { SKELETON_SHAPE, Skeleton, SkeletonRegion } from "../skeleton/skeleton.js";
 import { TEXT_ELEMENT, TEXT_TONE, TEXT_VARIANT, Text } from "../text/text.js";
 
@@ -20,7 +21,9 @@ import { TEXT_ELEMENT, TEXT_TONE, TEXT_VARIANT, Text } from "../text/text.js";
  * frame is drawn within a frame.
  *
  * A section a Settings link or a search result lands on wears its `anchor`
- * whole. Where the card has no rows to draw, it holds a line
+ * whole. Its card is a reveal area (`RevealArea`), so the rows a setting
+ * in it brings (`Reveal`) unroll in under it and the rows under them glide
+ * down, where no page around it moves its sections as well. Where the card has no rows to draw, it holds a line
  * (`SettingsLine`) in their place, a row's height and inset: a note in the
  * muted words of a description, who to sign in as or that there is nothing
  * here, or a read that failed, holding the failure (`ErrorState`).
@@ -185,6 +188,7 @@ export function SettingsSection({
   children: ReactNode;
 }): React.JSX.Element {
   const headingId = useId();
+  const card = useRef<HTMLDivElement>(null);
   const headed = title !== undefined && title !== null && title !== false && title !== "";
   return (
     <section
@@ -205,7 +209,11 @@ export function SettingsSection({
         </div>
       ) : null}
       {frame === SETTINGS_SECTION_FRAME.CARD ? (
-        <div className="luke-settings-section-card">{children}</div>
+        <RevealArea root={card}>
+          <div ref={card} className="luke-settings-section-card" {...revealArea()}>
+            {children}
+          </div>
+        </RevealArea>
       ) : (
         children
       )}

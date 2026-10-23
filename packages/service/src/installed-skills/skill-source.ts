@@ -47,6 +47,7 @@ import {
   DISCOVERY_FILE,
   discoverSkillFolders,
   pathWithin,
+  pluginGroups,
   splitFolder,
 } from "./skill-discovery.js";
 
@@ -67,6 +68,8 @@ export interface SkillRepository {
   readonly defaultBranch: string;
   readonly bearer: Redacted.Redacted | null;
   readonly access: GitHubTokenAccess | null;
+  /** Whether GitHub says the repository is public: answered anonymously, or listed as not private. */
+  readonly public: boolean;
 }
 
 /** One file of a skill folder, by its path from the folder, and its size as the tree says. */
@@ -75,10 +78,11 @@ interface SkillFolderFile {
   readonly bytes: number;
 }
 
-/** One folder holding a `SKILL.md`: its path from the repository's root, empty for the root, and every file under it. */
+/** One folder holding a `SKILL.md`: its path from the repository's root, empty for the root, every file under it, and the plugin a manifest groups it under. */
 export interface SkillFolder {
   readonly path: string;
   readonly files: readonly SkillFolderFile[];
+  readonly group?: string;
 }
 
 /** What GitHub answers for a public repository read anonymously. */
@@ -140,6 +144,7 @@ const publicRepository = /* @__PURE__ */ Effect.fnUntraced(function* (
     defaultBranch: answered.value.default_branch,
     bearer: null,
     access: null,
+    public: true,
   };
 });
 
@@ -170,6 +175,7 @@ export const reachSkillRepository = /* @__PURE__ */ Effect.fnUntraced(function* 
     defaultBranch: repository.defaultBranch,
     bearer: token,
     access,
+    public: !repository.private,
   };
 });
 
@@ -187,6 +193,15 @@ export const pinnedCommit = /* @__PURE__ */ Effect.fnUntraced(function* (
   if (sha === undefined) return yield* Effect.fail(HOSTED_REFUSAL.BRANCH_NOT_FOUND);
   return { ref: named, sha };
 });
+
+/** The folder's plugin as a key to spread, where a manifest groups it. */
+function pluginOf(
+  groups: ReadonlyMap<string, string>,
+  folder: string,
+): { readonly group?: string } {
+  const group = groups.get(folder);
+  return group === undefined ? {} : { group };
+}
 
 /** A file discovery reads beside the tree, as text, where the tree holds it as a blob; nothing where it does not. */
 const discoveryText = /* @__PURE__ */ Effect.fnUntraced(function* (
@@ -262,8 +277,10 @@ export const skillFolders = /* @__PURE__ */ Effect.fnUntraced(function* (
     within,
     fullDepth,
   ).slice(0, MAX_FOLDERS);
+  const groups = pluginGroups(marketplace, plugin, within);
   return folders.map((folder) => ({
     path: folder,
+    ...pluginOf(groups, folder),
     files: blobs.flatMap((blob) => {
       if (folder !== "" && !blob.name.startsWith(`${folder}/`)) return [];
       return [

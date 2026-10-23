@@ -45,6 +45,7 @@ import {
   inboxReadAllSchema,
   inboxReadStateSchema,
 } from "./inbox-wire.js";
+import { memoriesAnswerSchema, memoryIdSchema } from "./memory-wire.js";
 import { catalogModelSchema, modelChoiceSchema, modelProviderSchema } from "./models-wire.js";
 import {
   planTemplateAnswerSchema,
@@ -220,6 +221,26 @@ export type GitHubTokenSaveParams = typeof githubTokenSaveParamsSchema.Type;
 
 /** The account's plan template, as the window hears it read or written: the template as kept and whether the account wrote it, or why there is none. */
 export const planTemplateAnswerViewSchema = EffectSchema.Union([planTemplateAnswerSchema, failed]);
+
+/** A workspace's memories, as the window hears them read or one forgotten: the memories as they stand, or why there are none. */
+export const memoriesAnswerViewSchema = EffectSchema.Union([memoriesAnswerSchema, failed]);
+
+export type MemoriesAnswerView = typeof memoriesAnswerViewSchema.Type;
+
+/** Reading a workspace's memories, as the window asks it: the workspace Settings shows. */
+export const memoriesReadParamsSchema = EffectSchema.Struct({
+  workspaceId: EffectSchema.NonEmptyString,
+});
+
+export type MemoriesReadParams = typeof memoriesReadParamsSchema.Type;
+
+/** Forgetting a memory, as the window asks it: its workspace and the memory's id. */
+export const memoryForgetParamsSchema = EffectSchema.Struct({
+  workspaceId: EffectSchema.NonEmptyString,
+  id: memoryIdSchema,
+});
+
+export type MemoryForgetParams = typeof memoryForgetParamsSchema.Type;
 
 export type PlanTemplateAnswerView = typeof planTemplateAnswerViewSchema.Type;
 

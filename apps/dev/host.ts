@@ -58,6 +58,7 @@ import {
   RUN_ON_MAC_TOOL,
   runOnMacTool,
 } from "@luke/service/agents/mac-command";
+import { memoryOnFor } from "@luke/service/agents/memory-tools";
 import type { RepositorySandbox } from "@luke/service/agents/repository-shell";
 import { keepSessionSandboxAlive } from "@luke/service/agents/session-sandboxes";
 import { hostedEnvironment } from "@luke/service/environment";
@@ -262,6 +263,24 @@ export function offeredKindTools(
       const agent = yield* host.agent(admitted.success);
       if (Result.isFailure(agent)) return new Set<KindTool>();
       return kindToolsOf(agent.success);
+    }),
+  );
+}
+
+/**
+ * Whether the session is offered `remember` and `recall` for the turn it
+ * opens, for those tools' own files: only where the agent's starter turned
+ * Memory on (`memoryOnFor`), and never for a session the host does not
+ * admit or whose conversation is no agent's.
+ */
+export function memoryOffered(auth: SessionAuth, sessionId: string): Promise<boolean> {
+  return runAgent(
+    Effect.gen(function* () {
+      const admitted = yield* host.admit(auth, sessionId);
+      if (Result.isFailure(admitted)) return false;
+      const agent = yield* host.agent(admitted.success);
+      if (Result.isFailure(agent)) return false;
+      return yield* memoryOnFor(agent.success.userId);
     }),
   );
 }

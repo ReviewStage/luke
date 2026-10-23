@@ -1,4 +1,5 @@
-import type { ReactNode } from "react";
+import { type ReactNode, useRef } from "react";
+import { RevealArea, revealArea } from "../reveal/reveal.js";
 import { TEXT_ELEMENT, TEXT_VARIANT, Text } from "../text/text.js";
 
 /**
@@ -8,7 +9,9 @@ import { TEXT_ELEMENT, TEXT_VARIANT, Text } from "../text/text.js";
  * its sections: the inset around the column, which narrows when the page
  * does, the measure the column reads at, the title's place and size, the
  * room under the head, and the room between one section (`SettingsSection`)
- * and the next. A section owns its heading and card, and a row its padding,
+ * and the next. Its column of sections is a reveal area (`RevealArea`), so
+ * as a setting's rows unroll in (`Reveal`), the sections under them glide
+ * down with the rows. A section owns its heading and card, and a row its padding,
  * so a caller sets no length anywhere on a settings page. The title is the
  * page's `h1`, which each section's `h2` heads a part of. What acts on the
  * whole page, a quiet reset, ends the title's line flush with the cards'
@@ -39,6 +42,7 @@ export function SettingsPage({
   /** The sections, a section's gap apart. */
   children: ReactNode;
 }): React.JSX.Element {
+  const sections = useRef<HTMLDivElement>(null);
   return (
     <div className="luke-settings-page">
       <div className="luke-settings-page-column">
@@ -50,7 +54,11 @@ export function SettingsPage({
             <div className="luke-settings-page-actions">{actions}</div>
           )}
         </header>
-        <div className="luke-settings-page-sections">{children}</div>
+        <RevealArea root={sections}>
+          <div ref={sections} className="luke-settings-page-sections" {...revealArea()}>
+            {children}
+          </div>
+        </RevealArea>
       </div>
     </div>
   );

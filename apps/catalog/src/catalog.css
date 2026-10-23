@@ -1,6 +1,10 @@
 /* catalog.css -- the catalog's own page, drawn in the shared tokens it shows,
    so the index and the toolbar change density and palette with the example. */
 
+/* Note that the base layer is named first, as each app's reset names it,
+   so a bare glyph's own rule sits under the component that draws it. */
+@layer base, components;
+
 @import "@luke/ui/tokens.css";
 @import "@luke/ui/styles.css";
 
@@ -816,6 +820,20 @@ body {
   font-size: 0.9em;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* A picture opened over the window from its tile: its name over it, the
+   picture fitted under. */
+.catalog-picture-viewer-title {
+  padding: var(--luke-space-8) var(--luke-space-12);
+  color: var(--luke-color-text-muted);
+}
+
+.catalog-picture-viewer-body {
+  display: grid;
+  overflow: hidden;
+  place-items: center;
+  background: var(--luke-color-surface);
 }
 
 /* A message box's card around a bare text area, at a composer's insets. */

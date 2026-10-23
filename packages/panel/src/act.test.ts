@@ -41,6 +41,8 @@ function openActPort(actor: ActSender): void {
         githubTokenRead: noToken,
         githubTokenSave: noToken,
         githubTokenRemove: noToken,
+        memoriesRead: notTemplated,
+        memoryForget: notTemplated,
         planTemplateRead: notTemplated,
         planTemplateWrite: notTemplated,
         planTemplateRevisions: notTemplated,

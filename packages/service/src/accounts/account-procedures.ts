@@ -91,6 +91,7 @@ import {
   type ModelCatalog,
 } from "../providers/model-catalog.js";
 import { forgetPosthogPersonEffect } from "../providers/posthog.js";
+import { memoriesProcedures } from "./memories-procedures.js";
 import { providerKeysProcedures } from "./provider-keys-procedures.js";
 
 export interface AccountProcedureSeams extends EveReach {
@@ -365,5 +366,6 @@ export function accountProcedures(seams: AccountProcedureSeams) {
       }),
 
     ...providerKeysProcedures(seams),
+    ...memoriesProcedures(seams),
   };
 }

@@ -1,4 +1,7 @@
-import type { InstalledSkillSummary } from "@luke/features/installed-skill-route-wire";
+import type {
+  InstalledSkillContent,
+  InstalledSkillSummary,
+} from "@luke/features/installed-skill-route-wire";
 import {
   INSTALLED_SKILL_CALL_FAILURE,
   type InstalledSkillFailedView,
@@ -12,28 +15,52 @@ import {
   BUTTON_VARIANT,
   Button,
   ConfirmDialog,
+  DIALOG_SIZE,
+  DIALOG_TONE,
+  Dialog,
+  DocumentIcon,
   ErrorState,
+  Fact,
+  Facts,
+  GAP,
   PlusIcon,
   SettingsLine,
   SettingsRow,
   SettingsRowsSkeleton,
   SettingsSection,
   SettingsSectionsSkeleton,
+  SpinnerRegion,
+  Stack,
   Switch,
+  TEXT_ELEMENT,
+  TEXT_VARIANT,
+  Text,
   TrashIcon,
+  UpdateIcon,
   useConfirmDialog,
 } from "@luke/ui";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
+import { FolderInputIcon } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAct } from "../act.js";
+import { MarkdownMessage } from "../markdown-message.js";
 import { useWorkspaceMembersRead } from "../tasks/use-workspace-members.js";
+import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast.js";
 import { AddSkillDialog } from "./add-skill-dialog.js";
 import { MenuRow } from "./menu-row.js";
 import { shownWorkspace } from "./settings-rows.js";
 import {
   failureLine,
+  fencedSkillFile,
+  installedNotice,
+  SKILL_ACTION,
   SKILLS_LINE,
+  type SkillAction,
   type SkillRow,
+  shareFailureLine,
+  shareQuestion,
+  sizeText,
+  skillActions,
   skillGroups,
   withSkill,
   workspaceGroupTitle,
@@ -47,14 +74,19 @@ import type { WorkspaceSettingsControl } from "./workspace-page.js";
  * its name, then the account's own under Personal, as the Automations list
  * groups (`skills-model.ts`). Each row is the skill's name, its scope's
  * badge, and under them its description, where its files came from, and who
- * installed it; at its end an Update available button where a GitHub
- * skill's folder moved at its ref, its switch, and a ⋯ with Remove, which
- * asks first. A row the account may not change, a teammate's workspace
- * skill to a member who is not an owner or admin, as the service says by
- * `manageable`, draws its switch unavailable and no ⋯. A line at the top says where repository skills come from and that a
- * change reaches only agents started afterwards, which nothing else on the
- * page can say. Add skill opens the dialog (`add-skill-dialog.tsx`), whose
- * install lands in the list at once. The list is read when the page is
+ * installed it; at its end its switch and a ⋯ (`skillActions`): View, which
+ * opens its `SKILL.md` and its files over the window; Share with workspace,
+ * for the account's own skill outside a personal workspace, which asks
+ * first because it moves the skill; Update, where a GitHub skill's folder
+ * moved at its ref; and Remove, which asks first. A row the account may not
+ * change, a teammate's workspace skill to a member who is not an owner or
+ * admin, as the service says by `manageable`, draws its switch unavailable
+ * and View alone in its ⋯. A line at the top says where repository skills
+ * come from and that a change reaches only agents started afterwards, which
+ * nothing else on the page can say. Add skill opens the dialog
+ * (`add-skill-dialog.tsx`), whose install lands in the list at once, its
+ * rows lit once and a toast naming them and how to call the first one a
+ * member can call (`installedNotice`). The list is read when the page is
  * drawn; each GitHub skill the account may change is then checked for an
  * update, once.
  */
@@ -71,7 +103,7 @@ type ListRead =
   | { readonly kind: typeof LIST.FAILED; readonly line: string }
   | { readonly kind: typeof LIST.READ; readonly skills: readonly InstalledSkillSummary[] };
 
-const READING: ListRead = { kind: LIST.READING };
+const READING = { kind: LIST.READING } as const;
 
 const ACCEPTED: ActionResult = { status: ACTION_RESULT_STATUS.ACCEPTED };
 
@@ -83,17 +115,106 @@ function rejected(reason: string): ActionResult {
 /** The line for a write that never reached the service. */
 const UNANSWERED_LINE = failureLine({ failure: INSTALLED_SKILL_CALL_FAILURE.UNANSWERED });
 
-/** One installed skill's row: its words, Update available, its switch, and Remove in its ⋯. */
+/** The glyph each of a row's acts leads with. */
+const ACTION_ICON = {
+  [SKILL_ACTION.VIEW]: <DocumentIcon />,
+  [SKILL_ACTION.SHARE]: <FolderInputIcon />,
+  [SKILL_ACTION.UPDATE]: <UpdateIcon />,
+  [SKILL_ACTION.REMOVE]: <TrashIcon />,
+} as const satisfies Record<SkillAction, React.JSX.Element>;
+
+/** The words each of a row's acts says. */
+const ACTION_LABEL = {
+  [SKILL_ACTION.VIEW]: SKILLS_LINE.VIEW,
+  [SKILL_ACTION.SHARE]: SKILLS_LINE.SHARE,
+  [SKILL_ACTION.UPDATE]: SKILLS_LINE.UPDATE,
+  [SKILL_ACTION.REMOVE]: SKILLS_LINE.REMOVE,
+} as const satisfies Record<SkillAction, string>;
+
+/** One skill read whole for View: being read, refused, or read. */
+type ContentRead =
+  | { readonly kind: typeof LIST.READING }
+  | { readonly kind: typeof LIST.FAILED; readonly line: string }
+  | { readonly kind: typeof LIST.READ; readonly content: InstalledSkillContent };
+
+/** View: a skill's `SKILL.md` drawn as written, and every file it carries with its size. */
+function SkillFileDialog({
+  skill,
+  onClose,
+}: {
+  skill: InstalledSkillSummary;
+  onClose: () => void;
+}): React.JSX.Element {
+  const { act } = useAct();
+  const [read, setRead] = useState<ContentRead>(READING);
+  const [attempt, setAttempt] = useState(0);
+
+  useEffect(() => {
+    let current = true;
+    setRead(READING);
+    void act(ACT_KIND.INSTALLED_SKILLS_READ, { skillId: skill.id })
+      .catch(() => undefined)
+      .then((answer) => {
+        if (!current) return;
+        if (answer === undefined)
+          return setRead({ kind: LIST.FAILED, line: SKILLS_LINE.VIEW_FAILED });
+        if ("failure" in answer) return setRead({ kind: LIST.FAILED, line: failureLine(answer) });
+        setRead({ kind: LIST.READ, content: answer });
+      });
+    return () => {
+      current = false;
+    };
+  }, [act, skill.id, attempt]);
+
+  return (
+    <Dialog
+      title={skill.name}
+      size={DIALOG_SIZE.WIDE}
+      onDismiss={onClose}
+      actions={
+        <Button variant={BUTTON_VARIANT.QUIET} onClick={onClose}>
+          Close
+        </Button>
+      }
+    >
+      {read.kind === LIST.READING ? (
+        <SpinnerRegion label={`Reading ${skill.name}`} delay />
+      ) : read.kind === LIST.FAILED ? (
+        <ErrorState onRetry={() => setAttempt((count) => count + 1)}>{read.line}</ErrorState>
+      ) : (
+        <Stack gap={GAP.FIELD}>
+          <MarkdownMessage words={fencedSkillFile(read.content.skillFile)} />
+          <Stack gap={GAP.ITEM}>
+            <Text variant={TEXT_VARIANT.LABEL} as={TEXT_ELEMENT.H3}>
+              {SKILLS_LINE.FILES}
+            </Text>
+            <Facts>
+              {read.content.files.map((file) => (
+                <Fact key={file.path} label={file.path}>
+                  {sizeText(file.bytes)}
+                </Fact>
+              ))}
+            </Facts>
+          </Stack>
+        </Stack>
+      )}
+    </Dialog>
+  );
+}
+
+/** One installed skill's row: its words, its switch, and its ⋯ with View, Share with workspace, Update, and Remove. */
 function SkillRowView({
   row,
-  workspaceId,
+  workspace,
   updateAvailable,
+  landed,
   onChanged,
   onRemoved,
 }: {
   row: SkillRow;
-  workspaceId: string;
+  workspace: Workspace;
   updateAvailable: boolean;
+  landed: boolean;
   onChanged: (skill: InstalledSkillSummary, updated: boolean) => void;
   onRemoved: (skillId: string) => void;
 }): React.JSX.Element {
@@ -101,6 +222,7 @@ function SkillRowView({
   const { skill } = row;
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | undefined>(undefined);
+  const [viewing, setViewing] = useState(false);
 
   /** A toggle or an update sent, its answer put in the list, or why it is unchanged under the row. */
   const write = (
@@ -130,36 +252,51 @@ function SkillRowView({
       }),
   );
 
+  // Note that a share moves the skill, so the row the answer lands is the
+  // workspace's, and the list draws it there; a name the workspace already
+  // holds stays in the question, said for that workspace.
+  const sharing = useConfirmDialog({ subject: true, surfaceOpen: true }, () =>
+    act(ACT_KIND.INSTALLED_SKILLS_SHARE, { workspaceId: workspace.id, skillId: skill.id })
+      .catch(() => undefined)
+      .then((answer): ActionResult => {
+        if (answer === undefined) return rejected(UNANSWERED_LINE);
+        if ("failure" in answer) return rejected(shareFailureLine(answer, skill.name, workspace));
+        onChanged(answer.skill, false);
+        return ACCEPTED;
+      }),
+  );
+
+  const press = {
+    [SKILL_ACTION.VIEW]: () => setViewing(true),
+    [SKILL_ACTION.SHARE]: sharing.ask,
+    [SKILL_ACTION.UPDATE]: () =>
+      write(
+        act(ACT_KIND.INSTALLED_SKILLS_UPDATE, { workspaceId: workspace.id, skillId: skill.id }),
+        true,
+      ),
+    [SKILL_ACTION.REMOVE]: removal.ask,
+  } as const satisfies Record<SkillAction, () => void>;
+  const actions = skillActions(row, { workspace, updateAvailable }).map((group) =>
+    group.map((each) => ({
+      label: ACTION_LABEL[each],
+      icon: ACTION_ICON[each],
+      ...(each === SKILL_ACTION.REMOVE ? { danger: true } : undefined),
+      ...(each === SKILL_ACTION.UPDATE && busy ? { disabled: true } : undefined),
+      onSelect: press[each],
+    })),
+  );
+
   return (
     <>
       <MenuRow
         label={`${skill.name} actions`}
-        actions={
-          skill.manageable
-            ? [{ label: "Remove", icon: <TrashIcon />, danger: true, onSelect: removal.ask }]
-            : []
-        }
+        actions={actions}
         row={{
           label: skill.name,
           adornment: <Badge tone={BADGE_TONE.NEUTRAL}>{row.badge}</Badge>,
           description: `${skill.description} · ${row.line}`,
           error,
-          control:
-            updateAvailable && skill.manageable ? (
-              <Button
-                variant={BUTTON_VARIANT.OUTLINE}
-                busy={busy}
-                busyLabel="Updating"
-                onClick={() =>
-                  write(
-                    act(ACT_KIND.INSTALLED_SKILLS_UPDATE, { workspaceId, skillId: skill.id }),
-                    true,
-                  )
-                }
-              >
-                {SKILLS_LINE.UPDATE_AVAILABLE}
-              </Button>
-            ) : null,
+          landed,
           describedControl: (control) => (
             <Switch
               checked={skill.enabled}
@@ -185,6 +322,11 @@ function SkillRowView({
           running: "Removing…",
         }}
       />
+      <ConfirmDialog
+        confirm={sharing}
+        question={{ ...shareQuestion(skill.name, workspace), tone: DIALOG_TONE.PRIMARY }}
+      />
+      {viewing ? <SkillFileDialog skill={skill} onClose={() => setViewing(false)} /> : null}
     </>
   );
 }
@@ -193,15 +335,19 @@ function SkillRowView({
 function ShownSkills({
   workspace,
   readerId,
+  pause,
 }: {
   workspace: Workspace;
   readerId: string | undefined;
+  pause: ((ms: number) => Promise<void>) | undefined;
 }): React.JSX.Element {
   const { act } = useAct();
   const [list, setList] = useState<ListRead>(READING);
   const [attempt, setAttempt] = useState(0);
   const [adding, setAdding] = useState(false);
   const [updates, setUpdates] = useState<ReadonlyMap<string, boolean>>(new Map());
+  const [landed, setLanded] = useState<ReadonlySet<string>>(new Set());
+  const toast = useToast();
   const members = useWorkspaceMembersRead(workspace).members;
 
   useEffect(() => {
@@ -259,11 +405,19 @@ function ShownSkills({
         : held,
     );
   }, []);
-  const installed = useCallback((made: readonly InstalledSkillSummary[]) => {
-    setList((held) =>
-      held.kind === LIST.READ ? { kind: LIST.READ, skills: [...held.skills, ...made] } : held,
-    );
-  }, []);
+  // Note that an install lights only its own rows, each once, and says how
+  // to call what it made, since the dialog that made them has closed.
+  const installed = useCallback(
+    (made: readonly InstalledSkillSummary[]) => {
+      setList((held) =>
+        held.kind === LIST.READ ? { kind: LIST.READ, skills: [...held.skills, ...made] } : held,
+      );
+      setLanded(new Set(made.map((each) => each.id)));
+      const notice = installedNotice(made, workspace);
+      if (notice !== undefined) toast({ ...notice, tone: TOAST_TONE.DONE, hold: TOAST_HOLD.DONE });
+    },
+    [toast, workspace],
+  );
 
   const groups = skills === undefined ? undefined : skillGroups(skills, readerId, members);
   const rows = (shown: readonly SkillRow[]) =>
@@ -274,8 +428,9 @@ function ShownSkills({
         <SkillRowView
           key={row.skill.id}
           row={row}
-          workspaceId={workspace.id}
+          workspace={workspace}
           updateAvailable={updates.get(row.skill.id) === true}
+          landed={landed.has(row.skill.id)}
           onChanged={changed}
           onRemoved={removed}
         />
@@ -322,6 +477,7 @@ function ShownSkills({
           workspace={workspace}
           onInstalled={installed}
           onClose={() => setAdding(false)}
+          {...(pause === undefined ? undefined : { pause })}
         />
       ) : null}
     </>
@@ -332,11 +488,14 @@ function ShownSkills({
 export function SkillsPage({
   control,
   readerId,
+  pause,
 }: {
   /** The account's workspaces, drawn while it is signed in. */
   control: WorkspaceSettingsControl | undefined;
   /** The signed-in account's id, whose own installs say you. */
   readerId: string | undefined;
+  /** The Add skill dialog's wait before a preview, the renderer's own where none is handed in. */
+  pause?: (ms: number) => Promise<void>;
 }): React.JSX.Element | null {
   if (control === undefined) return null;
   const workspace = shownWorkspace(control);
@@ -352,5 +511,5 @@ export function SkillsPage({
     );
   }
   // Keyed to the workspace, so another one listed reads its own skills and asks nothing left over.
-  return <ShownSkills key={workspace.id} workspace={workspace} readerId={readerId} />;
+  return <ShownSkills key={workspace.id} workspace={workspace} readerId={readerId} pause={pause} />;
 }

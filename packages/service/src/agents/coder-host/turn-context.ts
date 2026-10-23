@@ -22,10 +22,14 @@
  * has not read: the developer's time on every turn, the rest of the task
  * only where it changed since the session last handed it, and the chat only
  * where it holds what was not handed before, so the history grows by what
- * is new rather than by the same words every turn.
+ * is new rather than by the same words every turn. An operator whose
+ * history nears eve's compaction is told once, at the next turn's open, to
+ * keep what is durable before the summary folds it (`flushDue`), since eve
+ * gives the model no step of its own ahead of a compaction.
  */
 
 import { createHash } from "node:crypto";
+import type { CodingAgentContextRow } from "@luke/database/models/coding-agent-store";
 import type { StoredTask } from "@luke/database/models/task-store";
 import { boardText } from "@luke/features/board-text";
 import type { Board } from "@luke/features/board-wire";
@@ -37,6 +41,7 @@ import {
 } from "@luke/features/plan-template";
 import { PLAN_FIELD, type PlanRevisionLine } from "@luke/features/task-wire";
 import { openThreadsText } from "../../tasks/comment-tools.js";
+import { CODER } from "./bounds.js";
 import { CODER_TOOL } from "./tool-set.js";
 
 /** Each section of the default template as the developer reads it, what it holds, and when it is done. */
@@ -111,11 +116,40 @@ export interface TurnHanded {
   readonly spoken?: boolean;
   /** Whether the call's words stand in the history since the last compaction, so a spoken turn after a spoken one need not hand them again. */
   readonly callWords?: boolean;
+  /** Whether a turn of the session has opened since it started or eve last compacted it, so the newest step its row holds was read against this history. */
+  readonly opened?: boolean;
+  /** Whether an operator was told since the last compaction that its history will soon be summarised (`FLUSH_LINE`), so it is told once. */
+  readonly flushTold?: boolean;
 }
 
 /** What a session has handed once eve compacted its history: only the last turn's kind, since a summary may have dropped the rest. */
 export function handedAfterCompaction(handed: TurnHanded): TurnHanded {
   return handed.spoken === true ? { spoken: true } : {};
+}
+
+/**
+ * What an operator's turn opens with once its history nears eve's
+ * compaction: one step to keep what is durable before the summary folds it.
+ */
+export const FLUSH_LINE = `Your history is nearly full, and soon it will be summarised, which keeps the gist and loses the detail. Before anything else this turn, call \`${CODER_TOOL.REMEMBER}\` for each settled fact or convention this history holds that the workspace's later work needs and that is not kept yet; leave out what \`${CODER_TOOL.RECALL}\` answered, which is kept already. Then go on with the turn.`;
+
+/**
+ * Whether an operator's turn opens with `FLUSH_LINE`: the newest step its
+ * row holds, read against this session's history since its start or eve's
+ * last compaction (`TurnHanded`'s `opened`), ended past the flush mark of
+ * the window (`CODER.FLUSH_THRESHOLD_SHARE`), and it has not been told since
+ * that compaction. Note that a step older than the row's compaction is
+ * none, because it measured the history the summary replaced.
+ */
+export function flushDue(
+  context: CodingAgentContextRow,
+  windowTokens: number,
+  handed: TurnHanded,
+): boolean {
+  const step = context.lastStep;
+  if (step === null || handed.opened !== true || handed.flushTold === true) return false;
+  if (context.compactedAt !== null && context.compactedAt.getTime() >= step.at) return false;
+  return step.inputTokens + step.outputTokens >= windowTokens * CODER.FLUSH_THRESHOLD_SHARE;
 }
 
 /** A content address: the same text always answers the same key. */
