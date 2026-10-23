@@ -342,7 +342,9 @@ const FAILED_STATUS = { UNAVAILABLE: 503, REFUSED: 422 } as const;
  * again at once, and given up where the image is still being prepared after
  * the template's own wait. An open answers preparing before any sandbox
  * stands, so making it again leaves nothing behind. `times` only bounds a
- * template that answers ready yet keeps losing its snapshot.
+ * template that answers ready yet keeps losing its snapshot. A message's
+ * relaunch past its answer retries on it too, its lease let go for each
+ * wait (`send`).
  */
 const IMAGE_READY = {
   times: 3,
@@ -1381,7 +1383,8 @@ export const runnerSessions = <
       // all the same, and waits on the image's build once the answer has left. Note that the wait
       // holds no runner lease, because a message sent meanwhile waits on the lease no longer than
       // its own deadline; the lease is taken once the build ended and the message sent afresh, so
-      // a sandbox a message sent meanwhile relaunched is written to rather than opened twice. A
+      // a sandbox a message sent meanwhile relaunched is written to rather than opened twice, and
+      // let go again for another wait where the relaunch finds the image's snapshot gone. A
       // caller with no after-response door is answered that the image is being prepared, as before.
       send: (sessionId, message) =>
         Effect.gen(function* () {
@@ -1400,7 +1403,10 @@ export const runnerSessions = <
                         Effect.ignore(image.prepared),
                       ).pipe(
                         Effect.andThen(
-                          holdingRunner(agent.id, sendHolding(sessionId, message, sent)),
+                          Effect.retry(
+                            holdingRunner(agent.id, sendHolding(sessionId, message, sent)),
+                            IMAGE_READY,
+                          ),
                         ),
                         Effect.catch(launchFailed(agent)),
                       ),
