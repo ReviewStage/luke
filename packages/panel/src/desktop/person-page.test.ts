@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import {
   AUTOMATION_ACTION,
   AUTOMATION_DEFAULT_GUARDS,
+  AUTOMATION_RUN_STATUS,
   AUTOMATION_SCOPE,
   AUTOMATION_TRIGGER,
   type AutomationScope,
@@ -32,6 +33,7 @@ import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platfo
 import { handState } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { followedInboxes } from "../testing/followed-inboxes.js";
+import { restOn } from "../testing/hint-rest.js";
 import { tasksControl, waitingOf } from "../testing/tasks-control.js";
 import { PersonPage } from "./person-page.js";
 
@@ -57,6 +59,7 @@ function automation(
   name: string,
   by: string,
   scope: AutomationScope,
+  overrides: Partial<AutomationSummary> = {},
 ): AutomationSummary {
   return {
     id: `5a0c4d2e-0000-4c3a-9e7d-${String(n).padStart(12, "0")}`,
@@ -74,11 +77,23 @@ function automation(
     createdAt: 1,
     scope,
     creatorId: by,
+    ...overrides,
   };
 }
 
 const AUTOMATIONS = [
-  automation(1, "Morning Sentry triage", "user-charles", AUTOMATION_SCOPE.WORKSPACE),
+  automation(1, "Morning Sentry triage", "user-charles", AUTOMATION_SCOPE.WORKSPACE, {
+    nextRunAt: NOW + 2 * MINUTE,
+    lastRun: {
+      id: "1c2d3e4f-5a6b-4c7d-8e9f-0a1b2c3d4e5f",
+      firing: { kind: AUTOMATION_TRIGGER.SCHEDULE, dueAt: 2 },
+      status: AUTOMATION_RUN_STATUS.FAILED,
+      reason: "unavailable",
+      agent: null,
+      firedAt: 2,
+      settledAt: 3,
+    },
+  }),
   automation(2, "Charles's own reminders", "user-charles", AUTOMATION_SCOPE.PERSONAL),
   automation(3, "Weekly dependency bumps", "user-dean", AUTOMATION_SCOPE.WORKSPACE),
 ];
@@ -602,6 +617,20 @@ test("a person's page lists the workspace's automations they made, never their o
   await settle();
 
   assert.deepEqual(sections(page).Automations, ["Morning Sentry triage"]);
+});
+
+test("an automation's row leads with its clock tile, ends with its failure and when it runs next, and hangs its card", async () => {
+  handState({});
+  const { page } = mount(CHARLES.userId);
+  await settle();
+
+  const row = page.querySelector<HTMLElement>('section[aria-label="Automations"] li');
+  assert.ok(row?.querySelector('.actor-mark[data-kind="automation"]'), "the clock tile leads");
+  assert.ok(row?.querySelector(".failed-mark"), "a failed newest run is marked at the end");
+  assert.match(row?.textContent ?? "", /Next /u);
+  restOn(row?.querySelector("button") ?? assert.fail("no press"));
+  const card = document.querySelector('.luke-tooltip-card [data-actor-card="automation"]');
+  assert.match(card?.textContent ?? "", /Morning Sentry triage/u);
 });
 
 test("automations that could not be read say so and offer Retry, never passing for an empty page, and Retry reads them again", async () => {

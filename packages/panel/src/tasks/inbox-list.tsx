@@ -982,7 +982,7 @@ function TaskStatusChip({ holder }: { holder: InboxHolder }): React.JSX.Element 
  * automation's clock tile, and the factory glyph for the agents no
  * automation names, as the holder's group header draws them.
  */
-function HolderGlyph({ holder }: { holder: InboxHolder }): React.JSX.Element {
+export function HolderGlyph({ holder }: { holder: InboxHolder }): React.JSX.Element {
   const known = useAutomation(
     holder.kind === INBOX_HOLDER.AUTOMATION ? (holder.automationId ?? undefined) : undefined,
   );

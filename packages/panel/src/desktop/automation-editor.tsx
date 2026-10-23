@@ -129,12 +129,14 @@ import {
   useMinute,
   wholeWordsHint,
 } from "@luke/ui";
+import { ACTOR_KIND, ACTOR_STATE } from "@luke/ui/actor-model";
 import { dayAndTimeText, localTimeZone, sinceText, timeZoneNames } from "@luke/ui/time-format";
 import { useDisclosure } from "@luke/ui/use-disclosure";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { Result } from "effect";
 import { ChevronRightIcon, HistoryIcon, PlayIcon, Trash2Icon, ZapIcon } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
+import { ActorMark, automationActor } from "../actor-ref.js";
 import { useAppCommand } from "../app-commands.js";
 import { CopyGlyph, copyHint, useCopyFeedback } from "../copy-feedback.js";
 import { useCopyLinkItem } from "../copy-link-item.js";
@@ -835,6 +837,13 @@ function EditorToolbar({
           <nav className="automation-crumbs" aria-label="Path">
             <FoldingButton label="Automations" icon={<ZapIcon />} onClick={onBack} />
             <ChevronRightIcon aria-hidden="true" />
+            <ActorMark
+              actor={
+                automation === undefined
+                  ? { kind: ACTOR_KIND.AUTOMATION, name: NEW_AUTOMATION, state: ACTOR_STATE.REST }
+                  : automationActor(automation)
+              }
+            />
             <CurrentCrumb name={automation === undefined ? NEW_AUTOMATION : automation.name} />
           </nav>
           {codeReview ? <ExperimentTag /> : null}
