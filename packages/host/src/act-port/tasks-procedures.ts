@@ -25,6 +25,8 @@ import {
   type TaskPagesFollow,
   type TaskPagesFollowed,
   type TasksBoardSaveParams,
+  type TasksBrowserTabOpenAnswer,
+  type TasksBrowserTabOpenParams,
   type TasksBrowserTabsAnswer,
   type TasksBrowserTabsParams,
   type TasksCommentActParams,
@@ -108,6 +110,9 @@ export interface TasksProceduresDependencies {
     tasksPullRequest(params: TasksPullRequestParams): Effect.Effect<TasksPullRequestAnswer>;
     tasksIssue(params: TasksIssueParams): Effect.Effect<TasksIssueAnswer>;
     tasksBrowserTabs(params: TasksBrowserTabsParams): Effect.Effect<TasksBrowserTabsAnswer>;
+    tasksBrowserTabOpen(
+      params: TasksBrowserTabOpenParams,
+    ): Effect.Effect<TasksBrowserTabOpenAnswer>;
     /** A task's Browser tabs followed at the host, their changes heard through `onTaskBrowserTabsChanged`. */
     tasksBrowserTabsFollow(scope: TaskBrowserTabsFollow): Effect.Effect<void>;
     tasksBrowserTabsUnfollow(scope: TaskBrowserTabsFollow): Effect.Effect<void>;
@@ -444,6 +449,13 @@ export function tasksProcedures(dependencies: TasksProceduresDependencies) {
         const answer = yield* host.tasksBrowserTabs(input);
         if ("tabs" in answer) return answer;
         return yield* Effect.fail(errors.REFUSED());
+      },
+    ),
+    // A tab opened in an agent's browser answers why none opened as the panel's own answer, for its words.
+    [TASKS_ACT_KIND.TASKS_BROWSER_TAB_OPEN]: actPort[TASKS_ACT_KIND.TASKS_BROWSER_TAB_OPEN].effect(
+      function* ({ input, context, errors }) {
+        yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+        return yield* host.tasksBrowserTabOpen(input);
       },
     ),
     // A task's Browser tabs followed for its side panel: two panels on one task share one follow at the host.

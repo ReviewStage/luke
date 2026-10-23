@@ -2454,10 +2454,25 @@ ul.actor-stack {
 }
 
 /* A searchable menu hung from its own button (`@luke/ui`'s
-   `AnchoredPopover`) stands in the layer's place. */
+   `AnchoredPopover`) stands in the layer's place, and is what a listed
+   row's submenu stands against. */
 .luke-anchored-popover > .searchable-menu {
-  position: static;
+  position: relative;
   width: auto;
+}
+
+/* A listed row's submenu stands beside the row as the list scrolled it
+   (`searchable-menu.tsx` places the branch over the row), taking no
+   pointer itself, so the rows under it stay the pointer's. */
+.searchable-menu-row-branch {
+  position: absolute;
+  right: 0;
+  left: 0;
+  pointer-events: none;
+}
+
+.searchable-menu-row-branch > * {
+  pointer-events: auto;
 }
 
 /* What pops up arrives on the pair every arriving element rides, the

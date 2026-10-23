@@ -555,6 +555,40 @@ it.layer(getTestDB())("the browser tool", (it) => {
   );
 
   it.effect(
+    "a tab a member opened in the agent's browser is listed to the agent as theirs, and stays theirs once listed",
+    () =>
+      Effect.gen(function* () {
+        const { conversationId, userId } = yield* openConversation;
+        const signIn = { targetId: "member-tab", url: "https://accounts.test/", title: "Sign in" };
+        const { peer } = yield* browser([START_PAGE, signIn]);
+        const layer = yield* runningBrowser(peer);
+        yield* upsertBrowserTab({
+          conversationId,
+          targetId: signIn.targetId,
+          address: signIn.url,
+          title: signIn.title,
+          openedBy: { kind: AGENT_BROWSER_TAB_OPENER.MEMBER, userId },
+        });
+
+        const listed = ran(
+          yield* call(conversationId, { actions: [{ action: BROWSER_AGENT_ACTION.LIST }] }, layer),
+        );
+        const again = ran(
+          yield* call(conversationId, { actions: [{ action: BROWSER_AGENT_ACTION.LIST }] }, layer),
+        );
+
+        const theirs = {
+          tab: signIn.targetId,
+          url: signIn.url,
+          title: signIn.title,
+          openedBy: AGENT_BROWSER_TAB_OPENER.MEMBER,
+        };
+        assert.deepEqual(listed.tabs, [theirs]);
+        assert.deepEqual(again.tabs, [theirs], "the agent's own list does not make it the agent's");
+      }),
+  );
+
+  it.effect(
     "the blank page Chromium starts with is never listed or kept, and a list's tabs are the result's",
     () =>
       Effect.gen(function* () {

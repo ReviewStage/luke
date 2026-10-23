@@ -56,6 +56,8 @@ export const GATEWAY_METHOD = {
   TASKS_ISSUE_LINKS: "tasks.issueLinks",
   /** The Browser tabs open in a task's agents' browsers, read from the service and answered to the panel that asked, held nowhere. */
   TASKS_BROWSER_TABS: "tasks.browserTabs",
+  /** A Browser tab opened at an address in a task's coding agent's browser on the service, taken over by the account at once; answered to the panel that asked, held nowhere. */
+  TASKS_BROWSER_TAB_OPEN: "tasks.browserTabOpen",
   /** One more issue linked to a task on the service, which reads it from its provider first; answered to the caller. */
   TASKS_ISSUE_LINK: "tasks.issueLink",
   /** Which keyword a task's pull requests write of one of its links, changed on the service; answered to the caller. */

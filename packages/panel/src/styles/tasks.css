@@ -1614,25 +1614,31 @@
   border: 0;
 }
 
-/* A cloud Browser tab (cloud-browser-pane.tsx): whose browser it is and
-   the page's address beside who drives it, then the page drawn on a canvas
-   of the page's own shape, centred in the body, with a quiet line over it
-   while no page stands to drive. */
+/* A cloud Browser tab (cloud-browser-pane.tsx): the steps and the address
+   as a Browser tab's bar has them; who has it under the bar; then the page
+   drawn on a canvas of the page's own shape, centred in the body, with a
+   quiet line over it while no page stands to drive, or while a draft waits
+   on an address. */
 .cloud-browser-bar {
   gap: var(--luke-space-8);
 }
 
-.cloud-browser-where {
+/* Who has the tab, or why a step was refused, in a quiet line under the
+   bar, Take over or Hand back at its end, so the address keeps the bar. */
+.cloud-browser-standing {
   display: flex;
   min-width: 0;
-  flex: 1;
-  align-items: baseline;
-  gap: var(--luke-space-6);
+  flex: none;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--luke-control-gap);
+  padding: var(--luke-space-4) var(--column-inset);
+  border-bottom: 1px solid var(--luke-color-border);
 }
 
-/* Whose browser it is stays whole; the address gives way first. */
-.cloud-browser-where > :first-child {
-  flex: none;
+.cloud-browser-body > .cloud-browser-notice > .luke-text {
+  max-width: 32em;
+  text-align: center;
 }
 
 .cloud-browser-body {
@@ -1830,15 +1836,10 @@
 
 /* The find a page's tab keeps over its source fills the tab as the panel's
    own would. */
-/* A Browser tab (browser-pane.tsx): the page's bar, its address field
-   filling what the steps leave, and the body main lays the page's view
-   over, which draws a still of the page while something covers it. */
-.browser-view-address {
-  display: flex;
-  min-width: 0;
-  flex: 1;
-}
-
+/* A Browser tab (browser-pane.tsx): the body main lays the page's view
+   over, which draws a still of the page while something covers it; its
+   bar's address field (`@luke/ui`'s AddressField) fills what the steps
+   leave. */
 .browser-view-body {
   position: relative;
 }

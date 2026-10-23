@@ -164,7 +164,7 @@ import {
   withClosedTab,
   withUndrawnPassed,
 } from "./closed-tabs.js";
-import { useCloudBrowserTabs } from "./cloud-browser-tabs.js";
+import { useCloudBrowserDrafts, useCloudBrowserTabs } from "./cloud-browser-tabs.js";
 import {
   startFailureNote as agentStartFailureNote,
   agentStillWriting,
@@ -1695,11 +1695,19 @@ export function useTasksTab(input: {
   // The task's agents' cloud Browser tabs, while the Browser tab experiment is on, which the panel draws on its own task alone.
   const cloudTaskId =
     inboxView === undefined && pageAgents === undefined ? viewed.activeTaskId : undefined;
-  const cloudListed = useCloudBrowserTabs(cloudTaskId, useExperiment(EXPERIMENT.BROWSER));
+  const cloudOn = useExperiment(EXPERIMENT.BROWSER);
+  const cloudListed = useCloudBrowserTabs(cloudTaskId, cloudOn);
+  // A draft of a tab in an agent's browser stands in the strip after the tabs the service lists.
+  const cloudDrafts = useCloudBrowserDrafts(cloudTaskId, cloudOn);
   // Note that a panel off its task lists none, rather than none read yet, so a cloud tab chosen there gives way.
   const cloudBrowsers = useMemo(
-    () => (cloudTaskId === undefined ? NO_IDS : cloudListed?.map((each) => each.id)),
-    [cloudTaskId, cloudListed],
+    () =>
+      cloudTaskId === undefined
+        ? NO_IDS
+        : cloudListed === undefined
+          ? undefined
+          : [...cloudListed.map((each) => each.id), ...cloudDrafts.map((each) => each.id)],
+    [cloudTaskId, cloudListed, cloudDrafts],
   );
   // The task's Chat stands in the side panel once Chat is on and its read holds the task's channel, and
   // opened where it holds none yet, which the tab says; it stands nowhere while Chat is off (`drawnFixed`).

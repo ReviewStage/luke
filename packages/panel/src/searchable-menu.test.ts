@@ -68,7 +68,9 @@ function footOf(said: string[]): FootRow[] {
 }
 
 /** The menu drawn over `rows`, with a field where `placeholder` is given, in a page that hears what Escape reaches. */
-function mount(options: { placeholder?: string; foot?: boolean; room?: boolean } = {}) {
+function mount(
+  options: { placeholder?: string; foot?: boolean; room?: boolean; rows?: readonly MenuRow[] } = {},
+) {
   const asked: Asked = { said: [], escapedPast: [] };
   // Note that the page listens a box above React's root, because a press
   // kept from it still reaches the root's own listeners.
@@ -86,7 +88,7 @@ function mount(options: { placeholder?: string; foot?: boolean; room?: boolean }
         id: "menu",
         label: "Model",
         placeholder: options.placeholder,
-        rows: ROWS,
+        rows: options.rows ?? ROWS,
         value: undefined,
         noMatch: "No models match",
         onPick: (id) => asked.said.push(`pick ${id}`),
@@ -164,6 +166,56 @@ test("the arrows go on into the pinned rows, whose submenu Right opens, Left clo
   assert.deepEqual([last, effort, inside, expanded], ["Open on GitHub", "Effort", "High", "true"]);
   assert.equal(closed, null);
   assert.deepEqual(asked.said, ["effort low"]);
+});
+
+/** A listed row that opens a submenu of where a new tab opens, beside a row of its own. */
+function browserRows(said: string[]): readonly MenuRow[] {
+  return [
+    { id: "board", label: "Board" },
+    {
+      id: "browser",
+      label: "New Browser tab",
+      submenu: {
+        label: "Open the tab in",
+        rows: [
+          { id: "agent", label: "Invite expiry" },
+          { id: "mac", label: "This Mac" },
+        ],
+        value: undefined,
+        onPick: (id) => said.push(`open ${id}`),
+      },
+    },
+  ];
+}
+
+test("a listed row with a submenu opens it on Enter or Right rather than being picked, Left closes it, and Enter picks in it", () => {
+  const said: string[] = [];
+  const asked = mount({ placeholder: "Search tabs", rows: browserRows(said) });
+  press({ key: "ArrowDown" });
+  press({ key: "Enter" });
+  const inside = announced();
+  press({ key: "ArrowLeft" });
+  const closed = document.querySelector('[aria-label="Open the tab in"][role="listbox"]');
+  press({ key: "ArrowRight" });
+  press({ key: "ArrowDown" });
+  press({ key: "Enter" });
+
+  assert.equal(inside, "Invite expiry");
+  assert.equal(closed, null);
+  assert.deepEqual(asked.said, []);
+  assert.deepEqual(said, ["open mac"]);
+});
+
+test("a search finds a listed row by the rows of its submenu", () => {
+  mount({ placeholder: "Search tabs", rows: browserRows([]) });
+  const field = keys() as HTMLInputElement;
+  const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+  act(() => {
+    setter?.call(field, "expiry");
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+
+  assert.equal(announced(), "New Browser tab");
 });
 
 test("Enter on a pinned row presses it", () => {
