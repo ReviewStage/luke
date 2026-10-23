@@ -398,17 +398,6 @@ body,
   -webkit-app-region: no-drag;
 }
 
-/* A section's head is an eyebrow, small, spaced, and upper case, whether it
-   folds or not, so it names the groups under it without competing with
-   them; a group's own head keeps its name as written. */
-.sidebar-section-head > .luke-nav-item[data-variant="head"],
-.sidebar-section-head-name {
-  font-size: var(--luke-type-eyebrow-size);
-  font-weight: var(--luke-weight-semibold);
-  letter-spacing: var(--luke-type-eyebrow-tracking);
-  text-transform: uppercase;
-}
-
 .sidebar-section-head-name {
   min-width: 0;
   flex: 1;
@@ -492,15 +481,6 @@ body,
   font-weight: var(--luke-weight-medium);
 }
 
-/* A group's heading in a column of places is an eyebrow, as the sidebar's
-   sections are; a heading that names a workspace keeps its name as written. */
-.section-heading:not(.settings-nav-workspace) {
-  font-size: var(--luke-type-eyebrow-size);
-  font-weight: var(--luke-weight-semibold);
-  letter-spacing: var(--luke-type-eyebrow-tracking);
-  text-transform: uppercase;
-}
-
 .sidebar-note {
   margin: var(--luke-space-4) var(--row-inset);
   color: var(--luke-color-text-muted);
@@ -570,8 +550,8 @@ body,
   background: var(--luke-color-fill-hover);
 }
 
-/* The open plan's row is a slip of the sheet's paper laid on the birch,
-   lifted by its hairline and a breath of shadow, as the sheet is. */
+/* The open plan's row is drawn in the work sheet's ground on the sidebar,
+   lifted by a hairline and a soft shadow, as the sheet is. */
 .sidebar-task[aria-current="page"] {
   background: var(--luke-color-ground);
   box-shadow:
@@ -2045,26 +2025,19 @@ ul.actor-stack {
   color: var(--luke-color-text);
 }
 
-/* A plan reads as a page of a quiet magazine: its title set large in the
-   serif at the regular weight, each section named by a small, spaced,
-   upper-case label with room above it rather than a rule under it, and
-   what stands under a section a step of medium sans. */
+/* A plan's title is set large in the semibold, and each section is named
+   by a heading with room above it rather than a rule under it. */
 .desktop-document .luke-markdown-heading[data-level="1"] {
-  font-family: var(--luke-font-serif);
-  font-size: 2.15em;
-  font-weight: var(--luke-weight-regular);
-  letter-spacing: -0.015em;
-  line-height: 1.15;
+  font-size: 1.9em;
+  font-weight: var(--luke-weight-semibold);
+  letter-spacing: -0.02em;
+  line-height: 1.2;
 }
 
 .desktop-document .luke-markdown-heading[data-level="2"] {
-  margin-top: 2.2em;
-  margin-bottom: 0.9em;
-  color: var(--luke-color-text-muted);
-  font-size: 0.72em;
+  margin-top: 1.6em;
+  font-size: 1.3em;
   font-weight: var(--luke-weight-semibold);
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
 }
 
 .desktop-document .luke-markdown-heading[data-level="3"] {
@@ -4489,15 +4462,13 @@ ul.actor-stack {
   background: var(--luke-color-sidebar);
 }
 
-/* The title stands a step under the way back above it, in the serif every
-   page title is set in. */
+/* The title stands a step under the way back above it. */
 .settings-pages-title,
 .version-log-title,
 .admin-sections-title {
   margin: var(--luke-space-12) var(--row-inset);
-  font-family: var(--luke-font-serif);
   font-size: var(--luke-type-title-size);
-  font-weight: var(--luke-weight-regular);
+  font-weight: var(--luke-weight-semibold);
   letter-spacing: -0.015em;
 }
 

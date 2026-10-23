@@ -3,7 +3,7 @@
    out. */
 
 @layer components {
-  /* The card is fresh paper lying on the sheet, its corner the dialog's,
+  /* The card stands on the sheet in the surface's ground, its corner the dialog's,
      lifted by a soft shadow rather than ringed by a dark edge; the field,
      input, and bare looks stand flat in what holds them. */
   .luke-composer-frame {

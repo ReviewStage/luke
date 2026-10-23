@@ -85,8 +85,8 @@ const DESKTOP_WINDOW = {
   MARGIN: 24,
   // The window's ground before the renderer paints, one per appearance; each
   // is the desktop palette's `--luke-color-sidebar` for that appearance, the
-  // birch the shell is drawn on and its work sheet laid over.
-  BACKGROUND: { DARK: "#111315", LIGHT: "#edeae3" },
+  // frame the shell is drawn on and its work sheet laid over.
+  BACKGROUND: { DARK: "#0e0e10", LIGHT: "#f4f4f5" },
 } as const;
 
 /** The first frame of the window, centred in the display's work area. */

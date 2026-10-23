@@ -84,11 +84,11 @@
   overflow: clip;
 }
 
-/* The window is a birch table and the work a sheet of paper laid on it: the
-   shell's ground is the sidebar's, so the sidebar stands on it with no edge
-   of its own, and the work column is a sheet a gap in from the window's
-   edges, its corners soft and its edge a hairline and a shadow's lift. A
-   narrow room shows one column at a time and keeps it full bleed. */
+/* The work is a sheet laid on the window's frame: the shell's ground is the
+   sidebar's, so the sidebar stands on it with no edge of its own, and the
+   work column is a sheet a gap in from the window's edges, its corners
+   soft and its edge a hairline and a soft shadow. A narrow room shows one
+   column at a time and keeps it full bleed. */
 .desktop-shell {
   --sheet-gap: var(--luke-space-8);
   --sheet-radius: var(--luke-radius-14);

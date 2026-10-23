@@ -19,16 +19,6 @@
     padding: 0 var(--luke-space-2);
   }
 
-  /* A group's name is an eyebrow over its card: small, spaced, upper case,
-     and muted, so the card's rows carry the page. */
-  .luke-settings-section-head > .luke-text[data-variant="section"] {
-    color: var(--luke-color-text-muted);
-    font-size: var(--luke-type-eyebrow-size);
-    font-weight: var(--luke-weight-semibold);
-    letter-spacing: var(--luke-type-eyebrow-tracking);
-    text-transform: uppercase;
-  }
-
   /* The card's corner is a control's, so a page draws one corner throughout. */
   .luke-settings-section-card {
     display: flex;

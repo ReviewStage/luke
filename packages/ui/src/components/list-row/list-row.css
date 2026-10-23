@@ -36,8 +36,8 @@
     box-shadow: inset 0 0 0 1px var(--luke-color-border-selected);
   }
 
-  /* The open row is a slip of the work's paper laid on the list, lifted by
-     its hairline and a breath of shadow, as the work's own sheet is. */
+  /* The open row is drawn in the work sheet's ground, lifted by a hairline
+     and a soft shadow, as the sheet itself is. */
   .luke-list-row[data-current="true"] {
     background: var(--luke-color-ground);
     box-shadow:

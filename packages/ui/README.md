@@ -34,7 +34,7 @@ An app imports the sheets after its reset and before its utilities:
 Every token is a `--luke-*` custom property under `src/tokens/`.
 
 - **Base scale** (`scale.css`), the same in every app: `--luke-space-{0,2,4,6,8,12,16,20,24,32,40,48,64,96}`,
-  `--luke-radius-{6,8,10,14,20,full}`, and `--luke-weight-{regular,medium,semibold,bold}`
+  `--luke-radius-{6,8,10,14,full}`, and `--luke-weight-{regular,medium,semibold,bold}`
   (400, 500, 600, 700).
 - **Roles** (`profiles.css`), set by both profiles; a component reads a role,
   never a base value at its call site:
@@ -47,7 +47,6 @@ Every token is a `--luke-*` custom property under `src/tokens/`.
   | `--luke-type-body-*` (size / leading) | 13 / 20 | 16 / 24 | 14 / 20 |
   | `--luke-type-label-*` | 13 / 18 | 14 / 20 | 13 / 18 |
   | `--luke-type-caption-*` | 12 / 16 | 12 / 16 | 12 / 16 |
-  | `--luke-type-eyebrow-*` (size / tracking) | 11 / 0.08em | 11 / 0.08em | 11 / 0.08em |
   | `--luke-type-section-*` | 13 / 18 | 16 / 24 | 16 / 24 |
   | `--luke-type-dialog-*` | 15 / 20 | 20 / 28 | 20 / 28 |
   | `--luke-type-title-*` | 26 / 34 | 28 / 36 | 22 / 30 |
@@ -70,9 +69,6 @@ Every token is a `--luke-*` custom property under `src/tokens/`.
   The settings-row, card, dialog, and menu roles beside them (`--luke-settings-row-*`,
   `--luke-card-*`, `--luke-dialog-*`, `--luke-menu-*`) are set the same way. `tokens.test.ts`
   holds both profiles to one set of names.
-- **Faces** (`profiles.css`): `--luke-font-sans`, `--luke-font-mono`,
-  `--luke-font-display`, and `--luke-font-serif`, the serif a plan's title is
-  set in (the Mac's New York on the desktop, the platform's `ui-serif` on the web).
 - **Palette** (`palettes.css`): semantic colours, `--luke-color-*` (`text`,
   `text-muted`, `ground`, `surface`, `overlay`, `fill-*`, `border*`, `accent*`,
   `danger*`, `focus-ring`, …), set by both profiles in both themes.

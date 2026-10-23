@@ -140,7 +140,24 @@ const WEB_THEMES = {
   dark: '[data-luke-profile="web"][data-luke-theme="dark"] {',
 } as const;
 
-/** A palette value in one theme's rule, an `#rgb`, `#rrggbb`, or `rgba()` as red, green, blue, alpha. */
+/** An `oklch(L C H)` colour as red, green, blue (0 to 255) and alpha, by Björn Ottosson's OKLab matrices, as `tokens.test.ts` reads one. */
+function oklchToRgb(lightness: number, chroma: number, hue: number): number[] {
+  const a = chroma * Math.cos((hue * Math.PI) / 180);
+  const b = chroma * Math.sin((hue * Math.PI) / 180);
+  const l = (lightness + 0.3963377774 * a + 0.2158037573 * b) ** 3;
+  const m = (lightness - 0.1055613458 * a - 0.0638541728 * b) ** 3;
+  const s = (lightness - 0.0894841775 * a - 1.291485548 * b) ** 3;
+  const encode = (linear: number) =>
+    255 * (linear <= 0.0031308 ? 12.92 * linear : 1.055 * linear ** (1 / 2.4) - 0.055);
+  return [
+    encode(4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s),
+    encode(-1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s),
+    encode(-0.0041960863 * l - 0.7034186147 * m + 1.707614701 * s),
+    1,
+  ];
+}
+
+/** A palette value in one theme's rule, an `#rgb`, `#rrggbb`, `oklch()`, or `rgba()` as red, green, blue, alpha. */
 function tokenOf(theme: keyof typeof WEB_THEMES, name: string): number[] {
   const start = PALETTES.indexOf(WEB_THEMES[theme]);
   const rule = PALETTES.slice(start, PALETTES.indexOf("\n}", start));
@@ -150,6 +167,8 @@ function tokenOf(theme: keyof typeof WEB_THEMES, name: string): number[] {
     ? [...short].map((digit) => digit + digit).join("")
     : /^#([0-9a-f]{6})$/i.exec(value)?.[1];
   if (hex) return [0, 2, 4].map((at) => Number.parseInt(hex.slice(at, at + 2), 16)).concat(1);
+  const oklch = /^oklch\(([\d.]+) ([\d.]+) ([\d.]+)\)$/.exec(value);
+  if (oklch) return oklchToRgb(Number(oklch[1]), Number(oklch[2]), Number(oklch[3]));
   const rgba = /^rgba?\((.*)\)$/.exec(value)?.[1];
   expect(rgba, `${name} in ${theme}`).toBeDefined();
   return (rgba ?? "").split(",").map(Number).concat(1).slice(0, 4);

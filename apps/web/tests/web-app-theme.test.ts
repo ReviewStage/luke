@@ -23,7 +23,7 @@ import { fakeService } from "./support/fake-service";
  */
 
 /** The site palette's two grounds (`@luke/ui`'s `palettes.css`), which the chrome is tinted with. */
-const GROUND = { light: "#fbfaf7", dark: "#1a1c1f" } as const;
+const GROUND = { light: "#ffffff", dark: "#121316" } as const;
 
 /** The query a machine's dark appearance answers. */
 const MACHINE_DARK = "(prefers-color-scheme: dark)";

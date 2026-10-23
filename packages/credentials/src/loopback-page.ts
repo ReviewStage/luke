@@ -98,8 +98,8 @@ const PAGE_STYLE = `
   * { box-sizing: border-box; }
   body {
     margin: 0;
-    background: #15171a;
-    color: rgba(240, 236, 228, 0.92);
+    background: #08090b;
+    color: rgba(255, 255, 255, 0.92);
     font-family: -apple-system, blinkmacsystemfont, "SF Pro Display", "Segoe UI", sans-serif;
     -webkit-font-smoothing: antialiased;
   }
@@ -109,12 +109,12 @@ const PAGE_STYLE = `
     padding: 40px 32px;
     border: 1px solid rgba(255, 255, 255, 0.08);
     border-radius: 8px;
-    background: #1c1f22;
+    background: #101114;
     box-shadow: 0 24px 80px rgba(0, 0, 0, 0.42);
     text-align: center;
   }
   .solo-mark { display: inline-flex; margin-bottom: 4px; }
-  .mark { width: 52px; height: auto; color: rgba(240, 236, 228, 0.92); }
+  .mark { width: 52px; height: auto; color: rgba(255, 255, 255, 0.92); }
   .connection {
     display: flex;
     align-items: center;
@@ -122,11 +122,11 @@ const PAGE_STYLE = `
     gap: 16px;
     margin: 0 auto 20px;
   }
-  .provider-mark { display: block; width: 38px; height: 38px; flex: 0 0 auto; color: rgba(240, 236, 228, 0.92); }
+  .provider-mark { display: block; width: 38px; height: 38px; flex: 0 0 auto; color: rgba(255, 255, 255, 0.92); }
   .provider-mark-google { width: 38px; height: 38px; }
   .provider-mark-github { width: 38px; height: 38px; }
   .mark-connection { width: 48px; flex: 0 0 auto; }
-  .arrow { width: 24px; height: 24px; color: rgba(240, 236, 228, 0.58); flex: 0 0 auto; }
+  .arrow { width: 24px; height: 24px; color: rgba(255, 255, 255, 0.56); flex: 0 0 auto; }
   .pill {
     display: inline-block;
     padding: 3px 11px;
@@ -134,12 +134,12 @@ const PAGE_STYLE = `
     font-size: 0.75rem;
     font-weight: 650;
     letter-spacing: 0.2px;
-    background: rgba(143, 203, 168, 0.14);
-    color: #8fcba8;
+    background: rgba(111, 220, 164, 0.14);
+    color: #6fdca4;
   }
-  .pill[data-tone="attention"] { background: rgba(227, 167, 92, 0.14); color: #e3a75c; }
+  .pill[data-tone="attention"] { background: rgba(255, 160, 73, 0.14); color: #ffa049; }
   h1 { margin: 12px 0 8px; font-size: 1.375rem; line-height: 1.2; }
-  p { margin: 0; color: rgba(240, 236, 228, 0.58); font-size: 0.9375rem; line-height: 1.6; }
+  p { margin: 0; color: rgba(255, 255, 255, 0.56); font-size: 0.9375rem; line-height: 1.6; }
 `;
 
 export function accountLoopbackPage(page: LoopbackPage): string {
