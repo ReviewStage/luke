@@ -24,7 +24,7 @@ import { keydownHandler } from "@tiptap/pm/keymap";
 import type { ResolvedPos } from "@tiptap/pm/model";
 import { Plugin, PluginKey } from "@tiptap/pm/state";
 import type { EditorBox, EditorFormat, EditorFormatDoors, EditorFormatting } from "./contract.js";
-import { keymapName } from "./writing-keys.js";
+import { inTableCell, keymapName } from "./writing-keys.js";
 
 /** Each writing mark by TipTap's name for it. */
 const MARK_NAMES = {
@@ -109,6 +109,7 @@ export function formatOf(editor: Editor): EditorFormat {
     to,
     empty,
     code: blocks.has(WRITING_BLOCK.CODE_BLOCK),
+    cell: inTableCell(editor.state.selection.$from) || inTableCell(editor.state.selection.$to),
     marks: WRITING_MARKS.filter((mark) => editor.isActive(MARK_NAMES[mark])),
     block: blocks.size === 1 ? [...blocks][0] : undefined,
     link: linked && typeof href === "string" ? href : undefined,

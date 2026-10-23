@@ -30,7 +30,8 @@ export interface EditorBox {
 /**
  * The selection as a format toolbar reads it: where it stands in the text,
  * which moves the toolbar as it changes; whether it holds any words;
- * whether it touches a code block, where no toolbar stands; the marks every
+ * whether it touches a code block, where no toolbar stands; whether it
+ * stands in a table's cell, where no block can be turned; the marks every
  * selected word wears, Link's among them; the one kind of block it stands
  * in, none where it spans several; and the link it or the caret stands in.
  */
@@ -39,6 +40,7 @@ export interface EditorFormat {
   readonly to: number;
   readonly empty: boolean;
   readonly code: boolean;
+  readonly cell: boolean;
   readonly marks: readonly WritingMark[];
   readonly block: WritingBlock | undefined;
   readonly link: string | undefined;

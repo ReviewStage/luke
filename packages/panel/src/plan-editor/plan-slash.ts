@@ -1,6 +1,5 @@
 import { WRITING_BLOCK, WRITING_INSERT } from "@luke/settings/shortcuts";
 import type { Editor } from "@tiptap/core";
-import type { ResolvedPos } from "@tiptap/pm/model";
 import { Plugin, PluginKey } from "@tiptap/pm/state";
 import type { EditorView } from "@tiptap/pm/view";
 import {
@@ -10,6 +9,7 @@ import {
   type SlashBlock,
 } from "./contract.js";
 import { turnInto } from "./writing-format.js";
+import { inTableCell } from "./writing-keys.js";
 
 /**
  * plan-slash.ts -- the plan editor's `/`: the word the caret ends reported to the panel, which draws the block menu over it, and the block it chooses laid in in the word's place.
@@ -83,28 +83,12 @@ const INSERTS = {
   },
 } as const satisfies Record<SlashBlock, (editor: Editor) => void>;
 
-/** The roles a table's cells take in ProseMirror's table schema, which TipTap's table cells declare. */
-const CELL_ROLES: ReadonlySet<unknown> = new Set(["cell", "header_cell"]);
-
-/**
- * Whether the caret stands in a table's cell. Note that no block the menu
- * lays in may stand there, because a cell of GFM's table is one line of
- * words, so a table, a heading, or a list laid in a cell is lost as the
- * text is saved.
- */
-function inCell($from: ResolvedPos): boolean {
-  for (let depth = $from.depth; depth > 0; depth -= 1) {
-    if (CELL_ROLES.has($from.node(depth).type.spec.tableRole)) return true;
-  }
-  return false;
-}
-
 /** The `/` word the caret ends in plain text, outside code and outside a table's cell; nothing while the editor has no caret or the caret ends none. */
 function slashAt(view: EditorView): SlashWord | undefined {
   const { selection, doc } = view.state;
   if (!selection.empty || !view.hasFocus()) return undefined;
   const { $from } = selection;
-  if ($from.parent.type.spec.code === true || inCell($from)) return undefined;
+  if ($from.parent.type.spec.code === true || inTableCell($from)) return undefined;
   const before = $from.parent.textBetween(0, $from.parentOffset, undefined, LEAF_CHARACTER);
   const match = SLASH_WORD.exec(before);
   if (match === null) return undefined;
