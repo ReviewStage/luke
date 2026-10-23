@@ -857,6 +857,21 @@ export function decodeMention(target: string, repository: string | null): Mentio
   return Option.getOrUndefined(readMention(fieldsOf(target, repository)));
 }
 
+/**
+ * The repository a GitHub page of a file or a folder is of, `owner/name` as
+ * its own address spells it, for words of no repository to read the page
+ * as that file or folder by (`decodeMention`), rather than as a page of
+ * GitHub's; nothing for any other target, a branch's page among them.
+ */
+export function pageRepositoryOf(target: string): string | undefined {
+  const url = parsedUrl(target);
+  if (url?.origin !== GITHUB.ORIGIN) return undefined;
+  const [, owner, name] = url.pathname.split("/");
+  if (owner === undefined || owner === "" || name === undefined || name === "") return undefined;
+  const repository = `${owner}/${name}`;
+  return repositoryFields(url, repository) === undefined ? undefined : repository;
+}
+
 /** Words with each control character, a line break among them, made a space, so a name stays one line of a link's label. */
 function withoutControls(words: string): string {
   return [...words]
