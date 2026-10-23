@@ -490,6 +490,29 @@
     );
   }
 
+  /* A row whose acts stand on its title's line fades that line alone; the
+     lines under it (an Inbox item's preview and attachments) stay whole. */
+  .luke-list-row[data-actions="hover"][data-meta="title"] {
+    --luke-list-row-title-line: calc(var(--luke-space-8) + var(--luke-type-label-leading));
+    --luke-list-row-hide:
+      linear-gradient(
+        to left,
+        transparent var(--luke-list-row-acts, 0px),
+        #000 calc(var(--luke-list-row-acts, 0px) + var(--luke-list-row-fade))
+      ),
+      linear-gradient(#000, #000);
+  }
+
+  .luke-list-row[data-actions="hover"][data-meta="title"] .luke-list-row-main {
+    mask-position:
+      0 0,
+      0 var(--luke-list-row-title-line);
+    mask-repeat: no-repeat;
+    mask-size:
+      100% var(--luke-list-row-title-line),
+      100% 100%;
+  }
+
   .luke-list-row[data-actions="hover"][data-meta="title"] .luke-list-row-actions {
     inset-block: var(--luke-space-8) auto;
     height: var(--luke-type-label-leading);
@@ -501,7 +524,10 @@
     pointer-events: auto;
   }
 
-  .luke-list-row[data-actions="hover"]:is(:has(:focus-visible), [data-menu-open="true"])
+  .luke-list-row[data-actions="hover"]:has(.luke-list-row-actions):is(
+      :has(:focus-visible),
+      [data-menu-open="true"]
+    )
     .luke-list-row-main {
     mask-image: var(--luke-list-row-hide);
   }
@@ -512,7 +538,7 @@
       pointer-events: auto;
     }
 
-    .luke-list-row[data-actions="hover"]:hover .luke-list-row-main {
+    .luke-list-row[data-actions="hover"]:has(.luke-list-row-actions):hover .luke-list-row-main {
       mask-image: var(--luke-list-row-hide);
     }
   }
@@ -542,7 +568,8 @@
       pointer-events: auto;
     }
 
-    .luke-list-row[data-actions="hover"][data-current="true"] .luke-list-row-main {
+    .luke-list-row[data-actions="hover"][data-current="true"]:has(.luke-list-row-actions)
+      .luke-list-row-main {
       mask-image: var(--luke-list-row-hide);
     }
 
