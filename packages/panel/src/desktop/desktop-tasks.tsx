@@ -1219,7 +1219,7 @@ function PlanDocument({
                         task={{ name: task.name, status: listed.status }}
                         inbox={{
                           body: inboxBody,
-                          waiting: inbox.board.open.length,
+                          board: inbox.board,
                           drafted: inbox.drafted,
                         }}
                         chat={
