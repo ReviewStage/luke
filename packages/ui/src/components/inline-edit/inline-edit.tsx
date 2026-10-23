@@ -25,7 +25,9 @@ import { ShadcnInput } from "../../shadcn/input.js";
  * The field is shadcn/ui's input (`../../shadcn/input.tsx`, on Base UI),
  * each look drawn over the input's own classes by a variant on its
  * `data-look`, which outranks them whatever order the utilities land in, in
- * Tailwind utilities over the theme's field roles. It keeps the
+ * Tailwind utilities over the theme's field roles; the field's line and
+ * weight revert to the layers under the utilities, as no rule set them
+ * before. It keeps the
  * `luke-inline-edit` name a container that sizes it finds it by. On a
  * finger's device each look takes at least 16px words, or iOS zooms the page
  * into the field the moment it is focused.
@@ -57,7 +59,7 @@ export type InlineEditLook = (typeof INLINE_EDIT_LOOK)[keyof typeof INLINE_EDIT_
  */
 const INLINE_EDIT =
   "luke-inline-edit pointer-coarse:data-[look]:text-touch " +
-  "data-[look=field]:inline-block data-[look=field]:h-auto data-[look=field]:w-auto data-[look=field]:rounded-inline-edit data-[look=field]:border-0 data-[look=field]:bg-ground data-[look=field]:focus:bg-ground data-[look=field]:px-luke-4 data-[look=field]:py-px data-[look=field]:shadow-selected-edge data-[look=field]:text-body-size data-[look=field]:[font-family:inherit] data-[look=field]:[font-weight:inherit] data-[look=field]:[line-height:inherit] " +
+  "data-[look=field]:inline-block data-[look=field]:h-auto data-[look=field]:w-auto data-[look=field]:rounded-inline-edit data-[look=field]:border-0 data-[look=field]:bg-ground data-[look=field]:focus:bg-ground data-[look=field]:px-luke-4 data-[look=field]:py-px data-[look=field]:shadow-selected-edge data-[look=field]:text-body-size data-[look=field]:[font-family:inherit] data-[look=field]:[font-weight:revert-layer] data-[look=field]:[line-height:revert-layer] " +
   "data-[look=input]:-my-inline-edit-lift data-[look=input]:ms-inline-edit-reach data-[look=input]:h-luke-24 data-[look=input]:border-border data-[look=input]:px-luke-8 data-[look=input]:tracking-normal data-[look=input]:[font:inherit] " +
   "data-[look=well]:inline-block data-[look=well]:h-auto data-[look=well]:w-auto data-[look=well]:rounded-none data-[look=well]:border-0 data-[look=well]:bg-transparent data-[look=well]:focus:bg-transparent data-[look=well]:p-0 data-[look=well]:text-inherit data-[look=well]:outline-none data-[look=well]:[font:inherit]";
 
