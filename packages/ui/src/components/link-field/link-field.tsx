@@ -1,4 +1,4 @@
-import { type CSSProperties, type Ref, useState } from "react";
+import { type Ref, useState } from "react";
 import { ExternalIcon, UnlinkIcon } from "../../face/glyphs.js";
 import { IconButton } from "../button/button.js";
 import { MENU_SURFACE_FLOW, MenuSurface } from "../menu/menu-surface.js";
@@ -9,7 +9,7 @@ import { Tooltip } from "../tooltip/hint.js";
  * link-field.tsx -- the small popover a link is written in over selected words: a field for its address, and Open and Remove beside it where a link is already there.
  *
  * It stands on the menu's surface, laid in a row as a find bar is, and its
- * owner places it under the words and shows it. The field takes the caret
+ * owner places it under the words, in a box of its own, and shows it. The field takes the caret
  * as it opens, holding the link already there selected, so typing or a
  * paste replaces it. Enter hands the owner the address as it stands
  * (`onApply`), and Escape gives up (`onCancel`); what either does to the
@@ -32,8 +32,6 @@ export function LinkField({
   onCancel,
   onOpen,
   onRemove,
-  className,
-  style,
   ref,
 }: {
   /** The link already on the words, which the field opens holding. */
@@ -46,21 +44,18 @@ export function LinkField({
   onOpen?: (() => void) | undefined;
   /** Remove's press, offered where a link is already there. */
   onRemove?: (() => void) | undefined;
-  /** The owner's own class, which places it and nothing of its look. */
-  className?: string | undefined;
-  /** Where the owner places it. */
-  style?: CSSProperties | undefined;
   ref?: Ref<HTMLDivElement> | undefined;
 }): React.JSX.Element {
   const [typed, setTyped] = useState(href ?? "");
+  // Note that a field handed another link starts over from it, so Enter never applies the last one's words to it.
+  const [opened, setOpened] = useState(href);
+  if (opened !== href) {
+    setOpened(href);
+    setTyped(href ?? "");
+  }
   const linked = href !== undefined;
   return (
-    <MenuSurface
-      ref={ref}
-      className={className === undefined ? "luke-link-field" : `luke-link-field ${className}`}
-      flow={MENU_SURFACE_FLOW.ROW}
-      style={style}
-    >
+    <MenuSurface ref={ref} className="luke-link-field" flow={MENU_SURFACE_FLOW.ROW}>
       <TextField
         label={LINK_FIELD_WORDS.LABEL}
         type={TEXT_FIELD_TYPE.URL}

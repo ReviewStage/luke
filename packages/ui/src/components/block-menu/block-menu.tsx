@@ -4,7 +4,7 @@ import {
   type WritingAction,
   type WritingShortcut,
 } from "@luke/settings/shortcuts";
-import type { CSSProperties, ReactNode, Ref } from "react";
+import type { ReactNode, Ref } from "react";
 import { type ComboboxGroup, ComboboxList } from "../combobox/combobox.js";
 import { MENU_SURFACE_INSET, MenuSurface } from "../menu/menu-surface.js";
 import { type MenuKey, MenuKeys } from "../menu-keys/menu-keys.js";
@@ -23,8 +23,8 @@ import { WritingGlyph } from "../writing-glyph/writing-glyph.js";
  * (`comboboxOptionId`); the list takes only the pointer, which moves the
  * highlight as it passes and chooses a row it presses, the caret staying in
  * the editor. What is offered, narrowed as the words after the `/` are
- * typed, is its owner's; where nothing matches it says so. Its owner places
- * it.
+ * typed, is its owner's; where nothing matches it says so. It takes no
+ * class or style: its owner places it in a box of its own.
  */
 
 /** The menu's own name, which its listbox is read by. */
@@ -107,8 +107,6 @@ export function BlockMenu({
   active,
   onActiveChange,
   onChoose,
-  className,
-  style,
   ref,
 }: {
   /** The list's id, which the editor names in `aria-controls`. */
@@ -120,22 +118,13 @@ export function BlockMenu({
   onActiveChange: (active: number) => void;
   /** A row pressed. */
   onChoose: (row: BlockMenuRow) => void;
-  /** The owner's own class, which places it and nothing of its look. */
-  className?: string | undefined;
-  /** Where the owner places it. */
-  style?: CSSProperties | undefined;
   ref?: Ref<HTMLDivElement> | undefined;
 }): React.JSX.Element {
   // A group with nothing left in it after the owner's narrowing is not headed.
   const shown = groups.filter((group) => group.rows.length > 0);
   const rows = shown.flatMap((group) => group.rows);
   return (
-    <MenuSurface
-      ref={ref}
-      className={className === undefined ? "luke-block-menu" : `luke-block-menu ${className}`}
-      inset={MENU_SURFACE_INSET.NONE}
-      style={style}
-    >
+    <MenuSurface ref={ref} className="luke-block-menu" inset={MENU_SURFACE_INSET.NONE}>
       <ComboboxList
         id={id}
         label={BLOCK_MENU_LABEL}

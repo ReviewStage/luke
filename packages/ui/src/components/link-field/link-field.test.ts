@@ -9,7 +9,8 @@ import { LinkField } from "./link-field.js";
  * link-field.test.ts -- the popover a link is written in: it opens with the
  * caret in its field, holding the link already there; Enter hands its
  * owner the address typed, trimmed, and Escape gives up; Open and Remove
- * stand only beside a link already there, each told when pressed.
+ * stand only beside a link already there, each told when pressed; and a
+ * field handed another link starts over from it.
  */
 
 declare global {
@@ -30,26 +31,33 @@ afterEach(() => {
 /** What a test's field told its owner, in order. */
 type Told = string[];
 
-/** The field over words linked to `href`, or none. */
-function mount(href?: string): { popover: HTMLElement; field: HTMLInputElement; told: Told } {
+/** The field over words linked to `href`, or none, and a way to hand the same field another link. */
+function mount(href?: string): {
+  popover: HTMLElement;
+  field: HTMLInputElement;
+  told: Told;
+  relink: (href: string | undefined) => void;
+} {
   const told: Told = [];
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
   roots.push(root);
-  act(() =>
-    root.render(
-      createElement(LinkField, {
-        href,
-        onApply: (typed) => told.push(`apply ${typed}`),
-        onCancel: () => told.push("cancel"),
-        onOpen: () => told.push("open"),
-        onRemove: () => told.push("remove"),
-      }),
-    ),
-  );
+  const draw = (linked: string | undefined) =>
+    act(() =>
+      root.render(
+        createElement(LinkField, {
+          href: linked,
+          onApply: (typed) => told.push(`apply ${typed}`),
+          onCancel: () => told.push("cancel"),
+          onOpen: () => told.push("open"),
+          onRemove: () => told.push("remove"),
+        }),
+      ),
+    );
+  draw(href);
   const field = container.querySelector("input");
   if (field === null) throw new Error("the field is drawn");
-  return { popover: container, field, told };
+  return { popover: container, field, told, relink: draw };
 }
 
 /** Types `words` into `field` as a person would, replacing what it holds. */
@@ -104,4 +112,13 @@ test("a link already there opens in the field, with Open and Remove beside it", 
   expect(buttons(popover)).toEqual(["Open link", "Remove link"]);
   for (const button of popover.querySelectorAll("button")) act(() => button.click());
   expect(told).toEqual(["open", "remove"]);
+});
+
+test("a field handed another link starts over from it, so Enter applies what it shows", () => {
+  const { field, told, relink } = mount("https://a.example");
+  type(field, "https://a.example/half");
+  relink("https://b.example");
+  expect(field.value).toBe("https://b.example");
+  key(field, "Enter");
+  expect(told).toEqual(["apply https://b.example"]);
 });

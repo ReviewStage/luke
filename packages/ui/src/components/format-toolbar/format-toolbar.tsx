@@ -8,15 +8,7 @@ import {
   type WritingMark,
   type WritingShortcut,
 } from "@luke/settings/shortcuts";
-import {
-  type CSSProperties,
-  Fragment,
-  type KeyboardEvent,
-  type ReactNode,
-  type Ref,
-  useRef,
-  useState,
-} from "react";
+import { Fragment, type KeyboardEvent, type ReactNode, type Ref, useRef, useState } from "react";
 import { ChevronDownIcon, CommentAddIcon } from "../../face/glyphs.js";
 import { Button, IconButton } from "../button/button.js";
 import { dropBelowStart, useMenu } from "../menu/menu.js";
@@ -29,8 +21,8 @@ import { WritingGlyph } from "../writing-glyph/writing-glyph.js";
  * format-toolbar.tsx -- the toolbar over selected words: Turn into ▾, then Bold, Italic, Strikethrough, and Code, then Link, then Comment, each group a hairline apart.
  *
  * It stands on the menu's surface in toolbar flow, as the read view's
- * Comment bubble does, and its owner places it over the selection and
- * shows it. Each mark is a glyph that stands pressed while the selection
+ * Comment bubble does; it takes no class or style, so its owner places it
+ * over the selection in a box of its own, and shows it. Each mark is a glyph that stands pressed while the selection
  * wears it; Turn into names the block the selection is in and drops the
  * blocks it can become (`TurnIntoMenu`); Comment, with its words, starts a
  * comment on the words. Turn into and Comment are drawn only where the
@@ -193,16 +185,14 @@ function pressGroups(props: {
 }
 
 /**
- * The toolbar over a selection that wears `marks`, which its owner places
- * by `className` and `style` and shows while the selection stands.
+ * The toolbar over a selection that wears `marks`, shown while the
+ * selection stands, in a box of its owner's that places it.
  */
 export function FormatToolbar({
   marks,
   onMark,
   turnInto,
   onComment,
-  className,
-  style,
   ref,
 }: {
   /** The marks the whole selection wears, whose presses stand pressed. */
@@ -213,10 +203,6 @@ export function FormatToolbar({
   turnInto?: FormatToolbarTurnInto | undefined;
   /** Comment's press, where the words can be commented on. */
   onComment?: (() => void) | undefined;
-  /** The owner's own class, which places it and nothing of its look. */
-  className?: string | undefined;
-  /** Where the owner places it. */
-  style?: CSSProperties | undefined;
   ref?: Ref<HTMLDivElement> | undefined;
 }): React.JSX.Element {
   const buttons = useRef<(HTMLButtonElement | null)[]>([]);
@@ -239,11 +225,8 @@ export function FormatToolbar({
   return (
     <MenuSurface
       ref={ref}
-      className={
-        className === undefined ? "luke-format-toolbar" : `luke-format-toolbar ${className}`
-      }
+      className="luke-format-toolbar"
       flow={MENU_SURFACE_FLOW.TOOLBAR}
-      style={style}
       role="toolbar"
       aria-label={FORMAT_TOOLBAR_WORDS.GROUP}
       onKeyDown={rove}
