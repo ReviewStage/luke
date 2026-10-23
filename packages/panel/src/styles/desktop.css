@@ -401,9 +401,9 @@ body,
   flex: 1;
   padding-left: var(--row-inset);
   color: var(--luke-color-text-muted);
-  font-size: 11px;
+  font-size: var(--luke-type-eyebrow-size);
   font-weight: var(--luke-weight-semibold);
-  letter-spacing: 0.08em;
+  letter-spacing: var(--luke-type-eyebrow-tracking);
   text-transform: uppercase;
 }
 
@@ -2034,6 +2034,7 @@ ul.actor-stack {
 
 .desktop-document .markdown-heading[data-level="2"] {
   margin-top: 2.2em;
+  margin-bottom: 0.9em;
   color: var(--luke-color-text-muted);
   font-size: 0.72em;
   font-weight: var(--luke-weight-semibold);

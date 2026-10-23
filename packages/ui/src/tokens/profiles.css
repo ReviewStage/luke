@@ -46,6 +46,10 @@
   --luke-type-label-leading: 18px;
   --luke-type-caption-size: 12px;
   --luke-type-caption-leading: 16px;
+  /* A small, spaced, upper-case label naming the group under it: a
+     sidebar section's head, a plan's section. */
+  --luke-type-eyebrow-size: 11px;
+  --luke-type-eyebrow-tracking: 0.08em;
   --luke-type-section-size: 13px;
   --luke-type-section-leading: 18px;
   --luke-type-dialog-size: 15px;
@@ -175,6 +179,10 @@
   --luke-type-label-leading: 20px;
   --luke-type-caption-size: 12px;
   --luke-type-caption-leading: 16px;
+  /* A small, spaced, upper-case label naming the group under it: a
+     sidebar section's head, a plan's section. */
+  --luke-type-eyebrow-size: 11px;
+  --luke-type-eyebrow-tracking: 0.08em;
   --luke-type-section-size: 16px;
   --luke-type-section-leading: 24px;
   --luke-type-dialog-size: 20px;
