@@ -2520,6 +2520,13 @@ it.layer(getTestDB())("the coding-agent store's search of a workspace's agents",
         assert.deepEqual(yield* found(owner, "invite"), [titled.agentId]);
         assert.deepEqual(yield* found(owner, "GPT 5.1 Codex"), [untitled.agentId]);
         assert.deepEqual(yield* found(owner, "invitations"), [onTask.agentId]);
+        // Each word is found in the name or in the task's name, whichever holds it.
+        assert.deepEqual(yield* found(owner, "send  INVITATIONS"), [onTask.agentId]);
+        assert.deepEqual(yield* found(owner, "invitations send"), [onTask.agentId]);
+        assert.deepEqual(yield* found(owner, "reminder nothing"), []);
+        assert.deepEqual(yield* found(owner, "send 100%"), []);
+        // A query of only whitespace narrows nothing.
+        assert.equal((yield* found(owner, "  \t ")).length, 5);
         assert.deepEqual(yield* found(outsider, "invite"), []);
         assert.deepEqual(yield* found(outsider, "luke"), []);
       }),
