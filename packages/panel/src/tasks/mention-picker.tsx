@@ -124,9 +124,10 @@ import { useTaskStatus } from "./use-known-names.js";
  * Wherever the words stand in a workspace, the list offers its other
  * tasks too, as the window lists them, once a word is typed: each by its
  * name, its key beside it (`ACME-42`, `@luke/features/workspace-key`),
- * found by either, a pick written as the task's mention. Words that are a
- * task's key whole lead the list with that task, as words that read as a
- * date lead it with the date.
+ * found by either, a pick written as the task's mention; the plan's own is
+ * found by its key in the plan's group. Words that are a task's key whole
+ * lead the list with that task, as words that read as a date lead it with
+ * the date.
  *
  * Wherever the words stand in a workspace whose members the window has
  * read (`../member-directory.tsx`), the list offers its people too, each by
@@ -507,8 +508,13 @@ function pathRow(entry: RepositoryPath): MentionRow {
   };
 }
 
-/** The plan's rows: each section by its heading, a heading borne twice once for each section, then the plan itself; none where no plan stands. */
-function taskRows(taskId: string, taskName: string, text: string): MentionRow[] {
+/** The plan's rows: each section by its heading, a heading borne twice once for each section, then the plan itself, found by its name and its key; none where no plan stands. */
+function taskRows(
+  taskId: string,
+  taskName: string,
+  key: string | undefined,
+  text: string,
+): MentionRow[] {
   if (taskId === NO_TASK) return [];
   const headings = planSections(text).map((section) => section.heading);
   const anchors = sectionAnchors(headings);
@@ -529,7 +535,8 @@ function taskRows(taskId: string, taskName: string, text: string): MentionRow[] 
       mention: { kind: MENTION_KIND.TASK, taskId: taskId },
       name: taskName,
       detail: "The whole plan",
-      terms: taskName,
+      terms: key === undefined ? taskName : `${key} ${taskName}`,
+      key,
     },
   ];
 }
@@ -881,25 +888,27 @@ function groupsFor(
   }
   const bare = term.trim() === "";
   const files = bare || paths === undefined ? [] : best(paths.map(pathRow), term, PER_GROUP);
-  // The workspace's tasks are offered only once a word is typed, the task the words key leading the list.
+  const plan = { label: MENTION_GROUP.PLAN, rows: best(rows.plan, term, PER_GROUP) };
+  // The workspace's tasks are offered only once a word is typed.
   const tasks = {
     label: MENTION_GROUP.TASKS,
     rows: bare ? [] : best(rows.tasks, term, PER_GROUP),
   };
-  const leads = tasks.rows.some((row) => keyed(row, term));
+  // The group holding the task the words are the key of, the plan's own or another, leads the list.
+  const keyedGroup = [plan, tasks].find((group) => group.rows.some((row) => keyed(row, term)));
   const members = [
     { label: MENTION_GROUP.AGENTS, rows: best(rows.agents, term, PER_GROUP) },
     { label: MENTION_GROUP.PEOPLE, rows: best(rows.people, term, PER_GROUP) },
   ];
   const place = [
     { label: MENTION_GROUP.FILES, rows: files },
-    { label: MENTION_GROUP.PLAN, rows: best(rows.plan, term, PER_GROUP) },
-    ...(leads ? [] : [tasks]),
+    plan,
+    tasks,
     { label: MENTION_GROUP.PAGES, rows: best(rows.pages, term, PER_GROUP) },
-  ];
+  ].filter((group) => group !== keyedGroup);
   return [
     { label: MENTION_GROUP.DATES, rows: rows.dates },
-    ...(leads ? [tasks] : []),
+    ...(keyedGroup === undefined ? [] : [keyedGroup]),
     ...(membersFirst ? [...members, ...place] : [...place, ...members]),
     { label: MENTION_GROUP.PULL_REQUESTS, rows: best(rows.pullRequests, term, PER_GROUP) },
     { label: MENTION_GROUP.SKILLS, rows: best(rows.skills, term, PER_GROUP) },
@@ -1476,13 +1485,14 @@ export function useMentionPicker({
     listed.tasks.find((task) => task.id === taskId)?.workspaceId ??
     listed.workspaces.find((each) => each.slug !== undefined && each.slug === source?.workspace)
       ?.id;
-  const taskRowsOffered = open
-    ? workspaceTaskRows(
-        taskId,
-        listed.workspaces.find((each) => each.id === tasksWorkspaceId),
-        listed.tasks,
-      )
-    : [];
+  const tasksWorkspace = listed.workspaces.find((each) => each.id === tasksWorkspaceId);
+  const taskRowsOffered = open ? workspaceTaskRows(taskId, tasksWorkspace, listed.tasks) : [];
+  // The plan's own key, which finds the plan's row as another task's finds its.
+  const planNumber = listed.tasks.find((task) => task.id === taskId)?.number;
+  const planKey =
+    tasksWorkspace === undefined || planNumber === undefined
+      ? undefined
+      : taskKey(tasksWorkspace.name, planNumber);
   // The list is narrowed to the kind a key opened or whose word was typed, and searched by the words after it.
   const kinds = open
     ? kindsOf(source, self, skills, servers, people.length, taskRowsOffered.length, members)
@@ -1532,7 +1542,7 @@ export function useMentionPicker({
           scope,
           read,
           {
-            plan: taskRows(taskId, source.taskName, source.text()),
+            plan: taskRows(taskId, source.taskName, planKey, source.text()),
             tasks: taskRowsOffered,
             pages: pageRows(taskId, source.pages ?? NO_PAGES),
             // The members a mention tells are each named by their own task, so none is offered as the plan's own.

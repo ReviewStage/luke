@@ -145,7 +145,7 @@ const detailedRows = (page: HTMLElement) =>
       .join(" · "),
   );
 
-test("on a plan, a task's key typed whole leads the @ list with that task, its key beside it, a pick written as its mention; the plan itself and another workspace's tasks are not offered", async () => {
+test("on a plan, a task's key typed whole leads the @ list with that task, its key beside it, a pick written as its mention; the plan's own key leads with the plan, and another workspace's tasks are not offered", async () => {
   const workspace = (id: string, name: string, slug: string) => ({
     id,
     name,
@@ -189,9 +189,10 @@ test("on a plan, a task's key typed whole leads the @ list with that task, its k
     "Cut the release · STAG-421",
   ]);
   act(() => picker().onTrigger(word("STAG-1")));
-  assert.ok(
-    !detailedRows(page).some((row) => row.startsWith("Ship the palette · STAG-1")),
-    "the plan itself is not offered as another task",
+  assert.deepEqual(
+    detailedRows(page)[0],
+    "Ship the palette · The whole plan",
+    "the plan's own key leads with the plan's own row, not another task's",
   );
   act(() => picker().onTrigger(word("acme")));
   assert.ok(!rows(page).includes("Acme's own task"), "another workspace's task is not offered");
