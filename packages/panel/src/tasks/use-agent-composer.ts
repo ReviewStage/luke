@@ -127,6 +127,8 @@ interface Held {
   editing: string | undefined;
   /** The line a rewind under way, an edit's or a revert's, takes the agent back to just before, by its message id; none while none is out. */
   reverting: string | undefined;
+  /** When the newest edit or revert was pressed, in epoch milliseconds, which the working line counts from while it goes; none before one was. */
+  rewoundAt: number | undefined;
   /** The messages a rewind under way or just done drops, by their ids, hidden until the transcript reads back without them. */
   cut: ReadonlySet<string> | undefined;
   /** The Revert that did not go, which the note under the box is of and its Retry asks again. */
@@ -143,6 +145,7 @@ function fresh(agentId: string): Held {
     failed: undefined,
     editing: undefined,
     reverting: undefined,
+    rewoundAt: undefined,
     cut: undefined,
     revertFailed: undefined,
     closed: undefined,
@@ -216,6 +219,8 @@ export interface HeldComposer extends AgentComposerControl {
   readonly rewindOut: boolean;
   /** Whether a rewind is out, or the line an edit sent in its place has not been read back yet. */
   readonly rewinding: boolean;
+  /** When the newest edit or revert was pressed, in epoch milliseconds, which the working line counts from while it is rewinding; none before one was. */
+  readonly rewoundAt: number | undefined;
   /** Takes the agent back to just before one of the developer's lines, sending nothing. */
   readonly revert: (messageId: string) => void;
   /** The messages a rewind drops, hidden from the transcript until it reads back without them; none while none does. */
@@ -388,10 +393,12 @@ export function useAgentComposer(input: {
       state: SENT_LINE_STATE.PENDING,
       rewinds: messageId,
     };
+    const rewoundAt = Date.now();
     setHeld((was) => ({
       ...was,
       revertFailed: undefined,
       editing: undefined,
+      rewoundAt,
       cut: cutFrom(messages, messageId),
       sent: [...was.sent, line],
     }));
@@ -400,11 +407,13 @@ export function useAgentComposer(input: {
 
   /** Takes the agent back to just before the line named once every send before it has answered. */
   const revert = (messageId: string) => {
+    const rewoundAt = Date.now();
     setHeld((was) => ({
       ...was,
       revertFailed: undefined,
       editing: undefined,
       reverting: messageId,
+      rewoundAt,
       cut: cutFrom(messages, messageId),
     }));
     const before = queues.current.get(agentId) ?? Promise.resolve();
@@ -477,6 +486,7 @@ export function useAgentComposer(input: {
     dropEdit: () => setHeld((was) => ({ ...was, editing: undefined })),
     sendEdit,
     rewindOut: held.reverting !== undefined,
+    rewoundAt: held.rewoundAt,
     rewinding:
       held.reverting !== undefined ||
       held.sent.some(

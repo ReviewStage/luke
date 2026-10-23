@@ -42,6 +42,7 @@ import {
 } from "@luke/ui";
 import { ACTOR_KIND, ACTOR_STATE, type Actor } from "@luke/ui/actor-model";
 import { skillWord } from "@luke/ui/skill-mention";
+import { useDisclosure } from "@luke/ui/use-disclosure";
 import type { VirtualRowsHandle } from "@luke/ui/virtual-rows";
 import {
   callEndedLine,
@@ -1284,6 +1285,11 @@ export function AgentMessage({
   const words = messageWords(message);
   const forkOffered = useForkOffered();
   const editor = useMessageEdit(message.id);
+  // Note that a box let go stays drawn, on the doors it was last handed, until its exit has played.
+  const editing = useDisclosure(editor !== undefined);
+  const lastEditor = useRef(editor);
+  if (editor !== undefined) lastEditor.current = editor;
+  const drawnEditor = editor ?? (editing.mounted ? lastEditor.current : undefined);
   if (plan) {
     return (
       <PlanCard
@@ -1308,10 +1314,17 @@ export function AgentMessage({
     // An inbox answer or thread message reads back without the item's key, which is the agent's.
     const shown = inboxLineWords(words);
     // A line open for writing again is written where it stands.
-    if (editor !== undefined) {
+    if (drawnEditor !== undefined) {
       return (
         <Message from={message.role} data-message-id={message.id} data-editing="">
-          <EditComposer message={message} words={shown} edit={editor} />
+          <div
+            ref={editing.ref}
+            className="edit-composer"
+            data-leaving={editing.leaving ? "" : undefined}
+            inert={editing.leaving}
+          >
+            <EditComposer message={message} words={shown} edit={drawnEditor} />
+          </div>
         </Message>
       );
     }
@@ -2327,7 +2340,10 @@ function AgentTabView({
                     working={working || composer.rewinding}
                     rewindOut={composer.rewindOut}
                     sessionStarting={agent.status === CODING_AGENT_STATUS.STARTING}
-                    startedAt={startedAt}
+                    // Note that while a rewind goes the line counts from its press, never from the run before it, which is the agent's start until a new turn begins.
+                    startedAt={
+                      composer.rewinding && startedAt !== undefined ? composer.rewoundAt : startedAt
+                    }
                     ended={
                       // Note that the end line waits for a page, so a stopped agent's tab never draws it over nothing.
                       transcript.pages === 0

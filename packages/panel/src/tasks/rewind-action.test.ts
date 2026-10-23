@@ -133,9 +133,11 @@ test("an edit's send takes the agent back to just before the line, then sends th
   await act(async () => composer().edit("second-line"));
   await act(async () => composer().sendEdit("second-line", "second line, again", []));
   const meanwhile = composer().rewinding;
+  const pressedAt = composer().rewoundAt;
   await settle();
 
   assert.equal(meanwhile, true);
+  assert.ok(pressedAt !== undefined && Date.now() - pressedAt < 5_000, "it counts from the press");
   assert.deepEqual(calls, ["rewind:second-line", "send:second line, again"]);
   assert.equal(composer().editing, undefined);
   assert.equal(composer().draft, "Also update the tests.");
