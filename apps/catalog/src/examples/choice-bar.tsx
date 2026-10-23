@@ -11,13 +11,11 @@ import {
   ALIGN,
   AlertIcon,
   CHOICE_BAR_FOLD,
-  CHOICE_BAR_INSET,
   CHOICE_BAR_LOOK,
   CHOICE_BAR_SIZE,
   CheckIcon,
   ChoiceBar,
   type ChoiceBarFold,
-  type ChoiceBarInset,
   type ChoiceBarLook,
   type ChoiceBarSize,
   type ChoiceItem,
@@ -114,7 +112,6 @@ function HeldTabs<Value extends string>({
   start,
   look,
   size,
-  inset,
   fold,
   stretch,
 }: {
@@ -123,7 +120,6 @@ function HeldTabs<Value extends string>({
   start: Value;
   look: ChoiceBarLook;
   size?: ChoiceBarSize | undefined;
-  inset?: ChoiceBarInset | undefined;
   fold?: ChoiceBarFold | undefined;
   stretch?: boolean | undefined;
 }): React.JSX.Element {
@@ -140,7 +136,6 @@ function HeldTabs<Value extends string>({
         look={look}
         size={size}
         panels={panels}
-        inset={inset}
         fold={fold}
         stretch={stretch}
       />
@@ -223,13 +218,12 @@ function ChoiceBarExample(): React.JSX.Element {
           />
         </Stack>
       </CatalogSection>
-      <CatalogSection id="choice-bar-reading" title="Fill, set in to a reading measure">
+      <CatalogSection id="choice-bar-passing" title="Fill, a count with its glyph">
         <HeldTabs
           label="Pull request"
           items={VIEWS_PASSING}
           start={VIEW.CONVERSATION}
           look={CHOICE_BAR_LOOK.FILL}
-          inset={CHOICE_BAR_INSET.READING}
         />
       </CatalogSection>
       <CatalogSection id="choice-bar-plain" title="Fill, names alone">
