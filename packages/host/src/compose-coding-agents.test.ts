@@ -278,6 +278,7 @@ function fakeService() {
   // The newest page, as the follow opens with it; none answers one with something on it.
   let newestPage: CodingAgentNewestAnswer | { readonly failure: "unanswered" } | undefined;
   // The transaction a pin answers it committed in, where it answers one.
+  let startTxid: string | undefined;
   let pinTxid: string | undefined;
   // The transaction the service says each inbox write committed in; none says it changed nothing.
   let committedIn: { readonly txid?: string } = {};
@@ -312,7 +313,8 @@ function fakeService() {
     start: (taskId, request) =>
       Effect.sync(() => {
         asked.push(`start:${taskId}:${request.idempotencyKey}:${request.model ?? "default"}`);
-        return { agent: { ...AGENT, status: CODING_AGENT_STATUS.STARTING } };
+        const agent = { ...AGENT, status: CODING_AGENT_STATUS.STARTING };
+        return startTxid === undefined ? { agent } : { agent, txid: startTxid };
       }),
     startFrom: (request) =>
       Effect.sync(() => {
@@ -747,6 +749,10 @@ function fakeService() {
     sealAccount: (next: AccountInboxLiveAnswer | typeof LIVE_SIGNED_OUT | undefined) => {
       accountLive = next;
     },
+    /** The transaction a Start answers it committed in; none answers none. */
+    startCommits: (txid: string | undefined) => {
+      startTxid = txid;
+    },
     /** The transaction a pin answers it committed in; none answers none. */
     pinCommits: (txid: string | undefined) => {
       pinTxid = txid;
@@ -813,6 +819,7 @@ function subject(
       askedAsTold,
       asked: service.asked,
       pinCommits: service.pinCommits,
+      startCommits: service.startCommits,
       sealTranscript: service.sealTranscript,
       sealChat: service.sealChat,
       answerWrites: service.answerWrites,
@@ -2665,30 +2672,63 @@ it.effect(
 );
 
 it.effect(
-  "a sent message is confirmed once its row's transaction reached the transcript a window follows, and at once where none follows it",
+  "a sent message answers before its row's transaction reaches the transcript a window follows, so the next send is not held behind it",
   () =>
     Effect.gen(function* () {
-      const { call, sealTranscript, pageNow: script, sendTxid, realtime } = yield* subject();
+      const { call, sealTranscript, pageNow: script, sendTxid, realtime, asked } = yield* subject();
       sealTranscript(SEALED_TRANSCRIPT);
-      sendTxid("742");
-      const send = { agentId: AGENT_ID, text: "Use seven days.", clientKey: "send-1" };
-
-      // No window follows the transcript: nothing to wait on.
-      assert.deepEqual(yield* call(GATEWAY_METHOD.CODING_AGENTS_MESSAGE, send), { agent: AGENT });
-      assert.deepEqual(realtime.awaitingTxids(), []);
-
       script(pageNow("1:0", { holds: true }));
       yield* call(GATEWAY_METHOD.CODING_AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
       yield* settled;
       transcriptRows(realtime, 1);
       yield* settled;
-      const sending = yield* Effect.forkChild(call(GATEWAY_METHOD.CODING_AGENTS_MESSAGE, send));
-      yield* settled;
-      assert.deepEqual(realtime.awaitingTxids(), ["742"]);
-      assert.equal(sending.pollUnsafe(), undefined);
+      sendTxid("742");
 
-      realtime.arrive("742");
-      assert.deepEqual(yield* Fiber.join(sending), { agent: AGENT });
+      const first = yield* Effect.forkChild(
+        call(GATEWAY_METHOD.CODING_AGENTS_MESSAGE, {
+          agentId: AGENT_ID,
+          text: "Use seven days.",
+          clientKey: "send-1",
+        }),
+      );
+      yield* settled;
+      assert.notEqual(first.pollUnsafe(), undefined, "answered with its row still on its way");
+      assert.deepEqual(yield* Fiber.join(first), { agent: AGENT });
+
+      sendTxid("743");
+      assert.deepEqual(
+        yield* call(GATEWAY_METHOD.CODING_AGENTS_MESSAGE, {
+          agentId: AGENT_ID,
+          text: "And email them.",
+          clientKey: "send-2",
+        }),
+        { agent: AGENT },
+      );
+      assert.deepEqual(realtime.awaitingTxids(), []);
+      assert.deepEqual(
+        asked.filter((each) => each.startsWith("message:")),
+        [`message:${AGENT_ID}:send-1:Use seven days.`, `message:${AGENT_ID}:send-2:And email them.`],
+      );
+    }),
+);
+
+it.effect(
+  "a Start answers its agent before the task list carries the Start's transaction",
+  () =>
+    Effect.gen(function* () {
+      const { call, startCommits } = yield* subject({ listed: () => Effect.never });
+      startCommits("9104");
+
+      const starting = yield* Effect.forkChild(
+        call(GATEWAY_METHOD.CODING_AGENTS_START, { taskId: TASK_ID, idempotencyKey: "press-1" }),
+      );
+      yield* settled;
+
+      assert.notEqual(starting.pollUnsafe(), undefined, "answered with the list still behind");
+      assert.deepEqual(yield* Fiber.join(starting), {
+        agent: { ...AGENT, status: CODING_AGENT_STATUS.STARTING },
+        txid: "9104",
+      });
     }),
 );
 

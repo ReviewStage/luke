@@ -29,7 +29,7 @@ import {
   Stream,
   SubscriptionRef,
 } from "effect";
-import { confirmWrite, LiveBroken, type LiveClient, liveRows, type TxWait } from "./live-follow.js";
+import { LiveBroken, type LiveClient, liveRows } from "./live-follow.js";
 
 /**
  * transcript-follow.ts -- a coding agent's transcript, or one of its workers', followed here on a Neon Realtime subscription for the windows that draw it, each page told as it is read.
@@ -99,8 +99,6 @@ type Standing =
   | {
       readonly kind: "live";
       readonly state: SubscriptionRef.SubscriptionRef<LiveState>;
-      /** The wait for a write's transaction on the subscription standing now; none while it is polled or not yet live. */
-      readonly txWait: () => TxWait | undefined;
     }
   | { readonly kind: "refused" };
 
@@ -226,7 +224,6 @@ export function transcriptFollows<Key = TranscriptKey>(
         const first = yield* sealedOf(seal);
         if (Option.isNone(first)) return { kind: "refused" } as const;
         const state = yield* SubscriptionRef.make<LiveState>({ kind: "waiting" });
-        let txWait: TxWait | undefined;
         /** One seal followed until its subscription stops, which marks the state broken. */
         const follow = (sealed: AgentTranscriptLiveAnswer) =>
           Stream.runForEach(
@@ -236,9 +233,6 @@ export function transcriptFollows<Key = TranscriptKey>(
                 reseal: () => Effect.map(seal(false), followedAnswer),
                 poll: (after) => Effect.map(seal(true, after), followedAnswer),
                 now: dependencies.now,
-                onTxWait: (wait) => {
-                  txWait = wait;
-                },
               },
               followedRead(sealed),
             ),
@@ -269,7 +263,7 @@ export function transcriptFollows<Key = TranscriptKey>(
             }
           }),
         );
-        return { kind: "live", state, txWait: () => txWait } as const;
+        return { kind: "live", state } as const;
       }),
   });
 }
@@ -510,26 +504,3 @@ export function followTranscript<Key>(
   );
 }
 
-/**
- * Confirms a write to a transcript once its transaction has reached the
- * transcript's live subscription, so the page it moved is told first; at
- * once where the transcript is not followed, is polled, or the write
- * answered no transaction.
- */
-export function confirmTranscriptWrite<Key>(
-  follows: TranscriptFollows<Key>,
-  key: Key,
-  txid: string | undefined,
-): Effect.Effect<void> {
-  return Effect.gen(function* () {
-    if (txid === undefined || !(yield* RcMap.has(follows, key))) return;
-    yield* Effect.scoped(
-      Effect.flatMap(RcMap.get(follows, key), (standing) =>
-        standing.kind === "live" ? confirmWrite(standing.txWait(), txid) : Effect.void,
-      ),
-    ).pipe(
-      // A follow the service never sealed shows nothing to wait for.
-      Effect.catchTag("SealUnanswered", () => Effect.void),
-    );
-  });
-}
