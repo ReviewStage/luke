@@ -68,7 +68,7 @@ import { MessageRevealProvider } from "./tasks/message-links.js";
 import { type RepositoryRemedyDoors, RepositoryRemedyProvider } from "./tasks/repository-remedy.js";
 import { useTasksFixtureLanded } from "./tasks/tasks-fixture-loader.js";
 import { ThreadRevealProvider } from "./tasks/thread-reveal.js";
-import { ListedPullRequestsProvider, OpenLinkProvider } from "./tasks/use-open-link.js";
+import { ListedPullRequests, OpenLinkProvider } from "./tasks/use-open-link.js";
 import { type LeaveAsk, useLeaveGuard, useTasksTab } from "./tasks/use-tasks-tab.js";
 import { TOAST_HOLD, TOAST_TONE, ToastHost, useToast } from "./toast.js";
 import { useUpdatedToast } from "./update-toast.js";
@@ -790,7 +790,7 @@ function AppWindow(): React.JSX.Element {
   return (
     <OpenSettingsProvider value={openSettings}>
       <OpenLinkProvider value={openLukeLink}>
-        <ListedPullRequestsProvider value={listedTasks}>
+        <ListedPullRequests tasks={listedTasks}>
           <PageWorkspaceProvider value={copyLink.onPageWorkspace}>
             <OpenPersonProvider value={openPerson}>
               <OpenFeedbackProvider value={openFeedbackAbout}>
@@ -879,7 +879,7 @@ function AppWindow(): React.JSX.Element {
               </OpenFeedbackProvider>
             </OpenPersonProvider>
           </PageWorkspaceProvider>
-        </ListedPullRequestsProvider>
+        </ListedPullRequests>
       </OpenLinkProvider>
     </OpenSettingsProvider>
   );
