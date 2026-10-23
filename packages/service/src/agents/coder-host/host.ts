@@ -37,6 +37,7 @@ import type * as HttpClient from "effect/http/HttpClient";
 import type { MessageStreamEvent } from "eve/client";
 import type { SessionAuth, SessionContext } from "eve/context";
 import { MESSAGE_ROLE, type UnparsedWireValue, type WireRecord } from "../../core.js";
+import type { HostedEnvironment } from "../../environment.js";
 import type { GitHubApp } from "../../github/github-app.js";
 import { logStoreFailure } from "../../http/store-failure.js";
 import type { WorkspaceLinearConnect } from "../../integrations/integration-connect.js";
@@ -139,6 +140,12 @@ import {
   timeWithLead,
   turnKindWords,
 } from "./turn-context.js";
+import { CODER_TOOL } from "./tool-set.js";
+import {
+  NO_SHELL_ENVIRONMENT,
+  type ShellEnvironment,
+  workspaceShellEnvironment,
+} from "./workspace-environment.js";
 
 /**
  * host.ts -- the coding-agent host composed over eve and the store: what the coder project's authored files call.
@@ -353,6 +360,15 @@ export interface CoderHost extends HostAdmission {
    * still ends the turn in time.
    */
   sessionEnded(sessionId: string): Effect.Effect<void, never, DatabaseServices>;
+  /**
+   * The agent's workspace's variables and secrets, read now, for one shell
+   * command of the agent's or a worker's in its sandbox
+   * (`workspace-environment.ts`); none where the agent or its workspace's
+   * values could not be read, logged, so the command runs without them.
+   */
+  shellEnvironment(
+    admitted: AdmittedConversation,
+  ): Effect.Effect<ShellEnvironment, never, DatabaseServices | HostedEnvironment>;
   /**
    * Relays one event of a worker's session into the child conversation its
    * delegation was recorded under, as a child turn on the recorded pair; a
@@ -1002,6 +1018,22 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
         Effect.catchCause((cause) =>
           Effect.logWarning(
             `The turn of ended session ${sessionId} was not settled: ${causeKind(cause)}`,
+          ),
+        ),
+      ),
+
+    shellEnvironment: (admitted) =>
+      Effect.gen(function* () {
+        const agent = yield* agentOf(admitted);
+        if (Result.isFailure(agent)) return NO_SHELL_ENVIRONMENT;
+        return yield* workspaceShellEnvironment(agent.success.organizationId);
+      }).pipe(
+        Effect.catch((failure) =>
+          Effect.as(
+            Effect.logWarning(
+              `The agent of conversation ${admitted.target.conversationId} was not read for its environment: ${failure._tag}`,
+            ),
+            NO_SHELL_ENVIRONMENT,
           ),
         ),
       ),

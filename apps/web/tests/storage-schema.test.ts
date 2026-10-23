@@ -117,6 +117,7 @@ const DECLARED_TABLES = [
   "voice_sessions",
   "workspace_chat",
   "voice_transcript_segments",
+  "workspace_environment_variable",
   "workspace_integration_connection",
   "workspace_token_repository",
 ].sort();
