@@ -139,7 +139,7 @@ function wordCount(messages: readonly UIMessage[]): number {
  */
 export function heardCalls(input: {
   held: readonly HeardCall[];
-  /** The call standing, and its transcript as the document holds it (`voice.callTranscript`). */
+  /** The call standing, and its transcript as the document holds it (`callTranscript`, beside the voice slice). */
   voice: Pick<VoiceView, "call"> & { callTranscript: VoiceCallTranscript | undefined };
   agentId: string;
   now: number;

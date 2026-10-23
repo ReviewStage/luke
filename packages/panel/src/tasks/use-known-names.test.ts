@@ -151,7 +151,8 @@ test("the tasks' keys are handed again for a delivery that moves no key, and ane
   });
   const listeners = new Set<(snapshot: AppStateSnapshot) => void>();
   fakeAppBridge({
-    onAppState: (listener) => {
+    onAppState: (heard: (delivery: AppStateDelivery) => void) => {
+      const listener = (snapshot: AppStateSnapshot) => heard(deliveryOf(snapshot));
       listeners.add(listener);
       return () => listeners.delete(listener);
     },
