@@ -58,12 +58,12 @@ import { CODER } from "../agents/coder-host/bounds.js";
 import { codingAgentFailureOf, codingAgentStatusOf } from "../agents/coder-host/status.js";
 import { BRAIN_REQUEST_FAILURE, DAY_MS, TURN_STATUS } from "../core.js";
 import { isAdminRole } from "./admin-access.js";
-import { lastNDayKeys } from "./admin-metrics.js";
+import { dayStart, lastNDayKeys } from "./admin-metrics.js";
 import {
   AdminMetricsScopeSchema,
   AggregateColumnSchema,
+  findAccountFaces,
   keptByScope,
-  UserRoleSchema,
 } from "./admin-queries.js";
 import { ADMIN_ATTENTION_LIMIT, type AdminReliabilitySource } from "./admin-reliability.js";
 
@@ -376,30 +376,6 @@ const findBrokenInstallations = SqlSchema.findAll({
     ),
 });
 
-const findAttentionAccounts = SqlSchema.findAll({
-  Request: Schema.Array(Schema.String),
-  Result: Schema.Struct({
-    id: Schema.String,
-    name: Schema.String,
-    email: Schema.String,
-    image: Schema.NullOr(Schema.String),
-    role: UserRoleSchema,
-  }),
-  execute: (ids) =>
-    Database.use((db) =>
-      db
-        .select({
-          id: user.id,
-          name: user.name,
-          email: user.email,
-          image: user.image,
-          role: user.role,
-        })
-        .from(user)
-        .where(inArray(user.id, [...ids])),
-    ),
-});
-
 /** Each account's coding agents with a turn that failed since the bound, each agent once. */
 const findFailedAgentCounts = SqlSchema.findAll({
   Request: Schema.Struct({ ids: Schema.Array(Schema.String), since: Schema.Date }),
@@ -638,7 +614,7 @@ const readAttention = /* @__PURE__ */ Effect.fn("web/readReliabilityAttention")(
   const ids = listed.map((row) => row.id);
   const [accountRows, failedRows] = yield* Effect.all(
     [
-      findAttentionAccounts(ids),
+      findAccountFaces(ids),
       findFailedAgentCounts({ ids, since: new Date(now - ADMIN_ATTENTION_AGENT_DAYS * DAY_MS) }),
     ],
     { concurrency: "unbounded" },
@@ -707,7 +683,7 @@ export function readAdminReliabilitySource(input: {
 
     const windowStartDay = lastNDayKeys(input.now, input.windowDays)[0] ?? utcDayKey(input.now);
     const request = {
-      windowStart: new Date(`${windowStartDay}T00:00:00.000Z`),
+      windowStart: dayStart(windowStartDay),
       scope: input.scope,
     };
 

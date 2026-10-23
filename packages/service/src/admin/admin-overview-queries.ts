@@ -66,6 +66,8 @@ import {
   ADMIN_RETENTION_WEEKS,
   ADMIN_TREND_DAYS,
   type AdminMetricsSource,
+  cohortRetention,
+  dayStart,
   lastNDayKeys,
   lastNWeekStartKeys,
   utcWeekStartKey,
@@ -73,6 +75,8 @@ import {
 } from "./admin-metrics.js";
 import { ADMIN_OVERVIEW_ACCOUNTS_LIMIT, type AdminOverviewSource } from "./admin-overview.js";
 import {
+  ACCOUNT_FACE_COLUMNS,
+  ACCOUNT_FACE_FIELDS,
   AdminMetricsScopeSchema,
   type AdminQueryFailure,
   AggregateColumnSchema,
@@ -81,7 +85,6 @@ import {
   NullableAggregateColumnSchema,
   readAdminMetricsSource,
   SIGNUP_WEEK,
-  UserRoleSchema,
 } from "./admin-queries.js";
 
 const DailyCountSchema = Schema.Literals(Object.values(DAILY_COUNT));
@@ -505,11 +508,7 @@ const findReach = SqlSchema.findAll({
 const findTopAccounts = SqlSchema.findAll({
   Request: BoundScopeSchema,
   Result: Schema.Struct({
-    id: Schema.String,
-    name: Schema.String,
-    email: Schema.String,
-    image: Schema.NullOr(Schema.String),
-    role: UserRoleSchema,
+    ...ACCOUNT_FACE_FIELDS,
     activeDays: AggregateColumnSchema,
   }),
   execute: (request) => {
@@ -518,11 +517,7 @@ const findTopAccounts = SqlSchema.findAll({
     return Database.use((db) =>
       db
         .select({
-          id: user.id,
-          name: user.name,
-          email: user.email,
-          image: user.image,
-          role: user.role,
+          ...ACCOUNT_FACE_COLUMNS,
           activeDays,
         })
         .from(actions)
@@ -716,20 +711,8 @@ const readMeaningfulRetention = /* @__PURE__ */ Effect.fn("web/readMeaningfulRet
     ],
     { concurrency: "unbounded" },
   );
-  const cohortSizes = new Map(sizeRows.map((row) => [row.week, row.value]));
-  const activeByCohortWeek = new Map<string, Map<string, number>>();
-  for (const row of activeRows) {
-    const byWeek = activeByCohortWeek.get(row.signupWeek) ?? new Map<string, number>();
-    byWeek.set(row.activityWeek, row.value);
-    activeByCohortWeek.set(row.signupWeek, byWeek);
-  }
-  return { cohortSizes, activeByCohortWeek };
+  return cohortRetention(sizeRows, activeRows);
 });
-
-/** The start of a UTC day key, as the instant a bound compares against. */
-function dayStart(day: string): Date {
-  return new Date(`${day}T00:00:00.000Z`);
-}
 
 /**
  * Reads everything the Overview shows beyond signups, retention's hosted

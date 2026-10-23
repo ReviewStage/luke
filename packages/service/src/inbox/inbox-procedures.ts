@@ -180,6 +180,57 @@ const takenAnswer = /* @__PURE__ */ Effect.fnUntraced(function* (
 });
 
 /**
+ * An answer taken, handed to its item's agent as the member's message under
+ * the answer's key through the one steer path (`coder-host/steer.ts`), then
+ * counted and the agent's task settled where the answer finished its work.
+ * A hand-off that fails, is interrupted, or dies takes the answer back, so
+ * an item never reads answered while the agent was not told; an agent whose
+ * session has ended for good can hear nothing again, so its item keeps the
+ * answer.
+ */
+const handedAnswer = /* @__PURE__ */ Effect.fnUntraced(function* (
+  seams: InboxProcedureSeams,
+  writer: Effect.Effect<StoreWriter>,
+  request: Request,
+  userId: string,
+  itemId: string,
+  agentId: string,
+  message: {
+    readonly text: string;
+    readonly clientKey: string;
+    readonly attachments: readonly CodingAgentAttachment[];
+  },
+  counted: Effect.Effect<void>,
+) {
+  const { text, clientKey, attachments } = message;
+  const handedOver = Effect.gen(function* () {
+    const agent = yield* hostedStoreOrUnavailable(readCodingAgent(userId, agentId));
+    if (Option.isNone(agent)) return yield* Effect.fail(HOSTED_REFUSAL.AGENT_RETIRED);
+    const eve = yield* eveFor<EveTypedTurn>(seams, request, userId);
+    yield* steerCodingAgent(eve, writer, userId, agent.value, {
+      text,
+      attachments,
+      clientKey,
+      sender: { kind: MESSAGE_SENDER.MEMBER, userId },
+    });
+  });
+  yield* handedOver.pipe(
+    Effect.catchIf(retiredRefusal, () => Effect.void),
+    Effect.onError(() =>
+      withdrawInboxAnswer(userId, itemId, clientKey).pipe(
+        Effect.tapError(logStoreFailure),
+        Effect.ignore,
+      ),
+    ),
+  );
+  // Counted only once the hand-off stands, since a failed one withdraws the answer above.
+  yield* counted;
+  // The question settled may have finished the task's work, asked once the agent was told, so one
+  // woken by the answer reads as running (`tasks/task-finish.ts`).
+  yield* settleAgentTaskIfFinished(userId, agentId);
+});
+
+/**
  * Answers one item of a task of the account's workspaces, whichever
  * member started its agent. An answer naming a revision the agent has
  * since moved on from, or an item no longer open, is answered with the
@@ -233,32 +284,17 @@ const answered = /* @__PURE__ */ Effect.fnUntraced(function* (
     yield* settleAgentTaskIfFinished(userId, taken.agentId);
     return { item: taken, taken: true, ...writtenIn };
   }
-  const answer = taken.answer;
-  const handedOver = Effect.gen(function* () {
-    const agent = yield* hostedStoreOrUnavailable(readCodingAgent(userId, taken.agentId));
-    if (Option.isNone(agent)) return yield* Effect.fail(HOSTED_REFUSAL.AGENT_RETIRED);
-    const eve = yield* eveFor<EveTypedTurn>(seams, request, userId);
-    yield* steerCodingAgent(eve, writer, userId, agent.value, {
-      text: inboxAnswerMessage(taken, answer),
-      attachments,
-      clientKey,
-      sender: { kind: MESSAGE_SENDER.MEMBER, userId },
-    });
-  });
-  yield* handedOver.pipe(
-    Effect.catchIf(retiredRefusal, () => Effect.void),
-    Effect.onError(() =>
-      withdrawInboxAnswer(userId, itemId, clientKey).pipe(
-        Effect.tapError(logStoreFailure),
-        Effect.ignore,
-      ),
-    ),
+  const text = inboxAnswerMessage(taken, taken.answer);
+  yield* handedAnswer(
+    seams,
+    writer,
+    request,
+    userId,
+    itemId,
+    taken.agentId,
+    { text, clientKey, attachments },
+    counted,
   );
-  // Counted only once the hand-off stands, since a failed one withdraws the answer above.
-  yield* counted;
-  // The question settled may have finished the task's work, asked once the agent was told, so one
-  // woken by the answer reads as running (`tasks/task-finish.ts`).
-  yield* settleAgentTaskIfFinished(userId, taken.agentId);
   return { item: taken, taken: true, ...writtenIn };
 });
 
@@ -314,29 +350,21 @@ const answeredByReply = /* @__PURE__ */ Effect.fnUntraced(function* (
     yield* settleAgentTaskIfFinished(userId, item.agentId);
     return { item, ...writtenIn };
   }
-  const handedOver = Effect.gen(function* () {
-    const agent = yield* hostedStoreOrUnavailable(readCodingAgent(userId, item.agentId));
-    if (Option.isNone(agent)) return yield* Effect.fail(HOSTED_REFUSAL.AGENT_RETIRED);
-    const eve = yield* eveFor<EveTypedTurn>(seams, request, userId);
-    yield* steerCodingAgent(eve, writer, userId, agent.value, {
-      text: inboxAnswerMessage(item, reply, inboxTodoTicks(item, answers, answered.value.ask)),
-      attachments,
-      clientKey,
-      sender: { kind: MESSAGE_SENDER.MEMBER, userId },
-    });
-  });
-  yield* handedOver.pipe(
-    Effect.catchIf(retiredRefusal, () => Effect.void),
-    Effect.onError(() =>
-      withdrawInboxAnswer(userId, itemId, clientKey).pipe(
-        Effect.tapError(logStoreFailure),
-        Effect.ignore,
-      ),
-    ),
+  const message = inboxAnswerMessage(
+    item,
+    reply,
+    inboxTodoTicks(item, answers, answered.value.ask),
   );
-  // Counted only once the hand-off stands, since a failed one withdraws the answer above.
-  yield* counted;
-  yield* settleAgentTaskIfFinished(userId, item.agentId);
+  yield* handedAnswer(
+    seams,
+    writer,
+    request,
+    userId,
+    itemId,
+    item.agentId,
+    { text: message, clientKey, attachments },
+    counted,
+  );
   return { item, ...writtenIn };
 });
 

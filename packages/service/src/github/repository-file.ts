@@ -14,14 +14,14 @@
 
 import { Effect, type Redacted, Result, Schema } from "effect";
 import { Base64 } from "effect/encoding";
-import * as HttpClient from "effect/http/HttpClient";
+import type * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import {
-  GITHUB_FAILURE,
   GITHUB_HTTP_STATUS,
-  GitHubUnavailable,
+  type GitHubUnavailable,
   githubRead,
   readBody,
+  send,
 } from "./github-app.js";
 
 /** What GitHub answers for a regular file: its size, and its bytes in base64 where it carries them (up to a megabyte). */
@@ -85,17 +85,9 @@ export function readRepositoryFile(
     const request = githubRead(`/repos/${repository.fullName}/contents/${encoded}`, token).pipe(
       HttpClientRequest.setUrlParams({ ref }),
     );
-    const client = yield* HttpClient.HttpClient;
     return yield* Effect.scoped(
       Effect.gen(function* () {
-        const response = yield* Effect.mapError(
-          client.execute(request),
-          (error) =>
-            new GitHubUnavailable({
-              reason: GITHUB_FAILURE.TRANSPORT,
-              status: error.response?.status,
-            }),
-        );
+        const response = yield* send(request);
         if (response.status === GITHUB_HTTP_STATUS.NOT_FOUND) return NOT_FOUND;
         const answer = yield* readBody(response, ContentsSchema);
         if (!Schema.is(FileContentsSchema)(answer)) return NOT_REGULAR;
@@ -128,17 +120,9 @@ export function readBranchHead(
     // Note that a branch's name may hold a slash, which stays a step of the ref's path.
     const ref = branch.split("/").map(encodeURIComponent).join("/");
     const request = githubRead(`/repos/${repository.fullName}/git/ref/heads/${ref}`, token);
-    const client = yield* HttpClient.HttpClient;
     return yield* Effect.scoped(
       Effect.gen(function* () {
-        const response = yield* Effect.mapError(
-          client.execute(request),
-          (error) =>
-            new GitHubUnavailable({
-              reason: GITHUB_FAILURE.TRANSPORT,
-              status: error.response?.status,
-            }),
-        );
+        const response = yield* send(request);
         if (response.status === GITHUB_HTTP_STATUS.NOT_FOUND) return undefined;
         const answer = yield* readBody(response, BranchRefSchema);
         return answer.object.sha;
@@ -168,17 +152,9 @@ export function readCommitSha(
       `/repos/${repository.fullName}/commits/${encodeURIComponent(ref)}`,
       token,
     );
-    const client = yield* HttpClient.HttpClient;
     return yield* Effect.scoped(
       Effect.gen(function* () {
-        const response = yield* Effect.mapError(
-          client.execute(request),
-          (error) =>
-            new GitHubUnavailable({
-              reason: GITHUB_FAILURE.TRANSPORT,
-              status: error.response?.status,
-            }),
-        );
+        const response = yield* send(request);
         if (
           response.status === GITHUB_HTTP_STATUS.NOT_FOUND ||
           response.status === GITHUB_HTTP_STATUS.UNPROCESSABLE

@@ -54,6 +54,7 @@ import { Effect, Option, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
 import { isAdminRole, USER_ROLE } from "./admin-access.js";
 import { lastNDayKeys } from "./admin-metrics.js";
+import { ACCOUNT_FACE_COLUMNS, ACCOUNT_FACE_FIELDS } from "./admin-queries.js";
 import { searchLikePattern } from "./admin-users.js";
 import {
   ADMIN_WORKSPACES_ACTIVITY_DAYS,
@@ -65,7 +66,7 @@ import type { AdminSeamEffect } from "./seam.js";
 /** The fewest members a workspace has to count as shared. */
 const SHARED_MEMBERS = 2;
 
-const UserRoleSchema = Schema.NullOr(Schema.Literals(Object.values(USER_ROLE)));
+const _UserRoleSchema = Schema.NullOr(Schema.Literals(Object.values(USER_ROLE)));
 
 const ScopeSchema = Schema.Literals([ADMIN_METRICS_SCOPE.NON_ADMINS, ADMIN_METRICS_SCOPE.ALL]);
 
@@ -228,22 +229,14 @@ const findOwners = SqlSchema.findAll({
   Request: OrganizationIdsSchema,
   Result: Schema.Struct({
     organizationId: Schema.String,
-    id: Schema.String,
-    name: Schema.String,
-    email: Schema.String,
-    image: Schema.NullOr(Schema.String),
-    role: UserRoleSchema,
+    ...ACCOUNT_FACE_FIELDS,
   }),
   execute: (organizationIds) =>
     Database.use((db) =>
       db
         .select({
           organizationId: member.organizationId,
-          id: user.id,
-          name: user.name,
-          email: user.email,
-          image: user.image,
-          role: user.role,
+          ...ACCOUNT_FACE_COLUMNS,
         })
         .from(member)
         .innerJoin(user, eq(user.id, member.userId))
