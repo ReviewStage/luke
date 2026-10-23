@@ -3632,7 +3632,7 @@ test("the chosen item keeps its place when its own plan folds, so J still reache
   act(() => keys.unmount());
 });
 
-test("a settled item offers, over its box, the next item that needs you, by its agent's tile and title and J where J reaches it, a press opening it; an item that waits offers none", async () => {
+test("a settled item offers, over its box, the next item that needs you as the Inbox draws it: its agent's tile, its title, the attention mark at its end and J where J reaches it, and its card hung beside it, a press opening it; an item that waits offers none", async () => {
   const { page } = mount();
   await settle();
   const offered = () =>
@@ -3642,8 +3642,16 @@ test("a settled item offers, over its box, the next item that needs you, by its 
   act(() => rowNamed(page, "How is a failed email retried?").click());
   const next = offered();
   assert.ok(next, "the settled item offers the next");
-  assert.equal(wordsOf(next), "NextAlert at 80%?J");
+  assert.equal(next.querySelector(".inbox-next-title")?.textContent, "Alert at 80%?");
+  assert.ok(next.querySelector(".inbox-row-attention"), "it needs you, as its row says");
+  assert.ok(wordsOf(next)?.endsWith("J"), "the key stands last");
   assert.ok(wearsAgentTile(next), "the next item's agent stands by its tile");
+  assert.equal(next.querySelector("[data-agent-ref]"), null, "the tile hangs no card of its own");
+  assert.match(
+    hoveredCard(next, "[data-inbox-row-card]") ?? "",
+    /^Billing usage alerts.*Alert at 80%\?.*Needs you/u,
+    "the card is the item's own",
+  );
   act(() => next.click());
   assert.equal(readTitle(page), "Alert at 80%?");
   assert.equal(offered(), null);
@@ -3669,7 +3677,8 @@ test("Next follows the way the keys last went: after K it offers the nearest ite
 
   pressKey("j");
   assert.equal(readTitle(page), "How is a failed email retried?");
-  assert.equal(wordsOf(offered()), "NextExpire after 7 days?J");
+  assert.equal(offered()?.querySelector(".inbox-next-title")?.textContent, "Expire after 7 days?");
+  assert.ok(wordsOf(offered())?.endsWith("J"));
   assert.equal(offered()?.getAttribute("aria-keyshortcuts"), "J");
 
   pressKey("j");
@@ -3677,7 +3686,9 @@ test("Next follows the way the keys last went: after K it offers the nearest ite
   assert.equal(readTitle(page), "How is a failed email retried?");
   const next = offered();
   assert.ok(next, "the settled item offers the next");
-  assert.equal(wordsOf(next), "Next ↑Alert at 80%?K");
+  assert.equal(next.querySelector(".inbox-next-lead")?.textContent, "Next ↑");
+  assert.equal(next.querySelector(".inbox-next-title")?.textContent, "Alert at 80%?");
+  assert.ok(wordsOf(next)?.endsWith("K"));
   assert.equal(next.getAttribute("aria-keyshortcuts"), "K");
   act(() => next.click());
   assert.equal(readTitle(page), "Alert at 80%?");

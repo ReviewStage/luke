@@ -61,7 +61,6 @@ import type { HeadingsChange, MentionNode, MentionNodeDoors } from "../plan-edit
 import { APP_STATE_HELD, useAppSlice } from "../use-app-state.js";
 import {
   AutomationChipCard,
-  InboxItemChipCard,
   PageChipCard,
   PersonChipCard,
   SectionChipCard,
@@ -78,6 +77,7 @@ import {
 import { FileCard } from "./file-ref.js";
 import { shortCommit } from "./file-tab-model.js";
 import { FileTypeIcon } from "./file-type-icon.js";
+import { InboxItemChipCard, InboxItemChipGlyph } from "./inbox-item-chip.js";
 import { IssueMark } from "./issue-mark.js";
 import { MentionedAgentCard, ReadAgentModel } from "./mentioned-agent-card.js";
 import { OpenedNote, PullRequestCardNotes } from "./pull-request-card-notes.js";
@@ -872,8 +872,9 @@ function PlaceGlyph({
       return <CommentsIcon />;
     case LINK_PLACE.MESSAGE:
       return <MessageSquareIcon aria-hidden="true" />;
-    case LINK_PLACE.INBOX:
     case LINK_PLACE.INBOX_ITEM:
+      return <InboxItemChipGlyph place={place} />;
+    case LINK_PLACE.INBOX:
       return <InboxIcon aria-hidden="true" />;
     case LINK_PLACE.AUTOMATIONS:
       return <ZapIcon aria-hidden="true" />;
@@ -998,7 +999,7 @@ function PlaceCard({
     case LINK_PLACE.PERSON:
       return <PersonChipCard userId={place.userId} workspace={workspace} fallback={fallback} />;
     case LINK_PLACE.INBOX_ITEM:
-      return <InboxItemChipCard itemId={place.itemId} fallback={fallback} />;
+      return <InboxItemChipCard place={place} fallback={fallback} />;
     case LINK_PLACE.AUTOMATION:
     case LINK_PLACE.AUTOMATION_RUN:
       return (
