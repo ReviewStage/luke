@@ -47,6 +47,32 @@ const TRANSCRIPT: readonly CodingAgentMessage[] = [
   message("third-reply", MESSAGE_ROLE.ASSISTANT),
 ];
 
+test("Edit writes again a person's lines, a teammate's among them, and never an automation's, GitHub's, or another agent's, which a reply still reverts to", () => {
+  const lines: readonly CodingAgentMessage[] = [
+    message("plan", MESSAGE_ROLE.USER),
+    message("first-reply", MESSAGE_ROLE.ASSISTANT),
+    {
+      ...message("teammate", MESSAGE_ROLE.USER),
+      sentBy: { name: "Charles", userId: "user-2", kind: "member" },
+    },
+    message("teammate-reply", MESSAGE_ROLE.ASSISTANT),
+    {
+      ...message("automation", MESSAGE_ROLE.USER),
+      sentBy: { name: "Nightly", kind: "automation" },
+    },
+    message("automation-reply", MESSAGE_ROLE.ASSISTANT),
+    { ...message("github", MESSAGE_ROLE.USER), sentBy: { name: "octocat", kind: "github" } },
+    message("github-reply", MESSAGE_ROLE.ASSISTANT),
+    { ...message("agent", MESSAGE_ROLE.USER), sentBy: { name: "Jack", agent: true } },
+  ];
+
+  const { editable, revertsAt } = rewindPoints(lines);
+
+  assert.deepEqual([...editable].toSorted(), ["plan", "teammate"]);
+  assert.equal(revertsAt.get("teammate-reply"), "automation");
+  assert.equal(revertsAt.get("github-reply"), "agent");
+});
+
 test("Edit writes again every line that opened a turn, the first included, and a reply reverts to the next of them", () => {
   const { editable, revertsAt } = rewindPoints(TRANSCRIPT);
 

@@ -1,7 +1,11 @@
-import type { CodingAgentAttachment, CodingAgentMessage } from "@luke/features/coding-agent-wire";
+import {
+  CODING_AGENT_SENDER,
+  type CodingAgentAttachment,
+  type CodingAgentMessage,
+} from "@luke/features/coding-agent-wire";
 import { ConfirmDialog, type DialogQuestion, useConfirmDialog } from "@luke/ui";
 import { ACTION_RESULT_STATUS, MESSAGE_ROLE } from "@luke/wire";
-import { PencilIcon, RotateCcwIcon } from "lucide-react";
+import { PencilIcon, Undo2Icon } from "lucide-react";
 import { createContext, type ReactNode, useContext } from "react";
 import { MessageAction } from "../ai-elements/message.js";
 import type { EditComposerDoors } from "./edit-composer.js";
@@ -69,12 +73,31 @@ interface RewindDoors {
 
 const RewindContext = createContext<RewindDoors | undefined>(undefined);
 
+/** The kinds of sender whose lines are a person's: a member, and a member who has since left. */
+const PERSON_SENDERS: ReadonlySet<string> = new Set([
+  CODING_AGENT_SENDER.MEMBER,
+  CODING_AGENT_SENDER.FORMER,
+]);
+
 /**
- * Where a transcript's rewinds land: the developer's lines that opened a
+ * Whether a person wrote the line, the reader or a teammate, which Edit
+ * writes again: no sender kept, as on a line from before senders were, or a
+ * member's. Luke from a call, an automation, GitHub, and another agent write
+ * lines no person said, which Revert to here still drops.
+ */
+function writtenByPerson(message: CodingAgentMessage): boolean {
+  const sender = message.sentBy;
+  if (sender === undefined) return true;
+  return sender.agent !== true && (sender.kind === undefined || PERSON_SENDERS.has(sender.kind));
+}
+
+/**
+ * Where a transcript's rewinds land: the lines a person wrote that opened a
  * turn, the first included, each one Edit may write again, and, for each
- * reply, the next such line, which its Revert to here drops from. Note that
- * a plan the agent was handed is drawn as its card, which offers no Edit, so
- * only a first line drawn as the developer's own bubble is written again.
+ * reply, the next line that opened a turn, whoever sent it, which its Revert
+ * to here drops from. Note that a plan the agent was handed is drawn as its
+ * card, which offers no Edit, so only a first line drawn as a bubble is
+ * written again.
  */
 export function rewindPoints(messages: readonly CodingAgentMessage[]): {
   readonly editable: ReadonlySet<string>;
@@ -89,7 +112,7 @@ export function rewindPoints(messages: readonly CodingAgentMessage[]): {
     if (message === undefined) continue;
     if (message.role === MESSAGE_ROLE.USER) {
       if (message.arrivedIn !== undefined) continue;
-      editable.add(message.id);
+      if (writtenByPerson(message)) editable.add(message.id);
       next = message.id;
     } else if (next !== undefined) {
       revertsAt.set(message.id, next);
@@ -141,7 +164,7 @@ export function RevertMessageAction({ messageId }: { messageId: string }): React
         tooltip={REWIND_WORDS.REVERT}
         onClick={confirm.ask}
       >
-        <RotateCcwIcon />
+        <Undo2Icon />
       </MessageAction>
       <ConfirmDialog confirm={confirm} question={REVERT_QUESTION} />
     </>
