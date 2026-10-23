@@ -29,17 +29,20 @@ import {
   DisclosureBody,
   DisclosureChevron,
   DisclosureSummary,
+  GAP,
   GLYPH_ARRIVAL,
   GLYPH_INK,
   GlyphSlot,
   INLINE_REF_LOOK,
   InlineRef,
+  LAYOUT_ELEMENT,
   LineButton,
   LineSummary,
   OneLine,
   ProviderMark,
   RollingNumber,
   Shimmer,
+  Stack,
   TEXT_ELEMENT,
   TEXT_TONE,
   TEXT_VARIANT,
@@ -1257,13 +1260,13 @@ function TodoItems({
   live: boolean;
 }): ReactNode {
   return (
-    <ul className="todo-items">
+    <Stack as={LAYOUT_ELEMENT.UL} gap={GAP.TIGHT} className="todo-items">
       {todos.map((todo, index) => (
         // Note that an item's place is its identity, so a write that moves
         // an item on is drawn as that item changing where it stands.
         <TodoItem key={index} todo={todo} live={live} />
       ))}
-    </ul>
+    </Stack>
   );
 }
 

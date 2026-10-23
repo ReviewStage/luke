@@ -481,9 +481,9 @@ test("find opened in the List is let go as the Board is chosen", async () => {
   act(() => {
     assert.ok(runAppCommand(APP_COMMAND.FIND), "the List offers find");
   });
-  assert.ok(page.querySelector("search[aria-label='Find']"), "the List's find bar stands");
+  assert.ok(page.querySelector("[role='search'][aria-label='Find']"), "the List's find bar stands");
   act(() => buttonNamed(page, "Board").click());
-  assert.equal(page.querySelector("search[aria-label='Find']"), null);
+  assert.equal(page.querySelector("[role='search'][aria-label='Find']"), null);
 });
 
 test("a row's words said to a screen reader alone are left out of find, so a key searched is found once", async () => {

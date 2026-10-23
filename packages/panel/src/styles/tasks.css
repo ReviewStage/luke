@@ -2597,12 +2597,7 @@
 }
 
 .chapter-key-changes > ul {
-  display: flex;
-  flex-direction: column;
-  gap: var(--luke-space-8);
-  margin: var(--luke-space-4) 0 0;
-  padding: 0;
-  list-style: none;
+  margin-top: var(--luke-space-4);
 }
 
 /* A key change's card, `@luke/ui`'s outlined Card: the words take its
@@ -3493,15 +3488,6 @@
 }
 
 /* The comments and reviews, oldest first, each boxed under its head. */
-.pull-request-conversation {
-  display: flex;
-  flex-direction: column;
-  gap: var(--luke-space-8);
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
 .pull-request-entry {
   display: flex;
   min-width: 0;
@@ -3545,17 +3531,6 @@
 .pull-request-entry .changes-comment-state {
   flex: 0 0 auto;
   white-space: nowrap;
-}
-
-/* A review's threads on lines, under its words, each on the annotation
-   card (`.annotation-card`). */
-.pull-request-threads {
-  display: flex;
-  flex-direction: column;
-  gap: var(--luke-space-6);
-  margin: 0;
-  padding: 0;
-  list-style: none;
 }
 
 /* A Conversation thread's card answers its own width, as one on a line does. */
@@ -3825,15 +3800,6 @@
   padding-left: var(--annotation-face-x);
 }
 
-.annotation-comments {
-  display: flex;
-  flex-direction: column;
-  gap: var(--luke-space-12);
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
 .annotation-comment {
   display: grid;
   min-width: 0;
@@ -3961,16 +3927,6 @@
    a row of pills, each its emoji and how many gave it, the reader's own lit.
    A pill the reader may press is `@luke/ui`'s compact filter Chip; one they
    may not is a Badge, lit in the ink as a pressed one is. */
-.pull-request-reactions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--luke-space-4);
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
 .pull-request-section > .pull-request-reactions {
   margin-top: var(--luke-space-8);
   padding-inline: var(--row-inset);
@@ -4889,13 +4845,7 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
 .todo-items {
   --state-glyph-size: 14px;
 
-  display: flex;
-  flex-direction: column;
-  gap: var(--luke-space-4);
-  margin: 0;
-  padding: 0;
   line-height: var(--luke-type-body-leading);
-  list-style: none;
 }
 
 .todo-item {
@@ -5319,21 +5269,6 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
    the box's words, and over the developer's bubble in the transcript, at its
    right as the bubble is; and the pictures a call answered
    (`agent-pictures.tsx`), on the same chips. */
-.attached-files {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--luke-space-8);
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-/* A message box's row stands hidden while it holds no file, so its first
-   file arrives into a list that stood (`attached-file-chips.tsx`). */
-.attached-files[hidden] {
-  display: none;
-}
-
 .agent-composer .attached-files {
   padding: var(--luke-space-12) var(--luke-space-12) 0;
 }
@@ -6212,17 +6147,6 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
    wrapping where the page is narrow, each its issue's mark, its key in the
    code face, and its title cut short at a chip's widest, and Link issue,
    quiet, at the row's end. What did not land is said under the row. */
-.task-issue-links-rows {
-  display: flex;
-  min-width: 0;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--luke-space-6);
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
 .task-issue-link,
 .task-issue-links-add {
   display: flex;

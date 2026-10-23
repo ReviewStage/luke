@@ -24,8 +24,10 @@ import {
   ErrorState,
   Fill,
   FolderIcon,
+  GAP,
   HoldPress,
   IconButton,
+  LAYOUT_ELEMENT,
   ListMotion,
   MarkDoneIcon,
   motionKey,
@@ -44,6 +46,7 @@ import {
   Shortcut,
   Skeleton,
   SkeletonRegion,
+  Stack,
   Tooltip,
   UNASSIGNED_WORDS,
   UnpinIcon,
@@ -427,7 +430,13 @@ function TaskRows({
   });
   const drawn = useLeaving(rows, taskRowKey);
   return (
-    <ul className="sidebar-tasks" {...motionRows()} onPointerDown={drag}>
+    <Stack
+      as={LAYOUT_ELEMENT.UL}
+      gap={GAP.ROW}
+      className="sidebar-tasks"
+      moves
+      onPointerDown={drag}
+    >
       {drawn.map(({ value: row }) =>
         row.kind === TASK_ROW.TASK ? (
           <SidebarTask
@@ -462,7 +471,7 @@ function TaskRows({
           />
         ),
       )}
-    </ul>
+    </Stack>
   );
 }
 
@@ -642,10 +651,12 @@ function PinnedRows({
   const drawn = useLeaving(rows, pinnedRowKey);
   return (
     // An open Pinned keeps an order a row carried in lands at a place in; a folded one draws only some of its rows, so a drop lands on top.
-    <ul
+    <Stack
+      as={LAYOUT_ELEMENT.UL}
+      gap={GAP.ROW}
       className="sidebar-tasks"
       data-row-drop-rows={onDropOut !== undefined && movable ? "" : undefined}
-      {...motionRows()}
+      moves
       onPointerDown={drag}
     >
       {drawn.map(({ key, value: row }) => {
@@ -696,7 +707,7 @@ function PinnedRows({
           </RowPlaced>
         );
       })}
-    </ul>
+    </Stack>
   );
 }
 

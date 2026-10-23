@@ -134,14 +134,6 @@
      pointer off the card's edge by a menu's inset, as a menu item's sits. A
      row a press does nothing on keeps a row's place, so every word starts
      on the rows' column. */
-  .luke-hover-card-list {
-    display: flex;
-    flex-direction: column;
-    margin: 0;
-    padding: 0;
-    list-style: none;
-  }
-
   .luke-hover-card-row {
     display: flex;
     box-sizing: border-box;

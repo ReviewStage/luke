@@ -438,7 +438,7 @@ test("a text file opened over a tab leaves the tab's find its own, the file's wo
     runAppCommand(APP_COMMAND.FIND);
   });
   const field =
-    document.querySelector<HTMLInputElement>('search.find-bar input[aria-label="Find"]') ??
+    document.querySelector<HTMLInputElement>('.find-bar input[aria-label="Find"]') ??
     assert.fail("the tab's find bar stands open");
   act(() => {
     Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(field, "seat");
@@ -446,7 +446,7 @@ test("a text file opened over a tab leaves the tab's find its own, the file's wo
   });
 
   assert.equal(
-    document.querySelector('search[aria-label="Find"] [aria-live="polite"]')?.textContent,
+    document.querySelector('[role="search"][aria-label="Find"] [aria-live="polite"]')?.textContent,
     "1 of 1",
   );
   act(() => {

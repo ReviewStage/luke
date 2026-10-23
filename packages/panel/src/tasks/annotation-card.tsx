@@ -7,6 +7,9 @@ import {
   CARD_PADDING,
   Card,
   DisclosureChevron,
+  GAP,
+  LAYOUT_ELEMENT,
+  Stack,
   Tooltip,
   useDisclosureState,
   VISUALLY_HIDDEN_UNDER,
@@ -194,7 +197,11 @@ export function AnnotationCard({
 
 /** A card's comments, in order. */
 export function AnnotationComments({ children }: { children: ReactNode }): React.JSX.Element {
-  return <ol className="annotation-comments">{children}</ol>;
+  return (
+    <Stack as={LAYOUT_ELEMENT.OL} gap={GAP.BLOCK} className="annotation-comments">
+      {children}
+    </Stack>
+  );
 }
 
 /**

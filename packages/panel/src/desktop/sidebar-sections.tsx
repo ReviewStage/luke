@@ -12,12 +12,15 @@ import {
   DIALOG_TONE,
   type DialogConfirm,
   EllipsisIcon,
+  GAP,
   IconButton,
+  LAYOUT_ELEMENT,
   MarkDoneIcon,
   motionRows,
   NOTE_LINE_LOOK,
   NoteLine,
   PencilIcon,
+  Stack,
   TextField,
   Tooltip,
   TrashIcon,
@@ -522,7 +525,13 @@ export function SidebarSections({
   const drag = useRowDrag(move, { handle: SECTION_HANDLE });
   return (
     <nav className="sidebar-group" aria-label="Sections">
-      <ul className="sidebar-sections" {...motionRows()} onPointerDown={drag}>
+      <Stack
+        as={LAYOUT_ELEMENT.UL}
+        gap={GAP.CONTROL}
+        className="sidebar-sections"
+        moves
+        onPointerDown={drag}
+      >
         {sections.map((drawn, at) => (
           <li key={drawn.section.id} className="sidebar-sections-item">
             <SidebarSection
@@ -532,7 +541,7 @@ export function SidebarSections({
             />
           </li>
         ))}
-      </ul>
+      </Stack>
     </nav>
   );
 }

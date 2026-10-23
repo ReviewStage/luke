@@ -20,10 +20,19 @@ export const MENU_SURFACE_INSET = {
 
 export type MenuSurfaceInset = (typeof MENU_SURFACE_INSET)[keyof typeof MENU_SURFACE_INSET];
 
+/** Which way the surface lays what it holds: a menu's rows one under another, or a bar's field and buttons one beside another. */
+export const MENU_SURFACE_FLOW = {
+  COLUMN: "column",
+  ROW: "row",
+} as const;
+
+export type MenuSurfaceFlow = (typeof MENU_SURFACE_FLOW)[keyof typeof MENU_SURFACE_FLOW];
+
 /** The surface itself, a box its owner places by its own class and keys by its own handlers. */
 export function MenuSurface({
   className,
   inset = MENU_SURFACE_INSET.MENU,
+  flow = MENU_SURFACE_FLOW.COLUMN,
   placed,
   leaving = false,
   children,
@@ -32,6 +41,7 @@ export function MenuSurface({
   /** The owner's own class, which places it and sets its width and nothing of its look. */
   className?: string | undefined;
   inset?: MenuSurfaceInset | undefined;
+  flow?: MenuSurfaceFlow | undefined;
   /** Whether it has been measured into place; hidden while false, drawn at once where the owner measures nothing. */
   placed?: boolean | undefined;
   /** It is on its way out: fading, inert, and taking nothing. */
@@ -42,6 +52,7 @@ export function MenuSurface({
       {...rest}
       className={className === undefined ? "luke-menu-surface" : `luke-menu-surface ${className}`}
       data-inset={inset}
+      data-flow={flow === MENU_SURFACE_FLOW.ROW ? flow : undefined}
       data-placed={placed === undefined ? undefined : String(placed)}
       data-leaving={leaving ? "true" : undefined}
       inert={leaving}

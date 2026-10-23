@@ -1,10 +1,12 @@
 import type { CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import {
   type ContextMenuProps,
+  GAP,
   HoverCard,
   HoverCardHead,
   HoverCardNote,
   IconButton,
+  LAYOUT_ELEMENT,
   LIST_DENSITY,
   List,
   ListRow,
@@ -13,6 +15,7 @@ import {
   SCROLL_FADE,
   SCROLL_SIZE,
   ScrollArea,
+  Stack,
   Tooltip,
   useMenu,
 } from "@luke/ui";
@@ -857,11 +860,16 @@ export function TaskSummary({
               {layout.mode === SUMMARY_MODE.COLUMN ? (
                 <SummaryList sections={sections} agents={tasks.agents} shown={tasks.shown} />
               ) : kinds.length === 0 ? null : (
-                <ul className="task-summary-rows" aria-label={TABS_SECTION}>
+                <Stack
+                  as={LAYOUT_ELEMENT.UL}
+                  gap={GAP.ROW}
+                  className="task-summary-rows"
+                  aria-label={TABS_SECTION}
+                >
                   {kinds.map((entry) => (
                     <RailRow key={entry.row.id} entry={entry} />
                   ))}
-                </ul>
+                </Stack>
               )}
             </div>
           </ScrollArea>

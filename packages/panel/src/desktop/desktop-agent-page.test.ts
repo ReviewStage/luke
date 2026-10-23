@@ -421,7 +421,7 @@ test("the page draws the task column's agent pane, at its reading width, and ⌘
   assert.ok(page.querySelector(".desktop-agent [role='log']"), "the transcript is the pane's");
   assert.equal(offered, true);
   assert.ok(page.querySelector(".desktop-agent")?.closest(".find-scope"), "the pane finds");
-  assert.ok(page.querySelector("search[aria-label='Find']"), "⌘F opens the find bar");
+  assert.ok(page.querySelector("[role='search'][aria-label='Find']"), "⌘F opens the find bar");
 });
 
 test("Fork to new agent on the page's agent opens the page's draft in its place, which starts the fork where that agent is, naming no task, and the new agent opens on its own page", async () => {

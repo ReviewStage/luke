@@ -16,12 +16,15 @@ import {
   commandKeyshortcuts,
   Fill,
   FoldingButton,
+  GAP,
+  LAYOUT_ELEMENT,
   NAV_CURRENT,
   NavItem,
   SCROLL_FADE,
   ScrollArea,
   SettingsPage,
   Shortcut,
+  Stack,
   useMenu,
 } from "@luke/ui";
 import { accountActor } from "@luke/ui/actor-model";
@@ -322,7 +325,7 @@ export function DesktopSettings({
                         listed={listed}
                         capabilities={settings.capabilities}
                       />
-                      <ul>
+                      <Stack as={LAYOUT_ELEMENT.UL} gap={GAP.ROW}>
                         {pages.map((view) => (
                           <SettingsPageRow
                             key={view}
@@ -332,7 +335,7 @@ export function DesktopSettings({
                             onOpen={() => open(view)}
                           />
                         ))}
-                      </ul>
+                      </Stack>
                     </section>
                   ))
                 )}

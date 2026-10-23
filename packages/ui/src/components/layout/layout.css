@@ -16,6 +16,12 @@
     flex-direction: column;
   }
 
+  /* A hidden arrangement stands out of the layout, as the user agent's own
+     rule would have it were the box not laid out by this sheet. */
+  :is(.luke-stack, .luke-inline)[hidden] {
+    display: none;
+  }
+
   .luke-inline[data-wrap="true"] {
     flex-wrap: wrap;
   }
@@ -40,8 +46,16 @@
     gap: 0;
   }
 
+  [data-gap="row"]:is(.luke-stack, .luke-inline) {
+    gap: var(--luke-list-gap);
+  }
+
   [data-gap="tight"]:is(.luke-stack, .luke-inline) {
     gap: var(--luke-space-4);
+  }
+
+  [data-gap="item"]:is(.luke-stack, .luke-inline) {
+    gap: var(--luke-space-6);
   }
 
   [data-gap="icon"]:is(.luke-stack, .luke-inline) {
@@ -54,6 +68,10 @@
 
   [data-gap="field"]:is(.luke-stack, .luke-inline) {
     gap: var(--luke-field-gap);
+  }
+
+  [data-gap="block"]:is(.luke-stack, .luke-inline) {
+    gap: var(--luke-space-12);
   }
 
   [data-gap="section"]:is(.luke-stack, .luke-inline) {

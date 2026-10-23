@@ -15,6 +15,9 @@ import {
   CloseIcon,
   dropBelowStart,
   ExternalIcon,
+  GAP,
+  Inline,
+  LAYOUT_ELEMENT,
   PROVIDER_MARK_SIZE,
   ProviderMark,
   TEXT_BUTTON_TONE,
@@ -193,7 +196,7 @@ export function TaskIssueLinks({
   const linked = new Set(links.map((link) => link.externalId));
   return (
     <section className="task-issue-links" aria-label={LINKS_WORDS.HEADING}>
-      <ul className="task-issue-links-rows">
+      <Inline as={LAYOUT_ELEMENT.UL} gap={GAP.ITEM} className="task-issue-links-rows">
         {links.map((link) => (
           <LinkChip
             key={link.id}
@@ -229,7 +232,7 @@ export function TaskIssueLinks({
             />
           </li>
         ) : null}
-      </ul>
+      </Inline>
       {note === undefined ? null : (
         <p className="task-issue-links-note" role="alert">
           {note}

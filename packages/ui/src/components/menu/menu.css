@@ -47,6 +47,14 @@
     padding: 0;
   }
 
+  /* A bar on the menu's surface, as a find bar floats over what it finds
+     in: its field and its buttons side by side, a hair apart. */
+  .luke-menu-surface[data-flow="row"] {
+    flex-direction: row;
+    align-items: center;
+    gap: var(--luke-space-2);
+  }
+
   .luke-menu {
     position: fixed;
     z-index: var(--luke-z-menu);

@@ -1192,7 +1192,7 @@ test("a new shell asked for while the tab is hidden waits for a stopped sandbox'
 /** Types into the find bar's field as the keyboard does, which React hears as an input. */
 function typeFind(text: string): void {
   const field = document.querySelector<HTMLInputElement>(
-    'search.find-bar input[aria-label="Find"]',
+    '.find-bar input[aria-label="Find"]',
   );
   assert.ok(field, "the find bar stands open");
   act(() => {
@@ -1203,7 +1203,7 @@ function typeFind(text: string): void {
 
 /** What the find bar's tally says. */
 function findTally(): string | null | undefined {
-  return document.querySelector('search[aria-label="Find"] [aria-live="polite"]')?.textContent;
+  return document.querySelector('[role="search"][aria-label="Find"] [aria-live="polite"]')?.textContent;
 }
 
 test("⌘F finds in the shell's scrollback, which the terminal draws on a canvas, from the newest match up, every match counted and stepped through", async () => {

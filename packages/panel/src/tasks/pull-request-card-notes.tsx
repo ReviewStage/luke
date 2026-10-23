@@ -1,5 +1,16 @@
 import type { GitHubPerson } from "@luke/features/coding-agent-wire";
-import { Badge, HoverCardNote, TIME_LOOK, Time, useMinute, VisuallyHidden } from "@luke/ui";
+import {
+  ALIGN,
+  Badge,
+  GAP,
+  HoverCardNote,
+  Inline,
+  LAYOUT_ELEMENT,
+  TIME_LOOK,
+  Time,
+  useMinute,
+  VisuallyHidden,
+} from "@luke/ui";
 import { githubActor } from "@luke/ui/actor-model";
 import { GitCommitHorizontalIcon, MessageSquareIcon } from "lucide-react";
 import { ActorLine, ActorRef } from "../actor-ref.js";
@@ -178,7 +189,13 @@ export function PullRequestCardNotes({
         </HoverCardNote>
       )}
       {labels.length === 0 ? null : (
-        <ul className="card-labels" aria-label="Labels">
+        <Inline
+          as={LAYOUT_ELEMENT.UL}
+          gap={GAP.TIGHT}
+          align={ALIGN.STRETCH}
+          className="card-labels"
+          aria-label="Labels"
+        >
           {labels.slice(0, MAX_LABELS).map((label) => (
             <li key={label.name}>
               <Badge swatch={label.color}>{label.name}</Badge>
@@ -189,7 +206,7 @@ export function PullRequestCardNotes({
               <Badge>{`+${labels.length - MAX_LABELS}`}</Badge>
             </li>
           ) : null}
-        </ul>
+        </Inline>
       )}
       <CountsNote comments={comments} commits={commits} />
     </>

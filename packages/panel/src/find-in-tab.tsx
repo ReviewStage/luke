@@ -4,6 +4,8 @@ import {
   DisclosureFind,
   Fill,
   IconButton,
+  MENU_SURFACE_FLOW,
+  MenuSurface,
   SearchField,
   Tooltip,
   useDisclosureFinding,
@@ -275,7 +277,13 @@ function FindBar({
     field.current?.select();
   }, [summons]);
   return (
-    <search className="find-bar" aria-label="Find" {...{ [FIND_SKIP_ATTRIBUTE]: "" }}>
+    <MenuSurface
+      className="find-bar"
+      flow={MENU_SURFACE_FLOW.ROW}
+      role="search"
+      aria-label="Find"
+      {...{ [FIND_SKIP_ATTRIBUTE]: "" }}
+    >
       <div className="find-bar-field">
         <SearchField
           ref={field}
@@ -308,7 +316,7 @@ function FindBar({
         icon={<ChevronDownIcon aria-hidden="true" />}
       />
       <BarButton label="Close find" onPress={onClose} icon={<CloseIcon />} />
-    </search>
+    </MenuSurface>
   );
 }
 
