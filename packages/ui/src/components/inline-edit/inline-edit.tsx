@@ -55,7 +55,11 @@ export type InlineEditLook = (typeof INLINE_EDIT_LOOK)[keyof typeof INLINE_EDIT_
  * inset and edge at the start, so its words stand where the label's stood
  * and the row keeps its height; in a well, bare in the type around it,
  * ringed by the well rather than by itself. How wide a field or a well
- * stands is its container's to say.
+ * stands is its container's to say. Note that the field look's line and
+ * weight are `revert-layer`, which hands them back to the engine's own for an
+ * input (no `base` layer rule, `@luke/panel`'s base.css included, sets an
+ * input's), because the input's `text-body` and `font-normal` would set them
+ * where the hand-written rule never did.
  */
 const INLINE_EDIT =
   "luke-inline-edit pointer-coarse:data-[look]:text-touch " +
