@@ -42,15 +42,15 @@ Every token is a `--luke-*` custom property under `src/tokens/`.
   | Role | Desktop | Web | Web, compact |
   | --- | ---: | ---: | ---: |
   | `--luke-control-height` | 30px | 44px | 32px |
-  | `--luke-control-radius` | 8px | 8px | 8px |
+  | `--luke-control-radius` | 10px | 10px | 10px |
   | `--luke-control-icon` | 15px | 16px | 16px |
   | `--luke-type-body-*` (size / leading) | 13 / 20 | 16 / 24 | 14 / 20 |
   | `--luke-type-label-*` | 13 / 18 | 14 / 20 | 13 / 18 |
   | `--luke-type-caption-*` | 12 / 16 | 12 / 16 | 12 / 16 |
   | `--luke-type-section-*` | 13 / 18 | 16 / 24 | 16 / 24 |
   | `--luke-type-dialog-*` | 15 / 20 | 20 / 28 | 20 / 28 |
-  | `--luke-type-title-*` | 22 / 30 | 28 / 36 | 22 / 30 |
-  | `--luke-page-inset` | 40px (24px under 480px of content) | 24px | 24px |
+  | `--luke-type-title-*` | 26 / 34 | 28 / 36 | 22 / 30 |
+  | `--luke-page-inset` | 48px (24px under 480px of content) | 24px | 24px |
   | `--luke-control-gap`, `--luke-icon-gap` | 8px | 8px | 8px |
   | `--luke-field-gap`, `--luke-section-gap` | 16px | 16px | 16px |
   | `--luke-menu-row-height` | 32px | 44px | 32px |

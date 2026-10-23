@@ -5556,7 +5556,7 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
   font-weight: var(--luke-weight-semibold);
 }
 
-.terminal-shells-foot [data-agent-ref] .harness-mark {
+.terminal-shells-foot [data-agent-ref] .luke-harness-mark {
   width: var(--luke-control-icon);
   height: var(--luke-control-icon);
 }

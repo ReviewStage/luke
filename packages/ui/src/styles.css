@@ -74,6 +74,7 @@
 @import "./components/rolling-number/rolling-number.css";
 @import "./components/slider/slider.css";
 @import "./components/prose/prose.css";
+@import "./marks/harness-mark.css";
 @import "./marks/provider-mark.css";
 @import "./marks/task-marks.css";
 @import "./components/provider-button/provider-button.css";

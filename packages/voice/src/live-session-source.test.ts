@@ -144,7 +144,7 @@ it.live(
       );
       assert.equal(
         hostedVoiceUnavailableNote(source.diagnostics()),
-        "This agent runs in Claude Code or Codex and can't take calls yet.",
+        "This agent runs on Claude or Codex and can't take calls yet.",
       );
     }),
 );

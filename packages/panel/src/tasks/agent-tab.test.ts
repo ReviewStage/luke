@@ -579,7 +579,9 @@ test("a call about an agent names it by its chip in the place of the words, as i
   assert.equal(chip("archive_agent"), "Retry audit", "an agent the plan lists not by its answer");
   assert.equal(said("archive_agent"), "Archived Retry audit");
   assert.ok(
-    line("archive_agent")?.querySelector("[data-tool-agent-ref] img.harness-mark"),
+    line("archive_agent")?.querySelector(
+      "[data-tool-agent-ref] .luke-harness-mark[data-provider='openai']",
+    ),
     "an agent the plan lists not wears the harness its answer's model runs in, Codex's here",
   );
   assert.equal(chip("start_agent"), undefined, "a start that names no agent yet keeps its words");
@@ -717,8 +719,10 @@ test("a call about an agent the place lists not, whose answer names no model, we
   const chip = container.querySelector('[data-call-id="call-archive_agent"] [data-tool-agent-ref]');
 
   assert.equal(chip?.textContent, "Retry audit");
-  // Codex's mark is its picture.
-  assert.ok(chip?.querySelector("img.harness-mark"), "the chip wears Codex's mark");
+  assert.ok(
+    chip?.querySelector(".luke-harness-mark[data-provider='openai']"),
+    "the chip wears Codex's mark",
+  );
   fakeAppBridge({});
 });
 

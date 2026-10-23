@@ -93,14 +93,7 @@ import {
   useMinute,
   WingFace,
 } from "@luke/ui";
-import {
-  ACTOR_KIND,
-  type Actor,
-  actorName,
-  assigneeFace,
-  memberActor,
-  ROLE_WORDS,
-} from "@luke/ui/actor-model";
+import { ACTOR_KIND, type Actor, actorName, assigneeFace } from "@luke/ui/actor-model";
 import { matchesTokens, matchRanges, searchTokens } from "@luke/ui/search-tokens";
 import {
   agentRow,
@@ -115,7 +108,7 @@ import { formatCount } from "@luke/ui/time-format";
 import { Command, defaultFilter } from "cmdk";
 import { LinkIcon } from "lucide-react";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { ActorMark, AssigneeFaceMark } from "../actor-ref.js";
+import { AssigneeFaceMark } from "../actor-ref.js";
 import {
   appCommandOffered,
   runAppCommand,
@@ -123,6 +116,7 @@ import {
   useOverlayHold,
 } from "../app-commands.js";
 import { type CopyLink, inSidePanel, type LinkAtHand } from "../links-at-hand.js";
+import { memberRows } from "../member-rows.js";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs.js";
 import { Highlighted } from "../search-field.js";
 import { settingsPageOf } from "../settings/pages.js";
@@ -788,8 +782,8 @@ function archivedAgentRows(
 }
 
 /**
- * The listed workspace's members, the reader among them, each by their
- * face, name, and role, found by their name and email, a choice opening
+ * The listed workspace's members as every people menu lists them, the
+ * reader first (`memberRows`), each hanging their card, a choice opening
  * their page; none until the members are read.
  */
 function peopleRows(
@@ -797,13 +791,13 @@ function peopleRows(
   readerId: string | undefined,
   open: (userId: string) => void,
 ): readonly PaletteRow[] {
-  return (members ?? []).map((member) => ({
-    icon: <ActorMark actor={memberActor(member, readerId)} />,
-    label: member.name,
-    detail:
-      member.userId === readerId ? `You · ${ROLE_WORDS[member.role]}` : ROLE_WORDS[member.role],
-    terms: [member.name, member.email],
-    onChoose: () => open(member.userId),
+  return memberRows(members, readerId).map((row) => ({
+    icon: row.icon,
+    label: row.label,
+    detail: row.detail,
+    terms: row.terms,
+    card: row.card,
+    onChoose: () => open(row.member.userId),
   }));
 }
 

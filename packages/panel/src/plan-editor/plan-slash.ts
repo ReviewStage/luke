@@ -9,12 +9,13 @@ import {
   type SlashBlock,
 } from "./contract.js";
 import { turnInto } from "./writing-format.js";
+import { inTableCell } from "./writing-keys.js";
 
 /**
  * plan-slash.ts -- the plan editor's `/`: the word the caret ends reported to the panel, which draws the block menu over it, and the block it chooses laid in in the word's place.
  *
- * A `/` at the start of a line or after a space, outside code, opens the
- * panel's menu (`onTrigger`): the word runs from the `/` to the caret, with
+ * A `/` at the start of a line or after a space, outside code and outside
+ * a table's cell, opens the panel's menu (`onTrigger`): the word runs from the `/` to the caret, with
  * no space in it, so a space typed after it ends it and closes the menu.
  * A choice deletes the word, through its end where the caret stands inside
  * it, and runs the block's command on the block the caret stands in
@@ -82,12 +83,12 @@ const INSERTS = {
   },
 } as const satisfies Record<SlashBlock, (editor: Editor) => void>;
 
-/** The `/` word the caret ends in plain text, outside code; nothing while the editor has no caret or the caret ends none. */
+/** The `/` word the caret ends in plain text, outside code and outside a table's cell; nothing while the editor has no caret or the caret ends none. */
 function slashAt(view: EditorView): SlashWord | undefined {
   const { selection, doc } = view.state;
   if (!selection.empty || !view.hasFocus()) return undefined;
   const { $from } = selection;
-  if ($from.parent.type.spec.code === true) return undefined;
+  if ($from.parent.type.spec.code === true || inTableCell($from)) return undefined;
   const before = $from.parent.textBetween(0, $from.parentOffset, undefined, LEAF_CHARACTER);
   const match = SLASH_WORD.exec(before);
   if (match === null) return undefined;

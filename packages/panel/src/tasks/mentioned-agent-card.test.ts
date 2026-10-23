@@ -310,7 +310,7 @@ test("a chip of an agent the window lists not reads its task's agents once as it
   const chip = container.querySelector("[data-mention-ref]") ?? undefined;
 
   assert.ok(
-    chip?.querySelector(".luke-inline-ref-glyph .harness-mark"),
+    chip?.querySelector(".luke-inline-ref-glyph .luke-harness-mark"),
     "the chip wears its harness",
   );
   const card = await cardOf(chip);
@@ -354,7 +354,7 @@ test("a mention of an agent the window lists not, laid in a message box as an In
   );
 
   assert.ok(
-    container.querySelector(".luke-inline-ref-glyph .harness-mark"),
+    container.querySelector(".luke-inline-ref-glyph .luke-harness-mark"),
     "the box's chip wears its harness",
   );
 });
@@ -390,7 +390,7 @@ test("a mention of its own task's agent whose tile the page knows no harness of 
   );
 
   assert.ok(
-    container.querySelector(".luke-inline-ref-glyph .harness-mark"),
+    container.querySelector(".luke-inline-ref-glyph .luke-harness-mark"),
     "the box's chip wears its harness",
   );
 });

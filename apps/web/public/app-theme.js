@@ -17,7 +17,7 @@
 // never signed in, draws no sidebar in the frame, since the sign-in gate
 // stands none.
 (() => {
-  const GROUND = { light: "#fbfbfa", dark: "#08090b" };
+  const GROUND = { light: "#ffffff", dark: "#121316" };
   const SIDEBAR_WIDTH = { MIN: 200, MAX: 400 };
   let chosen = null;
   let signedIn = null;
