@@ -7,10 +7,10 @@
  * the build and never in a visitor's tab. The drawing module is TypeScript
  * that reaches the shared packages' sources, so it is loaded through a Vite
  * server of its own, which runs it as the SSR build runs the pages, and
- * closed after. Every document is drawn through that one server at once, at
- * the start of a build, before Rollup transforms a module. Each document is
- * watched, so an edit to it draws them again and reloads its page under
- * `vite`.
+ * closed after: a build draws every document through one such server at
+ * its start, before Rollup transforms a module, and `vite` draws each when
+ * its module loads. Each document is watched, so an edit to it reloads its
+ * page under `vite`.
  */
 
 import { readFile } from "node:fs/promises";
@@ -24,11 +24,14 @@ const resolveFile = (path: string) => fileURLToPath(new URL(path, import.meta.ur
 
 const DRAWING_MODULE = resolveFile("../src/site-markdown.tsx");
 
-/** Each module this answers, the document it is read from, and how that document is drawn. */
-const SITE_DOCUMENTS = new Map<
-  string,
-  { file: string; draw: (site: SiteMarkdown, words: string) => unknown }
->([
+/** A document this answers: the file it is read from, and how it is drawn. */
+interface SiteDocument {
+  readonly file: string;
+  readonly draw: (site: SiteMarkdown, words: string) => unknown;
+}
+
+/** Each module this answers, and its document. */
+const SITE_DOCUMENTS = new Map<string, SiteDocument>([
   [
     "virtual:luke/changelog-releases",
     {
@@ -72,6 +75,12 @@ export async function drawnBySite<Drawn>(draw: (site: SiteMarkdown) => Drawn): P
   }
 }
 
+/** One site document drawn through a server of its own. */
+async function drawnDocument(document: SiteDocument): Promise<unknown> {
+  const words = await readFile(document.file, "utf8");
+  return drawnBySite((site) => document.draw(site, words));
+}
+
 /** Every site document drawn through one server, by the module that answers it. */
 async function drawnDocuments(): Promise<Map<string, unknown>> {
   const documents = await Promise.all(
@@ -91,27 +100,20 @@ async function drawnDocuments(): Promise<Map<string, unknown>> {
  * Note that a build draws every document in `buildStart`, because the server
  * runs on the build's own event loop: drawn beside Rollup's transforms, each
  * module the server fetches waits behind theirs, past the module runner's
- * fixed 60 s on a loaded machine. Served (`vite`, vitest), the documents are
- * drawn on the first load instead, so a server that never imports one never
- * pays for them, and drawn again once one of them changes.
+ * fixed 60 s on a loaded machine. Served (`vite`, vitest), nothing transforms
+ * beside it, so each document is drawn alone when its module loads, and one
+ * that fails to draw fails only its own page.
  */
 export function siteMarkdown(): Plugin {
   let building = false;
-  let drawings: Promise<Map<string, unknown>> | undefined;
+  let drawings: Map<string, unknown> | undefined;
   return {
     name: "luke-site-markdown",
     configResolved(config) {
       building = config.command === "build";
     },
     async buildStart() {
-      if (!building) return;
-      drawings = drawnDocuments();
-      await drawings;
-    },
-    watchChange(id) {
-      if ([...SITE_DOCUMENTS.values()].some((document) => document.file === id)) {
-        drawings = undefined;
-      }
+      if (building) drawings = await drawnDocuments();
     },
     resolveId: (id) => (SITE_DOCUMENTS.has(id) ? `${RESOLVED_PREFIX}${id}` : undefined),
     async load(id) {
@@ -119,8 +121,7 @@ export function siteMarkdown(): Plugin {
       const document = name === undefined ? undefined : SITE_DOCUMENTS.get(name);
       if (name === undefined || document === undefined) return undefined;
       this.addWatchFile(document.file);
-      drawings ??= drawnDocuments();
-      const value = (await drawings).get(name);
+      const value = drawings?.has(name) ? drawings.get(name) : await drawnDocument(document);
       return `export default ${JSON.stringify(value)};`;
     },
   };
