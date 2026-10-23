@@ -38,6 +38,8 @@
   --color-popover-foreground: var(--luke-color-text);
   --color-border-strong: var(--luke-color-border-strong);
   --color-subtle-foreground: var(--luke-color-text-subtle);
+  --color-fill-strong: var(--luke-color-fill-strong);
+  --color-danger: var(--luke-color-danger-text);
   --color-tooltip: var(--luke-color-tooltip);
   --color-tooltip-foreground: var(--luke-color-tooltip-text);
   --color-tooltip-edge: var(--luke-color-tooltip-edge);
