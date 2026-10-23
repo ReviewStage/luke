@@ -1,5 +1,5 @@
 import type { AdminDailyUsage, AdminTrend } from "@luke/features/admin-answer-wire";
-import { type ChartConfig } from "@luke/ui/chart";
+import type { ChartConfig } from "@luke/ui/chart";
 import { DailyBars } from "@luke/ui/daily-bars";
 import { seriesHasNoData } from "@luke/ui/daily-series";
 import { barTopRadius } from "./bar-radius.js";
