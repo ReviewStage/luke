@@ -195,30 +195,30 @@
   /* A list reaches past the column by its rows' inset, so a row's words
      open on the title's edge and its fill runs out either side. */
   .luke-collection-page-content > .luke-list,
-  .luke-collection-page-loading {
+  .luke-collection-page-skeleton {
     margin-inline: calc(-1 * var(--luke-space-12));
   }
 
-  .luke-collection-page-loading {
+  .luke-collection-page-skeleton {
     display: flex;
     flex-direction: column;
     gap: var(--luke-space-2);
   }
 
   /* A loading row stands as tall as a ListRow with a line under its title. */
-  .luke-collection-page-loading-row {
+  .luke-collection-page-skeleton-row {
     display: flex;
     flex-direction: column;
     gap: var(--luke-space-2);
     padding: var(--luke-space-8) var(--luke-space-12);
   }
 
-  .luke-collection-page-loading-title {
+  .luke-collection-page-skeleton-title {
     font-size: var(--luke-type-label-size);
     line-height: var(--luke-type-label-leading);
   }
 
-  .luke-collection-page-loading-description {
+  .luke-collection-page-skeleton-description {
     font-size: var(--luke-type-caption-size);
     line-height: var(--luke-type-caption-leading);
   }

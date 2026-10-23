@@ -11,9 +11,10 @@ import { SKELETON_SHAPE, Skeleton, SkeletonRegion } from "../skeleton/skeleton.j
  * start on one edge. A `List` laid straight into the content reaches past
  * that edge by its rows' own inset, so its words line up with the title's
  * and its fill runs out to either side. Each state of the content opens at
- * the same place under the filters: a read in progress stands rows of
- * blocks where the rows will be, and the empty and failed states stand a
- * little above the room's middle, so swapping one state for another moves
+ * the same place under the filters: a read in progress stands the
+ * caller's own skeleton of what will land, or rows of blocks where the rows
+ * will be, and the empty and failed states stand a little above the room's
+ * middle, so swapping one state for another moves
  * nothing above it.
  *
  * Under the window's toolbar (`PAGE_FRAME.TOOLBAR`) the page draws no
@@ -44,23 +45,37 @@ function said(words: ReactNode): boolean {
   return words !== undefined && words !== null && words !== false && words !== "";
 }
 
-/** Rows of blocks in a `ListRow`'s shape, a title over its line, named `label` to a reader. */
-function LoadingRows({ label }: { label: string }): React.JSX.Element {
+/**
+ * Rows of blocks in a `ListRow`'s shape, a title over its line: what a read
+ * in progress stands where the caller hands no skeleton of its own.
+ */
+function CollectionPageRowsSkeleton(): React.JSX.Element {
   return (
-    <SkeletonRegion label={label}>
-      <div className="luke-collection-page-loading">
-        {Array.from({ length: LOADING_ROWS }, (_, row) => (
-          <div key={row} className="luke-collection-page-loading-row">
-            <span className="luke-collection-page-loading-title">
-              <Skeleton shape={SKELETON_SHAPE.LINE} width="40%" />
-            </span>
-            <span className="luke-collection-page-loading-description">
-              <Skeleton shape={SKELETON_SHAPE.LINE} width="65%" />
-            </span>
-          </div>
-        ))}
-      </div>
-    </SkeletonRegion>
+    <div className="luke-collection-page-skeleton">
+      {Array.from({ length: LOADING_ROWS }, (_, row) => (
+        <div key={row} className="luke-collection-page-skeleton-row">
+          <span className="luke-collection-page-skeleton-title">
+            <Skeleton shape={SKELETON_SHAPE.LINE} width="40%" />
+          </span>
+          <span className="luke-collection-page-skeleton-description">
+            <Skeleton shape={SKELETON_SHAPE.LINE} width="65%" />
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** The page's loading region, named `label` to a reader: `skeleton`, or rows of blocks where none is given. */
+function CollectionPageSkeleton({
+  label,
+  skeleton,
+}: {
+  label: string;
+  skeleton: ReactNode;
+}): React.JSX.Element {
+  return (
+    <SkeletonRegion label={label}>{skeleton ?? <CollectionPageRowsSkeleton />}</SkeletonRegion>
   );
 }
 
@@ -69,6 +84,7 @@ export function CollectionPage({
   filters,
   state,
   loadingLabel,
+  skeleton,
   empty,
   error,
   children,
@@ -79,6 +95,12 @@ export function CollectionPage({
   state: CollectionState;
   /** What is being read, said to a reader while the rows are. */
   loadingLabel: string;
+  /**
+   * What stands in the content's place while it is read: the collection's
+   * own `*Skeleton`, drawn in the page's loading region, so the content
+   * lands where its blocks stood. Rows of blocks where none is given.
+   */
+  skeleton?: ReactNode;
   /** What stands in the rows' place when there are none (an EmptyState). */
   empty?: ReactNode;
   /** What stands in the rows' place when they could not be read (an ErrorState). */
@@ -126,7 +148,9 @@ export function CollectionPage({
       )}
       <div className="luke-collection-page-scroll">
         <div className="luke-collection-page-content">
-          {state === COLLECTION_STATE.LOADING ? <LoadingRows label={loadingLabel} /> : null}
+          {state === COLLECTION_STATE.LOADING ? (
+            <CollectionPageSkeleton label={loadingLabel} skeleton={skeleton} />
+          ) : null}
           {state === COLLECTION_STATE.EMPTY ? (
             <div className="luke-collection-page-notice">{empty}</div>
           ) : null}

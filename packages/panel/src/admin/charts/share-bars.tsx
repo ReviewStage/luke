@@ -16,9 +16,9 @@ import {
   REACH_FEATURE,
   type ReachFeature,
 } from "@luke/features/admin-overview-vocabulary";
-import { TEXT_ELEMENT, TEXT_TONE, Text } from "@luke/ui";
+import { Skeleton, TEXT_ELEMENT, TEXT_TONE, Text } from "@luke/ui";
 import { formatCount } from "@luke/ui/time-format";
-import { ChartEmpty, ChartFrame } from "./chart-frame.js";
+import { AsideSkeleton, ChartEmpty, ChartFrame } from "./chart-frame.js";
 
 /** What each funnel step is called, in the words a maintainer reads it by. */
 const FUNNEL_LABEL = {
@@ -41,8 +41,61 @@ const REACH_LABEL = {
   [REACH_FEATURE.CHAT]: "Chat",
 } as const satisfies Record<ReachFeature, string>;
 
+const REACH_TITLE = "Feature reach · this week";
+
+/** The funnel's heading, which names the window its accounts were created in. */
+function funnelTitle(windowDays: number): string {
+  return `Activation · accounts created in the last ${windowDays} days`;
+}
+
 function formatShare(share: number | null): string {
   return share === null ? "—" : `${Math.round(share * 100)}%`;
+}
+
+/** The bones standing for a row's count and share, about their figures' width. */
+const SKELETON_COUNT_WIDTH = "32px";
+
+const SKELETON_SHARE_WIDTH = "28px";
+
+/** The rows of one chart, a step apart. */
+function ShareList({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}): React.JSX.Element {
+  return (
+    <ul aria-label={label} className="grid gap-(--luke-space-8)">
+      {children}
+    </ul>
+  );
+}
+
+/** One row's frame: its name, its bar, its count, and its share, each in its column. */
+function ShareRowFrame({
+  label,
+  bar,
+  count,
+  share,
+}: {
+  label: string;
+  bar: React.ReactNode;
+  count: React.ReactNode;
+  share: React.ReactNode;
+}): React.JSX.Element {
+  return (
+    <li className="grid grid-cols-[minmax(0,9rem)_minmax(0,1fr)_auto_3rem] items-center gap-(--luke-space-12) tabular-nums">
+      <Text as={TEXT_ELEMENT.SPAN}>{label}</Text>
+      {bar}
+      <Text as={TEXT_ELEMENT.SPAN}>{count}</Text>
+      <span className="text-right">
+        <Text as={TEXT_ELEMENT.SPAN} tone={TEXT_TONE.MUTED}>
+          {share}
+        </Text>
+      </span>
+    </li>
+  );
 }
 
 /** One row: its name, its bar, its count, and its share. */
@@ -57,24 +110,34 @@ function ShareRow({
 }): React.JSX.Element {
   const percent = Math.min(100, Math.round((share ?? 0) * 100));
   return (
-    <li className="grid grid-cols-[minmax(0,9rem)_minmax(0,1fr)_auto_3rem] items-center gap-(--luke-space-12) tabular-nums">
-      <Text as={TEXT_ELEMENT.SPAN}>{label}</Text>
-      <span
-        aria-hidden="true"
-        className="block h-2 overflow-hidden rounded-full bg-(--luke-color-fill-hover)"
-      >
+    <ShareRowFrame
+      label={label}
+      bar={
         <span
-          className="block h-full rounded-full bg-(--luke-color-chart-1)"
-          style={{ width: `${percent}%` }}
-        />
-      </span>
-      <Text as={TEXT_ELEMENT.SPAN}>{formatCount(count)}</Text>
-      <span className="text-right">
-        <Text as={TEXT_ELEMENT.SPAN} tone={TEXT_TONE.MUTED}>
-          {formatShare(share)}
-        </Text>
-      </span>
-    </li>
+          aria-hidden="true"
+          className="block h-2 overflow-hidden rounded-full bg-(--luke-color-fill-hover)"
+        >
+          <span
+            className="block h-full rounded-full bg-(--luke-color-chart-1)"
+            style={{ width: `${percent}%` }}
+          />
+        </span>
+      }
+      count={formatCount(count)}
+      share={formatShare(share)}
+    />
+  );
+}
+
+/** One row while its figures are read: its name, which the chart knows, and bones for the rest. */
+function ShareRowSkeleton({ label }: { label: string }): React.JSX.Element {
+  return (
+    <ShareRowFrame
+      label={label}
+      bar={<Skeleton />}
+      count={<Skeleton width={SKELETON_COUNT_WIDTH} />}
+      share={<Skeleton width={SKELETON_SHARE_WIDTH} />}
+    />
   );
 }
 
@@ -91,7 +154,7 @@ export function FunnelChart({
   funnel: readonly AdminFunnelStep[];
   windowDays: number;
 }): React.JSX.Element {
-  const title = `Activation · accounts created in the last ${windowDays} days`;
+  const title = funnelTitle(windowDays);
   const signedUp = funnel.find((step) => step.step === FUNNEL_STEP.SIGNED_UP)?.accounts ?? 0;
   if (signedUp === 0) {
     return (
@@ -102,7 +165,7 @@ export function FunnelChart({
   }
   return (
     <ChartFrame title={title}>
-      <ul aria-label="Activation funnel" className="grid gap-(--luke-space-8)">
+      <ShareList label="Activation funnel">
         {funnel.map((step) => (
           <ShareRow
             key={step.step}
@@ -111,14 +174,27 @@ export function FunnelChart({
             share={step.share}
           />
         ))}
-      </ul>
+      </ShareList>
+    </ChartFrame>
+  );
+}
+
+/** The funnel while the window is read: its heading, and a row for every step by its name, with bones for its figures. */
+export function FunnelChartSkeleton({ windowDays }: { windowDays: number }): React.JSX.Element {
+  return (
+    <ChartFrame title={funnelTitle(windowDays)}>
+      <ShareList label="Activation funnel">
+        {Object.values(FUNNEL_STEP).map((step) => (
+          <ShareRowSkeleton key={step} label={FUNNEL_LABEL[step]} />
+        ))}
+      </ShareList>
     </ChartFrame>
   );
 }
 
 /** The share of this week's active developers who used each feature. */
 export function ReachChart({ reach }: { reach: AdminOverview["reach"] }): React.JSX.Element {
-  const title = "Feature reach · this week";
+  const title = REACH_TITLE;
   const aside = `of ${formatCount(reach.activeDevelopers)} active developers`;
   if (reach.activeDevelopers === 0) {
     return (
@@ -129,7 +205,7 @@ export function ReachChart({ reach }: { reach: AdminOverview["reach"] }): React.
   }
   return (
     <ChartFrame title={title} aside={aside}>
-      <ul aria-label="Feature reach" className="grid gap-(--luke-space-8)">
+      <ShareList label="Feature reach">
         {reach.features.map((row) => (
           <ShareRow
             key={row.feature}
@@ -138,7 +214,20 @@ export function ReachChart({ reach }: { reach: AdminOverview["reach"] }): React.
             share={row.share}
           />
         ))}
-      </ul>
+      </ShareList>
+    </ChartFrame>
+  );
+}
+
+/** The reach while the week is read: a row for every feature, by its name, with bones for its figures. */
+export function ReachChartSkeleton(): React.JSX.Element {
+  return (
+    <ChartFrame title={REACH_TITLE} aside={<AsideSkeleton />}>
+      <ShareList label="Feature reach">
+        {Object.values(REACH_FEATURE).map((feature) => (
+          <ShareRowSkeleton key={feature} label={REACH_LABEL[feature]} />
+        ))}
+      </ShareList>
     </ChartFrame>
   );
 }
