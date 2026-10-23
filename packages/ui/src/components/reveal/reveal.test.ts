@@ -209,7 +209,7 @@ test("two reveals turned on in one change glide the row under them once, as far 
   ]);
 });
 
-test("a choice picked again rolls up the rows of the value left as the rows of the one picked unroll", () => {
+test("a choice picked again rolls up the rows of the value left as the rows of the one picked unroll on the spring, the row under them gliding with them", () => {
   const card = ({ kind }: { kind: "schedule" | "webhook" }) =>
     createElement(
       SettingsSection,
@@ -220,6 +220,7 @@ test("a choice picked again rolls up the rows of the value left as the rows of t
         children: (value) =>
           value === "schedule" ? row("Repeats") : [row("Address"), row("Secret")],
       }),
+      row("Under"),
     );
   const show = draw(card, { kind: "schedule" });
 
@@ -235,6 +236,12 @@ test("a choice picked again rolls up the rows of the value left as the rows of t
     [{ opacity: 0 }, { opacity: 1 }],
     [ROLLED_UP, UNROLLED],
   ]);
+  const unroll = played.find(
+    (each) => each.element === boxOf("Address") && "clipPath" in (each.keyframes[0] ?? {}),
+  );
+  const glide = played.find((each) => each.element === rowOf("Under"));
+  expect(glide?.keyframes[0]).toEqual({ transform: `translate(0px, ${-ROW}px)` });
+  expect([unroll?.timing.duration, glide?.timing.duration]).toEqual([460, 460]);
 });
 
 test("outside a reveal area a setting's rows come and go at once", async () => {

@@ -52,7 +52,9 @@
  * row under it travel as one edge; a row leaving is rolled up the same way
  * on the exit's tokens, and the rows under it close over it on those same
  * tokens at once, rather than after it, since what it goes into is the
- * room they close.
+ * room they close. Where rows arrive in its place in the same change, as a
+ * choice's next rows do, they unroll on the spring as ever, and what they
+ * move glides with them.
  *
  * Several motions over one root, each reveal of a page playing its own,
  * play a commit that changes more than one of them as one: each reads the
@@ -457,6 +459,8 @@ interface MoveTiming {
   readonly way: ListMotionWay;
   /** Whether a row arriving travels in from where it would leave to, or only fades in where it stands. */
   readonly travels: boolean;
+  /** What the rows a leaving row unrolled away from close over it on, where nothing arrives in its place: its exit's timing. */
+  readonly close: KeyframeAnimationOptions | undefined;
 }
 
 /** Plays a row's arrival, the way it would leave played back on the spring, added onto any motion of its own, as it fades in, `step` staggers after the first; only the fade where it does not travel. */
@@ -500,13 +504,15 @@ function playMoves(root: HTMLElement, before: Snapshot, timing: MoveTiming): voi
       ? { x: 0, y: 0 }
       : { x: was.x - is.x, y: was.y - is.y };
   };
-  let arrivals = 0;
+  const arriving = movers.filter((mover) => {
+    const list = mover.parentElement;
+    return wasOf(mover) === undefined && list !== null && before.lists.has(list);
+  });
+  for (const [step, mover] of arriving.entries()) arrive(root, mover, step, timing);
+  // Note that rows arriving in a leaving row's place, a choice's next rows, set the beat what they move glides on.
+  const glide = arriving.length === 0 ? (timing.close ?? timing.travel) : timing.travel;
   for (const mover of movers) {
-    if (wasOf(mover) === undefined) {
-      const list = mover.parentElement;
-      if (list !== null && before.lists.has(list)) arrive(root, mover, arrivals++, timing);
-      continue;
-    }
+    if (wasOf(mover) === undefined) continue;
     const carrier = carrierOf(root, mover);
     const own = movedBy(mover);
     const carried = carrier === root ? { x: 0, y: 0 } : movedBy(carrier);
@@ -514,7 +520,7 @@ function playMoves(root: HTMLElement, before: Snapshot, timing: MoveTiming): voi
     const y = own.y - carried.y;
     if (Math.abs(x) < STILL && Math.abs(y) < STILL) continue;
     mover.animate([{ transform: `translate(${x}px, ${y}px)` }, { transform: "none" }], {
-      ...timing.travel,
+      ...glide,
       delay: timing.wait,
       fill: "backwards",
       composite: "add",
@@ -646,7 +652,8 @@ class ListMotionPlayer extends Component<
     // Note that the change that ends the read lands the last of it, which arrives as the rest of it did.
     playMoves(root, before, {
       wait: left && !closes ? Number(exit.duration) : 0,
-      travel: closes ? exit : shape,
+      travel: shape,
+      close: closes ? exit : undefined,
       arrive: tokenTiming(root, "--luke-duration-quick", "--luke-motion-exit"),
       stagger: reading
         ? 0
