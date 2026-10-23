@@ -257,3 +257,18 @@ export function ChipName(props: ChipNameProps): React.JSX.Element {
     </span>
   );
 }
+
+/**
+ * The quiet count after a chip's words, what a filter would leave out: in the
+ * subtle ink at fixed figures, and on a pressed filter stepped back from the
+ * ground's colour its words are in, rather than the subtle ink it would
+ * vanish into there. A reader hears the count where the chip's name or its
+ * description says it, so it is hidden from them here.
+ */
+export function ChipCount({ children }: { children: string }): React.JSX.Element {
+  return (
+    <span className="luke-chip-count" aria-hidden="true">
+      {children}
+    </span>
+  );
+}

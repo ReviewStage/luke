@@ -201,7 +201,7 @@ function smallTargets(): ReadonlyMap<string, Element> {
     [
       "the plan byline's time",
       markup(
-        '<p class="plan-byline"><span class="actor-line">Last edited · <button class="luke-text-button">2h ago</button></span></p>',
+        '<p class="plan-byline"><span class="actor-line">Last edited · <button class="luke-text-button" data-lines="whole">2h ago</button></span></p>',
         ".luke-text-button",
       ),
     ],
@@ -450,7 +450,7 @@ function transcriptRows(): [string, HTMLElement][] {
   host.innerHTML = `
     <div class="tool"><details><summary class="luke-line-button" data-look="row" data-row="a call's line"></summary></details></div>
     <details class="todos-dock"><summary class="todos-dock-head" data-row="the to-do list's head"></summary></details>
-    <div class="agent-published-dock"><ul class="luke-list"><li class="luke-list-row"><button class="luke-list-row-main" data-row="the pull request's row"></button></li></ul></div>`;
+    <div class="agent-published-dock"><ul class="luke-list" data-finger-tall="true"><li class="luke-list-row"><button class="luke-list-row-main" data-row="the pull request's row"></button></li></ul></div>`;
   return [...host.querySelectorAll<HTMLElement>("[data-row]")].map((row) => [
     row.dataset.row ?? "",
     row,

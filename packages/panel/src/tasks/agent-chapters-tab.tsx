@@ -648,7 +648,12 @@ function ChaptersReading({
                     onBeside={() => setBeside((was) => !was)}
                     onOver={() => setOver((was) => !was)}
                   />
-                  <Text as={TEXT_ELEMENT.H3} variant={TEXT_VARIANT.SECTION} id={headingId}>
+                  <Text
+                    as={TEXT_ELEMENT.H3}
+                    variant={TEXT_VARIANT.SECTION}
+                    id={headingId}
+                    className="chapter-head-title"
+                  >
                     {at + 1}. {chapter.title}
                   </Text>
                   {chapter.risk === null ? null : (

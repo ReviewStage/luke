@@ -44,6 +44,7 @@ import {
   CHOICE_BAR_FOLD,
   CHOICE_BAR_LOOK,
   Chip,
+  ChipCount,
   ChipName,
   ChoiceBar,
   type ChoiceItem,
@@ -58,8 +59,10 @@ import {
   ErrorState,
   Fill,
   IconButton,
+  LINE_BUTTON_LOOK,
   LIST_DENSITY,
   LIST_VARIANT,
+  LineButton,
   List,
   ListRow,
   linesCount,
@@ -122,6 +125,8 @@ import { appPlatform } from "../app-platform.js";
 import { useCopyLinkItem } from "../copy-link-item.js";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu.js";
 import { type HandTabActions, useHandedTabActions } from "../desktop/strip-tabs.js";
+import { SHELL_ROOM } from "../shell-room.js";
+import { ShellRoomContext } from "../stage-room.js";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast.js";
 import {
   AgentChangesTab,
@@ -957,13 +962,13 @@ function ThreadWhere({
   if (onPress === undefined) return <Tooltip label={named}>{words}</Tooltip>;
   return (
     <Tooltip label={THREAD_REVEAL_WORDS.VIEW_FILES}>
-      <TextButton
-        tone={TEXT_BUTTON_TONE.QUIET}
+      <LineButton
+        look={LINE_BUTTON_LOOK.BAND}
         aria-label={`${THREAD_REVEAL_WORDS.VIEW_FILES}: ${named}`}
         onClick={onPress}
       >
         {words}
-      </TextButton>
+      </LineButton>
     </Tooltip>
   );
 }
@@ -1581,11 +1586,13 @@ function HeaderTitle({
 }): React.JSX.Element {
   if (title === undefined) {
     return (
-      <PartSkeleton
-        label={PULL_REQUEST_WORDS.READING}
-        widths={["60%"]}
-        className="pull-request-title"
-      />
+      <div className="pull-request-title-wait">
+        <PartSkeleton
+          label={PULL_REQUEST_WORDS.READING}
+          widths={["60%"]}
+          className="pull-request-title"
+        />
+      </div>
     );
   }
   return (
@@ -1787,11 +1794,7 @@ function ConversationFilter({
         onClick={() => onChange(!on)}
       >
         <ChipName>{label}</ChipName>
-        {count === undefined ? null : (
-          <span className="pull-request-filter-count" aria-hidden="true">
-            {formatLocaleCount(count)}
-          </span>
-        )}
+        {count === undefined ? null : <ChipCount>{formatLocaleCount(count)}</ChipCount>}
       </Chip>
       {note === undefined ? null : (
         <span id={noteId} hidden>
@@ -2262,6 +2265,11 @@ function PullRequestTabBody({
   const status = agent?.status;
   const ended = !agentStillWriting(status ?? CODING_AGENT_STATUS.RUNNING);
   const id = useId();
+  // A phone names each of the tabs in words, never their glyphs alone, which a finger cannot hover for a name.
+  const tabsFold =
+    useContext(ShellRoomContext) === SHELL_ROOM.NARROW
+      ? CHOICE_BAR_FOLD.WORDS
+      : CHOICE_BAR_FOLD.TOGETHER;
   const ids = (each: PullRequestView) => ({
     tab: `${id}-${each}-tab`,
     panel: `${id}-${each}-panel`,
@@ -2425,11 +2433,13 @@ function PullRequestTabBody({
                   <div className="pull-request-title-row">
                     <HeaderTitle title={title} writes={writes} />
                     {held === undefined ? null : (
-                      <PullRequestStateMenu
-                        pullRequest={held}
-                        queued={overview?.merging?.queued}
-                        writes={writes}
-                      />
+                      <div className="pull-request-state">
+                        <PullRequestStateMenu
+                          pullRequest={held}
+                          queued={overview?.merging?.queued}
+                          writes={writes}
+                        />
+                      </div>
                     )}
                     <div className="pull-request-title-actions">
                       {onRun === undefined || held === undefined ? null : (
@@ -2460,15 +2470,17 @@ function PullRequestTabBody({
                   />
                 </header>
                 <div className="pull-request-tabs">
-                  <ChoiceBar<PullRequestView>
-                    label="Pull request"
-                    items={tabsOf(parts, published, held, changes, chapters)}
-                    value={view}
-                    onChange={onView}
-                    look={CHOICE_BAR_LOOK.FILL}
-                    fold={CHOICE_BAR_FOLD.TOGETHER}
-                    panels={ids}
-                  />
+                  <div className="pull-request-tab-bar">
+                    <ChoiceBar<PullRequestView>
+                      label="Pull request"
+                      items={tabsOf(parts, published, held, changes, chapters)}
+                      value={view}
+                      onChange={onView}
+                      look={CHOICE_BAR_LOOK.FILL}
+                      fold={tabsFold}
+                      panels={ids}
+                    />
+                  </div>
                   {reviewable ? (
                     <PullRequestReview
                       writes={review}

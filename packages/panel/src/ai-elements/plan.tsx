@@ -1,4 +1,4 @@
-import { DisclosureChevron } from "@luke/ui";
+import { DisclosureChevron, GlyphSlot } from "@luke/ui";
 import { useClipped } from "@luke/ui/use-clipped";
 import type { ReactNode } from "react";
 import {
@@ -56,11 +56,7 @@ export function PlanHeader({ children, ...props }: TaskHeaderProps): ReactNode {
 
 /** The seat a header's icon stands in, before the title, whatever icon the caller hands it. */
 export function PlanIcon({ children }: { children: ReactNode }): ReactNode {
-  return (
-    <span className="plan-card-icon" aria-hidden="true">
-      {children}
-    </span>
-  );
+  return <GlyphSlot>{children}</GlyphSlot>;
 }
 
 export type TaskTitleProps = {

@@ -220,22 +220,19 @@
 /* The byline's presses, its people and the time that opens the version
    history, each take a press a finger's height on a coarse pointer, and at
    least as wide, centred on what they draw; the lines between them part a
-   little further, so one line's press does not cover the next's words. Note
-   that the time's own clip is lifted there, since it would clip its press,
-   and the time is too short to want cutting. */
+   little further, so one line's press does not cover the next's words. The
+   time is drawn whole (`TEXT_BUTTON_LINES.WHOLE`), which takes its own. */
 @media (pointer: coarse) {
   .plan-byline {
     row-gap: var(--luke-space-12);
   }
 
-  .plan-byline [data-actor-ref],
-  .plan-byline .luke-text-button {
+  .plan-byline [data-actor-ref] {
     position: relative;
     overflow: visible;
   }
 
-  .plan-byline [data-actor-ref]::before,
-  .plan-byline .luke-text-button::before {
+  .plan-byline [data-actor-ref]::before {
     position: absolute;
     top: 50%;
     left: 50%;
@@ -739,20 +736,11 @@
 
 /* The picture's press stands centred where the picture did. With a mouse in a
    wide room a pointer's press opens nothing and falls through to the
-   section, so there the press wears the plain pointer and does not sink; a
-   key's press still opens it. */
-.plan-diagram > .luke-picture-tile {
-  margin-inline: auto;
-}
-
-@media (pointer: fine) {
-  .desktop-shell:not([data-room="narrow"]) .plan-diagram > .luke-picture-tile {
-    cursor: auto;
-  }
-
-  .desktop-shell:not([data-room="narrow"]) .plan-diagram .luke-picture-tile-face {
-    transform: none;
-  }
+   section (`pointerOpens`); a key's press still opens it. */
+.plan-diagram-stage {
+  display: flex;
+  min-width: 0;
+  justify-content: center;
 }
 
 @media (pointer: coarse) {
@@ -1329,7 +1317,7 @@
 /* Words leading the bar, with no control before them. */
 .file-view-bar > .page-view-title,
 .file-view-bar > .terminal-tab-title,
-.file-view-bar > .luke-breadcrumb-bar > :is(.file-view-path, .files-viewed):first-child {
+.file-view-bar :is(.file-view-path, .files-viewed):first-child {
   padding-left: var(--row-inset);
 }
 
@@ -2058,7 +2046,8 @@
   transform: translate(-50%, var(--luke-space-4));
 }
 
-.diff-list > .luke-scroll-area > :first-child {
+/* Pierre's own container, which it draws the files into inside the scroller. */
+[data-diff-list-scroller] > :first-child {
   padding-inline: var(--luke-space-12);
 }
 
@@ -2117,7 +2106,8 @@
   min-width: 0;
 }
 
-.diff-list-path-part > .luke-text-button {
+/* The path's folder and name in a row inside its press, the folder cut short first. */
+.diff-list-path-words {
   display: flex;
   min-width: 0;
 }
@@ -2285,10 +2275,6 @@
   gap: var(--luke-control-gap);
   padding: var(--luke-space-4) var(--luke-space-6);
   border-bottom: 1px solid var(--luke-color-border);
-}
-
-.file-tree-search > .luke-search-field {
-  flex: 1;
 }
 
 /* Beside Files changed's cards, the search stands where the first card does,
@@ -2646,7 +2632,7 @@
   gap: var(--luke-control-gap);
 }
 
-.chapter-head-row > .luke-text {
+.chapter-head-title {
   min-width: 0;
   overflow-wrap: anywhere;
 }
@@ -2680,17 +2666,19 @@
   list-style: none;
 }
 
+/* The words take the card's width; the press to its lines hugs its own. */
 .chapter-key-change {
   display: flex;
   flex-direction: column;
+  align-items: flex-start;
   gap: var(--luke-space-2);
   padding: var(--luke-space-6) var(--luke-space-8);
   border: 1px solid var(--luke-color-border);
   border-radius: var(--luke-control-radius);
 }
 
-.chapter-key-change > .luke-text-button {
-  align-self: flex-start;
+.chapter-key-change-words {
+  align-self: stretch;
 }
 
 /* A key change's lines named alone, while stale chapters draw no diff to bring them into. */
@@ -2813,7 +2801,8 @@
   border-bottom: 1px solid var(--luke-color-border);
 }
 
-.pull-request-tabs > .luke-choice-bar {
+/* The tabs take what room Review leaves them. */
+.pull-request-tab-bar {
   min-width: 0;
   flex: 1 1 0;
 }
@@ -2875,8 +2864,8 @@
   reading-flow: flex-visual;
 }
 
-.pull-request-title-row > .luke-chip,
-.pull-request-title-row > .luke-badge {
+.pull-request-state {
+  display: flex;
   flex: none;
   /* Note that the pill is drawn ahead of the title it follows in the
      markup, where a screen reader names the title first. */
@@ -2887,7 +2876,7 @@
 }
 
 .pull-request-title-row > .pull-request-title,
-.pull-request-title-row > .luke-skeleton-region {
+.pull-request-title-row > .pull-request-title-wait {
   min-width: 0;
   flex: 1 1 auto;
   padding-block: calc((var(--luke-control-height) - var(--luke-type-dialog-leading)) / 2);
@@ -2911,13 +2900,12 @@
     reading-flow: normal;
   }
 
-  .pull-request-title-row > .luke-chip,
-  .pull-request-title-row > .luke-badge {
+  .pull-request-state {
     order: 0;
   }
 
   .pull-request-title-row > .pull-request-title,
-  .pull-request-title-row > .luke-skeleton-region {
+  .pull-request-title-row > .pull-request-title-wait {
     flex-basis: 100%;
     padding-block: 0;
   }
@@ -2955,24 +2943,6 @@
   mask-image: linear-gradient(to left, transparent, #000 var(--label-fade));
   mask-origin: content-box;
   mask-repeat: no-repeat;
-}
-
-/* A phone names each of the tabs in words, never their glyphs alone, which
-   a finger cannot hover for a name: the glyphs give way instead, and a row
-   still too long scrolls sideways, as a fill bar does. */
-.desktop-shell[data-room="narrow"] .pull-request-tabs .luke-choice-bar-icon {
-  display: none;
-}
-
-.desktop-shell[data-room="narrow"]
-  .pull-request-tabs
-  .luke-choice-bar[data-folded="true"]
-  .luke-choice-bar-label {
-  position: static;
-  overflow: visible;
-  width: auto;
-  height: auto;
-  clip-path: none;
 }
 
 /* The Conversation's scroller (agent-pull-request-tab.tsx's
@@ -3063,12 +3033,6 @@
   color: var(--luke-color-text);
 }
 
-/* The chevron at the heading's glyph size, its turn the disclosure's. */
-.pull-request-section-head > .luke-disclosure-turn > svg {
-  width: var(--luke-control-icon);
-  height: var(--luke-control-icon);
-}
-
 /* What the heading holds at its end, Hide resolved and Hide bots on the
    Conversation's: filter chips as the tasks board's toolbar draws its view
    filter, each its word and the quiet count of what it leaves out, pressed
@@ -3082,18 +3046,6 @@
 
 .pull-request-filter {
   display: inline-flex;
-}
-
-.pull-request-filter-count {
-  color: var(--luke-color-text-subtle);
-  font-variant-numeric: tabular-nums;
-}
-
-/* A pressed filter is drawn in the ink, so its count steps back from the
-   ground's colour its words are in, rather than the subtle ink it would
-   vanish into. */
-.luke-chip[aria-pressed="true"] .pull-request-filter-count {
-  color: color-mix(in srgb, var(--luke-color-ink-inverse) 65%, var(--luke-color-ink));
 }
 
 /* What a section holds opens a step under its band. */
@@ -3909,18 +3861,6 @@
   line-height: var(--luke-type-caption-leading);
 }
 
-.annotation-card-where > .luke-text-button {
-  display: flex;
-  width: 100%;
-  min-width: 0;
-  border-radius: 0;
-  transition: background-color var(--luke-duration-hover) ease;
-}
-
-.annotation-card-where > .luke-text-button:hover {
-  background: var(--luke-color-fill-hover);
-}
-
 .annotation-where {
   display: flex;
   min-width: 0;
@@ -3965,9 +3905,11 @@
   background: var(--luke-color-fill-hover);
 }
 
-.annotation-card-head > .luke-disclosure-turn {
+.annotation-card-turn {
+  display: flex;
   width: var(--annotation-turn);
   height: var(--annotation-turn);
+  flex: none;
   align-items: center;
   justify-content: center;
 }
@@ -4302,9 +4244,11 @@
   position: relative;
 }
 
-.whole-file > .luke-spinner-region {
+/* The wait for the file's bundle stands over the whole of it. */
+.whole-file-wait {
   position: absolute;
   inset: 0;
+  display: flex;
 }
 
 /* A note under a line of a whole file, its card or its chip: Pierre stands
@@ -4332,11 +4276,9 @@
   container: annotation luke-room / inline-size;
 }
 
-/* Luke is told by his wing mark and his name in his own colour, on the card a review thread wears. */
-.file-note .transcript-luke-mark,
-.file-note .transcript-luke-mark .luke-face {
-  width: var(--annotation-face);
-  height: var(--annotation-face);
+/* Luke is told by his wing mark, at the card's face size (`--luke-glyph-size`), and his name in his own colour, on the card a review thread wears. */
+.file-note .annotation-card {
+  --luke-glyph-size: var(--annotation-face);
 }
 
 .file-note-author {
@@ -4456,21 +4398,6 @@ ol.transcript-list {
    over it. */
 .tool {
   font-size: var(--luke-type-caption-size);
-}
-
-.tool-icon {
-  display: flex;
-  width: 16px;
-  height: 16px;
-  flex-shrink: 0;
-  align-items: center;
-  justify-content: center;
-  color: var(--luke-color-text-muted);
-}
-
-.tool-icon > svg {
-  width: 16px;
-  height: 16px;
 }
 
 .tool-words {
@@ -4671,21 +4598,6 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
   border-bottom-right-radius: 0;
 }
 
-.plan-card-icon {
-  display: flex;
-  width: 16px;
-  height: 16px;
-  flex-shrink: 0;
-  align-items: center;
-  justify-content: center;
-  color: var(--luke-color-text-muted);
-}
-
-.plan-card-icon > svg {
-  width: 16px;
-  height: 16px;
-}
-
 .plan-card-title {
   min-width: 0;
   flex: 1;
@@ -4721,12 +4633,6 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
    brain, in the muted ink, keeping their own breaks and wrapping anywhere. */
 .reasoning {
   font-size: var(--luke-type-caption-size);
-}
-
-.reasoning-icon {
-  width: 16px;
-  height: 16px;
-  flex-shrink: 0;
 }
 
 .reasoning-preview {
@@ -4895,7 +4801,7 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
 /* An agent's tab while its transcript or the agent is read
    (`agent-tab-skeleton.tsx`): the log's last lines stand at its foot, where
    the newest lines draw, on the log's own inset, over the composer's card. */
-.agent-tab > .luke-skeleton-region {
+.agent-log-wait {
   display: flex;
   min-height: 0;
   flex: 1;
@@ -4908,19 +4814,6 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
   flex-direction: column;
   gap: var(--luke-space-8);
   padding: var(--luke-section-gap) var(--luke-space-16) var(--luke-space-20);
-}
-
-.transcript-luke-mark {
-  display: flex;
-  width: 16px;
-  height: 16px;
-  flex: 0 0 auto;
-}
-
-.transcript-luke-mark .luke-face {
-  width: 16px;
-  height: 16px;
-  color: var(--voice-luke);
 }
 
 /* Coding agents --------------------------------------------------------- */
@@ -5256,16 +5149,12 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
 
 /* A finger's press is 44px tall, so on a coarse pointer a transcript's rows
    that open something, the docked to-do list's head and the agent's pull
-   request's row, stand that tall, their words still centred, as a call's
-   line (a LineButton's row) does of its own; a mouse keeps their compact
-   heights. */
+   request's row (`List`'s `fingerTall`), stand that tall, their words still
+   centred, as a call's line (a LineButton's row) does of its own; a mouse
+   keeps their compact heights. */
 @media (pointer: coarse) {
   .todos-dock-head {
     height: auto;
-    min-height: 44px;
-  }
-
-  .agent-published-dock .luke-list-row-main {
     min-height: 44px;
   }
 }
@@ -5273,13 +5162,6 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
 .todos-dock[open] > .todos-dock-head {
   border-bottom-left-radius: 0;
   border-bottom-right-radius: 0;
-}
-
-.todos-dock-icon {
-  width: 16px;
-  height: 16px;
-  flex-shrink: 0;
-  color: var(--luke-color-text-muted);
 }
 
 .todos-dock-summary {
@@ -5336,20 +5218,6 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
   display: flex;
   align-items: flex-start;
   gap: var(--luke-icon-gap);
-}
-
-.todo-mark {
-  display: flex;
-  width: 16px;
-  height: 1lh;
-  flex-shrink: 0;
-  align-items: center;
-  justify-content: center;
-  color: var(--luke-color-text-muted);
-}
-
-.todo-item[data-todo-status="in_progress"] > .todo-mark {
-  color: var(--luke-color-text);
 }
 
 .todo-words {
@@ -6372,7 +6240,7 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
 
 /* The searchable menu's class rides a box drawn as its contents
    (`agent-servers.tsx`), so its rows lie in `@luke/ui`'s panel. */
-.luke-popover-panel > .agent-servers-menu {
+.searchable-menu.agent-servers-menu {
   display: contents;
 }
 
@@ -6823,22 +6691,6 @@ svg.lucide {
   color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
   line-height: var(--luke-type-caption-leading);
-}
-
-/* The harness's mark, in the 16px seat a call's icon stands in. */
-.subagent-icon {
-  display: flex;
-  width: 16px;
-  height: 16px;
-  flex-shrink: 0;
-  align-items: center;
-  justify-content: center;
-  color: var(--luke-color-text-muted);
-}
-
-.subagent-icon > svg {
-  width: 16px;
-  height: 16px;
 }
 
 .subagent-job {
@@ -7726,7 +7578,7 @@ svg.lucide {
 }
 
 /* A list with nothing in it lays its empty state out as the column it fills (`empty-state.tsx`). */
-.comments-list:has(.luke-empty-state) {
+.comments-list[data-empty] {
   display: flex;
   min-height: 100%;
   flex-direction: column;

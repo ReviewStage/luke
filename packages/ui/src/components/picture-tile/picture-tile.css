@@ -40,4 +40,13 @@
   .luke-picture-tile:active .luke-picture-tile-face {
     transform: scale(0.98);
   }
+
+  /* A place whose pointer's press opens nothing: the plain pointer, and no sink. */
+  .luke-picture-tile[data-pointer-opens="false"] {
+    cursor: auto;
+  }
+
+  .luke-picture-tile[data-pointer-opens="false"]:active .luke-picture-tile-face {
+    transform: none;
+  }
 }

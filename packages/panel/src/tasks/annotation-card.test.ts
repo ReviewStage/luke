@@ -122,7 +122,7 @@ function columns(card: HTMLElement) {
   const content = card.querySelector(".annotation-card-content") ?? assert.fail("a body");
   const comment = card.querySelector(".annotation-comment") ?? assert.fail("a comment");
   const headStyle = getComputedStyle(head);
-  const turn = card.querySelector(".luke-disclosure-turn") ?? assert.fail("a chevron");
+  const turn = card.querySelector(".annotation-card-turn") ?? assert.fail("a chevron's seat");
   const face = card.querySelector(".annotation-card-face") ?? assert.fail("a face");
   const headGap = pixels(head, headStyle.getPropertyValue("gap"));
   const headFace = paddingStart(head) + pixels(turn, getComputedStyle(turn).width) + headGap;

@@ -236,13 +236,15 @@ export function FileTreePane({
     >
       {edge === undefined ? null : <div className="side-panel-resize" {...edge} />}
       <search className="file-tree-search">
-        <TreeSearch
-          field={field}
-          query={query}
-          scope={scope}
-          floating={float?.floating ?? false}
-          onQuery={setQuery}
-        />
+        <Fill>
+          <TreeSearch
+            field={field}
+            query={query}
+            scope={scope}
+            floating={float?.floating ?? false}
+            onQuery={setQuery}
+          />
+        </Fill>
         {shown === undefined ? null : (
           <Tooltip label={shown.length === 0 ? "Luke has shown no files yet" : filterLabel}>
             <IconButton

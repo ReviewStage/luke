@@ -1,4 +1,4 @@
-import { LineSummary, TextButton, useDisclosureBodyDrawn } from "@luke/ui";
+import { GlyphSlot, LineSummary, TextButton, useDisclosureBodyDrawn } from "@luke/ui";
 import { useClipped } from "@luke/ui/use-clipped";
 import { type ReactNode, useState } from "react";
 import { GLYPH_STATE, StateGlyph, stateEndMark } from "../state-glyph.js";
@@ -154,9 +154,7 @@ export function ToolLine({
   const [labelBox, labelClipped] = useClipped(label ?? "");
   return (
     <>
-      <span className="tool-icon" aria-hidden="true">
-        {icon}
-      </span>
+      <GlyphSlot>{icon}</GlyphSlot>
       {/* Note that the label keeps its space, so the line still reads as one sentence to find, copy, and a screen reader, though the flex gap sets it. */}
       <span className="tool-words">
         {label === undefined ? null : (

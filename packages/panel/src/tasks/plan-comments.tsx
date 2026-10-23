@@ -1908,7 +1908,10 @@ export function PlanCommentsTab({
           />
         </div>
         <ScrollArea ref={list} fade={SCROLL_FADE.BOTH}>
-          <div className="comments-list">
+          <div
+            className="comments-list"
+            data-empty={!control.failed && listed.length === 0 && control.read ? "" : undefined}
+          >
             {control.failed ? (
               <ErrorState placement={ERROR_STATE_PLACEMENT.CENTRED} onRetry={control.onRetry}>
                 The comments could not be read.

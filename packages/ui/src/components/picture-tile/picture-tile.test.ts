@@ -94,3 +94,28 @@ test("a hint wrapping a picture tile hears its press, and the tile still opens",
 
   expect(heard).toEqual(["hint", "open"]);
 });
+
+test("a tile a pointer's press does not open lets that press pass to its place, and a key's press still opens it", () => {
+  const opened: string[] = [];
+  const reached: string[] = [];
+  const container = mount(
+    createElement(
+      "div",
+      { onClick: () => reached.push("section") },
+      createElement(PictureTile, {
+        name: "A diagram",
+        pointerOpens: false,
+        onOpen: () => opened.push("diagram"),
+        children: shot("A diagram"),
+      }),
+    ),
+  );
+  const tile = container.querySelector("button") ?? expect.unreachable("the tile is drawn");
+
+  act(() => tile.dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 1 })));
+  expect(opened).toEqual([]);
+  expect(reached).toEqual(["section"]);
+
+  act(() => tile.dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 0 })));
+  expect(opened).toEqual(["diagram"]);
+});

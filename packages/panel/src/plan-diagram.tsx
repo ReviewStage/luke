@@ -9,9 +9,18 @@ import {
   type DiagramModule,
 } from "@luke/ui/diagram-contract";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
-import { type ReactNode, useEffect, useReducer, useState, useSyncExternalStore } from "react";
+import {
+  type ReactNode,
+  useContext,
+  useEffect,
+  useReducer,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import { DIAGRAM_REFUSED_LINE, useSideBundles } from "./bundle-loader.js";
-import { coarsePointerNow } from "./coarse-pointer.js";
+import { coarsePointerNow, useCoarsePointer } from "./coarse-pointer.js";
+import { SHELL_ROOM } from "./shell-room.js";
+import { ShellRoomContext } from "./stage-room.js";
 import { AttachmentViewer } from "./tasks/attachment-viewer.js";
 import { IMAGE_OPENING } from "./tasks/use-image-zoom.js";
 
@@ -191,6 +200,10 @@ export function PlanDiagram({
   const [fullScreen, setFullScreen] = useState(false);
   const picture = drawingNow?.kind === DIAGRAM_DRAWING.DRAWN ? drawingNow.url : undefined;
   const pictureShown = picture !== undefined && !showingCode;
+  // Note that this draws what a press would do, where `opensFullScreen` asks again as the press lands.
+  const coarse = useCoarsePointer();
+  const room = useContext(ShellRoomContext);
+  const pointerOpens = coarse || room === SHELL_ROOM.NARROW;
   return (
     <figure className="plan-diagram ph-no-capture" aria-busy={drawingNow === undefined}>
       <div className="plan-diagram-head">
@@ -210,20 +223,23 @@ export function PlanDiagram({
       </div>
       {drawingNow?.kind === DIAGRAM_DRAWING.REFUSED ? <RefusedLine /> : null}
       {pictureShown ? (
-        <PictureTile
-          name={DIAGRAM_ALT}
-          onOpen={(event) => {
-            // Note that a key's press (no pointer's click count) opens it in any room, because the
-            // head's Full screen stands only where a finger's tap would open it too.
-            const keyed = event.detail === 0;
-            if (!keyed && !opensFullScreen(event.currentTarget)) return;
-            // The press is the picture's, so the section around it does not open to be edited.
-            event.stopPropagation();
-            setFullScreen(true);
-          }}
-        >
-          <DiagramPicture url={picture} />
-        </PictureTile>
+        <div className="plan-diagram-stage">
+          <PictureTile
+            name={DIAGRAM_ALT}
+            pointerOpens={pointerOpens}
+            onOpen={(event) => {
+              // Note that a key's press (no pointer's click count) opens it in any room, because the
+              // head's Full screen stands only where a finger's tap would open it too.
+              const keyed = event.detail === 0;
+              if (!keyed && !opensFullScreen(event.currentTarget)) return;
+              // The press is the picture's, so the section around it does not open to be edited.
+              event.stopPropagation();
+              setFullScreen(true);
+            }}
+          >
+            <DiagramPicture url={picture} />
+          </PictureTile>
+        </div>
       ) : (
         source
       )}

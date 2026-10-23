@@ -68,6 +68,7 @@ export function TaskPaneSwitcher({
         items={items}
         value={pane}
         look={CHOICE_BAR_LOOK.SEGMENTED}
+        stretch
         onChange={onChoose}
       />
     </div>

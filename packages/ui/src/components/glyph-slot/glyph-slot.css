@@ -1,0 +1,36 @@
+/* glyph-slot.css -- GlyphSlot: a glyph's square seat before a line's words,
+   16px unless `--luke-glyph-size` says otherwise, its glyph centred in it and
+   filling it, in the ink the slot names. */
+
+@layer components {
+  .luke-glyph-slot {
+    display: inline-flex;
+    width: var(--luke-glyph-size, var(--luke-space-16));
+    height: var(--luke-glyph-size, var(--luke-space-16));
+    flex: none;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* Before words that may wrap, as tall as their first line and centred on it. */
+  .luke-glyph-slot[data-line="true"] {
+    height: 1lh;
+  }
+
+  .luke-glyph-slot > :is(svg, img) {
+    width: var(--luke-glyph-size, var(--luke-space-16));
+    height: var(--luke-glyph-size, var(--luke-space-16));
+  }
+
+  .luke-glyph-slot[data-ink="muted"] {
+    color: var(--luke-color-text-muted);
+  }
+
+  .luke-glyph-slot[data-ink="text"] {
+    color: var(--luke-color-text);
+  }
+
+  .luke-glyph-slot[data-ink="voice"] {
+    color: var(--luke-color-working);
+  }
+}

@@ -146,13 +146,17 @@ test("a badge whose words wrap stands as a rounded box, never a bubble", () => {
 
 test("a board card's 1 needs you keeps its words on one line, the maker's name giving way", () => {
   const marks = draw(
-    createElement(WaitingBadge, { count: 1 }),
+    createElement(
+      "span",
+      { className: "tasks-board-waiting" },
+      createElement(WaitingBadge, { count: 1 }),
+    ),
     "tasks-board-card",
     "tasks-board-card-head",
     "tasks-board-card-marks",
   );
-  const badge = marks.querySelector(".luke-badge") ?? assert.fail("the badge");
-  assert.equal(getComputedStyle(badge).flexShrink, "0");
+  const seat = marks.querySelector(".tasks-board-waiting") ?? assert.fail("the badge's seat");
+  assert.equal(getComputedStyle(seat).flexShrink, "0");
 });
 
 test("a settled form's long value drops under its name rather than squeezing the name a letter a line", () => {
