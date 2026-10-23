@@ -55,6 +55,8 @@ export const skeletonThroughComponentsRule = defineRule({
         "`<{{tag}}>` is drawn in `{{component}}`, which is no `*Skeleton` component. Draw a skeleton's blocks in a component named `*Skeleton`, which the surface renders while it reads.",
       copiedBox:
         '`class="{{name}}"` on `<{{tag}}>` in `{{component}}` copies a box of the surface it stands for. Draw the box through the component the loaded state draws it with, factoring one out where the surface builds it by hand; a class of the skeleton\'s own names itself one (`…-skeleton…`).',
+      spreadBox:
+        "A spread on `<{{tag}}>` in `{{component}}` may carry a class that copies a box of the surface it stands for. Spell the skeleton's own class as a literal, or draw the box through a component.",
       unknownClass:
         "`<{{tag}}>`'s `className` in `{{component}}` is no literal, so it may copy a box of the surface it stands for. Spell the skeleton's own class as a literal, or draw the box through a component.",
     },
@@ -77,9 +79,12 @@ export const skeletonThroughComponentsRule = defineRule({
         const tag = intrinsicTagOf(node.name);
         if (!skeleton || tag === undefined) return;
         for (const attribute of node.attributes) {
-          if (attribute.type !== "JSXAttribute" || attributeName(attribute) !== "className") {
+          // Note that a spread may carry a class the rule cannot read, so it is refused as an unread class is.
+          if (attribute.type === "JSXSpreadAttribute") {
+            context.report({ node: attribute, messageId: "spreadBox", data: { tag, component } });
             continue;
           }
+          if (attributeName(attribute) !== "className") continue;
           const values = literalValuesOf(attribute.value);
           if (values === undefined) {
             context.report({

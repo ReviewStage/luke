@@ -41,6 +41,8 @@ tester.run("skeleton-through-components", skeletonThroughComponentsRule, {
       'function PartSkeleton({ wide }) { return <div className={wide ? "pr-skeleton pr-skeleton-wide" : "pr-skeleton"} />; }',
     ),
     // A lowercase helper inside a skeleton is the skeleton's own.
+    // A spread on a component is the component's to read, as the loaded state's is.
+    panel("function RowSkeleton(props) { return <ListRow {...props} title={<Skeleton />} />; }"),
     panel(
       "function TableSkeleton() { const bone = (w) => <Skeleton width={w} />; return <Table>{bone(1)}</Table>; }",
     ),
@@ -105,6 +107,17 @@ tester.run("skeleton-through-components", skeletonThroughComponentsRule, {
       errors: [
         { messageId: "copiedBox", data: { name: "pr-row", tag: "div", component: "PartSkeleton" } },
       ],
+    },
+    // A spread on an intrinsic element may carry a copied class, whether its source is a literal or not.
+    {
+      ...panel(
+        'function ComposerSkeleton() { return <div {...{ className: "agent-composer" }}><Skeleton /></div>; }',
+      ),
+      errors: [{ messageId: "spreadBox", data: { tag: "div", component: "ComposerSkeleton" } }],
+    },
+    {
+      ...panel("function PartSkeleton(props) { return <div {...props} />; }"),
+      errors: [{ messageId: "spreadBox" }],
     },
     // A class the rule cannot read may be a copied box.
     {
