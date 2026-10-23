@@ -16,7 +16,7 @@ import {
   resolveSigningMode,
   SIGNING_MODE,
 } from "./package-config.mjs";
-import { NATIVE_HELPERS, PACKAGED_ARCHITECTURE } from "./package-layout.mjs";
+import { NATIVE_HELPERS, packagedAppPath } from "./package-layout.mjs";
 import { builderReleaseArtifactDirectory, RELEASE_VOLUME_NAME } from "./release-config.mjs";
 
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
@@ -26,18 +26,10 @@ const desktopPackage = JSON.parse(fs.readFileSync(path.join(appRoot, "package.js
 const packageAssets = packageAssetPaths({ appRoot });
 const productName = desktopPackage.productName;
 const electronBuilderMetadataName = "luke";
-const electronBuilderMacAppPath = path.join(
-  builderReleaseArtifactDirectory(repoRoot),
-  `mac-${PACKAGED_ARCHITECTURE}`,
-  `${productName}.app`,
-);
-
-export const ELECTRON_BUILDER_UPDATE_CACHE_DIR_NAME = APP_UPDATE_CACHE_DIR_NAME;
-export const ELECTRON_BUILDER_UPDATE_FEED_URL = APP_UPDATE_FEED_URL;
 export const ELECTRON_BUILDER_UPDATE_PUBLISH_CONFIG = {
   provider: "generic",
-  url: ELECTRON_BUILDER_UPDATE_FEED_URL,
-  updaterCacheDirName: ELECTRON_BUILDER_UPDATE_CACHE_DIR_NAME,
+  url: APP_UPDATE_FEED_URL,
+  updaterCacheDirName: APP_UPDATE_CACHE_DIR_NAME,
 };
 export const ELECTRON_BUILDER_GITHUB_PUBLISH_CONFIG = {
   provider: "github",
@@ -149,7 +141,7 @@ export function createElectronBuilderConfig(env = process.env) {
           x: DMG_WINDOW.POSITIONS.APP.X,
           y: DMG_WINDOW.POSITIONS.APP.Y,
           type: "file",
-          path: electronBuilderMacAppPath,
+          path: packagedAppPath(repoRoot),
           name: `${productName}.app`,
         },
         {

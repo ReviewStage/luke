@@ -18,10 +18,12 @@ export const NATIVE_HELPERS = [
   { source: "OutputVolume.swift", binary: "mac-output-volume", frameworks: ["CoreAudio"] },
 ];
 
-export function packagedAppPath(repoRoot, architecture = PACKAGED_ARCHITECTURE) {
-  return path.join(repoRoot, "artifacts", "release-builder", `mac-${architecture}`, "Luke.app");
-}
-
-export function packagedAppExecutable(repoRoot, architecture = PACKAGED_ARCHITECTURE) {
-  return path.join(packagedAppPath(repoRoot, architecture), "Contents", "MacOS", "Luke");
+export function packagedAppPath(repoRoot) {
+  return path.join(
+    repoRoot,
+    "artifacts",
+    "release-builder",
+    `mac-${PACKAGED_ARCHITECTURE}`,
+    "Luke.app",
+  );
 }

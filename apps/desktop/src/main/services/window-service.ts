@@ -134,7 +134,6 @@ export interface WindowService extends DesktopService {
   /** Only this build's own renderer may reach a bridge entry. */
   trustedSender: (event: IpcMainEvent | IpcMainInvokeEvent) => boolean;
   applyLoginItem: (openAtLogin: boolean) => void;
-  recycleVoiceWindow: () => void;
 }
 
 /**
@@ -253,17 +252,6 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
     payload: PushPayload<Name>,
   ): boolean {
     return windowPushes.push(sender, push, payload);
-  }
-
-  function broadcast<Name extends PushName>(
-    push: Name,
-    payload: PushPayload<Name>,
-    except?: WebContents,
-  ): void {
-    panels.broadcast(push, payload, except);
-    const voice = voiceWindow.current();
-    if (!voice || voice.webContents === except) return;
-    sendTo(voice.webContents, push, payload);
   }
 
   function windowFactsFor(sender: WebContents): AppWindowFacts {
@@ -434,7 +422,6 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
   // Named one at a time because Electron's `on` is typed per event name.
   const wake = (eventName: "resume" | "unlock-screen" | "user-did-become-active") => () => {
     handleDisplayChange();
-    broadcast(PUSH.LIFECYCLE, eventName);
     // A terminal's socket may have died in the sleep without a word, and one waiting out a backoff need not wait on.
     if (eventName === "resume") void run(operator.host.terminalWake());
   };
@@ -471,11 +458,6 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
       return url === rendererUrl || url === voiceUrl || url === callUrl;
     },
     applyLoginItem,
-    recycleVoiceWindow: () => {
-      if (!voiceWindow.current()) return;
-      voiceWindow.close();
-      raiseVoiceWindow();
-    },
     start: async () => {
       followDockIcon(path.join(config.resourceDirectory, "icon"));
       const settings = await run(operator.ensureSettings());

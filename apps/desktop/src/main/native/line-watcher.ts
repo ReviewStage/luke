@@ -1,4 +1,4 @@
-import { NativeHelper, type NativeHelperProcess } from "./native-helper";
+import { NativeHelper } from "./native-helper";
 
 /**
  * What a parser returns for a line that says the helper cannot answer. A
@@ -15,8 +15,6 @@ type ParsedLine<State> = State | LineUnavailable | undefined;
 
 export interface LineWatcherOptions<State> {
   binary: string;
-  /** Fixed by the build and by the caller; never anything read from a model. */
-  arguments?: readonly string[];
   /** `"pipe"` only for a watcher that writes the helper a word. */
   input?: "ignore" | "pipe";
   parse: (line: string) => ParsedLine<State>;
@@ -34,14 +32,6 @@ export interface LineWatcherOptions<State> {
    * subject can come back (the default output device changes).
    */
   unavailableLineEnds: boolean;
-  /**
-   * How long `stop()` waits for the process to actually exit. Zero — the
-   * default — kills and does not wait. Non-zero only where a successor needs
-   * the system to have released what this process held.
-   */
-  exitWaitMs?: number;
-  /** Internal seam for tests; production always uses the one spawn in NativeHelper. */
-  spawnProcess?: () => NativeHelperProcess | undefined;
 }
 
 export interface LineWatcher {
@@ -49,8 +39,8 @@ export interface LineWatcher {
   start(): boolean;
   /** One line to the helper's stdin; false when there is nothing to write to. */
   send(line: string): boolean;
-  /** Detaches, kills, and resolves when the process is gone or `exitWaitMs` elapses. */
-  stop(): Promise<void>;
+  /** Detaches and kills, without waiting for the process to exit. */
+  stop(): void;
 }
 
 /**
@@ -90,10 +80,8 @@ export function lineWatcher<State>(options: LineWatcherOptions<State>): LineWatc
       if (helper || done) return false;
       const started = new NativeHelper({
         binary: options.binary,
-        ...(options.arguments ? { arguments: options.arguments } : undefined),
         ...(options.input ? { input: options.input } : undefined),
         output: "lines",
-        ...(options.spawnProcess ? { spawnProcess: options.spawnProcess } : undefined),
       });
       started.onLine(handle);
       started.onExit(end);
@@ -107,14 +95,14 @@ export function lineWatcher<State>(options: LineWatcherOptions<State>): LineWatc
     send(line: string): boolean {
       return done ? false : (helper?.writeLine(line) ?? false);
     },
-    stop(): Promise<void> {
+    stop(): void {
       // Latched before detaching: the pipe outlives the kill by however long
       // the process takes to die, so a line still in it is dropped rather than
       // acted on under a helper the app has already let go of.
       const stopping = helper;
       done = true;
       helper = undefined;
-      return stopping?.stop(options.exitWaitMs ?? 0) ?? Promise.resolve();
+      stopping?.stop();
     },
   };
 }

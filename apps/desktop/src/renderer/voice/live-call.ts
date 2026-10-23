@@ -33,7 +33,12 @@ import {
   stopDevice,
 } from "@luke/panel/voice/live-peer";
 import { VOICE_ACTIVITY_HANGOVER_MS } from "@luke/panel/voice/voice-level-meter";
-import { AVATAR_STATUS, type AvatarFeed, type AvatarStatus } from "@luke/voice/avatar";
+import {
+  AVATAR_STATUS,
+  type AvatarFeed,
+  type AvatarStatus,
+  avatarStanding,
+} from "@luke/voice/avatar";
 import {
   AVATAR_HANDOVER_DIRECT,
   type AvatarHandover,
@@ -884,7 +889,7 @@ export class LiveCall implements LiveVoiceCall {
       avatarFeed !== undefined &&
       stream !== undefined &&
       !this.#ended &&
-      (this.#avatarStatus === AVATAR_STATUS.STARTING || this.#avatarStatus === AVATAR_STATUS.LIVE);
+      avatarStanding({ status: this.#avatarStatus });
     if (!wanted) {
       if (this.#tee !== undefined) this.#disarm(this.#tee);
       this.#tee = undefined;

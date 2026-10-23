@@ -45,7 +45,6 @@
   "rawAsyncPrimitives": [
     "apps/desktop/src/main/ipc/register-desktop-ipc.ts",
     "apps/desktop/src/main/native/media-duck.ts",
-    "apps/desktop/src/main/native/native-helper.ts",
     "apps/desktop/src/main/services/window-service.ts",
     "apps/desktop/src/main/window/voice-window.ts",
     "packages/panel/src/feedback-images.ts",
