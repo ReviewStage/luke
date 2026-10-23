@@ -40,6 +40,7 @@ import {
   type PlanEditorModule,
 } from "../plan-editor/contract.js";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast.js";
+import { useFileDrop } from "../use-file-drop.js";
 import { AttachFilesButton } from "./attach-files-button.js";
 import { AttachedFileChips, attachmentChips } from "./attached-file-chips.js";
 import { readFiles, withFiles } from "./attached-files.js";
@@ -156,11 +157,6 @@ const ITEM_CHANGED = "The agent changed this item while your files were read. At
 
 /** What the press after an archived agent's note says. */
 const UNARCHIVE = "Unarchive";
-
-/** Whether a drag carries files, which is all the card takes from one. */
-function carriesFiles(event: React.DragEvent): boolean {
-  return event.dataTransfer.types.includes("Files");
-}
 
 /**
  * What a box's note line asks for: a note, where a question's controls
@@ -448,7 +444,6 @@ function AnswerCard({
 }: AnswerBoxProps & { statuses: IntegrationStatuses }): React.JSX.Element {
   const toast = useToast();
   const [refusal, setRefusal] = useState<string | undefined>(undefined);
-  const [dropping, setDropping] = useState(false);
   // How many hand-offs of files are still being read, during which the answer waits.
   const [reading, setReading] = useState(0);
   const draft = control.draftOf(item);
@@ -534,32 +529,14 @@ function AnswerCard({
       .finally(() => setReading((count) => count - 1));
   };
   const takes = !answering || knownResponse(item.response);
+  const fileDrop = useFileDrop((files) => attach(Array.from(files)), { over: takes, drop: takes });
   // Note that Reply stands only while the editor stands and takes a quote, and no send is out, since a press lets the selection go.
   const quotes = takes && !sending && !dictating && module !== undefined;
   return (
-    // biome-ignore lint/a11y/noStaticElementInteractions: the card is a drop target alone; the keys it hears come from its own field and buttons.
-    <div
-      className="agent-composer"
-      onDragOver={(event) => {
-        if (!carriesFiles(event) || !takes) return;
-        event.preventDefault();
-        setDropping(true);
-      }}
-      onDragLeave={(event) => {
-        // A drag moving onto one of the card's own children has not left it.
-        const into = event.relatedTarget;
-        if (!(into instanceof Node && event.currentTarget.contains(into))) setDropping(false);
-      }}
-      onDrop={(event) => {
-        if (!carriesFiles(event) || !takes) return;
-        event.preventDefault();
-        setDropping(false);
-        attach(Array.from(event.dataTransfer.files));
-      }}
-    >
+    <div className="agent-composer" {...fileDrop.target}>
       {takes ? (
         <AnswerForm
-          dropping={dropping}
+          dropping={fileDrop.dropping}
           field={field}
           asks={asks}
           messages={!answering}
