@@ -16,7 +16,7 @@ export const timestamptz = (name: string) => timestamp(name, { withTimezone: tru
 export const createdAt = () => timestamptz("created_at").notNull().defaultNow();
 
 /**
- * Note that there is no `$onUpdate` here, unlike lobehub's: it would stamp
+ * Note that there is no `$onUpdate` here, unlike a stock Drizzle helper: it would stamp
  * the row from the real clock behind the caller's back, and every writer here
  * sets `updatedAt` itself from the instant its own clock read.
  */

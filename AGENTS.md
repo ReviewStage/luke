@@ -152,9 +152,8 @@ touched (`pnpm exec vitest run <path>`) or `pnpm check:affected` before a push
 is optional. `check.sh` is the full local run, for a release, a broad
 refactor, or on request, and must exit 0 when it is run.
 
-The vendored `testing` skill (`.agents/skills/testing`, lobehub's) is the
-testing guide, and the rules below agree with it. Its `bunx vitest` is
-`pnpm exec vitest` here.
+The rules below are the testing guide; every test runs on vitest, through
+`pnpm exec vitest`.
 
 - Every behavior change ships with a test that fails without it, same PR.
 - Use the smallest layer that catches the bug: a type or lint rule, then a
@@ -294,13 +293,12 @@ reads it: `packages/host/src/acts.ts`,
 
 - Schema at the boundary a value crosses, never a hand-written parser beside a
   hand-written shape.
-- Drizzle follows the vendored `drizzle` and `db-migrations` skills
-  (lobehub's): the `db.select()` builder, never `db.query`; the schema module
+- Drizzle: the `db.select()` builder, never `db.query`; the schema module
   under `packages/database/src/schemas/` first, then
   `pnpm db:generate --name=<what_it_does>` for its migration folder, which
   Drizzle's migrator applies by name and `drizzle-kit check` (run by
   `check.sh`) holds to commuting with every other branch's
-  (`packages/database/README.md`). Two things differ from lobehub's examples. A row is decoded
+  (`packages/database/README.md`). Two things differ from stock Drizzle usage. A row is decoded
   by an Effect `Schema` through `SqlSchema`, never `drizzle-zod`, because
   Effect takes no zod schema and a second validation library would split the
   one way a boundary value is declared. A statement is an `Effect` from

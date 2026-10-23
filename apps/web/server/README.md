@@ -22,10 +22,9 @@ For a new table or a changed one, edit the `packages/database/src/schemas/*.ts`
 module that declares it, run `pnpm db:generate`, and commit the SQL file,
 snapshot, and journal entry it writes under `packages/database/migrations/`
 in the same commit, with whatever query modules under `server/` need it. The
-vendored `drizzle` and `db-migrations` skills are the conventions: a text
-column typed by `$type<>()` rather than a `pgEnum`, a surrogate key rather
-than a new composite one, and an online index or a backfill handled the way
-`db-migrations` lays out. Dropping a column means deleting it from that module: the
+conventions: a text column typed by `$type<>()` rather than a `pgEnum`, a
+surrogate key rather than a new composite one, and an online index or a
+backfill written as idempotent SQL. Dropping a column means deleting it from that module: the
 drift check reads the database both ways, so a declaration the database no
 longer carries fails it exactly as a column no module declares does. It takes
 two deployments, because a build migrates while the deployment before it still
@@ -421,7 +420,7 @@ named imports from their own module
 which is what makes a renamed column a type error at the call site.
 
 The builder hands back the statement's rows, not a guarantee about them, so a
-row is still decoded by an Effect `Schema`, where lobehub's examples reach for
+row is still decoded by an Effect `Schema`, where Drizzle's usual answer is
 `drizzle-zod`: Effect takes no zod schema, and every other boundary value here
 is declared as a `Schema` already. `SqlSchema`'s `execute` takes the statement
 as the Effect the driver's builder already is, read off the service:
