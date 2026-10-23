@@ -241,6 +241,27 @@ Settings can show and restore an earlier one. A new task's plan begins as a copy
 it; no model reads the template itself. Deleting your account removes it and
 its history.
 
+**What Luke remembers.** Where its developer turned on the Memory
+experiment, as a coding agent works it may keep a fact or
+convention its developer settled or it confirmed in the code, such as how
+your team tests or ships, so later agents can recall it. Our service stores
+each one under the workspace the agent works in, as a short statement in the
+agent's words, with who it stands for (the member who started the agent that
+kept it, or the one whose agent last corrected it) and when, readable by our
+own operators like the transcript it came from; nothing asks you first. A
+memory is the workspace's shared knowledge: any member's coding agent there
+may read it, and Settings › Memory shows it to every member with your name on
+it. No agent of another workspace reads it. Luke refuses to keep words that
+look like a key, token, or password, and agents are told never to keep a
+remark personal to one member. In Settings › Memory you can forget a memory
+holding your words, and the workspace's owners and admins can forget any;
+forgetting deletes it at once, so no later agent recalls it. Like a
+project's history, a memory outlives the person who said it: leaving a
+workspace, or deleting your account, leaves the memories you kept with the
+workspace, and once your account is gone they no longer carry your name.
+Deleting a task does not remove a memory kept while working on it, and a
+workspace's memories go when the workspace does.
+
 **Pinned repositories.** When you pin a repository in the sidebar, our
 service stores its name and when you pinned it under your account, so the pin
 follows you to every Mac you sign in on. Unpinning deletes that record, and
@@ -1577,7 +1598,9 @@ and error, performance, and agent reports by Sentry.
   repositories, your tasks with their history, whiteboards, pages, coding
   agents, inbox items and pictures, and chat messages, the conversation with
   its attached files, every call's record, the commands waiting for your Mac with the
-  record of when it last read, your own API keys, Luke's record of your
+  record of when it last read, your own API keys, your name on the memories
+  Luke's agents kept in your words (the memories themselves stay with their
+  workspace), Luke's record of your
   Linear, Notion, Sentry, and Slack connections, and everything earlier
   versions left there — and asks PostHog to erase the person it holds for your
   account with its usage data and recordings, which PostHog queues and carries

@@ -790,6 +790,32 @@ test("with Chat off the instructions are the golden's, byte for byte, and messag
   }
 });
 
+test("with Memory off the instructions say nothing of the workspace's memory; with it on they add its section before the one on messages, and nothing else", () => {
+  for (const brief of Object.values(CODING_AGENT_BRIEF)) {
+    const off = coderInstructions("Acme/Relay", brief, true, TASK_LINK);
+    const on = coderInstructions(
+      "Acme/Relay",
+      brief,
+      true,
+      TASK_LINK,
+      undefined,
+      false,
+      null,
+      false,
+      CODER_HARNESS.EVE,
+      CODING_AGENT_KIND.CODER,
+      true,
+    );
+    assert.ok(!off.includes("## The workspace's memory"), brief);
+    assert.ok(!off.includes(`\`${CODER_TOOL.REMEMBER}\``), brief);
+    const start = on.indexOf("## The workspace's memory\n\n");
+    const end = on.indexOf("## What your messages are", start);
+    assert.ok(start > 0 && end > start, brief);
+    assert.ok(on.slice(start, end).includes(`\`${CODER_TOOL.RECALL}\``), brief);
+    assert.equal(on.slice(0, start) + on.slice(end), off, brief);
+  }
+});
+
 /** The member's operator's instructions, recorded byte for byte: an agent of kind operator, blank, on no task and no repository. */
 const OPERATOR_PATH = fileURLToPath(
   new URL("../../../fixtures/coder-instructions/operator.json", import.meta.url),

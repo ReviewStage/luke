@@ -80,6 +80,7 @@ import {
   useAdminAccess,
   useAdminAccessPending,
   useAppSlice,
+  useExperimentChoices,
   VOICE_AVAILABLE,
 } from "./use-app-state.js";
 import { useSignIn } from "./use-sign-in.js";
@@ -417,7 +418,12 @@ function AppWindow(): React.JSX.Element {
   });
   linkWorkspace.current = settingsWorkspace.link;
   // The page Settings shows, which a link to one the platform does not offer leaves on Profile.
-  const shownView = shownSettingsView(settingsPlace.view, run?.capabilities ?? NO_CAPABILITIES);
+  const experiments = useExperimentChoices();
+  const shownView = shownSettingsView(
+    settingsPlace.view,
+    run?.capabilities ?? NO_CAPABILITIES,
+    experiments,
+  );
   // The links the window can copy now: ⌥⌘C copies the first, and ⌘K offers each (`links-at-hand.ts`).
   const copyLink = useCopyLink(
     tasks,

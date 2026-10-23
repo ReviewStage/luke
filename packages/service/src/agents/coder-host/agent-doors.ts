@@ -76,6 +76,7 @@ import {
   runUpdateAgent,
   runUpdateTask,
 } from "../coding-agent-tools.js";
+import { runAgentRecall, runAgentRemember } from "../memory-tools.js";
 import { runListOpenAsks } from "../operator-desk.js";
 import {
   REPOSITORY_REFUSAL,
@@ -142,7 +143,9 @@ export interface AgentToolCall {
     | typeof CODER_TOOL.UPDATE_AUTOMATION
     | typeof CODER_TOOL.DELETE_AUTOMATION
     | typeof CODER_TOOL.RUN_AUTOMATION
-    | typeof CODER_TOOL.LIST_MODELS;
+    | typeof CODER_TOOL.LIST_MODELS
+    | typeof CODER_TOOL.REMEMBER
+    | typeof CODER_TOOL.RECALL;
   readonly input: UnparsedWireValue;
   readonly callId: string;
 }
@@ -168,6 +171,8 @@ const AGENT_TOOL_RUN = {
   [CODER_TOOL.RUN_AUTOMATION]: runRunAutomation,
   [CODER_TOOL.LIST_MODELS]: runListModels,
   [CODER_TOOL.LIST_OPEN_ASKS]: runListOpenAsks,
+  [CODER_TOOL.REMEMBER]: runAgentRemember,
+  [CODER_TOOL.RECALL]: runAgentRecall,
 } as const;
 
 /** One call of the agent's chat tools, by the tool's name and the input its runtime held to its schema; a post carries its call's id, its key, how many posts its turn has made, and the door to the session's sandbox, where its pictures are read. */

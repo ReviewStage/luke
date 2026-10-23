@@ -1439,6 +1439,47 @@ belong in that loop. It lives in `account_preference.plan_template`
 the preferences part's own, so a row a template opened answers no snapshot.
 `src/accounts/account-plan-template.test.ts` answers the path over a real dialect.
 
+### Workspace memory
+
+Memory stands behind the Memory experiment (`EXPERIMENT.MEMORY`), read for
+the agent's starter by `memoryOnFor` (`src/agents/memory-tools.ts`): while it
+is off the agent is offered neither tool, its instructions say nothing of the
+memory, and the tools' door refuses a call a harness offering every tool
+still makes; Settings › Memory stands nowhere in the panel.
+
+The `memory` table (`packages/database/src/schemas/memory.ts`) holds the facts
+and conventions a workspace's coding agents kept, one short statement a row,
+keyed by `organization_id` and leaving with the workspace. It is the
+workspace's, shared by every member, rather than a task's, a repository's, or
+one member's, so every agent in the workspace may recall it and no agent of
+another workspace does. Its `user_id` names the member whose words it holds:
+the starter of the agent that kept it, or of the one that last corrected it.
+Like the workspace's git history it outlives that member: leaving keeps it,
+and deleting the account sets `user_id` null, read as a former member.
+
+The coding agent keeps and searches it through `remember` and `recall`
+(`src/agents/memory-tools.ts`), offered to the `coder` role alone and never a
+worker, on both the eve tool files and Luke's MCP server through the shared
+agent door (`coder-host/agent-doors.ts`). The workspace and the starter are
+read from the service's record of the agent (`callerWorkspace`,
+`callerUserId`), never from the model. `packages/database/src/models/memory-store.ts`
+keeps a memory or corrects one in place under a lock on the workspace's row,
+so the same words kept twice stand once, a correction leaves no older version
+beside the new one, and the bound of 200 memories of 400 characters a
+workspace is counted once. Recall ranks the workspace's memories by how many
+of the query's words each holds; no index or embedding stands behind it.
+Credential-shaped words are refused before the store is reached, and a store
+that cannot be reached answers the agent that memory is unavailable rather
+than failing the turn.
+
+Settings › Memory reads them through the account resource's `memories` and
+`forgetMemory` procedures (`src/accounts/memories-procedures.ts`, on
+`/api/account/memories?workspaceId=`), each to a member of the workspace the
+query names: an account that is no member is answered `NOT_FOUND`. A forget is
+the member's whose words the memory holds, or an owner's or admin's
+(`src/accounts/workspace-memories.ts`); any other is `NOT_PERMITTED`.
+`src/accounts/memories-procedures.test.ts` answers both over a real dialect.
+
 ## The chapters group
 
 `src/chapters/chapters-generator.ts` tells a pull request's diff as chapters
