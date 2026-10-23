@@ -431,8 +431,13 @@ export class PanelManager {
       backgroundColor: DESKTOP_WINDOW.CLEAR,
       // On Tahoe the window is clear for the Liquid Glass laid behind its
       // page once it loads; before it, it is drawn on the sidebar material
-      // (`window-material.ts`).
-      ...(material === WINDOW_MATERIAL.LIQUID_GLASS ? { transparent: true } : SIDEBAR_VIBRANCY),
+      // (`window-material.ts`). Note that the glass window still names the
+      // material's active state, because Electron keeps it from construction
+      // and has no setter: the sidebar material a failed lay falls back to
+      // then stays frosted behind other apps too.
+      ...(material === WINDOW_MATERIAL.LIQUID_GLASS
+        ? { transparent: true, visualEffectState: SIDEBAR_VIBRANCY.visualEffectState }
+        : SIDEBAR_VIBRANCY),
       // The renderer draws its own title bar under the traffic lights, so the
       // window keeps its frame, its shadow, and its buttons, and nothing else.
       titleBarStyle: "hiddenInset",
