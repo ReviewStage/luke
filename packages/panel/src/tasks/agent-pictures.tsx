@@ -24,6 +24,7 @@ import {
   Card,
   GAP,
   Inline,
+  isVideoDataUrl,
   LAYOUT_ELEMENT,
   PictureTile,
   SPINNER_SIZE,
@@ -32,7 +33,7 @@ import {
   TEXT_VARIANT,
   Text,
   Tooltip,
-  VideoPlayer,
+  VideoStill,
 } from "@luke/ui";
 import {
   PICTURE_STATE,
@@ -75,9 +76,10 @@ import { AttachmentViewer, type ViewerAction } from "./attachment-viewer.js";
  * glyph where gone. A press on any opens the window's file viewer
  * walking the set, or the call's pictures, from it, with Add to plan
  * beside Download where the transcript is drawn on a plan's page. A WebM
- * the agent recorded and showed as a picture is played instead, its own
- * block above the call's pictures, with the player's own controls, and
- * walks no viewer. An image a line handed the agent, which its row names by
+ * the agent recorded, shown as a picture or answered by its browser's
+ * `stop_recording`, is drawn as one too, as its still with a play mark
+ * (`@luke/ui`'s `VideoStill`), and opens the same viewer, which plays it,
+ * Full screen among its controls. An image a line handed the agent, which its row names by
  * the picture it was kept as rather than carrying its bytes, is read the
  * same way and drawn among the line's files (`MessageFileChips`).
  * Everything here is left out of the screen recording, as the tab around
@@ -265,8 +267,11 @@ function ShownOne({
   );
 }
 
-/** What a tile shows: the picture, the spinner while it is read, or the glyph where it is gone. */
+/** What a tile shows: the picture or a video's still, the spinner while it is read, or the glyph where it is gone. */
 function TileFace({ state, words }: { state: PictureState | undefined; words: string }): ReactNode {
+  if (state?.kind === PICTURE_STATE.READY && isVideoDataUrl(state.url)) {
+    return <VideoStill dataUrl={state.url} label={words} fill />;
+  }
   if (state?.kind === PICTURE_STATE.READY) {
     return (
       <img
@@ -372,38 +377,9 @@ function setCount(count: number): string {
   return `${String(count)} pictures`;
 }
 
-/** A video the agent showed: its own block, played where its bytes are in, the picture's quiet box while read, its words where gone. */
-function ShownVideo({
-  door,
-  shown,
-}: {
-  door: AgentPictureDoor;
-  shown: ShownPicture & { readonly picture: KeptPicture };
-}): ReactNode {
-  const state = usePicture(door.owner, shown.picture.id, door.read);
-  const caption = shown.caption === "" ? undefined : shown.caption;
-  if (state.kind !== PICTURE_STATE.READY) {
-    return <PictureBlock state={state} alt={shown.caption} caption={caption} />;
-  }
-  return (
-    <span className="picture-block ph-no-capture" data-state={state.kind} data-video="">
-      <VideoPlayer dataUrl={state.url} label={shown.caption} size={shown.picture} />
-      {caption === undefined ? null : <span className="picture-caption">{caption}</span>}
-    </span>
-  );
-}
-
-/** Whether a shown file was kept as a video, played rather than drawn. */
-function isShownVideo(
-  shown: ShownPicture,
-): shown is ShownPicture & { readonly picture: KeptPicture } {
-  return shown.picture !== undefined && isVideoType(shown.picture.mediaType);
-}
-
 /**
- * A `show_image` call drawn as what it showed: each video it showed as its
- * own player, then one picture as its own block, several as one set, each
- * in its place while the call reads it.
+ * A `show_image` call drawn as what it showed: one picture or video as its
+ * own block, several as one set, each in its place while the call reads it.
  */
 export function ShownPictures({
   input,
@@ -415,21 +391,11 @@ export function ShownPictures({
   const door = useContext(AgentPicturesContext);
   const all = shownPicturesOf(input, output);
   if (door === undefined || all.length === 0) return null;
-  const videos = all.filter(isShownVideo);
-  const stills = all.filter((each) => !isShownVideo(each));
-  return (
-    <>
-      {videos.map((each, index) => (
-        // Note that a video's place among the call's is its identity: a call never reorders.
-        <ShownVideo key={index} door={door} shown={each} />
-      ))}
-      {stills.length === 0 ? null : <ShownStills door={door} shown={stills} />}
-    </>
-  );
+  return <ShownSet door={door} shown={all} />;
 }
 
-/** The pictures of a `show_image` call that are no video: one as its own block, several as one set. */
-function ShownStills({
+/** The pictures and videos of a `show_image` call: one as its own block, several as one set. */
+function ShownSet({
   door,
   shown,
 }: {
@@ -534,7 +500,8 @@ function CallChip({
  * The pictures an integration's call answered, as a row of chips under its
  * line, open or closed: one kept is its thumbnail, opening the viewer over
  * the call's pictures; one not kept says so, with its size, since the
- * model saw it all the same.
+ * model saw it all the same. The videos a browser call recorded stand
+ * under them as a `show_image` call's would.
  */
 export function CallPictures({
   tool,
@@ -550,10 +517,7 @@ export function CallPictures({
   const called = calledPicturesOf(tool, input, output);
   const recorded = recordedVideosOf(tool, output);
   if (door === undefined || (called.length === 0 && recorded.length === 0)) return null;
-  const videos = recorded.map((each, index) => (
-    // Note that a recording's place among its call's is its identity: an answer never reorders.
-    <ShownVideo key={index} door={door} shown={each} />
-  ));
+  const videos = recorded.length === 0 ? null : <ShownSet door={door} shown={recorded} />;
   if (called.length === 0) return <>{videos}</>;
   const kept = called.flatMap((each) =>
     each.kept ? [{ picture: each.picture, words: each.name }] : [],

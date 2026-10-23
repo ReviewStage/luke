@@ -1,17 +1,94 @@
-/* video-player.css -- VideoPlayer: a recording played in a frame that hugs
-   it at its own shape up to the column's, no taller than a picture is
-   drawn, on black while its first frame loads. */
+/* video-player.css -- VideoStill: a video drawn as a picture is, its first
+   frame at its own shape up to the column's and no taller than a picture is
+   drawn, on black while that frame loads, a play mark over its middle and
+   how long it runs in its corner. VideoPlayer: the video played in the file
+   viewer, as large as the card lets it. */
 
 @layer components {
-  .luke-video-player {
+  .luke-video-still {
+    position: relative;
+    display: block;
     width: fit-content;
     max-width: 100%;
+    min-width: 160px; /* off-scale: room for the mark while the first frame loads */
+    min-height: 90px; /* off-scale: the same, at a screen's shape */
+    background: #000; /* off-scale: a video's letterbox */
   }
 
-  .luke-video-player-video {
+  .luke-video-still[data-fill="true"] {
+    width: 100%;
+    height: 100%;
+    min-width: 0;
+    min-height: 0;
+  }
+
+  .luke-video-still-video {
     display: block;
     max-width: 100%;
     max-height: 520px; /* off-scale: a picture's drawn height */
+    width: auto;
+    height: auto;
+    pointer-events: none;
+  }
+
+  .luke-video-still[data-fill="true"] .luke-video-still-video {
+    width: 100%;
+    height: 100%;
+    max-height: none;
+    object-fit: cover;
+  }
+
+  /* The mark every player draws over a video not yet playing. */
+  .luke-video-still-play {
+    position: absolute;
+    inset: 50% auto auto 50%;
+    display: grid;
+    width: 44px; /* off-scale: a player's play mark */
+    height: 44px;
+    place-items: center;
+    border-radius: 50%;
+    background: rgba(0, 0, 0, 0.55); /* off-scale: over any frame, light or dark */
+    color: #fff; /* off-scale: the same */
+    transform: translate(-50%, -50%);
+    transition: background var(--luke-duration-fast) ease;
+  }
+
+  .luke-video-still-play svg {
+    width: 22px;
+    height: 22px;
+  }
+
+  .luke-video-still[data-fill="true"] .luke-video-still-play {
+    width: 28px;
+    height: 28px;
+  }
+
+  .luke-video-still[data-fill="true"] .luke-video-still-play svg {
+    width: 14px;
+    height: 14px;
+  }
+
+  .luke-picture-tile:hover .luke-video-still-play {
+    background: rgba(0, 0, 0, 0.75); /* off-scale: the mark under the pointer */
+  }
+
+  .luke-video-still-time {
+    position: absolute;
+    right: var(--luke-space-6);
+    bottom: var(--luke-space-6);
+    padding: 1px var(--luke-space-4);
+    border-radius: var(--luke-space-4);
+    background: rgba(0, 0, 0, 0.6); /* off-scale: over any frame, light or dark */
+    color: #fff; /* off-scale: the same */
+    font-size: 11px; /* off-scale: a player's time */
+    font-variant-numeric: tabular-nums;
+    line-height: 1.4;
+  }
+
+  .luke-video-player {
+    display: block;
+    max-width: 100%;
+    max-height: 100%;
     width: auto;
     height: auto;
     background: #000; /* off-scale: a video's letterbox */

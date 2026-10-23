@@ -450,7 +450,7 @@ test("the viewer opened on the first picture to land reaches the rest as their r
   assert.equal(document.querySelector(".attachment-viewer-place")?.textContent, "1 of 3");
 });
 
-test("a WebM the agent showed plays in its own player, left out of the replay, beside the picture shown with it", async () => {
+test("a WebM the agent showed stands as its still in the set beside the picture shown with it, left out of the replay, and the viewer plays it", async () => {
   const created: string[] = [];
   const revoked: string[] = [];
   const own = { create: URL.createObjectURL, revoke: URL.revokeObjectURL };
@@ -489,31 +489,47 @@ test("a WebM the agent showed plays in its own player, left out of the replay, b
         ),
     );
 
-    const player = container.querySelector("video");
-    assert.ok(player, "the video is played, not drawn");
-    assert.equal(player.getAttribute("src"), "blob:video-1");
-    assert.equal(player.getAttribute("aria-label"), "Video: Inviting a member");
-    assert.ok(player.hasAttribute("controls"));
-    assert.ok(player.closest(".ph-no-capture"), "the player is left out of the replay");
-    assert.deepEqual(created, [CONVERSATION_MEDIA_TYPE.WEBM]);
+    const frame = container.querySelector("video");
+    assert.ok(frame, "the video is drawn by its own first frame");
+    assert.equal(frame.getAttribute("src"), "blob:video-1");
+    assert.equal(frame.hasAttribute("controls"), false, "the still plays nothing where it stands");
+    assert.ok(frame.closest(".ph-no-capture"), "the still is left out of the replay");
     assert.deepEqual(
-      [...container.querySelectorAll("img")].map((image) => image.getAttribute("src")),
-      ["data:image/png;base64,iVBORw=="],
-      "the picture shown with it is drawn as one picture alone is",
+      [...container.querySelectorAll(".picture-set-tiles button")].map((tile) =>
+        tile.getAttribute("aria-label"),
+      ),
+      ["Enlarge Inviting a member", "Enlarge The invite sent"],
+      "the video and the picture stand side by side as one set",
     );
     assert.deepEqual(read.sort(), [video.id, still.id].sort());
+
+    act(() =>
+      container
+        .querySelector<HTMLButtonElement>('button[aria-label="Enlarge Inviting a member"]')
+        ?.click(),
+    );
+    const player = document.querySelector('[role="dialog"] video');
+    assert.ok(player, "a press opens the viewer, which plays the video");
+    assert.equal(player.hasAttribute("controls"), true, "with the player's own controls");
+    assert.equal(player.getAttribute("aria-label"), "Video: Inviting a member.webm");
+    assert.equal(document.querySelector(".attachment-viewer-place")?.textContent, "1 of 2");
+    assert.deepEqual(created, [CONVERSATION_MEDIA_TYPE.WEBM, CONVERSATION_MEDIA_TYPE.WEBM]);
 
     const root = roots.pop();
     assert.ok(root);
     act(() => root.unmount());
-    assert.deepEqual(revoked, ["blob:video-1"], "the address is let go of as the player goes");
+    assert.deepEqual(
+      revoked.sort(),
+      ["blob:video-1", "blob:video-2"],
+      "each address is let go of as its video goes",
+    );
   } finally {
     URL.createObjectURL = own.create;
     URL.revokeObjectURL = own.revoke;
   }
 });
 
-test("a recording a finished browser call kept plays under its row, out of the turn's fold, its caption under it", async () => {
+test("a recording a finished browser call kept stands as its still under its row, out of the turn's fold, its caption under it, and the viewer plays it", async () => {
   const own = { create: URL.createObjectURL, revoke: URL.revokeObjectURL };
   // Note that jsdom makes no object URLs, so the window's own are stood in for, and put back after.
   URL.createObjectURL = () => "blob:recording-1";
@@ -558,16 +574,24 @@ test("a recording a finished browser call kept plays under its row, out of the t
       () => Promise.resolve({ contentType: CONVERSATION_MEDIA_TYPE.WEBM, base64: "GkXfow==" }),
     );
 
-    const player = container.querySelector("video");
-    assert.ok(player, "the recording plays though the work before it folded");
-    assert.equal(player.getAttribute("src"), "blob:recording-1");
-    assert.equal(player.getAttribute("aria-label"), "Video: Inviting a member");
-    assert.ok(player.closest(".ph-no-capture"));
+    const frame = container.querySelector("video");
+    assert.ok(frame, "the recording stands though the work before it folded");
+    assert.equal(frame.getAttribute("src"), "blob:recording-1");
+    assert.ok(frame.closest(".ph-no-capture"));
     assert.equal(
-      player.closest(".picture-block")?.querySelector(".picture-caption")?.textContent,
+      frame.closest(".picture-block")?.querySelector(".picture-caption")?.textContent,
       "Inviting a member",
     );
     assert.deepEqual(read, [video.id]);
+
+    act(() =>
+      container
+        .querySelector<HTMLButtonElement>('button[aria-label="Enlarge Inviting a member"]')
+        ?.click(),
+    );
+    const player = document.querySelector('[role="dialog"] video');
+    assert.ok(player, "a press opens the viewer, which plays the recording");
+    assert.equal(player.hasAttribute("controls"), true);
   } finally {
     URL.createObjectURL = own.create;
     URL.revokeObjectURL = own.revoke;

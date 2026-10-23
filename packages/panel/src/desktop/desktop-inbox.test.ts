@@ -2224,7 +2224,7 @@ test("a picture of an item opens a viewer the arrow keys walk across every pictu
   assert.deepEqual(viewer(), ["The pull request tab.png", "3 of 3"]);
 });
 
-test("a recording an agent's words draw plays in its own player, left out of the replay and of the viewer's walk, beside the picture drawn with it", async () => {
+test("a recording an agent's words draw stands as its still, left out of the replay, and opens the viewer a picture does, which plays it and walks on to the picture drawn with it", async () => {
   const [still, video] = [
     "5e8d2c1a-7b3f-4a6e-9c2d-1f4b6a8e3c90",
     "5e8d2c1a-7b3f-4a6e-9c2d-1f4b6a8e3c91",
@@ -2273,12 +2273,11 @@ test("a recording an agent's words draw plays in its own player, left out of the
     const pane = await mountThread(threadItem([message]));
     await settle();
 
-    const player = pane.querySelector("video");
-    assert.ok(player, "the recording is played, not drawn");
-    assert.equal(player.getAttribute("src"), "blob:video-1");
-    assert.equal(player.getAttribute("aria-label"), "Video: The invite flow");
-    assert.ok(player.closest(".ph-no-capture"), "the player is left out of the replay");
-    assert.deepEqual(created, [INBOX_FILE_TYPE.WEBM]);
+    const frame = pane.querySelector("video");
+    assert.ok(frame, "the recording is drawn by its own first frame");
+    assert.equal(frame.getAttribute("src"), "blob:video-1");
+    assert.equal(frame.hasAttribute("controls"), false, "the still plays nothing where it stands");
+    assert.ok(frame.closest(".ph-no-capture"), "the still is left out of the replay");
     assert.equal(pane.querySelectorAll("video").length, 1, "the recording stands once");
     assert.deepEqual(
       [...pane.querySelectorAll('[aria-label="Attached files"] > *')].map(
@@ -2287,23 +2286,32 @@ test("a recording an agent's words draw plays in its own player, left out of the
       [],
       "the recording the words draw is not named again as a file over them",
     );
-    assert.equal(
-      pane.querySelector('button[aria-label="Enlarge Inviting a member"]'),
-      null,
-      "no press opens a recording as a picture",
+    const press = pane.querySelector<HTMLButtonElement>(
+      'button[aria-label="Enlarge Inviting a member"]',
     );
-    const press = pane.querySelector<HTMLButtonElement>('button[aria-label="Enlarge The email"]');
-    assert.ok(press, "the picture beside it still opens");
+    assert.ok(press, "the recording opens as a picture does");
+    assert.ok(press.contains(frame));
     act(() => press.click());
+    await settle();
+
+    const card = document.querySelector('[role="dialog"]');
+    const player = card?.querySelector("video");
+    assert.ok(player, "the viewer plays the recording");
+    assert.equal(player.hasAttribute("controls"), true, "with the player's own controls");
+    assert.equal(player.getAttribute("aria-label"), "Video: Inviting a member.webm");
+    assert.equal(player.getAttribute("src"), "blob:video-2");
+    assert.ok(player.closest(".ph-no-capture"), "the player is left out of the replay");
+    assert.deepEqual(created, [INBOX_FILE_TYPE.WEBM, INBOX_FILE_TYPE.WEBM]);
+    assert.equal(card?.querySelector(".attachment-viewer-place")?.textContent, "2 of 2");
+    act(() =>
+      card?.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true, cancelable: true }),
+      ),
+    );
     assert.equal(
       document.querySelector('[role="dialog"] .luke-zoom-image')?.getAttribute("alt"),
       "The email.png",
-      "the viewer opens on the picture",
-    );
-    assert.equal(
-      document.querySelector('[role="dialog"] .attachment-viewer-place'),
-      null,
-      "the viewer walks the picture alone",
+      "the walk goes on to the picture drawn with it",
     );
   } finally {
     URL.createObjectURL = own.create;

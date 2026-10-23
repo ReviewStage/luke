@@ -20,6 +20,7 @@ import {
   Tooltip,
   useImageZoom,
   usePictureExpand,
+  VideoPlayer,
   ZoomImage,
 } from "@luke/ui";
 import {
@@ -35,13 +36,16 @@ import { FileTypeIcon } from "./file-type-icon.js";
 import { WholeFile, type WholeFileNote } from "./whole-file.js";
 
 /**
- * attachment-viewer.tsx -- a file on a message opened over the window, as Quick Look opens one: an image fitted to the window, a text file drawn as every code is, or any other file by its icon with a way to save it.
+ * attachment-viewer.tsx -- a file on a message opened over the window, as Quick Look opens one: an image fitted to the window, a video played there, a text file drawn as every code is, or any other file by its icon with a way to save it.
  *
  * A picture opens fitted to the window, or at its own pixels where the place
  * opening it asks, and zooms as Preview's does: a pinch, a trackpad's or two
  * fingers', or a Control-scroll about the pointer, a press to its own pixels there
  * and back, the header's buttons or a bare `=`, `-`, and `0`; zoomed, it is
- * moved by a drag or a two-finger scroll (`@luke/ui`'s ZoomImage).
+ * moved by a drag or a two-finger scroll (`@luke/ui`'s ZoomImage). A video,
+ * such as one an agent recorded and opened from its still as a picture is,
+ * plays at once as large as the card lets it, with the player's own
+ * controls, Full screen among them (`@luke/ui`'s VideoPlayer).
  *
  * The files of one message are walked in place with the header's arrows or
  * the arrow keys, and the header names the file shown, its size, and how
@@ -151,7 +155,7 @@ function HeaderButton({
   );
 }
 
-/** The file shown: the picture, its text drawn as every code is, or the icon, name, and size over Download. */
+/** The file shown: the picture, the video playing, its text drawn as every code is, or the icon, name, and size over Download. */
 function AttachmentBody({
   file,
   base64,
@@ -167,6 +171,13 @@ function AttachmentBody({
     return (
       <div ref={zoom.frameRef} className="attachment-viewer-body">
         <ZoomImage zoom={zoom} src={file.url} alt={file.name} />
+      </div>
+    );
+  }
+  if (attachmentView(file) === ATTACHMENT_VIEW.VIDEO) {
+    return (
+      <div className="attachment-viewer-body">
+        <VideoPlayer dataUrl={file.url} label={file.name} />
       </div>
     );
   }
@@ -250,6 +261,8 @@ export function AttachmentViewer({
       return;
     }
     if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+    // Note that an arrow on the video's own controls seeks it, as the player's keys do, rather than walking away from it.
+    if (event.target instanceof HTMLVideoElement) return;
     event.preventDefault();
     walk(event.key === "ArrowLeft" ? -1 : 1);
   };
