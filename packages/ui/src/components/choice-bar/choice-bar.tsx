@@ -34,9 +34,7 @@
  * stretched (`stretch`), filling its row on one line, its options sharing
  * it alike, as a pane switcher's. In either the fill or the thumb slides
  * from option to option. `size`
- * compact is a step smaller, in the caption's type. A fill bar heading a
- * page read at its measure, or a narrow column, stands its options in line
- * with the words under it (`inset`). What finds the bar for an app (the
+ * compact is a step smaller, in the caption's type. What finds the bar for an app (the
  * desktop's settings search) is the app's: it hands the bar the `data-`
  * attributes its search lands on.
  */
@@ -85,14 +83,6 @@ export const CHOICE_BAR_FOCUS = {
 } as const;
 
 export type ChoiceBarFocus = (typeof CHOICE_BAR_FOCUS)[keyof typeof CHOICE_BAR_FOCUS];
-
-/** Where a fill bar stands its options: at its container's edges, or with the words of a page read at its measure. */
-export const CHOICE_BAR_INSET = {
-  NONE: "none",
-  READING: "reading",
-} as const;
-
-export type ChoiceBarInset = (typeof CHOICE_BAR_INSET)[keyof typeof CHOICE_BAR_INSET];
 
 /**
  * What folds a fill bar's options when the row is short of room: its own
@@ -392,7 +382,6 @@ interface ChoiceBarBase<Value extends string> {
   /** The id of each tab and of the panel it shows, by value: given, the bar is a tablist; absent, a radio group. */
   panels?: ((value: Value) => ChoicePanelIds) | undefined;
   focus?: ChoiceBarFocus | undefined;
-  inset?: ChoiceBarInset | undefined;
   fold?: ChoiceBarFold | undefined;
   /** Whether a segmented bar fills its row on one line, its options sharing it alike, rather than hugging them. */
   stretch?: boolean | undefined;
@@ -434,7 +423,6 @@ function countOf(count: ChoiceItem<string>["count"]): ReactNode {
 interface OptionsPlaced {
   readonly look: ChoiceBarLook;
   readonly size: ChoiceBarSize;
-  readonly inset: ChoiceBarInset;
   readonly values: readonly string[];
 }
 
@@ -450,7 +438,6 @@ interface OptionNamed {
 interface OptionsNamed {
   readonly look: ChoiceBarLook;
   readonly size: ChoiceBarSize;
-  readonly inset: ChoiceBarInset;
   readonly options: readonly OptionNamed[];
 }
 
@@ -477,7 +464,6 @@ export function ChoiceBar<Value extends string>(props: ChoiceBarProps<Value>): R
     size = CHOICE_BAR_SIZE.REGULAR,
     panels,
     focus = CHOICE_BAR_FOCUS.ROVING,
-    inset = CHOICE_BAR_INSET.NONE,
     fold = CHOICE_BAR_FOLD.OWN,
     stretch = false,
     hint: Hint = Tooltip,
@@ -489,7 +475,6 @@ export function ChoiceBar<Value extends string>(props: ChoiceBarProps<Value>): R
   const placed = useKept<OptionsPlaced>({
     look,
     size,
-    inset,
     values: items.map((item) => item.value),
   });
   const thumb = useThumb(value, placed);
@@ -499,7 +484,6 @@ export function ChoiceBar<Value extends string>(props: ChoiceBarProps<Value>): R
       ? {
           look,
           size,
-          inset,
           options: items.map((item) => ({
             value: item.value,
             glyph: item.icon !== undefined,
@@ -533,7 +517,6 @@ export function ChoiceBar<Value extends string>(props: ChoiceBarProps<Value>): R
       className="luke-choice-bar"
       data-look={look}
       data-size={size}
-      data-inset={inset}
       data-fold={fold}
       data-folded={folded ? "true" : undefined}
       data-stretch={stretch ? "true" : undefined}

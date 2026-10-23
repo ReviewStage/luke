@@ -36,7 +36,6 @@ import { FILE_PICKERS_EXAMPLE } from "./examples/file-picker";
 import { FILE_TEXT_EXAMPLE } from "./examples/file-text";
 import { FOLDING_BUTTONS_EXAMPLE } from "./examples/folding-buttons";
 import { FORM_FIELD_EXAMPLE } from "./examples/form-field";
-import { FORM_SECTION_EXAMPLE } from "./examples/form-section";
 import { FORMAT_TOOLBAR_EXAMPLE } from "./examples/format-toolbar";
 import { GLYPH_SLOTS_EXAMPLE } from "./examples/glyph-slots";
 import { HOVER_CARDS_EXAMPLE } from "./examples/hover-cards";
@@ -146,7 +145,6 @@ export const EXAMPLES: readonly Example[] = [
   FILE_TEXT_EXAMPLE,
   FOLDING_BUTTONS_EXAMPLE,
   FORM_FIELD_EXAMPLE,
-  FORM_SECTION_EXAMPLE,
   HOVER_CARDS_EXAMPLE,
   INLINE_EDITS_EXAMPLE,
   INLINE_REFS_EXAMPLE,
