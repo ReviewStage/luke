@@ -35,7 +35,11 @@ import { unreadOperatorNotices, writeOperatorNotice } from "@luke/database/model
 import { keepPlanAttachment, PLAN_ATTACHMENT_KEEP } from "@luke/database/models/plan-attachments";
 import { holdSandbox } from "@luke/database/models/sandbox-terminal-lease";
 import { readTask, updateTask } from "@luke/database/models/task-store";
-import { type ConversationTarget, storeWriter } from "@luke/database/models/writer";
+import {
+  type ConversationTarget,
+  type LineSender,
+  storeWriter,
+} from "@luke/database/models/writer";
 import { codingAgent } from "@luke/database/schemas/coding-agent";
 import { conversations, messages, turns } from "@luke/database/schemas/storage";
 import {
@@ -2466,7 +2470,7 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, modelCatalogOf(CATALOG)))(
     );
 
     it.effect(
-      "an operator whose last step passed the flush mark is told once to keep what is durable before its history is summarised, never with Memory off or on a fresh history, and again only after eve compacted it",
+      "an operator whose last step passed the flush mark is told once to keep what is durable before its history is summarised, never with Memory off, on a fresh history, or on a turn its heartbeat opens, and again only after eve compacted it",
       () =>
         Effect.gen(function* () {
           const host = yield* hostOverStore();
@@ -2508,7 +2512,19 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork, modelCatalogOf(CATALOG)))(
           yield* stepAt(0.5, 2_000);
           assert.ok(!told(yield* typed(first.handed)), "below the mark");
           yield* stepAt(0.85, 3_000);
-          const flushed = yield* typed(first.handed);
+          // A turn its heartbeat opens may keep nothing, so it is not told, and the member's next turn is.
+          const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
+          const lineFrom = (sender: LineSender, clientKey: string) =>
+            writer.writeAwaitingLine(
+              { userId, conversationId: operator.agent.conversationId },
+              { text: "Look over what changed today.", clientKey, sender },
+              Effect.succeed(true),
+            );
+          yield* lineFrom({ kind: MESSAGE_SENDER.AUTOMATION, name: "Luke's heartbeat" }, "beat");
+          const beat = yield* typed(first.handed);
+          assert.ok(!told(beat), beat.text ?? "");
+          yield* lineFrom({ kind: MESSAGE_SENDER.MEMBER, userId }, "member");
+          const flushed = yield* typed(beat.handed);
           assert.ok(told(flushed), flushed.text ?? "");
           assert.ok(!told(yield* typed(flushed.handed)), "told once");
           // A coder past the mark is told nothing.

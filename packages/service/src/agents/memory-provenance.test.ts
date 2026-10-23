@@ -6,10 +6,12 @@ import { writeAccountPreferences } from "@luke/database/models/account-store";
 import { type CodingAgent, createCodingAgent } from "@luke/database/models/coding-agent-store";
 import { listMemories, MEMORY_OUTCOME } from "@luke/database/models/memory-store";
 import { user } from "@luke/database/schemas/auth";
+import type { StoredAutomationOrigin } from "@luke/database/schemas/coding-agent";
 import { messages, turns } from "@luke/database/schemas/storage";
 import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import { getTestDB, openWorkspace } from "@luke/database/testing";
 import { CLAUDE_CODE_TOOL } from "@luke/features/agent-tools";
+import { AUTOMATION_FIRING } from "@luke/features/automation-wire";
 import { CODING_AGENT_KIND } from "@luke/features/coding-agent-wire";
 import { EXPERIMENT } from "@luke/settings";
 import { Effect, Option } from "effect";
@@ -31,7 +33,8 @@ import { runAgentRemember } from "./memory-tools.js";
  *
  * Through `runAgentRemember`, over a real dialect, with the turn under way
  * written as the relay writes it: a turn an automation's run opened keeps
- * nothing, and neither does an operator's turn its heartbeat opened, nor a
+ * nothing, an eve agent an automation started included, whose first line
+ * the relay wrote with no sender, and neither does an operator's turn its heartbeat opened, nor a
  * turn whose journal already holds a web read, eve's or Claude Code's; a
  * turn a member's own line opened, which read nothing of the web, keeps the
  * memory; and a turn that settled refuses nothing. Synthetic accounts,
@@ -41,7 +44,10 @@ import { runAgentRemember } from "./memory-tools.js";
 const FACT = "The web server's store tests run on PGlite through test:store.";
 
 /** A member with Memory on, in a workspace of their own, and an agent of the kind given there. */
-const openAgent = (kind: typeof CODING_AGENT_KIND.CODER | typeof CODING_AGENT_KIND.OPERATOR) =>
+const openAgent = (
+  kind: typeof CODING_AGENT_KIND.CODER | typeof CODING_AGENT_KIND.OPERATOR,
+  automationOrigin?: StoredAutomationOrigin,
+) =>
   Effect.gen(function* () {
     const db = yield* Database;
     const userId = `user-${randomUUID()}`;
@@ -69,6 +75,7 @@ const openAgent = (kind: typeof CODING_AGENT_KIND.CODER | typeof CODING_AGENT_KI
       model: "anthropic/claude-opus-5.5",
       effort: "high",
       repository: null,
+      automationOrigin,
     });
     assert.ok(Option.isSome(started));
     return { agent: started.value.agent, workspaceId };
@@ -76,6 +83,7 @@ const openAgent = (kind: typeof CODING_AGENT_KIND.CODER | typeof CODING_AGENT_KI
 
 /** What sent a turn's opening line, as its row keeps it. */
 type Opener =
+  | { readonly sender: undefined }
   | { readonly sender: typeof MESSAGE_SENDER.MEMBER }
   | { readonly sender: typeof MESSAGE_SENDER.AUTOMATION; readonly name: string };
 
@@ -108,9 +116,11 @@ const writeTurn = (
       metadata: { author: MESSAGE_AUTHOR.DEVELOPER, channel: MESSAGE_CHANNEL.TYPED },
       placedAt: now,
       finishedAt: now,
-      ...(opener.sender === MESSAGE_SENDER.AUTOMATION
-        ? { sender: opener.sender, senderName: opener.name }
-        : { sender: opener.sender, senderUserId: agent.userId }),
+      ...(opener.sender === undefined
+        ? undefined
+        : opener.sender === MESSAGE_SENDER.AUTOMATION
+          ? { sender: opener.sender, senderName: opener.name }
+          : { sender: opener.sender, senderUserId: agent.userId }),
     });
     yield* db.insert(messages).values({
       ...own,
@@ -154,6 +164,23 @@ it.layer(getTestDB())("a remember's provenance", (it) => {
       assert.equal(answer.reason, MEMORY_PROVENANCE_REFUSAL.AUTOMATION);
       assert.deepEqual(yield* listMemories(workspaceId), []);
     }),
+  );
+
+  it.effect(
+    "an eve agent's first turn, whose line the relay wrote with no sender, keeps nothing where an automation started the agent",
+    () =>
+      Effect.gen(function* () {
+        const origin = {
+          name: "Nightly triage",
+          firing: { kind: AUTOMATION_FIRING.MANUAL },
+          prompt: "Triage the overnight errors.",
+        };
+        const { agent, workspaceId } = yield* openAgent(CODING_AGENT_KIND.CODER, origin);
+        yield* writeTurn(agent, { sender: undefined }, []);
+
+        assert.equal((yield* remember(agent)).reason, MEMORY_PROVENANCE_REFUSAL.AUTOMATION);
+        assert.deepEqual(yield* listMemories(workspaceId), []);
+      }),
   );
 
   it.effect("an operator's turn its heartbeat opened keeps nothing", () =>

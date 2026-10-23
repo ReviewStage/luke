@@ -82,6 +82,7 @@ import {
 } from "../brain-host/relay.js";
 import { rotationSeedText } from "../brain-host/seed.js";
 import { carryStop } from "../brain-host/stop-carrier.js";
+import { newestLineIsAutomation } from "../memory-provenance.js";
 import { memoryOnFor, seedMemoryText } from "../memory-tools.js";
 import { markDeskNoticesRead, type OperatorDesk, readOperatorDesk } from "../operator-desk.js";
 import { type ReadWebPageResult, ResearchBudget, runReadWebPage } from "../public-research.js";
@@ -727,8 +728,10 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
    * Whether an operator's turn opens with the line telling it its history
    * will soon be summarised (`turn-context.ts`'s `flushDue`), read against
    * the window the catalog lists for what it runs on now; never for any
-   * other agent, nor where its member has Memory off, and not where a read
-   * failed, which is logged, so the turn still opens.
+   * other agent, nor where its member has Memory off, nor on a turn an
+   * automation's line opens, its heartbeat's among them, which may keep
+   * nothing and so leaves the line to the member's next turn; and not where
+   * a read failed, which is logged, so the turn still opens.
    */
   const flushOf = (
     agent: CodingAgent,
@@ -738,6 +741,8 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
       ? Effect.succeed(false)
       : Effect.gen(function* () {
           if (!(yield* memoryOnFor(agent.userId))) return false;
+          // A turn an automation opens may keep nothing, so it is not told, and a member's later turn is.
+          if (yield* newestLineIsAutomation(agent)) return false;
           const context = yield* readCodingAgentContext(agent.userId, agent.id);
           if (Option.isNone(context)) return false;
           const { model, contextWindow } = context.value;

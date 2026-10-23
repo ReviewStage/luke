@@ -11,7 +11,8 @@
  * context, which anyone could have written. Both are read from the store's
  * record of the turn under way, the agent's newest, so every runtime is held
  * to the one rule, eve's and a native harness's alike: the line that opened
- * it, by the sender its row keeps (`MESSAGE_SENDER.AUTOMATION`), and its
+ * it, by the sender its row keeps (`MESSAGE_SENDER.AUTOMATION`), or by
+ * keeping none on an agent an automation started, and its
  * journal, by the calls of any web read it holds, Luke's own page read,
  * eve's provider-run search, the agent's browser, and Claude Code's and
  * Codex's own. Note that a web read the relay has not yet written, such as
@@ -29,6 +30,7 @@ import {
 } from "@luke/database/models/coding-agent-store";
 import {
   latestTurnsOf,
+  listRecentMessages,
   listTurnOpeners,
   readMessageByClientId,
 } from "@luke/database/models/message-reads";
@@ -36,6 +38,7 @@ import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import { CLAUDE_CODE_TOOL, CODEX_TOOL } from "@luke/features/agent-tools";
 import { toolPartName } from "@luke/wire/ui-messages";
 import { Effect } from "effect";
+import { MESSAGE_ROLE } from "../core.js";
 import type { StoreFailure } from "../http/store-failure.js";
 import { AGENT_TOOL } from "./agent-runtime/tools.js";
 import { CODER_TOOL_SET, RETIRED_CODER_TOOL } from "./coder-host/tool-set.js";
@@ -51,6 +54,9 @@ export const MEMORY_PROVENANCE_REFUSAL = {
   UNREADABLE:
     "Not remembered: where this turn's words came from could not be read. Carry on without it.",
 } as const;
+
+/** How many of the conversation's newest messages are read for its newest line: it, and the journals a few turns queued behind it wrote. */
+const NEWEST_LINES_READ = 8;
 
 /** Every tool that reads the public web, under each name a journal stores a call of it. */
 const WEB_READS: ReadonlySet<string> = new Set([
@@ -74,18 +80,35 @@ function calledTool(part: {
   return toolPartName(part.type);
 }
 
+/**
+ * Whether a line of the agent's conversation is an automation's run: by the
+ * sender its row keeps, or, on an agent an automation started, a line that
+ * kept none. Note that the second is the first line of an eve agent an
+ * automation started, because eve's session takes it as it opens and the
+ * relay writes it with no sender (`coder-host/start.ts`), while every line
+ * a member sends keeps theirs.
+ */
+const automationLine = (agent: CodingAgent, messageId: string) =>
+  Effect.map(
+    lineSendersOf({ userId: agent.userId, conversationId: agent.conversationId }, [messageId]),
+    (senders) => {
+      const sent = senders.get(messageId);
+      return sent === undefined
+        ? agent.automationOrigin !== null
+        : sent.kind === MESSAGE_SENDER.AUTOMATION;
+    },
+  );
+
 /** Whether the turn's opening line was an automation's run. */
 const openedByAutomation = (agent: CodingAgent, turnId: string) =>
   Effect.gen(function* () {
-    const target = { userId: agent.userId, conversationId: agent.conversationId };
     const openers = yield* listTurnOpeners(agent.userId, agent.conversationId, CODER_TOOL_SET, [
       turnId,
     ]);
     if (!openers.ok) return undefined;
     const opener = openers.value[0];
     if (opener === undefined) return false;
-    const senders = yield* lineSendersOf(target, [opener.id]);
-    return senders.get(opener.id)?.kind === MESSAGE_SENDER.AUTOMATION;
+    return yield* automationLine(agent, opener.id);
   });
 
 /** Whether the turn's journal, which shares the turn's id as its key, holds a call of a web read. */
@@ -121,5 +144,29 @@ export function rememberRefusal(
     if (web === true) return MEMORY_PROVENANCE_REFUSAL.WEB_READ;
     if (automation === undefined || web === undefined) return MEMORY_PROVENANCE_REFUSAL.UNREADABLE;
     return undefined;
+  });
+}
+
+/**
+ * Whether the newest line of the agent's conversation, the one a turn opens
+ * on as it starts, is an automation's run, as above: what holds an
+ * operator's flush back to a turn that may keep what it is told to
+ * (`coder-host/host.ts`'s `turnMessage`). None among the newest messages, or
+ * a page that does not read, is no automation's.
+ */
+export function newestLineIsAutomation(
+  agent: CodingAgent,
+): Effect.Effect<boolean, StoreFailure, DatabaseServices> {
+  return Effect.gen(function* () {
+    const read = yield* listRecentMessages(
+      agent.userId,
+      agent.conversationId,
+      CODER_TOOL_SET,
+      NEWEST_LINES_READ,
+    );
+    const line = read.ok
+      ? read.value.findLast((record) => record.message.role === MESSAGE_ROLE.USER)
+      : undefined;
+    return line === undefined ? false : yield* automationLine(agent, line.id);
   });
 }
