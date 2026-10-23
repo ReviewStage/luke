@@ -56,8 +56,9 @@ it.layer(getTestDB())("the agent persona-name migration", (it) => {
         const archivedByName = yield* start("Refund webhook");
         const archivedByTitle = yield* start("Refund retries");
         // The agents as ones made before stood: given a first name, as every agent was.
-        const named = (agentId: string, personaName: string) =>
-          db.update(codingAgent).set({ personaName }).where(eq(codingAgent.id, agentId));
+        // Note that the column is written and read by SQL, since no module declares it any longer.
+        const named = (agentId: string, name: string) =>
+          sql`update coding_agent set persona_name = ${name} where id = ${agentId}`;
         yield* named(invoices, "Maya");
         yield* named(untitled, "Theo");
         // An archive each named its archiver as it then stood: by its human name, and by its title.
@@ -81,17 +82,16 @@ it.layer(getTestDB())("the agent persona-name migration", (it) => {
         for (const statement of yield* migrationStatements(MIGRATION)) yield* sql.unsafe(statement);
 
         const read = (agentId: string) =>
-          Effect.map(
-            db
-              .select({
-                personaName: codingAgent.personaName,
-                title: codingAgent.title,
-                archiver: codingAgent.archivedBy,
-              })
+          Effect.gen(function* () {
+            const [named] = yield* sql<{
+              readonly persona_name: string | null;
+            }>`select persona_name from coding_agent where id = ${agentId}`;
+            const [row] = yield* db
+              .select({ title: codingAgent.title, archiver: codingAgent.archivedBy })
               .from(codingAgent)
-              .where(eq(codingAgent.id, agentId)),
-            ([row]) => [row?.personaName, row?.title, row?.archiver?.agentName],
-          );
+              .where(eq(codingAgent.id, agentId));
+            return [named?.persona_name, row?.title, row?.archiver?.agentName];
+          });
         assert.deepEqual(yield* read(invoices), [null, "Invoice emails", undefined]);
         assert.deepEqual(yield* read(untitled), [null, null, undefined]);
         assert.deepEqual(yield* read(archivedByName), [null, "Refund webhook", "Invoice emails"]);

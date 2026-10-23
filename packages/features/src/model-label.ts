@@ -84,9 +84,7 @@ interface NamedAgent {
 
 /**
  * The name an agent goes by apart from its title: Luke for an operator,
- * and none for any other agent, which goes by its title. A human name an
- * agent was once given (`coding_agent.persona_name`) is never read, so one
- * a deployment still writes is never shown. Every place that names an agent
+ * and none for any other agent, which goes by its title. Every place that names an agent
  * goes through this, `agentTabLabel` among them, so an operator is Luke in
  * every one; a query names it as `agentGivenNameSql` does.
  */

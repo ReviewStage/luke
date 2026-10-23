@@ -264,7 +264,7 @@ it.layer(getTestDB())("the chat store's members and channels", (it) => {
   );
 
   it.effect(
-    "each agent member is read as its coding agent names it: its task, none for an agent on no task, and its title, else its model's id, never a human name it was once given, while an outsider reads none",
+    "each agent member is read as its coding agent names it: its task, none for an agent on no task, and its title, else its model's id, while an outsider reads none",
     () =>
       Effect.gen(function* () {
         const db = yield* Database;
@@ -272,24 +272,18 @@ it.layer(getTestDB())("the chat store's members and channels", (it) => {
         const stranger = yield* openAccount();
         const workspace = yield* openWorkspace(owner);
         const task = yield* openTask(owner, workspace);
-        const named = yield* openAgent(owner, task);
         const titled = yield* openAgent(owner, task);
         const taskless = yield* openAgent(owner, task);
-        yield* db
-          .update(codingAgent)
-          .set({ title: "Invite emails", personaName: "Maya Chen" })
-          .where(eq(codingAgent.id, named));
         yield* db
           .update(codingAgent)
           .set({ title: "Invite emails" })
           .where(eq(codingAgent.id, titled));
         yield* db.update(codingAgent).set({ taskId: null }).where(eq(codingAgent.id, taskless));
-        for (const agentId of [named, titled, taskless]) {
+        for (const agentId of [titled, taskless]) {
           yield* ensureMember(owner, workspace, { kind: MEMBER_KIND.AGENT, agentId });
         }
 
         const agents = yield* agentMembersOf(owner, workspace);
-        assert.deepEqual(agents.get(named), { taskId: task, name: "Invite emails" });
         assert.deepEqual(agents.get(titled), { taskId: task, name: "Invite emails" });
         assert.deepEqual(agents.get(taskless), {
           taskId: undefined,
@@ -2529,15 +2523,11 @@ it.layer(getTestDB())("the chat store's operator, private to its member", (it) =
           }),
         ).agent.id;
         const coderId = yield* openAgent(owner, task);
-        // A title the model gave it, and a first name an operator from before was given, name it no longer; a coder's first name names it no longer either.
+        // A title the model gave it names it no longer.
         yield* db
           .update(codingAgent)
-          .set({ title: "Desk sweep", personaName: "Ava" })
+          .set({ title: "Desk sweep" })
           .where(eq(codingAgent.id, operatorId));
-        yield* db
-          .update(codingAgent)
-          .set({ personaName: "Maya" })
-          .where(eq(codingAgent.id, coderId));
         const seat = (subject: ChatMemberSubject) =>
           Effect.map(ensureMember(owner, workspace, subject), Option.getOrThrow);
         const ada = yield* seat({ kind: MEMBER_KIND.HUMAN, userId: owner });

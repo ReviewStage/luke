@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { CODING_AGENT_KIND } from "@luke/features/coding-agent-wire";
-import { eq } from "drizzle-orm";
 import { Effect, Option } from "effect";
 import * as SqlClient from "effect/sql/SqlClient";
 import { Database } from "../../core/query.js";
@@ -10,7 +9,6 @@ import { createCodingAgent } from "../../models/coding-agent-store.js";
 import { createTask } from "../../models/task-store.js";
 import { getTestDB, migrationStatements, openWorkspace } from "../../testing/index.js";
 import { user } from "../auth.js";
-import { codingAgent } from "../coding-agent.js";
 
 /**
  * The migration that clears the first name a member's operator was given
@@ -33,7 +31,6 @@ const openAccount = Effect.gen(function* () {
 it.layer(getTestDB())("the operator persona-name migration", (it) => {
   it.effect("clears an existing operator's first name and leaves a coder's", () =>
     Effect.gen(function* () {
-      const db = yield* Database;
       const sql = yield* SqlClient.SqlClient;
       const owner = yield* openAccount;
       const workspace = yield* openWorkspace(owner);
@@ -63,24 +60,20 @@ it.layer(getTestDB())("the operator persona-name migration", (it) => {
         }),
       ).agent;
       // The operator and the coder as ones made before stood: given a first name, as every agent was.
-      yield* db
-        .update(codingAgent)
-        .set({ personaName: "Ava" })
-        .where(eq(codingAgent.id, operator.id));
-      yield* db
-        .update(codingAgent)
-        .set({ personaName: "Maya" })
-        .where(eq(codingAgent.id, coder.id));
+      // Note that the column is written and read by SQL, since no module declares it any longer.
+      const named = (agentId: string, name: string) =>
+        sql`update coding_agent set persona_name = ${name} where id = ${agentId}`;
+      yield* named(operator.id, "Ava");
+      yield* named(coder.id, "Maya");
 
       for (const statement of yield* migrationStatements(MIGRATION)) yield* sql.unsafe(statement);
 
       const nameOf = (agentId: string) =>
         Effect.map(
-          db
-            .select({ personaName: codingAgent.personaName })
-            .from(codingAgent)
-            .where(eq(codingAgent.id, agentId)),
-          ([row]) => row?.personaName,
+          sql<{
+            readonly persona_name: string | null;
+          }>`select persona_name from coding_agent where id = ${agentId}`,
+          ([row]) => row?.persona_name,
         );
       assert.equal(yield* nameOf(operator.id), null);
       assert.equal(yield* nameOf(coder.id), "Maya");
