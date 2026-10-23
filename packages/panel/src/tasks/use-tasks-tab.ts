@@ -2815,13 +2815,7 @@ export function useTasksTab(input: {
 
   // A started task becomes the host's open one, which turns the page to it,
   // so the dialog closes and the Inbox or a version history standing behind
-  // it gives way. It opens with the side panel shown, on the plan, the one
-  // tab a new task holds, which Luke writes as the developer talks. Note
-  // that the panel is shown as the start is sent, while the modal dialog
-  // stands over it, because the host turns to the new plan before the start
-  // answers, and a show on the answer would open a panel hidden on the new
-  // plan since; a refusal hides it again where it stood hidden.
-  // It starts in the chosen workspace; with none listed the
+  // it gives way. It starts in the chosen workspace; with none listed the
   // service starts it in the account's first one. A name left blank is not
   // sent, and the plan stands as Untitled. A start opens no call, and
   // names no planning, so the task opens on an empty plan rather than the
@@ -2839,8 +2833,6 @@ export function useTasksTab(input: {
     workspaceId: string | undefined,
     from: NewTaskStart = {},
   ): Promise<string | undefined> => {
-    const panelWasOpen = sidePanel.open;
-    sidePanel.onSetOpen(true);
     // An agent's start opens on its task's page at once, its words drawn as
     // the agent's first line, rather than holding the card until the
     // service answers; a refusal opens the card again where it was left.
@@ -2861,7 +2853,6 @@ export function useTasksTab(input: {
       setHistoryFor(undefined);
     }
     const refusedWith = (note: string): string => {
-      if (!panelWasOpen) sidePanel.onSetOpen(false);
       if (handed !== undefined) {
         setStartingTask(undefined);
         setStandIn((now) => now ?? standingBefore);

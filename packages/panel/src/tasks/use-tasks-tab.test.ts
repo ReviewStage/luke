@@ -525,47 +525,6 @@ test("New plan opens its dialog over the open plan, which stays open; a second p
   assert.equal(tab.control().newTask.open, false, "Settings taking the window put the dialog away");
 });
 
-test("a task started opens with the side panel shown on its plan, a refused start hides it again where it stood hidden, and a panel hidden before the start answers stays hidden", async () => {
-  const answers: Array<(answer: PortActResult<typeof ACT_KIND.TASKS_START>) => void> = [];
-  const tab = mount(
-    { shown: true, tasks: OPEN },
-    { [ACT_KIND.TASKS_START]: () => new Promise((resolve) => answers.push(resolve)) },
-  );
-  const panel = () => tab.control().sidePanel;
-  act(() => panel().onToggle());
-  assert.equal(panel().open, false);
-
-  const send = () => {
-    let note: Promise<string | undefined> = Promise.resolve(undefined);
-    act(() => {
-      note = tab.control().newTask.start("Dark mode", null, tab.control().newTask.workspaceId);
-    });
-    return note;
-  };
-  act(() => tab.control().onNewTask());
-  const refused = send();
-  assert.deepEqual(
-    panelOf(tab),
-    { open: true, tab: SIDE_PANEL_TAB.PLAN },
-    "the panel shows as the start is sent",
-  );
-  await act(async () => {
-    answers[0]?.({ failure: TASK_CALL_FAILURE.REPOSITORY_NOT_REACHABLE });
-    await refused;
-  });
-  assert.equal(panel().open, false, "a refusal hides it again");
-
-  const started = send();
-  assert.equal(panel().open, true);
-  // The host turns to the new plan before the start answers, and the developer hides its panel.
-  act(() => panel().onToggle());
-  await act(async () => {
-    answers[1]?.({ planId: OTHER_TASK_ID });
-    await started;
-  });
-  assert.equal(panel().open, false, "the late answer leaves the panel the developer hid");
-});
-
 /** A board holding Luke's drawing of one box, numbered as his `number`th. */
 function _drawnBoard(number: number): Board {
   return {
@@ -3212,6 +3171,29 @@ test("New task's Agent mode sends one start carrying the agent, its words and mo
   );
   assert.equal(tab.control().agents.draft, undefined, "no draft stands in its place");
   assert.deepEqual(tab.control().mainTabs.tab, { agent: AGENT_ID }, "the task opens on its tab");
+});
+
+test("a task started, with an agent or without, leaves a hidden side panel hidden", async () => {
+  const started = { ...RUNNING_AGENT, planId: OTHER_TASK_ID };
+  const tab = mount(
+    { shown: true, tasks: OPEN },
+    {
+      [ACT_KIND.TASKS_START]: () =>
+        Promise.resolve({ planId: OTHER_TASK_ID, agentStart: { agent: started } }),
+      [ACT_KIND.CODING_AGENTS_LIST]: () => Promise.resolve({ agents: [started] }),
+    },
+  );
+  act(() => tab.control().sidePanel.onToggle());
+  assert.equal(tab.control().sidePanel.open, false);
+
+  await act(async () => {
+    await tab.control().newTask.start("Dark mode", null, undefined, { brief: "Later" });
+  });
+  assert.equal(tab.control().sidePanel.open, false, "File for later opens no plan beside it");
+
+  await startAgentTask(tab);
+  assert.deepEqual(tab.control().mainTabs.tab, { agent: AGENT_ID });
+  assert.equal(tab.control().sidePanel.open, false, "the plan does not open beside the agent");
 });
 
 test("New task's agent stands on its task with the words it started on as its first line before the task's agents or its transcript are read", async () => {
