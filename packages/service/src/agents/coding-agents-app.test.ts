@@ -253,6 +253,7 @@ import { HostedEnvironment, type HostedEnvironmentValues } from "../environment.
 import { recordingProductAnalytics, SERVER_EVENT } from "../events/server-events.js";
 import { LINK_OUTCOME, linkInstallation } from "../github/github-installations.js";
 import { PULL_REQUEST_QUEUED_OPERATION } from "../github/pull-request-merging.js";
+import { keptAfterResponse } from "../http/after-response.js";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import { HOSTED_REFUSAL } from "../http/http-effect.js";
 import { type InboxTitleModelOf, inboxProcedures } from "../inbox/inbox-procedures.js";
@@ -8960,6 +8961,27 @@ it.layer(getTestDB())("the coding agent's chat tools", (it) => {
         assert.ok("told" in mentioned);
         assert.deepEqual([mentioned.told, mentioned.unresolved], [[chat.links.second], ["@Ghost"]]);
         assert.equal(eve.sent.length, 2);
+      }),
+  );
+
+  it.effect(
+    "a post that mentions an agent is answered before that agent is steered, naming it as being told rather than told, and the steer runs once the answer has left",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const chat = yield* openAgents(eve);
+        const after = keptAfterResponse();
+        const posted = yield* chat
+          .post(chat.first, { text: `${chat.links.second} the invite table is yours.` })
+          .pipe(Effect.provide(after.layer));
+        assert.ok(posted.status === ACTION_RESULT_STATUS.ACCEPTED && "seq" in posted);
+        assert.deepEqual(
+          [posted.told, posted.telling, posted.held, posted.left],
+          [[], [chat.links.second], [], []],
+        );
+        assert.equal(eve.sent.length, 0, "the answer waits on no steer");
+        yield* after.run;
+        assert.equal(eve.sent.length, 1, "the steer runs once the answer has left");
       }),
   );
 

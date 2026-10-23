@@ -81,7 +81,13 @@ import {
   subjectOf,
 } from "./chat-ask.js";
 import { type ChatNames, chatNamesOf } from "./chat-names.js";
-import { blockWords, type ChatReceipt, type ChatTelling, tellMessage } from "./chat-notify.js";
+import {
+  blockWords,
+  type ChatReceipt,
+  type ChatReceiptTelling,
+  type ChatTelling,
+  tellMessageAfterAnswer,
+} from "./chat-notify.js";
 import type { InboxSandboxDoor } from "./inbox-image.js";
 
 /**
@@ -106,8 +112,9 @@ import type { InboxSandboxDoor } from "./inbox-image.js";
  * refused with words that send the agent back to its own;
  * it is told to the members it addresses through the one door a person's
  * post goes through too (`chat-notify.ts`), and the call answers the
- * receipt, so the agent knows who heard it now, who reads it next, who has
- * left, and which links named no one. A read answers who is in the task's
+ * receipt, so the agent knows who heard it now, which agents are being
+ * told, steered once the call has answered so it never waits on their
+ * sessions, who reads it next, who has left, and which links named no one. A read answers who is in the task's
  * chat, the channels the agent sees, its own and every DM it is one of,
  * with what it has not read in each, and then the messages: what it has
  * not read, which the read marks read,
@@ -143,7 +150,8 @@ export const CHAT_TOOLS = {
       "team read. You post in no other channel. replyTo is a message's number to answer it in its thread. " +
       "A member's mention link in the words, [@Name](link) as read_chat lists it, and a reply in a thread each tell the members they address, " +
       `at most ${CHAT_BOUNDS.MAX_STEERS_PER_POST}; a plain post tells nobody, and is read when they next read the chat. ` +
-      "An @word that is no link names no one. The call answers with the message's number, who was told now, who reads it " +
+      "An @word that is no link names no one. The call answers with the message's number, who was told now, who is being told, " +
+      "an agent its notice reaches just after the call answers, who reads it " +
       "when they next read, and who has left, each by their mention link, and the label of any link that named no member. " +
       "This is your team's Slack: post what the team, its engineering manager among them, would want to know, in short casual messages the way a person types them, never a report and never filler, whenever you start something, decide something, find " +
       "something, get stuck, push, or finish, the way a teammate keeps the team posted; " +
@@ -282,11 +290,13 @@ export type MessageLine = {
 /**
  * What a post answers: its place, where it was said or the root of the
  * thread it replies in, and the receipt, every member named by its
- * mention link; `untold` where the post stands but telling the members it
+ * mention link, with the agents being told past the answer where the
+ * runtime steers them there; `untold` where the post stands but telling the members it
  * addresses failed, who read it when they next read; and the agent's asks
  * where it asked.
  */
 type PostedLine = ChatReceipt & {
+  readonly telling?: readonly string[];
   readonly seq: number;
   readonly in?: string;
   readonly thread?: number;
@@ -800,7 +810,9 @@ function writePost(
 /**
  * What a post the store took answers: its place, where it was said or the
  * root of the thread it replies in, and the receipt of telling the members
- * it addresses. A post repeated under its key is told again, which the
+ * it addresses, whose agents are steered after the call has answered where
+ * the runtime keeps work past an answer (`tellMessageAfterAnswer`), so a
+ * post never waits on another agent's sandbox waking. A post repeated under its key is told again, which the
  * notice's key and the one outstanding notice keep from telling anyone
  * twice, so a repeat finishes a telling the first call never made. Note
  * that a post whose telling failed is answered as posted and untold,
@@ -827,8 +839,8 @@ function postedLine(
             ),
           }
         : named;
-    const told = yield* Effect.result(tellMessage(telling, message, unresolved));
-    const receipt = Result.getOrElse(told, () => NO_RECEIPT);
+    const told = yield* Effect.result(tellMessageAfterAnswer(telling, message, unresolved));
+    const receipt: ChatReceipt | ChatReceiptTelling = Result.getOrElse(told, () => NO_RECEIPT);
     const parent = message.parentId === null ? [] : [message.parentId];
     // A root that could not be read is logged and named by nothing, since the post stands either way.
     const roots = yield* seqsOf(agent.userId, seat.organizationId, parent).pipe(
@@ -841,6 +853,7 @@ function postedLine(
       // A reply whose root could not be read names no thread, since the place it was asked for may be a reply's.
       ...(thread[0] !== undefined ? { thread: thread[0] } : message.parentId === null ? place : {}),
       told: receipt.told,
+      ...("telling" in receipt ? { telling: receipt.telling } : undefined),
       held: receipt.held,
       left: receipt.left,
       unresolved: receipt.unresolved,
