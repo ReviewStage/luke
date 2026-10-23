@@ -20,6 +20,7 @@ import {
   accountPreferencesParts,
   EXPERIMENT,
   type ExperimentChoices,
+  MAC_COMMAND_MODE,
   SETTINGS_RESET_SCOPE,
   snapshotAccountPreferences,
   THEME,
@@ -227,7 +228,8 @@ const SAMPLE_VALUE = {
   preferBuiltInMicrophone: false,
   // On is the default, so Off is the choice that has to survive a reopen.
   agentNotifications: false,
-  macCommands: false,
+  // Ask is the default, so Never is the choice that has to survive a reopen.
+  macCommands: MAC_COMMAND_MODE.NEVER,
   // Atlas is the default, so another is the choice that has to survive a reopen.
   videoAvatar: VIDEO_AVATAR.CELIA,
   // Each diff setting away from its default, the look a review tool's reader picked.
@@ -361,6 +363,20 @@ test("the Default avatar an earlier build stored reads as no choice", async (t) 
   const reopened = storeIn(directory);
   assert.equal(await reopened.get("videoAvatar"), undefined);
   assert.equal(appSettingsView(await reopened.snapshot()).videoAvatar, undefined);
+});
+
+test("the Mac commands switch an earlier build stored reads as a mode: on as Ask, off as Never", async (t) => {
+  const directory = await temporaryDirectory(t, "luke-settings-");
+  await storeIn(directory).set("macCommands", MAC_COMMAND_MODE.ALWAYS);
+  const file = path.join(directory, SETTINGS_FILE_NAME);
+  const stored = await readSettingsFile(directory);
+  assert.ok(stored.includes(`"${MAC_COMMAND_MODE.ALWAYS}"`));
+
+  await fs.writeFile(file, stored.replace(`"${MAC_COMMAND_MODE.ALWAYS}"`, "true"));
+  assert.equal(await storeIn(directory).get("macCommands"), MAC_COMMAND_MODE.ASK);
+
+  await fs.writeFile(file, stored.replace(`"${MAC_COMMAND_MODE.ALWAYS}"`, "false"));
+  assert.equal(await storeIn(directory).get("macCommands"), MAC_COMMAND_MODE.NEVER);
 });
 
 test("every provider key an earlier build stored is dropped, and the choices beside it stay", async (t) => {

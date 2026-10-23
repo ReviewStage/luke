@@ -18,6 +18,19 @@ export const NATIVE_HELPERS = [
   { source: "OutputVolume.swift", binary: "mac-output-volume", frameworks: ["CoreAudio"] },
 ];
 
+/**
+ * macOS 26's Liquid Glass, laid behind the panel window
+ * (`src/main/native/liquid-glass.ts`): `electron-liquid-glass`'s prebuilt
+ * N-API addon for the packaged architecture, copied beside the helpers by
+ * the native build and shipped and signed as they are. The package's own
+ * JavaScript is not bundled; the main process loads the addon itself.
+ */
+export const LIQUID_GLASS_ADDON = {
+  packageName: "electron-liquid-glass",
+  prebuild: path.join("prebuilds", "darwin-arm64", "node.napi.armv8.node"),
+  binary: "liquid-glass.node",
+};
+
 export function packagedAppPath(repoRoot) {
   return path.join(
     repoRoot,

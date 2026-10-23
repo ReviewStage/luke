@@ -355,6 +355,21 @@ export interface ComposerTrigger {
   readonly rect: { readonly left: number; readonly top: number; readonly bottom: number };
 }
 
+/** Whether two reports say the same, so an unchanged word is not reported again. */
+export function sameTrigger(
+  a: ComposerTrigger | undefined,
+  b: ComposerTrigger | undefined,
+): boolean {
+  if (a === undefined || b === undefined) return a === b;
+  return (
+    a.start === b.start &&
+    a.query === b.query &&
+    a.rect.left === b.rect.left &&
+    a.rect.top === b.rect.top &&
+    a.rect.bottom === b.rect.bottom
+  );
+}
+
 /** A chip the composer draws in its words: a skill, written `/name`. */
 export interface ComposerChip {
   readonly name: string;

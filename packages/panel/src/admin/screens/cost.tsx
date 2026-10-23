@@ -333,14 +333,12 @@ export function CostScreen({
   );
   const signOut = () => void withdraw(onSignOut);
   const controls = (
-    <>
-      <AdminViewOptions
-        windowDays={windowDays}
-        onWindowDaysChange={onWindowDaysChange}
-        hideAdmins={hideAdmins}
-        onHideAdminsChange={onHideAdminsChange}
-      />
-    </>
+    <AdminViewOptions
+      windowDays={windowDays}
+      onWindowDaysChange={onWindowDaysChange}
+      hideAdmins={hideAdmins}
+      onHideAdminsChange={onHideAdminsChange}
+    />
   );
 
   switch (state.status) {

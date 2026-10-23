@@ -1,4 +1,6 @@
 import { isRecord, isWireString, type UnparsedWireValue } from "@luke/wire";
+import { PICTURE_TYPE, type PictureType } from "../picture-wire.js";
+
 /**
  * A note from the user to the people who make Luke. Two kinds, because they are
  * read differently on arrival: feedback is about Luke, and a prompt is an ask
@@ -27,13 +29,9 @@ function isFeedbackKind(value: UnparsedWireValue): value is FeedbackKind {
  * `image/*`: the renderer re-encodes what does not fit, and the endpoint that
  * turns a submission into email forwards these types blind.
  */
-export const FEEDBACK_IMAGE_TYPE = {
-  PNG: "image/png",
-  JPEG: "image/jpeg",
-  WEBP: "image/webp",
-} as const;
+export const FEEDBACK_IMAGE_TYPE = PICTURE_TYPE;
 
-type FeedbackImageType = (typeof FEEDBACK_IMAGE_TYPE)[keyof typeof FEEDBACK_IMAGE_TYPE];
+type FeedbackImageType = PictureType;
 
 const FEEDBACK_IMAGE_TYPES: readonly string[] = Object.values(FEEDBACK_IMAGE_TYPE);
 

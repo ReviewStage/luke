@@ -39,9 +39,9 @@ contextBridge.exposeInMainWorld("luke", exposedBridge());
 
 // An attached shell's port cannot cross the context bridge, so it is handed
 // into the page as Electron hands a port to an isolated world; the page reads
-// it back by the channel and checks the ticket (`renderer/terminal/terminal-port.ts`).
-// A terminal of this Mac's port (`renderer/planning/mac-terminal-tab.tsx`) and
-// a cloud Browser tab's live view's port (`@luke/panel`'s
+// it back by the channel and checks the ticket (`packages/panel/src/terminal/terminal-port.ts`).
+// A terminal of this Mac's port (`packages/panel/src/tasks/mac-terminal-tab.tsx`)
+// and a cloud Browser tab's live view's port (`@luke/panel`'s
 // `tasks/browser-live-port.ts`) are handed in the same way.
 for (const channel of [
   TERMINAL_PORT_CHANNEL,

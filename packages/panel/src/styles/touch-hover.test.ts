@@ -166,34 +166,6 @@ for (const metaAt of [LIST_ROW_META.MIDDLE, LIST_ROW_META.TITLE]) {
   });
 }
 
-/** A sidebar task row's time, in the row's markup, its row hovered. */
-function hoveredTaskTime(): Element {
-  const container = draw(
-    createElement(
-      "li",
-      { className: "sidebar-task-item" },
-      createElement(
-        "div",
-        { className: "sidebar-task" },
-        createElement("span", { className: "sidebar-task-time" }, "21m"),
-      ),
-    ),
-  );
-  const time = container.querySelector(".sidebar-task-time") ?? assert.fail("the time");
-  hover(time);
-  return time;
-}
-
-test("on a touch screen a sidebar task row a tap leaves hovered keeps its time", () => {
-  layHoverable(true);
-  assert.ok(readable(hoveredTaskTime()));
-});
-
-test("with a mouse a hovered sidebar task row gives its time's place to Pin and Archive", () => {
-  layHoverable(false);
-  assert.ok(!readable(hoveredTaskTime()));
-});
-
 /** A place's row whose count stands only under the pointer, and its chord, hovered. */
 function hoveredPlace() {
   const container = draw(

@@ -46,7 +46,6 @@ export const GAP = {
   /** Blocks of words one under another, as comments in a thread stand. */
   BLOCK: "block",
   SECTION: "section",
-  LOOSE: "loose",
 } as const;
 
 export type Gap = (typeof GAP)[keyof typeof GAP];
@@ -62,10 +61,9 @@ export const ALIGN = {
 
 export type Align = (typeof ALIGN)[keyof typeof ALIGN];
 
-/** Where items stand along the arrangement: packed at its start, centre, or end, or spread to both ends. */
+/** Where items stand along the arrangement: packed at its start or end, or spread to both ends. */
 export const JUSTIFY = {
   START: "start",
-  CENTER: "center",
   END: "end",
   BETWEEN: "between",
 } as const;
@@ -90,10 +88,8 @@ export type Inset = (typeof INSET)[keyof typeof INSET];
 /** The elements an arrangement may be, by what it groups. */
 export const LAYOUT_ELEMENT = {
   DIV: "div",
-  SECTION: "section",
   UL: "ul",
   OL: "ol",
-  LI: "li",
   FORM: "form",
 } as const;
 

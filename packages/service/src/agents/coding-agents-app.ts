@@ -4,6 +4,7 @@ import { readConversationPicture } from "@luke/database/models/conversation-pict
 import { childConversationId } from "@luke/database/models/ids";
 import { codingAgentCallIdSchema } from "@luke/features/coding-agent-wire";
 import { githubImageOf } from "@luke/features/github-image";
+import { HTTP_METHOD } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import { Effect, Layer, Option, Result } from "effect";
 import { type HttpClient, HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
@@ -11,7 +12,6 @@ import { unparsedWire } from "../core.js";
 import type { HostedEnvironment } from "../environment.js";
 import type { GitHubApp } from "../github/github-app.js";
 import { githubImage } from "../github/github-images.js";
-import { githubReadOrRefusal } from "../github/github-refusal.js";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import {
   HOSTED_BYTES_HEADERS,
@@ -20,12 +20,15 @@ import {
   hostedNotFoundRoute,
   hostedRefusing,
   hostedStoreOrUnavailable,
+  resolvedUserId,
   type UserIdResolver,
+  uuidOf,
 } from "../http/http-effect.js";
 import { readInboxAttachment } from "../inbox/inbox-store.js";
 import type { ModelCatalog } from "../providers/model-catalog.js";
 import { ANY_METHOD, type WebRoutes } from "../route.js";
-import { reachedAgent, resolvedUserId, uuidOf } from "./agent-reach.js";
+import { reachedAgent } from "./agent-reach.js";
+import { githubReadRefusal } from "./asked-pull-request.js";
 import { agentPullRequestReach } from "./coder-host/published.js";
 
 /**
@@ -46,10 +49,6 @@ const AGENTS_PATH = {
   INBOX_ATTACHMENT: "/api/inbox/attachment",
   /** GET serves one picture a tool answered the agent, or one of its workers where the query names the delegation call; the rewrite moves the agent id into the `id` query, the call into `call`, and the picture into `picture`. */
   PICTURE: "/api/agents/picture",
-} as const;
-
-const HTTP_METHOD = {
-  GET: "GET",
 } as const;
 
 const QUERY = {
@@ -118,20 +117,7 @@ const githubImageEndpoint = /* @__PURE__ */ Effect.fn("web/agentGitHubImageEndpo
   const read = yield* Effect.gen(function* () {
     const { token } = yield* agentPullRequestReach(userId, agent);
     return yield* githubImage(token, agent.repository, image);
-  }).pipe(
-    Effect.catch((failure) => {
-      switch (failure._tag) {
-        case "RepositoryNotReachable":
-          return Effect.fail(HOSTED_REFUSAL.REPOSITORY_NOT_REACHABLE);
-        case "SqlError":
-        case "EffectDrizzleQueryError":
-        case "SchemaError":
-          return hostedStoreOrUnavailable(Effect.fail(failure));
-        default:
-          return githubReadOrRefusal(Effect.fail(failure));
-      }
-    }),
-  );
+  }).pipe(githubReadRefusal);
   if (Option.isNone(read)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
   return HttpServerResponse.uint8Array(read.value.bytes, {
     status: HOSTED_HTTP_STATUS.OK,

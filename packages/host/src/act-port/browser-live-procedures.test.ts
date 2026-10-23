@@ -5,18 +5,17 @@ import {
   type BrowserLivePortOutbound,
   type BrowserLivePortTicket,
 } from "@luke/features/browser-live-acts";
-import type { ActSender } from "@luke/host/act-port";
-import { type TestActPort, testActPort } from "@luke/host/act-port/testing";
-import { ACT_KIND } from "@luke/host/acts";
-import type { HostOperator } from "@luke/host/host-operator";
 import type { WireBoundaryInput } from "@luke/wire";
 import { Effect } from "effect";
-import type { WebContents } from "electron";
+import { ACT_KIND } from "../acts.js";
+import type { HostOperator } from "../host-operator.js";
+import type { ActSender } from "./base.js";
 import {
   type BrowserLiveActsDependencies,
   browserLiveProcedures,
   type MainBrowserLivePort,
-} from "./browser-live-acts";
+} from "./browser-live-procedures.js";
+import { type TestActPort, testActPort } from "./testing.js";
 
 /**
  * A cloud Browser tab's live view as main carries it, over a host and ports
@@ -29,8 +28,13 @@ import {
  * answered. Synthetic ids and frames throughout.
  */
 
+/** A window, read by identity alone. */
+interface Window {
+  readonly window: number;
+}
+
 /** Every act port a fixture opened, closed once its test is done. */
-const ports: TestActPort<WebContents>[] = [];
+const ports: TestActPort<Window>[] = [];
 
 afterEach(() => {
   for (const port of ports.splice(0)) port.close();
@@ -41,9 +45,11 @@ const TAB_ID = "5a0e1f2b-3c4d-4e5f-9a6b-7c8d9e0f1a2b";
 const ATTACH = { viewId: "view-a", taskId: TASK_ID, tabId: TAB_ID };
 const REFUSED = { refused: "Could not show that tab." };
 
-// SAFETY: the rows read a sender by identity alone; one inert object is one window.
-const panelOf = (): ActSender<WebContents> => ({
-  sender: {} as WebContents,
+let windows = 0;
+
+/** A panel of a window of its own. */
+const panelOf = (): ActSender<Window> => ({
+  sender: { window: ++windows },
   panel: true,
   voice: false,
   call: false,
@@ -51,7 +57,7 @@ const panelOf = (): ActSender<WebContents> => ({
 
 /** One port main opened, as the test watches it: where it went, what main posted on it, and whether it closed. */
 interface ScriptedPort {
-  readonly sender: WebContents;
+  readonly sender: Window;
   readonly ticket: BrowserLivePortTicket;
   readonly posted: BrowserLivePortOutbound[];
   closed: boolean;
@@ -61,12 +67,12 @@ interface ScriptedPort {
 function fixture(options: { experimentOn?: boolean } = {}) {
   const asked: string[] = [];
   const opened: ScriptedPort[] = [];
-  const gone = new Map<WebContents, () => void>();
+  const gone = new Map<Window, () => void>();
   const pending: Effect.Effect<unknown>[] = [];
   let messageListener: Parameters<HostOperator["onBrowserLiveMessage"]>[0] | undefined;
   let closedListener: Parameters<HostOperator["onBrowserLiveClosed"]>[0] | undefined;
   let ids = 0;
-  const host: BrowserLiveActsDependencies["host"] = {
+  const host: BrowserLiveActsDependencies<Window>["host"] = {
     browserLiveConnect: ({ connectionId, taskId, tabId }) =>
       Effect.sync(() => {
         asked.push(`connect:${connectionId}:${taskId}:${tabId}`);
@@ -86,7 +92,7 @@ function fixture(options: { experimentOn?: boolean } = {}) {
     },
   };
   const actPort = testActPort(
-    browserLiveProcedures({
+    browserLiveProcedures<Window>({
       host,
       ports: {
         open: (sender, ticket): MainBrowserLivePort => {
@@ -128,7 +134,7 @@ function fixture(options: { experimentOn?: boolean } = {}) {
       message: (connectionId: string, text: string) => messageListener?.({ connectionId, text }),
       closed: (connectionId: string, code: number) => closedListener?.({ connectionId, code }),
     },
-    pageGone: (sender: WebContents) => gone.get(sender)?.(),
+    pageGone: (sender: Window) => gone.get(sender)?.(),
     drain: Effect.suspend(() => Effect.all(pending.splice(0), { discard: true })),
   };
 }
@@ -202,7 +208,7 @@ it.effect("only a panel with the Browser tab experiment on may attach a view", (
   Effect.gen(function* () {
     const off = fixture({ experimentOn: false });
     const on = fixture();
-    const voice: ActSender<WebContents> = { ...panelOf(), panel: false, voice: true };
+    const voice: ActSender<Window> = { ...panelOf(), panel: false, voice: true };
 
     const whileOff = yield* off.actPort.perform(
       { kind: ACT_KIND.BROWSER_LIVE_ATTACH, payload: ATTACH },

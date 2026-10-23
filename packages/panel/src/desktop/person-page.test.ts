@@ -343,9 +343,7 @@ function sections(page: HTMLElement): Record<string, string[]> {
   return Object.fromEntries(
     [...page.querySelectorAll("section.home-section")].map((section) => [
       section.getAttribute("aria-label"),
-      [...section.querySelectorAll(".sidebar-task-name, .luke-list-row-title")].map(
-        (name) => name.textContent,
-      ),
+      [...section.querySelectorAll(".luke-list-row-title")].map((name) => name.textContent),
     ]),
   );
 }

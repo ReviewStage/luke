@@ -9,7 +9,7 @@ import { lookAtPlanPicture, offeredTaskTools } from "../host.js";
  * look_at_picture.ts -- the agent looks at one of its plan's pictures, named by the address the plan's text writes it at.
  *
  * The planning model's tool too, one implementation for both
- * (`packages/service/src/plans/picture-look.ts`). The call reaches the store
+ * (`packages/service/src/tasks/picture-look.ts`). The call reaches the store
  * through the host's door (`../host.ts`), as `edit_plan` does, and its
  * answer is shown to the model as the picture itself, never its base64 as
  * text; the transcript keeps only that it looked. It is offered at each

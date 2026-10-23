@@ -1,5 +1,6 @@
 import { INSTALLED_SKILLS } from "@luke/agent-runner/protocol";
 import { MENTIONED_HEADING } from "@luke/database/models/attached-file-parts";
+import { type CodingAgent, codingAgentBriefOf } from "@luke/database/models/coding-agent-store";
 import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
 import { CHAT_NOTICE_LEAD } from "@luke/features/chat-wire";
 import {
@@ -10,7 +11,9 @@ import {
   type CodingAgentKind,
   OPERATOR_QUIET_REPLY,
 } from "@luke/features/coding-agent-wire";
+import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
 import { INBOX_ANSWER_LEAD, INBOX_MESSAGE_LEAD } from "@luke/features/inbox-wire";
+import { encodeMention, MENTION_KIND } from "@luke/features/mention-link";
 import { INTEGRATION_NAMES_SAID } from "../../integrations/integrations.js";
 import { COMMAND_DESCRIPTION_INSTRUCTION } from "../command-description.js";
 import { CODER } from "./bounds.js";
@@ -868,6 +871,51 @@ Your messages are read by the developer in Luke's own window as a transcript, be
 ${namingWords(repository ?? EXAMPLE_REPOSITORY, taskLink)}
 
 Never print a credential, a token, or the contents of an environment file, in a message, a commit, or a pull request.`;
+}
+
+/** What an agent's instructions are composed on beyond its row. */
+export interface AgentInstructionsContext {
+  /** Whether its token reads the repository's CI. */
+  readonly ciReadable: boolean;
+  /** The co-author trailer where it writes as its developer. */
+  readonly coAuthor: string | undefined;
+  /** The workspace its links are written under. */
+  readonly workspace: string;
+  readonly chatOn: boolean;
+  readonly memoryOn: boolean;
+  readonly harness: CoderHarness;
+}
+
+/**
+ * The instructions for the agent its row names, on any harness: its brief
+ * (`codingAgentBriefOf`), its task's link, its start branch, its credential,
+ * and its kind read from the row, so an eve session and a native one are
+ * worded alike for the same agent.
+ */
+export function agentCoderInstructions(
+  agent: CodingAgent,
+  context: AgentInstructionsContext,
+): string {
+  const taskLink =
+    agent.taskId === null
+      ? null
+      : encodeMention(
+          { kind: MENTION_KIND.TASK, taskId: agent.taskId },
+          { workspace: context.workspace, repository: null },
+        );
+  return coderInstructions(
+    agent.repository,
+    codingAgentBriefOf(agent),
+    context.ciReadable,
+    taskLink,
+    context.coAuthor,
+    context.chatOn,
+    agent.startBranch,
+    agent.githubAccess === GITHUB_ACCESS.TOKEN,
+    context.harness,
+    agent.kind,
+    context.memoryOn,
+  );
 }
 
 /** The instructions a worker runs under: one slice of the agent's work, read-only, answered whole. */

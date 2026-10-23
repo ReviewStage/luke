@@ -55,7 +55,7 @@ import {
   namedOverviewPullRequest,
   namedPendingReview,
 } from "../github/github-people.js";
-import { githubReadOrRefusal, logGitHubReadFailure } from "../github/github-refusal.js";
+import { logGitHubReadFailure } from "../github/github-refusal.js";
 import { pullRequestMerging } from "../github/pull-request-merging.js";
 import {
   addLineComment,
@@ -90,17 +90,14 @@ import {
   viewerPendingReviewOf,
   viewerReactionsOf,
 } from "../github/pull-requests.js";
-import {
-  HOSTED_REFUSAL,
-  hostedStoreOrUnavailable,
-  type UserIdResolver,
-} from "../http/http-effect.js";
+import { HOSTED_REFUSAL, type UserIdResolver } from "../http/http-effect.js";
 import { accountMiddleware, hosted } from "../orpc/base.js";
 import { reachedAgentById } from "./agent-reach.js";
 import {
   askedPublished,
   askedPullRequest,
   forgetPublished,
+  githubReadRefusal,
   pullRequestNumberOf,
 } from "./asked-pull-request.js";
 import {
@@ -163,20 +160,7 @@ const overviewPart = <A, R>(
     const part = yield* Effect.gen(function* () {
       const { token } = yield* agentPullRequestReach(userId, agent);
       return yield* read(token, agent, pullRequest, userId);
-    }).pipe(
-      Effect.catch((failure) => {
-        switch (failure._tag) {
-          case "RepositoryNotReachable":
-            return Effect.fail(HOSTED_REFUSAL.REPOSITORY_NOT_REACHABLE);
-          case "SqlError":
-          case "EffectDrizzleQueryError":
-          case "SchemaError":
-            return hostedStoreOrUnavailable(Effect.fail(failure));
-          default:
-            return githubReadOrRefusal(Effect.fail(failure));
-        }
-      }),
-    );
+    }).pipe(githubReadRefusal);
     // Note that a part may carry what is the reader's own, such as the reactions they gave or the review they hold pending, which every hosted answer's `private, no-store` keeps from anyone else.
     return { pullRequest: part };
   });

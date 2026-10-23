@@ -7,6 +7,12 @@
 
 @import "@luke/ui/tokens.css";
 @import "@luke/ui/styles.css";
+/* Tailwind's theme and utilities alone, no preflight, as the apps take them,
+   over `@luke/ui`'s own sources and its shadcn/ui vocabulary. */
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities) source(none);
+@import "@luke/ui/tailwind/sources.css";
+@import "@luke/ui/tailwind/theme.css";
 
 *,
 *::before,

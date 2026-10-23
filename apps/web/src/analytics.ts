@@ -280,23 +280,6 @@ function withClient(use: (posthog: PostHog) => void): void {
   void client?.then((posthog) => posthog && use(posthog)).catch(() => undefined);
 }
 
-/** What the person record holds beyond the id it is keyed by. */
-export interface SiteVisitor {
-  name?: string;
-  email?: string;
-}
-
-/**
- * Names the visitor by the account they just created. The id is the same
- * opaque database id the desktop's events resolve to, which is what joins the
- * two halves of the funnel; the name and address ride as person properties,
- * the same two fields the account itself holds and the service attaches to
- * desktop events.
- */
-export function identifySiteVisitor(userId: string, visitor: SiteVisitor = {}): void {
-  withClient((posthog) => posthog.identify(userId, visitor));
-}
-
 export function captureSiteEvent(event: SiteEvent): void {
   withClient((posthog) => posthog.capture(event));
 }
@@ -325,7 +308,7 @@ export function signInCountDeadline(): AbortSignal {
 
 /**
  * Where the two halves of the funnel join: names the visitor by the account
- * the browser just signed in as (`identifySiteVisitor`) and counts
+ * the browser just signed in as and counts
  * `site:sign_in_complete`, once per Better Auth session however many pages of
  * the flow call it.
  *
