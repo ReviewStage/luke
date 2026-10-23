@@ -83,6 +83,7 @@
     "./picture-wire": "./src/picture-wire.js",
     "./pin-order": "./src/pin-order.js",
     "./place-chip-model": "./src/place-chip-model.js",
+    "./thing-kind": "./src/thing-kind.js",
     "./plan-attachment-link": "./src/plan-attachment-link.js",
     "./inbox-attachment-link": "./src/inbox-attachment-link.js",
     "./lone-link": "./src/lone-link.js",
