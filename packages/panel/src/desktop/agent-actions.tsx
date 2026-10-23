@@ -190,6 +190,19 @@ export function useAgentCallDoors(
   return useMemo(() => (onPress === undefined ? undefined : { onPress }), [onPress]);
 }
 
+/** What an agent's actions read of the window's agent control: its doors, the reads they run, and the models it is named by. */
+export type AgentActionsControl = Pick<
+  CodingAgentsControl,
+  | "onRename"
+  | "onArchive"
+  | "onUnarchive"
+  | "onDelete"
+  | "readAgent"
+  | "readTranscript"
+  | "chatOn"
+  | "models"
+>;
+
 /** One agent's actions, as every surface that draws it offers them. */
 export function useAgentActions(
   agent: Pick<
@@ -204,7 +217,7 @@ export function useAgentActions(
     | "brief"
     | "kind"
   >,
-  agents: CodingAgentsControl,
+  agents: AgentActionsControl,
   input: {
     /** The agent's name as the surface draws it, which a transcript copied is headed by. */
     readonly label: string;

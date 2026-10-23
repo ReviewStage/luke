@@ -126,13 +126,14 @@ import { PANEL_TAB, type PanelTab } from "../panel-tabs.js";
 import { RepositoryPicture } from "../repository-picture.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { GLYPH_STATE, stateEndMark } from "../state-glyph.js";
+import { useSteadyDoor, useSteadyDoors } from "../steady-door.js";
 import { useChatOn } from "../tasks/chat-gate.js";
 import type { InboxListing } from "../tasks/use-inbox-listing.js";
 import { inColumn, type PinnedTab } from "../tasks/use-side-panel.js";
 import { useUnreadTasks } from "../tasks/use-task-looks.js";
 import { AUTOMATIONS_PAGE, type InboxChoice, type TasksControl } from "../tasks/use-tasks-tab.js";
 import { useAdminAccess, useExperiment } from "../use-app-state.js";
-import { ActionMenu, type MenuAction, type MenuEntry } from "./action-menu.js";
+import { ActionMenu, type MenuAction } from "./action-menu.js";
 import { welcomed } from "./desktop-welcome.js";
 import { useFailedRunsMark } from "./failed-runs.js";
 import { type FoldedGroups, useFoldedGroups } from "./folded-groups.js";
@@ -142,7 +143,7 @@ import { isLuke, useLukeOperator, withoutLuke } from "./luke-operator.js";
 import { ADMIN_PLACE } from "./pages-on-demand.js";
 import { needsYouNoun, usePlacesWaiting } from "./places-waiting.js";
 import { RowPlaced } from "./row-moves.js";
-import { SidebarAgent } from "./sidebar-agent.js";
+import { type AgentRowControl, type AgentRowSections, SidebarAgent } from "./sidebar-agent.js";
 import { SIDEBAR_WIDTH, type SidebarCollapse, sidebarInSight } from "./sidebar-collapse.js";
 import { SidebarFoot } from "./sidebar-foot.js";
 import { type CountNoun, SidebarGroupHeader } from "./sidebar-group-header.js";
@@ -151,7 +152,6 @@ import { SidebarLuke } from "./sidebar-luke.js";
 import { SidebarPinnedTab } from "./sidebar-pinned-tab.js";
 import {
   type DrawnSection,
-  moveToSectionEntry,
   PINNED_DROP_ZONE,
   rowMember,
   SidebarSections,
@@ -166,7 +166,7 @@ import {
   useTaskViewCommands,
   ViewChips,
 } from "./sidebar-task-view.js";
-import { type RowFaces, SidebarTask } from "./task-actions.js";
+import { type RowFaces, rowFaces, SidebarTask, type TaskMenuControl } from "./task-actions.js";
 import { useTaskListView } from "./task-list-view.js";
 import { useRowDrag } from "./use-row-drag.js";
 import { WorkspaceSwitcher } from "./workspace-switcher.js";
@@ -343,6 +343,10 @@ function HistoryButton({
 /** What every row of the tasks is drawn with, whichever section it stands in. */
 interface RowContext {
   readonly tasks: TasksControl;
+  /** What a task's row reads of the tasks, standing while the list moves, so a row is drawn again for its own task alone. */
+  readonly rowTasks: TaskMenuControl;
+  /** What an agent's row reads of the window's agents, standing while the open task's agents move. */
+  readonly rowAgents: AgentRowControl;
   /** Whether a task is the one open, which a fold still leaves standing. */
   readonly current: (taskId: string) => boolean;
   /** Whether a row is the one the sidebar marks: the pin the open task was opened from, else the open task's own row. */
@@ -353,7 +357,7 @@ interface RowContext {
   /** Opens an agent with no plan on its own page. */
   readonly onOpenAgent: (agentId: string) => void;
   /** What an agent's delete runs once it landed: its page left where it is the one standing. */
-  readonly onDeletedAgent: (agentId: string) => () => void;
+  readonly onDeletedAgent: (agentId: string) => void;
   /** Whether a task was saved since the developer last looked at it on this Mac. */
   readonly unread: (task: TaskSummary) => boolean;
   /** Whether an agent's turn ended while the developer was not looking at it. */
@@ -368,8 +372,8 @@ interface RowContext {
   readonly inSight: boolean;
   /** Hears a row let go over a section, Tasks, or Pinned, while the account keeps sections; none while it does not. */
   readonly dropOut: ((row: TaskRow, zone: string, at: number) => void) | undefined;
-  /** An agent's Move to section, as a task's menu offers it; none for an archived agent. */
-  readonly sectionEntry: (agent: TasklessAgent) => MenuEntry | undefined;
+  /** The sections an agent's Move to section offers, as a task's menu offers them. */
+  readonly sections: AgentRowSections;
 }
 
 /** A repository's group's key, by which it leaves the list. */
@@ -437,7 +441,7 @@ function TaskRows({
         row.kind === TASK_ROW.TASK ? (
           <SidebarTask
             key={row.task.id}
-            tasks={context.tasks}
+            tasks={context.rowTasks}
             task={row.task}
             current={context.marked(row.task.id, undefined)}
             open={context.current(row.task.id)}
@@ -446,13 +450,13 @@ function TaskRows({
             at={taskRowTime(row, context.order)}
             repository={repository?.(row)}
             faces={faces}
-            onOpen={() => context.onOpen(row.task.id)}
+            onOpen={context.onOpen}
           />
         ) : (
           <SidebarAgent
             key={row.agent.id}
             agent={row.agent}
-            agents={context.tasks.agents}
+            agents={context.rowAgents}
             current={context.currentRow(row)}
             unread={context.unseenAgent(row.agent.id)}
             now={context.now}
@@ -460,22 +464,15 @@ function TaskRows({
             repository={repository?.(row)}
             face={faces.creator && faces.assignee}
             shown={context.tasks.shown && context.inSight}
-            onOpen={() => context.onOpenAgent(row.agent.id)}
-            onPin={pinOf(context.tasks, row.agent)}
-            section={context.sectionEntry(row.agent)}
-            onDeleted={context.onDeletedAgent(row.agent.id)}
+            onOpen={context.onOpenAgent}
+            onPin={context.tasks.onPinAgent}
+            sections={context.sections}
+            onDeleted={context.onDeletedAgent}
           />
         ),
       )}
     </Stack>
   );
-}
-
-/** Pin or Unpin for an agent's row, the account's own; none for an archived agent, which the sidebar draws among the archived whether or not it is pinned, as a plan's. */
-function pinOf(tasks: TasksControl, agent: TasklessAgent): ((pinned: boolean) => void) | undefined {
-  return agent.archivedAt === undefined
-    ? (pinned) => tasks.onPinAgent(agent.id, pinned)
-    : undefined;
 }
 
 /** One row under Pinned: a pinned plan, a tab pinned on a listed plan, or a pinned agent with no plan, and where its pin stands. */
@@ -662,16 +659,16 @@ function PinnedRows({
             <RowPlaced key={key} place={placeOf(key)}>
               <SidebarAgent
                 agent={agent}
-                agents={context.tasks.agents}
+                agents={context.rowAgents}
                 current={context.currentRow(agentRow(agent))}
                 unread={context.unseenAgent(agent.id)}
                 now={context.now}
                 at={agent.activityAt}
                 shown={context.tasks.shown && context.inSight}
-                onOpen={() => context.onOpenAgent(agent.id)}
-                onPin={pinOf(context.tasks, agent)}
-                section={context.sectionEntry(agent)}
-                onDeleted={context.onDeletedAgent(agent.id)}
+                onOpen={context.onOpenAgent}
+                onPin={context.tasks.onPinAgent}
+                sections={context.sections}
+                onDeleted={context.onDeletedAgent}
               />
             </RowPlaced>
           );
@@ -681,13 +678,13 @@ function PinnedRows({
           <RowPlaced key={key} place={placeOf(key)}>
             {pin === undefined ? (
               <SidebarTask
-                tasks={context.tasks}
+                tasks={context.rowTasks}
                 task={task}
                 current={context.marked(task.id, undefined)}
                 open={context.current(task.id)}
                 unread={context.unread(task)}
                 now={context.now}
-                onOpen={() => context.onOpen(task.id)}
+                onOpen={context.onOpen}
               />
             ) : (
               <SidebarPinnedTab
@@ -961,7 +958,11 @@ function CreatorSection({
         onToggle={() => folds.toggleCreator(group.creatorId)}
       />
       {rows.length === 0 ? null : (
-        <TaskRows rows={rows} context={context} faces={{ ...context.faces, creator: false }} />
+        <TaskRows
+          rows={rows}
+          context={context}
+          faces={rowFaces({ ...context.faces, creator: false })}
+        />
       )}
     </div>
   );
@@ -1014,7 +1015,11 @@ function AssigneeSection({
         onToggle={() => folds.toggleAssignee(group.assigneeId)}
       />
       {rows.length === 0 ? null : (
-        <TaskRows rows={rows} context={context} faces={{ ...context.faces, assignee: false }} />
+        <TaskRows
+          rows={rows}
+          context={context}
+          faces={rowFaces({ ...context.faces, assignee: false })}
+        />
       )}
     </div>
   );
@@ -1762,35 +1767,71 @@ function SidebarColumn({
     ]);
   };
   const { chosen } = overlay;
+  // Note that what every row is handed stands across the sidebar's draws while it says the same,
+  // because a row holds while what it is handed does (`memo`), and the tasks are new on every
+  // patch to any task, which comes constantly while agents work.
+  const { agents } = tasks;
+  const readTasks = useSteadyDoor(() => tasks);
+  const rowTasks = useSteadyDoors<TaskMenuControl>({
+    shown: tasks.shown,
+    me: tasks.me,
+    signedIn: tasks.signedIn,
+    workspaces: tasks.workspaces,
+    taskSections: tasks.taskSections,
+    copy: tasks.copy,
+    onShowAgent: tasks.onShowAgent,
+    onRenameTask: tasks.onRenameTask,
+    onMarkTask: tasks.onMarkTask,
+    onSettleTasks: tasks.onSettleTasks,
+    onDeleteTask: tasks.onDeleteTask,
+    onMoveTask: tasks.onMoveTask,
+    onWriteSections: tasks.onWriteSections,
+    onChangeRepository: tasks.onChangeRepository,
+    onOpenOnGitHub: tasks.onOpenOnGitHub,
+    now: readTasks,
+  });
+  const rowAgents = useSteadyDoors<AgentRowControl>({
+    onRename: agents.onRename,
+    onArchive: agents.onArchive,
+    onUnarchive: agents.onUnarchive,
+    onDelete: agents.onDelete,
+    readAgent: agents.readAgent,
+    readTranscript: agents.readTranscript,
+    chatOn: agents.chatOn,
+    models: agents.models,
+    me: agents.me,
+    pullRequests: agents.pullRequests,
+  });
+  const rowSections = useSteadyDoors<AgentRowSections>({
+    taskSections: tasks.taskSections,
+    onWriteSections: tasks.onWriteSections,
+    askNew: useSteadyDoor(sectionDialogs.askNew),
+  });
+  const openRow = useSteadyDoor(chosen(openTask));
+  const openAgentRow = useSteadyDoor(chosen(openAgent));
+  const leaveDeletedAgent = useSteadyDoor((agentId: string) => {
+    if (tasks.agentView.agentId === agentId) tasks.agentView.onClose();
+  });
   const context: RowContext = {
     tasks,
+    rowTasks,
+    rowAgents,
     current,
     marked: (taskId, pin) =>
       markedPin === undefined ? pin === undefined && current(taskId) : pin === markedPin,
-    onOpen: chosen(openTask),
+    onOpen: openRow,
     currentRow,
-    onOpenAgent: chosen(openAgent),
-    onDeletedAgent: (agentId) => () => {
-      if (tasks.agentView.agentId === agentId) tasks.agentView.onClose();
-    },
+    onOpenAgent: openAgentRow,
+    onDeletedAgent: leaveDeletedAgent,
     unread,
     unseenAgent: (agentId) =>
       tasks.unreadTabs.some((tab) => isAgentTab(tab) && tab.agent === agentId),
     now,
     order: taskView.view.order,
-    faces: { creator: createdBy === undefined, assignee: assignedTo === undefined },
+    faces: rowFaces({ creator: createdBy === undefined, assignee: assignedTo === undefined }),
     inSight: overlay.inSight,
     dropOut: sectionsShown ? dropRow : undefined,
-    // Note that an archived agent stands in no section, so it is offered none until it is brought back, as an archived task.
-    sectionEntry: (agent) =>
-      agent.archivedAt === undefined
-        ? moveToSectionEntry(
-            tasks,
-            { agent: true, id: agent.id },
-            agent.workspaceId,
-            sectionDialogs.askNew,
-          )
-        : undefined,
+    sections: rowSections,
   };
   // A pinned tab is on show where its task is open and its column shows it:
   // an agent's or the Inbox in the task's own column, any other in the side panel. The
@@ -2004,30 +2045,30 @@ function SidebarColumn({
                           row.kind === TASK_ROW.TASK ? (
                             <SidebarTask
                               key={row.task.id}
-                              tasks={tasks}
+                              tasks={context.rowTasks}
                               task={row.task}
                               current={context.marked(row.task.id, undefined)}
                               open={current(row.task.id)}
                               unread={unread(row.task)}
                               now={now}
                               faces={context.faces}
-                              onOpen={() => context.onOpen(row.task.id)}
+                              onOpen={context.onOpen}
                             />
                           ) : (
                             <SidebarAgent
                               key={row.agent.id}
                               agent={row.agent}
-                              agents={tasks.agents}
+                              agents={context.rowAgents}
                               current={currentRow(row)}
                               unread={context.unseenAgent(row.agent.id)}
                               now={now}
                               at={taskRowTime(row, context.order)}
                               face={context.faces.creator && context.faces.assignee}
                               shown={tasks.shown && overlay.inSight}
-                              onOpen={() => context.onOpenAgent(row.agent.id)}
-                              onPin={pinOf(tasks, row.agent)}
-                              section={context.sectionEntry(row.agent)}
-                              onDeleted={context.onDeletedAgent(row.agent.id)}
+                              onOpen={context.onOpenAgent}
+                              onPin={tasks.onPinAgent}
+                              sections={context.sections}
+                              onDeleted={context.onDeletedAgent}
                             />
                           ),
                         onDropRow: dropRow,

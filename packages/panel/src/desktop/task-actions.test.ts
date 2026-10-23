@@ -33,7 +33,7 @@ import { tasksControl, UNPINNED_SUMMARY } from "../testing/tasks-control.js";
 import { newestToastSays } from "../testing/toast.js";
 import { ToastHost } from "../toast.js";
 import { DesktopTasks } from "./desktop-tasks.js";
-import { SidebarTask, taskOf } from "./task-actions.js";
+import { SidebarTask, taskMenuControl, taskOf } from "./task-actions.js";
 import { taskCardOf } from "./task-card.js";
 
 const TASK: Task = {
@@ -170,12 +170,12 @@ function sidebarTask(
     "ul",
     null,
     createElement(SidebarTask, {
-      tasks,
+      tasks: taskMenuControl(tasks),
       task,
       current,
       unread: false,
       now: task.updatedAt,
-      onOpen: () => asked.opened.push(task.id),
+      onOpen: (taskId) => asked.opened.push(taskId),
     }),
   );
 }

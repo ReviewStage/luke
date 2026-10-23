@@ -20,7 +20,7 @@ import {
 } from "@luke/ui";
 import { ACTOR_KIND, ACTOR_STATE, type Actor, teammateCreator } from "@luke/ui/actor-model";
 import { agentRow, taskRowName } from "@luke/ui/task-list-model";
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef } from "react";
 import { useAct } from "../act.js";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref.js";
 import { useDraftedAgents } from "../composer-drafts.js";
@@ -30,11 +30,13 @@ import { AgentCard, tasklessRowSubject } from "../tasks/agent-ref.js";
 import { agentEndMark, TAB_KIND, tabLook } from "../tasks/tab-look.js";
 import { markReadItem } from "../tasks/task-menu-items.js";
 import { type CodingAgentsControl, readAgentById } from "../tasks/use-coding-agents.js";
+import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { useCallingAgent } from "../use-voice-view.js";
 import { ActionMenu, type MenuAction, type MenuEntry } from "./action-menu.js";
-import { rowDoors, useAgentActions } from "./agent-actions.js";
+import { type AgentActionsControl, rowDoors, useAgentActions } from "./agent-actions.js";
 import { useAgentReadMarks } from "./agent-read-marks.js";
 import { useRowPlace, withRowMoves } from "./row-moves.js";
+import { moveToSectionEntry, type SectionDialogs } from "./sidebar-sections.js";
 import { type RowMark, RowMarks } from "./task-actions.js";
 
 /**
@@ -68,6 +70,15 @@ import { type RowMark, RowMarks } from "./task-actions.js";
  * by its own id before it is archived unasked, because the row's status is
  * the list's and the task open's agents never hold it.
  */
+
+/** What an agent's row reads of the window's agent control: its actions' doors and reads, and what its card names. */
+export type AgentRowControl = AgentActionsControl &
+  Pick<CodingAgentsControl, "me" | "pullRequests">;
+
+/** The reader's own sections, which a row's Move to section puts the agent in, and the door that asks for a new one. */
+export type AgentRowSections = Pick<TasksControl, "taskSections" | "onWriteSections"> & {
+  readonly askNew: SectionDialogs["askNew"];
+};
 
 /** What the row's menu is called, as the agent page's ⋯ is. */
 const ACTIONS_LABEL = "Agent actions";
@@ -104,13 +115,17 @@ function SidebarAgentCard({
   agents,
 }: {
   agent: TasklessAgent;
-  agents: CodingAgentsControl;
+  agents: AgentRowControl;
 }): React.JSX.Element {
   return <AgentCard subject={tasklessRowSubject(agent, agents)} models={agents.models} />;
 }
 
-/** One agent with no task among the sidebar's tasks. */
-export function SidebarAgent({
+/**
+ * One agent with no task among the sidebar's tasks. A memo boundary: its
+ * presses take the agent's id, so the sidebar drawn again for another row's
+ * change hands it the same props, and leaves it as it was.
+ */
+export const SidebarAgent = memo(function SidebarAgent({
   agent,
   agents,
   current,
@@ -122,12 +137,12 @@ export function SidebarAgent({
   shown,
   onOpen,
   onPin,
-  section,
+  sections,
   onDeleted,
 }: {
   agent: TasklessAgent;
   /** The window's agent control, whose archive and rename act on any agent by its id. */
-  agents: CodingAgentsControl;
+  agents: AgentRowControl;
   /** Whether this agent's page is the one standing. */
   current: boolean;
   /** Whether its turn ended while the developer was not looking at it: main's unseen dot, which a mark by hand adds to. */
@@ -142,13 +157,13 @@ export function SidebarAgent({
   face?: boolean;
   /** Whether the sidebar is on screen and in sight, which the row's menu does not outlive. */
   shown: boolean;
-  onOpen: () => void;
-  /** Pins the agent for the reader or unpins it; none for an archived agent, which offers no pin. */
-  onPin?: ((pinned: boolean) => void) | undefined;
-  /** Move to section, in the menu's group with Pin and Archive as a task's; none for an archived agent. */
-  section?: MenuEntry | undefined;
-  /** Leaves the agent's page where it is the one standing, once its delete landed; every surface drawing the row names it, so none leaves a deleted agent's page up. */
-  onDeleted: () => void;
+  onOpen: (agentId: string) => void;
+  /** Pins an agent for the reader or unpins it; none where the row offers no pin. An archived agent offers none either way. */
+  onPin?: ((agentId: string, pinned: boolean) => void) | undefined;
+  /** The sections Move to section offers, in the menu's group with Pin and Archive as a task's; none where it offers none. An archived agent offers none either way. */
+  sections?: AgentRowSections | undefined;
+  /** Leaves an agent's page where it is the one standing, once its delete landed; every surface drawing the row names it, so none leaves a deleted agent's page up. */
+  onDeleted: (agentId: string) => void;
 }): React.JSX.Element {
   const reader = useMemberDirectory();
   const name = taskRowName(agentRow(agent));
@@ -170,10 +185,27 @@ export function SidebarAgent({
   const actions = useAgentActions(
     agent,
     { ...agents, readAgent: (agentId) => readAgentById(act, agentId) },
-    { label: name, shown, terminals: { onOpenTerminal: undefined }, onDeleted },
+    {
+      label: name,
+      shown,
+      terminals: { onOpenTerminal: undefined },
+      onDeleted: () => onDeleted(agent.id),
+    },
   );
   const { copyLink, onRename, archive, deletion } = rowDoors(actions.doors);
   const archived = agent.archivedAt !== undefined;
+  // Note that an archived agent stands in no section and takes no pin, so it is offered neither until it is brought back, as an archived task.
+  const pinAgent =
+    onPin === undefined || archived ? undefined : (pinned: boolean) => onPin(agent.id, pinned);
+  const section =
+    sections === undefined || archived
+      ? undefined
+      : moveToSectionEntry(
+          sections,
+          { agent: true, id: agent.id },
+          agent.workspaceId,
+          sections.askNew,
+        );
   // A draft waiting in its box wears the pencil while its page is not the one open, as a task's row does.
   const drafted = useDraftedAgents().includes(agent.id) && !current;
   const { rename } = actions;
@@ -188,7 +220,7 @@ export function SidebarAgent({
     onRename === undefined
       ? undefined
       : { label: "Rename", icon: <PencilIcon />, onSelect: onRename };
-  const pin = onPin === undefined ? undefined : pinItem(agent, onPin);
+  const pin = pinAgent === undefined ? undefined : pinItem(agent, pinAgent);
   // Note that the row lays the agent's actions out in a task's row's groups, its own items among them.
   const groups: MenuEntry[][] = [
     [
@@ -206,14 +238,14 @@ export function SidebarAgent({
   // Note that the row's buttons say Pin and Archive as a task's do, running what the menu's items run.
   const pinned = agent.pinnedAt !== undefined;
   const marks: RowMark[] = [
-    ...(onPin === undefined
+    ...(pinAgent === undefined
       ? []
       : [
           {
             key: "pin",
             label: pinned ? "Unpin" : "Pin",
             icon: pinned ? <UnpinIcon /> : <PinIcon />,
-            onSelect: () => onPin(!pinned),
+            onSelect: () => pinAgent(!pinned),
           },
         ]),
     ...(archive === undefined
@@ -294,7 +326,7 @@ export function SidebarAgent({
               ? undefined
               : () => {
                   menu.close(false);
-                  onOpen();
+                  onOpen(agent.id);
                 }
           }
           contextMenu={editing ? undefined : menu.contextMenu(row)}
@@ -313,4 +345,4 @@ export function SidebarAgent({
       {actions.dialog}
     </>
   );
-}
+});

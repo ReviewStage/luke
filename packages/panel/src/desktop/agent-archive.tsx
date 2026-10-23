@@ -77,7 +77,7 @@ function archiveQuestion(name: string): DialogQuestion {
 }
 
 /** A press that archives or unarchives without a dialog, its refusal said in a toast. */
-function useArchivePress(agents: CodingAgentsControl) {
+function useArchivePress(agents: Pick<CodingAgentsControl, "onArchive">) {
   const toast = useToast();
   return (agentId: string, archived: boolean) =>
     agents.onArchive(agentId, archived).then((result: ActionResult) => {
@@ -93,7 +93,10 @@ export interface AgentArchive {
 }
 
 /** An archived agent's Unarchive as a menu offers it, its refusal said in a toast. */
-export function useAgentUnarchive(agentId: string, agents: CodingAgentsControl): MenuAction {
+export function useAgentUnarchive(
+  agentId: string,
+  agents: Pick<CodingAgentsControl, "onArchive">,
+): MenuAction {
   const press = useArchivePress(agents);
   return { label: UNARCHIVE_LABEL, icon: <UnarchiveIcon />, onSelect: () => press(agentId, false) };
 }
@@ -105,7 +108,7 @@ export function useAgentUnarchive(agentId: string, agents: CodingAgentsControl):
  */
 export function useAgentArchive(
   agent: Pick<CodingAgentSummary, "id" | "status" | "title" | "automationName" | "model">,
-  agents: CodingAgentsControl,
+  agents: Pick<CodingAgentsControl, "onArchive" | "readAgent" | "models">,
   shown: boolean,
 ): AgentArchive {
   const press = useArchivePress(agents);

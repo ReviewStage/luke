@@ -46,7 +46,10 @@ import { TILE_SIZE, WorkspaceTile } from "./workspace-tile.js";
 const MOVE_REFUSED = "The task could not be moved. Try again.";
 
 /** The workspaces a task may be moved to: every one the account is in but its own. */
-function otherWorkspaces(tasks: TasksControl, task: TaskSummary): readonly Workspace[] {
+function otherWorkspaces(
+  tasks: Pick<TasksControl, "workspaces">,
+  task: TaskSummary,
+): readonly Workspace[] {
   return tasks.workspaces.filter((workspace) => workspace.id !== task.workspaceId);
 }
 
@@ -239,7 +242,7 @@ interface MoveTaskDoor {
 
 /** One task's Move to workspace, held for whichever door offers its menu. */
 export function useMoveTaskDialog(
-  tasks: TasksControl,
+  tasks: Pick<TasksControl, "workspaces" | "me" | "shown" | "onMoveTask">,
   task: TaskSummary | undefined,
 ): MoveTaskDoor {
   const others = task === undefined ? [] : otherWorkspaces(tasks, task);

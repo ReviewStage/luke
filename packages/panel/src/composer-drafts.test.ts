@@ -20,7 +20,7 @@ import { afterEach, beforeAll, beforeEach, test } from "vitest";
 import { useDraftsOwner } from "./composer-drafts.js";
 import { DesktopSidebar } from "./desktop/desktop-sidebar.js";
 import { DesktopTasks } from "./desktop/desktop-tasks.js";
-import { SidebarTask } from "./desktop/task-actions.js";
+import { SidebarTask, taskMenuControl } from "./desktop/task-actions.js";
 import { DRAFT_WORD } from "./draft-mark.js";
 import {
   type AgentComposerControl,
@@ -173,7 +173,7 @@ function windowOn(registry: AtomRegistry.AtomRegistry) {
     const rows = [INVITES.plan, BILLING.plan].map((summary) =>
       createElement(SidebarTask, {
         key: summary.id,
-        tasks: tasks,
+        tasks: taskMenuControl(tasks),
         task: summary,
         current: summary.id === open.plan.id,
         unread: false,
@@ -616,7 +616,7 @@ async function columnOn(
             "ul",
             null,
             createElement(SidebarTask, {
-              tasks: tasks,
+              tasks: taskMenuControl(tasks),
               task: INVITES.plan,
               current: true,
               unread: false,
@@ -780,7 +780,7 @@ async function inboxOn(item: InboxItem) {
             "ul",
             null,
             createElement(SidebarTask, {
-              tasks: tasks,
+              tasks: taskMenuControl(tasks),
               task: INVITES.plan,
               current: false,
               unread: false,

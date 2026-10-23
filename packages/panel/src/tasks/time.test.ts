@@ -7,7 +7,7 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
-import { SidebarTask } from "../desktop/task-actions.js";
+import { SidebarTask, taskMenuControl } from "../desktop/task-actions.js";
 import { lineWords } from "../testing/actor-line.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { DOCUMENT_TASK } from "../testing/document-task.js";
@@ -54,7 +54,7 @@ function saidOf(at: number) {
   };
   const row = mount(
     createElement(SidebarTask, {
-      tasks: tasksControl({ tasks: [task] }),
+      tasks: taskMenuControl(tasksControl({ tasks: [task] })),
       task,
       current: false,
       unread: false,
