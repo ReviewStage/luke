@@ -2280,7 +2280,7 @@ test("the Sentry row reads again as the window comes forward: an install made on
 
   assert.deepEqual(before, [
     "Sentry",
-    "Not installed. Alerts and new issues can trigger this workspace's automations.",
+    "Not installed.",
   ]);
   assert.deepEqual(installed, ["Sentry", "Installed · acme"]);
   assert.equal([...githubGroup(page).querySelectorAll(ROWS)].map(nameOf).includes("Sentry"), false);
@@ -2329,7 +2329,7 @@ test("an admin installs Sentry for the workspace from its row, which opens Sentr
 
   assert.deepEqual(before, [
     "Sentry",
-    "Not installed. Alerts and new issues can trigger this workspace's automations.",
+    "Not installed.",
   ]);
   assert.equal(document.querySelector('[role="alertdialog"]'), null);
   assert.deepEqual(sentrySent(), [[ACT_KIND.WORKSPACE_SENTRY_INSTALL, { workspaceId: ACME.id }]]);
@@ -2358,7 +2358,7 @@ test("an installed workspace's Sentry names its organization, its ⋯ disconnect
   ]);
   assert.deepEqual(after, [
     "Sentry",
-    "Not installed. Alerts and new issues can trigger this workspace's automations.",
+    "Not installed.",
   ]);
   assert.deepEqual(rowWords(memberRow), ["Sentry", "Installed · acme"]);
   assert.deepEqual(rowButtons(memberRow), []);
