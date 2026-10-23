@@ -636,6 +636,26 @@ function fakeService() {
           },
         };
       }),
+    startInboxThread: (request) =>
+      Effect.sync(() => {
+        asked.push(
+          `inbox-start:${request.agentId}:${request.title}:${request.text}:${request.clientKey}`,
+        );
+        return {
+          item: {
+            ...ITEM,
+            title: request.title ?? ITEM.title,
+            messages: [
+              {
+                id: MESSAGE_ID,
+                author: INBOX_MESSAGE_AUTHOR.MEMBER,
+                text: request.text,
+                createdAt: ITEM.updatedAt,
+              },
+            ],
+          },
+        };
+      }),
     closeInbox: (itemId, request) =>
       Effect.sync(() => {
         asked.push(`close:${itemId}:${request.revision}:${request.clientKey}`);
@@ -1132,6 +1152,28 @@ it.effect("each method asks the service once and answers what it said, whole", (
       answers: { ask: MESSAGE_ID, reply: INBOX_REPLY.CHOSE, choices: ["Ship it"] },
     });
     assert.deepEqual(
+      yield* call(GATEWAY_METHOD.CODING_AGENTS_INBOX_START, {
+        agentId: AGENT_ID,
+        title: "Annual plan copy",
+        text: "Draft the annual plan's line too.",
+        clientKey: "start-1",
+      }),
+      {
+        item: {
+          ...ITEM,
+          title: "Annual plan copy",
+          messages: [
+            {
+              id: MESSAGE_ID,
+              author: INBOX_MESSAGE_AUTHOR.MEMBER,
+              text: "Draft the annual plan's line too.",
+              createdAt: ITEM.updatedAt,
+            },
+          ],
+        },
+      },
+    );
+    assert.deepEqual(
       yield* call(GATEWAY_METHOD.CODING_AGENTS_INBOX_READ_STATE, { itemId: ITEM.id, unread: true }),
       { id: ITEM.id, unread: true },
     );
@@ -1203,6 +1245,7 @@ it.effect("each method asks the service once and answers what it said, whole", (
       `close:${ITEM.id}:2:close-1`,
       `inbox-message:${ITEM.id}:Also page on-call.:pager.txt:message-1`,
       `inbox-message:${ITEM.id}:Ship it.::message-2:answers ${MESSAGE_ID} chose Ship it`,
+      `inbox-start:${AGENT_ID}:Annual plan copy:Draft the annual plan's line too.:start-1`,
       `inbox-unread:${ITEM.id}`,
       `inbox-read:${ITEM.id}`,
       `inbox-read-all:${WORKSPACE_ID}`,

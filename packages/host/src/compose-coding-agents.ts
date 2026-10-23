@@ -44,6 +44,7 @@ import {
   codingAgentInboxMessageParamsSchema,
   codingAgentInboxReadStateParamsSchema,
   codingAgentInboxScopeSchema,
+  codingAgentInboxStartParamsSchema,
   codingAgentListParamsSchema,
   codingAgentMessageParamsSchema,
   codingAgentMessagesParamsSchema,
@@ -217,6 +218,7 @@ export type CodingAgentClient = Pick<
   | "answerInbox"
   | "closeInbox"
   | "messageInbox"
+  | "startInboxThread"
   | "markInboxItemRead"
   | "markInboxItemUnread"
   | "markInboxRead"
@@ -1027,6 +1029,16 @@ function composed(
           "a message on an inbox item names the item, the words or files, and the message's key",
         );
         const answer = yield* confirmed(asked(client.messageInbox(itemId, request)));
+        return carried<CodingAgentInboxMessagedView>(answer);
+      }),
+    [GATEWAY_METHOD.CODING_AGENTS_INBOX_START]: (params) =>
+      Effect.gen(function* () {
+        const request = yield* read(
+          codingAgentInboxStartParamsSchema,
+          params,
+          "a new inbox thread names the agent, its subject, the words or files, and the thread's key",
+        );
+        const answer = yield* confirmed(asked(client.startInboxThread(request)));
         return carried<CodingAgentInboxMessagedView>(answer);
       }),
     [GATEWAY_METHOD.CODING_AGENTS_INBOX_READ_STATE]: (params) =>

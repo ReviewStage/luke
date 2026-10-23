@@ -232,8 +232,8 @@ interface PickerProps {
   describedBy?: string | undefined;
   /** Whether the chip's last pick was refused, as its row says under it. */
   invalid?: true | undefined;
-  /** The id of the value chosen now, checked in the menu. */
-  value: string;
+  /** The id of the value chosen now, checked in the menu; none where nothing is chosen yet, which keeps no row a check's room. */
+  value: string | undefined;
   /** What the chip says: the chosen value's own words. */
   valueLabel: string;
   /** The chosen value's mark, where values carry one. */

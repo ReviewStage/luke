@@ -511,16 +511,20 @@ export function inboxMessageOf(draft: InboxDraft): InboxMessageDraft | undefined
 /**
  * The thread an item is drawn as from version 5, or nothing where it is
  * drawn from the fields a desktop before it reads: a thread holding an ask,
- * or one a note opens, the agent's words with nothing in the item's blocks,
- * since a post that asks nothing leaves those empty. An item from before
- * version 5, whose question its blocks hold and whose thread asks nothing,
- * is drawn as it always was.
+ * one a note opens, the agent's words with nothing in the item's blocks,
+ * since a post that asks nothing leaves those empty, or one a member
+ * started, their words first, which asks nothing and holds no view either.
+ * An item from before version 5, whose question its blocks hold and whose
+ * thread asks nothing, is drawn as it always was.
  */
 export function inboxThreadOf(item: InboxItem): readonly InboxMessage[] | undefined {
   const thread = item.thread ?? [];
   if (thread.some((message) => message.ask !== undefined)) return thread;
-  const opens = thread[0]?.author === INBOX_MESSAGE_AUTHOR.AGENT;
-  return opens && item.blocks.length === 0 ? thread : undefined;
+  const opener = thread[0];
+  if (opener === undefined || item.blocks.length > 0) return undefined;
+  const opens =
+    opener.author === INBOX_MESSAGE_AUTHOR.AGENT || item.response.type === INBOX_RESPONSE.NONE;
+  return opens ? thread : undefined;
 }
 
 /** An ask this build knows, as a read carries it, with where it stands. */
@@ -1419,9 +1423,10 @@ export function inboxSettledWords(
   return undefined;
 }
 
-/** A settled item's standing in one word: answered, resolved by a member without an answer, or withdrawn by its agent. */
+/** A settled item's standing in one word: answered, sent by the member who started it, resolved by a member without an answer, or withdrawn by its agent. */
 export const INBOX_SETTLED_STANDING = {
   ANSWERED: "Answered",
+  STARTED: "Sent",
   RESOLVED: "Resolved",
   WITHDRAWN: "Withdrawn",
 } as const;
@@ -1436,7 +1441,14 @@ export const INBOX_SETTLED_STANDING = {
 export function inboxSettledStanding(
   item: InboxItem,
 ): (typeof INBOX_SETTLED_STANDING)[keyof typeof INBOX_SETTLED_STANDING] {
-  if (item.status === INBOX_STATUS.ANSWERED) return INBOX_SETTLED_STANDING.ANSWERED;
+  if (item.status === INBOX_STATUS.ANSWERED) {
+    // A thread a member started stands settled on their own nod until its agent writes on it.
+    const thread = inboxThreadOf(item) ?? [];
+    const sent =
+      thread.length > 0 &&
+      thread.every((message) => message.author === INBOX_MESSAGE_AUTHOR.MEMBER);
+    return sent ? INBOX_SETTLED_STANDING.STARTED : INBOX_SETTLED_STANDING.ANSWERED;
+  }
   if (item.closedBy !== undefined) return INBOX_SETTLED_STANDING.RESOLVED;
   const withdrawn = (inboxThreadOf(item) ?? []).some(
     (each) => each.ask?.status === INBOX_ASK_STATUS.WITHDRAWN,

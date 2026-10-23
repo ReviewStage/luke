@@ -2122,3 +2122,36 @@ test("a settled item's card names its ending in the word its line says it in: an
     "an agent's close before threads says why",
   );
 });
+
+test("a thread a member started reads Sent until its agent writes on it, by a reply of its own as much as by a post", () => {
+  const opener = {
+    id: "e1b2c3d4-0000-4000-8000-0000000000f2",
+    author: INBOX_MESSAGE_AUTHOR.MEMBER,
+    member: DANA,
+    text: "Draft the annual plan's line too.",
+    createdAt: 1_000,
+  };
+  const started = item({
+    id: "t1",
+    response: { type: INBOX_RESPONSE.NONE },
+    needsReply: false,
+    status: INBOX_STATUS.ANSWERED,
+    answer: { reply: INBOX_REPLY.ACKNOWLEDGED },
+    thread: [opener],
+  });
+  assert.equal(inboxSettledStanding(started), "Sent");
+
+  const replied = {
+    ...started,
+    thread: [
+      opener,
+      {
+        id: "e1b2c3d4-0000-4000-8000-0000000000f3",
+        author: INBOX_MESSAGE_AUTHOR.AGENT,
+        text: "Two months free, billed yearly.",
+        createdAt: 2_000,
+      },
+    ],
+  };
+  assert.equal(inboxSettledStanding(replied), "Answered", "the agent's reply leaves the revision");
+});

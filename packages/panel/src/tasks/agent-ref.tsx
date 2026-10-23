@@ -363,6 +363,37 @@ export function AgentActorRef({
 }
 
 /**
+ * An agent of the workspace's own card, as a place that holds no tab of it
+ * hangs it: its tab's card read as it is first hung, on the task it works
+ * on or in the workspace the place's members are of
+ * (`mentioned-agent-card.tsx`), its tile and name standing while it is
+ * read, and where the read answers nothing.
+ */
+export function AgentHoverCard({
+  actor,
+  agentId,
+}: {
+  actor: Extract<Actor, { kind: typeof ACTOR_KIND.AGENT }>;
+  agentId: string;
+}): React.ReactNode {
+  const { workspaceId } = useMemberDirectory();
+  const fallback = (
+    <HoverCard>
+      <HoverCardHead glyph={<ActorMark actor={actor} size={ACTOR_SIZE.CARD} />} name={actor.name} />
+    </HoverCard>
+  );
+  return (
+    <MentionedAgentCard
+      agentId={agentId}
+      taskId={actor.taskId}
+      name={actor.name}
+      workspaceId={workspaceId}
+      fallback={fallback}
+    />
+  );
+}
+
+/**
  * Another coding agent named as a line's sender, by the id the service
  * answered for it: its harness's mark and its name, as it sent the line,
  * hanging its tab's card as it stands now, read as the card is first hung
@@ -378,24 +409,9 @@ export function SendingAgent({
   /** Whether the name stands without its mark, whose face the line already draws. */
   nameOnly?: boolean;
 }): React.JSX.Element {
-  const { workspaceId } = useMemberDirectory();
   const openPlace = useOpenPlace();
   const { taskId } = actor;
-  // Its own card stands while the agent is read, and where the read answers nothing.
-  const fallback = (
-    <HoverCard>
-      <HoverCardHead glyph={<ActorMark actor={actor} size={ACTOR_SIZE.CARD} />} name={actor.name} />
-    </HoverCard>
-  );
-  const card = (
-    <MentionedAgentCard
-      agentId={agentId}
-      taskId={taskId}
-      name={actor.name}
-      workspaceId={workspaceId}
-      fallback={fallback}
-    />
-  );
+  const card = <AgentHoverCard actor={actor} agentId={agentId} />;
   const open =
     openPlace === undefined
       ? undefined

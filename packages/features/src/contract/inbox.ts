@@ -1,5 +1,5 @@
 /**
- * inbox.ts -- what an agent posted for the developer (`inbox-wire.ts`, `account-inbox-wire.ts`), read, answered, closed, messaged, and marked read.
+ * inbox.ts -- what an agent posted for the developer (`inbox-wire.ts`, `account-inbox-wire.ts`), read, answered, closed, messaged, and marked read, and a thread a member starts.
  *
  * The three reads, a task's, an agent's, and the account's, are held by the
  * service while nothing changed since the reader's cursor, and travel as
@@ -27,6 +27,7 @@ import {
   inboxReadAllRequestSchema,
   inboxReadAllSchema,
   inboxReadStateSchema,
+  inboxStartRequestSchema,
 } from "../inbox-wire.js";
 import { HOSTED_SERVICE_PATH } from "../service-paths.js";
 import { bodyCap, exactBodyInput, exactInput, hostedProcedure } from "./base.js";
@@ -51,6 +52,12 @@ const MESSAGE_BODY_BYTES =
       INBOX_BOUNDS.MAX_FIELDS *
         (INBOX_BOUNDS.MAX_LABEL_CHARS + INBOX_BOUNDS.MAX_FIELD_VALUE_CHARS) +
       INBOX_BOUNDS.MAX_OPTIONS * INBOX_BOUNDS.MAX_LABEL_CHARS) +
+  MAXIMUM_ATTACHMENTS_BODY_BYTES +
+  2_048;
+
+/** A new thread is a subject, its first message's words and files, and room for the agent's id and the key: the words at JSON's widest escape, the files, and the rest. */
+const START_BODY_BYTES =
+  6 * (INBOX_BOUNDS.MAX_TITLE_CHARS + INBOX_BOUNDS.MAX_MESSAGE_CHARS) +
   MAXIMUM_ATTACHMENTS_BODY_BYTES +
   2_048;
 
@@ -126,6 +133,11 @@ export const inboxContract = {
       }),
     )
     .input(exactBodyInput(pathIdSchema, inboxMessageRequestSchema))
+    .output(EffectSchema.flip(inboxMessagedSchema)),
+  start: hostedProcedure
+    .meta(bodyCap(START_BODY_BYTES))
+    .meta(openapi({ method: HTTP_METHOD.POST, path: HOSTED_SERVICE_PATH.INBOX }))
+    .input(exactInput(inboxStartRequestSchema))
     .output(EffectSchema.flip(inboxMessagedSchema)),
   markItemRead: hostedProcedure
     .meta(openapi({ method: HTTP_METHOD.PUT, path: INBOX_PROCEDURE_PATH.ITEM_READ }))

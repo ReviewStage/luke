@@ -181,6 +181,7 @@ import {
   inboxMessagedSchema,
   inboxReadAllSchema,
   inboxReadStateSchema,
+  inboxStartTitle,
 } from "@luke/features/inbox-wire";
 import { INTEGRATION_PROVIDER, type IntegrationProvider } from "@luke/features/integration-wire";
 import { transcriptNowAnswerSchema } from "@luke/features/live-wire";
@@ -254,7 +255,7 @@ import { LINK_OUTCOME, linkInstallation } from "../github/github-installations.j
 import { PULL_REQUEST_QUEUED_OPERATION } from "../github/pull-request-merging.js";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import { HOSTED_REFUSAL } from "../http/http-effect.js";
-import { inboxProcedures } from "../inbox/inbox-procedures.js";
+import { type InboxTitleModelOf, inboxProcedures } from "../inbox/inbox-procedures.js";
 import {
   answerInboxItem,
   closeInboxItem,
@@ -626,6 +627,7 @@ const standing = (
   eve: ReturnType<typeof fakeEve>,
   summaryModel: SummaryModelOf = () => Effect.succeed(undefined),
   sessionSandboxes: SandboxStopReach["sessionSandboxes"] = sessionSandboxesLayer,
+  titleModel: InboxTitleModelOf = () => Effect.succeed(undefined),
 ) =>
   Effect.gen(function* () {
     const client = yield* SqlClient.SqlClient;
@@ -663,6 +665,7 @@ const standing = (
       workspaces: yield* fakeWorkspaceSeams,
       summaryModel,
       sessionSandboxes,
+      titleModel,
       keepAwake: keepAwakeDetached,
     };
     const agents = HttpRouter.toWebHandler(
@@ -856,6 +859,8 @@ const openTask = (
     readonly summaryModel?: SummaryModelOf;
     /** The sandboxes an archive stops; Vercel's own, which a test with no token in its environment finds unavailable, unless a test scripts them. */
     readonly sessionSandboxes?: SandboxStopReach["sessionSandboxes"];
+    /** The model an untitled inbox thread's title is generated on; none unless a test names one. */
+    readonly titleModel?: InboxTitleModelOf;
   } = {},
 ) =>
   Effect.gen(function* () {
@@ -886,6 +891,7 @@ const openTask = (
       eve,
       options.summaryModel,
       options.sessionSandboxes,
+      options.titleModel,
     );
     return { owner, other, task, installation, eve, github, ask, fetch };
   });
@@ -6085,9 +6091,12 @@ const SIZED_PNG = Uint8Array.from([
 
 it.layer(getTestDB())("the developer's inbox", (it) => {
   /** The owner's task with one agent started on it, its session claimed so a message reaches it, and the inbox as each side sees it. */
-  const openInbox = (eve = fakeEve()) =>
+  const openInbox = (eve = fakeEve(), titleModel?: InboxTitleModelOf) =>
     Effect.gen(function* () {
-      const opened = yield* openTask({ eve });
+      const opened = yield* openTask({
+        eve,
+        ...(titleModel === undefined ? undefined : { titleModel }),
+      });
       const { agent, target } = yield* startedAgent(opened.owner, opened.task.id, opened.ask);
       const sessionId = eve.opened[0]?.sessionId ?? "";
       assert.equal(yield* claimRuntimeSession(target, sessionId, yield* DateTime.nowAsDate), true);
@@ -6752,6 +6761,216 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
         assert.equal(sent.status, HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE);
         const kept = (yield* read()).items.find((item) => item.id === asked.success.id);
         assert.equal(kept?.messages, undefined);
+      }),
+  );
+
+  it.effect(
+    "a member starts a thread with an agent that stopped: it stands under a key minted from its subject past the agent's own, their words first, and wakes the agent under the message lead naming that key; the agent's post under the key answers on it, a repeat under the client's key, even after the agent retitled the thread, reaches the agent once and other words under it are refused, one with no subject is titled by its first line, and an outsider, an agent of no workspace of theirs, a blank subject, and no words are refused",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const { owner, other, task, agent, target, ask, post, read, transcript } =
+          yield* openInbox(eve);
+        const theirs = yield* post({ ...QUESTION, key: "annual-plan-copy" });
+        assert.ok(Result.isSuccess(theirs));
+        yield* turnEnded(target);
+        const before = eve.sent.length;
+        const start = (body: WireBoundaryInput, bearer = owner) =>
+          ask(request(ACCOUNT_INBOX, bearer, { method: "POST", body }));
+        const body = {
+          agentId: agent.id,
+          title: "Annual plan copy",
+          text: "Draft the annual plan's line too.",
+          clientKey: randomUUID(),
+        };
+
+        const started = readAnswer(inboxMessagedSchema, HOSTED_HTTP_STATUS.OK, yield* start(body));
+        assert.deepEqual(
+          [started.item.key, started.item.title, started.item.status],
+          ["annual-plan-copy-2", body.title, INBOX_STATUS.ANSWERED],
+        );
+        assert.deepEqual(
+          started.item.thread?.map((each) => [each.author, each.member?.userId, each.text]),
+          [[INBOX_MESSAGE_AUTHOR.MEMBER, owner, body.text]],
+        );
+        const handed = JSON.stringify(eve.sent.slice(before).map((each) => each.message.message));
+        assert.ok(
+          handed.includes(`${INBOX_MESSAGE_LEAD} on \\"${body.title}\\" (key annual-plan-copy-2)`),
+        );
+        assert.ok(handed.includes(body.text), "it carries the words");
+        assert.equal((yield* transcript()).status, CODING_AGENT_STATUS.RUNNING);
+
+        const again = readAnswer(inboxMessagedSchema, HOSTED_HTTP_STATUS.OK, yield* start(body));
+        assert.equal(again.item.id, started.item.id);
+        assert.equal(eve.sent.length, before + 1, "a repeat under the key reaches the agent once");
+        assert.deepEqual(
+          yield* start({ ...body, text: "Something else." }),
+          refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
+          "other words under a key taken are refused, so the agent never hears what the thread does not show",
+        );
+        assert.equal(eve.sent.length, before + 1);
+        assert.deepEqual(
+          (yield* read()).items
+            .filter((item) => item.key.startsWith("annual-plan-copy"))
+            .map((item) => [item.key, item.title])
+            .sort(),
+          [
+            ["annual-plan-copy", QUESTION.title],
+            ["annual-plan-copy-2", body.title],
+          ],
+          "the agent's own thread under the subject's key stands as it was",
+        );
+
+        yield* TestClock.adjust(Duration.seconds(1));
+        const reply = "Two months free, billed yearly.";
+        const replied = yield* postInboxThread(
+          { userId: owner, taskId: task.id, agentId: agent.id },
+          { key: "annual-plan-copy-2", body: reply },
+        );
+        assert.ok(Result.isSuccess(replied));
+        assert.deepEqual(
+          replied.success.thread?.map((each) => [each.author, each.text]),
+          [
+            [INBOX_MESSAGE_AUTHOR.MEMBER, body.text],
+            [INBOX_MESSAGE_AUTHOR.AGENT, reply],
+          ],
+        );
+        const retitled = yield* postInboxThread(
+          { userId: owner, taskId: task.id, agentId: agent.id },
+          { key: "annual-plan-copy-2", title: "Final plan copy", body: "Retitled." },
+        );
+        assert.ok(Result.isSuccess(retitled));
+        const late = readAnswer(inboxMessagedSchema, HOSTED_HTTP_STATUS.OK, yield* start(body));
+        assert.deepEqual(
+          [late.item.id, late.item.title, eve.sent.length],
+          [started.item.id, "Final plan copy", before + 1],
+          "a start retried once its agent retitled the thread is the thread it started, heard once",
+        );
+
+        assert.deepEqual(
+          yield* start({ ...body, clientKey: randomUUID() }, other),
+          refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
+        );
+        assert.deepEqual(
+          yield* start({ ...body, agentId: randomUUID(), clientKey: randomUUID() }),
+          refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
+        );
+        assert.deepEqual(
+          yield* start({ ...body, title: "  ", clientKey: randomUUID() }),
+          refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
+        );
+        const untitled = readAnswer(
+          inboxMessagedSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* start({
+            agentId: agent.id,
+            text: "Ship the monthly toggle too.\n\nIt can wait for the table.",
+            clientKey: randomUUID(),
+          }),
+        );
+        assert.deepEqual(
+          [untitled.item.title, untitled.item.key],
+          ["Ship the monthly toggle too.", "ship-the-monthly-toggle-too"],
+          "a thread started with no subject is titled by its message's first line",
+        );
+        assert.deepEqual(
+          yield* start({ ...body, text: "  ", clientKey: randomUUID() }),
+          refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
+        );
+      }),
+  );
+
+  it.effect(
+    "a thread started with no subject is titled by the agent-title model over its message on the sender's own key, after the answer, its key, its place, and its read state kept; one with a subject, and one whose sender has no key, keep the title they were started under",
+    () =>
+      Effect.gen(function* () {
+        const asked: string[] = [];
+        const model = new MockLanguageModelV4({
+          doGenerate: async (options) => {
+            asked.push(JSON.stringify(options.prompt));
+            return {
+              content: [{ type: "text", text: "Annual plan pricing copy." }],
+              finishReason: { unified: "stop", raw: "stop" },
+              usage: {
+                inputTokens: { total: 1, noCache: 1, cacheRead: 0, cacheWrite: 0 },
+                outputTokens: { total: 1, text: 1, reasoning: 0 },
+              },
+              warnings: [],
+            };
+          },
+        });
+        const keyed = new Set<string>();
+        const titleModel: InboxTitleModelOf = (userId) =>
+          Effect.succeed(keyed.has(userId) ? model : undefined);
+        const eve = fakeEve();
+        const { owner, agent, target, ask, read } = yield* openInbox(eve, titleModel);
+        keyed.add(owner);
+        yield* turnEnded(target);
+        const start = (body: WireBoundaryInput) =>
+          Effect.map(ask(request(ACCOUNT_INBOX, owner, { method: "POST", body })), (answered) =>
+            readAnswer(inboxMessagedSchema, HOSTED_HTTP_STATUS.OK, answered),
+          );
+        const text = "Can you draft the annual plan's line for the pricing table too?";
+
+        const untitled = yield* start({ agentId: agent.id, text, clientKey: randomUUID() });
+        const subject = "Pricing table";
+        const titled = yield* start({
+          agentId: agent.id,
+          title: subject,
+          text,
+          clientKey: randomUUID(),
+        });
+        keyed.delete(owner);
+        const keyless = yield* start({
+          agentId: agent.id,
+          text: "Ship it tonight.",
+          clientKey: randomUUID(),
+        });
+
+        const items = new Map((yield* read()).items.map((item) => [item.id, item]));
+        const titledNow = items.get(untitled.item.id);
+        assert.deepEqual(
+          [titledNow?.title, titledNow?.key, titledNow?.updatedAt, titledNow?.unread],
+          ["Annual plan pricing copy", untitled.item.key, untitled.item.updatedAt, false],
+          "the model's title stands, under the key and at the place it was started at, read for its sender",
+        );
+        assert.equal(
+          untitled.item.title,
+          inboxStartTitle({ text }),
+          "the answer carries the first line",
+        );
+        assert.equal(items.get(titled.item.id)?.title, subject);
+        assert.equal(items.get(keyless.item.id)?.title, "Ship it tonight.");
+        assert.equal(asked.length, 1, "only the untitled thread with a key asks the model");
+        assert.ok(asked[0]?.includes("annual plan"), "the model is asked over the message");
+      }),
+  );
+
+  it.effect(
+    "a thread the agent's session did not take is taken back whole, so the Inbox never shows a thread the agent was not told",
+    () =>
+      Effect.gen(function* () {
+        const { owner, agent, ask, read } = yield* openInbox(
+          fakeEve({ sends: EVE_SEND_OUTCOME.FAILED }),
+        );
+
+        const sent = yield* ask(
+          request(ACCOUNT_INBOX, owner, {
+            method: "POST",
+            body: {
+              agentId: agent.id,
+              title: "Still there?",
+              text: "Ping.",
+              clientKey: randomUUID(),
+            },
+          }),
+        );
+
+        assert.equal(sent.status, HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE);
+        assert.deepEqual(
+          (yield* read()).items.filter((item) => item.title === "Still there?"),
+          [],
+        );
       }),
   );
 
