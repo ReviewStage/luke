@@ -218,10 +218,10 @@ import { useOpenPlace } from "./use-open-link.js";
  * menu: first what the list holds, To do, the developer's own items they are
  * not done with, asks waiting on them and anything of theirs unread, a
  * settled thread its agent wrote on again among them, or All, every item,
- * the head naming All after the Inbox's name; then Group by, by task, by
- * person, by status (what needs the developer
+ * the head naming All after the Inbox's name; then Group by, None, one
+ * run, by task, by person, or by status (what needs the developer
  * under the attention mark, what waits on others, what is answered, each
- * folding as a task's group does), or None, one run; Sort, the latest
+ * folding as a task's group does); Sort, the latest
  * change first or the oldest first; Whose, everyone's
  * items, the developer's own, or one teammate's by face and name, which a
  * chip over the list then says, its × listing everyone's again; each
@@ -1253,10 +1253,10 @@ function windowEntries(
       label: GROUP_BY,
       icon: <ListIcon />,
       items: [
+        groupBy("None", <ListIcon />, INBOX_GROUPING.NONE),
         groupBy("Task", <DocumentIcon />, INBOX_GROUPING.TASK),
         groupBy("Person", <UsersIcon />, INBOX_GROUPING.PERSON),
         groupBy("Status", <CircleDotIcon />, INBOX_GROUPING.STATUS),
-        groupBy("None", <ListIcon />, INBOX_GROUPING.NONE),
       ],
     },
     {
