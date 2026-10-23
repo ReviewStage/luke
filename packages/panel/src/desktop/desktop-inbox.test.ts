@@ -494,6 +494,7 @@ function mount(
     panel,
     holding: firstHolding = HOLDING,
     withSidebar = false,
+    readerKnown = true,
   }: {
     listUnread?: boolean;
     standing?: readonly TaskSummary[];
@@ -506,6 +507,8 @@ function mount(
     holding?: readonly AppInboxTaskHolding[];
     /** Whether the window's sidebar stands beside the Inbox page, its Inbox row counting. */
     withSidebar?: boolean;
+    /** Whether the window knows the reader's own account id, as an account stored without one does not. */
+    readerKnown?: boolean;
   } = {},
 ) {
   // Note that the host's inbox streams are answered beside whatever acts the test answers by now.
@@ -542,7 +545,7 @@ function mount(
     };
     setTasks = setListed;
     const control = tasksControl({
-      me: READER.userId,
+      ...(readerKnown ? { me: READER.userId } : {}),
       workspace: listedWorkspace,
       tasks: listed,
       listRead,
@@ -6427,6 +6430,23 @@ test("Whose in the view's menu offers Anyone, the reader as Me, then each teamma
   act(() => clear.click());
   assert.equal(whoseChip(page), null);
   assert.equal(listed(page).length, 5);
+});
+
+test("Whose offers Me though the window does not know the reader's id, and a Me chosen stays checked under Me's chip", async () => {
+  listedWorkspace = SHARED_WORKSPACE;
+  members = SHARED_MEMBERS;
+  const { page } = mount([], { readerKnown: false });
+  await settle();
+  chooseView(page, "Whose", "Me");
+  const options = page.querySelector<HTMLButtonElement>('button[aria-label="View options"]');
+  act(() => options?.click());
+  act(() => viewItem("Whose").click());
+
+  assert.deepEqual(whoseChip(page)?.[0], "Me");
+  assert.deepEqual(
+    ["Anyone", "Me"].map((each) => viewItem(each).getAttribute("aria-checked")),
+    ["false", "true"],
+  );
 });
 
 test("a teammate chosen in Whose with nothing in the scope shown says so, and offers everyone's items again where no scope holds any of theirs", async () => {

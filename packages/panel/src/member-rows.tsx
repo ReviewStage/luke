@@ -73,44 +73,60 @@ export function memberRows(
   });
 }
 
+/** What a filter by person keeps: anyone's, the reader's own, or one teammate's. */
+export const PEOPLE_FILTER = {
+  ANYONE: "anyone",
+  ME: "me",
+  PERSON: "person",
+} as const;
+
+/** A filter by person's choice, a teammate named by their account id and their name. */
+export type PeopleFilter =
+  | { readonly kind: typeof PEOPLE_FILTER.ANYONE }
+  | { readonly kind: typeof PEOPLE_FILTER.ME }
+  | { readonly kind: typeof PEOPLE_FILTER.PERSON; readonly userId: string; readonly name: string };
+
 /**
  * A filter by person's choices: Anyone, then the reader as Me, then each
  * other member as `memberRows` draws them, their email beside their name and
- * their card beside the row, the one chosen checked. `chosen` is the account
- * id filtered to, none for Anyone, and a choice hands `onChoose` the same,
- * with the member it names where it names one.
+ * their card beside the row, the one chosen checked, a teammate by their id
+ * alone. Me stands where the reader's id is known, or where the caller keeps
+ * the reader's own apart from any id (`meWithoutId`), as the Inbox reads an
+ * item waiting on nobody it can name as the reader's.
  */
 export function peopleFilterActions({
   members,
   readerId,
   chosen,
   onChoose,
+  meWithoutId = false,
 }: {
   members: readonly WorkspaceMember[] | undefined;
   readerId: string | undefined;
-  chosen: string | undefined;
-  onChoose: (userId: string | undefined, member?: WorkspaceMember) => void;
+  chosen: PeopleFilter | { readonly kind: typeof PEOPLE_FILTER.PERSON; readonly userId: string };
+  onChoose: (filter: PeopleFilter) => void;
+  meWithoutId?: boolean;
 }): MenuAction[] {
   const rows = memberRows(members, readerId);
   const mine = rows.find((row) => row.actor.you);
   const me: MenuAction[] =
-    readerId === undefined
+    readerId === undefined && !meWithoutId
       ? []
       : [
           {
             label: PEOPLE_FILTER_WORDS.ME,
             icon: mine?.icon ?? <UserIcon />,
             card: mine?.card,
-            checked: chosen === readerId,
-            onSelect: () => onChoose(readerId, mine?.member),
+            checked: chosen.kind === PEOPLE_FILTER.ME,
+            onSelect: () => onChoose({ kind: PEOPLE_FILTER.ME }),
           },
         ];
   return [
     {
       label: PEOPLE_FILTER_WORDS.ANYONE,
       icon: <UsersIcon />,
-      checked: chosen === undefined,
-      onSelect: () => onChoose(undefined),
+      checked: chosen.kind === PEOPLE_FILTER.ANYONE,
+      onSelect: () => onChoose({ kind: PEOPLE_FILTER.ANYONE }),
     },
     ...me,
     ...rows
@@ -121,8 +137,9 @@ export function peopleFilterActions({
         detail: row.detail,
         detailPlace: MENU_DETAIL.BESIDE,
         card: row.card,
-        checked: chosen === row.member.userId,
-        onSelect: () => onChoose(row.member.userId, row.member),
+        checked: chosen.kind === PEOPLE_FILTER.PERSON && chosen.userId === row.member.userId,
+        onSelect: () =>
+          onChoose({ kind: PEOPLE_FILTER.PERSON, userId: row.member.userId, name: row.label }),
       })),
   ];
 }

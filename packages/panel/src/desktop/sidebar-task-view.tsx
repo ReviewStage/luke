@@ -37,7 +37,7 @@ import type { ReactNode } from "react";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref.js";
 import { useAppCommand } from "../app-commands.js";
 import { useMemberDirectory } from "../member-directory.js";
-import { peopleFilterActions } from "../member-rows.js";
+import { PEOPLE_FILTER, peopleFilterActions } from "../member-rows.js";
 import { TASK_STATUS_WORDS } from "../tasks/task-standing.js";
 import { ActionMenu, type MenuAction, type MenuEntry } from "./action-menu.js";
 import type { CountNoun } from "./sidebar-group-header.js";
@@ -150,6 +150,33 @@ const READING_MEMBERS: MenuAction = {
   onSelect: () => undefined,
 };
 
+/** Assigned to's and Created by's choices, as every filter by person offers them: Anyone, Me, then each other member, the account id filtered to checked, and while the members are read a row saying so. */
+function memberFilter(
+  chosen: string | undefined,
+  onChoose: (userId: string | undefined) => void,
+  reader: ReturnType<typeof useMemberDirectory>,
+): MenuAction[] {
+  const people = peopleFilterActions({
+    members: reader.members,
+    readerId: reader.readerId,
+    chosen:
+      chosen === undefined
+        ? { kind: PEOPLE_FILTER.ANYONE }
+        : chosen === reader.readerId
+          ? { kind: PEOPLE_FILTER.ME }
+          : { kind: PEOPLE_FILTER.PERSON, userId: chosen },
+    onChoose: (filter) =>
+      onChoose(
+        filter.kind === PEOPLE_FILTER.ANYONE
+          ? undefined
+          : filter.kind === PEOPLE_FILTER.ME
+            ? reader.readerId
+            : filter.userId,
+      ),
+  });
+  return [...people, ...(reader.membersReading ? [READING_MEMBERS] : [])];
+}
+
 /** The menu's choices: how the list groups, Assignee and Creator only where the workspace is shared, how it orders, and who the tasks it lists are assigned to and who created them, where shared. */
 function viewEntries(
   control: TaskListViewControl,
@@ -209,28 +236,12 @@ function viewEntries(
             {
               label: "Assigned to",
               icon: <UserCheckIcon />,
-              items: [
-                ...peopleFilterActions({
-                  members: reader.members,
-                  readerId: reader.readerId,
-                  chosen: view.assignedTo,
-                  onChoose: control.onAssignedTo,
-                }),
-                ...(reader.membersReading ? [READING_MEMBERS] : []),
-              ],
+              items: memberFilter(view.assignedTo, control.onAssignedTo, reader),
             },
             {
               label: "Created by",
               icon: <UsersIcon />,
-              items: [
-                ...peopleFilterActions({
-                  members: reader.members,
-                  readerId: reader.readerId,
-                  chosen: view.createdBy,
-                  onChoose: control.onCreatedBy,
-                }),
-                ...(reader.membersReading ? [READING_MEMBERS] : []),
-              ],
+              items: memberFilter(view.createdBy, control.onCreatedBy, reader),
             },
           ],
         ]

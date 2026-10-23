@@ -235,10 +235,13 @@ export const NO_CREATOR = "No one";
 /** How many values a chip names before it counts the rest. */
 const CHIP_VALUES = 2;
 
-/** One value a field may keep: its words, its mark, and the value itself; a repository's owner or a person's detail, and a person's card, besides. */
+/** One value a field may keep: its words, its mark, and the value itself; a repository's owner or a person's detail, and a person's menu name and card, besides. */
 interface FieldValue {
   readonly value: string | null;
+  /** What the chip says of it, the reader as You. */
   readonly words: string;
+  /** What the menu names it where that is not its words: the reader by their name, whose detail says You. */
+  readonly label?: string;
   readonly icon: React.JSX.Element;
   /** Muted words beside the name in the menu, a repository's owner or a person's email or You; the chip names the value without them. */
   readonly detail?: string | undefined;
@@ -316,7 +319,8 @@ function peopleValues(
   return [
     ...rows.map((row) => ({
       value: row.member.userId,
-      words: row.label,
+      words: actorName(row.actor),
+      label: row.label,
       detail: row.detail,
       icon: row.icon,
       card: row.card,
@@ -464,8 +468,8 @@ function filterEntries(
       icon: FIELD_ICON[field],
       items: [
         ...fieldValues(field, tasks, filter, reader, pictures).map(
-          ({ value, words, icon, detail, card }): MenuAction => ({
-            label: words,
+          ({ value, words, label, icon, detail, card }): MenuAction => ({
+            label: label ?? words,
             icon,
             ...(detail === undefined ? {} : { detail, detailPlace: MENU_DETAIL.BESIDE }),
             card,

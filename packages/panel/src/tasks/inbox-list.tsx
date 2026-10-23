@@ -114,7 +114,7 @@ import {
 import { SidebarGroupHeader } from "../desktop/sidebar-group-header.js";
 import { SidebarSectionHead } from "../desktop/sidebar-task-view.js";
 import { useMemberDirectory } from "../member-directory.js";
-import { PEOPLE_FILTER_WORDS, peopleFilterActions } from "../member-rows.js";
+import { PEOPLE_FILTER, PEOPLE_FILTER_WORDS, peopleFilterActions } from "../member-rows.js";
 import { TaskChipCard } from "./chip-cards.js";
 import { type InboxCloser, useInboxClose } from "./inbox-close.js";
 import {
@@ -738,32 +738,31 @@ function PersonHeader({
   );
 }
 
-/** Whose's choices, as every filter by person offers them: Anyone, Me, then each teammate, the choice checked. */
+/** Whose's choices, as every filter by person offers them: Anyone, Me, then each teammate, the choice checked. Note that Me stands though the reader's id is unknown, since the reader's own items are read without one (`readersItem`). */
 function whoseEntries(
   whose: InboxWhose,
   onWhose: (whose: InboxWhose) => void,
   reader: ReturnType<typeof useMemberDirectory>,
   readerId: string | undefined,
 ): MenuAction[] {
-  const you = reader.readerId ?? readerId;
-  const chosen =
-    whose.kind === INBOX_WHOSE.EVERYONE
-      ? undefined
-      : whose.kind === INBOX_WHOSE.MINE
-        ? you
-        : whose.userId;
   return peopleFilterActions({
     members: reader.members,
-    readerId: you,
-    chosen,
-    onChoose: (userId, member) =>
+    readerId: reader.readerId ?? readerId,
+    chosen:
+      whose.kind === INBOX_WHOSE.EVERYONE
+        ? { kind: PEOPLE_FILTER.ANYONE }
+        : whose.kind === INBOX_WHOSE.MINE
+          ? { kind: PEOPLE_FILTER.ME }
+          : { kind: PEOPLE_FILTER.PERSON, userId: whose.userId },
+    onChoose: (filter) =>
       onWhose(
-        userId === undefined
+        filter.kind === PEOPLE_FILTER.ANYONE
           ? EVERYONES
-          : userId === you || member === undefined
+          : filter.kind === PEOPLE_FILTER.ME
             ? { kind: INBOX_WHOSE.MINE }
-            : { kind: INBOX_WHOSE.PERSON, userId, name: member.name },
+            : { kind: INBOX_WHOSE.PERSON, userId: filter.userId, name: filter.name },
       ),
+    meWithoutId: true,
   });
 }
 

@@ -1013,7 +1013,7 @@ test("the Filter's Repository names each repository as the repository chip does,
   assert.deepEqual(offered, ["acme", "beta"]);
 });
 
-test("the Filter's Assignee and Creator list the members as every people menu does, you first as You and the rest by name with their email beside it, each hanging their card", async () => {
+test("the Filter's Assignee and Creator list the members as every people menu does, you first as You and the rest by name with their email beside it, each hanging their card, and your own chip says You", async () => {
   fakeActPort({
     [ACT_KIND.WORKSPACE_MEMBERS_READ]: () =>
       Promise.resolve([
@@ -1057,6 +1057,11 @@ test("the Filter's Assignee and Creator list the members as every people menu do
   ];
   assert.deepEqual(offered, [[...people, ["No assignee", null]], people]);
   assert.deepEqual(cards, ["Charles Pan", "Charles Pan"]);
+
+  openOptions(page, "Filter");
+  choose("Assignee", "Dean Stratakos");
+  closeMenus();
+  assert.match(page.textContent ?? "", /Assignee: You/, "the reader's own chip says You");
 });
 
 test("the Filter's Repository leads each repository with its owner's picture, on the List and the Board alike", async () => {
