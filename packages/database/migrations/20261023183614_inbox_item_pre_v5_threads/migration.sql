@@ -8,8 +8,9 @@ SELECT
 	coalesce((
 		SELECT string_agg(CASE "block"->>'type'
 			WHEN 'markdown' THEN "block"->>'text'
-			WHEN 'link' THEN '[' || regexp_replace("block"->>'label', '([\\\[\]])', '\\\1', 'g') || '](' || ("block"->>'url') || ')'
-			WHEN 'code' THEN 'https://github.com/' || ("block"->>'repo') || '/blob/' || ("block"->>'sha') || '/' || ("block"->>'path')
+			WHEN 'link' THEN '[' || regexp_replace("block"->>'label', '([\\\[\]])', '\\\1', 'g') || '](' || replace(replace("block"->>'url', '(', '%28'), ')', '%29') || ')'
+			WHEN 'code' THEN 'https://github.com/' || ("block"->>'repo') || '/blob/' || ("block"->>'sha') || '/'
+				|| replace(replace(replace(replace(replace(replace(replace("block"->>'path', '%', '%25'), ' ', '%20'), '#', '%23'), '?', '%3F'), '(', '%28'), ')', '%29'), '"', '%22')
 				|| '#L' || ("block"->>'startLine')
 				|| CASE WHEN ("block"->>'endLine') = ("block"->>'startLine') THEN '' ELSE '-L' || ("block"->>'endLine') END
 			WHEN 'image' THEN '![' || regexp_replace(regexp_replace("block"->>'alt', '\s+', ' ', 'g'), '([\\\[\]])', '\\\1', 'g')

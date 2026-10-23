@@ -23,7 +23,8 @@ import * as SqlClient from "effect/sql/SqlClient";
  *
  * Over a database migrated up to it, holding items an agent posted before
  * version 5: once it runs, each reads as a thread its agent's message
- * opens, carrying its blocks as Markdown, its picture as that message's
+ * opens, carrying its blocks as Markdown, a link's and a code block's
+ * address escaped as a post writes them, its picture as that message's
  * file, and the ask its response stood for, open, answered, or withdrawn as
  * the item stood; an answer reads as the member's message answering that
  * ask, with the note as its words and the answer's files as its own; the
@@ -97,6 +98,19 @@ it.effect(
           [
             { type: "markdown", text: "Require a review on `main`." },
             { type: "link", url: "https://github.com/acme/relay/settings", label: "Settings" },
+            {
+              type: "link",
+              url: "https://en.wikipedia.org/wiki/Relay_(disambiguation)",
+              label: "Relay",
+            },
+            {
+              type: "code",
+              repo: "acme/relay",
+              path: "docs/spec #2.md",
+              startLine: 3,
+              endLine: 5,
+              sha: "0123456789abcdef0123456789abcdef01234567",
+            },
             { type: "image", attachmentId: pictureId, alt: "The [rules] page" },
           ],
           { type: "task" },
@@ -145,7 +159,13 @@ it.effect(
           [
             {
               author: INBOX_MESSAGE_AUTHOR.AGENT,
-              text: `Require a review on \`main\`.\n\n[Settings](https://github.com/acme/relay/settings)\n\n![The \\[rules\\] page](${address})`,
+              text: [
+                "Require a review on `main`.",
+                "[Settings](https://github.com/acme/relay/settings)",
+                "[Relay](https://en.wikipedia.org/wiki/Relay_%28disambiguation%29)",
+                "https://github.com/acme/relay/blob/0123456789abcdef0123456789abcdef01234567/docs/spec%20%232.md#L3-L5",
+                `![The \\[rules\\] page](${address})`,
+              ].join("\n\n"),
               files: [{ attachmentId: pictureId, name: "picture-1.png", mediaType: "image/png" }],
               ask: { type: "do", steps: [], status: "open" },
             },
