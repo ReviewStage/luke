@@ -105,7 +105,7 @@ function agentRowEnd(agent: MentionableAgent, place: AgentRowPlace): React.React
 }
 
 /** What an agent's row says of its task: this one, another by its name, or none, and whether it is archived. */
-export function agentTaskDetail(
+function agentTaskDetail(
   agent: Pick<MentionableAgent, "task" | "archived">,
   taskId: string | undefined,
 ): string {

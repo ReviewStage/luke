@@ -137,10 +137,3 @@ export type PagePlace = typeof pagePlaceSchema.Type;
 export function pagePlaceId(place: PagePlace): string {
   return "taskId" in place ? place.taskId : place.agentId;
 }
-
-/** The place as what its pages stand on. */
-export function pageOwnerOf(place: PagePlace): PageOwner {
-  return "taskId" in place
-    ? { kind: PAGE_OWNER.TASK, taskId: place.taskId }
-    : { kind: PAGE_OWNER.AGENT, agentId: place.agentId };
-}

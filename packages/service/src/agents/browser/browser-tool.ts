@@ -161,7 +161,7 @@ type KeptNote =
   | { readonly omitted: PictureOmission; readonly byteCount: number };
 
 /** A step as the tool answers it: a screenshot's transcript copy replaced by what was kept of it, every other step as it ran. */
-export type BrowserToolStep =
+type BrowserToolStep =
   | Exclude<BrowserAgentStep, ScreenshotStep>
   | (Omit<ScreenshotStep, "kept"> & (KeptNote | Record<never, never>));
 

@@ -19,7 +19,7 @@ import { useAct } from "../act.js";
  */
 
 /** The workspace's agents as the picker draws them: read, failed, or not yet read. */
-export type AgentsRead =
+type AgentsRead =
   | { readonly agents: readonly CodingAgentSummary[] }
   | { readonly failed: true }
   | undefined;

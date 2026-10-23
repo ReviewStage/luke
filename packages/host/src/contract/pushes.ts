@@ -28,7 +28,6 @@ import { actProcedure } from "./base.js";
 /** Every push main sends a window, by the name it crosses under. */
 export const PUSH = {
   APP_STATE: "app:state",
-  LIFECYCLE: "app:lifecycle",
   MENU_COMMAND: "app:menu-command",
   VOICE_LIVE_SESSION_CHANGED: "app:voice-live-session-changed",
   TASKS_TALK: "app:task-talk-forwarded",
@@ -66,7 +65,6 @@ export const PUSH_GUARD = {
    * or the display it stands on — which the document does not number.
    */
   [PUSH.APP_STATE]: result<AppStateDelivery>(isAppStateDelivery),
-  [PUSH.LIFECYCLE]: result<string>(isWireString),
   /** A command chosen from the menu bar, for the focused window to run as its shortcut would. */
   [PUSH.MENU_COMMAND]: result<AppCommand>(isAppCommand),
   /**
@@ -281,7 +279,6 @@ export type PushEvent = {
 /** The bridge method a window hears each push on, as it did when each push was a channel of its own. */
 export const PUSH_METHOD = {
   onAppState: PUSH.APP_STATE,
-  onLifecycle: PUSH.LIFECYCLE,
   onMenuCommand: PUSH.MENU_COMMAND,
   onVoiceLiveSessionChanged: PUSH.VOICE_LIVE_SESSION_CHANGED,
   onTasksTalk: PUSH.TASKS_TALK,

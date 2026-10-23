@@ -368,12 +368,12 @@ export function UnassignedMark({
 }
 
 /** What a screen reader hears of a row no one is assigned to, whose dashed mark says it on screen. */
-export function UnassignedHeard(): React.JSX.Element {
+function UnassignedHeard(): React.JSX.Element {
   return <VisuallyHidden>{`(${UNASSIGNED_WORDS.toLowerCase()})`}</VisuallyHidden>;
 }
 
 /** What a reader of the screen hears of a row's assignee, whose face says it on screen: their name, and that they left where they did. */
-export function AssigneeHeard({ actor }: { actor: Actor }): React.JSX.Element {
+function AssigneeHeard({ actor }: { actor: Actor }): React.JSX.Element {
   const left = leftWithFace(actor) ? ", who left" : "";
   return <VisuallyHidden>{`(assigned to ${actorName(actor)}${left})`}</VisuallyHidden>;
 }

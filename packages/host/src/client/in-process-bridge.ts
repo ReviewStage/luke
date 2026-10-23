@@ -177,7 +177,6 @@ export function createInProcessBridge(
       recordAgentTrace: dropped,
       feedAvatar: dropped,
       signalAvatarView: dropped,
-      onLifecycle: neverDelivered,
       onMenuCommand: neverDelivered,
       onVoiceLiveSessionChanged: neverDelivered,
       onTasksTalk: neverDelivered,

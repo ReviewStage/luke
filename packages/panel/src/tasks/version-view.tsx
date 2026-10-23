@@ -167,7 +167,7 @@ function VersionBody({
  * sections in a note's own type, each heading at a section's level over its
  * lines, a section apart.
  */
-export function VersionSkeleton({
+function VersionSkeleton({
   title,
   section,
 }: {
