@@ -5,6 +5,8 @@ import type { TaskAgentLine, TaskPullRequestLine, TaskSummary } from "@luke/feat
 import type { Workspace } from "@luke/features/workspace-wire";
 import {
   AVATAR_SIZE,
+  GLYPH_INK,
+  GlyphSlot,
   HOVER_CARD_ROW_LOOK,
   HoverCard,
   HoverCardHead,
@@ -401,13 +403,17 @@ function TaskStanding({
       <TaskKey workspaceName={workspaceName} number={task.number} />
       {task.status === undefined ? null : (
         <span className="task-card-chip">
-          <TaskStatusGlyph status={task.status} />
+          <GlyphSlot ink={GLYPH_INK.INHERIT}>
+            <TaskStatusGlyph status={task.status} />
+          </GlyphSlot>
           {TASK_STATUS_WORDS[task.status]}
         </span>
       )}
       {task.priority === undefined ? null : (
         <span className="task-card-chip">
-          <TaskPriorityMark priority={task.priority} />
+          <GlyphSlot ink={GLYPH_INK.INHERIT}>
+            <TaskPriorityMark priority={task.priority} />
+          </GlyphSlot>
           {TASK_PRIORITY_WORDS[task.priority]}
         </span>
       )}

@@ -1,4 +1,12 @@
-import { LineSummary, TEXT_ELEMENT, TEXT_VARIANT, Text, useDisclosureBodyDrawn } from "@luke/ui";
+import {
+  GLYPH_INK,
+  GlyphSlot,
+  LineSummary,
+  TEXT_ELEMENT,
+  TEXT_VARIANT,
+  Text,
+  useDisclosureBodyDrawn,
+} from "@luke/ui";
 import { BrainIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { Fold, FoldBody, type FoldProps } from "./fold.js";
@@ -43,7 +51,9 @@ export function ReasoningTrigger({ preview = "" }: ReasoningTriggerProps): React
   const drawn = useDisclosureBodyDrawn();
   return (
     <LineSummary brightens>
-      <BrainIcon className="reasoning-icon" aria-hidden="true" />
+      <GlyphSlot ink={GLYPH_INK.INHERIT}>
+        <BrainIcon />
+      </GlyphSlot>
       <Text
         as={TEXT_ELEMENT.SPAN}
         variant={TEXT_VARIANT.INHERIT}

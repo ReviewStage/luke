@@ -149,7 +149,9 @@ export function AnnotationCard({
       {where === undefined ? null : <div className="annotation-card-where">{where}</div>}
       <Fold className="annotation-card-fold" open={open} onOpenChange={onOpenChange}>
         <FoldSummary className="annotation-card-head">
-          <DisclosureChevron />
+          <span className="annotation-card-turn">
+            <DisclosureChevron />
+          </span>
           <span className="annotation-card-face">{face}</span>
           <span className="annotation-card-name">{name}</span>
           {time === undefined ? null : <span className="annotation-card-time">{time}</span>}

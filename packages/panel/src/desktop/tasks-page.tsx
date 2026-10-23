@@ -194,7 +194,7 @@ export function TasksPage({
   const listed = tasks.listed.tasks;
   const toolbar = (
     <header className="desktop-toolbar">
-      <div className="desktop-toolbar-heading">
+      <div className="desktop-toolbar-heading tasks-page-heading">
         <OneLine
           as={ONE_LINE_ELEMENT.H1}
           end={ONE_LINE_END.ELLIPSIS}

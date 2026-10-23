@@ -206,6 +206,17 @@
     --luke-chip-ink: var(--luke-color-ink-inverse);
   }
 
+  /* A count after the words (`ChipCount`), quiet, at fixed figures; on a
+     pressed filter it steps back from the ground's colour its words are in. */
+  .luke-chip-count {
+    color: var(--luke-color-text-subtle);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .luke-chip[aria-pressed="true"] .luke-chip-count {
+    color: color-mix(in srgb, var(--luke-color-ink-inverse) 65%, var(--luke-color-ink));
+  }
+
   /* A removable filter names one applied, so it stands chosen, on the
      chip's chosen face inside the strong hairline; its × ends it, a round
      press inside its capsule. */

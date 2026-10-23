@@ -24,6 +24,8 @@ import {
   EmptyState,
   ERROR_STATE_PLACEMENT,
   ErrorState,
+  GLYPH_INK,
+  GlyphSlot,
   IconButton,
   InlineEdit,
   PAGE_FRAME,
@@ -250,7 +252,11 @@ function TaskBoardCard({
         <TaskKey workspaceName={workspaceName} number={task.number} />
       ) : null}
       <span className="tasks-board-card-marks">
-        {drawn(TASK_PROPERTY.WAITING) ? <WaitingBadge count={waiting} /> : null}
+        {drawn(TASK_PROPERTY.WAITING) && waiting > 0 ? (
+          <span className="tasks-board-waiting">
+            <WaitingBadge count={waiting} />
+          </span>
+        ) : null}
         {drawn(TASK_PROPERTY.UPDATED) ? (
           <Time at={taskTime(task, TASK_ORDER.UPDATED)} now={now} hint={false} />
         ) : null}
@@ -380,11 +386,22 @@ interface ColumnPeople {
 /** A column's head for the value it stands for. */
 function columnHead(head: TasksGroupHead, people: ColumnPeople): ColumnHead {
   if (head.kind === TASKS_GROUP.STATUS) {
-    return { mark: <TaskStatusMark status={head.status} />, words: TASK_STATUS_WORDS[head.status] };
+    return {
+      mark: (
+        <GlyphSlot ink={GLYPH_INK.INHERIT}>
+          <TaskStatusMark status={head.status} />
+        </GlyphSlot>
+      ),
+      words: TASK_STATUS_WORDS[head.status],
+    };
   }
   if (head.kind === TASKS_GROUP.PRIORITY) {
     return {
-      mark: <TaskPriorityMark priority={head.priority} />,
+      mark: (
+        <GlyphSlot ink={GLYPH_INK.INHERIT}>
+          <TaskPriorityMark priority={head.priority} />
+        </GlyphSlot>
+      ),
       words: TASK_PRIORITY_WORDS[head.priority],
     };
   }
@@ -493,7 +510,7 @@ function TaskBoardColumnView({
       </h2>
       {column.tasks.length === 0 ? (
         column.older === undefined ? (
-          <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
+          <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED} className="tasks-board-empty">
             {NO_TASKS}
           </Text>
         ) : null

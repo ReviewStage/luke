@@ -17,7 +17,8 @@ import { CatalogSection } from "../section";
  * line-buttons.tsx -- a LineButton as a call's row that opens a tab, a row
  * whose every word is muted brightening under the pointer, a LineSummary
  * folding a call's body open under it, and a quote that shows its words,
- * cut short after two lines in a narrow column.
+ * cut short after two lines in a narrow column, and a band naming the lines
+ * a card is on across its top.
  */
 
 /** Does nothing, for a press the catalog only draws. */
@@ -86,6 +87,18 @@ function LineButtons(): React.JSX.Element {
               request, and a test that breaks on a refactor is deleted rather than fixed.
             </LineButton>
           </Text>
+        </div>
+      </CatalogSection>
+      <CatalogSection id="line-buttons-band" title="Band, a strip across a card">
+        <div className="catalog-band-card">
+          <LineButton
+            look={LINE_BUTTON_LOOK.BAND}
+            onClick={pressed}
+            aria-label="View in Files changed: src/invites/send.ts lines 3–4"
+          >
+            <span className="catalog-band-words">src/invites/send.ts · lines 3–4</span>
+          </LineButton>
+          <Text className="catalog-band-body">Should this retry on a 429 as well?</Text>
         </div>
       </CatalogSection>
     </>

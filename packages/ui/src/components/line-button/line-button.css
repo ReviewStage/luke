@@ -96,4 +96,10 @@
   .luke-line-button[data-look="quote"]:active {
     opacity: 0.7;
   }
+
+  /* A band across a card: its container's type and ink, square at its
+     ends, filled faintly under the pointer. */
+  .luke-line-button[data-look="band"]:hover {
+    background: var(--luke-color-fill-hover);
+  }
 }

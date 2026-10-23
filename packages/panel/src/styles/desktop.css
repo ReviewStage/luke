@@ -3009,6 +3009,7 @@ ul.actor-stack {
 
 /* A chip is never wider than the card. */
 .task-card-chip {
+  --luke-glyph-size: var(--luke-type-caption-size);
   display: inline-flex;
   box-sizing: border-box;
   max-width: 100%;
@@ -3022,11 +3023,6 @@ ul.actor-stack {
   font-size: var(--luke-type-caption-size);
   line-height: var(--luke-type-caption-leading);
   white-space: nowrap;
-}
-
-.task-card-chip > .luke-task-mark {
-  width: var(--luke-type-caption-size);
-  height: var(--luke-type-caption-size);
 }
 
 /* A task's key (`TaskKey`, `task-standing.tsx`), drawn alike wherever it
@@ -5440,12 +5436,6 @@ ul.actor-stack {
 /* The window's one strip is `@luke/ui`'s Tabs (tab-strip.tsx), drawn alike
    in the plan's column and the side panel, folding as the room says. */
 
-/* A glyph wearing where its work stands takes a glyph's footprint, so an
-   agent's tab and a fixed tab line their labels up alike. */
-.luke-tab-icon .state-glyph {
-  --state-glyph-size: var(--luke-control-icon);
-}
-
 /* A label cut short fades out over its last `--label-fade` rather than
    ending in an ellipsis, as a browser's tab does (`@luke/ui`'s `tabs.css`),
    and so does a subagent's job, and every name, title, and place the shell and the sidebar cut to
@@ -5600,17 +5590,6 @@ ul.actor-stack {
   padding: var(--luke-space-8) var(--column-inset) var(--luke-space-8)
     var(--sidebar-toggle-clearance);
   border-bottom: 1px solid var(--luke-color-border);
-}
-
-.task-pane-switcher .luke-choice-bar[data-look="segmented"] {
-  width: auto;
-  flex: 1 1 auto;
-  flex-wrap: nowrap;
-}
-
-.task-pane-switcher .luke-choice-bar-option {
-  flex: 1 1 0;
-  justify-content: center;
 }
 
 .desktop-shell[data-room="narrow"]
@@ -5867,28 +5846,6 @@ ul.actor-stack {
 
 [data-luke-profile="desktop"] :is(.tab-switcher, .tab-switcher-backdrop) {
   -webkit-app-region: no-drag;
-}
-
-/* The cards are `@luke/ui`'s TabCards; a glyph wearing where its work
-   stands takes each slot's footprint, as the glyphs beside it do. */
-.luke-tab-card-glyph .state-glyph {
-  --state-glyph-size: 28px;
-  width: 28px;
-  height: 28px;
-}
-
-.luke-tab-card-name > .state-glyph {
-  --state-glyph-size: var(--luke-menu-glyph);
-  width: var(--luke-menu-glyph);
-  height: var(--luke-menu-glyph);
-  flex: 0 0 auto;
-}
-
-.luke-tab-card-detail > .state-glyph {
-  --state-glyph-size: var(--luke-type-caption-size);
-  width: var(--luke-type-caption-size);
-  height: var(--luke-type-caption-size);
-  flex: 0 0 auto;
 }
 
 /* The keys' hints along the foot, as ⌘K's foot has them. */
@@ -6552,6 +6509,7 @@ ul.actor-stack {
 /* A column's head: its status's mark, its name, and how many it holds, on
    its cards' inset. */
 .tasks-board-column-head {
+  --luke-glyph-size: var(--luke-control-icon);
   display: flex;
   align-items: center;
   gap: var(--luke-icon-gap);
@@ -6561,13 +6519,8 @@ ul.actor-stack {
   font-variant-numeric: tabular-nums;
 }
 
-.tasks-board-column-head > .luke-task-mark {
-  width: var(--luke-control-icon);
-  height: var(--luke-control-icon);
-}
-
 /* A column with no task says so in one quiet line. */
-.tasks-board-column > p.luke-text {
+.tasks-board-empty {
   padding: var(--luke-space-2) var(--luke-space-6) var(--luke-space-6);
 }
 
@@ -6673,7 +6626,8 @@ ul.actor-stack {
 
 /* What waits on the reader is read whole, so its badge keeps its words on
    one line, and the maker's name, cut short, gives way instead. */
-.tasks-board-card-marks > .luke-badge {
+.tasks-board-waiting {
+  display: flex;
   flex: none;
 }
 
@@ -6755,11 +6709,6 @@ ul.actor-stack {
   pointer-events: auto;
 }
 
-.tasks-board-card-foot .luke-task-mark {
-  width: var(--luke-control-icon);
-  height: var(--luke-control-icon);
-}
-
 .tasks-board-repository {
   margin-left: var(--luke-space-4);
   color: var(--luke-color-text-subtle);
@@ -6820,7 +6769,7 @@ ul.actor-stack {
    List | Board switch stands beside its title, and the List runs its groups
    down the page, each headed as a Board's column is, its rows the page's
    own `ListRow`s led by the task's priority, key, and status. */
-.desktop-toolbar-heading:has(.luke-choice-bar) {
+.desktop-toolbar-heading.tasks-page-heading {
   display: flex;
   align-items: center;
   gap: var(--luke-space-12);
@@ -6838,7 +6787,7 @@ ul.actor-stack {
   padding-bottom: var(--luke-space-24);
 }
 
-.tasks-list > p.luke-text {
+.tasks-list-none {
   grid-column: 1 / -1;
 }
 
@@ -6866,7 +6815,7 @@ ul.actor-stack {
   grid-column: 1 / -1;
 }
 
-.tasks-list-group > p.luke-text {
+.tasks-list-group-empty {
   padding: var(--luke-space-4) var(--row-inset);
 }
 
@@ -6914,8 +6863,7 @@ ul.actor-stack {
   flex: none;
 }
 
-.tasks-list-glyph > svg,
-.tasks-list-glyph > .luke-task-mark {
+.tasks-list-glyph > svg {
   width: var(--luke-control-icon);
   height: var(--luke-control-icon);
 }

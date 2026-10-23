@@ -308,8 +308,9 @@ body,
 
 /* The face's ink, motion wiring, and generated motions are `@luke/ui`'s
    (`face/face.css`); its size where nothing more particular lays it out is
-   the window's. */
-.luke-face {
+   the window's, except where it is asked to fill its box (`fill`), which
+   this unlayered size would otherwise beat. */
+.luke-face:not([data-fill="true"]) {
   width: 18px;
   height: 18px;
 }
@@ -399,13 +400,14 @@ body,
    footprint, so a tab or a row moves nothing as its work starts or ends.
    Failed, the glyph stands as at rest, and the failed mark at its row's end
    says it (`.failed-mark`). In the `base` layer, so a shared component's
-   glyph slot that holds one sizes it as it sizes any glyph of its own. */
+   glyph slot that holds one sizes it as it sizes any glyph of its own, at
+   the size the slot says (`--luke-glyph-size`) where nothing nearer does. */
 @layer base {
   .state-glyph {
     position: relative;
     display: inline-flex;
-    width: var(--state-glyph-size, 16px);
-    height: var(--state-glyph-size, 16px);
+    width: var(--state-glyph-size, var(--luke-glyph-size, 16px));
+    height: var(--state-glyph-size, var(--luke-glyph-size, 16px));
     flex: 0 0 auto;
     align-items: center;
     justify-content: center;

@@ -20,7 +20,10 @@ import type { ButtonHTMLAttributes, MouseEvent, ReactNode } from "react";
  * place's (`onOpen`), handed the click so it can keep the press from the
  * element around it, or let it through; an app's hint wraps it as it wraps
  * a Button, handing it the pointer, press, and focus handlers it shows and
- * goes on by, each heard before the tile's own.
+ * goes on by, each heard before the tile's own. A place whose pointer's
+ * press opens nothing, and falls through to what is around the tile, says
+ * so (`pointerOpens`): the tile then wears the plain pointer and does not
+ * sink, while a key's press still opens it.
  */
 
 /** What a press is named for, the picture's words after it. */
@@ -45,6 +48,7 @@ export function PictureTile({
   name,
   onOpen,
   fill = false,
+  pointerOpens = true,
   caption,
   children,
   onClick,
@@ -56,6 +60,8 @@ export function PictureTile({
   onOpen: (event: MouseEvent<HTMLButtonElement>) => void;
   /** Whether it fills the room its container gives it rather than hugging its picture. */
   fill?: boolean | undefined;
+  /** Whether a pointer's press opens it, so it wears the zooming pointer and sinks; a key's press always does. */
+  pointerOpens?: boolean | undefined;
   /** Words under the picture that the press takes with it. */
   caption?: ReactNode;
   /** The picture, in its place's own frame. */
@@ -66,6 +72,7 @@ export function PictureTile({
       type="button"
       className="luke-picture-tile"
       data-fill={fill}
+      data-pointer-opens={pointerOpens}
       aria-label={name === "" ? ENLARGE_LABEL : `${ENLARGE_LABEL} ${name}`}
       {...hinted}
       onClick={(event) => {

@@ -6,8 +6,9 @@ import { CatalogSection } from "../section";
 /**
  * picture-tiles.tsx -- a picture that opens when pressed, sinking a little
  * under the press: one hugging its picture in a column of words, one with
- * no words of its own, and a row of tiles that fill the room each is given,
- * captioned under the picture. A press here only counts, since opening a
+ * no words of its own, a row of tiles that fill the room each is given,
+ * captioned under the picture, and one a pointer's press falls through,
+ * which a key alone opens, with the plain pointer and no sink. A press here only counts, since opening a
  * picture over the window is the app's.
  */
 
@@ -79,6 +80,18 @@ function PictureTiles(): React.JSX.Element {
             ))}
           </div>
           <OpenedLine opened={set} />
+        </div>
+      </CatalogSection>
+      <CatalogSection
+        id="picture-tiles-keyed"
+        title="Opened by a key alone, a pointer's press falling through"
+      >
+        <div className="catalog-stack">
+          <PictureTile name="A diagram" pointerOpens={false} onOpen={openHugged}>
+            <span className="catalog-picture-frame">
+              <img src={BEFORE} alt="A diagram" draggable={false} />
+            </span>
+          </PictureTile>
         </div>
       </CatalogSection>
     </>

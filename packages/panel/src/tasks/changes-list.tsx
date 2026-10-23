@@ -538,7 +538,9 @@ export function FileHead({
         {hinted(
           hint,
           <TextButton aria-label={`${hint}: ${path}`} onClick={() => copy(path, words)}>
-            <PathParts path={path} />
+            <span className="diff-list-path-words">
+              <PathParts path={path} />
+            </span>
           </TextButton>,
         )}
       </span>

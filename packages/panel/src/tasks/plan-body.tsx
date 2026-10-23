@@ -17,6 +17,7 @@ import {
   Button,
   EllipsisIcon,
   IconButton,
+  TEXT_BUTTON_LINES,
   TextButton,
   Tooltip,
   useMenu,
@@ -237,12 +238,15 @@ function EditTime({
   label,
   onShow,
   short = false,
+  whole = false,
 }: {
   at: number;
   /** What the press is called, from how long ago the edit was, "2 hours ago". */
   label: (ago: string) => string;
   onShow: (() => void) | undefined;
   short?: boolean;
+  /** Whether its press is drawn whole, a finger's press on a coarse pointer, as the byline's is. */
+  whole?: boolean;
 }): React.JSX.Element {
   // Note that the time reads the minute itself, so the minute draws it again and not the section it stands in.
   const now = useMinute();
@@ -252,6 +256,7 @@ function EditTime({
       <span>{words}</span>
     ) : (
       <TextButton
+        lines={whole ? TEXT_BUTTON_LINES.WHOLE : TEXT_BUTTON_LINES.ONE}
         aria-label={label(agoText(at, now))}
         // The pointer on the time is the way to the history, so its chunk is read now rather than at the press.
         onPointerEnter={VERSION_HISTORY.prefetch}
@@ -343,6 +348,7 @@ function PlanByline({
               at={edit.at}
               label={editedLabel}
               onShow={onShowHistory === undefined ? undefined : () => onShowHistory(undefined)}
+              whole
             />
           </>
         )

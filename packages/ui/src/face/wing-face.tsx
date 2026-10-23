@@ -18,6 +18,8 @@ interface WingFaceProps {
   muted?: boolean;
   /** Fills the box that holds it rather than standing at the font's size. */
   fill?: boolean;
+  /** Draws the face in its holder's ink, where the holder says whose face it is by its colour. */
+  inherit?: boolean;
 }
 
 /** Nothing beyond the smile and the eyes, which is what a still face draws. */
@@ -53,6 +55,7 @@ export function WingFace({
   repeat = false,
   muted = false,
   fill = false,
+  inherit = false,
 }: WingFaceProps): React.JSX.Element {
   const parts = motion === undefined ? RESTING_PARTS : FACE_MOTION_PARTS[motion];
 
@@ -63,6 +66,7 @@ export function WingFace({
       data-repeat={String(repeat)}
       data-muted={String(muted)}
       data-fill={String(fill)}
+      data-inherit={inherit ? "true" : undefined}
       viewBox={FACE_ART.VIEW_BOX}
       aria-hidden="true"
       focusable="false"

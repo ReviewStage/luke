@@ -457,7 +457,9 @@ export function PierreDiffList({
       onPointerLeave={letGoHint}
       onPointerDown={letGoHint}
     >
-      <ScrollArea ref={host}>{null}</ScrollArea>
+      <ScrollArea ref={host} data-diff-list-scroller="">
+        {null}
+      </ScrollArea>
       {offer === undefined || onComment === undefined ? null : (
         <div
           ref={offerBox}

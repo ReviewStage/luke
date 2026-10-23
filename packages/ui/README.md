@@ -90,6 +90,10 @@ Every token is a `--luke-*` custom property under `src/tokens/`.
   `--luke-combobox-list-max` caps a `ComboboxList`'s height (280px where
   unset), so a picker placed against the window's edge hands its list the
   room it found; nothing else inside the list is the app's to set.
+  `--luke-glyph-size` sizes the glyph a `GlyphSlot` seats (16px where
+  unset), and a component's own glyph slot sets it for the glyph an app
+  hands it, a tab's or a tab card's, so a container whose glyphs stand
+  larger or smaller, a review card's face, says so once.
 
 ## Using a component
 
@@ -134,7 +138,7 @@ What the barrel holds (`src/index.ts`):
 
 | Kind | Components |
 | --- | --- |
-| Type and layout | `Text`, `Stack`, `Inline`, `ScrollArea`, `Card`, `Prose` |
+| Type and layout | `Text`, `Stack`, `Inline`, `ScrollArea`, `Card`, `Prose`, `GlyphSlot` |
 | Actions | `Button`, `IconButton`, `ButtonLink`, `FoldingButton`, `Chip`, `AttachmentChip`, `InlineRef`, `NavItem`, `NavItemLink` |
 | Press shortcuts | `HoldPress`, `MarkStrip`, `CommandLink`, `SkillChip`: a pointer's second way in beside a control's own (a held press, a strip standing for a hidden rail, a ⌘-click, a pill in a box's words) |
 | Entry | `FormField`, `TextField`, `TextArea`, `SearchField`, `Checkbox`, `ChoiceList`, `Switch`, `ChoiceBar` (with `CountPart`, `linesCount`), `Select`, `Combobox` (with `ComboboxList`, `ComboboxListBox`, `ComboboxOptionItem`), `Calendar` |

@@ -819,7 +819,11 @@ function TasksListGroup({
       ) : null}
       {folded ? null : group.tasks.length === 0 ? (
         group.older === undefined ? (
-          <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
+          <Text
+            variant={TEXT_VARIANT.CAPTION}
+            tone={TEXT_TONE.MUTED}
+            className="tasks-list-group-empty"
+          >
             {draggable && ordered(group.head) ? DRAG_HERE : NO_TASKS}
           </Text>
         ) : null
@@ -929,7 +933,7 @@ export function TasksList({
       >
         {/* Note that an empty section stands as a place to drag into, so the view matches nothing where no group holds a task. */}
         {groups.every((group) => group.tasks.length === 0) ? (
-          <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
+          <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED} className="tasks-list-none">
             {NONE_STANDING}
           </Text>
         ) : null}

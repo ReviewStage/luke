@@ -302,7 +302,10 @@
     }
   }
 
+  /* Each glyph slot says its glyph's size (`--luke-glyph-size`), which a
+     glyph the app draws in it, a mark wearing where its work stands, reads. */
   .luke-tab-icon {
+    --luke-glyph-size: var(--luke-control-icon);
     position: relative;
     display: flex;
     flex: 0 0 auto;
@@ -558,6 +561,7 @@
 
   /* A card with no still yet wears its glyph, large and quiet, in the preview's middle. */
   .luke-tab-card-glyph {
+    --luke-glyph-size: 28px;
     display: inline-flex;
     color: var(--luke-color-text-subtle);
   }
@@ -568,6 +572,7 @@
   }
 
   .luke-tab-card-name {
+    --luke-glyph-size: var(--luke-menu-glyph);
     display: flex;
     min-width: 0;
     align-items: center;
@@ -593,6 +598,7 @@
   /* Where it stands, under the name, inset to the name's words; the line
      stands empty where a card has none, so every card is one height. */
   .luke-tab-card-detail {
+    --luke-glyph-size: var(--luke-type-caption-size);
     display: flex;
     align-items: center;
     gap: var(--luke-space-4);
