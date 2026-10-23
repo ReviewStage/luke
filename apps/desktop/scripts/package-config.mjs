@@ -5,6 +5,7 @@ export { PACKAGED_ARCHITECTURE };
 export const MACOS_DEPLOYMENT_TARGET = "14.0";
 export const SWIFT_TARGET_TRIPLE = `${PACKAGED_ARCHITECTURE}-apple-macos${MACOS_DEPLOYMENT_TARGET}`;
 export const LICENSE_RESOURCE_NAME = "LUKE-LICENSE.txt";
+export const NOTICE_RESOURCE_NAME = "LUKE-NOTICE.txt";
 // This is the sentence macOS shows when it asks for the microphone, so it is
 // what consent is given against. It has to say where the audio goes.
 export const MICROPHONE_USAGE_DESCRIPTION =
