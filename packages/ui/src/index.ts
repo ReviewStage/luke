@@ -93,6 +93,7 @@ export * from "./components/skill-chip/skill-chip.js";
 export * from "./components/slider/slider.js";
 export * from "./components/spinner/spinner.js";
 export * from "./components/split-button/split-button.js";
+export * from "./components/stepped-back/stepped-back.js";
 export * from "./components/swatch/swatch.js";
 export * from "./components/switch/switch.js";
 export * from "./components/tabs/tabs.js";
