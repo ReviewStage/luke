@@ -1953,7 +1953,7 @@ function SidebarColumn({
               {narrow ? places : null}
               {operator === undefined ? null : (
                 <nav className="sidebar-group" aria-label="Luke">
-                  <ul className="sidebar-tasks">
+                  <Stack as={LAYOUT_ELEMENT.UL} gap={GAP.ROW} className="sidebar-tasks">
                     <SidebarLuke
                       operator={operator}
                       agent={tasks.listedAgents.standing.find(
@@ -1965,7 +1965,7 @@ function SidebarColumn({
                       shown={tasks.shown && overlay.inSight}
                       onOpen={chosen(openAgent)}
                     />
-                  </ul>
+                  </Stack>
                 </nav>
               )}
               {/* While the account keeps sections Pinned stands empty too, a place to drop the first pin, for a mouse: a finger, which drags no row, draws it only once it holds one. */}

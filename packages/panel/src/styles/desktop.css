@@ -3068,6 +3068,8 @@ ul.actor-stack {
   --inbox-face: 20px;
   /* The chip's face, an actor's in a line (`ACTOR_SIZE.INLINE`). */
   --inbox-mark: 16px;
+  /* Note that the thread stands flush on what the log says under it, rather than a log line's step apart. */
+  margin-block-end: 0;
 }
 
 .inbox-comment {

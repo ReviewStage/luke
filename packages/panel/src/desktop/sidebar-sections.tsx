@@ -16,7 +16,6 @@ import {
   IconButton,
   LAYOUT_ELEMENT,
   MarkDoneIcon,
-  motionRows,
   NOTE_LINE_LOOK,
   NoteLine,
   PencilIcon,
@@ -483,10 +482,12 @@ function SidebarSection({
         )
       ) : (
         // A folded section's rows are only the open one, so a drop over it lands on top rather than among them.
-        <ul
+        <Stack
+          as={LAYOUT_ELEMENT.UL}
+          gap={GAP.ROW}
           className="sidebar-tasks"
           data-row-drop-rows={folded ? undefined : ""}
-          {...motionRows()}
+          moves
           onPointerDown={drag}
         >
           {shown.map(({ key, value: row }) => (
@@ -494,7 +495,7 @@ function SidebarSection({
               {context.row(row)}
             </RowPlaced>
           ))}
-        </ul>
+        </Stack>
       )}
     </div>
   );

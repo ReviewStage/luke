@@ -251,9 +251,7 @@ test("with Minimize inline comments on, an agent's note stands behind a chip wit
 
 /** Types into the find bar's field as the keyboard does, which React hears as an input. */
 function typeFind(text: string): void {
-  const field = document.querySelector<HTMLInputElement>(
-    '.find-bar input[aria-label="Find"]',
-  );
+  const field = document.querySelector<HTMLInputElement>('.find-bar input[aria-label="Find"]');
   assert.ok(field, "the find bar stands open");
   act(() => {
     Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(field, text);
@@ -263,7 +261,8 @@ function typeFind(text: string): void {
 
 /** What the find bar's tally says. */
 function findTally(): string | null | undefined {
-  return document.querySelector('[role="search"][aria-label="Find"] [aria-live="polite"]')?.textContent;
+  return document.querySelector('[role="search"][aria-label="Find"] [aria-live="polite"]')
+    ?.textContent;
 }
 
 test("⌘F over a File tab counts every match in the file and in its agents' notes, from its text, and steps through them", async () => {
