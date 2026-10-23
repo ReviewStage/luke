@@ -455,21 +455,10 @@
      press its edges and its ring. The metadata steps out of sight under
      them rather than out of the line. */
   .luke-list-row[data-actions="hover"] {
-    --luke-list-row-fill: transparent;
     /* Note that this is a label's fade, as a cut title's is (above). */
     --luke-list-row-fade: 20px; /* off-scale: a label's fade */
 
     position: relative;
-  }
-
-  .luke-list-row[data-actions="hover"]:has(button.luke-list-row-main):hover:not(
-    [data-current="true"]
-  ) {
-    --luke-list-row-fill: var(--luke-color-fill-hover);
-  }
-
-  .luke-list-row[data-actions="hover"][data-current="true"] {
-    --luke-list-row-fill: var(--luke-color-ground);
   }
 
   .luke-list-row[data-actions="hover"] .luke-list-row-main {
@@ -488,24 +477,17 @@
     transition: opacity var(--luke-duration-hover) ease;
   }
 
-  /* The backdrop: opaque where the acts stand, fading in over the words
-     before them, and taking no presses, so the press under its fade is
-     still the row's. Note that it stands a hairline in from the row's
-     edges, where the row's own fill shows alike, so the ring an open menu
-     draws inside the row (above) is never painted over. */
-  .luke-list-row[data-actions="hover"] .luke-list-row-actions::before {
-    content: "";
-    position: absolute;
-    z-index: -1;
-    inset-block: 1px; /* off-scale: the menu ring's hairline */
-    inset-inline: calc(-1 * var(--luke-list-row-fade)) 1px; /* off-scale: the menu ring's hairline */
-    border-start-end-radius: inherit;
-    border-end-end-radius: inherit;
-    background:
-      linear-gradient(var(--luke-list-row-fill), var(--luke-list-row-fill)),
-      var(--luke-list-row-ground, var(--luke-color-ground));
-    mask-image: linear-gradient(to right, transparent, #000 var(--luke-list-row-fade));
-    pointer-events: none;
+  /* The words under the acts fade out beneath them rather than under a
+     painted backdrop, so whatever the row stands on shows through alike:
+     its own fill, the window's ground, or the Mac's frosted sidebar, which
+     no opaque paint could match. `--luke-list-row-acts` is the acts' width,
+     which the row measures (`list-row.tsx`). */
+  .luke-list-row[data-actions="hover"] {
+    --luke-list-row-hide: linear-gradient(
+      to left,
+      transparent var(--luke-list-row-acts, 0px),
+      #000 calc(var(--luke-list-row-acts, 0px) + var(--luke-list-row-fade))
+    );
   }
 
   .luke-list-row[data-actions="hover"][data-meta="title"] .luke-list-row-actions {
@@ -519,10 +501,19 @@
     pointer-events: auto;
   }
 
+  .luke-list-row[data-actions="hover"]:is(:has(:focus-visible), [data-menu-open="true"])
+    .luke-list-row-main {
+    mask-image: var(--luke-list-row-hide);
+  }
+
   @media (hover: hover) {
     .luke-list-row[data-actions="hover"]:hover .luke-list-row-actions {
       opacity: 1;
       pointer-events: auto;
+    }
+
+    .luke-list-row[data-actions="hover"]:hover .luke-list-row-main {
+      mask-image: var(--luke-list-row-hide);
     }
   }
 
@@ -549,6 +540,10 @@
     .luke-list-row[data-actions="hover"][data-current="true"] .luke-list-row-actions {
       opacity: 1;
       pointer-events: auto;
+    }
+
+    .luke-list-row[data-actions="hover"][data-current="true"] .luke-list-row-main {
+      mask-image: var(--luke-list-row-hide);
     }
 
     .luke-list-row[data-actions="hover"][data-current="true"]:has(.luke-list-row-actions)

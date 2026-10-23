@@ -136,8 +136,27 @@
     0 16px 40px -20px var(--luke-color-shadow);
 }
 
+/* Inside the sheet a top row is shorter by the gap above it and the same
+   below its middle, so its middle stays level with the traffic lights and
+   the title bar's buttons, which stand on the window rather than the sheet,
+   instead of a gap below them. Its controls are centred in it rather than
+   padded, so the shorter row still holds them. */
+.desktop-shell:not([data-room="narrow"]) > .desktop-main {
+  --desktop-bar-height: calc(2 * (var(--title-bar-middle) - var(--sheet-gap)) + 1px);
+}
+
+.desktop-shell:not([data-room="narrow"]) > .desktop-main :is(.desktop-toolbar, .side-panel-bar) {
+  padding-block: 0;
+}
+
+/* With the sidebar folded there is no frame beside the sheet to set it off,
+   so it fills the window, which already rounds its corners, rather than
+   standing a gap in from them as a second, nested window would. */
 .desktop-shell[data-sidebar-collapsed="true"]:not([data-room="narrow"]) > .desktop-main {
-  margin-left: var(--sheet-gap);
+  --sheet-gap: 0px;
+  --sheet-radius: 0px;
+
+  box-shadow: none;
 }
 
 /* The side panel's well reaches the sheet's right edge, and its top and

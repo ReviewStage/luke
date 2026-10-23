@@ -580,6 +580,34 @@ test("acts shown only on hover are still met by Tab after their row, and pressed
   expect(heard).toEqual(["end"]);
 });
 
+test("a row whose acts show on hover keeps the reach of its acts in from its end, as they resize", () => {
+  const resized = standInResizeObserver();
+  let actsWidth = 56;
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
+    this: HTMLElement,
+  ) {
+    const left = this.classList.contains("luke-list-row-actions") ? 240 - actsWidth : 0;
+    return DOMRect.fromRect({ x: left, width: 240 - left, height: 32 });
+  });
+  const container = draw(
+    createElement(List, {
+      label: "Tasks",
+      children: createElement(ListRow, {
+        title: "Apply Scandinavian design across app",
+        actionsAt: LIST_ROW_ACTIONS.HOVER,
+        onPress: ignore,
+        actions: createElement(IconButton, { icon: glyph(), label: "Pin" }),
+      }),
+    }),
+  );
+  const row = container.querySelector<HTMLElement>(".luke-list-row") ?? expect.fail("row");
+  act(() => resized());
+  expect(row.style.getPropertyValue("--luke-list-row-acts")).toBe("56px");
+  actsWidth = 88;
+  act(() => resized());
+  expect(row.style.getPropertyValue("--luke-list-row-acts")).toBe("88px");
+});
+
 test("an app hears whether a row's title is cut short, whenever its box resizes", () => {
   const heard: boolean[] = [];
   const resized = standInResizeObserver();

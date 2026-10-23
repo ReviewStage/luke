@@ -271,6 +271,28 @@ export function List({
   );
 }
 
+/**
+ * Keeps a hover row's `--luke-list-row-acts` at how far its acts reach in
+ * from the row's end, which its stylesheet fades the row's words out under,
+ * whenever the acts or the row resize. Note that a host with no observer (a
+ * server render, a test's DOM) lays nothing out, so it sets nothing.
+ */
+function measureActs(acts: HTMLElement): (() => void) | undefined {
+  const row = acts.closest<HTMLElement>(".luke-list-row");
+  if (row === null || typeof ResizeObserver === "undefined") return undefined;
+  const measure = () => {
+    const reach = row.getBoundingClientRect().right - acts.getBoundingClientRect().left;
+    row.style.setProperty("--luke-list-row-acts", `${Math.max(0, reach)}px`);
+  };
+  const resized = new ResizeObserver(measure);
+  resized.observe(acts);
+  resized.observe(row);
+  return () => {
+    resized.disconnect();
+    row.style.removeProperty("--luke-list-row-acts");
+  };
+}
+
 /** One row of a `List`: `title` over `description`, `meta` at its end, `actions` beside it. */
 export function ListRow({
   leading,
@@ -390,6 +412,11 @@ export function ListRow({
     [descriptionMeasured, describedDense],
   );
   const [leadMeasured, leadClipped] = useClipped(lead?.label);
+  const actsMeasured = useCallback(
+    (element: HTMLDivElement | null) =>
+      element === null || actionsAt !== LIST_ROW_ACTIONS.HOVER ? undefined : measureActs(element),
+    [actionsAt],
+  );
   const heading = (
     <span ref={titleMeasured} className="luke-list-row-title" data-overflow={String(titleClipped)}>
       {title}
@@ -481,7 +508,11 @@ export function ListRow({
       ) : (
         <hint.Hint label={hint.label}>{press}</hint.Hint>
       )}
-      {said(actions) ? <div className="luke-list-row-actions">{actions}</div> : null}
+      {said(actions) ? (
+        <div ref={actsMeasured} className="luke-list-row-actions">
+          {actions}
+        </div>
+      ) : null}
     </>
   );
   const { view, item } = swiped;
