@@ -1,4 +1,4 @@
--- backfill: every inbox item from before version 5 is written as a version 5 thread, so no read falls back to the item's own blocks, response, and answer: the agent's message opening its thread carries its blocks as Markdown, its pictures as that message's files by their addresses, and the ask its response stands for, open, answered, or withdrawn as the item stands; a member's message carries the answer to that ask, or the words a nod carried; an open ask is named on the item; and the item's blocks are emptied, since its message carries them. Each message's id is drawn from its item's, so a second run writes nothing twice, and every statement reads only items still before version 5, which the last one moves on.
+-- backfill: every inbox item from before version 5 is written as a version 5 thread, and so is every item the version 4 tool posted after the bump, whose blocks still hold its question and whose thread holds no ask, so no read falls back to the item's own blocks, response, and answer: the agent's message opening its thread carries its blocks as Markdown, its pictures as that message's files by their addresses, and the ask its response stands for, open, answered, or withdrawn as the item stands; a member's message carries the answer to that ask, or the words a nod carried; an open ask is named on the item; and the item's blocks are emptied, since its message carries them. Each message's id is drawn from its item's, so a second run writes nothing twice, and every statement after the first reads only the items it opened a thread for whose blocks still stand, which the last one empties.
 INSERT INTO "inbox_message" ("id", "item_id", "author", "user_id", "text", "ask", "answers", "client_key", "created_at")
 SELECT
 	md5("item"."id"::text || ':ask')::uuid,
@@ -41,7 +41,8 @@ CROSS JOIN LATERAL (
 		END AS "ask",
 		coalesce("item"."answer"->>'reply' <> 'acknowledged', false) AS "taken"
 ) AS "asked"
-WHERE "item"."version" < 5
+WHERE ("item"."version" < 5 OR "item"."blocks" <> '[]'::jsonb)
+	AND NOT EXISTS (SELECT 1 FROM "inbox_message" AS "asking" WHERE "asking"."item_id" = "item"."id" AND "asking"."ask" IS NOT NULL)
 ON CONFLICT DO NOTHING;
 --> statement-breakpoint
 UPDATE "attachment" SET
@@ -57,7 +58,9 @@ UPDATE "attachment" SET
 FROM (
 	SELECT "item"."id" AS "item_id", "block"->>'attachmentId' AS "attachment_id", row_number() OVER (PARTITION BY "item"."id" ORDER BY "at") AS "at"
 	FROM "inbox_item" AS "item", jsonb_array_elements("item"."blocks") WITH ORDINALITY AS "listed"("block", "at")
-	WHERE "item"."version" < 5 AND "block"->>'type' = 'image'
+	WHERE "block"->>'type' = 'image'
+		AND EXISTS (SELECT 1 FROM "inbox_message" AS "opening" WHERE "opening"."id" = md5("item"."id"::text || ':ask')::uuid)
+		AND ("item"."version" < 5 OR "item"."blocks" <> '[]'::jsonb)
 ) AS "pictured"
 WHERE "attachment"."id"::text = "pictured"."attachment_id"
 	AND "attachment"."inbox_item_id" = "pictured"."item_id"
@@ -91,14 +94,18 @@ CROSS JOIN LATERAL (
 		"item"."response"->>'type' IN ('choice', 'approval', 'task', 'form', 'text')
 			AND "item"."answer"->>'reply' <> 'acknowledged' AS "answers"
 ) AS "asked"
-WHERE "item"."version" < 5
+WHERE EXISTS (SELECT 1 FROM "inbox_message" AS "opening" WHERE "opening"."id" = md5("item"."id"::text || ':ask')::uuid)
+	AND ("item"."version" < 5 OR "item"."blocks" <> '[]'::jsonb)
 	AND "item"."answer" IS NOT NULL
 	AND ("asked"."answers" OR coalesce("item"."answer"->>'note', '') <> '')
 ON CONFLICT DO NOTHING;
 --> statement-breakpoint
-UPDATE "inbox_item" SET "open_ask_message_id" = md5("id"::text || ':ask')::uuid
-WHERE "version" < 5
-	AND "status" = 'open'
-	AND "response"->>'type' IN ('choice', 'approval', 'task', 'form', 'text');
+UPDATE "inbox_item" AS "item" SET "open_ask_message_id" = md5("item"."id"::text || ':ask')::uuid
+WHERE EXISTS (SELECT 1 FROM "inbox_message" AS "opening" WHERE "opening"."id" = md5("item"."id"::text || ':ask')::uuid)
+	AND ("item"."version" < 5 OR "item"."blocks" <> '[]'::jsonb)
+	AND "item"."status" = 'open'
+	AND "item"."response"->>'type' IN ('choice', 'approval', 'task', 'form', 'text');
 --> statement-breakpoint
-UPDATE "inbox_item" SET "version" = 5, "blocks" = '[]'::jsonb WHERE "version" < 5;
+UPDATE "inbox_item" AS "item" SET "version" = 5, "blocks" = '[]'::jsonb
+WHERE EXISTS (SELECT 1 FROM "inbox_message" AS "opening" WHERE "opening"."id" = md5("item"."id"::text || ':ask')::uuid)
+	AND ("item"."version" < 5 OR "item"."blocks" <> '[]'::jsonb);

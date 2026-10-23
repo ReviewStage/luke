@@ -27,7 +27,8 @@ import * as SqlClient from "effect/sql/SqlClient";
  * file, and the ask its response stood for, open, answered, or withdrawn as
  * the item stood; an answer reads as the member's message answering that
  * ask, with the note as its words; the open ask is the one the operator's
- * read finds; and a second run writes nothing twice. Synthetic accounts
+ * read finds; an item the version 4 tool posted after the bump is written
+ * the same way; and a second run writes nothing twice. Synthetic accounts
  * throughout.
  */
 
@@ -76,13 +77,17 @@ it.effect(
           status: string,
           blocks: unknown,
           response: unknown,
-          rest: { readonly answer?: unknown; readonly closedReason?: string } = {},
+          rest: {
+            readonly answer?: unknown;
+            readonly closedReason?: string;
+            readonly version?: number;
+          } = {},
         ) =>
           Effect.gen(function* () {
             const id = randomUUID();
             const answer = rest.answer === undefined ? null : JSON.stringify(rest.answer);
             yield* sql`insert into inbox_item (id, user_id, task_id, organization_id, agent_id, key, revision, version, title, blocks, response, needs_reply, status, answer, answer_key, answered_by, closed_reason, posted_at, updated_at)
-              values (${id}, 'dean', ${taskId}, ${workspaceId}, ${agent.id}, ${key}, 1, 4, ${key}, ${JSON.stringify(blocks)}::jsonb, ${JSON.stringify(response)}::jsonb, true, ${status}, ${answer}::jsonb, ${answer === null ? null : randomUUID()}, ${answer === null ? null : "charles"}, ${rest.closedReason ?? null}, '2026-10-17T09:00:00Z', '2026-10-17T10:00:00Z')`;
+              values (${id}, 'dean', ${taskId}, ${workspaceId}, ${agent.id}, ${key}, 1, ${rest.version ?? 4}, ${key}, ${JSON.stringify(blocks)}::jsonb, ${JSON.stringify(response)}::jsonb, true, ${status}, ${answer}::jsonb, ${answer === null ? null : randomUUID()}, ${answer === null ? null : "charles"}, ${rest.closedReason ?? null}, '2026-10-17T09:00:00Z', '2026-10-17T10:00:00Z')`;
             return id;
           });
         const pictureId = randomUUID();
@@ -111,6 +116,14 @@ it.effect(
           [{ type: "markdown", text: "Deploy the preview?" }],
           { type: "approval" },
           { closedReason: "Deployed it myself." },
+        );
+        // The version 4 tool still posted for a while after the bump: version 5, its question in its blocks, its thread asking nothing.
+        const rollback = yield* item(
+          "rollback",
+          "answered",
+          [{ type: "markdown", text: "Roll back the migration?" }],
+          { type: "approval" },
+          { answer: { reply: "approved" }, version: 5 },
         );
 
         yield* runWebMigrations();
@@ -162,6 +175,17 @@ it.effect(
           status: "withdrawn",
           withdrawnReason: "Deployed it myself.",
         });
+
+        const approved = yield* read(rollback);
+        const [posted, approval] = approved.thread ?? [];
+        assert.deepEqual(
+          [posted?.text, posted?.ask?.status, approval?.answers],
+          [
+            "Roll back the migration?",
+            "answered",
+            { ask: posted?.id, reply: "chose", choices: ["Approve"] },
+          ],
+        );
 
         const waiting = yield* memberOpenAsks("dean", workspaceId, 10);
         assert.deepEqual(
