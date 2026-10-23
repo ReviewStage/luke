@@ -90,8 +90,8 @@ const YOUTUBE_HOSTS: readonly string[] = [
   "youtu.be",
 ];
 
-/** A YouTube channel's handle as its address spells it: `@name`. */
-const YOUTUBE_HANDLE = /^@[\w.-]{1,100}$/u;
+/** A YouTube channel's handle, decoded: `@name`, in any script YouTube takes one in. */
+const YOUTUBE_HANDLE = /^@[\p{L}\p{M}\p{N}_.\-·]{1,100}$/u;
 
 /** X's hosts, under its old name too. */
 const X_HOSTS: readonly string[] = [
@@ -111,15 +111,19 @@ const X_POST_STEP = "status";
 
 /** X's own pages, whose first step is spelled as an account's could be but names none. */
 const X_PAGES: ReadonlySet<string> = new Set([
+  "communities",
   "compose",
   "explore",
+  "grok",
   "hashtag",
   "home",
   "i",
   "intent",
+  "jobs",
   "login",
   "messages",
   "notifications",
+  "premium",
   "privacy",
   "search",
   "settings",
@@ -146,14 +150,18 @@ function named(words: string): string | undefined {
   return name.length <= MAX_NAME_CHARS ? name : `${name.slice(0, MAX_NAME_CHARS - 1)}${FOLD}`;
 }
 
-/** A Maps path step as words: its `+` a space, as Maps spells one, then decoded where it decodes. */
-function stepWords(step: string): string {
-  const spaced = step.replaceAll("+", " ");
+/** A path step decoded where it decodes, as it is where it does not. */
+function decodedStep(step: string): string {
   try {
-    return decodeURIComponent(spaced);
+    return decodeURIComponent(step);
   } catch {
-    return spaced;
+    return step;
   }
+}
+
+/** A Maps path step as words: its `+` a space, as Maps spells one, then decoded. */
+function stepWords(step: string): string {
+  return decodedStep(step.replaceAll("+", " "));
 }
 
 /** A route's stops as its name: each stop that says something, joined. */
@@ -235,7 +243,9 @@ function googleMeetName(url: URL): string | undefined {
 /** A YouTube channel called by its handle; any other page of YouTube's spells nothing of itself. */
 function youtubeName(url: URL): string | undefined {
   const [first, ...rest] = pathSteps(url);
-  return first !== undefined && rest.length <= 1 && YOUTUBE_HANDLE.test(first) ? first : undefined;
+  if (first === undefined || rest.length > 1) return undefined;
+  const handle = decodedStep(first);
+  return YOUTUBE_HANDLE.test(handle) ? named(handle) : undefined;
 }
 
 /** An X account called by its handle, and one of its posts as its author's; X's own pages spell no one. */

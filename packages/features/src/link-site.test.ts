@@ -146,6 +146,8 @@ test("a YouTube page, on its own host or a short link, is YouTube's, a channel c
   assert.equal(named("https://www.youtube.com/@acme"), "@acme");
   assert.equal(named("https://www.youtube.com/@acme/videos"), "@acme");
   assert.equal(named("https://www.youtube.com/watch?v=dQw4w9WgXcQ"), "YouTube");
+  assert.equal(named("https://www.youtube.com/@日本語チャンネル"), "@日本語チャンネル");
+  assert.equal(named("https://www.youtube.com/@%E0%A4"), "YouTube");
 });
 
 test("an X page, under its old name too, is X's, an account called by its handle and a post by its author", () => {
@@ -164,4 +166,7 @@ test("an X page, under its old name too, is X's, an account called by its handle
   assert.equal(named("https://x.com/home"), "X");
   assert.equal(named("https://x.com/search?q=luke"), "X");
   assert.equal(named("https://x.com/i/spaces/1AbC"), "X");
+  for (const page of ["premium", "jobs", "communities", "grok"]) {
+    assert.equal(named(`https://x.com/${page}`), "X", page);
+  }
 });
