@@ -32,7 +32,7 @@ export interface MarkdownSpan {
 export const MARKDOWN_MARK = {
   INSERTED: "inserted",
   DELETED: "deleted",
-  /** Words a comment thread is anchored to (`planning/plan-comments.tsx`). */
+  /** Words a comment thread is anchored to (`tasks/plan-comments.tsx`). */
   COMMENT: "comment",
 } as const;
 

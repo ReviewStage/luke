@@ -188,17 +188,17 @@ function workspaceAnswer({ words }: CodingAgentWorkspaceListParams): readonly Co
   );
 }
 
-/** The workspace's members, as its Members list reads them: the reader, and a teammate. */
+/** The workspace's members, as its Members list reads them: a teammate, then the reader. */
 const READER_ID = "u_reader";
 const DANA_ID = "u_dana";
 const MEMBERS: readonly WorkspaceMember[] = [
+  { userId: DANA_ID, name: "Dana Reyes", email: "dana@example.com", role: WORKSPACE_ROLE.ADMIN },
   {
     userId: READER_ID,
     name: "Charles Pan",
     email: "charles@example.com",
     role: WORKSPACE_ROLE.OWNER,
   },
-  { userId: DANA_ID, name: "Dana Reyes", email: "dana@example.com", role: WORKSPACE_ROLE.ADMIN },
 ];
 
 /** Every act the panel told the main process, in order. */
@@ -1570,7 +1570,7 @@ function peopleListed(container: HTMLElement): [string, string, string | null][]
   );
 }
 
-test("an @ among the workspace's members offers its people, the reader as You, each wearing their mark, and a kind of their own narrowed to by @people:", async () => {
+test("an @ among the workspace's members offers its people, the reader first as You and the rest by name with their email, each wearing their mark, and a kind of their own narrowed to by @people:", async () => {
   const { container } = await memberBox();
 
   typeInComposer(container, "See @");

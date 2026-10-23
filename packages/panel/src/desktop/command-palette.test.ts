@@ -1255,6 +1255,41 @@ test("Search lists the listed workspace's plans first, then every other workspac
   );
 });
 
+test("a task's key typed whole in any case lists its task first, ahead of a longer key it begins, and choosing it opens the task", () => {
+  const stage = { id: "workspace-stage", name: "Stage", role: WORKSPACE_ROLE.OWNER, github: null };
+  const task = (number: number, name: string) => ({
+    id: `task-${number}`,
+    workspaceId: stage.id,
+    number,
+    name,
+    createdAt: 1,
+    updatedAt: 1,
+    repository: "stage/luke",
+  });
+  const sent: string[] = [];
+  openPalette(
+    tasksControl({
+      workspaces: [stage],
+      workspace: stage,
+      tasks: [task(421, "Cut the release"), task(42, "Billing usage alerts from the meter")],
+      onSelect: (taskId) => {
+        sent.push(taskId);
+      },
+    }),
+  );
+  chooseFilter("Tasks");
+  type("stag-42");
+
+  assert.deepEqual(rows(), [
+    "Billing usage alerts from the meter · stage/luke",
+    "Cut the release · stage/luke",
+  ]);
+  type("STAG-421");
+  assert.deepEqual(rows()[0], "Cut the release · stage/luke");
+  press("Cut the release · stage/luke");
+  assert.deepEqual(sent, ["task-421"]);
+});
+
 test("a task wears who is on it at its row's end, a teammate by face, no one on the dashed mark, the reader nothing, and is found by its assignee's name or its creator's, which the row then says", () => {
   const charles = { userId: "user-charles", name: "Charles Pan" };
   const dean = { userId: "user-dean", name: "Dean Stratakos" };
@@ -1673,8 +1708,14 @@ test("on an agent's page in another workspace than the one listed, ⌥⌘C names
   assert.deepEqual(copied, [`https://tryluke.dev/beta/agent/${LINKED_AGENT}`]);
 });
 
-test("People lists the listed workspace's members by name and role, the reader as You, found by email too, and a choice opens their page", async () => {
+test("People lists the listed workspace's members as every people menu does, the reader first as You and the rest by name with their email, found by email too, each hanging their card, and a choice opens their page", async () => {
   const members = [
+    {
+      userId: "user-maya",
+      name: "Maya Chen",
+      email: "maya@example.com",
+      role: WORKSPACE_ROLE.ADMIN,
+    },
     {
       userId: "user-dean",
       name: "Dean Stratakos",
@@ -1703,10 +1744,19 @@ test("People lists the listed workspace's members by name and role, the reader a
   });
   chooseFilter("People");
 
-  assert.deepEqual(rows(), ["Dean Stratakos · You · Owner", "Charles Pan · Member"]);
+  assert.deepEqual(rows(), [
+    "Dean Stratakos · You",
+    "Charles Pan · charles@example.com",
+    "Maya Chen · maya@example.com",
+  ]);
   type("charles@");
-  assert.deepEqual(rows(), ["Charles Pan · Member"]);
-  act(() => document.querySelector<HTMLElement>('[role="option"]')?.click());
+  assert.deepEqual(rows(), ["Charles Pan · charles@example.com"]);
+  const row = document.querySelector<HTMLElement>('[role="option"]');
+  assert.ok(row, "Charles is listed");
+  restOn(row);
+  const card = document.querySelector('.luke-tooltip-card [data-actor-card="person"]');
+  assert.equal(card?.querySelector(".luke-hover-card-name")?.textContent, "Charles Pan");
+  act(() => row.click());
   assert.deepEqual(opened, ["user-charles"]);
   assert.deepEqual(sent.tabs, []);
 });
@@ -1819,7 +1869,7 @@ test("People says the members are being read until they answer, and a refused re
   assert.equal(emptyLine(), "Reading the workspace's members…");
   await act(async () => answers.shift()?.resolve([member]));
   await settle();
-  assert.deepEqual(rows(), ["Charles Pan · Member"]);
+  assert.deepEqual(rows(), ["Charles Pan · charles@example.com"]);
 });
 
 test("Tasks says the account's tasks are being read before the list first answers", () => {

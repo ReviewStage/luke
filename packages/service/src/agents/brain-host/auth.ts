@@ -95,7 +95,7 @@ function requestAttributes(headers: Headers): SessionAuthContext["attributes"] {
  * The account behind a request's bearer, as eve's own promise-shaped `AuthFn`
  * takes it. The resolution itself is an effect (`hostedUserId`), so what
  * crosses into eve is one run of it at eve's own edge rather than a
- * promise-shaped door beside the effect in `server/hosted/`.
+ * promise-shaped door beside the effect in this package.
  */
 export type BearerAccount = (request: Request) => Promise<string | undefined>;
 

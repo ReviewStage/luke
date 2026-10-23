@@ -16,6 +16,7 @@
  */
 
 import { createHash, createPublicKey, randomBytes, randomUUID, verify } from "node:crypto";
+import { CHATGPT_SIGN_IN } from "@luke/credentials";
 import {
   isRecord,
   isWireNumber,
@@ -24,25 +25,6 @@ import {
   valueFromJsonText,
   type WireRecord,
 } from "@luke/wire";
-
-/** OpenAI's endpoints and the fixed values of the open-source flow. */
-export const SIGN_IN = {
-  DISCOVERY_URL: "https://auth.openai.com/.well-known/openid-configuration",
-  ISSUER: "https://auth.openai.com",
-  RESOURCE: "https://api.openai.com/v1",
-  REGISTRATION_CLIENT_ID: "dynamic_agent_client",
-  AGENT_NAME_HINT: "Luke",
-  CALLBACK_PATH: "/auth/callback",
-  USAGE_SCOPE: "chatgpt.tokens.use.direct",
-  SCOPES: [
-    "openid",
-    "profile",
-    "email",
-    "offline_access",
-    "resource.invoke",
-    "chatgpt.tokens.use.direct",
-  ],
-} as const;
 
 /** Why a step of the sign-in refused to go on. */
 export const SIGN_IN_REFUSAL = {
@@ -166,7 +148,7 @@ export function createExtAgentHostId(): string {
 
 /** The exact callback URI for a loopback port; only the port may vary between attempts. */
 function loopbackRedirectUri(port: number): string {
-  return `http://127.0.0.1:${port}${SIGN_IN.CALLBACK_PATH}`;
+  return `http://127.0.0.1:${port}${CHATGPT_SIGN_IN.CALLBACK_PATH}`;
 }
 
 /** A fresh attempt: random state, nonce and verifier, bound to one callback URI and one host. */
@@ -188,7 +170,7 @@ export function readDiscovery(document: UnparsedWireValue): Endpoints {
   const token = field("token_endpoint");
   const jwks = field("jwks_uri");
   if (
-    issuer !== SIGN_IN.ISSUER ||
+    issuer !== CHATGPT_SIGN_IN.ISSUER ||
     authorize === undefined ||
     token === undefined ||
     jwks === undefined
@@ -203,7 +185,7 @@ export function readDiscovery(document: UnparsedWireValue): Endpoints {
 
 /** OpenAI's endpoints, read from its discovery document. */
 export async function discoverEndpoints(fetcher: Fetch): Promise<Endpoints> {
-  const response = await fetcher(SIGN_IN.DISCOVERY_URL, {
+  const response = await fetcher(CHATGPT_SIGN_IN.DISCOVERY_URL, {
     headers: { accept: "application/json" },
   });
   return readDiscovery(valueFromJsonText(await response.text()));
@@ -212,13 +194,13 @@ export async function discoverEndpoints(fetcher: Fetch): Promise<Endpoints> {
 /** The URL the system browser opens for a first registration, every value URL-encoded. */
 export function authorizeUrl(endpoints: Endpoints, pending: PendingAuthorization): string {
   const query = new URLSearchParams({
-    client_id: SIGN_IN.REGISTRATION_CLIENT_ID,
-    agent_name_hint: SIGN_IN.AGENT_NAME_HINT,
+    client_id: CHATGPT_SIGN_IN.REGISTRATION_CLIENT_ID,
+    agent_name_hint: CHATGPT_SIGN_IN.AGENT_NAME_HINT,
     ext_agent_host_id: pending.extAgentHostId,
     response_type: "code",
     redirect_uri: pending.redirectUri,
-    scope: SIGN_IN.SCOPES.join(" "),
-    resource: SIGN_IN.RESOURCE,
+    scope: CHATGPT_SIGN_IN.SCOPES.join(" "),
+    resource: CHATGPT_SIGN_IN.RESOURCE,
     state: pending.state,
     nonce: pending.nonce,
     code_challenge_method: "S256",
@@ -256,7 +238,7 @@ export function readCallback(
   if (
     issuedClientId === null ||
     issuedClientId.length === 0 ||
-    issuedClientId === SIGN_IN.REGISTRATION_CLIENT_ID
+    issuedClientId === CHATGPT_SIGN_IN.REGISTRATION_CLIENT_ID
   ) {
     throw new SignInRefused(
       SIGN_IN_REFUSAL.NO_ISSUED_CLIENT,
@@ -277,7 +259,7 @@ function codeExchangeBody(
     code: grant.code,
     code_verifier: pending.codeVerifier,
     redirect_uri: pending.redirectUri,
-    resource: SIGN_IN.RESOURCE,
+    resource: CHATGPT_SIGN_IN.RESOURCE,
   });
 }
 
@@ -287,7 +269,7 @@ function refreshBody(credentials: ChatGptCredentials): URLSearchParams {
     grant_type: "refresh_token",
     client_id: credentials.issuedClientId,
     refresh_token: credentials.tokens.refreshToken,
-    resource: SIGN_IN.RESOURCE,
+    resource: CHATGPT_SIGN_IN.RESOURCE,
   });
 }
 
@@ -309,10 +291,10 @@ export function readTokenResponse(body: UnparsedWireValue, previousIdToken?: str
     );
   }
   const scopes = (requiredString(body, "scope") ?? "").split(" ").filter((one) => one.length > 0);
-  if (!scopes.includes(SIGN_IN.USAGE_SCOPE)) {
+  if (!scopes.includes(CHATGPT_SIGN_IN.USAGE_SCOPE)) {
     throw new SignInRefused(
       SIGN_IN_REFUSAL.USAGE_NOT_GRANTED,
-      `the grant lacks ${SIGN_IN.USAGE_SCOPE}, so ChatGPT plan usage is not enabled`,
+      `the grant lacks ${CHATGPT_SIGN_IN.USAGE_SCOPE}, so ChatGPT plan usage is not enabled`,
     );
   }
   return {
@@ -402,7 +384,7 @@ export function verifyIdToken(input: {
   const audience = payload.aud;
   const audiences = Array.isArray(audience) ? audience : [audience];
   const failed = [
-    payload.iss === SIGN_IN.ISSUER ? null : "issuer",
+    payload.iss === CHATGPT_SIGN_IN.ISSUER ? null : "issuer",
     audiences.includes(input.issuedClientId) ? null : "audience",
     payload.nonce === input.nonce ? null : "nonce",
     isWireNumber(payload.exp) && payload.exp > input.nowSeconds ? null : "expiry",

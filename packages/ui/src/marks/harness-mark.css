@@ -1,0 +1,10 @@
+/* harness-mark.css -- a harness's mark keeps its box in a row however tight the row is.
+
+   The mark has no size of its own: the row, tab, or chip it leads sizes its
+   glyph cell (`harness-mark.tsx`). */
+
+@layer components {
+  .luke-harness-mark {
+    flex: none;
+  }
+}

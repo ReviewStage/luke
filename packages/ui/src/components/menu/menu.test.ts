@@ -6,6 +6,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, expect, test, vi } from "vitest";
 import { Tooltip } from "../tooltip/hint.js";
 import {
+  MENU_DETAIL,
   MENU_ITEM_MARK,
   Menu,
   type MenuEntry,
@@ -260,6 +261,38 @@ test("a label and a detail the menu cuts short fade out at their end rather than
   ).toEqual([
     ["fade", "true"],
     ["fade", "true"],
+  ]);
+});
+
+test("a detail placed beside its label stands on the label's line, the item a row's height, and is heard after the label as one under it is", () => {
+  standInResizeObserver();
+  mount(
+    createElement(Harness, {
+      groups: [
+        [
+          { label: "Ada Lovelace", detail: "ada@example.com", onSelect: () => undefined },
+          {
+            label: "Grace Hopper",
+            detail: "grace@example.com",
+            detailPlace: MENU_DETAIL.BESIDE,
+            onSelect: () => undefined,
+          },
+        ],
+      ],
+    }),
+  );
+  press(button("More"));
+  const items = [...(openMenu()?.querySelectorAll('[role="menuitem"]') ?? [])];
+
+  expect(
+    items.map((item) => [
+      item.getAttribute("aria-label"),
+      item.getAttribute("data-detail"),
+      item.querySelector(".luke-menu-item-copy")?.getAttribute("data-place") ?? null,
+    ]),
+  ).toEqual([
+    ["Ada Lovelace, ada@example.com", "true", null],
+    ["Grace Hopper, grace@example.com", null, "beside"],
   ]);
 });
 

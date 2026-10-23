@@ -85,13 +85,16 @@ beforeAll(async () => {
   await import("posthog-js/dist/lazy-recorder");
   posthog = (await import("posthog-js")).default;
   posthog.on("eventCaptured", (event: CaptureResult) => captured.push(event));
-  const { startSiteAnalytics, identifySiteVisitor } = await import("../src/analytics");
+  const { startSiteAnalytics, completeSiteSignIn } = await import("../src/analytics");
   startSiteAnalytics();
-  identifySiteVisitor("user-1");
   // The recorder holds its first batch until someone interacts with the page.
-  await vi.waitFor(() => assert.ok(captured.some((event) => event.event === "$identify")));
+  await vi.waitFor(() => assert.ok(captured.some((event) => event.event === "$pageview")));
   document.querySelector("h1")?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
   await vi.advanceTimersByTimeAsync(RECORDING_FLUSH_MS);
+  // Note that the sign-in comes last, because completing one shuts the client down.
+  await completeSiteSignIn(
+    Promise.resolve({ session: { id: "session-1" }, user: { id: "user-1" } }),
+  );
 });
 
 afterAll(() => {

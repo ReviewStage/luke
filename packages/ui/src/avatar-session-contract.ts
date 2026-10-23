@@ -6,7 +6,7 @@
  * on, so it ships as a bundle of its own (`avatar-session.js`, built from
  * `apps/desktop/src/renderer/avatar-session/index.ts`) that the panel
  * loads the first time an avatar is shown
- * (`apps/desktop/src/renderer/bundle-loader.ts`), as the whiteboard and a plan's
+ * (`packages/panel/src/bundle-loader.ts`), as the whiteboard and a plan's
  * editor are. That bundle's entry exports one module, `avatarSession`, and
  * this file is the whole of what the two share. Nothing here imports a
  * value, so the renderer carries none of the SDK, and the bundle carries

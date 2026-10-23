@@ -21,10 +21,11 @@ import { UserIcon } from "../../face/glyphs.js";
  * faces overlap draws it so the face beneath never shows through.
  *
  * Nobody, where a place says who is on something and no one is, stands as
- * a small figure in a dashed outline of the same box (`UnassignedAvatar`),
- * as Linear draws a task with no assignee, so the row reads level with its
- * neighbours, never passes for anyone's face, and the figure tells it from
- * a status's ring beside it.
+ * an empty seat in a dashed outline of the same box (`UnassignedAvatar`),
+ * as Linear draws a task with no assignee: a solid head and shoulders cut
+ * off by the ring, so the row reads level with its neighbours, never passes
+ * for anyone's face, and the figure, solid rather than traced so it holds at
+ * a row's smallest size, tells it from the backlog's dashed status ring.
  */
 
 /** How large the disc is drawn: a mark at a row's time, in a line of words, at a control's glyph size, in a facepile, a list row's, the account's, a card head's, a page's head, a detail page's masthead, or a portrait beside a biography. */
@@ -180,7 +181,7 @@ export function Avatar(props: AvatarProps): React.JSX.Element {
   return <AvatarDisc key={props.src ?? ""} {...props} />;
 }
 
-/** No one, a small figure in a dashed outline of the disc's box at `size`, named Unassigned to a reader unless the words already stand beside it. */
+/** No one, an empty seat in a dashed outline of the disc's box at `size`, named Unassigned to a reader unless the words already stand beside it. */
 export function UnassignedAvatar({
   size = AVATAR_SIZE.ROW,
   decorative = false,
@@ -196,12 +197,14 @@ export function UnassignedAvatar({
       data-unassigned="true"
       {...(decorative ? { "aria-hidden": true } : { role: "img", "aria-label": UNASSIGNED_WORDS })}
     >
-      <svg className="luke-avatar-unassigned" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-        <circle cx="8" cy="8" r="7.25" pathLength="40" />
+      <svg className="luke-avatar-unassigned" viewBox="0 0 16 16" aria-hidden="true">
+        <circle className="luke-avatar-unassigned-ring" cx="8" cy="8" r="7.3" pathLength="40" />
+        {/* The shoulders are the arc of a circle beneath, closed by the bottom of the seat's own 5.4 circle inside the ring, where the two cross. */}
+        <g className="luke-avatar-unassigned-seat">
+          <circle cx="8" cy="6.6" r="2.1" />
+          <path d="M4.158 11.795A5.2 5.2 0 0 1 11.842 11.795A5.4 5.4 0 0 1 4.158 11.795Z" />
+        </g>
       </svg>
-      <span className="luke-avatar-glyph">
-        <UserIcon />
-      </span>
     </span>
   );
 }

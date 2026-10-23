@@ -7,8 +7,7 @@
  * `TestContext` callback.
  *
  * A test written on `it.effect` reaches for `TestClock` directly for its
- * clock (see `../effect/timers.test.ts` for the pattern) rather than a fake
- * clock of its own, and settles a wait through the predicate it is actually
+ * clock rather than a fake clock of its own, and settles a wait through the predicate it is actually
  * waiting on rather than a fixed microtask drain.
  */
 

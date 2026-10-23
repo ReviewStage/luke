@@ -54,6 +54,7 @@ import { imageFiles } from "../feedback-images.js";
 import { GRANT_OUTCOME, useIntegrationGrant } from "../integration-grant.js";
 import { useIntegrationStatuses } from "../integration-statuses.js";
 import { COMPOSER_INPUT, type ComposerEditorHandle } from "../plan-editor/contract.js";
+import { useFileDrop } from "../use-file-drop.js";
 import { AgentContextRing } from "./agent-context.js";
 import { contextHint } from "./agent-context-model.js";
 import { AgentModelChip } from "./agent-model-chip.js";
@@ -179,11 +180,8 @@ import { DICTATION_PHASE } from "./use-dictation.js";
  * New task's composer is this same box over a start rather than a message
  * (`new-task-composer.tsx`): its owner names what the box asks for and
  * calls its round button (`wording`), lays its issue over the words
- * (`above`), stands its repository and Issue chips after the "+" (`tools`)
- * and its File for later just before Start (`beforeSend`), told whether the
- * card is too narrow for its words, so on a phone it draws its mark alone,
- * holds Start while
- * it cannot start (`sendable`), hears the keys the field leaves (`onKey`),
+ * (`above`), stands its repository and Issue chips after the "+" (`tools`),
+ * holds Start while it cannot start (`sendable`), hears the keys the field leaves (`onKey`),
  * says what Escape does (`onLeave`), hands its workspace's mentions and
  * the chosen repository's skills to its `@` and `/` lists, and offers no MCP servers'
  * switches, so the box draws no servers' button.
@@ -217,7 +215,7 @@ const BUTTON = {
 /**
  * The card widths below which a press draws its mark alone: the branch's
  * chip first, then the owner's presses that carry words (New task's Plan
- * toggle and File for later, at the step the ⋯ stands), then the model
+ * toggle, at the step the ⋯ stands), then the model
  * chip. Note that they are steps of the same order as the stylesheet's
  * `composer` queries (tasks.css's, and New task's in desktop.css, at 400
  * and 240), because the room each leaves is counted on the steps before it.
@@ -242,11 +240,6 @@ type OverflowPress = (typeof OVERFLOW_PRESS)[keyof typeof OVERFLOW_PRESS];
 interface OverflowOffer {
   press: OverflowPress;
   action: MenuAction;
-}
-
-/** Whether a drag carries files, which is all the card takes from one. */
-function carriesFiles(event: React.DragEvent): boolean {
-  return event.dataTransfer.types.includes("Files");
 }
 
 /** The presses standing on the foot that the stylesheet hid for want of room. */
@@ -447,7 +440,7 @@ export function AgentComposer({
   tools?: ReactNode;
   /** What stands first among the foot's right-hand presses, before the model chip, handed whether the card is too narrow for their words. */
   actions?: ((narrow: boolean) => ReactNode) | undefined;
-  /** What stands just before the round button, handed whether the card is too narrow for its words, as `actions` is: New task's File for later. */
+  /** What stands just before the round button, handed whether the card is too narrow for its words, as `actions` is. */
   beforeSend?: ((narrow: boolean) => ReactNode) | undefined;
   /** What stands beside Dictate: an agent's Call, or on a call its controls, where the platform takes calls (`agent-call.tsx`). */
   call?: ReactNode;
@@ -476,7 +469,6 @@ export function AgentComposer({
   const [contextOpen, setContextOpen] = useState(false);
   const [stopping, setStopping] = useState(false);
   const [refusal, setRefusal] = useState<string | undefined>(undefined);
-  const [dropping, setDropping] = useState(false);
   // How many hand-offs are still being read, during which Send waits, so no
   // message goes without a file the developer already handed the box.
   const [reading, setReading] = useState(0);
@@ -489,6 +481,7 @@ export function AgentComposer({
   const stoppable = status === CODING_AGENT_STATUS.RUNNING;
   const closed = composer.closed !== undefined;
   const held = composer.sending || closed;
+  const fileDrop = useFileDrop((files) => attach(Array.from(files)), { over: !held });
   const empty = !sendsEmpty && !hasWordsOrFiles(composer.draft.trim(), composer.attachments);
   const showsStop = empty && stoppable && !composer.sending;
   const bundle = useAtomValue(useSideBundles().planEditor);
@@ -708,25 +701,10 @@ export function AgentComposer({
       ref={card}
       data-status={status}
       data-closed={closed ? "" : undefined}
-      onDragOver={(event) => {
-        if (!carriesFiles(event) || held) return;
-        event.preventDefault();
-        setDropping(true);
-      }}
-      onDragLeave={(event) => {
-        // A drag moving onto one of the card's own children has not left it.
-        const into = event.relatedTarget;
-        if (!(into instanceof Node && event.currentTarget.contains(into))) setDropping(false);
-      }}
-      onDrop={(event) => {
-        if (!carriesFiles(event)) return;
-        event.preventDefault();
-        setDropping(false);
-        attach(Array.from(event.dataTransfer.files));
-      }}
+      {...fileDrop.target}
     >
       <PromptInput
-        dropping={dropping}
+        dropping={fileDrop.dropping}
         onSubmit={() => {
           setRefusal(undefined);
           refocus.current = card.current?.contains(document.activeElement) === true;

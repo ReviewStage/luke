@@ -33,7 +33,6 @@ import {
 import {
   type KeyRing,
   openGitHubToken,
-  parseKeyRing,
   sealGitHubToken,
 } from "@luke/database/models/provider-key-seal";
 import {
@@ -43,17 +42,11 @@ import {
   type GitHubTokenRejection,
   type GitHubTokenSummary,
 } from "@luke/features/github-token-wire";
-import { middlewareGen } from "@orpc/experimental-effect";
 import { DateTime, Duration, Effect, Option, Redacted, Result, Schema } from "effect";
 import { HttpClient } from "effect/http";
-import { HostedEnvironment } from "../environment.js";
-import {
-  HOSTED_REFUSAL,
-  hostedStoreOrUnavailable,
-  type UserIdResolver,
-} from "../http/http-effect.js";
+import { hostedStoreOrUnavailable, type UserIdResolver } from "../http/http-effect.js";
 import { makeRateBrake } from "../http/rate-brake.js";
-import { accountMiddleware, type HostedContext, hosted } from "../orpc/base.js";
+import { accountMiddleware, hosted, keyRingMiddleware } from "../orpc/base.js";
 import { githubRead } from "./github-app.js";
 
 const SAVE_BRAKE = {
@@ -175,21 +168,6 @@ const checkGitHubToken = /* @__PURE__ */ Effect.fnUntraced(function* (
     githubLogin: user.value.login,
     expiresAt: expiryOf(headers[GITHUB_TOKEN_HEADER.EXPIRATION]),
   });
-});
-
-/** The deployment's ring, handed on as the procedure's, or the request refused as unavailable where it holds none it can parse. */
-const keyRingMiddleware = middlewareGen<HostedContext, { readonly ring: KeyRing }>(function* ({
-  next,
-}) {
-  const configured = (yield* HostedEnvironment).providerKeyEncryptionKeys;
-  if (configured === undefined) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
-  const ring = parseKeyRing(configured);
-  if (Result.isFailure(ring)) {
-    // The fault names the shape that is wrong and never a value.
-    yield* Effect.logError(`The provider key encryption keys cannot be read: ${ring.failure}`);
-    return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
-  }
-  return yield* next({ context: { ring: ring.success } });
 });
 
 /** The token as the member is shown it, answered unreadable where the ring cannot open it. */

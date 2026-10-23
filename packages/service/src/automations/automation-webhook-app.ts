@@ -3,7 +3,7 @@ import type { DatabaseServices } from "@luke/database/core/query";
 import { readWebhookAutomation, recordAutomationRun } from "@luke/database/models/automation-store";
 import { wireUuidSchema } from "@luke/features";
 import { AUTOMATION_FIRING, AUTOMATION_WEBHOOK } from "@luke/features/automation-wire";
-import { unparsedWire } from "@luke/wire";
+import { HTTP_METHOD, unparsedWire } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import { DateTime, Effect, Layer, Option, Result } from "effect";
 import { HttpRouter, HttpServerRequest, type HttpServerResponse } from "effect/http";
@@ -41,8 +41,6 @@ import { ANY_METHOD, type WebRoutes } from "../route.js";
 
 /** The path a caller posts to; the rewrite moves the address's id into the `id` query. */
 const PATH = "/api/automations/webhook";
-
-const HTTP_METHOD = { POST: "POST" } as const;
 
 const QUERY = { ID: "id" } as const;
 

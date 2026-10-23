@@ -42,15 +42,15 @@ Every token is a `--luke-*` custom property under `src/tokens/`.
   | Role | Desktop | Web | Web, compact |
   | --- | ---: | ---: | ---: |
   | `--luke-control-height` | 30px | 44px | 32px |
-  | `--luke-control-radius` | 8px | 8px | 8px |
+  | `--luke-control-radius` | 10px | 10px | 10px |
   | `--luke-control-icon` | 15px | 16px | 16px |
   | `--luke-type-body-*` (size / leading) | 13 / 20 | 16 / 24 | 14 / 20 |
   | `--luke-type-label-*` | 13 / 18 | 14 / 20 | 13 / 18 |
   | `--luke-type-caption-*` | 12 / 16 | 12 / 16 | 12 / 16 |
   | `--luke-type-section-*` | 13 / 18 | 16 / 24 | 16 / 24 |
   | `--luke-type-dialog-*` | 15 / 20 | 20 / 28 | 20 / 28 |
-  | `--luke-type-title-*` | 22 / 30 | 28 / 36 | 22 / 30 |
-  | `--luke-page-inset` | 40px (24px under 480px of content) | 24px | 24px |
+  | `--luke-type-title-*` | 26 / 34 | 28 / 36 | 22 / 30 |
+  | `--luke-page-inset` | 48px (24px under 480px of content) | 24px | 24px |
   | `--luke-control-gap`, `--luke-icon-gap` | 8px | 8px | 8px |
   | `--luke-field-gap`, `--luke-section-gap` | 16px | 16px | 16px |
   | `--luke-menu-row-height` | 32px | 44px | 32px |
@@ -86,7 +86,14 @@ Every token is a `--luke-*` custom property under `src/tokens/`.
   its motions `face/face-motion.css`, which `@luke/brand`'s
   `generate-brand-assets.mjs` writes; an app sets only the face's size where
   it lays one out. A component reads
-  only `--luke-*` custom properties.
+  only `--luke-*` custom properties, directly or through the Tailwind theme.
+- **Tailwind theme** (`tailwind/theme.css`, `tailwind/sources.css`):
+  shadcn/ui's utility vocabulary (`bg-primary`, `text-muted-foreground`,
+  `border-border`, `bg-switch-on`, …), each name an alias of a `--luke-*`
+  role. An app's Tailwind entry imports both after Tailwind's own theme and
+  utilities, as the desktop's `tailwind.css`, the web's `app.css`, and the
+  catalog's `catalog.css` do, so the utilities `@luke/ui`'s components spell
+  are compiled.
 - **Placement hooks**: the few properties an app may set on a component's
   container, each the one way a measurement of the app's reaches inside.
   `--luke-combobox-list-max` caps a `ComboboxList`'s height (280px where
@@ -96,6 +103,15 @@ Every token is a `--luke-*` custom property under `src/tokens/`.
   unset), and a component's own glyph slot sets it for the glyph an app
   hands it, a tab's or a tab card's, so a container whose glyphs stand
   larger or smaller, a review card's face, says so once.
+
+## Built on shadcn/ui
+
+`@luke/ui`'s controls are moving onto shadcn/ui over Base UI, one component
+at a time, each behind the props it already has, so no call site changes
+as it moves. A vendored shadcn component lives in `src/shadcn/`, generated
+by the shadcn CLI (style `base-nova`, base `base`) and drawn in the Tailwind
+theme above; the `@luke/ui` component an app imports wraps it. Moved so far:
+`Switch`.
 
 ## Using a component
 

@@ -95,7 +95,8 @@ import { BROWSER_TAKEOVER_HOLD_MS } from "../agents/agent-browser-tabs-procedure
 import { controlsAgent } from "../agents/agent-reach.js";
 import { BROWSER_UNREACHABLE, type BrowserUnreachable } from "../agents/browser/agent-browser.js";
 import { CODER } from "../agents/coder-host/bounds.js";
-import { EXCESS_KEYS, type UnparsedWireValue, unparsedWire } from "../core.js";
+import { EXCESS_KEYS, type UnparsedWireValue } from "../core.js";
+import { jsonOf } from "../http/http-effect.js";
 import type { RelaySocket } from "../terminal/relay.js";
 import { BROWSER_LIVE_BOUNDS } from "./bounds.js";
 
@@ -225,12 +226,6 @@ const readHistory = read(
   }),
 );
 const readClientMessage = readEither(browserLiveClientMessageSchema);
-
-/** A text frame's JSON, or nothing a reader takes where it is none. */
-function jsonOf(text: string): UnparsedWireValue {
-  const parsed = Result.try(() => JSON.parse(text));
-  return unparsedWire(Result.isSuccess(parsed) ? parsed.success : undefined);
-}
 
 /** The instant the lease reaches to from a write at the instant given: the idle bound, and the minute until the next write. */
 function heldFrom(instant: Date): Date {

@@ -13,11 +13,11 @@ import {
   landingWords,
 } from "@luke/features/landing-outcome";
 import { AuthMark, AuthPage } from "@luke/ui";
-import { StrictMode, useState } from "react";
-import { createRoot } from "react-dom/client";
+import { useState } from "react";
 import { startSiteAnalytics } from "./analytics";
 import { landingDescription, useConnectReturn } from "./connect-return";
 import "./styles.css";
+import { mountPrerenderedPage } from "./mount-page";
 
 /**
  * Where a developer lands once a sign-in to an integration, started from
@@ -71,10 +71,4 @@ function IntegrationConnected(): React.JSX.Element {
 
 startSiteAnalytics();
 
-const rootElement = document.getElementById("root");
-if (!rootElement) throw new Error("Root element is missing");
-createRoot(rootElement).render(
-  <StrictMode>
-    <IntegrationConnected />
-  </StrictMode>,
-);
+mountPrerenderedPage(<IntegrationConnected />);

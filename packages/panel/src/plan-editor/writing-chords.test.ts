@@ -154,6 +154,46 @@ test("⌘E sets code, ⌥⌘2 a second heading, and ⇧⌘8 a bulleted list, non
   assert.deepEqual([...code.ran, ...heading.ran, ...list.ran], []);
 });
 
+test("a block's chord in a table's cell does nothing, reaching neither the cell nor the window, while ⌘B still bolds there", () => {
+  const { handle, element } = mount("| Role | Invites |\n| --- | --- |\n| Admin | Anyone |\n");
+  const editor = element.editor ?? assert.fail("the editor is running");
+  let cell = { from: 0, to: 0 };
+  editor.state.doc.descendants((node, pos) => {
+    if (node.isText && node.text === "Anyone") cell = { from: pos, to: pos + node.nodeSize };
+  });
+  const before = handle.markdown();
+
+  const heard: string[] = [];
+  const hear = (event: KeyboardEvent) => heard.push(event.key);
+  act(() => {
+    editor.commands.setTextSelection(cell);
+  });
+  window.addEventListener("keydown", hear);
+  press(element, "2", { option: true });
+  press(element, "8", { shift: true });
+  press(element, "b", { shift: true });
+  window.removeEventListener("keydown", hear);
+
+  assert.equal(handle.markdown(), before, "the cell keeps its one line of words");
+  assert.deepEqual(heard, [], "the window hears none of them");
+  press(element, "b");
+  assert.ok(handle.markdown().includes("| **Anyone** |"), "a mark is still laid on in a cell");
+});
+
+test("a block's chord over words that run through a table, from a line before it to one after, leaves the plan as it was", () => {
+  const { handle, element } = mount("Intro\n\n| A |\n| --- |\n| value |\n\nOutro\n");
+  const editor = element.editor ?? assert.fail("the editor is running");
+  const before = handle.markdown();
+
+  act(() => {
+    editor.commands.setTextSelection({ from: 1, to: editor.state.doc.content.size - 1 });
+  });
+  press(element, "2", { option: true });
+  press(element, "8", { shift: true });
+
+  assert.equal(handle.markdown(), before);
+});
+
 test("⇧⌘⏎, which the editor's Enter handles too, still toggles the panel full screen", () => {
   const { ran, element } = mount("Ship the invite flow.\n");
   act(() => {

@@ -39,7 +39,7 @@
  */
 
 import { createHash } from "node:crypto";
-import { Clock, Data, Duration, Effect, Result } from "effect";
+import { Clock, Data, Duration, Effect, Result, Schedule } from "effect";
 import type { SandboxSession } from "eve/sandbox";
 import { prepareImage } from "./agent-runtime/sandbox-image.js";
 import { CODER } from "./coder-host/bounds.js";
@@ -365,14 +365,10 @@ export const awaitTemplate = (
   build: ImageBuild,
   wait: Duration.Duration = NATIVE_TEMPLATE.WAIT,
 ): TemplateRead =>
-  Effect.gen(function* () {
-    const reads = Math.floor(Duration.toMillis(wait) / Duration.toMillis(NATIVE_TEMPLATE.POLL));
-    let read = yield* advanceTemplate(api, build);
-    for (let waited = 0; read.state === TEMPLATE_STATE.PREPARING && waited < reads; waited += 1) {
-      yield* Effect.sleep(NATIVE_TEMPLATE.POLL);
-      read = yield* advanceTemplate(api, build);
-    }
-    return read;
+  Effect.repeat(advanceTemplate(api, build), {
+    schedule: Schedule.spaced(NATIVE_TEMPLATE.POLL),
+    times: Math.floor(Duration.toMillis(wait) / Duration.toMillis(NATIVE_TEMPLATE.POLL)),
+    while: (read) => read.state === TEMPLATE_STATE.PREPARING,
   });
 
 /** What one sweep of the templates came to: the current one's state where it was read, and how many others went. */

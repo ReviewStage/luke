@@ -13,7 +13,7 @@ import { runAgent } from "../runtime.js";
 /**
  * The bearer's account, resolved as an effect and run once here: eve's door
  * takes a promise, and an authored file is where this deployment runs what it
- * hands eve, so nothing under `server/hosted/` keeps a promise-shaped copy of
+ * hands eve, so nothing under `packages/service/` keeps a promise-shaped copy of
  * the resolution for eve's sake.
  */
 const resolveUserId = (request: Request): Promise<string | undefined> =>

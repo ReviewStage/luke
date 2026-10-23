@@ -59,19 +59,14 @@ import {
 } from "@luke/ui/tab-strip-model";
 import { Effect } from "effect";
 import * as Atom from "effect/reactivity/Atom";
-import {
-  type HouseIcon,
-  InboxIcon,
-  ListTodoIcon,
-  MessagesSquareIcon,
-  UserRoundIcon,
-  ZapIcon,
-} from "lucide-react";
+import { type HouseIcon, InboxIcon, ListTodoIcon, MessagesSquareIcon, ZapIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useAct } from "../act.js";
+import { ACTOR_SIZE, ActorMark } from "../actor-ref.js";
 import { overlayHoldsKeyboard, useAppCommand, useOverlayHold } from "../app-commands.js";
 import { stepTitle } from "../history-titles.js";
+import { MemberDirectory, usePerson } from "../member-directory.js";
 import type { StepTitle } from "../navigation-history.js";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs.js";
 import { rendererRuntime } from "../renderer-runtime.js";
@@ -187,6 +182,11 @@ function taskName(tasks: TasksControl, taskId: string): string | undefined {
   return tasks.tasks.find((task) => task.id === taskId)?.name;
 }
 
+/** A person's page stop wears their face, read against the members around it as every person is drawn. */
+function PersonStopFace({ userId, name }: { userId: string; name: string }): React.JSX.Element {
+  return <ActorMark actor={usePerson({ userId, name })} size={ACTOR_SIZE.INLINE} />;
+}
+
 /** How a card wears its stop, from what the window holds of it now and what Back's list named it while it stood. */
 function cardLook(stop: Stop, tasks: TasksControl, title: StepTitle | undefined): CardLook {
   switch (stop.kind) {
@@ -232,7 +232,11 @@ function cardLook(stop: Stop, tasks: TasksControl, title: StepTitle | undefined)
       };
     }
     case STOP_KIND.PERSON:
-      return { icon: <UserRoundIcon />, label: stop.name ?? PERSON_WORDS, detail: undefined };
+      return {
+        icon: <PersonStopFace userId={stop.userId} name={stop.name ?? PERSON_WORDS} />,
+        label: stop.name ?? PERSON_WORDS,
+        detail: undefined,
+      };
   }
 }
 
@@ -541,35 +545,37 @@ export function TabSwitcher({
     <>
       <div className="tab-switcher-backdrop" aria-hidden="true" />
       <div className="tab-switcher" role="dialog" aria-label="Recent tabs">
-        <TabCards label="Recent tabs">
-          {cards.map((stop, at) => {
-            const look = cardLook(
-              stop,
-              tasks,
-              titles.current.find((held) => sameStop(held.stop, stop))?.title,
-            );
-            return (
-              <TabCard
-                key={at}
-                icon={look.icon}
-                label={look.label}
-                detail={look.detail}
-                detailIcon={look.detailIcon}
-                endMark={look.endMark}
-                still={stills.current.find((held) => sameStop(held.stop, stop))?.src}
-                here={state.here && at === 0}
-                chosen={at === chosen}
-                // Note that the card is picked on the press, because ⌃ is held while it is pressed, which a Mac makes a right-click.
-                pickOnPress
-                onPoint={() => move(switcherChose(latest.current, at))}
-                onPick={() => {
-                  move(switcherChose(latest.current, at));
-                  letGo(true);
-                }}
-              />
-            );
-          })}
-        </TabCards>
+        <MemberDirectory workspace={tasks.workspace} readerId={tasks.me}>
+          <TabCards label="Recent tabs">
+            {cards.map((stop, at) => {
+              const look = cardLook(
+                stop,
+                tasks,
+                titles.current.find((held) => sameStop(held.stop, stop))?.title,
+              );
+              return (
+                <TabCard
+                  key={at}
+                  icon={look.icon}
+                  label={look.label}
+                  detail={look.detail}
+                  detailIcon={look.detailIcon}
+                  endMark={look.endMark}
+                  still={stills.current.find((held) => sameStop(held.stop, stop))?.src}
+                  here={state.here && at === 0}
+                  chosen={at === chosen}
+                  // Note that the card is picked on the press, because ⌃ is held while it is pressed, which a Mac makes a right-click.
+                  pickOnPress
+                  onPoint={() => move(switcherChose(latest.current, at))}
+                  onPick={() => {
+                    move(switcherChose(latest.current, at));
+                    letGo(true);
+                  }}
+                />
+              );
+            })}
+          </TabCards>
+        </MemberDirectory>
       </div>
     </>,
     document.body,
