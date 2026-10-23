@@ -12,7 +12,7 @@ import { AttachedFileChips, attachmentChips } from "./attached-file-chips.js";
  * on the press, so the box no longer holds it, while the row keeps its chip
  * drawn, out of reach, as it scales out, and takes it once that has played;
  * of two files alike, the one pressed is the one taken off; and a file the
- * box takes on scales in.
+ * box takes on scales in, the first into an empty box among them.
  */
 
 declare global {
@@ -167,6 +167,17 @@ test("a file the box takes on scales in", () => {
   draw([SPEC]);
   act(() => document.querySelector<HTMLButtonElement>("button")?.click());
   const arrived = chips().at(-1);
+  assert.equal(arrived?.title, "notes.txt");
+  const scaled = played
+    .filter((motion) => motion.element === arrived)
+    .some((motion) => motion.keyframes.some((frame) => String(frame.transform).includes("scale")));
+  assert.ok(scaled, "it scales in");
+});
+
+test("the first file an empty box takes on scales in too", () => {
+  draw([]);
+  act(() => document.querySelector<HTMLButtonElement>("button")?.click());
+  const arrived = chips()[0];
   assert.equal(arrived?.title, "notes.txt");
   const scaled = played
     .filter((motion) => motion.element === arrived)

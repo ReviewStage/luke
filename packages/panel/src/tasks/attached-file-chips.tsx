@@ -110,6 +110,9 @@ function FileChipOf({
  * chip. Note that it is its own component under the row's `ListMotion`,
  * because `useLeaving` finds the motion through the context the motion
  * provides, and called above it would find none and let a chip go at once.
+ * The row stands, hidden, while the box holds no file, because the motion
+ * plays an arrival only into a list that stood before the change, so the
+ * first file taken on scales in as every later one does.
  */
 function BoxRow({
   row,
@@ -133,9 +136,14 @@ function BoxRow({
     return id;
   };
   const drawn = useLeaving(files, idOf);
-  if (drawn.length === 0) return null;
   return (
-    <ul ref={row} className="attached-files" aria-label="Attached files" {...motionRows()}>
+    <ul
+      ref={row}
+      className="attached-files"
+      aria-label="Attached files"
+      hidden={drawn.length === 0}
+      {...motionRows()}
+    >
       {drawn.map((entry) => {
         const index = files.indexOf(entry.value);
         return (

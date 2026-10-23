@@ -5655,6 +5655,12 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
   list-style: none;
 }
 
+/* A message box's row stands hidden while it holds no file, so its first
+   file arrives into a list that stood (`attached-file-chips.tsx`). */
+.attached-files[hidden] {
+  display: none;
+}
+
 .agent-composer .attached-files {
   padding: var(--luke-space-12) var(--luke-space-12) 0;
 }
