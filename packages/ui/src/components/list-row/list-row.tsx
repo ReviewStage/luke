@@ -95,12 +95,13 @@ import { useRowSwipe } from "./use-row-swipe.js";
  * app's is (`LIST_ROW_META.TITLE`), at the end of its title's line, the
  * description running the row's whole width under both and its leading
  * mark level with the title. A row's acts stand beside it, or, in a list
- * that offers them only to the row in hand (`LIST_ROW_ACTIONS.HOVER`), over
- * its metadata's end while the pointer rests on it or it holds the
+ * that offers them only to the row in hand (`LIST_ROW_ACTIONS.HOVER`), in
+ * its metadata's place while the pointer rests on it or it holds the
  * keyboard, the metadata stepping aside as a sidebar row's time does for
- * Pin and Archive. They are laid over the row's end on a backdrop of the
- * row's own fill, faded in over the words they cover, so coming and going
- * they move nothing: the title keeps its room, and the press its ring.
+ * Pin and Archive. The row keeps their place beside its words whether they
+ * show or not, as wide as the wider of them and its metadata, so coming and
+ * going they move nothing and cover nothing: the title keeps its room, and
+ * the press its ring.
  *
  * A title cut short, there or anywhere, fades out over its last few pixels
  * instead of ending in an ellipsis, as a browser's tab does; one drawn
@@ -139,7 +140,7 @@ export const LIST_ROW_META = {
 
 export type ListRowMeta = (typeof LIST_ROW_META)[keyof typeof LIST_ROW_META];
 
-/** When a row's acts stand: always, beside it, or over its metadata's end only while the row is in hand. */
+/** When a row's acts stand: always, beside it, or in its metadata's place only while the row is in hand. */
 export const LIST_ROW_ACTIONS = {
   ALWAYS: "always",
   HOVER: "hover",
@@ -271,28 +272,6 @@ export function List({
   );
 }
 
-/**
- * Keeps a hover row's `--luke-list-row-acts` at how far its acts reach in
- * from the row's end, which its stylesheet fades the row's words out under,
- * whenever the acts or the row resize. Note that a host with no observer (a
- * server render, a test's DOM) lays nothing out, so it sets nothing.
- */
-function measureActs(acts: HTMLElement): (() => void) | undefined {
-  const row = acts.closest<HTMLElement>(".luke-list-row");
-  if (row === null || typeof ResizeObserver === "undefined") return undefined;
-  const measure = () => {
-    const reach = row.getBoundingClientRect().right - acts.getBoundingClientRect().left;
-    row.style.setProperty("--luke-list-row-acts", `${Math.max(0, reach)}px`);
-  };
-  const resized = new ResizeObserver(measure);
-  resized.observe(acts);
-  resized.observe(row);
-  return () => {
-    resized.disconnect();
-    row.style.removeProperty("--luke-list-row-acts");
-  };
-}
-
 /** One row of a `List`: `title` over `description`, `meta` at its end, `actions` beside it. */
 export function ListRow({
   leading,
@@ -412,17 +391,24 @@ export function ListRow({
     [descriptionMeasured, describedDense],
   );
   const [leadMeasured, leadClipped] = useClipped(lead?.label);
-  const actsMeasured = useCallback(
-    (element: HTMLDivElement | null) =>
-      element === null || actionsAt !== LIST_ROW_ACTIONS.HOVER ? undefined : measureActs(element),
-    [actionsAt],
-  );
   const heading = (
     <span ref={titleMeasured} className="luke-list-row-title" data-overflow={String(titleClipped)}>
       {title}
     </span>
   );
-  const metadata = said(meta) ? <span className="luke-list-row-meta">{meta}</span> : null;
+  // Note that the metadata and the chevron stand together at the row's end,
+  // the place a hover row's acts step into.
+  const end =
+    said(meta) || chevron ? (
+      <span className="luke-list-row-end">
+        {said(meta) ? <span className="luke-list-row-meta">{meta}</span> : null}
+        {chevron ? (
+          <span className="luke-list-row-chevron" aria-hidden="true">
+            <ChevronRightIcon />
+          </span>
+        ) : null}
+      </span>
+    ) : null;
   const face = (
     <>
       {said(leading) ? (
@@ -434,7 +420,7 @@ export function ListRow({
         {metaAt === LIST_ROW_META.TITLE ? (
           <span className="luke-list-row-head">
             {heading}
-            {metadata}
+            {end}
           </span>
         ) : (
           heading
@@ -468,12 +454,7 @@ export function ListRow({
           </span>
         ) : null}
       </span>
-      {metaAt === LIST_ROW_META.TITLE ? null : metadata}
-      {chevron ? (
-        <span className="luke-list-row-chevron" aria-hidden="true">
-          <ChevronRightIcon />
-        </span>
-      ) : null}
+      {metaAt === LIST_ROW_META.TITLE ? null : end}
     </>
   );
   const press = onPress ? (
@@ -508,11 +489,7 @@ export function ListRow({
       ) : (
         <hint.Hint label={hint.label}>{press}</hint.Hint>
       )}
-      {said(actions) ? (
-        <div ref={actsMeasured} className="luke-list-row-actions">
-          {actions}
-        </div>
-      ) : null}
+      {said(actions) ? <div className="luke-list-row-actions">{actions}</div> : null}
     </>
   );
   const { view, item } = swiped;
