@@ -134,11 +134,11 @@ const STEP_KEYS = new Map([
 const LIST = "luke-choice-list min-w-0 m-0 p-0 [border:0] list-none";
 
 const LIST_LOOK = {
-  plain: "flex gap-luke-4",
-  marked: "flex gap-luke-4",
-  pill: "flex flex-row flex-wrap gap-luke-6",
-  picture: "grid grid-cols-4 gap-x-luke-8 gap-y-luke-12",
-  card: "flex gap-luke-8",
+  plain: "flex gap-1",
+  marked: "flex gap-1",
+  pill: "flex flex-row flex-wrap gap-1.5",
+  picture: "grid grid-cols-4 gap-x-2 gap-y-3",
+  card: "flex gap-2",
 } as const satisfies Record<ChoiceLook, string>;
 
 /**
@@ -150,7 +150,7 @@ const LIST_LOOK = {
  * where a utility would outrank it.
  */
 const ROW =
-  "luke-choice flex items-center gap-luke-12 min-w-0 m-0 py-luke-8 px-luke-12 [border:0] rounded-control outline-offset-[calc(-1*var(--luke-focus-ring-width))] font-ui text-body text-left cursor-pointer in-data-[luke-profile=desktop]:cursor-default transition-[background-color] duration-(--luke-duration-hover) ease-[ease]";
+  "luke-choice flex items-center gap-3 min-w-0 m-0 py-2 px-3 [border:0] rounded-control outline-offset-[calc(-1*var(--luke-focus-ring-width))] font-ui text-body text-left cursor-pointer in-data-[luke-profile=desktop]:cursor-default transition-[background-color] duration-(--luke-duration-hover) ease-[ease]";
 
 /**
  * Each look's own row. A pill's corners are half its one-line height
@@ -163,8 +163,8 @@ const ROW =
 const ROW_LOOK = {
   plain: "",
   marked: "",
-  pill: "gap-icon-gap min-h-control py-luke-4 px-luke-12 rounded-[calc(var(--luke-control-height)/2)] text-caption leading-body",
-  picture: "flex-col gap-luke-4 p-0 outline-none text-[length:inherit] leading-body",
+  pill: "gap-icon-gap min-h-control py-1 px-3 rounded-[calc(var(--luke-control-height)/2)] text-caption leading-body",
+  picture: "flex-col gap-1 p-0 outline-none text-[length:inherit] leading-body",
   card: "p-0",
 } as const satisfies Record<ChoiceLook, string>;
 
@@ -177,7 +177,7 @@ const ROW_ACROSS = "flex-[1_1_0] items-start";
  * in a radio and a tick in a box.
  */
 const CONTROL =
-  "luke-choice-control inline-grid flex-none place-items-center size-luke-16 box-border border-[1.5px] border-solid transition-[background-color,border-color] duration-(--luke-duration-hover) ease-[ease]";
+  "luke-choice-control inline-grid flex-none place-items-center size-4 box-border border-[1.5px] border-solid transition-[background-color,border-color] duration-(--luke-duration-hover) ease-[ease]";
 
 /**
  * A checked control's fill: the accent, or what picking it means, going
@@ -192,8 +192,8 @@ const CONTROL_FILL = {
 } as const satisfies Record<ChoiceTone, string>;
 
 const CONTROL_MARK = {
-  radio: "after:size-luke-6 after:rounded-[50%] after:content-['']",
-  box: "after:w-luke-8 after:h-luke-4 after:mt-[-2px] after:border-b-2 after:border-l-2 after:[transform:rotate(-45deg)] after:content-['']",
+  radio: "after:size-1.5 after:rounded-[50%] after:content-['']",
+  box: "after:w-2 after:h-1 after:mt-[-2px] after:border-b-2 after:border-l-2 after:[transform:rotate(-45deg)] after:content-['']",
 } as const;
 
 const CONTROL_INK = {
@@ -220,7 +220,7 @@ const FACE_RING = {
  * its own under them, ringed once picked, and steps back whole while its
  * option is unavailable.
  */
-const CARD = "luke-choice-card flex flex-col gap-luke-8 p-luke-12 rounded-control";
+const CARD = "luke-choice-card flex flex-col gap-2 p-3 rounded-control";
 
 const CARD_RING = {
   rest: "[box-shadow:inset_0_0_0_1px_var(--luke-color-border)]",
@@ -302,7 +302,7 @@ export interface ChoiceListSettled<Value extends string> extends ChoiceListBase<
 function PickedCheck({ className }: { className: string }): React.JSX.Element {
   return (
     <svg
-      className={cn("luke-choice-check size-luke-12 align-[-1px]", className)}
+      className={cn("luke-choice-check size-3 align-[-1px]", className)}
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
@@ -366,11 +366,11 @@ function ChoiceWords({
   return (
     <span
       className={cn(
-        "luke-choice-words flex flex-col gap-luke-2 min-w-0",
+        "luke-choice-words flex flex-col gap-0.5 min-w-0",
         look === CHOICE_LOOK.CARD ? "flex-initial" : "flex-auto",
       )}
     >
-      <span className="luke-choice-head flex flex-wrap items-start justify-between gap-x-luke-8 gap-y-luke-4">
+      <span className="luke-choice-head flex flex-wrap items-start justify-between gap-x-2 gap-y-1">
         <span
           className={cn(
             "luke-choice-label min-w-0 font-medium wrap-anywhere",
@@ -381,7 +381,7 @@ function ChoiceWords({
           {hung}
         </span>
         {option.badge === undefined && number === undefined ? null : (
-          <span className="luke-choice-end inline-flex flex-none items-center gap-luke-8">
+          <span className="luke-choice-end inline-flex flex-none items-center gap-2">
             {option.badge === undefined ? null : <Badge tone={tone}>{option.badge}</Badge>}
             {/* The number is the row's key, which the row says to a reader as its key shortcut. */}
             {number === undefined ? null : (
@@ -605,14 +605,14 @@ function ChoiceRow({
       data-checked={checked}
       data-unavailable={option.detail === undefined ? undefined : true}
     >
-      <div className="luke-choice-card-head flex items-center justify-between gap-luke-8">
+      <div className="luke-choice-card-head flex items-center justify-between gap-2">
         {row}
         {option.aside === undefined ? null : (
           <span className="luke-choice-aside text-caption-inline">{option.aside}</span>
         )}
       </div>
       {option.below === undefined || option.below === null ? null : (
-        <div className="luke-choice-card-body flex flex-col gap-luke-6">{option.below}</div>
+        <div className="luke-choice-card-body flex flex-col gap-1.5">{option.below}</div>
       )}
     </div>
   );
@@ -758,8 +758,8 @@ function SettledChoices<Value extends string>({
               after={
                 picked ? (
                   // Note that the note runs inline in the label's line, so its smaller words share the label's baseline rather than a box's centre.
-                  <span className="luke-choice-picked ml-luke-8 text-muted-foreground text-caption leading-body font-regular whitespace-nowrap">
-                    <PickedCheck className="mr-luke-2" />
+                  <span className="luke-choice-picked ml-2 text-muted-foreground text-caption leading-body font-regular whitespace-nowrap">
+                    <PickedCheck className="mr-0.5" />
                     {pickedNote}
                   </span>
                 ) : null
