@@ -1057,6 +1057,7 @@ function Invitations({
             {
               label: "Cancel invitation",
               icon: <XIcon />,
+              danger: true,
               disabled: busy,
               onSelect: () => cancel(one.id),
             },

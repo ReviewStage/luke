@@ -68,7 +68,8 @@ import { pullRequestAsked, usePullRequestNumber } from "./pull-request-number.js
  * The pill is `@luke/ui`'s pill chip in the tone of where the pull request
  * stands, as stage-cli's status pill is, and opens a menu offering what may
  * be done from there: Ready for review for a draft and Convert to draft for
- * one open, each with Close pull request, neutral as GitHub draws it, and
+ * one open, each with Close pull request, drawn red as every item that
+ * ends what it acts on is, and
  * Reopen pull request for one closed; once merged it is a badge in that
  * tone, with nothing left to press. The title is edited in place, as
  * stage-cli's is: its pencil opens a field over it, Enter or the check keeps
@@ -321,6 +322,7 @@ export function PullRequestStateMenu({
   const items: MenuAction[] = actions.map((action) => ({
     label: ACTION_WORDS[action],
     icon: ACTION_GLYPHS[action],
+    danger: action === PULL_REQUEST_ACTION.CLOSE,
     disabled: writes.pending !== undefined,
     onSelect: () => writes.write({ action }),
   }));

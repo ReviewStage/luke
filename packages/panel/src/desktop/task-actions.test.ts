@@ -666,7 +666,7 @@ function installMembers(members: readonly { userId: string; name: string }[] | u
           ),
   });
 }
-test("Mark done marks a task with agents done at once, from its row's check and its menu alike, Cancel task cancels it, and a task already done offers neither Mark done nor its check", async () => {
+test("Mark done marks a task with agents done at once, from its row's check and its menu alike, Cancel task, drawn red, cancels it, and a task already done offers neither Mark done nor its check", async () => {
   const working: TaskSummary = {
     ...OTHER,
     status: TASK_STATUS.IN_PROGRESS,
@@ -699,6 +699,8 @@ test("Mark done marks a task with agents done at once, from its row's check and 
   rightClick(rowButton, 40, 60);
   choose("Mark done");
   rightClick(rowButton, 40, 60);
+  const cancel = menuItems().find((item) => item.textContent === "Cancel task");
+  assert.equal(cancel?.dataset.danger, "true", "Cancel task is drawn red");
   choose("Cancel task");
   assert.deepEqual(settled, [
     [[working.id], TASK_STATUS.DONE],
