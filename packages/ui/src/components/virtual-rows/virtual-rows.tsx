@@ -38,7 +38,9 @@ import { cssCustomProperties } from "../../css.js";
  * their place as older rows land and are measured. A row measured again, a
  * fold opened in it, moves the scroll only where the whole row stands above
  * the view, so nothing the reader sees moves. Following the newest row is
- * the caller's, whose scroller this is. The run opens on its last rows.
+ * the caller's, whose scroller this is: while the caller says it holds the
+ * end (`pinned`), the run puts the scroller back there after its own
+ * writes. The run opens on its last rows.
  *
  * The virtualizer is TanStack Virtual's: headless, so the rows are the
  * caller's own elements in the caller's own scroller, and the scroll logic
@@ -121,6 +123,7 @@ function offsetWithin(block: HTMLElement, scroller: HTMLElement): number {
 
 export function VirtualRows({
   scroller,
+  pinned,
   keys,
   estimate,
   gap = 0,
@@ -132,6 +135,8 @@ export function VirtualRows({
 }: {
   /** The element that scrolls, which the rows stand in. */
   scroller: RefObject<HTMLElement | null>;
+  /** Whether the caller holds the scroller at its end right now, where the run then leaves it. */
+  pinned?: (() => boolean) | undefined;
   /** Each row's key, in order: what its height is kept by. */
   keys: readonly string[];
   /** The height a row is taken to have before it is measured, in pixels. */
@@ -175,6 +180,15 @@ export function VirtualRows({
     if (element === null || box === null) return;
     const at = Math.round(offsetWithin(element, box));
     if (at !== margin) setMargin(at);
+  });
+  // Note that a run held at its end goes back there after the virtualizer's own writes, because
+  // as it first takes the scroller it scrolls to its guess (`initialOffset`), which a log
+  // already at its end hears as the reader scrolling up.
+  useLayoutEffect(() => {
+    const box = scroller.current;
+    if (box === null || pinned?.() !== true) return;
+    const end = box.scrollHeight - box.clientHeight;
+    if (box.scrollTop < end) box.scrollTop = end;
   });
   const bringing = useRef<Bringing | undefined>(undefined);
   const rowElement = useCallback(
