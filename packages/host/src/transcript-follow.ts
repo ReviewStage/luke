@@ -416,12 +416,13 @@ export function followTranscript<Key>(
           return true;
         });
       heard(window.messages);
-      /** The rows' messages not yet told, beside what the last page said of the agent; the cursor moves past them where they follow on from it. */
-      const tellDrawn = (page: CodingAgentTranscriptPage, state: LiveState) =>
+      /** The rows' messages not yet told, beside what the last page said of the agent, each noted in `during` where given; the cursor moves past them where they follow on from it. */
+      const tellDrawn = (page: CodingAgentTranscriptPage, state: LiveState, during?: Set<string>) =>
         Effect.gen(function* () {
           if (state.kind !== "standing" || "failure" in page) return;
           const fresh = heard(state.drawn.messages);
           if (fresh.length === 0) return;
+          for (const message of fresh) during?.add(message.id);
           const { seq, revision } = cursorParts(window.cursor);
           // Note that the cursor moves only where the window holds every message past it, so a read past it misses none.
           const cursor =
@@ -437,6 +438,8 @@ export function followTranscript<Key>(
         Stream.filter(movedFrom({ kind: "waiting" })),
         Stream.runHead,
       );
+      /** The last page told, whose word on the agent the rows drawn beside the next read are told with; none before the first. */
+      let last: CodingAgentTranscriptPage | undefined;
       while (true) {
         yield* wake;
         const was = yield* SubscriptionRef.get(state);
@@ -444,7 +447,20 @@ export function followTranscript<Key>(
           yield* RcMap.invalidate(follows, key);
           return yield* tell(UNANSWERED_PAGE);
         }
-        const answer = yield* reads.after(window.cursor);
+        // Note that the rows drawn while the page is read go on being told beside it, because a
+        // turn that starts moves the turns and the reply's first words land with it; a message
+        // they told is left out of the page, since the page may have read it before they did.
+        const toldBeside = new Set<string>();
+        const lastTold = last;
+        const besideRead =
+          lastTold === undefined
+            ? Effect.void
+            : SubscriptionRef.changes(state).pipe(
+                Stream.runForEach((now) => tellDrawn(lastTold, now, toldBeside)),
+              );
+        const answer = yield* Effect.scoped(
+          Effect.andThen(Effect.forkScoped(besideRead), reads.after(window.cursor)),
+        );
         // Note that a held cursor the service refuses, gone or stale, is let go untold, and the follow opens on the newest page as one holding nothing does; the window joins it or takes it in place of what it drew.
         if (fromHeld && unanswered(answer)) {
           yield* memory.forget;
@@ -477,15 +493,22 @@ export function followTranscript<Key>(
           continue;
         }
         fromHeld = false;
-        const page = toldPage(answer);
+        const untold = (message: CodingAgentMessage) => !toldBeside.has(message.id);
+        const shown =
+          "failure" in answer ? answer : { ...answer, messages: answer.messages.filter(untold) };
+        // Note that whether the page is caught up is the whole page's word, before the rows told beside it are left out.
+        const whole = toldPage(answer);
+        const page =
+          "failure" in whole ? whole : { ...whole, messages: whole.messages.filter(untold) };
         if (!("failure" in page)) heard(page.messages);
         yield* tell(page);
+        last = page;
         if ("failure" in answer) {
           if (answer.failure === CODING_AGENT_CALL_FAILURE.NOT_FOUND) return yield* memory.forget;
           wake = Effect.sleep(RESEAL);
           continue;
         }
-        window = joinedWindow(window, answer);
+        window = joinedWindow(window, shown);
         yield* memory.keep(window);
         // Note that a full page is followed by the next at once, and a short one is caught up, with no empty page read to say so.
         if (answer.messages.length >= CODING_AGENT_BOUNDS.MESSAGES_PAGE) {
@@ -503,4 +526,3 @@ export function followTranscript<Key>(
     }),
   );
 }
-

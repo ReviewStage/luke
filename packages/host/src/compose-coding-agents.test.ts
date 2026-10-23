@@ -67,7 +67,7 @@ import {
 } from "@luke/gateway";
 import { isRecord, type WireRecord, type WireValue } from "@luke/wire";
 import { noNetwork } from "@luke/wire/testing";
-import { Effect, Fiber } from "effect";
+import { Deferred, Effect, Fiber } from "effect";
 import { TestClock } from "effect/testing";
 import { type CodingAgentClient, composeCodingAgents } from "./compose-coding-agents.js";
 import { fakeRealtime } from "./testing/fake-realtime.js";
@@ -275,6 +275,7 @@ function fakeService() {
   let accountLive: AccountInboxLiveAnswer | typeof LIVE_SIGNED_OUT | undefined;
   // Each page read at once, in turn; the last stands once the others are read.
   let pagesNow: readonly (TranscriptNowAnswer | { readonly failure: "unanswered" })[] = [];
+  let pageGate: Effect.Effect<void> = Effect.void;
   // The newest page, as the follow opens with it; none answers one with something on it.
   let newestPage: CodingAgentNewestAnswer | { readonly failure: "unanswered" } | undefined;
   // The transaction a pin answers it committed in, where it answers one.
@@ -322,17 +323,20 @@ function fakeService() {
         return { agent: { ...AGENT, status: CODING_AGENT_STATUS.STARTING } };
       }),
     messagesNow: (agentId, after, callId) =>
-      Effect.sync(() => {
-        asked.push(
-          callId === undefined
-            ? `messages-now:${agentId}:${after}`
-            : `worker-now:${agentId}:${callId}:${after}`,
-        );
-        const [page, ...rest] = pagesNow;
-        if (rest.length > 0) pagesNow = rest;
-        cursor = "2:1";
-        return page ?? { ...SAID, cursor, holds: false };
-      }),
+      Effect.andThen(
+        Effect.suspend(() => pageGate),
+        Effect.sync(() => {
+          asked.push(
+            callId === undefined
+              ? `messages-now:${agentId}:${after}`
+              : `worker-now:${agentId}:${callId}:${after}`,
+          );
+          const [page, ...rest] = pagesNow;
+          if (rest.length > 0) pagesNow = rest;
+          cursor = "2:1";
+          return page ?? { ...SAID, cursor, holds: false };
+        }),
+      ),
     messagesNewest: (agentId, callId, cut) =>
       Effect.sync(() => {
         asked.push(
@@ -729,6 +733,10 @@ function fakeService() {
     pageNow: (...pages: readonly (TranscriptNowAnswer | { readonly failure: "unanswered" })[]) => {
       pagesNow = pages;
     },
+    /** What a page read at once waits on before the service answers it; nothing from the start. */
+    holdPages: (gate: Effect.Effect<void>) => {
+      pageGate = gate;
+    },
     /** The newest page the service answers. */
     pageNewest: (page: CodingAgentNewestAnswer | { readonly failure: "unanswered" }) => {
       newestPage = page;
@@ -829,6 +837,7 @@ function subject(
           event.kind === GATEWAY_EVENT.CHAT_CHANGED ? [event.payload] : [],
         ),
       pageNow: service.pageNow,
+      holdPages: service.holdPages,
       pageNewest: service.pageNewest,
       sendTxid: service.sendTxid,
       sealScope: service.sealScope,
@@ -1603,6 +1612,64 @@ it.effect(
       transcriptRows(realtime, 3, 2);
       yield* settled;
       assert.equal(asked.at(-1), `messages-now:${AGENT_ID}:3:0`);
+    }),
+);
+
+it.effect(
+  "a message the window's rows draw while a moved turn's page is read is told at once, and left out of that page, which may have read it first",
+  () =>
+    Effect.gen(function* () {
+      const {
+        call,
+        pages,
+        sealTranscript,
+        pageNow: script,
+        holdPages,
+        pageNewest,
+        realtime,
+      } = yield* subject();
+      sealTranscript(SEALED_TRANSCRIPT);
+      pageNewest(newestPage("1:0", "Reading the invites."));
+      const caught = pageNow("1:0", { holds: true });
+      script(caught);
+      yield* call(GATEWAY_METHOD.CODING_AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
+      yield* settled;
+      transcriptRows(realtime, 1);
+      yield* settled;
+      const toldBefore = pages().length;
+
+      const answer = yield* Deferred.make<void>();
+      holdPages(Deferred.await(answer));
+      const said = (seq: number, text: string) => ({
+        id: `m-${seq}`,
+        role: "assistant" as const,
+        parts: [{ type: "text", text }],
+      });
+      const read: TranscriptNowAnswer = {
+        ...pageNow("3:0", { holds: false }),
+        messages: [said(2, "Writ"), said(3, "Testing the expiry.")],
+      };
+      script(read);
+      // A turn opening reads the page, which the service is slow to answer.
+      transcriptRows(realtime, 2, 2);
+      yield* settled;
+      const drawn = windowRow(2, "Writing the expiry.");
+      realtime.deliver("window", [drawn.row]);
+      realtime.deliver("windowParts", [drawn.part]);
+      yield* settled;
+      assert.deepEqual(pages().slice(toldBefore), [
+        {
+          transcript: FOLLOWED,
+          page: { ...windowPage(caught), messages: [said(2, "Writing the expiry.")] },
+        },
+      ]);
+
+      yield* Deferred.succeed(answer, undefined);
+      yield* settled;
+      assert.deepEqual(pages().at(-1), {
+        transcript: FOLLOWED,
+        page: { ...windowPage(read), messages: [said(3, "Testing the expiry.")] },
+      });
     }),
 );
 
@@ -2707,29 +2774,30 @@ it.effect(
       assert.deepEqual(realtime.awaitingTxids(), []);
       assert.deepEqual(
         asked.filter((each) => each.startsWith("message:")),
-        [`message:${AGENT_ID}:send-1:Use seven days.`, `message:${AGENT_ID}:send-2:And email them.`],
+        [
+          `message:${AGENT_ID}:send-1:Use seven days.`,
+          `message:${AGENT_ID}:send-2:And email them.`,
+        ],
       );
     }),
 );
 
-it.effect(
-  "a Start answers its agent before the task list carries the Start's transaction",
-  () =>
-    Effect.gen(function* () {
-      const { call, startCommits } = yield* subject({ listed: () => Effect.never });
-      startCommits("9104");
+it.effect("a Start answers its agent before the task list carries the Start's transaction", () =>
+  Effect.gen(function* () {
+    const { call, startCommits } = yield* subject({ listed: () => Effect.never });
+    startCommits("9104");
 
-      const starting = yield* Effect.forkChild(
-        call(GATEWAY_METHOD.CODING_AGENTS_START, { taskId: TASK_ID, idempotencyKey: "press-1" }),
-      );
-      yield* settled;
+    const starting = yield* Effect.forkChild(
+      call(GATEWAY_METHOD.CODING_AGENTS_START, { taskId: TASK_ID, idempotencyKey: "press-1" }),
+    );
+    yield* settled;
 
-      assert.notEqual(starting.pollUnsafe(), undefined, "answered with the list still behind");
-      assert.deepEqual(yield* Fiber.join(starting), {
-        agent: { ...AGENT, status: CODING_AGENT_STATUS.STARTING },
-        txid: "9104",
-      });
-    }),
+    assert.notEqual(starting.pollUnsafe(), undefined, "answered with the list still behind");
+    assert.deepEqual(yield* Fiber.join(starting), {
+      agent: { ...AGENT, status: CODING_AGENT_STATUS.STARTING },
+      txid: "9104",
+    });
+  }),
 );
 
 it.effect(

@@ -270,6 +270,43 @@ test("the toolbar's Start is told it succeeded only by its own Start landing, ne
   );
 });
 
+test("a plan's Start stands its agent's tab at once under the press's key, which gives way to the agent once made, without reading the list again, or to nothing where it was refused", async () => {
+  const tab = mount({ taskId: TASK, repository: "acme/relay" });
+  tab.answer(ACT_KIND.CODING_AGENTS_LIST, { agents: [] });
+  let land: (answer: WireBoundaryInput) => void = () => undefined;
+  tab.answer(
+    ACT_KIND.CODING_AGENTS_START,
+    new Promise<WireBoundaryInput>((resolve) => {
+      land = resolve;
+    }),
+    { failure: CODING_AGENT_CALL_FAILURE.INVALID_CHOICE },
+  );
+  await tab.mount();
+
+  act(() => tab.control().start.onPress({ model: "openai/gpt-6.1-sol", effort: "xhigh" }));
+  await settle();
+  assert.deepEqual(tab.control().start.pending, { key: "key-1", model: "openai/gpt-6.1-sol" });
+  assert.deepEqual(tab.control().agentIds, ["key-1"]);
+  assert.deepEqual(tab.started, ["key-1"], "its tab is chosen on the press");
+
+  await act(async () => land({ agent: STARTED }));
+  await settle();
+  assert.equal(tab.control().start.pending, undefined);
+  assert.deepEqual(tab.control().agentIds, [AGENT]);
+  assert.deepEqual(tab.started, ["key-1", AGENT]);
+  assert.equal(
+    tab.asked.filter((each) => each.kind === ACT_KIND.CODING_AGENTS_LIST).length,
+    1,
+    "the list already read is joined the agent rather than read again",
+  );
+
+  act(() => tab.control().start.onPress());
+  await settle();
+  assert.equal(tab.control().start.pending, undefined);
+  assert.deepEqual(tab.control().agentIds, [AGENT], "a refused Start leaves no tab");
+  assert.ok(tab.control().start.note !== undefined, "and says why beside Start");
+});
+
 test("a draft's words outlast a relaunch, the plan opening on its draft again under the same key, its files and chips left behind, and a draft let go stays gone", async () => {
   const before = mount({ taskId: TASK, repository: "acme/relay" });
   before.answer(ACT_KIND.CODING_AGENTS_LIST, { agents: [] });
