@@ -88,7 +88,6 @@ export * from "./components/rolling-number/rolling-number.js";
 export * from "./components/saved-tick/saved-tick.js";
 export * from "./components/scroll-area/scroll-area.js";
 export * from "./components/search-field/search-field.js";
-export * from "./components/select/select.js";
 export * from "./components/settings-page/settings-page.js";
 export * from "./components/settings-row/settings-row.js";
 export * from "./components/settings-section/settings-section.js";

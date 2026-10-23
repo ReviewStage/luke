@@ -73,7 +73,6 @@ import { ROLLING_NUMBER_EXAMPLE } from "./examples/rolling-number";
 import { SAVED_TICKS_EXAMPLE } from "./examples/saved-ticks";
 import { SCROLL_AREA_EXAMPLE } from "./examples/scroll-area";
 import { SEARCH_FIELDS_EXAMPLE } from "./examples/search-fields";
-import { SELECT_EXAMPLE } from "./examples/select";
 import { SETTINGS_PAGE_EXAMPLE } from "./examples/settings-page";
 import { SETTINGS_ROW_EXAMPLE } from "./examples/settings-row";
 import { SETTINGS_SECTION_EXAMPLE } from "./examples/settings-section";
@@ -182,7 +181,6 @@ export const EXAMPLES: readonly Example[] = [
   SCROLL_AREA_EXAMPLE,
   SAVED_TICKS_EXAMPLE,
   SEARCH_FIELDS_EXAMPLE,
-  SELECT_EXAMPLE,
   SETTINGS_PAGE_EXAMPLE,
   SETTINGS_SECTION_EXAMPLE,
   SPINNERS_EXAMPLE,
