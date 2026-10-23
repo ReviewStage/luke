@@ -1,19 +1,19 @@
 # Contributing to Luke
 
 Luke is a macOS Electron app for working through a task out loud with a voice
-agent that reads your code. It started as a sidecar that observes coding-agent
-sessions, and that code is still here.
+agent that reads your code.
 
 This page covers setup and points at the documents that own the rest.
 
 ## Before you write code
 
-Read [AGENTS.md](AGENTS.md). Its Never section holds the rules every change has
-to respect: no credential or account secret reaches an answer, an event, the
-voice window, a trace, or a fixture, and session replay leaves the machine as
-layout, never text. A change that widens what Luke may read or write, or what
-leaves the developer's machine, is a product decision, so open an issue first
-rather than a pull request.
+[AGENTS.md](AGENTS.md) is the guide for coding agents and holds the rules
+reviewers hold a pull request to; read it to know what review will check, not as
+a setup guide. Its Never section matters most: no credential or account secret
+reaches an answer, an event, the voice window, a trace, or a fixture, and
+session replay leaves the machine as layout, never text. A change that widens
+what Luke may read or write, or what leaves the developer's machine, is a
+product decision, so open an issue first rather than a pull request.
 
 ## Set up
 
@@ -28,6 +28,20 @@ Command Line Tools.
 ./scripts/run.sh --instance second # launch a named instance beside the running one
 ./scripts/run.sh --preview         # launch against this branch's Vercel Preview, as its own instance
 ```
+
+## Developing without Luke's accounts
+
+- **On Linux**, `./scripts/bootstrap.sh` installs dependencies (it skips
+  Electron's binary), and `./scripts/check.sh`, the vitest suites
+  (`pnpm exec vitest run <path>`), and lint all work. CI runs on ubuntu-24.04.
+  The app itself does not launch there: `run.sh` requires macOS.
+- **On a Mac**, `./scripts/run.sh --fixture smoke` runs the app on fixture data
+  and needs no credentials.
+- **A live run** (`./scripts/run.sh` without `--fixture`) signs in to the
+  production service at tryluke.dev; `--preview` signs in to a Vercel Preview
+  instead.
+- **Not supported yet:** self-hosting the backend (`packages/service` and
+  `apps/web`).
 
 ### Running more than one Luke Dev
 
@@ -63,25 +77,32 @@ again only when it opens or reloads a window.
 
 ```
 apps/
+  catalog/        every shared @luke/ui component on synthetic data, built and never deployed
   desktop/        the Electron app: main, preload, the renderer windows, build and release scripts
   dev/            the coding agent's eve app
   web/            the site, the Vercel function routes (server/routes/), and the deployment shell
 packages/
+  agent-runner/   the runner in a coding agent's sandbox: Claude Code or Codex, messages in and out
   brand/          the design sources, the generators, and the generated art, motion tokens, and geometry
   credentials/    account sign-in: PKCE, loopback consent, the account session manager
   database/       the hosted store's Drizzle schema, queries, migrations, and test databases
-  features/       the hosted service's client side: paths, wire, clients, tasks and boards, product events, feedback
+  features/       the hosted service's contract and clients: paths, wire, tasks and boards, product events, feedback
   gateway/        the one protocol between the renderer and the host, and the trace record of what crosses it
   host/           the desktop's Node kernel, reached only through the Gateway
   live/           the GPT Live protocol as Luke reads it
-  panel/          shared React for the desktop panel: Luke's face and glyphs
+  panel/          shared React for the panel every client mounts: the desktop window and the web tab
   runtime/        Effect infrastructure: storage, timers, queues, single-flight, test support
+  service/        the hosted backend's logic: agents, maintenance sweep, observability
   settings/       the app settings schema
+  ui/             the design system: every component, control, and page pattern the apps draw with
   voice/          the live voice orchestrator
   wire/           the vocabulary every side speaks and the Schema tooling it is declared with
 tools/
   anti-slop/      the repository's oxlint rules
-  trace-export/   turns a recorded development trace into the unbox-ai viewer's document
+  claude-code-probe/  proves Claude Code runs inside a Luke sandbox
+  codex-probe/    proves Codex runs inside a Luke sandbox
+  trace-export/   turns a recorded development trace into a document for a trace viewer
+  voice-samples/  records the clip Settings plays for each Live voice, by hand on a Mac
 scripts/          bootstrap, check, run, evidence, and release; repository-checks.sh holds the contract checks
 docs/             design, tasks, style, and workflow; a plan lives on its task, never in a document here
 ```
@@ -108,6 +129,16 @@ The canonical commands and when each one is required are the command table in
 
 Open it ready for review, not as a draft, with a short summary of what changed
 and why; root [AGENTS.md](AGENTS.md)'s "Merging" says how it merges.
+
+## What happens to your PR
+
+A maintainer reviews it. CI runs every check; the Vercel Preview on a pull
+request from a fork waits for a maintainer to approve it. Once it is approved
+and green, the merge queue tests it against the latest `main` and lands it.
+
+Contributions are licensed under Apache-2.0, as section 5 of the
+[LICENSE](LICENSE) provides: what you submit is under the same terms as the
+project, and there is no CLA to sign.
 
 ## Reporting problems
 
