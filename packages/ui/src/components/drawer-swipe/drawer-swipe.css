@@ -1,0 +1,26 @@
+/* drawer-swipe.css -- the dimmed window under a phone's drawer (`drawer-scrim.tsx`).
+   It fades in and out with the drawer, on the pane's own beat, since the
+   drawer is a pane and travels on it (docs/DESIGN.md); while a finger
+   swipes the drawer it stands at the share open the swipe writes on its
+   stage and plays nothing, so it follows the finger. */
+
+@layer components {
+  .luke-drawer-scrim {
+    position: absolute;
+    z-index: 1;
+    inset: 0;
+    background: var(--luke-color-scrim);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--luke-duration-pane) var(--luke-motion-pane);
+  }
+
+  .luke-drawer-scrim[data-open="true"] {
+    opacity: 1;
+  }
+
+  [data-luke-drawer-drag] > .luke-drawer-scrim {
+    opacity: var(--luke-drawer-progress, 0);
+    transition: none;
+  }
+}
