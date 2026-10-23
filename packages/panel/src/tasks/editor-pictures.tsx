@@ -12,6 +12,7 @@ import {
   ErrorState,
   FoldingButton,
   FormField,
+  MENU_SURFACE_ELEMENT,
   MENU_SURFACE_FLOW,
   MenuSurface,
   Spinner,
@@ -262,6 +263,7 @@ function PictureTools({
   const { worded, above } = useToolsLayout(column);
   return (
     <MenuSurface
+      as={MENU_SURFACE_ELEMENT.SPAN}
       flow={MENU_SURFACE_FLOW.TOOLBAR}
       className="picture-tools"
       role="toolbar"

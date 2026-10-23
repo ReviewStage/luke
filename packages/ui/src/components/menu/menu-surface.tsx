@@ -1,3 +1,5 @@
+import { createElement } from "react";
+
 /**
  * menu-surface.tsx -- the menu's surface for a list an app hangs itself: its ground, edge, corner, shadow, inset, entrance, and exit, with the owner's place and keys.
  *
@@ -35,8 +37,17 @@ export const MENU_SURFACE_FLOW = {
 
 export type MenuSurfaceFlow = (typeof MENU_SURFACE_FLOW)[keyof typeof MENU_SURFACE_FLOW];
 
+/** The elements a surface may be: a box, or a span where it hangs in running words, as a picture's tools hang in a paragraph. */
+export const MENU_SURFACE_ELEMENT = {
+  DIV: "div",
+  SPAN: "span",
+} as const;
+
+export type MenuSurfaceElement = (typeof MENU_SURFACE_ELEMENT)[keyof typeof MENU_SURFACE_ELEMENT];
+
 /** The surface itself, a box its owner places by its own class and keys by its own handlers. */
 export function MenuSurface({
+  as: Element = MENU_SURFACE_ELEMENT.DIV,
   className,
   inset = MENU_SURFACE_INSET.MENU,
   flow = MENU_SURFACE_FLOW.COLUMN,
@@ -45,6 +56,7 @@ export function MenuSurface({
   children,
   ...rest
 }: Omit<React.ComponentPropsWithRef<"div">, "className" | "inert"> & {
+  as?: MenuSurfaceElement | undefined;
   /** The owner's own class, which places it and sets its width and nothing of its look. */
   className?: string | undefined;
   inset?: MenuSurfaceInset | undefined;
@@ -54,18 +66,20 @@ export function MenuSurface({
   /** It is on its way out: fading, inert, and taking nothing. */
   leaving?: boolean | undefined;
 }): React.JSX.Element {
-  return (
-    <div
-      {...rest}
-      className={className === undefined ? "luke-menu-surface" : `luke-menu-surface ${className}`}
-      data-inset={inset}
-      data-flow={flow === MENU_SURFACE_FLOW.COLUMN ? undefined : flow}
-      data-placed={placed === undefined ? undefined : String(placed)}
-      data-leaving={leaving ? "true" : undefined}
-      inert={leaving}
-    >
-      {children}
-    </div>
+  // Note that the element is made rather than written, because a ref typed
+  // for a div is no ref for a span.
+  return createElement(
+    Element,
+    {
+      ...rest,
+      className: className === undefined ? "luke-menu-surface" : `luke-menu-surface ${className}`,
+      "data-inset": inset,
+      "data-flow": flow === MENU_SURFACE_FLOW.COLUMN ? undefined : flow,
+      "data-placed": placed === undefined ? undefined : String(placed),
+      "data-leaving": leaving ? "true" : undefined,
+      inert: leaving,
+    },
+    children,
   );
 }
 
