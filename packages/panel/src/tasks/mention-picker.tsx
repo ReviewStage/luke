@@ -62,6 +62,7 @@ import { ACTOR_SIZE, ActorMark } from "../actor-ref.js";
 import { type IntegrationToolsReads, useIntegrationTools } from "../integration-tools.js";
 import { useMemberDirectory } from "../member-directory.js";
 import type { ComposerTrigger, MentionNode } from "../plan-editor/contract.js";
+import { agentTaskDetail } from "./agent-menu-row.js";
 import {
   DATE_PICKER_CLOSE,
   type DatePicked,
@@ -229,19 +230,8 @@ interface Closed {
 /** What a page's row says beside its title. */
 const PAGE_DETAIL = "Page";
 
-/** What an agent's row says beside its name: its task's, this one's, or none. */
-const AGENT_DETAIL = {
-  THIS_TASK: "This task",
-  NO_TASK: "No task",
-  OTHER_TASK: "Another task",
-  ARCHIVED: "Archived",
-} as const;
-
 /** What the reader's own row says beside their name. */
 const YOU_DETAIL = "You";
-
-/** What stands between an agent's task and its being archived in its row's detail. */
-const DETAIL_JOIN = " · ";
 
 /** What a pull request's row says beside its name where no agent is named for it. */
 const PULL_REQUEST_DETAIL = "Pull request";
@@ -518,17 +508,6 @@ function pageRows(taskId: string, pages: readonly MentionablePage[]): MentionRow
   }));
 }
 
-/** What an agent's row says of its task: this one, another by its name, or none, and whether it is archived. */
-function agentDetail(agent: MentionableAgent, taskId: string): string {
-  const task =
-    agent.task === undefined
-      ? AGENT_DETAIL.NO_TASK
-      : agent.task.id === taskId
-        ? AGENT_DETAIL.THIS_TASK
-        : (agent.task.name ?? AGENT_DETAIL.OTHER_TASK);
-  return agent.archived === true ? `${task}${DETAIL_JOIN}${AGENT_DETAIL.ARCHIVED}` : task;
-}
-
 /**
  * Each agent's row, by its tab's name, wearing its tile, labelled and found
  * by its task: the plan's own agents first, then the workspace's others in
@@ -550,7 +529,7 @@ function agentRows(
     if (seen.has(agent.id) || (agent.archived === true && !typed)) continue;
     seen.add(agent.id);
     const task = agent.task;
-    const detail = agentDetail(agent, taskId);
+    const detail = agentTaskDetail(agent, taskId);
     rows.push({
       mention:
         task === undefined

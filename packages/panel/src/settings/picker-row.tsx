@@ -253,6 +253,8 @@ interface PickerProps {
   width?: ChipWidth | undefined;
   /** Reads what the menu lists now, as it opens, so a list that failed to read is asked for again. */
   onOpen?: (() => void) | undefined;
+  /** Present, the owner answers the search: it hears each query as typed, and the rows it hands are listed unfiltered. */
+  onSearch?: ((query: string) => void) | undefined;
   onPick: (id: string) => void;
 }
 
@@ -277,6 +279,7 @@ export function Picker({
   align = PICKER_ALIGN.END,
   width = CHIP_WIDTH.FIELD,
   onOpen,
+  onSearch,
   onPick,
 }: PickerProps): React.JSX.Element {
   const [open, setOpen] = useState(false);
@@ -328,6 +331,7 @@ export function Picker({
           value={value}
           note={note}
           noMatch={noMatch}
+          onSearch={onSearch}
           onPick={(id) => {
             close();
             onPick(id);
