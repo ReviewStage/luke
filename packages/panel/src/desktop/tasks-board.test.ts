@@ -30,6 +30,7 @@ import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { onRegistry } from "../testing/copy-feedback.js";
+import { restOn } from "../testing/hint-rest.js";
 import { tasksControl } from "../testing/tasks-control.js";
 import { newestToastSays } from "../testing/toast.js";
 import { ToastHost } from "../toast.js";
@@ -295,6 +296,12 @@ test("a press on a card opens its task", async () => {
   const board = await mountBoard();
   act(() => cardOf(board, "t-42").click());
   assert.deepEqual(opened, ["t-42"]);
+});
+
+test("a card at rest hangs its task's card", async () => {
+  const board = await mountBoard();
+  restOn(cardOf(board, "t-42"));
+  assert.ok(document.querySelector(".luke-tooltip-card [data-task-card]"));
 });
 
 test("the settled finished before the past week give way to a line counting them, which shows them all; by priority the columns run from the most pressing, empty ones left out where asked", async () => {

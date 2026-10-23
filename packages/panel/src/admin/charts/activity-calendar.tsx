@@ -6,7 +6,7 @@ import { ChartTooltipFrame } from "@luke/ui/chart";
 import { partialDayKey } from "@luke/ui/daily-series";
 import { formatCount } from "@luke/ui/time-format";
 import { Fragment, useCallback, useLayoutEffect, useRef, useState } from "react";
-import { ChartFrame } from "./chart-frame.js";
+import { ChartFrame, ChartFrameSkeleton } from "./chart-frame.js";
 import { USAGE_CHART } from "./usage-chart.js";
 
 /**
@@ -84,6 +84,16 @@ const CALENDAR_TOOLTIP_GAP_PX = 6;
 const CALENDAR_CELL_PX = 12;
 
 const CALENDAR_GAP_PX = 3;
+
+/**
+ * The grid's height: its month-label row, a caption's line, over the seven
+ * day rows, each a gap under the row above it.
+ */
+const CALENDAR_GRID_HEIGHT = `calc(var(--luke-type-caption-leading) + ${DAYS_PER_WEEK * (CALENDAR_CELL_PX + CALENDAR_GAP_PX)}px)`;
+
+/** What the calendar's cells say, under the grid. */
+const CALENDAR_LEGEND =
+  "Each cell is one UTC day, whatever the window. A deeper fill is more hosted calls against the busiest day shown, and the dashed cell is today, still filling.";
 
 /** The weekday-label column's fixed width, which is what makes the fit exact. */
 const CALENDAR_WEEKDAY_COLUMN_PX = 28;
@@ -218,7 +228,7 @@ export function ActivityCalendar({
           </div>
         ) : null
       }
-      legend="Each cell is one UTC day, whatever the window. A deeper fill is more hosted calls against the busiest day shown, and the dashed cell is today, still filling."
+      legend={CALENDAR_LEGEND}
     >
       <div ref={gridAreaRef}>
         {weeks.length === 0 ? null : (
@@ -267,4 +277,13 @@ export function ActivityCalendar({
       </div>
     </ChartFrame>
   );
+}
+
+/**
+ * The calendar while its year is read: a bone for its heading, whose span
+ * the fit decides, over a block as tall as the grid, and its legend as
+ * itself, so the card is as tall as the one that replaces it.
+ */
+export function ActivityCalendarSkeleton(): React.JSX.Element {
+  return <ChartFrameSkeleton legend={CALENDAR_LEGEND} plot={CALENDAR_GRID_HEIGHT} />;
 }

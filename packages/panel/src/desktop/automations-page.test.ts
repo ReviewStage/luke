@@ -585,6 +585,20 @@ test("an automation turned off reads Off where its next run would, and a failed 
   assert.ok(rowOf(page, "Dependency bumps").querySelector(".failed-mark"));
 });
 
+test("an automation's row leads with its clock tile, wearing its newest run's state, and hangs its card", async () => {
+  standing = [FAILING];
+  const page = mount();
+  await settle();
+
+  const row = rowOf(page, "Dependency bumps");
+  assert.ok(row.querySelector('.actor-mark[data-kind="automation"]'), "the clock tile leads");
+  assert.equal(row.querySelector(".automation-row-glyph"), null, "no trigger glyph on a tile");
+  restOn(row.querySelector<HTMLElement>("button") ?? assert.fail("no press"));
+  const card = document.querySelector('.luke-tooltip-card [data-actor-card="automation"]');
+  assert.match(card?.textContent ?? "", /Dependency bumps/u);
+  assert.match(card?.textContent ?? "", /Last ran/u);
+});
+
 test("a switch turns its automation off, and the row takes the service's answer in its place", async () => {
   const page = mount();
   await settle();
@@ -1061,6 +1075,10 @@ test("a row opens its automation's page, under crumbs naming it, with what it wa
 
   assert.deepEqual(places.at(-1), { kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
   assert.equal(crumbs(page), "AutomationsNightly flaky-test sweep");
+  assert.ok(
+    page.querySelector('.automation-crumbs .actor-mark[data-kind="automation"]'),
+    "the clock tile stands before the name",
+  );
   assert.equal(
     page.querySelector<HTMLInputElement>("input[aria-label='Automation name']")?.value,
     SWEEP.name,
@@ -2030,7 +2048,7 @@ function glyphs(rows: readonly Element[]): string[] {
   });
 }
 
-test("each run and each automation wears what fires it: a schedule's clock, GitHub's mark, a webhook's hook, or Run now's play", async () => {
+test("each run wears what fires it: a schedule's clock, GitHub's mark, a webhook's hook, or Run now's play, while each automation's row leads with its clock tile whatever fires it", async () => {
   standing = [
     SWEEP,
     automation(7, {
@@ -2045,7 +2063,12 @@ test("each run and each automation wears what fires it: a schedule's clock, GitH
   ];
   const list = mountPages({ kind: AUTOMATIONS_PAGE.LIST });
   await settle();
-  assert.deepEqual(glyphs(automationRows(list)), ["clock", "github", "webhook"]);
+  assert.deepEqual(
+    automationRows(list).map(
+      (row) => row.querySelector('.actor-mark[data-kind="automation"]') !== null,
+    ),
+    [true, true, true],
+  );
   act(() => root?.unmount());
   document.body.innerHTML = "";
 
@@ -2948,13 +2971,16 @@ const ISSUE_FIRING = {
   },
 } as const;
 
-test("a Sentry automation and its runs wear Sentry's mark, its row says its event and filters, and a skipped run says its issue and opens it", async () => {
+test("a Sentry automation's runs wear Sentry's mark, its row says its event and filters, and a skipped run says its issue and opens it", async () => {
   const opened: string[] = [];
   fakeAppPlatform({ ...QUIET_PANEL, openWeb: (url: string) => opened.push(url) });
   standing = [SENTRY_ALERTS];
   const list = mountPages({ kind: AUTOMATIONS_PAGE.LIST });
   await settle();
-  assert.deepEqual(glyphs(automationRows(list)), ["sentry"]);
+  assert.ok(
+    rowOf(list, "Fix Sentry errors").querySelector('.actor-mark[data-kind="automation"]'),
+    "the row leads with its clock tile, Sentry's mark left to its runs",
+  );
   assert.ok(
     says(rowOf(list, "Fix Sentry errors"), "When an alert fires in Sentry · web, api · error"),
   );

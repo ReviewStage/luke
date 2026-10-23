@@ -17,8 +17,8 @@ import {
 /**
  * copy-message.tsx -- the actions under a transcript's message: a copy of its words to the clipboard, where its transcript names its messages Copy link, on an agent's own message where its tab offers it, Fork to new agent (`fork-action.tsx`), and, where its tab offers a rewind, a line's Edit or a reply's Revert to here (`rewind-action.tsx`).
  *
- * A thin wrapper over AI Elements' message actions, shared by the voice
- * Call tab and a coding agent's tab, answered as every copy button
+ * A thin wrapper over AI Elements' message actions, shared by every
+ * transcript's messages, answered as every copy button
  * in the window is (`copy-feedback.tsx`): the glyph turns to a check for a
  * moment and back, and the button's name stays "Copy".
  */

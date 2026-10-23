@@ -2,7 +2,12 @@
  * cost.tsx -- the Cost screen: what the hosted service spends, priced at list price from the usage its tables keep.
  */
 
-import type { AdminCost, AdminCostAccount, AdminCostModel } from "@luke/features/admin-cost-wire";
+import {
+  ADMIN_COST_TOP_ACCOUNTS_LIMIT,
+  type AdminCost,
+  type AdminCostAccount,
+  type AdminCostModel,
+} from "@luke/features/admin-cost-wire";
 import { ADMIN_READ, type AdminMetricsWindow } from "@luke/features/admin-wire";
 import {
   BADGE_TONE,
@@ -17,17 +22,17 @@ import {
 } from "@luke/ui";
 import { formatCompact, formatTrendMove, formatUsd } from "@luke/ui/admin-format";
 import { formatCount } from "@luke/ui/time-format";
-import { AccountCell } from "../accounts-table/accounts-table.js";
+import { AccountCell, AccountCellSkeleton } from "../accounts-table/accounts-table.js";
 import { useAdminDoors } from "../admin-doors.js";
-import { CostChart } from "../charts/cost-chart.js";
-import { AdminSection, StatCard, StatGroup } from "../charts/stat-card.js";
+import { CostChart, CostChartSkeleton } from "../charts/cost-chart.js";
+import { AdminSection, STAT_LAYOUT, StatCards, type StatSpec } from "../charts/stat-card.js";
 import { AdminErrorState } from "../chrome/cards.js";
 import { AdminViewOptions, Refreshing, windowWords } from "../chrome/controls.js";
 import { PageNote } from "../chrome/notes.js";
 import { AdminPage, type ViewerAccount } from "../chrome/page-header.js";
 import { PageSkeleton } from "../chrome/page-skeleton.js";
+import { DataTableSkeleton } from "../chrome/table-skeleton.js";
 import { windowedReadQuery } from "../routing.js";
-import { SKELETON_PLOT, SKELETON_SHAPE, type SkeletonShape } from "../skeleton.js";
 import { adminReadFailure, useAdminRead } from "../use-admin-read.js";
 
 const COST_ERROR = "The cost endpoint did not answer.";
@@ -39,18 +44,8 @@ const COST_DESCRIPTION =
 /** The screen's dollar measure, named once so every label says the same thing. */
 const LIST_PRICE = "List-price equivalent";
 
-/** The screen's own sections, in the order the loaded page states them. */
-const COST_SHAPES: readonly SkeletonShape[] = [
-  { kind: SKELETON_SHAPE.STATIC, node: <PageNote>{COST_DESCRIPTION}</PageNote> },
-  { kind: SKELETON_SHAPE.STAT_GROUP },
-  { kind: SKELETON_SHAPE.STATIC, node: <ListPriceNote /> },
-  { kind: SKELETON_SHAPE.HEADING, label: `Daily ${LIST_PRICE.toLowerCase()}` },
-  { kind: SKELETON_SHAPE.CHART, plots: [SKELETON_PLOT.USAGE] },
-  { kind: SKELETON_SHAPE.HEADING, label: `${LIST_PRICE} by model` },
-  { kind: SKELETON_SHAPE.TABLE, rows: 5, numericColumns: 2 },
-  { kind: SKELETON_SHAPE.HEADING, label: `Accounts with the highest ${LIST_PRICE.toLowerCase()}` },
-  { kind: SKELETON_SHAPE.TABLE, rows: 10, numericColumns: 3 },
-];
+/** How many models the by-model table's skeleton stands a row for, about the models a window prices. */
+const MODEL_SKELETON_ROWS = 5;
 
 /** The figure a dollar amount that has nothing to divide by stands as. */
 const NO_FIGURE = "—";
@@ -89,6 +84,41 @@ function spendHint(cost: AdminCost): string {
     ? spendMove(cost)
     : `${spendMove(cost)} · plus ${formatCompact(unpriced)} unpriced tokens`;
 }
+
+/** The headline cards, in the order they stand. */
+const COST_STATS: readonly StatSpec<AdminCost>[] = [
+  {
+    key: "spend",
+    label: (cost) => `${LIST_PRICE} · ${cost.windowDays} days`,
+    value: (cost) => formatUsd(cost.totals.spendUsd),
+    hint: spendHint,
+    title: (cost) =>
+      `${LIST_PRICE.toLowerCase()} against ${formatUsd(cost.totals.trend.prior)} in the ${cost.totals.trend.days} days before`,
+  },
+  {
+    key: "per-account",
+    label: () => `${LIST_PRICE} per active account`,
+    value: (cost) => usdOrNone(cost.perAccount.meanUsd),
+    hint: (cost) =>
+      `median ${usdOrNone(cost.perAccount.medianUsd)} · ${formatCount(cost.perAccount.accounts)} accounts`,
+  },
+  {
+    key: "per-merged",
+    label: () => `${LIST_PRICE} per merged PR`,
+    value: (cost) => usdOrNone(cost.perMergedPullRequest.spendUsd),
+    hint: (cost) =>
+      `the window's whole figure over ${formatCount(cost.perMergedPullRequest.mergedPullRequests)} PRs merged`,
+  },
+  {
+    key: "voice",
+    label: () => "Voice minutes",
+    value: (cost) => wholeMinutes(cost.voice.minutes),
+    hint: (cost) =>
+      cost.voice.unpricedMinutes === 0
+        ? `${formatUsd(cost.voice.spendUsd)} at ${cost.prices.voice.model}'s list price`
+        : `${formatUsd(cost.voice.spendUsd)} at list price · ${wholeMinutes(cost.voice.unpricedMinutes)} min on an unpriced model`,
+  },
+];
 
 /** The two tables' column keys. */
 const MODEL_COLUMN = { MODEL: "model", SPEND: "spend", TOKENS: "tokens" } as const;
@@ -198,6 +228,82 @@ function CostBasisNote({ cost }: { cost: AdminCost }): React.JSX.Element {
   );
 }
 
+/**
+ * The screen's sections under its toolbar, drawn from `cost` once it is
+ * read and as their skeletons until then, so the loading page is this page
+ * with bones where the answer lands.
+ */
+function CostSections({
+  cost,
+  onOpenAccount,
+}: {
+  cost: AdminCost | undefined;
+  onOpenAccount: (id: string) => void;
+}): React.JSX.Element {
+  return (
+    <>
+      <AdminSection>
+        <PageNote>{COST_DESCRIPTION}</PageNote>
+        <StatCards layout={STAT_LAYOUT.GROUP} stats={COST_STATS} data={cost} />
+        <ListPriceNote />
+      </AdminSection>
+
+      <AdminSection title={`Daily ${LIST_PRICE.toLowerCase()}`}>
+        {cost === undefined ? (
+          <CostChartSkeleton />
+        ) : (
+          <CostChart daily={cost.daily} generatedAt={cost.generatedAt} />
+        )}
+      </AdminSection>
+
+      <AdminSection title={`${LIST_PRICE} by model`}>
+        {cost === undefined ? (
+          <DataTableSkeleton
+            label={`${LIST_PRICE} by model`}
+            columns={MODEL_COLUMNS}
+            rows={MODEL_SKELETON_ROWS}
+            minWidth={DATA_TABLE_MIN_WIDTH.NARROW}
+          />
+        ) : (
+          <DataTable
+            label={`${LIST_PRICE} by model`}
+            columns={MODEL_COLUMNS}
+            rows={cost.byModel}
+            rowKey={(row) => row.model ?? ""}
+            empty="No model tokens recorded in this window yet."
+            minWidth={DATA_TABLE_MIN_WIDTH.NARROW}
+          />
+        )}
+      </AdminSection>
+
+      <AdminSection title={`Accounts with the highest ${LIST_PRICE.toLowerCase()}`}>
+        {cost === undefined ? (
+          <DataTableSkeleton
+            label={`Accounts with the highest ${LIST_PRICE.toLowerCase()}`}
+            columns={accountColumns(onOpenAccount)}
+            rows={ADMIN_COST_TOP_ACCOUNTS_LIMIT}
+            minWidth={DATA_TABLE_MIN_WIDTH.MEDIUM}
+            cells={{ [ACCOUNT_COLUMN.ACCOUNT]: <AccountCellSkeleton /> }}
+          />
+        ) : (
+          <>
+            <DataTable
+              label={`Accounts with the highest ${LIST_PRICE.toLowerCase()}`}
+              columns={accountColumns(onOpenAccount)}
+              rows={cost.topAccounts}
+              rowKey={(row) => row.id}
+              empty="No priced usage recorded in this window yet."
+              minWidth={DATA_TABLE_MIN_WIDTH.MEDIUM}
+              onRowPress={(row) => onOpenAccount(row.id)}
+            />
+            <CostBasisNote cost={cost} />
+          </>
+        )}
+      </AdminSection>
+    </>
+  );
+}
+
 export function CostScreen({
   hideAdmins,
   onHideAdminsChange,
@@ -240,12 +346,9 @@ export function CostScreen({
   switch (state.status) {
     case "loading":
       return frame(
-        <PageSkeleton
-          title="Cost"
-          note={windowWords(windowDays)}
-          controls={controls}
-          shapes={COST_SHAPES}
-        />,
+        <PageSkeleton title="Cost" note={windowWords(windowDays)} controls={controls}>
+          <CostSections cost={undefined} onOpenAccount={onOpenAccount} />
+        </PageSkeleton>,
       );
     case "signed-out":
       return gate.signedOut();
@@ -262,77 +365,13 @@ export function CostScreen({
           />
         </AdminPage>,
       );
-    case "ready": {
-      const cost = state.value;
+    case "ready":
       return frame(
         <AdminPage title="Cost" note={windowWords(windowDays)} controls={controls}>
           <Refreshing failure={state.refreshFailure} refreshing={refreshing} onRetry={reload}>
-            <AdminSection>
-              <PageNote>{COST_DESCRIPTION}</PageNote>
-              <StatGroup>
-                <StatCard
-                  label={`${LIST_PRICE} · ${cost.windowDays} days`}
-                  value={formatUsd(cost.totals.spendUsd)}
-                  hint={spendHint(cost)}
-                  title={`${LIST_PRICE.toLowerCase()} against ${formatUsd(cost.totals.trend.prior)} in the ${cost.totals.trend.days} days before`}
-                  grouped
-                />
-                <StatCard
-                  label={`${LIST_PRICE} per active account`}
-                  value={usdOrNone(cost.perAccount.meanUsd)}
-                  hint={`median ${usdOrNone(cost.perAccount.medianUsd)} · ${formatCount(cost.perAccount.accounts)} accounts`}
-                  grouped
-                />
-                <StatCard
-                  label={`${LIST_PRICE} per merged PR`}
-                  value={usdOrNone(cost.perMergedPullRequest.spendUsd)}
-                  hint={`the window's whole figure over ${formatCount(cost.perMergedPullRequest.mergedPullRequests)} PRs merged`}
-                  grouped
-                />
-                <StatCard
-                  label="Voice minutes"
-                  value={wholeMinutes(cost.voice.minutes)}
-                  hint={
-                    cost.voice.unpricedMinutes === 0
-                      ? `${formatUsd(cost.voice.spendUsd)} at ${cost.prices.voice.model}'s list price`
-                      : `${formatUsd(cost.voice.spendUsd)} at list price · ${wholeMinutes(cost.voice.unpricedMinutes)} min on an unpriced model`
-                  }
-                  grouped
-                />
-              </StatGroup>
-              <ListPriceNote />
-            </AdminSection>
-
-            <AdminSection title={`Daily ${LIST_PRICE.toLowerCase()}`}>
-              <CostChart daily={cost.daily} generatedAt={cost.generatedAt} />
-            </AdminSection>
-
-            <AdminSection title={`${LIST_PRICE} by model`}>
-              <DataTable
-                label={`${LIST_PRICE} by model`}
-                columns={MODEL_COLUMNS}
-                rows={cost.byModel}
-                rowKey={(row) => row.model ?? ""}
-                empty="No model tokens recorded in this window yet."
-                minWidth={DATA_TABLE_MIN_WIDTH.NARROW}
-              />
-            </AdminSection>
-
-            <AdminSection title={`Accounts with the highest ${LIST_PRICE.toLowerCase()}`}>
-              <DataTable
-                label={`Accounts with the highest ${LIST_PRICE.toLowerCase()}`}
-                columns={accountColumns(onOpenAccount)}
-                rows={cost.topAccounts}
-                rowKey={(row) => row.id}
-                empty="No priced usage recorded in this window yet."
-                minWidth={DATA_TABLE_MIN_WIDTH.MEDIUM}
-                onRowPress={(row) => onOpenAccount(row.id)}
-              />
-              <CostBasisNote cost={cost} />
-            </AdminSection>
+            <CostSections cost={state.value} onOpenAccount={onOpenAccount} />
           </Refreshing>
         </AdminPage>,
       );
-    }
   }
 }

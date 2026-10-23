@@ -652,8 +652,8 @@ function PlanDocument({
   // The slug the task's links are written under, as its ⋯ menu's Copy link to task writes it.
   const workspace =
     opened === undefined ? undefined : taskLinkPlace(tasks.workspaces, opened).workspace;
-  // A row that opens a tab of this column, as a coding agent's start on the
-  // Call tab opens the agent's, first has a panel filling the window over it
+  // A row that opens a tab of this column, as a coding agent's start in an
+  // agent's tab opens the agent's, first has a panel filling the window over it
   // give way, and hands the keys to this column, so ⌘W closes the tab it opened.
   const openColumnTab = (opened: MainTab) => {
     if (sidePanel.fullScreen) sidePanel.onToggleFullScreen();
@@ -820,6 +820,7 @@ function PlanDocument({
             chosen: (chosen) =>
               sameTab(chosen, tab) || (sideTab !== undefined && sameTab(chosen, sideTab)),
             shownCode: shownCode ?? [],
+            pages: { taskId: listedCard.id },
             task: {
               name: listedCard.name,
               status: listedCard.status,

@@ -225,3 +225,21 @@ test("no two rows the search can land on wear the same id", () => {
     [],
   );
 });
+
+test("a writing chord is found by its name and by the Markdown typed for it, on the Keyboard shortcuts page", () => {
+  const entries = settingsSearchEntries({
+    settings: settingsView(),
+    voiceControlsDrawn: false,
+    accountDrawn: true,
+    capabilities: DESKTOP_CAPABILITIES,
+    workspace: undefined,
+  });
+  const shortcutsFound = (query: string) =>
+    (searchSettings(entries, query)?.groups ?? [])
+      .filter((group) => group.page === SETTINGS_VIEW.SHORTCUTS)
+      .flatMap((group) => group.items.map((entry) => entry.label));
+
+  assert.deepEqual(shortcutsFound("Strikethrough"), ["Strikethrough"]);
+  assert.deepEqual(shortcutsFound("~~"), ["Strikethrough"]);
+  assert.ok(shortcutsFound("markdown").includes("Divider"), "a rule with no chord is listed too");
+});

@@ -11,6 +11,7 @@ import {
   ONE_LINE_END,
   OneLine,
   PAGE_FRAME,
+  Skeleton,
   TEXT_ELEMENT,
   TEXT_TONE,
   TEXT_VARIANT,
@@ -194,6 +195,7 @@ export function AdminCollectionPage({
   filters,
   state,
   loadingLabel,
+  skeleton,
   empty,
   error,
   children,
@@ -205,6 +207,8 @@ export function AdminCollectionPage({
   filters: React.ReactNode;
   state: CollectionState;
   loadingLabel: string;
+  /** The view's own sections drawn before their answer, standing while it is read. */
+  skeleton?: React.ReactNode;
   empty?: React.ReactNode;
   error?: React.ReactNode;
   children?: React.ReactNode;
@@ -218,11 +222,24 @@ export function AdminCollectionPage({
         filters={filters}
         state={state}
         loadingLabel={loadingLabel}
+        skeleton={skeleton}
         empty={empty}
         error={error}
       >
         {children}
       </CollectionPage>
     </div>
+  );
+}
+
+/** A count bone, about the "12 of 340 accounts" a collection's filters say beside the search once read. */
+const SKELETON_COUNT_WIDTH = "128px";
+
+/** The count a collection's filters say beside its search, while the collection is read. */
+export function CollectionCountSkeleton(): React.JSX.Element {
+  return (
+    <Text as={TEXT_ELEMENT.DIV} variant={TEXT_VARIANT.CAPTION}>
+      <Skeleton width={SKELETON_COUNT_WIDTH} />
+    </Text>
   );
 }

@@ -61,6 +61,9 @@ type HintProps = Pick<
   "onPointerEnter" | "onPointerLeave" | "onPointerDown" | "onFocus" | "onBlur" | "aria-keyshortcuts"
 >;
 
+/** The card's own class, which `.prompt-input*` (tasks.css) lays out from. */
+const PROMPT_INPUT_CLASS = "prompt-input";
+
 export type PromptInputProps = Omit<
   HTMLAttributes<HTMLFormElement>,
   "onSubmit" | "className" | "children"
@@ -87,7 +90,7 @@ export function PromptInput({
   return (
     <ComposerFrame
       as={COMPOSER_ELEMENT.FORM}
-      className={cn("prompt-input", className)}
+      className={cn(PROMPT_INPUT_CLASS, className)}
       dropping={dropping}
       onSubmit={handleSubmit}
       {...props}
@@ -95,6 +98,11 @@ export function PromptInput({
       {children}
     </ComposerFrame>
   );
+}
+
+/** The card standing still, with no form around it: its frame and layout alone, as a box's placeholder draws them. */
+export function PromptInputCard({ children }: { children: ReactNode }): ReactNode {
+  return <ComposerFrame className={PROMPT_INPUT_CLASS}>{children}</ComposerFrame>;
 }
 
 /** Submits the form around a field, as Enter there does, unless its submit button is disabled. */

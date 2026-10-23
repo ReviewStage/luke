@@ -592,7 +592,7 @@ function mount(
       },
     });
     if (sidebar) return createElement(SharedListing, { tasks: control });
-    const inbox = createElement(DesktopInbox, { tasks: control });
+    const inbox = createElement(DesktopInbox, { tasks: control, room: room ?? SHELL_ROOM.WIDE });
     return withSidebar
       ? createElement(Fragment, null, createElement(DesktopSidebar, sidebarProps(control)), inbox)
       : inbox;
@@ -4622,6 +4622,16 @@ function hoveredCard(control: Element, card: string): string | null {
   return wordsOf(document.querySelector(`.luke-tooltip-card ${card}`));
 }
 
+test("a task's group header hangs the task's card, as the automation's does its own", async () => {
+  const { page } = mount();
+  await settle();
+  const header = headerNamed(page, "Invites");
+  restOn(header);
+  // Note that this window stands no chip cards, so the header hangs the card's fallback: the task's head.
+  const name = document.querySelector(".luke-tooltip-card .luke-hover-card-name");
+  assert.equal(name?.textContent, "Invites", "the header hangs a card named for its task");
+});
+
 test("an automation's group wears its clock tile and hangs its card, as its crumb does, the card's name opening its page since the header's press folds; its agent's row wears the agent's tile and hangs a card naming the agent and the automation that started it; the agents no automation names stand under no actor", async () => {
   handState({});
   listedWorkspace = {
@@ -4674,7 +4684,10 @@ test("an automation's group wears its clock tile and hangs its card, as its crum
   await settle();
   const crumb = page.querySelector<HTMLButtonElement>('nav[aria-label="Path"] button');
   assert.ok(crumb, "the automation's crumb is drawn");
-  assert.ok(crumb.querySelector(".lucide-clock"), "the automation's crumb wears its clock");
+  assert.ok(
+    crumb.querySelector('.actor-mark[data-kind="automation"]'),
+    "the automation's crumb wears its clock tile, as its group does",
+  );
   assert.match(hoveredCard(crumb, '[data-actor-card="automation"]') ?? "", /Nightly flake sweep/u);
   assert.equal(
     document.querySelector('.luke-tooltip-card [data-actor-card="automation"] button')?.textContent,
@@ -6199,40 +6212,39 @@ test("on All, every item settled and read is drawn gray, and what waits or is un
   assert.equal(rowMuted(page, "Expire after 7 days?"), false, "settled, but unread");
 });
 
-test("an answer moves no row while the list is shown, under either sort and every grouping, and the list sorts anew once the Inbox is left and come back to", async () => {
-  const groupings = ["plan", "person", "status", "newest"] as const;
-  const sorts = ["latest", "oldest"] as const;
-  for (const grouping of groupings) {
-    for (const sort of sorts) {
-      window.localStorage.setItem(SHOW_KEY, JSON.stringify("all"));
-      window.localStorage.setItem(GROUPING_KEY, JSON.stringify(grouping));
-      window.localStorage.setItem(SORT_KEY, JSON.stringify(sort));
-      const { page } = mount();
-      await settle();
-      const { answer } = gatedAnswers();
-      act(() => rowNamed(page, "Alert at 80%?").click());
-      await settle();
-      const before = placesOf(page);
+// One test per grouping and sort, each mounting the Inbox once, so a loaded shard times a
+// quarter-second mount rather than the eight of them together.
+const ANSWER_VIEWS = ["plan", "person", "status", "newest"].flatMap((grouping) =>
+  ["latest", "oldest"].map((sort) => ({ grouping, sort })),
+);
 
-      answerWithNote(page, "Use 90%");
-      await settle();
-      assert.deepEqual(placesOf(page), before, `${grouping}, ${sort}: as the answer is sent`);
-      await act(async () => answer({ item: THRESHOLD_ANSWERED, taken: true }));
-      await settle();
-      assert.deepEqual(placesOf(page), before, `${grouping}, ${sort}: once it is taken`);
-      assert.equal(rowMuted(page, "Alert at 80%?"), true);
+test.for(ANSWER_VIEWS)(
+  "an answer moves no row while the list is shown, under $grouping grouping and $sort sort, and the list sorts anew once the Inbox is left and come back to",
+  async ({ grouping, sort }) => {
+    window.localStorage.setItem(SHOW_KEY, JSON.stringify("all"));
+    window.localStorage.setItem(GROUPING_KEY, JSON.stringify(grouping));
+    window.localStorage.setItem(SORT_KEY, JSON.stringify(sort));
+    const { page } = mount();
+    await settle();
+    const { answer } = gatedAnswers();
+    act(() => rowNamed(page, "Alert at 80%?").click());
+    await settle();
+    const before = placesOf(page);
 
-      act(() => setInboxOpen(false));
-      act(() => setInboxOpen(true));
-      await settle();
-      assert.notDeepEqual(placesOf(page), before, `${grouping}, ${sort}: sorted anew`);
+    answerWithNote(page, "Use 90%");
+    await settle();
+    assert.deepEqual(placesOf(page), before, `${grouping}, ${sort}: as the answer is sent`);
+    await act(async () => answer({ item: THRESHOLD_ANSWERED, taken: true }));
+    await settle();
+    assert.deepEqual(placesOf(page), before, `${grouping}, ${sort}: once it is taken`);
+    assert.equal(rowMuted(page, "Alert at 80%?"), true);
 
-      act(() => root?.unmount());
-      root = undefined;
-      document.body.innerHTML = "";
-    }
-  }
-});
+    act(() => setInboxOpen(false));
+    act(() => setInboxOpen(true));
+    await settle();
+    assert.notDeepEqual(placesOf(page), before, `${grouping}, ${sort}: sorted anew`);
+  },
+);
 
 test("an answer the service refuses brings its item back as it was, needing you, with its box's words and why it did not go", async () => {
   const { page } = mount();
@@ -8383,6 +8395,65 @@ function paneTitle(page: HTMLElement): string | null | undefined {
   return page.querySelector(".inbox-view-items .inbox-subject-title")?.textContent;
 }
 
+test("on a phone the Inbox's list is headed by New task and one ⋯, its title centred between them, and the ⋯ opens the search and View options' own menu, so nothing is lost", async () => {
+  const { page, asked } = mount([], { room: SHELL_ROOM.NARROW });
+  await settle();
+  const head = page.querySelector<HTMLElement>(".inbox-head");
+  assert.ok(head, "the phone's head stands");
+  assert.deepEqual(
+    [...head.querySelectorAll("button")].map((each) => each.getAttribute("aria-label")),
+    ["New task", "More"],
+  );
+  assert.match(head.querySelector("h1")?.textContent ?? "", /^Inbox/);
+  assert.equal(magnifier(page), null, "no magnifier of its own");
+
+  const more = () =>
+    head.querySelector<HTMLButtonElement>('[aria-label="More"]') ?? assert.fail("the ⋯ stands");
+  const pick = (name: string) => {
+    act(() => more().click());
+    const item = [
+      ...document.querySelectorAll<HTMLElement>('[role="menu"] [role="menuitem"]'),
+    ].find((each) => each.querySelector(".luke-menu-item-label")?.textContent === name);
+    assert.ok(item, `the ⋯ offers ${name}`);
+    act(() => item.click());
+  };
+  act(() => more().click());
+  assert.deepEqual(
+    [...document.querySelectorAll('[role="menu"] .luke-menu-item-label')].map(
+      (each) => each.textContent,
+    ),
+    ["New thread", "Search inbox", "View options"],
+    "the ⋯ holds what the wide head draws as buttons",
+  );
+  act(() => more().click());
+  pick("View options");
+  assert.ok(
+    document.querySelector('[role="menu"][aria-label="View options"]:not([data-leaving])'),
+    "View options' own menu stands",
+  );
+  act(() => {
+    document.activeElement?.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }),
+    );
+  });
+  pick("Search inbox");
+  const field = page.querySelector<HTMLInputElement>(
+    '.inbox-head input[aria-label="Search inbox"]',
+  );
+  assert.ok(field, "the search opens");
+  act(() => {
+    field.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+  });
+  assert.equal(
+    document.activeElement,
+    more(),
+    "Escape folds it and hands the keyboard back to the ⋯",
+  );
+
+  act(() => head.querySelector<HTMLButtonElement>('[aria-label="New task"]')?.click());
+  assert.equal(asked.newTasks, 1);
+});
+
 test("the list's magnifier opens a search in the Inbox's name that narrows the list to the items saying every word typed, the item open leaving the list but not the pane; Escape empties and folds it, handing the keyboard back to the magnifier", async () => {
   const { page } = mount();
   await settle();
@@ -8474,8 +8545,15 @@ const STARTED: InboxItem = {
   ],
 };
 
-/** Every thread the pane starts, written down and answered as the service starts it, the task's inbox then holding it; the workspace's agents read as `agents`. */
-function heldStarts(agents: readonly CodingAgentSummary[]): CodingAgentInboxStartParams[] {
+/**
+ * Every thread the pane starts, written down and answered as the service
+ * starts it, the task's inbox then holding it; the workspace's newest agents
+ * read as `agents`, and those a search names as `found` answers its words.
+ */
+function heldStarts(
+  agents: readonly CodingAgentSummary[],
+  found: (words: string) => readonly CodingAgentSummary[] = () => [],
+): CodingAgentInboxStartParams[] {
   const sent: CodingAgentInboxStartParams[] = [];
   const bridge = appBridge();
   const previous = fakeActsAnswer();
@@ -8483,7 +8561,9 @@ function heldStarts(agents: readonly CodingAgentSummary[]): CodingAgentInboxStar
     ...bridge,
     act: (request: AnyAct): Promise<FakeActAnswer> => {
       if (request.kind === ACT_KIND.CODING_AGENTS_WORKSPACE_LIST) {
-        return Promise.resolve({ status: FAKE_ANSWER.DONE, value: { agents } });
+        const { words } = request.payload;
+        const value = { agents: words === undefined ? agents : found(words) };
+        return Promise.resolve({ status: FAKE_ANSWER.DONE, value });
       }
       if (request.kind !== ACT_KIND.CODING_AGENTS_INBOX_START) return previous(request);
       sent.push(request.payload);
@@ -8592,7 +8672,7 @@ function toMenuRows(): string[] {
   });
 }
 
-test("To lists the workspace's agents as one list, newest first, each by its own name alone in its tab's look", async () => {
+test("To lists the workspace's agents as one list, newest first, each in its tab's look and named as its tab is, its task beside it as the @ menu says it, No task for one on none, and nothing where the task only says the agent's name again", async () => {
   listedWorkspace = ACME;
   inboxes = new Map([[BILLING.id, [THRESHOLD]]]);
   const MAYA: CodingAgentSummary = {
@@ -8607,7 +8687,12 @@ test("To lists the workspace's agents as one list, newest first, each by its own
     planId: null,
     title: "Nightly dependency sweep",
   };
-  heldStarts([LONE, MAYA, AGENT]);
+  const NAMESAKE: CodingAgentSummary = {
+    ...AGENT,
+    id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b24",
+    title: BILLING.name,
+  };
+  heldStarts([NAMESAKE, LONE, MAYA, AGENT]);
   const { page } = mount();
   await settle();
   act(() =>
@@ -8624,9 +8709,10 @@ test("To lists the workspace's agents as one list, newest first, each by its own
   await settle();
 
   assert.deepEqual(toMenuRows(), [
-    "Nightly dependency sweep",
-    "Move the frontend into shared components",
-    "Alerts",
+    BILLING.name,
+    "Nightly dependency sweep · No task",
+    `Move the frontend into shared components · ${INVITES.name}`,
+    `Alerts · ${BILLING.name}`,
   ]);
 });
 
@@ -8666,4 +8752,134 @@ test("To's rows keep no check's room while no agent is chosen, and each hangs it
     new RegExp(`On ${BILLING.name}`, "u"),
     "the card stands whole as it is hung, its task named, as ⌘K's does, with nothing read",
   );
+});
+
+/** Opens a New thread from the Inbox's head, then its To menu, and hands back the draft's pane. */
+async function openTo(page: HTMLElement): Promise<HTMLElement> {
+  act(() =>
+    (
+      page.querySelector<HTMLButtonElement>('button[aria-label="New thread"]') ??
+      assert.fail("the head offers New thread")
+    ).click(),
+  );
+  await settle();
+  const pane = itemPane(page);
+  act(() =>
+    (
+      pane.querySelector<HTMLButtonElement>('[aria-label^="To: "]') ??
+      assert.fail("the draft has To")
+    ).click(),
+  );
+  await settle();
+  return pane;
+}
+
+test("a To row ends in its starter's face where a teammate started the agent and in nothing for the reader's own, then in the failed mark where its turn failed", async () => {
+  listedWorkspace = SHARED_WORKSPACE;
+  members = SHARED_MEMBERS;
+  inboxes = new Map([[BILLING.id, [THRESHOLD]]]);
+  const THEIRS: CodingAgentSummary = {
+    ...AGENT,
+    id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b25",
+    title: "Seat limits",
+    status: CODING_AGENT_STATUS.FAILED,
+    startedBy: TEAMMATE,
+  };
+  heldStarts([THEIRS, { ...AGENT, startedBy: READER }]);
+  const { page } = mount();
+  await settle();
+  await openTo(page);
+
+  const ends = [
+    ...document.querySelectorAll('[role="dialog"][aria-label="To"] [role="option"]'),
+  ].map((option) => {
+    const end = option.querySelector(".luke-combobox-option-hint");
+    return [
+      option.querySelector(".luke-combobox-option-label")?.textContent,
+      ...[...(end?.children ?? [])].map((mark) =>
+        mark.matches(".actor-mark") ? `face ${mark.getAttribute("data-kind")}` : mark.className,
+      ),
+    ];
+  });
+  assert.deepEqual(ends, [["Seat limits", "face person", "failed-mark"], ["Alerts"]]);
+});
+
+test("a word typed in To asks the service for the agents it names, so one past the workspace's newest is found, picked, and sent to", async () => {
+  listedWorkspace = ACME;
+  inboxes = new Map([[BILLING.id, [THRESHOLD]]]);
+  const OLDER: CodingAgentSummary = {
+    ...AGENT,
+    id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b26",
+    planId: INVITES.id,
+    title: "Seat limits",
+  };
+  const searched: string[] = [];
+  const starts = heldStarts([AGENT], (words) => {
+    searched.push(words);
+    return words === "seat" ? [OLDER] : [];
+  });
+  const { page } = mount();
+  await settle();
+  const pane = await openTo(page);
+
+  const search =
+    document.querySelector<HTMLInputElement>('[role="dialog"][aria-label="To"] input') ??
+    assert.fail("To's menu has a search field");
+  const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+  act(() => {
+    setValue?.call(search, "seat");
+    search.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await settle();
+  assert.deepEqual(searched, ["seat"], "the words reach the service");
+  assert.deepEqual(toMenuRows(), [`Seat limits · ${INVITES.name}`]);
+
+  act(() =>
+    (
+      document.querySelector<HTMLElement>('[role="dialog"][aria-label="To"] [role="option"]') ??
+      assert.fail("To lists the agent found")
+    ).click(),
+  );
+  await settle();
+  assert.equal(
+    pane.querySelector('[aria-label^="To: "]')?.getAttribute("aria-label"),
+    "To: Seat limits",
+  );
+  typeInComposer(pane, "Raise the seat limit.");
+  act(() =>
+    (
+      pane.querySelector<HTMLButtonElement>("form.inbox-answer button[type='submit']") ??
+      assert.fail("the box has a Send")
+    ).click(),
+  );
+  await settle();
+  assert.deepEqual(
+    starts.map(({ agentId }) => agentId),
+    [OLDER.id],
+  );
+});
+
+test("an agent of the workspace's newest stays found by every word its row shows, its name and its task, though the service finds nothing for the words", async () => {
+  listedWorkspace = ACME;
+  inboxes = new Map([[BILLING.id, [THRESHOLD]]]);
+  const searched: string[] = [];
+  heldStarts([AGENT], (words) => {
+    searched.push(words);
+    return [];
+  });
+  const { page } = mount();
+  await settle();
+  await openTo(page);
+
+  const search =
+    document.querySelector<HTMLInputElement>('[role="dialog"][aria-label="To"] input') ??
+    assert.fail("To's menu has a search field");
+  const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+  act(() => {
+    setValue?.call(search, "billing alerts");
+    search.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await settle();
+  assert.deepEqual(searched, ["billing alerts"]);
+  assert.deepEqual(toMenuRows(), [`Alerts · ${BILLING.name}`]);
 });

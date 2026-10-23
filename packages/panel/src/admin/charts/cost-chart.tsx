@@ -14,7 +14,7 @@ import { partialDayKey, seriesHasNoData } from "@luke/ui/daily-series";
 import { formatDayTick } from "@luke/ui/time-format";
 import { Bar, BarChart, CartesianGrid, Cell, XAxis, YAxis } from "recharts";
 import { barTopRadius } from "./bar-radius.js";
-import { ChartEmpty, ChartFrame, LEGEND, LEGEND_ENTRY } from "./chart-frame.js";
+import { ChartEmpty, ChartFrame, ChartFrameSkeleton, LEGEND, LEGEND_ENTRY } from "./chart-frame.js";
 
 /** Each source's name and its series colour, in the order the bars stack them from the axis up. */
 const COST_CHART = {
@@ -26,6 +26,11 @@ const COST_CHART = {
 } as const satisfies ChartConfig;
 
 const SOURCES: readonly CostSource[] = Object.values(COST_SOURCE);
+
+const COST_TITLE = "Daily list-price equivalent by source, USD";
+
+/** The plot's height, which the chart and its skeleton both stand. */
+const COST_PLOT_HEIGHT = "12rem";
 
 /** The swatch beside a legend's name, in the series' own colour. */
 const SWATCH = {
@@ -67,7 +72,7 @@ export function CostChart({
   daily: readonly AdminCostDay[];
   generatedAt: number;
 }): React.JSX.Element {
-  const title = "Daily list-price equivalent by source, USD";
+  const title = COST_TITLE;
   const totals = daily.map((day) => SOURCES.reduce((total, source) => total + day[source], 0));
   if (seriesHasNoData(totals)) {
     return (
@@ -84,7 +89,11 @@ export function CostChart({
   }));
   return (
     <ChartFrame title={title} legend={<CostLegend />}>
-      <ChartContainer config={COST_CHART} className="aspect-auto h-48 w-full">
+      <ChartContainer
+        config={COST_CHART}
+        className="aspect-auto w-full"
+        style={{ height: COST_PLOT_HEIGHT }}
+      >
         <BarChart data={data}>
           <CartesianGrid vertical={false} />
           <XAxis
@@ -128,4 +137,9 @@ export function CostChart({
       </ChartContainer>
     </ChartFrame>
   );
+}
+
+/** The chart while the window is read: its heading and legend, which it knows, over its plot's block. */
+export function CostChartSkeleton(): React.JSX.Element {
+  return <ChartFrameSkeleton title={COST_TITLE} legend={<CostLegend />} plot={COST_PLOT_HEIGHT} />;
 }

@@ -33,7 +33,14 @@ import {
 import { lapsedServer, SERVER_HANDED } from "@luke/ui/agent-servers-model";
 import { OPENAI_KEY_MISSING_NOTE } from "@luke/voice/microphone-access";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
-import { type ReactNode, type RefObject, useEffect, useRef, useState } from "react";
+import {
+  type ComponentProps,
+  type ReactNode,
+  type RefObject,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import {
   PromptInput,
   PromptInputFooter,
@@ -275,6 +282,36 @@ function useFootWidth(card: RefObject<HTMLDivElement | null>): number | undefine
     return () => observer.disconnect();
   }, [card]);
   return width;
+}
+
+/**
+ * The composer's room around its card, on the transcript's own inset, and
+ * the boxes its foot lays its presses in: the attach press's, at the
+ * foot's left, which the narrowest card folds into the ⋯, and the right's
+ * row, the model chip through Send. The box and its placeholder
+ * (`agent-tab-skeleton.tsx`) both stand in these, so the placeholder lands
+ * where the box does. The card is a drop target alone; the keys it hears
+ * come from its own field and buttons.
+ */
+export function ComposerCard({
+  children,
+  ...props
+}: Omit<ComponentProps<"div">, "className">): React.JSX.Element {
+  return (
+    <div className="agent-composer" {...props}>
+      {children}
+    </div>
+  );
+}
+
+/** The attach press's own box at the foot's left, which the narrowest card hides as the ⋯ takes the press in. */
+export function ComposerAttach({ children }: { children: ReactNode }): React.JSX.Element {
+  return <span className="agent-composer-attach">{children}</span>;
+}
+
+/** The foot's right: the model chip, the context ring, the microphone, and Send. */
+export function ComposerActions({ children }: { children: ReactNode }): React.JSX.Element {
+  return <div className="agent-composer-actions">{children}</div>;
 }
 
 /**
@@ -667,10 +704,8 @@ export function AgentComposer({
   };
 
   return (
-    // biome-ignore lint/a11y/noStaticElementInteractions: the card is a drop target alone; the keys it hears come from its own field and buttons.
-    <div
+    <ComposerCard
       ref={card}
-      className="agent-composer"
       data-status={status}
       data-closed={closed ? "" : undefined}
       onDragOver={(event) => {
@@ -758,14 +793,14 @@ export function AgentComposer({
           ) : (
             <>
               <PromptInputTools>
-                <span className="agent-composer-attach">
+                <ComposerAttach>
                   <AttachFilesButton
                     label={BUTTON.ATTACH}
                     disabled={held}
                     picker={picker}
                     onFiles={attach}
                   />
-                </span>
+                </ComposerAttach>
                 <BranchChip
                   published={published}
                   doors={doors}
@@ -773,7 +808,7 @@ export function AgentComposer({
                 />
                 {tools}
               </PromptInputTools>
-              <div className="agent-composer-actions">
+              <ComposerActions>
                 {actions?.(folds(FOLD_WIDTH.ACTIONS))}
                 {model === undefined ? null : (
                   <AgentModelChip
@@ -824,7 +859,7 @@ export function AgentComposer({
                     />
                   </Tooltip>
                 )}
-              </div>
+              </ComposerActions>
             </>
           )}
         </PromptInputFooter>
@@ -848,6 +883,6 @@ export function AgentComposer({
           {closed ? closedRemedy : null}
         </div>
       ) : null}
-    </div>
+    </ComposerCard>
   );
 }

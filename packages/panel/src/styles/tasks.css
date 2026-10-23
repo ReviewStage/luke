@@ -1005,7 +1005,7 @@
   border-bottom: 0;
 }
 
-/* The Code and Call tabs' logs, whose calls each open at a checkpoint stuck
+/* The Code tab's log, whose calls each open at a checkpoint stuck
    to the log's top (../ai-elements/checkpoint.tsx): the log's fade starts
    beneath the checkpoint's band (`SCROLL_FADE_INSET.BAND`), so the time
    stands whole and what scrolls under it dissolves just below it. The band
@@ -2539,26 +2539,29 @@
   line-height: var(--luke-type-caption-leading);
 }
 
-.chapters-skeleton {
+/* The placeholder's region takes the room under the line, as the
+   chapters' body does under theirs, so the rail runs the full height. */
+.chapters-generating > .luke-skeleton-region {
   display: flex;
-  gap: var(--luke-section-gap);
-  padding: var(--luke-space-12) var(--column-inset);
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
 }
 
-.chapters-skeleton-rail {
+/* A placeholder row in the rail's own list, a chapter's row's height and
+   inset, its block where the row's title will stand. */
+.chapter-rail-skeleton-row {
   display: flex;
-  width: min(var(--chapter-rail-width, calc(var(--luke-space-64) * 4)), 40%);
-  flex: none;
-  flex-direction: column;
-  gap: var(--luke-space-12);
+  height: var(--luke-control-height);
+  align-items: center;
+  padding-inline: var(--luke-space-8);
 }
 
 .chapters-skeleton-reading {
   display: flex;
-  min-width: 0;
-  flex: 1;
   flex-direction: column;
   gap: var(--luke-space-8);
+  padding: var(--luke-space-12) var(--column-inset);
 }
 
 /* A panel too narrow for the rail beside the chapter floats it over the
@@ -2601,7 +2604,9 @@
     display: flex;
   }
 
-  .chapters-skeleton-rail {
+  /* The rail floats over the chapter here, only while asked for, so the
+     chapters' placeholder stands none. */
+  .chapters-generating .chapter-rail {
     display: none;
   }
 }
@@ -3296,9 +3301,10 @@
 }
 
 /* A part of the overview still being read: its blocks in the type its
-   words will stand in, at the content inset; under the title, the branches'
-   and the people's two lines; in the checks, rows as boxed as theirs will
-   be. A part whose read failed says so in the same place, with its Retry. */
+   words will stand in, at the content inset. The title, the people line,
+   the checks, and the conversation stand theirs in their own boxes
+   (`agent-pull-request-tab.tsx`). A part whose read failed says so in the
+   same place, with its Retry. */
 .pull-request-skeleton,
 .pull-request-failure {
   padding-inline: var(--row-inset);
@@ -3308,15 +3314,8 @@
   margin-top: var(--luke-space-6);
 }
 
-.pull-request-head-skeleton,
 .pull-request-title-row + .pull-request-failure {
   margin-top: var(--luke-space-6);
-}
-
-.pull-request-checks-skeleton {
-  padding: var(--luke-space-8) var(--boxed-inset);
-  border: 1px solid var(--luke-color-border);
-  border-radius: var(--luke-control-radius);
 }
 
 /* A deployment's door to the address it serves, quiet at its row's end. */
@@ -3417,7 +3416,7 @@
   vertical-align: middle;
 }
 
-.pull-request-picture-waiting {
+.pull-request-picture-skeleton {
   display: inline-block;
   width: min(100%, 240px);
   aspect-ratio: 16 / 10;
@@ -4387,15 +4386,14 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
   border-bottom: 0;
 }
 
-/* The two transcripts: the Call tab and an agent's tab, each a frame the
-   log fills, their rows drawn by the one set of blocks
-   (../tasks/transcript-blocks.tsx over ../ai-elements/). What follows is
-   each one's own: Luke's mark beside a note of his, drawn at the row's 16px
-   in his voice's colour; the agent's composer; a worker's line. */
+/* An agent's tab: a frame the log fills, its rows drawn by the one set of
+   blocks (../tasks/transcript-blocks.tsx over ../ai-elements/). What
+   follows is its own: Luke's mark beside a note of his, drawn at the row's
+   16px in his voice's colour; the agent's composer; a worker's line. */
 /* An agent's tab while its transcript or the agent is read
    (`agent-tab-skeleton.tsx`): the log's last lines stand at its foot, where
    the newest lines draw, on the log's own inset, over the composer's card. */
-.agent-log-wait {
+.agent-log-skeleton-wait {
   display: flex;
   min-height: 0;
   flex: 1;
@@ -6107,19 +6105,9 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
   color: var(--luke-color-danger-text);
 }
 
-/* The Work tab's own ----------------------------------------------------- */
-
-/* The Work tab's Show earlier work, a quiet line over its oldest turn. */
-.task-call-earlier {
-  margin: 0;
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-caption-size);
-  line-height: var(--luke-type-caption-leading);
-}
-
 /* Lucide's glyphs, which the AI Elements components draw with, at the
    stroke every glyph of our own is drawn at in its 24 box (glyphs.tsx), so
-   the Work and Transcript tabs read at the weight of the rest of the window. */
+   the transcripts read at the weight of the rest of the window. */
 svg.lucide {
   stroke-width: 1.9;
 }
@@ -6181,7 +6169,7 @@ svg.lucide {
   }
 }
 
-/* A narrow panel's Call tab gives a subagent's job two lines before it
+/* A narrow side panel gives a subagent's job two lines before it
    cuts it, so the time and marks beside it leave more than a word of it. */
 @container side-panel (max-width: 359px) {
   .subagent-line {

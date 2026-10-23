@@ -7,7 +7,6 @@ import {
   BackIcon,
   COLLECTION_STATE,
   CollectionPage,
-  ComposeIcon,
   commandKeyshortcuts,
   DetailPage,
   DrawerScrim,
@@ -20,8 +19,10 @@ import {
   PANE_PIN_ELEMENT,
   PanePin,
   ScrollArea,
-  SettingsPage,
-  SettingsSectionsSkeleton,
+  SETTINGS_ROW_MARK_WIDTH,
+  SETTINGS_SKELETON_CONTROL,
+  SettingsPageSkeleton,
+  type SettingsSectionSkeletonShape,
   Shortcut,
   SidebarIcon,
   Skeleton,
@@ -31,6 +32,7 @@ import {
 import { isAgentTab } from "@luke/ui/tab-strip-model";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
 import { lazy, Suspense, useEffect, useMemo, useRef } from "react";
+import { ACTOR_SIZE, actorMarkWidth } from "../actor-ref.js";
 import { useAppCommand } from "../app-commands.js";
 import { appPlatform } from "../app-platform.js";
 import { CALL_CARD_SURFACE, StandingCallCardDock } from "../call/call-card.js";
@@ -72,6 +74,7 @@ import { DesktopTasks } from "./desktop-tasks.js";
 import { useFloatDismiss } from "./hover-pane.js";
 import { useLukeOperator } from "./luke-operator.js";
 import { MobileBar, mobileBarShown } from "./mobile-bar.js";
+import { NewTaskButton } from "./new-task-button.js";
 import { OfflineMark, useOffline } from "./offline-mark.js";
 import { ADMIN_PLACE, PERSON_PAGE, VERSION_HISTORY } from "./pages-on-demand.js";
 import { PaneGlide } from "./pane-motion.js";
@@ -284,14 +287,29 @@ function AutomationsLoading({
 }
 
 /**
- * How wide the placeholder title stands while Settings' chunk loads: a short
- * page name's, five controls' height across. Note that it is a length rather
- * than a share, because the title's line is only as wide as what it holds.
+ * The sections that stand while Settings' chunk loads, in the shape of the
+ * Account page Settings opens on: who is signed in, their face leading; the
+ * GitHub token, its mark leading; and Delete account. Note that they are not
+ * read from the page itself, because that would draw its chunk in with this one.
  */
-const SETTINGS_SKELETON_TITLE = "calc(5 * var(--luke-control-height))";
-
-/** How many rows each placeholder section stands while Settings' chunk loads. */
-const SETTINGS_SKELETON = [3, 2] as const;
+const SETTINGS_SKELETON: readonly SettingsSectionSkeletonShape[] = [
+  {
+    headed: true,
+    rows: [
+      {
+        described: true,
+        mark: actorMarkWidth(ACTOR_SIZE.CARD),
+        controls: [SETTINGS_SKELETON_CONTROL.BUTTON],
+      },
+      {
+        described: false,
+        mark: SETTINGS_ROW_MARK_WIDTH,
+        controls: [SETTINGS_SKELETON_CONTROL.BUTTON],
+      },
+      { described: false, controls: [SETTINGS_SKELETON_CONTROL.BUTTON] },
+    ],
+  },
+];
 
 /**
  * What stands while Settings' chunk loads: its frame, the page list's column
@@ -316,9 +334,7 @@ function SettingsLoading({
       </nav>
       <section className="settings-page" aria-label="Settings" hidden={hidden.item}>
         <div className="desktop-drag-strip" />
-        <SettingsPage title={<Skeleton width={SETTINGS_SKELETON_TITLE} />}>
-          <SettingsSectionsSkeleton label="Loading Settings" sections={SETTINGS_SKELETON} />
-        </SettingsPage>
+        <SettingsPageSkeleton label="Loading Settings" sections={SETTINGS_SKELETON} />
       </section>
     </div>
   );
@@ -401,6 +417,15 @@ function usePlaceCommands(
         }
       : undefined,
   );
+  useAppCommand(
+    APP_COMMAND.TASKS,
+    pastGate && tasks.signedIn
+      ? () => {
+          if (tab !== PANEL_TAB.TASKS) onTabChange(PANEL_TAB.TASKS);
+          tasks.boardView.onOpen();
+        }
+      : undefined,
+  );
   // The Admin place is an admin's alone, so ⌘K offers it only on the terms its sidebar row stands on.
   const adminOn = useAdminAccess();
   useAppCommand(
@@ -476,25 +501,6 @@ function usePlaceCommands(
   );
 }
 
-/**
- * The sidebar's New task, kept in reach while the sidebar is folded: an icon
- * beside the toggle, the way a chat app keeps its compose button beside its
- * own. It asks for exactly what the sidebar's button asks for: the New task
- * dialog, over whatever stands.
- */
-function TitleBarNewTask({ tasks }: { tasks: TasksControl }): React.JSX.Element {
-  return (
-    <Tooltip label="New task" command={APP_COMMAND.NEW_TASK}>
-      <IconButton
-        icon={<ComposeIcon />}
-        label="New task"
-        disabled={!tasks.signedIn}
-        onClick={tasks.onNewTask}
-      />
-    </Tooltip>
-  );
-}
-
 /** The voice's notice line, one element for every draw, which reads the line where it is drawn (`WindowVoiceNotice`). */
 const NOTICE_STRIP = <WindowVoiceNotice />;
 
@@ -504,7 +510,7 @@ const NOTICE_STRIP = <WindowVoiceNotice />;
  * the call bar. A tab standing behind another chosen tab, or under a side
  * panel filling the window, is not on screen.
  */
-function callTabShown(tasks: TasksControl, calling: string | undefined): boolean {
+function callingTabShown(tasks: TasksControl, calling: string | undefined): boolean {
   const { mainTabs, sidePanel } = tasks;
   const tab = mainTabs.tab;
   return (
@@ -713,7 +719,7 @@ export function DesktopShell({
   const calling = useCallingAgent();
   // Chat is handed only what it reads of the tasks, so a delivery that moves the rest draws none of it.
   const chatSurface = useChatSurface(tasks);
-  const callShown = taskDrawn && callTabShown(tasks, calling);
+  const callShown = taskDrawn && callingTabShown(tasks, calling);
   // A phone's task leads its own row with the way back to the page it was opened from, named for it (`task-pane-switcher.tsx`).
   const awayLabel = awayBack(history.away, history.onLeave).label;
   const { onLeave } = history;
@@ -862,6 +868,8 @@ export function DesktopShell({
   const drawerOver = room === SHELL_ROOM.NARROW && sidebar.overlay !== SIDEBAR_OVERLAY.CLOSED;
   // A phone goes between its places by a bar at the screen's foot, standing on their lists alone (`mobile-bar.tsx`).
   const barShown = mobileBarShown(room, tasks, chatOn);
+  // A phone's Inbox, Tasks page, and Chat, each on its list, head themselves with one row of their own (`phone-head.tsx`).
+  const placeHeaded = barShown && (inboxOpen || boardOpen || chatOpen);
   return (
     <div
       ref={shell}
@@ -902,7 +910,7 @@ export function DesktopShell({
                 />
               </PageFind>
             ) : inboxOpen ? (
-              <DesktopInbox tasks={tasks} listing={sharedListing} />
+              <DesktopInbox tasks={tasks} listing={sharedListing} room={room} />
             ) : pageAgent !== undefined ? (
               // Keyed by the agent, so another agent's page is a page of its own, holding nothing of the last.
               <DesktopAgentPage
@@ -986,13 +994,14 @@ export function DesktopShell({
       ) : null}
       {/* Note that they follow the drag strips they cover, because a later drag region wins.
           Folded, the sidebar's offline pill stands here, as its New task does. */}
-      {/* A phone's task heads itself with one row of its own, its way back where these stood (`task-pane-switcher.tsx`). */}
-      {room === SHELL_ROOM.NARROW && taskDrawn ? (
+      {/* A phone's task and its places head themselves with one row of their own (`phone-head.tsx`), the task's way back
+          or the place's one control where these stood; the places bar's More opens the drawer the toggle did. */}
+      {room === SHELL_ROOM.NARROW && (taskDrawn || placeHeaded) ? (
         <SidebarChord sidebar={sidebar} />
       ) : (
         <PanePin as={PANE_PIN_ELEMENT.DIV} className="title-bar-controls" onPin={keepOverlay}>
           <SidebarToggle sidebar={sidebar} />
-          {sidebar.collapsed ? <TitleBarNewTask tasks={tasks} /> : null}
+          {sidebar.collapsed ? <NewTaskButton tasks={tasks} /> : null}
           {sidebar.collapsed ? <OfflineMark /> : null}
         </PanePin>
       )}

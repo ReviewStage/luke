@@ -3,8 +3,8 @@
  *
  * Keyframe's session token can view the avatar and send it audio, so it
  * reaches one renderer: the panel's, which runs the session and draws its
- * video at the top of the Call tab. It is never written to the document,
- * which every window reads, and never broadcast. Nothing here calls
+ * video in the tab of the agent the call is into. It is never written to
+ * the document, which every window reads, and never broadcast. Nothing here calls
  * Electron, so what reaches the page is read and tested as the plain relay
  * it is.
  */

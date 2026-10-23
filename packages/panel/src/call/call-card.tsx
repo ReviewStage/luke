@@ -68,7 +68,7 @@ export interface CallControls {
  * The avatar as a card draws it (`callCardVideoStatus`): its tile while it
  * is starting or live, playing the track handed, and Video on beside the
  * plan's name while it is `OFF`. Video off and Video on ask main, as the
- * Call tab's do, so one press turns video off or on in every view at once.
+ * agent's tab's do, so one press turns video off or on in every view at once.
  */
 export interface CallCardVideo {
   status: AvatarStatus;
@@ -96,7 +96,7 @@ export function useCardVideoStatus(): AvatarStatus | undefined {
 
 /**
  * The card's video from its status and the track the window holds for it,
- * its Video off and Video on asking main as the Call tab's do, or nothing
+ * its Video off and Video on asking main as the agent's tab's do, or nothing
  * while the card has no video to offer.
  */
 export function cardVideo(
@@ -133,8 +133,8 @@ export function callControls(tell: ActHandle["tell"], speakerMuted: boolean): Ca
  * for the task it opens. In the floating window the name is the drag handle,
  * since macOS hands a press on a drag region to the drag, never the page.
  * There is no ×: End call is the way to put a call away, and a live call
- * nobody can see is what the card is for. On a video call the Call tab's
- * own tile stands over the name while the avatar does, with its Video off
+ * nobody can see is what the card is for. On a video call the agent's
+ * tab's own tile stands over the name while the avatar does, with its Video off
  * and no end of its own, and Video on stands beside the name once it is down.
  */
 export function CallCard({

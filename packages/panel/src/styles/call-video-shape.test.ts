@@ -7,10 +7,8 @@ import { layContainersAt } from "../testing/container-width.js";
 /**
  * call-video-shape.test.ts -- Luke's video tile draws the avatar's whole
  * picture in a shape that follows the room. The stock avatars stream a
- * square picture: in the Call tab the tile is square at its width and held
- * to two fifths of the stage's height, so a short window draws it wider,
- * never past 16:9; on the call card it stays 16:9; in an agent's tab it
- * stands at the picture's own aspect, which the picture fills. The picture
+ * square picture: on the call card the tile stays 16:9; in an agent's tab
+ * it stands at the picture's own aspect, which the picture fills. The picture
  * is never cut, and where the tile is wider a blurred copy of it fills what
  * it leaves. A box drawn at a
  * ratio takes its content's height as its least height unless told
@@ -40,64 +38,39 @@ function liveTile(parent: HTMLElement) {
   return { tile, frame, fill };
 }
 
-/** The Call tab's column and a call card in the sidebar, each holding a live tile. */
-function surfaces() {
+/** A call card in the sidebar, holding a live tile. */
+function cardTile() {
   laid = layContainersAt({});
   document.documentElement.dataset.lukeProfile = "desktop";
-  const tab = document.body.appendChild(document.createElement("section"));
-  tab.className = "task-call";
   const card = document.body.appendChild(document.createElement("section"));
   card.className = "call-card";
   card.dataset.surface = "sidebar";
-  return { tab: liveTile(tab), card: liveTile(card) };
+  return liveTile(card);
 }
 
-test("no tile takes its least height from the square stream inside it", () => {
-  for (const { tile } of Object.values(surfaces())) {
-    assert.equal(getComputedStyle(tile).minHeight, "0px");
-  }
-});
-
-test("the Call tab's tile is square at its width, held to two fifths of the stage, and never wider than 16:9 at that height", () => {
-  const { tab } = surfaces();
-  const drawn = getComputedStyle(tab.tile);
-  assert.equal(drawn.aspectRatio, "1 / 1");
-  assert.match(drawn.maxHeight, /--luke-stage-height\) \* 0\.4\)\)$/u);
-  assert.match(
-    drawn.maxHeight,
-    /^max\(135px, /u,
-    "a stage too short for the narrowest tile's 16:9 keeps that height rather than flattening it",
-  );
-  assert.match(
-    drawn.width,
-    /^min\(/u,
-    "the tile follows the tab rather than standing at one width",
-  );
-  assert.match(drawn.width, /\b560px\b/u);
-  assert.match(drawn.width, /--luke-stage-height\) \* 0\.4 \* 16 \/ 9\)/u);
+test("the card's tile takes no least height from the square stream inside it", () => {
+  assert.equal(getComputedStyle(cardTile().tile).minHeight, "0px");
 });
 
 test("the call card's tile stays 16:9 at the card's width", () => {
-  const { card } = surfaces();
-  const drawn = getComputedStyle(card.tile);
+  const drawn = getComputedStyle(cardTile().tile);
   assert.equal(drawn.aspectRatio, "16 / 9");
-  assert.equal(drawn.maxHeight, "none");
+  assert.equal(drawn.width, "100%");
 });
 
 test("the picture is drawn whole, and a blurred copy fills the tile under it", () => {
-  for (const { tile, frame, fill } of Object.values(surfaces())) {
-    assert.equal(getComputedStyle(frame).objectFit, "contain");
-    const under = getComputedStyle(fill);
-    assert.equal(under.objectFit, "cover");
-    assert.equal(under.position, "absolute");
-    assert.equal(under.zIndex, "-1");
-    assert.match(under.filter, /blur\(/u);
-    assert.equal(
-      getComputedStyle(tile).isolation,
-      "isolate",
-      "the fill stands over the tile's ground",
-    );
-  }
+  const { tile, frame, fill } = cardTile();
+  assert.equal(getComputedStyle(frame).objectFit, "contain");
+  const under = getComputedStyle(fill);
+  assert.equal(under.objectFit, "cover");
+  assert.equal(under.position, "absolute");
+  assert.equal(under.zIndex, "-1");
+  assert.match(under.filter, /blur\(/u);
+  assert.equal(
+    getComputedStyle(tile).isolation,
+    "isolate",
+    "the fill stands over the tile's ground",
+  );
 });
 
 /** An agent's tab's video room, holding its live tile in its frame, as `panel-avatar.tsx` draws them. */

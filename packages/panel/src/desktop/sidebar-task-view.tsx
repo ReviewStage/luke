@@ -142,6 +142,13 @@ function filteredActor(
   return creatorActor(named ?? { ownerId: createdBy }, reader, undefined);
 }
 
+/** The row standing last in a people menu while the members are read, which nothing picks. */
+const READING_MEMBERS: MenuAction = {
+  label: "Reading members…",
+  disabled: true,
+  onSelect: () => undefined,
+};
+
 /** Created by's and Assigned to's choices: Anyone, then Me, then each other member as read, the choice checked. */
 function memberEntries(
   createdBy: string | undefined,
@@ -179,6 +186,7 @@ function memberEntries(
       checked: createdBy === member.userId,
       onSelect: () => onCreatedBy(member.userId),
     })),
+    ...(reader.membersReading ? [READING_MEMBERS] : []),
   ];
 }
 

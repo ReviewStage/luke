@@ -28,6 +28,7 @@ import {
   TEXT_VARIANT,
   Text,
 } from "@luke/ui";
+import { Fragment } from "react";
 
 /**
  * A card inside a StatGroup leaves its edge to the group's, and once the
@@ -44,12 +45,16 @@ const METRIC_CARD_GROUPED =
  */
 const METRIC_FIGURE = "whitespace-nowrap tabular-nums";
 
-/** A label bone's width, about the words it stands for. */
-const SKELETON_LABEL_WIDTH = "96px";
+/**
+ * A label bone's width, about the words it stands for. Each is a share of
+ * the card's line, so the bones ask no width of the card, as wrapping words
+ * do not, and a row of cards wraps where the loaded one does.
+ */
+const SKELETON_LABEL_WIDTH = "60%";
 
-const SKELETON_VALUE_WIDTH = "80px";
+const SKELETON_VALUE_WIDTH = "45%";
 
-const SKELETON_HINT_WIDTH = "128px";
+const SKELETON_HINT_WIDTH = "80%";
 
 /**
  * A metric's frame: a card of its own, or a cell of a StatGroup's. Note that
@@ -123,7 +128,7 @@ export function MetricCard({
   );
 }
 
-export function StatCard({
+function StatCard({
   label,
   value,
   hint,
@@ -195,19 +200,16 @@ export const CARD_GAP = "gap-(--luke-space-8)";
  * so the row wraps once a figure needs the room rather than the figure
  * overflowing its card.
  */
-export const STAT_ROW = `flex flex-wrap ${CARD_GAP}`;
+const STAT_ROW = `flex flex-wrap ${CARD_GAP}`;
 
-export const STAT_CELL = "flex-1";
+const STAT_CELL = "flex-1";
 
 /**
  * Two cards of a row of four, kept together so the four read in order: one
  * row of four on a wide page, two rows of two on a narrower one, and one
  * column once a pair's figures need the room.
  */
-export const STAT_PAIR = `flex flex-1 basis-88 flex-wrap ${CARD_GAP}`;
-
-/** The cards a StatGroup sets side by side once the page is wide enough for them. */
-export const STAT_GROUP_COLUMNS = 3;
+const STAT_PAIR = `flex flex-1 basis-88 flex-wrap ${CARD_GAP}`;
 
 /**
  * Related headline metrics share one surface, leaving charts as the dominant
@@ -216,7 +218,7 @@ export const STAT_GROUP_COLUMNS = 3;
  * through a one-pixel gap, because a row that wraps when a figure needs the
  * room would leave a fixed divider on the wrong side of a card.
  */
-export function StatGroup({ children }: { children: React.ReactNode }): React.JSX.Element {
+function StatGroup({ children }: { children: React.ReactNode }): React.JSX.Element {
   return (
     <Card padding={CARD_PADDING.FLUSH}>
       <div className="flex flex-col gap-px bg-(--luke-color-border) min-[720px]:flex-row min-[720px]:flex-wrap">
@@ -224,6 +226,97 @@ export function StatGroup({ children }: { children: React.ReactNode }): React.JS
       </div>
     </Card>
   );
+}
+
+/**
+ * One stat card as a page declares it, read from the answer `T`: its label,
+ * its figure, and, where it has them, its hint and its title. Whether a card
+ * has a hint is the declaration's, so its skeleton stands the hint's line
+ * exactly where the loaded card will.
+ */
+export interface StatSpec<T> {
+  key: string;
+  label: (data: T) => string;
+  value: (data: T) => string;
+  hint?: ((data: T) => React.ReactNode) | undefined;
+  title?: ((data: T) => string) | undefined;
+}
+
+/**
+ * How a page sets its stat cards: on one shared surface (`StatGroup`), side
+ * by side in a row that wraps, or in a row's two wrapping pairs, which keep
+ * four cards reading in order.
+ */
+export const STAT_LAYOUT = {
+  GROUP: "group",
+  ROW: "row",
+  PAIRS: "pairs",
+} as const;
+
+type StatLayout = (typeof STAT_LAYOUT)[keyof typeof STAT_LAYOUT];
+
+/** The cards two by two, the last alone where they are odd. */
+function inPairs<T>(items: readonly T[]): T[][] {
+  const pairs: T[][] = [];
+  for (let at = 0; at < items.length; at += 2) pairs.push(items.slice(at, at + 2));
+  return pairs;
+}
+
+/**
+ * A page's stat cards, one for each of `stats` in their order, set as
+ * `layout` sets them: each card drawn from `data` once it is read, and its
+ * skeleton until then, so the cards, their count, and their hints are the
+ * declaration's alone, loading or loaded.
+ */
+export function StatCards<T>({
+  layout,
+  stats,
+  data,
+}: {
+  layout: StatLayout;
+  stats: readonly StatSpec<T>[];
+  data: T | undefined;
+}): React.JSX.Element {
+  const grouped = layout === STAT_LAYOUT.GROUP;
+  const card = (stat: StatSpec<T>) =>
+    data === undefined ? (
+      <MetricCardSkeleton grouped={grouped} hint={stat.hint !== undefined} />
+    ) : (
+      <StatCard
+        label={stat.label(data)}
+        value={stat.value(data)}
+        hint={stat.hint?.(data)}
+        title={stat.title?.(data)}
+        grouped={grouped}
+      />
+    );
+  const cell = (stat: StatSpec<T>) => (
+    <div key={stat.key} className={STAT_CELL}>
+      {card(stat)}
+    </div>
+  );
+  switch (layout) {
+    case STAT_LAYOUT.GROUP:
+      return (
+        <StatGroup>
+          {stats.map((stat) => (
+            <Fragment key={stat.key}>{card(stat)}</Fragment>
+          ))}
+        </StatGroup>
+      );
+    case STAT_LAYOUT.ROW:
+      return <div className={STAT_ROW}>{stats.map(cell)}</div>;
+    case STAT_LAYOUT.PAIRS:
+      return (
+        <div className={STAT_ROW}>
+          {inPairs(stats).map((pair) => (
+            <div key={pair[0]?.key} className={STAT_PAIR}>
+              {pair.map(cell)}
+            </div>
+          ))}
+        </div>
+      );
+  }
 }
 
 /**

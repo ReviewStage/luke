@@ -45,11 +45,7 @@ import { task } from "./task.js";
  * an ask, and the one that waits on an answer is named here; the title,
  * blocks, response, and `needs_reply` stay written beside it for a reader
  * from before version 5. The row goes with its
- * account, its task, and its agent alike. The columns
- * the fixed kinds stood in, `kind`, `details`, `options`, and
- * `recommended`, are declared no longer: the database still holds them,
- * kept in step by the trigger `20261007104640_inbox_item_blocks` installed,
- * until a contract migration drops them both.
+ * account, its task, and its agent alike.
  */
 export const inboxItem = pgTable(
   "inbox_item",

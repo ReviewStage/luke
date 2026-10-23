@@ -33,6 +33,7 @@ import {
   MenuGlyph,
   MenuSurface,
   ProviderMark,
+  Spinner,
   TEXT_ELEMENT,
   TEXT_TONE,
   TEXT_VARIANT,
@@ -44,6 +45,7 @@ import {
 import { type Actor, LUKE_ACTOR, memberActor } from "@luke/ui/actor-model";
 import type { NamedServer } from "@luke/ui/agent-servers-model";
 import type { SkillOption } from "@luke/ui/skill-mention";
+import { pullRequestLabelOf } from "@luke/ui/tab-strip-model";
 import { fileFolder, fileName } from "@luke/voice/code-pane-model";
 import { defaultFilter } from "cmdk";
 import * as Atom from "effect/reactivity/Atom";
@@ -63,6 +65,7 @@ import { type IntegrationToolsReads, useIntegrationTools } from "../integration-
 import { useMemberDirectory } from "../member-directory.js";
 import type { ComposerTrigger, MentionNode } from "../plan-editor/contract.js";
 import { appStateDerivedAtom, useAppSlice } from "../use-app-state.js";
+import { agentTaskDetail } from "./agent-menu-row.js";
 import {
   DATE_PICKER_CLOSE,
   type DatePicked,
@@ -240,19 +243,8 @@ interface Closed {
 /** What a page's row says beside its title. */
 const PAGE_DETAIL = "Page";
 
-/** What an agent's row says beside its name: its task's, this one's, or none. */
-const AGENT_DETAIL = {
-  THIS_TASK: "This task",
-  NO_TASK: "No task",
-  OTHER_TASK: "Another task",
-  ARCHIVED: "Archived",
-} as const;
-
 /** What the reader's own row says beside their name. */
 const YOU_DETAIL = "You";
-
-/** What stands between an agent's task and its being archived in its row's detail. */
-const DETAIL_JOIN = " · ";
 
 /** What a pull request's row says beside its name where no agent is named for it. */
 const PULL_REQUEST_DETAIL = "Pull request";
@@ -318,7 +310,7 @@ const listedTasksAtom: Atom.Atom<{
 const MENU_LABEL = "Mention";
 
 /** What the list says where it has no row. */
-const NO_MATCH = "Nothing matches";
+const NO_MATCH = "No results match";
 
 /** The keys the list hears, said at its foot as far as it hears them now. */
 const MENU_KEY = {
@@ -574,17 +566,6 @@ function workspaceTaskRows(
   });
 }
 
-/** What an agent's row says of its task: this one, another by its name, or none, and whether it is archived. */
-function agentDetail(agent: MentionableAgent, taskId: string): string {
-  const task =
-    agent.task === undefined
-      ? AGENT_DETAIL.NO_TASK
-      : agent.task.id === taskId
-        ? AGENT_DETAIL.THIS_TASK
-        : (agent.task.name ?? AGENT_DETAIL.OTHER_TASK);
-  return agent.archived === true ? `${task}${DETAIL_JOIN}${AGENT_DETAIL.ARCHIVED}` : task;
-}
-
 /**
  * Each agent's row, by its tab's name, wearing its tile, labelled and found
  * by its task: the plan's own agents first, then the workspace's others in
@@ -606,7 +587,7 @@ function agentRows(
     if (seen.has(agent.id) || (agent.archived === true && !typed)) continue;
     seen.add(agent.id);
     const task = agent.task;
-    const detail = agentDetail(agent, taskId);
+    const detail = agentTaskDetail(agent, taskId);
     rows.push({
       mention:
         task === undefined
@@ -679,7 +660,7 @@ function pullRequestRows(
 ): MentionRow[] {
   if (taskId === NO_TASK) return [];
   return pullRequests.map((pullRequest) => {
-    const name = `#${pullRequest.number} ${pullRequest.title}`;
+    const name = pullRequestLabelOf(pullRequest);
     const detail = pullRequest.agent ?? PULL_REQUEST_DETAIL;
     return {
       mention: {
@@ -1063,6 +1044,7 @@ function MentionMenu({
   at,
   keys,
   place,
+  reading,
   onHover,
   onChoose,
 }: {
@@ -1072,6 +1054,8 @@ function MentionMenu({
   at: number;
   keys: readonly string[];
   place: MenuPlace;
+  /** Whether a read the list offers rows from is still out, which the list says in place of "no match". */
+  reading: boolean;
   onHover: (index: number) => void;
   onChoose: (row: MentionRow) => void;
 }): React.JSX.Element {
@@ -1095,7 +1079,8 @@ function MentionMenu({
         }}
         // A narrowed list's one group is named by its crumb.
         headed={crumb === undefined}
-        empty={NO_MATCH}
+        empty={reading ? undefined : NO_MATCH}
+        note={reading ? <Spinner delay label="Reading" /> : undefined}
       />
       <div className="task-compose-menu-foot mention-menu-foot" aria-hidden="true">
         {keys.map((key) => (
@@ -1574,6 +1559,13 @@ export function useMentionPicker({
           members !== undefined,
         );
   const rows = groups.flatMap((group) => group.rows);
+  // The list says it is reading, never that nothing matches, while a read it draws rows from is out.
+  const reading =
+    open &&
+    ((members === undefined && directory.membersReading) ||
+      (readAgents !== undefined && wantsAgents) ||
+      (read === undefined && treeKey(taskId, workspaceId, repository) !== undefined) ||
+      (skills !== undefined && skills.known === undefined));
   // Words typed past a space that match nothing are prose, not a mention: the list stands aside, and comes back only if they match again.
   const shown = naming || (open && (rows.length > 0 || !/\s/u.test(term.trim())));
   const held =
@@ -1726,6 +1718,7 @@ export function useMentionPicker({
         at={at}
         keys={keys}
         place={placeOf(trigger, placed, box.clientWidth)}
+        reading={reading}
         onHover={(index) => setHighlight({ start: trigger.start, query: trigger.query, at: index })}
         onChoose={choose}
       />

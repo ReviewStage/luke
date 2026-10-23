@@ -22,7 +22,7 @@ import type { EditComposerDoors } from "./edit-composer.js";
  * line that opened a turn is written again, and a reply is reverted to only
  * where such a line follows it, since a line a turn took in while it ran sits
  * inside that turn's work. Only the conversation goes back: the agent's
- * checkout stays as it is. A worker's tab and the Call tab hand none.
+ * checkout stays as it is. A worker's tab hands none.
  */
 
 /** Which rewind a message offers: a line of the developer's its Edit, a reply its Revert to here. */

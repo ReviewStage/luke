@@ -7,7 +7,9 @@ import {
   Badge,
   ConfirmDialog,
   ErrorState,
+  SETTINGS_SKELETON_CONTROL,
   SettingsLine,
+  type SettingsRowSkeletonShape,
   SettingsRowsSkeleton,
   SettingsSection,
   TEXT_TONE,
@@ -73,6 +75,12 @@ function keeperOf(memory: MemorySummary, readerId: string | undefined): string {
 
 /** The class PostHog's recorder leaves out of a recording, element and children alike. */
 const NO_CAPTURE = "ph-no-capture";
+
+/** The rows that stand while the memories are read: each its words over who kept it and when, and its ⋯. */
+const MEMORIES_SKELETON: readonly SettingsRowSkeletonShape[] = Array.from({ length: 3 }, () => ({
+  described: true,
+  controls: [SETTINGS_SKELETON_CONTROL.MORE],
+}));
 
 /** One memory's row: its words, when it was last kept, and Forget behind its ⋯. */
 function MemoryRow({
@@ -264,7 +272,7 @@ export function MemorySection({
               </ErrorState>
             </SettingsLine>
           ) : (
-            <SettingsRowsSkeleton label="Loading Luke's memory" rows={3} />
+            <SettingsRowsSkeleton label="Loading Luke's memory" rows={MEMORIES_SKELETON} />
           )}
         </SettingsSection>
       </div>

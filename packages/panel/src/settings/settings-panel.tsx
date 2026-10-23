@@ -20,6 +20,7 @@ import { LinksSection } from "./links-section.js";
 import { MacCommandsSection } from "./mac-commands-section.js";
 import { MemorySection } from "./memory-page.js";
 import { NotificationsSection } from "./notifications-section.js";
+import { PrivacySection } from "./privacy-section.js";
 import { settingsRowsInput, shownWorkspace } from "./settings-rows.js";
 import { WindowShortcutSections } from "./shortcuts-page.js";
 import { SkillsPage } from "./skills-page.js";
@@ -108,6 +109,7 @@ export function SettingsPanel({
               onDeleteAccount={onDeleteAccount}
             />
             {panelView ? <LinksSection view={panelView} writes={writes} /> : null}
+            {panelView ? <PrivacySection view={panelView} writes={writes} /> : null}
           </>
         ) : (
           <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.SUBTLE}>

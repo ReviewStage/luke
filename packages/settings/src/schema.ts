@@ -26,7 +26,7 @@ import {
   INLINE_DIFF_LABEL,
 } from "./diff-view.js";
 import { EXPERIMENT, experimentOn } from "./experiments.js";
-import { choiceSetting, optional, toggleSetting } from "./schema-builders.js";
+import { buildToggleSetting, choiceSetting, optional, toggleSetting } from "./schema-builders.js";
 import {
   SETTING_SECTION,
   SETTING_SIDE_EFFECT,
@@ -239,6 +239,28 @@ export const APP_SETTING_SCHEMA = {
     // Nothing to run per write: a web page reads the choice as it loads.
     sideEffect: SETTING_SIDE_EFFECT.NONE,
     visible: accountDrawn,
+  }),
+  /*
+   * Whether this Luke sends its counts of how features are used. On by
+   * default in a packaged build, the app people download, and off in a
+   * development one, so a run from source counts nothing until its
+   * developer turns it on. Kept on this device rather than with the account,
+   * since which build runs is the device's.
+   */
+  usageData: buildToggleSetting({
+    field: "usageData",
+    id: APP_SETTING_ID.USAGE_DATA,
+    label: "Share usage data",
+    detail:
+      "Counts of which Luke features you use, sent under your account. " +
+      "Never what you type or say.",
+    default: true,
+    unpackagedDefault: false,
+    page: SETTINGS_PAGE.ACCOUNT,
+    section: SETTING_SECTION.PRIVACY,
+    order: 310,
+    visible: accountDrawn,
+    sideEffect: SETTING_SIDE_EFFECT.USAGE_DATA,
   }),
   duckOtherMedia: toggleSetting({
     field: "duckOtherMedia",

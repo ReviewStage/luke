@@ -24,7 +24,7 @@ import {
  * already saying goodbye, so there is nothing for the model to add. Asked
  * for a step after it anyway, the model answers with nothing, as its words
  * tell it to, and eve reads an empty answer as the model failing, retries it
- * once, and fails the turn, which the Call tab then said had failed.
+ * once, and fails the turn, which the agent's tab then says had failed.
  */
 
 /**

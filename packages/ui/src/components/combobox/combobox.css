@@ -131,6 +131,7 @@
 
   /* A hint keeps a menu's distance from what stands before it, as a chord does. */
   .luke-combobox-option-hint {
+    gap: var(--luke-space-4);
     padding-left: var(--luke-space-16);
   }
 

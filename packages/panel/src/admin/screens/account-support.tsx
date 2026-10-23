@@ -33,17 +33,32 @@ import {
   DATA_TABLE_MIN_WIDTH,
   DataTable,
   type DataTableColumn,
+  type DataTableMinWidth,
   GAP,
   Inline,
+  Skeleton,
   Stack,
+  TEXT_ELEMENT,
   TEXT_TONE,
   Text,
 } from "@luke/ui";
 import { formatCount, formatInstant } from "@luke/ui/time-format";
-import { AdminSection, STAT_CELL, STAT_PAIR, STAT_ROW, StatCard } from "../charts/stat-card.js";
+import { AdminSection, STAT_LAYOUT, StatCards, type StatSpec } from "../charts/stat-card.js";
+import { DataTableSkeleton } from "../chrome/table-skeleton.js";
 
 /** What the page draws where a value is absent. */
 const NONE = "—";
+
+/**
+ * How many rows each table's skeleton stands, about an active account's:
+ * how many it holds is the answer's alone.
+ */
+const SKELETON_ROWS = { AGENTS: 5, WORKSPACES: 2, CREDENTIALS: 2, FAILURES: 3 } as const;
+
+/** The defaults' line bones, about their sentences' width. */
+const SKELETON_DEFAULTS_WIDTH = "320px";
+
+const SKELETON_EXPERIMENTS_WIDTH = "192px";
 
 /** A coding agent's status words, by the tone the panel's own pills would draw them in. */
 const AGENT_STATUS_TONE = {
@@ -102,55 +117,38 @@ function percentOf(part: number, whole: number): string | undefined {
 }
 
 /** The window's work as four stat cards: tasks, agents, pull requests, and call minutes. */
-function WorkCards({
-  support,
-  windowDays,
-}: {
-  support: AdminAccountSupport;
-  windowDays: number;
-}): React.JSX.Element {
-  const { totals } = support;
-  const failed = percentOf(totals.agentsFailed, totals.agentsRead);
-  const truncated = totals.agentsRead < totals.agentsStarted;
-  return (
-    <div className={STAT_ROW}>
-      <div className={STAT_PAIR}>
-        <div className={STAT_CELL}>
-          <StatCard
-            label={`Tasks created · ${windowDays} days`}
-            value={formatCount(totals.tasksCreated)}
-          />
-        </div>
-        <div className={STAT_CELL}>
-          <StatCard
-            label={`Coding agents · ${windowDays} days`}
-            value={formatCount(totals.agentsStarted)}
-            hint={
-              failed === undefined
-                ? "none started"
-                : `${failed} failed${truncated ? ` of the newest ${formatCount(totals.agentsRead)}` : ""}`
-            }
-          />
-        </div>
-      </div>
-      <div className={STAT_PAIR}>
-        <div className={STAT_CELL}>
-          <StatCard
-            label={`Pull requests merged · ${windowDays} days`}
-            value={formatCount(totals.pullRequestsMerged)}
-            hint={`of ${formatCount(totals.pullRequestsOpened)} opened`}
-            title="Of the pull requests opened by the agents started in the window"
-          />
-        </div>
-        <div className={STAT_CELL}>
-          <StatCard
-            label={`Call minutes · ${windowDays} days`}
-            value={formatCount(totals.callMinutes)}
-          />
-        </div>
-      </div>
-    </div>
-  );
+function workStats(windowDays: number): readonly StatSpec<AdminAccountSupport>[] {
+  return [
+    {
+      key: "tasks",
+      label: () => `Tasks created · ${windowDays} days`,
+      value: ({ totals }) => formatCount(totals.tasksCreated),
+    },
+    {
+      key: "agents",
+      label: () => `Coding agents · ${windowDays} days`,
+      value: ({ totals }) => formatCount(totals.agentsStarted),
+      hint: ({ totals }) => {
+        const failed = percentOf(totals.agentsFailed, totals.agentsRead);
+        const truncated = totals.agentsRead < totals.agentsStarted;
+        return failed === undefined
+          ? "none started"
+          : `${failed} failed${truncated ? ` of the newest ${formatCount(totals.agentsRead)}` : ""}`;
+      },
+    },
+    {
+      key: "merged",
+      label: () => `Pull requests merged · ${windowDays} days`,
+      value: ({ totals }) => formatCount(totals.pullRequestsMerged),
+      hint: ({ totals }) => `of ${formatCount(totals.pullRequestsOpened)} opened`,
+      title: () => "Of the pull requests opened by the agents started in the window",
+    },
+    {
+      key: "call-minutes",
+      label: () => `Call minutes · ${windowDays} days`,
+      value: ({ totals }) => formatCount(totals.callMinutes),
+    },
+  ];
 }
 
 const AGENT_COLUMNS: readonly DataTableColumn<AdminAccountAgent>[] = [
@@ -325,65 +323,118 @@ function DefaultsLines({ support }: { support: AdminAccountSupport }): React.JSX
   );
 }
 
-/** Every support section, in the order a maintainer reads an account by. */
+/** The defaults while they are read: bones for the model line and the experiments' line under it. */
+function DefaultsLinesSkeleton(): React.JSX.Element {
+  return (
+    <Stack gap={GAP.CONTROL}>
+      <Text as={TEXT_ELEMENT.DIV}>
+        <Skeleton width={SKELETON_DEFAULTS_WIDTH} />
+      </Text>
+      <Text as={TEXT_ELEMENT.DIV}>
+        <Skeleton width={SKELETON_EXPERIMENTS_WIDTH} />
+      </Text>
+    </Stack>
+  );
+}
+
+/** One support table: its label, its columns, its rows from the answer, and what it says with none. */
+function SupportTable<Row>({
+  label,
+  columns,
+  rows,
+  rowKey,
+  empty,
+  minWidth,
+  skeletonRows,
+}: {
+  label: string;
+  columns: readonly DataTableColumn<Row>[];
+  rows: readonly Row[] | undefined;
+  rowKey: (row: Row) => string;
+  empty: string;
+  minWidth: DataTableMinWidth;
+  skeletonRows: number;
+}): React.JSX.Element {
+  return rows === undefined ? (
+    <DataTableSkeleton label={label} columns={columns} rows={skeletonRows} minWidth={minWidth} />
+  ) : (
+    <DataTable
+      label={label}
+      columns={columns}
+      rows={rows}
+      rowKey={rowKey}
+      empty={empty}
+      minWidth={minWidth}
+    />
+  );
+}
+
+/**
+ * Every support section, in the order a maintainer reads an account by,
+ * drawn from `support` once it is read and as their skeletons until then.
+ */
 export function AccountSupportSections({
   support,
   windowDays,
 }: {
-  support: AdminAccountSupport;
+  support: AdminAccountSupport | undefined;
   windowDays: number;
 }): React.JSX.Element {
   return (
     <>
       <AdminSection title="Work">
-        <WorkCards support={support} windowDays={windowDays} />
+        <StatCards layout={STAT_LAYOUT.PAIRS} stats={workStats(windowDays)} data={support} />
       </AdminSection>
 
       <AdminSection title="Recent agents">
-        <DataTable
+        <SupportTable
           label="The account's newest coding agents"
           columns={AGENT_COLUMNS}
-          rows={support.recentAgents}
+          rows={support?.recentAgents}
           rowKey={(agent) => agent.id}
           empty="No coding agent started yet."
           minWidth={DATA_TABLE_MIN_WIDTH.MEDIUM}
+          skeletonRows={SKELETON_ROWS.AGENTS}
         />
       </AdminSection>
 
       <AdminSection title="Workspaces">
-        <DataTable
+        <SupportTable
           label="The account's workspaces"
           columns={WORKSPACE_COLUMNS}
-          rows={support.workspaces}
+          rows={support?.workspaces}
           rowKey={(workspace) => workspace.id}
           empty="In no workspace."
           minWidth={DATA_TABLE_MIN_WIDTH.NARROW}
+          skeletonRows={SKELETON_ROWS.WORKSPACES}
         />
       </AdminSection>
 
       <AdminSection title="Keys and connections">
-        <DataTable
+        <SupportTable
           label="The account's provider keys and integration connections"
           columns={CREDENTIAL_COLUMNS}
-          rows={credentialRows(support)}
+          rows={support === undefined ? undefined : credentialRows(support)}
           rowKey={(row) => String(row.order)}
           empty="No provider key or connection."
           minWidth={DATA_TABLE_MIN_WIDTH.NARROW}
+          skeletonRows={SKELETON_ROWS.CREDENTIALS}
         />
       </AdminSection>
 
       <AdminSection title="Defaults and experiments">
-        <DefaultsLines support={support} />
+        {support === undefined ? <DefaultsLinesSkeleton /> : <DefaultsLines support={support} />}
       </AdminSection>
 
       <AdminSection title={`Recent failures · ${windowDays} days`}>
-        <DataTable
+        <SupportTable
           label="The account's recent failures"
           columns={FAILURE_COLUMNS}
-          rows={support.failures.map((failure, order) => ({ order, failure }))}
+          rows={support?.failures.map((failure, order) => ({ order, failure }))}
           rowKey={(row) => String(row.order)}
           empty="Nothing failed in this window."
           minWidth={DATA_TABLE_MIN_WIDTH.NARROW}
+          skeletonRows={SKELETON_ROWS.FAILURES}
         />
       </AdminSection>
     </>
