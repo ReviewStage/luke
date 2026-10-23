@@ -521,31 +521,6 @@
   margin-top: 0.5em;
 }
 
-/* The plan's document (`plan-document-editor.tsx`). Its title and
-   sections are blocks: the words take the text cursor and nothing else marks
-   them, since a click into them edits them, and a block the keyboard selects
-   wears a soft tint of the focus colour a little past its words, as a
-   document editor marks a selected block. */
-.plan-document-block {
-  position: relative;
-  isolation: isolate;
-  cursor: text;
-}
-
-.plan-document-block:focus-visible {
-  outline: none; /* no ring: the tint below marks the block */
-}
-
-.plan-document-block:focus-visible::before {
-  position: absolute;
-  z-index: -1;
-  inset: calc(var(--luke-space-2) * -1) calc(var(--luke-space-6) * -1);
-  border-radius: var(--luke-radius-6);
-  background: color-mix(in srgb, var(--luke-color-focus-ring) 14%, transparent);
-  content: "";
-  pointer-events: none;
-}
-
 /* A title that is not edited, with what stands at its right end on its line,
    as a page's actions stand at the end of its title. */
 .task-title-line {
@@ -571,12 +546,6 @@
    pixels. Note that it outranks `.luke-markdown p`, which breaks anywhere. */
 .task-title .luke-markdown-heading {
   overflow-wrap: break-word;
-}
-
-/* The title is edited where it is drawn: its caret in the accent and no box. */
-.task-title-text {
-  caret-color: var(--luke-color-accent);
-  outline: none; /* no ring: the caret alone, edited where it is drawn */
 }
 
 /* The space between two sections, resolved at the text's own size so a
@@ -4221,20 +4190,13 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
   white-space: pre-wrap;
 }
 
-/* A transcript's fenced block (transcript-markdown.tsx), drawn as a Code
-   tab card is: the code's own ground inside a hairline, a header naming
-   the language with the copy at its right, and the lines in the cards'
-   type. The copy is the window's own icon button, flush with the header's
-   right edge, so the header is the button's height and no more. The lines
-   keep whole and scroll sideways inside the block, so a long one never
-   widens the transcript. */
-.transcript-code {
-  overflow: hidden;
-  border: 1px solid var(--luke-color-border);
-  border-radius: var(--luke-radius-8);
-  background: var(--luke-color-code-ground);
-}
-
+/* A transcript's fenced block (transcript-markdown.tsx), on `@luke/ui`'s
+   code card as a Code tab card is: a header naming the language with the
+   copy at its right, and the lines in the cards' type. The copy is the
+   window's own icon button, flush with the header's right edge, so the
+   header is the button's height and no more. The lines keep whole and
+   scroll sideways inside the block, so a long one never widens the
+   transcript. */
 .transcript-code-header {
   display: flex;
   min-width: 0;

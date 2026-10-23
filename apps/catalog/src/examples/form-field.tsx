@@ -1,4 +1,4 @@
-import { FormField, GAP, Stack, TextField } from "@luke/ui";
+import { type FieldControl, FormField, GAP, Stack, TextField } from "@luke/ui";
 import { useState } from "react";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
@@ -6,9 +6,8 @@ import { CatalogSection } from "../section";
 /**
  * form-field.tsx -- a field with a label alone, with a description, with an
  * error, with long words in a narrow column, and one counting its words
- * against its limit once they near it. The control is a bare input standing
- * in for the text controls that come after it, but for the counted one,
- * whose count follows a real field's typing.
+ * against its limit once they near it. The control is a text field standing
+ * in for any control a field holds.
  */
 
 /** How many characters the counted example takes at most. */
@@ -30,8 +29,10 @@ function CountedField(): React.JSX.Element {
   );
 }
 
-function SampleInput(control: React.InputHTMLAttributes<HTMLInputElement>): React.JSX.Element {
-  return <input {...control} className="catalog-input" type="text" defaultValue="Acme" />;
+/** A text field standing in for whichever control a field holds. */
+function SampleInput({ control }: { control: FieldControl }): React.JSX.Element {
+  const [name, setName] = useState("Acme");
+  return <TextField field={control} value={name} onChange={setName} />;
 }
 
 function FormFields(): React.JSX.Element {
@@ -41,17 +42,17 @@ function FormFields(): React.JSX.Element {
         <div className="catalog-column">
           <Stack gap={GAP.FIELD}>
             <FormField label="Workspace name">
-              {(control) => <SampleInput {...control} />}
+              {(control) => <SampleInput control={control} />}
             </FormField>
             <FormField label="Workspace name" description="Everyone in the workspace sees it.">
-              {(control) => <SampleInput {...control} />}
+              {(control) => <SampleInput control={control} />}
             </FormField>
             <FormField
               label="Workspace name"
               description="Everyone in the workspace sees it."
               error="A workspace by that name already exists."
             >
-              {(control) => <SampleInput {...control} />}
+              {(control) => <SampleInput control={control} />}
             </FormField>
           </Stack>
         </div>
@@ -68,7 +69,7 @@ function FormFields(): React.JSX.Element {
             description="Pick one the workspace's GitHub installation can reach, or the runs start with no checkout at all."
             error="The installation no longer reaches acme/a-repository-whose-name-runs-long."
           >
-            {(control) => <SampleInput {...control} />}
+            {(control) => <SampleInput control={control} />}
           </FormField>
         </div>
       </CatalogSection>
