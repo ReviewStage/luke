@@ -31,12 +31,10 @@ import {
   GATEWAY_EVENT,
   GATEWAY_METHOD,
   type GatewayMethodHandler,
-  invalid,
   RefusedRefusal,
+  readParams,
 } from "@luke/gateway";
-import { unparsedWire } from "@luke/wire";
-import { readEither } from "@luke/wire/effect";
-import { Effect, FiberMap, Result, Stream } from "effect";
+import { Effect, FiberMap, Stream } from "effect";
 import type { AccountComposer } from "./compose-account.js";
 import type { OpenTerminalSocket, TerminalSocket } from "./compose-terminals.js";
 import type { HostKernel } from "./host-kernel.js";
@@ -116,12 +114,13 @@ export function browserLiveConcern(
   const methods: BrowserLiveConcern["methods"] = {
     [GATEWAY_METHOD.BROWSER_LIVE_CONNECT]: (params) =>
       Effect.gen(function* () {
-        const read = readEither(browserLiveConnectParamsSchema)(unparsedWire(params));
-        if (Result.isFailure(read)) {
-          return yield* invalid("opening a live view names the connection, the task, and the tab");
-        }
+        const read = yield* readParams(
+          browserLiveConnectParamsSchema,
+          params,
+          "opening a live view names the connection, the task, and the tab",
+        );
         if (!gate()) return yield* Effect.fail(new RefusedRefusal({ message: "signed out" }));
-        const { connectionId, taskId, tabId } = read.success;
+        const { connectionId, taskId, tabId } = read;
         if (socketOrigin === undefined) {
           return yield* Effect.fail(new RefusedRefusal({ message: "no live view is served" }));
         }
@@ -133,10 +132,12 @@ export function browserLiveConcern(
       }),
     [GATEWAY_METHOD.BROWSER_LIVE_SEND]: (params) =>
       Effect.gen(function* () {
-        const read = readEither(browserLiveSendParamsSchema)(unparsedWire(params));
-        if (Result.isFailure(read))
-          return yield* invalid("sending names the connection and the text");
-        const { connectionId, text } = read.success;
+        const read = yield* readParams(
+          browserLiveSendParamsSchema,
+          params,
+          "sending names the connection and the text",
+        );
+        const { connectionId, text } = read;
         const connection = connections.get(connectionId);
         if (connection === undefined) return {};
         if (connection.socket !== undefined) {
@@ -148,11 +149,13 @@ export function browserLiveConcern(
       }),
     [GATEWAY_METHOD.BROWSER_LIVE_DISCONNECT]: (params) =>
       Effect.gen(function* () {
-        const read = readEither(browserLiveConnectionParamsSchema)(unparsedWire(params));
-        if (Result.isFailure(read))
-          return yield* invalid("closing a live view names the connection");
-        connections.delete(read.success.connectionId);
-        yield* FiberMap.remove(fibers, read.success.connectionId);
+        const read = yield* readParams(
+          browserLiveConnectionParamsSchema,
+          params,
+          "closing a live view names the connection",
+        );
+        connections.delete(read.connectionId);
+        yield* FiberMap.remove(fibers, read.connectionId);
         return {};
       }),
   };

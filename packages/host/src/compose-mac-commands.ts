@@ -13,7 +13,7 @@ import {
   type MacCommandResult,
   type MacShellResult,
 } from "@luke/features/mac-command-wire";
-import { Config, Duration, Effect, FiberSet, Option, Schedule, Schema, Stream } from "effect";
+import { Config, Duration, Effect, FiberSet, Option, Schedule, Stream } from "effect";
 import * as HttpClient from "effect/http/HttpClient";
 import type { ChildProcessSpawner } from "effect/process";
 import type { AccountComposer } from "./compose-account.js";
@@ -21,7 +21,7 @@ import type { Composer } from "./composer.js";
 import { Environment, Reporter } from "./effect/seams.js";
 import type { HOST_PLATFORM_CONCERN, PlatformConcernMethods } from "./host-concerns.js";
 import type { HostKernel } from "./host-kernel.js";
-import { LiveBroken, type LiveClient, liveRows, openRealtimeClient } from "./live-follow.js";
+import { decodedLiveRows, type LiveClient, openRealtimeClient } from "./live-follow.js";
 import { type MacShell, runMacCommand } from "./mac-command-runner.js";
 import type { RunMode } from "./run-mode.js";
 
@@ -143,7 +143,6 @@ export function composeMacCommands(
     const http = yield* HttpClient.HttpClient;
     const { kernel, account, enabled, client } = dependencies;
     const openLive = dependencies.openLive ?? openRealtimeClient;
-    const decode = Schema.decodeUnknownOption(macCommandsLiveRowsSchema);
 
     const asked = <A>(call: Effect.Effect<A, never, HttpClient.HttpClient>) =>
       Effect.provideService(call, HttpClient.HttpClient, http);
@@ -232,7 +231,7 @@ export function composeMacCommands(
             tried = new Set(commands.map((command) => command.id));
             for (const command of fresh) yield* FiberSet.run(running, claimed(running, command));
           });
-        const rows = liveRows(
+        const rows = decodedLiveRows(
           {
             openLive,
             reseal: () => seal(userId, false),
@@ -240,13 +239,9 @@ export function composeMacCommands(
             now: kernel.now,
           },
           first,
+          macCommandsLiveRowsSchema,
         );
-        const following = Stream.runForEach(rows, (delivered) =>
-          Option.match(decode(delivered), {
-            onNone: () => Effect.fail(new LiveBroken({ reason: "a row did not decode" })),
-            onSome: (read) => claimNew(macCommandsOfLiveRows(read)),
-          }),
-        );
+        const following = Stream.runForEach(rows, (read) => claimNew(macCommandsOfLiveRows(read)));
         return Effect.raceFirst(following, presence(userId)).pipe(
           Effect.catch(() => Effect.sleep(LIVE_RESTART)),
         );

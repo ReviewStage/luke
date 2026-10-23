@@ -10,20 +10,10 @@ import {
   type ScopeInboxLiveAnswer,
   scopeInboxLiveRowsSchema,
 } from "@luke/features/live-wire";
-import {
-  Data,
-  Duration,
-  Effect,
-  Option,
-  RcMap,
-  Schema,
-  type Scope,
-  Stream,
-  SubscriptionRef,
-} from "effect";
+import { Data, Duration, Effect, RcMap, type Scope, Stream, SubscriptionRef } from "effect";
 import { Hex } from "effect/encoding";
 import type { InboxTxWaits } from "./inbox-tx-waits.js";
-import { LiveBroken, type LiveClient, liveRows } from "./live-follow.js";
+import { decodedLiveRows, type LiveClient } from "./live-follow.js";
 
 /**
  * scope-inbox-follow.ts -- a plan's inbox, or one agent's, followed for main from a Neon Realtime subscription the host holds while it is followed, and told whole as it changes.
@@ -110,7 +100,6 @@ export type ScopeInboxes = RcMap.RcMap<InboxScopeKey, Standing>;
 export function scopeInboxes(
   dependencies: ScopeInboxDependencies,
 ): Effect.Effect<ScopeInboxes, never, Scope.Scope> {
-  const decode = Schema.decodeUnknownOption(scopeInboxLiveRowsSchema);
   return RcMap.make({
     idleTimeToLive: IDLE,
     lookup: (scope: InboxScopeKey) =>
@@ -130,7 +119,7 @@ export function scopeInboxes(
           return { kind: "refused", failure } as const;
         }
         const inbox = yield* SubscriptionRef.make<LiveState>({ kind: "waiting" });
-        const rows = liveRows(
+        const rows = decodedLiveRows(
           {
             openLive: dependencies.openLive,
             reseal: () => seal(false),
@@ -139,19 +128,15 @@ export function scopeInboxes(
             onTxWait: dependencies.txWaits.hook(),
           },
           first,
+          scopeInboxLiveRowsSchema,
         );
         yield* Effect.forkScoped(
-          Stream.runForEach(rows, (read) =>
-            Option.match(decode(read), {
-              onNone: () => Effect.fail(new LiveBroken({ reason: "a row did not decode" })),
-              onSome: (decoded) => {
-                const items = inboxOfLiveRows(decoded);
-                return Effect.flatMap(cursorOf(items), (cursor) =>
-                  SubscriptionRef.set(inbox, { kind: "standing", inbox: { items, cursor } }),
-                );
-              },
-            }),
-          ).pipe(Effect.catch(() => SubscriptionRef.set(inbox, { kind: "broken" }))),
+          Stream.runForEach(rows, (decoded) => {
+            const items = inboxOfLiveRows(decoded);
+            return Effect.flatMap(cursorOf(items), (cursor) =>
+              SubscriptionRef.set(inbox, { kind: "standing", inbox: { items, cursor } }),
+            );
+          }).pipe(Effect.catch(() => SubscriptionRef.set(inbox, { kind: "broken" }))),
         );
         return { kind: "live", inbox } as const;
       }),
