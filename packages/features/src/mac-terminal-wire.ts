@@ -68,9 +68,6 @@ export const macTerminalKeySchema = EffectSchema.Struct({
   agentId: macTerminalOpenParamsSchema.fields.agentId,
 });
 
-/** The channel a terminal's port is posted to its panel on, under its agent's id. */
-export const MAC_TERMINAL_PORT_CHANNEL = "mac-terminal:port";
-
 export const MAC_TERMINAL_PORT_MESSAGE = {
   /** main → renderer: what the terminal printed. */
   OUTPUT: "output",

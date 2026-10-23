@@ -17,9 +17,6 @@
 import { Schema as EffectSchema } from "effect";
 import { BROWSER_LIVE } from "./browser-live-wire.js";
 
-/** The channel each attached view's port is posted on. */
-export const BROWSER_LIVE_PORT_CHANNEL = "browser-live:port";
-
 /** The kinds of message on a view's port. */
 export const BROWSER_LIVE_PORT_MESSAGE = {
   /** main → renderer: one text frame the service sent, unread. */

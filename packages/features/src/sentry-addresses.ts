@@ -15,7 +15,6 @@
  * `@sentry/browser` each hand their own here and get back what they gave.
  */
 
-import { Predicate } from "effect";
 import { redactCredentials } from "./credential-redaction.js";
 
 /** What a redacted value, segment, or fragment reads as. */
@@ -102,8 +101,8 @@ export function scrubbedAttributes<Attributes extends object>(attributes: Attrib
     const scrub = URL_ATTRIBUTES.get(name);
     if (scrub === undefined) return [name, value];
     if (Array.isArray(value))
-      return [name, value.map((item) => (Predicate.isString(item) ? scrub(item) : item))];
-    return [name, Predicate.isString(value) ? scrub(value) : value];
+      return [name, value.map((item) => (typeof item === "string" ? scrub(item) : item))];
+    return [name, typeof value === "string" ? scrub(value) : value];
   });
   // SAFETY: each entry keeps its name, and a string is replaced only by a string, in an array or not.
   return Object.fromEntries(entries) as Attributes;
@@ -111,7 +110,7 @@ export function scrubbedAttributes<Attributes extends object>(attributes: Attrib
 
 /** A request's query as an event carries it, a string or its pairs, with every value redacted. */
 export function scrubbedQueryParams(query: QueryParams): QueryParams {
-  if (Predicate.isString(query)) return scrubbedQuery(query);
+  if (typeof query === "string") return scrubbedQuery(query);
   if (Array.isArray(query))
     return query.map(([name]): [string, string] => [scrubbedSegment(name), REDACTED]);
   return Object.fromEntries(Object.keys(query).map((name) => [scrubbedSegment(name), REDACTED]));

@@ -44,7 +44,8 @@ fi
 # `@luke/host` and every door of it a browser loads are walked the same way:
 # `/effect`, `/client`, `/act-port`, `/service-layer`, `/agent-notices` and
 # `/task-code`, which the web app runs the host in a tab through, and
-# `/acts`, `/app-state`, `/bridge` and `/contract`, which the panel reads
+# `/acts`, `/app-state`, `/bridge`, `/bridge-channels` and `/contract`, which the
+# panel and the preload read
 # (`packages/host/AGENTS.md`). Their graphs name no `node:` module, no `ws`, no
 # `electron`, no `@luke/host/node`, and no `Buffer` or `process` global, and
 # what needs one sits behind
@@ -76,6 +77,7 @@ node --input-type=module -e '
         "acts.ts",
         "app-state.ts",
         "bridge.ts",
+        "bridge-channels.ts",
         "contract/index.ts",
         "task-code.ts",
       ],

@@ -26,7 +26,7 @@
 
 import { feedbackDelivery } from "@luke/features/feedback";
 import type { LinkPlatform } from "@luke/features/link-open";
-import { TERMINAL_PORT_CHANNEL } from "@luke/features/terminal-acts";
+import { TERMINAL_PORT_CHANNEL } from "@luke/features/port-channels";
 import { runModeFor } from "@luke/host";
 import {
   type ActPortDependencies,

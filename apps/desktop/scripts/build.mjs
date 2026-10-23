@@ -18,6 +18,7 @@ import {
 } from "@luke/panel/build-table";
 import { sentryEsbuildPlugin } from "@sentry/esbuild-plugin";
 import { build } from "esbuild";
+import { MAIN_ENTRY, NODE_BUNDLE, PRELOAD_ENTRY } from "./node-bundles.mjs";
 import { replayProjectKeyDefine, signingModeDefine } from "./package-config.mjs";
 import { tailwindPlugin } from "./tailwind.mjs";
 
@@ -284,13 +285,9 @@ const rendererBuild = build({
 await Promise.all([
   rendererBuild,
   build({
-    entryPoints: [path.join(appRoot, "src/main/index.ts")],
+    ...NODE_BUNDLE,
+    entryPoints: [MAIN_ENTRY],
     outfile: path.join(outputRoot, "main.js"),
-    bundle: true,
-    platform: "node",
-    format: "cjs",
-    target: "node22",
-    external: ["electron"],
     plugins: sentryPlugins(),
     define: {
       PACKAGED_SENTRY_DSN: JSON.stringify(process.env.SENTRY_DSN ?? ""),
@@ -301,8 +298,6 @@ await Promise.all([
       // the run answers to; see `@luke/host`'s app-identity.ts.
       ...signingModeDefine(process.env),
     },
-    sourcemap: "external",
-    logLevel: "info",
   }),
   // The code colouring process main forks with `utilityProcess`
   // (`src/main/services/task-code-colouring.ts`), its own bundle so Shiki,
@@ -320,16 +315,10 @@ await Promise.all([
     logLevel: "info",
   }),
   build({
-    entryPoints: [path.join(appRoot, "src/preload/index.ts")],
+    ...NODE_BUNDLE,
+    entryPoints: [PRELOAD_ENTRY],
     outfile: path.join(outputRoot, "preload.js"),
-    bundle: true,
-    platform: "node",
-    format: "cjs",
-    target: "node22",
-    external: ["electron"],
     plugins: sentryPlugins(),
-    sourcemap: "external",
-    logLevel: "info",
   }),
   build({
     // The stylesheet entry `@import`s the renderer's stylesheets; esbuild

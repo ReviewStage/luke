@@ -189,7 +189,7 @@ export function composeDesktop(
       // not land, and the document says so from its first version.
       const updateEngine =
         config.packaged && config.runMode.sendsNetwork && config.platform === "darwin"
-          ? createElectronUpdaterEngine()
+          ? yield* Effect.promise(createElectronUpdaterEngine)
           : undefined;
       const state = new AppStateStore(
         initialAppState(

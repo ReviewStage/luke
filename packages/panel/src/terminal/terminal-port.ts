@@ -11,11 +11,8 @@
  * host's port and is ignored.
  */
 
-import {
-  TERMINAL_PORT_CHANNEL,
-  type TerminalPortTicket,
-  terminalPortTicketSchema,
-} from "@luke/features/terminal-acts";
+import { TERMINAL_PORT_CHANNEL } from "@luke/features/port-channels";
+import { type TerminalPortTicket, terminalPortTicketSchema } from "@luke/features/terminal-acts";
 import { isRecord, unparsedWire } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import { Result } from "effect";

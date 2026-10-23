@@ -2,10 +2,10 @@
 
 import assert from "node:assert/strict";
 import {
-  MAC_TERMINAL_PORT_CHANNEL,
   MAC_TERMINAL_PORT_MESSAGE,
   type MacTerminalPortOutbound,
 } from "@luke/features/mac-terminal-wire";
+import { MAC_TERMINAL_PORT_CHANNEL } from "@luke/features/port-channels";
 import { ACT_KIND } from "@luke/host/acts";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";

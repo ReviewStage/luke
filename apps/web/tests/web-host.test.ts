@@ -1,12 +1,10 @@
 // @vitest-environment jsdom
+
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { INTEGRATION_PROVIDER, INTEGRATION_STATUS } from "@luke/features/integration-wire";
-import {
-  TERMINAL_CONNECTION,
-  TERMINAL_PORT_CHANNEL,
-  TERMINAL_PORT_MESSAGE,
-} from "@luke/features/terminal-acts";
+import { TERMINAL_PORT_CHANNEL } from "@luke/features/port-channels";
+import { TERMINAL_CONNECTION, TERMINAL_PORT_MESSAGE } from "@luke/features/terminal-acts";
 import { ACT_KIND } from "@luke/host/acts";
 import { askAct } from "@luke/panel/act";
 import { installActPort, installAppBridge } from "@luke/panel/app-bridge";

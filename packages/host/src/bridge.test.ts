@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import { IDLE_VOICE_VIEW } from "@luke/voice/voice-view";
 import type { UnparsedWireValue } from "@luke/wire";
 import { test } from "vitest";
-import { BRIDGE } from "./bridge.js";
+import type { AppStateSnapshot } from "./app-state.js";
+import { BRIDGE, guardedPreloadBridge, type PreloadBridge } from "./bridge.js";
 import { PUSH, PUSH_GUARD } from "./contract/index.js";
 
 /** A chat message main tells the window is waiting, as `toastChatMessage` sends it. */
@@ -40,4 +41,32 @@ test("the voice window's report carries what moved in the transcript or nothing,
   );
   // A report without the third argument is a sender this build does not know.
   assert.equal(passes([IDLE_VOICE_VIEW, undefined]), false);
+});
+
+/** A preload's bridge whose read of the document answers `snapshot` as main sent it, unread. */
+function preloadAnswering(snapshot: UnparsedWireValue): PreloadBridge {
+  const ignored = () => undefined;
+  return {
+    // SAFETY: the preload hands main's answer on unread, which is what this stands for.
+    // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- An answer the guard refuses is what is under test.
+    requestAppState: async () => snapshot as unknown as AppStateSnapshot,
+    reportVoiceView: ignored,
+    recordAgentTrace: ignored,
+    feedAvatar: ignored,
+    signalAvatarView: ignored,
+    notifyReady: ignored,
+    recordSurfaceEvent: ignored,
+  };
+}
+
+test("the page reads the document main answered, and refuses one that is not a snapshot", async () => {
+  const snapshot = { version: 3, run: { capabilities: [] }, window: { fullScreen: false } };
+  assert.deepEqual(
+    await guardedPreloadBridge(preloadAnswering(snapshot)).requestAppState(),
+    snapshot,
+  );
+  await assert.rejects(
+    guardedPreloadBridge(preloadAnswering({ ...snapshot, version: -1 })).requestAppState(),
+    /Invalid bridge response/,
+  );
 });

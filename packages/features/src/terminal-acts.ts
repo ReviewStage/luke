@@ -43,9 +43,6 @@ export const TERMINAL_FLOW = VIEW_FLOW;
 /** @public Read by the Terminal tab, above this contract. */
 export type TerminalRefusal = TerminalViewRefusal;
 
-/** The channel each attached shell's port is posted on. */
-export const TERMINAL_PORT_CHANNEL = "terminal:port";
-
 /**
  * The kinds of message on a shell's port.
  *

@@ -2,8 +2,8 @@
 
 import assert from "node:assert/strict";
 import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@luke/features/coding-agent-wire";
+import { TERMINAL_PORT_CHANNEL } from "@luke/features/port-channels";
 import {
-  TERMINAL_PORT_CHANNEL,
   TERMINAL_REFUSAL,
   type TerminalPortInbound,
   type TerminalPortOutbound,

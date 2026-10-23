@@ -3,9 +3,11 @@ import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { BROWSER_LIVE_PORT_CHANNEL } from "@luke/features/browser-live-acts";
-import { MAC_TERMINAL_PORT_CHANNEL } from "@luke/features/mac-terminal-wire";
-import { TERMINAL_PORT_CHANNEL } from "@luke/features/terminal-acts";
+import {
+  BROWSER_LIVE_PORT_CHANNEL,
+  MAC_TERMINAL_PORT_CHANNEL,
+  TERMINAL_PORT_CHANNEL,
+} from "@luke/features/port-channels";
 import {
   createActPortHandler,
   type PlatformActProcedures,

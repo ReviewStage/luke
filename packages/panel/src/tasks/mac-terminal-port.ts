@@ -8,7 +8,8 @@
  * port of main's and is ignored.
  */
 
-import { MAC_TERMINAL_PORT_CHANNEL, macTerminalKeySchema } from "@luke/features/mac-terminal-wire";
+import { macTerminalKeySchema } from "@luke/features/mac-terminal-wire";
+import { MAC_TERMINAL_PORT_CHANNEL } from "@luke/features/port-channels";
 import { isRecord, unparsedWire } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import { Result } from "effect";

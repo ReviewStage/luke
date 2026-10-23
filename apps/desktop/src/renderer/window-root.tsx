@@ -11,7 +11,8 @@
  */
 
 import { RegistryContext } from "@effect/atom-react/RegistryContext";
-import { ACT_PORT, type PreloadBridge } from "@luke/host/bridge";
+import { guardedPreloadBridge, type PreloadBridge } from "@luke/host/bridge";
+import { ACT_PORT } from "@luke/host/bridge-channels";
 import { actPort, installActPort, installAppBridge, openPushStream } from "@luke/panel/app-bridge";
 import { installAppPlatform } from "@luke/panel/app-platform";
 import { installPanelSpanRecorder } from "@luke/panel/panel-spans";
@@ -50,7 +51,7 @@ export function mountWindow(
   // What main pushes this window arrives on one stream of that port, opened
   // now and heard through the bridge's own listeners beside the preload's calls.
   const pushes = openPushStream(actPort());
-  installAppBridge({ ...preloadWindow.luke, ...pushes.listeners });
+  installAppBridge({ ...guardedPreloadBridge(preloadWindow.luke), ...pushes.listeners });
   installAppPlatform(DESKTOP_PLATFORM);
 
   // Every window's tracing and error reports, from Sentry's SDK loaded once

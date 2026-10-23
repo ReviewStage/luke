@@ -19,13 +19,15 @@ import {
 import type { UnparsedWireValue } from "@luke/wire";
 import { wireResult as result, type WireGuard } from "@luke/wire/wire-guard";
 import { type AppStateSnapshot, isAppStateSnapshot } from "./app-state.js";
+import {
+  BRIDGE_CHANNEL,
+  BRIDGE_KIND,
+  type BridgeChannelMethod,
+  type BridgeKind,
+} from "./bridge-channels.js";
 import type { PUSH_METHOD, PushMethod, PushPayload } from "./contract/pushes.js";
 
-/** The act port's handshake, which the page and the preload each take their half of. */
-export { ACT_PORT, actPortForwarder } from "./contract/kinds.js";
-
 type BridgeArguments = readonly unknown[];
-type BridgeKind = "invoke" | "send";
 type BridgeEntry<
   Kind extends BridgeKind,
   Channel extends string,
@@ -81,8 +83,7 @@ export const BRIDGE = {
    * told.
    */
   requestAppState: entry({
-    kind: "invoke",
-    channel: "app:state-request",
+    ...BRIDGE_CHANNEL.requestAppState,
     args: noArgs,
     result: result<AppStateSnapshot>(isAppStateSnapshot),
   }),
@@ -101,8 +102,7 @@ export const BRIDGE = {
    * document's `voice.callTranscript`.
    */
   reportVoiceView: entry({
-    kind: "send",
-    channel: "app:report-voice-view",
+    ...BRIDGE_CHANNEL.reportVoiceView,
     args: args<[VoiceView, ProductExchangeKind | undefined, VoiceCallTranscriptChange | undefined]>(
       (v) =>
         v.length === 3 &&
@@ -119,8 +119,7 @@ export const BRIDGE = {
    * gate.
    */
   recordAgentTrace: entry({
-    kind: "send",
-    channel: "app:record-agent-trace",
+    ...BRIDGE_CHANNEL.recordAgentTrace,
     args: args<[AgentWireTrace]>((v) => v.length === 1 && isAgentWireTrace(v[0])),
   }),
   /**
@@ -130,8 +129,7 @@ export const BRIDGE = {
    * nothing reads an answer.
    */
   feedAvatar: entry({
-    kind: "send",
-    channel: "app:feed-avatar",
+    ...BRIDGE_CHANNEL.feedAvatar,
     args: args<[AvatarFeed]>((v) => v.length === 1 && avatarFeedFromWire(v[0]) !== undefined),
   }),
   /**
@@ -141,16 +139,14 @@ export const BRIDGE = {
    * a relay between two windows, and nothing reads an answer.
    */
   signalAvatarView: entry({
-    kind: "send",
-    channel: "app:signal-avatar-view",
+    ...BRIDGE_CHANNEL.signalAvatarView,
     args: args<[AvatarViewSignal]>(
       (v) => v.length === 1 && avatarViewSignalFromWire(v[0]) !== undefined,
     ),
   }),
-  notifyReady: entry({ kind: "send", channel: "app:renderer-ready", args: noArgs }),
+  notifyReady: entry({ ...BRIDGE_CHANNEL.notifyReady, args: noArgs }),
   recordSurfaceEvent: entry({
-    kind: "send",
-    channel: "app:record-surface-event",
+    ...BRIDGE_CHANNEL.recordSurfaceEvent,
     args: args<SurfaceEventArguments>(
       (v) =>
         v.length === 2 &&
@@ -159,7 +155,10 @@ export const BRIDGE = {
           undefined,
     ),
   }),
-} as const;
+} as const satisfies Record<
+  BridgeChannelMethod,
+  BridgeEntry<BridgeKind, string, BridgeArguments, unknown>
+>;
 
 export type Bridge = typeof BRIDGE;
 export type BridgeMethod = keyof Bridge;
@@ -201,4 +200,29 @@ export type AppBridge = PreloadBridge & PushListeners;
 export function bridgeEntries(): ReadonlyArray<[BridgeMethod, Bridge[BridgeMethod]]> {
   // SAFETY: Object.entries only erases the literal keys already declared by BRIDGE.
   return Object.entries(BRIDGE) as Array<[BridgeMethod, Bridge[BridgeMethod]]>;
+}
+
+/**
+ * The preload's bridge with each invoke's answer held to its result guard.
+ * Note that the page holds it rather than the preload, because the guards
+ * are Schemas and the preload, which runs before every window's page, reads
+ * only `bridge-channels.ts`, so it never evaluates `effect`. An answer its
+ * guard refuses rejects the call, as the preload's own check once did.
+ */
+export function guardedPreloadBridge(preload: PreloadBridge): PreloadBridge {
+  const guarded: Record<string, CallableFunction> = { ...preload };
+  for (const [method, definition] of bridgeEntries()) {
+    const guard = definition.result;
+    if (definition.kind !== BRIDGE_KIND.INVOKE || guard === undefined) continue;
+    // SAFETY: an invoke is exposed by the preload as a call answering what main sent, unread.
+    const call = preload[method] as (...args: UnparsedWireValue[]) => Promise<UnparsedWireValue>;
+    guarded[method] = async (...args: UnparsedWireValue[]) => {
+      const value = await call(...args);
+      if (!guard(value)) throw new Error("Invalid bridge response");
+      return value;
+    };
+  }
+  // SAFETY: each guarded call takes the arguments and answers the value of the call it wraps.
+  // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- The manifest loop keeps every method of the preload's bridge.
+  return guarded as unknown as PreloadBridge;
 }

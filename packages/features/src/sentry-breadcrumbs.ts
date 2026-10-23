@@ -30,7 +30,6 @@
  * they gave.
  */
 
-import { Predicate } from "effect";
 import {
   isAddressAttribute,
   REDACTED,
@@ -72,7 +71,7 @@ const ACCESS_TOKEN_PARAMETER = "access_token";
 const STARTING_ADDRESS_ATTRIBUTES = ["url.full", "http.url", "url"] as const;
 
 function namesAccessToken(texts: readonly unknown[]): boolean {
-  return texts.some((text) => Predicate.isString(text) && text.includes(ACCESS_TOKEN_PARAMETER));
+  return texts.some((text) => typeof text === "string" && text.includes(ACCESS_TOKEN_PARAMETER));
 }
 
 /** An attribute as it may be sent: an address scrubbed already, and any other text naming the token replaced. */

@@ -13,12 +13,12 @@
 
 import {
   BROWSER_LIVE_ABNORMAL_CLOSE,
-  BROWSER_LIVE_PORT_CHANNEL,
   BROWSER_LIVE_PORT_MESSAGE,
   type BrowserLiveTarget,
   browserLivePortOutboundSchema,
   browserLivePortTicketSchema,
 } from "@luke/features/browser-live-acts";
+import { BROWSER_LIVE_PORT_CHANNEL } from "@luke/features/port-channels";
 import { ACT_KIND } from "@luke/host/acts";
 import { isRecord, unparsedWire } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";

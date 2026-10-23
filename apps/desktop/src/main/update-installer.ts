@@ -3,7 +3,7 @@ import {
   type UpdaterEngine,
   type UpdaterEngineEvents,
 } from "@luke/host/update-service";
-import { autoUpdater, type UpdateCheckResult } from "electron-updater";
+import type { UpdateCheckResult } from "electron-updater";
 
 /** electron-updater emits progress per chunk; the broadcast needs far less. */
 const PROGRESS_EMIT_INTERVAL_MS = 500;
@@ -33,9 +33,13 @@ interface AppUpdaterInternals {
  * of flaky downloads). Under it all is still Squirrel.Mac: the archive's code
  * signature must match the running app's, and the swap happens in ShipIt at
  * quit. It can only replace a signed, packaged build, which is why the caller
- * constructs this at all only for one.
+ * constructs this at all only for one. Note that electron-updater is imported
+ * here rather than at the top of the file, because main's bundle is evaluated
+ * whole before the app is ready, and every other run (a development or an
+ * unpackaged one) never constructs an engine to need it.
  */
-export function createElectronUpdaterEngine(): UpdaterEngine {
+export async function createElectronUpdaterEngine(): Promise<UpdaterEngine> {
+  const { autoUpdater } = await import("electron-updater");
   return {
     wire(events: UpdaterEngineEvents) {
       autoUpdater.autoDownload = true;
