@@ -6,6 +6,7 @@ import {
   BROWSER_LIVE_CLIENT,
   BROWSER_LIVE_CLOSE_CODE,
   BROWSER_LIVE_CLOSE_REASON,
+  BROWSER_LIVE_HISTORY,
   BROWSER_LIVE_KEY_ACTION,
   BROWSER_LIVE_MOUSE_ACTION,
   BROWSER_LIVE_MOUSE_BUTTON,
@@ -131,6 +132,9 @@ function liveBrowser(
         if (command.method === "Target.attachToTarget")
           return { result: { sessionId: TARGET_SESSION } };
         if (command.method === "Target.getTargets") return undefined;
+        if (command.method === "Page.getNavigationHistory") {
+          return { result: { currentIndex: 1, entries: [{ id: 10 }, { id: 11 }, { id: 12 }] } };
+        }
         if (options.mouseHangs === true && command.method === "Input.dispatchMouseEvent") {
           return { silent: true };
         }
@@ -434,6 +438,93 @@ it.effect(
         params: { text: "pässword" },
         sessionId: TARGET_SESSION,
       });
+      yield* panel.leave;
+      yield* Fiber.join(fiber);
+    }),
+);
+
+/** The commands that move the tab's page, as a step from its bar sends them. */
+const steering = (commands: readonly FakeCdpCommand[]) =>
+  commands.filter((command) =>
+    ["Page.navigate", "Page.reload", "Page.navigateToHistoryEntry"].includes(command.method),
+  );
+
+it.effect(
+  "a step from the bar takes a tab nobody drives over for the member, then opens the address, steps back and forward, and reloads",
+  () =>
+    Effect.gen(function* () {
+      const { peer, browser, commands } = yield* liveBrowser();
+      const panel = yield* scriptedViewer;
+      const { fiber } = yield* started(
+        peer,
+        commands,
+        Effect.scoped(
+          relayBrowserTab(panel.viewer, ASK, reachedTab(undefined), world(browser).deps),
+        ),
+      );
+
+      yield* panel.push({
+        type: BROWSER_LIVE_CLIENT.NAVIGATE,
+        address: "https://example.test/next",
+      });
+      yield* panel.push({ type: BROWSER_LIVE_CLIENT.HISTORY, step: BROWSER_LIVE_HISTORY.BACK });
+      yield* panel.push({ type: BROWSER_LIVE_CLIENT.HISTORY, step: BROWSER_LIVE_HISTORY.FORWARD });
+      yield* panel.push({ type: BROWSER_LIVE_CLIENT.HISTORY, step: BROWSER_LIVE_HISTORY.RELOAD });
+      yield* until(() => steering(commands).length === 4);
+
+      assert.equal(panel.ofType(BROWSER_LIVE_SERVER.DRIVER).at(-1)?.yours, true);
+      assert.deepEqual(panel.ofType(BROWSER_LIVE_SERVER.REFUSED), []);
+      assert.deepEqual(steering(commands), [
+        {
+          method: "Page.navigate",
+          params: { url: "https://example.test/next" },
+          sessionId: TARGET_SESSION,
+        },
+        {
+          method: "Page.navigateToHistoryEntry",
+          params: { entryId: 10 },
+          sessionId: TARGET_SESSION,
+        },
+        {
+          method: "Page.navigateToHistoryEntry",
+          params: { entryId: 12 },
+          sessionId: TARGET_SESSION,
+        },
+        { method: "Page.reload", params: {}, sessionId: TARGET_SESSION },
+      ]);
+      yield* panel.leave;
+      yield* Fiber.join(fiber);
+    }),
+);
+
+it.effect(
+  "a step from the bar is refused while another member holds the tab, and an address no Browser tab loads is passed over",
+  () =>
+    Effect.gen(function* () {
+      const { peer, browser, commands } = yield* liveBrowser();
+      const panel = yield* scriptedViewer;
+      const store = world(browser);
+      const { fiber } = yield* started(
+        peer,
+        commands,
+        Effect.scoped(relayBrowserTab(panel.viewer, ASK, reachedTab(undefined), store.deps)),
+      );
+
+      yield* panel.push({ type: BROWSER_LIVE_CLIENT.NAVIGATE, address: "file:///etc/hosts" });
+      store.driveAs("member-2", AN_HOUR_IN);
+      yield* panel.push({
+        type: BROWSER_LIVE_CLIENT.NAVIGATE,
+        address: "https://example.test/next",
+      });
+      yield* panel.push({ type: BROWSER_LIVE_CLIENT.HISTORY, step: BROWSER_LIVE_HISTORY.RELOAD });
+      yield* until(() => panel.ofType(BROWSER_LIVE_SERVER.REFUSED).length === 2);
+
+      assert.deepEqual(
+        panel.ofType(BROWSER_LIVE_SERVER.REFUSED).map((message) => message.reason),
+        [BROWSER_LIVE_REFUSAL.HELD, BROWSER_LIVE_REFUSAL.HELD],
+      );
+      assert.equal(panel.ofType(BROWSER_LIVE_SERVER.DRIVER).at(-1)?.driver?.userId, "member-2");
+      assert.deepEqual(steering(commands), [], "nothing moved the page another member drives");
       yield* panel.leave;
       yield* Fiber.join(fiber);
     }),
