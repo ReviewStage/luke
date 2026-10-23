@@ -1082,7 +1082,8 @@ ul.actor-stack {
    a ⋯ and a + that show while the header is hovered, holds focus, or has
    its menu open. */
 .sidebar-repository + .sidebar-repository,
-.sidebar-tasks + .sidebar-repository {
+.sidebar-tasks + .sidebar-repository,
+.chat-rail-body > .luke-list + .sidebar-repository {
   margin-top: var(--luke-space-8);
 }
 

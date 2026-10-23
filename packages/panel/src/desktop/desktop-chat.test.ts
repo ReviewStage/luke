@@ -2889,3 +2889,31 @@ test("a reader signed in to the window after another reads none of their posts, 
   );
   assert.equal(chat.page.querySelector(".chat-message[data-unsent]"), null);
 });
+
+test("hovering a task's channel in the rail hangs its task's card beside it, and a topic's row hangs none", () => {
+  const page = mount((chat) => chat, undefined, undefined, undefined, { tasks: [INVITATIONS] });
+
+  restOn(railRow(page, "teammate-invitations"));
+
+  const card = document.querySelector('[role="tooltip"]');
+  assert.match(card?.textContent ?? "", /Teammate invitations/u);
+  assert.match(card?.textContent ?? "", /ada\/relay/u);
+
+  restOn(railRow(page, "general"));
+
+  assert.equal(document.querySelector('[role="tooltip"]')?.textContent, "general");
+});
+
+test("the rail's places stand in named lists, For you alone in its own and every group's places in its own", () => {
+  const page = mount();
+  const lists = [...page.querySelectorAll<HTMLElement>(".chat-rail ul[aria-label]")].map((list) => [
+    list.getAttribute("aria-label"),
+    [...list.querySelectorAll(".luke-list-row-main")].map(railName),
+  ]);
+
+  assert.deepEqual(lists[0], ["For you", ["For you"]]);
+  assert.ok(
+    lists.some(([name, places]) => name === "Channels" && (places as string[]).includes("general")),
+    "the channels stand in a list of their own",
+  );
+});

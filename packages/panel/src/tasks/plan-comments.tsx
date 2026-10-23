@@ -60,7 +60,6 @@ import {
   TEXT_VARIANT,
   Text,
   TextArea,
-  TIME_LOOK,
   Time,
   Tooltip,
   TrashIcon,
@@ -318,7 +317,7 @@ function EventLine({
         </span>
         <span className="comment-head-end">
           <span className="comment-time">
-            <Time at={entry.at} now={now} look={TIME_LOOK.AGO} />
+            <Time at={entry.at} now={now} />
           </span>
         </span>
       </div>
@@ -464,7 +463,7 @@ function CommentEntry({
         <WriterRef writer={entry.writer} agents={doors.agents} />
         <span className="comment-head-end">
           <span className="comment-time">
-            <Time at={entry.at} now={now} look={TIME_LOOK.AGO} />
+            <Time at={entry.at} now={now} />
             {entry.editedAt === undefined ? null : ` · ${COMMENT_WORDS.EDITED}`}
           </span>
           <div className="comment-tools">
@@ -1016,7 +1015,7 @@ function ThreadCard({
           <div className="comment-head">
             <WriterRef writer={first.writer} agents={doors.agents} />
             <span className="comment-time">
-              <Time at={first.at} now={now} look={TIME_LOOK.AGO} />
+              <Time at={first.at} now={now} />
             </span>
           </div>
         )}
@@ -1045,7 +1044,7 @@ function ThreadCard({
               {replies.length === 1 ? "1 reply" : `${replies.length} replies`}
               <span className="comment-time">
                 {" · "}
-                <Time at={replies.at(-1)?.at ?? thread.updatedAt} now={now} look={TIME_LOOK.AGO} />
+                <Time at={replies.at(-1)?.at ?? thread.updatedAt} now={now} />
               </span>
             </span>
           )}
