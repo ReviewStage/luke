@@ -3723,6 +3723,33 @@ export function startInboxThread(
 }
 
 /**
+ * A thread a member started with no subject given the title named, where
+ * it still bears the one its first message stood for, so a title its agent
+ * wrote since stands; its revision moved on, which wakes every held read of
+ * it, and its last change left as it was, so it neither moves in the list
+ * nor reads unread to the member who sent it.
+ */
+const retitleItem = SqlSchema.void({
+  Request: Schema.Struct({ itemId: Schema.String, standing: Schema.String, title: Schema.String }),
+  execute: ({ itemId, standing, title }) =>
+    Database.use((db) =>
+      db
+        .update(inboxItem)
+        .set({ title, revision: sql`${inboxItem.revision} + 1` })
+        .where(and(eq(inboxItem.id, itemId), eq(inboxItem.title, standing))),
+    ),
+});
+
+/** A thread started with no subject titled anew, where it still bears the title it was started under (`retitleItem`). */
+export function retitleInboxThread(
+  itemId: string,
+  standing: string,
+  title: string,
+): InboxStoreEffect<void> {
+  return title === standing ? Effect.void : retitleItem({ itemId, standing, title });
+}
+
+/**
  * A thread the member started taken back, as a message the agent was not
  * told is: deleted whole, where the member reaches it and it holds nothing
  * but their first message under the key, so a thread the agent has since

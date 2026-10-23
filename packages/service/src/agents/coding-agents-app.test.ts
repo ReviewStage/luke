@@ -179,6 +179,7 @@ import {
   inboxMessagedSchema,
   inboxReadAllSchema,
   inboxReadStateSchema,
+  inboxStartTitle,
 } from "@luke/features/inbox-wire";
 import { INTEGRATION_PROVIDER, type IntegrationProvider } from "@luke/features/integration-wire";
 import { transcriptNowAnswerSchema } from "@luke/features/live-wire";
@@ -252,7 +253,7 @@ import { LINK_OUTCOME, linkInstallation } from "../github/github-installations.j
 import { PULL_REQUEST_QUEUED_OPERATION } from "../github/pull-request-merging.js";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import { HOSTED_REFUSAL } from "../http/http-effect.js";
-import { inboxProcedures } from "../inbox/inbox-procedures.js";
+import { type InboxTitleModelOf, inboxProcedures } from "../inbox/inbox-procedures.js";
 import {
   answerInboxItem,
   closeInboxItem,
@@ -624,6 +625,7 @@ const standing = (
   eve: ReturnType<typeof fakeEve>,
   summaryModel: SummaryModelOf = () => Effect.succeed(undefined),
   sessionSandboxes: SandboxStopReach["sessionSandboxes"] = sessionSandboxesLayer,
+  titleModel: InboxTitleModelOf = () => Effect.succeed(undefined),
 ) =>
   Effect.gen(function* () {
     const client = yield* SqlClient.SqlClient;
@@ -661,6 +663,7 @@ const standing = (
       workspaces: yield* fakeWorkspaceSeams,
       summaryModel,
       sessionSandboxes,
+      titleModel,
       keepAwake: keepAwakeDetached,
     };
     const agents = HttpRouter.toWebHandler(
@@ -854,6 +857,8 @@ const openTask = (
     readonly summaryModel?: SummaryModelOf;
     /** The sandboxes an archive stops; Vercel's own, which a test with no token in its environment finds unavailable, unless a test scripts them. */
     readonly sessionSandboxes?: SandboxStopReach["sessionSandboxes"];
+    /** The model an untitled inbox thread's title is generated on; none unless a test names one. */
+    readonly titleModel?: InboxTitleModelOf;
   } = {},
 ) =>
   Effect.gen(function* () {
@@ -884,6 +889,7 @@ const openTask = (
       eve,
       options.summaryModel,
       options.sessionSandboxes,
+      options.titleModel,
     );
     return { owner, other, task, installation, eve, github, ask, fetch };
   });
@@ -6083,9 +6089,12 @@ const SIZED_PNG = Uint8Array.from([
 
 it.layer(getTestDB())("the developer's inbox", (it) => {
   /** The owner's task with one agent started on it, its session claimed so a message reaches it, and the inbox as each side sees it. */
-  const openInbox = (eve = fakeEve()) =>
+  const openInbox = (eve = fakeEve(), titleModel?: InboxTitleModelOf) =>
     Effect.gen(function* () {
-      const opened = yield* openTask({ eve });
+      const opened = yield* openTask({
+        eve,
+        ...(titleModel === undefined ? undefined : { titleModel }),
+      });
       const { agent, target } = yield* startedAgent(opened.owner, opened.task.id, opened.ask);
       const sessionId = eve.opened[0]?.sessionId ?? "";
       assert.equal(yield* claimRuntimeSession(target, sessionId, yield* DateTime.nowAsDate), true);
@@ -6866,6 +6875,72 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
           yield* start({ ...body, text: "  ", clientKey: randomUUID() }),
           refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
         );
+      }),
+  );
+
+  it.effect(
+    "a thread started with no subject is titled by the agent-title model over its message on the sender's own key, after the answer, its key, its place, and its read state kept; one with a subject, and one whose sender has no key, keep the title they were started under",
+    () =>
+      Effect.gen(function* () {
+        const asked: string[] = [];
+        const model = new MockLanguageModelV4({
+          doGenerate: async (options) => {
+            asked.push(JSON.stringify(options.prompt));
+            return {
+              content: [{ type: "text", text: "Annual plan pricing copy." }],
+              finishReason: { unified: "stop", raw: "stop" },
+              usage: {
+                inputTokens: { total: 1, noCache: 1, cacheRead: 0, cacheWrite: 0 },
+                outputTokens: { total: 1, text: 1, reasoning: 0 },
+              },
+              warnings: [],
+            };
+          },
+        });
+        const keyed = new Set<string>();
+        const titleModel: InboxTitleModelOf = (userId) =>
+          Effect.succeed(keyed.has(userId) ? model : undefined);
+        const eve = fakeEve();
+        const { owner, agent, target, ask, read } = yield* openInbox(eve, titleModel);
+        keyed.add(owner);
+        yield* turnEnded(target);
+        const start = (body: WireBoundaryInput) =>
+          Effect.map(ask(request(ACCOUNT_INBOX, owner, { method: "POST", body })), (answered) =>
+            readAnswer(inboxMessagedSchema, HOSTED_HTTP_STATUS.OK, answered),
+          );
+        const text = "Can you draft the annual plan's line for the pricing table too?";
+
+        const untitled = yield* start({ agentId: agent.id, text, clientKey: randomUUID() });
+        const subject = "Pricing table";
+        const titled = yield* start({
+          agentId: agent.id,
+          title: subject,
+          text,
+          clientKey: randomUUID(),
+        });
+        keyed.delete(owner);
+        const keyless = yield* start({
+          agentId: agent.id,
+          text: "Ship it tonight.",
+          clientKey: randomUUID(),
+        });
+
+        const items = new Map((yield* read()).items.map((item) => [item.id, item]));
+        const titledNow = items.get(untitled.item.id);
+        assert.deepEqual(
+          [titledNow?.title, titledNow?.key, titledNow?.updatedAt, titledNow?.unread],
+          ["Annual plan pricing copy", untitled.item.key, untitled.item.updatedAt, false],
+          "the model's title stands, under the key and at the place it was started at, read for its sender",
+        );
+        assert.equal(
+          untitled.item.title,
+          inboxStartTitle({ text }),
+          "the answer carries the first line",
+        );
+        assert.equal(items.get(titled.item.id)?.title, subject);
+        assert.equal(items.get(keyless.item.id)?.title, "Ship it tonight.");
+        assert.equal(asked.length, 1, "only the untitled thread with a key asks the model");
+        assert.ok(asked[0]?.includes("annual plan"), "the model is asked over the message");
       }),
   );
 
