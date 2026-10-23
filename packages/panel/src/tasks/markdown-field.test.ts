@@ -105,7 +105,7 @@ it.effect(
 function chord(
   field: HTMLElement,
   selected: [number, number],
-  press: { key: string; shiftKey?: boolean },
+  press: { key: string; code?: string; shiftKey?: boolean },
 ): boolean {
   const area = field.querySelector("textarea") ?? assert.fail("no text area");
   area.focus();
@@ -126,9 +126,13 @@ const WRITING_CHORDS = [
   { name: "⇧⌘X strikes through", press: { key: "x", shiftKey: true }, written: "~~word~~" },
   { name: "⌘E writes code", press: { key: "e" }, written: "`word`" },
   { name: "⌘B bolds", press: { key: "b" }, written: "**word**" },
-  { name: "⇧⌘8 bullets", press: { key: "8", shiftKey: true }, written: "- word" },
-  { name: "⇧⌘7 numbers", press: { key: "7", shiftKey: true }, written: "1. word" },
-  { name: "⇧⌘9 lists tasks", press: { key: "9", shiftKey: true }, written: "- [ ] word" },
+  { name: "⇧⌘8 bullets", press: { key: "*", code: "Digit8", shiftKey: true }, written: "- word" },
+  { name: "⇧⌘7 numbers", press: { key: "&", code: "Digit7", shiftKey: true }, written: "1. word" },
+  {
+    name: "⇧⌘9 lists tasks",
+    press: { key: "(", code: "Digit9", shiftKey: true },
+    written: "- [ ] word",
+  },
 ] as const;
 
 for (const { name, press, written } of WRITING_CHORDS) {

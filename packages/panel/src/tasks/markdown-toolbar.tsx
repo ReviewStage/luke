@@ -191,7 +191,13 @@ export function formatForKey(
 ): MarkdownFormat | undefined {
   return CHORDED.find((press) => {
     const chord = chordOf(press);
-    return chord !== undefined && shortcutMatches(chord, event);
+    if (chord === undefined) return false;
+    // Note that Shift turns a digit into its symbol (⇧8 is "*"), so a shifted digit is told by its physical key.
+    if (chord.shift === true && /^\d$/u.test(chord.key.key)) {
+      const { metaKey, ctrlKey, altKey, shiftKey, code } = event;
+      return metaKey && shiftKey && !ctrlKey && !altKey && code === chord.key.code;
+    }
+    return shortcutMatches(chord, event);
   })?.format;
 }
 
