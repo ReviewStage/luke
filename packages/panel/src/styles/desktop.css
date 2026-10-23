@@ -6161,9 +6161,7 @@ ul.actor-stack {
 }
 
 /* A card too narrow for every press's words, as on a phone, keeps its
-   round Start at the row's end: File for later draws its mark alone
-   (`new-task-composer.tsx`), the model chip's words are
-   what give way, cut short, and the microphone stands in the row in place
+   round Start at the row's end: the model chip's words are what give way, cut short, and the microphone stands in the row in place
    of a ⋯ that would hold it alone. */
 @container composer (max-width: 399px) {
   .new-task-composer .agent-composer-actions .agent-model-chip {

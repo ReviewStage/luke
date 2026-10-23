@@ -3,7 +3,6 @@
 import assert from "node:assert/strict";
 import type { LinearIssueSummary } from "@luke/features/linear-wire";
 import { type CatalogModel, MODEL_PROVIDER, type ModelChoice } from "@luke/features/models-wire";
-import { TASK_STATUS, type TaskStatus } from "@luke/features/task-wire";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
@@ -23,8 +22,7 @@ import { NewTaskComposer } from "./new-task-composer.js";
  * of its page, its `@` and `/` lists open under the caret's line, since a
  * list risen over the card is cut off under the page's head, while the
  * dialog's card keeps them over it; and a card too narrow for every press
- * has File for later draw its mark alone, still named
- * and still pressed, its microphone stand in the row in place of a ⋯ that
+ * has its microphone stand in the row in place of a ⋯ that
  * would hold it alone, and its model chip's words give way, so the round
  * Start stands inside the card, at the row's end. jsdom lays nothing out, so the
  * card's width is its form's, given as the window would lay it, and what is
@@ -169,14 +167,12 @@ const ISSUES: readonly LinearIssueSummary[] = [
 /**
  * Home's card at a width, with every chip chosen: its repository, the
  * account's model, and a Linear issue picked from the Issue chip, and words
- * typed, so Start and File for later both stand ready. Answers the card and
- * the statuses each start asked for.
+ * typed, so Start stands ready. Answers the card.
  */
 async function mountChosen(width: number, touch: boolean) {
   vi.spyOn(HTMLFormElement.prototype, "clientWidth", "get").mockReturnValue(width);
   layContainersAt({ composer: width }, { touch });
   const control = tasksControl();
-  const statuses: (TaskStatus | undefined)[] = [];
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
   roots.push(root);
@@ -192,10 +188,7 @@ async function mountChosen(width: number, touch: boolean) {
             models: MODELS,
             readDefault: () => Promise.resolve({ choice: DEFAULT_CHOICE }),
             linearIssuesIn: () => () => Promise.resolve(ISSUES),
-            start: (_name, _repository, _workspace, from) => {
-              statuses.push(from?.status);
-              return Promise.resolve(undefined);
-            },
+            start: () => Promise.resolve(undefined),
           },
           workspaceId: "workspace-acme",
           onLeave: () => undefined,
@@ -220,7 +213,7 @@ async function mountChosen(width: number, touch: boolean) {
   assert.ok(container.textContent?.includes("ENG-1"), "the issue is linked over the words");
   typeInComposer(container, "Reproduce it first.");
   await settle();
-  return { container, statuses };
+  return { container };
 }
 
 /** The presses drawn along the foot's right-hand row, in the order they stand, each by its name. */
@@ -245,12 +238,7 @@ test("on a phone-wide card with every chip chosen, Start stands last in the row,
   const { container } = await mountChosen(CARD.PHONE, true);
   const presses = rowPresses(container);
 
-  assert.deepEqual(presses.map(nameOf), [
-    "Opus 5.5 High",
-    "Dictate",
-    "File for later",
-    "Start agent",
-  ]);
+  assert.deepEqual(presses.map(nameOf), ["Opus 5.5 High", "Dictate", "Start agent"]);
   assert.deepEqual(
     presses.filter(drawsWords).map(nameOf),
     ["Opus 5.5 High"],
@@ -259,28 +247,10 @@ test("on a phone-wide card with every chip chosen, Start stands last in the row,
   assert.equal(presses.at(-1)?.disabled, false, "Start stands ready");
 });
 
-test("on a desktop-wide card with every chip chosen, the row reads the model and File for later in words, the microphone, and Start", async () => {
+test("on a desktop-wide card with every chip chosen, the row reads the model in words, the microphone, and Start", async () => {
   const { container } = await mountChosen(CARD.DESKTOP, false);
   const presses = rowPresses(container);
 
-  assert.deepEqual(presses.map(nameOf), [
-    "Opus 5.5 High",
-    "Dictate",
-    "File for later",
-    "Start agent",
-  ]);
-  assert.deepEqual(presses.filter(drawsWords).map(nameOf), ["Opus 5.5 High", "File for later"]);
-});
-
-test("on a phone-wide card File for later draws the backlog's mark alone, keeps its name, and still files the task in the backlog", async () => {
-  const { container, statuses } = await mountChosen(CARD.PHONE, true);
-  const file =
-    rowPresses(container).find((press) => press.getAttribute("aria-label") === "File for later") ??
-    assert.fail("File for later is named");
-
-  assert.equal(drawsWords(file), false, "its words are drawn nowhere");
-  assert.ok(file.querySelector(".luke-task-status-mark"), "it draws the backlog's mark");
-  act(() => file.click());
-  await settle();
-  assert.deepEqual(statuses, [TASK_STATUS.BACKLOG]);
+  assert.deepEqual(presses.map(nameOf), ["Opus 5.5 High", "Dictate", "Start agent"]);
+  assert.deepEqual(presses.filter(drawsWords).map(nameOf), ["Opus 5.5 High"]);
 });
