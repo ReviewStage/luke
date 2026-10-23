@@ -103,17 +103,16 @@ repository.
   the sandbox. Each coding agent gets a sandbox of its own and pushes through
   the same App.
 - **Models.** Every model call runs on your own keys or subscriptions, added
-  in Settings › Agents; Luke pays for none. Voice and dictation run on OpenAI, on your OpenAI
-  API key, and are off without one. Coding agents run on Anthropic or OpenAI,
-  depending on the model you pick, on your subscription or API key. Your
-  voice streams to OpenAI and does not pass through Luke's service.
+  in Settings › Agents; Luke pays for none. Voice and dictation run on OpenAI,
+  on your OpenAI API key, and are off without one. Coding agents run on
+  Anthropic or OpenAI, depending on the model you pick, on your subscription
+  or API key. Your voice streams to OpenAI and does not pass through Luke's
+  service.
 - **Commands on your Mac.** Luke and coding agents can run shell commands on
-  your Mac, from your home folder and without asking, and what they print goes
-  to the model and is kept with the conversation. This exists because the code
-  is otherwise read in a cloud sandbox: it is how an agent reads your local
-  checkout, uncommitted work, or a server you have running. It is on by
-  default. Turn it off in Settings › This Mac › Let agents run commands on
-  this Mac.
+  your Mac, in your login shell and without asking, and what they print goes
+  to the model. This is how an agent reads a local checkout or a server you
+  have running. It is on by default; turn it off in Settings › This Mac › Let
+  agents run commands on this Mac.
 
 [PRIVACY.md](PRIVACY.md) lists everything Luke stores, every provider it sends
 data to, and how long each keeps it.
