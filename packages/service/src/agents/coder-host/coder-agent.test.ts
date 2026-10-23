@@ -6,6 +6,7 @@ import {
   CODING_AGENT_BRIEF,
   CODING_AGENT_KIND,
   type CodingAgentBrief,
+  type CodingAgentKind,
 } from "@luke/features/coding-agent-wire";
 import { Duration, Redacted, Schema } from "effect";
 import { routeAuth } from "eve/channels/auth";
@@ -814,6 +815,33 @@ test("with Memory off the instructions say nothing of the workspace's memory; wi
     assert.ok(on.slice(start, end).includes(`\`${CODER_TOOL.RECALL}\``), brief);
     assert.equal(on.slice(0, start) + on.slice(end), off, brief);
   }
+});
+
+test("with Memory on, the operator is told to keep the developer's own preferences and what they are juggling private, and a coder that it keeps and recalls none", () => {
+  const memorySection = (kind: CodingAgentKind) => {
+    const on = coderInstructions(
+      null,
+      CODING_AGENT_BRIEF.BLANK,
+      false,
+      null,
+      undefined,
+      false,
+      null,
+      false,
+      CODER_HARNESS.EVE,
+      kind,
+      true,
+    );
+    const start = on.indexOf("## The workspace's memory\n\n");
+    return on.slice(start, on.indexOf("## What your messages are", start));
+  };
+  const operator = memorySection(CODING_AGENT_KIND.OPERATOR);
+  const coder = memorySection(CODING_AGENT_KIND.CODER);
+
+  assert.ok(operator.includes("Keep the developer's own preferences and what they are juggling"));
+  assert.ok(operator.includes("as private memories, with private set"));
+  assert.ok(coder.includes("you are never answered one, and you never set private"));
+  assert.ok(!coder.includes("what they are juggling"));
 });
 
 /** The member's operator's instructions, recorded byte for byte: an agent of kind operator, blank, on no task and no repository. */

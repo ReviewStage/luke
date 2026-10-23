@@ -17,7 +17,8 @@ import { MemorySection } from "./memory-page.js";
  * of the workspace Settings shows are read for that workspace, listed in the
  * service's order with their words whole and whose words they are; Forget
  * stands only on a memory the reader may forget, asks first in the confirm
- * dialog, and the memory leaves the list once the service says so; a forget
+ * dialog, and the memory leaves the list once the service says so; a
+ * private memory is marked Only you and a shared one is not; a forget
  * that fails says so in the dialog and keeps the memory listed; another
  * workspace reads its own memories; and a read that fails offers to try
  * again. Synthetic workspaces, members, and memories.
@@ -39,6 +40,7 @@ const DEPLOYS: MemorySummary = {
   text: "Deployments go out from the release branch through Vercel.",
   keptBy: { userId: READER, name: "Rita Reader" },
   forgettable: true,
+  private: false,
   createdAt: Date.UTC(2026, 9, 10, 12),
   updatedAt: Date.UTC(2026, 9, 12, 12),
 };
@@ -48,6 +50,7 @@ const TESTS: MemorySummary = {
   text: "The web server's store tests run on PGlite through test:store.",
   keptBy: { userId: "user-dean", name: "Dean" },
   forgettable: false,
+  private: false,
   createdAt: Date.UTC(2026, 9, 9, 12),
   updatedAt: Date.UTC(2026, 9, 9, 12),
 };
@@ -225,6 +228,27 @@ test("a forget that fails says so in the dialog and keeps the memory listed", as
     dialog().querySelector('[role="alert"]')?.textContent,
     "The memory could not be forgotten. Try again.",
   );
+});
+
+test("a private memory is marked Only you, a shared one is not, and its Forget says only the reader's agents lose it", async () => {
+  stored = [{ ...DEPLOYS, private: true }, TESTS];
+  const { page } = await mount();
+
+  assert.match(rowOf(page, DEPLOYS).textContent ?? "", /Only you/u);
+  assert.doesNotMatch(rowOf(page, TESTS).textContent ?? "", /Only you/u);
+  assert.match(page.textContent ?? "", /except those marked Only you/u);
+  const ellipsis =
+    rowOf(page, DEPLOYS).querySelector<HTMLButtonElement>('button[aria-haspopup="menu"]') ??
+    assert.fail("no ⋯");
+  act(() => ellipsis.click());
+  act(() =>
+    (
+      [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(
+        (item) => item.textContent === "Forget",
+      ) ?? assert.fail("no Forget in the ⋯")
+    ).click(),
+  );
+  assert.match(dialog().textContent ?? "", /Your Luke will not recall it again/u);
 });
 
 test("a memory whose member's account is gone reads as kept by a former member", async () => {

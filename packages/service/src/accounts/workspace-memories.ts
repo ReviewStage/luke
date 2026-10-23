@@ -16,8 +16,9 @@ import { Effect, Option } from "effect";
 /**
  * workspace-memories.ts -- a workspace's shared memories as one member reads and forgets them from Settings.
  *
- * Every member of a workspace reads its memories, each named by the member
- * whose words it holds. Forgetting follows the workspace automations' rule
+ * Every member of a workspace reads its shared memories, each named by the
+ * member whose words it holds, and their own private ones, which no other
+ * member reads and only they forget. Forgetting follows the workspace automations' rule
  * (`automation-store.ts`'s `allowedTo`): the member whose words a memory
  * holds may forget it, and so may the workspace's owners and admins, the
  * only ones who may forget one whose member's account is gone; every other
@@ -69,7 +70,7 @@ function keeperOf(
   return name === undefined ? null : { userId, name };
 }
 
-/** The workspace's memories as the reader sees them: each named by its member, and forgettable where the reader may. */
+/** The workspace's memories as the reader sees them: each named by its member, and forgettable where the reader may, a private one by its member alone. */
 function summariesFor(
   userId: string,
   manages: boolean,
@@ -81,7 +82,9 @@ function summariesFor(
       id: kept.id,
       text: kept.text,
       keptBy: keeperOf(kept.userId, names),
-      forgettable: manages || kept.userId === userId,
+      forgettable:
+        kept.privateTo === null ? manages || kept.userId === userId : kept.privateTo === userId,
+      private: kept.privateTo !== null,
       createdAt: kept.createdAt,
       updatedAt: kept.updatedAt,
     })),
@@ -96,7 +99,7 @@ export function readWorkspaceMemories(
   return Effect.gen(function* () {
     const role = yield* roleIn(userId, workspaceId);
     if (Option.isNone(role)) return { kind: WORKSPACE_MEMORY.NOT_MEMBER } as const;
-    const stored = yield* listMemories(workspaceId);
+    const stored = yield* listMemories(workspaceId, userId);
     const memories = yield* summariesFor(userId, MANAGING_ROLES.has(role.value), stored);
     return { kind: WORKSPACE_MEMORY.READ, memories } as const;
   });
@@ -119,7 +122,7 @@ export function forgetWorkspaceMemory(
     const forgot = yield* forgetMemory(workspaceId, id, { userId, manages });
     if (forgot === MEMORY_FORGET.NOT_PERMITTED)
       return { kind: WORKSPACE_MEMORY.NOT_PERMITTED } as const;
-    const memories = yield* summariesFor(userId, manages, yield* listMemories(workspaceId));
+    const memories = yield* summariesFor(userId, manages, yield* listMemories(workspaceId, userId));
     return { kind: WORKSPACE_MEMORY.READ, memories } as const;
   });
 }
