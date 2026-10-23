@@ -29,6 +29,8 @@ export function OneLine({
   as = ONE_LINE_ELEMENT.SPAN,
   end = ONE_LINE_END.FADE,
   hint,
+  className,
+  words,
   children,
 }: {
   /** The element the line is drawn as: a row's name (`strong`), its detail (`small`), or words in a row (`span`). */
@@ -37,10 +39,20 @@ export function OneLine({
   end?: OneLineEnd;
   /** The app's hint over the line, which says its words whole while they are cut short. */
   hint?: OneLineHint | undefined;
+  /** A hook for the caller's own layout and type beside the shared class. */
+  className?: string | undefined;
+  /** The words as one string where `children` draws them as a tree (a glyph before them), measured as they change; `children` itself where it is a string. */
+  words?: string | undefined;
   children: ReactNode;
 }): React.JSX.Element {
   return (
-    <ClippedLine as={as} end={end} hint={hint}>
+    <ClippedLine
+      as={as}
+      end={end}
+      hint={hint}
+      {...(className === undefined ? {} : { className })}
+      words={words ?? (typeof children === "string" ? children : undefined)}
+    >
       {children}
     </ClippedLine>
   );

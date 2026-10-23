@@ -5,10 +5,10 @@ import { readFileSync } from "node:fs";
 import { afterEach, beforeAll, test } from "vitest";
 
 /**
- * hover-card-chips.test.ts -- nothing on a hover card runs past its edge: a
- * card's chip is never wider than the card, and an Inbox row's card keeps its
- * task's key whole and on one line with the task's chip, which gives way
- * instead. jsdom lays nothing out, so the rules that hold them in are read.
+ * hover-card-chips.test.ts -- nothing on a hover card runs past its edge: an
+ * Inbox row's card keeps its task's key whole and on one line with the
+ * task's chip, which gives way instead. jsdom lays nothing out, so the rules
+ * that hold them in are read.
  */
 
 beforeAll(() => {
@@ -27,11 +27,9 @@ function element(tag: string, className: string, parent: Element): HTMLElement {
   return made;
 }
 
-test("a card's chip is held to the card's width, and an Inbox card's key stays whole on one line with its task's chip", () => {
+test("an Inbox card's key stays whole on one line with its task's chip", () => {
   const standing = element("div", "task-card-standing", document.body);
-  const chip = element("span", "task-card-chip", standing);
   const key = element("span", "task-key", standing);
-  assert.equal(getComputedStyle(chip).maxWidth, "100%");
   assert.equal(getComputedStyle(key).flexShrink, "0");
   assert.equal(getComputedStyle(standing).flexWrap, "wrap");
   assert.equal(

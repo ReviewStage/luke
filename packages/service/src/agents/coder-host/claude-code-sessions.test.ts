@@ -109,6 +109,9 @@ import { CODER_TOOL_SET } from "./tool-set.js";
 const SNAPSHOT = "snap_fixture_image";
 const EVENTS_URL = "https://luke.test/api/agents/runner/events";
 const MCP_URL = "https://luke.test/api/agents/mcp";
+
+/** The one integration the agent is handed, a server of its own. */
+const LINEAR_SERVER = { name: "linear", url: `${MCP_URL}/integrations/linear` };
 const INSTRUCTIONS = "You are a Luke coding agent.";
 const BUNDLE = new TextEncoder().encode("// the runner, bundled\nconsole.log('runner');\n");
 const PLAN_TOKEN = "sk-ant-oat01-fixture-plan-token";
@@ -203,6 +206,7 @@ function sessionsFor(userId: string, sequence: { next: number }) {
     userId,
     eventsUrl: EVENTS_URL,
     mcpUrl: MCP_URL,
+    integrations: () => Effect.succeed([LINEAR_SERVER]),
     instructions: () => Effect.succeed(INSTRUCTIONS),
     nextSequence: () => Effect.sync(() => sequence.next),
     run: (effect) => Effect.runPromise(effect),
@@ -403,6 +407,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
           firstSequence: 0,
           eventsUrl: EVENTS_URL,
           mcpUrl: MCP_URL,
+          integrations: [LINEAR_SERVER],
           allowedDomains: config.allowedDomains,
           installedSkills: "/opt/luke/installed-skills",
         });

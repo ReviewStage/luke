@@ -19,7 +19,7 @@ import { searchAnchorProps } from "@luke/settings/settings-anchors";
 import { CHOICE_LOOK, ChoiceList, SettingsRow } from "@luke/ui";
 import { useSettingWrite } from "@luke/ui/use-setting-write";
 import type { ActionResult } from "@luke/wire";
-import { ChangedMark } from "./marks.js";
+import { SettingMarks } from "./marks.js";
 
 /** Each face's token, its name, and the address of its picture. */
 interface PictureChoiceOption<Value extends string> {
@@ -47,7 +47,7 @@ export function PictureChoiceRow<Value extends string>({
   changed?: boolean;
   onChange: (value: Value) => Promise<ActionResult>;
 }): React.JSX.Element {
-  const { busy, rejection, run } = useSettingWrite(onChange);
+  const { busy, rejection, saves, run } = useSettingWrite(onChange);
   const chosen = options.find((option) => option.value === value) ?? options[0];
 
   // Note that the anchor wraps the shared row, which takes no attribute of its own, so the landing rings it whole.
@@ -57,7 +57,7 @@ export function PictureChoiceRow<Value extends string>({
         label={
           <>
             {label}
-            {changed ? <ChangedMark /> : null}
+            <SettingMarks changed={changed} saves={saves} />
           </>
         }
         description={detail}

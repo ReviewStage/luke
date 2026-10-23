@@ -420,7 +420,7 @@ const FOCUSABLE = "button, select, input, textarea, [tabindex]";
 /**
  * What a landed row wears for the stylesheet to ring it once, so the eye finds
  * the row the view just moved to. The ring is a one-shot animation in
- * `settings.css`; the attribute stays until the row is landed on again.
+ * `search.css`; the attribute stays until the row is landed on again.
  */
 const SETTINGS_SEARCH_LANDED_ATTRIBUTE = "data-search-landed";
 

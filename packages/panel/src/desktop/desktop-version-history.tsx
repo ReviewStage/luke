@@ -25,6 +25,7 @@ import {
   List,
   ListRow,
   NavItem,
+  OneLine,
   RetryRowLabel,
   SCROLL_FADE,
   ScrollArea,
@@ -46,7 +47,6 @@ import { ACTOR_SIZE, ActorMark, LeftWords } from "../actor-ref.js";
 import { useAppCommand } from "../app-commands.js";
 import { ColumnFoot } from "../call/call-card.js";
 import { LINK_COPY, useCopyToast } from "../copy-feedback.js";
-import { FadingWords } from "../fading-words.js";
 import { FIND_PAGE, PageFind } from "../find-in-tab.js";
 import type { NavigationHistory } from "../navigation-history.js";
 import { hiddenColumns, SHELL_ROOM, type ShellRoom } from "../shell-room.js";
@@ -300,10 +300,10 @@ function SectionsHead({
   onBack: () => void;
 }): React.JSX.Element {
   const name = (
-    <FadingWords className="version-row-author" data-author={author.kind}>
+    <OneLine className="version-row-author">
       {actorName(author)}
       <LeftWords actor={author} />
-    </FadingWords>
+    </OneLine>
   );
   return (
     <>

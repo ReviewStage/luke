@@ -4,9 +4,8 @@ import {
   type PagePlace,
   type PageShower,
 } from "@luke/features/page-wire";
-import { HoverCard, HoverCardHead, Time, useMinute } from "@luke/ui";
+import { HoverCard, HoverCardHead, PageThumb, Time, useMinute } from "@luke/ui";
 import { AppWindowIcon } from "lucide-react";
-import { useState } from "react";
 import { appPlatform } from "../app-platform.js";
 import { PAGE_SANDBOX } from "./page-pane.js";
 import { useKnownNames } from "./use-known-names.js";
@@ -38,21 +37,14 @@ interface CardPage {
 
 /** The page's newest version, drawn small and inert. */
 function PagePreview({ place, page }: CardPage): React.JSX.Element {
-  const [loaded, setLoaded] = useState(false);
   return (
-    <div className="page-card-preview ph-no-capture" data-loaded={String(loaded)}>
-      <iframe
-        className="page-card-frame"
-        title={`${page.title} preview`}
-        src={appPlatform().pageFrameUrl({ ...place, pageId: page.id, version: page.version })}
-        sandbox={PAGE_SANDBOX}
-        allow=""
-        referrerPolicy="no-referrer"
-        tabIndex={-1}
-        aria-hidden="true"
-        onLoad={() => setLoaded(true)}
-      />
-    </div>
+    <PageThumb
+      frame={{
+        title: `${page.title} preview`,
+        src: appPlatform().pageFrameUrl({ ...place, pageId: page.id, version: page.version }),
+        sandbox: PAGE_SANDBOX,
+      }}
+    />
   );
 }
 

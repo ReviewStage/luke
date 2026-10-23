@@ -90,7 +90,10 @@
     padding-block: max(0px, calc((16px - 1lh) / 2)); /* off-scale: the mark's 16px */
   }
 
+  /* Note that the wash is also handed on as a custom property, so a mark
+     inside that rings itself in the ground can run the wash on over its ring. */
   .luke-inline-ref[data-look="wash"]:hover {
+    --luke-inline-ref-wash: var(--luke-color-fill-hover);
     background: var(--luke-color-fill-hover);
     box-shadow: 0 0 0 3px var(--luke-color-fill-hover); /* off-scale: the wash's bleed */
     color: var(--luke-color-text);

@@ -28,6 +28,14 @@
     overflow-wrap: anywhere;
   }
 
+  .luke-inline[data-grow] {
+    flex: 1 1 var(--luke-select-field-width);
+  }
+
+  .luke-inline[data-grow-first] > :first-child {
+    flex: 1 1 var(--luke-select-field-width);
+  }
+
   [data-gap="none"]:is(.luke-stack, .luke-inline) {
     gap: 0;
   }

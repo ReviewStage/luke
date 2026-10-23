@@ -1,3 +1,4 @@
+import { PRESS_PULSE, pulseOnPress } from "../../press-pulse.js";
 /**
  * mark-strip.tsx -- the thin strip a hidden rail leaves in its place: one mark for each of its rows, a press on which shows the rail again.
  *
@@ -38,7 +39,11 @@ export function MarkStrip({
   return (
     // biome-ignore lint/a11y/useKeyWithClickEvents: a picture hidden from assistive technology; the keyboard shows the rail through its toggle.
     // biome-ignore lint/a11y/noStaticElementInteractions: as above.
-    <div className="luke-mark-strip" aria-hidden="true" onClick={onPress}>
+    <div
+      className="luke-mark-strip"
+      aria-hidden="true"
+      onClick={pulseOnPress(onPress, PRESS_PULSE.QUIET)}
+    >
       {marks.map((mark, index) => (
         <span
           key={index}

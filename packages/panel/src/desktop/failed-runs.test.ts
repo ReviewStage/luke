@@ -111,9 +111,9 @@ test("a failed run's toast is under its automation's name, and its View opens th
       detail: "Flaky test sweep",
     }),
   );
-  const toast = document.querySelector<HTMLElement>(".toast");
+  const toast = document.querySelector<HTMLElement>(".luke-toast");
   assert.ok(toast);
-  assert.equal(toast.querySelector(".toast-detail")?.textContent, "Flaky test sweep");
+  assert.equal(toast.querySelector(".luke-toast-detail")?.textContent, "Flaky test sweep");
   const view = [...toast.querySelectorAll("button")].find(
     (button) => button.textContent === "View",
   );

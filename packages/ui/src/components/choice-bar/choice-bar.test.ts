@@ -548,3 +548,28 @@ test("a bar folding together folds once a name grows past its width, though noth
     vi.restoreAllMocks();
   }
 });
+
+test("a bar a finger works names every option in words alone and draws none of their glyphs, where another draws them", () => {
+  const glyphed: readonly ChoiceItem<View>[] = OPEN_ITEMS.map((item) => ({
+    ...item,
+    icon: createElement("svg", { "data-glyph": item.value }),
+  }));
+  const bar = (fold: (typeof CHOICE_BAR_FOLD)[keyof typeof CHOICE_BAR_FOLD]) =>
+    createElement(ChoiceBar<View>, {
+      label: "Pull request",
+      items: glyphed,
+      value: VIEW.CONVERSATION,
+      onChange: () => undefined,
+      look: CHOICE_BAR_LOOK.FILL,
+      fold,
+    });
+  const words = render(bar(CHOICE_BAR_FOLD.WORDS));
+  const together = render(bar(CHOICE_BAR_FOLD.TOGETHER));
+  const named = (container: HTMLElement) =>
+    [...container.querySelectorAll(".luke-choice-bar-label")].map((label) => label.textContent);
+
+  assert.deepEqual(named(words), ["Conversation", "Checks", "Files"]);
+  assert.equal(words.querySelectorAll("[data-glyph]").length, 0);
+  assert.deepEqual(named(together), ["Conversation", "Checks", "Files"]);
+  assert.equal(together.querySelectorAll("[data-glyph]").length, 3);
+});

@@ -24,8 +24,13 @@ import {
   EmptyState,
   ERROR_STATE_PLACEMENT,
   ErrorState,
+  GLYPH_INK,
+  GlyphSlot,
   IconButton,
   InlineEdit,
+  ListMotion,
+  motionKey,
+  motionRows,
   PAGE_FRAME,
   PAGE_WIDTH,
   PROVIDER_MARK_SIZE,
@@ -42,6 +47,7 @@ import {
   Text,
   Time,
   Tooltip,
+  useLeaving,
   useMinute,
 } from "@luke/ui";
 import { actorName, creatorActor } from "@luke/ui/actor-model";
@@ -54,6 +60,7 @@ import {
   type TaskProperty,
   type TasksGroup,
   type TasksGroupHead,
+  taskIdOf,
   tasksBoardColumns,
 } from "@luke/ui/tasks-page-model";
 import { useInlineRename } from "@luke/ui/use-inline-rename";
@@ -250,7 +257,11 @@ function TaskBoardCard({
         <TaskKey workspaceName={workspaceName} number={task.number} />
       ) : null}
       <span className="tasks-board-card-marks">
-        {drawn(TASK_PROPERTY.WAITING) ? <WaitingBadge count={waiting} /> : null}
+        {drawn(TASK_PROPERTY.WAITING) && waiting > 0 ? (
+          <span className="tasks-board-waiting">
+            <WaitingBadge count={waiting} />
+          </span>
+        ) : null}
         {drawn(TASK_PROPERTY.UPDATED) ? (
           <Time at={taskTime(task, TASK_ORDER.UPDATED)} now={now} hint={false} />
         ) : null}
@@ -280,6 +291,7 @@ function TaskBoardCard({
     <li
       className="tasks-board-card"
       data-task-id={task.id}
+      {...motionKey(task.id)}
       data-menu-open={actions.open ? "true" : undefined}
       data-editing={rename.editing ? "true" : undefined}
     >
@@ -380,11 +392,22 @@ interface ColumnPeople {
 /** A column's head for the value it stands for. */
 function columnHead(head: TasksGroupHead, people: ColumnPeople): ColumnHead {
   if (head.kind === TASKS_GROUP.STATUS) {
-    return { mark: <TaskStatusMark status={head.status} />, words: TASK_STATUS_WORDS[head.status] };
+    return {
+      mark: (
+        <GlyphSlot ink={GLYPH_INK.INHERIT}>
+          <TaskStatusMark status={head.status} />
+        </GlyphSlot>
+      ),
+      words: TASK_STATUS_WORDS[head.status],
+    };
   }
   if (head.kind === TASKS_GROUP.PRIORITY) {
     return {
-      mark: <TaskPriorityMark priority={head.priority} />,
+      mark: (
+        <GlyphSlot ink={GLYPH_INK.INHERIT}>
+          <TaskPriorityMark priority={head.priority} />
+        </GlyphSlot>
+      ),
       words: TASK_PRIORITY_WORDS[head.priority],
     };
   }
@@ -471,6 +494,7 @@ function TaskBoardColumnView({
     column.head.kind === TASKS_GROUP.ASSIGNEE && !narrow
       ? properties.filter((property) => property !== TASK_PROPERTY.ASSIGNEE)
       : properties;
+  const cards = useLeaving(column.tasks, taskIdOf);
   return (
     <section
       className="tasks-board-column"
@@ -491,9 +515,9 @@ function TaskBoardColumnView({
           </Text>
         )}
       </h2>
-      {column.tasks.length === 0 ? (
+      {cards.length === 0 ? (
         column.older === undefined ? (
-          <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
+          <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED} className="tasks-board-empty">
             {NO_TASKS}
           </Text>
         ) : null
@@ -505,8 +529,12 @@ function TaskBoardColumnView({
             fade={SCROLL_FADE.BOTH}
             overscroll={SCROLL_OVERSCROLL.CHAIN}
           >
-            <ul className="tasks-board-cards" onPointerDown={narrow ? undefined : drag}>
-              {column.tasks.map((task) => (
+            <ul
+              className="tasks-board-cards"
+              {...motionRows()}
+              onPointerDown={narrow ? undefined : drag}
+            >
+              {cards.map(({ value: task }) => (
                 <TaskBoardCard
                   key={task.id}
                   tasks={tasks}
@@ -549,6 +577,7 @@ export function TasksBoard({
   const { waiting } = useSettledWaiting(tasks.listed.inbox, tasks.inboxTaskless);
   const waitingOn = new Map(waiting.map((each) => [each.taskId, each.items.length]));
   const ids = useId();
+  const board = useRef<HTMLDivElement>(null);
   const [chosen, setChosen] = useState<string>(FIRST_SHOWN);
   const listed = tasks.listed.tasks;
   const { filter, display } = frame;
@@ -622,33 +651,35 @@ export function TasksBoard({
         </ErrorState>
       }
     >
-      <div className="tasks-board" data-row-drop-scope="">
-        {columns.length === 0 ? (
-          <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
-            {NONE_STANDING}
-          </Text>
-        ) : null}
-        {(narrow ? columns.filter((column) => columnValue(column.head) === shown) : columns).map(
-          (column) => (
-            <TaskBoardColumnView
-              key={columnValue(column.head)}
-              tasks={tasks}
-              column={column}
-              columns={columns}
-              workspaceName={workspaceName}
-              narrow={narrow}
-              panelId={panelId}
-              properties={display.properties}
-              people={people}
-              waitingOn={waitingOn}
-              now={now}
-              onOpen={(task) => tasks.onSelect(task.id)}
-              onStanding={setStanding}
-              onShowOlder={() => frame.onDisplay({ ...display, completed: COMPLETED_WINDOW.ALL })}
-            />
-          ),
-        )}
-      </div>
+      <ListMotion root={board}>
+        <div ref={board} className="tasks-board" data-row-drop-scope="">
+          {columns.length === 0 ? (
+            <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
+              {NONE_STANDING}
+            </Text>
+          ) : null}
+          {(narrow ? columns.filter((column) => columnValue(column.head) === shown) : columns).map(
+            (column) => (
+              <TaskBoardColumnView
+                key={columnValue(column.head)}
+                tasks={tasks}
+                column={column}
+                columns={columns}
+                workspaceName={workspaceName}
+                narrow={narrow}
+                panelId={panelId}
+                properties={display.properties}
+                people={people}
+                waitingOn={waitingOn}
+                now={now}
+                onOpen={(task) => tasks.onSelect(task.id)}
+                onStanding={setStanding}
+                onShowOlder={() => frame.onDisplay({ ...display, completed: COMPLETED_WINDOW.ALL })}
+              />
+            ),
+          )}
+        </div>
+      </ListMotion>
     </CollectionPage>
   );
 }

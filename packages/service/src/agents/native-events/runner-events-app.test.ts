@@ -994,6 +994,67 @@ it.layer(getTestDB())("the runner events route", (it) => {
   );
 
   it.effect(
+    "a call to an integration's own server is stored as that integration's tool, the account named past its first, and its answer kept as the text the model read",
+    () =>
+      Effect.gen(function* () {
+        const post = yield* standing;
+        const agent = yield* agentWithBearer;
+        const top = { parent_tool_use_id: null, session_id: SESSION };
+        const messagesOfTurn = [
+          { type: RUNNER_EVENT.ACCEPTED, uuid: agent.lineId },
+          {
+            type: "assistant",
+            message: {
+              id: "msg_1",
+              content: [
+                {
+                  type: "tool_use",
+                  id: "toolu_fetch",
+                  name: "mcp__notion-2__notion-fetch",
+                  input: { id: "page-1" },
+                },
+              ],
+            },
+            ...top,
+          },
+          {
+            type: "user",
+            message: {
+              content: [
+                {
+                  type: "tool_result",
+                  tool_use_id: "toolu_fetch",
+                  content: [{ type: "text", text: '{"title":"Launch plan"}' }],
+                },
+              ],
+            },
+            ...top,
+          },
+        ];
+        // SAFETY: each message above is one the pinned SDK or the runner emits, written in its JSON shape.
+        const events = messagesOfTurn.map(
+          (message, sequence) => ({ sequence, message }) as RunnerEvent,
+        );
+
+        yield* post(agent.bearer, events);
+        const { rows } = yield* transcriptOf(agent.target.conversationId);
+        const parts = rows.at(-1)?.parts ?? [];
+
+        assert.deepEqual(parts.map(drawn), [
+          ["step-start"],
+          ["tool-notion_remote", "output-available", '{"title":"Launch plan"}'],
+        ]);
+        const call = parts[1];
+        assert.deepEqual(call !== undefined && "input" in call ? call.input : undefined, {
+          remoteTool: "notion-fetch",
+          parentCallId: "toolu_fetch",
+          input: { id: "page-1" },
+          connection: "notion-2",
+        });
+      }),
+  );
+
+  it.effect(
     "the last event applied is kept on the conversation, for a relaunch to number after",
     () =>
       Effect.gen(function* () {
@@ -1385,6 +1446,67 @@ it.layer(getTestDB())("the runner events route, on Codex", (it) => {
           ],
         );
         assert.notEqual(Option.getOrThrow(context).compactedAt, null);
+      }),
+  );
+
+  it.effect(
+    "a call to an integration's own server is stored as that integration's tool, its answer kept as the text the model read",
+    () =>
+      Effect.gen(function* () {
+        const post = yield* standing;
+        const agent = yield* agentOn(HARNESS.CODEX, ["List the issues."]);
+        const listed = {
+          type: "mcpToolCall",
+          id: "mcp_linear",
+          server: "linear",
+          tool: "list_issues",
+          status: "inProgress",
+          arguments: { team: "ENG" },
+          result: null,
+          error: null,
+        };
+        const messagesOfTurn: WireValue[] = [
+          {
+            method: "thread/started",
+            params: { thread: { id: THREAD, parentThreadId: null } },
+          },
+          { type: RUNNER_EVENT.ACCEPTED, uuid: agent.lineId },
+          notification("turn/started", { turn: { id: "turn-1" } }),
+          notification("item/started", { item: listed }),
+          notification("item/completed", {
+            item: {
+              ...listed,
+              status: "completed",
+              result: {
+                content: [{ type: "text", text: '{"issues":[{"id":"LIN-1"}]}' }],
+                structuredContent: null,
+                _meta: null,
+              },
+            },
+          }),
+          notification("turn/completed", {
+            turn: { id: "turn-1", status: "completed", error: null },
+          }),
+          { type: RUNNER_EVENT.END, reason: RUNNER_END.TURN_ENDED },
+        ];
+        // SAFETY: each message above is one app-server or the runner emits, written in its JSON shape.
+        const events = messagesOfTurn.map(
+          (message, sequence) => ({ sequence, message }) as RunnerEvent,
+        );
+        yield* post(agent.bearer, events);
+        const { rows } = yield* transcriptOf(agent.target.conversationId);
+        const parts = rows.at(-1)?.parts ?? [];
+
+        assert.deepEqual(parts.map(drawn), [
+          ["step-start"],
+          ["tool-linear_remote", "output-available", '{"issues":[{"id":"LIN-1"}]}'],
+        ]);
+        const call = parts[1];
+        assert.deepEqual(call !== undefined && "input" in call ? call.input : undefined, {
+          remoteTool: "list_issues",
+          parentCallId: "mcp_linear",
+          input: { team: "ENG" },
+        });
       }),
   );
 

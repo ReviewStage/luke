@@ -96,6 +96,7 @@ import {
   Fill,
   FoldingButton,
   IconButton,
+  OneLine,
   PAGE_FRAME,
   POPOVER_ALIGN,
   PROVIDER_MARK_SIZE,
@@ -122,9 +123,9 @@ import {
   useConfirmDialog,
   useMenu,
   useMinute,
+  wholeWordsHint,
 } from "@luke/ui";
 import { dayAndTimeText, localTimeZone, sinceText, timeZoneNames } from "@luke/ui/time-format";
-import { useClipped } from "@luke/ui/use-clipped";
 import { useDisclosure } from "@luke/ui/use-disclosure";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { Result } from "effect";
@@ -748,13 +749,10 @@ function AutomationActions({
 
 /** The crumb naming the automation, fading out at its end where the toolbar is narrow, the pointer reading it whole. */
 function CurrentCrumb({ name }: { name: string }): React.JSX.Element {
-  const [words, clipped] = useClipped(name);
   return (
-    <Tooltip label={clipped ? name : undefined}>
-      <span ref={words} className="automation-crumb" data-overflow={String(clipped)}>
-        {name}
-      </span>
-    </Tooltip>
+    <OneLine className="automation-crumb" hint={wholeWordsHint(name)}>
+      {name}
+    </OneLine>
   );
 }
 
@@ -1073,7 +1071,6 @@ function SentryRows({
     return (
       <SettingsRow
         label="Sentry isn't installed"
-        description="Install Luke's Sentry integration on this workspace so its alerts and issues can start runs."
         error={sentry.refusal}
       >
         {() => (

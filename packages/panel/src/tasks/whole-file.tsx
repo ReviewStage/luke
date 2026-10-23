@@ -353,7 +353,11 @@ export function WholeFile({
   return (
     <Fill className="whole-file">
       <ScrollArea ref={host}>{null}</ScrollArea>
-      {module === undefined ? <SpinnerRegion delay label="Loading file" /> : null}
+      {module === undefined ? (
+        <div className="whole-file-wait">
+          <SpinnerRegion delay label="Loading file" />
+        </div>
+      ) : null}
       {notes.map((note) => createPortal(note.content, elementFor(note.key), note.key))}
     </Fill>
   );

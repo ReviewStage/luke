@@ -1,4 +1,10 @@
-import { createElement, type HTMLAttributes, type ReactNode, type Ref } from "react";
+import {
+  createElement,
+  type HTMLAttributes,
+  type ReactNode,
+  type Ref,
+  type SyntheticEvent,
+} from "react";
 
 /**
  * layout.tsx -- the two arrangements every container is built from: a Stack sets what it holds one under another, an Inline one beside another.
@@ -59,6 +65,7 @@ export const LAYOUT_ELEMENT = {
   UL: "ul",
   OL: "ol",
   LI: "li",
+  FORM: "form",
 } as const;
 
 export type LayoutElement = (typeof LAYOUT_ELEMENT)[keyof typeof LAYOUT_ELEMENT];
@@ -81,6 +88,8 @@ interface LayoutProps {
   /** The name of a list or a region, where nothing visible names it. */
   "aria-label"?: string | undefined;
   "aria-labelledby"?: string | undefined;
+  /** What a submit does, on an Inline that is a `form`. */
+  onSubmit?: (event: SyntheticEvent) => void;
   children: ReactNode;
 }
 
@@ -113,10 +122,18 @@ export function Inline({
   align = ALIGN.CENTER,
   justify = JUSTIFY.START,
   wrap = true,
+  grow = false,
+  growFirst = false,
   as: Element = LAYOUT_ELEMENT.DIV,
   children,
   ...named
-}: LayoutProps & { wrap?: boolean }): React.JSX.Element {
+}: LayoutProps & {
+  wrap?: boolean;
+  /** Whether it takes the room its line leaves, down to a field's least width, where it wraps. */
+  grow?: boolean;
+  /** Whether its first item takes the room the others leave, as a field does beside its presses. */
+  growFirst?: boolean;
+}): React.JSX.Element {
   return (
     <Element
       className="luke-inline"
@@ -125,6 +142,8 @@ export function Inline({
       data-align={align}
       data-justify={justify}
       data-wrap={wrap}
+      data-grow={grow ? "" : undefined}
+      data-grow-first={growFirst ? "" : undefined}
       {...named}
     >
       {children}

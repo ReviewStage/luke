@@ -100,7 +100,7 @@ export interface LandedThread extends LandedCard {
   readonly onOpenChange: (open: boolean) => void;
 }
 
-/** The ring's animation (`settings.css`'s `search-landed`), whose end is the landing's. */
+/** The ring's animation (`search.css`'s `search-landed`), whose end is the landing's. */
 const RING_ANIMATION = "search-landed";
 
 /** How many frames a card is waited for where the view says no other. */

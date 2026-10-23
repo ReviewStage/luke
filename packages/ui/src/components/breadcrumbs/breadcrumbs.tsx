@@ -1,4 +1,5 @@
 import { type ComponentProps, type ComponentType, type ReactNode, useState } from "react";
+import { pulseOnPress } from "../../press-pulse.js";
 import { useDisclosure } from "../../use-disclosure.js";
 import { BUTTON_VARIANT } from "../button/button.js";
 import { FoldingButton, type FoldingButtonHint } from "../folding-button/folding-button.js";
@@ -113,6 +114,8 @@ interface PathCrumb extends CrumbBase {
   readonly shown?: boolean | undefined;
   /** How its words end where they are cut short: fading out where none is said, or in an ellipsis. */
   readonly end?: OneLineEnd | undefined;
+  /** Whether it keeps its size in a narrow bar, so the crumbs after it are cut short first; it gives way with the rest where none is said. */
+  readonly fixed?: boolean | undefined;
 }
 
 /**
@@ -132,6 +135,7 @@ interface WayBackCrumb extends CrumbBase {
   readonly expanded?: undefined;
   readonly shown?: undefined;
   readonly end?: undefined;
+  readonly fixed?: undefined;
 }
 
 /** One crumb of a path. */
@@ -278,7 +282,7 @@ function CrumbControl({
         aria-current={current}
         aria-haspopup={crumb.popup}
         aria-expanded={crumb.popup === undefined ? undefined : crumb.expanded === true}
-        onClick={(event) => onPress(event.currentTarget)}
+        onClick={pulseOnPress((event) => onPress(event.currentTarget))}
       >
         <CrumbFace glyph={crumb.glyph} label={label} end={crumb.end} />
       </button>
@@ -333,6 +337,7 @@ function CrumbItem({
       ref={presence.ref}
       data-shown={crumb.shownAt ?? BREADCRUMB_SHOWN.ALWAYS}
       data-words={crumb.icon === undefined && crumb.onPress === undefined}
+      data-fixed={crumb.fixed === true ? "true" : undefined}
       data-motion={motion}
       inert={presence.leaving}
     >

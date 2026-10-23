@@ -1,4 +1,5 @@
 import type { MouseEvent, ReactNode, Ref } from "react";
+import { PRESS_PULSE, pulsePress } from "../../press-pulse.js";
 
 /**
  * command-link.tsx -- words that a ⌘-click (Ctrl-click off a Mac) opens what they name from, as an editor's ⌘-click follows a reference: a pull request's title opening it on GitHub.
@@ -41,6 +42,7 @@ export function CommandLink({
     if (onOpen === undefined || !(event.metaKey || event.ctrlKey)) return;
     if (event.target instanceof Element && event.target.closest("button") !== null) return;
     event.preventDefault();
+    pulsePress(event.currentTarget, PRESS_PULSE.WORDS);
     onOpen();
   };
   return (

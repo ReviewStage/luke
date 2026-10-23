@@ -30,7 +30,9 @@ import { CatalogSection } from "../section";
  * composer's card as New task's stands, which on a phone's screen gives its
  * words the room the desktop's margins would spend, and a picture shown edge
  * to edge under its own bar, each opened from its button and
- * put away by its answers, Escape, or a press on the dimmed window. The
+ * put away by its answers, Escape, or a press on the dimmed window; the
+ * note and the composer, holding words, are nudged by the first of those
+ * and put away by the next. The
  * question's words scroll inside the card in a short window, so its answers
  * stay on screen.
  */
@@ -106,6 +108,7 @@ function NoteDialog({ onClose }: { onClose: () => void }): React.JSX.Element {
     <Dialog
       size={DIALOG_SIZE.WIDE}
       title="Send feedback"
+      holding={note.trim() !== ""}
       initialFocus={field}
       onDismiss={onClose}
       dropping={dropping}
@@ -155,6 +158,7 @@ function ComposerDialog({ onClose }: { onClose: () => void }): React.JSX.Element
     <Dialog
       size={DIALOG_SIZE.COMPOSER}
       title="New task"
+      holding={words.trim() !== ""}
       initialFocus={field}
       onDismiss={onClose}
       actionsStart={<IconButton icon={<ImageIcon />} label="Attach files" />}

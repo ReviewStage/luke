@@ -9,7 +9,9 @@ import {
   Button,
   CheckIcon,
   ExternalIcon,
+  GAP,
   IconButton,
+  Inline,
   SettingsRow,
   SettingsSection,
   Tooltip,
@@ -67,10 +69,10 @@ export function VoiceSection({
         <SettingsSection>
           <SettingsRow
             label={
-              <span className="settings-name">
+              <Inline gap={GAP.ICON} wrap={false}>
                 Voice
                 <AttentionMark note={VOICE_KEYLESS_NOTE} />
-              </span>
+              </Inline>
             }
             description={VOICE_KEYLESS_NOTE}
           >
@@ -97,14 +99,14 @@ export function VoiceSection({
           <div {...searchAnchorProps(SETTINGS_SEARCH_ROW.MICROPHONE)}>
             <SettingsRow
               label={
-                <span className="settings-name">
+                <Inline gap={GAP.ICON} wrap={false}>
                   Microphone
                   {microphoneRow.ready ? (
                     <CheckIcon />
                   ) : (
                     <AttentionMark note={MICROPHONE_UNGRANTED_NOTE} />
                   )}
-                </span>
+                </Inline>
               }
               description={microphoneRow.detail}
             >

@@ -2,6 +2,7 @@
 
 import assert from "node:assert/strict";
 import { INTEGRATION_PROVIDER_LIST } from "@luke/features/integration-wire";
+import { LINK_SITE_LIST } from "@luke/features/link-site";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { test } from "vitest";
@@ -85,6 +86,15 @@ function markBounds(svg: Element): Bounds | undefined {
   for (const path of svg.querySelectorAll("path")) {
     bounds = pathBounds(path.getAttribute("d") ?? "", bounds);
   }
+  for (const polygon of svg.querySelectorAll("polygon")) {
+    const numbers = (polygon.getAttribute("points") ?? "")
+      .trim()
+      .split(/[\s,]+/)
+      .map(Number);
+    for (let at = 0; at + 1 < numbers.length; at += 2) {
+      bounds = grow(bounds, numbers[at] ?? 0, numbers[at + 1] ?? 0);
+    }
+  }
   for (const rect of svg.querySelectorAll("rect")) {
     const x = Number(rect.getAttribute("x") ?? 0);
     const y = Number(rect.getAttribute("y") ?? 0);
@@ -98,7 +108,11 @@ function markBounds(svg: Element): Bounds | undefined {
   return bounds;
 }
 
-const MARKED: readonly MarkProvider[] = [...INTEGRATION_PROVIDER_LIST, MARK_PROVIDER.GOOGLE];
+const MARKED: readonly MarkProvider[] = [
+  ...INTEGRATION_PROVIDER_LIST,
+  ...LINK_SITE_LIST,
+  MARK_PROVIDER.GOOGLE,
+];
 
 test("every provider's mark lies inside its own box and fills it", () => {
   for (const provider of MARKED) {

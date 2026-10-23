@@ -470,6 +470,8 @@ export interface CodingAgentCall {
   readonly caller: AgentCaller;
   /** eve's coding-agent service as the deployment acting for the caller's member; nothing where the deployment names no secret or no origin for eve, which sends and starts nothing. */
   readonly eve: AgentSessions | undefined;
+  /** eve as the deployment acting for any account, such as the creator an automation's run starts as, whoever fired it; nothing where the deployment names no secret or no origin for eve. */
+  readonly eveAs?: ((account: string) => AgentSessions) | undefined;
   readonly writer: Effect.Effect<StoreWriter>;
   /** The key a message or a start is made under: eve's own id for the tool call, so a call run again sends or starts once. */
   readonly clientKey: string;
@@ -1936,11 +1938,18 @@ const sectionAsked = (
     });
   });
 
-/** Whether every change named already stands on the task as its member reads it. */
-function changesStand(task: StoredTask["task"], changes: TaskChanges): boolean {
+/**
+ * Whether every change named already stands on the task as its member reads
+ * it. Note that a repository confirmed again stands only where it is reached
+ * as the task records it, because the write records the access it was reached
+ * through.
+ */
+function changesStand(stored: StoredTask, changes: TaskChanges): boolean {
+  const { task } = stored;
   return (
     (changes.name === undefined || changes.name === task.name) &&
     (changes.repository === undefined || changes.repository === task.repository) &&
+    (changes.githubAccess === undefined || changes.githubAccess === stored.githubAccess) &&
     (changes.pinned === undefined || changes.pinned === (task.pinnedAt !== undefined)) &&
     (changes.status === undefined || changes.status === task.status) &&
     (changes.priority === undefined || changes.priority === task.priority) &&
@@ -2104,7 +2113,7 @@ export function runUpdateTask(
         return agentToolRejected(relinked.failure);
       }
       const already =
-        changesStand(read.value.task, asWritten) &&
+        changesStand(read.value, asWritten) &&
         (placing?.success.stands ?? true) &&
         (relinked === undefined || issueChangesStand(relinked.success));
       // The task's change and its place in the sidebar are one transaction, so a place refused, its

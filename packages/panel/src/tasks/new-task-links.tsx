@@ -13,12 +13,12 @@ import {
   Chip,
   CloseIcon,
   IconButton,
+  OneLine,
   PROVIDER_MARK_SIZE,
   ProviderMark,
   Tooltip,
 } from "@luke/ui";
 import { CircleDotIcon } from "lucide-react";
-import { FadingWords } from "../fading-words.js";
 import { RELATION_DETAIL } from "./task-issue-links-model.js";
 
 /**
@@ -119,7 +119,9 @@ function LinkChip({
       <span className="new-task-issue-key">
         {github ? `#${link.issue.number}` : link.issue.identifier}
       </span>
-      <FadingWords className="new-task-issue-title" words={link.issue.title} />
+      <OneLine className="new-task-issue-title" words={link.issue.title}>
+        {link.issue.title}
+      </OneLine>
       <span className="new-task-issue-relation">
         <Tooltip label={RELATION_DETAIL[link.relation]}>
           <Chip

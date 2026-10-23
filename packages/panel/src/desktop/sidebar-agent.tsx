@@ -7,6 +7,7 @@ import {
   LIST_ROW_CURRENT,
   LIST_ROW_INK,
   ListRow,
+  OneLine,
   PencilIcon,
   PinIcon,
   RowHint,
@@ -24,7 +25,6 @@ import { useAct } from "../act.js";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref.js";
 import { useDraftedAgents } from "../composer-drafts.js";
 import { DraftMark } from "../draft-mark.js";
-import { FadingWords } from "../fading-words.js";
 import { useMemberDirectory } from "../member-directory.js";
 import { AgentCard, tasklessRowSubject } from "../tasks/agent-ref.js";
 import { agentEndMark, TAB_KIND, tabLook } from "../tasks/tab-look.js";
@@ -240,6 +240,7 @@ export function SidebarAgent({
       <RowHintOptions card={card} cardBeside cardRegion={item}>
         <ListRow
           ref={hold}
+          motionKey={agent.id}
           density={LIST_DENSITY.DENSE}
           ink={LIST_ROW_INK.SIDEBAR}
           leading={
@@ -271,7 +272,9 @@ export function SidebarAgent({
             editing ? null : (
               <span className="sidebar-task-time">
                 {repository === undefined ? null : (
-                  <FadingWords className="sidebar-task-repository" words={repository} />
+                  <OneLine className="sidebar-task-repository" words={repository}>
+                    {repository}
+                  </OneLine>
                 )}
                 {starter === undefined ? null : (
                   <ActorMark actor={starter} size={ACTOR_SIZE.MARK} />

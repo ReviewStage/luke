@@ -26,10 +26,13 @@ import {
   DisclosureBody,
   DisclosureChevron,
   DisclosureSummary,
+  GLYPH_INK,
+  GlyphSlot,
   INLINE_REF_LOOK,
   InlineRef,
   LineButton,
   LineSummary,
+  OneLine,
   ProviderMark,
   Shimmer,
   TEXT_ELEMENT,
@@ -43,13 +46,13 @@ import { ACTOR_KIND, ACTOR_STATE, type Actor, actorName } from "@luke/ui/actor-m
 import { githubShapes, wholeRendering } from "@luke/ui/github-html";
 import { gluedRun, LINK_GLUE } from "@luke/ui/link-glue";
 import { TAB_WORDS } from "@luke/ui/tab-strip-model";
-import { useClipped } from "@luke/ui/use-clipped";
 import {
   AppWindowIcon,
   ArchiveIcon,
   ArchiveRestoreIcon,
   BookOpenIcon,
   BotIcon,
+  CalendarCheckIcon,
   CalendarClockIcon,
   CalendarCogIcon,
   CalendarPlusIcon,
@@ -69,6 +72,7 @@ import {
   FolderMinusIcon,
   FolderPlusIcon,
   GlobeIcon,
+  HashIcon,
   HourglassIcon,
   ImageIcon,
   InboxIcon,
@@ -78,6 +82,9 @@ import {
   type LucideIcon,
   MessageCircleQuestionIcon,
   MessageCircleXIcon,
+  MessageSquareCheckIcon,
+  MessageSquareTextIcon,
+  MessagesSquareIcon,
   PencilLineIcon,
   PhoneOffIcon,
   PlayIcon,
@@ -827,7 +834,7 @@ function CutWords({
   );
 }
 
-/** Each kind of call's icon: a verb's own, or, for a call about something the window draws a glyph for, that glyph's likeness: the Code tab's brackets for code shown, the transcript's scroll for an agent read, as Copy full transcript wears it, never the terminal a shell command wears. A list of the agents is a list's own, rows each led by its mark, since it reads them all rather than one; a list of the models wears a chip, what an agent runs on. */
+/** Each kind of call's icon: a verb's own, or, for a call about something the window draws a glyph for, that glyph's likeness: the Code tab's brackets for code shown, the transcript's scroll for an agent read, as Copy full transcript wears it, never the terminal a shell command wears. A list of the agents is a list's own, rows each led by its mark, since it reads them all rather than one; a list of the models wears a chip, what an agent runs on. A chat call wears a speech bubble, and an edit of a channel the hash the chat's list leads a channel with. */
 const CALL_ICON = {
   [CALL_KIND.COMMAND]: TerminalIcon,
   [CALL_KIND.MAC_COMMAND]: LaptopIcon,
@@ -852,6 +859,10 @@ const CALL_ICON = {
   [CALL_KIND.INBOX_READ]: InboxIcon,
   [CALL_KIND.INBOX_REPLY]: InboxIcon,
   [CALL_KIND.INBOX_WITHDRAW]: InboxIcon,
+  [CALL_KIND.CHAT_POST]: MessageSquareTextIcon,
+  [CALL_KIND.CHAT_READ]: MessagesSquareIcon,
+  [CALL_KIND.CHAT_RESOLVE]: MessageSquareCheckIcon,
+  [CALL_KIND.CHAT_EDIT_CHANNEL]: HashIcon,
   [CALL_KIND.WORKER]: BotIcon,
   [CALL_KIND.WORKER_WAIT]: HourglassIcon,
   [CALL_KIND.WORKER_CANCEL]: CircleStopIcon,
@@ -871,6 +882,7 @@ const CALL_ICON = {
   [CALL_KIND.CREATE_AUTOMATION]: CalendarPlusIcon,
   [CALL_KIND.UPDATE_AUTOMATION]: CalendarCogIcon,
   [CALL_KIND.DELETE_AUTOMATION]: CalendarXIcon,
+  [CALL_KIND.RUN_AUTOMATION]: CalendarCheckIcon,
   [CALL_KIND.MOVE_TASK]: FolderInputIcon,
   [CALL_KIND.UPDATE_TASK]: FilePenIcon,
   [CALL_KIND.LIST_ISSUES]: ListTodoIcon,
@@ -1245,13 +1257,21 @@ function TodoItems({
         const working = live && todo.status === CODING_AGENT_TODO_STATUS.IN_PROGRESS;
         return (
           <li key={index} className="todo-item" data-todo-status={todo.status}>
-            <span className="todo-mark" role="img" aria-label={look.label}>
+            <GlyphSlot
+              line
+              ink={
+                todo.status === CODING_AGENT_TODO_STATUS.IN_PROGRESS
+                  ? GLYPH_INK.TEXT
+                  : GLYPH_INK.MUTED
+              }
+              label={look.label}
+            >
               {working ? (
                 <StateGlyph state={GLYPH_STATE.WORKING} />
               ) : (
                 <StateGlyph state={GLYPH_STATE.REST} glyph={<look.Icon aria-hidden="true" />} />
               )}
-            </span>
+            </GlyphSlot>
             <span className="todo-words">{todo.content}</span>
           </li>
         );
@@ -1323,7 +1343,9 @@ export function TranscriptTodosDock({
   return (
     <Fold className="todos-dock" data-todos-dock="" aria-label="To-dos">
       <FoldSummary className="todos-dock-head">
-        <ListTodoIcon className="todos-dock-icon" aria-hidden="true" />
+        <GlyphSlot>
+          <ListTodoIcon />
+        </GlyphSlot>
         <span className="todos-dock-summary">{summary}</span>
         {focus === undefined ? null : (
           <Text
@@ -1407,16 +1429,13 @@ export function TranscriptSubagent({
   card,
   body,
 }: TranscriptSubagentProps): ReactNode {
-  const [words, clipped] = useClipped(job);
   const running = state === TOOL_STATE.INPUT_STREAMING || state === TOOL_STATE.INPUT_AVAILABLE;
   const line = (
     <>
-      <span className="subagent-icon">
+      <GlyphSlot>
         <SubagentMark model={pair?.choice.model} />
-      </span>
-      <span ref={words} className="subagent-job" data-overflow={String(clipped)}>
-        {job}
-      </span>
+      </GlyphSlot>
+      <OneLine className="subagent-job">{job}</OneLine>
       {pair === undefined ? null : (
         <span className="subagent-pair" data-subagent-pair="">
           <ModelLabel choice={pair.choice} models={pair.models} />

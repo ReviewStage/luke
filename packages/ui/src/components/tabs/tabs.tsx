@@ -19,6 +19,7 @@ import {
 import { flushSync } from "react-dom";
 import { cssCustomProperties } from "../../css.js";
 import { CloseIcon } from "../../face/glyphs.js";
+import { PRESS_PULSE, pulseOnPress, pulsePress } from "../../press-pulse.js";
 import { useClipped } from "../../use-clipped.js";
 import { BUTTON_SIZE, IconButton } from "../button/button.js";
 import {
@@ -505,7 +506,11 @@ export function Tab({
       aria-keyshortcuts={keyshortcuts}
       aria-description={unread ? UNREAD_TAB_NOTE : undefined}
       tabIndex={selected ? 0 : -1}
-      onClick={onSelect}
+      onClick={(event) => {
+        // Note that the tab around the button is the pill a press is seen on.
+        pulsePress(event.currentTarget.closest<HTMLElement>(".luke-tab") ?? event.currentTarget);
+        onSelect();
+      }}
       onDoubleClick={preview ? onKeep : undefined}
       {...contextMenu}
       onKeyDown={(event) => {
@@ -642,11 +647,12 @@ export function TabCard({
           ? (event) => {
               if (event.button !== 0) return;
               event.preventDefault();
+              pulsePress(event.currentTarget, PRESS_PULSE.QUIET);
               onPick();
             }
           : undefined
       }
-      onClick={pickOnPress ? undefined : onPick}
+      onClick={pickOnPress ? undefined : pulseOnPress(onPick, PRESS_PULSE.QUIET)}
       // Note that a card handed the focus is picked by Return or Space, as a press on it picks it.
       onKeyDown={(event) => {
         if (event.key !== "Enter" && event.key !== " ") return;

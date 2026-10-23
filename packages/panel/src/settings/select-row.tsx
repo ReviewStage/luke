@@ -53,13 +53,14 @@ export function SelectRow<Value extends string | number>({
   // biome-ignore lint/suspicious/noConfusingVoidType: the voice and pace cannot be refused, so those writes answer void
   onChange: (value: Value) => void | Promise<ActionResult>;
 }): React.JSX.Element {
-  const { busy, rejection, run } = useSettingWrite(onChange);
+  const { busy, rejection, saves, run } = useSettingWrite(onChange);
   const chosen = options.find((option) => option.value === value);
   return (
     <PickerRow
       label={label}
       detail={detail}
       changed={changed}
+      saves={saves}
       error={rejection ?? error}
       density={density}
       width={width}

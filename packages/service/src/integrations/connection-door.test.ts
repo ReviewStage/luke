@@ -14,9 +14,12 @@ import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
 import { getTestDB, startTask } from "@luke/database/testing";
 import { CODING_AGENT_PAYER } from "@luke/features/coding-agent-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
-import { Clock, Effect, Layer, Logger, Option, Redacted } from "effect";
+import { isRecord, type WireRecord } from "@luke/wire";
+import { fakeHttpClientLayer } from "@luke/wire/testing";
+import { Clock, Duration, Effect, Fiber, Layer, Logger, Option, Redacted, Result } from "effect";
 import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
+import { TestClock } from "effect/testing";
 import { admitRunnerBearer, runnerTokenDigest } from "../agents/luke-mcp/bearer.js";
 import { RUNNER_EVENTS_PATH, runnerEventsApp } from "../agents/native-events/runner-events-app.js";
 import { NO_GITHUB } from "../testing/github-app-fake.js";
@@ -27,13 +30,23 @@ import {
   linearServer,
   linearTokenOf,
 } from "../testing/integration-mcp-fake.js";
-import { runConnectionExecute, runConnectionSearch } from "./connection-door.js";
-import { beginIntegrationSignIn, completeIntegrationSignIn } from "./integration-store.js";
+import {
+  callConnectionTool,
+  connectionInstructions,
+  listConnectionTools,
+  nativeAgentConnections,
+} from "./connection-door.js";
+import {
+  beginIntegrationSignIn,
+  completeIntegrationSignIn,
+  renameIntegrationConnection,
+} from "./integration-store.js";
 import { integrationUnavailable } from "./integration-token.js";
+import { INTEGRATION } from "./integrations.js";
 
 /**
- * A native agent's `connection_search` and `connection_execute`, run through
- * their door over the real store on PGlite, against Linear's MCP server as a
+ * A native agent's integration servers, listed and called through their
+ * door over the real store on PGlite, against Linear's MCP server as a
  * fake standing at its own address (`../testing/integration-mcp-fake.ts`),
  * which admits only the bearer Connect issued the member. Linear and Notion
  * are set up on this deployment, the rest are not, and GitHub is offered as
@@ -115,184 +128,201 @@ function hearing(): Heard {
   return { calls: [], bearers: [] };
 }
 
+/** Linear's server as one that never answers, so only a bound ends a read of it. */
+const SILENT_LINEAR = fakeHttpClientLayer(() => new Promise<Response>(() => {}));
+
+/** The text of a forwarded MCP result's first block. */
+function firstText(result: Result.Result<WireRecord, unknown>): unknown {
+  if (Result.isFailure(result)) return undefined;
+  const content = result.success.content;
+  return Array.isArray(content) && isRecord(content[0]) ? content[0].text : undefined;
+}
+
 it.layer(getTestDB())("the integrations' door", (it) => {
   it.effect(
-    "a search lists the connected integration's tools with their signatures, and the ones the member has not connected as requiring sign-in",
-    () =>
-      Effect.gen(function* () {
-        const member = yield* memberWithLinear;
-        const heard = hearing();
-        const logged: string[] = [];
-
-        const found = yield* runConnectionSearch(member.admitted, {}).pipe(
-          Effect.provide(doorServices(linearTokenOf(member.userId), heard, logged)),
-        );
-
-        assert.ok("tools" in found);
-        assert.equal(found.total, 5);
-        assert.deepEqual(
-          found.tools.find((tool) => tool.tool === "list_issues"),
-          {
-            connection: "linear",
-            description: "List issues in the workspace.",
-            signature:
-              "list_issues(input: { team: string /* The team's key */; limit?: number /* How many; minimum: 1 */ }): Promise<unknown>",
-            tool: "list_issues",
-          },
-        );
-        assert.equal(
-          found.tools.find((tool) => tool.tool === "create_issue")?.signature,
-          "create_issue(input: { title: string; priority?: 1 | 2 | 3 }): Promise<{ id?: string }>",
-        );
-        assert.deepEqual(
-          found.unavailable?.find((each) => each.connection === NOTION),
-          {
-            connection: NOTION,
-            error: integrationUnavailable(NOTION).NOT_CONNECTED,
-            requiresSignIn: true,
-          },
-        );
-        assert.equal(
-          found.unavailable?.find((each) => each.connection === INTEGRATION_PROVIDER.GITHUB)
-            ?.requiresSignIn,
-          true,
-        );
-        assert.deepEqual(heard.bearers.length > 0, true);
-      }),
-  );
-
-  it.effect("a search's words rank the tools that match them first, and page them", () =>
-    Effect.gen(function* () {
-      const member = yield* memberWithLinear;
-      const services = doorServices(linearTokenOf(member.userId), hearing(), []);
-
-      const ranked = yield* runConnectionSearch(member.admitted, {
-        query: "create issue",
-        connection: LINEAR,
-      }).pipe(Effect.provide(services));
-      const paged = yield* runConnectionSearch(member.admitted, {
-        connection: LINEAR,
-        limit: 1,
-        offset: 1,
-      }).pipe(Effect.provide(services));
-
-      assert.ok("tools" in ranked && "tools" in paged);
-      // Every Linear tool matches the connection's own words; the tools named by them come first.
-      assert.deepEqual(
-        ranked.tools.slice(0, 2).map((tool) => tool.tool),
-        ["create_issue", "list_issues"],
-      );
-      assert.equal(ranked.unavailable, undefined);
-      assert.deepEqual(
-        paged.tools.map((tool) => tool.tool),
-        ["create_issue"],
-      );
-      assert.equal(paged.total, 5);
-    }),
-  );
-
-  it.effect(
-    "an execute calls the tool on the member's own grant with its input and answers its result",
-    () =>
-      Effect.gen(function* () {
-        const member = yield* memberWithLinear;
-        const heard = hearing();
-        const services = doorServices(linearTokenOf(member.userId), heard, []);
-
-        const listed = yield* runConnectionExecute(member.admitted, {
-          connection: LINEAR,
-          tool: "list_issues",
-          input: { team: "ENG" },
-        }).pipe(Effect.provide(services));
-        const created = yield* runConnectionExecute(member.admitted, {
-          connection: LINEAR,
-          tool: "create_issue",
-          input: { title: "Invite emails bounce" },
-        }).pipe(Effect.provide(services));
-        const drawn = yield* runConnectionExecute(member.admitted, {
-          connection: LINEAR,
-          tool: "draw",
-        }).pipe(Effect.provide(services));
-
-        assert.deepEqual(listed, { status: "accepted", output: { issues: [{ id: "LIN-1" }] } });
-        assert.deepEqual(created, { status: "accepted", output: { id: "LIN-2" } });
-        assert.deepEqual(drawn, {
-          status: "accepted",
-          output: [
-            { type: "text", text: "A chart:" },
-            { type: "image", data: "iVBORw0KGgo=", mimeType: "image/png" },
-          ],
-        });
-        assert.deepEqual(heard.calls, [
-          { name: "list_issues", arguments: { team: "ENG" } },
-          { name: "create_issue", arguments: { title: "Invite emails bounce" } },
-          { name: "draw", arguments: {} },
-        ]);
-      }),
-  );
-
-  it.effect(
-    "a connection the member has not connected is refused as requiring sign-in, and a search that asks to sign in starts none",
-    () =>
-      Effect.gen(function* () {
-        const member = yield* memberWithLinear;
-        const heard = hearing();
-        const services = doorServices(linearTokenOf(member.userId), heard, []);
-
-        const executed = yield* runConnectionExecute(member.admitted, {
-          connection: NOTION,
-          tool: "notion-search",
-        }).pipe(Effect.provide(services));
-        const signIn = yield* runConnectionSearch(member.admitted, {
-          connection: NOTION,
-          signIn: true,
-        }).pipe(Effect.provide(services));
-
-        const refusal = {
-          status: "rejected",
-          error: integrationUnavailable(NOTION).NOT_CONNECTED,
-          connection: NOTION,
-          requiresSignIn: true,
-        };
-        assert.deepEqual(executed, refusal);
-        assert.deepEqual(signIn, refusal);
-        assert.deepEqual(heard.bearers, []);
-      }),
-  );
-
-  it.effect(
-    "a connection switched off for the agent, a tool the server lists none of, and the tool's own error are each refused",
+    "a native agent is handed a server for each integration offered it, but one switched off",
     () =>
       Effect.gen(function* () {
         const member = yield* memberWithLinear;
         const services = doorServices(linearTokenOf(member.userId), hearing(), []);
 
-        const unknown = yield* runConnectionExecute(member.admitted, {
-          connection: LINEAR,
-          tool: "list_issue",
-        }).pipe(Effect.provide(services));
-        const failed = yield* runConnectionExecute(member.admitted, {
-          connection: LINEAR,
-          tool: "fail",
-        }).pipe(Effect.provide(services));
+        const before = yield* nativeAgentConnections(member.admitted).pipe(
+          Effect.provide(services),
+        );
         yield* updateCodingAgentServers(member.userId, member.agentId, [LINEAR]);
-        const switchedOff = yield* runConnectionExecute(member.admitted, {
-          connection: LINEAR,
-          tool: "list_issues",
-          input: { team: "ENG" },
+        const after = yield* nativeAgentConnections(member.admitted).pipe(Effect.provide(services));
+
+        assert.ok(before.includes(LINEAR) && before.includes(NOTION));
+        assert.deepEqual(
+          after,
+          before.filter((name) => name !== LINEAR),
+        );
+      }),
+  );
+
+  it.effect(
+    "each connection's server tells the model what the integration is and, past one account, which account it is by label",
+    () =>
+      Effect.gen(function* () {
+        const member = yield* memberWithLinear;
+        const services = doorServices(linearTokenOf(member.userId), hearing(), []);
+        const account = (connectionName: string, connectSubject: string) =>
+          Effect.andThen(
+            beginIntegrationSignIn(
+              member.userId,
+              { provider: NOTION, connectionName, connectSubject },
+              `state-${connectionName}-${member.userId}`,
+              Redacted.make("connect-verifier"),
+            ),
+            completeIntegrationSignIn(
+              member.userId,
+              connectionName,
+              `state-${connectionName}-${member.userId}`,
+            ),
+          );
+        yield* account(NOTION, member.userId);
+        yield* account("notion-2", `second-${member.userId}`);
+        yield* renameIntegrationConnection(member.userId, NOTION, "Work");
+        yield* renameIntegrationConnection(member.userId, "notion-2", "Personal");
+        const told = (name: string) =>
+          connectionInstructions(member.admitted, name).pipe(Effect.provide(services));
+
+        assert.deepEqual(yield* told(LINEAR), Option.some(INTEGRATION[LINEAR].DESCRIPTION));
+        const second = Option.getOrThrow(yield* told("notion-2"));
+        assert.ok(second.startsWith(INTEGRATION[NOTION].DESCRIPTION));
+        assert.ok(second.includes('the developer\'s "Personal" Notion account'));
+        assert.deepEqual(yield* told("slack"), Option.none());
+      }),
+  );
+
+  it.effect(
+    "a connected integration lists its provider's tools as the provider listed them, and one the member has not connected lists none",
+    () =>
+      Effect.gen(function* () {
+        const member = yield* memberWithLinear;
+        const heard = hearing();
+        const logged: string[] = [];
+        const services = doorServices(linearTokenOf(member.userId), heard, logged);
+
+        const linear = yield* listConnectionTools(member.admitted, LINEAR).pipe(
+          Effect.provide(services),
+        );
+        const bearersForLinear = heard.bearers.length;
+        const notion = yield* listConnectionTools(member.admitted, NOTION).pipe(
+          Effect.provide(services),
+        );
+
+        assert.deepEqual(
+          linear.map((tool) => tool.name),
+          ["list_issues", "create_issue", "fail", "draw", "attach"],
+        );
+        assert.deepEqual(linear.find((tool) => tool.name === "create_issue")?.outputSchema, {
+          type: "object",
+          properties: { id: { type: "string" } },
+        });
+        assert.deepEqual(notion, []);
+        assert.equal(heard.bearers.length, bearersForLinear);
+        assert.deepEqual(
+          logged.filter((line) => line.includes("notion")),
+          [
+            JSON.stringify([
+              `integration server notion lists no tools: ${integrationUnavailable(NOTION).NOT_CONNECTED}`,
+            ]),
+          ],
+        );
+      }),
+  );
+
+  it.effect(
+    "a call forwards its input on the member's own grant and answers the provider's result as it sent it",
+    () =>
+      Effect.gen(function* () {
+        const member = yield* memberWithLinear;
+        const heard = hearing();
+        const services = doorServices(linearTokenOf(member.userId), heard, []);
+        const call = (tool: string, input: WireRecord = {}) =>
+          callConnectionTool(member.admitted, LINEAR, tool, input).pipe(Effect.provide(services));
+
+        const listed = yield* call("list_issues", { team: "ENG" });
+        const created = yield* call("create_issue", { title: "Invite emails bounce" });
+        const failed = yield* call("fail");
+
+        assert.equal(firstText(listed), JSON.stringify({ issues: [{ id: "LIN-1" }] }));
+        assert.ok(Result.isSuccess(created));
+        assert.deepEqual(created.success.structuredContent, { id: "LIN-2" });
+        assert.ok(Result.isSuccess(failed));
+        assert.equal(failed.success.isError, true);
+        assert.equal(firstText(failed), "Team not found.");
+        assert.deepEqual(heard.calls, [
+          { name: "list_issues", arguments: { team: "ENG" } },
+          { name: "create_issue", arguments: { title: "Invite emails bounce" } },
+          { name: "fail", arguments: {} },
+        ]);
+        assert.ok(heard.bearers.every((each) => each === `Bearer ${linearTokenOf(member.userId)}`));
+      }),
+  );
+
+  it.effect(
+    "a call of a connection the member has not connected is refused as requiring sign-in, and reaches no provider",
+    () =>
+      Effect.gen(function* () {
+        const member = yield* memberWithLinear;
+        const heard = hearing();
+        const services = doorServices(linearTokenOf(member.userId), heard, []);
+
+        const called = yield* callConnectionTool(member.admitted, NOTION, "notion-search", {}).pipe(
+          Effect.provide(services),
+        );
+
+        assert.deepEqual(
+          called,
+          Result.fail({
+            status: "rejected",
+            error: integrationUnavailable(NOTION).NOT_CONNECTED,
+            connection: NOTION,
+            requiresSignIn: true,
+          }),
+        );
+        assert.deepEqual(heard.bearers, []);
+      }),
+  );
+
+  it.effect(
+    "a connection switched off for the agent lists no tools and refuses a call, and a tool the server lists none of is refused",
+    () =>
+      Effect.gen(function* () {
+        const member = yield* memberWithLinear;
+        const heard = hearing();
+        const services = doorServices(linearTokenOf(member.userId), heard, []);
+
+        const unknown = yield* callConnectionTool(member.admitted, LINEAR, "list_issue", {}).pipe(
+          Effect.provide(services),
+        );
+        yield* updateCodingAgentServers(member.userId, member.agentId, [LINEAR]);
+        const bearersBefore = heard.bearers.length;
+        const listed = yield* listConnectionTools(member.admitted, LINEAR).pipe(
+          Effect.provide(services),
+        );
+        const switchedOff = yield* callConnectionTool(member.admitted, LINEAR, "list_issues", {
+          team: "ENG",
         }).pipe(Effect.provide(services));
 
-        assert.deepEqual(unknown, {
-          status: "rejected",
-          error:
-            'Connection "linear" has no tool named "list_issue". Closest tools: list_issues, create_issue.',
-        });
-        assert.deepEqual(failed, { status: "rejected", error: "Team not found." });
-        assert.equal(switchedOff.status, "rejected");
-        assert.ok(
-          "error" in switchedOff &&
-            switchedOff.error.startsWith('Connection "linear" is not available.'),
+        assert.deepEqual(
+          unknown,
+          Result.fail({
+            status: "rejected",
+            error: 'Connection "linear" has no tool named "list_issue".',
+          }),
         );
+        assert.deepEqual(listed, []);
+        assert.deepEqual(
+          switchedOff,
+          Result.fail({
+            status: "rejected",
+            error: 'Connection "linear" is not available to this agent.',
+          }),
+        );
+        assert.equal(heard.bearers.length, bearersBefore);
       }),
   );
 
@@ -302,10 +332,8 @@ it.layer(getTestDB())("the integrations' door", (it) => {
       Effect.gen(function* () {
         const member = yield* memberWithLinear;
         const services = doorServices(linearTokenOf(member.userId), hearing(), []);
-        const listIssues = runConnectionExecute(member.admitted, {
-          connection: LINEAR,
-          tool: "list_issues",
-          input: { team: "ENG" },
+        const listIssues = callConnectionTool(member.admitted, LINEAR, "list_issues", {
+          team: "ENG",
         }).pipe(Effect.provide(services));
         yield* updateCodingAgentServers(member.userId, member.agentId, [LINEAR]);
         // The developer's message mentions @Linear, which its hand-over writes on the agent's row.
@@ -341,10 +369,37 @@ it.layer(getTestDB())("the integrations' door", (it) => {
         ]);
         const afterABatchedTurn = yield* listIssues;
 
-        assert.equal(beforeTheTurn.status, "rejected");
-        assert.notEqual(inTheTurn.status, "rejected");
-        assert.equal(inTheNextTurn.status, "rejected");
-        assert.equal(afterABatchedTurn.status, "rejected");
+        assert.ok(Result.isFailure(beforeTheTurn));
+        assert.ok(Result.isSuccess(inTheTurn));
+        assert.ok(Result.isFailure(inTheNextTurn));
+        assert.ok(Result.isFailure(afterABatchedTurn));
+      }),
+  );
+
+  it.effect(
+    "a provider that never answers costs its server its tools once the bound passes, with one log line",
+    () =>
+      Effect.gen(function* () {
+        const member = yield* memberWithLinear;
+        const logged: string[] = [];
+        const services = Layer.mergeAll(
+          NO_GITHUB,
+          LINEAR_AND_NOTION_CONNECT,
+          SILENT_LINEAR,
+          Logger.layer([Logger.make(({ message }) => logged.push(JSON.stringify(message)))]),
+        );
+
+        const listing = yield* Effect.forkChild(
+          listConnectionTools(member.admitted, LINEAR).pipe(Effect.provide(services)),
+        );
+        yield* TestClock.adjust(Duration.seconds(10));
+        const listed = yield* Fiber.join(listing);
+
+        assert.deepEqual(listed, []);
+        assert.equal(
+          logged.filter((line) => line.includes("integration server linear lists no tools")).length,
+          1,
+        );
       }),
   );
 
@@ -358,21 +413,23 @@ it.layer(getTestDB())("the integrations' door", (it) => {
         // Linear's server here admits another bearer, so it refuses the member's, echoing it.
         const services = doorServices("another-bearer", hearing(), logged);
 
-        const found = yield* runConnectionSearch(member.admitted, { connection: LINEAR }).pipe(
+        const listed = yield* listConnectionTools(member.admitted, LINEAR).pipe(
           Effect.provide(services),
         );
-        const executed = yield* runConnectionExecute(member.admitted, {
-          connection: LINEAR,
-          tool: "list_issues",
-        }).pipe(Effect.provide(services));
+        const called = yield* callConnectionTool(member.admitted, LINEAR, "list_issues", {}).pipe(
+          Effect.provide(services),
+        );
 
-        assert.deepEqual(found, {
-          status: "rejected",
-          error:
-            'Authorization failed for "linear": the service refused the connection\'s credential.',
-        });
-        assert.equal(executed.status, "rejected");
-        for (const said of [JSON.stringify(found), JSON.stringify(executed), ...logged]) {
+        assert.deepEqual(listed, []);
+        assert.deepEqual(
+          called,
+          Result.fail({
+            status: "rejected",
+            error:
+              'Authorization failed for "linear": the service refused the connection\'s credential.',
+          }),
+        );
+        for (const said of [JSON.stringify(called), ...logged]) {
           assert.ok(!said.includes(token), said);
           assert.ok(!said.includes(token.slice(0, 16)), said);
         }

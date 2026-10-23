@@ -5,7 +5,7 @@ import { DisclosureAction } from "@luke/ui";
 import { act, createElement, type ReactNode, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
-import { layContainersAt, shown } from "../testing/container-width.js";
+import { layContainersAt } from "../testing/container-width.js";
 import {
   ANNOTATION_TONE,
   AnnotationCard,
@@ -17,8 +17,9 @@ import {
  * annotation-card.test.ts -- the card every annotation on code stands on: its
  * faces and its words each keep one column, the head's and every comment's
  * alike; folded, it is its head alone, counting its comments rather than
- * previewing any; and a narrow card drops the age, draws each state as a
- * dot that still says its word, and counts without the word.
+ * previewing any; and a narrow card says the age to a reader alone, draws
+ * each state as its badge's dot that still says its word, and counts
+ * without the word.
  *
  * jsdom lays nothing out, so the window's stylesheets are laid for a card
  * of each width (`testing/container-width.ts`) and the columns are read
@@ -81,7 +82,7 @@ function Card({ startsOpen }: { startsOpen: boolean }): ReactNode {
 
 function draw(startsOpen: boolean, width = 900): HTMLElement {
   laid?.remove();
-  laid = layContainersAt({ annotation: width });
+  laid = layContainersAt({ annotation: width, "luke-room": width });
   const container = document.body.appendChild(document.createElement("div"));
   container.className = "pull-request-thread-slot";
   const root = createRoot(container);
@@ -122,7 +123,7 @@ function columns(card: HTMLElement) {
   const content = card.querySelector(".annotation-card-content") ?? assert.fail("a body");
   const comment = card.querySelector(".annotation-comment") ?? assert.fail("a comment");
   const headStyle = getComputedStyle(head);
-  const turn = card.querySelector(".luke-disclosure-turn") ?? assert.fail("a chevron");
+  const turn = card.querySelector(".annotation-card-turn") ?? assert.fail("a chevron's seat");
   const face = card.querySelector(".annotation-card-face") ?? assert.fail("a face");
   const headGap = pixels(head, headStyle.getPropertyValue("gap"));
   const headFace = paddingStart(head) + pixels(turn, getComputedStyle(turn).width) + headGap;
@@ -161,21 +162,23 @@ test("folded, a card is its head alone, counting its comments and previewing non
   assert.equal(container.querySelector(".annotation-card-count"), null, "open, nothing is counted");
 });
 
-test("a narrow card drops the age, draws a state as a dot that still says its word, and counts without the word", () => {
+test("a narrow card says the age to a reader alone, draws a state as its dot that still says its word, and counts without the word", () => {
   const wide = draw(false, 900);
-  const time = () => wide.querySelector(".annotation-card-time") ?? assert.fail("an age");
-  const word = () => wide.querySelector(".annotation-card-chip-word") ?? assert.fail("a word");
+  const time = () =>
+    wide.querySelector(".annotation-card-time")?.parentElement ?? assert.fail("an age");
+  const word = () =>
+    wide.querySelector(".annotation-card-state .luke-badge-words") ?? assert.fail("a word");
   const countWord = () =>
-    wide.querySelector(".annotation-card-count-word") ?? assert.fail("the count's word");
-  assert.equal(shown(time()), true);
+    wide.querySelector(".annotation-card-count .luke-visually-hidden") ??
+    assert.fail("the count's word");
+  assert.notEqual(getComputedStyle(time()).position, "absolute", "wide, the age is drawn");
   assert.notEqual(getComputedStyle(word()).position, "absolute", "wide, the state says its word");
   assert.notEqual(getComputedStyle(countWord()).position, "absolute");
 
   laid?.remove();
-  laid = layContainersAt({ annotation: 360 });
-  assert.equal(shown(time()), false, "narrow, the age steps out");
-  const chip = wide.querySelector(".annotation-card-chip") ?? assert.fail("a chip");
-  assert.equal(getComputedStyle(chip).width, "var(--luke-space-8)", "the state is a dot");
+  laid = layContainersAt({ annotation: 360, "luke-room": 360 });
+  assert.equal(getComputedStyle(time()).position, "absolute", "narrow, the age steps out");
+  assert.equal(time().textContent, "2h", "and is still read");
   assert.equal(getComputedStyle(word()).position, "absolute", "its word is drawn nowhere");
   assert.equal(word().textContent, "Outdated", "and still names it");
   assert.equal(getComputedStyle(countWord()).position, "absolute", "the count drops its word");

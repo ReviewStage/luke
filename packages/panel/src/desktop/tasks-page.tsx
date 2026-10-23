@@ -1,5 +1,12 @@
 import { TASK_PRIORITY_ORDER, TASK_STATUS } from "@luke/features/task-wire";
-import { CHOICE_BAR_LOOK, CHOICE_BAR_SIZE, ChoiceBar } from "@luke/ui";
+import {
+  CHOICE_BAR_LOOK,
+  CHOICE_BAR_SIZE,
+  ChoiceBar,
+  ONE_LINE_ELEMENT,
+  ONE_LINE_END,
+  OneLine,
+} from "@luke/ui";
 import {
   BOARD_PROPERTIES,
   COMPLETED_WINDOW,
@@ -187,8 +194,14 @@ export function TasksPage({
   const listed = tasks.listed.tasks;
   const toolbar = (
     <header className="desktop-toolbar">
-      <div className="desktop-toolbar-heading">
-        <h1 className="desktop-toolbar-title">{TASKS}</h1>
+      <div className="desktop-toolbar-heading tasks-page-heading">
+        <OneLine
+          as={ONE_LINE_ELEMENT.H1}
+          end={ONE_LINE_END.ELLIPSIS}
+          className="desktop-toolbar-title"
+        >
+          {TASKS}
+        </OneLine>
         <ViewSwitch view={view} onView={choose} />
       </div>
       <div className="desktop-toolbar-actions">

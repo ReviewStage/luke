@@ -40,7 +40,8 @@ function forkChip(width = 528) {
   source.textContent = "Admin dashboard design audit";
   chip.appendChild(document.createElement("span")).textContent = "at";
   const quote = chip.appendChild(document.createElement("span"));
-  quote.className = "draft-fork-quote";
+  quote.className = "luke-one-line draft-fork-quote";
+  quote.dataset.end = "ellipsis";
   quote.textContent = "“Merged: #4078 (charts and stat cards on app…”";
   chip.appendChild(document.createElement("span")).className = "draft-fork-drop";
   return { chip, lead, source, quote };

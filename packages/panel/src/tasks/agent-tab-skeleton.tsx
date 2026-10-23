@@ -31,13 +31,15 @@ export function TranscriptSkeleton({
   label?: string | undefined;
 }): React.JSX.Element {
   return (
-    <SkeletonRegion label={label}>
-      <div className="agent-log-skeleton">
-        {LOG_LINE_WIDTHS.map((width) => (
-          <Skeleton key={width} width={width} />
-        ))}
-      </div>
-    </SkeletonRegion>
+    <div className="agent-log-wait">
+      <SkeletonRegion label={label}>
+        <div className="agent-log-skeleton">
+          {LOG_LINE_WIDTHS.map((width) => (
+            <Skeleton key={width} width={width} />
+          ))}
+        </div>
+      </SkeletonRegion>
+    </div>
   );
 }
 

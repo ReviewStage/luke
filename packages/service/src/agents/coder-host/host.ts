@@ -48,6 +48,7 @@ import {
 import type { CommentToolName } from "../../tasks/comment-tools.js";
 import type { PictureLookResult } from "../../tasks/picture-look.js";
 import { reopenTaskForWork, settleTaskIfFinished } from "../../tasks/task-finish.js";
+import type { SentryApp } from "../../triggers/sentry/sentry-app-config.js";
 import { delegatedChildOf, type HostAdmission, hostAdmission } from "../agent-runtime/host-core.js";
 import { endsTurn } from "../agent-runtime/sandbox.js";
 import type { AgentSkill } from "../agent-runtime/skills.js";
@@ -496,7 +497,12 @@ export interface CoderHost extends HostAdmission {
   ): Effect.Effect<
     WireRecord,
     never,
-    DatabaseServices | HttpClient.HttpClient | GitHubApp | ModelCatalog | WorkspaceLinearConnect
+    | DatabaseServices
+    | HttpClient.HttpClient
+    | GitHubApp
+    | ModelCatalog
+    | WorkspaceLinearConnect
+    | SentryApp
   >;
   /** Folds an event the store need hear nothing of into the session's relay state and answers whether it did, so the caller admits the session and relays only the rest: the relay's own quiet events (`foldedQuietly`), bar a compaction's end, which the agent's row records. */
   relaysQuietly(event: MessageStreamEvent, state: RelayStateStore): boolean;

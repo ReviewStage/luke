@@ -56,6 +56,7 @@ export function DocumentByline({
   createdAt,
   now,
   edited,
+  saved,
 }: {
   creator: Actor | undefined;
   /** Luke or the coding agent that made the task for `creator`, and the task the agent works on, which the line says it came from; none for one made by hand. */
@@ -64,6 +65,8 @@ export function DocumentByline({
   now: number;
   /** The phrase for the last edit, "Last edited by [Luke] Luke · 2h ago"; none where nothing changed since it was created. */
   edited?: ReactNode;
+  /** What confirms the reader's own edit landed, a Saved tick, after the rest. */
+  saved?: ReactNode;
 }): React.JSX.Element {
   return (
     <p className="plan-byline">
@@ -93,6 +96,7 @@ export function DocumentByline({
           <span className="actor-line plan-byline-edited">{edited}</span>
         </>
       )}
+      {saved}
     </p>
   );
 }

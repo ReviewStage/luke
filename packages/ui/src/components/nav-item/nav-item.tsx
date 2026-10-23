@@ -1,5 +1,6 @@
 import type { ButtonHTMLAttributes, KeyboardEvent, MouseEvent, ReactNode, Ref } from "react";
 import { ChevronRightIcon } from "../../face/glyphs.js";
+import { PRESS_PULSE, pulseOnPress } from "../../press-pulse.js";
 import { type ContextMenuProps, withContextMenu } from "../menu/menu.js";
 import { ClippedLine, ONE_LINE_ELEMENT, ONE_LINE_END } from "../one-line/clipped-line.js";
 
@@ -233,7 +234,7 @@ export function NavItemLink({
       title={title}
       aria-label={props["aria-label"]}
       aria-current={current}
-      onClick={onClick}
+      onClick={pulseOnPress(onClick, PRESS_PULSE.QUIET)}
     >
       {said(icon) ? <Glyph icon={icon} folds={false} /> : null}
       <Name>{children}</Name>
@@ -280,7 +281,7 @@ export function NavItem({
       onMouseDown={keepFocus === true ? preventFocusMove : undefined}
       onFocus={props.onFocus}
       onBlur={props.onBlur}
-      onClick={menu?.onClick ?? onClick}
+      onClick={pulseOnPress(menu?.onClick ?? onClick, PRESS_PULSE.QUIET)}
       {...withContextMenu(props.contextMenu, { onPointerDown: props.onPointerDown })}
       onKeyDown={props.onKeyDown}
     >

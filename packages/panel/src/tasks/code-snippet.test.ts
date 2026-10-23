@@ -221,7 +221,9 @@ test("a press on the note's head folds it to its head alone", async () => {
 test("with Minimize inline comments on, the note is a chip on its line until the chip shows it", async () => {
   handSettings({ diffMinimizeComments: true });
   const container = await draw(codeTab());
-  const chip = container.querySelector<HTMLElement>(".code-snippet .diff-thread-chip");
+  const chip = container.querySelector<HTMLElement>(
+    ".code-snippet .diff-thread-chip-row > summary",
+  );
   assert.ok(chip, "the chip stands in the note's place");
   assert.equal(chip.getAttribute("aria-label"), "Invite emails's note on lines 13–14, show");
   assert.equal(
@@ -233,7 +235,7 @@ test("with Minimize inline comments on, the note is a chip on its line until the
   await settle();
   assert.equal(chip.closest("details")?.hasAttribute("open"), true, "the chip shows the note");
   assert.equal(
-    container.querySelector(".diff-thread-chip")?.getAttribute("aria-label"),
+    container.querySelector(".diff-thread-chip-row > summary")?.getAttribute("aria-label"),
     "Invite emails's note on lines 13–14, hide",
   );
 });

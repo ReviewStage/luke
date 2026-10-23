@@ -10,6 +10,7 @@ import {
   type InboxForm,
 } from "@luke/features/inbox-wire";
 import {
+  Badge,
   BUTTON_SIZE,
   BUTTON_VARIANT,
   Button,
@@ -21,6 +22,7 @@ import {
   type FieldControl,
   FormField,
   GAP,
+  LAYOUT_ELEMENT,
   ReadableControls,
   Stack,
   TEXT_FIELD_TYPE,
@@ -46,6 +48,7 @@ import {
   withStep,
   withValue,
 } from "./inbox-model.js";
+import { REPLY_SCOPE } from "./reply-to-selection.js";
 import { SentWords } from "./skill-chip.js";
 
 /**
@@ -60,8 +63,10 @@ import { SentWords } from "./skill-chip.js";
  * stand in (`DraftQuestion`), and a send lacking something takes the
  * keyboard to it (`focusMissing`). An ask's words, its options and its
  * steps, select and copy whether it is open or not (`ReadableControls`), a
- * drag over them picking and ticking nothing. Nothing here knows where the
- * ask came from: an Inbox item's thread or a chat message.
+ * drag over them picking and ticking nothing, and stand Reply over them as
+ * the words around them do (`reply-to-selection.tsx`), a field's own
+ * typing aside. Nothing here knows where the ask came from: an Inbox
+ * item's thread or a chat message.
  */
 
 /** The words a choice's open options are named by, for a reader that does not see the question over them. */
@@ -235,7 +240,17 @@ function InboxFormField({
     case INBOX_FIELD.TEXT:
       return (
         <div {...fieldFrame(field, readOnly)}>
-          <FormField label={<FieldLabel field={field} />}>
+          <FormField
+            label={<FieldLabel field={field} />}
+            count={
+              readOnly
+                ? undefined
+                : {
+                    length: value === undefined ? 0 : String(value).length,
+                    limit: INBOX_BOUNDS.MAX_FIELD_VALUE_CHARS,
+                  }
+            }
+          >
             {(control) => {
               const words = value === undefined ? "" : String(value);
               const onChange = (typed: string | undefined) =>
@@ -465,6 +480,15 @@ function AskPress({
   );
 }
 
+/** An ask's controls, whose words select and copy, and a Reply quotes as the words around them. */
+function AskWords({ children }: { children: React.ReactNode }): React.JSX.Element {
+  return (
+    <div className="inbox-ask-words" {...{ [REPLY_SCOPE]: "" }}>
+      <ReadableControls>{children}</ReadableControls>
+    </div>
+  );
+}
+
 /**
  * An open ask's controls, each attaching its answer to the reply rather
  * than sending it, and each press taking it off again: a `decide`'s options
@@ -482,9 +506,9 @@ export function AskControls(props: {
   doors: AskDoors;
 }): React.JSX.Element {
   return (
-    <ReadableControls>
+    <AskWords>
       <OpenControls {...props} />
-    </ReadableControls>
+    </AskWords>
   );
 }
 
@@ -534,7 +558,7 @@ function OpenControls({
       return (
         <>
           {steps.length === 0 ? null : (
-            <ul className="inbox-ask-steps" aria-label="Steps">
+            <Stack as={LAYOUT_ELEMENT.UL} gap={GAP.CONTROL} aria-label="Steps">
               {steps.map((step, at) => (
                 // Steps have no key of their own, and are never reordered.
                 <li key={at} data-inbox-step="">
@@ -547,7 +571,7 @@ function OpenControls({
                   </Checkbox>
                 </li>
               ))}
-            </ul>
+            </Stack>
           )}
           <div className="inbox-ask-presses">
             <AskPress
@@ -640,9 +664,9 @@ export function HeldControls(props: {
   draft: InboxDraft;
 }): React.JSX.Element {
   return (
-    <ReadableControls>
+    <AskWords>
       <LeftControls {...props} />
-    </ReadableControls>
+    </AskWords>
   );
 }
 
@@ -678,7 +702,7 @@ function LeftControls({
       return (
         <>
           {steps.length === 0 ? null : (
-            <ul className="inbox-ask-steps" aria-label="Steps">
+            <Stack as={LAYOUT_ELEMENT.UL} gap={GAP.CONTROL} aria-label="Steps">
               {steps.map((step, at) => (
                 // Steps have no key of their own, and are never reordered.
                 <li key={at} data-inbox-step="">
@@ -687,7 +711,7 @@ function LeftControls({
                   </Checkbox>
                 </li>
               ))}
-            </ul>
+            </Stack>
           )}
           <div className="inbox-ask-presses">
             <AnsweredPress
@@ -824,8 +848,8 @@ export function WithdrawnWords({
 /** The small pill an ask waiting on someone else ends its message with: "Waiting on" them, after a dot in the muted ink. */
 export function WaitingMarker({ on }: { on: string }): React.JSX.Element {
   return (
-    <span className="inbox-ask-marker" data-inbox-marker="">
-      Waiting on {on}
+    <span data-inbox-marker="">
+      <Badge dot>Waiting on {on}</Badge>
     </span>
   );
 }

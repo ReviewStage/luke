@@ -1406,7 +1406,8 @@ export function useCodingAgents(input: {
     (agentId) => act(ACT_KIND.CODING_AGENTS_PULL_REQUEST, { agentId }),
     [act],
   );
-  const published = useTaskPullRequests(taskId, agents, readPullRequestOnce, held);
+  // Note that an archived agent's pull request is read too, since the summary offers it as any other.
+  const published = useTaskPullRequests(taskId, held, readPullRequestOnce, held);
 
   // A pull request a tab names by its number is kept by agent and number,
   // apart from the agents' own, so it never stands for what an agent

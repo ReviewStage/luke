@@ -72,7 +72,7 @@ html.call-window #root {
     calc(
       -1 *
       min(
-        max(0px, var(--column-dock, 0px) + var(--luke-space-8) - var(--luke-space-16)),
+        max(0px, var(--luke-column-dock, 0px) + var(--luke-space-8) - var(--luke-space-16)),
         var(--luke-stage-height) -
         var(--floating-card, 0px) -
         2 *

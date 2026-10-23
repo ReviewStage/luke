@@ -8,7 +8,7 @@ import {
   DIFF_LINE_HEIGHT,
   INLINE_DIFF,
 } from "@luke/settings/diff-view";
-import { afterEach, test } from "vitest";
+import { afterEach, beforeAll, test, vi } from "vitest";
 import type { DiffLook, FileViewHandle, FileViewProps } from "./contract.js";
 import { diffView } from "./index.js";
 
@@ -45,6 +45,7 @@ afterEach(() => {
   mounted = [];
   kept = new Map();
   document.body.replaceChildren();
+  vi.restoreAllMocks();
 });
 
 /** The view's element for a note, made the first time it is asked for. */
@@ -94,6 +95,18 @@ function nextFrame(): Promise<void> {
 function drawnLines(root: ShadowRoot, selector = "[data-line]"): number[] {
   return [...root.querySelectorAll(selector)].map((row) => Number(row.getAttribute("data-line")));
 }
+
+// Note that Pierre draws nothing until its highlighter has loaded, once for the run, so the tests wait for it here rather than each on its first frame.
+beforeAll(async () => {
+  const { host, handle } = mountFile(props());
+  for (let frame = 0; frame < 300; frame += 1) {
+    if (host.querySelector("diffs-container")?.shadowRoot?.querySelector("[data-line]")) break;
+    await nextFrame();
+  }
+  handle.unmount();
+  mounted = [];
+  document.body.replaceChildren();
+});
 
 test("a whole file is drawn numbered from its first line, with no empty line after its final newline", async () => {
   const { host } = mountFile(props());
@@ -244,4 +257,43 @@ test("a list draws each file's notes in the view's own element for that file and
   await nextFrame();
   await nextFrame();
   assert.deepEqual(asked.at(-1), { path: "src/seats.ts", key: "t1" });
+});
+
+test("a list is written with no style as markup, which the panel's policy would refuse", async () => {
+  // Note that each spy calls through, so Pierre draws as it would, and only what it wrote is read.
+  const writers = [
+    vi.spyOn(Element.prototype, "innerHTML", "set"),
+    vi.spyOn(ShadowRoot.prototype, "innerHTML", "set"),
+  ];
+  const inserted = vi.spyOn(Element.prototype, "insertAdjacentHTML");
+  const host = document.createElement("div");
+  document.body.append(host);
+  const patch =
+    "--- a/src/seats.ts\n+++ b/src/seats.ts\n@@ -10,2 +10,2 @@\n const kept = 1;\n-const gone = 2;\n+const come = 2;\n";
+  const handle = diffView.mountList(host, {
+    files: [
+      {
+        path: "src/seats.ts",
+        patch,
+        collapsed: false,
+        annotations: [],
+        lead: false,
+        expandable: false,
+      },
+    ],
+    look: LOOK,
+    renderHeader: () => document.createElement("div"),
+    renderAnnotation: noteElement,
+    onTopFile: () => undefined,
+  });
+  mounted.push(handle);
+  await nextFrame();
+  await nextFrame();
+  const written = [
+    ...writers.flatMap((writer) => writer.mock.calls.map(([html]) => String(html))),
+    ...inserted.mock.calls.map(([, html]) => html),
+  ];
+  const code = written.filter((html) => html.includes("data-line"));
+  assert.ok(code.length > 0, "the list's lines are written as markup");
+  for (const html of code) assert.doesNotMatch(html, /\sstyle="/);
 });

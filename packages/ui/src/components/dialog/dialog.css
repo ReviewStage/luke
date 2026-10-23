@@ -134,6 +134,50 @@
     outline: none; /* no ring: a dialog holding focus for its controls */
   }
 
+  /* Asked away while at work, or holding a draft, the card swells and
+     settles back on the spring, so the press is answered though the card
+     stays (`dialog.tsx`). */
+  /* Note that the entrance stays listed, because a name dropped and named
+     again replays, so leaving it out would replay the entrance as the nudge
+     ends. */
+  .luke-dialog[data-nudge="true"] {
+    animation:
+      luke-dialog-fade var(--luke-duration-quick) var(--luke-motion-exit),
+      luke-dialog-rise var(--luke-duration-fast) var(--luke-spring-fast),
+      luke-dialog-nudge var(--luke-duration-fast) var(--luke-spring-fast);
+  }
+
+  /* Its act refused, the card shakes once as the refusal lands, on the
+     beat a refused button shakes on (`dialog.tsx` restarts `data-refused`
+     on each). The entrance stays listed, as it does for the nudge. */
+  .luke-dialog[data-refused="true"] {
+    animation:
+      luke-dialog-fade var(--luke-duration-quick) var(--luke-motion-exit),
+      luke-dialog-rise var(--luke-duration-fast) var(--luke-spring-fast),
+      luke-dialog-shake var(--luke-duration-fast) var(--luke-motion-exit);
+  }
+
+  @keyframes luke-dialog-shake {
+    20% {
+      transform: translateX(-6px);
+    }
+    40% {
+      transform: translateX(6px);
+    }
+    60% {
+      transform: translateX(-4px);
+    }
+    80% {
+      transform: translateX(4px);
+    }
+  }
+
+  @keyframes luke-dialog-nudge {
+    40% {
+      transform: scale(1.02);
+    }
+  }
+
   @keyframes luke-dialog-fade {
     from {
       opacity: 0;

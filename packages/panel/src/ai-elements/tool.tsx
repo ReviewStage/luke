@@ -1,5 +1,11 @@
-import { LineSummary, TextButton, useDisclosureBodyDrawn } from "@luke/ui";
-import { useClipped } from "@luke/ui/use-clipped";
+import {
+  Badge,
+  GlyphSlot,
+  LineSummary,
+  OneLine,
+  TextButton,
+  useDisclosureBodyDrawn,
+} from "@luke/ui";
 import { type ReactNode, useState } from "react";
 import { GLYPH_STATE, StateGlyph, stateEndMark } from "../state-glyph.js";
 import { CodeBlock } from "./code-block.js";
@@ -151,23 +157,15 @@ export function ToolLine({
   "state" | "icon" | "label" | "subject" | "chip" | "subjectIsCode" | "place"
 >): ReactNode {
   const trailing = subject !== undefined || chip !== undefined;
-  const [labelBox, labelClipped] = useClipped(label ?? "");
   return (
     <>
-      <span className="tool-icon" aria-hidden="true">
-        {icon}
-      </span>
+      <GlyphSlot>{icon}</GlyphSlot>
       {/* Note that the label keeps its space, so the line still reads as one sentence to find, copy, and a screen reader, though the flex gap sets it. */}
       <span className="tool-words">
         {label === undefined ? null : (
-          <span
-            ref={labelBox}
-            className="tool-label"
-            data-chipped={chip === undefined ? undefined : ""}
-            data-overflow={String(labelClipped)}
-          >
+          <OneLine className={chip === undefined ? "tool-label" : "tool-label tool-label-chipped"}>
             {trailing ? `${label} ` : label}
-          </span>
+          </OneLine>
         )}
         {chip === undefined ? null : (
           <span className="tool-chip">
@@ -181,7 +179,12 @@ export function ToolLine({
           </span>
         )}
       </span>
-      {place === undefined ? null : <span className="tool-place"> {place}</span>}
+      {place === undefined ? null : (
+        <span className="tool-place">
+          {" "}
+          <Badge>{place}</Badge>
+        </span>
+      )}
       <ToolStateMark state={state} />
     </>
   );

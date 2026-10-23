@@ -364,8 +364,9 @@ function MentionGlyph({
       return <FolderIcon aria-hidden="true" />;
     case MENTION_KIND.SERVER:
     case MENTION_KIND.TOOL:
-    case MENTION_KIND.LINK:
       return <ProviderMark provider={mention.provider} />;
+    case MENTION_KIND.LINK:
+      return <ProviderMark provider={"site" in mention ? mention.site : mention.provider} />;
     case MENTION_KIND.PAGE:
       return <AppWindowIcon aria-hidden="true" />;
     case MENTION_KIND.AGENT: {

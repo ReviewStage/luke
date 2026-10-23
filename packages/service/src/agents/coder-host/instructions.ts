@@ -174,7 +174,14 @@ interface ToolWords {
   readonly checks: { readonly readable: string; readonly rest: string };
   /** How it hands work to a helper, given what a helper reads and never does. */
   readonly worker: (worker: { readonly reads: string; readonly readOnly: string }) => string;
+  /** How it reaches the services the developer connected, where its harness takes each as an MCP server of its own; nothing where it reaches them through tools of its own. */
+  readonly integrations: string;
 }
+
+/** What a native agent is told of the services the developer connected, each of which its harness takes as an MCP server of its own (`../luke-mcp/app.ts`). */
+const NATIVE_INTEGRATION_WORDS = `The services the developer connected, such as ${INTEGRATION_NAMES_SAID}, are MCP servers of your own, one per connection and named for it (\`linear\`, or \`notion-2\` for their second Notion account): use their tools as you use any other. One that lists no tools is not connected, or its sign-in expired, and only the developer can connect it again, in Luke's settings.
+
+`;
 
 /** The repository named in the examples of an agent with none of its own. */
 /**
@@ -222,6 +229,7 @@ const TOOL_WORDS: Readonly<Record<CoderHarness, ToolWords>> = {
     checks: { readable: CHECKS_WORDS.readable, rest: CHECKS_WORDS.rest },
     worker: ({ reads, readOnly }) =>
       `\`${CODING_AGENT_DELEGATE_TOOL}\` hands one scoped subagent task to ${reads} its answer arrives as that subagent task's result. Wait for it by calling task_wait right after delegating, unless you set \`background\` because there is other work to do while it runs; several calls in one step run at once, and a call with a worker's taskId sends that worker more. Delegate broad searches, a comparison of approaches, and investigations independent of each other, and keep the editing and the publishing to yourself: ${readOnly} Where the developer connected ${INTEGRATION_NAMES_SAID}, a worker reads it too, and changes something there only when its subagent task explicitly asks it to. Choose each worker's model and effort for the job, a cheaper or faster model for a simple lookup and a stronger one for hard analysis, or leave both to yours; a model or effort outside the catalog is refused with the valid list. A worker knows only what its subagent task says, and the developer reads it too, so write it as short Markdown in complete sentences, never clipped notes: the goal as one plain sentence on the first line, then short sections or bullets for the context it needs, what to inspect, what to return, and any constraints.`,
+    integrations: "",
   },
   [CODER_HARNESS.CLAUDE_CODE]: {
     checkout: `Your own tools start there: every Bash command runs in the checkout, and Read, Edit, Write, Glob, and Grep resolve a relative path from it. ${COMMAND_DESCRIPTION_INSTRUCTION} The checkout holds the repository's whole history.`,
@@ -241,6 +249,7 @@ const TOOL_WORDS: Readonly<Record<CoderHarness, ToolWords>> = {
     },
     worker: () =>
       "Claude Code's Agent tool hands a scoped task to a subagent, which runs on a Claude model and answers you once it is done; several run at once. Hand it broad searches, a comparison of approaches, and investigations independent of each other, and keep the editing and the publishing to yourself. A subagent knows only what its task says, and the developer reads it too, so write the task as short Markdown in complete sentences, never clipped notes: the goal as one plain sentence first, then the context it needs, what to inspect, what to return, and any constraints.",
+    integrations: NATIVE_INTEGRATION_WORDS,
   },
   [CODER_HARNESS.CODEX]: {
     checkout: `Your own tools start there: every shell command runs in the checkout, and \`apply_patch\` resolves a relative path from it. ${COMMAND_DESCRIPTION_INSTRUCTION} The checkout holds the repository's whole history.`,
@@ -260,6 +269,7 @@ const TOOL_WORDS: Readonly<Record<CoderHarness, ToolWords>> = {
     },
     worker: () =>
       "Codex's own subagents take a scoped task each, run on a GPT model, and answer you once they are done; several run at once. Hand them broad searches, a comparison of approaches, and investigations independent of each other, and keep the editing and the publishing to yourself. A subagent knows only what its task says, and the developer reads it too, so write the task as short Markdown in complete sentences, never clipped notes: the goal as one plain sentence first, then the context it needs, what to inspect, what to return, and any constraints.",
+    integrations: NATIVE_INTEGRATION_WORDS,
   },
 };
 
@@ -595,7 +605,7 @@ When your change is something a person looks at, such as a page, a screen, or a 
 ${tools.browser}`,
     search: `${tools.searchWeb} when a fact lies outside the repository, such as a library's documentation. A query leaves for the public web, so never put the repository's code, names, or paths into one.
 
-`,
+${tools.integrations}`,
     skills: `${tools.skills}
 
 `,
@@ -638,7 +648,7 @@ Where the ${words.brief} is unclear, say so plainly in your final message rather
 `,
     search: `${tools.searchWeb} when a fact lies outside what you were handed, such as a library's documentation. A query leaves for the public web, so never put private names or words into one.
 
-`,
+${tools.integrations}`,
     skills: "",
     links: `A link in the developer's message whose label starts with \`@\`, such as \`[@session-store.ts](https://github.com/acme/app/blob/HEAD/apps/web/session-store.ts)\`, is something they pointed you at.`,
     worker: {
@@ -685,7 +695,7 @@ You run one conversation with the developer that goes on for weeks and is never 
 `,
     search: `${tools.searchWeb} when a fact lies outside what you were handed, such as a library's documentation. A query leaves for the public web, so never put private names or words into one.
 
-`,
+${tools.integrations}`,
     skills: "",
     links:
       "A link in the developer's message whose label starts with `@`, such as `[@session-store.ts](https://github.com/acme/app/blob/HEAD/apps/web/session-store.ts)`, is something they pointed you at.",

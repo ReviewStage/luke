@@ -5,12 +5,12 @@ import {
   ConfirmDialog,
   type DialogQuestion,
   IconButton,
+  OneLine,
   Tooltip,
   UnarchiveIcon,
   useConfirmDialog,
   useMenu,
 } from "@luke/ui";
-import { useClipped } from "@luke/ui/use-clipped";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { useRef, useState } from "react";
 import { AgentCard, agentSubject, NOTHING_HELD } from "../tasks/agent-ref.js";
@@ -147,7 +147,6 @@ function ArchivedAgentRow({
   const item = useRef<HTMLLIElement>(null);
   const unarchive = () => press(agent.id, false);
   const subject = agentSubject(agents, agent.id, NOTHING_HELD, false);
-  const [words, clipped] = useClipped(subject.name);
   return (
     <li ref={item} className="task-summary-archived-agent" {...menu.contextMenu()}>
       <Tooltip
@@ -160,9 +159,7 @@ function ArchivedAgentRow({
           <span className="task-summary-glyph">
             <AgentGlyph agent={agent} />
           </span>
-          <span ref={words} className="task-summary-label" data-overflow={String(clipped)}>
-            {subject.name}
-          </span>
+          <OneLine className="task-summary-label">{subject.name}</OneLine>
           {agentEndMark(agent, false)}
         </span>
       </Tooltip>

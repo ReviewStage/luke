@@ -47,6 +47,7 @@ export const AGENT_TOOL = {
   CREATE_AUTOMATION: "create_automation",
   UPDATE_AUTOMATION: "update_automation",
   DELETE_AUTOMATION: "delete_automation",
+  RUN_AUTOMATION: "run_automation",
   // The models an agent may be started on, named for any agent offered `start_agent`.
   LIST_MODELS: "list_models",
   // The public reads, every role's: eve's provider-run search on the agent's own model call, and the page read.

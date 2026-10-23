@@ -126,6 +126,7 @@ const CONFIG: CodexConfig = {
   firstSequence: FIRST_SEQUENCE,
   eventsUrl: EVENTS_URL,
   mcpUrl: "https://luke.test/runner/mcp",
+  integrations: [{ name: "linear", url: "https://luke.test/runner/mcp/integrations/linear" }],
   tokenUrl: TOKEN_URL,
 };
 
@@ -364,6 +365,11 @@ it.effect(
         'mcp_servers.luke.bearer_token_env_var="LUKE_RUNNER_TOKEN"',
         'mcp_servers.luke.default_tools_approval_mode="approve"',
         "mcp_servers.luke.tool_timeout_sec=600.0",
+        'mcp_servers.linear.url="https://luke.test/runner/mcp/integrations/linear"',
+        'mcp_servers.linear.bearer_token_env_var="LUKE_RUNNER_TOKEN"',
+        'mcp_servers.linear.default_tools_approval_mode="approve"',
+        "mcp_servers.linear.startup_timeout_sec=20.0",
+        "mcp_servers.linear.tool_timeout_sec=600.0",
         'approval_policy="never"',
         'sandbox_mode="workspace-write"',
         "sandbox_workspace_write.network_access=true",

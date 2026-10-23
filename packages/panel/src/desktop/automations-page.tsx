@@ -36,6 +36,9 @@ import {
   List,
   ListRow,
   NO_CONTEXT_MENU,
+  ONE_LINE_ELEMENT,
+  ONE_LINE_END,
+  OneLine,
   PAGE_FRAME,
   SETTINGS_SECTION_FRAME,
   SettingsRow,
@@ -59,7 +62,6 @@ import { Fragment, useEffect, useRef, useState } from "react";
 import { useAct } from "../act.js";
 import { useAppCommand } from "../app-commands.js";
 import { LinkWorkspaceProvider, useCopyLinkItem } from "../copy-link-item.js";
-import { FadingWords } from "../fading-words.js";
 import { NOT_FOUND_THING, NotFound } from "../not-found.js";
 import { useSentryRead } from "../settings/use-sentry-read.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
@@ -169,7 +171,9 @@ function OwnerCell({
     <Tooltip label={name}>
       <span className="automation-owner" data-owner={owner}>
         <OwnerMark owner={owner} workspace={workspace} mine={mine} size={OWNER_MARK_SIZE.INLINE} />
-        <FadingWords className="automation-owner-name" words={name} />
+        <OneLine className="automation-owner-name" words={name}>
+          {name}
+        </OneLine>
       </span>
     </Tooltip>
   );
@@ -446,7 +450,13 @@ function ListPage({
       toolbar={
         <header className="desktop-toolbar">
           <div className="desktop-toolbar-heading">
-            <h1 className="desktop-toolbar-title">Automations</h1>
+            <OneLine
+              as={ONE_LINE_ELEMENT.H1}
+              end={ONE_LINE_END.ELLIPSIS}
+              className="desktop-toolbar-title"
+            >
+              Automations
+            </OneLine>
           </div>
           <div className="desktop-toolbar-actions">
             <Button

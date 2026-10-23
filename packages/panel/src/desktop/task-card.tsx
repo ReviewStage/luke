@@ -5,6 +5,7 @@ import type { TaskAgentLine, TaskPullRequestLine, TaskSummary } from "@luke/feat
 import type { Workspace } from "@luke/features/workspace-wire";
 import {
   AVATAR_SIZE,
+  Badge,
   HOVER_CARD_ROW_LOOK,
   HoverCard,
   HoverCardHead,
@@ -400,16 +401,14 @@ function TaskStanding({
     <div className="task-card-standing">
       <TaskKey workspaceName={workspaceName} number={task.number} />
       {task.status === undefined ? null : (
-        <span className="task-card-chip">
-          <TaskStatusGlyph status={task.status} />
+        <Badge icon={<TaskStatusGlyph status={task.status} />}>
           {TASK_STATUS_WORDS[task.status]}
-        </span>
+        </Badge>
       )}
       {task.priority === undefined ? null : (
-        <span className="task-card-chip">
-          <TaskPriorityMark priority={task.priority} />
+        <Badge icon={<TaskPriorityMark priority={task.priority} />}>
           {TASK_PRIORITY_WORDS[task.priority]}
-        </span>
+        </Badge>
       )}
       <AssigneeChip assignee={task.assignee} />
     </div>
@@ -420,14 +419,17 @@ function TaskStanding({
 function AssigneeChip({ assignee }: { assignee: TaskSummary["assignee"] }): React.JSX.Element {
   const person = usePerson(assignee);
   return (
-    <span className="task-card-chip" data-task-card-assignee="">
-      {assignee === undefined ? (
-        <UnassignedMark size={ACTOR_SIZE.MARK} decorative />
-      ) : (
-        <ActorMark actor={person} size={ACTOR_SIZE.MARK} />
-      )}
+    <Badge
+      icon={
+        assignee === undefined ? (
+          <UnassignedMark size={ACTOR_SIZE.MARK} decorative />
+        ) : (
+          <ActorMark actor={person} size={ACTOR_SIZE.MARK} />
+        )
+      }
+    >
       {assignee === undefined ? NO_ASSIGNEE_WORDS : assignee.name}
-    </span>
+    </Badge>
   );
 }
 

@@ -32,17 +32,27 @@ import {
   ConfirmDialog,
   ErrorState,
   FormField,
+  GAP,
   INLINE_EDIT_LOOK,
+  Inline,
   InlineEdit,
   type InlineEditEnd,
+  JUSTIFY,
+  LAYOUT_ELEMENT,
   OneLine,
   ProviderMark,
   SETTINGS_ROW_INDENT,
+  SETTINGS_ROW_STATE,
   SettingsLine,
   SettingsRow,
+  SettingsRowActSlot,
+  SettingsRowMark,
+  SettingsRowStateLine,
   SettingsRowsSkeleton,
+  SettingsRowValue,
   SettingsSection,
   SettingsSectionsSkeleton,
+  Stack,
   TEXT_FIELD_AUTO_COMPLETE,
   TEXT_FIELD_TYPE,
   TextField,
@@ -242,29 +252,29 @@ const GITHUB_CONNECTED_LINE = {
 
 /** GitHub's own mark, which leads its row as a provider's leads Settings › Integrations'. */
 const GITHUB_MARK = (
-  <span className="settings-row-mark">
+  <SettingsRowMark>
     <ProviderMark provider={INTEGRATION_PROVIDER.GITHUB} />
-  </span>
+  </SettingsRowMark>
 );
 
 /** Linear's own mark, which leads its row as GitHub's leads GitHub's. */
 const LINEAR_MARK = (
-  <span className="settings-row-mark">
+  <SettingsRowMark>
     <ProviderMark provider={INTEGRATION_PROVIDER.LINEAR} />
-  </span>
+  </SettingsRowMark>
 );
 
 /** Sentry's own mark, which leads its row as Linear's leads Linear's. */
 const SENTRY_MARK = (
-  <span className="settings-row-mark">
+  <SettingsRowMark>
     <ProviderMark provider={INTEGRATION_PROVIDER.SENTRY} />
-  </span>
+  </SettingsRowMark>
 );
 
 /** What the Sentry row's line says, by whether an installation stands and who is reading it. */
 const SENTRY_LINE = {
   INSTALLED: (accounts: string) => (accounts === "" ? "Installed" : `Installed · ${accounts}`),
-  MANAGES: "Not installed. Alerts and new issues can trigger this workspace's automations.",
+  MANAGES: "Not installed.",
   MEMBER: "Not installed. Ask an owner or admin.",
 } as const;
 
@@ -456,7 +466,7 @@ function MemberRow({
     : [];
   const acting = profileActs.length + roleActs.length + removeActs.length > 0;
   return (
-    <div className="workspace-member">
+    <Stack gap={GAP.NONE}>
       <MenuRow
         label={`${member.name} actions`}
         actions={[profileActs, roleActs, removeActs]}
@@ -473,10 +483,8 @@ function MemberRow({
           error: refusal,
           control: (
             <>
-              <span className="settings-row-value">{ROLE_WORDS[member.role]}</span>
-              {slotted && !acting ? (
-                <span className="settings-act-slot" aria-hidden="true" />
-              ) : null}
+              <SettingsRowValue>{ROLE_WORDS[member.role]}</SettingsRowValue>
+              {slotted && !acting ? <SettingsRowActSlot /> : null}
             </>
           ),
         }}
@@ -499,7 +507,7 @@ function MemberRow({
           running: TRANSFER_WORDS.RUNNING,
         }}
       />
-    </div>
+    </Stack>
   );
 }
 
@@ -719,6 +727,7 @@ function OwnerLeave({
       {heir === undefined ? null : (
         <ConfirmDialog
           confirm={transfer}
+          gate={workspace.name}
           question={{
             title: `Transfer ownership of ${workspace.name}`,
             body: TRANSFER_WORDS.BODY,
@@ -838,7 +847,7 @@ function RoleChip({
   const menu = useMenu(true);
   const door = useRef<HTMLButtonElement | null>(null);
   return (
-    <span className="workspace-invite-role">
+    <Inline wrap={false}>
       <Chip
         look={CHIP_LOOK.FIELD}
         width={CHIP_WIDTH.FIXED}
@@ -869,7 +878,7 @@ function RoleChip({
           onClose={menu.close}
         />
       )}
-    </span>
+    </Inline>
   );
 }
 
@@ -1007,30 +1016,32 @@ function Invitations({
 
   return (
     <>
-      <div className="workspace-invite-row">
-        <form className="workspace-invite" onSubmit={invite}>
-          <TextField
-            type={TEXT_FIELD_TYPE.EMAIL}
-            required
-            label="Email address"
-            placeholder="name@example.com"
-            autoComplete={TEXT_FIELD_AUTO_COMPLETE.OFF}
-            spellCheck={false}
-            value={email}
-            disabled={busy}
-            onChange={setEmail}
-          />
-          <RoleChip value={role} disabled={busy} adminAllowed={owner} onChange={setRole} />
-          <Button type={BUTTON_TYPE.SUBMIT} variant={BUTTON_VARIANT.OUTLINE} disabled={busy}>
-            Invite
-          </Button>
-        </form>
+      <Stack gap={GAP.NONE}>
+        <div className="workspace-invite">
+          <Inline as={LAYOUT_ELEMENT.FORM} justify={JUSTIFY.END} grow growFirst onSubmit={invite}>
+            <TextField
+              type={TEXT_FIELD_TYPE.EMAIL}
+              required
+              label="Email address"
+              placeholder="name@example.com"
+              autoComplete={TEXT_FIELD_AUTO_COMPLETE.OFF}
+              spellCheck={false}
+              value={email}
+              disabled={busy}
+              onChange={setEmail}
+            />
+            <RoleChip value={role} disabled={busy} adminAllowed={owner} onChange={setRole} />
+            <Button type={BUTTON_TYPE.SUBMIT} variant={BUTTON_VARIANT.OUTLINE} disabled={busy}>
+              Invite
+            </Button>
+          </Inline>
+        </div>
         {note === undefined ? null : (
           <SettingsLine>
             <ErrorState>{note}</ErrorState>
           </SettingsLine>
         )}
-      </div>
+      </Stack>
       {firstReadFailed !== undefined ? (
         <ReadFailed line={firstReadFailed} onRetry={read} />
       ) : pending === undefined ? (
@@ -1094,7 +1105,7 @@ function ConnectionRow({ connection }: { connection: ShownConnection }): React.J
     <SettingsRow
       indent={SETTINGS_ROW_INDENT.MARK}
       leading={
-        <span className="settings-row-mark">
+        <SettingsRowMark>
           <WorkspaceTile
             workspace={{
               id: `github:${connection.login}`,
@@ -1103,18 +1114,18 @@ function ConnectionRow({ connection }: { connection: ShownConnection }): React.J
             }}
             size={TILE_SIZE.NESTED}
           />
-        </span>
+        </SettingsRowMark>
       }
       label={connection.login}
       description={
         connection.active ? (
-          <span className="settings-state" data-state="connected">
+          <SettingsRowStateLine state={SETTINGS_ROW_STATE.CONNECTED}>
             {GITHUB_CONNECTED}
-          </span>
+          </SettingsRowStateLine>
         ) : (
-          <span className="settings-state" data-state="attention">
+          <SettingsRowStateLine state={SETTINGS_ROW_STATE.ATTENTION}>
             {GITHUB_SUSPENDED}
-          </span>
+          </SettingsRowStateLine>
         )
       }
     >
@@ -1158,7 +1169,7 @@ function ManagedGitHub({
   };
   const connected = connections.length > 0;
   return (
-    <div className="workspace-github">
+    <Stack gap={GAP.NONE}>
       <SettingsRow
         leading={GITHUB_MARK}
         label="GitHub"
@@ -1184,7 +1195,7 @@ function ManagedGitHub({
           </>
         )}
       </SettingsRow>
-    </div>
+    </Stack>
   );
 }
 
@@ -1242,13 +1253,13 @@ function WorkspaceGitHub({ workspace }: { workspace: Workspace }): React.JSX.Ele
 function linearLine(linear: Workspace["linear"], manages: boolean): React.ReactNode {
   if (linear === undefined) return manages ? LINEAR_LINE.MANAGES : LINEAR_LINE.MEMBER;
   return linear.active ? (
-    <span className="settings-state" data-state="connected">
+    <SettingsRowStateLine state={SETTINGS_ROW_STATE.CONNECTED}>
       {LINEAR_LINE.CONNECTED}
-    </span>
+    </SettingsRowStateLine>
   ) : (
-    <span className="settings-state" data-state="attention">
+    <SettingsRowStateLine state={SETTINGS_ROW_STATE.ATTENTION}>
       {manages ? LINEAR_LINE.EXPIRED : LINEAR_LINE.EXPIRED_MEMBER}
-    </span>
+    </SettingsRowStateLine>
   );
 }
 
@@ -1291,7 +1302,7 @@ function ManagedLinear({ workspace }: { workspace: Workspace }): React.JSX.Eleme
       ? []
       : [[{ label: "Disconnect", icon: <TrashIcon />, danger: true, onSelect: disconnect.ask }]];
   return (
-    <div className="workspace-linear">
+    <Stack gap={GAP.NONE}>
       <MenuRow
         label="Linear actions"
         actions={actions}
@@ -1324,7 +1335,7 @@ function ManagedLinear({ workspace }: { workspace: Workspace }): React.JSX.Eleme
           }}
         />
       )}
-    </div>
+    </Stack>
   );
 }
 
@@ -1353,9 +1364,9 @@ function sentryLine(sentry: WorkspaceSentry, manages: boolean): React.ReactNode 
     one.account === undefined ? [] : [one.account],
   );
   return (
-    <span className="settings-state" data-state="connected">
+    <SettingsRowStateLine state={SETTINGS_ROW_STATE.CONNECTED}>
       {SENTRY_LINE.INSTALLED(accounts.join(", "))}
-    </span>
+    </SettingsRowStateLine>
   );
 }
 
@@ -1423,7 +1434,7 @@ function ManagedSentry({
     })),
   ].filter((group) => group.length > 0);
   return (
-    <div className="workspace-sentry">
+    <Stack gap={GAP.NONE}>
       <MenuRow
         label="Sentry actions"
         actions={actions}
@@ -1454,7 +1465,7 @@ function ManagedSentry({
           running: "Disconnecting",
         }}
       />
-    </div>
+    </Stack>
   );
 }
 
@@ -1644,7 +1655,7 @@ function WorkspaceIdentity({ workspace }: { workspace: Workspace }): React.JSX.E
     ) : null;
   const photoPicker = manages ? picker.input : null;
   return (
-    <div className="workspace-identity">
+    <Stack gap={GAP.NONE}>
       <MenuRow
         label="Workspace actions"
         actions={actions}
@@ -1678,7 +1689,7 @@ function WorkspaceIdentity({ workspace }: { workspace: Workspace }): React.JSX.E
           running: "Removing",
         }}
       />
-    </div>
+    </Stack>
   );
 }
 

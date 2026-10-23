@@ -17,7 +17,7 @@ import { ImagePlusIcon } from "lucide-react";
 import { useMemo } from "react";
 import { useAct } from "../act.js";
 import { encodeImage } from "../feedback-images.js";
-import { TOAST_HOLD, TOAST_TONE, UNDO_LABEL, useToast } from "../toast.js";
+import { TOAST_HOLD, TOAST_TONE, UNDO_LABEL, useToast, useWorkingToast } from "../toast.js";
 import type { ViewerAction } from "./attachment-viewer.js";
 import { useTaskMentions } from "./task-mentions.js";
 
@@ -33,7 +33,9 @@ import { useTaskMentions } from "./task-mentions.js";
  * meets the text moved on is written again on the text as it stands. Note
  * that it is never written at the editor's caret, because the plan's editor
  * closes as focus leaves it, and the press that adds the picture is in the
- * agent's tab. Undo takes the line back out where it still stands alone;
+ * agent's tab. The toast says the adding is under way from the press, since
+ * re-encoding, keeping, and writing can take a moment, and turns in place
+ * into what came of it. Undo takes the line back out where it still stands alone;
  * the kept picture goes with the plan.
  */
 
@@ -42,6 +44,7 @@ const ADD_LABEL = "Add to plan";
 
 /** What each outcome says in the window's toast. */
 const ADD_WORDS = {
+  ADDING: "Adding to the plan…",
   ADDED: "Added to the plan",
   NOT_A_PICTURE: "This picture could not be added to the plan.",
   TOO_MANY: "This plan already holds as many pictures as it can.",
@@ -92,16 +95,18 @@ export function useAddToPlan(): ViewerAction | undefined {
   const page = useTaskMentions();
   const { act } = useAct();
   const toast = useToast();
+  const working = useWorkingToast();
   return useMemo(() => {
     if (page === undefined || page.taskId === "" || page.workspace === "") return undefined;
     const { taskId, workspace } = page;
-    const failed = (words: string) =>
-      toast({ words, tone: TOAST_TONE.FAILED, hold: TOAST_HOLD.FAILED });
     const save = (base: string, value: string): Promise<TasksEditAnswer> =>
       act(ACT_KIND.TASKS_EDIT, { taskId: taskId, edit: { document: { base, value } } }).catch(
         (): TasksEditAnswer => ({ failure: TASK_CALL_FAILURE.UNANSWERED }),
       );
     const add = async (chip: FileChip) => {
+      const settle = working(ADD_WORDS.ADDING);
+      const failed = (words: string) =>
+        settle({ words, tone: TOAST_TONE.FAILED, hold: TOAST_HOLD.FAILED });
       const encoded = await encodeImage(fileOf(chip), PICTURE_BOUNDS.MAX_BYTES);
       if (encoded === undefined) return failed(ADD_WORDS.NOT_A_PICTURE);
       const url = `data:${encoded.mediaType};base64,${encoded.base64}`;
@@ -142,7 +147,7 @@ export function useAddToPlan(): ViewerAction | undefined {
             : { words: ADD_WORDS.UNDONE, tone: TOAST_TONE.DONE, hold: TOAST_HOLD.DONE },
         );
       };
-      toast({
+      settle({
         words: ADD_WORDS.ADDED,
         tone: TOAST_TONE.DONE,
         action: { label: UNDO_LABEL, onPress: () => void undo() },
@@ -153,5 +158,5 @@ export function useAddToPlan(): ViewerAction | undefined {
       icon: <ImagePlusIcon aria-hidden="true" />,
       onPress: (chip: FileChip) => void add(chip),
     };
-  }, [act, page, toast]);
+  }, [act, page, toast, working]);
 }

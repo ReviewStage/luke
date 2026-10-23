@@ -27,6 +27,7 @@ import {
   recordCodingAgentPublished,
 } from "@luke/database/models/coding-agent-store";
 import { keepConversationPicture } from "@luke/database/models/conversation-pictures";
+import { linkIntegrationInstallation } from "@luke/database/models/integration-installation-store";
 import { writePage } from "@luke/database/models/plan-pages";
 import { listRevisions } from "@luke/database/models/plan-revisions";
 import {
@@ -68,6 +69,7 @@ import {
   CODING_AGENT_STATUS,
   PULL_REQUEST_STATE,
 } from "@luke/features/coding-agent-wire";
+import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
 import { INBOX_ASK, INBOX_RESPONSE } from "@luke/features/inbox-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { CODING_AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@luke/features/models-wire";
@@ -123,6 +125,7 @@ import {
 import { integrationConnectOver, NO_WORKSPACE_LINEAR } from "../../testing/integration-connect.js";
 import { nativeRelayFake } from "../../testing/native-relay-fake.js";
 import { sandboxDouble } from "../../testing/repository-sandbox.js";
+import { SentryApp, sentryAppService } from "../../triggers/sentry/sentry-app-config.js";
 import { AUTOMATION_TOOL_REFUSAL } from "../automation-tools.js";
 import { BRAIN_HOST_ATTRIBUTE, BRAIN_HOST_HEADER, BRAIN_HOST_TURN } from "../brain-host/bounds.js";
 import { claimRuntimeSession } from "../brain-host/conversation.js";
@@ -449,13 +452,23 @@ async function issueReadingGitHub(workspaceId: string) {
   return github.layer;
 }
 
-/** A caller of the agent tools from the agent's own session, under the host given, over the suite's catalog unless another is given. */
+/** Luke's Sentry integration as a deployment that configures it holds it. */
+const SENTRY_CONFIGURED = Layer.succeed(
+  SentryApp,
+  sentryAppService(
+    { slug: "luke", clientId: "sentry-client", clientSecret: Redacted.make("sentry-secret") },
+    [],
+  ),
+);
+
+/** A caller of the agent tools from the agent's own session, under the host given, over the suite's catalog and a configured Sentry integration unless others are given. */
 async function peerCaller(
   host: CoderHost,
   agent: StartedAgent,
   services: Awaited<ReturnType<typeof fakeCoderEve>>["services"],
   catalog: Layer.Layer<ModelCatalog> = modelCatalogOf(CATALOG),
   linear: Layer.Layer<WorkspaceLinearConnect> = NO_WORKSPACE_LINEAR,
+  sentry: Layer.Layer<SentryApp> = SENTRY_CONFIGURED,
 ) {
   const admitted = await database.run(host.admit(seat(agent), agent.sessionId));
   if (Result.isFailure(admitted)) return assert.fail(admitted.failure);
@@ -467,7 +480,7 @@ async function peerCaller(
     database.run(
       host
         .agentTools(admitted.success, { tool, input: unparsedWire(input), callId })
-        .pipe(Effect.provide(Layer.mergeAll(services, catalog, ANALYTICS.layer, linear))),
+        .pipe(Effect.provide(Layer.mergeAll(services, catalog, ANALYTICS.layer, linear, sentry))),
     );
 }
 
@@ -2284,6 +2297,22 @@ test("update_task renames a task, pins it for the caller's starter alone, sets i
     [RELAY_FULL_NAME, true],
     JSON.stringify(again),
   );
+  // The caller's own task, recorded as reached on its owner's token, is confirmed again through the App.
+  const ownRepository = (key: string) =>
+    call(CODER_TOOL.UPDATE_TASK, { taskId: tasks.invitations, repository: RELAY_FULL_NAME }, key);
+  await database.run(
+    updateTask(agents.caller.userId, tasks.invitations, {
+      repository: RELAY_FULL_NAME,
+      githubAccess: GITHUB_ACCESS.TOKEN,
+    }),
+  );
+  const reached = await ownRepository("call-5c");
+  assert.equal(reached.already, false, JSON.stringify(reached));
+  const recorded = Option.getOrThrow(
+    await database.run(readTask(agents.caller.userId, tasks.invitations)),
+  );
+  assert.equal(recorded.githubAccess, GITHUB_ACCESS.APP);
+  assert.equal((await ownRepository("call-5d")).already, true);
 
   const own = await call(
     CODER_TOOL.UPDATE_TASK,
@@ -3950,7 +3979,7 @@ test("list_automations, create_automation, update_automation, and delete_automat
     [
       automation.name,
       automation.enabled,
-      automation.prompt,
+      automation.promptChars,
       automation.repositories,
       automation.runsLandOn,
       automation.scope,
@@ -3960,13 +3989,18 @@ test("list_automations, create_automation, update_automation, and delete_automat
     [
       "Agent audit",
       true,
-      prompt.trim(),
+      prompt.trim().length,
       [RELAY_FULL_NAME],
       "new-agent",
       "personal",
       true,
       "string",
     ],
+  );
+  // The answer carries the start of the prompt, as the list does, not the whole of it.
+  assert.ok(
+    isWireString(automation.prompt) && automation.prompt.length === 301,
+    JSON.stringify(automation.prompt),
   );
   assert.ok(isWireString(automation.id));
   const id = automation.id;
@@ -4025,6 +4059,29 @@ test("list_automations, create_automation, update_automation, and delete_automat
   const afterRefusals = await call(CODER_TOOL.LIST_AUTOMATIONS, {});
   assert.equal(Array.isArray(afterRefusals.automations) && afterRefusals.automations.length, 1);
 
+  assert.deepEqual(
+    await make({ disabledServers: ["neon", "not-a-server"] }, "unknown-server"),
+    rejected(`${AUTOMATION_TOOL_REFUSAL.UNKNOWN_SERVERS} not-a-server.`),
+  );
+
+  // Run now: one run under the call's key, started as a scheduled run starts, and the same call again names it.
+  const ran = await call(CODER_TOOL.RUN_AUTOMATION, { automationId: id }, "call-run");
+  assert.equal(ran.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(ran));
+  assert.ok(isRecord(ran.run) && isRecord(ran.run.agent), JSON.stringify(ran));
+  assert.deepEqual(
+    [ran.run.firedBy, ran.run.status, ran.alreadyRan, automationOf(ran).name],
+    ["manual", "started", false, "Agent audit"],
+  );
+  const again = await call(CODER_TOOL.RUN_AUTOMATION, { automationId: id }, "call-run");
+  assert.deepEqual(
+    [isRecord(again.run) ? again.run.id : undefined, again.alreadyRan],
+    [ran.run.id, true],
+  );
+  assert.deepEqual(
+    await stranger(CODER_TOOL.RUN_AUTOMATION, { automationId: id }, "stranger-run"),
+    rejected(AUTOMATION_TOOL_REFUSAL.NO_AUTOMATION),
+  );
+
   // A change: paused, its next due cleared; a new prompt and model, and every run handed to one agent.
   const update = (asked: WireRecord, by = call, key = "call-change") =>
     by(CODER_TOOL.UPDATE_AUTOMATION, { automationId: id, ...asked } as WireBoundaryInput, key);
@@ -4053,7 +4110,13 @@ test("list_automations, create_automation, update_automation, and delete_automat
   // A teammate reads a personal automation of the starter's not at all, then a workspace's, which it may turn on but not change or delete.
   assert.deepEqual((await teammate(CODER_TOOL.LIST_AUTOMATIONS, {})).automations, []);
   assert.equal(
-    automationOf(await update({ scope: "workspace", agentId: null })).scope,
+    automationOf(
+      await update({
+        scope: "workspace",
+        agentId: null,
+        guards: { maxConcurrentRuns: 5, dailyRunCap: 50 },
+      }),
+    ).scope,
     "workspace",
   );
   assert.deepEqual(
@@ -4064,6 +4127,23 @@ test("list_automations, create_automation, update_automation, and delete_automat
     automationOf(await update({ enabled: true }, teammate, "teammate-toggle")).enabled,
     true,
   );
+  // A teammate runs a workspace's automation as its creator: the run starts the creator's agent.
+  const teammateRan = await teammate(
+    CODER_TOOL.RUN_AUTOMATION,
+    { automationId: id },
+    "teammate-run",
+  );
+  assert.ok(
+    isRecord(teammateRan.run) && isRecord(teammateRan.run.agent),
+    JSON.stringify(teammateRan),
+  );
+  assert.equal(teammateRan.run.status, "started");
+  const started = await database.run(
+    readCodingAgent(agents.caller.userId, String(teammateRan.run.agent.id)),
+  );
+  assert.ok(Option.isSome(started) && started.value.userId === agents.caller.userId);
+  // eve is reached as the creator the run starts as, not as the teammate who fired it.
+  assert.equal(eve.sent.at(-1)?.headers.get(BRAIN_HOST_HEADER.ACCOUNT), agents.caller.userId);
   assert.deepEqual(
     await teammate(CODER_TOOL.DELETE_AUTOMATION, { automationId: id }, "teammate-delete"),
     rejected(AUTOMATION_TOOL_REFUSAL.NOT_PERMITTED),
@@ -4084,5 +4164,100 @@ test("list_automations, create_automation, update_automation, and delete_automat
   assert.deepEqual(
     await call(CODER_TOOL.DELETE_AUTOMATION, { automationId: id }, "delete-again"),
     rejected(AUTOMATION_TOOL_REFUSAL.NO_AUTOMATION),
+  );
+});
+
+test("create_automation and update_automation take a Sentry trigger once the workspace installed Luke's Sentry integration, with its filters and per-issue cooldown, and refuse one where the deployment configures no Sentry integration or the workspace installed none", async () => {
+  const { workspaceId, agents } = await openWorkspaces();
+  const eve = await fakeCoderEve(workspaceId);
+  const call = await peerCaller(hostOf(true), agents.caller, eve.services);
+  const unconfigured = await peerCaller(
+    hostOf(true),
+    agents.caller,
+    eve.services,
+    modelCatalogOf(CATALOG),
+    NO_WORKSPACE_LINEAR,
+    Layer.succeed(SentryApp, sentryAppService(undefined, ["SENTRY_APP_CLIENT_SECRET"])),
+  );
+  const alerts = {
+    kind: "integration",
+    provider: "sentry",
+    event: "alert-triggered",
+    filters: { project: ["web"], level: ["error", "fatal"] },
+  };
+  const made = {
+    name: "Fix Sentry alerts",
+    prompt: "Fix the error the alert names.",
+    trigger: alerts,
+  };
+  const automationOf = (answer: WireRecord) =>
+    isRecord(answer.automation) ? answer.automation : {};
+  const rejected = (reason: string) => ({ status: ACTION_RESULT_STATUS.REJECTED, reason });
+
+  assert.deepEqual(
+    await unconfigured(CODER_TOOL.CREATE_AUTOMATION, made, "unconfigured"),
+    rejected(AUTOMATION_TOOL_REFUSAL.SENTRY_UNCONFIGURED),
+  );
+  assert.deepEqual(
+    await call(CODER_TOOL.CREATE_AUTOMATION, made, "uninstalled"),
+    rejected(AUTOMATION_TOOL_REFUSAL.SENTRY_NOT_INSTALLED),
+  );
+  const weekly = automationOf(
+    await call(
+      CODER_TOOL.CREATE_AUTOMATION,
+      {
+        name: "Weekly audit",
+        prompt: "Audit the errors.",
+        trigger: { kind: "schedule", cron: "0 9 * * 1", timezone: "Europe/London" },
+      },
+      "weekly",
+    ),
+  );
+  assert.ok(isWireString(weekly.id), JSON.stringify(weekly));
+  const toSentry = {
+    automationId: weekly.id,
+    trigger: { kind: "integration", provider: "sentry", event: "issue-created" },
+  };
+  assert.deepEqual(
+    await call(CODER_TOOL.UPDATE_AUTOMATION, toSentry, "switch-uninstalled"),
+    rejected(AUTOMATION_TOOL_REFUSAL.SENTRY_NOT_INSTALLED),
+  );
+
+  await database.run(
+    linkIntegrationInstallation({
+      provider: "sentry",
+      externalId: "sentry-installation",
+      organizationId: workspaceId,
+      userId: agents.caller.userId,
+      accountLabel: "acme",
+    }),
+  );
+  assert.deepEqual(
+    await unconfigured(CODER_TOOL.UPDATE_AUTOMATION, toSentry, "switch-unconfigured"),
+    rejected(AUTOMATION_TOOL_REFUSAL.SENTRY_UNCONFIGURED),
+  );
+  const created = await call(
+    CODER_TOOL.CREATE_AUTOMATION,
+    { ...made, guards: { maxConcurrentRuns: 1, dailyRunCap: 10, subjectCooldownHours: 6 } },
+    "installed",
+  );
+  assert.equal(created.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(created));
+  assert.deepEqual(
+    [automationOf(created).trigger, automationOf(created).guards],
+    [alerts, { maxConcurrentRuns: 1, dailyRunCap: 10, subjectCooldownHours: 6 }],
+  );
+  const switched = await call(CODER_TOOL.UPDATE_AUTOMATION, toSentry, "switch-installed");
+  assert.equal(switched.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(switched));
+  assert.deepEqual(automationOf(switched).trigger, toSentry.trigger);
+  assert.deepEqual(
+    await call(
+      CODER_TOOL.UPDATE_AUTOMATION,
+      {
+        automationId: weekly.id,
+        guards: { maxConcurrentRuns: 1, dailyRunCap: 10, subjectCooldownHours: 169 },
+      },
+      "cooldown-too-long",
+    ),
+    rejected(AUTOMATION_TOOL_REFUSAL.UNREADABLE_UPDATE),
   );
 });

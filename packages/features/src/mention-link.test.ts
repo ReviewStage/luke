@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
 import { INTEGRATION_PROVIDER } from "./integration-wire.js";
+import { LINK_SITE } from "./link-site.js";
 import {
   askedInWords,
   decodeMention,
@@ -593,6 +594,22 @@ test("a Notion page reads as Notion's link on its app's host, app.notion.com, as
       url,
     );
   }
+});
+
+test("a Google Maps page reads as the site's link and is named by the place its address spells", () => {
+  const url = "https://www.google.com/maps/place/Ferry+Building/@37.79,-122.39,17z";
+
+  assert.deepEqual(decodeMention(url, REPOSITORY), {
+    kind: MENTION_KIND.LINK,
+    site: LINK_SITE.GOOGLE_MAPS,
+    url,
+  });
+  assert.equal(linkMention(url, url, REPOSITORY)?.name, "Ferry Building");
+  assert.equal(
+    pastedLinkMention("https://maps.app.goo.gl/Ab12Cd34", REPOSITORY)?.name,
+    "Google Maps",
+  );
+  assert.equal(linkMention("the pier", url, REPOSITORY)?.name, "the pier");
 });
 
 test("a page's address stays one markdown link's however many parentheses it keeps", () => {

@@ -75,6 +75,7 @@ import {
   type ContentBlock,
   INPUT_LINE,
   type InputLine,
+  type IntegrationServer,
   RUNNER_ENV,
   type RunnerConfig,
 } from "@luke/agent-runner/protocol";
@@ -185,6 +186,8 @@ export interface RunnerSessionsOptions {
   readonly eventsUrl: string;
   /** The Luke MCP server's endpoint (P06), which the composing edge names. */
   readonly mcpUrl: string;
+  /** The integrations the agent is handed as its launch starts, each an MCP server of its own beside Luke's. */
+  readonly integrations: (agent: CodingAgent) => Effect.Effect<readonly IntegrationServer[]>;
   /** Luke's coder instructions for the agent, which the harness's config carries. */
   readonly instructions: (agent: CodingAgent) => Effect.Effect<string>;
   /** One past the last event the store applied of the conversation's runner, where a launch numbers its events from. */

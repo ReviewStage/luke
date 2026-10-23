@@ -46,6 +46,27 @@
     border-bottom: 1px solid var(--luke-color-border);
   }
 
+  /* A chip at the end of its row, as wide as what it says, on the surface
+     inside a hairline: its glyphs and count muted, in the text's ink under
+     the pointer. */
+  .luke-disclosure-summary[data-look="chip"] {
+    width: fit-content;
+    min-height: 0;
+    margin-inline-start: auto;
+    padding: var(--luke-space-2) var(--luke-space-6);
+    border: 1px solid var(--luke-color-border);
+    background: var(--luke-color-surface);
+  }
+
+  .luke-disclosure-summary[data-look="chip"]:hover {
+    background: var(--luke-color-surface);
+  }
+
+  .luke-disclosure-summary[data-look="chip"] > svg {
+    width: var(--luke-space-12);
+    height: var(--luke-space-12);
+  }
+
   .luke-disclosure-summary::-webkit-details-marker {
     display: none;
   }
@@ -85,7 +106,9 @@
     display: flex;
     flex: none;
     color: var(--luke-color-text-muted);
-    transition: transform var(--luke-duration-hover) ease;
+    /* The chevron turns on the spring small elements ride, so it settles
+       with the body unrolling under it rather than snapping ahead. */
+    transition: transform var(--luke-duration-fast) var(--luke-spring-fast);
   }
 
   .luke-disclosure-turn[data-open="true"] {

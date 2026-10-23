@@ -154,7 +154,7 @@ const resumePointOf = Effect.fn("agent-runner/resumePointOf")(function* (
 function queryOptions(
   config: ClaudeCodeConfig,
   env: RunnerInput["env"],
-  luke: McpSdkServerConfigWithInstance,
+  servers: Readonly<Record<string, McpSdkServerConfigWithInstance>>,
   onStop: HookCallback,
   from: ResumePoint,
 ): Options {
@@ -172,8 +172,8 @@ function queryOptions(
     env: { ...env, [RUNNER_ENV.BEARER]: undefined },
     // Note that the SDK puts an HTTP server's config, headers and all, in the
     // CLI's argv, which any process in the sandbox can read, so Luke's is an
-    // SDK server the runner relays over the CLI's own stdio (`mcp-relay.ts`).
-    mcpServers: { [MCP_SERVER]: luke },
+    // SDK server the runner relays over the CLI's own stdio (`mcp-relay.ts`), as is each integration's.
+    mcpServers: { ...servers },
     sandbox: {
       enabled: true,
       failIfUnavailable: true,
@@ -460,12 +460,19 @@ const runClaudeCode = Effect.fn("agent-runner/runClaudeCode")(function* (
     }
     return { continue: true };
   };
-  const luke = yield* openMcpRelay(MCP_SERVER, config.mcpUrl, bearer);
+  const servers: Record<string, McpSdkServerConfigWithInstance> = {
+    [MCP_SERVER]: yield* openMcpRelay(MCP_SERVER, config.mcpUrl, bearer),
+  };
+  // Each integration the agent is handed is a server of its own, its tools named `mcp__<connection>__<tool>`.
+  for (const integration of config.integrations ?? []) {
+    if (integration.name === MCP_SERVER) continue;
+    servers[integration.name] = yield* openMcpRelay(integration.name, integration.url, bearer);
+  }
   const prompts = yield* Queue.unbounded<SDKUserMessage, Cause.Done>();
   const from = yield* resumePointOf(claudeCode, config);
   const session = claudeCode.query({
     prompt: Stream.toAsyncIterable(Stream.fromQueue(prompts)),
-    options: queryOptions(config, context.env, luke, onStop, from),
+    options: queryOptions(config, context.env, servers, onStop, from),
   });
   const launch: Launch = {
     session,

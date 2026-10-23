@@ -1,9 +1,8 @@
 import type { TaskSummary } from "@luke/features/task-wire";
-import { FolderIcon, ListRow, Time } from "@luke/ui";
+import { FolderIcon, ListRow, OneLine, Time } from "@luke/ui";
 import { assigneeFace } from "@luke/ui/actor-model";
 import { TASK_ORDER, taskTime } from "@luke/ui/task-list-model";
 import { AssigneeFaceMark } from "../actor-ref.js";
-import { FadingWords } from "../fading-words.js";
 import { useMemberDirectory } from "../member-directory.js";
 import { RepositoryPicture } from "../repository-picture.js";
 import { TaskStatusMark } from "./task-card.js";
@@ -53,7 +52,9 @@ export function RecentRow({
       title={task.name}
       meta={
         <span className="home-row-meta">
-          <FadingWords className="home-row-context" words={task.repository ?? "No repository"} />
+          <OneLine className="home-row-context" words={task.repository ?? "No repository"}>
+            {task.repository ?? "No repository"}
+          </OneLine>
           {worn === undefined ? null : <AssigneeFaceMark face={worn} />}
           <TaskStatusMark task={task} />
           <Time at={taskTime(task, TASK_ORDER.UPDATED)} now={now} />

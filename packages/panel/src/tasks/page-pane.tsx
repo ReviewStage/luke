@@ -14,10 +14,11 @@ import {
   FILL_ELEMENT,
   Fill,
   IconButton,
+  OneLine,
   SpinnerRegion,
   Tooltip,
+  wholeWordsHint,
 } from "@luke/ui";
-import { useClipped } from "@luke/ui/use-clipped";
 import { Option, Schema } from "effect";
 import {
   ChevronLeftIcon,
@@ -381,7 +382,6 @@ export function PagePane({
     if (showingSource && source === undefined) ask(version);
   }, [showingSource, source, version, ask]);
   const toggleLabel = showingSource ? "View page" : "View source";
-  const [titleBox, titleClipped] = useClipped(page.title);
   return (
     <FindScope
       className="page-view-find"
@@ -390,11 +390,9 @@ export function PagePane({
     >
       <Fill className="page-view file-view ph-no-capture">
         <header className="file-view-bar">
-          <Tooltip label={titleClipped ? page.title : undefined}>
-            <span ref={titleBox} className="page-view-title" data-overflow={String(titleClipped)}>
-              {page.title}
-            </span>
-          </Tooltip>
+          <OneLine className="page-view-title" hint={wholeWordsHint(page.title)}>
+            {page.title}
+          </OneLine>
           <div className="file-view-actions">
             {page.version > 1 ? (
               <div className="page-view-versions">

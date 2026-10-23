@@ -132,6 +132,20 @@ export const IMAGE_MEDIA_TYPE = {
  */
 const SEQUENCE_MAX = 2 ** 52;
 
+/**
+ * One integration the agent is handed, as an MCP server of its own at Luke,
+ * reached under the runner's bearer as Luke's own server is: the
+ * connection's name (`linear`, `notion-2`), which the server is registered
+ * under and its tools are named by, and its endpoint. The name is a bare
+ * word, so it stands as a TOML key in Codex's config and in Claude Code's
+ * `mcp__<server>__<tool>` as written.
+ */
+const IntegrationServerSchema = Schema.Struct({
+  name: Schema.String.check(Schema.isPattern(/^[a-z0-9][a-z0-9-]*$/)),
+  url: Schema.String,
+});
+export type IntegrationServer = typeof IntegrationServerSchema.Type;
+
 const SequenceSchema = Schema.Number.check(
   Schema.isInt(),
   Schema.isGreaterThanOrEqualTo(0),
@@ -165,6 +179,8 @@ export const ClaudeCodeConfigSchema = Schema.Struct({
   eventsUrl: Schema.String,
   /** The Luke MCP server's streamable-HTTP endpoint. */
   mcpUrl: Schema.String,
+  /** The integrations the agent is handed, one MCP server each; none in a config written before them. */
+  integrations: Schema.optionalKey(Schema.Array(IntegrationServerSchema)),
   /** The hosts a command the agent runs may reach, besides nothing else. */
   allowedDomains: Schema.Array(Schema.String),
   /** Where the member's installed skills are (`INSTALLED_SKILLS`), loaded as a local plugin where the folder holds one. */
@@ -201,6 +217,8 @@ export const CodexConfigSchema = Schema.Struct({
   firstSequence: SequenceSchema,
   eventsUrl: Schema.String,
   mcpUrl: Schema.String,
+  /** The integrations the agent is handed, one MCP server each; none in a config written before them. */
+  integrations: Schema.optionalKey(Schema.Array(IntegrationServerSchema)),
   /**
    * Where the runner asks Luke for the plan's access token, under its bearer
    * (`/api/agents/runner-token`). App-server takes its token from the

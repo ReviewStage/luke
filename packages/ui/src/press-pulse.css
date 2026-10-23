@@ -1,0 +1,51 @@
+/* press-pulse.css -- the answer a press a ui control took plays once it lands
+   (`press-pulse.ts` restarts `data-pulse` on each), by its shape: a face
+   springs back from pressed inside a box that stands still, a small control
+   whole, a row or a card a little, and words fade a little and come back.
+   Every one runs on `--luke-duration-fast`, which reduced motion and a
+   capture run hold still. Note that the whole shapes move by `scale` and
+   the words by `opacity`, never `transform`, so a drag's or a swipe's
+   transform the shape stands at goes on standing under it. Imported after
+   every component's sheet, so a pulse plays over a shape's resting look. */
+
+@layer components {
+  [data-pulse="face"] > [data-press-face] {
+    animation: luke-press-face var(--luke-duration-fast) var(--luke-spring-fast);
+  }
+
+  [data-pulse="control"] {
+    animation: luke-press-control var(--luke-duration-fast) var(--luke-spring-fast);
+  }
+
+  [data-pulse="quiet"] {
+    animation: luke-press-quiet var(--luke-duration-fast) var(--luke-spring-fast);
+  }
+
+  [data-pulse="words"] {
+    animation: luke-press-words var(--luke-duration-fast) var(--luke-motion-exit);
+  }
+
+  @keyframes luke-press-face {
+    from {
+      transform: scale(0.86);
+    }
+  }
+
+  @keyframes luke-press-control {
+    from {
+      scale: 0.94;
+    }
+  }
+
+  @keyframes luke-press-quiet {
+    from {
+      scale: 0.98;
+    }
+  }
+
+  @keyframes luke-press-words {
+    from {
+      opacity: 0.55;
+    }
+  }
+}

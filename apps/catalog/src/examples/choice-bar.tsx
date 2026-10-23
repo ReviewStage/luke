@@ -9,11 +9,13 @@
 
 import {
   AlertIcon,
+  CHOICE_BAR_FOLD,
   CHOICE_BAR_INSET,
   CHOICE_BAR_LOOK,
   CHOICE_BAR_SIZE,
   CheckIcon,
   ChoiceBar,
+  type ChoiceBarFold,
   type ChoiceBarInset,
   type ChoiceBarLook,
   type ChoiceBarSize,
@@ -112,6 +114,8 @@ function HeldTabs<Value extends string>({
   look,
   size,
   inset,
+  fold,
+  stretch,
 }: {
   label: string;
   items: readonly ChoiceItem<Value>[];
@@ -119,6 +123,8 @@ function HeldTabs<Value extends string>({
   look: ChoiceBarLook;
   size?: ChoiceBarSize | undefined;
   inset?: ChoiceBarInset | undefined;
+  fold?: ChoiceBarFold | undefined;
+  stretch?: boolean | undefined;
 }): React.JSX.Element {
   const [value, setValue] = useState<Value>(start);
   const id = useId();
@@ -134,6 +140,8 @@ function HeldTabs<Value extends string>({
         size={size}
         panels={panels}
         inset={inset}
+        fold={fold}
+        stretch={stretch}
       />
       {items.map((item) => (
         <div
@@ -247,6 +255,26 @@ function ChoiceBarExample(): React.JSX.Element {
             size={CHOICE_BAR_SIZE.COMPACT}
           />
         </Stack>
+      </CatalogSection>
+      <CatalogSection id="choice-bar-stretch" title="Segmented, stretched across its row">
+        <HeldTabs
+          label="Task view"
+          items={PLAIN}
+          start={VIEW.CONVERSATION}
+          look={CHOICE_BAR_LOOK.SEGMENTED}
+          stretch
+        />
+      </CatalogSection>
+      <CatalogSection id="choice-bar-words" title="Fill, named in words alone, for a finger">
+        <div className="catalog-narrow">
+          <HeldTabs
+            label="Pull request"
+            items={VIEWS}
+            start={VIEW.CHECKS}
+            look={CHOICE_BAR_LOOK.FILL}
+            fold={CHOICE_BAR_FOLD.WORDS}
+          />
+        </div>
       </CatalogSection>
       <CatalogSection id="choice-bar-radio" title="Setting a value, as a radio group">
         <Stack gap={GAP.CONTROL} align="start">
