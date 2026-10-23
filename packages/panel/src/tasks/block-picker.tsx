@@ -87,7 +87,7 @@ export interface BlockPickerRows {
 }
 
 /** The menu's rows as a document that changes none of them offers them. */
-export const SLASH_ROWS: BlockPickerRows = { added: [], dropped: new Set() };
+const SLASH_ROWS: BlockPickerRows = { added: [], dropped: new Set() };
 
 /** A writing block or the divider, as the vocabulary names it, answering the aliases given. */
 function vocabulary(block: WritingBlock | WritingInsert, aliases: readonly string[]): SlashEntry {

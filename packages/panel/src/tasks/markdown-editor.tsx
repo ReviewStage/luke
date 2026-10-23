@@ -2,7 +2,14 @@ import { useAtomValue } from "@effect/atom-react";
 import { decodeMention } from "@luke/features/mention-link";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { AsyncResult } from "effect/reactivity";
-import { type ReactNode, type RefObject, useEffect, useLayoutEffect, useRef, useState } from "react";
+import {
+  type ReactNode,
+  type RefObject,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import { createPortal } from "react-dom";
 import { useAppCommand } from "../app-commands.js";
 import { useSideBundles } from "../bundle-loader.js";
@@ -65,7 +72,7 @@ const ROOM_CLASS = "markdown-editor";
 const EDITOR_LOAD_FAILED = "The editor could not be loaded.";
 
 /** A document's mentions in its editor: what they open and where they are written, what the `@` list offers, and how an edit of the document's headings names them anew. */
-export interface MarkdownEditorMentions {
+interface MarkdownEditorMentions {
   readonly doors: MentionDoors;
   /** What the `@` list offers but the document's own words, which the editor reads as they stand. */
   readonly source: Omit<MentionSource, "text">;

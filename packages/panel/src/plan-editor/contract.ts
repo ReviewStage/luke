@@ -122,7 +122,7 @@ type SlashInsert = (typeof SLASH_INSERT)[keyof typeof SLASH_INSERT];
 export type SlashBlock = WritingBlock | WritingInsert | SlashInsert;
 
 /** A block of a document's own its `/` menu offers, laid in as the Markdown it names. */
-export interface SlashMarkdown {
+interface SlashMarkdown {
   readonly markdown: string;
 }
 
