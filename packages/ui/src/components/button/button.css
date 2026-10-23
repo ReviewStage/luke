@@ -1,64 +1,26 @@
-/* button.css -- Button and IconButton: one control's box in the profile, a
-   look per variant, and the unavailable and busy faces every look shares.
-   The keyboard's ring is the app's reset's, as it is for every control. */
+/* button.css -- Button and IconButton: a look per variant, the inks every
+   state sets, and the motions every look shares. The box, type, and edge
+   are Tailwind utilities on the vendored shadcn button (`button.tsx`,
+   `../../shadcn/button.tsx`); what stays here is what a container's sheet
+   restyles a button by from this same layer, which a utility would
+   outrank: the `--luke-button-*` inks, the fill and ink drawn from them,
+   the resting inset, least width, and glyph size; and what Tailwind has no
+   words for: a pseudo-element's hit area, a keyframe, and a press felt by
+   the face inside. The keyboard's ring is the app's reset's, as it is for
+   every control. */
 
 @layer components {
+  /* Note that the inset and least width are a container's to change (a
+     dialog's actions, a narrow error's retry), so they rest here rather
+     than in a utility; a box with an inset of its own sets it in one. */
   .luke-button {
     --luke-button-fill: transparent;
     --luke-button-ink: var(--luke-color-text);
     --luke-button-edge: transparent;
-    position: relative;
-    display: inline-flex;
-    flex: none;
-    align-items: center;
-    justify-content: center;
     min-width: 0;
-    max-width: 100%;
-    height: var(--luke-control-height);
-    margin: 0;
     padding: 0 var(--luke-control-inset);
-    border: 1px solid var(--luke-button-edge);
-    border-radius: var(--luke-control-radius);
     background: var(--luke-button-fill);
     color: var(--luke-button-ink);
-    font-family: var(--luke-font-sans);
-    font-size: var(--luke-type-label-size);
-    line-height: var(--luke-type-label-leading);
-    font-weight: var(--luke-weight-medium);
-    text-decoration: none;
-    white-space: nowrap;
-    cursor: pointer;
-    transition:
-      background-color var(--luke-duration-hover) ease,
-      color var(--luke-duration-hover) ease,
-      filter var(--luke-duration-hover) ease,
-      opacity var(--luke-duration-hover) ease;
-  }
-
-  /* A desktop control answers a press the way a Mac's does, without the
-     web's pointing hand. */
-  [data-luke-profile="desktop"] .luke-button {
-    cursor: default;
-  }
-
-  .luke-button-face {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--luke-icon-gap);
-    min-width: 0;
-  }
-
-  .luke-button-words {
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
-  .luke-button-trailing {
-    flex: none;
-    color: var(--luke-color-text-subtle);
-    font-size: var(--luke-type-caption-size);
-    line-height: var(--luke-type-caption-leading);
-    font-variant-numeric: tabular-nums;
   }
 
   .luke-button svg {
@@ -69,16 +31,6 @@
 
   .luke-button[data-icon-only="true"] {
     --luke-button-ink: var(--luke-color-text-muted);
-    width: var(--luke-control-height);
-    padding: 0;
-  }
-
-  /* Compact, a row's mark: a smaller square on a smaller corner, its glyph
-     the control's own. */
-  .luke-button[data-icon-only="true"][data-size="compact"] {
-    width: var(--luke-space-24);
-    height: var(--luke-space-24);
-    border-radius: var(--luke-radius-6);
   }
 
   /* A finger's target: on a coarse pointer a button takes a press
@@ -96,33 +48,13 @@
     }
   }
 
-  /* Compact with words, a row mark's height in the caption's type, its
-     glyph nearer its words. */
-  .luke-button[data-size="compact"]:not([data-icon-only="true"]) {
-    height: var(--luke-space-24);
-    padding-inline: var(--luke-space-8);
-    font-size: var(--luke-type-caption-size);
-    line-height: var(--luke-type-caption-leading);
-    font-weight: var(--luke-weight-semibold);
-  }
-
-  .luke-button[data-size="compact"]:not([data-icon-only="true"]) .luke-button-face {
-    gap: var(--luke-space-4);
-  }
-
   .luke-button[data-variant="outline"] {
     --luke-button-edge: var(--luke-color-border-strong);
   }
 
-  /* Subtle, a quiet press among quiet words: their muted ink, and compact
-     with words their weight rather than a label's, so it never outweighs
-     the line it stands in. */
+  /* Subtle, a quiet press among quiet words: their muted ink. */
   .luke-button[data-variant="subtle"] {
     --luke-button-ink: var(--luke-color-text-muted);
-  }
-
-  .luke-button[data-variant="subtle"][data-size="compact"]:not([data-icon-only="true"]) {
-    font-weight: var(--luke-weight-medium);
   }
 
   .luke-button[data-variant="primary"] {
@@ -171,42 +103,15 @@
     --luke-button-ink: var(--luke-color-danger-text);
   }
 
-  /* A row, a card's act drawn as a menu's row: the row's width, height,
-     corner, and inset, its words at its start in the body's type, lit by
-     the menu row's fill under the pointer and the keyboard alike, never
-     ringed. */
-  .luke-button[data-variant="row"] {
-    display: flex;
-    width: 100%;
-    justify-content: flex-start;
-    height: var(--luke-menu-row-height);
-    padding: 0 var(--luke-space-8);
-    border-radius: var(--luke-menu-row-radius);
-    font-size: var(--luke-type-body-size);
-    line-height: var(--luke-type-body-leading);
-    font-weight: var(--luke-weight-regular);
-  }
-
+  /* A row, a card's act drawn as a menu's row (its box is the `row` size's),
+     lit by the menu row's fill under the pointer and the keyboard alike,
+     never ringed. */
   .luke-button[data-variant="row"]:is(:hover, :focus-visible, [aria-expanded="true"]):not(
     :disabled,
     [aria-disabled="true"]
   ) {
     outline: none; /* no ring: the row's fill marks it, as a menu's does */
     --luke-button-fill: var(--luke-color-fill-strong);
-  }
-
-  /* Round, a glyph alone is a disc and words a pill, held off its round
-     ends by half its height. */
-  .luke-button[data-shape="round"] {
-    border-radius: var(--luke-radius-full);
-  }
-
-  .luke-button[data-shape="round"]:not([data-icon-only="true"]) {
-    padding-inline: calc(var(--luke-control-height) / 2);
-  }
-
-  .luke-button[data-shape="round"][data-size="compact"]:not([data-icon-only="true"]) {
-    padding-inline: var(--luke-space-8);
   }
 
   /* A danger toggle is quiet while off, and on the danger tint while on. */
@@ -397,25 +302,14 @@
     }
   }
 
-  /* Unavailable, a button fades to 45%: a disabled one whole, one that
-     keeps the keyboard its fill and its words alone, so the app's ring
-     around it is drawn at full strength. */
-  .luke-button:disabled {
-    opacity: 0.45;
-    cursor: default;
-  }
-
-  /* A read-only button records a press, so it stands at full strength:
-     the press given, never one faded while it waits. */
-  .luke-button[data-read-only="true"]:disabled {
-    opacity: 1;
-  }
-
+  /* Unavailable, a button fades to 45%: a disabled one whole (its
+     utilities'), but a read-only one, which records a press given and so
+     stands at full strength, and one that keeps the keyboard its fill and
+     its words alone, so the app's ring around it is drawn at full strength. */
   .luke-button[aria-disabled="true"]:not([aria-busy="true"], [data-done="true"]) {
     --luke-button-fill-faded: color-mix(in srgb, var(--luke-button-fill) 45%, transparent);
     background: var(--luke-button-fill-faded);
     color: color-mix(in srgb, var(--luke-button-ink) 45%, transparent);
-    cursor: default;
   }
 
   /* A submit unavailable stands on the strong fill with a muted glyph rather
@@ -429,22 +323,8 @@
     filter: none;
   }
 
-  .luke-button-ring {
-    display: block;
-    width: var(--luke-control-icon);
-    height: var(--luke-control-icon);
-  }
-
-  /* Busy, its words keep their room under the ring, so the button neither
-     shrinks nor moves what stands beside it. */
-  .luke-button[aria-busy="true"] {
-    cursor: progress;
-  }
-
-  .luke-button[aria-busy="true"] .luke-button-face {
-    visibility: hidden;
-  }
-
+  /* Busy, its words keep their room hidden under the ring (its face's
+     utilities), so the button neither shrinks nor moves what stands beside it. */
   .luke-button[aria-busy="true"]::after {
     position: absolute;
     inset: 0;
@@ -470,16 +350,11 @@
   /* Done, its act landed: its words keep their room and its name, unseen, and a check
      springs in where they stood, at full strength, since nothing is
      unavailable about an act that has landed. The check's one beat is what
-     its owner waits on (`button.tsx`), so a dialog closes as it settles. */
-  .luke-button[data-done="true"] {
-    cursor: default;
-  }
-
-  /* Note that the words fade rather than hide, because a hidden face would
-     take the button's name with it while its check, which says nothing,
-     stands. */
+     its owner waits on (`button.tsx`), so a dialog closes as it settles.
+     Note that the words fade (its face's utilities) rather than hide,
+     because a hidden face would take the button's name with it while its
+     check, which says nothing, stands. */
   .luke-button[data-done="true"] .luke-button-face {
-    opacity: 0;
     /* Note that the words leave at once, because a busy button's words stood
        hidden under its ring and would show through a fade as the check
        lands; they come back on the face's own fade as the check goes. */
@@ -487,10 +362,6 @@
   }
 
   .luke-button-done {
-    position: absolute;
-    inset: 0;
-    display: grid;
-    place-items: center;
     animation:
       luke-button-done-fade var(--luke-duration-quick) ease-out backwards,
       luke-button-done-spring var(--luke-duration-fast) var(--luke-spring-fast) backwards;

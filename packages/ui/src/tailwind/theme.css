@@ -23,6 +23,45 @@
   --shadow-switch-thumb: var(--luke-shadow-switch-thumb);
   --ease-spring-fast: var(--luke-spring-fast);
 
+  /* The controls' own roles (`profiles.css`), which a button, a toggle, and
+     a tab are drawn at in every profile; and a button's look, which its
+     variant and state set as `--luke-button-*` on the button itself
+     (`button.css`), so a container's sheet restyles it by those alone. */
+  --font-ui: var(--luke-font-sans);
+  --font-weight-regular: var(--luke-weight-regular);
+  --font-weight-medium: var(--luke-weight-medium);
+  --font-weight-semibold: var(--luke-weight-semibold);
+  --text-body: var(--luke-type-body-size);
+  --text-body--line-height: var(--luke-type-body-leading);
+  --text-label: var(--luke-type-label-size);
+  --text-label--line-height: var(--luke-type-label-leading);
+  --text-caption: var(--luke-type-caption-size);
+  --text-caption--line-height: var(--luke-type-caption-leading);
+  --spacing-control: var(--luke-control-height);
+  --spacing-control-inset: var(--luke-control-inset);
+  --spacing-control-icon: var(--luke-control-icon);
+  --spacing-icon-gap: var(--luke-icon-gap);
+  --spacing-menu-row: var(--luke-menu-row-height);
+  /* The base scale by its own names (`px-luke-8` is `--luke-space-8`),
+     since Tailwind's numbered scale is in rem, which a root sized to its
+     words (the catalog's) would shrink. */
+  --spacing-luke-2: var(--luke-space-2);
+  --spacing-luke-4: var(--luke-space-4);
+  --spacing-luke-6: var(--luke-space-6);
+  --spacing-luke-8: var(--luke-space-8);
+  --spacing-luke-12: var(--luke-space-12);
+  --spacing-luke-16: var(--luke-space-16);
+  --spacing-luke-24: var(--luke-space-24);
+  --radius-luke-6: var(--luke-radius-6);
+  --radius-luke-8: var(--luke-radius-8);
+  --radius-luke-full: var(--luke-radius-full);
+  --radius-control: var(--luke-control-radius);
+  --radius-menu-row: var(--luke-menu-row-radius);
+  --color-subtle-foreground: var(--luke-color-text-subtle);
+  --color-button-fill: var(--luke-button-fill);
+  --color-button-ink: var(--luke-button-ink);
+  --color-button-edge: var(--luke-button-edge);
+
   /* Motion comes from the motion tokens alone (docs/DESIGN.md): a `transition`
      utility runs on the quick duration and the spring, never on Tailwind's
      own literal. */

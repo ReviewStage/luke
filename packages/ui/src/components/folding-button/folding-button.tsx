@@ -17,6 +17,7 @@ import {
   type ButtonSize,
   type ButtonVariant,
 } from "../button/button.js";
+import { cn } from "../../cn.js";
 import { Tooltip } from "../tooltip/hint.js";
 
 /**
@@ -43,6 +44,24 @@ import { Tooltip } from "../tooltip/hint.js";
  * words while they are folded and nothing while they are drawn, and wraps
  * the button's box, which hands what the hint gives it on to the button.
  */
+
+/**
+ * The box's own classes, and the fold it lays on its button: under a
+ * `--luke-fold` of `folded`, a square around the glyph, its words drawn
+ * nowhere though a reader still has them. Note that the fold is drawn from
+ * the box, whose child selectors outweigh the button's own utilities, so it
+ * needs no class on the button, which takes none.
+ */
+const FOLDING_BOX = cn(
+  "luke-folding-button inline-flex flex-none min-w-0 max-w-full",
+  "[@container_style(--luke-fold:folded)]:[&>.luke-button]:w-control",
+  "[@container_style(--luke-fold:folded)]:[&>.luke-button]:p-0",
+  "[@container_style(--luke-fold:folded)]:[&>.luke-button[data-size=compact]]:w-luke-24",
+  "[@container_style(--luke-fold:folded)]:[&_.luke-button-words]:sr-only",
+);
+
+/** A row-look box, the row's whole width, as the look says. */
+const FOLDING_ROW = "flex w-full";
 
 /** The value of `--luke-fold` that folds every folding button under it. */
 const FOLDED = "folded";
@@ -134,7 +153,7 @@ function FoldingBox({
   return (
     <span
       ref={measured}
-      className="luke-folding-button"
+      className={cn(FOLDING_BOX, variant === BUTTON_VARIANT.ROW && FOLDING_ROW)}
       data-row={variant === BUTTON_VARIANT.ROW ? "" : undefined}
     >
       <Button
