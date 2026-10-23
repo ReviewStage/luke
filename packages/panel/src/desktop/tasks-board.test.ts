@@ -843,6 +843,29 @@ test("a card's pull requests past the first three are counted, and the count han
   assert.doesNotMatch(card?.textContent ?? "", /more/u, "it counts nothing it leaves out");
 });
 
+test("a card whose window holds every agent but not the pull requests still draws the pull requests its row names", async () => {
+  handState({}, { tasks: { ...IDLE_TASKS_VIEW, taskAgents: [] } });
+  const board = await mountBoard([
+    {
+      ...task(42, "Fix Safari login", TASK_STATUS.IN_PROGRESS, TASK_PRIORITY.HIGH),
+      agents: {
+        total: 1,
+        working: 0,
+        agents: [],
+        pullRequestTotal: 1,
+        pullRequests: [pullRequestLine(4120)],
+      },
+    },
+  ]);
+
+  assert.deepEqual(
+    [...board.querySelectorAll('li[data-task-id="t-42"] [data-task-work="pull-request"]')].map(
+      (pill) => pill.textContent,
+    ),
+    ["#4120"],
+  );
+});
+
 test("a card's assignee hangs the person's card", async () => {
   const board = await mountBoard([
     {

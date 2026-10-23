@@ -15,8 +15,8 @@ import { agentStillWriting } from "./coding-agent-model.js";
  * (`taskAgents`) and every pull request of each (`taskPullRequests`). The
  * agents stand as the row names them, those at work first, then the rest,
  * newest started first within each; the pull requests in the row's order.
- * Where the window holds neither, before the list is followed live, the
- * row's own few stand in.
+ * Where the window does not hold one of the lists, as before the list is
+ * followed live, the row's own few stand in for it.
  */
 
 /** A task's agents and pull requests, every one the window holds. */
@@ -37,23 +37,33 @@ function workingFirst(a: TaskAgentLine & { createdAt: number }, b: typeof a): nu
   return working !== 0 ? working : b.createdAt - a.createdAt;
 }
 
-/** Every agent and pull request of one task, as the window held them at the last delivery that moved the list; none where it holds no live list. */
+/** What the window holds of one task's work beside the list: each list where the window holds it, apart, since each may stand without the other. */
+interface HeldWork {
+  readonly agents: readonly TaskAgentLine[] | undefined;
+  readonly pullRequests: readonly TaskPullRequestLine[] | undefined;
+}
+
+/** Every agent and pull request of one task, as the window held them at the last delivery that moved the list; each none where it holds no such list. */
 const taskWorkAtom = Atom.family((taskId: string) =>
-  Atom.map(planningAtom, (planning) => {
-    const agents = planning?.taskAgents;
-    if (agents === undefined) return undefined;
-    return {
-      agents: agents.filter((agent) => agent.planId === taskId).toSorted(workingFirst),
+  Atom.map(
+    planningAtom,
+    (planning): HeldWork => ({
+      agents: planning?.taskAgents
+        ?.filter((agent) => agent.planId === taskId)
+        .toSorted(workingFirst),
       pullRequests:
-        planning?.taskPullRequests?.find((each) => each.taskId === taskId)?.pullRequests ?? [],
-    };
-  }),
+        planning?.taskPullRequests === undefined
+          ? undefined
+          : (planning.taskPullRequests.find((each) => each.taskId === taskId)?.pullRequests ?? []),
+    }),
+  ),
 );
 
-/** Every agent a task holds and every pull request they opened; the row's own few where the window holds no live list. */
+/** Every agent a task holds and every pull request they opened; each the row's own few where the window holds no full list of it. */
 export function useTaskWork(task: Pick<TaskSummary, "id" | "agents">): TaskWork {
   const held = useAtomValue(taskWorkAtom(task.id));
-  return (
-    held ?? { agents: task.agents?.agents ?? [], pullRequests: task.agents?.pullRequests ?? [] }
-  );
+  return {
+    agents: held.agents ?? task.agents?.agents ?? [],
+    pullRequests: held.pullRequests ?? task.agents?.pullRequests ?? [],
+  };
 }
