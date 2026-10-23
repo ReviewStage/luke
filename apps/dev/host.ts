@@ -629,7 +629,7 @@ export function runOnMacFor(admit: CoderHost["admit"]) {
           }
           // SAFETY: eve hands a tool the JSON object the model emitted; the door parses it as wire input.
           const call = unparsedWire(input as WireBoundaryInput);
-          return yield* runOnMacTool(admitted.success.target.userId, call);
+          return yield* runOnMacTool(admitted.success.target, call);
         }),
       ),
   });

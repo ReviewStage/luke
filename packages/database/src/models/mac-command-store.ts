@@ -5,13 +5,18 @@ import {
   type MacCommandResult,
   macCommandResultSchema,
 } from "@luke/features/mac-command-wire";
-import { and, asc, eq, gte, inArray, isNotNull, isNull, type SQL } from "drizzle-orm";
+import { and, asc, eq, gte, inArray, isNotNull, isNull, ne, or, type SQL, sql } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
 import { type LiveStatement, liveSelection, liveStatementOf } from "../core/live-statement.js";
 import { Database, queryBuilder } from "../core/query.js";
+import { codingAgent } from "../schemas/coding-agent.js";
 import { macCommand, macCommandListener } from "../schemas/mac-command.js";
+import { conversations, messages } from "../schemas/storage.js";
+import { MESSAGE_SENDER } from "../storage-vocabulary.js";
 import type { TaskStoreEffect } from "./task-store.js";
+import type { ConversationTarget } from "./writer.js";
 
 /**
  * mac-command-store.ts -- the commands an account's agents queued for its Mac, and when a Mac last listened for them.
@@ -197,6 +202,51 @@ const findResult = SqlSchema.findOneOption({
     ),
 });
 
+/** A child conversation, which a worker runs in, read through to the root its lines were sent to. */
+const parent = alias(conversations, "parent");
+
+/** The agent that sent a line, read for whose it is. */
+const sendingAgent = alias(codingAgent, "sending_agent");
+
+/**
+ * One line of the conversation's root, or the root's own where it is one,
+ * that another account put there: a member other than the owner, a former
+ * member, or an agent that is not the owner's own or is gone.
+ */
+const findForeignLine = SqlSchema.findOneOption({
+  Request: Schema.Struct({ userId: Schema.String, conversationId: Schema.String }),
+  Result: Schema.Struct({ id: Schema.String }),
+  execute: ({ userId, conversationId }) =>
+    Database.use((db) =>
+      db
+        .select({ id: messages.id })
+        .from(conversations)
+        .leftJoin(parent, eq(parent.id, conversations.parentConversationId))
+        .innerJoin(
+          messages,
+          eq(messages.conversationId, sql`coalesce(${parent.id}, ${conversations.id})`),
+        )
+        .leftJoin(sendingAgent, eq(sendingAgent.id, messages.senderAgentId))
+        .where(
+          and(
+            eq(conversations.id, conversationId),
+            eq(conversations.userId, userId),
+            or(
+              and(
+                eq(messages.sender, MESSAGE_SENDER.MEMBER),
+                or(isNull(messages.senderUserId), ne(messages.senderUserId, userId)),
+              ),
+              and(
+                eq(messages.sender, MESSAGE_SENDER.AGENT),
+                or(isNull(sendingAgent.userId), ne(sendingAgent.userId, userId)),
+              ),
+            ),
+          ),
+        )
+        .limit(1),
+    ),
+});
+
 const deleteCommand = SqlSchema.void({
   Request: CommandKeySchema,
   execute: ({ userId, id }) =>
@@ -213,6 +263,17 @@ export function markMacListening(userId: string): TaskStoreEffect<void> {
 /** Whether a Mac of the account listened at or after the instant given. */
 export function macListeningSince(userId: string, since: Date): TaskStoreEffect<boolean> {
   return Effect.map(findListener({ userId, since }), Option.isSome);
+}
+
+/**
+ * Whether anyone but the conversation's owner has put words into it: a line
+ * another member sent, or one an agent that is not the owner's own sent, in
+ * the conversation or, for a worker's, in the agent's it was delegated from.
+ * Note that a line the service itself sends, such as a wake, is not counted,
+ * because no other account wrote it.
+ */
+export function heardFromAnotherAccount(target: ConversationTarget): TaskStoreEffect<boolean> {
+  return Effect.map(findForeignLine(target), Option.isSome);
 }
 
 /** Queues one command for the account's Mac, under the id its caller minted. */

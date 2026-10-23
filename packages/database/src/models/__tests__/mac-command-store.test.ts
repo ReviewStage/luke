@@ -13,11 +13,15 @@ import { Clock, Effect, Option, Schema } from "effect";
 import { SqlClient } from "effect/sql";
 import { Database } from "../../core/query.js";
 import { user } from "../../schemas/auth.js";
+import { codingAgent } from "../../schemas/coding-agent.js";
 import { macCommand } from "../../schemas/mac-command.js";
-import { getTestDB } from "../../testing/index.js";
+import { conversations, messages } from "../../schemas/storage.js";
+import { CONVERSATION_KIND, MESSAGE_SENDER, type MessageSender } from "../../storage-vocabulary.js";
+import { getTestDB, openWorkspace } from "../../testing/index.js";
 import {
   claimMacCommand,
   claimMacCommands,
+  heardFromAnotherAccount,
   macCommandResult,
   macCommandsLiveStatement,
   macCommandsWaiting,
@@ -237,6 +241,160 @@ it.layer(getTestDB())("the Mac command store", (it) => {
         Option.none(),
       );
       assert.deepEqual(yield* liveCommandsOf(owner, [MAC_COMMAND_KIND.SHELL]), [queued]);
+    }),
+  );
+});
+
+/** A coding agent's conversation under the account, with the agent itself in the workspace given, answering both ids. */
+const openAgent = (userId: string, organizationId: string) =>
+  Effect.gen(function* () {
+    const db = yield* Database;
+    const [id, conversationId] = [randomUUID(), randomUUID()];
+    yield* db
+      .insert(conversations)
+      .values({ id: conversationId, userId, kind: CONVERSATION_KIND.CODING_AGENT });
+    yield* db.insert(codingAgent).values({
+      id,
+      organizationId,
+      userId,
+      conversationId,
+      model: "anthropic/claude-opus-5.5",
+      effort: "high",
+      repository: "acme/api",
+      repositories: ["acme/api"],
+      idempotencyKey: randomUUID(),
+    });
+    return { id, conversationId };
+  });
+
+/** A worker's conversation delegated from the one given, under the same account. */
+const openWorker = (userId: string, parentConversationId: string) =>
+  Effect.gen(function* () {
+    const db = yield* Database;
+    const id = randomUUID();
+    yield* db.insert(conversations).values({
+      id,
+      userId,
+      kind: CONVERSATION_KIND.CHILD,
+      parentConversationId,
+    });
+    return id;
+  });
+
+/** One line sent into the conversation, as the writer keeps a developer's or an agent's line to a coding agent. */
+const sendLine = (
+  owner: string,
+  conversationId: string,
+  seq: number,
+  sender: {
+    readonly kind: MessageSender;
+    readonly userId?: string;
+    readonly agentId?: string;
+  },
+) =>
+  Effect.gen(function* () {
+    const db = yield* Database;
+    yield* db.insert(messages).values({
+      userId: owner,
+      conversationId,
+      seq,
+      clientId: randomUUID(),
+      role: "user",
+      parts: [],
+      placedAt: yield* now,
+      sender: sender.kind,
+      senderUserId: sender.userId ?? null,
+      senderAgentId: sender.agentId ?? null,
+    });
+  });
+
+it.layer(getTestDB())("who has put words into an agent's conversation", (it) => {
+  const people = Effect.gen(function* () {
+    const { owner: starter, other: teammate } = yield* openAccounts;
+    const workspace = yield* openWorkspace(starter);
+    return { starter, teammate, workspace };
+  });
+
+  it.effect(
+    "only the starter, their own agents, and the service's wakes leave it the starter's",
+    () =>
+      Effect.gen(function* () {
+        const { starter, workspace } = yield* people;
+        const agent = yield* openAgent(starter, workspace);
+        const own = yield* openAgent(starter, workspace);
+        yield* sendLine(starter, agent.conversationId, 1, {
+          kind: MESSAGE_SENDER.MEMBER,
+          userId: starter,
+        });
+        yield* sendLine(starter, agent.conversationId, 2, {
+          kind: MESSAGE_SENDER.AGENT,
+          agentId: own.id,
+        });
+        yield* sendLine(starter, agent.conversationId, 3, { kind: MESSAGE_SENDER.LUKE });
+        const target = { userId: starter, conversationId: agent.conversationId };
+        assert.equal(yield* heardFromAnotherAccount(target), false);
+      }),
+  );
+
+  it.effect("a teammate's line, or a line from their agent, counts as another account's", () =>
+    Effect.gen(function* () {
+      const { starter, teammate, workspace } = yield* people;
+      const messaged = yield* openAgent(starter, workspace);
+      yield* sendLine(starter, messaged.conversationId, 1, {
+        kind: MESSAGE_SENDER.MEMBER,
+        userId: teammate,
+      });
+      const theirs = yield* openAgent(teammate, workspace);
+      const reached = yield* openAgent(starter, workspace);
+      yield* sendLine(starter, reached.conversationId, 1, {
+        kind: MESSAGE_SENDER.AGENT,
+        agentId: theirs.id,
+      });
+      for (const { conversationId } of [messaged, reached]) {
+        assert.equal(yield* heardFromAnotherAccount({ userId: starter, conversationId }), true);
+      }
+    }),
+  );
+
+  it.effect("a line whose sender is gone counts as another account's", () =>
+    Effect.gen(function* () {
+      const { starter, workspace } = yield* people;
+      const agent = yield* openAgent(starter, workspace);
+      yield* sendLine(starter, agent.conversationId, 1, { kind: MESSAGE_SENDER.MEMBER });
+      yield* sendLine(starter, agent.conversationId, 2, {
+        kind: MESSAGE_SENDER.AGENT,
+        agentId: randomUUID(),
+      });
+      const target = { userId: starter, conversationId: agent.conversationId };
+      assert.equal(yield* heardFromAnotherAccount(target), true);
+    }),
+  );
+
+  it.effect("a worker's conversation reads the lines of the agent it was delegated from", () =>
+    Effect.gen(function* () {
+      const { starter, teammate, workspace } = yield* people;
+      const agent = yield* openAgent(starter, workspace);
+      const worker = yield* openWorker(starter, agent.conversationId);
+      const target = { userId: starter, conversationId: worker };
+      assert.equal(yield* heardFromAnotherAccount(target), false);
+      yield* sendLine(starter, agent.conversationId, 1, {
+        kind: MESSAGE_SENDER.MEMBER,
+        userId: teammate,
+      });
+      assert.equal(yield* heardFromAnotherAccount(target), true);
+    }),
+  );
+
+  it.effect("an account reads nothing of a conversation that is not its own", () =>
+    Effect.gen(function* () {
+      const { starter, teammate, workspace } = yield* people;
+      const agent = yield* openAgent(starter, workspace);
+      yield* sendLine(starter, agent.conversationId, 1, {
+        kind: MESSAGE_SENDER.MEMBER,
+        userId: teammate,
+      });
+      const target = { userId: teammate, conversationId: agent.conversationId };
+      assert.equal(yield* heardFromAnotherAccount(target), false);
     }),
   );
 });
