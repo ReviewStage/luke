@@ -23,9 +23,6 @@ import {
   ErrorState,
   ExpandIcon,
   Fill,
-  HoverCard,
-  HoverCardHead,
-  HoverCardNote,
   IconButton,
   LIST_DENSITY,
   List,
@@ -92,13 +89,7 @@ import { panelTabPlace } from "../links-at-hand.js";
 import { useMemberDirectory } from "../member-directory.js";
 import { type MenuRow, MenuRowList } from "../searchable-menu.js";
 import { GLYPH_STATE, type GlyphState, stateEndMark } from "../state-glyph.js";
-import {
-  AgentActorRef,
-  AgentCard,
-  agentCardReading,
-  agentSubject,
-  NOTHING_HELD,
-} from "../tasks/agent-ref.js";
+import { AgentActorRef, agentSubject, NOTHING_HELD } from "../tasks/agent-ref.js";
 import { AgentSubagentTab, type BriefTask, type TranscriptCards } from "../tasks/agent-tab.js";
 import {
   AgentTabCard,
@@ -108,10 +99,8 @@ import {
   heldLatest,
   lastFinished,
 } from "../tasks/agent-tab-card.js";
-import { ChangesCard, peopleOf } from "../tasks/changes-card.js";
-import { PageChipCard, TaskChipCard } from "../tasks/chip-cards.js";
+import { peopleOf } from "../tasks/changes-card.js";
 import {
-  browserOf,
   CloudBrowserDraftPane,
   type CloudBrowserOwner,
   CloudBrowserPane,
@@ -130,11 +119,11 @@ import {
   agentTabLabel,
   subagentActor,
 } from "../tasks/coding-agent-model.js";
-import { FileCard, fileLook, newestFileNote } from "../tasks/file-ref.js";
+import { fileLook, newestFileNote } from "../tasks/file-ref.js";
 import { snippetOf } from "../tasks/file-tab-model.js";
 import { FileView, type TreeShown } from "../tasks/file-view.js";
+import type { InboxBoardView } from "../tasks/inbox-model.js";
 import { MacTerminalTab } from "../tasks/mac-terminal-tab.js";
-import { PageCard, PageNameCard } from "../tasks/page-card.js";
 import { PagePane } from "../tasks/page-pane.js";
 import { PlanCommentsTab } from "../tasks/plan-comments.js";
 import { ofPullRequestTab, pullRequestOfTab } from "../tasks/pull-request-number.js";
@@ -148,7 +137,7 @@ import {
 } from "../tasks/tab-look.js";
 import { TaskBoard } from "../tasks/task-board.js";
 import { useOpenTerminal } from "../tasks/terminal-commands.js";
-import { TerminalCardFoot, TerminalStanding } from "../tasks/terminal-shells.js";
+import { TerminalStanding } from "../tasks/terminal-shells.js";
 import { TerminalTab } from "../tasks/terminal-tab.js";
 import { cardTitle, TOOL_TARGET, type ToolTarget } from "../tasks/tool-call-model.js";
 import {
@@ -199,6 +188,7 @@ import {
   type WorkerStandings,
 } from "./strip-tabs.js";
 import { LOOK_STRIP, useStripLooks } from "./switcher-looks.js";
+import { type CardSubject, tabCard } from "./tab-card.js";
 import { TabStrip } from "./tab-strip.js";
 
 /**
@@ -455,21 +445,6 @@ function cloudBrowserTitleOf(drawn: DrawnCloudBrowser): string {
   return (URL.canParse(tab.address) ? new URL(tab.address).host : "") || TAB_WORDS.BROWSER;
 }
 
-/** A cloud Browser tab's card: its title, under the glyph of whose browser it lives in, which the line under says, then its address once it has one. */
-function CloudBrowserCard({ drawn }: { drawn: DrawnCloudBrowser }): React.JSX.Element {
-  const address = "tab" in drawn ? drawn.tab.address : "";
-  return (
-    <HoverCard data-tab-card="">
-      <HoverCardHead
-        glyph={drawn.owner.icon}
-        name={cloudBrowserTitleOf(drawn)}
-        sub={`In ${browserOf(drawn.owner.name)}`}
-      />
-      {address.length === 0 ? null : <HoverCardNote oneLine>{address}</HoverCardNote>}
-    </HoverCard>
-  );
-}
-
 /** No Changes tab open on the task, the same array every render. */
 const NO_OPEN_CHANGES: readonly ChangesStripTab[] = [];
 
@@ -600,17 +575,20 @@ export interface PanelCards {
   readonly onOpenAgent: (agentId: string) => void;
 }
 
-/** An agent's tab card as a row of its terminal or its browser hangs it, `foot` under it where the row says more. */
+/** An agent's tab card as a row of its browser hangs it, named as the row names the agent. */
 function agentRowCard(
   agent: CodingAgentSummary,
   label: string,
   cards: PanelCards | undefined,
-  foot?: React.ReactNode,
 ): React.ReactNode {
   if (cards === undefined) return undefined;
   const { agents, held, shownAgent } = cards;
-  const read = agentCardReading(agent, label, held, shownAgent === agent.id, agents);
-  return <AgentTabCard name={label} models={agents.models ?? []} read={read} foot={foot} />;
+  const subject = agentSubject(agents, agent.id, held, shownAgent === agent.id);
+  return hungCard({
+    kind: TAB_KIND.AGENT,
+    subject: { ...subject, name: label },
+    models: agents.models,
+  });
 }
 
 /**
@@ -711,15 +689,13 @@ export function panelEntries(input: {
     // Note that the card's note is of the revision the row opens: the open tab's, else the one shown.
     const commit = open ? tab.commit : ref.commit;
     const card =
-      cards === undefined ? undefined : (
-        <FileCard
-          path={ref.path}
-          note={newestFileNote(cards.shown, ref.path, {
-            repository: cards.repository,
-            commit,
-          })}
-        />
-      );
+      cards === undefined
+        ? undefined
+        : hungCard({
+            kind: TAB_KIND.FILE,
+            path: ref.path,
+            note: newestFileNote(cards.shown, ref.path, { repository: cards.repository, commit }),
+          });
     return {
       row: { id: String(at), ...fileLook(ref.path), section: ADD_SECTION.FILES },
       card,
@@ -732,15 +708,16 @@ export function panelEntries(input: {
   const changesRows = changes.map(({ agentId, label, pullRequest }) => {
     const look = tabLook({ kind: TAB_KIND.CHANGES, pullRequest });
     const card =
-      cards === undefined ? undefined : (
-        <ChangesCard
-          subject={agentSubject(cards.agents, agentId, cards.held, cards.shownAgent === agentId)}
-          models={cards.agents.models}
-          pullRequest={pullRequest}
-          people={peopleOf(cards.agents.changesPeople.get(agentId), pullRequest)}
-          onOpenAgent={() => cards.onOpenAgent(agentId)}
-        />
-      );
+      cards === undefined
+        ? undefined
+        : hungCard({
+            kind: TAB_KIND.CHANGES,
+            subject: agentSubject(cards.agents, agentId, cards.held, cards.shownAgent === agentId),
+            models: cards.agents.models,
+            pullRequest,
+            people: peopleOf(cards.agents.changesPeople.get(agentId), pullRequest),
+            onOpenAgent: () => cards.onOpenAgent(agentId),
+          });
     return {
       row: {
         id: pullRequest.url,
@@ -759,7 +736,16 @@ export function panelEntries(input: {
       ...tabLook({ kind: TAB_KIND.PAGE, title: page.title }),
       section: ADD_SECTION.PAGES,
     },
-    card: cards === undefined ? undefined : <PageCard place={cards.pagePlace} page={page} />,
+    card:
+      cards === undefined
+        ? undefined
+        : hungCard({
+            kind: TAB_KIND.PAGE,
+            place: cards.pagePlace,
+            pageId: page.id,
+            name: page.title,
+            page,
+          }),
     onPick: () => panel.onChoose({ page: page.id }),
   }));
   // A terminal's row adds a shell to its agent's sandbox, as New terminal
@@ -776,31 +762,40 @@ export function panelEntries(input: {
     },
     // Note that the row hangs its Terminal tab's card: its agent's, saying under a rule whose sandbox its shells run in.
     endMark: agentEndMark(agent, true),
-    card: agentRowCard(agent, label, cards, <TerminalCardFoot agentId={agent.id} />),
+    card:
+      cards === undefined
+        ? undefined
+        : hungCard({
+            kind: TAB_KIND.TERMINAL,
+            agentId: agent.id,
+            subject: agentSubject(
+              cards.agents,
+              agent.id,
+              cards.held,
+              cards.shownAgent === agent.id,
+            ),
+            models: cards.agents.models,
+          }),
     onPick: () => input.terminals?.onNew(agent.id),
   }));
   const browserRows = browserEntries(input.browsers, cards);
   return [...kinds, ...fileRows, ...changesRows, ...pageRows, ...terminalRows, ...browserRows];
 }
 
-/**
- * The Plan tab's card: the task's own card, as its sidebar row and a chip
- * naming it hang it (`TaskChipCard`), or its glyph and name where the
- * window lists no such task; none where the panel knows no task. The plan's
- * summary row hangs the same (`task-summary.tsx`).
- */
-export function planTabCard(
-  planId: string | undefined,
-  plan: PlanStanding | undefined,
-): React.ReactNode {
-  if (planId === undefined || plan === undefined) return undefined;
-  const { icon, label } = tabLook({ kind: TAB_KIND.PLAN, ...plan });
-  const fallback = (
-    <HoverCard>
-      <HoverCardHead glyph={icon} name={label} />
-    </HoverCard>
-  );
-  return <TaskChipCard taskId={planId} fallback={fallback} />;
+/** A tab's card as a hover hangs it (`tab-card.tsx`): none for a kind that hangs none, when the hover hangs its hint. */
+function hungCard(subject: CardSubject): ReactNode {
+  return tabCard(subject) ?? undefined;
+}
+
+/** The task the panel stands beside, as its Plan tab's card reads it; none where the panel knows no task. */
+function planOf(input: {
+  planId: string | undefined;
+  plan: PlanStanding | undefined;
+}): { taskId: string; standing: PlanStanding } | undefined {
+  const { planId, plan } = input;
+  return planId === undefined || plan === undefined
+    ? undefined
+    : { taskId: planId, standing: plan };
 }
 
 /** A Pull request tab's look, named by its pull request's number and title as the task's agents last read it, wearing its mark for where it stands. */
@@ -883,6 +878,8 @@ function stripTabs(input: {
   inboxWaiting: number;
   /** Whether a card of the task's Inbox holds a draft, which its tab marks while another is chosen. */
   inboxDrafted: boolean;
+  /** The task's Inbox as its board reads, which its tab's card says; none beside anything but a task's page. */
+  inbox: InboxBoardView | undefined;
 }): DrawnTab[] {
   const { panel, unread, agents, subagents, files, changes, pages, terminals, shown, held } = input;
   const { repository, copied, onOpenAgent, shownAgent, pagePlace } = input;
@@ -910,7 +907,7 @@ function stripTabs(input: {
       detail: tab === SIDE_PANEL_TAB.INBOX && inboxWaiting > 0 ? String(inboxWaiting) : undefined,
       endMark:
         tab === SIDE_PANEL_TAB.INBOX && inboxDrafted && !chosen(tab) ? <DraftMark /> : undefined,
-      card: tab === SIDE_PANEL_TAB.PLAN ? planTabCard(input.planId, input.plan) : undefined,
+      card: hungCard({ kind: TAB_KIND.PANEL, tab, plan: planOf(input), inbox: input.inbox }),
     }),
     close: () => panel.onClose(tab),
   }));
@@ -940,7 +937,7 @@ function stripTabs(input: {
       look: look(tab, {
         ...tabLook({ kind: TAB_KIND.SUBAGENT, name: label, model, state }),
         endMark: stateEndMark(state, false),
-        card: <AgentTabCard name={label} untitled={untitled} models={models} read={readCard} />,
+        card: hungCard({ kind: TAB_KIND.SUBAGENT, name: label, untitled, models, read: readCard }),
       }),
       close: () => panel.onClose(tab),
       copy: copied(read),
@@ -949,12 +946,15 @@ function stripTabs(input: {
   // A file's tab hangs the file's card, as every place naming the file does.
   const fileTabs = files.map(({ path, commit }) => {
     const note = newestFileNote(shown, path, { repository, commit });
-    const card = <FileCard path={path} note={note} />;
     return {
       tab: { file: path },
       look: look(
         { file: path },
-        { ...tabLook({ kind: TAB_KIND.FILE, path }), tooltip: path, card },
+        {
+          ...tabLook({ kind: TAB_KIND.FILE, path }),
+          tooltip: path,
+          card: hungCard({ kind: TAB_KIND.FILE, path, note }),
+        },
       ),
       close: () => panel.onClose({ file: path }),
     };
@@ -963,19 +963,20 @@ function stripTabs(input: {
   const changesTabs = changes.map((tab) => {
     const subject = agentSubject(agents, tab.changes, held, shownAgent === tab.changes);
     const pullRequest = pullRequestOfTab(agents, tab);
-    const card =
-      subject.agent === undefined || pullRequest === undefined ? undefined : (
-        <ChangesCard
-          subject={subject}
-          models={agents.models}
-          pullRequest={pullRequest}
-          people={peopleOf(agents.changesPeople.get(tab.changes), pullRequest)}
-          onOpenAgent={() => onOpenAgent(tab.changes)}
-        />
-      );
+    const changesCard = hungCard({
+      kind: TAB_KIND.CHANGES,
+      subject,
+      models,
+      pullRequest,
+      people:
+        pullRequest === undefined
+          ? undefined
+          : peopleOf(agents.changesPeople.get(tab.changes), pullRequest),
+      onOpenAgent: () => onOpenAgent(tab.changes),
+    });
     return {
       tab,
-      look: look(tab, { ...changesLook(tab, agents), card }),
+      look: look(tab, { ...changesLook(tab, agents), card: changesCard }),
       close: () => panel.onClose(tab),
     };
   });
@@ -984,7 +985,13 @@ function stripTabs(input: {
     tab,
     look: look(tab, {
       ...tabLook({ kind: TAB_KIND.PAGE, title: line.title }),
-      card: <PageCard place={pagePlace} page={line} />,
+      card: hungCard({
+        kind: TAB_KIND.PAGE,
+        place: pagePlace,
+        pageId: line.id,
+        name: line.title,
+        page: line,
+      }),
     }),
     close: () => panel.onClose(tab),
   }));
@@ -992,20 +999,12 @@ function stripTabs(input: {
   // card, saying under a rule whose sandbox its shells run in.
   const terminalTabs = terminals.map((tab) => {
     const subject = agentSubject(agents, tab.terminal, held, false);
-    const card = (
-      <AgentTabCard
-        name={subject.name}
-        models={models}
-        read={subject.read}
-        foot={<TerminalCardFoot agentId={tab.terminal} />}
-      />
-    );
     return {
       tab,
       look: look(tab, {
         ...tabLook({ kind: TAB_KIND.TERMINAL, agent: subject.agent }),
         detail: subject.name,
-        card,
+        card: hungCard({ kind: TAB_KIND.TERMINAL, agentId: tab.terminal, subject, models }),
       }),
       close: () => panel.onClose(tab),
     };
@@ -1027,7 +1026,12 @@ function stripTabs(input: {
         look: look(tab, {
           icon: drawn.owner.icon,
           label: cloudBrowserTitleOf(drawn),
-          card: <CloudBrowserCard drawn={drawn} />,
+          card: hungCard({
+            kind: TAB_KIND.BROWSER,
+            owner: drawn.owner,
+            title: cloudBrowserTitleOf(drawn),
+            address: "tab" in drawn ? drawn.tab.address : "",
+          }),
         }),
         close: () => {
           if ("draft" in drawn && input.planId !== undefined) {
@@ -1042,13 +1046,13 @@ function stripTabs(input: {
   const transcriptTabs = panel.strip.filter(isTranscriptTab).flatMap((tab) => {
     const agent = agents.agents?.find((each) => each.id === tab.transcript);
     if (agent === undefined) return [];
-    const { name, read } = agentSubject(agents, agent.id, held, chosen(tab));
+    const subject = agentSubject(agents, agent.id, held, chosen(tab));
     return [
       {
         tab,
         look: look(tab, {
-          ...tabLook({ kind: TAB_KIND.AGENT, name, agent }),
-          card: <AgentTabCard name={name} models={models} read={read} />,
+          ...tabLook({ kind: TAB_KIND.AGENT, name: subject.name, agent }),
+          card: hungCard({ kind: TAB_KIND.AGENT, subject, models }),
         }),
         close: () => panel.onClose(tab),
       },
@@ -1071,11 +1075,13 @@ function stripTabs(input: {
  * The strip of tabs across the panel's top: the open fixed tabs, then the
  * subagents and the files, then the "+". A fixed tab's own word is all it
  * needs to say, so it hangs no pill, but the Plan tab, which hangs the
- * task's card as its sidebar row does (`planTabCard`), while a subagent's hangs a card naming
+ * task's card as its sidebar row does, and the Inbox, which hangs what
+ * waits as the plan's summary row does, while a subagent's hangs a card naming
  * it whole with when it last moved and its latest step
  * (`agent-tab-card.tsx`), and a Changes tab its pull request's, naming the
  * agent whose it is (`ChangesCard`), and a page's a preview of the page
- * (`PageCard`); no tab has a chord. A tab something arrived on
+ * (`PageCard`), each drawn by `tabCard` as every other place naming what
+ * the tab shows draws it; no tab has a chord. A tab something arrived on
  * while another was shown reads in semibold until shown. Every tab, of
  * whatever kind, stands at the strip's end once opened, a subagent's
  * wearing the worker's glyph with a ring while it runs, until the developer
@@ -1113,7 +1119,7 @@ function PanelTabs({
   handed,
   onOpenAgent,
   shownAgent,
-  inboxWaiting,
+  inbox,
   inboxDrafted,
   activity,
 }: {
@@ -1155,8 +1161,8 @@ function PanelTabs({
   onOpenAgent: (agentId: string) => void;
   /** The agent whose tab the plan's column shows, whose Changes card follows its run. */
   shownAgent: string | undefined;
-  /** How many of the task's inbox items wait on the developer, which its Inbox tab counts. */
-  inboxWaiting: number;
+  /** The task's Inbox as its board reads, whose items waiting on the developer its tab counts and its card says; none beside anything but a task's page. */
+  inbox: InboxBoardView | undefined;
   /** Whether a card of the task's Inbox holds a draft, which its tab marks while another is chosen. */
   inboxDrafted: boolean;
   /** Where a phone's Activity lists the tabs in the strip's place, how a row's press leaves the list, and where the tab shown is handed on; none where the strip is the way between them. */
@@ -1182,8 +1188,9 @@ function PanelTabs({
     pagePlace: pagePlaceOf(holder, taskId),
     plan: task,
     planId: holder === SIDE_PANEL_HOLDER.TASK ? taskId : undefined,
-    inboxWaiting,
+    inboxWaiting: inbox?.open.length ?? 0,
     inboxDrafted,
+    inbox,
   });
   const strip = inTaskOrder(kinds, panel.order, (entry) => entry.tab);
   // Note that only a task's panel hands its looks over, since an agent's page holds its panel under the agent's id.
@@ -1557,18 +1564,17 @@ export interface TaskCards {
 }
 
 /**
- * The cards a transcript's rows hang, each the card of the tab the row
- * opens: a call about an agent the agent's (`agent-ref.tsx`), code shown
- * the file's, with Luke's note on the lines (`file-ref.tsx`), a page shown
- * or read the page's, previewing it, as its tab and its chip hang it
- * (`page-card.tsx`), and a subagent's row its worker's, read as its tab
- * reads its own, `chosen` telling whether that tab is the one shown, whose
- * transcript follows the run. A call's own rows name no worker, and hang
+ * The cards a transcript's rows hang, each the card the tab the row opens
+ * hangs, drawn as that tab draws it (`tab-card.tsx`): an agent's, code
+ * shown the file's with Luke's note on the lines, a page's previewing it,
+ * the plan's or another task's the task's card, and a subagent's row its
+ * worker's, read as its tab reads its own, `chosen` telling whether that
+ * tab is the one shown, whose transcript follows the run; a tab that hangs
+ * none leaves the row its hint. A call's own rows name no worker, and hang
  * none for one. An agent's transcript also names the task whose plan it was
  * handed, by `task`, and every transcript names an agent a call is about by
- * its tab's tile and name, by `agent`. Every kind of target is answered by
- * name, so a kind added to `TOOL_TARGET` is a choice made here of the card
- * its row hangs rather than a hint it falls back to unseen.
+ * its tab's tile and name, by `agent`. Every kind of target names the tab
+ * it opens, so a kind added to `TOOL_TARGET` is a choice made here.
  */
 export function taskCards(input: {
   agents: CodingAgentsControl;
@@ -1576,39 +1582,45 @@ export function taskCards(input: {
   chosen: (tab: StripTab) => boolean;
   /** Every code Luke showed on the task, whose note on a `show_code` call's lines its row's card says. */
   shownCode: readonly TaskCodeShowing[];
-  /** What the transcript's pages stand on, its task or its agent on no task, which a page's row reads its card from; none where its rows open no page. */
+  /** What the transcript stands on, its task or its agent on no task, which a page's row reads its card from and a plan's row names; none where its rows open neither. */
   pages: PagePlace | undefined;
   /** The plan's task, which an agent's plan card names as its sender. */
   task?: BriefTask | undefined;
 }): TaskCards {
   const { agents, held, chosen, shownCode, pages, task } = input;
-  const target = (opened: ToolTarget, name?: string): ReactNode => {
+  // The task the transcript stands on, whose Plan tab a row opens; none for an agent on no task.
+  const taskId = pages !== undefined && "taskId" in pages ? pages.taskId : undefined;
+  const subjectOf = (opened: ToolTarget, name: string | undefined): CardSubject | undefined => {
     switch (opened.kind) {
       case TOOL_TARGET.SHOWN_CODE: {
         const note = shownCode.find((each) => each.callId === opened.call)?.code.note;
-        return <FileCard path={opened.ref.path} note={note} />;
+        return { kind: TAB_KIND.FILE, path: opened.ref.path, note };
       }
       case TOOL_TARGET.AGENT: {
-        const tab = { agent: opened.agent };
-        const subject = agentSubject(agents, opened.agent, held, chosen(tab));
-        return <AgentCard subject={subject} models={agents.models} />;
+        const subject = agentSubject(agents, opened.agent, held, chosen({ agent: opened.agent }));
+        return { kind: TAB_KIND.AGENT, subject, models: agents.models };
       }
       case TOOL_TARGET.PAGE:
-        return pages === undefined ? undefined : (
-          <PageChipCard
-            place={pages}
-            pageId={opened.page}
-            fallback={<PageNameCard name={name} />}
-          />
-        );
-      // Note that these tabs hang a pill or a card the row has no read of yet, so the row's hint says what it opens.
-      case TOOL_TARGET.BOARD:
+        return pages === undefined
+          ? undefined
+          : { kind: TAB_KIND.PAGE, place: pages, pageId: opened.page, name };
       case TOOL_TARGET.PLAN:
-      case TOOL_TARGET.INBOX:
-      case TOOL_TARGET.CHAT:
+        return taskId === undefined
+          ? undefined
+          : { kind: TAB_KIND.PLAN, taskId, name: task?.name, status: task?.status };
       case TOOL_TARGET.TASK:
-        return undefined;
+        return { kind: TAB_KIND.PLAN, taskId: opened.task, name };
+      case TOOL_TARGET.BOARD:
+        return { kind: TAB_KIND.PANEL, tab: SIDE_PANEL_TAB.BOARD };
+      case TOOL_TARGET.INBOX:
+        return { kind: TAB_KIND.PANEL, tab: SIDE_PANEL_TAB.INBOX };
+      case TOOL_TARGET.CHAT:
+        return { kind: TAB_KIND.CHAT };
     }
+  };
+  const target = (opened: ToolTarget, name?: string): ReactNode => {
+    const subject = subjectOf(opened, name);
+    return subject === undefined ? undefined : hungCard(subject);
   };
   // An agent the plan lists is named on a call's row as its tab wears it; one it does not is left to the call's answer.
   const agent = (agentId: string) => {
@@ -2219,9 +2231,13 @@ export function SidePanel({
   plan?: React.ReactNode;
   /** The task whose plan that is, whose name and status its Plan tab wears; none beside anything but a task's page. */
   task?: PlanStanding | undefined;
-  /** The task's Inbox, which its Inbox tab shows, how many of its items wait on the developer, which the tab counts, and whether a card holds a draft, which the tab marks; none beside anything but a task's page. */
+  /** The task's Inbox, which its Inbox tab shows, its board, whose items waiting on the developer the tab counts and its card says, and whether a card holds a draft, which the tab marks; none beside anything but a task's page. */
   inbox?:
-    | { readonly body: React.ReactNode; readonly waiting: number; readonly drafted: boolean }
+    | {
+        readonly body: React.ReactNode;
+        readonly board: InboxBoardView;
+        readonly drafted: boolean;
+      }
     | undefined;
   /** The task's Chat, its channel, which its Chat tab shows; none where Chat is off or beside anything but a task's page. */
   chat?: React.ReactNode;
@@ -2485,7 +2501,7 @@ export function SidePanel({
           handed={handed}
           onOpenAgent={(agent) => onOpenTarget({ kind: TOOL_TARGET.AGENT, agent })}
           shownAgent={shownAgent}
-          inboxWaiting={inbox?.waiting ?? 0}
+          inbox={inbox?.board}
           inboxDrafted={inbox?.drafted ?? false}
           task={task}
           activity={

@@ -301,6 +301,19 @@ test("the side panel's Plan tab hangs the task's card, as its sidebar row does",
   assert.match(card.textContent ?? "", /Invite flow/u, "the card lists the task's agents");
 });
 
+test("the side panel's Inbox tab hangs what waits on the developer, as the plan's summary row does", async () => {
+  const panel = (await mount()).querySelector(".side-panel-tabs");
+  const tab = [...(panel?.querySelectorAll<HTMLElement>('[role="tab"]') ?? [])].find(
+    (each) => each.querySelector(".luke-tab-label")?.firstChild?.textContent === "Inbox",
+  );
+  assert.ok(tab, "the strip has the Inbox tab");
+  restOn(tab);
+  const card = document.querySelector(".luke-tooltip-card [data-tab-card]");
+  assert.ok(card, "the Inbox's card is hung");
+  assert.equal(card.querySelector(".luke-hover-card-name")?.textContent, "Inbox");
+  assert.ok(card.querySelector(".luke-hover-card-corner")?.textContent, "it says how many wait");
+});
+
 test("a Terminal tab wears its agent's glyph, says Terminal with the agent's name beside it, and hangs the agent's card saying whose sandbox it is in", async () => {
   const panel = (await mount()).querySelector(".side-panel-tabs");
   const tab = [...(panel?.querySelectorAll<HTMLElement>('[role="tab"]') ?? [])].find(

@@ -7,9 +7,6 @@ import {
   Card,
   type ContextMenuProps,
   GAP,
-  HoverCard,
-  HoverCardHead,
-  HoverCardNote,
   IconButton,
   LAYOUT_ELEMENT,
   LIST_DENSITY,
@@ -25,7 +22,7 @@ import {
   useMenu,
 } from "@luke/ui";
 import { openThread, usePlanCommentsControl } from "@luke/ui/plan-comments";
-import { sameTab, TAB_WORDS } from "@luke/ui/tab-strip-model";
+import { sameTab } from "@luke/ui/tab-strip-model";
 import { useDisclosure } from "@luke/ui/use-disclosure";
 import { shownFiles } from "@luke/voice/code-pane-model";
 import { ChevronsLeftIcon, ChevronsRightIcon, ListIcon } from "lucide-react";
@@ -39,13 +36,10 @@ import {
   useState,
 } from "react";
 import { agentPlace, useCopyLinkItem } from "../copy-link-item.js";
-import { agentCardReading, agentSubject } from "../tasks/agent-ref.js";
-import { AgentTabCard } from "../tasks/agent-tab-card.js";
-import { ChangesCard, peopleOf } from "../tasks/changes-card.js";
-import { agentTabLabel } from "../tasks/coding-agent-model.js";
-import { FileCard, newestFileNote } from "../tasks/file-ref.js";
-import { type InboxBoardView, NEEDS_YOU } from "../tasks/inbox-model.js";
-import { PageCard } from "../tasks/page-card.js";
+import { agentSubject } from "../tasks/agent-ref.js";
+import { peopleOf } from "../tasks/changes-card.js";
+import { newestFileNote } from "../tasks/file-ref.js";
+import type { InboxBoardView } from "../tasks/inbox-model.js";
 import { openPlanStanding, TAB_KIND, tabLook } from "../tasks/tab-look.js";
 import type { CodingAgentsControl } from "../tasks/use-coding-agents.js";
 import { SIDE_PANEL_TAB } from "../tasks/use-side-panel.js";
@@ -53,14 +47,9 @@ import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { ActionMenu } from "./action-menu.js";
 import { ArchivedAgents, useAgentArchive } from "./agent-archive.js";
 import { AGENTS_SECTION, agentEntries, INBOX_ROW, inboxEntry } from "./main-tabs.js";
-import {
-  ADD_SECTION,
-  type ChangesOffer,
-  changesOffers,
-  panelEntries,
-  planTabCard,
-} from "./side-panel.js";
+import { ADD_SECTION, type ChangesOffer, changesOffers, panelEntries } from "./side-panel.js";
 import type { AddEntry, HeldTranscripts } from "./strip-tabs.js";
+import { type CardSubject, tabCard } from "./tab-card.js";
 
 /**
  * task-summary.tsx -- the open task's summary at its column's right: everything the task's two "+" menus open, at a glance, pinned beside the document or folded to a rail of glyphs that expands in place as a card.
@@ -346,36 +335,14 @@ interface SummarySection<Entry extends AddEntry = SummaryEntry> {
 }
 
 /**
- * The Inbox row's card, in a tab card's look: its name, how many items wait
- * on the developer at its right, and under them the title of the newest
- * that waits, or of the latest settled where none does.
- */
-function InboxCard({ inbox }: { inbox: InboxBoardView }): React.JSX.Element {
-  const waiting = inbox.open.length;
-  const latest = waiting > 0 ? inbox.open.at(-1) : inbox.settled[0];
-  return (
-    <HoverCard data-tab-card="">
-      <HoverCardHead
-        name={TAB_WORDS.INBOX}
-        corner={
-          waiting === 0
-            ? NEEDS_YOU.NONE
-            : `${waiting} ${waiting === 1 ? NEEDS_YOU.COUNT.one : NEEDS_YOU.COUNT.many}`
-        }
-      />
-      {latest === undefined ? null : <HoverCardNote>{latest.title}</HoverCardNote>}
-    </HoverCard>
-  );
-}
-
-/**
  * The card each row hangs, the one its tab hangs where it has one: an
  * agent's its tab's card, read from what its tab last held; a file's its
  * path and the agent's note; a pull request's its title, number, and what it
  * changes, under the agent whose it is; a page's a preview of its newest
- * version; the Inbox's what waits; the plan's the task's card, as its tab
- * hangs it. The panel's other kinds hang none, as their tabs hang none,
- * since their names say all there is.
+ * version; the Inbox's what waits; the plan's the task's card. Each is
+ * the card its tab hangs (`tab-card.tsx`), so the row and the tab never
+ * say different things; the panel's other kinds hang none, as their tabs
+ * hang none, since their names say all there is.
  */
 function withCards(
   entries: readonly AddEntry[],
@@ -394,47 +361,52 @@ function withCards(
   const { agents, mainTabs } = tasks;
   const models = agents.models ?? [];
   const shown = tasks.shownCode ?? [];
+  const card = (entry: AddEntry, subject: CardSubject) => ({
+    ...entry,
+    card: tabCard(subject) ?? undefined,
+  });
   return entries.map((entry) => {
     const { row, agent } = entry;
     if (agent !== undefined) {
-      const label = agentTabLabel(agent, agents.models);
       const chosen = sameTab({ agent: agent.id }, mainTabs.tab);
-      const read = agentCardReading(agent, label, held, chosen, agents);
-      return { ...entry, card: <AgentTabCard name={label} models={models} read={read} /> };
+      const subject = agentSubject(agents, agent.id, held, chosen);
+      return card(entry, { kind: TAB_KIND.AGENT, subject, models });
     }
-    if (row.id === INBOX_ROW) return { ...entry, card: <InboxCard inbox={inbox} /> };
+    if (row.id === INBOX_ROW) return card(entry, { kind: TAB_KIND.INBOX, inbox });
     if (row.id === SIDE_PANEL_TAB.PLAN) {
-      return { ...entry, card: planTabCard(tasks.activeTaskId, openPlanStanding(tasks)) };
+      const taskId = tasks.activeTaskId;
+      const standing = openPlanStanding(tasks);
+      const plan =
+        taskId === undefined || standing === undefined ? undefined : { taskId, standing };
+      return card(entry, { kind: TAB_KIND.PANEL, tab: SIDE_PANEL_TAB.PLAN, plan });
     }
     if (row.section === ADD_SECTION.PULL_REQUESTS) {
       // Note that a pull request's row is named by its page (`panelEntries`).
       const offer = changes.find((each) => each.pullRequest.url === row.id);
       if (offer === undefined) return entry;
       const chosen = sameTab({ agent: offer.agent.id }, mainTabs.tab);
-      const subject = agentSubject(agents, offer.agent.id, held, chosen);
-      const card = (
-        <ChangesCard
-          subject={subject}
-          models={agents.models}
-          pullRequest={offer.pullRequest}
-          people={peopleOf(agents.changesPeople.get(offer.agent.id), offer.pullRequest)}
-          onOpenAgent={() => onOpenAgent(offer.agent.id)}
-        />
-      );
-      return { ...entry, card };
+      return card(entry, {
+        kind: TAB_KIND.CHANGES,
+        subject: agentSubject(agents, offer.agent.id, held, chosen),
+        models,
+        pullRequest: offer.pullRequest,
+        people: peopleOf(agents.changesPeople.get(offer.agent.id), offer.pullRequest),
+        onOpenAgent: () => onOpenAgent(offer.agent.id),
+      });
     }
     if (row.section === ADD_SECTION.PAGES) {
       // Note that a page's row is named by the page's id (`panelEntries`).
       const page = tasks.pages?.find((each) => each.id === row.id);
       const taskId = tasks.activeTaskId;
       if (page === undefined || taskId === undefined) return entry;
-      return { ...entry, card: <PageCard place={{ taskId }} page={page} /> };
+      const place = { taskId };
+      return card(entry, { kind: TAB_KIND.PAGE, place, pageId: page.id, name: page.title, page });
     }
     // Note that a file's row is named by its place in the files listed (`panelEntries`).
     const path = row.section === ADD_SECTION.FILES ? files[Number(row.id)] : undefined;
     if (path === undefined) return entry;
     const note = newestFileNote(shown, path, { repository, commit: undefined });
-    return { ...entry, card: <FileCard path={path} note={note} /> };
+    return card(entry, { kind: TAB_KIND.FILE, path, note });
   });
 }
 
