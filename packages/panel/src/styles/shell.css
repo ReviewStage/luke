@@ -96,9 +96,12 @@
   background: var(--luke-color-sidebar);
 }
 
+/* Note that the sheet rounds its corners without clipping what it holds,
+   because a menu hung in it may stand past its edge over the next column
+   (an AnchoredPopover bounded by the window), and a clip would cut it off;
+   what is drawn into a corner rounds that corner itself (the side panel). */
 .desktop-shell:not([data-room="narrow"]) > .desktop-main {
   margin: var(--sheet-gap) var(--sheet-gap) var(--sheet-gap) 0;
-  overflow: clip;
   border-radius: var(--sheet-radius);
   background: var(--luke-color-ground);
   box-shadow:
@@ -109,6 +112,17 @@
 
 .desktop-shell[data-sidebar-collapsed="true"]:not([data-room="narrow"]) > .desktop-main {
   margin-left: var(--sheet-gap);
+}
+
+/* The side panel's well reaches the sheet's right edge, and its top and
+   bottom, so it rounds the sheet's corners it stands in; full screen it
+   covers the whole sheet and rounds all four. */
+.desktop-shell:not([data-room="narrow"]) > .desktop-main .side-panel {
+  border-radius: 0 var(--sheet-radius) var(--sheet-radius) 0;
+}
+
+.desktop-shell:not([data-room="narrow"]) > .desktop-main .side-panel[data-full-screen="true"] {
+  border-radius: var(--sheet-radius);
 }
 
 .desktop-shell[data-sidebar-collapsed="true"] {
