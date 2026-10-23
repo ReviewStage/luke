@@ -4,6 +4,7 @@ import {
   Button,
   GAP,
   Inline,
+  JUSTIFY,
   POPOVER_ALIGN,
   POPOVER_PANEL_LOOK,
   PopoverPanel,
@@ -86,7 +87,7 @@ function PopoverPanelsExample(): React.JSX.Element {
   return (
     <CatalogSection id="popover-panel-looks" title="A card and a menu">
       <div className="catalog-popover-stage">
-        <Inline gap={GAP.CONTROL} justify="between">
+        <Inline gap={GAP.CONTROL} justify={JUSTIFY.BETWEEN}>
           <Hung look={POPOVER_PANEL_LOOK.CARD} label="Context usage" />
           <Hung look={POPOVER_PANEL_LOOK.MENU} label="MCP servers" />
         </Inline>

@@ -97,6 +97,33 @@
   --luke-dialog-radius: var(--luke-radius-14);
   --luke-dialog-action-gap: var(--luke-space-8);
   --luke-dialog-action-width: 80px;
+  /* The card's lift off the dimmed window, and the ring and deeper lift a
+     drag it would take draws on it. */
+  --luke-dialog-shadow: 0 16px 56px var(--luke-color-shadow);
+  --luke-dialog-drop-shadow:
+    0 0 0 2px color-mix(in srgb, var(--luke-color-accent) 70%, transparent),
+    0 24px 64px var(--luke-color-shadow-deep);
+  /* The room a dialog's card may stand in: the window seen, less its margins. */
+  --luke-dialog-room: calc(var(--luke-stage-height) - 2 * var(--luke-space-24));
+
+  /* A hover hint: the pill's own corner and lift, as it was drawn before it
+     was shared, the widest it stands (the window, less twice tooltip.tsx's
+     TOOLTIP_MARGIN), and the width of a card hung in its place. */
+  --luke-tooltip-radius: 7px;
+  --luke-tooltip-shadow: 0 4px 14px var(--luke-color-shadow);
+  --luke-tooltip-max-width: calc(100vw - 12px);
+  --luke-tooltip-card-width: 280px;
+
+  /* A hover card's words, off the type scale as they were drawn before they
+     were shared: its name, the line under it and its corner, code in its
+     note, its own glyph, a count's line under its rows, and the least size
+     any of them stands at under a finger. */
+  --luke-hover-card-name-size: 12.5px;
+  --luke-hover-card-sub-size: 11.5px;
+  --luke-hover-card-code-size: 11px;
+  --luke-hover-card-glyph: 14px;
+  --luke-hover-card-more-height: 22px;
+  --luke-hover-card-coarse-size: 12px;
 
   --luke-menu-row-height: 32px;
   --luke-menu-row-radius: var(--luke-radius-8);
@@ -110,6 +137,8 @@
   /* How deep a scroller's edge dissolves where content runs past it
      (`ScrollArea`'s fade); the window's has stood a step off the scale. */
   --luke-scroll-fade: 26px;
+  /* How far a label cut short fades out at its end, in place of an ellipsis. */
+  --luke-label-fade: 20px;
   /* How tall a band stuck at a scroller's start stands, a call's checkpoint,
      which its fade begins beneath (`ScrollArea`'s `fadeInset`). */
   --luke-scroll-band: var(--luke-space-32);
@@ -217,6 +246,33 @@
   --luke-dialog-radius: var(--luke-radius-14);
   --luke-dialog-action-gap: var(--luke-space-8);
   --luke-dialog-action-width: 80px;
+  /* The card's lift off the dimmed window, and the ring and deeper lift a
+     drag it would take draws on it. */
+  --luke-dialog-shadow: 0 16px 56px var(--luke-color-shadow);
+  --luke-dialog-drop-shadow:
+    0 0 0 2px color-mix(in srgb, var(--luke-color-accent) 70%, transparent),
+    0 24px 64px var(--luke-color-shadow-deep);
+  /* The room a dialog's card may stand in: the window seen, less its margins. */
+  --luke-dialog-room: calc(var(--luke-stage-height) - 2 * var(--luke-space-24));
+
+  /* A hover hint: the pill's own corner and lift, as it was drawn before it
+     was shared, the widest it stands (the window, less twice tooltip.tsx's
+     TOOLTIP_MARGIN), and the width of a card hung in its place. */
+  --luke-tooltip-radius: 7px;
+  --luke-tooltip-shadow: 0 4px 14px var(--luke-color-shadow);
+  --luke-tooltip-max-width: calc(100vw - 12px);
+  --luke-tooltip-card-width: 280px;
+
+  /* A hover card's words, off the type scale as they were drawn before they
+     were shared: its name, the line under it and its corner, code in its
+     note, its own glyph, a count's line under its rows, and the least size
+     any of them stands at under a finger. */
+  --luke-hover-card-name-size: 12.5px;
+  --luke-hover-card-sub-size: 11.5px;
+  --luke-hover-card-code-size: 11px;
+  --luke-hover-card-glyph: 14px;
+  --luke-hover-card-more-height: 22px;
+  --luke-hover-card-coarse-size: 12px;
 
   /* A web menu's rows are its controls' height, a finger's target. */
   --luke-menu-row-height: 44px;
@@ -230,6 +286,8 @@
 
   /* How deep a scroller's edge dissolves where content runs past it (`ScrollArea`'s fade). */
   --luke-scroll-fade: var(--luke-space-24);
+  /* How far a label cut short fades out at its end, in place of an ellipsis. */
+  --luke-label-fade: 20px;
   /* How tall a band stuck at a scroller's start stands, which its fade begins beneath. */
   --luke-scroll-band: var(--luke-space-32);
 

@@ -40,16 +40,21 @@ import { Duration, Effect, Option, Result, type Schema } from "effect";
 import type { HttpClient } from "effect/http";
 import { RUNNER_TAG, SANDBOX_NAME, taggedRunner } from "../agents/coder-host/runner-sessions.js";
 import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
-import { OPEN_INTERNET_POLICY } from "../agents/terminal/agent-sandbox.js";
 import {
   deploymentOidcToken,
   type ListedSandbox,
-  RUNNING_STATUS,
+  SANDBOX_STATUS,
   SESSION_TAG,
   type VercelSandboxApi,
   vercelSandboxApi,
 } from "../agents/vercel-sandbox-api.js";
-import { listOrderAt, listRunningSandboxes, windowAt } from "./sandbox-sweep-list.js";
+import {
+  listOrderAt,
+  listRunningSandboxes,
+  type StopBudget,
+  stopWithinBudget,
+  windowAt,
+} from "./sandbox-sweep-list.js";
 
 export const NATIVE_SANDBOX_SWEEP = {
   /** How long after its run's newest turn ended a sandbox waits for the END's own stop before the sweep stops it. */
@@ -104,7 +109,8 @@ interface NativeSandbox {
 function nativeSandboxOf(sandbox: ListedSandbox): NativeSandbox | undefined {
   if (!sandbox.name.startsWith(SANDBOX_NAME)) return undefined;
   // A page may name a sandbox that stopped since it was asked for, as Vercel recovers overdue sessions.
-  if (sandbox.status !== RUNNING_STATUS || sandbox.currentSessionId === undefined) return undefined;
+  if (sandbox.status !== SANDBOX_STATUS.RUNNING || sandbox.currentSessionId === undefined)
+    return undefined;
   const agentId = sandbox.tags?.[RUNNER_TAG.AGENT];
   const sessionId = sandbox.tags?.[SESSION_TAG];
   if (agentId === undefined || sessionId === undefined) return undefined;
@@ -122,7 +128,7 @@ const movedOn = (api: VercelSandboxApi, sandbox: NativeSandbox) =>
     const [fresh] = yield* api.listTagged(sandbox.sessionId);
     if (
       fresh === undefined ||
-      fresh.status !== RUNNING_STATUS ||
+      fresh.status !== SANDBOX_STATUS.RUNNING ||
       fresh.currentSessionId !== sandbox.running
     ) {
       return true;
@@ -142,7 +148,7 @@ const movedOn = (api: VercelSandboxApi, sandbox: NativeSandbox) =>
 const exitedRunner = (api: VercelSandboxApi, sandbox: NativeSandbox) =>
   Effect.gen(function* () {
     const [fresh] = yield* api.listTagged(sandbox.sessionId);
-    if (fresh?.status !== RUNNING_STATUS || fresh.currentSessionId !== sandbox.running) {
+    if (fresh?.status !== SANDBOX_STATUS.RUNNING || fresh.currentSessionId !== sandbox.running) {
       return undefined;
     }
     const runner = taggedRunner(fresh);
@@ -150,11 +156,6 @@ const exitedRunner = (api: VercelSandboxApi, sandbox: NativeSandbox) =>
     const exit = yield* api.commandExit(runner.sandboxSessionId, runner.commandId);
     return exit === null ? undefined : runner.commandId;
   }).pipe(Effect.orElseSucceed(() => undefined));
-
-/** A count of stops taken, shared by the sandboxes one sweep reads at once. */
-interface StopBudget {
-  remaining: number;
-}
 
 /** Whether the run of the sandbox's agent still has a turn queued or running, read from the store. */
 const runGoesOn = (sandbox: NativeSandbox) =>
@@ -206,22 +207,7 @@ const endSandbox = (
     const ended = yield* runEnded(sandbox, now);
     if (Option.isNone(ended)) return SANDBOX_ENDING.LEFT;
     if (yield* sandboxHeld(ended.value, now)) return SANDBOX_ENDING.HELD;
-    if (budget.remaining <= 0) return SANDBOX_ENDING.DEFERRED;
-    budget.remaining -= 1;
-    // The credential comes off first, and a sandbox it would not come off is left up for the next sweep rather than stopped with it.
-    const stopped = yield* Effect.result(
-      Effect.andThen(
-        api.updateNetworkPolicy(sandbox.running, OPEN_INTERNET_POLICY),
-        api.stopSession(sandbox.running),
-      ),
-    );
-    if (Result.isFailure(stopped)) {
-      yield* Effect.logWarning(
-        `an ended native sandbox was not stopped: ${stopped.failure.message}`,
-      );
-      return SANDBOX_ENDING.FAILED;
-    }
-    return SANDBOX_ENDING.STOPPED;
+    return yield* stopWithinBudget(api, sandbox.running, budget, "an ended native sandbox");
   });
 
 /**

@@ -1,9 +1,10 @@
 import type { InstalledSkillFilesRefusal } from "@luke/features/installed-skill-route-wire";
 import type { ModelProvider } from "@luke/features/models-wire";
 import type { RepositoryUnreached } from "@luke/features/repository-reach-wire";
-import { type Cause, Effect, type Layer, type Option, Stream } from "effect";
+import { readEither } from "@luke/wire/effect";
+import { type Cause, Effect, type Layer, Option, Result, Stream } from "effect";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
-import type { UnparsedWireValue } from "../core.js";
+import { type UnparsedWireValue, unparsedWire, wireUuidSchema } from "../core.js";
 import { ANY_METHOD, ANY_PATH } from "../route.js";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "./http.js";
 import { logStoreFailure, type StoreFailure } from "./store-failure.js";
@@ -241,6 +242,45 @@ export function hostedStoreOrUnavailable<A, R>(
   );
 }
 
+/** The bearer's account, or the invalid-token refusal. */
+export const resolvedUserId = /* @__PURE__ */ Effect.fnUntraced(function* (
+  seams: { readonly resolveUserId: UserIdResolver },
+  request: Request,
+): Effect.fn.Return<string, HostedRefusal> {
+  const account = yield* seams.resolveUserId(request);
+  if (Option.isNone(account)) return yield* Effect.fail<HostedRefusal>(HOSTED_REFUSAL.INVALID_TOKEN);
+  return account.value;
+});
+
+/**
+ * An id a path named, or not found where it is no UUID, since it names no row.
+ *
+ * Note that each refusal here is failed as a `HostedRefusal` rather than its
+ * own literal: an `Effect` failing with the bare literal, checked this early,
+ * leads `apps/web`'s exact-optional build to infer the refusal unions of
+ * other modules' `Effect.catch` callbacks too narrowly.
+ */
+export const pathUuid = /* @__PURE__ */ Effect.fnUntraced(function* (
+  id: string,
+): Effect.fn.Return<string, HostedRefusal> {
+  const read = readEither(wireUuidSchema)(unparsedWire(id));
+  if (Result.isFailure(read)) return yield* Effect.fail<HostedRefusal>(HOSTED_REFUSAL.NOT_FOUND);
+  return read.success;
+});
+
+/** The one id the path put under the query name; two is refused, and one that is no UUID names no row. */
+export const uuidOf = /* @__PURE__ */ Effect.fnUntraced(function* (
+  request: Request,
+  name: string,
+): Effect.fn.Return<string, HostedRefusal> {
+  const ids = new URL(request.url).searchParams.getAll(name);
+  const [id] = ids;
+  if (id === undefined || ids.length !== 1) {
+    return yield* Effect.fail<HostedRefusal>(HOSTED_REFUSAL.INVALID_REQUEST);
+  }
+  return yield* pathUuid(id);
+});
+
 /** An endpoint's refusal carried back onto the answer channel, so a group registers a route that answers every request. */
 export function hostedRefusing<R>(
   endpoint: Effect.Effect<HttpServerResponse.HttpServerResponse, HostedRefusal, R>,
@@ -353,6 +393,12 @@ export const readBodyBytesEffect = /* @__PURE__ */ Effect.fn("web/readBodyBytesE
   }
   return joined;
 });
+
+/** A text's JSON, or nothing a reader takes where it is none, as a PTY's stray output or a body that is no JSON is. */
+export function jsonOf(text: string): UnparsedWireValue {
+  const parsed = Result.try(() => JSON.parse(text));
+  return unparsedWire(Result.isSuccess(parsed) ? parsed.success : undefined);
+}
 
 /** Bytes read as UTF-8 JSON, the unparsed wire value a schema reads next; anything else is an invalid request. */
 export function parseJsonBytes(bytes: Uint8Array): Effect.Effect<UnparsedWireValue, HostedRefusal> {

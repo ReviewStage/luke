@@ -36,7 +36,7 @@ const PICTURE_SELECTOR = ".luke-zoom-image";
  */
 const SHADOW_ROOM_PX = 96;
 
-/** What the card wears while it flies, which stands its own entrance down (`dialog.css`). */
+/** What the card wears while it flies, which stands its own entrance down (`dialog.tsx`). */
 const EXPANDING_ATTRIBUTE = "data-expanding";
 
 /** The picture a tile was pressed on, until the frame the press landed in has passed. */

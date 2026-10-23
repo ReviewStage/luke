@@ -51,9 +51,8 @@ export const TEXT_FONT = {
 
 export type TextFont = (typeof TEXT_FONT)[keyof typeof TEXT_FONT];
 
-/** Where a truncated line is cut: at its end, or, for a path whose last part is its name, at its start. */
+/** Where a truncated line is cut where not at its end (`truncate`): for a path whose last part is its name, at its start. */
 export const TEXT_TRUNCATE = {
-  END: "end",
   START: "start",
 } as const;
 
@@ -68,8 +67,6 @@ export const TEXT_ELEMENT = {
   H2: "h2",
   H3: "h3",
   H4: "h4",
-  H5: "h5",
-  H6: "h6",
 } as const;
 
 export type TextElement = (typeof TEXT_ELEMENT)[keyof typeof TEXT_ELEMENT];

@@ -53,7 +53,7 @@ const DROPDOWN_MENU_ITEM_LIT =
 
 /** The surface every menu stands on, a list its owner hangs and keys itself included. */
 export const DROPDOWN_MENU_SURFACE =
-  "flex flex-col rounded-menu border border-border-strong bg-background p-menu-inset text-foreground shadow-menu animate-menu-arrive data-[leaving=true]:pointer-events-none data-[leaving=true]:animate-menu-leave data-[leaving=true]:transition-none data-[placed=false]:invisible";
+  "flex flex-col rounded-menu border border-border-strong bg-background p-menu-inset text-foreground shadow-menu animate-menu-in data-[leaving=true]:pointer-events-none data-[leaving=true]:animate-menu-leave data-[leaving=true]:transition-none data-[placed=false]:invisible";
 
 /** A menu's own popup on that surface: a menu's width, and as tall as can be seen, scrolling down and never sideways. */
 const DROPDOWN_MENU_POPUP =

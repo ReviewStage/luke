@@ -5,7 +5,8 @@ import {
 } from "@luke/database/models/automation-store";
 import { AUTOMATION_FIRING, AUTOMATION_TRIGGER } from "@luke/features/automation-wire";
 import { TRIGGER_PROVIDER, type TriggerProvider } from "@luke/features/trigger-catalog";
-import { Clock, Effect, Layer, Option } from "effect";
+import { HTTP_METHOD } from "@luke/wire";
+import { DateTime, Effect, Layer, Option } from "effect";
 import { HttpRouter, HttpServerRequest, type HttpServerResponse } from "effect/http";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import {
@@ -47,8 +48,6 @@ import {
  * agent, since a provider waits only a second or so for the answer.
  * Nothing of the body is logged.
  */
-
-const HTTP_METHOD = { POST: "POST" } as const;
 
 /** The largest delivery read; Sentry's are tens of kilobytes. */
 const MAXIMUM_DELIVERY_BYTES = 1024 * 1024;
@@ -129,7 +128,7 @@ function deliveryEndpoint(source: TriggerSource<TriggerSourceServices>) {
     if (Option.isNone(workspace)) {
       return hostedJsonResponse(HOSTED_HTTP_STATUS.ACCEPTED, { queued: 0 });
     }
-    const firedAt = new Date(yield* Clock.currentTimeMillis);
+    const firedAt = yield* DateTime.nowAsDate;
     let queued = 0;
     for (const event of source.normalize(delivery)) {
       queued += yield* hostedStoreOrUnavailable(

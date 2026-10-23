@@ -17,6 +17,7 @@ import { AgentComposer } from "./agent-composer.js";
 import { AGENT_LEAD, AgentMessage } from "./agent-tab.js";
 import { SentWords, SkillFiles } from "./skill-chip.js";
 import type { SkillSource } from "./skill-picker.js";
+import { SkillRef } from "./skill-ref.js";
 
 /**
  * skill-chip.test.ts -- a skill's chip opens its `SKILL.md`, the composer's
@@ -121,7 +122,7 @@ test("a press on a skill's chip in the composer opens the skill's file, and a pr
   const { container, opened } = await mounted(
     createElement(Composer, { words: "Cut it with /release now" }),
   );
-  const chip = container.querySelector(".agent-composer-input .luke-skill-chip");
+  const chip = container.querySelector(".agent-composer-input [data-skill-ref]");
   assert.equal(chip?.textContent, "/release", "the chosen skill is drawn as a chip");
   const words = container.querySelector(".agent-composer-input p");
   assert.ok(chip && words, "the box is drawn");
@@ -136,7 +137,7 @@ test("a skill's chip in the composer hangs the skill's card, what it is for unde
   const { container } = await mounted(
     createElement(Composer, { words: "Cut it with /release now" }),
   );
-  const chip = container.querySelector(".agent-composer-input .luke-skill-chip");
+  const chip = container.querySelector(".agent-composer-input [data-skill-ref]");
   assert.ok(chip, "the chosen skill is drawn as a chip");
 
   restOn(chip);
@@ -144,6 +145,40 @@ test("a skill's chip in the composer hangs the skill's card, what it is for unde
   const card = document.querySelector<HTMLElement>(".luke-tooltip-card > [data-skill-card]");
   assert.equal(card?.querySelector(".luke-hover-card-name")?.textContent, "/release");
   assert.equal(card?.querySelector(".luke-hover-card-note")?.textContent, RELEASE.description);
+});
+
+test("a skill's chip is the one pill in the composer and in a sent message, each leading with the book", async () => {
+  const { container: composer } = await mounted(
+    createElement(Composer, { words: "Cut it with /release now" }),
+  );
+  const { container: sent } = await mounted(
+    createElement(SentWords, { text: "Cut it with /release now." }),
+  );
+  const boxed = composer.querySelector(".agent-composer-input [data-skill-ref]");
+  const said = sent.querySelector("[data-skill-ref]");
+  assert.ok(boxed && said, "both draw the skill as a chip");
+
+  for (const chip of [boxed, said]) {
+    assert.equal(chip.getAttribute("data-look"), "pill");
+    assert.equal(chip.textContent, "/release");
+    assert.ok(chip.querySelector(".luke-inline-ref-glyph svg"), "the chip leads with the book");
+  }
+  assert.equal(boxed.innerHTML, said.innerHTML, "the two chips are drawn alike");
+});
+
+test("a skill still being read hangs a card of its name, with a placeholder for what it is for", async () => {
+  const { container } = await mounted(
+    createElement(SkillRef, { name: "release", skill: undefined, onOpen: undefined }),
+  );
+  const chip = container.querySelector("[data-skill-ref]");
+  assert.ok(chip, "the skill is a chip before it is read");
+  assert.ok(chip.querySelector(".luke-inline-ref-glyph svg"), "it leads with the book");
+
+  restOn(chip);
+
+  const card = document.querySelector<HTMLElement>(".luke-tooltip-card > [data-skill-card]");
+  assert.equal(card?.querySelector(".luke-hover-card-name")?.textContent, "/release");
+  assert.equal(card?.querySelector('[role="status"]')?.textContent, "Reading skill…");
 });
 
 test("a sent chip's hover card is the plan card: the skill's mark and name, what it is for, and its file's line, which says and opens nothing, since the chip opens it", async () => {

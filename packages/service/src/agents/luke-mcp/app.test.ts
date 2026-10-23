@@ -19,10 +19,11 @@ import { BROWSER_AGENT_ACTION } from "@luke/features/browser-agent-actions";
 import { CHAT_TOOL } from "@luke/features/chat-wire";
 import { CODING_AGENT_PAYER } from "@luke/features/coding-agent-wire";
 import { INBOX_TOOL } from "@luke/features/inbox-wire";
-import { PICTURE_TYPE, type Picture } from "@luke/features/picture-wire";
+import { PICTURE_MEDIA_TYPE, PICTURE_TYPE, type Picture } from "@luke/features/picture-wire";
 import { planAttachmentAddress } from "@luke/features/plan-attachment-link";
 import { EXPERIMENT } from "@luke/settings";
 import { type UnparsedWireValue, unparsedWire, type WireBoundaryInput } from "@luke/wire";
+import { webmBytes } from "@luke/wire/testing";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
@@ -44,6 +45,7 @@ import {
 import { INTEGRATION } from "../../integrations/integrations.js";
 import { modelCatalogOf } from "../../providers/model-catalog.js";
 import type { CommentToolName } from "../../tasks/comment-tools.js";
+import { PICTURE_LOOK_REFUSAL, pictureNotLooked } from "../../tasks/picture-look.js";
 import {
   agentBrowserTestLayer,
   fakeCdpPeer,
@@ -778,6 +780,35 @@ it.layer(getTestDB())("Luke's MCP server", (it) => {
         assert.deepEqual(called.content, [
           { type: "text", text: '{"status":"looked"}' },
           { type: "image", data: Base64.encode(PICTURE.bytes), mimeType: PICTURE_TYPE.PNG },
+        ]);
+      }),
+  );
+
+  it.effect(
+    "a look at a video of the agent's plan comes back as the refusal alone, with no image and none of its bytes",
+    () =>
+      Effect.gen(function* () {
+        const fetch = yield* standing;
+        const agent = yield* agentWithBearer;
+        const video: Picture = {
+          contentType: PICTURE_MEDIA_TYPE.WEBM,
+          bytes: webmBytes(1280, 800),
+        };
+        const kept = yield* keepPlanAttachment(agent.userId, agent.taskId, video);
+        if (kept.status !== PLAN_ATTACHMENT_KEEP.KEPT) return assert.fail("the video was not kept");
+        const address = planAttachmentAddress(
+          { taskId: agent.taskId, attachmentId: kept.id },
+          "acme",
+        );
+        const client = yield* connected(fetch, agent.bearer);
+
+        const called = yield* Effect.promise(() =>
+          client.callTool({ name: "look_at_picture", arguments: { address } }),
+        );
+        yield* Effect.promise(() => client.close());
+
+        assert.deepEqual(called.content, [
+          { type: "text", text: JSON.stringify(pictureNotLooked(PICTURE_LOOK_REFUSAL.VIDEO)) },
         ]);
       }),
   );

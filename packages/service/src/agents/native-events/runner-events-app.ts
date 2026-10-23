@@ -31,8 +31,8 @@ import {
   type ProviderKeyProvider,
 } from "@luke/features/provider-key-wire";
 import { causeKind } from "@luke/runtime/effect";
-import { type WireValue, WireValueSchema } from "@luke/wire";
-import { Clock, Effect, Layer, Option, Predicate, Result, Schema } from "effect";
+import { HTTP_METHOD, type WireValue, WireValueSchema } from "@luke/wire";
+import { Clock, DateTime, Effect, Layer, Option, Predicate, Result, Schema } from "effect";
 import {
   FetchHttpClient,
   HttpRouter,
@@ -54,8 +54,8 @@ import {
 import { providerModelOf } from "../../providers/model-catalog.js";
 import { ANY_METHOD, type WebRoutes } from "../../route.js";
 import { reopenTaskForWork, settleTaskIfFinished } from "../../tasks/task-finish.js";
-import { runnerEnded } from "../coder-host/claude-code-sessions.js";
 import { isNativeRuntime } from "../coder-host/native-runtime.js";
+import { runnerEnded } from "../coder-host/runner-sessions.js";
 import { NativeAgentSessions } from "../coder-host/runtime-sessions.js";
 import { estimatedTokens } from "../coder-host/token-estimate.js";
 import { CODER_TOOL_SET } from "../coder-host/tool-set.js";
@@ -109,8 +109,6 @@ import {
 
 /** The path a runner posts its events to. */
 export const RUNNER_EVENTS_PATH = "/api/agents/runner-events";
-
-const HTTP_METHOD = { POST: "POST" } as const;
 
 /** The most a batch may hold: the runner's 256 events, a tool's whole answer among them, under the platform's own bound. */
 const MAX_BODY_BYTES = 4 * 1024 * 1024;
@@ -522,7 +520,7 @@ const stopTurnOfAsk = (
       }
     }
     const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
-    const at = new Date(yield* Clock.currentTimeMillis);
+    const at = yield* DateTime.nowAsDate;
     yield* writer.requestTurnCancel(target, { turnId, at });
   }).pipe(
     Effect.catchCause((cause) =>

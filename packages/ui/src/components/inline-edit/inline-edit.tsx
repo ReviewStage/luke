@@ -1,5 +1,6 @@
-import type { KeyboardEvent, ReactNode } from "react";
+import type { ReactNode } from "react";
 import { useLayoutEffect, useRef } from "react";
+import { isComposingKey } from "../../composing-key.js";
 
 /**
  * inline-edit.tsx -- words edited where they are drawn: shown as they stand, and, while the caller says, a field over them in their place.
@@ -39,13 +40,6 @@ export type InlineEditLook = (typeof INLINE_EDIT_LOOK)[keyof typeof INLINE_EDIT_
 export interface InlineEditEnd {
   readonly value: string | undefined;
   readonly byKey: boolean;
-}
-
-/** Whether a key went to an input method composing text rather than to the field. */
-function composing(event: KeyboardEvent): boolean {
-  // Note that Safari reports the composition's last key with `isComposing`
-  // already false, and code 229 still, so both are read.
-  return event.nativeEvent.isComposing || event.keyCode === 229;
 }
 
 /** The field, opened over `value`; it ends once, by Return, Escape, or the focus leaving. */
@@ -91,9 +85,9 @@ function InlineEditField({
         if (event.key === "Escape") {
           event.preventDefault();
           event.stopPropagation();
-          if (!composing(event)) end(false, true);
+          if (!isComposingKey(event)) end(false, true);
         }
-        if (event.key === "Enter" && !composing(event)) {
+        if (event.key === "Enter" && !isComposingKey(event)) {
           event.preventDefault();
           end(true, true);
         }

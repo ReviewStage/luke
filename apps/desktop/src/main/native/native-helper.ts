@@ -2,7 +2,7 @@ import { type StdioOptions, spawn } from "node:child_process";
 import path from "node:path";
 import { app } from "electron";
 
-export interface NativeHelperProcess {
+interface NativeHelperProcess {
   stdin?: {
     write?(chunk: string): void;
     end?(): void;
@@ -19,11 +19,8 @@ export interface NativeHelperProcess {
 
 interface NativeHelperOptions {
   binary: string;
-  arguments?: readonly string[];
   input?: "ignore" | "pipe";
-  output?: "ignore" | "inherit" | "lines";
-  /** Internal seam for tests; production always uses the one spawn below. */
-  spawnProcess?: () => NativeHelperProcess | undefined;
+  output: "inherit" | "lines";
 }
 
 let resolvedNativeDirectory: string | undefined;
@@ -36,8 +33,8 @@ function nativeDirectory(): string {
   return resolvedNativeDirectory;
 }
 
-/** The one path resolver for executable helpers. */
-function nativeHelperPath(binary: string): string {
+/** The one path resolver for the native files beside the app: its executable helpers and its addon. */
+export function nativeHelperPath(binary: string): string {
   return path.join(nativeDirectory(), binary);
 }
 
@@ -68,7 +65,7 @@ export class NativeHelper {
   start(): boolean {
     if (this.#child || this.#ended) return false;
     try {
-      const child = this.#options.spawnProcess?.() ?? this.#spawn();
+      const child = this.#spawn();
       if (!child) return false;
       this.#child = child;
       child.stdout?.setEncoding("utf8");
@@ -104,40 +101,22 @@ export class NativeHelper {
     }
   }
 
-  /** Stops the process and optionally resolves when its exit or the cap arrives. */
-  stop(waitForExitMs = 0): Promise<void> {
-    const child = this.#detach();
-    if (!child) return Promise.resolve();
-    if (waitForExitMs <= 0) {
-      child.kill?.();
-      return Promise.resolve();
-    }
-    const gone = new Promise<void>((resolve) => {
-      child.on("exit", resolve);
-      setTimeout(resolve, waitForExitMs).unref();
-    });
-    child.kill?.();
-    return gone;
+  /** Stops the process without waiting for its exit. */
+  stop(): void {
+    this.#detach()?.kill?.();
   }
 
   #spawn(): NativeHelperProcess | undefined {
     // The helpers are Mac binaries, so there is nothing to spawn anywhere
-    // else. The check lives with the spawn rather than with the start, so no
-    // seam above it can turn it off.
+    // else.
     if (process.platform !== "darwin") return undefined;
     const stdio: StdioOptions = [
       this.#options.input ?? "ignore",
-      this.#options.output === "lines"
-        ? "pipe"
-        : this.#options.output === "inherit"
-          ? "inherit"
-          : "ignore",
+      this.#options.output === "lines" ? "pipe" : "inherit",
       "ignore",
     ];
     // SAFETY: spawn returns ChildProcess; this module alone narrows the stdio it configured.
-    return spawn(nativeHelperPath(this.#options.binary), [...(this.#options.arguments ?? [])], {
-      stdio,
-    }) as NativeHelperProcess;
+    return spawn(nativeHelperPath(this.#options.binary), [], { stdio }) as NativeHelperProcess;
   }
 
   #read(chunk: string): void {

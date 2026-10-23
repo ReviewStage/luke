@@ -78,6 +78,7 @@ import { readEither } from "@luke/wire/effect";
 import {
   type Cause,
   Clock,
+  DateTime,
   Deferred,
   Duration,
   Effect,
@@ -94,7 +95,8 @@ import { BROWSER_TAKEOVER_HOLD_MS } from "../agents/agent-browser-tabs-procedure
 import { controlsAgent } from "../agents/agent-reach.js";
 import { BROWSER_UNREACHABLE, type BrowserUnreachable } from "../agents/browser/agent-browser.js";
 import { CODER } from "../agents/coder-host/bounds.js";
-import { EXCESS_KEYS, type UnparsedWireValue, unparsedWire } from "../core.js";
+import { EXCESS_KEYS, type UnparsedWireValue } from "../core.js";
+import { jsonOf } from "../http/http-effect.js";
 import type { RelaySocket } from "../terminal/relay.js";
 import { BROWSER_LIVE_BOUNDS } from "./bounds.js";
 
@@ -225,14 +227,6 @@ const readHistory = read(
 );
 const readClientMessage = readEither(browserLiveClientMessageSchema);
 
-/** A text frame's JSON, or nothing a reader takes where it is none. */
-function jsonOf(text: string): UnparsedWireValue {
-  const parsed = Result.try(() => JSON.parse(text));
-  return unparsedWire(Result.isSuccess(parsed) ? parsed.success : undefined);
-}
-
-const now = Effect.map(Clock.currentTimeMillis, (millis) => new Date(millis));
-
 /** The instant the lease reaches to from a write at the instant given: the idle bound, and the minute until the next write. */
 function heldFrom(instant: Date): Date {
   const reach = Duration.sum(BROWSER_LIVE_BOUNDS.IDLE, BROWSER_LIVE_BOUNDS.LEASE_WRITE_EVERY);
@@ -348,7 +342,7 @@ function commandOf(
 /** Ends once the panel has sent nothing for the idle bound. */
 function idleWatch(lastActive: Ref.Ref<number>): Effect.Effect<LiveEnd> {
   const activeLately = Effect.gen(function* () {
-    const since = (yield* now).getTime() - (yield* Ref.get(lastActive));
+    const since = (yield* Clock.currentTimeMillis) - (yield* Ref.get(lastActive));
     return since < Duration.toMillis(BROWSER_LIVE_BOUNDS.IDLE);
   });
   return Effect.as(
@@ -451,7 +445,7 @@ function isYours(view: LiveView, driver: { readonly userId: string } | null | un
 /** The driver as the tab now stands, sent where it changed; a takeover that is no longer this member's is no longer this socket's. */
 function publishDriver(view: LiveView, row: ReachedBrowserTab): Effect.Effect<void> {
   return Effect.gen(function* () {
-    const found = browserTabDriver(row.tab, yield* now);
+    const found = browserTabDriver(row.tab, yield* DateTime.nowAsDate);
     const driver =
       found === null ? null : { userId: found.userId, heldUntil: found.heldUntil.getTime() };
     if (driver?.userId !== view.ask.userId) yield* Ref.set(view.driving, undefined);
@@ -650,7 +644,7 @@ function steer(view: LiveView, message: SteerMessage, at: Date): Effect.Effect<v
 
 function onMessage(view: LiveView, message: BrowserLiveClientMessage): Effect.Effect<void> {
   return Effect.gen(function* () {
-    const at = yield* now;
+    const at = yield* DateTime.nowAsDate;
     yield* noteActive(view, at);
     switch (message.type) {
       case BROWSER_LIVE_CLIENT.TAKE_OVER:
@@ -691,7 +685,7 @@ function dispatchInput(view: LiveView, target: LiveTarget): Effect.Effect<void, 
     Effect.gen(function* () {
       const batch = yield* Queue.takeAll(view.inputs);
       for (const input of foldMoves(batch)) {
-        if (!(yield* standsAt(view, (yield* now).getTime()))) return;
+        if (!(yield* standsAt(view, yield* Clock.currentTimeMillis))) return;
         if ("step" in input) yield* stepHistory(target, input.step);
         else
           yield* Effect.ignore(target.cdp.send({ ...input.command, sessionId: target.sessionId }));
@@ -753,10 +747,12 @@ function relayFrame(
     const last = yield* Ref.get(view.lastFrame);
     if (last !== undefined) {
       const wait =
-        last + Duration.toMillis(BROWSER_LIVE_BOUNDS.FRAME_EVERY) - (yield* now).getTime();
+        last +
+        Duration.toMillis(BROWSER_LIVE_BOUNDS.FRAME_EVERY) -
+        (yield* Clock.currentTimeMillis);
       if (wait > 0) yield* Effect.sleep(Duration.millis(wait));
     }
-    yield* Ref.set(view.lastFrame, (yield* now).getTime());
+    yield* Ref.set(view.lastFrame, yield* Clock.currentTimeMillis);
     const ack = {
       method: "Page.screencastFrameAck",
       params: { sessionId: ackId },
@@ -918,7 +914,7 @@ export function relayBrowserTab(
   deps: BrowserLiveDependencies,
 ): Effect.Effect<void, never, Scope.Scope> {
   return Effect.gen(function* () {
-    const startedAt = yield* now;
+    const startedAt = yield* DateTime.nowAsDate;
     const view = yield* openView(viewer, ask, reached, deps, startedAt);
     // A takeover this socket took is handed back as it closes, however it closes.
     yield* Effect.addFinalizer(() => releaseOnClose(view));

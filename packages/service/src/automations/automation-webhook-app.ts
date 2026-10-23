@@ -3,9 +3,9 @@ import type { DatabaseServices } from "@luke/database/core/query";
 import { readWebhookAutomation, recordAutomationRun } from "@luke/database/models/automation-store";
 import { wireUuidSchema } from "@luke/features";
 import { AUTOMATION_FIRING, AUTOMATION_WEBHOOK } from "@luke/features/automation-wire";
-import { unparsedWire } from "@luke/wire";
+import { HTTP_METHOD, unparsedWire } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
-import { Clock, Effect, Layer, Option, Result } from "effect";
+import { DateTime, Effect, Layer, Option, Result } from "effect";
 import { HttpRouter, HttpServerRequest, type HttpServerResponse } from "effect/http";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import {
@@ -41,8 +41,6 @@ import { ANY_METHOD, type WebRoutes } from "../route.js";
 
 /** The path a caller posts to; the rewrite moves the address's id into the `id` query. */
 const PATH = "/api/automations/webhook";
-
-const HTTP_METHOD = { POST: "POST" } as const;
 
 const QUERY = { ID: "id" } as const;
 
@@ -111,7 +109,7 @@ const webhookEndpoint = /* @__PURE__ */ Effect.fn("web/automationWebhookEndpoint
     ).pipe(Effect.mapError(() => HOSTED_REFUSAL.INVALID_REQUEST));
     // A NUL is UTF-8 but no text a column keeps, so a body holding one is refused rather than lost.
     if (text.includes("\u0000")) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
-    const firedAt = new Date(yield* Clock.currentTimeMillis);
+    const firedAt = yield* DateTime.nowAsDate;
     const recorded = yield* hostedStoreOrUnavailable(
       recordAutomationRun(automation.value, {
         dedupeKey: dedupeKeyOf(request),

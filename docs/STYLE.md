@@ -113,8 +113,8 @@ and the command handlers last, at line 3514 of 4824.
 
 - Line one is the file naming itself: `name.ts -- one line of purpose.`
   Then, when useful, a few lines on why it is its own file. No file is
-  silent, barrels included. Good: `packages/session/src/urgency.ts:1`,
-  `packages/gateway/src/protocol.ts:11`.
+  silent, barrels included. Good: `packages/runtime/src/effect/single-flight.ts:2`,
+  `packages/gateway/src/protocol.ts:2`.
 - Then imports, constants and schemas, private helpers, the public
   functions, and the entry points (route handlers, IPC handlers, React
   components) last.

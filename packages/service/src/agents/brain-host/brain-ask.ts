@@ -15,7 +15,7 @@ import {
 import type { StoreWriter } from "@luke/database/models/writer";
 import {
   Cause,
-  Clock,
+  DateTime,
   Duration,
   Effect,
   type Schema as EffectSchema,
@@ -235,7 +235,7 @@ export const acceptAsk = /* @__PURE__ */ Effect.fn("web/acceptAsk")(function* <
   input: AskInput<Origin>,
 ): Effect.fn.Return<AskOutcome, QueryError | EffectSchema.SchemaError, DatabaseServices> {
   const { accountId, userId, question, origin, clientId, conversationId } = input;
-  const now = new Date(yield* Clock.currentTimeMillis);
+  const now = yield* DateTime.nowAsDate;
   if (!(yield* conversationReachableBy(accountId, conversationId))) {
     return Result.fail({ refusal: ASK_REFUSAL.NOT_FOUND });
   }
@@ -389,7 +389,7 @@ export const stopAsk = /* @__PURE__ */ Effect.fn("web/stopAsk")(function* (
 ): Effect.fn.Return<StopOutcome, QueryError | EffectSchema.SchemaError, DatabaseServices> {
   const standing = yield* askStanding(seams, userId, id);
   if (standing === undefined) return Result.fail({ refusal: STOP_REFUSAL.NOT_FOUND });
-  const at = new Date(yield* Clock.currentTimeMillis);
+  const at = yield* DateTime.nowAsDate;
   let turn: StoredTurnRecord;
   if (standing.turn === undefined) {
     yield* seams.asks.cancelRequested(standing.ask.id, at);

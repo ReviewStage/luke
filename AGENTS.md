@@ -122,7 +122,14 @@ component, factored out of the surface where it builds the box by hand.
   told of a chat message is never handed the video, only told it is there
   (`coder-host/chat-notify.ts`), the inbox's and the chat's players are left
   out of session replay, and none of it goes into a trace, a counted event, a
-  fixture, or the voice window. And Sentry's SDKs run
+  fixture, or the voice window. Such a recording may also be added to its
+  task's plan, from the file viewer's Add to plan or an agent's `edit_plan`,
+  at most ten to a plan, kept beside the plan as its pictures are
+  (`packages/database/src/models/plan-attachments.ts`), shown to the members
+  who can open the task and deleted with the plan; `look_at_picture` refuses
+  it (`packages/service/src/tasks/picture-look.ts`), so no model is handed it,
+  the plan's player is left out of session replay, and none of it goes into a
+  trace, a counted event, a fixture, or the voice window. And Sentry's SDKs run
   with their default data collection, but that the service's and the eve roots'
   leave out model inputs and outputs and request bodies
   (`packages/service/src/observability/sentry.ts`, the eve roots'
@@ -291,12 +298,10 @@ PR that finishes the callers it was for, not left as a name on an allowlist.
   call's lifecycle is a `forkDetach` and needs no door.
 - **`packages/features/src/hosted-link.ts`** — oRPC's `OpenAPILink` awaits a promise from its `fetch`, so the account call runs there on the services the asking fiber handed it; what would end this row is an Effect transport in oRPC's link.
 - **The test-support edges** — `packages/database/src/testing/sql-client.ts`,
-  `packages/database/src/testing/no-database.ts`,
   `packages/database/src/testing/hosted-store-database.ts`,
   `apps/dev/evals/coder.eval.ts`, and
   `packages/wire/src/testing/effect.ts` each build a runner (a
-  `ManagedRuntime` over a throwaway database, a `SqlClient` that refuses every
-  statement) so a suite or an offline eval still written on `node:assert` or a
+  `ManagedRuntime` over a throwaway database) so a suite or an offline eval still written on `node:assert` or a
   plain fixture can hold a promise where an effect is described; a test body is
   its own edge.
 

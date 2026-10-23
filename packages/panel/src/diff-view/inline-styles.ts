@@ -1,5 +1,6 @@
 import type { Element as HastElement, Nodes, Properties, RootContent } from "hast";
 import { toHtml as writeHast } from "hast-util-to-html";
+import { styleElementSheets, touchesStyle } from "../style-element-sheets.js";
 
 /**
  * inline-styles.ts -- the styles Pierre's diffs writes as markup, carried and applied through the CSSOM, which the panel's policy admits.
@@ -68,7 +69,11 @@ export function toHtml(tree: Tree, options?: Parameters<typeof writeHast>[1]): s
 /**
  * Pierre's own writer (`@pierre/diffs`'s `utils/hastToHtml.js`), answered
  * with `toHtml`, since Pierre's writes most elements itself, styles as
- * markup, and hands `hast-util-to-html` only what it does not.
+ * markup, and hands `hast-util-to-html` only what it does not. The
+ * panel's build redirects Pierre's import here (`scripts/build-table.mjs`),
+ * which no import graph shows.
+ *
+ * @public
  */
 export function hastToHtml(tree: Tree): string {
   return toHtml(tree);
@@ -84,16 +89,6 @@ function restyle(element: Element): void {
   }
 }
 
-/** Whether a change under the root touched a `<style>` element's rules. */
-function touchesStyle(record: MutationRecord): boolean {
-  const target = record.target;
-  return (
-    target instanceof HTMLStyleElement ||
-    target.parentNode instanceof HTMLStyleElement ||
-    [...record.addedNodes, ...record.removedNodes].some((node) => node instanceof HTMLStyleElement)
-  );
-}
-
 /**
  * Applies what Pierre writes as markup under `root`, now and as it draws
  * again, with `look` adopted after it, until the answer is called.
@@ -101,19 +96,9 @@ function touchesStyle(record: MutationRecord): boolean {
 export function adoptShadowStyles(root: ShadowRoot, look: CSSStyleSheet): () => void {
   // Pierre's own sheet, adopted before anything here was.
   const own = root.adoptedStyleSheets.filter((sheet) => sheet !== look);
-  const sheets = new Map<HTMLStyleElement, { sheet: CSSStyleSheet; text: string }>();
+  const sheets = styleElementSheets(root);
   const adopt = () => {
-    const standing = new Set(root.querySelectorAll("style"));
-    for (const style of sheets.keys()) if (!standing.has(style)) sheets.delete(style);
-    for (const style of standing) {
-      const text = style.textContent ?? "";
-      const held = sheets.get(style);
-      if (held?.text === text) continue;
-      const sheet = held?.sheet ?? new CSSStyleSheet();
-      sheet.replaceSync(text);
-      sheets.set(style, { sheet, text });
-    }
-    root.adoptedStyleSheets = [...own, ...[...sheets.values()].map((held) => held.sheet), look];
+    root.adoptedStyleSheets = [...own, ...sheets(), look];
   };
   const observer = new MutationObserver((records) => {
     for (const record of records) {

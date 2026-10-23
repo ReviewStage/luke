@@ -145,6 +145,22 @@
     --luke-button-ink: var(--luke-color-ground);
   }
 
+  /* Over a picture or a video's frame, as a player's controls stand: white
+     in either theme, since what is under it is the frame's, not the
+     window's, and a white wash under the pointer. */
+  .luke-button[data-variant="media"] {
+    --luke-button-fill: transparent;
+    --luke-button-ink: #fff; /* off-scale: over any frame, light or dark */
+  }
+
+  .luke-button[data-variant="media"]:hover:not(:disabled, [aria-disabled="true"]) {
+    --luke-button-fill: rgba(255, 255, 255, 0.18); /* off-scale: the same */
+  }
+
+  .luke-button[data-variant="media"]:active:not(:disabled, [aria-disabled="true"]) {
+    --luke-button-fill: rgba(255, 255, 255, 0.28); /* off-scale: the same */
+  }
+
   .luke-button[data-variant="working-tint"] {
     --luke-button-fill: color-mix(in srgb, var(--luke-color-working) 14%, transparent);
     --luke-button-ink: var(--luke-color-working);

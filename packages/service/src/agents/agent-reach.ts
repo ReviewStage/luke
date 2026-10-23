@@ -27,14 +27,15 @@ import { readAccountNames } from "@luke/database/models/workspace-store";
 import type { ConversationTarget } from "@luke/database/models/writer";
 import { CODING_AGENT_PAYER, type CodingAgentPayer } from "@luke/features/coding-agent-wire";
 import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
-import { readEither } from "@luke/wire/effect";
-import { Effect, Option, Result } from "effect";
-import { unparsedWire, wireUuidSchema } from "../core.js";
+import { Effect, Option } from "effect";
 import {
   HOSTED_REFUSAL,
   type HostedRefusal,
   hostedStoreOrUnavailable,
+  pathUuid,
+  resolvedUserId,
   type UserIdResolver,
+  uuidOf,
 } from "../http/http-effect.js";
 import type { StoreFailure } from "../http/store-failure.js";
 
@@ -55,38 +56,6 @@ export interface ReachedAgent {
   readonly agent: CodingAgent;
   readonly target: ConversationTarget;
 }
-
-/** The bearer's account, or the invalid-token refusal. */
-export const resolvedUserId = /* @__PURE__ */ Effect.fnUntraced(function* (
-  seams: AccountResolving,
-  request: Request,
-): Effect.fn.Return<string, HostedRefusal> {
-  const account = yield* seams.resolveUserId(request);
-  if (Option.isNone(account)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_TOKEN);
-  return account.value;
-});
-
-/** An id a path named, or not found where it is no UUID, since it names no row. */
-export const pathUuid = /* @__PURE__ */ Effect.fnUntraced(function* (
-  id: string,
-): Effect.fn.Return<string, HostedRefusal> {
-  const read = readEither(wireUuidSchema)(unparsedWire(id));
-  if (Result.isFailure(read)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-  return read.success;
-});
-
-/** The one id the path put under the query name; two is refused, and one that is no UUID names no row. */
-export const uuidOf = /* @__PURE__ */ Effect.fnUntraced(function* (
-  request: Request,
-  name: string,
-): Effect.fn.Return<string, HostedRefusal> {
-  const ids = new URL(request.url).searchParams.getAll(name);
-  const [id] = ids;
-  if (id === undefined || ids.length !== 1) {
-    return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
-  }
-  return yield* pathUuid(id);
-});
 
 /**
  * The agent the path names, on a task or with none, where the account is a

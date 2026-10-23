@@ -66,7 +66,7 @@ import {
   PROVIDER_KEY_STATUS,
   planLimitResetsAt,
 } from "@luke/features/provider-key-wire";
-import { DateTime, Duration, Effect, Option, Redacted, Result, Schema } from "effect";
+import { DateTime, Duration, Effect, Option, Redacted, Result, Schedule, Schema } from "effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 
@@ -90,8 +90,17 @@ const REFRESH_MARGIN = Duration.minutes(10);
 /** How long OpenAI is given to answer one call. */
 const CALL_TIMEOUT = Duration.seconds(10);
 
-/** The waits between revocation tries, after a failure to connect or a server error. */
-const REVOKE_RETRY_WAITS = [Duration.seconds(1), Duration.seconds(2)] as const;
+/** The waits between revocation tries, after a failure to connect or a server error: a second, then two. */
+const REVOKE_RETRY = { WAIT: Duration.seconds(1), TIMES: 2 } as const;
+
+/** How one try at revoking ended: OpenAI confirmed it, refused it for good, or it is worth another try. */
+const REVOKE_OUTCOME = {
+  CONFIRMED: "confirmed",
+  REFUSED: "refused",
+  RETRY: "retry",
+} as const;
+
+type RevokeOutcome = (typeof REVOKE_OUTCOME)[keyof typeof REVOKE_OUTCOME];
 
 /** The hint a ChatGPT sign-in is shown by: it has no key to show the end of. */
 const CHATGPT_HINT = "ChatGPT";
@@ -575,7 +584,9 @@ export const refreshChatGptAccess = /* @__PURE__ */ Effect.fnUntraced(function* 
 });
 
 /** One try at revoking a refresh token: confirmed, refused for good, or worth another try. */
-const revokeOnce = /* @__PURE__ */ Effect.fnUntraced(function* (credentials: SealedCredentials) {
+const revokeOnce = /* @__PURE__ */ Effect.fnUntraced(function* (
+  credentials: SealedCredentials,
+): Effect.fn.Return<RevokeOutcome, never, HttpClient.HttpClient> {
   const client = yield* HttpClient.HttpClient;
   const discovered = yield* client.get(CHATGPT_OAUTH.DISCOVERY_URL).pipe(
     Effect.flatMap((response) => response.json),
@@ -584,32 +595,32 @@ const revokeOnce = /* @__PURE__ */ Effect.fnUntraced(function* (credentials: Sea
     Effect.timeout(CALL_TIMEOUT),
     Effect.option,
   );
-  if (Option.isNone(discovered)) return "retry" as const;
+  if (Option.isNone(discovered)) return REVOKE_OUTCOME.RETRY;
   // A revocation endpoint off OpenAI's own server is sent no refresh token.
-  if (!onIssuer(discovered.value.revocation_endpoint)) return "refused" as const;
+  if (!onIssuer(discovered.value.revocation_endpoint)) return REVOKE_OUTCOME.REFUSED;
   // The issued client and the refresh token are revealed here alone, into the one form OpenAI reads them from.
   const answered = yield* postForm(discovered.value.revocation_endpoint, {
     token: credentials.refreshToken,
     token_type_hint: "refresh_token",
     client_id: credentials.clientId,
   });
-  if (Option.isNone(answered)) return "retry" as const;
-  if (answered.value.status === HTTP_STATUS.OK) return "confirmed" as const;
+  if (Option.isNone(answered)) return REVOKE_OUTCOME.RETRY;
+  if (answered.value.status === HTTP_STATUS.OK) return REVOKE_OUTCOME.CONFIRMED;
   return answered.value.status >= HTTP_STATUS.SERVER_ERROR
-    ? ("retry" as const)
-    : ("refused" as const);
+    ? REVOKE_OUTCOME.RETRY
+    : REVOKE_OUTCOME.REFUSED;
 });
 
 /** Revokes the sign-in's renewable session, trying again after a failure to connect or a server error; answers whether OpenAI confirmed it. */
-const revokeSession = /* @__PURE__ */ Effect.fnUntraced(function* (credentials: SealedCredentials) {
-  for (const wait of [Duration.zero, ...REVOKE_RETRY_WAITS]) {
-    if (Duration.isGreaterThan(wait, Duration.zero)) yield* Effect.sleep(wait);
-    const tried = yield* revokeOnce(credentials);
-    if (tried === "confirmed") return true;
-    if (tried === "refused") return false;
-  }
-  return false;
-});
+const revokeSession = (credentials: SealedCredentials) =>
+  revokeOnce(credentials).pipe(
+    Effect.repeat({
+      schedule: Schedule.exponential(REVOKE_RETRY.WAIT),
+      times: REVOKE_RETRY.TIMES,
+      until: (tried) => tried !== REVOKE_OUTCOME.RETRY,
+    }),
+    Effect.map((tried) => tried === REVOKE_OUTCOME.CONFIRMED),
+  );
 
 /**
  * Removes the account's ChatGPT sign-in, revoking its renewable session at

@@ -11,7 +11,7 @@ import { Schema } from "effect";
  */
 
 /** One command waiting on the developer: the ask's id, which is the command's, the shell text, and when the Mac asked, by its clock. */
-export const macCommandAskSchema = Schema.Struct({
+const macCommandAskSchema = Schema.Struct({
   id: Schema.String,
   command: Schema.String,
   askedAt: Schema.Number,

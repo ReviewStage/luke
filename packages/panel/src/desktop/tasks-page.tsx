@@ -6,6 +6,7 @@ import {
   ONE_LINE_ELEMENT,
   ONE_LINE_END,
   OneLine,
+  PageToolbar,
 } from "@luke/ui";
 import {
   BOARD_PROPERTIES,
@@ -29,10 +30,10 @@ import { Schema } from "effect";
 import { KanbanIcon, ListFilterIcon, ListIcon, SlidersHorizontalIcon } from "lucide-react";
 import { useState } from "react";
 import { FIND_PAGE, PageFind } from "../find-in-tab.js";
+import { readKept, writeKept } from "../kept-storage.js";
 import { MemberDirectory } from "../member-directory.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
-import { readKept, writeKept } from "./folded-groups.js";
 import { NewTaskButton } from "./new-task-button.js";
 import { PhoneHead, PlaceMore, useMenuAsk } from "./phone-head.js";
 import { TasksBoard } from "./tasks-board.js";
@@ -270,36 +271,40 @@ export function TasksPage({
   const toolbar = phone ? (
     phoneHead
   ) : (
-    <header className="desktop-toolbar">
-      <div className="desktop-toolbar-heading tasks-page-heading">
-        <OneLine
-          as={ONE_LINE_ELEMENT.H1}
-          end={ONE_LINE_END.ELLIPSIS}
-          className="desktop-toolbar-title"
-        >
-          {TASKS}
-        </OneLine>
-        <ViewSwitch view={view} onView={choose} />
-      </div>
-      <div className="desktop-toolbar-actions">
-        <TasksFilterButton
-          shown={tasks.shown}
-          tasks={listed}
-          filter={filter}
-          onFilter={onFilter}
-          shared={shared}
-          pictures={tasks.repositories.pictures}
-        />
-        <TasksViewOptions
-          shown={tasks.shown}
-          board={view === TASKS_VIEW.BOARD}
-          display={display}
-          initial={INITIAL_DISPLAY[view]}
-          onDisplay={onDisplay}
-          shared={shared}
-        />
-      </div>
-    </header>
+    <PageToolbar
+      lead={
+        <div className="desktop-toolbar-heading tasks-page-heading">
+          <OneLine
+            as={ONE_LINE_ELEMENT.H1}
+            end={ONE_LINE_END.ELLIPSIS}
+            className="desktop-toolbar-title"
+          >
+            {TASKS}
+          </OneLine>
+          <ViewSwitch view={view} onView={choose} />
+        </div>
+      }
+      actions={
+        <>
+          <TasksFilterButton
+            shown={tasks.shown}
+            tasks={listed}
+            filter={filter}
+            onFilter={onFilter}
+            shared={shared}
+            pictures={tasks.repositories.pictures}
+          />
+          <TasksViewOptions
+            shown={tasks.shown}
+            board={view === TASKS_VIEW.BOARD}
+            display={display}
+            initial={INITIAL_DISPLAY[view]}
+            onDisplay={onDisplay}
+            shared={shared}
+          />
+        </>
+      }
+    />
   );
   // Note that the line stands while nothing is filtered, hidden, so its first chip scales in and its last scales out.
   const chips = <TasksFilterChips tasks={listed} filter={filter} onFilter={onFilter} />;

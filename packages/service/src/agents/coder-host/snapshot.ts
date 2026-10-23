@@ -49,14 +49,13 @@ import type * as HttpClient from "effect/http/HttpClient";
 import type { GitHubApp } from "../../github/github-app.js";
 import { REPOSITORY_SANDBOX_CONTRACT } from "../repository-sandbox-contract.js";
 import { capSandboxTimeout } from "../sandbox-keep-alive.js";
-import {
-  credentialPolicy,
-  OPEN_INTERNET_POLICY,
-  type RepositoryCredential,
-} from "../terminal/agent-sandbox.js";
+import { credentialPolicy, type RepositoryCredential } from "../terminal/agent-sandbox.js";
 import {
   deploymentOidcToken,
   type ListedSandbox,
+  OPEN_INTERNET_POLICY,
+  SANDBOX_STATUS,
+  UP_STATUSES,
   type VercelSandboxApi,
   vercelSandboxApi,
 } from "../vercel-sandbox-api.js";
@@ -107,9 +106,6 @@ export interface SnapshotAsk<R> {
   /** Whether the sandbox is in use and stays up as it stands: a developer's terminal holds it, or a turn of the source began. */
   readonly keepUp: Effect.Effect<boolean, unknown, R>;
 }
-
-/** The states a sandbox is up in, or coming up in, which this step neither wakes nor stops. */
-const UP_STATUSES: ReadonlySet<string> = new Set(["pending", "running"]);
 
 /**
  * Files the copy never picks up from the working tree, by glob, because
@@ -165,7 +161,7 @@ function printedCommits(
 
 /** The session a running sandbox runs; none for one not running. */
 function runningSession(sandbox: ListedSandbox | undefined): string | undefined {
-  return sandbox?.status === "running" ? sandbox.currentSessionId : undefined;
+  return sandbox?.status === SANDBOX_STATUS.RUNNING ? sandbox.currentSessionId : undefined;
 }
 
 /**

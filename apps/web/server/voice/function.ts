@@ -5,11 +5,11 @@ import { PROVIDER_KEY_PROVIDER } from "@luke/features/provider-key-wire";
 import { ownApiKeyOf } from "@luke/service/accounts/own-api-key";
 import { deploymentEveOrigin } from "@luke/service/agents/brain-host/eve-origin";
 import { hostedUserInfo, userIdForAuthorization } from "@luke/service/auth/bearer";
-import { eveDeploymentSecretIn } from "@luke/service/environment";
+import { eveDeploymentSecretIn, namedIn } from "@luke/service/environment";
 import { standReported } from "@luke/service/observability/sentry";
 import type { VoiceAccounts } from "@luke/service/voice/accounts";
 import { deploymentExchange } from "@luke/service/voice/deployment-exchange";
-import { Keyframe } from "@luke/service/voice/keyframe";
+import { AVATAR_ENVIRONMENT, Keyframe } from "@luke/service/voice/keyframe";
 import { LOG_EVENT, standardOutputLog } from "@luke/service/voice/log";
 import {
   type VoiceServer,
@@ -17,7 +17,7 @@ import {
   type VoiceServiceOptions,
   voiceServer,
 } from "@luke/service/voice/service";
-import { Effect, Layer, Redacted } from "effect";
+import { Effect, Layer } from "effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import type * as HttpClient from "effect/http/HttpClient";
 import { nativeAgents } from "../native-agents.js";
@@ -44,10 +44,6 @@ import { runWeb } from "../runtime.js";
 const VOICE_FUNCTION_ENVIRONMENT = {
   /** A deployment-pinned model; `LIVE_DEFAULTS.MODEL` otherwise. */
   LIVE_MODEL: "LUKE_LIVE_MODEL",
-  /** Luke's Keyframe Labs key, which mints each call's avatar session. */
-  KEYFRAME_API_KEY: "KEYFRAME_API_KEY",
-  /** The stock persona every call's avatar is minted as. */
-  KEYFRAME_PERSONA_ID: "LUKE_KEYFRAME_PERSONA_ID",
 } as const;
 
 const deploymentAccounts: VoiceAccounts = {
@@ -57,20 +53,14 @@ const deploymentAccounts: VoiceAccounts = {
   recordSeconds: (input) => Effect.suspend(() => recordVoiceSeconds({ ...input, now: Date.now() })),
 };
 
-/** A secret as the environment holds it, sealed: nothing where it is absent or blank. */
-function configured(name: string): Redacted.Redacted | undefined {
-  const named = process.env[name]?.trim();
-  return named ? Redacted.make(named) : undefined;
-}
-
 /**
  * The call's avatar on this deployment's Keyframe key and persona, or none
  * where either is missing, which answers every avatar ask not configured and
  * leaves the voice untouched.
  */
 function deploymentAvatar(): VoiceServiceOptions["avatar"] {
-  const apiKey = configured(VOICE_FUNCTION_ENVIRONMENT.KEYFRAME_API_KEY);
-  const personaId = process.env[VOICE_FUNCTION_ENVIRONMENT.KEYFRAME_PERSONA_ID]?.trim();
+  const apiKey = namedIn(process.env, AVATAR_ENVIRONMENT.KEYFRAME_API_KEY);
+  const personaId = process.env[AVATAR_ENVIRONMENT.KEYFRAME_PERSONA_ID]?.trim();
   if (apiKey === undefined || !personaId) return undefined;
   return {
     keyframe: Layer.provide(Keyframe.layer({ apiKey }), FetchHttpClient.layer),
@@ -110,7 +100,7 @@ export function voiceFunctionOptions(
       ownApiKeyOf(
         accountId,
         PROVIDER_KEY_PROVIDER.OPENAI,
-        configured(PROVIDER_KEY_ENCRYPTION_ENVIRONMENT.KEYS),
+        namedIn(process.env, PROVIDER_KEY_ENCRYPTION_ENVIRONMENT.KEYS),
       ),
     model: process.env[VOICE_FUNCTION_ENVIRONMENT.LIVE_MODEL],
     accounts: deploymentAccounts,

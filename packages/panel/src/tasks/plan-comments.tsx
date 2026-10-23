@@ -115,6 +115,7 @@ import {
   type PlanEditorHandle,
   type PlanEditorModule,
 } from "../plan-editor/contract.js";
+import { useFileDrop } from "../use-file-drop.js";
 import { AgentActorRef, agentSubject, NOTHING_HELD } from "./agent-ref.js";
 import { AttachFilesButton } from "./attach-files-button.js";
 import { AttachedFileChips, attachmentChips } from "./attached-file-chips.js";
@@ -123,7 +124,7 @@ import { DictateButton, DictationStrip } from "./dictation-strip.js";
 import type { EditAgents } from "./edit-ref.js";
 import { MentionNodeChip, pastedMentionNode } from "./mention-chip.js";
 import { MENTION_MENU_SIDE, useMentionPicker } from "./mention-picker.js";
-import { CommentFiles, carriesFiles, useCommentAttaching } from "./plan-comment-files.js";
+import { CommentFiles, useCommentAttaching } from "./plan-comment-files.js";
 import { EDITOR_ROOM_CLASS } from "./plan-document-editor.js";
 import { type TaskMentionsValue, useMentionLink, useTaskMentions } from "./task-mentions.js";
 import { DICTATION_PHASE, type DictationControl, useDictation } from "./use-dictation.js";
@@ -729,7 +730,7 @@ function ReplyField({
   const dictates = useCommentEditor() !== undefined;
   const [words, setWords] = useState("");
   const files = useCommentAttaching();
-  const [dropping, setDropping] = useState(false);
+  const fileDrop = useFileDrop((dropped) => files.attach(Array.from(dropped)));
   // The words sent and not yet answered, which the field holds as a draft while it stands empty, so a send that fails finds them.
   const [inFlight, setInFlight] = useState("");
   const attempt = useRef<
@@ -762,7 +763,7 @@ function ReplyField({
       look={variant === REPLY_VARIANT.FIRST ? COMPOSER_LOOK.BARE : COMPOSER_LOOK.CARD}
       className="comment-field"
       data-variant={variant}
-      dropping={dropping}
+      dropping={fileDrop.dropping}
       // Note that the words in flight, held files and files still being read, and a dictation whose words land once heard, hold the field as typed words do, so a press away keeps a thread being started.
       data-held={
         (words === "" ? inFlight : words).trim() !== "" ||
@@ -770,22 +771,7 @@ function ReplyField({
         files.reading > 0 ||
         dictating
       }
-      onDragOver={(event) => {
-        if (!carriesFiles(event)) return;
-        event.preventDefault();
-        setDropping(true);
-      }}
-      onDragLeave={(event) => {
-        // A drag moving onto one of the field's own children has not left it.
-        const into = event.relatedTarget;
-        if (!(into instanceof Node && event.currentTarget.contains(into))) setDropping(false);
-      }}
-      onDrop={(event) => {
-        if (!carriesFiles(event)) return;
-        event.preventDefault();
-        setDropping(false);
-        files.attach(Array.from(event.dataTransfer.files));
-      }}
+      {...fileDrop.target}
     >
       <AttachedFileChips
         files={attachmentChips(files.attachments)}

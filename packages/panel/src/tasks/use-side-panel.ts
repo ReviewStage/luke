@@ -1209,7 +1209,7 @@ export function drawsChanges(
  * where the item's task's agents stand in no column of their own, once its
  * agents are read and the agent is among them.
  */
-export function drawsTranscript(
+function drawsTranscript(
   tab: TranscriptStripTab,
   drawn: Pick<DrawnTabs, "taskAgents" | "task">,
 ): boolean {

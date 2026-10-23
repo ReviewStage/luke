@@ -14,7 +14,6 @@ import {
   type InboxAsk,
   type InboxReplyKind,
   inboxReplyAnswers,
-  inboxResponseAsk,
 } from "@luke/features/inbox-wire";
 import {
   askNumberedPick,
@@ -26,7 +25,7 @@ import {
 } from "./inbox-model.js";
 
 /**
- * chat-ask-model.ts -- a chat ask read as the Inbox's ask: the ask its response stands for, the answer its controls hold, what that answer lacks, and whom it waits on.
+ * chat-ask-model.ts -- a chat ask read as the Inbox's ask: the answer its controls hold, what that answer lacks, and whom it waits on.
  *
  * A chat ask carries the Inbox's version 4 response, which the chat's wire
  * keeps (`chat-wire.ts`), while the Inbox draws its asks as version 5's
@@ -69,11 +68,6 @@ function respondedDraft(response: ChatResponse, draft: InboxDraft): InboxDraft {
   })();
   if (decision === undefined) return draft;
   return { ...draft, choices: decision.held === undefined ? [] : [decision.held] };
-}
-
-/** The ask a chat ask's response stands for; none for an acknowledgement, which asks nothing. */
-export function chatAskOf(response: ChatResponse): InboxAsk | undefined {
-  return inboxResponseAsk(response);
 }
 
 /** The answer the card's controls and note hold, or none where they hold none the ask takes. */
