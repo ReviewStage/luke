@@ -134,7 +134,7 @@ function TaskAssigneePicker({
   /** Where a pick is sent; without one the chip only says. */
   onPick: ((assigneeId: string | null) => void) | undefined;
 }): React.JSX.Element {
-  const { members, readerId, reading } = useMemberDirectory();
+  const { members, readerId, membersReading } = useMemberDirectory();
   const person = usePerson(assignee);
   return (
     <Picker
@@ -151,7 +151,7 @@ function TaskAssigneePicker({
       rows={assigneeRows(members, readerId)}
       placeholder="Assign to…"
       noMatch="No people match"
-      note={reading ? <Spinner delay label="Reading members" /> : undefined}
+      note={membersReading ? <Spinner delay label="Reading members" /> : undefined}
       align={PICKER_ALIGN.START}
       width={CHIP_WIDTH.AUTO}
       disabled={onPick === undefined}

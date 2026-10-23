@@ -1467,7 +1467,7 @@ export function useMentionPicker({
   // The list says it is reading, never that nothing matches, while a read it draws rows from is out.
   const reading =
     open &&
-    ((members === undefined && directory.reading) ||
+    ((members === undefined && directory.membersReading) ||
       (readAgents !== undefined && wantsAgents) ||
       (read === undefined && treeKey(taskId, workspaceId, repository) !== undefined) ||
       (skills !== undefined && skills.known === undefined));

@@ -447,7 +447,7 @@ function filterEntries(
           }),
         ),
         // Note that the members are read for the people's fields alone, so no other field says it is reading.
-        ...(reader.reading && PERSON_FIELDS.includes(field) ? [READING_MEMBERS] : []),
+        ...(reader.membersReading && PERSON_FIELDS.includes(field) ? [READING_MEMBERS] : []),
       ],
     };
   });

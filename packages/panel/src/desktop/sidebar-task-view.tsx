@@ -186,7 +186,7 @@ function memberEntries(
       checked: createdBy === member.userId,
       onSelect: () => onCreatedBy(member.userId),
     })),
-    ...(reader.reading ? [READING_MEMBERS] : []),
+    ...(reader.membersReading ? [READING_MEMBERS] : []),
   ];
 }
 
