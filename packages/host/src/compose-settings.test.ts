@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { NodeFileSystem, NodePath } from "@effect/platform-node";
 import { it } from "@effect/vitest";
 import { HOSTED_SERVICE_PATH, NO_CREDENTIAL } from "@luke/features";
+import { PRODUCT_EVENT } from "@luke/features/analytics";
 import {
   GATEWAY_CLIENT_ROLE,
   GATEWAY_EVENT,
@@ -29,62 +30,94 @@ import { fixedAccountSource } from "./testing/fixed-account-source.js";
 
 const SERVICE_BASE_URL = "https://luke.example.test";
 
+/** A settings concern in a run that sends, over a service that answers every request and keeps what each carried. */
+const sendingSettings = Effect.fnUntraced(function* (packaged: boolean) {
+  const requests: { readonly url: string; readonly authorization: string | null }[] = [];
+  const service: typeof globalThis.fetch = async (input, init) => {
+    const request = new Request(input, init);
+    requests.push({ url: request.url, authorization: request.headers.get("authorization") });
+    return new Response(null, { status: 204 });
+  };
+  const stateRoot = yield* temporaryDirectoryScoped("luke-settings-sending-");
+  const machine = Layer.mergeAll(
+    Layer.succeed(
+      HostKernelTag,
+      hostKernelOver({
+        stateRoot,
+        // A run that sends, so the counted events leave on a flush.
+        runMode: runModeFor({ capture: false, fixture: false }),
+        accountBaseUrl: `${SERVICE_BASE_URL}/api/auth`,
+        now: () => 0,
+        createId: () => "id",
+        report: () => undefined,
+        emit: () => undefined,
+      }),
+    ),
+    Layer.succeed(Environment, ConfigProvider.fromEnvRecord({})),
+    // A version the counted events allowlist reads, so the launch is counted.
+    Layer.succeed(AppIdentity, { appVersion: "1.0.0", packaged }),
+    fixedAccountSource(),
+    NodeFileSystem.layer,
+    NodePath.layer,
+  );
+  const settings = yield* Effect.provide(composeSettings(), machine).pipe(
+    Effect.provideService(FetchHttpClient.Fetch, service),
+  );
+  yield* settings.link({
+    credential: NO_CREDENTIAL,
+    readAccountKey: () => Effect.succeed(undefined),
+    confirmAccount: () => Effect.void,
+    setVoice: () => Effect.void,
+    endLiveSession: Effect.void,
+  });
+  // The lifetime arms the counted events, where usage data is shared, and counts this launch.
+  yield* settings.lifetime;
+  const sent = () =>
+    requests.filter(
+      (request) => request.url === `${SERVICE_BASE_URL}${HOSTED_SERVICE_PATH.EVENTS}`,
+    );
+  return { settings, sent, service };
+});
+
 it.effect(
   "a linked credential with no authorization reaches a settings client's request with no header",
-  () => {
-    const requests: { readonly url: string; readonly authorization: string | null }[] = [];
-    /** The service, answering every request and keeping what each carried. */
-    const service: typeof globalThis.fetch = async (input, init) => {
-      const request = new Request(input, init);
-      requests.push({ url: request.url, authorization: request.headers.get("authorization") });
-      return new Response(null, { status: 204 });
-    };
-    return Effect.gen(function* () {
-      const stateRoot = yield* temporaryDirectoryScoped("luke-settings-credential-");
-      const machine = Layer.mergeAll(
-        Layer.succeed(
-          HostKernelTag,
-          hostKernelOver({
-            stateRoot,
-            // A run that sends, so the counted events leave on a flush.
-            runMode: runModeFor({ capture: false, fixture: false }),
-            accountBaseUrl: `${SERVICE_BASE_URL}/api/auth`,
-            now: () => 0,
-            createId: () => "id",
-            report: () => undefined,
-            emit: () => undefined,
-          }),
-        ),
-        Layer.succeed(Environment, ConfigProvider.fromEnvRecord({})),
-        // A version the counted events allowlist reads, so the launch is counted.
-        Layer.succeed(AppIdentity, { appVersion: "1.0.0", packaged: false }),
-        fixedAccountSource(),
-        NodeFileSystem.layer,
-        NodePath.layer,
-      );
-      const settings = yield* Effect.provide(composeSettings(), machine);
-      yield* settings.link({
-        credential: NO_CREDENTIAL,
-        readAccountKey: () => Effect.succeed(undefined),
-        confirmAccount: () => Effect.void,
-        setVoice: () => Effect.void,
-        endLiveSession: Effect.void,
-      });
-      // The lifetime arms the counted events and counts this launch.
-      yield* settings.lifetime;
+  () =>
+    Effect.gen(function* () {
+      const { settings, sent, service } = yield* sendingSettings(true);
 
-      yield* settings.flushProductEvents;
+      yield* Effect.provideService(settings.flushProductEvents, FetchHttpClient.Fetch, service);
 
-      const sent = requests.filter(
-        (request) => request.url === `${SERVICE_BASE_URL}${HOSTED_SERVICE_PATH.EVENTS}`,
+      assert.ok(sent().length > 0, "the launch's count was sent");
+      for (const request of sent()) assert.equal(request.authorization, null);
+    }).pipe(Effect.provide([NodeFileSystem.layer, NodePath.layer])),
+);
+
+it.effect(
+  "a run from source counts nothing until usage data is turned on, and nothing once it is off again",
+  () =>
+    Effect.gen(function* () {
+      const { settings, sent, service } = yield* sendingSettings(false);
+      const update = settings.methods[GATEWAY_METHOD.SETTINGS_UPDATE];
+      assert.ok(update, "the concern answers a settings write");
+      const context = { client: { clientId: "panel", role: GATEWAY_CLIENT_ROLE.OPERATOR } };
+      const countAndFlush = Effect.andThen(
+        Effect.sync(() => {
+          settings.recordProductEvent(PRODUCT_EVENT.APP_LAUNCH, { app_version: "1.0.0" });
+        }),
+        Effect.provideService(settings.flushProductEvents, FetchHttpClient.Fetch, service),
       );
-      assert.ok(sent.length > 0, "the launch's count was sent");
-      for (const request of sent) assert.equal(request.authorization, null);
-    }).pipe(
-      Effect.provideService(FetchHttpClient.Fetch, service),
-      Effect.provide([NodeFileSystem.layer, NodePath.layer]),
-    );
-  },
+
+      yield* countAndFlush;
+      assert.equal(sent().length, 0, "a run from source sent a count by default");
+
+      yield* update({ field: "usageData", value: true }, context);
+      yield* countAndFlush;
+      assert.equal(sent().length, 1, "the count made once usage data was on was not sent");
+
+      yield* update({ field: "usageData", value: false }, context);
+      yield* countAndFlush;
+      assert.equal(sent().length, 1, "a count was sent after usage data was turned off");
+    }).pipe(Effect.provide([NodeFileSystem.layer, NodePath.layer])),
 );
 
 /** One browser tab's settings concern over the shared state root: what it sent its panel, and each voice it handed the live source. */

@@ -17,6 +17,7 @@ export function clientSettingSideEffects(dependencies: ClientSettingSideEffectDe
   return {
     [SETTING_SIDE_EFFECT.NONE]: noClientSettingSideEffect,
     [SETTING_SIDE_EFFECT.VOICE]: noClientSettingSideEffect,
+    [SETTING_SIDE_EFFECT.USAGE_DATA]: noClientSettingSideEffect,
     [SETTING_SIDE_EFFECT.LOGIN_ITEM]: ({ settings }) => applyLoginItem(settings.stored.openAtLogin),
     [SETTING_SIDE_EFFECT.MEDIA_DUCK]: ({ settings }) =>
       mediaDuck.setEnabled(settings.stored.duckOtherMedia),

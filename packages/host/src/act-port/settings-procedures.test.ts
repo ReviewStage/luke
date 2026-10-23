@@ -32,6 +32,7 @@ const REFUSAL = {
 const NO_SIDE_EFFECTS: ClientSettingSideEffects = {
   [SETTING_SIDE_EFFECT.NONE]: () => {},
   [SETTING_SIDE_EFFECT.LOGIN_ITEM]: () => {},
+  [SETTING_SIDE_EFFECT.USAGE_DATA]: () => {},
   [SETTING_SIDE_EFFECT.VOICE]: () => {},
   [SETTING_SIDE_EFFECT.MEDIA_DUCK]: () => {},
 };
