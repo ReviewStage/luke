@@ -11,7 +11,9 @@ import { Checkbox } from "./checkbox.js";
  * the caller the value they ask for, a mixed box resolves to checked while
  * still submitting what its caller holds, and an unavailable one changes
  * nothing; nor does a read-only one, which is not unavailable. A box named
- * by a label of its own draws no words.
+ * by a label of its own draws no words. Space checks a box the keyboard is
+ * on, as a press does. Each reads the box as a reader is told it: the
+ * `role="checkbox"` element and what it says of itself.
  */
 
 declare global {
@@ -62,8 +64,13 @@ function Signed({
   );
 }
 
-function box(page: HTMLElement): HTMLInputElement {
-  return page.querySelector<HTMLInputElement>('input[type="checkbox"]') ?? assert.fail("no box");
+function box(page: HTMLElement): HTMLElement {
+  return page.querySelector<HTMLElement>('[role="checkbox"]') ?? assert.fail("no box");
+}
+
+/** What the box tells a reader it is: checked, unchecked, or mixed. */
+function said(page: HTMLElement): string | null {
+  return box(page).getAttribute("aria-checked");
 }
 
 function press(element: HTMLElement | null): void {
@@ -76,13 +83,26 @@ test("the box and its words each hand the caller the value they ask for", () => 
   press(page.querySelector("label"));
   press(box(page));
   assert.equal(page.querySelector("output")?.textContent, "true,false,true");
-  assert.equal(box(page).checked, true);
+  assert.equal(said(page), "true");
+});
+
+test("Space on the box checks it and Space again unchecks it", () => {
+  const page = render(createElement(Signed));
+  const space = () =>
+    act(() => {
+      box(page).dispatchEvent(new KeyboardEvent("keydown", { key: " ", bubbles: true }));
+      box(page).dispatchEvent(new KeyboardEvent("keyup", { key: " ", bubbles: true }));
+    });
+  space();
+  space();
+  assert.equal(page.querySelector("output")?.textContent, "true,false");
+  assert.equal(said(page), "false");
 });
 
 test("a mixed box reads as mixed and resolves to checked whatever its caller last held", () => {
   for (const start of [false, true]) {
     const page = render(createElement(Signed, { mixed: true, start }));
-    assert.equal(box(page).indeterminate, true);
+    assert.equal(said(page), "mixed");
     press(box(page));
     assert.equal(page.querySelector("output")?.textContent, "true");
   }
@@ -108,7 +128,7 @@ test("a mixed box its caller holds checked still submits with its form", () => {
 
 test("an unavailable box changes nothing", () => {
   const page = render(createElement(Signed, { disabled: true }));
-  assert.equal(box(page).disabled, true);
+  assert.equal(box(page).getAttribute("aria-disabled"), "true");
   press(box(page));
   assert.equal(page.querySelector("output")?.textContent, "");
 });
@@ -116,11 +136,15 @@ test("an unavailable box changes nothing", () => {
 test("a read-only box stands as its caller holds it, checked or not, and hands on no press of the box or its words", () => {
   for (const start of [false, true]) {
     const page = render(createElement(Signed, { readOnly: true, start }));
-    assert.equal(box(page).disabled, false, "it is not unavailable, so it is not faded");
+    assert.notEqual(
+      box(page).getAttribute("aria-disabled"),
+      "true",
+      "it is not unavailable, so it is not faded",
+    );
     assert.equal(box(page).getAttribute("aria-readonly"), "true");
     press(box(page));
     press(page.querySelector("label"));
-    assert.equal(box(page).checked, start);
+    assert.equal(said(page), String(start));
     assert.equal(page.querySelector("output")?.textContent, "");
   }
 });

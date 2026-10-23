@@ -61,6 +61,12 @@
   --color-fill-pressed: var(--luke-color-fill-pressed);
   --color-accent-ink: var(--luke-color-accent-text);
   --spacing-touch: var(--luke-touch-target);
+  /* A box or a range a choice is drawn in: a field's ground inside a
+     chosen row's edge, filled in the accent where it is on. */
+  --color-field: var(--luke-color-input);
+  --color-control-edge: var(--luke-color-border-selected);
+  --color-accent-fill: var(--luke-color-accent);
+  --color-on-accent: var(--luke-color-on-accent);
   --color-button-fill: var(--luke-button-fill);
   --color-button-ink: var(--luke-button-ink);
   --color-button-edge: var(--luke-button-edge);
@@ -80,3 +86,9 @@
 @custom-variant pointer-coarse (@media (pointer: coarse));
 @custom-variant fold-folded (@container style(--luke-fold: folded));
 @custom-variant fold-bare (@container style(--luke-fold: bare));
+
+/* An orientation, as shadcn/ui's own stylesheet names Base UI's
+   `data-orientation` for the components it vendors (a slider's, a tab
+   list's, a toggle group's). */
+@custom-variant data-horizontal (&[data-orientation="horizontal"]);
+@custom-variant data-vertical (&[data-orientation="vertical"]);

@@ -332,11 +332,13 @@ test("a press on a task's checkbox ticks or clears that one item in the saved te
   ]);
   render({ ...DOCUMENT_TASK, document: { body, assumptions: [] } });
   await settle();
-  const boxes = [
-    ...block(container, "Steps").querySelectorAll<HTMLInputElement>("input[type=checkbox]"),
-  ];
+  const boxes = [...block(container, "Steps").querySelectorAll<HTMLElement>('[role="checkbox"]')];
   assert.deepEqual(
-    boxes.map((box) => [box.getAttribute("aria-label"), box.disabled, box.checked]),
+    boxes.map((box) => [
+      box.getAttribute("aria-label"),
+      box.getAttribute("aria-disabled") === "true",
+      box.getAttribute("aria-checked") === "true",
+    ]),
     [
       ["Send the invite", false, false],
       ["Write the email", false, false],
@@ -360,8 +362,8 @@ test("a press on a task's checkbox ticks or clears that one item in the saved te
       { base: body, value: body.replace("> 1. [ ] Quoted", "> 1. [x] Quoted") },
     ],
   );
-  assert.equal(nested.checked, true, "a saved tick stands");
-  assert.equal(ticked.checked, true, "a tick the save refused goes back");
+  assert.equal(nested.getAttribute("aria-checked"), "true", "a saved tick stands");
+  assert.equal(ticked.getAttribute("aria-checked"), "true", "a tick the save refused goes back");
   // Note that the check is a boolean, because a failing comparison would print the whole editor's DOM.
   assert.ok(container.querySelector(".plan-document-editor") === null, "no editor opened");
 });
@@ -398,7 +400,7 @@ test("a press while a tick is out sends nothing and goes back, and a box is name
   const { container, render } = mount();
   render({ ...DOCUMENT_TASK, document: { body, assumptions: [] } }, door);
   await settle();
-  const boxes = [...container.querySelectorAll<HTMLInputElement>("input[type=checkbox]")];
+  const boxes = [...container.querySelectorAll<HTMLElement>('[role="checkbox"]')];
   assert.deepEqual(
     boxes.map((box) => box.getAttribute("aria-label")),
     ["One", "Upload screenshot"],
@@ -415,7 +417,7 @@ test("a press while a tick is out sends nothing and goes back, and a box is name
     [{ base: body, value: body.replace("[ ] One", "[x] One") }],
   );
   assert.deepEqual(
-    boxes.map((box) => box.checked),
+    boxes.map((box) => box.getAttribute("aria-checked") === "true"),
     [true, false],
   );
 });

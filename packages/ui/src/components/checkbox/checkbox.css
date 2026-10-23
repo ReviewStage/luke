@@ -1,81 +1,14 @@
-/* checkbox.css -- the platform's own box in the accent, beside its words in
-   the body's type, the box standing on the words' first line. */
+/* checkbox.css -- the ink of a Checkbox's words, which a stepped-back
+   region quiets from this same layer (stepped-back.css), where a utility
+   would outrank it. The box and the rest of its row are Tailwind utilities
+   (`checkbox.tsx`, `../../shadcn/checkbox.tsx`). */
 
 @layer components {
   .luke-checkbox {
-    display: inline-flex;
-    align-items: flex-start;
-    gap: var(--luke-icon-gap);
-    min-width: 0;
     color: var(--luke-color-text);
-    font-family: var(--luke-font-sans);
-    font-size: var(--luke-type-body-size);
-    line-height: var(--luke-type-body-leading);
-  }
-
-  .luke-checkbox-box {
-    flex: none;
-    width: 14px;
-    height: 14px;
-    margin: calc((var(--luke-type-body-leading) - 14px) / 2) 0 0;
-    accent-color: var(--luke-color-accent);
-    transition: transform var(--luke-duration-fast) var(--luke-spring-fast);
-  }
-
-  /* Held down, the box gives under the finger and springs back as the press
-     leaves, as a switch's thumb does. */
-  .luke-checkbox-box:active:not(:disabled, [aria-readonly="true"]) {
-    transform: scale(0.85);
-  }
-
-  /* Ticked, it springs up from a little smaller, so the tick lands rather
-     than appears; a box drawn ticked plays it too, which is short enough to
-     read as the box arriving. */
-  .luke-checkbox-box:checked {
-    animation: luke-checkbox-tick var(--luke-duration-fast) var(--luke-spring-fast);
-  }
-
-  @keyframes luke-checkbox-tick {
-    from {
-      transform: scale(0.7);
-    }
-  }
-
-  .luke-checkbox-words {
-    min-width: 0;
-    overflow-wrap: anywhere;
   }
 
   .luke-checkbox[data-disabled="true"] {
     color: var(--luke-color-text-subtle);
-  }
-
-  /* A read-only box takes no press, so nothing about it says it does. */
-  .luke-checkbox[data-read-only="true"],
-  .luke-checkbox[data-read-only="true"] .luke-checkbox-box {
-    cursor: default;
-  }
-
-  /* A box without words stands on no line of its own, and on a coarse
-     pointer takes a press a finger's width across, centred on it, while it
-     draws at its own size, as a compact button does. */
-  .luke-checkbox[data-words="false"] {
-    position: relative;
-  }
-
-  .luke-checkbox[data-words="false"] .luke-checkbox-box {
-    margin: 0;
-  }
-
-  @media (pointer: coarse) {
-    .luke-checkbox[data-words="false"]::before {
-      position: absolute;
-      top: 50%;
-      left: 50%;
-      width: var(--luke-touch-target);
-      height: var(--luke-touch-target);
-      transform: translate(-50%, -50%);
-      content: "";
-    }
   }
 }

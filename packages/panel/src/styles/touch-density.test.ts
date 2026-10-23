@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import {
   AddressField,
   BUTTON_SIZE,
+  Checkbox,
   Disclosure,
   IconButton,
   INLINE_EDIT_LOOK,
@@ -184,10 +185,25 @@ function smallTargets(): ReadonlyMap<string, Element> {
     ],
     [
       "a plan's task box",
-      markup(
-        '<ul class="luke-markdown"><li class="task-list-item"><span class="luke-markdown-task"><label class="luke-checkbox" data-words="false"><input class="luke-checkbox-box" type="checkbox"></label></span></li></ul>',
-        ".luke-markdown-task > label",
-      ),
+      drawn(
+        createElement(
+          "ul",
+          { className: "luke-markdown" },
+          createElement(
+            "li",
+            { className: "task-list-item" },
+            createElement(
+              "span",
+              { className: "luke-markdown-task" },
+              createElement(Checkbox, {
+                label: "Ship it",
+                checked: false,
+                onChange: () => undefined,
+              }),
+            ),
+          ),
+        ),
+      ).querySelector(".luke-markdown-task > label") ?? assert.fail("a task box is drawn"),
     ],
     [
       "a task box in the plan's editor",
