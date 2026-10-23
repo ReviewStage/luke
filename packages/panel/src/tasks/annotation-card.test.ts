@@ -119,7 +119,7 @@ function paddingStart(element: Element): number {
 
 /** Where a box's own start stands from the card's, by the paddings, gaps, and columns before it. */
 function columns(card: HTMLElement) {
-  const head = card.querySelector(".annotation-card-head") ?? assert.fail("a head");
+  const head = card.querySelector(".annotation-card-fold > summary") ?? assert.fail("a head");
   const content = card.querySelector(".annotation-card-content") ?? assert.fail("a body");
   const comment = card.querySelector(".annotation-comment") ?? assert.fail("a comment");
   const headStyle = getComputedStyle(head);

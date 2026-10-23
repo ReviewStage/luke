@@ -29,6 +29,8 @@ import {
   OneLine,
   PencilIcon,
   PlusIcon,
+  RESIZE_EDGE_SIDE,
+  ResizeEdge,
   RowHint,
   RowHintOptions,
   SCROLL_FADE,
@@ -40,6 +42,7 @@ import {
   UnarchiveIcon,
   useMenu,
   useMinute,
+  useResizeEdge,
   VisuallyHidden,
 } from "@luke/ui";
 import { type Actor, actorName } from "@luke/ui/actor-model";
@@ -90,14 +93,12 @@ import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { ActionMenu, type MenuAction } from "./action-menu.js";
 import { type ChannelDialogs, useChannelDialogs } from "./chat-channel-dialogs.js";
 import { previewWords } from "./chat-preview.js";
-import { SidebarResizeEdge } from "./desktop-sidebar.js";
 import { INBOX_LIST_WIDTH, useChatListWidth } from "./folded-groups.js";
 import { strandedHome } from "./move-task-dialog.js";
 import { useNarrowFocus } from "./narrow-focus.js";
 import { sectionGlyph } from "./section-icon-picker.js";
 import { SidebarGroupHeader } from "./sidebar-group-header.js";
 import { TaskStatusMark, taskCardOf } from "./task-card.js";
-import { EDGE_SIDE, useResizableEdge } from "./use-resizable-edge.js";
 
 /**
  * desktop-chat.tsx -- the window's Chat: the workspace's channels and direct messages in a rail of their own, and For you or the channel chosen read beside it.
@@ -966,8 +967,8 @@ function ChatView({
   // Note that For you is where Chat opens, so its link is Chat's own.
   const copyChat = useCopyLinkItem()({ kind: LINK_PLACE.CHAT });
   const { width, onResize } = useChatListWidth();
-  const edge = useResizableEdge({
-    side: EDGE_SIDE.RIGHT,
+  const edge = useResizeEdge({
+    side: RESIZE_EDGE_SIDE.RIGHT,
     width,
     bounds: INBOX_LIST_WIDTH,
     reserve: () => PANE_RESERVE,
@@ -1157,7 +1158,7 @@ function ChatView({
             {groups.trail.map(group)}
           </div>
         </ScrollArea>
-        {single ? null : <SidebarResizeEdge edge={edge} />}
+        {single ? null : <ResizeEdge edge={edge} />}
       </nav>
       <ChatPane
         chat={chat}

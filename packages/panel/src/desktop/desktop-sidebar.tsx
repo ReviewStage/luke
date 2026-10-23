@@ -40,6 +40,9 @@ import {
   PinIcon,
   PlusIcon,
   ProviderMark,
+  RESIZE_EDGE_SIDE,
+  ResizeEdge,
+  type ResizeEdgeHandle,
   SCROLL_FADE,
   ScrollArea,
   SearchIcon,
@@ -53,6 +56,7 @@ import {
   useLeaving,
   useMenu,
   useMinute,
+  useResizeEdge,
   VisuallyHidden,
 } from "@luke/ui";
 import { actorName, creatorActor, personActor } from "@luke/ui/actor-model";
@@ -163,7 +167,6 @@ import {
 } from "./sidebar-task-view.js";
 import { type RowFaces, SidebarTask } from "./task-actions.js";
 import { useTaskListView } from "./task-list-view.js";
-import { EDGE_SIDE, type ResizableEdgeProps, useResizableEdge } from "./use-resizable-edge.js";
 import { useRowDrag } from "./use-row-drag.js";
 import { WorkspaceSwitcher } from "./workspace-switcher.js";
 
@@ -188,9 +191,9 @@ const LIST_SKELETON = ["72%", "54%", "64%", "46%"] as const;
 export function useSidebarEdge(
   sidebar: SidebarCollapse,
   onToggleCollapsed?: () => void,
-): ResizableEdgeProps {
-  return useResizableEdge({
-    side: EDGE_SIDE.RIGHT,
+): ResizeEdgeHandle {
+  return useResizeEdge({
+    side: RESIZE_EDGE_SIDE.RIGHT,
     width: sidebar.width,
     bounds: SIDEBAR_WIDTH,
     reserve: () => WORK_RESERVE,
@@ -198,14 +201,6 @@ export function useSidebarEdge(
     onResize: sidebar.onResize,
     onToggleCollapsed,
   });
-}
-
-/**
- * The left column's right edge, dragged to resize it; double-clicked, it goes
- * back to the default width.
- */
-export function SidebarResizeEdge({ edge }: { edge: ResizableEdgeProps }): React.JSX.Element {
-  return <div className="sidebar-resize" {...edge} />;
 }
 
 /** The display a browser tab answers, as against an installed web app's own window, which draws no Back of its own. */
@@ -2126,7 +2121,7 @@ function SidebarColumn({
       </ColumnFoot>
       {sectionDialogs.dialog}
       {/* Last, so the drag strip above Luke does not take the edge's top from it. */}
-      {sidebar.collapsed ? null : <SidebarResizeEdge edge={edge} />}
+      {sidebar.collapsed ? null : <ResizeEdge edge={edge} />}
     </aside>
   );
 }

@@ -7,7 +7,20 @@ import {
   sizeLabel,
 } from "@luke/features/attachment-model";
 import { SHORTCUT_KEY, type ShortcutChord } from "@luke/settings/shortcuts";
-import { Button, CloseIcon, DIALOG_SIZE, Dialog, IconButton, OneLine, Tooltip } from "@luke/ui";
+import {
+  Button,
+  CloseIcon,
+  DIALOG_SIZE,
+  Dialog,
+  IconButton,
+  IMAGE_OPENING,
+  type ImageOpening,
+  type ImageZoom,
+  OneLine,
+  Tooltip,
+  useImageZoom,
+  ZoomImage,
+} from "@luke/ui";
 import {
   ChevronLeftIcon,
   ChevronRightIcon,
@@ -18,12 +31,6 @@ import {
 import { useId } from "react";
 import { CopyGlyph, type CopyState, copyHint, useCopyFeedback } from "../copy-feedback.js";
 import { FileTypeIcon } from "./file-type-icon.js";
-import {
-  IMAGE_OPENING,
-  type ImageOpening,
-  type ImageZoom,
-  useImageZoom,
-} from "./use-image-zoom.js";
 import { WholeFile, type WholeFileNote } from "./whole-file.js";
 
 /**
@@ -33,7 +40,7 @@ import { WholeFile, type WholeFileNote } from "./whole-file.js";
  * opening it asks, and zooms as Preview's does: a pinch, a trackpad's or two
  * fingers', or a Control-scroll about the pointer, a press to its own pixels there
  * and back, the header's buttons or a bare `=`, `-`, and `0`; zoomed, it is
- * moved by a drag or a two-finger scroll (`./use-image-zoom.ts`).
+ * moved by a drag or a two-finger scroll (`@luke/ui`'s ZoomImage).
  *
  * The files of one message are walked in place with the header's arrows or
  * the arrow keys, and the header names the file shown, its size, and how
@@ -65,7 +72,7 @@ const VIEWER_LABEL = {
   CLOSE: "Close",
 } as const;
 
-/** The bare keys a picture's zoom buttons name in their hints, which `./use-image-zoom.ts` answers. */
+/** The bare keys a picture's zoom buttons name in their hints, which `@luke/ui`'s `useImageZoom` answers. */
 const ZOOM_CHORD = {
   IN: { key: SHORTCUT_KEY.EQUALS, plain: true },
   OUT: { key: SHORTCUT_KEY.MINUS, plain: true },
@@ -157,12 +164,7 @@ function AttachmentBody({
   if (attachmentView(file) === ATTACHMENT_VIEW.IMAGE) {
     return (
       <div ref={zoom.frameRef} className="attachment-viewer-body">
-        <img
-          className="attachment-viewer-image"
-          src={file.url}
-          alt={file.name}
-          {...zoom.imageProps}
-        />
+        <ZoomImage zoom={zoom} src={file.url} alt={file.name} />
       </div>
     );
   }

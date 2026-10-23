@@ -591,7 +591,7 @@ function buttonWith(container: HTMLElement, label: RegExp): HTMLButtonElement | 
 
 /** The labels a thread's head wears beside its path, in order. */
 function threadLabels(thread: HTMLElement): string[] {
-  const head = thread.querySelector(".annotation-card-head")?.textContent ?? "";
+  const head = thread.querySelector(".annotation-card-fold > summary")?.textContent ?? "";
   return ["Resolved", "Outdated"].filter((label) => head.includes(label));
 }
 
@@ -1071,7 +1071,8 @@ test("a review that only left line comments draws each thread under it: its file
   await act(async () => more.click());
   assert.deepEqual(opened, [`${PAGE}#discussion_r1`]);
 
-  const head = folded.querySelector<HTMLElement>(".annotation-card-head") ?? assert.fail("a head");
+  const head =
+    folded.querySelector<HTMLElement>(".annotation-card-fold > summary") ?? assert.fail("a head");
   assert.deepEqual(threadLabels(folded), ["Resolved", "Outdated"]);
   assert.match(
     folded.querySelector(".annotation-card-where")?.textContent ?? "",
@@ -1347,7 +1348,7 @@ test("Add reaction opens one row of GitHub's eight, each named, the arrows movin
 function filter(tab: HTMLElement, name: string): HTMLButtonElement {
   return (
     tab.querySelector<HTMLButtonElement>(
-      `section[aria-label="Conversation"] .pull-request-section-head .pull-request-filter button[aria-label="${name}"]`,
+      `section[aria-label="Conversation"] .pull-request-section-fold > summary .pull-request-filter button[aria-label="${name}"]`,
     ) ?? assert.fail(`the conversation offers ${name}`)
   );
 }
@@ -1356,7 +1357,7 @@ function filter(tab: HTMLElement, name: string): HTMLButtonElement {
 function sectionHead(tab: HTMLElement, name: string): HTMLElement {
   return (
     tab.querySelector<HTMLElement>(
-      `section[aria-label="${name}"] > details > summary.pull-request-section-head`,
+      `section[aria-label="${name}"] > details.pull-request-section-fold > summary`,
     ) ?? assert.fail(`the ${name} folds under its heading`)
   );
 }
@@ -4959,7 +4960,7 @@ test("every review thread's head leads with its chevron and ends with its ⋯, i
     ["its line", inline],
   ] as const) {
     const head =
-      root.querySelector<HTMLElement>("summary.annotation-card-head") ??
+      root.querySelector<HTMLElement>(".annotation-card-fold > summary") ??
       assert.fail(`the thread on ${where} has a head`);
     assert.ok(
       head.firstElementChild?.querySelector(".luke-disclosure-turn"),
@@ -5408,7 +5409,10 @@ test("the member's pending comments stand on their lines in Files changed, marke
   );
   const card = list.renderAnnotation(INVITE_FILE.path, "PRRC_start");
   assert.match(card.textContent ?? "", /dana.*Pending/u);
-  assert.match(card.querySelector(".annotation-card-head")?.textContent ?? "", /Pending/u);
+  assert.match(
+    card.querySelector(".annotation-card-fold > summary")?.textContent ?? "",
+    /Pending/u,
+  );
   assert.equal(
     (card.textContent ?? "").split("Pending").length - 1,
     1,

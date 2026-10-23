@@ -165,7 +165,10 @@ test("an agent's note stands under the last line it pointed at, headed by the ag
     "annotation-additions-14",
   );
   assert.ok(drawnRoot(container).querySelector('slot[name="annotation-additions-14"]'));
-  assert.match(note.querySelector(".annotation-card-head")?.textContent ?? "", /^Invite emails/u);
+  assert.match(
+    note.querySelector(".annotation-card-fold > summary")?.textContent ?? "",
+    /^Invite emails/u,
+  );
   assert.equal((container.textContent ?? "").split(NOTE).length - 1, 1, "the note is said once");
 });
 

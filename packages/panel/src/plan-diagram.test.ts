@@ -296,7 +296,7 @@ test("on a finger's device a tap on a diagram opens it over the window at its ow
   const open = viewer() ?? assert.fail("the diagram opens over the window");
   assert.equal(open.dataset.opening, "own-pixels");
   assert.equal(
-    open.querySelector(".attachment-viewer-image")?.getAttribute("src"),
+    open.querySelector(".luke-zoom-image")?.getAttribute("src"),
     pictureOf(code, DIAGRAM_APPEARANCE.LIGHT),
   );
   const close =

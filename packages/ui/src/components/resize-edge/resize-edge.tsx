@@ -1,9 +1,9 @@
 /**
- * use-resizable-edge.ts -- the edge a pane is resized by: dragged between its bounds, snapped shut or to the whole window past them, reset by a double-click, and stepped from the keyboard.
+ * resize-edge.tsx -- the edge a pane is resized by: dragged between its bounds, snapped shut or to the whole window past them, reset by a double-click, and stepped from the keyboard.
  *
- * A pane hands this its width, its bounds, and what to do with a new width,
- * and spreads what comes back onto the element it draws as its edge, a
- * focusable separator that is the pane's own child. The edge decides nothing
+ * A pane hands `useResizeEdge` its width, its bounds, and what to do with a
+ * new width, and draws what comes back as a `ResizeEdge`, a focusable
+ * separator that is the pane's own child, straddling its border. The edge decides nothing
  * the pane keeps: every width and every snap is handed back to the pane's
  * owner, so the window's two resizable panes (the task's side panel at the
  * right, the sidebar at the left) drag alike and keep their widths their own
@@ -20,16 +20,15 @@
  * pointer coming back.
  */
 
-import type React from "react";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 
 /** Which side of its pane the edge stands on: the side panel's left, the sidebar's right. */
-export const EDGE_SIDE = {
+export const RESIZE_EDGE_SIDE = {
   LEFT: "left",
   RIGHT: "right",
 } as const;
 
-type EdgeSide = (typeof EDGE_SIDE)[keyof typeof EDGE_SIDE];
+export type ResizeEdgeSide = (typeof RESIZE_EDGE_SIDE)[keyof typeof RESIZE_EDGE_SIDE];
 
 /** Where a drag has taken the pane past its bounds. */
 const EDGE_SNAP = {
@@ -66,7 +65,7 @@ const EXPAND_OVERSHOOT = 160;
  */
 const SNAP_HYSTERESIS = 24;
 
-/** What the document's root wears while a drag lasts; desktop.css draws the resize cursor everywhere under it. */
+/** What the document's root wears while a drag lasts; resize-edge.css draws the resize cursor everywhere under it. */
 const EDGE_DRAG_ATTRIBUTE = "data-edge-drag";
 
 /** How far one arrow press moves the edge, in CSS pixels. */
@@ -83,8 +82,8 @@ interface EdgeBounds {
   readonly DEFAULT: number;
 }
 
-export interface ResizableEdgeOptions {
-  side: EdgeSide;
+export interface ResizeEdgeOptions {
+  side: ResizeEdgeSide;
   /** The pane's width as its owner keeps it. */
   width: number;
   bounds: EdgeBounds;
@@ -103,9 +102,10 @@ export interface ResizableEdgeOptions {
   onToggleExpanded?: (() => void) | undefined;
 }
 
-/** What the edge's element is spread with. */
-export interface ResizableEdgeProps {
+/** What the edge is drawn with, which `ResizeEdge` spreads on its element. */
+export interface ResizeEdgeHandle {
   ref: React.RefCallback<HTMLElement>;
+  "data-side": ResizeEdgeSide;
   role: "separator";
   "aria-orientation": "vertical";
   "aria-label": string;
@@ -139,7 +139,7 @@ interface Drag {
  * reserve. A container that measures nothing is not laid out, so only the
  * pane's own bound stands.
  */
-function roomFor(edge: HTMLElement, options: ResizableEdgeOptions): number {
+function roomFor(edge: HTMLElement, options: ResizeEdgeOptions): number {
   const { bounds } = options;
   const own = bounds.MAX ?? Number.POSITIVE_INFINITY;
   const container = edge.parentElement?.parentElement;
@@ -149,7 +149,7 @@ function roomFor(edge: HTMLElement, options: ResizableEdgeOptions): number {
 }
 
 /** The snap a width the pointer asks for earns, given the one the drag holds. */
-function snapFor(asked: number, drag: Drag, options: ResizableEdgeOptions): EdgeSnap {
+function snapFor(asked: number, drag: Drag, options: ResizeEdgeOptions): EdgeSnap {
   const give = (snap: EdgeSnap) => (drag.snap === snap ? SNAP_HYSTERESIS : 0);
   const shutBelow = options.bounds.MIN - COLLAPSE_OVERSHOOT + give(EDGE_SNAP.COLLAPSE);
   const growAbove = drag.max + EXPAND_OVERSHOOT - give(EDGE_SNAP.EXPAND);
@@ -159,13 +159,13 @@ function snapFor(asked: number, drag: Drag, options: ResizableEdgeOptions): Edge
 }
 
 /** The width the pane asks for when the pointer stands at `x`, by how far it has come and which way widens. */
-function askedWidth(drag: Drag, x: number, side: EdgeSide): number {
-  const moved = side === EDGE_SIDE.LEFT ? drag.x - x : x - drag.x;
+function askedWidth(drag: Drag, x: number, side: ResizeEdgeSide): number {
+  const moved = side === RESIZE_EDGE_SIDE.LEFT ? drag.x - x : x - drag.x;
   return drag.from + moved;
 }
 
 /** Toggles the pane into or out of one snap. */
-function toggleSnap(snap: EdgeSnap, options: ResizableEdgeOptions): void {
+function toggleSnap(snap: EdgeSnap, options: ResizeEdgeOptions): void {
   if (snap === EDGE_SNAP.COLLAPSE) options.onToggleCollapsed?.();
   if (snap === EDGE_SNAP.EXPAND) options.onToggleExpanded?.();
 }
@@ -176,7 +176,7 @@ function toggleSnap(snap: EdgeSnap, options: ResizableEdgeOptions): void {
  * A snap leaves the width as the drag drew it, so the pane shuts or grows
  * from where it stood.
  */
-function follow(drag: Drag, x: number, options: ResizableEdgeOptions): void {
+function follow(drag: Drag, x: number, options: ResizeEdgeOptions): void {
   const asked = askedWidth(drag, x, options.side);
   const snap = snapFor(asked, drag, options);
   if (snap !== drag.snap) {
@@ -194,12 +194,12 @@ function keyedWidth(
   key: string,
   width: number,
   max: number,
-  options: ResizableEdgeOptions,
+  options: ResizeEdgeOptions,
 ): number | undefined {
   // Note that the arrow pointing away from the pane widens it, because that
   // is the way the edge moves.
-  const widens = options.side === EDGE_SIDE.LEFT ? "ArrowLeft" : "ArrowRight";
-  const narrows = options.side === EDGE_SIDE.LEFT ? "ArrowRight" : "ArrowLeft";
+  const widens = options.side === RESIZE_EDGE_SIDE.LEFT ? "ArrowLeft" : "ArrowRight";
+  const narrows = options.side === RESIZE_EDGE_SIDE.LEFT ? "ArrowRight" : "ArrowLeft";
   if (key === widens) return width + KEY_STEP;
   if (key === narrows) return width - KEY_STEP;
   if (key === "Home") return options.bounds.MIN;
@@ -215,7 +215,7 @@ function keyedWidth(
  * an edge its own snap took away. While it lasts the whole window wears the
  * resize cursor and selects no text.
  */
-export function useResizableEdge(options: ResizableEdgeOptions): ResizableEdgeProps {
+export function useResizeEdge(options: ResizeEdgeOptions): ResizeEdgeHandle {
   const { bounds, width, onResize } = options;
   const latest = useRef(options);
   const drag = useRef<Drag | undefined>(undefined);
@@ -281,6 +281,7 @@ export function useResizableEdge(options: ResizableEdgeOptions): ResizableEdgePr
 
   return {
     ref: measure,
+    "data-side": options.side,
     role: "separator",
     "aria-orientation": "vertical",
     "aria-label": options.label,
@@ -306,4 +307,14 @@ export function useResizableEdge(options: ResizableEdgeOptions): ResizableEdgePr
       onResize(Math.min(max, Math.max(bounds.MIN, asked)));
     },
   };
+}
+
+/**
+ * The edge itself, drawn as the pane's own child from what `useResizeEdge`
+ * handed its owner: a strip wider than it looks straddling the pane's
+ * border on its side, filled in the accent under the pointer, mid-drag, or
+ * on the keyboard (resize-edge.css).
+ */
+export function ResizeEdge({ edge }: { edge: ResizeEdgeHandle }): React.JSX.Element {
+  return <div className="luke-resize-edge" {...edge} />;
 }

@@ -24,8 +24,9 @@ import { CatalogSection } from "../section";
  * summary's words or flush with the row, a fold whose holder keeps its
  * state, a summary long enough to wrap in a pane narrower than its words,
  * a summary holding a control that is pressed without folding it, a
- * chip at the end of its row counting the threads it folds, and a fold
- * drawn as a card, its chevron leading its head or ending it.
+ * chip at the end of its row counting the threads it folds, a fold
+ * drawn as a card, its chevron leading its head or ending it, and a
+ * transcript's line, bare, which the skin around its fold draws.
  */
 
 /** A fold whose summary ends with a ⋯ in its action slot, which counts its presses rather than folding the row. */
@@ -185,6 +186,22 @@ function Disclosures(): React.JSX.Element {
               </DisclosureBody>
             </Disclosure>
           </Stack>
+        </div>
+      </CatalogSection>
+      <CatalogSection
+        id="disclosure-transcript"
+        title="A transcript's line, drawn by its fold's skin"
+      >
+        <div className="catalog-frame catalog-frame-wide catalog-transcript-fold">
+          <Disclosure>
+            <DisclosureSummary look={DISCLOSURE_SUMMARY.TRANSCRIPT}>
+              <DisclosureChevron />
+              <span>Conversation</span>
+            </DisclosureSummary>
+            <DisclosureBody inset={DISCLOSURE_BODY.FLUSH}>
+              <Text>Dana: Should this retry on a 429 too?</Text>
+            </DisclosureBody>
+          </Disclosure>
         </div>
       </CatalogSection>
       <CatalogSection id="disclosure-long" title="Long summary, narrow pane">

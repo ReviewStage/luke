@@ -22,7 +22,10 @@
     font-size: var(--luke-type-caption-size);
   }
 
-  .luke-disclosure-summary {
+  /* Note that a transcript's line is bare of the row's drawing, its skin the
+     fold's around it, so the row's rules pass it by; `:where` keeps them
+     weighing what one class does. */
+  .luke-disclosure-summary:not(:where([data-look="transcript"])) {
     display: flex;
     align-items: center;
     gap: var(--luke-icon-gap);
@@ -102,14 +105,24 @@
     display: none;
   }
 
+  /* A transcript's line: only what makes it a summary pressed as a row is,
+     no marker, no list's bullet, no selection, the platform's arrow; the
+     rest is its fold's skin. */
+  .luke-disclosure-summary[data-look="transcript"] {
+    cursor: default;
+    list-style: none;
+    user-select: none;
+  }
+
   /* A summary's words wrap rather than run past a narrow pane, an unbroken
      name among them. */
-  .luke-disclosure-summary > :not(svg, .luke-disclosure-turn) {
+  .luke-disclosure-summary:not(:where([data-look="transcript"]))
+  > :not(svg, .luke-disclosure-turn) {
     min-width: 0;
     overflow-wrap: anywhere;
   }
 
-  .luke-disclosure-summary:hover {
+  .luke-disclosure-summary:not(:where([data-look="transcript"])):hover {
     background: var(--luke-color-fill-strong);
     color: var(--luke-color-text);
   }

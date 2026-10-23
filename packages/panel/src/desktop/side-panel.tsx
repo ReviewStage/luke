@@ -32,6 +32,9 @@ import {
   LIST_DENSITY,
   List,
   ListRow,
+  RESIZE_EDGE_SIDE,
+  ResizeEdge,
+  type ResizeEdgeHandle,
   SCROLL_SIZE,
   ScrollArea,
   SidePanelIcon,
@@ -40,6 +43,7 @@ import {
   TEXT_VARIANT,
   Text,
   Tooltip,
+  useResizeEdge,
 } from "@luke/ui";
 import {
   agentOfTab,
@@ -168,7 +172,6 @@ import {
 } from "./strip-tabs.js";
 import { LOOK_STRIP, useStripLooks } from "./switcher-looks.js";
 import { TabStrip } from "./tab-strip.js";
-import { EDGE_SIDE, type ResizableEdgeProps, useResizableEdge } from "./use-resizable-edge.js";
 
 /**
  * side-panel.tsx -- the open task's side panel at the window's right: its toggle, its tabs and their "+", its full-screen button, the tab shown, and the edge it is resized by.
@@ -251,15 +254,6 @@ const PANEL_LEAVING = {
 } as const;
 
 type PanelLeaving = (typeof PANEL_LEAVING)[keyof typeof PANEL_LEAVING];
-
-/**
- * The panel's left edge, dragged to resize it, past its least width to close
- * it, and past its greatest to fill the window; double-clicked, it goes back
- * to the default width.
- */
-function ResizeEdge({ edge }: { edge: ResizableEdgeProps }): React.JSX.Element {
-  return <div className="side-panel-resize" {...edge} />;
-}
 
 /** A task with no page, the same array every render. */
 const NO_PAGES: readonly PageLine[] = [];
@@ -1850,7 +1844,7 @@ export interface SidePanelDrawing {
   leaving: PanelLeaving;
   /** The exit has played: draw the panel as asked. */
   onLeft: () => void;
-  edge: ResizableEdgeProps;
+  edge: ResizeEdgeHandle;
 }
 
 /** An exit under way, and the panel it holds drawn. */
@@ -1911,8 +1905,8 @@ export function useSidePanelDrawing(panel: SidePanelControl): SidePanelDrawing {
   }
   const onLeft = useCallback(() => setHeld(undefined), []);
   const drawn = drawnPanel(panel, held);
-  const edge = useResizableEdge({
-    side: EDGE_SIDE.LEFT,
+  const edge = useResizeEdge({
+    side: RESIZE_EDGE_SIDE.LEFT,
     width: drawn.width,
     bounds: SIDE_PANEL_WIDTH,
     reserve: documentReserve,

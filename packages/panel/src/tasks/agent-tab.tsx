@@ -32,6 +32,7 @@ import {
   INLINE_REF_LOOK,
   InlineRef,
   LineSummary,
+  MESSAGE_ACTIONS_PLACEMENT,
   OneLine,
   TaskStatusMark,
   TEXT_LINK_LOOK,
@@ -75,7 +76,7 @@ import {
   ConversationScrollButton,
 } from "../ai-elements/conversation.js";
 import { Fold, FoldBody } from "../ai-elements/fold.js";
-import { MESSAGE_ACTIONS_PLACEMENT, Message, MessageContent } from "../ai-elements/message.js";
+import { Message, MessageContent } from "../ai-elements/message.js";
 import { Plan, PlanContent, PlanHeader, PlanIcon, PlanTitle } from "../ai-elements/plan.js";
 import { TOOL_STATE } from "../ai-elements/tool.js";
 import { appPlatform } from "../app-platform.js";

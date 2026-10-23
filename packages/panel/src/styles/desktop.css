@@ -1806,7 +1806,7 @@ ul.actor-stack {
   min-width: 0;
 }
 
-.message-meta > :is(.message-actions, .message-sent-at) {
+.message-meta > :is(.luke-message-actions, .message-sent-at) {
   flex: none;
 }
 
@@ -4226,7 +4226,7 @@ ul.actor-stack {
 
 /* The presses show as their row does, so a message's Copy stands with its
    Reply rather than waiting on a transcript's hover of its own. */
-.chat-byline-action > .message-actions {
+.chat-byline-action > .luke-message-actions {
   opacity: 1;
   pointer-events: auto;
 }
@@ -5160,31 +5160,10 @@ ul.actor-stack {
   bottom: 0;
 }
 
-/* A resize edge straddles its pane's border, wider than it looks: the side
-   panel's left border, the sidebar's right. */
-.side-panel-resize,
-.sidebar-resize {
-  position: absolute;
-  z-index: 2;
-  top: 0;
-  bottom: 0;
-  width: 6px;
-  cursor: col-resize;
-  outline: none; /* no ring: the edge fills in the focus colour */
-  transition: background-color var(--luke-duration-hover) ease;
-}
-
-[data-luke-profile="desktop"] .side-panel-resize,
-[data-luke-profile="desktop"] .sidebar-resize {
-  -webkit-app-region: no-drag;
-}
-
-.side-panel-resize {
-  left: -3px;
-}
-
 /* A drag the edge's snap took away from under the pointer is still the
-   edge's, so the whole window wears its cursor and selects nothing. */
+   edge's (`@luke/ui`'s ResizeEdge marks the root), so the whole window wears
+   its cursor and selects nothing. Note that this stays out of the layers,
+   so it wins over every cursor the window draws. */
 :root[data-edge-drag] {
   cursor: col-resize;
   user-select: none;
@@ -5194,27 +5173,14 @@ ul.actor-stack {
   cursor: inherit;
 }
 
-.sidebar-resize {
-  right: -3px;
-}
-
-.side-panel-resize:hover,
-.side-panel-resize:active,
-.side-panel-resize:focus-visible,
-.sidebar-resize:hover,
-.sidebar-resize:active,
-.sidebar-resize:focus-visible {
-  background: color-mix(in srgb, var(--luke-color-accent) 55%, transparent);
-}
-
 /* A finger takes an edge across both columns' gutters, centred on the strip
    it draws, which keeps its width and its place. Note that the edge stops at
    the gutters rather than reaching a finger's full width, because past them
    it would stand over the rows and controls either column holds there, and
-   a press on one would start a drag instead. */
+   a press on one would start a drag instead. The gutters are the panel's,
+   so this stays here beside them rather than in `@luke/ui`'s ResizeEdge. */
 @media (pointer: coarse) {
-  .side-panel-resize::before,
-  .sidebar-resize::before {
+  .luke-resize-edge::before {
     position: absolute;
     top: 0;
     bottom: 0;
