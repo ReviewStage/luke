@@ -3,7 +3,7 @@ import { MESSAGE_CHANNEL } from "@luke/wire";
 import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 import { Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
-import { Database, type DatabaseServices, type QueryError } from "../core/query.js";
+import { Database, type DatabaseServices, type StoreFailure } from "../core/query.js";
 import { asks, conversations, messages } from "../schemas/storage.js";
 import { InstantColumnSchema } from "./columns.js";
 import { holdConversationDispatch } from "./dispatch-lock.js";
@@ -154,10 +154,8 @@ export interface AskDeliveryBinding {
   stoppedOn(target: ConversationTarget, turnId: string): AskEffect<readonly AskRow[]>;
 }
 
-type AskFailure = QueryError | Schema.SchemaError;
-
 /** What every method of the record answers: an effect over the ambient client. */
-type AskEffect<A> = Effect.Effect<A, AskFailure, DatabaseServices>;
+type AskEffect<A> = Effect.Effect<A, StoreFailure, DatabaseServices>;
 
 /** The whole of an ask's row, as every read of one projects it and the binding returns it. */
 const ASK_COLUMNS = {
@@ -293,7 +291,7 @@ const findLatestSession = SqlSchema.findOneOption({
 /** The newest session any of the conversation's asks was handed to, by eve's sortable ids. */
 function latestSessionOf(
   target: ConversationTarget,
-): Effect.Effect<string | undefined, AskFailure, DatabaseServices> {
+): Effect.Effect<string | undefined, StoreFailure, DatabaseServices> {
   return Effect.map(findLatestSession(target), (found) =>
     Option.getOrUndefined(Option.map(found, (row) => row.sessionId)),
   );
@@ -388,23 +386,26 @@ const TYPED_LINE_OF_ASK = and(
 /** Whether a typed line asked it, as the join above reads it. */
 const ASKED_BY_TYPED_LINE = sql<boolean>`${messages.id} is not null`;
 
+/** What every read of spoken asks selects, as `SpokenAskRowSchema` decodes it. */
+const SPOKEN_ASK_COLUMNS = {
+  id: asks.id,
+  clientId: asks.clientId,
+  revision: sql<number>`coalesce(${asks.askRevision}, 0)`,
+  turnId: asks.turnId,
+  cancelRequestedAt: asks.cancelRequestedAt,
+  joinedAfterStep: asks.joinedAfterStep,
+  toldSeq: asks.toldSeq,
+  endToldAt: asks.endToldAt,
+  typed: ASKED_BY_TYPED_LINE,
+};
+
 const findSpokenIn = SqlSchema.findAll({
   Request: SpokenInSchema,
   Result: SpokenAskRowSchema,
   execute: (key) =>
     Database.use((db) =>
       db
-        .select({
-          id: asks.id,
-          clientId: asks.clientId,
-          revision: sql<number>`coalesce(${asks.askRevision}, 0)`,
-          turnId: asks.turnId,
-          cancelRequestedAt: asks.cancelRequestedAt,
-          joinedAfterStep: asks.joinedAfterStep,
-          toldSeq: asks.toldSeq,
-          endToldAt: asks.endToldAt,
-          typed: ASKED_BY_TYPED_LINE,
-        })
+        .select(SPOKEN_ASK_COLUMNS)
         .from(asks)
         .leftJoin(messages, TYPED_LINE_OF_ASK)
         .where(and(eq(asks.userId, key.userId), eq(asks.voiceSessionId, key.voiceSessionId)))
@@ -424,17 +425,7 @@ const findUnendedSpoken = SqlSchema.findAll({
   execute: (key) =>
     Database.use((db) =>
       db
-        .select({
-          id: asks.id,
-          clientId: asks.clientId,
-          revision: sql<number>`coalesce(${asks.askRevision}, 0)`,
-          turnId: asks.turnId,
-          cancelRequestedAt: asks.cancelRequestedAt,
-          joinedAfterStep: asks.joinedAfterStep,
-          toldSeq: asks.toldSeq,
-          endToldAt: asks.endToldAt,
-          typed: ASKED_BY_TYPED_LINE,
-        })
+        .select(SPOKEN_ASK_COLUMNS)
         .from(asks)
         .leftJoin(messages, TYPED_LINE_OF_ASK)
         .where(
@@ -604,7 +595,7 @@ function dispatchAskOnce(
   target: ConversationTarget,
   id: string,
   dispatch: (sessionId: string | undefined) => Effect.Effect<AskDispatch | undefined>,
-): Effect.Effect<AskRow | AskDispatchRefusal, AskFailure, DatabaseServices> {
+): Effect.Effect<AskRow | AskDispatchRefusal, StoreFailure, DatabaseServices> {
   return Effect.flatMap(SqlClient.SqlClient, (client) =>
     client.withTransaction(
       Effect.gen(function* () {
@@ -636,7 +627,7 @@ function dispatchAskOnce(
 /** The one place a client id becomes a row: the insert lands or is refused by the index, and the row is read back either way. */
 const recordAsk = /* @__PURE__ */ Effect.fn("web/recordAsk")(function* (
   ask: AskWrite,
-): Effect.fn.Return<AskRow, AskFailure, DatabaseServices> {
+): Effect.fn.Return<AskRow, StoreFailure, DatabaseServices> {
   yield* insertAsk(ask);
   const row = yield* findAskByClient({
     conversationId: ask.conversationId,

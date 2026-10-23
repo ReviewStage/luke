@@ -69,7 +69,6 @@ export type BreadcrumbShown = (typeof BREADCRUMB_SHOWN)[keyof typeof BREADCRUMB_
 
 /** What a crumb's press opens. */
 export const BREADCRUMB_POPUP = {
-  MENU: "menu",
   DIALOG: "dialog",
 } as const;
 

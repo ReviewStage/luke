@@ -1,18 +1,7 @@
 {
   "$schema": "https://unpkg.com/knip@6/schema.json",
   "ignoreDependencies": ["oxlint", "turbo"],
-  "ignoreBinaries": [
-    "afconvert",
-    "iconutil",
-    "ditto",
-    "shasum",
-    "tiffutil",
-    "codesign",
-    "xcrun",
-    "swiftc",
-    "electron"
-  ],
-  "ignore": [".opencode/**"],
+  "ignoreBinaries": ["afconvert", "iconutil", "ditto", "shasum", "tiffutil"],
   "workspaces": {
     ".": {
       "entry": ["scripts/fixtures/discarded-effect/*.ts"],
@@ -36,7 +25,6 @@
       "project": ["src/**", "scripts/**"]
     },
     "apps/catalog": {
-      "entry": ["src/main.tsx"],
       "project": ["src/**"]
     },
     "apps/web": {
@@ -46,7 +34,6 @@
         "src/*.tsx",
         "src/app/main.tsx",
         "src/entry-server.tsx",
-        "server/db/migrate.ts",
         "scripts/*.ts",
         "server/feedback.mjs",
         "server/feedback.d.mts"
@@ -91,21 +78,19 @@
       "project": ["**/*.ts"]
     },
     "packages/agent-runner": {
-      "entry": ["src/main.ts", "scripts/generate-codex-protocol.mjs"],
       "project": ["src/**", "scripts/**"],
       "ignore": ["src/codex-protocol/**"]
     },
     "tools/claude-code-probe": {
-      "entry": ["src/cli.ts", "src/sandbox/driver.mjs"],
+      "entry": ["src/sandbox/driver.mjs"],
       "project": ["src/**", "tests/**"],
       "ignoreDependencies": ["@anthropic-ai/claude-agent-sdk"]
     },
     "tools/anti-slop": {
-      "entry": ["index.ts", "press-guard-check.ts"],
+      "entry": ["index.ts"],
       "project": ["**/*.ts"]
     },
     "packages/brand": {
-      "entry": ["scripts/generate-brand-assets.mjs", "scripts/generate-surface-shared.mjs"],
       "project": ["src/**", "scripts/**"]
     }
   },

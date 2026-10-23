@@ -47,7 +47,6 @@
 import {
   type KeyRing,
   openProviderKey,
-  parseKeyRing,
   sealProviderKey,
 } from "@luke/database/models/provider-key-seal";
 import {
@@ -69,16 +68,10 @@ import {
   SUBSCRIPTION_KIND_PROVIDER,
   type SubscriptionKeySummary,
 } from "@luke/features/provider-key-wire";
-import { middlewareGen } from "@orpc/experimental-effect";
 import { Clock, DateTime, Duration, Effect, Redacted, Result } from "effect";
-import { HostedEnvironment } from "../environment.js";
-import {
-  HOSTED_REFUSAL,
-  hostedStoreOrUnavailable,
-  type UserIdResolver,
-} from "../http/http-effect.js";
+import { hostedStoreOrUnavailable, type UserIdResolver } from "../http/http-effect.js";
 import { makeRateBrake } from "../http/rate-brake.js";
-import { accountMiddleware, type HostedContext, hosted } from "../orpc/base.js";
+import { accountMiddleware, hosted, keyRingMiddleware } from "../orpc/base.js";
 import {
   checkFastAccess,
   checkProviderKey,
@@ -104,22 +97,6 @@ const SAVE_BRAKE = {
 export interface ProviderKeysProcedureSeams {
   resolveUserId: UserIdResolver;
 }
-
-/** The deployment's ring, handed on as the procedure's, or the request refused as unavailable where it holds none it can parse. */
-const keyRingMiddleware = middlewareGen<HostedContext, { readonly ring: KeyRing }>(function* ({
-  next,
-}) {
-  const environment = yield* HostedEnvironment;
-  const configured = environment.providerKeyEncryptionKeys;
-  if (configured === undefined) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
-  const ring = parseKeyRing(configured);
-  if (Result.isFailure(ring)) {
-    // The fault names the shape that is wrong and never a value.
-    yield* Effect.logError(`The provider key encryption keys cannot be read: ${ring.failure}`);
-    return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
-  }
-  return yield* next({ context: { ring: ring.success } });
-});
 
 /** The kinds a subscription credential is, every kind but the API key. */
 const SUBSCRIPTION_KINDS = Object.values(PROVIDER_KEY_KIND).filter(

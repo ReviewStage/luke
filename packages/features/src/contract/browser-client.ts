@@ -24,16 +24,12 @@
 
 import type { UnparsedWireValue } from "@luke/wire";
 import { type Client, createORPCClient, ORPCError } from "@orpc/client";
-import {
-  type AnySchema,
-  getProcedureContractOrThrow,
-  type InferSchemaInput,
-  type ProcedureContract,
-} from "@orpc/contract";
+import type { InferSchemaInput, ProcedureContract } from "@orpc/contract";
 import { OpenAPILink } from "@orpc/openapi/fetch";
 import { Result, Schema } from "effect";
 import { readServiceAnswer } from "../service-wire.js";
 import { hostedContract } from "./index.js";
+import { outputWireSchema } from "./output-schema.js";
 
 /** The answer arrived through a redirect, so something in front of the service answered it. */
 export class BrowserRedirected extends Error {
@@ -78,23 +74,6 @@ type BrowserLinkClient<Router> =
 export type BrowserClient = BrowserLinkClient<typeof hostedContract>;
 
 const isRefusalBody = Schema.is(Schema.Struct({ error: Schema.String }));
-
-/**
- * Whether a contract's schema is an Effect Schema, which every hosted
- * procedure's is; a wire schema decodes and encodes with no service, which
- * is what the narrowing states beyond what `Schema.isSchema` checks.
- */
-function isWireSchema(
-  schema: AnySchema | undefined,
-): schema is AnySchema & Schema.Codec<unknown, unknown> {
-  return Schema.isSchema(schema);
-}
-
-/** The wire schema a procedure's output is decoded with: the one its contract declares, flipped back. */
-function outputWireSchema(path: readonly string[]): Schema.Codec<unknown> | undefined {
-  const [declared] = getProcedureContractOrThrow(hostedContract, path)["~orpc"].outputSchemas ?? [];
-  return isWireSchema(declared) ? Schema.flip(declared) : undefined;
-}
 
 /** One request on the page's own `fetch`, with its cookies, a redirect followed and refused. */
 async function sent(url: string, init: RequestInit): Promise<Response> {

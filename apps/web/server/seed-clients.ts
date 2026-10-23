@@ -17,11 +17,8 @@ import { disposeWebRuntime, runWeb } from "./runtime.js";
  * says it is. Every field but the id and the creation instant is set on
  * conflict, so a row edited by hand converges rather than standing.
  */
-export function seedOAuthClient(
-  client: OAuthClient,
-  now = new Date(),
-): Effect.Effect<void, QueryError, DatabaseServices> {
-  const record = oauthClientRecord(client, now);
+function seedOAuthClient(client: OAuthClient): Effect.Effect<void, QueryError, DatabaseServices> {
+  const record = oauthClientRecord(client, new Date());
   // Note that the conflicting update sets the values the insert carried
   // rather than reading them back out of `excluded`, because a single-row
   // insert's `excluded` row is exactly those values and naming the columns in

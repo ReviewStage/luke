@@ -1,7 +1,7 @@
 import { PRODUCT_SETTING_VALUE, type ProductSettingValue } from "@luke/features/analytics";
 import type { UnparsedWireValue } from "@luke/wire";
 import { APP_SETTING_KIND, type AppSettingId, appToggleText } from "@luke/wire/app-settings";
-import { Result, Schema } from "effect";
+import { Schema } from "effect";
 import {
   type AppSettingReader,
   type AppSettingSchemaEntry,
@@ -21,31 +21,18 @@ import {
 const valid = <Value>(value: Value): SettingGuardResult<Value> => ({ valid: true, value });
 const invalid = <Value>(value: Value): SettingGuardResult<Value> => ({ valid: false, value });
 
-/**
- * Every guard settles as a `Result` before it ever becomes a `{ valid, value
- * }` pair: a success is what a guard accepted, and a failure carries the same
- * value a caller sees on refusal (the default, or `undefined`), because the
- * exported shape keeps a value on both branches even where the failure
- * channel usually would not. The fold is total, so it is stated as one —
- * `Result.match` rather than a test of the tag and a reach into the arm it
- * proved.
- */
-const settingGuardFromEither = <Value>(
-  either: Result.Result<Value, Value>,
-): SettingGuardResult<Value> => Result.match(either, { onSuccess: valid, onFailure: invalid });
-
 export function optional<Value extends UnparsedWireValue>(
   value: UnparsedWireValue,
   guard: (candidate: UnparsedWireValue) => candidate is Value,
 ): SettingGuardResult<Value | undefined> {
   if (value === undefined) return valid(undefined);
-  return settingGuardFromEither(guard(value) ? Result.succeed(value) : Result.fail(undefined));
+  return guard(value) ? valid(value) : invalid(undefined);
 }
 
 function boolean(defaultValue: boolean) {
   const isBoolean = Schema.is(Schema.Boolean);
   return (value: UnparsedWireValue): SettingGuardResult<boolean> =>
-    settingGuardFromEither(isBoolean(value) ? Result.succeed(value) : Result.fail(defaultValue));
+    isBoolean(value) ? valid(value) : invalid(defaultValue);
 }
 
 const toggleAnalytics = (value: StoredSettingValue): ProductSettingValue =>
@@ -54,14 +41,15 @@ const toggleAnalytics = (value: StoredSettingValue): ProductSettingValue =>
 const choiceAnalytics = (value: StoredSettingValue): ProductSettingValue =>
   value === undefined ? PRODUCT_SETTING_VALUE.CLEARED : PRODUCT_SETTING_VALUE.SET;
 
-/** What a toggle declares of its own; the rest is fixed by its being a toggle. */
-interface ToggleSpec<Field extends string, Id extends AppSettingId> {
+type SettingKind = (typeof APP_SETTING_KIND)[keyof typeof APP_SETTING_KIND];
+
+/** What every schema row declares alike, toggle or choice: its field, its name, and where it stands. */
+interface RowSpec<Field extends string, Id extends AppSettingId> {
   field: Field;
   id: Id;
   label: string;
   /** What the row cannot say for itself, drawn under its label. */
   detail?: string;
-  default: boolean;
   page: SettingsPage;
   section?: SettingSection;
   order: number;
@@ -70,16 +58,34 @@ interface ToggleSpec<Field extends string, Id extends AppSettingId> {
   visible?: (view: SettingsVisibility) => boolean;
 }
 
+/** What a toggle declares of its own; the rest is fixed by its being a toggle. */
+interface ToggleSpec<Field extends string, Id extends AppSettingId> extends RowSpec<Field, Id> {
+  default: boolean;
+}
+
 /**
- * One toggle's entry but for its guard, which decides what nothing stored
- * reads as and so is each builder's own.
+ * The part of a row's entry its spec fixes whatever its kind: where it
+ * stands, its one id, and its description, of `kind` and worded by `value`.
  */
-function toggleEntry<Field extends string, Id extends AppSettingId>(
-  spec: ToggleSpec<Field, Id>,
-): Omit<AppSettingSchemaEntry<Field, boolean, Id, boolean>, "guard" | "control"> {
+function rowEntry<Field extends string, Id extends AppSettingId>(
+  spec: RowSpec<Field, Id>,
+  kind: SettingKind,
+  value: (settings: AppSettingReader) => string,
+): Pick<
+  AppSettingSchemaEntry<Field, unknown, Id>,
+  | "field"
+  | "page"
+  | "section"
+  | "order"
+  | "resetScope"
+  | "sideEffect"
+  | "rows"
+  | "ids"
+  | "describe"
+  | "visible"
+> {
   return {
     field: spec.field,
-    default: spec.default,
     page: spec.page,
     section: spec.section ?? SETTING_SECTION.MAIN,
     order: spec.order,
@@ -91,10 +97,25 @@ function toggleEntry<Field extends string, Id extends AppSettingId>(
       id: spec.id,
       label: spec.label,
       ...(spec.detail === undefined ? undefined : { detail: spec.detail }),
-      kind: APP_SETTING_KIND.TOGGLE,
-      value: appToggleText(settings(spec.field) === true),
+      kind,
+      value: value(settings),
     }),
     visible: spec.visible,
+  };
+}
+
+/**
+ * One toggle's entry but for its guard, which decides what nothing stored
+ * reads as and so is each builder's own.
+ */
+function toggleEntry<Field extends string, Id extends AppSettingId>(
+  spec: ToggleSpec<Field, Id>,
+): Omit<AppSettingSchemaEntry<Field, boolean, Id, boolean>, "guard" | "control"> {
+  return {
+    ...rowEntry(spec, APP_SETTING_KIND.TOGGLE, (settings) =>
+      appToggleText(settings(spec.field) === true),
+    ),
+    default: spec.default,
     analytics: { value: toggleAnalytics },
   };
 }
@@ -141,47 +162,38 @@ export function choiceSetting<
   Value extends string | number,
   Id extends AppSettingId,
   Default extends Value | undefined,
->(spec: {
-  field: Field;
-  id: Id;
-  label: string;
-  /** What the row cannot say for itself, drawn under its label. */
-  detail?: string;
-  /** Every value the setting stores, in the order the control offers them. */
-  values: readonly Value[];
-  /** The control's token for a value, and the value its description reads. */
-  token: (value: Value) => string;
-  /** How a value is worded on the control, when that differs from `token`. */
-  optionLabel?: (value: Value) => string;
-  /** The address of the picture a value is shown with, for a choice whose values have faces, which is then chosen from them. */
-  optionPicture?: (value: Value) => string | undefined;
-  /** The path of the clip a value is heard in, under the panel's asset base, for a choice whose values are sounds. */
-  optionSample?: (value: Value) => string | undefined;
-  /** The heading a value stands under, for a choice drawn in groups; values sharing one stand together in `values`' order. */
-  optionGroup?: (value: Value) => string | undefined;
-  /** A short word of what a value is, at the end of its row where the control draws one. */
-  optionTag?: (value: Value) => string | undefined;
-  default: Default;
-  /** The word for no choice at all, required where the default is nothing. */
-  absent?: string;
-  page: SettingsPage;
-  section?: SettingSection;
-  order: number;
-  sideEffect: SettingSideEffectId;
-  resetScope?: SettingsResetScope;
-  /**
-   * The vocabulary's own guard for its own values. Passed rather than built
-   * from `values`, because the package that names a value set is the package
-   * that says what one is, and a membership test rebuilt here would be a
-   * second reading of it.
-   */
-  guard: (value: UnparsedWireValue) => SettingGuardResult<Value | undefined>;
-  visible?: (view: SettingsVisibility) => boolean;
-  /** A control whose options are observed, or whose empty token is its own. */
-  control?: SettingControl<Value | undefined>;
-  /** The empty search field's words, for a list long enough that its pop-up searches. */
-  search?: string;
-}): AppSettingSchemaEntry<Field, Value | undefined, Id, Default> {
+>(
+  spec: RowSpec<Field, Id> & {
+    /** Every value the setting stores, in the order the control offers them. */
+    values: readonly Value[];
+    /** The control's token for a value, and the value its description reads. */
+    token: (value: Value) => string;
+    /** How a value is worded on the control, when that differs from `token`. */
+    optionLabel?: (value: Value) => string;
+    /** The address of the picture a value is shown with, for a choice whose values have faces, which is then chosen from them. */
+    optionPicture?: (value: Value) => string | undefined;
+    /** The path of the clip a value is heard in, under the panel's asset base, for a choice whose values are sounds. */
+    optionSample?: (value: Value) => string | undefined;
+    /** The heading a value stands under, for a choice drawn in groups; values sharing one stand together in `values`' order. */
+    optionGroup?: (value: Value) => string | undefined;
+    /** A short word of what a value is, at the end of its row where the control draws one. */
+    optionTag?: (value: Value) => string | undefined;
+    default: Default;
+    /** The word for no choice at all, required where the default is nothing. */
+    absent?: string;
+    /**
+     * The vocabulary's own guard for its own values. Passed rather than built
+     * from `values`, because the package that names a value set is the package
+     * that says what one is, and a membership test rebuilt here would be a
+     * second reading of it.
+     */
+    guard: (value: UnparsedWireValue) => SettingGuardResult<Value | undefined>;
+    /** A control whose options are observed, or whose empty token is its own. */
+    control?: SettingControl<Value | undefined>;
+    /** The empty search field's words, for a list long enough that its pop-up searches. */
+    search?: string;
+  },
+): AppSettingSchemaEntry<Field, Value | undefined, Id, Default> {
   const optionLabel = spec.optionLabel ?? spec.token;
   const byToken: Map<string, Value> = new Map(
     spec.values.map((value) => [spec.token(value), value] as const),
@@ -221,24 +233,9 @@ export function choiceSetting<
     stored: (token) => byToken.get(token),
   };
   return {
-    field: spec.field,
+    ...rowEntry(spec, APP_SETTING_KIND.CHOICE, (settings) => tokenOf(storedValue(settings))),
     default: spec.default,
     guard: spec.guard,
-    page: spec.page,
-    section: spec.section ?? SETTING_SECTION.MAIN,
-    order: spec.order,
-    resetScope: spec.resetScope,
-    sideEffect: spec.sideEffect,
-    rows: SETTING_ROWS.SCHEMA,
-    ids: [spec.id],
-    describe: (settings) => ({
-      id: spec.id,
-      label: spec.label,
-      ...(spec.detail === undefined ? undefined : { detail: spec.detail }),
-      kind: APP_SETTING_KIND.CHOICE,
-      value: tokenOf(storedValue(settings)),
-    }),
-    visible: spec.visible,
     control,
     analytics: { value: choiceAnalytics },
   };

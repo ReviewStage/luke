@@ -12,7 +12,7 @@ import {
  * integration-sign-in.ts -- a Connect sign-in the window waits on, from the press to how it ended: still waiting, failed, or never finished.
  *
  * Settings › Integrations and the composer's MCP servers popover draw it
- * alike (the desktop's `renderer/integration-statuses.ts` holds it). A sign-in happens in the
+ * alike (`packages/panel/src/integration-statuses.ts` holds it). A sign-in happens in the
  * browser, and the window learns how it went only by reading where the
  * provider stands again, so this is what each read says of it. A read that
  * finds it connected ends it. A read that names it among the service's

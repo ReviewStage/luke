@@ -1,0 +1,31 @@
+/* theme.css -- shadcn/ui's Tailwind vocabulary over the `--luke-*` tokens, the one theme every app's Tailwind entry takes on after Tailwind's own.
+
+   The components `@luke/ui` vendors from shadcn/ui (`../shadcn/`) and the
+   panel's AI Elements (`@luke/panel`'s `ai-elements/`) are written in
+   Tailwind's utility vocabulary: `bg-primary`, `text-muted-foreground`,
+   `border-border`. Each token here is an alias of a palette role (or of one
+   the panel's base.css names), so a utility and a hand-written rule read one
+   vocabulary, no app maps a name to a role of its own, and no second gray or
+   hairline is invented. Only the tokens something draws with. */
+@theme inline {
+  --font-mono: var(--luke-font-mono);
+  --color-background: var(--luke-color-overlay);
+  --color-foreground: var(--luke-color-text);
+  --color-muted: var(--luke-color-fill-hover);
+  --color-muted-foreground: var(--luke-color-text-muted);
+  --color-primary: var(--luke-color-text);
+  --color-primary-foreground: var(--luke-color-ink-inverse);
+  --color-border: var(--luke-color-border);
+  /* The switch's own inks, which the palette keeps apart from the accent. */
+  --color-switch-track: var(--luke-color-switch-track);
+  --color-switch-on: var(--luke-color-switch-on);
+  --color-switch-thumb: var(--luke-color-switch-thumb);
+  --shadow-switch-thumb: var(--luke-shadow-switch-thumb);
+  --ease-spring-fast: var(--luke-spring-fast);
+
+  /* Motion comes from the motion tokens alone (docs/DESIGN.md): a `transition`
+     utility runs on the quick duration and the spring, never on Tailwind's
+     own literal. */
+  --default-transition-duration: var(--luke-duration-quick);
+  --default-transition-timing-function: var(--luke-spring);
+}

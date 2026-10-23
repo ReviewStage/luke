@@ -114,7 +114,11 @@ export function isWireBoolean(value: UnparsedWireValue): value is boolean {
   return readsWireBoolean(value);
 }
 
-const readsWireRecordShape = Schema.is(Schema.declare(isPlainWireRecordShape));
+/** A record's own shape as a Schema, for a struct field that holds a record whose values nothing reads yet. */
+export const WireRecordShapeSchema: Schema.Codec<WireRecord> =
+  Schema.declare(isPlainWireRecordShape);
+
+const readsWireRecordShape = Schema.is(WireRecordShapeSchema);
 
 /**
  * A record's own shape, not whether its values are wire values: a record

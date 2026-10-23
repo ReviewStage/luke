@@ -24,12 +24,14 @@
  */
 
 import "@orpc/experimental-effect/extensions/effect";
+import { type KeyRing, parseKeyRing } from "@luke/database/models/provider-key-seal";
 import { hostedContract } from "@luke/features/contract";
 import { middlewareGen, type WithEffectContext } from "@orpc/experimental-effect";
 import { implement } from "@orpc/server";
 import type { ResponseHeadersHandlerPluginContext } from "@orpc/server/plugins";
-import { Effect, Option } from "effect";
+import { Effect, Option, Result } from "effect";
 import { sessionCredential } from "../auth/session-credential.js";
+import { HostedEnvironment } from "../environment.js";
 import {
   HOSTED_REFUSAL,
   hostedCarriesBearer,
@@ -81,6 +83,22 @@ export function bearerOnlyMiddleware(resolveUserId: UserIdResolver) {
     return yield* next({ context: { userId: account.value } });
   });
 }
+
+/** The deployment's ring, handed on as the procedure's, or the request refused as unavailable where it holds none it can parse. */
+export const keyRingMiddleware = middlewareGen<HostedContext, { readonly ring: KeyRing }>(
+  function* ({ next }) {
+    const environment = yield* HostedEnvironment;
+    const configured = environment.providerKeyEncryptionKeys;
+    if (configured === undefined) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
+    const ring = parseKeyRing(configured);
+    if (Result.isFailure(ring)) {
+      // The fault names the shape that is wrong and never a value.
+      yield* Effect.logError(`The provider key encryption keys cannot be read: ${ring.failure}`);
+      return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
+    }
+    return yield* next({ context: { ring: ring.success } });
+  },
+);
 
 /**
  * The caller by a Better Auth session, read from the request's one

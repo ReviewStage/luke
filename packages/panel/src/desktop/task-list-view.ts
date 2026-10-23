@@ -11,7 +11,7 @@ import {
 import { Schema } from "effect";
 import * as Atom from "effect/reactivity/Atom";
 import { useState } from "react";
-import { readKept, writeKept } from "./folded-groups.js";
+import { readKept, writeKept } from "../kept-storage.js";
 
 /**
  * task-list-view.ts -- how each workspace's task list is grouped, ordered, and filtered in the sidebar, kept per workspace on this Mac.

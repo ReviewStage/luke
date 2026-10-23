@@ -1,9 +1,4 @@
-import {
-  HTTP_METHOD,
-  type UnparsedWireValue,
-  unparsedWire,
-  type WireBoundaryInput,
-} from "@luke/wire";
+import { HTTP_METHOD, type UnparsedWireValue, unparsedWire } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import { Effect, Result } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
@@ -12,6 +7,7 @@ import {
   accountCall,
   type CallCredential,
   callAnswered,
+  jsonOf,
 } from "./account-call.js";
 import type { WorkspaceTokenRepository } from "./github-repositories-wire.js";
 import {
@@ -112,11 +108,6 @@ const REFUSALS: ReadonlyMap<HostedApiError, WorkspaceCallFailure> = new Map([
   [HOSTED_API_ERROR.ALREADY_INVITED, WORKSPACE_CALL_FAILURE.ALREADY_INVITED],
   [HOSTED_API_ERROR.LINEAR_UNAVAILABLE, WORKSPACE_CALL_FAILURE.LINEAR_UNAVAILABLE],
 ]);
-
-/** A response's body as JSON, or nothing where it is not JSON at all. */
-function jsonOf(response: Response): Effect.Effect<WireBoundaryInput> {
-  return Effect.promise((): Promise<WireBoundaryInput> => response.json().catch(() => undefined));
-}
 
 /** The refusal a refused answer carries, where it is one named here; unanswered otherwise. */
 function refusedAs(payload: UnparsedWireValue): WorkspaceCallResult<never> {

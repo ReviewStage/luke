@@ -36,7 +36,12 @@ import {
 } from "drizzle-orm";
 import { Data, DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
-import { Database, type DatabaseServices, type QueryError } from "../core/query.js";
+import {
+  Database,
+  type DatabaseServices,
+  type QueryError,
+  type StoreFailure,
+} from "../core/query.js";
 import { attachment } from "../schemas/attachment.js";
 import { automation } from "../schemas/automation.js";
 import { codingAgent } from "../schemas/coding-agent.js";
@@ -91,7 +96,7 @@ import {
  * no database of its own.
  */
 
-export type TaskStoreFailure = QueryError | Schema.SchemaError;
+export type TaskStoreFailure = StoreFailure;
 
 /** What a task store operation answers: an effect over the ambient client, composed into whatever called it. */
 export type TaskStoreEffect<A> = Effect.Effect<A, TaskStoreFailure, DatabaseServices>;

@@ -7,8 +7,8 @@ import { useCallback, useLayoutEffect, useRef, useState } from "react";
  * room around it given to something else, and whenever its words change,
  * since a box whose width its row sets keeps that width when its words are
  * renamed longer or shorter. The owner marks it `data-overflow`, which its
- * stylesheet fades out over its last few pixels (the desktop's
- * `--label-fade`), as Chrome's and Arc's tabs end a long title.
+ * stylesheet fades out over its last few pixels
+ * (`--luke-label-fade`), as Chrome's and Arc's tabs end a long title.
  *
  * An owner that draws its words from a string hands it as `words`, and the
  * box is measured in the render that changes it, before it is painted.

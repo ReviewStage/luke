@@ -422,6 +422,16 @@ export const MAC_TERMINAL_ACT_KIND = {
 } as const;
 
 /**
+ * A command an agent asked to run on this Mac (`../mac-command-ask.ts`),
+ * answered by the developer from the prompt the panel draws over the window:
+ * allowed once, allowed always, which also writes Settings › This Mac to
+ * Always allow, or denied. Answered by the host, which holds the ask.
+ */
+export const MAC_COMMAND_ACT_KIND = {
+  MAC_COMMAND_ANSWER: "macCommands.answer",
+} as const;
+
+/**
  * A coding agent's Terminal tab (`messages/terminal.ts`): its shells listed,
  * started, named, and ended, its sandbox resumed on the developer's click,
  * and a shell attached and detached. What a shell prints travels on the port
@@ -585,6 +595,7 @@ export const PORT_ACT_KIND = {
   ...CHAPTERS_ACT_KIND,
   ...INSTALLED_SKILL_ACT_KIND,
   ...INTEGRATION_ACT_KIND,
+  ...MAC_COMMAND_ACT_KIND,
   ...MAC_TERMINAL_ACT_KIND,
   ...SETTINGS_ACT_KIND,
   ...TASKS_ACT_KIND,

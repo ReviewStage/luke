@@ -13,6 +13,7 @@ import { SHELL_ROOM } from "../shell-room.js";
 import { HISTORY_READ } from "../tasks/use-plan-history.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { DOCUMENT_TASK } from "../testing/document-task.js";
+import { restOn } from "../testing/hint-rest.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { tasksControl } from "../testing/tasks-control.js";
 import { DesktopVersionHistory, taskVersionSubject } from "./desktop-version-history.js";
@@ -136,4 +137,21 @@ test("a version by a member who left names them as one, in its row and over its 
     "Lee Park (former member)",
   ]);
   assert.ok(view.querySelector('.actor-mark[data-left="true"]'));
+});
+
+test("a version by a member hangs their card beside its row while the pointer rests on it", async () => {
+  fakeActPort({
+    [ACT_KIND.WORKSPACE_FORMER_MEMBERS_READ]: () => Promise.resolve([]),
+    [ACT_KIND.WORKSPACE_MEMBERS_READ]: () =>
+      Promise.resolve([{ ...LEE, email: "lee@example.com", role: WORKSPACE_ROLE.MEMBER }]),
+  });
+  const view = drawn();
+  await settle();
+
+  const row = view.querySelector<HTMLElement>('[aria-label="Version list"] button');
+  assert.ok(row, "a version is listed");
+  restOn(row);
+  const card = document.querySelector('.luke-tooltip-card [data-actor-card="person"]');
+  assert.equal(card?.querySelector(".luke-hover-card-name")?.textContent, "Lee Park");
+  assert.match(card?.textContent ?? "", /lee@example\.com/u);
 });
