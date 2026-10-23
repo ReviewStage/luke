@@ -5722,28 +5722,6 @@ ul.actor-stack {
   -webkit-app-region: no-drag;
 }
 
-/* The keys' hints along the foot, as ⌘K's foot has them. */
-.tab-switcher-footer {
-  display: flex;
-  align-items: center;
-  gap: var(--luke-space-16);
-  height: 36px;
-  padding: 0 var(--luke-space-16);
-  border-top: 1px solid var(--luke-color-border);
-  color: var(--luke-color-text-subtle);
-  font-size: var(--luke-type-caption-size);
-}
-
-.tab-switcher-footer-hint {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--luke-space-4);
-}
-
-.tab-switcher-footer {
-  --luke-shortcut-ink: var(--luke-color-text-muted);
-}
-
 /* Start ------------------------------------------------------------------ */
 
 /* The toolbar's Start, a shared SplitButton, and the note beside it. */
