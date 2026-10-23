@@ -25,6 +25,7 @@ import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { onRegistry } from "../testing/copy-feedback.js";
+import { restOn } from "../testing/hint-rest.js";
 import { tasksControl } from "../testing/tasks-control.js";
 import { ToastHost } from "../toast.js";
 import { TasksPage } from "./tasks-page.js";
@@ -1010,6 +1011,52 @@ test("the Filter's Repository names each repository as the repository chip does,
     .map((item) => item.querySelector(".luke-menu-item-detail")?.textContent);
 
   assert.deepEqual(offered, ["acme", "beta"]);
+});
+
+test("the Filter's Assignee and Creator list the members as every people menu does, you first as You and the rest by name with their email beside it, each hanging their card", async () => {
+  fakeActPort({
+    [ACT_KIND.WORKSPACE_MEMBERS_READ]: () =>
+      Promise.resolve([
+        { userId: "user-maya", name: "Maya Okafor", email: "maya@acme.dev", role: "member" },
+        ...MEMBERS,
+        { userId: "user-charles", name: "Charles Pan", email: "charles@acme.dev", role: "member" },
+      ]),
+  });
+  const page = await mountPage();
+  listWorkspace({ ...ACME, memberCount: 3 });
+  await act(async () => undefined);
+  const offered: (string | null | undefined)[][][] = [];
+  const cards: (string | null | undefined)[] = [];
+  for (const field of ["Assignee", "Creator"]) {
+    openOptions(page, "Filter");
+    choose(field);
+    const items = [
+      ...([...document.querySelectorAll('[role="menu"]:not([data-leaving])')]
+        .at(-1)
+        ?.querySelectorAll<HTMLElement>(".luke-menu-item") ?? []),
+    ];
+    offered.push(
+      items.map((item) => [
+        item.querySelector(".luke-menu-item-label")?.textContent,
+        item.querySelector(".luke-menu-item-detail")?.textContent ?? null,
+      ]),
+    );
+    restOn(
+      items.find(
+        (item) => item.querySelector(".luke-menu-item-label")?.textContent === "Charles Pan",
+      ) ?? assert.fail(`${field} offers Charles Pan`),
+    );
+    cards.push(document.querySelector(".luke-tooltip-card .luke-hover-card-name")?.textContent);
+    closeMenus();
+  }
+
+  const people = [
+    ["Dean Stratakos", "You"],
+    ["Charles Pan", "charles@acme.dev"],
+    ["Maya Okafor", "maya@acme.dev"],
+  ];
+  assert.deepEqual(offered, [[...people, ["No assignee", null]], people]);
+  assert.deepEqual(cards, ["Charles Pan", "Charles Pan"]);
 });
 
 test("the Filter's Repository leads each repository with its owner's picture, on the List and the Board alike", async () => {

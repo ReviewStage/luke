@@ -923,6 +923,60 @@ test("grouped by assignee, your tasks come first, then each teammate's by name, 
   );
 });
 
+/** The words a card hung now names its subject by. */
+function cardName(): string | undefined {
+  return (
+    document.querySelector(".luke-tooltip-card .luke-hover-card-name")?.textContent ?? undefined
+  );
+}
+
+test("Assigned to and Created by each offer Anyone, then you as Me, then each teammate by name with their email beside it, hanging their card", async () => {
+  const sidebar = await mountRead(ACME, ASSIGNED);
+  const offered: (readonly (string | null)[])[][] = [];
+  for (const submenu of ["Assigned to", "Created by"]) {
+    const button = sidebar.querySelector<HTMLButtonElement>('button[aria-label="View options"]');
+    assert.ok(button, "the Tasks head offers View options");
+    act(() => button.click());
+    act(() => menuItem(submenu).click());
+    const menu = [...document.querySelectorAll<HTMLElement>('[role="menu"]')].at(-1);
+    offered.push(
+      [...(menu?.querySelectorAll<HTMLElement>('[role="menuitemcheckbox"]') ?? [])].map((item) => [
+        itemLabel(item),
+        item.querySelector(".luke-menu-item-detail")?.textContent ?? null,
+      ]),
+    );
+    restOn(menuItem("Charles Pan"));
+    assert.equal(cardName(), "Charles Pan", `${submenu}'s teammate hangs their card`);
+    act(() => button.click());
+  }
+
+  const people = [
+    ["Anyone", null],
+    ["Me", null],
+    ["Charles Pan", "charles@acme.dev"],
+    ["Maya Okafor", "maya@acme.dev"],
+  ];
+  assert.deepEqual(offered, [people, people]);
+});
+
+test("a person's group header, by assignee or by creator, hangs their card", async () => {
+  const sidebar = await mountRead(ACME, ASSIGNED);
+  const header = (name: string) =>
+    [
+      ...sidebar.querySelectorAll<HTMLButtonElement>(
+        `${TASK_LIST} .sidebar-repository-header button[aria-expanded]:not([aria-haspopup])`,
+      ),
+    ].find((button) => heardName(button) === name) ?? assert.fail(`${name} heads a group`);
+  const hung: (string | undefined)[] = [];
+  for (const grouping of ["Assignee", "Creator"]) {
+    choose(sidebar, "Group by", grouping);
+    restOn(header("Charles Pan"));
+    hung.push(cardName());
+  }
+
+  assert.deepEqual(hung, ["Charles Pan", "Charles Pan"]);
+});
+
 test("an assignee's group folds, and stays folded across launches", async () => {
   const sidebar = await mountRead(ACME, ASSIGNED);
   choose(sidebar, "Group by", "Assignee");

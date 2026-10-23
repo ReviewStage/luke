@@ -24,9 +24,9 @@ import {
   TEXT_VARIANT,
   Text,
 } from "@luke/ui";
-import { memberActor } from "@luke/ui/actor-model";
 import { ACTOR_SIZE, ActorMark, UnassignedMark } from "../actor-ref.js";
 import { useMemberDirectory, usePerson } from "../member-directory.js";
+import { memberRows } from "../member-rows.js";
 import type { MenuRow } from "../searchable-menu.js";
 import { PICKER_ALIGN, Picker } from "../settings/picker-row.js";
 
@@ -91,32 +91,26 @@ export const NO_ASSIGNEE = "no-assignee";
 export const NO_ASSIGNEE_WORDS = "No assignee";
 
 /**
- * The assignee's menu: No assignee, then the workspace's members, the reader
- * first and the rest by name, each by face and name with their email as
- * detail, which a search matches too; only No assignee while the members are
- * unread. The Tasks page's compact assignee chip drops the same rows.
+ * The assignee's menu: No assignee, then the workspace's members as every
+ * people menu lists them (`memberRows`); only No assignee while the members
+ * are unread. The Tasks page's compact assignee chip drops the same rows.
  */
 export function assigneeRows(
   members: readonly WorkspaceMember[] | undefined,
   readerId: string | undefined,
 ): readonly MenuRow[] {
-  const ordered = [...(members ?? [])].sort(
-    (one, other) =>
-      Number(other.userId === readerId) - Number(one.userId === readerId) ||
-      one.name.localeCompare(other.name),
-  );
   return [
     {
       id: NO_ASSIGNEE,
       label: NO_ASSIGNEE_WORDS,
       icon: <UnassignedMark size={ACTOR_SIZE.INLINE} decorative />,
     },
-    ...ordered.map((member) => ({
-      id: member.userId,
-      label: member.name,
-      icon: <ActorMark actor={memberActor(member, readerId)} size={ACTOR_SIZE.INLINE} />,
-      detail: member.userId === readerId ? "You" : member.email,
-      terms: [member.email],
+    ...memberRows(members, readerId).map((row) => ({
+      id: row.member.userId,
+      label: row.label,
+      icon: row.icon,
+      detail: row.detail,
+      terms: row.terms,
     })),
   ];
 }

@@ -765,10 +765,10 @@ function chooseView(page: HTMLElement, submenu: string, choice: string): void {
   act(() => viewItem(choice).click());
 }
 
-/** The item of the menus open now whose words end in `label`, a choice or a submenu, after any face's initial. */
+/** The item of the menus open now whose label ends in `label`, a choice or a submenu, after any face's initial. */
 function viewItem(label: string): HTMLElement {
   const item = [...document.querySelectorAll<HTMLElement>('[role^="menuitem"]')].findLast((each) =>
-    each.textContent?.endsWith(label),
+    (each.querySelector(".luke-menu-item-label") ?? each).textContent?.endsWith(label),
   );
   assert.ok(item, `the menu offers ${label}`);
   return item;
@@ -5730,7 +5730,7 @@ test("the attention mark stands before the time on the reader's own open item al
   ]);
 });
 
-test("a teammate's open item of an agent with no plan is listed under the automation that started it, wearing the teammate's face with no attention mark; To do leaves it out, and Group by person lists it under the teammate", async () => {
+test("a teammate's open item of an agent with no plan is listed under the automation that started it, wearing the teammate's face with no attention mark; To do leaves it out, and Group by person lists it under the teammate, whose header hangs their card", async () => {
   agentInboxes = new Map([[SWEEP_AGENT, [{ ...QUARANTINE, startedBy: TEAMMATE }]]]);
   const { page } = mount([{ ...waitingTaskless(QUARANTINE), startedBy: TEAMMATE.userId }]);
   await settle();
@@ -5759,6 +5759,19 @@ test("a teammate's open item of an agent with no plan is listed under the automa
     byPerson[byPerson.indexOf("# Charles Pan") + 1],
     "Quarantine the flaky test?",
     byPerson.join(" | "),
+  );
+  const header = [
+    ...page.querySelectorAll<HTMLButtonElement>(
+      ".inbox-tasks .sidebar-repository-header button[aria-expanded]:not([aria-haspopup])",
+    ),
+  ].find((each) => heardName(each) === "Charles Pan");
+  assert.ok(header, "Charles Pan heads a group");
+  restOn(header);
+  assert.equal(
+    document.querySelector(".luke-tooltip-card [data-actor-card='person'] .luke-hover-card-name")
+      ?.textContent,
+    "Charles Pan",
+    "a person's group header hangs their card",
   );
 });
 
@@ -6355,7 +6368,7 @@ function whoseChip(page: HTMLElement): readonly (string | null | undefined)[] | 
   ];
 }
 
-test("Whose in the view's menu lists one teammate's items, by their face and name, or the reader's own as Mine; a chip over the list says so, the choice outlives a relaunch, and the chip's × lists everyone's again", async () => {
+test("Whose in the view's menu offers Anyone, the reader as Me, then each teammate by face and name with their email, hanging their card; a chosen teammate's items list under a chip saying so, the choice outlives a relaunch, Me's chip says Me, and the chip's × lists everyone's again", async () => {
   listedWorkspace = SHARED_WORKSPACE;
   members = SHARED_MEMBERS;
   inboxes.set(BILLING.id, [{ ...THRESHOLD, startedBy: TEAMMATE }, RETRY]);
@@ -6365,13 +6378,29 @@ test("Whose in the view's menu lists one teammate's items, by their face and nam
   const options = page.querySelector<HTMLButtonElement>('button[aria-label="View options"]');
   act(() => options?.click());
   act(() => viewItem("Whose").click());
+  const whose = [...document.querySelectorAll<HTMLElement>('[role="menuitemcheckbox"]')].slice(-3);
   assert.deepEqual(
-    ["Everyone", "Mine", "Charles Pan"].map((each) => viewItem(each).getAttribute("aria-checked")),
-    ["true", "false", "false"],
+    whose.map((item) => [
+      item.querySelector(".luke-menu-item-label")?.textContent,
+      item.querySelector(".luke-menu-item-detail")?.textContent ?? null,
+      item.getAttribute("aria-checked"),
+    ]),
+    [
+      ["Anyone", null, "true"],
+      ["Me", null, "false"],
+      ["Charles Pan", "charles@example.com", "false"],
+    ],
   );
   assert.ok(
     viewItem("Charles Pan").querySelector('.actor-mark[data-kind="person"]'),
     "a teammate is offered by their face",
+  );
+  restOn(viewItem("Charles Pan"));
+  assert.equal(
+    document.querySelector(".luke-tooltip-card [data-actor-card='person'] .luke-hover-card-name")
+      ?.textContent,
+    "Charles Pan",
+    "a teammate's row hangs their card",
   );
   act(() => viewItem("Charles Pan").click());
   await settle();
@@ -6384,8 +6413,8 @@ test("Whose in the view's menu lists one teammate's items, by their face and nam
   await settle();
   assert.deepEqual(whoseChip(page), ["Charles Pan", "Show everyone's items"]);
 
-  chooseView(page, "Whose", "Mine");
-  assert.deepEqual(whoseChip(page)?.[0], "Mine");
+  chooseView(page, "Whose", "Me");
+  assert.deepEqual(whoseChip(page)?.[0], "Me");
   assert.deepEqual(listed(page), [
     "# Billing usage alerts",
     "How is a failed email retried?",

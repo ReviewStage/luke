@@ -6,6 +6,7 @@ import {
   IconButton,
   LIST_MOTION_WAY,
   ListMotion,
+  MENU_DETAIL,
   MENU_ITEM_MARK,
   motionKey,
   motionRows,
@@ -77,8 +78,9 @@ import {
   UserXIcon,
 } from "lucide-react";
 import { type ReactNode, type RefObject, useMemo, useRef } from "react";
-import { ACTOR_SIZE, ActorMark, UnassignedMark } from "../actor-ref.js";
+import { ACTOR_SIZE, ActorMark, actorCard, UnassignedMark } from "../actor-ref.js";
 import { useMemberDirectory } from "../member-directory.js";
+import { memberRows } from "../member-rows.js";
 import { RepositoryPicture } from "../repository-picture.js";
 import { repositoryWords } from "../repository-row.js";
 import {
@@ -233,13 +235,15 @@ export const NO_CREATOR = "No one";
 /** How many values a chip names before it counts the rest. */
 const CHIP_VALUES = 2;
 
-/** One value a field may keep: its words, its mark, and the value itself. */
+/** One value a field may keep: its words, its mark, and the value itself; a repository's owner or a person's detail, and a person's card, besides. */
 interface FieldValue {
   readonly value: string | null;
   readonly words: string;
   readonly icon: React.JSX.Element;
-  /** Muted words after the name in the menu, a repository's owner; the chip names the value without them. */
+  /** Muted words beside the name in the menu, a repository's owner or a person's email or You; the chip names the value without them. */
   readonly detail?: string | undefined;
+  /** The card a person's row hangs. */
+  readonly card?: React.ReactNode;
 }
 
 /** Who a creator is, as the directory draws them, else as a listed task names them. */
@@ -291,18 +295,41 @@ export function assigneeWords(
     : actorName(assigneeFor(assigneeId, reader, tasks));
 }
 
-/** The people a person's field offers, by account id: the reader, then each member, then anyone else a task or the filter names. */
-function peopleOffered(
+/**
+ * The people a person's field offers: the members as every people menu lists
+ * them (`memberRows`), then anyone else a task or the filter names, drawn
+ * as `actorOf` reads them, each hanging their card.
+ */
+function peopleValues(
   held: ReadonlySet<string | null>,
   reader: ReturnType<typeof useMemberDirectory>,
-): readonly string[] {
-  const members = (reader.members ?? []).map((member) => member.userId);
-  return [
+  actorOf: (userId: string) => Actor,
+): readonly FieldValue[] {
+  const rows = memberRows(reader.members, reader.readerId);
+  const listed = new Set(rows.map((row) => row.member.userId));
+  const others = [
     ...new Set([
       ...(reader.readerId === undefined ? [] : [reader.readerId]),
-      ...members,
       ...[...held].filter((id): id is string => id !== null),
     ]),
+  ].filter((id) => !listed.has(id));
+  return [
+    ...rows.map((row) => ({
+      value: row.member.userId,
+      words: row.label,
+      detail: row.detail,
+      icon: row.icon,
+      card: row.card,
+    })),
+    ...others.map((id) => {
+      const actor = actorOf(id);
+      return {
+        value: id,
+        words: actorName(actor),
+        icon: <ActorMark actor={actor} size={ACTOR_SIZE.INLINE} />,
+        card: actorCard(actor),
+      };
+    }),
   ];
 }
 
@@ -339,11 +366,7 @@ function fieldValues(
       }));
     case TASKS_FILTER_FIELD.ASSIGNEE:
       return [
-        ...peopleOffered(held, reader).map((id) => ({
-          value: id,
-          words: assigneeWords(id, reader, tasks),
-          icon: <ActorMark actor={assigneeFor(id, reader, tasks)} size={ACTOR_SIZE.INLINE} />,
-        })),
+        ...peopleValues(held, reader, (id) => assigneeFor(id, reader, tasks)),
         ...(held.has(null)
           ? [
               {
@@ -356,11 +379,7 @@ function fieldValues(
       ];
     case TASKS_FILTER_FIELD.CREATOR:
       return [
-        ...peopleOffered(held, reader).map((id) => ({
-          value: id,
-          words: creatorWords(id, reader, tasks),
-          icon: <ActorMark actor={creatorFor(id, reader, tasks)} size={ACTOR_SIZE.INLINE} />,
-        })),
+        ...peopleValues(held, reader, (id) => creatorFor(id, reader, tasks)),
         ...(held.has(null) ? [{ value: null, words: NO_CREATOR, icon: <UserXIcon /> }] : []),
       ];
     case TASKS_FILTER_FIELD.MADE_BY:
@@ -445,10 +464,11 @@ function filterEntries(
       icon: FIELD_ICON[field],
       items: [
         ...fieldValues(field, tasks, filter, reader, pictures).map(
-          ({ value, words, icon, detail }): MenuAction => ({
+          ({ value, words, icon, detail, card }): MenuAction => ({
             label: words,
             icon,
-            detail,
+            ...(detail === undefined ? {} : { detail, detailPlace: MENU_DETAIL.BESIDE }),
+            card,
             checked: kept.includes(value),
             stays: true,
             onSelect: () => onFilter(toggledFilter(filter, field, value)),
