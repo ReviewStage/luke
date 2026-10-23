@@ -227,9 +227,11 @@ export function AttachmentViewer({
   const file = files[at];
   const zoom = useImageZoom(file?.name ?? "", file?.url ?? "", opening);
   // A picture opened from its tile grows from it, and goes back into it
-  // only while the picture it was opened on is the one shown.
-  const [openedOn] = useState(file?.url);
-  const expand = usePictureExpand(file?.url === openedOn);
+  // only while the picture it was opened on is the one shown. Note that the
+  // place is asked beside the file's bytes, because two files may hold the
+  // same picture, and a place that moved as others landed closes in place.
+  const [opened] = useState({ at, url: file?.url });
+  const expand = usePictureExpand(at === opened.at && file?.url === opened.url);
   const close = () => expand.close(onClose);
 
   if (file === undefined) return null;

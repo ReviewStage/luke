@@ -163,12 +163,27 @@ export function usePictureExpand(onOpened: boolean): PictureExpand {
   // The tile's picture stands hidden while its own is shown over it, and
   // comes back as soon as the viewer shows another or is gone.
   useLayoutEffect(() => {
-    if (face === undefined || !grown.current) return undefined;
-    face.style.visibility = onOpened ? "hidden" : "";
-    return () => {
-      face.style.visibility = "";
-    };
+    if (face !== undefined && grown.current) face.style.visibility = onOpened ? "hidden" : "";
   }, [face, onOpened]);
+  useLayoutEffect(
+    () => () => {
+      if (face !== undefined && grown.current) face.style.visibility = "";
+    },
+    [face],
+  );
+
+  // Flies the card from the tile, or lets its own entrance play where the
+  // picture cannot be measured, which taking the attribute off replays.
+  const fly = (standing: HTMLElement, tile: HTMLElement, timing: KeyframeAnimationOptions) => {
+    const flight = tile.isConnected ? flightOf(tile, standing) : undefined;
+    if (flight === undefined) {
+      standing.removeAttribute(EXPANDING_ATTRIBUTE);
+      return;
+    }
+    grown.current = true;
+    if (onOpened) tile.style.visibility = "hidden";
+    standing.animate([flight.tile, flight.landed], timing);
+  };
 
   const grow = (standing: HTMLElement) => {
     if (card.current !== null || face === undefined || !face.isConnected) return;
@@ -178,14 +193,25 @@ export function usePictureExpand(onOpened: boolean): PictureExpand {
     // Note that the attribute goes on before the card is measured, so the
     // measure is of the card as it stands rather than mid-entrance.
     standing.setAttribute(EXPANDING_ATTRIBUTE, "true");
-    const flight = flightOf(face, standing);
-    if (flight === undefined) {
-      standing.removeAttribute(EXPANDING_ATTRIBUTE);
+    const picture = standing.querySelector(PICTURE_SELECTOR);
+    if (!(picture instanceof HTMLImageElement) || picture.complete) {
+      fly(standing, face, timing);
       return;
     }
-    grown.current = true;
-    face.style.visibility = "hidden";
-    standing.animate([flight.tile, flight.landed], timing);
+    // Note that a picture the viewer has yet to decode has no size to fly
+    // to, so the card stands unseen until it has one, then flies; one that
+    // fails to load opens as every card does.
+    const waiting = standing.animate([{ opacity: 0 }, { opacity: 0 }], { fill: "forwards" });
+    const settle = (event: Event) => {
+      picture.removeEventListener("load", settle);
+      picture.removeEventListener("error", settle);
+      waiting.cancel();
+      if (closing.current) return;
+      if (event.type === "load") fly(standing, face, timing);
+      else standing.removeAttribute(EXPANDING_ATTRIBUTE);
+    };
+    picture.addEventListener("load", settle);
+    picture.addEventListener("error", settle);
   };
 
   const close = (done: () => void) => {

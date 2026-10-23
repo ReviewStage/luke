@@ -58,7 +58,7 @@ beforeEach(() => {
     return DOMRect.fromRect({ x: rect.left, y: rect.top, width: rect.width, height: rect.height });
   });
   HTMLElement.prototype.animate = function (this: HTMLElement, frames: Keyframe[] | null) {
-    const animation = { onfinish: null };
+    const animation = { onfinish: null, cancel: () => undefined };
     played.push({ element: this, frames: frames ?? [], animation });
     return animation as unknown as Animation;
   };
@@ -178,6 +178,35 @@ test("a picture opened from its tile grows from the tile's rect and shrinks back
 
   expect(closed).toEqual(["closed"]);
   expect(page.card()).toBeNull();
+  expect(page.face.style.visibility).toBe("");
+});
+
+test("a picture the viewer has yet to load flies from its tile once it has, the card unseen meanwhile", () => {
+  vi.spyOn(HTMLImageElement.prototype, "complete", "get").mockReturnValue(false);
+  const closed: string[] = [];
+  const page = mountPage(closed);
+
+  act(() => page.tile.click());
+  expect(cardFlights().map((each) => each.frames[0]?.opacity)).toEqual([0]);
+  expect(page.face.style.visibility).toBe("");
+
+  const picture = document.querySelector(".luke-dialog .luke-zoom-image");
+  act(() => picture?.dispatchEvent(new Event("load")));
+
+  expect(cardFlights()[1]?.frames[0]?.transform).toBe("translate(-160px, 192px) scale(0.2, 0.2)");
+  expect(page.face.style.visibility).toBe("hidden");
+});
+
+test("a picture that fails to load opens with the dialog's own entrance", () => {
+  vi.spyOn(HTMLImageElement.prototype, "complete", "get").mockReturnValue(false);
+  const page = mountPage([]);
+
+  act(() => page.tile.click());
+  const picture = document.querySelector(".luke-dialog .luke-zoom-image");
+  act(() => picture?.dispatchEvent(new Event("error")));
+
+  expect(page.card()?.hasAttribute("data-expanding")).toBe(false);
+  expect(cardFlights()).toHaveLength(1);
   expect(page.face.style.visibility).toBe("");
 });
 
