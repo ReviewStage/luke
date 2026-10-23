@@ -10,6 +10,7 @@ import {
   type InboxForm,
 } from "@luke/features/inbox-wire";
 import {
+  Badge,
   BUTTON_SIZE,
   BUTTON_VARIANT,
   Button,
@@ -21,6 +22,7 @@ import {
   type FieldControl,
   FormField,
   GAP,
+  LAYOUT_ELEMENT,
   ReadableControls,
   Stack,
   TEXT_FIELD_TYPE,
@@ -534,7 +536,7 @@ function OpenControls({
       return (
         <>
           {steps.length === 0 ? null : (
-            <ul className="inbox-ask-steps" aria-label="Steps">
+            <Stack as={LAYOUT_ELEMENT.UL} gap={GAP.CONTROL} aria-label="Steps">
               {steps.map((step, at) => (
                 // Steps have no key of their own, and are never reordered.
                 <li key={at} data-inbox-step="">
@@ -547,7 +549,7 @@ function OpenControls({
                   </Checkbox>
                 </li>
               ))}
-            </ul>
+            </Stack>
           )}
           <div className="inbox-ask-presses">
             <AskPress
@@ -678,7 +680,7 @@ function LeftControls({
       return (
         <>
           {steps.length === 0 ? null : (
-            <ul className="inbox-ask-steps" aria-label="Steps">
+            <Stack as={LAYOUT_ELEMENT.UL} gap={GAP.CONTROL} aria-label="Steps">
               {steps.map((step, at) => (
                 // Steps have no key of their own, and are never reordered.
                 <li key={at} data-inbox-step="">
@@ -687,7 +689,7 @@ function LeftControls({
                   </Checkbox>
                 </li>
               ))}
-            </ul>
+            </Stack>
           )}
           <div className="inbox-ask-presses">
             <AnsweredPress
@@ -824,8 +826,8 @@ export function WithdrawnWords({
 /** The small pill an ask waiting on someone else ends its message with: "Waiting on" them, after a dot in the muted ink. */
 export function WaitingMarker({ on }: { on: string }): React.JSX.Element {
   return (
-    <span className="inbox-ask-marker" data-inbox-marker="">
-      Waiting on {on}
+    <span data-inbox-marker="">
+      <Badge dot>Waiting on {on}</Badge>
     </span>
   );
 }

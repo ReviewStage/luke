@@ -232,7 +232,7 @@ test("with Minimize inline comments on, an agent's note stands behind a chip wit
   const chip = () => noteSlot(container).querySelector<HTMLElement>(".diff-thread-chip");
 
   assert.equal(chip()?.getAttribute("aria-label"), "Invite emails's note on lines 3–4, show");
-  assert.ok(chip()?.querySelector(".transcript-luke-mark"));
+  assert.ok(chip()?.querySelector(".luke-face"));
   act(() => chip()?.click());
   assert.equal(chip()?.getAttribute("aria-label"), "Invite emails's note on lines 3–4, hide");
 

@@ -1,4 +1,4 @@
-import { SKELETON_SHAPE, Skeleton, SkeletonRegion } from "@luke/ui";
+import { FILL_ELEMENT, Fill, SKELETON_SHAPE, Skeleton, SkeletonRegion } from "@luke/ui";
 
 /**
  * agent-tab-skeleton.tsx -- an agent's tab in the shape it lands in, while what it draws is on its way.
@@ -31,13 +31,15 @@ export function TranscriptSkeleton({
   label?: string | undefined;
 }): React.JSX.Element {
   return (
-    <SkeletonRegion label={label}>
-      <div className="agent-log-skeleton">
-        {LOG_LINE_WIDTHS.map((width) => (
-          <Skeleton key={width} width={width} />
-        ))}
-      </div>
-    </SkeletonRegion>
+    <div className="agent-log-wait">
+      <SkeletonRegion label={label}>
+        <div className="agent-log-skeleton">
+          {LOG_LINE_WIDTHS.map((width) => (
+            <Skeleton key={width} width={width} />
+          ))}
+        </div>
+      </SkeletonRegion>
+    </div>
   );
 }
 
@@ -59,11 +61,11 @@ export function ComposerSkeleton(): React.JSX.Element {
 /** A whole agent's tab before it can be drawn: the log's last lines over the composer, which `label` names to a reader. */
 export function AgentTabSkeleton({ label }: { label?: string | undefined }): React.JSX.Element {
   return (
-    <section className="agent-tab">
+    <Fill as={FILL_ELEMENT.SECTION} className="agent-tab">
       <TranscriptSkeleton label={label} />
       <footer className="agent-tab-foot">
         <ComposerSkeleton />
       </footer>
-    </section>
+    </Fill>
   );
 }

@@ -9,9 +9,11 @@ import {
 import { expect, test } from "vitest";
 import {
   agentRow,
+  assigneeGroups,
   type CreatorGroup,
   createdByOnly,
   creatorGroups,
+  drawnGrouping,
   hiddenStatuses,
   type RepositoryGroup,
   repositoryGroups,
@@ -370,4 +372,68 @@ test("the rows assigned to one member are the tasks they are on and the one-off 
   ];
   expect(taskRowsAssignedTo(rows, DEAN).map(taskRowName)).toEqual(["Dean's on it", "Dean's agent"]);
   expect(taskRowsAssignedTo(rows, undefined)).toHaveLength(4);
+});
+
+/** A task as `task` makes it, assigned to `assignee`. */
+function assigned(
+  name: string,
+  updatedAt: number,
+  assignee: keyof typeof NAMES,
+  creator?: keyof typeof NAMES,
+): TaskRow {
+  return taskRow({
+    ...task(name, "acme/relay", 1, updatedAt, creator),
+    assignee: { userId: assignee, name: NAMES[assignee] },
+  });
+}
+
+/** An assignee's name as the wire carries it on a row. */
+const assigneeOnWire = (row: TaskRow) =>
+  row.kind === TASK_ROW.TASK ? (row.task.assignee?.name ?? "") : (row.agent.startedBy?.name ?? "");
+
+test("grouped by assignee, the reader's own come first, then each teammate's by name whatever the order, then no one's", () => {
+  const rows = [
+    taskRow(task("No one's latest", "acme/relay", 1, 99, DEAN)),
+    assigned("Maya's latest", 80, MAYA),
+    assigned("Dean's", 10, DEAN, CHARLES),
+    assigned("Charles's", 50, CHARLES),
+    assigned("Maya's older", 20, MAYA),
+  ];
+  const groups = assigneeGroups(rows, TASK_ORDER.UPDATED, DEAN, assigneeOnWire);
+  expect(groups.map((group) => group.assigneeId)).toEqual([DEAN, CHARLES, MAYA, undefined]);
+  expect(names(groups)).toEqual([
+    ["Dean's"],
+    ["Charles's"],
+    ["Maya's latest", "Maya's older"],
+    ["No one's latest"],
+  ]);
+});
+
+test("grouped by assignee and ordered by name, each group's rows run alphabetically", () => {
+  const rows = [assigned("b", 1, MAYA), assigned("a", 2, MAYA), assigned("c", 3, MAYA)];
+  expect(names(assigneeGroups(rows, TASK_ORDER.NAME, DEAN, assigneeOnWire))).toEqual([
+    ["a", "b", "c"],
+  ]);
+});
+
+test("grouped by assignee, a one-off agent stands under whoever started it, a task under its assignee rather than its creator", () => {
+  const rows = [
+    assigned("Charles made it, Maya's on it", 10, MAYA, CHARLES),
+    oneOff("Charles's agent", "acme/relay", 1, 20, CHARLES),
+    taskRow(task("Charles made it, no one's on it", "acme/relay", 1, 30, CHARLES)),
+  ];
+  const groups = assigneeGroups(rows, TASK_ORDER.UPDATED, DEAN, assigneeOnWire);
+  expect(groups.map((group) => group.assigneeId)).toEqual([CHARLES, MAYA, undefined]);
+  expect(names(groups)).toEqual([
+    ["Charles's agent"],
+    ["Charles made it, Maya's on it"],
+    ["Charles made it, no one's on it"],
+  ]);
+});
+
+test("a grouping by person kept for a workspace nobody shares is drawn by repository, and kept as chosen where it is shared", () => {
+  expect(drawnGrouping(TASK_GROUPING.ASSIGNEE, false)).toBe(TASK_GROUPING.REPOSITORY);
+  expect(drawnGrouping(TASK_GROUPING.CREATOR, false)).toBe(TASK_GROUPING.REPOSITORY);
+  expect(drawnGrouping(TASK_GROUPING.NONE, false)).toBe(TASK_GROUPING.NONE);
+  expect(drawnGrouping(TASK_GROUPING.ASSIGNEE, true)).toBe(TASK_GROUPING.ASSIGNEE);
 });

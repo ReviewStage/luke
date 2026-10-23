@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
+import { VISUALLY_HIDDEN_UNDER } from "../visually-hidden/visually-hidden.js";
 import { BADGE_TONE, Badge } from "./badge.js";
 
 /**
@@ -44,4 +45,18 @@ test("a badge with no colour of a provider's wears no dot", () => {
   const view = render(createElement(Badge, { tone: BADGE_TONE.WORKING, children: "Working" }));
   assert.equal(view.textContent, "Working");
   assert.equal(view.querySelectorAll('[aria-hidden="true"]').length, 0);
+});
+
+test("a badge that gives up its words in a narrow room still holds them for a reader", () => {
+  const view = render(
+    createElement(Badge, { hideWordsUnder: VISUALLY_HIDDEN_UNDER.SNUG, children: "Ready" }),
+  );
+  assert.equal(view.textContent, "Ready");
+});
+
+test("a badge with no glyph or swatch keeps its words drawn however narrow the room", () => {
+  const view = render(
+    createElement(Badge, { hideWordsUnder: VISUALLY_HIDDEN_UNDER.SNUG, children: "Ready" }),
+  );
+  assert.equal(view.querySelector(".luke-badge-words")?.getAttribute("data-under"), null);
 });

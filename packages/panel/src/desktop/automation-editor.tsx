@@ -93,6 +93,7 @@ import {
   DetailPage,
   EllipsisIcon,
   ErrorState,
+  Fill,
   FoldingButton,
   IconButton,
   PAGE_FRAME,
@@ -120,7 +121,9 @@ import {
   Tooltip,
   useConfirmDialog,
   useMenu,
+  useMinute,
 } from "@luke/ui";
+import { dayAndTimeText, localTimeZone, sinceText, timeZoneNames } from "@luke/ui/time-format";
 import { useClipped } from "@luke/ui/use-clipped";
 import { useDisclosure } from "@luke/ui/use-disclosure";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
@@ -141,7 +144,6 @@ import { AgentModelChip } from "../tasks/agent-model-chip.js";
 import { AgentServersButton } from "../tasks/agent-servers.js";
 import { ModelMenu } from "../tasks/model-menu.js";
 import { CHIP_PLACE, RepositoryChip, type RepositoryChooser } from "../tasks/repository-chip.js";
-import { dayAndTimeText, sinceText, useMinute } from "../tasks/task-time.js";
 import type { LeaveAsk, LeaveGuard } from "../tasks/use-tasks-tab.js";
 import { useExperiment } from "../use-app-state.js";
 import { ActionMenu, type MenuAction } from "./action-menu.js";
@@ -294,7 +296,7 @@ const WEEKDAYS = [
 const HOURLY_MINUTES = [0, 15, 30, 45] as const;
 
 /** Every zone this Mac knows, as the zone menu lists them. */
-const TIME_ZONES = Intl.supportedValuesOf("timeZone");
+const TIME_ZONES = timeZoneNames();
 
 /** What a short menu says where a search matches nothing, which it has no search to say. */
 const NO_MATCH = "Nothing matches.";
@@ -348,7 +350,7 @@ function zoneLabel(zone: string): string {
 
 /** The zone this Mac is in, which a new automation runs in until another is chosen. */
 function windowZone(): string {
-  return Intl.DateTimeFormat().resolvedOptions().timeZone;
+  return localTimeZone();
 }
 
 /** An owner as the crumbs and the Owner row name it. */
@@ -2074,8 +2076,8 @@ export function AutomationEditor({
     onOpenAgent,
   };
   return (
-    <div ref={screen} className="automations-view">
-      <div className="automation-editor-screen" hidden={hidden.list}>
+    <Fill ref={screen} className="automations-view">
+      <Fill className="automation-editor-screen" hidden={hidden.list}>
         <EditorToolbar
           automation={automation}
           codeReview={codeReviewOn && readCodeReviewSettings(draft.prompt) !== undefined}
@@ -2136,7 +2138,7 @@ export function AutomationEditor({
           {narrow ? null : <AutomationRunsPanel panel={runsPanel} {...runsRead} />}
           <PaneGlide root={editorLayout} layout={{ runsOpen: !narrow && runsPanel.open }} />
         </div>
-      </div>
+      </Fill>
       {narrow ? (
         <AutomationRunsScreen
           id={runsScreen}
@@ -2163,6 +2165,6 @@ export function AutomationEditor({
           running: "Deleting",
         }}
       />
-    </div>
+    </Fill>
   );
 }

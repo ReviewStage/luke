@@ -1,4 +1,4 @@
-import { TEXT_ELEMENT, TEXT_VARIANT, Text, WingFace } from "@luke/ui";
+import { FILL_ELEMENT, Fill, TEXT_ELEMENT, TEXT_VARIANT, Text, WingFace } from "@luke/ui";
 import { MENTION_MENU_SIDE } from "../tasks/mention-picker.js";
 import { NewTaskComposer } from "../tasks/new-task-composer.js";
 import { freshAccount } from "../tasks/resting-page.js";
@@ -52,7 +52,7 @@ export function welcomed(tasks: TasksControl): boolean {
 export function DesktopWelcome({ tasks }: { tasks: TasksControl }): React.JSX.Element | null {
   if (!welcomed(tasks)) return null;
   return (
-    <section className="home-welcome" aria-label="Welcome">
+    <Fill as={FILL_ELEMENT.SECTION} className="home-welcome" aria-label="Welcome">
       <span className="home-welcome-face" aria-hidden="true">
         <WingFace />
       </span>
@@ -67,6 +67,6 @@ export function DesktopWelcome({ tasks }: { tasks: TasksControl }): React.JSX.El
           listSide={MENTION_MENU_SIDE.BELOW}
         />
       </div>
-    </section>
+    </Fill>
   );
 }

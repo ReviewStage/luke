@@ -116,22 +116,24 @@ export function PullRequestsOnGitHub({ children }: { children: ReactNode }): Rea
  * another branch, opens through `open` too, by its number, in a Pull request
  * tab of the first of the place's agents; and any other link is the window's.
  * `drawn` is the agents whose tabs the place draws, none before they are
- * read. Note that an agent's pull request whose tab the place no longer
- * draws, an archived agent's on a task, is not that agent's to open, since
- * claiming it would open nothing.
+ * read, and `held` every agent of the place, an archived one among them,
+ * whose Pull request tab stands as a live agent's does, so a link to an
+ * archived agent's pull request, merged or not, opens its tab too.
  */
 export function openPullRequestsHere(
   agents: {
     readonly pullRequests: ReadonlyMap<string, { readonly url: string }>;
     readonly agentIds: readonly string[] | undefined;
+    readonly heldIds?: readonly string[] | undefined;
   },
   open: (agentId: string, number?: number) => void,
   repository?: string | null,
 ): OpenHere {
   return (href) => {
     const { pullRequests, agentIds: drawn } = agents;
+    const owners = agents.heldIds ?? drawn;
     const opened = [...pullRequests].flatMap(([agentId, { url }]) =>
-      drawn === undefined || drawn.includes(agentId) ? [{ agentId, url }] : [],
+      owners === undefined || owners.includes(agentId) ? [{ agentId, url }] : [],
     );
     const agentId = pullRequestAgentOf(href, opened);
     if (agentId !== undefined) {

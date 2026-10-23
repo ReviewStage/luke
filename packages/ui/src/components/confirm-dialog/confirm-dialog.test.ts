@@ -14,7 +14,9 @@ import { ConfirmDialog, useConfirmDialog } from "./confirm-dialog.js";
  * the card until it lands; a refusal keeps the card up saying why, and the
  * act can be tried again; and the question goes the moment its subject or
  * its surface does, a refusal with it, while an answer already given
- * finishes unseen.
+ * finishes unseen. An answer that lands shows its check in the act's place
+ * until the check has been seen; a refusal shakes the card; and a gated
+ * question offers its act only once the subject's name is typed exactly.
  */
 
 /** The answers the owner's act is waiting on, settled by the test in the order they were asked. */
@@ -40,7 +42,15 @@ afterEach(() => {
 });
 
 /** A settings line that asks before deleting a key, with toggles that take the key or the page away. */
-function Owner({ answers, withField }: { answers: Answers; withField: boolean }) {
+function Owner({
+  answers,
+  withField,
+  gate,
+}: {
+  answers: Answers;
+  withField: boolean;
+  gate: string | undefined;
+}) {
   const [subject, setSubject] = useState(true);
   const [surfaceOpen, setSurfaceOpen] = useState(true);
   const field = useRef<HTMLInputElement | null>(null);
@@ -63,6 +73,7 @@ function Owner({ answers, withField }: { answers: Answers; withField: boolean })
         running: "Deleting",
       },
       field: withField ? field : undefined,
+      gate,
       children: withField
         ? createElement("input", { ref: field, "aria-label": "Type delete" })
         : undefined,
@@ -106,13 +117,13 @@ function holds(element: Element | null | undefined): boolean {
 }
 
 /** The owner drawn and its question asked from its button, which keeps focus as a press would give it. */
-function asked(withField = false) {
+function asked(withField = false, gate: string | undefined = undefined) {
   const answers: Answers = [];
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  act(() => root.render(createElement(Owner, { answers, withField })));
+  act(() => root.render(createElement(Owner, { answers, withField, gate })));
   const opener = button("Delete key") ?? assert.fail("no opener");
   opener.focus();
   act(() => opener.click());
@@ -210,5 +221,67 @@ test("a question that asks for a field lands on it, and Enter there answers", as
   key("Enter");
   assert.equal(button("Deleting")?.disabled, true, "Enter in the field answers");
   await settle(ACCEPTED);
+  assert.equal(question(), null);
+});
+
+test("an answer that lands shows its check in the act's place, the card standing until the check's motion finishes", async () => {
+  const motion = new EventTarget();
+  Object.defineProperty(HTMLElement.prototype, "getAnimations", {
+    configurable: true,
+    value(this: HTMLElement) {
+      return this.classList.contains("luke-button-done") ? [motion] : [];
+    },
+  });
+  const { opener, settle } = asked();
+  press("Delete");
+  await settle(ACCEPTED);
+  const card = question();
+  const checked = button("Delete")?.getAttribute("data-done");
+  const cancelStilled = button("Cancel")?.disabled;
+  key("Escape");
+  const keptByEscape = question() !== null;
+  act(() => motion.dispatchEvent(new Event("finish")));
+  Reflect.deleteProperty(HTMLElement.prototype, "getAnimations");
+
+  assert.ok(card, "the card stands while the check shows");
+  assert.equal(checked, "true", "the act wears its check");
+  assert.equal(cancelStilled, true);
+  assert.equal(keptByEscape, true, "Escape does not cut the check short");
+  assert.equal(question(), null, "the card goes once the check has been seen");
+  assert.ok(holds(opener), "focus goes back to the opener");
+});
+
+test("a refusal shakes the card as it lands", async () => {
+  const { settle } = asked();
+  press("Delete");
+  await settle(REFUSED);
+  assert.equal(question()?.getAttribute("data-refused"), "true");
+});
+
+test("a gated question lands on its gate and offers the act only once the subject's name is typed exactly, a press or Enter before refused with a shake", async () => {
+  const { settle } = asked(false, "Acme Inc");
+  const gate = question()?.querySelector("input") ?? assert.fail("no gate");
+  const type = (words: string) =>
+    act(() => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(gate, words);
+      gate.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+  const landed = holds(gate);
+  const label = document.querySelector(`label[for="${gate.id}"]`)?.textContent;
+  press("Delete");
+  const refusedPress = button("Delete")?.getAttribute("data-denied");
+  type("acme inc");
+  key("Enter");
+  const runningMisnamed = button("Deleting") !== undefined;
+  type("Acme Inc");
+  key("Enter");
+  const running = button("Deleting")?.disabled;
+  await settle(ACCEPTED);
+
+  assert.ok(landed, "the gate takes focus in Cancel's place");
+  assert.equal(label, "Type Acme Inc to confirm");
+  assert.equal(refusedPress, "true", "a press before the name shakes the act");
+  assert.equal(runningMisnamed, false, "a name typed otherwise is not the name");
+  assert.equal(running, true, "Enter answers once the name is typed");
   assert.equal(question(), null);
 });

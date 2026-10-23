@@ -27,6 +27,8 @@ import {
   DocumentIcon,
   ERROR_STATE_PLACEMENT,
   ErrorState,
+  FILL_ELEMENT,
+  Fill,
   INLINE_REF_LOOK,
   InlineRef,
   LineSummary,
@@ -35,8 +37,10 @@ import {
   TEXT_TONE,
   Text,
   TextLink,
+  useMinute,
 } from "@luke/ui";
 import { ACTOR_KIND, ACTOR_STATE, type Actor } from "@luke/ui/actor-model";
+import { skillWord } from "@luke/ui/skill-mention";
 import type { VirtualRowsHandle } from "@luke/ui/virtual-rows";
 import {
   callEndedLine,
@@ -174,7 +178,6 @@ import type { SkillSource } from "./skill-picker.js";
 import { SkillCard } from "./skill-ref.js";
 import { PlanGlyph } from "./tab-look.js";
 import { useMentionDoors } from "./task-mentions.js";
-import { useMinute } from "./task-time.js";
 import {
   calledAgent,
   cardTitle,
@@ -696,7 +699,7 @@ function LoadedSkillView({
   return (
     <OpeningCallView
       part={part}
-      hint={subject.skill.path}
+      hint={subject.skill.path ?? skillWord(subject.skill.name)}
       card={<SkillCard subject={subject} />}
       onOpen={subject.onOpen}
     />
@@ -2218,7 +2221,8 @@ function AgentTabView({
     [automationId, automationName, brief, run, tasked, openTarget, originStarter, steadyGitHub],
   );
   return (
-    <section
+    <Fill
+      as={FILL_ELEMENT.SECTION}
       ref={tab}
       className="agent-tab ph-no-capture"
       aria-label={agentTabLabel(agent, models)}
@@ -2331,7 +2335,7 @@ function AgentTabView({
       composer.sending ? null : (
         <ReplyToSelection scope={tab} onReply={(words) => replyDoor.current?.(words)} />
       )}
-    </section>
+    </Fill>
   );
 }
 
@@ -2381,7 +2385,7 @@ const NO_RETRY = () => undefined;
 export function StartingAgentTab({ line }: { line: SentLine }): React.JSX.Element {
   const messages = useMemo(() => agentLines([], [line]), [line]);
   return (
-    <section className="agent-tab ph-no-capture">
+    <Fill as={FILL_ELEMENT.SECTION} className="agent-tab ph-no-capture">
       <AgentTranscriptView
         messages={messages}
         brief={CODING_AGENT_BRIEF.PROMPT}
@@ -2395,7 +2399,7 @@ export function StartingAgentTab({ line }: { line: SentLine }): React.JSX.Elemen
       <footer className="agent-tab-foot">
         <ComposerSkeleton />
       </footer>
-    </section>
+    </Fill>
   );
 }
 
@@ -2748,7 +2752,11 @@ export function AgentSubagentTab({
     onHeld(callId, { ...held, subagentTitles: new Map() });
   }, [onHeld, callId, messages, pageStatus, runStartedAt, pageTitle]);
   return (
-    <section className="agent-tab ph-no-capture" aria-label={cardTitle(task)}>
+    <Fill
+      as={FILL_ELEMENT.SECTION}
+      className="agent-tab ph-no-capture"
+      aria-label={cardTitle(task)}
+    >
       <MacOwnerProvider value={macOwner}>
         <AgentPicturesProvider value={pictures}>
           <WholePartsProvider value={wholeParts}>
@@ -2770,6 +2778,6 @@ export function AgentSubagentTab({
           </WholePartsProvider>
         </AgentPicturesProvider>
       </MacOwnerProvider>
-    </section>
+    </Fill>
   );
 }

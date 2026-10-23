@@ -85,7 +85,7 @@ function milliseconds(value: string): number {
  * here as everywhere else, without a check of their own.
  */
 export function paneTiming(element: Element): KeyframeAnimationOptions | undefined {
-  return tokenTiming(element, "--duration-pane", "--motion-pane");
+  return tokenTiming(element, "--luke-duration-pane", "--luke-motion-pane");
 }
 
 /**

@@ -22,6 +22,9 @@ import {
   EmptyState,
   ERROR_STATE_PLACEMENT,
   ErrorState,
+  FILL_ELEMENT,
+  FILL_FLOW,
+  Fill,
   HoverCard,
   HoverCardHead,
   HoverCardNote,
@@ -40,6 +43,8 @@ import {
   TEXT_VARIANT,
   Text,
   TextButton,
+  TIME_LOOK,
+  Time,
   Tooltip,
 } from "@luke/ui";
 import {
@@ -83,7 +88,6 @@ import { BarMenu } from "./file-menu.js";
 import type { TreeShown } from "./file-view.js";
 import { TranscriptWords } from "./transcript-blocks.js";
 import type { CodingAgentsControl } from "./use-coding-agents.js";
-import { useWorkingNow, workingTime } from "./working-time.js";
 
 /**
  * agent-chapters-tab.tsx -- the Chapters view of an agent's Pull request tab (`agent-pull-request-tab.tsx`): its pull request's diff told as chapters to review in order, each read as its title, risk, and summary over its own hunks, drawn by Files changed's own list.
@@ -211,17 +215,6 @@ const RISK_TONES = {
 /** The rail's toggle that opens it beside the chapter, which the stylesheet draws only where it has room there. */
 const BESIDE_TOGGLE = '.chapter-rail-toggle[data-place="beside"]';
 
-/** How long chapters have been generating, moving each second on the window's own clock; a timer to a reader, never announced. */
-function Elapsed({ startedAt }: { startedAt: number }): React.JSX.Element | null {
-  const now = useWorkingNow();
-  if (now === undefined) return null;
-  return (
-    <span role="timer" aria-live="off">
-      {workingTime(now - startedAt)}
-    </span>
-  );
-}
-
 /** The widths of the blocks standing for the rail's rows, and for the chapter's lines. */
 const SKELETON_ROWS = ["80%", "65%", "72%", "50%"] as const;
 const SKELETON_LINES = ["40%", "92%", "86%", "60%"] as const;
@@ -247,14 +240,14 @@ function Generating({
 }): React.JSX.Element {
   const words = ours ? CHAPTERS_WORDS.GENERATING : CHAPTERS_WORDS.ELSEWHERE;
   return (
-    <div className="chapters-generating">
+    <Fill className="chapters-generating">
       <p className="chapters-generating-line">
         <span>
           {words}
           {live ? (
             <>
               {" · "}
-              <Elapsed startedAt={startedAt} />
+              <Time at={startedAt} look={TIME_LOOK.DURATION} />
             </>
           ) : null}
         </span>
@@ -278,7 +271,7 @@ function Generating({
           </div>
         </div>
       </SkeletonRegion>
-    </div>
+    </Fill>
   );
 }
 
@@ -608,8 +601,8 @@ function ChaptersReading({
   const previous = chapters[at - 1];
   const next = chapters[at + 1];
   return (
-    // biome-ignore lint/a11y/noStaticElementInteractions: the view hears its chapter keys from whatever in it has the focus, past the list's own.
-    <div
+    // The view hears its chapter keys from whatever in it has the focus, past the list's own.
+    <Fill
       ref={root}
       className="chapters-view"
       data-rail-beside={String(slide.drawn)}
@@ -631,7 +624,7 @@ function ChaptersReading({
           {CHAPTERS_WORDS.madeBy(chaptersModelLabel(model))}
         </Text>
       </p>
-      <div className="chapters-body">
+      <Fill flow={FILL_FLOW.ROW} clip className="chapters-body">
         {slide.drawn || over ? (
           <ChapterRail
             rows={rows}
@@ -644,7 +637,7 @@ function ChaptersReading({
           />
         ) : null}
         <ChapterStrip rows={rows} at={at} viewed={viewed} onOpen={toggleRail} />
-        <section className="chapter-reading" aria-labelledby={headingId}>
+        <Fill as={FILL_ELEMENT.SECTION} className="chapter-reading" aria-labelledby={headingId}>
           <header className="chapter-head">
             <ScrollArea size={SCROLL_SIZE.CONTENT}>
               <div className="chapter-head-body">
@@ -655,7 +648,12 @@ function ChaptersReading({
                     onBeside={() => setBeside((was) => !was)}
                     onOver={() => setOver((was) => !was)}
                   />
-                  <Text as={TEXT_ELEMENT.H3} variant={TEXT_VARIANT.SECTION} id={headingId}>
+                  <Text
+                    as={TEXT_ELEMENT.H3}
+                    variant={TEXT_VARIANT.SECTION}
+                    id={headingId}
+                    className="chapter-head-title"
+                  >
                     {at + 1}. {chapter.title}
                   </Text>
                   {chapter.risk === null ? null : (
@@ -786,9 +784,9 @@ function ChaptersReading({
               </Button>
             </Tooltip>
           </footer>
-        </section>
-      </div>
-    </div>
+        </Fill>
+      </Fill>
+    </Fill>
   );
 }
 

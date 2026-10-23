@@ -180,7 +180,7 @@ function columnLog(container: HTMLElement): string {
   if (pane === null || pane.textContent === null) return "empty";
   if (pane.querySelector(".luke-spinner") !== null) return "spinner";
   if (/Loading agent/u.test(pane.textContent)) return "loading agent";
-  const region = pane.querySelector(".agent-tab > .luke-skeleton-region");
+  const region = pane.querySelector(".agent-tab > .agent-log-wait");
   if (region !== null) {
     const blocks = [...region.querySelectorAll(".luke-skeleton")].map(
       (block) => `${block.getAttribute("data-shape")}:${block.getAttribute("style")}`,

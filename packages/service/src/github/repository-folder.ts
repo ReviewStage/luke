@@ -40,6 +40,7 @@ type GitEntry = (typeof GIT_ENTRY)[keyof typeof GIT_ENTRY];
 
 /** What GitHub answers for a tree: each entry by its name within the tree, a blob's size, and whether it cut the listing short. */
 const TreeSchema = Schema.Struct({
+  sha: Schema.optionalKey(Schema.String),
   tree: Schema.Array(
     Schema.Struct({
       path: Schema.String,
@@ -57,13 +58,14 @@ interface RepositoryEntry {
   readonly size?: number;
 }
 
-/** A folder as GitHub holds it: none at the path on the branch, or its entries and whether GitHub cut them short. */
+/** A folder as GitHub holds it: none at the path on the branch, or its entries, whether GitHub cut them short, and its tree's sha where GitHub said it, which changes with anything under it. */
 export type RepositoryFolder =
   | { readonly found: false }
   | {
       readonly found: true;
       readonly entries: readonly RepositoryEntry[];
       readonly truncated: boolean;
+      readonly sha?: string;
     };
 
 const NO_FOLDER: RepositoryFolder = { found: false };
@@ -72,9 +74,11 @@ const NO_FOLDER: RepositoryFolder = { found: false };
  * The repository's folder at the path on the branch named, the root for an
  * empty path, as the git trees API lists it: its own entries, or with
  * `recursive` everything under it, each named by its path from the folder.
+ * A commit's sha names the commit as a branch's name does. Read anonymously
+ * where the token is `null`.
  */
 export function readRepositoryFolder(
-  token: Redacted.Redacted,
+  token: Redacted.Redacted | null,
   repository: { readonly fullName: string; readonly defaultBranch: string },
   path: string,
   recursive = false,
@@ -112,6 +116,7 @@ export function readRepositoryFolder(
               : { name: entry.path, type: entry.type, size: entry.size },
           ),
           truncated: answer.truncated,
+          ...(answer.sha === undefined ? undefined : { sha: answer.sha }),
         } satisfies RepositoryFolder;
       }),
     );

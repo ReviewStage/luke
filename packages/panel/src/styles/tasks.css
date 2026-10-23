@@ -8,10 +8,6 @@
 .task-board {
   position: relative;
   isolation: isolate;
-  display: flex;
-  min-height: 0;
-  flex: 1;
-  flex-direction: column;
   overflow: hidden;
   color: var(--luke-color-text-muted);
 }
@@ -178,7 +174,7 @@
   inset: -2px;
   border-radius: var(--luke-radius-6);
   background: color-mix(in srgb, var(--accent) 18%, transparent);
-  animation: plan-fresh calc(var(--duration-shape) * 3) ease-out both;
+  animation: luke-menu-leave calc(var(--luke-duration-shape) * 3) ease-out both;
   content: "";
   pointer-events: none;
 }
@@ -196,23 +192,13 @@
   inset: -4px;
   border-radius: var(--luke-radius-8);
   background: color-mix(in srgb, var(--voice-luke) 18%, transparent);
-  animation: plan-fresh calc(var(--duration-shape) * 3) ease-out both;
+  animation: luke-menu-leave calc(var(--luke-duration-shape) * 3) ease-out both;
   content: "";
   pointer-events: none;
 }
 
 @keyframes plan-caret-blink {
   50% {
-    opacity: 0;
-  }
-}
-
-@keyframes plan-fresh {
-  from {
-    opacity: 1;
-  }
-
-  to {
     opacity: 0;
   }
 }
@@ -234,22 +220,19 @@
 /* The byline's presses, its people and the time that opens the version
    history, each take a press a finger's height on a coarse pointer, and at
    least as wide, centred on what they draw; the lines between them part a
-   little further, so one line's press does not cover the next's words. Note
-   that the time's own clip is lifted there, since it would clip its press,
-   and the time is too short to want cutting. */
+   little further, so one line's press does not cover the next's words. The
+   time is drawn whole (`TEXT_BUTTON_LINES.WHOLE`), which takes its own. */
 @media (pointer: coarse) {
   .plan-byline {
     row-gap: var(--luke-space-12);
   }
 
-  .plan-byline [data-actor-ref],
-  .plan-byline .luke-text-button {
+  .plan-byline [data-actor-ref] {
     position: relative;
     overflow: visible;
   }
 
-  .plan-byline [data-actor-ref]::before,
-  .plan-byline .luke-text-button::before {
+  .plan-byline [data-actor-ref]::before {
     position: absolute;
     top: 50%;
     left: 50%;
@@ -348,7 +331,7 @@
   line-height: var(--luke-type-caption-leading);
   opacity: 0;
   pointer-events: none;
-  transition: opacity var(--duration-hover) ease;
+  transition: opacity var(--luke-duration-hover) ease;
 }
 
 .plan-unit-attributed:focus-within .plan-unit-byline {
@@ -371,7 +354,7 @@
   flex: none;
   opacity: 0;
   pointer-events: auto;
-  transition: opacity var(--duration-hover) ease;
+  transition: opacity var(--luke-duration-hover) ease;
 }
 
 .plan-unit-attributed:focus-within .plan-unit-more,
@@ -753,20 +736,11 @@
 
 /* The picture's press stands centred where the picture did. With a mouse in a
    wide room a pointer's press opens nothing and falls through to the
-   section, so there the press wears the plain pointer and does not sink; a
-   key's press still opens it. */
-.plan-diagram > .luke-picture-tile {
-  margin-inline: auto;
-}
-
-@media (pointer: fine) {
-  .desktop-shell:not([data-room="narrow"]) .plan-diagram > .luke-picture-tile {
-    cursor: auto;
-  }
-
-  .desktop-shell:not([data-room="narrow"]) .plan-diagram .luke-picture-tile-face {
-    transform: none;
-  }
+   section (`pointerOpens`); a key's press still opens it. */
+.plan-diagram-stage {
+  display: flex;
+  min-width: 0;
+  justify-content: center;
 }
 
 @media (pointer: coarse) {
@@ -803,15 +777,6 @@
   line-height: var(--luke-type-caption-leading);
 }
 
-/* The Code tab: every code Luke showed on the plan, one card each under the
-   call it was shown on, in a log that fills the tab (code-pane.tsx). */
-.code-pane {
-  display: flex;
-  min-height: 0;
-  flex: 1;
-  flex-direction: column;
-}
-
 /* The transcript's frame (../ai-elements/conversation.tsx): a log that
    scrolls inside the room its pane leaves it, in a `ScrollArea` holding the
    block its lines stand in (`.conversation-log`), its lines a step apart,
@@ -823,10 +788,6 @@
 @layer components {
   .conversation {
     position: relative;
-    display: flex;
-    min-height: 0;
-    flex: 1;
-    flex-direction: column;
   }
 
   .conversation-log {
@@ -959,7 +920,7 @@
     gap: var(--luke-space-2);
     opacity: 0;
     pointer-events: none;
-    transition: opacity var(--duration-quick) var(--spring);
+    transition: opacity var(--luke-duration-quick) var(--luke-spring);
   }
 
   .message-actions[data-placement="floating"] {
@@ -1317,21 +1278,7 @@
 /* A File tab: its file, or the lines Luke showed of it under why the file
    is not shown, filling the tab. */
 .file-tab {
-  display: flex;
-  min-height: 0;
-  flex: 1;
-  flex-direction: column;
   background: var(--code-ground);
-}
-
-/* A File tab beside its repository's tree, under one bar across both: the
-   file takes the room the tree leaves, and the tree keeps to the right, as
-   an editor's explorer docked there does. */
-.file-view {
-  display: flex;
-  min-height: 0;
-  flex: 1;
-  flex-direction: column;
 }
 
 /* The tree slides in past the view's right edge and out over the file, so
@@ -1339,14 +1286,6 @@
    which would make a scroller a focus could scroll sideways. */
 .file-view-body {
   position: relative;
-  display: flex;
-  min-height: 0;
-  flex: 1;
-  overflow: clip;
-}
-
-.file-view-body > .file-tab {
-  min-width: 0;
 }
 
 /* The bar: history, the path, then the file's actions and the tree's
@@ -1378,7 +1317,7 @@
 /* Words leading the bar, with no control before them. */
 .file-view-bar > .page-view-title,
 .file-view-bar > .terminal-tab-title,
-.file-view-bar > .luke-breadcrumb-bar > :is(.file-view-path, .files-viewed):first-child {
+.file-view-bar :is(.file-view-path, .files-viewed):first-child {
   padding-left: var(--row-inset);
 }
 
@@ -1416,18 +1355,6 @@
 
 .file-view-actions {
   margin-left: auto;
-}
-
-/* A plan with no repository names the file plainly, cut from its left, in
-   the window's own type as the breadcrumbs are. */
-.file-view-path {
-  min-width: 0;
-  overflow: hidden;
-  color: var(--luke-color-text);
-  direction: rtl;
-  text-align: left;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 /* The commit a pinned read is at, quiet beside the path. */
@@ -1587,11 +1514,11 @@
   display: flex;
   width: min(var(--file-tree-width, 264px), calc(100% - var(--luke-space-48)));
   box-shadow: var(--luke-menu-shadow);
-  animation: pane-over-in var(--duration-pane) var(--motion-pane) backwards;
+  animation: pane-over-in var(--luke-duration-pane) var(--luke-motion-pane) backwards;
 }
 
 .file-view[data-pane-beside="false"][data-pane-over="peek"] .file-tree-pane {
-  animation-delay: var(--duration-quick);
+  animation-delay: var(--luke-duration-quick);
 }
 
 .file-view[data-pane-beside="false"]:is([data-pane-over="peek"], [data-pane-over="open"])
@@ -1633,11 +1560,11 @@
 
   .file-view:is([data-pane-over="peek"], [data-pane-over="open"]) .file-tree-pane {
     display: flex;
-    animation: pane-over-in var(--duration-pane) var(--motion-pane) backwards;
+    animation: pane-over-in var(--luke-duration-pane) var(--luke-motion-pane) backwards;
   }
 
   .file-view[data-pane-over="peek"] .file-tree-pane {
-    animation-delay: var(--duration-quick);
+    animation-delay: var(--luke-duration-quick);
   }
 
   .file-view[data-pane-over="closed"] .file-tree-pane {
@@ -1684,11 +1611,11 @@
   .file-view:is([data-pane-over="peek"], [data-pane-over="open"])
   .file-tree-pane {
   display: flex;
-  animation: pane-over-in var(--duration-pane) var(--motion-pane) backwards;
+  animation: pane-over-in var(--luke-duration-pane) var(--luke-motion-pane) backwards;
 }
 
 .desktop-shell[data-room="narrow"] .file-view[data-pane-over="peek"] .file-tree-pane {
-  animation-delay: var(--duration-quick);
+  animation-delay: var(--luke-duration-quick);
 }
 
 .desktop-shell[data-room="narrow"] .file-view .file-tree-toggle[data-place="over"] {
@@ -1719,11 +1646,11 @@
 
   .terminal-tab:is([data-pane-over="peek"], [data-pane-over="open"]) .terminal-shells {
     display: flex;
-    animation: pane-over-in var(--duration-pane) var(--motion-pane) backwards;
+    animation: pane-over-in var(--luke-duration-pane) var(--luke-motion-pane) backwards;
   }
 
   .terminal-tab[data-pane-over="peek"] .terminal-shells {
-    animation-delay: var(--duration-quick);
+    animation-delay: var(--luke-duration-quick);
   }
 
   .terminal-tab[data-pane-over="closed"] .terminal-shells {
@@ -1796,48 +1723,6 @@
   border: 0;
 }
 
-/* A page's card (page-card.tsx) previews its newest version under its head:
-   the page laid out four times the card's width, a desktop window's, and
-   scaled down by as much into a box of a window's shape, its corners a
-   control's. The frame takes no pointer, so the card stays standing as the
-   pointer crosses it, and it fades in once loaded over a quiet ground that
-   holds its place meanwhile. */
-.page-card-preview {
-  position: relative;
-  overflow: hidden;
-  flex: none;
-  aspect-ratio: 16 / 10;
-  border: 1px solid var(--luke-color-border);
-  border-radius: var(--luke-control-radius);
-  background: var(--luke-color-fill-hover);
-}
-
-.page-card-frame {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 400%;
-  height: 400%;
-  border: 0;
-  opacity: 0;
-  pointer-events: none;
-  transform: scale(0.25);
-  transform-origin: 0 0;
-  transition: opacity var(--duration-hover) ease;
-}
-
-.page-card-preview[data-loaded="true"] .page-card-frame {
-  opacity: 1;
-}
-
-/* New tab in an agent's browser (cloud-browser-open.tsx): whose browser,
-   the address, and what opening it does, stacked in the dialog's body. */
-.cloud-browser-open {
-  display: flex;
-  flex-direction: column;
-  gap: var(--luke-space-12);
-}
-
 /* A cloud Browser tab (cloud-browser-pane.tsx): whose browser it is and
    the page's address beside who drives it, then the page drawn on a canvas
    of the page's own shape, centred in the body, with a quiet line over it
@@ -1892,8 +1777,8 @@
 /* The agent's pointer over a cloud Browser tab (cloud-browser-cursor.tsx):
    an arrow over the drawn page, never in its frame, taking no pointer
    events. It stands at the agent's point, scaled onto the page by the
-   component, and glides to each new one over --duration-fast on
-   --spring-fast, about the beat its action waits; a still pointer jumps.
+   component, and glides to each new one over --luke-duration-fast on
+   --luke-spring-fast, about the beat its action waits; a still pointer jumps.
    While the agent is active it rocks about its tip, and fades once it is
    not. A click presses it once it has arrived, with a ripple at the point;
    typing bobs it. It is a compact neutral arrowhead on a soft neutral halo,
@@ -1913,8 +1798,8 @@
   opacity: 0;
   translate: var(--cloud-browser-cursor-x) var(--cloud-browser-cursor-y);
   transition:
-    translate var(--duration-fast) var(--spring-fast),
-    opacity var(--duration-quick) ease;
+    translate var(--luke-duration-fast) var(--luke-spring-fast),
+    opacity var(--luke-duration-quick) ease;
 }
 
 .cloud-browser-cursor[data-shown] {
@@ -1922,7 +1807,7 @@
 }
 
 .cloud-browser-cursor[data-still] {
-  transition: opacity var(--duration-quick) ease;
+  transition: opacity var(--luke-duration-quick) ease;
 }
 
 .cloud-browser-cursor-rock {
@@ -1982,8 +1867,8 @@
 }
 
 .cloud-browser-cursor[data-shown][data-kind="click"]:not([data-still]) .cloud-browser-cursor-arrow {
-  animation: cloud-browser-cursor-press var(--duration-fast) ease-in-out var(--duration-fast)
-    backwards;
+  animation: cloud-browser-cursor-press var(--luke-duration-fast) ease-in-out
+    var(--luke-duration-fast) backwards;
 }
 
 .cloud-browser-cursor[data-shown][data-kind="type"]:not([data-still]) .cloud-browser-cursor-arrow {
@@ -2001,8 +1886,8 @@
   border: calc(var(--luke-space-2) / 2) solid var(--agent-pointer);
   border-radius: 50%;
   opacity: 0;
-  animation: cloud-browser-cursor-ripple var(--duration-shape) ease-out var(--duration-fast)
-    backwards;
+  animation: cloud-browser-cursor-ripple var(--luke-duration-shape) ease-out
+    var(--luke-duration-fast) backwards;
 }
 
 @keyframes cloud-browser-cursor-rock {
@@ -2060,11 +1945,6 @@
    leave. */
 .browser-view-body {
   position: relative;
-  display: flex;
-  min-height: 0;
-  flex: 1;
-  flex-direction: column;
-  overflow: clip;
 }
 
 /* The still stands where the page stood, at the size the page was drawn
@@ -2075,13 +1955,6 @@
   top: 0;
   left: 0;
   max-width: none;
-}
-
-.page-view-find {
-  display: flex;
-  min-height: 0;
-  flex: 1;
-  flex-direction: column;
 }
 
 /* What became of a changed file, lettered quietly beside its path in a
@@ -2146,10 +2019,6 @@
    two of them (diff-view/index.ts's LIST_FILE_GAP). */
 .diff-list {
   position: relative;
-  display: flex;
-  min-height: 0;
-  flex: 1;
-  flex-direction: column;
   background: var(--luke-color-ground);
 }
 
@@ -2172,7 +2041,8 @@
   transform: translate(-50%, var(--luke-space-4));
 }
 
-.diff-list > .luke-scroll-area > :first-child {
+/* Pierre's own container, which it draws the files into inside the scroller. */
+[data-diff-list-scroller] > :first-child {
   padding-inline: var(--luke-space-12);
 }
 
@@ -2208,7 +2078,7 @@
 
 .diff-list-fold {
   transform: rotate(90deg);
-  transition: transform var(--duration-quick) ease;
+  transition: transform var(--luke-duration-quick) ease;
 }
 
 .diff-list-head[data-collapsed] .diff-list-fold {
@@ -2231,7 +2101,8 @@
   min-width: 0;
 }
 
-.diff-list-path-part > .luke-text-button {
+/* The path's folder and name in a row inside its press, the folder cut short first. */
+.diff-list-path-words {
   display: flex;
   min-width: 0;
 }
@@ -2401,10 +2272,6 @@
   border-bottom: 1px solid var(--luke-color-border);
 }
 
-.file-tree-search > .luke-search-field {
-  flex: 1;
-}
-
 /* Beside Files changed's cards, the search stands where the first card does,
    the room between files above it, so the tree and the list share a top. */
 .file-tab:has(> .diff-list) + .file-tree-pane .file-tree-search {
@@ -2449,10 +2316,6 @@
   --trees-git-modified-color-override: var(--luke-color-attention);
   --trees-git-deleted-color-override: var(--luke-color-danger-text);
   --trees-git-renamed-color-override: var(--luke-color-working);
-  display: flex;
-  min-height: 0;
-  flex: 1;
-  flex-direction: column;
 }
 
 /* The tree rings whichever row holds focus, a pressed one too, so until the
@@ -2627,10 +2490,6 @@
      the fade begins beneath the heading at whatever height it stands
      (`SCROLL_FADE_INSET.BAND`). */
   --luke-scroll-band: var(--pull-request-band);
-  display: flex;
-  min-height: 0;
-  flex: 1;
-  flex-direction: column;
 }
 
 .pull-request-view[hidden] {
@@ -2646,18 +2505,10 @@
    leaves a strip of one mark a chapter while hidden. */
 .chapters-view {
   --chapter-rail-width: calc(var(--luke-space-64) * 4);
-  display: flex;
-  min-height: 0;
-  flex: 1;
-  flex-direction: column;
 }
 
 .chapters-body {
   position: relative;
-  display: flex;
-  min-height: 0;
-  flex: 1;
-  overflow: clip;
 }
 
 .chapter-rail {
@@ -2745,14 +2596,6 @@
 /* The chapter: its head, which scrolls on its own once it is taller than
    its share, so the diff under it keeps at least half the view; the list;
    and the foot. */
-.chapter-reading {
-  display: flex;
-  min-width: 0;
-  min-height: 0;
-  flex: 1;
-  flex-direction: column;
-}
-
 .chapter-head {
   display: flex;
   min-height: 0;
@@ -2784,7 +2627,7 @@
   gap: var(--luke-control-gap);
 }
 
-.chapter-head-row > .luke-text {
+.chapter-head-title {
   min-width: 0;
   overflow-wrap: anywhere;
 }
@@ -2818,17 +2661,19 @@
   list-style: none;
 }
 
+/* The words take the card's width; the press to its lines hugs its own. */
 .chapter-key-change {
   display: flex;
   flex-direction: column;
+  align-items: flex-start;
   gap: var(--luke-space-2);
   padding: var(--luke-space-6) var(--luke-space-8);
   border: 1px solid var(--luke-color-border);
   border-radius: var(--luke-control-radius);
 }
 
-.chapter-key-change > .luke-text-button {
-  align-self: flex-start;
+.chapter-key-change-words {
+  align-self: stretch;
 }
 
 /* A key change's lines named alone, while stale chapters draw no diff to bring them into. */
@@ -2853,13 +2698,6 @@
 
 /* Chapters being made: how long it has been, then blocks where the rail
    and the chapter will stand. */
-.chapters-generating {
-  display: flex;
-  min-height: 0;
-  flex: 1;
-  flex-direction: column;
-}
-
 .chapters-generating-line {
   display: flex;
   align-items: center;
@@ -2917,7 +2755,7 @@
 
   .chapters-view[data-rail-over="open"] .chapter-rail {
     display: flex;
-    animation: chapter-rail-in var(--duration-pane) var(--motion-pane) backwards;
+    animation: chapter-rail-in var(--luke-duration-pane) var(--luke-motion-pane) backwards;
   }
 
   .chapters-view .chapter-strip {
@@ -2958,7 +2796,8 @@
   border-bottom: 1px solid var(--luke-color-border);
 }
 
-.pull-request-tabs > .luke-choice-bar {
+/* The tabs take what room Review leaves them. */
+.pull-request-tab-bar {
   min-width: 0;
   flex: 1 1 0;
 }
@@ -3000,7 +2839,7 @@
   position: relative;
   z-index: 1;
   flex: none;
-  container: pull-request-header / inline-size;
+  container: pull-request-header luke-room / inline-size;
   padding: var(--luke-space-8) var(--column-inset);
 }
 
@@ -3020,8 +2859,8 @@
   reading-flow: flex-visual;
 }
 
-.pull-request-title-row > .luke-chip,
-.pull-request-title-row > .luke-badge {
+.pull-request-state {
+  display: flex;
   flex: none;
   /* Note that the pill is drawn ahead of the title it follows in the
      markup, where a screen reader names the title first. */
@@ -3032,7 +2871,7 @@
 }
 
 .pull-request-title-row > .pull-request-title,
-.pull-request-title-row > .luke-skeleton-region {
+.pull-request-title-row > .pull-request-title-wait {
   min-width: 0;
   flex: 1 1 auto;
   padding-block: calc((var(--luke-control-height) - var(--luke-type-dialog-leading)) / 2);
@@ -3056,13 +2895,12 @@
     reading-flow: normal;
   }
 
-  .pull-request-title-row > .luke-chip,
-  .pull-request-title-row > .luke-badge {
+  .pull-request-state {
     order: 0;
   }
 
   .pull-request-title-row > .pull-request-title,
-  .pull-request-title-row > .luke-skeleton-region {
+  .pull-request-title-row > .pull-request-title-wait {
     flex-basis: 100%;
     padding-block: 0;
   }
@@ -3100,24 +2938,6 @@
   mask-image: linear-gradient(to left, transparent, #000 var(--label-fade));
   mask-origin: content-box;
   mask-repeat: no-repeat;
-}
-
-/* A phone names each of the tabs in words, never their glyphs alone, which
-   a finger cannot hover for a name: the glyphs give way instead, and a row
-   still too long scrolls sideways, as a fill bar does. */
-.desktop-shell[data-room="narrow"] .pull-request-tabs .luke-choice-bar-icon {
-  display: none;
-}
-
-.desktop-shell[data-room="narrow"]
-  .pull-request-tabs
-  .luke-choice-bar[data-folded="true"]
-  .luke-choice-bar-label {
-  position: static;
-  overflow: visible;
-  width: auto;
-  height: auto;
-  clip-path: none;
 }
 
 /* The Conversation's scroller (agent-pull-request-tab.tsx's
@@ -3208,12 +3028,6 @@
   color: var(--luke-color-text);
 }
 
-/* The chevron at the heading's glyph size, its turn the disclosure's. */
-.pull-request-section-head > .luke-disclosure-turn > svg {
-  width: var(--luke-control-icon);
-  height: var(--luke-control-icon);
-}
-
 /* What the heading holds at its end, Hide resolved and Hide bots on the
    Conversation's: filter chips as the tasks board's toolbar draws its view
    filter, each its word and the quiet count of what it leaves out, pressed
@@ -3227,18 +3041,6 @@
 
 .pull-request-filter {
   display: inline-flex;
-}
-
-.pull-request-filter-count {
-  color: var(--luke-color-text-subtle);
-  font-variant-numeric: tabular-nums;
-}
-
-/* A pressed filter is drawn in the ink, so its count steps back from the
-   ground's colour its words are in, rather than the subtle ink it would
-   vanish into. */
-.luke-chip[aria-pressed="true"] .pull-request-filter-count {
-  color: color-mix(in srgb, var(--luke-color-ink-inverse) 65%, var(--luke-color-ink));
 }
 
 /* What a section holds opens a step under its band. */
@@ -3421,7 +3223,7 @@
 
 .pull-request-branch-glyph > * {
   grid-area: 1 / 1;
-  transition: opacity var(--duration-quick) var(--motion-exit);
+  transition: opacity var(--luke-duration-quick) var(--luke-motion-exit);
 }
 
 .pull-request-branch-glyph > .copy-glyph {
@@ -3687,17 +3489,6 @@
   min-width: 0;
 }
 
-@container pull-request-header (max-width: 520px) {
-  .merge-chip .luke-badge-words {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    overflow: hidden;
-    clip-path: inset(50%);
-    white-space: nowrap;
-  }
-}
-
 .pull-request-section {
   margin-top: var(--luke-space-20);
 }
@@ -3880,7 +3671,7 @@
 /* A Conversation thread's card answers its own width, as one on a line does. */
 .pull-request-thread-slot {
   min-width: 0;
-  container: annotation / inline-size;
+  container: annotation luke-room / inline-size;
 }
 
 /* A review thread on its line in Files changed (agent-pull-request-tab.tsx's
@@ -3896,7 +3687,7 @@
     clamp(var(--luke-space-8), (100% - 440px) * 999, var(--luke-space-12));
   font-family: var(--luke-font-sans);
   white-space: normal;
-  container: annotation / inline-size;
+  container: annotation luke-room / inline-size;
 }
 
 /* A line's review threads minimized to one chip (minimized-threads.tsx), as
@@ -4065,18 +3856,6 @@
   line-height: var(--luke-type-caption-leading);
 }
 
-.annotation-card-where > .luke-text-button {
-  display: flex;
-  width: 100%;
-  min-width: 0;
-  border-radius: 0;
-  transition: background-color var(--duration-hover) ease;
-}
-
-.annotation-card-where > .luke-text-button:hover {
-  background: var(--luke-color-fill-hover);
-}
-
 .annotation-where {
   display: flex;
   min-width: 0;
@@ -4114,16 +3893,18 @@
   font-size: var(--luke-type-caption-size);
   line-height: var(--luke-type-caption-leading);
   white-space: nowrap;
-  transition: background-color var(--duration-hover) ease;
+  transition: background-color var(--luke-duration-hover) ease;
 }
 
 .annotation-card-head:hover {
   background: var(--luke-color-fill-hover);
 }
 
-.annotation-card-head > .luke-disclosure-turn {
+.annotation-card-turn {
+  display: flex;
   width: var(--annotation-turn);
   height: var(--annotation-turn);
+  flex: none;
   align-items: center;
   justify-content: center;
 }
@@ -4256,16 +4037,6 @@
     height: var(--luke-space-8);
     padding: 0;
     background: var(--annotation-chip-ink);
-  }
-
-  .annotation-card-chip-word,
-  .annotation-card-count-word {
-    position: absolute;
-    overflow: hidden;
-    width: 1px;
-    height: 1px;
-    clip-path: inset(50%);
-    white-space: nowrap;
   }
 }
 
@@ -4466,15 +4237,13 @@
    diff bundle loads. */
 .whole-file {
   position: relative;
-  display: flex;
-  min-height: 0;
-  flex: 1;
-  flex-direction: column;
 }
 
-.whole-file > .luke-spinner-region {
+/* The wait for the file's bundle stands over the whole of it. */
+.whole-file-wait {
   position: absolute;
   inset: 0;
+  display: flex;
 }
 
 /* A note under a line of a whole file, its card or its chip: Pierre stands
@@ -4499,14 +4268,12 @@
    back, in the element Pierre keeps for it under a File tab's line or a
    Code card's (`.whole-file-note`, `.diff-note`), which insets it. */
 .file-note {
-  container: annotation / inline-size;
+  container: annotation luke-room / inline-size;
 }
 
-/* Luke is told by his wing mark and his name in his own colour, on the card a review thread wears. */
-.file-note .transcript-luke-mark,
-.file-note .transcript-luke-mark .luke-face {
-  width: var(--annotation-face);
-  height: var(--annotation-face);
+/* Luke is told by his wing mark, at the card's face size (`--luke-glyph-size`), and his name in his own colour, on the card a review thread wears. */
+.file-note .annotation-card {
+  --luke-glyph-size: var(--annotation-face);
 }
 
 .file-note-author {
@@ -4626,21 +4393,6 @@ ol.transcript-list {
    over it. */
 .tool {
   font-size: var(--luke-type-caption-size);
-}
-
-.tool-icon {
-  display: flex;
-  width: 16px;
-  height: 16px;
-  flex-shrink: 0;
-  align-items: center;
-  justify-content: center;
-  color: var(--luke-color-text-muted);
-}
-
-.tool-icon > svg {
-  width: 16px;
-  height: 16px;
 }
 
 .tool-words {
@@ -4828,8 +4580,8 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
   padding-inline: var(--luke-space-12);
   border-radius: inherit;
   transition:
-    color var(--duration-quick) var(--spring),
-    background-color var(--duration-quick) var(--spring);
+    color var(--luke-duration-quick) var(--luke-spring),
+    background-color var(--luke-duration-quick) var(--luke-spring);
 }
 
 .plan-card-head:hover {
@@ -4839,21 +4591,6 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
 .plan-card[open] > .plan-card-head {
   border-bottom-left-radius: 0;
   border-bottom-right-radius: 0;
-}
-
-.plan-card-icon {
-  display: flex;
-  width: 16px;
-  height: 16px;
-  flex-shrink: 0;
-  align-items: center;
-  justify-content: center;
-  color: var(--luke-color-text-muted);
-}
-
-.plan-card-icon > svg {
-  width: 16px;
-  height: 16px;
 }
 
 .plan-card-title {
@@ -4891,12 +4628,6 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
    brain, in the muted ink, keeping their own breaks and wrapping anywhere. */
 .reasoning {
   font-size: var(--luke-type-caption-size);
-}
-
-.reasoning-icon {
-  width: 16px;
-  height: 16px;
-  flex-shrink: 0;
 }
 
 .reasoning-preview {
@@ -5062,18 +4793,10 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
    (../tasks/transcript-blocks.tsx over ../ai-elements/). What follows is
    each one's own: Luke's mark beside a note of his, drawn at the row's 16px
    in his voice's colour; the agent's composer; a worker's line. */
-.task-call,
-.agent-tab {
-  display: flex;
-  min-height: 0;
-  flex: 1;
-  flex-direction: column;
-}
-
 /* An agent's tab while its transcript or the agent is read
    (`agent-tab-skeleton.tsx`): the log's last lines stand at its foot, where
    the newest lines draw, on the log's own inset, over the composer's card. */
-.agent-tab > .luke-skeleton-region {
+.agent-log-wait {
   display: flex;
   min-height: 0;
   flex: 1;
@@ -5086,19 +4809,6 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
   flex-direction: column;
   gap: var(--luke-space-8);
   padding: var(--luke-section-gap) var(--luke-space-16) var(--luke-space-20);
-}
-
-.transcript-luke-mark {
-  display: flex;
-  width: 16px;
-  height: 16px;
-  flex: 0 0 auto;
-}
-
-.transcript-luke-mark .luke-face {
-  width: 16px;
-  height: 16px;
-  color: var(--voice-luke);
 }
 
 /* Coding agents --------------------------------------------------------- */
@@ -5342,12 +5052,9 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
 }
 
 .draft-fork-quote {
-  display: block;
   min-width: 4em;
   flex: 1 1 0;
-  overflow: hidden;
   color: var(--luke-color-text);
-  text-overflow: ellipsis;
 }
 
 .draft-fork-drop {
@@ -5427,8 +5134,8 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
   border-radius: inherit;
   cursor: pointer;
   transition:
-    color var(--duration-quick) var(--spring),
-    background-color var(--duration-quick) var(--spring);
+    color var(--luke-duration-quick) var(--luke-spring),
+    background-color var(--luke-duration-quick) var(--luke-spring);
 }
 
 .todos-dock-head:hover {
@@ -5437,16 +5144,12 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
 
 /* A finger's press is 44px tall, so on a coarse pointer a transcript's rows
    that open something, the docked to-do list's head and the agent's pull
-   request's row, stand that tall, their words still centred, as a call's
-   line (a LineButton's row) does of its own; a mouse keeps their compact
-   heights. */
+   request's row (`List`'s `fingerTall`), stand that tall, their words still
+   centred, as a call's line (a LineButton's row) does of its own; a mouse
+   keeps their compact heights. */
 @media (pointer: coarse) {
   .todos-dock-head {
     height: auto;
-    min-height: 44px;
-  }
-
-  .agent-published-dock .luke-list-row-main {
     min-height: 44px;
   }
 }
@@ -5454,13 +5157,6 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
 .todos-dock[open] > .todos-dock-head {
   border-bottom-left-radius: 0;
   border-bottom-right-radius: 0;
-}
-
-.todos-dock-icon {
-  width: 16px;
-  height: 16px;
-  flex-shrink: 0;
-  color: var(--luke-color-text-muted);
 }
 
 .todos-dock-summary {
@@ -5519,20 +5215,6 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
   gap: var(--luke-icon-gap);
 }
 
-.todo-mark {
-  display: flex;
-  width: 16px;
-  height: 1lh;
-  flex-shrink: 0;
-  align-items: center;
-  justify-content: center;
-  color: var(--luke-color-text-muted);
-}
-
-.todo-item[data-todo-status="in_progress"] > .todo-mark {
-  color: var(--luke-color-text);
-}
-
 .todo-words {
   min-width: 0;
   overflow-wrap: anywhere;
@@ -5552,31 +5234,31 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
    standing still under it, because the card's ground is translucent and a
    line passing over a list would show it through. */
 [data-todos-dock][data-disclosure="opening"] {
-  animation: todos-dock-unroll var(--duration-pane) var(--motion-pane) backwards;
+  animation: todos-dock-unroll var(--luke-duration-pane) var(--luke-motion-pane) backwards;
 }
 
 [data-todos-dock][data-disclosure="opening"] > summary {
-  animation: todos-dock-rise var(--duration-pane) var(--motion-pane) backwards;
+  animation: todos-dock-rise var(--luke-duration-pane) var(--luke-motion-pane) backwards;
 }
 
 [data-todos-dock][data-disclosure="opening"] > .todos-dock-body {
   animation:
-    luke-disclosure-fade var(--duration-quick) var(--motion-pane) backwards,
-    todos-dock-rise var(--duration-pane) var(--motion-pane) backwards;
+    luke-disclosure-fade var(--luke-duration-quick) var(--luke-motion-pane) backwards,
+    todos-dock-rise var(--luke-duration-pane) var(--luke-motion-pane) backwards;
 }
 
 [data-todos-dock][data-disclosure="closing"] {
-  animation: todos-dock-roll-up var(--duration-exit) var(--motion-exit) forwards;
+  animation: todos-dock-roll-up var(--luke-duration-exit) var(--luke-motion-exit) forwards;
 }
 
 [data-todos-dock][data-disclosure="closing"] > summary {
-  animation: todos-dock-sink var(--duration-exit) var(--motion-exit) forwards;
+  animation: todos-dock-sink var(--luke-duration-exit) var(--luke-motion-exit) forwards;
 }
 
 [data-todos-dock][data-disclosure="closing"] > .todos-dock-body {
   animation:
-    luke-disclosure-leave var(--duration-exit) var(--motion-exit) forwards,
-    todos-dock-sink var(--duration-exit) var(--motion-exit) forwards;
+    luke-disclosure-leave var(--luke-duration-exit) var(--luke-motion-exit) forwards,
+    todos-dock-sink var(--luke-duration-exit) var(--luke-motion-exit) forwards;
 }
 
 /* Note that each clip names both ends, because a clip cannot be interpolated
@@ -6214,7 +5896,7 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
 }
 
 .attachment-viewer-image[data-glide="true"] {
-  transition: transform var(--duration-quick) var(--motion-pane);
+  transition: transform var(--luke-duration-quick) var(--luke-motion-pane);
 }
 
 /* A text file fills the card under its header and scrolls there, drawn
@@ -6311,10 +5993,6 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
    it, with `clip` rather than `hidden`, as a File tab's body does. */
 .terminal-tab-body {
   position: relative;
-  display: flex;
-  min-height: 0;
-  flex: 1;
-  overflow: clip;
   background: var(--terminal-ground);
 }
 
@@ -6375,13 +6053,6 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
 
 /* The list's room while no read has listed the shells: the blocks standing
    for them, or the failure, with the foot kept at the list's end. */
-.terminal-shells-wait {
-  display: flex;
-  min-height: 0;
-  flex: 1;
-  flex-direction: column;
-}
-
 .terminal-shells-wait[data-failed] {
   padding: var(--luke-space-8) var(--luke-space-12);
 }
@@ -6456,7 +6127,7 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
    is already making again, shows only once it has held a second, so a blip
    is never seen. */
 .terminal-bar[data-late="true"] {
-  animation: terminal-bar-late 0s linear var(--late-delay) both;
+  animation: terminal-bar-late 0s linear var(--luke-late-delay) both;
 }
 
 @keyframes terminal-bar-late {
@@ -6564,7 +6235,7 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
 
 /* The searchable menu's class rides a box drawn as its contents
    (`agent-servers.tsx`), so its rows lie in `@luke/ui`'s panel. */
-.luke-popover-panel > .agent-servers-menu {
+.searchable-menu.agent-servers-menu {
   display: contents;
 }
 
@@ -6609,20 +6280,16 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
 }
 
 .agent-servers-problem {
-  min-width: 0;
   flex: 1 1 auto;
-  overflow: hidden;
   color: var(--luke-color-attention);
   font-size: var(--luke-type-caption-size);
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 /* A sign-in's line in the same place is no problem: never finished, in the
    muted detail colour. One still waiting on the browser is the shared ring
    alone after the name, its words in its title, with Reopen and Cancel at
    the row's end, as Settings › Integrations draws them. */
-.agent-servers-problem[data-tone="quiet"] {
+.agent-servers-problem-quiet {
   color: var(--luke-color-text-muted);
 }
 
@@ -6691,7 +6358,7 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
 .agent-context-fill {
   stroke: var(--context-fill);
   stroke-linecap: round;
-  transition: stroke-dasharray var(--duration-quick) var(--spring);
+  transition: stroke-dasharray var(--luke-duration-quick) var(--luke-spring);
 }
 
 /* The popover hangs above the ring as the model menu does above its chip,
@@ -7019,22 +6686,6 @@ svg.lucide {
   color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
   line-height: var(--luke-type-caption-leading);
-}
-
-/* The harness's mark, in the 16px seat a call's icon stands in. */
-.subagent-icon {
-  display: flex;
-  width: 16px;
-  height: 16px;
-  flex-shrink: 0;
-  align-items: center;
-  justify-content: center;
-  color: var(--luke-color-text-muted);
-}
-
-.subagent-icon > svg {
-  width: 16px;
-  height: 16px;
 }
 
 .subagent-job {
@@ -7409,7 +7060,7 @@ svg.lucide {
   background: var(--comment-mark);
   color: inherit;
   cursor: pointer;
-  transition: background var(--duration-hover) ease;
+  transition: background var(--luke-duration-hover) ease;
 }
 
 .plan-comment-mark:hover,
@@ -7460,20 +7111,14 @@ svg.lucide {
   top: 0;
   right: 0;
   left: 0;
-  animation: comment-slot-arrive var(--duration-quick) ease-out backwards;
+  animation: luke-menu-arrive var(--luke-duration-quick) ease-out backwards;
 }
 
 /* A card already in the margin travels to its next place, as threads above
    it open, grow, or arrive, on the spring every move rides; one arriving
    lands where it belongs and fades in. */
 .comment-slot[data-moves="true"] {
-  transition: transform var(--duration-shape) var(--spring);
-}
-
-@keyframes comment-slot-arrive {
-  from {
-    opacity: 0;
-  }
+  transition: transform var(--luke-duration-shape) var(--luke-spring);
 }
 
 /* A block's own comment button, under the pointer, just outside the column's end, where a section's ⋯ hangs. */
@@ -7484,7 +7129,7 @@ svg.lucide {
   position: absolute;
   left: calc(100% + var(--luke-space-2));
   opacity: 0;
-  transition: opacity var(--duration-hover) ease;
+  transition: opacity var(--luke-duration-hover) ease;
 }
 
 .comment-block-button:focus-within {
@@ -7692,11 +7337,11 @@ svg.lucide {
   display: flex;
   margin-right: calc(var(--luke-space-6) * -1);
   opacity: 0;
-  transition: opacity var(--duration-hover) ease;
+  transition: opacity var(--luke-duration-hover) ease;
 }
 
 .comment-head-end > .comment-time {
-  transition: opacity var(--duration-hover) ease;
+  transition: opacity var(--luke-duration-hover) ease;
 }
 
 .comment-tools:focus-within,
@@ -7906,11 +7551,7 @@ svg.lucide {
    which holds the list's own padded element). */
 .comments-tab {
   position: relative;
-  display: flex;
   height: 100%;
-  min-height: 0;
-  flex: 1;
-  flex-direction: column;
 }
 
 /* The tab's head, as the sidebar's section heads are: the list's name in
@@ -7932,7 +7573,7 @@ svg.lucide {
 }
 
 /* A list with nothing in it lays its empty state out as the column it fills (`empty-state.tsx`). */
-.comments-list:has(.luke-empty-state) {
+.comments-list[data-empty] {
   display: flex;
   min-height: 100%;
   flex-direction: column;

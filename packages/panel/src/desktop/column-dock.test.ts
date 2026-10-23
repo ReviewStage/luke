@@ -123,7 +123,7 @@ function dockOf(
   const container = document.body.appendChild(document.createElement("div"));
   root = createRoot(container);
   act(() => root?.render(createElement(shell, { narrow })));
-  return document.documentElement.style.getPropertyValue("--column-dock");
+  return document.documentElement.style.getPropertyValue("--luke-column-dock");
 }
 
 test("on a phone's Chat page the dock is the channel's composer at its foot, not a thread's reply above it", () => {
@@ -173,7 +173,7 @@ test("a to-do list landing over an agent's composer raises the dock at the frame
   const container = document.body.appendChild(document.createElement("div"));
   root = createRoot(container);
   act(() => root?.render(createElement(AgentShell, { todos: false })));
-  const dock = () => document.documentElement.style.getPropertyValue("--column-dock");
+  const dock = () => document.documentElement.style.getPropertyValue("--luke-column-dock");
   assert.equal(dock(), "100px", "the composer alone docks");
 
   await act(async () => root?.render(createElement(AgentShell, { todos: true })));

@@ -19,10 +19,10 @@ import {
   SOMEONE_REASON,
 } from "@luke/ui/actor-model";
 import { TAB_WORDS } from "@luke/ui/tab-strip-model";
+import { dayAndTimeText } from "@luke/ui/time-format";
 import { diffArrays } from "diff";
 import { MARKDOWN_MARK, type MarkdownMark } from "../markdown-message.js";
 import { providerOf } from "./coding-agent-model.js";
-import { dayAndTimeText } from "./task-time.js";
 
 /**
  * plan-history-model.ts -- the version history's words for each revision, and a version of the plan drawn against another with its changes marked.

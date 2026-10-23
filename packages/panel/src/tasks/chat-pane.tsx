@@ -21,12 +21,16 @@ import {
   DIALOG_TONE,
   type DialogQuestion,
   EmptyState,
+  ONE_LINE_ELEMENT,
+  OneLine,
   TEXT_BUTTON_TONE,
   TEXT_ELEMENT,
   TEXT_TONE,
   Text,
   TextButton,
+  Time,
   useConfirmDialog,
+  useMinute,
   VisuallyHidden,
 } from "@luke/ui";
 import { ACTOR_KIND, type Actor, actorName, distinctActors } from "@luke/ui/actor-model";
@@ -50,7 +54,6 @@ import {
   postsIn,
 } from "@luke/ui/chat-model";
 import { PICTURE_STATE, type PictureAnswer, usePicture } from "@luke/ui/picture-cache";
-import type { SkillOption } from "@luke/ui/skill-mention";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import * as Atom from "effect/reactivity/Atom";
 import type * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -73,7 +76,7 @@ import {
   ConversationScrollButton,
 } from "../ai-elements/conversation.js";
 import { MESSAGE_ACTIONS_PLACEMENT } from "../ai-elements/message.js";
-import { FADING_ELEMENT, FadingWords } from "../fading-words.js";
+import { FadingWords } from "../fading-words.js";
 import { PictureBlock } from "../picture-block.js";
 import { useSteadyDoor } from "../steady-door.js";
 import { SendingAgent } from "./agent-ref.js";
@@ -91,11 +94,10 @@ import { InboxCodeCard, type InboxCodeDoors } from "./inbox-code-card.js";
 import { NEEDS_YOU } from "./inbox-model.js";
 import { LinkBlock } from "./inbox-pane.js";
 import { LoneLinkCards } from "./lone-link-card.js";
-import { RelativeTime } from "./relative-time.js";
 import { SentWords, SkillFiles } from "./skill-chip.js";
 import type { SkillSource } from "./skill-picker.js";
+import type { SkillWithFile } from "./skill-ref.js";
 import { TaskMentions, type TaskMentionsValue } from "./task-mentions.js";
-import { useMinute } from "./task-time.js";
 import { TranscriptWords } from "./transcript-blocks.js";
 
 /**
@@ -145,7 +147,7 @@ import { TranscriptWords } from "./transcript-blocks.js";
  * the roster and the doors every row shares (`RowDoors`), which stand across
  * a push that only brings a message, so a new message draws its own row and
  * the pane around it, and no other. A row's time counts the minute itself
- * (`RelativeTime`), and an ask's card, which reads the chat whole, alone
+ * (`Time`), and an ask's card, which reads the chat whole, alone
  * reads it as it moves (`ChatReadContext`).
  */
 
@@ -316,7 +318,7 @@ export interface ChatTaskDoors {
   readonly mentions?: TaskMentionsValue | undefined;
   /** Where a person's `/skill` is read from and what opens its file, so it draws as its chip; none where the page hands its own, or the task names no repository. */
   readonly skills?:
-    | { readonly source: SkillSource; readonly onOpen: (skill: SkillOption) => void }
+    | { readonly source: SkillSource; readonly onOpen: (skill: SkillWithFile) => void }
     | undefined;
 }
 
@@ -729,7 +731,7 @@ function Byline({
       {where === undefined ? null : (
         <FadingWords className="chat-byline-where">{where}</FadingWords>
       )}
-      <RelativeTime className="chat-time" at={at} />
+      <Time className="chat-time" at={at} />
       {action}
     </div>
   );
@@ -753,7 +755,7 @@ function Face({
   if (continued) {
     return (
       <span className="chat-face" data-continued="true">
-        <RelativeTime className="chat-time" at={at} />
+        <Time className="chat-time" at={at} />
       </span>
     );
   }
@@ -1094,9 +1096,9 @@ function PlaceHead({
     <header className="desktop-toolbar chat-head">
       {lead}
       <div className="desktop-toolbar-heading">
-        <FadingWords as={FADING_ELEMENT.H1} className="desktop-toolbar-title" words={title}>
+        <OneLine as={ONE_LINE_ELEMENT.H1} className="desktop-toolbar-title" words={title}>
           {name}
-        </FadingWords>
+        </OneLine>
         {meta === undefined ? null : (
           <span className="chat-head-meta">
             <Text as={TEXT_ELEMENT.SPAN} tone={TEXT_TONE.MUTED} truncate>

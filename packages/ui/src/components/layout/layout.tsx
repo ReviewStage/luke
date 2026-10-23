@@ -1,4 +1,10 @@
-import type { ReactNode } from "react";
+import {
+  createElement,
+  type HTMLAttributes,
+  type ReactNode,
+  type Ref,
+  type SyntheticEvent,
+} from "react";
 
 /**
  * layout.tsx -- the two arrangements every container is built from: a Stack sets what it holds one under another, an Inline one beside another.
@@ -9,6 +15,13 @@ import type { ReactNode } from "react";
  * Where an Inline runs out of room it wraps, unless told to hold its line;
  * either way an item may shrink, so a long label gives way before the row
  * overflows its container.
+ *
+ * A Fill is a region rather than an arrangement of items: it takes the room
+ * its own column leaves and lays what it holds one under another, or beside
+ * (`FILL_FLOW.ROW`), as a page fills its pane and a pane's body fills it.
+ * It may clip what stands past its edges, with `clip` rather than `hidden`,
+ * so a pane sliding through it never scrolls it. Its owner places it and
+ * names it by its own class, never restyling the fill itself.
  */
 
 /** The room between items, by what they are: from none, through a glyph and its words, to two sections. */
@@ -52,6 +65,7 @@ export const LAYOUT_ELEMENT = {
   UL: "ul",
   OL: "ol",
   LI: "li",
+  FORM: "form",
 } as const;
 
 export type LayoutElement = (typeof LAYOUT_ELEMENT)[keyof typeof LAYOUT_ELEMENT];
@@ -74,6 +88,8 @@ interface LayoutProps {
   /** The name of a list or a region, where nothing visible names it. */
   "aria-label"?: string | undefined;
   "aria-labelledby"?: string | undefined;
+  /** What a submit does, on an Inline that is a `form`. */
+  onSubmit?: (event: SyntheticEvent) => void;
   children: ReactNode;
 }
 
@@ -106,10 +122,18 @@ export function Inline({
   align = ALIGN.CENTER,
   justify = JUSTIFY.START,
   wrap = true,
+  grow = false,
+  growFirst = false,
   as: Element = LAYOUT_ELEMENT.DIV,
   children,
   ...named
-}: LayoutProps & { wrap?: boolean }): React.JSX.Element {
+}: LayoutProps & {
+  wrap?: boolean;
+  /** Whether it takes the room its line leaves, down to a field's least width, where it wraps. */
+  grow?: boolean;
+  /** Whether its first item takes the room the others leave, as a field does beside its presses. */
+  growFirst?: boolean;
+}): React.JSX.Element {
   return (
     <Element
       className="luke-inline"
@@ -118,9 +142,62 @@ export function Inline({
       data-align={align}
       data-justify={justify}
       data-wrap={wrap}
+      data-grow={grow ? "" : undefined}
+      data-grow-first={growFirst ? "" : undefined}
       {...named}
     >
       {children}
     </Element>
+  );
+}
+
+/** Which way a Fill lays what it holds: one under another, or one beside another. */
+export const FILL_FLOW = {
+  COLUMN: "column",
+  ROW: "row",
+} as const;
+
+export type FillFlow = (typeof FILL_FLOW)[keyof typeof FILL_FLOW];
+
+/** The elements a Fill may be, by the region it is. */
+export const FILL_ELEMENT = {
+  DIV: "div",
+  SECTION: "section",
+  ARTICLE: "article",
+} as const;
+
+export type FillElement = (typeof FILL_ELEMENT)[keyof typeof FILL_ELEMENT];
+
+/** A region taking the room its column leaves, laying what it holds in `flow`, clipping past its edges where `clip`. */
+export function Fill({
+  as: Element = FILL_ELEMENT.DIV,
+  flow = FILL_FLOW.COLUMN,
+  clip = false,
+  className,
+  ref,
+  children,
+  ...rest
+}: Omit<HTMLAttributes<HTMLElement>, "className"> & {
+  as?: FillElement;
+  flow?: FillFlow;
+  /** Whether what stands past its edges is cut off there, as a pane sliding through it is. */
+  clip?: boolean;
+  /** The owner's own class, which names and places it and sets nothing of its fill. */
+  className?: string | undefined;
+  ref?: Ref<HTMLElement> | undefined;
+  children?: ReactNode;
+}): React.JSX.Element {
+  // Note that the element is made rather than written, because a ref typed
+  // for any of the three is no ref for their union.
+  return createElement(
+    Element,
+    {
+      ...rest,
+      ref,
+      className: className === undefined ? "luke-fill" : `luke-fill ${className}`,
+      "data-flow": flow,
+      "data-clip": clip ? "true" : undefined,
+    },
+    children,
   );
 }

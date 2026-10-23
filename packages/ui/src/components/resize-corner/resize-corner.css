@@ -1,0 +1,56 @@
+/* resize-corner.css -- a bracket on each top corner of a box, since the box
+   grows upward: out of sight at rest, brought out while the frame is
+   revealed (the pointer over the box, a drag under way) or the keyboard is
+   on one, and lit in the focus colour under the pointer. */
+
+@layer components {
+  .luke-resize-frame {
+    position: relative;
+    width: 100%;
+    height: 100%;
+  }
+
+  .luke-resize-corner {
+    position: absolute;
+    z-index: 1;
+    top: calc(-1 * var(--luke-space-6));
+    width: var(--luke-space-16);
+    height: var(--luke-space-16);
+    box-sizing: border-box;
+    border-top: 2px solid var(--luke-color-border-strong);
+    opacity: 0;
+    outline: none; /* no ring: the bracket lights in the focus colour */
+    touch-action: none;
+    transition: opacity var(--luke-duration-hover) ease;
+  }
+
+  .luke-resize-frame[data-reveal="true"] .luke-resize-corner,
+  .luke-resize-frame:focus-within .luke-resize-corner {
+    opacity: 1;
+  }
+
+  /* A touch screen has no hover to bring them out, so there they always stand. */
+  @media (hover: none) {
+    .luke-resize-corner {
+      opacity: 1;
+    }
+  }
+
+  .luke-resize-corner[data-corner="left"] {
+    left: calc(-1 * var(--luke-space-6));
+    border-left: 2px solid var(--luke-color-border-strong);
+    border-top-left-radius: var(--luke-radius-6);
+    cursor: nwse-resize;
+  }
+
+  .luke-resize-corner[data-corner="right"] {
+    right: calc(-1 * var(--luke-space-6));
+    border-right: 2px solid var(--luke-color-border-strong);
+    border-top-right-radius: var(--luke-radius-6);
+    cursor: nesw-resize;
+  }
+
+  .luke-resize-corner:is(:hover, :active, :focus-visible) {
+    border-color: var(--luke-color-accent);
+  }
+}

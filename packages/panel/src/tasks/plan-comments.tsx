@@ -30,6 +30,7 @@ import {
   EmptyState,
   ERROR_STATE_PLACEMENT,
   ErrorState,
+  Fill,
   IconButton,
   LINE_BUTTON_LOOK,
   LineButton,
@@ -45,10 +46,13 @@ import {
   TEXT_VARIANT,
   Text,
   TextArea,
+  TIME_LOOK,
+  Time,
   Tooltip,
   TrashIcon,
   useConfirmDialog,
   useMenu,
+  useMinute,
   VisuallyHidden,
 } from "@luke/ui";
 import { type Actor, LUKE_ACTOR } from "@luke/ui/actor-model";
@@ -108,9 +112,7 @@ import { MentionNodeChip, pastedMentionNode } from "./mention-chip.js";
 import { MENTION_MENU_SIDE, useMentionPicker } from "./mention-picker.js";
 import { CommentFiles, carriesFiles, useCommentAttaching } from "./plan-comment-files.js";
 import { EDITOR_ROOM_CLASS } from "./plan-document-editor.js";
-import { RelativeTime } from "./relative-time.js";
 import { type TaskMentionsValue, useMentionLink, useTaskMentions } from "./task-mentions.js";
-import { useMinute } from "./task-time.js";
 import { DICTATION_PHASE, type DictationControl, useDictation } from "./use-dictation.js";
 import { useKnownNames } from "./use-known-names.js";
 import { useOpenLink } from "./use-open-link.js";
@@ -293,7 +295,7 @@ function EventLine({
         </span>
         <span className="comment-head-end">
           <span className="comment-time">
-            <RelativeTime at={entry.at} now={now} ago />
+            <Time at={entry.at} now={now} look={TIME_LOOK.AGO} />
           </span>
         </span>
       </div>
@@ -439,7 +441,7 @@ function CommentEntry({
         <WriterRef writer={entry.writer} agents={doors.agents} />
         <span className="comment-head-end">
           <span className="comment-time">
-            <RelativeTime at={entry.at} now={now} ago />
+            <Time at={entry.at} now={now} look={TIME_LOOK.AGO} />
             {entry.editedAt === undefined ? null : ` · ${COMMENT_WORDS.EDITED}`}
           </span>
           <div className="comment-tools">
@@ -935,7 +937,7 @@ function ThreadCard({
           <div className="comment-head">
             <WriterRef writer={first.writer} agents={doors.agents} />
             <span className="comment-time">
-              <RelativeTime at={first.at} now={now} ago />
+              <Time at={first.at} now={now} look={TIME_LOOK.AGO} />
             </span>
           </div>
         )}
@@ -964,7 +966,7 @@ function ThreadCard({
               {replies.length === 1 ? "1 reply" : `${replies.length} replies`}
               <span className="comment-time">
                 {" · "}
-                <RelativeTime at={replies.at(-1)?.at ?? thread.updatedAt} now={now} ago />
+                <Time at={replies.at(-1)?.at ?? thread.updatedAt} now={now} look={TIME_LOOK.AGO} />
               </span>
             </span>
           )}
@@ -1885,7 +1887,7 @@ export function PlanCommentsTab({
   const listed = filter === COMMENTS_FILTER.OPEN ? open : resolved;
   const full = { ...doors, control };
   return (
-    <div className="comments-tab">
+    <Fill className="comments-tab">
       <WordsDatePickerRoom>
         <div className="comments-head">
           <span className="comments-head-title">
@@ -1906,7 +1908,10 @@ export function PlanCommentsTab({
           />
         </div>
         <ScrollArea ref={list} fade={SCROLL_FADE.BOTH}>
-          <div className="comments-list">
+          <div
+            className="comments-list"
+            data-empty={!control.failed && listed.length === 0 && control.read ? "" : undefined}
+          >
             {control.failed ? (
               <ErrorState placement={ERROR_STATE_PLACEMENT.CENTRED} onRetry={control.onRetry}>
                 The comments could not be read.
@@ -1941,6 +1946,6 @@ export function PlanCommentsTab({
           </div>
         </ScrollArea>
       </WordsDatePickerRoom>
-    </div>
+    </Fill>
   );
 }

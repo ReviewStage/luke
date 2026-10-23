@@ -23,7 +23,12 @@ import {
   TASK_ISSUE_RELATION,
   type TaskIssueChoice,
 } from "@luke/features/task-issue-wire";
-import { TASK_STATUS, TASK_TREE_ENTRY, type TaskStatus } from "@luke/features/task-wire";
+import {
+  TASK_SKILL_SOURCE,
+  TASK_STATUS,
+  TASK_TREE_ENTRY,
+  type TaskStatus,
+} from "@luke/features/task-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
 import type { LinearIssuesAsk } from "@luke/ui/tasks-model";
@@ -500,6 +505,7 @@ test("a skill chosen from the / list is its chip, which opens its SKILL.md in th
             {
               name: "release",
               description: "Cut a release.",
+              source: TASK_SKILL_SOURCE.REPOSITORY,
               path: ".agents/skills/release/SKILL.md",
             },
           ],
@@ -569,8 +575,20 @@ test("a repository group's + opens the card on its repository rather than the la
 
 test("Escape puts the card away with nothing started, and focus goes back to what opened it", async () => {
   const card = await mount();
+  await card.key("Escape");
+  assert.equal(card.dialog(), null);
+  assert.equal(document.activeElement, card.opener);
+  assert.deepEqual(card.starts, []);
+});
+
+test("a card holding words is nudged rather than put away by the first Escape, and put away by the next", async () => {
+  const card = await mount();
   card.type("Dark mode");
   await card.key("Escape");
+  const nudged = card.dialog()?.getAttribute("data-nudge");
+  await card.key("Escape");
+
+  assert.equal(nudged, "true", "the first Escape nudges the card and keeps it");
   assert.equal(card.dialog(), null);
   assert.equal(document.activeElement, card.opener);
   assert.deepEqual(card.starts, []);
@@ -579,6 +597,7 @@ test("Escape puts the card away with nothing started, and focus goes back to wha
 test("words left in a card put away come back as New task opens again and after a relaunch, and a task started lets them go", async () => {
   const card = await mount();
   card.type("Dark mode");
+  await card.key("Escape");
   await card.key("Escape");
   assert.equal(card.dialog(), null);
 
@@ -606,6 +625,7 @@ test("words typed before the workspaces are read stay in the box as the workspac
   await card.list("workspace-personal");
   assert.equal(card.field().textContent, "Dark mode");
 
+  await card.key("Escape");
   await card.key("Escape");
   await card.reopen();
   assert.equal(card.field().textContent, "Dark mode");

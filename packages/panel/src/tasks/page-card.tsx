@@ -4,13 +4,10 @@ import {
   type PagePlace,
   type PageShower,
 } from "@luke/features/page-wire";
-import { HoverCard, HoverCardHead } from "@luke/ui";
+import { HoverCard, HoverCardHead, PageThumb, Time, useMinute } from "@luke/ui";
 import { AppWindowIcon } from "lucide-react";
-import { useState } from "react";
 import { appPlatform } from "../app-platform.js";
 import { PAGE_SANDBOX } from "./page-pane.js";
-import { RelativeTime } from "./relative-time.js";
-import { useMinute } from "./task-time.js";
 import { useKnownNames } from "./use-known-names.js";
 
 /**
@@ -40,21 +37,14 @@ interface CardPage {
 
 /** The page's newest version, drawn small and inert. */
 function PagePreview({ place, page }: CardPage): React.JSX.Element {
-  const [loaded, setLoaded] = useState(false);
   return (
-    <div className="page-card-preview ph-no-capture" data-loaded={String(loaded)}>
-      <iframe
-        className="page-card-frame"
-        title={`${page.title} preview`}
-        src={appPlatform().pageFrameUrl({ ...place, pageId: page.id, version: page.version })}
-        sandbox={PAGE_SANDBOX}
-        allow=""
-        referrerPolicy="no-referrer"
-        tabIndex={-1}
-        aria-hidden="true"
-        onLoad={() => setLoaded(true)}
-      />
-    </div>
+    <PageThumb
+      frame={{
+        title: `${page.title} preview`,
+        src: appPlatform().pageFrameUrl({ ...place, pageId: page.id, version: page.version }),
+        sandbox: PAGE_SANDBOX,
+      }}
+    />
   );
 }
 
@@ -95,7 +85,7 @@ export function PageCard({ place, page }: CardPage): React.JSX.Element {
         name={page.title}
         // Note that the words stand in a span of their own, so a long agent's name wraps inside the card.
         sub={sub === undefined ? undefined : <span>{sub}</span>}
-        corner={<RelativeTime at={page.at} now={now} hint={false} />}
+        corner={<Time at={page.at} now={now} hint={false} />}
       />
       {/* A new version is a new preview, held hidden until it has loaded rather than over the last one's frame. */}
       <PagePreview key={`${page.id}/${page.version}`} place={place} page={page} />

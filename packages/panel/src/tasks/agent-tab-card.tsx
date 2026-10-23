@@ -5,7 +5,15 @@ import type {
 } from "@luke/features/coding-agent-wire";
 import type { CatalogModel, ModelChoice } from "@luke/features/models-wire";
 import type { PlanEditor } from "@luke/features/task-wire";
-import { HoverCard, HoverCardHead, HoverCardNote, HoverCardRule, VisuallyHidden } from "@luke/ui";
+import {
+  HoverCard,
+  HoverCardHead,
+  HoverCardNote,
+  HoverCardRule,
+  Time,
+  useMinute,
+  VisuallyHidden,
+} from "@luke/ui";
 import type { Actor } from "@luke/ui/actor-model";
 import {
   ACTOR_SIZE,
@@ -27,8 +35,6 @@ import {
 } from "./coding-agent-model.js";
 import { ModelLabel } from "./model-label.js";
 import { PullRequestMark } from "./pull-request-mark.js";
-import { RelativeTime } from "./relative-time.js";
-import { useMinute } from "./task-time.js";
 import { delegationView } from "./tool-call-model.js";
 import { type CopiedTranscript, LATEST_ACTIVITY, latestActivity } from "./transcript-copy.js";
 import { WorkingTime } from "./working-time.js";
@@ -133,7 +139,7 @@ function Corner({ corner }: { corner: CardCorner }): React.JSX.Element | null {
         <>
           {corner.state}
           {corner.state === undefined || corner.at === undefined ? null : ENDED_SEPARATOR}
-          {corner.at === undefined ? null : <RelativeTime at={corner.at} now={now} hint={false} />}
+          {corner.at === undefined ? null : <Time at={corner.at} now={now} hint={false} />}
         </>
       );
     case CARD_CORNER.NONE:

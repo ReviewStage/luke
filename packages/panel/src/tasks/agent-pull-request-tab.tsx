@@ -44,6 +44,7 @@ import {
   CHOICE_BAR_FOLD,
   CHOICE_BAR_LOOK,
   Chip,
+  ChipCount,
   ChipName,
   ChoiceBar,
   type ChoiceItem,
@@ -56,9 +57,12 @@ import {
   DisclosureChevron,
   EmptyState,
   ErrorState,
+  Fill,
   IconButton,
+  LINE_BUTTON_LOOK,
   LIST_DENSITY,
   LIST_VARIANT,
+  LineButton,
   List,
   ListRow,
   linesCount,
@@ -76,12 +80,16 @@ import {
   TEXT_VARIANT,
   Text,
   TextButton,
+  TIME_LOOK,
+  Time,
   Tooltip,
   useMenu,
+  useMinute,
   VisuallyHidden,
 } from "@luke/ui";
 import { actorName } from "@luke/ui/actor-model";
 import { PICTURE_STATE, usePicture } from "@luke/ui/picture-cache";
+import { formatLocaleCount, workingTime } from "@luke/ui/time-format";
 import {
   BookOpenIcon,
   BotIcon,
@@ -117,6 +125,8 @@ import { appPlatform } from "../app-platform.js";
 import { useCopyLinkItem } from "../copy-link-item.js";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu.js";
 import { type HandTabActions, useHandedTabActions } from "../desktop/strip-tabs.js";
+import { SHELL_ROOM } from "../shell-room.js";
+import { ShellRoomContext } from "../stage-room.js";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast.js";
 import {
   AgentChangesTab,
@@ -195,8 +205,6 @@ import {
   type PullRequestWrites,
   usePullRequestWrites,
 } from "./pull-request-writes.js";
-import { RelativeTime } from "./relative-time.js";
-import { useMinute } from "./task-time.js";
 import {
   THREAD_REVEAL_WORDS,
   type ThreadLanding,
@@ -209,7 +217,6 @@ import { type GitHubPictureDrawer, GitHubWords, TranscriptWords } from "./transc
 import type { CodingAgentsControl } from "./use-coding-agents.js";
 import { type OpenHere, OpenHereFirst, useOpenLink, useOpenPlace } from "./use-open-link.js";
 import { PULL_REQUEST_VIEW, type PullRequestView } from "./use-side-panel.js";
-import { useWorkingNow, workingTime } from "./working-time.js";
 
 /**
  * agent-pull-request-tab.tsx -- one agent's Pull request tab in the side panel: its pull request as GitHub holds it, laid out as stage-cli's pull request page: a fixed header, then tabs for its conversation, its checks, its chapters, and its files.
@@ -337,7 +344,7 @@ const PULL_REQUEST_WORDS = {
   LEFT: "left",
   /** What the Files changed tab's hint says of every line the pull request changes. */
   total: (additions: number, deletions: number) =>
-    `+${additions.toLocaleString()} −${deletions.toLocaleString()} total`,
+    `+${formatLocaleCount(additions)} −${formatLocaleCount(deletions)} total`,
 } as const;
 
 /** The lines a review thread is on, as its head names them: where it stands now, else where it was made; none for a thread on the whole file. */
@@ -590,17 +597,6 @@ function Section({
   );
 }
 
-/** A running check's count since it started, moving each second on the window's own clock; a timer to a reader, never announced. */
-function RunningTime({ startedAt }: { startedAt: number }): React.JSX.Element | null {
-  const now = useWorkingNow();
-  if (now === undefined) return null;
-  return (
-    <span role="timer" aria-live="off">
-      {workingTime(now - startedAt)}
-    </span>
-  );
-}
-
 /** The App's square at a check's size: its picture once it loads, and its robot on the quiet tile until then and where there is none. */
 function CheckSquare({ name, src }: { name: string; src: string | undefined }): React.JSX.Element {
   return (
@@ -716,7 +712,7 @@ function CheckRow({
         </>
       }
       description={check.app ?? undefined}
-      meta={running ? live ? <RunningTime startedAt={startedAt} /> : null : duration}
+      meta={running ? live ? <Time at={startedAt} look={TIME_LOOK.DURATION} /> : null : duration}
       onPress={url === null ? undefined : () => openLink(url)}
       linkHref={url ?? undefined}
     />
@@ -966,13 +962,13 @@ function ThreadWhere({
   if (onPress === undefined) return <Tooltip label={named}>{words}</Tooltip>;
   return (
     <Tooltip label={THREAD_REVEAL_WORDS.VIEW_FILES}>
-      <TextButton
-        tone={TEXT_BUTTON_TONE.QUIET}
+      <LineButton
+        look={LINE_BUTTON_LOOK.BAND}
         aria-label={`${THREAD_REVEAL_WORDS.VIEW_FILES}: ${named}`}
         onClick={onPress}
       >
         {words}
-      </TextButton>
+      </LineButton>
     </Tooltip>
   );
 }
@@ -996,7 +992,7 @@ function useThreadHead(thread: ReviewThread, now: number, pending: boolean) {
       ),
     time:
       first === undefined ? undefined : (
-        <RelativeTime className="annotation-card-time" at={first.at} now={now} />
+        <Time className="annotation-card-time" at={first.at} now={now} />
       ),
     states: threadStates(thread, pending),
     count: thread.comments.length + thread.more,
@@ -1092,7 +1088,7 @@ function ThreadComment({
         meta: (
           <>
             <ActorRef actor={writer} nameOnly />
-            <RelativeTime className="annotation-card-time" at={comment.at} now={now} />
+            <Time className="annotation-card-time" at={comment.at} now={now} />
             {draft === undefined ? null : <PendingBadge />}
           </>
         ),
@@ -1141,7 +1137,7 @@ function PendingList({
             head={
               <>
                 <PersonRef person={draft.by} />
-                <RelativeTime className="changes-comment-time" at={draft.at} now={now} />
+                <Time className="changes-comment-time" at={draft.at} now={now} />
               </>
             }
             words={<EntryWords entry={draft} picture={picture} />}
@@ -1271,7 +1267,7 @@ function EntryCard({
       <span className="changes-comment-head">
         <PersonRef person={entry.by} />
         {entry.state === undefined ? null : <ReviewStanding state={entry.state} />}
-        <RelativeTime className="changes-comment-time" at={entry.at} now={now} />
+        <Time className="changes-comment-time" at={entry.at} now={now} />
       </span>
       <EntryWords entry={entry} picture={picture} />
       <Reactions reactions={entry.reactions} subject={entry.subject} />
@@ -1351,8 +1347,10 @@ function PullRequestHead({
       </span>
       <OpenedLine
         person={author}
-        opened={<RelativeTime at={pullRequest.createdAt} now={now} ago />}
-        merged={mergedAt === null ? undefined : <RelativeTime at={mergedAt} now={now} ago />}
+        opened={<Time at={pullRequest.createdAt} now={now} look={TIME_LOOK.AGO} />}
+        merged={
+          mergedAt === null ? undefined : <Time at={mergedAt} now={now} look={TIME_LOOK.AGO} />
+        }
       />
       <span className="pull-request-reviewers">
         {reviewers.length === 0 ? null : <HeaderReviewers reviewers={reviewers} />}
@@ -1417,7 +1415,7 @@ function Deployments({
 }): React.JSX.Element | null {
   if (deployments.length === 0) return null;
   return (
-    <Section title="Deployments" count={deployments.length.toLocaleString()}>
+    <Section title="Deployments" count={formatLocaleCount(deployments.length)}>
       <List label="Deployment list" variant={LIST_VARIANT.CARD} density={LIST_DENSITY.DENSE}>
         {deployments.map((deployment) => (
           <DeploymentRow key={deployment.environment} agentId={agentId} deployment={deployment} />
@@ -1588,11 +1586,13 @@ function HeaderTitle({
 }): React.JSX.Element {
   if (title === undefined) {
     return (
-      <PartSkeleton
-        label={PULL_REQUEST_WORDS.READING}
-        widths={["60%"]}
-        className="pull-request-title"
-      />
+      <div className="pull-request-title-wait">
+        <PartSkeleton
+          label={PULL_REQUEST_WORDS.READING}
+          widths={["60%"]}
+          className="pull-request-title"
+        />
+      </div>
     );
   }
   return (
@@ -1647,7 +1647,7 @@ function checksCount(
 ): readonly CountPart[] | undefined {
   const glyph = SUMMARY_GLYPHS[summary];
   if (glyph === null && count === undefined) return undefined;
-  const text = count?.toLocaleString() ?? "";
+  const text = count === undefined ? "" : formatLocaleCount(count);
   const tone = SUMMARY_TONES[summary];
   return [
     glyph === null ? { text, tone } : { text, tone, glyph, glyphLabel: SUMMARY_WORDS[summary] },
@@ -1737,7 +1737,7 @@ function tabsOf(
       icon: <MessagesSquareIcon />,
       label: "Conversation",
       count:
-        conversation === undefined ? undefined : conversationCount(conversation).toLocaleString(),
+        conversation === undefined ? undefined : formatLocaleCount(conversationCount(conversation)),
     },
     {
       value: PULL_REQUEST_VIEW.CHECKS,
@@ -1755,7 +1755,7 @@ function tabsOf(
       value: PULL_REQUEST_VIEW.CHAPTERS,
       icon: <BookOpenIcon />,
       label: "Chapters",
-      count: chapterCount?.toLocaleString(),
+      count: chapterCount === undefined ? undefined : formatLocaleCount(chapterCount),
     },
     {
       value: PULL_REQUEST_VIEW.FILES,
@@ -1794,11 +1794,7 @@ function ConversationFilter({
         onClick={() => onChange(!on)}
       >
         <ChipName>{label}</ChipName>
-        {count === undefined ? null : (
-          <span className="pull-request-filter-count" aria-hidden="true">
-            {count.toLocaleString()}
-          </span>
-        )}
+        {count === undefined ? null : <ChipCount>{formatLocaleCount(count)}</ChipCount>}
       </Chip>
       {note === undefined ? null : (
         <span id={noteId} hidden>
@@ -2262,9 +2258,18 @@ function PullRequestTabBody({
   onActions,
   onRun,
 }: AgentPullRequestTabProps): React.JSX.Element {
-  const status = control.agents?.find((each) => each.id === agentId)?.status;
+  // The agent, archived or not, since an archived agent's pull request keeps its tab.
+  const agent =
+    control.agents?.find((each) => each.id === agentId) ??
+    control.archived?.find((each) => each.id === agentId);
+  const status = agent?.status;
   const ended = !agentStillWriting(status ?? CODING_AGENT_STATUS.RUNNING);
   const id = useId();
+  // A phone names each of the tabs in words, never their glyphs alone, which a finger cannot hover for a name.
+  const tabsFold =
+    useContext(ShellRoomContext) === SHELL_ROOM.NARROW
+      ? CHOICE_BAR_FOLD.WORDS
+      : CHOICE_BAR_FOLD.TOGETHER;
   const ids = (each: PullRequestView) => ({
     tab: `${id}-${each}-tab`,
     panel: `${id}-${each}-panel`,
@@ -2387,7 +2392,7 @@ function PullRequestTabBody({
   );
   const threadJumps = useThreadJumps({
     agentId,
-    planId: control.agents?.find((each) => each.id === agentId)?.planId ?? null,
+    planId: agent?.planId ?? null,
     number,
     shown,
     threads: threadList,
@@ -2409,7 +2414,7 @@ function PullRequestTabBody({
     <ThreadWritesProvider value={{ agentId, onWritten: written }}>
       <ThreadJumpContext.Provider value={threadJumps.jumps}>
         <AnchorsContext.Provider value={anchors.open}>
-          <div
+          <Fill
             className="file-view pull-request-tab ph-no-capture"
             onScrollCapture={fold.onScrollCapture}
           >
@@ -2428,11 +2433,13 @@ function PullRequestTabBody({
                   <div className="pull-request-title-row">
                     <HeaderTitle title={title} writes={writes} />
                     {held === undefined ? null : (
-                      <PullRequestStateMenu
-                        pullRequest={held}
-                        queued={overview?.merging?.queued}
-                        writes={writes}
-                      />
+                      <div className="pull-request-state">
+                        <PullRequestStateMenu
+                          pullRequest={held}
+                          queued={overview?.merging?.queued}
+                          writes={writes}
+                        />
+                      </div>
                     )}
                     <div className="pull-request-title-actions">
                       {onRun === undefined || held === undefined ? null : (
@@ -2463,15 +2470,17 @@ function PullRequestTabBody({
                   />
                 </header>
                 <div className="pull-request-tabs">
-                  <ChoiceBar<PullRequestView>
-                    label="Pull request"
-                    items={tabsOf(parts, published, held, changes, chapters)}
-                    value={view}
-                    onChange={onView}
-                    look={CHOICE_BAR_LOOK.FILL}
-                    fold={CHOICE_BAR_FOLD.TOGETHER}
-                    panels={ids}
-                  />
+                  <div className="pull-request-tab-bar">
+                    <ChoiceBar<PullRequestView>
+                      label="Pull request"
+                      items={tabsOf(parts, published, held, changes, chapters)}
+                      value={view}
+                      onChange={onView}
+                      look={CHOICE_BAR_LOOK.FILL}
+                      fold={tabsFold}
+                      panels={ids}
+                    />
+                  </div>
                   {reviewable ? (
                     <PullRequestReview
                       writes={review}
@@ -2484,7 +2493,7 @@ function PullRequestTabBody({
                     />
                   ) : null}
                 </div>
-                <div
+                <Fill
                   className="pull-request-view"
                   role="tabpanel"
                   id={ids(PULL_REQUEST_VIEW.CONVERSATION).panel}
@@ -2499,8 +2508,8 @@ function PullRequestTabBody({
                     kept={kept}
                     landing={threadJumps.conversationLanding ?? anchors.landing}
                   />
-                </div>
-                <div
+                </Fill>
+                <Fill
                   className="pull-request-view"
                   role="tabpanel"
                   id={ids(PULL_REQUEST_VIEW.CHECKS).panel}
@@ -2518,8 +2527,8 @@ function PullRequestTabBody({
                       live={shown && view === PULL_REQUEST_VIEW.CHECKS}
                     />
                   </DetailPage>
-                </div>
-                <div
+                </Fill>
+                <Fill
                   className="pull-request-view"
                   role="tabpanel"
                   id={ids(PULL_REQUEST_VIEW.CHAPTERS).panel}
@@ -2543,10 +2552,10 @@ function PullRequestTabBody({
                       />
                     </Suspense>
                   ) : null}
-                </div>
+                </Fill>
               </>
             )}
-            <div
+            <Fill
               className="pull-request-view"
               role="tabpanel"
               id={ids(PULL_REQUEST_VIEW.FILES).panel}
@@ -2566,8 +2575,8 @@ function PullRequestTabBody({
                   reveal={threadJumps.filesReveal}
                 />
               </PendingSurfaceProvider>
-            </div>
-          </div>
+            </Fill>
+          </Fill>
         </AnchorsContext.Provider>
       </ThreadJumpContext.Provider>
     </ThreadWritesProvider>

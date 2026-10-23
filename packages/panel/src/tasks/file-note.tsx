@@ -1,5 +1,15 @@
 import { LINK_PLACE, type LinkPlace } from "@luke/features/luke-link";
-import { DisclosureAction, IconButton, Tooltip, useMenu, WingFace } from "@luke/ui";
+import {
+  DisclosureAction,
+  GLYPH_INK,
+  GlyphSlot,
+  IconButton,
+  Time,
+  Tooltip,
+  useMenu,
+  useMinute,
+  WingFace,
+} from "@luke/ui";
 import { lineRangeText } from "@luke/voice/code-pane-model";
 import { EllipsisIcon, MessagesSquareIcon } from "lucide-react";
 import { useCopyLinkItem } from "../copy-link-item.js";
@@ -8,9 +18,7 @@ import { MarkdownMessage } from "../markdown-message.js";
 import { AnnotationCard, AnnotationComment, AnnotationComments } from "./annotation-card.js";
 import type { FileNote } from "./file-tab-model.js";
 import { chipPress, MinimizedChip } from "./minimized-threads.js";
-import { RelativeTime } from "./relative-time.js";
 import { useMentionLink } from "./task-mentions.js";
-import { useMinute } from "./task-time.js";
 import { useOpenLink, useOpenPlace } from "./use-open-link.js";
 
 /**
@@ -161,12 +169,12 @@ function FileNoteCard({
         open={!folded}
         onOpenChange={(open) => onFold(!open)}
         face={
-          <span className="transcript-luke-mark" aria-hidden="true">
-            <WingFace />
-          </span>
+          <GlyphSlot ink={GLYPH_INK.VOICE}>
+            <WingFace fill inherit />
+          </GlyphSlot>
         }
         name={<span className="file-note-author">{author}</span>}
-        time={<RelativeTime className="annotation-card-time" at={note.shownAt} now={now} />}
+        time={<Time className="annotation-card-time" at={note.shownAt} now={now} />}
         menu={<NoteMenu place={place} />}
       >
         <AnnotationComments>
@@ -219,9 +227,9 @@ export function FileNoteAnnotation({
     <MinimizedChip
       label={CHIP_LABEL(author, lineRangeText(note) ?? "", minimized.shown)}
       faces={
-        <span className="transcript-luke-mark" aria-hidden="true">
-          <WingFace />
-        </span>
+        <GlyphSlot ink={GLYPH_INK.VOICE}>
+          <WingFace fill inherit />
+        </GlyphSlot>
       }
       count={1}
       shown={minimized.shown}

@@ -22,4 +22,12 @@
     line-height: var(--luke-type-caption-leading);
     overflow-wrap: anywhere;
   }
+
+  /* The name a gate asks for, set apart from the words around it so it
+     reads as exactly what to type. */
+  .luke-confirm-dialog-gate {
+    font-family: var(--luke-font-mono);
+    color: var(--luke-color-text);
+    overflow-wrap: anywhere;
+  }
 }

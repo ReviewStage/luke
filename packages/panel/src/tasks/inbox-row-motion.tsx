@@ -365,15 +365,15 @@ export class InboxRowMotion extends Component<
       return;
     }
     if (leavers.length > 0) this.holdHeight(root);
-    const exit = animates(root) ? tokenTiming(root, "--duration-exit", "--motion-exit") : undefined;
+    const exit = animates(root) ? tokenTiming(root, "--luke-duration-exit", "--luke-motion-exit") : undefined;
     // Note that a glide under way is stopped before anything is read, so each
     // element is read where the new layout stands it, and all are read at once.
     for (const mover of moversOf(root)) glides.get(mover)?.cancel();
     playExits(root, leavers, before, exit);
-    const travel = tokenTiming(root, "--duration-shape", "--spring");
+    const travel = tokenTiming(root, "--luke-duration-shape", "--luke-spring");
     if (before === null || travel === undefined) return;
     const wait = leavers.length > 0 && exit !== undefined ? Number(exit.duration) : 0;
-    playMoves(root, before, wait, travel, tokenTiming(root, "--duration-quick", "--motion-exit"));
+    playMoves(root, before, wait, travel, tokenTiming(root, "--luke-duration-quick", "--luke-motion-exit"));
   }
 
   override componentWillUnmount(): void {

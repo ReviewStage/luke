@@ -55,25 +55,35 @@ test("below 560px the tabs take their room in", () => {
   assert.deepEqual(rowAt(470), { fold: "tight", reviewWord: false });
 }, 60_000);
 
-/** The row's tabs as drawn in the room given at a phone's width, folded together as a row too short for their names folds them. */
+/**
+ * The row's tabs as the tab draws them in the room given at a phone's width
+ * and too short for their names: in a narrow room named in words alone
+ * (`CHOICE_BAR_FOLD.WORDS`), which draws no glyph; elsewhere folded together.
+ */
 function phoneRowAt(room: "narrow" | "wide") {
   laid?.remove();
   laid = layContainersAt({ "pull-request-tab": 390 }, { touch: true });
+  const bar =
+    room === "narrow"
+      ? '<div class="luke-choice-bar" role="tablist" data-look="fill" data-fold="words">'
+      : '<div class="luke-choice-bar" role="tablist" data-look="fill" data-fold="together" data-folded="true">';
+  const glyph = room === "narrow" ? "" : '<span class="luke-choice-bar-icon"><svg></svg></span>';
   document.body.innerHTML = [
     `<div class="desktop-shell" data-room="${room}"><div class="file-view pull-request-tab">`,
-    '<div class="pull-request-tabs">',
-    '<div class="luke-choice-bar" role="tablist" data-look="fill" data-fold="together" data-folded="true">',
+    '<div class="pull-request-tabs"><div class="pull-request-tab-bar">',
+    bar,
     '<button class="luke-choice-bar-option" role="tab" aria-selected="true">',
-    '<span class="luke-choice-bar-icon"><svg></svg></span><span class="luke-choice-bar-label">Conversation</span>',
-    "</button></div></div>",
+    `${glyph}<span class="luke-choice-bar-label">Conversation</span>`,
+    "</button></div></div></div>",
     "</div></div>",
   ].join("");
-  const read = (selector: string) =>
-    getComputedStyle(document.querySelector(selector) ?? assert.fail(`${selector} stands`));
-  const label = read(".luke-choice-bar-label");
+  const label = getComputedStyle(
+    document.querySelector(".luke-choice-bar-label") ?? assert.fail("the name stands"),
+  );
+  const icon = document.querySelector(".luke-choice-bar-icon");
   return {
     named: label.position !== "absolute" && label.clipPath !== "inset(50%)",
-    glyph: read(".luke-choice-bar-icon").display !== "none",
+    glyph: icon !== null && getComputedStyle(icon).display !== "none",
   };
 }
 

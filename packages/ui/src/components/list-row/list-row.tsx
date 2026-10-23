@@ -232,20 +232,34 @@ function said(words: ReactNode): boolean {
   return words !== undefined && words !== null && words !== false && words !== "";
 }
 
-/** A list of `ListRow`s, named by `label` for a reader moving between lists. */
+/**
+ * A list of `ListRow`s, named by `label` for a reader moving between lists.
+ * One whose rows a finger opens (`fingerTall`) stands each a finger's press
+ * tall on a coarse pointer, its words centred in it, as a call's line does
+ * of its own; a mouse keeps the row's own height.
+ */
 export function List({
   label,
   variant = LIST_VARIANT.PLAIN,
   density = LIST_DENSITY.REGULAR,
+  fingerTall = false,
   children,
 }: {
   label: string;
   variant?: ListVariant;
   density?: ListDensity;
+  /** Whether each row stands a finger's press tall on a coarse pointer. */
+  fingerTall?: boolean | undefined;
   children: ReactNode;
 }): React.JSX.Element {
   return (
-    <ul className="luke-list" data-variant={variant} data-density={density} aria-label={label}>
+    <ul
+      className="luke-list"
+      data-variant={variant}
+      data-density={density}
+      data-finger-tall={fingerTall ? "true" : undefined}
+      aria-label={label}
+    >
       <ListDensityContext.Provider value={density}>{children}</ListDensityContext.Provider>
     </ul>
   );

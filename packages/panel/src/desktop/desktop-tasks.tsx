@@ -9,8 +9,11 @@ import {
   EmptyState,
   ERROR_STATE_PLACEMENT,
   ErrorState,
+  FILL_ELEMENT,
+  Fill,
   SKELETON_SHAPE,
   Skeleton,
+  useMinute,
 } from "@luke/ui";
 import { openThread, PlanCommentsProvider, usePlanComments } from "@luke/ui/plan-comments";
 import { searchTokens } from "@luke/ui/search-tokens";
@@ -69,7 +72,6 @@ import {
   useMentionAgentsReader,
 } from "../tasks/task-mentions.js";
 import { taskLinkPlace } from "../tasks/task-menu-items.js";
-import { useMinute } from "../tasks/task-time.js";
 import { TerminalCommands } from "../tasks/terminal-commands.js";
 import { TOOL_TARGET, type ToolTarget } from "../tasks/tool-call-model.js";
 import { useHeldInboxList } from "../tasks/use-held-inbox-list.js";
@@ -206,12 +208,12 @@ function TaskPageSkeleton({
   /** How the summary will stand, whose room is kept. */
   summary: SummaryMode;
   /** Hands over the column, which the summary's room is measured on, as the page's own does. */
-  onColumn: (column: HTMLDivElement | null) => void;
+  onColumn: (column: HTMLElement | null) => void;
 }): React.JSX.Element {
   const fullScreen = panel?.fullScreen === true;
   return (
     <div className="desktop-task" data-panel-open={String(panel !== undefined)}>
-      <div ref={onColumn} className="desktop-task-main" hidden={fullScreen}>
+      <Fill ref={onColumn} className="desktop-task-main" hidden={fullScreen}>
         <Toolbar
           heading={
             <div className="desktop-toolbar-heading">
@@ -224,20 +226,20 @@ function TaskPageSkeleton({
           ))}
         </Toolbar>
         <div className="desktop-plan-body">
-          <div className="desktop-task-column">
-            <section className="desktop-agent">
+          <Fill className="desktop-task-column">
+            <Fill as={FILL_ELEMENT.SECTION} className="desktop-agent">
               {starting === undefined ? (
                 <AgentTabSkeleton label={TASK_LOADING_LABEL} />
               ) : (
                 <StartingAgentTab line={starting} />
               )}
-            </section>
-          </div>
+            </Fill>
+          </Fill>
           {summary === SUMMARY_MODE.NONE ? null : (
             <aside className="task-summary" data-mode={summary} aria-hidden="true" />
           )}
         </div>
-      </div>
+      </Fill>
       {panel === undefined ? null : (
         <aside
           className="side-panel"
@@ -533,7 +535,7 @@ function PlanDocument({
     }
   }, [resolvedLinked, inboxTaskId, showSideTab]);
   const { onArea: setArea, focus, setFocus } = useColumnFocus();
-  const [column, setColumn] = useState<HTMLDivElement | null>(null);
+  const [column, setColumn] = useState<HTMLElement | null>(null);
   // The summary lists the task's agents once they are read, so where the
   // task's row says it has some, the summary's room is kept from the open on
   // and the list landing moves nothing in the column.
@@ -867,7 +869,7 @@ function PlanDocument({
         {region.kind === DOCUMENT_REGION.MISSING ? (
           <NotFound thing={NOT_FOUND_THING.TASK} action={close} />
         ) : (
-          <section className="desktop-empty-region">
+          <Fill as={FILL_ELEMENT.SECTION} className="desktop-empty-region">
             {region.kind === DOCUMENT_REGION.FAILED ? (
               <ErrorState
                 onRetry={tasks.onRetryDocument}
@@ -879,7 +881,7 @@ function PlanDocument({
             ) : (
               <EmptyState>{line}</EmptyState>
             )}
-          </section>
+          </Fill>
         )}
       </>
     );
@@ -926,7 +928,7 @@ function PlanDocument({
     },
   };
   const documentBody = (
-    <section className="desktop-document" aria-label={task.name}>
+    <Fill as={FILL_ELEMENT.SECTION} className="desktop-document" aria-label={task.name}>
       <PlanBody
         task={task}
         live={tasks.live}
@@ -943,7 +945,7 @@ function PlanDocument({
         standing={standing}
         underTitle={underTitle}
       />
-    </section>
+    </Fill>
   );
   const inboxBody = (
     <TaskInboxTab
@@ -1022,7 +1024,7 @@ function PlanDocument({
                     {/* Note that the column is hidden rather than left out while the
           panel fills the window, and keeps its layout beneath the panel, so
           leaving full screen uncovers it as it was. */}
-                    <div
+                    <Fill
                       ref={setColumn}
                       className="desktop-task-main"
                       hidden={sidePanel.fullScreen}
@@ -1103,9 +1105,9 @@ function PlanDocument({
                             // While the agents are read, or a draft opens on a task with none, the
                             // column stands as the tab it will show does before it lands.
                             columnComing ? (
-                              <section className="desktop-agent">
+                              <Fill as={FILL_ELEMENT.SECTION} className="desktop-agent">
                                 <AgentTabSkeleton />
-                              </section>
+                              </Fill>
                             ) : null
                           ) : (
                             <CallNotice.Provider value={notice}>
@@ -1138,7 +1140,7 @@ function PlanDocument({
                           onOpenAgent={(agent) => openColumnTab({ agent })}
                         />
                       </div>
-                    </div>
+                    </Fill>
                     {drawing.panel ? (
                       <SidePanel
                         {...drawing}
@@ -1171,9 +1173,13 @@ function PlanDocument({
                         }}
                         chat={
                           chatOn && tasks.chatView.available ? (
-                            <section className="desktop-task-chat" aria-label="Chat">
+                            <Fill
+                              as={FILL_ELEMENT.SECTION}
+                              className="desktop-task-chat"
+                              aria-label="Chat"
+                            >
                               <TaskChatTab tasks={tasks} taskId={task.id} />
-                            </section>
+                            </Fill>
                           ) : undefined
                         }
                         activity={switched ? { listed: activityListed, onListed } : undefined}
@@ -1208,7 +1214,7 @@ function StartingTaskPage({
   summary: SummaryPin;
 }): React.JSX.Element {
   const drawing = useSidePanelDrawing(tasks.sidePanel);
-  const [column, setColumn] = useState<HTMLDivElement | null>(null);
+  const [column, setColumn] = useState<HTMLElement | null>(null);
   // Note that the summary's room is kept, as the task's page keeps it for the agent it lists, so nothing moves as the page lands.
   const summaryLayout = useSummaryLayout(summary, column, tasks.sidePanel.fullScreen, true);
   return (
@@ -1277,9 +1283,9 @@ export const DesktopTasks = memo(function DesktopTasks({
       return (
         <>
           <div className="desktop-drag-strip" />
-          <div className="home">
+          <Fill className="home">
             <DesktopWelcome tasks={tasks} />
-          </div>
+          </Fill>
           {secondCall}
         </>
       );

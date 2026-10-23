@@ -26,6 +26,6 @@
   /* Motion comes from the motion tokens alone (docs/DESIGN.md): a `transition`
      utility runs on the quick duration and the spring, never on Tailwind's
      own literal. */
-  --default-transition-duration: var(--duration-quick);
-  --default-transition-timing-function: var(--spring);
+  --default-transition-duration: var(--luke-duration-quick);
+  --default-transition-timing-function: var(--luke-spring);
 }

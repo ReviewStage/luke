@@ -6,6 +6,7 @@ import {
   CHIP_TONE,
   CHIP_WIDTH,
   Chip,
+  ChipCount,
   ChipName,
   GAP,
   Inline,
@@ -42,6 +43,28 @@ function FilterRow(): React.JSX.Element {
           {each}
         </Chip>
       ))}
+    </Inline>
+  );
+}
+
+/** Filters each saying what they would leave out: Hide resolved on, Hide bots off. */
+function CountedFilters(): React.JSX.Element {
+  const [resolved, setResolved] = useState(true);
+  const [bots, setBots] = useState(false);
+  return (
+    <Inline gap={GAP.TIGHT}>
+      <Chip
+        look={CHIP_LOOK.FILTER}
+        aria-pressed={resolved}
+        onClick={() => setResolved((was) => !was)}
+      >
+        <ChipName>Hide resolved</ChipName>
+        <ChipCount>4</ChipCount>
+      </Chip>
+      <Chip look={CHIP_LOOK.FILTER} aria-pressed={bots} onClick={() => setBots((was) => !was)}>
+        <ChipName>Hide bots</ChipName>
+        <ChipCount>12</ChipCount>
+      </Chip>
     </Inline>
   );
 }
@@ -107,6 +130,9 @@ function Chips(): React.JSX.Element {
       ))}
       <CatalogSection id="chips-filter-row" title="Filter row">
         <FilterRow />
+      </CatalogSection>
+      <CatalogSection id="chips-counted-filters" title="Filters with the count they leave out">
+        <CountedFilters />
       </CatalogSection>
       <CatalogSection id="chips-compact" title="Compact counts">
         <CompactRow />

@@ -26,6 +26,8 @@ import {
   DisclosureBody,
   DisclosureChevron,
   DisclosureSummary,
+  GLYPH_INK,
+  GlyphSlot,
   INLINE_REF_LOOK,
   InlineRef,
   LineButton,
@@ -50,6 +52,10 @@ import {
   ArchiveRestoreIcon,
   BookOpenIcon,
   BotIcon,
+  CalendarClockIcon,
+  CalendarCogIcon,
+  CalendarPlusIcon,
+  CalendarXIcon,
   CircleCheckIcon,
   CircleDotIcon,
   CircleIcon,
@@ -863,6 +869,10 @@ const CALL_ICON = {
   [CALL_KIND.READ_TASK]: FileTextIcon,
   [CALL_KIND.CREATE_SECTION]: FolderPlusIcon,
   [CALL_KIND.DELETE_SECTION]: FolderMinusIcon,
+  [CALL_KIND.LIST_AUTOMATIONS]: CalendarClockIcon,
+  [CALL_KIND.CREATE_AUTOMATION]: CalendarPlusIcon,
+  [CALL_KIND.UPDATE_AUTOMATION]: CalendarCogIcon,
+  [CALL_KIND.DELETE_AUTOMATION]: CalendarXIcon,
   [CALL_KIND.MOVE_TASK]: FolderInputIcon,
   [CALL_KIND.UPDATE_TASK]: FilePenIcon,
   [CALL_KIND.LIST_ISSUES]: ListTodoIcon,
@@ -1237,13 +1247,21 @@ function TodoItems({
         const working = live && todo.status === CODING_AGENT_TODO_STATUS.IN_PROGRESS;
         return (
           <li key={index} className="todo-item" data-todo-status={todo.status}>
-            <span className="todo-mark" role="img" aria-label={look.label}>
+            <GlyphSlot
+              line
+              ink={
+                todo.status === CODING_AGENT_TODO_STATUS.IN_PROGRESS
+                  ? GLYPH_INK.TEXT
+                  : GLYPH_INK.MUTED
+              }
+              label={look.label}
+            >
               {working ? (
                 <StateGlyph state={GLYPH_STATE.WORKING} />
               ) : (
                 <StateGlyph state={GLYPH_STATE.REST} glyph={<look.Icon aria-hidden="true" />} />
               )}
-            </span>
+            </GlyphSlot>
             <span className="todo-words">{todo.content}</span>
           </li>
         );
@@ -1315,7 +1333,9 @@ export function TranscriptTodosDock({
   return (
     <Fold className="todos-dock" data-todos-dock="" aria-label="To-dos">
       <FoldSummary className="todos-dock-head">
-        <ListTodoIcon className="todos-dock-icon" aria-hidden="true" />
+        <GlyphSlot>
+          <ListTodoIcon />
+        </GlyphSlot>
         <span className="todos-dock-summary">{summary}</span>
         {focus === undefined ? null : (
           <Text
@@ -1403,9 +1423,9 @@ export function TranscriptSubagent({
   const running = state === TOOL_STATE.INPUT_STREAMING || state === TOOL_STATE.INPUT_AVAILABLE;
   const line = (
     <>
-      <span className="subagent-icon">
+      <GlyphSlot>
         <SubagentMark model={pair?.choice.model} />
-      </span>
+      </GlyphSlot>
       <span ref={words} className="subagent-job" data-overflow={String(clipped)}>
         {job}
       </span>

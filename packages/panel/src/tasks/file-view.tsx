@@ -4,9 +4,15 @@ import {
   ArrowLeftIcon,
   ArrowRightIcon,
   BreadcrumbBar,
+  FILL_FLOW,
+  Fill,
   IconButton,
   ProviderMark,
   SidePanelIcon,
+  TEXT_ELEMENT,
+  TEXT_TRUNCATE,
+  TEXT_VARIANT,
+  Text,
   Tooltip,
 } from "@luke/ui";
 import { shownFiles } from "@luke/voice/code-pane-model";
@@ -463,9 +469,14 @@ function BarPathWords({ path }: { path: BarPath }): React.JSX.Element {
   if (browse === undefined) {
     return (
       <Tooltip label={path.path}>
-        <span className="file-view-path">
+        <Text
+          as={TEXT_ELEMENT.SPAN}
+          variant={TEXT_VARIANT.INHERIT}
+          truncate={TEXT_TRUNCATE.START}
+          className="file-view-path"
+        >
           <bdi>{path.path}</bdi>
-        </span>
+        </Text>
       </Tooltip>
     );
   }
@@ -660,7 +671,7 @@ export function FileView({
     onBrowse(path, newTab);
   };
   return (
-    <div className="file-view" {...tree.root}>
+    <Fill className="file-view" {...tree.root}>
       <FileViewBar
         history={history}
         lead={
@@ -690,7 +701,7 @@ export function FileView({
         }
         tree={browsing ? tree.toggles : undefined}
       />
-      <div className="file-view-body" {...tree.body}>
+      <Fill flow={FILL_FLOW.ROW} clip className="file-view-body" {...tree.body}>
         {/* Keyed by the file, then by the commit it is read at, so lines read
             at one commit are never laid beside another's. */}
         <Fragment key={file.path}>
@@ -717,7 +728,7 @@ export function FileView({
             edge={edge}
           />
         ) : null}
-      </div>
-    </div>
+      </Fill>
+    </Fill>
   );
 }

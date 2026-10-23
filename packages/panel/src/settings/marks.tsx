@@ -1,4 +1,4 @@
-import { AlertIcon, VisuallyHidden } from "@luke/ui";
+import { SettingsAttentionMark, SettingsChangedMark } from "@luke/ui";
 
 /**
  * The word beside a row's name while its value differs from the default,
@@ -8,7 +8,7 @@ import { AlertIcon, VisuallyHidden } from "@luke/ui";
  * rather than a dot, so a reader and a glance read the same thing.
  */
 export function ChangedMark(): React.JSX.Element {
-  return <span className="settings-changed">Modified</span>;
+  return <SettingsChangedMark />;
 }
 
 /**
@@ -21,12 +21,7 @@ export function ChangedMark(): React.JSX.Element {
  * is where the missing thing is explained.
  */
 export function AttentionMark({ note }: { note: string }): React.JSX.Element {
-  return (
-    <span className="settings-attention" title={note}>
-      <AlertIcon />
-      <VisuallyHidden>({note})</VisuallyHidden>
-    </span>
-  );
+  return <SettingsAttentionMark note={note} />;
 }
 
 /* Whether each group holds a value its reset would change, judged from the

@@ -96,4 +96,22 @@
   .luke-line-button[data-look="quote"]:active {
     opacity: 0.7;
   }
+
+  /* A band across a card: its container's type and ink, square at its
+     ends, filled faintly under the pointer, its words coming up to the full
+     ink and underlined under the pointer or the keyboard, as a link's are,
+     so it reads as the way to the lines it names. */
+  .luke-line-button[data-look="band"] {
+    text-decoration-thickness: 1px;
+    text-underline-offset: 0.24em;
+  }
+
+  .luke-line-button[data-look="band"]:hover {
+    background: var(--luke-color-fill-hover);
+  }
+
+  .luke-line-button[data-look="band"]:is(:hover, :focus-visible) {
+    color: var(--luke-color-text);
+    text-decoration-line: underline;
+  }
 }

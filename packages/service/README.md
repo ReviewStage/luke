@@ -802,7 +802,12 @@ wrapper's own result. Both the names and that envelope are the wire's
 (`@luke/features/integration-wire`'s `INTEGRATION_REMOTE_TOOL` and
 `integrationRemoteCallSchema`), because the desktop draws the nested call as
 the provider's tool, under the provider's mark, and leaves its wrapper's row
-out. Every name
+out. A Claude Code or Codex agent has no wrapper: each connection it is
+handed is an MCP server of its own at Luke
+(`/api/agents/mcp/integrations/<connection>`, `src/agents/luke-mcp/app.ts`
+over `src/integrations/connection-door.ts`), and its call of one
+(`mcp__linear__list_issues`, or Codex's `mcpToolCall` on server `linear`) is
+stored under the same name and envelope, the call its own parent. Every name
 is in both agents' tool sets whatever any account's connections stand at, so
 a transcript reads back the same after a Disconnect. Rows hold provider
 content (Linear's issues and comments, Notion's pages); no token reaches a
@@ -1188,7 +1193,16 @@ archives it or brings it back, by the task
 menu's own path (`updateTask`, as `src/tasks/tasks-app.ts`'s PATCH runs it)
 for that starter, never archiving the task the agent works on, stopping no
 agent, as the menu's archive stops none, and recording no reason, since a
-task's archive keeps only when it stands from; and `list_models`, the models and efforts the agent's starter may
+task's archive keeps only when it stands from; `list_automations`,
+`create_automation`, `update_automation`, and `delete_automation`
+(`src/agents/automation-tools.ts`), which list the workspace's automations
+the starter may read, or read one whole with its newest runs, and make,
+change, pause, resume, and delete one for the starter through the
+automations routes' own writes (`src/automations/automation-writes.ts`),
+under the same checks and access, an automation made under an id drawn from
+eve's key for the call, so a call run again makes one, and never with a
+webhook trigger, whose secret is shown only in the window that minted it;
+an operator is offered no delete; and `list_models`, the models and efforts the agent's starter may
 start one on and their default, read from the one source a start is checked
 against (`accountModelChoices` in `src/agents/coder-host/start.ts`), so a
 choice it lists is one `start_agent` takes. A list, a read, or a start of an agent, a list of tasks,

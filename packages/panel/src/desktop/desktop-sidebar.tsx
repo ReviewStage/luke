@@ -22,6 +22,7 @@ import {
   dropBelowStart,
   EllipsisIcon,
   ErrorState,
+  Fill,
   FolderIcon,
   HoldPress,
   IconButton,
@@ -41,16 +42,21 @@ import {
   Skeleton,
   SkeletonRegion,
   Tooltip,
+  UNASSIGNED_WORDS,
   UnpinIcon,
   useMenu,
+  useMinute,
   VisuallyHidden,
 } from "@luke/ui";
-import { actorName, creatorActor } from "@luke/ui/actor-model";
+import { actorName, creatorActor, personActor } from "@luke/ui/actor-model";
 import { isAgentTab, sameTab } from "@luke/ui/tab-strip-model";
 import {
+  type AssigneeGroup,
   agentRow,
+  assigneeGroups,
   type CreatorGroup,
   creatorGroups,
+  drawnGrouping,
   hiddenStatuses,
   orderTaskRows,
   type RepositoryGroup,
@@ -94,7 +100,7 @@ import {
   ZapIcon,
 } from "lucide-react";
 import { memo, useRef } from "react";
-import { ACTOR_SIZE, ActorMark } from "../actor-ref.js";
+import { ACTOR_SIZE, ActorMark, UnassignedMark } from "../actor-ref.js";
 import { runAppCommand, useAppCommand } from "../app-commands.js";
 import { ColumnFoot } from "../call/call-card.js";
 import { useCoarsePointer } from "../coarse-pointer.js";
@@ -108,7 +114,6 @@ import { RepositoryPicture } from "../repository-picture.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { GLYPH_STATE, stateEndMark } from "../state-glyph.js";
 import { useChatOn } from "../tasks/chat-gate.js";
-import { useMinute } from "../tasks/task-time.js";
 import type { InboxListing } from "../tasks/use-inbox-listing.js";
 import { inColumn, type PinnedTab } from "../tasks/use-side-panel.js";
 import { useUnreadTasks } from "../tasks/use-task-looks.js";
@@ -909,6 +914,58 @@ function CreatorSection({
   );
 }
 
+/** Who a row is assigned to, as their face and name are read: a task's assignee, or whoever started the agent; none where no one is. */
+function assigneeOf(row: TaskRow): TaskSummary["assignee"] {
+  return row.kind === TASK_ROW.TASK ? row.task.assignee : row.agent.startedBy;
+}
+
+/**
+ * One assignee's tasks under a header naming them by face, the reader's own
+ * as You and a former member's grayed, and the tasks no one is assigned to
+ * under Unassigned on the dashed mark, folded and kept as a creator's group
+ * is. The face is the group's to say, so the rows wear none, and name no
+ * repository either, which the row's card names.
+ */
+function AssigneeSection({
+  group,
+  folds,
+  context,
+}: {
+  group: AssigneeGroup;
+  folds: FoldedGroups;
+  context: RowContext;
+}): React.JSX.Element {
+  const reader = useMemberDirectory();
+  const first = group.rows[0];
+  const assignee = first === undefined ? undefined : assigneeOf(first);
+  const actor =
+    assignee === undefined
+      ? undefined
+      : personActor(assignee, reader.members, reader.readerId, reader.former);
+  const folded = folds.assigneeFolded(group.assigneeId);
+  const rows = folded ? group.rows.filter(context.currentRow) : group.rows;
+  return (
+    <div className="sidebar-repository">
+      <SidebarGroupHeader
+        glyph={
+          actor === undefined ? (
+            <UnassignedMark size={ACTOR_SIZE.INLINE} decorative />
+          ) : (
+            <ActorMark actor={actor} size={ACTOR_SIZE.INLINE} />
+          )
+        }
+        name={actor === undefined ? UNASSIGNED_WORDS : actorName(actor)}
+        folded={folded}
+        count={group.rows.length}
+        onToggle={() => folds.toggleAssignee(group.assigneeId)}
+      />
+      {rows.length === 0 ? null : (
+        <TaskRows rows={rows} context={context} faces={{ ...context.faces, assignee: false }} />
+      )}
+    </div>
+  );
+}
+
 /** What the list says where its filters leave nothing, as the Tasks page says it. */
 const NONE_MATCH = "No tasks match this view.";
 
@@ -919,12 +976,13 @@ function creatorOf(row: TaskRow): Pick<TaskSummary, "createdBy" | "ownerId"> {
   return startedBy === undefined ? {} : { createdBy: startedBy, ownerId: startedBy.userId };
 }
 
-/** The listed tasks as the view groups them: by repository, by creator, or in one run. */
+/** The listed tasks as the view groups them: by repository, by assignee, by creator, or in one run. */
 type TaskSections =
   | {
       readonly grouping: typeof TASK_GROUPING.REPOSITORY;
       readonly groups: readonly RepositoryGroup[];
     }
+  | { readonly grouping: typeof TASK_GROUPING.ASSIGNEE; readonly groups: readonly AssigneeGroup[] }
   | { readonly grouping: typeof TASK_GROUPING.CREATOR; readonly groups: readonly CreatorGroup[] }
   | { readonly grouping: typeof TASK_GROUPING.NONE; readonly rows: readonly TaskRow[] };
 
@@ -939,7 +997,11 @@ function taskSections(
   order: TaskOrder,
   tasks: TasksControl,
   creatorName: (row: TaskRow) => string,
+  assigneeName: (row: TaskRow) => string,
 ): TaskSections {
+  if (grouping === TASK_GROUPING.ASSIGNEE) {
+    return { grouping, groups: assigneeGroups(rows, order, tasks.me, assigneeName) };
+  }
   if (grouping === TASK_GROUPING.CREATOR) {
     return { grouping, groups: creatorGroups(rows, order, tasks.me, creatorName) };
   }
@@ -967,6 +1029,10 @@ function drawnTasks(
   switch (sections.grouping) {
     case TASK_GROUPING.REPOSITORY:
       return sections.groups.flatMap((group) => under(folds.folded(group.repository), group.rows));
+    case TASK_GROUPING.ASSIGNEE:
+      return sections.groups.flatMap((group) =>
+        under(folds.assigneeFolded(group.assigneeId), group.rows),
+      );
     case TASK_GROUPING.CREATOR:
       return sections.groups.flatMap((group) =>
         under(folds.creatorFolded(group.creatorId), group.rows),
@@ -1010,6 +1076,19 @@ function TaskGroups({
               }
               folds={folds}
               onNewTaskIn={onNewTaskIn}
+              context={context}
+            />
+          ))}
+        </>
+      );
+    case TASK_GROUPING.ASSIGNEE:
+      return (
+        <>
+          {sections.groups.map((group) => (
+            <AssigneeSection
+              key={group.assigneeId ?? UNASSIGNED_WORDS}
+              group={group}
+              folds={folds}
               context={context}
             />
           ))}
@@ -1685,11 +1764,17 @@ function SidebarColumn({
   const { grouping, order } = taskView.view;
   const sections = taskSections(
     statusRows,
-    grouping === TASK_GROUPING.CREATOR && !shared ? TASK_GROUPING.REPOSITORY : grouping,
+    drawnGrouping(grouping, shared),
     order,
     tasks,
-    // A creator's group is ordered by the name its header says.
+    // A creator's or an assignee's group is ordered by the name its header says.
     (row) => actorName(creatorActor(creatorOf(row), reader, undefined)),
+    (row) => {
+      const assignee = assigneeOf(row);
+      return assignee === undefined
+        ? UNASSIGNED_WORDS
+        : actorName(personActor(assignee, reader.members, reader.readerId, reader.former));
+    },
   );
   // A row names its repository as its group's header would, owner and all where two share a name.
   const named = repositoryGroups(unpinned);
@@ -1799,7 +1884,7 @@ function SidebarColumn({
       {/* One scroller for both sections, so the pinned tasks scroll away
           with the rest rather than holding half the column; in a phone's
           drawer the pages' rows ride it too. */}
-      <div className="sidebar-section">
+      <Fill className="sidebar-section">
         <ScrollArea fade={SCROLL_FADE.BOTH}>
           <div className="sidebar-section-body">
             {narrow ? places : null}
@@ -1960,7 +2045,7 @@ function SidebarColumn({
             )}
           </div>
         </ScrollArea>
-      </div>
+      </Fill>
 
       <ColumnFoot docked={!sidebar.collapsed}>
         <SidebarFoot

@@ -14,7 +14,9 @@
  * input is an envelope of the remote tool's name, the input eve validated
  * for it, the call it ran under, and, for an account past the provider's
  * first, which account it was (`integrationRemoteCallSchema`), which the
- * desktop reads back to draw the row. Every name is registered in every
+ * desktop reads back to draw the row. A native agent's call of a tool on an
+ * integration's own server is kept the same way (`storedServerCall`), the
+ * call standing as its own parent. Every name is registered in every
  * agent's tool set whatever any account's connections stand at, so a
  * transcript that used an integration reads back the same after a
  * Disconnect.
@@ -70,23 +72,48 @@ export function isRemoteToolName(name: string): boolean {
   return name.includes(QUALIFIED_SEPARATOR);
 }
 
-/** The integration and account whose connection eve qualified a remote tool's name with, and the tool's own name. */
-function remoteToolOf(toolName: string):
-  | {
-      readonly provider: IntegrationProvider;
-      readonly connection: string;
-      readonly place: number;
-      readonly remoteTool: string;
-    }
-  | undefined {
-  const separator = toolName.indexOf(QUALIFIED_SEPARATOR);
-  if (separator < 0) return undefined;
-  const connection = toolName.slice(0, separator);
+/** A remote tool of one integration's account: the integration, the connection and its place among the integration's accounts, and the tool's own name. */
+interface RemoteTool {
+  readonly provider: IntegrationProvider;
+  readonly connection: string;
+  readonly place: number;
+  readonly remoteTool: string;
+}
+
+/** The integration and account a connection is named for, with a remote tool's own name; nothing where the connection is no integration's or the name no tool's. */
+function remoteToolIn(connection: string, remoteTool: string): RemoteTool | undefined {
   // Note that a connection is named for its account, the first after its provider (`agent-runtime/connections.ts`).
   const account = integrationConnectionOf(connection);
-  const remoteTool = toolName.slice(separator + QUALIFIED_SEPARATOR.length);
   if (account === undefined || !isRemoteToolWord(remoteTool)) return undefined;
   return { ...account, connection, remoteTool };
+}
+
+/** The integration and account whose connection eve qualified a remote tool's name with, and the tool's own name. */
+function remoteToolOf(toolName: string): RemoteTool | undefined {
+  const separator = toolName.indexOf(QUALIFIED_SEPARATOR);
+  if (separator < 0) return undefined;
+  return remoteToolIn(
+    toolName.slice(0, separator),
+    toolName.slice(separator + QUALIFIED_SEPARATOR.length),
+  );
+}
+
+/** A call of a remote tool as the record keeps it: under its integration's fixed name, its envelope naming the call it ran under. */
+function storedAs(
+  remote: RemoteTool,
+  input: UnparsedWireValue,
+  parentCallId: string,
+): { readonly name: string; readonly input: UnparsedWireValue } {
+  return {
+    name: INTEGRATION_REMOTE_TOOL[remote.provider],
+    // An object was sent, so an empty one stands for an input it never had.
+    input: {
+      remoteTool: remote.remoteTool,
+      parentCallId,
+      input: input ?? {},
+      ...(remote.place > 1 ? { connection: remote.connection } : undefined),
+    },
+  };
 }
 
 /**
@@ -102,15 +129,23 @@ export function storedRemoteCall(
   parentCallId: string,
 ): { readonly name: string; readonly input: UnparsedWireValue } | undefined {
   const remote = remoteToolOf(toolName);
-  if (remote === undefined) return undefined;
-  return {
-    name: INTEGRATION_REMOTE_TOOL[remote.provider],
-    // eve validated an object, so an empty one stands for an input it never had.
-    input: {
-      remoteTool: remote.remoteTool,
-      parentCallId,
-      input: input ?? {},
-      ...(remote.place > 1 ? { connection: remote.connection } : undefined),
-    },
-  };
+  return remote === undefined ? undefined : storedAs(remote, input, parentCallId);
+}
+
+/**
+ * A native agent's call of a tool on an integration's own MCP server
+ * (`../agents/luke-mcp/app.ts`), as the record keeps it: as eve's nested
+ * call of the same tool is kept, under the integration's fixed name and its
+ * envelope, the call standing as its own parent, since no
+ * `connection_execute` wraps it; nothing for a server that is no
+ * integration's connection.
+ */
+export function storedServerCall(
+  connection: string,
+  remoteTool: string,
+  input: UnparsedWireValue,
+  callId: string,
+): { readonly name: string; readonly input: UnparsedWireValue } | undefined {
+  const remote = remoteToolIn(connection, remoteTool);
+  return remote === undefined ? undefined : storedAs(remote, input, callId);
 }

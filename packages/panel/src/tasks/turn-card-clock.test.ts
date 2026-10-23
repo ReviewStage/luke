@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
+import { callHeading } from "@luke/ui/time-format";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, test, vi } from "vitest";
-import { callHeading } from "./task-time.js";
 import { TurnCard } from "./turn-card.js";
 
 /** The Mac's own region, read by a time asked for in no locale of its own: one that sets the clock on 24 hours. */
@@ -20,18 +20,6 @@ function onMacRegion(): void {
 
 afterEach(() => {
   vi.restoreAllMocks();
-});
-
-test("a call's header names its day as today, yesterday, a weekday this week, or a date", () => {
-  const now = new Date(2026, 9, 8, 18, 0).getTime();
-  const at = (month: number, day: number, year = 2026) =>
-    new Date(year, month, day, 15, 42).getTime();
-
-  assert.equal(callHeading(at(9, 8), now), "Today, 3:42 PM");
-  assert.equal(callHeading(at(9, 7), now), "Yesterday, 3:42 PM");
-  assert.equal(callHeading(at(9, 5), now), "Monday, 3:42 PM");
-  assert.equal(callHeading(at(8, 21), now), "Sep 21, 3:42 PM");
-  assert.equal(callHeading(at(11, 30, 2025), now), "Dec 30, 2025, 3:42 PM");
 });
 
 test("a turn's heading and the card it hangs read one clock on a Mac set to 24 hours", () => {

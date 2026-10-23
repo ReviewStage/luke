@@ -26,13 +26,23 @@ export const CARD_PADDING = {
 
 export type CardPadding = (typeof CARD_PADDING)[keyof typeof CARD_PADDING];
 
+/** How a card stands on its page: on the page's surface, or raised on an opaque ground in a strong edge and a smaller corner, as a card set inside a thread's words is. */
+export const CARD_LOOK = {
+  SURFACE: "surface",
+  RAISED: "raised",
+} as const;
+
+export type CardLook = (typeof CARD_LOOK)[keyof typeof CARD_LOOK];
+
 /** `children` framed by a card, `padding` in from its edge. */
 export function Card({
+  look = CARD_LOOK.SURFACE,
   padding = CARD_PADDING.REGULAR,
   title,
   ref,
   children,
 }: {
+  look?: CardLook;
   padding?: CardPadding;
   /** The hint a pointer resting anywhere on the card is shown. */
   title?: string | undefined;
@@ -41,8 +51,13 @@ export function Card({
   children: ReactNode;
 }): React.JSX.Element {
   return (
-    <div ref={ref} className="luke-card" data-padding={padding} title={title}>
+    <div ref={ref} className="luke-card" data-look={look} data-padding={padding} title={title}>
       {children}
     </div>
   );
+}
+
+/** A card's head: a line of muted caption words, a kind and where it stands, wrapping where the room runs out. */
+export function CardHead({ children }: { children: ReactNode }): React.JSX.Element {
+  return <div className="luke-card-head">{children}</div>;
 }

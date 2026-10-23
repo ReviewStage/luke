@@ -12,11 +12,7 @@
    `data-luke-profile`, `data-luke-theme`, and `data-luke-density`, so every
    sheet below reads them. */
 @import "@luke/ui/tokens.css";
-/* Motion tokens next, so base.css can spend them without restating the
-   springs or the duration set. */
-@import "@luke/brand/motion-tokens.css";
-/* Before base.css: `.settings-input` is equal specificity to the tweaks
-   there, and those tweaks have to win. */
+@import "./search.css";
 @import "./settings.css";
 @import "./base.css";
 /* The shared components' own rules, in the `components` layer: above

@@ -31,6 +31,9 @@ import {
   LIST_ROW_META,
   List,
   ListRow,
+  ONE_LINE_ELEMENT,
+  ONE_LINE_END,
+  OneLine,
   RowHint,
   RowHintOptions,
   SCROLL_FADE,
@@ -41,8 +44,10 @@ import {
   Skeleton,
   SkeletonRegion,
   TaskStatusMark,
+  Time,
   Tooltip,
   useMenu,
+  useMinute,
   VisuallyHidden,
 } from "@luke/ui";
 import {
@@ -169,11 +174,9 @@ import {
   useLeaving,
 } from "./inbox-row-motion.js";
 import { ReadAgentModel } from "./mentioned-agent-card.js";
-import { RelativeTime } from "./relative-time.js";
 import { PlanGlyph } from "./tab-look.js";
 import { markReadItem } from "./task-menu-items.js";
 import { TASK_STATUS_WORDS, TaskKey } from "./task-standing.js";
-import { useMinute } from "./task-time.js";
 import { cardTitle, plainWords } from "./tool-call-model.js";
 import { useOpenPlace } from "./use-open-link.js";
 
@@ -501,7 +504,7 @@ function InboxItemCard({
             <span>{standingWords(item, needsYou, starter)}</span>
           </>
         }
-        corner={<RelativeTime at={item.updatedAt} now={now} hint={false} />}
+        corner={<Time at={item.updatedAt} now={now} hint={false} />}
       />
       {thread.ask === undefined ? (
         settled === undefined ? null : (
@@ -894,7 +897,7 @@ export function InboxItemRow({
                 </span>
               ) : null}
               <TaskStatusChip holder={holder} />
-              <RelativeTime at={item.updatedAt} now={now} hint={false} />
+              <Time at={item.updatedAt} now={now} hint={false} />
             </span>
           }
           metaAt={LIST_ROW_META.TITLE}
@@ -1544,7 +1547,15 @@ function ListHead({
       ) : (
         <header className="desktop-toolbar inbox-tasks-bar">
           <div className="desktop-toolbar-heading">
-            {search.field ?? <h1 className="desktop-toolbar-title">{title}</h1>}
+            {search.field ?? (
+              <OneLine
+                as={ONE_LINE_ELEMENT.H1}
+                end={ONE_LINE_END.ELLIPSIS}
+                className="desktop-toolbar-title"
+              >
+                {title}
+              </OneLine>
+            )}
           </div>
           <div className="desktop-toolbar-actions">{options}</div>
         </header>
@@ -1866,7 +1877,11 @@ export function InboxList({
   };
   // Note that each grouping draws its groups anew, keyed by it, so a group of one grouping never leaves into another's.
   const body = (
-    <div ref={bodyRef} className="inbox-tasks-body">
+    <div
+      ref={bodyRef}
+      className="inbox-tasks-body"
+      data-empty={String(listedItems(view).length === 0)}
+    >
       {view.grouping === INBOX_GROUPING.NONE ? (
         <InboxRows items={view.items} row={row} />
       ) : view.grouping === INBOX_GROUPING.PERSON ? (

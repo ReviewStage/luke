@@ -6,7 +6,15 @@ import {
   browserAddressOf,
 } from "@luke/features/browser-acts";
 import { ACT_KIND } from "@luke/host/acts";
-import { AddressField, ERROR_STATE_PLACEMENT, ErrorState, IconButton, Tooltip } from "@luke/ui";
+import {
+  AddressField,
+  ERROR_STATE_PLACEMENT,
+  ErrorState,
+  FILL_ELEMENT,
+  Fill,
+  IconButton,
+  Tooltip,
+} from "@luke/ui";
 import { ArrowLeftIcon, ArrowRightIcon, ExternalLinkIcon, RotateCwIcon, XIcon } from "lucide-react";
 import {
   type RefObject,
@@ -435,7 +443,11 @@ export function BrowserPane({
   const address = page?.address ?? open.address ?? "";
   const loading = page?.loading === true;
   return (
-    <section className="browser-view file-view ph-no-capture" aria-label="Browser">
+    <Fill
+      as={FILL_ELEMENT.SECTION}
+      className="browser-view file-view ph-no-capture"
+      aria-label="Browser"
+    >
       <header className="file-view-bar browser-view-bar">
         <div className="file-view-history">
           <BarStep
@@ -477,7 +489,7 @@ export function BrowserPane({
           />
         </div>
       </header>
-      <div ref={body} className="browser-view-body">
+      <Fill clip ref={body} className="browser-view-body">
         {!opened && !refused ? null : refused ? (
           <ErrorState
             onRetry={() => openAt(browserAddressOf(address) ?? address)}
@@ -500,7 +512,7 @@ export function BrowserPane({
             style={{ width: still.width, height: still.height }}
           />
         )}
-      </div>
-    </section>
+      </Fill>
+    </Fill>
   );
 }

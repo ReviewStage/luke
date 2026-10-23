@@ -5,8 +5,8 @@
  * (`@luke/features/browser-agent-cdp`'s `BROWSER_CURSOR_BEAT`), in the page's
  * CSS pixels of its visible area, and the tab's live read carries the last
  * one (`AgentBrowserTab.cursor`). The arrow stands at that point scaled onto
- * the drawn page, and glides there over `--duration-fast` on
- * `--spring-fast`, about the beat, so it arrives as the action lands. It is
+ * the drawn page, and glides there over `--luke-duration-fast` on
+ * `--luke-spring-fast`, about the beat, so it arrives as the action lands. It is
  * drawn as a compact neutral arrowhead on a soft halo, as Codex draws its
  * agent's, in a lighter grey over a dark page (`onDarkPage`). While
  * the agent is active on the tab it rocks gently about its tip, a loop

@@ -19,6 +19,8 @@ import {
   EmptyState,
   ERROR_STATE_PLACEMENT,
   ErrorState,
+  FILL_ELEMENT,
+  Fill,
   FoldingButton,
   LIST_DENSITY,
   LIST_ROW_CURRENT,
@@ -36,13 +38,14 @@ import {
   Text,
   Tooltip,
   useMenu,
+  useMinute,
 } from "@luke/ui";
+import { momentText, sinceText } from "@luke/ui/time-format";
 import { ClockIcon, ExternalLinkIcon, PlayIcon, WebhookIcon } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { useCopyLinkItem } from "../copy-link-item.js";
 import { GLYPH_STATE, type GlyphState, StateGlyph, stateEndMark } from "../state-glyph.js";
 import { centreWithin, scrollerOf } from "../tasks/code-pane.js";
-import { momentText, sinceText, useMinute } from "../tasks/task-time.js";
 import { useOpenLink } from "../tasks/use-open-link.js";
 import { ActionMenu, type MenuAction } from "./action-menu.js";
 import { RUNS_PANEL_WIDTH, type RunsPanel } from "./folded-groups.js";
@@ -368,13 +371,19 @@ export function AutomationRunsScreen({
   onBack: () => void;
 }): React.JSX.Element {
   return (
-    <section id={id} className="automation-runs-screen" aria-label="Runs" hidden={hidden}>
+    <Fill
+      as={FILL_ELEMENT.SECTION}
+      id={id}
+      className="automation-runs-screen"
+      aria-label="Runs"
+      hidden={hidden}
+    >
       <header className="desktop-toolbar">
         <div className="automation-runs-back">
           <FoldingButton label={name} icon={<BackIcon />} onClick={onBack} />
         </div>
       </header>
       <RunsBody {...shown} />
-    </section>
+    </Fill>
   );
 }

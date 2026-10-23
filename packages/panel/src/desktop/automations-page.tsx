@@ -30,11 +30,15 @@ import {
   EmptyState,
   ERROR_STATE_PLACEMENT,
   ErrorState,
+  Fill,
   FoldingButton,
   LIST_VARIANT,
   List,
   ListRow,
   NO_CONTEXT_MENU,
+  ONE_LINE_ELEMENT,
+  ONE_LINE_END,
+  OneLine,
   PAGE_FRAME,
   SETTINGS_SECTION_FRAME,
   SettingsRow,
@@ -49,8 +53,10 @@ import {
   Text,
   Tooltip,
   useMenu,
+  useMinute,
   VisuallyHidden,
 } from "@luke/ui";
+import { momentText } from "@luke/ui/time-format";
 import { ChevronRightIcon, GitPullRequestIcon, PlusIcon, ZapIcon } from "lucide-react";
 import { Fragment, useEffect, useRef, useState } from "react";
 import { useAct } from "../act.js";
@@ -61,7 +67,6 @@ import { NOT_FOUND_THING, NotFound } from "../not-found.js";
 import { useSentryRead } from "../settings/use-sentry-read.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { GLYPH_STATE, glyphStateWords, StateGlyph, stateEndMark } from "../state-glyph.js";
-import { momentText, useMinute } from "../tasks/task-time.js";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast.js";
 import { useExperiment } from "../use-app-state.js";
@@ -444,7 +449,13 @@ function ListPage({
       toolbar={
         <header className="desktop-toolbar">
           <div className="desktop-toolbar-heading">
-            <h1 className="desktop-toolbar-title">Automations</h1>
+            <OneLine
+              as={ONE_LINE_ELEMENT.H1}
+              end={ONE_LINE_END.ELLIPSIS}
+              className="desktop-toolbar-title"
+            >
+              Automations
+            </OneLine>
           </div>
           <div className="desktop-toolbar-actions">
             <Button
@@ -602,7 +613,7 @@ function ReadingPage({ onBack, room }: { onBack: () => void; room: ShellRoom }):
   useAppCommand(APP_COMMAND.EXIT_AUTOMATIONS, onBack);
   const runsPanel = useRunsPanel();
   return (
-    <div className="automations-view">
+    <Fill className="automations-view">
       <header className="desktop-toolbar">
         <div className="automation-toolbar">
           <div className="desktop-toolbar-heading automation-toolbar-reading">
@@ -632,7 +643,7 @@ function ReadingPage({ onBack, room }: { onBack: () => void; room: ShellRoom }):
           />
         )}
       </div>
-    </div>
+    </Fill>
   );
 }
 

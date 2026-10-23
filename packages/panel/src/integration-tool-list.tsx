@@ -15,6 +15,8 @@ import {
   BADGE_TONE,
   Badge,
   type BadgeTone,
+  FILL_ELEMENT,
+  Fill,
   IconButton,
   LIST_DENSITY,
   LIST_ROW_CURRENT,
@@ -293,7 +295,7 @@ export function IntegrationToolDetail({
   const hints = toolHints(tool.annotations);
   const title = toolTitle(tool);
   return (
-    <article className="integration-tool-detail" aria-label={title}>
+    <Fill as={FILL_ELEMENT.ARTICLE} className="integration-tool-detail" aria-label={title}>
       <header className="integration-tool-detail-head">
         {onBack !== undefined && backLabel !== undefined ? (
           <Tooltip label={backLabel}>
@@ -348,6 +350,6 @@ export function IntegrationToolDetail({
           <Parameters tool={tool} />
         </div>
       </ScrollArea>
-    </article>
+    </Fill>
   );
 }

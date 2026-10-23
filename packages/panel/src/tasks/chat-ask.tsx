@@ -8,7 +8,17 @@ import {
   knownResponse,
 } from "@luke/features/chat-wire";
 import type { InboxAsk } from "@luke/features/inbox-wire";
-import { ErrorState, TEXT_TONE, TEXT_VARIANT, Text } from "@luke/ui";
+import {
+  CARD_LOOK,
+  CARD_PADDING,
+  Card,
+  CardHead,
+  ErrorState,
+  TEXT_TONE,
+  TEXT_VARIANT,
+  Text,
+  Time,
+} from "@luke/ui";
 import { type Actor, actorName } from "@luke/ui/actor-model";
 import type { ChatAskAnswer } from "@luke/ui/chat-model";
 import { CheckIcon } from "lucide-react";
@@ -57,7 +67,6 @@ import {
   type InboxMissing,
   sentenceCased,
 } from "./inbox-model.js";
-import { RelativeTime } from "./relative-time.js";
 import { SentWords } from "./skill-chip.js";
 
 /**
@@ -321,7 +330,7 @@ function AnsweredComment({
             <span className="inbox-comment-when">
               {at === undefined ? null : (
                 <>
-                  <RelativeTime className={THREAD_TIME_CLASS} at={at} now={now} /> ·{" "}
+                  <Time className={THREAD_TIME_CLASS} at={at} now={now} /> ·{" "}
                 </>
               )}
               <Delivered heard={ask.needsReply} poster={actorOf(message.authorId)} />
@@ -379,13 +388,15 @@ export function AskCard({
     return (
       <div className="chat-ask" data-status={ask.status}>
         <div className="inbox-ask">
-          <div className="inbox-ask-head">
-            <Text tone={TEXT_TONE.MUTED}>{NEWER_LUKE}</Text>
-          </div>
-          <div className="chat-ask-body">
-            {title}
-            {blocks}
-          </div>
+          <Card look={CARD_LOOK.RAISED} padding={CARD_PADDING.FLUSH}>
+            <CardHead>
+              <Text tone={TEXT_TONE.MUTED}>{NEWER_LUKE}</Text>
+            </CardHead>
+            <div className="chat-ask-body">
+              {title}
+              {blocks}
+            </div>
+          </Card>
         </div>
       </div>
     );
@@ -418,38 +429,40 @@ export function AskCard({
   return (
     <div className="chat-ask" data-status={ask.status}>
       <div className="inbox-ask">
-        {asked === undefined ? null : (
-          <div className="inbox-ask-head">
-            <span className="inbox-ask-kind">{askHeadWords(asked, undefined)}</span>
-            {standing}
+        <Card look={CARD_LOOK.RAISED} padding={CARD_PADDING.FLUSH}>
+          {asked === undefined ? null : (
+            <CardHead>
+              <span className="inbox-ask-kind">{askHeadWords(asked, undefined)}</span>
+              {standing}
+            </CardHead>
+          )}
+          <div className="chat-ask-body">
+            {title}
+            {blocks}
+            {waiting ? <Waiting waitsOn={waitsOn} actorOf={actorOf} /> : null}
+            {answerable ? (
+              <Answer
+                message={message}
+                ask={ask}
+                response={response}
+                asked={asked}
+                self={self}
+                keywords={keywords}
+                onAnswer={onAnswer}
+              />
+            ) : null}
+            {ask.status === ASK_STATUS.ANSWERED ? (
+              <AnsweredComment
+                message={message}
+                ask={ask}
+                asked={asked}
+                chat={chat}
+                actorOf={actorOf}
+                now={now}
+              />
+            ) : null}
           </div>
-        )}
-        <div className="chat-ask-body">
-          {title}
-          {blocks}
-          {waiting ? <Waiting waitsOn={waitsOn} actorOf={actorOf} /> : null}
-          {answerable ? (
-            <Answer
-              message={message}
-              ask={ask}
-              response={response}
-              asked={asked}
-              self={self}
-              keywords={keywords}
-              onAnswer={onAnswer}
-            />
-          ) : null}
-          {ask.status === ASK_STATUS.ANSWERED ? (
-            <AnsweredComment
-              message={message}
-              ask={ask}
-              asked={asked}
-              chat={chat}
-              actorOf={actorOf}
-              now={now}
-            />
-          ) : null}
-        </div>
+        </Card>
       </div>
     </div>
   );

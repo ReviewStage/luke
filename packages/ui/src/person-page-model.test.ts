@@ -6,8 +6,9 @@ import { agentStarter, personPage, personPageEmpty, personRef } from "./person-p
 
 /**
  * A person's page lists what of theirs the listed workspace's task list
- * holds: their agents at work, the tasks they created, and their other
- * agents, each newest first, and nobody else's. Synthetic accounts.
+ * holds: their agents at work, the tasks assigned to them, the rest of the
+ * tasks they created, and their other agents, each newest first, and
+ * nobody else's. Synthetic accounts.
  */
 
 const CHARLES = { userId: "user-charles", name: "Charles Pan" };
@@ -36,6 +37,7 @@ function task(
   updatedAt: number,
   createdBy: typeof CHARLES,
   agents: readonly TaskAgentLine[] = [],
+  assignee?: typeof CHARLES,
 ): TaskSummary {
   const summary: TaskSummary = {
     id: `11111111-0000-4000-8000-${String(n).padStart(12, "0")}`,
@@ -46,6 +48,7 @@ function task(
     repository: "acme/relay",
     ownerId: createdBy.userId,
     createdBy,
+    ...(assignee === undefined ? undefined : { assignee }),
   };
   if (agents.length === 0) return summary;
   return {
@@ -96,6 +99,32 @@ test("a person's tasks are those they created, the latest updated first", () => 
     personPage(DANA.userId, TASKS).created.map((summary) => summary.name),
     ["Cache keys"],
   );
+});
+
+test("a person's tasks assigned to them come apart from those they created, the latest first, one both listed once as assigned", () => {
+  const SAM = { userId: "user-sam", name: "Sam Ortiz" };
+  const handedToDana = task(4, "Cache eviction", 700, CHARLES, [], DANA);
+  const ownedByCharles = task(5, "Relay timeouts", 300, CHARLES, [], CHARLES);
+  const handedToCharles = task(6, "Dashboard copy", 600, DANA, [], CHARLES);
+  const tasks = [...TASKS, handedToDana, ownedByCharles, handedToCharles];
+
+  const charles = personPage(CHARLES.userId, tasks);
+  assert.deepEqual(
+    charles.assigned.map((summary) => summary.name),
+    ["Dashboard copy", "Relay timeouts"],
+  );
+  assert.deepEqual(
+    charles.created.map((summary) => summary.name),
+    ["Cache eviction", "Relay retries", "Retry dashboard"],
+  );
+  // Someone the list names only as an assignee has a page of what they are on, and is named by it.
+  const sams = personPage(SAM.userId, [task(7, "Flaky test", 50, DANA, [], SAM)]);
+  assert.deepEqual(
+    sams.assigned.map((summary) => summary.name),
+    ["Flaky test"],
+  );
+  assert.equal(personPageEmpty(sams), false);
+  assert.deepEqual(personRef(SAM.userId, [task(7, "Flaky test", 50, DANA, [], SAM)]), SAM);
 });
 
 test("someone with nothing in the list has an empty page, and someone with anything does not", () => {

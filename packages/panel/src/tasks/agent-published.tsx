@@ -212,7 +212,7 @@ export function PublishedRow({
   return (
     <>
       <div className="agent-published">
-        <List label="Pull request" variant={LIST_VARIANT.CARD}>
+        <List label="Pull request" variant={LIST_VARIANT.CARD} fingerTall>
           {/* Note that the card stands in the pill's place whatever the title's width, since it names the title whole, the published one where GitHub answered nothing. */}
           <RowHintOptions card={card}>
             <ListRow

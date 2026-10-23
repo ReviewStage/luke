@@ -8,7 +8,7 @@ import {
   type AutomationScope,
   type AutomationSummary,
 } from "@luke/features/automation-wire";
-import { dayAndTimeText, momentText } from "../tasks/task-time.js";
+import { dayAndTimeText, momentText } from "@luke/ui/time-format";
 
 /** What the Automations list says to a reader while it is first read, on its page and in the frame standing while the page's code loads. */
 export const READING_AUTOMATIONS = "Reading your automations…";

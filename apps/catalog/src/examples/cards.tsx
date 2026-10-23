@@ -2,8 +2,10 @@ import {
   ALIGN,
   BUTTON_VARIANT,
   Button,
+  CARD_LOOK,
   CARD_PADDING,
   Card,
+  CardHead,
   GAP,
   Inline,
   JUSTIFY,
@@ -39,6 +41,20 @@ function Cards(): React.JSX.Element {
               </Text>
               <Text tone={TEXT_TONE.MUTED}>No calls in this window.</Text>
             </Stack>
+          </Card>
+        </div>
+      </CatalogSection>
+      <CatalogSection id="card-raised" title="Raised, with a head">
+        <div className="catalog-column">
+          <Card look={CARD_LOOK.RAISED} padding={CARD_PADDING.FLUSH}>
+            <CardHead>
+              <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION}>
+                Decide
+              </Text>
+              <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION}>
+                Answered
+              </Text>
+            </CardHead>
           </Card>
         </div>
       </CatalogSection>

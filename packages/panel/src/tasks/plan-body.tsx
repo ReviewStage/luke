@@ -17,13 +17,16 @@ import {
   Button,
   EllipsisIcon,
   IconButton,
+  TEXT_BUTTON_LINES,
   TextButton,
   Tooltip,
   useMenu,
+  useMinute,
   VisuallyHidden,
 } from "@luke/ui";
 import { actorName } from "@luke/ui/actor-model";
 import { commentSpansIn, usePlanCommentsControl } from "@luke/ui/plan-comments";
+import { agoText, momentText, sinceText } from "@luke/ui/time-format";
 import { LinkIcon } from "lucide-react";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ActorStack } from "../actor-ref.js";
@@ -80,7 +83,6 @@ import {
   type UnitView,
 } from "./task-reveal.js";
 import { TaskKeyLine, TaskStandingChips, type TaskStandingDoor } from "./task-standing.js";
-import { agoText, momentText, sinceText, useMinute } from "./task-time.js";
 import { TaskTitle } from "./task-title.js";
 import { useOpenLink } from "./use-open-link.js";
 import { EDITOR_PLACE, type PlanEditDoor, usePlanEditing } from "./use-plan-editing.js";
@@ -236,12 +238,15 @@ function EditTime({
   label,
   onShow,
   short = false,
+  whole = false,
 }: {
   at: number;
   /** What the press is called, from how long ago the edit was, "2 hours ago". */
   label: (ago: string) => string;
   onShow: (() => void) | undefined;
   short?: boolean;
+  /** Whether its press is drawn whole, a finger's press on a coarse pointer, as the byline's is. */
+  whole?: boolean;
 }): React.JSX.Element {
   // Note that the time reads the minute itself, so the minute draws it again and not the section it stands in.
   const now = useMinute();
@@ -251,6 +256,7 @@ function EditTime({
       <span>{words}</span>
     ) : (
       <TextButton
+        lines={whole ? TEXT_BUTTON_LINES.WHOLE : TEXT_BUTTON_LINES.ONE}
         aria-label={label(agoText(at, now))}
         // The pointer on the time is the way to the history, so its chunk is read now rather than at the press.
         onPointerEnter={VERSION_HISTORY.prefetch}
@@ -342,6 +348,7 @@ function PlanByline({
               at={edit.at}
               label={editedLabel}
               onShow={onShowHistory === undefined ? undefined : () => onShowHistory(undefined)}
+              whole
             />
           </>
         )
