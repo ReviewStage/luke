@@ -62,7 +62,7 @@ import {
 } from "lucide-react";
 import { type RefObject, useEffect, useId, useState } from "react";
 import { useAct } from "../act.js";
-import { ACTOR_SIZE, ActorMark } from "../actor-ref.js";
+import { ACTOR_SIZE, ActorMark, actorCard } from "../actor-ref.js";
 import { type IntegrationToolsReads, useIntegrationTools } from "../integration-tools.js";
 import { useMemberDirectory } from "../member-directory.js";
 import { memberRows, YOU_WORD } from "../member-rows.js";
@@ -334,7 +334,7 @@ type MentionRow = {
   readonly actor?: Actor | undefined;
   /** An agent's row as every agent menu draws it (`agent-menu-row.tsx`): its tab's glyph, its end, and its card; none for any other row. */
   readonly look?: Pick<MenuRow, "icon" | "end" | "card"> | undefined;
-  /** The card a page's row hangs beside it, its tab's; none for any other row, a file's being drawn as its row is (`comboboxGroups`). */
+  /** The card a page's or a person's row hangs beside it, a page's tab's and a person's own; none for any other row, a file's being drawn as its row is (`comboboxGroups`). */
   readonly card?: React.ReactNode | undefined;
   /** A pull request, whose mark its row wears for where it stands; none for any other row. */
   readonly pullRequest?: MentionablePullRequest | undefined;
@@ -579,7 +579,7 @@ function directoryPeople(
   }));
 }
 
-/** Each person's row, by their name, wearing their picture, said by their email or as You, found by their name or their email. */
+/** Each person's row, by their name, wearing their picture and hanging their card, said by their email or as You, found by their name or their email. */
 function personRows(
   people: readonly MentionablePerson[],
   readerId: string | undefined,
@@ -590,6 +590,7 @@ function personRows(
     detail: person.userId === readerId ? YOU_WORD : person.email,
     terms: `${person.name} ${person.email ?? ""}`,
     actor: person.actor,
+    card: actorCard(person.actor),
   }));
 }
 

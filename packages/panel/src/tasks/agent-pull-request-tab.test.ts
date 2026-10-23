@@ -2121,7 +2121,9 @@ test("each part's placeholder stands in the boxes the part lands in: the line un
       (each) => each.textContent === label,
     ) ?? assert.fail(`${label} stands`);
 
-  assert.ok(placeholder("Reading pull request").querySelector(".pull-request-people .luke-skeleton"));
+  assert.ok(
+    placeholder("Reading pull request").querySelector(".pull-request-people .luke-skeleton"),
+  );
   assert.ok(
     placeholder("Reading conversation").querySelectorAll(".pull-request-entry .luke-skeleton")
       .length > 0,
@@ -3359,14 +3361,14 @@ function menuItems(): { readonly label: string; readonly checked: string | null 
   }));
 }
 
-/** Presses the menu item that begins with the words given. */
+/** Presses the menu item whose label begins with the words given. */
 async function pressItem(words: string): Promise<void> {
   const item =
     [
       ...document.querySelectorAll<HTMLButtonElement>(
         ':is([role="menuitem"], [role="menuitemcheckbox"])',
       ),
-    ].find((each) => each.textContent?.startsWith(words)) ??
+    ].find((each) => each.querySelector(".luke-menu-item-label")?.textContent?.startsWith(words)) ??
     assert.fail(`the menu offers ${words}`);
   act(() => item.click());
   await settle();
@@ -3416,6 +3418,18 @@ test("the reviewer picker lists the repository's teams then its people, the auth
     { label: "charlespan", checked: "true" },
     { label: "priyan", checked: "false" },
   ]);
+  const priyan =
+    [...document.querySelectorAll<HTMLElement>('[role="menuitemcheckbox"]')].find((item) =>
+      item.querySelector(".luke-menu-item-label")?.textContent?.includes("priyan"),
+    ) ?? assert.fail("priyan is offered");
+  assert.equal(
+    priyan.querySelector<HTMLElement>(".actor-mark")?.dataset.kind,
+    "github",
+    "a reviewer is offered by their GitHub face, not a generic icon",
+  );
+  restOn(priyan);
+  const card = document.querySelector('.luke-tooltip-card [data-actor-card="github"]');
+  assert.match(card?.textContent ?? "", /priyan/u);
   await pressItem("priyan");
 
   assert.deepEqual(changes, [

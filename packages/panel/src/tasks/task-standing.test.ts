@@ -10,6 +10,7 @@ import { afterEach, beforeEach, test, vi } from "vitest";
 import { MemberDirectory } from "../member-directory.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { layContainersAt } from "../testing/container-width.js";
+import { restOn } from "../testing/hint-rest.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { TaskKeyLine, TaskStandingChips } from "./task-standing.js";
 
@@ -174,6 +175,10 @@ test("the assignee's menu lists No assignee, then the reader, then every other m
       "GGrace Hopperuser-grace@acme.test",
     ],
   );
+  restOn(rows[2] ?? assert.fail("no Ada row"));
+  const card = document.querySelector('.luke-tooltip-card [data-actor-card="person"]');
+  assert.equal(card?.querySelector(".luke-hover-card-name")?.textContent, "Ada Lovelace");
+  assert.match(card?.textContent ?? "", /user-ada@acme\.test/u);
   act(() => (rows[2] ?? assert.fail("no Ada row")).click());
 
   assert.deepEqual(sent, [{ assigneeId: "user-ada" }]);
