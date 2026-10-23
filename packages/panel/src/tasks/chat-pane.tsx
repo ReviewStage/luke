@@ -64,6 +64,7 @@ import {
   memo,
   useCallback,
   useContext,
+  useEffect,
   useLayoutEffect,
   useMemo,
   useRef,
@@ -88,12 +89,19 @@ import { AskCard } from "./chat-ask.js";
 import { ChannelName, channelTitle } from "./chat-channel-name.js";
 import { ChatComposer, type ChatComposerMentions } from "./chat-composer.js";
 import { useChatMentions } from "./chat-mention-source.js";
+import {
+  type ChatReplyDoors,
+  ChatReplyDoorsContext,
+  replyInto,
+  useChatReplyDoor,
+} from "./chat-reply-doors.js";
 import { CopyMessageAction } from "./copy-message.js";
 import { FileRef } from "./file-ref.js";
 import { InboxCodeCard, type InboxCodeDoors } from "./inbox-code-card.js";
 import { NEEDS_YOU } from "./inbox-model.js";
 import { LinkBlock } from "./inbox-pane.js";
 import { LoneLinkCards } from "./lone-link-card.js";
+import { REPLY_SCOPE, ReplyToSelection } from "./reply-to-selection.js";
 import { SentWords, SkillFiles } from "./skill-chip.js";
 import type { SkillSource } from "./skill-picker.js";
 import type { SkillWithFile } from "./skill-ref.js";
@@ -120,6 +128,11 @@ import { TranscriptWords } from "./transcript-blocks.js";
  * a press folds the thread open there with a box to reply in under it; a
  * root with none offers Reply at its byline's end while it is hovered,
  * which opens the box alone, beside the Copy every message offers there.
+ * Words selected in a message, or in an ask's card, stand Reply over them,
+ * as an agent's words do in its tab (`reply-to-selection.tsx`), which
+ * quotes them into the box that answers them (`chat-reply-doors.ts`): an
+ * open ask's answer, the thread's box where it is open, else the channel's
+ * at its foot; For you, which has no box of its own, opens the thread.
  * A place's messages are a log, as every conversation in the window is:
  * it opens at the newest, follows new ones while the reader is there, and
  * a channel opened with messages unread draws a "New" line before the
@@ -282,9 +295,9 @@ function Block({
   if (!knownBlock(block)) return <Text tone={TEXT_TONE.SUBTLE}>{NEWER_LUKE}</Text>;
   switch (block.type) {
     case CHAT_BLOCK.MARKDOWN:
-      // Note that every message is drawn as a document, as an Inbox item's words are, so a link alone on its line is its card.
+      // Note that every message is drawn as a document, as an Inbox item's words are, so a link alone on its line is its card; whoever wrote it, a selection inside may be replied to.
       return (
-        <div className="chat-words">
+        <div className="chat-words" {...{ [REPLY_SCOPE]: "" }}>
           {typed ? (
             <SentWords text={block.text} asDocument />
           ) : (
@@ -840,6 +853,10 @@ const ThreadRow = memo(function ThreadRow({
   continued?: boolean;
 }): React.JSX.Element {
   const [open, setOpen] = useState(false);
+  const row = useRef<HTMLLIElement>(null);
+  const threadDoor = useRef<((words: string) => boolean) | undefined>(undefined);
+  // A quote For you's Reply opened the thread for, laid into its box once the box stands.
+  const [quoting, setQuoting] = useState<string | undefined>(undefined);
   const actor = context.actorOf(message.authorId);
   // The thread's repliers lead its press by their faces, each once, as a comment thread at rest names them.
   const repliers = distinctActors(replies.map((reply) => context.actorOf(reply.authorId)));
@@ -858,8 +875,25 @@ const ThreadRow = memo(function ThreadRow({
   );
   // A message nobody has replied to offers Reply at its byline's end beside its Copy, out of the way until wanted.
   const quiet = replies.length === 0 && !open;
+  // A Reply over the thread's words quotes into its box while it is open; For you, which has no box of its own, opens it.
+  useChatReplyDoor(row, (words) => {
+    if (!canReply) return false;
+    if (open) return threadDoor.current?.(words) === true;
+    if (posted === undefined) return false;
+    setOpen(true);
+    setQuoting(words);
+    return true;
+  });
+  useEffect(() => {
+    if (quoting !== undefined && threadDoor.current?.(quoting) === true) setQuoting(undefined);
+  }, [quoting]);
   return (
-    <li className="chat-message" data-seq={message.seq} data-continued={String(continued)}>
+    <li
+      ref={row}
+      className="chat-message"
+      data-seq={message.seq}
+      data-continued={String(continued)}
+    >
       <Face actor={actor} continued={continued} at={message.postedAt} />
       <div className="chat-message-body">
         <Byline
@@ -905,6 +939,7 @@ const ThreadRow = memo(function ThreadRow({
                 ])}
                 keywords={context.keywords}
                 compact
+                replyDoor={threadDoor}
                 onSend={(text, attachments, takeBack) =>
                   context.send(
                     { channelId: message.channelId, replyTo: message.seq },
@@ -1205,6 +1240,8 @@ export const ChatPane = memo(function ChatPane({
     [roster, taskDoors],
   );
   const posting = usePendingPosts(chat, onPost);
+  // The boxes a Reply in the place shown quotes into, each by the words it answers.
+  const [replyDoors] = useState((): ChatReplyDoors => new Map());
   const { send, onRetryPost, onDiscardPost } = posting;
   const context = useMemo(
     (): MessageContext => ({
@@ -1240,16 +1277,18 @@ export const ChatPane = memo(function ChatPane({
   );
   return (
     <ChatReadContext.Provider value={chat}>
-      <PlaceView
-        chat={chat}
-        place={place}
-        context={context}
-        pending={posting.pending}
-        lead={lead}
-        hidden={hidden}
-        channelActions={channelActions}
-        onBringBack={onBringBack}
-      />
+      <ChatReplyDoorsContext.Provider value={replyDoors}>
+        <PlaceView
+          chat={chat}
+          place={place}
+          context={context}
+          pending={posting.pending}
+          lead={lead}
+          hidden={hidden}
+          channelActions={channelActions}
+          onBringBack={onBringBack}
+        />
+      </ChatReplyDoorsContext.Provider>
     </ChatReadContext.Provider>
   );
 });
@@ -1279,9 +1318,28 @@ function PlaceView({
   const channel = placeChannel(chat, place);
   const entries = useKeptThreads(forYou(chat));
   const pendingBy = useMemo(() => pendingByPlace(pending), [pending]);
+  const section = useRef<HTMLElement>(null);
+  const replyDoors = useContext(ChatReplyDoorsContext);
+  const footDoor = useRef<((words: string) => boolean) | undefined>(undefined);
+  // A Reply over words no nearer box answers quotes into the channel's own, at its foot.
+  const reply = (
+    <ReplyToSelection
+      scope={section}
+      onReply={(words, picked) => {
+        if (replyDoors === undefined || !replyInto(replyDoors, picked, words)) {
+          footDoor.current?.(words);
+        }
+      }}
+    />
+  );
   if (place.kind === CHAT_PLACE.FOR_YOU || channel === undefined) {
     return (
-      <section className="chat-stream ph-no-capture" aria-label="For you" hidden={hidden}>
+      <section
+        ref={section}
+        className="chat-stream ph-no-capture"
+        aria-label="For you"
+        hidden={hidden}
+      >
         <PlaceHead title={FOR_YOU_TITLE} name={FOR_YOU_TITLE} meta={undefined} lead={lead} />
         {entries.length === 0 ? (
           <EmptyState icon={<AtSignIcon />}>{NEEDS_YOU.NONE}</EmptyState>
@@ -1308,6 +1366,7 @@ function PlaceView({
             <ConversationScrollButton />
           </Conversation>
         )}
+        {reply}
       </section>
     );
   }
@@ -1315,7 +1374,7 @@ function PlaceView({
   const title = channelTitle(chat, names, channel);
   const doors = doorsIn(channel.id);
   return (
-    <section className="chat-stream ph-no-capture" aria-label={title} hidden={hidden}>
+    <section ref={section} className="chat-stream ph-no-capture" aria-label={title} hidden={hidden}>
       <PlaceHead
         title={title}
         name={<ChannelName chat={chat} names={names} channel={channel} />}
@@ -1340,6 +1399,7 @@ function PlaceView({
           label={composerLabel(chat, names, channel)}
           mentions={mentionsIn(channel.id)}
           keywords={keywords}
+          replyDoor={footDoor}
           onSend={(text, attachments, takeBack) =>
             send(
               { channelId: channel.id },
@@ -1362,6 +1422,7 @@ function PlaceView({
           </Text>
         </div>
       )}
+      {reply}
     </section>
   );
 }

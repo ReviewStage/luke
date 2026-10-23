@@ -48,6 +48,7 @@ import {
   withStep,
   withValue,
 } from "./inbox-model.js";
+import { REPLY_SCOPE } from "./reply-to-selection.js";
 import { SentWords } from "./skill-chip.js";
 
 /**
@@ -62,8 +63,10 @@ import { SentWords } from "./skill-chip.js";
  * stand in (`DraftQuestion`), and a send lacking something takes the
  * keyboard to it (`focusMissing`). An ask's words, its options and its
  * steps, select and copy whether it is open or not (`ReadableControls`), a
- * drag over them picking and ticking nothing. Nothing here knows where the
- * ask came from: an Inbox item's thread or a chat message.
+ * drag over them picking and ticking nothing, and stand Reply over them as
+ * the words around them do (`reply-to-selection.tsx`), a field's own
+ * typing aside. Nothing here knows where the ask came from: an Inbox
+ * item's thread or a chat message.
  */
 
 /** The words a choice's open options are named by, for a reader that does not see the question over them. */
@@ -467,6 +470,15 @@ function AskPress({
   );
 }
 
+/** An ask's controls, whose words select and copy, and a Reply quotes as the words around them. */
+function AskWords({ children }: { children: React.ReactNode }): React.JSX.Element {
+  return (
+    <div className="inbox-ask-words" {...{ [REPLY_SCOPE]: "" }}>
+      <ReadableControls>{children}</ReadableControls>
+    </div>
+  );
+}
+
 /**
  * An open ask's controls, each attaching its answer to the reply rather
  * than sending it, and each press taking it off again: a `decide`'s options
@@ -484,9 +496,9 @@ export function AskControls(props: {
   doors: AskDoors;
 }): React.JSX.Element {
   return (
-    <ReadableControls>
+    <AskWords>
       <OpenControls {...props} />
-    </ReadableControls>
+    </AskWords>
   );
 }
 
@@ -642,9 +654,9 @@ export function HeldControls(props: {
   draft: InboxDraft;
 }): React.JSX.Element {
   return (
-    <ReadableControls>
+    <AskWords>
       <LeftControls {...props} />
-    </ReadableControls>
+    </AskWords>
   );
 }
 

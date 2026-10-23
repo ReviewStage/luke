@@ -532,6 +532,89 @@ function words(page: HTMLElement): string[] {
   });
 }
 
+/** Selects the words drawn under `within` as `words`, from `from` through `to`, as a drag lets them go. */
+function selectWithin(within: Element, words: string, from: string, to: string): void {
+  const walker = document.createTreeWalker(within, NodeFilter.SHOW_TEXT);
+  let text: Node | null = walker.nextNode();
+  while (text !== null && !(text.textContent ?? "").includes(words)) text = walker.nextNode();
+  assert.ok(text instanceof Text, `${words} is drawn`);
+  const range = document.createRange();
+  range.setStart(text, text.data.indexOf(from));
+  range.setEnd(text, text.data.indexOf(to) + to.length);
+  window.getSelection()?.removeAllRanges();
+  window.getSelection()?.addRange(range);
+  act(() => {
+    text.parentElement?.dispatchEvent(new Event("pointerup", { bubbles: true }));
+  });
+}
+
+/** Presses Reply where it stands over the selection. */
+async function pressReply(): Promise<void> {
+  const reply = [
+    ...document.body.querySelectorAll<HTMLButtonElement>(".reply-to-selection button"),
+  ].find((each) => each.textContent === "Reply");
+  assert.ok(reply !== undefined, "Reply stands over the selection");
+  act(() => reply.click());
+  await settle();
+}
+
+/** The quotes a box holds, in order. */
+function quotesIn(box: Element): (string | null)[] {
+  return [...box.querySelectorAll(".composer-editor .composer-quote-words")].map(
+    (quote) => quote.textContent,
+  );
+}
+
+test("words selected in a channel's message quote into the channel's box, which posts them as a quote over the words typed under it, and a reply's words in an open thread quote into the thread's box", async () => {
+  const posts: ChatPost[] = [];
+  const page = mount(undefined, undefined, undefined, undefined, {}, (land, post) => {
+    posts.push(post);
+    return land();
+  });
+  act(() => railRow(page, "teammate-invitations").click());
+  const foot = boxNamed(page, "Message #teammate-invitations");
+
+  const split = page.querySelector('.chat-message[data-seq="52"]') ?? assert.fail("message 52");
+  selectWithin(split, "before you touch the template.", "before", "template.");
+  await pressReply();
+  assert.deepEqual(quotesIn(foot), ["before you touch the template."]);
+  typeInComposer(foot, "Waiting on it.");
+  pressInComposer(foot, "Enter");
+  await settle();
+  assert.deepEqual(
+    posts.map((post) => post.text),
+    ["> before you touch the template.\n\nWaiting on it."],
+  );
+
+  act(() =>
+    page
+      .querySelector<HTMLButtonElement>('.chat-message[data-seq="48"] button[aria-expanded]')
+      ?.click(),
+  );
+  const holding = page.querySelector('.chat-reply[data-seq="50"]') ?? assert.fail("reply 50");
+  selectWithin(holding, "doing the resend endpoint", "doing", "meanwhile.");
+  await pressReply();
+  assert.deepEqual(quotesIn(boxNamed(page, "Reply in thread")), [
+    "doing the resend endpoint meanwhile.",
+  ]);
+  assert.deepEqual(quotesIn(foot), [], "the channel's box takes none of a thread's words");
+});
+
+test("in For you, words selected in an open ask quote into its answer's note line, and a message's words open its thread and quote into its box", async () => {
+  const page = mount();
+  const card = openAsk(page, EXPIRY);
+
+  selectWithin(card, "Matches password reset links", "Matches", "links");
+  await pressReply();
+  assert.deepEqual(quotesIn(card), ["Matches password reset links"]);
+
+  const asking = page.querySelector('.chat-message[data-seq="47"]') ?? assert.fail("message 47");
+  selectWithin(asking, "Happy to wait", "Happy", "wait");
+  await pressReply();
+  assert.deepEqual(quotesIn(boxNamed(asking as HTMLElement, "Reply in thread")), ["Happy to wait"]);
+  assert.deepEqual(quotesIn(card), ["Matches password reset links"]);
+});
+
 /** A workspace the window lists, which a chip's link is written in. */
 const ACME: Workspace = {
   id: "9e8d7c6b-5a49-4382-9716-05f4e3d2c1b0",
