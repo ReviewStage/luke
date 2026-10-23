@@ -20,12 +20,14 @@ import {
   hostedNotFoundRoute,
   hostedRefusing,
   hostedStoreOrUnavailable,
+  resolvedUserId,
   type UserIdResolver,
+  uuidOf,
 } from "../http/http-effect.js";
 import { readInboxAttachment } from "../inbox/inbox-store.js";
 import type { ModelCatalog } from "../providers/model-catalog.js";
 import { ANY_METHOD, type WebRoutes } from "../route.js";
-import { reachedAgent, resolvedUserId, uuidOf } from "./agent-reach.js";
+import { reachedAgent } from "./agent-reach.js";
 import { agentPullRequestReach } from "./coder-host/published.js";
 
 /**

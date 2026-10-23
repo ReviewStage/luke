@@ -1,10 +1,8 @@
 import type { DatabaseServices } from "@luke/database/core/query";
 import { readPlanAttachment } from "@luke/database/models/plan-attachments";
 import { readPlanCommentFile } from "@luke/database/models/plan-comments";
-import { readEither } from "@luke/wire/effect";
-import { Effect, Layer, Option, Result } from "effect";
+import { Effect, Layer, Option } from "effect";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
-import { unparsedWire, wireUuidSchema } from "../core.js";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import {
   HOSTED_BYTES_HEADERS,
@@ -13,7 +11,9 @@ import {
   hostedNotFoundRoute,
   hostedRefusing,
   hostedStoreOrUnavailable,
+  resolvedUserId,
   type UserIdResolver,
+  uuidOf,
 } from "../http/http-effect.js";
 import { ANY_METHOD, type WebRoutes } from "../route.js";
 
@@ -52,35 +52,6 @@ export type TasksAppServices = DatabaseServices;
 
 type TasksServices = TasksAppServices | HttpServerRequest.HttpServerRequest;
 
-/** The bearer's account, or the invalid-token refusal. */
-const resolvedUserId = /* @__PURE__ */ Effect.fnUntraced(function* (
-  seams: TasksAppSeams,
-  request: Request,
-): Effect.fn.Return<string, HostedRefusal> {
-  const account = yield* seams.resolveUserId(request);
-  if (Option.isNone(account)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_TOKEN);
-  return account.value;
-});
-
-/**
- * The one id the path named under `query`. Two would leave the path and the effect
- * disagreeing, so two is refused; an id that is not a UUID names no row, and
- * answers as none.
- */
-const idOf = /* @__PURE__ */ Effect.fnUntraced(function* (
-  request: Request,
-  query: string,
-): Effect.fn.Return<string, HostedRefusal> {
-  const ids = new URL(request.url).searchParams.getAll(query);
-  const [id] = ids;
-  if (id === undefined || ids.length !== 1) {
-    return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
-  }
-  const read = readEither(wireUuidSchema)(unparsedWire(id));
-  if (Result.isFailure(read)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-  return read.success;
-});
-
 /**
  * GET serves one attachment of the plan as its bytes, to the members of the
  * plan's workspace alone: a picture its text names, under the media type the
@@ -96,8 +67,8 @@ const attachmentEndpoint = /* @__PURE__ */ Effect.fn("web/planAttachmentEndpoint
     return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
   }
   const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
-  const taskId = yield* idOf(request, TASK_ID_QUERY);
-  const attachmentId = yield* idOf(request, ATTACHMENT_QUERY);
+  const taskId = yield* uuidOf(request, TASK_ID_QUERY);
+  const attachmentId = yield* uuidOf(request, ATTACHMENT_QUERY);
   const userId = yield* resolvedUserId(seams, request);
   const picture = yield* hostedStoreOrUnavailable(readPlanAttachment(userId, taskId, attachmentId));
   const found = Option.isSome(picture)
