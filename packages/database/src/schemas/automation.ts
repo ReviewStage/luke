@@ -152,5 +152,11 @@ export const automationRun = pgTable(
     uniqueIndex("automation_run_dedupe").on(table.automationId, table.dedupeKey),
     // The history reads one automation's runs newest first, and the guards count its recent ones.
     index("automation_run_automation_fired").on(table.automationId, table.firedAt),
+    // The sweep starts the queued runs oldest first and fails the ones queued too long.
+    index("automation_run_status_fired").on(table.status, table.firedAt),
+    // The sweep recovers the started runs no agent was recorded for, oldest claim first.
+    index("automation_run_unrecorded_settled")
+      .on(table.status, table.settledAt)
+      .where(sql`${table.codingAgentId} is null`),
   ],
 );

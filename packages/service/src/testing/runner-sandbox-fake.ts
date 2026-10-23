@@ -141,10 +141,11 @@ export function runnerSandboxApi() {
   const failPolicy = { remaining: 0 };
   /** Whether a read that waits for a running command's exit is held until the reader gives up. */
   const waits = { hold: false };
-  /** What a test does the moment a detached command has started, before the API answers, and the exit a waited run ends on, 0 unless it says. */
+  /** What a test does the moment a detached command has started, before the API answers; the exit a waited run ends on, 0 unless it says; and what it does as a waited run arrives, before it ends. */
   const hooks: {
     onStart?: ((command: FakeCommand) => Promise<void>) | undefined;
     runExit?: ((args: readonly string[]) => number) | undefined;
+    onRun?: ((env: Readonly<Record<string, string>>) => Promise<void>) | undefined;
   } = {};
   /** The snapshots taken, in order. */
   const snapshots: string[] = [];
@@ -291,6 +292,7 @@ export function runnerSandboxApi() {
     if (rest === "cmd") {
       const asked = await body();
       if (asked.wait === true) {
+        await hooks.onRun?.(asked.env ?? {});
         runs.push({ session: sessionId, args: asked.args, env: asked.env ?? {} });
         const exitCode = hooks.runExit?.(asked.args) ?? 0;
         return new Response(`${JSON.stringify({ command: { exitCode } })}\n`);

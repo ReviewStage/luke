@@ -28,6 +28,149 @@
   --shadow-switch-thumb: var(--luke-shadow-switch-thumb);
   --ease-spring-fast: var(--luke-spring-fast);
 
+  /* Text entry and the words around it (`text-field`, `search-field`,
+     `form-field`, `inline-edit`, `length-counter`): a
+     field's grounds and edges, the type roles its words are set in, and the
+     lengths it stands at, each a profile's role. A name added here that
+     tailwind-merge cannot read is listed in `../cn.ts`. */
+  --color-well: var(--luke-color-well);
+  --color-field: var(--luke-color-input);
+  --color-field-focus: var(--luke-color-input-focus);
+  --color-ground: var(--luke-color-ground);
+  --color-fill-pressed: var(--luke-color-fill-pressed);
+  --font-body: var(--luke-font-sans);
+  --text-title: var(--luke-type-title-size);
+  --text-title--line-height: var(--luke-type-title-leading);
+  /* A field set a size under the body's keeps the body's line. */
+  --leading-body: var(--luke-type-body-leading);
+  /* Words edited in place in the body's size, on the line of what they stand in. */
+  --text-body-size: var(--luke-type-body-size);
+  /* A finger's field takes 16px words at least, or iOS zooms into it. */
+  --text-touch: max(16px, 1em);
+  --text-caption-touch: max(16px, var(--luke-type-caption-size));
+  /* The base scale's larger steps by name (the smaller stand with the menus'
+     roles below), because Tailwind's numbered steps are rems of a root the
+     window sets at the body's size, not 16px. */
+  --spacing-luke-20: var(--luke-space-20);
+  --spacing-luke-24: var(--luke-space-24);
+  --spacing-control-inset: var(--luke-control-inset);
+  --spacing-control-icon: var(--luke-control-icon);
+  /* A field a step under a control, among a bar's controls. */
+  --spacing-control-compact: calc(var(--luke-control-height) - 2 * var(--luke-space-2));
+  /* A time's block inset: the room around one line, so its value stands on the field's middle. */
+  --spacing-time-inset: calc(
+    (var(--luke-control-height) - var(--luke-type-body-leading)) /
+    2 -
+    1px
+  );
+  --spacing-time-value: var(--luke-type-body-leading);
+  /* A growing note's least height, from its rows (`--luke-text-area-rows`), and its most. */
+  --spacing-text-area-least: calc(
+    var(--luke-text-area-rows) *
+    var(--luke-type-body-leading) +
+    2 *
+    var(--luke-space-6) +
+    2px
+  );
+  --spacing-text-area-bare-least: max(
+    var(--luke-text-area-least, 0px),
+    calc(
+      var(--luke-text-area-rows) *
+      var(--luke-type-body-leading) +
+      var(--luke-text-area-inset-start, 0px) +
+      var(--luke-text-area-inset-end, 0px)
+    )
+  );
+  --spacing-text-area-grow-max: var(--luke-text-area-grow-max);
+  /* A bare text area's insets, which the card it stands in sets. */
+  --spacing-text-area-inset-start: var(--luke-text-area-inset-start, 0px);
+  --spacing-text-area-inset-inline: var(--luke-text-area-inset-inline, 0px);
+  --spacing-text-area-inset-end: var(--luke-text-area-inset-end, 0px);
+  /* A search's lead, a hair under a row's, so the magnifier stands where a row's glyph does. */
+  --spacing-search-lead: calc(var(--luke-space-8) - 1px);
+  /* A search's clear, nested inside the well's edge. */
+  --spacing-search-clear: calc(var(--luke-control-height) - 2px - 2 * var(--luke-space-2));
+  /* A menu's search row: a menu row, its inset, and its hairline. */
+  --spacing-menu-search: calc(var(--luke-menu-row-height) + 2 * var(--luke-space-2) + 2px);
+  /* A settings label renamed in place overhangs the label by its inset and edge. */
+  /* off-scale: a 24px box over an 18px label line stands 3px past it each side. */
+  --spacing-inline-edit-lift: 3px;
+  --spacing-inline-edit-reach: calc(-1 * var(--luke-space-8) - 1px);
+  --radius-control-compact: calc(var(--luke-control-radius) - var(--luke-space-2));
+  --radius-inline-edit: calc(var(--luke-radius-6) - 1px);
+  --shadow-selected-edge: inset 0 0 0 1px var(--luke-color-border-selected);
+  --ease-plain: ease;
+  /* A field turning wrong shakes once; an arriving part fades in, a clear
+     grows in and shrinks out, an error drops into its line, and a count
+     ticks in the way it moved. */
+  --animate-field-shake: field-shake var(--luke-duration-fast) var(--luke-motion-exit);
+  --animate-arrive: arrive-fade var(--luke-duration-quick) ease-out backwards;
+  --animate-leave: leave-fade var(--luke-duration-exit) var(--luke-motion-exit) forwards;
+  --animate-pop-in:
+    arrive-fade var(--luke-duration-quick) ease-out backwards,
+    pop-grow var(--luke-duration-fast) var(--luke-spring-fast) backwards;
+  --animate-pop-out: pop-out var(--luke-duration-exit) var(--luke-motion-exit) forwards;
+  --animate-drop-in:
+    arrive-fade var(--luke-duration-quick) ease-out,
+    drop-in var(--luke-duration-fast) var(--luke-spring-fast);
+  --animate-tick-up:
+    arrive-fade var(--luke-duration-quick) ease-out backwards,
+    tick-up var(--luke-duration-fast) var(--luke-spring-fast) backwards;
+  --animate-tick-down:
+    arrive-fade var(--luke-duration-quick) ease-out backwards,
+    tick-down var(--luke-duration-fast) var(--luke-spring-fast) backwards;
+
+  @keyframes field-shake {
+    20% {
+      transform: translateX(-3px);
+    }
+    40% {
+      transform: translateX(3px);
+    }
+    60% {
+      transform: translateX(-2px);
+    }
+    80% {
+      transform: translateX(2px);
+    }
+  }
+  @keyframes arrive-fade {
+    from {
+      opacity: 0;
+    }
+  }
+  @keyframes leave-fade {
+    to {
+      opacity: 0;
+    }
+  }
+  @keyframes pop-grow {
+    from {
+      transform: scale(0.5);
+    }
+  }
+  @keyframes pop-out {
+    to {
+      opacity: 0;
+      transform: scale(0.5);
+    }
+  }
+  @keyframes drop-in {
+    from {
+      transform: translateY(-4px);
+    }
+  }
+  @keyframes tick-up {
+    from {
+      transform: translateY(40%);
+    }
+  }
+  @keyframes tick-down {
+    from {
+      transform: translateY(-40%);
+    }
+  }
+
   /* The overlays' roles (`../shadcn/dialog.tsx`, `popover.tsx`, `tooltip.tsx`,
      `hover-card.tsx`): the dimmed window, the surface a card or a menu
      stands on and its hairline, the dark pill, their corners, lifts, and
@@ -218,13 +361,14 @@
   --text-tag--line-height: var(--luke-type-tag-leading);
   /* A role's weight, so a utility reads `font-label` and never `font-medium`:
      the weight is the role's, which `profiles.css` sets once. */
-  --font-weight-body: var(--luke-type-body-weight);
+  --font-weight-text: var(--luke-type-body-weight);
   --font-weight-label: var(--luke-type-label-weight);
-  --font-weight-caption: var(--luke-type-caption-weight);
   --font-weight-group: var(--luke-type-group-weight);
   --font-weight-tag: var(--luke-type-tag-weight);
   --font-weight-section: var(--luke-type-section-weight);
   --font-weight-emphasis: var(--luke-type-emphasis-weight);
+  --font-weight-title: var(--luke-type-title-weight);
+  --tracking-title: var(--luke-type-title-tracking);
   /* A menu's exit, a fade, over `menu.css`'s keyframes; its entrance is the
      overlays' `--animate-menu-in` above. */
   --animate-menu-leave: luke-menu-leave var(--luke-duration-exit) var(--luke-motion-exit) forwards;

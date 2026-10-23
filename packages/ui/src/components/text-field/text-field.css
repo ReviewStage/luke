@@ -1,9 +1,10 @@
-/* text-field.css -- a text entry: one control's height and corner for a
-   line, a field's ground inside a hairline, the body's type, and the danger
-   ink for its edge while its field says something is wrong. Code is set
-   in the mono face where its caller asks, and a page's title written in
-   place stands in the title's type without a well. The keyboard's
-   ring is the app's reset's, as it is for every field. */
+/* text-field.css -- the combobox's field (`combobox.tsx`), the one control
+   still drawn in this class: one control's height and corner for a line, a
+   field's ground inside a hairline, the body's type, and the danger ink for
+   its edge while it is wrong. `TextField` and `TextArea` are drawn by
+   shadcn/ui's input and textarea (`../../shadcn/`) and wear none of this; it
+   goes once the combobox's field does too. The keyboard's ring is the app's
+   reset's, as it is for every field. */
 
 @layer components {
   .luke-text-field {
@@ -25,84 +26,6 @@
     transition:
       border-color var(--luke-duration-hover) ease,
       background-color var(--luke-duration-hover) ease;
-  }
-
-  textarea.luke-text-field {
-    height: auto;
-    padding-block: var(--luke-space-6);
-    resize: vertical;
-  }
-
-  /* A note that grows with its words from its rows' height, up to where
-     scrolling it is kinder than a field the height of the window. Its rows
-     still set its least height, which it gives way to in a card too short
-     for it. */
-  textarea.luke-text-field[data-grow="true"] {
-    min-height: calc(
-      var(--luke-text-area-rows) *
-      var(--luke-type-body-leading) +
-      2 *
-      var(--luke-space-6) +
-      2px
-    );
-    max-height: var(--luke-text-area-grow-max);
-    field-sizing: content;
-    resize: none;
-  }
-
-  /* A page's title written in place: the title's words alone, the caret in
-     them showing focus, so no well, no edge and no ring. */
-  .luke-text-field[data-size="title"],
-  .luke-text-field[data-size="title"]:focus {
-    height: auto;
-    padding: 0;
-    border: 0;
-    background: none;
-    font-size: var(--luke-type-title-size);
-    font-weight: var(--luke-type-title-weight);
-    letter-spacing: var(--luke-type-title-tracking);
-    line-height: var(--luke-type-title-leading);
-    outline: none;
-  }
-
-  /* Words written in place in the body's type, as a mail's subject among
-     the lines of its head: no well, no edge and no ring, the caret in them
-     showing focus, as a title written in place does. */
-  .luke-text-field[data-size="inline"],
-  .luke-text-field[data-size="inline"]:focus {
-    height: auto;
-    padding: 0;
-    border: 0;
-    background: none;
-    outline: none;
-  }
-
-  .luke-text-field[data-font="mono"] {
-    font-family: var(--luke-font-mono);
-  }
-
-  /* A time is typed or stepped with the arrows; the engine's own clock is
-     hidden, because what it opens is the engine's picker, not the app's. */
-  .luke-text-field[type="time"]::-webkit-calendar-picker-indicator {
-    display: none;
-  }
-
-  /* WebKit on iOS draws a time in a box of its own: at a least width of its
-     own, past the field's, and with its value at the top of a block field
-     and centred across it. The engine's look is let go so the field keeps
-     its width, its block inset is the room around one line, so the value
-     stands on the field's middle wherever the engine sets it, and the value
-     starts where every field's words start. */
-  .luke-text-field[type="time"] {
-    -webkit-appearance: none;
-    appearance: none;
-    padding-block: calc((var(--luke-control-height) - var(--luke-type-body-leading)) / 2 - 1px);
-  }
-
-  .luke-text-field[type="time"]::-webkit-date-and-time-value {
-    min-height: var(--luke-type-body-leading);
-    margin: 0;
-    text-align: start;
   }
 
   .luke-text-field::placeholder {
@@ -141,63 +64,5 @@
     color: var(--luke-color-text-subtle);
     cursor: not-allowed;
     opacity: 0.7;
-  }
-  /* A field among a bar's controls, as a Browser tab's address: a step
-     under a control, on a smaller corner, in the caption's type on the
-     well's ground, its edge lighting while it holds the caret in place of
-     a ring. A finger's field takes 16px words, or iOS zooms into it. */
-  .luke-text-field[data-size="compact"] {
-    height: calc(var(--luke-control-height) - 2 * var(--luke-space-2));
-    padding: 0 var(--luke-space-6);
-    border-color: var(--luke-color-border);
-    border-radius: calc(var(--luke-control-radius) - var(--luke-space-2));
-    background: var(--luke-color-well);
-    font-size: var(--luke-type-caption-size);
-    text-overflow: ellipsis;
-  }
-
-  .luke-text-field[data-size="compact"]:focus {
-    border-color: var(--luke-color-text-subtle);
-    background: var(--luke-color-well);
-    outline: none;
-  }
-
-  @media (pointer: coarse) {
-    .luke-text-field[data-size="compact"] {
-      font-size: max(16px, var(--luke-type-caption-size));
-    }
-  }
-
-  /* A text area bare in a card that is its well, as a message box's: no
-     edge, no ground and no ring, the caret marking it, at the insets its
-     card sets. Growing, its rows and those insets set its least height, or
-     the card's own least (`--luke-text-area-least`) where that is taller. */
-  textarea.luke-text-field[data-look="bare"],
-  textarea.luke-text-field[data-look="bare"]:focus {
-    padding: var(--luke-text-area-inset-start, 0) var(--luke-text-area-inset-inline, 0)
-      var(--luke-text-area-inset-end, 0);
-    border: 0;
-    border-radius: 0;
-    background: none;
-    outline: none;
-    resize: none;
-  }
-
-  textarea.luke-text-field[data-look="bare"][data-grow="true"] {
-    min-height: max(
-      var(--luke-text-area-least, 0px),
-      calc(
-        var(--luke-text-area-rows) *
-        var(--luke-type-body-leading) +
-        var(--luke-text-area-inset-start, 0px) +
-        var(--luke-text-area-inset-end, 0px)
-      )
-    );
-  }
-
-  /* A growing text area asked to grows with its words however many, as a
-     message box does, and scrolls the page around it rather than itself. */
-  textarea.luke-text-field[data-grow-limit="none"] {
-    max-height: none;
   }
 }

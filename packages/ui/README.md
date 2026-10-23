@@ -148,6 +148,11 @@ combobox or react-day-picker would (the open list, its filter and
 highlight; a controlled `YYYY-MM-DD` month in UTC). What a component's
 classes cannot say (keyframes other surfaces share, a rule a finger's
 media query must outrank, the keyboard's ring) stays in its own sheet.
+The text entries and form pieces, `TextField`, `TextArea`,
+`SearchField`, `AddressField`, `FormField`, `InlineEdit`, and
+`LengthCounter`, stand on shadcn's Input, Textarea, Label, and Field. A name the
+theme adds that tailwind-merge cannot read as a size is listed in `cn.ts`, or
+`cn` drops it as a second colour.
 
 The overlays: `Dialog` and `ConfirmDialog` stand on shadcn's dialog, and
 `TooltipPill` and `TooltipCard` on its tooltip and hover card, placed by

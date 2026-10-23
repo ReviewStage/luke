@@ -8,7 +8,7 @@ import {
   RUNNER_ENV,
   RUNNER_HARNESS,
 } from "@luke/agent-runner/protocol";
-import { Database } from "@luke/database/core/query";
+import { Database, type DatabaseServices } from "@luke/database/core/query";
 import {
   claimCodingAgentRunnerLease,
   releaseCodingAgentRunnerLease,
@@ -47,6 +47,7 @@ import { fakeHttpClientLayer } from "@luke/wire/testing";
 import {
   Clock,
   DateTime,
+  Deferred,
   Duration,
   Effect,
   Fiber,
@@ -67,6 +68,7 @@ import {
   GITHUB_FIXTURE_INSTALLATION_TOKEN,
   githubReaching,
   type InstallationFixture,
+  type SentToGitHub,
 } from "../../testing/github-app-fake.js";
 import { fixtureToken, linesOf, runnerSandboxApi } from "../../testing/runner-sandbox-fake.js";
 import {
@@ -154,6 +156,7 @@ function services(
     Layer.succeed(AgentSandboxImage, {
       snapshotId: Effect.succeed(Option.fromNullishOr(snapshot)),
       snapshotGone: () => Effect.void,
+      prepared: Effect.succeed(true),
     }),
     Layer.succeed(RunnerBundle, { contents: Effect.succeed(BUNDLE) }),
   );
@@ -279,15 +282,18 @@ const raceThrough = <A, E>(held: { open: () => void }, fibers: readonly Fiber.Fi
  * times, each after the event loop turned enough for a wait the work armed
  * to stand, and the work joined.
  */
+/** Real turns of the event loop enough for a forked fiber to reach whatever it waits on next. */
+const turnsPass = Effect.promise(async () => {
+  for (let turn = 0; turn < 50; turn += 1) {
+    await new Promise<void>((settle) => setImmediate(settle));
+  }
+});
+
 const across = <A, E>(work: Effect.Effect<A, E>, step: Duration.Duration, times: number) =>
   Effect.gen(function* () {
     const fiber = yield* Effect.forkChild(work);
     for (let move = 0; move < times; move += 1) {
-      yield* Effect.promise(async () => {
-        for (let turn = 0; turn < 50; turn += 1) {
-          await new Promise<void>((settle) => setImmediate(settle));
-        }
-      });
+      yield* turnsPass;
       yield* TestClock.adjust(step);
     }
     return yield* Fiber.join(fiber);
@@ -304,10 +310,17 @@ afterEach(() => {
   vi.unstubAllEnvs();
 });
 
+/** What a repository agent's sessions are composed with beside the fake Vercel: the image's snapshot as it is asked, and what a test does as each request reaches GitHub. */
+interface RepositoryAgentSeams {
+  readonly snapshotId?: Effect.Effect<Option.Option<string>, ImagePreparing>;
+  readonly onGitHub?: (sent: SentToGitHub) => void;
+}
+
 /** An account on its Claude plan with one agent on a task of the Relay repository, and its sessions over the fake Vercel given. */
 const repositoryAgent = (
   api: ReturnType<typeof runnerSandboxApi>,
   installation: InstallationFixture = RELAY_INSTALLATION,
+  seams: RepositoryAgentSeams = {},
 ) =>
   Effect.gen(function* () {
     const userId = `user-${randomUUID()}`;
@@ -327,19 +340,26 @@ const repositoryAgent = (
       repository: RELAY_FULL_NAME,
     });
     const agent = Option.getOrThrow(started).agent;
-    const github = githubReaching([installation], undefined, {}, (sent) =>
-      new URL(sent.url).hostname === "vercel.com"
-        ? api.respond(sent.url, { method: sent.method, headers: sent.headers, body: sent.body })
-        : undefined,
-    );
+    const github = githubReaching([installation], undefined, {}, (sent) => {
+      if (new URL(sent.url).hostname === "vercel.com") {
+        return api.respond(sent.url, {
+          method: sent.method,
+          headers: sent.headers,
+          body: sent.body,
+        });
+      }
+      seams.onGitHub?.(sent);
+      return undefined;
+    });
     const sessions = yield* sessionsFor(userId, { next: 0 }).pipe(
       Effect.provide(
         Layer.mergeAll(
           github.layer,
           Layer.succeed(HostedEnvironment, NO_KEYS),
           Layer.succeed(AgentSandboxImage, {
-            snapshotId: Effect.succeed(Option.some(SNAPSHOT)),
+            snapshotId: seams.snapshotId ?? Effect.succeed(Option.some(SNAPSHOT)),
             snapshotGone: () => Effect.void,
+            prepared: Effect.succeed(true),
           }),
           Layer.succeed(RunnerBundle, { contents: Effect.succeed(BUNDLE) }),
         ),
@@ -348,6 +368,33 @@ const repositoryAgent = (
 
     return { userId, agent, sessions };
   });
+
+/** The contents access a repository token is cut to: a checkout's reads, the firewall's writes. */
+const TOKEN_ACCESS = { READ: "read", WRITE: "write" } as const;
+type TokenAccess = (typeof TOKEN_ACCESS)[keyof typeof TOKEN_ACCESS];
+
+/** Whether a request to GitHub mints a repository token cut to the access given. */
+const mintsRepositoryToken = (each: SentToGitHub, access: TokenAccess) => {
+  if (!new URL(each.url).pathname.endsWith("/access_tokens")) return false;
+  const asked: { repositories?: unknown; permissions?: { contents?: string } } = JSON.parse(
+    each.body,
+  );
+  return asked.repositories !== undefined && asked.permissions?.contents === access;
+};
+
+/** A request a test waits to see reach GitHub: `seen` settles once one the predicate takes arrived. */
+function sighting(wanted: (sent: SentToGitHub) => boolean) {
+  let settle = () => {};
+  const seen = new Promise<void>((resolve) => {
+    settle = resolve;
+  });
+  return {
+    seen,
+    observe: (sent: SentToGitHub) => {
+      if (wanted(sent)) settle();
+    },
+  };
+}
 
 /** Another agent of the account's on the agent's own task, started on the branch given or the default one. */
 const anotherAgent = (userId: string, agent: CodingAgent, startBranch?: string) =>
@@ -1118,6 +1165,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
               Layer.succeed(AgentSandboxImage, {
                 snapshotId: Effect.fail(new ImagePreparing()),
                 snapshotGone: () => Effect.void,
+                prepared: Effect.succeed(true),
               }),
             ),
           ),
@@ -1154,6 +1202,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
               handedBack.push(snapshotId);
               current.snapshot = "snap_fixture_image_again";
             }),
+          prepared: Effect.succeed(true),
         });
         const sessions = yield* sessionsFor(userId, { next: 0 }).pipe(
           Effect.provide(Layer.merge(services(api), image)),
@@ -1237,13 +1286,16 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         assert.ok(first !== undefined);
         first.exitCode = 0;
         sequence.next = 42;
-        const lateEnds: string[] = [];
-        // The first launch's END lands just as the relaunch's command has started, before its answer.
+        const lateEnds: Promise<string>[] = [];
+        // The test's own database, which the END's lease is taken in beside the relaunch's.
+        const context = yield* Effect.context<DatabaseServices>();
+        // The first launch's END lands just as the relaunch's command has started, before its answer,
+        // and waits out the relaunch's lease.
         api.hooks.onStart = async () => {
           lateEnds.push(
-            await Effect.runPromise(
+            Effect.runPromiseWith(context)(
               runnerEnded({ target, sessionId: opened.sessionId, sequence: 41 }).pipe(
-                Effect.provide(Layer.mergeAll(api.layer, getTestDB())),
+                Effect.provide(api.layer),
               ),
             ),
           );
@@ -1252,31 +1304,36 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         const sent = yield* sessions.send(opened.sessionId, message(agent, "Again."));
 
         assert.equal(sent.outcome, EVE_SEND_OUTCOME.ACCEPTED);
-        assert.deepEqual(lateEnds, [RUNNER_ENDED.STALE]);
+        yield* Effect.promise(async () => {
+          for (let turn = 0; turn < 50; turn += 1) {
+            await new Promise<void>((settle) => setImmediate(settle));
+          }
+        });
+        yield* TestClock.adjust(CODER.RUNNER_LEASE.POLL);
+        assert.deepEqual(yield* Effect.promise(() => Promise.all(lateEnds)), [RUNNER_ENDED.STALE]);
         assert.equal(api.sandboxes[0]?.status, "running");
       }),
   );
 
   it.effect(
-    "an open answers at once while the image is still being prepared, opens nothing until it is ready, then launches with no ask again",
+    "an open answers at once while the image is still being prepared, opens nothing until its build ends, then launches at once with no ask again",
     () =>
       Effect.gen(function* () {
         vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
         const api = runnerSandboxApi();
         const { userId, agent } = yield* openAgent;
-        const preparing = { remaining: 2 };
+        const built = yield* Deferred.make<void>();
         const kept = keptAfterResponse();
         const sessions = yield* sessionsFor(userId, { next: 0 }).pipe(
           Effect.provide(
             Layer.merge(
               services(api),
               Layer.succeed(AgentSandboxImage, {
-                snapshotId: Effect.suspend(() => {
-                  if (preparing.remaining === 0) return Effect.succeed(Option.some(SNAPSHOT));
-                  preparing.remaining -= 1;
-                  return Effect.fail(new ImagePreparing());
-                }),
+                snapshotId: Effect.flatMap(Deferred.isDone(built), (done) =>
+                  done ? Effect.succeed(Option.some(SNAPSHOT)) : Effect.fail(new ImagePreparing()),
+                ),
                 snapshotGone: () => Effect.void,
+                prepared: Effect.as(Deferred.await(built), true),
               }),
             ),
           ),
@@ -1285,10 +1342,14 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         const opened = yield* sessions
           .open(message(agent, "Fix the invitations."))
           .pipe(Effect.provide(kept.layer));
+        const launching = yield* Effect.forkChild(kept.run);
+        yield* turnsPass;
 
         assert.equal(opened.outcome, EVE_SEND_OUTCOME.ACCEPTED);
         assert.equal(api.sandboxes.length, 0);
-        yield* across(kept.run, NATIVE_TEMPLATE.POLL, 3);
+        // Note that the clock never moves: the launch asks again on the build's end, not on a tick.
+        yield* Deferred.succeed(built, undefined);
+        yield* Fiber.join(launching);
         assert.equal(api.sandboxes.length, 1);
         assert.equal(api.commands.length, 1);
         assert.equal((yield* newestTurn(agent)).status, undefined);
@@ -1296,12 +1357,13 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
   );
 
   it.effect(
-    "an image still being prepared past the open's wait opens nothing, and the agent's first turn reads failed for its sandbox",
+    "an image still being prepared past the template's wait opens nothing, and the agent's first turn reads failed for its sandbox",
     () =>
       Effect.gen(function* () {
         vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
         const api = runnerSandboxApi();
         const { userId, agent } = yield* openAgent;
+        const kept = keptAfterResponse();
         const sessions = yield* sessionsFor(userId, { next: 0 }).pipe(
           Effect.provide(
             Layer.merge(
@@ -1309,18 +1371,16 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
               Layer.succeed(AgentSandboxImage, {
                 snapshotId: Effect.fail(new ImagePreparing()),
                 snapshotGone: () => Effect.void,
+                prepared: Effect.succeed(false),
               }),
             ),
           ),
         );
-        const polls =
-          Duration.toMillis(NATIVE_TEMPLATE.WAIT) / Duration.toMillis(NATIVE_TEMPLATE.POLL) + 2;
 
-        const opened = yield* across(
-          sessions.open(message(agent, "Fix the invitations.")),
-          NATIVE_TEMPLATE.POLL,
-          polls,
-        );
+        const opened = yield* sessions
+          .open(message(agent, "Fix the invitations."))
+          .pipe(Effect.provide(kept.layer));
+        yield* kept.run;
 
         assert.equal(opened.outcome, EVE_SEND_OUTCOME.ACCEPTED);
         assert.equal(api.sandboxes.length, 0);
@@ -1611,6 +1671,50 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
       assert.equal(ended, RUNNER_ENDED.HELD);
       assert.equal(api.sandboxes[0]?.status, "running");
     }),
+  );
+
+  it.effect(
+    "a launch's END waits out a call holding the agent's runner lease, and stops nothing once that call relaunched the runner",
+    () =>
+      Effect.gen(function* () {
+        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+        const api = runnerSandboxApi();
+        const { userId, agent } = yield* openAgent;
+        const sessions = yield* sessionsFor(userId, { next: 0 }).pipe(
+          Effect.provide(services(api)),
+        );
+        const opened = yield* sessions.open(message(agent, "Fix the invitations."));
+        assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+        const [sandbox] = api.sandboxes;
+        assert.ok(sandbox !== undefined);
+        // A send elsewhere holds the lease, as it does while it relaunches the runner.
+        const now = new Date(yield* Clock.currentTimeMillis);
+        const elsewhere = randomUUID();
+        const until = new Date(now.getTime() + Duration.toMillis(CODER.RUNNER_LEASE.HOLD));
+        assert.equal(yield* claimCodingAgentRunnerLease(agent.id, elsewhere, now, until), true);
+
+        const ending = yield* Effect.forkChild(
+          runnerEnded({
+            target: { userId, conversationId: agent.conversationId },
+            sessionId: opened.sessionId,
+            sequence: 5,
+          }).pipe(Effect.provide(api.layer)),
+        );
+        yield* Effect.promise(async () => {
+          for (let turn = 0; turn < 50; turn += 1) {
+            await new Promise<void>((settle) => setImmediate(settle));
+          }
+        });
+        yield* TestClock.adjust("5 seconds");
+        assert.equal(sandbox.status, "running");
+        // The send's relaunch writes its launch's tag, past the END's sequence, and lets go.
+        sandbox.tags[RUNNER_TAG.LAUNCH] = "42";
+        yield* releaseCodingAgentRunnerLease(agent.id, elsewhere);
+        yield* TestClock.adjust(CODER.RUNNER_LEASE.POLL);
+
+        assert.equal(yield* Fiber.join(ending), RUNNER_ENDED.STALE);
+        assert.equal(sandbox.status, "running");
+      }),
   );
 
   it.effect(
@@ -1956,6 +2060,65 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         assert.equal(clone?.env[REPOSITORY_SANDBOX_CONTRACT.VARIABLE.BRANCH], "relay-fix");
         assert.equal(api.snapshots.length, 1);
         assert.equal(repositorySnapshots(api).length, 1);
+      }),
+  );
+
+  it.effect(
+    "a launch asks GitHub for the repository while the image's snapshot is still being looked up",
+    () =>
+      Effect.gen(function* () {
+        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+        const api = runnerSandboxApi();
+        const image = gate();
+        const read = sighting((sent) => mintsRepositoryToken(sent, TOKEN_ACCESS.READ));
+        const { agent, sessions } = yield* repositoryAgent(api, ownInstallation(), {
+          snapshotId: Effect.as(
+            Effect.promise(() => image.pass()),
+            Option.some(SNAPSHOT),
+          ),
+          onGitHub: read.observe,
+        });
+
+        const opening = yield* Effect.forkChild(sessions.open(message(agent, "Fix the relay.")));
+        yield* Effect.promise(() => Promise.all([image.arrived, read.seen]));
+        image.open();
+        const opened = yield* Fiber.join(opening);
+
+        assert.equal(opened.outcome, EVE_SEND_OUTCOME.ACCEPTED);
+        assert.equal(api.commands.length, 1);
+      }),
+  );
+
+  it.effect(
+    "a launch mints its write token and reads its installed skills while its repository is cloned",
+    () =>
+      Effect.gen(function* () {
+        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+        const api = runnerSandboxApi();
+        const clone = gate();
+        const write = sighting((sent) => mintsRepositoryToken(sent, TOKEN_ACCESS.WRITE));
+        const skills = sighting((sent) => new URL(sent.url).pathname.includes("/git/trees/"));
+        const { agent, sessions } = yield* repositoryAgent(api, ownInstallation(), {
+          onGitHub: (sent) => {
+            write.observe(sent);
+            skills.observe(sent);
+          },
+        });
+        api.hooks.onRun = async (env) => {
+          if (isClone({ env })) await clone.pass();
+        };
+
+        const opening = yield* Effect.forkChild(sessions.open(message(agent, "Fix the relay.")));
+        yield* Effect.promise(() => Promise.all([clone.arrived, write.seen, skills.seen]));
+        const startedDuringClone = api.commands.length;
+        clone.open();
+        const opened = yield* Fiber.join(opening);
+
+        assert.equal(opened.outcome, EVE_SEND_OUTCOME.ACCEPTED);
+        assert.equal(startedDuringClone, 0);
+        assert.equal(api.commands.length, 1);
+        const writeHeader = `Basic ${Buffer.from(`x-access-token:${GITHUB_FIXTURE_INSTALLATION_TOKEN}`).toString("base64")}`;
+        assert.ok(JSON.stringify(api.policies.at(-1)?.policy).includes(writeHeader));
       }),
   );
 });

@@ -143,6 +143,7 @@ function services(
     Layer.succeed(AgentSandboxImage, {
       snapshotId: Effect.succeed(Option.some(SNAPSHOT)),
       snapshotGone: () => Effect.void,
+      prepared: Effect.succeed(true),
     }),
     Layer.succeed(RunnerBundle, { contents: Effect.succeed(BUNDLE) }),
   );
