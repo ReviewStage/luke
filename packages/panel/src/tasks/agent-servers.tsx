@@ -630,6 +630,8 @@ function ServersPopover({
     actions?: React.ReactNode;
     /** The server's card, or the card of the tool a search found, hung beside the row. */
     card: React.ReactNode;
+    /** Whether the press opens a further page, which a chevron says. */
+    opens: boolean;
     onPress: (() => void) | undefined;
   }) => {
     const { index } = input;
@@ -646,7 +648,7 @@ function ServersPopover({
             meta={input.meta}
             actions={input.actions}
             current={index >= 0 && index === at ? LIST_ROW_CURRENT.ITEM : undefined}
-            chevron={input.onPress !== undefined}
+            chevron={input.opens}
             keepFocus
             tabbable={false}
             onPress={input.onPress}
@@ -665,7 +667,13 @@ function ServersPopover({
       title: <ServerRowWords row={row} />,
       card: <ServerCard provider={row.provider} connection={row.connection} />,
       actions: end(row),
-      onPress: opensTools(row) ? () => open(row) : undefined,
+      opens: opensTools(row),
+      // Note that a row the keys can choose takes the press as Enter does, because a row hangs its card from its press and a row with none would hang nothing.
+      onPress: opensTools(row)
+        ? () => open(row)
+        : pickIndex(row) < 0
+          ? undefined
+          : () => choose({ row }),
     });
 
   const toolRow = ({ row, tool }: ToolHit) =>
@@ -680,6 +688,7 @@ function ServersPopover({
       ),
       meta: row.name,
       card: <ServerCard provider={row.provider} connection={row.connection} tool={tool.name} />,
+      opens: true,
       onPress: () => open(row, query),
     });
 

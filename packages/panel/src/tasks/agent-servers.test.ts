@@ -520,3 +520,21 @@ test("a server's row hangs the server's card beside it, and a tool a search foun
   assert.equal(toolCard?.querySelector(".agent-servers-name")?.textContent, "Vercel");
   assert.equal(toolCard?.querySelectorAll('ul[aria-label$=" tools"] > li').length, 1);
 });
+
+test("a server that is not connected hangs its card too, though its press is no page", async () => {
+  const { container } = await opened();
+
+  const press = serverPress(container, "Mercury") ?? assert.fail("no Mercury row");
+  restOn(press);
+  await act(async () => {
+    for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
+  });
+
+  const card = [...document.querySelectorAll(".luke-tooltip-card > [data-server-card]")].at(-1);
+  assert.equal(card?.querySelector(".agent-servers-name")?.textContent, "Mercury");
+  assert.equal(
+    container.querySelectorAll(".agent-servers-list .luke-list-row-chevron").length,
+    2,
+    "only the two servers with tools say they open a page",
+  );
+});
