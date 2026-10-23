@@ -30,12 +30,14 @@ import {
   TextField,
   Tooltip,
 } from "@luke/ui";
+import { ACTOR_KIND } from "@luke/ui/actor-model";
 import { useEffect, useRef, useState } from "react";
 import { ActorMark } from "../actor-ref.js";
 import { imageFiles } from "../feedback-images.js";
 import { useIntegrationStatuses } from "../integration-statuses.js";
 import type { MenuRow } from "../searchable-menu.js";
 import { PICKER_ALIGN, Picker } from "../settings/picker-row.js";
+import { AgentHoverCard } from "./agent-ref.js";
 import { AttachFilesButton } from "./attach-files-button.js";
 import { AttachedFileChips, attachmentChips } from "./attached-file-chips.js";
 import { readFiles, withFiles } from "./attached-files.js";
@@ -115,7 +117,8 @@ function agentLook(agent: MentionableAgent): {
  * To's rows: each agent in its tab's look, its title beside its name where
  * the two differ, as ⌘K tells agents apart, under its task's name, each
  * task's agents standing together, so a search for a task's name finds its
- * agents too, and those on no task last.
+ * agents too, and those on no task last; each hangs the agent's own
+ * card, as ⌘K's rows do.
  */
 function toRows(agents: readonly MentionableAgent[]): readonly MenuRow[] {
   const sectionOf = (agent: MentionableAgent) => agent.task?.name ?? NO_TASK;
@@ -127,12 +130,18 @@ function toRows(agents: readonly MentionableAgent[]): readonly MenuRow[] {
   return ordered.map((each) => {
     const title = each.summary?.title ?? undefined;
     const titled = title !== undefined && title !== each.name;
+    const { actor } = each;
+    const card =
+      actor.kind === ACTOR_KIND.AGENT ? (
+        <AgentHoverCard actor={{ ...actor, taskId: each.task?.id }} agentId={each.id} />
+      ) : undefined;
     return {
       id: each.id,
       ...agentLook(each),
       ...(titled ? { detail: title } : undefined),
       section: sectionOf(each),
       terms: [each.name, ...(titled ? [title] : [])],
+      card,
     };
   });
 }
@@ -265,7 +274,7 @@ export function InboxCompose({
               label={TO}
               align={PICKER_ALIGN.START}
               width={CHIP_WIDTH.AUTO}
-              value={agent?.id ?? ""}
+              value={agent?.id}
               valueLabel={
                 agent === undefined
                   ? NO_AGENT

@@ -8488,21 +8488,19 @@ function toMenuRows(): string[] {
   });
 }
 
-test("To lists the workspace's agents as ⌘K does, each in its tab's look under its task's name, its title beside a given name, and those on no task last", async () => {
+test("To lists the workspace's agents as ⌘K does, each in its tab's look by its title under its task's name, and those on no task last", async () => {
   listedWorkspace = ACME;
   inboxes = new Map([[BILLING.id, [THRESHOLD]]]);
   const MAYA: CodingAgentSummary = {
     ...AGENT,
     id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b22",
     planId: INVITES.id,
-    personaName: "Maya",
     title: "Move the frontend into shared components",
   };
   const LONE: CodingAgentSummary = {
     ...AGENT,
     id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b23",
     planId: null,
-    personaName: "Ravi",
     title: "Nightly dependency sweep",
   };
   heldStarts([LONE, MAYA, AGENT]);
@@ -8525,8 +8523,45 @@ test("To lists the workspace's agents as ⌘K does, each in its tab's look under
     `# ${BILLING.name}`,
     "Alerts",
     `# ${INVITES.name}`,
-    "Maya · Move the frontend into shared components",
+    "Move the frontend into shared components",
     "# No task",
-    "Ravi · Nightly dependency sweep",
+    "Nightly dependency sweep",
   ]);
+});
+
+test("To's rows keep no check's room while no agent is chosen, and each hangs its agent's card while the pointer rests on it, as ⌘K's rows do", async () => {
+  listedWorkspace = ACME;
+  inboxes = new Map();
+  heldStarts([AGENT]);
+  const { page } = mount([], { standing: [BILLING], holding: [] });
+  await settle();
+  act(() =>
+    (
+      page.querySelector<HTMLButtonElement>('button[aria-label="New thread"]') ??
+      assert.fail("the head offers New thread")
+    ).click(),
+  );
+  await settle();
+  const to =
+    itemPane(page).querySelector<HTMLButtonElement>('[aria-label^="To: "]') ??
+    assert.fail("the draft has To");
+  assert.equal(to.getAttribute("aria-label"), "To: Choose an agent");
+  act(() => to.click());
+  await settle();
+
+  const option =
+    document.querySelector<HTMLElement>('[role="dialog"][aria-label="To"] [role="option"]') ??
+    assert.fail("To lists the agent");
+  assert.equal(
+    option.querySelector(".luke-combobox-option-end"),
+    null,
+    "no row keeps a check's room",
+  );
+  restOn(option);
+  await settle();
+  assert.equal(
+    document.querySelector(".luke-tooltip-card .luke-hover-card-name")?.textContent,
+    "Alerts",
+    "the row hangs its agent's card",
+  );
 });

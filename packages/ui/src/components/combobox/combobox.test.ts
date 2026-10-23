@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { MOTION_DELAY_MS } from "@luke/brand";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, test } from "vitest";
+import { afterEach, beforeEach, test, vi } from "vitest";
 // Note that the row a list engine owns is reached through the barrel, as an app reaches it.
 import { ComboboxListBox, ComboboxOptionItem } from "../../index.js";
 import { Combobox, ComboboxList, type ComboboxOption, comboboxOptionId } from "./combobox.js";
@@ -32,9 +33,20 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 const roots: Root[] = [];
 
+/** Stands in for the browser's ResizeObserver, which jsdom lacks, since every option's name and detail measure whether they are cut short. */
+class StandInResizeObserver {
+  observe(): void {}
+  disconnect(): void {}
+}
+
+beforeEach(() => {
+  vi.stubGlobal("ResizeObserver", StandInResizeObserver);
+});
+
 afterEach(() => {
   for (const root of roots.splice(0)) act(() => root.unmount());
   document.body.replaceChildren();
+  vi.unstubAllGlobals();
 });
 
 const FRUIT = ["Apple", "Apricot", "Banana", "Cherry"];
@@ -484,4 +496,72 @@ test("a list box a list engine owns takes the engine's names, keys, and ref, and
     ["relay", "deck"],
   );
   assert.deepEqual(keys, ["ArrowDown"]);
+});
+
+test("an option's name and detail cut short fade out rather than ending in an ellipsis, and one with a card hangs it beside the option while the pointer rests on it", () => {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  // Note that the box is measured narrower than its words, as a narrow menu cuts a long title, on the observer's first report.
+  vi.stubGlobal(
+    "ResizeObserver",
+    class {
+      readonly #heard: () => void;
+      constructor(heard: () => void) {
+        this.#heard = heard;
+      }
+      observe(): void {
+        this.#heard();
+      }
+      disconnect(): void {}
+    },
+  );
+  vi.spyOn(HTMLElement.prototype, "scrollWidth", "get").mockReturnValue(400);
+  vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(120);
+  act(() => {
+    root.render(
+      createElement(ComboboxList, {
+        id: "agents",
+        label: "Agents",
+        groups: [
+          {
+            options: [
+              {
+                id: "maya",
+                label: "Maya",
+                detail: "Move all frontend into shared components and deduplicate",
+                card: createElement("p", { className: "agent-card-words" }, "Maya's card"),
+              },
+            ],
+          },
+        ],
+        active: 0,
+        onActiveChange: () => undefined,
+        onChoose: () => undefined,
+      }),
+    );
+  });
+  const option = container.querySelector('[role="option"]') ?? assert.fail("the option");
+  const ends = [
+    ...option.querySelectorAll(".luke-combobox-option-label > *, .luke-combobox-option-detail > *"),
+  ].map((line) => [line.getAttribute("data-end"), line.getAttribute("data-overflow")]);
+  assert.deepEqual(ends, [
+    ["fade", "true"],
+    ["fade", "true"],
+  ]);
+
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  try {
+    act(() => {
+      option.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
+    });
+    act(() => {
+      vi.advanceTimersByTime(MOTION_DELAY_MS.HINT);
+    });
+  } finally {
+    vi.useRealTimers();
+  }
+  assert.equal(document.querySelector(".agent-card-words")?.textContent, "Maya's card");
+  vi.restoreAllMocks();
 });
