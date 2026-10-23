@@ -3214,6 +3214,25 @@ test("New task's Agent mode sends one start carrying the agent, its words and mo
   assert.deepEqual(tab.control().mainTabs.tab, { agent: AGENT_ID }, "the task opens on its tab");
 });
 
+test("a task started with an agent opens on the agent's tab and leaves a hidden side panel hidden", async () => {
+  const started = { ...RUNNING_AGENT, planId: OTHER_TASK_ID };
+  const tab = mount(
+    { shown: true, tasks: OPEN },
+    {
+      [ACT_KIND.TASKS_START]: () =>
+        Promise.resolve({ planId: OTHER_TASK_ID, agentStart: { agent: started } }),
+      [ACT_KIND.CODING_AGENTS_LIST]: () => Promise.resolve({ agents: [started] }),
+    },
+  );
+  act(() => tab.control().sidePanel.onToggle());
+  assert.equal(tab.control().sidePanel.open, false);
+
+  await startAgentTask(tab);
+
+  assert.deepEqual(tab.control().mainTabs.tab, { agent: AGENT_ID });
+  assert.equal(tab.control().sidePanel.open, false, "the plan does not open beside the agent");
+});
+
 test("New task's agent stands on its task with the words it started on as its first line before the task's agents or its transcript are read", async () => {
   const started = { ...RUNNING_AGENT, planId: OTHER_TASK_ID };
   const tab = mount(
