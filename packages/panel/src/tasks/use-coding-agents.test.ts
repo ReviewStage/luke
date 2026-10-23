@@ -334,6 +334,39 @@ test("a plan's Start stands its agent's tab at once under the press's key, which
   assert.ok(tab.control().start.note !== undefined, "and says why beside Start");
 });
 
+test("a plan's Start on a task whose list did not read stands its tab at once, and the agent it made among the task's agents until a read lands", async () => {
+  const tab = mount({ taskId: TASK, repository: "acme/relay" });
+  let land: (answer: WireBoundaryInput) => void = () => undefined;
+  tab.answer(
+    ACT_KIND.CODING_AGENTS_START,
+    new Promise<WireBoundaryInput>((resolve) => {
+      land = resolve;
+    }),
+  );
+  await tab.mount();
+  assert.equal(tab.control().listFailed, true, "the list did not read");
+
+  act(() => tab.control().start.onPress());
+  await settle();
+  assert.deepEqual(tab.control().agentIds, ["key-1"]);
+
+  await act(async () => land({ agent: STARTED }));
+  await settle();
+  assert.deepEqual(tab.control().agentIds, [AGENT], "the agent stands though no read landed");
+  assert.deepEqual(tab.started, ["key-1", AGENT]);
+  assert.equal(
+    tab.asked.filter((each) => each.kind === ACT_KIND.CODING_AGENTS_LIST).length,
+    2,
+    "and the list is read again",
+  );
+
+  const other = { ...STARTED, id: "9d2b7b5e-4e3f-4e9c-9c77-7a5d8b3f4c32", createdAt: 0 };
+  tab.answer(ACT_KIND.CODING_AGENTS_LIST, { agents: [other, STARTED] });
+  act(() => tab.control().onRetryList());
+  await settle();
+  assert.deepEqual(tab.control().agentIds, [other.id, AGENT], "a read that lands is the list");
+});
+
 test("a draft's words outlast a relaunch, the plan opening on its draft again under the same key, its files and chips left behind, and a draft let go stays gone", async () => {
   const before = mount({ taskId: TASK, repository: "acme/relay" });
   before.answer(ACT_KIND.CODING_AGENTS_LIST, { agents: [] });

@@ -1593,61 +1593,98 @@ it.effect(
     }),
 );
 
+/**
+ * A follow whose rows draw `m-2` as "Writing the expiry." at the
+ * conversation's revision 2 while a moved turn's page is read, the page
+ * answering `pageText` for it at the cursor named: every page told from the
+ * moment the turn moved, once the page and a delivery of the rows after it
+ * landed.
+ */
+function toldBesideRead(pageCursor: string, pageText: string) {
+  return Effect.gen(function* () {
+    const {
+      call,
+      pages,
+      sealTranscript,
+      pageNow: script,
+      holdPages,
+      pageNewest,
+      realtime,
+    } = yield* subject();
+    sealTranscript(SEALED_TRANSCRIPT);
+    pageNewest(newestPage("1:0", "Reading the invites."));
+    const caught = pageNow("1:0", { holds: true });
+    script(caught);
+    yield* call(GATEWAY_METHOD.CODING_AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
+    yield* settled;
+    transcriptRows(realtime, 1);
+    yield* settled;
+    const toldBefore = pages().length;
+
+    const answer = yield* Deferred.make<void>();
+    holdPages(Deferred.await(answer));
+    const read: TranscriptNowAnswer = {
+      ...pageNow(pageCursor, { holds: false }),
+      messages: [said(2, pageText), said(3, "Testing the expiry.")],
+    };
+    script(read);
+    // A turn opening reads the page, which the service is slow to answer.
+    transcriptRows(realtime, 2, 2);
+    yield* settled;
+    const drawn = windowRow(2, "Writing the expiry.");
+    realtime.deliver("window", [drawn.row]);
+    realtime.deliver("windowParts", [drawn.part]);
+    yield* settled;
+    const beside = pages().slice(toldBefore);
+
+    yield* Deferred.succeed(answer, undefined);
+    yield* settled;
+    // The rows deliver again as they stood, which tells nothing older than the page.
+    realtime.deliver("windowParts", [drawn.part]);
+    yield* settled;
+    return { beside, after: pages().slice(toldBefore + beside.length), caught, read };
+  });
+}
+
+/** One of the agent's messages, at `seq`, saying `text` in one part. */
+function said(seq: number, text: string) {
+  return { id: `m-${seq}`, role: "assistant" as const, parts: [{ type: "text", text }] };
+}
+
 it.effect(
-  "a message the window's rows draw while a moved turn's page is read is told at once, and left out of that page, which may have read it first",
+  "a message the window's rows draw while a moved turn's page is read is told at once, and left out of that page where the page read it at an older revision",
   () =>
     Effect.gen(function* () {
-      const {
-        call,
-        pages,
-        sealTranscript,
-        pageNow: script,
-        holdPages,
-        pageNewest,
-        realtime,
-      } = yield* subject();
-      sealTranscript(SEALED_TRANSCRIPT);
-      pageNewest(newestPage("1:0", "Reading the invites."));
-      const caught = pageNow("1:0", { holds: true });
-      script(caught);
-      yield* call(GATEWAY_METHOD.CODING_AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
-      yield* settled;
-      transcriptRows(realtime, 1);
-      yield* settled;
-      const toldBefore = pages().length;
+      const { beside, after, caught, read } = yield* toldBesideRead("3:0", "Writ");
 
-      const answer = yield* Deferred.make<void>();
-      holdPages(Deferred.await(answer));
-      const said = (seq: number, text: string) => ({
-        id: `m-${seq}`,
-        role: "assistant" as const,
-        parts: [{ type: "text", text }],
-      });
-      const read: TranscriptNowAnswer = {
-        ...pageNow("3:0", { holds: false }),
-        messages: [said(2, "Writ"), said(3, "Testing the expiry.")],
-      };
-      script(read);
-      // A turn opening reads the page, which the service is slow to answer.
-      transcriptRows(realtime, 2, 2);
-      yield* settled;
-      const drawn = windowRow(2, "Writing the expiry.");
-      realtime.deliver("window", [drawn.row]);
-      realtime.deliver("windowParts", [drawn.part]);
-      yield* settled;
-      assert.deepEqual(pages().slice(toldBefore), [
+      assert.deepEqual(beside, [
         {
           transcript: FOLLOWED,
           page: { ...windowPage(caught), messages: [said(2, "Writing the expiry.")] },
         },
       ]);
+      assert.deepEqual(after, [
+        {
+          transcript: FOLLOWED,
+          page: { ...windowPage(read), messages: [said(3, "Testing the expiry.")] },
+        },
+      ]);
+    }),
+);
 
-      yield* Deferred.succeed(answer, undefined);
-      yield* settled;
-      assert.deepEqual(pages().at(-1), {
-        transcript: FOLLOWED,
-        page: { ...windowPage(read), messages: [said(3, "Testing the expiry.")] },
-      });
+it.effect(
+  "a page read at the rows' revision or later tells its newer copy of a message the rows drew beside it, and the rows never draw the older one back over it",
+  () =>
+    Effect.gen(function* () {
+      const newer = "Writing the expiry, then testing it.";
+      const { after, read } = yield* toldBesideRead("3:5", newer);
+
+      assert.deepEqual(after, [
+        {
+          transcript: FOLLOWED,
+          page: { ...windowPage(read), messages: [said(2, newer), said(3, "Testing the expiry.")] },
+        },
+      ]);
     }),
 );
 

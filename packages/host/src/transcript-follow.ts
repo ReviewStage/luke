@@ -84,6 +84,8 @@ interface Drawn {
   readonly messages: readonly CodingAgentMessage[];
   readonly lowest: number;
   readonly highest: number;
+  /** The conversation's journal revision as delivered beside them, which every change to a message past it counts up; none before the conversation's row lands. */
+  readonly revision: number | undefined;
 }
 
 /** What the statements last delivered: what a page beside the messages is read by, as one digest any change to it moves, and the newest messages drawn. */
@@ -158,10 +160,12 @@ function canonical(value: unknown): string {
 /** The window's messages as the rows draw them, with the sequences they span. */
 function drawnOf(rows: typeof agentTranscriptLiveRowsSchema.Type): Drawn {
   const seqs = rows.window.map((row) => row.seq);
+  const revisions = rows.conversation.map((row) => row.revision);
   return {
     messages: windowMessagesOf(rows.window, rows.windowParts),
     lowest: seqs.length === 0 ? 0 : Math.min(...seqs),
     highest: seqs.length === 0 ? 0 : Math.max(...seqs),
+    revision: revisions.length === 0 ? undefined : Math.max(...revisions),
   };
 }
 
@@ -403,23 +407,52 @@ export function followTranscript<Key>(
       let window = opened.value;
       // Whether the next read is the first past a held cursor, which falls back to the newest page where it is refused.
       let fromHeld = Option.isSome(held);
-      /** Each message told, as it was told, so a row drawn again alike is not told again. */
-      const told = new Map<string, string>();
-      const heard = (messages: readonly CodingAgentMessage[]) =>
-        messages.filter((message) => {
-          const said = canonical(message);
-          if (told.get(message.id) === said) return false;
-          told.set(message.id, said);
+      /**
+       * Each message told: as it was told, the journal revision that copy is
+       * known to stand at or past, none where unknown, and whether a page or
+       * the rows told it. Note that the journal revision is what orders a
+       * page against the rows, because a page and the rows beside it may
+       * each have read a message the other has not, and every change to a
+       * message past a revision counts the revision up: a page is at least as
+       * new as its cursor's revision, and the rows as the revision delivered
+       * beside them.
+       */
+      const told = new Map<
+        string,
+        { readonly said: string; readonly at: number | undefined; readonly paged: boolean }
+      >();
+      /** A page's messages to tell, read at its cursor's revision: every one but those the rows drew at a later revision. */
+      const heardPaged = (messages: readonly CodingAgentMessage[], cursor: string) => {
+        const at = Number(cursorParts(cursor).revision);
+        return messages.filter((message) => {
+          const was = told.get(message.id);
+          if (was !== undefined && !was.paged && was.at !== undefined && was.at > at) return false;
+          told.set(message.id, { said: canonical(message), at, paged: true });
           return true;
         });
-      heard(window.messages);
-      /** The rows' messages not yet told, beside what the last page said of the agent, each noted in `during` where given; the cursor moves past them where they follow on from it. */
-      const tellDrawn = (page: CodingAgentTranscriptPage, state: LiveState, during?: Set<string>) =>
+      };
+      /** The rows' messages to tell: every one drawn otherwise than it was told, but those a page told at the rows' revision or later. */
+      const heardDrawn = ({ messages, revision }: Drawn) =>
+        messages.filter((message) => {
+          const said = canonical(message);
+          const was = told.get(message.id);
+          if (was?.said === said) return false;
+          const pagedLater =
+            was?.paged === true &&
+            was.at !== undefined &&
+            revision !== undefined &&
+            was.at >= revision;
+          if (pagedLater) return false;
+          told.set(message.id, { said, at: revision, paged: false });
+          return true;
+        });
+      heardPaged(window.messages, window.cursor);
+      /** The rows' messages not yet told, beside what the last page said of the agent; the cursor moves past them where they follow on from it. */
+      const tellDrawn = (page: CodingAgentTranscriptPage, state: LiveState) =>
         Effect.gen(function* () {
           if (state.kind !== LIVE_STATE.STANDING || "failure" in page) return;
-          const fresh = heard(state.drawn.messages);
+          const fresh = heardDrawn(state.drawn);
           if (fresh.length === 0) return;
-          for (const message of fresh) during?.add(message.id);
           const { seq, revision } = cursorParts(window.cursor);
           // Note that the cursor moves only where the window holds every message past it, so a read past it misses none.
           const cursor =
@@ -445,15 +478,14 @@ export function followTranscript<Key>(
           return yield* tell(UNANSWERED_PAGE);
         }
         // Note that the rows drawn while the page is read go on being told beside it, because a
-        // turn that starts moves the turns and the reply's first words land with it; a message
-        // they told is left out of the page, since the page may have read it before they did.
-        const toldBeside = new Set<string>();
+        // turn that starts moves the turns and the reply's first words land with it; the page
+        // then tells only what it read at least as new as they drew (`heardPaged`).
         const lastTold = last;
         const besideRead =
           lastTold === undefined
             ? Effect.void
             : SubscriptionRef.changes(state).pipe(
-                Stream.runForEach((now) => tellDrawn(lastTold, now, toldBeside)),
+                Stream.runForEach((now) => tellDrawn(lastTold, now)),
               );
         const answer = yield* Effect.scoped(
           Effect.andThen(Effect.forkScoped(besideRead), reads.after(window.cursor)),
@@ -470,7 +502,7 @@ export function followTranscript<Key>(
           }
           fromHeld = false;
           window = newest;
-          heard(newest.messages);
+          heardPaged(newest.messages, newest.cursor);
           wake = Effect.void;
           continue;
         }
@@ -485,19 +517,16 @@ export function followTranscript<Key>(
           }
           window = newest;
           told.clear();
-          heard(newest.messages);
+          heardPaged(newest.messages, newest.cursor);
           wake = Effect.void;
           continue;
         }
         fromHeld = false;
-        const untold = (message: CodingAgentMessage) => !toldBeside.has(message.id);
-        const shown =
-          "failure" in answer ? answer : { ...answer, messages: answer.messages.filter(untold) };
-        // Note that whether the page is caught up is the whole page's word, before the rows told beside it are left out.
+        // Note that whether the page is caught up is the whole page's word, before what it read older than the rows is left out.
         const whole = toldPage(answer);
-        const page =
-          "failure" in whole ? whole : { ...whole, messages: whole.messages.filter(untold) };
-        if (!("failure" in page)) heard(page.messages);
+        const fresh = "failure" in answer ? [] : heardPaged(answer.messages, answer.cursor);
+        const shown = "failure" in answer ? answer : { ...answer, messages: fresh };
+        const page = "failure" in whole ? whole : { ...whole, messages: fresh };
         yield* tell(page);
         last = page;
         if ("failure" in answer) {
