@@ -1156,7 +1156,7 @@ test("a task's row ends as its sidebar row does, who is on it then an agent at w
 
   assert.deepEqual(ends(), [["unassigned", "working"], ["unassigned"]]);
   type("ACME-12");
-  assert.deepEqual(rows(), ["Billing usage alerts · acme/billing"]);
+  assert.deepEqual(rows(), ["Billing usage alerts · ACME-12 · acme/billing"]);
 });
 
 test("an agent pressed on a task's card in ⌘K over Settings leaves the palette for the tasks and opens the agent's tab, as a row does", () => {
@@ -1255,7 +1255,7 @@ test("Search lists the listed workspace's plans first, then every other workspac
   );
 });
 
-test("a task's key typed whole in any case lists its task first, ahead of a longer key it begins, and choosing it opens the task", () => {
+test("a task's row says its key, which marks what the query typed, a key typed whole in any case lists its task first, ahead of a longer key it begins, and choosing it opens the task", () => {
   const stage = { id: "workspace-stage", name: "Stage", role: WORKSPACE_ROLE.OWNER, github: null };
   const task = (number: number, name: string) => ({
     id: `task-${number}`,
@@ -1281,12 +1281,17 @@ test("a task's key typed whole in any case lists its task first, ahead of a long
   type("stag-42");
 
   assert.deepEqual(rows(), [
-    "Billing usage alerts from the meter · stage/luke",
-    "Cut the release · stage/luke",
+    "Billing usage alerts from the meter · STAG-42 · stage/luke",
+    "Cut the release · STAG-421 · stage/luke",
   ]);
   type("STAG-421");
-  assert.deepEqual(rows()[0], "Cut the release · stage/luke");
-  press("Cut the release · stage/luke");
+  assert.deepEqual(rows()[0], "Cut the release · STAG-421 · stage/luke");
+  assert.equal(
+    document.querySelector('[role="option"] [data-task-key] .search-match')?.textContent,
+    "STAG-421",
+    "the key the query typed is marked in the row, so it says why the task was found",
+  );
+  press("Cut the release · STAG-421 · stage/luke");
   assert.deepEqual(sent, ["task-421"]);
 });
 

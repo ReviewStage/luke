@@ -136,6 +136,7 @@ import { InboxItemCard, InboxItemEnd, ItemMark } from "../tasks/inbox-item-parts
 import { holderName, type InboxListed, inboxItemWords } from "../tasks/inbox-model.js";
 import { agentEndMark, openPlanStanding, TAB_KIND, tabLook } from "../tasks/tab-look.js";
 import { markReadItem } from "../tasks/task-menu-items.js";
+import { TaskKey } from "../tasks/task-standing.js";
 import { cardTitle } from "../tasks/tool-call-model.js";
 import type { CodingAgentsControl } from "../tasks/use-coding-agents.js";
 import { choiceOf } from "../tasks/use-inbox-listing.js";
@@ -354,8 +355,8 @@ interface PaletteRow {
   command?: KeyedCommand | undefined;
   /** The short words the search scores, the name first. */
   terms: readonly string[];
-  /** A task's key, as `ACME-42`, which typed whole finds the task first. */
-  key?: string | undefined;
+  /** A task's key, as `ACME-42`, drawn first in its detail, which typed whole finds the task first. */
+  taskKey?: { readonly workspaceName: string; readonly number: number } | undefined;
   /** Longer words the row is found by as the settings search finds it, every word of the query somewhere in them. */
   keywords?: readonly string[] | undefined;
   onChoose: () => void;
@@ -384,7 +385,9 @@ const KEY_SCORE = 1;
  * almost any letters in order.
  */
 function rowScore(row: PaletteRow, query: string, tokens: readonly string[]): number {
-  if (row.key !== undefined && namesTaskKey(query, row.key)) return KEY_SCORE;
+  const key =
+    row.taskKey === undefined ? undefined : taskKey(row.taskKey.workspaceName, row.taskKey.number);
+  if (key !== undefined && namesTaskKey(query, key)) return KEY_SCORE;
   const score = defaultFilter(row.terms.join(" "), query);
   if (score > 0 || row.keywords === undefined) return score;
   return matchesTokens(row.keywords, tokens) ? KEYWORD_SCORE : 0;
@@ -607,13 +610,17 @@ function taskRows(
       ? undefined
       : tasks.workspaces.find((each) => each.id === task.workspaceId);
   // Note that a task is found by its key, as its card and the Tasks list say it, read under its own workspace's name.
-  const keyOf = (task: TaskSummary): string | null => {
+  const keyOf = (task: TaskSummary): PaletteRow["taskKey"] => {
     const home = tasks.workspaces.find((each) => each.id === task.workspaceId);
-    return home === undefined || task.number === undefined ? null : taskKey(home.name, task.number);
+    return home === undefined || task.number === undefined
+      ? undefined
+      : { workspaceName: home.name, number: task.number };
   };
   const taskOf = (task: TaskSummary): PaletteRow => {
     const elsewhere = elsewhereOf(task);
-    const key = keyOf(task) ?? undefined;
+    const numbered = keyOf(task);
+    const key =
+      numbered === undefined ? undefined : taskKey(numbered.workspaceName, numbered.number);
     const worn = assigneeFace(task, readerOf(task));
     const createdBy = task.createdBy?.name ?? null;
     const assignedTo = task.assignee?.name ?? null;
@@ -646,7 +653,7 @@ function taskRows(
         madeBy,
         origin === undefined ? null : MADE_BY_WORDS[origin.kind],
       ].filter((term) => term !== null && term !== undefined),
-      key,
+      taskKey: numbered,
       onChoose: () => open(task.id),
     };
   };
@@ -1161,18 +1168,28 @@ function PaletteItem({
     found === undefined
       ? row.detail
       : [row.detail, found].filter((words) => words !== undefined).join(" · ");
+  // The workspace a task is in elsewhere, its key, and the detail, each said once and joined by a dot.
+  const parts = [
+    row.workspace === undefined ? null : (
+      <WorkspaceRef
+        key="workspace"
+        workspace={row.workspace}
+        name={<Highlighted text={row.workspace.name} tokens={tokens} />}
+      />
+    ),
+    row.taskKey === undefined ? null : (
+      <TaskKey
+        key="task-key"
+        workspaceName={row.taskKey.workspaceName}
+        number={row.taskKey.number}
+        tokens={tokens}
+      />
+    ),
+    detail === undefined ? null : <Highlighted key="detail" text={detail} tokens={tokens} />,
+  ].filter((part) => part !== null);
   const words =
-    detail === undefined && row.workspace === undefined ? undefined : (
-      <>
-        {row.workspace === undefined ? null : (
-          <WorkspaceRef
-            workspace={row.workspace}
-            name={<Highlighted text={row.workspace.name} tokens={tokens} />}
-          />
-        )}
-        {row.workspace === undefined || detail === undefined ? null : " · "}
-        {detail === undefined ? null : <Highlighted text={detail} tokens={tokens} />}
-      </>
+    parts.length === 0 ? undefined : (
+      <>{parts.flatMap((part, at) => (at === 0 ? [part] : [" · ", part]))}</>
     );
   // Spoken, since a palette row is an option, which carries no
   // `aria-keyshortcuts` to say the chord for it.

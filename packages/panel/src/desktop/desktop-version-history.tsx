@@ -26,6 +26,7 @@ import {
   ListRow,
   NavItem,
   OneLine,
+  PageToolbar,
   ResizeEdge,
   RetryRowLabel,
   RowHint,
@@ -606,11 +607,7 @@ function VersionPage({
   }
   return (
     <>
-      {lead === undefined ? (
-        <div className="desktop-drag-strip" />
-      ) : (
-        <header className="desktop-toolbar">{lead}</header>
-      )}
+      {lead === undefined ? <div className="desktop-drag-strip" /> : <PageToolbar lead={lead} />}
       <Fill className="desktop-empty-region">
         {list.kind === HISTORY_READ.FAILED ? (
           <ErrorState onRetry={versions.onRetry} placement={ERROR_STATE_PLACEMENT.CENTRED}>
