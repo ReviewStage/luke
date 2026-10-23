@@ -196,9 +196,12 @@ async function drawn(
   return container;
 }
 
-/** The viewer opened over the picture, by a press on it. */
+/** The viewer opened over the picture, by a press on it, or over the recording, by its Expand. */
 async function opened(container: HTMLElement) {
-  const picture = container.querySelector<HTMLButtonElement>(".picture-block button");
+  // Note that a recording opens by its bar's Expand, and a picture by its tile.
+  const picture =
+    container.querySelector<HTMLButtonElement>('.picture-block button[aria-label="Expand"]') ??
+    container.querySelector<HTMLButtonElement>(".picture-block button");
   assert.ok(picture, "the picture is drawn, its bytes read");
   await act(async () => picture.click());
 }
@@ -313,7 +316,10 @@ test("a recording past what a plan may be sent, or one past the plan's videos, i
     await settled(() => /over/u.test(newestToastSays() ?? ""));
 
     assert.deepEqual(sent, []);
-    assert.equal(newestToastSays(), "This video is over 3.3 MB, more than a plan can be sent.");
+    assert.equal(
+      newestToastSays(),
+      "This video is over 3.3 MB, too large to add to the plan from here.",
+    );
 
     for (const root of roots.splice(0)) act(() => root.unmount());
     document.body.innerHTML = "";

@@ -316,7 +316,7 @@ test("a mouse's press on a diagram in a wide room, which enlarges nothing, opens
   assert.ok(container.querySelector(".plan-document-editor") !== null, "the editor opened");
 });
 
-test("a press on a video in a section, on its frame or a control in it, opens no editor, while a press on its caption still does", async () => {
+test("a press on a video in a section, on its frame, its scrubber, Play, Full screen, or Expand, opens no editor, while a press on its caption still does", async () => {
   fakeAppBridge({});
   fakeActPort({
     [ACT_KIND.TASKS_PICTURE_READ]: () =>
@@ -325,6 +325,14 @@ test("a press on a video in a section, on its frame or a control in it, opens no
   const own = { create: URL.createObjectURL, revoke: URL.revokeObjectURL };
   URL.createObjectURL = () => "blob:plan-recording";
   URL.revokeObjectURL = () => undefined;
+  // The window's playing and full screen, which jsdom does not implement.
+  vi.spyOn(HTMLMediaElement.prototype, "play").mockResolvedValue(undefined);
+  vi.spyOn(HTMLMediaElement.prototype, "pause").mockReturnValue(undefined);
+  const fullScreen = Object.getOwnPropertyDescriptor(Element.prototype, "requestFullscreen");
+  Object.defineProperty(Element.prototype, "requestFullscreen", {
+    configurable: true,
+    value: () => Promise.resolve(),
+  });
   try {
     const address = planAttachmentAddress(
       { taskId: DOCUMENT_TASK.id, attachmentId: "8c2d4e6f-1a3b-4c5d-9e7f-0a1b2c3d4e5f" },
@@ -340,13 +348,24 @@ test("a press on a video in a section, on its frame or a control in it, opens no
     await settle();
     const block = container.querySelector<HTMLElement>(".picture-block[data-video]");
     const video = block?.querySelector("video");
-    const expand = block?.querySelector<HTMLButtonElement>('button[aria-label="Expand"]');
+    const seek = block?.querySelector<HTMLElement>('[aria-label="Seek"]');
+    const named = (label: string) =>
+      block?.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`) ?? undefined;
+    const [play, fullScreen, expand] = ["Play", "Full screen", "Expand"].map(named);
     const caption = block?.querySelector<HTMLElement>(".picture-caption");
-    assert.ok(video && expand && caption, "the video plays in its section, under its caption");
+    assert.ok(
+      video && seek && play && fullScreen && expand && caption,
+      "the video plays in its section, under its caption",
+    );
 
-    act(() => {
-      video.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, detail: 1 }));
-    });
+    // The frame, the scrubber, Play, and Full screen, each as a mouse's press lands on it, then Expand.
+    for (const pressed of [video, seek, play, fullScreen]) {
+      act(() => {
+        pressed.dispatchEvent(
+          new MouseEvent("click", { bubbles: true, cancelable: true, detail: 1 }),
+        );
+      });
+    }
     act(() => expand.click());
 
     // Note that the check is a boolean, because a failing comparison would print the whole editor's DOM.
@@ -361,6 +380,8 @@ test("a press on a video in a section, on its frame or a control in it, opens no
   } finally {
     URL.createObjectURL = own.create;
     URL.revokeObjectURL = own.revoke;
+    if (fullScreen === undefined) Reflect.deleteProperty(Element.prototype, "requestFullscreen");
+    else Object.defineProperty(Element.prototype, "requestFullscreen", fullScreen);
   }
 });
 
