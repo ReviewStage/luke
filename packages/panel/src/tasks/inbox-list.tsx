@@ -90,7 +90,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { ACTOR_SIZE, ActorMark, AutomationCard, automationActor } from "../actor-ref.js";
+import { ACTOR_SIZE, ActorMark, AutomationCard, actorCard, automationActor } from "../actor-ref.js";
 import { AttentionMark } from "../attention-mark.js";
 import { useAutomation } from "../automation-directory.js";
 import { useInboxItemDraft } from "../composer-drafts.js";
@@ -114,6 +114,7 @@ import {
 import { SidebarGroupHeader } from "../desktop/sidebar-group-header.js";
 import { SidebarSectionHead } from "../desktop/sidebar-task-view.js";
 import { useMemberDirectory } from "../member-directory.js";
+import { PEOPLE_FILTER, PEOPLE_FILTER_WORDS, peopleFilterActions } from "../member-rows.js";
 import { TaskChipCard } from "./chip-cards.js";
 import { type InboxCloser, useInboxClose } from "./inbox-close.js";
 import {
@@ -698,7 +699,8 @@ function StatusHeader({
 /**
  * A person's group header: their face and name, the reader's own as You, a
  * member who left on the quiet outline, as the sidebar's group by creator
- * heads its groups. A press folds the group, as every group header's does.
+ * heads its groups, hanging their card as an automation's header hangs its
+ * own. A press folds the group, as every group header's does.
  */
 function PersonHeader({
   person,
@@ -726,6 +728,7 @@ function PersonHeader({
     <SidebarGroupHeader
       glyph={<ActorMark actor={actor} size={ACTOR_SIZE.INLINE} />}
       name={actorName(actor)}
+      card={person === undefined && you === undefined ? undefined : actorCard(actor)}
       folded={folded}
       count={count}
       noun={NEEDS_YOU.COUNT}
@@ -735,49 +738,39 @@ function PersonHeader({
   );
 }
 
-/** Whose's choices: Everyone, then Mine, then each teammate the workspace lists by face and name, the choice checked. */
+/** Whose's choices, as every filter by person offers them: Anyone, Me, then each teammate, the choice checked. Note that Me stands though the reader's id is unknown, since the reader's own items are read without one (`readersItem`). */
 function whoseEntries(
   whose: InboxWhose,
   onWhose: (whose: InboxWhose) => void,
   reader: ReturnType<typeof useMemberDirectory>,
   readerId: string | undefined,
 ): MenuAction[] {
-  const you = reader.readerId ?? readerId;
-  const me = reader.members?.find((member) => member.userId === you);
-  const others = (reader.members ?? []).filter((member) => member.userId !== you);
-  return [
-    {
-      label: "Everyone",
-      icon: <UsersIcon />,
-      checked: whose.kind === INBOX_WHOSE.EVERYONE,
-      onSelect: () => onWhose(EVERYONES),
-    },
-    {
-      label: "Mine",
-      icon:
-        me === undefined ? (
-          <UserIcon />
-        ) : (
-          <ActorMark actor={memberActor(me, you)} size={ACTOR_SIZE.INLINE} />
-        ),
-      checked: whose.kind === INBOX_WHOSE.MINE,
-      onSelect: () => onWhose({ kind: INBOX_WHOSE.MINE }),
-    },
-    ...others.map((member) => ({
-      label: member.name,
-      icon: <ActorMark actor={memberActor(member, you)} size={ACTOR_SIZE.INLINE} />,
-      checked: whose.kind === INBOX_WHOSE.PERSON && whose.userId === member.userId,
-      onSelect: () =>
-        onWhose({ kind: INBOX_WHOSE.PERSON, userId: member.userId, name: member.name }),
-    })),
-  ];
+  return peopleFilterActions({
+    members: reader.members,
+    readerId: reader.readerId ?? readerId,
+    chosen:
+      whose.kind === INBOX_WHOSE.EVERYONE
+        ? { kind: PEOPLE_FILTER.ANYONE }
+        : whose.kind === INBOX_WHOSE.MINE
+          ? { kind: PEOPLE_FILTER.ME }
+          : { kind: PEOPLE_FILTER.PERSON, userId: whose.userId },
+    onChoose: (filter) =>
+      onWhose(
+        filter.kind === PEOPLE_FILTER.ANYONE
+          ? EVERYONES
+          : filter.kind === PEOPLE_FILTER.ME
+            ? { kind: INBOX_WHOSE.MINE }
+            : { kind: INBOX_WHOSE.PERSON, userId: filter.userId, name: filter.name },
+      ),
+    meWithoutId: true,
+  });
 }
 
 /**
  * The head's button that drops the view's menu: first the scopes the Inbox
  * offers, To do and All, the one shown checked;
  * then, on the window's Inbox, Group by and Sort, each a submenu with its
- * choice checked; Whose, Everyone, Mine, or a teammate by face and name;
+ * choice checked; Whose, Anyone, Me, or a teammate by face and name;
  * Media previews; and Mark all as read at its foot.
  */
 function ViewOptions({
@@ -903,7 +896,7 @@ function windowEntries(
 }
 
 /**
- * The chip over the list while Whose leaves out anyone's items: Mine by the
+ * The chip over the list while Whose leaves out anyone's items: Me by the
  * reader's face, or the teammate's face and name, and a × that lists
  * everyone's again (`@luke/ui`'s removable filter chip, as the sidebar's
  * Created by stands over its tasks).
@@ -936,7 +929,7 @@ function WhoseChip({
         {actor === undefined ? <UserIcon /> : <ActorMark actor={actor} size={ACTOR_SIZE.MARK} />}
         <ChipName>
           {chosen.kind === INBOX_WHOSE.MINE
-            ? "Mine"
+            ? PEOPLE_FILTER_WORDS.ME
             : actor === undefined
               ? chosen.name
               : actorName(actor)}

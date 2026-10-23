@@ -45,7 +45,7 @@ import {
   useComboboxField,
   useMinute,
 } from "@luke/ui";
-import { type Actor, LUKE_ACTOR, memberActor } from "@luke/ui/actor-model";
+import { type Actor, LUKE_ACTOR } from "@luke/ui/actor-model";
 import type { NamedServer } from "@luke/ui/agent-servers-model";
 import type { SkillOption } from "@luke/ui/skill-mention";
 import { pullRequestLabelOf } from "@luke/ui/tab-strip-model";
@@ -65,6 +65,7 @@ import { useAct } from "../act.js";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref.js";
 import { type IntegrationToolsReads, useIntegrationTools } from "../integration-tools.js";
 import { useMemberDirectory } from "../member-directory.js";
+import { memberRows, YOU_WORD } from "../member-rows.js";
 import type { ComposerTrigger, MentionNode } from "../plan-editor/contract.js";
 import type { MenuRow } from "../searchable-menu.js";
 import { type AgentRowPlace, agentMenuRow, useAgentRowPlace } from "./agent-menu-row.js";
@@ -242,9 +243,6 @@ interface Closed {
 function versionWords(version: number): string {
   return `Version ${version}`;
 }
-
-/** What the reader's own row says beside their name. */
-const YOU_DETAIL = "You";
 
 /** What a pull request's row says beside its name where no agent is named for it. */
 const PULL_REQUEST_DETAIL = "Pull request";
@@ -568,16 +566,16 @@ function agentRows(
   return rows;
 }
 
-/** The workspace's members as the list offers them, each wearing their picture. */
+/** The workspace's members as the list offers them, as every people menu lists them (`memberRows`): the reader first, then everyone else by name, each wearing their picture. */
 function directoryPeople(
   members: readonly WorkspaceMember[],
   readerId: string | undefined,
 ): readonly MentionablePerson[] {
-  return members.map((member) => ({
-    userId: member.userId,
-    name: member.name,
-    email: member.email,
-    actor: memberActor(member, readerId),
+  return memberRows(members, readerId).map((row) => ({
+    userId: row.member.userId,
+    name: row.label,
+    email: row.member.email,
+    actor: row.actor,
   }));
 }
 
@@ -589,7 +587,7 @@ function personRows(
   return people.map((person) => ({
     mention: { kind: MENTION_KIND.PERSON, userId: person.userId },
     name: person.name,
-    detail: person.userId === readerId ? YOU_DETAIL : person.email,
+    detail: person.userId === readerId ? YOU_WORD : person.email,
     terms: `${person.name} ${person.email ?? ""}`,
     actor: person.actor,
   }));

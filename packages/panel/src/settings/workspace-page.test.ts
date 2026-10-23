@@ -1276,7 +1276,7 @@ const leaveGroup = (page: HTMLElement) =>
 const leaveLine = (group: HTMLElement) =>
   rowWords(group.querySelector<HTMLElement>(ROWS) ?? assert.fail("no leave row"))[1];
 
-test("the owner cannot leave until the workspace is handed over: its row says so and Transfer ownership hands it to the admin chosen, the first unless another is, once the workspace's name is typed", async () => {
+test("the owner cannot leave until the workspace is handed over: its row says so and Transfer ownership hands it to the admin chosen, the first by name unless another is, each offered with their email beside their name, once the workspace's name is typed", async () => {
   const other: WorkspaceMember = {
     ...ADMIN_OLA,
     userId: "user-kim",
@@ -1295,7 +1295,10 @@ test("the owner cannot leave until the workspace is handed over: its row says so
   act(() => chip.click());
   const offered = [...document.querySelectorAll<HTMLElement>('[role="menu"] [role^="menuitem"]')];
   const names = offered.map((item) => item.textContent);
-  act(() => offered.find((item) => item.textContent?.includes("kim@example.com"))?.click());
+  const besides = offered.map((item) =>
+    item.querySelector(".luke-menu-item-copy")?.getAttribute("data-place"),
+  );
+  act(() => offered.find((item) => item.textContent?.includes("ola@example.com"))?.click());
   await confirm("Transfer ownership");
   const refusedUntilNamed = roleSent();
   typeGate(ACME.name.toUpperCase());
@@ -1306,15 +1309,16 @@ test("the owner cannot leave until the workspace is handed over: its row says so
 
   assert.equal(line, "You're its owner. Make an admin the owner first, then you can leave.");
   assert.deepEqual(buttons(group, "Leave"), []);
-  assert.equal(first, "New owner: Ola");
+  assert.equal(first, "New owner: Kim");
   assert.deepEqual(
     names.map((name) => name?.replace(/^[A-Z]/u, "")),
-    ["Olaola@example.com", "Kimkim@example.com"],
+    ["Kimkim@example.com", "Olaola@example.com"],
   );
+  assert.deepEqual(besides, ["beside", "beside"]);
   assert.deepEqual(refusedUntilNamed, [], "the act waits on the workspace's name");
   assert.deepEqual(refusedMisnamed, [], "a name typed otherwise is not the name");
   assert.deepEqual(roleSent(), [
-    [ACT_KIND.WORKSPACE_TRANSFER, { workspaceId: ACME.id, userId: "user-kim" }],
+    [ACT_KIND.WORKSPACE_TRANSFER, { workspaceId: ACME.id, userId: ADMIN_OLA.userId }],
   ]);
 });
 
