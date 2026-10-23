@@ -40,14 +40,18 @@ contextBridge.exposeInMainWorld("luke", exposedBridge());
 // An attached shell's port cannot cross the context bridge, so it is handed
 // into the page as Electron hands a port to an isolated world; the page reads
 // it back by the channel and checks the ticket (`packages/panel/src/terminal/terminal-port.ts`).
-ipcRenderer.on(TERMINAL_PORT_CHANNEL, (event, ticket: UnparsedWireValue) => {
-  window.postMessage({ channel: TERMINAL_PORT_CHANNEL, ticket }, "*", [...event.ports]);
-});
-
-// A terminal of this Mac's port is handed in the same way (`packages/panel/src/tasks/mac-terminal-tab.tsx`).
-ipcRenderer.on(MAC_TERMINAL_PORT_CHANNEL, (event, ticket: UnparsedWireValue) => {
-  window.postMessage({ channel: MAC_TERMINAL_PORT_CHANNEL, ticket }, "*", [...event.ports]);
-});
+// A terminal of this Mac's port (`packages/panel/src/tasks/mac-terminal-tab.tsx`)
+// and a cloud Browser tab's live view's port (`@luke/panel`'s
+// `tasks/browser-live-port.ts`) are handed in the same way.
+for (const channel of [
+  TERMINAL_PORT_CHANNEL,
+  MAC_TERMINAL_PORT_CHANNEL,
+  BROWSER_LIVE_PORT_CHANNEL,
+]) {
+  ipcRenderer.on(channel, (event, ticket: UnparsedWireValue) => {
+    window.postMessage({ channel, ticket }, "*", [...event.ports]);
+  });
+}
 
 // The page's act port, posted to its own window by its root as oRPC's
 // Electron adapter has it, is forwarded to main once for this page's life;
@@ -58,8 +62,3 @@ window.addEventListener(
     ipcRenderer.postMessage(ACT_PORT.CHANNEL, null, [port]);
   }),
 );
-
-// A cloud Browser tab's live view's port is handed in the same way (`@luke/panel`'s `tasks/browser-live-port.ts`).
-ipcRenderer.on(BROWSER_LIVE_PORT_CHANNEL, (event, ticket: UnparsedWireValue) => {
-  window.postMessage({ channel: BROWSER_LIVE_PORT_CHANNEL, ticket }, "*", [...event.ports]);
-});
