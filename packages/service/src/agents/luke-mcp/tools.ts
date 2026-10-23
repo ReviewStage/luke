@@ -384,7 +384,7 @@ export const LUKE_MCP_TOOLS: ReadonlyMap<string, LukeMcpTool> = new Map<string, 
   commentTool(RESOLVE_THREAD_TOOL),
   commentTool(REOPEN_THREAD_TOOL),
   // The developer's Mac.
-  entry(RUN_ON_MAC_TOOL, (admitted, input) => runOnMacTool(admitted.target.userId, input)),
+  entry(RUN_ON_MAC_TOOL, (admitted, input) => runOnMacTool(admitted.target, input)),
   // The agent's browser.
   entry(BROWSER_TOOL, runAgentBrowser, browserContent),
 ]);
