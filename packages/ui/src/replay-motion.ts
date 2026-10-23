@@ -10,17 +10,22 @@
  * render clears it mid-play.
  */
 
-/** Plays `attribute`'s animation on `element` again from its start, `mover` being what the animation moves. */
+/**
+ * Plays `attribute`'s animation on `element` again from its start, `mover`
+ * being what the animation moves and `value` the attribute's, where its value
+ * says which answer plays.
+ */
 export function replayMotion(
   element: HTMLElement,
   attribute: string,
   mover: Element = element,
+  value = "true",
 ): void {
   element.removeAttribute(attribute);
   // Note that reading the layout here makes the engine see the attribute
   // gone before it is set again, which is what starts it anew.
   void element.offsetWidth;
-  element.setAttribute(attribute, "true");
+  element.setAttribute(attribute, value);
   // Note that every animation inside it ending bubbles here too, as a pulse
   // of a button in a card does, so only the mover's takes the answer away.
   const ended = (event: Event) => {

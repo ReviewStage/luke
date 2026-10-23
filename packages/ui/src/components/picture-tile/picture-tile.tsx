@@ -1,4 +1,5 @@
 import type { ButtonHTMLAttributes, MouseEvent, ReactNode } from "react";
+import { PRESS_PULSE, pulsePress } from "../../press-pulse.js";
 
 /**
  * picture-tile.tsx -- a picture that opens when pressed: the press that enlarges a picture over the window, around the picture as its place draws it.
@@ -80,6 +81,9 @@ export function PictureTile({
         onClick?.(event);
         // Note that a key's press is a click the pointer counts none of, so a click count says a pointer pressed it.
         if (!pointerOpens && event.detail > 0) return;
+        // Note that the face is what a press sinks, so it is what gives as the press lands.
+        const face = event.currentTarget.querySelector<HTMLElement>(".luke-picture-tile-face");
+        if (face !== null) pulsePress(face, PRESS_PULSE.QUIET);
         onOpen(event);
       }}
     >

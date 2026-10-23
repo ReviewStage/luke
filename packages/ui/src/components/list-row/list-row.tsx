@@ -14,6 +14,7 @@ import {
 } from "react";
 import { cssCustomProperties } from "../../css.js";
 import { ChevronRightIcon } from "../../face/glyphs.js";
+import { PRESS_PULSE, pulseOnPress, pulsePress } from "../../press-pulse.js";
 import { useClipped } from "../../use-clipped.js";
 import { motionKey, motionRows } from "../list-motion/list-motion.js";
 import { useLinkAddress } from "../menu/link-address.js";
@@ -458,7 +459,12 @@ export function ListRow({
       tabIndex={tabbable ? undefined : -1}
       // Note that the focus moves as a mousedown's default, so refusing it there is what keeps it.
       onMouseDown={keepFocus ? preventFocusMove : undefined}
-      onClick={onPress}
+      onClick={(event) => {
+        // Note that the row around the press is what is pressed, its fill and its actions with it.
+        const row = event.currentTarget.closest<HTMLElement>(".luke-list-row");
+        pulsePress(row ?? event.currentTarget, PRESS_PULSE.QUIET);
+        onPress(event);
+      }}
       onKeyDown={onKeyDown}
     >
       {face}
@@ -527,7 +533,7 @@ export function ListRow({
               className="luke-list-row-swipe-act"
               tabIndex={-1}
               data-swipe-act=""
-              onClick={swiped.onPress}
+              onClick={pulseOnPress(swiped.onPress)}
             >
               <span className="luke-list-row-swipe-label">
                 {swipe.icon}

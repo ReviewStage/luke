@@ -1,4 +1,5 @@
 import type { HTMLAttributes, MouseEvent } from "react";
+import { PRESS_PULSE, pulsePress } from "../../press-pulse.js";
 
 /**
  * skill-chip.tsx -- a chosen skill in a message box's words: its `/name` as a pill, a press on which opens the skill's file where the place can open it.
@@ -41,6 +42,7 @@ export function SkillChip({
     onOpen === undefined && onClick === undefined
       ? undefined
       : (event: MouseEvent<HTMLElement>) => {
+          pulsePress(event.currentTarget, PRESS_PULSE.WORDS);
           onOpen?.();
           onClick?.(event);
         };

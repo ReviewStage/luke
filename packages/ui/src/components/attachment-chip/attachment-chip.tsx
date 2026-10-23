@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { RemoveIcon } from "../../face/glyphs.js";
+import { pulseOnPress } from "../../press-pulse.js";
 import { ClippedLine, ONE_LINE_ELEMENT, ONE_LINE_END } from "../one-line/clipped-line.js";
 import { SPINNER_SIZE, Spinner } from "../spinner/spinner.js";
 
@@ -141,7 +142,7 @@ export function AttachmentChip({
           type="button"
           className="luke-attachment-chip-face"
           aria-label={`Open ${name}`}
-          onClick={onOpen}
+          onClick={pulseOnPress(onOpen)}
         >
           {face}
         </button>
@@ -152,7 +153,7 @@ export function AttachmentChip({
           className="luke-attachment-chip-remove"
           aria-label={`Remove ${name}`}
           disabled={removeDisabled === true}
-          onClick={onRemove}
+          onClick={pulseOnPress(onRemove)}
         >
           <RemoveIcon />
         </button>

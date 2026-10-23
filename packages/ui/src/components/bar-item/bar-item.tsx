@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { pulseOnPress } from "../../press-pulse.js";
 
 /**
  * bar-item.tsx -- one place in a phone's bar of places: its glyph over its name.
@@ -62,7 +63,7 @@ export function BarItem({
       aria-expanded={expanded}
       inert={inert}
       onPointerDown={onPointerDown}
-      onClick={onPress}
+      onClick={pulseOnPress(onPress)}
     >
       <span className="luke-bar-item-icon" aria-hidden="true">
         {icon}

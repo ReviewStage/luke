@@ -338,22 +338,11 @@
     transition: transform var(--luke-duration-exit) ease-out;
   }
 
-  /* Every press a button takes is answered once it lands: its face springs
-     back from pressed, so even a click too quick to hold the press down is
-     seen (`button.tsx` restarts `data-pulse` on each). A row is a menu's
-     row, lit rather than pressed, so it plays nothing. */
-  .luke-button[data-pulse="true"]:not([data-variant="row"]) .luke-button-face {
-    animation: luke-button-pulse var(--luke-duration-fast) var(--luke-spring-fast);
-  }
-
-  @keyframes luke-button-pulse {
-    from {
-      transform: scale(0.86);
-    }
-  }
-
-  /* A submit's arrow lifts away as the message goes and drops back in. */
-  .luke-button[data-submit="ready"][data-pulse="true"] svg {
+  /* Every press a button takes is answered once it lands, so even a click
+     too quick to hold the press down is seen: its face springs back from
+     pressed, and a row, a menu's row, gives a little whole (`press-pulse.css`).
+     A submit's arrow lifts away as the message goes and drops back in. */
+  .luke-button[data-submit="ready"][data-pulse="face"] svg {
     animation: luke-button-send var(--luke-duration-fast) var(--luke-spring-fast);
   }
 

@@ -11,6 +11,7 @@ import {
   useState,
 } from "react";
 import { FoldChevronIcon } from "../../face/glyphs.js";
+import { PRESS_PULSE, pulsePress } from "../../press-pulse.js";
 import { type DisclosureMotion, disclosureMotion, useDisclosure } from "../../use-disclosure.js";
 
 /**
@@ -221,6 +222,7 @@ export function useDisclosureSummaryClick(): (event: MouseEvent<HTMLElement>) =>
   const { toggle } = useDisclosureState();
   return (event) => {
     event.preventDefault();
+    pulsePress(event.currentTarget, PRESS_PULSE.QUIET);
     toggle();
   };
 }

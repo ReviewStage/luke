@@ -6,6 +6,7 @@ import type {
   ReactElement,
   ReactNode,
 } from "react";
+import { pulseOnPress } from "../../press-pulse.js";
 import { useLinkAddress } from "../menu/link-address.js";
 import { Tooltip } from "../tooltip/hint.js";
 
@@ -151,7 +152,7 @@ function InlineRefRoot({
       {...own}
       {...goneProps}
       aria-label={pressLabel}
-      onClick={onPress}
+      onClick={pulseOnPress(onPress)}
     >
       {face}
     </button>

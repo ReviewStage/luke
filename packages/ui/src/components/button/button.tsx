@@ -7,6 +7,7 @@ import {
   useRef,
 } from "react";
 import { CheckIcon } from "../../face/glyphs.js";
+import { PRESS_FACE, PRESS_PULSE, pulsePress } from "../../press-pulse.js";
 import { replayMotion } from "../../replay-motion.js";
 import { SpinnerRing } from "../spinner/spinner.js";
 
@@ -204,19 +205,16 @@ function preventFocusMove(event: MouseEvent<HTMLButtonElement>): void {
   event.preventDefault();
 }
 
-/** What a button plays as it answers a press: a shake for one it refused, a pulse for one it took. */
-const PRESS_ANSWER = {
-  DENIED: "data-denied",
-  PULSE: "data-pulse",
-} as const;
+/** What a button plays as it answers a press it refused: a shake. */
+const DENIED_ATTRIBUTE = "data-denied";
 
-/** Plays a press's pulse on `pressable`, whose face is what moves. */
-function pulse(pressable: HTMLElement): void {
-  replayMotion(
-    pressable,
-    PRESS_ANSWER.PULSE,
-    pressable.querySelector(".luke-button-face") ?? pressable,
-  );
+/**
+ * Plays a press's pulse on `pressable`: its face springs back inside its
+ * box, but a row's, a menu's row lit rather than pressed, which gives a
+ * little whole, as every row does.
+ */
+function pulse(pressable: HTMLElement, variant: ButtonVariant | undefined): void {
+  pulsePress(pressable, variant === BUTTON_VARIANT.ROW ? PRESS_PULSE.QUIET : PRESS_PULSE.FACE);
 }
 
 /** The attributes and handler a button carries for its state, shared by both kinds; `done` is a labelled one whose act has landed. */
@@ -255,10 +253,10 @@ function stateProps(props: ButtonBase, name: string | undefined, done = false) {
       if (refusing) {
         event.preventDefault();
         // Note that a busy button's ring, or a done one's check, already says why it takes no press.
-        if (!settled) replayMotion(event.currentTarget, PRESS_ANSWER.DENIED);
+        if (!settled) replayMotion(event.currentTarget, DENIED_ATTRIBUTE);
         return;
       }
-      pulse(event.currentTarget);
+      pulse(event.currentTarget, props.variant);
       props.onClick?.(event);
     },
   };
@@ -342,7 +340,7 @@ export function Button({
       aria-pressed={pressed}
       {...stateProps(readOnly ? { ...props, disabled: true } : props, label, done)}
     >
-      <span className="luke-button-face">
+      <span className="luke-button-face" {...PRESS_FACE}>
         {icon}
         <span className="luke-button-words">{children}</span>
         {trailing === undefined ? null : <span className="luke-button-trailing">{trailing}</span>}
@@ -374,11 +372,11 @@ export function ButtonLink({
       data-variant={variant ?? BUTTON_VARIANT.QUIET}
       href={href}
       onClick={(event) => {
-        pulse(event.currentTarget);
+        pulse(event.currentTarget, variant);
         onClick?.(event);
       }}
     >
-      <span className="luke-button-face">
+      <span className="luke-button-face" {...PRESS_FACE}>
         {icon}
         <span className="luke-button-words">{children}</span>
       </span>
@@ -409,11 +407,13 @@ export function IconButtonLink({
       data-variant={variant ?? BUTTON_VARIANT.QUIET}
       href={href}
       aria-label={label}
-      onClick={(event) => pulse(event.currentTarget)}
+      onClick={(event) => pulse(event.currentTarget, variant)}
       target={newTab ? "_blank" : undefined}
       rel={newTab ? "noreferrer" : undefined}
     >
-      <span className="luke-button-face">{icon}</span>
+      <span className="luke-button-face" {...PRESS_FACE}>
+        {icon}
+      </span>
     </a>
   );
 }
@@ -515,7 +515,9 @@ export function IconButton({
       aria-pressed={pressed}
       {...state}
     >
-      <span className="luke-button-face">{submit === undefined ? icon : submitGlyph(submit)}</span>
+      <span className="luke-button-face" {...PRESS_FACE}>
+        {submit === undefined ? icon : submitGlyph(submit)}
+      </span>
     </button>
   );
 }
