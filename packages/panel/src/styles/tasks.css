@@ -6873,29 +6873,15 @@ svg.lucide {
   max-width: calc(100% + var(--luke-space-6));
 }
 
-/* A line's other threads stand closed beside the open one, each on the
-   same raised surface, so the stack reads as one set over the page. */
-.comment-float .comment-card[data-open="false"] {
-  border-color: var(--luke-color-border-strong);
-  background: var(--luke-color-overlay);
-  box-shadow: var(--luke-menu-shadow);
-}
-
-/* Note that the hover's fill is translucent, so over the page it is laid on the card's own surface, never the words beneath. */
-.comment-float .comment-card[data-open="false"]:is(:hover, [data-pointed="true"]) {
-  background: linear-gradient(var(--luke-color-fill-hover), var(--luke-color-fill-hover))
-    var(--luke-color-overlay);
-}
-
-/* A thread: at rest its words on the column's ground, open on a menu's surface. */
+/* A thread (`Card`, its frame chosen by where it stands): at rest its words
+   on the column's ground, washed under the pointer; open, or at rest beside
+   the open one under a count, raised over the page as a menu is. */
 .comment-card {
   --comment-indent: calc(
     16px +
     5px
   ); /* off-scale: under the name, past the actor's 16px mark and its gap */
   padding: var(--luke-space-4) var(--luke-space-12) var(--luke-space-8);
-  border: 1px solid transparent;
-  border-radius: var(--luke-menu-radius);
   color: var(--luke-color-text);
   font-size: 13px;
   line-height: 1.5;
@@ -6904,21 +6890,11 @@ svg.lucide {
 /* A thread at rest is one press (`CardPress`) over its words and replies,
    which reaches its whole card and rings it from the keyboard. */
 .comment-card[data-open="false"] {
-  position: relative;
-  border-color: var(--luke-color-border);
   cursor: pointer;
-}
-
-.comment-card[data-open="false"]:hover,
-.comment-card[data-open="false"][data-pointed="true"] {
-  background: var(--luke-color-fill-hover);
 }
 
 .comment-card[data-open="true"] {
   padding-top: var(--luke-space-8);
-  border-color: var(--luke-color-border-strong);
-  background: var(--luke-color-overlay);
-  box-shadow: var(--luke-menu-shadow);
 }
 
 .comment-entry {
@@ -7259,14 +7235,6 @@ svg.lucide {
 
 .comments-row + .comments-row {
   margin-top: var(--luke-space-8);
-}
-
-/* In the tab every thread stands whole, on the panel's ground with a
-   hairline round it rather than floating over the page. */
-.comments-list .comment-card[data-open="true"] {
-  border-color: var(--luke-color-border);
-  background: none;
-  box-shadow: none;
 }
 
 /* A call that sent another agent words (`SentCall`): the words whole in

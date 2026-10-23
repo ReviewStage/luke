@@ -50,6 +50,7 @@
  * draw the copy of one even though the copy stands outside it.
  */
 
+import { CARD_DROP_TARGET } from "@luke/ui";
 import type React from "react";
 import { useEffect, useLayoutEffect, useRef } from "react";
 import { flushSync } from "react-dom";
@@ -87,8 +88,8 @@ const LIFTED_ATTRIBUTE = "data-lifted";
 /** A drop zone's rows, where it keeps an order of its own that a drop lands at a place in. */
 const ZONE_ROWS = "[data-row-drop-rows] > li:not([data-leaving])";
 
-/** What the zone a row is carried over wears while it is. */
-const DROP_TARGET = "data-drop-target";
+/** What the zone a row is carried over wears while it is; a card's (`Card`), since a board's column is one. */
+const DROP_TARGET = CARD_DROP_TARGET;
 
 /** What the row a drop would land above wears, and the last row where it would land below them all. */
 const DROP_BEFORE = "data-drop-before";
