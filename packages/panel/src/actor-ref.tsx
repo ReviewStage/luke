@@ -376,19 +376,38 @@ export function AssigneeHeard({ actor }: { actor: Actor }): React.JSX.Element {
 /**
  * The face a row wears at its end for who is on its task (`assigneeFace`):
  * its assignee's, or the dashed unassigned mark, each with the words a
- * screen reader hears of it.
+ * screen reader hears of it unless the row says them elsewhere.
  */
-export function AssigneeFaceMark({ face }: { face: AssigneeFace }): React.JSX.Element {
+export function AssigneeFaceMark({
+  face,
+  heard = true,
+}: {
+  face: AssigneeFace;
+  /**
+   * Whether the mark says its words to a screen reader: not on a row whose
+   * end steps aside for its acts while it holds the keyboard, which says
+   * them in its title instead (`AssigneeFaceHeard`).
+   */
+  heard?: boolean;
+}): React.JSX.Element {
+  return (
+    <>
+      {face.assignee === undefined ? (
+        <UnassignedMark size={ACTOR_SIZE.MARK} decorative hint />
+      ) : (
+        <ActorMark actor={face.assignee} size={ACTOR_SIZE.MARK} />
+      )}
+      {heard ? <AssigneeFaceHeard face={face} /> : null}
+    </>
+  );
+}
+
+/** The words a screen reader hears of a row's `AssigneeFaceMark`, for a row that says them in its title. */
+export function AssigneeFaceHeard({ face }: { face: AssigneeFace }): React.JSX.Element {
   return face.assignee === undefined ? (
-    <>
-      <UnassignedMark size={ACTOR_SIZE.MARK} decorative hint />
-      <UnassignedHeard />
-    </>
+    <UnassignedHeard />
   ) : (
-    <>
-      <ActorMark actor={face.assignee} size={ACTOR_SIZE.MARK} />
-      <AssigneeHeard actor={face.assignee} />
-    </>
+    <AssigneeHeard actor={face.assignee} />
   );
 }
 

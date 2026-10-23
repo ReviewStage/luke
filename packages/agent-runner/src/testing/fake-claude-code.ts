@@ -39,10 +39,13 @@ function stopHookOf(options: Options) {
 /**
  * A fake CLI that plays `steps` once, from Luke's first message. `prompted`
  * holds each prompt as the CLI reads it, for a test that must wait on one.
- * Each `result` names the prompts its turn took, as the CLI's does.
+ * Each `result` names the prompts its turn took, as the CLI's does. `chain`
+ * is the stored session's entries, which every session it is asked for
+ * reads as.
  */
 export const fakeClaudeCode = Effect.fn("agent-runner/fakeClaudeCode")(function* (
   steps: readonly Step[],
+  chain: readonly string[] = [],
 ) {
   const prompted = yield* Queue.unbounded<SDKUserMessage>();
   const unread = yield* Queue.unbounded<string>();
@@ -139,5 +142,11 @@ export const fakeClaudeCode = Effect.fn("agent-runner/fakeClaudeCode")(function*
 
   /** Lets a script held at `untilReleased` go on. */
   const release = Deferred.succeed(released, undefined);
-  return { layer: Layer.succeed(ClaudeCode, { query }), record, prompted, release };
+  const sessionChain = async () => chain;
+  return {
+    layer: Layer.succeed(ClaudeCode, { query, sessionChain }),
+    record,
+    prompted,
+    release,
+  };
 });

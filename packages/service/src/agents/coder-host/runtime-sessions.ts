@@ -73,6 +73,8 @@ export type RunnerChoice = (typeof RUNNER_CHOICE)[keyof typeof RUNNER_CHOICE];
 export interface NativeSessions<Turn extends BrainHostTurn = BrainHostTurn>
   extends AgentSessions<Turn> {
   readonly retune: (sessionId: string, conversationId: string) => Effect.Effect<RunnerChoice>;
+  /** The session's runner ended, keeping its sandbox and the harness's session, so the next message relaunches it; whether no runner runs now. */
+  readonly halt: (sessionId: string, conversationId: string) => Effect.Effect<boolean>;
 }
 
 export interface NativeAgentSessionsService {
@@ -301,6 +303,25 @@ export const runnerChoiceApplied = (agent: {
       ),
     ),
   );
+
+/**
+ * The native agent's runner ended for a rewind, acting for the agent's
+ * starter, keeping its sandbox and the harness's session for the next
+ * message's launch to cut and resume: whether no runner runs now. A
+ * function that cannot reach the harness, or a store that cannot be read,
+ * answers false, so the rewind cuts nothing a runner still writes to.
+ */
+export const runnerHalted = (
+  agent: { readonly id: string; readonly userId: string; readonly conversationId: string },
+  runtime: NativeRuntime,
+  sessionId: string,
+): Effect.Effect<boolean> =>
+  Effect.gen(function* () {
+    const native = yield* Effect.serviceOption(NativeAgentSessions);
+    const reached = Option.flatMap(native, (service) => service.sessions(runtime, agent.userId));
+    if (Option.isNone(reached)) return false;
+    return yield* (yield* reached.value).halt(sessionId, agent.conversationId);
+  });
 
 /**
  * What a call that failed answers its caller as: a native harness whose

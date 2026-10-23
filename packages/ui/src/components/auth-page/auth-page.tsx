@@ -1,4 +1,4 @@
-import { type MouseEvent, type ReactNode, useId } from "react";
+import { Children, type MouseEvent, type ReactNode, useId } from "react";
 import { BUTTON_VARIANT, ButtonLink } from "../button/button.js";
 
 /**
@@ -69,7 +69,9 @@ export function AuthPage({
           {title}
         </h1>
         {said(description) ? <p className="luke-auth-description">{description}</p> : null}
-        {said(children) ? <div className="luke-auth-body">{children}</div> : null}
+        {Children.toArray(children).some(said) ? (
+          <div className="luke-auth-body">{children}</div>
+        ) : null}
         <p className="luke-auth-error" role="alert">
           {said(error) ? error : null}
         </p>

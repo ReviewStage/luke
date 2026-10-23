@@ -118,6 +118,7 @@ export const BROWSER_TOOL = {
     "a key, scroll, wait, take a screenshot to see the page, take a snapshot to read it as " +
     "text with a ref beside each element, read its console, or close it. To show the developer " +
     "a flow you built or tested, record it: record starts a video of whatever the browser shows, " +
+    "your pointer drawn on the page while it records, " +
     `up to ${BROWSER_AGENT_LIMITS.RECORDING_MAX_SECONDS} seconds and across calls, and ` +
     "stop_recording, with a caption, stops it and keeps it in your transcript, where it plays; " +
     "stop it before your turn ends, or it is lost. Take a snapshot for " +

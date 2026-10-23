@@ -1553,7 +1553,7 @@ export function dockedTodos(
   return open ? standing : undefined;
 }
 
-/** How the fold reads a part: its words, its reasoning as a note, a delegation as a subagent and a to-do list each on a row of its own, a start that began a coding agent counted apart, and every other call grouped with the calls beside it. */
+/** How the fold reads a part: its words, its reasoning as a note, a delegation as a subagent, a to-do list and a set of pictures or a recording shown each on a row of its own, a start that began a coding agent counted apart, and every other call grouped with the calls beside it. */
 const AGENT_READING: RowReading<AgentPart> = {
   key: (part, index) => {
     if (part.kind === AGENT_PART.TOOL) return part.callId;
@@ -1565,7 +1565,10 @@ const AGENT_READING: RowReading<AgentPart> = {
     if (part.kind !== AGENT_PART.TOOL) return ROW_PART.NOTE;
     if (isDelegation(part)) return ROW_PART.SUBAGENT;
     if (startedAgentOf(part) !== undefined) return ROW_PART.CODING_AGENT;
-    return isTodos(part) ? ROW_PART.LONE_CALL : ROW_PART.CALL;
+    // Note that what the agent showed is never grouped, because a group folds closed once the agent moves on and would fold the pictures with it.
+    return isTodos(part) || isShownSet(part) || keptRecording(part)
+      ? ROW_PART.LONE_CALL
+      : ROW_PART.CALL;
   },
   running: (part) =>
     part.kind === AGENT_PART.TOOL &&
@@ -1982,6 +1985,8 @@ export function turnStretches(rows: readonly TurnRow<AgentPart>[]): readonly Tur
 
 /** What an agent is doing while it may still write, as its transcript's working line says it. */
 const WORKING_PHASE = {
+  /** It is being taken back to an earlier line (`rewind-action.tsx`), and stopped first where it ran. */
+  REWINDING: "rewinding",
   /** Its session has not opened the turn that will answer the newest line. */
   STARTING: "starting",
   /** The turn is open and its model has drawn nothing yet. */
@@ -1994,6 +1999,7 @@ export type WorkingPhase = (typeof WORKING_PHASE)[keyof typeof WORKING_PHASE];
 
 /** What the working line says in each phase. */
 export const WORKING_PHASE_WORDS = {
+  [WORKING_PHASE.REWINDING]: "Rewinding…",
   [WORKING_PHASE.STARTING]: "Starting…",
   [WORKING_PHASE.THINKING]: "Thinking…",
   [WORKING_PHASE.WORKING]: "Working…",
@@ -2014,12 +2020,15 @@ export const WORKING_PHASE_WORDS = {
  * journal before it is what the agent is doing, not the line; and that a
  * closed journal with no line after it stays working, because the page
  * that closes a journal can still say the agent runs until its turn row
- * settles a look later.
+ * settles a look later. While a rewind is out it is rewinding, whatever
+ * the transcript shows.
  */
 export function agentWorkingPhase(
   lines: readonly CodingAgentMessage[],
   sessionStarting: boolean,
+  rewinding = false,
 ): WorkingPhase {
+  if (rewinding) return WORKING_PHASE.REWINDING;
   const at = lines.findLastIndex((line) => line.role === MESSAGE_ROLE.ASSISTANT);
   const journal = lines[at];
   if (sessionStarting || journal === undefined) return WORKING_PHASE.STARTING;
@@ -2121,6 +2130,8 @@ export interface SentLine {
   /** Whether a turn ran as the line went, so it steers that turn rather than opening one. */
   readonly steers: boolean;
   readonly state: SentLineState;
+  /** The developer's line it was written in place of, by its message id, which the agent is taken back to just before as it goes; none for a line sent after the rest. */
+  readonly rewinds?: string | undefined;
 }
 
 /** The ids the developer's rows of a transcript were written under, which a sent line's row is one of once it lands. */

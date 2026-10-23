@@ -89,6 +89,7 @@ import {
   type CodingAgentPullRequestWriteAnswerView,
   type CodingAgentRenameParams,
   type CodingAgentReviewOptionsAnswerView,
+  type CodingAgentRewindParams,
   type CodingAgentServersParams,
   type CodingAgentStartParams,
   type CodingAgentStopParams,
@@ -714,6 +715,8 @@ export interface HostOperator {
   codingAgentServers(params: CodingAgentServersParams): Effect.Effect<CodingAgentAgentAnswer>;
   /** One agent stopped; the agent as it then stands, or why it was not. */
   codingAgentStop(params: CodingAgentStopParams): Effect.Effect<CodingAgentAgentAnswer>;
+  /** One agent taken back to just before one of the developer's lines, stopped first where it still works; the agent as it then stands, or why it was not. */
+  codingAgentRewind(params: CodingAgentRewindParams): Effect.Effect<CodingAgentAgentAnswer>;
   /** One agent archived, a turn it still runs stopped first, or brought back; the agent as it then stands, or why it is unchanged. */
   codingAgentArchive(params: CodingAgentArchiveParams): Effect.Effect<CodingAgentAgentAnswer>;
   /** One agent deleted for good, a turn it still runs stopped first; that it was, or why not. */
@@ -2075,6 +2078,14 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
     codingAgentStop: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.CODING_AGENTS_STOP, { agentId: params.agentId }),
+        codingAgentAnswer(codingAgentAgentAnswerSchema),
+      ),
+    codingAgentRewind: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.CODING_AGENTS_REWIND, {
+          agentId: params.agentId,
+          messageId: params.messageId,
+        }),
         codingAgentAnswer(codingAgentAgentAnswerSchema),
       ),
     codingAgentArchive: (params) =>

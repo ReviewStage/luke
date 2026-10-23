@@ -15,6 +15,7 @@ import { EVE_MOUNT, type EveTypedTurn } from "../agents/brain-host/eve-sessions.
 import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
 import { deploymentEveForAccounts } from "../agents/deployment-eve.js";
 import { sweepNativeTemplates } from "../agents/native-sandbox-template.js";
+import { sweepNativeRepositorySnapshots } from "../agents/repository-snapshot.js";
 import { sessionSandboxesLayer, sweepSessionSandboxes } from "../agents/session-sandboxes.js";
 import type { EveForAccount } from "../automations/automation-runs.js";
 import { sweepAutomations } from "../automations/automation-sweep.js";
@@ -137,6 +138,9 @@ const maintenanceSweepEffect = /* @__PURE__ */ Effect.fn("web/maintenanceSweepEf
       ),
     // The current image's template is built ahead of any launch, so the first one after a deploy finds it ready.
     sweepImageTemplates: () => sweepNativeTemplates().pipe(Effect.provideContext(startContext)),
+    // A repository no agent starts on any more keeps no snapshot past its age.
+    sweepRepositorySnapshots: () =>
+      sweepNativeRepositorySnapshots().pipe(Effect.provideContext(startContext)),
     sweepVoice: (now) =>
       sweepVoiceOrphans(
         {

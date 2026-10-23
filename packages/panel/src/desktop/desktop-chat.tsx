@@ -98,7 +98,7 @@ import { strandedHome } from "./move-task-dialog.js";
 import { useNarrowFocus } from "./narrow-focus.js";
 import { sectionGlyph } from "./section-icon-picker.js";
 import { SidebarGroupHeader } from "./sidebar-group-header.js";
-import { TaskStatusMark, taskCardOf } from "./task-card.js";
+import { TaskRowMark, taskCardOf } from "./task-card.js";
 
 /**
  * desktop-chat.tsx -- the window's Chat: the workspace's channels and direct messages in a rail of their own, and For you or the channel chosen read beside it.
@@ -616,7 +616,7 @@ function RailRow({
       card={placeCard(tasks, row, actorOf)}
       end={
         task !== undefined ? (
-          <TaskStatusMark task={task} stranded={strandedHome(tasks, task)} />
+          <TaskRowMark task={task} stranded={strandedHome(tasks, task)} />
         ) : row.between.length > 0 || row.other?.agent === undefined ? undefined : (
           // An agent the reader writes with wears where it stands at the row's end, as its sidebar row does.
           agentEndMark(row.other.agent, false)
@@ -1069,7 +1069,7 @@ function ChatView({
       <div className="chat-view">
         <nav className="chat-rail" aria-label={CHAT_LIST} style={{ width: railWidth }}>
           {/* Note that New channel stands but takes no press until the chat is read, since a channel opened against no chat would go nowhere. */}
-          <RailBar onNew={undefined} viewOptions={undefined} />
+          <RailBar onNew={undefined} viewOptions={undefined} narrow={room === SHELL_ROOM.NARROW} />
           {standIn}
         </nav>
         {dialogs.dialog}
@@ -1121,6 +1121,7 @@ function ChatView({
         style={{ width: railWidth }}
       >
         <RailBar
+          narrow={room === SHELL_ROOM.NARROW}
           onNew={dialogs.askNew}
           viewOptions={
             <ChatViewOptions
@@ -1186,10 +1187,13 @@ function ChatView({
 function RailBar({
   onNew,
   viewOptions,
+  narrow,
 }: {
   /** Opens New channel's question; none while no chat is read, which leaves the press disabled. */
   onNew: (() => void) | undefined;
   viewOptions: React.ReactNode;
+  /** Whether the room is a phone's, whose tag is the experiment's glyph alone. */
+  narrow: boolean;
 }): React.JSX.Element {
   return (
     <header className="desktop-toolbar chat-rail-bar">
@@ -1201,7 +1205,7 @@ function RailBar({
         >
           {CHAT_LIST}
         </OneLine>
-        <ExperimentTag />
+        <ExperimentTag narrow={narrow} />
       </div>
       <div className="desktop-toolbar-actions">
         {viewOptions}

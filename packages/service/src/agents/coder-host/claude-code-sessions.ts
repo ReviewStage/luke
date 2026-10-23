@@ -181,7 +181,12 @@ function claudeCode(options: ClaudeCodeSessionsOptions): RunnerHarness<{ readonl
     return { env };
   });
 
-  const config = (agent: CodingAgent, resume: string | undefined, firstSequence: number) =>
+  const config = (
+    agent: CodingAgent,
+    resume: string | undefined,
+    firstSequence: number,
+    rewindBefore: string | undefined,
+  ) =>
     Effect.gen(function* () {
       const model = providerModelOf(agent.model);
       if (model === undefined) return yield* Effect.fail(new LaunchRefused({ reason: "model" }));
@@ -195,6 +200,7 @@ function claudeCode(options: ClaudeCodeSessionsOptions): RunnerHarness<{ readonl
         ...(model.fast ? { fast: true } : undefined),
         append: yield* options.instructions(agent),
         ...(resume === undefined ? undefined : { resume }),
+        ...(rewindBefore === undefined ? undefined : { rewindBefore }),
         firstSequence,
         eventsUrl: options.eventsUrl,
         mcpUrl: options.mcpUrl,

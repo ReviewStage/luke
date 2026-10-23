@@ -7,9 +7,15 @@ import { useCopyLink } from "../copy-link-item.js";
 import { ForkMessageAction } from "./fork-action.js";
 import type { ForkCut } from "./fork-model.js";
 import { useMessagePlace } from "./message-links.js";
+import {
+  EditMessageAction,
+  REWIND_ACTION,
+  RevertMessageAction,
+  type RewindAction,
+} from "./rewind-action.js";
 
 /**
- * copy-message.tsx -- the actions under a transcript's message: a copy of its words to the clipboard, where its transcript names its messages Copy link, and, on an agent's own message where its tab offers it, Fork to new agent (`fork-action.tsx`).
+ * copy-message.tsx -- the actions under a transcript's message: a copy of its words to the clipboard, where its transcript names its messages Copy link, on an agent's own message where its tab offers it, Fork to new agent (`fork-action.tsx`), and, where its tab offers a rewind, a line's Edit or a reply's Revert to here (`rewind-action.tsx`).
  *
  * A thin wrapper over AI Elements' message actions, shared by the voice
  * Call tab and a coding agent's tab, answered as every copy button
@@ -28,6 +34,7 @@ export function CopyMessageAction({
   forkCut,
   placement = MESSAGE_ACTIONS_PLACEMENT.FLOATING,
   lead,
+  rewind,
 }: {
   words: string;
   /** Whether its words are whole and there are any, which its Copy needs; a turn still running, or one with no words, is offered no Copy. */
@@ -42,6 +49,8 @@ export function CopyMessageAction({
   placement?: MessageActionsPlacement;
   /** An action of the message's own set before Copy, as a chat notice's Open in Chat is. */
   lead?: ReactNode;
+  /** How its tab may offer to rewind to it: Edit on a line of the developer's, Revert to here on the agent's own; none where it offers neither. */
+  rewind?: RewindAction | undefined;
 }): ReactNode {
   const { state, copy } = useCopyFeedback();
   const place = useMessagePlace(messageId ?? "");
@@ -69,6 +78,11 @@ export function CopyMessageAction({
       )}
       {!forkable || messageId === undefined ? null : (
         <ForkMessageAction messageId={messageId} words={words} cut={forkCut} />
+      )}
+      {rewind === undefined || messageId === undefined ? null : rewind === REWIND_ACTION.REVERT ? (
+        <RevertMessageAction messageId={messageId} />
+      ) : (
+        <EditMessageAction messageId={messageId} />
       )}
     </MessageActions>
   );

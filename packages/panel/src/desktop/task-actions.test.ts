@@ -390,6 +390,23 @@ test("a sidebar task Luke or a coding agent made wears who is on it rather than 
   unmountAll();
 });
 
+test("a sidebar task leads with its glyph as every place naming a task does: its status's mark, or the document where it has no status", () => {
+  /** The class of the mark the row leads with, and the status it says. */
+  const lead = (task: TaskSummary) => {
+    const { tasks, asked } = openTab();
+    const container = mount(sidebarTask(tasks, task, asked));
+    const mark = container.querySelector(".luke-list-row-leading > svg");
+    unmountAll();
+    return [mark?.getAttribute("class"), mark?.getAttribute("data-status")];
+  };
+
+  assert.deepEqual(lead({ ...OTHER, status: TASK_STATUS.IN_PROGRESS }), [
+    "luke-task-mark luke-task-status-mark",
+    TASK_STATUS.IN_PROGRESS,
+  ]);
+  assert.deepEqual(lead(OTHER), ["icon-button-glyph", null]);
+});
+
 test("Start and the task's ⋯ stand in the task's toolbar whichever tab its column shows, its plan's or its Chat's", () => {
   const drawn = (tab: MainTab | undefined) => {
     const container = mount(

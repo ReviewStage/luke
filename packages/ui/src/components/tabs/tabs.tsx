@@ -621,7 +621,7 @@ export function TabCard({
   detail?: string | undefined;
   /** The glyph before the detail's words. */
   detailIcon?: ReactNode;
-  /** A mark after the detail's words. */
+  /** A mark after the detail's words, or alone where there are none. */
   endMark?: ReactNode;
   /** A picture of the screen, by its address; its glyph, large, until it has one. */
   still?: string | undefined;
@@ -681,9 +681,9 @@ export function TabCard({
             <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.SUBTLE}>
               {detail}
             </Text>
-            {endMark}
           </>
         )}
+        {endMark}
       </div>
     </div>
   );

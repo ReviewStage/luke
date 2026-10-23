@@ -6,7 +6,11 @@ import {
   shownPicturesOf,
 } from "@luke/features/agent-pictures-model";
 import type { FileChip } from "@luke/features/attachment-model";
-import type { CodingAgentMessage } from "@luke/features/coding-agent-wire";
+import {
+  CODING_AGENT_ATTACHMENT_TYPE,
+  type CodingAgentAttachment,
+  type CodingAgentMessage,
+} from "@luke/features/coding-agent-wire";
 import { isVideoType, type KeptPicture } from "@luke/features/conversation-picture-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import {
@@ -649,6 +653,81 @@ export function CallPictures({
       {list}
       {videos}
     </>
+  );
+}
+
+/** The media types a message may carry a file of, as the wire takes them. */
+const ATTACHMENT_TYPES: ReadonlySet<string> = new Set(Object.values(CODING_AGENT_ATTACHMENT_TYPE));
+
+/** A file's bytes as a message carries them, read off a `data:` address; none for any other address. */
+function attachmentOfData(name: string, url: string): CodingAgentAttachment | undefined {
+  const read = /^data:([^;,]+);base64,(.+)$/u.exec(url);
+  const mediaType = read?.[1];
+  const data = read?.[2];
+  if (mediaType === undefined || data === undefined || !ATTACHMENT_TYPES.has(mediaType)) {
+    return undefined;
+  }
+  // SAFETY: the type was just found among the wire's own.
+  return { name, mediaType: mediaType as CodingAgentAttachment["mediaType"], data };
+}
+
+/** One of a line's files as Edit carries it again, by its place on the line, which never changes. */
+export interface LineAttachment {
+  readonly key: string;
+  readonly attachment: CodingAgentAttachment;
+}
+
+/**
+ * A line's files as a message to the agent carries them again, for Edit to
+ * send: each one the line holds inline, and each one kept as a picture whose
+ * bytes the window has read, by its place on the line; and whether a
+ * picture is still being read, which joins them once it lands
+ * (`LinePicturesWatch`). One that is gone is left out.
+ */
+export function useLineAttachments(message: CodingAgentMessage): {
+  readonly attachments: readonly LineAttachment[];
+  readonly reading: boolean;
+} {
+  const door = useContext(AgentPicturesContext);
+  let reading = false;
+  const attachments = messageFileChips(message).flatMap(
+    ({ name, url, pictureId }, index): LineAttachment[] => {
+      const state =
+        pictureId === undefined || door === undefined
+          ? undefined
+          : pictureNow(door.owner, pictureId);
+      if (
+        state !== undefined &&
+        state.kind !== PICTURE_STATE.READY &&
+        state.kind !== PICTURE_STATE.MISSING
+      ) {
+        reading = true;
+      }
+      const attachment = attachmentOfData(
+        name,
+        state?.kind === PICTURE_STATE.READY ? state.url : url,
+      );
+      return attachment === undefined ? [] : [{ key: String(index), attachment }];
+    },
+  );
+  return { attachments, reading };
+}
+
+/** Reads a line's kept pictures through the agent's door, and says so each time one settles; draws nothing. */
+export function LinePicturesWatch({
+  message,
+  onSettled,
+}: {
+  message: CodingAgentMessage;
+  onSettled: () => void;
+}): ReactNode {
+  const door = useContext(AgentPicturesContext);
+  if (door === undefined) return null;
+  return messageFileChips(message).map(({ pictureId }, index) =>
+    pictureId === undefined ? null : (
+      // Note that a file's place on its line is its identity: a line never reorders.
+      <PictureWatch key={index} door={door} id={pictureId} onSettled={onSettled} />
+    ),
   );
 }
 

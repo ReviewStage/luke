@@ -13,9 +13,10 @@ import { AuthPage } from "./auth-page.js";
  * auth-page.test.ts -- the page is one main landmark holding one card named
  * by its title, its artwork hidden from a reader; what went wrong is
  * announced from an alert region that stood before it arrived; a page with
- * nothing to say past its title says its title alone; its mark wears a badge
- * only once the flow has ended, which leaves the title the region's name;
- * and the way on is one link under the words.
+ * nothing to say past its title says its title alone, with no room kept for
+ * choices that are all absent; its mark wears a badge only once the flow has
+ * ended, which leaves the title the region's name; and the way on is one link
+ * under the words.
  */
 
 const roots: Root[] = [];
@@ -77,6 +78,13 @@ test("a page with nothing to say past its title says its title alone", () => {
   );
   expect(container.querySelector("main")?.textContent).toBe("Continuing to Luke…");
   expect(container.querySelector('[aria-hidden="true"]')).toBeNull();
+});
+
+test("a body whose every choice is absent keeps no room on the card", () => {
+  const container = mount(
+    createElement(AuthPage, { title: "Nothing to connect", children: [null, false, undefined] }),
+  );
+  expect(container.querySelector(".luke-auth-body")).toBeNull();
 });
 
 /** The glyphs a page's hidden artwork draws: the mark's, and its badge's where it wears one. */
