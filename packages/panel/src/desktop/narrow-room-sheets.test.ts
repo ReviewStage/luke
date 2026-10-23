@@ -82,3 +82,25 @@ test("in a narrow room a task's Chat tab draws no channel head under the task's 
   assert.deepEqual(chatHeadsIn("narrow"), { tab: false, place: true });
   assert.deepEqual(chatHeadsIn("wide"), { tab: true, place: true });
 });
+
+/** A Terminal tab's shells in the room given, its panel as wide as a phone on its side leaves it, shut or floated open over the screen. */
+function shellsIn(room: "narrow" | "wide", over: "closed" | "open") {
+  laid?.remove();
+  document.body.innerHTML = "";
+  laid = layContainersAt({ "side-panel": 800 });
+  const shell = document.body.appendChild(document.createElement("div"));
+  shell.className = "desktop-shell";
+  shell.dataset.room = room;
+  const tab = shell.appendChild(document.createElement("section"));
+  tab.className = "terminal-tab file-view";
+  tab.dataset.paneOver = over;
+  const shells = tab.appendChild(document.createElement("aside"));
+  shells.className = "terminal-shells";
+  return { shown: shown(shells), floats: getComputedStyle(shells).position === "absolute" };
+}
+
+test("on a phone on its side, wider than the panel's own line, a Terminal tab's shells still float over the screen, shut until asked, and a wide room docks them as before", () => {
+  assert.deepEqual(shellsIn("narrow", "closed"), { shown: false, floats: true });
+  assert.deepEqual(shellsIn("narrow", "open"), { shown: true, floats: true });
+  assert.equal(shellsIn("wide", "open").floats, false);
+});

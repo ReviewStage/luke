@@ -1491,13 +1491,17 @@
 /* A Terminal tab's shells float the same way below a 480px panel, so the
    screen beside them never falls under forty columns: at the panel's
    default width the screen has the whole tab, the shells a hover away. */
+.terminal-tab {
+  --terminal-shells-over: min(264px, calc(100% - var(--luke-space-48)));
+}
+
 @container side-panel (max-width: 479px) {
   .terminal-tab .terminal-shells {
     position: absolute;
     z-index: 1;
     inset-block: 0;
     right: 0;
-    width: min(264px, calc(100% - var(--luke-space-48)));
+    width: var(--terminal-shells-over);
     box-shadow: var(--luke-menu-shadow);
   }
 
@@ -1521,6 +1525,29 @@
   .terminal-tab .file-tree-toggle[data-place="over"] {
     display: flex;
   }
+}
+
+/* On a phone the shells float over the screen at any width, a phone on its
+   side included, since the task's header's ⋯ opens them over it alone
+   (`terminal-tab.tsx`), as a file's tree floats there. */
+.desktop-shell[data-room="narrow"] .terminal-tab .terminal-shells {
+  position: absolute;
+  z-index: 1;
+  inset-block: 0;
+  right: 0;
+  width: var(--terminal-shells-over);
+  box-shadow: var(--luke-menu-shadow);
+}
+
+.desktop-shell[data-room="narrow"]
+  .terminal-tab:is([data-pane-over="peek"], [data-pane-over="open"])
+  .terminal-shells {
+  display: flex;
+  animation: pane-over-in var(--luke-duration-pane) var(--luke-motion-pane) backwards;
+}
+
+.desktop-shell[data-room="narrow"] .terminal-tab[data-pane-over="closed"] .terminal-shells {
+  display: none;
 }
 
 @keyframes pane-over-in {

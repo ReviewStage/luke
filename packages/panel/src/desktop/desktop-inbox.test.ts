@@ -3185,6 +3185,39 @@ test("on To do, a focused row whose item is answered on another Mac leaves the k
   );
 });
 
+test("on a phone, a focused row whose item is answered elsewhere leaves the keyboard on the head's ⋯, which holds View options there", async () => {
+  const { page } = mount([], { room: SHELL_ROOM.NARROW });
+  await settle();
+  // To do is chosen as a phone chooses it: the ⋯'s View options opens the list's own menu where the ⋯ stood.
+  const more = () =>
+    page.querySelector<HTMLButtonElement>('.inbox-head button[aria-label="More"]') ??
+    assert.fail("the ⋯ stands");
+  act(() => more().click());
+  const options = [
+    ...document.querySelectorAll<HTMLElement>('[role="menu"] [role="menuitem"]'),
+  ].find((each) => each.querySelector(".luke-menu-item-label")?.textContent === "View options");
+  act(() => options?.click());
+  act(() => viewItem("To do").click());
+  rowNamed(page, "Expire after 7 days?").focus();
+  inboxes.set(INVITES.id, [
+    {
+      ...EXPIRY,
+      status: INBOX_STATUS.ANSWERED,
+      answer: { reply: INBOX_REPLY.CHOSE, choices: ["Retry once"] },
+      updatedAt: 6_000,
+    },
+  ]);
+  act(() =>
+    setHolding([
+      { taskId: INVITES.id, items: 1, updatedAt: 6_000 },
+      { taskId: BILLING.id, items: 2, updatedAt: 5_000 },
+    ]),
+  );
+  await settle();
+  assert.deepEqual(listed(page), ["# Billing usage alerts", "▸ *Alert at 80%?"]);
+  assert.ok(document.activeElement === more(), "the keyboard is on the head's ⋯");
+});
+
 /** Gives the window the list's motion tokens beside the pane's, and an engine that records what is played; answers what was played. */
 function playListMotions() {
   const motions = playMotions();
