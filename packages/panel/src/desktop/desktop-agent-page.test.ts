@@ -2005,7 +2005,7 @@ test("on the page of an agent working in no repository, a GitHub page of a file 
   );
 });
 
-test("a chip in the agent's words naming the pull request it opened hangs its Pull request tab's card, as on a task", async () => {
+test("a chip in the agent's words naming the pull request it opened, or a page under it, hangs its Pull request tab's card, as on a task", async () => {
   const url = "https://github.com/acme/relay/pull/2911";
   published = {
     repository: "acme/relay",
@@ -2027,7 +2027,7 @@ test("a chip in the agent's words naming the pull request it opened hangs its Pu
       {
         id: "answer",
         role: MESSAGE_ROLE.ASSISTANT,
-        parts: [{ type: "text", text: `Opened [@#2911](${url}).` }],
+        parts: [{ type: "text", text: `Opened [@#2911](${url}), its [@files](${url}/files).` }],
       },
     ],
     cursor: "1:0",
@@ -2036,13 +2036,21 @@ test("a chip in the agent's words naming the pull request it opened hangs its Pu
   };
   const page = mount(tasksControl({ workspace: ACME, workspaces: [ACME] }));
   await settle();
-  const chip = page.querySelector(".agent-page [data-mention-ref]");
-  assert.ok(chip, "the pull request is its chip");
+  const chips = [...page.querySelectorAll(".agent-page [data-mention-ref]")];
+  assert.equal(chips.length, 2, "the pull request and its files are chips");
 
-  restOn(chip);
-  const card = document.querySelector(".luke-tooltip-card .luke-hover-card");
-  assert.equal(card?.hasAttribute("data-tab-card"), true, "the card is its tab's");
-  assert.equal(card?.querySelector(".luke-hover-card-name")?.textContent, "Await the payment mock");
+  for (const chip of chips) {
+    restOn(chip);
+    const card = [...document.querySelectorAll(".luke-tooltip-card .luke-hover-card")].at(-1);
+    assert.equal(card?.hasAttribute("data-tab-card"), true, "the card is its tab's");
+    assert.equal(
+      card?.querySelector(".luke-hover-card-name")?.textContent,
+      "Await the payment mock",
+    );
+    act(() => {
+      chip.dispatchEvent(new MouseEvent("pointerout", { bubbles: true }));
+    });
+  }
 });
 
 /** The page's dialog's button with these words, or a failure saying the dialog offers none. */

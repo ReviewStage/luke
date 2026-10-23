@@ -23,7 +23,7 @@ import {
   Tooltip,
   useMenu,
 } from "@luke/ui";
-import { pullRequestAgentOf } from "@luke/ui/pull-request-link";
+import { pullRequestAgentOf, repositoryPullRequestOf } from "@luke/ui/pull-request-link";
 import { type StripTab, sameTab } from "@luke/ui/tab-strip-model";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -437,12 +437,16 @@ export function DesktopAgentPage({
     const url = encodeMention({ kind: MENTION_KIND.FILE, path: skill.path }, place);
     appPlatform().openGitHub(url);
   };
-  // A link to the pull request the agent opened hangs its Pull request tab's card, as on a task.
+  // A link to the pull request the agent opened, or a page under it, hangs its Pull request tab's card, as on a task.
   const pullRequestCard = (url: string) => {
     const pullRequest = control.pullRequests.get(agentId);
     if (pullRequest === undefined) return undefined;
-    if (pullRequestAgentOf(url, [{ agentId, url: pullRequest.url }]) === undefined)
-      return undefined;
+    const number = repositoryPullRequestOf(url, agentRepository);
+    const own =
+      pullRequestAgentOf(url, [{ agentId, url: pullRequest.url }]) !== undefined ||
+      (number !== undefined &&
+        repositoryPullRequestOf(pullRequest.url, agentRepository) === number);
+    if (!own) return undefined;
     const card = tabCard({
       kind: TAB_KIND.CHANGES,
       subject: agentSubject(control, agentId, views.held, false),
