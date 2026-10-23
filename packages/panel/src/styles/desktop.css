@@ -3385,9 +3385,10 @@ ul.actor-stack {
 }
 
 /* A replaced or withdrawn ask keeps its controls in the agent's message as
-   it offered them, nothing picked and taking nothing, dimmed so they read
-   as what it used to ask rather than something to answer, over the pill
-   saying what replaced it, or why it was withdrawn. */
+   it offered them, nothing picked and taking nothing, stepped back to the
+   muted ink (`SteppedBack`) so they read as what it used to ask rather than
+   something to answer or something answered, over the pill saying what
+   replaced it, or that it was withdrawn and why. */
 .inbox-ask-replaced {
   display: flex;
   min-width: 0;
@@ -3400,7 +3401,22 @@ ul.actor-stack {
   min-width: 0;
   flex-direction: column;
   gap: var(--luke-space-12);
-  opacity: 0.55;
+}
+
+/* A withdrawn ask's pill holds one word, and its why stands under it as a
+   muted sentence rather than wrapping inside the pill. */
+.inbox-ask-withdrawn {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--luke-space-4);
+}
+
+.inbox-ask-why {
+  margin: 0;
+  color: var(--luke-color-text-muted);
+  overflow-wrap: anywhere;
 }
 
 /* The press an answer gave wears its glyph in the tone of what it did,
