@@ -138,16 +138,18 @@ export function voiceRuntimeReports(
     // follows on every display. A kind arrives only with the edge that opened
     // the exchange, so its presence is the count and no level change of its
     // own is one. The call's transcript arrives as what moved in it and is
-    // held whole here, so a panel that opens mid-call reads all of it.
+    // held whole here, beside the voice slice rather than in it, so a panel
+    // that opens mid-call reads all of it and one standing is handed only
+    // what moved.
     reportVoiceView(context, view, countedKind, transcript) {
       if (!voiceWindow.owns(context.sender)) return;
       const { state } = dependencies;
-      const held = state.snapshot().voice;
+      const held = state.snapshot();
       const callTranscript =
         transcript === undefined
           ? held.callTranscript
           : withCallTranscriptChange(held.callTranscript, transcript);
-      state.update({ voice: { ...held, view, callTranscript } });
+      state.update({ voice: { ...held.voice, view }, callTranscript });
       panels.setVoiceExchange(liveExchangeActive(view));
       if (countedKind !== undefined) {
         dependencies.recordProductEvent(PRODUCT_EVENT.VOICE_EXCHANGE, {
