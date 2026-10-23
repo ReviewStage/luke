@@ -47,10 +47,10 @@ const TRANSCRIPT: readonly CodingAgentMessage[] = [
   message("third-reply", MESSAGE_ROLE.ASSISTANT),
 ];
 
-test("Edit writes again the lines that opened a turn, and a reply reverts to the next of them", () => {
-  const { editable, revertsAt } = rewindPoints(TRANSCRIPT, true);
+test("Edit writes again every line that opened a turn, the first included, and a reply reverts to the next of them", () => {
+  const { editable, revertsAt } = rewindPoints(TRANSCRIPT);
 
-  assert.deepEqual([...editable].toSorted(), ["second-line", "third-line"]);
+  assert.deepEqual([...editable].toSorted(), ["plan", "second-line", "third-line"]);
   assert.deepEqual(
     new Map(revertsAt),
     new Map([
@@ -58,12 +58,6 @@ test("Edit writes again the lines that opened a turn, and a reply reverts to the
       ["second-reply", "third-line"],
     ]),
   );
-});
-
-test("the oldest line held is written again where older pages are still to read, since it is no plan", () => {
-  const { editable } = rewindPoints(TRANSCRIPT.slice(2), false);
-
-  assert.deepEqual([...editable].toSorted(), ["second-line", "third-line"]);
 });
 
 const roots: Root[] = [];

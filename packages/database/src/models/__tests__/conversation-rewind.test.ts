@@ -144,6 +144,23 @@ it.layer(getTestDB())("rewinding a coding agent's conversation", (it) => {
     }),
   );
 
+  it.effect(
+    "cuts at the first line, leaving the conversation empty for the words sent in its place",
+    () =>
+      Effect.gen(function* () {
+        const target = yield* openConversation;
+        const { firstLine } = yield* threeLines(target);
+
+        const rewound = yield* rewindConversation(target, firstLine);
+        const after = yield* standing(target);
+
+        assert.equal(Result.getOrThrow(rewound).clientId, "client-1");
+        assert.deepEqual(after.seqs, []);
+        assert.deepEqual(after.turns, []);
+        assert.deepEqual(yield* readNativeRewind(target), Option.some("client-1"));
+      }),
+  );
+
   it.effect("keeps the line's id for the next launch until it is handed over", () =>
     Effect.gen(function* () {
       const target = yield* openConversation;

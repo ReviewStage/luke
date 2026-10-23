@@ -71,25 +71,20 @@ const RewindContext = createContext<RewindDoors | undefined>(undefined);
 
 /**
  * Where a transcript's rewinds land: the developer's lines that opened a
- * turn, each one Edit may write again, and, for each reply, the next such
- * line, which its Revert to here drops from. Note that the plan the agent was
- * handed opens the transcript and is never written again here, so the first
- * message is passed over only where the messages held start at the start;
- * where older pages are still to read, it is a line as any other.
+ * turn, the first included, each one Edit may write again, and, for each
+ * reply, the next such line, which its Revert to here drops from. Note that
+ * a plan the agent was handed is drawn as its card, which offers no Edit, so
+ * only a first line drawn as the developer's own bubble is written again.
  */
-export function rewindPoints(
-  messages: readonly CodingAgentMessage[],
-  fromStart: boolean,
-): {
+export function rewindPoints(messages: readonly CodingAgentMessage[]): {
   readonly editable: ReadonlySet<string>;
   readonly revertsAt: ReadonlyMap<string, string>;
 } {
   const editable = new Set<string>();
   const revertsAt = new Map<string, string>();
   let next: string | undefined;
-  const first = fromStart ? 1 : 0;
   // Read from the end, so each reply finds the opening line nearest after it.
-  for (let at = messages.length - 1; at >= first; at -= 1) {
+  for (let at = messages.length - 1; at >= 0; at -= 1) {
     const message = messages[at];
     if (message === undefined) continue;
     if (message.role === MESSAGE_ROLE.USER) {
