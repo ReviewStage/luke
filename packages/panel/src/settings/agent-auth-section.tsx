@@ -27,7 +27,6 @@ import {
   EllipsisIcon,
   ErrorState,
   GAP,
-  HarnessMark,
   IconButton,
   Inline,
   JUSTIFY,
@@ -69,6 +68,7 @@ import { EyeIcon, EyeOffIcon } from "lucide-react";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { useAct } from "../act.js";
 import { ActionMenu } from "../desktop/action-menu.js";
+import { HarnessMark } from "../harness-marks.js";
 import { useSettleOpenAiKey } from "../openai-key.js";
 import { useOpenLink } from "../tasks/use-open-link.js";
 import { useCapability } from "../use-app-state.js";

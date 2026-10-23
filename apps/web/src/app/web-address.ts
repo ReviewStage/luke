@@ -13,7 +13,7 @@
 /** The path the web app's panel is served at, which names no place. */
 export const PANEL_PATH = "/app";
 
-/** Where the build emits the panel's static files, Excalidraw's fonts and the voice clips (`scripts/panel-build.ts`). */
+/** Where the build emits the panel's static files, Excalidraw's fonts and the harness marks (`scripts/panel-build.ts`). */
 export const PANEL_ASSET_BASE = `${PANEL_PATH}/`;
 
 /** The address the tab stands at, as the panel writes one: its path, query, and fragment. */

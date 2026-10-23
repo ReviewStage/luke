@@ -12,7 +12,6 @@ import {
   type ChipLook,
   ChipName,
   type ChipWidth,
-  HarnessMark,
   POPOVER_ALIGN,
   TEXT_LINK_LOOK,
   TextLink,
@@ -20,6 +19,7 @@ import {
 } from "@luke/ui";
 import { useDisclosure } from "@luke/ui/use-disclosure";
 import { useEffect, useId, useRef, useState } from "react";
+import { HarnessMark } from "../harness-marks.js";
 import { agentUsageLine, choiceLabel, planPayerOf, providerOf } from "./coding-agent-model.js";
 import { ModelLabel } from "./model-label.js";
 import { ModelMenu, settledChoice } from "./model-menu.js";

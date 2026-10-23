@@ -1,13 +1,7 @@
 import type { CodingAgentPullRequest, CodingAgentStatus } from "@luke/features/coding-agent-wire";
 import type { ModelProvider } from "@luke/features/models-wire";
 import type { TaskStatus } from "@luke/features/task-wire";
-import {
-  AgentPlaceholderIcon,
-  DocumentIcon,
-  HarnessMark,
-  PlusIcon,
-  TaskStatusMark,
-} from "@luke/ui";
+import { AgentPlaceholderIcon, DocumentIcon, PlusIcon, TaskStatusMark } from "@luke/ui";
 import { pullRequestLabelOf, TAB_WORDS } from "@luke/ui/tab-strip-model";
 import { DOCUMENT_REGION } from "@luke/ui/tasks-model";
 import {
@@ -20,6 +14,7 @@ import {
   LaptopIcon,
   MessagesSquareIcon,
 } from "lucide-react";
+import { HarnessMark } from "../harness-marks.js";
 import { GLYPH_STATE, type GlyphState, StateGlyph, stateEndMark } from "../state-glyph.js";
 import { agentGlyphState, providerOf } from "./coding-agent-model.js";
 import { fileLook } from "./file-ref.js";

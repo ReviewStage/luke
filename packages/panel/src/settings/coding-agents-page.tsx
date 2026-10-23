@@ -16,7 +16,6 @@ import {
   CHOICE_BAR_LOOK,
   ChoiceBar,
   ErrorState,
-  HarnessMark,
   SETTINGS_SKELETON_CONTROL,
   SettingsLine,
   SettingsRow,
@@ -32,6 +31,7 @@ import { actionRejection } from "@luke/ui/use-setting-write";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { useCallback, useEffect, useState } from "react";
 import { useAct } from "../act.js";
+import { HarnessMark } from "../harness-marks.js";
 import {
   choiceModelId,
   choiceOn,

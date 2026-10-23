@@ -1,6 +1,7 @@
 import { CONTEXT_WINDOW } from "@luke/features/coding-agent-wire";
 import type { CatalogModel, ModelChoice } from "@luke/features/models-wire";
-import { HarnessMark, Spinner } from "@luke/ui";
+import { Spinner } from "@luke/ui";
+import { HarnessMark } from "../harness-marks.js";
 import { type FootRow, type MenuRow, SearchableMenu } from "../searchable-menu.js";
 import {
   CONTEXT_WORD,
