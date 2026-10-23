@@ -102,6 +102,8 @@ export const CALL_KIND = {
   UPDATE_AUTOMATION: "update-automation",
   /** An automation deleted (`delete_automation`), its row naming it once answered. */
   DELETE_AUTOMATION: "delete-automation",
+  /** An automation run now (`run_automation`), its row naming it once answered. */
+  RUN_AUTOMATION: "run-automation",
   /** A task moved into a section of the member's sidebar or out of them (`move_task`), its row naming the task once answered. */
   MOVE_TASK: "move-task",
   /** A task of the workspace changed (`update_task`), its row naming the task once answered; an older transcript's archive of one reads as a change too. */
@@ -174,6 +176,7 @@ export const CALL_WORDS = {
   [CALL_KIND.CREATE_AUTOMATION]: { verb: "Made the automation", code: false },
   [CALL_KIND.UPDATE_AUTOMATION]: { verb: "Changed the automation", code: false },
   [CALL_KIND.DELETE_AUTOMATION]: { verb: "Deleted the automation", code: false },
+  [CALL_KIND.RUN_AUTOMATION]: { verb: "Ran the automation", code: false },
   [CALL_KIND.MOVE_TASK]: { verb: "Moved the task", code: false },
   [CALL_KIND.UPDATE_TASK]: { verb: "Updated the task", code: false },
   [CALL_KIND.LIST_ISSUES]: { verb: "Listed the issues", code: false },

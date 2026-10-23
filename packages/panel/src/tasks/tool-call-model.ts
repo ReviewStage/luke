@@ -947,6 +947,8 @@ function tasksToolView(
       return answeredCall(CALL_KIND.UPDATE_AUTOMATION, input, output, "automation", "name");
     case AGENT_TOOL.DELETE_AUTOMATION:
       return answeredCall(CALL_KIND.DELETE_AUTOMATION, input, output, "automation", "name");
+    case AGENT_TOOL.RUN_AUTOMATION:
+      return answeredCall(CALL_KIND.RUN_AUTOMATION, input, output, "automation", "name");
     case RETIRED_TOOL.MOVE_TASK:
       return answeredCall(CALL_KIND.MOVE_TASK, input, output, "task", "name");
     case AGENT_TOOL.UPDATE_TASK:

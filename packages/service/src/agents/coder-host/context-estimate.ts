@@ -20,6 +20,7 @@ import {
   CREATE_AUTOMATION_TOOL,
   DELETE_AUTOMATION_TOOL,
   LIST_AUTOMATIONS_TOOL,
+  RUN_AUTOMATION_TOOL,
   UPDATE_AUTOMATION_TOOL,
 } from "../automation-tools.js";
 import { BROWSER_TOOL } from "../browser/browser-tool.js";
@@ -195,6 +196,10 @@ const AUTHORED_TOOLS = {
   [CODER_TOOL.DELETE_AUTOMATION]: {
     description: DELETE_AUTOMATION_TOOL.description,
     inputSchema: emitJsonSchema(DELETE_AUTOMATION_TOOL.inputSchema),
+  },
+  [CODER_TOOL.RUN_AUTOMATION]: {
+    description: RUN_AUTOMATION_TOOL.description,
+    inputSchema: emitJsonSchema(RUN_AUTOMATION_TOOL.inputSchema),
   },
   [CODER_TOOL.POST_CHAT]: {
     description: CHAT_TOOLS.POST.description,

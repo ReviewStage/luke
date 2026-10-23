@@ -50,6 +50,7 @@ import {
   runCreateAutomation,
   runDeleteAutomation,
   runListAutomations,
+  runRunAutomation,
   runUpdateAutomation,
 } from "../automation-tools.js";
 import type { AdmittedConversation } from "../brain-host/conversation.js";
@@ -140,6 +141,7 @@ export interface AgentToolCall {
     | typeof CODER_TOOL.CREATE_AUTOMATION
     | typeof CODER_TOOL.UPDATE_AUTOMATION
     | typeof CODER_TOOL.DELETE_AUTOMATION
+    | typeof CODER_TOOL.RUN_AUTOMATION
     | typeof CODER_TOOL.LIST_MODELS;
   readonly input: UnparsedWireValue;
   readonly callId: string;
@@ -163,6 +165,7 @@ const AGENT_TOOL_RUN = {
   [CODER_TOOL.CREATE_AUTOMATION]: runCreateAutomation,
   [CODER_TOOL.UPDATE_AUTOMATION]: runUpdateAutomation,
   [CODER_TOOL.DELETE_AUTOMATION]: runDeleteAutomation,
+  [CODER_TOOL.RUN_AUTOMATION]: runRunAutomation,
   [CODER_TOOL.LIST_MODELS]: runListModels,
   [CODER_TOOL.LIST_OPEN_ASKS]: runListOpenAsks,
 } as const;

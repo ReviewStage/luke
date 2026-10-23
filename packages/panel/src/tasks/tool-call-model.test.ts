@@ -757,6 +757,12 @@ test("the automation calls read as theirs, a made one by the name asked and a ch
       output: { status: "accepted", automation },
     },
     {
+      tool: "run_automation",
+      callId: "call-5",
+      input: { automationId: "automation-1" },
+      output: { status: "accepted", automation, run: { id: "run-1", status: "started" } },
+    },
+    {
       tool: "delete_automation",
       callId: "call-4",
       input: { automationId: "automation-1" },
@@ -773,6 +779,7 @@ test("the automation calls read as theirs, a made one by the name asked and a ch
       [CALL_KIND.LIST_AUTOMATIONS, "", undefined],
       [CALL_KIND.CREATE_AUTOMATION, "Agent audit", undefined],
       [CALL_KIND.UPDATE_AUTOMATION, "Agent audit", undefined],
+      [CALL_KIND.RUN_AUTOMATION, "Agent audit", undefined],
       [CALL_KIND.DELETE_AUTOMATION, "Agent audit", undefined],
     ],
   );

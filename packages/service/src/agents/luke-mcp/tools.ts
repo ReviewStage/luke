@@ -67,6 +67,7 @@ import {
   CREATE_AUTOMATION_TOOL,
   DELETE_AUTOMATION_TOOL,
   LIST_AUTOMATIONS_TOOL,
+  RUN_AUTOMATION_TOOL,
   UPDATE_AUTOMATION_TOOL,
 } from "../automation-tools.js";
 import type { AdmittedConversation } from "../brain-host/conversation.js";
@@ -353,6 +354,7 @@ export const LUKE_MCP_TOOLS: ReadonlyMap<string, LukeMcpTool> = new Map<string, 
   agentTool(CREATE_AUTOMATION_TOOL),
   agentTool(UPDATE_AUTOMATION_TOOL),
   agentTool(DELETE_AUTOMATION_TOOL),
+  agentTool(RUN_AUTOMATION_TOOL),
   // Chat.
   entry(CHAT_TOOLS.POST, (admitted, input, { seams, sandbox, callId }) =>
     runAgentChat(seams, admitted, {
