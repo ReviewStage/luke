@@ -21,7 +21,7 @@
     border: 1px solid var(--luke-color-border);
     border-radius: var(--luke-control-radius);
     background: var(--luke-color-fill-hover);
-    color: var(--luke-color-text-subtle);
+    color: var(--luke-color-text-muted);
     cursor: text;
     transition: border-color var(--luke-duration-hover) ease;
   }
@@ -47,7 +47,7 @@
   }
 
   .luke-search-field-input::placeholder {
-    color: var(--luke-color-text-subtle);
+    color: var(--luke-color-text-muted);
   }
 
   .luke-search-field-tally {

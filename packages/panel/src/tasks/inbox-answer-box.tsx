@@ -1,7 +1,15 @@
 import { useAtomValue } from "@effect/atom-react";
 import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import { INBOX_BOUNDS, type InboxItem, type InboxMessage } from "@luke/features/inbox-wire";
-import { BUTTON_TYPE, BUTTON_VARIANT, Button, ErrorState, SUBMIT_STATE, Tooltip } from "@luke/ui";
+import {
+  BUTTON_TYPE,
+  BUTTON_VARIANT,
+  Button,
+  ErrorState,
+  STATUS_TONE,
+  SUBMIT_STATE,
+  Tooltip,
+} from "@luke/ui";
 import { SERVER_HANDED } from "@luke/ui/agent-servers-model";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
@@ -22,7 +30,7 @@ import {
   type ComposerQuote,
   type PlanEditorModule,
 } from "../plan-editor/contract.js";
-import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast.js";
+import { TOAST_HOLD, useToast } from "../toast.js";
 import { useFileDrop } from "../use-file-drop.js";
 import { AttachFilesButton } from "./attach-files-button.js";
 import { AttachedFileChips, attachmentChips } from "./attached-file-chips.js";
@@ -419,7 +427,7 @@ function AnswerCard({
   const unarchive = () =>
     void onUnarchiveAgent().then((result) => {
       if (result.status !== ACTION_RESULT_STATUS.ACCEPTED) {
-        toast({ words: result.reason, tone: TOAST_TONE.FAILED, hold: TOAST_HOLD.FAILED });
+        toast({ words: result.reason, tone: STATUS_TONE.DANGER, hold: TOAST_HOLD.FAILED });
       } else if (kept !== undefined) control.onDropNote(item.id, kept);
     });
   const message = () => {

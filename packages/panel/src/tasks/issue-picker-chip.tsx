@@ -5,13 +5,13 @@ import type { LinearIssueSummary } from "@luke/features/linear-wire";
 import { TASK_BOUNDS } from "@luke/features/task-wire";
 import { SHORTCUT_KEY, type ShortcutChord, shortcutAria } from "@luke/settings/shortcuts";
 import {
-  BADGE_TONE,
   Badge,
   CHIP_LOOK,
   CHIP_WIDTH,
   Chip,
   ChipName,
   ProviderMark,
+  STATUS_TONE,
   TEXT_ELEMENT,
   TEXT_VARIANT,
   Text,
@@ -267,7 +267,7 @@ function githubRow(
       <span className="issue-picker-github-detail">
         <Tooltip label={ISSUE_WORDS.OUTSIDE_HINT}>
           <span>
-            <Badge tone={BADGE_TONE.ATTENTION}>{ISSUE_WORDS.OUTSIDE}</Badge>
+            <Badge tone={STATUS_TONE.ATTENTION}>{ISSUE_WORDS.OUTSIDE}</Badge>
           </span>
         </Tooltip>
         <Text

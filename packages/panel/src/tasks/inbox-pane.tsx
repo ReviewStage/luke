@@ -17,7 +17,6 @@ import { LINK_PLACE } from "@luke/features/luke-link";
 import type { CatalogModel } from "@luke/features/models-wire";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
-  BADGE_TONE,
   BackIcon,
   Badge,
   Breadcrumbs,
@@ -36,6 +35,7 @@ import {
   LAYOUT_ELEMENT,
   ONE_LINE_END,
   PageToolbar,
+  STATUS_TONE,
   Stack,
   SteppedBack,
   TEXT_TONE,
@@ -587,7 +587,7 @@ const REPLACED = {
 function AnsweredMarker(): React.JSX.Element {
   return (
     <span data-inbox-settled="answered">
-      <Badge tone={BADGE_TONE.COMPLETE} icon={<CheckIcon aria-hidden="true" />}>
+      <Badge tone={STATUS_TONE.COMPLETE} icon={<CheckIcon aria-hidden="true" />}>
         {ANSWERED}
       </Badge>
     </span>

@@ -176,7 +176,7 @@
     min-width: 0;
     flex: 1 1 0;
     overflow: hidden;
-    color: var(--luke-color-text-subtle);
+    color: var(--luke-color-text-muted);
     font-size: var(--luke-type-caption-size);
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -208,7 +208,7 @@
   }
 
   .luke-nav-item-count {
-    color: var(--luke-color-text-subtle);
+    color: var(--luke-color-text-muted);
     font-size: var(--luke-type-caption-size);
     font-variant-numeric: tabular-nums;
     transition: opacity var(--luke-duration-hover) ease;
@@ -218,11 +218,10 @@
     opacity: 0;
   }
 
-  /* Note that the accent count takes the accent's ink rather than its fill,
-     because a count is words, and the fill reads at 1.5:1 on the web's
-     light sidebar. */
-  .luke-nav-item-count[data-tone="accent"] {
-    color: var(--luke-color-accent-text);
+  /* A count of what waits on the reader is in the needs-you tone, as the
+     rows it counts are (`tokens/status-tone.css`); a tally keeps the muted ink. */
+  .luke-nav-item-count[data-tone]:not([data-tone="neutral"]) {
+    color: var(--luke-tone-ink);
   }
 
   .luke-nav-item:focus-visible .luke-nav-item-count[data-shown="on-hover"] {

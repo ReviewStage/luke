@@ -1,5 +1,6 @@
 import type { CSSProperties, ReactNode } from "react";
 import { cssCustomProperties } from "../../css.js";
+import { STATUS_TONE, type StatusTone } from "../../status-tone.js";
 import { useClipped } from "../../use-clipped.js";
 import type { VisuallyHiddenUnder } from "../visually-hidden/visually-hidden.js";
 
@@ -18,7 +19,7 @@ import type { VisuallyHiddenUnder } from "../visually-hidden/visually-hidden.js"
  * colour as a dot before its words (`swatch`) rather than on them, because a
  * provider lets its colour be anything, a dark one among them, which the
  * badge's words could not be read in. The colour is six hex digits, the
- * spelling GitHub and Linear answer; any other is drawn in the subtle ink.
+ * spelling GitHub and Linear answer; any other is drawn in the muted ink.
  * Where the colour is how a reader tells one from another, a pull request's
  * labels in its header, the badge is filled with it instead (`fill`), as
  * GitHub draws a label: a solid fill in the light appearance, its words dark
@@ -38,18 +39,6 @@ import type { VisuallyHiddenUnder } from "../visually-hidden/visually-hidden.js"
 
 /** The one spelling of a provider's colour a swatch paints: six hex digits, with or without its `#`. */
 const SWATCH_COLOUR = /^#?([0-9a-f]{6})$/iu;
-
-/** What a badge says about where something stands. */
-export const BADGE_TONE = {
-  NEUTRAL: "neutral",
-  WORKING: "working",
-  ATTENTION: "attention",
-  COMPLETE: "complete",
-  MERGED: "merged",
-  DANGER: "danger",
-} as const;
-
-export type BadgeTone = (typeof BADGE_TONE)[keyof typeof BADGE_TONE];
 
 /** How light a fill reads, past which GitHub writes on it in dark words rather than white. */
 const LIGHT_FILL = 0.453;
@@ -126,7 +115,7 @@ function FilledWords({ children }: { children: string }): React.JSX.Element {
 
 /** A state in `tone`, said by its words. */
 export function Badge({
-  tone = BADGE_TONE.NEUTRAL,
+  tone = STATUS_TONE.NEUTRAL,
   icon,
   swatch,
   fill,
@@ -135,10 +124,10 @@ export function Badge({
   hideWordsUnder,
   children,
 }: {
-  tone?: BadgeTone;
+  tone?: StatusTone;
   /** A glyph before the words, saying the state again. */
   icon?: ReactNode;
-  /** A provider's colour for what the badge names, drawn as a dot before its words; any colour but six hex digits is drawn subtle. */
+  /** A provider's colour for what the badge names, drawn as a dot before its words; any colour but six hex digits is drawn muted. */
   swatch?: string | undefined;
   /** A provider's colour the badge is filled with, its words on one line; any colour but six hex digits draws it neutral. */
   fill?: string | undefined;
@@ -153,7 +142,7 @@ export function Badge({
 }): React.JSX.Element {
   const colour = swatch === undefined ? undefined : SWATCH_COLOUR.exec(swatch)?.[1];
   const filled = fill === undefined ? undefined : fillColours(fill);
-  const marked = icon != null || swatch !== undefined || dot || tone !== BADGE_TONE.NEUTRAL;
+  const marked = icon != null || swatch !== undefined || dot || tone !== STATUS_TONE.NEUTRAL;
   return (
     <span
       className="luke-badge"

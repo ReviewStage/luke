@@ -106,7 +106,7 @@ export function ExperimentalPage({
 }): React.JSX.Element {
   if (!signedIn) {
     return (
-      <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.SUBTLE}>
+      <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
         {SIGN_IN_NOTE}
       </Text>
     );

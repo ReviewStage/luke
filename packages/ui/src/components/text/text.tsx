@@ -34,11 +34,10 @@ export const TEXT_VARIANT = {
 
 export type TextVariant = (typeof TEXT_VARIANT)[keyof typeof TEXT_VARIANT];
 
-/** The ink words are drawn in: the text's own, a step quieter, or quieter still. */
+/** The ink words are drawn in: the text's own, or a step quieter. */
 export const TEXT_TONE = {
   DEFAULT: "default",
   MUTED: "muted",
-  SUBTLE: "subtle",
 } as const;
 
 export type TextTone = (typeof TEXT_TONE)[keyof typeof TEXT_TONE];

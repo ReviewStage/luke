@@ -466,7 +466,7 @@ body,
    inset as a row's words are. */
 .sidebar-hidden-statuses {
   margin: var(--luke-space-4) var(--row-inset);
-  color: var(--luke-color-text-subtle);
+  color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
   line-height: var(--luke-type-caption-leading);
 }
@@ -573,7 +573,7 @@ body,
 
 .actor-mark[data-kind="someone"] {
   box-shadow: inset 0 0 0 1px var(--luke-color-border-strong);
-  color: var(--luke-color-text-subtle);
+  color: var(--luke-color-text-muted);
 }
 
 /* A member who left keeps their own face, their picture or their letter on
@@ -824,7 +824,7 @@ ul.actor-stack {
 .sidebar-task-time {
   flex: none;
   min-width: calc(2 * var(--sidebar-plan-mark) + var(--luke-space-2));
-  color: var(--luke-color-text-subtle);
+  color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
   font-variant-numeric: tabular-nums;
   text-align: right;
@@ -850,7 +850,7 @@ ul.actor-stack {
   max-width: 7em;
   overflow: hidden;
   margin-right: var(--luke-space-6);
-  color: var(--luke-color-text-subtle);
+  color: var(--luke-color-text-muted);
   vertical-align: bottom;
   white-space: nowrap;
 }
@@ -868,7 +868,7 @@ ul.actor-stack {
   width: 12px;
   height: 12px;
   flex: none;
-  color: var(--luke-color-text-subtle);
+  color: var(--luke-color-text-muted);
   vertical-align: -1.5px; /* off-scale */
 }
 
@@ -1185,14 +1185,14 @@ ul.actor-stack {
 
 .section-emoji-group-name {
   margin: 0 0 var(--luke-space-4);
-  color: var(--luke-color-text-subtle);
+  color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
   font-weight: var(--luke-weight-medium);
 }
 
 .section-icon-note {
   margin: var(--luke-space-8) 0;
-  color: var(--luke-color-text-subtle);
+  color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
 }
 
@@ -1208,7 +1208,7 @@ ul.actor-stack {
 .sidebar-repository-pinned {
   display: inline-flex;
   flex: none;
-  color: var(--luke-color-text-subtle);
+  color: var(--luke-color-text-muted);
 }
 
 .sidebar-repository-pinned svg {
@@ -1563,7 +1563,7 @@ ul.actor-stack {
 }
 
 .account-menu-email {
-  color: var(--luke-color-text-subtle);
+  color: var(--luke-color-text-muted);
 }
 
 /* Empty and waiting states ---------------------------------------------- */
@@ -1668,7 +1668,7 @@ ul.actor-stack {
 }
 
 .inbox-compose-label {
-  color: var(--luke-color-text-subtle);
+  color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
   line-height: var(--luke-type-caption-leading);
 }
@@ -1780,7 +1780,7 @@ ul.actor-stack {
   place-items: center;
   width: 16px;
   height: 16px;
-  color: var(--luke-color-text-subtle);
+  color: var(--luke-color-text-muted);
 }
 
 .agent-origin-glyph > svg {
@@ -2439,7 +2439,7 @@ ul.actor-stack {
   overflow: hidden;
   flex: 0 100 auto;
   min-width: 0;
-  color: var(--luke-color-text-subtle);
+  color: var(--luke-color-text-muted);
   font-family: var(--luke-font-mono);
   font-size: var(--luke-type-caption-size);
   font-weight: var(--luke-weight-regular);
@@ -2491,7 +2491,7 @@ ul.actor-stack {
   overflow: hidden;
   flex: 0 100 auto;
   min-width: 0;
-  color: var(--luke-color-text-subtle);
+  color: var(--luke-color-text-muted);
   font-family: var(--luke-font-mono);
   font-size: var(--luke-type-caption-size);
   white-space: nowrap;
@@ -2532,7 +2532,7 @@ ul.actor-stack {
   align-items: baseline;
   gap: var(--luke-space-6);
   margin: 0 0 var(--luke-space-4);
-  color: var(--luke-color-text-subtle);
+  color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
   font-weight: var(--luke-weight-semibold);
 }
@@ -2573,7 +2573,7 @@ ul.actor-stack {
 }
 
 .integration-tool-parameter-type {
-  color: var(--luke-color-text-subtle);
+  color: var(--luke-color-text-muted);
   font-family: var(--luke-font-mono);
   font-size: var(--luke-type-caption-size);
 }
@@ -2605,7 +2605,7 @@ ul.actor-stack {
   flex-wrap: wrap;
   align-items: baseline;
   gap: var(--luke-space-4);
-  color: var(--luke-color-text-subtle);
+  color: var(--luke-color-text-muted);
 }
 
 .integration-tool-parameter-values code {
@@ -2857,11 +2857,13 @@ ul.actor-stack {
   --inbox-unread-dot: 7px;
 }
 
+/* Note that the dot is the accent's ink rather than its fill, because the
+   web's cyan fill reads at 1.7:1 on its light page, under a mark's 3:1. */
 .inbox-row-unread {
   width: var(--inbox-unread-dot);
   height: var(--inbox-unread-dot);
   border-radius: 50%;
-  background: var(--luke-color-accent);
+  background: var(--luke-color-accent-text);
 }
 
 /* An Inbox item that needs the developer wears the attention mark before
@@ -2898,7 +2900,7 @@ ul.actor-stack {
 }
 
 /* A task's key (`TaskKey`, `task-standing.tsx`), drawn alike wherever it
-   stands: its words are `Text`'s caption, subtle and monospace, with even
+   stands: its words are `Text`'s caption, muted and monospace, with even
    figures. It is short and read whole, so it never shrinks, and what stands
    beside it gives way instead; it sits centred on the row it leads. */
 .task-key {
@@ -3144,7 +3146,7 @@ ul.actor-stack {
    over its pills in the label's type, as a field's label stands. */
 .inbox-field-optional {
   margin-left: var(--luke-space-6);
-  color: var(--luke-color-text-subtle);
+  color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
   font-weight: var(--luke-weight-regular);
 }
@@ -3382,7 +3384,7 @@ ul.actor-stack {
 
 .inbox-next-lead {
   flex: none;
-  color: var(--luke-color-text-subtle);
+  color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
   font-weight: var(--luke-weight-regular);
 }
@@ -3403,7 +3405,7 @@ ul.actor-stack {
 
 .inbox-pager-count {
   margin-right: var(--luke-space-6);
-  color: var(--luke-color-text-subtle);
+  color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
@@ -3683,7 +3685,7 @@ ul.actor-stack {
 
 .automation-suggestion-add {
   flex: none;
-  color: var(--luke-color-text-subtle);
+  color: var(--luke-color-text-muted);
 }
 
 .automation-suggestion:hover:not([data-disabled="true"]) .automation-suggestion-add {
@@ -3698,7 +3700,7 @@ ul.actor-stack {
 }
 
 .automation-suggestion-detail {
-  color: var(--luke-color-text-subtle);
+  color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
   line-height: var(--luke-type-caption-leading);
 }
@@ -4927,7 +4929,7 @@ ul.actor-stack {
    folded sidebar group shows after its name. */
 .inbox-row-count {
   flex: none;
-  color: var(--luke-color-text-subtle);
+  color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
   font-variant-numeric: tabular-nums;
 }
@@ -5441,7 +5443,7 @@ ul.actor-stack {
   height: 44px;
   padding: 0 var(--luke-space-16);
   border-bottom: 1px solid var(--luke-color-border);
-  color: var(--luke-color-text-subtle);
+  color: var(--luke-color-text-muted);
 }
 
 .command-palette-search svg {
@@ -5463,7 +5465,7 @@ ul.actor-stack {
 }
 
 .command-palette-search input::placeholder {
-  color: var(--luke-color-text-subtle);
+  color: var(--luke-color-text-muted);
 }
 
 /* The band under the field the filters stand in. Note that it is a block,
@@ -5486,7 +5488,7 @@ ul.actor-stack {
   height: 36px;
   padding: 0 var(--luke-space-16);
   border-top: 1px solid var(--luke-color-border);
-  color: var(--luke-color-text-subtle);
+  color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
 }
 
@@ -5654,7 +5656,7 @@ ul.actor-stack {
 
 .feedback-dialog-identity {
   margin-left: auto;
-  color: var(--luke-color-text-subtle);
+  color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
   line-height: var(--luke-type-caption-leading);
 }
@@ -5695,7 +5697,7 @@ ul.actor-stack {
   overflow: hidden;
   min-width: min(16ch, 35%);
   flex: 1;
-  color: var(--luke-color-text-subtle);
+  color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
   white-space: nowrap;
 }
@@ -6111,7 +6113,7 @@ ul.actor-stack {
 }
 
 .task-card-number {
-  color: var(--luke-color-text-subtle);
+  color: var(--luke-color-text-muted);
   font-variant-numeric: tabular-nums;
 }
 
@@ -6252,7 +6254,7 @@ ul.actor-stack {
   align-items: center;
   gap: var(--luke-space-6);
   margin-left: auto;
-  color: var(--luke-color-text-subtle);
+  color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
   line-height: var(--luke-type-caption-leading);
   font-variant-numeric: tabular-nums;
@@ -6276,7 +6278,7 @@ ul.actor-stack {
    agent, named muted before their square, cut short rather than pushing
    the key aside. */
 .tasks-board-maker {
-  color: var(--luke-color-text-subtle);
+  color: var(--luke-color-text-muted);
 }
 
 /* A card's name stands whole under its line, in the label's weight,
@@ -6345,7 +6347,7 @@ ul.actor-stack {
 
 .tasks-board-repository {
   margin-left: var(--luke-space-4);
-  color: var(--luke-color-text-subtle);
+  color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
   line-height: var(--luke-type-caption-leading);
   pointer-events: none;
@@ -6483,7 +6485,7 @@ ul.actor-stack {
 .tasks-list-chevron {
   display: inline-flex;
   flex: none;
-  color: var(--luke-color-text-subtle);
+  color: var(--luke-color-text-muted);
   transition: transform var(--luke-duration-fast) var(--luke-spring-fast);
 }
 
@@ -6584,7 +6586,7 @@ ul.actor-stack {
   min-width: 0;
   align-items: center;
   gap: var(--luke-space-6);
-  color: var(--luke-color-text-subtle);
+  color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
   line-height: var(--luke-type-caption-leading);
   font-variant-numeric: tabular-nums;
@@ -6719,7 +6721,7 @@ ul.actor-stack {
   flex: none;
   align-items: center;
   gap: var(--luke-space-6);
-  color: var(--luke-color-text-subtle);
+  color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
   line-height: var(--luke-type-caption-leading);
   font-variant-numeric: tabular-nums;

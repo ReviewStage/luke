@@ -9,11 +9,11 @@ import {
   AlertIcon,
   ArchiveIcon,
   BANNER_LOOK,
-  BANNER_TONE,
   Banner,
   BUTTON_VARIANT,
   Button,
   GAP,
+  STATUS_TONE,
   Stack,
   TEXT_TONE,
   TEXT_VARIANT,
@@ -28,7 +28,7 @@ function Looks(): React.JSX.Element {
     <Stack gap={GAP.FIELD}>
       <Banner
         look={BANNER_LOOK.STRIP}
-        tone={BANNER_TONE.ATTENTION}
+        tone={STATUS_TONE.ATTENTION}
         glyph={<AlertIcon />}
         actions={<Button variant={BUTTON_VARIANT.OUTLINE}>Move to Acme</Button>}
       >
@@ -41,7 +41,7 @@ function Looks(): React.JSX.Element {
       >
         <Text variant={TEXT_VARIANT.SECTION}>This plan is archived</Text>
       </Banner>
-      <Banner look={BANNER_LOOK.CARD} tone={BANNER_TONE.ATTENTION} glyph={<AlertIcon />}>
+      <Banner look={BANNER_LOOK.CARD} tone={STATUS_TONE.ATTENTION} glyph={<AlertIcon />}>
         <Text variant={TEXT_VARIANT.SECTION}>Every new plan starts from this template</Text>
         <Text tone={TEXT_TONE.MUTED}>Edit it to change what a plan holds when it is made.</Text>
       </Banner>

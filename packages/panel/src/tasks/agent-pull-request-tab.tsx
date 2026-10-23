@@ -51,9 +51,7 @@ import {
   ChipName,
   ChoiceBar,
   type ChoiceItem,
-  COUNT_TONE,
   type CountPart,
-  type CountTone,
   DETAIL_PAGE_INSET,
   DetailPage,
   DISCLOSURE_SUMMARY,
@@ -83,7 +81,9 @@ import {
   Skeleton,
   SkeletonRegion,
   SpinnerRegion,
+  STATUS_TONE,
   Stack,
+  type StatusTone,
   TEXT_BUTTON_TONE,
   TEXT_ELEMENT,
   TEXT_VARIANT,
@@ -138,7 +138,7 @@ import { ActionMenu, type MenuAction } from "../desktop/action-menu.js";
 import { type HandTabActions, useHandedTabActions } from "../desktop/strip-tabs.js";
 import { SHELL_ROOM } from "../shell-room.js";
 import { ShellRoomContext } from "../stage-room.js";
-import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast.js";
+import { TOAST_HOLD, useToast } from "../toast.js";
 import {
   AgentChangesTab,
   type ChangesReads,
@@ -1819,11 +1819,11 @@ const SUMMARY_WORDS = {
 
 /** The tone the Checks tab's count takes for how its checks went, as its glyph does. */
 const SUMMARY_TONES = {
-  [CHECK_SUMMARY.FAILING]: COUNT_TONE.DANGER,
-  [CHECK_SUMMARY.PENDING]: COUNT_TONE.ATTENTION,
-  [CHECK_SUMMARY.PASSING]: COUNT_TONE.COMPLETE,
-  [CHECK_SUMMARY.NONE]: COUNT_TONE.QUIET,
-} as const satisfies Record<CheckSummary, CountTone>;
+  [CHECK_SUMMARY.FAILING]: STATUS_TONE.DANGER,
+  [CHECK_SUMMARY.PENDING]: STATUS_TONE.WORKING,
+  [CHECK_SUMMARY.PASSING]: STATUS_TONE.COMPLETE,
+  [CHECK_SUMMARY.NONE]: STATUS_TONE.NEUTRAL,
+} as const satisfies Record<CheckSummary, StatusTone>;
 
 /** What the Checks tab counts: how they went in its colour from the first frame, and how many once read; nothing where neither stands. */
 function checksCount(
@@ -2208,7 +2208,7 @@ function useThreadJumps(input: {
   const gone = jump !== undefined && conversation.kind === PART.LANDED && target === undefined;
   useEffect(() => {
     if (!gone) return;
-    toast({ words: THREAD_REVEAL_WORDS.GONE, tone: TOAST_TONE.FAILED, hold: TOAST_HOLD.FAILED });
+    toast({ words: THREAD_REVEAL_WORDS.GONE, tone: STATUS_TONE.DANGER, hold: TOAST_HOLD.FAILED });
     setJump(undefined);
   }, [gone, toast]);
   const letGo = useCallback((ask: number) => {
@@ -2235,7 +2235,7 @@ function useThreadJumps(input: {
             if (jump.ask !== ask || target.id === undefined) return;
             toast({
               words: THREAD_REVEAL_WORDS.FILE_GONE,
-              tone: TOAST_TONE.FAILED,
+              tone: STATUS_TONE.DANGER,
               hold: TOAST_HOLD.FAILED,
             });
             latestView.current(PULL_REQUEST_VIEW.CONVERSATION);

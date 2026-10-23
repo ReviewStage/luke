@@ -131,4 +131,5 @@ export * from "./marks/provider-mark.js";
 export * from "./marks/task-marks.js";
 export * from "./motion-timing.js";
 export * from "./picture-expand.js";
+export * from "./status-tone.js";
 export * from "./tokens/surface.js";

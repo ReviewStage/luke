@@ -9,9 +9,7 @@ import { GITHUB_INSTALLATION_STATUS } from "@luke/features/github-installation-w
 import { INTEGRATION_ROW_STATUS } from "@luke/features/integration-row-wire";
 import { INTEGRATION_NAME } from "@luke/features/integration-wire";
 import {
-  BADGE_TONE,
   Badge,
-  type BadgeTone,
   COLLECTION_STATE,
   DATA_TABLE_COLUMN_KIND,
   DATA_TABLE_MIN_WIDTH,
@@ -20,7 +18,9 @@ import {
   GAP,
   Inline,
   SearchField,
+  STATUS_TONE,
   Stack,
+  type StatusTone,
   TEXT_ELEMENT,
   TEXT_TONE,
   TEXT_VARIANT,
@@ -74,10 +74,10 @@ type WorkspaceColumnKey = (typeof WORKSPACE_COLUMN)[keyof typeof WORKSPACE_COLUM
 
 /** The tone each installation status is drawn in: working, held, or gone. */
 const INSTALLATION_TONE = {
-  [GITHUB_INSTALLATION_STATUS.ACTIVE]: BADGE_TONE.COMPLETE,
-  [GITHUB_INSTALLATION_STATUS.SUSPENDED]: BADGE_TONE.ATTENTION,
-  [GITHUB_INSTALLATION_STATUS.DELETED]: BADGE_TONE.NEUTRAL,
-} as const satisfies Record<AdminWorkspaceInstallation["status"], BadgeTone>;
+  [GITHUB_INSTALLATION_STATUS.ACTIVE]: STATUS_TONE.COMPLETE,
+  [GITHUB_INSTALLATION_STATUS.SUSPENDED]: STATUS_TONE.ATTENTION,
+  [GITHUB_INSTALLATION_STATUS.DELETED]: STATUS_TONE.NEUTRAL,
+} as const satisfies Record<AdminWorkspaceInstallation["status"], StatusTone>;
 
 const INSTALLATION_LABEL = {
   [GITHUB_INSTALLATION_STATUS.ACTIVE]: "Active",
@@ -137,8 +137,8 @@ function IntegrationsCell({
           key={integration.provider}
           tone={
             integration.status === INTEGRATION_ROW_STATUS.EXPIRED
-              ? BADGE_TONE.ATTENTION
-              : BADGE_TONE.NEUTRAL
+              ? STATUS_TONE.ATTENTION
+              : STATUS_TONE.NEUTRAL
           }
         >
           {integration.status === INTEGRATION_ROW_STATUS.EXPIRED
@@ -172,7 +172,7 @@ function workspaceColumns(
           <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.LABEL}>
             {row.name}
           </Text>
-          {row.personal ? <Badge tone={BADGE_TONE.NEUTRAL}>Personal</Badge> : null}
+          {row.personal ? <Badge tone={STATUS_TONE.NEUTRAL}>Personal</Badge> : null}
         </Inline>
       ),
     },

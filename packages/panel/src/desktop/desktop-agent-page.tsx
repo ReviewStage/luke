@@ -21,6 +21,7 @@ import {
   OneLine,
   PageToolbar,
   SpinnerRegion,
+  STATUS_TONE,
   Tooltip,
   useMenu,
 } from "@luke/ui";
@@ -62,7 +63,7 @@ import {
 } from "../tasks/use-open-link.js";
 import { PULL_REQUEST_VIEW, SIDE_PANEL_TAB } from "../tasks/use-side-panel.js";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
-import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast.js";
+import { TOAST_HOLD, useToast } from "../toast.js";
 import { ActionMenu } from "./action-menu.js";
 import {
   type AgentTerminalDoors,
@@ -335,7 +336,7 @@ export function DesktopAgentPage({
   const unarchive = () => {
     onArchive(agentId, false).then((result) => {
       if (result.status !== ACTION_RESULT_STATUS.ACCEPTED) {
-        toast({ words: result.reason, tone: TOAST_TONE.FAILED, hold: TOAST_HOLD.FAILED });
+        toast({ words: result.reason, tone: STATUS_TONE.DANGER, hold: TOAST_HOLD.FAILED });
       }
     }, nothing);
   };

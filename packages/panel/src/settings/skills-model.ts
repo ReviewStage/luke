@@ -42,6 +42,7 @@ import {
   type TaskSkillSource,
 } from "@luke/features/task-wire";
 import type { Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
+import { STATUS_TONE, type StatusTone } from "@luke/ui";
 
 /**
  * skills-model.ts -- Settings › Skills and its Add skill dialog as the window draws them, judged without drawing: the rows and their lines, and what a paste would install.
@@ -398,14 +399,11 @@ const UNSUPPORTED_WORDS = {
 
 /* ----- The dialog ----- */
 
-/** How a line under the box reads: understood, a wait, or a problem. */
-export const DETECTED_TONE = {
-  DETECTED: "detected",
-  WAITING: "waiting",
-  PROBLEM: "problem",
-} as const;
-
-export type DetectedTone = (typeof DETECTED_TONE)[keyof typeof DETECTED_TONE];
+/** How a line under the box reads, of the status tones: understood, a wait, or a problem. */
+export type DetectedTone =
+  | typeof STATUS_TONE.COMPLETE
+  | typeof STATUS_TONE.NEUTRAL
+  | typeof STATUS_TONE.ATTENTION;
 
 /** The line under the box. */
 export interface DetectedLine {
@@ -423,16 +421,16 @@ export function pastedLine(paste: SkillPaste): DetectedLine | undefined {
     case SKILL_PASTE_KIND.EMPTY:
       return undefined;
     case SKILL_PASTE_KIND.UNSUPPORTED:
-      return { text: UNSUPPORTED_WORDS[paste.reason], tone: DETECTED_TONE.PROBLEM };
+      return { text: UNSUPPORTED_WORDS[paste.reason], tone: STATUS_TONE.ATTENTION };
     case SKILL_PASTE_KIND.SOURCE:
       return {
         text: `Reading ${paste.owner}/${paste.repo}…`,
-        tone: DETECTED_TONE.WAITING,
+        tone: STATUS_TONE.NEUTRAL,
       };
     case SKILL_PASTE_KIND.TEXT:
       return {
         text: `Skill text${paste.name === undefined ? "" : ` · ${paste.name}`} · ${SKILLS_LINE.READING}`,
-        tone: DETECTED_TONE.WAITING,
+        tone: STATUS_TONE.NEUTRAL,
       };
   }
 }
@@ -445,12 +443,12 @@ function skillsText(count: number): string {
 /** What a preview that leaves nothing to show says under the box: no skill in the repository, or a source Luke does not read. */
 export function previewLine(preview: InstalledSkillPreview): DetectedLine | undefined {
   if (preview.kind === SKILL_PASTE_KIND.UNSUPPORTED) {
-    return { text: UNSUPPORTED_WORDS[preview.reason], tone: DETECTED_TONE.PROBLEM };
+    return { text: UNSUPPORTED_WORDS[preview.reason], tone: STATUS_TONE.ATTENTION };
   }
   if (preview.kind !== SKILL_PASTE_KIND.SOURCE || preview.skills.length > 0) return undefined;
   return {
     text: `No skills found in ${preview.owner}/${preview.repo} @ ${preview.sha.slice(0, SHORT_SHA)}.`,
-    tone: DETECTED_TONE.PROBLEM,
+    tone: STATUS_TONE.ATTENTION,
   };
 }
 
@@ -565,20 +563,10 @@ export function installable(
   return tickable(candidate) && standingIn(candidate, scope) === undefined;
 }
 
-/** How a mark beside a found skill's name reads, as a badge's tone does. */
-export const SKILL_MARK_TONE = {
-  NEUTRAL: "neutral",
-  COMPLETE: "complete",
-  WORKING: "working",
-  ATTENTION: "attention",
-} as const;
-
-export type SkillMarkTone = (typeof SKILL_MARK_TONE)[keyof typeof SKILL_MARK_TONE];
-
 /** One mark beside a found skill's name. */
 export interface SkillMark {
   readonly text: string;
-  readonly tone: SkillMarkTone;
+  readonly tone: StatusTone;
 }
 
 /** The skills.sh partners the `skills` tool names, by the key skills.sh answers under. */
@@ -660,16 +648,16 @@ export function candidateMarks(
   const marks: SkillMark[] = [];
   const standing = standingIn(candidate, scope);
   if (standing === INSTALLED_SKILL_STANDING.CURRENT) {
-    marks.push({ text: SKILLS_LINE.INSTALLED, tone: SKILL_MARK_TONE.COMPLETE });
+    marks.push({ text: SKILLS_LINE.INSTALLED, tone: STATUS_TONE.COMPLETE });
   } else if (standing === INSTALLED_SKILL_STANDING.UPDATE) {
-    marks.push({ text: SKILLS_LINE.UPDATE_AVAILABLE, tone: SKILL_MARK_TONE.WORKING });
+    marks.push({ text: SKILLS_LINE.UPDATE_AVAILABLE, tone: STATUS_TONE.WORKING });
   } else if (standing === INSTALLED_SKILL_STANDING.TAKEN) {
     marks.push({
       text: `Name taken in ${scopeName(scope, workspace)}`,
-      tone: SKILL_MARK_TONE.ATTENTION,
+      tone: STATUS_TONE.ATTENTION,
     });
   }
-  if (candidate.hasScripts === true) marks.push({ text: "scripts", tone: SKILL_MARK_TONE.NEUTRAL });
+  if (candidate.hasScripts === true) marks.push({ text: "scripts", tone: STATUS_TONE.NEUTRAL });
   return marks;
 }
 
@@ -679,16 +667,16 @@ export function candidateNote(
   scope: InstalledSkillScope,
 ): DetectedLine | undefined {
   if (!tickable(candidate)) {
-    return { text: problemsLine(candidate.problems), tone: DETECTED_TONE.PROBLEM };
+    return { text: problemsLine(candidate.problems), tone: STATUS_TONE.ATTENTION };
   }
   const standing = standingIn(candidate, scope);
   if (standing === INSTALLED_SKILL_STANDING.UPDATE) {
-    return { text: "Update it from the Skills page instead.", tone: DETECTED_TONE.WAITING };
+    return { text: "Update it from the Skills page instead.", tone: STATUS_TONE.NEUTRAL };
   }
   if (standing === INSTALLED_SKILL_STANDING.TAKEN) {
     return {
       text: `Another skill named ${candidate.name} is installed there. Remove it first, or install for the other scope.`,
-      tone: DETECTED_TONE.WAITING,
+      tone: STATUS_TONE.NEUTRAL,
     };
   }
   return undefined;

@@ -1,13 +1,13 @@
 import type { PendingReviewComment, ReviewThread } from "@luke/features/coding-agent-wire";
 import { PULL_REQUEST_ACTION } from "@luke/features/pull-request-write-wire";
 import {
-  BADGE_TONE,
   Badge,
   BUTTON_SIZE,
   BUTTON_VARIANT,
   Button,
   ConfirmDialog,
   type DialogQuestion,
+  STATUS_TONE,
   useConfirmDialog,
 } from "@luke/ui";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
@@ -138,7 +138,7 @@ export function usePendingThread(thread: ReviewThread): boolean {
 
 /** The Pending mark a pending comment and a thread it starts wear. */
 export function PendingBadge(): React.JSX.Element {
-  return <Badge tone={BADGE_TONE.ATTENTION}>{PENDING_WORDS.PENDING}</Badge>;
+  return <Badge tone={STATUS_TONE.ATTENTION}>{PENDING_WORDS.PENDING}</Badge>;
 }
 
 /** The words being written over a pending comment's: the field, Cancel, and Save; ⌘↩ saves. */

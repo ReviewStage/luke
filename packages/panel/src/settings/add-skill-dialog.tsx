@@ -17,9 +17,7 @@ import type { Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import {
   ALIGN,
-  BADGE_TONE,
   Badge,
-  type BadgeTone,
   BUTTON_VARIANT,
   Button,
   CARD_LOOK,
@@ -43,6 +41,7 @@ import {
   ScrollArea,
   SearchField,
   Spinner,
+  STATUS_TONE,
   Stack,
   TEXT_BUTTON_TONE,
   TEXT_ELEMENT,
@@ -68,7 +67,6 @@ import {
   candidateMarks,
   candidateNote,
   confirmView,
-  DETECTED_TONE,
   type DetectedLine,
   type DetectedTone,
   everyTicked,
@@ -88,10 +86,8 @@ import {
   previewSourceLine,
   problemsLine,
   pulledLine,
-  SKILL_MARK_TONE,
   SKILLS_LINE,
   type SkillListGroup,
-  type SkillMarkTone,
   type SkillTicks,
   skillList,
   type TextDeclares,
@@ -130,18 +126,10 @@ const PREVIEW_PAUSE_MS = 400;
 
 /** How the line under the box is drawn: understood with its dot, a problem in the attention tint, or plain while it waits. */
 const LINE_STATE = {
-  [DETECTED_TONE.DETECTED]: "connected",
-  [DETECTED_TONE.PROBLEM]: "attention",
-  [DETECTED_TONE.WAITING]: "plain",
+  [STATUS_TONE.COMPLETE]: "connected",
+  [STATUS_TONE.ATTENTION]: "attention",
+  [STATUS_TONE.NEUTRAL]: "plain",
 } as const satisfies Record<DetectedTone, string>;
-
-/** The badge each mark wears. */
-const MARK_BADGE = {
-  [SKILL_MARK_TONE.NEUTRAL]: BADGE_TONE.NEUTRAL,
-  [SKILL_MARK_TONE.COMPLETE]: BADGE_TONE.COMPLETE,
-  [SKILL_MARK_TONE.WORKING]: BADGE_TONE.WORKING,
-  [SKILL_MARK_TONE.ATTENTION]: BADGE_TONE.ATTENTION,
-} as const satisfies Record<SkillMarkTone, BadgeTone>;
 
 /** The service's preview as the dialog holds it: of which text, and what it answered. */
 interface Previewed {
@@ -202,12 +190,12 @@ function SkillName({
         {title}
       </Text>
       {marks.map((mark) => (
-        <Badge key={mark.text} tone={MARK_BADGE[mark.tone]}>
+        <Badge key={mark.text} tone={mark.tone}>
           {mark.text}
         </Badge>
       ))}
       {warnings.map((part) => (
-        <Badge key={part.text} tone={BADGE_TONE.ATTENTION}>
+        <Badge key={part.text} tone={STATUS_TONE.ATTENTION}>
           {part.text}
         </Badge>
       ))}
@@ -228,12 +216,12 @@ function AuditLine({
       {parts.map((part, index) => (
         <Inline key={part.text} gap={GAP.ICON}>
           {index === 0 ? null : (
-            <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.SUBTLE} as={TEXT_ELEMENT.SPAN}>
+            <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED} as={TEXT_ELEMENT.SPAN}>
               ·
             </Text>
           )}
           {part.warn ? (
-            <Badge tone={BADGE_TONE.ATTENTION}>{part.text}</Badge>
+            <Badge tone={STATUS_TONE.ATTENTION}>{part.text}</Badge>
           ) : (
             <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED} as={TEXT_ELEMENT.SPAN}>
               {part.text}
@@ -267,7 +255,7 @@ function SkillFile({
   if (!files.opened.has(candidate.name) || read === undefined) return null;
   if ("reading" in read) return <Spinner label={`Reading ${candidate.name}'s SKILL.md`} />;
   if ("failed" in read) {
-    return <DetectedText line={{ text: read.failed, tone: DETECTED_TONE.PROBLEM }} />;
+    return <DetectedText line={{ text: read.failed, tone: STATUS_TONE.ATTENTION }} />;
   }
   return <FileText text={read.markdown} label={`${candidate.name}'s SKILL.md`} />;
 }
@@ -528,7 +516,7 @@ function BrowseSkills({
   return (
     <Stack gap={GAP.CONTROL}>
       {missing === undefined ? null : (
-        <DetectedText line={{ text: missing, tone: DETECTED_TONE.PROBLEM }} />
+        <DetectedText line={{ text: missing, tone: STATUS_TONE.ATTENTION }} />
       )}
       {groups.length === 0 ? (
         <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
@@ -538,7 +526,7 @@ function BrowseSkills({
       {groups.map((group) => (
         <Stack key={group.title ?? ""} gap={GAP.ITEM} aria-label={group.title ?? "Skills found"}>
           {group.title === undefined ? null : (
-            <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.SUBTLE}>
+            <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
               {`${group.title} · ${group.skills.length}`}
             </Text>
           )}
@@ -621,7 +609,7 @@ function TextSkill({
           )}
         </FormField>
         {shown.length === 0 ? null : (
-          <DetectedText line={{ text: problemsLine(shown), tone: DETECTED_TONE.PROBLEM }} />
+          <DetectedText line={{ text: problemsLine(shown), tone: STATUS_TONE.ATTENTION }} />
         )}
         <FileText text={markdown} label="Pasted text" extent={FILE_TEXT_EXTENT.PEEK} />
       </Stack>
@@ -736,7 +724,7 @@ export function AddSkillDialog({
     view === undefined
       ? pastedLine(paste)
       : "failure" in view
-        ? { text: failureLine(view), tone: DETECTED_TONE.PROBLEM }
+        ? { text: failureLine(view), tone: STATUS_TONE.ATTENTION }
         : previewLine(view);
   const request = installRequest({
     workspaceId: workspace.id,
@@ -901,7 +889,7 @@ export function AddSkillDialog({
         {folded && refusal !== undefined ? (
           <span
             className="settings-state"
-            data-state={LINE_STATE[DETECTED_TONE.PROBLEM]}
+            data-state={LINE_STATE[STATUS_TONE.ATTENTION]}
             role="alert"
           >
             {refusal}

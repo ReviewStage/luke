@@ -290,7 +290,7 @@ function Block({
   code: InboxCodeDoors | undefined;
   context: MessageContext;
 }): React.JSX.Element {
-  if (!knownBlock(block)) return <Text tone={TEXT_TONE.SUBTLE}>{NEWER_LUKE}</Text>;
+  if (!knownBlock(block)) return <Text tone={TEXT_TONE.MUTED}>{NEWER_LUKE}</Text>;
   switch (block.type) {
     case CHAT_BLOCK.MARKDOWN:
       // Note that every message is drawn as a document, as an Inbox item's words are, so a link alone on its line is its card; whoever wrote it, a selection inside may be replied to.

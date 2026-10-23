@@ -57,6 +57,7 @@ import {
   SettingsSection,
   type SettingsSectionSkeletonShape,
   SettingsSectionsSkeleton,
+  STATUS_TONE,
   Stack,
   TEXT_FIELD_AUTO_COMPLETE,
   TEXT_FIELD_TYPE,
@@ -94,7 +95,7 @@ import { encodeImage } from "../feedback-images.js";
 import { memberRows } from "../member-rows.js";
 import { useOpenPerson } from "../person-door.js";
 import { useWorkspaceMembersRead } from "../tasks/use-workspace-members.js";
-import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast.js";
+import { TOAST_HOLD, useToast } from "../toast.js";
 import { useCapability } from "../use-app-state.js";
 import { useRefocusAfterEdit } from "../use-refocus-after-edit.js";
 import { MacRepositoriesGroup } from "./mac-repository-settings.js";
@@ -616,7 +617,7 @@ function MemberLeave({
     act(ACT_KIND.WORKSPACE_LEAVE, { workspaceId }).then(() => {
       show({
         words: LEAVE_WORDS.LEFT(workspace.name),
-        tone: TOAST_TONE.DONE,
+        tone: STATUS_TONE.COMPLETE,
         hold: TOAST_HOLD.DONE,
       });
       onLeft();

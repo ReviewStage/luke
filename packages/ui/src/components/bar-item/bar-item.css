@@ -33,9 +33,9 @@
   }
 
   /* What waits on the reader, as a badge on the glyph's top corner: a
-     NavItem's accent count turned inside out, its figures in the ground on
-     the accent's ink, so it holds the contrast that count holds, in even
-     figures, growing away from the glyph as it lengthens. A ring of the
+     NavItem's needs-you count turned inside out, its figures in white on the
+     needs-you fill the "!" disc is drawn in, in even figures, growing away
+     from the glyph as it lengthens. A ring of the
      ground the bar stands on parts it from the glyph's strokes. */
   .luke-bar-item-count {
     position: absolute;
@@ -46,8 +46,8 @@
     padding: 0 var(--luke-space-4);
     border-radius: var(--luke-radius-full);
     box-shadow: 0 0 0 var(--luke-space-2) var(--luke-color-ground);
-    background: var(--luke-color-accent-text);
-    color: var(--luke-color-ink-inverse);
+    background: var(--luke-color-attention-fill);
+    color: var(--luke-color-on-attention);
     font-size: var(--luke-type-caption-size);
     line-height: var(--luke-type-caption-leading);
     font-weight: var(--luke-weight-semibold);

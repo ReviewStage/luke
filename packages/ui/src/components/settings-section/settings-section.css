@@ -52,7 +52,7 @@
     gap: var(--luke-control-gap);
     margin: 0;
     padding: var(--luke-settings-row-block) var(--luke-settings-row-inline);
-    color: var(--luke-color-text-subtle);
+    color: var(--luke-color-text-muted);
     font-family: var(--luke-font-sans);
     font-size: var(--luke-type-caption-size);
     line-height: var(--luke-type-caption-leading);

@@ -87,7 +87,7 @@
     display: inline-flex;
     align-items: center;
     gap: var(--luke-space-4);
-    color: var(--luke-color-text-subtle);
+    color: var(--luke-color-text-muted);
     font-size: var(--luke-type-caption-size);
     line-height: var(--luke-type-caption-leading);
     font-variant-numeric: tabular-nums;
@@ -105,17 +105,10 @@
     height: var(--luke-type-caption-size);
   }
 
-  /* A part's tone holds whether its option is chosen or not. */
-  .luke-count-part[data-tone="complete"] {
-    color: var(--luke-color-complete);
-  }
-
-  .luke-count-part[data-tone="attention"] {
-    color: var(--luke-color-attention);
-  }
-
-  .luke-count-part[data-tone="danger"] {
-    color: var(--luke-color-danger-text);
+  /* A part's tone holds whether its option is chosen or not; a neutral one
+     keeps its row's own ink. */
+  .luke-count-part[data-tone]:not([data-tone="neutral"]) {
+    color: var(--luke-tone-ink);
   }
 
   /* The thumb stands where the row last measured its chosen option, hidden

@@ -316,13 +316,13 @@
 
   /* A row whose thing is done with stands back in the palette's quieter
      inks rather than by fading its words, which still name what it opens
-     and so read at AA (`docs/DESIGN.md`): its title takes the subtle ink,
-     its description and metadata already the muted one. Only its marks,
+     and so read at AA (`docs/DESIGN.md`): its title takes the muted ink
+     its description and metadata already wear. Only its marks,
      the leading glyph and the attachments its words already say, fade.
      Its fill, which says it is open or in hand, and its acts stay as they
      are. */
   .luke-list-row[data-muted="true"] .luke-list-row-title {
-    color: var(--luke-color-text-subtle);
+    color: var(--luke-color-text-muted);
   }
 
   .luke-list-row[data-muted="true"] .luke-list-row-leading,
@@ -453,7 +453,7 @@
   .luke-list-row-chevron {
     display: inline-flex;
     flex: none;
-    color: var(--luke-color-text-subtle);
+    color: var(--luke-color-text-muted);
     opacity: 0;
     transition: opacity var(--luke-duration-hover) ease;
   }

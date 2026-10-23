@@ -149,7 +149,7 @@ function Cards(): React.JSX.Element {
           />
         ))}
       </TabCards>
-      <Text tone={TEXT_TONE.SUBTLE}>
+      <Text tone={TEXT_TONE.MUTED}>
         {picked === undefined ? "Press a card to pick it." : `Picked ${picked}.`}
       </Text>
     </>

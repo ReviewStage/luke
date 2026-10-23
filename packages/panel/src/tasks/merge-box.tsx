@@ -14,9 +14,7 @@ import {
   type PullRequestAction,
 } from "@luke/features/pull-request-write-wire";
 import {
-  BADGE_TONE,
   Badge,
-  type BadgeTone,
   BUTTON_VARIANT,
   Button,
   type ButtonVariant,
@@ -26,6 +24,8 @@ import {
   SPINNER_SIZE,
   SpinnerRing,
   SplitButton,
+  STATUS_TONE,
+  type StatusTone,
   Tooltip,
   useConfirmDialog,
   useMenu,
@@ -231,7 +231,7 @@ function useMergeMethod(
 /** The chip's face: its word, its tone, and its glyph. */
 interface ChipFace {
   readonly label: string;
-  readonly tone: BadgeTone;
+  readonly tone: StatusTone;
   readonly icon: ReactNode;
 }
 
@@ -244,22 +244,22 @@ const CHIP_GLYPHS = {
   READY: <GitMergeIcon aria-hidden="true" />,
 } as const;
 
-function chip(label: string, tone: BadgeTone, icon: ReactNode): ChipFace {
+function chip(label: string, tone: StatusTone, icon: ReactNode): ChipFace {
   return { label, tone, icon };
 }
 
 /** What a merge GitHub says is blocked is held up by, as the chip says it; none where it waits on its checks, which the Checks tab says. */
 function blockedChip(merging: PullRequestMerging | undefined): ChipFace | undefined {
   if (merging?.review === REVIEW_DECISION.CHANGES_REQUESTED) {
-    return chip("Changes requested", BADGE_TONE.DANGER, CHIP_GLYPHS.HELD);
+    return chip("Changes requested", STATUS_TONE.DANGER, CHIP_GLYPHS.HELD);
   }
   if (merging?.review === REVIEW_DECISION.REVIEW_REQUIRED) {
-    return chip("Review required", BADGE_TONE.ATTENTION, CHIP_GLYPHS.REVIEW);
+    return chip("Review required", STATUS_TONE.ATTENTION, CHIP_GLYPHS.REVIEW);
   }
   if (merging?.checks === CHECK_SUMMARY.FAILING || merging?.checks === CHECK_SUMMARY.PENDING) {
     return undefined;
   }
-  return chip("Blocked", BADGE_TONE.DANGER, CHIP_GLYPHS.HELD);
+  return chip("Blocked", STATUS_TONE.DANGER, CHIP_GLYPHS.HELD);
 }
 
 /**
@@ -280,16 +280,16 @@ function chipOf(
   }
   switch (merge) {
     case MERGE_STATE.UNKNOWN:
-      return chip("Checking", BADGE_TONE.NEUTRAL, CHIP_GLYPHS.CHECKING);
+      return chip("Checking", STATUS_TONE.WORKING, CHIP_GLYPHS.CHECKING);
     case MERGE_STATE.CONFLICTS:
-      return chip("Conflicts", BADGE_TONE.DANGER, CHIP_GLYPHS.HELD);
+      return chip("Conflicts", STATUS_TONE.DANGER, CHIP_GLYPHS.HELD);
     case MERGE_STATE.BEHIND:
-      return chip("Behind", BADGE_TONE.ATTENTION, CHIP_GLYPHS.BEHIND);
+      return chip("Behind", STATUS_TONE.ATTENTION, CHIP_GLYPHS.BEHIND);
     case MERGE_STATE.BLOCKED:
       return blockedChip(merging);
     default:
       return action === undefined
-        ? chip("Ready", BADGE_TONE.COMPLETE, CHIP_GLYPHS.READY)
+        ? chip("Ready", STATUS_TONE.COMPLETE, CHIP_GLYPHS.READY)
         : undefined;
   }
 }

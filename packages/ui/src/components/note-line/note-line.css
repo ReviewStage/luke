@@ -19,7 +19,7 @@
 
   .luke-note-line[data-look="list"],
   .luke-note-line[data-look="inset"] {
-    color: var(--luke-color-text-subtle);
+    color: var(--luke-color-text-muted);
     font-size: var(--luke-type-caption-size);
     line-height: var(--luke-type-caption-leading);
   }

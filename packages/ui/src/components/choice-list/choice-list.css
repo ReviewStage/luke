@@ -176,7 +176,7 @@
 
   .luke-choice-number {
     min-width: 1ch;
-    color: var(--luke-color-text-subtle);
+    color: var(--luke-color-text-muted);
     font-size: var(--luke-type-caption-size);
     line-height: var(--luke-type-body-leading);
     font-variant-numeric: tabular-nums;
@@ -195,7 +195,7 @@
     height: var(--luke-space-16);
     margin-top: calc((var(--luke-type-body-leading) - var(--luke-space-16)) / 2);
     box-sizing: border-box;
-    border: 1.5px solid var(--luke-color-text-subtle);
+    border: 1.5px solid var(--luke-color-text-muted);
     border-radius: var(--luke-space-4);
     transition:
       background-color var(--luke-duration-hover) ease,
@@ -213,16 +213,10 @@
 
   /* A toned row fills its checked control with what picking it means,
      its dot or tick in the ground's ink, which reads on either fill. */
-  [aria-checked="true"][data-tone="complete"] > .luke-choice-control {
+  [aria-checked="true"][data-tone]:not([data-tone="neutral"]) > .luke-choice-control {
     --luke-choice-ink: var(--luke-color-ground);
-    border-color: var(--luke-color-complete);
-    background: var(--luke-color-complete);
-  }
-
-  [aria-checked="true"][data-tone="danger"] > .luke-choice-control {
-    --luke-choice-ink: var(--luke-color-ground);
-    border-color: var(--luke-color-danger);
-    background: var(--luke-color-danger);
+    border-color: var(--luke-tone-ink);
+    background: var(--luke-tone-ink);
   }
 
   [aria-checked="true"] > .luke-choice-control[data-shape="radio"]::after {

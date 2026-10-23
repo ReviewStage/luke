@@ -10,12 +10,12 @@ import {
 } from "@luke/features/admin-cost-wire";
 import { ADMIN_READ, type AdminMetricsWindow } from "@luke/features/admin-wire";
 import {
-  BADGE_TONE,
   Badge,
   DATA_TABLE_COLUMN_KIND,
   DATA_TABLE_MIN_WIDTH,
   DataTable,
   type DataTableColumn,
+  STATUS_TONE,
   TEXT_ELEMENT,
   TEXT_TONE,
   Text,
@@ -142,7 +142,7 @@ const MODEL_COLUMNS: readonly DataTableColumn<AdminCostModel>[] = [
     kind: DATA_TABLE_COLUMN_KIND.NUMERIC,
     cell: (row) =>
       row.spendUsd === null ? (
-        <Badge tone={BADGE_TONE.ATTENTION}>Unpriced</Badge>
+        <Badge tone={STATUS_TONE.ATTENTION}>Unpriced</Badge>
       ) : (
         formatUsd(row.spendUsd)
       ),

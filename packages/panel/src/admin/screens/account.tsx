@@ -2,12 +2,12 @@ import type { AdminUserDetail } from "@luke/features/admin-answer-wire";
 import { ADMIN_READ, type AdminMetricsWindow } from "@luke/features/admin-wire";
 import {
   AVATAR_SIZE,
-  BADGE_TONE,
   Badge,
   GAP,
   Inline,
   SKELETON_SHAPE,
   Skeleton,
+  STATUS_TONE,
   Stack,
   TEXT_ELEMENT,
   TEXT_TONE,
@@ -149,7 +149,7 @@ function Masthead({ detail }: { detail: AdminUserDetail }): React.JSX.Element {
       email={
         <Inline>
           <Text tone={TEXT_TONE.MUTED}>{subject.email}</Text>
-          {subject.admin ? <Badge tone={BADGE_TONE.NEUTRAL}>Admin</Badge> : null}
+          {subject.admin ? <Badge tone={STATUS_TONE.NEUTRAL}>Admin</Badge> : null}
         </Inline>
       }
       joined={

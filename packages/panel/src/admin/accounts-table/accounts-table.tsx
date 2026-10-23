@@ -1,5 +1,4 @@
 import {
-  BADGE_TONE,
   Badge,
   DATA_TABLE_COLUMN_KIND,
   DATA_TABLE_MIN_WIDTH,
@@ -9,6 +8,7 @@ import {
   Inline,
   SKELETON_SHAPE,
   Skeleton,
+  STATUS_TONE,
   TEXT_ELEMENT,
   TEXT_TONE,
   TEXT_VARIANT,
@@ -167,7 +167,7 @@ export function AccountCell({
           <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.LABEL}>
             {accountLabel(account)}
           </Text>
-          {account.admin ? <Badge tone={BADGE_TONE.NEUTRAL}>Admin</Badge> : null}
+          {account.admin ? <Badge tone={STATUS_TONE.NEUTRAL}>Admin</Badge> : null}
         </Inline>
       }
       email={

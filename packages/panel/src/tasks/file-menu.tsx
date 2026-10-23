@@ -1,10 +1,18 @@
-import { CopyIcon, DownloadIcon, EllipsisIcon, IconButton, Tooltip, useMenu } from "@luke/ui";
+import {
+  CopyIcon,
+  DownloadIcon,
+  EllipsisIcon,
+  IconButton,
+  STATUS_TONE,
+  Tooltip,
+  useMenu,
+} from "@luke/ui";
 import { fileName } from "@luke/voice/code-pane-model";
 import { ClipboardCopyIcon, FolderTreeIcon } from "lucide-react";
 import { appPlatform } from "../app-platform.js";
 import { useCopyToast } from "../copy-feedback.js";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu.js";
-import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast.js";
+import { TOAST_HOLD, useToast } from "../toast.js";
 import { WHOLE_TEXT, type WholeText } from "./file-tab-model.js";
 
 /**
@@ -75,12 +83,13 @@ export function useSaveText(): (name: string, text: string) => Promise<void> {
       .saveFile({ name, text })
       .then(
         (saved) => {
-          if (saved) show({ words: "File saved", tone: TOAST_TONE.DONE, hold: TOAST_HOLD.DONE });
+          if (saved)
+            show({ words: "File saved", tone: STATUS_TONE.COMPLETE, hold: TOAST_HOLD.DONE });
         },
         () =>
           show({
             words: "Could not save the file.",
-            tone: TOAST_TONE.FAILED,
+            tone: STATUS_TONE.DANGER,
             hold: TOAST_HOLD.FAILED,
           }),
       );
@@ -108,7 +117,7 @@ export function FileMenu({
       if (whole.kind === WHOLE_TEXT.READ) use(whole.text);
       else {
         const words = whole.kind === WHOLE_TEXT.REFUSED ? REFUSED : UNREAD;
-        show({ words, tone: TOAST_TONE.FAILED, hold: TOAST_HOLD.FAILED });
+        show({ words, tone: STATUS_TONE.DANGER, hold: TOAST_HOLD.FAILED });
       }
     });
 

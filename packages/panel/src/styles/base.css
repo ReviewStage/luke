@@ -452,7 +452,7 @@ body,
   flex: 0 0 auto;
   align-items: center;
   justify-content: center;
-  color: var(--luke-color-text-subtle);
+  color: var(--luke-color-text-muted);
 }
 
 .draft-mark > svg {
