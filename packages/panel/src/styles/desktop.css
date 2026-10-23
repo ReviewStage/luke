@@ -6397,15 +6397,6 @@ ul.actor-stack {
   margin: 0 calc(-1 * var(--luke-focus-ring-reach)) calc(-1 * var(--luke-focus-ring-reach));
 }
 
-.tasks-board-cards {
-  display: flex;
-  flex-direction: column;
-  gap: var(--luke-space-6);
-  margin: 0;
-  padding: var(--luke-focus-ring-reach);
-  list-style: none;
-}
-
 /* A card: raised off its column's well, lifting under the pointer and while
    its menu is open (`Card`). Its press covers the whole card, its foot's
    chips standing over it, so the card opens wherever it is pressed but on a

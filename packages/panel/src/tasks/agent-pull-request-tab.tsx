@@ -38,6 +38,9 @@ import {
   AVATAR_SHAPE,
   AVATAR_SIZE,
   Avatar,
+  BLOCK_LIST_ELEMENT,
+  BlockList,
+  BlockListItem,
   BUTTON_VARIANT,
   Button,
   CHIP_LOOK,
@@ -1121,9 +1124,9 @@ function PendingList({
   picture: GitHubPictureDrawer;
 }): React.JSX.Element {
   return (
-    <ol className="pull-request-pending-list" aria-label={PENDING_WORDS.PENDING}>
+    <BlockList as={BLOCK_LIST_ELEMENT.OL} label={PENDING_WORDS.PENDING}>
       {drafts.map((draft) => (
-        <li key={draft.id} className="pull-request-thread-comment">
+        <BlockListItem key={draft.id}>
           <Text
             as={TEXT_ELEMENT.SPAN}
             variant={TEXT_VARIANT.INHERIT}
@@ -1145,9 +1148,9 @@ function PendingList({
             }
             words={<EntryWords entry={draft} picture={picture} />}
           />
-        </li>
+        </BlockListItem>
       ))}
-    </ol>
+    </BlockList>
   );
 }
 

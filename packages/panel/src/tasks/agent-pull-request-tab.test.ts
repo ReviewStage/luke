@@ -5463,14 +5463,13 @@ test("the member's pending comments stand on their lines in Files changed, marke
   );
   const panel =
     tab.querySelector<HTMLElement>('[role="dialog"]') ?? assert.fail("Review opens its panel");
-  const listed = [...panel.querySelectorAll(".pull-request-pending-list > li")].map(
+  const listed = [...panel.querySelectorAll('ol[aria-label="Pending"] > li')].map(
     (each) => each.querySelector(".pull-request-pending-where")?.textContent,
   );
   assert.deepEqual(listed, ["src/invite.ts · line 13", "src/invite.ts · line 12"]);
 
   // ⌘↩ in a listed comment's edit saves that comment alone, never the whole review.
-  const entry =
-    panel.querySelector<HTMLElement>(".pull-request-pending-list > li") ?? assert.fail();
+  const entry = panel.querySelector<HTMLElement>('ol[aria-label="Pending"] > li') ?? assert.fail();
   act(() => commentOffer(entry, "Edit").click());
   typeInto(entry, "Pending comment", "Still once, really?");
   const field = entry.querySelector("textarea") ?? assert.fail("the edit's field");

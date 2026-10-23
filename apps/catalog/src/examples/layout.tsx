@@ -4,6 +4,7 @@ import {
   FILL_FLOW,
   Fill,
   GAP,
+  INSET,
   Inline,
   JUSTIFY,
   LAYOUT_ELEMENT,
@@ -18,7 +19,8 @@ import { CatalogSection } from "../section";
 /**
  * layout.tsx -- Stack and Inline at every gap role, along and across their
  * room, an Inline of long labels in a narrow column, wrapping and held, a
- * list of rows and a wrapping list of labels, each a `ul`, and a Fill taking
+ * list of rows and a wrapping list of labels, each a `ul`, lists keeping
+ * room inside their edge at each inset, and a Fill taking
  * the room a pane's head leaves, down the pane and across it, clipping what
  * stands past its edge.
  */
@@ -116,6 +118,21 @@ function Layout(): React.JSX.Element {
               ))}
             </Inline>
           </div>
+        </Inline>
+      </CatalogSection>
+      <CatalogSection id="layout-insets" title="Room inside a list's edge">
+        <Inline gap={GAP.SECTION} align={ALIGN.START}>
+          {[INSET.RING, INSET.COLUMN, INSET.BLOCK].map((inset) => (
+            <div key={inset} className="catalog-narrow">
+              <Stack as={LAYOUT_ELEMENT.UL} gap={GAP.ITEM} inset={inset} aria-label={inset}>
+                {["First", "Second"].map((row) => (
+                  <li key={row}>
+                    <Swatch>{`${row}, ${inset}`}</Swatch>
+                  </li>
+                ))}
+              </Stack>
+            </div>
+          ))}
         </Inline>
       </CatalogSection>
       <CatalogSection id="layout-fill" title="Fill">

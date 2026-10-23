@@ -12,6 +12,8 @@ import {
   ErrorState,
   FoldingButton,
   FormField,
+  MENU_SURFACE_FLOW,
+  MenuSurface,
   Spinner,
   TextField,
   useFilePicker,
@@ -259,7 +261,8 @@ function PictureTools({
 }): React.JSX.Element {
   const { worded, above } = useToolsLayout(column);
   return (
-    <span
+    <MenuSurface
+      flow={MENU_SURFACE_FLOW.TOOLBAR}
       className="picture-tools"
       role="toolbar"
       aria-label="Picture"
@@ -278,7 +281,7 @@ function PictureTools({
           }}
         />
       ))}
-    </span>
+    </MenuSurface>
   );
 }
 

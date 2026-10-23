@@ -5,7 +5,8 @@
  * `PopoverPanel` for a dialog hung from its button. A list whose keys stay
  * somewhere else stands on it too: a searchable menu keyed from its field,
  * the `@` and `/` lists keyed from the editor they were typed in, a crumb's
- * tree, and the one press offered over selected words. The owner places it
+ * tree, and a toolbar floated over a message, a picture, or selected code.
+ * The owner places it
  * and keys it; the surface draws it the way every menu is drawn. It stays
  * hidden for the one layout pass that measures where it fits, where its
  * owner says it is not placed yet, and while its owner holds it drawn
@@ -20,10 +21,16 @@ export const MENU_SURFACE_INSET = {
 
 export type MenuSurfaceInset = (typeof MENU_SURFACE_INSET)[keyof typeof MENU_SURFACE_INSET];
 
-/** Which way the surface lays what it holds: a menu's rows one under another, or a bar's field and buttons one beside another. */
+/**
+ * Which way the surface lays what it holds: a menu's rows one under another;
+ * a bar's field and buttons one beside another; or a toolbar floated over
+ * what it acts on, its buttons a hair from its edge at a control's corner,
+ * shown and hidden by its owner rather than arriving as a menu opens.
+ */
 export const MENU_SURFACE_FLOW = {
   COLUMN: "column",
   ROW: "row",
+  TOOLBAR: "toolbar",
 } as const;
 
 export type MenuSurfaceFlow = (typeof MENU_SURFACE_FLOW)[keyof typeof MENU_SURFACE_FLOW];
@@ -52,7 +59,7 @@ export function MenuSurface({
       {...rest}
       className={className === undefined ? "luke-menu-surface" : `luke-menu-surface ${className}`}
       data-inset={inset}
-      data-flow={flow === MENU_SURFACE_FLOW.ROW ? flow : undefined}
+      data-flow={flow === MENU_SURFACE_FLOW.COLUMN ? undefined : flow}
       data-placed={placed === undefined ? undefined : String(placed)}
       data-leaving={leaving ? "true" : undefined}
       inert={leaving}

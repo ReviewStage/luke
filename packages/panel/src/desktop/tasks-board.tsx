@@ -31,13 +31,15 @@ import {
   EmptyState,
   ERROR_STATE_PLACEMENT,
   ErrorState,
+  GAP,
   GLYPH_INK,
   GlyphSlot,
   IconButton,
+  INSET,
   InlineEdit,
+  LAYOUT_ELEMENT,
   ListMotion,
   motionKey,
-  motionRows,
   PAGE_FRAME,
   PAGE_WIDTH,
   PROVIDER_MARK_SIZE,
@@ -46,6 +48,7 @@ import {
   SCROLL_OVERSCROLL,
   SCROLL_SIZE,
   ScrollArea,
+  Stack,
   TaskPriorityMark,
   TaskStatusMark,
   TEXT_ELEMENT,
@@ -546,9 +549,12 @@ function TaskBoardColumnView({
             fade={SCROLL_FADE.BOTH}
             overscroll={SCROLL_OVERSCROLL.CHAIN}
           >
-            <ul
+            <Stack
+              as={LAYOUT_ELEMENT.UL}
+              gap={GAP.ITEM}
+              inset={INSET.RING}
               className="tasks-board-cards"
-              {...motionRows()}
+              moves
               onPointerDown={narrow ? undefined : drag}
             >
               {cards.map(({ value: task }) => (
@@ -565,7 +571,7 @@ function TaskBoardColumnView({
                   onStanding={(standing) => onStanding(task, standing)}
                 />
               ))}
-            </ul>
+            </Stack>
           </ScrollArea>
         </div>
       )}
