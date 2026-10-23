@@ -68,6 +68,14 @@ export const CODER = {
   /** An installation token is good for an hour from its mint; the one at the firewall is renewed this long after, inside that hour. */
   GITHUB_TOKEN_REFRESH: Duration.minutes(50),
   /**
+   * How long an installation token a native runner's sandbox was handed is
+   * left standing at its firewall before a message to the runner mints
+   * another (`runner-sessions.ts`). Nothing renews it during a turn, so a
+   * message leaves the turn it starts at least the forty minutes of the hour
+   * this leaves; under it, a burst of messages mints one token, not one each.
+   */
+  RUNNER_CREDENTIAL_KEPT: Duration.minutes(20),
+  /**
    * The longest one pause (`sleep.ts`) may be. The credential at the
    * firewall is renewed only as a step starts, so a step may start on one
    * nearly fifty minutes old; a pause past the ten minutes it has left would
