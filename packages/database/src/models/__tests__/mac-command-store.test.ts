@@ -8,6 +8,7 @@ import {
   type MacCommandKind,
   type MacCommandResult,
 } from "@luke/features/mac-command-wire";
+import { MESSAGE_ROLE, type MessageRole } from "@luke/wire";
 import { eq, sql } from "drizzle-orm";
 import { Clock, Effect, Option, Schema } from "effect";
 import { SqlClient } from "effect/sql";
@@ -281,16 +282,21 @@ const openWorker = (userId: string, parentConversationId: string) =>
     return id;
   });
 
-/** One line sent into the conversation, as the writer keeps a developer's or an agent's line to a coding agent. */
+/**
+ * One line sent into the conversation, as the writer keeps a developer's or
+ * an agent's line to a coding agent; with no sender, as a line was kept
+ * before senders were, or as the model's own reply is.
+ */
 const sendLine = (
   owner: string,
   conversationId: string,
   seq: number,
-  sender: {
+  sender?: {
     readonly kind: MessageSender;
     readonly userId?: string;
     readonly agentId?: string;
   },
+  role: MessageRole = MESSAGE_ROLE.USER,
 ) =>
   Effect.gen(function* () {
     const db = yield* Database;
@@ -299,12 +305,12 @@ const sendLine = (
       conversationId,
       seq,
       clientId: randomUUID(),
-      role: "user",
+      role,
       parts: [],
       placedAt: yield* now,
-      sender: sender.kind,
-      senderUserId: sender.userId ?? null,
-      senderAgentId: sender.agentId ?? null,
+      sender: sender?.kind ?? null,
+      senderUserId: sender?.userId ?? null,
+      senderAgentId: sender?.agentId ?? null,
     });
   });
 
@@ -367,6 +373,22 @@ it.layer(getTestDB())("who has put words into an agent's conversation", (it) => 
       });
       const target = { userId: starter, conversationId: agent.conversationId };
       assert.equal(yield* heardFromAnotherAccount(target), true);
+    }),
+  );
+
+  it.effect("a developer's line kept before senders were counts as another account's", () =>
+    Effect.gen(function* () {
+      const { starter, workspace } = yield* people;
+      const agent = yield* openAgent(starter, workspace);
+      const target = { userId: starter, conversationId: agent.conversationId };
+      yield* sendLine(starter, agent.conversationId, 1, undefined, MESSAGE_ROLE.ASSISTANT);
+      assert.equal(yield* heardFromAnotherAccount(target), false, "the model's own reply");
+      yield* sendLine(starter, agent.conversationId, 2);
+      assert.equal(
+        yield* heardFromAnotherAccount(target),
+        true,
+        "a line nothing says whose it was",
+      );
     }),
   );
 

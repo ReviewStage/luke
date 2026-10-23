@@ -5,6 +5,7 @@ import {
   type MacCommandResult,
   macCommandResultSchema,
 } from "@luke/features/mac-command-wire";
+import { MESSAGE_ROLE } from "@luke/wire";
 import { and, asc, eq, gte, inArray, isNotNull, isNull, ne, or, type SQL, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { DateTime, Effect, Option, Schema } from "effect";
@@ -211,7 +212,9 @@ const sendingAgent = alias(codingAgent, "sending_agent");
 /**
  * One line of the conversation's root, or the root's own where it is one,
  * that another account put there: a member other than the owner, a former
- * member, or an agent that is not the owner's own or is gone.
+ * member, or an agent that is not the owner's own or is gone. A developer's
+ * line written before senders were kept, a `user` row with no sender, counts
+ * too, because nothing says whose it was.
  */
 const findForeignLine = SqlSchema.findOneOption({
   Request: Schema.Struct({ userId: Schema.String, conversationId: Schema.String }),
@@ -240,6 +243,7 @@ const findForeignLine = SqlSchema.findOneOption({
                 eq(messages.sender, MESSAGE_SENDER.AGENT),
                 or(isNull(sendingAgent.userId), ne(sendingAgent.userId, userId)),
               ),
+              and(eq(messages.role, MESSAGE_ROLE.USER), isNull(messages.sender)),
             ),
           ),
         )
@@ -267,10 +271,10 @@ export function macListeningSince(userId: string, since: Date): TaskStoreEffect<
 
 /**
  * Whether anyone but the conversation's owner has put words into it: a line
- * another member sent, or one an agent that is not the owner's own sent, in
- * the conversation or, for a worker's, in the agent's it was delegated from.
- * Note that a line the service itself sends, such as a wake, is not counted,
- * because no other account wrote it.
+ * another member sent, one an agent that is not the owner's own sent, or one
+ * whose sender was never kept, in the conversation or, for a worker's, in
+ * the agent's it was delegated from. Note that a line the service itself
+ * sends, such as a wake, is not counted, because no other account wrote it.
  */
 export function heardFromAnotherAccount(target: ConversationTarget): TaskStoreEffect<boolean> {
   return Effect.map(findForeignLine(target), Option.isSome);
