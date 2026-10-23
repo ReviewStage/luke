@@ -39,7 +39,7 @@ import {
   inboxReadAskSchema,
 } from "@luke/features/inbox-wire";
 import { LINK_PLACE, linkOf } from "@luke/features/luke-link";
-import { MENTION_KIND, mentionMarkdown } from "@luke/features/mention-link";
+import { MENTION_KIND, mentionMarkdown, type PlanMention } from "@luke/features/mention-link";
 import { pageFrameUrl } from "@luke/features/page-frame";
 import { PAGE_SHOWER, type PageLine } from "@luke/features/page-wire";
 import {
@@ -546,6 +546,8 @@ interface Asked {
   readonly marks: [string, TaskMark][];
   /** How many times it was asked for New task. */
   newTasks: number;
+  /** Each mention it was asked to open, in order. */
+  readonly shownMentions: PlanMention[];
 }
 
 /** The Inbox over the two tasks, and the items of agents with no task given, its own view real, as the tasks tab holds it, and every press that leaves it recorded; or, `listUnread`, opened before the account's task list is first read; or over the tasks given; or, `room`, under the side panel itself in that room, as the tasks tab holds it while the Inbox has chosen nothing. */
@@ -586,6 +588,7 @@ function mount(
     closed: 0,
     marks: [],
     newTasks: 0,
+    shownMentions: [],
   };
   function Page({ sidePanel }: { sidePanel?: SidePanelControl | undefined }) {
     const [chosen, setChosen] = useState<InboxChoice | undefined>(undefined);
@@ -645,6 +648,7 @@ function mount(
         onTaskAgents: () => undefined,
       },
       onShowTask: (taskId) => asked.shownTasks.push(taskId),
+      onShowMention: (mention) => asked.shownMentions.push(mention),
       onMarkTask: (taskId, mark) => asked.marks.push([taskId, mark]),
       onNewTask: () => {
         asked.newTasks += 1;
@@ -4720,6 +4724,36 @@ test("a thread draws its messages after the question in the order they were writ
   ]);
   const mine = itemPane(page).querySelectorAll('[data-inbox-comment="message"]')[4];
   assert.equal(mine?.querySelector("[data-mention-ref]")?.textContent, "rollout-store.ts");
+});
+
+test("in the window's Inbox a task an agent's message mentions is its chip, which opens through the Inbox's own doors, as the box's mentions do", async () => {
+  listedWorkspace = ACME;
+  const plan = mentionMarkdown({ kind: MENTION_KIND.TASK, taskId: INVITES.id }, "Invites", {
+    workspace: ACME.slug,
+    repository: "acme/relay",
+  });
+  const threaded: InboxItem = {
+    ...RETRY,
+    updatedAt: 5_100,
+    thread: inOrder(RETRY, [
+      threadMessage("c1b2c3d4-0000-4000-8000-000000000071", "agent", `Same as ${plan}.`, 5_100),
+    ]),
+  };
+  inboxes = new Map([
+    [BILLING.id, [THRESHOLD, threaded]],
+    [INVITES.id, [EXPIRY]],
+  ]);
+  const { page, asked } = mount();
+  await settle();
+  act(() => rowNamed(page, "How is a failed email retried?").click());
+  await settle();
+
+  const said = itemPane(page).querySelectorAll('[data-inbox-comment="message"]');
+  const chip = said[said.length - 1]?.querySelector<HTMLElement>("[data-mention-ref]");
+  assert.equal(chip?.textContent, "Invites");
+  act(() => chip?.click());
+
+  assert.deepEqual(asked.shownMentions, [{ kind: MENTION_KIND.TASK, taskId: INVITES.id }]);
 });
 
 /** Selects the words drawn in the item's pane as `words`, from `from` through `to`, as a drag lets them go. */

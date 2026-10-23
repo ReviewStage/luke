@@ -1206,22 +1206,20 @@ export function InboxPane({
     );
   // The box stands at the thread's end as the reader's draft reply.
   const draftReply = (
-    <AnswerMentions value={mentions}>
-      <DraftReply readerId={readerId}>
-        <InboxAnswerBox
-          item={item}
-          readerId={readerId}
-          control={control}
-          agent={by.subject.agent}
-          thread={thread}
-          controls={question}
-          skills={agents.readSkills}
-          keywords={answerKeywords(holder, item)}
-          replyScope={board}
-          onUnarchiveAgent={() => agents.onArchive(item.agentId, false)}
-        />
-      </DraftReply>
-    </AnswerMentions>
+    <DraftReply readerId={readerId}>
+      <InboxAnswerBox
+        item={item}
+        readerId={readerId}
+        control={control}
+        agent={by.subject.agent}
+        thread={thread}
+        controls={question}
+        skills={agents.readSkills}
+        keywords={answerKeywords(holder, item)}
+        replyScope={board}
+        onUnarchiveAgent={() => agents.onArchive(item.agentId, false)}
+      />
+    </DraftReply>
   );
   return (
     <section
@@ -1270,31 +1268,33 @@ export function InboxPane({
               <InboxPictures itemId={item.id} control={control}>
                 <LoneLinkCards doors={cardDoors}>
                   <Subject item={item} heading={setHeading} />
-                  <Stack
-                    as={LAYOUT_ELEMENT.OL}
-                    gap={GAP.NONE}
-                    className="inbox-thread"
-                    aria-label="Thread"
-                  >
-                    {thread.map((message, at) => (
-                      <Fragment key={message.id}>
-                        <ThreadMessage
-                          item={item}
-                          message={message}
-                          thread={thread}
-                          by={by}
-                          now={now}
-                          control={control}
-                          waitingOn={waitingOn}
-                        />
-                        {/* The first message always stands, so the line saying earlier ones are cut follows it. */}
-                        {at === 0 && thread.length >= INBOX_BOUNDS.MAX_MESSAGES_READ ? (
-                          <EarlierMessages by={by} />
-                        ) : null}
-                      </Fragment>
-                    ))}
-                    {draftReply}
-                  </Stack>
+                  <AnswerMentions value={mentions}>
+                    <Stack
+                      as={LAYOUT_ELEMENT.OL}
+                      gap={GAP.NONE}
+                      className="inbox-thread"
+                      aria-label="Thread"
+                    >
+                      {thread.map((message, at) => (
+                        <Fragment key={message.id}>
+                          <ThreadMessage
+                            item={item}
+                            message={message}
+                            thread={thread}
+                            by={by}
+                            now={now}
+                            control={control}
+                            waitingOn={waitingOn}
+                          />
+                          {/* The first message always stands, so the line saying earlier ones are cut follows it. */}
+                          {at === 0 && thread.length >= INBOX_BOUNDS.MAX_MESSAGES_READ ? (
+                            <EarlierMessages by={by} />
+                          ) : null}
+                        </Fragment>
+                      ))}
+                      {draftReply}
+                    </Stack>
+                  </AnswerMentions>
                 </LoneLinkCards>
               </InboxPictures>
             </WordsWorkspace>
