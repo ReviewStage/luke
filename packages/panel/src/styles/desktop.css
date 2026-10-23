@@ -2394,13 +2394,6 @@ ul.actor-stack {
   bottom: calc(100% + var(--luke-space-4));
 }
 
-/* A harness's mark keeps its box in a row however tight the row is, drawn
-   as an image (`harness-marks.tsx`) as the traced provider marks
-   (`@luke/ui`'s `ProviderMark`) keep theirs. */
-.harness-mark {
-  flex: 0 0 auto;
-}
-
 /* An integration whose brand publishes its one-colour mark in named inks
    wears them by the ground: Executor's and Notion's pure white on dark and
    pure black on light, Sentry's white on dark and its dark blurple on light,

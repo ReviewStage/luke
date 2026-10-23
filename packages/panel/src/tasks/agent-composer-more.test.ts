@@ -207,9 +207,9 @@ test("a card too narrow for the model's words has its chip draw the harness's ma
     box.container.querySelector<HTMLButtonElement>(".agent-model-chip button") ??
     assert.fail("the model chip stands");
   assert.equal(model().getAttribute("aria-label"), "Opus 5.5 High");
-  assert.notEqual(model().querySelector(".harness-mark"), null);
+  assert.notEqual(model().querySelector(".luke-harness-mark"), null);
 
   laid.mockReturnValue(CARD.WIDE);
   act(() => relayout());
-  assert.equal(model().querySelector(".harness-mark"), null);
+  assert.equal(model().querySelector(".luke-harness-mark"), null);
 });

@@ -184,7 +184,7 @@ body {
   background: var(--luke-color-surface);
 }
 
-.catalog-glyph svg {
+.catalog-glyph :is(svg, img) {
   display: block;
   flex: none;
   width: 20px;

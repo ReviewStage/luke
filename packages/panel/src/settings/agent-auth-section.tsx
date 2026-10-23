@@ -74,7 +74,7 @@ import { useOpenLink } from "../tasks/use-open-link.js";
 import { useCapability } from "../use-app-state.js";
 
 /**
- * agent-auth-section.tsx -- Settings › Agents' harnesses: one row each for Claude Code and Codex, saying how it is connected, and the dialog that connects it.
+ * agent-auth-section.tsx -- Settings › Agents' harnesses: one row each for Claude and Codex, saying how it is connected, and the dialog that connects it.
  *
  * The account holds up to two credentials per harness: a plan (Claude's
  * `claude setup-token`, or the ChatGPT sign-in) and the provider's API key.
@@ -123,7 +123,7 @@ type Credential = (typeof CREDENTIAL)[keyof typeof CREDENTIAL];
 /** Each harness by the provider whose models it runs: its name, its plan's kind, the provider's name on its key, where a key is made, and the row a search lands on. */
 const HARNESS = {
   [PROVIDER_KEY_PROVIDER.ANTHROPIC]: {
-    name: "Claude Code",
+    name: "Claude",
     plan: PROVIDER_KEY_KIND.CLAUDE_SETUP_TOKEN,
     keyName: "Anthropic",
     keyUrl: "https://console.anthropic.com/settings/keys",
@@ -555,7 +555,7 @@ function ClaudeTokenPanel({
         confirm={removal}
         question={{
           title: "Disconnect your Claude plan?",
-          body: "Claude Code agents will stop running on your Claude plan, and Luke deletes the token it holds.",
+          body: "Claude agents will stop running on your Claude plan, and Luke deletes the token it holds.",
           verb: WORDS.DISCONNECT,
           running: "Disconnecting…",
         }}
