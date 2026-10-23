@@ -20,6 +20,9 @@ import { SHOW_CODE_TOOL, shownCodeOf } from "./show-code.js";
  * Nothing is written here.
  */
 
+/** How many agents' journals are read at once: under the web pool's five connections, so one read leaves room for the rest of its instance. */
+const JOURNAL_READ_CONCURRENCY = 3;
+
 /** Every code the journals' answered `show_code` calls put on screen, in the order the calls were made, the journals oldest first, each under the agent named. */
 function shownCodeIn(journals: readonly StoredMessageRecord[], agentId: string): TaskShownCode[] {
   return journals.flatMap((journal) =>
@@ -49,11 +52,19 @@ function shownCodeIn(journals: readonly StoredMessageRecord[], agentId: string):
  */
 const agentsShownCode = Effect.fnUntraced(function* (userId: string, taskId: string) {
   const agents = yield* listCodingAgentLines(userId, taskId, { includeArchived: true });
-  const read = yield* Effect.forEach(agents, (agent) =>
-    Effect.map(
-      listJournalsCalling(agent.userId, agent.conversationId, CODER_TOOL_SET, SHOW_CODE_TOOL.name),
-      (journals) => (journals.ok ? shownCodeIn(journals.value, agent.id) : []),
-    ),
+  const read = yield* Effect.forEach(
+    agents,
+    (agent) =>
+      Effect.map(
+        listJournalsCalling(
+          agent.userId,
+          agent.conversationId,
+          CODER_TOOL_SET,
+          SHOW_CODE_TOOL.name,
+        ),
+        (journals) => (journals.ok ? shownCodeIn(journals.value, agent.id) : []),
+      ),
+    { concurrency: JOURNAL_READ_CONCURRENCY },
   );
   return read.flat().sort((one, other) => one.shownAt - other.shownAt);
 });

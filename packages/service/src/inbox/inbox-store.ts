@@ -1574,13 +1574,15 @@ export function memberAgentInboxLiveStatements(
   return scopeLiveStatements({ userId, scope: INBOX_SCOPE.AGENT_OF_WORKSPACE, id: agentId });
 }
 
-/** The scope's items: every open one, then the latest settled ones up to the limit. */
+/** The scope's items: every open one, then the latest settled ones up to the limit, the two read at once. */
 function scopeItems(
   scope: InboxScope,
   settledLimit: number,
 ): InboxStoreEffect<readonly InboxItem[]> {
   return Effect.map(
-    Effect.all([findOpenItems(scope), findSettledItems({ ...scope, limit: settledLimit })]),
+    Effect.all([findOpenItems(scope), findSettledItems({ ...scope, limit: settledLimit })], {
+      concurrency: 2,
+    }),
     ([open, settled]) => [...open, ...settled].map((row) => storedItem(row).item),
   );
 }
@@ -2293,13 +2295,13 @@ export function taskInboxStamps(
   return scopeStamps({ userId, scope: INBOX_SCOPE.TASK, id: taskId });
 }
 
-/** Where the scope's items stand: every open one, then the latest settled, as `scopeItems` reads them. */
+/** Where the scope's items stand: every open one, then the latest settled, as `scopeItems` reads them, the two at once. */
 function scopeStamps(scope: InboxScope): InboxStoreEffect<readonly InboxStamp[]> {
   return Effect.map(
-    Effect.all([
-      findOpenStamps(scope),
-      findSettledStamps({ ...scope, limit: INBOX_BOUNDS.MAX_ITEMS_READ }),
-    ]),
+    Effect.all(
+      [findOpenStamps(scope), findSettledStamps({ ...scope, limit: INBOX_BOUNDS.MAX_ITEMS_READ })],
+      { concurrency: 2 },
+    ),
     ([open, settled]) =>
       [...open, ...settled].map((row) => ({ ...row, updatedAt: row.updatedAt.getTime() })),
   );
