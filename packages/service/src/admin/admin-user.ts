@@ -14,7 +14,7 @@ import {
 import { Clock, Effect } from "effect";
 import { DAY_MS } from "../core.js";
 import { type AdminAccountSource, buildAdminAccountSupport } from "./admin-account.js";
-import { ADMIN_TREND_DAYS, lastNDayKeys, sum, trailingTrend } from "./admin-metrics.js";
+import { ADMIN_TREND_DAYS, dayStart, lastNDayKeys, sum, trailingTrend } from "./admin-metrics.js";
 import { ADMIN_REFUSAL, type AdminRefusal } from "./http-effect.js";
 import { type AdminSeamEffect, unavailableSeam } from "./seam.js";
 
@@ -112,7 +112,7 @@ export function buildAdminUserDetail(
     support: buildAdminAccountSupport(
       support,
       now,
-      Date.parse(`${dayKeys[0] ?? utcDayKey(now)}T00:00:00.000Z`),
+      dayStart(dayKeys[0] ?? utcDayKey(now)).getTime(),
       source.usage.allTime.lastActiveDay,
     ),
   };
