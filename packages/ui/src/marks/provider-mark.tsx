@@ -19,7 +19,7 @@ void React;
  * whether it stands for an account's sign-in, its connected GitHub, a
  * workspace's organization, or the GitHub integration, in the desktop and on
  * the site alike. The harnesses a model runs in are not providers of this kind
- * and have their own marks (the desktop's `harness-marks.tsx`).
+ * and have their own marks (`harness-mark.tsx`).
  */
 
 /**

@@ -90,6 +90,7 @@ import {
   ChipName,
   ChoiceList,
   ConfirmDialog,
+  cssCustomProperties,
   DetailPage,
   EllipsisIcon,
   ErrorState,
@@ -106,7 +107,11 @@ import {
   RevealChoice,
   revealArea,
   SETTINGS_SECTION_FRAME,
+  SETTINGS_SKELETON_CONTROL,
+  SettingsControlSkeleton,
   SettingsRow,
+  type SettingsRowSkeletonShape,
+  SettingsRowsSkeleton,
   SettingsSection,
   SidePanelIcon,
   SKELETON_SHAPE,
@@ -126,29 +131,43 @@ import {
   Tooltip,
   useConfirmDialog,
   useMenu,
-  useMinute,
   wholeWordsHint,
 } from "@luke/ui";
-import { dayAndTimeText, localTimeZone, sinceText, timeZoneNames } from "@luke/ui/time-format";
+import { ACTOR_KIND, ACTOR_STATE } from "@luke/ui/actor-model";
+import { dayAndTimeText, localTimeZone, timeZoneNames } from "@luke/ui/time-format";
 import { useDisclosure } from "@luke/ui/use-disclosure";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { Result } from "effect";
 import { ChevronRightIcon, HistoryIcon, PlayIcon, Trash2Icon, ZapIcon } from "lucide-react";
-import { useEffect, useId, useRef, useState } from "react";
+import {
+  type ReactNode,
+  type Ref,
+  type RefObject,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+} from "react";
+import { ActorMark, automationActor } from "../actor-ref.js";
 import { useAppCommand } from "../app-commands.js";
 import { CopyGlyph, copyHint, useCopyFeedback } from "../copy-feedback.js";
 import { useCopyLinkItem } from "../copy-link-item.js";
 import { ExperimentTag, SendFeedbackButton } from "../experiment-marks.js";
 import { useIntegrationStatuses } from "../integration-statuses.js";
 import { useOpenSettings } from "../open-settings.js";
+import { matchingRows } from "../searchable-menu.js";
 import { Picker, PickerRow } from "../settings/picker-row.js";
 import { SelectRow } from "../settings/select-row.js";
 import { SwitchRow } from "../settings/switch-row.js";
 import { hiddenColumns, SHELL_ROOM, type ShellRoom } from "../shell-room.js";
+import { agentMenuRow, useAgentRowPlace } from "../tasks/agent-menu-row.js";
 import { AgentModelChip } from "../tasks/agent-model-chip.js";
 import { AgentServersButton } from "../tasks/agent-servers.js";
+import type { MentionableAgent } from "../tasks/mention-picker.js";
 import { ModelMenu } from "../tasks/model-menu.js";
 import { CHIP_PLACE, RepositoryChip, type RepositoryChooser } from "../tasks/repository-chip.js";
+import { mentionableAgent } from "../tasks/task-mentions.js";
+import { useKnownNames } from "../tasks/use-known-names.js";
 import type { LeaveAsk, LeaveGuard } from "../tasks/use-tasks-tab.js";
 import { useExperiment } from "../use-app-state.js";
 import { ActionMenu, type MenuAction } from "./action-menu.js";
@@ -158,7 +177,7 @@ import { useRunsPanel } from "./folded-groups.js";
 import { type NarrowColumns, useNarrowFocus } from "./narrow-focus.js";
 import { PaneGlide } from "./pane-motion.js";
 import { useAutomationRuns } from "./use-automation-runs.js";
-import { type AgentsRead, type RunChoices, useRunChoices } from "./use-run-choices.js";
+import { type RunChoices, useRunChoices } from "./use-run-choices.js";
 
 /**
  * automation-editor.tsx -- one automation's page, or a new one's: who owns it, its name, its schedule, its task, and its repository, saved by an explicit Create or Save.
@@ -477,8 +496,8 @@ function namesSaid(providers: readonly IntegrationProvider[]): string {
 /** The most marks the servers chip holds before it counts the rest, so it stays a picker's width. */
 const SERVERS_CHIP_MARKS = 4;
 
-/** How wide the block standing in the servers chip is while the connections are read: a chip of a mark or two. */
-const SERVERS_CHIP_SKELETON_WIDTH = "96px";
+/** How wide the servers row's words stand while the connections are read, as a share of their line. */
+const SERVERS_DETAIL_SKELETON = "40%";
 
 /**
  * The servers row while no read of the owner's connections has answered:
@@ -502,11 +521,16 @@ function UnreadServersRow({
       />
     );
   }
+  return <ServersRowSkeleton />;
+}
+
+/** The servers row while the connections are read: its name, and blocks where its words and its field chip will stand, claiming nothing. */
+function ServersRowSkeleton(): React.JSX.Element {
   return (
-    <SettingsRow label="MCP servers" description={<Skeleton width="40%" />}>
+    <SettingsRow label="MCP servers" description={<Skeleton width={SERVERS_DETAIL_SKELETON} />}>
       {() => (
         <SkeletonRegion label="Reading your connected servers…">
-          <Skeleton shape={SKELETON_SHAPE.CONTROL} width={SERVERS_CHIP_SKELETON_WIDTH} />
+          <SettingsControlSkeleton control={SETTINGS_SKELETON_CONTROL.SELECT} />
         </SkeletonRegion>
       )}
     </SettingsRow>
@@ -728,6 +752,57 @@ function ScheduleRows({
   );
 }
 
+/** The form's groups, by their headings, in the order the form stands them. */
+const EDITOR_SECTION = {
+  SHARING: "Sharing",
+  TRIGGER: "Trigger",
+  PROMPT: "Prompt",
+  RUNS: "Runs",
+} as const;
+
+/** How many lines the prompt's field stands, written in or read. */
+const PROMPT_ROWS = 5;
+
+/**
+ * The rows a saved automation's groups stand before it is read, as a
+ * scheduled one, the kind most are, runs on a new agent each time: Sharing's
+ * Owner; Trigger's Type, Repeats, Time, and Time zone; and Runs' Repository,
+ * Runs land in, Model on the account's default, MCP servers, and Archive
+ * successful runs, each with the words under its name where it says them.
+ */
+const SCHEDULED_ROWS = {
+  [EDITOR_SECTION.SHARING]: [{ described: true, controls: [SETTINGS_SKELETON_CONTROL.SELECT] }],
+  [EDITOR_SECTION.TRIGGER]: [
+    { described: true, controls: [SETTINGS_SKELETON_CONTROL.SELECT] },
+    { described: true, controls: [SETTINGS_SKELETON_CONTROL.SELECT] },
+    // The time's field stands at a picker's width beside the pickers (`.automation-field`).
+    { described: false, controls: [SETTINGS_SKELETON_CONTROL.SELECT] },
+    { described: false, controls: [SETTINGS_SKELETON_CONTROL.SELECT] },
+  ],
+  [EDITOR_SECTION.RUNS]: [
+    { described: false, controls: [SETTINGS_SKELETON_CONTROL.SELECT] },
+    { described: false, controls: [SETTINGS_SKELETON_CONTROL.SELECT] },
+    { described: true, controls: [SETTINGS_SKELETON_CONTROL.SELECT] },
+    { described: true, controls: [SETTINGS_SKELETON_CONTROL.SELECT] },
+    { described: true, controls: [SETTINGS_SKELETON_CONTROL.SWITCH] },
+  ],
+} as const satisfies Record<string, readonly SettingsRowSkeletonShape[]>;
+
+/** The automation's tile before its crumb, at an actor mark's inline size (`avatar.css`). */
+const SKELETON_CRUMB_MARK = "16px";
+
+/** How wide a placeholder page's name, and the crumb naming it, stand. */
+const SKELETON_NAME = { TITLE: "40%", CRUMB: "120px" } as const;
+
+/** How wide the placeholder toolbar's worded acts stand: where the draft stands, Run now, and Save. */
+const SKELETON_ACTS = { STATUS: "34px", RUN_NOW: "100px", SAVE: "56px" } as const;
+
+/** An icon press's width, the ⋯'s and the Runs toggle's, as tall as it is wide. */
+const ICON_PRESS_WIDTH = "var(--luke-control-height)";
+
+/** What an automation's placeholder page says to a reader while the list is first read. */
+const READING_AUTOMATION = "Reading the automation…";
+
 /** What a new automation's page is called until it is made. */
 const NEW_AUTOMATION = "New automation";
 
@@ -767,13 +842,62 @@ function AutomationActions({
   );
 }
 
-/** The crumb naming the automation, fading out at its end where the toolbar is narrow, the pointer reading it whole. */
-function CurrentCrumb({ name }: { name: string }): React.JSX.Element {
+/** The crumb naming the automation, fading out at its end where the toolbar is narrow, the pointer reading `hint` whole. */
+function Crumb({
+  hint,
+  children,
+}: {
+  hint?: ReturnType<typeof wholeWordsHint> | undefined;
+  children: ReactNode;
+}): React.JSX.Element {
   return (
-    <OneLine className="automation-crumb" hint={wholeWordsHint(name)}>
-      {name}
+    <OneLine className="automation-crumb" hint={hint}>
+      {children}
     </OneLine>
   );
+}
+
+/** The crumb naming the automation by its name. */
+function CurrentCrumb({ name }: { name: string }): React.JSX.Element {
+  return <Crumb hint={wholeWordsHint(name)}>{name}</Crumb>;
+}
+
+/**
+ * The editor's toolbar: the crumbs back to the list, ending in `crumb`, and
+ * `tag` after them, with the page's acts at its end. Its own width, which a
+ * container query reads, folds its acts' words before they crowd its crumbs.
+ */
+function EditorToolbarFrame({
+  crumb,
+  tag,
+  onBack,
+  children,
+}: {
+  crumb: ReactNode;
+  tag?: ReactNode;
+  onBack: () => void;
+  children: ReactNode;
+}): React.JSX.Element {
+  return (
+    <header className="desktop-toolbar">
+      <div className="automation-toolbar">
+        <div className="desktop-toolbar-heading">
+          <nav className="automation-crumbs" aria-label="Path">
+            <FoldingButton label="Automations" icon={<ZapIcon />} onClick={onBack} />
+            <ChevronRightIcon aria-hidden="true" />
+            {crumb}
+          </nav>
+          {tag}
+        </div>
+        <div className="desktop-toolbar-actions">{children}</div>
+      </div>
+    </header>
+  );
+}
+
+/** Where the draft stands, said beside its save, and gone where the toolbar folds its acts. */
+function EditorStatus({ children }: { children: ReactNode }): React.JSX.Element {
+  return <span className="automation-editor-status">{children}</span>;
 }
 
 /**
@@ -835,82 +959,84 @@ function EditorToolbar({
           ? "Unsaved changes"
           : "Saved";
   return (
-    <header className="desktop-toolbar">
-      {/* The toolbar's own width, which a container query reads, folds its acts' words before they crowd its crumbs. */}
-      <div className="automation-toolbar">
-        <div className="desktop-toolbar-heading">
-          <nav className="automation-crumbs" aria-label="Path">
-            <FoldingButton label="Automations" icon={<ZapIcon />} onClick={onBack} />
-            <ChevronRightIcon aria-hidden="true" />
-            <CurrentCrumb name={automation === undefined ? NEW_AUTOMATION : automation.name} />
-          </nav>
-          {codeReview ? <ExperimentTag narrow={narrow} /> : null}
-        </div>
-        <div className="desktop-toolbar-actions">
-          {codeReview ? <SendFeedbackButton experiment={EXPERIMENT.CODE_REVIEW} /> : null}
-          <span className="automation-editor-status">
-            <Text
-              variant={TEXT_VARIANT.CAPTION}
-              tone={dirty ? TEXT_TONE.MUTED : TEXT_TONE.SUBTLE}
-              as={TEXT_ELEMENT.SPAN}
-            >
-              {status}
-            </Text>
-          </span>
-          {automation === undefined ? null : (
-            <FoldingButton
-              label="Run now"
-              icon={<PlayIcon />}
-              variant={BUTTON_VARIANT.OUTLINE}
-              busy={running ? "Running" : undefined}
-              onClick={onRunNow}
-            />
-          )}
-          <Button
-            variant={BUTTON_VARIANT.PRIMARY}
-            busy={saving}
-            busyLabel="Saving"
-            succeeded={!saveRefused}
-            disabled={!(automation === undefined || dirty)}
-            onClick={onSave}
-          >
-            {automation === undefined ? "Create" : "Save"}
-          </Button>
-          {automation === undefined ? null : (
-            <>
-              <Switch
-                checked={automation.enabled}
-                label={
-                  automation.enabled ? `Turn off ${automation.name}` : `Turn on ${automation.name}`
-                }
-                onChange={(enabled) => onToggle(enabled)}
-              />
-              <AutomationActions automation={automation} onDelete={onDelete} />
-            </>
-          )}
-          {/* The Runs panel's toggle, the side panel's own button and chord at the window's top right; in a narrow room, the way to the runs' own screen. */}
-          {runs.screen === undefined ? (
-            <Tooltip label={runsLabel} command={APP_COMMAND.TOGGLE_SIDE_PANEL}>
-              <IconButton
-                icon={<SidePanelIcon />}
-                label={runsLabel}
-                aria-expanded={runs.shown}
-                onClick={runs.onPress}
-              />
-            </Tooltip>
-          ) : (
-            <Tooltip label={RUNS_LABEL}>
-              <IconButton
-                icon={<HistoryIcon />}
-                label={RUNS_LABEL}
-                aria-controls={runs.screen}
-                onClick={runs.onPress}
-              />
-            </Tooltip>
-          )}
-        </div>
-      </div>
-    </header>
+    <EditorToolbarFrame
+      crumb={
+        <>
+          <ActorMark
+            actor={
+              automation === undefined
+                ? { kind: ACTOR_KIND.AUTOMATION, name: NEW_AUTOMATION, state: ACTOR_STATE.REST }
+                : automationActor(automation)
+            }
+          />
+          <CurrentCrumb name={automation === undefined ? NEW_AUTOMATION : automation.name} />
+        </>
+      }
+      tag={codeReview ? <ExperimentTag narrow={narrow} /> : null}
+      onBack={onBack}
+    >
+      {codeReview ? <SendFeedbackButton experiment={EXPERIMENT.CODE_REVIEW} /> : null}
+      <EditorStatus>
+        <Text
+          variant={TEXT_VARIANT.CAPTION}
+          tone={dirty ? TEXT_TONE.MUTED : TEXT_TONE.SUBTLE}
+          as={TEXT_ELEMENT.SPAN}
+        >
+          {status}
+        </Text>
+      </EditorStatus>
+      {automation === undefined ? null : (
+        <FoldingButton
+          label="Run now"
+          icon={<PlayIcon />}
+          variant={BUTTON_VARIANT.OUTLINE}
+          busy={running ? "Running" : undefined}
+          onClick={onRunNow}
+        />
+      )}
+      <Button
+        variant={BUTTON_VARIANT.PRIMARY}
+        busy={saving}
+        busyLabel="Saving"
+        succeeded={!saveRefused}
+        disabled={!(automation === undefined || dirty)}
+        onClick={onSave}
+      >
+        {automation === undefined ? "Create" : "Save"}
+      </Button>
+      {automation === undefined ? null : (
+        <>
+          <Switch
+            checked={automation.enabled}
+            label={
+              automation.enabled ? `Turn off ${automation.name}` : `Turn on ${automation.name}`
+            }
+            onChange={(enabled) => onToggle(enabled)}
+          />
+          <AutomationActions automation={automation} onDelete={onDelete} />
+        </>
+      )}
+      {/* The Runs panel's toggle, the side panel's own button and chord at the window's top right; in a narrow room, the way to the runs' own screen. */}
+      {runs.screen === undefined ? (
+        <Tooltip label={runsLabel} command={APP_COMMAND.TOGGLE_SIDE_PANEL}>
+          <IconButton
+            icon={<SidePanelIcon />}
+            label={runsLabel}
+            aria-expanded={runs.shown}
+            onClick={runs.onPress}
+          />
+        </Tooltip>
+      ) : (
+        <Tooltip label={RUNS_LABEL}>
+          <IconButton
+            icon={<HistoryIcon />}
+            label={RUNS_LABEL}
+            aria-controls={runs.screen}
+            onClick={runs.onPress}
+          />
+        </Tooltip>
+      )}
+    </EditorToolbarFrame>
   );
 }
 
@@ -1519,11 +1645,6 @@ function ModelRow({
   );
 }
 
-/** An agent as the agent picker names it. */
-function agentLabel(agent: { title: string | null }): string {
-  return agent.title ?? "Untitled agent";
-}
-
 /** What the agent picker names the saved agent the workspace's list no longer holds. */
 const KEPT_AGENT_LABEL = "The agent it goes to now";
 
@@ -1536,25 +1657,34 @@ const AGENT_DETAIL =
 
 /**
  * The agent each run goes to, chosen from the workspace's agents on the
- * repository. The agent it goes to as saved is kept first in the menu where
- * the list no longer holds it, so another pick can still be taken back.
+ * repository, each drawn as every agent menu draws it (`agentMenuRow`). The
+ * menu lists the newest while nothing is typed and, once a word is, those
+ * the service finds on the repository, so an agent past the newest is
+ * found; the agent chosen from a search stays named after the list moves
+ * on. The agent it goes to as saved is kept first in the menu where the
+ * list no longer holds it, so another pick can still be taken back.
  */
 function AgentRow({
   draft,
   savedAgentId,
-  agents,
+  choices,
   problem,
   onDraft,
 }: {
   draft: AutomationDraft;
   /** The agent its runs go to as saved, or none. */
   savedAgentId: string | null;
-  agents: AgentsRead;
+  choices: RunChoices;
   /** What stops a save here, or nothing. */
   problem: string | undefined;
   onDraft: (patch: Partial<AutomationDraft>) => void;
 }): React.JSX.Element {
-  const now = useMinute();
+  const { agents, found, models, searched: words, searchAgents } = choices;
+  const [picked, setPicked] = useState<MentionableAgent | undefined>(undefined);
+  const known = useKnownNames();
+  const place = useAgentRowPlace();
+  // Note that the catalog this row read names the models, since the window's own may not hold it yet.
+  const drawn = { ...place, models: models ?? place.models };
   if (agents !== undefined && "failed" in agents) {
     return (
       <SettingsRow
@@ -1566,19 +1696,38 @@ function AgentRow({
       </SettingsRow>
     );
   }
-  const listed = agents?.agents ?? [];
-  const chosen = listed.find((agent) => agent.id === draft.agentId);
+  const offered = (agents?.agents ?? []).map((agent) =>
+    mentionableAgent(agent, known.tasks, drawn.models),
+  );
+  const searched = found?.map((agent) => mentionableAgent(agent, known.tasks, drawn.models));
+  // Note that the newest are matched here too, because the service matches an agent by its
+  // title and its task, not by a name its row takes from its model.
+  const matched = new Set(
+    matchingRows(
+      offered.map((agent) => agentMenuRow(agent, drawn)),
+      words,
+    ).map((row) => row.id),
+  );
+  const listed =
+    words === ""
+      ? offered
+      : [
+          ...offered.filter((agent) => matched.has(agent.id)),
+          ...(searched ?? []).filter((agent) => !matched.has(agent.id)),
+        ];
+  const chosen =
+    offered.find((agent) => agent.id === draft.agentId) ??
+    searched?.find((agent) => agent.id === draft.agentId) ??
+    (picked?.id === draft.agentId ? picked : undefined);
+  const chosenRow = chosen === undefined ? undefined : agentMenuRow(chosen, drawn);
   const kept =
-    savedAgentId !== null && !listed.some((agent) => agent.id === savedAgentId)
+    savedAgentId !== null && !offered.some((agent) => agent.id === savedAgentId)
       ? savedAgentId
       : undefined;
+  // Note that a search lists only what it found, so the kept agent stands in the menu while none is typed.
   const rows = [
-    ...(kept === undefined ? [] : [{ id: kept, label: KEPT_AGENT_LABEL }]),
-    ...listed.map((agent) => ({
-      id: agent.id,
-      label: agentLabel(agent),
-      detail: sinceText(agent.createdAt, now),
-    })),
+    ...(kept === undefined || words !== "" ? [] : [{ id: kept, label: KEPT_AGENT_LABEL }]),
+    ...listed.map((agent) => agentMenuRow(agent, drawn)),
   ];
   return (
     <PickerRow
@@ -1587,15 +1736,17 @@ function AgentRow({
       detail={AGENT_DETAIL}
       value={draft.agentId ?? ""}
       valueLabel={
-        chosen !== undefined
-          ? agentLabel(chosen)
+        chosenRow !== undefined
+          ? chosenRow.label
           : draft.agentId !== null && draft.agentId === kept
             ? KEPT_AGENT_LABEL
             : "Choose an agent"
       }
+      valueIcon={chosenRow?.icon}
       rows={rows}
+      placeholder="Search agents"
       note={
-        agents === undefined ? (
+        words !== "" ? undefined : agents === undefined ? (
           <Spinner delay label="Loading agents" />
         ) : rows.length === 0 ? (
           "No agents of this workspace work in it yet."
@@ -1603,7 +1754,12 @@ function AgentRow({
       }
       noMatch={NO_MATCH.AGENTS}
       error={problem}
-      onPick={(agentId) => onDraft({ agentId })}
+      onOpen={() => searchAgents("")}
+      onSearch={searchAgents}
+      onPick={(agentId) => {
+        setPicked(listed.find((agent) => agent.id === agentId));
+        onDraft({ agentId });
+      }}
     />
   );
 }
@@ -1642,7 +1798,7 @@ function RunsGroup({
   // The other repositories as a save would send them: the one shown first left out.
   const also = draft.alsoRepositories.filter((repository) => repository !== draft.repository);
   return (
-    <SettingsSection title="Runs">
+    <SettingsSection title={EDITOR_SECTION.RUNS}>
       <SettingsRow
         label="Repository"
         description={
@@ -1683,7 +1839,7 @@ function RunsGroup({
             <AgentRow
               draft={draft}
               savedAgentId={savedAgentId}
-              agents={choices.agents}
+              choices={choices}
               problem={problems[DRAFT_FIELD.AGENT]}
               onDraft={onDraft}
             />
@@ -1775,9 +1931,9 @@ function EditorForm({
   ] as const;
   return (
     <RevealArea root={form}>
-      <div ref={form} className="automation-form" {...revealArea()}>
+      <AutomationForm ref={form} {...revealArea()}>
         {offersOwner ? (
-          <SettingsSection title="Sharing">
+          <SettingsSection title={EDITOR_SECTION.SHARING}>
             <OwnerRow
               owner={draft.owner}
               owners={owners}
@@ -1787,7 +1943,7 @@ function EditorForm({
             />
           </SettingsSection>
         ) : null}
-        <SettingsSection title="Trigger">
+        <SettingsSection title={EDITOR_SECTION.TRIGGER}>
           <SelectRow
             width={CHIP_WIDTH.MIN_FIELD}
             label="Type"
@@ -1853,11 +2009,11 @@ function EditorForm({
             onSettings={(next) => onDraft({ prompt: withCodeReviewSettings(draft.prompt, next) })}
           />
         )}
-        <SettingsSection title="Prompt" frame={SETTINGS_SECTION_FRAME.NONE}>
+        <SettingsSection title={EDITOR_SECTION.PROMPT} frame={SETTINGS_SECTION_FRAME.NONE}>
           <TextArea
             ref={prompt}
             label="Prompt"
-            rows={5}
+            rows={PROMPT_ROWS}
             placeholder="Find the flakiest test in CI this week and fix it."
             value={draft.prompt}
             invalid={problems[DRAFT_FIELD.PROMPT] !== undefined}
@@ -1879,8 +2035,186 @@ function EditorForm({
           repositories={repositories}
           onDraft={onDraft}
         />
-      </div>
+      </AutomationForm>
     </RevealArea>
+  );
+}
+
+/**
+ * An automation's page: its toolbar over its setup, with the Runs panel
+ * `beside` it, and what stands apart from the setup after it, a narrow room's
+ * runs screen and the page's questions.
+ */
+function AutomationPageFrame({
+  screenRef,
+  layoutRef,
+  hidden,
+  toolbar,
+  setup,
+  beside,
+  children,
+}: {
+  screenRef?: RefObject<HTMLDivElement | null> | undefined;
+  layoutRef?: RefObject<HTMLDivElement | null> | undefined;
+  /** Whether the setup's screen is hidden, as a narrow room hides it while its runs stand. */
+  hidden?: boolean | undefined;
+  toolbar: ReactNode;
+  setup: ReactNode;
+  beside: ReactNode;
+  children?: ReactNode;
+}): React.JSX.Element {
+  return (
+    <Fill ref={screenRef} className="automations-view">
+      <Fill className="automation-editor-screen" hidden={hidden}>
+        {toolbar}
+        <div ref={layoutRef} className="automation-editor-layout">
+          <DetailPage frame={PAGE_FRAME.TOOLBAR} label="Automation">
+            {setup}
+          </DetailPage>
+          {beside}
+        </div>
+      </Fill>
+      {children}
+    </Fill>
+  );
+}
+
+/** The setup's column: the name over the form, a step apart. */
+function AutomationSetup({ children }: { children: ReactNode }): React.JSX.Element {
+  return <div className="automation-editor">{children}</div>;
+}
+
+/** The form, as Settings draws a page: each group's name over its card, the groups a section apart. */
+function AutomationForm({
+  ref,
+  children,
+  ...area
+}: {
+  ref?: Ref<HTMLDivElement> | undefined;
+  children: ReactNode;
+} & Partial<ReturnType<typeof revealArea>>): React.JSX.Element {
+  return (
+    <div ref={ref} className="automation-form" {...area}>
+      {children}
+    </div>
+  );
+}
+
+/** The prompt's field while the automation is read: a block its rows tall. */
+function PromptSkeleton(): React.JSX.Element {
+  return (
+    <div
+      className="automation-prompt-skeleton"
+      style={cssCustomProperties({ "--automation-prompt-rows": String(PROMPT_ROWS) })}
+    >
+      <Skeleton shape={SKELETON_SHAPE.BLOCK} />
+    </div>
+  );
+}
+
+/**
+ * The setup while the automation is read, as a scheduled one on a new agent
+ * stands: its name in the title's type, then each group under its heading,
+ * Sharing where the workspace is shared, its rows' words and controls as
+ * blocks, and the prompt's field, so the editor lands where they stood.
+ */
+function EditorSkeleton({ offersOwner }: { offersOwner: boolean }): React.JSX.Element {
+  return (
+    <SkeletonRegion label={READING_AUTOMATION}>
+      <AutomationSetup>
+        <Text variant={TEXT_VARIANT.TITLE} as={TEXT_ELEMENT.DIV}>
+          <Skeleton width={SKELETON_NAME.TITLE} />
+        </Text>
+        <AutomationForm>
+          {offersOwner ? (
+            <SettingsSection title={EDITOR_SECTION.SHARING}>
+              <SettingsRowsSkeleton rows={SCHEDULED_ROWS[EDITOR_SECTION.SHARING]} />
+            </SettingsSection>
+          ) : null}
+          <SettingsSection title={EDITOR_SECTION.TRIGGER}>
+            <SettingsRowsSkeleton rows={SCHEDULED_ROWS[EDITOR_SECTION.TRIGGER]} />
+          </SettingsSection>
+          <SettingsSection title={EDITOR_SECTION.PROMPT} frame={SETTINGS_SECTION_FRAME.NONE}>
+            <PromptSkeleton />
+          </SettingsSection>
+          <SettingsSection title={EDITOR_SECTION.RUNS}>
+            <SettingsRowsSkeleton rows={SCHEDULED_ROWS[EDITOR_SECTION.RUNS]} />
+          </SettingsSection>
+        </AutomationForm>
+      </AutomationSetup>
+    </SkeletonRegion>
+  );
+}
+
+/** A saved automation's acts while it is read: where the draft stands, Run now, Save, its switch, its ⋯, and the Runs toggle. */
+function EditorActsSkeleton(): React.JSX.Element {
+  return (
+    <>
+      <EditorStatus>
+        <Text variant={TEXT_VARIANT.CAPTION} as={TEXT_ELEMENT.SPAN}>
+          <Skeleton width={SKELETON_ACTS.STATUS} />
+        </Text>
+      </EditorStatus>
+      <Skeleton shape={SKELETON_SHAPE.CONTROL} width={SKELETON_ACTS.RUN_NOW} />
+      <Skeleton shape={SKELETON_SHAPE.CONTROL} width={SKELETON_ACTS.SAVE} />
+      <SettingsControlSkeleton control={SETTINGS_SKELETON_CONTROL.SWITCH} />
+      <Skeleton shape={SKELETON_SHAPE.CONTROL} width={ICON_PRESS_WIDTH} />
+      <Skeleton shape={SKELETON_SHAPE.CONTROL} width={ICON_PRESS_WIDTH} />
+    </>
+  );
+}
+
+/**
+ * One automation's page opened before the list is first read, from a link,
+ * ⌘K, or a run's card, in the editor's own frame: its toolbar, the crumbs'
+ * way back to the list ending in a block where the name will stand and its
+ * acts as blocks, over the setup as blocks and the Runs panel reading, until
+ * the list says what it holds. A narrow room stands the setup alone, as the
+ * editor does.
+ */
+export function AutomationPageSkeleton({
+  room,
+  offersOwner,
+  onBack,
+}: {
+  room: ShellRoom;
+  /** Whether the workspace is shared, where the setup opens on Sharing. */
+  offersOwner: boolean;
+  onBack: () => void;
+}): React.JSX.Element {
+  const runsPanel = useRunsPanel();
+  return (
+    <AutomationPageFrame
+      toolbar={
+        <EditorToolbarFrame
+          crumb={
+            <>
+              <Skeleton shape={SKELETON_SHAPE.CIRCLE} width={SKELETON_CRUMB_MARK} />
+              <Crumb>
+                <Skeleton width={SKELETON_NAME.CRUMB} />
+              </Crumb>
+            </>
+          }
+          onBack={onBack}
+        >
+          <EditorActsSkeleton />
+        </EditorToolbarFrame>
+      }
+      setup={<EditorSkeleton offersOwner={offersOwner} />}
+      beside={
+        room === SHELL_ROOM.NARROW ? null : (
+          <AutomationRunsPanel
+            panel={runsPanel}
+            mine
+            created
+            automationId={undefined}
+            runs={undefined}
+            onRetry={() => undefined}
+            onOpenAgent={() => undefined}
+          />
+        )
+      }
+    />
   );
 }
 
@@ -2106,8 +2440,11 @@ export function AutomationEditor({
     onOpenAgent,
   };
   return (
-    <Fill ref={screen} className="automations-view">
-      <Fill className="automation-editor-screen" hidden={hidden.list}>
+    <AutomationPageFrame
+      screenRef={screen}
+      layoutRef={editorLayout}
+      hidden={hidden.list}
+      toolbar={
         <EditorToolbar
           automation={automation}
           codeReview={codeReviewOn && readCodeReviewSettings(draft.prompt) !== undefined}
@@ -2127,50 +2464,53 @@ export function AutomationEditor({
           }}
           narrow={narrow}
         />
-        <div ref={editorLayout} className="automation-editor-layout">
-          <DetailPage frame={PAGE_FRAME.TOOLBAR} label="Automation">
-            <div className="automation-editor">
-              <TextField
-                ref={nameField}
-                label="Automation name"
-                size={TEXT_FIELD_SIZE.TITLE}
-                placeholder="Untitled automation"
-                value={draft.name}
-                onEscape={() => nameField.current?.blur()}
-                onChange={(name) => editDraft({ name })}
-              />
-              {shownProblems && problems[DRAFT_FIELD.NAME] !== undefined ? (
-                <p className="error-message automation-form-problem" role="alert">
-                  {problems[DRAFT_FIELD.NAME]}
-                </p>
-              ) : null}
-              {refusal === undefined ? null : (
-                <p className="error-message automation-save-refusal" role="alert">
-                  {refusal}
-                </p>
-              )}
-              <EditorForm
-                draft={draft}
-                automation={automation}
-                writes={writes}
-                problems={shownProblems ? problems : {}}
-                taskBacked={taskBacked}
-                workspace={workspace}
-                offersOwner={offersOwner}
-                repositories={repositories}
-                shownSecret={shownSecret}
-                onSecret={setShownSecret}
-                savedAgentId={savedAgentId}
-                codeReviewOn={codeReviewOn}
-                sentry={sentry}
-                onDraft={editDraft}
-              />
-            </div>
-          </DetailPage>
+      }
+      setup={
+        <AutomationSetup>
+          <TextField
+            ref={nameField}
+            label="Automation name"
+            size={TEXT_FIELD_SIZE.TITLE}
+            placeholder="Untitled automation"
+            value={draft.name}
+            onEscape={() => nameField.current?.blur()}
+            onChange={(name) => editDraft({ name })}
+          />
+          {shownProblems && problems[DRAFT_FIELD.NAME] !== undefined ? (
+            <p className="error-message automation-form-problem" role="alert">
+              {problems[DRAFT_FIELD.NAME]}
+            </p>
+          ) : null}
+          {refusal === undefined ? null : (
+            <p className="error-message automation-save-refusal" role="alert">
+              {refusal}
+            </p>
+          )}
+          <EditorForm
+            draft={draft}
+            automation={automation}
+            writes={writes}
+            problems={shownProblems ? problems : {}}
+            taskBacked={taskBacked}
+            workspace={workspace}
+            offersOwner={offersOwner}
+            repositories={repositories}
+            shownSecret={shownSecret}
+            onSecret={setShownSecret}
+            savedAgentId={savedAgentId}
+            codeReviewOn={codeReviewOn}
+            sentry={sentry}
+            onDraft={editDraft}
+          />
+        </AutomationSetup>
+      }
+      beside={
+        <>
           {narrow ? null : <AutomationRunsPanel panel={runsPanel} {...runsRead} />}
           <PaneGlide root={editorLayout} layout={{ runsOpen: !narrow && runsPanel.open }} />
-        </div>
-      </Fill>
+        </>
+      }
+    >
       {narrow ? (
         <AutomationRunsScreen
           id={runsScreen}
@@ -2197,6 +2537,6 @@ export function AutomationEditor({
           running: "Deleting",
         }}
       />
-    </Fill>
+    </AutomationPageFrame>
   );
 }

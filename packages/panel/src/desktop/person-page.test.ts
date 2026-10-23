@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import {
   AUTOMATION_ACTION,
   AUTOMATION_DEFAULT_GUARDS,
+  AUTOMATION_RUN_STATUS,
   AUTOMATION_SCOPE,
   AUTOMATION_TRIGGER,
   type AutomationScope,
@@ -58,6 +59,7 @@ function automation(
   name: string,
   by: string,
   scope: AutomationScope,
+  overrides: Partial<AutomationSummary> = {},
 ): AutomationSummary {
   return {
     id: `5a0c4d2e-0000-4c3a-9e7d-${String(n).padStart(12, "0")}`,
@@ -75,11 +77,23 @@ function automation(
     createdAt: 1,
     scope,
     creatorId: by,
+    ...overrides,
   };
 }
 
 const AUTOMATIONS = [
-  automation(1, "Morning Sentry triage", "user-charles", AUTOMATION_SCOPE.WORKSPACE),
+  automation(1, "Morning Sentry triage", "user-charles", AUTOMATION_SCOPE.WORKSPACE, {
+    nextRunAt: NOW + 2 * MINUTE,
+    lastRun: {
+      id: "1c2d3e4f-5a6b-4c7d-8e9f-0a1b2c3d4e5f",
+      firing: { kind: AUTOMATION_TRIGGER.SCHEDULE, dueAt: 2 },
+      status: AUTOMATION_RUN_STATUS.FAILED,
+      reason: "unavailable",
+      agent: null,
+      firedAt: 2,
+      settledAt: 3,
+    },
+  }),
   automation(2, "Charles's own reminders", "user-charles", AUTOMATION_SCOPE.PERSONAL),
   automation(3, "Weekly dependency bumps", "user-dean", AUTOMATION_SCOPE.WORKSPACE),
 ];
@@ -412,6 +426,21 @@ test("each row opens what it names: an agent its tab, an item the Inbox on it, a
   assert.deepEqual(opened.tasks, [DASHBOARD.id]);
 });
 
+test("a waiting item is the Inbox's own row: its task named in a chip before its preview, the marks of its Inbox row and its time at the end, and its card hung beside it", async () => {
+  const { page } = mount(CHARLES.userId);
+  await settle();
+
+  const row = button(page, "Retry 429s too?");
+  assert.equal(row.querySelector(".home-row-context"), null, "no task name at the row's end");
+  assert.equal(row.querySelector(".luke-list-row-lead")?.textContent, RETRIES.name);
+  assert.ok(row.querySelector('.actor-mark[data-kind="agent"]'), "the agent's tile leads");
+  assert.ok(row.querySelector(".home-row-meta time"), "its time stands at its end");
+
+  restOn(row);
+  const card = document.querySelector(".luke-tooltip-card [data-inbox-row-card]");
+  assert.equal(card?.querySelector(".luke-hover-card-name")?.textContent, RETRY_429.title);
+});
+
 test("an agent's row says its failure at its end and hangs the agent's card while rested on, as the sidebar's row does", async () => {
   const broken = agent(9, "Flaky retry", CHARLES, CODING_AGENT_STATUS.FAILED, 5 * MINUTE);
   const failing = task(9, "Retry flake hunt", CHARLES, 5 * MINUTE, [broken]);
@@ -647,6 +676,20 @@ test("a person's page lists the workspace's automations they made, never their o
   assert.deepEqual(sections(page).Automations, ["Morning Sentry triage"]);
 });
 
+test("an automation's row leads with its clock tile, ends with its failure and when it runs next, and hangs its card", async () => {
+  handState({});
+  const { page } = mount(CHARLES.userId);
+  await settle();
+
+  const row = page.querySelector<HTMLElement>('section[aria-label="Automations"] li');
+  assert.ok(row?.querySelector('.actor-mark[data-kind="automation"]'), "the clock tile leads");
+  assert.ok(row?.querySelector(".failed-mark"), "a failed newest run is marked at the end");
+  assert.match(row?.textContent ?? "", /Next /u);
+  restOn(row?.querySelector("button") ?? assert.fail("no press"));
+  const card = document.querySelector('.luke-tooltip-card [data-actor-card="automation"]');
+  assert.match(card?.textContent ?? "", /Morning Sentry triage/u);
+});
+
 test("automations that could not be read say so and offer Retry, never passing for an empty page, and Retry reads them again", async () => {
   handState({});
   automationsRefused = true;
@@ -687,6 +730,21 @@ test("while the Inbox and the automations are read, placeholder rows stand for e
   assert.deepEqual(waits(page), ["Reading your inbox…", "Reading their automations…"]);
   assert.equal(page.querySelector(".luke-spinner"), null);
   assert.doesNotMatch(page.textContent ?? "", /Nothing of theirs here yet/u);
+});
+
+test("while the Inbox is read, its placeholder stands where the section waiting on them lands, right after Working now", async () => {
+  handState({});
+  inboxHeld = true;
+  const { page } = mount(CHARLES.userId);
+  await settle();
+
+  const order = [...page.querySelectorAll("section.home-section")].map(
+    (section) =>
+      section.getAttribute("aria-label") ??
+      section.querySelector('[role="status"]')?.textContent ??
+      "",
+  );
+  assert.deepEqual(order.slice(0, 3), ["Working now", "Reading your inbox…", "Created"]);
 });
 
 test("a page opened by a member's id alone stands a placeholder head while the members are read, never Someone not in this workspace nor an empty page", async () => {

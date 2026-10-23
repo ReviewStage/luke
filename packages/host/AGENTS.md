@@ -2,9 +2,10 @@
 
 ## Everything of the machine arrives as a seam
 
-`composeHost` is handed the state root, the version, the environment, the account
-source (whose desktop implementation brings the cipher), and the id source, and
-derives none of them. Nothing here reads
+`hostAssemblyLayer` (`src/compose-host.ts`) is handed the state root, the
+version, the environment, the account source (whose desktop implementation
+brings the cipher), and the id source through the services its launch provides
+(`host-kernel.ts`'s `HostKernelTag` among them), and derives none of them. Nothing here reads
 the hosting process's own profile, so a validation run on a temporary state root
 is the same composition as a live one.
 

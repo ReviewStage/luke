@@ -91,6 +91,33 @@ it.effect("a log line becomes a Sentry log, and a span a Sentry span", () =>
   }),
 );
 
+it.effect(
+  "a span that carries what a model was handed or answered leaves without it, and with the rest",
+  () =>
+    Effect.gen(function* () {
+      const sentry = recordingSentry();
+      // Note that the span is written as eve writes its own agent spans, by its trace policy rather than Sentry's.
+      yield* Effect.void.pipe(
+        Effect.withSpan("chat claude", {
+          attributes: {
+            "gen_ai.request.model": "fixture-slate",
+            "gen_ai.system_instructions": "fixture-amber",
+            "gen_ai.input.messages": "fixture-cobalt",
+            "gen_ai.tool.call.result": "fixture-ochre",
+            "gen_ai.output.messages": "fixture-umber",
+          },
+        }),
+        Effect.provide(sentry.layer),
+      );
+      const spans = sentOfType(sentry.sent, "span").map((item) => item.text);
+      const sent = (words: string) => spans.some((text) => text.includes(words));
+      assert.deepEqual(
+        ["slate", "amber", "cobalt", "ochre", "umber"].filter((words) => sent(`fixture-${words}`)),
+        ["slate"],
+      );
+    }),
+);
+
 it.effect("a monitored run returns only once its closing check-in has left", () =>
   Effect.gen(function* () {
     // Note that the network is held by hand, because a function frozen once it answers drops whatever is still in flight.

@@ -17,7 +17,7 @@ import {
 } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { onRegistry } from "../testing/copy-feedback.js";
-import { ItemMark } from "./inbox-list.js";
+import { ItemMark } from "./inbox-item-parts.js";
 import { taskHolder } from "./inbox-model.js";
 
 /**
@@ -98,6 +98,8 @@ test("an item an archived agent posted wears the harness that agent ran on, read
     for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
   });
 
-  // Codex's mark is its picture.
-  assert.ok(container.querySelector(".actor-mark img.harness-mark"), "the row wears Codex's mark");
+  assert.ok(
+    container.querySelector(".actor-mark .luke-harness-mark[data-provider='openai']"),
+    "the row wears Codex's mark",
+  );
 });

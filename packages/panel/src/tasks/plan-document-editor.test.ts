@@ -61,6 +61,7 @@ const STAND_IN: PlanEditorModule = {
         return { base: merged, text: merged };
       },
       chooseMention: () => undefined,
+      insertBlock: () => undefined,
       markdown: () => props.markdown,
       focusAt: (placement) => {
         placed.push(placement);
@@ -72,6 +73,11 @@ const STAND_IN: PlanEditorModule = {
       removePicture: () => undefined,
       selectionSpan: () => undefined,
       blockSpan: () => undefined,
+      selectionBox: () => undefined,
+      toggleMark: () => undefined,
+      turnInto: () => undefined,
+      setLink: () => undefined,
+      focus: () => undefined,
       destroy: () => {
         editor.destroyed = true;
       },

@@ -450,7 +450,7 @@ export interface CoderHost extends HostAdmission {
     input: UnparsedWireValue,
   ): Effect.Effect<ReadWebPageResult, never, HttpClient.HttpClient>;
   /**
-   * Runs one `look_at_picture` call (`../../plans/picture-look.ts`): one of
+   * Runs one `look_at_picture` call (`../../tasks/picture-look.ts`): one of
    * the pictures of the agent's plan, read as the member whose turn this is.
    */
   lookAtPicture(

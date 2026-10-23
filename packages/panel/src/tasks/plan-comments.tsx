@@ -27,6 +27,7 @@ import {
   CARD_PRESS_REACH,
   CARD_SHADOW,
   Card,
+  type CardHover,
   type CardLook,
   CardPress,
   type CardShadow,
@@ -59,7 +60,6 @@ import {
   TEXT_VARIANT,
   Text,
   TextArea,
-  TIME_LOOK,
   Time,
   Tooltip,
   TrashIcon,
@@ -155,7 +155,10 @@ import {
  * bubble that rises over them, or from the button a block shows at its end
  * under the pointer, which comments on the whole block; while the bubble
  * stands, ⌥⌘M starts it as a press on the bubble does
- * (`APP_COMMAND.COMMENT_ON_SELECTION`). Its words are
+ * (`APP_COMMAND.COMMENT_ON_SELECTION`). In the open editor the format
+ * toolbar over the words selected takes the bubble's place, its Comment
+ * starting the thread (`useEditorComment`), so two surfaces never stand over
+ * one selection. Its words are
  * measured in the plan's Markdown by laying the words drawn over the
  * section's source (`@luke/features/plan-comment-anchor`), so emphasis, a
  * link, or a chip inside them puts nothing off. Posting a comment asks no
@@ -317,7 +320,7 @@ function EventLine({
         </span>
         <span className="comment-head-end">
           <span className="comment-time">
-            <Time at={entry.at} now={now} look={TIME_LOOK.AGO} />
+            <Time at={entry.at} now={now} />
           </span>
         </span>
       </div>
@@ -463,7 +466,7 @@ function CommentEntry({
         <WriterRef writer={entry.writer} agents={doors.agents} />
         <span className="comment-head-end">
           <span className="comment-time">
-            <Time at={entry.at} now={now} look={TIME_LOOK.AGO} />
+            <Time at={entry.at} now={now} />
             {entry.editedAt === undefined ? null : ` · ${COMMENT_WORDS.EDITED}`}
           </span>
           <div className="comment-tools">
@@ -911,6 +914,49 @@ function threadFrame(place: ThreadPlace, open: boolean): { look: CardLook; shado
 }
 
 /**
+ * A thread's card, raised or outlined by where it stands and whether it is
+ * open (`threadFrame`), in a comment's own type and inset. Every thread
+ * draws it, and so do the Comments tab's placeholder cards, so a thread
+ * lands where its placeholder stood.
+ */
+function CommentCard({
+  place,
+  open,
+  hover = CARD_HOVER.NONE,
+  lit,
+  children,
+  ...data
+}: {
+  place: ThreadPlace;
+  open: boolean;
+  hover?: CardHover;
+  lit?: boolean | undefined;
+  "data-thread"?: string | undefined;
+  "data-pointed"?: boolean | undefined;
+  children: ReactNode;
+}): React.JSX.Element {
+  return (
+    <Card
+      {...threadFrame(place, open)}
+      corner={CARD_CORNER.MENU}
+      padding={CARD_PADDING.NONE}
+      hover={hover}
+      lit={lit}
+      className="comment-card"
+      data-open={String(open)}
+      {...data}
+    >
+      {children}
+    </Card>
+  );
+}
+
+/** One row of the Comments tab's list, a step from the next: a thread's card, or a placeholder's. */
+function CommentsRow({ children }: { children: ReactNode }): React.JSX.Element {
+  return <div className="comments-row">{children}</div>;
+}
+
+/**
  * One thread as the margin, a count's card, or the Comments tab draws it:
  * open, every entry and the field that answers it; at rest, its first
  * comment and the faces and count of its replies, which opens it.
@@ -959,14 +1005,11 @@ function ThreadCard({
       ...new Map(replies.map((entry) => [JSON.stringify(entry.writer), entry.writer])).values(),
     ];
     return (
-      <Card
-        {...threadFrame(place, false)}
-        corner={CARD_CORNER.MENU}
-        padding={CARD_PADDING.NONE}
+      <CommentCard
+        place={place}
+        open={false}
         hover={CARD_HOVER.WASH}
         lit={pointed}
-        className="comment-card"
-        data-open="false"
         data-pointed={pointed}
         data-thread={thread.id}
       >
@@ -975,7 +1018,7 @@ function ThreadCard({
           <div className="comment-head">
             <WriterRef writer={first.writer} agents={doors.agents} />
             <span className="comment-time">
-              <Time at={first.at} now={now} look={TIME_LOOK.AGO} />
+              <Time at={first.at} now={now} />
             </span>
           </div>
         )}
@@ -1004,23 +1047,16 @@ function ThreadCard({
               {replies.length === 1 ? "1 reply" : `${replies.length} replies`}
               <span className="comment-time">
                 {" · "}
-                <Time at={replies.at(-1)?.at ?? thread.updatedAt} now={now} look={TIME_LOOK.AGO} />
+                <Time at={replies.at(-1)?.at ?? thread.updatedAt} now={now} />
               </span>
             </span>
           )}
         </CardPress>
-      </Card>
+      </CommentCard>
     );
   }
   return (
-    <Card
-      {...threadFrame(place, true)}
-      corner={CARD_CORNER.MENU}
-      padding={CARD_PADDING.NONE}
-      className="comment-card"
-      data-open="true"
-      data-thread={thread.id}
-    >
+    <CommentCard place={place} open data-thread={thread.id}>
       {first === undefined ? head : null}
       {thread.entries.map((entry) =>
         entry.kind === PLAN_COMMENT_ENTRY.COMMENT ? (
@@ -1063,7 +1099,7 @@ function ThreadCard({
           }}
         />
       ) : null}
-    </Card>
+    </CommentCard>
   );
 }
 
@@ -1085,14 +1121,7 @@ function PendingCard({
   const [sending, setSending] = useState(false);
   const [note, setNote] = useState<string | undefined>(undefined);
   return (
-    <Card
-      {...threadFrame(THREAD_PLACE.MARGIN, true)}
-      corner={CARD_CORNER.MENU}
-      padding={CARD_PADDING.NONE}
-      className="comment-card"
-      data-open="true"
-      data-thread={PENDING_THREAD}
-    >
+    <CommentCard place={THREAD_PLACE.MARGIN} open data-thread={PENDING_THREAD}>
       {note === undefined ? null : (
         <div className="comment-note" role="alert">
           {note}
@@ -1125,7 +1154,7 @@ function PendingCard({
           return true;
         }}
       />
-    </Card>
+    </CommentCard>
   );
 }
 
@@ -1503,6 +1532,11 @@ export function PlanCommentLayer({
         setBubble(undefined);
         return;
       }
+      // Note that in the editor the format toolbar over the words starts their thread, so no bubble stands beside it.
+      if (editor !== undefined) {
+        setBubble(undefined);
+        return;
+      }
       const range = selection.getRangeAt(0);
       const start = range.startContainer.parentElement?.closest<HTMLElement>(`.${unitClass}`);
       const end = range.endContainer.parentElement?.closest<HTMLElement>(`.${unitClass}`);
@@ -1516,20 +1550,6 @@ export function PlanCommentLayer({
       const below =
         coarsePointerNow() && box.bottom + BUBBLE_ROOM_TOUCH <= visibleViewport().bottom;
       const top = (below ? box.bottom : box.top) - own.top;
-      // In the editor the words are measured through it, and its selection is left as it stands.
-      if (editor !== undefined) {
-        setBubble({
-          top,
-          left: box.left - own.left,
-          below,
-          start: () => {
-            const span = editor.current?.selectionSpan();
-            if (span !== undefined) setPending(editorPending(span, PLAN_COMMENT_SCOPE.WORDS));
-            setBubble(undefined);
-          },
-        });
-        return;
-      }
       const index = [...element.querySelectorAll(`.${unitClass}`)].indexOf(start);
       const section = sections[index];
       const quote = selection.toString().trim();
@@ -1794,6 +1814,19 @@ export function PlanCommentLayer({
 
 const PendingSetter = createContext<(pending: PendingThread | undefined) => void>(() => undefined);
 
+/**
+ * Starts a thread on the words selected in the open editor, measured through
+ * it and its selection left as it stands, as the format toolbar's Comment
+ * over them does; nothing where none are selected.
+ */
+export function useEditorComment(editor: RefObject<PlanEditorHandle | undefined>): () => void {
+  const setPending = useContext(PendingSetter);
+  return () => {
+    const span = editor.current?.selectionSpan();
+    if (span !== undefined) setPending(editorPending(span, PLAN_COMMENT_SCOPE.WORDS));
+  };
+}
+
 /** Holds which thread is open and the one being started, for the marks, the margin, and the Comments tab under it. */
 export function CommentFocusScope({
   planId,
@@ -1894,12 +1927,14 @@ function CommentsSkeleton(): React.JSX.Element {
   return (
     <SkeletonRegion label="Reading the comments…">
       {COMMENTS_SKELETON.map((card) => (
-        <div key={card.author} className="comments-row">
-          <Skeleton width={card.author} />
-          {card.words.map((width) => (
-            <Skeleton key={width} width={width} />
-          ))}
-        </div>
+        <CommentsRow key={card.author}>
+          <CommentCard place={THREAD_PLACE.LIST} open={false}>
+            <Skeleton width={card.author} />
+            {card.words.map((width) => (
+              <Skeleton key={width} width={width} />
+            ))}
+          </CommentCard>
+        </CommentsRow>
       ))}
     </SkeletonRegion>
   );
@@ -2004,7 +2039,7 @@ export function PlanCommentsTab({
               )
             ) : (
               listed.map((thread) => (
-                <div key={thread.id} className="comments-row">
+                <CommentsRow key={thread.id}>
                   {/* Note that every thread stands whole here, its replies and its field, its quote the way to its words in the plan. */}
                   <ThreadCard
                     thread={thread}
@@ -2021,7 +2056,7 @@ export function PlanCommentsTab({
                         : undefined
                     }
                   />
-                </div>
+                </CommentsRow>
               ))
             )}
           </div>

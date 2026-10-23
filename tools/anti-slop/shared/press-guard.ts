@@ -91,17 +91,20 @@ const DISABLE_DIRECTIVES = [
   /\/\*\s*(?:eslint|oxlint)-disable(?:-next-line|-line)?(?![\w-])([\s\S]*?)\*\//gu,
 ];
 
-function silencesGuard(ruleList: string): boolean {
+function silencesGuard(ruleList: string, guard: string): boolean {
   const rules = (ruleList.split("--")[0] ?? "").split(/[\s,]+/u).filter((rule) => rule.length > 0);
-  return rules.length === 0 || rules.includes(PRESS_GUARD_RULE);
+  return rules.length === 0 || rules.includes(guard);
 }
 
-/** The 1-based lines of `text` holding a directive that silences the guard. */
-export function guardSuppressionLines(text: string): readonly number[] {
+/** The 1-based lines of `text` holding a directive that silences `guard`, the press guard where none is named. */
+export function guardSuppressionLines(
+  text: string,
+  guard: string = PRESS_GUARD_RULE,
+): readonly number[] {
   const lines: number[] = [];
   for (const directive of DISABLE_DIRECTIVES) {
     for (const match of text.matchAll(directive)) {
-      if (!silencesGuard(match[1] ?? "")) continue;
+      if (!silencesGuard(match[1] ?? "", guard)) continue;
       lines.push(text.slice(0, match.index).split("\n").length);
     }
   }
@@ -112,22 +115,25 @@ export function guardSuppressionLines(text: string): readonly number[] {
 export const JSX_SOURCE = /\.(?:tsx|jsx|js|mjs|cjs)$/u;
 
 /**
- * Why an oxlint configuration leaves the guard short of an error everywhere,
- * or undefined where it holds: the rule must be an error, and no override
- * may name it, since an override can only weaken it for the files it covers.
+ * Why an oxlint configuration leaves `guard`, the press guard where none is
+ * named, short of an error everywhere, or undefined where it holds: the rule
+ * must be an error, and no override may name it, since an override can only
+ * weaken it for the files it covers.
  */
-export function configWeakensGuard(config: unknown): string | undefined {
+export function configWeakensGuard(
+  config: unknown,
+  guard: string = PRESS_GUARD_RULE,
+): string | undefined {
   if (config === null || typeof config !== "object") return "the configuration is not an object";
   const rules: unknown = Reflect.get(config, "rules");
-  const level =
-    rules !== null && typeof rules === "object" ? Reflect.get(rules, PRESS_GUARD_RULE) : undefined;
-  if (level !== "error") return `"rules" must set "${PRESS_GUARD_RULE}" to "error"`;
+  const level = rules !== null && typeof rules === "object" ? Reflect.get(rules, guard) : undefined;
+  if (level !== "error") return `"rules" must set "${guard}" to "error"`;
   const overrides: unknown = Reflect.get(config, "overrides");
   if (!Array.isArray(overrides)) return undefined;
   const named = overrides.some((override: unknown) => {
     if (override === null || typeof override !== "object") return false;
     const overridden: unknown = Reflect.get(override, "rules");
-    return overridden !== null && typeof overridden === "object" && PRESS_GUARD_RULE in overridden;
+    return overridden !== null && typeof overridden === "object" && guard in overridden;
   });
-  return named ? `no override may name "${PRESS_GUARD_RULE}"` : undefined;
+  return named ? `no override may name "${guard}"` : undefined;
 }

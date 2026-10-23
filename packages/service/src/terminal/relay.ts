@@ -67,7 +67,7 @@ import type {
 } from "../agents/terminal/agent-sandbox.js";
 import { attachTerminal, TMUX } from "../agents/terminal/tmux.js";
 import type { InteractiveShell, SandboxUnavailable } from "../agents/vercel-sandbox-api.js";
-import { unparsedWire } from "../core.js";
+import { jsonOf } from "../http/http-effect.js";
 import { frameBytes } from "../voice/socket.js";
 
 const TERMINAL_RELAY_BOUNDS = {
@@ -164,12 +164,6 @@ const PtyExitSchema = Schema.Struct({ type: Schema.Literal("exit"), code: Schema
 
 const readResize = readEither(terminalRelayResizeSchema);
 const readPtyExit = readEither(PtyExitSchema);
-
-/** A text frame's JSON, or nothing a reader takes where it is none. */
-function jsonOf(text: string) {
-  const parsed = Result.try(() => JSON.parse(text));
-  return unparsedWire(Result.isSuccess(parsed) ? parsed.success : undefined);
-}
 
 const now = Effect.map(Clock.currentTimeMillis, (millis) => new Date(millis));
 

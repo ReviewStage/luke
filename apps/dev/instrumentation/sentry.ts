@@ -1,5 +1,5 @@
 /**
- * sentry.ts -- Sentry for the coding agent, as Sentry's eve guide sets it up: started before the agent loads, so every turn, model call, tool call, and error reaches Sentry's Agent Tracing.
+ * sentry.ts -- Sentry for the coding agent, as Sentry's eve guide sets it up: started before the agent loads, so every turn, model call, tool call, and error reaches Sentry's Agent Tracing, without what the model was sent or answered.
  *
  * eve runs this provider's setup at server startup, before it loads the
  * agent and the AI SDK. The options are the deployment's own

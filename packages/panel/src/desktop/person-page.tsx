@@ -1,4 +1,8 @@
-import { automationOwner, automationTriggerText } from "@luke/features/automation-list-model";
+import {
+  automationOwner,
+  automationRunStanding,
+  automationTriggerText,
+} from "@luke/features/automation-list-model";
 import { AUTOMATION_SCOPE, type AutomationSummary } from "@luke/features/automation-wire";
 import { LINK_PLACE, linkOf } from "@luke/features/luke-link";
 import type { TaskSummary } from "@luke/features/task-wire";
@@ -15,14 +19,10 @@ import {
   IconButton,
   List,
   ListRow,
-  ONE_LINE_ELEMENT,
   OneLine,
   PAGE_FRAME,
   RowHint,
   RowHintOptions,
-  SKELETON_SHAPE,
-  Skeleton,
-  SkeletonRegion,
   TEXT_ELEMENT,
   TEXT_TONE,
   TEXT_VARIANT,
@@ -49,20 +49,34 @@ import {
   personRef,
 } from "@luke/ui/person-page-model";
 import { EllipsisIcon, LinkIcon, ListFilterIcon, MailIcon, UsersIcon } from "lucide-react";
-import type { ReactNode } from "react";
-import { ACTOR_SIZE, ActorMark, automationActor, YouBadge } from "../actor-ref.js";
+import { type ReactNode, useCallback, useRef } from "react";
+import { ACTOR_SIZE, ActorMark, AutomationCard, automationActor, YouBadge } from "../actor-ref.js";
 import { useAppCommand } from "../app-commands.js";
 import { LINK_COPY, useCopyToast } from "../copy-feedback.js";
 import { MemberDirectory, useMemberDirectory } from "../member-directory.js";
 import { NOT_FOUND_THING, NotFound } from "../not-found.js";
 import { useOpenSettings } from "../open-settings.js";
+import { stateEndMark } from "../state-glyph.js";
 import { AgentCard, lineSubject } from "../tasks/agent-ref.js";
 import { InboxItemRow, InboxListSkeleton } from "../tasks/inbox-list.js";
-import { holderName, INBOX_HOLDER, type InboxListed, inboxWaitsOn } from "../tasks/inbox-model.js";
+import { INBOX_HOLDER, type InboxListed, inboxWaitsOn } from "../tasks/inbox-model.js";
 import { agentEndMark } from "../tasks/tab-look.js";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
 import { useWaitingItems } from "../tasks/use-waiting-items.js";
 import { ActionMenu, type MenuAction } from "./action-menu.js";
+import { STANDING_GLYPH } from "./automation-runs-panel.js";
+import { automationNextText } from "./automation-words.js";
+import {
+  PersonHeadFrame,
+  PersonHeadSkeleton,
+  PersonNameSkeleton,
+  PersonSectionFrame,
+  PersonToolbar,
+  PersonTop,
+  PROFILE,
+  RowsSkeleton,
+  SectionSkeleton,
+} from "./person-frame.js";
 import { RecentRow } from "./recent-row.js";
 import { useTaskListView } from "./task-list-view.js";
 import { useAutomations } from "./use-automations.js";
@@ -89,28 +103,6 @@ import { useAutomations } from "./use-automations.js";
  * personal workspace, their answers, or another workspace's. A press on a
  * row opens what it names, and Escape leaves the page.
  */
-
-/** How wide a placeholder section's name stands, as a short section name does. */
-const SKELETON_SECTION = "120px";
-
-/** How wide the placeholder head's name and the line under it stand, as a name and a role and email do. */
-const SKELETON_HEAD = { NAME: "180px", LINE: "240px" } as const;
-
-/** The placeholder head's face, at the page's size (`.actor-mark[data-size="page"]`). */
-const SKELETON_FACE = "48px";
-
-/** A placeholder row's tile, an automation's or a repository's at its inline size (`.home-row-picture`). */
-const SKELETON_MARK = "16px";
-
-/** How wide each placeholder row's name and what is said beside it stand, so the rows read as rows of their own. */
-const SKELETON_ROWS = [
-  { name: "46%", context: "96px" },
-  { name: "38%", context: "120px" },
-  { name: "54%", context: "80px" },
-] as const;
-
-/** What the page is called where it cannot name the person yet. */
-const PROFILE = "Profile";
 
 /** What a page's head says under a name, by who the person is to the workspace. */
 function headLine(person: Actor): string | undefined {
@@ -140,51 +132,9 @@ function PersonSection({
   children: ReactNode;
 }): React.JSX.Element {
   return (
-    <section className="home-section" aria-label={title}>
-      <header className="person-section-head">
-        <Text as={TEXT_ELEMENT.H2} variant={TEXT_VARIANT.SECTION} tone={TEXT_TONE.MUTED}>
-          {title}
-        </Text>
-        <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.SUBTLE}>
-          {count}
-        </Text>
-      </header>
+    <PersonSectionFrame label={title} title={title} count={count}>
       <List label={title}>{children}</List>
-    </section>
-  );
-}
-
-/** A section still being read: a block where its name will stand, over the placeholder rows in `children`. */
-function SectionSkeleton({ children }: { children: ReactNode }): React.JSX.Element {
-  return (
-    <section className="home-section">
-      <div className="person-section-head">
-        <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.SECTION}>
-          <Skeleton width={SKELETON_SECTION} />
-        </Text>
-      </div>
-      {children}
-    </section>
-  );
-}
-
-/** A list still being read, which `label` names: rows of a tile, a name, and what is said beside it, as a task's or an automation's row stands. */
-function RowsSkeleton({ label }: { label: string }): React.JSX.Element {
-  return (
-    <SectionSkeleton>
-      <SkeletonRegion label={label}>
-        <List label={label}>
-          {SKELETON_ROWS.map(({ name, context }) => (
-            <ListRow
-              key={name}
-              leading={<Skeleton shape={SKELETON_SHAPE.CIRCLE} width={SKELETON_MARK} />}
-              title={<Skeleton width={name} />}
-              meta={<Skeleton width={context} />}
-            />
-          ))}
-        </List>
-      </SkeletonRegion>
-    </SectionSkeleton>
+    </PersonSectionFrame>
   );
 }
 
@@ -353,34 +303,59 @@ function usePersonAutomations(workspaceId: string | undefined, userId: string): 
   return { ...none, automations };
 }
 
-/** One of their automations as a row: its clock wearing how its newest run went, its name, and what fires it; a press opens it. */
+/** One of their automations as a row: its clock wearing how its newest run went, its name, and what fires it, then a failure's mark and when it runs next, hanging its card; a press opens it. */
 function AutomationRow({
   automation,
+  workspaceName,
+  now,
   onOpen,
 }: {
   automation: AutomationSummary;
+  workspaceName: string | undefined;
+  now: number;
   onOpen: () => void;
 }): React.JSX.Element {
+  const trigger = automationTriggerText(automation.trigger, automation.repositories ?? []);
+  const state = STANDING_GLYPH[automationRunStanding(automation.lastRun)];
+  const item = useRef<HTMLElement | null>(null);
+  // Note that the row's item is its press's parent, which its card counts as its control.
+  const hold = useCallback((press: HTMLElement | null) => {
+    item.current = press?.parentElement ?? null;
+  }, []);
   return (
-    <ListRow
-      leading={
-        <span className="home-row-picture">
-          <ActorMark actor={automationActor(automation)} />
-        </span>
-      }
-      title={automation.name}
-      meta={
-        <span className="home-row-meta">
-          <OneLine
-            className="home-row-context"
-            words={automationTriggerText(automation.trigger, automation.repositories ?? [])}
-          >
-            {automationTriggerText(automation.trigger, automation.repositories ?? [])}
-          </OneLine>
-        </span>
-      }
-      onPress={onOpen}
-    />
+    <RowHintOptions
+      card={<AutomationCard automation={automation} workspaceName={workspaceName} />}
+      cardBeside
+      cardRegion={item}
+    >
+      <ListRow
+        ref={hold}
+        leading={
+          <span className="home-row-picture">
+            <ActorMark actor={automationActor(automation)} />
+          </span>
+        }
+        title={automation.name}
+        meta={
+          <span className="home-row-meta">
+            <OneLine className="home-row-context" words={trigger}>
+              {trigger}
+            </OneLine>
+            {stateEndMark(state, true)}
+            <Text
+              as={TEXT_ELEMENT.SPAN}
+              variant={TEXT_VARIANT.CAPTION}
+              tone={TEXT_TONE.MUTED}
+              truncate
+            >
+              {automationNextText(automation, now)}
+            </Text>
+          </span>
+        }
+        hint={{ Hint: RowHint, label: automation.name }}
+        onPress={onOpen}
+      />
+    </RowHintOptions>
   );
 }
 
@@ -388,41 +363,24 @@ function AutomationRow({
 function PersonHead({ person }: { person: Actor }): React.JSX.Element {
   const line = headLine(person);
   return (
-    <header className="person-head">
-      <ActorMark actor={person} size={ACTOR_SIZE.PAGE} />
-      <div className="person-head-copy">
-        <p className="person-head-name">
+    <PersonHeadFrame
+      face={<ActorMark actor={person} size={ACTOR_SIZE.PAGE} />}
+      name={
+        <>
           <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.TITLE}>
             {headName(person)}
           </Text>
           {person.kind === ACTOR_KIND.PERSON && person.you ? <YouBadge /> : null}
-        </p>
-        {line === undefined ? null : (
+        </>
+      }
+      line={
+        line === undefined ? null : (
           <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
             {line}
           </Text>
-        )}
-      </div>
-    </header>
-  );
-}
-
-/** The head while the members are read: a block where their face, their name, and who they are here will stand. */
-function PersonHeadSkeleton(): React.JSX.Element {
-  return (
-    <SkeletonRegion label="Reading who they are…">
-      <header className="person-head">
-        <Skeleton shape={SKELETON_SHAPE.CIRCLE} width={SKELETON_FACE} />
-        <div className="person-head-copy">
-          <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.TITLE}>
-            <Skeleton width={SKELETON_HEAD.NAME} />
-          </Text>
-          <Text variant={TEXT_VARIANT.CAPTION}>
-            <Skeleton width={SKELETON_HEAD.LINE} />
-          </Text>
-        </div>
-      </header>
-    </SkeletonRegion>
+        )
+      }
+    />
   );
 }
 
@@ -546,12 +504,7 @@ function PersonColumn({
       frame={PAGE_FRAME.TOOLBAR}
       label={name ?? PROFILE}
       toolbar={
-        <header className="desktop-toolbar">
-          <div className="desktop-toolbar-heading">
-            <OneLine as={ONE_LINE_ELEMENT.H1} className="desktop-toolbar-title" words={name}>
-              {name ?? (refused ? PROFILE : <Skeleton width={SKELETON_HEAD.NAME} />)}
-            </OneLine>
-          </div>
+        <PersonToolbar name={name ?? (refused ? PROFILE : <PersonNameSkeleton />)} words={name}>
           <PersonActions
             tasks={tasks}
             userId={userId}
@@ -559,10 +512,10 @@ function PersonColumn({
             shared={shared}
             onShowTasks={showTasks}
           />
-        </header>
+        </PersonToolbar>
       }
     >
-      <div className="person-top">{head}</div>
+      <PersonTop>{head}</PersonTop>
       {tasks.listFailed ? (
         <div className="home-note">
           <ErrorState onRetry={tasks.onRetryList}>
@@ -579,6 +532,16 @@ function PersonColumn({
           ))}
         </PersonSection>
       )}
+      {/* Note that the Inbox's placeholder, or its failure, stands where its section will, right after Working now. */}
+      {read.failed ? (
+        <div className="home-note">
+          <ErrorState onRetry={read.onRetry}>Some Inbox items could not be read.</ErrorState>
+        </div>
+      ) : waiting.length === 0 && read.reading ? (
+        <SectionSkeleton>
+          <InboxListSkeleton />
+        </SectionSkeleton>
+      ) : null}
       {waiting.length === 0 ? null : (
         <PersonSection
           title={you ? "Waiting on you" : "Waiting on their answer"}
@@ -592,7 +555,7 @@ function PersonColumn({
               now={now}
               models={tasks.agents.models}
               readerId={tasks.me}
-              context={holderName(listed.holder)}
+              chip
               onChoose={openItem}
             />
           ))}
@@ -625,6 +588,8 @@ function PersonColumn({
             <AutomationRow
               key={automation.id}
               automation={automation}
+              workspaceName={tasks.workspace?.name}
+              now={now}
               onOpen={() =>
                 tasks.automationsView.onOpen({
                   kind: AUTOMATIONS_PAGE.EDIT,
@@ -635,15 +600,6 @@ function PersonColumn({
           ))}
         </PersonSection>
       )}
-      {read.failed ? (
-        <div className="home-note">
-          <ErrorState onRetry={read.onRetry}>Some Inbox items could not be read.</ErrorState>
-        </div>
-      ) : waiting.length === 0 && read.reading ? (
-        <SectionSkeleton>
-          <InboxListSkeleton />
-        </SectionSkeleton>
-      ) : null}
       {theirAutomations.failed ? (
         <div className="home-note">
           <ErrorState onRetry={theirAutomations.onRetry}>

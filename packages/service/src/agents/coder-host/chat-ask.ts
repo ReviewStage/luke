@@ -15,16 +15,15 @@ import {
   CHAT_BOUNDS,
   CHAT_FIELD,
   type ChatBlock,
-  type ChatChoice,
   type ChatForm,
   type ChatPostBlock,
   type ChatReadResponse,
   type ChatReply,
-  type ChatResponse,
   chatImageTypeSchema,
   codeLinesReadable,
   MEMBER_KIND,
   type postChatAskInputSchema,
+  recommendedLabels,
 } from "@luke/features/chat-wire";
 import { MENTION_KIND } from "@luke/features/mention-link";
 import { Effect, Result, Schema } from "effect";
@@ -63,7 +62,9 @@ import { type InboxSandboxDoor, readInboxImage } from "./inbox-image.js";
 /** Why an ask was not posted, in the words the model reads. */
 export const ASK_REFUSAL = {
   NO_OPTIONS: "Not posted: a choice's options each stand under a label of their own.",
-  UNKNOWN_RECOMMENDATION: "Not posted: recommended names no option's label.",
+  UNKNOWN_RECOMMENDATION: "Not posted: recommended names a label no option has.",
+  SEVERAL_RECOMMENDED:
+    "Not posted: recommended names each label once, and several only where multiple lets them pick several.",
   FIELD_LABELS: "Not posted: a form names each field by a label of its own.",
   SELECT_OPTIONS:
     "Not posted: a select field offers its options, each once, and no other field offers options.",
@@ -83,6 +84,9 @@ export const ASK_REFUSAL = {
 
 /** A post that may carry an ask, as the wire reads it. */
 type AskPost = typeof postChatAskInputSchema.Type;
+
+/** What a posted ask asks for, its choice's recommendation one label or a list of them. */
+type ResponsePost = NonNullable<AskPost["ask"]>["response"];
 
 /** One ask as the agent reads it back: its key and place, where it stands, what it asks while open, and what came of it. */
 export type AskLine = {
@@ -110,12 +114,18 @@ function distinct(labels: readonly string[]): boolean {
   return new Set(labels).size === labels.length;
 }
 
-/** A choice's own refusal: a label used twice, or a recommendation naming none. */
-function choiceRefusal(choice: ChatChoice): string | undefined {
+/** A choice's own refusal: a label used twice, a recommendation naming none, one twice, or several where one may be picked. */
+function choiceRefusal(
+  choice: Extract<ResponsePost, { type: typeof CHAT_ASK.CHOICE }>,
+): string | undefined {
   const labels = choice.options.map((option) => option.label);
   if (!distinct(labels)) return ASK_REFUSAL.NO_OPTIONS;
-  if (choice.recommended !== undefined && !labels.includes(choice.recommended)) {
+  const recommended = recommendedLabels(choice);
+  if (!recommended.every((label) => labels.includes(label))) {
     return ASK_REFUSAL.UNKNOWN_RECOMMENDATION;
+  }
+  if (!distinct(recommended) || (recommended.length > 1 && choice.multiple !== true)) {
+    return ASK_REFUSAL.SEVERAL_RECOMMENDED;
   }
   return undefined;
 }
@@ -140,7 +150,7 @@ function formRefusal(form: ChatForm): string | undefined {
 }
 
 /** A response's own refusal, by its type. */
-function responseRefusal(response: ChatResponse): string | undefined {
+function responseRefusal(response: ResponsePost): string | undefined {
   switch (response.type) {
     case CHAT_ASK.CHOICE:
       return choiceRefusal(response);

@@ -44,7 +44,7 @@ import {
 import { alias } from "drizzle-orm/pg-core";
 import { DateTime, Effect, Option, Schema, SchemaTransformation } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
-import { Database, type DatabaseServices, type QueryError, queryBuilder } from "../core/query.js";
+import { Database, type DatabaseServices, queryBuilder, type StoreFailure } from "../core/query.js";
 import { agentPin } from "../schemas/agent-pin.js";
 import { organization, user } from "../schemas/auth.js";
 import {
@@ -158,10 +158,8 @@ import type { ConversationTarget } from "./writer.js";
  * database of its own.
  */
 
-type CodingAgentStoreFailure = QueryError | Schema.SchemaError;
-
 /** What a coding agent store operation answers: an effect over the ambient client, composed into whatever called it. */
-export type CodingAgentStoreEffect<A> = Effect.Effect<A, CodingAgentStoreFailure, DatabaseServices>;
+export type CodingAgentStoreEffect<A> = Effect.Effect<A, StoreFailure, DatabaseServices>;
 
 /** One coding agent as the service holds it: what the tabs read, and what the agent's own turns run on. */
 export interface CodingAgent {
@@ -1317,17 +1315,29 @@ const AGENT_SHOWN_NAME = sql<string>`coalesce(
   replace(regexp_replace(${codingAgent.model}, '^[^/]*/', ''), '-', ' ')
 )`;
 
-/** The condition that the name an agent is shown by, or its task's name, holds the words, whatever their case. */
-function agentNamed(words: string): SQL | undefined {
-  const pattern = containing(words);
-  return or(
-    ilike(AGENT_SHOWN_NAME, pattern),
-    exists(
-      queryBuilder
-        .select({ one: task.id })
-        .from(task)
-        .where(and(eq(task.id, codingAgent.taskId), ilike(task.name, pattern))),
-    ),
+/**
+ * The condition that every word of the query is held by the name an agent is
+ * shown by or its task's name, each word by either, whatever its case; none
+ * for a query of no words. Note that the query is split as the panel's
+ * `matchingRows` splits one, so a row matches on the service where it matches
+ * in a menu.
+ */
+function agentNamed(query: string): SQL | undefined {
+  const words = query.split(/\s+/u).filter(Boolean);
+  if (words.length === 0) return undefined;
+  return and(
+    ...words.map((word) => {
+      const pattern = containing(word);
+      return or(
+        ilike(AGENT_SHOWN_NAME, pattern),
+        exists(
+          queryBuilder
+            .select({ one: task.id })
+            .from(task)
+            .where(and(eq(task.id, codingAgent.taskId), ilike(task.name, pattern))),
+        ),
+      );
+    }),
   );
 }
 
@@ -1749,7 +1759,7 @@ const deleteConversationRow = SqlSchema.void({
 export function createCodingAgent(
   userId: string,
   started: NewCodingAgent,
-): Effect.Effect<Option.Option<CodingAgentStarted>, CodingAgentStoreFailure, DatabaseServices> {
+): Effect.Effect<Option.Option<CodingAgentStarted>, StoreFailure, DatabaseServices> {
   return Effect.flatMap(SqlClient.SqlClient, (client) =>
     client.withTransaction(
       Effect.gen(function* () {
@@ -1842,9 +1852,7 @@ export function discardCodingAgent(
 /** What a delete that stopped the agent first tells it. */
 export interface CodingAgentDeleteGuard<R> {
   /** Whether the agent, read under its conversation's lock, still stands as the caller's Stop left it; false refuses the delete. */
-  readonly standsStopped: (
-    agent: CodingAgent,
-  ) => Effect.Effect<boolean, CodingAgentStoreFailure, R>;
+  readonly standsStopped: (agent: CodingAgent) => Effect.Effect<boolean, StoreFailure, R>;
   /** Run under that lock before anything is deleted, given the agent's conversation, as a task's delete runs its own. */
   readonly beforeDelete: TaskDeleteGuard<R>["beforeDelete"];
 }
@@ -1908,7 +1916,7 @@ export function deleteCodingAgent<R = never>(
   guard: CodingAgentDeleteGuard<R>,
 ): Effect.Effect<
   Option.Option<{ readonly txid: string }>,
-  CodingAgentStoreFailure | TaskAgentUnstopped,
+  StoreFailure | TaskAgentUnstopped,
   DatabaseServices | R
 > {
   return Effect.flatMap(SqlClient.SqlClient, (client) =>
@@ -1990,7 +1998,7 @@ function workspaceRequest(userId: string, organizationId: string, options: Works
  * account's own where `ownOnly` asks, newest started first, an archived one
  * left out unless `includeArchived` asks,
  * only those on the repository named where one is, on the plan named
- * where one is, and whose shown name (`agentTabLabel`) or task's name holds
+ * where one is, and whose shown name (`agentTabLabel`) or task's name holds each of
  * the words where some are given, and at most `limit`; a workspace the account is not in has
  * none.
  */
@@ -2254,7 +2262,7 @@ export function dispatchMentioningServers<E, R>(
   agentId: string,
   mentioned: readonly string[],
   dispatch: Effect.Effect<boolean, E, R>,
-): Effect.Effect<boolean, E | CodingAgentStoreFailure, R | DatabaseServices> {
+): Effect.Effect<boolean, E | StoreFailure, R | DatabaseServices> {
   if (mentioned.length === 0) return dispatch;
   return Effect.gen(function* () {
     const locked = yield* lockReachableMentionedServers({ userId, agentId });

@@ -10,13 +10,15 @@ import {
   JSX_SOURCE,
   PRESS_GUARD_RULE,
 } from "./shared/press-guard.ts";
+import { SKELETON_GUARD_RULE } from "./shared/skeleton-guard.ts";
 
 /**
- * The guard has no escape hatch: oxlint honors every inline disable and has
- * no flag to refuse one, so `pnpm lint` runs this after it. It fails on a
- * JSX-capable file outside `@luke/ui` holding a directive that would
- * silence `no-raw-press-outside-ui`, and on an `.oxlintrc.json` that leaves
- * the rule short of an error anywhere.
+ * The design system's guards have no escape hatch: oxlint honors every
+ * inline disable and has no flag to refuse one, so `pnpm lint` runs this
+ * after it. It fails on a JSX-capable file outside `@luke/ui` holding a
+ * directive that would silence `no-raw-press-outside-ui`, on any JSX-capable
+ * file holding one that would silence `skeleton-through-components`, and on
+ * an `.oxlintrc.json` that leaves either rule short of an error anywhere.
  */
 const REPOSITORY_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 
@@ -34,22 +36,39 @@ function sourceFiles(): readonly string[] {
   return listed.stdout.split("\0").filter((file) => file.length > 0);
 }
 
-const problems: string[] = [];
+/** Each guard, the files it watches, and what to do instead of silencing it. */
+const GUARDS = [
+  {
+    rule: PRESS_GUARD_RULE,
+    watches: (absolute: string) => isOutsideUi(absolute),
+    remedy: "Move the press onto a @luke/ui component or variant instead",
+  },
+  {
+    rule: SKELETON_GUARD_RULE,
+    watches: () => true,
+    remedy:
+      "Draw the skeleton in a `*Skeleton` component, through the components the loaded state draws with",
+  },
+] as const;
+
 const config: unknown = JSON.parse(
   readFileSync(path.join(REPOSITORY_ROOT, ".oxlintrc.json"), "utf8"),
 );
-const weakened = configWeakensGuard(config);
-if (weakened !== undefined) problems.push(`.oxlintrc.json: ${weakened}`);
-for (const file of sourceFiles()) {
-  const absolute = path.join(REPOSITORY_ROOT, file);
-  if (!JSX_SOURCE.test(file) || !isOutsideUi(absolute) || !existsSync(absolute)) continue;
-  for (const line of guardSuppressionLines(readFileSync(absolute, "utf8"))) {
-    problems.push(`${file}:${line}: a disable directive silences ${PRESS_GUARD_RULE}`);
+const files = sourceFiles().filter((file) => JSX_SOURCE.test(file));
+for (const guard of GUARDS) {
+  const problems: string[] = [];
+  const weakened = configWeakensGuard(config, guard.rule);
+  if (weakened !== undefined) problems.push(`.oxlintrc.json: ${weakened}`);
+  for (const file of files) {
+    const absolute = path.join(REPOSITORY_ROOT, file);
+    if (!guard.watches(absolute) || !existsSync(absolute)) continue;
+    for (const line of guardSuppressionLines(readFileSync(absolute, "utf8"), guard.rule)) {
+      problems.push(`${file}:${line}: a disable directive silences ${guard.rule}`);
+    }
   }
-}
-if (problems.length > 0) {
+  if (problems.length === 0) continue;
   process.stderr.write(
-    `error: ${PRESS_GUARD_RULE} takes no suppression. Move the press onto a @luke/ui component or variant instead:\n${problems.map((problem) => `  ${problem}`).join("\n")}\n`,
+    `error: ${guard.rule} takes no suppression. ${guard.remedy}:\n${problems.map((problem) => `  ${problem}`).join("\n")}\n`,
   );
   process.exitCode = 1;
 }

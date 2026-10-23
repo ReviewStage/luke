@@ -57,13 +57,6 @@ import {
 } from "./runner-sessions.js";
 import type { NativeSessions } from "./runtime-sessions.js";
 
-export { RUNNER_ENDED, runnerEnded } from "./runner-sessions.js";
-
-/** What the sessions reach. */
-export type ClaudeCodeServices = RunnerServices;
-
-export type ClaudeCodeSessionsOptions = RunnerSessionsOptions;
-
 /** The hosts a command the agent runs may reach through Claude Code's command sandbox: GitHub and the package registries. */
 const ALLOWED_DOMAINS = [
   "github.com",
@@ -81,7 +74,7 @@ function effortOf(effort: string): Effort | undefined {
 }
 
 /** Claude Code as the shared launch drives it, for one account. */
-function claudeCode(options: ClaudeCodeSessionsOptions): RunnerHarness<{ readonly _tag: string }> {
+function claudeCode(options: RunnerSessionsOptions): RunnerHarness<{ readonly _tag: string }> {
   const { userId } = options;
 
   /**
@@ -245,6 +238,6 @@ function claudeCode(options: ClaudeCodeSessionsOptions): RunnerHarness<{ readonl
 
 /** The sessions for one account, over the calling fiber's services. */
 export const claudeCodeSessions = <Turn extends BrainHostTurn = BrainHostTurn>(
-  options: ClaudeCodeSessionsOptions,
-): Effect.Effect<NativeSessions<Turn>, never, ClaudeCodeServices> =>
+  options: RunnerSessionsOptions,
+): Effect.Effect<NativeSessions<Turn>, never, RunnerServices> =>
   runnerSessions<{ readonly _tag: string }, Turn>(claudeCode(options), options);

@@ -73,6 +73,14 @@ export const MENU_ITEM_MARK = {
 
 export type MenuItemMark = (typeof MENU_ITEM_MARK)[keyof typeof MENU_ITEM_MARK];
 
+/** Where an item's detail stands: a second line under its label, or beside it on the one line, as a picker's row says a person's email. */
+export const MENU_DETAIL = {
+  UNDER: "under",
+  BESIDE: "beside",
+} as const;
+
+export type MenuDetailPlace = (typeof MENU_DETAIL)[keyof typeof MENU_DETAIL];
+
 /** The gap between a button and the menu dropped from it. */
 export const MENU_DROP = 4;
 /** The items the menu's keys move between: every one that applies now, a setting's as an action's. */
@@ -92,6 +100,8 @@ export interface MenuAction {
   icon?: React.JSX.Element;
   /** A muted second line under the label, such as who shares a workspace, which a reader hears after it. */
   detail?: string | undefined;
+  /** Where the detail stands: under the label where none is said, or beside it. */
+  detailPlace?: MenuDetailPlace | undefined;
   onSelect: () => void;
   /** Drawn red: the action cannot be taken back, or ends what it acts on, as closing a pull request or canceling a task does. */
   danger?: boolean;
@@ -470,14 +480,21 @@ function ItemEnd({ action }: { action: MenuAction }): React.JSX.Element | null {
       </>
     );
   }
-  if (action.checked === true) {
+  // Note that a setting with a hint keeps its check's room while it is off, so the hints of a menu of them end in one line down it.
+  if (action.checked === true || (action.checked === false && hint !== null)) {
     return (
-      <span className="luke-menu-item-end">
-        <CheckIcon />
-      </span>
+      <>
+        {hint}
+        <span className="luke-menu-item-end">{action.checked ? <CheckIcon /> : null}</span>
+      </>
     );
   }
   return hint;
+}
+
+/** Whether an item draws its detail as a second line under its label, which the item grows to hold. */
+function secondLine(action: MenuAction): boolean {
+  return action.detail !== undefined && action.detailPlace !== MENU_DETAIL.BESIDE;
 }
 
 /** An item's button, with the card its action hangs beside it where it has one. */
@@ -518,7 +535,10 @@ export function MenuItem({
       {action.detail === undefined ? (
         label
       ) : (
-        <span className="luke-menu-item-copy">
+        <span
+          className="luke-menu-item-copy"
+          data-place={action.detailPlace === MENU_DETAIL.BESIDE ? MENU_DETAIL.BESIDE : undefined}
+        >
           {label}
           <OneLine className="luke-menu-item-detail">{action.detail}</OneLine>
         </span>
@@ -550,7 +570,7 @@ export function MenuItem({
           aria-label={heard}
           tabIndex={-1}
           className="luke-menu-item"
-          data-detail={action.detail === undefined ? undefined : "true"}
+          data-detail={secondLine(action) ? "true" : undefined}
           disabled={action.disabled}
           onClick={pulseOnPress(onChoose, PRESS_PULSE.QUIET)}
         >
@@ -568,7 +588,7 @@ export function MenuItem({
         tabIndex={-1}
         className="luke-menu-item"
         data-danger={action.danger ? "true" : undefined}
-        data-detail={action.detail === undefined ? undefined : "true"}
+        data-detail={secondLine(action) ? "true" : undefined}
         disabled={action.disabled}
         onClick={pulseOnPress(onChoose, PRESS_PULSE.QUIET)}
       >
@@ -609,7 +629,7 @@ function SteeredItem({
     "data-steered": "true",
     "data-highlighted": steered.highlighted ? "true" : undefined,
     "data-danger": action.danger ? "true" : undefined,
-    "data-detail": action.detail === undefined ? undefined : "true",
+    "data-detail": secondLine(action) ? "true" : undefined,
     onMouseDown: (event: React.MouseEvent) => event.preventDefault(),
     onMouseMove: off ? undefined : steered.onHover,
     onClick: off ? undefined : pulseOnPress(onChoose, PRESS_PULSE.QUIET),

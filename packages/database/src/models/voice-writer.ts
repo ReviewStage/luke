@@ -18,7 +18,7 @@ import {
   Database,
   type DatabaseServices,
   type DatabaseShape,
-  type QueryError,
+  type StoreFailure,
 } from "../core/query.js";
 import { conversations } from "../schemas/storage.js";
 import { voiceSessions, voiceTranscriptSegments } from "../schemas/voice.js";
@@ -127,12 +127,12 @@ export interface VoiceWriter {
   consume(
     target: VoiceTarget,
     event: LiveServerEvent,
-  ): Effect.Effect<VoiceWriteResult, VoiceWriteFailure, DatabaseServices>;
+  ): Effect.Effect<VoiceWriteResult, StoreFailure, DatabaseServices>;
   /** One speaker's utterance as it stands: inserted under the ledger's id on first sight, grown in place after, cut from the session's segments over its span each time. */
   upsertSpokenRow(
     target: VoiceTarget,
     row: SpokenRowWrite,
-  ): Effect.Effect<VoiceWriteResult, VoiceWriteFailure, DatabaseServices>;
+  ): Effect.Effect<VoiceWriteResult, StoreFailure, DatabaseServices>;
   /**
    * The developer's rows a delegation is about take that delegation, and its
    * turn where the ask has learned one. The service names the rows by the
@@ -145,7 +145,7 @@ export interface VoiceWriter {
   attachSpokenAsk(
     target: VoiceTarget,
     attach: SpokenAskAttach,
-  ): Effect.Effect<VoiceWriteResult, VoiceWriteFailure, DatabaseServices>;
+  ): Effect.Effect<VoiceWriteResult, StoreFailure, DatabaseServices>;
   /**
    * A line the developer typed into the call: one typed row, sent by the
    * member on the call, naming the session and the instant it was typed at,
@@ -155,7 +155,7 @@ export interface VoiceWriter {
   writeTypedRow(
     target: VoiceTarget,
     row: TypedRowWrite,
-  ): Effect.Effect<VoiceWriteResult, VoiceWriteFailure, DatabaseServices>;
+  ): Effect.Effect<VoiceWriteResult, StoreFailure, DatabaseServices>;
 }
 
 interface VoiceWriterOptions {
@@ -182,9 +182,6 @@ const SEGMENT_ROLE_OF_SPEAKER = {
   [TRANSCRIPT_SPEAKER.USER]: VOICE_SEGMENT_ROLE.USER,
   [TRANSCRIPT_SPEAKER.ASSISTANT]: VOICE_SEGMENT_ROLE.ASSISTANT,
 } as const satisfies Record<TranscriptSpeaker, VoiceSegmentRole>;
-
-/** How a statement here fails: the driver's own refusal, or a row the schema refused. */
-type VoiceWriteFailure = QueryError | Schema.SchemaError;
 
 /** The store's answer to a row write, as this writer reports it: written or grown is written, a refusal is the store's own. */
 const upserted = <E, R>(
@@ -312,7 +309,7 @@ export function voiceWriter({ store }: VoiceWriterOptions): VoiceWriter {
   function appendSegment(
     target: VoiceTarget,
     delta: SegmentDelta,
-  ): Effect.Effect<Option.Option<VoiceSessionRow>, VoiceWriteFailure, DatabaseServices> {
+  ): Effect.Effect<Option.Option<VoiceSessionRow>, StoreFailure, DatabaseServices> {
     return Effect.flatMap(SqlClient.SqlClient, (client) =>
       client.withTransaction(
         Effect.gen(function* () {
@@ -357,7 +354,7 @@ export function voiceWriter({ store }: VoiceWriterOptions): VoiceWriter {
   function upsertSpokenRow(
     target: VoiceTarget,
     row: SpokenRowWrite,
-  ): Effect.Effect<VoiceWriteResult, VoiceWriteFailure, DatabaseServices> {
+  ): Effect.Effect<VoiceWriteResult, StoreFailure, DatabaseServices> {
     return Effect.gen(function* () {
       const voiceSession = yield* findVoiceSession({
         userId: target.userId,
@@ -418,7 +415,7 @@ export function voiceWriter({ store }: VoiceWriterOptions): VoiceWriter {
   function attachSpokenAsk(
     target: VoiceTarget,
     attach: SpokenAskAttach,
-  ): Effect.Effect<VoiceWriteResult, VoiceWriteFailure, DatabaseServices> {
+  ): Effect.Effect<VoiceWriteResult, StoreFailure, DatabaseServices> {
     return Effect.map(store.attachSpokenAsk(target.conversation, attach), (attached) =>
       Result.isSuccess(attached)
         ? attached.success.length > 0
@@ -431,7 +428,7 @@ export function voiceWriter({ store }: VoiceWriterOptions): VoiceWriter {
   function writeTypedRow(
     target: VoiceTarget,
     row: TypedRowWrite,
-  ): Effect.Effect<VoiceWriteResult, VoiceWriteFailure, DatabaseServices> {
+  ): Effect.Effect<VoiceWriteResult, StoreFailure, DatabaseServices> {
     return Effect.gen(function* () {
       const voiceSession = yield* findVoiceSession({
         userId: target.userId,

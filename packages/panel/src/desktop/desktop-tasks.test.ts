@@ -106,6 +106,38 @@ test("a task the service will not hand the reader, as a link to another workspac
   container.remove();
 });
 
+test("while the task is read, its column's toolbar and the side panel stand their tabs' blocks in the rows the strips land in, the + after them, and the ⋯ an icon press square", () => {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  act(() =>
+    root.render(
+      createElement(DesktopTasks, {
+        summary: UNPINNED_SUMMARY,
+        looks: NO_LOOKS,
+        tasks: tasksControl({
+          page: TASKS_PAGE.DOCUMENT,
+          activeTaskId: TASK.id,
+          region: { kind: DOCUMENT_REGION.READING },
+          sidePanel: { ...tasksControl().sidePanel, open: true },
+        }),
+      }),
+    ),
+  );
+  const blocks = (row: Element | null) =>
+    [...(row?.querySelectorAll(":scope > .luke-skeleton") ?? [])].length;
+
+  assert.equal(blocks(container.querySelector(".desktop-toolbar > .main-tabs")), 2);
+  assert.equal(blocks(container.querySelector("aside[aria-label='Panel'] .side-panel-tabs")), 2);
+  const acts = [...container.querySelectorAll(".desktop-toolbar-actions > .luke-skeleton")];
+  assert.equal(
+    acts.at(-1)?.getAttribute("style"),
+    "--luke-skeleton-width: var(--luke-control-height);",
+  );
+  act(() => root.unmount());
+  container.remove();
+});
+
 test("a task with no agent tab draws a new agent's draft, its composer offering Call where the window takes calls, and no pane of start buttons", () => {
   const DRAFT_ID = "draft-1";
   const drawn = (calls: TasksControl["calls"]) => {

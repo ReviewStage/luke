@@ -3285,17 +3285,17 @@ test("update_agent refuses a Claude Code agent a GPT model and a context window,
     {
       status: ACTION_RESULT_STATUS.REJECTED,
       reason:
-        "Not changed: that agent runs on Claude Code, which runs Claude models alone; choose one of those, or start a new agent on another model.",
+        "Not changed: that agent runs on Claude, which runs Claude models alone; choose one of those, or start a new agent on another model.",
     },
     {
       status: ACTION_RESULT_STATUS.REJECTED,
       reason:
-        "Not changed: that agent runs on Claude Code, which manages its own context; leave contextWindow out.",
+        "Not changed: that agent runs on Claude, which manages its own context; leave contextWindow out.",
     },
     {
       status: ACTION_RESULT_STATUS.REJECTED,
       reason:
-        "Not changed: that agent runs on Claude Code, which manages its own context; leave contextWindow out.",
+        "Not changed: that agent runs on Claude, which manages its own context; leave contextWindow out.",
     },
   ]);
   const unchanged = await stored(onClaudeCode);

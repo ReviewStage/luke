@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { configWeakensGuard, guardSuppressionLines, PRESS_GUARD_RULE } from "./press-guard.ts";
+import { SKELETON_GUARD_RULE } from "./skeleton-guard.ts";
 
 describe("guardSuppressionLines", () => {
   it("finds a line, next-line, and block directive naming the guard", () => {
@@ -63,5 +64,29 @@ describe("configWeakensGuard", () => {
       overrides: [{ files: ["packages/panel/**"], rules: { [PRESS_GUARD_RULE]: "off" } }],
     };
     expect(configWeakensGuard(overridden)).toBeDefined();
+  });
+});
+
+describe("the skeleton guard", () => {
+  it("is found silenced by a directive naming it, and not by one naming the press guard", () => {
+    const text = [
+      `// oxlint-disable-next-line ${SKELETON_GUARD_RULE}`,
+      `// oxlint-disable-next-line ${PRESS_GUARD_RULE}`,
+    ].join("\n");
+    expect(guardSuppressionLines(text, SKELETON_GUARD_RULE)).toEqual([1]);
+  });
+
+  it("is weakened where the configuration leaves it short of an error or an override names it", () => {
+    const rules = { [PRESS_GUARD_RULE]: "error", [SKELETON_GUARD_RULE]: "error" };
+    expect(configWeakensGuard({ rules, overrides: [] }, SKELETON_GUARD_RULE)).toBeUndefined();
+    expect(
+      configWeakensGuard({ rules: { [PRESS_GUARD_RULE]: "error" } }, SKELETON_GUARD_RULE),
+    ).toBeDefined();
+    expect(
+      configWeakensGuard(
+        { rules, overrides: [{ files: ["**/*.tsx"], rules: { [SKELETON_GUARD_RULE]: "off" } }] },
+        SKELETON_GUARD_RULE,
+      ),
+    ).toBeDefined();
   });
 });

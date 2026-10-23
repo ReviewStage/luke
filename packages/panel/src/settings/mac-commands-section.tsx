@@ -6,9 +6,10 @@ import type { SettingsWrites } from "./writes.js";
 /**
  * mac-commands-section.tsx -- whether Luke and coding agents may run shell commands on this Mac, the This Mac page's one group.
  *
- * One switch, on by default: agents run any command here without asking,
- * and this is the one way to stop them (`compose-mac-commands.ts` in the
- * host stops reading for commands while it is off).
+ * One choice, Ask every time by default: each command is put to the
+ * developer before it runs, or every command runs unasked, or none at all
+ * (`compose-mac-commands.ts` in the host stops reading for commands under
+ * Never).
  */
 export function MacCommandsSection({
   view,

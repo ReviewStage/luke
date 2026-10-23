@@ -23,6 +23,7 @@ import {
   Tooltip,
   UnpinIcon,
   useMenu,
+  useMinute,
   VisuallyHidden,
 } from "@luke/ui";
 import { isAgentTab, isChangesTab, isFileTab, pullRequestLabelOf } from "@luke/ui/tab-strip-model";
@@ -34,7 +35,10 @@ import { ScrollTextIcon } from "lucide-react";
 import { useCallback, useEffect, useRef } from "react";
 import { askAct } from "../act.js";
 import { rendererRuntime } from "../renderer-runtime.js";
+import { agentSubject, NOTHING_HELD } from "../tasks/agent-ref.js";
+import { peopleOf } from "../tasks/changes-card.js";
 import type { PullRequestMarked } from "../tasks/pull-request-mark.js";
+import { pullRequestOfTab } from "../tasks/pull-request-number.js";
 import { PlanGlyph, TAB_KIND, type TabSubject, tabLook } from "../tasks/tab-look.js";
 import { TRANSCRIPT_COPY } from "../tasks/transcript-copy.js";
 import { type PinnedTab, SIDE_PANEL_TAB } from "../tasks/use-side-panel.js";
@@ -43,7 +47,8 @@ import { ActionMenu, type MenuAction } from "./action-menu.js";
 import { agentTranscriptRead } from "./agent-actions.js";
 import { useRowPlace, withRowMoves } from "./row-moves.js";
 import { type TranscriptCopier, useTranscriptCopier } from "./strip-tabs.js";
-import { PullRequestLine, RepositoryDetail } from "./task-card.js";
+import { tabCard } from "./tab-card.js";
+import { PullRequestLine, RepositoryDetail, taskCardOf } from "./task-card.js";
 
 /**
  * sidebar-pinned-tab.tsx -- a tab of the task's columns pinned to the sidebar: its row under Pinned, its Unpin, and its menu.
@@ -57,7 +62,10 @@ import { PullRequestLine, RepositoryDetail } from "./task-card.js";
  * name after its glyph, then the task it is of, which opens the task, and
  * the task's repository, which opens on GitHub, and for an agent's pin or
  * its Changes' the pull request it opened, which opens in its Pull request tab where the window lists it and on GitHub otherwise, once the one read of
- * it the card makes as it opens lands. A press opens the task, where it is not the open one, and the tab
+ * it the card makes as it opens lands. A Changes pin on the open task, whose
+ * agent it still holds, hangs the Changes tab's own card instead (`tabCard`),
+ * from the pull request the tab reads, and keeps the card above only for the
+ * pins that cannot read it. A press opens the task, where it is not the open one, and the tab
  * in its column: an agent's in the task's column, any other in the side
  * panel, opening either where it is closed. The row it opened from is
  * then the one the sidebar marks, in its task's row's place, for as long
@@ -128,14 +136,29 @@ function repositoryOfLine(line: TaskPullRequestLine): string | undefined {
 }
 
 /**
+ * The pull request a pin of an agent's Changes shows, as the open task's
+ * agents last read it: the very read the Changes tab draws from
+ * (`pullRequestOfTab`), a numbered tab's included. Nothing for any other pin,
+ * or for a pin of another task, whose agents the window does not read.
+ */
+function openPullRequestOf(
+  pin: PinnedTab,
+  tasks: TasksControl,
+): CodingAgentPullRequest | undefined {
+  const { tab } = pin;
+  if (!isChangesTab(tab) || pin.task !== tasks.activeTaskId) return undefined;
+  return pullRequestOfTab(tasks.agents, tab);
+}
+
+/**
  * The pull request a pin of an agent's Changes shows, as the window last
- * read it from GitHub. An agent's own is the open task's read of that agent
- * where the pin is on it, else the task's row's line naming the agent. A
- * numbered tab names another pull request of its agent's repository, which
- * the row's lines identify by number alone, so one is taken from the row only
- * where all its lines stand in one repository. Nothing for any other pin,
- * or where the window cannot tell which pull request the pin is of; the pin
- * then keeps the label and the grey icon it was pinned with.
+ * read it from GitHub: the open task's own read where the pin is on it, else
+ * the task's row's line naming the agent. A numbered tab names another pull
+ * request of its agent's repository, which the row's lines identify by number
+ * alone, so one is taken from the row only where all its lines stand in one
+ * repository. Nothing for any other pin, or where the window cannot tell
+ * which pull request the pin is of; the pin then keeps the label and the grey
+ * icon it was pinned with.
  */
 function pinPullRequest(
   pin: PinnedTab,
@@ -144,14 +167,14 @@ function pinPullRequest(
 ): PinnedPullRequest | undefined {
   const { tab } = pin;
   if (!isChangesTab(tab)) return undefined;
+  const own = openPullRequestOf(pin, tasks);
+  if (own !== undefined) return own;
   const lines = task.agents?.pullRequests ?? [];
   if (tab.number !== undefined) {
     const sameRepository = new Set(lines.map(repositoryOfLine)).size <= 1;
     return sameRepository ? lines.find((line) => line.number === tab.number) : undefined;
   }
-  const own =
-    pin.task === tasks.activeTaskId ? tasks.agents.pullRequests.get(tab.changes) : undefined;
-  return own ?? lines.find((line) => line.agentId === tab.changes);
+  return lines.find((line) => line.agentId === tab.changes);
 }
 
 /** A pin as the sidebar names it: by the label it was pinned under, but a Plan tab's by its task's name and a Changes tab's by its pull request's number and title as they stand now, as the tab itself is named. */
@@ -294,6 +317,33 @@ function PinPullRequest({ agentId }: { agentId: string }): React.JSX.Element | n
 }
 
 /**
+ * The card the Changes tab itself hangs (`tabCard`), for a pin of a Changes
+ * tab whose agent the open task still holds and whose pull request it has
+ * read; none otherwise, where the pin hangs its own card, which reads the
+ * pull request as it shows. Note that a pin whose agent is gone hangs none,
+ * since the open task no longer lists it.
+ */
+function pinChangesCard(
+  pin: PinnedTab,
+  tasks: TasksControl,
+  gone: boolean,
+  onOpenAgent: (agentId: string) => void,
+): React.JSX.Element | null {
+  const { tab } = pin;
+  const pullRequest = openPullRequestOf(pin, tasks);
+  if (gone || !isChangesTab(tab) || pullRequest === undefined) return null;
+  const { agents } = tasks;
+  return tabCard({
+    kind: TAB_KIND.CHANGES,
+    subject: agentSubject(agents, tab.changes, NOTHING_HELD, false),
+    models: agents.models,
+    pullRequest,
+    people: peopleOf(agents.changesPeople.get(tab.changes), pullRequest),
+    onOpenAgent: () => onOpenAgent(tab.changes),
+  });
+}
+
+/**
  * The card a pin's row hangs, a task card's own rows: the tab's name after
  * its glyph as its row draws it, wrapped to two lines, then the task it is of and the task's
  * repository, each opening where it says, a note where the task no longer
@@ -370,6 +420,7 @@ export function SidebarPinnedTab({
   const livePullRequest = pinPullRequest(kept, task, tasks);
   const pin = namedPin(kept, task, livePullRequest);
   const copied = useTranscriptCopier();
+  const now = useMinute();
   const menu = useMenu(tasks.shown && inSight);
   const place = useRowPlace();
   const row = useRef<HTMLElement | null>(null);
@@ -381,6 +432,9 @@ export function SidebarPinnedTab({
   }, []);
   const gone = pinGone(pin, tasks);
   const agent = pinAgent(pin, task, tasks);
+  const changesCard = pinChangesCard(pin, tasks, gone, (agentId) =>
+    tasks.onOpenPinnedTab({ ...pin, tab: { agent: agentId } }),
+  );
   // The row is what the menu rings and hands focus back to, even when the
   // right-click lands on Unpin over its end.
   const showMenu = menu.contextMenu(row);
@@ -388,15 +442,21 @@ export function SidebarPinnedTab({
     <>
       <RowHintOptions
         card={
-          <PinnedTabCard
-            pin={pin}
-            task={task}
-            agent={agent}
-            pullRequest={livePullRequest}
-            gone={gone}
-            tasks={tasks}
-            onOpenTask={onOpenTask}
-          />
+          pin.tab === SIDE_PANEL_TAB.PLAN ? (
+            taskCardOf(tasks, task, now)
+          ) : changesCard !== null ? (
+            changesCard
+          ) : (
+            <PinnedTabCard
+              pin={pin}
+              task={task}
+              agent={agent}
+              pullRequest={livePullRequest}
+              gone={gone}
+              tasks={tasks}
+              onOpenTask={onOpenTask}
+            />
+          )
         }
         cardBeside
         cardRegion={item}

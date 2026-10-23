@@ -1,4 +1,4 @@
-import { INBOX_ASK, type InboxAsk } from "@luke/features/inbox-wire";
+import { INBOX_ASK, type InboxAsk, type InboxAskInput } from "@luke/features/inbox-wire";
 
 /**
  * inbox-ask-words.ts -- what an Inbox ask asks, in the words its box leads with: the one name the box, the list's row, and the agent's transcript say it by.
@@ -14,7 +14,10 @@ const PART = " · ";
  * where the ask shows one alone, the item's title standing for a to-do
  * that named none.
  */
-export function askHeadWords(ask: InboxAsk, ticked: readonly number[] | undefined): string {
+export function askHeadWords(
+  ask: InboxAsk | InboxAskInput,
+  ticked: readonly number[] | undefined,
+): string {
   switch (ask.type) {
     case INBOX_ASK.DECIDE:
       return ask.multiple === true ? "Pick any" : "Pick one";

@@ -22,22 +22,26 @@ import {
   macCommandResult,
   macCommandsWaiting,
   macListeningSince,
+  markMacListening,
   queueMacCommand,
 } from "@luke/database/models/mac-command-store";
 import { user } from "@luke/database/schemas/auth";
+import { conversations, messages } from "@luke/database/schemas/storage";
+import { CONVERSATION_KIND, MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import { getTestDB } from "@luke/database/testing";
 import {
   MAC_COMMAND_KIND,
   type MacCommand,
   type MacCommandResult,
 } from "@luke/features/mac-command-wire";
+import { unparsedWire } from "@luke/wire";
 import { Clock, type Context, Effect, Fiber, Layer, Option } from "effect";
 import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import { hostedFetch } from "../orpc/handler.js";
 import type { WebServices } from "../runtime.js";
-import { askMac, MAC_COMMAND_STATUS } from "./mac-command.js";
+import { askMac, MAC_COMMAND_STATUS, runOnMacTool } from "./mac-command.js";
 import { macCommandsProcedures } from "./mac-commands-procedures.js";
 
 const ORIGIN = "https://luke.test";
@@ -362,6 +366,47 @@ it.layer(getTestDB())("a command run on the developer's Mac", (it) => {
         );
         assert.equal(yield* macListeningSince("user-listens", since), true);
         assert.equal(yield* macListeningSince("user-silent", since), false);
+      }),
+  );
+
+  it.effect(
+    "an agent a teammate messaged runs nothing on its starter's Mac, though the Mac listens",
+    () =>
+      Effect.gen(function* () {
+        const [starter, teammate] = ["user-starter", "user-teammate"];
+        yield* account(starter);
+        yield* account(teammate);
+        yield* markMacListening(starter);
+        const db = yield* Database;
+        const conversationId = randomUUID();
+        yield* db
+          .insert(conversations)
+          .values({ id: conversationId, userId: starter, kind: CONVERSATION_KIND.CODING_AGENT });
+        yield* db.insert(messages).values({
+          userId: starter,
+          conversationId,
+          seq: 1,
+          clientId: randomUUID(),
+          role: "user",
+          parts: [],
+          placedAt: new Date(yield* Clock.currentTimeMillis),
+          sender: MESSAGE_SENDER.MEMBER,
+          senderUserId: teammate,
+        });
+        const since = new Date(yield* Clock.currentTimeMillis);
+
+        const answer = yield* runOnMacTool(
+          { userId: starter, conversationId },
+          unparsedWire({ command: "cat ~/.ssh/id_ed25519" }),
+        );
+
+        assert.equal(answer.status, MAC_COMMAND_STATUS.NOT_RUN);
+        assert.match("reason" in answer ? answer.reason : "", /someone other than the developer/u);
+        assert.equal(
+          yield* macCommandsWaiting(starter, since, [MAC_COMMAND_KIND.SHELL]),
+          false,
+          "nothing was queued for the starter's Mac",
+        );
       }),
   );
 });

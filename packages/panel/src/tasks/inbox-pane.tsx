@@ -68,7 +68,7 @@ import {
   SOMEONE_REASON,
 } from "@luke/ui/actor-model";
 import { isWireString } from "@luke/wire";
-import { CheckIcon, CircleSlashIcon, ClockIcon, FactoryIcon } from "lucide-react";
+import { CheckIcon, CircleSlashIcon } from "lucide-react";
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ActorLine, ActorRef, AutomationCard } from "../actor-ref.js";
 import {
@@ -118,6 +118,7 @@ import { type InboxCloser, useInboxClose } from "./inbox-close.js";
 import { InboxCodeCard, type InboxCodeDoors } from "./inbox-code-card.js";
 import { COMMENT, Comment, CommentName, THREAD_TIME_CLASS } from "./inbox-comment.js";
 import { type FormTextDoors, InboxFormText } from "./inbox-form-text.js";
+import { HolderGlyph } from "./inbox-item-parts.js";
 import {
   answerOf,
   askNumberedPick,
@@ -1780,7 +1781,7 @@ function useAutomationCrumb(
   return {
     label: holder.name,
     // Note that the agents no automation names stand under no automation, so their crumb wears the factory glyph, as their group's header does.
-    glyph: holder.automationId === null ? <FactoryIcon /> : <ClockIcon />,
+    glyph: <HolderGlyph holder={holder} />,
     hint: holder.name,
     card:
       known === undefined ? undefined : (

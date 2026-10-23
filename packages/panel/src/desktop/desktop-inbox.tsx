@@ -18,7 +18,7 @@ import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { agentTabLabel } from "../tasks/coding-agent-model.js";
 import { INBOX_COLUMNS, useInboxColumns } from "../tasks/inbox-columns.js";
 import { InboxCompose } from "../tasks/inbox-compose.js";
-import { InboxList, InboxListNote, ItemMark, newTaskAction } from "../tasks/inbox-list.js";
+import { InboxList, InboxListNote, newTaskAction } from "../tasks/inbox-list.js";
 import {
   anyUnread,
   INBOX_HOLDER,
@@ -240,9 +240,7 @@ function InboxShown({
   const next = inboxNext(
     steps,
     chosen,
-    ({ holder, item }) => (
-      <ItemMark holder={holder} agentId={item.agentId} models={named.models} readerId={tasks.me} />
-    ),
+    { models: named.models, readerId: tasks.me },
     open,
     folds.folded,
     direction,

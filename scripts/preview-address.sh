@@ -4,7 +4,7 @@ set -euo pipefail
 # Prints the address of the Vercel Preview built from one commit, or exits
 # without one.
 #
-#   scripts/preview-address.sh [--sha COMMIT] [--repo OWNER/NAME] [--branch NAME]
+#   scripts/preview-address.sh [--repo OWNER/NAME]
 #
 # The preview is found the way the deployed-shape probe finds it (`apps/web/server/preview-deployment.ts`):
 # through the GitHub deployment record Vercel writes for the head commit, since
@@ -25,8 +25,8 @@ set -euo pipefail
 # skips against the branch's last deployment that succeeded, and after a
 # rebase that commit is no ancestor of the head: the first earlier head whose
 # deployed tree matches and that has a record of its own is the build serving
-# it. The branch is the one `--branch` names, or the checkout's own where
-# `--sha` names no other commit; a detached head asks no branch. That address is then asked
+# it. The commit is the checkout's head and the branch the checkout's own; a
+# detached head asks no branch. That address is then asked
 # for one page, because a preview behind Vercel Authentication redirects every
 # stranger to `vercel.com/sso-api`, and a Mac's own requests carry no Vercel
 # session, so such a preview is PROTECTED and useless to point a build at.
@@ -72,23 +72,11 @@ ancestors=${PREVIEW_ADDRESS_ANCESTORS:-50}
 # still tried after it.
 PUSHED_HEADS_PAGE=100
 
-sha=
 repo=
-branch=
-branch_given=false
 while (($# > 0)); do
     case $1 in
-    --sha)
-        sha=$2
-        shift 2
-        ;;
     --repo)
         repo=$2
-        shift 2
-        ;;
-    --branch)
-        branch=$2
-        branch_given=true
         shift 2
         ;;
     *)
@@ -98,14 +86,10 @@ while (($# > 0)); do
     esac
 done
 
-if [[ -z $sha ]]; then
-    if [[ $branch_given == false ]]; then
-        branch=$(git symbolic-ref --quiet --short HEAD || true)
-    fi
-    if ! sha=$(git rev-parse HEAD); then
-        printf 'UNREADABLE: could not read the head commit\n' >&2
-        exit "$EXIT_UNREADABLE"
-    fi
+branch=$(git symbolic-ref --quiet --short HEAD || true)
+if ! sha=$(git rev-parse HEAD); then
+    printf 'UNREADABLE: could not read the head commit\n' >&2
+    exit "$EXIT_UNREADABLE"
 fi
 if [[ -z $repo ]]; then
     if ! repo=$(gh repo view --json nameWithOwner --jq .nameWithOwner); then

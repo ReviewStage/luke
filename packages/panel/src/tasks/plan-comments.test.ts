@@ -31,6 +31,7 @@ import {
 } from "../testing/composer.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { DOCUMENT_TASK } from "../testing/document-task.js";
+import { restOn } from "../testing/hint-rest.js";
 import { PlanBody } from "./plan-body.js";
 import { CommentFocusScope, PlanCommentsTab } from "./plan-comments.js";
 import { TaskMentions, type TaskMentionsValue } from "./task-mentions.js";
@@ -336,6 +337,30 @@ test("the Comments tab draws a skeleton while its threads are read, then neither
   );
   assert.equal(reading.container.querySelector(".comments-list .luke-empty-state"), null);
   assert.equal(reading.container.querySelector(".comments-list[data-empty]"), null);
+  assert.ok(
+    reading.container.querySelectorAll('[role="status"] .comment-card .luke-skeleton').length > 0,
+    "the placeholder's blocks stand in a thread's own card, where the threads land",
+  );
+});
+
+test("a comment's time reads as chat's does, a few letters, with the full moment on hover", () => {
+  // Note that the window's minute counts on the real clock here, so the comment is dated from it.
+  const at = Date.now() - 3 * 3_600_000 - 30_000;
+  const [open] = THREADS;
+  assert.ok(open?.entries[0]);
+  const { container } = drawn("tab", [
+    { ...open, entries: [{ ...open.entries[0], at }], createdAt: at, updatedAt: at },
+  ]);
+
+  const time = container.querySelector<HTMLElement>(".comment-time time");
+  assert.equal(time?.textContent, "3h");
+
+  restOn(time as HTMLElement);
+
+  assert.match(
+    document.querySelector('[role="tooltip"]')?.textContent ?? "",
+    /^[A-Z][a-z]{2} \d{1,2}, \d{4}, \d{1,2}:\d{2}\s[AP]M$/u,
+  );
 });
 
 test("a page that is not the plan's own marks no comment", () => {

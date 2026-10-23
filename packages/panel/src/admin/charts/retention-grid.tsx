@@ -23,13 +23,12 @@ import { ChartEmpty, ChartFrame, PlotBox } from "./chart-frame.js";
 const RETENTION_FILL_FLOOR_PERCENT = 8;
 
 /**
- * The share past which a cell's fill is strong enough that the page's text
- * stops clearing it, in the dark theme, so the text flips to the ink the
- * palette sets on a fill of the accent's family. That ink is dark in both
- * themes, so in the light theme, where the text is dark already and the fill
- * is thinned against a light card, the flip changes the ink by almost nothing.
+ * The ceiling over a cell's fill. Note that a full share stops here rather
+ * than at the series' own ink, because the page's text must read at AA on
+ * every cell in both themes (`admin-retention-grid.test.ts`), and no single
+ * ink, dark or white, clears the chart blue across the whole ramp.
  */
-const RETENTION_TEXT_FLIP_SHARE = 0.75;
+const RETENTION_FILL_CEILING_PERCENT = 60;
 
 /** A cohort row's height at least, every cell's, which the grid's skeleton stands too. */
 const RETENTION_ROW_HEIGHT = "2.25rem";
@@ -48,12 +47,14 @@ const RETENTION_SKELETON_WEEKS = 8;
 const RETENTION_CELL_BOX: React.CSSProperties = { minHeight: RETENTION_ROW_HEIGHT };
 
 function retentionCellStyle(share: number): React.CSSProperties {
-  const fill = Math.max(RETENTION_FILL_FLOOR_PERCENT, Math.round(share * 100));
+  const fill = Math.max(
+    RETENTION_FILL_FLOOR_PERCENT,
+    Math.round(share * RETENTION_FILL_CEILING_PERCENT),
+  );
   return {
     ...RETENTION_CELL_BOX,
     backgroundColor: `color-mix(in oklab, var(--luke-color-chart-1) ${fill}%, transparent)`,
-    color:
-      share >= RETENTION_TEXT_FLIP_SHARE ? "var(--luke-color-on-accent)" : "var(--luke-color-text)",
+    color: "var(--luke-color-text)",
   };
 }
 

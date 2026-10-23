@@ -31,6 +31,7 @@ import {
   typeInComposer,
 } from "../testing/composer.js";
 import { onRegistry } from "../testing/copy-feedback.js";
+import { restOn } from "../testing/hint-rest.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { AgentComposer } from "./agent-composer.js";
 import { type RepositoryRemedyDoors, RepositoryRemedyProvider } from "./repository-remedy.js";
@@ -168,6 +169,32 @@ test("the box takes the caret as it opens, Enter sends what was typed, and the b
   assert.equal(document.activeElement, composerEditor(box.container), "and keeps the caret");
   typeInComposer(box.container, "and the next one");
   assert.equal(box.shown(), "and the next one");
+});
+
+test("words selected raise the format toolbar, its marks alone, and a message bolded from it is sent as its Markdown", async () => {
+  const box = await mounted();
+  typeInComposer(box.container, "Ship it now");
+  const editor = composerEditor(box.container).editor ?? assert.fail("the editor is running");
+
+  act(() => {
+    editor.commands.setTextSelection({ from: 1 + "Ship ".length, to: 1 + "Ship it".length });
+  });
+  const toolbar =
+    box.container.querySelector<HTMLElement>('[role="toolbar"][aria-label="Formatting"]') ??
+    assert.fail("the toolbar stands over the words");
+  const presses = [...toolbar.querySelectorAll("button")].map((each) =>
+    each.getAttribute("aria-label"),
+  );
+  assert.deepEqual(presses, ["Bold", "Italic", "Strikethrough", "Code", "Link"]);
+
+  act(() => toolbar.querySelector<HTMLButtonElement>('button[aria-label="Bold"]')?.click());
+  pressInComposer(box.container, "Enter");
+  await settle();
+
+  assert.deepEqual(
+    box.sent.map((each) => each.text),
+    ["Ship **it** now"],
+  );
 });
 
 test("a message that did not go comes back into the box, the caret at its end, and Retry sends it again under its key", async () => {
@@ -339,7 +366,11 @@ test("an Enter an input method is composing sends nothing, and Shift+Enter is a 
 });
 
 test("on a coarse pointer Enter is a new line in the box, and Send sends the lines", async () => {
-  vi.stubGlobal("matchMedia", (query: string) => ({ matches: query === "(pointer: coarse)" }));
+  vi.stubGlobal("matchMedia", (query: string) => ({
+    matches: query === "(pointer: coarse)",
+    addEventListener: ignore,
+    removeEventListener: ignore,
+  }));
   const box = await mounted();
   typeInComposer(box.container, "Fix the bug");
   pressInComposer(box.container, "Enter");
@@ -405,6 +436,26 @@ test("a / opens the repository's skills over the caret, the keys move through th
     box.sent.map((each) => each.text),
     ["Ship it with /deploy now"],
   );
+});
+
+test("a row of the skills' list leads with a book, says what it is for and where it comes from, and hangs the skill's card beside it", async () => {
+  const box = await mounted();
+  typeInComposer(box.container, "Ship it with /");
+  await settle();
+  const [row] = box.container.querySelectorAll('[role="listbox"] [role="option"]');
+  assert.ok(row, "the list offers the skills");
+  assert.ok(row.querySelector(".luke-combobox-option-glyph svg"), "the row leads with a book");
+  assert.equal(
+    row.querySelector(".luke-combobox-option-detail")?.textContent,
+    SKILLS[0]?.description,
+  );
+  assert.equal(row.querySelector(".luke-combobox-option-hint")?.textContent, "Repo");
+
+  restOn(row);
+
+  const card = document.querySelector<HTMLElement>(".luke-tooltip-card > [data-skill-card]");
+  assert.equal(card?.querySelector(".luke-hover-card-name")?.textContent, "/release");
+  assert.equal(card?.querySelector(".luke-hover-card-note")?.textContent, SKILLS[0]?.description);
 });
 
 test("Escape closes the skills' list without leaving the box, and the list stays closed while the word is typed on", async () => {

@@ -84,6 +84,15 @@ body,
   background: var(--luke-color-ground);
 }
 
+/* The Mac panel window's page is clear under the shell, whose frame tint and
+   solid sheet paint everything there is, so the window's sidebar material
+   (`panel-manager.ts`) frosts through the frame; the voice and call windows,
+   which hold no shell, keep their ground. */
+:root[data-luke-profile="desktop"]:has(.desktop-shell),
+:root[data-luke-profile="desktop"]:has(.desktop-shell) :is(body, #root) {
+  background: transparent;
+}
+
 /* Scrollbars ---------------------------------------------------------------- */
 
 /* Every scroller in the window draws the one scrollbar a Mac app does: a thin
@@ -403,8 +412,6 @@ body,
   flex: 1;
   padding-left: var(--row-inset);
   color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-caption-size);
-  font-weight: var(--luke-weight-medium);
 }
 
 /* The Tasks page's filter line: a chip for each field filtered and Clear
@@ -552,8 +559,13 @@ body,
   background: var(--luke-color-fill-hover);
 }
 
+/* The open plan's row is drawn in the work sheet's ground on the sidebar,
+   lifted by a hairline and a soft shadow, as the sheet is. */
 .sidebar-task[aria-current="page"] {
-  background: var(--luke-color-fill-strong);
+  background: var(--luke-color-ground);
+  box-shadow:
+    0 0 0 1px var(--luke-color-border),
+    0 1px 2px var(--luke-color-shadow-soft);
 }
 
 /* Whoever did something (`actor-ref.tsx`): a person on a circle, their
@@ -1082,7 +1094,8 @@ ul.actor-stack {
    a ⋯ and a + that show while the header is hovered, holds focus, or has
    its menu open. */
 .sidebar-repository + .sidebar-repository,
-.sidebar-tasks + .sidebar-repository {
+.sidebar-tasks + .sidebar-repository,
+.chat-rail-body > .luke-list + .sidebar-repository {
   margin-top: var(--luke-space-8);
 }
 
@@ -1516,7 +1529,6 @@ ul.actor-stack {
    the tab's pill a row's inset in, as the side panel's row starts its own;
    the Inbox pane's bar leads with its crumbs, drawn as tabs, alike. */
 .desktop-task-main .desktop-toolbar,
-.desktop-toolbar:has(.desktop-toolbar-heading > .luke-skeleton),
 .inbox-view-items .desktop-toolbar {
   padding-left: var(--column-inset);
 }
@@ -2076,22 +2088,24 @@ ul.actor-stack {
   color: var(--luke-color-text);
 }
 
+/* A plan's title is set large in the semibold, and each section is named
+   by a heading with room above it rather than a rule under it. */
 .desktop-document .luke-markdown-heading[data-level="1"] {
   font-size: 1.9em;
-  font-weight: var(--luke-weight-bold);
+  font-weight: var(--luke-weight-semibold);
   letter-spacing: -0.02em;
   line-height: 1.2;
 }
 
 .desktop-document .luke-markdown-heading[data-level="2"] {
-  margin-top: 0.6em;
-  padding-bottom: 0.35em;
-  border-bottom: 1px solid var(--luke-color-border);
+  margin-top: 1.6em;
   font-size: 1.3em;
+  font-weight: var(--luke-weight-semibold);
 }
 
 .desktop-document .luke-markdown-heading[data-level="3"] {
   font-size: 1.05em;
+  font-weight: var(--luke-weight-medium);
 }
 
 /* In a column under 400px the title steps down to a section's size and a
@@ -2392,13 +2406,6 @@ ul.actor-stack {
 .issue-picker-chip[data-side="above"] .searchable-menu {
   top: auto;
   bottom: calc(100% + var(--luke-space-4));
-}
-
-/* A harness's mark keeps its box in a row however tight the row is, drawn
-   as an image (`harness-marks.tsx`) as the traced provider marks
-   (`@luke/ui`'s `ProviderMark`) keep theirs. */
-.harness-mark {
-  flex: 0 0 auto;
 }
 
 /* An integration whose brand publishes its one-colour mark in named inks
@@ -3646,12 +3653,6 @@ ul.actor-stack {
   gap: var(--luke-space-8);
 }
 
-/* An automation's toolbar while the list is read: its name's crumb is a
-   block with no words, so no baseline, and the heading centres instead. */
-.desktop-toolbar-heading.automation-toolbar-reading {
-  align-items: center;
-}
-
 .experiment-tag {
   flex: none;
   padding: 0 var(--luke-space-6);
@@ -3833,10 +3834,8 @@ ul.actor-stack {
   margin-bottom: var(--luke-space-6);
 }
 
-/* What fires a suggestion, or an automation in the list, on a tile, so a
-   row and a suggestion read as the same kind of thing. */
-.automation-suggestion-glyph,
-.automation-row-glyph {
+/* What fires a suggestion, on a tile. */
+.automation-suggestion-glyph {
   display: grid;
   width: 32px; /* off-scale */
   height: 32px; /* off-scale */
@@ -3970,10 +3969,17 @@ ul.actor-stack {
   gap: var(--luke-section-gap);
 }
 
-/* The prompt's placeholder, the height of its five-row field
-   (`text-field.css`). */
+/* The prompt's placeholder, the height of its field at the rows it stands
+   (`--automation-prompt-rows`, the editor's `PROMPT_ROWS`), its insets and
+   its border (`text-field.css`). */
 .automation-prompt-skeleton {
-  height: calc(5 * var(--luke-type-body-leading) + 2 * var(--luke-space-6) + 2px);
+  height: calc(
+    var(--automation-prompt-rows) *
+    var(--luke-type-body-leading) +
+    2 *
+    var(--luke-space-6) +
+    2px
+  );
 }
 
 /* The servers left on, by their marks, inside the servers row's field chip. */
@@ -4535,7 +4541,6 @@ ul.actor-stack {
   min-height: 0;
   flex-direction: column;
   padding: 0 var(--column-inset) var(--column-inset);
-  border-right: 1px solid var(--luke-color-border);
   background: var(--luke-color-sidebar);
 }
 
@@ -4545,7 +4550,7 @@ ul.actor-stack {
 .admin-sections-title {
   margin: var(--luke-space-12) var(--row-inset);
   font-size: var(--luke-type-title-size);
-  font-weight: var(--luke-weight-bold);
+  font-weight: var(--luke-weight-semibold);
   letter-spacing: -0.015em;
 }
 
@@ -4696,7 +4701,7 @@ ul.actor-stack {
    title stands. */
 .template-document .task-page-head .luke-markdown-heading[data-level="1"] {
   font-size: var(--luke-type-title-size);
-  font-weight: var(--luke-weight-bold);
+  font-weight: var(--luke-weight-medium);
   letter-spacing: -0.015em;
   line-height: var(--luke-type-title-leading);
 }
@@ -4807,40 +4812,6 @@ ul.actor-stack {
   color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
   line-height: var(--luke-type-caption-leading);
-}
-
-/* The page while a version is read (`version-view.tsx`): each section's
-   heading a block in a heading's type over its lines in the body's, as far
-   apart as the plan's own sections stand. */
-.version-skeleton-section + .version-skeleton-section {
-  margin-top: var(--luke-space-24);
-}
-
-.version-skeleton-heading {
-  margin-bottom: var(--luke-space-8);
-  font-size: 1.35em;
-}
-
-/* The moment's place in the toolbar while the versions are read, in the
-   title's type. */
-.version-skeleton-title {
-  font-size: var(--luke-type-dialog-size);
-}
-
-/* A row while the versions are read: the author's block over the summary's,
-   in a row's own type and room, so the rows land where the blocks stood. */
-.version-skeleton-row {
-  display: flex;
-  flex-direction: column;
-  gap: var(--luke-space-2);
-  padding: var(--luke-space-8) var(--row-inset);
-  font-size: var(--luke-type-caption-size);
-  line-height: var(--luke-type-caption-leading);
-}
-
-.version-skeleton-author {
-  font-size: var(--luke-type-label-size);
-  line-height: var(--luke-type-label-leading);
 }
 
 /* No call bar stands below a version, so it needs no room under its last line. */
@@ -5304,19 +5275,10 @@ ul.actor-stack {
   gap: var(--luke-control-gap);
   min-height: var(--desktop-bar-height);
   padding: var(--luke-space-8) var(--panel-toggle-clearance) var(--luke-space-8) var(--column-inset);
-  border-bottom: 1px solid var(--luke-color-border);
 }
 
 [data-luke-profile="desktop"] .side-panel-bar {
   -webkit-app-region: drag;
-}
-
-/* A bar inside the panel, an Inbox item's, draws its own hairline and no
-   more: the toolbar's hairline running past both sides (shell.css) is the
-   work column's, for a pane sliding in beside it, and from the panel it
-   would run on across the column's transcript at the item bar's height. */
-.side-panel .desktop-toolbar::before {
-  content: none;
 }
 
 /* Full screen with the sidebar folded, the row starts where the plan's
@@ -5627,7 +5589,7 @@ ul.actor-stack {
   border: 1px solid var(--luke-color-border-strong);
   border-radius: var(--luke-dialog-radius);
   background: var(--luke-color-overlay);
-  box-shadow: 0 24px 64px var(--luke-color-shadow-deep);
+  box-shadow: 0 16px 56px var(--luke-color-shadow);
   color: var(--luke-color-text);
   overflow: clip;
   transform: translateX(-50%);
@@ -5802,7 +5764,7 @@ ul.actor-stack {
   border: 1px solid var(--luke-color-border-strong);
   border-radius: var(--luke-dialog-radius);
   background: var(--luke-color-overlay);
-  box-shadow: 0 24px 64px var(--luke-color-shadow-deep);
+  box-shadow: 0 16px 56px var(--luke-color-shadow);
   color: var(--luke-color-text);
   overflow: clip;
   transform: translate(-50%, -50%);
@@ -6196,9 +6158,7 @@ ul.actor-stack {
 }
 
 /* A card too narrow for every press's words, as on a phone, keeps its
-   round Start at the row's end: File for later draws its mark alone
-   (`new-task-composer.tsx`), the model chip's words are
-   what give way, cut short, and the microphone stands in the row in place
+   round Start at the row's end: the model chip's words are what give way, cut short, and the microphone stands in the row in place
    of a ⋯ that would hold it alone. */
 @container composer (max-width: 399px) {
   .new-task-composer .agent-composer-actions .agent-model-chip {

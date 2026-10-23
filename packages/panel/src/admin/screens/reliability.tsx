@@ -551,15 +551,13 @@ export function ReliabilityScreen({
   );
   const signOut = () => void withdraw(onSignOut);
   const controls = (
-    <>
-      <AdminViewOptions
-        windowDays={shownWindow}
-        onWindowDaysChange={onWindowDaysChange}
-        windows={ADMIN_RELIABILITY_WINDOWS}
-        hideAdmins={hideAdmins}
-        onHideAdminsChange={onHideAdminsChange}
-      />
-    </>
+    <AdminViewOptions
+      windowDays={shownWindow}
+      onWindowDaysChange={onWindowDaysChange}
+      windows={ADMIN_RELIABILITY_WINDOWS}
+      hideAdmins={hideAdmins}
+      onHideAdminsChange={onHideAdminsChange}
+    />
   );
 
   switch (state.status) {

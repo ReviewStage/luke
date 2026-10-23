@@ -494,6 +494,7 @@ function mount(
     panel,
     holding: firstHolding = HOLDING,
     withSidebar = false,
+    readerKnown = true,
   }: {
     listUnread?: boolean;
     standing?: readonly TaskSummary[];
@@ -506,6 +507,8 @@ function mount(
     holding?: readonly AppInboxTaskHolding[];
     /** Whether the window's sidebar stands beside the Inbox page, its Inbox row counting. */
     withSidebar?: boolean;
+    /** Whether the window knows the reader's own account id, as an account stored without one does not. */
+    readerKnown?: boolean;
   } = {},
 ) {
   // Note that the host's inbox streams are answered beside whatever acts the test answers by now.
@@ -542,7 +545,7 @@ function mount(
     };
     setTasks = setListed;
     const control = tasksControl({
-      me: READER.userId,
+      ...(readerKnown ? { me: READER.userId } : {}),
       workspace: listedWorkspace,
       tasks: listed,
       listRead,
@@ -765,10 +768,10 @@ function chooseView(page: HTMLElement, submenu: string, choice: string): void {
   act(() => viewItem(choice).click());
 }
 
-/** The item of the menus open now whose words end in `label`, a choice or a submenu, after any face's initial. */
+/** The item of the menus open now whose label ends in `label`, a choice or a submenu, after any face's initial. */
 function viewItem(label: string): HTMLElement {
   const item = [...document.querySelectorAll<HTMLElement>('[role^="menuitem"]')].findLast((each) =>
-    each.textContent?.endsWith(label),
+    (each.querySelector(".luke-menu-item-label") ?? each).textContent?.endsWith(label),
   );
   assert.ok(item, `the menu offers ${label}`);
   return item;
@@ -3632,7 +3635,7 @@ test("the chosen item keeps its place when its own plan folds, so J still reache
   act(() => keys.unmount());
 });
 
-test("a settled item offers, over its box, the next item that needs you, by its agent's tile and title and J where J reaches it, a press opening it; an item that waits offers none", async () => {
+test("a settled item offers, over its box, the next item that needs you as the Inbox draws it: its agent's tile, its title, the attention mark at its end and J where J reaches it, and its card hung beside it, a press opening it; an item that waits offers none", async () => {
   const { page } = mount();
   await settle();
   const offered = () =>
@@ -3642,8 +3645,16 @@ test("a settled item offers, over its box, the next item that needs you, by its 
   act(() => rowNamed(page, "How is a failed email retried?").click());
   const next = offered();
   assert.ok(next, "the settled item offers the next");
-  assert.equal(wordsOf(next), "NextAlert at 80%?J");
+  assert.equal(next.querySelector(".inbox-next-title")?.textContent, "Alert at 80%?");
+  assert.ok(next.querySelector(".inbox-row-attention"), "it needs you, as its row says");
+  assert.ok(wordsOf(next)?.endsWith("J"), "the key stands last");
   assert.ok(wearsAgentTile(next), "the next item's agent stands by its tile");
+  assert.equal(next.querySelector("[data-agent-ref]"), null, "the tile hangs no card of its own");
+  assert.match(
+    hoveredCard(next, "[data-inbox-row-card]") ?? "",
+    /^Billing usage alerts.*Alert at 80%\?.*Needs you/u,
+    "the card is the item's own",
+  );
   act(() => next.click());
   assert.equal(readTitle(page), "Alert at 80%?");
   assert.equal(offered(), null);
@@ -3669,7 +3680,8 @@ test("Next follows the way the keys last went: after K it offers the nearest ite
 
   pressKey("j");
   assert.equal(readTitle(page), "How is a failed email retried?");
-  assert.equal(wordsOf(offered()), "NextExpire after 7 days?J");
+  assert.equal(offered()?.querySelector(".inbox-next-title")?.textContent, "Expire after 7 days?");
+  assert.ok(wordsOf(offered())?.endsWith("J"));
   assert.equal(offered()?.getAttribute("aria-keyshortcuts"), "J");
 
   pressKey("j");
@@ -3677,7 +3689,9 @@ test("Next follows the way the keys last went: after K it offers the nearest ite
   assert.equal(readTitle(page), "How is a failed email retried?");
   const next = offered();
   assert.ok(next, "the settled item offers the next");
-  assert.equal(wordsOf(next), "Next ↑Alert at 80%?K");
+  assert.equal(next.querySelector(".inbox-next-lead")?.textContent, "Next ↑");
+  assert.equal(next.querySelector(".inbox-next-title")?.textContent, "Alert at 80%?");
+  assert.ok(wordsOf(next)?.endsWith("K"));
   assert.equal(next.getAttribute("aria-keyshortcuts"), "K");
   act(() => next.click());
   assert.equal(readTitle(page), "Alert at 80%?");
@@ -4622,6 +4636,16 @@ function hoveredCard(control: Element, card: string): string | null {
   return wordsOf(document.querySelector(`.luke-tooltip-card ${card}`));
 }
 
+test("a task's group header hangs the task's card, as the automation's does its own", async () => {
+  const { page } = mount();
+  await settle();
+  const header = headerNamed(page, "Invites");
+  restOn(header);
+  // Note that this window stands no chip cards, so the header hangs the card's fallback: the task's head.
+  const name = document.querySelector(".luke-tooltip-card .luke-hover-card-name");
+  assert.equal(name?.textContent, "Invites", "the header hangs a card named for its task");
+});
+
 test("an automation's group wears its clock tile and hangs its card, as its crumb does, the card's name opening its page since the header's press folds; its agent's row wears the agent's tile and hangs a card naming the agent and the automation that started it; the agents no automation names stand under no actor", async () => {
   handState({});
   listedWorkspace = {
@@ -4674,7 +4698,10 @@ test("an automation's group wears its clock tile and hangs its card, as its crum
   await settle();
   const crumb = page.querySelector<HTMLButtonElement>('nav[aria-label="Path"] button');
   assert.ok(crumb, "the automation's crumb is drawn");
-  assert.ok(crumb.querySelector(".lucide-clock"), "the automation's crumb wears its clock");
+  assert.ok(
+    crumb.querySelector('.actor-mark[data-kind="automation"]'),
+    "the automation's crumb wears its clock tile, as its group does",
+  );
   assert.match(hoveredCard(crumb, '[data-actor-card="automation"]') ?? "", /Nightly flake sweep/u);
   assert.equal(
     document.querySelector('.luke-tooltip-card [data-actor-card="automation"] button')?.textContent,
@@ -5706,7 +5733,7 @@ test("the attention mark stands before the time on the reader's own open item al
   ]);
 });
 
-test("a teammate's open item of an agent with no plan is listed under the automation that started it, wearing the teammate's face with no attention mark; To do leaves it out, and Group by person lists it under the teammate", async () => {
+test("a teammate's open item of an agent with no plan is listed under the automation that started it, wearing the teammate's face with no attention mark; To do leaves it out, and Group by person lists it under the teammate, whose header hangs their card", async () => {
   agentInboxes = new Map([[SWEEP_AGENT, [{ ...QUARANTINE, startedBy: TEAMMATE }]]]);
   const { page } = mount([{ ...waitingTaskless(QUARANTINE), startedBy: TEAMMATE.userId }]);
   await settle();
@@ -5735,6 +5762,19 @@ test("a teammate's open item of an agent with no plan is listed under the automa
     byPerson[byPerson.indexOf("# Charles Pan") + 1],
     "Quarantine the flaky test?",
     byPerson.join(" | "),
+  );
+  const header = [
+    ...page.querySelectorAll<HTMLButtonElement>(
+      ".inbox-tasks .sidebar-repository-header button[aria-expanded]:not([aria-haspopup])",
+    ),
+  ].find((each) => heardName(each) === "Charles Pan");
+  assert.ok(header, "Charles Pan heads a group");
+  restOn(header);
+  assert.equal(
+    document.querySelector(".luke-tooltip-card [data-actor-card='person'] .luke-hover-card-name")
+      ?.textContent,
+    "Charles Pan",
+    "a person's group header hangs their card",
   );
 });
 
@@ -6331,7 +6371,7 @@ function whoseChip(page: HTMLElement): readonly (string | null | undefined)[] | 
   ];
 }
 
-test("Whose in the view's menu lists one teammate's items, by their face and name, or the reader's own as Mine; a chip over the list says so, the choice outlives a relaunch, and the chip's × lists everyone's again", async () => {
+test("Whose in the view's menu offers Anyone, the reader as Me, then each teammate by face and name with their email, hanging their card; a chosen teammate's items list under a chip saying so, the choice outlives a relaunch, Me's chip says Me, and the chip's × lists everyone's again", async () => {
   listedWorkspace = SHARED_WORKSPACE;
   members = SHARED_MEMBERS;
   inboxes.set(BILLING.id, [{ ...THRESHOLD, startedBy: TEAMMATE }, RETRY]);
@@ -6341,13 +6381,29 @@ test("Whose in the view's menu lists one teammate's items, by their face and nam
   const options = page.querySelector<HTMLButtonElement>('button[aria-label="View options"]');
   act(() => options?.click());
   act(() => viewItem("Whose").click());
+  const whose = [...document.querySelectorAll<HTMLElement>('[role="menuitemcheckbox"]')].slice(-3);
   assert.deepEqual(
-    ["Everyone", "Mine", "Charles Pan"].map((each) => viewItem(each).getAttribute("aria-checked")),
-    ["true", "false", "false"],
+    whose.map((item) => [
+      item.querySelector(".luke-menu-item-label")?.textContent,
+      item.querySelector(".luke-menu-item-detail")?.textContent ?? null,
+      item.getAttribute("aria-checked"),
+    ]),
+    [
+      ["Anyone", null, "true"],
+      ["Me", null, "false"],
+      ["Charles Pan", "charles@example.com", "false"],
+    ],
   );
   assert.ok(
     viewItem("Charles Pan").querySelector('.actor-mark[data-kind="person"]'),
     "a teammate is offered by their face",
+  );
+  restOn(viewItem("Charles Pan"));
+  assert.equal(
+    document.querySelector(".luke-tooltip-card [data-actor-card='person'] .luke-hover-card-name")
+      ?.textContent,
+    "Charles Pan",
+    "a teammate's row hangs their card",
   );
   act(() => viewItem("Charles Pan").click());
   await settle();
@@ -6360,8 +6416,8 @@ test("Whose in the view's menu lists one teammate's items, by their face and nam
   await settle();
   assert.deepEqual(whoseChip(page), ["Charles Pan", "Show everyone's items"]);
 
-  chooseView(page, "Whose", "Mine");
-  assert.deepEqual(whoseChip(page)?.[0], "Mine");
+  chooseView(page, "Whose", "Me");
+  assert.deepEqual(whoseChip(page)?.[0], "Me");
   assert.deepEqual(listed(page), [
     "# Billing usage alerts",
     "How is a failed email retried?",
@@ -6374,6 +6430,23 @@ test("Whose in the view's menu lists one teammate's items, by their face and nam
   act(() => clear.click());
   assert.equal(whoseChip(page), null);
   assert.equal(listed(page).length, 5);
+});
+
+test("Whose offers Me though the window does not know the reader's id, and a Me chosen stays checked under Me's chip", async () => {
+  listedWorkspace = SHARED_WORKSPACE;
+  members = SHARED_MEMBERS;
+  const { page } = mount([], { readerKnown: false });
+  await settle();
+  chooseView(page, "Whose", "Me");
+  const options = page.querySelector<HTMLButtonElement>('button[aria-label="View options"]');
+  act(() => options?.click());
+  act(() => viewItem("Whose").click());
+
+  assert.deepEqual(whoseChip(page)?.[0], "Me");
+  assert.deepEqual(
+    ["Anyone", "Me"].map((each) => viewItem(each).getAttribute("aria-checked")),
+    ["false", "true"],
+  );
 });
 
 test("a teammate chosen in Whose with nothing in the scope shown says so, and offers everyone's items again where no scope holds any of theirs", async () => {

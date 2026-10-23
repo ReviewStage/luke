@@ -650,7 +650,7 @@ function menuRows(page: HTMLElement): string[] {
 
 /** The keys the open list says it hears at its foot. */
 function menuKeys(page: HTMLElement): string[] {
-  return [...page.querySelectorAll(".mention-menu .mention-menu-foot > *")].map(
+  return [...page.querySelectorAll(".mention-menu .luke-menu-keys > *")].map(
     (key) => key.textContent ?? "",
   );
 }
@@ -1417,7 +1417,11 @@ test("where the editor's bundle could not be loaded, a reply's quote is written 
 });
 
 test("on a coarse pointer the plain field's Enter is a new line, its return key says so, and ⌘+Enter posts", async () => {
-  vi.stubGlobal("matchMedia", (query: string) => ({ matches: query === "(pointer: coarse)" }));
+  vi.stubGlobal("matchMedia", (query: string) => ({
+    matches: query === "(pointer: coarse)",
+    addEventListener: () => undefined,
+    removeEventListener: () => undefined,
+  }));
   const { field, sent } = await plainChat();
   assert.equal(field.getAttribute("enterkeyhint"), "enter");
   writeInto(field, "ship it");
@@ -2629,10 +2633,16 @@ test("an agent the plans' summaries do not name is read as its chip's mark reads
   const page = mount((chat) => ({ ...chat, agents: [] }));
   // Until its task's agents are read it stands by the name the chat read carries, on the mark of no known harness.
   const before = railRow(page, "Invite emails").closest("li");
-  assert.equal(before?.querySelector(".actor-mark img.harness-mark"), null);
+  assert.equal(
+    before?.querySelector(".actor-mark .luke-harness-mark[data-provider='openai']"),
+    null,
+  );
   await settle();
   const after = railRow(page, "Nova").closest("li");
-  assert.ok(after?.querySelector(".actor-mark img.harness-mark"), "its row wears Codex's mark");
+  assert.ok(
+    after?.querySelector(".actor-mark .luke-harness-mark[data-provider='openai']"),
+    "its row wears Codex's mark",
+  );
   assert.equal(after?.querySelector(".failed-mark")?.getAttribute("aria-label"), "Failed");
   // One with no title is named by the automation that started it, as its tab is, and drawn at
   // rest, since a read is not followed and a face never stays working after its agent stopped.
@@ -2888,4 +2898,32 @@ test("a reader signed in to the window after another reads none of their posts, 
     "both went as the reader who wrote them",
   );
   assert.equal(chat.page.querySelector(".chat-message[data-unsent]"), null);
+});
+
+test("hovering a task's channel in the rail hangs its task's card beside it, and a topic's row hangs none", () => {
+  const page = mount((chat) => chat, undefined, undefined, undefined, { tasks: [INVITATIONS] });
+
+  restOn(railRow(page, "teammate-invitations"));
+
+  const card = document.querySelector('[role="tooltip"]');
+  assert.match(card?.textContent ?? "", /Teammate invitations/u);
+  assert.match(card?.textContent ?? "", /ada\/relay/u);
+
+  restOn(railRow(page, "general"));
+
+  assert.equal(document.querySelector('[role="tooltip"]')?.textContent, "general");
+});
+
+test("the rail's places stand in named lists, For you alone in its own and every group's places in its own", () => {
+  const page = mount();
+  const lists = [...page.querySelectorAll<HTMLElement>(".chat-rail ul[aria-label]")].map((list) => [
+    list.getAttribute("aria-label"),
+    [...list.querySelectorAll(".luke-list-row-main")].map(railName),
+  ]);
+
+  assert.deepEqual(lists[0], ["For you", ["For you"]]);
+  assert.ok(
+    lists.some(([name, places]) => name === "Channels" && (places as string[]).includes("general")),
+    "the channels stand in a list of their own",
+  );
 });

@@ -74,6 +74,7 @@
 @import "./components/rolling-number/rolling-number.css";
 @import "./components/slider/slider.css";
 @import "./components/prose/prose.css";
+@import "./marks/harness-mark.css";
 @import "./marks/provider-mark.css";
 @import "./marks/task-marks.css";
 @import "./components/provider-button/provider-button.css";
@@ -89,7 +90,6 @@
 @import "./components/checkbox/checkbox.css";
 @import "./components/choice-list/choice-list.css";
 @import "./components/readable-controls/readable-controls.css";
-@import "./components/switch/switch.css";
 @import "./components/choice-bar/choice-bar.css";
 @import "./components/settings-page/settings-page.css";
 @import "./components/settings-section/settings-section.css";
@@ -115,5 +115,11 @@
 @import "./components/editable-heading/editable-heading.css";
 /* After the controls it steps back: the choice list, checkbox, field, and button. */
 @import "./components/stepped-back/stepped-back.css";
+/* After the button's and the menu's, whose pressed look and surface they draw on. */
+@import "./components/menu-keys/menu-keys.css";
+@import "./components/block-menu/block-menu.css";
+@import "./components/format-toolbar/format-toolbar.css";
+@import "./components/link-field/link-field.css";
+@import "./components/rect-float/rect-float.css";
 /* Last, so a press's pulse plays over every shape's resting look. */
 @import "./press-pulse.css";

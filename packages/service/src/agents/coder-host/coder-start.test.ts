@@ -1,23 +1,32 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
+import { Database } from "@luke/database/core/query";
+import { askRecord } from "@luke/database/models/asks";
 import { readCodingAgent } from "@luke/database/models/coding-agent-store";
+import { heardFromAnotherAccount } from "@luke/database/models/mac-command-store";
 import { createTask, readTask } from "@luke/database/models/task-store";
+import { storeWriter } from "@luke/database/models/writer";
+import { messages } from "@luke/database/schemas/storage";
 import { getTestDB, joinWorkspace, linearIssueLink, openWorkspace } from "@luke/database/testing";
 import { AUTOMATION_FIRING } from "@luke/features/automation-wire";
 import { CODING_AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@luke/features/models-wire";
 import { TASK_ISSUE_PROVIDER, TASK_ISSUE_RELATION } from "@luke/features/task-issue-wire";
 import { TASK_STATUS, type TaskStatus } from "@luke/features/task-wire";
+import { and, eq } from "drizzle-orm";
 import { Effect, Layer, Option, Result, Stream } from "effect";
+import { MESSAGE_ROLE } from "../../core.js";
 import { HOSTED_REFUSAL } from "../../http/http-effect.js";
 import { modelCatalogOf } from "../../providers/model-catalog.js";
 import { connectAgentApiKeys } from "../../testing/agent-credentials.js";
+import { stampedEveEvent } from "../../testing/eve-events.js";
 import {
   connectWorkspaceGitHub,
   githubReaching,
   type InstallationFixture,
   openGithubUser,
 } from "../../testing/github-app-fake.js";
+import { BRAIN_HOST_TURN } from "../brain-host/bounds.js";
 import {
   type AgentSessions,
   EVE_CANCEL_OUTCOME,
@@ -25,7 +34,9 @@ import {
   EVE_SEND_OUTCOME,
   type EveMessage,
 } from "../brain-host/eve-sessions.js";
+import { memoryRelayState, StreamRelay } from "../brain-host/relay.js";
 import { ISSUE_LINKS_HEADING, type StartAsk, startCodingAgent } from "./start.js";
+import { CODER_TOOL_SET } from "./tool-set.js";
 
 /**
  * coder-start.test.ts -- an agent started in a workspace with no task, as an automation's run starts one, and one started on a plan that links issues.
@@ -181,6 +192,57 @@ it.layer(getTestDB())("an agent started in a workspace with no plan", (it) => {
 
         assert.ok(Result.isFailure(refused));
         assert.deepEqual(opened, []);
+      }),
+  );
+
+  it.effect(
+    "a fresh agent on eve, whose prompt eve's receipt writes as its first line with no sender, has heard from no one but its starter, so its Mac is still its own",
+    () =>
+      Effect.gen(function* () {
+        const { owner, workspaceId } = yield* openConnectedWorkspace;
+        const { opened, eve } = fakeEve();
+        const { agent } = yield* startCodingAgent(eve, owner, workspaceAsk(workspaceId)).pipe(
+          Effect.provide(services),
+        );
+        const target = { userId: owner, conversationId: agent.conversationId };
+        // eve's session takes the prompt the Start handed it and tells of it as its first turn's received message.
+        const handed = opened[0];
+        assert.ok(handed !== undefined && typeof handed.message === "string");
+        const relay = new StreamRelay({
+          writer: yield* storeWriter({ tools: CODER_TOOL_SET }),
+          asks: { binding: askRecord(), stopTurn: () => Effect.void },
+          now: () => Date.UTC(2026, 9, 23),
+          report: () => undefined,
+        });
+        const standing = {
+          sessionId: `wrun_${randomUUID()}`,
+          target,
+          turn: BRAIN_HOST_TURN.TYPED,
+          state: memoryRelayState(),
+        };
+        const turn = { turnId: "turn_0", sequence: 0 };
+        for (const event of [
+          stampedEveEvent({ type: "turn.started", data: turn }, 0),
+          stampedEveEvent(
+            { type: "message.received", data: { ...turn, message: handed.message } },
+            0,
+          ),
+        ]) {
+          yield* relay.handle(event, standing);
+        }
+
+        const db = yield* Database;
+        const lines = yield* db
+          .select({ id: messages.id })
+          .from(messages)
+          .where(
+            and(
+              eq(messages.conversationId, agent.conversationId),
+              eq(messages.role, MESSAGE_ROLE.USER),
+            ),
+          );
+        assert.equal(lines.length, 1, "the prompt is the conversation's one line");
+        assert.equal(yield* heardFromAnotherAccount(target), false);
       }),
   );
 });

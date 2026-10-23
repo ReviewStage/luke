@@ -5,6 +5,18 @@ SCRIPT_DIRECTORY=$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source=scripts/lib/workspace.sh
 source "$SCRIPT_DIRECTORY/lib/workspace.sh"
 
+LUKE_FIXTURE_SCENARIO=smoke
+LUKE_EVIDENCE_ROOT="$LUKE_ARTIFACT_ROOT/evidence"
+LUKE_EXPANDED_EVIDENCE_PATH="$LUKE_EVIDENCE_ROOT/app-smoke-expanded.png"
+LUKE_SPEAKING_EVIDENCE_PATH="$LUKE_EVIDENCE_ROOT/app-smoke-speaking.png"
+LUKE_MUTED_EVIDENCE_PATH="$LUKE_EVIDENCE_ROOT/app-smoke-muted.png"
+LUKE_DUPLEX_EVIDENCE_PATH="$LUKE_EVIDENCE_ROOT/app-smoke-duplex.png"
+LUKE_TASKS_EVIDENCE_PATH="$LUKE_EVIDENCE_ROOT/app-smoke-tasks.png"
+LUKE_TASKS_BOARD_EVIDENCE_PATH="$LUKE_EVIDENCE_ROOT/app-smoke-tasks-board.png"
+LUKE_TASKS_TRANSCRIPT_EVIDENCE_PATH="$LUKE_EVIDENCE_ROOT/app-smoke-tasks-transcript.png"
+LUKE_TASKS_WORK_EVIDENCE_PATH="$LUKE_EVIDENCE_ROOT/app-smoke-tasks-work.png"
+LUKE_CHAT_EVIDENCE_PATH="$LUKE_EVIDENCE_ROOT/app-smoke-chat.png"
+
 luke_require_macos
 luke_require_node
 luke_require_command sips

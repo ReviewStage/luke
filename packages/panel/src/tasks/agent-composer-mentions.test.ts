@@ -27,8 +27,9 @@ import {
   type MentionPlace,
   mentionMarkdown,
 } from "@luke/features/mention-link";
+import { pageFrameUrl } from "@luke/features/page-frame";
 import { TASK_SKILL_SOURCE, TASK_TREE_ENTRY } from "@luke/features/task-wire";
-import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
+import { IDLE_TASKS_VIEW, type TaskCodeShowing } from "@luke/features/tasks-view";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { ACTOR_KIND, ACTOR_STATE } from "@luke/ui/actor-model";
@@ -173,9 +174,12 @@ const NEWEST_AGENTS: readonly CodingAgentSummary[] = [BILLING_AGENT, SWEEPER];
 /** Every agent of the workspace, which a search finds among, archived ones included. */
 const WORKSPACE_AGENTS: readonly CodingAgentSummary[] = [BILLING_AGENT, SWEEPER, OLD_AGENT, LEDGER];
 
+/** The newest agents the workspace's list answers now. */
+let newest: readonly CodingAgentSummary[] = NEWEST_AGENTS;
+
 /** The workspace's list as the service answers it: the newest, or those whose title or task's name holds the words, as the store finds them. */
 function workspaceAnswer({ words }: CodingAgentWorkspaceListParams): readonly CodingAgentSummary[] {
-  if (words === undefined) return NEWEST_AGENTS;
+  if (words === undefined) return newest;
   const lower = words.toLowerCase();
   return WORKSPACE_AGENTS.filter(
     (agent) =>
@@ -184,17 +188,17 @@ function workspaceAnswer({ words }: CodingAgentWorkspaceListParams): readonly Co
   );
 }
 
-/** The workspace's members, as its Members list reads them: the reader, and a teammate. */
+/** The workspace's members, as its Members list reads them: a teammate, then the reader. */
 const READER_ID = "u_reader";
 const DANA_ID = "u_dana";
 const MEMBERS: readonly WorkspaceMember[] = [
+  { userId: DANA_ID, name: "Dana Reyes", email: "dana@example.com", role: WORKSPACE_ROLE.ADMIN },
   {
     userId: READER_ID,
     name: "Charles Pan",
     email: "charles@example.com",
     role: WORKSPACE_ROLE.OWNER,
   },
-  { userId: DANA_ID, name: "Dana Reyes", email: "dana@example.com", role: WORKSPACE_ROLE.ADMIN },
 ];
 
 /** Every act the panel told the main process, in order. */
@@ -270,6 +274,7 @@ function answer(request: AnyAct): Promise<FakeActAnswer> {
 
 beforeEach(() => {
   standing = "acme/relay";
+  newest = NEWEST_AGENTS;
   told.length = 0;
   installScrollIntoView();
   installEditorLayout();
@@ -311,7 +316,7 @@ function planPage(opened: Mention[], repository = "acme/relay"): TaskMentionsVal
 const SELF_ID = "agent-1";
 
 /** A page an agent showed on the plan, and two of its agents, the box's own among them. */
-const PAGE = { id: "page-1", title: "Invites by week" };
+const PAGE = { id: "page-1", title: "Invites by week", version: 1, at: 1_000 };
 const STORE_AGENT = {
   id: "agent-2",
   name: "Wire the desktop",
@@ -324,9 +329,13 @@ const STORE_AGENT = {
 } as const;
 const SELF_AGENT = { ...STORE_AGENT, id: SELF_ID, name: "Invite by email" };
 
-/** The plan's page holding its pages and agents, every link a chip was asked to open kept. */
+/** The plan's page holding its pages and agents, as the task's list read them, every link a chip was asked to open kept. */
 function taskPage(opened: Mention[] = []): TaskMentionsValue {
-  return { ...planPage(opened), pages: [PAGE], agents: [SELF_AGENT, STORE_AGENT] };
+  const store = {
+    ...STORE_AGENT,
+    summary: workspaceAgent(STORE_AGENT.id, STORE_AGENT.name, TASK_ID),
+  };
+  return { ...planPage(opened), pages: [PAGE], agents: [SELF_AGENT, store] };
 }
 
 /** The box on the composer's own control, its sends answered by `sender`. */
@@ -718,12 +727,14 @@ test("off a plan's page a sent message's page of an integration's is still its c
   assert.equal(carryingTarget(container), undefined);
 });
 
-test("an @ in the box on a plan's page offers the plan's pages and its other agents, each in its own group, and not the agent whose box it is", async () => {
+test("an @ in the box on a plan's page offers the plan's pages and its other agents, each in its own group, an agent leading with its tab's glyph, and not the agent whose box it is", async () => {
   const { container } = await box(taskPage());
 
   typeInComposer(container, "See @");
   await settle();
-  const agentGlyph = container.querySelector('.mention-menu [aria-label="Agents"] .actor-mark');
+  const agentGlyph = container.querySelector(
+    '.mention-menu [aria-label="Agents"] [role="option"] .luke-combobox-option-glyph',
+  )?.firstElementChild;
 
   assert.deepEqual(groupsListed(container), [
     ["Plan", ["Goal", "Rollout", "Invitations"]],
@@ -732,7 +743,7 @@ test("an @ in the box on a plan's page offers the plan's pages and its other age
     ["MCP servers", ["Linear"]],
     ["Mention from", ["Files and folders", "Plan", "Pages", "Agents", "Dates", "Linear"]],
   ]);
-  assert.equal(agentGlyph?.getAttribute("data-kind"), ACTOR_KIND.AGENT);
+  assert.equal(agentGlyph?.className, "state-glyph", "the agent's row leads with its tab's glyph");
 });
 
 test("a page picked from the @ list is drawn as its chip and sent as its link, which names the page by its id alone", async () => {
@@ -913,6 +924,180 @@ test("a word typed after @ finds an agent the workspace's newest leave out, as t
   });
 });
 
+/** The box on the plan's page that reads its workspace's agents, among the workspace's members. */
+async function workspaceMemberBox() {
+  const sender: MessageSender = () => new Promise<CodingAgentAgentAnswer>(ignore);
+  const { container } = drawing(
+    amongMembers(
+      createElement(WorkspacePage, null, createElement(Box, { sender, skills: noSkills })),
+    ),
+    undefined,
+  );
+  await settle();
+  return container;
+}
+
+test("an @ row for an agent ends in its starter's face where a teammate started it and in nothing for the reader's own, then in the failed mark where its turn failed", async () => {
+  newest = [
+    {
+      ...BILLING_AGENT,
+      status: CODING_AGENT_STATUS.FAILED,
+      startedBy: { userId: DANA_ID, name: "Dana Reyes" },
+    },
+    { ...SWEEPER, startedBy: { userId: READER_ID, name: "Charles Pan" } },
+  ];
+  const container = await workspaceMemberBox();
+
+  typeInComposer(container, "See @");
+  await settle();
+
+  const ends = [
+    ...container.querySelectorAll('.mention-menu [aria-label="Agents"] [role="option"]'),
+  ].map((row) => [
+    row.querySelector(".luke-combobox-option-label")?.textContent,
+    ...[...(row.querySelector(".luke-combobox-option-hint")?.children ?? [])].map((mark) =>
+      mark.matches(".actor-mark") ? `face ${mark.getAttribute("data-kind")}` : mark.className,
+    ),
+  ]);
+  assert.deepEqual(ends, [
+    ["Wire the desktop"],
+    ["Bill by seat", `face ${ACTOR_KIND.PERSON}`, "failed-mark"],
+    ["Sweep flaky tests"],
+  ]);
+});
+
+test("an @ row for an agent hangs the agent's own card while the pointer rests on it, naming its task, with nothing read for it", async () => {
+  const { container } = await workspaceBox();
+
+  typeInComposer(container, "See @bill");
+  await settle();
+  const option =
+    container.querySelector<HTMLElement>('.mention-menu [aria-label="Agents"] [role="option"]') ??
+    assert.fail("the list offers the agent");
+  const reads = told.length;
+  restOn(option);
+
+  const card = document.querySelector(".luke-tooltip-card") ?? assert.fail("the row hangs a card");
+  assert.equal(card.querySelector(".luke-hover-card-name")?.textContent, "Bill by seat");
+  assert.match(card.textContent ?? "", new RegExp(`On ${BILLING.name}`, "u"));
+  assert.equal(told.length, reads, "the card is drawn from the agent the list read");
+});
+
+/** Luke's note on a file of the repository, as he showed its lines at `commit`. */
+function shownAt(commit: string, note: string, at: number): TaskCodeShowing {
+  return {
+    callId: `c-${commit}`,
+    turnId: "t",
+    shownAt: at,
+    code: {
+      ref: { path: "apps/web/rollout-store.ts", startLine: 3, endLine: 5 },
+      repository: "acme/relay",
+      commit,
+      firstLine: 1,
+      lineCount: 9,
+      lines: [],
+      note,
+    },
+  };
+}
+
+/** The card an @ row hangs once the pointer rests on it, as the list is drawn for the page given. */
+async function cardOfRow(page: TaskMentionsValue, typed: string, section: string) {
+  const { container } = await box(page);
+  typeInComposer(container, typed);
+  await settle();
+  const option =
+    container.querySelector<HTMLElement>(
+      `.mention-menu [aria-label="${section}"] [role="option"]`,
+    ) ?? assert.fail(`the list offers a row under ${section}`);
+  restOn(option);
+  return {
+    option,
+    card: document.querySelector(".luke-tooltip-card") ?? assert.fail("the row hangs a card"),
+  };
+}
+
+test("an @ row for a file hangs the file's card with Luke's newest note, read at the commit an open tab of it is pinned to", async () => {
+  const shownCode = [
+    shownAt("aaaa111", "Fix parsing", 1_000),
+    shownAt("bbbb222", "Add logging", 2_000),
+  ];
+
+  const pinned = await cardOfRow(
+    {
+      ...planPage([]),
+      shownCode,
+      openFiles: [{ path: "apps/web/rollout-store.ts", commit: "aaaa111" }],
+    },
+    "See @rollout-store",
+    "Files and folders",
+  );
+  assert.equal(
+    pinned.card.querySelector(".luke-hover-card-name")?.textContent,
+    "apps/web/rollout-store.ts",
+  );
+  assert.equal(pinned.card.querySelector(".luke-hover-card-note")?.textContent, "Fix parsing");
+});
+
+test("an @ row for a file with no tab open of it hangs the note of Luke's newest showing", async () => {
+  const { card } = await cardOfRow(
+    {
+      ...planPage([]),
+      shownCode: [
+        shownAt("aaaa111", "Fix parsing", 1_000),
+        shownAt("bbbb222", "Add logging", 2_000),
+      ],
+    },
+    "See @rollout-store",
+    "Files and folders",
+  );
+
+  assert.equal(card.querySelector(".luke-hover-card-note")?.textContent, "Add logging");
+});
+
+test("an @ row for a file Luke showed no note on hangs the file's card with its path alone", async () => {
+  const { card } = await cardOfRow(planPage([]), "See @rollout-store", "Files and folders");
+
+  assert.equal(
+    card.querySelector(".luke-hover-card-name")?.textContent,
+    "apps/web/rollout-store.ts",
+  );
+  assert.equal(card.querySelector(".luke-hover-card-note"), null);
+});
+
+test("an @ row for a page says its version where it has more than one, else its age, and hangs the page's card", async () => {
+  const threeHoursAgo = Date.now() - 3 * 60 * 60 * 1000;
+  fakeAppPlatform({ ...DESKTOP_LINKS, pageFrameUrl });
+
+  const later = await cardOfRow(
+    { ...planPage([]), pages: [{ ...PAGE, version: 3, at: threeHoursAgo }] },
+    "See @invites",
+    "Pages",
+  );
+  assert.equal(
+    later.option.querySelector(".luke-combobox-option-detail")?.textContent,
+    "Version 3",
+  );
+  assert.equal(
+    later.card.querySelector("[data-page-card] .luke-hover-card-name")?.textContent,
+    PAGE.title,
+  );
+  assert.match(later.card.textContent ?? "", /Version 3/u);
+});
+
+test("an @ row for a page still on its first version says how long ago it was written in place of the version", async () => {
+  const threeHoursAgo = Date.now() - 3 * 60 * 60 * 1000;
+  fakeAppPlatform({ ...DESKTOP_LINKS, pageFrameUrl });
+
+  const { option } = await cardOfRow(
+    { ...planPage([]), pages: [{ ...PAGE, version: 1, at: threeHoursAgo }] },
+    "See @invites",
+    "Pages",
+  );
+
+  assert.equal(option.querySelector(".luke-combobox-option-detail")?.textContent, "3h");
+});
+
 test("a sent mention of an agent of another task or none hangs a card naming where it works, never the task page's own card for an id it has no tab of", () => {
   const mention = (agentId: string, taskId: string | undefined) =>
     mentionMarkdown(
@@ -1029,7 +1214,7 @@ function crumb(container: HTMLElement): string | undefined {
 
 /** The keys the list's foot names. */
 function footKeys(container: HTMLElement): string[] {
-  return [...container.querySelectorAll(".mention-menu-foot span")].map(
+  return [...container.querySelectorAll(".mention-menu .luke-menu-keys > *")].map(
     (key) => key.textContent ?? "",
   );
 }
@@ -1385,7 +1570,7 @@ function peopleListed(container: HTMLElement): [string, string, string | null][]
   );
 }
 
-test("an @ among the workspace's members offers its people, the reader as You, each wearing their mark, and a kind of their own narrowed to by @people:", async () => {
+test("an @ among the workspace's members offers its people, the reader first as You and the rest by name with their email, each wearing their mark, and a kind of their own narrowed to by @people:", async () => {
   const { container } = await memberBox();
 
   typeInComposer(container, "See @");

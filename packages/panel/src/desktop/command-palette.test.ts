@@ -1673,8 +1673,14 @@ test("on an agent's page in another workspace than the one listed, ⌥⌘C names
   assert.deepEqual(copied, [`https://tryluke.dev/beta/agent/${LINKED_AGENT}`]);
 });
 
-test("People lists the listed workspace's members by name and role, the reader as You, found by email too, and a choice opens their page", async () => {
+test("People lists the listed workspace's members as every people menu does, the reader first as You and the rest by name with their email, found by email too, each hanging their card, and a choice opens their page", async () => {
   const members = [
+    {
+      userId: "user-maya",
+      name: "Maya Chen",
+      email: "maya@example.com",
+      role: WORKSPACE_ROLE.ADMIN,
+    },
     {
       userId: "user-dean",
       name: "Dean Stratakos",
@@ -1703,10 +1709,19 @@ test("People lists the listed workspace's members by name and role, the reader a
   });
   chooseFilter("People");
 
-  assert.deepEqual(rows(), ["Dean Stratakos · You · Owner", "Charles Pan · Member"]);
+  assert.deepEqual(rows(), [
+    "Dean Stratakos · You",
+    "Charles Pan · charles@example.com",
+    "Maya Chen · maya@example.com",
+  ]);
   type("charles@");
-  assert.deepEqual(rows(), ["Charles Pan · Member"]);
-  act(() => document.querySelector<HTMLElement>('[role="option"]')?.click());
+  assert.deepEqual(rows(), ["Charles Pan · charles@example.com"]);
+  const row = document.querySelector<HTMLElement>('[role="option"]');
+  assert.ok(row, "Charles is listed");
+  restOn(row);
+  const card = document.querySelector('.luke-tooltip-card [data-actor-card="person"]');
+  assert.equal(card?.querySelector(".luke-hover-card-name")?.textContent, "Charles Pan");
+  act(() => row.click());
   assert.deepEqual(opened, ["user-charles"]);
   assert.deepEqual(sent.tabs, []);
 });
@@ -1819,7 +1834,7 @@ test("People says the members are being read until they answer, and a refused re
   assert.equal(emptyLine(), "Reading the workspace's members…");
   await act(async () => answers.shift()?.resolve([member]));
   await settle();
-  assert.deepEqual(rows(), ["Charles Pan · Member"]);
+  assert.deepEqual(rows(), ["Charles Pan · charles@example.com"]);
 });
 
 test("Tasks says the account's tasks are being read before the list first answers", () => {
@@ -2327,6 +2342,31 @@ test("the Inbox is followed only once it is searched, and then lists what needs 
     "Which webhook secret should rotate? · Billing usage alerts",
     "Use acme.dev for previews? · Billing usage alerts",
   ]);
+});
+
+test("an Inbox item is the Inbox's own row: its agent's tile, the marks of its Inbox row and its time at its end, and its card hung beside it", async () => {
+  paletteOverInbox(() => ({ items: [PREVIEWS, ROTATE] }));
+  chooseFilter("Inbox");
+  await settle();
+
+  const [needs, answered] = [...document.querySelectorAll<HTMLElement>('[role="option"]')];
+  assert.ok(needs, "the item that needs you is listed");
+  assert.ok(needs.querySelector('.actor-mark[data-kind="agent"]'), "the agent's tile leads");
+  assert.ok(needs.querySelector(".luke-combobox-option-hint .inbox-row-attention"), "it needs you");
+  assert.ok(needs.querySelector(".luke-combobox-option-hint time"), "its time stands at its end");
+  assert.equal(
+    answered?.querySelector(".inbox-row-attention"),
+    null,
+    "an answered item needs no one",
+  );
+
+  restOn(needs);
+  const card = document.querySelector(".luke-tooltip-card [data-inbox-row-card]");
+  assert.equal(
+    card?.querySelector(".luke-hover-card-name")?.textContent,
+    "Which webhook secret should rotate?",
+  );
+  assert.match(card?.textContent ?? "", /Rotate the Stripe signing secret today\./u);
 });
 
 test("an Inbox item is found under All by words its thread says, which its row says beside its task", async () => {

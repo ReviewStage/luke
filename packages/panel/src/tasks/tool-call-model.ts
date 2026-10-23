@@ -22,6 +22,7 @@ import {
   type InboxThreadPostInput,
   inboxPostInputSchema,
   inboxThreadPostInputSchema,
+  recommendedLabels,
 } from "@luke/features/inbox-wire";
 import {
   type IntegrationProvider,
@@ -51,6 +52,7 @@ import {
 } from "@luke/wire";
 import { Option, Schema } from "effect";
 import { TOOL_BLOCK, type ToolBlock } from "../ai-elements/tool.js";
+import { INLINE_SPAN, readInline } from "../plan-editor/composer-markdown.js";
 import { shortCommit } from "./file-tab-model.js";
 import { askHeadWords } from "./inbox-ask-words.js";
 
@@ -360,12 +362,14 @@ function inboxPostView(input: WireValue | undefined): InboxPost | undefined {
   return Option.getOrUndefined(readPost(input));
 }
 
-/** What a post asks, as the row's body lists it: a choice's options, the recommended one saying so, or a form's fields with their types, a select's recommended option saying so. */
+/** What a post asks, as the row's body lists it: a choice's options, each recommended one saying so, or a form's fields with their types, a select's recommended option saying so. */
 function askLines(response: InboxPost["response"]): readonly string[] {
   switch (response.type) {
     case INBOX_RESPONSE.CHOICE:
       return response.options.map((option) => {
-        const recommended = response.recommended === option.label ? " (recommended)" : "";
+        const recommended = recommendedLabels(response).includes(option.label)
+          ? " (recommended)"
+          : "";
         const detail = option.detail === undefined ? "" : ` -- ${option.detail}`;
         return `- ${option.label}${recommended}${detail}`;
       });
@@ -416,7 +420,7 @@ function threadPostView(input: WireValue | undefined): InboxThreadPostInput | un
 
 /**
  * What a post's ask offers, as the row's body lists it under the ask's
- * kind: a `decide`'s options, the recommended one saying so, a `do`'s
+ * kind: a `decide`'s options, each recommended one saying so, a `do`'s
  * steps, or an `answer`'s fields with their types; none where the reply's
  * own words answer it.
  */
@@ -424,7 +428,7 @@ function threadAskLines(ask: NonNullable<InboxThreadPostInput["ask"]>): readonly
   switch (ask.type) {
     case INBOX_ASK.DECIDE:
       return ask.options.map((option) => {
-        const recommended = ask.recommended === option.label ? " (recommended)" : "";
+        const recommended = recommendedLabels(ask).includes(option.label) ? " (recommended)" : "";
         const detail = option.detail === undefined ? "" : ` -- ${option.detail}`;
         return `- ${option.label}${recommended}${detail}`;
       });
@@ -1345,11 +1349,12 @@ export function delegationView(
 const LINE_MARKS = /^(?:#{1,6}|>|[-*+]|\d+[.)])\s+/u;
 
 /**
- * The marks of strong emphasis and code inside a line, which a title drawn
- * as plain words leaves out. Note that `__` stays, because it is more often
- * a name's own (`__init__`) than emphasis.
+ * The marks of strong emphasis and code left standing in plain words, a run
+ * that wraps nothing, which a title drawn as plain words leaves out. Note
+ * that `__` stays, because it is more often a name's own (`__init__`) than
+ * emphasis.
  */
-const INLINE_MARKS = /\*\*|`/gu;
+const STRAY_MARKS = /\*\*|`/gu;
 
 /** A markdown fence's opening or closing line, which plain words leave out. */
 const FENCE_LINE = /^\s*(?:```|~~~)/u;
@@ -1367,7 +1372,16 @@ export function cardTitle(text: string): string {
 
 function plainLine(line: string): string {
   // A link is said by its name, as its chip names it, never its destination (`linkLabels`).
-  return linkLabels(line.trim().replace(LINE_MARKS, "")).replace(INLINE_MARKS, "").trim();
+  const words = linkLabels(line.trim().replace(LINE_MARKS, ""));
+  // Note that the marks are read as a message box reads them (`composer-markdown.ts`), so a preview says what the box showed: each mark's words without its delimiters or the escapes in them, a code span's words as they are, and words wearing none as typed but for a stray mark.
+  return readInline(words, [])
+    .map((span) => {
+      const said = words.slice(span.from, span.to);
+      const marked = span.kind === INLINE_SPAN.WORDS && span.marks.length > 0;
+      return marked ? said : said.replace(STRAY_MARKS, "");
+    })
+    .join("")
+    .trim();
 }
 
 /**

@@ -1,11 +1,12 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { MOTION_DELAY_MS } from "@luke/brand";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, test } from "vitest";
+import { afterEach, test, vi } from "vitest";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { tasksControl } from "../testing/tasks-control.js";
@@ -43,6 +44,8 @@ const roots: Root[] = [];
 afterEach(() => {
   for (const root of roots.splice(0)) act(() => root.unmount());
   document.body.innerHTML = "";
+  vi.unstubAllGlobals();
+  vi.useRealTimers();
 });
 
 /** The switcher over the tasks given, in sight or folded away. */
@@ -121,6 +124,38 @@ test("the menu offers the workspaces, the listed one checked, New workspace, and
     ["Workspace settings", null],
   ]);
   assert.deepEqual(pressed, [`choose:${PERSONAL.id}`, "settings"]);
+});
+
+test("a workspace's row hangs its card while the pointer rests on it: its name and who shares it", () => {
+  vi.stubGlobal(
+    "ResizeObserver",
+    class implements ResizeObserver {
+      constructor(private readonly heard: ResizeObserverCallback) {}
+      observe(): void {
+        this.heard([], this);
+      }
+      unobserve(): void {}
+      disconnect(): void {}
+    },
+  );
+  const page = mount({
+    workspaces: [PERSONAL, { ...ACME, memberCount: 5 }],
+    workspace: PERSONAL,
+  });
+  open(page.switcher());
+  const row = menuItems().find((item) => labelOf(item) === "acme") ?? assert.fail("no acme row");
+
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  act(() => {
+    row.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
+  });
+  act(() => {
+    vi.advanceTimersByTime(MOTION_DELAY_MS.HINT);
+  });
+  const card = document.querySelector("[data-workspace-card]");
+
+  assert.match(card?.textContent ?? "", /acme/);
+  assert.match(card?.textContent ?? "", /5 members/);
 });
 
 test("a member of a team is offered the same three kinds of item as its admin", () => {
