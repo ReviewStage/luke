@@ -14,6 +14,7 @@ import { INTEGRATION, type IntegrationDefinition } from "../integrations/integra
 import { CRON_ENVIRONMENT } from "../maintenance/maintenance-bounds.js";
 import { SENTRY_ENVIRONMENT } from "../observability/sentry.js";
 import { POSTHOG_ENVIRONMENT, posthogProjectConsoleUrl } from "../providers/posthog.js";
+import { AVATAR_ENVIRONMENT } from "../voice/keyframe.js";
 import type { AdminViewer } from "./admin-access.js";
 import { readAdminAccountSource } from "./admin-account-queries.js";
 import { readAdminCost } from "./admin-cost-queries.js";
@@ -57,16 +58,6 @@ export interface AdminSessionApi {
 function configured(name: string): boolean {
   return (process.env[name] ?? "").trim().length > 0;
 }
-
-/**
- * The call avatar's Keyframe pair, named here as well as where the voice
- * function reads it (`apps/web/server/voice/function.ts`), since a package
- * cannot import from an app.
- */
-const AVATAR_ENVIRONMENT = {
-  KEYFRAME_API_KEY: "KEYFRAME_API_KEY",
-  KEYFRAME_PERSONA_ID: "LUKE_KEYFRAME_PERSONA_ID",
-} as const;
 
 /** Each account integration Vercel Connect grants, by whether its connector UID is set; one granted by the account's own sign-in has none. */
 function connectorPresence(): Map<(typeof INTEGRATION_PROVIDER_LIST)[number], boolean> {

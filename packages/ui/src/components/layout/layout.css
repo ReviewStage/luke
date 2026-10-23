@@ -78,10 +78,6 @@
     gap: var(--luke-section-gap);
   }
 
-  [data-gap="loose"]:is(.luke-stack, .luke-inline) {
-    gap: var(--luke-space-24);
-  }
-
   [data-align="start"]:is(.luke-stack, .luke-inline) {
     align-items: flex-start;
   }
@@ -104,10 +100,6 @@
 
   [data-justify="start"]:is(.luke-stack, .luke-inline) {
     justify-content: flex-start;
-  }
-
-  [data-justify="center"]:is(.luke-stack, .luke-inline) {
-    justify-content: center;
   }
 
   [data-justify="end"]:is(.luke-stack, .luke-inline) {

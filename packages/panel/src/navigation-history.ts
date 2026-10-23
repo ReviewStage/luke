@@ -90,7 +90,7 @@ import {
   useRef,
   useSyncExternalStore,
 } from "react";
-import type { AdminView } from "./admin/routing.js";
+import { ADMIN_PAGE, type AdminView } from "./admin/routing.js";
 import { PANEL_TAB, type PanelTab } from "./panel-tabs.js";
 import { settingsPageExperimentStands } from "./settings/settings-rows.js";
 import { SHELL_ROOM, type ShellRoom } from "./shell-room.js";
@@ -339,7 +339,7 @@ function samePage(one: Place, other: Place): boolean {
 
 /** Whether an Admin view is one of the place's sections, rather than an account's or a day's page under one. */
 function adminSection(view: AdminView): boolean {
-  return view.kind !== "account" && view.kind !== "day";
+  return view.kind !== ADMIN_PAGE.ACCOUNT && view.kind !== ADMIN_PAGE.DAY;
 }
 
 /**
@@ -354,8 +354,9 @@ function samePageAdminView(one: AdminView, other: AdminView): boolean {
 
 /** Whether two Admin views are the same view. */
 function sameAdminView(one: AdminView, other: AdminView): boolean {
-  if (one.kind === "account" && other.kind === "account") return one.id === other.id;
-  if (one.kind === "day" && other.kind === "day") return one.day === other.day;
+  if (one.kind === ADMIN_PAGE.ACCOUNT && other.kind === ADMIN_PAGE.ACCOUNT)
+    return one.id === other.id;
+  if (one.kind === ADMIN_PAGE.DAY && other.kind === ADMIN_PAGE.DAY) return one.day === other.day;
   return one.kind === other.kind;
 }
 
@@ -579,11 +580,21 @@ function asking(
 }
 
 /** One step of the trail as Back's and Forward's lists draw it: where it stands on the trail, what it was called, and which page it was. */
+/**
+ * The page a step stood on: its place's kind, and which of that kind's pages
+ * it was, where the kind has more than one (a task's, an agent's, an
+ * automation's).
+ */
+export interface HistoryPage {
+  readonly kind: Place["kind"];
+  readonly of: string | undefined;
+}
+
 export interface HistoryStep {
   readonly at: number;
   readonly title: StepTitle | undefined;
-  /** The page it stood on, so the list can gather a page's steps together. */
-  readonly page: string;
+  /** The page it stood on, so the list can gather a page's steps together (`sameHistoryPage`). */
+  readonly page: HistoryPage;
 }
 
 /** The window's history as its buttons and keys use it. */
@@ -601,23 +612,29 @@ export interface NavigationHistory {
 /** How many steps each way Back's and Forward's lists draw. */
 const LISTED_STEPS = 15;
 
-/** A key naming a place's page, the same for every step on one page. */
-function pageKey(place: Place): string {
+/** The page a place stands on, the same for every step on one page (`sameHistoryPage`). */
+function pageOf(place: Place): HistoryPage {
   switch (place.kind) {
     case PLACE_KIND.TASK:
     case PLACE_KIND.VERSION_HISTORY:
-      return `${place.kind}:${place.taskId}`;
+      return { kind: place.kind, of: place.taskId };
     case PLACE_KIND.AGENT:
-      return `${place.kind}:${place.agentId}`;
+      return { kind: place.kind, of: place.agentId };
     case PLACE_KIND.PERSON:
-      return `${place.kind}:${place.userId}`;
+      return { kind: place.kind, of: place.userId };
     case PLACE_KIND.AUTOMATIONS:
-      return place.page.kind === AUTOMATIONS_PAGE.EDIT
-        ? `${place.kind}:${place.page.automationId}`
-        : `${place.kind}:${place.page.kind}`;
+      return {
+        kind: place.kind,
+        of: place.page.kind === AUTOMATIONS_PAGE.EDIT ? place.page.automationId : place.page.kind,
+      };
     default:
-      return place.kind;
+      return { kind: place.kind, of: undefined };
   }
+}
+
+/** Whether two steps stood on one page, so the list gathers them together. */
+export function sameHistoryPage(one: HistoryPage, other: HistoryPage): boolean {
+  return one.kind === other.kind && one.of === other.of;
 }
 
 /**
@@ -637,7 +654,7 @@ function listedSteps(
     const at = nearest({ entries: trail.entries, at: from }, way, reachable);
     const place = at === undefined ? undefined : trail.entries[at]?.state;
     if (at === undefined || place === undefined) break;
-    listed.push({ at, title: titleOf(place), page: pageKey(place) });
+    listed.push({ at, title: titleOf(place), page: pageOf(place) });
     from = at;
   }
   return listed;

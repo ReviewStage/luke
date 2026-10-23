@@ -519,55 +519,6 @@ body,
   line-height: var(--luke-type-label-leading);
 }
 
-/* Every row of the plans is one line, whatever section it stands in: what
-   else there is to say of it is on its hover card. */
-.sidebar-task {
-  display: block;
-  width: 100%;
-  padding: var(--luke-space-8) var(--row-inset);
-  border-radius: var(--luke-control-radius);
-  background: none;
-  text-align: left;
-  transition: background-color var(--luke-duration-hover) ease;
-}
-
-/* In the sidebar a row is a control's height, as New plan's is, its line set
-   to the label's leading rather than left to the font, so every row of the
-   column stands as tall whatever the font measures. */
-.desktop-sidebar .sidebar-task-item {
-  line-height: var(--luke-type-label-leading);
-}
-
-/* Note that the row's height is set rather than grown from its padding,
-   because the smaller time, set on the name's baseline, sits a pixel lower
-   in its line and would make the row a pixel taller than New plan's. */
-.desktop-sidebar .sidebar-task {
-  display: flex;
-  height: var(--luke-control-height);
-  align-items: center;
-  padding-block: 0;
-}
-
-.desktop-sidebar .sidebar-task > .sidebar-task-line {
-  flex: 1;
-}
-
-/* A plan's row fills while the pointer is anywhere on its item, its own
-   buttons at its end included, and no more than its hover does, so the open
-   plan keeps its stronger fill. */
-:where(.sidebar-task-item:hover) > .sidebar-task {
-  background: var(--luke-color-fill-hover);
-}
-
-/* The open plan's row is drawn in the work sheet's ground on the sidebar,
-   lifted by a hairline and a soft shadow, as the sheet is. */
-.sidebar-task[aria-current="page"] {
-  background: var(--luke-color-ground);
-  box-shadow:
-    0 0 0 1px var(--luke-color-border),
-    0 1px 2px var(--luke-color-shadow-soft);
-}
-
 /* Whoever did something (`actor-ref.tsx`): a person on a circle, their
    picture or their letter on a hue; Luke, an agent, or an automation by its
    glyph alone in a rounded square's box, on a solid tile where a facepile
@@ -858,65 +809,9 @@ ul.actor-stack {
   line-height: var(--luke-type-caption-leading);
 }
 
-.sidebar-task-name {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* A plan's name reads in the body's weight, the open one too, whose fill is
-   what marks it. In the sidebar a read name is in the quieter ink, and the
-   open one and the one under the pointer go up to the primary. */
-.sidebar-task-name {
-  font-size: var(--luke-type-body-size);
-}
-
-.desktop-sidebar :is(.sidebar-task-name, .sidebar-pinned-tab-name) {
-  color: var(--luke-color-sidebar-ink);
-  transition: color var(--luke-duration-hover) ease;
-}
-
-.desktop-sidebar
-  .sidebar-task[aria-current="page"]
-  :is(.sidebar-task-name, .sidebar-pinned-tab-name),
-.desktop-sidebar .sidebar-task-item:hover :is(.sidebar-task-name, .sidebar-pinned-tab-name) {
-  color: var(--luke-color-text);
-}
-
-/* The one unread mark: what the developer has not seen, a plan saved since
-   they last looked at it on this Mac, as a tab that something arrived on
-   while another was chosen does (`@luke/ui`'s `tabs.css`), reads in the heavier weight and the primary ink until they look, as a chat app's
-   channels do. What waits on them also wears the attention mark
-   (`.inbox-row-attention`); an unread Inbox item wears the blue dot
-   (`.inbox-row-unread`). In the sidebar, where a read name is in the
-   quieter ink, the ink carries half the step, so a semibold is enough. */
-.sidebar-task[data-unread="true"] .sidebar-task-name {
-  color: var(--luke-color-text);
-  font-weight: var(--luke-weight-bold);
-}
-
 /* The wrapper that hears typing in a preview's content lays nothing out. */
 .side-panel-keeps {
   display: contents;
-}
-
-.desktop-sidebar .sidebar-task[data-unread="true"] .sidebar-task-name {
-  font-weight: var(--luke-weight-semibold);
-}
-
-/* A row's first line: the plan's name, cut short where it must, and how long
-   ago it was updated at the end, muted and in even figures so the column of
-   times lines up. */
-.sidebar-task-line {
-  display: flex;
-  align-items: baseline;
-  gap: var(--luke-space-8);
-  min-width: 0;
-}
-
-.sidebar-task-line .sidebar-task-name {
-  min-width: 0;
-  flex: 1;
 }
 
 /* A one-off agent's row leads with its harness mark, as its tab does, so it
@@ -968,11 +863,6 @@ ul.actor-stack {
   margin-right: var(--luke-space-4);
 }
 
-/* Home's time sets its parts apart by its own gap. */
-.home-row .sidebar-task-time > .actor-mark {
-  margin-right: 0;
-}
-
 .task-mark-glyph {
   display: inline-block;
   width: 12px;
@@ -1012,20 +902,6 @@ ul.actor-stack {
 .task-mark-attention .attention-mark svg {
   width: 10px;
   height: 10px;
-}
-
-/* Pin and Archive stand in the time's slot, which is always as wide as the
-   two of them, while the row is hovered or holds the keyboard (`ListRow`'s
-   acts on hover), so the name is cut where it always is and nothing moves. */
-.sidebar-task-item {
-  position: relative;
-}
-
-/* Note that the row holding the keyboard stands over its neighbours, because
-   its ring reaches past the list's gap and the next row's fill would
-   otherwise paint over the ring's foot. */
-.sidebar-task-item:has(:focus-visible) {
-  z-index: 1;
 }
 
 /* A row's transform is a drag's (use-row-drag.ts): sliding aside for a row
@@ -1076,16 +952,6 @@ ul.actor-stack {
 /* While a row is dragged, the pointer says it is holding one. */
 .sidebar-tasks[data-dragging="true"] {
   cursor: grabbing;
-}
-
-.sidebar-task-item:has(:focus-visible) .sidebar-task .sidebar-task-time {
-  visibility: hidden;
-}
-
-@media (hover: hover) {
-  .sidebar-task-item:hover .sidebar-task .sidebar-task-time {
-    visibility: hidden;
-  }
 }
 
 /* A repository's plans under a header in the headings' voice, drawn as a
@@ -1573,8 +1439,7 @@ ul.actor-stack {
 [data-luke-profile="desktop"] .luke-choice-bar-option,
 [data-luke-profile="desktop"] .luke-nav-item,
 [data-luke-profile="desktop"] .desktop-toolbar-actions,
-[data-luke-profile="desktop"] .desktop-toolbar .inbox-crumbs,
-[data-luke-profile="desktop"] .sidebar-task {
+[data-luke-profile="desktop"] .desktop-toolbar .inbox-crumbs {
   -webkit-app-region: no-drag;
 }
 
@@ -1699,12 +1564,6 @@ ul.actor-stack {
 
 .account-menu-email {
   color: var(--luke-color-text-subtle);
-}
-
-/* A sidebar plan whose menu is open is ringed, the way Finder rings the row a
-   right-click is about, so the menu is plainly about that plan. */
-.sidebar-task[data-menu-open="true"] {
-  box-shadow: inset 0 0 0 1px var(--luke-color-border-selected);
 }
 
 /* Empty and waiting states ---------------------------------------------- */
@@ -2048,15 +1907,6 @@ ul.actor-stack {
   margin-left: auto;
 }
 
-/* With comments in its margin, the document stands left of the column's
-   middle by half the margin, so the reading width and the margin beside it
-   are centred together, as a document's margin comments are. */
-.desktop-document
-  .plan-document-scroll[data-comments="margin"]
-  :is(.plan-body, .plan-crumb, .plan-edit-note, .plan-changed-note) {
-  margin-left: max(0px, calc((100% - var(--luke-page-measure) - var(--comment-margin-room)) / 2));
-}
-
 .desktop-document .plan-body {
   color: var(--luke-color-text-body);
   font-size: var(--luke-type-reading-size);
@@ -2065,7 +1915,7 @@ ul.actor-stack {
 
 /* A document's blocks, and the sections of a text drawn inside one block,
    stand a section's gap apart. */
-.desktop-document :is(.plan-body, .document-sections) > * + * {
+.desktop-document .plan-body > * + * {
   margin-top: 1.5em;
 }
 
@@ -3000,13 +2850,6 @@ ul.actor-stack {
 
 .inbox-tasks[data-placement="sidebar"] .inbox-tasks-chips {
   padding-inline: 0;
-}
-
-/* An item's row is a sidebar row led by its agent's tile (`actor-ref.tsx`),
-   centred on the line as a pinned tab's is, with no Unpin to leave room for. */
-.inbox-row .sidebar-task-line {
-  align-items: center;
-  gap: var(--luke-space-6);
 }
 
 .inbox-row-mark {
@@ -4891,15 +4734,6 @@ ul.actor-stack {
      panel on one line with the toolbar's last button, as far in from the
      panel's. */
   --summary-rail-width: calc(var(--luke-control-height) + 2 * var(--column-inset));
-  --summary-room: 0px;
-}
-
-.desktop-task-main:has(> .desktop-plan-body > .task-summary[data-mode="column"]) {
-  --summary-room: var(--summary-width);
-}
-
-.desktop-task-main:has(> .desktop-plan-body > .task-summary[data-mode="rail"]) {
-  --summary-room: var(--summary-rail-width);
 }
 
 .desktop-plan-body {
@@ -5868,23 +5702,6 @@ ul.actor-stack {
   margin: var(--luke-space-4) 0;
 }
 
-.home-row .sidebar-task-line {
-  align-items: center;
-}
-
-.home-row .sidebar-task-line,
-.inbox-row .sidebar-task-line:has(.home-row-context) {
-  gap: var(--luke-space-8);
-}
-
-.home-row .sidebar-task-name,
-.inbox-row:has(.home-row-context) .sidebar-task-name {
-  overflow: hidden;
-  flex: 0 1 auto;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 /* What the row is about keeps a floor beside a long title, so the title is
    what gives way and the context is never cut to a letter or a sliver. Past
    the floor it takes what the title leaves. */
@@ -5895,28 +5712,6 @@ ul.actor-stack {
   color: var(--luke-color-text-subtle);
   font-size: var(--luke-type-caption-size);
   white-space: nowrap;
-}
-
-/* A home row offers no Pin or Archive to give way to, so its time stays put
-   while the row is hovered or holds the keyboard, and its moment can be read. */
-.home-section .sidebar-task-item:has(:focus-visible) .sidebar-task-time {
-  visibility: visible;
-}
-
-@media (hover: hover) {
-  .home-section .sidebar-task-item:hover .sidebar-task-time {
-    visibility: visible;
-  }
-}
-
-/* The time ends the row whether a context fills up to it or not, so the
-   times stand in one column down a station or a section. */
-.home-row .sidebar-task-time {
-  display: inline-flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: var(--luke-space-6);
-  margin-left: auto;
 }
 
 /* A ListRow's metadata on Home and a person's page: what
@@ -6216,11 +6011,6 @@ ul.actor-stack {
   overflow: hidden;
   color: var(--luke-color-text);
   white-space: nowrap;
-}
-
-.new-task-issue-state {
-  flex: none;
-  color: var(--luke-color-text-subtle);
 }
 
 .new-task-issue-drop {

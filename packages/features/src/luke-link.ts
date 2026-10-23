@@ -2,6 +2,7 @@ import { Schema as EffectSchema, Option } from "effect";
 import { isUtcDayKey } from "./admin-wire.js";
 import { inAppScheme, isLinkHome, LINK_ORIGIN } from "./link-home.js";
 import { decodeMention, encodeMention, MENTION_KIND } from "./mention-link.js";
+import { parsedUrl } from "./parsed-url.js";
 
 /**
  * luke-link.ts -- a place in Luke as the link it is shared by: every thing a teammate can be sent to, written as its address and read back from one.
@@ -315,15 +316,6 @@ function decodedStep(step: string): string | undefined {
   if (step.length > LINK_BOUNDS.MAX_STEP_CHARS * 3) return undefined;
   try {
     return decodeURIComponent(step);
-  } catch {
-    return undefined;
-  }
-}
-
-/** A target read as an address, or nothing where it is none; `new URL` caught, since Safari before 18 has no `URL.parse`. */
-function parsedUrl(target: string): URL | undefined {
-  try {
-    return new URL(target);
   } catch {
     return undefined;
   }

@@ -170,7 +170,7 @@
 
   :is(.luke-list[data-density="dense"] > .luke-list-row, .luke-list-row[data-density="dense"])
     .luke-list-row-description[data-overflow="true"] {
-    mask-image: linear-gradient(to left, transparent, #000 20px); /* off-scale: a label's fade */
+    mask-image: linear-gradient(to left, transparent, #000 var(--luke-label-fade));
   }
 
   :is(.luke-list[data-density="dense"] > .luke-list-row, .luke-list-row[data-density="dense"])
@@ -284,7 +284,7 @@
   }
 
   .luke-list-row-title[data-overflow="true"] {
-    mask-image: linear-gradient(to left, transparent, #000 20px); /* off-scale: a label's fade */
+    mask-image: linear-gradient(to left, transparent, #000 var(--luke-label-fade));
   }
 
   /* What has not been seen reads in a heavier weight, and its description
@@ -361,7 +361,7 @@
 
   /* The name of what a row belongs to fades where its chip cuts it short. */
   .luke-list-row-lead-label[data-overflow="true"] {
-    mask-image: linear-gradient(to left, transparent, #000 20px); /* off-scale: a label's fade */
+    mask-image: linear-gradient(to left, transparent, #000 var(--luke-label-fade));
   }
 
   /* The title gives way first; past it, the metadata is cut short rather

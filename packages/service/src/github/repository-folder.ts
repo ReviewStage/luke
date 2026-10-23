@@ -19,13 +19,13 @@
  */
 
 import { Effect, type Redacted, Schema } from "effect";
-import * as HttpClient from "effect/http/HttpClient";
+import type * as HttpClient from "effect/http/HttpClient";
 import {
-  GITHUB_FAILURE,
   GITHUB_HTTP_STATUS,
-  GitHubUnavailable,
+  type GitHubUnavailable,
   githubRead,
   readBody,
+  send,
 } from "./github-app.js";
 import { repositorySegments } from "./repository-file.js";
 
@@ -88,17 +88,9 @@ export function readRepositoryFolder(
     const treeish = encodeURIComponent(`${repository.defaultBranch}:${path}`);
     const listing = `/repos/${repository.fullName}/git/trees/${treeish}`;
     const request = githubRead(recursive ? `${listing}?recursive=1` : listing, token);
-    const client = yield* HttpClient.HttpClient;
     return yield* Effect.scoped(
       Effect.gen(function* () {
-        const response = yield* Effect.mapError(
-          client.execute(request),
-          (error) =>
-            new GitHubUnavailable({
-              reason: GITHUB_FAILURE.TRANSPORT,
-              status: error.response?.status,
-            }),
-        );
+        const response = yield* send(request);
         // Note that GitHub answers a path naming a file as unprocessable,
         // since `<branch>:<file>` is a blob and no tree.
         if (

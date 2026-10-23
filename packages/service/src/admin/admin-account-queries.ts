@@ -68,7 +68,7 @@ import {
   type AdminAccountAgentSource,
   type AdminAccountSource,
 } from "./admin-account.js";
-import { lastNDayKeys } from "./admin-metrics.js";
+import { dayStart, lastNDayKeys } from "./admin-metrics.js";
 import { AggregateColumnSchema } from "./admin-queries.js";
 
 type AdminQueryFailure = QueryError | Schema.SchemaError;
@@ -456,7 +456,7 @@ export function readAdminAccountSource(input: {
   return Effect.gen(function* () {
     const { userId } = input;
     const windowStartDay = lastNDayKeys(input.now, input.windowDays)[0] ?? utcDayKey(input.now);
-    const windowStart = new Date(`${windowStartDay}T00:00:00.000Z`);
+    const windowStart = dayStart(windowStartDay);
     const window = { userId, windowStart };
 
     const [

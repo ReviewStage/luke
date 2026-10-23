@@ -134,12 +134,11 @@ import {
   GATEWAY_EVENT,
   GATEWAY_METHOD,
   type GatewayMethodTable,
-  invalid,
+  readParams,
 } from "@luke/gateway";
 import { catchAllButInterrupt } from "@luke/runtime/effect";
 import type { VoiceCallAbout } from "@luke/voice/voice-view";
-import { keepIdentity, unparsedWire } from "@luke/wire";
-import { readEither } from "@luke/wire/effect";
+import { keepIdentity } from "@luke/wire";
 import {
   Cache,
   Cause,
@@ -153,7 +152,6 @@ import {
   FiberMap,
   Option,
   Queue,
-  Result,
   Schedule,
   Schema,
   type Scope,
@@ -1737,10 +1735,13 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       }),
     [GATEWAY_METHOD.TASKS_OPEN]: (params) =>
       Effect.gen(function* () {
-        const read = readEither(tasksOpenParamsSchema)(unparsedWire(params));
-        if (Result.isFailure(read)) return yield* invalid("opening a task names one task");
+        const read = yield* readParams(
+          tasksOpenParamsSchema,
+          params,
+          "opening a task names one task",
+        );
         if (!gate()) return { opened: false };
-        const { taskId } = read.success;
+        const { taskId } = read;
         // A press on the task already open, drawn or being read, asks nothing again.
         const status = view.document.status;
         if (
@@ -1770,12 +1771,13 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       }),
     [GATEWAY_METHOD.TASKS_FILE]: (params) =>
       Effect.gen(function* () {
-        const read = readEither(tasksFileParamsSchema)(unparsedWire(params));
-        if (Result.isFailure(read)) {
-          return yield* invalid("reading a file names a task, a path, and a window of its lines");
-        }
+        const read = yield* readParams(
+          tasksFileParamsSchema,
+          params,
+          "reading a file names a task, a path, and a window of its lines",
+        );
         if (!gate()) return carried<TasksFileAnswer>({ failure: TASK_CALL_FAILURE.UNANSWERED });
-        const { taskId, ...window } = read.success;
+        const { taskId, ...window } = read;
         const answer = yield* served(client.readFile(taskId, window));
         if (answer === undefined) {
           return carried<TasksFileAnswer>({ failure: TASK_CALL_FAILURE.UNANSWERED });
@@ -1786,14 +1788,13 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     // the tree keeps the folders it has opened.
     [GATEWAY_METHOD.TASKS_TREE]: (params) =>
       Effect.gen(function* () {
-        const read = readEither(tasksTreeParamsSchema)(unparsedWire(params));
-        if (Result.isFailure(read)) {
-          return yield* invalid(
-            "listing a folder names a task, or a workspace and its repository, and the folder's path",
-          );
-        }
+        const read = yield* readParams(
+          tasksTreeParamsSchema,
+          params,
+          "listing a folder names a task, or a workspace and its repository, and the folder's path",
+        );
         if (!gate()) return carried<TasksTreeAnswer>({ failure: TASK_CALL_FAILURE.UNANSWERED });
-        const asked = read.success;
+        const asked = read;
         const folder = {
           path: asked.path,
           ...(asked.recursive === undefined ? undefined : { recursive: asked.recursive }),
@@ -1809,16 +1810,15 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     // nowhere: a skill added on GitHub is chosen on the next read.
     [GATEWAY_METHOD.TASKS_SKILLS]: (params) =>
       Effect.gen(function* () {
-        const read = readEither(tasksSkillsParamsSchema)(unparsedWire(params));
-        if (Result.isFailure(read)) {
-          return yield* invalid(
-            "reading a repository's skills names the task, or a workspace and its repository",
-          );
-        }
+        const read = yield* readParams(
+          tasksSkillsParamsSchema,
+          params,
+          "reading a repository's skills names the task, or a workspace and its repository",
+        );
         if (!gate()) {
           return carried<TasksSkillsAnswer>({ failure: TASK_CALL_FAILURE.UNANSWERED });
         }
-        const asked = read.success;
+        const asked = read;
         const answer = yield* served(
           "planId" in asked ? client.readSkills(asked.planId) : client.readRepositorySkills(asked),
         );
@@ -1828,46 +1828,43 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     // link asking it again for as long as `LINK_READ_KEPT` says.
     [GATEWAY_METHOD.TASKS_PULL_REQUEST]: (params) =>
       Effect.gen(function* () {
-        const read = readEither(tasksPullRequestParamsSchema)(unparsedWire(params));
-        if (Result.isFailure(read)) {
-          return yield* invalid(
-            "reading a pull request names a workspace, its repository, and the pull request's number",
-          );
-        }
+        const read = yield* readParams(
+          tasksPullRequestParamsSchema,
+          params,
+          "reading a pull request names a workspace, its repository, and the pull request's number",
+        );
         if (!gate()) {
           return carried<TasksPullRequestAnswer>({ failure: TASK_CALL_FAILURE.UNANSWERED });
         }
-        const answer = yield* Cache.get(pullRequestReads, linkReadKey(read.success));
+        const answer = yield* Cache.get(pullRequestReads, linkReadKey(read));
         return carried<TasksPullRequestAnswer>(answer ?? { failure: TASK_CALL_FAILURE.UNANSWERED });
       }),
     // An issue is answered as a pull request is: to the link that asked, and kept as it is.
     [GATEWAY_METHOD.TASKS_ISSUE]: (params) =>
       Effect.gen(function* () {
-        const read = readEither(tasksIssueParamsSchema)(unparsedWire(params));
-        if (Result.isFailure(read)) {
-          return yield* invalid(
-            "reading an issue names a workspace, its repository, and the issue's number",
-          );
-        }
+        const read = yield* readParams(
+          tasksIssueParamsSchema,
+          params,
+          "reading an issue names a workspace, its repository, and the issue's number",
+        );
         if (!gate()) {
           return carried<TasksIssueAnswer>({ failure: TASK_CALL_FAILURE.UNANSWERED });
         }
-        const answer = yield* Cache.get(issueReads, linkReadKey(read.success));
+        const answer = yield* Cache.get(issueReads, linkReadKey(read));
         return carried<TasksIssueAnswer>(answer ?? { failure: TASK_CALL_FAILURE.UNANSWERED });
       }),
     // A repository's issues are answered as an issue is: to the picker that asked, and held nowhere.
     [GATEWAY_METHOD.TASKS_GITHUB_ISSUES]: (params) =>
       Effect.gen(function* () {
-        const read = readEither(tasksGitHubIssuesParamsSchema)(unparsedWire(params));
-        if (Result.isFailure(read)) {
-          return yield* invalid(
-            "reading a repository's issues names a workspace, its repository, and words or a number where it asks for some",
-          );
-        }
+        const read = yield* readParams(
+          tasksGitHubIssuesParamsSchema,
+          params,
+          "reading a repository's issues names a workspace, its repository, and words or a number where it asks for some",
+        );
         if (!gate()) {
           return carried<TasksGitHubIssuesAnswer>({ failure: TASK_CALL_FAILURE.UNANSWERED });
         }
-        const { workspaceId, repository, query, number } = read.success;
+        const { workspaceId, repository, query, number } = read;
         const ask = number !== undefined ? { number } : query !== undefined ? { query } : {};
         const answer = yield* served(client.readRepositoryIssues({ workspaceId, repository }, ask));
         return carried<TasksGitHubIssuesAnswer>(
@@ -1879,47 +1876,48 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     // and reads again after each change.
     [GATEWAY_METHOD.TASKS_ISSUE_LINKS]: (params) =>
       Effect.gen(function* () {
-        const read = readEither(tasksIssueLinksParamsSchema)(unparsedWire(params));
-        if (Result.isFailure(read)) return yield* invalid("reading a task's issues names the task");
-        if (!gate()) return carried<TasksIssueLinksAnswer>(TASK_ISSUES_UNANSWERED);
-        return carried<TasksIssueLinksAnswer>(
-          yield* served(client.readIssueLinks(read.success.taskId)),
+        const read = yield* readParams(
+          tasksIssueLinksParamsSchema,
+          params,
+          "reading a task's issues names the task",
         );
+        if (!gate()) return carried<TasksIssueLinksAnswer>(TASK_ISSUES_UNANSWERED);
+        return carried<TasksIssueLinksAnswer>(yield* served(client.readIssueLinks(read.taskId)));
       }),
     // A task's agents' Browser tabs are answered to the side panel that
     // asked and held nowhere, since each carries a page's address and title:
     // the panel draws what it was answered, and reads again while it stands.
     [GATEWAY_METHOD.TASKS_BROWSER_TABS]: (params) =>
       Effect.gen(function* () {
-        const read = readEither(tasksBrowserTabsParamsSchema)(unparsedWire(params));
-        if (Result.isFailure(read))
-          return yield* invalid("reading a task's Browser tabs names the task");
-        if (!gate()) return carried<TasksBrowserTabsAnswer>(TASK_ISSUES_UNANSWERED);
-        return carried<TasksBrowserTabsAnswer>(
-          yield* served(client.readBrowserTabs(read.success.taskId)),
+        const read = yield* readParams(
+          tasksBrowserTabsParamsSchema,
+          params,
+          "reading a task's Browser tabs names the task",
         );
+        if (!gate()) return carried<TasksBrowserTabsAnswer>(TASK_ISSUES_UNANSWERED);
+        return carried<TasksBrowserTabsAnswer>(yield* served(client.readBrowserTabs(read.taskId)));
       }),
     // A tab a member opens in an agent's browser is answered to the panel
     // that asked and held nowhere, as the task's tabs are.
     [GATEWAY_METHOD.TASKS_BROWSER_TAB_OPEN]: (params) =>
       Effect.gen(function* () {
-        const read = readEither(tasksBrowserTabOpenParamsSchema)(unparsedWire(params));
-        if (Result.isFailure(read)) {
-          return yield* invalid("opening a Browser tab names the task, the agent, and the address");
-        }
-        if (!gate()) return carried<TasksBrowserTabOpenAnswer>(TASK_ISSUES_UNANSWERED);
-        return carried<TasksBrowserTabOpenAnswer>(
-          yield* served(client.openBrowserTab(read.success)),
+        const read = yield* readParams(
+          tasksBrowserTabOpenParamsSchema,
+          params,
+          "opening a Browser tab names the task, the agent, and the address",
         );
+        if (!gate()) return carried<TasksBrowserTabOpenAnswer>(TASK_ISSUES_UNANSWERED);
+        return carried<TasksBrowserTabOpenAnswer>(yield* served(client.openBrowserTab(read)));
       }),
     [GATEWAY_METHOD.TASKS_ISSUE_LINK]: (params) =>
       Effect.gen(function* () {
-        const read = readEither(tasksIssueLinkParamsSchema)(unparsedWire(params));
-        if (Result.isFailure(read)) {
-          return yield* invalid("linking an issue names the task and the issue");
-        }
+        const read = yield* readParams(
+          tasksIssueLinkParamsSchema,
+          params,
+          "linking an issue names the task and the issue",
+        );
         if (!gate()) return carried<TasksIssueLinkAnswer>(TASK_ISSUES_UNANSWERED);
-        const { taskId, issue } = read.success;
+        const { taskId, issue } = read;
         const answer = yield* served(client.linkIssue(taskId, issue));
         if ("issue" in answer) {
           const tag = issueTagOf(answer.issue);
@@ -1931,12 +1929,13 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       }),
     [GATEWAY_METHOD.TASKS_ISSUE_RELATE]: (params) =>
       Effect.gen(function* () {
-        const read = readEither(tasksIssueRelateParamsSchema)(unparsedWire(params));
-        if (Result.isFailure(read)) {
-          return yield* invalid("relating an issue names the task, the link, and its keyword");
-        }
+        const read = yield* readParams(
+          tasksIssueRelateParamsSchema,
+          params,
+          "relating an issue names the task, the link, and its keyword",
+        );
         if (!gate()) return carried<TasksIssueRelateAnswer>(TASK_ISSUES_UNANSWERED);
-        const { taskId, linkId, relation } = read.success;
+        const { taskId, linkId, relation } = read;
         const answer = yield* served(client.relateIssue(taskId, linkId, relation));
         if ("issue" in answer) {
           const tag = issueTagOf(answer.issue);
@@ -1946,12 +1945,13 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       }),
     [GATEWAY_METHOD.TASKS_ISSUE_UNLINK]: (params) =>
       Effect.gen(function* () {
-        const read = readEither(tasksIssueUnlinkParamsSchema)(unparsedWire(params));
-        if (Result.isFailure(read)) {
-          return yield* invalid("unlinking an issue names the task and the link");
-        }
+        const read = yield* readParams(
+          tasksIssueUnlinkParamsSchema,
+          params,
+          "unlinking an issue names the task and the link",
+        );
         if (!gate()) return carried<TasksIssueUnlinkAnswer>(TASK_ISSUES_UNANSWERED);
-        const { taskId, linkId } = read.success;
+        const { taskId, linkId } = read;
         const answer = yield* served(client.unlinkIssue(taskId, linkId));
         if ("unlinked" in answer) {
           yield* retag(taskId, (tags) => tags.filter((each) => each.id !== linkId));
@@ -1963,28 +1963,29 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     // what it read, and reads again as the task moves on.
     [GATEWAY_METHOD.TASKS_REVISIONS]: (params) =>
       Effect.gen(function* () {
-        const read = readEither(tasksRevisionsParamsSchema)(unparsedWire(params));
-        if (Result.isFailure(read)) {
-          return yield* invalid(
-            "reading a plan's history names the task, and where an older page is read from",
-          );
-        }
+        const read = yield* readParams(
+          tasksRevisionsParamsSchema,
+          params,
+          "reading a plan's history names the task, and where an older page is read from",
+        );
         if (!gate()) {
           return carried<TasksRevisionsAnswer>({ failure: TASK_CALL_FAILURE.UNANSWERED });
         }
-        const { taskId, before } = read.success;
+        const { taskId, before } = read;
         const page = yield* served(client.readRevisions(taskId, before));
         return carried<TasksRevisionsAnswer>(page ?? { failure: TASK_CALL_FAILURE.UNANSWERED });
       }),
     [GATEWAY_METHOD.TASKS_REVISION]: (params) =>
       Effect.gen(function* () {
-        const read = readEither(tasksRevisionParamsSchema)(unparsedWire(params));
-        if (Result.isFailure(read))
-          return yield* invalid("reading a revision names a task and its number");
+        const read = yield* readParams(
+          tasksRevisionParamsSchema,
+          params,
+          "reading a revision names a task and its number",
+        );
         if (!gate()) {
           return carried<TasksRevisionAnswer>({ failure: TASK_CALL_FAILURE.UNANSWERED });
         }
-        const revision = yield* served(client.readRevision(read.success.taskId, read.success.seq));
+        const revision = yield* served(client.readRevision(read.taskId, read.seq));
         return carried<TasksRevisionAnswer>(
           revision === undefined ? { failure: TASK_CALL_FAILURE.UNANSWERED } : { revision },
         );
@@ -1993,18 +1994,14 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     // so its HTML never enters the view every window is told.
     [GATEWAY_METHOD.TASKS_PAGE]: (params) =>
       Effect.gen(function* () {
-        const read = readEither(tasksPageParamsSchema)(unparsedWire(params));
-        if (Result.isFailure(read)) {
-          return yield* invalid(
-            "reading a page names a task or an agent, the page, and its version",
-          );
-        }
+        const read = yield* readParams(
+          tasksPageParamsSchema,
+          params,
+          "reading a page names a task or an agent, the page, and its version",
+        );
         if (!gate()) return carried<TasksPageAnswer>({ failure: TASK_CALL_FAILURE.UNANSWERED });
-        const { pageId, version } = read.success;
-        const place =
-          "taskId" in read.success
-            ? { taskId: read.success.taskId }
-            : { agentId: read.success.agentId };
+        const { pageId, version } = read;
+        const place = "taskId" in read ? { taskId: read.taskId } : { agentId: read.agentId };
         const page = yield* served(client.readPageVersion(place, pageId, version));
         return carried<TasksPageAnswer>(
           page === undefined ? { failure: TASK_CALL_FAILURE.UNANSWERED } : { page },
@@ -2017,22 +2014,24 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     // what is already followed does nothing.
     [GATEWAY_METHOD.TASKS_HISTORY_FOLLOW]: (params) =>
       Effect.gen(function* () {
-        const read = readEither(taskHistoryFollowSchema)(unparsedWire(params));
-        if (Result.isFailure(read)) {
-          return yield* invalid("following a task's history names the task");
-        }
+        const read = yield* readParams(
+          taskHistoryFollowSchema,
+          params,
+          "following a task's history names the task",
+        );
         if (!gate()) return {};
-        const { taskId } = read.success;
+        const { taskId } = read;
         yield* FiberMap.run(historyFollows, taskId, followHistory(taskId), { onlyIfMissing: true });
         return {};
       }),
     [GATEWAY_METHOD.TASKS_HISTORY_UNFOLLOW]: (params) =>
       Effect.gen(function* () {
-        const read = readEither(taskHistoryFollowSchema)(unparsedWire(params));
-        if (Result.isFailure(read)) {
-          return yield* invalid("letting a task's history go names the task");
-        }
-        yield* FiberMap.remove(historyFollows, read.success.taskId);
+        const read = yield* readParams(
+          taskHistoryFollowSchema,
+          params,
+          "letting a task's history go names the task",
+        );
+        yield* FiberMap.remove(historyFollows, read.taskId);
         return {};
       }),
     // A task's Browser tabs are followed for a window's side panel while it
@@ -2040,11 +2039,13 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     // what is already followed does nothing.
     [GATEWAY_METHOD.TASKS_BROWSER_TABS_FOLLOW]: (params) =>
       Effect.gen(function* () {
-        const read = readEither(taskBrowserTabsFollowSchema)(unparsedWire(params));
-        if (Result.isFailure(read))
-          return yield* invalid("following a task's Browser tabs names the task");
+        const read = yield* readParams(
+          taskBrowserTabsFollowSchema,
+          params,
+          "following a task's Browser tabs names the task",
+        );
         if (!gate()) return {};
-        const { taskId } = read.success;
+        const { taskId } = read;
         yield* FiberMap.run(browserTabsFollows, taskId, followBrowserTabs(taskId), {
           onlyIfMissing: true,
         });
@@ -2052,10 +2053,12 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       }),
     [GATEWAY_METHOD.TASKS_BROWSER_TABS_UNFOLLOW]: (params) =>
       Effect.gen(function* () {
-        const read = readEither(taskBrowserTabsFollowSchema)(unparsedWire(params));
-        if (Result.isFailure(read))
-          return yield* invalid("letting a task's Browser tabs go names the task");
-        yield* FiberMap.remove(browserTabsFollows, read.success.taskId);
+        const read = yield* readParams(
+          taskBrowserTabsFollowSchema,
+          params,
+          "letting a task's Browser tabs go names the task",
+        );
+        yield* FiberMap.remove(browserTabsFollows, read.taskId);
         return {};
       }),
     // A plan's pages are followed for a window's Inbox while it draws an item
@@ -2064,30 +2067,36 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     // followed does nothing.
     [GATEWAY_METHOD.TASKS_PAGES_FOLLOW]: (params) =>
       Effect.gen(function* () {
-        const read = readEither(taskPagesFollowSchema)(unparsedWire(params));
-        if (Result.isFailure(read))
-          return yield* invalid("following pages names the task or the agent");
+        const read = yield* readParams(
+          taskPagesFollowSchema,
+          params,
+          "following pages names the task or the agent",
+        );
         if (!gate()) return {};
-        yield* FiberMap.run(pagesFollows, pagePlaceId(read.success), followPages(read.success), {
+        yield* FiberMap.run(pagesFollows, pagePlaceId(read), followPages(read), {
           onlyIfMissing: true,
         });
         return {};
       }),
     [GATEWAY_METHOD.TASKS_PAGES_UNFOLLOW]: (params) =>
       Effect.gen(function* () {
-        const read = readEither(taskPagesFollowSchema)(unparsedWire(params));
-        if (Result.isFailure(read))
-          return yield* invalid("letting pages go names the task or the agent");
-        yield* FiberMap.remove(pagesFollows, pagePlaceId(read.success));
+        const read = yield* readParams(
+          taskPagesFollowSchema,
+          params,
+          "letting pages go names the task or the agent",
+        );
+        yield* FiberMap.remove(pagesFollows, pagePlaceId(read));
         return {};
       }),
     [GATEWAY_METHOD.TASKS_PAGES]: (params) =>
       Effect.gen(function* () {
-        const read = readEither(tasksPagesParamsSchema)(unparsedWire(params));
-        if (Result.isFailure(read))
-          return yield* invalid("reading pages names the task or the agent");
+        const read = yield* readParams(
+          tasksPagesParamsSchema,
+          params,
+          "reading pages names the task or the agent",
+        );
         if (!gate()) return carried<TasksPagesAnswer>({ failure: TASK_CALL_FAILURE.UNANSWERED });
-        const pages = yield* served(client.readPages(read.success));
+        const pages = yield* served(client.readPages(read));
         return carried<TasksPagesAnswer>(
           pages === undefined ? { failure: TASK_CALL_FAILURE.UNANSWERED } : { pages },
         );
@@ -2096,58 +2105,64 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     // nowhere, so they never enter the view every window is told.
     [GATEWAY_METHOD.TASKS_PICTURE]: (params) =>
       Effect.gen(function* () {
-        const read = readEither(tasksPictureParamsSchema)(unparsedWire(params));
-        if (Result.isFailure(read))
-          return yield* invalid("reading a picture names a task and the picture");
+        const read = yield* readParams(
+          tasksPictureParamsSchema,
+          params,
+          "reading a picture names a task and the picture",
+        );
         if (!gate()) {
           return carried<TasksPictureAnswer>({ failure: TASK_CALL_FAILURE.UNANSWERED });
         }
-        const picture = yield* served(
-          client.readPicture(read.success.planId, read.success.attachmentId),
-        );
+        const picture = yield* served(client.readPicture(read.planId, read.attachmentId));
         return carried<TasksPictureAnswer>(picture);
       }),
     // A plan's comments are read past the window's cursor, held by the service while nothing changed.
     [GATEWAY_METHOD.TASKS_COMMENTS]: (params) =>
       Effect.gen(function* () {
-        const read = readEither(tasksCommentsParamsSchema)(unparsedWire(params));
-        if (Result.isFailure(read))
-          return yield* invalid("reading a plan's comments names the plan and a cursor");
+        const read = yield* readParams(
+          tasksCommentsParamsSchema,
+          params,
+          "reading a plan's comments names the plan and a cursor",
+        );
         if (!gate()) return carried<TasksCommentsAnswer>({ failure: TASK_CALL_FAILURE.UNANSWERED });
-        const answer = yield* served(client.comments(read.success.planId, read.success.after));
+        const answer = yield* served(client.comments(read.planId, read.after));
         return carried<TasksCommentsAnswer>(answer);
       }),
     [GATEWAY_METHOD.TASKS_COMMENT_START]: (params) =>
       Effect.gen(function* () {
-        const read = readEither(tasksCommentStartParamsSchema)(unparsedWire(params));
-        if (Result.isFailure(read))
-          return yield* invalid("starting a comment names a plan and the thread");
+        const read = yield* readParams(
+          tasksCommentStartParamsSchema,
+          params,
+          "starting a comment names a plan and the thread",
+        );
         if (!gate()) return carried<TasksCommentAnswer>({ failure: TASK_CALL_FAILURE.UNANSWERED });
-        const answer = yield* served(client.startComment(read.success.planId, read.success.start));
+        const answer = yield* served(client.startComment(read.planId, read.start));
         return carried<TasksCommentAnswer>(answer);
       }),
     [GATEWAY_METHOD.TASKS_COMMENT_ACT]: (params) =>
       Effect.gen(function* () {
-        const read = readEither(tasksCommentActParamsSchema)(unparsedWire(params));
-        if (Result.isFailure(read))
-          return yield* invalid("changing a comment names a plan, a thread, and what to do");
-        if (!gate()) return carried<TasksCommentAnswer>({ failure: TASK_CALL_FAILURE.UNANSWERED });
-        const answer = yield* served(
-          client.actOnComment(read.success.planId, read.success.threadId, read.success.action),
+        const read = yield* readParams(
+          tasksCommentActParamsSchema,
+          params,
+          "changing a comment names a plan, a thread, and what to do",
         );
+        if (!gate()) return carried<TasksCommentAnswer>({ failure: TASK_CALL_FAILURE.UNANSWERED });
+        const answer = yield* served(client.actOnComment(read.planId, read.threadId, read.action));
         return carried<TasksCommentAnswer>(answer);
       }),
     // The picture is kept and its id answered to the editor that took it;
     // the plan's text names it once the editor lays its address in.
     [GATEWAY_METHOD.TASKS_PICTURE_KEEP]: (params) =>
       Effect.gen(function* () {
-        const read = readEither(tasksPictureKeepParamsSchema)(unparsedWire(params));
-        if (Result.isFailure(read))
-          return yield* invalid("keeping a picture names a task and the picture");
+        const read = yield* readParams(
+          tasksPictureKeepParamsSchema,
+          params,
+          "keeping a picture names a task and the picture",
+        );
         if (!gate()) {
           return carried<TasksPictureKeepAnswer>({ failure: TASK_CALL_FAILURE.UNANSWERED });
         }
-        const kept = yield* served(client.keepPicture(read.success.planId, read.success.picture));
+        const kept = yield* served(client.keepPicture(read.planId, read.picture));
         return carried<TasksPictureKeepAnswer>(kept);
       }),
     // The service answers the task as restored, so the list's row and the
@@ -2155,11 +2170,13 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     // confirmed once its transaction reached the history the window follows.
     [GATEWAY_METHOD.TASKS_RESTORE]: (params) =>
       Effect.gen(function* () {
-        const read = readEither(tasksRevisionParamsSchema)(unparsedWire(params));
-        if (Result.isFailure(read))
-          return yield* invalid("restoring a revision names a task and its number");
+        const read = yield* readParams(
+          tasksRevisionParamsSchema,
+          params,
+          "restoring a revision names a task and its number",
+        );
         if (!gate()) return { restored: false };
-        const { taskId, seq } = read.success;
+        const { taskId, seq } = read;
         const restored = yield* serial(
           Effect.gen(function* () {
             const answer = yield* served(client.restore(taskId, seq));
@@ -2190,12 +2207,13 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       }),
     [GATEWAY_METHOD.TASKS_START]: (params) =>
       Effect.gen(function* () {
-        const read = readEither(tasksStartRequestSchema)(unparsedWire(params));
-        if (Result.isFailure(read)) {
-          return yield* invalid("starting a task names it, and its repository where it has one");
-        }
+        const read = yield* readParams(
+          tasksStartRequestSchema,
+          params,
+          "starting a task names it, and its repository where it has one",
+        );
         if (!gate()) return carried<TasksStartAnswer>({ failure: TASK_CALL_FAILURE.UNANSWERED });
-        const request = read.success;
+        const request = read;
         return yield* writtenThenListed(
           Effect.gen(function* () {
             const started = yield* served(client.create(request));
@@ -2228,10 +2246,13 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     // because a call still standing would go on writing a document that is gone.
     [GATEWAY_METHOD.TASKS_DELETE]: (params) =>
       Effect.gen(function* () {
-        const read = readEither(tasksOpenParamsSchema)(unparsedWire(params));
-        if (Result.isFailure(read)) return yield* invalid("deleting a task names one task");
+        const read = yield* readParams(
+          tasksOpenParamsSchema,
+          params,
+          "deleting a task names one task",
+        );
         if (!gate()) return { deleted: false };
-        const { taskId } = read.success;
+        const { taskId } = read;
         yield* endTaskCall(taskId);
         return yield* writtenThenListed(
           Effect.gen(function* () {
@@ -2254,10 +2275,13 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     // open document take it in place and nothing is read again.
     [GATEWAY_METHOD.TASKS_RENAME]: (params) =>
       Effect.gen(function* () {
-        const read = readEither(tasksRenameParamsSchema)(unparsedWire(params));
-        if (Result.isFailure(read)) return yield* invalid("renaming a task names it and its name");
+        const read = yield* readParams(
+          tasksRenameParamsSchema,
+          params,
+          "renaming a task names it and its name",
+        );
         if (!gate()) return { renamed: false };
-        const { taskId, name } = read.success;
+        const { taskId, name } = read;
         return yield* writtenThenListed(
           Effect.gen(function* () {
             const written = yield* served(client.rename(taskId, { name }));
@@ -2282,14 +2306,13 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     // document take it in place and nothing is read again.
     [GATEWAY_METHOD.TASKS_SET_STANDING]: (params) =>
       Effect.gen(function* () {
-        const read = readEither(tasksSetStandingParamsSchema)(unparsedWire(params));
-        if (Result.isFailure(read)) {
-          return yield* invalid(
-            "setting where a task stands names it and its status, priority, or assignee",
-          );
-        }
+        const read = yield* readParams(
+          tasksSetStandingParamsSchema,
+          params,
+          "setting where a task stands names it and its status, priority, or assignee",
+        );
         if (!gate()) return { changed: false };
-        const { taskId, ...standing } = read.success;
+        const { taskId, ...standing } = read;
         return yield* writtenThenListed(
           Effect.gen(function* () {
             const changed = yield* served(client.setStanding(taskId, standing));
@@ -2301,12 +2324,13 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       }),
     [GATEWAY_METHOD.TASKS_PIN]: (params) =>
       Effect.gen(function* () {
-        const read = readEither(tasksPinParamsSchema)(unparsedWire(params));
-        if (Result.isFailure(read)) {
-          return yield* invalid("pinning a task names it and whether it is pinned");
-        }
+        const read = yield* readParams(
+          tasksPinParamsSchema,
+          params,
+          "pinning a task names it and whether it is pinned",
+        );
         if (!gate()) return { changed: false };
-        const { taskId, pinned, position } = read.success;
+        const { taskId, pinned, position } = read;
         return yield* markTask(
           taskId,
           position === undefined ? { pinned } : { pinned, pinPosition: position },
@@ -2317,12 +2341,13 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     // pin's transaction, so a delivery from before it draws nothing back.
     [GATEWAY_METHOD.TASKS_PIN_REPOSITORY]: (params) =>
       Effect.gen(function* () {
-        const read = readEither(tasksPinRepositoryParamsSchema)(unparsedWire(params));
-        if (Result.isFailure(read)) {
-          return yield* invalid("pinning a repository names it and whether it is pinned");
-        }
+        const read = yield* readParams(
+          tasksPinRepositoryParamsSchema,
+          params,
+          "pinning a repository names it and whether it is pinned",
+        );
         if (!gate()) return { changed: false };
-        const { repository, pinned } = read.success;
+        const { repository, pinned } = read;
         return yield* serial(
           Effect.gen(function* () {
             const answer = yield* served(client.pinRepository(repository, pinned));
@@ -2336,12 +2361,13 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     // The service answers the sections as they then stand, as it does the pins, and waits on the followed sidebar as a pin does.
     [GATEWAY_METHOD.TASKS_WRITE_SECTION]: (params) =>
       Effect.gen(function* () {
-        const read = readEither(tasksWriteSectionParamsSchema)(unparsedWire(params));
-        if (Result.isFailure(read)) {
-          return yield* invalid("a change to a section names what it changes");
-        }
+        const read = yield* readParams(
+          tasksWriteSectionParamsSchema,
+          params,
+          "a change to a section names what it changes",
+        );
         if (!gate()) return { changed: false };
-        const asked = read.success;
+        const asked = read;
         return yield* serial(
           Effect.gen(function* () {
             const written = yield* served(client.writeTaskSection(asked));
@@ -2358,14 +2384,15 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     // shows on the next opening.
     [GATEWAY_METHOD.TASKS_REPOSITORIES]: (params) =>
       Effect.gen(function* () {
-        const read = readEither(tasksRepositoriesParamsSchema)(unparsedWire(params));
-        if (Result.isFailure(read)) {
-          return yield* invalid("listing repositories names the workspace they are for, or none");
-        }
+        const read = yield* readParams(
+          tasksRepositoriesParamsSchema,
+          params,
+          "listing repositories names the workspace they are for, or none",
+        );
         if (!gate()) {
           return carried<TasksRepositoriesAnswer>({ failure: TASK_CALL_FAILURE.UNANSWERED });
         }
-        const listed = yield* served(client.repositories(read.success.workspaceId));
+        const listed = yield* served(client.repositories(read.workspaceId));
         return carried<TasksRepositoriesAnswer>(
           listed.ok ? { repositories: listed.answer } : { failure: listed.failure },
         );
@@ -2374,14 +2401,15 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     // open document take it in place and nothing is read again.
     [GATEWAY_METHOD.TASKS_SET_REPOSITORY]: (params) =>
       Effect.gen(function* () {
-        const read = readEither(tasksSetRepositoryParamsSchema)(unparsedWire(params));
-        if (Result.isFailure(read)) {
-          return yield* invalid("giving a task its repository names the task and the repository");
-        }
+        const read = yield* readParams(
+          tasksSetRepositoryParamsSchema,
+          params,
+          "giving a task its repository names the task and the repository",
+        );
         if (!gate()) {
           return carried<TasksSetRepositoryAnswer>({ failure: TASK_CALL_FAILURE.UNANSWERED });
         }
-        const { taskId, repository } = read.success;
+        const { taskId, repository } = read;
         return yield* writtenThenListed(
           Effect.gen(function* () {
             const changed = yield* served(client.setRepository(taskId, repository));
@@ -2403,14 +2431,15 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     // document take its workspace in place and nothing is read again.
     [GATEWAY_METHOD.TASKS_MOVE]: (params) =>
       Effect.gen(function* () {
-        const read = readEither(tasksMoveParamsSchema)(unparsedWire(params));
-        if (Result.isFailure(read)) {
-          return yield* invalid("moving a task names the task and the workspace");
-        }
+        const read = yield* readParams(
+          tasksMoveParamsSchema,
+          params,
+          "moving a task names the task and the workspace",
+        );
         if (!gate()) {
           return carried<TasksMoveAnswer>({ failure: TASK_CALL_FAILURE.UNANSWERED });
         }
-        const { taskId, workspaceId } = read.success;
+        const { taskId, workspaceId } = read;
         return yield* writtenThenListed(
           Effect.gen(function* () {
             const moved = yield* served(client.move(taskId, workspaceId));
@@ -2429,12 +2458,13 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     // the document at once and the notetaker's drafts drawn before it drop.
     [GATEWAY_METHOD.TASKS_EDIT]: (params) =>
       Effect.gen(function* () {
-        const read = readEither(tasksEditParamsSchema)(unparsedWire(params));
-        if (Result.isFailure(read)) {
-          return yield* invalid("an edit names a task, and its document's base and value");
-        }
+        const read = yield* readParams(
+          tasksEditParamsSchema,
+          params,
+          "an edit names a task, and its document's base and value",
+        );
         if (!gate()) return carried<TasksEditAnswer>({ failure: TASK_CALL_FAILURE.UNANSWERED });
-        const { taskId, edit } = read.success;
+        const { taskId, edit } = read;
         return yield* serial(
           Effect.gen(function* () {
             const edited = yield* served(client.edit(taskId, edit));
@@ -2479,28 +2509,33 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     // held nowhere, since it is other accounts' data, which no view keeps.
     [GATEWAY_METHOD.ADMIN_READ]: (params) =>
       Effect.gen(function* () {
-        const read = readEither(adminReadParamsSchema)(unparsedWire(params));
-        if (Result.isFailure(read))
-          return yield* invalid("an admin read names its procedure and query");
+        const read = yield* readParams(
+          adminReadParamsSchema,
+          params,
+          "an admin read names its procedure and query",
+        );
         if (!gate()) return carried<AdminReadAnswer>({ refused: ADMIN_UNANSWERED });
-        return carried<AdminReadAnswer>(yield* served(client.admin.read(read.success)));
+        return carried<AdminReadAnswer>(yield* served(client.admin.read(read)));
       }),
     [GATEWAY_METHOD.ADMIN_FAVORITE]: (params) =>
       Effect.gen(function* () {
-        const read = readEither(adminFavoriteParamsSchema)(unparsedWire(params));
-        if (Result.isFailure(read))
-          return yield* invalid("a star names an account and whether it is set");
-        if (!gate()) return carried<boolean>(false);
-        return carried<boolean>(
-          yield* served(client.admin.favorite(read.success.id, read.success.favorite)),
+        const read = yield* readParams(
+          adminFavoriteParamsSchema,
+          params,
+          "a star names an account and whether it is set",
         );
+        if (!gate()) return carried<boolean>(false);
+        return carried<boolean>(yield* served(client.admin.favorite(read.id, read.favorite)));
       }),
     [GATEWAY_METHOD.WORKSPACES_CREATE]: (params) =>
       Effect.gen(function* () {
-        const read = readEither(tasksWorkspaceCreateParamsSchema)(unparsedWire(params));
-        if (Result.isFailure(read)) return yield* invalid("making a workspace names it");
+        const read = yield* readParams(
+          tasksWorkspaceCreateParamsSchema,
+          params,
+          "making a workspace names it",
+        );
         if (!gate()) return carried<TasksWorkspaceAnswer>(WORKSPACE_UNANSWERED);
-        const made = yield* workspaceCall(client.workspaces.create(read.success.name));
+        const made = yield* workspaceCall(client.workspaces.create(read.name));
         return carried<TasksWorkspaceAnswer>(
           made.ok ? { workspace: made.answer } : { failure: made.failure },
         );
@@ -2509,12 +2544,13 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     // follow carries the same name a moment later.
     [GATEWAY_METHOD.WORKSPACES_RENAME]: (params) =>
       Effect.gen(function* () {
-        const read = readEither(tasksWorkspaceRenameParamsSchema)(unparsedWire(params));
-        if (Result.isFailure(read)) {
-          return yield* invalid("renaming a workspace names it and its new name");
-        }
+        const read = yield* readParams(
+          tasksWorkspaceRenameParamsSchema,
+          params,
+          "renaming a workspace names it and its new name",
+        );
         if (!gate()) return carried<TasksWorkspaceAnswer>(WORKSPACE_UNANSWERED);
-        const { workspaceId, name } = read.success;
+        const { workspaceId, name } = read;
         return carried<TasksWorkspaceAnswer>(
           yield* workspaceWrite(client.workspaces.rename(workspaceId, name)),
         );
@@ -2524,12 +2560,13 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     // read the photo by it.
     [GATEWAY_METHOD.WORKSPACES_PHOTO_SET]: (params) =>
       Effect.gen(function* () {
-        const read = readEither(tasksWorkspacePhotoSetParamsSchema)(unparsedWire(params));
-        if (Result.isFailure(read)) {
-          return yield* invalid("setting a workspace's photo names it and a photo or none");
-        }
+        const read = yield* readParams(
+          tasksWorkspacePhotoSetParamsSchema,
+          params,
+          "setting a workspace's photo names it and a photo or none",
+        );
         if (!gate()) return carried<TasksWorkspaceAnswer>(WORKSPACE_UNANSWERED);
-        const { workspaceId, photo } = read.success;
+        const { workspaceId, photo } = read;
         return carried<TasksWorkspaceAnswer>(
           yield* workspaceWrite(client.workspaces.setPhoto(workspaceId, photo)),
         );
@@ -2539,21 +2576,27 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     // the organization.
     [GATEWAY_METHOD.WORKSPACES_GITHUB_CONNECT]: (params) =>
       Effect.gen(function* () {
-        const read = readEither(tasksWorkspaceParamsSchema)(unparsedWire(params));
-        if (Result.isFailure(read)) return yield* invalid("connecting GitHub names a workspace");
+        const read = yield* readParams(
+          tasksWorkspaceParamsSchema,
+          params,
+          "connecting GitHub names a workspace",
+        );
         if (!gate()) return carried<TasksWorkspaceGitHubConnectAnswer>(WORKSPACE_UNANSWERED);
-        const begun = yield* served(client.workspaces.githubConnect(read.success.workspaceId));
+        const begun = yield* served(client.workspaces.githubConnect(read.workspaceId));
         return carried<TasksWorkspaceGitHubConnectAnswer>(
           begun.ok ? { url: begun.answer } : { failure: begun.failure },
         );
       }),
     [GATEWAY_METHOD.WORKSPACES_GITHUB_DISCONNECT]: (params) =>
       Effect.gen(function* () {
-        const read = readEither(tasksWorkspaceParamsSchema)(unparsedWire(params));
-        if (Result.isFailure(read)) return yield* invalid("disconnecting GitHub names a workspace");
+        const read = yield* readParams(
+          tasksWorkspaceParamsSchema,
+          params,
+          "disconnecting GitHub names a workspace",
+        );
         if (!gate()) return carried<TasksWorkspaceAnswer>(WORKSPACE_UNANSWERED);
         const disconnected = yield* workspaceCall(
-          client.workspaces.githubDisconnect(read.success.workspaceId),
+          client.workspaces.githubDisconnect(read.workspaceId),
         );
         return carried<TasksWorkspaceAnswer>(
           disconnected.ok ? { workspace: disconnected.answer } : { failure: disconnected.failure },
@@ -2564,21 +2607,27 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     // the connection.
     [GATEWAY_METHOD.WORKSPACES_LINEAR_CONNECT]: (params) =>
       Effect.gen(function* () {
-        const read = readEither(tasksWorkspaceParamsSchema)(unparsedWire(params));
-        if (Result.isFailure(read)) return yield* invalid("connecting Linear names a workspace");
+        const read = yield* readParams(
+          tasksWorkspaceParamsSchema,
+          params,
+          "connecting Linear names a workspace",
+        );
         if (!gate()) return carried<TasksWorkspaceGitHubConnectAnswer>(WORKSPACE_UNANSWERED);
-        const begun = yield* served(client.workspaces.linearConnect(read.success.workspaceId));
+        const begun = yield* served(client.workspaces.linearConnect(read.workspaceId));
         return carried<TasksWorkspaceGitHubConnectAnswer>(
           begun.ok ? { url: begun.answer } : { failure: begun.failure },
         );
       }),
     [GATEWAY_METHOD.WORKSPACES_LINEAR_DISCONNECT]: (params) =>
       Effect.gen(function* () {
-        const read = readEither(tasksWorkspaceParamsSchema)(unparsedWire(params));
-        if (Result.isFailure(read)) return yield* invalid("disconnecting Linear names a workspace");
+        const read = yield* readParams(
+          tasksWorkspaceParamsSchema,
+          params,
+          "disconnecting Linear names a workspace",
+        );
         if (!gate()) return carried<TasksWorkspaceAnswer>(WORKSPACE_UNANSWERED);
         const disconnected = yield* workspaceCall(
-          client.workspaces.linearDisconnect(read.success.workspaceId),
+          client.workspaces.linearDisconnect(read.workspaceId),
         );
         return carried<TasksWorkspaceAnswer>(
           disconnected.ok ? { workspace: disconnected.answer } : { failure: disconnected.failure },
@@ -2588,11 +2637,13 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     // picker reads them as it opens and as its search changes.
     [GATEWAY_METHOD.WORKSPACES_LINEAR_ISSUES]: (params) =>
       Effect.gen(function* () {
-        const read = readEither(tasksLinearIssuesParamsSchema)(unparsedWire(params));
-        if (Result.isFailure(read))
-          return yield* invalid("reading Linear issues names a workspace");
+        const read = yield* readParams(
+          tasksLinearIssuesParamsSchema,
+          params,
+          "reading Linear issues names a workspace",
+        );
         if (!gate()) return carried<TasksLinearIssuesAnswer>(WORKSPACE_UNANSWERED);
-        const listed = yield* served(client.workspaces.linearIssues(read.success));
+        const listed = yield* served(client.workspaces.linearIssues(read));
         return carried<TasksLinearIssuesAnswer>(
           listed.ok ? { issues: listed.answer } : { failure: listed.failure },
         );
@@ -2601,12 +2652,13 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     // nowhere: the row reads it as it opens and as the window comes forward.
     [GATEWAY_METHOD.WORKSPACES_SENTRY]: (params) =>
       Effect.gen(function* () {
-        const read = readEither(tasksWorkspaceParamsSchema)(unparsedWire(params));
-        if (Result.isFailure(read)) return yield* invalid("reading Sentry names a workspace");
-        if (!gate()) return carried<TasksWorkspaceSentryAnswer>(WORKSPACE_UNANSWERED);
-        const sentry = yield* served(
-          client.workspaces.sentryInstallations(read.success.workspaceId),
+        const read = yield* readParams(
+          tasksWorkspaceParamsSchema,
+          params,
+          "reading Sentry names a workspace",
         );
+        if (!gate()) return carried<TasksWorkspaceSentryAnswer>(WORKSPACE_UNANSWERED);
+        const sentry = yield* served(client.workspaces.sentryInstallations(read.workspaceId));
         return carried<TasksWorkspaceSentryAnswer>(
           sentry.ok ? { sentry: sentry.answer } : { failure: sentry.failure },
         );
@@ -2615,22 +2667,26 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     // held nowhere: the install lands in the browser.
     [GATEWAY_METHOD.WORKSPACES_SENTRY_INSTALL]: (params) =>
       Effect.gen(function* () {
-        const read = readEither(tasksWorkspaceParamsSchema)(unparsedWire(params));
-        if (Result.isFailure(read)) return yield* invalid("installing Sentry names a workspace");
+        const read = yield* readParams(
+          tasksWorkspaceParamsSchema,
+          params,
+          "installing Sentry names a workspace",
+        );
         if (!gate()) return carried<TasksWorkspaceGitHubConnectAnswer>(WORKSPACE_UNANSWERED);
-        const begun = yield* served(client.workspaces.sentryInstall(read.success.workspaceId));
+        const begun = yield* served(client.workspaces.sentryInstall(read.workspaceId));
         return carried<TasksWorkspaceGitHubConnectAnswer>(
           begun.ok ? { url: begun.answer } : { failure: begun.failure },
         );
       }),
     [GATEWAY_METHOD.WORKSPACES_SENTRY_DISCONNECT]: (params) =>
       Effect.gen(function* () {
-        const read = readEither(tasksWorkspaceSentryDisconnectParamsSchema)(unparsedWire(params));
-        if (Result.isFailure(read)) {
-          return yield* invalid("disconnecting Sentry names a workspace and an installation");
-        }
+        const read = yield* readParams(
+          tasksWorkspaceSentryDisconnectParamsSchema,
+          params,
+          "disconnecting Sentry names a workspace and an installation",
+        );
         if (!gate()) return carried<TasksWorkspaceSentryAnswer>(WORKSPACE_UNANSWERED);
-        const { workspaceId, installationId } = read.success;
+        const { workspaceId, installationId } = read;
         const sentry = yield* served(
           client.workspaces.sentryDisconnect(workspaceId, installationId),
         );
@@ -2646,44 +2702,59 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     // stand, and letting them go ends it.
     [GATEWAY_METHOD.WORKSPACES_PEOPLE_FOLLOW]: (params) =>
       Effect.gen(function* () {
-        const read = readEither(workspacePeopleFollowSchema)(unparsedWire(params));
-        if (Result.isFailure(read)) return yield* invalid("a follow names a workspace");
+        const read = yield* readParams(
+          workspacePeopleFollowSchema,
+          params,
+          "a follow names a workspace",
+        );
         if (!gate()) return {};
-        const { workspaceId } = read.success;
+        const { workspaceId } = read;
         yield* FiberMap.run(peopleFollows, workspaceId, followPeople(workspaceId));
         return {};
       }),
     [GATEWAY_METHOD.WORKSPACES_PEOPLE_UNFOLLOW]: (params) =>
       Effect.gen(function* () {
-        const read = readEither(workspacePeopleFollowSchema)(unparsedWire(params));
-        if (Result.isFailure(read)) return yield* invalid("a follow names a workspace");
-        yield* FiberMap.remove(peopleFollows, read.success.workspaceId);
+        const read = yield* readParams(
+          workspacePeopleFollowSchema,
+          params,
+          "a follow names a workspace",
+        );
+        yield* FiberMap.remove(peopleFollows, read.workspaceId);
         return {};
       }),
     // An owner's or an admin's window follows a workspace's invitations as
     // it follows its people.
     [GATEWAY_METHOD.WORKSPACES_INVITATIONS_FOLLOW]: (params) =>
       Effect.gen(function* () {
-        const read = readEither(workspacePeopleFollowSchema)(unparsedWire(params));
-        if (Result.isFailure(read)) return yield* invalid("a follow names a workspace");
+        const read = yield* readParams(
+          workspacePeopleFollowSchema,
+          params,
+          "a follow names a workspace",
+        );
         if (!gate()) return {};
-        const { workspaceId } = read.success;
+        const { workspaceId } = read;
         yield* FiberMap.run(invitationFollows, workspaceId, followInvitations(workspaceId));
         return {};
       }),
     [GATEWAY_METHOD.WORKSPACES_INVITATIONS_UNFOLLOW]: (params) =>
       Effect.gen(function* () {
-        const read = readEither(workspacePeopleFollowSchema)(unparsedWire(params));
-        if (Result.isFailure(read)) return yield* invalid("a follow names a workspace");
-        yield* FiberMap.remove(invitationFollows, read.success.workspaceId);
+        const read = yield* readParams(
+          workspacePeopleFollowSchema,
+          params,
+          "a follow names a workspace",
+        );
+        yield* FiberMap.remove(invitationFollows, read.workspaceId);
         return {};
       }),
     [GATEWAY_METHOD.WORKSPACES_MEMBERS]: (params) =>
       Effect.gen(function* () {
-        const read = readEither(tasksWorkspaceMembersParamsSchema)(unparsedWire(params));
-        if (Result.isFailure(read)) return yield* invalid("reading members names a workspace");
+        const read = yield* readParams(
+          tasksWorkspaceMembersParamsSchema,
+          params,
+          "reading members names a workspace",
+        );
         if (!gate()) return carried<TasksWorkspaceMembersAnswer>(WORKSPACE_UNANSWERED);
-        const people = yield* served(client.workspaces.people(read.success.workspaceId));
+        const people = yield* served(client.workspaces.people(read.workspaceId));
         return carried<TasksWorkspaceMembersAnswer>(
           !people.ok
             ? { failure: people.failure }
@@ -2697,10 +2768,13 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     // named, and the list itself never carries its bytes.
     [GATEWAY_METHOD.WORKSPACES_PHOTO]: (params) =>
       Effect.gen(function* () {
-        const read = readEither(tasksWorkspacePhotoParamsSchema)(unparsedWire(params));
-        if (Result.isFailure(read)) return yield* invalid("reading a photo names a workspace");
+        const read = yield* readParams(
+          tasksWorkspacePhotoParamsSchema,
+          params,
+          "reading a photo names a workspace",
+        );
         if (!gate()) return carried<TasksWorkspacePhotoAnswer>(WORKSPACE_UNANSWERED);
-        const photo = yield* served(client.workspaces.photo(read.success.workspaceId));
+        const photo = yield* served(client.workspaces.photo(read.workspaceId));
         return carried<TasksWorkspacePhotoAnswer>(
           photo.ok ? photo.answer : { failure: photo.failure },
         );
@@ -2710,26 +2784,26 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     // they move no task and no workspace the view holds.
     [GATEWAY_METHOD.WORKSPACES_TOKEN_REPOSITORIES]: (params) =>
       Effect.gen(function* () {
-        const read = readEither(tasksWorkspaceTokenRepositoriesParamsSchema)(unparsedWire(params));
-        if (Result.isFailure(read)) {
-          return yield* invalid("reading a workspace's token repositories names the workspace");
-        }
+        const read = yield* readParams(
+          tasksWorkspaceTokenRepositoriesParamsSchema,
+          params,
+          "reading a workspace's token repositories names the workspace",
+        );
         if (!gate()) return carried<TasksWorkspaceTokenRepositoriesAnswer>(WORKSPACE_UNANSWERED);
-        const listed = yield* served(client.workspaces.tokenRepositories(read.success.workspaceId));
+        const listed = yield* served(client.workspaces.tokenRepositories(read.workspaceId));
         return carried<TasksWorkspaceTokenRepositoriesAnswer>(
           listed.ok ? { repositories: listed.answer } : { failure: listed.failure },
         );
       }),
     [GATEWAY_METHOD.WORKSPACES_TOKEN_REPOSITORY_SET]: (params) =>
       Effect.gen(function* () {
-        const read = readEither(tasksWorkspaceTokenRepositorySetParamsSchema)(unparsedWire(params));
-        if (Result.isFailure(read)) {
-          return yield* invalid(
-            "adding or removing a token repository names the workspace, the repository, and which",
-          );
-        }
+        const read = yield* readParams(
+          tasksWorkspaceTokenRepositorySetParamsSchema,
+          params,
+          "adding or removing a token repository names the workspace, the repository, and which",
+        );
         if (!gate()) return carried<TasksWorkspaceTokenRepositoriesAnswer>(WORKSPACE_UNANSWERED);
-        const { workspaceId, repository, added } = read.success;
+        const { workspaceId, repository, added } = read;
         const changed = yield* served(
           client.workspaces.setTokenRepository(workspaceId, repository, added),
         );
@@ -2739,12 +2813,13 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       }),
     [GATEWAY_METHOD.WORKSPACES_MEMBER_REMOVE]: (params) =>
       Effect.gen(function* () {
-        const read = readEither(tasksWorkspaceMemberRemoveParamsSchema)(unparsedWire(params));
-        if (Result.isFailure(read)) {
-          return yield* invalid("removing a member names the workspace and the member");
-        }
+        const read = yield* readParams(
+          tasksWorkspaceMemberRemoveParamsSchema,
+          params,
+          "removing a member names the workspace and the member",
+        );
         if (!gate()) return carried<TasksWorkspaceMembersAnswer>(WORKSPACE_UNANSWERED);
-        const { workspaceId, userId } = read.success;
+        const { workspaceId, userId } = read;
         const remaining = yield* workspaceCall(client.workspaces.removeMember(workspaceId, userId));
         return carried<TasksWorkspaceMembersAnswer>(
           remaining.ok ? { members: remaining.answer } : { failure: remaining.failure },
@@ -2753,12 +2828,13 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     // A role changed moves no task; the follow carries it, as a removal's.
     [GATEWAY_METHOD.WORKSPACES_MEMBER_ROLE]: (params) =>
       Effect.gen(function* () {
-        const read = readEither(tasksWorkspaceMemberRoleParamsSchema)(unparsedWire(params));
-        if (Result.isFailure(read)) {
-          return yield* invalid("changing a role names the workspace, the member, and the role");
-        }
+        const read = yield* readParams(
+          tasksWorkspaceMemberRoleParamsSchema,
+          params,
+          "changing a role names the workspace, the member, and the role",
+        );
         if (!gate()) return carried<TasksWorkspaceMembersAnswer>(WORKSPACE_UNANSWERED);
-        const { workspaceId, userId, role } = read.success;
+        const { workspaceId, userId, role } = read;
         const changed = yield* workspaceCall(
           client.workspaces.changeRole(workspaceId, userId, role),
         );
@@ -2771,12 +2847,13 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     // drawn from, and which the follow carries; it moves no task.
     [GATEWAY_METHOD.WORKSPACES_TRANSFER]: (params) =>
       Effect.gen(function* () {
-        const read = readEither(tasksWorkspaceTransferParamsSchema)(unparsedWire(params));
-        if (Result.isFailure(read)) {
-          return yield* invalid("handing a workspace over names it and the admin");
-        }
+        const read = yield* readParams(
+          tasksWorkspaceTransferParamsSchema,
+          params,
+          "handing a workspace over names it and the admin",
+        );
         if (!gate()) return carried<TasksWorkspaceMembersAnswer>(WORKSPACE_UNANSWERED);
-        const { workspaceId, userId } = read.success;
+        const { workspaceId, userId } = read;
         const handedOver = yield* workspaceCall(client.workspaces.transfer(workspaceId, userId));
         return carried<TasksWorkspaceMembersAnswer>(
           handedOver.ok ? { members: handedOver.answer } : { failure: handedOver.failure },
@@ -2789,10 +2866,13 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     // ends and closes nothing.
     [GATEWAY_METHOD.WORKSPACES_LEAVE]: (params) =>
       Effect.gen(function* () {
-        const read = readEither(tasksWorkspaceLeaveParamsSchema)(unparsedWire(params));
-        if (Result.isFailure(read)) return yield* invalid("leaving a workspace names it");
+        const read = yield* readParams(
+          tasksWorkspaceLeaveParamsSchema,
+          params,
+          "leaving a workspace names it",
+        );
         if (!gate()) return carried<TasksWorkspaceLeaveAnswer>(WORKSPACE_UNANSWERED);
-        const { workspaceId } = read.success;
+        const { workspaceId } = read;
         const openTaskId = view.activeTaskId;
         const openWorkspaceId = view.tasks.find((task) => task.id === openTaskId)?.workspaceId;
         const departedTaskIds = view.tasks
@@ -2831,22 +2911,26 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     // and moves no workspace or task, so nothing else is read with it.
     [GATEWAY_METHOD.WORKSPACES_INVITATIONS]: (params) =>
       Effect.gen(function* () {
-        const read = readEither(tasksWorkspaceParamsSchema)(unparsedWire(params));
-        if (Result.isFailure(read)) return yield* invalid("reading invitations names a workspace");
+        const read = yield* readParams(
+          tasksWorkspaceParamsSchema,
+          params,
+          "reading invitations names a workspace",
+        );
         if (!gate()) return carried<TasksWorkspaceInvitationsAnswer>(WORKSPACE_UNANSWERED);
-        const pending = yield* served(client.workspaces.invitations(read.success.workspaceId));
+        const pending = yield* served(client.workspaces.invitations(read.workspaceId));
         return carried<TasksWorkspaceInvitationsAnswer>(
           pending.ok ? { invitations: pending.answer } : { failure: pending.failure },
         );
       }),
     [GATEWAY_METHOD.WORKSPACES_INVITE]: (params) =>
       Effect.gen(function* () {
-        const read = readEither(tasksWorkspaceInviteParamsSchema)(unparsedWire(params));
-        if (Result.isFailure(read)) {
-          return yield* invalid("an invitation names a workspace, an address, and a role");
-        }
+        const read = yield* readParams(
+          tasksWorkspaceInviteParamsSchema,
+          params,
+          "an invitation names a workspace, an address, and a role",
+        );
         if (!gate()) return carried<TasksWorkspaceInvitationAnswer>(WORKSPACE_UNANSWERED);
-        const { workspaceId, email, role } = read.success;
+        const { workspaceId, email, role } = read;
         const made = yield* served(client.workspaces.invite(workspaceId, email, role));
         return carried<TasksWorkspaceInvitationAnswer>(
           made.ok ? { invitation: made.answer } : { failure: made.failure },
@@ -2854,12 +2938,13 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       }),
     [GATEWAY_METHOD.WORKSPACES_INVITATION_CANCEL]: (params) =>
       Effect.gen(function* () {
-        const read = readEither(tasksWorkspaceInvitationCancelParamsSchema)(unparsedWire(params));
-        if (Result.isFailure(read)) {
-          return yield* invalid("canceling an invitation names the workspace and the invitation");
-        }
+        const read = yield* readParams(
+          tasksWorkspaceInvitationCancelParamsSchema,
+          params,
+          "canceling an invitation names the workspace and the invitation",
+        );
         if (!gate()) return carried<TasksWorkspaceInvitationsAnswer>(WORKSPACE_UNANSWERED);
-        const { workspaceId, invitationId } = read.success;
+        const { workspaceId, invitationId } = read;
         const pending = yield* served(
           client.workspaces.cancelInvitation(workspaceId, invitationId),
         );
@@ -2870,10 +2955,12 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     // A save of another task than the open one is dropped: its board is not drawn.
     [GATEWAY_METHOD.TASKS_BOARD_SAVE]: (params) =>
       Effect.gen(function* () {
-        const read = readEither(tasksBoardSaveParamsSchema)(unparsedWire(params));
-        if (Result.isFailure(read))
-          return yield* invalid("saving a board names a task and its scene");
-        const { taskId, elements, appliedDrawing, image } = read.success;
+        const read = yield* readParams(
+          tasksBoardSaveParamsSchema,
+          params,
+          "saving a board names a task and its scene",
+        );
+        const { taskId, elements, appliedDrawing, image } = read;
         if (!gate() || view.activeTaskId !== taskId) return { saved: false };
         const sent = yield* serial(
           Effect.gen(function* () {

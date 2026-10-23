@@ -1,67 +1,7 @@
 import { harnessNameOf } from "@luke/features/agent-runtime-models";
 import { MODEL_PROVIDER } from "@luke/features/models-wire";
-import {
-  AgentPlaceholderIcon,
-  ArchiveIcon,
-  ArrowDownIcon,
-  ArrowLeftIcon,
-  ArrowRightIcon,
-  ArrowUpIcon,
-  BackIcon,
-  BoardIcon,
-  CallIcon,
-  CheckIcon,
-  ChevronDownIcon,
-  ChevronRightIcon,
-  CloseIcon,
-  CodeIcon,
-  CollapseIcon,
-  ComposeIcon,
-  CopyIcon,
-  DisplayIcon,
-  DocumentIcon,
-  DownloadIcon,
-  EllipsisIcon,
-  ExpandIcon,
-  ExternalIcon,
-  FolderIcon,
-  ForwardIcon,
-  GearIcon,
-  HarnessMark,
-  ImageIcon,
-  KeyboardIcon,
-  LaptopIcon,
-  MARK_PROVIDER,
-  McpIcon,
-  MicrophoneIcon,
-  MicrophoneOffIcon,
-  PencilIcon,
-  PinIcon,
-  PlayIcon,
-  PlugIcon,
-  PlusIcon,
-  PROVIDER_MARK_SIZE,
-  ProviderMark,
-  RemoveIcon,
-  ResetIcon,
-  ReturnIcon,
-  SearchIcon,
-  SidebarIcon,
-  SidePanelIcon,
-  SpeakerIcon,
-  SpeakerOffIcon,
-  StopIcon,
-  TerminalIcon,
-  TrashIcon,
-  UnarchiveIcon,
-  UnpinIcon,
-  UpdateIcon,
-  UserIcon,
-  VideoIcon,
-  VideoOffIcon,
-  WaveformIcon,
-  WingFace,
-} from "@luke/ui";
+import * as ui from "@luke/ui";
+import { HarnessMark, MARK_PROVIDER, PROVIDER_MARK_SIZE, ProviderMark, WingFace } from "@luke/ui";
 import codexOneX from "../../../../packages/panel/marks/codex-16.png";
 import codexTwoX from "../../../../packages/panel/marks/codex-32.png";
 import codexThreeX from "../../../../packages/panel/marks/codex-48.png";
@@ -77,64 +17,16 @@ import { CatalogSection } from "../section";
 /** Codex's picture as the desktop serves it, from the panel's own files. */
 const CODEX_ART = { oneX: codexOneX, twoX: codexTwoX, threeX: codexThreeX };
 
-/** Every glyph `face/glyphs.tsx` draws, by the name it is exported under. */
-const GLYPHS = Object.entries({
-  AgentPlaceholderIcon,
-  ArchiveIcon,
-  ArrowDownIcon,
-  ArrowLeftIcon,
-  ArrowRightIcon,
-  ArrowUpIcon,
-  BackIcon,
-  BoardIcon,
-  CallIcon,
-  CheckIcon,
-  ChevronDownIcon,
-  ChevronRightIcon,
-  CloseIcon,
-  CodeIcon,
-  CollapseIcon,
-  ComposeIcon,
-  CopyIcon,
-  DisplayIcon,
-  DocumentIcon,
-  DownloadIcon,
-  EllipsisIcon,
-  ExpandIcon,
-  ExternalIcon,
-  FolderIcon,
-  ForwardIcon,
-  GearIcon,
-  ImageIcon,
-  KeyboardIcon,
-  LaptopIcon,
-  McpIcon,
-  MicrophoneIcon,
-  MicrophoneOffIcon,
-  PencilIcon,
-  PinIcon,
-  PlayIcon,
-  PlugIcon,
-  PlusIcon,
-  RemoveIcon,
-  ResetIcon,
-  ReturnIcon,
-  SearchIcon,
-  SidePanelIcon,
-  SidebarIcon,
-  SpeakerIcon,
-  SpeakerOffIcon,
-  StopIcon,
-  TerminalIcon,
-  TrashIcon,
-  UnarchiveIcon,
-  UnpinIcon,
-  UpdateIcon,
-  UserIcon,
-  VideoIcon,
-  VideoOffIcon,
-  WaveformIcon,
-});
+/** A glyph's name as `@luke/ui` exports it: every glyph ends in `Icon`, a heading's starts with `Heading`. */
+type GlyphName = Extract<keyof typeof ui, `${string}Icon` | `Heading${string}`>;
+
+/** Whether an export of the package is a glyph, by the name it is exported under. */
+function isGlyph(entry: [string, unknown]): entry is [GlyphName, (typeof ui)[GlyphName]] {
+  return entry[0].endsWith("Icon") || entry[0].startsWith("Heading");
+}
+
+/** Every glyph `face/glyphs.tsx` draws, by the name it is exported under, read off the package so none is left out. */
+const GLYPHS = Object.entries(ui).filter(isGlyph);
 
 function Artwork(): React.JSX.Element {
   return (

@@ -132,8 +132,6 @@
   --agent-pointer: rgba(107, 111, 118, 0.9);
   --agent-pointer-on-dark: rgba(206, 209, 214, 0.92);
   --agent-pointer-halo: rgba(0, 0, 0, 0.2);
-  /* How far a label cut short fades out at its end, in place of an ellipsis. */
-  --label-fade: 20px;
 }
 
 /* Pierre's diff and file tree each ask for `color-scheme: light dark` in

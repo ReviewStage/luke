@@ -10,8 +10,8 @@ import {
   workspaceChatLiveRowsSchema,
   workspaceChatOfLiveRows,
 } from "@luke/features/live-wire";
-import { Duration, Effect, Option, Schema, Stream } from "effect";
-import { LiveBroken, type LiveClient, liveRows, type TxWait } from "./live-follow.js";
+import { Duration, Effect, Stream } from "effect";
+import { decodedLiveRows, LiveBroken, type LiveClient, type TxWait } from "./live-follow.js";
 
 /**
  * chat-follow.ts -- a workspace's chat followed over Neon Realtime: joined once, sealed, and each change told whole.
@@ -84,24 +84,23 @@ function tellLive(
   dependencies: ChatFollowDependencies,
   first: WorkspaceChatLiveAnswer,
 ): Effect.Effect<void, LiveBroken> {
-  const decode = Schema.decodeUnknownOption(workspaceChatLiveRowsSchema);
-  const rows = liveRows(
+  const rows = decodedLiveRows(
     {
       openLive: dependencies.openLive,
       reseal: () => resealed(dependencies, false),
       poll: (after) => resealed(dependencies, true, after),
       now: dependencies.now,
-      ...(dependencies.onTxWait === undefined ? {} : { onTxWait: dependencies.onTxWait }),
+      onTxWait: dependencies.onTxWait,
     },
     first,
+    workspaceChatLiveRowsSchema,
   );
   return Stream.runForEach(rows, (read) => {
-    const chat = Option.map(decode(read), workspaceChatOfLiveRows);
-    if (Option.isNone(chat)) return Effect.fail(new LiveBroken({ reason: "a row did not decode" }));
-    if (chat.value === undefined) {
+    const chat = workspaceChatOfLiveRows(read);
+    if (chat === undefined) {
       return Effect.fail(new LiveBroken({ reason: "the reader is no longer in the chat" }));
     }
-    return dependencies.tell(chat.value);
+    return dependencies.tell(chat);
   });
 }
 

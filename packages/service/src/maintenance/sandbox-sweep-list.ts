@@ -1,5 +1,5 @@
 /**
- * sandbox-sweep-list.ts -- how the scheduled sandbox sweeps read the project's running sandboxes: which end of the list, how many pages, and which of them to read this minute.
+ * sandbox-sweep-list.ts -- how the scheduled sandbox sweeps read the project's running sandboxes: which end of the list, how many pages, and which of them to read this minute; and how each stops one within its bound.
  *
  * The native and the eve sweeps list the same Vercel project and bound a
  * minute the same way: a few pages of the running sandboxes, and a set
@@ -12,12 +12,27 @@
  */
 
 import { Effect, Result } from "effect";
+import { OPEN_INTERNET_POLICY } from "../agents/terminal/agent-sandbox.js";
 import {
   LIST_ORDER,
   type ListedSandbox,
   type ListOrder,
   type VercelSandboxApi,
 } from "../agents/vercel-sandbox-api.js";
+
+/** How a stop within a sweep's bound ended: stopped, refused by Vercel, or left for the next sweep past the bound. */
+const BUDGETED_STOP = {
+  STOPPED: "stopped",
+  FAILED: "failed",
+  DEFERRED: "deferred",
+} as const;
+
+type BudgetedStop = (typeof BUDGETED_STOP)[keyof typeof BUDGETED_STOP];
+
+/** A count of stops taken, shared by the sandboxes one sweep reads at once. */
+export interface StopBudget {
+  remaining: number;
+}
 
 /** How long an end of the list is listed from before the other end is: a sweep runs each minute, and the order alternates. */
 const ORDER_PERIOD_MS = 60_000;
@@ -86,3 +101,31 @@ export function windowAt<Listed>(found: readonly Listed[], width: number, now: D
   const start = (sweepsFromThisEnd * width) % found.length;
   return [...found.slice(start), ...found.slice(0, start)].slice(0, width);
 }
+
+/**
+ * One running sandbox stopped, where the sweep's bound of stops still has
+ * room; past it the sandbox is deferred to the next sweep. A stop Vercel
+ * refuses is logged under the words naming the sandbox, and answered failed.
+ */
+export const stopWithinBudget = (
+  api: VercelSandboxApi,
+  running: string,
+  budget: StopBudget,
+  named: string,
+): Effect.Effect<BudgetedStop> =>
+  Effect.gen(function* () {
+    if (budget.remaining <= 0) return BUDGETED_STOP.DEFERRED;
+    budget.remaining -= 1;
+    // The credential comes off first, and a sandbox it would not come off is left up for the next sweep rather than stopped with it.
+    const stopped = yield* Effect.result(
+      Effect.andThen(
+        api.updateNetworkPolicy(running, OPEN_INTERNET_POLICY),
+        api.stopSession(running),
+      ),
+    );
+    if (Result.isFailure(stopped)) {
+      yield* Effect.logWarning(`${named} was not stopped: ${stopped.failure.message}`);
+      return BUDGETED_STOP.FAILED;
+    }
+    return BUDGETED_STOP.STOPPED;
+  });

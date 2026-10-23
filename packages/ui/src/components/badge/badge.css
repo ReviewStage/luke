@@ -138,11 +138,11 @@
   /* A filled badge's words cut short fade out over their last few pixels,
      at their own end: the left, where they read right to left. */
   .luke-badge-line[data-overflow="true"] {
-    mask-image: linear-gradient(to left, transparent, #000 20px); /* off-scale: a label's fade */
+    mask-image: linear-gradient(to left, transparent, #000 var(--luke-label-fade));
   }
 
   .luke-badge-line[data-overflow="true"]:dir(rtl) {
-    mask-image: linear-gradient(to right, transparent, #000 20px); /* off-scale: a label's fade */
+    mask-image: linear-gradient(to right, transparent, #000 var(--luke-label-fade));
   }
 
   /* Lit, the reader's own, it stands in the ink as a pressed filter chip
