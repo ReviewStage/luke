@@ -21,6 +21,7 @@ import {
   TURN_ROW,
   type TurnRow,
 } from "@luke/features/turn-rows";
+import { keySpansIn } from "@luke/features/workspace-key";
 import {
   DISCLOSURE_BODY,
   DISCLOSURE_LOOK,
@@ -58,6 +59,7 @@ import {
   type MarkdownComponents,
   type MarkdownNodeProps,
   type MarkdownSteps,
+  markdownStep,
   TRANSCRIPT_REMARK_STEPS,
 } from "@luke/ui/markdown";
 import { TAB_WORDS } from "@luke/ui/tab-strip-model";
@@ -154,6 +156,7 @@ import {
   TRANSCRIPT_CODE_AND_TABLE_COMPONENTS,
   TranscriptMarkdownSource,
 } from "./transcript-markdown.js";
+import { useTaskKeyTargets } from "./use-known-names.js";
 import { opensAsLink, useOpenLink } from "./use-open-link.js";
 import { type CutBody, WHOLE_PART } from "./whole-parts.js";
 import { WorkingTime } from "./working-time.js";
@@ -411,6 +414,90 @@ function markLoneLinks(tree: MarkdownNode, definitions: ReadonlyMap<string, Mark
   }
 }
 
+/**
+ * What a task's key written among the words stands as once it is marked:
+ * a node of its own rather than a link of markdown's, so it is drawn as its
+ * task's chip (`MentionElement`) and held with its punctuation as a mention
+ * is, yet never read as a link standing alone in its paragraph, which a
+ * document draws as a card.
+ */
+const KEY_NODE = "taskKey";
+
+/** The nodes whose words hold no key: code, which is read literally, links and pictures, which already go somewhere, raw HTML, and a key already marked. */
+const KEYLESS_NODES: ReadonlySet<string> = new Set([
+  "code",
+  "inlineCode",
+  "link",
+  "linkReference",
+  "definition",
+  "image",
+  "imageReference",
+  "html",
+  KEY_NODE,
+]);
+
+/** A run of text with each key `targets` holds in it marked as its task's chip, the words between left as they were. */
+function keyedRun(text: MarkdownNode, targets: ReadonlyMap<string, string>): MarkdownNode[] {
+  const value = text.value ?? "";
+  const spans = keySpansIn(value, targets);
+  if (spans.length === 0) return [text];
+  const run: MarkdownNode[] = [];
+  let from = 0;
+  for (const span of spans) {
+    if (span.start > from) run.push({ type: "text", value: value.slice(from, span.start) });
+    run.push({
+      type: KEY_NODE,
+      data: { hName: MENTION_ELEMENT.TAG, hProperties: { [MENTION_ELEMENT.TARGET]: span.known } },
+      children: [{ type: "text", value: span.key }],
+    });
+    from = span.end;
+  }
+  if (from < value.length) run.push({ type: "text", value: value.slice(from) });
+  return run;
+}
+
+/**
+ * Marks each listed task's key written among the words (`ACME-42`) to be
+ * drawn as that task's chip, which says the key as written, wears the
+ * task's status, and hangs its card. Note that the words themselves are
+ * left as written, so an agent reading them reads the key, and that a key
+ * in code, a link, or a picture's words is left alone.
+ */
+function markTaskKeys(node: MarkdownNode, targets: ReadonlyMap<string, string>): void {
+  if (node.children === undefined || KEYLESS_NODES.has(node.type)) return;
+  node.children = node.children.flatMap((child) => {
+    if (child.type === "text") return keyedRun(child, targets);
+    markTaskKeys(child, targets);
+    return [child];
+  });
+}
+
+/** A serial for each set of keys the words were read with, which a transcript is drawn again under once the set changes. */
+const keySerials = new WeakMap<ReadonlyMap<string, string>, number>();
+
+/** How many sets of keys have been seen, the last one's serial. */
+let keySetsSeen = 0;
+
+/**
+ * The serial of a set of keys, counted from one as each is first seen.
+ * Note that a transcript is drawn again under it, because its library reads
+ * each block of words once and does not read it again for a change of
+ * steps alone, so words drawn before the tasks were listed would never
+ * chip a key; the set changes only as a key does (`useTaskKeyTargets`).
+ */
+function keySerial(targets: ReadonlyMap<string, string>): number {
+  const held = keySerials.get(targets);
+  if (held !== undefined) return held;
+  keySetsSeen += 1;
+  keySerials.set(targets, keySetsSeen);
+  return keySetsSeen;
+}
+
+/** The step that marks the listed tasks' keys among the words, named apart as every step is. */
+function markTaskKeysStep(targets: ReadonlyMap<string, string>): (tree: MarkdownNode) => void {
+  return (tree) => markTaskKeys(tree, targets);
+}
+
 /** The step that marks a transcript's links and its pictures, a reference's read through its definition, and holds each mention with its punctuation. */
 function markLinks(tree: MarkdownNode): void {
   const definitions = definitionsIn(tree);
@@ -476,32 +563,27 @@ function markDocumentStep(): (tree: MarkdownNode) => void {
   return markDocument;
 }
 
-/** The markdown steps a transcript is read with: the library's own, then the mark on its links. */
-const TRANSCRIPT_REMARK_PLUGINS = [...TRANSCRIPT_REMARK_STEPS, markLinksStep];
-
-/** The steps words drawn as a document are read with: a transcript's, with the document's own marks. */
-const DOCUMENT_REMARK_PLUGINS = [...TRANSCRIPT_REMARK_STEPS, markDocumentStep];
-
 /**
- * The steps a message someone typed is read with: a transcript's, with each
- * line break typed kept as one. Note that Markdown joins two lines with no
- * blank line between them into one, which is right for words a model wrote
- * and wrong for words a person typed line by line into a box whose Enter is
- * a new line, as GitHub keeps a comment's line breaks for the same reason.
+ * The steps words are read with: the library's own; for words a person
+ * typed, each line break typed kept as one; the listed tasks' keys, where
+ * any are known; then the marks on its links, a document's own marks among
+ * them where the words are drawn as one. Note that Markdown joins two lines
+ * with no blank line between them into one, which is right for words a
+ * model wrote and wrong for words a person typed line by line into a box
+ * whose Enter is a new line, as GitHub keeps a comment's line breaks for the
+ * same reason.
  */
-const TYPED_REMARK_PLUGINS = [...TRANSCRIPT_REMARK_STEPS, remarkBreaks, markLinksStep];
-
-/** The steps a document someone typed is read with: a typed message's, with the document's own marks. */
-const TYPED_DOCUMENT_REMARK_PLUGINS = [
-  ...TRANSCRIPT_REMARK_STEPS,
-  remarkBreaks,
-  markDocumentStep,
-];
-
-/** The steps words are read with, by whether a person typed them and whether they are drawn as a document. */
-function remarkPluginsFor(typed: boolean, asDocument: boolean) {
-  if (asDocument) return typed ? TYPED_DOCUMENT_REMARK_PLUGINS : DOCUMENT_REMARK_PLUGINS;
-  return typed ? TYPED_REMARK_PLUGINS : TRANSCRIPT_REMARK_PLUGINS;
+function remarkPluginsFor(
+  typed: boolean,
+  asDocument: boolean,
+  keyTargets: ReadonlyMap<string, string>,
+): MarkdownSteps {
+  return [
+    ...TRANSCRIPT_REMARK_STEPS,
+    ...(typed ? [remarkBreaks] : []),
+    ...(keyTargets.size === 0 ? [] : [markdownStep(markTaskKeysStep, keyTargets)]),
+    asDocument ? markDocumentStep : markLinksStep,
+  ];
 }
 
 /**
@@ -715,19 +797,24 @@ export function TranscriptWords({
 }: {
   text: string;
   element?: TranscriptElement | undefined;
-  /** Whether a person typed the words, whose every line break is kept (`TYPED_REMARK_PLUGINS`). */
+  /** Whether a person typed the words, whose every line break is kept (`remarkPluginsFor`). */
   typed?: boolean | undefined;
   /** Whether the words are drawn as a document, as an Inbox item's are: pictures written next to each other side by side, and a link alone in its paragraph as its card (`lone-link-card.tsx`). */
   asDocument?: boolean | undefined;
   /** Whether the words are still being written, as a running turn's newest are. */
   streaming?: boolean | undefined;
 }): ReactNode {
-  const remarkPlugins = remarkPluginsFor(typed, asDocument);
+  const keyTargets = useTaskKeyTargets();
+  const remarkPlugins = useMemo(
+    () => remarkPluginsFor(typed, asDocument, keyTargets),
+    [typed, asDocument, keyTargets],
+  );
   const { components, allowedTags, literal } = useElementDraw(element);
   // Note that the source stays the words as written, because a code block's copy reads it.
   return (
     <TranscriptMarkdownSource markdown={text}>
       <MessageResponse
+        key={keySerial(keyTargets)}
         words={element === undefined ? text : element.markdown}
         streaming={streaming}
         components={components}
