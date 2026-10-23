@@ -69,7 +69,7 @@ import { isOperator } from "./steward.js";
 import { workspaceStepOf, writtenMention } from "./written-mentions.js";
 
 /** How much the desk and the asks read hold. */
-export const OPERATOR_DESK = {
+const OPERATOR_DESK = {
   /** The most rows a section of the desk shows; the rest are counted. */
   ROWS: 8,
   /** The most of the workspace's agents, newest first, the desk reads its member's from. */
@@ -105,7 +105,7 @@ export const LIST_OPEN_ASKS_TOOL = {
 } as const;
 
 /** One section of the desk: its heading, and every row it holds, of which it shows `OPERATOR_DESK.ROWS`. */
-export interface DeskSection {
+interface DeskSection {
   readonly heading: string;
   readonly rows: readonly string[];
   /** Where the rows past the cap are read whole. */
@@ -167,7 +167,7 @@ function sectionText(section: DeskSection): string {
  * The desk as a turn's message carries it, behind its lead: each section
  * that holds a row, or a line saying none holds one.
  */
-export function deskText(sections: readonly DeskSection[]): string {
+function deskText(sections: readonly DeskSection[]): string {
   const held = sections.filter((section) => section.rows.length > 0);
   const body =
     held.length === 0
@@ -219,7 +219,7 @@ const memberAgentsOf = (operator: CodingAgent) =>
  * and ready, and the threads waiting in their inbox. Read as the operator's
  * member, so a workspace they have left reads as nothing standing.
  */
-export const readDeskSections = (
+const readDeskSections = (
   operator: CodingAgent,
 ): Effect.Effect<readonly DeskSection[], StoreFailure, DatabaseServices> =>
   Effect.gen(function* () {

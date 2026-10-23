@@ -157,7 +157,7 @@ export interface BrowserStanding {
 }
 
 /** A recording stopped, as the sandbox answered it: the video's length, its bytes, and the absolute path it stays at in the sandbox; or why there is none. */
-export type BrowserRecordingRead =
+type BrowserRecordingRead =
   | {
       readonly ok: true;
       readonly seconds: number;

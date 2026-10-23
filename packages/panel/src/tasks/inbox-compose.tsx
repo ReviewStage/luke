@@ -77,7 +77,7 @@ interface ComposeDraft {
 const EMPTY_DRAFT: ComposeDraft = { subject: "", note: "", attachments: [] };
 
 /** A started thread, and the agent it went to, whose task the Inbox opens it under. */
-export interface InboxStarted {
+interface InboxStarted {
   readonly item: InboxItem;
   readonly agent: MentionableAgent;
 }

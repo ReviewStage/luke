@@ -244,7 +244,7 @@ const DOOR_FAILED_RESULT: McpToolCallResult = {
 };
 
 /** The doors to an admitted agent's sandbox, which the edge composes on its own runner (`sandbox-door.ts`). */
-export type LukeMcpSandboxDoor = (admitted: AdmittedConversation) => AgentSandboxDoors;
+type LukeMcpSandboxDoor = (admitted: AdmittedConversation) => AgentSandboxDoors;
 
 /** The agent's browser as the edge composes it (`../browser/agent-browser.ts`'s `agentBrowserServices`), over the runtime's HTTP client. */
 export type LukeMcpBrowser = Layer.Layer<AgentBrowser, never, HttpClient.HttpClient>;

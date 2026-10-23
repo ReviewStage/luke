@@ -1153,7 +1153,7 @@ export const taskSkillsSchema = EffectSchema.Struct({
   ),
 });
 
-export type TaskSkills = typeof taskSkillsSchema.Type;
+type TaskSkills = typeof taskSkillsSchema.Type;
 
 /**
  * The query a skills read carries to ask for the member's installed skills

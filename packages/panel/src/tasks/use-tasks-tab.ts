@@ -571,7 +571,7 @@ export interface NewTaskPreset {
  * repository, the issues linked, the model on its chip, and the press it
  * made, whose key a Retry asking the same carries again.
  */
-export interface NewTaskCardKept {
+interface NewTaskCardKept {
   /** What the card started, which it opens again for; a task's agent where none is named. */
   readonly purpose?: NewTaskPurpose;
   readonly repository: string | null;

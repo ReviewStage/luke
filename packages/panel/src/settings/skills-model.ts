@@ -108,7 +108,7 @@ export function workspaceGroupTitle(workspace: Pick<Workspace, "name">): string 
 }
 
 /** "Everyone in Stage": the dialog's workspace scope, named for the workspace. */
-export function everyoneIn(workspace: Pick<Workspace, "name">): string {
+function everyoneIn(workspace: Pick<Workspace, "name">): string {
   return `Everyone in ${workspace.name}`;
 }
 
@@ -125,7 +125,7 @@ function filesText(count: number): string {
 }
 
 /** Where a skill's files came from: `owner/repo @ 3f9c2e1`, or Pasted. */
-export function sourceLine(source: InstalledSkillSource): string {
+function sourceLine(source: InstalledSkillSource): string {
   if (source.type === INSTALLED_SKILL_SOURCE.TEXT) return SKILLS_LINE.PASTED;
   return `${source.owner}/${source.repo} @ ${source.sha.slice(0, SHORT_SHA)}`;
 }

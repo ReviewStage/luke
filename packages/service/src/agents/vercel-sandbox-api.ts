@@ -84,7 +84,7 @@ const SANDBOX_API = {
 export const COMMAND_GONE = "gone";
 
 /** A command's exit code, null while it runs, or gone (`COMMAND_GONE`). */
-export type CommandExit = number | null | typeof COMMAND_GONE;
+type CommandExit = number | null | typeof COMMAND_GONE;
 
 /** Which of the API's calls was made, as a failure names it. */
 export const SANDBOX_CALL = {

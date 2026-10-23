@@ -401,7 +401,7 @@ const ATTACHMENT_MODE = 0o644;
 const ATTACHMENT_NAME_CHARS = 80;
 
 /** A message line and the files it names, which are written into the running session before the line. */
-export interface RunnerMessage {
+interface RunnerMessage {
   readonly line: InputLine & { readonly uuid: string };
   readonly files: readonly SandboxFile[];
 }

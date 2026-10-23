@@ -88,7 +88,7 @@ const INSTALLED_SKILL_COLUMNS = {
 };
 
 /** One file of an installed skill: its path from the skill's folder, its bytes, and their hex SHA-256. */
-export interface InstalledSkillFile {
+interface InstalledSkillFile {
   readonly path: string;
   readonly bytes: Uint8Array;
   readonly sha256: string;
@@ -125,7 +125,7 @@ export interface NewInstalledSkill extends InstalledSkillRevision {
 }
 
 /** What an account asks to do with an installed skill: read and use it, or change, toggle, and remove it. */
-export const INSTALLED_SKILL_ACCESS = {
+const INSTALLED_SKILL_ACCESS = {
   READ: "read",
   MANAGE: "manage",
 } as const;
