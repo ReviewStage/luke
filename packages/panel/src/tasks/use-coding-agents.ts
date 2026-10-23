@@ -613,6 +613,12 @@ export function useCodingAgents(input: {
   agentId?: string | undefined;
   /** The open task's repository, or null while it names none. */
   repository: string | null;
+  /**
+   * Every agent on a task, the archived ones left out, as the task list
+   * followed live carries them; none where it is not followed, or does not
+   * list the open task.
+   */
+  listedAgents?: readonly CodingAgentSummary[] | undefined;
   /** Opens Settings on its Integrations page. */
   onOpenIntegrations: () => void;
   /** Opens Settings on its Agents page. */
@@ -689,7 +695,16 @@ export function useCodingAgents(input: {
     () => (started === undefined ? undefined : { agentId: started.agent.id, line: started.line }),
     [started],
   );
-  const agents = useMemo(() => held?.filter((agent) => agent.archivedAt === undefined), [held]);
+  // Note that until the list is read, the task's agents the followed task list carries stand as its
+  // live agents, so the column draws at once; the read adds the archived ones, which only it holds.
+  const { listedAgents } = input;
+  const listedHere = useMemo(
+    () =>
+      taskId === undefined ? undefined : listedAgents?.filter((agent) => agent.planId === taskId),
+    [listedAgents, taskId],
+  );
+  const shown = held ?? listedHere;
+  const agents = useMemo(() => shown?.filter((agent) => agent.archivedAt === undefined), [shown]);
   const archivedAgents = useMemo(
     () => held?.filter((agent) => agent.archivedAt !== undefined),
     [held],

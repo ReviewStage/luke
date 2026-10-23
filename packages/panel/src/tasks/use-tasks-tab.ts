@@ -1570,6 +1570,9 @@ export function useTasksTab(input: {
     taskId: fixture === undefined ? viewed.activeTaskId : undefined,
     repository:
       openDocument?.id === viewed.activeTaskId ? (openDocument?.repository ?? null) : null,
+    listedAgents: tasks.tasks.some((task) => task.id === viewed.activeTaskId)
+      ? tasks.taskAgents
+      : undefined,
     onOpenIntegrations: input.onOpenIntegrations,
     onOpenApiKeys: input.onOpenApiKeys,
     me: input.accountId,
