@@ -414,7 +414,13 @@ export function useTaskMenu(
   tasks: TasksControl,
   taskId: string,
   name: string,
-  doors: { rename: () => void; drawn: boolean; unread: boolean },
+  doors: {
+    rename: () => void;
+    drawn: boolean;
+    unread: boolean;
+    /** Groups drawn over the task's own, read as the menu is drawn, as a phone's header leads its ⋯ with the task's views; none elsewhere. */
+    lead?: (() => readonly (readonly MenuEntry[])[]) | undefined;
+  },
 ) {
   const task = taskOf(tasks, taskId);
   const reads = useReadMarks();
@@ -442,22 +448,25 @@ export function useTaskMenu(
         label="Task actions"
         menu={drawn}
         footer={task === undefined ? undefined : <TaskMenuFooter tasks={tasks} task={task} />}
-        groups={withRowMoves(
-          taskActionGroups(tasks, taskId, {
-            rename: doors.rename,
-            askDelete: deletion.ask,
-            askMove: moving.ask,
-            copy,
-            section,
-            read: {
-              unread: doors.unread,
-              onMark: (unread) => {
-                if (task !== undefined) reads.mark(task, unread);
+        groups={[
+          ...(doors.lead?.() ?? []),
+          ...withRowMoves(
+            taskActionGroups(tasks, taskId, {
+              rename: doors.rename,
+              askDelete: deletion.ask,
+              askMove: moving.ask,
+              copy,
+              section,
+              read: {
+                unread: doors.unread,
+                onMark: (unread) => {
+                  if (task !== undefined) reads.mark(task, unread);
+                },
               },
-            },
-          }),
-          place,
-        )}
+            }),
+            place,
+          ),
+        ]}
         onClose={close}
       />
     );
@@ -494,6 +503,7 @@ export function TaskActions({
   task,
   button,
   onRename,
+  lead,
 }: {
   tasks: TasksControl;
   task: TaskSummary;
@@ -501,12 +511,15 @@ export function TaskActions({
   button: boolean;
   /** Opens the toolbar's title as the task's name field. */
   onRename: () => void;
+  /** Groups the menu leads with over the task's own, read as it is drawn: a phone's views of the task, and what the tab shown offers (`task-pane-switcher.tsx`). */
+  lead?: (() => readonly (readonly MenuEntry[])[]) | undefined;
 }): React.JSX.Element {
   // Note that the open plan is unread only by a mark by hand, since its saves are seen as they land.
   const actions = useTaskMenu(tasks, task.id, task.name, {
     rename: onRename,
     drawn: button,
     unread: useReadMarks().markedUnread(task.id),
+    lead,
   });
   const { deletion } = actions;
   const asking = confirmAsked(deletion.stage);

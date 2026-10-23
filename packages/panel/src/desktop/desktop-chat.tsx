@@ -1069,7 +1069,7 @@ function ChatView({
       <div className="chat-view">
         <nav className="chat-rail" aria-label={CHAT_LIST} style={{ width: railWidth }}>
           {/* Note that New channel stands but takes no press until the chat is read, since a channel opened against no chat would go nowhere. */}
-          <RailBar onNew={undefined} viewOptions={undefined} />
+          <RailBar onNew={undefined} viewOptions={undefined} narrow={room === SHELL_ROOM.NARROW} />
           {standIn}
         </nav>
         {dialogs.dialog}
@@ -1121,6 +1121,7 @@ function ChatView({
         style={{ width: railWidth }}
       >
         <RailBar
+          narrow={room === SHELL_ROOM.NARROW}
           onNew={dialogs.askNew}
           viewOptions={
             <ChatViewOptions
@@ -1186,10 +1187,13 @@ function ChatView({
 function RailBar({
   onNew,
   viewOptions,
+  narrow,
 }: {
   /** Opens New channel's question; none while no chat is read, which leaves the press disabled. */
   onNew: (() => void) | undefined;
   viewOptions: React.ReactNode;
+  /** Whether the room is a phone's, whose tag is the experiment's glyph alone. */
+  narrow: boolean;
 }): React.JSX.Element {
   return (
     <header className="desktop-toolbar chat-rail-bar">
@@ -1201,7 +1205,7 @@ function RailBar({
         >
           {CHAT_LIST}
         </OneLine>
-        <ExperimentTag />
+        <ExperimentTag narrow={narrow} />
       </div>
       <div className="desktop-toolbar-actions">
         {viewOptions}

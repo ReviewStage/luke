@@ -972,6 +972,7 @@ export const PlanBody = memo(function PlanBody({
   agents,
   standing: taskStanding,
   underTitle,
+  titleActions = true,
 }: {
   task: Task;
   live: boolean;
@@ -996,6 +997,8 @@ export const PlanBody = memo(function PlanBody({
   standing?: TaskStandingDoor;
   /** What the task's own page draws under its status and priority, over its byline, as its linked issues; nothing elsewhere. */
   underTitle?: React.ReactNode;
+  /** Whether the title draws its ⋯; a phone's task draws none, its header's ⋯ holding all it offers (`task-pane-switcher.tsx`). */
+  titleActions?: boolean;
 }): React.JSX.Element {
   const { views, behind, jumps } = useTaskChase(task, live, reader);
   const editable = onEdit !== undefined;
@@ -1288,7 +1291,7 @@ export const PlanBody = memo(function PlanBody({
     );
   const titled = editable && onRename !== undefined;
   const titleMenu =
-    linked === undefined || page !== undefined ? null : (
+    !titleActions || linked === undefined || page !== undefined ? null : (
       <TitleMenu
         linked={linked}
         // Note that a document that cannot be edited has no block Tab stop, so the ⋯ is one.
