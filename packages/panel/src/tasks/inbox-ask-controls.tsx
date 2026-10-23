@@ -8,6 +8,7 @@ import {
   type InboxChoice,
   type InboxField,
   type InboxForm,
+  recommendedLabels,
 } from "@luke/features/inbox-wire";
 import {
   Badge,
@@ -19,6 +20,8 @@ import {
   Checkbox,
   ChoiceList,
   type ChoiceOption,
+  COMPOSER_LOOK,
+  ComposerFrame,
   type FieldControl,
   FormField,
   GAP,
@@ -27,8 +30,6 @@ import {
   Stack,
   TEXT_FIELD_TYPE,
   TextField,
-  COMPOSER_LOOK,
-  ComposerFrame,
 } from "@luke/ui";
 import type { Actor } from "@luke/ui/actor-model";
 import { CheckIcon, CircleSlashIcon, Undo2Icon } from "lucide-react";
@@ -77,7 +78,7 @@ const CHOICE_LEGEND = "Options";
 /** The badge an option the agent recommends wears, a choice's or a form's select's. */
 const RECOMMENDED = "Recommended";
 
-/** A choice's options as `@luke/ui`'s ChoiceList draws them, the one the agent recommends wearing its badge. */
+/** A choice's options as `@luke/ui`'s ChoiceList draws them, each the agent recommends wearing its badge. */
 export function choiceOptions(
   options: readonly { label: string; detail?: string | undefined; recommended: boolean }[],
 ): ChoiceOption<string>[] {
@@ -117,7 +118,7 @@ export function ChoiceOptions({
   readOnly = false,
   onDraft,
 }: {
-  choice: Pick<InboxChoice, "options" | "multiple" | "recommended">;
+  choice: Pick<InboxChoice, "options" | "multiple" | "recommended" | "recommendations">;
   draft: InboxDraft;
   disabled: boolean;
   numbered?: boolean;
@@ -127,7 +128,7 @@ export function ChoiceOptions({
   const options = choiceOptions(
     choice.options.map((option) => ({
       ...option,
-      recommended: choice.recommended === option.label,
+      recommended: recommendedLabels(choice).includes(option.label),
     })),
   );
   return (

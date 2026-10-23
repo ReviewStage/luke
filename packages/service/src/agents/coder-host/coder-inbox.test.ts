@@ -302,6 +302,18 @@ it.layer(getTestDB())("the coding agent's inbox", (it) => {
             INBOX_REFUSAL.NO_OPTIONS,
           ],
           [decide({ ...QUEUE.ask, recommended: "Kafka" }), INBOX_REFUSAL.UNKNOWN_RECOMMENDATION],
+          [
+            decide({ ...QUEUE.ask, multiple: true, recommended: ["Redis", "Kafka"] }),
+            INBOX_REFUSAL.UNKNOWN_RECOMMENDATION,
+          ],
+          [
+            decide({ ...QUEUE.ask, recommended: ["Postgres outbox", "Redis"] }),
+            INBOX_REFUSAL.SEVERAL_RECOMMENDED,
+          ],
+          [
+            decide({ ...QUEUE.ask, multiple: true, recommended: ["Redis", "Redis"] }),
+            INBOX_REFUSAL.SEVERAL_RECOMMENDED,
+          ],
           [answer([{ type: INBOX_FIELD.SELECT, label: "Channel" }]), INBOX_REFUSAL.SELECT_OPTIONS],
           [
             answer([
@@ -343,6 +355,45 @@ it.layer(getTestDB())("the coding agent's inbox", (it) => {
         yield* post(agent, answer([channel]));
         const item = yield* onlyItem(agent);
         assert.deepEqual(item.response, { type: INBOX_RESPONSE.FORM, fields: [channel] });
+      }),
+  );
+
+  it.effect(
+    "a decide that takes several recommends several, kept as its first label and every label, and a list of one is kept as its label",
+    () =>
+      Effect.gen(function* () {
+        const agent = yield* openAgent;
+        const options = [{ label: "Email" }, { label: "Slack" }, { label: "SMS" }];
+        yield* post(agent, {
+          key: "invite-channels",
+          title: "Which channels send invitations?",
+          body: "Pick any.",
+          ask: { type: INBOX_ASK.DECIDE, options, multiple: true, recommended: ["Slack", "Email"] },
+        });
+        const several = yield* onlyItem(agent);
+        const kept = {
+          type: INBOX_ASK.DECIDE,
+          options,
+          multiple: true,
+          recommended: "Slack",
+          recommendations: ["Slack", "Email"],
+        };
+        assert.deepEqual(openAsk(several).ask, { ...kept, status: INBOX_ASK_STATUS.OPEN });
+        assert.deepEqual(several.response, { ...kept, type: INBOX_RESPONSE.CHOICE });
+
+        yield* TestClock.adjust(Duration.seconds(1));
+        yield* post(agent, {
+          key: "invite-channels",
+          body: "Only one, then.",
+          ask: { type: INBOX_ASK.DECIDE, options, recommended: ["SMS"] },
+        });
+        const one = yield* onlyItem(agent);
+        assert.deepEqual(openAsk(one).ask, {
+          type: INBOX_ASK.DECIDE,
+          options,
+          recommended: "SMS",
+          status: INBOX_ASK_STATUS.OPEN,
+        });
       }),
   );
 

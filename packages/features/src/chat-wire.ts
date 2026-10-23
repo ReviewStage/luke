@@ -20,6 +20,9 @@ import {
   inboxOptionSchema,
   inboxReplyRefusal,
   inboxWordBlockSchema,
+  keptRecommendation,
+  RECOMMENDED_FIELDS,
+  recommendedInputSchema,
 } from "./inbox-wire.js";
 import { countedNumber, wireUuidSchema } from "./service-wire.js";
 
@@ -60,6 +63,8 @@ export {
   inboxBlockSchema as chatBlockSchema,
   /** @public */
   inboxImageTypeSchema as chatImageTypeSchema,
+  /** @public */
+  recommendedLabels,
 } from "./inbox-wire.js";
 
 /**
@@ -315,23 +320,18 @@ export const chatTargetSchema = EffectSchema.String.check(
   EffectSchema.isPattern(new RegExp(`^(?:${CHANNEL_TARGET}|${MEMBER_TARGET})$`, "u")),
 );
 
-/**
- * What an ask asks for, one of six, as the Inbox asked before its version 5:
- * a choice among options, several where `multiple`, the label it recommends
- * named; an approval; words, with what the box says while empty; a task; a
- * form of fields; or nothing but an acknowledgement.
- * @public
- */
-export const chatResponseSchema = EffectSchema.Union([
-  EffectSchema.Struct({
-    type: EffectSchema.Literal(CHAT_ASK.CHOICE),
-    options: EffectSchema.Array(inboxOptionSchema).check(
-      EffectSchema.isMinLength(2),
-      EffectSchema.isMaxLength(CHAT_BOUNDS.MAX_OPTIONS),
-    ),
-    multiple: EffectSchema.optionalKey(EffectSchema.Boolean),
-    recommended: EffectSchema.optionalKey(EffectSchema.String),
-  }),
+/** A choice's own keys but its recommendation: two to six options, several to be picked where `multiple`. */
+const CHOICE_FIELDS = {
+  type: EffectSchema.Literal(CHAT_ASK.CHOICE),
+  options: EffectSchema.Array(inboxOptionSchema).check(
+    EffectSchema.isMinLength(2),
+    EffectSchema.isMaxLength(CHAT_BOUNDS.MAX_OPTIONS),
+  ),
+  multiple: EffectSchema.optionalKey(EffectSchema.Boolean),
+};
+
+/** The responses but a choice, kept as they are posted. */
+const OTHER_RESPONSES = [
   EffectSchema.Struct({ type: EffectSchema.Literal(CHAT_ASK.APPROVAL) }),
   EffectSchema.Struct({
     type: EffectSchema.Literal(CHAT_ASK.TEXT),
@@ -346,10 +346,31 @@ export const chatResponseSchema = EffectSchema.Union([
     ),
   }),
   EffectSchema.Struct({ type: EffectSchema.Literal(CHAT_ASK.NONE) }),
+] as const;
+
+/**
+ * What an ask asks for as it is kept, one of six, as the Inbox asked before
+ * its version 5: a choice among options, several where `multiple`, the
+ * labels it recommends named; an approval; words, with what the box says
+ * while empty; a task; a form of fields; or nothing but an acknowledgement.
+ * @public
+ */
+export const chatResponseSchema = EffectSchema.Union([
+  EffectSchema.Struct({ ...CHOICE_FIELDS, ...RECOMMENDED_FIELDS }),
+  ...OTHER_RESPONSES,
 ]);
 
 /** @public */
 export type ChatResponse = typeof chatResponseSchema.Type;
+
+/** What an ask asks for as its poster states it: one it is kept as, but a choice's recommendation one label or a list of them. */
+const chatResponseInputSchema = EffectSchema.Union([
+  EffectSchema.Struct({
+    ...CHOICE_FIELDS,
+    recommended: EffectSchema.optionalKey(recommendedInputSchema),
+  }),
+  ...OTHER_RESPONSES,
+]);
 
 /**
  * A choice as an ask asks it, with the options an answer must name.
@@ -439,9 +460,9 @@ export function knownBlock(block: ChatReadBlock): block is InboxBlock {
 }
 
 /**
- * An ask as its poster states it: the response it asks for, a one-line
- * title where the message's words are not its heading, and whether the
- * poster needs to hear back, which it does unless it says not.
+ * An ask as it is kept: the response it asks for, a one-line title where
+ * the message's words are not its heading, and whether the poster needs to
+ * hear back, which it does unless it says not.
  */
 export const chatAskSchema = EffectSchema.Struct({
   title: EffectSchema.optionalKey(filledText(CHAT_BOUNDS.MAX_TITLE_CHARS)),
@@ -450,6 +471,22 @@ export const chatAskSchema = EffectSchema.Struct({
 });
 
 export type ChatAsk = typeof chatAskSchema.Type;
+
+/** An ask as its poster states it: one it is kept as, but a choice's recommendation one label or a list of them. */
+export const chatAskInputSchema = EffectSchema.Struct({
+  ...chatAskSchema.fields,
+  response: chatResponseInputSchema,
+});
+
+type ChatAskInput = typeof chatAskInputSchema.Type;
+
+/** A posted ask as its message keeps it: a choice's recommendation its first label and, where several, every one. */
+export function keptChatAsk(ask: ChatAskInput): ChatAsk {
+  const response = ask.response;
+  if (response.type !== CHAT_ASK.CHOICE) return { ...ask, response };
+  const { recommended: _recommended, ...rest } = response;
+  return { ...ask, response: { ...rest, ...keptRecommendation(response) } };
+}
 
 const postFields = {
   text: filledText(CHAT_BOUNDS.MAX_TEXT_CHARS),
@@ -518,7 +555,7 @@ export const postChatAskInputSchema = EffectSchema.Struct({
   /** What a topic channel `to` opens is for; nothing where the post opens none. */
   purpose: EffectSchema.optionalKey(chatPurposeSchema),
   key: EffectSchema.optionalKey(inboxKeySchema),
-  ask: EffectSchema.optionalKey(chatAskSchema),
+  ask: EffectSchema.optionalKey(chatAskInputSchema),
   blocks: EffectSchema.optionalKey(chatPostBlocksSchema),
 }).check(EffectSchema.makeFilter(askKeyed), EffectSchema.makeFilter(oneDestination));
 

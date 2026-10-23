@@ -41,6 +41,7 @@ import {
   inboxReplyRefusal,
   knownBlock,
   knownResponse,
+  recommendedLabels,
 } from "@luke/features/inbox-wire";
 import { LINK_PLACE, type ReadLink, readLink } from "@luke/features/luke-link";
 import { insideCode, linksIn } from "@luke/features/mention-link";
@@ -967,7 +968,7 @@ export function proposedOptions(item: InboxItem): readonly ProposedOption[] {
     return response.options.map((option) => ({
       label: option.label,
       ...(option.detail === undefined ? undefined : { detail: option.detail }),
-      recommended: response.recommended === option.label,
+      recommended: recommendedLabels(response).includes(option.label),
       picked: chosen.includes(option.label),
     }));
   }
@@ -1105,9 +1106,15 @@ function contextWords(item: InboxItem): string | undefined {
   return undefined;
 }
 
+/** How many of a choice's options are recommended, as its row's preview says it after the count of them: nothing for none. */
+function recommendedWords(count: number): string {
+  if (count === 0) return "";
+  return count === 1 ? ", one recommended" : `, ${count} recommended`;
+}
+
 /**
  * What an open item asks, as its row says it before anyone has written on
- * it: a choice by how many options it offers and whether one is
+ * it: a choice by how many options it offers and how many of them are
  * recommended, a form by its fields, and anything else by its kind and the
  * first words of its context.
  */
@@ -1116,9 +1123,11 @@ function asksWords(item: InboxItem): string {
   if (!knownResponse(response)) return ASKS_NEWER;
   const kind = ASKS_WORDS[response.type];
   if (response.type === INBOX_RESPONSE.CHOICE) {
-    const recommended = response.options.some((option) => option.label === response.recommended);
+    const recommended = response.options.filter((option) =>
+      recommendedLabels(response).includes(option.label),
+    ).length;
     const options = counted(response.options.length, "option");
-    return `${kind}${PREVIEW_PART}${options}${recommended ? ", one recommended" : ""}`;
+    return `${kind}${PREVIEW_PART}${options}${recommendedWords(recommended)}`;
   }
   if (response.type === INBOX_RESPONSE.FORM) {
     return `${kind}${PREVIEW_PART}${counted(response.fields.length, "field")}`;
@@ -1449,7 +1458,9 @@ function askLine(ask: InboxKnownAsk, ticked: readonly number[]): string {
   switch (ask.type) {
     case INBOX_ASK.DECIDE:
       return ask.options
-        .map((option) => (option.label === ask.recommended ? `${option.label} ★` : option.label))
+        .map((option) =>
+          recommendedLabels(ask).includes(option.label) ? `${option.label} ★` : option.label,
+        )
         .join(" / ");
     case INBOX_ASK.DO: {
       const steps = ask.steps.map((step) => plainWords(step));

@@ -1,4 +1,9 @@
-import { INBOX_ASK, INBOX_STATUS, type InboxItem } from "@luke/features/inbox-wire";
+import {
+  INBOX_ASK,
+  INBOX_STATUS,
+  type InboxItem,
+  recommendedLabels,
+} from "@luke/features/inbox-wire";
 import { LINK_PLACE } from "@luke/features/luke-link";
 import type { CatalogModel } from "@luke/features/models-wire";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
@@ -609,7 +614,7 @@ function HolderRef({ holder }: { holder: InboxHolder }): React.JSX.Element {
   );
 }
 
-/** An open ask as an item's card shows it in full: a choice's options, the recommended one marked; a to-do's steps, ticked as the reader's draft ticks them; or what a form or an answer asks. */
+/** An open ask as an item's card shows it in full: a choice's options, each recommended one marked; a to-do's steps, ticked as the reader's draft ticks them; or what a form or an answer asks. */
 function CardAsk({
   ask,
   ticked,
@@ -630,7 +635,7 @@ function CardAsk({
                 glyph={<CircleIcon aria-hidden="true" />}
                 label={option.label}
                 end={
-                  option.label === ask.recommended ? (
+                  recommendedLabels(ask).includes(option.label) ? (
                     <Badge tone={BADGE_TONE.ATTENTION}>{RECOMMENDED}</Badge>
                   ) : undefined
                 }

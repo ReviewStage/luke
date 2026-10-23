@@ -9274,6 +9274,19 @@ it.layer(getTestDB())("the coding agent's chat tools", (it) => {
           }),
           refused(ASK_REFUSAL.UNKNOWN_RECOMMENDATION),
         );
+        for (const recommended of [
+          { recommended: ["Postgres outbox", "Redis"] },
+          { multiple: true, recommended: ["Redis", "Redis"] },
+        ]) {
+          assert.deepEqual(
+            yield* chat.post(chat.first, {
+              ...QUEUE_ASK,
+              key: "several",
+              ask: { response: { ...QUEUE_ASK.ask.response, ...recommended } },
+            }),
+            refused(ASK_REFUSAL.SEVERAL_RECOMMENDED),
+          );
+        }
         const channel = {
           type: CHAT_FIELD.SELECT,
           label: "Channel",
@@ -9342,6 +9355,36 @@ it.layer(getTestDB())("the coding agent's chat tools", (it) => {
         assert.deepEqual(
           read.asks.map((ask) => ask.key),
           ["invite-channel", QUEUE_ASK.key],
+        );
+      }),
+  );
+
+  it.effect(
+    "a choice that takes several recommends several, kept as its first label and every label",
+    () =>
+      Effect.gen(function* () {
+        const chat = yield* openAgents();
+        const asked = yield* chat.post(chat.first, {
+          ...QUEUE_ASK,
+          ask: {
+            response: {
+              ...QUEUE_ASK.ask.response,
+              multiple: true,
+              recommended: ["Redis", "Postgres outbox"],
+            },
+          },
+        });
+        assert.ok("asks" in asked && asked.asks !== undefined);
+        assert.deepEqual(
+          asked.asks.map((ask) => ask.response),
+          [
+            {
+              ...QUEUE_ASK.ask.response,
+              multiple: true,
+              recommended: "Redis",
+              recommendations: ["Redis", "Postgres outbox"],
+            },
+          ],
         );
       }),
   );
