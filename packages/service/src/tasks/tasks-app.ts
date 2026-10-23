@@ -1,6 +1,7 @@
 import type { DatabaseServices } from "@luke/database/core/query";
 import { readPlanAttachment } from "@luke/database/models/plan-attachments";
 import { readPlanCommentFile } from "@luke/database/models/plan-comments";
+import { HTTP_METHOD } from "@luke/wire";
 import { Effect, Layer, Option } from "effect";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
@@ -32,10 +33,6 @@ import { ANY_METHOD, type WebRoutes } from "../route.js";
 const TASKS_PATH = {
   /** GET serves one attachment of the plan as its bytes; the rewrite moves the path's ids into the `id` and `attachment` queries. */
   ATTACHMENT: "/api/plans/attachment",
-} as const;
-
-const HTTP_METHOD = {
-  GET: "GET",
 } as const;
 
 const TASK_ID_QUERY = "id";

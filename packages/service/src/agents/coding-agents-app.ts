@@ -4,6 +4,7 @@ import { readConversationPicture } from "@luke/database/models/conversation-pict
 import { childConversationId } from "@luke/database/models/ids";
 import { codingAgentCallIdSchema } from "@luke/features/coding-agent-wire";
 import { githubImageOf } from "@luke/features/github-image";
+import { HTTP_METHOD } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import { Effect, Layer, Option, Result } from "effect";
 import { type HttpClient, HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
@@ -48,10 +49,6 @@ const AGENTS_PATH = {
   INBOX_ATTACHMENT: "/api/inbox/attachment",
   /** GET serves one picture a tool answered the agent, or one of its workers where the query names the delegation call; the rewrite moves the agent id into the `id` query, the call into `call`, and the picture into `picture`. */
   PICTURE: "/api/agents/picture",
-} as const;
-
-const HTTP_METHOD = {
-  GET: "GET",
 } as const;
 
 const QUERY = {
