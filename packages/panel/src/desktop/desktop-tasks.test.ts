@@ -14,11 +14,15 @@ import {
   PULL_REQUEST_STATE,
 } from "@luke/features/coding-agent-wire";
 import {
+  INBOX_ASK,
+  INBOX_ASK_STATUS,
+  INBOX_MESSAGE_AUTHOR,
   INBOX_REPLY,
-  INBOX_RESPONSE,
   INBOX_STATUS,
   INBOX_WIRE_VERSION,
   type InboxItem,
+  type InboxMessage,
+  type InboxReadAsk,
 } from "@luke/features/inbox-wire";
 import { PLAN_ACTOR, type Task } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
@@ -333,6 +337,31 @@ test("a plan's Inbox tab whose read holds nothing says nothing needs you under t
   container.remove();
 });
 
+/** The agent's message opening an item's thread, by the item's id, asking `ask` where it asks. */
+function agentMessage(itemId: string, at: number, ask?: InboxMessage["ask"]): InboxMessage {
+  return {
+    id: askOf(itemId),
+    author: INBOX_MESSAGE_AUTHOR.AGENT,
+    text: "Invites expire after 24 hours today.",
+    ...(ask === undefined ? undefined : { ask }),
+    createdAt: at,
+  };
+}
+
+/** The id of the agent's message opening an item's thread, by the item's id. */
+function askOf(itemId: string): string {
+  return `e${itemId.slice(1)}`;
+}
+
+/** An approval as an ask, Approve or Decline, standing as `status` says. */
+function approvalAsk(status: InboxReadAsk["status"]): InboxMessage["ask"] {
+  return {
+    type: INBOX_ASK.DECIDE,
+    options: [{ label: "Approve" }, { label: "Decline" }],
+    status,
+  };
+}
+
 /** An item of the plan's agent, open and asking for an approval, as the service answers one. */
 function approvalItem(id: string, title: string, at: number): InboxItem {
   return {
@@ -342,10 +371,9 @@ function approvalItem(id: string, title: string, at: number): InboxItem {
     revision: 1,
     version: INBOX_WIRE_VERSION,
     title,
-    blocks: [],
-    response: { type: INBOX_RESPONSE.APPROVAL },
     needsReply: true,
     status: INBOX_STATUS.OPEN,
+    thread: [agentMessage(id, at, approvalAsk(INBOX_ASK_STATUS.OPEN))],
     postedAt: at,
     updatedAt: at,
   };
@@ -523,7 +551,16 @@ function approvedItem(id: string, title: string, at: number): InboxItem {
   return {
     ...approvalItem(id, title, at),
     status: INBOX_STATUS.ANSWERED,
-    answer: { reply: INBOX_REPLY.APPROVED },
+    thread: [
+      agentMessage(id, at, approvalAsk(INBOX_ASK_STATUS.ANSWERED)),
+      {
+        id: `f${id.slice(1)}`,
+        author: INBOX_MESSAGE_AUTHOR.MEMBER,
+        text: "",
+        answers: { ask: askOf(id), reply: INBOX_REPLY.CHOSE, choices: ["Approve"] },
+        createdAt: at,
+      },
+    ],
   };
 }
 
@@ -1085,7 +1122,7 @@ test("a plan's own Inbox acknowledges the reader's own notice as it opens it, an
   });
   const notice = (id: string, title: string, at: number): InboxItem => ({
     ...approvalItem(id, title, at),
-    response: { type: INBOX_RESPONSE.NONE },
+    thread: [agentMessage(id, at)],
     needsReply: false,
     revision: 3,
   });
@@ -1106,7 +1143,8 @@ test("a plan's own Inbox acknowledges the reader's own notice as it opens it, an
     for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
   });
   assert.equal(inbox.title(), "The preview is up");
-  const sent = () => answered.map(({ itemId, revision, reply }) => ({ itemId, revision, reply }));
+  // Note that a nod carries its item, the revision shown, and the nod alone, under a key of the window's own.
+  const sent = () => answered.map(({ clientKey: _key, ...nod }) => nod);
   assert.deepEqual(sent(), [{ itemId: OWN.id, revision: 3, reply: INBOX_REPLY.ACKNOWLEDGED }]);
 
   await act(async () => inbox.row("The migration ran")?.click());

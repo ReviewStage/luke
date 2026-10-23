@@ -75,7 +75,7 @@ import { TOOL_TARGET, type ToolTarget } from "../tasks/tool-call-model.js";
 import { useHeldInboxList } from "../tasks/use-held-inbox-list.js";
 import { useInboxReadMarks, useNodOnOpen, useReadOnOpen } from "../tasks/use-inbox-read-marks.js";
 import type { MainTab } from "../tasks/use-main-tabs.js";
-import { OpenHereProvider, openPullRequestsHere, useOpenLink } from "../tasks/use-open-link.js";
+import { OpenHereProvider, openPullRequestsHere } from "../tasks/use-open-link.js";
 import type { PlanEditDoor } from "../tasks/use-plan-editing.js";
 import { PULL_REQUEST_VIEW, SIDE_PANEL_TAB, type SidePanelTab } from "../tasks/use-side-panel.js";
 import { type TaskInboxControl, useTaskInbox } from "../tasks/use-task-inbox.js";
@@ -337,7 +337,6 @@ function TaskInboxTab({
   inbox,
   onOpenTask,
   onOpenAgent,
-  openLink,
   code,
 }: {
   tasks: TasksControl;
@@ -345,7 +344,6 @@ function TaskInboxTab({
   inbox: TaskInboxControl;
   onOpenTask: () => void;
   onOpenAgent: (agentId: string) => void;
-  openLink: (url: string) => void;
   code: InboxCodeDoors;
 }): React.JSX.Element {
   const now = useMinute();
@@ -487,7 +485,6 @@ function TaskInboxTab({
             onOpenHolder: onOpenTask,
             taskCard: taskCardOf(tasks, task, now),
             onOpenAgent,
-            openLink,
             code,
             onMark: marks.onMark,
             onClose: closeItem,
@@ -554,7 +551,6 @@ function PlanDocument({
   const views = useTabViews();
   const chatOn = useChatOn();
   const { act } = useAct();
-  const openLink = useOpenLink();
   const inboxTaskId = region.kind === DOCUMENT_REGION.READY ? region.task.id : undefined;
   const inbox = useTaskInbox({
     taskId: inboxTaskId,
@@ -1001,9 +997,6 @@ function PlanDocument({
   const terminalHere = agentOfTab(
     sideFocused && sidePanel.tab !== undefined ? sidePanel.tab : mainTabs.tab,
   );
-  const openTaskLink = (href: string) => {
-    if (!openHere(href)) openLink(href);
-  };
   // The plan's document and its Inbox stand in the side panel, drawn here,
   // where what they read is held, and handed to the panel to draw as tabs.
   // A summary row that opens a tab of the side panel hands the panel the
@@ -1047,7 +1040,6 @@ function PlanDocument({
       inbox={inbox}
       onOpenTask={() => openPanelTab(SIDE_PANEL_TAB.PLAN)}
       onOpenAgent={(agent) => openColumnTab({ agent })}
-      openLink={openTaskLink}
       code={{
         repository: task.repository,
         readFile: (window) => act(ACT_KIND.TASKS_FILE, { taskId: task.id, ...window }),

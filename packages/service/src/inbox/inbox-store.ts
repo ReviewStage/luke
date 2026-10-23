@@ -43,7 +43,7 @@ import type {
   AccountTasklessEntry,
 } from "@luke/features/account-inbox-wire";
 import type { CodingAgentAttachment } from "@luke/features/coding-agent-wire";
-import { type ConversationMediaType, isVideoType } from "@luke/features/conversation-picture-wire";
+import type { ConversationMediaType } from "@luke/features/conversation-picture-wire";
 import {
   INBOX_PICTURE_IN_WORDS,
   type InboxItemPlace,

@@ -253,12 +253,7 @@ import { PULL_REQUEST_QUEUED_OPERATION } from "../github/pull-request-merging.js
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import { HOSTED_REFUSAL } from "../http/http-effect.js";
 import { type InboxTitleModelOf, inboxProcedures } from "../inbox/inbox-procedures.js";
-import {
-  answerInboxAsk,
-  closeInboxItem,
-  type InboxImage,
-  postInboxThread,
-} from "../inbox/inbox-store.js";
+import { answerInboxAsk, closeInboxItem, postInboxThread } from "../inbox/inbox-store.js";
 import { hostedFetch } from "../orpc/handler.js";
 import { modelCatalogOf, type OfferedModel } from "../providers/model-catalog.js";
 import type { WebServices } from "../runtime.js";

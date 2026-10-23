@@ -3,7 +3,9 @@
 import assert from "node:assert/strict";
 import { type CodingAgentInboxChanged, INBOX_SCOPE_KIND } from "@luke/features/coding-agent-view";
 import {
-  INBOX_RESPONSE,
+  INBOX_ASK,
+  INBOX_ASK_STATUS,
+  INBOX_MESSAGE_AUTHOR,
   INBOX_STATUS,
   INBOX_WIRE_VERSION,
   type InboxItem,
@@ -55,8 +57,19 @@ function item(id: string, title: string): InboxItem {
     revision: 1,
     version: INBOX_WIRE_VERSION,
     title,
-    blocks: [],
-    response: { type: INBOX_RESPONSE.APPROVAL },
+    thread: [
+      {
+        id: `e${id.slice(1)}`,
+        author: INBOX_MESSAGE_AUTHOR.AGENT,
+        text: "Approve or decline.",
+        ask: {
+          type: INBOX_ASK.DECIDE,
+          options: [{ label: "Approve" }, { label: "Decline" }],
+          status: INBOX_ASK_STATUS.OPEN,
+        },
+        createdAt: 1_000,
+      },
+    ],
     needsReply: true,
     status: INBOX_STATUS.OPEN,
     postedAt: 1_000,

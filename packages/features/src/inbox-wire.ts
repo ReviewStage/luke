@@ -486,7 +486,7 @@ export function keptRecommendation(choice: Recommending): {
  * with what the box says while empty; a task; a form of fields, each select
  * naming the option it recommends; or nothing but an acknowledgement.
  */
-export const inboxResponseSchema = EffectSchema.Union([
+const inboxResponseSchema = EffectSchema.Union([
   EffectSchema.Struct({
     type: EffectSchema.Literal(INBOX_RESPONSE.CHOICE),
     options: EffectSchema.Array(inboxOptionSchema).check(
@@ -1366,31 +1366,10 @@ export function inboxAnswersRefusal(
 }
 
 /**
- * The version 4 response nearest an ask, which the item carries as a view
- * of its open ask for a desktop before version 5: a `decide` is a choice of
- * the same options, a `do` a to-do, whose steps the item's blocks must say,
- * and an `answer` a form of its fields, or words where it has none.
- */
-export function inboxAskResponse(ask: InboxAsk): InboxResponse {
-  switch (ask.type) {
-    case INBOX_ASK.DECIDE:
-      // A choice is a decide's own keys, its options, multiple, and recommended, under its own type.
-      return { ...ask, type: INBOX_RESPONSE.CHOICE };
-    case INBOX_ASK.DO:
-      return { type: INBOX_RESPONSE.TODO };
-    case INBOX_ASK.ANSWER:
-      return ask.fields === undefined
-        ? { type: INBOX_RESPONSE.TEXT }
-        : { type: INBOX_RESPONSE.FORM, fields: ask.fields };
-  }
-}
-
-/**
- * The ask a stored version 4 response stands for, which the first message
- * of the item's thread ends with: a choice is a `decide` of its options, an
- * approval a `decide` between Approve and Decline, a to-do a `do` of no
- * steps, a form an `answer` of its fields, words an `answer` of none, and
- * an acknowledgement no ask at all.
+ * The ask a response stands for, as a chat ask's answer is read: a choice
+ * is a `decide` of its options, an approval a `decide` between Approve and
+ * Decline, a to-do a `do` of no steps, a form an `answer` of its fields,
+ * words an `answer` of none, and an acknowledgement no ask at all.
  */
 export function inboxResponseAsk(response: InboxResponse): InboxAsk | undefined {
   switch (response.type) {
