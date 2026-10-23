@@ -13,14 +13,14 @@ import type {
   InboxItemToast,
 } from "@luke/host/agent-notices";
 import type { AppStateSnapshot, AppWindowFacts } from "@luke/host/app-state";
-import { applyThemePreference, followAppearance, NativeTheme } from "@luke/host/appearance";
+import { applyThemePreference, NativeTheme } from "@luke/host/appearance";
 import type { OperatorClient } from "@luke/host/client";
 import { type AppStateStore, voiceWindowGone, WindowAppStates } from "@luke/host/client";
 import { PUSH, type PushName, type PushPayload } from "@luke/host/contract";
 import type { DesktopService } from "@luke/host/desktop-service";
 import { APP_SETTING_SCHEMA } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
-import { Effect, Exit, Scope } from "effect";
+import { Effect } from "effect";
 import {
   app,
   type BrowserWindow,
@@ -223,8 +223,6 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
 
   /** Electron's own `nativeTheme`, the one appearance every window here follows. */
   const withNativeTheme = Effect.provideService(NativeTheme, nativeTheme);
-  /** What the panels' grounds follow the appearance in; closing it takes the listener back. */
-  const appearanceScope = Scope.makeUnsafe();
   /** The panel windows standing now, the ones a zoom is applied to. */
   const withPanelWindows = Effect.provideService(PanelWindows, {
     standing: () => panels.windows(),
@@ -486,12 +484,6 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
       // The theme is steered before any panel opens, so the first frame of
       // every window is already drawn in the appearance it will keep.
       await run(applyThemePreference(settings?.stored.theme).pipe(withNativeTheme));
-      await run(
-        followAppearance((dark) => panels.paint(dark)).pipe(
-          Scope.provide(appearanceScope),
-          withNativeTheme,
-        ),
-      );
       applyLoginItem(settings?.stored.openAtLogin ?? APP_SETTING_SCHEMA.openAtLogin.default);
       if (runMode.observesProviders) {
         native.setMediaDuckEnabled(
@@ -569,7 +561,6 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
       powerMonitor.removeListener("user-did-become-active", wakeHandlers["user-did-become-active"]);
       for (const wait of pendingWaits) clearTimeout(wait);
       pendingWaits.clear();
-      await run(Scope.close(appearanceScope, Exit.void));
       if (session.defaultSession.protocol.isProtocolHandled(PAGE_SCHEME)) {
         session.defaultSession.protocol.unhandle(PAGE_SCHEME);
       }
