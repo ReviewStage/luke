@@ -3297,7 +3297,7 @@
   padding-inline: var(--row-inset);
 }
 
-.pull-request-skeleton > .skeleton + .skeleton {
+.pull-request-skeleton > .luke-skeleton + .luke-skeleton {
   margin-top: var(--luke-space-6);
 }
 
