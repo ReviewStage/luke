@@ -30,6 +30,7 @@ import {
   inboxAnswersReply,
   inboxClosedMessage,
   inboxReplyRefusal,
+  inboxStartTitle,
   inboxThreadMessage,
   inboxTodoTicks,
 } from "@luke/features/inbox-wire";
@@ -572,10 +573,10 @@ export function inboxProcedures(seams: InboxProcedureSeams) {
       context,
     }) {
       const agentId = yield* rowIdOf(input.agentId);
-      const { title, text, clientKey, attachments = [] } = input;
+      const { text, clientKey, attachments = [] } = input;
       return yield* started(seams, writer, context.request, context.userId, {
         agentId,
-        title,
+        title: inboxStartTitle(input),
         text,
         clientKey,
         attachments,

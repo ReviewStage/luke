@@ -6754,7 +6754,7 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
   );
 
   it.effect(
-    "a member starts a thread with an agent that stopped: it stands under a key minted from its subject past the agent's own, their words first, and wakes the agent under the message lead naming that key; the agent's post under the key answers on it, a repeat under the client's key, even after the agent retitled the thread, reaches the agent once and other words under it are refused, and an outsider, an agent of no workspace of theirs, no subject, and no words are refused",
+    "a member starts a thread with an agent that stopped: it stands under a key minted from its subject past the agent's own, their words first, and wakes the agent under the message lead naming that key; the agent's post under the key answers on it, a repeat under the client's key, even after the agent retitled the thread, reaches the agent once and other words under it are refused, one with no subject is titled by its first line, and an outsider, an agent of no workspace of theirs, a blank subject, and no words are refused",
     () =>
       Effect.gen(function* () {
         const eve = fakeEve();
@@ -6847,6 +6847,20 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
         assert.deepEqual(
           yield* start({ ...body, title: "  ", clientKey: randomUUID() }),
           refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
+        );
+        const untitled = readAnswer(
+          inboxMessagedSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* start({
+            agentId: agent.id,
+            text: "Ship the monthly toggle too.\n\nIt can wait for the table.",
+            clientKey: randomUUID(),
+          }),
+        );
+        assert.deepEqual(
+          [untitled.item.title, untitled.item.key],
+          ["Ship the monthly toggle too.", "ship-the-monthly-toggle-too"],
+          "a thread started with no subject is titled by its message's first line",
         );
         assert.deepEqual(
           yield* start({ ...body, text: "  ", clientKey: randomUUID() }),

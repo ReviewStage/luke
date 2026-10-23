@@ -6,6 +6,7 @@ import {
   INBOX_ASK_STATUS,
   INBOX_RESPONSE,
   type InboxReadAsk,
+  inboxStartTitle,
 } from "./inbox-wire.js";
 
 /**
@@ -42,4 +43,26 @@ test("a decide ask and an answer ask stand for the response that says the same, 
     askStillAsked({ type: INBOX_RESPONSE.CHOICE, options: [{ label: "Operating" }] }, DECIDE),
     false,
   );
+});
+
+test("a thread started with no subject is titled by its message's first line that says anything, as plain words cut on a word, else by its first file's name", () => {
+  const PDF = { name: "invoice.pdf", mediaType: "application/pdf", data: "JVBERi0=" } as const;
+  assert.equal(inboxStartTitle({ title: "Pricing", text: "Anything." }), "Pricing");
+  assert.equal(
+    inboxStartTitle({ text: "\n## Annual plan **copy**\nDraft it too." }),
+    "Annual plan copy",
+  );
+  assert.equal(
+    inboxStartTitle({
+      text: "- see [@pricing.tsx](https://github.com/acme/app/blob/HEAD/pricing.tsx)",
+    }),
+    "see @pricing.tsx",
+  );
+  assert.equal(
+    inboxStartTitle({
+      text: "Can you also draft the annual plan copy for the pricing table and the checkout page?",
+    }),
+    "Can you also draft the annual plan copy for the pricing…",
+  );
+  assert.equal(inboxStartTitle({ text: "", attachments: [PDF] }), "invoice.pdf");
 });

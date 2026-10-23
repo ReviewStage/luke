@@ -942,9 +942,12 @@ export const inboxMessagedSchema = EffectSchema.Struct({ item: inboxItemSchema, 
  */
 export const inboxStartRequestSchema = EffectSchema.Struct({
   agentId: wireUuidSchema,
-  title: EffectSchema.Trim.check(
-    EffectSchema.isNonEmpty(),
-    EffectSchema.isMaxLength(INBOX_BOUNDS.MAX_TITLE_CHARS),
+  /** The thread's subject; absent where the member wrote none, which its first message's first line stands for (`inboxStartTitle`). */
+  title: EffectSchema.optionalKey(
+    EffectSchema.Trim.check(
+      EffectSchema.isNonEmpty(),
+      EffectSchema.isMaxLength(INBOX_BOUNDS.MAX_TITLE_CHARS),
+    ),
   ),
   text: inboxMessageRequestSchema.fields.text,
   attachments: inboxMessageRequestSchema.fields.attachments,
@@ -952,6 +955,43 @@ export const inboxStartRequestSchema = EffectSchema.Struct({
 }).check(EffectSchema.makeFilter(({ text, attachments }) => hasWordsOrFiles(text, attachments)));
 
 export type InboxStartRequest = typeof inboxStartRequestSchema.Type;
+
+/** The longest title a thread's first line stands for its subject in, cut on a word where one ends near it. */
+const STARTED_TITLE_CHARS = 60;
+
+/** The title of a thread started with no subject where its message holds neither words nor a file. */
+const STARTED_TITLE_FALLBACK = "New thread";
+
+/** A line of Markdown as plain words: its heading, quote, or list mark, its links' labels for the links, and no emphasis or code marks. */
+function plainLine(line: string): string {
+  return line
+    .replace(/^\s*(?:#{1,6}|>+|[-*+]|\d+[.)])\s+/u, "")
+    .replace(/!?\[([^\]]*)\]\([^)]*\)/gu, "$1")
+    .replace(/[*_`~]/gu, "")
+    .replace(/\s+/gu, " ")
+    .trim();
+}
+
+/**
+ * The title of a thread a member started: the subject they wrote, or,
+ * where they wrote none, the first line of their message that says
+ * anything, as plain words cut to a short line on a word, or the name of
+ * its first file where it holds no words.
+ */
+export function inboxStartTitle(
+  request: Pick<InboxStartRequest, "title" | "text" | "attachments">,
+): string {
+  if (request.title !== undefined) return request.title;
+  const line = request.text
+    .split("\n")
+    .map(plainLine)
+    .find((each) => each !== "");
+  if (line === undefined) return request.attachments?.[0]?.name ?? STARTED_TITLE_FALLBACK;
+  if (line.length <= STARTED_TITLE_CHARS) return line;
+  const cut = line.slice(0, STARTED_TITLE_CHARS);
+  const space = cut.lastIndexOf(" ");
+  return `${(space > STARTED_TITLE_CHARS / 2 ? cut.slice(0, space) : cut).trimEnd()}…`;
+}
 
 /** One item's read state for the member who marked it, as marking it read or unread answers it. */
 export const inboxReadStateSchema = EffectSchema.Struct({

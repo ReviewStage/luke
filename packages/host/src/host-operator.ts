@@ -2290,7 +2290,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       Effect.map(
         client.call(GATEWAY_METHOD.CODING_AGENTS_INBOX_START, {
           agentId: params.agentId,
-          title: params.title,
+          ...(params.title === undefined ? undefined : { title: params.title }),
           text: params.text,
           ...(params.attachments === undefined ? undefined : { attachments: params.attachments }),
           clientKey: params.clientKey,

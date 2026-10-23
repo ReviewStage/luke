@@ -618,7 +618,7 @@ function fakeService() {
         return {
           item: {
             ...ITEM,
-            title: request.title,
+            title: request.title ?? ITEM.title,
             messages: [
               {
                 id: MESSAGE_ID,

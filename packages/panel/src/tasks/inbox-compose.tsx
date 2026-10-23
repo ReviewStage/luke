@@ -3,7 +3,8 @@
  *
  * The pane stands where an item's would, under a bar of its own: To, the
  * agent the thread goes to, picked from the workspace's agents; Subject,
- * the thread's title; and the box an item's reply is written in, words,
+ * the thread's title, which may be left empty for the service to take the
+ * message's first line for it; and the box an item's reply is written in, words,
  * mentions, and files. Send starts the thread, which the service writes
  * under a key of its own and hands to the agent as a message on it, and
  * the Inbox then opens the thread in the pane's place. A send that is not
@@ -52,7 +53,7 @@ const NO_AGENT = "Choose an agent";
 const NO_MATCH = "No agent matches";
 const NO_AGENTS = "No agents in this workspace yet.";
 const AGENTS_FAILED = "The workspace's agents could not be read.";
-const SUBJECT_PLACEHOLDER = "What is it about?";
+const SUBJECT_PLACEHOLDER = "Optional";
 const BACK_TO_INBOX = "Back to inbox";
 
 /** The way back's pill, which names Back's chord as the item pane's does. */
@@ -161,7 +162,6 @@ export function InboxCompose({
   const text = draft.note.trim();
   const sendable =
     agent !== undefined &&
-    draft.subject.trim() !== "" &&
     (text !== "" || draft.attachments.length > 0) &&
     text.length <= INBOX_BOUNDS.MAX_MESSAGE_CHARS;
   const send = () => {
@@ -173,7 +173,7 @@ export function InboxCompose({
     setRefusal(undefined);
     start({
       agentId: agent.id,
-      title: draft.subject.trim(),
+      ...(draft.subject.trim() === "" ? undefined : { title: draft.subject.trim() }),
       text,
       ...(draft.attachments.length === 0 ? undefined : { attachments: draft.attachments }),
       clientKey: key,

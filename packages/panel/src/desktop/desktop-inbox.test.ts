@@ -8340,8 +8340,9 @@ test("New thread in the Inbox's head opens a draft in the pane, To naming the ag
   const send = () =>
     pane.querySelector<HTMLButtonElement>("form.inbox-answer button[type='submit']") ??
     assert.fail("the box has a Send");
+  assert.equal(send().disabled, true, "a draft with no words sends nothing");
   typeInComposer(pane, "Draft the annual plan's line too.");
-  assert.equal(send().disabled, true, "a thread with no subject sends nothing");
+  assert.equal(send().disabled, false, "To and words light Send, the subject being optional");
 
   const subject =
     pane.querySelector<HTMLInputElement>('input[aria-label="Subject"]') ??
@@ -8351,7 +8352,6 @@ test("New thread in the Inbox's head opens a draft in the pane, To naming the ag
     setValue?.call(subject, "Annual plan copy");
     subject.dispatchEvent(new Event("input", { bubbles: true }));
   });
-  assert.equal(send().disabled, false, "To, a subject, and words light Send");
   act(() => send().click());
   await settle();
 
