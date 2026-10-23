@@ -661,6 +661,7 @@ export function SidebarTask({
       <RowHintOptions card={card} cardBeside cardRegion={item}>
         <ListRow
           ref={hold}
+          motionKey={task.id}
           density={LIST_DENSITY.DENSE}
           ink={LIST_ROW_INK.SIDEBAR}
           leading={

@@ -38,6 +38,11 @@ import { TASK_ORDER, taskTime } from "./task-list-model.js";
  * finished at its last save (`updatedAt`).
  */
 
+/** A task's key in a list of tasks: its id. */
+export function taskIdOf(task: TaskSummary): string {
+  return task.id;
+}
+
 /** The fields a filter narrows the tasks by. */
 export const TASKS_FILTER_FIELD = {
   STATUS: "status",

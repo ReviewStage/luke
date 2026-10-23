@@ -370,7 +370,9 @@ body,
 
 .sidebar-section-body {
   display: flex;
-  min-height: 100%;
+  /* At least the column, and as tall as its list motion holds it while a row
+     leaves near the scroller's end (`ListMotion`). */
+  min-height: max(100%, var(--luke-list-held-height, 0px));
   flex-direction: column;
   padding: var(--luke-focus-ring-reach);
 }
@@ -1078,6 +1080,18 @@ ul.actor-stack {
    its menu open. */
 .sidebar-repository + .sidebar-repository,
 .sidebar-tasks + .sidebar-repository {
+  margin-top: var(--luke-space-8);
+}
+
+/* A group leaving is laid over the place it held as it slides out
+   (`ListMotion`), so the room above the group after it counts only the
+   groups still in the layout, and that group's glide ends where it stands
+   once the leaving one is gone rather than a margin short. */
+.sidebar-group > .sidebar-repository[data-leaving] + .sidebar-repository {
+  margin-top: 0;
+}
+
+.sidebar-group > .sidebar-repository:not([data-leaving]) ~ .sidebar-repository:not([data-leaving]) {
   margin-top: var(--luke-space-8);
 }
 
@@ -2895,21 +2909,9 @@ ul.actor-stack {
 /* The list's body, inside the `ScrollArea` tab panel that scrolls it. */
 .inbox-tasks-body {
   /* Held as tall as the scroller shows it while a row leaves, so the rows in
-     sight stand still (`inbox-row-motion.tsx`). */
-  min-height: var(--inbox-held-height, 0);
+     sight stand still (`ListMotion`). */
+  min-height: var(--luke-list-held-height, 0);
   padding: var(--luke-space-8) var(--column-inset) var(--column-inset);
-}
-
-/* A row or a group leaving is laid over the place it held as it fades
-   (`inbox-row-motion.tsx`), placed from its run or the body it stands in,
-   which scroll with it, and takes no pointer. */
-.inbox-tasks-body,
-.inbox-tasks-body .sidebar-tasks {
-  position: relative;
-}
-
-.inbox-tasks-body [data-leaving] {
-  pointer-events: none;
 }
 
 /* A group's room above it counts only the groups still in the layout, so a

@@ -15,6 +15,7 @@ import {
 import { cssCustomProperties } from "../../css.js";
 import { ChevronRightIcon } from "../../face/glyphs.js";
 import { useClipped } from "../../use-clipped.js";
+import { motionKey, motionRows } from "../list-motion/list-motion.js";
 import { useLinkAddress } from "../menu/link-address.js";
 import { type ContextMenuProps, withContextMenu } from "../menu/menu.js";
 import { useRowSwipe } from "./use-row-swipe.js";
@@ -243,6 +244,7 @@ export function List({
   variant = LIST_VARIANT.PLAIN,
   density = LIST_DENSITY.REGULAR,
   fingerTall = false,
+  moves = false,
   children,
 }: {
   label: string;
@@ -250,6 +252,8 @@ export function List({
   density?: ListDensity;
   /** Whether each row stands a finger's press tall on a coarse pointer. */
   fingerTall?: boolean | undefined;
+  /** Whether its rows move as they arrive, leave, and change places, under a `ListMotion` (`motionRows`). */
+  moves?: boolean;
   children: ReactNode;
 }): React.JSX.Element {
   return (
@@ -259,6 +263,7 @@ export function List({
       data-density={density}
       data-finger-tall={fingerTall ? "true" : undefined}
       aria-label={label}
+      {...(moves ? motionRows() : {})}
     >
       <ListDensityContext.Provider value={density}>{children}</ListDensityContext.Provider>
     </ul>
@@ -291,6 +296,7 @@ export function ListRow({
   tabbable = true,
   onTitleClipped,
   id,
+  motionKey: followedBy,
   ref,
   onKeyDown,
   contextMenu,
@@ -343,6 +349,8 @@ export function ListRow({
   onTitleClipped?: ((clipped: boolean) => void) | undefined;
   /** The id of the row's item, which a field driving the list names as its active row. */
   id?: string | undefined;
+  /** The key a `ListMotion` follows the row by, out of one list and into another (`motionKey`). */
+  motionKey?: string | undefined;
   /** Handed the row's press, or its item where it opens nothing. A callback, so one list keeps each row's by its own key. */
   ref?: RefCallback<HTMLElement> | undefined;
   /** A key pressed on the row's press; a row that opens nothing hears none. */
@@ -478,6 +486,7 @@ export function ListRow({
   return (
     <li
       id={id}
+      {...(followedBy === undefined ? {} : motionKey(followedBy))}
       ref={swipe === undefined ? (onPress ? undefined : ref) : hold}
       className="luke-list-row"
       data-meta={metaAt === LIST_ROW_META.TITLE ? metaAt : undefined}

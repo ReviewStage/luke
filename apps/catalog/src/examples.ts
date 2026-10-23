@@ -34,6 +34,7 @@ import { INLINE_EDITS_EXAMPLE } from "./examples/inline-edits";
 import { INLINE_REFS_EXAMPLE } from "./examples/inline-refs";
 import { LAYOUT_EXAMPLE } from "./examples/layout";
 import { LINE_BUTTONS_EXAMPLE } from "./examples/line-buttons";
+import { LIST_MOTION_EXAMPLE } from "./examples/list-motion";
 import { LIST_ROW_EXAMPLE } from "./examples/list-row";
 import { LOADING_INDICATORS_EXAMPLE } from "./examples/loading-indicators";
 import { MENU_EXAMPLE } from "./examples/menu";
@@ -135,6 +136,7 @@ export const EXAMPLES: readonly Example[] = [
   SWITCHES_EXAMPLE,
   TABS_EXAMPLE,
   LIST_ROW_EXAMPLE,
+  LIST_MOTION_EXAMPLE,
   MENU_EXAMPLE,
   NAV_ITEMS_EXAMPLE,
   NOTE_LINES_EXAMPLE,

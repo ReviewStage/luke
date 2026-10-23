@@ -110,6 +110,11 @@ export interface AssigneeGroup {
   readonly rows: readonly TaskRow[];
 }
 
+/** The key a row is followed by, out of one list and into another: its task's id, or its agent's. */
+export function taskRowKey(row: TaskRow): string {
+  return row.kind === TASK_ROW.TASK ? row.task.id : row.agent.id;
+}
+
 /** A task as a row of the list. */
 export function taskRow(task: TaskSummary): TaskRow {
   return { kind: TASK_ROW.TASK, task };

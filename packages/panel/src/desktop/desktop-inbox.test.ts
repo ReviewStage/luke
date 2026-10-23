@@ -3372,6 +3372,7 @@ function playListMotions() {
     "--luke-motion-exit": "ease",
     "--luke-duration-shape": "460ms",
     "--luke-spring": "ease-out",
+    "--luke-list-travel": "16px",
   };
   for (const [name, value] of Object.entries(tokens)) root.setProperty(name, value);
   onTestFinished(() => {
@@ -3400,7 +3401,7 @@ async function answerExpiryElsewhere(): Promise<void> {
   await settle();
 }
 
-test("on To do, an item answered on another Mac fades where its row stood, its task's group with it, out of reach while it fades, and leaves the list once the fade has played", async () => {
+test("on To do, an item answered on another Mac slides out from where its row stood, its task's group with it, out of reach while it goes, and leaves the list once its exit has played", async () => {
   const played = playListMotions();
   const { page } = mount();
   await settle();
@@ -3420,7 +3421,10 @@ test("on To do, an item answered on another Mac fades where its row stood, its t
   const fades = played.filter((each) => leaving.includes(each.element as HTMLElement));
   assert.deepEqual(
     fades.map((each) => each.keyframes.at(-1)),
-    [{ opacity: 0 }, { opacity: 0 }],
+    [
+      { opacity: 0, transform: "translateX(-16px)" },
+      { opacity: 0, transform: "translateX(-16px)" },
+    ],
   );
 
   act(() => {
@@ -3448,7 +3452,7 @@ test("a row leaving a list scrolled down holds the list as tall as its scroller 
   vi.spyOn(body, "getBoundingClientRect").mockImplementation(
     () => ({ top: -scrolled, bottom: 900 - scrolled }) as DOMRect,
   );
-  const held = () => body.style.getPropertyValue("--inbox-held-height");
+  const held = () => body.style.getPropertyValue("--luke-list-held-height");
 
   await answerExpiryElsewhere();
   assert.equal(held(), "620px", "as far down as the scroller shows it");
