@@ -24,10 +24,10 @@ what we collect, who we send it to, and how to turn it off.
 - **Commands on your Mac.** Coding agents can run commands on your Mac, and
   what those commands print leaves it. See "Commands agents run on your Mac"
   under [What we collect](#what-we-collect).
-- **Off switches.** Turn off product analytics in Settings, turn off "Let
-  agents run commands on this Mac", disconnect any integration, or delete
-  your account, which erases what our service keeps under it. See [Your
-  choices](#your-choices).
+- **Off switches.** Turn off "Share usage data" in Settings › Account, turn
+  off "Let agents run commands on this Mac", disconnect any integration, or
+  delete your account, which erases what our service keeps under it. See
+  [Your choices](#your-choices).
 
 ## What we collect
 
