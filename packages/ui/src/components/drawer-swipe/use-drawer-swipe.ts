@@ -4,7 +4,8 @@ import { type RefObject, useEffect, useLayoutEffect, useRef } from "react";
  * use-drawer-swipe.ts -- a phone's drawer swiped in from the screen's left edge, or swiped back out, following the finger and springing open or shut as it is let go.
  *
  * A finger going down near the left edge of the stage while the drawer is
- * away, or on the drawer while it stands, is a swipe in waiting. It is
+ * away, or on the drawer while it stands, is a swipe in waiting; a finger
+ * going down anywhere off the stage is none. It is
  * claimed only once it has gone a few pixels and leans sideways, the way the
  * drawer moves: one that goes up or down first is the page's scroll, and is
  * left to it for the rest of its way. The first `EDGE.MARGIN` of the edge is
@@ -16,8 +17,9 @@ import { type RefObject, useEffect, useLayoutEffect, useRef } from "react";
  * it, which the drawer's own `transform` and the scrim's `opacity` read with
  * their transitions off, so nothing plays under the finger and no render
  * runs per move. Let go, where the release lands is carried along the
- * finger's speed, so a flick opens or shuts whatever its length; past half
- * way the drawer opens, short of it it shuts. The mark is taken off once the
+ * finger's speed as it lifts, none where it paused first, so a flick opens
+ * or shuts whatever its length; past half way the drawer opens, short of
+ * it it shuts. The mark is taken off once the
  * owner has drawn the drawer in its new state, so it travels the rest of the
  * way on its own transition from where the finger left it. A finger the
  * system took away puts the drawer back as it was.
@@ -115,7 +117,9 @@ function startsSwipe(
   drawer: HTMLElement | null,
   open: boolean,
 ): boolean {
-  if (open) return drawer !== null && target instanceof Node && drawer.contains(target);
+  if (!(target instanceof Node)) return false;
+  if (open) return drawer?.contains(target) === true;
+  if (!stage.contains(target)) return false;
   const left = x - stage.getBoundingClientRect().left;
   return left >= DRAWER_SWIPE.EDGE_MARGIN && left <= DRAWER_SWIPE.EDGE_REACH;
 }
@@ -210,7 +214,9 @@ export function useDrawerSwipe(options: DrawerSwipeOptions): void {
       if (held === undefined || held.pointerId !== event.pointerId) return;
       swipe.current = undefined;
       if (held.state !== SWIPE_STATE.CLAIMED) return;
-      const last = held.samples.at(-1)?.progress ?? held.from;
+      // Note that the release is a sample of its own, so a finger held still before it lifts carries no speed from before the pause.
+      const last = clampShare(held.from + (event.clientX - held.x) / held.width);
+      held.samples.push({ at: event.timeStamp, progress: last });
       settle(
         event.type === "pointerup" ? opensOnRelease(last, speed(held.samples)) : held.from === 1,
       );

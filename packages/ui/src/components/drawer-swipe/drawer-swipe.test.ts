@@ -11,8 +11,8 @@ import { useDrawerSwipe } from "./use-drawer-swipe.js";
  * drawer-swipe.test.ts -- a finger swiping in from the stage's left edge
  * opens the drawer, the drawer and the dimmed window under it following the
  * finger's share open as it goes; one let go short of half way puts it back,
- * unless it was flicked; a finger at the screen's very edge, one going up or
- * down first, a mouse, and a stage where the swipe is off open nothing; an
+ * unless it was flicked and not held still after; a finger at the screen's
+ * very edge, one off the stage, one going up or down first, a mouse, and a stage where the swipe is off open nothing; an
  * open drawer swiped left shuts, and one the system took away stays open;
  * and a claimed swipe's moves and touches reach nothing under the finger.
  */
@@ -195,6 +195,31 @@ test("a short quick flick opens the drawer", () => {
     ],
   );
   assert.equal(drawer.dataset.open, "true");
+});
+
+test("a short flick held still before the finger lifts goes back", () => {
+  const { drawer, row } = render();
+  act(() => {
+    row.dispatchEvent(finger("pointerdown", 30, 400, 1));
+    row.dispatchEvent(finger("pointermove", 60, 400, 9));
+    row.dispatchEvent(finger("pointermove", 100, 400, 17));
+    row.dispatchEvent(finger("pointerup", 100, 400, 1017));
+  });
+  assert.equal(drawer.dataset.open, "false");
+});
+
+test("a finger going down off the stage opens nothing, however near the edge", () => {
+  const { drawer } = render();
+  const below = document.body.appendChild(document.createElement("div"));
+  swipe(
+    below,
+    [30, 900],
+    [
+      [60, 900],
+      [200, 900],
+    ],
+  );
+  assert.equal(drawer.dataset.open, "false");
 });
 
 test("a finger at the screen's very edge is left to the browser's own back swipe", () => {
