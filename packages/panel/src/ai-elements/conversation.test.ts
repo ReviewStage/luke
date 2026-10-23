@@ -5,7 +5,12 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
 import { relayout } from "../testing/resize-observer.js";
-import { Conversation, ConversationContent } from "./conversation.js";
+import {
+  Conversation,
+  ConversationContent,
+  ConversationRows,
+  ConversationScrollButton,
+} from "./conversation.js";
 
 /**
  * conversation.test.ts -- a log following its newest line scrolls to it
@@ -176,4 +181,73 @@ test("a fold the reader opens on the newest line grows under them without the lo
   layout.height = 900;
   act(() => relayout());
   assert.deepEqual(layout.writes, [], "the lines above the fold stay where they stood");
+});
+
+/** Lays out every log drawn from now on as 2000px of lines in a 600px box, its rows' block 16px down it. */
+function logsLaidOut(): void {
+  const tops = new WeakMap<Element, number>();
+  const isLog = (element: Element) => element.getAttribute("role") === "log";
+  vi.spyOn(HTMLElement.prototype, "scrollHeight", "get").mockImplementation(function (
+    this: HTMLElement,
+  ) {
+    return isLog(this) ? 2000 : 0;
+  });
+  vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockImplementation(function (
+    this: HTMLElement,
+  ) {
+    return isLog(this) ? 600 : 0;
+  });
+  vi.spyOn(HTMLElement.prototype, "offsetTop", "get").mockImplementation(function (
+    this: HTMLElement,
+  ) {
+    return this.hasAttribute("data-virtual-rows") ? 16 : 0;
+  });
+  vi.spyOn(Element.prototype, "scrollTop", "get").mockImplementation(function (this: Element) {
+    return tops.get(this) ?? 0;
+  });
+  vi.spyOn(Element.prototype, "scrollTop", "set").mockImplementation(function (
+    this: Element,
+    to: number,
+  ) {
+    tops.set(this, Math.max(0, Math.min(to, isLog(this) ? 1400 : 0)));
+  });
+}
+
+test("a long log opens on its newest line, and stays following it once the virtualizer takes its box", () => {
+  logsLaidOut();
+  const keys = Array.from({ length: 10 }, (_, index) => `line-${index}`);
+  const container = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(container);
+  roots.push(root);
+  const log = () =>
+    createElement(
+      Conversation,
+      null,
+      createElement(
+        ConversationContent,
+        null,
+        createElement(ConversationRows, {
+          keys,
+          estimate: 160,
+          gap: 12,
+          children: (index: number) => createElement("p", null, keys[index]),
+        }),
+      ),
+      createElement(ConversationScrollButton),
+    );
+  act(() => root.render(log()));
+  const box = container.querySelector<HTMLElement>("[role=log]") ?? assert.fail("the log");
+  // jsdom scrolls nothing by `scrollTo`, which the virtualizer writes through.
+  box.scrollTo = ((options?: ScrollToOptions) => {
+    if (options?.top !== undefined) box.scrollTop = options.top;
+  }) as HTMLElement["scrollTo"];
+  // Drawn again, as any patch to the window's state draws it, by when the virtualizer takes the box.
+  act(() => root.render(log()));
+  scroll(box, box.scrollTop);
+  assert.equal(box.scrollTop, 1400, "the log stands at its end");
+  assert.equal(
+    container.querySelector("[aria-label='Scroll to the newest line']"),
+    null,
+    "the log still follows its newest line",
+  );
 });

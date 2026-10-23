@@ -61,6 +61,7 @@ const STAND_IN: PlanEditorModule = {
         return { base: merged, text: merged };
       },
       chooseMention: () => undefined,
+      insertBlock: () => undefined,
       markdown: () => props.markdown,
       focusAt: (placement) => {
         placed.push(placement);

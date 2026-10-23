@@ -192,6 +192,7 @@ export const APP_SLICE = {
   TASKS: sliceAtom("tasks"),
   CODING_AGENTS: sliceAtom("codingAgents"),
   INBOX: sliceAtom("inbox"),
+  MAC_COMMANDS: sliceAtom("macCommands"),
   NOTIFICATIONS: sliceAtom("notifications"),
   NETWORK: sliceAtom("network"),
   SESSION_REPLAY: sliceAtom("sessionReplay"),

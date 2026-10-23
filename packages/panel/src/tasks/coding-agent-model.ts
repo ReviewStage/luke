@@ -611,7 +611,7 @@ function credentialMissingWords(
   provider: ModelProvider | undefined,
   action: (typeof ACTION)[keyof typeof ACTION],
 ): string {
-  const harness = provider === undefined ? "Claude Code or Codex" : harnessNameOf(provider);
+  const harness = provider === undefined ? "Claude or Codex" : harnessNameOf(provider);
   return `Connect ${harness} in Settings to ${action}.`;
 }
 

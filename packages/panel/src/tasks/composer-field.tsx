@@ -20,6 +20,7 @@ import type {
   MentionNodeDoors,
   PlanEditorModule,
 } from "../plan-editor/contract.js";
+import { useSelectionToolbar } from "./selection-toolbar.js";
 
 /**
  * composer-field.tsx -- the field of a box written to an agent, its message box's or the Inbox's answer box's: the editor bundle's composer mounted in the card, the words it hands back, and the commands that change them from outside.
@@ -40,7 +41,10 @@ import type {
  * words the field draws while the draft is empty, rather than an attribute
  * of the editor's, so the recording masks it as it masks the words. A chip
  * the editor holds is drawn by the box, into the node's own element, as the
- * owner draws it (`chip`), and so is a quote block (`quote`). The field's
+ * owner draws it (`chip`), and so is a quote block (`quote`). Words
+ * selected raise the format toolbar over them, its marks alone
+ * (`./selection-toolbar.tsx`), which stands aside while a list the box
+ * opened stands, as its `aria-expanded` says. The field's
  * look is its own (`.agent-composer-input`, tasks.css), in the body type,
  * and unrecorded (`ph-no-capture`), the same in both boxes.
  */
@@ -168,6 +172,12 @@ export function ComposerField({
     [room, editedLinks],
   );
   const [chips, setChips] = useState<readonly DrawnChip[]>([]);
+  const toolbar = useSelectionToolbar({
+    editor,
+    room,
+    blocks: false,
+    held: aria["aria-expanded"] === "true",
+  });
   // The last words the editor handed back, which a draft from outside is told against.
   const emitted = useRef(draft);
   const drawn = useRef(0);
@@ -182,6 +192,7 @@ export function ComposerField({
     mentions,
     takesFocus,
     focus,
+    format: toolbar.doors,
   });
   latest.current = {
     draft,
@@ -194,6 +205,7 @@ export function ComposerField({
     mentions,
     takesFocus,
     focus,
+    format: toolbar.doors,
   };
 
   /** A chip the editor asked for, drawn into its node's element until the node goes. */
@@ -236,6 +248,10 @@ export function ComposerField({
                   ? undefined
                   : (trigger) => latest.current.mentions?.onChannelTrigger?.(trigger),
             },
+      format: {
+        onFormat: (format) => latest.current.format.onFormat(format),
+        onLink: () => latest.current.format.onLink(),
+      },
     });
     editor.current = mounted;
     return () => {
@@ -281,6 +297,7 @@ export function ComposerField({
           each.key,
         ),
       )}
+      {toolbar.drawn}
       {children}
     </ComposerFieldRoom>
   );

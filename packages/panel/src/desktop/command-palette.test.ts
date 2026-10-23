@@ -1673,8 +1673,14 @@ test("on an agent's page in another workspace than the one listed, ⌥⌘C names
   assert.deepEqual(copied, [`https://tryluke.dev/beta/agent/${LINKED_AGENT}`]);
 });
 
-test("People lists the listed workspace's members by name and role, the reader as You, found by email too, and a choice opens their page", async () => {
+test("People lists the listed workspace's members as every people menu does, the reader first as You and the rest by name with their email, found by email too, each hanging their card, and a choice opens their page", async () => {
   const members = [
+    {
+      userId: "user-maya",
+      name: "Maya Chen",
+      email: "maya@example.com",
+      role: WORKSPACE_ROLE.ADMIN,
+    },
     {
       userId: "user-dean",
       name: "Dean Stratakos",
@@ -1703,10 +1709,19 @@ test("People lists the listed workspace's members by name and role, the reader a
   });
   chooseFilter("People");
 
-  assert.deepEqual(rows(), ["Dean Stratakos · You · Owner", "Charles Pan · Member"]);
+  assert.deepEqual(rows(), [
+    "Dean Stratakos · You",
+    "Charles Pan · charles@example.com",
+    "Maya Chen · maya@example.com",
+  ]);
   type("charles@");
-  assert.deepEqual(rows(), ["Charles Pan · Member"]);
-  act(() => document.querySelector<HTMLElement>('[role="option"]')?.click());
+  assert.deepEqual(rows(), ["Charles Pan · charles@example.com"]);
+  const row = document.querySelector<HTMLElement>('[role="option"]');
+  assert.ok(row, "Charles is listed");
+  restOn(row);
+  const card = document.querySelector('.luke-tooltip-card [data-actor-card="person"]');
+  assert.equal(card?.querySelector(".luke-hover-card-name")?.textContent, "Charles Pan");
+  act(() => row.click());
   assert.deepEqual(opened, ["user-charles"]);
   assert.deepEqual(sent.tabs, []);
 });
@@ -1819,7 +1834,7 @@ test("People says the members are being read until they answer, and a refused re
   assert.equal(emptyLine(), "Reading the workspace's members…");
   await act(async () => answers.shift()?.resolve([member]));
   await settle();
-  assert.deepEqual(rows(), ["Charles Pan · Member"]);
+  assert.deepEqual(rows(), ["Charles Pan · charles@example.com"]);
 });
 
 test("Tasks says the account's tasks are being read before the list first answers", () => {
