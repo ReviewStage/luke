@@ -4,14 +4,18 @@ import assert from "node:assert/strict";
 import {
   AddressField,
   BUTTON_SIZE,
+  Disclosure,
   IconButton,
   INLINE_EDIT_LOOK,
   InlineEdit,
+  LineSummary,
   MARK_PROVIDER,
   PROVIDER_BUTTON_SIZE,
   ProviderButton,
   TEXT_AREA_LOOK,
+  TEXT_BUTTON_LINES,
   TextArea,
+  TextButton,
 } from "@luke/ui";
 import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -201,9 +205,23 @@ function smallTargets(): ReadonlyMap<string, Element> {
     ],
     [
       "the plan byline's time",
-      markup(
-        '<p class="plan-byline"><span class="actor-line">Last edited · <button class="luke-text-button" data-lines="whole">2h ago</button></span></p>',
-        ".luke-text-button",
+      buttonIn(
+        drawn(
+          createElement(
+            "p",
+            { className: "plan-byline" },
+            createElement(
+              "span",
+              { className: "actor-line" },
+              "Last edited · ",
+              createElement(
+                TextButton,
+                { lines: TEXT_BUTTON_LINES.WHOLE, onClick: () => undefined },
+                "2h ago",
+              ),
+            ),
+          ),
+        ),
       ),
     ],
     [
@@ -446,15 +464,18 @@ test("with a mouse those presses still wait for the pointer", () => {
 
 /** A transcript's rows that open something, each in the markup its component draws: a call's line, the docked to-do list's head, and the agent's pull request's row. */
 function transcriptRows(): [string, HTMLElement][] {
+  const call = drawn(
+    createElement(Disclosure, {}, createElement(LineSummary, { "data-row": "a call's line" }, "")),
+    "tool",
+  );
   const host = document.body.appendChild(document.createElement("div"));
   host.innerHTML = `
-    <div class="tool"><details><summary class="luke-line-button" data-look="row" data-row="a call's line"></summary></details></div>
     <details class="luke-disclosure" data-look="card"><summary class="luke-disclosure-summary" data-look="head" data-row="the to-do list's head"></summary></details>
     <div class="agent-published-dock"><ul class="luke-list" data-finger-tall="true"><li class="luke-list-row"><button class="luke-list-row-main" data-row="the pull request's row"></button></li></ul></div>`;
-  return [...host.querySelectorAll<HTMLElement>("[data-row]")].map((row) => [
-    row.dataset.row ?? "",
-    row,
-  ]);
+  return [
+    ...call.querySelectorAll<HTMLElement>("[data-row]"),
+    ...host.querySelectorAll<HTMLElement>("[data-row]"),
+  ].map((row) => [row.dataset.row ?? "", row]);
 }
 
 test("on a touch screen a transcript's rows that open something stand a finger's height tall", () => {

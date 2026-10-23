@@ -1,4 +1,6 @@
+import { Button as ButtonPrimitive } from "@base-ui/react/button";
 import type { ButtonHTMLAttributes, MouseEvent, ReactNode } from "react";
+import { cn } from "../../cn.js";
 import { PRESS_PULSE, pulseOnPress } from "../../press-pulse.js";
 import { useDisclosureState, useDisclosureSummaryClick } from "../disclosure/disclosure.js";
 
@@ -45,6 +47,36 @@ export const LINE_BUTTON_LOOK = {
 
 export type LineButtonLook = (typeof LINE_BUTTON_LOOK)[keyof typeof LINE_BUTTON_LOOK];
 
+/**
+ * A line's box: its column's width, one line tall, in its container's type
+ * and ink, with no box of its own but its look's. Note that a summary draws
+ * no marker of its own: a row's chevron, where it has one, is the caller's;
+ * and that a glyph keeps its seat however long the words beside it run.
+ */
+const LINE =
+  "luke-line-button flex w-full min-w-0 items-center gap-icon-gap m-0 p-0 [border:0] bg-transparent bg-none text-inherit [font:inherit] text-start list-none select-none cursor-pointer in-data-[luke-profile=desktop]:cursor-default transition-[color,background-color,opacity] duration-(--luke-duration-hover) ease-[ease] [&::-webkit-details-marker]:hidden [&>svg]:flex-none";
+
+/**
+ * Each look's own. A call's row is at least 28px tall (a finger's 44px on a
+ * coarse pointer, its words still centred), so a narrow column whose
+ * caller lets its words wrap grows the row around them; its words are in
+ * the caption's type and the muted ink, held in by a hairline at its ends,
+ * lit under the pointer and deeper under the press. A quote is two lines
+ * and then cut short, its ink coming up under the pointer and fading back
+ * under the press. A band across a card is filled faintly under the
+ * pointer, its words coming up to the full ink and underlined under the
+ * pointer or the keyboard, as a link's are, so it reads as the way to the
+ * lines it names. Note that a state here is a selector of its own rather
+ * than Tailwind's `hover:`, which a touch screen never answers, so a tap
+ * draws as it did; and that the row's type is keyed on its look, which
+ * outweighs the box's `font: inherit`.
+ */
+const LINE_LOOK = {
+  row: "min-h-[28px] pointer-coarse:min-h-touch py-luke-2 px-luke-4 rounded-luke-6 text-muted-foreground data-[look=row]:text-caption [&:hover:not(:active)]:bg-secondary [&:active]:bg-fill-pressed data-[brightens=true]:[&:hover]:text-foreground",
+  quote: "line-clamp-2 [line-clamp:2] wrap-anywhere [&:hover]:text-foreground [&:active]:opacity-70",
+  band: "decoration-1 underline-offset-[0.24em] [&:hover]:bg-muted [&:is(:hover,:focus-visible)]:text-foreground [&:is(:hover,:focus-visible)]:underline",
+} as const satisfies Record<LineButtonLook, string>;
+
 /** What an app's hint hands the line it wraps: when to show and go, and what it says of the line. */
 type HintProps = Pick<
   ButtonHTMLAttributes<HTMLElement>,
@@ -88,9 +120,9 @@ export function LineButton({
   "aria-controls"?: string | undefined;
 }): React.JSX.Element {
   return (
-    <button
+    <ButtonPrimitive
       type="button"
-      className="luke-line-button"
+      className={cn(LINE, LINE_LOOK[look])}
       data-look={look}
       data-brightens={brightens === true ? true : undefined}
       id={id}
@@ -98,7 +130,7 @@ export function LineButton({
       {...props}
     >
       {children}
-    </button>
+    </ButtonPrimitive>
   );
 }
 
@@ -110,7 +142,7 @@ export function LineSummary({ brightens, children, ...props }: LineBase): React.
     // biome-ignore lint/a11y/noStaticElementInteractions: a summary is the platform's own disclosure control, focusable and opened by Enter and Space; the click it already takes is routed to React's state.
     // biome-ignore lint/a11y/useAriaPropsSupportedByRole: a summary is exposed as its details' disclosure button, which takes aria-expanded; the rule's table gives the element no role.
     <summary
-      className="luke-line-button"
+      className={cn(LINE, LINE_LOOK.row)}
       data-look={LINE_BUTTON_LOOK.ROW}
       data-brightens={brightens === true ? true : undefined}
       aria-expanded={open}

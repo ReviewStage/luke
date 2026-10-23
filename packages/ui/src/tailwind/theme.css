@@ -58,6 +58,9 @@
   --radius-control: var(--luke-control-radius);
   --radius-menu-row: var(--luke-menu-row-radius);
   --color-subtle-foreground: var(--luke-color-text-subtle);
+  --color-fill-pressed: var(--luke-color-fill-pressed);
+  --color-accent-ink: var(--luke-color-accent-text);
+  --spacing-touch: var(--luke-touch-target);
   --color-button-fill: var(--luke-button-fill);
   --color-button-ink: var(--luke-button-ink);
   --color-button-edge: var(--luke-button-edge);
@@ -68,3 +71,12 @@
   --default-transition-duration: var(--luke-duration-quick);
   --default-transition-timing-function: var(--luke-spring);
 }
+
+/* The conditions a control answers beside its states: a finger's pointer,
+   on which a press is taken a finger's width across (`pointer-coarse:`),
+   and the fold a narrow container asks of the controls in it through
+   `--luke-fold` (`fold-folded:`, `fold-bare:`; README's "Folding in a
+   narrow container"). */
+@custom-variant pointer-coarse (@media (pointer: coarse));
+@custom-variant fold-folded (@container style(--luke-fold: folded));
+@custom-variant fold-bare (@container style(--luke-fold: bare));

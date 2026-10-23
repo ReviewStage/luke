@@ -24,6 +24,7 @@ const merge = extendTailwindMerge({
         "control-icon",
         "icon-gap",
         "menu-row",
+        "touch",
         "luke-2",
         "luke-4",
         "luke-6",

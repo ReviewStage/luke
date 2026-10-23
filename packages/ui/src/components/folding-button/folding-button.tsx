@@ -54,10 +54,10 @@ import { Tooltip } from "../tooltip/hint.js";
  */
 const FOLDING_BOX = cn(
   "luke-folding-button inline-flex flex-none min-w-0 max-w-full",
-  "[@container_style(--luke-fold:folded)]:[&>.luke-button]:w-control",
-  "[@container_style(--luke-fold:folded)]:[&>.luke-button]:p-0",
-  "[@container_style(--luke-fold:folded)]:[&>.luke-button[data-size=compact]]:w-luke-24",
-  "[@container_style(--luke-fold:folded)]:[&_.luke-button-words]:sr-only",
+  "fold-folded:[&>.luke-button]:w-control",
+  "fold-folded:[&>.luke-button]:p-0",
+  "fold-folded:[&>.luke-button[data-size=compact]]:w-luke-24",
+  "fold-folded:[&_.luke-button-words]:sr-only",
 );
 
 /** A row-look box, the row's whole width, as the look says. */
