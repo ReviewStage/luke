@@ -86,11 +86,10 @@ export const CHOICE_BAR_FOCUS = {
 
 export type ChoiceBarFocus = (typeof CHOICE_BAR_FOCUS)[keyof typeof CHOICE_BAR_FOCUS];
 
-/** Where a fill bar stands its options: at its container's edges, with the words of a page read at its measure, or at a column's inset. */
+/** Where a fill bar stands its options: at its container's edges, or with the words of a page read at its measure. */
 export const CHOICE_BAR_INSET = {
   NONE: "none",
   READING: "reading",
-  COLUMN: "column",
 } as const;
 
 export type ChoiceBarInset = (typeof CHOICE_BAR_INSET)[keyof typeof CHOICE_BAR_INSET];

@@ -22,6 +22,7 @@
  */
 
 import type { DatabaseServices, QueryError } from "@luke/database/core/query";
+import { INTEGRATION_ROW_STATUS } from "@luke/database/integration-vocabulary";
 import {
   INTEGRATION_GRANT,
   INTEGRATION_GRANT_OF,
@@ -41,11 +42,7 @@ import {
   type IntegrationConnect,
   type WorkspaceLinearConnect,
 } from "./integration-connect.js";
-import {
-  expireIntegrationConnection,
-  INTEGRATION_ROW_STATUS,
-  readIntegrationConnection,
-} from "./integration-store.js";
+import { expireIntegrationConnection, readIntegrationConnection } from "./integration-store.js";
 import { LINEAR_READ_FAILURE, workspaceLinearToken } from "./linear-issues.js";
 import { readConversationWorkspace } from "./workspace-integration-store.js";
 

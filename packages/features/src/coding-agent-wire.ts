@@ -9,6 +9,7 @@ import {
   REACTION,
 } from "./pull-request-write-wire.js";
 import { countedNumber, memberRefSchema, wireUuidSchema } from "./service-wire.js";
+import { trimmedText } from "./text-schema.js";
 
 /**
  * coding-agent-wire.ts -- a task's coding agents, as the desktop starts, lists, reads, messages, and stops them.
@@ -372,11 +373,6 @@ const codingAgentAttachmentsSchema = EffectSchema.Array(codingAgentAttachmentSch
       CODING_AGENT_BOUNDS.MAX_ATTACHMENTS_BYTES,
   ),
 );
-
-/** A text settled with its ends trimmed, refused when nothing but whitespace stands, and bounded. */
-function trimmedText(maximumChars: number) {
-  return EffectSchema.Trim.check(EffectSchema.isNonEmpty(), EffectSchema.isMaxLength(maximumChars));
-}
 
 /** A message's words, trimmed and bounded, and empty where the files carry the message alone. */
 const messageWordsSchema = EffectSchema.Trim.check(

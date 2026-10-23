@@ -13,21 +13,10 @@ import {
   TASK_ISSUE_RELATION,
   type TaskIssueChoice,
 } from "@luke/features/task-issue-wire";
-import { TASK_BOUNDS, TASK_STATUS } from "@luke/features/task-wire";
+import { TASK_BOUNDS } from "@luke/features/task-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { SHORTCUT_KEY, type ShortcutChord, shortcutMatches } from "@luke/settings/shortcuts";
-import {
-  CHIP_LOOK,
-  CHIP_WIDTH,
-  Chip,
-  ChipName,
-  TaskStatusMark,
-  TEXT_ELEMENT,
-  TEXT_TONE,
-  TEXT_VARIANT,
-  Text,
-  Tooltip,
-} from "@luke/ui";
+import { CHIP_WIDTH, TEXT_ELEMENT, TEXT_TONE, TEXT_VARIANT, Text } from "@luke/ui";
 import { agentPromptOf, taskNameOfIssue, workspaceReaches } from "@luke/ui/tasks-model";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useAct } from "../act.js";
@@ -111,12 +100,8 @@ import type { NewTaskAgent, NewTaskStart, TasksControl } from "./use-tasks-tab.j
  *
  * Return starts, Shift+Return is a new line, and ⌘Return on a box with
  * neither words nor files starts a bare task: an empty plan, no call, and
- * no agent, which needs no repository. File for later, beside Start, files
- * the task in the backlog instead:
- * no call and no agent, named by its issue where one was picked and else
- * by the words' first line, the words kept as its brief for whoever takes
- * it up; it stands once there are words or an issue. Start's task starts
- * to do. Escape closes a menu or a dictation standing first,
+ * no agent, which needs no repository. Escape closes a menu or a
+ * dictation standing first,
  * and then whatever the owner says (`onLeave`), the dialog's card. A start
  * that was refused keeps the card and its words, with why under it and
  * Retry. Nothing typed here reaches the model as conversation.
@@ -144,7 +129,7 @@ import type { NewTaskAgent, NewTaskStart, TasksControl } from "./use-tasks-tab.j
  * say so, its words are kept as a draft of their own, and the agent is handed
  * the fixed brief with the words fenced after it (`automation-agent-brief.ts`),
  * refused here where that would pass an agent's first message's bound. It
- * starts on words alone: it offers no Issue chip and no File for later, and
+ * starts on words alone: it offers no Issue chip, and
  * ⌘Return on an empty box starts no bare task. A start refused after the card
  * closed opens it again for the same purpose.
  */
@@ -175,29 +160,10 @@ const PURPOSE_WORDS = {
 /** Why an automation's agent did not start where the brief and the words pass an agent's first message's bound. */
 const TOO_LONG = "That request is too long.";
 
-/** Why Start is held without a repository, and File for later's words. */
+/** Why Start is held without a repository. */
 const COMPOSER_WORDS = {
   NEEDS_REPOSITORY: "An agent needs a repository to work in. Choose one.",
-  FILE: "File for later",
-  FILE_HINT: "Add it to the backlog without starting it",
 } as const;
-
-/**
- * The name a task filed for later stands under: its issue's, else its
- * words' first line, cut to a name's bound. Note that the bound counts
- * UTF-16 units, as the wire does, and the cut falls between characters, so
- * an emoji is kept whole or left out rather than split.
- */
-function filedName(issueName: string | undefined, said: string): string {
-  if (issueName !== undefined) return issueName;
-  const line = said.split("\n", 1)[0]?.trim() ?? "";
-  let name = "";
-  for (const character of line) {
-    if (name.length + character.length > TASK_BOUNDS.MAX_NAME_CHARS) break;
-    name += character;
-  }
-  return name;
-}
 
 /** What one Agent-mode press asked beside its key: the task's name, repository, workspace, and issues, and the agent's words, files, and model. */
 export interface AgentAsk {
@@ -426,10 +392,7 @@ export function NewTaskComposer({
     );
   };
 
-  const begin = (
-    name: string,
-    handing: Pick<NewTaskStart, "handed" | "brief" | "status" | "card"> = {},
-  ) => {
+  const begin = (name: string, handing: Pick<NewTaskStart, "handed" | "card"> = {}) => {
     if (starting) return;
     setStarting(true);
     onStarting?.(true);
@@ -454,11 +417,8 @@ export function NewTaskComposer({
         onStarting?.(false);
       });
   };
-  // Which press a Retry repeats: Start's, or File for later's.
-  const filing = useRef(false);
   const start = () => {
     if (!canStart) return;
-    filing.current = false;
     const name = issueName ?? "";
     const prompt = forAutomation ? automationAgentBrief(said) : agentPromptOf(linkedIssues, said);
     if (forAutomation && prompt.length > CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS) {
@@ -482,20 +442,7 @@ export function NewTaskComposer({
     });
   };
   // ⌘Return on a box with nothing in it starts a bare task: no call and no agent.
-  const bare = () => {
-    filing.current = false;
-    begin(issueName ?? "");
-  };
-  // File for later is a bare task in the backlog, its words kept as its brief.
-  const filable = said !== "" || named !== undefined;
-  const file = () => {
-    if (!filable) return;
-    filing.current = true;
-    begin(filedName(issueName, said), {
-      status: TASK_STATUS.BACKLOG,
-      ...(said === "" ? undefined : { brief: said }),
-    });
-  };
+  const bare = () => begin(issueName ?? "");
 
   const onKey = (event: KeyboardEvent): boolean => {
     if (!shortcutMatches(BARE_CHORD, event)) return false;
@@ -579,7 +526,7 @@ export function NewTaskComposer({
     note,
     closed: undefined,
     send: start,
-    retry: () => (filing.current ? file() : start()),
+    retry: start,
     sent: [],
   };
 
@@ -620,25 +567,6 @@ export function NewTaskComposer({
           links.length === 0 ? undefined : (
             <NewTaskLinks links={links} disabled={starting} onChange={setLinks} />
           )
-        }
-        beforeSend={
-          forAutomation
-            ? undefined
-            : (narrow) => (
-                // Note that File for later is a chip, and a card too narrow for its words draws the backlog's mark alone, still named, so Start keeps its room.
-                <Tooltip label={COMPOSER_WORDS.FILE_HINT}>
-                  <Chip
-                    look={CHIP_LOOK.FILTER}
-                    iconOnly={narrow}
-                    aria-label={COMPOSER_WORDS.FILE}
-                    disabled={starting || !filable}
-                    onClick={file}
-                  >
-                    <TaskStatusMark status={TASK_STATUS.BACKLOG} />
-                    <ChipName>{COMPOSER_WORDS.FILE}</ChipName>
-                  </Chip>
-                </Tooltip>
-              )
         }
       />
       {blocked ? (

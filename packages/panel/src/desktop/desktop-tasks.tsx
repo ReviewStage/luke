@@ -16,6 +16,7 @@ import {
   useMinute,
 } from "@luke/ui";
 import { openThread, PlanCommentsProvider, usePlanComments } from "@luke/ui/plan-comments";
+import { pullRequestAgentOf, repositoryPullRequestOf } from "@luke/ui/pull-request-link";
 import { searchTokens } from "@luke/ui/search-tokens";
 import { agentOfTab, followedAgent, sameTab } from "@luke/ui/tab-strip-model";
 import { DOCUMENT_REGION, RENAME_FAILED_NOTE, TASKS_PAGE } from "@luke/ui/tasks-model";
@@ -35,6 +36,7 @@ import { CallNotice } from "../tasks/agent-call.js";
 import { AgentCard, agentSubject } from "../tasks/agent-ref.js";
 import { StartingAgentTab } from "../tasks/agent-tab.js";
 import { AgentTabSkeleton } from "../tasks/agent-tab-skeleton.js";
+import { peopleOf } from "../tasks/changes-card.js";
 import { useChatNames } from "../tasks/chat-actors.js";
 import { useChatOn } from "../tasks/chat-gate.js";
 import { agentActor, agentTabLabel, type SentLine } from "../tasks/coding-agent-model.js";
@@ -58,6 +60,7 @@ import { PlanBody, type SectionLinks } from "../tasks/plan-body.js";
 import { CommentFocusScope } from "../tasks/plan-comments.js";
 import { CHIP_PLACE, RepositoryChip } from "../tasks/repository-chip.js";
 import { SkillFiles } from "../tasks/skill-chip.js";
+import { TAB_KIND } from "../tasks/tab-look.js";
 import { TaskIssueLinks } from "../tasks/task-issue-links.js";
 import {
   mentionablePullRequests,
@@ -86,6 +89,7 @@ import { useTaskInboxShow } from "./folded-groups.js";
 import { AgentPane, MainTabStrip, MainTabStripSkeleton, mainTabLabel } from "./main-tabs.js";
 import {
   COLUMN,
+  changesTabOf,
   type ShownTab,
   SIDE_PANEL_HOLDER,
   SidePanel,
@@ -99,6 +103,7 @@ import {
 import { StartAgentButton } from "./start-agent-button.js";
 import { useStrandedTaskBanner } from "./stranded-task-banner.js";
 import { useTabViews } from "./strip-tabs.js";
+import { tabCard } from "./tab-card.js";
 import { TaskActions } from "./task-actions.js";
 import { taskCardOf } from "./task-card.js";
 import {
@@ -747,6 +752,31 @@ function PlanDocument({
     const subject = agentSubject(agents, agentId, views.held, false);
     return { actor: subject.tile, card: <AgentCard subject={subject} models={agents.models} /> };
   };
+  // A pull request one of the task's agents opened hangs its Pull request tab's card wherever a link names it.
+  const pullRequestCard = (url: string) => {
+    const owned = [...agents.pullRequests].map(([agentId, each]) => ({ agentId, url: each.url }));
+    // A page under an agent's pull request, as its files, is still that pull request, as its press says.
+    const number = repositoryPullRequestOf(url, opened?.repository);
+    const owner =
+      pullRequestAgentOf(url, owned) ??
+      (number === undefined
+        ? undefined
+        : owned.find((each) => repositoryPullRequestOf(each.url, opened?.repository) === number)
+            ?.agentId);
+    if (owner === undefined) return undefined;
+    const agentId = changesTabOf(agents, owner, tasks.sidePanel.changes).changes;
+    const pullRequest = agents.pullRequests.get(agentId);
+    if (pullRequest === undefined) return undefined;
+    const card = tabCard({
+      kind: TAB_KIND.CHANGES,
+      subject: agentSubject(agents, agentId, views.held, false),
+      models: agents.models,
+      pullRequest,
+      people: peopleOf(agents.changesPeople.get(agentId), pullRequest),
+      onOpenAgent: () => openColumnTab({ agent: agentId }),
+    });
+    return card ?? undefined;
+  };
   // Note that what the transcripts and the plan are handed, and what they
   // read from around them, is held across this page's draws over the same
   // task, because each holds while that does (`AgentPane`, `PlanBody`), and
@@ -759,6 +789,7 @@ function PlanDocument({
   const openPullRequestDoor = useSteadyDoor(openPullRequest);
   const openAgent = useSteadyDoor((agent: string) => openColumnTab({ agent }));
   const agentLookDoor = useSteadyDoor(agentLook);
+  const pullRequestCardDoor = useSteadyDoor(pullRequestCard);
   const openMentionedFileDoor = useSteadyDoor(openMentionedFile);
   const { onFork: forkDoor, onContinue: continueDoor } = useAgentDraftDoors(
     agents,
@@ -810,8 +841,18 @@ function PlanDocument({
             onOpenFile: openMentionedFileDoor,
             reveal,
             onRevealed: onSectionRevealed,
+            agentOf: agentLookDoor,
+            pullRequestOf: pullRequestCardDoor,
           },
-    [workspace, openMention, openMentionedFileDoor, reveal, onSectionRevealed],
+    [
+      workspace,
+      openMention,
+      openMentionedFileDoor,
+      reveal,
+      onSectionRevealed,
+      agentLookDoor,
+      pullRequestCardDoor,
+    ],
   );
   const { linearIssuesIn, githubIssuesIn } = tasks.newTask;
   const underTitle = useMemo(
@@ -898,6 +939,7 @@ function PlanDocument({
         onOpenTask: openMention,
         onOpenFile: openMentionedFileDoor,
         agentOf: agentLookDoor,
+        pullRequestOf: pullRequestCardDoor,
       },
     };
   }, [
@@ -911,6 +953,7 @@ function PlanDocument({
     openMention,
     openMentionedFileDoor,
     agentLookDoor,
+    pullRequestCardDoor,
   ]);
   if (region.kind === DOCUMENT_REGION.READING) {
     return <TaskPageSkeleton drawing={drawing} summary={summaryLayout} onColumn={setColumn} />;

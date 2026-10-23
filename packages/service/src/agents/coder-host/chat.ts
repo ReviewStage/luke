@@ -130,7 +130,7 @@ import type { InboxSandboxDoor } from "./inbox-image.js";
  * message each other.
  */
 
-/** The tools as the model is shown them (`coder/tools/`): each one's name, words, and input. */
+/** The tools as the model is shown them (`../luke-mcp/tools.ts`): each one's name, words, and input. */
 export const CHAT_TOOLS = {
   POST: {
     name: CHAT_TOOL.POST,

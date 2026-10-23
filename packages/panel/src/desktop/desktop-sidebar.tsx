@@ -113,7 +113,7 @@ import {
   ZapIcon,
 } from "lucide-react";
 import { memo, useRef } from "react";
-import { ACTOR_SIZE, ActorMark, UnassignedMark } from "../actor-ref.js";
+import { ACTOR_SIZE, ActorMark, actorCard, UnassignedMark } from "../actor-ref.js";
 import { runAppCommand, useAppCommand } from "../app-commands.js";
 import { ColumnFoot } from "../call/call-card.js";
 import { useCoarsePointer } from "../coarse-pointer.js";
@@ -121,7 +121,12 @@ import { useNewTaskDrafted } from "../composer-drafts.js";
 import { LinkWorkspaceProvider } from "../copy-link-item.js";
 import { DraftMark } from "../draft-mark.js";
 import { MemberDirectory, useMemberDirectory } from "../member-directory.js";
-import type { HistoryStep, NavigationHistory } from "../navigation-history.js";
+import {
+  type HistoryPage,
+  type HistoryStep,
+  type NavigationHistory,
+  sameHistoryPage,
+} from "../navigation-history.js";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs.js";
 import { RepositoryPicture } from "../repository-picture.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
@@ -264,14 +269,14 @@ function historyGroups(
   onGoTo: (at: number) => void,
 ): (readonly MenuAction[])[] {
   const groups: MenuAction[][] = [];
-  let page: string | undefined;
+  let page: HistoryPage | undefined;
   for (const step of steps) {
     const item: MenuAction = {
       label: step.title?.label ?? UNNAMED_STEP,
       detail: step.title?.detail,
       onSelect: () => onGoTo(step.at),
     };
-    if (step.page === page) groups.at(-1)?.push(item);
+    if (page !== undefined && sameHistoryPage(step.page, page)) groups.at(-1)?.push(item);
     else groups.push([item]);
     page = step.page;
   }
@@ -931,9 +936,10 @@ function RepositorySection({
 
 /**
  * One creator's tasks under a header naming them by face, the reader's own
- * as You, a former member's on the quiet outline, folded and kept as a
- * repository's group is. The face is the group's to say, so the rows wear
- * none, and name no repository either, which the row's card names.
+ * as You, a former member's on the quiet outline, hanging their card,
+ * folded and kept as a repository's group is. The face is the group's to
+ * say, so the rows wear none, and name no repository either, which the
+ * row's card names.
  */
 function CreatorSection({
   group,
@@ -954,6 +960,7 @@ function CreatorSection({
       <SidebarGroupHeader
         glyph={<ActorMark actor={actor} size={ACTOR_SIZE.INLINE} />}
         name={actorName(actor)}
+        card={actorCard(actor)}
         folded={folded}
         count={group.rows.length}
         onToggle={() => folds.toggleCreator(group.creatorId)}
@@ -972,10 +979,10 @@ function assigneeOf(row: TaskRow): TaskSummary["assignee"] {
 
 /**
  * One assignee's tasks under a header naming them by face, the reader's own
- * as You and a former member's grayed, and the tasks no one is assigned to
- * under Unassigned on the dashed mark, folded and kept as a creator's group
- * is. The face is the group's to say, so the rows wear none, and name no
- * repository either, which the row's card names.
+ * as You and a former member's grayed, hanging their card, and the tasks no
+ * one is assigned to under Unassigned on the dashed mark, folded and kept
+ * as a creator's group is. The face is the group's to say, so the rows wear
+ * none, and name no repository either, which the row's card names.
  */
 function AssigneeSection({
   group,
@@ -1006,6 +1013,7 @@ function AssigneeSection({
           )
         }
         name={actor === undefined ? UNASSIGNED_WORDS : actorName(actor)}
+        card={actor === undefined ? undefined : actorCard(actor)}
         folded={folded}
         count={group.rows.length}
         onToggle={() => folds.toggleAssignee(group.assigneeId)}

@@ -3,12 +3,12 @@ import { LANDING_TONE } from "@luke/features/landing-outcome";
 import { type SocialProvider, socialProviderFromState } from "@luke/features/sign-in-provider";
 import { AuthMark, AuthPage, SIGN_IN_FAILURE, SocialProviderButton } from "@luke/ui";
 import { createAuthClient } from "better-auth/react";
-import { StrictMode, useEffect, useRef, useState } from "react";
-import { createRoot } from "react-dom/client";
+import { useEffect, useRef, useState } from "react";
 import { captureSiteEvent, SITE_EVENT, startSiteAnalytics } from "./analytics";
 import { openLukeFromMac } from "./open-luke";
 import { useSocialSignIn } from "./sign-in-choices";
 import "./styles.css";
+import { mountPrerenderedPage } from "./mount-page";
 
 // The provider client forwards the authorization server's signed `oauth_query`
 // through social sign-in, so the new Better Auth session resumes this exact
@@ -62,11 +62,4 @@ function SignIn(): React.JSX.Element {
 
 startSiteAnalytics();
 
-const rootElement = document.getElementById("root");
-if (!rootElement) throw new Error("Root element is missing");
-
-createRoot(rootElement).render(
-  <StrictMode>
-    <SignIn />
-  </StrictMode>,
-);
+mountPrerenderedPage(<SignIn />);

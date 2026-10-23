@@ -747,3 +747,32 @@ test("pasted Markdown lands as its marks, a bare address pasted stays the words 
     "Ship [**it**](https://example.com/b) in my __init__ at https://example.com/a",
   );
 });
+
+test("asterisks, tildes, brackets, and backslashes in marked words are escaped, so the words and their marks come back as they were", () => {
+  const box = mounted("a **b ~~c] \\d");
+  box.selectAll();
+
+  chord(box.host, "b");
+  const bolded = box.drafts.at(-1) ?? "";
+  assert.equal(bolded, "**a \\*\\*b \\~\\~c\\] \\\\d**");
+  box.handle.replace(bolded);
+  assert.deepEqual(marked(box.host), { strong: ["a **b ~~c] \\d"] });
+  assert.equal(box.drafts.at(-1), bolded);
+
+  box.handle.replace("see a]b now");
+  box.select(1 + "see ".length, 1 + "see a]b".length);
+  box.handle.setLink("https://example.com");
+  const linked = box.drafts.at(-1) ?? "";
+  assert.equal(linked, "see [a\\]b](https://example.com) now");
+  box.handle.replace(linked);
+  assert.deepEqual(marked(box.host), { a: ["a]b"] });
+});
+
+test("a paste over part of a marked word is cut to fit the bound as the words would stand after it, delimiters and all", () => {
+  const box = mounted("**it** ok", { maxLength: 12 });
+  box.select(1, 2);
+
+  paste(box.host, "abcde");
+
+  assert.equal(box.drafts.at(-1), "abcd**t** ok");
+});

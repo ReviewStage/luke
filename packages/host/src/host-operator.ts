@@ -405,6 +405,11 @@ import { readEither } from "@luke/wire/effect";
 import { Clock, Effect, type Schema as EffectSchema, ErrorReporter, Option, Result } from "effect";
 import { Base64 } from "effect/encoding";
 import type { AppAccessSlice } from "./app-state.js";
+import {
+  type MacCommandAnswer,
+  type MacCommandAsk,
+  macCommandAsksSchema,
+} from "./mac-command-ask.js";
 
 /**
  * The desktop's client over the host's own vocabulary: the settings, account,
@@ -445,6 +450,8 @@ export interface HostOperator {
   macRepositories(): Effect.Effect<MacRepositoriesAnswer | undefined>;
   /** One repository's run command set on this Mac, or forgotten with null; the repositories as they then stand. */
   setMacRepository(entry: MacRepository): Effect.Effect<MacRepositoriesAnswer | undefined>;
+  /** The developer's answer to one command an agent asked to run on this Mac; whether the ask still waited. */
+  answerMacCommand(answer: MacCommandAnswer): Effect.Effect<boolean>;
   updateSetting<Field extends AppSettingField>(
     field: Field,
     value: AppSettingValue<Field>,
@@ -943,6 +950,8 @@ export interface HostOperator {
   onVoiceLiveSessionChanged(listener: (change: VoiceLiveSessionChanged) => void): () => void;
   onSessionReplayChanged(listener: (replay: HostSessionReplay) => void): () => void;
   onTasksChanged(listener: (view: TasksView) => void): () => void;
+  /** The commands agents asked to run on this Mac that wait on the developer, whole, each time one is asked or answered. */
+  onMacCommandAsksChanged(listener: (asks: readonly MacCommandAsk[]) => void): () => void;
   /** An agent's shells and where its sandbox stands, or why not; none where the host could not answer. */
   terminalList(params: { agentId: string }): Effect.Effect<TerminalsActAnswer | undefined>;
   terminalCreate(params: {
@@ -1078,6 +1087,9 @@ const AUTOMATION_UNANSWERED = { failure: AUTOMATION_CALL_FAILURE.UNANSWERED } as
 /** A task call that reached no answer, as every task method answers one. */
 const TASK_UNANSWERED = { failure: TASK_CALL_FAILURE.UNANSWERED } as const;
 
+/** A GitHub disconnect that reached no answer. */
+const GITHUB_DISCONNECT_UNANSWERED = { failure: GITHUB_DISCONNECT_FAILURE.UNANSWERED } as const;
+
 /** An admin read that reached no answer. */
 const ADMIN_READ_UNANSWERED = { refused: ADMIN_UNANSWERED } as const;
 
@@ -1182,6 +1194,14 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           command: entry.command,
         }),
         answerOf(macRepositoriesAnswerSchema, undefined),
+      ),
+    answerMacCommand: (answer) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.MAC_COMMAND_ANSWER, {
+          id: answer.id,
+          decision: answer.decision,
+        }),
+        (result) => record(result)?.answered === true,
       ),
     settingsSnapshot: () =>
       Effect.map(client.call(GATEWAY_METHOD.SETTINGS_SNAPSHOT), (answer) =>
@@ -1572,14 +1592,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
     githubDisconnect: () =>
       Effect.map(
         client.call(GATEWAY_METHOD.GITHUB_DISCONNECT),
-        (answer): TasksGitHubDisconnectAnswer =>
-          (answer.ok
-            ? Result.getOrUndefined(
-                readEither(tasksGitHubDisconnectAnswerSchema, { excess: EXCESS_KEYS.DROP })(
-                  answer.result,
-                ),
-              )
-            : undefined) ?? { failure: GITHUB_DISCONNECT_FAILURE.UNANSWERED },
+        answerOf(tasksGitHubDisconnectAnswerSchema, GITHUB_DISCONNECT_UNANSWERED),
       ),
     adminRead: (params) =>
       Effect.map(
@@ -2455,6 +2468,15 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         // (`gatewayHost`), so it is passed on as built: a decode here would
         // only rebuild the same tree new, and every comparison after it walk it.
         (payload) => (isRecord(payload) ? answered<TasksView>(payload) : undefined),
+        listener,
+      ),
+    onMacCommandAsksChanged: (listener) =>
+      on(
+        GATEWAY_EVENT.MAC_COMMAND_ASKS_CHANGED,
+        (payload) =>
+          Result.getOrUndefined(
+            readEither(macCommandAsksSchema, { excess: EXCESS_KEYS.DROP })(payload),
+          )?.asks,
         listener,
       ),
     terminalList: (params) =>

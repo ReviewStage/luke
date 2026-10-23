@@ -1,3 +1,5 @@
+import { styleElementSheets, touchesStyle } from "../style-element-sheets.js";
+
 /**
  * adopted-styles.ts -- the rules a terminal writes into `<style>` elements of its own, adopted by the document as constructed sheets, which the panel's policy admits.
  *
@@ -14,40 +16,17 @@
  * still refuses the element itself, which the console reports once for each.
  */
 
-/** Whether a node is a `<style>` element or stands inside one. */
-function inStyle(node: Node | null): boolean {
-  return node instanceof HTMLStyleElement || node?.parentNode instanceof HTMLStyleElement;
-}
-
-/** Whether a change under the root touched a `<style>` element's rules. */
-function touchesStyle(record: MutationRecord): boolean {
-  return (
-    inStyle(record.target) ||
-    [...record.addedNodes, ...record.removedNodes].some((node) => node instanceof HTMLStyleElement)
-  );
-}
-
 /**
  * Adopts the rules of every `<style>` element under `root`, now and as they
  * change, until the answer is called.
  */
 export function adoptInlineStyles(root: HTMLElement): () => void {
-  const sheets = new Map<HTMLStyleElement, { sheet: CSSStyleSheet; text: string }>();
+  const sheets = styleElementSheets(root);
   // The sheets the document holds for this root, which the next adoption replaces.
   let adopted = new Set<CSSStyleSheet>();
   const others = () => document.adoptedStyleSheets.filter((sheet) => !adopted.has(sheet));
   const adopt = () => {
-    const standing = new Set(root.querySelectorAll("style"));
-    for (const style of sheets.keys()) if (!standing.has(style)) sheets.delete(style);
-    for (const style of standing) {
-      const text = style.textContent ?? "";
-      const held = sheets.get(style);
-      if (held?.text === text) continue;
-      const sheet = held?.sheet ?? new CSSStyleSheet();
-      sheet.replaceSync(text);
-      sheets.set(style, { sheet, text });
-    }
-    const mine = new Set([...sheets.values()].map((held) => held.sheet));
+    const mine = new Set(sheets());
     document.adoptedStyleSheets = [...others(), ...mine];
     adopted = mine;
   };

@@ -11,8 +11,10 @@
 
 import { ACT_KIND } from "@luke/host/acts";
 import { UPDATE_STATUS, type UpdateSnapshot } from "@luke/settings/update";
+import { Option, Schema } from "effect";
 import { useEffect } from "react";
 import { useAct } from "./act.js";
+import { readKeptOption, writeKept } from "./kept-storage.js";
 import { TOAST_TONE, useToast } from "./toast.js";
 
 /** The storage key the version last announced is kept under. */
@@ -20,20 +22,12 @@ const ANNOUNCED_KEY = "luke.update-announced";
 
 /** The version last announced, or none where there is none or storage refuses the read. */
 function readAnnounced(): string | null {
-  try {
-    return window.localStorage.getItem(ANNOUNCED_KEY);
-  } catch {
-    return null;
-  }
+  return Option.getOrNull(readKeptOption(ANNOUNCED_KEY, Schema.String));
 }
 
 /** Keeps the version announced; storage that refuses the write leaves it to be said again. */
 function keepAnnounced(version: string): void {
-  try {
-    window.localStorage.setItem(ANNOUNCED_KEY, version);
-  } catch {
-    // Said again on the next launch main reports it, which is no worse.
-  }
+  writeKept(ANNOUNCED_KEY, Schema.String, version);
 }
 
 /** Says, once for each version, that Luke was updated to the version running. */

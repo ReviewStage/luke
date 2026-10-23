@@ -1,9 +1,6 @@
 import { CODER_TOOL } from "@luke/service/agents/coder-host/tool-set";
 import { UPDATE_TASK_TOOL } from "@luke/service/agents/coding-agent-tools";
-import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
-import { emitJsonSchema } from "@luke/wire/effect";
-import { defineTool } from "eve/tools";
-import { runAgentTool } from "../host.js";
+import { agentToolFor } from "../host.js";
 
 /**
  * update_task.ts -- the agent changes a task of its workspace on behalf of the member who started it: its name, repository, pin, or where it stands.
@@ -15,14 +12,4 @@ import { runAgentTool } from "../host.js";
  * change stops no agent, as the menu's stops none; a change already standing
  * answers as done, so a call run again changes nothing.
  */
-export default defineTool({
-  description: UPDATE_TASK_TOOL.description,
-  inputSchema: emitJsonSchema(UPDATE_TASK_TOOL.inputSchema),
-  execute: async (input, ctx) =>
-    // SAFETY: eve hands a tool the JSON object the model emitted; the host parses it as wire input.
-    runAgentTool(ctx.session.auth, ctx.session.id, {
-      tool: CODER_TOOL.UPDATE_TASK,
-      input: unparsedWire(input as WireBoundaryInput),
-      callId: ctx.callId,
-    }),
-});
+export default agentToolFor(CODER_TOOL.UPDATE_TASK, UPDATE_TASK_TOOL);

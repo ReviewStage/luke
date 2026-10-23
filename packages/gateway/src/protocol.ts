@@ -420,11 +420,12 @@ export const GATEWAY_METHOD = {
   CLIENT_BOOTSTRAP: "client.bootstrap",
   SETTINGS_SNAPSHOT: "settings.snapshot",
   SETTINGS_UPDATE: "settings.update",
-  SETTINGS_UPDATE_ENTRY: "settings.updateEntry",
   SETTINGS_RESET: "settings.reset",
   /** Each repository's run command on this Mac (`@luke/features/mac-terminal-wire`): read, and one repository's set. */
   MAC_REPOSITORIES_READ: "macRepositories.read",
   MAC_REPOSITORY_SET: "macRepositories.set",
+  /** The developer's answer to one command an agent asked to run on this Mac (`@luke/host/contract`'s `MAC_COMMAND_DECISION`), by the ask's id. */
+  MAC_COMMAND_ANSWER: "macCommands.answer",
   /** One experiment turned on or off for the signed-in account on the service; the settings as they then stand, the experiments among them. */
   EXPERIMENTS_SET: "experiments.set",
   ACCOUNT_SNAPSHOT: "account.snapshot",
@@ -752,6 +753,8 @@ export const GATEWAY_EVENT = {
   INBOX_CHANGED: "inbox.changed",
   /** What waits across the followed account, whole or why there is none, each time it moves while it is followed. */
   ACCOUNT_INBOX_CHANGED: "accountInbox.changed",
+  /** The commands agents asked to run on this Mac that wait on the developer's answer, whole, each time one is asked or answered. */
+  MAC_COMMAND_ASKS_CHANGED: "macCommandAsks.changed",
 } as const;
 
 export type GatewayEventKind = (typeof GATEWAY_EVENT)[keyof typeof GATEWAY_EVENT];

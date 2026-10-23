@@ -1,3 +1,5 @@
+import { harnessNameOf } from "@luke/features/agent-runtime-models";
+import { MODEL_PROVIDER } from "@luke/features/models-wire";
 import {
   AgentPlaceholderIcon,
   ArchiveIcon,
@@ -7,7 +9,6 @@ import {
   ArrowUpIcon,
   BackIcon,
   BoardIcon,
-  CallIcon,
   CheckIcon,
   ChevronDownIcon,
   ChevronRightIcon,
@@ -25,6 +26,7 @@ import {
   FolderIcon,
   ForwardIcon,
   GearIcon,
+  HarnessMark,
   ImageIcon,
   KeyboardIcon,
   LaptopIcon,
@@ -59,6 +61,9 @@ import {
   WaveformIcon,
   WingFace,
 } from "@luke/ui";
+import codexOneX from "../../../../packages/panel/marks/codex-16.png";
+import codexTwoX from "../../../../packages/panel/marks/codex-32.png";
+import codexThreeX from "../../../../packages/panel/marks/codex-48.png";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
@@ -67,6 +72,9 @@ import { CatalogSection } from "../section";
  * generated sources: Luke's face at rest, every glyph, and every provider's
  * mark, each drawn from the package itself rather than from a copy.
  */
+
+/** Codex's picture as the desktop serves it, from the panel's own files. */
+const CODEX_ART = { oneX: codexOneX, twoX: codexTwoX, threeX: codexThreeX };
 
 /** Every glyph `face/glyphs.tsx` draws, by the name it is exported under. */
 const GLYPHS = Object.entries({
@@ -78,7 +86,6 @@ const GLYPHS = Object.entries({
   ArrowUpIcon,
   BackIcon,
   BoardIcon,
-  CallIcon,
   CheckIcon,
   ChevronDownIcon,
   ChevronRightIcon,
@@ -153,6 +160,18 @@ function Artwork(): React.JSX.Element {
                 <Glyph />
               </span>
               <span className="catalog-tile-name">{name}</span>
+            </li>
+          ))}
+        </ul>
+      </CatalogSection>
+      <CatalogSection id="artwork-harness-marks" title="Harness marks">
+        <ul className="catalog-tiles">
+          {Object.values(MODEL_PROVIDER).map((provider) => (
+            <li key={provider} className="catalog-tile">
+              <span className="catalog-glyph">
+                <HarnessMark provider={provider} codexArt={CODEX_ART} />
+              </span>
+              <span className="catalog-tile-name">{harnessNameOf(provider)}</span>
             </li>
           ))}
         </ul>

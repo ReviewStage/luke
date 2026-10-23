@@ -30,7 +30,7 @@ import { AgentCallVideo, useAgentCallVideo } from "../call/panel-avatar.js";
 import { useOpenAiKeyMissing, useOpenApiKeys } from "../openai-key.js";
 import { APP_SLICE, useAppSlice, VOICE_AVAILABLE } from "../use-app-state.js";
 import { useStandingVoiceView } from "../use-voice-view.js";
-import { CALL_CONTROL_LABEL } from "./tasks-parts.js";
+import { CALL_CONTROL_LABEL, CallMute } from "./tasks-parts.js";
 
 /**
  * agent-call.tsx -- an agent's tab taking calls: the call's controls in the composer's row, and while a call into the agent stands, Luke's video centred above the composer and the voice's notice line over it.
@@ -127,33 +127,6 @@ function useCallButton(agentId: string) {
   };
 }
 
-/** A mute in the composer's row: its glyph struck through, and on the danger tint, while it is on. */
-function CallMute({
-  on,
-  label,
-  command,
-  icon,
-  onPress,
-}: {
-  on: boolean;
-  label: string;
-  command: typeof APP_COMMAND.TOGGLE_MICROPHONE | typeof APP_COMMAND.TOGGLE_SPEAKER;
-  icon: React.JSX.Element;
-  onPress: () => void;
-}): React.JSX.Element {
-  return (
-    <Tooltip label={label} command={command}>
-      <IconButton
-        variant={BUTTON_VARIANT.DANGER}
-        icon={icon}
-        label={label}
-        pressed={on}
-        onClick={onPress}
-      />
-    </Tooltip>
-  );
-}
-
 /**
  * Video on or off in the composer's row, wherever video is offered on the
  * call: its glyph says whether the video is up, as the mutes' say whether
@@ -235,6 +208,7 @@ export function AgentCallControls({
   return (
     <fieldset className="agent-call-controls" aria-label={CALL_CONTROLS_LABEL}>
       <CallMute
+        shape={BUTTON_SHAPE.SQUARE}
         on={view.speakerMuted}
         label={
           view.speakerMuted ? CALL_CONTROL_LABEL.UNMUTE_SPEAKER : CALL_CONTROL_LABEL.MUTE_SPEAKER
@@ -246,6 +220,7 @@ export function AgentCallControls({
         }
       />
       <CallMute
+        shape={BUTTON_SHAPE.SQUARE}
         on={button.muted}
         label={
           button.muted ? CALL_CONTROL_LABEL.UNMUTE_MICROPHONE : CALL_CONTROL_LABEL.MUTE_MICROPHONE

@@ -100,6 +100,33 @@ export interface AdminMetricsSource {
   };
 }
 
+/** The start of a UTC day key, as the instant a bound compares against. */
+export function dayStart(day: string): Date {
+  return new Date(`${day}T00:00:00.000Z`);
+}
+
+/**
+ * The retention grid's counts as the queries read them: each signup week's
+ * cohort size, and its distinct active accounts in each activity week.
+ */
+export function cohortRetention(
+  sizeRows: readonly { readonly week: string; readonly value: number }[],
+  activeRows: readonly {
+    readonly signupWeek: string;
+    readonly activityWeek: string;
+    readonly value: number;
+  }[],
+): AdminMetricsSource["retention"] {
+  const cohortSizes = new Map(sizeRows.map((row) => [row.week, row.value]));
+  const activeByCohortWeek = new Map<string, Map<string, number>>();
+  for (const row of activeRows) {
+    const byWeek = activeByCohortWeek.get(row.signupWeek) ?? new Map<string, number>();
+    byWeek.set(row.activityWeek, row.value);
+    activeByCohortWeek.set(row.signupWeek, byWeek);
+  }
+  return { cohortSizes, activeByCohortWeek };
+}
+
 /**
  * The window's UTC day keys, oldest first and ending on `now`'s own day, as the
  * usage table's YYYY-MM-DD keys. The series the dashboard draws is built from
