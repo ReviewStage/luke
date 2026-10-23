@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { MARK_PROVIDER, ProviderMark } from "@luke/ui";
+import { MARK_PROVIDER, type MarkProvider, ProviderMark } from "@luke/ui";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
@@ -16,8 +16,9 @@ import { TranscriptWords } from "./transcript-blocks.js";
 
 /**
  * site-link-chips.test.ts -- a link to a well-known site's page in words is
- * drawn as its chip: Google Maps's own pin, and the place, search, or route
- * its address spells, a labelled link keeping its label. Synthetic places.
+ * drawn as its chip: its site's own mark, and the place, route, code, or
+ * author its address spells, a labelled link keeping its label. Synthetic
+ * places and pages.
  */
 
 const PLACE = "https://www.google.com/maps/place/Ferry+Building/@37.79,-122.39,17z/data=!3m1";
@@ -65,4 +66,31 @@ test("a Google Maps link is a chip wearing Maps's pin and called by its place, i
     ["Ferry Building", "SFO → Ferry Building", "the pier"],
   );
   for (const chip of chips) assert.equal(chip.querySelector("svg")?.outerHTML, pin);
+});
+
+test("a Google Doc, a Meet, a YouTube video, and an X post each wear their own mark and say what their address spells", async () => {
+  const container = await drawn(
+    [
+      "https://docs.google.com/document/d/1AbC/edit",
+      "https://meet.google.com/abc-defg-hij",
+      "https://youtu.be/dQw4w9WgXcQ",
+      "https://x.com/acme/status/1850000000000000000",
+    ].join(" and "),
+  );
+  const chips = [...container.querySelectorAll<HTMLElement>("[data-mention-ref]")];
+  const mark = (provider: MarkProvider) =>
+    renderToStaticMarkup(createElement(ProviderMark, { provider }));
+
+  assert.deepEqual(
+    chips.map((chip) => [
+      chip.querySelector(".luke-inline-ref-label")?.textContent,
+      chip.querySelector("svg")?.outerHTML,
+    ]),
+    [
+      ["Google Docs", mark(MARK_PROVIDER.GOOGLE_DOCS)],
+      ["abc-defg-hij", mark(MARK_PROVIDER.GOOGLE_MEET)],
+      ["YouTube", mark(MARK_PROVIDER.YOUTUBE)],
+      ["Post by @acme", mark(MARK_PROVIDER.X)],
+    ],
+  );
 });
