@@ -38,6 +38,7 @@ import {
 import {
   deploymentOidcToken,
   type ListedSandbox,
+  SANDBOX_STATUS,
   type VercelSandboxApi,
   vercelSandboxApi,
 } from "../agents/vercel-sandbox-api.js";
@@ -55,9 +56,6 @@ export const SANDBOX_RETENTION_SWEEP = {
 
 /** The name prefixes of the coding agents' own sandboxes, eve's and a native agent's. */
 const AGENT_SANDBOX_NAMES = [EVE_SESSION_SANDBOX_NAME, SANDBOX_NAME] as const;
-
-/** The status a sandbox is down in, its filesystem kept in its snapshot. */
-const STOPPED_STATUS = "stopped";
 
 /** What one sweep came to: sandboxes brought onto the bound, ones left, ones Vercel did not confirm, ones past the bound, and ones whose snapshot went. */
 export interface SandboxRetentionSweepOutcome {
@@ -102,7 +100,9 @@ const unboundIn = (api: VercelSandboxApi, bucket: string) =>
     Effect.map((pages) =>
       pages
         .flat()
-        .filter((sandbox) => sandbox.status === STOPPED_STATUS && !retentionStands(sandbox)),
+        .filter(
+          (sandbox) => sandbox.status === SANDBOX_STATUS.STOPPED && !retentionStands(sandbox),
+        ),
     ),
   );
 

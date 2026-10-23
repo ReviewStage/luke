@@ -150,16 +150,14 @@ import {
 } from "../repository-snapshot.js";
 import { WITHOUT_CAPABILITIES } from "../sandbox-capabilities.js";
 import { capSandboxTimeout } from "../sandbox-keep-alive.js";
-import {
-  credentialPolicy,
-  OPEN_INTERNET_POLICY,
-  type RepositoryCredential,
-} from "../terminal/agent-sandbox.js";
+import { credentialPolicy, type RepositoryCredential } from "../terminal/agent-sandbox.js";
 import {
   deploymentOidcToken,
   type ListedSandbox,
   type NetworkPolicy,
   NOT_FOUND_STATUS,
+  OPEN_INTERNET_POLICY,
+  SANDBOX_STATUS,
   type SandboxFile,
   SandboxUnavailable,
   SESSION_TAG,
@@ -589,7 +587,7 @@ function liveRunner(
   const runner = taggedRunner(sandbox);
   if (
     runner === undefined ||
-    sandbox.status !== "running" ||
+    sandbox.status !== SANDBOX_STATUS.RUNNING ||
     sandbox.currentSessionId !== runner.sandboxSessionId
   ) {
     return Effect.succeed(undefined);
@@ -1416,7 +1414,8 @@ export const runnerEnded = Effect.fn("web/runnerEnded")(function* (ending: Runne
   const launch = taggedLaunch(found.value.tags ?? {});
   if (launch !== undefined && ending.sequence < launch.firstSequence) return RUNNER_ENDED.STALE;
   const running = found.value.currentSessionId;
-  if (found.value.status !== "running" || running === undefined) return RUNNER_ENDED.STALE;
+  if (found.value.status !== SANDBOX_STATUS.RUNNING || running === undefined)
+    return RUNNER_ENDED.STALE;
   // Read last, just before the stop, so a developer who opened a Terminal during the turn keeps the sandbox.
   if (yield* sandboxHeld(ending.target.conversationId, yield* DateTime.nowAsDate))
     return RUNNER_ENDED.HELD;
