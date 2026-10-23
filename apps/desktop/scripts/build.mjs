@@ -9,8 +9,6 @@ import {
   excalidrawFontsLocal,
   excalidrawLeftOut,
   HIGHLIGHT_WORKER_BUILD,
-  HIGHLIGHT_WORKER_SCRIPT,
-  highlightWorkerScriptModule,
   LUCIDE_WHOLE,
   lucideWholeModule,
   panelDefines,
@@ -228,21 +226,10 @@ const SIDE_BUNDLE_ENTRIES = {
 };
 
 // The worker Pierre's diffs highlights a Files changed list in, bundled as
-// the panel's build table says (`HIGHLIGHT_WORKER_BUILD`), its text the
-// module the diff bundle imports on demand (`HIGHLIGHT_WORKER_SCRIPT`), so
-// it is a chunk of its own, fetched once the diff bundle's pool starts.
+// the panel's build table says (`HIGHLIGHT_WORKER_BUILD`) and handed to the
+// diff bundle as text through `panelDefines`.
 const highlightWorker = await build(HIGHLIGHT_WORKER_BUILD);
 const highlightWorkerText = highlightWorker.outputFiles[0]?.text ?? "";
-const highlightWorkerScript = {
-  name: "highlight-worker-script",
-  setup(build) {
-    build.onLoad({ filter: /[\\/]highlight-worker-script\.ts$/ }, (args) =>
-      args.path === HIGHLIGHT_WORKER_SCRIPT
-        ? { contents: highlightWorkerScriptModule(highlightWorkerText), loader: "js" }
-        : undefined,
-    );
-  },
-};
 
 // The renderer, as ES modules: one entry per window role, so a window parses
 // only the surface it mounts, the side bundles above, and the chunks the
@@ -271,7 +258,6 @@ const rendererBuild = build({
   conditions: ["production"],
   plugins: [
     panelRedirects,
-    highlightWorkerScript,
     lucideWholeOnDemand,
     excalidrawTrim,
     excalidrawFontsLocal,
@@ -284,7 +270,7 @@ const rendererBuild = build({
   sourcemap: "external",
   logLevel: "info",
   define: {
-    ...panelDefines(),
+    ...panelDefines(highlightWorkerText),
     // The analytics project the screen recorder files into, from the
     // packaging environment rather than source, where secret scanners
     // cannot tell a published project key from a real secret, and only for a

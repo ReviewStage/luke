@@ -17,8 +17,6 @@ import {
   excalidrawLeftOut,
   excalidrawWithoutFontFallback,
   HIGHLIGHT_WORKER_BUILD,
-  HIGHLIGHT_WORKER_SCRIPT,
-  highlightWorkerScriptModule,
   LUCIDE_WHOLE,
   lucideWholeModule,
   panelDefines,
@@ -102,33 +100,19 @@ export function panelResolve(): Plugin {
 }
 
 /**
- * The free identifiers the panel reads. Note that `process.env.NODE_ENV` is
- * left to Vite, which sets it by mode.
+ * The free identifiers the panel reads, among them the diff highlighter's
+ * worker, bundled through esbuild as the desktop bundles it. Note that
+ * `process.env.NODE_ENV` is left to Vite, which sets it by mode.
  */
 function panelDefine(): Plugin {
   return {
     name: "panel-define",
-    config() {
-      const { "process.env.NODE_ENV": _mode, ...define } = panelDefines();
+    async config() {
+      const worker = await build(HIGHLIGHT_WORKER_BUILD);
+      const { "process.env.NODE_ENV": _mode, ...define } = panelDefines(
+        worker.outputFiles?.[0]?.text ?? "",
+      );
       return { define };
-    },
-  };
-}
-
-/**
- * The diff highlighter's worker, bundled through esbuild as the desktop
- * bundles it, answering the module the diff bundle imports its text from on
- * demand (`HIGHLIGHT_WORKER_SCRIPT`), which Rollup then splits into a chunk
- * of its own.
- */
-function panelHighlightWorker(): Plugin {
-  let text: Promise<string> | undefined;
-  return {
-    name: "panel-highlight-worker",
-    load(id) {
-      if (id.split("?")[0] !== HIGHLIGHT_WORKER_SCRIPT) return undefined;
-      text ??= build(HIGHLIGHT_WORKER_BUILD).then((worker) => worker.outputFiles?.[0]?.text ?? "");
-      return text.then(highlightWorkerScriptModule);
     },
   };
 }
@@ -180,5 +164,5 @@ function panelStaticFiles(): Plugin {
 
 /** Everything the web's build needs to bundle the panel. */
 export function panelBuild(): Plugin[] {
-  return [panelResolve(), panelDefine(), panelHighlightWorker(), panelStaticFiles()];
+  return [panelResolve(), panelDefine(), panelStaticFiles()];
 }

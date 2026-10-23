@@ -152,11 +152,10 @@ export function lucideWholeModule(file) {
 }
 
 // The worker Pierre's diffs highlights a Files changed list in
-// (`src/diff-view/index.ts`'s `listHighlighting`), bundled whole as one
-// classic script whose text each build answers
-// `src/diff-view/highlight-worker-script.ts` with, a chunk the diff bundle
-// fetches once its pool starts and starts each worker from as a `blob:`, the
-// one place the panel's policy admits a worker from.
+// (`src/diff-view/highlight-pool.ts`, started by `src/diff-view/index.ts`),
+// bundled whole as one classic script and handed to the diff bundle as text
+// (`DIFF_HIGHLIGHT_WORKER`), which starts each worker from a `blob:`, the one
+// place the panel's policy admits a worker from.
 //
 // The worker is handed every grammar and theme it highlights with by the
 // window's thread, which loads each on its own as a language or a theme is
@@ -186,7 +185,7 @@ const highlightWorkerSetsLeftOut = {
 /**
  * The esbuild options the highlight worker is bundled with; each build runs
  * them through its own esbuild, since Vite bundles a classic script no
- * differently, and answers `HIGHLIGHT_WORKER_SCRIPT` with the text.
+ * differently, and hands `panelDefines` the text.
  */
 export const HIGHLIGHT_WORKER_BUILD = {
   entryPoints: [fileURLToPath(import.meta.resolve("@pierre/diffs/worker/worker.js"))],
@@ -202,22 +201,12 @@ export const HIGHLIGHT_WORKER_BUILD = {
   logLevel: "info",
 };
 
-/** The module each build answers with the highlight worker's text, which the diff bundle imports on demand. */
-export const HIGHLIGHT_WORKER_SCRIPT = path.join(
-  panelRoot,
-  "src/diff-view/highlight-worker-script.ts",
-);
-
-/** What `HIGHLIGHT_WORKER_SCRIPT` is answered with, given the worker's text. */
-export function highlightWorkerScriptModule(text) {
-  return `export const HIGHLIGHT_WORKER_SCRIPT = ${JSON.stringify(text)};`;
-}
-
-/** The free identifiers the panel's code reads that a build replaces. */
-export function panelDefines() {
+/** The free identifiers the panel's code reads that a build replaces, given the highlight worker's text. */
+export function panelDefines(highlightWorkerText) {
   return {
     "process.env.NODE_ENV": '"production"',
     "process.env.IS_PREACT": '"false"',
+    DIFF_HIGHLIGHT_WORKER: JSON.stringify(highlightWorkerText),
   };
 }
 
