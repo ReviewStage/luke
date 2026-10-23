@@ -35,6 +35,8 @@ import {
   RESIZE_EDGE_SIDE,
   ResizeEdge,
   type ResizeEdgeHandle,
+  RowHint,
+  RowHintOptions,
   SCROLL_SIZE,
   ScrollArea,
   SidePanelIcon,
@@ -734,7 +736,7 @@ function terminalOffers(
 const noFocusMove = () => undefined;
 
 /** One tab the strip draws: the tab, how it looks, how it closes, and how its transcript is copied. */
-interface DrawnTab {
+export interface DrawnTab {
   tab: SidePanelTab;
   look: TabLook;
   /** Closes the tab, as its × does. */
@@ -1176,7 +1178,7 @@ function PanelTabs({
  * what the "+" offers, as the empty panel offers it, since a phone draws no
  * "+". With nothing open past the plan it says so over the offers.
  */
-function ActivityList({
+export function ActivityList({
   strip,
   offers,
   onListed,
@@ -1205,24 +1207,31 @@ function ActivityList({
           // Note that the open tabs are dense rows, as the offers under them (`MenuRowList`) are, so both read down one edge in one type.
           <List label="Activity" density={LIST_DENSITY.DENSE}>
             {open.map((entry) => (
-              <ListRow
-                key={tabKey(entry.tab)}
-                leading={entry.look.icon}
-                title={entry.look.label}
-                meta={entry.look.detail}
-                unread={entry.look.unread}
-                actions={
-                  <IconButton
-                    icon={<CloseIcon />}
-                    label={`Close ${entry.look.label}`}
-                    onClick={entry.close}
-                  />
-                }
-                onPress={() => {
-                  onListed(false);
-                  entry.look.onSelect();
-                }}
-              />
+              // Note that a tab's card hangs on its row as it hangs on the tab in the strip, since a row drops nothing its tab carries.
+              <RowHintOptions key={tabKey(entry.tab)} card={entry.look.card} cardBeside>
+                <ListRow
+                  leading={entry.look.icon}
+                  title={entry.look.label}
+                  meta={entry.look.detail}
+                  unread={entry.look.unread}
+                  hint={
+                    entry.look.card === undefined
+                      ? undefined
+                      : { Hint: RowHint, label: entry.look.label }
+                  }
+                  actions={
+                    <IconButton
+                      icon={<CloseIcon />}
+                      label={`Close ${entry.look.label}`}
+                      onClick={entry.close}
+                    />
+                  }
+                  onPress={() => {
+                    onListed(false);
+                    entry.look.onSelect();
+                  }}
+                />
+              </RowHintOptions>
             ))}
           </List>
         )}

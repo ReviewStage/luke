@@ -23,7 +23,7 @@ import {
   TextLink,
 } from "@luke/ui";
 import { ACTOR_KIND, ACTOR_STATE, type Actor, actorName } from "@luke/ui/actor-model";
-import { TAB_WORDS } from "@luke/ui/tab-strip-model";
+import { pullRequestLabelOf, TAB_WORDS } from "@luke/ui/tab-strip-model";
 import { MESSAGE_ROLE } from "@luke/wire";
 import { ChevronsUpIcon, SplitIcon, TextQuoteIcon } from "lucide-react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
@@ -376,9 +376,7 @@ function ReplayFoot({
   const pullRequest = published?.pullRequest ?? place.pullRequests.get(agentId);
   const branch = published?.branch ?? undefined;
   const words =
-    pullRequest === undefined || pullRequest === null
-      ? undefined
-      : `#${pullRequest.number} ${pullRequest.title}`;
+    pullRequest === undefined || pullRequest === null ? undefined : pullRequestLabelOf(pullRequest);
   return (
     <div className="replay-foot">
       {branch === undefined ? null : (

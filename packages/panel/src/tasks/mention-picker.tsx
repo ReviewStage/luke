@@ -43,6 +43,7 @@ import {
 import { type Actor, LUKE_ACTOR, memberActor } from "@luke/ui/actor-model";
 import type { NamedServer } from "@luke/ui/agent-servers-model";
 import type { SkillOption } from "@luke/ui/skill-mention";
+import { pullRequestLabelOf } from "@luke/ui/tab-strip-model";
 import { fileFolder, fileName } from "@luke/voice/code-pane-model";
 import { defaultFilter } from "cmdk";
 import {
@@ -621,7 +622,7 @@ function pullRequestRows(
 ): MentionRow[] {
   if (taskId === NO_TASK) return [];
   return pullRequests.map((pullRequest) => {
-    const name = `#${pullRequest.number} ${pullRequest.title}`;
+    const name = pullRequestLabelOf(pullRequest);
     const detail = pullRequest.agent ?? PULL_REQUEST_DETAIL;
     return {
       mention: {

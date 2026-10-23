@@ -81,7 +81,7 @@ afterEach(() => {
 });
 
 /** The pin's row drawn in the sidebar's list, answering its press. */
-function drawPin(): HTMLElement {
+function drawPin(pin: PinnedTab = PIN, task: TaskSummary = TASK): HTMLElement {
   const list = document.body.appendChild(document.createElement("ul"));
   root = createRoot(list);
   act(() =>
@@ -89,9 +89,9 @@ function drawPin(): HTMLElement {
       onRegistry(
         AtomRegistry.make(),
         createElement(SidebarPinnedTab, {
-          tasks: tasksControl({ tasks: [TASK] }),
-          pin: PIN,
-          task: TASK,
+          tasks: tasksControl({ tasks: [task] }),
+          pin,
+          task,
           current: false,
           inSight: true,
           onOpen: () => undefined,
@@ -176,4 +176,40 @@ test("a pinned agent's card hung again after its read failed asks again, and sho
   await settled();
   assert.deepEqual(reads, [AGENT, AGENT]);
   assert.match(card()?.textContent ?? "", /Expire invitations/u);
+});
+
+test("a pinned Changes tab wears its pull request's mark and current label where its task's row holds the pull request, and the grey icon and pinned label where it holds none", () => {
+  const pin: PinnedTab = { task: TASK.id, tab: { changes: AGENT }, label: "#42 Old title", at: 1 };
+  const held: TaskSummary = {
+    ...TASK,
+    agents: {
+      total: 1,
+      working: 0,
+      agents: [],
+      pullRequestTotal: 1,
+      pullRequests: [
+        {
+          number: 42,
+          title: "Expire invitations",
+          state: PULL_REQUEST_STATE.MERGED,
+          checks: CHECK_SUMMARY.PASSING,
+          additions: 4,
+          deletions: 1,
+          agentId: AGENT,
+        },
+      ],
+    },
+  };
+  const live = drawPin(pin, held);
+  assert.equal(live.textContent, "#42 Expire invitations");
+  assert.equal(
+    live.querySelector("[data-pull-request-mark]")?.getAttribute("data-pull-request-state"),
+    PULL_REQUEST_STATE.MERGED,
+  );
+
+  act(() => root?.unmount());
+  document.body.replaceChildren();
+  const unknown = drawPin(pin, TASK);
+  assert.equal(unknown.textContent, "#42 Old title");
+  assert.equal(unknown.querySelector("[data-pull-request-mark]"), null);
 });
