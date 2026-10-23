@@ -70,7 +70,9 @@
   },
   "dependencies": {
     "@sentry/electron": "8.2.0",
-    "electron-liquid-glass": "1.1.1",
     "electron-updater": "6.8.9"
+  },
+  "optionalDependencies": {
+    "electron-liquid-glass": "1.1.1"
   }
 }
