@@ -241,7 +241,14 @@ function GitHubPicture({
   return state.kind === PICTURE_STATE.READY ? (
     <img className="pull-request-picture" src={state.url} alt={alt} />
   ) : (
-    <span className="pull-request-picture-waiting" role="img" aria-label={alt}>
+    <PictureSkeleton alt={alt} />
+  );
+}
+
+/** A linked picture while it is read: a block the size a picture stands at, named by its alternative words. */
+function PictureSkeleton({ alt }: { alt: string }): React.JSX.Element {
+  return (
+    <span className="pull-request-picture-skeleton" role="img" aria-label={alt}>
       <Skeleton shape={SKELETON_SHAPE.BLOCK} />
     </span>
   );
