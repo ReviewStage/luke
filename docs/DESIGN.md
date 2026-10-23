@@ -188,8 +188,8 @@ side panel's first tab, the transcript, and Settings' page list all read down
 that one edge. Controls in a row stand `--luke-control-gap` apart, a glyph
 `--luke-icon-gap` from its words, a column's groups `--luke-section-gap`, and a page's
 content `--luke-page-inset` from its column, each the desktop profile's role.
-No pixel of padding, margin, or gap in `shell.css`, `desktop.css`,
-and `tooltip.css` is anything but one of these; the optical
+No pixel of padding, margin, or gap in `shell.css` and `desktop.css` is
+anything but one of these; the optical
 exception above is marked `/* off-scale */` on its declaration, so a reader
 sees it is deliberate.
 

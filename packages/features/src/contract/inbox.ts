@@ -17,8 +17,8 @@ import { accountInboxAnswerSchema } from "../account-inbox-wire.js";
 import { MAXIMUM_ATTACHMENTS_BODY_BYTES } from "../coding-agent-wire.js";
 import {
   INBOX_BOUNDS,
+  inboxAcknowledgeRequestSchema,
   inboxAnsweredSchema,
-  inboxAnswerRequestSchema,
   inboxAnswerSchema,
   inboxCloseRequestSchema,
   inboxCursorSchema,
@@ -32,17 +32,7 @@ import {
 import { HOSTED_SERVICE_PATH } from "../service-paths.js";
 import { bodyCap, exactBodyInput, exactInput, hostedProcedure } from "./base.js";
 
-/** An answer is a note, a few short fields, and the files a message may carry: the note's bound at JSON's widest escape, the files, and room for the rest. */
-const ANSWER_BODY_BYTES =
-  6 *
-    (INBOX_BOUNDS.MAX_NOTE_CHARS +
-      INBOX_BOUNDS.MAX_FIELDS *
-        (INBOX_BOUNDS.MAX_LABEL_CHARS + INBOX_BOUNDS.MAX_FIELD_VALUE_CHARS) +
-      INBOX_BOUNDS.MAX_OPTIONS * INBOX_BOUNDS.MAX_LABEL_CHARS) +
-  MAXIMUM_ATTACHMENTS_BODY_BYTES +
-  2_048;
-
-/** A close is a revision and a key, so a few hundred bytes hold it. */
+/** A nod or a close is a revision and a key, so a few hundred bytes hold it. */
 const CLOSE_BODY_BYTES = 1_024;
 
 /** A message is its words, the files a message may carry, and the answer it may carry: the words' and the answer's picks and values at JSON's widest escape, the files, and room for the key, the ask, and the steps. */
@@ -102,7 +92,7 @@ export const inboxContract = {
     .input(pastCursorSchema)
     .output(EffectSchema.flip(inboxAnswerSchema)),
   answer: hostedProcedure
-    .meta(bodyCap(ANSWER_BODY_BYTES))
+    .meta(bodyCap(CLOSE_BODY_BYTES))
     .meta(
       openapi({
         method: HTTP_METHOD.POST,
@@ -110,7 +100,7 @@ export const inboxContract = {
         inputStructure: "detailed",
       }),
     )
-    .input(exactBodyInput(pathIdSchema, inboxAnswerRequestSchema))
+    .input(exactBodyInput(pathIdSchema, inboxAcknowledgeRequestSchema))
     .output(EffectSchema.flip(inboxAnsweredSchema)),
   close: hostedProcedure
     .meta(bodyCap(CLOSE_BODY_BYTES))

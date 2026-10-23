@@ -454,8 +454,9 @@
   padding-left: calc(var(--row-inset) + var(--luke-menu-inset));
 }
 
-/* The editor of a plan's text is the room its @ list hangs in. */
-.plan-document-editor {
+/* A Markdown document's editor (`markdown-editor.tsx`) is the room its
+   toolbar, its / menu, and its @ list hang in. */
+.markdown-editor {
   position: relative;
 }
 

@@ -5,11 +5,7 @@ import {
 } from "./agent-browser-tab-wire.js";
 import { boardSaveRequestSchema, boardSchema } from "./board-wire.js";
 import { codingAgentAgentAnswerSchema } from "./coding-agent-view.js";
-import {
-  CODING_AGENT_ATTACHMENT_TYPE,
-  codingAgentSummarySchema,
-  tasklessAgentSchema,
-} from "./coding-agent-wire.js";
+import { codingAgentSummarySchema, tasklessAgentSchema } from "./coding-agent-wire.js";
 import {
   GITHUB_ISSUES_BOUNDS,
   githubIssueSummarySchema,
@@ -32,6 +28,7 @@ import {
 } from "./page-wire.js";
 import { pictureDataUrlSchema } from "./picture-wire.js";
 import { pinPositionSchema } from "./pin-order.js";
+import { planAttachmentTypeSchema } from "./plan-attachment-wire.js";
 import {
   planCommentActionRequestSchema,
   planCommentStartRequestSchema,
@@ -857,13 +854,13 @@ export type TasksPictureParams = typeof tasksPictureParamsSchema.Type;
  * One attachment of a plan, as the window hears it: its bytes in base64
  * under its media type, which the window draws or offers from a `data:` URL
  * of its own making, or why there is none: not the account's to read, or no
- * answer. A picture the plan's text names is an image; a file a comment
- * carries is any type a coding agent's file may be. The host fetched it
+ * answer. A picture the plan's text names is an image or a video; a file a
+ * comment carries is any type a coding agent's file may be. The host fetched it
  * under the account, so the window holds no bearer and no address.
  */
 export const tasksPictureAnswerSchema = EffectSchema.Union([
   EffectSchema.Struct({
-    contentType: EffectSchema.Literals(Object.values(CODING_AGENT_ATTACHMENT_TYPE)),
+    contentType: planAttachmentTypeSchema,
     base64: EffectSchema.String,
   }),
   EffectSchema.Struct({
@@ -873,7 +870,7 @@ export const tasksPictureAnswerSchema = EffectSchema.Union([
 
 export type TasksPictureAnswer = typeof tasksPictureAnswerSchema.Type;
 
-/** A picture kept on a plan, as the editor that took it asks: the plan, and the picture as a `data:` URL. */
+/** A picture kept on a plan, as the editor that took it asks: the plan, and the picture or video as a `data:` URL. */
 export const tasksPictureKeepParamsSchema = EffectSchema.Struct({
   planId: EffectSchema.NonEmptyString,
   picture: pictureDataUrlSchema,
@@ -881,9 +878,10 @@ export const tasksPictureKeepParamsSchema = EffectSchema.Struct({
 
 export type TasksPictureKeepParams = typeof tasksPictureKeepParamsSchema.Type;
 
-/** Why a picture was not kept: the plan holds its bound of pictures, the plan is not the account's to write, or no answer. */
+/** Why a picture was not kept: the plan holds its bound of pictures, or of videos, the plan is not the account's to write, or no answer. */
 export const PICTURE_KEEP_FAILURE = {
   TOO_MANY: "too-many",
+  TOO_MANY_VIDEOS: "too-many-videos",
   NOT_FOUND: TASK_CALL_FAILURE.NOT_FOUND,
   UNANSWERED: TASK_CALL_FAILURE.UNANSWERED,
 } as const;

@@ -26,7 +26,6 @@ import {
   INBOX_IMAGE_TYPE,
   INBOX_MESSAGE_AUTHOR,
   INBOX_REPLY,
-  INBOX_RESPONSE,
   INBOX_STATUS,
   INBOX_WIRE_VERSION,
   type InboxItem,
@@ -232,8 +231,6 @@ const ITEM: InboxItem = {
   revision: 2,
   version: INBOX_WIRE_VERSION,
   title: "Push to the release branch?",
-  blocks: [],
-  response: { type: INBOX_RESPONSE.APPROVAL },
   needsReply: true,
   status: INBOX_STATUS.OPEN,
   postedAt: 1_800_000_000_000,
@@ -673,18 +670,8 @@ function fakeService() {
       }),
     answerInbox: (itemId, request) =>
       Effect.sync(() => {
-        asked.push(
-          `answer:${itemId}:${request.revision}:${request.reply}:${request.note ?? ""}:${request.clientKey}`,
-        );
-        return {
-          item: {
-            ...ITEM,
-            revision: 3,
-            status: INBOX_STATUS.ANSWERED,
-            answer: { reply: request.reply },
-          },
-          taken: true,
-        };
+        asked.push(`answer:${itemId}:${request.revision}:${request.reply}:${request.clientKey}`);
+        return { item: { ...ITEM, revision: 3, status: INBOX_STATUS.ANSWERED }, taken: true };
       }),
     accountInboxLive: (userId, poll) =>
       Effect.sync(() => {
@@ -1115,19 +1102,10 @@ it.effect("each method asks the service once and answers what it said, whole", (
       yield* call(GATEWAY_METHOD.CODING_AGENTS_INBOX_ANSWER, {
         itemId: ITEM.id,
         revision: 2,
-        reply: INBOX_REPLY.DECLINED,
-        note: "Not before the freeze lifts.",
+        reply: INBOX_REPLY.ACKNOWLEDGED,
         clientKey: "answer-1",
       }),
-      {
-        item: {
-          ...ITEM,
-          revision: 3,
-          status: INBOX_STATUS.ANSWERED,
-          answer: { reply: INBOX_REPLY.DECLINED },
-        },
-        taken: true,
-      },
+      { item: { ...ITEM, revision: 3, status: INBOX_STATUS.ANSWERED }, taken: true },
     );
     assert.deepEqual(
       yield* call(GATEWAY_METHOD.CODING_AGENTS_INBOX_CLOSE, {
@@ -1257,7 +1235,7 @@ it.effect("each method asks the service once and answers what it said, whole", (
       `attachment:${ITEM.id}:${ATTACHMENT_ID}`,
       `picture:${AGENT_ID}:${PICTURE_ID}:call-worker`,
       `part:${AGENT_ID}:message-1:2:`,
-      `answer:${ITEM.id}:2:${INBOX_REPLY.DECLINED}:Not before the freeze lifts.:answer-1`,
+      `answer:${ITEM.id}:2:${INBOX_REPLY.ACKNOWLEDGED}:answer-1`,
       `close:${ITEM.id}:2:close-1`,
       `inbox-message:${ITEM.id}:Also page on-call.:pager.txt:message-1`,
       `inbox-message:${ITEM.id}:Ship it.::message-2:answers ${MESSAGE_ID} chose Ship it`,
@@ -2234,7 +2212,6 @@ const ITEM_ROW = {
   ...LIVE_ITEM,
   startedBy: "user-dana",
   startedByName: null,
-  answer: null,
   answeredBy: null,
   answeredByName: null,
   closedReason: null,

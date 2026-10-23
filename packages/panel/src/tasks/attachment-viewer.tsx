@@ -88,7 +88,7 @@ const ZOOM_CHORD = {
 /** No notes on a file of a message. */
 const NO_NOTES: readonly WholeFileNote[] = [];
 
-/** One more thing the viewer's picture may be given to: its button's words and glyph, and what a press does with the file shown. */
+/** One more thing the viewer's picture or video may be given to: its button's words and glyph, and what a press does with the file shown. */
 export interface ViewerAction {
   readonly label: string;
   readonly icon: React.ReactNode;
@@ -228,7 +228,7 @@ export function AttachmentViewer({
   /** Shows the message's file at this place. */
   onAt: (at: number) => void;
   onClose: () => void;
-  /** One more thing a picture shown may be given to, named in the header before Download; none where the place opening the viewer offers nothing. */
+  /** One more thing a picture or a video shown may be given to, named in the header before Download; none where the place opening the viewer offers nothing. */
   action?: ViewerAction | undefined;
   /** A quiet line the place says of the file shown, after its size, such as who last edited a plan's picture; none where it says nothing. */
   note?: React.ReactNode;
@@ -254,6 +254,7 @@ export function AttachmentViewer({
   // keyboard's focus out of the card.
   const walk = (step: number) => onAt((at + step + files.length) % files.length);
   const image = attachmentView(file) === ATTACHMENT_VIEW.IMAGE;
+  const video = attachmentView(file) === ATTACHMENT_VIEW.VIDEO;
   // The arrows walk the message's files, and a picture's zoom keys zoom it;
   // a key's own default, a copy of the lines selected among them, is left alone.
   const walkKey = (event: React.KeyboardEvent<HTMLDivElement>) => {
@@ -329,7 +330,7 @@ export function AttachmentViewer({
               />
             </>
           ) : null}
-          {action === undefined || !image ? null : (
+          {action === undefined || !(image || video) ? null : (
             <Button icon={action.icon} onClick={() => action.onPress(file)}>
               {action.label}
             </Button>

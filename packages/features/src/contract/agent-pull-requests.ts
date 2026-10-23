@@ -30,11 +30,12 @@ import { bodyCap, exactInput, hostedProcedure } from "./base.js";
 
 /**
  * A change to a pull request names the change and its few fields, a
- * review's words the longest of them, so a body past this is no change.
+ * review's words the longest of them, and a description's edit two such
+ * words, its own and those it began from, so a body past this is no change.
  * Note that each of those words' characters may take six bytes as JSON,
  * a control character escaped as `\u0000`.
  */
-const ACTION_BODY_BYTES = PULL_REQUEST_WRITE_BOUNDS.MAX_BODY_CHARS * 6 + 4_096;
+const ACTION_BODY_BYTES = PULL_REQUEST_WRITE_BOUNDS.MAX_BODY_CHARS * 2 * 6 + 4_096;
 
 /** The public paths, each naming the agent under `{id}`. */
 const AGENT_PULL_REQUEST_PATH = {

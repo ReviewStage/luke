@@ -45,6 +45,7 @@ interface Standing {
   taskId: string | undefined;
   agentId?: string;
   repository: string | null;
+  listedAgents?: readonly CodingAgentSummary[];
 }
 
 /** Any kind the hook asks. */
@@ -106,6 +107,7 @@ function mount(
       taskId: held.taskId,
       agentId: held.agentId,
       repository: held.repository,
+      listedAgents: held.listedAgents,
       onOpenIntegrations: () => undefined,
       onOpenApiKeys: () => undefined,
       onStarted: (agentId) => started.push(agentId),
@@ -155,6 +157,31 @@ function startPayloads(
 // Note that the refusal raises the window's toast, whose waits stand on the test's clock.
 
 // Note that the refusal raises the window's toast, whose waits stand on the test's clock.
+
+test("the task's agents the followed list carries draw before its list is read, and the read adds the archived ones", async () => {
+  const OTHER_TASK = "3c2d1e0f-4a5b-4c6d-8e7f-9a0b1c2d3e4f";
+  const elsewhere = { ...STARTED, id: "5d4c3b2a-1f0e-4d9c-8b7a-6f5e4d3c2b1a", planId: OTHER_TASK };
+  const archived = {
+    ...STARTED,
+    id: "9e8d7c6b-5a4f-4e3d-9c2b-1a0f9e8d7c6b",
+    status: CODING_AGENT_STATUS.COMPLETED,
+    archivedAt: 2,
+  };
+  const tab = mount({ taskId: TASK, repository: "acme/relay", listedAgents: [elsewhere, STARTED] });
+  const read = Promise.withResolvers<WireBoundaryInput>();
+  tab.answer(ACT_KIND.CODING_AGENTS_LIST, read.promise);
+  await tab.mount();
+
+  assert.deepEqual(tab.control().agentIds, [AGENT]);
+
+  read.resolve({ agents: [STARTED, archived] });
+  await settle();
+  assert.deepEqual(tab.control().agentIds, [AGENT]);
+  assert.deepEqual(
+    tab.control().archived?.map((agent) => agent.id),
+    [archived.id],
+  );
+});
 
 test("a draft asks nothing of the service, one per plan, until its first message starts the agent on those words as its prompt under the draft's key, with the MCP servers it switched off, opening its tab", async () => {
   const OTHER_TASK = "3c2d1e0f-4a5b-4c6d-8e7f-9a0b1c2d3e4f";

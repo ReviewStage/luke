@@ -72,7 +72,7 @@ function respondedDraft(response: ChatResponse, draft: InboxDraft): InboxDraft {
 
 /** The answer the card's controls and note hold, or none where they hold none the ask takes. */
 export function chatAskReply(response: ChatResponse, draft: InboxDraft): ChatReply | undefined {
-  return inboxReply({ response }, respondedDraft(response, draft));
+  return inboxReply(response, respondedDraft(response, draft));
 }
 
 /** What the card's answer still lacks, the first thing in the ask's order, or nothing where it lacks nothing it can be told to fill. */
@@ -80,7 +80,7 @@ export function chatAskMissing(
   response: ChatResponse,
   draft: InboxDraft,
 ): InboxMissing | undefined {
-  return inboxMissing({ response }, respondedDraft(response, draft));
+  return inboxMissing(response, respondedDraft(response, draft));
 }
 
 /** Whether the card holds anything at all, a pick, a press, a tick, a field filled, or words, which lights its Send. */

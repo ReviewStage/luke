@@ -101,6 +101,7 @@ const ACTION_WORDS = {
   [PULL_REQUEST_ACTION.CLOSE]: "Close pull request",
   [PULL_REQUEST_ACTION.REOPEN]: "Reopen pull request",
   [PULL_REQUEST_ACTION.EDIT_TITLE]: "Edit title",
+  [PULL_REQUEST_ACTION.EDIT_DESCRIPTION]: "Edit description",
   [PULL_REQUEST_ACTION.REQUEST_REVIEW]: "Request review",
   [PULL_REQUEST_ACTION.REMOVE_REVIEW_REQUEST]: "Remove review request",
   [PULL_REQUEST_ACTION.ADD_LABEL]: "Add label",

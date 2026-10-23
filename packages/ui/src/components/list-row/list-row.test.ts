@@ -10,6 +10,7 @@ import {
   LIST_ROW_ACTIONS,
   LIST_ROW_CURRENT,
   LIST_ROW_META,
+  LIST_VARIANT,
   List,
   type ListDensity,
   ListRow,
@@ -1380,4 +1381,28 @@ test("a row in a dense list is drawn once as it mounts, knowing it is dense in t
     "false",
   );
   expect(container.querySelector<HTMLElement>(".luke-list-row")?.getAttribute("style")).toBeNull();
+});
+
+test("a press gives a row whole, and a row edge to edge in a card only inside its fill", () => {
+  const container = draw(
+    createElement(
+      "div",
+      null,
+      createElement(List, {
+        label: "Plain",
+        children: createElement(ListRow, { title: "Ada", onPress: ignore }),
+      }),
+      createElement(List, {
+        label: "Card",
+        variant: LIST_VARIANT.CARD,
+        children: createElement(ListRow, { title: "Grace", onPress: ignore }),
+      }),
+    ),
+  );
+  press(button(container, "Ada"));
+  press(button(container, "Grace"));
+  const [plain, card] = [...container.querySelectorAll(".luke-list-row")];
+
+  expect(plain?.getAttribute("data-pulse")).toBe("quiet");
+  expect(card?.getAttribute("data-pulse")).toBe("flush");
 });

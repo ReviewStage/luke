@@ -4,16 +4,17 @@ import assert from "node:assert/strict";
 import { CHECK_SUMMARY, PULL_REQUEST_STATE } from "@luke/features/coding-agent-wire";
 import { LINK_PLACE, type ReadLink } from "@luke/features/luke-link";
 import type { TaskSummary } from "@luke/features/task-wire";
-import { act, createElement, type ReactNode } from "react";
+import { act, createElement, memo, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import { PullRequestLine } from "../desktop/task-card.js";
 import { fakeAppPlatform } from "../testing/app-platform.js";
 import {
-  ListedPullRequestsProvider,
+  ListedPullRequests,
   OpenLinkProvider,
   openPullRequestsHere,
   PullRequestsOnGitHub,
+  useOpenLink,
 } from "./use-open-link.js";
 
 /**
@@ -21,7 +22,9 @@ import {
  * opened opens in that agent's Pull request tab on its task wherever the
  * window draws it, outside any task as much as on another; one no listed
  * task names, and any inside a pull request's own tab, open on GitHub.
- * Synthetic ids, a task card's pull request row standing for every press.
+ * A new list draws no part opening links again, which reads the list as
+ * the link opens. Synthetic ids, a task card's pull request row standing
+ * for every press.
  */
 
 const TASK = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
@@ -81,7 +84,7 @@ function press(url: string, wrap: (row: ReactNode) => ReactNode = (row) => row) 
       createElement(
         OpenLinkProvider,
         { value: (link: ReadLink) => links.push(link) },
-        createElement(ListedPullRequestsProvider, { value: LISTED }, wrap(row)),
+        createElement(ListedPullRequests, { tasks: LISTED, children: wrap(row) }),
       ),
     ),
   );
@@ -136,4 +139,36 @@ test("on a task, an archived agent's pull request, merged or not, opens in its o
   );
   assert.equal(openHere(URL), true);
   assert.deepEqual(opened, [[AGENT, undefined]]);
+});
+
+test("a new list of tasks draws no part opening links again, and a link opened after it reads the new list", () => {
+  const links: ReadLink[] = [];
+  let draws = 0;
+  let open: ((href: string) => void) | undefined;
+  // Note that the part holds while nothing it is handed changes, as a transcript's link does.
+  const Opener = memo(function Opener() {
+    draws += 1;
+    open = useOpenLink();
+    return null;
+  });
+  const openPlace = (link: ReadLink) => {
+    links.push(link);
+  };
+  const draw = (tasks: readonly TaskSummary[]) =>
+    createElement(
+      OpenLinkProvider,
+      { value: openPlace },
+      createElement(ListedPullRequests, { tasks, children: createElement(Opener) }),
+    );
+  fakeAppPlatform({ openGitHub: () => undefined });
+  root = createRoot(document.body.appendChild(document.createElement("div")));
+  act(() => root?.render(draw([])));
+  act(() => root?.render(draw(LISTED)));
+  act(() => open?.(URL));
+
+  assert.equal(draws, 1);
+  assert.deepEqual(
+    links.map((link) => link.place),
+    [{ kind: LINK_PLACE.CHANGES, planId: TASK, agentId: AGENT }],
+  );
 });
