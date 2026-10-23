@@ -95,7 +95,6 @@ export * from "./components/settings-section/settings-section.js";
 export * from "./components/shimmer/shimmer.js";
 export * from "./components/shortcut/shortcut.js";
 export * from "./components/skeleton/skeleton.js";
-export * from "./components/skill-chip/skill-chip.js";
 export * from "./components/slider/slider.js";
 export * from "./components/spinner/spinner.js";
 export * from "./components/split-button/split-button.js";
