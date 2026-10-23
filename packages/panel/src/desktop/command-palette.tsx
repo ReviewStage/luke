@@ -53,7 +53,7 @@
 import type { TasklessAgent } from "@luke/features/coding-agent-wire";
 import { TASK_TREE_BOUNDS, TASK_TREE_ENTRY, type TaskSummary } from "@luke/features/task-wire";
 import type { TaskCodeShowing, TasksTreeAnswer } from "@luke/features/tasks-view";
-import { taskKey } from "@luke/features/workspace-key";
+import { namesTaskKey, taskKey } from "@luke/features/workspace-key";
 import type { Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
 import type { ExperimentChoices, HostCapability } from "@luke/settings";
 import { SETTINGS_PAGE_LIST, type SettingsView } from "@luke/settings/settings-views";
@@ -354,6 +354,8 @@ interface PaletteRow {
   command?: KeyedCommand | undefined;
   /** The short words the search scores, the name first. */
   terms: readonly string[];
+  /** A task's key, as `ACME-42`, which typed whole finds the task first. */
+  key?: string | undefined;
   /** Longer words the row is found by as the settings search finds it, every word of the query somewhere in them. */
   keywords?: readonly string[] | undefined;
   onChoose: () => void;
@@ -368,14 +370,21 @@ interface PaletteSection {
 /** The score a row found only by its keywords takes: after every row its own words matched. */
 const KEYWORD_SCORE = Number.MIN_VALUE;
 
+/** The score a task takes whose key the query is whole: cmdk's best, which no fuzzy match beats. */
+const KEY_SCORE = 1;
+
 /**
- * How well a row answers the query: cmdk's own score over its short words,
- * else the least score where every word of the query is in its keywords.
- * Note that the keywords are not scored by cmdk, because its scoring is
- * fuzzy and a setting's description is long enough to hold almost any
- * letters in order.
+ * How well a row answers the query: the best where it is the row's task's
+ * key whole, else cmdk's own score over its short words, else the least
+ * score where every word of the query is in its keywords. Note that a key
+ * typed whole is not left to cmdk, because its scoring weighs the words
+ * before a term, so STAG-42 typed could rank STAG-421 of a shorter name
+ * above STAG-42 itself; and the keywords are not scored by cmdk, because
+ * its scoring is fuzzy and a setting's description is long enough to hold
+ * almost any letters in order.
  */
 function rowScore(row: PaletteRow, query: string, tokens: readonly string[]): number {
+  if (row.key !== undefined && namesTaskKey(query, row.key)) return KEY_SCORE;
   const score = defaultFilter(row.terms.join(" "), query);
   if (score > 0 || row.keywords === undefined) return score;
   return matchesTokens(row.keywords, tokens) ? KEYWORD_SCORE : 0;
@@ -574,10 +583,10 @@ function taskDetail(task: TaskSummary): string | undefined {
  * them, naming its workspace and found by its name, since opening one
  * switches the window to it. A task wears at its end who is on it and its
  * row's mark, as its sidebar row does (`assigneeFace`, `TaskRowMark`), and
- * is found by its key, its assignee's name, and its creator's. An agent
- * opens on its own page, as its sidebar row does. An agent's line on a
- * task's card opens the task on its tab through `showAgent`, which leaves
- * the palette as a row does.
+ * is found by its key, its assignee's name, and its creator's, a key typed
+ * whole listing its task first. An agent opens on its own page, as its
+ * sidebar row does. An agent's line on a task's card opens the task on its
+ * tab through `showAgent`, which leaves the palette as a row does.
  */
 function taskRows(
   tasks: TasksControl,
@@ -604,6 +613,7 @@ function taskRows(
   };
   const taskOf = (task: TaskSummary): PaletteRow => {
     const elsewhere = elsewhereOf(task);
+    const key = keyOf(task) ?? undefined;
     const worn = assigneeFace(task, readerOf(task));
     const createdBy = task.createdBy?.name ?? null;
     const assignedTo = task.assignee?.name ?? null;
@@ -628,7 +638,7 @@ function taskRows(
       people: [...new Set([assignedTo, createdBy])].filter((name) => name !== null),
       terms: [
         task.name,
-        keyOf(task),
+        key,
         task.repository,
         elsewhere?.name ?? null,
         assignedTo,
@@ -636,6 +646,7 @@ function taskRows(
         madeBy,
         origin === undefined ? null : MADE_BY_WORDS[origin.kind],
       ].filter((term) => term !== null && term !== undefined),
+      key,
       onChoose: () => open(task.id),
     };
   };

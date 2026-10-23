@@ -32,3 +32,8 @@ function workspacePrefix(workspaceName: string): string {
 export function taskKey(workspaceName: string, number: number): string {
   return `${workspacePrefix(workspaceName)}-${number}`;
 }
+
+/** Whether the words typed are a task's key whole, as `stag-422` is STAG-422: the case and the space around them aside. */
+export function namesTaskKey(words: string, key: string): boolean {
+  return words.trim().toLocaleUpperCase() === key;
+}
