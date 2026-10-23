@@ -10,11 +10,15 @@
    frame, the resting pose each starts from — head upright, eyes open.
    `--luke-scroll-glide` is how a scroller a component moves itself gets
    there, a tab strip bringing a tab into view: a glide, or at once where
-   motion is held still. The desktop holds the same tokens still on its
-   capture stage. */
+   motion is held still. `--luke-wait-motion` is the play state of a wait
+   drawn over its own length, a toast's countdown: it says how much time is
+   left, so reduced motion keeps it running, in steps rather than a glide,
+   and only a capture run holds it. The desktop holds the same tokens still
+   on its capture stage. */
 
 :root {
   --luke-loop-motion: running;
+  --luke-wait-motion: running;
   --luke-face-motion: running;
   --luke-scroll-glide: smooth;
 }

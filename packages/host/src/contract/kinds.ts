@@ -212,24 +212,6 @@ export const AVATAR_ACT_KIND = {
 } as const;
 
 /**
- * A Browser tab's view, which main owns over the panel that asked
- * (`browser-views.ts`): opened on an address and answered how its page
- * stands, sent to another, stepped back, forward, reloaded or stopped,
- * placed over the tab's body or put out of sight, caught as a still while
- * something covers it, and closed with its tab. How the page goes on to
- * stand arrives on the panel's `onBrowserState`. Taken from a panel alone,
- * and only while the account has the Browser tab experiment on.
- */
-export const BROWSER_ACT_KIND = {
-  BROWSER_OPEN: "browser.open",
-  BROWSER_NAVIGATE: "browser.navigate",
-  BROWSER_STEP: "browser.step",
-  BROWSER_PLACE: "browser.place",
-  BROWSER_CAPTURE: "browser.capture",
-  BROWSER_CLOSE: "browser.close",
-} as const;
-
-/**
  * A coding agent's Pull request tab's Chapters: a pull request's chapters
  * read as its workspace keeps them, and generated for its head on Luke's own
  * model key when the developer presses Generate, the generation answered
@@ -251,11 +233,13 @@ export const CHAPTERS_ACT_KIND = {
  */
 export const INSTALLED_SKILL_ACT_KIND = {
   INSTALLED_SKILLS_LIST: "installedSkills.list",
+  INSTALLED_SKILLS_READ: "installedSkills.read",
   INSTALLED_SKILLS_PREVIEW: "installedSkills.preview",
   INSTALLED_SKILLS_INSTALL: "installedSkills.install",
   INSTALLED_SKILLS_SET_ENABLED: "installedSkills.setEnabled",
   INSTALLED_SKILLS_CHECK_UPDATE: "installedSkills.checkUpdate",
   INSTALLED_SKILLS_UPDATE: "installedSkills.update",
+  INSTALLED_SKILLS_SHARE: "installedSkills.share",
   INSTALLED_SKILLS_REMOVE: "installedSkills.remove",
 } as const;
 
@@ -351,6 +335,8 @@ export const TASKS_ACT_KIND = {
   TASKS_ISSUE: "tasks.issue",
   /** The Browser tabs open in a task's agents' browsers, read from the service for the side panel's cloud Browser tabs; answered to the panel, never on the document. */
   TASKS_BROWSER_TABS: "tasks.browserTabs",
+  /** A Browser tab opened at an address in a task's coding agent's cloud browser through the service, taken over by the member at once, as the side panel's "+" opens one; answered to the panel, never on the document. */
+  TASKS_BROWSER_TAB_OPEN: "tasks.browserTabOpen",
   /**
    * A task's agents' Browser tabs, followed while the window holds the
    * stream open for the side panel's cloud Browser tabs: each time one
@@ -583,7 +569,6 @@ export const PORT_ACT_KIND = {
   ...AGENT_INBOX_ACT_KIND,
   ...AUTOMATION_ACT_KIND,
   ...AVATAR_ACT_KIND,
-  ...BROWSER_ACT_KIND,
   ...BROWSER_LIVE_ACT_KIND,
   ...CHAPTERS_ACT_KIND,
   ...INSTALLED_SKILL_ACT_KIND,
@@ -608,7 +593,6 @@ export type PortActKind = (typeof PORT_ACT_KIND)[keyof typeof PORT_ACT_KIND];
  */
 export const PLATFORM_PORT_ACT_KIND = {
   ...AVATAR_ACT_KIND,
-  ...BROWSER_ACT_KIND,
   ...BROWSER_LIVE_ACT_KIND,
   ...MAC_TERMINAL_ACT_KIND,
   ...TERMINAL_ACT_KIND,

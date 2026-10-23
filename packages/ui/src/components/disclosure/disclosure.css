@@ -3,14 +3,29 @@
    until the pointer is over them; its body, in its caller's type, indented
    past the chevron or flush with the row; and the motion a press plays as
    the body lands or leaves, which any fold built on `useDisclosureFold`
-   shares. */
+   shares. A fold may stand as a card: on the hover's wash inside a hairline,
+   its head the one line it shows closed and its body under a hairline. */
 
 @layer components {
   .luke-disclosure {
     min-width: 0;
   }
 
-  .luke-disclosure-summary {
+  /* A card, clipped to its corners so its head's hover fill follows them and
+     a ring inside it is drawn inside its control, in the caption's type. */
+  .luke-disclosure[data-look="card"] {
+    --luke-focus-ring-offset: var(--luke-focus-ring-inset);
+    overflow: clip;
+    border: 1px solid var(--luke-color-border);
+    border-radius: var(--luke-control-radius);
+    background: var(--luke-color-fill-hover);
+    font-size: var(--luke-type-caption-size);
+  }
+
+  /* Note that a transcript's line is bare of the row's drawing, its skin the
+     fold's around it, so the row's rules pass it by; `:where` keeps them
+     weighing what one class does. */
+  .luke-disclosure-summary:not(:where([data-look="transcript"])) {
     display: flex;
     align-items: center;
     gap: var(--luke-icon-gap);
@@ -46,18 +61,68 @@
     border-bottom: 1px solid var(--luke-color-border);
   }
 
+  /* A chip at the end of its row, as wide as what it says, on the surface
+     inside a hairline: its glyphs and count muted, in the text's ink under
+     the pointer. */
+  .luke-disclosure-summary[data-look="chip"] {
+    width: fit-content;
+    min-height: 0;
+    margin-inline-start: auto;
+    padding: var(--luke-space-2) var(--luke-space-6);
+    border: 1px solid var(--luke-color-border);
+    background: var(--luke-color-surface);
+  }
+
+  .luke-disclosure-summary[data-look="chip"]:hover {
+    background: var(--luke-color-surface);
+  }
+
+  /* A card's head: a 32px line in the card's own ink, inset as its body is,
+     its corners the card's clip. */
+  .luke-disclosure-summary[data-look="head"] {
+    height: 32px;
+    min-height: 0;
+    padding: 0 var(--luke-space-12);
+    border-radius: 0;
+    color: inherit;
+  }
+
+  /* A finger's press is 44px tall, so on a coarse pointer a card's head
+     stands that tall, its words still centred. */
+  @media (pointer: coarse) {
+    .luke-disclosure-summary[data-look="head"] {
+      height: auto;
+      min-height: 44px;
+    }
+  }
+
+  .luke-disclosure-summary[data-look="chip"] > svg {
+    width: var(--luke-space-12);
+    height: var(--luke-space-12);
+  }
+
   .luke-disclosure-summary::-webkit-details-marker {
     display: none;
   }
 
+  /* A transcript's line: only what makes it a summary pressed as a row is,
+     no marker, no list's bullet, no selection, the platform's arrow; the
+     rest is its fold's skin. */
+  .luke-disclosure-summary[data-look="transcript"] {
+    cursor: default;
+    list-style: none;
+    user-select: none;
+  }
+
   /* A summary's words wrap rather than run past a narrow pane, an unbroken
      name among them. */
-  .luke-disclosure-summary > :not(svg, .luke-disclosure-turn) {
+  .luke-disclosure-summary:not(:where([data-look="transcript"]))
+  > :not(svg, .luke-disclosure-turn) {
     min-width: 0;
     overflow-wrap: anywhere;
   }
 
-  .luke-disclosure-summary:hover {
+  .luke-disclosure-summary:not(:where([data-look="transcript"])):hover {
     background: var(--luke-color-fill-strong);
     color: var(--luke-color-text);
   }
@@ -85,7 +150,9 @@
     display: flex;
     flex: none;
     color: var(--luke-color-text-muted);
-    transition: transform var(--luke-duration-hover) ease;
+    /* The chevron turns on the spring small elements ride, so it settles
+       with the body unrolling under it rather than snapping ahead. */
+    transition: transform var(--luke-duration-fast) var(--luke-spring-fast);
   }
 
   .luke-disclosure-turn[data-open="true"] {
@@ -107,6 +174,12 @@
 
   .luke-disclosure-body[data-inset="flush"] {
     padding: var(--luke-space-4);
+  }
+
+  /* Under a card's head, past the hairline under it, at the head's inset. */
+  .luke-disclosure-body[data-inset="card"] {
+    padding: var(--luke-space-8) var(--luke-space-12);
+    border-top: 1px solid var(--luke-color-border);
   }
 
   /* A fold a press opens or closes (`use-disclosure.ts`). Its body lands in

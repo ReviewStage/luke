@@ -13,13 +13,15 @@ export const ONE_LINE_END = {
 
 export type OneLineEnd = (typeof ONE_LINE_END)[keyof typeof ONE_LINE_END];
 
-/** The elements a line may be drawn as: words in a row, a name, a detail under it, or a paragraph. */
+/** The elements a line may be drawn as: a page's or a pane's heading, words in a row, a name, a detail under it, a paragraph, or a name in the code face. */
 export const ONE_LINE_ELEMENT = {
   H1: "h1",
+  H2: "h2",
   SPAN: "span",
   STRONG: "strong",
   SMALL: "small",
   P: "p",
+  CODE: "code",
 } as const;
 
 export type OneLineElement = (typeof ONE_LINE_ELEMENT)[keyof typeof ONE_LINE_ELEMENT];

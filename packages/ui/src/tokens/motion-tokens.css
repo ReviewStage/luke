@@ -75,4 +75,5 @@
   --luke-row-stagger: 32ms;
   --luke-hint-delay: 500ms;
   --luke-late-delay: 1000ms;
+  --luke-confirm-delay: 1200ms;
 }

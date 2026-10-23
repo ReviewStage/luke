@@ -53,12 +53,13 @@ const STORAGE_KEY = "luke.composerDrafts";
 /** How many drafts are kept at most, the oldest written let go first. */
 const MAX_KEPT = 200;
 
-/** What a draft is written to: a started agent, a plan's agent not yet started, an inbox item, a task not yet started, or a chat's channel or thread. */
+/** What a draft is written to: a started agent, a plan's agent not yet started, an inbox item, a task not yet started, an automation's helper not yet started, or a chat's channel or thread. */
 export const DRAFT_PLACE = {
   AGENT: "agent",
   NEW_AGENT: "newAgent",
   INBOX: "inbox",
   NEW_TASK: "newTask",
+  NEW_AUTOMATION: "newAutomation",
   CHAT: "chat",
 } as const;
 
@@ -100,6 +101,11 @@ const draftPlaceSchema = Schema.Union([
   Schema.Struct({
     kind: Schema.Literal(DRAFT_PLACE.NEW_TASK),
     /** The workspace the task starts in; null before the workspaces are read. */
+    workspaceId: Schema.NullOr(Schema.String),
+  }),
+  Schema.Struct({
+    kind: Schema.Literal(DRAFT_PLACE.NEW_AUTOMATION),
+    /** The workspace the automation's helper starts in; null before the workspaces are read. */
     workspaceId: Schema.NullOr(Schema.String),
   }),
   Schema.Struct({

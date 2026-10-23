@@ -29,6 +29,7 @@ import {
   removeInstalledSkill,
   sessionInstalledSkills,
   setInstalledSkillEnabled,
+  shareInstalledSkill,
   updateInstalledSkill,
 } from "../installed-skill-store.js";
 
@@ -37,7 +38,8 @@ import {
  * over a real dialect: a personal skill is its installer's alone in every
  * workspace, a workspace skill is installed and read by every current
  * member and managed by its installer while a member or by its current
- * owners and admins, a name is held once per scope,
+ * owners and admins, a personal skill is moved into a workspace by its
+ * owner alone, a name is held once per scope,
  * and a skill's files are held to their bounds.
  *
  * Synthetic accounts, workspaces, and skills throughout.
@@ -108,6 +110,15 @@ const managedBy = (userId: string, id: string) =>
     });
     return { toggled: Option.isSome(toggled), updated: Option.isSome(updated) };
   });
+
+/** Whether the account's share of the skill into the workspace moved it, or which refusal it met. */
+const shareOf = (userId: string, id: string, organizationId: string) =>
+  Effect.map(Effect.result(shareInstalledSkill(userId, id, organizationId)), (result) =>
+    Result.match(result, {
+      onSuccess: (row) => (Option.isSome(row) ? "shared" : "refused"),
+      onFailure: (failure) => failure._tag,
+    }),
+  );
 
 const refusalOf = (userId: string, made: NewInstalledSkill) =>
   Effect.map(Effect.result(installSkill(userId, made)), (result) =>
@@ -248,6 +259,108 @@ it.layer(getTestDB())("the installed skill store", (it) => {
         );
         assert.deepEqual(yield* namesSeen(owner, workspace), ["workspace:release-notes"]);
         assert.equal(yield* readable(installer, own), false);
+      }),
+  );
+
+  it.effect(
+    "sharing moves the owner's personal skill into their workspace whole, the same skill with its files, source, and toggle, its owner kept as who installed it",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* openAccount;
+        const teammate = yield* openAccount;
+        const workspace = yield* openWorkspace(owner);
+        const elsewhere = yield* openWorkspace(owner);
+        yield* joinWorkspace(workspace, teammate, WORKSPACE_ROLE.MEMBER);
+        const script = { path: "scripts/run.sh", bytes: text("echo hi\n") };
+        const id = yield* installed(
+          owner,
+          skill(PERSONAL, "grill-me", [skillFile("grill-me"), script]),
+        );
+        yield* setInstalledSkillEnabled(owner, id, false);
+        const before = Option.getOrThrow(yield* readInstalledSkill(owner, id));
+
+        const shared = Option.getOrThrow(yield* shareInstalledSkill(owner, id, workspace));
+        const after = Option.getOrThrow(yield* readInstalledSkill(teammate, id));
+
+        assert.deepEqual(
+          [
+            shared.id,
+            shared.scope,
+            shared.organizationId,
+            shared.ownerUserId,
+            shared.installedByUserId,
+          ],
+          [id, INSTALLED_SKILL_SCOPE.WORKSPACE, workspace, null, owner],
+        );
+        assert.deepEqual(
+          [after.source, after.computedHash, after.enabled, after.description],
+          [before.source, before.computedHash, false, before.description],
+        );
+        assert.deepEqual(after.files, before.files);
+        assert.deepEqual(yield* namesSeen(owner, workspace), ["workspace:grill-me"]);
+        assert.deepEqual(yield* namesSeen(teammate, workspace), ["workspace:grill-me"]);
+        assert.deepEqual(yield* namesSeen(owner, elsewhere), [], "moved, not copied");
+        assert.deepEqual(yield* managedBy(owner, id), { toggled: true, updated: true });
+        assert.deepEqual(yield* managedBy(teammate, id), { toggled: false, updated: false });
+      }),
+  );
+
+  it.effect(
+    "only a personal skill's owner shares it, only into a workspace they are a current member of, and a workspace skill is never shared again",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* openAccount;
+        const admin = yield* openAccount;
+        const workspace = yield* openWorkspace(owner);
+        const theirs = yield* openWorkspace(admin);
+        const leaving = yield* openWorkspace(admin);
+        yield* joinWorkspace(workspace, admin, WORKSPACE_ROLE.ADMIN);
+        yield* joinWorkspace(leaving, owner, WORKSPACE_ROLE.MEMBER);
+        const id = yield* installed(owner, skill(PERSONAL, "my-pr-style"));
+        const workspaceSkill = yield* installed(
+          owner,
+          skill(inWorkspace(workspace), "release-notes"),
+        );
+
+        assert.equal(
+          yield* shareOf(admin, id, workspace),
+          "refused",
+          "an admin shares no one else's skill",
+        );
+        assert.equal(yield* shareOf(owner, id, theirs), "refused", "no workspace they are not in");
+        yield* leaveWorkspace(leaving, owner);
+        assert.equal(yield* shareOf(owner, id, leaving), "refused", "no workspace they left");
+        assert.equal(yield* shareOf(owner, workspaceSkill, theirs), "refused");
+        assert.equal(yield* shareOf(owner, workspaceSkill, workspace), "refused");
+        assert.equal(yield* shareOf(owner, randomUUID(), workspace), "refused");
+        assert.deepEqual(yield* namesSeen(owner, workspace), [
+          "workspace:release-notes",
+          "personal:my-pr-style",
+        ]);
+        assert.deepEqual(yield* namesSeen(admin, theirs), []);
+      }),
+  );
+
+  it.effect(
+    "a share into a workspace already holding a skill of that name is refused as taken, and the skill stays personal",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* openAccount;
+        const teammate = yield* openAccount;
+        const workspace = yield* openWorkspace(owner);
+        yield* joinWorkspace(workspace, teammate, WORKSPACE_ROLE.MEMBER);
+        yield* installed(teammate, skill(inWorkspace(workspace), "testing"));
+        const id = yield* installed(owner, skill(PERSONAL, "testing"));
+
+        assert.equal(yield* shareOf(owner, id, workspace), "InstalledSkillNameTaken");
+        assert.deepEqual(yield* namesSeen(owner, workspace), [
+          "workspace:testing",
+          "personal:testing",
+        ]);
+        assert.deepEqual(
+          Option.map(yield* readInstalledSkill(owner, id), (row) => row.scope),
+          Option.some(INSTALLED_SKILL_SCOPE.PERSONAL),
+        );
       }),
   );
 

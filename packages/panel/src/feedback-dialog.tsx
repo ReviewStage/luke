@@ -12,7 +12,9 @@
  * Escape and a press on the dimmed window only close the card, keeping the
  * words and screenshots for the next opening of that kind — unless there are
  * no words yet, in which case there is nothing worth keeping and they discard
- * it too.
+ * it too. While there are words, the first of them nudges the card and keeps
+ * it open, so a stray press never takes the card from under a note being
+ * written, and the next closes it. A send refused shakes the card.
  *
  * What a send carries is exactly what the card shows: the words, the
  * screenshots drawn in it, which experiment the note is about where its
@@ -37,6 +39,7 @@ import { ACT_KIND } from "@luke/host/acts";
 import { EXPERIMENTS, type Experiment } from "@luke/settings";
 import { SHORTCUT_KEY, type ShortcutChord, shortcutAria } from "@luke/settings/shortcuts";
 import {
+  ALIGN,
   AttachmentChip,
   BUTTON_VARIANT,
   Button,
@@ -44,8 +47,11 @@ import {
   DIALOG_SIZE,
   Dialog,
   ErrorState,
+  GAP,
   IconButton,
   ImageIcon,
+  Inline,
+  LAYOUT_ELEMENT,
   Shortcut,
   TEXT_ELEMENT,
   TEXT_VARIANT,
@@ -339,6 +345,8 @@ export function FeedbackDialog({
       size={DIALOG_SIZE.WIDE}
       title={dialogTitle(kind, about)}
       busy={busy}
+      refused={rejection !== undefined}
+      holding={hasWords(draft)}
       initialFocus={field}
       onDismiss={() => close(false)}
       onKeyDown={sendKey}
@@ -412,7 +420,13 @@ export function FeedbackDialog({
           }}
         />
         {draft.images.length > 0 ? (
-          <ul className="feedback-dialog-images" aria-label="Screenshots">
+          <Inline
+            as={LAYOUT_ELEMENT.UL}
+            gap={GAP.CONTROL}
+            align={ALIGN.STRETCH}
+            className="feedback-dialog-images"
+            aria-label="Screenshots"
+          >
             {draft.images.map((image, index) => (
               <AttachmentChip
                 key={`${image.name}-${String(index)}`}
@@ -426,7 +440,7 @@ export function FeedbackDialog({
                 }
               />
             ))}
-          </ul>
+          </Inline>
         ) : null}
         {signature ? (
           <div className="feedback-dialog-signature">

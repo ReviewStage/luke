@@ -672,7 +672,6 @@ export function AgentComposer({
       ref={card}
       className="agent-composer"
       data-status={status}
-      data-dropping={dropping ? "" : undefined}
       data-closed={closed ? "" : undefined}
       onDragOver={(event) => {
         if (!carriesFiles(event) || held) return;
@@ -692,6 +691,7 @@ export function AgentComposer({
       }}
     >
       <PromptInput
+        dropping={dropping}
         onSubmit={() => {
           setRefusal(undefined);
           refocus.current = card.current?.contains(document.activeElement) === true;

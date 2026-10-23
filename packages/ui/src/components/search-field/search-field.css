@@ -104,6 +104,34 @@
     color: var(--luke-color-text-muted);
     cursor: default;
     transition: background-color var(--luke-duration-hover) ease;
+    animation:
+      luke-search-clear-fade var(--luke-duration-quick) ease-out backwards,
+      luke-search-clear-grow var(--luke-duration-fast) var(--luke-spring-fast) backwards;
+  }
+
+  /* The clear fades and grows in with the first character, and once the
+     field is empty fades and shrinks out over the exit before it is taken. */
+  .luke-search-field-clear[data-leaving="true"] {
+    animation: luke-search-clear-out var(--luke-duration-exit) var(--luke-motion-exit) forwards;
+  }
+
+  @keyframes luke-search-clear-fade {
+    from {
+      opacity: 0;
+    }
+  }
+
+  @keyframes luke-search-clear-grow {
+    from {
+      transform: scale(0.5);
+    }
+  }
+
+  @keyframes luke-search-clear-out {
+    to {
+      opacity: 0;
+      transform: scale(0.5);
+    }
   }
 
   .luke-search-field-clear:hover {

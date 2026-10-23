@@ -6,6 +6,7 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
+import { sideBundles } from "../bundle-loader.js";
 import { LinkWorkspaceProvider } from "../copy-link-item.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import {
@@ -16,6 +17,7 @@ import {
   typeInComposer,
 } from "../testing/composer.js";
 import { onRegistry } from "../testing/copy-feedback.js";
+import { onSideBundles } from "../testing/side-bundles.js";
 import { ChatComposer, type ChatComposerMentions } from "./chat-composer.js";
 
 /**
@@ -23,8 +25,9 @@ import { ChatComposer, type ChatComposerMentions } from "./chat-composer.js";
  * Inbox's: words typed and not sent wait under their channel, and under
  * their thread for a reply, while another is open; a post leaves the box at
  * once, which keeps the caret and takes the next; a post refused comes back
- * with why and Retry where the box holds nothing newer; Escape leaves the box; and a Luke address
- * pasted whole is written as its chip.
+ * with why and Retry where the box holds nothing newer; Escape leaves the box; a Luke address
+ * pasted whole is written as its chip; and a quote handed to a box whose
+ * editor still loads is laid in once it lands.
  */
 
 /** The channels the boxes post in. */
@@ -313,5 +316,51 @@ test("a plan's address pasted whole is drawn as its chip and posted as its link 
   assert.match(
     sent[0] ?? "",
     new RegExp(`^see \\[@[^\\]]+\\]\\(https://tryluke\\.dev/acme/plan/${PLAN}\\)$`, "u"),
+  );
+});
+
+test("a quote handed to a box whose editor still loads is laid in once the editor lands, rather than lost", async () => {
+  let land: () => void = () => undefined;
+  const landing = new Promise<void>((resolve) => {
+    land = resolve;
+  });
+  const bundles = sideBundles({
+    planEditor: () =>
+      landing.then(() => import("../plan-editor/index.js")).then((entry) => entry.planEditor),
+  });
+  const quoted: string[] = [];
+  const container = document.createElement("div");
+  document.body.append(container);
+  root = createRoot(container);
+  act(() =>
+    root?.render(
+      onRegistry(
+        AtomRegistry.make(),
+        onSideBundles(
+          bundles,
+          createElement(ChatComposer, {
+            channelId: GENERAL,
+            replyTo: 48,
+            label: "Reply in thread",
+            mentions: NO_MENTIONS,
+            keywords: [],
+            compact: true,
+            pendingQuote: { words: "Happy to wait", onQuoted: () => quoted.push("in") },
+            onSend: taken,
+          }),
+        ),
+      ),
+    ),
+  );
+  await settle();
+  assert.equal(container.querySelector(".composer-editor"), null, "the editor is still loading");
+
+  await act(async () => land());
+  await settle();
+  assert.deepEqual(
+    [...container.querySelectorAll(".composer-editor .composer-quote-words")].map(
+      (quote) => quote.textContent,
+    ),
+    ["Happy to wait"],
   );
 });

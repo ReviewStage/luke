@@ -21,10 +21,9 @@
  * Left out, beside the harness's own shell, files, todos, waiting,
  * subagents, skills, and web reads: the spoken-turn tools
  * (`queue_question`, `withdraw_question`, `end_call`), which only a spoken
- * turn of eve's offers. The integrations' `connection_search` and
- * `connection_execute` are eve's own built-in tools rather than tool files;
- * here they keep eve's names, words, and schemas, and run through Luke's own
- * door over the same grants (`../../integrations/connection-door.ts`).
+ * turn of eve's offers; and eve's `connection_search` and
+ * `connection_execute`, since each integration the agent is handed is an
+ * MCP server of its own beside this one (`app.ts`).
  *
  * Two things eve's tool files keep in the session's own state have none
  * here, since the server keeps no session: a call's id, which the agent
@@ -40,25 +39,12 @@ import type { CodingAgent } from "@luke/database/models/coding-agent-store";
 import { CHAT_TOOL } from "@luke/features/chat-wire";
 import { CODING_AGENT_KIND } from "@luke/features/coding-agent-wire";
 import { INBOX_TOOL } from "@luke/features/inbox-wire";
-import {
-  ACTION_RESULT_STATUS,
-  isRecord,
-  type UnparsedWireValue,
-  unparsedWire,
-  type WireValue,
-  WireValueSchema,
-} from "@luke/wire";
+import { ACTION_RESULT_STATUS, type UnparsedWireValue, unparsedWire } from "@luke/wire";
 import { emitJsonSchema } from "@luke/wire/effect";
 import { Effect, Schema } from "effect";
 import type { HttpClient } from "effect/http";
 import type { HostedEnvironment } from "../../environment.js";
 import type { GitHubApp } from "../../github/github-app.js";
-import {
-  CONNECTION_EXECUTE_TOOL,
-  CONNECTION_SEARCH_TOOL,
-  runConnectionExecute,
-  runConnectionSearch,
-} from "../../integrations/connection-door.js";
 import type {
   IntegrationConnect,
   WorkspaceLinearConnect,
@@ -76,10 +62,12 @@ import {
 import { CODER_SHOW_PAGE_TOOL } from "../../tasks/page-tool.js";
 import { LOOK_AT_PICTURE_TOOL, PICTURE_LOOK_STATUS } from "../../tasks/picture-look.js";
 import { SHOW_CODE_TOOL } from "../../tasks/show-code.js";
+import type { SentryApp } from "../../triggers/sentry/sentry-app-config.js";
 import {
   CREATE_AUTOMATION_TOOL,
   DELETE_AUTOMATION_TOOL,
   LIST_AUTOMATIONS_TOOL,
+  RUN_AUTOMATION_TOOL,
   UPDATE_AUTOMATION_TOOL,
 } from "../automation-tools.js";
 import type { AdmittedConversation } from "../brain-host/conversation.js";
@@ -142,7 +130,8 @@ export type LukeMcpServices =
   | ModelCatalog
   | WorkspaceLinearConnect
   | IntegrationConnect
-  | HostedEnvironment;
+  | HostedEnvironment
+  | SentryApp;
 
 /** What a tool runs against: the doors' services, and the agent's browser, which the server provides itself (`app.ts`). */
 export type LukeMcpToolServices = LukeMcpServices | AgentBrowser;
@@ -262,53 +251,6 @@ function lookedPictureContent(result: LukeMcpToolResult): readonly McpContent[] 
   return [{ type: "text", text: JSON.stringify(result) }];
 }
 
-/** A connection call that ran, its tool's output kept as eve reads it. */
-const isExecuted = Schema.is(
-  Schema.Struct({ status: Schema.Literal(ACTION_RESULT_STATUS.ACCEPTED), output: WireValueSchema }),
-);
-
-/** One block of a provider tool's result as the agent is shown it, as eve's model output shows it: a text, a picture, or a sound, and a resource as its words. */
-function remoteBlock(block: WireValue): readonly McpContent[] {
-  if (!isRecord(block)) return [];
-  const { type, text, data, mimeType } = block;
-  if (type === "text" && typeof text === "string") return [{ type, text }];
-  if ((type === "image" || type === "audio") && typeof data === "string") {
-    return typeof mimeType === "string" ? [{ type, data, mimeType }] : [];
-  }
-  if (type === "resource" && isRecord(block.resource)) {
-    const { uri, text: words, blob, mimeType: blobType } = block.resource;
-    const named = typeof uri === "string" ? uri : undefined;
-    if (typeof words === "string") {
-      return [{ type: "text", text: named === undefined ? words : `${named}\n${words}` }];
-    }
-    if (typeof blob !== "string") return [];
-    // Note that a picture or a sound a resource carries is shown as one, and any other bytes are named, so none is dropped unsaid.
-    const kind = typeof blobType === "string" ? blobType : "application/octet-stream";
-    if (kind.startsWith("image/")) return [{ type: "image", data: blob, mimeType: kind }];
-    if (kind.startsWith("audio/")) return [{ type: "audio", data: blob, mimeType: kind }];
-    return [
-      { type: "text", text: `Resource: ${named ?? "resource"} (${kind}, binary, not shown)` },
-    ];
-  }
-  if (type === "resource_link") {
-    const name = typeof block.name === "string" ? block.name : "resource";
-    const uri = typeof block.uri === "string" ? block.uri : "";
-    return [{ type: "text", text: `Resource link: ${name} ${uri}`.trim() }];
-  }
-  return [];
-}
-
-/** What the agent is shown of a connection call: the tool's own content blocks where any is no text, its text, or its JSON; the refusal's JSON otherwise. */
-function executedContent(result: LukeMcpToolResult): readonly McpContent[] {
-  if (!isExecuted(result)) return [{ type: "text", text: JSON.stringify(result) }];
-  const { output } = result;
-  if (Array.isArray(output)) {
-    const blocks = output.flatMap(remoteBlock);
-    if (blocks.some((block) => block.type !== "text")) return blocks;
-  }
-  return [{ type: "text", text: typeof output === "string" ? output : JSON.stringify(output) }];
-}
-
 /**
  * What the agent is shown of a browser call: its JSON with every
  * screenshot's base64 taken out and its kept full-size copy named by id
@@ -412,6 +354,7 @@ export const LUKE_MCP_TOOLS: ReadonlyMap<string, LukeMcpTool> = new Map<string, 
   agentTool(CREATE_AUTOMATION_TOOL),
   agentTool(UPDATE_AUTOMATION_TOOL),
   agentTool(DELETE_AUTOMATION_TOOL),
+  agentTool(RUN_AUTOMATION_TOOL),
   // Chat.
   entry(CHAT_TOOLS.POST, (admitted, input, { seams, sandbox, callId }) =>
     runAgentChat(seams, admitted, {
@@ -440,20 +383,6 @@ export const LUKE_MCP_TOOLS: ReadonlyMap<string, LukeMcpTool> = new Map<string, 
   entry(RUN_ON_MAC_TOOL, (admitted, input) => runOnMacTool(admitted.target.userId, input)),
   // The agent's browser.
   entry(BROWSER_TOOL, runAgentBrowser, browserContent),
-  // The integrations.
-  entryOf(
-    CONNECTION_SEARCH_TOOL.name,
-    CONNECTION_SEARCH_TOOL.description,
-    CONNECTION_SEARCH_TOOL.inputSchema,
-    (admitted, input) => runConnectionSearch(admitted, input),
-  ),
-  entryOf(
-    CONNECTION_EXECUTE_TOOL.name,
-    CONNECTION_EXECUTE_TOOL.description,
-    CONNECTION_EXECUTE_TOOL.inputSchema,
-    (admitted, input) => runConnectionExecute(admitted, input),
-    executedContent,
-  ),
 ]);
 
 /** What of an agent decides which tools it is offered, as eve decides it (`../coder-host/tool-set.ts`). */

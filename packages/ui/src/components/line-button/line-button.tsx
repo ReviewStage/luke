@@ -1,4 +1,5 @@
 import type { ButtonHTMLAttributes, MouseEvent, ReactNode } from "react";
+import { PRESS_PULSE, pulseOnPress } from "../../press-pulse.js";
 import { useDisclosureState, useDisclosureSummaryClick } from "../disclosure/disclosure.js";
 
 /**
@@ -20,7 +21,12 @@ import { useDisclosureState, useDisclosureSummaryClick } from "../disclosure/dis
  *   ink keeps the rest of its words muted;
  * - `quote` a quoted passage, in its container's own type and ink, up to two
  *   lines and cut short after, its ink coming up under the pointer and
- *   fading back under the press.
+ *   fading back under the press;
+ * - `band` a strip across a card, flush to its edges: its container's own
+ *   type and ink, square at its ends, filled faintly under the pointer and
+ *   its words underlined in the full ink under the pointer or the keyboard,
+ *   as a link's are, as a review card's line naming the file and lines it
+ *   is on.
  *
  * The caller draws what stands in the line (a glyph, its words, a state
  * mark) with its own classes, and the line lays them out in a row. It takes
@@ -34,6 +40,7 @@ import { useDisclosureState, useDisclosureSummaryClick } from "../disclosure/dis
 export const LINE_BUTTON_LOOK = {
   ROW: "row",
   QUOTE: "quote",
+  BAND: "band",
 } as const;
 
 export type LineButtonLook = (typeof LINE_BUTTON_LOOK)[keyof typeof LINE_BUTTON_LOOK];
@@ -87,7 +94,7 @@ export function LineButton({
       data-look={look}
       data-brightens={brightens === true ? true : undefined}
       id={id}
-      onClick={onClick}
+      onClick={pulseOnPress(onClick, PRESS_PULSE.QUIET)}
       {...props}
     >
       {children}

@@ -22,8 +22,10 @@ import {
   handBackBrowserTab,
   listAgentBrowserTabs,
   listTaskBrowserTabs,
+  noteBrowserTabPage,
   pointBrowserTab,
   readTaskBrowserTab,
+  recordMemberOpenedBrowserTab,
   renewBrowserTabTakeover,
   retargetBrowserTab,
   takeOverBrowserTab,
@@ -243,6 +245,67 @@ it.layer(getTestDB())("an agent's Browser tabs", (it) => {
         assert.equal(yield* driverNow, teammate);
         assert.equal(yield* handBackBrowserTab(tab.id, teammate), true);
         assert.equal(yield* driverNow, null);
+      }),
+  );
+
+  it.effect(
+    "a tab a member opened stands as theirs though the agent's list wrote it first, and the agent's later writes leave it theirs",
+    () =>
+      Effect.gen(function* () {
+        const { agent, teammate } = yield* openTask;
+        // The agent's `list` saw the new page in the moment before the member's open recorded it.
+        const listed = yield* upsertBrowserTab(
+          action(agent.conversationId, "target-new", "about:blank"),
+        );
+        const opened = yield* recordMemberOpenedBrowserTab({
+          conversationId: agent.conversationId,
+          targetId: "target-new",
+          address: "https://accounts.test/",
+          title: "https://accounts.test/",
+          userId: teammate,
+        });
+        const later = yield* upsertBrowserTab(
+          action(agent.conversationId, "target-new", "https://accounts.test/home"),
+        );
+
+        assert.equal(opened.id, listed.id);
+        assert.equal(opened.address, "https://accounts.test/");
+        for (const row of [opened, later]) {
+          assert.equal(row.openedBy, AGENT_BROWSER_TAB_OPENER.MEMBER);
+          assert.equal(row.openedByUserId, teammate);
+        }
+      }),
+  );
+
+  it.effect(
+    "a live view's note of a tab's page moves its address and title on its own target alone, and leaves its opener and last action",
+    () =>
+      Effect.gen(function* () {
+        const { agent } = yield* openTask;
+        const tab = yield* upsertBrowserTab(
+          action(agent.conversationId, "target-1", "https://shop.test/login"),
+        );
+        yield* TestClock.adjust("1 minute");
+
+        const noted = yield* noteBrowserTabPage(tab.id, "target-1", {
+          address: "https://shop.test/dashboard",
+          title: "Dashboard",
+        });
+        yield* retargetBrowserTab(agent.conversationId, tab.id, "target-1", "target-2");
+        // A view still on the old target, as one a reopening moved the tab off, notes nothing.
+        const stale = yield* noteBrowserTabPage(tab.id, "target-1", {
+          address: "https://shop.test/stale",
+          title: "Stale",
+        });
+
+        assert.equal(noted, true);
+        assert.equal(stale, false);
+        const [row] = yield* listAgentBrowserTabs(agent.conversationId);
+        assert.ok(row);
+        assert.equal(row.address, "https://shop.test/dashboard");
+        assert.equal(row.title, "Dashboard");
+        assert.equal(row.openedBy, AGENT_BROWSER_TAB_OPENER.AGENT);
+        assert.equal(row.lastActedAt.getTime(), tab.lastActedAt.getTime());
       }),
   );
 

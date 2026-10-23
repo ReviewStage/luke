@@ -1,14 +1,26 @@
-import { ATTACHMENT_CHIP_STATE, AttachmentChip, ImageIcon } from "@luke/ui";
-import { useState } from "react";
+import {
+  ATTACHMENT_CHIP_STATE,
+  AttachmentChip,
+  BUTTON_VARIANT,
+  Button,
+  ImageIcon,
+  LIST_MOTION_WAY,
+  ListMotion,
+  motionRows,
+  useLeaving,
+} from "@luke/ui";
+import { type RefObject, useRef, useState } from "react";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
 /**
  * attachment-chips.tsx -- a row of files coming along with a message: a
  * picture's thumbnail, files drawn by name and size, one with nothing to
- * open, a long name cut short, and the way off each, unavailable while busy;
- * then the same chips in a narrow column, and a call's pictures still read,
- * gone, and not kept.
+ * open, a long name cut short, and the way off each, unavailable while busy,
+ * each file taken off scaling out under the row's `ListMotion`;
+ * then the same chips in a narrow column, a call's pictures still read,
+ * gone, and not kept, and files going up, at a share and with none, which
+ * land on a press, each taking its check.
  */
 
 /** A synthetic picture drawn in place, so the catalog renders offline. */
@@ -34,27 +46,74 @@ const FILES: readonly SampleFile[] = [
   { name: "trace.txt", openable: false },
 ];
 
+/** The row's chips, each followed by its file's name, in a component of their own under the row's `ListMotion`, whose context `useLeaving` reads, so a file taken off scales out. */
+function AttachmentList({
+  row,
+  files,
+  busy,
+  onOpen,
+  onRemove,
+}: {
+  row: RefObject<HTMLUListElement | null>;
+  files: readonly SampleFile[];
+  busy: boolean;
+  onOpen: (name: string) => void;
+  onRemove: (file: SampleFile) => void;
+}): React.JSX.Element {
+  const drawn = useLeaving(files, (file) => file.name);
+  return (
+    <ul ref={row} className="catalog-attachments" aria-label="Attached files" {...motionRows()}>
+      {drawn.map(({ key, value: file, leaving }) => (
+        <AttachmentChip
+          key={key}
+          motionKey={key}
+          name={file.name}
+          image={file.image}
+          icon={<ImageIcon />}
+          detail={file.detail}
+          onOpen={file.openable && !leaving ? () => onOpen(file.name) : undefined}
+          onRemove={leaving ? undefined : () => onRemove(file)}
+          removeDisabled={busy}
+        />
+      ))}
+    </ul>
+  );
+}
+
 /** The sample row: a press on a chip says which file it opened, and each one's way off takes it off. */
 function AttachmentRow({ busy }: { busy: boolean }): React.JSX.Element {
   const [files, setFiles] = useState(FILES);
   const [opened, setOpened] = useState<string>();
+  const row = useRef<HTMLUListElement | null>(null);
   return (
     <>
-      <ul className="catalog-attachments" aria-label="Attached files">
-        {files.map((file) => (
-          <AttachmentChip
-            key={file.name}
-            name={file.name}
-            image={file.image}
-            icon={<ImageIcon />}
-            detail={file.detail}
-            onOpen={file.openable ? () => setOpened(file.name) : undefined}
-            onRemove={() => setFiles((now) => now.filter((each) => each !== file))}
-            removeDisabled={busy}
-          />
-        ))}
-      </ul>
+      <ListMotion root={row} way={LIST_MOTION_WAY.SCALE}>
+        <AttachmentList
+          row={row}
+          files={files}
+          busy={busy}
+          onOpen={setOpened}
+          onRemove={(file) => setFiles((now) => now.filter((each) => each !== file))}
+        />
+      </ListMotion>
       <p>{opened === undefined ? "Nothing opened" : `Opened ${opened}`}</p>
+    </>
+  );
+}
+
+/** Files on their way up: one at a known share, one whose send says none; a press lands them. */
+function UploadingRow(): React.JSX.Element {
+  const [landed, setLanded] = useState(false);
+  const state = landed ? ATTACHMENT_CHIP_STATE.READY : ATTACHMENT_CHIP_STATE.UPLOADING;
+  return (
+    <>
+      <ul className="catalog-attachments" aria-label="Files going up">
+        <AttachmentChip name="screenshot.png" image={PICTURE} state={state} progress={64} />
+        <AttachmentChip name="spec.pdf" icon={<ImageIcon />} detail="48 KB" state={state} />
+      </ul>
+      <Button variant={BUTTON_VARIANT.OUTLINE} onClick={() => setLanded((now) => !now)}>
+        {landed ? "Send again" : "Land them"}
+      </Button>
     </>
   );
 }
@@ -84,6 +143,9 @@ function AttachmentChips(): React.JSX.Element {
             detail="6.2 MB"
           />
         </ul>
+      </CatalogSection>
+      <CatalogSection id="attachment-chip-uploading" title="Going up">
+        <UploadingRow />
       </CatalogSection>
       <CatalogSection id="attachment-chip-narrow" title="Narrow column, long names">
         <div className="catalog-narrow">

@@ -5,6 +5,7 @@ import {
   Banner,
   BUTTON_VARIANT,
   Button,
+  ComposerFrame,
   riseAboveEnd,
   TEXT_BUTTON_TONE,
   TEXT_TONE,
@@ -294,7 +295,7 @@ export function ContinuedComposerNote({
   return (
     <>
       <div className="agent-composer">
-        <div className="continued-composer">
+        <ComposerFrame className="continued-composer">
           <Banner
             look={BANNER_LOOK.ROW}
             glyph={<ArrowRightIcon aria-hidden="true" />}
@@ -323,7 +324,7 @@ export function ContinuedComposerNote({
               <ContinuedIn {...doors} />
             </Text>
           </Banner>
-        </div>
+        </ComposerFrame>
       </div>
       {archive.dialog}
     </>

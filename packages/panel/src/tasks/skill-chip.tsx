@@ -1,3 +1,4 @@
+import type { MarkdownComponents, MarkdownNodeProps } from "@luke/ui/markdown";
 import {
   holdsSlashWord,
   type SkillOption,
@@ -15,7 +16,6 @@ import {
   useRef,
   useState,
 } from "react";
-import type { Components, ExtraProps } from "streamdown";
 import type { SkillSource } from "./skill-picker.js";
 import { opensFile, SkillRef, type SkillSubject, type SkillWithFile } from "./skill-ref.js";
 import { type TranscriptElement, TranscriptWords } from "./transcript-blocks.js";
@@ -84,7 +84,7 @@ function withChips(text: string, tokens: readonly TextRange[]): string {
  * message's skills hold, and its `/name` as words otherwise, as an element
  * typed into the message by hand is.
  */
-function SkillElement({ node }: ExtraProps): ReactNode {
+function SkillElement({ node }: MarkdownNodeProps): ReactNode {
   const doors = useContext(SkillFileContext);
   const name = String(node?.properties[SKILL_ELEMENT.NAME] ?? "");
   const skill = doors?.skills?.get(name);
@@ -92,7 +92,7 @@ function SkillElement({ node }: ExtraProps): ReactNode {
   return <SkillRef subject={{ skill, onOpen: () => doors.onOpen(skill) }} />;
 }
 
-const SKILL_COMPONENTS: Components = { [SKILL_ELEMENT.TAG]: SkillElement };
+const SKILL_COMPONENTS: MarkdownComponents = { [SKILL_ELEMENT.TAG]: SkillElement };
 
 /** Hands every transcript under it the task's skills and what opening one's file does. */
 export function SkillFiles({

@@ -107,6 +107,8 @@ function FoldingBox({
   shape,
   size,
   busy,
+  succeeded,
+  turns,
   disabled,
   onClick,
   trailing,
@@ -121,11 +123,14 @@ function FoldingBox({
   shape: ButtonShape | undefined;
   size: ButtonSize | undefined;
   busy: string | undefined;
+  succeeded: boolean | undefined;
+  turns: boolean | undefined;
   disabled: boolean | undefined;
   onClick: ((event: MouseEvent<HTMLButtonElement>) => void) | undefined;
   trailing: ReactNode;
 }): React.JSX.Element {
-  const busyProps = busy === undefined ? {} : { busy: true, busyLabel: busy };
+  // Note that the main part is told how its press landed while it is not busy too, since the ring's leaving is what it reads it at.
+  const busyProps = { busy: busy !== undefined, busyLabel: busy ?? "", succeeded };
   return (
     <span
       ref={measured}
@@ -140,6 +145,7 @@ function FoldingBox({
         shape={shape ?? BUTTON_SHAPE.SQUARE}
         size={size}
         disabled={disabled}
+        turns={turns}
         onClick={onClick}
         label={doors.name}
         aria-haspopup={doors["aria-haspopup"]}
@@ -162,6 +168,8 @@ export function FoldingButton({
   shape,
   size,
   busy,
+  succeeded,
+  turns,
   disabled,
   onClick,
   trailing,
@@ -178,6 +186,10 @@ export function FoldingButton({
   size?: ButtonSize | undefined;
   /** While its press is out, what it is doing ("Running"): a ring stands over it under that name. */
   busy?: string | undefined;
+  /** Whether the press its ring stood for landed, read as the ring leaves (Button's `succeeded`). */
+  succeeded?: boolean | undefined;
+  /** Whether its glyph turns once as a press lands, as a retry's arrow does (Button's `turns`). */
+  turns?: boolean | undefined;
   disabled?: boolean | undefined;
   onClick?: ((event: MouseEvent<HTMLButtonElement>) => void) | undefined;
   /** A count after its words, inside the button's fill; it stays drawn when the words fold. */
@@ -195,6 +207,8 @@ export function FoldingButton({
       shape={shape}
       size={size}
       busy={busy}
+      succeeded={succeeded}
+      turns={turns}
       disabled={disabled}
       onClick={onClick}
       trailing={trailing}

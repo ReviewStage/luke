@@ -1,4 +1,5 @@
 import type { ButtonHTMLAttributes, MouseEvent, ReactNode } from "react";
+import { PRESS_PULSE, pulseOnPress } from "../../press-pulse.js";
 import { useLinkAddress } from "../menu/link-address.js";
 
 /**
@@ -19,7 +20,10 @@ import { useLinkAddress } from "../menu/link-address.js";
  *   offers ("3 replies").
  *
  * It keeps to one line unless asked for two (`lines`), as a card's name
- * wraps: words longer than that end in an ellipsis. It takes no
+ * wraps: words longer than that end in an ellipsis. Words too short to want
+ * cutting, a time, may be asked whole: on a coarse pointer those lift the
+ * clip and take a finger's press wider and taller than they are, which the
+ * clip of words that can be cut would cut short. It takes no
  * class or style, and its outer spacing is its container's. One that keeps
  * focus (`keepFocus`) leaves the focus where it is when a pointer presses
  * it, as a Button's does, and an app's hint wraps it as it wraps a Button,
@@ -51,6 +55,8 @@ type HintProps = Pick<
 export const TEXT_BUTTON_LINES = {
   ONE: "one",
   TWO: "two",
+  /** Too short to want cutting, so on a coarse pointer its press reaches past its words. */
+  WHOLE: "whole",
 } as const;
 
 export type TextButtonLines = (typeof TEXT_BUTTON_LINES)[keyof typeof TEXT_BUTTON_LINES];
@@ -107,7 +113,7 @@ export function TextButton({
       onBlur={props.onBlur}
       // Note that the focus moves as a mousedown's default, so refusing it there is what keeps it.
       onMouseDown={keepFocus === true ? preventFocusMove : undefined}
-      onClick={onClick}
+      onClick={pulseOnPress(onClick, PRESS_PULSE.WORDS)}
     >
       {children}
     </button>

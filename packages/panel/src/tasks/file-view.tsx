@@ -8,12 +8,15 @@ import {
   Fill,
   IconButton,
   ProviderMark,
+  RESIZE_EDGE_SIDE,
+  type ResizeEdgeHandle,
   SidePanelIcon,
   TEXT_ELEMENT,
   TEXT_TRUNCATE,
   TEXT_VARIANT,
   Text,
   Tooltip,
+  useResizeEdge,
 } from "@luke/ui";
 import { shownFiles } from "@luke/voice/code-pane-model";
 import {
@@ -35,11 +38,6 @@ import {
   useHoverPane,
 } from "../desktop/hover-pane.js";
 import { type PaneSlide, usePaneSlide } from "../desktop/pane-motion.js";
-import {
-  EDGE_SIDE,
-  type ResizableEdgeProps,
-  useResizableEdge,
-} from "../desktop/use-resizable-edge.js";
 import type { ReadFolder } from "../file-tree/contract.js";
 import { FileBreadcrumbs } from "./file-breadcrumbs.js";
 import { FileMenu } from "./file-menu.js";
@@ -377,7 +375,7 @@ export function usePaneRoom(shown: {
     },
     pane: {
       floating: pane.floating,
-      onPointerDown: keep,
+      onPressWithin: keep,
       onPointerLeave: pane.onPointerLeave,
       onKeyDown: pane.onKeyDown,
     },
@@ -401,10 +399,10 @@ export interface TreeShown {
  * reset by a double-click; none where the panel keeps no width for it.
  * Note that it is called by the view, which outlives the tree a drag shuts.
  */
-export function useTreeEdge(tree: TreeShown): ResizableEdgeProps | undefined {
+export function useTreeEdge(tree: TreeShown): ResizeEdgeHandle | undefined {
   const width = tree.width;
-  const edge = useResizableEdge({
-    side: EDGE_SIDE.LEFT,
+  const edge = useResizeEdge({
+    side: RESIZE_EDGE_SIDE.LEFT,
     width: width?.width ?? FILE_TREE_WIDTH.DEFAULT,
     bounds: FILE_TREE_WIDTH,
     reserve: () => TAB_RESERVE,

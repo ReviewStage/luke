@@ -36,6 +36,7 @@ import {
   type TaskCallFailure,
   type TaskCodeShowing,
   type TaskShownCode,
+  type TasksBrowserTabOpenAnswer,
   type TasksBrowserTabsAnswer,
   type TasksCommentAnswer,
   type TasksCommentsAnswer,
@@ -78,6 +79,7 @@ import {
   taskHistoryFollowSchema,
   taskPagesFollowSchema,
   tasksBoardSaveParamsSchema,
+  tasksBrowserTabOpenParamsSchema,
   tasksBrowserTabsParamsSchema,
   tasksCommentActParamsSchema,
   tasksCommentStartParamsSchema,
@@ -327,6 +329,7 @@ export type TasksClient = Pick<
   | "readRepositoryIssues"
   | "readIssueLinks"
   | "readBrowserTabs"
+  | "openBrowserTab"
   | "linkIssue"
   | "relateIssue"
   | "unlinkIssue"
@@ -1776,6 +1779,19 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         if (!gate()) return carried<TasksBrowserTabsAnswer>(TASK_ISSUES_UNANSWERED);
         return carried<TasksBrowserTabsAnswer>(
           yield* served(client.readBrowserTabs(read.success.taskId)),
+        );
+      }),
+    // A tab a member opens in an agent's browser is answered to the panel
+    // that asked and held nowhere, as the task's tabs are.
+    [GATEWAY_METHOD.TASKS_BROWSER_TAB_OPEN]: (params) =>
+      Effect.gen(function* () {
+        const read = readEither(tasksBrowserTabOpenParamsSchema)(unparsedWire(params));
+        if (Result.isFailure(read)) {
+          return yield* invalid("opening a Browser tab names the task, the agent, and the address");
+        }
+        if (!gate()) return carried<TasksBrowserTabOpenAnswer>(TASK_ISSUES_UNANSWERED);
+        return carried<TasksBrowserTabOpenAnswer>(
+          yield* served(client.openBrowserTab(read.success)),
         );
       }),
     [GATEWAY_METHOD.TASKS_ISSUE_LINK]: (params) =>

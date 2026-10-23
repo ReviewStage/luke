@@ -204,7 +204,7 @@ const sentryTriggerFiltersSchema = EffectSchema.Struct({
  * An event of the Sentry organization installed on the automation's
  * workspace; only deliveries from that workspace's installation fire it.
  */
-const sentryTriggerSchema = EffectSchema.Struct({
+export const sentryTriggerSchema = EffectSchema.Struct({
   kind: EffectSchema.Literal(AUTOMATION_TRIGGER.INTEGRATION),
   provider: EffectSchema.Literal(TRIGGER_PROVIDER.SENTRY),
   event: EffectSchema.Literals(Object.values(SENTRY_TRIGGER_EVENT)),

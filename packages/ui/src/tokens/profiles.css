@@ -35,6 +35,8 @@
   --luke-page-inset-narrow: var(--luke-space-24);
   /* Between two items of a list, close enough that they read as one. */
   --luke-list-gap: var(--luke-space-2);
+  /* How far a list's row travels as it arrives or leaves (`ListMotion`). */
+  --luke-list-travel: var(--luke-space-16);
   /* The measure a page is read at, about seventy characters of body text: a
      document, a detail page, a collection. Settings reads a step narrower. */
   --luke-page-measure: 720px;
@@ -168,6 +170,8 @@
   --luke-page-inset-narrow: var(--luke-space-24);
   /* Between two items of a list, close enough that they read as one. */
   --luke-list-gap: var(--luke-space-2);
+  /* How far a list's row travels as it arrives or leaves (`ListMotion`). */
+  --luke-list-travel: var(--luke-space-16);
   /* The measure a page is read at, about seventy characters of body text: a
      document, a detail page, a collection. Settings reads a step narrower. */
   --luke-page-measure: 720px;

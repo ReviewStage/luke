@@ -1,16 +1,13 @@
 import {
   AUTOMATION_ACCESS,
-  automationRunByKey,
   listAutomationRuns,
   listAutomations,
   readAutomation,
-  recordAutomationRun,
 } from "@luke/database/models/automation-store";
 import { wireUuidSchema } from "@luke/features";
-import { AUTOMATION_FIRING } from "@luke/features/automation-wire";
 import { unparsedWire } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
-import { Clock, Effect, Option, Result } from "effect";
+import { Effect, Option, Result } from "effect";
 import type { EveTypedTurn } from "../agents/brain-host/eve-sessions.js";
 import { type EveReach, eveFor } from "../agents/coder-host/stop.js";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
@@ -22,11 +19,11 @@ import {
 } from "../http/http-effect.js";
 import { accountMiddleware, hosted } from "../orpc/base.js";
 import { AUTOMATION_RUNS_READ } from "./automation-live.js";
-import { executeAutomationRun } from "./automation-runs.js";
 import {
   changeAutomationAs,
   createAutomationAs,
   removeAutomationAs,
+  runAutomationNowAs,
   runSummaries,
   summaryOf,
 } from "./automation-writes.js";
@@ -151,30 +148,13 @@ export function automationsProcedures(seams: AutomationsProcedureSeams) {
           Option.isSome(readable) ? HOSTED_REFUSAL.NOT_PERMITTED : HOSTED_REFUSAL.NOT_FOUND,
         );
       }
-      const firedAt = new Date(yield* Clock.currentTimeMillis);
-      const recorded = yield* hostedStoreOrUnavailable(
-        recordAutomationRun(automation.value, {
-          dedupeKey: key,
-          firing: { kind: AUTOMATION_FIRING.MANUAL, userId },
-          firedAt,
-        }),
+      // Note that the run reaches eve as this request's caller, whoever made the automation, as a Start does.
+      const ran = yield* runAutomationNowAs(userId, automation.value, key, () =>
+        eveFor<EveTypedTurn>(seams, context.request, userId),
       );
-      if (Option.isSome(recorded)) {
-        // Note that the run reaches eve as this request's caller, whoever made the automation, as a Start does.
-        yield* executeAutomationRun(
-          () => eveFor<EveTypedTurn>(seams, context.request, userId),
-          recorded.value,
-        );
-      }
-      const run = yield* hostedStoreOrUnavailable(automationRunByKey(userId, id, key));
-      if (Option.isNone(run)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-      const [summary] = yield* runSummaries(userId, [run.value]);
-      if (summary === undefined) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
       return {
-        status: Option.isSome(recorded) ? HOSTED_HTTP_STATUS.CREATED : HOSTED_HTTP_STATUS.OK,
-        body: Option.isSome(recorded)
-          ? { run: summary, txid: recorded.value.txid }
-          : { run: summary },
+        status: ran.made ? HOSTED_HTTP_STATUS.CREATED : HOSTED_HTTP_STATUS.OK,
+        body: ran.txid === undefined ? { run: ran.run } : { run: ran.run, txid: ran.txid },
       };
     }),
 

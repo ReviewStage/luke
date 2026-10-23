@@ -115,6 +115,14 @@
     padding: var(--luke-space-4) var(--luke-space-8);
   }
 
+  /* A list whose rows a finger opens stands each a finger's press tall on a
+     coarse pointer, its words still centred; a mouse keeps its height. */
+  @media (pointer: coarse) {
+    .luke-list[data-finger-tall="true"] .luke-list-row-main {
+      min-height: var(--luke-touch-target);
+    }
+  }
+
   .luke-list[data-density="compact"] .luke-list-row-actions {
     padding-inline-end: var(--luke-space-8);
   }

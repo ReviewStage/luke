@@ -206,6 +206,17 @@
     --luke-chip-ink: var(--luke-color-ink-inverse);
   }
 
+  /* A count after the words (`ChipCount`), quiet, at fixed figures; on a
+     pressed filter it steps back from the ground's colour its words are in. */
+  .luke-chip-count {
+    color: var(--luke-color-text-subtle);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .luke-chip[aria-pressed="true"] .luke-chip-count {
+    color: color-mix(in srgb, var(--luke-color-ink-inverse) 65%, var(--luke-color-ink));
+  }
+
   /* A removable filter names one applied, so it stands chosen, on the
      chip's chosen face inside the strong hairline; its × ends it, a round
      press inside its capsule. */
@@ -219,6 +230,29 @@
     border-color: var(--luke-color-chip-edge-strong);
     background: var(--luke-color-chip-selected);
     --luke-chip-ink: var(--luke-color-text);
+  }
+
+  /* A removable chip was added to the field it stands in, so it springs in
+     from a smaller size as it arrives, its opacity over the quick beat and
+     its scale on the fast spring. One a `ListMotion` follows
+     (`data-motion-key`) arrives and leaves by the motion instead, which
+     scales it the same way, so the two never play at once. */
+  .luke-chip[data-removable="true"]:not([data-motion-key]) {
+    animation:
+      luke-chip-fade-in var(--luke-duration-quick) ease-out backwards,
+      luke-chip-pop var(--luke-duration-fast) var(--luke-spring-fast) backwards;
+  }
+
+  @keyframes luke-chip-fade-in {
+    from {
+      opacity: 0;
+    }
+  }
+
+  @keyframes luke-chip-pop {
+    from {
+      transform: scale(0.6);
+    }
   }
 
   .luke-chip-remove {

@@ -19,6 +19,26 @@
     height: 14px;
     margin: calc((var(--luke-type-body-leading) - 14px) / 2) 0 0;
     accent-color: var(--luke-color-accent);
+    transition: transform var(--luke-duration-fast) var(--luke-spring-fast);
+  }
+
+  /* Held down, the box gives under the finger and springs back as the press
+     leaves, as a switch's thumb does. */
+  .luke-checkbox-box:active:not(:disabled, [aria-readonly="true"]) {
+    transform: scale(0.85);
+  }
+
+  /* Ticked, it springs up from a little smaller, so the tick lands rather
+     than appears; a box drawn ticked plays it too, which is short enough to
+     read as the box arriving. */
+  .luke-checkbox-box:checked {
+    animation: luke-checkbox-tick var(--luke-duration-fast) var(--luke-spring-fast);
+  }
+
+  @keyframes luke-checkbox-tick {
+    from {
+      transform: scale(0.7);
+    }
   }
 
   .luke-checkbox-words {

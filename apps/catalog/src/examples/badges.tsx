@@ -5,8 +5,10 @@ import { CatalogSection } from "../section";
 /**
  * badges.tsx -- every tone with its words, one with a glyph, a provider's
  * labels each wearing its colour as a dot, a dark one and one with no colour
- * it can paint among them, badges standing on a line of body words, and a
- * long label in a narrow column.
+ * it can paint among them, the same labels filled with their colour, a
+ * badge lit as the reader's own, badges standing on a line of body words,
+ * words given up to a glyph or a tone's dot in a narrow room, and a long
+ * label in a narrow column.
  */
 
 const SAYS = {
@@ -52,6 +54,24 @@ function Badges(): React.JSX.Element {
           <Badge>+3</Badge>
         </Inline>
       </CatalogSection>
+      <CatalogSection id="badge-fill" title="Filled with a provider's colour">
+        <Inline gap={GAP.ICON}>
+          {LABELS.map((label) => (
+            <Badge key={label.name} fill={label.color}>
+              {label.name}
+            </Badge>
+          ))}
+        </Inline>
+        <div className="catalog-narrow">
+          <Badge fill="0e8a16">waiting on the release train before it can merge</Badge>
+        </div>
+      </CatalogSection>
+      <CatalogSection id="badge-lit" title="Lit, the reader's own">
+        <Inline gap={GAP.ICON}>
+          <Badge lit>👍 12</Badge>
+          <Badge>🚀 1</Badge>
+        </Inline>
+      </CatalogSection>
       <CatalogSection id="badge-line" title="On a line of words">
         <div className="catalog-column">
           <Text>
@@ -69,6 +89,12 @@ function Badges(): React.JSX.Element {
             hideWordsUnder={VISUALLY_HIDDEN_UNDER.SNUG}
           >
             Ready to merge
+          </Badge>
+          <Badge tone={BADGE_TONE.ATTENTION} hideWordsUnder={VISUALLY_HIDDEN_UNDER.SNUG}>
+            Pending
+          </Badge>
+          <Badge dot hideWordsUnder={VISUALLY_HIDDEN_UNDER.SNUG}>
+            Outdated
           </Badge>
         </div>
       </CatalogSection>

@@ -26,8 +26,6 @@ export const HOST_CAPABILITY = {
   TERMINALS: "terminals",
   /** Sign in with ChatGPT, whose loopback only a client on the machine itself can listen on. */
   CHATGPT_SIGN_IN: "chatGptSignIn",
-  /** A Browser tab, whose page a view of the client's own draws over the panel. */
-  BROWSER: "browser",
   /**
    * An app installed on the machine rather than a page in a browser tab:
    * the window's zoom, opening at login, the menu bar whose chords the

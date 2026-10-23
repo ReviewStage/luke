@@ -202,6 +202,7 @@ function codex(options: CodexSessionsOptions): RunnerHarness<{ readonly _tag: st
         firstSequence,
         eventsUrl: options.eventsUrl,
         mcpUrl: options.mcpUrl,
+        integrations: yield* options.integrations(agent),
         tokenUrl,
         installedSkills: NATIVE_SKILLS_PATH.INSTALLED,
       };

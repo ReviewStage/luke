@@ -24,6 +24,8 @@ import {
   taskHistoryFollowSchema,
   taskPagesFollowSchema,
   tasksBoardSaveParamsSchema,
+  tasksBrowserTabOpenAnswerSchema,
+  tasksBrowserTabOpenParamsSchema,
   tasksBrowserTabsParamsSchema,
   tasksCommentActParamsSchema,
   tasksCommentAnswerSchema,
@@ -208,6 +210,11 @@ export const tasksActsContract = {
   [TASKS_ACT_KIND.TASKS_BROWSER_TABS]: actProcedure("Could not read the task's Browser tabs.")
     .input(exactInput(tasksBrowserTabsParamsSchema))
     .output(EffectSchema.flip(agentBrowserTabsAnswerSchema)),
+  [TASKS_ACT_KIND.TASKS_BROWSER_TAB_OPEN]: actProcedure(
+    "Could not open a tab in that agent's browser on this system.",
+  )
+    .input(exactInput(tasksBrowserTabOpenParamsSchema))
+    .output(EffectSchema.flip(tasksBrowserTabOpenAnswerSchema)),
   [TASKS_ACT_KIND.TASKS_BROWSER_TABS_FOLLOW]: actProcedure(
     "Could not follow the task's Browser tabs on this system.",
   )

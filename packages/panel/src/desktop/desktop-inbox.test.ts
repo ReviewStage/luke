@@ -2099,7 +2099,7 @@ test("an image an item shows is drawn, and a press opens it over the window", as
   assert.ok(press, "the image is pressed to enlarge it");
   act(() => press.click());
   assert.equal(
-    document.querySelector<HTMLImageElement>(".attachment-viewer-image")?.alt,
+    document.querySelector<HTMLImageElement>(".luke-zoom-image")?.alt,
     "The pull request tab.png",
   );
 });
@@ -2195,7 +2195,7 @@ test("a picture of an item opens a viewer the arrow keys walk across every pictu
     const card = document.querySelector<HTMLElement>('[role="dialog"]');
     assert.ok(card, "the viewer is open");
     return [
-      card.querySelector<HTMLImageElement>(".attachment-viewer-image")?.alt,
+      card.querySelector<HTMLImageElement>(".luke-zoom-image")?.alt,
       card.querySelector(".attachment-viewer-place")?.textContent,
     ];
   };
@@ -2292,7 +2292,7 @@ test("a thread draws a comment's files over its words: an agent's pictures stand
     const card = document.querySelector<HTMLElement>('[role="dialog"]');
     assert.ok(card, "the viewer is open");
     return [
-      card.querySelector<HTMLImageElement>(".attachment-viewer-image")?.alt,
+      card.querySelector<HTMLImageElement>(".luke-zoom-image")?.alt,
       card.querySelector(".attachment-viewer-place")?.textContent,
     ];
   };
@@ -3372,6 +3372,7 @@ function playListMotions() {
     "--luke-motion-exit": "ease",
     "--luke-duration-shape": "460ms",
     "--luke-spring": "ease-out",
+    "--luke-list-travel": "16px",
   };
   for (const [name, value] of Object.entries(tokens)) root.setProperty(name, value);
   onTestFinished(() => {
@@ -3400,7 +3401,7 @@ async function answerExpiryElsewhere(): Promise<void> {
   await settle();
 }
 
-test("on To do, an item answered on another Mac fades where its row stood, its task's group with it, out of reach while it fades, and leaves the list once the fade has played", async () => {
+test("on To do, an item answered on another Mac slides out from where its row stood, its task's group with it, out of reach while it goes, and leaves the list once its exit has played", async () => {
   const played = playListMotions();
   const { page } = mount();
   await settle();
@@ -3420,7 +3421,10 @@ test("on To do, an item answered on another Mac fades where its row stood, its t
   const fades = played.filter((each) => leaving.includes(each.element as HTMLElement));
   assert.deepEqual(
     fades.map((each) => each.keyframes.at(-1)),
-    [{ opacity: 0 }, { opacity: 0 }],
+    [
+      { opacity: 0, transform: "translateX(-16px)" },
+      { opacity: 0, transform: "translateX(-16px)" },
+    ],
   );
 
   act(() => {
@@ -3448,7 +3452,7 @@ test("a row leaving a list scrolled down holds the list as tall as its scroller 
   vi.spyOn(body, "getBoundingClientRect").mockImplementation(
     () => ({ top: -scrolled, bottom: 900 - scrolled }) as DOMRect,
   );
-  const held = () => body.style.getPropertyValue("--inbox-held-height");
+  const held = () => body.style.getPropertyValue("--luke-list-held-height");
 
   await answerExpiryElsewhere();
   assert.equal(held(), "620px", "as far down as the scroller shows it");
@@ -6539,6 +6543,68 @@ test("a thread that grows while the reader is at its end, a message or a picture
   layout.height = 1600;
   act(() => relayout());
   assert.equal(board.scrollTop, 300, "scrolled up, the reader's place stands");
+});
+
+/** Selects the words drawn under `within` as `words`, from `from` through `to`, as a drag lets them go. */
+function selectWithin(within: Element, words: string, from: string, to: string): void {
+  const walker = document.createTreeWalker(within, NodeFilter.SHOW_TEXT);
+  let text: Node | null = walker.nextNode();
+  while (text !== null && !(text.textContent ?? "").includes(words)) text = walker.nextNode();
+  assert.ok(text instanceof Text, `${words} is drawn`);
+  const range = document.createRange();
+  range.setStart(text, text.data.indexOf(from));
+  range.setEnd(text, text.data.indexOf(to) + to.length);
+  window.getSelection()?.removeAllRanges();
+  window.getSelection()?.addRange(range);
+  act(() => {
+    text.parentElement?.dispatchEvent(new Event("pointerup", { bubbles: true }));
+  });
+}
+
+/** The quotes the item's box holds, in order. */
+function boxQuotes(pane: HTMLElement): (string | null)[] {
+  const box = pane.querySelector(".inbox-answer") ?? assert.fail("the box is drawn");
+  return [...box.querySelectorAll(".composer-editor .composer-quote-words")].map(
+    (quote) => quote.textContent,
+  );
+}
+
+test("words selected in what an open ask offers, an option's words, quote into its box as the agent's message's do", async () => {
+  const pane = await mountThread(threadItem([askingMessage(EXPIRY_ASK)]));
+
+  selectWithin(pane, "What most teams use.", "What", "use.");
+  const reply = replyPress() ?? assert.fail("Reply stands over an option's words");
+  act(() => reply.click());
+  await settle();
+
+  assert.deepEqual(boxQuotes(pane), ["What most teams use."]);
+  assert.equal(replyPress() === undefined, true, "Reply goes once pressed");
+});
+
+test("a field's name in an open ask quotes into its box, and words typed into a field offer no Reply, being the reader's own", async () => {
+  const pane = await mountThread(
+    threadItem([
+      askingMessage({
+        type: INBOX_ASK.ANSWER,
+        fields: [{ type: INBOX_FIELD.TEXT, label: "Reason for the change", required: true }],
+      }),
+    ]),
+  );
+  const field = pane.querySelector(".inbox-field-composer") ?? assert.fail("the field is drawn");
+  typeInComposer(field, "Teams abroad miss the window");
+
+  selectWithin(field, "Teams abroad", "Teams", "abroad");
+  assert.equal(
+    replyPress() === undefined,
+    true,
+    "the reader's own typing is not the agent's words",
+  );
+
+  selectWithin(pane, "Reason for the change", "Reason", "change");
+  const reply = replyPress() ?? assert.fail("Reply stands over a field's name");
+  act(() => reply.click());
+  await settle();
+  assert.deepEqual(boxQuotes(pane), ["Reason for the change"]);
 });
 
 /** Everything the thread's subject draws, a part a child: its title alone. */

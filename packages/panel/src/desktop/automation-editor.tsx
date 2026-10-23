@@ -96,10 +96,15 @@ import {
   Fill,
   FoldingButton,
   IconButton,
+  OneLine,
   PAGE_FRAME,
   POPOVER_ALIGN,
   PROVIDER_MARK_SIZE,
   ProviderMark,
+  Reveal,
+  RevealArea,
+  RevealChoice,
+  revealArea,
   SETTINGS_SECTION_FRAME,
   SettingsRow,
   SettingsSection,
@@ -122,9 +127,9 @@ import {
   useConfirmDialog,
   useMenu,
   useMinute,
+  wholeWordsHint,
 } from "@luke/ui";
 import { dayAndTimeText, localTimeZone, sinceText, timeZoneNames } from "@luke/ui/time-format";
-import { useClipped } from "@luke/ui/use-clipped";
 import { useDisclosure } from "@luke/ui/use-disclosure";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { Result } from "effect";
@@ -582,6 +587,12 @@ function nextRunsText(draft: AutomationDraft): string | undefined {
 /** The parse the schedule's picker reads its kind back with. */
 const scheduleKindOf = optionValue(SCHEDULE_KINDS);
 
+/** Which field a schedule is written in: a cron for a custom one, a clock for the rest. */
+const SCHEDULE_FIELD = {
+  CRON: "cron",
+  CLOCK: "clock",
+} as const;
+
 /**
  * A schedule's rows: how often, under its next runs; then the time, day,
  * or cron that kind asks for; then its zone, searched since every zone this
@@ -622,76 +633,82 @@ function ScheduleRows({
         parse={scheduleKindOf}
         onChange={(kind) => onSchedule({ ...schedule, kind })}
       />
-      {schedule.kind === SCHEDULE_KIND.CUSTOM ? (
-        <SettingsRow label="Cron" error={zoneRefused ? undefined : problem}>
-          {(control) => (
-            <span className="automation-field">
-              <TextField
-                ref={cron}
-                label="Cron"
-                describedBy={control["aria-describedby"]}
-                invalid={control["aria-invalid"]}
-                font={TEXT_FIELD_FONT.MONO}
-                spellCheck={false}
-                value={schedule.cron}
-                onEscape={() => cron.current?.blur()}
-                onChange={(text) => onSchedule({ ...schedule, cron: text })}
-              />
-            </span>
-          )}
-        </SettingsRow>
-      ) : (
-        <SettingsRow
-          label={schedule.kind === SCHEDULE_KIND.WEEKLY ? "Day and time" : "Time"}
-          error={zoneRefused ? undefined : problem}
-        >
-          {(control) => (
-            <>
-              {schedule.kind === SCHEDULE_KIND.WEEKLY ? (
-                <Picker
-                  width={CHIP_WIDTH.MIN_FIELD}
-                  label="Day"
-                  value={String(schedule.weekday)}
-                  valueLabel={WEEKDAYS[schedule.weekday] ?? WEEKDAYS[0]}
-                  rows={WEEKDAYS.map((day, weekday) => ({ id: String(weekday), label: day }))}
-                  noMatch={NO_MATCH}
-                  onPick={(id) => onSchedule({ ...schedule, weekday: Number(id) })}
-                />
-              ) : null}
-              {schedule.kind === SCHEDULE_KIND.HOURLY ? (
-                <Picker
-                  width={CHIP_WIDTH.MIN_FIELD}
-                  label="Minutes past the hour"
-                  value={String(schedule.minute)}
-                  valueLabel={hourlyLabel(schedule.minute)}
-                  rows={HOURLY_MINUTES.map((minute) => ({
-                    id: String(minute),
-                    label: hourlyLabel(minute),
-                  }))}
-                  noMatch={NO_MATCH}
-                  onPick={(id) => onSchedule({ ...schedule, minute: Number(id) })}
-                />
-              ) : (
-                <span className="automation-field automation-time-field">
+      <RevealChoice
+        value={schedule.kind === SCHEDULE_KIND.CUSTOM ? SCHEDULE_FIELD.CRON : SCHEDULE_FIELD.CLOCK}
+      >
+        {(field) =>
+          field === SCHEDULE_FIELD.CRON ? (
+            <SettingsRow label="Cron" error={zoneRefused ? undefined : problem}>
+              {(control) => (
+                <span className="automation-field">
                   <TextField
-                    ref={time}
-                    type={TEXT_FIELD_TYPE.TIME}
-                    label="Time"
+                    ref={cron}
+                    label="Cron"
                     describedBy={control["aria-describedby"]}
                     invalid={control["aria-invalid"]}
-                    value={clockValue(schedule.hour, schedule.minute)}
-                    onEscape={() => time.current?.blur()}
-                    onChange={(text) => {
-                      const clock = clockOf(text);
-                      if (clock !== undefined) onSchedule({ ...schedule, ...clock });
-                    }}
+                    font={TEXT_FIELD_FONT.MONO}
+                    spellCheck={false}
+                    value={schedule.cron}
+                    onEscape={() => cron.current?.blur()}
+                    onChange={(text) => onSchedule({ ...schedule, cron: text })}
                   />
                 </span>
               )}
-            </>
-          )}
-        </SettingsRow>
-      )}
+            </SettingsRow>
+          ) : (
+            <SettingsRow
+              label={schedule.kind === SCHEDULE_KIND.WEEKLY ? "Day and time" : "Time"}
+              error={zoneRefused ? undefined : problem}
+            >
+              {(control) => (
+                <>
+                  {schedule.kind === SCHEDULE_KIND.WEEKLY ? (
+                    <Picker
+                      width={CHIP_WIDTH.MIN_FIELD}
+                      label="Day"
+                      value={String(schedule.weekday)}
+                      valueLabel={WEEKDAYS[schedule.weekday] ?? WEEKDAYS[0]}
+                      rows={WEEKDAYS.map((day, weekday) => ({ id: String(weekday), label: day }))}
+                      noMatch={NO_MATCH}
+                      onPick={(id) => onSchedule({ ...schedule, weekday: Number(id) })}
+                    />
+                  ) : null}
+                  {schedule.kind === SCHEDULE_KIND.HOURLY ? (
+                    <Picker
+                      width={CHIP_WIDTH.MIN_FIELD}
+                      label="Minutes past the hour"
+                      value={String(schedule.minute)}
+                      valueLabel={hourlyLabel(schedule.minute)}
+                      rows={HOURLY_MINUTES.map((minute) => ({
+                        id: String(minute),
+                        label: hourlyLabel(minute),
+                      }))}
+                      noMatch={NO_MATCH}
+                      onPick={(id) => onSchedule({ ...schedule, minute: Number(id) })}
+                    />
+                  ) : (
+                    <span className="automation-field automation-time-field">
+                      <TextField
+                        ref={time}
+                        type={TEXT_FIELD_TYPE.TIME}
+                        label="Time"
+                        describedBy={control["aria-describedby"]}
+                        invalid={control["aria-invalid"]}
+                        value={clockValue(schedule.hour, schedule.minute)}
+                        onEscape={() => time.current?.blur()}
+                        onChange={(text) => {
+                          const clock = clockOf(text);
+                          if (clock !== undefined) onSchedule({ ...schedule, ...clock });
+                        }}
+                      />
+                    </span>
+                  )}
+                </>
+              )}
+            </SettingsRow>
+          )
+        }
+      </RevealChoice>
       <PickerRow
         width={CHIP_WIDTH.MIN_FIELD}
         label="Time zone"
@@ -748,13 +765,10 @@ function AutomationActions({
 
 /** The crumb naming the automation, fading out at its end where the toolbar is narrow, the pointer reading it whole. */
 function CurrentCrumb({ name }: { name: string }): React.JSX.Element {
-  const [words, clipped] = useClipped(name);
   return (
-    <Tooltip label={clipped ? name : undefined}>
-      <span ref={words} className="automation-crumb" data-overflow={String(clipped)}>
-        {name}
-      </span>
-    </Tooltip>
+    <OneLine className="automation-crumb" hint={wholeWordsHint(name)}>
+      {name}
+    </OneLine>
   );
 }
 
@@ -779,6 +793,7 @@ function EditorToolbar({
   codeReview,
   dirty,
   saving,
+  saveRefused,
   onBack,
   onSave,
   onToggle,
@@ -792,6 +807,8 @@ function EditorToolbar({
   codeReview: boolean;
   dirty: boolean;
   saving: boolean;
+  /** Whether the last save was refused, read as its ring leaves: one that was not lands on a check. */
+  saveRefused: boolean;
   onBack: () => void;
   onSave: () => void;
   onToggle: (enabled: boolean) => void;
@@ -846,6 +863,7 @@ function EditorToolbar({
             variant={BUTTON_VARIANT.PRIMARY}
             busy={saving}
             busyLabel="Saving"
+            succeeded={!saveRefused}
             disabled={!(automation === undefined || dirty)}
             onClick={onSave}
           >
@@ -943,10 +961,9 @@ function GitHubSettingsRows({
   event: GitHubTriggerEvent;
   settings: GitHubTriggerSettings;
   onSettings: (settings: GitHubTriggerSettings) => void;
-}): React.JSX.Element | null {
-  if (event === GITHUB_TRIGGER_EVENT.CHECK_FAILED) return null;
+}): React.JSX.Element {
   return (
-    <>
+    <Reveal shown={event !== GITHUB_TRIGGER_EVENT.CHECK_FAILED}>
       {SENDER_CHOICES.map((choice) => (
         <SwitchRow
           key={choice.value}
@@ -958,36 +975,34 @@ function GitHubSettingsRows({
           }
         />
       ))}
-      {event === GITHUB_TRIGGER_EVENT.PULL_REQUEST_UPDATED
-        ? MOMENT_CHOICES.map((choice) => (
-            <SwitchRow
-              key={choice.value}
-              label={choice.label}
-              detail={choice.detail}
-              checked={settings.moments.includes(choice.value)}
-              onChange={(on) =>
-                onSettings({ ...settings, moments: toggled(settings.moments, choice.value, on) })
-              }
-            />
-          ))
-        : null}
-      {PULL_REQUEST_EVENTS.has(event) ? (
-        <>
+      <Reveal shown={event === GITHUB_TRIGGER_EVENT.PULL_REQUEST_UPDATED}>
+        {MOMENT_CHOICES.map((choice) => (
           <SwitchRow
-            label="Skip drafts"
-            detail="A draft starts a run once it is marked ready."
-            checked={!settings.drafts}
-            onChange={(skip) => onSettings({ ...settings, drafts: !skip })}
+            key={choice.value}
+            label={choice.label}
+            detail={choice.detail}
+            checked={settings.moments.includes(choice.value)}
+            onChange={(on) =>
+              onSettings({ ...settings, moments: toggled(settings.moments, choice.value, on) })
+            }
           />
-          <SwitchRow
-            label="Include forks"
-            detail="A fork's pull request is code from outside the repository, read by an agent that can push to it."
-            checked={settings.forks}
-            onChange={(forks) => onSettings({ ...settings, forks })}
-          />
-        </>
-      ) : null}
-    </>
+        ))}
+      </Reveal>
+      <Reveal shown={PULL_REQUEST_EVENTS.has(event)}>
+        <SwitchRow
+          label="Skip drafts"
+          detail="A draft starts a run once it is marked ready."
+          checked={!settings.drafts}
+          onChange={(skip) => onSettings({ ...settings, drafts: !skip })}
+        />
+        <SwitchRow
+          label="Include forks"
+          detail="A fork's pull request is code from outside the repository, read by an agent that can push to it."
+          checked={settings.forks}
+          onChange={(forks) => onSettings({ ...settings, forks })}
+        />
+      </Reveal>
+    </Reveal>
   );
 }
 
@@ -1071,11 +1086,7 @@ function SentryRows({
   // Note that a read still out, or one that failed, installs nothing, so an existing trigger stays editable.
   if (sentry.read !== undefined && sentry.read.installations.length === 0) {
     return (
-      <SettingsRow
-        label="Sentry isn't installed"
-        description="Install Luke's Sentry integration on this workspace so its alerts and issues can start runs."
-        error={sentry.refusal}
-      >
+      <SettingsRow label="Sentry isn't installed" error={sentry.refusal}>
         {() => (
           <Button
             variant={BUTTON_VARIANT.PRIMARY}
@@ -1659,30 +1670,34 @@ function RunsGroup({
         parse={targetOf}
         onChange={(target) => onDraft({ target })}
       />
-      {sameAgent ? (
-        <AgentRow
-          draft={draft}
-          savedAgentId={savedAgentId}
-          agents={choices.agents}
-          problem={problems[DRAFT_FIELD.AGENT]}
-          onDraft={onDraft}
-        />
-      ) : (
-        <>
-          <ModelRow draft={draft} choices={choices} onDraft={onDraft} />
-          <ServersRow
-            mine={mine}
-            disabled={draft.disabledServers}
-            onSwitch={(disabledServers) => onDraft({ disabledServers })}
-          />
-          <SwitchRow
-            label="Archive successful runs"
-            detail="Its transcript and pull request are kept."
-            checked={draft.archiveSuccessful}
-            onChange={(archiveSuccessful) => onDraft({ archiveSuccessful })}
-          />
-        </>
-      )}
+      <RevealChoice value={draft.target}>
+        {(target) =>
+          target === AUTOMATION_TARGET.SAME_AGENT ? (
+            <AgentRow
+              draft={draft}
+              savedAgentId={savedAgentId}
+              agents={choices.agents}
+              problem={problems[DRAFT_FIELD.AGENT]}
+              onDraft={onDraft}
+            />
+          ) : (
+            <>
+              <ModelRow draft={draft} choices={choices} onDraft={onDraft} />
+              <ServersRow
+                mine={mine}
+                disabled={draft.disabledServers}
+                onSwitch={(disabledServers) => onDraft({ disabledServers })}
+              />
+              <SwitchRow
+                label="Archive successful runs"
+                detail="Its transcript and pull request are kept."
+                checked={draft.archiveSuccessful}
+                onChange={(archiveSuccessful) => onDraft({ archiveSuccessful })}
+              />
+            </>
+          )
+        }
+      </RevealChoice>
     </SettingsSection>
   );
 }
@@ -1744,113 +1759,121 @@ function EditorForm({
   const review = codeReviewOn ? readCodeReviewSettings(draft.prompt) : undefined;
   // The prompt's Escape lets go of the caret and keeps the press, as every field's here does.
   const prompt = useRef<HTMLTextAreaElement>(null);
+  // The form is the area its reveals move, so the groups under a trigger's rows glide as they unroll.
+  const form = useRef<HTMLDivElement>(null);
   const workspaceName = workspace?.name ?? "Workspace";
   const owners = [
     { value: AUTOMATION_SCOPE.PERSONAL, label: "Personal" },
     { value: AUTOMATION_SCOPE.WORKSPACE, label: workspaceName },
   ] as const;
   return (
-    <div className="automation-form">
-      {offersOwner ? (
-        <SettingsSection title="Sharing">
-          <OwnerRow
-            owner={draft.owner}
-            owners={owners}
-            mine={automation === undefined || automation.mine === true}
-            workspace={workspace}
-            onOwner={(owner) => onDraft({ owner })}
+    <RevealArea root={form}>
+      <div ref={form} className="automation-form" {...revealArea()}>
+        {offersOwner ? (
+          <SettingsSection title="Sharing">
+            <OwnerRow
+              owner={draft.owner}
+              owners={owners}
+              mine={automation === undefined || automation.mine === true}
+              workspace={workspace}
+              onOwner={(owner) => onDraft({ owner })}
+            />
+          </SettingsSection>
+        ) : null}
+        <SettingsSection title="Trigger">
+          <SelectRow
+            width={CHIP_WIDTH.MIN_FIELD}
+            label="Type"
+            detail={automationTriggerText(draftTrigger(draft), draftRepositories(draft))}
+            value={draft.triggerKind}
+            options={triggers}
+            parse={triggerKindOf}
+            error={
+              draft.triggerKind === AUTOMATION_TRIGGER.SCHEDULE
+                ? undefined
+                : (problems[DRAFT_FIELD.SCHEDULE] ?? problems[DRAFT_FIELD.FILTERS])
+            }
+            onChange={(triggerKind) => onDraft({ triggerKind })}
           />
+          <RevealChoice value={draft.triggerKind}>
+            {(kind) =>
+              kind === AUTOMATION_TRIGGER.SCHEDULE ? (
+                <ScheduleRows
+                  draft={draft}
+                  problem={problems[DRAFT_FIELD.SCHEDULE]}
+                  onSchedule={(schedule) => onDraft({ schedule })}
+                  onTimezone={(timezone) => onDraft({ timezone })}
+                />
+              ) : kind === AUTOMATION_TRIGGER.GITHUB ? (
+                <>
+                  <SelectRow
+                    width={CHIP_WIDTH.MIN_FIELD}
+                    label="Event"
+                    detail="Heard through the workspace's GitHub App."
+                    value={draft.githubEvent}
+                    options={GITHUB_EVENTS}
+                    parse={githubEventOf}
+                    onChange={(event) => onDraft(withGithubEvent(draft, event))}
+                  />
+                  <GitHubSettingsRows
+                    event={draft.githubEvent}
+                    settings={draft.githubSettings}
+                    onSettings={(githubSettings) => onDraft({ githubSettings })}
+                  />
+                </>
+              ) : kind === AUTOMATION_TRIGGER.INTEGRATION ? (
+                <SentryRows
+                  draft={draft}
+                  sentry={sentry}
+                  withheld={sentryWithheld(sentry, automation, draft)}
+                  problem={problems[DRAFT_FIELD.COOLDOWN]}
+                  onDraft={onDraft}
+                />
+              ) : (
+                <WebhookRows
+                  automation={automation}
+                  writes={writes}
+                  secret={shownSecret}
+                  onSecret={onSecret}
+                />
+              )
+            }
+          </RevealChoice>
         </SettingsSection>
-      ) : null}
-      <SettingsSection title="Trigger">
-        <SelectRow
-          width={CHIP_WIDTH.MIN_FIELD}
-          label="Type"
-          detail={automationTriggerText(draftTrigger(draft), draftRepositories(draft))}
-          value={draft.triggerKind}
-          options={triggers}
-          parse={triggerKindOf}
-          error={
-            draft.triggerKind === AUTOMATION_TRIGGER.SCHEDULE
-              ? undefined
-              : (problems[DRAFT_FIELD.SCHEDULE] ?? problems[DRAFT_FIELD.FILTERS])
-          }
-          onChange={(triggerKind) => onDraft({ triggerKind })}
-        />
-        {draft.triggerKind === AUTOMATION_TRIGGER.SCHEDULE ? (
-          <ScheduleRows
-            draft={draft}
-            problem={problems[DRAFT_FIELD.SCHEDULE]}
-            onSchedule={(schedule) => onDraft({ schedule })}
-            onTimezone={(timezone) => onDraft({ timezone })}
-          />
-        ) : draft.triggerKind === AUTOMATION_TRIGGER.GITHUB ? (
-          <>
-            <SelectRow
-              width={CHIP_WIDTH.MIN_FIELD}
-              label="Event"
-              detail="Heard through the workspace's GitHub App."
-              value={draft.githubEvent}
-              options={GITHUB_EVENTS}
-              parse={githubEventOf}
-              onChange={(event) => onDraft(withGithubEvent(draft, event))}
-            />
-            <GitHubSettingsRows
-              event={draft.githubEvent}
-              settings={draft.githubSettings}
-              onSettings={(githubSettings) => onDraft({ githubSettings })}
-            />
-          </>
-        ) : draft.triggerKind === AUTOMATION_TRIGGER.INTEGRATION ? (
-          <SentryRows
-            draft={draft}
-            sentry={sentry}
-            withheld={sentryWithheld(sentry, automation, draft)}
-            problem={problems[DRAFT_FIELD.COOLDOWN]}
-            onDraft={onDraft}
-          />
-        ) : (
-          <WebhookRows
-            automation={automation}
-            writes={writes}
-            secret={shownSecret}
-            onSecret={onSecret}
+        {review === undefined ? null : (
+          <CodeReviewGroup
+            settings={review}
+            onSettings={(next) => onDraft({ prompt: withCodeReviewSettings(draft.prompt, next) })}
           />
         )}
-      </SettingsSection>
-      {review === undefined ? null : (
-        <CodeReviewGroup
-          settings={review}
-          onSettings={(next) => onDraft({ prompt: withCodeReviewSettings(draft.prompt, next) })}
+        <SettingsSection title="Prompt" frame={SETTINGS_SECTION_FRAME.NONE}>
+          <TextArea
+            ref={prompt}
+            label="Prompt"
+            rows={5}
+            placeholder="Find the flakiest test in CI this week and fix it."
+            value={draft.prompt}
+            invalid={problems[DRAFT_FIELD.PROMPT] !== undefined}
+            onEscape={() => prompt.current?.blur()}
+            onChange={(text) => onDraft({ prompt: text })}
+          />
+          {/* What stops a save, said under the prompt once a save was pressed. */}
+          {problems[DRAFT_FIELD.PROMPT] === undefined ? null : (
+            <ErrorState>{problems[DRAFT_FIELD.PROMPT]}</ErrorState>
+          )}
+        </SettingsSection>
+        <RunsGroup
+          draft={draft}
+          mine={automation === undefined || automation.mine === true}
+          savedAgentId={savedAgentId}
+          workspace={workspace}
+          problems={problems}
+          taskBacked={taskBacked}
+          repositories={repositories}
+          onDraft={onDraft}
         />
-      )}
-      <SettingsSection title="Prompt" frame={SETTINGS_SECTION_FRAME.NONE}>
-        <TextArea
-          ref={prompt}
-          label="Prompt"
-          rows={5}
-          placeholder="Find the flakiest test in CI this week and fix it."
-          value={draft.prompt}
-          invalid={problems[DRAFT_FIELD.PROMPT] !== undefined}
-          onEscape={() => prompt.current?.blur()}
-          onChange={(text) => onDraft({ prompt: text })}
-        />
-        {/* What stops a save, said under the prompt once a save was pressed. */}
-        {problems[DRAFT_FIELD.PROMPT] === undefined ? null : (
-          <ErrorState>{problems[DRAFT_FIELD.PROMPT]}</ErrorState>
-        )}
-      </SettingsSection>
-      <RunsGroup
-        draft={draft}
-        mine={automation === undefined || automation.mine === true}
-        savedAgentId={savedAgentId}
-        workspace={workspace}
-        problems={problems}
-        taskBacked={taskBacked}
-        repositories={repositories}
-        onDraft={onDraft}
-      />
-    </div>
+      </div>
+    </RevealArea>
   );
 }
 
@@ -2083,6 +2106,7 @@ export function AutomationEditor({
           codeReview={codeReviewOn && readCodeReviewSettings(draft.prompt) !== undefined}
           dirty={dirty}
           saving={saving}
+          saveRefused={refusal !== undefined}
           onBack={onBack}
           onSave={save}
           onToggle={toggle}

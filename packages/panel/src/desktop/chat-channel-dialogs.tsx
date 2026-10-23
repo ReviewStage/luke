@@ -133,7 +133,11 @@ export function useChannelDialogs(
         }}
       >
         <Stack>
-          <FormField label="Name" description="Lowercase, with dashes, as agents write it after #.">
+          <FormField
+            label="Name"
+            description="Lowercase, with dashes, as agents write it after #."
+            count={{ length: name.length, limit: CHAT_BOUNDS.MAX_KEY_CHARS }}
+          >
             {(control) => (
               <TextField
                 ref={field}
@@ -147,7 +151,11 @@ export function useChannelDialogs(
               />
             )}
           </FormField>
-          <FormField label="Purpose" description="Agents that read the channel see it too.">
+          <FormField
+            label="Purpose"
+            description="Agents that read the channel see it too."
+            count={{ length: purpose.length, limit: CHAT_BOUNDS.MAX_PURPOSE_CHARS }}
+          >
             {(control) => (
               <TextField
                 field={control}

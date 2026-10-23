@@ -1,8 +1,10 @@
 import { CLAUDE_CODE_LUKE_TOOL_PREFIX, CLAUDE_CODE_TOOL } from "@luke/features/agent-tools";
 import type { ToolCallSettlement } from "@luke/features/brain";
 import { redactCredentials } from "@luke/features/credential-redaction";
-import { type WireValue, WireValueSchema } from "@luke/wire";
+import { integrationOfRemoteTool } from "@luke/features/integration-wire";
+import { type UnparsedWireValue, type WireValue, WireValueSchema } from "@luke/wire";
 import { Option, Predicate, Schema } from "effect";
+import { storedServerCall } from "../../integrations/connection-tools.js";
 import {
   NATIVE_MOMENT,
   type NativeContextUsage,
@@ -35,8 +37,11 @@ import {
  * once with words that say only that it launched, so that call is kept
  * open instead and settled by the task notification its end posts. A call to Luke's
  * own MCP server is named as Luke's tool (`mcp__luke__read_inbox` is
- * `read_inbox`) and its answer read as the JSON that tool answers; every
- * other call keeps the CLI's own name and its answer the text the model
+ * `read_inbox`) and its answer read as the JSON that tool answers; a call
+ * to an integration's own server (`mcp__linear__list_issues`) is stored as
+ * eve's call of that integration's tool is, so it draws with the service's
+ * mark and the tool's own name; every other call keeps the CLI's own name,
+ * and it and an integration's call keep as their answer the text the model
  * read. A turn also says how it found the plan that pays: a `result` that
  * is no error ran on it, an answer the CLI flags `authentication_failed`
  * (a setup-token revoked, expired, or never one) refused it, and a
@@ -194,11 +199,37 @@ const CREDENTIAL_REFUSED: ReadonlySet<string> = new Set([
   "oauth_org_not_allowed",
 ]);
 
-/** The name a call is stored under: Luke's tool's own for a call to Luke's MCP server, the CLI's otherwise. */
-function storedClaudeCodeToolName(name: string): string {
-  return name.startsWith(CLAUDE_CODE_LUKE_TOOL_PREFIX)
-    ? name.slice(CLAUDE_CODE_LUKE_TOOL_PREFIX.length)
-    : name;
+/** What Claude Code puts before any MCP server's tool, the server's name and `__` following it (`mcp__linear__list_issues`). */
+const MCP_TOOL_PREFIX = "mcp__";
+const MCP_SERVER_SEPARATOR = "__";
+
+/**
+ * The name and input a call is stored under: Luke's tool's own for a call
+ * to Luke's MCP server; for a call to an integration's own server, its
+ * integration's fixed name and envelope, as eve's nested call of the tool is
+ * stored (`storedServerCall`); the CLI's otherwise.
+ */
+function storedClaudeCodeCall(
+  callId: string,
+  name: string,
+  input: WireValue,
+): { readonly name: string; readonly input: UnparsedWireValue } {
+  if (name.startsWith(CLAUDE_CODE_LUKE_TOOL_PREFIX)) {
+    return { name: name.slice(CLAUDE_CODE_LUKE_TOOL_PREFIX.length), input };
+  }
+  if (!name.startsWith(MCP_TOOL_PREFIX)) return { name, input };
+  const named = name.slice(MCP_TOOL_PREFIX.length);
+  const separator = named.indexOf(MCP_SERVER_SEPARATOR);
+  const integration =
+    separator < 0
+      ? undefined
+      : storedServerCall(
+          named.slice(0, separator),
+          named.slice(separator + MCP_SERVER_SEPARATOR.length),
+          input,
+          callId,
+        );
+  return integration ?? { name, input };
 }
 
 const CLI_TOOL_NAMES: ReadonlySet<string> = new Set(Object.values(CLAUDE_CODE_TOOL));
@@ -230,7 +261,8 @@ function settlementOf(
   content: string | readonly WireValue[] | undefined,
   isError: boolean,
 ): ToolCallSettlement {
-  const lukeTool = !CLI_TOOL_NAMES.has(storedName);
+  const lukeTool =
+    !CLI_TOOL_NAMES.has(storedName) && integrationOfRemoteTool(storedName) === undefined;
   const text = answerText(content, !lukeTool);
   return lukeTool
     ? toolAnswerSettlement({ lukeTool: true, text }, isError)
@@ -283,11 +315,11 @@ function assistantMoments(message: WireValue): readonly NativeMoment[] {
     }
     const call = readToolUseBlock(block);
     if (Option.isSome(call)) {
+      const { id, name, input } = call.value;
       moments.push({
         kind: NATIVE_MOMENT.TOOL_STARTED,
-        callId: call.value.id,
-        name: storedClaudeCodeToolName(call.value.name),
-        input: call.value.input,
+        callId: id,
+        ...storedClaudeCodeCall(id, name, input),
       });
     }
   }

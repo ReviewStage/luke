@@ -14,7 +14,9 @@ import {
 } from "react";
 import { cssCustomProperties } from "../../css.js";
 import { ChevronRightIcon } from "../../face/glyphs.js";
+import { PRESS_PULSE, pulseOnPress, pulsePress } from "../../press-pulse.js";
 import { useClipped } from "../../use-clipped.js";
+import { motionKey, motionRows } from "../list-motion/list-motion.js";
 import { useLinkAddress } from "../menu/link-address.js";
 import { type ContextMenuProps, withContextMenu } from "../menu/menu.js";
 import { useRowSwipe } from "./use-row-swipe.js";
@@ -232,20 +234,38 @@ function said(words: ReactNode): boolean {
   return words !== undefined && words !== null && words !== false && words !== "";
 }
 
-/** A list of `ListRow`s, named by `label` for a reader moving between lists. */
+/**
+ * A list of `ListRow`s, named by `label` for a reader moving between lists.
+ * One whose rows a finger opens (`fingerTall`) stands each a finger's press
+ * tall on a coarse pointer, its words centred in it, as a call's line does
+ * of its own; a mouse keeps the row's own height.
+ */
 export function List({
   label,
   variant = LIST_VARIANT.PLAIN,
   density = LIST_DENSITY.REGULAR,
+  fingerTall = false,
+  moves = false,
   children,
 }: {
   label: string;
   variant?: ListVariant;
   density?: ListDensity;
+  /** Whether each row stands a finger's press tall on a coarse pointer. */
+  fingerTall?: boolean | undefined;
+  /** Whether its rows move as they arrive, leave, and change places, under a `ListMotion` (`motionRows`). */
+  moves?: boolean;
   children: ReactNode;
 }): React.JSX.Element {
   return (
-    <ul className="luke-list" data-variant={variant} data-density={density} aria-label={label}>
+    <ul
+      className="luke-list"
+      data-variant={variant}
+      data-density={density}
+      data-finger-tall={fingerTall ? "true" : undefined}
+      aria-label={label}
+      {...(moves ? motionRows() : {})}
+    >
       <ListDensityContext.Provider value={density}>{children}</ListDensityContext.Provider>
     </ul>
   );
@@ -277,6 +297,7 @@ export function ListRow({
   tabbable = true,
   onTitleClipped,
   id,
+  motionKey: followedBy,
   ref,
   onKeyDown,
   contextMenu,
@@ -329,6 +350,8 @@ export function ListRow({
   onTitleClipped?: ((clipped: boolean) => void) | undefined;
   /** The id of the row's item, which a field driving the list names as its active row. */
   id?: string | undefined;
+  /** The key a `ListMotion` follows the row by, out of one list and into another (`motionKey`). */
+  motionKey?: string | undefined;
   /** Handed the row's press, or its item where it opens nothing. A callback, so one list keeps each row's by its own key. */
   ref?: RefCallback<HTMLElement> | undefined;
   /** A key pressed on the row's press; a row that opens nothing hears none. */
@@ -436,7 +459,12 @@ export function ListRow({
       tabIndex={tabbable ? undefined : -1}
       // Note that the focus moves as a mousedown's default, so refusing it there is what keeps it.
       onMouseDown={keepFocus ? preventFocusMove : undefined}
-      onClick={onPress}
+      onClick={(event) => {
+        // Note that the row around the press is what is pressed, its fill and its actions with it.
+        const row = event.currentTarget.closest<HTMLElement>(".luke-list-row");
+        pulsePress(row ?? event.currentTarget, PRESS_PULSE.QUIET);
+        onPress(event);
+      }}
       onKeyDown={onKeyDown}
     >
       {face}
@@ -464,6 +492,7 @@ export function ListRow({
   return (
     <li
       id={id}
+      {...(followedBy === undefined ? {} : motionKey(followedBy))}
       ref={swipe === undefined ? (onPress ? undefined : ref) : hold}
       className="luke-list-row"
       data-meta={metaAt === LIST_ROW_META.TITLE ? metaAt : undefined}
@@ -504,7 +533,7 @@ export function ListRow({
               className="luke-list-row-swipe-act"
               tabIndex={-1}
               data-swipe-act=""
-              onClick={swiped.onPress}
+              onClick={pulseOnPress(swiped.onPress)}
             >
               <span className="luke-list-row-swipe-label">
                 {swipe.icon}

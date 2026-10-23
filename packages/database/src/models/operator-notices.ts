@@ -98,7 +98,6 @@ const UnreadNoticeSchema = Schema.Struct({
   agentId: Schema.String,
   taskId: Schema.NullOr(Schema.String),
   at: Schema.Date,
-  agentPersonaName: Schema.NullOr(Schema.String),
   agentTitle: Schema.NullOr(Schema.String),
   agentModel: Schema.String,
 });
@@ -117,7 +116,6 @@ const findUnread = SqlSchema.findAll({
           agentId: operatorNotice.agentId,
           taskId: operatorNotice.taskId,
           at: operatorNotice.at,
-          agentPersonaName: codingAgent.personaName,
           agentTitle: codingAgent.title,
           agentModel: codingAgent.model,
         })
@@ -163,7 +161,6 @@ const DueWakeSchema = Schema.Struct({
   organizationId: Schema.String,
   agentId: Schema.String,
   taskId: Schema.NullOr(Schema.String),
-  agentPersonaName: Schema.NullOr(Schema.String),
   agentTitle: Schema.NullOr(Schema.String),
   agentModel: Schema.String,
 });
@@ -187,7 +184,6 @@ const findDueWakes = SqlSchema.findAll({
           organizationId: operatorOf.organizationId,
           agentId: operatorNotice.agentId,
           taskId: operatorNotice.taskId,
-          agentPersonaName: failedAgent.personaName,
           agentTitle: failedAgent.title,
           agentModel: failedAgent.model,
         })

@@ -2,6 +2,8 @@ import {
   BUTTON_TYPE,
   BUTTON_VARIANT,
   type ButtonType,
+  COMPOSER_ELEMENT,
+  ComposerFrame,
   cn,
   IconButton,
   SUBMIT_STATE,
@@ -47,9 +49,10 @@ import type {
  * its glyph in the surface's own colour while it takes a press, and dimmed
  * to the raised ground with a muted glyph while it does not. Both are the
  * shared submit's own, never an opacity over the filled one, so the glyph
- * stays a colour apart from its disc in either state. The card and its foot
- * wear their own classes (`.prompt-input*`, tasks.css) on luke tokens, and
- * an owner's class beside them places the card in its surface.
+ * stays a colour apart from its disc in either state. The card is
+ * `@luke/ui`'s `ComposerFrame`, its edge brightened while files are dragged
+ * over it; `.prompt-input*` (tasks.css) lays out what it holds, and an
+ * owner's class beside them places the card in its surface.
  */
 
 /** What the window's hint hands the submit it wraps: when to show and go, and the chord it names. */
@@ -58,24 +61,39 @@ type HintProps = Pick<
   "onPointerEnter" | "onPointerLeave" | "onPointerDown" | "onFocus" | "onBlur" | "aria-keyshortcuts"
 >;
 
-export type PromptInputProps = Omit<HTMLAttributes<HTMLFormElement>, "onSubmit"> & {
+export type PromptInputProps = Omit<
+  HTMLAttributes<HTMLFormElement>,
+  "onSubmit" | "className" | "children"
+> & {
   onSubmit: () => void;
+  /** The owner's class, which places the card in its surface. */
+  className?: string | undefined;
+  /** Whether files are dragged over the box, which brightens its edge. */
+  dropping?: boolean | undefined;
+  children: ReactNode;
 };
 
 export function PromptInput({
   className,
   onSubmit,
+  dropping = false,
   children,
   ...props
 }: PromptInputProps): ReactNode {
-  const handleSubmit: FormEventHandler<HTMLFormElement> = (event) => {
+  const handleSubmit: FormEventHandler<HTMLElement> = (event) => {
     event.preventDefault();
     onSubmit();
   };
   return (
-    <form className={cn("prompt-input", className)} onSubmit={handleSubmit} {...props}>
+    <ComposerFrame
+      as={COMPOSER_ELEMENT.FORM}
+      className={cn("prompt-input", className)}
+      dropping={dropping}
+      onSubmit={handleSubmit}
+      {...props}
+    >
       {children}
-    </form>
+    </ComposerFrame>
   );
 }
 

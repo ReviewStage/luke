@@ -10,6 +10,7 @@ import {
   ChoiceList,
   type ChoiceOption,
   ConfirmDialog,
+  CornerCount,
   type DialogQuestion,
   FoldingButton,
   POPOVER_ALIGN,
@@ -278,14 +279,9 @@ export function PullRequestReview({
         ref={trigger}
         label={REVIEW_WORDS.OPEN}
         icon={
-          <span className="pull-request-review-mark">
+          <CornerCount count={pending?.comments ?? 0}>
             <MessageSquarePlusIcon aria-hidden="true" />
-            {pending == null || pending.comments === 0 ? null : (
-              <span className="pull-request-review-count" aria-hidden="true">
-                {pending.comments}
-              </span>
-            )}
-          </span>
+          </CornerCount>
         }
         name={
           pending == null || pending.comments === 0

@@ -1,16 +1,13 @@
 /**
- * browser-acts.ts -- what a Browser tab says to the main process and hears back: the address a typed line opens, its acts' payloads, and how its page stands.
+ * browser-acts.ts -- how a Browser tab's bar reads what is typed into it, which addresses a Browser tab loads, and which chords pressed over its page stay the window's.
  *
- * A Browser tab draws one web page in a view main owns over the panel,
- * so the tab names its view by an id it
- * made and main keeps the page. The acts carry an address, a step, and where
- * the view stands on the window, never the page itself; what comes back is
- * how the page stands, its address, title, and whether it can step back or
- * forward, on the panel's own `onBrowserState`, and a still of it while
- * something covers it. Nothing here enters app state, a trace, or a count.
+ * A Browser tab draws a page of an agent's cloud browser beside the plan
+ * (`cloud-browser-pane.tsx`): its bar opens a typed line as a browser's
+ * address bar would, the service and the live-view relay load no address
+ * but an http or https one, and a Command chord pressed while the member
+ * drives the page is the window's unless the page edits text with it.
+ * Nothing here enters app state, a trace, or a count.
  */
-
-import { Schema } from "effect";
 
 /** The longest address the tab opens, as a browser's own address bar takes it. */
 const BROWSER_ADDRESS_MAX_CHARS = 2_048;
@@ -33,22 +30,12 @@ const NAMED_SCHEME = /^[a-z][a-z\d+.-]*:\/\//iu;
 const HOST_LIKE =
   /^(?:localhost|\[[\da-f:]+\]|[^\s/:?#.]+(?:\.[^\s/:?#.]+)+\.?)(?::\d{1,5})?(?:[/?#]\S*)?$/iu;
 
-/** Hosts served on the Mac or its own network, which are opened over plain http, as a dev server serves them. */
+/** Hosts served on the machine itself or its own network, which are opened over plain http, as a dev server serves them. */
 const LOCAL_HOST =
   /^(?:localhost|.+\.localhost|127(?:\.\d{1,3}){3}|0\.0\.0\.0|\[::1\]|10(?:\.\d{1,3}){3}|192\.168(?:\.\d{1,3}){2})$/iu;
 
 /** Where words that are not an address are looked up, as a browser's address bar does. */
 const SEARCH = "https://www.google.com/search?q=";
-
-/** The steps a Browser tab's bar takes its page through. */
-export const BROWSER_STEP = {
-  BACK: "back",
-  FORWARD: "forward",
-  RELOAD: "reload",
-  STOP: "stop",
-} as const;
-
-export type BrowserStep = (typeof BROWSER_STEP)[keyof typeof BROWSER_STEP];
 
 /** Whether an address is one a Browser tab loads: an absolute http or https address the URL parser reads, no longer than the bar takes. */
 export function isBrowserAddress(address: string): boolean {
@@ -81,95 +68,14 @@ export function browserAddressOf(typed: string): string | undefined {
   return isBrowserAddress(search) ? search : undefined;
 }
 
-const browserId = Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(64));
-
-const browserAddress = Schema.String.check(Schema.makeFilter(isBrowserAddress));
-
-const shown = Schema.String.check(Schema.isMaxLength(BROWSER_SHOWN_MAX_CHARS));
-
-/** A length on the window in CSS pixels, whole. */
-const pixels = Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 100_000 }));
-
-/** A call that names one Browser tab's view. */
-export const browserViewParamsSchema = Schema.Struct({ browserId });
-
-/** An open, or a navigation: the view, and the address it loads. */
-export const browserAddressParamsSchema = Schema.Struct({ browserId, address: browserAddress });
-
-/** A step of the bar's: back, forward, reload, or stop. */
-export const browserStepParamsSchema = Schema.Struct({
-  browserId,
-  step: Schema.Literals(Object.values(BROWSER_STEP)),
-});
-
-/** Where the tab's body stands in the panel's window, in its CSS pixels. */
-const browserBoundsSchema = Schema.Struct({
-  x: pixels,
-  y: pixels,
-  width: pixels,
-  height: pixels,
-});
-
-export type BrowserBounds = typeof browserBoundsSchema.Type;
-
-/** Where the view stands over the window, or none while it is to be out of sight. */
-export const browserPlaceParamsSchema = Schema.Struct({
-  browserId,
-  bounds: Schema.NullOr(browserBoundsSchema),
-});
-
-/** How one Browser tab's page stands: where it is, what it calls itself, and which of the bar's steps it can take. */
-export const browserPageSchema = Schema.Struct({
-  browserId,
-  address: shown,
-  title: shown,
-  loading: Schema.Boolean,
-  back: Schema.Boolean,
-  forward: Schema.Boolean,
-  /** Why the page last failed to load, in the browser's words; none once one loads. */
-  failure: Schema.optional(shown),
-});
-
-export type BrowserPage = typeof browserPageSchema.Type;
-
-/** Whether a value is how a Browser tab's page stands, as the panel is told on `onBrowserState`. */
-export const isBrowserPage = Schema.is(browserPageSchema);
-
-const keyName = Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(32));
-
-/**
- * A window's chord pressed while a Browser tab's page held the keyboard,
- * which main hands back to the panel so the window's own chords answer over
- * the page as they do over any tab: the key as the page heard it, and its
- * modifiers. The page keeps the chords it edits text with.
- */
-const browserKeySchema = Schema.Struct({
-  browserId,
-  key: keyName,
-  code: keyName,
-  meta: Schema.Boolean,
-  shift: Schema.Boolean,
-  alt: Schema.Boolean,
-  control: Schema.Boolean,
-});
-
-export type BrowserKey = typeof browserKeySchema.Type;
-
-/** Whether a value is a chord handed back from a Browser tab's page, as the panel is told on `onBrowserKey`. */
-export const isBrowserKey = Schema.is(browserKeySchema);
-
-/**
- * A Browser tab's page took the keyboard, a click into it or a key, which
- * main says to the panel, since the page stands in a view of its own that no
- * focus event of the panel's page hears, and the panel's keys follow the
- * column that holds the keyboard.
- */
-const browserFocusSchema = Schema.Struct({ browserId });
-
-export type BrowserFocus = typeof browserFocusSchema.Type;
-
-/** Whether a value says which Browser tab's page took the keyboard, as the panel is told on `onBrowserFocus`. */
-export const isBrowserFocus = Schema.is(browserFocusSchema);
+/** A chord pressed over a page: the key as the page heard it, and its modifiers. */
+interface BrowserChord {
+  readonly key: string;
+  readonly meta: boolean;
+  readonly shift: boolean;
+  readonly alt: boolean;
+  readonly control: boolean;
+}
 
 /** The keys a page keeps under Command, since they edit its text: copy, paste, cut, select all, and undo or redo. */
 const PAGE_KEPT_KEYS: ReadonlySet<string> = new Set(["c", "v", "x", "a", "z"]);
@@ -179,7 +85,7 @@ const PAGE_KEPT_KEYS: ReadonlySet<string> = new Set(["c", "v", "x", "a", "z"]);
  * chord but those the page edits text with, and ⌃Tab or ⌃⇧Tab, the tab
  * switcher's, which a page would otherwise take as its own focus move.
  */
-export function chordIsWindows(chord: Omit<BrowserKey, "browserId" | "code">): boolean {
+export function chordIsWindows(chord: BrowserChord): boolean {
   if (!chord.meta) return chord.control && !chord.alt && chord.key === "Tab";
   return chord.alt || chord.control || !PAGE_KEPT_KEYS.has(chord.key.toLowerCase());
 }

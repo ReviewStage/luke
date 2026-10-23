@@ -32,6 +32,8 @@ import {
   INLINE_REF_LOOK,
   InlineRef,
   LineSummary,
+  MESSAGE_ACTIONS_PLACEMENT,
+  OneLine,
   TaskStatusMark,
   TEXT_LINK_LOOK,
   TEXT_TONE,
@@ -74,13 +76,12 @@ import {
   ConversationScrollButton,
 } from "../ai-elements/conversation.js";
 import { Fold, FoldBody } from "../ai-elements/fold.js";
-import { MESSAGE_ACTIONS_PLACEMENT, Message, MessageContent } from "../ai-elements/message.js";
+import { Message, MessageContent } from "../ai-elements/message.js";
 import { Plan, PlanContent, PlanHeader, PlanIcon, PlanTitle } from "../ai-elements/plan.js";
 import { TOOL_STATE } from "../ai-elements/tool.js";
 import { appPlatform } from "../app-platform.js";
 import { useAutomation } from "../automation-directory.js";
 import { useCopyToast } from "../copy-feedback.js";
-import { FadingWords } from "../fading-words.js";
 import { useFindOpen } from "../find-in-tab.js";
 import { useMemberDirectory, usePerson } from "../member-directory.js";
 import { GLYPH_STATE, stateEndMark } from "../state-glyph.js";
@@ -207,7 +208,12 @@ import {
   TranscriptWords,
 } from "./transcript-blocks.js";
 import { type FindRow, useTranscriptFind } from "./transcript-find.js";
-import { UndeliveredLines, UndeliveredMark, useUndeliveredLines } from "./undelivered-mark.js";
+import {
+  UndeliveredLines,
+  UndeliveredMark,
+  useLineSending,
+  useUndeliveredLines,
+} from "./undelivered-mark.js";
 import { useAgentCalls } from "./use-agent-calls.js";
 import { type HeldComposer, useAgentComposer } from "./use-agent-composer.js";
 import { type AgentModelControl, useAgentModel } from "./use-agent-model.js";
@@ -654,12 +660,7 @@ function TodosDock({
   if (docked === undefined) return null;
   return (
     <div className="agent-todos-dock">
-      <TranscriptTodosDock
-        key={docked.callId}
-        todos={docked.todos}
-        summary={todosSummary(docked.todos)}
-        focus={todoFocus(docked.todos)}
-      />
+      <TranscriptTodosDock todos={docked.todos} focus={todoFocus(docked.todos)} />
     </div>
   );
 }
@@ -1032,11 +1033,16 @@ function OriginSubject({
   const words =
     subject.title === undefined ? `#${subject.number}` : `#${subject.number} ${subject.title}`;
   const { url } = subject;
-  if (url === undefined) return <FadingWords className="agent-origin-subject" words={words} />;
+  if (url === undefined)
+    return (
+      <OneLine className="agent-origin-subject" words={words}>
+        {words}
+      </OneLine>
+    );
   const chip = linkChip(url, words, doors);
   if (chip !== undefined) return <span className="agent-origin-chip">{chip}</span>;
   return (
-    <FadingWords className="agent-origin-subject" words={words}>
+    <OneLine className="agent-origin-subject" words={words}>
       <TextLink
         href={url}
         look={TEXT_LINK_LOOK.UNDERLINED}
@@ -1047,7 +1053,7 @@ function OriginSubject({
       >
         {words}
       </TextLink>
-    </FadingWords>
+    </OneLine>
   );
 }
 
@@ -1276,6 +1282,7 @@ export function AgentMessage({
 }): ReactNode {
   const words = messageWords(message);
   const forkOffered = useForkOffered();
+  const sending = useLineSending(message.id);
   if (plan) {
     return (
       <PlanCard
@@ -1301,7 +1308,7 @@ export function AgentMessage({
     const shown = inboxLineWords(words);
     return (
       <Message from={message.role} data-message-id={message.id}>
-        <MessageFileChips message={message} />
+        <MessageFileChips message={message} sending={sending} />
         {words === "" ? null : (
           <MessageContent>
             <SentToAgent id={message.id} arrived={message.arrivedIn !== undefined}>
@@ -2177,10 +2184,16 @@ function AgentTabView({
     ),
     sameSet,
   );
+  const sending = useKept(
+    new Set(
+      composer.sent.filter((line) => line.state === SENT_LINE_STATE.PENDING).map((line) => line.id),
+    ),
+    sameSet,
+  );
   const retryLine = useSteady(composer.retryLine);
   const marks = useMemo(
-    () => ({ undelivered, unsent, retry: (id: string) => retryLine?.(id) }),
-    [undelivered, unsent, retryLine],
+    () => ({ undelivered, unsent, sending, retry: (id: string) => retryLine?.(id) }),
+    [undelivered, unsent, sending, retryLine],
   );
   const starterActor = usePerson(agent.startedBy);
   const pictures = useAgentPictureDoor(agent.id);

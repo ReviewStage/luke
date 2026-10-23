@@ -29,13 +29,13 @@ function titleRowAt(width: number, touch = false) {
     '<div class="file-view pull-request-tab">',
     '<header class="pull-request-header"><div class="pull-request-title-row">',
     '<h2 class="pull-request-title pull-request-title-editable">A long title <span class="pull-request-number">#1</span></h2>',
-    '<button class="luke-chip">Open</button>',
+    '<div class="pull-request-state"><button class="luke-chip">Open</button></div>',
     '<div class="pull-request-title-actions"><button class="luke-button">Merge</button></div>',
     "</div></header></div>",
   ].join("");
   const row = document.querySelector(".pull-request-title-row") ?? assert.fail("the row stands");
   const title = document.querySelector(".pull-request-title") ?? assert.fail("the title stands");
-  const pill = document.querySelector(".luke-chip") ?? assert.fail("the pill stands");
+  const pill = document.querySelector(".pull-request-state") ?? assert.fail("the pill stands");
   const style = getComputedStyle(title);
   // Note that flex items of one order are drawn in the markup's, which puts the title first.
   const order = (element: Element) => Number(getComputedStyle(element).order || "0");
@@ -88,7 +88,7 @@ function foldedAt(room: "narrow" | "wide") {
     `<div class="desktop-shell" data-room="${room}"><div class="file-view pull-request-tab">`,
     '<header class="pull-request-header" data-folded=""><div class="pull-request-title-row">',
     '<h2 class="pull-request-title pull-request-title-editable">A long title <span class="pull-request-number">#1</span></h2>',
-    '<button class="luke-chip">Open</button>',
+    '<div class="pull-request-state"><button class="luke-chip">Open</button></div>',
     '<div class="pull-request-title-actions"><button class="luke-button">Merge</button></div>',
     '</div><div class="changes-people pull-request-people">main ← topic</div></header>',
     "</div></div>",
@@ -99,7 +99,7 @@ function foldedAt(room: "narrow" | "wide") {
   const title = document.querySelector(".pull-request-title") ?? assert.fail("the title stands");
   return {
     people: shown(".pull-request-people"),
-    pill: shown(".luke-chip"),
+    pill: shown(".pull-request-state"),
     actions: shown(".pull-request-title-actions"),
     titleOneLine: getComputedStyle(title).whiteSpace === "nowrap",
   };

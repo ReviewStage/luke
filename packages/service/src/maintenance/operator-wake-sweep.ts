@@ -60,7 +60,7 @@ function wakeKey(wake: DueOperatorWake): string {
 
 /** The line that wakes the operator, naming the agent that failed. */
 function wakeLine(wake: DueOperatorWake, step: string): string {
-  const name = wake.agentPersonaName ?? wake.agentTitle ?? wake.agentModel;
+  const name = wake.agentTitle ?? wake.agentModel;
   const task = wake.taskId === null ? undefined : { taskId: wake.taskId };
   const mention = writtenMention(
     { kind: MENTION_KIND.AGENT, ...task, agentId: wake.agentId },

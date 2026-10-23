@@ -175,7 +175,7 @@ function longestBackticks(text: string): number {
 }
 
 /** The fence a block holding `content` is written with: longer than any run of backticks in it, and never shorter than three. */
-function fenceFor(content: string): string {
+export function fenceFor(content: string): string {
   return "`".repeat(Math.max(FENCE_LEAST, longestBackticks(content) + 1));
 }
 

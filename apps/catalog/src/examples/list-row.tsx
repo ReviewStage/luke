@@ -20,8 +20,8 @@ import { CatalogSection } from "../section";
 /**
  * list-row.tsx -- a list's rows with their metadata and acts lined up, the
  * one open now, unread rows, rows that open nothing, rows in a card,
- * compact and dense, rows whose acts show on hover, rows that go deeper, and
- * long words in a narrow column.
+ * a row a finger's height on a coarse pointer, compact and dense, rows whose
+ * acts show on hover, rows that go deeper, and long words in a narrow column.
  */
 
 const MEMBERS = [
@@ -118,6 +118,18 @@ function ListRows(): React.JSX.Element {
       <CatalogSection id="list-row-card" title="Rows in a card">
         <div className="catalog-column">
           <Automations />
+        </div>
+      </CatalogSection>
+      <CatalogSection id="list-row-finger" title="A finger's height on a coarse pointer">
+        <div className="catalog-column">
+          <List label="Pull request" variant={LIST_VARIANT.CARD} fingerTall>
+            <ListRow
+              leading={<UserIcon />}
+              title="#4702 · Fold the task sweep into ui"
+              meta="+412 −388"
+              onPress={() => undefined}
+            />
+          </List>
         </div>
       </CatalogSection>
       <CatalogSection id="list-row-compact" title="Compact rows">

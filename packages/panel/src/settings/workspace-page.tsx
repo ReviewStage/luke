@@ -274,7 +274,7 @@ const SENTRY_MARK = (
 /** What the Sentry row's line says, by whether an installation stands and who is reading it. */
 const SENTRY_LINE = {
   INSTALLED: (accounts: string) => (accounts === "" ? "Installed" : `Installed · ${accounts}`),
-  MANAGES: "Not installed. Alerts and new issues can trigger this workspace's automations.",
+  MANAGES: "Not installed.",
   MEMBER: "Not installed. Ask an owner or admin.",
 } as const;
 
@@ -727,6 +727,7 @@ function OwnerLeave({
       {heir === undefined ? null : (
         <ConfirmDialog
           confirm={transfer}
+          gate={workspace.name}
           question={{
             title: `Transfer ownership of ${workspace.name}`,
             body: TRANSFER_WORDS.BODY,

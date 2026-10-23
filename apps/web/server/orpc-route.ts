@@ -4,6 +4,7 @@ import { memberSeams, workspaceSeams } from "@luke/database/models/workspace-sea
 import { accountProcedureSeams } from "@luke/service/accounts/account-seams";
 import { hostedAdminSeams } from "@luke/service/admin/admin-route";
 import { deploymentEveOrigin } from "@luke/service/agents/brain-host/eve-origin";
+import { agentBrowserServices } from "@luke/service/agents/browser/agent-browser";
 import type { NativeAgentSessions } from "@luke/service/agents/coder-host/runtime-sessions";
 import {
   type SandboxStopReach,
@@ -96,6 +97,7 @@ const DEPLOYMENT_SEAMS: HostedRouterSeams = {
   workspaces: workspaceSeams(auth.api),
   eveOrigin: deploymentEveOrigin,
   sandbox: agentSandboxLayer,
+  agentBrowser: agentBrowserServices,
   sessionSandboxes: sessionSandboxesLayer,
   keepAwake,
   members: memberSeams(auth.api),

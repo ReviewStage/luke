@@ -71,6 +71,8 @@
   --luke-color-sidebar-ink: light-dark(rgba(38, 36, 32, 0.7), rgba(240, 236, 228, 0.7));
   /* A sunk ground, a step off the window's: a code block's, a strip's, a well's. */
   --luke-color-well: light-dark(#f5f2ec, #15171a);
+  /* The code on screen, in the ground of GitHub's own themes. */
+  --luke-color-code-ground: light-dark(#fff, #0d1117);
   --luke-color-fill-hover: light-dark(rgba(60, 50, 35, 0.04), rgba(240, 236, 228, 0.05));
   --luke-color-fill-strong: light-dark(rgba(60, 50, 35, 0.065), rgba(240, 236, 228, 0.09));
   --luke-color-fill-selected: light-dark(rgba(60, 50, 35, 0.08), rgba(240, 236, 228, 0.18));
@@ -187,6 +189,7 @@
   --luke-color-sidebar: #edeae3;
   --luke-color-sidebar-ink: rgba(38, 36, 32, 0.7);
   --luke-color-well: #f5f2ec;
+  --luke-color-code-ground: #fff;
   /* The site had one fill, its muted ground; a control's states need a
      step each past it, the desktop's light steps, so a chosen segment or a
      pressed button reads apart from one merely hovered. */
@@ -287,6 +290,7 @@
   --luke-color-sidebar: #111315;
   --luke-color-sidebar-ink: rgba(240, 236, 228, 0.7);
   --luke-color-well: #15171a;
+  --luke-color-code-ground: #0d1117;
   --luke-color-fill-hover: rgba(240, 236, 228, 0.05);
   --luke-color-fill-strong: rgba(240, 236, 228, 0.09);
   --luke-color-fill-selected: rgba(240, 236, 228, 0.18);

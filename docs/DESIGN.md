@@ -22,7 +22,8 @@ for a frame. Durations and delays come only from the tokens in
 `packages/ui/src/tokens/motion-tokens.css` (`--luke-duration-shape`,
 `--luke-duration-exit`, `--luke-duration-quick`, `--luke-duration-fast`, `--luke-duration-hover`,
 `--luke-duration-pane`, `--luke-motion-exit`, `--luke-motion-pane`, `--luke-row-stagger`,
-`--luke-hint-delay`, `--luke-late-delay`). Never write a literal millisecond into a
+`--luke-hint-delay`, `--luke-late-delay`, and `--luke-confirm-delay`, how long an
+autosave's Saved stands). Never write a literal millisecond into a
 rule: reduced motion and capture runs zero the tokens, and a literal is a
 motion those runs cannot stop. The one sanctioned exception is an endless loop
 (a spinner, a breathing idle, the face's own motions) whose
@@ -33,7 +34,12 @@ timed to a generated face gesture may also use the gesture's literal phase,
 but it must answer `--luke-face-motion`, live beside a comment naming the generated
 cycle and phase it follows, and do no work when that gesture is not selected.
 A TypeScript constant that mirrors a CSS timing (`WARM_MS` in `@luke/ui`'s `hint.tsx`)
-names the `MOTION_DURATION_MS` or `MOTION_DELAY_MS` tokens it mirrors.
+names the `MOTION_DURATION_MS` or `MOTION_DELAY_MS` tokens it mirrors. A wait drawn
+over its own length, a toast's countdown bar draining over the hold its
+host hands it (`--luke-toast-hold`), takes that hold rather than a token,
+because it shows time passing rather than moving anything. Reduced motion
+keeps it, since the time left is information, but in whole-second steps rather
+than a glide; only a capture run holds it still, through `--luke-wait-motion`.
 
 ## Layout lands at once; motion is transform and opacity
 

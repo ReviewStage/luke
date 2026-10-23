@@ -8,7 +8,8 @@ import { temporaryDirectory } from "@luke/runtime/testing";
 import { test } from "vitest";
 import { webFunctions } from "../server/function-layout";
 import { apiRewrites, rewritesDrifted, vercelConfigSource } from "../server/function-rewrites";
-import { changelogRoutes, parseReleases } from "../src/changelog-releases";
+import { changelogRoutes } from "../src/changelog-releases";
+import { parseReleases } from "../src/site-markdown";
 
 interface Route {
   readonly src: string;

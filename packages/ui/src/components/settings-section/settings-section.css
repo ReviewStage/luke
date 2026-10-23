@@ -43,6 +43,16 @@
     border-top: 1px solid var(--luke-color-border);
   }
 
+  /* The rows a setting reveals (reveal.css) are ruled as the card's own,
+     and a reveal with none to draw stands nowhere, so it draws no rule. */
+  .luke-settings-section-card .luke-reveal > * + * {
+    border-top: 1px solid var(--luke-color-border);
+  }
+
+  .luke-settings-section-card .luke-reveal:empty {
+    display: none;
+  }
+
   .luke-settings-line {
     display: flex;
     box-sizing: border-box;

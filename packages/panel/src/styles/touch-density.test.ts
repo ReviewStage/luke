@@ -2,6 +2,7 @@
 
 import assert from "node:assert/strict";
 import {
+  AddressField,
   BUTTON_SIZE,
   IconButton,
   INLINE_EDIT_LOOK,
@@ -10,9 +11,7 @@ import {
   PROVIDER_BUTTON_SIZE,
   ProviderButton,
   TEXT_AREA_LOOK,
-  TEXT_FIELD_SIZE,
   TextArea,
-  TextField,
 } from "@luke/ui";
 import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -180,8 +179,8 @@ function smallTargets(): ReadonlyMap<string, Element> {
     [
       "a plan's task box",
       markup(
-        '<ul class="markdown"><li class="task-list-item"><span class="task-list-box"><label class="luke-checkbox" data-words="false"><input class="luke-checkbox-box" type="checkbox"></label></span></li></ul>',
-        ".task-list-box > label",
+        '<ul class="luke-markdown"><li class="task-list-item"><span class="luke-markdown-task"><label class="luke-checkbox" data-words="false"><input class="luke-checkbox-box" type="checkbox"></label></span></li></ul>',
+        ".luke-markdown-task > label",
       ),
     ],
     [
@@ -201,7 +200,7 @@ function smallTargets(): ReadonlyMap<string, Element> {
     [
       "the plan byline's time",
       markup(
-        '<p class="plan-byline"><span class="actor-line">Last edited · <button class="luke-text-button">2h ago</button></span></p>',
+        '<p class="plan-byline"><span class="actor-line">Last edited · <button class="luke-text-button" data-lines="whole">2h ago</button></span></p>',
         ".luke-text-button",
       ),
     ],
@@ -238,14 +237,15 @@ function closes(): ReadonlyMap<string, Element> {
 
 /** The resize edges, each by what the developer calls it. */
 function resizeEdges(): ReadonlyMap<string, Element> {
-  const edge = (className: string) => {
+  const edge = (side: string) => {
     const element = document.body.appendChild(document.createElement("div"));
-    element.className = className;
+    element.className = "luke-resize-edge";
+    element.dataset.side = side;
     return element;
   };
   return new Map([
-    ["the sidebar's resize edge", edge("sidebar-resize")],
-    ["the side panel's resize edge", edge("side-panel-resize")],
+    ["the sidebar's resize edge", edge("right")],
+    ["the side panel's resize edge", edge("left")],
   ]);
 }
 
@@ -322,13 +322,11 @@ function fields(): ReadonlyMap<string, HTMLInputElement | HTMLTextAreaElement> {
     return container.querySelector("input") ?? assert.fail("the field is drawn");
   };
   const address = drawn(
-    createElement(TextField, {
-      label: "Address",
-      size: TEXT_FIELD_SIZE.COMPACT,
+    createElement(AddressField, {
       value: "",
       onChange: () => undefined,
+      onOpen: () => undefined,
     }),
-    "browser-view-address",
   );
   const comment = drawn(
     createElement(TextArea, {
@@ -449,8 +447,8 @@ function transcriptRows(): [string, HTMLElement][] {
   const host = document.body.appendChild(document.createElement("div"));
   host.innerHTML = `
     <div class="tool"><details><summary class="luke-line-button" data-look="row" data-row="a call's line"></summary></details></div>
-    <details class="todos-dock"><summary class="todos-dock-head" data-row="the to-do list's head"></summary></details>
-    <div class="agent-published-dock"><ul class="luke-list"><li class="luke-list-row"><button class="luke-list-row-main" data-row="the pull request's row"></button></li></ul></div>`;
+    <details class="luke-disclosure" data-look="card"><summary class="luke-disclosure-summary" data-look="head" data-row="the to-do list's head"></summary></details>
+    <div class="agent-published-dock"><ul class="luke-list" data-finger-tall="true"><li class="luke-list-row"><button class="luke-list-row-main" data-row="the pull request's row"></button></li></ul></div>`;
   return [...host.querySelectorAll<HTMLElement>("[data-row]")].map((row) => [
     row.dataset.row ?? "",
     row,

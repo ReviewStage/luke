@@ -132,7 +132,7 @@ function byline(room: string) {
     return getComputedStyle(element);
   };
   return {
-    actions: part("message-actions"),
+    actions: part("luke-message-actions"),
     sender: part("message-sender"),
     sentAt: part("message-sent-at"),
   };

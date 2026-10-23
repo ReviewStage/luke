@@ -10,7 +10,6 @@ import { agentInboxActsContract } from "./agent-inbox.js";
 import { agentActsContract } from "./agents.js";
 import { automationActsContract } from "./automations.js";
 import { avatarActsContract } from "./avatar.js";
-import { browserActsContract } from "./browser.js";
 import { browserLiveActsContract } from "./browser-live.js";
 import { chaptersActsContract } from "./chapters.js";
 import { installedSkillActsContract } from "./installed-skills.js";
@@ -46,7 +45,6 @@ export {
   AGENT_INBOX_ACT_KIND,
   AUTOMATION_ACT_KIND,
   AVATAR_ACT_KIND,
-  BROWSER_ACT_KIND,
   BROWSER_LIVE_ACT_KIND,
   CHAPTERS_ACT_KIND,
   INSTALLED_SKILL_ACT_KIND,
@@ -85,7 +83,6 @@ export const actContract = {
   ...agentInboxActsContract,
   ...automationActsContract,
   ...avatarActsContract,
-  ...browserActsContract,
   ...browserLiveActsContract,
   ...chaptersActsContract,
   ...installedSkillActsContract,

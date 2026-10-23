@@ -13,7 +13,7 @@ import { useDisclosure } from "@luke/ui/use-disclosure";
 import { type ViewportBox, visibleViewport } from "@luke/ui/visible-viewport";
 import { type RefObject, useId, useLayoutEffect, useRef, useState } from "react";
 import { type MenuRow, SearchableMenu } from "../searchable-menu.js";
-import { ChangedMark } from "./marks.js";
+import { SettingMarks } from "./marks.js";
 
 /**
  * picker-row.tsx -- the one control a settings row picks a value with: a chip naming the value, and the app's own menu under it.
@@ -351,6 +351,7 @@ export function Picker({
 export function PickerRow({
   detail,
   changed,
+  saves = 0,
   error,
   density,
   ...picker
@@ -359,6 +360,8 @@ export function PickerRow({
   detail?: React.ReactNode;
   /** Whether the stored value differs from the default, which earns the mark. */
   changed?: boolean | undefined;
+  /** How many of the row's writes have landed, which its Saved tick confirms each of. */
+  saves?: number | undefined;
   /** What the last write was refused with, or nothing while none was. */
   error?: React.ReactNode;
   /** How the row stands; in a settings card where none is named. */
@@ -368,7 +371,7 @@ export function PickerRow({
     <SettingsRow
       density={density}
       label={picker.label}
-      adornment={changed ? <ChangedMark /> : null}
+      adornment={<SettingMarks changed={changed} saves={saves} />}
       description={detail}
       error={error}
     >

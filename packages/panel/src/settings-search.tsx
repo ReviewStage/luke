@@ -33,7 +33,16 @@ import {
   FILES_CHANGED_SHORTCUTS,
   shownShortcutGroups,
 } from "@luke/settings/shortcuts";
-import { commandKeyshortcuts, NAV_CURRENT, NavItem, SearchField, Shortcut } from "@luke/ui";
+import {
+  commandKeyshortcuts,
+  GAP,
+  LAYOUT_ELEMENT,
+  NAV_CURRENT,
+  NavItem,
+  SearchField,
+  Shortcut,
+  Stack,
+} from "@luke/ui";
 import { integrationLines } from "@luke/ui/integration-search";
 import { matchesTokens, searchTokens } from "@luke/ui/search-tokens";
 import { useStateWithRef } from "@luke/ui/use-state-with-ref";
@@ -606,7 +615,7 @@ export function SettingsSearchResults({
       {search.groups.map((group) => (
         <section key={group.page} aria-label={resultPageWord(group.page)}>
           <h2 className="section-heading">{resultPageWord(group.page)}</h2>
-          <ul>
+          <Stack as={LAYOUT_ELEMENT.UL} gap={GAP.ROW}>
             {group.items.map((entry) => (
               <li key={entry.id}>
                 <NavItem
@@ -617,7 +626,7 @@ export function SettingsSearchResults({
                 </NavItem>
               </li>
             ))}
-          </ul>
+          </Stack>
         </section>
       ))}
     </div>

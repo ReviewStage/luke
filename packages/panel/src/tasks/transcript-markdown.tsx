@@ -1,6 +1,10 @@
 import type { CodeLines, CodeToken } from "@luke/features/tasks-view";
 import { ACT_KIND, COLOURED_CODE_MAX_CHARS, FENCE_LANGUAGE_MAX_CHARS } from "@luke/host/acts";
 import {
+  CARD_CORNER,
+  CARD_LOOK,
+  CARD_PADDING,
+  Card,
   cssCustomProperties,
   IconButton,
   TEXT_ELEMENT,
@@ -9,6 +13,7 @@ import {
   Tooltip,
 } from "@luke/ui";
 import { SUGGESTED_CHANGE_LANGUAGE } from "@luke/ui/github-html";
+import type { MarkdownComponents, MarkdownNodeProps } from "@luke/ui/markdown";
 import {
   type ComponentProps,
   type CSSProperties,
@@ -19,7 +24,6 @@ import {
   useEffect,
   useState,
 } from "react";
-import type { Components, ExtraProps } from "streamdown";
 import { type ActHandle, useAct } from "../act.js";
 import { CopyGlyph, copyHint, useCopyFeedback } from "../copy-feedback.js";
 
@@ -181,7 +185,7 @@ function fenceStillOpen(markdown: string): boolean {
 }
 
 /** A fenced block's code: the text its element holds, as the markdown wrote it. */
-function blockText(node: ExtraProps["node"]): string {
+function blockText(node: MarkdownNodeProps["node"]): string {
   return (node?.children ?? []).map((child) => (child.type === "text" ? child.value : "")).join("");
 }
 
@@ -312,7 +316,10 @@ function CodeRows({
  * the removed lines' tint; its copy is the new lines alone, which is the
  * suggestion. A diff's rows are tinted the same way (`rowsOf`).
  */
-function TranscriptCodeBlock({ className, node }: ComponentProps<"code"> & ExtraProps): ReactNode {
+function TranscriptCodeBlock({
+  className,
+  node,
+}: ComponentProps<"code"> & MarkdownNodeProps): ReactNode {
   const markdown = useContext(MarkdownSource);
   const language = LANGUAGE_CLASS.exec(className ?? "")?.[1] ?? "";
   const code = blockText(node).replace(/\n$/u, "");
@@ -331,7 +338,12 @@ function TranscriptCodeBlock({ className, node }: ComponentProps<"code"> & Extra
         .join("\n")
     : code;
   return (
-    <div className="transcript-code ph-no-capture">
+    <Card
+      look={CARD_LOOK.CODE}
+      corner={CARD_CORNER.CONTROL}
+      padding={CARD_PADDING.FLUSH}
+      className="transcript-code ph-no-capture"
+    >
       <div className="transcript-code-header">
         {suggesting ? (
           <span className="transcript-code-suggestion">{SUGGESTION.LABEL}</span>
@@ -356,7 +368,7 @@ function TranscriptCodeBlock({ className, node }: ComponentProps<"code"> & Extra
           )}
         </code>
       </pre>
-    </div>
+    </Card>
   );
 }
 
@@ -366,7 +378,7 @@ function TranscriptCodeBlock({ className, node }: ComponentProps<"code"> & Extra
  * cell keeps the alignment its column's rule gave it, which Streamdown
  * hands on as the cell's style.
  */
-export const TRANSCRIPT_CODE_AND_TABLE_COMPONENTS: Components = {
+export const TRANSCRIPT_CODE_AND_TABLE_COMPONENTS: MarkdownComponents = {
   code: TranscriptCodeBlock,
   inlineCode: ({ children }) => <code className="transcript-inline-code">{children}</code>,
   table: ({ children }) => (

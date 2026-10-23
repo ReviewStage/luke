@@ -1,4 +1,4 @@
-import { SettingsAttentionMark, SettingsChangedMark } from "@luke/ui";
+import { SavedTick, SettingsAttentionMark, SettingsChangedMark } from "@luke/ui";
 
 /**
  * The word beside a row's name while its value differs from the default,
@@ -9,6 +9,26 @@ import { SettingsAttentionMark, SettingsChangedMark } from "@luke/ui";
  */
 export function ChangedMark(): React.JSX.Element {
   return <SettingsChangedMark />;
+}
+
+/**
+ * What rides a settings row's name: the Modified word while its value
+ * differs from the default, and the Saved tick each time a write of the row's
+ * lands (`useSettingWrite`'s `saves`).
+ */
+export function SettingMarks({
+  changed,
+  saves,
+}: {
+  changed: boolean | undefined;
+  saves: number;
+}): React.JSX.Element {
+  return (
+    <>
+      {changed === true ? <ChangedMark /> : null}
+      <SavedTick saves={saves} />
+    </>
+  );
 }
 
 /**

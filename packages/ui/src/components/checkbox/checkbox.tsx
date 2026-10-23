@@ -1,4 +1,5 @@
 import { type ReactNode, useEffect, useRef } from "react";
+import { pulsePress } from "../../press-pulse.js";
 
 /**
  * checkbox.tsx -- a yes-or-no choice beside the words that say what it is: the platform's own box, drawn in the accent.
@@ -82,7 +83,10 @@ export function Checkbox({
         // `checked`, so a form it stands in still submits what the caller holds.
         // A read-only box hands nothing on, so it stays as its caller holds it.
         onChange={(event) => {
-          if (!readOnly) onChange(mixed ? true : event.target.checked);
+          if (readOnly) return;
+          // Note that a box ticked springs up by its own tick, which outranks the pulse, so the pulse is an unticking's.
+          pulsePress(event.currentTarget);
+          onChange(mixed ? true : event.target.checked);
         }}
       />
       {label === undefined ? <span className="luke-checkbox-words">{children}</span> : null}

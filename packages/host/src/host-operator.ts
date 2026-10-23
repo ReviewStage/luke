@@ -152,6 +152,7 @@ import {
 import type { InboxReadAllRequest } from "@luke/features/inbox-wire";
 import {
   INSTALLED_SKILL_CALL_FAILURE,
+  type InstalledSkillContentView,
   type InstalledSkillIdParams,
   type InstalledSkillInstallParams,
   type InstalledSkillInstallView,
@@ -160,11 +161,13 @@ import {
   type InstalledSkillPreviewParams,
   type InstalledSkillPreviewView,
   type InstalledSkillRemovedView,
+  type InstalledSkillShareParams,
   type InstalledSkillToggleParams,
   type InstalledSkillUpdateCheckView,
   type InstalledSkillUpdatedView,
   type InstalledSkillUpdateParams,
   type InstalledSkillView,
+  installedSkillContentViewSchema,
   installedSkillInstallViewSchema,
   installedSkillListViewSchema,
   installedSkillPreviewViewSchema,
@@ -212,6 +215,8 @@ import {
   type TaskPagesFollow,
   type TaskPagesFollowed,
   type TasksBoardSaveParams,
+  type TasksBrowserTabOpenAnswer,
+  type TasksBrowserTabOpenParams,
   type TasksBrowserTabsAnswer,
   type TasksBrowserTabsParams,
   type TasksCommentActParams,
@@ -298,6 +303,7 @@ import {
   taskBrowserTabsFollowedSchema,
   taskHistoryFollowedSchema,
   taskPagesFollowedSchema,
+  tasksBrowserTabOpenAnswerSchema,
   tasksBrowserTabsAnswerSchema,
   tasksCommentAnswerSchema,
   tasksCommentsAnswerSchema,
@@ -526,6 +532,8 @@ export interface HostOperator {
   tasksIssueLinks(params: TasksIssueLinksParams): Effect.Effect<TasksIssueLinksAnswer>;
   /** The Browser tabs open in a task's agents' browsers, the oldest first; or that the service did not answer. */
   tasksBrowserTabs(params: TasksBrowserTabsParams): Effect.Effect<TasksBrowserTabsAnswer>;
+  /** A Browser tab opened at an address in a task's coding agent's browser, taken over by the account; or why none opened. */
+  tasksBrowserTabOpen(params: TasksBrowserTabOpenParams): Effect.Effect<TasksBrowserTabOpenAnswer>;
   /** One more issue linked to a task, read from its provider by the service; or why none was. */
   tasksIssueLink(params: TasksIssueLinkParams): Effect.Effect<TasksIssueLinkAnswer>;
   /** Which keyword a task's pull requests write of one of its links; or why it stands as it was. */
@@ -750,6 +758,8 @@ export interface HostOperator {
   chaptersModelWrite(params: ChaptersModelWriteParams): Effect.Effect<ChaptersModelAnswerView>;
   /** The skills the account sees in a workspace, the workspace's then its own; or why there are none. */
   installedSkillsList(params: InstalledSkillListParams): Effect.Effect<InstalledSkillListView>;
+  /** One installed skill read whole, its `SKILL.md` and every file's path and size; or why it was not. */
+  installedSkillsRead(params: InstalledSkillIdParams): Effect.Effect<InstalledSkillContentView>;
   /** What a paste would install, read by the service; or why it did not say. */
   installedSkillsPreview(
     params: InstalledSkillPreviewParams,
@@ -768,6 +778,8 @@ export interface HostOperator {
   installedSkillsUpdate(
     params: InstalledSkillUpdateParams,
   ): Effect.Effect<InstalledSkillUpdatedView>;
+  /** The account's own personal skill moved into a workspace; the skill as it then stands, or why it is unchanged. */
+  installedSkillsShare(params: InstalledSkillShareParams): Effect.Effect<InstalledSkillView>;
   /** One installed skill removed; or why it stands. */
   installedSkillsRemove(params: InstalledSkillIdParams): Effect.Effect<InstalledSkillRemovedView>;
   /** One agent's changes: its pull request's files as GitHub holds them; or why there are none. */
@@ -1478,6 +1490,15 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         client.call(GATEWAY_METHOD.TASKS_BROWSER_TABS, { taskId: params.taskId }),
         taskIssueAnswer(tasksBrowserTabsAnswerSchema),
       ),
+    tasksBrowserTabOpen: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.TASKS_BROWSER_TAB_OPEN, {
+          taskId: params.taskId,
+          agentId: params.agentId,
+          address: params.address,
+        }),
+        taskIssueAnswer(tasksBrowserTabOpenAnswerSchema),
+      ),
     tasksIssueLink: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.TASKS_ISSUE_LINK, {
@@ -2160,6 +2181,11 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         client.call(GATEWAY_METHOD.INSTALLED_SKILLS_LIST, params),
         installedSkillAnswer(installedSkillListViewSchema),
       ),
+    installedSkillsRead: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.INSTALLED_SKILLS_READ, params),
+        installedSkillAnswer(installedSkillContentViewSchema),
+      ),
     installedSkillsPreview: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.INSTALLED_SKILLS_PREVIEW, params),
@@ -2184,6 +2210,11 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       Effect.map(
         client.call(GATEWAY_METHOD.INSTALLED_SKILLS_UPDATE, params),
         installedSkillAnswer(installedSkillUpdatedViewSchema),
+      ),
+    installedSkillsShare: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.INSTALLED_SKILLS_SHARE, params),
+        installedSkillAnswer(installedSkillViewSchema),
       ),
     installedSkillsRemove: (params) =>
       Effect.map(

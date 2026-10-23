@@ -538,7 +538,8 @@ test("the tree's search narrows the list, said over it while the tree is hidden,
 test("with the file stood on filtered out, the tree marks the file the list scrolls to", async () => {
   files = [changed("src/a.ts"), changed("lib/b.ts"), changed("lib/c.ts")];
   await drawTab({ treeOpen: true });
-  act(() => header("src/a.ts").dispatchEvent(new MouseEvent("pointerdown", { bubbles: true })));
+  const row = header("src/a.ts").querySelector("summary") ?? assert.fail("the header is a row");
+  act(() => row.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true })));
   assert.ok(header("src/a.ts").hasAttribute("data-standing"));
 
   typeSearch("lib");
@@ -617,17 +618,19 @@ test("while the tree is hidden a strip stands in its place, a mark for each file
   const { tree } = heldTree(false);
   await drawTab({ tree });
 
-  const strip = document.querySelector<HTMLElement>(".file-tree-strip") ?? assert.fail("a strip");
+  const strip =
+    document.querySelector<HTMLElement>(".file-tree-strip .luke-mark-strip") ??
+    assert.fail("a strip");
   assert.deepEqual(
     [...strip.children].map((mark) => [
-      mark.getAttribute("data-status"),
+      mark.getAttribute("data-tone"),
       mark.hasAttribute("data-viewed"),
       mark.hasAttribute("data-current"),
     ]),
     [
-      ["added", true, true],
-      ["deleted", false, false],
-      ["modified", false, false],
+      ["complete", true, true],
+      ["danger", false, false],
+      ["attention", false, false],
     ],
   );
   assert.equal(document.querySelector(".file-tree-pane"), null);
@@ -1930,12 +1933,16 @@ test("I turns Minimize inline comments on and off inside Files changed, each lin
   press(listBox(), { key: "i" });
   await flush();
   const chip =
-    note().querySelector<HTMLElement>(".diff-thread-chip") ?? assert.fail("a chip stands");
+    note().querySelector<HTMLElement>(".diff-thread-chip-row > summary") ??
+    assert.fail("a chip stands");
   assert.equal(chip.getAttribute("aria-label"), "1 comment by octo · 1 open, show");
   assert.equal(note().querySelector(".drawn-thread"), null, "minimized, the thread is put away");
   press(document.body, { key: "i" });
   await flush();
-  assert.ok(note().querySelector(".diff-thread-chip"), "outside the view, I is not the view's");
+  assert.ok(
+    note().querySelector(".diff-thread-chip-row > summary"),
+    "outside the view, I is not the view's",
+  );
 
   // A find looking through the tab reads the put-away thread's words, and opens the line it brings into view.
   await redraw({ threads, finding: true });
@@ -1948,7 +1955,7 @@ test("I turns Minimize inline comments on and off inside Files changed, each lin
   act(() => reveal(match, slot));
   await flush();
   assert.equal(
-    note().querySelector(".diff-thread-chip")?.getAttribute("aria-label"),
+    note().querySelector(".diff-thread-chip-row > summary")?.getAttribute("aria-label"),
     "1 comment by octo · 1 open, hide",
   );
   assert.equal(
@@ -1959,7 +1966,11 @@ test("I turns Minimize inline comments on and off inside Files changed, each lin
 
   press(listBox(), { key: "i" });
   await flush();
-  assert.equal(note().querySelector(".diff-thread-chip"), null, "I again draws every thread whole");
+  assert.equal(
+    note().querySelector(".diff-thread-chip-row > summary"),
+    null,
+    "I again draws every thread whole",
+  );
 });
 
 test("minimized, the threads on no line take a row of their own for their chip, which has no line to float over", async () => {
@@ -2028,7 +2039,7 @@ test("a review thread on a line between hunks moves onto its line once a gap ope
   assert.equal(
     lastDrawn()
       .renderAnnotation("src/seats.ts", `${PAGE}#in-gap`)
-      .querySelector(".diff-thread-chip")
+      .querySelector(".diff-thread-chip-row > summary")
       ?.getAttribute("aria-label"),
     "1 comment by octo · 1 open, show",
   );

@@ -61,7 +61,6 @@ import {
 } from "@luke/ui/agent-servers-model";
 import { matchIntegration, shownTools } from "@luke/ui/integration-search";
 import { searchTokens } from "@luke/ui/search-tokens";
-import { useClipped } from "@luke/ui/use-clipped";
 import {
   cloneElement,
   createContext,
@@ -73,7 +72,6 @@ import {
   useRef,
   useState,
 } from "react";
-import { FadingWords } from "../fading-words.js";
 import { useIntegrationGrant } from "../integration-grant.js";
 import type { IntegrationStatuses } from "../integration-statuses.js";
 import {
@@ -196,22 +194,12 @@ function ServerSwitch({
 
 /** A server's name in its row, faded where the row cuts it short. */
 function ServerName({ name }: { name: string }): React.JSX.Element {
-  const [box, clipped] = useClipped(name);
-  return (
-    <span ref={box} className="agent-servers-name" data-overflow={String(clipped)}>
-      {name}
-    </span>
-  );
+  return <OneLine className="agent-servers-name">{name}</OneLine>;
 }
 
 /** A server's name heading its own page, faded where the head cuts it short. */
 function ServerPageTitle({ name }: { name: string }): React.JSX.Element {
-  const [box, clipped] = useClipped(name);
-  return (
-    <span ref={box} className="agent-servers-page-title" data-overflow={String(clipped)}>
-      {name}
-    </span>
-  );
+  return <OneLine className="agent-servers-page-title">{name}</OneLine>;
 }
 
 /**
@@ -679,9 +667,9 @@ function ServersPopover({
       index: pickIndex(row, tool),
       row,
       title: (
-        <FadingWords className="integration-tool-id" words={tool.name}>
+        <OneLine className="integration-tool-id" words={tool.name}>
           <Highlighted text={tool.name} tokens={searchTokens(query)} />
-        </FadingWords>
+        </OneLine>
       ),
       meta: row.name,
       onPress: () => open(row, query),

@@ -302,10 +302,16 @@ export function todosView(input: WireValue | undefined): CodingAgentTodos["todos
   return Option.getOrUndefined(readTodos(input))?.todos;
 }
 
+/** How many of a list's items are done, and how many it holds. */
+export function todosCount(todos: CodingAgentTodos["todos"]): { done: number; total: number } {
+  const done = todos.filter((todo) => todo.status === CODING_AGENT_TODO_STATUS.DONE).length;
+  return { done, total: todos.length };
+}
+
 /** How far a list has got: "2 of 5 done". */
 export function todosSummary(todos: CodingAgentTodos["todos"]): string {
-  const done = todos.filter((todo) => todo.status === CODING_AGENT_TODO_STATUS.DONE).length;
-  return `${done} of ${todos.length} done`;
+  const { done, total } = todosCount(todos);
+  return `${done} of ${total} done`;
 }
 
 /** The item a list is at: the one in progress, else the first still pending; nothing once every item is done. */
@@ -762,6 +768,17 @@ function namedCall(
   };
 }
 
+/** A chat call named by a field that may hold a member's mention link, said by the name its chip says rather than its address (`linkLabels`). */
+function chatCall(
+  kind: CallKind,
+  input: WireValue | undefined,
+  output: WireValue | undefined,
+  field: string,
+): ToolCallView {
+  const call = namedCall(kind, input, output, field);
+  return { ...call, subject: linkLabels(call.subject) };
+}
+
 /** A call about one agent named by the agent's title its answer gives, as the agent's tab names it; nothing before the answer, whose input holds only an id. */
 function answeredAgentCall(
   kind: CallKind,
@@ -936,6 +953,8 @@ function tasksToolView(
       return answeredCall(CALL_KIND.UPDATE_AUTOMATION, input, output, "automation", "name");
     case AGENT_TOOL.DELETE_AUTOMATION:
       return answeredCall(CALL_KIND.DELETE_AUTOMATION, input, output, "automation", "name");
+    case AGENT_TOOL.RUN_AUTOMATION:
+      return answeredCall(CALL_KIND.RUN_AUTOMATION, input, output, "automation", "name");
     case RETIRED_TOOL.MOVE_TASK:
       return answeredCall(CALL_KIND.MOVE_TASK, input, output, "task", "name");
     case AGENT_TOOL.UPDATE_TASK:
@@ -952,6 +971,14 @@ function tasksToolView(
       return namedCall(CALL_KIND.CREATE_TASK, input, output, "name");
     case AGENT_TOOL.END_CALL:
       return namedCall(CALL_KIND.END_CALL, input, output, undefined);
+    case CHAT_TOOL.POST:
+      return chatCall(CALL_KIND.CHAT_POST, input, output, "text");
+    case CHAT_TOOL.READ:
+      return chatCall(CALL_KIND.CHAT_READ, input, output, "channel");
+    case CHAT_TOOL.RESOLVE:
+      return namedCall(CALL_KIND.CHAT_RESOLVE, input, output, "key");
+    case CHAT_TOOL.EDIT_CHANNEL:
+      return namedCall(CALL_KIND.CHAT_EDIT_CHANNEL, input, output, "channel");
     case EVE_TOOL.TASK_WAIT:
       return namedCall(CALL_KIND.WORKER_WAIT, input, output, undefined);
     case EVE_TOOL.TASK_CANCEL:

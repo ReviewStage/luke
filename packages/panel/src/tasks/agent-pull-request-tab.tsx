@@ -38,12 +38,16 @@ import {
   AVATAR_SHAPE,
   AVATAR_SIZE,
   Avatar,
+  BLOCK_LIST_ELEMENT,
+  BlockList,
+  BlockListItem,
   BUTTON_VARIANT,
   Button,
   CHIP_LOOK,
   CHOICE_BAR_FOLD,
   CHOICE_BAR_LOOK,
   Chip,
+  ChipCount,
   ChipName,
   ChoiceBar,
   type ChoiceItem,
@@ -52,14 +56,20 @@ import {
   type CountTone,
   DETAIL_PAGE_INSET,
   DetailPage,
+  DISCLOSURE_SUMMARY,
   DisclosureAction,
   DisclosureChevron,
+  DisclosureSummary,
   EmptyState,
   ErrorState,
   Fill,
+  GAP,
   IconButton,
+  LAYOUT_ELEMENT,
+  LINE_BUTTON_LOOK,
   LIST_DENSITY,
   LIST_VARIANT,
+  LineButton,
   List,
   ListRow,
   linesCount,
@@ -72,6 +82,7 @@ import {
   Skeleton,
   SkeletonRegion,
   SpinnerRegion,
+  Stack,
   TEXT_BUTTON_TONE,
   TEXT_ELEMENT,
   TEXT_VARIANT,
@@ -117,11 +128,13 @@ import {
   useState,
 } from "react";
 import { ACTOR_SIZE, ActorMark, ActorRef } from "../actor-ref.js";
-import { Fold, FoldBody, FoldSummary } from "../ai-elements/fold.js";
+import { Fold, FoldBody } from "../ai-elements/fold.js";
 import { appPlatform } from "../app-platform.js";
 import { useCopyLinkItem } from "../copy-link-item.js";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu.js";
 import { type HandTabActions, useHandedTabActions } from "../desktop/strip-tabs.js";
+import { SHELL_ROOM } from "../shell-room.js";
+import { ShellRoomContext } from "../stage-room.js";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast.js";
 import {
   AgentChangesTab,
@@ -576,8 +589,8 @@ function Section({
   }
   return (
     <section className="pull-request-section" aria-label={title}>
-      <Fold open={fold.open} onOpenChange={fold.onOpenChange}>
-        <FoldSummary className="pull-request-section-head">
+      <Fold className="pull-request-section-fold" open={fold.open} onOpenChange={fold.onOpenChange}>
+        <DisclosureSummary look={DISCLOSURE_SUMMARY.TRANSCRIPT}>
           <DisclosureChevron />
           {heading}
           {end === undefined ? null : (
@@ -585,7 +598,7 @@ function Section({
               <span className="pull-request-section-end">{end}</span>
             </DisclosureAction>
           )}
-        </FoldSummary>
+        </DisclosureSummary>
         <FoldBody className="pull-request-section-body">{children}</FoldBody>
       </Fold>
     </section>
@@ -957,13 +970,13 @@ function ThreadWhere({
   if (onPress === undefined) return <Tooltip label={named}>{words}</Tooltip>;
   return (
     <Tooltip label={THREAD_REVEAL_WORDS.VIEW_FILES}>
-      <TextButton
-        tone={TEXT_BUTTON_TONE.QUIET}
+      <LineButton
+        look={LINE_BUTTON_LOOK.BAND}
         aria-label={`${THREAD_REVEAL_WORDS.VIEW_FILES}: ${named}`}
         onClick={onPress}
       >
         {words}
-      </TextButton>
+      </LineButton>
     </Tooltip>
   );
 }
@@ -1113,9 +1126,9 @@ function PendingList({
   picture: GitHubPictureDrawer;
 }): React.JSX.Element {
   return (
-    <ol className="pull-request-pending-list" aria-label={PENDING_WORDS.PENDING}>
+    <BlockList as={BLOCK_LIST_ELEMENT.OL} label={PENDING_WORDS.PENDING}>
       {drafts.map((draft) => (
-        <li key={draft.id} className="pull-request-thread-comment">
+        <BlockListItem key={draft.id}>
           <Text
             as={TEXT_ELEMENT.SPAN}
             variant={TEXT_VARIANT.INHERIT}
@@ -1137,9 +1150,9 @@ function PendingList({
             }
             words={<EntryWords entry={draft} picture={picture} />}
           />
-        </li>
+        </BlockListItem>
       ))}
-    </ol>
+    </BlockList>
   );
 }
 
@@ -1267,7 +1280,7 @@ function EntryCard({
       <EntryWords entry={entry} picture={picture} />
       <Reactions reactions={entry.reactions} subject={entry.subject} />
       {threads.length === 0 ? null : (
-        <ol className="pull-request-threads">
+        <Stack as={LAYOUT_ELEMENT.OL} gap={GAP.ITEM} className="pull-request-threads">
           {threads.map((thread, at) => (
             // Note that a thread is keyed by its first comment's page, which no other thread shares, or its place.
             <ThreadCard
@@ -1277,7 +1290,7 @@ function EntryCard({
               picture={picture}
             />
           ))}
-        </ol>
+        </Stack>
       )}
     </li>
   );
@@ -1561,11 +1574,11 @@ function ConversationPart({
       ) : shown.length === 0 ? (
         <p className="pull-request-quiet pull-request-none">{PULL_REQUEST_WORDS.NO_MATCHING}</p>
       ) : (
-        <ol className="pull-request-conversation">
+        <Stack as={LAYOUT_ELEMENT.OL} gap={GAP.CONTROL} className="pull-request-conversation">
           {shown.map((entry) => (
             <EntryCard key={entry.url} entry={entry} now={now} picture={picture} />
           ))}
-        </ol>
+        </Stack>
       )}
     </Section>
   );
@@ -1581,11 +1594,13 @@ function HeaderTitle({
 }): React.JSX.Element {
   if (title === undefined) {
     return (
-      <PartSkeleton
-        label={PULL_REQUEST_WORDS.READING}
-        widths={["60%"]}
-        className="pull-request-title"
-      />
+      <div className="pull-request-title-wait">
+        <PartSkeleton
+          label={PULL_REQUEST_WORDS.READING}
+          widths={["60%"]}
+          className="pull-request-title"
+        />
+      </div>
     );
   }
   return (
@@ -1787,11 +1802,7 @@ function ConversationFilter({
         onClick={() => onChange(!on)}
       >
         <ChipName>{label}</ChipName>
-        {count === undefined ? null : (
-          <span className="pull-request-filter-count" aria-hidden="true">
-            {formatLocaleCount(count)}
-          </span>
-        )}
+        {count === undefined ? null : <ChipCount>{formatLocaleCount(count)}</ChipCount>}
       </Chip>
       {note === undefined ? null : (
         <span id={noteId} hidden>
@@ -2255,9 +2266,18 @@ function PullRequestTabBody({
   onActions,
   onRun,
 }: AgentPullRequestTabProps): React.JSX.Element {
-  const status = control.agents?.find((each) => each.id === agentId)?.status;
+  // The agent, archived or not, since an archived agent's pull request keeps its tab.
+  const agent =
+    control.agents?.find((each) => each.id === agentId) ??
+    control.archived?.find((each) => each.id === agentId);
+  const status = agent?.status;
   const ended = !agentStillWriting(status ?? CODING_AGENT_STATUS.RUNNING);
   const id = useId();
+  // A phone names each of the tabs in words, never their glyphs alone, which a finger cannot hover for a name.
+  const tabsFold =
+    useContext(ShellRoomContext) === SHELL_ROOM.NARROW
+      ? CHOICE_BAR_FOLD.WORDS
+      : CHOICE_BAR_FOLD.TOGETHER;
   const ids = (each: PullRequestView) => ({
     tab: `${id}-${each}-tab`,
     panel: `${id}-${each}-panel`,
@@ -2380,7 +2400,7 @@ function PullRequestTabBody({
   );
   const threadJumps = useThreadJumps({
     agentId,
-    planId: control.agents?.find((each) => each.id === agentId)?.planId ?? null,
+    planId: agent?.planId ?? null,
     number,
     shown,
     threads: threadList,
@@ -2421,11 +2441,13 @@ function PullRequestTabBody({
                   <div className="pull-request-title-row">
                     <HeaderTitle title={title} writes={writes} />
                     {held === undefined ? null : (
-                      <PullRequestStateMenu
-                        pullRequest={held}
-                        queued={overview?.merging?.queued}
-                        writes={writes}
-                      />
+                      <div className="pull-request-state">
+                        <PullRequestStateMenu
+                          pullRequest={held}
+                          queued={overview?.merging?.queued}
+                          writes={writes}
+                        />
+                      </div>
                     )}
                     <div className="pull-request-title-actions">
                       {onRun === undefined || held === undefined ? null : (
@@ -2456,15 +2478,17 @@ function PullRequestTabBody({
                   />
                 </header>
                 <div className="pull-request-tabs">
-                  <ChoiceBar<PullRequestView>
-                    label="Pull request"
-                    items={tabsOf(parts, published, held, changes, chapters)}
-                    value={view}
-                    onChange={onView}
-                    look={CHOICE_BAR_LOOK.FILL}
-                    fold={CHOICE_BAR_FOLD.TOGETHER}
-                    panels={ids}
-                  />
+                  <div className="pull-request-tab-bar">
+                    <ChoiceBar<PullRequestView>
+                      label="Pull request"
+                      items={tabsOf(parts, published, held, changes, chapters)}
+                      value={view}
+                      onChange={onView}
+                      look={CHOICE_BAR_LOOK.FILL}
+                      fold={tabsFold}
+                      panels={ids}
+                    />
+                  </div>
                   {reviewable ? (
                     <PullRequestReview
                       writes={review}

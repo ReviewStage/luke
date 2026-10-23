@@ -550,7 +550,7 @@ function capitalized(words: string): string {
   return `${words.charAt(0).toUpperCase()}${words.slice(1)}`;
 }
 
-/** An agent as the preamble names it: Luke for an operator, its human name, else its title, or its model where it has none, and its id. */
+/** An agent as the preamble names it: Luke for an operator, else its title, or its model where it has none, and its id. */
 function agentName(agent: CodingAgent): string {
   return `"${agentGivenName(agent) ?? agent.title ?? agent.model}" (agent id ${agent.id})`;
 }

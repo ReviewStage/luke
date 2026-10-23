@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { changelogFeed, parseReleases } from "../src/changelog-releases";
+import { changelogFeed } from "../src/changelog-releases";
+import { parseReleases } from "../src/site-markdown";
 
 const CHANGELOG = [
   "# Changelog",

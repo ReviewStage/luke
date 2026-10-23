@@ -81,7 +81,9 @@ Every token is a `--luke-*` custom property under `src/tokens/`.
 - **Motion** (`motion-tokens.css`, generated from `@luke/brand`'s tables by
   `pnpm --filter @luke/brand generate`; `motion.css`): `--luke-duration-*`,
   `--luke-duration-shape`, `--luke-spring`, `--luke-spring-fast`, `--luke-motion-exit|pane`,
-  `--luke-row-stagger`, `--luke-hint-delay`, `--luke-late-delay`, and
+  `--luke-row-stagger`, `--luke-hint-delay`, `--luke-late-delay`,
+  `--luke-confirm-delay` (how long a `SavedTick` stands, which reduced motion
+  keeps, so the words stay to be read), and
   `--luke-loop-motion`, the play state an endless loop holds, and
   `--luke-face-motion`, the face's. Reduced motion zeroes the durations but
   hover's and pauses both loops. The face's own rules are `face/face.css`, and
@@ -94,6 +96,10 @@ Every token is a `--luke-*` custom property under `src/tokens/`.
   `--luke-combobox-list-max` caps a `ComboboxList`'s height (280px where
   unset), so a picker placed against the window's edge hands its list the
   room it found; nothing else inside the list is the app's to set.
+  `--luke-glyph-size` sizes the glyph a `GlyphSlot` seats (16px where
+  unset), and a component's own glyph slot sets it for the glyph an app
+  hands it, a tab's or a tab card's, so a container whose glyphs stand
+  larger or smaller, a review card's face, says so once.
 
 ## Using a component
 
@@ -115,7 +121,9 @@ import { BUTTON_VARIANT, Button, GAP, Inline, TEXT_ELEMENT, TEXT_VARIANT, Text }
   constant, never a string.
 - **No `className` or `style`.** A control owns its height, padding, type, and
   states. Where it stands, and the room around it, is its container's: a
-  `Stack` or `Inline` with a `GAP` role, or a page pattern.
+  `Stack` or `Inline` with a `GAP` role, or a page pattern. A frame that is
+  no control, a `Fill` or a `Card`, keeps its owner's class only to be named
+  and placed by it, never to be drawn.
 - **Data and callbacks in.** A component never reaches an app's bridge, its
   network, or its shortcuts; the app's adapter hands it values and handlers.
 - **A row a list engine owns.** Where a library of the app's owns a list's
@@ -138,11 +146,11 @@ What the barrel holds (`src/index.ts`):
 
 | Kind | Components |
 | --- | --- |
-| Type and layout | `Text`, `Stack`, `Inline`, `ScrollArea`, `Card`, `Prose` |
+| Type and layout | `Text`, `Stack`, `Inline`, `ScrollArea`, `Card`, `Prose`, `GlyphSlot` |
 | Actions | `Button`, `IconButton`, `ButtonLink`, `FoldingButton`, `Chip`, `AttachmentChip`, `InlineRef`, `NavItem`, `NavItemLink` |
 | Press shortcuts | `HoldPress`, `MarkStrip`, `CommandLink`, `SkillChip`: a pointer's second way in beside a control's own (a held press, a strip standing for a hidden rail, a ⌘-click, a pill in a box's words) |
-| Entry | `FormField`, `TextField`, `TextArea`, `SearchField`, `Checkbox`, `ChoiceList`, `Switch`, `ChoiceBar` (with `CountPart`, `linesCount`), `Select`, `Combobox` (with `ComboboxList`, `ComboboxListBox`, `ComboboxOptionItem`), `Calendar` |
-| Status | `Badge`, `Avatar`, `Spinner`, `BusyLabel`, `Skeleton`, `EmptyState`, `ErrorState` |
+| Entry | `FormField` (with `LengthCounter`), `TextField`, `TextArea`, `SearchField`, `Checkbox`, `ChoiceList`, `Switch`, `ChoiceBar` (with `CountPart`, `linesCount`), `Select`, `Combobox` (with `ComboboxList`, `ComboboxListBox`, `ComboboxOptionItem`), `Calendar` |
+| Status | `Badge`, `Avatar`, `Spinner`, `BusyLabel`, `SavedTick`, `Skeleton`, `EmptyState`, `ErrorState` |
 | Overlays | `Dialog`, `ConfirmDialog` (with `useConfirmDialog`), `AnchoredPopover`, `Menu` (with `useMenu`), `TooltipPill`, `TooltipCard`, `HoverCard` |
 | Patterns | `SettingsRow`, `SettingsSection` (with `SettingsRowsSkeleton`, `SettingsSectionsSkeleton`), `SettingsPage`, `FormSection`, `ListRow`, `CollectionPage`, `DetailPage`, `AuthPage`, `PublicPage` (with `PublicSection`, `PublicMedia`) |
 | Brand | `WingFace`, the glyphs (`face/glyphs.tsx`), `ProviderMark` |
