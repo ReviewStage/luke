@@ -1,8 +1,8 @@
 /* menu.css -- a drop-down menu hung at a point in the window (`menu.tsx`)
    and its submenus: one surface over everything, its rows one fixed
    height, a long menu scrolling down within the window and never sideways.
-   Words wider than the menu, a long email or name, end in an ellipsis
-   inside their row. The same surface stands under a list an app hangs and
+   Words wider than the menu, a long email or name, fade out at their
+   row's end (`OneLine`), as every cut line of the app does. The same surface stands under a list an app hangs and
    keys itself (`menu-surface.tsx`), placed by its owner. Note that the
    entrance animates a transform, which makes the surface the containing
    block of every fixed box inside it, so a submenu, a second surface beside
@@ -190,8 +190,6 @@
   .luke-menu-item-label {
     min-width: 0;
     flex: 1;
-    overflow: hidden;
-    text-overflow: ellipsis;
   }
 
   .luke-menu-item-copy {
@@ -207,10 +205,8 @@
   }
 
   .luke-menu-item-detail {
-    overflow: hidden;
     color: var(--luke-color-text-muted);
     font-size: 11.5px;
-    text-overflow: ellipsis;
   }
 
   /* Under a finger, on a phone held at arm's length, no smaller than 12px. */
