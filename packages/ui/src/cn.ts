@@ -17,7 +17,7 @@ import { extendTailwindMerge } from "tailwind-merge";
 const merge = extendTailwindMerge({
   extend: {
     theme: {
-      text: ["body", "label", "caption"],
+      text: ["body", "label", "caption", "caption-inline"],
       spacing: [
         "control",
         "control-inset",
@@ -32,7 +32,17 @@ const merge = extendTailwindMerge({
         "choice-segment-compact",
         "caption-glyph",
       ],
-      radius: ["control", "menu-row", "luke-6", "luke-8", "luke-10", "luke-full", "choice-segment"],
+      radius: [
+        "control",
+        "menu-row",
+        "luke-6",
+        "luke-8",
+        "luke-10",
+        "luke-full",
+        "choice-segment",
+        "choice-box",
+      ],
+      leading: ["body"],
       font: ["ui"],
       "font-weight": ["regular"],
     },

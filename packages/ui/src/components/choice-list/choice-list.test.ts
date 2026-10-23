@@ -23,7 +23,9 @@ import {
  * arrows moving along it; a marked and numbered list
  * leads each row with its control and wears its key; a read-only list
  * keeps the open look, its pick checked, and takes no press, key, or Tab;
- * and a settled list names what was picked and takes no press.
+ * a settled list names what was picked and takes no press; and Enter
+ * presses a row and a card's own field keeps its caret, where Base UI's
+ * radio and group would not.
  */
 
 declare global {
@@ -426,7 +428,7 @@ test("a card list holds each option's controls under its radio, and a key presse
   const cards = [...container.querySelectorAll(".luke-choice-card")];
   assert.equal(cards.length, 2);
   assert.ok(cards[0]?.querySelector(".luke-choice-aside a"));
-  const input = cards[0]?.querySelector("input");
+  const input = cards[0]?.querySelector('input[aria-label="Token"]');
   assert.ok(input);
   assert.equal(input.closest('[role="radio"]'), null);
   act(() => {
@@ -435,4 +437,41 @@ test("a card list holds each option's controls under its radio, and a key presse
   const radios = [...container.querySelectorAll('[role="radio"]')];
   assert.equal(radios[0]?.getAttribute("aria-checked"), "true");
   assert.equal(radios[1]?.getAttribute("aria-checked"), "false");
+});
+
+test("Enter on a row is left to the row's button, which presses it as a button's Enter does", () => {
+  for (const select of [CHOICE_SELECT.ONE, CHOICE_SELECT.MANY]) {
+    const page = render(createElement(Held, { select }));
+    const never = row(page, "Never retry");
+    act(() => never.focus());
+    let pressed = true;
+    act(() => {
+      pressed = never.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }),
+      );
+    });
+    assert.equal(pressed, true, `a ${select} list's row keeps Enter's press`);
+  }
+});
+
+test("a card's own field keeps its caret as focus lands in it", () => {
+  const container = render(
+    createElement(Held, {
+      look: CHOICE_LOOK.CARD,
+      start: ["three"],
+      options: [
+        {
+          value: "three",
+          label: "Subscription",
+          below: createElement("input", { "aria-label": "Token", defaultValue: "sk-test" }),
+        },
+        { value: "never", label: "API key" },
+      ],
+    }),
+  );
+  const input =
+    container.querySelector<HTMLInputElement>('input[aria-label="Token"]') ??
+    assert.fail("no field");
+  act(() => input.focus());
+  assert.deepEqual([input.selectionStart, input.selectionEnd], [7, 7]);
 });

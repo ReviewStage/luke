@@ -1,98 +1,24 @@
-/* choice-list.css -- a column of option rows, each the width of its column:
-   a quiet fill at rest, the strong fill once hovered, the strong fill ringed
-   once checked so it reads apart from the hover that shares it. A settled
-   list keeps the pick in the checked look and steps the rest back to an
-   outline in muted words; a read-only one keeps the open look at full
-   strength. */
+/* choice-list.css -- a choice row's fill, edge, and ink, a face's keyboard ring, and its name cut short: the parts of a choice list a sheet must draw.
+
+   The list draws itself in Tailwind utilities (choice-list.tsx); what
+   stays here is what a utility cannot hold. A row's background, box-shadow,
+   and colour, and a detail's colour, are quieted by a stepped-back region
+   (`stepped-back.css`) from this same components layer, where a utility,
+   in the layer above, would outrank it and keep the row loud. And a name's
+   fade at its end is a mask whose gradient runs to an opaque stop, which
+   no theme role names, and a face's keyboard ring asks the window's
+   keyboard state above its focus, which no variant says cleanly.
+
+   A row is a quiet fill at rest, the strong fill once hovered, the strong
+   fill ringed once checked so it reads apart from the hover that shares
+   it. A settled list keeps the pick in the checked look and steps the rest
+   back to an outline in muted words; a read-only one keeps the open look
+   at full strength. */
 
 @layer components {
-  .luke-choice-list {
-    display: flex;
-    flex-direction: column;
-    gap: var(--luke-space-4);
-    min-inline-size: 0;
-    margin: 0;
-    padding: 0;
-    border: 0;
-    list-style: none;
-  }
-
-  /* Rows side by side share the width, each as tall as the tallest. */
-  .luke-choice-list[data-flow="across"] {
-    flex-direction: row;
-  }
-
-  .luke-choice-list[data-flow="across"] > .luke-choice {
-    flex: 1 1 0;
-    align-items: flex-start;
-  }
-
-  /* Pills wrap onto as many lines as they need, never jumping between a
-     line's end and the line under it. */
-  .luke-choice-list[data-look="pill"] {
-    flex-flow: row wrap;
-    gap: var(--luke-space-6);
-  }
-
-  /* Note that a pill's corners are half its one-line height rather than a
-     full round, so a long option that wraps in a narrow column stands as a
-     rounded box instead of swelling into an ellipse, while a short one is
-     the same capsule as ever. */
-  .luke-choice-list[data-look="pill"] > .luke-choice {
-    gap: var(--luke-icon-gap);
-    min-height: var(--luke-control-height);
-    padding: var(--luke-space-4) var(--luke-space-12);
-    border-radius: calc(var(--luke-control-height) / 2);
-    box-shadow: inset 0 0 0 1px var(--luke-color-border);
-    font-size: var(--luke-type-caption-size);
-  }
-
-  .luke-choice-list[data-look="pill"] > .luke-choice[aria-checked="true"] {
-    background: color-mix(in srgb, var(--luke-color-accent) 16%, transparent);
-    box-shadow: inset 0 0 0 1px var(--luke-color-accent);
-  }
-
-  .luke-choice-list[data-look="pill"] .luke-choice-check {
-    display: none;
-    flex: none;
-    margin: 0;
-  }
-
-  /* A pill's badge stands beside its words while they fit on one line,
-     and drops under them once they would wrap, rather than squeezing them
-     into a column of a word a line. */
-  .luke-choice-list[data-look="pill"] .luke-choice-label {
-    flex: 0 1 auto;
-  }
-
-  .luke-choice-list[data-look="pill"] > .luke-choice[aria-checked="true"] .luke-choice-check {
-    display: block;
-  }
-
   .luke-choice {
-    display: flex;
-    align-items: center;
-    gap: var(--luke-space-12);
-    min-width: 0;
-    margin: 0;
-    padding: var(--luke-space-8) var(--luke-space-12);
-    border: 0;
-    border-radius: var(--luke-control-radius);
-    /* Note that a row draws the keyboard's ring inside itself, because the
-       list scrolls in a dialog whose edge would cut a ring drawn outside. */
-    outline-offset: calc(-1 * var(--luke-focus-ring-width));
     background: var(--luke-color-fill-hover);
     color: var(--luke-color-text);
-    font-family: var(--luke-font-sans);
-    font-size: var(--luke-type-body-size);
-    line-height: var(--luke-type-body-leading);
-    text-align: left;
-    cursor: pointer;
-    transition: background-color var(--luke-duration-hover) ease;
-  }
-
-  [data-luke-profile="desktop"] .luke-choice {
-    cursor: default;
   }
 
   button.luke-choice:hover:not(:disabled) {
@@ -111,212 +37,39 @@
     color: var(--luke-color-text-muted);
   }
 
-  .luke-choice:disabled {
-    opacity: 0.4;
-    cursor: default;
+  /* A pill is outlined at rest and tinted in the accent once picked. */
+  .luke-choice-list[data-look="pill"] > .luke-choice {
+    box-shadow: inset 0 0 0 1px var(--luke-color-border);
   }
 
-  /* A read-only list records a choice made, so its rows stand at full
-     strength: an answer given, never one faded while it waits. */
-  .luke-choice-list[data-read-only="true"] > .luke-choice:disabled {
-    opacity: 1;
+  .luke-choice-list[data-look="pill"] > .luke-choice[aria-checked="true"] {
+    background: color-mix(in srgb, var(--luke-color-accent) 16%, transparent);
+    box-shadow: inset 0 0 0 1px var(--luke-color-accent);
   }
 
-  .luke-choice-mark {
-    display: inline-flex;
-    flex: none;
-  }
-
-  .luke-choice-words {
-    display: flex;
-    flex: 1 1 auto;
-    flex-direction: column;
-    gap: var(--luke-space-2);
-    min-width: 0;
-  }
-
-  /* The badge stands at the label's top right while the label keeps a
-     readable measure beside it; in a column too narrow for both, a side
-     panel's or a phone's, the badge and the number drop to a line of
-     their own under the label rather than squeezing it to a word a line.
-     A word too long for its line, a path or an identifier, still breaks
-     anywhere rather than pushing past the row's edge. */
-  .luke-choice-head {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: var(--luke-space-4) var(--luke-space-8);
-  }
-
-  .luke-choice-label {
-    flex: 1 1 0;
-    min-width: 0;
-    font-weight: var(--luke-weight-medium);
-    overflow-wrap: anywhere;
-  }
-
-  /* The badge and the row's number keep their width at the head's right,
-     the number last, in the caption type's quiet figures. */
-  .luke-choice-end {
-    display: inline-flex;
-    flex: none;
-    align-items: center;
-    gap: var(--luke-space-8);
-  }
-
-  /* Note that only a badge asks a row's label for a measure, since a
-     number alone is narrow enough to stand beside any label; a pill sizes
-     to its words and asks none. */
-  .luke-choice-list:not([data-look="pill"])
-    .luke-choice-head:has(> .luke-choice-end .luke-badge)
-    > .luke-choice-label {
-    flex-basis: 10em;
-  }
-
-  .luke-choice-number {
-    min-width: 1ch;
-    color: var(--luke-color-text-subtle);
-    font-size: var(--luke-type-caption-size);
-    line-height: var(--luke-type-body-leading);
-    font-variant-numeric: tabular-nums;
-    text-align: center;
-  }
-
-  /* A marked row's radio or checkbox stands on the label's first line: a
-     ring at rest, filled in the accent once checked, a dot in a radio and a
-     tick in a box, both in the accent's ink. */
-  .luke-choice-control {
-    display: inline-grid;
-    flex: none;
-    align-self: flex-start;
-    place-items: center;
-    width: var(--luke-space-16);
-    height: var(--luke-space-16);
-    margin-top: calc((var(--luke-type-body-leading) - var(--luke-space-16)) / 2);
-    box-sizing: border-box;
-    border: 1.5px solid var(--luke-color-text-subtle);
-    border-radius: var(--luke-space-4);
-    transition:
-      background-color var(--luke-duration-hover) ease,
-      border-color var(--luke-duration-hover) ease;
-  }
-
-  .luke-choice-control[data-shape="radio"] {
-    border-radius: 50%;
-  }
-
-  [aria-checked="true"] > .luke-choice-control {
-    border-color: var(--luke-color-accent);
-    background: var(--luke-color-accent);
-  }
-
-  /* A toned row fills its checked control with what picking it means,
-     its dot or tick in the ground's ink, which reads on either fill. */
-  [aria-checked="true"][data-tone="complete"] > .luke-choice-control {
-    --luke-choice-ink: var(--luke-color-ground);
-    border-color: var(--luke-color-complete);
-    background: var(--luke-color-complete);
-  }
-
-  [aria-checked="true"][data-tone="danger"] > .luke-choice-control {
-    --luke-choice-ink: var(--luke-color-ground);
-    border-color: var(--luke-color-danger);
-    background: var(--luke-color-danger);
-  }
-
-  [aria-checked="true"] > .luke-choice-control[data-shape="radio"]::after {
-    width: var(--luke-space-6);
-    height: var(--luke-space-6);
-    border-radius: 50%;
-    background: var(--luke-choice-ink, var(--luke-color-on-accent));
-    content: "";
-  }
-
-  [aria-checked="true"] > .luke-choice-control[data-shape="box"]::after {
-    width: var(--luke-space-8);
-    height: var(--luke-space-4);
-    margin-top: -2px;
-    border-bottom: 2px solid var(--luke-choice-ink, var(--luke-color-on-accent));
-    border-left: 2px solid var(--luke-choice-ink, var(--luke-color-on-accent));
-    transform: rotate(-45deg);
-    content: "";
-  }
-
-  .luke-choice-detail {
-    color: var(--luke-color-text-muted);
-    font-size: var(--luke-type-caption-size);
-    line-height: var(--luke-type-caption-leading);
-  }
-
-  /* Note that the note runs inline in the label's line, so its smaller
-     words share the label's baseline rather than a box's centre. */
-  .luke-choice-picked {
-    margin-left: var(--luke-space-8);
-    color: var(--luke-color-text-muted);
-    font-size: var(--luke-type-caption-size);
-    font-weight: var(--luke-weight-regular);
-    white-space: nowrap;
-  }
-
-  .luke-choice-check {
-    width: 12px;
-    height: 12px;
-    margin-right: var(--luke-space-2);
-    vertical-align: -1px;
-  }
-
-  /* Faces in a grid, four to a line: each a round picture over its name,
-     ringed in the switch's accent once picked, the keyboard's ring drawn
-     on the picture since the row itself has no box to ring. */
-  .luke-choice-list[data-look="picture"] {
-    display: grid;
-    gap: var(--luke-space-12) var(--luke-space-8);
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-  }
-
+  /* A face has no box of its own, its picture ringed instead, and its
+     name in muted words until picked. */
   .luke-choice-list[data-look="picture"] > .luke-choice {
-    flex-direction: column;
-    gap: var(--luke-space-4);
-    padding: 0;
-    outline: none;
     background: none;
     box-shadow: none;
     color: var(--luke-color-text-muted);
-    font-size: inherit;
   }
 
   .luke-choice-list[data-look="picture"] > .luke-choice:hover:not(:disabled) {
     background: none;
   }
 
-  .luke-choice-list[data-look="picture"] .luke-choice-mark {
-    overflow: hidden;
-    width: 100%;
-    max-width: 88px;
-    aspect-ratio: 1;
-    border-radius: 50%;
-    background: var(--luke-color-border);
-    box-shadow: inset 0 0 0 1px var(--luke-color-border-strong);
-    transition: box-shadow var(--luke-duration-hover) ease;
+  /* A card wears the row's box, its head's radio none. */
+  .luke-choice-card-head > .luke-choice,
+  .luke-choice-card-head > .luke-choice[aria-checked="true"],
+  .luke-choice-card-head > button.luke-choice:hover:not(:disabled) {
+    background: none;
+    box-shadow: none;
   }
 
-  .luke-choice-list[data-look="picture"] .luke-choice-mark img {
-    display: block;
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-    object-position: 50% 25%;
-  }
-
-  .luke-choice-list[data-look="picture"] > .luke-choice:hover:not(:disabled) .luke-choice-mark {
-    box-shadow: 0 0 0 2px var(--luke-color-border-strong);
-  }
-
-  .luke-choice-list[data-look="picture"] > .luke-choice[aria-checked="true"] .luke-choice-mark {
-    box-shadow: 0 0 0 2px var(--luke-color-switch-on);
-  }
-
+  /* The keyboard's ring on a face is drawn on its picture, outside the
+     picked ring, once the keyboard has moved focus; the selector asks the
+     window's keyboard state, a focus, and the face's part at once. */
   :root[data-keyboard="true"]
     .luke-choice-list[data-look="picture"]
     > .luke-choice:focus-visible
@@ -325,87 +78,12 @@
     outline-offset: calc(2px + var(--luke-focus-ring-offset));
   }
 
-  .luke-choice-name {
-    overflow: hidden;
-    max-width: 100%;
-    font-size: var(--luke-type-caption-size);
-    white-space: nowrap;
+  .luke-choice-detail {
+    color: var(--luke-color-text-muted);
   }
 
   /* A name cut short fades out at its end, once it is measured cut. */
   .luke-choice-name[data-overflow="true"] {
     mask-image: linear-gradient(to left, transparent, #000 var(--luke-label-fade));
-  }
-
-  .luke-choice-list[data-look="picture"] > .luke-choice[aria-checked="true"] .luke-choice-name {
-    color: var(--luke-color-text);
-    font-weight: var(--luke-weight-semibold);
-  }
-
-  /* A card holds its radio, what it says at the head's end, and controls of
-     its own under them; the card wears the row's box, the radio none. */
-  .luke-choice-list[data-look="card"] {
-    gap: var(--luke-space-8);
-  }
-
-  .luke-choice-card {
-    display: flex;
-    flex-direction: column;
-    gap: var(--luke-space-8);
-    padding: var(--luke-space-12);
-    border-radius: var(--luke-control-radius);
-    box-shadow: inset 0 0 0 1px var(--luke-color-border);
-  }
-
-  .luke-choice-card[data-checked="true"] {
-    box-shadow: inset 0 0 0 1px var(--luke-color-border-selected);
-  }
-
-  .luke-choice-card[data-unavailable="true"] {
-    opacity: 0.55;
-  }
-
-  .luke-choice-card-head {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--luke-space-8);
-  }
-
-  .luke-choice-card-head > .luke-choice,
-  .luke-choice-card-head > .luke-choice[aria-checked="true"],
-  .luke-choice-card-head > button.luke-choice:hover:not(:disabled) {
-    min-width: 0;
-    padding: 0;
-    background: none;
-    box-shadow: none;
-  }
-
-  .luke-choice-card-head > .luke-choice:disabled {
-    opacity: 1;
-  }
-
-  /* An unsaved credential's radio cannot be picked, so its ring steps back while its label stays readable. */
-  .luke-choice-card-head > .luke-choice:disabled > .luke-choice-control {
-    opacity: 0.4;
-  }
-
-  .luke-choice-card-head .luke-choice-control {
-    margin-top: 0;
-    align-self: center;
-  }
-
-  .luke-choice-card-head .luke-choice-words {
-    flex: 0 1 auto;
-  }
-
-  .luke-choice-aside {
-    font-size: var(--luke-type-caption-size);
-  }
-
-  .luke-choice-card-body {
-    display: flex;
-    flex-direction: column;
-    gap: var(--luke-space-6);
   }
 }
