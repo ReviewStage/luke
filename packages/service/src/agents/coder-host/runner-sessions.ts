@@ -1261,17 +1261,12 @@ export const runnerSessions = <
             yield* relaunched(sessionId, agent, found.value.name, running.sandboxSessionId, sent);
             return accepted;
           }
-          // The installation token lives an hour, so each message sets a fresh one; and the
-          // harness's lines (the agent's model and effort as they stand) go ahead of the message,
+          // The harness's lines (the agent's model and effort as they stand) go ahead of the message,
           // which a change since the launch takes effect from. The choice read here stands until
           // the write: a change of it is handed to the runner by `retune`, which holds the same
           // lease, so it is written after this line, never undone by it.
-          const [, ahead] = yield* Effect.all(
-            [
-              renewCredential(target, agent, running.sandboxSessionId),
-              harness.ahead(agent),
-              filesWritten(running.sandboxSessionId, sent),
-            ],
+          const [ahead] = yield* Effect.all(
+            [harness.ahead(agent), filesWritten(running.sandboxSessionId, sent)],
             { concurrency: "unbounded" },
           );
           // Note that the write is the runner's liveness check: Vercel refuses stdin to a command
@@ -1290,7 +1285,21 @@ export const runnerSessions = <
                 () => Effect.succeed(false),
               ),
             );
-          if (wrote) return accepted;
+          if (wrote) {
+            // The installation token lives an hour, so each message sets a fresh one, after the
+            // write rather than ahead of it: the model takes seconds to reach its first command, and
+            // the agent hears the message a GitHub mint and a policy update sooner. Note that a
+            // renewal that fails is logged and the message stands, since the runner already took it
+            // and a send answered failed would be sent again; the next message renews it.
+            yield* renewCredential(target, agent, running.sandboxSessionId).pipe(
+              Effect.catch((failure) =>
+                Effect.logWarning(
+                  `A ${harness.name} runner's credential was not renewed: ${describeFailure(failure)}`,
+                ),
+              ),
+            );
+            return accepted;
+          }
         }
         // The sandbox stopped or the runner ended: resumed, its credential set again, and the runner relaunched on the harness's session.
         // Lowered first, so the session the resume opens lives the timeout, not an old sandbox's day.

@@ -2233,4 +2233,29 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         assert.ok(JSON.stringify(api.policies.at(-1)?.policy).includes(writeHeader));
       }),
   );
+  it.effect(
+    "a message to a running runner is written ahead of its credential's renewal, and a renewal Vercel refused leaves the message standing",
+    () =>
+      Effect.gen(function* () {
+        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+        const api = runnerSandboxApi();
+        const { agent, sessions } = yield* repositoryAgent(api, ownInstallation());
+        const opened = yield* sessions.open(message(agent, "Fix the invitations."));
+        assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+        const policiesBefore = api.policies.length;
+        api.failPolicy.remaining = 1;
+
+        const sent = yield* sessions.send(opened.sessionId, message(agent, "Now the emails."));
+        const later = yield* sessions.send(opened.sessionId, message(agent, "And the docs."));
+
+        assert.deepEqual(
+          [sent.outcome, later.outcome],
+          [EVE_SEND_OUTCOME.ACCEPTED, EVE_SEND_OUTCOME.ACCEPTED],
+        );
+        assert.ok(api.commands[0]?.stdin.includes("Now the emails."));
+        assert.equal(api.commands.length, 1);
+        // The refused renewal set nothing; the next message's renewal set the credential afresh.
+        assert.equal(api.policies.length, policiesBefore + 1);
+      }),
+  );
 });
