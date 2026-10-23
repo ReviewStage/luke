@@ -326,6 +326,11 @@ test("a message's preview says its words without the marks a message box writes,
   );
   assert.equal(plainWords("***both*** at once"), "both at once");
   assert.equal(plainWords("5 * 3 is 15, and my_var stays"), "5 * 3 is 15, and my_var stays");
+  assert.equal(
+    plainWords("Run `a*b*c` and `x ** y` as written"),
+    "Run a*b*c and x ** y as written",
+  );
+  assert.equal(plainWords("Keep \\*word\\* as typed"), "Keep \\*word\\* as typed");
 });
 
 test("a plan edit's row sums its notes by what each did, and shows them as JSON", () => {

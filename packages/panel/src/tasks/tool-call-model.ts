@@ -1357,9 +1357,17 @@ const INLINE_MARKS = /\*\*|`/gu;
 /**
  * Words wrapped in one `*` or in `~~`, italic or struck, which plain words
  * say without the marks. Note that a `*` standing between spaces, as in
- * `5 * 3`, wraps nothing and stays.
+ * `5 * 3`, wraps nothing and stays, and so does one a backslash escapes.
  */
-const WRAPPING_MARKS = /(\*|~~)(?=\S)(.+?)(?<=\S)\1/gu;
+const WRAPPING_MARKS = /(?<!\\)(\*|~~)(?=\S)(.+?)(?<![\s\\])\1/gu;
+
+/** A code span: a run of backticks, its words, and the same run closing them, whose words stay as they are. */
+const CODE_SPAN = /(`+)(.+?)\1/gu;
+
+/** Words outside code said without their marks: strong emphasis and stray backticks left out, and italic or struck words unwrapped. */
+function unmarked(words: string): string {
+  return words.replace(INLINE_MARKS, "").replace(WRAPPING_MARKS, "$2");
+}
 
 /** A markdown fence's opening or closing line, which plain words leave out. */
 const FENCE_LINE = /^\s*(?:```|~~~)/u;
@@ -1377,10 +1385,15 @@ export function cardTitle(text: string): string {
 
 function plainLine(line: string): string {
   // A link is said by its name, as its chip names it, never its destination (`linkLabels`).
-  return linkLabels(line.trim().replace(LINE_MARKS, ""))
-    .replace(INLINE_MARKS, "")
-    .replace(WRAPPING_MARKS, "$2")
-    .trim();
+  const words = linkLabels(line.trim().replace(LINE_MARKS, ""));
+  // A code span's words are said as they are, its backticks left out, and only the words around it lose their marks.
+  let plain = "";
+  let at = 0;
+  for (const span of words.matchAll(CODE_SPAN)) {
+    plain += unmarked(words.slice(at, span.index)) + (span[2] ?? "");
+    at = span.index + span[0].length;
+  }
+  return (plain + unmarked(words.slice(at))).trim();
 }
 
 /**
