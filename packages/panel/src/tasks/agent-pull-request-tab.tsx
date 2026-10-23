@@ -260,7 +260,7 @@ import { PULL_REQUEST_VIEW, type PullRequestView } from "./use-side-panel.js";
  * GitHub's own sentence and the presses (`merge-box.tsx`), with Preview
  * first where a deployment of its head serves an address, opening it or, for
  * several, a menu of their environments (`PreviewControl`), and Run before
- * it, which runs the agent's branch in a terminal of this Mac in the side
+ * it, which runs the shown pull request's branch in a terminal of this Mac in the side
  * panel, where the panel offers one (`onRun`). Open on GitHub
  * and Refresh stand in the side panel's own ⋯ over the tab, which the tab
  * hands them to while it is drawn (`useHandedTabActions`). Under it one
@@ -2250,7 +2250,7 @@ interface AgentPullRequestTabProps {
   onView: (view: PullRequestView) => void;
   /** Hears what the side panel's toolbar ⋯ offers while the tab is drawn, Open on GitHub and Refresh (`useHandedTabActions`); none where no toolbar draws them. */
   onActions?: HandTabActions | undefined;
-  /** Runs the agent's branch in a terminal of this Mac in the side panel, which the header's Run offers; none where the platform has no Mac terminal, no repository is known, or the tab names another pull request than the agent's own. */
+  /** Runs the shown pull request's branch in a terminal of this Mac in the side panel, which the header's Run offers; none where the platform has no Mac terminal or no repository is known. A fork's pull request offers none, whatever this holds. */
   onRun?: (() => void) | undefined;
 }
 
@@ -2528,7 +2528,10 @@ function PullRequestTabBody({
                     )}
                     <div className="pull-request-title-actions">
                       <PreviewControl checks={landed(parts.checks)} shown={shown} />
-                      {onRun === undefined || held === undefined ? null : (
+                      {/* Note that a fork's pull request offers no Run, because the run fetches its head by branch name from the base repository, where a branch of the same name would be another's. */}
+                      {onRun === undefined ||
+                      held === undefined ||
+                      overview?.headOwner !== undefined ? null : (
                         <Button
                           variant={BUTTON_VARIANT.OUTLINE}
                           icon={<PlayIcon />}

@@ -14,6 +14,7 @@ import { useAct } from "../act.js";
 import { TERMINAL_LOAD_FAILED, useSideBundles } from "../bundle-loader.js";
 import type { TerminalHandle } from "../terminal/contract.js";
 import { onMacTerminalPort } from "./mac-terminal-port.js";
+import { pullRequestAsked } from "./pull-request-number.js";
 import { useOpenLink } from "./use-open-link.js";
 
 /**
@@ -84,7 +85,7 @@ const lastRuns = new Map<
 >();
 
 export function MacTerminalTab({ tab }: { tab: MacTerminalStripTab }): React.JSX.Element {
-  const { macTerminal: agentId, repository, asked } = tab;
+  const { macTerminal: agentId, repository, asked, number } = tab;
   const known = lastRuns.get(agentId);
   // Note that a press of Run in the tab counts on from the ⋯'s, so each press is a run of its own, and the tab drawn again counts on from the last run.
   const [presses, setPresses] = useState(known?.asked === asked ? known.presses : 0);
@@ -140,18 +141,25 @@ export function MacTerminalTab({ tab }: { tab: MacTerminalStripTab }): React.JSX
     const again = held?.asked !== asked || held.presses !== presses;
     const reading: Promise<ReadBranch | null> = !again
       ? Promise.resolve(held)
-      : (tell("▸ Reading the agent's pushed branch…"),
-        act(ACT_KIND.CODING_AGENTS_PULL_REQUEST, { agentId }).then((answer) =>
-          "failure" in answer || answer.branch === null
-            ? null
-            : { branch: answer.branch, pullRequest: answer.pullRequest?.number ?? null },
+      : (tell(
+          number === undefined
+            ? "▸ Reading the agent's pushed branch…"
+            : `▸ Reading the branch of pull request #${number}…`,
+        ),
+        act(ACT_KIND.CODING_AGENTS_PULL_REQUEST, pullRequestAsked(agentId, number)).then(
+          (answer) =>
+            "failure" in answer || answer.branch === null
+              ? null
+              : { branch: answer.branch, pullRequest: answer.pullRequest?.number ?? null },
         ));
     reading
       .then((read) => {
         if (!live) return;
         if (read === null) {
           tell(
-            "This agent has pushed no branch yet. Ask it to push its work, then press Run again.",
+            number === undefined
+              ? "This agent has pushed no branch yet. Ask it to push its work, then press Run again."
+              : `Pull request #${number} could not be read from GitHub. Press Run again to retry.`,
           );
           setStanding({ kind: "idle" });
           return;
@@ -180,7 +188,7 @@ export function MacTerminalTab({ tab }: { tab: MacTerminalStripTab }): React.JSX
       port.current = undefined;
       mounted.unmount();
     };
-  }, [module, element, openLink, act, agentId, repository, asked, presses]);
+  }, [module, element, openLink, act, agentId, repository, asked, number, presses]);
 
   const running = standing.kind === "running" || standing.kind === "stopping";
   const stop = () => {

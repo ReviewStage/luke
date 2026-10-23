@@ -1657,6 +1657,41 @@ test("Run in the header of the agent's Pull request tab runs its branch on this 
   assert.equal(tab.repository, PAGE.repository);
 });
 
+test("Run in the header of a Pull request tab opened by its number runs that pull request's branch, not the agent's own", async () => {
+  takeDownTerminal = standTerminalDocument();
+  pages = [{ agent: { ...PAGE, status: CODING_AGENT_STATUS.RUNNING } }];
+  published = {
+    repository: "acme/relay",
+    branch: "luke/view-commands",
+    pullRequest: {
+      number: 2905,
+      title: "View commands",
+      url: "https://github.com/acme/relay/pull/2905",
+      state: PULL_REQUEST_STATE.OPEN,
+      checks: CHECK_SUMMARY.PASSING,
+      additions: 5,
+      deletions: 2,
+      changedFiles: 2,
+    },
+  };
+  await mountPanelPage();
+  // Note that a link to another pull request opens its tab by number, as the Inbox's and a mention's do.
+  act(() => drawnPanel?.onChoose({ changes: AGENT_ID, number: 2905 }));
+  await settle();
+
+  const run =
+    document.querySelector<HTMLButtonElement>(
+      'aside.side-panel .pull-request-title-actions button[aria-label="Run on this Mac"]',
+    ) ?? assert.fail("the numbered Pull request tab's header offers Run");
+  act(() => run.click());
+  await settle();
+
+  const tab = drawnPanel?.tab;
+  assert.ok(tab !== undefined && isMacTerminalTab(tab), "Run shows a Mac terminal");
+  assert.equal(tab.macTerminal, AGENT_ID);
+  assert.equal(tab.number, 2905);
+});
+
 test("Archive agent on the page's ⋯ reads an agent at rest again and archives it unasked, its composer giving way to Unarchive", async () => {
   const page = mount();
   await settle();

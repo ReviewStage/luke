@@ -30,12 +30,29 @@ import { MacTerminalTab } from "./mac-terminal-tab.js";
  * it and the tab draws it stopped when main says it ended; Run starts it
  * anew; Open in Terminal asks main to open the worktree once a run has
  * started; and the tab drawn again over a run only shows it, a stopped one
- * still Stopped. Main is the process boundary: its act
+ * still Stopped; a run asked from another pull request's tab reads and runs
+ * that pull request's branch. Main is the process boundary: its act
  * channel answers, and a run's port is handed into the page as the preload
  * hands it. Synthetic names throughout.
  */
 
 const AGENT = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
+
+/** Another pull request of the agent's repository than its own, as its tab names it by number. */
+const OTHER = {
+  repository: "acme/app",
+  branch: "luke/other-thing",
+  pullRequest: {
+    number: 57,
+    title: "Another thing",
+    url: "https://github.com/acme/app/pull/57",
+    state: "open",
+    checks: "passing",
+    additions: 2,
+    deletions: 1,
+    changedFiles: 1,
+  },
+};
 
 /** Every act the tab sent, on the act channel or the act port, by kind and payload, in order. */
 let sent: (AnyAct | SentPortAct)[];
@@ -63,9 +80,10 @@ beforeEach(() => {
   // Note that the acts main answers itself, a run's among them, and what the agent published, ride the act port.
   fakeActPortAnswering((request) => {
     sent.push(request);
-    return Promise.resolve(
-      request.kind === ACT_KIND.CODING_AGENTS_PULL_REQUEST ? published : undefined,
-    );
+    if (request.kind !== ACT_KIND.CODING_AGENTS_PULL_REQUEST) return Promise.resolve(undefined);
+    // SAFETY: the tab asks for a pull request with the agent and, for another's, its number.
+    const asked = request.payload as { readonly number?: number };
+    return Promise.resolve(asked.number === OTHER.pullRequest.number ? OTHER : published);
   });
   // jsdom has neither constructed sheets nor media queries; the window has both.
   Object.defineProperty(document, "adoptedStyleSheets", {
@@ -98,7 +116,7 @@ async function settle(): Promise<void> {
 }
 
 /** The tab drawn for the agent's press, with what it draws and does. */
-async function mount(asked: number) {
+async function mount(asked: number, number?: number) {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
@@ -111,7 +129,12 @@ async function mount(asked: number) {
         onSideBundles(
           SIDE_BUNDLES,
           createElement(MacTerminalTab, {
-            tab: { macTerminal: AGENT, repository: "acme/app", asked },
+            tab: {
+              macTerminal: AGENT,
+              repository: "acme/app",
+              asked,
+              ...(number === undefined ? undefined : { number }),
+            },
           }),
         ),
       ),
@@ -241,4 +264,16 @@ test("Open in Terminal waits for the run to start", async () => {
   await settle();
 
   assert.deepEqual(tab.offered(), ["Open in Terminal", "Stop"]);
+});
+
+test("a run asked from another pull request's tab reads and runs that pull request's branch", async () => {
+  const tab = await mount(7, OTHER.pullRequest.number);
+
+  assert.deepEqual(
+    opens().map(({ branch, pullRequest }) => ({ branch, pullRequest })),
+    [{ branch: "luke/other-thing", pullRequest: 57 }],
+  );
+  tab.post();
+  await settle();
+  assert.match(tab.bar(), /luke\/other-thing · this Mac · Running/u);
 });
