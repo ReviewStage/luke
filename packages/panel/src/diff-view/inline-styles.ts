@@ -69,7 +69,11 @@ export function toHtml(tree: Tree, options?: Parameters<typeof writeHast>[1]): s
 /**
  * Pierre's own writer (`@pierre/diffs`'s `utils/hastToHtml.js`), answered
  * with `toHtml`, since Pierre's writes most elements itself, styles as
- * markup, and hands `hast-util-to-html` only what it does not.
+ * markup, and hands `hast-util-to-html` only what it does not. The
+ * panel's build redirects Pierre's import here (`scripts/build-table.mjs`),
+ * which no import graph shows.
+ *
+ * @public
  */
 export function hastToHtml(tree: Tree): string {
   return toHtml(tree);

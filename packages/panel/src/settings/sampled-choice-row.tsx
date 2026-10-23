@@ -114,6 +114,19 @@ function SampleButton({
   );
 }
 
+/**
+ * Brings the picked row into the list's view as the dialog opens, because
+ * the focus it takes does not scroll. Note that it is drawn inside the
+ * dialog, after the list, because the dialog's card stands a render after
+ * the dialog, so only what stands in it reads the row as it lands.
+ */
+function PickedInView({ row }: { row: React.RefObject<HTMLButtonElement | null> }): null {
+  useLayoutEffect(() => {
+    row.current?.scrollIntoView?.({ block: "center" });
+  }, [row]);
+  return null;
+}
+
 /** The dialog the chip opens: every value under its heading, the picked one played as it is picked, kept only by Done. */
 function SampledChoiceDialog({
   title,
@@ -142,10 +155,6 @@ function SampledChoiceDialog({
   };
   const groups = grouped(options);
   const walk = groups.flatMap((group) => group.options);
-  // Note that the picked row is brought into the list's view as the dialog opens, because the focus it takes does not scroll.
-  useLayoutEffect(() => {
-    pickedRow.current?.scrollIntoView?.({ block: "center" });
-  }, []);
   // Note that the arrows walk every row, across the headings, and wrap at the list's ends, because each
   // heading's run is a radio group of its own whose arrows would otherwise stop at its last row.
   const onKeyDownCapture = (event: React.KeyboardEvent<HTMLDivElement>) => {
@@ -214,6 +223,7 @@ function SampledChoiceDialog({
           })}
         </div>
       </ScrollArea>
+      <PickedInView row={pickedRow} />
     </Dialog>
   );
 }

@@ -1,7 +1,7 @@
 import { AUTOMATION_SCOPE } from "@luke/features/automation-wire";
 import { PULL_REQUEST_STATE } from "@luke/features/coding-agent-wire";
 import { GITHUB_ACCESS, type GitHubAccess } from "@luke/features/github-repositories-wire";
-import { INBOX_RESPONSE, INBOX_STATUS } from "@luke/features/inbox-wire";
+import { INBOX_STATUS } from "@luke/features/inbox-wire";
 import { planAttachmentIdsIn } from "@luke/features/plan-attachment-link";
 import type { PlanSectionWriter } from "@luke/features/plan-document";
 import { DEFAULT_PLAN_TEMPLATE } from "@luke/features/plan-document-template";
@@ -1568,8 +1568,8 @@ const findStandingPullRequestStates = SqlSchema.findAll({
 
 /**
  * One inbox item of the task holding a question open for the developer:
- * open, and asking something, which a notice, a post that asked nothing and
- * waits on their nod alone, never does (the inbox store's own `ASKING`,
+ * open, and holding an ask open, which a notice, a post that asked nothing
+ * and waits on their nod alone, never does (the inbox store's own `ASKING`,
  * `packages/service/src/inbox/inbox-store.ts`).
  */
 const findOpenQuestion = SqlSchema.findOneOption({
@@ -1584,7 +1584,7 @@ const findOpenQuestion = SqlSchema.findOneOption({
           and(
             eq(inboxItem.taskId, taskId),
             eq(inboxItem.status, INBOX_STATUS.OPEN),
-            sql`${inboxItem.response} ->> 'type' <> ${INBOX_RESPONSE.NONE}`,
+            isNotNull(inboxItem.openAskMessageId),
           ),
         )
         .limit(1),

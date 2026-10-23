@@ -3,8 +3,8 @@ import {
   type TaskRecordLiveRows,
   taskRecordLiveRowsSchema,
 } from "@luke/features/live-wire";
-import { Effect, Option, Schema, Stream } from "effect";
-import { LiveBroken, type LiveClient, liveRows } from "./live-follow.js";
+import { type Effect, Stream } from "effect";
+import { decodedLiveRows, type LiveBroken, type LiveClient } from "./live-follow.js";
 
 /**
  * task-record-follow.ts -- where an open task's pages and agents' code stand, followed by the host over a Neon Realtime subscription, so a part is read again only once its mark moved.
@@ -77,8 +77,7 @@ export function taskRecordMoves(
   dependencies: TaskRecordFollowDependencies,
   first: TaskRecordLiveAnswer,
 ): Stream.Stream<readonly TaskRecordPart[], LiveBroken> {
-  const decode = Schema.decodeUnknownOption(taskRecordLiveRowsSchema);
-  return liveRows(
+  return decodedLiveRows(
     {
       openLive: dependencies.openLive,
       reseal: dependencies.seal,
@@ -86,13 +85,8 @@ export function taskRecordMoves(
       now: dependencies.now,
     },
     first,
+    taskRecordLiveRowsSchema,
   ).pipe(
-    Stream.mapEffect((read) =>
-      Option.match(decode(read), {
-        onNone: () => Effect.fail(new LiveBroken({ reason: "a row did not decode" })),
-        onSome: Effect.succeed,
-      }),
-    ),
     Stream.mapAccum(
       (): TaskRecordLiveRows | undefined => undefined,
       (before: TaskRecordLiveRows | undefined, rows: TaskRecordLiveRows) => {

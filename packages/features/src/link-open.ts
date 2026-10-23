@@ -1,6 +1,7 @@
 import type { UnparsedWireValue } from "@luke/wire";
 import { Schema } from "effect";
 import { openTargetOf } from "./open-address.js";
+import { parsedUrl } from "./parsed-url.js";
 
 /**
  * link-open.ts -- where the account opens a Luke link, and whether a web page showing one hands it to the Mac app.
@@ -47,15 +48,6 @@ const readsLinkOpen = Schema.is(Schema.Literals(LINK_OPEN_LIST));
 /** Whether a value is one of the choices, as one arriving from storage or the wire is read. */
 export function isLinkOpen(value: UnparsedWireValue): value is LinkOpen {
   return readsLinkOpen(value);
-}
-
-/** An address read as a URL, or nothing; `new URL` caught, since Safari before 17 has no `URL.canParse`. */
-function parsedUrl(address: string): URL | undefined {
-  try {
-    return new URL(address);
-  } catch {
-    return undefined;
-  }
 }
 
 /**

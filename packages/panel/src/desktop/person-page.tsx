@@ -257,7 +257,7 @@ function PersonActions({
         ]),
   ];
   return (
-    <div className="desktop-toolbar-actions">
+    <>
       {shared ? (
         <Button variant={BUTTON_VARIANT.OUTLINE} icon={<ListFilterIcon />} onClick={onShowTasks}>
           {you ? "My tasks in sidebar" : "Their tasks in sidebar"}
@@ -273,7 +273,7 @@ function PersonActions({
           )}
         </>
       )}
-    </div>
+    </>
   );
 }
 

@@ -1,6 +1,8 @@
 import { useAtomValue } from "@effect/atom-react/Hooks";
+import { encodeMention, MENTION_KIND } from "@luke/features/mention-link";
 import type { KnownNames } from "@luke/features/place-chip-model";
 import type { TaskStatus } from "@luke/features/task-wire";
+import { taskKey } from "@luke/features/workspace-key";
 import type { AppStateSnapshot } from "@luke/host/app-state";
 import * as Atom from "effect/reactivity/Atom";
 import { useMemo } from "react";
@@ -14,7 +16,7 @@ import { appStateDerivedAtom } from "../use-app-state.js";
  * Read from main's document, which every window holds: every task's title,
  * the agents each task's row names and the models they run on, the agents
  * with no task the list carries, theirs, and the automations that started
- * them, the active task's pages, the Inbox
+ * them, the active task's pages, each task's key, the Inbox
  * items waiting, and the agents an automation started with no task; and
  * from the directories standing around the caller, the members and the
  * automation asked for. Nothing is fetched, so a name the window does not
@@ -82,6 +84,55 @@ const heldStatusesAtom: Atom.Atom<ReadonlyMap<string, TaskStatus>> = Atom.map(
       ),
     ),
 );
+
+/** No keys: what a window listing no numbered task holds, one object for every reader. */
+const NO_KEY_TARGETS: ReadonlyMap<string, string> = new Map();
+
+/** Whether two sets of keys name the same tasks by the same links, which a delivery that moved no task's key keeps. */
+function sameTargets(
+  held: ReadonlyMap<string, string>,
+  next: ReadonlyMap<string, string>,
+): boolean {
+  if (held.size !== next.size) return false;
+  for (const [key, target] of held) if (next.get(key) !== target) return false;
+  return true;
+}
+
+/**
+ * Each listed task's key (`ACME-42`), the link its mention is written with,
+ * built once per delivery that moved the tasks or the Inbox, as the names
+ * are. A key two tasks share, as two workspaces whose names begin alike
+ * give theirs, names neither, so words never chip the wrong task. It tells
+ * its readers only when a key or its link changed, which a task's other
+ * moves never do, so the words drawn with it are read again only then.
+ */
+const heldKeyTargetsAtom: Atom.Atom<ReadonlyMap<string, string>> = Atom.withEquality(
+  Atom.map(namedSlicesAtom, ({ planning }) => {
+    const workspaces = new Map(planning?.workspaces.map((workspace) => [workspace.id, workspace]));
+    const targets = new Map<string, string>();
+    const shared = new Set<string>();
+    for (const task of planning?.tasks ?? []) {
+      const workspace = workspaces.get(task.workspaceId);
+      if (workspace === undefined || task.number === undefined) continue;
+      const key = taskKey(workspace.name, task.number);
+      if (targets.has(key)) shared.add(key);
+      const place = { workspace: workspace.slug ?? "", repository: null };
+      targets.set(key, encodeMention({ kind: MENTION_KIND.TASK, taskId: task.id }, place));
+    }
+    for (const key of shared) targets.delete(key);
+    return targets.size === 0 ? NO_KEY_TARGETS : targets;
+  }),
+  sameTargets,
+);
+
+/**
+ * The link each listed task's key names its task by, which words written
+ * with a key in them are drawn with as that task's chip; the one shared
+ * value, the same object until a task's key or its link changes.
+ */
+export function useTaskKeyTargets(): ReadonlyMap<string, string> {
+  return useAtomValue(heldKeyTargetsAtom);
+}
 
 /**
  * The status of the task `taskId` names, as the window's task list holds it,

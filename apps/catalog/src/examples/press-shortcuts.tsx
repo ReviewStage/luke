@@ -13,7 +13,6 @@ import {
   MarkStrip,
   Menu,
   PlayIcon,
-  SkillChip,
   SplitButton,
   type StripMark,
   TEXT_TONE,
@@ -28,9 +27,8 @@ import { CatalogSection } from "../section";
  * press-shortcuts.tsx -- the second ways in a press offers beside a control's
  * own: Back held, or right-clicked, listing the steps behind it; a split
  * button that hears every press of its main part, a refused one too; a hidden
- * rail's strip of marks, pressed to show the rail; a title a ⌘-click opens;
- * and a chosen skill's pill in a box's words, pressed to open its file. Each
- * says what it last did, since the catalog has nowhere to go.
+ * rail's strip of marks, pressed to show the rail; and a title a ⌘-click
+ * opens. Each says what it last did, since the catalog has nowhere to go.
  */
 
 const STEPS = ["Auth refactor · Code", "Auth refactor · Plan", "Inbox"] as const;
@@ -160,13 +158,6 @@ function PressShortcuts(): React.JSX.Element {
         >
           Fix token refresh on wake #4635
         </CommandLink>
-        {said}
-      </CatalogSection>
-      <CatalogSection id="press-skill" title="A chosen skill in a box's words">
-        <Text>
-          Run <SkillChip label="/testing" onOpen={() => setDone("Opened testing's SKILL.md")} /> on
-          the new store, then <SkillChip label="/orchestrate" /> the rest.
-        </Text>
         {said}
       </CatalogSection>
     </>

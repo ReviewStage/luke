@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { PACKAGED_ARCHITECTURE } from "./package-config.mjs";
+import { PACKAGED_ARCHITECTURE } from "./package-layout.mjs";
 
 const NOTARY_KEYCHAIN_PROFILE = "luke-notary";
 // The version-free asset name every release carries beside the versioned DMG,

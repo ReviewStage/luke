@@ -1,9 +1,4 @@
-import {
-  HTTP_METHOD,
-  type UnparsedWireValue,
-  unparsedWire,
-  type WireBoundaryInput,
-} from "@luke/wire";
+import { HTTP_METHOD, type UnparsedWireValue, unparsedWire } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import { Effect, Option, Result, Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
@@ -12,6 +7,7 @@ import {
   accountCall,
   type CallCredential,
   callAnswered,
+  jsonOf,
 } from "./account-call.js";
 import type { AccountPreferencesAnswerWire } from "./account-wire.js";
 import { type ChaptersModelId, chaptersModelSchema } from "./chapters-model-choice.js";
@@ -106,12 +102,12 @@ import {
 import { imageBodyOf } from "./image-body.js";
 import {
   INBOX_FILE_TYPE,
-  type InboxAnswerRequest,
+  type InboxAcknowledgeRequest,
   type InboxCloseRequest,
   type InboxMessageRequest,
   type InboxReadAllRequest,
   type InboxStartRequest,
-  inboxAnswerRequestSchema,
+  inboxAcknowledgeRequestSchema,
   inboxCloseRequestSchema,
   inboxMessageRequestSchema,
   inboxReadAllRequestSchema,
@@ -306,11 +302,6 @@ function chaptersAnswer(
         PULL_REQUEST_CHAPTERS_CALL_FAILURE.UNANSWERED,
     }),
   );
-}
-
-/** A response's body as JSON, or nothing where it is not JSON at all. */
-function jsonOf(response: Response): Effect.Effect<WireBoundaryInput> {
-  return Effect.promise((): Promise<WireBoundaryInput> => response.json().catch(() => undefined));
 }
 
 /**
@@ -1438,17 +1429,17 @@ export class HostedCodingAgentClient {
   }
 
   /**
-   * Answers one item of the inbox against the revision the window drew,
-   * under the key the window made for the answer, which a retry carries
-   * again, and answers the item as it then stands with whether the answer
-   * was taken; an answer the service would refuse by shape is refused here
+   * Acknowledges one notice of the inbox, Got it, against the revision the
+   * window drew, under the key the window made for the nod, which a retry
+   * carries again, and answers the item as it then stands with whether the
+   * nod was taken; a nod the service would refuse by shape is refused here
    * without traveling.
    */
   answerInbox(
     itemId: string,
-    request: InboxAnswerRequest,
+    request: InboxAcknowledgeRequest,
   ): Effect.Effect<CodingAgentInboxAnsweredView, never, HttpClient.HttpClient> {
-    const body = wireRequestOf(inboxAnswerRequestSchema, request);
+    const body = wireRequestOf(inboxAcknowledgeRequestSchema, request);
     if (body === undefined) return Effect.succeed(UNANSWERED);
     return hostedAnswer(
       askHosted(this.#hosted.inbox.answer, { params: { id: itemId }, body }, HOSTED_DEADLINE.STEER),

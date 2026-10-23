@@ -224,7 +224,7 @@ export const messageCredentialMissing = /* @__PURE__ */ Effect.fnUntraced(functi
  * since no credential of its pays for them, as `agentRuntimeChoice` decides
  * it; the menus mark those models rather than let a Start fail late.
  */
-export const unconnectedProviders = /* @__PURE__ */ Effect.fnUntraced(function* (
+const unconnectedProviders = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
   read?: AccountKeyRows,
 ): Effect.fn.Return<ReadonlySet<ModelProvider>, StoreFailure, DatabaseServices> {

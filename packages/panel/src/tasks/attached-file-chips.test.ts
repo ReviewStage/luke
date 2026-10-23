@@ -5,6 +5,7 @@ import type { CodingAgentAttachment } from "@luke/features/coding-agent-wire";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
+import { attachmentChipName } from "../testing/attachment-chip.js";
 import { AttachedFileChips, attachmentChips } from "./attached-file-chips.js";
 
 /**
@@ -140,17 +141,14 @@ test("the way off takes the file off on the press, and its chip scales out out o
   remove(chips()[0]);
   assert.deepEqual(held.now, [NOTES], "the box no longer holds it");
   const leaving = chips().find((chip) => chip.hasAttribute("data-leaving"));
-  assert.equal(leaving?.title, "spec.pdf", "drawn through its exit");
+  assert.equal(leaving && attachmentChipName(leaving), "spec.pdf", "drawn through its exit");
   assert.equal(leaving?.hasAttribute("inert"), true);
   const scaled = played
     .filter((motion) => motion.element === leaving)
     .some((motion) => motion.keyframes.some((frame) => String(frame.transform).includes("scale")));
   assert.ok(scaled, "it scales out");
   finishAll();
-  assert.deepEqual(
-    chips().map((chip) => chip.title),
-    ["notes.txt"],
-  );
+  assert.deepEqual(chips().map(attachmentChipName), ["notes.txt"]);
 });
 
 test("of two files alike, the one whose way off is pressed is the one taken off", () => {
@@ -167,7 +165,7 @@ test("a file the box takes on scales in", () => {
   draw([SPEC]);
   act(() => document.querySelector<HTMLButtonElement>("button")?.click());
   const arrived = chips().at(-1);
-  assert.equal(arrived?.title, "notes.txt");
+  assert.equal(arrived && attachmentChipName(arrived), "notes.txt");
   const scaled = played
     .filter((motion) => motion.element === arrived)
     .some((motion) => motion.keyframes.some((frame) => String(frame.transform).includes("scale")));
@@ -178,7 +176,7 @@ test("the first file an empty box takes on scales in too", () => {
   draw([]);
   act(() => document.querySelector<HTMLButtonElement>("button")?.click());
   const arrived = chips()[0];
-  assert.equal(arrived?.title, "notes.txt");
+  assert.equal(arrived && attachmentChipName(arrived), "notes.txt");
   const scaled = played
     .filter((motion) => motion.element === arrived)
     .some((motion) => motion.keyframes.some((frame) => String(frame.transform).includes("scale")));

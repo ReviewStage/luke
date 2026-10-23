@@ -2,7 +2,7 @@ import type { TaskSummary } from "@luke/features/task-wire";
 import { TASKS_READ, type TasksView } from "@luke/features/tasks-view";
 import { Schema } from "effect";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { readKept, writeKept } from "../desktop/folded-groups.js";
+import { readKept, writeKept } from "../kept-storage.js";
 
 /**
  * use-last-task.ts -- the task each account last had open, kept across launches, and opened again at the next launch where it still stands.

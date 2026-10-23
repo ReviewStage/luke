@@ -103,7 +103,7 @@ import type { ListRowHint } from "../list-row/list-row.js";
 import { useTouchHold } from "../menu/touch-hold.js";
 import type { OneLineHint } from "../one-line/clipped-line.js";
 import { Shortcut } from "../shortcut/shortcut.js";
-import { TOOLTIP_LEAVING, TooltipCard, type TooltipLeaving, TooltipPill } from "./tooltip.js";
+import { TOOLTIP_CHORD, TooltipCard, TooltipPill } from "./tooltip.js";
 
 /**
  * How long after one pill goes the next shows at once. Note that it is the
@@ -323,7 +323,7 @@ function Hint({
   chord: ShortcutChord | undefined;
   card: ReactNode;
   cardBeside: boolean;
-  leaving: TooltipLeaving | undefined;
+  leaving: boolean;
   hold: (element: HTMLElement | null) => void;
   onCard: (over: boolean) => void;
   onCardPress: () => void;
@@ -354,7 +354,7 @@ function Hint({
       {...placed}
       label={drawn.label}
       shortcut={
-        chord === undefined ? undefined : <Shortcut chord={chord} className="luke-tooltip-chord" />
+        chord === undefined ? undefined : <Shortcut chord={chord} className={TOOLTIP_CHORD} />
       }
     />
   );
@@ -669,7 +669,7 @@ export function Tooltip({
           chord={chord}
           card={card}
           cardBeside={cardBeside}
-          leaving={pill.leaving ? TOOLTIP_LEAVING.SEEN : undefined}
+          leaving={pill.leaving}
           hold={drawPill}
           onCard={onCard}
           onCardPress={onCardPress}

@@ -1,7 +1,7 @@
 import type { Workspace } from "@luke/features/workspace-wire";
 import { Schema } from "effect";
 import { useState } from "react";
-import { readKept, writeKept } from "./folded-groups.js";
+import { readKept, writeKept } from "../kept-storage.js";
 
 /**
  * chosen-workspace.ts -- which of the account's workspaces the sidebar lists and New task starts in, kept across launches.

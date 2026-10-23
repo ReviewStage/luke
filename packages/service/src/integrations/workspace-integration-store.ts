@@ -24,7 +24,7 @@ import {
   integrationProviderSchema,
 } from "@luke/features/integration-wire";
 import { and, eq } from "drizzle-orm";
-import { DateTime, Effect, Option, Redacted, Schema } from "effect";
+import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
 import type { IntegrationStoreEffect } from "./integration-store.js";
 
@@ -37,8 +37,6 @@ export interface WorkspaceIntegrationRow {
   readonly state: string | undefined;
   /** When the sign-in under way began; nothing when none is. */
   readonly stateIssuedAt: Date | undefined;
-  /** Connect's handle on the sign-in under way; nothing when none is. */
-  readonly verifier: Redacted.Redacted | undefined;
 }
 
 const RowSchema = Schema.Struct({
@@ -47,7 +45,6 @@ const RowSchema = Schema.Struct({
   status: Schema.Literals(Object.values(INTEGRATION_ROW_STATUS)),
   state: Schema.NullOr(Schema.String),
   stateIssuedAt: Schema.NullOr(InstantColumnSchema),
-  connectVerifier: Schema.NullOr(Schema.String),
 });
 
 const ROW_COLUMNS = {
@@ -56,7 +53,6 @@ const ROW_COLUMNS = {
   status: workspaceIntegrationConnection.status,
   state: workspaceIntegrationConnection.state,
   stateIssuedAt: workspaceIntegrationConnection.stateIssuedAt,
-  connectVerifier: workspaceIntegrationConnection.connectVerifier,
 };
 
 function rowOf(row: typeof RowSchema.Type): WorkspaceIntegrationRow {
@@ -66,7 +62,6 @@ function rowOf(row: typeof RowSchema.Type): WorkspaceIntegrationRow {
     status: row.status,
     state: row.state ?? undefined,
     stateIssuedAt: row.stateIssuedAt ?? undefined,
-    verifier: row.connectVerifier === null ? undefined : Redacted.make(row.connectVerifier),
   };
 }
 
@@ -129,7 +124,6 @@ const BeginSchema = Schema.Struct({
   provider: integrationProviderSchema,
   userId: Schema.String,
   state: Schema.String,
-  verifier: Schema.String,
   at: Schema.Date,
 });
 
@@ -140,7 +134,7 @@ const BeginSchema = Schema.Struct({
  */
 const upsertSignIn = SqlSchema.void({
   Request: BeginSchema,
-  execute: ({ organizationId, provider, userId, state, verifier, at }) =>
+  execute: ({ organizationId, provider, userId, state, at }) =>
     Database.use((db) =>
       db
         .insert(workspaceIntegrationConnection)
@@ -150,7 +144,6 @@ const upsertSignIn = SqlSchema.void({
           status: INTEGRATION_ROW_STATUS.PENDING,
           state,
           stateIssuedAt: at,
-          connectVerifier: verifier,
           connectedByUserId: userId,
           updatedAt: at,
         })
@@ -162,7 +155,6 @@ const upsertSignIn = SqlSchema.void({
           set: {
             state,
             stateIssuedAt: at,
-            connectVerifier: verifier,
             connectedByUserId: userId,
             updatedAt: at,
           },
@@ -176,7 +168,6 @@ export function beginWorkspaceIntegrationSignIn(
   provider: IntegrationProvider,
   userId: string,
   state: string,
-  verifier: Redacted.Redacted,
 ): IntegrationStoreEffect<void> {
   return Effect.flatMap(DateTime.nowAsDate, (at) =>
     upsertSignIn({
@@ -184,7 +175,6 @@ export function beginWorkspaceIntegrationSignIn(
       provider,
       userId,
       state,
-      verifier: Redacted.value(verifier),
       at,
     }),
   );
@@ -208,7 +198,6 @@ const updateConnected = SqlSchema.findAll({
           status: INTEGRATION_ROW_STATUS.CONNECTED,
           state: null,
           stateIssuedAt: null,
-          connectVerifier: null,
           connectedAt: at,
           updatedAt: at,
         })
@@ -254,7 +243,7 @@ const clearState = SqlSchema.void({
     Database.use((db) =>
       db
         .update(workspaceIntegrationConnection)
-        .set({ state: null, stateIssuedAt: null, connectVerifier: null, updatedAt: at })
+        .set({ state: null, stateIssuedAt: null, updatedAt: at })
         .where(and(ofWorkspace(key), eq(workspaceIntegrationConnection.state, state))),
     ),
 });

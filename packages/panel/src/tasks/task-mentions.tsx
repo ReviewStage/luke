@@ -143,12 +143,15 @@ export interface TasklessPlace {
  * automation started is: its repository's files and folders, its skills,
  * and the servers, and no plan's sections; a task or a section a message
  * names opens through `onOpenTask`, and a file is GitHub's, since no File
- * tab stands there.
+ * tab stands there. A place of no repository, as Luke's page is, offers
+ * the rest all the same. A link to a pull request the place's agent opened
+ * hangs the card `pullRequestOf` answers, where the place hands one.
  */
 export function tasklessMentions(
   place: TasklessPlace,
   onOpenTask: MentionDoors["onOpenTask"],
   readAgents?: MentionAgentsReader,
+  pullRequestOf?: MentionDoors["pullRequestOf"],
 ): TaskMentionsValue {
   const { workspace, workspaceId, repository } = place;
   return {
@@ -165,6 +168,7 @@ export function tasklessMentions(
       anchors: NO_ANCHORS,
       onOpenTask,
       onOpenFile: undefined,
+      pullRequestOf,
     },
   };
 }
@@ -265,7 +269,8 @@ export interface MentionedTask {
  * names the task, so a file of its repository is still the file and a
  * section the plan no longer holds is drawn gone; with none, as in the
  * workspace's Inbox, no repository is at hand, so a GitHub page is drawn as
- * GitHub's.
+ * GitHub's, but for a file's or a folder's, drawn as that file or folder of
+ * the repository its address names (`mention-chip.tsx`'s `linkChip`).
  */
 export function useMentionDoors(task?: MentionedTask): MentionDoors {
   const page = useContext(TaskMentionsContext)?.doors;

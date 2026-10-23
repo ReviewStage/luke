@@ -1,18 +1,11 @@
 import { authDeployment } from "@luke/service/auth/auth-deployment";
 import { resolveRelayUserId } from "@luke/service/auth/bearer";
 import { browserLiveDependencies } from "@luke/service/browser-live/production";
-import {
-  type BrowserLiveServer,
-  browserLiveServer,
-  standBrowserLive,
-} from "@luke/service/browser-live/service";
+import { browserLiveServer, standBrowserLive } from "@luke/service/browser-live/service";
+import type { RelayServer } from "@luke/service/http/relay-upgrade";
 import { standReported } from "@luke/service/observability/sentry";
 import { relayDependencies } from "@luke/service/terminal/production";
-import {
-  standTerminalRelay,
-  type TerminalRelayServer,
-  terminalRelayServer,
-} from "@luke/service/terminal/service";
+import { standTerminalRelay, terminalRelayServer } from "@luke/service/terminal/service";
 import { Effect } from "effect";
 import { runWeb } from "../runtime.js";
 
@@ -30,11 +23,11 @@ import { runWeb } from "../runtime.js";
  * session cookie (`http/relay-upgrade.ts`).
  */
 
-let standingTerminal: TerminalRelayServer | undefined;
+let standingTerminal: RelayServer | undefined;
 
-let standingBrowser: BrowserLiveServer | undefined;
+let standingBrowser: RelayServer | undefined;
 
-function standTerminal(relay: TerminalRelayServer): void {
+function standTerminal(relay: RelayServer): void {
   void standReported(
     runWeb,
     Effect.scoped(
@@ -52,7 +45,7 @@ function standTerminal(relay: TerminalRelayServer): void {
   );
 }
 
-function standBrowser(live: BrowserLiveServer): void {
+function standBrowser(live: RelayServer): void {
   void standReported(
     runWeb,
     Effect.scoped(

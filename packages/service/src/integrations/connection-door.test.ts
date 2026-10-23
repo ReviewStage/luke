@@ -16,7 +16,7 @@ import { CODING_AGENT_PAYER } from "@luke/features/coding-agent-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { isRecord, type WireRecord } from "@luke/wire";
 import { fakeHttpClientLayer } from "@luke/wire/testing";
-import { Clock, Duration, Effect, Fiber, Layer, Logger, Option, Redacted, Result } from "effect";
+import { Clock, Duration, Effect, Fiber, Layer, Logger, Option, Result } from "effect";
 import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
@@ -78,12 +78,7 @@ const memberWithLinear = Effect.gen(function* () {
   const agent = Option.getOrThrow(started).agent;
   const bearer = randomBytes(32).toString("base64url");
   yield* recordCodingAgentRunnerToken(userId, agent.id, runnerTokenDigest(bearer));
-  yield* beginIntegrationSignIn(
-    userId,
-    firstIntegrationAccount(userId, LINEAR),
-    `state-${userId}`,
-    Redacted.make("connect-verifier"),
-  );
+  yield* beginIntegrationSignIn(userId, firstIntegrationAccount(userId, LINEAR), `state-${userId}`);
   assert.equal(yield* completeIntegrationSignIn(userId, LINEAR, `state-${userId}`), true);
   const admitted = Option.getOrThrow(yield* admitRunnerBearer(bearer));
   return { userId, agentId: agent.id, admitted, bearer };
@@ -172,7 +167,6 @@ it.layer(getTestDB())("the integrations' door", (it) => {
               member.userId,
               { provider: NOTION, connectionName, connectSubject },
               `state-${connectionName}-${member.userId}`,
-              Redacted.make("connect-verifier"),
             ),
             completeIntegrationSignIn(
               member.userId,

@@ -12,14 +12,15 @@ import { afterEach, beforeAll, test } from "vitest";
 import { fakeAppBridge } from "../testing/app-bridge.js";
 import { stateWith } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
-import { useKnownNames } from "./use-known-names.js";
+import { useKnownNames, useTaskKeyTargets } from "./use-known-names.js";
 
 /**
  * use-known-names.test.ts -- every chip of a window reads the one set of
  * names main's document holds: two readers of the same document are handed
  * the same names, a delivery that moves neither the tasks nor the Inbox
  * hands them those names again, and one that adds a task hands them new
- * names naming it. Synthetic tasks.
+ * names naming it; the tasks' keys, likewise, are handed again until a key
+ * changes, whatever else about a task moves. Synthetic tasks.
  */
 
 const AT = 1_792_000_000_000;
@@ -132,4 +133,49 @@ test("a task added hands every reader new names that name it", async () => {
   assert.notEqual(one, held);
   assert.equal(one?.tasks.get(BILLING.id), "Usage billing");
   assert.equal(seen.get("two"), one);
+});
+
+test("the tasks' keys are handed again for a delivery that moves no key, and anew for one that adds a numbered task", async () => {
+  const acme = {
+    id: "workspace-acme",
+    name: "Acme",
+    slug: "acme",
+    role: "owner",
+    github: null,
+  } as const;
+  const numbered = (task: TaskSummary, number: number): TaskSummary => ({ ...task, number });
+  const listing = (tasks: readonly TaskSummary[], version: number): AppStateSnapshot => ({
+    ...stateWith({}, { tasks: { ...IDLE_TASKS_VIEW, workspaces: [acme], tasks: [...tasks] } }),
+    version,
+  });
+  const listeners = new Set<(snapshot: AppStateSnapshot) => void>();
+  fakeAppBridge({
+    onAppState: (listener) => {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+    requestAppState: () => Promise.resolve(listing([numbered(INVITES, 41)], 1)),
+  });
+  const seen: ReadonlyMap<string, string>[] = [];
+  function Reader(): null {
+    seen.push(useTaskKeyTargets());
+    return null;
+  }
+  root = createRoot(document.body.appendChild(document.createElement("div")));
+  act(() => root?.render(onRegistry(AtomRegistry.make(), createElement(Reader))));
+  await settle();
+  const deliver = async (next: AppStateSnapshot) => {
+    act(() => {
+      for (const listener of listeners) listener(next);
+    });
+    await settle();
+  };
+  const first = seen.at(-1);
+  assert.deepEqual([...(first?.keys() ?? [])], ["ACME-41"]);
+
+  await deliver(listing([{ ...numbered(INVITES, 41), name: "Invites", updatedAt: AT + 1 }], 2));
+  assert.equal(seen.at(-1), first, "a rename moves no key");
+
+  await deliver(listing([numbered(INVITES, 41), numbered(BILLING, 42)], 3));
+  assert.deepEqual([...(seen.at(-1)?.keys() ?? [])], ["ACME-41", "ACME-42"]);
 });

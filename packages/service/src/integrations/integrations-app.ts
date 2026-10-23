@@ -6,15 +6,15 @@
  * provider, Connect is asked for a token afresh, and the browser is sent
  * on to the landing page with the provider and one word. A browser back
  * without a grant ends the sign-in, so the provider no longer stands
- * pending, unless Connect's result names a cancel or a refusal: that one
- * is left for the statuses read, which says why as it ends it. Connect
- * sends nothing back on the address, no error and no reason.
+ * pending. Connect sends nothing back on the address, no error and no
+ * reason, and Luke asks Connect for none, because Connect documents no way
+ * to read why a sign-in ended.
  *
  * Everything else about the account's integrations is a hosted procedure
- * (`integrations-procedures.ts`), which reads the seams, the sign-in window,
- * and Connect's word on a sign-in from here. The sign-in's state is never
- * logged, and nothing Connect answers is answered on: the browser is only
- * ever sent on to the landing page with a provider and one word.
+ * (`integrations-procedures.ts`), which reads the seams and the sign-in
+ * window from here. The sign-in's state is never logged, and nothing
+ * Connect answers is answered on: the browser is only ever sent on to the
+ * landing page with a provider and one word.
  */
 
 import { randomBytes } from "node:crypto";
@@ -23,13 +23,11 @@ import { HOSTED_SERVICE_PATH } from "@luke/features";
 import {
   INTEGRATION_LANDING_STATUS,
   INTEGRATION_NAME,
-  INTEGRATION_SIGN_IN_FAILURE,
   type IntegrationLandingStatus,
   type IntegrationProvider,
-  type IntegrationSignInFailure,
   integrationLandingPath,
 } from "@luke/features/integration-wire";
-import { Effect, Layer, type Redacted, Result } from "effect";
+import { Effect, Layer, Result } from "effect";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
 import { recordServerEvent, SERVER_EVENT } from "../events/server-events.js";
 import {
@@ -41,8 +39,6 @@ import {
 import { ANY_METHOD, type WebRoutes } from "../route.js";
 import {
   accountIntegrationConnect,
-  CONNECT_SIGN_IN_RESULT,
-  type ConnectorService,
   INTEGRATION_CONNECT_FAILURE,
   type IntegrationConnect,
 } from "./integration-connect.js";
@@ -77,7 +73,6 @@ export interface IntegrationsAppSeams {
     userId: string,
     account: IntegrationAccountKey,
     state: string,
-    verifier: Redacted.Redacted,
   ) => IntegrationStoreEffect<boolean>;
   /** Sets one account connected, taking its name at the provider as its label where it carries none. */
   completeSignIn: (
@@ -128,39 +123,6 @@ export function signInStands(seams: IntegrationsAppSeams, issuedAt: Date | undef
   );
 }
 
-/** Why a sign-in ended without a grant, as the statuses read answers it: the provider aside. */
-export type SignInFailure = Omit<IntegrationSignInFailure, "provider">;
-
-/**
- * Asks Connect how the sign-in it answered this row's handle for stands,
- * and answers why it ended where Connect says it was cancelled or
- * refused; nothing while it is under way, succeeded, or Connect could not
- * be asked, which the next read asks again.
- */
-export const connectSignInFailure = /* @__PURE__ */ Effect.fnUntraced(function* (
-  connector: ConnectorService,
-  row: IntegrationConnectionRow,
-): Effect.fn.Return<SignInFailure | undefined> {
-  if (row.verifier === undefined) return undefined;
-  const result = yield* Effect.result(connector.signInResult(row.verifier));
-  if (Result.isFailure(result)) {
-    yield* Effect.logWarning(
-      `Vercel Connect could not say how a ${INTEGRATION_NAME[row.provider]} sign-in stands`,
-      result.failure.message,
-    );
-    return undefined;
-  }
-  const ended = result.success;
-  if (ended.kind === CONNECT_SIGN_IN_RESULT.CANCELED) {
-    return { reason: INTEGRATION_SIGN_IN_FAILURE.CANCELED };
-  }
-  if (ended.kind !== CONNECT_SIGN_IN_RESULT.FAILED) return undefined;
-  return {
-    reason: INTEGRATION_SIGN_IN_FAILURE.ERROR,
-    ...(ended.message !== undefined ? { message: ended.message } : undefined),
-  };
-});
-
 /** Where the browser lands, with the provider where the sign-in named one. */
 interface Landing {
   readonly provider: IntegrationProvider | undefined;
@@ -196,10 +158,7 @@ const callbackLanding = /* @__PURE__ */ Effect.fnUntraced(function* (
   if (Result.isFailure(issued)) {
     // Back without a grant: the sign-in is over, so the window waiting on it hears so at its next read.
     if (issued.failure.reason === INTEGRATION_CONNECT_FAILURE.NOT_AUTHORIZED) {
-      // Note that one Connect says was cancelled or refused is left standing, because the statuses read says why as it ends it.
-      if ((yield* connectSignInFailure(connector, row)) === undefined) {
-        yield* hostedStoreOrUnavailable(seams.endSignIn(row.userId, row.connectionName, state));
-      }
+      yield* hostedStoreOrUnavailable(seams.endSignIn(row.userId, row.connectionName, state));
       return landed(INTEGRATION_LANDING_STATUS.NOT_COMPLETED);
     }
     yield* Effect.logWarning(

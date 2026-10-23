@@ -108,7 +108,7 @@ interface Section<Row extends MenuRow> {
 }
 
 /** Rows a pinned row opens beside itself: the efforts a model lists, its context windows. */
-export interface Submenu {
+interface Submenu {
   /** What the rows are, for assistive technology. */
   label: string;
   rows: readonly MenuRow[];

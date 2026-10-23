@@ -115,7 +115,6 @@
   --luke-color-complete: light-dark(#18794e, #6fdca4);
   /* A state's ink as the ground of a pill that carries it. */
   --luke-color-attention-tint: color-mix(in srgb, var(--luke-color-attention) 14%, transparent);
-  --luke-color-complete-tint: color-mix(in srgb, var(--luke-color-complete) 14%, transparent);
   --luke-color-working: light-dark(#0a72a8, #5cd5ff);
   --luke-color-merged: light-dark(#8250df, #c3a0ff);
 
@@ -227,7 +226,6 @@
   --luke-color-on-attention: #fff;
   --luke-color-complete: #0f7a4e;
   --luke-color-attention-tint: #fdf0e2;
-  --luke-color-complete-tint: #e6f5ed;
   --luke-color-working: #0d6e80;
   --luke-color-merged: #8250df;
 
@@ -323,7 +321,6 @@
   --luke-color-on-attention: #fff;
   --luke-color-complete: #6fdca4;
   --luke-color-attention-tint: rgba(255, 160, 73, 0.14);
-  --luke-color-complete-tint: rgba(111, 220, 164, 0.14);
   --luke-color-working: #5cd5ff;
   --luke-color-merged: #c3a0ff;
 

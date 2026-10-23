@@ -180,13 +180,6 @@ export function orderTaskRows(rows: readonly TaskRow[], order: TaskOrder): TaskR
   return rows.toSorted(byOrder(order));
 }
 
-/** The plans in the order chosen, as their rows are ordered. */
-export function orderTasks(tasks: readonly TaskSummary[], order: TaskOrder): TaskSummary[] {
-  return orderTaskRows(tasks.map(taskRow), order).flatMap((row) =>
-    row.kind === TASK_ROW.TASK ? [row.task] : [],
-  );
-}
-
 /** The rows split by a key, each run kept in the order it was handed. */
 function grouped<K>(rows: readonly TaskRow[], keyOf: (row: TaskRow) => K): Map<K, TaskRow[]> {
   const groups = new Map<K, TaskRow[]>();

@@ -25,6 +25,7 @@ import {
   recommendedInputSchema,
 } from "./inbox-wire.js";
 import { countedNumber, wireUuidSchema } from "./service-wire.js";
+import { boundedText, filledText } from "./text-schema.js";
 
 export {
   /** @public */
@@ -102,17 +103,6 @@ export {
  * `@public` is vocabulary the chat's store, tools, and window read as they
  * land, which keeps knip from reading it as dead meanwhile.
  */
-
-function filledText(maximumChars: number) {
-  return EffectSchema.String.check(
-    EffectSchema.isNonEmpty(),
-    EffectSchema.isMaxLength(maximumChars),
-  );
-}
-
-function boundedText(maximumChars: number) {
-  return EffectSchema.String.check(EffectSchema.isMaxLength(maximumChars));
-}
 
 /**
  * What an ask asks for, by the response type its wire carries: the Inbox's
@@ -779,7 +769,7 @@ export function replyWords(reply: ChatReply): string {
  */
 export function replyRefusal(response: ChatReadResponse, reply: ChatReply): string | undefined {
   if (!knownResponse(response)) return "The item asks something this Luke does not know.";
-  return inboxReplyRefusal({ response }, reply);
+  return inboxReplyRefusal(response, reply);
 }
 
 /** What a window's post carries: its words as text or as blocks, and the pictures under them. */

@@ -5,6 +5,7 @@ import {
   Chip,
   ChipName,
   dropBelowStart,
+  FoldingSearch,
   IconButton,
   NAV_ITEM_VARIANT,
   NavItem,
@@ -76,14 +77,14 @@ type StatusFilterMenu = ReturnType<typeof useMenu>;
 
 /**
  * A section's head: its name, which folds the section where it may be
- * folded, and what stands at its end. A field the head opened, such as a
- * search, stands in the name's place while it is given (`field`), the end's
- * buttons kept as they stood, so a press on one is not lost to the head
- * drawn anew as the field gives way.
+ * folded, and what stands at its end. Where the section is searched
+ * (`search`), a magnifier after the name unfolds a field over it
+ * (`FoldingSearch`), the end's buttons standing still as it opens and
+ * folds, so a press on one lands though the press folded the field.
  */
 export function SidebarSectionHead({
   name,
-  field,
+  search,
   folded,
   count,
   noun,
@@ -91,8 +92,8 @@ export function SidebarSectionHead({
   children,
 }: {
   name: string;
-  /** What stands in the name's place while the head holds it, such as a search it opened. */
-  field?: ReactNode;
+  /** The search a magnifier after the name unfolds over it, where the section is searched. */
+  search?: { label: string; value: string; onChange: (value: string) => void } | undefined;
   /** Whether the section is folded, where its head folds it. */
   folded?: boolean;
   /** How many rows a folded section holds, shown after its name while folded. */
@@ -103,29 +104,29 @@ export function SidebarSectionHead({
   /** The head's buttons at its end. */
   children?: ReactNode;
 }): React.JSX.Element {
+  const named =
+    onToggle === undefined ? (
+      <span className="sidebar-section-head-name">{name}</span>
+    ) : (
+      <NavItem
+        variant={NAV_ITEM_VARIANT.HEAD}
+        expanded={folded !== true}
+        count={
+          folded === true && count !== undefined
+            ? {
+                value: count,
+                noun: noun === undefined ? undefined : count === 1 ? noun.one : noun.many,
+              }
+            : undefined
+        }
+        onClick={onToggle}
+      >
+        {name}
+      </NavItem>
+    );
   return (
     <div className="sidebar-section-head">
-      {field !== undefined && field !== null ? (
-        field
-      ) : onToggle === undefined ? (
-        <span className="sidebar-section-head-name">{name}</span>
-      ) : (
-        <NavItem
-          variant={NAV_ITEM_VARIANT.HEAD}
-          expanded={folded !== true}
-          count={
-            folded === true && count !== undefined
-              ? {
-                  value: count,
-                  noun: noun === undefined ? undefined : count === 1 ? noun.one : noun.many,
-                }
-              : undefined
-          }
-          onClick={onToggle}
-        >
-          {name}
-        </NavItem>
-      )}
+      {search === undefined ? named : <FoldingSearch {...search}>{named}</FoldingSearch>}
       {children}
     </div>
   );

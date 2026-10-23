@@ -11,7 +11,7 @@ import {
   useState,
 } from "react";
 import { FoldChevronIcon } from "../../face/glyphs.js";
-import { PRESS_PULSE, pulsePress } from "../../press-pulse.js";
+import { PRESS_PULSE, type PressPulse, pulsePress } from "../../press-pulse.js";
 import { type DisclosureMotion, disclosureMotion, useDisclosure } from "../../use-disclosure.js";
 
 /**
@@ -220,14 +220,17 @@ export function useDisclosureFinding(): boolean {
 }
 
 /**
- * The summary's click, routed to the fold's state. Note that the element's
- * own toggle is stopped, because the open state is React's.
+ * The summary's click, routed to the fold's state, answered with `pulse`.
+ * Note that the element's own toggle is stopped, because the open state is
+ * React's.
  */
-export function useDisclosureSummaryClick(): (event: MouseEvent<HTMLElement>) => void {
+export function useDisclosureSummaryClick(
+  pulse: PressPulse = PRESS_PULSE.QUIET,
+): (event: MouseEvent<HTMLElement>) => void {
   const { toggle } = useDisclosureState();
   return (event) => {
     event.preventDefault();
-    pulsePress(event.currentTarget, PRESS_PULSE.QUIET);
+    pulsePress(event.currentTarget, pulse);
     toggle();
   };
 }
@@ -318,7 +321,13 @@ export function DisclosureSummary({
   ...props
 }: DisclosureSummaryProps): React.JSX.Element {
   const { open } = useDisclosureState();
-  const toggle = useDisclosureSummaryClick();
+  // Note that a card's head and a file row meet the frame around them, so
+  // their press moves what they hold and leaves their fill standing.
+  const toggle = useDisclosureSummaryClick(
+    look === DISCLOSURE_SUMMARY.HEAD || look === DISCLOSURE_SUMMARY.ROW
+      ? PRESS_PULSE.FLUSH
+      : PRESS_PULSE.QUIET,
+  );
   const click = (event: MouseEvent<HTMLElement>) => {
     onClick?.(event);
     toggle(event);

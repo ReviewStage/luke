@@ -18,6 +18,7 @@ import {
   eq,
   gte,
   ilike,
+  inArray,
   isNotNull,
   isNull,
   max,
@@ -34,7 +35,9 @@ import { ADMIN_DAY_ACCOUNTS_LIMIT, type AdminDaySource } from "./admin-day.js";
 import {
   ADMIN_RETENTION_WEEKS,
   type AdminMetricsSource,
+  cohortRetention,
   countSignInMethods,
+  dayStart,
   lastNDayKeys,
   lastNWeekStartKeys,
   utcWeekStartKey,
@@ -68,7 +71,38 @@ export const AggregateColumnSchema = Schema.Union([
 export const NullableAggregateColumnSchema = Schema.NullOr(AggregateColumnSchema);
 
 /** The `role` column as the auth plugin writes it: one of the roles this build knows, or none yet. */
-export const UserRoleSchema = Schema.NullOr(Schema.Literals(Object.values(USER_ROLE)));
+const UserRoleSchema = Schema.NullOr(Schema.Literals(Object.values(USER_ROLE)));
+
+/** The fields an account is drawn by wherever the dashboard names one: who it is, its picture, and its role. */
+export const ACCOUNT_FACE_FIELDS = {
+  id: Schema.String,
+  name: Schema.String,
+  email: Schema.String,
+  image: Schema.NullOr(Schema.String),
+  role: UserRoleSchema,
+};
+
+/** The `user` columns those fields are read from. */
+export const ACCOUNT_FACE_COLUMNS = {
+  id: user.id,
+  name: user.name,
+  email: user.email,
+  image: user.image,
+  role: user.role,
+};
+
+/** The faces of the accounts named, in no order. */
+export const findAccountFaces = SqlSchema.findAll({
+  Request: Schema.Array(Schema.String),
+  Result: Schema.Struct(ACCOUNT_FACE_FIELDS),
+  execute: (ids) =>
+    Database.use((db) =>
+      db
+        .select(ACCOUNT_FACE_COLUMNS)
+        .from(user)
+        .where(inArray(user.id, [...ids])),
+    ),
+});
 
 const CountRowSchema = Schema.Struct({ value: AggregateColumnSchema });
 
@@ -227,7 +261,7 @@ const readRetentionMetrics = /* @__PURE__ */ Effect.fn("web/readRetentionMetrics
 ): Effect.fn.Return<AdminMetricsSource["retention"], AdminQueryFailure, DatabaseServices> {
   const weekKeys = lastNWeekStartKeys(now, ADMIN_RETENTION_WEEKS);
   const oldestWeekStartDay = weekKeys[0] ?? utcWeekStartKey(now);
-  const oldestWeekStart = new Date(`${oldestWeekStartDay}T00:00:00.000Z`);
+  const oldestWeekStart = dayStart(oldestWeekStartDay);
 
   const [sizeRows, activeRows] = yield* Effect.all(
     [
@@ -237,17 +271,7 @@ const readRetentionMetrics = /* @__PURE__ */ Effect.fn("web/readRetentionMetrics
     { concurrency: "unbounded" },
   );
 
-  const cohortSizes = new Map<string, number>();
-  for (const row of sizeRows) cohortSizes.set(row.week, row.value);
-
-  const activeByCohortWeek = new Map<string, Map<string, number>>();
-  for (const row of activeRows) {
-    const byWeek = activeByCohortWeek.get(row.signupWeek) ?? new Map<string, number>();
-    byWeek.set(row.activityWeek, row.value);
-    activeByCohortWeek.set(row.signupWeek, byWeek);
-  }
-
-  return { cohortSizes, activeByCohortWeek };
+  return cohortRetention(sizeRows, activeRows);
 });
 
 /** Reads every aggregate the overview shows beside its own, from the service's own tables. */
@@ -259,7 +283,7 @@ export function readAdminMetricsSource(input: {
   return Effect.gen(function* () {
     const fetchStartDay =
       lastNDayKeys(input.now, windowFetchDays(input.windowDays))[0] ?? utcDayKey(input.now);
-    const fetchStart = new Date(`${fetchStartDay}T00:00:00.000Z`);
+    const fetchStart = dayStart(fetchStartDay);
 
     const [users, retention] = yield* Effect.all(
       [readUserMetrics(fetchStart, input.scope), readRetentionMetrics(input.now, input.scope)],
@@ -271,11 +295,7 @@ export function readAdminMetricsSource(input: {
 }
 
 const AccountRowSchema = Schema.Struct({
-  id: Schema.String,
-  name: Schema.String,
-  email: Schema.String,
-  image: Schema.NullOr(Schema.String),
-  role: UserRoleSchema,
+  ...ACCOUNT_FACE_FIELDS,
   createdAt: InstantColumnSchema,
 });
 
@@ -286,11 +306,7 @@ const findAccount = SqlSchema.findOneOption({
     Database.use((db) =>
       db
         .select({
-          id: user.id,
-          name: user.name,
-          email: user.email,
-          image: user.image,
-          role: user.role,
+          ...ACCOUNT_FACE_COLUMNS,
           createdAt: user.createdAt,
         })
         .from(user)
@@ -343,11 +359,7 @@ const findAllTimeUsage = SqlSchema.findOneOption({
 });
 
 const DayAccountRowSchema = Schema.Struct({
-  id: Schema.String,
-  name: Schema.String,
-  email: Schema.String,
-  image: Schema.NullOr(Schema.String),
-  role: UserRoleSchema,
+  ...ACCOUNT_FACE_FIELDS,
   calls: AggregateColumnSchema,
 });
 
@@ -360,11 +372,7 @@ const findDayAccounts = SqlSchema.findAll({
     Database.use((db) =>
       db
         .select({
-          id: user.id,
-          name: user.name,
-          email: user.email,
-          image: user.image,
-          role: user.role,
+          ...ACCOUNT_FACE_COLUMNS,
           calls: hostedUsage.calls,
         })
         .from(hostedUsage)
@@ -462,11 +470,7 @@ const findUsageSeen = SqlSchema.findAll({
 });
 
 const RosterRowSchema = Schema.Struct({
-  id: Schema.String,
-  name: Schema.String,
-  email: Schema.String,
-  image: Schema.NullOr(Schema.String),
-  role: UserRoleSchema,
+  ...ACCOUNT_FACE_FIELDS,
   createdAt: InstantColumnSchema,
   activeDays: AggregateColumnSchema,
   lastActiveDay: Schema.NullOr(Schema.String),
@@ -499,11 +503,7 @@ const findRosterRows = SqlSchema.findAll({
     return Database.use((db) =>
       db
         .select({
-          id: user.id,
-          name: user.name,
-          email: user.email,
-          image: user.image,
-          role: user.role,
+          ...ACCOUNT_FACE_COLUMNS,
           createdAt: user.createdAt,
           activeDays: count(hostedUsage.day),
           lastActiveDay,

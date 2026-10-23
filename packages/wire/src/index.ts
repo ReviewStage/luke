@@ -28,6 +28,7 @@ export {
   valueFromJsonText,
   type WireBoundaryInput,
   type WireRecord,
+  WireRecordShapeSchema,
   type WireValue,
   WireValueSchema,
   wholeNumber,

@@ -125,7 +125,7 @@ const SUMMARY_WIDE = 1040;
 const SUMMARY_RAILED = 480;
 
 /** How the summary stands in the plan's column: pinned, a rail, or not drawn where the column has no room for one. */
-export const SUMMARY_MODE = {
+const SUMMARY_MODE = {
   COLUMN: "column",
   RAIL: "rail",
   NONE: "none",

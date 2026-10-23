@@ -35,7 +35,7 @@ import { task } from "./task.js";
 const literal = (value: string) => sql.raw(`'${value}'`);
 const bound = (bytes: number) => sql.raw(String(bytes));
 
-/** Whether a row's bytes are a WebM an agent recorded, which a chat message or an inbox message holds to a video's bound rather than a picture's. */
+/** Whether a row's bytes are a WebM an agent recorded, which a chat message, an inbox message, or a plan holds to a video's bound rather than a picture's. */
 const isWebm = (table: { readonly contentType: AnyPgColumn }) =>
   sql`${table.contentType} = ${literal(CONVERSATION_MEDIA_TYPE.WEBM)}`;
 
@@ -139,7 +139,7 @@ export const attachment = pgTable(
     name: text("name"),
     /** A file's place among the files it travelled with, from zero, in the order they were attached; null for a picture. */
     position: integer("position"),
-    /** The media type the bytes were sniffed to be, or travelled as: what they are served under. A conversation's, a chat message's, or an inbox message's may be a WebM an agent recorded, which no other owner's is. */
+    /** The media type the bytes were sniffed to be, or travelled as: what they are served under. A conversation's, a chat message's, an inbox message's, or a plan's may be a WebM an agent recorded, which no other owner's is. */
     contentType: text("content_type")
       .$type<CodingAgentAttachmentType | ConversationMediaType>()
       .notNull(),
@@ -184,10 +184,10 @@ export const attachment = pgTable(
       "attachment_one_owner",
       sql`(num_nonnulls(${sql.join(ownerColumns(table), sql`, `)}) = 1 or ${ownedByTaskAlone(table)}) and (${table.inboxMessageId} is null or ${table.inboxItemId} is not null)`,
     ),
-    // Each owner holds its bytes to its own bound, as the table it kept before did; a chat message's recording to a video's.
+    // Each owner holds its bytes to its own bound, as the table it kept before did; a chat message's recording and a plan's to a video's.
     check(
       "attachment_bytes_bound",
-      sql`(${table.chatMessageId} is null or octet_length(${table.bytes}) <= ${bound(CHAT_BOUNDS.MAX_IMAGE_BYTES)} or (${isWebm(table)} and octet_length(${table.bytes}) <= ${bound(CHAT_BOUNDS.MAX_VIDEO_BYTES)})) and (${table.conversationId} is null or octet_length(${table.bytes}) <= ${bound(CONVERSATION_PICTURE_BOUNDS.MAX_BYTES)}) and (not ${ownedByTaskAlone(table)} or octet_length(${table.bytes}) <= ${bound(PICTURE_BOUNDS.MAX_BYTES)})`,
+      sql`(${table.chatMessageId} is null or octet_length(${table.bytes}) <= ${bound(CHAT_BOUNDS.MAX_IMAGE_BYTES)} or (${isWebm(table)} and octet_length(${table.bytes}) <= ${bound(CHAT_BOUNDS.MAX_VIDEO_BYTES)})) and (${table.conversationId} is null or octet_length(${table.bytes}) <= ${bound(CONVERSATION_PICTURE_BOUNDS.MAX_BYTES)}) and (not ${ownedByTaskAlone(table)} or octet_length(${table.bytes}) <= ${bound(PICTURE_BOUNDS.MAX_BYTES)} or (${isWebm(table)} and octet_length(${table.bytes}) <= ${bound(PICTURE_BOUNDS.MAX_VIDEO_BYTES)}))`,
     ),
     // A plan comment's file names its task and workspace, has a name and a place among the comment's files, and is held to a file's bound.
     check(

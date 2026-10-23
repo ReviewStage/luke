@@ -54,6 +54,7 @@ import { imageFiles } from "../feedback-images.js";
 import { GRANT_OUTCOME, useIntegrationGrant } from "../integration-grant.js";
 import { useIntegrationStatuses } from "../integration-statuses.js";
 import { COMPOSER_INPUT, type ComposerEditorHandle } from "../plan-editor/contract.js";
+import { useFileDrop } from "../use-file-drop.js";
 import { AgentContextRing } from "./agent-context.js";
 import { contextHint } from "./agent-context-model.js";
 import { AgentModelChip } from "./agent-model-chip.js";
@@ -239,11 +240,6 @@ type OverflowPress = (typeof OVERFLOW_PRESS)[keyof typeof OVERFLOW_PRESS];
 interface OverflowOffer {
   press: OverflowPress;
   action: MenuAction;
-}
-
-/** Whether a drag carries files, which is all the card takes from one. */
-function carriesFiles(event: React.DragEvent): boolean {
-  return event.dataTransfer.types.includes("Files");
 }
 
 /** The presses standing on the foot that the stylesheet hid for want of room. */
@@ -473,7 +469,6 @@ export function AgentComposer({
   const [contextOpen, setContextOpen] = useState(false);
   const [stopping, setStopping] = useState(false);
   const [refusal, setRefusal] = useState<string | undefined>(undefined);
-  const [dropping, setDropping] = useState(false);
   // How many hand-offs are still being read, during which Send waits, so no
   // message goes without a file the developer already handed the box.
   const [reading, setReading] = useState(0);
@@ -486,6 +481,7 @@ export function AgentComposer({
   const stoppable = status === CODING_AGENT_STATUS.RUNNING;
   const closed = composer.closed !== undefined;
   const held = composer.sending || closed;
+  const fileDrop = useFileDrop((files) => attach(Array.from(files)), { over: !held });
   const empty = !sendsEmpty && !hasWordsOrFiles(composer.draft.trim(), composer.attachments);
   const showsStop = empty && stoppable && !composer.sending;
   const bundle = useAtomValue(useSideBundles().planEditor);
@@ -705,25 +701,10 @@ export function AgentComposer({
       ref={card}
       data-status={status}
       data-closed={closed ? "" : undefined}
-      onDragOver={(event) => {
-        if (!carriesFiles(event) || held) return;
-        event.preventDefault();
-        setDropping(true);
-      }}
-      onDragLeave={(event) => {
-        // A drag moving onto one of the card's own children has not left it.
-        const into = event.relatedTarget;
-        if (!(into instanceof Node && event.currentTarget.contains(into))) setDropping(false);
-      }}
-      onDrop={(event) => {
-        if (!carriesFiles(event)) return;
-        event.preventDefault();
-        setDropping(false);
-        attach(Array.from(event.dataTransfer.files));
-      }}
+      {...fileDrop.target}
     >
       <PromptInput
-        dropping={dropping}
+        dropping={fileDrop.dropping}
         onSubmit={() => {
           setRefusal(undefined);
           refocus.current = card.current?.contains(document.activeElement) === true;

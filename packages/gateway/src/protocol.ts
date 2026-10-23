@@ -420,7 +420,6 @@ export const GATEWAY_METHOD = {
   CLIENT_BOOTSTRAP: "client.bootstrap",
   SETTINGS_SNAPSHOT: "settings.snapshot",
   SETTINGS_UPDATE: "settings.update",
-  SETTINGS_UPDATE_ENTRY: "settings.updateEntry",
   SETTINGS_RESET: "settings.reset",
   /** Each repository's run command on this Mac (`@luke/features/mac-terminal-wire`): read, and one repository's set. */
   MAC_REPOSITORIES_READ: "macRepositories.read",

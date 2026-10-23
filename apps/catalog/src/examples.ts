@@ -23,6 +23,7 @@ import { COMMAND_ASK_EXAMPLE } from "./examples/command-ask";
 import { COMPOSER_FRAMES_EXAMPLE } from "./examples/composer-frames";
 import { CONFIRM_DIALOGS_EXAMPLE } from "./examples/confirm-dialogs";
 import { CORNER_COUNTS_EXAMPLE } from "./examples/corner-counts";
+import { DAILY_BARS_EXAMPLE } from "./examples/daily-bars";
 import { DATA_TABLE_EXAMPLE } from "./examples/data-table";
 import { DETAIL_PAGE_EXAMPLE } from "./examples/detail-page";
 import { DIALOGS_EXAMPLE } from "./examples/dialogs";
@@ -36,7 +37,6 @@ import { FILE_PICKERS_EXAMPLE } from "./examples/file-picker";
 import { FILE_TEXT_EXAMPLE } from "./examples/file-text";
 import { FOLDING_BUTTONS_EXAMPLE } from "./examples/folding-buttons";
 import { FORM_FIELD_EXAMPLE } from "./examples/form-field";
-import { FORM_SECTION_EXAMPLE } from "./examples/form-section";
 import { FORMAT_TOOLBAR_EXAMPLE } from "./examples/format-toolbar";
 import { GLYPH_SLOTS_EXAMPLE } from "./examples/glyph-slots";
 import { HOVER_CARDS_EXAMPLE } from "./examples/hover-cards";
@@ -56,6 +56,7 @@ import { NAV_ITEMS_EXAMPLE } from "./examples/nav-items";
 import { NOTE_LINES_EXAMPLE } from "./examples/note-lines";
 import { ONE_LINE_EXAMPLE } from "./examples/one-line";
 import { PAGE_THUMBS_EXAMPLE } from "./examples/page-thumbs";
+import { PAGE_TOOLBAR_EXAMPLE } from "./examples/page-toolbar";
 import { PAGINATION_EXAMPLE } from "./examples/pagination";
 import { PANE_PINS_EXAMPLE } from "./examples/pane-pins";
 import { PICTURE_TILES_EXAMPLE } from "./examples/picture-tiles";
@@ -93,6 +94,7 @@ import { TIMES_EXAMPLE } from "./examples/times";
 import { TOASTS_EXAMPLE } from "./examples/toasts";
 import { TOOLTIPS_EXAMPLE } from "./examples/tooltips";
 import { TYPOGRAPHY_EXAMPLE } from "./examples/typography";
+import { VIDEO_PLAYER_EXAMPLE } from "./examples/video-player";
 import { ZOOM_IMAGES_EXAMPLE } from "./examples/zoom-images";
 
 /**
@@ -134,6 +136,7 @@ export const EXAMPLES: readonly Example[] = [
   COMBOBOX_EXAMPLE,
   CONFIRM_DIALOGS_EXAMPLE,
   COMMAND_ASK_EXAMPLE,
+  DAILY_BARS_EXAMPLE,
   DATA_TABLE_EXAMPLE,
   DETAIL_PAGE_EXAMPLE,
   DIALOGS_EXAMPLE,
@@ -146,7 +149,6 @@ export const EXAMPLES: readonly Example[] = [
   FILE_TEXT_EXAMPLE,
   FOLDING_BUTTONS_EXAMPLE,
   FORM_FIELD_EXAMPLE,
-  FORM_SECTION_EXAMPLE,
   HOVER_CARDS_EXAMPLE,
   INLINE_EDITS_EXAMPLE,
   INLINE_REFS_EXAMPLE,
@@ -174,6 +176,7 @@ export const EXAMPLES: readonly Example[] = [
   ONE_LINE_EXAMPLE,
   PAGINATION_EXAMPLE,
   PAGE_THUMBS_EXAMPLE,
+  PAGE_TOOLBAR_EXAMPLE,
   PICTURE_TILES_EXAMPLE,
   POPOVER_PANELS_EXAMPLE,
   PRESS_SHORTCUTS_EXAMPLE,
@@ -193,6 +196,7 @@ export const EXAMPLES: readonly Example[] = [
   SKELETONS_EXAMPLE,
   RESIZE_CORNERS_EXAMPLE,
   SLIDER_EXAMPLE,
+  VIDEO_PLAYER_EXAMPLE,
   SETTINGS_ROW_EXAMPLE,
   AUTH_PAGE_EXAMPLE,
   GLYPH_SLOTS_EXAMPLE,

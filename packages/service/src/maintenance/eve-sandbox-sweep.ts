@@ -40,16 +40,21 @@ import { readEveRunStanding } from "@luke/database/models/coding-agent-store";
 import { sandboxHeld } from "@luke/database/models/sandbox-terminal-lease";
 import { Duration, Effect, Option, Result, type Schema } from "effect";
 import type { HttpClient } from "effect/http";
-import { OPEN_INTERNET_POLICY } from "../agents/terminal/agent-sandbox.js";
 import {
   deploymentOidcToken,
   type ListedSandbox,
-  RUNNING_STATUS,
+  SANDBOX_STATUS,
   SESSION_TAG,
   type VercelSandboxApi,
   vercelSandboxApi,
 } from "../agents/vercel-sandbox-api.js";
-import { listOrderAt, listRunningSandboxes, windowAt } from "./sandbox-sweep-list.js";
+import {
+  listOrderAt,
+  listRunningSandboxes,
+  type StopBudget,
+  stopWithinBudget,
+  windowAt,
+} from "./sandbox-sweep-list.js";
 
 /**
  * The name eve gives a session's own Vercel sandbox (eve 0.74.0's
@@ -119,15 +124,11 @@ interface EveSandbox {
   readonly running: string;
 }
 
-/** A count of stops taken, shared by the sandboxes one sweep reads at once. */
-interface StopBudget {
-  remaining: number;
-}
-
 function eveSandboxOf(sandbox: ListedSandbox): EveSandbox | undefined {
   if (!sandbox.name.startsWith(EVE_SESSION_SANDBOX_NAME)) return undefined;
   // A page may name a sandbox that stopped since it was asked for, as Vercel recovers overdue sessions.
-  if (sandbox.status !== RUNNING_STATUS || sandbox.currentSessionId === undefined) return undefined;
+  if (sandbox.status !== SANDBOX_STATUS.RUNNING || sandbox.currentSessionId === undefined)
+    return undefined;
   const sessionId = sandbox.tags?.[SESSION_TAG];
   if (sessionId === undefined) return undefined;
   return { sessionId, running: sandbox.currentSessionId };
@@ -139,7 +140,7 @@ const movedOn = (api: VercelSandboxApi, sandbox: EveSandbox) =>
     api.listTagged(sandbox.sessionId),
     ([fresh]) =>
       fresh === undefined ||
-      fresh.status !== RUNNING_STATUS ||
+      fresh.status !== SANDBOX_STATUS.RUNNING ||
       fresh.currentSessionId !== sandbox.running,
   ).pipe(Effect.orElseSucceed(() => true));
 
@@ -168,22 +169,7 @@ const endSandbox = (
     const again = yield* readEveRunStanding(sandbox.sessionId);
     if (Option.isNone(again) || !endedPastGrace(again.value, now)) return SANDBOX_ENDING.LEFT;
     if (yield* sandboxHeld(again.value.conversationId, now)) return SANDBOX_ENDING.HELD;
-    if (budget.remaining <= 0) return SANDBOX_ENDING.DEFERRED;
-    budget.remaining -= 1;
-    // The credential comes off first, and a sandbox it would not come off is left up for the next sweep rather than stopped with it.
-    const stopped = yield* Effect.result(
-      Effect.andThen(
-        api.updateNetworkPolicy(sandbox.running, OPEN_INTERNET_POLICY),
-        api.stopSession(sandbox.running),
-      ),
-    );
-    if (Result.isFailure(stopped)) {
-      yield* Effect.logWarning(
-        `an orphaned eve sandbox was not stopped: ${stopped.failure.message}`,
-      );
-      return SANDBOX_ENDING.FAILED;
-    }
-    return SANDBOX_ENDING.STOPPED;
+    return yield* stopWithinBudget(api, sandbox.running, budget, "an orphaned eve sandbox");
   });
 
 /**

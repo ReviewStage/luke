@@ -3,7 +3,13 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { PULL_REQUEST_STATE } from "@luke/features/coding-agent-wire";
 import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
-import { INBOX_RESPONSE, INBOX_STATUS } from "@luke/features/inbox-wire";
+import {
+  INBOX_APPROVAL_OPTION,
+  INBOX_ASK,
+  INBOX_ASK_STATUS,
+  INBOX_MESSAGE_AUTHOR,
+  INBOX_STATUS,
+} from "@luke/features/inbox-wire";
 import { DEFAULT_PLAN_TEMPLATE } from "@luke/features/plan-document-template";
 import { PLAN_ACTOR, TASK_PRIORITY, TASK_STATUS, type TaskSummary } from "@luke/features/task-wire";
 import { eq } from "drizzle-orm";
@@ -13,6 +19,7 @@ import { Database } from "../../core/query.js";
 import { user } from "../../schemas/auth.js";
 import { codingAgent, type StoredPullRequest } from "../../schemas/coding-agent.js";
 import { inboxItem } from "../../schemas/inbox.js";
+import { inboxMessage } from "../../schemas/inbox-message.js";
 import { conversations } from "../../schemas/storage.js";
 import { task } from "../../schemas/task.js";
 import { taskPin } from "../../schemas/task-pin.js";
@@ -782,7 +789,7 @@ const pullRequestIn = (state: StoredPullRequest["state"]): StoredPullRequest => 
   changedFiles: 1,
 });
 
-/** An inbox item of the task's agent, open and asking, or open as a notice where `asking` is false. */
+/** An inbox item of the task's agent, open and holding its message's ask open, or open as a notice, its message asking nothing, where `asking` is false. */
 const openInboxItem = (
   userId: string,
   organizationId: string,
@@ -804,13 +811,33 @@ const openInboxItem = (
       revision: 1,
       version: 5,
       title: "Which base?",
-      blocks: [],
-      response: asking ? { type: INBOX_RESPONSE.APPROVAL } : { type: INBOX_RESPONSE.NONE },
       needsReply: asking,
       status: INBOX_STATUS.OPEN,
       postedAt: now,
       updatedAt: now,
     });
+    const ask = {
+      type: INBOX_ASK.DECIDE,
+      options: [{ label: INBOX_APPROVAL_OPTION.APPROVE }, { label: INBOX_APPROVAL_OPTION.DECLINE }],
+      status: INBOX_ASK_STATUS.OPEN,
+    } as const;
+    const [message] = yield* db
+      .insert(inboxMessage)
+      .values({
+        itemId: id,
+        author: INBOX_MESSAGE_AUTHOR.AGENT,
+        text: "Rebase onto main?",
+        ask: asking ? ask : null,
+        createdAt: now,
+      })
+      .returning({ id: inboxMessage.id });
+    // A notice's message asks nothing, so the item names no open ask.
+    if (asking) {
+      yield* db
+        .update(inboxItem)
+        .set({ openAskMessageId: message?.id ?? assert.fail("the message was not written") })
+        .where(eq(inboxItem.id, id));
+    }
     return id;
   });
 

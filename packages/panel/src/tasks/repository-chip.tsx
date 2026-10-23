@@ -20,13 +20,14 @@ import {
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
+  Tooltip,
 } from "@luke/ui";
 import { repositoryFailureNote } from "@luke/ui/tasks-model";
 import { useDisclosure } from "@luke/ui/use-disclosure";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { OPEN_SETTINGS_LABEL, useOpenSettings } from "../open-settings.js";
 import { RepositoryPicture } from "../repository-picture.js";
-import { repositoryMenuRow } from "../repository-row.js";
+import { RepositoryCard, repositoryMenuRow } from "../repository-row.js";
 import { type MenuRow, SearchableMenu } from "../searchable-menu.js";
 import { PICKER_ALIGN, type PickerAlign, usePickerPlacement } from "../settings/picker-row.js";
 
@@ -306,30 +307,39 @@ export function RepositoryChip(props: {
   return (
     <div className="repository-chip" data-place={props.place} {...placement} ref={chip}>
       {triggerDrawn ? (
-        <Chip
-          ref={trigger}
-          look={PLACE_LOOK[props.place]}
-          width={props.width}
-          chevron={props.place === CHIP_PLACE.FIELD}
-          aria-describedby={props.describedBy}
-          aria-invalid={props.invalid}
-          aria-haspopup="dialog"
-          aria-expanded={open}
-          aria-controls={open ? menuId : undefined}
-          onClick={press}
+        <Tooltip
+          label={open ? undefined : (props.value ?? undefined)}
+          card={
+            props.value === null || open ? undefined : (
+              <RepositoryCard repository={props.value} pictures={chooser.pictures} />
+            )
+          }
         >
-          {props.value === null ? (
-            <ProviderMark provider={INTEGRATION_PROVIDER.GITHUB} />
-          ) : (
-            <RepositoryPicture
-              repository={props.value}
-              pictures={chooser.pictures}
-              fallback={<ProviderMark provider={INTEGRATION_PROVIDER.GITHUB} />}
-              size={AVATAR_SIZE.GLYPH}
-            />
-          )}
-          <ChipName>{label}</ChipName>
-        </Chip>
+          <Chip
+            ref={trigger}
+            look={PLACE_LOOK[props.place]}
+            width={props.width}
+            chevron={props.place === CHIP_PLACE.FIELD}
+            aria-describedby={props.describedBy}
+            aria-invalid={props.invalid}
+            aria-haspopup="dialog"
+            aria-expanded={open}
+            aria-controls={open ? menuId : undefined}
+            onClick={press}
+          >
+            {props.value === null ? (
+              <ProviderMark provider={INTEGRATION_PROVIDER.GITHUB} />
+            ) : (
+              <RepositoryPicture
+                repository={props.value}
+                pictures={chooser.pictures}
+                fallback={<ProviderMark provider={INTEGRATION_PROVIDER.GITHUB} />}
+                size={AVATAR_SIZE.GLYPH}
+              />
+            )}
+            <ChipName>{label}</ChipName>
+          </Chip>
+        </Tooltip>
       ) : null}
       {drawn.mounted ? (
         <SearchableMenu

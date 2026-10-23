@@ -1,5 +1,5 @@
 import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
-import { INBOX_REPLY, INBOX_STATUS, type InboxItem } from "@luke/features/inbox-wire";
+import { INBOX_STATUS, type InboxItem } from "@luke/features/inbox-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import type { AppInboxTaskHolding } from "@luke/host/app-state";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
@@ -8,7 +8,6 @@ import type { ActHandle } from "../act.js";
 import { useAppCommand } from "../app-commands.js";
 import {
   acknowledgedOnOpen,
-  EMPTY_INBOX_DRAFT,
   INBOX_HOLDER,
   type InboxGroup,
   type InboxListed,
@@ -239,10 +238,10 @@ export function useNodOnOpen({
 }: {
   shown: InboxListed | undefined;
   readerId: string | undefined;
-  control: Pick<TaskInboxControl, "read" | "failed" | "draftOf" | "onAnswer">;
+  control: Pick<TaskInboxControl, "read" | "failed" | "draftOf" | "onAcknowledge">;
 }): void {
   const nodded = useRef<{ readonly id: string; readonly revision: number } | undefined>(undefined);
-  const { read, failed, draftOf, onAnswer } = control;
+  const { read, failed, draftOf, onAcknowledge } = control;
   useEffect(() => {
     if (shown === undefined) {
       nodded.current = undefined;
@@ -257,6 +256,6 @@ export function useNodOnOpen({
     if (!acknowledgedOnOpen(item, readerId)) return;
     const draft = draftOf(item);
     if (draft.note.trim() !== "" || draft.attachments.length > 0) return;
-    onAnswer(item, EMPTY_INBOX_DRAFT, INBOX_REPLY.ACKNOWLEDGED);
-  }, [shown, readerId, read, failed, draftOf, onAnswer]);
+    onAcknowledge(item);
+  }, [shown, readerId, read, failed, draftOf, onAcknowledge]);
 }

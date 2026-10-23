@@ -16,7 +16,6 @@ import { user } from "./auth.js";
  * carries back to the callback, unique across every provider so the callback
  * finds the row by it alone; it stands only while a sign-in is under way, and
  * a connected row keeps its status while the account signs in again.
- * `connectVerifier` stands and goes with it.
  *
  * A Luke account may hold more than one account at a provider (two Notion
  * workspaces), each its own row and its own grant: `connectSubject` is the
@@ -48,11 +47,7 @@ export const integrationConnection = pgTable(
     state: text("state"),
     /** When the sign-in under way began; null when none is. */
     stateIssuedAt: timestamptz("state_issued_at"),
-    /**
-     * The handle Connect answered the sign-in under way with, which asks it
-     * how that sign-in ended when the browser never comes back; null when
-     * none is. Never logged, and never answered to a window.
-     */
+    /** Retired: Connect's handle on a sign-in, read by nothing since Luke stopped asking Connect's undocumented result endpoint; dropped once that deployment drains. */
     connectVerifier: text("connect_verifier"),
     /** When a sign-in last completed; null until one has. */
     connectedAt: timestamptz("connected_at"),

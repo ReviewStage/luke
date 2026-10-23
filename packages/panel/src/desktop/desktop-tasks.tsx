@@ -11,6 +11,7 @@ import {
   ErrorState,
   FILL_ELEMENT,
   Fill,
+  PageToolbar,
   SKELETON_SHAPE,
   Skeleton,
   useMinute,
@@ -74,7 +75,7 @@ import { TOOL_TARGET, type ToolTarget } from "../tasks/tool-call-model.js";
 import { useHeldInboxList } from "../tasks/use-held-inbox-list.js";
 import { useInboxReadMarks, useNodOnOpen, useReadOnOpen } from "../tasks/use-inbox-read-marks.js";
 import type { MainTab } from "../tasks/use-main-tabs.js";
-import { OpenHereProvider, openPullRequestsHere, useOpenLink } from "../tasks/use-open-link.js";
+import { OpenHereProvider, openPullRequestsHere } from "../tasks/use-open-link.js";
 import type { PlanEditDoor } from "../tasks/use-plan-editing.js";
 import { PULL_REQUEST_VIEW, SIDE_PANEL_TAB, type SidePanelTab } from "../tasks/use-side-panel.js";
 import { type TaskInboxControl, useTaskInbox } from "../tasks/use-task-inbox.js";
@@ -175,25 +176,6 @@ import {
 /** What the task's page says to a reader while the task is read. */
 const TASK_LOADING_LABEL = "Loading task";
 
-/**
- * The strip across the top of the work column, which is also the window's
- * drag handle: the column's tabs at its left and the task's actions at its right.
- */
-function Toolbar({
-  heading,
-  children,
-}: {
-  heading: React.ReactNode;
-  children?: React.ReactNode;
-}): React.JSX.Element {
-  return (
-    <header className="desktop-toolbar">
-      {heading}
-      {children ? <div className="desktop-toolbar-actions">{children}</div> : null}
-    </header>
-  );
-}
-
 /** How wide the toolbar's worded actions stand while the task is read: a repository's chip, and Start with its model menu. */
 const ACTION_SKELETON_WIDTHS = { REPOSITORY: "112px", START: "104px" } as const;
 
@@ -281,9 +263,10 @@ function TaskPageSkeleton({
       fullScreen={panel?.fullScreen === true}
       column={
         <>
-          <Toolbar heading={<MainTabStripSkeleton />}>
-            <TaskActionsSkeleton summary={summary.holds} />
-          </Toolbar>
+          <PageToolbar
+            lead={<MainTabStripSkeleton />}
+            actions={<TaskActionsSkeleton summary={summary.holds} />}
+          />
           <TaskBody>
             <Fill className="desktop-task-column">
               <AgentColumn>
@@ -354,7 +337,6 @@ function TaskInboxTab({
   inbox,
   onOpenTask,
   onOpenAgent,
-  openLink,
   code,
 }: {
   tasks: TasksControl;
@@ -362,7 +344,6 @@ function TaskInboxTab({
   inbox: TaskInboxControl;
   onOpenTask: () => void;
   onOpenAgent: (agentId: string) => void;
-  openLink: (url: string) => void;
   code: InboxCodeDoors;
 }): React.JSX.Element {
   const now = useMinute();
@@ -484,7 +465,7 @@ function TaskInboxTab({
           hidden={columns.shown !== INBOX_COLUMNS.BOTH}
         >
           {/* The empty pane keeps a bar the list's head's height, as the window's Inbox does. */}
-          <header className="desktop-toolbar" />
+          <PageToolbar />
           {/* Note that the list says what its tab or its search left out, so the pane beside it stands bare. */}
           {inbox.read && listed.length === 0 && !filteredOut && searched === undefined ? (
             <EmptyState icon={<InboxIcon />}>{NEEDS_YOU.NONE}</EmptyState>
@@ -504,7 +485,6 @@ function TaskInboxTab({
             onOpenHolder: onOpenTask,
             taskCard: taskCardOf(tasks, task, now),
             onOpenAgent,
-            openLink,
             code,
             onMark: marks.onMark,
             onClose: closeItem,
@@ -571,7 +551,6 @@ function PlanDocument({
   const views = useTabViews();
   const chatOn = useChatOn();
   const { act } = useAct();
-  const openLink = useOpenLink();
   const inboxTaskId = region.kind === DOCUMENT_REGION.READY ? region.task.id : undefined;
   const inbox = useTaskInbox({
     taskId: inboxTaskId,
@@ -973,7 +952,7 @@ function PlanDocument({
     const close = { label: "Close task", onClick: tasks.onLeaveTask };
     return (
       <>
-        <Toolbar heading={<div className="desktop-toolbar-heading" />} />
+        <PageToolbar heading={null} />
         {/* A plan the service would not hand the reader is not there for them, whether it was deleted or never theirs. */}
         {region.kind === DOCUMENT_REGION.MISSING ? (
           <NotFound thing={NOT_FOUND_THING.TASK} action={close} />
@@ -1018,9 +997,6 @@ function PlanDocument({
   const terminalHere = agentOfTab(
     sideFocused && sidePanel.tab !== undefined ? sidePanel.tab : mainTabs.tab,
   );
-  const openTaskLink = (href: string) => {
-    if (!openHere(href)) openLink(href);
-  };
   // The plan's document and its Inbox stand in the side panel, drawn here,
   // where what they read is held, and handed to the panel to draw as tabs.
   // A summary row that opens a tab of the side panel hands the panel the
@@ -1064,7 +1040,6 @@ function PlanDocument({
       inbox={inbox}
       onOpenTask={() => openPanelTab(SIDE_PANEL_TAB.PLAN)}
       onOpenAgent={(agent) => openColumnTab({ agent })}
-      openLink={openTaskLink}
       code={{
         repository: task.repository,
         readFile: (window) => act(ACT_KIND.TASKS_FILE, { taskId: task.id, ...window }),
@@ -1156,8 +1131,8 @@ function PlanDocument({
                     fullScreen={sidePanel.fullScreen}
                     column={
                       <>
-                        <Toolbar
-                          heading={
+                        <PageToolbar
+                          lead={
                             <MainTabStrip
                               task={task}
                               main={mainTabs}
@@ -1175,48 +1150,51 @@ function PlanDocument({
                               calling={calling}
                             />
                           }
-                        >
-                          {rename.refused ? (
-                            <p className="error-message" role="alert">
-                              {RENAME_FAILED_NOTE}
-                            </p>
-                          ) : null}
-                          {repositoryNote !== undefined ? (
-                            <p className="error-message" role="alert">
-                              {repositoryNote}
-                            </p>
-                          ) : null}
-                          <CopyChord copy={tasks.copy} />
-                          {terminalDoors.terminals ? (
-                            <TerminalCommands
-                              here={terminalHere}
-                              agents={agents}
-                              sidePanel={sidePanel}
-                              onShown={showSide}
-                            />
-                          ) : null}
-                          {/* A version drawn in the plan's place is the version's page, which opens no tab. */}
-                          {tasks.history.viewing === undefined ? (
-                            <NewTabChord
-                              onNewTab={sideFocused ? sidePanel.onNewTab : mainTabs.onNewTab}
-                            />
-                          ) : null}
-                          {/* Keyed once for the chip and the menu alike, so another plan
+                          actions={
+                            <>
+                              {rename.refused ? (
+                                <p className="error-message" role="alert">
+                                  {RENAME_FAILED_NOTE}
+                                </p>
+                              ) : null}
+                              {repositoryNote !== undefined ? (
+                                <p className="error-message" role="alert">
+                                  {repositoryNote}
+                                </p>
+                              ) : null}
+                              <CopyChord copy={tasks.copy} />
+                              {terminalDoors.terminals ? (
+                                <TerminalCommands
+                                  here={terminalHere}
+                                  agents={agents}
+                                  sidePanel={sidePanel}
+                                  onShown={showSide}
+                                />
+                              ) : null}
+                              {/* A version drawn in the plan's place is the version's page, which opens no tab. */}
+                              {tasks.history.viewing === undefined ? (
+                                <NewTabChord
+                                  onNewTab={sideFocused ? sidePanel.onNewTab : mainTabs.onNewTab}
+                                />
+                              ) : null}
+                              {/* Keyed once for the chip and the menu alike, so another plan
               starts both afresh and the same plan keeps them. */}
-                          <Fragment key={task.id}>
-                            <RepositoryChip
-                              place={CHIP_PLACE.TOOLBAR}
-                              value={task.repository}
-                              chooser={tasks.repositories}
-                              onChoose={chooseRepository}
-                              openRequest={menuRequest}
-                            />
-                            <StartAgentButton control={agents} />
-                            {/* The toolbar's one ⋯ is the task's; a tab's own actions are its menu's. A phone's is its header's. */}
-                            {switched ? null : taskMenu}
-                          </Fragment>
-                          <SummaryButton layout={summaryLayout} cardId={summaryCard} />
-                        </Toolbar>
+                              <Fragment key={task.id}>
+                                <RepositoryChip
+                                  place={CHIP_PLACE.TOOLBAR}
+                                  value={task.repository}
+                                  chooser={tasks.repositories}
+                                  onChoose={chooseRepository}
+                                  openRequest={menuRequest}
+                                />
+                                <StartAgentButton control={agents} />
+                                {/* The toolbar's one ⋯ is the task's; a tab's own actions are its menu's. A phone's is its header's. */}
+                                {switched ? null : taskMenu}
+                              </Fragment>
+                              <SummaryButton layout={summaryLayout} cardId={summaryCard} />
+                            </>
+                          }
+                        />
                         {/* The plan's banner is the whole plan's, so it stands over every
             tab of the column, and over the panel's while that fills the window. */}
                         {sidePanel.fullScreen ? null : stranded.banner}
