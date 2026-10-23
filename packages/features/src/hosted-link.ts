@@ -206,10 +206,10 @@ function refusalOf(payload: UnparsedWireValue): HostedRefused | undefined {
         ? planLimitReachedDataSchema
         : refusal === HOSTED_API_ERROR.AGENT_CREDENTIAL_MISSING
           ? credentialMissingDataSchema
-          : refusal === HOSTED_API_ERROR.SKILL_NAME_TAKEN ||
-              refusal === HOSTED_API_ERROR.SKILL_FILES_REFUSED
-            ? installedSkillRefusedDataSchema
-            : undefined;
+        : refusal === HOSTED_API_ERROR.SKILL_NAME_TAKEN ||
+            refusal === HOSTED_API_ERROR.SKILL_FILES_REFUSED
+          ? installedSkillRefusedDataSchema
+          : undefined;
   if (schema === undefined) return new HostedRefused({ refusal });
   const data = Result.getOrUndefined(readServiceAnswer(schema)(payload));
   return new HostedRefused({ refusal, ...(data === undefined ? undefined : { data }) });
