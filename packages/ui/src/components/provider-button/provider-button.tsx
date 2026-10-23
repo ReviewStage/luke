@@ -1,5 +1,6 @@
 import { useId } from "react";
 import { type MarkProvider, PROVIDER_MARK_SIZE, ProviderMark } from "../../marks/provider-mark.js";
+import { PRESS_PULSE, pulseOnPress } from "../../press-pulse.js";
 import { BUTTON_VARIANT, Button } from "../button/button.js";
 import { SpinnerRing } from "../spinner/spinner.js";
 
@@ -61,7 +62,7 @@ function GateButton({
       disabled={disabled || pending}
       aria-busy={pending ? true : undefined}
       aria-describedby={describedBy}
-      onClick={onPress}
+      onClick={pulseOnPress(onPress, PRESS_PULSE.QUIET)}
     >
       {pending ? (
         <span className="luke-provider-button-wait">

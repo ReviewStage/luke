@@ -1,6 +1,7 @@
 import type { ComponentPropsWithRef, ReactNode, Ref } from "react";
 import { useId, useImperativeHandle, useLayoutEffect, useRef } from "react";
 import { CheckIcon, ChevronRightIcon } from "../../face/glyphs.js";
+import { PRESS_PULSE, pulseOnPress } from "../../press-pulse.js";
 import { type ComboboxField, useComboboxField } from "./use-combobox-field.js";
 
 /**
@@ -122,7 +123,9 @@ export function ComboboxOptionItem({
       aria-current={option.current === true ? "true" : undefined}
       {...engine}
       // Note that an option that cannot be chosen now takes no press, whatever the engine handed it.
-      onClick={option.disabled === true ? undefined : engine.onClick}
+      onClick={
+        option.disabled === true ? undefined : pulseOnPress(engine.onClick, PRESS_PULSE.QUIET)
+      }
       className="luke-combobox-option"
       style={undefined}
     >

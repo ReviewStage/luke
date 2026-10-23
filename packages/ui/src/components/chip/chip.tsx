@@ -1,5 +1,6 @@
 import type { ComponentPropsWithRef, ReactNode } from "react";
 import { ChevronDownIcon, RemoveIcon } from "../../face/glyphs.js";
+import { PRESS_FACE, PRESS_PULSE, pulseOnPress } from "../../press-pulse.js";
 import { useClipped } from "../../use-clipped.js";
 
 /**
@@ -191,7 +192,7 @@ function RemovableChip({
         type="button"
         className="luke-chip-remove"
         aria-label={removeLabel}
-        onClick={onRemove}
+        onClick={pulseOnPress(onRemove)}
       >
         <RemoveIcon />
       </button>
@@ -210,8 +211,10 @@ export function Chip(props: ChipProps): React.JSX.Element {
       className="luke-chip"
       aria-busy={busy === true ? true : undefined}
       {...faceAttributes({ look, tone, width, size, iconOnly })}
+      // Note that a busy chip's face is already moving, as its wait, so a press plays nothing over it.
+      onClick={busy === true ? button.onClick : pulseOnPress(button.onClick, PRESS_PULSE.FACE)}
     >
-      <span className="luke-chip-face">
+      <span className="luke-chip-face" {...PRESS_FACE}>
         {children}
         {chevron ? <ChevronDownIcon /> : null}
       </span>

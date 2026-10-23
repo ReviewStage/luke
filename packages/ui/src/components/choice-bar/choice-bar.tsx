@@ -56,6 +56,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { pulseOnPress } from "../../press-pulse.js";
 import { CHOICE_ROLE, type ChoiceRole } from "../choice/choice-keys.js";
 import { type CountPart, CountParts } from "../choice/count-part.js";
 import { type ChoiceKeys, useChoiceKeys } from "../choice/use-choice-keys.js";
@@ -552,7 +553,7 @@ export function ChoiceBar<Value extends string>(props: ChoiceBarProps<Value>): R
             className="luke-choice-bar-option"
             disabled={disabled || item.disabled === true}
             onMouseDown={roving ? undefined : keepFocus}
-            onClick={() => press(item.value)}
+            onClick={pulseOnPress(() => press(item.value))}
           >
             {item.icon === undefined || fold === CHOICE_BAR_FOLD.WORDS ? null : (
               <span className="luke-choice-bar-icon" aria-hidden="true">

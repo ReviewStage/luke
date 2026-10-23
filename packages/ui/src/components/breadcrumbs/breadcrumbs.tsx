@@ -1,4 +1,5 @@
 import { type ComponentProps, type ComponentType, type ReactNode, useState } from "react";
+import { pulseOnPress } from "../../press-pulse.js";
 import { useDisclosure } from "../../use-disclosure.js";
 import { BUTTON_VARIANT } from "../button/button.js";
 import { FoldingButton, type FoldingButtonHint } from "../folding-button/folding-button.js";
@@ -281,7 +282,7 @@ function CrumbControl({
         aria-current={current}
         aria-haspopup={crumb.popup}
         aria-expanded={crumb.popup === undefined ? undefined : crumb.expanded === true}
-        onClick={(event) => onPress(event.currentTarget)}
+        onClick={pulseOnPress((event) => onPress(event.currentTarget))}
       >
         <CrumbFace glyph={crumb.glyph} label={label} end={crumb.end} />
       </button>

@@ -1,4 +1,5 @@
 import type { ButtonHTMLAttributes, MouseEvent, ReactNode } from "react";
+import { PRESS_PULSE, pulseOnPress } from "../../press-pulse.js";
 import { useDisclosureState, useDisclosureSummaryClick } from "../disclosure/disclosure.js";
 
 /**
@@ -93,7 +94,7 @@ export function LineButton({
       data-look={look}
       data-brightens={brightens === true ? true : undefined}
       id={id}
-      onClick={onClick}
+      onClick={pulseOnPress(onClick, PRESS_PULSE.QUIET)}
       {...props}
     >
       {children}

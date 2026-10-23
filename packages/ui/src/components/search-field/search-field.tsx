@@ -1,6 +1,7 @@
 import type { KeyboardEvent, ReactNode, Ref } from "react";
 import { useImperativeHandle, useRef } from "react";
 import { CloseIcon, SearchIcon } from "../../face/glyphs.js";
+import { pulseOnPress } from "../../press-pulse.js";
 import { useDisclosure } from "../../use-disclosure.js";
 import type { ComboboxField } from "../combobox/use-combobox-field.js";
 
@@ -177,10 +178,10 @@ export function SearchField({
           aria-label="Clear search"
           data-leaving={clear.leaving ? "true" : undefined}
           inert={clear.leaving}
-          onClick={() => {
+          onClick={pulseOnPress(() => {
             onClear?.();
             field.current?.focus();
-          }}
+          })}
         >
           <CloseIcon />
         </button>

@@ -1,4 +1,5 @@
 import type { ButtonHTMLAttributes, MouseEvent, ReactNode } from "react";
+import { PRESS_PULSE, pulseOnPress } from "../../press-pulse.js";
 import { useLinkAddress } from "../menu/link-address.js";
 
 /**
@@ -112,7 +113,7 @@ export function TextButton({
       onBlur={props.onBlur}
       // Note that the focus moves as a mousedown's default, so refusing it there is what keeps it.
       onMouseDown={keepFocus === true ? preventFocusMove : undefined}
-      onClick={onClick}
+      onClick={pulseOnPress(onClick, PRESS_PULSE.WORDS)}
     >
       {children}
     </button>

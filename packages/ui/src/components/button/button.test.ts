@@ -381,7 +381,7 @@ test("an unavailable button that keeps its Tab stop shakes at a refused press, u
   expect(merge?.getAttribute("data-denied")).toBe("true");
   expect(save?.hasAttribute("data-denied")).toBe(false);
   expect(open?.hasAttribute("data-denied")).toBe(false);
-  expect(open?.getAttribute("data-pulse")).toBe("true");
+  expect(open?.getAttribute("data-pulse")).toBe("face");
   expect(merge?.hasAttribute("data-pulse")).toBe(false);
   expect(save?.hasAttribute("data-pulse")).toBe(false);
 
