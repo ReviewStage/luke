@@ -2101,9 +2101,6 @@ ul.actor-stack {
 .agent-call-video-frame .call-video-tile {
   width: 100%;
   height: 100%;
-  max-height: none;
-  margin: 0;
-  aspect-ratio: auto;
 }
 
 .agent-call-video .call-video-frame {

@@ -160,13 +160,9 @@ export function heardCalls(input: {
 
 /**
  * A heard call as a row of the list, or nothing where nothing was said on
- * it: each line a message under the window's own row id, which names no row
- * on record, so the line carries its span on the call instead, which is what
- * a turn that took it as its ask names it by (`call-thread.ts`). The call
- * is taken to have started as far before it was first heard as its first
- * line began into it, since the window hears a call at its first line,
- * which puts each line's start on the call near where it was and a turn
- * that began before any line ahead of them all.
+ * it: each line a message under the window's own row id. The call is taken
+ * to have started as far before it was first heard as its first line began
+ * into it, since the window hears a call at its first line.
  */
 function heardRow(heard: HeardCall): TranscriptCallRow | undefined {
   const messages = heard.transcript.lines.flatMap((line) => {
@@ -174,7 +170,6 @@ function heardRow(heard: HeardCall): TranscriptCallRow | undefined {
       id: line.rowId,
       role: line.speaker,
       parts: [{ type: TRANSCRIPT_PART_TYPE.TEXT, text: line.words }],
-      metadata: { span: { startMs: line.startMs, endMs: line.endMs } },
     });
     return message === undefined ? [] : [message];
   });

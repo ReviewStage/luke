@@ -1714,7 +1714,7 @@ function afterStepOf(line: CodingAgentMessage): number {
 
 /**
  * One of the agent's turns as the rows every transcript draws, folded as
- * the Call tab folds Luke's (`turn-rows.ts`). A step boundary and a part
+ * `turn-rows.ts` folds a turn. A step boundary and a part
  * this build does not draw are left out, because the parts keep one rhythm
  * across them. The turn moves while the agent may still write to it, which
  * is its last message; any other has ended. A worker's session folds as

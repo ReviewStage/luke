@@ -1874,10 +1874,9 @@ export type CodingAgentPartAnswer = typeof codingAgentPartAnswerSchema.Type;
 const codingAgentMessageSchema = EffectSchema.Struct({
   id: EffectSchema.String,
   /**
-   * The turn the message is the journal of, so the Call tab knows which of
-   * the developer's lines asked for it and an agent's tab which turn a line
-   * said on a call answers (`readFrom`); absent on any other row, and from
-   * a service older than it.
+   * The turn the message is the journal of, so an agent's tab knows which
+   * turn a line said on a call answers (`readFrom`); absent on any other
+   * row, and from a service older than it.
    */
   turnId: EffectSchema.optionalKey(EffectSchema.String),
   /**

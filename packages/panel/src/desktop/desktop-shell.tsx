@@ -490,7 +490,7 @@ const NOTICE_STRIP = <WindowVoiceNotice />;
  * the call bar. A tab standing behind another chosen tab, or under a side
  * panel filling the window, is not on screen.
  */
-function callTabShown(tasks: TasksControl, calling: string | undefined): boolean {
+function callingTabShown(tasks: TasksControl, calling: string | undefined): boolean {
   const { mainTabs, sidePanel } = tasks;
   const tab = mainTabs.tab;
   return (
@@ -699,7 +699,7 @@ export function DesktopShell({
   const calling = useCallingAgent();
   // Chat is handed only what it reads of the tasks, so a delivery that moves the rest draws none of it.
   const chatSurface = useChatSurface(tasks);
-  const callShown = taskDrawn && callTabShown(tasks, calling);
+  const callShown = taskDrawn && callingTabShown(tasks, calling);
   if (gated) {
     const macAppLink = appPlatform().macAppLink?.();
     return (

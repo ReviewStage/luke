@@ -87,7 +87,7 @@ interface AppVoiceSlice {
   callTranscript?: VoiceCallTranscript | undefined;
   /**
    * Luke's avatar on the call, as the panel reports it: what puts the video
-   * tile at the top of the Call tab and what the tile draws. Main's rather than
+   * tile in the tab of the agent the call is into and what the tile draws. Main's rather than
    * the voice window's, so a replaced voice window leaves it standing.
    */
   avatar: AvatarState;

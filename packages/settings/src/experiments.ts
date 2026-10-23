@@ -14,7 +14,7 @@ export const EXPERIMENT = {
   CHAT: "chat",
   /** The Code review automation, offered on the Automations page with its own settings in the editor. */
   CODE_REVIEW: "code-review",
-  /** Calls that open with Luke on video, a Keyframe avatar at the top of the Call tab. */
+  /** Calls that open with Luke on video, a Keyframe avatar in the agent's tab. */
   VIDEO_CALLS: "video-calls",
   /** A workspace's memory: its coding agents keep and recall facts with remember and recall, reviewed in Settings › Memory. */
   MEMORY: "memory",

@@ -678,7 +678,7 @@ function voiced(): void {
 }
 
 /** A draft's tab whose Call starts the agent given, each draft it was handed and each call opened written down. */
-function callTab(
+function draftWithCall(
   draft: AgentDraft,
   answer: DraftCallStart,
   extra: Partial<CodingAgentsControl> = {},
@@ -702,7 +702,7 @@ function callTab(
 
 test("Call on an empty draft starts its agent blank and opens a call into the agent it started", async () => {
   voiced();
-  const tab = callTab({ ...DRAFT, prompt: "" }, { agentId: "agent-voice" });
+  const tab = draftWithCall({ ...DRAFT, prompt: "" }, { agentId: "agent-voice" });
   await settle();
   await tab.press(CALL_LABEL);
 
@@ -715,7 +715,7 @@ test("Call on an empty draft starts its agent blank and opens a call into the ag
 
 test("Call on a draft holding words starts its agent on them and opens a call into it, and one that did not start keeps the words, its Retry calling again", async () => {
   voiced();
-  const tab = callTab(DRAFT, { agentId: "agent-words" });
+  const tab = draftWithCall(DRAFT, { agentId: "agent-words" });
   await settle();
   await tab.press(CALL_LABEL);
   assert.deepEqual(
@@ -724,7 +724,7 @@ test("Call on a draft holding words starts its agent on them and opens a call in
   );
   assert.deepEqual(tab.opened, ["agent-words"]);
 
-  const refused = callTab(DRAFT, {
+  const refused = draftWithCall(DRAFT, {
     failure: startFailureNote({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }, TASK_ID),
   });
   await settle();
@@ -743,7 +743,7 @@ test("a draft offers no Call where the platform takes no calls, nor on a fork, w
   await settle();
   assert.equal(web.button(CALL_LABEL), undefined);
 
-  const fork = callTab(
+  const fork = draftWithCall(
     { ...DRAFT, fork: { agentId: "agent-source", messageId: "message-1", opening: "Fix it." } },
     { agentId: "x" },
   );
