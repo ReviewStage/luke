@@ -191,12 +191,6 @@ body,
   border-right: 0;
 }
 
-/* Settings' list standing alone leads with its one way back, Back to the
-   tasks; the history's Back and Forward beside it would be a second. */
-.desktop-shell[data-room="narrow"] :is(.settings-pages, .admin-sections) > .title-bar-controls {
-  display: none;
-}
-
 /* A place standing alone in a narrow room leads its head with the way back,
    so its name keeps the room left and what is said beside it gives way; its
    menu stays at the head's end, the only way to edit or archive a topic. */
@@ -5334,12 +5328,24 @@ ul.actor-stack {
    title bar's buttons' place, which a phone's task and places do not draw,
    so it starts at the column's inset. Under a task's, the column's bar starts
    and ends at the column's own inset, and the side panel draws no bar at
-   all, the row standing for it. */
-.desktop-shell[data-room="narrow"] .desktop-main .desktop-toolbar.phone-head {
+   all, the row standing for it. Settings, a version history, and Admin
+   stand beside the work column rather than in it, each column headed the
+   same way. */
+.desktop-shell[data-room="narrow"] .desktop-toolbar.phone-head {
   display: grid;
   grid-template-columns: var(--luke-control-height) minmax(0, 1fr) var(--luke-control-height);
   padding-right: var(--column-inset);
   padding-left: var(--column-inset);
+}
+
+/* A list's column (Settings', a version history's, Admin's) holds its rows
+   its own inset from its edges already, so its header takes none of its own
+   and its corners stand where every other phone's do. */
+.desktop-shell[data-room="narrow"]
+  :is(.settings-pages, .version-log, .admin-sections)
+  > .desktop-toolbar.phone-head {
+  padding-right: 0;
+  padding-left: 0;
 }
 
 .phone-head > .desktop-toolbar-heading {

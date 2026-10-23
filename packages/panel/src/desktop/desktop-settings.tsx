@@ -15,15 +15,14 @@ import {
   BackIcon,
   commandKeyshortcuts,
   Fill,
-  FoldingButton,
   GAP,
   LAYOUT_ELEMENT,
   NAV_CURRENT,
   NavItem,
-  PageToolbar,
   ResizeEdge,
   SCROLL_FADE,
   ScrollArea,
+  SETTINGS_PAGE_TITLE,
   SettingsPage,
   Shortcut,
   Stack,
@@ -66,10 +65,11 @@ import { useExperimentChoices } from "../use-app-state.js";
 import { ActionMenu } from "./action-menu.js";
 import { HistoryButtons, useSidebarEdge } from "./desktop-sidebar.js";
 import { useNarrowFocus } from "./narrow-focus.js";
+import { backStepName, PhoneBack, PhoneHead } from "./phone-head.js";
 import type { SidebarCollapse } from "./sidebar-collapse.js";
 import { WorkspaceTile } from "./workspace-tile.js";
 
-/** What the way back from a page to the page list says, in a narrow room. */
+/** Settings' name: the list's title, and where a narrow room's way back from a page goes. */
 const SETTINGS_LIST = "Settings";
 
 /** Whether Settings stands on its page list rather than on a page, which a narrow room draws one at a time. */
@@ -120,13 +120,65 @@ function SettingsPageRow({
   );
 }
 
-/** The head of a page's column: the window's drag strip, or under it in a narrow room the way back to the page list. */
-function PageBar({ onList }: { onList: (() => void) | undefined }): React.JSX.Element {
+/**
+ * The head of a page's column: the window's drag strip, or in a narrow room
+ * a phone's header (`phone-head.tsx`), the way back to the page list, the
+ * page's title centred, and what acts on the whole page, its ⋯.
+ */
+function PageBar({
+  onList,
+  title,
+  actions,
+}: {
+  onList: (() => void) | undefined;
+  title: string;
+  actions: React.ReactNode;
+}): React.JSX.Element {
   if (onList === undefined) return <div className="desktop-drag-strip" />;
   return (
-    <PageToolbar
-      lead={<FoldingButton label={SETTINGS_LIST} icon={<BackIcon />} onClick={onList} />}
+    <PhoneHead
+      place="settings-page"
+      start={<PhoneBack back={{ to: SETTINGS_LIST, onPress: onList }} />}
+      title={<h1 className="desktop-toolbar-title">{title}</h1>}
+      end={actions}
     />
+  );
+}
+
+/** The list's head: in a narrow room a phone's header, the way out of Settings and its title; the history's buttons, the way out, and the title in a column otherwise. */
+function ListHead({
+  room,
+  history,
+  onExit,
+}: {
+  room: ShellRoom;
+  history: NavigationHistory;
+  onExit: () => void;
+}): React.JSX.Element {
+  if (room === SHELL_ROOM.NARROW) {
+    return (
+      <PhoneHead
+        place="settings-pages"
+        start={<PhoneBack back={{ to: backStepName(history, undefined), onPress: onExit }} />}
+        title={<h1 className="desktop-toolbar-title">{SETTINGS_LIST}</h1>}
+        end={null}
+      />
+    );
+  }
+  return (
+    <>
+      <div className="desktop-drag-strip" />
+      <HistoryButtons history={history} room={room} />
+      <NavItem
+        icon={<BackIcon />}
+        aria-keyshortcuts={commandKeyshortcuts(APP_COMMAND.EXIT_SETTINGS)}
+        shortcut={<Shortcut chord={APP_SHORTCUTS[APP_COMMAND.EXIT_SETTINGS].chord} />}
+        onClick={onExit}
+      >
+        Back
+      </NavItem>
+      <h1 className="settings-pages-title">{SETTINGS_LIST}</h1>
+    </>
   );
 }
 
@@ -191,7 +243,11 @@ function GroupHeading({
  * A narrow room shows the list or the page, one at a time, the other column
  * hidden (`hiddenColumns`): Settings opens on its list, a page chosen there,
  * by a search, or by a link stands alone the whole width, and a way back at
- * its head returns to the list. The list's edge resizes nothing then.
+ * its head returns to the list. The list's edge resizes nothing then. Each
+ * is headed as a phone heads every page (`phone-head.tsx`): the list by the
+ * way out and its title, with no back and forward, the way out being the
+ * one; a page by the way back to the list, its title, and its reset in a ⋯,
+ * its own head left to the header.
  */
 export function DesktopSettings({
   sidebar,
@@ -232,7 +288,7 @@ export function DesktopSettings({
   const voiceNote = voicePageAttention(settings.microphone);
   const writes = useSettingsWrites();
   const rows = settingsRowsInput(settings);
-  const reset = pageResetControl(settings.view, settings.settings, writes, rows);
+  const reset = pageResetControl(settings.view, settings.settings, writes, rows, room);
   // Built only while a query stands: an empty field searches nothing.
   const search =
     rows && query !== "" ? searchSettings(settingsSearchEntries(rows), query) : undefined;
@@ -272,7 +328,10 @@ export function DesktopSettings({
   const edge = useSidebarEdge(sidebar);
   const hidden = hiddenColumns(room, step.listed);
   const screen = useNarrowFocus(room, step.listed);
-  const bar = <PageBar onList={room === SHELL_ROOM.NARROW ? step.onList : undefined} />;
+  const narrow = room === SHELL_ROOM.NARROW;
+  const bar = (
+    <PageBar onList={narrow ? step.onList : undefined} title={title} actions={reset ?? null} />
+  );
   // The page with a search of its own takes Command-F while it shows; a page hidden behind the list does not.
   const pageSearched =
     settings.view === SETTINGS_VIEW.INTEGRATIONS &&
@@ -295,17 +354,7 @@ export function DesktopSettings({
   return (
     <div ref={screen} className="desktop-settings">
       <nav className="settings-pages" aria-label="Settings pages" hidden={hidden.list}>
-        <div className="desktop-drag-strip" />
-        <HistoryButtons history={history} room={room} />
-        <NavItem
-          icon={<BackIcon />}
-          aria-keyshortcuts={commandKeyshortcuts(APP_COMMAND.EXIT_SETTINGS)}
-          shortcut={<Shortcut chord={APP_SHORTCUTS[APP_COMMAND.EXIT_SETTINGS].chord} />}
-          onClick={onExit}
-        >
-          Back
-        </NavItem>
-        <h1 className="settings-pages-title">Settings</h1>
+        <ListHead room={room} history={history} onExit={onExit} />
         <SettingsSearchField
           find={!pageSearched}
           onFind={hidden.list ? step.onList : undefined}
@@ -360,7 +409,7 @@ export function DesktopSettings({
               ? accountActor(settings.account)
               : undefined
           }
-          bar={bar}
+          back={narrow ? { to: SETTINGS_LIST, onPress: step.onList } : undefined}
           hidden={hidden.item}
           onShowHistory={() => setTemplateHistory(true)}
         />
@@ -368,7 +417,12 @@ export function DesktopSettings({
         <section className="settings-page" aria-label={title} hidden={hidden.item}>
           {bar}
           {/* Keyed to the page, so a page turned to opens at its top rather than where the last one was scrolled. */}
-          <SettingsPage key={settings.view} title={title} actions={reset}>
+          <SettingsPage
+            key={settings.view}
+            title={title}
+            place={narrow ? SETTINGS_PAGE_TITLE.IN_BAR : SETTINGS_PAGE_TITLE.IN_PAGE}
+            actions={reset}
+          >
             <SettingsPanel
               {...settings}
               integrationsFilter={{ query: integrationsQuery, onQueryChange: setIntegrationsQuery }}

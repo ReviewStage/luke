@@ -38,6 +38,7 @@ import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { HistoryIcon, InfoIcon } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { type ActHandle, useAct } from "../act.js";
+import { PhoneBack, type PhoneBackDoor, PhoneHead, PlaceMore } from "../desktop/phone-head.js";
 import { DocumentScroll } from "../tasks/document-frame.js";
 import type { TaskReader } from "../tasks/edit-ref.js";
 import { PlanBody, PlanBodyColumn, PlanPageHead } from "../tasks/plan-body.js";
@@ -74,6 +75,10 @@ import { TOAST_TONE, useToast } from "../toast.js";
  * no account signed in there is no template to show, and the page says so.
  * The document stands under `ph-no-capture`, so the session recording keeps
  * neither the words nor the rhythm of the typing.
+ *
+ * On a phone the page is headed as a phone heads every page
+ * (`../desktop/phone-head.tsx`): the way back to the page list, the page's
+ * name, and a ⋯ holding the page's actions, which leave the title's line.
  */
 
 /** The page's name, which the template is drawn under as a task's title, and its versions too. */
@@ -98,6 +103,9 @@ const TEMPLATE_WORKSPACE_ID = "plan-template";
 
 /** What the title line's button that opens the template's version history says, as a task's menu item says it. */
 const HISTORY_LABEL = "Version history";
+
+/** What the page's reset says. */
+const RESET_LABEL = "Reset to default";
 
 /** How wide the placeholder's headings and the lines under each stand, as shares of their lines, a plan's sections in the body's type. */
 const TEMPLATE_SKELETON = [
@@ -361,48 +369,49 @@ function TitleActions({
       </Tooltip>
       {custom ? (
         <Button variant={BUTTON_VARIANT.OUTLINE} icon={<ResetIcon />} onClick={onReset}>
-          Reset to default
+          {RESET_LABEL}
         </Button>
       ) : null}
     </TitleActionsLine>
   );
 }
 
-/** The template read: the note, the template as a plan's document, and the reset's question. */
+/** The template read: the note, and the template as a plan's document, its title line carrying the page's actions where a header does not. */
 function TemplateDocument({
   template,
   reader,
   onShowHistory,
+  onReset,
+  titled,
 }: {
   template: TemplateControl;
   /** The account reading it, whose every edit it is. */
   reader: TaskReader;
   onShowHistory: () => void;
+  onReset: () => void;
+  /** Whether the title's line carries the page's actions, which a phone's header holds instead. */
+  titled: boolean;
 }): React.JSX.Element {
-  const reset = useConfirmDialog({ subject: template.custom, surfaceOpen: true }, template.reset);
   return (
-    <>
-      <TemplateFrame>
-        <PlanBody
-          task={templateDocument(template.text, template.lastEdit)}
-          live={false}
-          reader={reader}
-          onEdit={template.edit}
-          onShowHistory={onShowHistory}
-          page={{
-            actions: (
-              <TitleActions
-                custom={template.custom}
-                onShowHistory={onShowHistory}
-                onReset={reset.ask}
-              />
-            ),
-            note: <TemplateNote />,
-          }}
-        />
-      </TemplateFrame>
-      <ConfirmDialog confirm={reset} question={RESET_QUESTION} />
-    </>
+    <TemplateFrame>
+      <PlanBody
+        task={templateDocument(template.text, template.lastEdit)}
+        live={false}
+        reader={reader}
+        onEdit={template.edit}
+        onShowHistory={onShowHistory}
+        page={{
+          actions: titled ? (
+            <TitleActions
+              custom={template.custom}
+              onShowHistory={onShowHistory}
+              onReset={onReset}
+            />
+          ) : null,
+          note: <TemplateNote />,
+        }}
+      />
+    </TemplateFrame>
   );
 }
 
@@ -413,7 +422,7 @@ function TemplateDocument({
  * headings over their lines in the plan's own type, so the template lands
  * where the blocks stood.
  */
-function TemplateSkeleton(): React.JSX.Element {
+function TemplateSkeleton({ titled }: { titled: boolean }): React.JSX.Element {
   return (
     <TemplateFrame>
       <DocumentScroll>
@@ -421,9 +430,11 @@ function TemplateSkeleton(): React.JSX.Element {
           <PlanPageHead
             name={TEMPLATE_TITLE}
             actions={
-              <TitleActionsLine>
-                <Skeleton shape={SKELETON_SHAPE.CONTROL} width="var(--luke-control-height)" />
-              </TitleActionsLine>
+              titled ? (
+                <TitleActionsLine>
+                  <Skeleton shape={SKELETON_SHAPE.CONTROL} width="var(--luke-control-height)" />
+                </TitleActionsLine>
+              ) : null
             }
             note={<TemplateNote />}
           />
@@ -454,9 +465,12 @@ function TemplateSkeleton(): React.JSX.Element {
 function TemplateState({
   signedIn,
   template,
+  titled,
 }: {
   signedIn: boolean;
   template: TemplateControl;
+  /** Whether the document's title line carries the page's actions, as `TemplateDocument` takes it. */
+  titled: boolean;
 }): React.JSX.Element {
   if (!signedIn) {
     return (
@@ -475,25 +489,66 @@ function TemplateState({
     );
   }
   // While the read is out the page's head stands where the document's will, the template's blocks under it.
-  return <TemplateSkeleton />;
+  return <TemplateSkeleton titled={titled} />;
+}
+
+/**
+ * A phone's header over the page: the way back, the page's name, and a ⋯
+ * holding its actions while the template is drawn, Version history and,
+ * while the account holds a template of its own, Reset to default.
+ */
+function TemplateHead({
+  back,
+  drawn,
+  custom,
+  onShowHistory,
+  onReset,
+}: {
+  back: PhoneBackDoor;
+  drawn: boolean;
+  custom: boolean;
+  onShowHistory: () => void;
+  onReset: () => void;
+}): React.JSX.Element {
+  return (
+    <PhoneHead
+      place="settings-page"
+      start={<PhoneBack back={back} />}
+      title={<h1 className="desktop-toolbar-title">{TEMPLATE_TITLE}</h1>}
+      end={
+        drawn ? (
+          <PlaceMore
+            shown
+            groups={() => [
+              [
+                { label: HISTORY_LABEL, icon: <HistoryIcon />, onSelect: onShowHistory },
+                ...(custom ? [{ label: RESET_LABEL, icon: <ResetIcon />, onSelect: onReset }] : []),
+              ],
+            ]}
+          />
+        ) : null
+      }
+    />
+  );
 }
 
 /**
  * Settings › Plan template beside Settings' page list: the template as a
- * plan's document, its title line carrying the page's actions.
- * `onShowHistory` opens the history, from the button or the "Edited by"
- * line, a section's opening it on the template as it stands.
+ * plan's document, its title line carrying the page's actions, or on a
+ * phone under a header holding them. `onShowHistory` opens the history,
+ * from the button or the "Edited by" line, a section's opening it on the
+ * template as it stands.
  */
 export function PlanTemplatePage({
   account,
-  bar,
+  back,
   hidden,
   onShowHistory,
 }: {
   /** The signed-in account, whose every edit of the template is; none while signed out. */
   account: PersonActor | undefined;
-  /** The head of the page's column, as every Settings page's (`desktop-settings.tsx`). */
-  bar: React.ReactNode;
+  /** The way back to the page list, which a phone's header leads with; none beside the list, where the window's drag strip heads the page. */
+  back: PhoneBackDoor | undefined;
   /** Whether the page is hidden, as a narrow room hides it behind the page list. */
   hidden: boolean;
   onShowHistory: () => void;
@@ -502,6 +557,7 @@ export function PlanTemplatePage({
   const { act } = useAct();
   const template = useTemplate(signedIn, act);
   const drawn = account !== undefined && template.read === TEMPLATE_READ.READ;
+  const reset = useConfirmDialog({ subject: template.custom, surfaceOpen: true }, template.reset);
   return (
     <section
       className="settings-page"
@@ -509,17 +565,30 @@ export function PlanTemplatePage({
       aria-busy={signedIn && template.read === TEMPLATE_READ.READING ? true : undefined}
       hidden={hidden}
     >
-      {/* Settings has no top bar: the page's title and its actions stand in the page. */}
-      {bar}
+      {/* Settings has no top bar but a phone's: the page's title and its actions stand in the page. */}
+      {back === undefined ? (
+        <div className="desktop-drag-strip" />
+      ) : (
+        <TemplateHead
+          back={back}
+          drawn={drawn}
+          custom={template.custom}
+          onShowHistory={onShowHistory}
+          onReset={reset.ask}
+        />
+      )}
       {drawn ? (
         <TemplateDocument
           template={template}
           reader={{ readerId: account.userId, owner: account }}
           onShowHistory={() => onShowHistory()}
+          onReset={reset.ask}
+          titled={back === undefined}
         />
       ) : (
-        <TemplateState signedIn={signedIn} template={template} />
+        <TemplateState signedIn={signedIn} template={template} titled={back === undefined} />
       )}
+      <ConfirmDialog confirm={reset} question={RESET_QUESTION} />
     </section>
   );
 }

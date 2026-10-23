@@ -315,10 +315,15 @@ function onScreen(page: HTMLElement, columns: Readonly<Record<string, string>>):
     .map(([name]) => name);
 }
 
-/** The button in `within` that says `words`, or none. */
+/** What an element is called: its accessible name where it carries one, a glyph's way back among them, or its words. */
+function nameOf(element: Element | null): string | undefined {
+  return element?.getAttribute("aria-label") ?? element?.textContent?.trim();
+}
+
+/** The button in `within` that says `words`, or is called them, or none. */
 function buttonSaying(within: HTMLElement, words: string): HTMLButtonElement | undefined {
   return [...within.querySelectorAll("button")].find(
-    (button) => button.textContent?.trim() === words,
+    (button) => button.textContent?.trim() === words || button.getAttribute("aria-label") === words,
   );
 }
 
@@ -346,7 +351,7 @@ test("Settings on a narrow stage opens on its page list, a page chosen stands al
   assert.deepEqual(onScreen(page, SETTINGS_COLUMNS), ["page"]);
   assert.equal(the(page, SETTINGS_COLUMNS.page).getAttribute("aria-label"), "Appearance");
 
-  press(the(page, SETTINGS_COLUMNS.page), "Settings");
+  press(the(page, SETTINGS_COLUMNS.page), "Back to Settings");
   assert.deepEqual(onScreen(page, SETTINGS_COLUMNS), ["list"]);
 
   press(the(page, SETTINGS_COLUMNS.list), "Appearance");
@@ -356,7 +361,7 @@ test("Settings on a narrow stage opens on its page list, a page chosen stands al
     ["list", "page"],
     "the desktop's width stands the list beside the page again",
   );
-  assert.equal(buttonSaying(the(page, SETTINGS_COLUMNS.page), "Settings"), undefined);
+  assert.equal(buttonSaying(the(page, SETTINGS_COLUMNS.page), "Back to Settings"), undefined);
 });
 
 test("a link to a Settings page on a narrow stage opens on that page, with the way back to the list", async () => {
@@ -367,7 +372,7 @@ test("a link to a Settings page on a narrow stage opens on that page, with the w
   assert.deepEqual(onScreen(page, SETTINGS_COLUMNS), ["page"]);
   assert.equal(the(page, SETTINGS_COLUMNS.page).getAttribute("aria-label"), "Appearance");
 
-  press(the(page, SETTINGS_COLUMNS.page), "Settings");
+  press(the(page, SETTINGS_COLUMNS.page), "Back to Settings");
   assert.deepEqual(onScreen(page, SETTINGS_COLUMNS), ["list"]);
 });
 
@@ -395,7 +400,7 @@ test("Find on a narrow Settings lands in the search shown: a page with none show
     PHONE,
     createElement(SettingsWindow, { link: { page: SETTINGS_VIEW.INTEGRATIONS } }),
   );
-  press(the(integrations, SETTINGS_COLUMNS.page), "Settings");
+  press(the(integrations, SETTINGS_COLUMNS.page), "Back to Settings");
   act(() => {
     runAppCommand(APP_COMMAND.FIND);
   });
@@ -427,12 +432,12 @@ test("a version history on a narrow stage opens on its versions, a version chose
   await settle();
   assert.deepEqual(onScreen(page, HISTORY_COLUMNS), ["version"]);
 
-  press(the(page, HISTORY_COLUMNS.version), "Versions");
+  press(the(page, HISTORY_COLUMNS.version), "Back to Versions");
   assert.deepEqual(onScreen(page, HISTORY_COLUMNS), ["list"]);
 
   resizeStage(WIDE);
   assert.deepEqual(onScreen(page, HISTORY_COLUMNS), ["list", "version"]);
-  assert.equal(buttonSaying(the(page, HISTORY_COLUMNS.version), "Versions"), undefined);
+  assert.equal(buttonSaying(the(page, HISTORY_COLUMNS.version), "Back to Versions"), undefined);
 });
 
 test("a link to a version on a narrow stage opens on that version, with the way back to the list", async () => {
@@ -442,7 +447,7 @@ test("a link to a version on a narrow stage opens on that version, with the way 
   );
   assert.deepEqual(onScreen(page, HISTORY_COLUMNS), ["version"]);
 
-  press(the(page, HISTORY_COLUMNS.version), "Versions");
+  press(the(page, HISTORY_COLUMNS.version), "Back to Versions");
   assert.deepEqual(onScreen(page, HISTORY_COLUMNS), ["list"]);
 });
 
@@ -528,9 +533,9 @@ test("a page chosen on a narrow Settings takes the focus to its way back, and Ba
   const page = await mount(PHONE, createElement(SettingsWindow, { link: undefined }));
   pressFocused(the(page, SETTINGS_COLUMNS.list), "Appearance");
   assert.equal(focusIn(page, SETTINGS_COLUMNS), "page");
-  assert.equal(document.activeElement?.textContent?.trim(), "Settings", "the way back to the list");
+  assert.equal(nameOf(document.activeElement), "Back to Settings", "the way back to the list");
 
-  pressFocused(the(page, SETTINGS_COLUMNS.page), "Settings");
+  pressFocused(the(page, SETTINGS_COLUMNS.page), "Back to Settings");
   assert.equal(focusIn(page, SETTINGS_COLUMNS), "list");
   assert.equal(document.activeElement?.textContent?.trim(), "Appearance", "the row chosen");
 });
@@ -551,9 +556,9 @@ test("a version chosen on a narrow stage takes the focus to its way back, and Ba
   });
   await settle();
   assert.equal(focusIn(page, HISTORY_COLUMNS), "version");
-  assert.equal(document.activeElement?.textContent?.trim(), "Versions", "the way back to the list");
+  assert.equal(nameOf(document.activeElement), "Back to Versions", "the way back to the list");
 
-  pressFocused(the(page, HISTORY_COLUMNS.version), "Versions");
+  pressFocused(the(page, HISTORY_COLUMNS.version), "Back to Versions");
   assert.equal(document.activeElement, versionRow(page, 1), "the row chosen");
 });
 
@@ -580,7 +585,7 @@ test("a wide Settings turned narrow hands the focus from the hidden page list to
   pressFocused(the(page, SETTINGS_COLUMNS.list), "Appearance");
   resizeStage(PHONE);
   assert.deepEqual(onScreen(page, SETTINGS_COLUMNS), ["page"]);
-  assert.equal(document.activeElement?.textContent?.trim(), "Settings", "the way back to the list");
+  assert.equal(nameOf(document.activeElement), "Back to Settings", "the way back to the list");
 });
 
 test("a link to a version on a narrow stage opens with the focus on its way back", async () => {
@@ -589,7 +594,7 @@ test("a link to a version on a narrow stage opens with the focus on its way back
     createElement(HistoryWindow, { returnTo: { revision: 2, opened: undefined } }),
   );
   assert.equal(focusIn(page, HISTORY_COLUMNS), "version");
-  assert.equal(document.activeElement?.textContent?.trim(), "Versions", "the way back to the list");
+  assert.equal(nameOf(document.activeElement), "Back to Versions", "the way back to the list");
 });
 
 test("a link to a chat place on a narrow stage opened while the read is out hands the focus to its way back once the read lands", async () => {

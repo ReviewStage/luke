@@ -1,17 +1,10 @@
 import { TASK_BOUNDS } from "@luke/features/task-wire";
-import {
-  BackIcon,
-  DocumentIcon,
-  IconButton,
-  InlineEdit,
-  type InlineEditEnd,
-  Tooltip,
-} from "@luke/ui";
+import { DocumentIcon, InlineEdit, type InlineEditEnd } from "@luke/ui";
 import { BotIcon, ListIcon } from "lucide-react";
 import type { AwayStep } from "../navigation-history.js";
 import { SIDE_PANEL_TAB, type SidePanelTab } from "../tasks/use-side-panel.js";
 import type { MenuAction } from "./action-menu.js";
-import { PhoneHead } from "./phone-head.js";
+import { PhoneBack, PhoneHead } from "./phone-head.js";
 
 /**
  * task-pane-switcher.tsx -- how a phone heads a task: one row of the way
@@ -104,11 +97,6 @@ interface TaskHeadRename {
   readonly onEnd: (end: InlineEditEnd) => void;
 }
 
-/** What the way back is called: where it goes, since its glyph alone says only that it goes back. */
-function backLabel(back: TaskHeadBack): string {
-  return `Back to ${back.label}`;
-}
-
 /**
  * The row heading a task on a phone; see the module's head. It is a phone's
  * header (`phone-head.tsx`): the way back at its start, the ⋯ at its end,
@@ -131,11 +119,7 @@ export function TaskHead({
   return (
     <PhoneHead
       place="task"
-      start={
-        <Tooltip label={backLabel(back)}>
-          <IconButton icon={<BackIcon />} label={backLabel(back)} onClick={back.onPress} />
-        </Tooltip>
-      }
+      start={<PhoneBack back={{ to: back.label, onPress: back.onPress }} />}
       title={
         <h1 className="desktop-toolbar-title">
           <InlineEdit

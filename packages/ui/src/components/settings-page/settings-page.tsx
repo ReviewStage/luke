@@ -36,7 +36,19 @@ import { TEXT_ELEMENT, TEXT_VARIANT, Text } from "../text/text.js";
  * A page whose name is not yet known, Settings while its chunk loads, stands
  * as a whole page of placeholders (`SettingsPageSkeleton`): the page itself,
  * a block for its title, and its sections' blocks.
+ *
+ * A page under a bar that names it, a phone's header, draws no head of its
+ * own (`SETTINGS_PAGE_TITLE.IN_BAR`): the bar holds the title and what acts
+ * on the page, and the sections start at the column's top.
  */
+
+/** Where a page's title stands: at the head of its column, or in a bar above the page that names it. */
+export const SETTINGS_PAGE_TITLE = {
+  IN_PAGE: "in-page",
+  IN_BAR: "in-bar",
+} as const;
+
+export type SettingsPageTitle = (typeof SETTINGS_PAGE_TITLE)[keyof typeof SETTINGS_PAGE_TITLE];
 
 /**
  * How wide a placeholder title stands: a short page name's, five controls'
@@ -45,14 +57,17 @@ import { TEXT_ELEMENT, TEXT_VARIANT, Text } from "../text/text.js";
  */
 const SKELETON_TITLE_WIDTH = "calc(5 * var(--luke-control-height))";
 
-/** A column of `children`, one section each, under `title` and beside it `actions`. */
+/** A column of `children`, one section each, under `title` and beside it `actions`, or under the bar that names the page where `place` says so. */
 export function SettingsPage({
   title,
+  place = SETTINGS_PAGE_TITLE.IN_PAGE,
   actions,
   children,
 }: {
   /** The page's name, its `h1`. */
   title: ReactNode;
+  /** Where the title stands; in a bar, the page draws neither it nor `actions`, which the bar holds. */
+  place?: SettingsPageTitle | undefined;
   /** What acts on the whole page, at the end of the title's line. */
   actions?: ReactNode;
   /** The sections, a section's gap apart. */
@@ -62,14 +77,16 @@ export function SettingsPage({
   return (
     <div className="luke-settings-page">
       <div className="luke-settings-page-column">
-        <header className="luke-settings-page-head">
-          <Text variant={TEXT_VARIANT.TITLE} as={TEXT_ELEMENT.H1}>
-            {title}
-          </Text>
-          {actions === undefined ? null : (
-            <div className="luke-settings-page-actions">{actions}</div>
-          )}
-        </header>
+        {place === SETTINGS_PAGE_TITLE.IN_BAR ? null : (
+          <header className="luke-settings-page-head">
+            <Text variant={TEXT_VARIANT.TITLE} as={TEXT_ELEMENT.H1}>
+              {title}
+            </Text>
+            {actions === undefined ? null : (
+              <div className="luke-settings-page-actions">{actions}</div>
+            )}
+          </header>
+        )}
         <RevealArea root={sections}>
           <div ref={sections} className="luke-settings-page-sections" {...revealArea()}>
             {children}
@@ -80,18 +97,21 @@ export function SettingsPage({
   );
 }
 
-/** A page of placeholders while `label` is read, drawn by the page itself: a block for its title over sections of `sections`' shapes. */
+/** A page of placeholders while `label` is read, drawn by the page itself: a block for its title, where the page draws one, over sections of `sections`' shapes. */
 export function SettingsPageSkeleton({
   label,
+  place,
   sections,
 }: {
   /** What is being read, said to a reader: "Loading Settings". */
   label: string;
+  /** Where the loaded page's title will stand, as `SettingsPage` takes it. */
+  place?: SettingsPageTitle | undefined;
   /** The sections likely to land, each in its shape. */
   sections: readonly SettingsSectionSkeletonShape[];
 }): React.JSX.Element {
   return (
-    <SettingsPage title={<Skeleton width={SKELETON_TITLE_WIDTH} />}>
+    <SettingsPage title={<Skeleton width={SKELETON_TITLE_WIDTH} />} place={place}>
       <SettingsSectionsSkeleton label={label} sections={sections} />
     </SettingsPage>
   );

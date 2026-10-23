@@ -147,6 +147,7 @@ export function TemplateVersionHistory({
       history={steps}
       subject={subject}
       account={account}
+      exitTo={TEMPLATE_TITLE}
       onExit={onExit}
       onRestored={onExit}
     />

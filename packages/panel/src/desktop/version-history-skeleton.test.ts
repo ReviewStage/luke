@@ -74,6 +74,7 @@ function drawn(list: PlanHistoryControl["list"]): HTMLElement {
         },
         subject: taskVersionSubject(tasks),
         account: { status: ACCOUNT_STATUS.SIGNED_IN, email: "dev@example.com", provider: "github" },
+        exitTo: undefined,
         onExit: ignore,
         onRestored: ignore,
       }),

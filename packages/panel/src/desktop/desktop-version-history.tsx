@@ -18,7 +18,6 @@ import {
   ErrorState,
   FILL_ELEMENT,
   Fill,
-  FoldingButton,
   IconButton,
   LIST_ROW_ACTIONS,
   LIST_ROW_CURRENT,
@@ -26,7 +25,6 @@ import {
   ListRow,
   NavItem,
   OneLine,
-  PageToolbar,
   ResizeEdge,
   RetryRowLabel,
   RowHint,
@@ -83,6 +81,7 @@ import { useVersionRestore, VersionPageSkeleton, VersionView } from "../tasks/ve
 import { ActionMenu, type MenuAction } from "./action-menu.js";
 import { HistoryButtons, useSidebarEdge } from "./desktop-sidebar.js";
 import { useNarrowFocus } from "./narrow-focus.js";
+import { backStepName, PhoneBack, type PhoneBackDoor, PhoneHead } from "./phone-head.js";
 import type { SidebarCollapse } from "./sidebar-collapse.js";
 
 /**
@@ -318,7 +317,8 @@ function SectionsHead({
 }: {
   author: Actor;
   source: SourceDoor | undefined;
-  onBack: () => void;
+  /** The way back to every version, a row of its own; none on a phone, whose header leads with it. */
+  onBack: (() => void) | undefined;
 }): React.JSX.Element {
   const name = (
     <OneLine className="version-row-author">
@@ -328,9 +328,11 @@ function SectionsHead({
   );
   return (
     <>
-      <NavItem icon={<BackIcon />} onClick={onBack}>
-        All versions
-      </NavItem>
+      {onBack === undefined ? null : (
+        <NavItem icon={<BackIcon />} onClick={onBack}>
+          {ALL_VERSIONS}
+        </NavItem>
+      )}
       <p className="version-sections-head">
         <ActorMark actor={author} size={ACTOR_SIZE.ROW} />
         {source === undefined ? (
@@ -576,14 +578,14 @@ function VersionPage({
   subject,
   restore,
   section,
-  lead,
+  back,
 }: {
   subject: VersionSubject;
   restore: DialogConfirm;
   /** The one unit of the version drawn alone, while a section of its revision is open. */
   section: number | undefined;
-  /** What leads the page's bar: the way back to the list, where the page stands alone. */
-  lead: React.ReactNode;
+  /** The way back to the list, where the page stands alone on a phone, whose header it leads. */
+  back: PhoneBackDoor | undefined;
 }): React.JSX.Element {
   const { versions } = subject;
   if (versions.viewing !== undefined) {
@@ -595,7 +597,7 @@ function VersionPage({
         noun={subject.noun}
         section={section}
         task={subject.task}
-        lead={lead}
+        back={back}
       />
     );
   }
@@ -603,11 +605,15 @@ function VersionPage({
   // A list read that holds versions is still finding the one the view opened on.
   const finding = list.kind === HISTORY_READ.READY && list.revisions.length > 0;
   if (list.kind === HISTORY_READ.READING || finding) {
-    return <VersionPageSkeleton lead={lead} title={subject.title} section={section} />;
+    return <VersionPageSkeleton back={back} title={subject.title} section={section} />;
   }
   return (
     <>
-      {lead === undefined ? <div className="desktop-drag-strip" /> : <PageToolbar lead={lead} />}
+      {back === undefined ? (
+        <div className="desktop-drag-strip" />
+      ) : (
+        <PhoneHead place="version" start={<PhoneBack back={back} />} title={null} end={null} />
+      )}
       <Fill className="desktop-empty-region">
         {list.kind === HISTORY_READ.FAILED ? (
           <ErrorState onRetry={versions.onRetry} placement={ERROR_STATE_PLACEMENT.CENTRED}>
@@ -621,8 +627,14 @@ function VersionPage({
   );
 }
 
-/** What the way back from a version to the list says, in a narrow room. */
+/** Where a narrow room's way back from a version goes: the list. */
 const VERSION_LIST = "Versions";
+
+/** Where the way back from a revision's sections goes: every version. */
+const ALL_VERSIONS = "All versions";
+
+/** The list's title. */
+const VERSION_HISTORY = "Version history";
 
 /** The open plan's history as the view's subject: its name, its agents, and the places in the window its revisions were written. */
 export function taskVersionSubject(tasks: TasksControl): VersionSubject {
@@ -661,7 +673,11 @@ export function taskVersionSubject(tasks: TasksControl): VersionSubject {
  * leaves for wherever it was opened from, and `onRestored` for what a
  * restore landed on. A narrow room shows the list or the version, one at a
  * time (`hiddenColumns`): a version or a section chosen stands alone the
- * whole width, under a way back to the list.
+ * whole width, under a way back to the list. Each is headed as a phone heads
+ * every page (`phone-head.tsx`): the list by its way out, named `exitTo`,
+ * or from a revision's sections the way back to every version, and its
+ * title, with no back and forward beside them; a version by the way back to
+ * the list, when it was saved, and its restore in a ⋯.
  */
 export function DesktopVersionHistory({
   sidebar,
@@ -669,6 +685,7 @@ export function DesktopVersionHistory({
   history,
   subject,
   account,
+  exitTo,
   onExit,
   onRestored,
 }: {
@@ -678,6 +695,8 @@ export function DesktopVersionHistory({
   subject: VersionSubject;
   /** Who is reading, whose revisions are drawn as theirs. */
   account: AccountSnapshot;
+  /** What `onExit` goes back to, which a phone's way back is named for; none where nothing names it. */
+  exitTo: string | undefined;
   onExit: () => void;
   onRestored: () => void;
 }): React.JSX.Element {
@@ -756,23 +775,44 @@ export function DesktopVersionHistory({
   useOpenedRowShown(versions.selected, rows, log);
   const hidden = hiddenColumns(room, versions.listed);
   const screen = useNarrowFocus(room, versions.listed);
+  const narrow = room === SHELL_ROOM.NARROW;
 
   return (
     <div ref={screen} className="desktop-version-history">
       <nav className="version-log ph-no-capture" aria-label="Versions" hidden={hidden.list}>
-        <div className="desktop-drag-strip" />
-        <HistoryButtons history={history} room={room} />
-        <NavItem
-          icon={<BackIcon />}
-          aria-keyshortcuts={commandKeyshortcuts(APP_COMMAND.EXIT_VERSION_HISTORY)}
-          shortcut={<Shortcut chord={APP_SHORTCUTS[APP_COMMAND.EXIT_VERSION_HISTORY].chord} />}
-          onClick={onExit}
-        >
-          Back
-        </NavItem>
+        {narrow ? (
+          // A phone's header: the way out, or back to every version from a revision's sections, and the title.
+          <PhoneHead
+            place="version-log"
+            start={
+              <PhoneBack
+                back={
+                  opened === undefined
+                    ? { to: exitTo, onPress: onExit }
+                    : { to: ALL_VERSIONS, onPress: closeSections }
+                }
+              />
+            }
+            title={<h1 className="desktop-toolbar-title">{VERSION_HISTORY}</h1>}
+            end={null}
+          />
+        ) : (
+          <>
+            <div className="desktop-drag-strip" />
+            <HistoryButtons history={history} room={room} />
+            <NavItem
+              icon={<BackIcon />}
+              aria-keyshortcuts={commandKeyshortcuts(APP_COMMAND.EXIT_VERSION_HISTORY)}
+              shortcut={<Shortcut chord={APP_SHORTCUTS[APP_COMMAND.EXIT_VERSION_HISTORY].chord} />}
+              onClick={onExit}
+            >
+              Back
+            </NavItem>
+          </>
+        )}
         <div className="version-log-track" data-opened={String(opened !== undefined)}>
           <div className="version-log-pane" inert={opened !== undefined}>
-            <h1 className="version-log-title">Version history</h1>
+            {narrow ? null : <h1 className="version-log-title">{VERSION_HISTORY}</h1>}
             <Fill className="sidebar-section">
               <ScrollArea ref={log} fade={SCROLL_FADE.BOTH}>
                 <div className="sidebar-section-body">
@@ -840,7 +880,7 @@ export function DesktopVersionHistory({
                         openedAuthor ?? revisionAuthorOf(openedLine, reader, agents, subject.own)
                       }
                       source={openedSource}
-                      onBack={closeSections}
+                      onBack={narrow ? undefined : closeSections}
                     />
                     {sections === undefined ? <SectionsSkeleton /> : null}
                     <List label={LIST_LABEL.SECTIONS}>
@@ -874,11 +914,7 @@ export function DesktopVersionHistory({
             subject={subject}
             restore={restore}
             section={opened === undefined ? undefined : unit}
-            lead={
-              room === SHELL_ROOM.NARROW ? (
-                <FoldingButton label={VERSION_LIST} icon={<BackIcon />} onClick={versions.onList} />
-              ) : undefined
-            }
+            back={narrow ? { to: VERSION_LIST, onPress: versions.onList } : undefined}
           />
         </PageFind>
       </section>
@@ -886,12 +922,19 @@ export function DesktopVersionHistory({
   );
 }
 
-/** The open plan's version history, as the window draws it in place of the tasks (`pages-on-demand.ts`). */
+/** The open plan's version history, as the window draws it in place of the tasks (`pages-on-demand.ts`), its way out named for the step Back goes to, or the plan where none stands behind. */
 export function TaskVersionHistory({
   tasks,
   ...view
-}: Omit<Parameters<typeof DesktopVersionHistory>[0], "subject"> & {
+}: Omit<Parameters<typeof DesktopVersionHistory>[0], "subject" | "exitTo"> & {
   tasks: TasksControl;
 }): React.JSX.Element {
-  return <DesktopVersionHistory {...view} subject={taskVersionSubject(tasks)} />;
+  const subject = taskVersionSubject(tasks);
+  return (
+    <DesktopVersionHistory
+      {...view}
+      subject={subject}
+      exitTo={backStepName(view.history, subject.title)}
+    />
+  );
 }
