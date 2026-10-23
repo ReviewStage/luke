@@ -114,15 +114,16 @@ fires, use a `@luke/ui` component, or add the component or variant there.
   (`coder-host/chat-notify.ts`), the inbox's and the chat's players are left
   out of session replay, and none of it goes into a trace, a counted event, a
   fixture, or the voice window. And Sentry's SDKs run
-  with their default data collection, but for model inputs and outputs and
-  request bodies, which are left out
+  with their default data collection, but that the service's and the eve roots'
+  leave out model inputs and outputs and request bodies
   (`packages/service/src/observability/sentry.ts`, the eve roots'
   `instrumentation/sentry.ts`, the desktop's `Sentry.init`, and the web app's
   browser SDK, `apps/web/src/app/web-sentry-sdk.ts`, with the desktop renderer's
-  token filters, `@luke/features/sentry-breadcrumbs`), so what a log line, a
-  local variable, or an error's words carry may still reach Sentry; a credential
-  among it is replaced only where Sentry's denylist catches it by name, and
-  `PRIVACY.md` says so.
+  token filters, `@luke/features/sentry-breadcrumbs`), so what a request, a log
+  line, a local variable, or an error's words carries may still reach Sentry
+  from the desktop and the browser, and a log line, a local variable, or an
+  error's words from any of them; a credential among it is replaced only where
+  Sentry's denylist catches it by name, and `PRIVACY.md` says so.
 - Session replay records the rendered panel with every word masked
   (`packages/panel/src/session-replay.ts`), so what leaves the machine is
   layout, not text; an unmasked attribute or a new way of drawing words is what
