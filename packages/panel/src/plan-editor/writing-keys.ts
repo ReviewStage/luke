@@ -8,7 +8,7 @@
  * place, every one of them or the ones an editor names (`actions`), as a
  * message box names its marks' alone. A block's chord, and a Markdown rule
  * that makes a block (`blockRulesOutOfCells`), does nothing in a table's
- * cell (`inTableCell`), which holds one line of words. A chord the editor answers goes no further than the editor, as the
+ * cell (`inTableCell`, `selectionTouchesCell`), which holds one line of words. A chord the editor answers goes no further than the editor, as the
  * pull request box's own do (`markdown-field.tsx`), so it is the editor's
  * alone while it has the caret and the window's keymap never hears it; every
  * other key, one the editor handled or not, reaches the window as before.
@@ -27,7 +27,7 @@ import {
 import { type AnyExtension, type Editor, Extension, InputRule } from "@tiptap/core";
 import { keydownHandler } from "@tiptap/pm/keymap";
 import type { ResolvedPos } from "@tiptap/pm/model";
-import { Plugin, PluginKey } from "@tiptap/pm/state";
+import { type EditorState, Plugin, PluginKey } from "@tiptap/pm/state";
 
 /** The extensions whose own chords the vocabulary's replace, by TipTap's names for them. */
 const WRITING_EXTENSIONS: ReadonlySet<string> = new Set([
@@ -101,6 +101,18 @@ export function inTableCell($at: ResolvedPos): boolean {
     if (CELL_ROLES.has($at.node(depth).type.spec.tableRole)) return true;
   }
   return false;
+}
+
+/** Whether the selection touches a table's cell: the caret stands in one, either end does, or a cell lies between them. */
+export function selectionTouchesCell(state: EditorState): boolean {
+  const { $from, $to, from, to } = state.selection;
+  if (inTableCell($from) || inTableCell($to)) return true;
+  let touched = false;
+  state.doc.nodesBetween(from, to, (node) => {
+    if (CELL_ROLES.has(node.type.spec.tableRole)) touched = true;
+    return !touched;
+  });
+  return touched;
 }
 
 /** A chord as ProseMirror's keymap spells it: Mod for Command, so another platform's editor answers Control, as TipTap's own chords do. */
@@ -183,8 +195,7 @@ export const writingKeys = Extension.create<{ actions: readonly WritingAction[] 
       if (shortcut.chord === undefined || !runsHere(action)) continue;
       const block = BLOCK_ACTIONS.has(action);
       bound[keymapName(shortcut.chord)] = () =>
-        (block && inTableCell(this.editor.state.selection.$from)) ||
-        WRITING_RUN[action](this.editor);
+        (block && selectionTouchesCell(this.editor.state)) || WRITING_RUN[action](this.editor);
     }
     const answer = keydownHandler(bound);
     return [

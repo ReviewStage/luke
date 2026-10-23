@@ -96,10 +96,17 @@ test("each rule that makes a block does nothing in a table's cell, its words kep
 
     typeKeys(editor, rule.typed);
 
-    const cells = [...editor.view.dom.querySelectorAll("td")].map((cell) => cell.innerHTML);
+    // Each cell holds one line of words and nothing else.
+    const cells = [...editor.view.dom.querySelectorAll("td")].map((cell) => ({
+      words: cell.textContent,
+      blocks: [...cell.children].map((child) => child.tagName),
+    }));
     assert.deepEqual(
       cells,
-      ["<p>Admin</p>", `<p>${rule.typed.replace(">", "&gt;")}Anyone</p>`],
+      [
+        { words: "Admin", blocks: ["P"] },
+        { words: `${rule.typed}Anyone`, blocks: ["P"] },
+      ],
       rule.typed,
     );
     assert.ok(handle.markdown().trim().startsWith("| Role"), `${rule.typed}: the table stands`);
