@@ -175,13 +175,10 @@ interface AgentInboxLine {
   readonly thread: readonly AgentThreadLine[];
   /** The member who closed the thread without answering, by name: a former member's where their account is gone. */
   readonly closedBy?: string;
-  /** What an item from before threads asks while open, which no message of its carries. */
-  readonly blocks?: InboxItem["blocks"];
-  readonly response?: InboxItem["response"];
-  /** How an item from before threads was answered, and the names of the files the answer carried. */
+  /** How a thread no message answers was answered, a notice's nod, and the names of the files the answer carried. */
   readonly answer?: InboxReply;
   readonly answerFiles?: readonly string[];
-  /** Why an item from before threads was closed. */
+  /** Why a thread whose messages ask nothing was closed. */
   readonly closedReason?: string;
 }
 
@@ -299,19 +296,16 @@ function openNotice(item: InboxItem): boolean {
 }
 
 /**
- * What an item from before threads carries on itself rather than on a
- * message: what it asks while open, how it was answered, and why it was
- * closed. Note that an item posted since carries each on its messages, so
- * none is repeated where a message asks or answers, and a notice's empty
- * view is left out, since it asks nothing.
+ * What a thread no message asks or answers carries on itself rather than on
+ * a message, a notice's: how it was answered, and why it was closed. Note
+ * that a thread that asks carries each on its messages, so none is
+ * repeated there.
  */
-function legacyOf(item: InboxItem, messages: readonly InboxMessage[]): Partial<AgentInboxLine> {
+function settlementOf(item: InboxItem, messages: readonly InboxMessage[]): Partial<AgentInboxLine> {
   if (messages.some((message) => message.ask !== undefined || message.answers !== undefined)) {
     return {};
   }
-  const asks = item.status === INBOX_STATUS.OPEN && !(openNotice(item) && item.blocks.length === 0);
   return {
-    ...(asks ? { blocks: item.blocks, response: item.response } : undefined),
     ...(item.answer === undefined ? undefined : { answer: item.answer }),
     ...(item.answerFiles === undefined
       ? undefined
@@ -355,7 +349,7 @@ function lineOf(item: InboxItem): AgentInboxLine {
     ...(earlier > 0 ? { earlier } : undefined),
     thread: told.map(threadLineOf),
     ...closerOf(item),
-    ...legacyOf(item, messages),
+    ...settlementOf(item, messages),
   };
 }
 
