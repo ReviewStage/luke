@@ -462,14 +462,23 @@ function isUnsealed<Answer extends object>(sealed: Answer | Unsealed): sealed is
   return "failure" in sealed;
 }
 
-/** The parts of an open task read apart from its document, each laid over the view as it lands. */
+/** The parts of an open task read apart from its document, each laid over the view as it lands, and the document itself. */
 const OPENED_PART = {
   BOARD: "board",
   CODE: "code",
   PAGES: "pages",
+  DOCUMENT: "document",
 } as const;
 
 type OpenedPart = (typeof OPENED_PART)[keyof typeof OPENED_PART];
+
+/** How many tasks left lately are kept as they were drawn, so opening one again draws it at once. */
+const RECENTLY_OPENED_KEPT = 8;
+
+/** A task's page as it was drawn when it was left: its document and the parts read beside it. */
+type OpenedCopy = Pick<TasksView, "board" | "shownCode" | "codeStatus" | "pages"> & {
+  readonly task: Task;
+};
 
 /**
  * The panel's tasks as one concern. The view is told to every client whole
@@ -524,8 +533,9 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
   /**
    * One read of the service at a time, whichever ask made it. Note that the
    * answers are applied in the order the reads were made, because a list
-   * that left before a task started, or a document read that left before a
-   * newer one, would otherwise land last and roll the view back.
+   * that left before a task started would otherwise land last and roll the
+   * view back. The open task's document and parts are read outside it,
+   * ordered by their own numbers instead (`partReads`).
    */
   const serial = (yield* Semaphore.make(1)).withPermits(1);
 
@@ -732,6 +742,53 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
   function heldTaskOf(taskId: string): TasksDocument["task"] {
     const held = view.document.task;
     return held?.id === taskId ? held : undefined;
+  }
+
+  /** The tasks left lately, the latest last, each as it was drawn when it was left (`RECENTLY_OPENED_KEPT`). */
+  const recentlyOpened = new Map<string, OpenedCopy>();
+
+  /** Keeps the open task's page as it is drawn now, where its document is, so opening it again draws it at once. */
+  function keepOpened(): void {
+    const taskId = view.activeTaskId;
+    const task = taskId === undefined ? undefined : heldTaskOf(taskId);
+    if (task === undefined) return;
+    const { board, shownCode, codeStatus, pages } = view;
+    recentlyOpened.delete(task.id);
+    recentlyOpened.set(task.id, {
+      task,
+      ...(board === undefined ? undefined : { board }),
+      ...(pages === undefined ? undefined : { pages }),
+      // Note that code still out, or a read of it that failed, is read again rather than kept.
+      ...(codeStatus === TASKS_READ.READY && shownCode !== undefined
+        ? { shownCode, codeStatus }
+        : undefined),
+    });
+    for (const oldest of recentlyOpened.keys()) {
+      if (recentlyOpened.size <= RECENTLY_OPENED_KEPT) break;
+      recentlyOpened.delete(oldest);
+    }
+  }
+
+  /**
+   * The page `taskId` opens on: as it was drawn when it was left, its row
+   * of the list laid over the copy, since the list is followed live and the
+   * copy is not; or reading where none is kept.
+   */
+  function openingView(taskId: string): Partial<TasksView> {
+    const copy = recentlyOpened.get(taskId);
+    if (copy === undefined) {
+      return { document: { status: TASKS_READ.READING }, codeStatus: TASKS_READ.READING };
+    }
+    const { task, ...parts } = copy;
+    const row = view.tasks.find((each) => each.id === taskId);
+    return {
+      ...parts,
+      codeStatus: parts.codeStatus ?? TASKS_READ.READING,
+      document: {
+        status: TASKS_READ.READY,
+        task: row === undefined ? task : { ...withoutAssignee(task), ...row },
+      },
+    };
   }
 
   /** A task's row of the list: everything but its document and what is written of it. */
@@ -1092,15 +1149,16 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
   }
 
   /**
-   * Each of the open task's parts read apart from its document, by the
-   * number of reads of it started and of the newest laid over the view, so
-   * a read that left before a newer one, or before a write of the part,
-   * never lands over it (`laidNow`).
+   * Each of the open task's parts, its document among them, by the number
+   * of reads of it started and of the newest laid over the view, so a read
+   * that left before a newer one, or before a write of the part, never
+   * lands over it (`laidNow`).
    */
   const partReads: Record<OpenedPart, { started: number; laid: number }> = {
     [OPENED_PART.BOARD]: { started: 0, laid: 0 },
     [OPENED_PART.CODE]: { started: 0, laid: 0 },
     [OPENED_PART.PAGES]: { started: 0, laid: 0 },
+    [OPENED_PART.DOCUMENT]: { started: 0, laid: 0 },
   };
 
   /** Numbers a read of the part as it starts. */
@@ -1124,26 +1182,34 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
   /** The open's part reads still out, one per part, a newer open's taking the place of the last. */
   const openedParts = yield* FiberMap.make<OpenedPart, void>();
 
+  /** The read an open asked for, which a newer open's interrupts. */
+  const openedRead = yield* FiberHandle.make<void>();
+
   /**
    * Reads what the active task's page draws, its document, board, code, and
    * pages, all at once, and tells the window the document with every part
    * that answered before it in one view, so the page lands whole rather than
    * a part at a time, each reflowing what the one before laid out. A part
    * answering after the document is laid over the view as it lands, on its
-   * own, so neither the document nor another part waits for it, and the
-   * lock (`serial`), held for the document's read alone as before, waits on
-   * none of them. A copy of the same task already held stays drawn while the
-   * reads are out and through a document read that failed, so a save
-   * redraws in place; a failed board, code, or pages read keeps what is held
-   * of it, as their own reads do. The document and the code say they are
-   * reading only where nothing of them is held, which a switch has already
-   * told (`TASKS_OPEN`).
+   * own, so neither the document nor another part waits for it. No read
+   * holds the lock (`serial`): the document is laid where it is still the
+   * newest of its reads and no write of it landed since it left (`laidNow`),
+   * so an open never queues behind another's reads or a write's answer. A
+   * copy of the same task already held, the one a switch drew from those
+   * kept (`openingView`) among them, stays drawn while the reads are out and
+   * through a document read that failed, so a save or a switch back redraws
+   * in place; a failed board, code, or pages read keeps what is held of it,
+   * as their own reads do. The document and the code say they are reading
+   * only where nothing of them is held, which a switch has already told
+   * (`TASKS_OPEN`).
    */
   function readOpened(taskId: string) {
     return Effect.gen(function* () {
-      const held = heldTaskOf(taskId);
+      const documentRead = partReadStarted(OPENED_PART.DOCUMENT);
       write({
-        ...(held === undefined ? { document: { status: TASKS_READ.READING } } : undefined),
+        ...(heldTaskOf(taskId) === undefined
+          ? { document: { status: TASKS_READ.READING } }
+          : undefined),
         ...(view.codeStatus === TASKS_READ.READY ? undefined : { codeStatus: TASKS_READ.READING }),
       });
       /** The parts that answered before the document, each laid with it where still the newest of its part. */
@@ -1182,7 +1248,10 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       const opened = yield* Fiber.join(yield* Effect.forkChild(served(client.open(taskId))));
       // Another task opened while these reads were out: their answers are not the panel's any more.
       if (view.activeTaskId !== taskId) return;
-      let read: TasksView = { ...view, document: documentAfter(opened, held) };
+      // Note that a document an answer wrote after this read left stands, since it is the newer.
+      let read: TasksView = laidNow(OPENED_PART.DOCUMENT, documentRead)
+        ? { ...view, document: documentAfter(opened, heldTaskOf(taskId)) }
+        : view;
       for (const part of early.splice(0)) {
         if (laidNow(part.part, part.read)) read = part.lay(read);
       }
@@ -1195,6 +1264,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
   /** Reads the active task's board; a failed read keeps the board drawn. */
   function readBoard(taskId: string) {
     return Effect.gen(function* () {
+      if (view.activeTaskId !== taskId) return;
       const read = partReadStarted(OPENED_PART.BOARD);
       const board = yield* served(client.readBoard(taskId));
       if (board === undefined || view.activeTaskId !== taskId) return;
@@ -1236,6 +1306,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
    */
   function readPages(taskId: string) {
     return Effect.gen(function* () {
+      if (view.activeTaskId !== taskId) return;
       const read = partReadStarted(OPENED_PART.PAGES);
       const pages = yield* served(client.readPages({ taskId }));
       if (view.activeTaskId !== taskId || !laidNow(OPENED_PART.PAGES, read)) return;
@@ -1473,6 +1544,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       row.id === task.id ? { ...withoutAssignee(row), ...summaryOf(task) } : row,
     );
     const held = heldTaskOf(task.id);
+    if (held !== undefined) partWritten(OPENED_PART.DOCUMENT);
     write(
       held === undefined
         ? { tasks }
@@ -1606,12 +1678,10 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         const open = view.activeTaskId;
         if (open !== undefined) yield* openBoard(open, { onlyIfMissing: true });
         if (open !== undefined) yield* openRecord(open, { onlyIfMissing: true });
-        const tasks = serial(
-          Effect.gen(function* () {
-            const taskId = view.activeTaskId;
-            if (taskId !== undefined) yield* readOpened(taskId);
-          }),
-        );
+        const tasks = Effect.suspend(() => {
+          const taskId = view.activeTaskId;
+          return taskId === undefined ? Effect.void : readOpened(taskId);
+        });
         yield* followWorkspaces;
         yield* followSidebar;
         yield* Effect.all([tasks, readGithubWhenStale], { concurrency: "unbounded" });
@@ -1631,23 +1701,31 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         if (Result.isFailure(read)) return yield* invalid("opening a task names one task");
         if (!gate()) return { opened: false };
         const { taskId } = read.success;
+        // A press on the task already open, drawn or being read, asks nothing again.
+        const status = view.document.status;
+        if (
+          view.activeTaskId === taskId &&
+          (status === TASKS_READ.READY || status === TASKS_READ.READING)
+        ) {
+          yield* openBoard(taskId, { onlyIfMissing: true });
+          yield* openRecord(taskId, { onlyIfMissing: true });
+          return { opened: true };
+        }
         // Note that a call about the task left behind goes on standing,
         // because the call outlives the task on screen: moving it to this
         // task is this task's own Talk press.
         if (view.activeTaskId !== taskId) {
-          // Note that the code says it is reading in the same view, so the
-          // page is told twice in all: that it is reading, then what it read.
-          view = {
-            ...withoutActivity(view),
-            activeTaskId: taskId,
-            document: { status: TASKS_READ.READING },
-            codeStatus: TASKS_READ.READING,
-          };
+          // Note that the task left is kept as drawn, and the one opened is
+          // drawn at once as it was last left, or else says it is reading,
+          // its code too; either way it is told again once read.
+          keepOpened();
+          view = { ...withoutActivity(view), activeTaskId: taskId, ...openingView(taskId) };
           publish();
         }
         yield* openBoard(taskId);
         yield* openRecord(taskId);
-        yield* serial(readOpened(taskId));
+        // Note that the open answers once the page is drawn, its read left running, so nothing waits on the network.
+        yield* FiberHandle.run(openedRead, readOpened(taskId));
         return { opened: true };
       }),
     [GATEWAY_METHOD.TASKS_FILE]: (params) =>
@@ -2062,6 +2140,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         yield* FiberHandle.clear(recordFollow);
         yield* serial(
           Effect.sync(() => {
+            keepOpened();
             const { activeTaskId: _closed, ...rest } = withoutActivity(view);
             view = { ...rest, document: { status: TASKS_READ.IDLE } };
             publish();
@@ -2086,6 +2165,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
             const { task, agent } = started.answer;
             // A task just started has had no call. A call about another task
             // is left to the start's own Talk press, which moves it here.
+            keepOpened();
             view = {
               ...withoutActivity(view),
               activeTaskId: task.id,
@@ -2117,6 +2197,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
           Effect.gen(function* () {
             const deleted = yield* served(client.delete(taskId));
             if (deleted === undefined) return [{ deleted: false }, undefined] as const;
+            recentlyOpened.delete(taskId);
             const tasks = view.tasks.filter((task) => task.id !== taskId);
             if (view.activeTaskId === taskId) {
               yield* FiberHandle.clear(boardFollow);
@@ -2146,6 +2227,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
               task.id === taskId ? { ...task, name: renamed.name } : task,
             );
             const held = heldTaskOf(taskId);
+            if (held !== undefined) partWritten(OPENED_PART.DOCUMENT);
             write(
               held === undefined
                 ? { tasks }
@@ -2793,6 +2875,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       yield* endTaskCall(undefined);
       yield* Cache.invalidateAll(pullRequestReads);
       yield* Cache.invalidateAll(issueReads);
+      yield* FiberHandle.clear(openedRead);
       yield* FiberHandle.clear(boardFollow);
       yield* FiberMap.clear(pagesFollows);
       yield* FiberMap.clear(browserTabsFollows);
@@ -2807,6 +2890,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         Effect.sync(() => {
           githubAskedAt = undefined;
           githubRead += 1;
+          recentlyOpened.clear();
           view = idleView();
           publish();
         }),
@@ -2814,7 +2898,9 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     }),
     // The code a call shows, coloured in turn, and the board, page, and code
     // reads their followed marks ask for; every other read of the tasks is an
-    // ask's.
+    // ask's. Note that these reads hold no lock, because each is ordered by
+    // its part's numbers (`laidNow`), and an open must not queue behind a
+    // read of the task it left.
     lifetime: Effect.gen(function* () {
       yield* Effect.forkScoped(
         // A showing that dies is reported and dropped, and the next is still drawn.
@@ -2831,14 +2917,14 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       yield* Effect.forkScoped(
         Effect.forever(
           Effect.flatMap(Queue.take(boardReads), (taskId) =>
-            gate() ? serial(readBoard(taskId)) : Effect.void,
+            gate() ? readBoard(taskId) : Effect.void,
           ),
         ),
       );
       yield* Effect.forkScoped(
         Effect.forever(
           Effect.flatMap(Queue.take(pageReads), (taskId) =>
-            gate() ? serial(readPages(taskId)) : Effect.void,
+            gate() ? readPages(taskId) : Effect.void,
           ),
         ),
       );
@@ -2846,7 +2932,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         Effect.forever(
           Effect.flatMap(Queue.take(codeReads), (taskId) =>
             Effect.suspend(() =>
-              gate() && view.activeTaskId === taskId ? serial(readShownCode(taskId)) : Effect.void,
+              gate() && view.activeTaskId === taskId ? readShownCode(taskId) : Effect.void,
             ),
           ),
         ),

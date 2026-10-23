@@ -1353,6 +1353,9 @@ function subject(
     const settled = Effect.gen(function* () {
       for (let tick = 0; tick < 200; tick += 1) yield* Effect.yieldNow;
     });
+    /** Opens a task as the window's press does, then lets the read the open left running land. */
+    const openTask = (taskId: string) =>
+      Effect.tap(call(GATEWAY_METHOD.TASKS_OPEN, { taskId }), () => settled);
     return {
       tasks,
       call,
@@ -1367,6 +1370,7 @@ function subject(
       realtime,
       listed,
       settled,
+      openTask,
     };
   });
 }
@@ -1497,7 +1501,7 @@ it.effect("the window's refresh lists the plans and opening one draws its saved 
   Effect.gen(function* () {
     const invites = task(INVITES, "Teammate invitations", "# Teammate invitations", 10);
     const billing = task(BILLING, "Billing export", "# Billing export", 20);
-    const { call, last, tasks, listed } = yield* subject(fakeService([billing, invites]));
+    const { call, last, tasks, listed, openTask } = yield* subject(fakeService([billing, invites]));
 
     yield* call(GATEWAY_METHOD.TASKS_REFRESH);
     yield* listed();
@@ -1508,14 +1512,14 @@ it.effect("the window's refresh lists the plans and opening one draws its saved 
     assert.equal(last()?.listStatus, TASKS_READ.READY);
     assert.equal(last()?.activeTaskId, undefined);
 
-    assert.deepEqual(yield* call(GATEWAY_METHOD.TASKS_OPEN, { taskId: INVITES }), {
+    assert.deepEqual(yield* openTask(INVITES), {
       opened: true,
     });
     assert.equal(last()?.activeTaskId, INVITES);
     assert.deepEqual(last()?.document, { status: TASKS_READ.READY, task: invites });
     assert.equal(tasks.activeTaskId(), INVITES);
 
-    yield* call(GATEWAY_METHOD.TASKS_OPEN, { taskId: BILLING });
+    yield* openTask(BILLING);
     assert.equal(last()?.activeTaskId, BILLING);
     assert.deepEqual(last()?.document, { status: TASKS_READ.READY, task: billing });
   }),
@@ -1592,11 +1596,11 @@ it.effect(
       service.boards[BILLING] = board;
       service.codes[BILLING] = [];
       service.pageLines[BILLING] = [funnel];
-      const { call, told } = yield* subject(service);
-      yield* call(GATEWAY_METHOD.TASKS_OPEN, { taskId: INVITES });
+      const { told, openTask } = yield* subject(service);
+      yield* openTask(INVITES);
 
       const before = told.length;
-      yield* call(GATEWAY_METHOD.TASKS_OPEN, { taskId: BILLING });
+      yield* openTask(BILLING);
       const opened = told.slice(before);
 
       assert.deepEqual(
@@ -1623,9 +1627,9 @@ it.effect(
       service.codes[INVITES] = [];
       // The pages are never answered, as a read that hangs until its deadline.
       service.readPages = () => Effect.never;
-      const { call, last } = yield* subject(service);
+      const { call, last, openTask } = yield* subject(service);
 
-      assert.deepEqual(yield* call(GATEWAY_METHOD.TASKS_OPEN, { taskId: INVITES }), {
+      assert.deepEqual(yield* openTask(INVITES), {
         opened: true,
       });
       assert.deepEqual(last()?.document, { status: TASKS_READ.READY, task: invites });
@@ -1650,9 +1654,9 @@ it.effect(
       const readCode = service.readCode;
       service.readCode = (taskId) => Effect.andThen(Deferred.await(codeHeld), readCode(taskId));
       service.readPages = () => Effect.never;
-      const { call, last } = yield* subject(service);
+      const { last, openTask } = yield* subject(service);
 
-      yield* call(GATEWAY_METHOD.TASKS_OPEN, { taskId: INVITES });
+      yield* openTask(INVITES);
       assert.deepEqual(last()?.document, { status: TASKS_READ.READY, task: invites });
       assert.equal(last()?.codeStatus, TASKS_READ.READING, "the code is still out");
 
@@ -1664,6 +1668,129 @@ it.effect(
 );
 
 it.effect(
+  "switching back to a task opened a moment ago draws its document, board, code, and pages at once, answers before any read does, and lays the read over it in place",
+  () =>
+    Effect.gen(function* () {
+      const invites = task(INVITES, "Teammate invitations", "# Teammate invitations", 10);
+      const billing = task(BILLING, "Billing export", "# Billing export", 20);
+      const service = fakeService([billing, invites]);
+      const board = { elements: [], appliedDrawing: 0 };
+      service.boards[INVITES] = board;
+      service.codes[INVITES] = [];
+      const { call, last, settled, openTask } = yield* subject(service);
+      yield* openTask(INVITES);
+      yield* openTask(BILLING);
+
+      // Every read of the task is held from here, as a service that has not answered yet.
+      const answered = yield* Deferred.make<void>();
+      const held =
+        <A>(read: (taskId: string) => Effect.Effect<A>) =>
+        (taskId: string) =>
+          Effect.andThen(Deferred.await(answered), read(taskId));
+      const { open, readBoard, readCode } = service;
+      service.open = held(open);
+      service.readBoard = held(readBoard);
+      service.readCode = held(readCode);
+      service.tasks = [billing, { ...invites, document: { ...invites.document, body: "# Newer" } }];
+
+      const switching = yield* Effect.forkChild(
+        call(GATEWAY_METHOD.TASKS_OPEN, { taskId: INVITES }),
+      );
+      yield* settled;
+      assert.deepEqual(switching.pollUnsafe(), Exit.succeed({ opened: true }), "the open answered");
+      assert.equal(last()?.activeTaskId, INVITES);
+      assert.deepEqual(last()?.document, { status: TASKS_READ.READY, task: invites });
+      assert.deepEqual(last()?.board, board);
+      assert.equal(last()?.codeStatus, TASKS_READ.READY);
+      assert.deepEqual(last()?.shownCode, []);
+
+      yield* Deferred.succeed(answered, undefined);
+      yield* settled;
+      assert.equal(last()?.document.task?.document.body, "# Newer");
+    }),
+);
+
+it.effect(
+  "an open is not queued behind the reads of a task switched past, whose answers land nowhere",
+  () =>
+    Effect.gen(function* () {
+      const invites = task(INVITES, "Teammate invitations", "# Teammate invitations", 10);
+      const billing = task(BILLING, "Billing export", "# Billing export", 20);
+      const service = fakeService([billing, invites]);
+      // The billing task's document and board are held, as reads still out when the next press lands.
+      const answered = yield* Deferred.make<void>();
+      const { open, readBoard } = service;
+      service.open = (taskId) =>
+        taskId === BILLING ? Effect.andThen(Deferred.await(answered), open(taskId)) : open(taskId);
+      service.readBoard = (taskId) =>
+        taskId === BILLING
+          ? Effect.andThen(Deferred.await(answered), readBoard(taskId))
+          : readBoard(taskId);
+      service.boards[BILLING] = { elements: [], appliedDrawing: 1 };
+      const { call, last, settled } = yield* subject(service);
+
+      yield* Effect.forkChild(call(GATEWAY_METHOD.TASKS_OPEN, { taskId: BILLING }));
+      yield* settled;
+      const opening = yield* Effect.forkChild(call(GATEWAY_METHOD.TASKS_OPEN, { taskId: INVITES }));
+      yield* settled;
+
+      assert.deepEqual(opening.pollUnsafe(), Exit.succeed({ opened: true }));
+      assert.equal(last()?.activeTaskId, INVITES);
+      assert.deepEqual(last()?.document, { status: TASKS_READ.READY, task: invites });
+
+      yield* Deferred.succeed(answered, undefined);
+      yield* settled;
+      assert.deepEqual(last()?.document, { status: TASKS_READ.READY, task: invites });
+      assert.equal(last()?.board, undefined, "the billing board lands nowhere");
+    }),
+);
+
+it.effect("a press on the task already open reads nothing again", () =>
+  Effect.gen(function* () {
+    const invites = task(INVITES, "Teammate invitations", "# Teammate invitations", 10);
+    const service = fakeService([invites]);
+    const { last, openTask } = yield* subject(service);
+    yield* openTask(INVITES);
+    const before = service.reads.length;
+
+    assert.deepEqual(yield* openTask(INVITES), { opened: true });
+    assert.deepEqual(service.reads.slice(before), []);
+    assert.deepEqual(last()?.document, { status: TASKS_READ.READY, task: invites });
+  }),
+);
+
+it.effect(
+  "an open's document read that left before a rename answered never lands over the renamed document",
+  () =>
+    Effect.gen(function* () {
+      const invites = task(INVITES, "Teammate invitations", "# Teammate invitations", 10);
+      const billing = task(BILLING, "Billing export", "# Billing export", 20);
+      const service = fakeService([billing, invites]);
+      const { call, last, settled, openTask } = yield* subject(service);
+      yield* openTask(INVITES);
+      yield* openTask(BILLING);
+
+      // The read takes the task as it stands when asked, and answers only once let go.
+      const answered = yield* Deferred.make<void>();
+      const { open } = service;
+      service.open = (taskId) =>
+        Effect.flatMap(open(taskId), (read) => Effect.as(Deferred.await(answered), read));
+      yield* call(GATEWAY_METHOD.TASKS_OPEN, { taskId: INVITES });
+      yield* settled;
+      assert.deepEqual(
+        yield* call(GATEWAY_METHOD.TASKS_RENAME, { taskId: INVITES, name: "Invitations" }),
+        { renamed: true },
+        "the rename is not held behind the read",
+      );
+
+      yield* Deferred.succeed(answered, undefined);
+      yield* settled;
+      assert.equal(last()?.document.task?.name, "Invitations");
+      assert.equal(last()?.document.task?.document.body, "# Invitations");
+    }),
+);
+
+it.effect(
   "a task's code read as none is held as none, and a task whose code read did not answer holds its code unread",
   () =>
     Effect.gen(function* () {
@@ -1671,12 +1798,12 @@ it.effect(
       const billing = task(BILLING, "Billing export", "# Billing export", 20);
       const service = fakeService([billing, invites]);
       service.codes[INVITES] = [];
-      const { call, last } = yield* subject(service);
+      const { last, openTask } = yield* subject(service);
 
-      yield* call(GATEWAY_METHOD.TASKS_OPEN, { taskId: INVITES });
+      yield* openTask(INVITES);
       assert.deepEqual(last()?.shownCode, []);
 
-      yield* call(GATEWAY_METHOD.TASKS_OPEN, { taskId: BILLING });
+      yield* openTask(BILLING);
       assert.equal(last()?.shownCode, undefined);
     }),
 );
@@ -1687,9 +1814,9 @@ it.effect(
     Effect.gen(function* () {
       const invites = task(INVITES, "Teammate invitations", "# Teammate invitations", 10);
       const service = fakeService([invites]);
-      const { call, last, told } = yield* subject(service);
+      const { call, last, told, openTask } = yield* subject(service);
 
-      yield* call(GATEWAY_METHOD.TASKS_OPEN, { taskId: INVITES });
+      yield* openTask(INVITES);
       assert.ok(
         told.some((view) => view.codeStatus === TASKS_READ.READING),
         "the read says it is out",
@@ -1768,9 +1895,9 @@ it.effect(
     Effect.gen(function* () {
       const invites = task(INVITES, "Teammate invitations", "# Teammate invitations", 10);
       const service = fakeService([invites]);
-      const { call, last } = yield* subject(service);
+      const { call, last, openTask } = yield* subject(service);
       yield* call(GATEWAY_METHOD.TASKS_REFRESH);
-      yield* call(GATEWAY_METHOD.TASKS_OPEN, { taskId: INVITES });
+      yield* openTask(INVITES);
 
       const answer = yield* call(GATEWAY_METHOD.TASKS_EDIT, {
         taskId: INVITES,
@@ -1974,9 +2101,9 @@ it.effect(
 it.effect("a sign-out drops the view the window drew", () =>
   Effect.gen(function* () {
     const service = fakeService([task(INVITES, "Teammate invitations", "# Draft", 10)]);
-    const { call, last, tasks } = yield* subject(service);
+    const { call, last, tasks, openTask } = yield* subject(service);
     yield* call(GATEWAY_METHOD.TASKS_REFRESH);
-    yield* call(GATEWAY_METHOD.TASKS_OPEN, { taskId: INVITES });
+    yield* openTask(INVITES);
 
     yield* tasks.reset;
 
@@ -1995,9 +2122,9 @@ it.effect(
     Effect.gen(function* () {
       const service = fakeService([task(INVITES, "Teammate invitations", "# Draft", 10)]);
       service.codes[INVITES] = [];
-      const { call, tasks, viewLands } = yield* subject(service);
+      const { tasks, viewLands, openTask } = yield* subject(service);
       yield* tasks.lifetime;
-      yield* call(GATEWAY_METHOD.TASKS_OPEN, { taskId: INVITES });
+      yield* openTask(INVITES);
       const shown = {
         callId: "call-1",
         turnId: "turn-1",
@@ -2034,9 +2161,9 @@ it.effect(
     Effect.gen(function* () {
       const service = fakeService([task(INVITES, "Teammate invitations", "# Draft", 10)]);
       service.codes[INVITES] = [];
-      const { call, tasks, viewLands } = yield* subject(service);
+      const { tasks, viewLands, openTask } = yield* subject(service);
       yield* tasks.lifetime;
-      yield* call(GATEWAY_METHOD.TASKS_OPEN, { taskId: INVITES });
+      yield* openTask(INVITES);
       const shown = {
         callId: "call-1",
         turnId: "turn-1",
@@ -2085,11 +2212,11 @@ it.effect("code whose drawing dies is reported, and code shown after it is still
   Effect.gen(function* () {
     const service = fakeService([task(INVITES, "Teammate invitations", "# Draft", 10)]);
     service.codes[INVITES] = [];
-    const { call, tasks, viewLands, reported } = yield* subject(service, {
+    const { tasks, viewLands, reported, openTask } = yield* subject(service, {
       breaksOn: (view) => (view.shownCode ?? []).some((code) => code.callId === "call-1"),
     });
     yield* tasks.lifetime;
-    yield* call(GATEWAY_METHOD.TASKS_OPEN, { taskId: INVITES });
+    yield* openTask(INVITES);
     const shown = {
       callId: "call-1",
       turnId: "turn-1",
@@ -2874,10 +3001,10 @@ it.effect(
       service.memberships = [PERSONAL, ACME];
       service.notPermitted = true;
       const standing: StandingCall = { about: { taskId: INVITES } };
-      const { call, last, listed } = yield* subject(service, { call: standing });
+      const { call, last, listed, openTask } = yield* subject(service, { call: standing });
       yield* call(GATEWAY_METHOD.TASKS_REFRESH);
       yield* listed();
-      yield* call(GATEWAY_METHOD.TASKS_OPEN, { taskId: INVITES });
+      yield* openTask(INVITES);
 
       const refused = yield* call(GATEWAY_METHOD.WORKSPACES_LEAVE, { workspaceId: ACME.id });
 
@@ -2911,10 +3038,10 @@ it.effect(
       const service = fakeService([acmeTask, personalTask]);
       service.memberships = [PERSONAL, ACME];
       const standing: StandingCall = { about: { taskId: INVITES } };
-      const { call, last, listed } = yield* subject(service, { call: standing });
+      const { call, last, listed, openTask } = yield* subject(service, { call: standing });
       yield* call(GATEWAY_METHOD.TASKS_REFRESH);
       yield* listed();
-      yield* call(GATEWAY_METHOD.TASKS_OPEN, { taskId: BILLING });
+      yield* openTask(BILLING);
 
       const left = yield* call(GATEWAY_METHOD.WORKSPACES_LEAVE, { workspaceId: ACME.id });
 
@@ -2929,9 +3056,9 @@ it.effect("leaving another workspace than the open plan's keeps the plan and its
     const service = fakeService([task(INVITES, "Teammate invitations", "# Draft", 10)]);
     service.memberships = [PERSONAL, ACME];
     const standing: StandingCall = { about: { taskId: INVITES } };
-    const { call, last } = yield* subject(service, { call: standing });
+    const { call, last, openTask } = yield* subject(service, { call: standing });
     yield* call(GATEWAY_METHOD.TASKS_REFRESH);
-    yield* call(GATEWAY_METHOD.TASKS_OPEN, { taskId: INVITES });
+    yield* openTask(INVITES);
 
     yield* call(GATEWAY_METHOD.WORKSPACES_LEAVE, { workspaceId: ACME.id });
 
@@ -3438,10 +3565,10 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const invites = task(INVITES, "Teammate invitations", "# Teammate invitations", 10);
-      const { call, last, listed } = yield* subject(fakeService([invites]));
+      const { call, last, listed, openTask } = yield* subject(fakeService([invites]));
       yield* call(GATEWAY_METHOD.TASKS_REFRESH);
       yield* listed();
-      yield* call(GATEWAY_METHOD.TASKS_OPEN, { taskId: INVITES });
+      yield* openTask(INVITES);
 
       const moved = yield* call(GATEWAY_METHOD.TASKS_MOVE, {
         taskId: INVITES,
@@ -3464,14 +3591,16 @@ it.effect(
     Effect.gen(function* () {
       const invites = task(INVITES, "Teammate invitations", "# Teammate invitations", 10);
       const realtime = fakeRealtime();
-      const { call, last } = yield* subject(fakeService([invites]), { openLive: realtime.open });
+      const { call, last, openTask } = yield* subject(fakeService([invites]), {
+        openLive: realtime.open,
+      });
       yield* call(GATEWAY_METHOD.TASKS_REFRESH);
       yield* realtime.listSubscribed;
       realtime.deliverPart("plans", [rowOfTask(invites)]);
       realtime.deliverPart("agents", []);
       realtime.deliverPart("issues", []);
       yield* realtime.settled;
-      yield* call(GATEWAY_METHOD.TASKS_OPEN, { taskId: INVITES });
+      yield* openTask(INVITES);
 
       const changed = yield* call(GATEWAY_METHOD.TASKS_SET_STANDING, {
         taskId: INVITES,
@@ -3499,10 +3628,10 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const invites = task(INVITES, "Teammate invitations", "# Teammate invitations", 10);
-      const { call, last, listed } = yield* subject(fakeService([invites]));
+      const { call, last, listed, openTask } = yield* subject(fakeService([invites]));
       yield* call(GATEWAY_METHOD.TASKS_REFRESH);
       yield* listed();
-      yield* call(GATEWAY_METHOD.TASKS_OPEN, { taskId: INVITES });
+      yield* openTask(INVITES);
       const openAssignee = () => {
         const open = last()?.document;
         return open?.status === TASKS_READ.READY ? open.task?.assignee : undefined;
@@ -3594,11 +3723,11 @@ it.effect(
       service.boards[INVITES] = { elements: [], appliedDrawing: 0 };
       service.boardSeals[INVITES] = sealedBoard(0);
       const realtime = fakeBoardRealtime();
-      const { call, tasks, last, viewLands } = yield* subject(service, {
+      const { call, tasks, last, viewLands, openTask } = yield* subject(service, {
         openLive: () => realtime.client,
       });
       yield* tasks.lifetime;
-      yield* call(GATEWAY_METHOD.TASKS_OPEN, { taskId: INVITES });
+      yield* openTask(INVITES);
       assert.deepEqual(last()?.board, { elements: [], appliedDrawing: 0 });
       yield* boardSettled;
       assert.deepEqual(realtime.subscribed(), ["board-0"]);
@@ -3655,9 +3784,9 @@ it.effect(
         },
       };
       const realtime = fakeServiceRealtime();
-      const { call, tasks } = yield* subject(service, { openLive: realtime.open });
+      const { call, tasks, openTask } = yield* subject(service, { openLive: realtime.open });
       yield* tasks.lifetime;
-      yield* call(GATEWAY_METHOD.TASKS_OPEN, { taskId: INVITES });
+      yield* openTask(INVITES);
       yield* boardSettled;
       realtime.deliver("board", [
         { taskId: INVITES, drawingNumber: 0, appliedDrawing: 0, imaged: false },
@@ -3750,9 +3879,11 @@ it.effect(
       service.codes[INVITES] = [];
       service.recordSeals[INVITES] = sealedRecord(0);
       const realtime = fakeBoardRealtime();
-      const { call, tasks } = yield* subject(service, { openLive: () => realtime.client });
+      const { call, tasks, openTask } = yield* subject(service, {
+        openLive: () => realtime.client,
+      });
       yield* tasks.lifetime;
-      yield* call(GATEWAY_METHOD.TASKS_OPEN, { taskId: INVITES });
+      yield* openTask(INVITES);
       yield* boardSettled;
       assert.deepEqual(realtime.subscribed().toSorted(), ["calls-0", "code-0", "pages-0"]);
       const taken = () => service.recordReads.splice(0).toSorted();
@@ -3802,11 +3933,11 @@ it.effect(
       service.codes[INVITES] = [];
       service.recordSeals[INVITES] = sealedRecord(0);
       const realtime = fakeBoardRealtime();
-      const { call, tasks, viewLands } = yield* subject(service, {
+      const { tasks, viewLands, openTask } = yield* subject(service, {
         openLive: () => realtime.client,
       });
       yield* tasks.lifetime;
-      yield* call(GATEWAY_METHOD.TASKS_OPEN, { taskId: INVITES });
+      yield* openTask(INVITES);
       yield* boardSettled;
       const deliver = (code: readonly unknown[]) =>
         Effect.andThen(
@@ -3877,9 +4008,11 @@ it.effect(
       service.boards[INVITES] = { elements: [], appliedDrawing: 0 };
       service.boardSeals[INVITES] = sealedBoard(0);
       const realtime = fakeBoardRealtime();
-      const { call, tasks } = yield* subject(service, { openLive: () => realtime.client });
+      const { tasks, openTask } = yield* subject(service, {
+        openLive: () => realtime.client,
+      });
       yield* tasks.lifetime;
-      yield* call(GATEWAY_METHOD.TASKS_OPEN, { taskId: INVITES });
+      yield* openTask(INVITES);
       yield* boardSettled;
       realtime.deliver("board-0", []);
       assert.deepEqual(realtime.subscribed(), ["board-0"]);
