@@ -2105,6 +2105,34 @@ test("the pill, the title, and the files' count stand from what Luke holds befor
   ]);
 });
 
+test("each part's placeholder stands in the boxes the part lands in: the line under the title in the people line, the conversation in entry cards, the checks in the checks' own list", async () => {
+  const pullRequest = held<{ pullRequest: CodingAgentOverviewPullRequest }>();
+  const checks = held<{ pullRequest: CodingAgentOverviewChecks }>();
+  const conversation = held<{ pullRequest: CodingAgentOverviewConversation }>();
+  const tab = await draw(
+    controlAnswering({
+      pullRequest: pullRequest.read,
+      checks: checks.read,
+      conversation: conversation.read,
+    }),
+  );
+  const placeholder = (label: string) =>
+    [...tab.querySelectorAll<HTMLElement>('[aria-busy="true"]')].find(
+      (each) => each.textContent === label,
+    ) ?? assert.fail(`${label} stands`);
+
+  assert.ok(placeholder("Reading pull request").querySelector(".pull-request-people .luke-skeleton"));
+  assert.ok(
+    placeholder("Reading conversation").querySelectorAll(".pull-request-entry .luke-skeleton")
+      .length > 0,
+  );
+  await choose(tab, "Checks");
+  const rows = placeholder("Reading checks").querySelectorAll(
+    '[aria-label="Check list"] li .luke-skeleton',
+  );
+  assert.ok(rows.length > 0, "the checks' blocks stand in the checks' own list");
+});
+
 /** A read answering each ask with the next of the answers given, the last again once they run out. */
 function inTurn<A>(...answers: readonly A[]): () => Promise<A> {
   let ask = 0;

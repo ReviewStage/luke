@@ -96,7 +96,15 @@ import {
   UserIcon,
   UsersIcon,
 } from "lucide-react";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import {
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { ACTOR_SIZE, ActorMark, AutomationCard, automationActor } from "../actor-ref.js";
 import { AttentionMark } from "../attention-mark.js";
 import { useAutomation } from "../automation-directory.js";
@@ -845,12 +853,8 @@ export function InboxItemRow({
           ink={LIST_ROW_INK.SIDEBAR}
           leading={
             <>
-              {/* Note that the gutter stands on every row, so the tiles line up whether a row wears the dot or not. */}
-              <span className="inbox-row-gutter">
-                {unread ? <span className="inbox-row-unread" /> : null}
-              </span>
               {/* Note that the tile hangs no card of its own, as a sidebar task's mark hangs none: the row's card names the agent. */}
-              <span className="inbox-row-mark">
+              <InboxRowLeading unread={unread}>
                 <ItemMark
                   holder={holder}
                   agentId={item.agentId}
@@ -858,7 +862,7 @@ export function InboxItemRow({
                   readerId={readerId}
                   plain
                 />
-              </span>
+              </InboxRowLeading>
             </>
           }
           title={title}
@@ -881,7 +885,7 @@ export function InboxItemRow({
             )
           }
           meta={
-            <span className="home-row-meta">
+            <InboxRowMeta>
               {unread ? <VisuallyHidden>{UNREAD}</VisuallyHidden> : null}
               {context === undefined ? null : (
                 <OneLine className="home-row-context" words={context}>
@@ -903,7 +907,7 @@ export function InboxItemRow({
               ) : null}
               <TaskStatusChip holder={holder} />
               <Time at={item.updatedAt} now={now} hint={false} />
-            </span>
+            </InboxRowMeta>
           }
           metaAt={LIST_ROW_META.TITLE}
           actions={
@@ -1387,6 +1391,34 @@ export function ShowEmpty({
 }
 
 /**
+ * An item row's leading: the gutter the unread dot stands in, on every row so
+ * the tiles line up whether a row wears the dot or not, and the tile after
+ * it. The list's rows and its placeholder rows both lead with it, so a tile
+ * lands where its block stood.
+ */
+function InboxRowLeading({
+  unread,
+  children,
+}: {
+  unread: boolean;
+  children: ReactNode;
+}): React.JSX.Element {
+  return (
+    <>
+      <span className="inbox-row-gutter">
+        {unread ? <span className="inbox-row-unread" /> : null}
+      </span>
+      <span className="inbox-row-mark">{children}</span>
+    </>
+  );
+}
+
+/** An item row's meta, its context, marks, and time in one line at the title's right. */
+function InboxRowMeta({ children }: { children: ReactNode }): React.JSX.Element {
+  return <span className="home-row-meta">{children}</span>;
+}
+
+/**
  * The list while its items are first read: rows in an item's own row, a
  * block where its agent's tile, its title, its time, and the line under
  * them will stand, so the
@@ -1418,20 +1450,18 @@ export function InboxListSkeleton({
           <ListRow
             key={title}
             leading={
-              <>
-                {/* Note that the gutter stands here as on every item's row, so the tiles land where their blocks stood. */}
-                <span className="inbox-row-gutter" />
+              <InboxRowLeading unread={false}>
                 <Skeleton shape={SKELETON_SHAPE.CIRCLE} width={SKELETON_MARK} />
-              </>
+              </InboxRowLeading>
             }
             title={<Skeleton width={title} />}
             description={<Skeleton width={preview} />}
             meta={
               context ? (
-                <span className="home-row-meta">
+                <InboxRowMeta>
                   <Skeleton width={SKELETON_CONTEXT} />
                   <Skeleton width={SKELETON_TIME} />
-                </span>
+                </InboxRowMeta>
               ) : (
                 <Skeleton width={SKELETON_TIME} />
               )

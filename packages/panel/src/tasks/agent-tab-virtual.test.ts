@@ -432,7 +432,7 @@ test("the log first draws once the agent's pull request is read, so its dock nev
   );
   assert.equal(drawnRows(container).length, 0, "no line is drawn while the pull request is read");
   assert.ok(
-    container.querySelector(".agent-tab > .agent-log-wait > [aria-busy]"),
+    container.querySelector(".agent-tab > .agent-log-skeleton-wait > [aria-busy]"),
     "the tab stands as loading",
   );
 

@@ -27,8 +27,6 @@ import {
   DocumentIcon,
   ERROR_STATE_PLACEMENT,
   ErrorState,
-  FILL_ELEMENT,
-  Fill,
   INLINE_REF_LOOK,
   InlineRef,
   LineSummary,
@@ -106,6 +104,7 @@ import { type PublishedDoors, PublishedRow } from "./agent-published.js";
 import { SendingAgent } from "./agent-ref.js";
 import type { AgentServersControl } from "./agent-servers.js";
 import type { HeldTranscript } from "./agent-tab-card.js";
+import { AgentTabFoot, AgentTabFrame } from "./agent-tab-frame.js";
 import { AgentTabSkeleton, ComposerSkeleton, TranscriptSkeleton } from "./agent-tab-skeleton.js";
 import { ArchivedComposerNote } from "./archived-note.js";
 import { CallEndMarker, CallStartMarker } from "./call-card.js";
@@ -2308,12 +2307,7 @@ function AgentTabView({
     [automationId, automationName, brief, run, tasked, openTarget, originStarter, steadyGitHub],
   );
   return (
-    <Fill
-      as={FILL_ELEMENT.SECTION}
-      ref={tab}
-      className="agent-tab ph-no-capture"
-      aria-label={agentTabLabel(agent, models)}
-    >
+    <AgentTabFrame ref={tab} label={agentTabLabel(agent, models)}>
       <MacOwnerProvider value={macOwner}>
         <AgentPicturesProvider value={pictures}>
           <WholePartsProvider value={wholeParts}>
@@ -2375,7 +2369,7 @@ function AgentTabView({
           </WholePartsProvider>
         </AgentPicturesProvider>
       </MacOwnerProvider>
-      <footer className="agent-tab-foot">
+      <AgentTabFoot>
         {call === undefined ? null : <AgentCallFoot agentId={agent.id} />}
         <TodosDock messages={lines} working={working} />
         <PublishedDock published={published} doors={doors} />
@@ -2421,7 +2415,7 @@ function AgentTabView({
             dictates={!onCall}
           />
         )}
-      </footer>
+      </AgentTabFoot>
       {/* Note that Reply stands only while the box takes a change, as a file's + does. */}
       {onUnarchive !== undefined ||
       continuedNote !== undefined ||
@@ -2429,7 +2423,7 @@ function AgentTabView({
       composer.sending ? null : (
         <ReplyToSelection scope={tab} onReply={(words) => replyDoor.current?.(words)} />
       )}
-    </Fill>
+    </AgentTabFrame>
   );
 }
 
@@ -2479,7 +2473,7 @@ const NO_RETRY = () => undefined;
 export function StartingAgentTab({ line }: { line: SentLine }): React.JSX.Element {
   const messages = useMemo(() => agentLines([], [line]), [line]);
   return (
-    <Fill as={FILL_ELEMENT.SECTION} className="agent-tab ph-no-capture">
+    <AgentTabFrame>
       <AgentTranscriptView
         messages={messages}
         brief={CODING_AGENT_BRIEF.PROMPT}
@@ -2490,10 +2484,10 @@ export function StartingAgentTab({ line }: { line: SentLine }): React.JSX.Elemen
         onRetry={NO_RETRY}
         overComposer
       />
-      <footer className="agent-tab-foot">
+      <AgentTabFoot>
         <ComposerSkeleton />
-      </footer>
-    </Fill>
+      </AgentTabFoot>
+    </AgentTabFrame>
   );
 }
 
@@ -2847,11 +2841,7 @@ export function AgentSubagentTab({
     onHeld(callId, { ...held, subagentTitles: new Map() });
   }, [onHeld, callId, messages, pageStatus, runStartedAt, pageTitle]);
   return (
-    <Fill
-      as={FILL_ELEMENT.SECTION}
-      className="agent-tab ph-no-capture"
-      aria-label={cardTitle(task)}
-    >
+    <AgentTabFrame label={cardTitle(task)}>
       <MacOwnerProvider value={macOwner}>
         <AgentPicturesProvider value={pictures}>
           <WholePartsProvider value={wholeParts}>
@@ -2873,6 +2863,6 @@ export function AgentSubagentTab({
           </WholePartsProvider>
         </AgentPicturesProvider>
       </MacOwnerProvider>
-    </Fill>
+    </AgentTabFrame>
   );
 }

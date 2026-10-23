@@ -1,11 +1,12 @@
+import { SKELETON_SHAPE, Skeleton, SkeletonRegion } from "@luke/ui";
 import {
-  ComposerFrame,
-  FILL_ELEMENT,
-  Fill,
-  SKELETON_SHAPE,
-  Skeleton,
-  SkeletonRegion,
-} from "@luke/ui";
+  PromptInputCard,
+  PromptInputFooter,
+  PromptInputTools,
+} from "../ai-elements/prompt-input.js";
+import { ComposerActions, ComposerAttach, ComposerCard } from "./agent-composer.js";
+import { AgentTabFoot, AgentTabFrame } from "./agent-tab-frame.js";
+import { ComposerFieldRoom, UnloadedComposerField } from "./composer-field.js";
 
 /**
  * agent-tab-skeleton.tsx -- an agent's tab in the shape it lands in, while what it draws is on its way.
@@ -41,7 +42,7 @@ export function TranscriptSkeleton({
   label?: string | undefined;
 }): React.JSX.Element {
   return (
-    <div className="agent-log-wait">
+    <div className="agent-log-skeleton-wait">
       <SkeletonRegion label={label}>
         <div className="agent-log-skeleton">
           {LOG_LINE_WIDTHS.map((width) => (
@@ -54,45 +55,44 @@ export function TranscriptSkeleton({
 }
 
 /**
- * The composer's card in its own frame and size: its empty field in the
- * field's own room, one line tall, and its foot's two ends as the composer
- * lays them, the + at the left, and the model chip beside the round send at
- * the right, so the card lands where it stood and its presses where their
- * blocks were. The icon presses between the chip and Send are left out, as
- * a narrow card folds them into its ⋯.
+ * The composer's card in its own frame and size, drawn in the composer's own
+ * boxes: its field unloaded, one line tall, and its foot's two ends as the
+ * composer lays them, the + at the left, and the model chip beside the round
+ * send at the right, so the card lands where it stood and its presses where
+ * their blocks were. The icon presses between the chip and Send are left
+ * out, as a narrow card folds them into its ⋯.
  */
 export function ComposerSkeleton(): React.JSX.Element {
   return (
-    <div className="agent-composer" aria-hidden="true">
-      <ComposerFrame className="prompt-input">
-        <div className="agent-composer-field">
-          <div className="agent-composer-input" />
-        </div>
-        <div className="prompt-input-footer">
-          <div className="prompt-input-tools">
-            {/* Note that the + stands in the attach press's own box, which the narrowest card folds away as it folds the +. */}
-            <span className="agent-composer-attach">
+    <ComposerCard aria-hidden="true">
+      <PromptInputCard>
+        <ComposerFieldRoom>
+          <UnloadedComposerField />
+        </ComposerFieldRoom>
+        <PromptInputFooter>
+          <PromptInputTools>
+            <ComposerAttach>
               <Skeleton shape={SKELETON_SHAPE.CONTROL} width={SQUARE_CONTROL_WIDTH} />
-            </span>
-          </div>
-          <div className="agent-composer-actions">
+            </ComposerAttach>
+          </PromptInputTools>
+          <ComposerActions>
             <Skeleton shape={SKELETON_SHAPE.CONTROL} width={MODEL_CHIP_WIDTH} />
             <Skeleton shape={SKELETON_SHAPE.CIRCLE} />
-          </div>
-        </div>
-      </ComposerFrame>
-    </div>
+          </ComposerActions>
+        </PromptInputFooter>
+      </PromptInputCard>
+    </ComposerCard>
   );
 }
 
 /** A whole agent's tab before it can be drawn: the log's last lines over the composer, which `label` names to a reader. */
 export function AgentTabSkeleton({ label }: { label?: string | undefined }): React.JSX.Element {
   return (
-    <Fill as={FILL_ELEMENT.SECTION} className="agent-tab">
+    <AgentTabFrame>
       <TranscriptSkeleton label={label} />
-      <footer className="agent-tab-foot">
+      <AgentTabFoot>
         <ComposerSkeleton />
-      </footer>
-    </Fill>
+      </AgentTabFoot>
+    </AgentTabFrame>
   );
 }

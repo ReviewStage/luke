@@ -1,6 +1,7 @@
 import { TEXT_ELEMENT, TEXT_VARIANT, Text } from "@luke/ui";
 import {
   type ReactNode,
+  type Ref,
   type RefObject,
   useCallback,
   useLayoutEffect,
@@ -46,6 +47,30 @@ import type {
 
 /** The editor's class, and the inert field's before it mounts. */
 const FIELD_CLASS = "ph-no-capture agent-composer-input";
+
+/**
+ * The field's room in its card, which sizes the field from one line to its
+ * cap (`.agent-composer-field`, tasks.css): the editor stands in it, and so
+ * does the placeholder of a box still being read.
+ */
+export function ComposerFieldRoom({
+  ref,
+  children,
+}: {
+  ref?: Ref<HTMLDivElement> | undefined;
+  children: ReactNode;
+}): React.JSX.Element {
+  return (
+    <div ref={ref} className="agent-composer-field">
+      {children}
+    </div>
+  );
+}
+
+/** The field before its editor mounts: drawn at the editor's own size and insets, inert. */
+export function UnloadedComposerField(): React.JSX.Element {
+  return <div className={FIELD_CLASS} aria-busy="true" />;
+}
 
 /** Whether the developer is typing somewhere the box must not take focus from: a field or an editor elsewhere. */
 function typingElsewhere(): boolean {
@@ -232,7 +257,7 @@ export function ComposerField({
   useLayoutEffect(() => editor.current?.setAria(aria));
 
   return (
-    <div ref={roomHost} className="agent-composer-field">
+    <ComposerFieldRoom ref={roomHost}>
       {draft === "" ? (
         <Text
           as={TEXT_ELEMENT.SPAN}
@@ -244,7 +269,7 @@ export function ComposerField({
           {placeholder}
         </Text>
       ) : null}
-      {module === undefined ? <div className={FIELD_CLASS} aria-busy="true" /> : <div ref={host} />}
+      {module === undefined ? <UnloadedComposerField /> : <div ref={host} />}
       {chips.map((each) =>
         createPortal(
           "mention" in each.chip
@@ -257,6 +282,6 @@ export function ComposerField({
         ),
       )}
       {children}
-    </div>
+    </ComposerFieldRoom>
   );
 }
