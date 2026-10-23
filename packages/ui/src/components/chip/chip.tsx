@@ -2,6 +2,7 @@ import type { ComponentPropsWithRef, ReactNode } from "react";
 import { ChevronDownIcon, RemoveIcon } from "../../face/glyphs.js";
 import { PRESS_FACE, PRESS_PULSE, pulseOnPress } from "../../press-pulse.js";
 import { useClipped } from "../../use-clipped.js";
+import { motionKey as motionKeyAttribute } from "../list-motion/list-motion.js";
 
 /**
  * chip.tsx -- the one chip: a button naming a value or a thing, drawn in the look of the place it stands.
@@ -33,8 +34,9 @@ import { useClipped } from "../../use-clipped.js";
  * own: it names what stands, a filter applied, a mention or a label added to
  * a field, and ends in a × named for what lifting it does, which its caller
  * answers at once, so what it named is gone on the press. It springs in as
- * it arrives; its exit is the list's that draws it (`ListMotion`), since
- * its caller has already let it go.
+ * it arrives; its exit is the list's that draws it, a `ListMotion`
+ * following it by its `motionKey`, which plays its arrival in its place,
+ * since its caller has already let it go.
  *
  * A chip comes at the control's size, or compact (`size`), a caption
  * line's pill, where it is one of a row of small counts (a pull request's
@@ -148,6 +150,7 @@ type ButtonChipProps = ChipFace & {
   /** Whether a change it made is out, which it says, and pulses, until answered. */
   busy?: boolean | undefined;
   onRemove?: never;
+  motionKey?: never;
 } & Omit<ComponentPropsWithRef<"button">, "type" | "style" | "className" | "aria-busy">;
 
 /** A chip naming what stands, ended by the × that lifts it. */
@@ -156,6 +159,8 @@ type RemovableChipProps = ChipFace & {
   onRemove: () => void;
   /** What the × does, its name for a reader ("Show everyone's tasks"). */
   removeLabel: string;
+  /** The key a `ListMotion` around its row follows it by, which plays its arrival and its exit. */
+  motionKey?: string | undefined;
   children: ReactNode;
 };
 
@@ -182,11 +187,17 @@ function faceAttributes({
 function RemovableChip({
   onRemove,
   removeLabel,
+  motionKey,
   children,
   ...face
 }: RemovableChipProps): React.JSX.Element {
   return (
-    <span className="luke-chip" data-removable="true" {...faceAttributes(face)}>
+    <span
+      className="luke-chip"
+      data-removable="true"
+      {...faceAttributes(face)}
+      {...(motionKey === undefined ? {} : motionKeyAttribute(motionKey))}
+    >
       <span className="luke-chip-face">{children}</span>
       <button
         type="button"
