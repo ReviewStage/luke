@@ -111,7 +111,7 @@ const standing = (target: Target) =>
       .where(eq(messages.conversationId, target.conversationId))
       .orderBy(asc(messages.seq));
     const turnRows = yield* db
-      .select({ id: turns.id })
+      .select({ id: turns.id, status: turns.status })
       .from(turns)
       .where(eq(turns.conversationId, target.conversationId));
     const [conversation] = yield* db
@@ -124,6 +124,7 @@ const standing = (target: Target) =>
     return {
       seqs: rows.map((row) => row.seq),
       turns: turnRows.map((row) => row.id),
+      statuses: turnRows.map((row) => row.status),
       conversation,
     };
   });
@@ -149,14 +150,16 @@ it.layer(getTestDB())("rewinding a coding agent's conversation", (it) => {
     () =>
       Effect.gen(function* () {
         const target = yield* openConversation;
-        const { firstLine } = yield* threeLines(target);
+        const { first, firstLine } = yield* threeLines(target);
 
         const rewound = yield* rewindConversation(target, firstLine);
         const after = yield* standing(target);
 
         assert.equal(Result.getOrThrow(rewound).clientId, "client-1");
         assert.deepEqual(after.seqs, []);
-        assert.deepEqual(after.turns, []);
+        // The first turn's row stands, settled and empty, so the agent reads as one that ran rather than one that never started.
+        assert.deepEqual(after.turns, [first]);
+        assert.deepEqual(after.statuses, [TURN_STATUS.SETTLED]);
         assert.deepEqual(yield* readNativeRewind(target), Option.some("client-1"));
       }),
   );

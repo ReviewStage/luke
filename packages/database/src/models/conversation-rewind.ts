@@ -1,5 +1,5 @@
-import { MESSAGE_ROLE } from "@luke/wire";
-import { and, eq, gte, inArray, isNull, or, sql } from "drizzle-orm";
+import { MESSAGE_ROLE, TURN_STATUS } from "@luke/wire";
+import { and, asc, eq, gte, inArray, isNull, lt, or, sql } from "drizzle-orm";
 import { Effect, Option, Result, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
 import { Database, type DatabaseServices, type QueryError } from "../core/query.js";
@@ -12,7 +12,9 @@ import type { ConversationTarget } from "./writer.js";
  *
  * A rewind drops the line named and everything after it: the turn it
  * opened and every later turn, with every row they wrote, and every row no
- * turn owns from the line on. It counts the journal revision up and marks
+ * turn owns from the line on. A cut at the first line keeps the first
+ * turn's row, its rows gone and settled, since an agent with no turn at all
+ * reads as one that never started. It counts the journal revision up and marks
  * the conversation rewound at it, so a reader holding an older cursor
  * reads the transcript afresh rather than joining what it holds, and
  * keeps the line's client id for the next launch of a Claude Code or
@@ -132,7 +134,40 @@ const findTurnsFrom = SqlSchema.findAll({
       db
         .select({ id: turns.id })
         .from(turns)
-        .where(and(eq(turns.conversationId, conversationId), gte(turns.queuedAt, from))),
+        .where(and(eq(turns.conversationId, conversationId), gte(turns.queuedAt, from)))
+        .orderBy(asc(turns.queuedAt), asc(turns.id)),
+    ),
+});
+
+const findTurnBefore = SqlSchema.findAll({
+  Request: Schema.Struct({ conversationId: Schema.String, from: Schema.Date }),
+  Result: Schema.Struct({ id: Schema.String }),
+  execute: ({ conversationId, from }) =>
+    Database.use((db) =>
+      db
+        .select({ id: turns.id })
+        .from(turns)
+        .where(and(eq(turns.conversationId, conversationId), lt(turns.queuedAt, from)))
+        .limit(1),
+    ),
+});
+
+/** A turn kept as the conversation's settled first, its work dropped, with no Stop or failure on it. */
+const settleKeptTurn = SqlSchema.void({
+  Request: Schema.Struct({ conversationId: Schema.String, turnId: Schema.String }),
+  execute: ({ conversationId, turnId }) =>
+    Database.use((db) =>
+      db
+        .update(turns)
+        .set({
+          status: TURN_STATUS.SETTLED,
+          settledAt: sql`now()`,
+          cancelRequestedAt: null,
+          cancelRequestKey: null,
+          failure: null,
+          failureDetail: null,
+        })
+        .where(and(eq(turns.conversationId, conversationId), eq(turns.id, turnId))),
     ),
 });
 
@@ -288,7 +323,14 @@ const cut = (target: ConversationTarget, messageId: string) =>
     const { seq, clientId, heard, from } = point.success;
     const turnIds = (yield* findTurnsFrom({ conversationId, from })).map((turn) => turn.id);
     yield* deleteMessagesFrom({ conversationId, seq, turnIds });
-    if (turnIds.length > 0) yield* deleteTurns({ conversationId, turnIds });
+    // Note that a cut dropping every turn keeps the first one's row, its work gone and settled, because
+    // an agent with no turn at all reads as one that never started, and fails past its grace.
+    const [first, ...later] = turnIds;
+    const keepsFirst =
+      first !== undefined && (yield* findTurnBefore({ conversationId, from })).length === 0;
+    const dropped = keepsFirst ? later : turnIds;
+    if (keepsFirst && first !== undefined) yield* settleKeptTurn({ conversationId, turnId: first });
+    if (dropped.length > 0) yield* deleteTurns({ conversationId, turnIds: dropped });
     // Note that a worker a dropped turn delegated is stamped deleted with it, so it is listed no more.
     yield* retireWorkersFrom({ conversationId, from });
     yield* markRewound({ conversationId, clientId, heard, turnIds });
