@@ -912,11 +912,29 @@ function startFailureWords(failure: CodingAgentCallFailure): string {
   }
 }
 
-/** What a message that did not reach the agent says under the composer, and what mends it, on a task or, for an agent with none, where the remedy needs no task. */
+/** What a teammate's agent says to a message its starter's own key refused: theirs to save in their Settings, which the reader's mend nothing of. */
+function starterKeyWords(failure: CodingAgentCallFailure, starter: string): string | undefined {
+  if (failure === CODING_AGENT_CALL_FAILURE.AGENT_API_KEY_UNREADABLE) {
+    return `${starter}'s saved API key can't be read. They save it again in Settings to unblock this agent.`;
+  }
+  if (failure === CODING_AGENT_CALL_FAILURE.AGENT_CREDENTIAL_MISSING) {
+    return `${starter} has no API key or plan connected for this agent. They connect one in Settings to unblock it.`;
+  }
+  return undefined;
+}
+
+/**
+ * What a message that did not reach the agent says under the composer, and
+ * what mends it, on a task or, for an agent with none, where the remedy needs
+ * no task. A teammate's agent (`starter`, `teammateStarter`) runs on its
+ * starter's credentials, so a refusal of theirs names them and offers the
+ * reader no Settings of their own.
+ */
 export function messageFailureNote(
   refused: RefusedCall,
   taskId: string | null,
   payer?: CodingAgentPayer | undefined,
+  starter?: string | undefined,
 ): Failure {
   if (refused.failure === CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE) {
     return unreachedFailure(refused.unreached, taskId);
@@ -930,6 +948,8 @@ export function messageFailureNote(
   ) {
     return callFailure(LUKE_PAID_REFUSAL);
   }
+  const theirs = starter === undefined ? undefined : starterKeyWords(refused.failure, starter);
+  if (theirs !== undefined) return callFailure(theirs);
   return (
     settingsFailure(refused, ACTION.MESSAGE) ??
     callFailure(planRefusalWords(refused, payer) ?? messageFailureWords(refused.failure))

@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
-import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
+import {
+  CODING_AGENT_CALL_FAILURE,
+  type CodingAgentCallFailure,
+} from "@luke/features/coding-agent-view";
 import {
   CHECK_SUMMARY,
   CODING_AGENT_PAYER,
@@ -780,6 +783,28 @@ test("a Start or a message refused for an API key saved but unreadable says so a
         text: "Your subscription isn't eligible to run this agent. Choose your API key in Settings to start one.",
       },
       FAILURE_REASON.OTHER,
+    ],
+  );
+});
+
+test("a message to a teammate's agent its starter's own key refused names the starter and offers the reader no Settings of their own", () => {
+  const note = (failure: CodingAgentCallFailure) =>
+    messageFailureNote({ failure }, null, CODING_AGENT_PAYER.API_KEY, "Ada");
+
+  assert.deepEqual(
+    [
+      note(CODING_AGENT_CALL_FAILURE.AGENT_API_KEY_UNREADABLE),
+      note(CODING_AGENT_CALL_FAILURE.AGENT_CREDENTIAL_MISSING),
+    ],
+    [
+      {
+        reason: FAILURE_REASON.OTHER,
+        text: "Ada's saved API key can't be read. They save it again in Settings to unblock this agent.",
+      },
+      {
+        reason: FAILURE_REASON.OTHER,
+        text: "Ada has no API key or plan connected for this agent. They connect one in Settings to unblock it.",
+      },
     ],
   );
 });

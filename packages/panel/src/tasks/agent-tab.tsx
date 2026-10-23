@@ -2729,6 +2729,7 @@ function AgentTabBody({
   callsSettled: boolean;
 }): React.JSX.Element {
   const { messages } = transcript;
+  const starter = teammateStarter(agent.startedBy, control.me);
   const composer = useAgentComposer({
     agentId: agent.id,
     taskId: agent.planId,
@@ -2737,6 +2738,7 @@ function AgentTabBody({
     send: control.onMessage,
     rewind: control.onRewind,
     payer: planPayerOf(agent.runtime),
+    starter,
     onStatus: control.onStatus,
   });
   const model = useAgentModel({ agent, choose: control.onChoose });
@@ -2790,7 +2792,6 @@ function AgentTabBody({
     bringIn: (messageId, then) => bringIn.current?.(messageId, then) === true,
     gone: () => toast({ words: MESSAGE_GONE, tone: STATUS_TONE.DANGER, hold: TOAST_HOLD.FAILED }),
   });
-  const starter = teammateStarter(agent.startedBy, control.me);
   const openAgent =
     onOpenTarget === undefined
       ? undefined
