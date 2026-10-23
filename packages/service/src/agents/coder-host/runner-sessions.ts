@@ -1403,11 +1403,27 @@ export const RUNNER_ENDED = {
  * A launch's end, as its END event tells it, for either harness: the
  * sandbox stopped, its repository credential taken off the firewall first,
  * unless a developer's Terminal holds it, and nothing for an END older than
- * the launch its sandbox runs now. Fails where Vercel or the store could not
- * be asked.
+ * the launch its sandbox runs now. Decided and stopped under the agent's
+ * runner lease, read again once it is held, so a `send` relaunching the
+ * runner either finishes first, and its newer launch makes this END stale,
+ * or starts after the stop and resumes the sandbox. Fails where Vercel or
+ * the store could not be asked, or the lease stayed held past its wait.
  */
 export const runnerEnded = Effect.fn("web/runnerEnded")(function* (ending: RunnerEnding) {
   const api = yield* vercelSandboxApi(deploymentOidcToken);
+  const found = yield* sandboxOf(api, ending.sessionId);
+  if (Option.isNone(found)) return RUNNER_ENDED.STALE;
+  const agentId = found.value.tags?.[RUNNER_TAG.AGENT];
+  // A sandbox no agent's tag names was never launched into, so no runner of it has a lease to wait out.
+  if (agentId === undefined) return yield* stoppedAtEnd(api, ending);
+  return yield* holdingRunner(agentId, stoppedAtEnd(api, ending));
+});
+
+/** The stop `runnerEnded` decides, on the sandbox as it stands when read here. */
+const stoppedAtEnd = Effect.fn("web/stoppedAtEnd")(function* (
+  api: VercelSandboxApi,
+  ending: RunnerEnding,
+) {
   const found = yield* sandboxOf(api, ending.sessionId);
   if (Option.isNone(found)) return RUNNER_ENDED.STALE;
   // Read apart from the runner's other tags, which a launch writes only once its command started.
