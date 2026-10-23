@@ -229,8 +229,15 @@ test("an admin's secret keeps its line breaks in a masked field, is sent once, a
       },
     ],
   );
-  assert.equal(document.querySelector('[role="dialog"]'), null, "the dialog closes once the secret is kept");
-  assert.ok(!document.body.innerHTML.includes(PASTED), "the window holds the secret nowhere once kept");
+  assert.equal(
+    document.querySelector('[role="dialog"]'),
+    null,
+    "the dialog closes once the secret is kept",
+  );
+  assert.ok(
+    !document.body.innerHTML.includes(PASTED),
+    "the window holds the secret nowhere once kept",
+  );
   assert.match(page.textContent ?? "", /TLS_CERT\s*Secret · …wxyz/u);
 });
 
@@ -322,6 +329,25 @@ test("Escape while a save is on its way keeps the dialog open, so the service's 
     refusal(page),
     "This workspace already holds 100 variables and secrets. Remove one first.",
   );
+});
+
+test("adding starts typing in the name, and editing in the value", async () => {
+  stored = [VARIABLE];
+  const page = await mount(ACME);
+
+  act(() => button(page, "Add variable").click());
+  await settle();
+  const adding = document.activeElement === field(page, "Name");
+  act(() => button(page, "Cancel").click());
+  await settle();
+  const more = page.querySelector<HTMLButtonElement>('button[aria-label="APP_MODE actions"]');
+  act(() => (more ?? assert.fail("no ⋯ for APP_MODE")).click());
+  await settle();
+  act(() => button(page, "Edit").click());
+  await settle();
+  const editing = document.activeElement === field(page, "Value");
+
+  assert.deepEqual([adding, editing], [true, true]);
 });
 
 test("the group and its fields are kept out of the screen recording", async () => {

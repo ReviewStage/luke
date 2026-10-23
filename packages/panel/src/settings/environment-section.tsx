@@ -44,7 +44,7 @@ import {
 } from "@luke/ui";
 import { dayText } from "@luke/ui/time-format";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useAct } from "../act.js";
 import { MenuRow } from "./menu-row.js";
 
@@ -189,6 +189,10 @@ function EnvironmentDialog({
   );
   const [saving, setSaving] = useState(false);
   const [refusal, setRefusal] = useState<string | undefined>(undefined);
+  // Where typing starts as the dialog opens: a new entry's name, or an edited one's value. The
+  // dialog places it itself, after it focuses its card, so a field's own autofocus would be lost.
+  const nameField = useRef<HTMLInputElement | null>(null);
+  const valueField = useRef<HTMLTextAreaElement | null>(null);
 
   const save = () => {
     const typed = name.trim();
@@ -207,6 +211,7 @@ function EnvironmentDialog({
       title={editing === undefined ? "Add variable" : `Edit ${editing.name}`}
       size={DIALOG_SIZE.WIDE}
       busy={saving}
+      initialFocus={editing === undefined ? nameField : valueField}
       // A dismissal while the save is on its way is ignored, so its refusal has a dialog to stand in.
       onDismiss={() => {
         if (!saving) onClose();
@@ -229,12 +234,12 @@ function EnvironmentDialog({
             <FormField label="Name">
               {(field) => (
                 <TextField
+                  ref={nameField}
                   field={field}
                   placeholder="NAME"
                   font={TEXT_FIELD_FONT.MONO}
                   autoComplete={TEXT_FIELD_AUTO_COMPLETE.OFF}
                   spellCheck={false}
-                  autoFocus
                   disabled={saving}
                   value={name}
                   onEnter={save}
@@ -266,6 +271,7 @@ function EnvironmentDialog({
           <FormField label="Value" error={refusal}>
             {(field) => (
               <TextArea
+                ref={valueField}
                 field={field}
                 placeholder={
                   kind === WORKSPACE_ENVIRONMENT_KIND.SECRET ? "Paste the secret" : "Value"
@@ -275,7 +281,6 @@ function EnvironmentDialog({
                 masked={kind === WORKSPACE_ENVIRONMENT_KIND.SECRET}
                 font={TEXT_FIELD_FONT.MONO}
                 spellCheck={false}
-                autoFocus={editing !== undefined}
                 busy={saving}
                 value={value}
                 onSubmit={save}
