@@ -57,7 +57,7 @@ import {
   useEditReader,
 } from "./edit-ref.js";
 import { type MentionDoors, mentionLinkDrawer } from "./mention-chip.js";
-import { PlanCommentLayer, useCommentFocus } from "./plan-comments.js";
+import { PlanCommentLayer, useCommentFocus, useEditorComment } from "./plan-comments.js";
 import {
   DocumentBlock,
   EditableTitle,
@@ -1206,6 +1206,8 @@ export const PlanBody = memo(function PlanBody({
     textSections.every((section, at) => section.text === views[at]?.words)
       ? textSections
       : undefined;
+  // The toolbar over the editor's words selected starts a thread on them where the plan's comments are drawn.
+  const commentOnWords = useEditorComment(editorHandle);
   const edited = lastEditOf(task);
   // A task item is ticked from the drawn plan while its words stand whole and
   // no editor is open, and saved through the editor's own door.
@@ -1411,6 +1413,7 @@ export const PlanBody = memo(function PlanBody({
                 scroller={scroller}
                 handle={editorHandle}
                 closedOn={closedOn}
+                onComment={drawnSections === undefined ? undefined : commentOnWords}
               />
             )}
             {comments === undefined || !commentsHere || drawnSections === undefined ? null : (

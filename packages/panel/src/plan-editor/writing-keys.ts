@@ -67,7 +67,7 @@ function runsHere(action: WritingAction): action is keyof typeof WRITING_RUN {
 }
 
 /** A chord as ProseMirror's keymap spells it: Mod for Command, so another platform's editor answers Control, as TipTap's own chords do. */
-function keymapName(chord: ShortcutChord): string {
+export function keymapName(chord: ShortcutChord): string {
   return ["Mod", chord.option ? "Alt" : undefined, chord.shift ? "Shift" : undefined, chord.key.key]
     .filter((part) => part !== undefined)
     .join("-");

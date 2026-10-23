@@ -12,6 +12,59 @@
  * parses none of them.
  */
 
+import type { WRITING_MARK, WritingBlock, WritingMark } from "@luke/settings/shortcuts";
+
+/** A box in the window, in the coordinates `getBoundingClientRect` speaks. */
+export interface EditorBox {
+  readonly left: number;
+  readonly top: number;
+  readonly right: number;
+  readonly bottom: number;
+}
+
+/**
+ * The selection as a format toolbar reads it: where it stands in the text,
+ * which moves the toolbar as it changes; whether it holds any words;
+ * whether it touches a code block, where no toolbar stands; the marks every
+ * selected word wears, Link's among them; the one kind of block it stands
+ * in, none where it spans several; and the link it or the caret stands in.
+ */
+export interface EditorFormat {
+  readonly from: number;
+  readonly to: number;
+  readonly empty: boolean;
+  readonly code: boolean;
+  readonly marks: readonly WritingMark[];
+  readonly block: WritingBlock | undefined;
+  readonly link: string | undefined;
+}
+
+/**
+ * What a format toolbar hands an editor as it mounts: the selection told
+ * after every change to it or its words (`onFormat`), and ⌘K over selected
+ * words or in a link (`onLink`), which opens the owner's link field. Note
+ * that ⌘K anywhere else is the window's command palette, so the editor
+ * leaves it alone there.
+ */
+export interface EditorFormatDoors {
+  readonly onFormat: (format: EditorFormat) => void;
+  readonly onLink: () => void;
+}
+
+/** What a format toolbar does to an editor's selection, and where it reads it standing. */
+export interface EditorFormatting {
+  /** Where the selected words stand in the window, the editor focused or not; none where nothing is laid out to measure. */
+  readonly selectionBox: () => EditorBox | undefined;
+  /** A mark laid on every selected word, or taken off where every one wears it. */
+  readonly toggleMark: (mark: Exclude<WritingMark, typeof WRITING_MARK.LINK>) => void;
+  /** The blocks the selection stands in turned into `block`. */
+  readonly turnInto: (block: WritingBlock) => void;
+  /** The selected words, or the whole link the caret stands in, linked to `href`; unlinked where it is none. */
+  readonly setLink: (href: string | undefined) => void;
+  /** The editor focused, its selection as it stood. */
+  readonly focus: () => void;
+}
+
 /**
  * The words a click landed on in a section as drawn: the section, the text
  * node's words, how many nodes of the same words came before it in the
@@ -75,6 +128,8 @@ export interface PlanEditorProps {
   readonly pictures?: PlanEditorPictures | undefined;
   /** The open comment threads' words, in offsets of `markdown`, which the editor carries as its words move; none where the text has no comments. */
   readonly anchors?: readonly EditorAnchor[] | undefined;
+  /** What a format toolbar over the text hears of its selection; none where no toolbar stands over it. */
+  readonly format?: EditorFormatDoors | undefined;
 }
 
 /** The words one comment thread is on, as offsets into a plan's Markdown. */
@@ -228,7 +283,7 @@ export interface EditorSpan {
 }
 
 /** An editor as mounted. */
-export interface PlanEditorHandle {
+export interface PlanEditorHandle extends EditorFormatting {
   /**
    * A save's merged answer taken in: Luke's part of `merged`, against what was
    * `sent`, laid in place of the blocks it changed. Answers the text the next
