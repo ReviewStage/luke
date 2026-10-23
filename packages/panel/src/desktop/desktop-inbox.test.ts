@@ -2276,7 +2276,14 @@ test("a recording an agent's words draw plays where it stands, left out of the r
     const inline = pane.querySelector("video");
     assert.ok(inline, "the recording plays where its words draw it");
     assert.equal(inline.getAttribute("src"), "blob:video-1");
-    assert.equal(inline.hasAttribute("controls"), true, "with the player's own controls");
+    assert.deepEqual(
+      [...(inline.closest(".luke-video-player")?.querySelectorAll("button") ?? [])].map((each) =>
+        each.getAttribute("aria-label"),
+      ),
+      ["Play", "Expand", "Full screen"],
+      "under Luke's own bar, with an Expand into the viewer",
+    );
+    assert.equal(inline.hasAttribute("controls"), false, "and not the browser's");
     assert.equal(inline.getAttribute("aria-label"), "Video: Inviting a member");
     assert.ok(inline.closest(".ph-no-capture"), "the player is left out of the replay");
     assert.equal(pane.querySelectorAll("video").length, 1, "the recording stands once");
@@ -2302,7 +2309,14 @@ test("a recording an agent's words draw plays where it stands, left out of the r
     const card = document.querySelector('[role="dialog"]');
     const player = card?.querySelector("video");
     assert.ok(player, "the viewer plays the recording");
-    assert.equal(player.hasAttribute("controls"), true, "with the player's own controls");
+    assert.deepEqual(
+      [...(player.closest(".luke-video-player")?.querySelectorAll("button") ?? [])].map((each) =>
+        each.getAttribute("aria-label"),
+      ),
+      ["Play", "Full screen"],
+      "under Luke's own bar",
+    );
+    assert.equal(player.hasAttribute("controls"), false, "and not the browser's");
     assert.equal(player.getAttribute("aria-label"), "Video: Inviting a member.webm");
     assert.equal(player.getAttribute("src"), "blob:video-2");
     assert.ok(player.closest(".ph-no-capture"), "the player is left out of the replay");

@@ -1868,7 +1868,14 @@ test("a recording a message carries plays where it stands, left out of the repla
     const inline = posted?.querySelector("video");
     assert.ok(inline, "the recording plays where the message draws it");
     assert.equal(inline.getAttribute("src"), "blob:video-1");
-    assert.equal(inline.hasAttribute("controls"), true, "with the player's own controls");
+    assert.deepEqual(
+      [...(inline.closest(".luke-video-player")?.querySelectorAll("button") ?? [])].map((each) =>
+        each.getAttribute("aria-label"),
+      ),
+      ["Play", "Expand", "Full screen"],
+      "under Luke's own bar, with an Expand into the viewer",
+    );
+    assert.equal(inline.hasAttribute("controls"), false, "and not the browser's");
     assert.ok(inline.closest(".ph-no-capture"), "the player is left out of the replay");
     assert.equal(posted?.querySelector('button[aria-label^="Enlarge"]'), null);
     const expand = posted?.querySelector<HTMLButtonElement>('button[aria-label="Expand"]');
@@ -1878,7 +1885,14 @@ test("a recording a message carries plays where it stands, left out of the repla
 
     const player = document.querySelector('[role="dialog"] video');
     assert.ok(player, "the viewer plays the recording");
-    assert.equal(player.hasAttribute("controls"), true, "with the player's own controls");
+    assert.deepEqual(
+      [...(player.closest(".luke-video-player")?.querySelectorAll("button") ?? [])].map((each) =>
+        each.getAttribute("aria-label"),
+      ),
+      ["Play", "Full screen"],
+      "under Luke's own bar",
+    );
+    assert.equal(player.hasAttribute("controls"), false, "and not the browser's");
     assert.equal(player.getAttribute("src"), "blob:video-2");
     assert.equal(player.getAttribute("aria-label"), "Video: invite-flow.webm");
     assert.ok(player.closest(".ph-no-capture"), "the player is left out of the replay");

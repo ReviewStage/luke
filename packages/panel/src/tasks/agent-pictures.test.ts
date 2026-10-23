@@ -498,7 +498,14 @@ test("a WebM the agent showed plays where it stands, above the picture shown wit
     const inline = container.querySelector("video");
     assert.ok(inline, "the video plays where it stands");
     assert.equal(inline.getAttribute("src"), "blob:video-1");
-    assert.equal(inline.hasAttribute("controls"), true, "with the player's own controls");
+    assert.deepEqual(
+      [...(inline.closest(".luke-video-player")?.querySelectorAll("button") ?? [])].map((each) =>
+        each.getAttribute("aria-label"),
+      ),
+      ["Play", "Expand", "Full screen"],
+      "under Luke's own bar, with an Expand into the viewer",
+    );
+    assert.equal(inline.hasAttribute("controls"), false, "and not the browser's");
     assert.equal(inline.getAttribute("aria-label"), "Video: Inviting a member");
     assert.ok(inline.closest(".ph-no-capture"), "the player is left out of the replay");
     assert.deepEqual(
@@ -516,7 +523,14 @@ test("a WebM the agent showed plays where it stands, above the picture shown wit
     );
     const player = document.querySelector('[role="dialog"] video');
     assert.ok(player, "its Expand opens the viewer, which plays the video");
-    assert.equal(player.hasAttribute("controls"), true, "with the player's own controls");
+    assert.deepEqual(
+      [...(player.closest(".luke-video-player")?.querySelectorAll("button") ?? [])].map((each) =>
+        each.getAttribute("aria-label"),
+      ),
+      ["Play", "Full screen"],
+      "under Luke's own bar",
+    );
+    assert.equal(player.hasAttribute("controls"), false, "and not the browser's");
     assert.equal(player.getAttribute("aria-label"), "Video: Inviting a member.webm");
     assert.equal(document.querySelector(".attachment-viewer-place")?.textContent, "1 of 2");
     assert.deepEqual(created, [CONVERSATION_MEDIA_TYPE.WEBM, CONVERSATION_MEDIA_TYPE.WEBM]);
@@ -646,7 +660,14 @@ test("a recording a finished browser call kept plays under its row, out of the t
     const inline = container.querySelector("video");
     assert.ok(inline, "the recording plays though the work before it folded");
     assert.equal(inline.getAttribute("src"), "blob:recording-1");
-    assert.equal(inline.hasAttribute("controls"), true);
+    assert.deepEqual(
+      [...(inline.closest(".luke-video-player")?.querySelectorAll("button") ?? [])].map((each) =>
+        each.getAttribute("aria-label"),
+      ),
+      ["Play", "Expand", "Full screen"],
+      "under Luke's own bar, with an Expand into the viewer",
+    );
+    assert.equal(inline.hasAttribute("controls"), false, "and not the browser's");
     assert.ok(inline.closest(".ph-no-capture"));
     assert.equal(
       inline.closest(".picture-block")?.querySelector(".picture-caption")?.textContent,
@@ -662,7 +683,14 @@ test("a recording a finished browser call kept plays under its row, out of the t
     );
     const player = document.querySelector('[role="dialog"] video');
     assert.ok(player, "its Expand opens the viewer, which plays the recording");
-    assert.equal(player.hasAttribute("controls"), true);
+    assert.deepEqual(
+      [...(player.closest(".luke-video-player")?.querySelectorAll("button") ?? [])].map((each) =>
+        each.getAttribute("aria-label"),
+      ),
+      ["Play", "Full screen"],
+      "under Luke's own bar",
+    );
+    assert.equal(player.hasAttribute("controls"), false, "and not the browser's");
   } finally {
     URL.createObjectURL = own.create;
     URL.revokeObjectURL = own.revoke;
