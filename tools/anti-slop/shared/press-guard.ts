@@ -1,3 +1,5 @@
+import { matchesGlob } from "node:path";
+
 import { repositoryPathOf } from "./effect-edges.ts";
 
 /**
@@ -136,4 +138,40 @@ export function configWeakensGuard(
     return overridden !== null && typeof overridden === "object" && guard in overridden;
   });
   return named ? `no override may name "${guard}"` : undefined;
+}
+
+/**
+ * Whether a gitignore-style `pattern`, as oxlint reads `ignorePatterns`
+ * relative to the configuration, hides the repository path `file`: a pattern
+ * with no inner slash matches at any depth, and one that names a folder hides
+ * everything under it.
+ */
+function patternHides(pattern: string, file: string): boolean {
+  const trimmed = pattern.replace(/^\//u, "").replace(/\/$/u, "");
+  const anchored = pattern.replace(/\/$/u, "").includes("/");
+  const glob = anchored ? trimmed : `**/${trimmed}`;
+  return matchesGlob(file, glob) || matchesGlob(file, `${glob}/**`);
+}
+
+/**
+ * Each `ignorePatterns` entry of an oxlint configuration that hides a file of
+ * `files` (repository paths) from every rule, with the files it hides. Note
+ * that the last pattern to match a file decides, and a `!` pattern brings the
+ * file back, as in a `.gitignore`.
+ */
+export function ignoredFiles(
+  config: unknown,
+  files: readonly string[],
+): ReadonlyMap<string, readonly string[]> {
+  const hidden = new Map<string, string[]>();
+  const patterns: unknown =
+    config !== null && typeof config === "object" ? Reflect.get(config, "ignorePatterns") : [];
+  if (!Array.isArray(patterns)) return hidden;
+  const entries = patterns.filter((pattern): pattern is string => typeof pattern === "string");
+  for (const file of files) {
+    const deciding = entries.findLast((entry) => patternHides(entry.replace(/^!/u, ""), file));
+    if (deciding === undefined || deciding.startsWith("!")) continue;
+    hidden.set(deciding, [...(hidden.get(deciding) ?? []), file]);
+  }
+  return hidden;
 }
