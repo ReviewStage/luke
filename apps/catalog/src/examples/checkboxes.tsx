@@ -1,4 +1,4 @@
-import { Checkbox, GAP, Stack } from "@luke/ui";
+import { ALIGN, Checkbox, GAP, Stack } from "@luke/ui";
 import { useState } from "react";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
@@ -27,7 +27,7 @@ function Checkboxes(): React.JSX.Element {
   return (
     <>
       <CatalogSection id="checkbox-states" title="States">
-        <Stack gap={GAP.CONTROL} align="start">
+        <Stack gap={GAP.CONTROL} align={ALIGN.START}>
           <Held start={false}>Include my name and email</Held>
           <Held start>Archive runs that succeed</Held>
           <Checkbox checked={false} mixed onChange={() => undefined}>
@@ -39,7 +39,7 @@ function Checkboxes(): React.JSX.Element {
         </Stack>
       </CatalogSection>
       <CatalogSection id="checkbox-wordless" title="Without words, a task list's markers">
-        <Stack gap={GAP.CONTROL} align="start">
+        <Stack gap={GAP.CONTROL} align={ALIGN.START}>
           <Wordless label="Send the invite" />
           <Checkbox label="Pick a date" checked disabled onChange={() => undefined} />
         </Stack>

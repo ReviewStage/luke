@@ -2772,7 +2772,7 @@
 .desktop-shell[data-room="narrow"]
   .pull-request-header[data-folded]
   .pull-request-title[data-overflow="true"] {
-  mask-image: linear-gradient(to left, transparent, #000 var(--label-fade));
+  mask-image: linear-gradient(to left, transparent, #000 var(--luke-label-fade));
   mask-origin: content-box;
   mask-repeat: no-repeat;
 }
@@ -4048,7 +4048,7 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
 }
 
 /* The subject takes what is left of the line and fades where the line cuts
-   it, over the last `--label-fade` as a cut label's (`@luke/ui`'s OneLine).
+   it, over the last `--luke-label-fade` as a cut label's (`@luke/ui`'s OneLine).
    Note that it is drawn without measuring the words, unlike a label's,
    because the subject's box takes the line's whole rest whatever it holds,
    so words that stop short end before the fade begins, and words still
@@ -4057,7 +4057,7 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
   min-width: 0;
   flex: 1 1 0;
   overflow: hidden;
-  mask-image: linear-gradient(to left, transparent, #000 var(--label-fade));
+  mask-image: linear-gradient(to left, transparent, #000 var(--luke-label-fade));
   white-space: nowrap;
 }
 

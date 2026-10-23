@@ -8,6 +8,7 @@
  */
 
 import {
+  ALIGN,
   AlertIcon,
   CHOICE_BAR_FOLD,
   CHOICE_BAR_INSET,
@@ -130,7 +131,7 @@ function HeldTabs<Value extends string>({
   const id = useId();
   const panels = (each: Value) => ({ tab: `${id}-${each}-tab`, panel: `${id}-${each}-panel` });
   return (
-    <Stack gap={GAP.CONTROL} align="start">
+    <Stack gap={GAP.CONTROL} align={ALIGN.START}>
       <ChoiceBar<Value>
         label={label}
         items={items}
@@ -277,7 +278,7 @@ function ChoiceBarExample(): React.JSX.Element {
         </div>
       </CatalogSection>
       <CatalogSection id="choice-bar-radio" title="Setting a value, as a radio group">
-        <Stack gap={GAP.CONTROL} align="start">
+        <Stack gap={GAP.CONTROL} align={ALIGN.START}>
           <HeldEffort start={EFFORT.MEDIUM} />
           <HeldEffort start={EFFORT.MEDIUM} size={CHOICE_BAR_SIZE.COMPACT} />
           <HeldEffort start={EFFORT.HIGH} look={CHOICE_BAR_LOOK.FILL} />
@@ -289,13 +290,13 @@ function ChoiceBarExample(): React.JSX.Element {
         </Stack>
       </CatalogSection>
       <CatalogSection id="choice-bar-clearable" title="Clearable, none chosen">
-        <Stack gap={GAP.CONTROL} align="start">
+        <Stack gap={GAP.CONTROL} align={ALIGN.START}>
           <HeldEffort start={undefined} clearable />
           <HeldEffort start={undefined} look={CHOICE_BAR_LOOK.FILL} clearable />
         </Stack>
       </CatalogSection>
       <CatalogSection id="choice-bar-disabled" title="Unavailable">
-        <Stack gap={GAP.CONTROL} align="start">
+        <Stack gap={GAP.CONTROL} align={ALIGN.START}>
           <HeldEffort start={EFFORT.LOW} disabled />
           <HeldEffort start={EFFORT.LOW} look={CHOICE_BAR_LOOK.FILL} disabled />
         </Stack>
