@@ -435,13 +435,13 @@ it.layer(getTestDB())("the installed skills routes", (it) => {
     "a source's skills are found where the skills tool finds them: a root skill alone, plugins, past a lock, internal ones when named, and deep where nothing else is",
     () =>
       Effect.gen(function* () {
-        const internal = (name: string) =>
+        const unlisted = (name: string) =>
           `---\nname: ${name}\ndescription: Hidden.\nmetadata:\n  internal: true\n---\n\nBody.\n`;
         const kit = fakeRepository("acme", "tools");
         commitTo(kit, "main", {
           "top/SKILL.md": skillFile("top", "At the root's own folder."),
           "skills/own/SKILL.md": skillFile("own", "The repository's own."),
-          "skills/secret/SKILL.md": internal("secret"),
+          "skills/staff/SKILL.md": unlisted("staff"),
           "skills/flow/SKILL.md":
             "---\nname: flow\ndescription: Hidden.\nmetadata: {internal: true}\n---\n\nBody.\n",
           ".codex/skills/codex/SKILL.md": skillFile("codex", "Under an agent's folder."),
@@ -486,11 +486,11 @@ it.layer(getTestDB())("the installed skills routes", (it) => {
           (yield* found("npx skills add acme/tools")).map(({ name }) => name),
           ["single", "top", "own", "codex", "pdf", "xlsx"],
         );
-        assert.deepEqual(yield* found("npx skills add acme/tools --skill SECRET"), [
+        assert.deepEqual(yield* found("npx skills add acme/tools --skill STAFF"), [
           { name: "single", selected: false },
           { name: "top", selected: false },
           { name: "own", selected: false },
-          { name: "secret", selected: true },
+          { name: "staff", selected: true },
           { name: "codex", selected: false },
           { name: "pdf", selected: false },
           { name: "xlsx", selected: false },
