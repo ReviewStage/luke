@@ -2706,6 +2706,11 @@
   margin-inline-start: auto;
 }
 
+/* The header's Preview where several deployments serve, holding the menu it drops. */
+.pull-request-preview {
+  display: flex;
+}
+
 /* A narrow header, a phone's or the side panel's at its least, gives the
    title a line of its own over the pill and the controls, which stand
    under it at the row's two ends; beside them it would wrap a word to a
