@@ -67,6 +67,7 @@ import {
   GITHUB_FIXTURE_INSTALLATION_TOKEN,
   githubReaching,
   type InstallationFixture,
+  type SentToGitHub,
 } from "../../testing/github-app-fake.js";
 import { fixtureToken, linesOf, runnerSandboxApi } from "../../testing/runner-sandbox-fake.js";
 import {
@@ -304,10 +305,17 @@ afterEach(() => {
   vi.unstubAllEnvs();
 });
 
+/** What a repository agent's sessions are composed with beside the fake Vercel: the image's snapshot as it is asked, and what a test does as each request reaches GitHub. */
+interface RepositoryAgentSeams {
+  readonly snapshotId?: Effect.Effect<Option.Option<string>, ImagePreparing>;
+  readonly onGitHub?: (sent: SentToGitHub) => void;
+}
+
 /** An account on its Claude plan with one agent on a task of the Relay repository, and its sessions over the fake Vercel given. */
 const repositoryAgent = (
   api: ReturnType<typeof runnerSandboxApi>,
   installation: InstallationFixture = RELAY_INSTALLATION,
+  seams: RepositoryAgentSeams = {},
 ) =>
   Effect.gen(function* () {
     const userId = `user-${randomUUID()}`;
@@ -327,18 +335,24 @@ const repositoryAgent = (
       repository: RELAY_FULL_NAME,
     });
     const agent = Option.getOrThrow(started).agent;
-    const github = githubReaching([installation], undefined, {}, (sent) =>
-      new URL(sent.url).hostname === "vercel.com"
-        ? api.respond(sent.url, { method: sent.method, headers: sent.headers, body: sent.body })
-        : undefined,
-    );
+    const github = githubReaching([installation], undefined, {}, (sent) => {
+      if (new URL(sent.url).hostname === "vercel.com") {
+        return api.respond(sent.url, {
+          method: sent.method,
+          headers: sent.headers,
+          body: sent.body,
+        });
+      }
+      seams.onGitHub?.(sent);
+      return undefined;
+    });
     const sessions = yield* sessionsFor(userId, { next: 0 }).pipe(
       Effect.provide(
         Layer.mergeAll(
           github.layer,
           Layer.succeed(HostedEnvironment, NO_KEYS),
           Layer.succeed(AgentSandboxImage, {
-            snapshotId: Effect.succeed(Option.some(SNAPSHOT)),
+            snapshotId: seams.snapshotId ?? Effect.succeed(Option.some(SNAPSHOT)),
             snapshotGone: () => Effect.void,
           }),
           Layer.succeed(RunnerBundle, { contents: Effect.succeed(BUNDLE) }),
@@ -348,6 +362,33 @@ const repositoryAgent = (
 
     return { userId, agent, sessions };
   });
+
+/** The contents access a repository token is cut to: a checkout's reads, the firewall's writes. */
+const TOKEN_ACCESS = { READ: "read", WRITE: "write" } as const;
+type TokenAccess = (typeof TOKEN_ACCESS)[keyof typeof TOKEN_ACCESS];
+
+/** Whether a request to GitHub mints a repository token cut to the access given. */
+const mintsRepositoryToken = (each: SentToGitHub, access: TokenAccess) => {
+  if (!new URL(each.url).pathname.endsWith("/access_tokens")) return false;
+  const asked: { repositories?: unknown; permissions?: { contents?: string } } = JSON.parse(
+    each.body,
+  );
+  return asked.repositories !== undefined && asked.permissions?.contents === access;
+};
+
+/** A request a test waits to see reach GitHub: `seen` settles once one the predicate takes arrived. */
+function sighting(wanted: (sent: SentToGitHub) => boolean) {
+  let settle = () => {};
+  const seen = new Promise<void>((resolve) => {
+    settle = resolve;
+  });
+  return {
+    seen,
+    observe: (sent: SentToGitHub) => {
+      if (wanted(sent)) settle();
+    },
+  };
+}
 
 /** Another agent of the account's on the agent's own task, started on the branch given or the default one. */
 const anotherAgent = (userId: string, agent: CodingAgent, startBranch?: string) =>
@@ -1956,6 +1997,65 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         assert.equal(clone?.env[REPOSITORY_SANDBOX_CONTRACT.VARIABLE.BRANCH], "relay-fix");
         assert.equal(api.snapshots.length, 1);
         assert.equal(repositorySnapshots(api).length, 1);
+      }),
+  );
+
+  it.effect(
+    "a launch asks GitHub for the repository while the image's snapshot is still being looked up",
+    () =>
+      Effect.gen(function* () {
+        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+        const api = runnerSandboxApi();
+        const image = gate();
+        const read = sighting((sent) => mintsRepositoryToken(sent, TOKEN_ACCESS.READ));
+        const { agent, sessions } = yield* repositoryAgent(api, ownInstallation(), {
+          snapshotId: Effect.as(
+            Effect.promise(() => image.pass()),
+            Option.some(SNAPSHOT),
+          ),
+          onGitHub: read.observe,
+        });
+
+        const opening = yield* Effect.forkChild(sessions.open(message(agent, "Fix the relay.")));
+        yield* Effect.promise(() => Promise.all([image.arrived, read.seen]));
+        image.open();
+        const opened = yield* Fiber.join(opening);
+
+        assert.equal(opened.outcome, EVE_SEND_OUTCOME.ACCEPTED);
+        assert.equal(api.commands.length, 1);
+      }),
+  );
+
+  it.effect(
+    "a launch mints its write token and reads its installed skills while its repository is cloned",
+    () =>
+      Effect.gen(function* () {
+        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+        const api = runnerSandboxApi();
+        const clone = gate();
+        const write = sighting((sent) => mintsRepositoryToken(sent, TOKEN_ACCESS.WRITE));
+        const skills = sighting((sent) => new URL(sent.url).pathname.includes("/git/trees/"));
+        const { agent, sessions } = yield* repositoryAgent(api, ownInstallation(), {
+          onGitHub: (sent) => {
+            write.observe(sent);
+            skills.observe(sent);
+          },
+        });
+        api.hooks.onRun = async (env) => {
+          if (isClone({ env })) await clone.pass();
+        };
+
+        const opening = yield* Effect.forkChild(sessions.open(message(agent, "Fix the relay.")));
+        yield* Effect.promise(() => Promise.all([clone.arrived, write.seen, skills.seen]));
+        const startedDuringClone = api.commands.length;
+        clone.open();
+        const opened = yield* Fiber.join(opening);
+
+        assert.equal(opened.outcome, EVE_SEND_OUTCOME.ACCEPTED);
+        assert.equal(startedDuringClone, 0);
+        assert.equal(api.commands.length, 1);
+        const writeHeader = `Basic ${Buffer.from(`x-access-token:${GITHUB_FIXTURE_INSTALLATION_TOKEN}`).toString("base64")}`;
+        assert.ok(JSON.stringify(api.policies.at(-1)?.policy).includes(writeHeader));
       }),
   );
 });
