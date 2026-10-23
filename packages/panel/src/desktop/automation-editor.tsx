@@ -793,6 +793,7 @@ function EditorToolbar({
   codeReview,
   dirty,
   saving,
+  saveRefused,
   onBack,
   onSave,
   onToggle,
@@ -806,6 +807,8 @@ function EditorToolbar({
   codeReview: boolean;
   dirty: boolean;
   saving: boolean;
+  /** Whether the last save was refused, read as its ring leaves: one that was not lands on a check. */
+  saveRefused: boolean;
   onBack: () => void;
   onSave: () => void;
   onToggle: (enabled: boolean) => void;
@@ -860,6 +863,7 @@ function EditorToolbar({
             variant={BUTTON_VARIANT.PRIMARY}
             busy={saving}
             busyLabel="Saving"
+            succeeded={!saveRefused}
             disabled={!(automation === undefined || dirty)}
             onClick={onSave}
           >
@@ -2102,6 +2106,7 @@ export function AutomationEditor({
           codeReview={codeReviewOn && readCodeReviewSettings(draft.prompt) !== undefined}
           dirty={dirty}
           saving={saving}
+          saveRefused={refusal !== undefined}
           onBack={onBack}
           onSave={save}
           onToggle={toggle}

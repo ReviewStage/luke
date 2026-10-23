@@ -295,6 +295,8 @@ export interface CodingAgentsControl {
     busy: boolean;
     /** Why the last Start did not start, or the last change of model did not take, said beside the button until the next. */
     note: Failure | undefined;
+    /** Whether this button's own last Start started its agent, so a draft's or a call's start, which hold it busy too, never reads as its own. */
+    succeeded: boolean;
     /** Starts an agent on the choice given, or on the account's default with none. */
     onPress: (choice?: ModelChoice) => void;
   };
@@ -648,6 +650,7 @@ export function useCodingAgents(input: {
   const writer = useDraftWriter();
   const draft = startsOn === undefined ? undefined : taskDraft(heldDraft, keptDraft);
   const [note, setNote] = useState<{ taskId: string; note: Failure } | undefined>(undefined);
+  const [startLanded, setStartLanded] = useState(false);
   const [reads, setReads] = useState(0);
   // The agent New task last started, its task, and the line it was started on.
   const [started, setStarted] = useState<
@@ -789,6 +792,8 @@ export function useCodingAgents(input: {
     asked: Omit<PortActPayload<typeof ACT_KIND.CODING_AGENTS_START>, "taskId">,
   ): Promise<CodingAgentAgentAnswer> => {
     setStarting(true);
+    // Note that every Start holds the toolbar's busy, so each lets go of the last one's landing; only the toolbar's own sets it again.
+    setStartLanded(false);
     // Note that a Start from the page's agent names no task, so the service puts it where that agent is.
     const where = on === taskId ? { taskId: on } : undefined;
     // An image still being prepared is said beside Start, and the same Start asked again under its key.
@@ -841,6 +846,7 @@ export function useCodingAgents(input: {
         return;
       }
       pending.current = undefined;
+      setStartLanded(true);
       landed(taskId, answer.agent);
     });
   };
@@ -1580,6 +1586,7 @@ export function useCodingAgents(input: {
       reason: startReason(taskId, repository),
       busy: starting,
       note: note !== undefined && note.taskId === taskId ? note.note : undefined,
+      succeeded: startLanded,
       onPress: pressStart,
     },
     startCall: taskId !== undefined ? startCall : undefined,

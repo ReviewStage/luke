@@ -15,6 +15,7 @@ import {
   MicrophoneOffIcon,
   PinIcon,
   PlusIcon,
+  RetryIcon,
   SidebarIcon,
   SpeakerIcon,
   Stack,
@@ -24,12 +25,15 @@ import {
   Text,
   TrashIcon,
 } from "@luke/ui";
+import { useState } from "react";
 import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
 /**
  * buttons.tsx -- every Button look at rest, with a glyph, unavailable,
- * unavailable but focusable, and busy; the IconButton's looks and toggle;
+ * unavailable but focusable, and busy; a busy Save and Upload that land on a
+ * check when Succeed ends them and just stop when Fail does; a Retry and a
+ * Reload whose arrows turn once at each press; the IconButton's looks and toggle;
  * ButtonLink's looks and an IconButtonLink; the round shape a call's
  * controls take, a danger toggle off and on; the compact marks a row reveals
  * at its end, and a compact labelled button among words; a message's submit in each of its states, and unavailable; and
@@ -47,6 +51,47 @@ const STATES = [
   { id: "buttons-busy", name: "Busy", props: { busy: true, busyLabel: "Saving" } },
 ] as const;
 
+/**
+ * A Save and an Upload made busy by their press, and ended by Succeed, which
+ * lands them on a check, or by Fail, which stops their rings.
+ */
+function Landing(): React.JSX.Element {
+  const [busy, setBusy] = useState(false);
+  const [succeeded, setSucceeded] = useState(false);
+  const end = (landed: boolean) => {
+    setSucceeded(landed);
+    setBusy(false);
+  };
+  return (
+    <Inline>
+      <Button
+        variant={BUTTON_VARIANT.PRIMARY}
+        busy={busy}
+        busyLabel="Saving"
+        succeeded={succeeded}
+        onClick={() => setBusy(true)}
+      >
+        Save
+      </Button>
+      <IconButton
+        icon={<PlusIcon />}
+        label="Upload"
+        variant={BUTTON_VARIANT.OUTLINE}
+        busy={busy}
+        busyLabel="Uploading"
+        succeeded={succeeded}
+        onClick={() => setBusy(true)}
+      />
+      <Button disabled={!busy} onClick={() => end(true)}>
+        Succeed
+      </Button>
+      <Button disabled={!busy} onClick={() => end(false)}>
+        Fail
+      </Button>
+    </Inline>
+  );
+}
+
 function Buttons(): React.JSX.Element {
   return (
     <>
@@ -61,6 +106,17 @@ function Buttons(): React.JSX.Element {
           </Inline>
         </CatalogSection>
       ))}
+      <CatalogSection id="buttons-landing" title="Busy, then landed or failed">
+        <Landing />
+      </CatalogSection>
+      <CatalogSection id="buttons-turn" title="Turning once at a press">
+        <Inline>
+          <Button icon={<RetryIcon />} turns>
+            Retry
+          </Button>
+          <IconButton icon={<RetryIcon />} label="Reload" turns />
+        </Inline>
+      </CatalogSection>
       <CatalogSection id="buttons-glyph" title="With a glyph">
         <Inline>
           <Button variant={BUTTON_VARIANT.PRIMARY} icon={<PlusIcon />}>
