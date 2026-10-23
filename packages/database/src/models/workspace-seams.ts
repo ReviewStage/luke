@@ -1,4 +1,4 @@
-import type { WorkspaceRole } from "@luke/features/workspace-wire";
+import type { ASSIGNABLE_ROLE, WorkspaceRole } from "@luke/features/workspace-wire";
 import { Cause, Data, Effect, Option, Schema } from "effect";
 
 /**
@@ -95,12 +95,15 @@ export interface WorkspaceSeams {
   ) => Effect.Effect<{ readonly id: string }, Cause.UnknownError>;
 }
 
+/** A role an invitation may hand, as the caller already decoded it. */
+type AssignableRole = (typeof ASSIGNABLE_ROLE)[keyof typeof ASSIGNABLE_ROLE];
+
 /** An invitation made under the session the headers carry. */
 interface InvitationRequest {
   readonly headers: Headers;
   readonly organizationId: string;
   readonly email: string;
-  readonly role: string;
+  readonly role: AssignableRole;
 }
 
 /** One workspace's invitations, read or canceled under the session the headers carry. */
@@ -230,7 +233,7 @@ export function memberSeams(api: MemberAuthApi): MemberSeams {
             headers: request.headers,
             body: {
               email: request.email,
-              role: request.role === "admin" ? "admin" : "member",
+              role: request.role,
               organizationId: request.organizationId,
             },
           }),

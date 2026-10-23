@@ -67,7 +67,13 @@ import {
 } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
 import { isSqlError } from "effect/sql/SqlError";
-import { Database, type DatabaseServices, type QueryError, queryBuilder } from "../core/query.js";
+import {
+  Database,
+  type DatabaseServices,
+  type QueryError,
+  queryBuilder,
+  type StoreFailure,
+} from "../core/query.js";
 import { asks, conversations, messages, turns } from "../schemas/storage.js";
 import { voiceSessions } from "../schemas/voice.js";
 import {
@@ -619,9 +625,6 @@ type Parts = StoredUIMessage["parts"];
 
 const BRAIN_AUTHORED = { author: MESSAGE_AUTHOR.BRAIN } as const;
 
-/** How a statement here fails: the driver's own refusal, or a row the schema refused. */
-type WriteFailure = QueryError | Schema.SchemaError;
-
 /**
  * A row a statement had to answer. Its absence is this writer's own
  * invariant broken — a conversation that vanished under its own lock, an
@@ -735,7 +738,7 @@ const MessageInsertSchema = Schema.Struct({
 class LockWaitRanOut extends Data.TaggedError("LockWaitRanOut")<Record<never, never>> {}
 
 /** Whether a statement failed because Postgres gave up waiting on a lock (`lock_timeout`, 55P03), beneath Drizzle's error where it wraps one. */
-function lockWaitRanOut(failure: WriteFailure): boolean {
+function lockWaitRanOut(failure: StoreFailure): boolean {
   const inner = failure._tag === "EffectDrizzleQueryError" ? failure.cause : failure;
   const beneath = Cause.isCause(inner) ? Cause.squash(inner) : inner;
   return isSqlError(beneath) && beneath.reason._tag === "LockTimeoutError";
@@ -1328,7 +1331,7 @@ interface WriterContext {
 }
 
 /** What one of this writer's statements answers: an effect over the transaction it runs in. */
-type Write<Result> = Effect.Effect<Result, WriteFailure, DatabaseServices>;
+type Write<Result> = Effect.Effect<Result, StoreFailure, DatabaseServices>;
 
 type Admitted = Result.Result<StoredUIMessage, MessageRefused>;
 
@@ -1371,7 +1374,7 @@ function admitted(
  */
 const allocateMessageSeq = /* @__PURE__ */ Effect.fnUntraced(function* (
   context: WriterContext,
-): Effect.fn.Return<number, WriteFailure, DatabaseServices> {
+): Effect.fn.Return<number, StoreFailure, DatabaseServices> {
   const row = yield* allocateMessageSequence({
     conversationId: context.target.conversationId,
     now: context.now,
@@ -1463,7 +1466,7 @@ const placedInstant = /* @__PURE__ */ Effect.fnUntraced(function* (
   context: WriterContext,
   metadata: StoredMessageMetadata | undefined,
   createdAt: Date,
-): Effect.fn.Return<Date, WriteFailure, DatabaseServices> {
+): Effect.fn.Return<Date, StoreFailure, DatabaseServices> {
   if (metadata === undefined || !("channel" in metadata)) return createdAt;
   if (metadata.channel !== MESSAGE_CHANNEL.VOICE) return createdAt;
   const { voice_session_id: sessionId, from_ms: fromMs } = metadata;
@@ -1485,7 +1488,7 @@ const insertMessage = /* @__PURE__ */ Effect.fnUntraced(function* (
     /** What sent a developer's line to a coding agent; none for every other row. */
     sender?: LineSender;
   },
-): Effect.fn.Return<InsertedMessage, WriteFailure, DatabaseServices> {
+): Effect.fn.Return<InsertedMessage, StoreFailure, DatabaseServices> {
   const seq = yield* allocateMessageSeq(context);
   const metadata: StoredMessageMetadata | undefined =
     row.message.role === MESSAGE_ROLE.SYSTEM ? undefined : row.message.metadata;
@@ -1543,7 +1546,7 @@ function openTurn(
 const journal = /* @__PURE__ */ Effect.fnUntraced(function* (
   context: WriterContext,
   turnId: string,
-): Effect.fn.Return<Journal, WriteFailure, DatabaseServices> {
+): Effect.fn.Return<Journal, StoreFailure, DatabaseServices> {
   const standing = yield* journalRow(context, turnId);
   if (Option.isSome(standing)) return Result.succeed(standing.value);
   const closed = yield* openTurn(context, turnId);
@@ -1570,7 +1573,7 @@ const amendJournal = /* @__PURE__ */ Effect.fnUntraced(function* (
   turnId: string,
   row: MessageRow,
   parts: Parts,
-): Effect.fn.Return<StoreWriteResult, WriteFailure, DatabaseServices> {
+): Effect.fn.Return<StoreWriteResult, StoreFailure, DatabaseServices> {
   const read = yield* admitted(context, {
     id: row.id,
     role: MESSAGE_ROLE.ASSISTANT,
@@ -1585,7 +1588,7 @@ const amendJournal = /* @__PURE__ */ Effect.fnUntraced(function* (
 const turnStarted = /* @__PURE__ */ Effect.fnUntraced(function* (
   context: WriterContext,
   event: Extract<BrainRunEvent, { kind: typeof BRAIN_RUN_EVENT.TURN_STARTED }>,
-): Effect.fn.Return<StoreWriteResult, WriteFailure, DatabaseServices> {
+): Effect.fn.Return<StoreWriteResult, StoreFailure, DatabaseServices> {
   const standing = yield* turnRow(context, event.turnId);
   const startedAt = new Date(event.at);
   if (Option.isNone(standing)) {
@@ -1608,7 +1611,7 @@ const turnStarted = /* @__PURE__ */ Effect.fnUntraced(function* (
 const turnEnded = /* @__PURE__ */ Effect.fnUntraced(function* (
   context: WriterContext,
   event: Extract<BrainRunEvent, { kind: typeof BRAIN_RUN_EVENT.TURN_ENDED }>,
-): Effect.fn.Return<StoreWriteResult, WriteFailure, DatabaseServices> {
+): Effect.fn.Return<StoreWriteResult, StoreFailure, DatabaseServices> {
   const standing = yield* turnRow(context, event.turnId);
   if (Option.isNone(standing)) return Result.fail({ refusal: STORE_WRITE_REFUSAL.NO_TURN });
   if (TERMINAL_TURN_STATUSES.has(standing.value.status)) {
@@ -1683,7 +1686,7 @@ const settleRetriedCalls = /* @__PURE__ */ Effect.fnUntraced(function* (
   context: WriterContext,
   turnId: string,
   row: MessageRow,
-): Effect.fn.Return<StoreWriteResult, WriteFailure, DatabaseServices> {
+): Effect.fn.Return<StoreWriteResult, StoreFailure, DatabaseServices> {
   const boundary = row.parts.findLastIndex((part) => part.type === UI_PART_TYPE.STEP_START);
   // Note that a coding agent's abandoned words leave with the attempt, since its failed turn keeps its words and the retry's own, which may be shorter, could not replace them.
   const dropsWords = context.kind === CONVERSATION_KIND.CODING_AGENT;
@@ -1725,7 +1728,7 @@ const settleRetriedCalls = /* @__PURE__ */ Effect.fnUntraced(function* (
 const stepStarted = /* @__PURE__ */ Effect.fnUntraced(function* (
   context: WriterContext,
   event: Extract<BrainRunEvent, { kind: typeof BRAIN_RUN_EVENT.STEP_STARTED }>,
-): Effect.fn.Return<StoreWriteResult, WriteFailure, DatabaseServices> {
+): Effect.fn.Return<StoreWriteResult, StoreFailure, DatabaseServices> {
   const opened = yield* journal(context, event.turnId);
   if (Result.isFailure(opened)) return Result.fail(opened.failure);
   const row = opened.success;
@@ -1739,7 +1742,7 @@ const stepStarted = /* @__PURE__ */ Effect.fnUntraced(function* (
 const toolCallStarted = /* @__PURE__ */ Effect.fnUntraced(function* (
   context: WriterContext,
   event: Extract<BrainRunEvent, { kind: typeof BRAIN_RUN_EVENT.TOOL_CALL_STARTED }>,
-): Effect.fn.Return<StoreWriteResult, WriteFailure, DatabaseServices> {
+): Effect.fn.Return<StoreWriteResult, StoreFailure, DatabaseServices> {
   const opened = yield* journal(context, event.turnId);
   if (Result.isFailure(opened)) return Result.fail(opened.failure);
   const row = opened.success;
@@ -1756,7 +1759,7 @@ const toolCallStarted = /* @__PURE__ */ Effect.fnUntraced(function* (
 const toolCallSettled = /* @__PURE__ */ Effect.fnUntraced(function* (
   context: WriterContext,
   event: Extract<BrainRunEvent, { kind: typeof BRAIN_RUN_EVENT.TOOL_CALL_SETTLED }>,
-): Effect.fn.Return<StoreWriteResult, WriteFailure, DatabaseServices> {
+): Effect.fn.Return<StoreWriteResult, StoreFailure, DatabaseServices> {
   const standing = yield* journalRow(context, event.turnId);
   if (Option.isNone(standing)) {
     const turn = yield* turnRow(context, event.turnId);
@@ -1796,7 +1799,7 @@ const toolCallSettled = /* @__PURE__ */ Effect.fnUntraced(function* (
 const reasoningCompleted = /* @__PURE__ */ Effect.fnUntraced(function* (
   context: WriterContext,
   event: Extract<BrainRunEvent, { kind: typeof BRAIN_RUN_EVENT.REASONING_COMPLETED }>,
-): Effect.fn.Return<StoreWriteResult, WriteFailure, DatabaseServices> {
+): Effect.fn.Return<StoreWriteResult, StoreFailure, DatabaseServices> {
   const { id } = event.item;
   if (!isWireString(id)) return Result.succeed(STORE_WRITE_EFFECT.IGNORED);
   const opened = yield* journal(context, event.turnId);
@@ -1822,7 +1825,7 @@ const reasoningCompleted = /* @__PURE__ */ Effect.fnUntraced(function* (
 const textDrafted = /* @__PURE__ */ Effect.fnUntraced(function* (
   context: WriterContext,
   event: Extract<BrainRunEvent, { kind: typeof BRAIN_RUN_EVENT.TEXT_DRAFTED }>,
-): Effect.fn.Return<StoreWriteResult, WriteFailure, DatabaseServices> {
+): Effect.fn.Return<StoreWriteResult, StoreFailure, DatabaseServices> {
   const opened = yield* journal(context, event.turnId);
   if (Result.isFailure(opened)) return Result.fail(opened.failure);
   const row = opened.success;
@@ -1863,7 +1866,7 @@ const textDrafted = /* @__PURE__ */ Effect.fnUntraced(function* (
 const messageCompleted = /* @__PURE__ */ Effect.fnUntraced(function* (
   context: WriterContext,
   event: Extract<BrainRunEvent, { kind: typeof BRAIN_RUN_EVENT.MESSAGE_COMPLETED }>,
-): Effect.fn.Return<StoreWriteResult, WriteFailure, DatabaseServices> {
+): Effect.fn.Return<StoreWriteResult, StoreFailure, DatabaseServices> {
   const read = yield* admitted(context, event.message);
   if (Result.isFailure(read)) return Result.fail(read.failure);
   const message = read.success;
@@ -1965,7 +1968,7 @@ function consume(context: WriterContext, event: BrainRunEvent): Write<StoreWrite
 const enqueueTurn = /* @__PURE__ */ Effect.fn("web/enqueueTurn")(function* (
   context: WriterContext,
   enqueue: TurnEnqueue,
-): Effect.fn.Return<TurnEnqueueResult, WriteFailure, DatabaseServices> {
+): Effect.fn.Return<TurnEnqueueResult, StoreFailure, DatabaseServices> {
   const turnId = enqueue.turnId ?? randomUUID();
   if (Option.isSome(yield* turnRow(context, turnId))) {
     return Result.succeed({ turnId, effect: STORE_WRITE_EFFECT.REPEATED });
@@ -1988,7 +1991,7 @@ const enqueueTurn = /* @__PURE__ */ Effect.fn("web/enqueueTurn")(function* (
 const upsertSpokenRow = /* @__PURE__ */ Effect.fn("web/upsertSpokenRow")(function* (
   context: WriterContext,
   write: SpokenRowWrite,
-): Effect.fn.Return<UserMessageWriteResult, WriteFailure, DatabaseServices> {
+): Effect.fn.Return<UserMessageWriteResult, StoreFailure, DatabaseServices> {
   const standing = yield* messageByClientId(context, write.clientId);
   const parts = [{ type: UI_PART_TYPE.TEXT, text: write.text, state: UI_PART_STATE.DONE }];
   // What Luke's words were read from is read again on every write, since the turn they answer may
@@ -2307,7 +2310,7 @@ function moveTurnWorkAfter(context: WriterContext, turnId: string, seq: number):
 const attachAskLines = /* @__PURE__ */ Effect.fn("web/attachAskLines")(function* (
   context: WriterContext,
   turnId: string,
-): Effect.fn.Return<AskLinesAttached, WriteFailure, DatabaseServices> {
+): Effect.fn.Return<AskLinesAttached, StoreFailure, DatabaseServices> {
   const standing = yield* findUnattachedAskRows({
     conversationId: context.target.conversationId,
     turnId,
@@ -2507,7 +2510,7 @@ const writeAwaitingLine = /* @__PURE__ */ Effect.fnUntraced(function* (
   land: (
     message: StoredUIMessage,
   ) => Write<Result.Result<{ readonly id: string; readonly txid: string }, typeof NO_CONVERSATION>>,
-): Effect.fn.Return<AwaitingLineWritten, WriteFailure, DatabaseServices> {
+): Effect.fn.Return<AwaitingLineWritten, StoreFailure, DatabaseServices> {
   const clientId = sentLineId(line.clientKey);
   // A line already under the key is the send a lost answer was for: eve has it, and hears nothing again.
   const standing = yield* messageByClientId(context, clientId);
@@ -2536,7 +2539,7 @@ const landAwaitingLine = /* @__PURE__ */ Effect.fnUntraced(function* (
   sender: LineSender,
 ): Effect.fn.Return<
   Result.Result<{ readonly id: string; readonly txid: string }, never>,
-  WriteFailure,
+  StoreFailure,
   DatabaseServices
 > {
   const { id, txid } = yield* insertMessage(context, {
@@ -2552,7 +2555,7 @@ const landAwaitingLine = /* @__PURE__ */ Effect.fnUntraced(function* (
 const writeTypedCallLine = /* @__PURE__ */ Effect.fn("web/writeTypedCallLine")(function* (
   context: WriterContext,
   write: TypedCallLineWrite,
-): Effect.fn.Return<UserMessageWriteResult, WriteFailure, DatabaseServices> {
+): Effect.fn.Return<UserMessageWriteResult, StoreFailure, DatabaseServices> {
   const standing = yield* messageByClientId(context, write.clientId);
   if (Option.isSome(standing)) {
     return Result.succeed({ id: standing.value.id, effect: STORE_WRITE_EFFECT.REPEATED });
@@ -2577,7 +2580,7 @@ const writeTypedCallLine = /* @__PURE__ */ Effect.fn("web/writeTypedCallLine")(f
 const takeAwaitingLine = /* @__PURE__ */ Effect.fnUntraced(function* (
   context: WriterContext,
   take: AwaitingLineTake,
-): Effect.fn.Return<AwaitingLineTaken, WriteFailure, DatabaseServices> {
+): Effect.fn.Return<AwaitingLineTaken, StoreFailure, DatabaseServices> {
   if (Option.isNone(yield* turnRow(context, take.turnId))) return Result.fail(NO_TURN);
   const awaiting = yield* findAwaitingLines({ conversationId: context.target.conversationId });
   const run =
@@ -2649,7 +2652,7 @@ const findSpokenRowsToAttach = SqlSchema.findAll({
 const attachSpokenAsk = /* @__PURE__ */ Effect.fn("web/attachSpokenAsk")(function* (
   context: WriterContext,
   attach: SpokenAskAttach,
-): Effect.fn.Return<SpokenAskAttached, WriteFailure, DatabaseServices> {
+): Effect.fn.Return<SpokenAskAttached, StoreFailure, DatabaseServices> {
   if (attach.rowIds.length === 0) return Result.succeed([]);
   const rows = yield* findSpokenRowsToAttach({
     conversationId: context.target.conversationId,
@@ -2735,7 +2738,7 @@ const stampTurnCancel = SqlSchema.findAll({
 const requestTurnCancel = /* @__PURE__ */ Effect.fn("web/requestTurnCancel")(function* (
   context: WriterContext,
   cancel: TurnCancelRequest,
-): Effect.fn.Return<TurnCancelResult, WriteFailure, DatabaseServices> {
+): Effect.fn.Return<TurnCancelResult, StoreFailure, DatabaseServices> {
   if (Option.isNone(yield* turnRow(context, cancel.turnId))) return Result.fail(NO_TURN);
   const stamped = yield* stampTurnCancel({
     turnId: cancel.turnId,
