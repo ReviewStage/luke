@@ -520,7 +520,7 @@ const taskAgentLineSchema = EffectSchema.Struct({
 export type TaskAgentLine = typeof taskAgentLineSchema.Type;
 
 /** A pull request one of a task's agents opened, as GitHub last answered the service: where it stands and its size. */
-const taskPullRequestLineSchema = EffectSchema.Struct({
+export const taskPullRequestLineSchema = EffectSchema.Struct({
   number: countedNumber,
   title: EffectSchema.String,
   state: EffectSchema.Literals(Object.values(PULL_REQUEST_STATE)),
@@ -536,6 +536,14 @@ const taskPullRequestLineSchema = EffectSchema.Struct({
 });
 
 export type TaskPullRequestLine = typeof taskPullRequestLineSchema.Type;
+
+/** Every pull request of one plan, uncapped, in the order its row names them: what a card naming them all reads, where the row names the first few. */
+export const taskPullRequestsSchema = EffectSchema.Struct({
+  taskId: EffectSchema.String,
+  pullRequests: EffectSchema.Array(taskPullRequestLineSchema),
+});
+
+export type TaskPullRequests = typeof taskPullRequestsSchema.Type;
 
 /**
  * What a task's coding agents are doing and what they published, in brief:

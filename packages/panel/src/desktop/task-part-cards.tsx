@@ -1,5 +1,4 @@
 import { CHECK_SUMMARY, type CheckSummary } from "@luke/features/coding-agent-wire";
-import { moreText } from "@luke/features/task-agents-model";
 import type { TaskAgentLine, TaskPullRequestLine } from "@luke/features/task-wire";
 import { HoverCard, HoverCardHead, HoverCardList, HoverCardNote } from "@luke/ui";
 import { LinesChanged } from "../tasks/agent-published.js";
@@ -16,8 +15,10 @@ import { AgentLine, PullRequestLine } from "./task-card.js";
  * Linear's board does: a pull request's mark hangs that pull request, its
  * title, where it stands, its checks, and its size; the count after the
  * marks hangs the pull requests it counts; and the working mark hangs the
- * task's agents, each a row that opens the task on its tab. Everything is
- * read from the task list's row, so a card fetches nothing.
+ * task's agents, each a row that opens the task on its tab. A card names
+ * every one, scrolling past a few rather than counting the rest, read from
+ * what the window holds beside the task list (`use-task-work.ts`), so a
+ * card fetches nothing.
  */
 
 /** What a pull request's card says of its checks; nothing where it has none. */
@@ -59,18 +60,15 @@ export function PullRequestCard({
   );
 }
 
-/** The card a count of pull requests hangs: a row for each it counts that the row names, then how many more the task holds. */
+/** The card a count of pull requests hangs: a row for each it counts, every one, scrolling past a few. */
 export function MorePullRequestsCard({
   pullRequests,
-  total,
 }: {
   pullRequests: readonly TaskPullRequestLine[];
-  /** How many the count stands for, of which the row names `pullRequests`. */
-  total: number;
 }): React.JSX.Element {
   return (
     <HoverCard data-more-pull-requests-card="">
-      <HoverCardList label="Pull requests" more={moreText(total, pullRequests.length)}>
+      <HoverCardList label="Pull requests">
         {pullRequests.map((pullRequest) => (
           <PullRequestLine key={pullRequest.url ?? pullRequest.number} pullRequest={pullRequest} />
         ))}
@@ -79,24 +77,21 @@ export function MorePullRequestsCard({
   );
 }
 
-/** The card the working mark hangs: a row for each agent the task's row names, which opens the task on its tab, then how many more it holds. */
+/** The card the working mark hangs: a row for each of the task's agents, every one, scrolling past a few, each opening the task on its tab. */
 export function TaskAgentsCard({
   taskId,
   agents,
-  total,
   tasks,
 }: {
   taskId: string;
   agents: readonly TaskAgentLine[];
-  /** How many agents the task holds. */
-  total: number;
   tasks: Pick<TasksControl, "onShowAgent"> & {
     readonly agents: Pick<TasksControl["agents"], "models">;
   };
 }): React.JSX.Element {
   return (
     <HoverCard data-task-agents-card="">
-      <HoverCardList label="Agents" more={moreText(total, agents.length)}>
+      <HoverCardList label="Agents">
         {agents.map((agent) => (
           <AgentLine
             key={agent.id}

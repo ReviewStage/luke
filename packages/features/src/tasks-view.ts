@@ -66,6 +66,7 @@ import {
   taskFileTextSchema,
   taskFileWindowSchema,
   taskPrioritySchema,
+  taskPullRequestsSchema,
   taskRenameRequestSchema,
   taskSchema,
   taskSkillsSchema,
@@ -257,6 +258,12 @@ export const tasksViewSchema = EffectSchema.Struct({
    * reads in place of listing each plan's agents again on a clock.
    */
   taskAgents: EffectSchema.optionalKey(EffectSchema.Array(codingAgentSummarySchema)),
+  /**
+   * Every pull request of each plan that has one, uncapped, as its row names
+   * the first few: present only while the list is followed live, when the
+   * Tasks page's cards name each one rather than a count of the rest.
+   */
+  taskPullRequests: EffectSchema.optionalKey(EffectSchema.Array(taskPullRequestsSchema)),
   listStatus: tasksReadSchema,
   /** The workspaces the account is a member of, its first one first, as the last list read answered; none before the first lands. */
   workspaces: EffectSchema.Array(workspaceSchema),

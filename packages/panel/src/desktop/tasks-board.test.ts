@@ -10,6 +10,7 @@ import {
   type TaskStatus,
   type TaskSummary,
 } from "@luke/features/task-wire";
+import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
 import type { Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
@@ -30,6 +31,7 @@ import { MemberDirectory } from "../member-directory.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
+import { handState } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
 import { tasksControl } from "../testing/tasks-control.js";
@@ -798,7 +800,18 @@ test("a card's pull request hangs that pull request's own card, its key, where i
   assert.equal(document.querySelector("[data-task-card]"), null, "the card hangs no task card");
 });
 
-test("a card's pull requests past the first three are counted, and the count hangs the rest", async () => {
+test("a card's pull requests past the first three are counted, and the count hangs every one of the rest the window holds, counting none", async () => {
+  const all = [4101, 4102, 4103, 4104, 4105, 4106].map((number) => pullRequestLine(number));
+  handState(
+    {},
+    {
+      tasks: {
+        ...IDLE_TASKS_VIEW,
+        taskAgents: [],
+        taskPullRequests: [{ taskId: "t-42", pullRequests: all }],
+      },
+    },
+  );
   const board = await mountBoard([
     {
       ...task(42, "Fix Safari login", TASK_STATUS.IN_PROGRESS, TASK_PRIORITY.HIGH),
@@ -807,7 +820,7 @@ test("a card's pull requests past the first three are counted, and the count han
         working: 0,
         agents: [],
         pullRequestTotal: 6,
-        pullRequests: [4101, 4102, 4103, 4104, 4105].map((number) => pullRequestLine(number)),
+        pullRequests: all.slice(0, 3),
       },
     },
   ]);
@@ -825,9 +838,9 @@ test("a card's pull requests past the first three are counted, and the count han
     [...(card?.querySelectorAll("[data-task-card-pull-request]") ?? [])].map(
       (row) => row.querySelector(".task-card-number")?.textContent,
     ),
-    ["#4104", "#4105"],
+    ["#4104", "#4105", "#4106"],
   );
-  assert.match(card?.textContent ?? "", /1 more/u, "it counts what the list did not name");
+  assert.doesNotMatch(card?.textContent ?? "", /more/u, "it counts nothing it leaves out");
 });
 
 test("a card's assignee hangs the person's card", async () => {

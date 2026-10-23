@@ -115,9 +115,6 @@ export interface GitHubActor {
   readonly bot: boolean;
 }
 
-/** The most sections an activity names before it counts the rest. */
-const NAMED_SECTIONS = 3;
-
 /** What an activity calls the words a plan holds before its first heading, as the version history does. */
 const OPENING_SECTION = "Opening";
 
@@ -501,14 +498,9 @@ export function latestActivity(
   };
 }
 
-/** An activity in a line: "Edited Rollout and Risks", or "Edited Goal, Rollout, and 3 more" past a few. */
+/** An activity in a line, every section it changed named: "Edited Rollout and Risks", "Edited Goal, Rollout, Risks, and Open questions". */
 export function activityWords(activity: ActorActivity): string {
-  const { sections } = activity;
-  const named =
-    sections.length <= NAMED_SECTIONS
-      ? sections
-      : [...sections.slice(0, NAMED_SECTIONS - 1), `${sections.length - NAMED_SECTIONS + 1} more`];
-  return `Edited ${NAMES.format(named)}`;
+  return `Edited ${NAMES.format(activity.sections)}`;
 }
 
 /**

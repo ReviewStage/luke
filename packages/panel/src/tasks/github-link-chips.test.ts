@@ -453,7 +453,7 @@ test("a pull request's card names its labels, and one read from an older service
   assert.deepEqual(cardLabels(older), []);
 });
 
-test("a pull request's card names its first six labels and counts the rest, so a card with many stays short", async () => {
+test("a pull request's card names every one of its labels, counting none", async () => {
   const { container } = await drawn(`See ${MANY_LABELS}.`, ACME_WITH_GITHUB);
 
   assert.deepEqual(cardLabels(container.querySelector("[data-mention-ref]") ?? undefined), [
@@ -463,7 +463,8 @@ test("a pull request's card names its first six labels and counts the rest, so a
     "d",
     "e",
     "f",
-    "+2",
+    "g",
+    "h",
   ]);
 });
 

@@ -197,22 +197,29 @@
     white-space: nowrap;
   }
 
-  .luke-hover-card-row-end,
-  .luke-hover-card-more {
+  .luke-hover-card-row-end {
+    flex: none;
     color: var(--luke-color-text-subtle);
     font-size: var(--luke-type-caption-size);
     font-variant-numeric: tabular-nums;
     white-space: nowrap;
   }
 
-  .luke-hover-card-row-end {
-    flex: none;
+  /* A list past a few rows' height scrolls within the card, about seven
+     rows' worth, or less where the window is short, fading at the edge
+     where more stands. It reaches past the card's inset as its rows' wash
+     does, and gives that room back inside, so the wash is never cut. */
+  .luke-hover-card-scroll {
+    display: flex;
+    flex-direction: column;
+    max-height: min(
+      calc(7.5 * var(--luke-menu-row-height)),
+      calc(var(--luke-stage-height, 100vh) * 0.4)
+    );
+    margin: 0 calc(-1 * var(--luke-space-8));
   }
 
-  .luke-hover-card-more {
-    display: flex;
-    height: 22px; /* off-scale: a count's line under the rows */
-    align-items: center;
-    padding-left: calc(var(--luke-menu-glyph) + var(--luke-icon-gap));
+  .luke-hover-card-scroll-body {
+    padding: 0 var(--luke-space-8);
   }
 }

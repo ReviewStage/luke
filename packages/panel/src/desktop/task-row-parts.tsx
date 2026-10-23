@@ -5,6 +5,7 @@ import {
   TASK_STATUS,
   TASK_STATUS_ORDER,
   type TaskPriority,
+  type TaskPullRequestLine,
   type TaskStanding,
   type TaskStatus,
   type TaskSummary,
@@ -41,6 +42,7 @@ import {
 } from "../tasks/task-standing.js";
 import { useOpenLink } from "../tasks/use-open-link.js";
 import { useTaskMaker } from "../tasks/use-task-origin.js";
+import { useTaskWork } from "../tasks/use-task-work.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast.js";
 import { ActionMenu } from "./action-menu.js";
@@ -289,9 +291,8 @@ export function WaitingBadge({ count }: { count: number }): React.JSX.Element | 
   );
 }
 
-/** A task's pull requests in the order its marks draw them: those still standing first, then the merged and the closed, each kept in the order the service sent. */
-function markedPullRequests(task: TaskSummary) {
-  const all = task.agents?.pullRequests ?? [];
+/** Pull requests in the order a task's marks draw them: those still standing first, then the merged and the closed, each kept in the order it came. */
+function markedPullRequests(all: readonly TaskPullRequestLine[]): readonly TaskPullRequestLine[] {
   return [
     ...all.filter((each) => STANDING_PULL_REQUESTS.has(each.state)),
     ...all.filter((each) => !STANDING_PULL_REQUESTS.has(each.state)),
@@ -341,24 +342,20 @@ export function TaskWorkMarks({
   onOpen: () => void;
 }): React.JSX.Element | null {
   const openLink = useOpenLink();
+  const work = useTaskWork(task);
   const working = task.agents?.working ?? 0;
-  const pullRequests = markedPullRequests(task);
+  const pullRequests = markedPullRequests(work.pullRequests);
   const shown = pullRequests.slice(0, most);
-  const total = task.agents?.pullRequestTotal ?? pullRequests.length;
+  const total = Math.max(task.agents?.pullRequestTotal ?? 0, pullRequests.length);
   const more = total - shown.length;
   if (working === 0 && shown.length === 0) return null;
   const chip = look === WORK_LOOK.PILLS ? CHIP_LOOK.PILL : CHIP_LOOK.TOOLBAR;
-  const agents = task.agents?.agents ?? [];
+  const { agents } = work;
   // Note that the working mark opens the agent at work the row names, else the task, which shows its agents.
   const atWork = agents.find((agent) => agentStillWriting(agent.status)) ?? agents[0];
   const agentsCard =
     agents.length === 0 ? undefined : (
-      <TaskAgentsCard
-        taskId={task.id}
-        agents={agents}
-        total={task.agents?.total ?? agents.length}
-        tasks={tasks}
-      />
+      <TaskAgentsCard taskId={task.id} agents={agents} tasks={tasks} />
     );
   const parts = (
     <>
@@ -406,7 +403,9 @@ export function TaskWorkMarks({
         <Tooltip
           label={moreWords(more)}
           card={
-            <MorePullRequestsCard pullRequests={pullRequests.slice(shown.length)} total={more} />
+            pullRequests.length > shown.length ? (
+              <MorePullRequestsCard pullRequests={pullRequests.slice(shown.length)} />
+            ) : undefined
           }
         >
           <Chip

@@ -790,11 +790,12 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
             ),
       openLive: dependencies.openLive ?? openRealtimeClient,
       now: kernel.now,
-      publish: ({ list, taskAgents }) => {
+      publish: ({ list, taskAgents, taskPullRequests }) => {
         write({
           tasks: list.plans,
           tasklessAgents: list.planlessAgents ?? [],
           taskAgents,
+          taskPullRequests,
           listStatus: TASKS_READ.READY,
         });
         // A name the service gave the open task reaches its document as the list carries it.

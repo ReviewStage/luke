@@ -31,6 +31,17 @@ import { CatalogSection } from "../section";
  * the linger an app gives its cards.
  */
 
+/** More agents than a card's list has height for, so the example scrolls. */
+const CATALOG_AGENTS = [
+  "Billing after downgrade",
+  "Rate limit search",
+  "Fix Safari login",
+  "Onboarding checklist",
+  "Self-hosting guide",
+  "Migrate auth SDK",
+  "Old onboarding copy",
+] as const;
+
 /** Whether the point `x`, `y` stands within the box spanning both rectangles, the gap between them included. */
 function withinBoth(x: number, y: number, one: DOMRect, other: DOMRect): boolean {
   return (
@@ -172,7 +183,8 @@ function HoverCards(): React.JSX.Element {
                   label="Created by Sam Rivera · 3d ago"
                 />
                 <HoverCardRule />
-                <HoverCardList label="Agents" more="2 more">
+                {/* Note that the list holds more rows than its height, so it scrolls and fades rather than counting the rest. */}
+                <HoverCardList label="Agents">
                   <li>
                     <HoverCardRow
                       glyph={<DocumentIcon />}
@@ -188,6 +200,15 @@ function HoverCards(): React.JSX.Element {
                       onPress={() => undefined}
                     />
                   </li>
+                  {CATALOG_AGENTS.map((name) => (
+                    <li key={name}>
+                      <HoverCardRow
+                        glyph={<DocumentIcon />}
+                        label={name}
+                        onPress={() => undefined}
+                      />
+                    </li>
+                  ))}
                 </HoverCardList>
               </HoverCard>
             }

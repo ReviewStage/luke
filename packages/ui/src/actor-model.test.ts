@@ -182,7 +182,7 @@ test("what someone last did in a plan is the sections whose last change is their
   assert.equal(said(latestActivity(edits, LUKE_ACTOR)), "Edited Approach");
   assert.equal(
     activityWords({ sections: ["Goal", "Approach", "Rollout", "Risks", "Open questions"], at: 0 }),
-    "Edited Goal, Approach, and 3 more",
+    "Edited Goal, Approach, Rollout, Risks, and Open questions",
   );
   assert.equal(
     latestActivity(edits, { kind: ACTOR_KIND.SOMEONE, reason: SOMEONE_REASON.UNNAMED }),

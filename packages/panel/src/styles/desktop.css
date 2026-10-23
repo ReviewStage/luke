@@ -769,16 +769,9 @@ ul.actor-stack {
   stroke-width: 3;
 }
 
-/* The rest a pile's count stands for, each by their mark and what their face would say. */
-/* However many it counts, the list stays inside the window and scrolls
-   within the card, in a `ScrollArea` as tall as it is, which gives way to
-   the room's height. */
-.actor-more {
-  display: flex;
-  max-height: min(240px, calc(var(--luke-stage-height) * 0.4));
-  flex-direction: column;
-}
-
+/* The rest a pile's count stands for, each by their mark and what their
+   face would say, scrolling within the card past a few as every card's
+   list does (`HoverCardScroll`). */
 .actor-more-row {
   display: flex;
   align-items: center;
