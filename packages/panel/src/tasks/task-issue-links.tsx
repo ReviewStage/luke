@@ -28,6 +28,7 @@ import {
 import { CircleDotIcon } from "lucide-react";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu.js";
 import { PICKER_ALIGN } from "../settings/picker-row.js";
+import { IssueCard } from "./issue-card.js";
 import { IssueMark } from "./issue-mark.js";
 import { IssuePickerChip } from "./issue-picker-chip.js";
 import { linksFull, RELATION_DETAIL, standingWords } from "./task-issue-links-model.js";
@@ -40,8 +41,8 @@ import type { TasksControl } from "./use-tasks-tab.js";
  *
  * Each chip is the issue's live mark, GitHub's for where it stands or
  * Linear's own, its key in the code face, and its title, cut short; its
- * tooltip says where the issue stands now and the keyword its pull requests
- * write. Its menu, headed by the same, opens the issue with its provider,
+ * card says where the issue stands now and the keyword its pull requests
+ * write, under its repository's key. Its menu, headed by the same, opens the issue with its provider,
  * offers Closes and Part of with the one chosen checked, and unlinks it,
  * which leaves the issue itself as it is with its provider. Where it
  * stands is read as the row opens and never kept (`use-task-issue-links.ts`),
@@ -106,6 +107,7 @@ function LinkChip({
 }): React.JSX.Element {
   const { drawn, close, trigger } = useMenu(true);
   const summary = linkSummary(link);
+  const stateWords = standingWords(link.standing);
   const open: MenuAction = {
     label: OPEN_WORDS[link.provider],
     icon: <ExternalIcon />,
@@ -127,7 +129,17 @@ function LinkChip({
   };
   return (
     <li className="task-issue-link" data-provider={link.provider} data-relation={link.relation}>
-      <Tooltip label={`${link.title} · ${summary}`}>
+      <Tooltip
+        label={`${link.title} · ${summary}`}
+        card={
+          <IssueCard
+            mark={<LinkMark link={link} />}
+            title={link.title}
+            heading={stateWords === undefined ? link.key : `${link.key} · ${stateWords}`}
+            note={`${LINKS_WORDS[link.relation]}: ${RELATION_DETAIL[link.relation]}`}
+          />
+        }
+      >
         <Chip
           look={CHIP_LOOK.FIELD}
           width={CHIP_WIDTH.AUTO}
