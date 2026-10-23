@@ -42,7 +42,6 @@ import {
 } from "@luke/database/models/installed-skill-store";
 import type { TaskStoreFailure } from "@luke/database/models/task-store";
 import { listWorkspaces, personalWorkspaceOf } from "@luke/database/models/workspace-store";
-import { wireUuidSchema } from "@luke/features";
 import type {
   InstalledSkillContent,
   InstalledSkillSummary,
@@ -55,8 +54,6 @@ import {
 } from "@luke/features/installed-skill-wire";
 import { parseSkillPaste } from "@luke/features/skill-paste";
 import { WORKSPACE_ROLE, type WorkspaceRole } from "@luke/features/workspace-wire";
-import { unparsedWire } from "@luke/wire";
-import { readEither } from "@luke/wire/effect";
 import { Data, Effect, Option, Result } from "effect";
 import { SqlClient } from "effect/sql";
 import {
@@ -64,6 +61,7 @@ import {
   type HostedRefusal,
   hostedStoreOrUnavailable,
   installedSkillRefused,
+  pathUuid,
   type UserIdResolver,
 } from "../http/http-effect.js";
 import { accountMiddleware, hosted } from "../orpc/base.js";
@@ -91,15 +89,6 @@ interface MemberWorkspace {
   readonly role: WorkspaceRole;
   readonly personal: boolean;
 }
-
-/** The path's id; one that is no UUID names no skill. */
-const idOf = /* @__PURE__ */ Effect.fnUntraced(function* (
-  id: string,
-): Effect.fn.Return<string, HostedRefusal> {
-  const read = readEither(wireUuidSchema)(unparsedWire(id));
-  if (Result.isFailure(read)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-  return read.success;
-});
 
 /** The workspace as the account is a member of it; not found where it is not. */
 const memberWorkspace = /* @__PURE__ */ Effect.fnUntraced(function* (
@@ -249,7 +238,7 @@ export function installedSkillsProcedures(seams: InstalledSkillsProcedureSeams) 
 
     /** One skill the account reads, whole: its `SKILL.md` and its files. */
     read: skills.read.effect(function* ({ input, context: { userId } }) {
-      const id = yield* idOf(input.id);
+      const id = yield* pathUuid(input.id);
       const read = yield* hostedStoreOrUnavailable(readInstalledSkill(userId, id));
       if (Option.isNone(read)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
       return contentOf(read.value);
@@ -303,7 +292,7 @@ export function installedSkillsProcedures(seams: InstalledSkillsProcedureSeams) 
       input: { params, body },
       context: { userId },
     }) {
-      const id = yield* idOf(params.id);
+      const id = yield* pathUuid(params.id);
       const written = yield* hostedStoreOrUnavailable(
         setInstalledSkillEnabled(userId, id, body.enabled),
       );
@@ -313,7 +302,7 @@ export function installedSkillsProcedures(seams: InstalledSkillsProcedureSeams) 
 
     /** Whether a GitHub skill's folder moved at its ref since it was pinned; never for a pasted one. */
     checkUpdate: skills.checkUpdate.effect(function* ({ input, context: { userId } }) {
-      const id = yield* idOf(input.id);
+      const id = yield* pathUuid(input.id);
       const workspace = yield* memberWorkspace(userId, input.workspaceId);
       const skill = yield* visibleSkill(userId, workspace, id);
       const { source } = skill;
@@ -339,7 +328,7 @@ export function installedSkillsProcedures(seams: InstalledSkillsProcedureSeams) 
 
     /** A GitHub skill's files read again at its ref and put in place of its own. */
     update: skills.update.effect(function* ({ input: { params, body }, context: { userId } }) {
-      const id = yield* idOf(params.id);
+      const id = yield* pathUuid(params.id);
       const workspace = yield* memberWorkspace(userId, body.workspaceId);
       const skill = yield* visibleSkill(userId, workspace, id);
       if (!managedBy(userId, workspace, skill))
@@ -365,7 +354,7 @@ export function installedSkillsProcedures(seams: InstalledSkillsProcedureSeams) 
 
     /** The account's own personal skill moved into a workspace it is a member of. */
     share: skills.share.effect(function* ({ input: { params, body }, context: { userId } }) {
-      const id = yield* idOf(params.id);
+      const id = yield* pathUuid(params.id);
       const workspace = yield* memberWorkspace(userId, body.workspaceId);
       yield* checkedScope(workspace, INSTALLED_SKILL_SCOPE.WORKSPACE);
       const written = yield* storeWrite(shareInstalledSkill(userId, id, workspace.id), undefined);
@@ -375,7 +364,7 @@ export function installedSkillsProcedures(seams: InstalledSkillsProcedureSeams) 
 
     /** One skill removed with its files. */
     remove: skills.remove.effect(function* ({ input, context: { userId } }) {
-      const id = yield* idOf(input.id);
+      const id = yield* pathUuid(input.id);
       const removed = yield* hostedStoreOrUnavailable(removeInstalledSkill(userId, id));
       if (!removed) return yield* refusedWrite(userId, id);
       return { id };

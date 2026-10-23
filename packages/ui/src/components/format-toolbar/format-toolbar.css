@@ -1,0 +1,24 @@
+/* format-toolbar.css -- the toolbar over selected words
+   (`format-toolbar.tsx`): the menu's surface in toolbar flow, a hairline
+   between its groups, a mark the selection wears pressed in the accent's
+   ink on a wash of it, and Turn into's chevron quieter than its words. */
+
+@layer components {
+  .luke-format-toolbar-rule {
+    flex: none;
+    width: 1px;
+    height: var(--luke-space-16);
+    margin: 0 var(--luke-space-2);
+    background: var(--luke-color-border-strong);
+  }
+
+  .luke-format-toolbar .luke-button[aria-pressed="true"] {
+    --luke-button-fill: color-mix(in srgb, var(--luke-color-accent-text) 14%, transparent);
+    --luke-button-ink: var(--luke-color-accent-text);
+  }
+
+  .luke-format-toolbar .luke-button-trailing > svg {
+    width: var(--luke-space-12);
+    height: var(--luke-space-12);
+  }
+}

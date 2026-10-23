@@ -36,8 +36,13 @@
     box-shadow: inset 0 0 0 1px var(--luke-color-border-selected);
   }
 
+  /* The open row is drawn in the work sheet's ground, lifted by a hairline
+     and a soft shadow, as the sheet itself is. */
   .luke-list-row[data-current="true"] {
-    background: var(--luke-color-fill-strong);
+    background: var(--luke-color-ground);
+    box-shadow:
+      0 0 0 1px var(--luke-color-border),
+      0 1px 2px var(--luke-color-shadow-soft);
   }
 
   .luke-list-row-main {
@@ -464,7 +469,7 @@
   }
 
   .luke-list-row[data-actions="hover"][data-current="true"] {
-    --luke-list-row-fill: var(--luke-color-fill-strong);
+    --luke-list-row-fill: var(--luke-color-ground);
   }
 
   .luke-list-row[data-actions="hover"] .luke-list-row-main {
@@ -582,7 +587,7 @@
   }
 
   .luke-list-row[data-swipe][data-current="true"] {
-    --luke-list-row-fill: var(--luke-color-fill-strong);
+    --luke-list-row-fill: var(--luke-color-ground);
 
     background: none;
   }

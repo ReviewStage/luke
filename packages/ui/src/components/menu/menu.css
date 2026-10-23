@@ -209,6 +209,24 @@
     font-size: 11.5px;
   }
 
+  /* A detail beside its label, as a picker's row says a person's email: on
+     the label's line, giving way to the label where the row runs short,
+     since the label is what tells the items apart. */
+  .luke-menu-item-copy[data-place="beside"] {
+    flex-direction: row;
+    align-items: baseline;
+    gap: var(--luke-space-8);
+  }
+
+  .luke-menu-item-copy[data-place="beside"] > .luke-menu-item-label {
+    flex: 0 1 auto;
+  }
+
+  .luke-menu-item-copy[data-place="beside"] > .luke-menu-item-detail {
+    min-width: 0;
+    flex: 0 1000 auto;
+  }
+
   /* Under a finger, on a phone held at arm's length, no smaller than 12px. */
   @media (pointer: coarse) {
     .luke-menu-item-detail {

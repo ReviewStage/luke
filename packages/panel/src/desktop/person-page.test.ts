@@ -426,6 +426,21 @@ test("each row opens what it names: an agent its tab, an item the Inbox on it, a
   assert.deepEqual(opened.tasks, [DASHBOARD.id]);
 });
 
+test("a waiting item is the Inbox's own row: its task named in a chip before its preview, the marks of its Inbox row and its time at the end, and its card hung beside it", async () => {
+  const { page } = mount(CHARLES.userId);
+  await settle();
+
+  const row = button(page, "Retry 429s too?");
+  assert.equal(row.querySelector(".home-row-context"), null, "no task name at the row's end");
+  assert.equal(row.querySelector(".luke-list-row-lead")?.textContent, RETRIES.name);
+  assert.ok(row.querySelector('.actor-mark[data-kind="agent"]'), "the agent's tile leads");
+  assert.ok(row.querySelector(".home-row-meta time"), "its time stands at its end");
+
+  restOn(row);
+  const card = document.querySelector(".luke-tooltip-card [data-inbox-row-card]");
+  assert.equal(card?.querySelector(".luke-hover-card-name")?.textContent, RETRY_429.title);
+});
+
 test("an agent's row says its failure at its end and hangs the agent's card while rested on, as the sidebar's row does", async () => {
   const broken = agent(9, "Flaky retry", CHARLES, CODING_AGENT_STATUS.FAILED, 5 * MINUTE);
   const failing = task(9, "Retry flake hunt", CHARLES, 5 * MINUTE, [broken]);
@@ -715,6 +730,21 @@ test("while the Inbox and the automations are read, placeholder rows stand for e
   assert.deepEqual(waits(page), ["Reading your inbox…", "Reading their automations…"]);
   assert.equal(page.querySelector(".luke-spinner"), null);
   assert.doesNotMatch(page.textContent ?? "", /Nothing of theirs here yet/u);
+});
+
+test("while the Inbox is read, its placeholder stands where the section waiting on them lands, right after Working now", async () => {
+  handState({});
+  inboxHeld = true;
+  const { page } = mount(CHARLES.userId);
+  await settle();
+
+  const order = [...page.querySelectorAll("section.home-section")].map(
+    (section) =>
+      section.getAttribute("aria-label") ??
+      section.querySelector('[role="status"]')?.textContent ??
+      "",
+  );
+  assert.deepEqual(order.slice(0, 3), ["Working now", "Reading your inbox…", "Created"]);
 });
 
 test("a page opened by a member's id alone stands a placeholder head while the members are read, never Someone not in this workspace nor an empty page", async () => {

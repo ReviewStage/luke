@@ -32,7 +32,7 @@ import { and, asc, eq, gt, isNull, lte, or, sql } from "drizzle-orm";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
 import { type LiveStatement, liveSelection, liveStatementOf } from "../core/live-statement.js";
-import { Database, type DatabaseServices, type QueryError, queryBuilder } from "../core/query.js";
+import { Database, type DatabaseServices, queryBuilder, type StoreFailure } from "../core/query.js";
 import { agentBrowserTab } from "../schemas/agent-browser-tab.js";
 import { member } from "../schemas/auth.js";
 import { codingAgent } from "../schemas/coding-agent.js";
@@ -40,9 +40,7 @@ import { task } from "../schemas/task.js";
 import { InstantColumnSchema } from "./columns.js";
 import { agentReachableBy, reachableTask, taskReachableBy, taskSeenBy } from "./workspace-store.js";
 
-type BrowserTabFailure = QueryError | Schema.SchemaError;
-
-type BrowserTabEffect<A> = Effect.Effect<A, BrowserTabFailure, DatabaseServices>;
+type BrowserTabEffect<A> = Effect.Effect<A, StoreFailure, DatabaseServices>;
 
 const OPENERS = Object.values(AGENT_BROWSER_TAB_OPENER);
 

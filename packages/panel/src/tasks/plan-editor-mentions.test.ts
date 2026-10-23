@@ -263,7 +263,7 @@ test("on the plan's page an @ typed in the plan offers its pages and its agents 
     workspace: "acme",
     repository: TASK.repository,
     text: () => TASK.document.body,
-    pages: [{ id: "page-1", title: "Invites by week" }],
+    pages: [{ id: "page-1", title: "Invites by week", version: 1, at: 1_000 }],
     agents: [
       {
         id: "agent-2",

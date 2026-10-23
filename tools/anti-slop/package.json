@@ -3,7 +3,7 @@
   "version": "0.19.0",
   "private": true,
   "type": "module",
-  "description": "The repository's oxlint rules: Effect runtime edges, raw async primitives, node:test, Drizzle writes, and the design system's press guard",
+  "description": "The repository's oxlint rules: Effect runtime edges, raw async primitives, node:test, Drizzle writes, and the design system's press and skeleton guards",
   "scripts": {
     "test:vitest": "vitest run",
     "typecheck": "tsc --project tsconfig.json"

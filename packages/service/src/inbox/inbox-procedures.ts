@@ -38,9 +38,8 @@ import {
 } from "@luke/features/inbox-wire";
 import { MODEL_PROVIDER, type ModelProvider } from "@luke/features/models-wire";
 import { failureKind } from "@luke/runtime/effect";
-import { readEither } from "@luke/wire/effect";
 import type { LanguageModel } from "ai";
-import { Effect, Option, Result } from "effect";
+import { Effect, Option } from "effect";
 import { type AccountResolving, controlsAgent } from "../agents/agent-reach.js";
 import type { EveTypedTurn } from "../agents/brain-host/eve-sessions.js";
 import { ownKeyOf } from "../agents/coder-host/account-keys.js";
@@ -54,7 +53,6 @@ import { steerCodingAgent } from "../agents/coder-host/steer.js";
 import { type EveReach, eveFor } from "../agents/coder-host/stop.js";
 import { titleInboxThread } from "../agents/coder-host/title.js";
 import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
-import { unparsedWire, wireUuidSchema } from "../core.js";
 import { HostedEnvironment } from "../environment.js";
 import { recordServerEvent, SERVER_EVENT } from "../events/server-events.js";
 import { afterResponse } from "../http/after-response.js";
@@ -62,6 +60,7 @@ import {
   HOSTED_REFUSAL,
   type HostedRefusal,
   hostedStoreOrUnavailable,
+  pathUuid,
 } from "../http/http-effect.js";
 import { logStoreFailure } from "../http/store-failure.js";
 import { accountMiddleware, hosted } from "../orpc/base.js";
@@ -137,15 +136,6 @@ const retitled = (
     if (Option.isNone(title)) return;
     yield* retitleInboxThread(item.id, item.title, title.value);
   });
-
-/** The id a path named, where it is a UUID; any other names no row, and is not found. */
-const rowIdOf = /* @__PURE__ */ Effect.fnUntraced(function* (
-  id: string,
-): Effect.fn.Return<string, HostedRefusal> {
-  const read = readEither(wireUuidSchema)(unparsedWire(id));
-  if (Result.isFailure(read)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-  return read.success;
-});
 
 /** Whether a hand-off was refused because the agent's session has ended for good, so no message will ever reach it. */
 function retiredRefusal(refusal: HostedRefusal): boolean {
@@ -596,14 +586,14 @@ export function inboxProcedures(seams: InboxProcedureSeams) {
       return yield* hostedStoreOrUnavailable(accountInboxPast(context.userId, after));
     }),
     task: signedIn.task.effect(function* ({ input, context }) {
-      const taskId = yield* rowIdOf(input.id);
+      const taskId = yield* pathUuid(input.id);
       const workspace = yield* hostedStoreOrUnavailable(readTaskWorkspace(context.userId, taskId));
       if (Option.isNone(workspace)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
       const after = input.after ?? INBOX_CURSOR_START;
       return yield* hostedStoreOrUnavailable(taskInboxPast(context.userId, taskId, after));
     }),
     agent: signedIn.agent.effect(function* ({ input, context }) {
-      const agentId = yield* rowIdOf(input.id);
+      const agentId = yield* pathUuid(input.id);
       const agent = yield* hostedStoreOrUnavailable(readCodingAgent(context.userId, agentId));
       if (Option.isNone(agent)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
       const after = input.after ?? INBOX_CURSOR_START;
@@ -613,7 +603,7 @@ export function inboxProcedures(seams: InboxProcedureSeams) {
       input,
       context,
     }) {
-      const itemId = yield* rowIdOf(input.params.id);
+      const itemId = yield* pathUuid(input.params.id);
       const { revision, clientKey, attachments = [], ...reply } = input.body;
       return yield* answered(seams, writer, context.request, context.userId, itemId, {
         revision,
@@ -626,7 +616,7 @@ export function inboxProcedures(seams: InboxProcedureSeams) {
       input,
       context,
     }) {
-      const itemId = yield* rowIdOf(input.params.id);
+      const itemId = yield* pathUuid(input.params.id);
       const { text, clientKey, attachments = [], answers, revision } = input.body;
       return yield* messaged(seams, writer, context.request, context.userId, itemId, {
         text,
@@ -640,7 +630,7 @@ export function inboxProcedures(seams: InboxProcedureSeams) {
       input,
       context,
     }) {
-      const agentId = yield* rowIdOf(input.agentId);
+      const agentId = yield* pathUuid(input.agentId);
       const { text, clientKey, attachments = [] } = input;
       return yield* started(seams, writer, context.request, context.userId, {
         agentId,
@@ -655,17 +645,17 @@ export function inboxProcedures(seams: InboxProcedureSeams) {
       input,
       context,
     }) {
-      const itemId = yield* rowIdOf(input.params.id);
+      const itemId = yield* pathUuid(input.params.id);
       return yield* closed(seams, writer, context.request, context.userId, itemId, input.body);
     }),
     markItemRead: signedIn.markItemRead.effect(function* ({ input, context }) {
-      const itemId = yield* rowIdOf(input.id);
+      const itemId = yield* pathUuid(input.id);
       const marked = yield* hostedStoreOrUnavailable(markInboxItemRead(context.userId, itemId));
       if (marked === false) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
       return { id: itemId, unread: false, ...marked };
     }),
     markItemUnread: signedIn.markItemUnread.effect(function* ({ input, context }) {
-      const itemId = yield* rowIdOf(input.id);
+      const itemId = yield* pathUuid(input.id);
       const marked = yield* hostedStoreOrUnavailable(markInboxItemUnread(context.userId, itemId));
       if (marked === false) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
       return { id: itemId, unread: true, ...marked };

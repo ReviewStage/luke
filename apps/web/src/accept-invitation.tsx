@@ -8,10 +8,10 @@ import {
 import { AuthPage, BUTTON_VARIANT, Button, SocialSignInCard } from "@luke/ui";
 import { organizationClient } from "better-auth/client/plugins";
 import { createAuthClient } from "better-auth/react";
-import { StrictMode, useEffect, useState } from "react";
-import { createRoot } from "react-dom/client";
+import { useEffect, useState } from "react";
 import { useSocialSignIn } from "./sign-in-choices";
 import "./styles.css";
+import { mountPrerenderedPage } from "./mount-page";
 
 /**
  * accept-invitation.tsx -- the page an invitee joins a workspace on, on the browser's own session.
@@ -243,11 +243,4 @@ function AcceptInvitation(): React.JSX.Element {
   );
 }
 
-const rootElement = document.getElementById("root");
-if (!rootElement) throw new Error("Root element is missing");
-
-createRoot(rootElement).render(
-  <StrictMode>
-    <AcceptInvitation />
-  </StrictMode>,
-);
+mountPrerenderedPage(<AcceptInvitation />);

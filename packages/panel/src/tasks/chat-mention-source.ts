@@ -85,8 +85,17 @@ function sourceIn(
   const planId = place === undefined ? undefined : channel?.planId;
   if (planId === undefined) return none;
   if (page?.taskId === planId) {
-    const { taskName, repository, text, pullRequests } = page;
-    return { taskId: planId, taskName, workspace, repository, text, pullRequests };
+    const { taskName, repository, text, pullRequests, shownCode, openFiles } = page;
+    return {
+      taskId: planId,
+      taskName,
+      workspace,
+      repository,
+      text,
+      pullRequests,
+      shownCode,
+      openFiles,
+    };
   }
   const task = tasks.find((each) => each.id === planId);
   if (task === undefined) return none;

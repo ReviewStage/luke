@@ -15,7 +15,13 @@
    A colour belongs here when a shared component draws with it or the
    window's own frame does (its sidebar, its wells). One that only one surface
    spends (a terminal's sixteen inks, a file icon's) stays in that app's
-   stylesheet. */
+   stylesheet.
+
+   The window is drawn as a sheet on a frame: the work column's ground
+   (`--luke-color-ground`) is the lightest in the light theme and a step
+   above the frame in the dark, and the frame the sidebar stands on is the
+   sidebar's ground (`--luke-color-sidebar`), so the sheet reads as lifted
+   off it in either theme. */
 
 [data-luke-theme="dark"] {
   color-scheme: dark;
@@ -52,20 +58,20 @@
      (`tokens.test.ts`). */
   --luke-color-accent-text: light-dark(#00689b, #5cd5ff);
 
-  --luke-color-ground: light-dark(#fcfcfc, #0c0c0e);
+  --luke-color-ground: light-dark(#ffffff, #161618);
   /* A settings group's ground, a card's. */
   --luke-color-surface: light-dark(#fff, rgba(255, 255, 255, 0.022));
   /* What floats over the window: the sidebar's step above the ground in the
      dark, where lighter is nearer, and white in the light, where a shadow
      says it instead. */
-  --luke-color-overlay: light-dark(#fff, #111114);
+  --luke-color-overlay: light-dark(#fff, #1c1c1f);
   /* The sidebar's column: a step darker than the ground in the light, and the
      overlay's step above it in the dark. Its words at rest sit a step under
      the text, so the open, hovered, and unread rows stand out by going up. */
-  --luke-color-sidebar: light-dark(#f3f3f4, #111114);
+  --luke-color-sidebar: light-dark(#f4f4f5, #0e0e10);
   --luke-color-sidebar-ink: light-dark(rgba(0, 0, 0, 0.68), rgba(255, 255, 255, 0.7));
   /* A sunk ground, a step off the window's: a code block's, a strip's, a well's. */
-  --luke-color-well: light-dark(#f8f8f9, #0f0f12);
+  --luke-color-well: light-dark(#f7f7f8, #121214);
   /* The code on screen, in the ground of GitHub's own themes. */
   --luke-color-code-ground: light-dark(#fff, #0d1117);
   --luke-color-fill-hover: light-dark(rgba(0, 0, 0, 0.035), rgba(255, 255, 255, 0.05));
@@ -78,10 +84,10 @@
   /* A chip's own face, opaque so it reads the same on any ground: its fill
      at rest, under the pointer, and standing chosen, and its hairline, the
      strong one round a chosen chip. */
-  --luke-color-chip: light-dark(#ffffff, #18181b);
-  --luke-color-chip-hover: light-dark(#f5f5f6, #202024);
-  --luke-color-chip-selected: light-dark(#ececee, #2c2c31);
-  --luke-color-chip-edge: light-dark(#dfdfe3, #2b2b30);
+  --luke-color-chip: light-dark(#ffffff, #1e1e22);
+  --luke-color-chip-hover: light-dark(#f5f5f6, #26262b);
+  --luke-color-chip-selected: light-dark(#ececee, #303036);
+  --luke-color-chip-edge: light-dark(#dfdfe3, #2c2c31);
   --luke-color-chip-edge-strong: light-dark(#b9b9c0, #45454c);
   --luke-color-input: light-dark(#fff, rgba(0, 0, 0, 0.4));
   --luke-color-input-focus: light-dark(#fff, rgba(0, 0, 0, 0.55));
@@ -178,7 +184,7 @@
   --luke-color-ink-inverse: var(--luke-color-ground);
   --luke-color-accent-text: #0d6e80;
 
-  --luke-color-ground: #fbfbfa;
+  --luke-color-ground: #ffffff;
   --luke-color-surface: oklch(1 0 0);
   --luke-color-overlay: oklch(1 0 0);
   --luke-color-sidebar: #f3f3f4;
@@ -278,13 +284,13 @@
   /* Luke's teal lifted to read on the dark grounds, AA against each (`tokens.test.ts`). */
   --luke-color-accent-text: #15b3d0;
 
-  --luke-color-ground: #08090b;
+  --luke-color-ground: #121316;
   /* A step above the page (1.06:1) lets a card read before its border does. */
-  --luke-color-surface: #101114;
-  --luke-color-overlay: #101114;
-  --luke-color-sidebar: #101114;
+  --luke-color-surface: #18191d;
+  --luke-color-overlay: #18191d;
+  --luke-color-sidebar: #08090b;
   --luke-color-sidebar-ink: rgba(255, 255, 255, 0.7);
-  --luke-color-well: #0c0d10;
+  --luke-color-well: #0e0f12;
   --luke-color-code-ground: #0d1117;
   --luke-color-fill-hover: rgba(255, 255, 255, 0.05);
   --luke-color-fill-strong: rgba(255, 255, 255, 0.09);
@@ -293,13 +299,13 @@
   --luke-color-border: rgba(255, 255, 255, 0.08);
   --luke-color-border-strong: rgba(255, 255, 255, 0.08);
   --luke-color-border-selected: rgba(255, 255, 255, 0.92);
-  --luke-color-chip: #16171b;
-  --luke-color-chip-hover: #1d1e23;
-  --luke-color-chip-selected: #272930;
-  --luke-color-chip-edge: #26272c;
+  --luke-color-chip: #1d1e23;
+  --luke-color-chip-hover: #24252b;
+  --luke-color-chip-selected: #2e3037;
+  --luke-color-chip-edge: #2c2d33;
   --luke-color-chip-edge-strong: #3f4148;
-  --luke-color-input: #101114;
-  --luke-color-input-focus: #101114;
+  --luke-color-input: #18191d;
+  --luke-color-input-focus: #18191d;
   --luke-color-match: rgba(255, 255, 255, 0.16);
   --luke-color-scrollbar: rgba(255, 255, 255, 0.18);
 

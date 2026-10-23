@@ -1276,7 +1276,7 @@ const leaveGroup = (page: HTMLElement) =>
 const leaveLine = (group: HTMLElement) =>
   rowWords(group.querySelector<HTMLElement>(ROWS) ?? assert.fail("no leave row"))[1];
 
-test("the owner cannot leave until the workspace is handed over: its row says so and Transfer ownership hands it to the admin chosen, the first unless another is, once the workspace's name is typed", async () => {
+test("the owner cannot leave until the workspace is handed over: its row says so and Transfer ownership hands it to the admin chosen, the first by name unless another is, each offered with their email beside their name, once the workspace's name is typed", async () => {
   const other: WorkspaceMember = {
     ...ADMIN_OLA,
     userId: "user-kim",
@@ -1295,7 +1295,10 @@ test("the owner cannot leave until the workspace is handed over: its row says so
   act(() => chip.click());
   const offered = [...document.querySelectorAll<HTMLElement>('[role="menu"] [role^="menuitem"]')];
   const names = offered.map((item) => item.textContent);
-  act(() => offered.find((item) => item.textContent?.includes("kim@example.com"))?.click());
+  const besides = offered.map((item) =>
+    item.querySelector(".luke-menu-item-copy")?.getAttribute("data-place"),
+  );
+  act(() => offered.find((item) => item.textContent?.includes("ola@example.com"))?.click());
   await confirm("Transfer ownership");
   const refusedUntilNamed = roleSent();
   typeGate(ACME.name.toUpperCase());
@@ -1306,15 +1309,16 @@ test("the owner cannot leave until the workspace is handed over: its row says so
 
   assert.equal(line, "You're its owner. Make an admin the owner first, then you can leave.");
   assert.deepEqual(buttons(group, "Leave"), []);
-  assert.equal(first, "New owner: Ola");
+  assert.equal(first, "New owner: Kim");
   assert.deepEqual(
     names.map((name) => name?.replace(/^[A-Z]/u, "")),
-    ["Olaola@example.com", "Kimkim@example.com"],
+    ["Kimkim@example.com", "Olaola@example.com"],
   );
+  assert.deepEqual(besides, ["beside", "beside"]);
   assert.deepEqual(refusedUntilNamed, [], "the act waits on the workspace's name");
   assert.deepEqual(refusedMisnamed, [], "a name typed otherwise is not the name");
   assert.deepEqual(roleSent(), [
-    [ACT_KIND.WORKSPACE_TRANSFER, { workspaceId: ACME.id, userId: "user-kim" }],
+    [ACT_KIND.WORKSPACE_TRANSFER, { workspaceId: ACME.id, userId: ADMIN_OLA.userId }],
   ]);
 });
 
@@ -1763,15 +1767,12 @@ test("Add repository offers the repositories the reader's own token may push to 
 
   act(() => button(rowNamed(page, "GitHub"), "Add repository").click());
   await settle();
-  const offered = [...document.querySelectorAll('[role="option"]')].map((one) => one.textContent);
-  const side =
-    [...document.querySelectorAll<HTMLElement>('[role="option"]')].find(
-      (one) => one.textContent === "octo-member/side",
-    ) ?? assert.fail("octo-member/side is not offered");
+  const offered = [...document.querySelectorAll('[role="option"]')].map(optionWords);
+  const side = document.querySelector<HTMLElement>('[role="option"]') ?? assert.fail("no option");
   act(() => side.click());
   await settle();
 
-  assert.deepEqual(offered, ["octo-member/side"]);
+  assert.deepEqual(offered, [["side", "octo-member"]]);
   assert.deepEqual(
     sent
       .filter((one) => one.kind === ACT_KIND.WORKSPACE_TOKEN_REPOSITORY_SET)
@@ -1793,10 +1794,45 @@ test("Add repository offers the token's repositories from a service older than a
   act(() => button(rowNamed(page, "GitHub"), "Add repository").click());
   await settle();
 
-  assert.deepEqual(
-    [...document.querySelectorAll('[role="option"]')].map((one) => one.textContent),
-    ["octo-member/side"],
+  assert.deepEqual([...document.querySelectorAll('[role="option"]')].map(optionWords), [
+    ["side", "octo-member"],
+  ]);
+});
+
+/** A picker option's name and its muted owner, as the repository chip's menu draws a repository. */
+function optionWords(option: Element): (string | null | undefined)[] {
+  return [".luke-combobox-option-label", ".luke-combobox-option-detail"].map(
+    (part) => option.querySelector(part)?.textContent,
   );
+}
+
+test("Add repository draws each repository as the repository chip's menu does, by its owner's picture and name, and a search finds it by its owner", async () => {
+  githubRepositories = ["acme/relay"];
+  tokenReach = [
+    ...["a", "b", "c", "d", "e", "f", "g"].map((name) => `octo-member/${name}`),
+    "side-org/zed",
+  ];
+  const { page } = await mount({ ...SEVERAL, role: WORKSPACE_ROLE.MEMBER });
+
+  act(() => button(rowNamed(page, "GitHub"), "Add repository").click());
+  await settle();
+  const zed = () =>
+    [...document.querySelectorAll('[role="option"]')].find(
+      (one) => optionWords(one)[0] === "zed",
+    ) ?? assert.fail("zed is not offered");
+  const field = document.querySelector<HTMLInputElement>("input") ?? assert.fail("no search field");
+  const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+  act(() => {
+    setter?.call(field, "side-org");
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+
+  assert.deepEqual(optionWords(zed()), ["zed", "side-org"]);
+  assert.equal(
+    zed().querySelector("img.luke-avatar-picture")?.getAttribute("src"),
+    "https://github.com/side-org.png?size=32",
+  );
+  assert.equal(document.querySelectorAll('[role="option"]').length, 1);
 });
 
 test("a token repositories read that lands after an add does not take back what the add answered", async () => {
@@ -1809,10 +1845,7 @@ test("a token repositories read that lands after an add does not take back what 
 
   act(() => button(rowNamed(page, "GitHub"), "Add repository").click());
   await settle();
-  const side =
-    [...document.querySelectorAll<HTMLElement>('[role="option"]')].find(
-      (one) => one.textContent === "octo-member/side",
-    ) ?? assert.fail("octo-member/side is not offered");
+  const side = document.querySelector<HTMLElement>('[role="option"]') ?? assert.fail("no option");
   act(() => side.click());
   await settle();
   release();

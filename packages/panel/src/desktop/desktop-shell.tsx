@@ -8,7 +8,6 @@ import {
   COLLECTION_STATE,
   CollectionPage,
   commandKeyshortcuts,
-  DetailPage,
   DrawerScrim,
   IconButton,
   NavItem,
@@ -25,7 +24,6 @@ import {
   type SettingsSectionSkeletonShape,
   Shortcut,
   SidebarIcon,
-  Skeleton,
   Tooltip,
   useDrawerSwipe,
 } from "@luke/ui";
@@ -37,7 +35,6 @@ import { useAppCommand } from "../app-commands.js";
 import { appPlatform } from "../app-platform.js";
 import { CALL_CARD_SURFACE, StandingCallCardDock } from "../call/call-card.js";
 import { useCoarsePointer } from "../coarse-pointer.js";
-import { ExperimentTag } from "../experiment-marks.js";
 import { FIND_PAGE, PageFind } from "../find-in-tab.js";
 import type { NavigationHistory, WindowHistory } from "../navigation-history.js";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs.js";
@@ -63,6 +60,11 @@ import {
 } from "../use-app-state.js";
 import { useCallingAgent } from "../use-voice-view.js";
 import { WindowVoiceNotice } from "../window-voice.js";
+import {
+  AutomationListSkeleton,
+  AutomationsActsSkeleton,
+  AutomationsToolbar,
+} from "./automation-list-frame.js";
 import { READING_AUTOMATIONS } from "./automation-words.js";
 import { useColumnDock } from "./column-dock.js";
 import { DesktopAgentPage } from "./desktop-agent-page.js";
@@ -78,6 +80,7 @@ import { NewTaskButton } from "./new-task-button.js";
 import { OfflineMark, useOffline } from "./offline-mark.js";
 import { ADMIN_PLACE, PERSON_PAGE, VERSION_HISTORY } from "./pages-on-demand.js";
 import { PaneGlide } from "./pane-motion.js";
+import { PersonPageSkeleton } from "./person-frame.js";
 import { SidePanelToggle } from "./side-panel.js";
 import { SIDEBAR_OVERLAY, type SidebarCollapse, sidebarInSight } from "./sidebar-collapse.js";
 import { homeTaskCardOf } from "./task-card.js";
@@ -179,7 +182,7 @@ function AdminLoading({
   );
 }
 
-/** What stands while a person's page's chunk loads: its frame, their name where the place that opened it knew it, and its own way out. */
+/** What stands while a person's page's chunk loads: the page as it stands until the members are read (`PersonPageSkeleton`), and its own way out. */
 function PersonLoading({
   name,
   onExit,
@@ -188,31 +191,8 @@ function PersonLoading({
   onExit: () => void;
 }): React.JSX.Element {
   useAppCommand(APP_COMMAND.EXIT_PERSON_PAGE, onExit);
-  return (
-    <DetailPage
-      frame={PAGE_FRAME.TOOLBAR}
-      label={name ?? "Profile"}
-      toolbar={
-        <header className="desktop-toolbar">
-          <div className="desktop-toolbar-heading">
-            <OneLine
-              as={ONE_LINE_ELEMENT.H1}
-              end={ONE_LINE_END.ELLIPSIS}
-              className="desktop-toolbar-title"
-            >
-              {name ?? <Skeleton width={PERSON_SKELETON_NAME} />}
-            </OneLine>
-          </div>
-        </header>
-      }
-    >
-      {null}
-    </DetailPage>
-  );
+  return <PersonPageSkeleton name={name} />;
 }
-
-/** How wide the placeholder name stands while a person's page's chunk loads, as the page's own does. */
-const PERSON_SKELETON_NAME = "180px";
 
 /**
  * What stands while a version history's chunk loads: its frame, the list's
@@ -248,18 +228,18 @@ function VersionHistoryLoading({
 }
 
 /**
- * What stands while the Automations pages' chunk loads: their frame, its
- * toolbar's title over the list as quiet blocks, and their own way out, so
- * Escape pressed in that frame closes Automations as the list would rather
- * than falling through to the task behind it.
+ * What stands while the Automations pages' chunk loads: the list's own
+ * toolbar and card as quiet blocks (`AutomationListSkeleton`), as the list
+ * stands while it is first read, and their own way out, so Escape pressed in
+ * that frame closes Automations as the list would rather than falling
+ * through to the task behind it.
  */
 function AutomationsLoading({
   onExit,
-  narrow,
+  room,
 }: {
   onExit: () => void;
-  /** Whether the room is a phone's, whose tag is the experiment's glyph alone. */
-  narrow: boolean;
+  room: ShellRoom;
 }): React.JSX.Element {
   useAppCommand(APP_COMMAND.EXIT_AUTOMATIONS, onExit);
   return (
@@ -267,21 +247,13 @@ function AutomationsLoading({
       frame={PAGE_FRAME.TOOLBAR}
       label="Automations"
       toolbar={
-        <header className="desktop-toolbar">
-          <div className="desktop-toolbar-heading">
-            <OneLine
-              as={ONE_LINE_ELEMENT.H1}
-              end={ONE_LINE_END.ELLIPSIS}
-              className="desktop-toolbar-title"
-            >
-              Automations
-            </OneLine>
-            <ExperimentTag narrow={narrow} />
-          </div>
-        </header>
+        <AutomationsToolbar>
+          <AutomationsActsSkeleton />
+        </AutomationsToolbar>
       }
       state={COLLECTION_STATE.LOADING}
       loadingLabel={READING_AUTOMATIONS}
+      skeleton={<AutomationListSkeleton narrow={room === SHELL_ROOM.NARROW} />}
     />
   );
 }
@@ -953,10 +925,7 @@ export function DesktopShell({
               >
                 <Suspense
                   fallback={
-                    <AutomationsLoading
-                      onExit={tasks.automationsView.onClose}
-                      narrow={room === SHELL_ROOM.NARROW}
-                    />
+                    <AutomationsLoading onExit={tasks.automationsView.onClose} room={room} />
                   }
                 >
                   <AutomationsPage tasks={tasks} room={room} />

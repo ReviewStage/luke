@@ -54,10 +54,11 @@ import {
   HOSTED_REFUSAL,
   type HostedRefusal,
   hostedStoreOrUnavailable,
+  pathUuid,
   type UserIdResolver,
 } from "../http/http-effect.js";
 import { accountMiddleware, hosted } from "../orpc/base.js";
-import { controlsAgent, pathUuid, reachedAgentById } from "./agent-reach.js";
+import { controlsAgent, reachedAgentById } from "./agent-reach.js";
 import { type AgentBrowser, BROWSER_UNREACHABLE } from "./browser/agent-browser.js";
 import { connectRestoring } from "./browser/restore-tabs.js";
 

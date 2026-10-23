@@ -12,6 +12,66 @@
  * parses none of them.
  */
 
+import type {
+  WRITING_MARK,
+  WritingBlock,
+  WritingInsert,
+  WritingMark,
+} from "@luke/settings/shortcuts";
+
+/** A box in the window, in the coordinates `getBoundingClientRect` speaks. */
+export interface EditorBox {
+  readonly left: number;
+  readonly top: number;
+  readonly right: number;
+  readonly bottom: number;
+}
+
+/**
+ * The selection as a format toolbar reads it: where it stands in the text,
+ * which moves the toolbar as it changes; whether it holds any words;
+ * whether it touches a code block, where no toolbar stands; whether it
+ * touches a table's cell, where no block can be turned; the marks every
+ * selected word wears, Link's among them; the one kind of block it stands
+ * in, none where it spans several; and the link it or the caret stands in.
+ */
+export interface EditorFormat {
+  readonly from: number;
+  readonly to: number;
+  readonly empty: boolean;
+  readonly code: boolean;
+  readonly cell: boolean;
+  readonly marks: readonly WritingMark[];
+  readonly block: WritingBlock | undefined;
+  readonly link: string | undefined;
+}
+
+/**
+ * What a format toolbar hands an editor as it mounts: the selection told
+ * after every change to it or its words (`onFormat`), and ⌘K over selected
+ * words or in a link (`onLink`), which opens the owner's link field. Note
+ * that ⌘K anywhere else is the window's command palette, so the editor
+ * leaves it alone there.
+ */
+export interface EditorFormatDoors {
+  readonly onFormat: (format: EditorFormat) => void;
+  readonly onLink: () => void;
+}
+
+/** What a format toolbar does to an editor's selection, and where it reads it standing. */
+export interface EditorFormatting {
+  /** Where the selected words stand in the window, the editor focused or not; none where nothing is laid out to measure. */
+  readonly selectionBox: () => EditorBox | undefined;
+  /** A mark laid on every selected word, or taken off where every one wears it. */
+  readonly toggleMark: (mark: Exclude<WritingMark, typeof WRITING_MARK.LINK>) => void;
+  /** The blocks the selection stands in turned into `block`. */
+  readonly turnInto: (block: WritingBlock) => void;
+  /** The selected words, or the whole link the caret stands in, linked to `href`; unlinked where it is none. */
+  readonly setLink: (href: string | undefined) => void;
+  /** The editor focused, its selection as it stood. */
+  readonly focus: () => void;
+}
+
 /**
  * The words a click landed on in a section as drawn: the section, the text
  * node's words, how many nodes of the same words came before it in the
@@ -44,6 +104,29 @@ export type PlanEditorPlacement =
 /** The caret at the end of the text, as a press on the room under its last line puts it. */
 export const PLACEMENT_END = { end: true } as const;
 
+/** What the `/` menu lays in beyond the writing vocabulary's blocks, each the menu's own. */
+export const SLASH_INSERT = {
+  DIAGRAM: "slash-diagram",
+  TABLE: "slash-table",
+  PICTURE: "slash-picture",
+  MENTION: "slash-mention",
+} as const;
+
+type SlashInsert = (typeof SLASH_INSERT)[keyof typeof SLASH_INSERT];
+
+/** A block the `/` menu offers: one a line is turned into, the divider, or one of the menu's own. */
+export type SlashBlock = WritingBlock | WritingInsert | SlashInsert;
+
+/**
+ * The plan editor's `/`, as the panel draws its menu: the `/` word the caret
+ * ends reported (`onTrigger`), and the keys the menu over it takes first
+ * (`onKey`), answering whether it took one.
+ */
+export interface PlanEditorBlocks {
+  readonly onTrigger: (trigger: ComposerTrigger | undefined) => void;
+  readonly onKey: (event: KeyboardEvent) => boolean;
+}
+
 /** What the document hands the editor as it mounts it in place of the text's drawn sections. */
 export interface PlanEditorProps {
   /** The text as the document holds it, which the editor opens on. */
@@ -75,6 +158,10 @@ export interface PlanEditorProps {
   readonly pictures?: PlanEditorPictures | undefined;
   /** The open comment threads' words, in offsets of `markdown`, which the editor carries as its words move; none where the text has no comments. */
   readonly anchors?: readonly EditorAnchor[] | undefined;
+  /** What a format toolbar over the text hears of its selection; none where no toolbar stands over it. */
+  readonly format?: EditorFormatDoors | undefined;
+  /** What the `/` menu over the text hears of its `/` word and its keys; none where no menu stands over it, which an empty line then does not offer. */
+  readonly blocks?: PlanEditorBlocks | undefined;
 }
 
 /** The words one comment thread is on, as offsets into a plan's Markdown. */
@@ -228,7 +315,7 @@ export interface EditorSpan {
 }
 
 /** An editor as mounted. */
-export interface PlanEditorHandle {
+export interface PlanEditorHandle extends EditorFormatting {
   /**
    * A save's merged answer taken in: Luke's part of `merged`, against what was
    * `sent`, laid in place of the blocks it changed. Answers the text the next
@@ -237,6 +324,8 @@ export interface PlanEditorHandle {
   readonly take: (sent: string, merged: string) => { readonly base: string; readonly text: string };
   /** The `@` word the caret ends written as the mention chosen, a space after it, the caret after the space. */
   readonly chooseMention: (mention: MentionNode) => void;
+  /** The `/` word the caret ends deleted, and `block` run on the block the caret stands in. */
+  readonly insertBlock: (block: SlashBlock) => void;
   /** The text as the editor holds it now, ahead of the draft it hands over once typing pauses. */
   readonly markdown: () => string;
   /** The caret put where the placement says and the editor focused, as a press on the text's room does while it is open. */
@@ -264,6 +353,21 @@ export interface ComposerTrigger {
   readonly start: number;
   readonly query: string;
   readonly rect: { readonly left: number; readonly top: number; readonly bottom: number };
+}
+
+/** Whether two reports say the same, so an unchanged word is not reported again. */
+export function sameTrigger(
+  a: ComposerTrigger | undefined,
+  b: ComposerTrigger | undefined,
+): boolean {
+  if (a === undefined || b === undefined) return a === b;
+  return (
+    a.start === b.start &&
+    a.query === b.query &&
+    a.rect.left === b.rect.left &&
+    a.rect.top === b.rect.top &&
+    a.rect.bottom === b.rect.bottom
+  );
 }
 
 /** A chip the composer draws in its words: a skill, written `/name`. */
@@ -305,6 +409,8 @@ export interface ComposerEditorProps {
   readonly drawQuote?: ((element: HTMLElement, quote: ComposerQuote) => () => void) | undefined;
   /** What the box's mentions are picked and drawn with: an `@` word reported as `/` words are, and each mention drawn into its node's element; none where the box takes no mentions. */
   readonly mentions?: ComposerMentions | undefined;
+  /** The format toolbar's doors, the selection told to it and ⌘K over words handed to it, where one stands over the box. */
+  readonly format?: EditorFormatDoors | undefined;
 }
 
 /** The caret as it stood when marked, carried through every change since, and the words put in there. */
@@ -318,8 +424,8 @@ export interface ComposerMark {
   readonly release: () => void;
 }
 
-/** A composer's editor as mounted: every change from outside goes through one of these, never through the words handed back. */
-export interface ComposerEditorHandle {
+/** A composer's editor as mounted: every change from outside goes through one of these, never through the words handed back, a format toolbar's presses among them. Note that the box holds no block, so its toolbar offers no Turn into. */
+export interface ComposerEditorHandle extends EditorFormatting {
   /** Empties the words, as a send that was taken does. */
   readonly clear: () => void;
   /** Lays in words whole, the caret at their end, as Retry's restored message does. */
@@ -349,7 +455,6 @@ export interface ComposerEditorHandle {
   readonly setInput: (input: ComposerInput) => void;
   /** The editor element's attributes that tie it to an open list, for assistive technology. */
   readonly setAria: (aria: Readonly<Record<string, string | undefined>>) => void;
-  readonly focus: () => void;
   readonly blur: () => void;
   readonly destroy: () => void;
 }

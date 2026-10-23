@@ -5,7 +5,6 @@ import { TASK_CALL_FAILURE, type TasksRepositoriesAnswer } from "@luke/features/
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
 import {
   AVATAR_SIZE,
-  Badge,
   BUTTON_VARIANT,
   Button,
   CHIP_LOOK,
@@ -27,6 +26,7 @@ import { useDisclosure } from "@luke/ui/use-disclosure";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { OPEN_SETTINGS_LABEL, useOpenSettings } from "../open-settings.js";
 import { RepositoryPicture } from "../repository-picture.js";
+import { repositoryMenuRow } from "../repository-row.js";
 import { type MenuRow, SearchableMenu } from "../searchable-menu.js";
 import { PICKER_ALIGN, type PickerAlign, usePickerPlacement } from "../settings/picker-row.js";
 
@@ -108,9 +108,6 @@ const CHOOSE_LABEL = "Choose repository";
 /** The chip's words where the workspace's GitHub reaches nothing to pick. */
 const NONE_LABEL = "No repository";
 
-/** The mark beside a repository the developer's own GitHub token reaches rather than the App. */
-const TOKEN_LABEL = "Token";
-
 /** What the menu says in the list's place. */
 const MENU_NOTE = {
   NONE_REACHED: "Luke can't see any repository yet.",
@@ -141,29 +138,6 @@ function unconnectedNotes(chooser: RepositoryChooser): readonly string[] {
     return [name === undefined ? MENU_NOTE.NOT_CONNECTED : MENU_NOTE.NOT_CONNECTED_IN(name)];
   }
   return [name === undefined ? MENU_NOTE.ASK_TO_CONNECT : MENU_NOTE.ASK_TO_CONNECT_IN(name)];
-}
-
-/** A repository's row words: its name, and its owner as the muted detail; a name with no owner is its label alone. */
-function ownerApart(fullName: string): Pick<MenuRow, "label" | "detail"> {
-  const slash = fullName.indexOf("/");
-  if (slash <= 0) return { label: fullName };
-  return { label: fullName.slice(slash + 1), detail: fullName.slice(0, slash) };
-}
-
-/** A row's words with the Token mark after its owner, where the developer's own token reaches it. */
-function tokenMarked(
-  words: Pick<MenuRow, "label" | "detail">,
-  token: boolean,
-): Pick<MenuRow, "label" | "detail"> {
-  if (!token) return words;
-  return {
-    label: words.label,
-    detail: (
-      <>
-        {words.detail} <Badge>{TOKEN_LABEL}</Badge>
-      </>
-    ),
-  };
 }
 
 /** Whether the read's repositories hold one, as GitHub spells it or not. */
@@ -197,18 +171,7 @@ function repositoryRows(
       .filter((each) => each.access === GITHUB_ACCESS.TOKEN)
       .map((each) => each.fullName),
   );
-  return names.map((fullName) => ({
-    id: fullName,
-    ...tokenMarked(ownerApart(fullName), onToken.has(fullName)),
-    terms: [fullName],
-    icon: (
-      <RepositoryPicture
-        repository={fullName}
-        pictures={pictures}
-        fallback={<ProviderMark provider={INTEGRATION_PROVIDER.GITHUB} />}
-      />
-    ),
-  }));
+  return names.map((fullName) => repositoryMenuRow(fullName, pictures, onToken.has(fullName)));
 }
 
 export function RepositoryChip(props: {

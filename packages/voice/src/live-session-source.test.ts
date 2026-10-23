@@ -51,7 +51,7 @@ function hosted(script: ScriptedSocketSeam, options: Partial<HostedLiveSessionOp
   });
 }
 
-it.live(
+it.effect(
   "the hosted source opens one socket with the bearer on its handshake and sends the create frame first, naming its task, its agent, and the developer's time zone and seeding nothing",
   () =>
     Effect.gen(function* () {
@@ -88,7 +88,7 @@ it.live(
     }),
 );
 
-it.live("the hosted source refuses to open without an access token and opens no socket", () =>
+it.effect("the hosted source refuses to open without an access token and opens no socket", () =>
   Effect.gen(function* () {
     const script = scriptedOpenSocket([answering(createdFrame())]);
     const source = hosted(script, { readAccessToken: () => Effect.succeed(undefined) });
@@ -102,7 +102,7 @@ it.live("the hosted source refuses to open without an access token and opens no 
   }),
 );
 
-it.live("the hosted source does not carry a renewed bearer for another account", () =>
+it.effect("the hosted source does not carry a renewed bearer for another account", () =>
   Effect.gen(function* () {
     let token = "token-old";
     let holder = "one@example.test";
@@ -129,7 +129,7 @@ it.live("the hosted source does not carry a renewed bearer for another account",
   }),
 );
 
-it.live(
+it.effect(
   "a call into an agent that runs natively is refused with a reason the developer reads, not as a plain HTTP error",
   () =>
     Effect.gen(function* () {
@@ -144,7 +144,7 @@ it.live(
       );
       assert.equal(
         hostedVoiceUnavailableNote(source.diagnostics()),
-        "This agent runs in Claude Code or Codex and can't take calls yet.",
+        "This agent runs on Claude or Codex and can't take calls yet.",
       );
     }),
 );

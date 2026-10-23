@@ -32,6 +32,7 @@ import { codingAgentsControl } from "../testing/tasks-control.js";
 import { NOTHING_HELD } from "./agent-ref.js";
 import { AGENT_LEAD, AgentMessage } from "./agent-tab.js";
 import { fixtureChat } from "./chat-fixture.js";
+import { ChipCards } from "./chip-cards.js";
 import { TOOL_TARGET, type ToolTarget } from "./tool-call-model.js";
 
 /**
@@ -578,7 +579,9 @@ test("a call about an agent names it by its chip in the place of the words, as i
   assert.equal(chip("archive_agent"), "Retry audit", "an agent the plan lists not by its answer");
   assert.equal(said("archive_agent"), "Archived Retry audit");
   assert.ok(
-    line("archive_agent")?.querySelector("[data-tool-agent-ref] img.harness-mark"),
+    line("archive_agent")?.querySelector(
+      "[data-tool-agent-ref] .luke-harness-mark[data-provider='openai']",
+    ),
     "an agent the plan lists not wears the harness its answer's model runs in, Codex's here",
   );
   assert.equal(chip("start_agent"), undefined, "a start that names no agent yet keeps its words");
@@ -716,8 +719,10 @@ test("a call about an agent the place lists not, whose answer names no model, we
   const chip = container.querySelector('[data-call-id="call-archive_agent"] [data-tool-agent-ref]');
 
   assert.equal(chip?.textContent, "Retry audit");
-  // Codex's mark is its picture.
-  assert.ok(chip?.querySelector("img.harness-mark"), "the chip wears Codex's mark");
+  assert.ok(
+    chip?.querySelector(".luke-harness-mark[data-provider='openai']"),
+    "the chip wears Codex's mark",
+  );
   fakeAppBridge({});
 });
 
@@ -802,6 +807,76 @@ test("a call that showed or read a page hangs the page's card as its tab does, p
     preview: undefined,
   });
   fakeAppBridge({});
+});
+
+test("a call about the plan or another task hangs that task's card as its Plan tab and sidebar row do, and a task the window lists not its name as the row says it", () => {
+  const cards = taskCards({
+    agents: codingAgentsControl({}),
+    held: NOTHING_HELD,
+    chosen: () => false,
+    shownCode: [],
+    pages: { taskId: "task-invoices" },
+    task: { name: "Invoice export", status: undefined, card: undefined },
+  });
+  // The window lists the plan and one other task, whose cards its sidebar rows hang.
+  const listed = new Map([
+    ["task-invoices", "Invoice export"],
+    ["task-retries", "Retry audit"],
+  ]);
+  const taskCard = (taskId: string) => {
+    const name = listed.get(taskId);
+    return name === undefined
+      ? undefined
+      : createElement("div", { "data-task-card": taskId }, createElement("b", null, name));
+  };
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  const message = assistant([
+    toolPart("edit_plan", { notes: [] }, ACCEPTED),
+    toolPart(
+      "read_task",
+      { taskId: "task-retries" },
+      { status: "accepted", task: { id: "task-retries", name: "Retry audit" } },
+    ),
+    toolPart(
+      "create_task",
+      { name: "Billing cleanup" },
+      { status: "accepted", task: { id: "task-billing", name: "Billing cleanup" } },
+    ),
+  ]);
+  act(() =>
+    root.render(
+      createElement(ChipCards, {
+        value: { taskCard },
+        children: createElement(AgentMessage, {
+          message,
+          plan: false,
+          lead: AGENT_LEAD,
+          moving: false,
+          delegation: { models: [], onOpenTarget: () => undefined, cards: cards.call },
+        }),
+      }),
+    ),
+  );
+  const fold = container.querySelector<HTMLElement>("[data-turn-fold] > summary");
+  act(() => fold?.click());
+  const cardOf = (callId: string) => {
+    const row = container.querySelector<HTMLElement>(`button[data-call-id="call-${callId}"]`);
+    assert.ok(row, "the call's row opens the task");
+    document.documentElement.dataset.keyboard = "true";
+    focusRestOn(row);
+    const card = [...document.querySelectorAll(".luke-tooltip-card > *")].at(-1);
+    return {
+      task: card?.getAttribute("data-task-card") ?? undefined,
+      name: card?.querySelector("b, .luke-hover-card-name")?.textContent,
+    };
+  };
+
+  assert.deepEqual(cardOf("edit_plan"), { task: "task-invoices", name: "Invoice export" });
+  assert.deepEqual(cardOf("read_task"), { task: "task-retries", name: "Retry audit" });
+  assert.deepEqual(cardOf("create_task"), { task: undefined, name: "Billing cleanup" });
 });
 
 /** eve's `connection_execute` running Linear's `list_issues`, and the call it ran as the record keeps it, under Linear's remote name. */

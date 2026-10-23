@@ -18,9 +18,12 @@ import {
   Tooltip,
   useMenu,
 } from "@luke/ui";
-import { PlusIcon, UserRoundIcon, UsersRoundIcon } from "lucide-react";
+import type { Actor } from "@luke/ui/actor-model";
+import { PlusIcon, UsersRoundIcon } from "lucide-react";
 import { useCallback, useState } from "react";
+import { ACTOR_SIZE, ActorMark, actorCard } from "../actor-ref.js";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu.js";
+import { useNamer } from "./pull-request-people.js";
 import type { PullRequestWrites } from "./pull-request-writes.js";
 
 /**
@@ -189,7 +192,8 @@ export function ReviewerPicker({
   const menu = useMenu(true);
   const asked = new Set(requested.map((person) => person.login));
   const askedTeams = new Set(requestedTeams.map((team) => team.slug));
-  const groups = reviewerGroups(options.read, author, asked, askedTeams, writes);
+  const name = useNamer();
+  const groups = reviewerGroups(options.read, author, asked, askedTeams, writes, name);
   return (
     <>
       <PickerButton
@@ -217,13 +221,14 @@ export function ReviewerPicker({
   );
 }
 
-/** The reviewer picker's groups: the teams, then the people, each checked while asked; a stand-in while what they offer is read. */
+/** The reviewer picker's groups: the teams, then the people by their GitHub face and card, each checked while asked; a stand-in while what they offer is read. */
 function reviewerGroups(
   read: OptionsRead,
   author: string | undefined,
   asked: ReadonlySet<string>,
   askedTeams: ReadonlySet<string>,
   writes: PullRequestWrites,
+  name: (person: GitHubPerson) => Actor,
 ): readonly (readonly MenuAction[])[] {
   if (read.kind !== OPTIONS.LANDED) return [[standInItem(read)]];
   const busy = writes.pending !== undefined;
@@ -249,9 +254,11 @@ function reviewerGroups(
     .map((user): MenuAction => {
       const on = asked.has(user.login);
       const reviewer = { kind: REVIEWER_KIND.USER, name: user.login };
+      const actor = name(user);
       return {
         label: user.login,
-        icon: <UserRoundIcon aria-hidden="true" />,
+        icon: <ActorMark actor={actor} size={ACTOR_SIZE.INLINE} />,
+        card: actorCard(actor),
         checked: on,
         disabled: busy,
         onSelect: () =>

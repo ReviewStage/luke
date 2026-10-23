@@ -4,7 +4,8 @@ import assert from "node:assert/strict";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
-import { type FootRow, type MenuRow, SearchableMenu } from "./searchable-menu.js";
+import { type FootRow, type MenuRow, MenuRowList, SearchableMenu } from "./searchable-menu.js";
+import { restOn } from "./testing/hint-rest.js";
 
 /**
  * searchable-menu.test.ts -- the keys a picker menu reads from its field:
@@ -332,4 +333,63 @@ test("a row's own end marks stand at its end, after why it cannot be picked now,
   });
 
   assert.deepEqual(ends, [[".failed-mark"], ["Archived", ".actor-mark"], null]);
+});
+
+test("rows drawn in place wear their end marks and hang their cards while the pointer rests on them, a submenu's choices as well", () => {
+  const container = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(container);
+  roots.push(root);
+  act(() =>
+    root.render(
+      createElement(MenuRowList, {
+        label: "Open a tab",
+        onPick: () => undefined,
+        rows: [
+          {
+            id: "alerts",
+            label: "Alerts",
+            end: createElement("span", { className: "failed-mark" }),
+            card: createElement("div", { "data-card": "alerts" }, "Alerts card"),
+          },
+          { id: "plain", label: "Plain" },
+          {
+            id: "browser",
+            label: "New Browser tab",
+            submenu: {
+              label: "Open the tab in",
+              value: undefined,
+              onPick: () => undefined,
+              rows: [
+                {
+                  id: "sweep",
+                  label: "Sweep",
+                  end: createElement("span", { className: "failed-mark" }),
+                  card: createElement("div", { "data-card": "sweep" }, "Sweep card"),
+                },
+              ],
+            },
+          },
+        ],
+      }),
+    ),
+  );
+  const rows = [...container.querySelectorAll<HTMLElement>("li, [role='listitem']")];
+  const ended = rows.filter((row) => row.querySelector(".failed-mark") !== null);
+  assert.equal(ended.length, 2, "the row and the submenu's choice each wear their mark");
+
+  const named = (label: string) =>
+    [...container.querySelectorAll<HTMLElement>("button")].find((button) =>
+      button.textContent?.includes(label),
+    ) ?? assert.fail(`${label} is drawn`);
+  restOn(named("Alerts"));
+  assert.equal(
+    document.querySelector(".luke-tooltip-card [data-card]")?.textContent,
+    "Alerts card",
+  );
+  restOn(named("Sweep"));
+  assert.ok(
+    [...document.querySelectorAll(".luke-tooltip-card [data-card]")].some(
+      (card) => card.textContent === "Sweep card",
+    ),
+  );
 });

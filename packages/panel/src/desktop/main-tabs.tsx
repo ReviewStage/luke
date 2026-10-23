@@ -12,8 +12,6 @@ import {
   Fill,
   INLINE_EDIT_LOOK,
   InlineEdit,
-  SKELETON_SHAPE,
-  Skeleton,
   TABS_GROUND,
   VisuallyHidden,
 } from "@luke/ui";
@@ -46,17 +44,17 @@ import type { TaskCards } from "./side-panel.js";
 import {
   type AddEntry,
   AddTabButton,
+  AddTabSkeleton,
   DoorsTab,
+  type HeldTranscripts,
   type TabDoors,
   type TabLook,
   type TabPin,
+  TabSkeleton,
   type TabViews,
 } from "./strip-tabs.js";
 import { LOOK_STRIP, useStripLooks } from "./switcher-looks.js";
 import { TabStrip } from "./tab-strip.js";
-
-/** How wide the block standing in a tab is while the task or its agents are read: a typical tab's width. */
-export const TAB_SKELETON_WIDTH = "120px";
 
 /**
  * main-tabs.tsx -- the task's column's tabs: each agent's, the draft agent's, and its Chat, the "+" that opens one, and what an agent's or the draft's tab shows in the column.
@@ -290,17 +288,34 @@ function agentTabs(input: {
  * whose tab is open chooses that tab rather than opening another, as a
  * browser's tab search does.
  */
-export function agentEntries(main: MainTabsControl, agents: CodingAgentsControl): AddEntry[] {
-  return (agents.agents ?? []).map((agent) => ({
-    row: {
-      id: agent.id,
-      ...tabLook({ kind: TAB_KIND.AGENT, name: agentTabLabel(agent, agents.models), agent }),
-      section: AGENTS_SECTION,
-    },
-    endMark: agentEndMark(agent, true),
-    onPick: () => main.onChoose({ agent: agent.id }),
-    agent,
-  }));
+export function agentEntries(
+  main: MainTabsControl,
+  agents: CodingAgentsControl,
+  held?: HeldTranscripts,
+): AddEntry[] {
+  return (agents.agents ?? []).map((agent) => {
+    const label = agentTabLabel(agent, agents.models);
+    const chosen = main.tab !== undefined && sameTab({ agent: agent.id }, main.tab);
+    return {
+      row: {
+        id: agent.id,
+        ...tabLook({ kind: TAB_KIND.AGENT, name: label, agent }),
+        section: AGENTS_SECTION,
+      },
+      endMark: agentEndMark(agent, true),
+      // Note that a caller handing what its tabs hold gets the card its tab hangs; ⌘K and the summary hang theirs themselves.
+      card:
+        held === undefined ? undefined : (
+          <AgentTabCard
+            name={label}
+            models={agents.models ?? []}
+            read={agentCardReading(agent, label, held, chosen, agents)}
+          />
+        ),
+      onPick: () => main.onChoose({ agent: agent.id }),
+      agent,
+    };
+  });
 }
 
 /**
@@ -351,7 +366,11 @@ export function chatEntries(available: boolean, onPick: () => void): AddEntry[] 
  * chat is started from a draft's composer, its Call. The task's Chat
  * stands in the side panel, whose own "+" offers it.
  */
-function addEntries(main: MainTabsControl, agents: CodingAgentsControl): AddEntry[] {
+function addEntries(
+  main: MainTabsControl,
+  agents: CodingAgentsControl,
+  held: HeldTranscripts,
+): AddEntry[] {
   const { start } = agents;
   const newAgent: AddEntry = {
     row: {
@@ -362,9 +381,29 @@ function addEntries(main: MainTabsControl, agents: CodingAgentsControl): AddEntr
     },
     onPick: () => main.onChoose({ draft: agents.onNewDraft() }),
   };
-  const agentRows = agentEntries(main, agents);
+  const agentRows = agentEntries(main, agents, held);
   const starts = agents.onUnarchive === undefined ? [newAgent] : [];
   return [...starts, ...agentRows];
+}
+
+/** The row the column's tabs stand in, which heads its toolbar: the strip, what follows it, and the "+" last. */
+function MainTabsRow({ children }: { children: React.ReactNode }): React.JSX.Element {
+  return <div className="desktop-toolbar-heading main-tabs">{children}</div>;
+}
+
+/**
+ * The column's strip while the task is read: one tab's block where the
+ * first tab will stand and the "+"'s after it, in the strip's own row, so
+ * the row holds still, and a narrow room wraps it under the toolbar's
+ * actions, as the strip that replaces it is.
+ */
+export function MainTabStripSkeleton(): React.JSX.Element {
+  return (
+    <MainTabsRow>
+      <TabSkeleton />
+      <AddTabSkeleton />
+    </MainTabsRow>
+  );
 }
 
 /**
@@ -452,7 +491,7 @@ export function MainTabStrip({
     };
   };
   return (
-    <div className="desktop-toolbar-heading main-tabs">
+    <MainTabsRow>
       <TabStrip
         label="Task"
         ground={TABS_GROUND.GROUND}
@@ -488,20 +527,18 @@ export function MainTabStrip({
       {/* While the agents are read, one tab-shaped block stands where their
           tabs will, as it stood while the task was read, so the row holds
           still until they land. */}
-      {agents.agents === undefined && !agents.listFailed ? (
-        <Skeleton shape={SKELETON_SHAPE.CONTROL} width={TAB_SKELETON_WIDTH} />
-      ) : null}
+      {agents.agents === undefined && !agents.listFailed ? <TabSkeleton /> : null}
       <AddTabButton
         label="Open a tab"
         placeholder="Search tabs"
         noMatch="No tabs match"
-        entries={addEntries(main, agents)}
+        entries={addEntries(main, agents, views.held)}
         onOpen={agents.onRetryList}
         asked={main.newTabAsked}
         answers={keys}
         onAnswered={main.onNewTabAnswered}
       />
-    </div>
+    </MainTabsRow>
   );
 }
 

@@ -70,6 +70,22 @@ export function createElectronBuilderConfig(env = process.env) {
       output: builderReleaseArtifactDirectory(repoRoot),
     },
     asar: true,
+    // Note that the packaged binary's Node switches are burnt off, because the
+    // app holds the microphone and Apple Events: a process that could launch
+    // it as Node (`ELECTRON_RUN_AS_NODE`), preload into it (`NODE_OPTIONS`), or
+    // attach a debugger (`--inspect`) would run its own code under those
+    // permissions. The app loads only from its asar, checked against the hash
+    // in Info.plist, and its cookies are encrypted with the same Keychain key
+    // `safeStorage` already uses. A development run (`electron .`) keeps
+    // Electron's defaults.
+    electronFuses: {
+      runAsNode: false,
+      enableNodeOptionsEnvironmentVariable: false,
+      enableNodeCliInspectArguments: false,
+      enableEmbeddedAsarIntegrityValidation: true,
+      onlyLoadAppFromAsar: true,
+      enableCookieEncryption: true,
+    },
     npmRebuild: false,
     files: ["dist/**/*", "package.json", "!dist/**/*.map"],
     extraResources: [
@@ -103,7 +119,7 @@ export function createElectronBuilderConfig(env = process.env) {
       minimumSystemVersion: MACOS_DEPLOYMENT_TARGET,
       binaries: NATIVE_HELPERS.map(macBinaryPath),
       // The app's own scheme, which a Luke link's "Open in Luke" page hands
-      // the plan to (`src/main/window/app-links.ts`): written into the
+      // the plan to (`src/main/services/window-service.ts`): written into the
       // bundle's CFBundleURLTypes, which macOS registers the app for.
       protocols: [{ name: "Luke link", schemes: ["tryluke"], role: "Viewer" }],
       extendInfo: {

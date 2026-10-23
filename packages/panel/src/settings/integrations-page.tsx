@@ -94,7 +94,7 @@ import { MenuRow } from "./menu-row.js";
  * One row per account at a provider (two Notion workspaces are two rows,
  * "Notion · Acme" and "Notion · Personal", each its own grant), and one for
  * a provider where the account holds none, under Connected or Not connected as the MCP popover
- * sections its servers (`../planning/agent-servers-model.ts`), each section
+ * sections its servers (`@luke/ui/agent-servers-model`), each section
  * in the order of the providers' names: its mark and name, and under it where its connection
  * stands once that needs saying — connected with the count of its server's
  * tools, a sign-in under way, or one expired. A sign-in begun waits on the

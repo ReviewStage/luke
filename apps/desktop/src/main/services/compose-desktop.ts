@@ -284,6 +284,7 @@ export function composeDesktop(
             windows.panels.focusExpanded();
             windows.showChat(workspaceId);
           },
+          openMacCommandAsk: () => windows.panels.focusExpanded(),
         },
         onPanelFocusChanged: windows.onPanelFocusChanged,
         report: config.report,

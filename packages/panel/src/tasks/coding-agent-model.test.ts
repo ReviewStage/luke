@@ -686,7 +686,7 @@ test("a Start refused for a missing credential says in one sentence which harnes
     [
       {
         reason: FAILURE_REASON.CONNECT_AGENTS,
-        text: "Connect Claude Code in Settings to start an agent.",
+        text: "Connect Claude in Settings to start an agent.",
       },
       {
         reason: FAILURE_REASON.CONNECT_AGENTS,

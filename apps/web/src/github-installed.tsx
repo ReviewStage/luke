@@ -7,11 +7,11 @@ import {
 import { INTEGRATION_NAME, INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { GITHUB_INSTALL_OUTCOME, LANDING_TONE, landingWords } from "@luke/features/landing-outcome";
 import { AuthMark, AuthPage, MARK_PROVIDER } from "@luke/ui";
-import { StrictMode, useState } from "react";
-import { createRoot } from "react-dom/client";
+import { useState } from "react";
 import { startSiteAnalytics } from "./analytics";
 import { landingDescription, useConnectReturn } from "./connect-return";
 import "./styles.css";
+import { mountPrerenderedPage } from "./mount-page";
 
 /**
  * Where GitHub leaves a developer once the Luke GitHub App is installed, by
@@ -57,10 +57,4 @@ function GitHubInstalled(): React.JSX.Element {
 
 startSiteAnalytics();
 
-const rootElement = document.getElementById("root");
-if (!rootElement) throw new Error("Root element is missing");
-createRoot(rootElement).render(
-  <StrictMode>
-    <GitHubInstalled />
-  </StrictMode>,
-);
+mountPrerenderedPage(<GitHubInstalled />);

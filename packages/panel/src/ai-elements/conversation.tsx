@@ -71,6 +71,8 @@ interface ConversationScroll {
   readonly scrollToBottom: () => void;
   /** The scroll box, which `ConversationContent` is. */
   readonly list: RefObject<HTMLDivElement | null>;
+  /** Whether the log follows its newest line now, read as it is asked rather than as last drawn. */
+  readonly following: () => boolean;
   readonly onScroll: (event: UIEvent<HTMLDivElement>) => void;
   /** Hears a press inside the log, a fold's among them. */
   readonly onFold: (event: MouseEvent<HTMLDivElement>) => void;
@@ -248,9 +250,10 @@ export function Conversation({
     if (!(event.target instanceof Element) || event.target.closest("summary") === null) return;
     following.current = false;
   }, []);
+  const follows = useCallback(() => following.current, []);
   const scroll = useMemo<ConversationScroll>(
-    () => ({ isAtBottom, list, scrollToBottom, onScroll, onFold }),
-    [isAtBottom, list, scrollToBottom, onScroll, onFold],
+    () => ({ isAtBottom, list, following: follows, scrollToBottom, onScroll, onFold }),
+    [isAtBottom, list, follows, scrollToBottom, onScroll, onFold],
   );
   return (
     <ConversationContext.Provider value={scroll}>
@@ -297,8 +300,9 @@ export function ConversationContent({
  * A long run of the log's lines drawn only near the view
  * (`@luke/ui/virtual-rows`), in the log's own scroll box, as one line of
  * the log: lines after it, a working line's, stand after the run. The log
- * goes on following its newest line as it does, and the run keeps the
- * reader's place as lines land before its first.
+ * goes on following its newest line as it does, the run leaving it at its
+ * end while it does, and the run keeps the reader's place as lines land
+ * before its first.
  */
 export function ConversationRows({
   keys,
@@ -317,10 +321,11 @@ export function ConversationRows({
   handle?: RefObject<VirtualRowsHandle | null> | undefined;
   children: (index: number) => ReactNode;
 }): ReactNode {
-  const { list } = useConversation();
+  const { list, following } = useConversation();
   return (
     <VirtualRows
       scroller={list}
+      pinned={following}
       keys={keys}
       estimate={estimate}
       gap={gap}

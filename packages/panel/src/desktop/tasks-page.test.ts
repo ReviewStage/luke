@@ -996,6 +996,74 @@ test("a row leads its repository with its owner's picture, one address for every
   assert.deepEqual(new Set(pictures), new Set(["https://github.com/acme.png?size=32"]));
 });
 
+test("the Filter's Repository names each repository as the repository chip does, its name with its owner muted after it, so two owners' same-named repositories read apart", async () => {
+  const page = await mountPage([
+    ...TASKS,
+    { ...task(50, "Docs for web", TASK_STATUS.TODO, TASK_PRIORITY.NONE), repository: "beta/web" },
+  ]);
+
+  openOptions(page, "Filter");
+  choose("Repository");
+  const offered = [
+    ...document.querySelectorAll<HTMLElement>('[role="menu"]:not([data-leaving]) .luke-menu-item'),
+  ]
+    .filter((item) => item.querySelector(".luke-menu-item-label")?.textContent === "web")
+    .map((item) => item.querySelector(".luke-menu-item-detail")?.textContent);
+
+  assert.deepEqual(offered, ["acme", "beta"]);
+});
+
+test("the Filter's Assignee and Creator list the members as every people menu does, you first as You and the rest by name with their email beside it, each hanging their card, and your own chip says You", async () => {
+  fakeActPort({
+    [ACT_KIND.WORKSPACE_MEMBERS_READ]: () =>
+      Promise.resolve([
+        { userId: "user-maya", name: "Maya Okafor", email: "maya@acme.dev", role: "member" },
+        ...MEMBERS,
+        { userId: "user-charles", name: "Charles Pan", email: "charles@acme.dev", role: "member" },
+      ]),
+  });
+  const page = await mountPage();
+  listWorkspace({ ...ACME, memberCount: 3 });
+  await act(async () => undefined);
+  const offered: (string | null | undefined)[][][] = [];
+  const cards: (string | null | undefined)[] = [];
+  for (const field of ["Assignee", "Creator"]) {
+    openOptions(page, "Filter");
+    choose(field);
+    const items = [
+      ...([...document.querySelectorAll('[role="menu"]:not([data-leaving])')]
+        .at(-1)
+        ?.querySelectorAll<HTMLElement>(".luke-menu-item") ?? []),
+    ];
+    offered.push(
+      items.map((item) => [
+        item.querySelector(".luke-menu-item-label")?.textContent,
+        item.querySelector(".luke-menu-item-detail")?.textContent ?? null,
+      ]),
+    );
+    restOn(
+      items.find(
+        (item) => item.querySelector(".luke-menu-item-label")?.textContent === "Charles Pan",
+      ) ?? assert.fail(`${field} offers Charles Pan`),
+    );
+    cards.push(document.querySelector(".luke-tooltip-card .luke-hover-card-name")?.textContent);
+    closeMenus();
+  }
+
+  const people = [
+    ["Dean Stratakos", "You"],
+    ["Charles Pan", "charles@acme.dev"],
+    ["Maya Okafor", "maya@acme.dev"],
+  ];
+  assert.deepEqual(offered, [[...people, ["No assignee", null]], people]);
+  assert.deepEqual(cards, ["Charles Pan", "Charles Pan"]);
+
+  openOptions(page, "Filter");
+  choose("Assignee", "Dean Stratakos");
+  closeMenus();
+  assert.match(page.textContent ?? "", /Assignee: You/, "the reader's own chip says You");
+});
+
 test("the Filter's Repository leads each repository with its owner's picture, on the List and the Board alike", async () => {
   const page = await mountPage();
   const offered = () =>

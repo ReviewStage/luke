@@ -14,12 +14,14 @@ import {
   DisclosureAction,
   DisclosureSummary,
   IconButton,
+  OneLine,
   TEXT_ELEMENT,
   TEXT_VARIANT,
   Text,
   TextButton,
   Tooltip,
 } from "@luke/ui";
+import { fileName } from "@luke/voice/code-pane-model";
 import { ChevronRightIcon } from "lucide-react";
 import {
   type ComponentProps,
@@ -44,6 +46,7 @@ import {
 } from "./changes-model.js";
 import type { DiffListDoor } from "./diff-list.js";
 import { PATH_COPY_WORDS } from "./file-menu.js";
+import { FileTypeIcon } from "./file-type-icon.js";
 
 /**
  * changes-list.tsx -- how Files changed's list of files is walked: which files a filter keeps, which are collapsed, the file the keys stand on, and the keys, stage-cli's, that move between them.
@@ -407,29 +410,19 @@ const HEAD_WORDS = {
   ALL_HINT: "\u2325-click for all files",
 } as const;
 
-/** A path as a header names it: its folder, quiet, then its name. */
+/** A path as a header names it: its folder, quiet, then its name, each fading out where the row cuts it short. */
 function PathParts({ path }: { path: string }): React.JSX.Element {
   const cut = path.lastIndexOf("/") + 1;
   return (
     <>
       {cut === 0 ? null : (
-        <Text
-          as={TEXT_ELEMENT.SPAN}
-          variant={TEXT_VARIANT.INHERIT}
-          truncate
-          className="diff-list-folder"
-        >
+        <OneLine className="diff-list-folder" words={path.slice(0, cut)}>
           <bdi>{path.slice(0, cut)}</bdi>
-        </Text>
+        </OneLine>
       )}
-      <Text
-        as={TEXT_ELEMENT.SPAN}
-        variant={TEXT_VARIANT.INHERIT}
-        truncate
-        className="diff-list-name"
-      >
+      <OneLine className="diff-list-name" words={path.slice(cut)}>
         <bdi>{path.slice(cut)}</bdi>
-      </Text>
+      </OneLine>
     </>
   );
 }
@@ -568,6 +561,7 @@ export function FileHead({
             {hinted(`${label} \u00b7 ${HEAD_WORDS.ALL_HINT}`, fold, FOLD_CHORD.ONE)}
           </DisclosureAction>
           {hinted(STATUS_WORDS[file.status], letter)}
+          <FileTypeIcon name={fileName(file.path)} />
           <span className="diff-list-path">
             {file.previousPath === null ? (
               pathCopy(file.path, 3, PATH_COPY_WORDS.PATH_COPIED, PATH_COPY_WORDS.COPY_PATH, false)

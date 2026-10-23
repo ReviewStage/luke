@@ -11,6 +11,8 @@ import {
   PlusIcon,
   POPOVER_ALIGN,
   POPOVER_BOUNDS,
+  SKELETON_SHAPE,
+  Skeleton,
   Tooltip,
   UnpinIcon,
   useMenu,
@@ -331,9 +333,29 @@ export interface AddEntry {
   row: MenuRow;
   /** The mark at the row's end where the row says where its work stands, as the summary and the palette draw it: a failure's (`state-glyph.tsx`). */
   endMark?: React.JSX.Element | undefined;
+  /** The card the row hangs beside it while the pointer rests on it, as its tab hangs its own; none where the row has none yet. */
+  card?: React.ReactNode;
   onPick: () => void;
   /** The agent the row names, for a row of the task's agents, whose menu archives it. */
   agent?: CodingAgentSummary | undefined;
+}
+
+/** An entry as a menu draws its row: its end mark and its card drawn where `MenuRow` draws them, so a "+" menu, ⌘K and the summary say the same of a row. */
+export function entryRow({ row, endMark, card }: AddEntry): MenuRow {
+  return { ...row, end: endMark ?? row.end, card: card ?? row.card };
+}
+
+/** How wide the block standing in a tab is while its strip is read: a typical tab's width. */
+const TAB_SKELETON_WIDTH = "120px";
+
+/** The block standing in a tab while its strip is read, at a typical tab's width. */
+export function TabSkeleton(): React.JSX.Element {
+  return <Skeleton shape={SKELETON_SHAPE.CONTROL} width={TAB_SKELETON_WIDTH} />;
+}
+
+/** The block standing in the "+" while its strip is read: an icon press's square, as tall as it is wide. */
+export function AddTabSkeleton(): React.JSX.Element {
+  return <Skeleton shape={SKELETON_SHAPE.CONTROL} width="var(--luke-control-height)" />;
 }
 
 /**
@@ -428,7 +450,7 @@ export function AddTabButton({
             className="tab-add-menu"
             label={label}
             placeholder={placeholder}
-            rows={entries.map((entry) => entry.row)}
+            rows={entries.map(entryRow)}
             value={undefined}
             noMatch={noMatch}
             onPick={pick}

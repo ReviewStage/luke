@@ -1,7 +1,7 @@
 /**
  * browser-live.ts -- a cloud Browser tab's live view as the panel reaches main for it: attached and detached, as procedures.
  *
- * Main answers them itself (`apps/desktop/src/main/ipc/browser-live-acts.ts`),
+ * Main answers them itself (`act-port/browser-live-procedures.ts`),
  * since the port they post reaches its windows; a browser tab refuses both,
  * opening the socket from its own page instead. They carry ids alone: what
  * the page shows travels on the port an attach posts to the asking panel.

@@ -59,6 +59,15 @@ container that takes no focus, and a spread from a ui helper
 would silence the rule and on an `.oxlintrc.json` that weakens it. Where it
 fires, use a `@luke/ui` component, or add the component or variant there.
 
+A loading skeleton draws through the components its loaded state draws with,
+never a copy of their boxes, and takes its counts, order, and sizes from the
+declaration the loaded surface reads, never literals of its own. Lint holds
+the first half (`anti-slop/skeleton-through-components`, under the same
+no-suppression check): `Skeleton` and `SkeletonRegion` are drawn only by a
+component named `*Skeleton`, in which an intrinsic element's class must be a
+literal naming itself a skeleton's (`…-skeleton…`); every other box is a
+component, factored out of the surface where it builds the box by hand.
+
 ## Never
 
 - Never let a credential or account secret enter a Gateway answer or event, the
@@ -114,14 +123,16 @@ fires, use a `@luke/ui` component, or add the component or variant there.
   (`coder-host/chat-notify.ts`), the inbox's and the chat's players are left
   out of session replay, and none of it goes into a trace, a counted event, a
   fixture, or the voice window. And Sentry's SDKs run
-  with their default data collection
+  with their default data collection, but that the service's and the eve roots'
+  leave out model inputs and outputs and request bodies
   (`packages/service/src/observability/sentry.ts`, the eve roots'
   `instrumentation/sentry.ts`, the desktop's `Sentry.init`, and the web app's
   browser SDK, `apps/web/src/app/web-sentry-sdk.ts`, with the desktop renderer's
   token filters, `@luke/features/sentry-breadcrumbs`), so what a request, a log
-  line, a local variable, or an agent's prompt, reply, or tool result carries
-  may reach Sentry; a credential among it is replaced only where Sentry's
-  denylist catches it by name, and `PRIVACY.md` says so.
+  line, a local variable, or an error's words carries may still reach Sentry
+  from the desktop and the browser, and a log line, a local variable, or an
+  error's words from any of them; a credential among it is replaced only where
+  Sentry's denylist catches it by name, and `PRIVACY.md` says so.
 - Session replay records the rendered panel with every word masked
   (`packages/panel/src/session-replay.ts`), so what leaves the machine is
   layout, not text; an unmasked attribute or a new way of drawing words is what
@@ -280,12 +291,10 @@ PR that finishes the callers it was for, not left as a name on an allowlist.
   call's lifecycle is a `forkDetach` and needs no door.
 - **`packages/features/src/hosted-link.ts`** — oRPC's `OpenAPILink` awaits a promise from its `fetch`, so the account call runs there on the services the asking fiber handed it; what would end this row is an Effect transport in oRPC's link.
 - **The test-support edges** — `packages/database/src/testing/sql-client.ts`,
-  `packages/database/src/testing/no-database.ts`,
   `packages/database/src/testing/hosted-store-database.ts`,
   `apps/dev/evals/coder.eval.ts`, and
   `packages/wire/src/testing/effect.ts` each build a runner (a
-  `ManagedRuntime` over a throwaway database, a `SqlClient` that refuses every
-  statement) so a suite or an offline eval still written on `node:assert` or a
+  `ManagedRuntime` over a throwaway database) so a suite or an offline eval still written on `node:assert` or a
   plain fixture can hold a promise where an effect is described; a test body is
   its own edge.
 
@@ -363,7 +372,10 @@ The model is Redis. Full rules with sources and examples in `docs/STYLE.md`.
   patterns and `--luke-*` tokens; no raw controls where a component exists,
   no literal colours or sizes, no `className` on its controls. A missing
   variant is added to `@luke/ui` as an `as const` option. Third-party engines
-  are the exception.
+  are the exception. `@luke/ui` is built on shadcn/ui over Base UI (approved
+  by Charles on 2026-10-23): its controls vendor shadcn's source
+  (`packages/ui/src/shadcn/`) and are written in Tailwind utilities over the
+  one theme in `@luke/ui/tailwind/theme.css`, which no app restates.
 
 ## Commits
 
