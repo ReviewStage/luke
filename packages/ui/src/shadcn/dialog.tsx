@@ -28,7 +28,7 @@ const DIALOG_ROOM =
   "fixed inset-x-0 top-viewport-top bottom-keyboard-inset z-dialog [-webkit-app-region:no-drag]";
 
 /** The card: a column at a question's measure, never taller than the window less its margins, on the motion tokens. */
-export const DIALOG_CARD =
+const DIALOG_CARD =
   "box-border flex w-dialog-confirm max-h-dialog-room flex-col gap-2 rounded-dialog border border-border-strong bg-popover p-dialog-inset text-body leading-[normal] text-popover-foreground shadow-dialog animate-dialog-in transition-shadow duration-(--luke-duration-hover) ease-[ease]";
 
 function Dialog({ ...props }: DialogPrimitive.Root.Props) {
