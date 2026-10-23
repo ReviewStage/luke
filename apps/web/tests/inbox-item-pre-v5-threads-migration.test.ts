@@ -26,10 +26,10 @@ import * as SqlClient from "effect/sql/SqlClient";
  * opens, carrying its blocks as Markdown, its picture as that message's
  * file, and the ask its response stood for, open, answered, or withdrawn as
  * the item stood; an answer reads as the member's message answering that
- * ask, with the note as its words; the open ask is the one the operator's
- * read finds; an item the version 4 tool posted after the bump is written
- * the same way; and a second run writes nothing twice. Synthetic accounts
- * throughout.
+ * ask, with the note as its words and the answer's files as its own; the
+ * open ask is the one the operator's read finds; an item the version 4
+ * tool posted after the bump is written the same way; and a second run
+ * writes nothing twice. Synthetic accounts throughout.
  */
 
 const MIGRATION = "20261023183614_inbox_item_pre_v5_threads";
@@ -110,6 +110,9 @@ it.effect(
           { type: "choice", options: [{ label: "Join us" }, { label: "You're invited" }] },
           { answer: { reply: "chose", choices: ["Join us"], note: "Shorter reads better." } },
         );
+        const answerFileId = randomUUID();
+        yield* sql`insert into attachment (id, organization_id, user_id, task_id, inbox_item_id, kind, name, position, content_type, byte_count, bytes, created_at)
+          values (${answerFileId}, ${workspaceId}, 'charles', ${taskId}, ${copy}, 'answer', 'mock.png', 0, 'image/png', ${PNG.length}, ${PNG}, '2026-10-17T10:00:00Z')`;
         const deploy = yield* item(
           "deploy",
           "closed",
@@ -154,7 +157,14 @@ it.effect(
         const answered = yield* read(copy);
         const [asked, answer] = answered.thread ?? [];
         assert.deepEqual(
-          [asked?.ask, answer?.author, answer?.member?.userId, answer?.text, answer?.answers],
+          [
+            asked?.ask,
+            answer?.author,
+            answer?.member?.userId,
+            answer?.text,
+            answer?.answers,
+            answer?.files,
+          ],
           [
             {
               type: "decide",
@@ -165,6 +175,7 @@ it.effect(
             "charles",
             "Shorter reads better.",
             { ask: asked?.id, reply: "chose", choices: ["Join us"] },
+            [{ attachmentId: answerFileId, name: "mock.png", mediaType: "image/png" }],
           ],
         );
 

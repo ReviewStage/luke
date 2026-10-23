@@ -1,4 +1,4 @@
--- backfill: every inbox item from before version 5 is written as a version 5 thread, and so is every item the version 4 tool posted after the bump, whose blocks still hold its question and whose thread holds no ask, so no read falls back to the item's own blocks, response, and answer: the agent's message opening its thread carries its blocks as Markdown, its pictures as that message's files by their addresses, and the ask its response stands for, open, answered, or withdrawn as the item stands; a member's message carries the answer to that ask, or the words a nod carried; an open ask is named on the item; and the item's blocks are emptied, since its message carries them. Each message's id is drawn from its item's, so a second run writes nothing twice, and every statement after the first reads only the items it opened a thread for whose blocks still stand, which the last one empties.
+-- backfill: every inbox item from before version 5 is written as a version 5 thread, and so is every item the version 4 tool posted after the bump, whose blocks still hold its question and whose thread holds no ask, so no read falls back to the item's own blocks, response, and answer: the agent's message opening its thread carries its blocks as Markdown, its pictures as that message's files by their addresses, and the ask its response stands for, open, answered, or withdrawn as the item stands; a member's message carries the answer to that ask, or the words a nod carried, and the files the answer carried; an open ask is named on the item; and the item's blocks are emptied, since its message carries them. Each message's id is drawn from its item's, so a second run writes nothing twice, and every statement after the first reads only the items it opened a thread for whose blocks still stand, which the last one empties.
 INSERT INTO "inbox_message" ("id", "item_id", "author", "user_id", "text", "ask", "answers", "client_key", "created_at")
 SELECT
 	md5("item"."id"::text || ':ask')::uuid,
@@ -97,8 +97,16 @@ CROSS JOIN LATERAL (
 WHERE EXISTS (SELECT 1 FROM "inbox_message" AS "opening" WHERE "opening"."id" = md5("item"."id"::text || ':ask')::uuid)
 	AND ("item"."version" < 5 OR "item"."blocks" <> '[]'::jsonb)
 	AND "item"."answer" IS NOT NULL
-	AND ("asked"."answers" OR coalesce("item"."answer"->>'note', '') <> '')
+	AND (
+		"asked"."answers"
+		OR coalesce("item"."answer"->>'note', '') <> ''
+		OR EXISTS (SELECT 1 FROM "attachment" AS "file" WHERE "file"."inbox_item_id" = "item"."id" AND "file"."kind" = 'answer')
+	)
 ON CONFLICT DO NOTHING;
+--> statement-breakpoint
+UPDATE "attachment" SET "kind" = 'message', "inbox_message_id" = md5("attachment"."inbox_item_id"::text || ':answer')::uuid
+WHERE "attachment"."kind" = 'answer'
+	AND EXISTS (SELECT 1 FROM "inbox_message" AS "answering" WHERE "answering"."id" = md5("attachment"."inbox_item_id"::text || ':answer')::uuid);
 --> statement-breakpoint
 UPDATE "inbox_item" AS "item" SET "open_ask_message_id" = md5("item"."id"::text || ':ask')::uuid
 WHERE EXISTS (SELECT 1 FROM "inbox_message" AS "opening" WHERE "opening"."id" = md5("item"."id"::text || ':ask')::uuid)
