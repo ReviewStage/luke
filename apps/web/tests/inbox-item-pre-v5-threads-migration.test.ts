@@ -149,10 +149,11 @@ it.effect(
 
         const read = (itemId: string) =>
           Effect.map(readInboxItem("dean", itemId), (found) => Option.getOrThrow(found).item);
-        const [{ slug }] = yield* sql<{
+        const [workspace] = yield* sql<{
           readonly slug: string;
         }>`select slug from organization where id = ${workspaceId}`;
-        const address = `https://tryluke.dev/${slug}/plan/${taskId}/inbox/${branch}/files/${pictureId}`;
+        assert.ok(workspace !== undefined);
+        const address = `https://tryluke.dev/${workspace.slug}/plan/${taskId}/inbox/${branch}/files/${pictureId}`;
         const opened = yield* read(branch);
         assert.deepEqual(
           opened.thread?.map(({ author, text, files, ask }) => ({ author, text, files, ask })),
