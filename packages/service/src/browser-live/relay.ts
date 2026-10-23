@@ -26,7 +26,10 @@
  * whose takeover does not stand is refused and goes nowhere. A step from the
  * tab's bar, an address opened or a step back, forward, or a reload, takes a
  * tab nobody drives over for the member first, as Take over would, and is
- * refused where another member holds it. Every point is in
+ * refused where another member holds it. Each move of the tab's page the
+ * view sees is kept on the tab's row too (`notePage`), on the target it
+ * watches alone, so a browser that starts afresh reopens the page the member
+ * moved it to rather than where the agent last left it. Every point is in
  * the panel's own pixels at the viewport it last sent, and is mapped onto
  * the page's CSS pixels. Mouse moves that queue behind a slower browser are
  * folded into the last of each run, so the pointer never lags behind the
@@ -54,7 +57,7 @@
 
 import type { ReachedBrowserTab } from "@luke/database/models/agent-browser-tabs";
 import { browserTabDriver } from "@luke/database/models/agent-browser-tabs";
-import { BROWSER_SHOWN_MAX_CHARS } from "@luke/features/browser-acts";
+import { BROWSER_SHOWN_MAX_CHARS, isBrowserAddress } from "@luke/features/browser-acts";
 import type { CdpCommand, CdpEvent, CdpFailure, CdpSession } from "@luke/features/browser-cdp";
 import {
   BROWSER_LIVE_CLIENT,
@@ -143,6 +146,12 @@ export interface BrowserLiveDependencies {
     now: Date,
   ) => Effect.Effect<boolean, unknown>;
   readonly handBack: (tabId: string, userId: string) => Effect.Effect<boolean, unknown>;
+  /** Keeps the tab's page as the view saw it move, on the target named alone, so a browser that starts afresh reopens it there; a write the store did not take is logged, for the next move to try again. */
+  readonly notePage: (
+    tabId: string,
+    targetId: string,
+    page: { readonly address: string; readonly title: string },
+  ) => Effect.Effect<void>;
   readonly hold: (conversationId: string, heldUntil: Date) => Effect.Effect<void>;
   /** Keeps the running sandbox the eve session is tagged with alive the timeout from now; a keep-alive that fails is logged, for the next to try again. */
   readonly keepAlive: (sessionId: string) => Effect.Effect<void>;
@@ -774,6 +783,11 @@ function onEvent(view: LiveView, event: CdpEvent): Effect.Effect<void> {
         if (Result.isFailure(info) || info.success.targetInfo.targetId !== targetId) return;
         const { url, title } = info.success.targetInfo;
         const last = yield* Ref.get(view.pageState);
+        // Note that a page the member moved, from the bar or by driving it, is kept for a restart to
+        // reopen; one no Browser tab loads, a blank or an error page, is not.
+        if ((url !== last.address || title !== last.title) && isBrowserAddress(url)) {
+          yield* view.deps.notePage(view.reached.tab.id, targetId, { address: url, title });
+        }
         return yield* publishPage(view, { ...last, address: shown(url), title: shown(title) });
       }
       case CDP_METHOD.STARTED_LOADING:

@@ -321,6 +321,30 @@ const retargetTab = SqlSchema.findAll({
     ),
 });
 
+const notePageTab = SqlSchema.findAll({
+  Request: Schema.Struct({
+    tabId: Schema.String,
+    targetId: Schema.String,
+    address: Schema.String,
+    title: Schema.String,
+  }),
+  Result: Schema.Struct({ id: Schema.String }),
+  execute: ({ tabId, targetId, address, title }) =>
+    Database.use((db) =>
+      db
+        .update(agentBrowserTab)
+        .set({ address, title })
+        .where(
+          and(
+            eq(agentBrowserTab.id, tabId),
+            // Only on the target the caller watches, so a write from a target a reopening moved the tab off never lands.
+            eq(agentBrowserTab.targetId, targetId),
+          ),
+        )
+        .returning({ id: agentBrowserTab.id }),
+    ),
+});
+
 const takeTab = SqlSchema.findAll({
   Request: Schema.Struct({
     tabId: Schema.String,
@@ -506,6 +530,26 @@ export function retargetBrowserTab(
   to: string,
 ): BrowserTabEffect<boolean> {
   return Effect.map(retargetTab({ conversationId, tabId, from, to }), (rows) => rows.length > 0);
+}
+
+/**
+ * Records a tab's page as a member's live view of it saw it move, the
+ * member steering it from its bar or driving it, so a browser that starts
+ * afresh reopens it where it stood (`restore-tabs.ts`): its address and
+ * title, cut where the Browser tab cuts them, and nothing else, its opener,
+ * takeover, and last action as they stood. Answers whether the tab took it:
+ * not where it no longer stands on the target named, as after a reopening
+ * moved it, so a stale view's write never lands.
+ */
+export function noteBrowserTabPage(
+  tabId: string,
+  targetId: string,
+  page: { readonly address: string; readonly title: string },
+): BrowserTabEffect<boolean> {
+  return Effect.map(
+    notePageTab({ tabId, targetId, address: shown(page.address), title: shown(page.title) }),
+    (rows) => rows.length > 0,
+  );
 }
 
 /**

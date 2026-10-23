@@ -156,6 +156,7 @@ function world(
   const holds: number[] = [];
   const keptAlive: { readonly sessionId: string; readonly at: number }[] = [];
   const handedBack: string[] = [];
+  const notedPages: { readonly targetId: string; readonly address: string }[] = [];
   const setDriver = (driverUserId: string | null, heldUntil: Date | null) => {
     if (row !== undefined) row = { ...row, tab: { ...row.tab, driverUserId, heldUntil } };
   };
@@ -188,6 +189,8 @@ function world(
         setDriver(null, null);
         return true;
       }),
+    notePage: (_tab, targetId, page) =>
+      Effect.sync(() => void notedPages.push({ targetId, address: page.address })),
     hold: (_conversation, heldUntil) => Effect.sync(() => void holds.push(heldUntil.getTime())),
     keepAlive: (sessionId) =>
       Effect.flatMap(Clock.currentTimeMillis, (at) =>
@@ -199,6 +202,7 @@ function world(
     holds,
     keptAlive,
     handedBack,
+    notedPages,
     close: () => {
       row = undefined;
     },
@@ -367,6 +371,40 @@ it.effect("the tab's address, title, and loading state reach the panel as they c
     yield* panel.leave;
     yield* Fiber.join(fiber);
   }),
+);
+
+/** The tab's page moved to the address and title given, as Chromium tells it. */
+const pageMoved = (targetId: string, url: string, title: string) => ({
+  method: "Target.targetInfoChanged",
+  params: { targetInfo: { targetId, url, title, type: "page" } },
+});
+
+it.effect(
+  "each move of the tab's page the view sees is kept on the tab's own target, for a restart to reopen it there, but a blank page and another tab's",
+  () =>
+    Effect.gen(function* () {
+      const { peer, browser, commands } = yield* liveBrowser();
+      const panel = yield* scriptedViewer;
+      const store = world(browser);
+      const { fiber } = yield* started(
+        peer,
+        commands,
+        Effect.scoped(relayBrowserTab(panel.viewer, ASK, reachedTab(undefined), store.deps)),
+      );
+
+      yield* peer.emit(pageMoved(TARGET, "https://example.test/dashboard", "Dashboard"));
+      yield* peer.emit(pageMoved("page-other", "https://example.test/other", "Other"));
+      yield* peer.emit(pageMoved(TARGET, "about:blank", ""));
+      yield* until(() =>
+        panel.ofType(BROWSER_LIVE_SERVER.PAGE).some((message) => message.address === "about:blank"),
+      );
+
+      assert.deepEqual(store.notedPages, [
+        { targetId: TARGET, address: "https://example.test/dashboard" },
+      ]);
+      yield* panel.leave;
+      yield* Fiber.join(fiber);
+    }),
 );
 
 const VIEWPORT = { type: BROWSER_LIVE_CLIENT.VIEWPORT, width: 640, height: 400 } as const;

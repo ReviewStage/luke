@@ -22,6 +22,7 @@ import {
   handBackBrowserTab,
   listAgentBrowserTabs,
   listTaskBrowserTabs,
+  noteBrowserTabPage,
   pointBrowserTab,
   readTaskBrowserTab,
   recordMemberOpenedBrowserTab,
@@ -273,6 +274,38 @@ it.layer(getTestDB())("an agent's Browser tabs", (it) => {
           assert.equal(row.openedBy, AGENT_BROWSER_TAB_OPENER.MEMBER);
           assert.equal(row.openedByUserId, teammate);
         }
+      }),
+  );
+
+  it.effect(
+    "a live view's note of a tab's page moves its address and title on its own target alone, and leaves its opener and last action",
+    () =>
+      Effect.gen(function* () {
+        const { agent } = yield* openTask;
+        const tab = yield* upsertBrowserTab(
+          action(agent.conversationId, "target-1", "https://shop.test/login"),
+        );
+        yield* TestClock.adjust("1 minute");
+
+        const noted = yield* noteBrowserTabPage(tab.id, "target-1", {
+          address: "https://shop.test/dashboard",
+          title: "Dashboard",
+        });
+        yield* retargetBrowserTab(agent.conversationId, tab.id, "target-1", "target-2");
+        // A view still on the old target, as one a reopening moved the tab off, notes nothing.
+        const stale = yield* noteBrowserTabPage(tab.id, "target-1", {
+          address: "https://shop.test/stale",
+          title: "Stale",
+        });
+
+        assert.equal(noted, true);
+        assert.equal(stale, false);
+        const [row] = yield* listAgentBrowserTabs(agent.conversationId);
+        assert.ok(row);
+        assert.equal(row.address, "https://shop.test/dashboard");
+        assert.equal(row.title, "Dashboard");
+        assert.equal(row.openedBy, AGENT_BROWSER_TAB_OPENER.AGENT);
+        assert.equal(row.lastActedAt.getTime(), tab.lastActedAt.getTime());
       }),
   );
 
