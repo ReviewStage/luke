@@ -34,6 +34,7 @@ const TEXT = [
   "```",
   "const invite = send(email);",
   "```",
+  "| Role | Invites |\n| --- | --- |\n| Admin | Anyone |",
   "",
 ].join("\n\n");
 
@@ -288,6 +289,15 @@ test("a `/` in code or inside a word opens nothing", async () => {
 
   typeAt(editor, endOf(editor, "invites"), "/");
   assert.equal(menuRows(container), undefined, "none inside a word");
+});
+
+test("a `/` in a table's cell opens nothing, since a cell holds one line of words", async () => {
+  const { container, editor } = await opened();
+
+  typeAt(editor, endOf(editor, "Anyone"), " /");
+  assert.equal(menuRows(container), undefined, "none in a cell");
+  typed(editor, "table");
+  assert.equal(menuRows(container), undefined, "nor as the words after it are typed");
 });
 
 test("words selected close the menu and raise the toolbar in its place, never both at once", async () => {
