@@ -671,22 +671,64 @@ function attachmentOfData(name: string, url: string): CodingAgentAttachment | un
   return { name, mediaType: mediaType as CodingAgentAttachment["mediaType"], data };
 }
 
+/** One of a line's files as Edit carries it again, by its place on the line, which never changes. */
+export interface LineAttachment {
+  readonly key: string;
+  readonly attachment: CodingAgentAttachment;
+}
+
 /**
  * A line's files as a message to the agent carries them again, for Edit to
  * send: each one the line holds inline, and each one kept as a picture whose
- * bytes the window has read; one it has not read yet is left out.
+ * bytes the window has read, by its place on the line; and whether a
+ * picture is still being read, which joins them once it lands
+ * (`LinePicturesWatch`). One that is gone is left out.
  */
-export function useMessageAttachments(
-  message: CodingAgentMessage,
-): readonly CodingAgentAttachment[] {
+export function useLineAttachments(message: CodingAgentMessage): {
+  readonly attachments: readonly LineAttachment[];
+  readonly reading: boolean;
+} {
   const door = useContext(AgentPicturesContext);
-  return messageFileChips(message).flatMap(({ name, url, pictureId }) => {
-    const state =
-      pictureId === undefined || door === undefined ? undefined : pictureNow(door.owner, pictureId);
-    const read = state?.kind === PICTURE_STATE.READY ? state.url : url;
-    const attachment = attachmentOfData(name, read);
-    return attachment === undefined ? [] : [attachment];
-  });
+  let reading = false;
+  const attachments = messageFileChips(message).flatMap(
+    ({ name, url, pictureId }, index): LineAttachment[] => {
+      const state =
+        pictureId === undefined || door === undefined
+          ? undefined
+          : pictureNow(door.owner, pictureId);
+      if (
+        state !== undefined &&
+        state.kind !== PICTURE_STATE.READY &&
+        state.kind !== PICTURE_STATE.MISSING
+      ) {
+        reading = true;
+      }
+      const attachment = attachmentOfData(
+        name,
+        state?.kind === PICTURE_STATE.READY ? state.url : url,
+      );
+      return attachment === undefined ? [] : [{ key: String(index), attachment }];
+    },
+  );
+  return { attachments, reading };
+}
+
+/** Reads a line's kept pictures through the agent's door, and says so each time one settles; draws nothing. */
+export function LinePicturesWatch({
+  message,
+  onSettled,
+}: {
+  message: CodingAgentMessage;
+  onSettled: () => void;
+}): ReactNode {
+  const door = useContext(AgentPicturesContext);
+  if (door === undefined) return null;
+  return messageFileChips(message).map(({ pictureId }, index) =>
+    pictureId === undefined ? null : (
+      // Note that a file's place on its line is its identity: a line never reorders.
+      <PictureWatch key={index} door={door} id={pictureId} onSettled={onSettled} />
+    ),
+  );
 }
 
 /**

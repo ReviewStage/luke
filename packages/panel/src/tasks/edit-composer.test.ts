@@ -17,6 +17,7 @@ import {
 } from "../testing/composer.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
+import { type AgentPictureDoor, AgentPicturesProvider } from "./agent-pictures.js";
 import { EditComposer } from "./edit-composer.js";
 
 /**
@@ -65,8 +66,12 @@ async function settle(): Promise<void> {
   });
 }
 
-/** The line's box mounted, every way it ended written down. */
-async function opened() {
+/** The line's box mounted, every way it ended written down, its pictures read through `door` where one is handed. */
+async function opened(
+  line: CodingAgentMessage = LINE,
+  door?: AgentPictureDoor,
+  words = "Also email the inviter.",
+) {
   const ended: { words: string; files: readonly CodingAgentAttachment[] }[] = [];
   let cancelled = 0;
   const container = document.createElement("div");
@@ -77,19 +82,23 @@ async function opened() {
     root.render(
       onRegistry(
         AtomRegistry.make(),
-        createElement(EditComposer, {
-          message: LINE,
-          words: "Also email the inviter.",
-          edit: {
-            agentId: "agent-1",
-            doors: { openGitHub: () => undefined, copy: () => undefined },
-            dictates: true,
-            onCancel: () => {
-              cancelled += 1;
+        createElement(
+          AgentPicturesProvider,
+          { value: door },
+          createElement(EditComposer, {
+            message: line,
+            words,
+            edit: {
+              agentId: "agent-1",
+              doors: { openGitHub: () => undefined, copy: () => undefined },
+              dictates: true,
+              onCancel: () => {
+                cancelled += 1;
+              },
+              onSend: (words, files) => ended.push({ words, files }),
             },
-            onSend: (words, files) => ended.push({ words, files }),
-          },
-        }),
+          }),
+        ),
       ),
     ),
   );
@@ -127,4 +136,48 @@ test("Cancel and Escape close it and send nothing", async () => {
 
   assert.equal(box.cancelled(), 2);
   assert.deepEqual(box.ended, []);
+});
+
+/** A line whose picture was kept apart, which the window reads through the agent's door. */
+const KEPT: CodingAgentMessage = {
+  id: "line-3",
+  role: MESSAGE_ROLE.USER,
+  parts: [
+    { type: "text", text: "And this one." },
+    {
+      type: "file",
+      mediaType: "image/png",
+      filename: "kept.png",
+      url: "",
+      providerMetadata: { luke: { attachmentId: "picture-1" } },
+    },
+  ],
+};
+
+test("a picture still being read holds Send, and joins the box once it lands", async () => {
+  let land: (() => void) | undefined;
+  const door: AgentPictureDoor = {
+    owner: `owner-${Math.random()}`,
+    read: () =>
+      new Promise((resolve) => {
+        land = () => resolve({ contentType: "image/png", base64: PIXEL });
+      }),
+  };
+  const box = await opened(KEPT, door, "And this one.");
+
+  pressInComposer(box.container, "Enter");
+  await settle();
+  assert.deepEqual(box.ended, [], "nothing goes while the picture is read");
+
+  await act(async () => land?.());
+  await settle();
+  pressInComposer(box.container, "Enter");
+  await settle();
+
+  assert.deepEqual(box.ended, [
+    {
+      words: "And this one.",
+      files: [{ name: "kept.png", mediaType: "image/png", data: PIXEL }],
+    },
+  ]);
 });
