@@ -111,7 +111,11 @@ at a time, each behind the props it already has, so no call site changes
 as it moves. A vendored shadcn component lives in `src/shadcn/`, generated
 by the shadcn CLI (style `base-nova`, base `base`) and drawn in the Tailwind
 theme above; the `@luke/ui` component an app imports wraps it. Moved so far:
-`Switch`.
+`Switch`; and the text entries and form pieces, `TextField`, `TextArea`,
+`SearchField`, `AddressField`, `FormField`, `FormSection`, `InlineEdit`, and
+`LengthCounter`, over shadcn's Input, Textarea, Label, and Field. A name the
+theme adds that tailwind-merge cannot read as a size is listed in `cn.ts`, or
+`cn` drops it as a second colour.
 
 ## Using a component
 

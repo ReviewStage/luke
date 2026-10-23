@@ -1,4 +1,5 @@
 import { type FormEvent, type ReactNode, useId } from "react";
+import { FieldGroup } from "../../shadcn/field.js";
 import { TEXT_ELEMENT, TEXT_TONE, TEXT_VARIANT, Text } from "../text/text.js";
 
 /**
@@ -16,6 +17,9 @@ import { TEXT_ELEMENT, TEXT_TONE, TEXT_VARIANT, Text } from "../text/text.js";
  * refused, and stands in a polite live region from the first render, as a
  * field's does, empty until it says something. A headed section is a form
  * landmark named by its heading and described by its words and its error.
+ * Its fields stand in shadcn/ui's field group (`../../shadcn/field.tsx`), and
+ * its parts are drawn in Tailwind utilities over the theme's gap and type
+ * roles.
  */
 
 /** Whether words say anything: nothing, `null`, `false`, and an empty string say nothing. */
@@ -57,7 +61,7 @@ export function FormSection({
     .join(" ");
   return (
     <form
-      className="luke-form-section"
+      className="m-0 flex min-w-0 flex-col gap-field-gap"
       noValidate
       aria-labelledby={headed ? titleId : undefined}
       aria-describedby={describedBy === "" ? undefined : describedBy}
@@ -67,7 +71,7 @@ export function FormSection({
       }}
     >
       {headed || described ? (
-        <div className="luke-form-section-head">
+        <div className="flex min-w-0 flex-col gap-1">
           {headed ? (
             <Text variant={TEXT_VARIANT.SECTION} as={TEXT_ELEMENT.H2} id={titleId}>
               {title}
@@ -80,11 +84,17 @@ export function FormSection({
           ) : null}
         </div>
       ) : null}
-      <div className="luke-form-section-fields">{children}</div>
-      <p className="luke-form-section-error" id={errorId} aria-live="polite">
+      <FieldGroup>{children}</FieldGroup>
+      <p
+        className="m-0 font-body text-body font-normal text-danger wrap-anywhere empty:-mt-field-gap"
+        id={errorId}
+        aria-live="polite"
+      >
         {failed ? error : null}
       </p>
-      {said(actions) ? <div className="luke-form-section-actions">{actions}</div> : null}
+      {said(actions) ? (
+        <div className="flex flex-wrap items-center justify-end gap-control-gap">{actions}</div>
+      ) : null}
     </form>
   );
 }

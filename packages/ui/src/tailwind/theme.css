@@ -52,6 +52,10 @@
   --text-caption--line-height: var(--luke-type-caption-leading);
   --text-title: var(--luke-type-title-size);
   --text-title--line-height: var(--luke-type-title-leading);
+  /* A field set a size under the body's keeps the body's line. */
+  --leading-body: var(--luke-type-body-leading);
+  /* Words edited in place in the body's size, on the line of what they stand in. */
+  --text-body-size: var(--luke-type-body-size);
   /* A finger's field takes 16px words at least, or iOS zooms into it. */
   --text-touch: max(16px, 1em);
   --text-caption-touch: max(16px, var(--luke-type-caption-size));
@@ -65,17 +69,27 @@
   /* A field a step under a control, among a bar's controls. */
   --spacing-control-compact: calc(var(--luke-control-height) - 2 * var(--luke-space-2));
   /* A time's block inset: the room around one line, so its value stands on the field's middle. */
-  --spacing-time-inset: calc((var(--luke-control-height) - var(--luke-type-body-leading)) / 2 - 1px);
+  --spacing-time-inset: calc(
+    (var(--luke-control-height) - var(--luke-type-body-leading)) /
+    2 -
+    1px
+  );
   --spacing-time-value: var(--luke-type-body-leading);
   /* A growing note's least height, from its rows (`--luke-text-area-rows`), and its most. */
   --spacing-text-area-least: calc(
-    var(--luke-text-area-rows) * var(--luke-type-body-leading) + 2 * var(--luke-space-6) + 2px
+    var(--luke-text-area-rows) *
+    var(--luke-type-body-leading) +
+    2 *
+    var(--luke-space-6) +
+    2px
   );
   --spacing-text-area-bare-least: max(
     var(--luke-text-area-least, 0px),
     calc(
-      var(--luke-text-area-rows) * var(--luke-type-body-leading) +
-      var(--luke-text-area-inset-start, 0px) + var(--luke-text-area-inset-end, 0px)
+      var(--luke-text-area-rows) *
+      var(--luke-type-body-leading) +
+      var(--luke-text-area-inset-start, 0px) +
+      var(--luke-text-area-inset-end, 0px)
     )
   );
   --spacing-text-area-grow-max: var(--luke-text-area-grow-max);

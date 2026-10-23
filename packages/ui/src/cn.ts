@@ -18,7 +18,8 @@ import { extendTailwindMerge } from "tailwind-merge";
 const merge = extendTailwindMerge({
   extend: {
     theme: {
-      text: ["body", "label", "caption", "title", "touch", "caption-touch"],
+      text: ["body", "label", "caption", "title", "body-size", "touch", "caption-touch"],
+      leading: ["body"],
       spacing: [
         "control",
         "control-inset",
