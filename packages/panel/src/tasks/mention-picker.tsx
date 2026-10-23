@@ -17,8 +17,9 @@ import {
   sectionAnchors,
 } from "@luke/features/mention-link";
 import { planSections } from "@luke/features/plan-document";
-import { TASK_TREE_ENTRY } from "@luke/features/task-wire";
-import type { WorkspaceMember } from "@luke/features/workspace-wire";
+import { TASK_TREE_ENTRY, type TaskSummary } from "@luke/features/task-wire";
+import { namesTaskKey, taskKey } from "@luke/features/workspace-key";
+import type { Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import {
   ArrowLeftIcon,
@@ -45,6 +46,7 @@ import type { NamedServer } from "@luke/ui/agent-servers-model";
 import type { SkillOption } from "@luke/ui/skill-mention";
 import { fileFolder, fileName } from "@luke/voice/code-pane-model";
 import { defaultFilter } from "cmdk";
+import * as Atom from "effect/reactivity/Atom";
 import {
   AppWindowIcon,
   BookOpenIcon,
@@ -60,6 +62,7 @@ import { ACTOR_SIZE, ActorMark } from "../actor-ref.js";
 import { type IntegrationToolsReads, useIntegrationTools } from "../integration-tools.js";
 import { useMemberDirectory } from "../member-directory.js";
 import type { ComposerTrigger, MentionNode } from "../plan-editor/contract.js";
+import { appStateDerivedAtom, useAppSlice } from "../use-app-state.js";
 import {
   DATE_PICKER_CLOSE,
   type DatePicked,
@@ -118,6 +121,13 @@ import { useTaskStatus } from "./use-known-names.js";
  * agent it is sent to is handed what it needs to read by
  * (`packages/service/src/agents/mentioned-context.ts`).
  *
+ * Wherever the words stand in a workspace, the list offers its other
+ * tasks too, as the window lists them, once a word is typed: each by its
+ * name, its key beside it (`ACME-42`, `@luke/features/workspace-key`),
+ * found by either, a pick written as the task's mention. Words that are a
+ * task's key whole lead the list with that task, as words that read as a
+ * date lead it with the date.
+ *
  * Wherever the words stand in a workspace whose members the window has
  * read (`../member-directory.tsx`), the list offers its people too, each by
  * their name and picture, the reader among them as You, found by their name
@@ -161,6 +171,7 @@ const MENTION_GROUP = {
   DATES: "Dates",
   FILES: "Files and folders",
   PLAN: "Plan",
+  TASKS: "Tasks",
   PAGES: "Pages",
   AGENTS: "Agents",
   PEOPLE: "People",
@@ -175,6 +186,7 @@ const MENTION_GROUP = {
 const MENTION_FROM = {
   FILES: "files",
   PLAN: "plan",
+  TASKS: "tasks",
   PAGES: "pages",
   AGENTS: "agents",
   PEOPLE: "people",
@@ -286,6 +298,21 @@ const PER_GROUP = 4;
 /** The most rows a list narrowed to one kind lists. */
 const PER_KIND = 50;
 
+/** The score a task takes whose key the words are whole: cmdk's best, which no fuzzy match beats. */
+const KEY_SCORE = 1;
+
+/** The window's tasks and workspaces, which tell their readers only when either is a new list, so a patch to the open plan draws no list again. */
+const listedTasksAtom: Atom.Atom<{
+  readonly tasks: readonly TaskSummary[];
+  readonly workspaces: readonly Workspace[];
+}> = Atom.withEquality(
+  appStateDerivedAtom((state) => ({
+    tasks: state?.tasks.tasks ?? [],
+    workspaces: state?.tasks.workspaces ?? [],
+  })),
+  (held, next) => held.tasks === next.tasks && held.workspaces === next.workspaces,
+);
+
 /** The list's own name, which its listbox is read by. */
 const MENU_LABEL = "Mention";
 
@@ -327,6 +354,8 @@ type MentionRow = {
   readonly written?: string | undefined;
   /** The words it is found by. */
   readonly terms: string;
+  /** A task's key, as `ACME-42`, which typed whole finds the task first. */
+  readonly key?: string | undefined;
   /** An agent's tile, or a person's picture, which its row wears; none for any other row. */
   readonly actor?: Actor | undefined;
   /** A pull request, whose mark its row wears for where it stands; none for any other row. */
@@ -514,6 +543,28 @@ function pageRows(taskId: string, pages: readonly MentionablePage[]): MentionRow
     detail: PAGE_DETAIL,
     terms: page.title,
   }));
+}
+
+/** Each of the workspace's tasks' rows but the plan's own, by its name, its key beside it, found by either. */
+function workspaceTaskRows(
+  taskId: string,
+  workspace: Workspace | undefined,
+  tasks: readonly TaskSummary[],
+): MentionRow[] {
+  if (workspace === undefined) return [];
+  return tasks.flatMap((task): MentionRow[] => {
+    if (task.id === taskId || task.workspaceId !== workspace.id) return [];
+    const key = task.number === undefined ? undefined : taskKey(workspace.name, task.number);
+    return [
+      {
+        mention: { kind: MENTION_KIND.TASK, taskId: task.id },
+        name: task.name,
+        detail: key,
+        terms: key === undefined ? task.name : `${key} ${task.name}`,
+        key,
+      },
+    ];
+  });
 }
 
 /** What an agent's row says of its task: this one, another by its name, or none, and whether it is archived. */
@@ -710,11 +761,20 @@ function skillRows(skills: readonly SkillOption[]): MentionRow[] {
   }));
 }
 
-/** The rows matching the query, best first, as many as `most`; the first rows in order for no query. */
+/** Whether the words are a row's task's key whole. */
+function keyed(row: MentionRow, query: string): boolean {
+  return row.key !== undefined && namesTaskKey(query, row.key);
+}
+
+/**
+ * The rows matching the query, best first, as many as `most`; the first
+ * rows in order for no query. A task whose key the words are whole ranks
+ * first, since cmdk's fuzzy score could put a longer key it begins above it.
+ */
 function best(rows: readonly MentionRow[], query: string, most: number): readonly MentionRow[] {
   if (query.trim() === "") return rows.slice(0, most);
   return rows
-    .map((row) => ({ row, score: defaultFilter(row.terms, query) }))
+    .map((row) => ({ row, score: keyed(row, query) ? KEY_SCORE : defaultFilter(row.terms, query) }))
     .filter((each) => each.score > 0)
     .sort((first, second) => second.score - first.score)
     .slice(0, most)
@@ -747,6 +807,8 @@ function fileRows(
 /** Every row of each kind but the repository's paths, found by the list's words. */
 interface KindRows {
   readonly plan: readonly MentionRow[];
+  /** The workspace's other tasks. */
+  readonly tasks: readonly MentionRow[];
   readonly pages: readonly MentionRow[];
   readonly agents: readonly MentionRow[];
   readonly people: readonly MentionRow[];
@@ -771,6 +833,8 @@ function narrowedRows(
       return paths === undefined ? [] : fileRows(paths, folder, term);
     case MENTION_FROM.PLAN:
       return best(rows.plan, term, PER_KIND);
+    case MENTION_FROM.TASKS:
+      return best(rows.tasks, term, PER_KIND);
     case MENTION_FROM.PAGES:
       return best(rows.pages, term, PER_KIND);
     case MENTION_FROM.AGENTS:
@@ -797,8 +861,9 @@ function kindRow(kind: MentionKind): MentionRow {
  * The groups the list offers for the word. Every kind at once: their first
  * few but the files, and a row for each kind, for no words; else each kind's
  * best, the date the words name first, since words that read as a date
- * mean one, then files and folders, or, where the members a mention tells
- * lead, the agents and the people. One kind: up to fifty of its rows, a
+ * mean one, and the task whose key they are whole next, then files and
+ * folders, or, where the members a mention tells lead, the agents and the
+ * people. One kind: up to fifty of its rows, a
  * folder's where one was walked into.
  */
 function groupsFor(
@@ -816,6 +881,12 @@ function groupsFor(
   }
   const bare = term.trim() === "";
   const files = bare || paths === undefined ? [] : best(paths.map(pathRow), term, PER_GROUP);
+  // The workspace's tasks are offered only once a word is typed, the task the words key leading the list.
+  const tasks = {
+    label: MENTION_GROUP.TASKS,
+    rows: bare ? [] : best(rows.tasks, term, PER_GROUP),
+  };
+  const leads = tasks.rows.some((row) => keyed(row, term));
   const members = [
     { label: MENTION_GROUP.AGENTS, rows: best(rows.agents, term, PER_GROUP) },
     { label: MENTION_GROUP.PEOPLE, rows: best(rows.people, term, PER_GROUP) },
@@ -823,10 +894,12 @@ function groupsFor(
   const place = [
     { label: MENTION_GROUP.FILES, rows: files },
     { label: MENTION_GROUP.PLAN, rows: best(rows.plan, term, PER_GROUP) },
+    ...(leads ? [] : [tasks]),
     { label: MENTION_GROUP.PAGES, rows: best(rows.pages, term, PER_GROUP) },
   ];
   return [
     { label: MENTION_GROUP.DATES, rows: rows.dates },
+    ...(leads ? [tasks] : []),
     ...(membersFirst ? [...members, ...place] : [...place, ...members]),
     { label: MENTION_GROUP.PULL_REQUESTS, rows: best(rows.pullRequests, term, PER_GROUP) },
     { label: MENTION_GROUP.SKILLS, rows: best(rows.skills, term, PER_GROUP) },
@@ -842,6 +915,8 @@ function KindGlyph({ kind }: { kind: MentionKind }): React.JSX.Element {
       return <FolderIcon aria-hidden="true" />;
     case MENTION_FROM.PLAN:
       return <DocumentIcon />;
+    case MENTION_FROM.TASKS:
+      return <PlanGlyph status={undefined} />;
     case MENTION_FROM.PAGES:
       return <AppWindowIcon aria-hidden="true" />;
     case MENTION_FROM.AGENTS:
@@ -1151,8 +1226,9 @@ function treeKey(
 
 /**
  * The kinds the place offers, in the list's order: its repository's files
- * and folders where it names one, the plan and its pages where a plan
- * stands, the workspace's agents where it reads them, its people where
+ * and folders where it names one, the plan where one stands, the
+ * workspace's other tasks where it holds any, the plan's pages, the
+ * workspace's agents where it reads them, its people where
  * the window has read them, the pull requests
  * the plan's agents published, the repository's skills where the words go
  * to an agent, dates wherever the list stands, and each connected server, the
@@ -1165,6 +1241,7 @@ function kindsOf(
   skills: MentionSkills | undefined,
   servers: readonly NamedServer[],
   people: number,
+  tasks: number,
   members: MentionMembers | undefined,
 ): readonly MentionKind[] {
   const { taskId, repository } = source;
@@ -1188,6 +1265,15 @@ function kindsOf(
             name: MENTION_GROUP.PLAN,
             // A plan whose words the place does not hold, as the window's Chat holds none, says no count it cannot know.
             detail: sectionCount(planSections(source.text()).length),
+          },
+        ]),
+    ...(tasks === 0
+      ? []
+      : [
+          {
+            from: MENTION_FROM.TASKS,
+            name: MENTION_GROUP.TASKS,
+            detail: counted(tasks, "task", "tasks"),
           },
         ]),
     ...(pages === 0
@@ -1381,8 +1467,24 @@ export function useMentionPicker({
   const people =
     members?.people ??
     (directory.members === undefined ? [] : directoryPeople(directory.members, readerId));
+  // The tasks offered are the workspace's the words stand in: the one that names it, else the plan's, else the one its slug names.
+  const listed = useAppSlice(listedTasksAtom);
+  const tasksWorkspaceId =
+    workspaceId ??
+    listed.tasks.find((task) => task.id === taskId)?.workspaceId ??
+    listed.workspaces.find((each) => each.slug !== undefined && each.slug === source?.workspace)
+      ?.id;
+  const taskRowsOffered = open
+    ? workspaceTaskRows(
+        taskId,
+        listed.workspaces.find((each) => each.id === tasksWorkspaceId),
+        listed.tasks,
+      )
+    : [];
   // The list is narrowed to the kind a key opened or whose word was typed, and searched by the words after it.
-  const kinds = open ? kindsOf(source, self, skills, servers, people.length, members) : [];
+  const kinds = open
+    ? kindsOf(source, self, skills, servers, people.length, taskRowsOffered.length, members)
+    : [];
   const scope = open ? scopeOf(trigger, narrowing, kinds) : undefined;
   const term = scope?.term ?? "";
 
@@ -1429,6 +1531,7 @@ export function useMentionPicker({
           read,
           {
             plan: taskRows(taskId, source.taskName, source.text()),
+            tasks: taskRowsOffered,
             pages: pageRows(taskId, source.pages ?? NO_PAGES),
             // The members a mention tells are each named by their own task, so none is offered as the plan's own.
             agents:

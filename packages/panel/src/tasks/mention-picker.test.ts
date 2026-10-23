@@ -1,18 +1,22 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { decodeMention, MENTION_KIND } from "@luke/features/mention-link";
+import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
+import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
 import { personActor } from "@luke/ui/actor-model";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, useRef } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
-import type { ComposerTrigger } from "../plan-editor/contract.js";
+import type { ComposerTrigger, MentionNode } from "../plan-editor/contract.js";
+import { handState } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { MENTION_MENU_SIDE, type MentionPicker, useMentionPicker } from "./mention-picker.js";
 import { NO_TASK } from "./task-mentions.js";
 
 /**
- * mention-picker.test.ts -- the `@` list where the words are a chat message's, as the editor's two reports drive it: the members a mention tells offered in place of the workspace's, and a list closed with Escape, which a `#` written over its word opens again on the channels.
+ * mention-picker.test.ts -- the `@` list as the editor's reports drive it: where the words are a chat message's, the members a mention tells offered in place of the workspace's, and a list closed with Escape, which a `#` written over its word opens again on the channels; and on a plan, the workspace's other tasks found by their keys.
  */
 
 let root: Root | undefined;
@@ -95,4 +99,112 @@ test("an @ list closed with Escape stays closed in its word, and a # written ove
     picker().onChannelTrigger(word(""));
   });
   assert.deepEqual(rows(page), ["general"]);
+});
+
+/** The list drawn as a plan's editor draws it, on `plan-1` of the Stage workspace, each mention picked recorded. */
+async function mountedOnPlan(chosen: MentionNode[]) {
+  let latest: MentionPicker | undefined;
+  function Picker() {
+    const room = useRef<HTMLDivElement>(null);
+    latest = useMentionPicker({
+      source: {
+        taskId: "plan-1",
+        taskName: "Ship the palette",
+        workspace: "stage",
+        repository: null,
+        text: () => "",
+      },
+      room,
+      side: MENTION_MENU_SIDE.BELOW,
+      onChoose: (mention) => chosen.push(mention),
+    });
+    return createElement("div", { ref: room }, latest.menu);
+  }
+  const page = document.createElement("div");
+  document.body.append(page);
+  root = createRoot(page);
+  act(() => root?.render(onRegistry(AtomRegistry.make(), createElement(Picker))));
+  await act(async () => {
+    for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
+  });
+  return {
+    picker: (): MentionPicker => {
+      assert.ok(latest, "the picker is drawn");
+      return latest;
+    },
+    page,
+  };
+}
+
+/** The rows the open list draws, by name and the detail beside it. */
+const detailedRows = (page: HTMLElement) =>
+  [...page.querySelectorAll('[role="option"]')].map((row) =>
+    [".luke-combobox-option-label", ".luke-combobox-option-detail"]
+      .map((part) => row.querySelector(part)?.textContent)
+      .filter((words) => words !== undefined)
+      .join(" · "),
+  );
+
+test("on a plan, a task's key typed whole leads the @ list with that task, its key beside it, a pick written as its mention; the plan itself and another workspace's tasks are not offered", async () => {
+  const workspace = (id: string, name: string, slug: string) => ({
+    id,
+    name,
+    slug,
+    role: WORKSPACE_ROLE.OWNER,
+    github: null,
+  });
+  const task = (id: string, workspaceId: string, number: number, name: string) => ({
+    id,
+    workspaceId,
+    number,
+    name,
+    createdAt: 1,
+    updatedAt: 1,
+    repository: null,
+  });
+  handState(
+    {},
+    {
+      tasks: {
+        ...IDLE_TASKS_VIEW,
+        workspaces: [
+          workspace("workspace-stage", "Stage", "stage"),
+          workspace("workspace-acme", "Acme", "acme"),
+        ],
+        tasks: [
+          task("plan-1", "workspace-stage", 1, "Ship the palette"),
+          task("plan-421", "workspace-stage", 421, "Cut the release"),
+          task("plan-42", "workspace-stage", 42, "Billing usage alerts from the meter"),
+          task("plan-acme", "workspace-acme", 42, "Acme's own task"),
+        ],
+      },
+    },
+  );
+  const chosen: MentionNode[] = [];
+  const { picker, page } = await mountedOnPlan(chosen);
+
+  act(() => picker().onTrigger(word("stag-42")));
+  assert.deepEqual(detailedRows(page).slice(0, 2), [
+    "Billing usage alerts from the meter · STAG-42",
+    "Cut the release · STAG-421",
+  ]);
+  act(() => picker().onTrigger(word("STAG-1")));
+  assert.ok(
+    !detailedRows(page).some((row) => row.startsWith("Ship the palette · STAG-1")),
+    "the plan itself is not offered as another task",
+  );
+  act(() => picker().onTrigger(word("acme")));
+  assert.ok(!rows(page).includes("Acme's own task"), "another workspace's task is not offered");
+
+  act(() => picker().onTrigger(word("stag-421")));
+  act(() => {
+    picker().onKey(new KeyboardEvent("keydown", { key: "Enter", cancelable: true }));
+  });
+  const [picked] = chosen;
+  assert.ok(picked, "the highlighted task is written");
+  assert.equal(picked.name, "Cut the release");
+  assert.deepEqual(decodeMention(picked.target, null), {
+    kind: MENTION_KIND.TASK,
+    taskId: "plan-421",
+  });
 });
