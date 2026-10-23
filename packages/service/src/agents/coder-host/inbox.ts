@@ -98,7 +98,7 @@ export const INBOX_TOOLS = {
       "or the exact lines a decision is about, as a blob link into your repository at the full 40-character commit you read them at, one already on GitHub, " +
       `ending #L<start>-L<end>, at most ${INBOX_BOUNDS.MAX_CODE_LINES} lines, which they see as GitHub holds them at that commit. ` +
       `Draw a picture where it belongs, such as a screenshot of a UI you rendered, as ![alt](<path> "caption"): path is the file's path in your sandbox, ` +
-      `relative to the checkout or absolute, a PNG, JPEG, or WebP of at most ${MAX_PICTURE_MB} MB, or a WebM video of at most ${MAX_VIDEO_MB} MB, such as a Playwright recordVideo of a flow, which plays there, never your cloud browser's recording, ` +
+      `relative to the checkout or absolute, a PNG, JPEG, or WebP of at most ${MAX_PICTURE_MB} MB, or a WebM video of at most ${MAX_VIDEO_MB} MB, such as a recording of a flow, which plays there, ` +
       `at most ${INBOX_BOUNDS.MAX_MESSAGE_PICTURES} a message; ` +
       "alt says in a sentence what it shows, and pictures written next to each other stand side by side. " +
       "ask is what the message asks of them, which ends it: " +

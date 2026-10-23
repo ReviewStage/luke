@@ -38,10 +38,9 @@ import {
   readInboxAttachment,
   taskInboxItems,
 } from "../../inbox/inbox-store.js";
-import { BROWSER_RECORDING_TITLE, SANDBOX_RECORDING } from "../browser/sandbox-recorder.js";
 import { CODER } from "./bounds.js";
 import { INBOX_REFUSAL, postToInbox, readOwnInbox, withdrawAsk } from "./inbox.js";
-import { BROWSER_RECORDING_REFUSAL, type InboxSandboxDoor } from "./inbox-image.js";
+import type { InboxSandboxDoor } from "./inbox-image.js";
 
 /**
  * The coding agent's inbox tools, through their public functions against a
@@ -449,23 +448,6 @@ it.layer(getTestDB())("the coding agent's inbox", (it) => {
   );
 
   it.effect(
-    "the cloud browser's own recording is refused, since it stays in the transcript: by its path before its file is read, and by the title its recorder stamps wherever a copy stands",
-    () =>
-      Effect.gen(function* () {
-        const agent = yield* openAgent;
-        const recorded = `/home/vercel-sandbox/${SANDBOX_RECORDING.VIDEO}`;
-        const stamped = webmBytes(1280, 800, { title: BROWSER_RECORDING_TITLE });
-        const sandbox = sandboxWith({ [recorded]: stamped, "/tmp/video/copy.webm": stamped });
-
-        for (const path of [recorded, "/tmp/video/copy.webm"]) {
-          const refused = yield* post(agent, { ...QUEUE, body: `![The flow](${path})` }, sandbox);
-          assert.equal(refusalOf(refused), `${BROWSER_RECORDING_REFUSAL} ${path}`);
-        }
-        assert.deepEqual(yield* taskInboxItems(agent.userId, agent.taskId), []);
-      }),
-  );
-
-  it.effect(
     "a picture past a picture's bound, a recording past a video's, and one that states no size are refused with the path named",
     () =>
       Effect.gen(function* () {
@@ -473,7 +455,7 @@ it.layer(getTestDB())("the coding agent's inbox", (it) => {
         const sandbox = sandboxWith({
           "shots/huge.png": paddedTo(PNG, INBOX_BOUNDS.MAX_IMAGE_BYTES + 1),
           "/tmp/video/long.webm": paddedTo(webmBytes(1280, 800), INBOX_BOUNDS.MAX_VIDEO_BYTES + 1),
-          "/tmp/video/flow.mkv": webmBytes(640, 480, { docType: "matroska" }),
+          "/tmp/video/flow.mkv": webmBytes(640, 480, "matroska"),
         });
         const tooLarge =
           "Not posted: a picture names a file larger than 1.5 MB, or a video larger than 4.0 MB; render it smaller, or record a shorter flow:";

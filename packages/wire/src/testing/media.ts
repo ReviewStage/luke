@@ -22,28 +22,16 @@ function ebml(id: readonly number[], body: readonly number[]): number[] {
   return [...id, 0x80 | body.length, ...body];
 }
 
-/**
- * A Matroska file of the doctype given, a WebM's by default, whose one
- * video track states the size, with no frames; and, where a title is given,
- * the segment's info stating it before the track, as an encoder writes it.
- */
-export function webmBytes(
-  width: number,
-  height: number,
-  { docType = "webm", title }: { readonly docType?: string; readonly title?: string } = {},
-): Uint8Array {
+/** A Matroska file of the doctype given, a WebM's by default, whose one video track states the size, with no frames. */
+export function webmBytes(width: number, height: number, docType = "webm"): Uint8Array {
   const video = ebml(
     [0xe0],
     [...ebml([0xb0], [width >> 8, width & 0xff]), ...ebml([0xba], [height >> 8, height & 0xff])],
   );
-  const info =
-    title === undefined
-      ? []
-      : ebml([0x15, 0x49, 0xa9, 0x66], ebml([0x7b, 0xa9], [...new TextEncoder().encode(title)]));
   const tracks = ebml([0x16, 0x54, 0xae, 0x6b], ebml([0xae], video));
   return new Uint8Array([
     ...ebml([0x1a, 0x45, 0xdf, 0xa3], ebml([0x42, 0x82], [...new TextEncoder().encode(docType)])),
-    ...ebml([0x18, 0x53, 0x80, 0x67], [...info, ...tracks]),
+    ...ebml([0x18, 0x53, 0x80, 0x67], tracks),
   ]);
 }
 

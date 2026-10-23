@@ -1137,7 +1137,10 @@ sandbox's snapshot is deleted, and once the agent stops it our service keeps the
 video, a WebM of up to 4 MB, beside the transcript as it keeps a screenshot,
 shown to the same members, readable by our operators, and deleted with the
 transcript on the same terms; the model is told it was kept, never handed the
-video, and the screen recording leaves out its player. Apart from such a
+video, and the screen recording leaves out its player. The agent may also post
+such a recording to the task's inbox or its workspace's chat, where it is kept
+and shown as any video an agent posts there is (see "A task's inbox" and "A
+workspace's chat"). Apart from such a
 recording, the page and its live-view frames
 are not kept by us: the frames pass through our service
 to the panel of each member who opens the task, and every such member can

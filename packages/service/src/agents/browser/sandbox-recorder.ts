@@ -53,15 +53,6 @@ export const RECORDING_SCRIPT_NAME = "luke-recording";
 export const RECORDING_START_OUTPUT = { STARTED: "started", RUNNING: "running" } as const;
 
 /**
- * The title the recorder stamps on every video it encodes, which a post to
- * the inbox or the chat refuses (`coder-host/inbox-image.ts`): `AGENTS.md`
- * keeps a cloud browser's recording beside the transcript alone, and the
- * encoder carries a title on through a copy or a re-encode, where a path
- * would not follow it.
- */
-export const BROWSER_RECORDING_TITLE = "luke-browser-recording";
-
-/**
  * The recorder, run by Node with the DevTools port, its directory, its most
  * seconds and bytes, the encoder, and the frame's most width and height as
  * its arguments. It writes `ready` once it reaches the browser, and
@@ -93,7 +84,6 @@ const encode = (out, crf, scale) =>
   new Promise((resolve) => {
     const args = ["-loglevel", "error", "-f", "image2pipe", "-avioflags", "direct", "-fpsprobesize", "0", "-probesize", "32", "-analyzeduration", "0", "-framerate", String(FPS), "-c:v", "mjpeg", "-i", "pipe:0", "-an"];
     args.push("-vf", scale ? "scale=-2:" + scale : "scale=trunc(iw/2)*2:trunc(ih/2)*2");
-    args.push("-metadata", "title=${BROWSER_RECORDING_TITLE}");
     args.push("-c:v", "libvpx-vp9", "-b:v", "0", "-crf", String(crf), "-deadline", "realtime", "-speed", "8", "-row-mt", "1", "-y", out);
     const child = spawn(ffmpeg, args, { stdio: ["pipe", "ignore", "inherit"] });
     child.on("error", () => resolve(false));

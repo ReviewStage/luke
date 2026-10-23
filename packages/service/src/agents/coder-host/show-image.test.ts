@@ -218,9 +218,7 @@ it.layer(getTestDB())("show_image", (it) => {
   it.effect("a Matroska file that is no WebM is refused as no picture, naming the path", () =>
     Effect.gen(function* () {
       const target = yield* openConversation;
-      const sandbox = sandboxWith({
-        [`${CHECKOUT}/flow.mkv`]: webmBytes(640, 480, { docType: "matroska" }),
-      });
+      const sandbox = sandboxWith({ [`${CHECKOUT}/flow.mkv`]: webmBytes(640, 480, "matroska") });
 
       assert.deepEqual(
         yield* show(
