@@ -386,6 +386,11 @@ function fakeService() {
         asked.push(`stop:${agentId}`);
         return { agent: { ...AGENT, status: CODING_AGENT_STATUS.CANCELLED } };
       }),
+    rewind: (agentId, messageId) =>
+      Effect.sync(() => {
+        asked.push(`rewind:${agentId}:${messageId}`);
+        return { agent: AGENT };
+      }),
     delete: (agentId) =>
       Effect.sync(() => {
         asked.push(`delete:${agentId}`);
@@ -620,6 +625,26 @@ function fakeService() {
         return {
           item: {
             ...ITEM,
+            messages: [
+              {
+                id: MESSAGE_ID,
+                author: INBOX_MESSAGE_AUTHOR.MEMBER,
+                text: request.text,
+                createdAt: ITEM.updatedAt,
+              },
+            ],
+          },
+        };
+      }),
+    startInboxThread: (request) =>
+      Effect.sync(() => {
+        asked.push(
+          `inbox-start:${request.agentId}:${request.title}:${request.text}:${request.clientKey}`,
+        );
+        return {
+          item: {
+            ...ITEM,
+            title: request.title ?? ITEM.title,
             messages: [
               {
                 id: MESSAGE_ID,
@@ -1127,6 +1152,28 @@ it.effect("each method asks the service once and answers what it said, whole", (
       answers: { ask: MESSAGE_ID, reply: INBOX_REPLY.CHOSE, choices: ["Ship it"] },
     });
     assert.deepEqual(
+      yield* call(GATEWAY_METHOD.CODING_AGENTS_INBOX_START, {
+        agentId: AGENT_ID,
+        title: "Annual plan copy",
+        text: "Draft the annual plan's line too.",
+        clientKey: "start-1",
+      }),
+      {
+        item: {
+          ...ITEM,
+          title: "Annual plan copy",
+          messages: [
+            {
+              id: MESSAGE_ID,
+              author: INBOX_MESSAGE_AUTHOR.MEMBER,
+              text: "Draft the annual plan's line too.",
+              createdAt: ITEM.updatedAt,
+            },
+          ],
+        },
+      },
+    );
+    assert.deepEqual(
       yield* call(GATEWAY_METHOD.CODING_AGENTS_INBOX_READ_STATE, { itemId: ITEM.id, unread: true }),
       { id: ITEM.id, unread: true },
     );
@@ -1198,6 +1245,7 @@ it.effect("each method asks the service once and answers what it said, whole", (
       `close:${ITEM.id}:2:close-1`,
       `inbox-message:${ITEM.id}:Also page on-call.:pager.txt:message-1`,
       `inbox-message:${ITEM.id}:Ship it.::message-2:answers ${MESSAGE_ID} chose Ship it`,
+      `inbox-start:${AGENT_ID}:Annual plan copy:Draft the annual plan's line too.:start-1`,
       `inbox-unread:${ITEM.id}`,
       `inbox-read:${ITEM.id}`,
       `inbox-read-all:${WORKSPACE_ID}`,
@@ -1672,6 +1720,45 @@ it.effect(
       yield* settled;
       assert.equal(newest(), read);
       assert.ok(!asked.some((ask) => ask.startsWith("messages-now")));
+    }),
+);
+
+it.effect(
+  "a page read at another rewind than the window's has the follow read the newest page afresh and tell it as the newest, which the window takes in place of what it drew",
+  () =>
+    Effect.gen(function* () {
+      const {
+        call,
+        asked,
+        pages,
+        sealTranscript,
+        pageNow: script,
+        pageNewest,
+        realtime,
+      } = yield* subject();
+      sealTranscript(SEALED_TRANSCRIPT);
+      pageNewest(newestPage("2:0", "Writing the expiry."));
+      script(pageNow("2:0", { holds: true }));
+      yield* call(GATEWAY_METHOD.CODING_AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
+      yield* settled;
+      transcriptRows(realtime, 2);
+      yield* settled;
+
+      // The agent is taken back to before its second line: every page says so from now on.
+      const rewound = { ...newestPage("3:1", "Reading the invites."), rewound: 1 };
+      pageNewest(rewound);
+      script({ ...pageNow("3:1", { holds: true }), rewound: 1 });
+      transcriptRows(realtime, 3, 2);
+      yield* settled;
+
+      const newestTold = pages().filter(
+        (told) => isRecord(told) && isRecord(told.page) && told.page.newest === true,
+      );
+      assert.deepEqual(newestTold.at(-1), {
+        transcript: FOLLOWED,
+        page: { ...rewound, newest: true, caughtUp: false },
+      });
+      assert.equal(asked.filter((ask) => ask.startsWith("messages-newest")).length, 2);
     }),
 );
 

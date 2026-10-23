@@ -1,5 +1,5 @@
 /**
- * inbox-procedures.ts -- what an agent posted for the developer, read, answered, messaged, and marked read.
+ * inbox-procedures.ts -- what an agent posted for the developer, read, answered, messaged, and marked read, and a thread a member starts.
  *
  * The inbox resource of the hosted oRPC router (`@luke/features/contract`'s
  * `inbox.ts`), each procedure answering the bytes its old `HttpRouter`
@@ -15,7 +15,8 @@
  * stays on the agents' group (`agents/coding-agents-app.ts`).
  */
 
-import { readCodingAgent } from "@luke/database/models/coding-agent-store";
+import type { DatabaseServices } from "@luke/database/core/query";
+import { type CodingAgent, readCodingAgent } from "@luke/database/models/coding-agent-store";
 import { readTaskWorkspace } from "@luke/database/models/task-store";
 import { type StoreWriter, storeWriter } from "@luke/database/models/writer";
 import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
@@ -24,29 +25,39 @@ import {
   INBOX_CURSOR_START,
   INBOX_STATUS,
   type InboxAnswers,
+  type InboxItem,
   type InboxReply,
   inboxAnswerHeard,
   inboxAnswerMessage,
   inboxAnswersReply,
   inboxClosedMessage,
   inboxReplyRefusal,
+  inboxStartTitle,
   inboxThreadMessage,
   inboxTodoTicks,
 } from "@luke/features/inbox-wire";
+import { MODEL_PROVIDER, type ModelProvider } from "@luke/features/models-wire";
+import { failureKind } from "@luke/runtime/effect";
 import { readEither } from "@luke/wire/effect";
+import type { LanguageModel } from "ai";
 import { Effect, Option, Result } from "effect";
-import type { AccountResolving } from "../agents/agent-reach.js";
+import { type AccountResolving, controlsAgent } from "../agents/agent-reach.js";
 import type { EveTypedTurn } from "../agents/brain-host/eve-sessions.js";
+import { ownKeyOf } from "../agents/coder-host/account-keys.js";
 import {
   accountInboxPast,
   agentInboxPast,
   taskInboxPast,
 } from "../agents/coder-host/inbox-page.js";
+import { titleModel } from "../agents/coder-host/model.js";
 import { steerCodingAgent } from "../agents/coder-host/steer.js";
 import { type EveReach, eveFor } from "../agents/coder-host/stop.js";
+import { titleInboxThread } from "../agents/coder-host/title.js";
 import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
 import { unparsedWire, wireUuidSchema } from "../core.js";
+import { HostedEnvironment } from "../environment.js";
 import { recordServerEvent, SERVER_EVENT } from "../events/server-events.js";
+import { afterResponse } from "../http/after-response.js";
 import {
   HOSTED_REFUSAL,
   type HostedRefusal,
@@ -54,6 +65,7 @@ import {
 } from "../http/http-effect.js";
 import { logStoreFailure } from "../http/store-failure.js";
 import { accountMiddleware, hosted } from "../orpc/base.js";
+import { providerModelOf } from "../providers/model-catalog.js";
 import { settleAgentTaskIfFinished } from "../tasks/task-finish.js";
 import {
   answerInboxAsk,
@@ -67,14 +79,64 @@ import {
   markInboxRead,
   postInboxMessage,
   readInboxItem,
+  retitleInboxThread,
   type StoredInboxItem,
+  startInboxThread,
   withdrawInboxAnswer,
   withdrawInboxClose,
   withdrawInboxMessage,
+  withdrawInboxThread,
 } from "./inbox-store.js";
 
-/** What the inbox asks of the deployment: who the caller is, and how eve is reached to hand an answer or a message to an agent. */
-export type InboxProcedureSeams = AccountResolving & EveReach;
+/** How a thread started with no subject finds the model its title is generated on: the sender's own key, preferring the agent's provider; none where they saved none. */
+export type InboxTitleModelOf = (
+  userId: string,
+  preferred: ModelProvider,
+) => Effect.Effect<LanguageModel | undefined, never, DatabaseServices | HostedEnvironment>;
+
+/** What the inbox asks of the deployment: who the caller is, how eve is reached to hand an answer or a message to an agent, and, for a test, the model an untitled thread's title is generated on. */
+export type InboxProcedureSeams = AccountResolving &
+  EveReach & { readonly titleModel?: InboxTitleModelOf | undefined };
+
+/** The agent-title model on the sender's own key (`../agents/coder-host/model.ts`), as an agent's own title is generated, Luke's key never paying for one; none where they saved no key, or it could not be read. */
+const productionTitleModel: InboxTitleModelOf = (userId, preferred) =>
+  Effect.gen(function* () {
+    const environment = yield* HostedEnvironment;
+    const own = yield* ownKeyOf(userId, preferred, environment.providerKeyEncryptionKeys).pipe(
+      Effect.catch((failure) =>
+        Effect.as(
+          Effect.logWarning(
+            `an inbox thread's title key could not be read: ${failureKind(failure)}`,
+          ),
+          undefined,
+        ),
+      ),
+    );
+    return own === undefined ? undefined : titleModel(own);
+  });
+
+/**
+ * A thread started with no subject titled as an agent is, by the agent-title
+ * model over the member's message on their own key, past the answer, so the
+ * send waits on no model: the title its first line stood for stays where the
+ * member saved no key, the call answers nothing, or its agent retitled it
+ * first (`retitleInboxThread`).
+ */
+const retitled = (
+  seams: InboxProcedureSeams,
+  userId: string,
+  agent: CodingAgent,
+  item: InboxItem,
+  text: string,
+) =>
+  Effect.gen(function* () {
+    const preferred = providerModelOf(agent.model)?.provider ?? MODEL_PROVIDER.ANTHROPIC;
+    const model = yield* (seams.titleModel ?? productionTitleModel)(userId, preferred);
+    if (model === undefined) return;
+    const title = yield* titleInboxThread(model, text);
+    if (Option.isNone(title)) return;
+    yield* retitleInboxThread(item.id, item.title, title.value);
+  });
 
 /** The id a path named, where it is a UUID; any other names no row, and is not found. */
 const rowIdOf = /* @__PURE__ */ Effect.fnUntraced(function* (
@@ -445,6 +507,75 @@ const messaged = /* @__PURE__ */ Effect.fnUntraced(function* (
 });
 
 /**
+ * A thread a member starts with an agent, written and handed to the agent
+ * as a message on it is (`messaged`): the agent hears the member's words
+ * under the thread's key, which it answers on with its own posts. Refused
+ * before anything is written where the member may not message the agent,
+ * so a thread the agent could never hear never stands; a hand-off that
+ * fails all the same takes the thread back whole, and one started again
+ * under its key is the one already written, handed off again, which the
+ * steer's own key makes reach the agent once.
+ */
+const started = /* @__PURE__ */ Effect.fnUntraced(function* (
+  seams: InboxProcedureSeams,
+  writer: Effect.Effect<StoreWriter>,
+  request: Request,
+  userId: string,
+  asked: {
+    readonly agentId: string;
+    readonly title: string;
+    readonly text: string;
+    readonly clientKey: string;
+    readonly attachments: readonly CodingAgentAttachment[];
+    /** Whether the member wrote the subject, where none stands for its message's first line until it is titled. */
+    readonly titled: boolean;
+  },
+) {
+  const { agentId, title, text, clientKey, attachments } = asked;
+  const agent = yield* hostedStoreOrUnavailable(readCodingAgent(userId, agentId));
+  if (Option.isNone(agent)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+  if (!controlsAgent(userId, agent.value)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
+  const { userId: starterId, taskId } = agent.value;
+  const written = yield* hostedStoreOrUnavailable(
+    startInboxThread(
+      userId,
+      { userId: starterId, taskId, agentId: agent.value.id },
+      { title, text, clientKey, files: attachments },
+    ),
+  );
+  if (Option.isNone(written)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+  const { item, outcome } = written.value;
+  if (outcome === INBOX_MESSAGE_OUTCOME.KEY_REUSED) {
+    return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+  }
+  // Note that a repeat leaves the thread standing on failure, because the write that wrote it decides whether it stays.
+  const unheard =
+    outcome === INBOX_MESSAGE_OUTCOME.WRITTEN
+      ? withdrawInboxThread(userId, item.id, clientKey)
+      : Effect.void;
+  const handedOver = Effect.gen(function* () {
+    const eve = yield* eveFor<EveTypedTurn>(seams, request, userId);
+    yield* steerCodingAgent(eve, writer, userId, agent.value, {
+      text: inboxThreadMessage(item, text),
+      attachments,
+      clientKey,
+      sender: { kind: MESSAGE_SENDER.MEMBER, userId },
+    });
+  });
+  yield* handedOver.pipe(
+    Effect.onError(() => unheard.pipe(Effect.tapError(logStoreFailure), Effect.ignore)),
+  );
+  // Note that only the write that started the thread titles it, so a repeat asks no model again.
+  if (!asked.titled && outcome === INBOX_MESSAGE_OUTCOME.WRITTEN) {
+    yield* afterResponse(
+      "an inbox thread's title",
+      retitled(seams, userId, agent.value, item, text),
+    );
+  }
+  return { item };
+});
+
+/**
  * The inbox resource, to a signed-in caller: the three held reads, an
  * item answered or closed without an answer, a message on its thread, and the member's own read state,
  * which no other member's moves. Marking an item read is what opening it
@@ -503,6 +634,21 @@ export function inboxProcedures(seams: InboxProcedureSeams) {
         attachments,
         answers,
         revision,
+      });
+    }),
+    start: hosted.inbox.use(accountMiddleware(seams.resolveUserId)).start.effect(function* ({
+      input,
+      context,
+    }) {
+      const agentId = yield* rowIdOf(input.agentId);
+      const { text, clientKey, attachments = [] } = input;
+      return yield* started(seams, writer, context.request, context.userId, {
+        agentId,
+        title: inboxStartTitle(input),
+        titled: input.title !== undefined,
+        text,
+        clientKey,
+        attachments,
       });
     }),
     close: hosted.inbox.use(accountMiddleware(seams.resolveUserId)).close.effect(function* ({

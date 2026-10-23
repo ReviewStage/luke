@@ -8,12 +8,10 @@ import {
   CHAT_MEMBER_LABEL,
   type ChatAsk,
   type ChatBlock,
-  type ChatImageType,
   type ChatReadBlock,
   type ChatReply,
   chatAskSchema,
   chatBlockSchema,
-  chatImageTypeSchema,
   chatReadBlockSchema,
   chatReplySchema,
   formValueLines,
@@ -22,6 +20,10 @@ import {
   replyWords,
 } from "@luke/features/chat-wire";
 import { CODING_AGENT_KIND } from "@luke/features/coding-agent-wire";
+import {
+  type ConversationMediaType,
+  conversationMediaTypeSchema,
+} from "@luke/features/conversation-picture-wire";
 import { EXPERIMENT } from "@luke/settings";
 import {
   and,
@@ -3319,9 +3321,9 @@ export function workspaceChatStamp(
   });
 }
 
-/** One picture as a post hands it in and a read answers it: the type its bytes were sniffed to be, and the bytes. */
+/** One picture as a post hands it in and a read answers it: the type its bytes were sniffed to be, a still's or an agent's recording's, and the bytes. */
 export interface ChatImage {
-  readonly contentType: ChatImageType;
+  readonly contentType: ConversationMediaType;
   readonly bytes: Uint8Array;
 }
 
@@ -3335,7 +3337,7 @@ const insertAttachment = SqlSchema.void({
     id: Schema.String,
     organizationId: Schema.String,
     messageId: Schema.String,
-    contentType: chatImageTypeSchema,
+    contentType: conversationMediaTypeSchema,
     byteCount: Schema.Number,
     bytes: Schema.Uint8Array,
     now: Schema.Date,
@@ -3372,7 +3374,7 @@ const findAttachment = SqlSchema.findOneOption({
     messageId: Schema.String,
     attachmentId: Schema.String,
   }),
-  Result: Schema.Struct({ contentType: chatImageTypeSchema, bytes: Schema.Uint8Array }),
+  Result: Schema.Struct({ contentType: conversationMediaTypeSchema, bytes: Schema.Uint8Array }),
   execute: (key) =>
     Database.use((db) =>
       db
@@ -3393,7 +3395,7 @@ const findAttachment = SqlSchema.findOneOption({
 });
 
 const ChatImageRowSchema = Schema.Struct({
-  contentType: chatImageTypeSchema,
+  contentType: conversationMediaTypeSchema,
   bytes: Schema.Uint8Array,
 });
 
@@ -3530,7 +3532,7 @@ const findMessagePictures = SqlSchema.findAll({
   }),
   Result: Schema.Struct({
     id: Schema.String,
-    contentType: chatImageTypeSchema,
+    contentType: conversationMediaTypeSchema,
     bytes: Schema.Uint8Array,
   }),
   execute: (key) =>

@@ -8,23 +8,20 @@ import {
   settingRowsForPage,
 } from "@luke/settings";
 import { searchAnchorProps } from "@luke/settings/settings-anchors";
-import { SELECT_ALIGN, SELECT_WIDTH, Select, SettingsRow, Switch } from "@luke/ui";
+import { SettingsRow, Switch } from "@luke/ui";
 import { useSettingWrite } from "@luke/ui/use-setting-write";
 import type { ActionResult } from "@luke/wire";
 import { APP_SETTING_KIND, APP_TOGGLE_VALUE } from "@luke/wire/app-settings";
 import { SettingMarks } from "./marks.js";
-import { Picker } from "./picker-row.js";
 import { PictureChoiceRow } from "./picture-choice-row.js";
 import { SampledChoiceRow } from "./sampled-choice-row.js";
+import { SelectRow } from "./select-row.js";
 import type { SettingsWrites } from "./writes.js";
 
 /** One value a choice's control offers, as the schema hands it. */
 type SettingOption = NonNullable<
   ReturnType<typeof settingRowsForPage>[number]["control"]
 >["options"][number];
-
-/** What the menu says when a search over a choice's values matches nothing. */
-const NO_MATCH = "Nothing matches.";
 
 /** Where a pressed search result lands: the row's one control, for a row the schema names. */
 function anchorOf(id: string) {
@@ -77,11 +74,10 @@ function SchemaSwitchRow({
 }
 
 /**
- * A choice's row: the shared row, and the shared pop-up for a short set read
- * whole. A set long enough to search drops the window's searchable menu
- * instead (`picker-row.tsx`), which the pop-up is not. A set whose values
- * have faces is a `PictureChoiceRow`, and a set whose values are heard a
- * `SampledChoiceRow`, never this.
+ * A choice's row: the shared pop-up (`select-row.tsx`), whose menu searches
+ * where the schema gives the set a search field and reads whole where it
+ * does not. A set whose values have faces is a `PictureChoiceRow`, and a set
+ * whose values are heard a `SampledChoiceRow`, never this.
  */
 function SchemaChoiceRow({
   id,
@@ -103,86 +99,20 @@ function SchemaChoiceRow({
   search: string | undefined;
   onChange: (token: string) => Promise<ActionResult>;
 }): React.JSX.Element {
-  const { busy, rejection, saves, run } = useSettingWrite(onChange);
-  // A token the set does not hold is not written, so a stale menu writes nothing.
-  const pick = (token: string) => {
-    if (options.some((option) => option.value === token)) run(token);
-  };
   return (
-    <SettingsRow
+    <SelectRow
       label={label}
-      adornment={<SettingMarks changed={changed} saves={saves} />}
-      description={detail}
-      error={rejection}
-    >
-      {(control) =>
-        search === undefined ? (
-          <Select
-            {...anchorOf(id)}
-            label={label}
-            options={options}
-            value={value}
-            describedBy={control["aria-describedby"]}
-            aria-invalid={control["aria-invalid"]}
-            disabled={busy}
-            align={SELECT_ALIGN.END}
-            width={SELECT_WIDTH.FIELD}
-            onChange={pick}
-          />
-        ) : (
-          <SearchedChoice
-            id={id}
-            label={label}
-            describedBy={control["aria-describedby"]}
-            invalid={control["aria-invalid"]}
-            value={value}
-            options={options}
-            search={search}
-            disabled={busy}
-            onPick={pick}
-          />
-        )
-      }
-    </SettingsRow>
-  );
-}
-
-/** A choice's chip over the window's searchable menu. */
-function SearchedChoice({
-  id,
-  label,
-  describedBy,
-  invalid,
-  value,
-  options,
-  search,
-  disabled,
-  onPick,
-}: {
-  id: string;
-  label: string;
-  describedBy: string | undefined;
-  invalid: true | undefined;
-  value: string;
-  options: readonly SettingOption[];
-  search: string | undefined;
-  disabled: boolean;
-  onPick: (token: string) => void;
-}): React.JSX.Element {
-  const chosen = options.find((option) => option.value === value);
-  return (
-    <Picker
-      label={label}
-      describedBy={describedBy}
-      invalid={invalid}
+      detail={detail}
+      changed={changed}
       value={value}
-      valueLabel={chosen?.label ?? value}
-      rows={options.map((option) => ({ id: option.value, label: option.label }))}
+      options={options}
+      // A token the set does not hold, or the one already stored, is not written, so a stale menu or a repeat pick writes nothing.
+      parse={(token) =>
+        token !== value && options.some((option) => option.value === token) ? token : undefined
+      }
       placeholder={search}
-      noMatch={NO_MATCH}
-      anchor={isAppSettingId(id) ? id : undefined}
-      disabled={disabled}
-      onPick={onPick}
+      {...(isAppSettingId(id) ? { anchor: id } : undefined)}
+      onChange={onChange}
     />
   );
 }

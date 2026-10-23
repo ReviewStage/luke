@@ -22,6 +22,7 @@ import { Clock, Duration, Effect, Fiber, Layer, Option } from "effect";
 import { TestClock } from "effect/testing";
 import {
   agentBrowserTestLayer,
+  FAKE_RECORDING_PATH,
   type FakeCdpAnswer,
   type FakeCdpCommand,
   type FakeCdpPeer,
@@ -1018,6 +1019,7 @@ it.layer(getTestDB())("the browser tool", (it) => {
         assert.ok(step.status === BROWSER_STEP_STATUS.DONE && "picture" in step);
         assert.equal(step.seconds, 8.3);
         assert.equal(step.caption, "Inviting a member");
+        assert.equal(step.path, FAKE_RECORDING_PATH, "the agent is answered where to post it from");
         assert.ok(step.picture !== undefined);
         assert.deepEqual(
           [step.picture.mediaType, step.picture.width, step.picture.height],

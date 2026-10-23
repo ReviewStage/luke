@@ -1,6 +1,8 @@
 import { posix } from "node:path";
-import { SIGNATURE_BYTES, sniffImageType } from "@luke/features/image-signature";
+import { type ConversationMediaType, isVideoType } from "@luke/features/conversation-picture-wire";
+import { SIGNATURE_BYTES } from "@luke/features/image-signature";
 import { INBOX_BOUNDS, type InboxImageType } from "@luke/features/inbox-wire";
+import { mediaDimensions, sniffMediaType } from "@luke/features/media-signature";
 import { Effect, Result } from "effect";
 import type { SandboxSession } from "eve/sandbox";
 import type { InboxImage } from "../../inbox/inbox-store.js";
@@ -9,10 +11,11 @@ import type { InboxImage } from "../../inbox/inbox-store.js";
  * inbox-image.ts -- a picture read from the agent's sandbox, an image block's or one `show_image` shows: the file at the path the agent named, bounded, and sniffed for what it is.
  *
  * The agent names a file in its sandbox, a screenshot it took of what it
- * rendered, and nothing else of the picture: no address, no type. The
- * file is read here through the same door the agent's own file tools
- * reach the sandbox by, as a stream: its first bytes are read for a PNG,
- * JPEG, or WebP signature as soon as they are in, since the name a file
+ * rendered or a WebM it recorded of a flow, and nothing else of it: no
+ * address, no type. The file is read here through the same door the
+ * agent's own file tools reach the sandbox by, as a stream: its first
+ * bytes are read for a PNG, JPEG, or WebP signature, or a WebM's where the
+ * read takes one, as soon as they are in, since the name a file
  * carries says nothing about what it holds and the type is what the
  * picture is served to the desktop under, so a file that is no image is
  * refused at its first chunk, and one past the bound is refused at the
@@ -29,7 +32,7 @@ type InboxSandbox = Pick<SandboxSession, "readFile">;
 export type InboxSandboxDoor = () => Promise<InboxSandbox>;
 
 /** Why a picture was not read, in the words the model reads; each is followed by the path. */
-interface SandboxImageRefusals {
+export interface SandboxImageRefusals {
   readonly NO_FILE: string;
   readonly NOT_IMAGE: string;
   readonly TOO_LARGE: string;
@@ -57,8 +60,9 @@ export interface SandboxImage<Type extends string> {
 /** Why an image block's picture was not read, in the words the model reads; each is followed by the path. */
 const INBOX_IMAGE_REFUSAL: SandboxImageRefusals = {
   NO_FILE: "Not posted: an image block names no file in your sandbox:",
-  NOT_IMAGE: "Not posted: an image block names a file that is not a PNG, JPEG, or WebP image:",
-  TOO_LARGE: `Not posted: an image block names a file larger than ${(INBOX_BOUNDS.MAX_IMAGE_BYTES / 1_000_000).toFixed(1)} MB; render it smaller, or at one screen scale:`,
+  NOT_IMAGE:
+    "Not posted: an image block names a file that is not a PNG, JPEG, or WebP image, or a WebM video that states its size:",
+  TOO_LARGE: `Not posted: an image block names a picture larger than ${(INBOX_BOUNDS.MAX_IMAGE_BYTES / 1_000_000).toFixed(1)} MB, or a video larger than ${(INBOX_BOUNDS.MAX_VIDEO_BYTES / 1_000_000).toFixed(1)} MB; render it smaller, or record a shorter flow:`,
   UNREADABLE: "Not posted: an image block's file could not be read from your sandbox:",
 } as const;
 
@@ -159,15 +163,49 @@ export function readSandboxImage<Type extends string>(
   }).pipe(Effect.catch(() => Effect.succeed(refused<Type>(terms.refusals.UNREADABLE, path))));
 }
 
-/** An image block's picture at the path, held to the inbox's bound, or the one sentence refusing it. */
+/** The most bytes a posted file of the type may be: a still's bound, or a recording's. */
+function postedBytesOf(type: ConversationMediaType): number {
+  return isVideoType(type) ? INBOX_BOUNDS.MAX_VIDEO_BYTES : INBOX_BOUNDS.MAX_IMAGE_BYTES;
+}
+
+/**
+ * A picture or a WebM recording a post draws, at the path, or the one
+ * sentence refusing it in the refusals' words: a still held to the picture
+ * bound, and a recording to the video bound and refused where it states no
+ * size, as `show_image` refuses one (`@luke/features/media-signature`).
+ * Note that the stream is read to the larger bound and a still is held to
+ * its own once its type is known, because the type is sniffed from bytes
+ * the bound has already let in.
+ */
+export function readSandboxMedia(
+  door: InboxSandboxDoor,
+  checkout: string,
+  path: string,
+  refusals: SandboxImageRefusals,
+): Effect.Effect<Result.Result<InboxImage, string>> {
+  const terms = { maxBytes: INBOX_BOUNDS.MAX_VIDEO_BYTES, refusals, sniff: sniffMediaType };
+  return Effect.map(
+    readSandboxImage(door, checkout, path, terms),
+    Result.flatMap((media) => {
+      if (media.bytes.byteLength > postedBytesOf(media.contentType)) {
+        return refused<ConversationMediaType>(refusals.TOO_LARGE, path);
+      }
+      if (
+        isVideoType(media.contentType) &&
+        mediaDimensions(media.bytes, media.contentType) === undefined
+      ) {
+        return refused<ConversationMediaType>(refusals.NOT_IMAGE, path);
+      }
+      return Result.succeed(media);
+    }),
+  );
+}
+
+/** An image block's picture or recording at the path, held to its bound, or the one sentence refusing it. */
 export function readInboxImage(
   door: InboxSandboxDoor,
   checkout: string,
   path: string,
 ): Effect.Effect<Result.Result<InboxImage, string>> {
-  return readSandboxImage(door, checkout, path, {
-    maxBytes: INBOX_BOUNDS.MAX_IMAGE_BYTES,
-    refusals: INBOX_IMAGE_REFUSAL,
-    sniff: sniffImageType,
-  });
+  return readSandboxMedia(door, checkout, path, INBOX_IMAGE_REFUSAL);
 }

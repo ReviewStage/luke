@@ -166,9 +166,10 @@ import { useExperimentChoices } from "../use-app-state.js";
 import { type AgentReadMarks, useAgentReadMarks } from "./agent-read-marks.js";
 import { LUKE_NAME, type LukeOperator, useLukeOperator, withoutLuke } from "./luke-operator.js";
 import { agentEntries, chatEntries, inboxEntries } from "./main-tabs.js";
+import { strandedHome } from "./move-task-dialog.js";
 import { changesOffers, panelEntries } from "./side-panel.js";
 import { taskOf } from "./task-actions.js";
-import { homeTaskCardOf } from "./task-card.js";
+import { homeTaskCardOf, TaskRowMark } from "./task-card.js";
 import { WorkspaceRef } from "./workspace-ref.js";
 
 /** The kinds of row the palette lists, each a filter of its own after All, in the order the filters stand. */
@@ -357,7 +358,7 @@ interface PaletteRow {
   detail?: string | undefined;
   /** The workspace a task is in where that is not the one listed, named by its tile and name before the detail. */
   workspace?: Workspace | undefined;
-  /** The mark at the row's end: a failed agent's, or the face of who is on a task (`assigneeFace`). */
+  /** The mark at the row's end: a failed agent's, or a task's face of who is on it (`assigneeFace`) and its row's mark (`TaskRowMark`). */
   endMark?: React.JSX.Element | undefined;
   /** A task's assignee's and creator's names, the one the query found it by said after the detail. */
   people?: readonly string[] | undefined;
@@ -582,10 +583,9 @@ function PaletteTaskCard({
   return homeTaskCardOf(tasks, task, useMinute());
 }
 
-/** A task's muted words: its key, where it has a number, and its repository. */
-function taskDetail(task: TaskSummary, key: string | undefined): string | undefined {
-  const words = [key, task.repository ?? undefined].filter((word) => word !== undefined);
-  return words.length === 0 ? undefined : words.join(" · ");
+/** A task's muted words: its repository. */
+function taskDetail(task: TaskSummary): string | undefined {
+  return task.repository ?? undefined;
 }
 
 /**
@@ -595,12 +595,12 @@ function taskDetail(task: TaskSummary, key: string | undefined): string | undefi
  * its tab's look, an archived one saying so in its detail. Within each, the
  * listed workspace's come first and every other workspace's tasks after
  * them, naming its workspace and found by its name, since opening one
- * switches the window to it. A task wears who is on it at its end, as its
- * sidebar row does (`assigneeFace`), and is found by its assignee's name and
- * its creator's, and by its key (`ACME-42`), which its detail says first.
- * An agent opens on its own page, as its sidebar row does. An agent's line
- * on a task's card opens the task on its tab through `showAgent`, which
- * leaves the palette as a row does.
+ * switches the window to it. A task wears at its end who is on it and its
+ * row's mark, as its sidebar row does (`assigneeFace`, `TaskRowMark`), and
+ * is found by its key, its assignee's name, and its creator's, a key typed
+ * whole listing its task first. An agent opens on its own page, as its
+ * sidebar row does. An agent's line on a task's card opens the task on its
+ * tab through `showAgent`, which leaves the palette as a row does.
  */
 function taskRows(
   tasks: TasksControl,
@@ -620,21 +620,21 @@ function taskRows(
     listedId === undefined || task.workspaceId === listedId
       ? undefined
       : tasks.workspaces.find((each) => each.id === task.workspaceId);
-  const keyOf = (task: TaskSummary): string | undefined => {
-    const workspaceName = tasks.workspaces.find((each) => each.id === task.workspaceId)?.name;
-    if (task.number === undefined || workspaceName === undefined) return undefined;
-    return taskKey(workspaceName, task.number);
+  // Note that a task is found by its key, as its card and the Tasks list say it, read under its own workspace's name.
+  const keyOf = (task: TaskSummary): string | null => {
+    const home = tasks.workspaces.find((each) => each.id === task.workspaceId);
+    return home === undefined || task.number === undefined ? null : taskKey(home.name, task.number);
   };
   const taskOf = (task: TaskSummary): PaletteRow => {
     const elsewhere = elsewhereOf(task);
-    const key = keyOf(task);
+    const key = keyOf(task) ?? undefined;
     const worn = assigneeFace(task, readerOf(task));
     const createdBy = task.createdBy?.name ?? null;
     const assignedTo = task.assignee?.name ?? null;
     // Note that a task Luke or an agent made says them in its detail, so it is found by them.
     const origin = originOf(task);
     const madeBy = origin === undefined ? null : actorName(origin);
-    const detail = taskDetail(task, key);
+    const detail = taskDetail(task);
     return {
       ...tabLook({ kind: TAB_KIND.PLAN, name: task.name, status: task.status }),
       detail:
@@ -643,7 +643,12 @@ function taskRows(
           : [detail, `by ${madeBy}`].filter((words) => words !== undefined).join(" · "),
       workspace: elsewhere,
       card: <PaletteTaskCard tasks={carded} task={task} />,
-      endMark: worn === undefined ? undefined : <AssigneeFaceMark face={worn} />,
+      endMark: (
+        <>
+          {worn === undefined ? null : <AssigneeFaceMark face={worn} />}
+          <TaskRowMark task={task} stranded={strandedHome(tasks, task)} />
+        </>
+      ),
       people: [...new Set([assignedTo, createdBy])].filter((name) => name !== null),
       terms: [
         task.name,

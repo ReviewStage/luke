@@ -222,6 +222,7 @@ export function useMentionAgentsReader(
                 ? undefined
                 : { task: { id: agent.planId, name: names.get(agent.planId) } }),
               archived: agent.archivedAt !== undefined,
+              summary: agent,
             };
           });
         },

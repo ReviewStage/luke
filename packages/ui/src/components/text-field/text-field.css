@@ -64,6 +64,18 @@
     outline: none;
   }
 
+  /* Words written in place in the body's type, as a mail's subject among
+     the lines of its head: no well, no edge and no ring, the caret in them
+     showing focus, as a title written in place does. */
+  .luke-text-field[data-size="inline"],
+  .luke-text-field[data-size="inline"]:focus {
+    height: auto;
+    padding: 0;
+    border: 0;
+    background: none;
+    outline: none;
+  }
+
   .luke-text-field[data-font="mono"] {
     font-family: var(--luke-font-mono);
   }

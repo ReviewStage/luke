@@ -26,4 +26,5 @@ export {
   type ParsedJsonObject,
 } from "./json.js";
 export { jsonSchemaGoldenRoot, settleJsonSchemaGolden } from "./json-schema-golden.js";
+export { paddedTo, pngBytes, webmBytes } from "./media.js";
 export { temporaryDirectory } from "./temporary-directory.js";

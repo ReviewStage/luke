@@ -128,6 +128,7 @@ import {
   listHeadControl,
   VIEW_OPTIONS,
 } from "./inbox-columns.js";
+import { NEW_THREAD } from "./inbox-compose.js";
 import {
   EVERYONES,
   holderKey,
@@ -217,10 +218,10 @@ import { useOpenPlace } from "./use-open-link.js";
  * menu: first what the list holds, To do, the developer's own items they are
  * not done with, asks waiting on them and anything of theirs unread, a
  * settled thread its agent wrote on again among them, or All, every item,
- * the head naming All after the Inbox's name; then Group by, by task, by
- * person, by status (what needs the developer
+ * the head naming All after the Inbox's name; then Group by, None, one
+ * run, by task, by person, or by status (what needs the developer
  * under the attention mark, what waits on others, what is answered, each
- * folding as a task's group does), or None, one run; Sort, the latest
+ * folding as a task's group does); Sort, the latest
  * change first or the oldest first; Whose, everyone's
  * items, the developer's own, or one teammate's by face and name, which a
  * chip over the list then says, its × listing everyone's again; each
@@ -1252,10 +1253,10 @@ function windowEntries(
       label: GROUP_BY,
       icon: <ListIcon />,
       items: [
+        groupBy("None", <ListIcon />, INBOX_GROUPING.NONE),
         groupBy("Task", <DocumentIcon />, INBOX_GROUPING.TASK),
         groupBy("Person", <UsersIcon />, INBOX_GROUPING.PERSON),
         groupBy("Status", <CircleDotIcon />, INBOX_GROUPING.STATUS),
-        groupBy("None", <ListIcon />, INBOX_GROUPING.NONE),
       ],
     },
     {
@@ -1416,7 +1417,13 @@ export function InboxListSkeleton({
         {SKELETON_ROWS.slice(0, rows).map(({ title, preview }) => (
           <ListRow
             key={title}
-            leading={<Skeleton shape={SKELETON_SHAPE.CIRCLE} width={SKELETON_MARK} />}
+            leading={
+              <>
+                {/* Note that the gutter stands here as on every item's row, so the tiles land where their blocks stood. */}
+                <span className="inbox-row-gutter" />
+                <Skeleton shape={SKELETON_SHAPE.CIRCLE} width={SKELETON_MARK} />
+              </>
+            }
             title={<Skeleton width={title} />}
             description={<Skeleton width={preview} />}
             meta={
@@ -1529,6 +1536,11 @@ function ListHead({
   const search = useListSearch(head.search);
   const options = (
     <>
+      {head.onCompose === undefined ? null : (
+        <Tooltip label={NEW_THREAD}>
+          <IconButton icon={<ComposeIcon />} label={NEW_THREAD} onClick={head.onCompose} />
+        </Tooltip>
+      )}
       {search.button}
       <ViewOptions
         shown={shown}
@@ -1670,6 +1682,8 @@ export interface InboxListHead {
   readonly readAll?: InboxReadAll | undefined;
   /** The list's search, which its head's magnifier opens, on the window's Inbox and a task's own alike; none where the list offers none. */
   readonly search?: InboxSearchHead | undefined;
+  /** Opens a New thread in the pane, from the head's compose button; none where the list offers none. */
+  readonly onCompose?: (() => void) | undefined;
 }
 
 /** The words a list's search holds, and the change that narrows the list to them. */

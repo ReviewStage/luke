@@ -44,8 +44,16 @@ import { AUTOMATIONS_PAGE, type InboxChoice, type TasksControl } from "./use-tas
  *
  * Its search, the words typed in the list's head, is held here too, so the
  * page's list and the sidebar's narrow alike, the item the pane shows
- * keeping its place among the steps, as it does under any scope (`inboxList`).
+ * keeping its place among the steps, as it does under any scope (`inboxList`);
+ * and whether a New thread stands in the pane, so the sidebar's head and the
+ * page open the same one.
  */
+
+/** A New thread just opened, before the Inbox it opened on has named the item it stands over. */
+const COMPOSE_PENDING = Symbol("compose-pending");
+
+/** What a New thread stands over: the item chosen as it opened, none where none was, or the one about to be named. */
+type ComposeOver = string | undefined | typeof COMPOSE_PENDING;
 
 /**
  * The tasks the list holds items of, in main's order: each holding one that
@@ -193,6 +201,18 @@ export function useInboxListing(
     workspaceId: tasks.workspace?.id,
     toDo: { groups: standing, holdings, readerId: tasks.me },
   });
+  // A New thread stands in the pane over the item chosen as it opened, and gives way as soon as another is chosen.
+  const [composing, setComposing] = useState<{ readonly over: ComposeOver } | undefined>(undefined);
+  const askedId = asked?.itemId;
+  const composeOn =
+    composing !== undefined && (composing.over === COMPOSE_PENDING || composing.over === askedId);
+  useEffect(() => {
+    if (composing?.over === COMPOSE_PENDING) setComposing({ over: askedId });
+    else if (composing !== undefined && composing.over !== askedId) setComposing(undefined);
+  }, [composing, askedId]);
+  const startCompose = useCallback(() => setComposing({ over: COMPOSE_PENDING }), []);
+  const endCompose = useCallback(() => setComposing(undefined), []);
+  const compose = { on: composeOn, onStart: startCompose, onEnd: endCompose };
   // The list's search, which narrows what it lists, never what it counts.
   const [query, setQuery] = useState("");
   const search = searchTokens(query);
@@ -262,7 +282,12 @@ export function useInboxListing(
     (chosenAgentId !== undefined || !listUnread);
   // Note that an item a link or a notification asked for is never given way to, found or not, and that only an Inbox standing has an item to stand in.
   const standIn =
-    view.open && chosen === undefined && !chosenWaits && !missing && asked?.opened !== true
+    view.open &&
+    chosen === undefined &&
+    !chosenWaits &&
+    !missing &&
+    asked?.opened !== true &&
+    composing === undefined
       ? firstChoice(list)
       : undefined;
   const { onChoose } = view;
@@ -299,6 +324,7 @@ export function useInboxListing(
     chosen,
     filteredOut,
     search: { query, onQuery: setQuery },
+    compose,
     searched,
     missing,
     reading,

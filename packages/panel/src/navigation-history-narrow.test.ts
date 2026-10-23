@@ -913,3 +913,37 @@ test("on a narrow stage another tab chosen in the side panel standing over the p
   act(() => window.history().onBack());
   assert.deepEqual(window.at().panel, { open: true, tab: PAGE_TAB });
 });
+
+test("on a narrow stage a task's way out steps back past its own panes to the page it was opened from, pushing nothing, and Forward opens the task again", () => {
+  const window = mount(SHELL_ROOM.NARROW, {
+    ...ON_TASK,
+    inbox: { open: true, chosen: undefined, listed: true },
+  });
+  assert.equal(window.history().away, undefined, "the Inbox's list has nothing behind it");
+  window.move((held) => ({
+    ...held,
+    inbox: { ...held.inbox, open: false },
+    panel: { open: true, tab: SIDE_PANEL_TAB.PLAN },
+  }));
+  // The task's own panes, each a step of its own: the agents' column, then a page's tab.
+  window.press(() => window.shown().sidePanel.onToggle());
+  window.press(() => window.shown().sidePanel.onShow(DOCUMENT_TASK.id, PAGE_TAB));
+  const steps = window.addresses();
+  assert.equal(steps.length, 3);
+  assert.ok(window.history().away, "the Inbox stands behind the task");
+
+  act(() => window.history().onLeave());
+  assert.equal(window.at().inbox.open, true, "the way out lands on the Inbox at once");
+  assert.deepEqual(window.addresses(), steps, "and pushes nothing");
+  assert.equal(window.held.current().at, 0);
+
+  act(() => window.history().onForward());
+  assert.equal(window.at().inbox.open, false, "Forward opens the task again");
+});
+
+test("on a narrow stage a task with no page behind it, as one a link opened, names none for its way out", () => {
+  const window = mount(SHELL_ROOM.NARROW, { ...ON_TASK, panel: { open: true, tab: PAGE_TAB } });
+  window.press(() => window.shown().sidePanel.onShow(DOCUMENT_TASK.id, SIDE_PANEL_TAB.PLAN));
+  assert.equal(window.history().canGoBack, true, "Back has the task's own pane behind it");
+  assert.equal(window.history().away, undefined, "but the way out has no page to go back to");
+});

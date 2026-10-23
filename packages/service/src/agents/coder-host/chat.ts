@@ -154,8 +154,9 @@ export const CHAT_TOOLS = {
       "the file in your sandbox of a picture you made, such as a screenshot of a UI you rendered, relative to the checkout " +
       "or absolute; or attachmentId, the id of a picture you were told, such as one beside an image you received " +
       '("Image <name> is attachment <id>") or one in a chat line ("[image: <alt> (attachment <id>)]"), which hands it on. ' +
-      `Either is a PNG, JPEG, or WebP of at most ${(CHAT_BOUNDS.MAX_IMAGE_BYTES / 1_000_000).toFixed(1)} MB, and alt ` +
-      "says in a sentence what it shows. An image block reaches the agents a post tells as a real image. " +
+      `Either is a PNG, JPEG, or WebP of at most ${(CHAT_BOUNDS.MAX_IMAGE_BYTES / 1_000_000).toFixed(1)} MB, or, by its path, ` +
+      `a WebM video of at most ${(CHAT_BOUNDS.MAX_VIDEO_BYTES / 1_000_000).toFixed(1)} MB, such as a recording of a flow, which plays in the chat; alt ` +
+      "says in a sentence what it shows. An image block reaches the agents a post tells as a real image, and a video as its words alone. " +
       "ask makes the message something you need answered; an ask needs a key, your own short lowercase slug for it, such as " +
       "branch-protection: posting under a key you used before updates that ask where it was first posted and opens it " +
       "again, so keep an ask current under its key and never ask it twice. ask.response is what you ask: choice (two to " +

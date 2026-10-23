@@ -1773,6 +1773,60 @@ ul.actor-stack {
   padding-inline: max(var(--content-inset), var(--reading-room));
 }
 
+/* A New thread stands in the reading pane at the thread's own measure: To
+   and Subject each a row, its label in the caption's voice before it, the
+   subject in the body's type, and a hairline under it, as a mail's head
+   is, and the reply's box under them, growing into the room left. */
+.desktop-inbox.inbox-compose {
+  padding-block: var(--luke-space-16);
+  padding-inline: max(var(--content-inset), var(--reading-room));
+}
+
+/* To and Subject stand at the box's own width, inside its inset. */
+.inbox-compose-head {
+  padding-inline: var(--luke-space-16);
+}
+
+.inbox-compose-row {
+  display: grid;
+  min-height: var(--luke-space-48);
+  align-items: center;
+  border-bottom: 1px solid var(--luke-color-border);
+  column-gap: var(--luke-space-12);
+  grid-template-columns: var(--luke-space-48) minmax(0, 1fr);
+}
+
+.inbox-compose-label {
+  color: var(--luke-color-text-subtle);
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
+}
+
+.inbox-compose-box {
+  margin-top: var(--luke-space-16);
+}
+
+/* A line written again where it stands (`edit-composer.tsx`) is already in the
+   transcript's measure, so its box takes no inset of its own, and opens out of
+   the bubble's corner as a card the window opens in place does. */
+.transcript-message.is-user[data-editing] .agent-composer {
+  padding: 0;
+}
+
+.edit-composer {
+  transform-origin: top right;
+  animation:
+    luke-menu-arrive var(--luke-duration-quick) var(--luke-motion-exit) both,
+    luke-card-grow var(--luke-duration-fast) var(--luke-spring-fast) both;
+}
+
+/* Let go, it shrinks back into the bubble's corner and fades before the bubble stands again. */
+.edit-composer[data-leaving] {
+  animation:
+    luke-menu-leave var(--luke-duration-exit) var(--luke-motion-exit) both,
+    luke-card-shrink var(--luke-duration-exit) var(--luke-motion-exit) both;
+}
+
 /* Who said or wrote a message on a shared plan, a teammate, Luke, or an
    automation, named by their mark and name in the muted meta voice, the mark
    centred on the words; the reader's own carry no name. A plan card and a
@@ -3385,9 +3439,10 @@ ul.actor-stack {
 }
 
 /* A replaced or withdrawn ask keeps its controls in the agent's message as
-   it offered them, nothing picked and taking nothing, dimmed so they read
-   as what it used to ask rather than something to answer, over the pill
-   saying what replaced it, or why it was withdrawn. */
+   it offered them, nothing picked and taking nothing, stepped back to the
+   muted ink (`SteppedBack`) so they read as what it used to ask rather than
+   something to answer or something answered, over the pill saying what
+   replaced it, or that it was withdrawn and why. */
 .inbox-ask-replaced {
   display: flex;
   min-width: 0;
@@ -3400,7 +3455,22 @@ ul.actor-stack {
   min-width: 0;
   flex-direction: column;
   gap: var(--luke-space-12);
-  opacity: 0.55;
+}
+
+/* A withdrawn ask's pill holds one word, and its why stands under it as a
+   muted sentence rather than wrapping inside the pill. */
+.inbox-ask-withdrawn {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--luke-space-4);
+}
+
+.inbox-ask-why {
+  margin: 0;
+  color: var(--luke-color-text-muted);
+  overflow-wrap: anywhere;
 }
 
 /* The press an answer gave wears its glyph in the tone of what it did,
@@ -3595,6 +3665,20 @@ ul.actor-stack {
   font-weight: var(--luke-weight-medium);
   line-height: var(--luke-type-caption-leading);
   letter-spacing: 0.01em;
+}
+
+/* A phone's tag is the experiment's glyph alone, in the same muted voice,
+   centred on the title, since a glyph has no baseline to sit on. */
+.experiment-tag[data-glyph] {
+  display: inline-flex;
+  align-self: center;
+  padding: 0;
+  border: 0;
+}
+
+.experiment-tag[data-glyph] > svg {
+  width: var(--luke-control-icon);
+  height: var(--luke-control-icon);
 }
 
 /* Automations ---------------------------------------------------------------- */
@@ -5450,33 +5534,39 @@ ul.actor-stack {
   margin-left: auto;
 }
 
-/* A phone's task is headed by its three views (`task-pane-switcher.tsx`):
-   a row of its own clear of the title bar's buttons at its left, the bar
-   taking the rest, each view an even share. The title bar's buttons stand
-   in that row, so the column's bar and the panel's under it start and end
-   at the column's own inset; and the panel draws no strip, its tabs listed
-   by the Activity view in its place. */
-.task-pane-switcher {
-  display: flex;
-  flex: 0 0 auto;
-  align-items: center;
-  min-height: var(--desktop-bar-height);
-  padding: var(--luke-space-8) var(--column-inset) var(--luke-space-8)
-    var(--sidebar-toggle-clearance);
-  border-bottom: 1px solid var(--luke-color-border);
+/* A phone's task is headed by one row of its own (`task-pane-switcher.tsx`),
+   a phone's standard header: the way back's glyph in its start corner, one ⋯
+   in its end corner, and the title of what is on screen centred between them,
+   truncating. The corners are one control wide each, so the title's centre is
+   the row's. It stands in the title bar's buttons' place, which a phone's
+   task does not draw, so it starts at the column's inset as the way back of a
+   Chat place does. The column's bar under it starts and ends at the column's
+   own inset, and the side panel draws no bar at all, the row standing for
+   it. */
+.desktop-shell[data-room="narrow"] .desktop-main .desktop-toolbar.task-head {
+  display: grid;
+  grid-template-columns: var(--luke-control-height) minmax(0, 1fr) var(--luke-control-height);
+  padding-right: var(--column-inset);
+  padding-left: var(--column-inset);
 }
 
-.desktop-shell[data-room="narrow"]
-  .task-pane-switcher
-  ~ .desktop-task
-  :is(.desktop-task-main .desktop-toolbar, .side-panel-bar) {
+.task-head > .desktop-toolbar-heading {
+  min-width: 0;
+  text-align: center;
+}
+
+.task-head > .desktop-toolbar-actions {
+  justify-content: flex-end;
+}
+
+.desktop-shell[data-room="narrow"] .task-head ~ .desktop-task .desktop-task-main .desktop-toolbar {
   --bar-start: var(--column-inset);
   --bar-end: var(--column-inset);
   padding-right: var(--bar-end);
   padding-left: var(--bar-start);
 }
 
-.side-panel[data-pane-switch] .side-panel-tabs {
+.side-panel[data-pane-switch] > .side-panel-bar {
   display: none;
 }
 

@@ -44,6 +44,7 @@ import {
   inboxMessageRequestSchema,
   inboxReadAllSchema,
   inboxReadStateSchema,
+  inboxStartRequestSchema,
 } from "./inbox-wire.js";
 import { memoriesAnswerSchema, memoryIdSchema } from "./memory-wire.js";
 import { catalogModelSchema, modelChoiceSchema, modelProviderSchema } from "./models-wire.js";
@@ -292,7 +293,7 @@ export type CodingAgentListParams = typeof codingAgentListParamsSchema.Type;
 export const codingAgentWorkspaceListParamsSchema = EffectSchema.Struct({
   workspaceId: EffectSchema.NonEmptyString,
   repository: EffectSchema.optionalKey(EffectSchema.NonEmptyString),
-  /** Only the agents whose title or task's name holds these words, whatever their case. */
+  /** Only the agents whose shown name (`agentTabLabel`) or task's name holds these words, whatever their case. */
   words: EffectSchema.optionalKey(
     EffectSchema.NonEmptyString.check(
       EffectSchema.isMaxLength(CODING_AGENT_BOUNDS.MAX_SEARCH_CHARS),
@@ -503,6 +504,14 @@ export const codingAgentStopParamsSchema = EffectSchema.Struct({
 
 export type CodingAgentStopParams = typeof codingAgentStopParamsSchema.Type;
 
+/** One agent taken back to just before one of the developer's lines, as the window names the line by its message id. */
+export const codingAgentRewindParamsSchema = EffectSchema.Struct({
+  agentId: EffectSchema.NonEmptyString,
+  messageId: EffectSchema.NonEmptyString,
+});
+
+export type CodingAgentRewindParams = typeof codingAgentRewindParamsSchema.Type;
+
 /** One agent, as the window asks to read it whole as its own page, on a task or with none. */
 export const codingAgentPageParamsSchema = EffectSchema.Struct({
   agentId: EffectSchema.NonEmptyString,
@@ -701,6 +710,11 @@ export type CodingAgentInboxMessageParams = typeof codingAgentInboxMessageParams
 export const codingAgentInboxMessagedViewSchema = EffectSchema.Union([inboxMessagedSchema, failed]);
 
 export type CodingAgentInboxMessagedView = typeof codingAgentInboxMessagedViewSchema.Type;
+
+/** A thread the window starts with one agent: the start request the service takes whole, its key the window's own. It is heard as a message on a thread is (`codingAgentInboxMessagedViewSchema`). */
+export const codingAgentInboxStartParamsSchema = inboxStartRequestSchema;
+
+export type CodingAgentInboxStartParams = typeof codingAgentInboxStartParamsSchema.Type;
 
 /** One item marked read or unread for the account, as the window asks it: the item, and whether it is to read as unread. */
 export const codingAgentInboxReadStateParamsSchema = EffectSchema.Struct({

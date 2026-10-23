@@ -552,6 +552,19 @@ export const codingAgentMessageRequestSchema = EffectSchema.Struct({
 export type CodingAgentMessageRequest = typeof codingAgentMessageRequestSchema.Type;
 
 /**
+ * Rewinding an agent (POST): the developer's line it goes back to just
+ * before, by its message id, dropping that line and everything after it.
+ * Whatever the agent is doing stops first. Only the conversation goes back,
+ * never the agent's checkout. The answer is the agent's summary as it then
+ * stands.
+ */
+export const codingAgentRewindRequestSchema = EffectSchema.Struct({
+  messageId: trimmedText(CODING_AGENT_BOUNDS.MAX_KEY_CHARS),
+});
+
+export type CodingAgentRewindRequest = typeof codingAgentRewindRequestSchema.Type;
+
+/**
  * Renaming an agent (PATCH): the title as the tab should show it, trimmed
  * and bounded; empty clears it, so the tab falls back to the model's name.
  */
@@ -613,7 +626,7 @@ export const CODING_AGENT_LIST_QUERY = {
   ARCHIVED: "archived",
 } as const;
 
-/** The query a workspace's agents are listed by: the workspace, the repository they are narrowed to, where one is named, words their title or task's name holds, where some are given, and `archived=include` for the archived ones among the rest, as a plan's list takes it. */
+/** The query a workspace's agents are listed by: the workspace, the repository they are narrowed to, where one is named, words their shown name (`agentTabLabel`) or task's name holds, where some are given, and `archived=include` for the archived ones among the rest, as a plan's list takes it. */
 export const CODING_AGENT_WORKSPACE_QUERY = {
   WORKSPACE_ID: "workspaceId",
   REPOSITORY: "repository",
@@ -2147,6 +2160,15 @@ export const codingAgentMessagesAnswerSchema = EffectSchema.Struct({
    */
   turnUsage: EffectSchema.optionalKey(codingAgentUsageSchema),
   context: EffectSchema.optionalKey(codingAgentContextSchema),
+  /**
+   * The journal revision the agent's transcript was last rewound at, on
+   * its own transcript once it has been: a reader whose transcript was read
+   * at another reads it afresh from its newest page rather than joining
+   * this one to what it holds, since a rewind dropped messages a join would
+   * keep. Absent on a worker's page, on one never rewound, and from a
+   * service older than it.
+   */
+  rewound: EffectSchema.optionalKey(countedNumber),
 });
 
 export type CodingAgentMessagesAnswer = typeof codingAgentMessagesAnswerSchema.Type;

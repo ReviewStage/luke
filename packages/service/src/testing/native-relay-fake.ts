@@ -148,6 +148,11 @@ function recordingHarness(
             write("retune", sessionId);
             return RUNNER_CHOICE.WRITTEN;
           }),
+        halt: (sessionId) =>
+          Effect.sync(() => {
+            write("halt", sessionId);
+            return true;
+          }),
       };
       return Option.some(Effect.succeed(sessions));
     },

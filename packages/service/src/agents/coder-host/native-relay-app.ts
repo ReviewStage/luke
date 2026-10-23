@@ -97,6 +97,10 @@ const answered = (
       return Effect.map(sessions.retune(call.sessionId, call.conversationId), (choice) => ({
         choice,
       }));
+    case NATIVE_RELAY_CALL.HALT:
+      return Effect.map(sessions.halt(call.sessionId, call.conversationId), (halted) => ({
+        halted,
+      }));
   }
 };
 
@@ -124,7 +128,7 @@ const nativeRelayEndpoint = /* @__PURE__ */ Effect.fn("web/nativeRelayEndpoint")
       return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
     }
     if ("message" in call) yield* admittedConversation(call, call.message.conversationId);
-    if (call.call === NATIVE_RELAY_CALL.RETUNE) {
+    if (call.call === NATIVE_RELAY_CALL.RETUNE || call.call === NATIVE_RELAY_CALL.HALT) {
       yield* admittedConversation(call, call.conversationId);
     }
     const native = yield* Effect.serviceOption(NativeAgentSessions);

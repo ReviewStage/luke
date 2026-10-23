@@ -840,6 +840,13 @@
     justify-content: flex-end;
   }
 
+  /* A line written again where it stands (`edit-composer.tsx`) is the agent's
+     message box at the measure a sent line's bubble takes, against the
+     column's right edge as the bubble is. */
+  .transcript-message.is-user[data-editing] {
+    align-items: stretch;
+  }
+
   /* A reply is reading text, so it keeps a reading leading rather than the
      body role's. It clips past the keyboard's ring rather than at its edge,
      so a fold, a tool line, or a chip it holds keeps its ring. */
@@ -955,8 +962,8 @@
   outline: none;
 }
 
-/* A replay card's foot: the branch, the pull request, and the way to the
-   whole transcript, over a dashed rule. */
+/* A replay card's foot: the branch and the pull request, over a dashed
+   rule. */
 .replay-foot {
   display: flex;
   flex-wrap: wrap;
@@ -3297,7 +3304,7 @@
   padding-inline: var(--row-inset);
 }
 
-.pull-request-skeleton > .skeleton + .skeleton {
+.pull-request-skeleton > .luke-skeleton + .luke-skeleton {
   margin-top: var(--luke-space-6);
 }
 
@@ -6256,18 +6263,6 @@ svg.lucide {
   max-height: 520px;
   height: auto;
   object-fit: contain;
-}
-
-/* A video an agent recorded and showed as a picture (`agent-pictures.tsx`):
-   played in the frame at its own shape up to the column's, no taller than a
-   picture is drawn, on black while its first frame loads. */
-.picture-video {
-  display: block;
-  max-width: 100%;
-  max-height: 520px;
-  width: auto;
-  height: auto;
-  background: #000;
 }
 
 .picture-caption {

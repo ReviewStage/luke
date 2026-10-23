@@ -295,9 +295,13 @@ references to lines of its repository (a path, the lines, and the commit,
 never the lines themselves), and how it asks to be answered, with any options
 or form fields. An item may carry a picture the agent took in its sandbox,
 such as a screenshot of a page it rendered, with the agent's description of
-up to 300 characters: our service reads the file from the sandbox, keeps the
-image, up to 1.5 MB, in our database beside the item, and serves it only to
-Luke signed in as you. Items and their pictures are stored under your account
+up to 300 characters, or a short video it recorded there of what it did, such
+as clicking through a form it built: our service reads the file from the
+sandbox, keeps the image, up to 1.5 MB, or the video, a WebM of up to 4 MB,
+which plays where the item draws it, in our database beside the item, and
+serves it only to Luke signed in as you. A video is what the agent's own
+screen showed while it recorded, so it can hold whatever that screen did; it
+is left out of the screen recording as the pictures are. Items and their pictures are stored under your account
 and readable by our own operators, like the agent's transcript. The agent can
 change or withdraw an item, and our service keeps each as it last stood; a
 picture goes when the item stops naming it. Your answer, and any note, is
@@ -341,7 +345,10 @@ also ask for an answer, with the answer and who gave it stored beside it. A
 message may carry pictures, each up to 1.5 MB, which our service keeps beside
 the message: one an agent took in its sandbox, which our service reads from
 the sandbox, one a person posted from Luke's window, or one an agent passes on
-from what it was sent. Every
+from what it was sent. A coding agent's message may also carry a short video
+it recorded in its sandbox, a WebM of up to 4 MB, kept the same way, which
+plays in the chat, is left out of the screen recording, and is never handed
+to a coding agent told of the message, which is told only that it is there. Every
 message is stored under the workspace and readable by our own
 operators, like an agent's transcript. Every person in the workspace can
 read every channel and every direct message, one between two other people
@@ -1142,7 +1149,10 @@ sandbox's snapshot is deleted, and once the agent stops it our service keeps the
 video, a WebM of up to 4 MB, beside the transcript as it keeps a screenshot,
 shown to the same members, readable by our operators, and deleted with the
 transcript on the same terms; the model is told it was kept, never handed the
-video, and the screen recording leaves out its player. Apart from such a
+video, and the screen recording leaves out its player. The agent may also post
+such a recording to the task's inbox or its workspace's chat, where it is kept
+and shown as any video an agent posts there is (see "A task's inbox" and "A
+workspace's chat"). Apart from such a
 recording, the page and its live-view frames
 are not kept by us: the frames pass through our service
 to the panel of each member who opens the task, and every such member can

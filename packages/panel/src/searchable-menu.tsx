@@ -91,6 +91,8 @@ export interface MenuRow {
   searchOnly?: boolean | undefined;
   /** Rows the row opens beside itself rather than being picked, as a pinned row's submenu: where a new Browser tab opens. */
   submenu?: Submenu | undefined;
+  /** The card hung beside the row while the pointer rests on it, as ⌘K hangs an agent's: an agent's own card. */
+  card?: React.ReactNode;
 }
 
 /** A run of matching rows under one heading, or under none, each with its place among the matches. */
@@ -237,6 +239,7 @@ function optionGroups(rows: readonly MenuRow[], value: string | undefined): Comb
       disabled: row.disabled !== undefined,
       opens: row.submenu !== undefined,
       current: value === undefined ? undefined : row.id === value,
+      card: row.card,
     })),
   }));
 }

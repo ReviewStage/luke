@@ -41,7 +41,7 @@ import { useKnownNames } from "./use-known-names.js";
  */
 
 /** What a mentioned agent's card names it by: the catalog that names its model, and the reader, whose own agents name no starter. */
-interface MentionedAgentsPlace {
+export interface MentionedAgentsPlace {
   readonly models: readonly CatalogModel[] | undefined;
   readonly me: string | undefined;
 }
@@ -56,6 +56,11 @@ export const MentionedAgents = MentionedAgentsContext.Provider;
 /** The reader, as the window around the chips names them, whose own work a card names no one over. */
 export function useMentionedReader(): string | undefined {
   return useContext(MentionedAgentsContext).me;
+}
+
+/** What the window around the chips names an agent's card by: the catalog that names its model, and the reader. */
+export function useMentionedPlace(): MentionedAgentsPlace {
+  return useContext(MentionedAgentsContext);
 }
 
 /** What a card's foot says of the task an agent works on. */
