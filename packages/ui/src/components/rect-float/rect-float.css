@@ -1,0 +1,20 @@
+/* rect-float.css -- the layer that stands by a box in the window
+   (`rect-float.tsx`): laid in its owner's positioned box at the edge of the
+   box it stands by, as wide as what it holds, and moved the gap off it,
+   above by its own height too. What it holds draws its own surface. */
+
+@layer components {
+  .luke-rect-float {
+    position: absolute;
+    z-index: 3;
+    width: max-content;
+  }
+
+  .luke-rect-float[data-side="above"] {
+    translate: 0 calc(-100% - var(--luke-space-4));
+  }
+
+  .luke-rect-float[data-side="below"] {
+    translate: 0 var(--luke-space-4);
+  }
+}

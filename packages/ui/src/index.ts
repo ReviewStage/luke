@@ -80,6 +80,7 @@ export * from "./components/prose/prose.js";
 export * from "./components/provider-button/provider-button.js";
 export * from "./components/public-page/public-page.js";
 export * from "./components/readable-controls/readable-controls.js";
+export * from "./components/rect-float/rect-float.js";
 export * from "./components/remote-surface/remote-surface.js";
 export * from "./components/resize-corner/resize-corner.js";
 export * from "./components/resize-edge/resize-edge.js";

@@ -65,6 +65,7 @@ import { PROGRESS_EXAMPLE } from "./examples/progress";
 import { PROSE_EXAMPLE } from "./examples/prose";
 import { PROVIDER_BUTTONS_EXAMPLE } from "./examples/provider-buttons";
 import { PUBLIC_PAGE_EXAMPLE } from "./examples/public-page";
+import { RECT_FLOAT_EXAMPLE } from "./examples/rect-float";
 import { REMOTE_SURFACE_EXAMPLE } from "./examples/remote-surface";
 import { RESIZE_CORNERS_EXAMPLE } from "./examples/resize-corners";
 import { RESIZE_EDGES_EXAMPLE } from "./examples/resize-edges";
@@ -165,6 +166,7 @@ export const EXAMPLES: readonly Example[] = [
   FORMAT_TOOLBAR_EXAMPLE,
   BLOCK_MENU_EXAMPLE,
   LINK_FIELD_EXAMPLE,
+  RECT_FLOAT_EXAMPLE,
   NAV_ITEMS_EXAMPLE,
   NOTE_LINES_EXAMPLE,
   ONE_LINE_EXAMPLE,

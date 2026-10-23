@@ -120,5 +120,6 @@
 @import "./components/block-menu/block-menu.css";
 @import "./components/format-toolbar/format-toolbar.css";
 @import "./components/link-field/link-field.css";
+@import "./components/rect-float/rect-float.css";
 /* Last, so a press's pulse plays over every shape's resting look. */
 @import "./press-pulse.css";

@@ -42,6 +42,7 @@ import {
   settledPicture,
 } from "./picture-node.js";
 import { planMentions } from "./plan-mentions.js";
+import { editorFormatting, formatReports } from "./writing-format.js";
 import { withoutTipTapChords, writingKeys } from "./writing-keys.js";
 
 /**
@@ -56,7 +57,8 @@ import { withoutTipTapChords, writingKeys } from "./writing-keys.js";
  * document could not draw it. A heading wears the read view's own class and
  * level, so the editor's words stand where the drawn words stood and opening
  * the text moves nothing. Each untouched block keeps its exact source
- * (`./document-source.ts`). A Mermaid code block stays code, its diagram
+ * (`./document-source.ts`). A format toolbar over the text hears its
+ * selection and acts on it (`./writing-format.ts`). A Mermaid code block stays code, its diagram
  * previewed under it where the panel draws one (`./diagram-preview.ts`).
  * Esc and ⌘↩ finish, naming the section the caret
  * stood in; ↑ on the text's first line goes to the title above it.
@@ -352,6 +354,7 @@ export function mountPlanEditor(host: HTMLElement, props: PlanEditorProps): Plan
     drawDiagram,
     pictures,
     anchors,
+    format,
   } = props;
   const extensions = markdownExtensions(mentions?.drawMention, mentions?.namesMention, pictures);
   const manager = documentManager(extensions);
@@ -375,6 +378,7 @@ export function mountPlanEditor(host: HTMLElement, props: PlanEditorProps): Plan
       Placeholder.configure({ placeholder }),
       commentAnchorMark,
       ...(drawDiagram === undefined ? [] : [diagramPreview(drawDiagram)]),
+      ...formatReports(format),
     ],
     content: opened.content,
     contentType: "json",
@@ -435,6 +439,7 @@ export function mountPlanEditor(host: HTMLElement, props: PlanEditorProps): Plan
   let onWordsAs = onWords === undefined ? undefined : editor.state;
   if (focus) editor.view.focus();
   return {
+    ...editorFormatting(editor),
     take: (sent, merged) => {
       const answer = documentTook(editor, manager, held, sent, merged);
       held = answer.held;

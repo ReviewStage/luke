@@ -72,6 +72,11 @@ const STAND_IN: PlanEditorModule = {
       removePicture: () => undefined,
       selectionSpan: () => undefined,
       blockSpan: () => undefined,
+      selectionBox: () => undefined,
+      toggleMark: () => undefined,
+      turnInto: () => undefined,
+      setLink: () => undefined,
+      focus: () => undefined,
       destroy: () => {
         editor.destroyed = true;
       },
