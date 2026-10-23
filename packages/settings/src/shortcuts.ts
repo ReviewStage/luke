@@ -64,6 +64,7 @@ export const APP_COMMAND = {
   EXIT_SETTINGS: "exit-settings",
   EXIT_VERSION_HISTORY: "exit-version-history",
   INBOX: "inbox",
+  TASKS: "tasks",
   INBOX_LIST: "inbox-list",
   PREVIOUS_INBOX_ITEM: "previous-inbox-item",
   NEXT_INBOX_ITEM: "next-inbox-item",
@@ -436,6 +437,8 @@ export const APP_SHORTCUTS = {
     chord: { key: SHORTCUT_KEY.ESCAPE, bare: true },
   },
   [APP_COMMAND.INBOX]: { label: "Inbox", chord: { key: SHORTCUT_KEY.I, shift: true } },
+  // Note that the Tasks page takes ⇧⌘B, for the Board it once was alone, because ⇧⌘T reopens a closed tab.
+  [APP_COMMAND.TASKS]: { label: "Tasks", chord: { key: SHORTCUT_KEY.B, shift: true } },
   [APP_COMMAND.INBOX_LIST]: {
     label: "Back to inbox list",
     chord: { key: SHORTCUT_KEY.ESCAPE, bare: true },
@@ -570,6 +573,7 @@ export const APP_SHORTCUT_GROUPS = [
       APP_COMMAND.EXIT_VERSION_HISTORY,
       APP_COMMAND.ASK_LUKE,
       APP_COMMAND.INBOX,
+      APP_COMMAND.TASKS,
       APP_COMMAND.INBOX_LIST,
       APP_COMMAND.PREVIOUS_INBOX_ITEM,
       APP_COMMAND.NEXT_INBOX_ITEM,

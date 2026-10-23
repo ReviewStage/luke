@@ -1293,8 +1293,8 @@ function useFloatingSidebar(sidebar: SidebarCollapse): FloatingSidebar {
 
 /**
  * The Tasks page's row, under the Inbox's. A press opens the listed
- * workspace's tasks as a List or a Board (`tasks-page.tsx`), and the row is
- * the place shown while it stands. It is always offered.
+ * workspace's tasks as a List or a Board (`tasks-page.tsx`), as its chord
+ * does, and the row is the place shown while it stands. It is always offered.
  */
 function SidebarTasksRow({
   current,
@@ -1309,6 +1309,8 @@ function SidebarTasksRow({
     <NavItem
       icon={<ListTodoIcon />}
       current={current ? NAV_CURRENT.PAGE : undefined}
+      aria-keyshortcuts={commandKeyshortcuts(APP_COMMAND.TASKS)}
+      shortcut={<Shortcut chord={APP_SHORTCUTS[APP_COMMAND.TASKS].chord} />}
       disabled={disabled}
       onClick={onOpen}
     >

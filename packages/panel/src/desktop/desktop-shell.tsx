@@ -417,6 +417,15 @@ function usePlaceCommands(
         }
       : undefined,
   );
+  useAppCommand(
+    APP_COMMAND.TASKS,
+    pastGate && tasks.signedIn
+      ? () => {
+          if (tab !== PANEL_TAB.TASKS) onTabChange(PANEL_TAB.TASKS);
+          tasks.boardView.onOpen();
+        }
+      : undefined,
+  );
   // The Admin place is an admin's alone, so ⌘K offers it only on the terms its sidebar row stands on.
   const adminOn = useAdminAccess();
   useAppCommand(
