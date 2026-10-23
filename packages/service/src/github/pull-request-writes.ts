@@ -24,7 +24,9 @@ import {
   type FileViewedState,
   MERGE_METHOD,
   type MergeMethod,
+  PULL_REQUEST_REFUSAL,
   PULL_REQUEST_WRITE_BOUNDS,
+  type PullRequestRefusal,
   type PullRequestReviewerRef,
   REVIEW_COMMENT_MODE,
   REVIEW_COMMENT_SIDE,
@@ -56,9 +58,10 @@ class GitHubTokenRefused extends Data.TaggedError("GitHubTokenRefused") {
   }
 }
 
-/** GitHub refused the change itself; its words, cut to the bound, are the member's to read. */
+/** GitHub refused the change itself, or it was refused before GitHub on what GitHub answered; its words, cut to the bound, are the member's to read, and why where the tab acts on it. */
 class GitHubWriteRefused extends Data.TaggedError("GitHubWriteRefused")<{
   readonly words: string;
+  readonly reason?: PullRequestRefusal;
 }> {
   override get message(): string {
     return "GitHub refused the change";
@@ -783,6 +786,70 @@ export const setPullRequestTitle = /* @__PURE__ */ Effect.fn("web/setPullRequest
 ): Effect.fn.Return<void, GitHubWriteFailure, HttpClient.HttpClient> {
   yield* githubWrite(token, TITLE_MUTATION, { id: pullRequestId, title }, Schema.Unknown);
 });
+
+const DESCRIPTION_QUERY = `query($id: ID!) {
+  node(id: $id) { ... on PullRequest { body } }
+}`;
+
+const DescriptionSchema = Schema.Struct({
+  node: Schema.NullOr(Schema.Struct({ body: Schema.optionalKey(Schema.String) })),
+});
+
+const DESCRIPTION_MUTATION = `mutation($id: ID!, $body: String!) {
+  updatePullRequest(input: { pullRequestId: $id, body: $body }) { pullRequest { id } }
+}`;
+
+/** What the member is told where the description changed on GitHub since they opened it. */
+const DESCRIPTION_CHANGED =
+  "The description changed on GitHub since you opened it. Reload it to see the change before saving yours.";
+
+/** A description's words as compared, so one saved with Windows line endings reads as the same words saved with Unix ones. */
+function comparable(body: string): string {
+  return body.replaceAll("\r\n", "\n");
+}
+
+/** A description as the member wrote it, and as it stood when they began. */
+export interface DescriptionEdit {
+  readonly body: string;
+  readonly expectedBody: string;
+}
+
+/**
+ * The pull request's description changed to the one given, on the member's
+ * token, once GitHub's own reads as the one they began from, line endings
+ * aside: where it changed since, as an edit on github.com changes it, the
+ * write is refused as such (`DESCRIPTION_CHANGED`) and nothing is written,
+ * so the member's draft never lands over another's words. Note that
+ * GitHub offers no write conditional on a description, so an edit landing
+ * between the read and the write is still written over.
+ */
+export const setPullRequestDescription = /* @__PURE__ */ Effect.fn("web/setPullRequestDescription")(
+  function* (
+    token: Redacted.Redacted,
+    pullRequestId: string,
+    edit: DescriptionEdit,
+  ): Effect.fn.Return<void, GitHubWriteFailure, HttpClient.HttpClient> {
+    const read = yield* githubWrite(
+      token,
+      DESCRIPTION_QUERY,
+      { id: pullRequestId },
+      DescriptionSchema,
+    );
+    if (read.node === null) return yield* refusalOf([NOT_RESOLVED]);
+    if (comparable(read.node.body ?? "") !== comparable(edit.expectedBody)) {
+      return yield* new GitHubWriteRefused({
+        words: DESCRIPTION_CHANGED,
+        reason: PULL_REQUEST_REFUSAL.DESCRIPTION_CHANGED,
+      });
+    }
+    yield* githubWrite(
+      token,
+      DESCRIPTION_MUTATION,
+      { id: pullRequestId, body: edit.body },
+      Schema.Unknown,
+    );
+  },
+);
 
 /**
  * The pull request what a reaction names is on, read on the member's token:
