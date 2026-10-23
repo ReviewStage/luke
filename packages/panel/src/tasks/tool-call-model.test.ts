@@ -999,6 +999,7 @@ test("a post from version 5 is a row naming its thread's title, or its key where
         recommended: ["Email", "SMS"],
       },
     },
+    output: undefined,
   });
   assert.deepEqual(several.input, {
     kind: TOOL_BLOCK.TEXT,
