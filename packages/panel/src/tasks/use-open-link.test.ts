@@ -126,3 +126,14 @@ test("on a task, its agent's pull request opens in its own Pull request tab, any
     [AGENT, 41],
   ]);
 });
+
+test("on a task, an archived agent's pull request, merged or not, opens in its own Pull request tab too", () => {
+  const opened: unknown[] = [];
+  const openHere = openPullRequestsHere(
+    { pullRequests: new Map([[AGENT, { url: URL }]]), agentIds: [], heldIds: [AGENT] },
+    (agentId, number) => opened.push([agentId, number]),
+    "acme/relay",
+  );
+  assert.equal(openHere(URL), true);
+  assert.deepEqual(opened, [[AGENT, undefined]]);
+});

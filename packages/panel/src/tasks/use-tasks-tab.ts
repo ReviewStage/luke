@@ -306,7 +306,11 @@ interface InboxViewControl {
   /** The pages of the chosen item's task as they move, which the panel beside it opens; none until read, or for an item of an agent with no task. */
   readonly pages: readonly PageLine[] | undefined;
   /** Tells the agents the Inbox read of the chosen item's task, whose Pull request tabs the panel beside it draws (`use-inbox-task-agents.ts`). */
-  readonly onTaskAgents: (taskId: string, agentIds: readonly string[]) => void;
+  readonly onTaskAgents: (
+    taskId: string,
+    agentIds: readonly string[],
+    heldIds?: readonly string[] | undefined,
+  ) => void;
 }
 
 /**
@@ -1723,6 +1727,12 @@ export function useTasksTab(input: {
       : (pageAgents ?? agents.agentIds),
     input.room,
     cloudBrowsers,
+    // Every agent of the task, an archived one among them, whose Pull request tab stands as a live agent's does.
+    inboxView !== undefined
+      ? inboxAgent === undefined
+        ? inboxTaskAgents.heldIds
+        : inboxAgents
+      : (pageAgents ?? agents.heldIds),
   );
   // A task whose column shows no tab stands on its plan: the side panel is
   // shown on its Plan tab, once for each task as it comes to show none, so a
@@ -3287,7 +3297,8 @@ export function useTasksTab(input: {
   );
   // Whether the open task's strips draw a closed tab of it again: an agent's
   // while the agent is not archived, the Inbox while the task holds an
-  // agent, and a subagent's, a Changes or Terminal tab, or a page's on the strip's own
+  // agent, a Changes tab while its agent is the task's, archived or not,
+  // and a subagent's, a Terminal tab, or a page's on the strip's own
   // terms. Note that what the task has not read yet counts as drawn, as the
   // strips stand a tab until the read says otherwise.
   const drawsAgain = (closed: ClosedTab): boolean => {
@@ -3303,7 +3314,7 @@ export function useTasksTab(input: {
     }
     if (isSubagentTab(tab))
       return drawsSubagent(tab, { agents: mainTabs.openAgents, subagents: NO_IDS });
-    if (isChangesTab(tab)) return drawsChanges(tab, { taskAgents: agentIds });
+    if (isChangesTab(tab)) return drawsChanges(tab, { taskAgents: agents.heldIds });
     if (isPageTab(tab)) return viewed.pages === undefined || pages.includes(tab.page);
     if (isTerminalTab(tab)) return drawsTerminal(tab, { taskAgents: agentIds });
     if (isMacTerminalTab(tab)) return drawsMacTerminal(tab, { taskAgents: agentIds });

@@ -250,6 +250,9 @@ async function inbox(
       [],
       [FUNNEL.id],
       taskAgents.agentIds,
+      undefined,
+      undefined,
+      taskAgents.heldIds,
     );
     control = sidePanel;
     // The window's keymap, which hears a chord as the window's root mounts it.
@@ -444,9 +447,9 @@ test("a click into a Browser tab's page beside the Inbox hands the panel the key
   assert.deepEqual(panelTabs(container), ["▸ invites.ts"]);
 });
 
-test("closing the last tab drawn beside the Inbox shuts the panel, as on a task's page, though the task keeps an archived agent's Pull request tab", async () => {
+test("an archived agent's Pull request tab stands beside the Inbox as any other, and closing the last tab drawn shuts the panel, as on a task's page", async () => {
   const { container, panel } = await inbox();
-  // The archived agent's tab, as one opened on the task's page before the agent was archived, which no strip draws.
+  // The archived agent's tab, as one opened on the task's page before the agent was archived, which still draws its pull request.
   act(() => panel().onChoose({ changes: ARCHIVED.id }));
   await settle();
   await pressChip(container, "relay#42");
