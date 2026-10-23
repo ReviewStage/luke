@@ -809,3 +809,66 @@ it.effect("never starts app-server on the plan when it does not know its own bun
     assert.deepEqual(spawned, []);
   }),
 );
+
+/** A page of the thread's turns, newest first, each naming the client id of the line it took. */
+function turnsPage(turns: readonly { readonly id: string; readonly line: string }[]): Exchange {
+  return {
+    method: "thread/turns/list",
+    reply: [
+      {
+        id: 90,
+        result: {
+          data: turns.map(({ id, line }) => ({
+            id,
+            items: [{ type: "userMessage", id: `${id}-item`, clientId: line, content: [] }],
+          })),
+          nextCursor: null,
+          backwardsCursor: null,
+        },
+      },
+    ],
+  };
+}
+
+const REVERTED: Exchange = {
+  method: "thread/revert",
+  reply: [{ id: 91, result: { turnsBackwardsCursor: null, itemsBackwardsCursor: null } }],
+};
+
+it.effect("reverts a rewound thread to before the turn that took the line the rewind dropped", () =>
+  Effect.gen(function* () {
+    const luke = fakeLuke();
+    const page = turnsPage([
+      { id: "turn-3", line: "6b1f5d0c-3a51-4c56-9d0e-2f1c4b7a8e09" },
+      { id: "turn-2", line: LINE.STEERED },
+      { id: "turn-1", line: "6b1f5d0c-3a51-4c56-9d0e-2f1c4b7a8e08" },
+    ]);
+    const script: Script = { exchanges: [...RESUME, page, REVERTED, RESUMED_TURN] };
+    const { spawned, write, run } = yield* launch([script], luke);
+    yield* write({ ...CONFIG, threadId: THREAD, rewindBefore: LINE.STEERED });
+    yield* write(message("What exact line did you first write to PROBE.md?", LINE.FIRST));
+
+    assert.equal(yield* Fiber.join(run), RUNNER_END.TURN_ENDED);
+    const [process] = spawned;
+    assert.deepEqual(process?.unexpected, []);
+    assert.deepEqual(received(process, "thread/revert"), [
+      { threadId: THREAD, beforeTurnId: "turn-2" },
+    ]);
+  }),
+);
+
+it.effect("resumes a thread whole where no turn took the line the rewind dropped", () =>
+  Effect.gen(function* () {
+    const luke = fakeLuke();
+    const page = turnsPage([{ id: "turn-1", line: "6b1f5d0c-3a51-4c56-9d0e-2f1c4b7a8e08" }]);
+    const script: Script = { exchanges: [...RESUME, page, RESUMED_TURN] };
+    const { spawned, write, run } = yield* launch([script], luke);
+    yield* write({ ...CONFIG, threadId: THREAD, rewindBefore: LINE.STEERED });
+    yield* write(message("What exact line did you first write to PROBE.md?", LINE.FIRST));
+
+    assert.equal(yield* Fiber.join(run), RUNNER_END.TURN_ENDED);
+    const [process] = spawned;
+    assert.deepEqual(process?.unexpected, []);
+    assert.deepEqual(received(process, "thread/revert"), []);
+  }),
+);

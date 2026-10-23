@@ -133,6 +133,7 @@ export const AGENT_ACT_KIND = {
   CODING_AGENTS_RENAME: "codingAgents.rename",
   CODING_AGENTS_SERVERS: "codingAgents.servers",
   CODING_AGENTS_STOP: "codingAgents.stop",
+  CODING_AGENTS_REWIND: "codingAgents.rewind",
   CODING_AGENTS_ARCHIVE: "codingAgents.archive",
   CODING_AGENTS_PIN: "codingAgents.pin",
   /** The account's operator in a workspace, Luke, ensured: the one standing, made where none stands, or, with a reset, a fresh one in place of it. */

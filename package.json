@@ -2,6 +2,11 @@
   "name": "luke",
   "version": "0.19.0",
   "private": true,
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ReviewStage/luke"
+  },
   "description": "Luke is a macOS app for planning a feature by voice before you hand it to a coding agent",
   "packageManager": "pnpm@10.34.5",
   "engines": {

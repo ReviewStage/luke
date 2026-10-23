@@ -21,11 +21,10 @@ function providerHint(): SocialProvider | undefined {
 
 /**
  * The page opens on the provider's mark, unbadged while it offers that
- * provider's button, or on Luke's, badged as failed, when the address
- * names no provider, which is a sign-in that cannot go on and offers Open
- * Luke instead. The closing note is its own line rather than a run-on: with
- * no provider to continue with there is no action block between it and the
- * copy above.
+ * provider's button. An address that names no provider is a sign-in that
+ * cannot go on, so it opens on Luke's mark badged as failed, says so in the
+ * consent page's failure wording, and offers Open Luke instead; it drops the
+ * closing note, which promises a confirmation that will never come.
  */
 function SignIn(): React.JSX.Element {
   const [provider] = useState(providerHint);
@@ -44,11 +43,11 @@ function SignIn(): React.JSX.Element {
   return (
     <AuthPage
       mark={<AuthMark provider={provider} tone={provider ? undefined : LANDING_TONE.FAILED} />}
-      title="Sign in to Luke"
-      description={provider ? undefined : "Luke could not verify which provider you chose."}
+      title={provider ? "Sign in to Luke" : "Luke could not continue"}
+      description={provider ? undefined : "Start sign-in again."}
       error={failed ? SIGN_IN_FAILURE : undefined}
       action={provider ? undefined : openLukeFromMac()}
-      footnote="You can close this window after Luke confirms the sign-in."
+      footnote={provider ? "You can close this window after Luke confirms the sign-in." : undefined}
     >
       {provider ? (
         <SocialProviderButton

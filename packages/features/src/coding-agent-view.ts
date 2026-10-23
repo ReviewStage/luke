@@ -503,6 +503,14 @@ export const codingAgentStopParamsSchema = EffectSchema.Struct({
 
 export type CodingAgentStopParams = typeof codingAgentStopParamsSchema.Type;
 
+/** One agent taken back to just before one of the developer's lines, as the window names the line by its message id. */
+export const codingAgentRewindParamsSchema = EffectSchema.Struct({
+  agentId: EffectSchema.NonEmptyString,
+  messageId: EffectSchema.NonEmptyString,
+});
+
+export type CodingAgentRewindParams = typeof codingAgentRewindParamsSchema.Type;
+
 /** One agent, as the window asks to read it whole as its own page, on a task or with none. */
 export const codingAgentPageParamsSchema = EffectSchema.Struct({
   agentId: EffectSchema.NonEmptyString,

@@ -386,6 +386,11 @@ function fakeService() {
         asked.push(`stop:${agentId}`);
         return { agent: { ...AGENT, status: CODING_AGENT_STATUS.CANCELLED } };
       }),
+    rewind: (agentId, messageId) =>
+      Effect.sync(() => {
+        asked.push(`rewind:${agentId}:${messageId}`);
+        return { agent: AGENT };
+      }),
     delete: (agentId) =>
       Effect.sync(() => {
         asked.push(`delete:${agentId}`);
@@ -1672,6 +1677,45 @@ it.effect(
       yield* settled;
       assert.equal(newest(), read);
       assert.ok(!asked.some((ask) => ask.startsWith("messages-now")));
+    }),
+);
+
+it.effect(
+  "a page read at another rewind than the window's has the follow read the newest page afresh and tell it as the newest, which the window takes in place of what it drew",
+  () =>
+    Effect.gen(function* () {
+      const {
+        call,
+        asked,
+        pages,
+        sealTranscript,
+        pageNow: script,
+        pageNewest,
+        realtime,
+      } = yield* subject();
+      sealTranscript(SEALED_TRANSCRIPT);
+      pageNewest(newestPage("2:0", "Writing the expiry."));
+      script(pageNow("2:0", { holds: true }));
+      yield* call(GATEWAY_METHOD.CODING_AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
+      yield* settled;
+      transcriptRows(realtime, 2);
+      yield* settled;
+
+      // The agent is taken back to before its second line: every page says so from now on.
+      const rewound = { ...newestPage("3:1", "Reading the invites."), rewound: 1 };
+      pageNewest(rewound);
+      script({ ...pageNow("3:1", { holds: true }), rewound: 1 });
+      transcriptRows(realtime, 3, 2);
+      yield* settled;
+
+      const newestTold = pages().filter(
+        (told) => isRecord(told) && isRecord(told.page) && told.page.newest === true,
+      );
+      assert.deepEqual(newestTold.at(-1), {
+        transcript: FOLLOWED,
+        page: { ...rewound, newest: true, caughtUp: false },
+      });
+      assert.equal(asked.filter((ask) => ask.startsWith("messages-newest")).length, 2);
     }),
 );
 

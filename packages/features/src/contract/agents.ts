@@ -34,6 +34,7 @@ import {
   codingAgentPinRequestSchema,
   codingAgentRenameRequestSchema,
   codingAgentReviewOptionsAnswerSchema,
+  codingAgentRewindRequestSchema,
   codingAgentServersRequestSchema,
   codingAgentStartRequestSchema,
   MAXIMUM_START_BODY_BYTES,
@@ -194,6 +195,18 @@ export const agentsContract = {
   stop: hostedProcedure
     .meta(openapi({ method: HTTP_METHOD.POST, path: `${AGENT_PATH}/stop` }))
     .input(idParams)
+    .output(EffectSchema.flip(codingAgentAnswerSchema)),
+  /** One agent taken back to just before one of the developer's lines, stopped first where it still works. */
+  rewind: hostedProcedure
+    .meta(bodyCap(CHOICE_BODY_BYTES))
+    .meta(
+      openapi({
+        method: HTTP_METHOD.POST,
+        path: `${AGENT_PATH}/rewind`,
+        inputStructure: "detailed",
+      }),
+    )
+    .input(exactBodyInput(idParams, codingAgentRewindRequestSchema))
     .output(EffectSchema.flip(codingAgentAnswerSchema)),
   /** One agent's changes, or those of the pull request of its repository the query numbers. */
   changes: hostedProcedure

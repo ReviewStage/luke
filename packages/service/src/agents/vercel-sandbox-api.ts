@@ -48,8 +48,8 @@ export const SESSION_TAG = "sessionId";
 /** The status a sandbox is up in, which the list of running sandboxes filters on. */
 export const RUNNING_STATUS = "running";
 
-/** Vercel's answer for a sandbox or session already gone. */
-const NOT_FOUND_STATUS = 404;
+/** Vercel's answer for a sandbox, session, or snapshot already gone. */
+export const NOT_FOUND_STATUS = 404;
 
 /**
  * Vercel's answer for a resume or a create whose snapshot is gone: expired

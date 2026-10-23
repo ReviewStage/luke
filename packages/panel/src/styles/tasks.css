@@ -840,6 +840,13 @@
     justify-content: flex-end;
   }
 
+  /* A line written again where it stands (`edit-composer.tsx`) is the agent's
+     message box at the measure a sent line's bubble takes, against the
+     column's right edge as the bubble is. */
+  .transcript-message.is-user[data-editing] {
+    align-items: stretch;
+  }
+
   /* A reply is reading text, so it keeps a reading leading rather than the
      body role's. It clips past the keyboard's ring rather than at its edge,
      so a fold, a tool line, or a chip it holds keeps its ring. */
@@ -955,8 +962,8 @@
   outline: none;
 }
 
-/* A replay card's foot: the branch, the pull request, and the way to the
-   whole transcript, over a dashed rule. */
+/* A replay card's foot: the branch and the pull request, over a dashed
+   rule. */
 .replay-foot {
   display: flex;
   flex-wrap: wrap;
@@ -2706,6 +2713,11 @@
   margin-inline-start: auto;
 }
 
+/* The header's Preview where several deployments serve, holding the menu it drops. */
+.pull-request-preview {
+  display: flex;
+}
+
 /* A narrow header, a phone's or the side panel's at its least, gives the
    title a line of its own over the pill and the controls, which stand
    under it at the row's two ends; beside them it would wrap a word to a
@@ -2724,6 +2736,16 @@
   .pull-request-title-row > .pull-request-title-wait {
     flex-basis: 100%;
     padding-block: 0;
+  }
+
+  /* Note that Preview, Run, and the merge control together may outgrow the
+     side panel at its least, so they wrap onto lines of their own, held to
+     the row's end, rather than run past an edge that clips them. */
+  .pull-request-title-actions {
+    min-width: 0;
+    flex: 0 1 auto;
+    flex-wrap: wrap;
+    justify-content: flex-end;
   }
 }
 

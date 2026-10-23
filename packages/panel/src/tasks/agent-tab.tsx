@@ -43,6 +43,7 @@ import {
 } from "@luke/ui";
 import { ACTOR_KIND, ACTOR_STATE, type Actor } from "@luke/ui/actor-model";
 import { skillWord } from "@luke/ui/skill-mention";
+import { useDisclosure } from "@luke/ui/use-disclosure";
 import type { VirtualRowsHandle } from "@luke/ui/virtual-rows";
 import {
   callEndedLine,
@@ -159,6 +160,7 @@ import {
 } from "./coding-agent-model.js";
 import { ContinueAgent, ContinuedComposerNote, ContinuedTrail } from "./continue-agent.js";
 import { CopyMessageAction } from "./copy-message.js";
+import { EditComposer } from "./edit-composer.js";
 import { ForkedToLine, useForkOffered } from "./fork-action.js";
 import { type ForkCut, forkCutOf, openReply } from "./fork-model.js";
 import { linkChip } from "./mention-chip.js";
@@ -172,6 +174,7 @@ import { PlanPictures } from "./plan-pictures.js";
 import { ReplayCard, type ReplayPlace, replayPlace } from "./replay-card.js";
 import { briefAgent, replayOpening } from "./replay-card-model.js";
 import { REPLY_SCOPE, ReplyToSelection } from "./reply-to-selection.js";
+import { REWIND_ACTION, RewindProvider, rewindPoints, useMessageEdit } from "./rewind-action.js";
 import { SentTime } from "./sent-time.js";
 import { MentionedServers, SentToAgent } from "./server-card.js";
 import { SentWords, useSkill } from "./skill-chip.js";
@@ -1283,6 +1286,12 @@ export function AgentMessage({
   const words = messageWords(message);
   const forkOffered = useForkOffered();
   const sending = useLineSending(message.id);
+  const editor = useMessageEdit(message.id);
+  // Note that a box let go stays drawn, on the doors it was last handed, until its exit has played.
+  const editing = useDisclosure(editor !== undefined);
+  const lastEditor = useRef(editor);
+  if (editor !== undefined) lastEditor.current = editor;
+  const drawnEditor = editor ?? (editing.mounted ? lastEditor.current : undefined);
   if (plan) {
     return (
       <PlanCard
@@ -1306,6 +1315,21 @@ export function AgentMessage({
     const sentAt = message.sentAt;
     // An inbox answer or thread message reads back without the item's key, which is the agent's.
     const shown = inboxLineWords(words);
+    // A line open for writing again is written where it stands.
+    if (drawnEditor !== undefined) {
+      return (
+        <Message from={message.role} data-message-id={message.id} data-editing="">
+          <div
+            ref={editing.ref}
+            className="edit-composer"
+            data-leaving={editing.leaving ? "" : undefined}
+            inert={editing.leaving}
+          >
+            <EditComposer message={message} words={shown} edit={drawnEditor} />
+          </div>
+        </Message>
+      );
+    }
     return (
       <Message from={message.role} data-message-id={message.id}>
         <MessageFileChips message={message} sending={sending} />
@@ -1324,6 +1348,7 @@ export function AgentMessage({
                 words={shown}
                 messageId={message.id}
                 placement={MESSAGE_ACTIONS_PLACEMENT.INLINE}
+                rewind={REWIND_ACTION.EDIT}
               />
             )}
             {named}
@@ -1372,6 +1397,7 @@ export function AgentMessage({
             forkable={forks}
             forkCut={forkCut}
             placement={MESSAGE_ACTIONS_PLACEMENT.INLINE}
+            rewind={REWIND_ACTION.REVERT}
           />
         ) : null
       }
@@ -1759,6 +1785,7 @@ function AgentTranscriptView({
   failed,
   working,
   sessionStarting = false,
+  rewindOut = false,
   startedAt,
   ended,
   endReason = FAILURE_REASON.OTHER,
@@ -1801,6 +1828,8 @@ function AgentTranscriptView({
   working: boolean;
   /** Whether the agent's session has not run its first turn yet, which its working line says. */
   sessionStarting?: boolean;
+  /** Whether a rewind is out, which its working line says until the service answers. */
+  rewindOut?: boolean;
   /** When the run under way began, which the working line counts from; none where unknown, when the line only shimmers. */
   startedAt?: number | undefined;
   /** The line the transcript ends on once its turn was stopped or failed (`endLineParts`); nothing otherwise. */
@@ -2003,7 +2032,7 @@ function AgentTranscriptView({
             {working ? (
               <WorkingLine
                 startedAt={startedAt}
-                words={WORKING_PHASE_WORDS[agentWorkingPhase(messages, sessionStarting)]}
+                words={WORKING_PHASE_WORDS[agentWorkingPhase(messages, sessionStarting, rewindOut)]}
               />
             ) : null}
             {ended === undefined && endTrail === undefined ? null : (
@@ -2160,9 +2189,50 @@ function AgentTabView({
 }): React.JSX.Element {
   const call = offeredCall;
   const onCall = useAgentOnCall(agent.id) && call !== undefined;
-  const lines = useMemo(
-    () => agentLines(transcript.messages, composer.sent),
-    [transcript.messages, composer.sent],
+  // Note that the messages a rewind drops are hidden at once, until the transcript reads back without them.
+  const { cut } = composer;
+  const kept = useMemo(
+    () =>
+      cut === undefined
+        ? transcript.messages
+        : transcript.messages.filter((message) => !cut.has(message.id)),
+    [transcript.messages, cut],
+  );
+  const lines = useMemo(() => agentLines(kept, composer.sent), [kept, composer.sent]);
+  // A rewind writes in the box, so it is offered only while the box takes words.
+  const boxOpen =
+    onUnarchive === undefined && continuedNote === undefined && composer.closed === undefined;
+  const onEdit = useSteady(boxOpen ? composer.edit : undefined);
+  const onCancelEdit = useSteady(composer.dropEdit);
+  const onSendEdit = useSteady(boxOpen ? composer.sendEdit : undefined);
+  const onRevert = useSteady(boxOpen ? composer.revert : undefined);
+  // Note that the rewind doors stand as they were while what they say is unchanged, because every message
+  // reads them, and a page that moved no rewind point must draw no message again.
+  const points = useKept(
+    useMemo(() => rewindPoints(kept), [kept]),
+    (a, b) => sameSet(a.editable, b.editable) && sameEntries(a.revertsAt, b.revertsAt),
+  );
+  const editorNow = { agentId: agent.id, doors, keywords, skills, dictates: !onCall };
+  const editorProps = useRef(editorNow);
+  editorProps.current = editorNow;
+  const editor = useCallback(() => editorProps.current, []);
+  const rewind = useMemo(
+    () =>
+      onEdit === undefined ||
+      onCancelEdit === undefined ||
+      onSendEdit === undefined ||
+      onRevert === undefined
+        ? undefined
+        : {
+            editing: composer.editing,
+            onEdit,
+            onCancelEdit,
+            onSendEdit,
+            onRevert,
+            editor,
+            ...points,
+          },
+    [composer.editing, onEdit, onCancelEdit, onSendEdit, onRevert, points, editor],
   );
   const chatOn = useChatOn();
   const working = agentStillWriting(agent.status);
@@ -2245,50 +2315,57 @@ function AgentTabView({
           <WholePartsProvider value={wholeParts}>
             <MentionedServers value={mentioned}>
               <UndeliveredLines value={marks}>
-                <AgentTranscriptView
-                  messages={lines}
-                  quietReplies={agent.kind === CODING_AGENT_KIND.OPERATOR}
-                  brief={agent.brief}
-                  briefSender={starter === undefined ? undefined : starterActor}
-                  origin={origin}
-                  readerId={readerId}
-                  taskId={agent.planId ?? undefined}
-                  replay={replay}
-                  delegation={{
-                    models,
-                    own: { model: agent.model, effort: agent.effort },
-                    starts:
-                      delegationStarts && workerStarts(delegationStarts, transcript.subagents),
-                    onOpen: openSubagent,
-                    onOpenTarget: openTarget,
-                    cards,
-                    standings: transcript.subagents,
-                    chat,
-                    chatOn,
-                  }}
-                  reading={transcript.reading || holding}
-                  holding={holding}
-                  failed={transcript.failed}
-                  working={working}
-                  sessionStarting={agent.status === CODING_AGENT_STATUS.STARTING}
-                  startedAt={startedAt}
-                  ended={
-                    // Note that the end line waits for a page, so a stopped agent's tab never draws it over nothing.
-                    transcript.pages === 0
-                      ? undefined
-                      : endLineParts(agent.status, transcript.failure, starter, continuable)
-                  }
-                  endReason={endLineReason(transcript.failure, starter)}
-                  onOpenApiKeys={onOpenApiKeys}
-                  endPress={endPress}
-                  endTrail={endTrail}
-                  onRetry={transcript.onRetry}
-                  onOlder={transcript.hasOlder ? transcript.loadOlder : undefined}
-                  olderFailed={transcript.olderFailed}
-                  overComposer
-                  calls={calls}
-                  bringIn={bringIn}
-                />
+                <RewindProvider value={rewind}>
+                  <AgentTranscriptView
+                    messages={lines}
+                    quietReplies={agent.kind === CODING_AGENT_KIND.OPERATOR}
+                    brief={agent.brief}
+                    briefSender={starter === undefined ? undefined : starterActor}
+                    origin={origin}
+                    readerId={readerId}
+                    taskId={agent.planId ?? undefined}
+                    replay={replay}
+                    delegation={{
+                      models,
+                      own: { model: agent.model, effort: agent.effort },
+                      starts:
+                        delegationStarts && workerStarts(delegationStarts, transcript.subagents),
+                      onOpen: openSubagent,
+                      onOpenTarget: openTarget,
+                      cards,
+                      standings: transcript.subagents,
+                      chat,
+                      chatOn,
+                    }}
+                    reading={transcript.reading || holding}
+                    holding={holding}
+                    failed={transcript.failed}
+                    // Note that a rewind draws the working line from its press until its line reads back, however slow its stop and relaunch.
+                    working={working || composer.rewinding}
+                    rewindOut={composer.rewindOut}
+                    sessionStarting={agent.status === CODING_AGENT_STATUS.STARTING}
+                    // Note that while a rewind goes the line counts from its press, never from the run before it, which is the agent's start until a new turn begins.
+                    startedAt={
+                      composer.rewinding && startedAt !== undefined ? composer.rewoundAt : startedAt
+                    }
+                    ended={
+                      // Note that the end line waits for a page, so a stopped agent's tab never draws it over nothing.
+                      transcript.pages === 0
+                        ? undefined
+                        : endLineParts(agent.status, transcript.failure, starter, continuable)
+                    }
+                    endReason={endLineReason(transcript.failure, starter)}
+                    onOpenApiKeys={onOpenApiKeys}
+                    endPress={endPress}
+                    endTrail={endTrail}
+                    onRetry={transcript.onRetry}
+                    onOlder={transcript.hasOlder ? transcript.loadOlder : undefined}
+                    olderFailed={transcript.olderFailed}
+                    overComposer
+                    calls={calls}
+                    bringIn={bringIn}
+                  />
+                </RewindProvider>
               </UndeliveredLines>
             </MentionedServers>
           </WholePartsProvider>
@@ -2526,6 +2603,7 @@ function AgentTabBody({
     messages: transcript.messages,
     running: agent.status === CODING_AGENT_STATUS.RUNNING,
     send: control.onMessage,
+    rewind: control.onRewind,
     payer: planPayerOf(agent.runtime),
     onStatus: control.onStatus,
   });

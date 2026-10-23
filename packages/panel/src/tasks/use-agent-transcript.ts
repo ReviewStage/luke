@@ -168,6 +168,8 @@ interface Held {
   subagentTitles: ReadonlyMap<string, string>;
   delegations: ReadonlyMap<string, number>;
   subagents: ReadonlyMap<string, CodingAgentSubagentStanding>;
+  /** The rewind the newest page held was read at; none before a page landed or where the transcript was never rewound. */
+  rewound: number | undefined;
   failed: boolean;
 }
 
@@ -190,6 +192,7 @@ function fresh(transcript: CodingAgentTranscriptKey): Held {
     subagentTitles: new Map(),
     delegations: new Map(),
     subagents: new Map(),
+    rewound: undefined,
     failed: false,
   };
 }
@@ -243,9 +246,11 @@ function joined(was: Held, page: CodingAgentTranscriptPage): Held {
       ? { ...fresh(was.transcript), pages: was.pages, failed: true }
       : { ...was, failed: true };
   }
-  // Note that a newest page that does not meet what is held replaces it, older pages and all, rather than leave a gap.
+  // Note that a newest page that does not meet what is held replaces it, older pages and all, rather than leave a gap,
+  // and so does one read at another rewind, since the rewind dropped messages a join would keep.
   const replaces =
-    page.newest === true && (was.messages.length === 0 || !meets(was.messages, page));
+    page.newest === true &&
+    (was.messages.length === 0 || !meets(was.messages, page) || page.rewound !== was.rewound);
   return {
     ...was,
     messages: replaces ? page.messages : applyMessagesPage(was.messages, page.messages),
@@ -261,6 +266,7 @@ function joined(was: Held, page: CodingAgentTranscriptPage): Held {
     pageStatus: page.status,
     caughtUp: page.caughtUp,
     pages: was.pages + 1,
+    rewound: page.newest === true ? page.rewound : was.rewound,
     pageTitle: page.title ?? undefined,
     subagentTitles: keptIfSame(
       was.subagentTitles,

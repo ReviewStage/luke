@@ -30,6 +30,7 @@ import {
   markDeepened,
   REPOSITORY_REFUSAL,
   type RepositorySandbox,
+  refreshRepository,
   runInSandbox,
   SHALLOW_CLONE_DEPTH,
   setCheckoutIdentity,
@@ -41,12 +42,16 @@ import { CODER, CODER_REFUSAL, type CoderRefusal } from "./bounds.js";
  * checkout.ts -- a coding agent's checkout of its repository, whose its commits are, and the credential its sandbox pushes through.
  *
  * The agent's repository is checked out in two steps. As its sandbox opens,
- * it is checked out shallow, on the same terms as the brain's checkout
+ * it is checked out on the same terms as the brain's checkout
  * (`repository-shell.ts`): the installation of its task's workspace is
  * confirmed to reach it and a read token minted for that one repository,
- * set at the sandbox's firewall for the clone alone and withdrawn after it,
- * and the clone is one commit deep, so a sandbox opened to read the code,
- * as a call's first look at it does, opens fast and holds no credential.
+ * set at the sandbox's firewall for the clone alone and withdrawn after it.
+ * eve's clone is one commit deep, so a sandbox opened to read the code, as a
+ * call's first look at it does, opens fast and holds no credential. A native
+ * harness's is whole, since it deepens at once, or is no clone at all where
+ * its workspace's repository snapshot opened the sandbox on a checkout
+ * already made, which is fetched up to the branch instead
+ * (`refreshAgentCheckout`, `repository-snapshot.ts`).
  * The first write deepens it (`deepenAgentCheckout`): a write token is
  * minted, carrying contents and pull requests write, since the agent pushes
  * a branch and opens a pull request from it, and set at the firewall for
@@ -306,40 +311,120 @@ function refusedWith(failure: { readonly reason: string }): CheckoutRefused {
   return new CheckoutRefused({ reason: failure.reason });
 }
 
+/** The agent's repository as its workspace reaches it: the workspace, the repository as GitHub spells it, its default branch, and a read token with whose it is. */
+export interface AgentRepositoryRead {
+  readonly workspaceId: string;
+  readonly fullName: string;
+  readonly defaultBranch: string;
+  readonly token: Redacted.Redacted;
+  readonly access: GitHubTokenAccess;
+}
+
 /**
- * The agent's repository checked out shallow, one commit deep, at the
- * branch it was started on where its row names one and at the current
- * default branch otherwise, into the sandbox, on a read token that stands
- * at the firewall for the clone alone. The checkout is recorded under the
- * name the agent's row holds. Nothing else is set: no commit identity and
- * no credential, which the first write's deepen sets
+ * The agent's repository as its workspace reaches it now: the workspace, the
+ * repository as GitHub spells it with its default branch, and a read token
+ * for that one repository with whose it is; refused as not reachable where
+ * neither the workspace's installation nor the starter's own token reaches
+ * it, and as GitHub unavailable where GitHub did not say.
+ */
+export const agentRepositoryRead = /* @__PURE__ */ Effect.fn("web/agentRepositoryRead")(function* (
+  target: ConversationTarget,
+  agent: WithRepository<CodingAgent>,
+): Effect.fn.Return<AgentRepositoryRead, CheckoutRefused, CheckoutServices> {
+  const app = yield* GitHubApp;
+  // Note that a store that could not be read refuses as GitHub unavailable, as the checkout always has.
+  const workspace = yield* agentWorkspace(target, agent).pipe(Effect.mapError(refusedBy));
+  if (Option.isNone(workspace))
+    return yield* new CheckoutRefused({ reason: CODER_REFUSAL.NOT_REACHABLE });
+  const reached = yield* app
+    .repositoryReadToken(workspace.value, agent.repository, agentMember(agent))
+    .pipe(Effect.mapError(refusedBy));
+  if (Option.isNone(reached))
+    return yield* new CheckoutRefused({ reason: CODER_REFUSAL.NOT_REACHABLE });
+  const { repository, token, access } = reached.value;
+  return {
+    workspaceId: workspace.value,
+    fullName: repository.fullName,
+    defaultBranch: repository.defaultBranch,
+    token,
+    access,
+  };
+});
+
+/** How deep an agent's checkout is cloned: one commit for eve's, whose first write deepens it, or whole for a native harness's, deepened at once anyway. */
+export const CHECKOUT_DEPTH = {
+  SHALLOW: "shallow",
+  WHOLE: "whole",
+} as const;
+
+export type CheckoutDepthChoice = (typeof CHECKOUT_DEPTH)[keyof typeof CHECKOUT_DEPTH];
+
+/**
+ * The agent's repository cloned into the sandbox on the read the caller
+ * made of it, at the branch it was started on where its row names one and
+ * at the default branch otherwise, the read token standing at the firewall
+ * for the clone alone: one commit deep by default, or whole where the caller
+ * asks, as a native harness's launch does, since it deepens at once and a
+ * whole clone is fetched in half the time of a shallow one deepened. The
+ * checkout is recorded under the name the agent's row holds. Nothing else
+ * is set: no commit identity and no credential, which the deepen sets
  * (`deepenAgentCheckout`). Note that a start branch deleted since the start
  * fails the clone, which says so in git's own words.
  */
+export const cloneAgentRepository = /* @__PURE__ */ Effect.fn("web/cloneAgentRepository")(
+  function* (
+    agent: WithRepository<CodingAgent>,
+    sandbox: RepositorySandbox,
+    read: AgentRepositoryRead,
+    depth: CheckoutDepthChoice = CHECKOUT_DEPTH.SHALLOW,
+  ): Effect.fn.Return<void, CheckoutRefused> {
+    yield* cloneRepository(
+      sandbox,
+      {
+        fullName: read.fullName,
+        defaultBranch: agent.startBranch ?? read.defaultBranch,
+        recordedAs: agent.repository,
+      },
+      read.token,
+      {
+        ...(depth === CHECKOUT_DEPTH.SHALLOW ? { depth: SHALLOW_CLONE_DEPTH } : undefined),
+        access: read.access,
+      },
+    ).pipe(Effect.mapError(refusedWith));
+  },
+);
+
+/** The agent's repository read and checked out shallow into the sandbox, as eve's sandbox opens on it (`cloneAgentRepository`). */
 export const checkOutAgentRepository = /* @__PURE__ */ Effect.fn("web/checkOutAgentRepository")(
   function* (
     target: ConversationTarget,
     agent: WithRepository<CodingAgent>,
     sandbox: RepositorySandbox,
   ): Effect.fn.Return<void, CheckoutRefused | StoreFailure, CheckoutServices> {
-    const app = yield* GitHubApp;
-    const reached = yield* Effect.gen(function* () {
-      const workspace = yield* agentWorkspace(target, agent);
-      if (Option.isNone(workspace)) return Option.none();
-      return yield* app.repositoryReadToken(workspace.value, agent.repository, agentMember(agent));
-    }).pipe(Effect.mapError(refusedBy));
-    if (Option.isNone(reached))
-      return yield* new CheckoutRefused({ reason: CODER_REFUSAL.NOT_REACHABLE });
-    const { repository, token, access } = reached.value;
-    yield* cloneRepository(
+    const read = yield* agentRepositoryRead(target, agent);
+    yield* cloneAgentRepository(agent, sandbox, read);
+  },
+);
+
+/**
+ * The checkout a repository snapshot opened the sandbox on brought up to the
+ * repository's default branch, on the read the caller made of it, the token
+ * at the firewall for the fetch alone, and recorded under the name the
+ * agent's row holds; refused, in git's words, where the sandbox holds no
+ * checkout of that repository or the fetch failed. As after a clone, no
+ * identity and no credential is set (`deepenAgentCheckout`).
+ */
+export const refreshAgentCheckout = /* @__PURE__ */ Effect.fn("web/refreshAgentCheckout")(
+  function* (
+    agent: WithRepository<CodingAgent>,
+    sandbox: RepositorySandbox,
+    read: AgentRepositoryRead,
+  ): Effect.fn.Return<void, CheckoutRefused> {
+    yield* refreshRepository(
       sandbox,
-      {
-        fullName: repository.fullName,
-        defaultBranch: agent.startBranch ?? repository.defaultBranch,
-        recordedAs: agent.repository,
-      },
-      token,
-      { depth: SHALLOW_CLONE_DEPTH, access },
+      { fullName: read.fullName, defaultBranch: read.defaultBranch, recordedAs: agent.repository },
+      read.token,
+      read.access,
     ).pipe(Effect.mapError(refusedWith));
   },
 );

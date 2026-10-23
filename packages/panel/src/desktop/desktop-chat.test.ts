@@ -37,7 +37,7 @@ import { act, createElement, type RefObject, useRef, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { sideBundles } from "../bundle-loader.js";
-import { SHELL_ROOM } from "../shell-room.js";
+import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { ChatComposer, type ChatComposerMentions } from "../tasks/chat-composer.js";
 import {
   type FixtureChat,
@@ -119,6 +119,7 @@ function mount(
     clientKey: string,
     reader: string | undefined,
   ) => Promise<string | undefined> = (land) => land(),
+  room: ShellRoom = SHELL_ROOM.WIDE,
 ): HTMLElement {
   function Page() {
     const [place, setPlace] = useState<ChatPlace>(FOR_YOU);
@@ -146,7 +147,7 @@ function mount(
     // The reader this draw's posts go as, as the window's chat hook binds its post to its account and workspace.
     const sentAs = readingAs;
     return createElement(DesktopChat, {
-      room: SHELL_ROOM.WIDE,
+      room,
       accountName: "Dean Stratakos",
       tasks: tasksControl({
         workspace,
@@ -926,7 +927,7 @@ test("a form none of whose fields must be filled may be sent empty", async () =>
   assert.equal(rail(page)[0], "▸ For you (3)");
 });
 
-test("an ask its poster resolved says it was withdrawn and why, and one asking nothing is nodded to by Got it, which settles it as acknowledged", async () => {
+test("an ask its poster resolved says it was withdrawn in its head and why in its body, and one asking nothing is nodded to by Got it, which settles it as acknowledged", async () => {
   const page = mount((chat) => ({
     ...chat,
     answer: {
@@ -958,7 +959,12 @@ test("an ask its poster resolved says it was withdrawn and why, and one asking n
   act(() => railRow(page, "teammate-invitations").click());
   assert.equal(
     settledAsk(page, 46).querySelector(".luke-card-head")?.textContent,
-    "Pick oneWithdrawn: Settled in the plan.",
+    "Pick oneWithdrawn",
+  );
+  assert.equal(
+    settledAsk(page, 46).querySelector("[data-inbox-withdrawn-why]")?.textContent,
+    "Settled in the plan.",
+    "why it was withdrawn stands under the head, as a sentence of its own",
   );
   assert.equal(settledAsk(page, 46).querySelector('[role="radio"]'), null);
   assert.equal(
@@ -1590,6 +1596,15 @@ test("the rail's bar is a page's toolbar: Chat's title and its Experimental tag,
     [],
     "nothing waits unread",
   );
+});
+
+test("on a phone the rail's Experimental tag is the experiment's glyph alone, still called Experimental, so Chat's title keeps its room", () => {
+  const page = mount(undefined, undefined, undefined, undefined, {}, undefined, SHELL_ROOM.NARROW);
+  const tag = page.querySelector(".chat-rail-bar .experiment-tag");
+  assert.equal(tag?.getAttribute("role"), "img");
+  assert.equal(tag?.getAttribute("aria-label"), "Experimental");
+  assert.equal(tag?.textContent, "", "no words beside the title");
+  assert.equal(page.querySelector(".chat-rail-bar h1")?.textContent, "Chat");
 });
 
 test("a For you row names a task's channel by its glyph and name, and a press on it opens the channel", () => {

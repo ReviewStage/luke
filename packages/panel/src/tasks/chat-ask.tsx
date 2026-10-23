@@ -58,6 +58,7 @@ import {
   sendFromPane,
   takesTyping,
   WaitingMarker,
+  WithdrawnWhy,
   WithdrawnWords,
 } from "./inbox-ask-controls.js";
 import { askHeadWords } from "./inbox-ask-words.js";
@@ -110,7 +111,8 @@ import { SentWords } from "./skill-chip.js";
  * answer: their face and name, when, and whether it reached the poster, then
  * the controls as the answer left them, read-only, a press given green going
  * ahead and red holding back, and their note as a sent message's words. Once
- * its poster resolved it, the card's head says it was withdrawn, and why. A
+ * its poster resolved it, the card's head says it was withdrawn, and its
+ * body ends with why as a muted sentence, as the Inbox's withdrawn ask does. A
  * response this build does not know is drawn as a line naming a newer Luke,
  * answered nowhere.
  */
@@ -458,6 +460,7 @@ export function AskCard({
           <div className="chat-ask-body">
             {title}
             {blocks}
+            {ask.status === ASK_STATUS.CLOSED ? <WithdrawnWhy reason={ask.closedReason} /> : null}
             {waiting ? <Waiting waitsOn={waitsOn} actorOf={actorOf} /> : null}
             {answerable ? (
               <Answer
