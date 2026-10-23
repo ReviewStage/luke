@@ -38,7 +38,7 @@ import {
   tasklessMentions,
   useMentionAgentsReader,
 } from "../tasks/task-mentions.js";
-import { TOOL_TARGET, type ToolTarget } from "../tasks/tool-call-model.js";
+import { cardTitle, TOOL_TARGET, type ToolTarget } from "../tasks/tool-call-model.js";
 import type { CodingAgentsControl } from "../tasks/use-coding-agents.js";
 import { type InboxListing, useInboxListing } from "../tasks/use-inbox-listing.js";
 import { useNodOnOpen, useReadOnOpen } from "../tasks/use-inbox-read-marks.js";
@@ -467,6 +467,7 @@ function InboxShown({
                       });
                     }}
                     onDiscard={compose.onEnd}
+                    phone={room === SHELL_ROOM.NARROW}
                   />
                 ) : chosen === undefined ? (
                   <section
@@ -524,6 +525,13 @@ function InboxShown({
                           pager={columns.shown === INBOX_COLUMNS.ITEM ? pager : undefined}
                           next={next}
                           mentions={mentions}
+                          phone={
+                            room === SHELL_ROOM.NARROW
+                              ? {
+                                  onShowPanel: sidePanel.open ? undefined : sidePanel.onToggle,
+                                }
+                              : undefined
+                          }
                           doors={{
                             ...paneDoors(tasks, chosen.holder, {
                               act,
@@ -554,6 +562,11 @@ function InboxShown({
                 agents={named}
                 views={views}
                 mentions={mentions}
+                phone={
+                  room === SHELL_ROOM.NARROW && chosen !== undefined
+                    ? { back: cardTitle(chosen.item.title), onBack: sidePanel.onToggle }
+                    : undefined
+                }
               />
             ) : null}
           </div>
@@ -611,6 +624,7 @@ function InboxSidePanel({
   agents,
   views,
   mentions,
+  phone,
 }: {
   tasks: TasksControl;
   drawing: SidePanelDrawing & { panel: SidePanelControl };
@@ -624,6 +638,8 @@ function InboxSidePanel({
   views: TabViews;
   /** What the item's box offers an `@`, which the composer of an agent's transcript beside it offers too. */
   mentions: TaskMentionsValue | undefined;
+  /** Where the panel heads itself on a phone, its way back shutting it to the item (`SidePanel`'s `phone`). */
+  phone: { readonly back: string; readonly onBack: () => void } | undefined;
 }): React.JSX.Element {
   const { panel } = drawing;
   const openTarget = (target: ToolTarget) => {
@@ -697,6 +713,7 @@ function InboxSidePanel({
       focused={focused}
       onOpenTarget={openTarget}
       transcript={taskId === undefined ? undefined : transcript}
+      phone={phone}
     />
   );
 }

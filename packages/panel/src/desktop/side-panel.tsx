@@ -16,6 +16,7 @@ import { ACT_KIND } from "@luke/host/acts";
 import { EXPERIMENT, HOST_CAPABILITY } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
+  BackIcon,
   CloseIcon,
   CollapseIcon,
   EmptyState,
@@ -65,6 +66,7 @@ import {
 } from "@luke/ui/tab-strip-model";
 import type { CodeFeedCallSource } from "@luke/voice/code-pane-model";
 import { type ShownFile, shownFiles } from "@luke/voice/code-pane-model";
+import { ListIcon } from "lucide-react";
 import {
   Fragment,
   type ReactNode,
@@ -170,6 +172,7 @@ import { useAgentTerminalDoors } from "./agent-actions.js";
 import { useFileTreeWidth } from "./folded-groups.js";
 import { PULL_REQUEST_TAB } from "./pages-on-demand.js";
 import { paneTiming } from "./pane-motion.js";
+import { PhoneHead, PlaceMore } from "./phone-head.js";
 import {
   type AddEntry,
   AddTabButton,
@@ -2013,6 +2016,22 @@ export function SidePanelToggle({
 }
 
 /**
+ * The panel's chord alone, where its toggle is not drawn: a phone's page,
+ * whose ⋯ offers Show panel and whose panel, open, heads itself with the
+ * way back that shuts it (`SidePanel`'s `phone`).
+ */
+export function SidePanelChord({
+  panel,
+  disabled,
+}: {
+  panel: SidePanelControl;
+  disabled: boolean;
+}): null {
+  useAppCommand(APP_COMMAND.TOGGLE_SIDE_PANEL, disabled ? undefined : panel.onToggle);
+  return null;
+}
+
+/**
  * Grows the panel over the document, or brings it back beside it. It stands
  * while the panel is open, so it offers the full-screen chord, and the menu
  * bar's way out while the panel fills the window. Escape's own way out is the
@@ -2195,7 +2214,8 @@ export function SidePanel({
   inbox,
   chat,
   transcript,
-  activity,
+  activity: taskActivity,
+  phone,
 }: SidePanelDrawing & {
   panel: SidePanelControl;
   /** The tabs holding something that arrived while another was shown, each in semibold until it is shown. */
@@ -2260,7 +2280,24 @@ export function SidePanel({
         readonly onShown: (shown: ShownTab | undefined) => void;
       }
     | undefined;
+  /**
+   * Where the panel stands over a phone's page other than a task's, an
+   * Inbox item's or an agent's, which has no header of its own to name the
+   * tab: the panel heads itself (`phone-head.tsx`), its way back shutting it
+   * to the page named, the tab shown or the list of its tabs centred, and a
+   * ⋯ holding the list, the tab's own actions, and Close; none elsewhere.
+   */
+  phone?: { readonly back: string; readonly onBack: () => void } | undefined;
 }): React.JSX.Element {
+  // A phone's panel over a page other than a task's keeps its own Activity: whether it lists its tabs, and the tab shown.
+  const [ownListed, setOwnListed] = useState(false);
+  const [ownShown, setOwnShown] = useState<ShownTab | undefined>(undefined);
+  if (ownListed && !panel.open) setOwnListed(false);
+  const ownActivity =
+    phone !== undefined && taskActivity === undefined
+      ? { listed: ownListed, onListed: setOwnListed, onShown: setOwnShown }
+      : undefined;
+  const activity = taskActivity ?? ownActivity;
   // The one slot the bar keeps for the chosen tab's ⋯, drawn there from the tab (`strip-tabs.tsx`).
   const [actionsSlot, setActionsSlot] = useState<HTMLElement | null>(null);
   // Where a phone's Activity lists the tabs, drawn there from the strip, which holds how each tab looks.
@@ -2479,6 +2516,18 @@ export function SidePanel({
       label="Panel"
       banner={banner}
       switched={switched}
+      head={
+        switched && ownActivity !== undefined && phone !== undefined ? (
+          <PanelPhoneHead
+            back={phone}
+            title={listing ? TABS : (label ?? PANEL_LABEL)}
+            listing={listing}
+            shown={ownShown}
+            onList={() => setOwnListed(true)}
+            onCloseShown={tab === undefined ? undefined : () => panel.onClose(tab)}
+          />
+        ) : undefined
+      }
       tabs={
         <PanelTabs
           panel={panel}
@@ -2645,6 +2694,76 @@ export function SidePanelSkeleton({
   );
 }
 
+/** What a phone's panel calls the list of its tabs, as a title and as the ⋯'s item that shows it. */
+const TABS = "Tabs";
+
+/** What a phone's panel is called where no tab is shown. */
+const PANEL_LABEL = "Panel";
+
+/**
+ * A phone's panel's header over a page other than a task's (`SidePanel`'s
+ * `phone`): the way back's glyph, shutting the panel to the page it names,
+ * the tab shown, or the list of tabs, centred, and a ⋯ holding the list,
+ * the tab's own actions, each naming the tab under it, and Close.
+ */
+function PanelPhoneHead({
+  back,
+  title,
+  listing,
+  shown,
+  onList,
+  onCloseShown,
+}: {
+  back: { readonly back: string; readonly onBack: () => void };
+  title: string;
+  listing: boolean;
+  shown: ShownTab | undefined;
+  onList: () => void;
+  /** Closes the tab shown; none where none is. */
+  onCloseShown: (() => void) | undefined;
+}): React.JSX.Element {
+  const backLabel = `Back to ${back.back}`;
+  return (
+    <PhoneHead
+      place="panel"
+      start={
+        <Tooltip label={backLabel}>
+          <IconButton icon={<BackIcon />} label={backLabel} onClick={back.onBack} />
+        </Tooltip>
+      }
+      title={<h1 className="desktop-toolbar-title">{title}</h1>}
+      end={
+        <PlaceMore
+          shown
+          groups={() => {
+            const tabActions =
+              listing || shown === undefined
+                ? []
+                : shown
+                    .groups()
+                    .map((group) =>
+                      group.map((item) => ({ ...item, detail: item.detail ?? shown.label })),
+                    );
+            return [
+              [{ label: TABS, icon: <ListIcon />, checked: listing, onSelect: onList }],
+              ...tabActions,
+              listing || onCloseShown === undefined
+                ? []
+                : [
+                    {
+                      label: `Close ${shown?.label ?? title}`,
+                      icon: <CloseIcon />,
+                      onSelect: onCloseShown,
+                    },
+                  ],
+            ].filter((group) => group.length > 0);
+          }}
+        />
+      }
+    />
+  );
+}
+
 /**
  * The frame every side panel stands in, the task's, an agent's page's, and
  * the Inbox's: the panel's pane at the window's
@@ -2667,6 +2786,7 @@ function PanelFrame({
   actions,
   banner,
   switched = false,
+  head,
   children,
 }: Omit<SidePanelDrawing, "panel"> & {
   panel: Pick<SidePanelControl, "width" | "fullScreen" | "fullScreenOnly" | "onToggleFullScreen">;
@@ -2680,6 +2800,8 @@ function PanelFrame({
   banner?: React.ReactNode;
   /** Whether a phone's header stands for the bar, which is then not drawn (`task-pane-switcher.tsx`). */
   switched?: boolean;
+  /** A phone's header drawn in the bar's place, where the panel heads itself (`SidePanel`'s `phone`). */
+  head?: React.ReactNode;
   children: React.ReactNode;
 }): React.JSX.Element {
   const aside = useRef<HTMLElement>(null);
@@ -2719,6 +2841,7 @@ function PanelFrame({
             />
           )}
         </div>
+        {head}
         {panel.fullScreen ? banner : null}
         {children}
         {/* Last, so the drag region of the row above does not take the

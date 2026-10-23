@@ -1,5 +1,7 @@
 import {
+  BackIcon,
   DetailPage,
+  IconButton,
   List,
   ListRow,
   ONE_LINE_ELEMENT,
@@ -12,8 +14,11 @@ import {
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
+  Tooltip,
 } from "@luke/ui";
 import type { ReactNode } from "react";
+import { PhoneHead } from "./phone-head.js";
+import type { TaskHeadBack } from "./task-pane-switcher.js";
 
 /**
  * person-frame.tsx -- a person's page's boxes, which the page and its placeholders both draw.
@@ -52,13 +57,35 @@ export const PROFILE = "Profile";
 export function PersonToolbar({
   name,
   words,
+  phoneBack,
   children,
 }: {
   name: ReactNode;
   /** The name's words, which the title reads whole where it cuts them short. */
   words?: string | undefined;
+  /** A phone's way back, which heads the page as a phone's page (`phone-head.tsx`): the back's glyph, the name centred, and the page's one ⋯ as `children`; none elsewhere. */
+  phoneBack?: TaskHeadBack | undefined;
   children?: ReactNode;
 }): React.JSX.Element {
+  if (phoneBack !== undefined) {
+    const back = `Back to ${phoneBack.label}`;
+    return (
+      <PhoneHead
+        place="person"
+        start={
+          <Tooltip label={back}>
+            <IconButton icon={<BackIcon />} label={back} onClick={phoneBack.onPress} />
+          </Tooltip>
+        }
+        title={
+          <OneLine as={ONE_LINE_ELEMENT.H1} className="desktop-toolbar-title" words={words}>
+            {name}
+          </OneLine>
+        }
+        end={children}
+      />
+    );
+  }
   return (
     <header className="desktop-toolbar">
       <div className="desktop-toolbar-heading">

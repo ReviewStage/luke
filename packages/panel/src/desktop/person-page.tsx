@@ -79,6 +79,7 @@ import {
 } from "./person-frame.js";
 import { RecentRow } from "./recent-row.js";
 import { useTaskListView } from "./task-list-view.js";
+import type { TaskHeadBack } from "./task-pane-switcher.js";
 import { useAutomations } from "./use-automations.js";
 
 /**
@@ -190,6 +191,7 @@ function PersonActions({
   person,
   shared,
   onShowTasks,
+  phone = false,
 }: {
   tasks: TasksControl;
   userId: string;
@@ -197,6 +199,8 @@ function PersonActions({
   /** Whether the workspace is shared, which alone filters the sidebar by person. */
   shared: boolean;
   onShowTasks: () => void;
+  /** Whether a phone heads the page, whose one ⋯ offers the sidebar's filter too, its button not drawn. */
+  phone?: boolean;
 }): React.JSX.Element {
   const openSettings = useOpenSettings();
   const copy = useCopyToast();
@@ -216,7 +220,11 @@ function PersonActions({
   // A page whose workspace is not known has no link, rather than one naming no workspace.
   const slug = home?.slug ?? homeId;
   const link = slug === undefined ? undefined : linkOf({ kind: LINK_PLACE.PERSON, userId }, slug);
+  const showTasks = you ? "My tasks in sidebar" : "Their tasks in sidebar";
   const actions: MenuAction[][] = [
+    ...(phone && shared
+      ? [[{ label: showTasks, icon: <ListFilterIcon />, onSelect: onShowTasks }]]
+      : []),
     ...(link === undefined
       ? []
       : [
@@ -256,11 +264,23 @@ function PersonActions({
           ],
         ]),
   ];
+  const more =
+    actions.length === 0 ? null : (
+      <>
+        <Tooltip label={MORE}>
+          <IconButton icon={<EllipsisIcon />} label={MORE} {...menu.trigger()} />
+        </Tooltip>
+        {menu.drawn === undefined ? null : (
+          <ActionMenu label={MORE} menu={menu.drawn} groups={actions} onClose={menu.close} />
+        )}
+      </>
+    );
+  if (phone) return <>{more}</>;
   return (
     <div className="desktop-toolbar-actions">
       {shared ? (
         <Button variant={BUTTON_VARIANT.OUTLINE} icon={<ListFilterIcon />} onClick={onShowTasks}>
-          {you ? "My tasks in sidebar" : "Their tasks in sidebar"}
+          {showTasks}
         </Button>
       ) : null}
       {actions.length === 0 ? null : (
@@ -433,11 +453,13 @@ function PersonColumn({
   userId,
   name: opened,
   staged,
+  away,
 }: {
   tasks: TasksControl;
   userId: string;
   name: string | undefined;
   staged: boolean;
+  away: TaskHeadBack | undefined;
 }): React.JSX.Element {
   const now = useMinute();
   const listed = tasks.listed.tasks;
@@ -504,13 +526,18 @@ function PersonColumn({
       frame={PAGE_FRAME.TOOLBAR}
       label={name ?? PROFILE}
       toolbar={
-        <PersonToolbar name={name ?? (refused ? PROFILE : <PersonNameSkeleton />)} words={name}>
+        <PersonToolbar
+          name={name ?? (refused ? PROFILE : <PersonNameSkeleton />)}
+          words={name}
+          phoneBack={away}
+        >
           <PersonActions
             tasks={tasks}
             userId={userId}
             person={person}
             shared={shared}
             onShowTasks={showTasks}
+            phone={away !== undefined}
           />
         </PersonToolbar>
       }
@@ -634,6 +661,7 @@ export function PersonPage({
   userId,
   name,
   staged = false,
+  away,
 }: {
   tasks: TasksControl;
   userId: string;
@@ -641,11 +669,13 @@ export function PersonPage({
   name?: string | undefined;
   /** Whether the run is a fixture's, whose sidebar view is kept nowhere. */
   staged?: boolean;
+  /** A phone's way back out of the page (`WindowHistory`'s `onLeave`), which heads it as a phone's page; none elsewhere. */
+  away?: TaskHeadBack | undefined;
 }): React.JSX.Element {
   useAppCommand(APP_COMMAND.EXIT_PERSON_PAGE, tasks.personView.onClose);
   return (
     <MemberDirectory workspace={tasks.workspace} readerId={tasks.me}>
-      <PersonColumn tasks={tasks} userId={userId} name={name} staged={staged} />
+      <PersonColumn tasks={tasks} userId={userId} name={name} staged={staged} away={away} />
     </MemberDirectory>
   );
 }

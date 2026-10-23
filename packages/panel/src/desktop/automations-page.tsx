@@ -20,6 +20,7 @@ import { ACT_KIND } from "@luke/host/acts";
 import { EXPERIMENT } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
+  BackIcon,
   BUTTON_VARIANT,
   Button,
   CardPress,
@@ -31,6 +32,7 @@ import {
   ERROR_STATE_PLACEMENT,
   ErrorState,
   FoldingButton,
+  IconButton,
   ListRow,
   NO_CONTEXT_MENU,
   OneLine,
@@ -78,6 +80,7 @@ import {
   automationOwnerName,
   READING_AUTOMATIONS,
 } from "./automation-words.js";
+import { PhoneHead, PlaceMore } from "./phone-head.js";
 import { useAutomations } from "./use-automations.js";
 
 /**
@@ -105,6 +108,16 @@ import { useAutomations } from "./use-automations.js";
 
 /** What an automation's row's right-click menu is called. */
 const ROW_ACTIONS = "Automation actions";
+
+/** What the list is called, and a phone's way back from an automation's page names it. */
+const AUTOMATIONS = "Automations";
+
+/** What a phone's way back from an automation's page is called. */
+const BACK_TO_AUTOMATIONS = `Back to ${AUTOMATIONS}`;
+
+/** What the list's acts are called, on their buttons and a phone's ⋯ alike. */
+const NEW_AUTOMATION = "New automation";
+const CREATE_WITH_AGENT = "Create with an agent";
 
 /** What the list says where it could not be read. */
 const UNREAD_LINE = "The automations could not be read.";
@@ -429,23 +442,56 @@ function ListPage({
       frame={PAGE_FRAME.TOOLBAR}
       label="Automations"
       toolbar={
-        <AutomationsToolbar>
-          <FoldingButton
-            label="Create with an agent"
-            icon={<BotIcon />}
-            variant={BUTTON_VARIANT.OUTLINE}
-            disabled={workspace === undefined}
-            onClick={tasks.onNewAutomationAgent}
+        room === SHELL_ROOM.NARROW ? (
+          // A phone heads the list as it heads every place (`phone-head.tsx`): New automation, the title centred, and a ⋯.
+          <PhoneHead
+            place="automations"
+            start={
+              <Tooltip label={NEW_AUTOMATION}>
+                <IconButton
+                  icon={<PlusIcon />}
+                  label={NEW_AUTOMATION}
+                  disabled={workspace === undefined}
+                  onClick={openNew}
+                />
+              </Tooltip>
+            }
+            title={<h1 className="desktop-toolbar-title">{AUTOMATIONS}</h1>}
+            end={
+              <PlaceMore
+                shown={tasks.shown}
+                groups={() => [
+                  [
+                    {
+                      label: CREATE_WITH_AGENT,
+                      icon: <BotIcon />,
+                      disabled: workspace === undefined,
+                      onSelect: tasks.onNewAutomationAgent,
+                    },
+                  ],
+                ]}
+              />
+            }
           />
-          <Button
-            variant={BUTTON_VARIANT.OUTLINE}
-            icon={<PlusIcon />}
-            disabled={workspace === undefined}
-            onClick={openNew}
-          >
-            New automation
-          </Button>
-        </AutomationsToolbar>
+        ) : (
+          <AutomationsToolbar>
+            <FoldingButton
+              label={CREATE_WITH_AGENT}
+              icon={<BotIcon />}
+              variant={BUTTON_VARIANT.OUTLINE}
+              disabled={workspace === undefined}
+              onClick={tasks.onNewAutomationAgent}
+            />
+            <Button
+              variant={BUTTON_VARIANT.OUTLINE}
+              icon={<PlusIcon />}
+              disabled={workspace === undefined}
+              onClick={openNew}
+            >
+              {NEW_AUTOMATION}
+            </Button>
+          </AutomationsToolbar>
+        )
       }
       state={listState(workspacesUnread, read)}
       loadingLabel={READING_AUTOMATIONS}
@@ -487,30 +533,56 @@ function ListPage({
   );
 }
 
+/**
+ * The toolbar of an automation's page that stands in for one it cannot
+ * show: the way back to the list, the list's clock and name, or on a phone
+ * the back's glyph alone, named for the list (`phone-head.tsx`).
+ */
+function ExitToolbar({ onBack, phone }: { onBack: () => void; phone: boolean }): React.JSX.Element {
+  if (phone) {
+    return (
+      <PhoneHead
+        place="automation"
+        start={
+          <Tooltip label={BACK_TO_AUTOMATIONS}>
+            <IconButton icon={<BackIcon />} label={BACK_TO_AUTOMATIONS} onClick={onBack} />
+          </Tooltip>
+        }
+        title={null}
+        end={null}
+      />
+    );
+  }
+  return (
+    <header className="desktop-toolbar">
+      <div className="desktop-toolbar-heading">
+        <Button variant={BUTTON_VARIANT.QUIET} icon={<ZapIcon />} onClick={onBack}>
+          {AUTOMATIONS}
+        </Button>
+      </div>
+    </header>
+  );
+}
+
 /** One automation's page whose list, or the workspaces it is read in, could not be read: said so, with Retry, rather than called gone. */
 function UnreadPage({
   line,
   onBack,
   onRetry,
+  phone,
 }: {
   line: string;
   onBack: () => void;
   onRetry: () => void;
+  /** Whether a phone heads the page, its way back the glyph alone. */
+  phone: boolean;
 }): React.JSX.Element {
   useAppCommand(APP_COMMAND.EXIT_AUTOMATIONS, onBack);
   return (
     <DetailPage
       frame={PAGE_FRAME.TOOLBAR}
       label="Automation"
-      toolbar={
-        <header className="desktop-toolbar">
-          <div className="desktop-toolbar-heading">
-            <Button variant={BUTTON_VARIANT.QUIET} icon={<ZapIcon />} onClick={onBack}>
-              Automations
-            </Button>
-          </div>
-        </header>
-      }
+      toolbar={<ExitToolbar onBack={onBack} phone={phone} />}
     >
       <ErrorState onRetry={onRetry} placement={ERROR_STATE_PLACEMENT.CENTRED}>
         {line}
@@ -520,21 +592,13 @@ function UnreadPage({
 }
 
 /** One automation's page that names an automation the list does not hold: it was deleted, or is of a workspace the reader is not in, as a link may name. */
-function GonePage({ onBack }: { onBack: () => void }): React.JSX.Element {
+function GonePage({ onBack, phone }: { onBack: () => void; phone: boolean }): React.JSX.Element {
   useAppCommand(APP_COMMAND.EXIT_AUTOMATIONS, onBack);
   return (
     <DetailPage
       frame={PAGE_FRAME.TOOLBAR}
       label="Automation"
-      toolbar={
-        <header className="desktop-toolbar">
-          <div className="desktop-toolbar-heading">
-            <Button variant={BUTTON_VARIANT.QUIET} icon={<ZapIcon />} onClick={onBack}>
-              Automations
-            </Button>
-          </div>
-        </header>
-      }
+      toolbar={<ExitToolbar onBack={onBack} phone={phone} />}
     >
       <NotFound thing={NOT_FOUND_THING.AUTOMATION} />
     </DetailPage>
@@ -654,11 +718,23 @@ function AutomationsPages({
   const { read, reload } = automations;
   if (workspace === undefined && tasks.workspacesFailed) {
     return (
-      <UnreadPage line={WORKSPACES_UNREAD_LINE} onBack={back} onRetry={tasks.onRetryWorkspaces} />
+      <UnreadPage
+        line={WORKSPACES_UNREAD_LINE}
+        onBack={back}
+        onRetry={tasks.onRetryWorkspaces}
+        phone={room === SHELL_ROOM.NARROW}
+      />
     );
   }
   if (read !== undefined && "failure" in read) {
-    return <UnreadPage line={UNREAD_LINE} onBack={back} onRetry={reload} />;
+    return (
+      <UnreadPage
+        line={UNREAD_LINE}
+        onBack={back}
+        onRetry={reload}
+        phone={room === SHELL_ROOM.NARROW}
+      />
+    );
   }
   const listedAutomations = read === undefined ? [] : read.automations;
   const opened =
@@ -671,7 +747,7 @@ function AutomationsPages({
     return read === undefined ? (
       <ReadingPage onBack={back} room={room} offersOwner={offersOwner} />
     ) : (
-      <GonePage onBack={back} />
+      <GonePage onBack={back} phone={room === SHELL_ROOM.NARROW} />
     );
   }
   // Code review, the one preset, is an experiment, so no page is filled in from it while it is off.

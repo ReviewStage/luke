@@ -307,12 +307,15 @@ const SHOW_ARCHIVED = "Show archived channels";
 /** What a task channel's menu opens its task with. */
 const OPEN_TASK = "Open task";
 
+/** What the way back from a place standing alone to the rail is called. */
+const BACK_TO_CHAT = "Back to Chat";
+
 /**
  * The way back's pill, which says where it goes and names Back's chord
  * whether its word is folded away or not, as the Inbox's way back does.
  */
 const BackHint: FoldingButtonHint = ({ children }) => (
-  <Tooltip label="Back to chat" command={APP_COMMAND.BACK}>
+  <Tooltip label={BACK_TO_CHAT} command={APP_COMMAND.BACK}>
     {children}
   </Tooltip>
 );
@@ -1043,12 +1046,18 @@ function ChatView({
       ),
     [answer, names, dialogs, view.open, readChannels, onSelect],
   );
+  // A phone's way back is the glyph alone, named for where it goes, as every phone's page leads (`phone-head.tsx`).
+  const phone = room === SHELL_ROOM.NARROW;
   const lead = useMemo(
     () =>
-      single ? (
+      phone ? (
+        <Tooltip label={BACK_TO_CHAT} command={APP_COMMAND.BACK}>
+          <IconButton icon={<BackIcon />} label={BACK_TO_CHAT} onClick={onList} />
+        </Tooltip>
+      ) : single ? (
         <FoldingButton label={CHAT_LIST} icon={<BackIcon />} onClick={onList} hint={BackHint} />
       ) : undefined,
-    [single, onList],
+    [phone, single, onList],
   );
   if (read === undefined || view.failed || rail === undefined || groups === undefined) {
     // Nothing read yet: a read that did not answer, one still out, or no chat to read at all.
@@ -1175,6 +1184,7 @@ function ChatView({
         readPicture={view.readPicture}
         taskDoors={taskDoors}
         lead={lead}
+        phone={phone}
         hidden={hidden.item}
       />
       {dialogs.dialog}

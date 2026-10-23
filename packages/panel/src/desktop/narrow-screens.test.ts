@@ -315,10 +315,14 @@ function onScreen(page: HTMLElement, columns: Readonly<Record<string, string>>):
     .map(([name]) => name);
 }
 
-/** The button in `within` that says `words`, or none. */
+/** What a phone's way back from a Chat place to its rail is called, its glyph alone. */
+const BACK_TO_CHAT = "Back to Chat";
+
+/** The button in `within` that says `words`, by its words or its name, or none. */
 function buttonSaying(within: HTMLElement, words: string): HTMLButtonElement | undefined {
+  // Note that a phone's way back is its glyph alone, so it says its words by its name.
   return [...within.querySelectorAll("button")].find(
-    (button) => button.textContent?.trim() === words,
+    (button) => button.textContent?.trim() === words || button.getAttribute("aria-label") === words,
   );
 }
 
@@ -485,13 +489,20 @@ test("Chat on a narrow stage opens on its rail, a place chosen stands alone unde
   act(() => forYou?.click());
   assert.deepEqual(onScreen(page, CHAT_COLUMNS), ["place"]);
   assert.equal(the(page, CHAT_COLUMNS.place).getAttribute("aria-label"), "For you");
+  // A phone heads the place as it heads every page: the way back's glyph alone, the name centred, nothing else.
+  const head = the(page, ".chat-place-head");
+  assert.deepEqual(
+    [...head.querySelectorAll("button")].map((each) => each.getAttribute("aria-label")),
+    [BACK_TO_CHAT],
+  );
+  assert.equal(head.querySelector("h1")?.textContent, "For you");
 
-  press(the(page, CHAT_COLUMNS.place), "Chat");
+  press(the(page, CHAT_COLUMNS.place), BACK_TO_CHAT);
   assert.deepEqual(onScreen(page, CHAT_COLUMNS), ["rail"]);
 
   resizeStage(WIDE);
   assert.deepEqual(onScreen(page, CHAT_COLUMNS), ["rail", "place"]);
-  assert.equal(buttonSaying(the(page, CHAT_COLUMNS.place), "Chat"), undefined);
+  assert.equal(buttonSaying(the(page, CHAT_COLUMNS.place), BACK_TO_CHAT), undefined);
 });
 
 test("a link to a chat place on a narrow stage opens on that place, with the way back to the rail", async () => {
@@ -504,7 +515,7 @@ test("a link to a chat place on a narrow stage opens on that place, with the way
   );
   assert.deepEqual(onScreen(page, CHAT_COLUMNS), ["place"]);
 
-  press(the(page, CHAT_COLUMNS.place), "Chat");
+  press(the(page, CHAT_COLUMNS.place), BACK_TO_CHAT);
   assert.deepEqual(onScreen(page, CHAT_COLUMNS), ["rail"]);
 });
 
@@ -569,9 +580,13 @@ test("a place chosen in a narrow Chat takes the focus to its way back, and Back 
     forYou.click();
   });
   assert.equal(focusIn(page, CHAT_COLUMNS), "place");
-  assert.equal(document.activeElement?.textContent?.trim(), "Chat", "the way back to the rail");
+  assert.equal(
+    document.activeElement?.getAttribute("aria-label"),
+    BACK_TO_CHAT,
+    "the way back to the rail",
+  );
 
-  pressFocused(the(page, CHAT_COLUMNS.place), "Chat");
+  pressFocused(the(page, CHAT_COLUMNS.place), BACK_TO_CHAT);
   assert.equal(document.activeElement, forYou, "the row chosen");
 });
 
@@ -605,5 +620,9 @@ test("a link to a chat place on a narrow stage opened while the read is out hand
   );
   act(() => landChatRead?.());
   assert.equal(focusIn(page, CHAT_COLUMNS), "place");
-  assert.equal(document.activeElement?.textContent?.trim(), "Chat", "the way back to the rail");
+  assert.equal(
+    document.activeElement?.getAttribute("aria-label"),
+    BACK_TO_CHAT,
+    "the way back to the rail",
+  );
 });

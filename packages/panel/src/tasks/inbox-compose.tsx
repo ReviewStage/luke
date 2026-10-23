@@ -25,12 +25,15 @@ import {
   CHIP_WIDTH,
   FoldingButton,
   type FoldingButtonHint,
+  IconButton,
   Spinner,
   TEXT_FIELD_SIZE,
   TextField,
   Tooltip,
+  TrashIcon,
 } from "@luke/ui";
 import { useEffect, useRef, useState } from "react";
+import { PhoneHead } from "../desktop/phone-head.js";
 import { imageFiles } from "../feedback-images.js";
 import { useIntegrationStatuses } from "../integration-statuses.js";
 import { matchingRows } from "../searchable-menu.js";
@@ -55,7 +58,7 @@ const NO_MATCH = "No agent matches";
 const NO_AGENTS = "No agents in this workspace yet.";
 const AGENTS_FAILED = "The workspace's agents could not be read.";
 const SUBJECT_PLACEHOLDER = "Optional";
-const BACK_TO_INBOX = "Back to inbox";
+const BACK_TO_INBOX = "Back to Inbox";
 
 /** The way back's pill, which names Back's chord as the item pane's does. */
 const BackHint: FoldingButtonHint = ({ children }) => (
@@ -95,6 +98,8 @@ export interface InboxComposeProps {
   readonly start: InboxThreadStarter;
   readonly onStarted: (started: InboxStarted) => void;
   readonly onDiscard: () => void;
+  /** Whether a phone heads the pane (`phone-head.tsx`): the way back's glyph, the title centred, and Discard's glyph. */
+  readonly phone?: boolean | undefined;
 }
 
 /** The agents To may name: those not archived, since none of them hears a thread. */
@@ -155,6 +160,7 @@ export function InboxCompose({
   start,
   onStarted,
   onDiscard,
+  phone = false,
 }: InboxComposeProps): React.JSX.Element {
   const [read, setRead] = useState<AgentsRead | undefined>(undefined);
   // The agents the last search found, standing until the next answers.
@@ -260,19 +266,41 @@ export function InboxCompose({
   const note = refusal ?? (field.failed ? EDITOR_LOAD_FAILED : undefined);
   return (
     <section className="inbox-view-items" aria-label={NEW_THREAD} hidden={hidden}>
-      <header className="desktop-toolbar">
-        {onBack === undefined ? null : (
-          <FoldingButton label="Inbox" icon={<BackIcon />} onClick={onBack} hint={BackHint} />
-        )}
-        <div className="desktop-toolbar-heading">
-          <h1 className="desktop-toolbar-title">{NEW_THREAD}</h1>
-        </div>
-        <div className="desktop-toolbar-actions">
-          <Button variant={BUTTON_VARIANT.QUIET} onClick={onDiscard} disabled={sending}>
-            {DISCARD}
-          </Button>
-        </div>
-      </header>
+      {phone && onBack !== undefined ? (
+        <PhoneHead
+          place="inbox-compose"
+          start={
+            <Tooltip label={BACK_TO_INBOX}>
+              <IconButton icon={<BackIcon />} label={BACK_TO_INBOX} onClick={onBack} />
+            </Tooltip>
+          }
+          title={<h1 className="desktop-toolbar-title">{NEW_THREAD}</h1>}
+          end={
+            <Tooltip label={DISCARD}>
+              <IconButton
+                icon={<TrashIcon />}
+                label={DISCARD}
+                onClick={onDiscard}
+                disabled={sending}
+              />
+            </Tooltip>
+          }
+        />
+      ) : (
+        <header className="desktop-toolbar">
+          {onBack === undefined ? null : (
+            <FoldingButton label="Inbox" icon={<BackIcon />} onClick={onBack} hint={BackHint} />
+          )}
+          <div className="desktop-toolbar-heading">
+            <h1 className="desktop-toolbar-title">{NEW_THREAD}</h1>
+          </div>
+          <div className="desktop-toolbar-actions">
+            <Button variant={BUTTON_VARIANT.QUIET} onClick={onDiscard} disabled={sending}>
+              {DISCARD}
+            </Button>
+          </div>
+        </header>
+      )}
       <div className="desktop-inbox inbox-compose">
         <div className="inbox-compose-head">
           <div className="inbox-compose-row">

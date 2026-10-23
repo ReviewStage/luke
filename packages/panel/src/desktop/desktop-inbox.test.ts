@@ -616,8 +616,9 @@ function mount(
   const container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
+  // Note that a panel handed in stands as handed, in whatever room, so a test can stand one open where a bare panel cannot open.
   const page =
-    room === undefined
+    room === undefined || panel !== undefined
       ? createElement(Page, { sidePanel: panel })
       : createElement(Panelled, { at: room });
   act(() => root?.render(onRegistry(AtomRegistry.make(), page)));
@@ -8942,4 +8943,108 @@ test("an agent of the workspace's newest stays found by every word its row shows
   await settle();
   assert.deepEqual(searched, ["billing alerts"]);
   assert.deepEqual(toMenuRows(), [`Alerts · ${BILLING.name}`]);
+});
+
+test("on a phone an item is headed by its way back's glyph, its title centred, and one ⋯ that says where it stands and holds the pager, what the crumbs opened, the panel, and the item's own actions", async () => {
+  const { page, asked } = mount([], { room: SHELL_ROOM.NARROW });
+  await settle();
+  layOut(page, 390);
+  act(() => rowNamed(page, "Expire after 7 days?").click());
+  await settle();
+  const head = page.querySelector<HTMLElement>(".inbox-item-head");
+  assert.ok(head, "the phone's head stands");
+  assert.deepEqual(
+    [...head.querySelectorAll("button")].map((each) => each.getAttribute("aria-label")),
+    ["Back to Inbox", "Item actions"],
+    "one control a corner",
+  );
+  assert.equal(head.querySelector("h1")?.textContent, "Expire after 7 days?");
+  assert.equal(page.querySelector('nav[aria-label="Path"]'), null, "no crumbs under it");
+
+  act(() => head.querySelector<HTMLButtonElement>('[aria-label="Item actions"]')?.click());
+  const menu = document.querySelector<HTMLElement>('[role="menu"]:not([data-leaving])');
+  assert.ok(menu, "the ⋯ opens");
+  assert.match(menu.textContent ?? "", /\d of \d/, "it says where the item stands");
+  const labels = [...menu.querySelectorAll(".luke-menu-item-label")].map(
+    (each) => each.textContent,
+  );
+  for (const offered of [
+    "Previous item",
+    "Next item",
+    "Open task",
+    "Open agent",
+    "Show panel",
+    "Copy link",
+  ]) {
+    assert.ok(labels.includes(offered), `the ⋯ offers ${offered}`);
+  }
+  const openTask = [...menu.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(
+    (each) => each.querySelector(".luke-menu-item-label")?.textContent === "Open task",
+  );
+  act(() => openTask?.click());
+  assert.deepEqual(
+    asked.shownTasks,
+    [INVITES.id],
+    "Open task opens the item's task, as its crumb did",
+  );
+
+  act(() => head.querySelector<HTMLButtonElement>('[aria-label="Back to Inbox"]')?.click());
+  assert.deepEqual(columnsShown(page), ["list"], "the way back stands the list");
+});
+
+test("on a phone the panel open over an item heads itself: the way back to the item, what it shows centred, and one ⋯ listing its tabs, in place of its bar", async () => {
+  let shut = 0;
+  const panel: SidePanelControl = {
+    ...tasksControl().sidePanel,
+    open: true,
+    fullScreen: true,
+    fullScreenOnly: true,
+    onToggle: () => {
+      shut += 1;
+    },
+  };
+  const { page } = mount([], { room: SHELL_ROOM.NARROW, panel });
+  await settle();
+  layOut(page, 390);
+  act(() => rowNamed(page, "Expire after 7 days?").click());
+  await settle();
+  const head = page.querySelector<HTMLElement>(".side-panel .panel-head");
+  assert.ok(head, "the panel heads itself");
+  assert.ok(page.querySelector(".side-panel[data-pane-switch]"), "its bar gives way to the head");
+  assert.deepEqual(
+    [...head.querySelectorAll("button")].map((each) => each.getAttribute("aria-label")),
+    ["Back to Expire after 7 days?", "More"],
+  );
+  act(() => head.querySelector<HTMLButtonElement>('[aria-label="More"]')?.click());
+  assert.ok(
+    [...document.querySelectorAll(".luke-menu-item-label")].some(
+      (each) => each.textContent === "Tabs",
+    ),
+    "the ⋯ lists the panel's tabs",
+  );
+  act(() => head.querySelector<HTMLButtonElement>('[aria-label="More"]')?.click());
+  act(() =>
+    head.querySelector<HTMLButtonElement>('[aria-label="Back to Expire after 7 days?"]')?.click(),
+  );
+  assert.equal(shut, 1, "the way back shuts the panel");
+});
+
+test("on a phone New thread is headed by its way back's glyph, its title centred, and Discard's glyph", async () => {
+  const { page } = mount([], { room: SHELL_ROOM.NARROW });
+  await settle();
+  layOut(page, 390);
+  const listHead = page.querySelector<HTMLElement>(".inbox-head") ?? assert.fail("the list's head");
+  act(() => listHead.querySelector<HTMLButtonElement>('[aria-label="More"]')?.click());
+  const compose = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(
+    (each) => each.querySelector(".luke-menu-item-label")?.textContent === "New thread",
+  );
+  act(() => compose?.click());
+  await settle();
+  const head = page.querySelector<HTMLElement>(".inbox-compose-head");
+  assert.ok(head, "the phone's head stands");
+  assert.deepEqual(
+    [...head.querySelectorAll("button")].map((each) => each.getAttribute("aria-label")),
+    ["Back to Inbox", "Discard"],
+  );
+  assert.equal(head.querySelector("h1")?.textContent, "New thread");
 });
