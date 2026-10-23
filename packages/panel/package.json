@@ -55,7 +55,6 @@
     "./styles/settings.css": "./src/styles/settings.css",
     "./styles/shell.css": "./src/styles/shell.css",
     "./styles/shortcut.css": "./src/styles/shortcut.css",
-    "./styles/sign-in.css": "./src/styles/sign-in.css",
     "./styles/tasks.css": "./src/styles/tasks.css",
     "./styles/theme.css": "./src/styles/theme.css",
     "./tasks/tasks-fixture-loader": "./src/tasks/tasks-fixture-loader.js",
