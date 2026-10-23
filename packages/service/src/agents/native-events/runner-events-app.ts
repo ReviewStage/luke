@@ -32,7 +32,7 @@ import {
 } from "@luke/features/provider-key-wire";
 import { causeKind } from "@luke/runtime/effect";
 import { type WireValue, WireValueSchema } from "@luke/wire";
-import { Clock, Effect, Layer, Option, Predicate, Result, Schema } from "effect";
+import { Clock, DateTime, Effect, Layer, Option, Predicate, Result, Schema } from "effect";
 import {
   FetchHttpClient,
   HttpRouter,
@@ -522,7 +522,7 @@ const stopTurnOfAsk = (
       }
     }
     const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
-    const at = new Date(yield* Clock.currentTimeMillis);
+    const at = yield* DateTime.nowAsDate;
     yield* writer.requestTurnCancel(target, { turnId, at });
   }).pipe(
     Effect.catchCause((cause) =>
