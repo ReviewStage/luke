@@ -114,6 +114,26 @@ test("a read in progress is announced by name, and shows no rows", () => {
   expect(document.querySelector('[role="list"], ul')).toBeNull();
 });
 
+test("a read in progress stands the caller's own skeleton in the named region, in place of the rows", () => {
+  const container = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(container);
+  roots.push(root);
+  act(() =>
+    root.render(
+      createElement(CollectionPage, {
+        title: "Tasks",
+        state: COLLECTION_STATE.LOADING,
+        loadingLabel: "Reading tasks",
+        skeleton: createElement("div", { "data-testid": "board-bones" }),
+      }),
+    ),
+  );
+  const status = document.querySelector('[role="status"]');
+  expect(status?.getAttribute("aria-busy")).toBe("true");
+  expect(status?.parentElement?.querySelector('[data-testid="board-bones"]')).not.toBeNull();
+  expect(document.querySelector(".luke-collection-page-loading")).toBeNull();
+});
+
 test("an empty collection shows its empty state alone, and a failed one its error", () => {
   const render = draw(COLLECTION_STATE.EMPTY);
   expect(document.body.textContent).toContain("No tasks yet");
