@@ -445,7 +445,6 @@ export interface CoderHost extends HostAdmission {
    */
   research(
     admitted: AdmittedConversation,
-    tool: typeof CODER_TOOL.READ_WEB_PAGE,
     turn: { readonly sessionId: string; readonly eveTurnId: string },
     input: UnparsedWireValue,
   ): Effect.Effect<ReadWebPageResult, never, HttpClient.HttpClient>;
@@ -541,7 +540,7 @@ const PREVIOUS_TURN_READ = 2;
 const NO_CHAT: ChatSince = { messages: [], more: false };
 
 /** A failure as a log line carries it: the checkout's reason, or a store failure's kind alone, since its message may name a statement. */
-function describeFailure(failure: CheckoutFailure): string {
+export function describeFailure(failure: CheckoutFailure): string {
   return failure._tag === "CheckoutRefused" ? failure.reason : failure._tag;
 }
 
@@ -1188,7 +1187,7 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
         yield* titleSubagent(model, admitted.target, childId, task);
       }),
 
-    research: (_admitted, _tool, turn, input) =>
+    research: (_admitted, turn, input) =>
       runReadWebPage(
         { turnId: hostTurnId(turn.sessionId, turn.eveTurnId), budget: research },
         input,

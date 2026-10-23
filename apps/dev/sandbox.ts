@@ -1,6 +1,7 @@
 import { AGENT_ROLE } from "@luke/service/agents/agent-runtime/role";
 import { environment, openSandbox } from "@luke/service/agents/agent-runtime/sandbox";
 import { CheckoutRefused } from "@luke/service/agents/coder-host/checkout";
+import { describeFailure } from "@luke/service/agents/coder-host/host";
 import { Effect, Result } from "effect";
 import { defineSandbox } from "eve/sandbox";
 import { host } from "./host.js";
@@ -48,9 +49,7 @@ export default defineSandbox(async ({ session }) => {
     }).pipe(
       // The failure fails the call that opened the sandbox, in the host's word for it; a store
       // failure by its kind alone, since its message may name a statement.
-      Effect.mapError(
-        (failure) => new Error(failure._tag === "CheckoutRefused" ? failure.reason : failure._tag),
-      ),
+      Effect.mapError((failure) => new Error(describeFailure(failure))),
     ),
   );
   return sandbox;
