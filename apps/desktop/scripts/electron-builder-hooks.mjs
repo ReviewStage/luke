@@ -4,11 +4,10 @@ import os from "node:os";
 import path from "node:path";
 import {
   awaitNotarizationDecision,
-  NOTARY_POLL_INTERVAL_MS,
-  NOTARY_POLL_TIMEOUT_MS,
   notaryInfoArguments,
   notaryLogArguments,
   notarySubmitArguments,
+  RELEASE_LATEST_DMG_FILE_NAME,
   releaseDmgFileName,
   releaseZipFileName,
   resolveNotaryCredentials,
@@ -63,12 +62,7 @@ async function submitForNotarization(artifactPath, credentials) {
   };
 
   try {
-    await awaitNotarizationDecision({
-      readStatus,
-      wait: sleep,
-      intervalMs: NOTARY_POLL_INTERVAL_MS,
-      timeoutMs: NOTARY_POLL_TIMEOUT_MS,
-    });
+    await awaitNotarizationDecision({ readStatus, wait: sleep });
   } catch (error) {
     process.stderr.write(`${error.message}\n`);
     execFileSync("xcrun", notaryLogArguments(submission.id, credentials), {
@@ -87,8 +81,8 @@ function staple(artifactPath) {
   });
 }
 
-function shouldNotarize(env = process.env) {
-  return env[ELECTRON_BUILDER_NOTARIZE_ENV] === "1";
+function shouldNotarize() {
+  return process.env[ELECTRON_BUILDER_NOTARIZE_ENV] === "1";
 }
 
 export async function notarizeElectronBuilderApp(context) {
@@ -141,7 +135,7 @@ export async function finalizeElectronBuilderArtifacts(buildResult) {
     await staple(dmgPath);
   }
 
-  const latestDmgPath = path.join(outputDirectory, "Luke.dmg");
+  const latestDmgPath = path.join(outputDirectory, RELEASE_LATEST_DMG_FILE_NAME);
   fs.copyFileSync(dmgPath, latestDmgPath);
   artifacts.push(latestDmgPath, writeSha256(dmgPath), writeSha256(zipPath));
   return artifacts;
