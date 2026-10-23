@@ -15,15 +15,22 @@ import {
   type ComposerEditorHandle,
   type ComposerEditorProps,
   type ComposerTrigger,
+  type EditorFormat,
 } from "./contract.js";
 
 /**
  * The message box's editor through its mount and its handle: the words read
  * out as the one string a message is, every change from outside landing
  * once, Enter and an input method's Enter, the bound, a paste, a dictation's
- * mark, and a skill's chip, which one Backspace takes out whole and whose
- * name stands in no attribute the recording would keep.
+ * mark, a skill's chip, which one Backspace takes out whole and whose
+ * name stands in no attribute the recording would keep, and the inline
+ * marks, typed, chorded, and read out and back as their Markdown.
  */
+
+// Note that the editor's keymap reads the platform once, as it loads, to say which key Mod is, so the page is a Mac's before anything is imported.
+vi.hoisted(() => {
+  Object.defineProperty(navigator, "platform", { value: "MacIntel", configurable: true });
+});
 
 const SKILLS: ReadonlySet<string> = new Set(["release", "deploy"]);
 
@@ -92,7 +99,52 @@ function mounted(text: string, overrides: Partial<ComposerEditorProps> = {}) {
     chips: () => [...chips].map((chip) => chip.textContent),
     /** Puts the caret at a place in the document, as a press there would. */
     caretAt: (pos: number) => editor.commands.setTextSelection(pos),
+    /** Selects the document from one place to another, as a drag would. */
+    select: (from: number, to: number) => editor.commands.setTextSelection({ from, to }),
+    /** Selects every word, as ⌘A does. */
+    selectAll: () => editor.commands.selectAll(),
   };
+}
+
+/** The words typed one key at a time, as the browser's text input hands each to the editor, so a Markdown rule a key completes runs. */
+function typeKeys(host: HTMLElement, text: string): void {
+  const view = composerEditor(host).editor?.view ?? assert.fail("the editor is running");
+  for (const character of text) {
+    const { from, to } = view.state.selection;
+    const typed = () => view.state.tr.insertText(character, from, to);
+    const ruled = view.someProp("handleTextInput", (handle) =>
+      handle(view, from, to, character, typed),
+    );
+    if (ruled !== true) view.dispatch(typed());
+  }
+}
+
+/** A chord pressed in the box, ⌘ with the letter, Shift where asked, as a Mac keyboard spells it; answers whether anything outside the editor heard it. */
+function chord(host: HTMLElement, letter: string, shift = false): boolean {
+  let heard = false;
+  const hear = () => {
+    heard = true;
+  };
+  window.addEventListener("keydown", hear);
+  const upper = letter.toUpperCase();
+  pressInComposer(host, shift ? upper : letter, {
+    code: `Key${upper}`,
+    keyCode: upper.charCodeAt(0),
+    metaKey: true,
+    shiftKey: shift,
+  });
+  window.removeEventListener("keydown", hear);
+  return heard;
+}
+
+/** What the box's words hold in each mark's element, by the element's tag. */
+function marked(host: HTMLElement): Record<string, string[]> {
+  const found: Record<string, string[]> = {};
+  for (const tag of ["strong", "em", "s", "code", "a"]) {
+    const words = [...composerEditor(host).querySelectorAll(tag)].map((each) => each.textContent);
+    if (words.length > 0) found[tag] = words;
+  }
+  return found;
 }
 
 /** A paste of the words and files given, as the system's clipboard hands one over, with the markup a copy from an editor carries beside them. */
@@ -421,7 +473,8 @@ test("an @ in code is the code's: no @ word is reported in a fence or a span", (
   typeInComposer(box.host, "```\n@ses");
   const inFence = box.reported.at(-1);
   box.handle.replace("Run `x @ses` now");
-  box.caretAt(1 + "Run `x @ses".length);
+  // Note that the code span's backticks are its mark's, which stand in no place of the document.
+  box.caretAt(1 + "Run x @ses".length);
 
   assert.equal(inFence, undefined);
   assert.equal(box.reported.at(-1), undefined);
@@ -451,7 +504,7 @@ test("a page's address pasted inside a code span stays the code's words", () => 
   const box = mountedWithMentions("");
   box.handle.replace("Run `x` now");
 
-  box.caretAt(1 + "Run `x".length);
+  box.caretAt(1 + "Run x".length);
   paste(box.host, ISSUE_URL);
 
   assert.deepEqual(box.drawn, []);
@@ -538,4 +591,159 @@ test("a quote is cut from its end to the room the bound leaves, and none is laid
   assert.ok(written.length <= 30, written);
   assert.match(written, /^Hi\n\n> Option A.*…\n\n$/u);
   assert.equal(box.handle.insertQuote("More"), false);
+});
+
+test("each mark's chord lays it on the words selected and takes it off again, the words read out as its Markdown, and the window never hears the chord", () => {
+  const box = mounted("Ship it now");
+  const chords = [
+    { key: "b", shiftKey: false, written: "Ship **it** now" },
+    { key: "i", shiftKey: false, written: "Ship *it* now" },
+    { key: "x", shiftKey: true, written: "Ship ~~it~~ now" },
+    { key: "e", shiftKey: false, written: "Ship `it` now" },
+  ];
+  for (const { key, shiftKey, written } of chords) {
+    box.select(1 + "Ship ".length, 1 + "Ship it".length);
+    const heard = chord(box.host, key, shiftKey);
+    assert.equal(box.drafts.at(-1), written, key);
+    assert.equal(heard, false, `the window never hears ${key}`);
+
+    chord(box.host, key, shiftKey);
+    assert.equal(box.drafts.at(-1), "Ship it now", `${key} again takes it off`);
+  }
+});
+
+test("a mark's Markdown typed becomes the mark, its delimiters gone from the words shown", () => {
+  const box = mounted("");
+
+  typeKeys(box.host, "a **bold** and *slanted* and ~~struck~~ and `code` word");
+
+  assert.deepEqual(marked(box.host), {
+    strong: ["bold"],
+    em: ["slanted"],
+    s: ["struck"],
+    code: ["code"],
+  });
+  assert.equal(composerEditor(box.host).textContent, "a bold and slanted and struck and code word");
+  assert.equal(box.drafts.at(-1), "a **bold** and *slanted* and ~~struck~~ and `code` word");
+});
+
+test("a message that comes back reads its Markdown back into marks, and reads out as it came", () => {
+  const box = mounted("");
+  const message =
+    "Go **now**, *gently*, ~~not~~ `make it` per [the guide](https://example.com/guide) ***both*** ways";
+
+  box.handle.replace(message);
+
+  assert.deepEqual(marked(box.host), {
+    strong: ["now", "both"],
+    em: ["gently", "both"],
+    s: ["not"],
+    code: ["make it"],
+    a: ["the guide"],
+  });
+  assert.equal(box.drafts.at(-1), message);
+  typeInComposer(box.host, "!");
+  assert.equal(box.drafts.at(-1), `${message}!`, "and an edit keeps every mark as it came");
+});
+
+test("words wearing no mark read out exactly as they came, stray asterisks, underscores, and backslashes among them", () => {
+  const box = mounted("");
+  const message = "5 * 3 is __init__ in my_var, \\*kept\\* ~one~ and an `open tick";
+
+  box.handle.replace(message);
+  typeInComposer(box.host, "!");
+
+  assert.deepEqual(marked(box.host), {});
+  assert.equal(box.drafts.at(-1), `${message}!`);
+});
+
+test("a chip among words selected and bolded stays the chip and wears no mark, and bolding them again takes the mark off", () => {
+  const box = mounted("Ship /deploy now");
+  box.selectAll();
+
+  chord(box.host, "b");
+  assert.equal(box.drafts.at(-1), "**Ship** /deploy **now**");
+  assert.deepEqual(box.chips(), ["/deploy"]);
+  assert.deepEqual(marked(box.host), { strong: ["Ship ", " now"] });
+
+  chord(box.host, "b");
+  assert.equal(box.drafts.at(-1), "Ship /deploy now");
+  assert.deepEqual(box.chips(), ["/deploy"]);
+});
+
+test("words in code take no other mark, and a mark's Markdown typed there stays the code's words", () => {
+  const box = mounted("Run `make it` now");
+  box.select(1 + "Run ".length, 1 + "Run make it".length);
+
+  chord(box.host, "b");
+  assert.deepEqual(box.drafts, [], "the words are as they were, so none are handed back");
+
+  box.caretAt(1 + "Run make".length);
+  typeKeys(box.host, " **x**");
+  assert.deepEqual(marked(box.host), { code: ["make **x** it"] });
+});
+
+test("a / typed in bold words still offers the skills, and a pick writes its chip outside the mark", () => {
+  const box = mounted("Run");
+  box.selectAll();
+  chord(box.host, "b");
+  box.caretAt(1 + "Run".length);
+
+  typeInComposer(box.host, " /rel");
+  assert.equal(box.triggers.at(-1)?.query, "rel");
+
+  box.handle.chooseSkill("release");
+  assert.deepEqual(box.chips(), ["/release"]);
+  assert.equal(box.drafts.at(-1), "**Run** /release ");
+});
+
+test("Enter still sends words that wear marks, and Shift+Enter is still a new line", () => {
+  const box = mounted("**Ship** it");
+
+  pressInComposer(box.host, "Enter", { shiftKey: true });
+  assert.equal(box.sends.count, 0);
+  pressInComposer(box.host, "Enter");
+  assert.equal(box.sends.count, 1);
+});
+
+test("⌘K over words selected opens the owner's link field and links them, and with none selected it is the window's", () => {
+  const formats: EditorFormat[] = [];
+  const links = { count: 0 };
+  const box = mounted("Read the guide", {
+    format: {
+      onFormat: (format) => formats.push(format),
+      onLink: () => {
+        links.count += 1;
+      },
+    },
+  });
+
+  box.caretAt(1);
+  assert.equal(chord(box.host, "k"), true, "a caret's ⌘K is the window's");
+  assert.equal(links.count, 0);
+
+  box.select(1 + "Read the ".length, 1 + "Read the guide".length);
+  assert.equal(formats.at(-1)?.empty, false, "the toolbar is told of the words selected");
+  assert.equal(chord(box.host, "k"), false, "the editor's alone");
+  assert.equal(links.count, 1);
+
+  box.handle.setLink("https://example.com/guide");
+  assert.equal(box.drafts.at(-1), "Read the [guide](https://example.com/guide)");
+  box.handle.toggleMark("writing-bold");
+  assert.equal(box.drafts.at(-1), "Read the [**guide**](https://example.com/guide)");
+});
+
+test("pasted Markdown lands as its marks, a bare address pasted stays the words it is, and one pasted over words selected links them", () => {
+  const box = mounted("");
+
+  paste(box.host, "Ship **it** in my __init__ at https://example.com/a");
+  assert.equal(box.drafts.at(-1), "Ship **it** in my __init__ at https://example.com/a");
+  assert.deepEqual(marked(box.host), { strong: ["it"] });
+
+  box.select(1 + "Ship ".length, 1 + "Ship it".length);
+  paste(box.host, "https://example.com/b");
+  assert.equal(
+    box.drafts.at(-1),
+    "Ship [**it**](https://example.com/b) in my __init__ at https://example.com/a",
+  );
 });
