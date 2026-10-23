@@ -12,12 +12,7 @@ import {
   RUN_PROFILE,
 } from "@luke/host/app-state";
 import type { ChatShown } from "@luke/host/contract";
-import {
-  APP_SETTING_SCHEMA,
-  EXPERIMENT,
-  type Experiment,
-  type HostCapability,
-} from "@luke/settings";
+import { APP_SETTING_SCHEMA, type Experiment, type HostCapability } from "@luke/settings";
 import { SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { cssCustomProperties } from "@luke/ui";
@@ -85,7 +80,6 @@ import {
   useAdminAccess,
   useAdminAccessPending,
   useAppSlice,
-  useExperiment,
   VOICE_AVAILABLE,
 } from "./use-app-state.js";
 import { useSignIn } from "./use-sign-in.js";
@@ -415,13 +409,6 @@ function AppWindow(): React.JSX.Element {
     leaveGuard,
     room,
   });
-  // A Browser tab left open as its experiment goes off closes, its page with
-  // it, on whatever plan and whatever the window shows, Settings included.
-  const browsing = useExperiment(EXPERIMENT.BROWSER);
-  const { onCloseBrowsers } = tasks.sidePanel;
-  useEffect(() => {
-    if (!browsing) onCloseBrowsers();
-  }, [browsing, onCloseBrowsers]);
   // The workspace Settings shows: the sidebar's, or one a link named while Settings stays open.
   const settingsWorkspace = useSettingsWorkspace({
     listedId: tasks.workspace?.id,

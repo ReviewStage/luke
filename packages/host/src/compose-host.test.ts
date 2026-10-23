@@ -172,7 +172,6 @@ describe("the host's platform concerns", () => {
         HOST_CAPABILITY.MAC_TERMINAL,
         HOST_CAPABILITY.TERMINALS,
         HOST_CAPABILITY.CHATGPT_SIGN_IN,
-        HOST_CAPABILITY.BROWSER,
         HOST_CAPABILITY.DESKTOP_APP,
       ]);
     }).pipe(Effect.provide(NodeFileSystem.layer)),

@@ -69,12 +69,6 @@ Review places a module and a component alike under this rule.
   on 2026-10-13: the Keyframe session token for a call's own avatar may reach
   the panel window, which runs that session, and never the voice window,
   a Gateway answer or event, app state, a counted event, a trace, or a fixture.
-  And, approved by Dean on 2026-10-16, a Browser tab's page, its address,
-  title, and a still of it go only to the panel that opened the tab, from its
-  view in main (`apps/desktop/src/main/window/browser-views.ts`), never into a
-  trace, a counted event, a fixture, app state, the service, or the voice
-  window; the still is left out of the screen recording, and the title and
-  address the tab draws are masked there as every word is.
   And, approved by Dean on 2026-10-20, an agent's cloud browser, a Chromium
   in that agent's own Vercel Sandbox, shows its pages, their live-view frames,
   address, title, screenshots, and text snapshots to that agent and its workers,

@@ -74,10 +74,7 @@ const roots: Root[] = [];
 
 beforeEach(() => {
   installScrollIntoView();
-  fakeAppBridge({
-    onMenuCommand: () => () => undefined,
-    onBrowserState: () => () => undefined,
-  });
+  fakeAppBridge({ onMenuCommand: () => () => undefined });
 });
 
 afterEach(() => {
@@ -92,13 +89,12 @@ async function settle(): Promise<void> {
   });
 }
 
-/** The plan drawn with its side panel open on its Board, answering how many Browser tabs the panel was asked to open, and the tabs it was asked to show. */
+/** The plan drawn with its side panel open on its Board, answering the tabs it was asked to show. */
 async function mount(
   agents: readonly CodingAgentSummary[] = [],
   viewed?: string,
   strip?: readonly SidePanelTab[],
-): Promise<{ readonly opened: () => number; readonly chosen: readonly SidePanelTab[] }> {
-  let opened = 0;
+): Promise<{ readonly chosen: readonly SidePanelTab[] }> {
   const chosen: SidePanelTab[] = [];
   const container = document.createElement("div");
   document.body.append(container);
@@ -119,9 +115,6 @@ async function mount(
       ...base.sidePanel,
       open: true,
       tab: SIDE_PANEL_TAB.BOARD,
-      onOpenBrowser: () => {
-        opened += 1;
-      },
       onChoose: (tab) => {
         chosen.push(tab);
       },
@@ -138,7 +131,7 @@ async function mount(
     ),
   );
   await settle();
-  return { opened: () => opened, chosen };
+  return { chosen };
 }
 
 /** Opens the side panel's "+" and answers its rows under Browser. */
@@ -195,7 +188,6 @@ test("on a task with one coding agent, the panel's + New Browser tab drafts a ta
 
   assert.deepEqual(submenuChoices(), [], "no submenu stands");
   assert.ok(landedOnDraft(task.chosen), "the panel lands on a draft cloud Browser tab");
-  assert.equal(task.opened(), 0, "the Mac's own Browser tab is never opened");
   assert.deepEqual(asked, [], "nothing opens in the agent's sandbox until the draft's Enter");
 });
 
@@ -229,7 +221,6 @@ test("on a task with several coding agents, the panel's + New Browser tab opens 
   await act(async () => choices[1]?.click());
   await settle();
   assert.ok(landedOnDraft(task.chosen), "the panel lands on a draft cloud Browser tab");
-  assert.equal(task.opened(), 0, "the Mac's own Browser tab is never opened");
   assert.deepEqual(asked, [], "nothing opens in the agent's sandbox until the draft's Enter");
 });
 

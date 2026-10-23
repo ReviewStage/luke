@@ -242,10 +242,6 @@ it.effect(
           Promise.all([
             askAct(ACT_KIND.UPDATE_CHECK).catch((error: Error) => error.message),
             askAct(ACT_KIND.MICROPHONE_REQUEST).catch((error: Error) => error.message),
-            askAct(ACT_KIND.BROWSER_OPEN, {
-              browserId: "browser-1",
-              address: "https://example.com/",
-            }).catch((error: Error) => error.message),
           ]),
         );
 
@@ -254,7 +250,6 @@ it.effect(
         assert.deepEqual(refusals, [
           "Could not check for updates on this system.",
           "Could not ask for the microphone on this system.",
-          "Could not open that page.",
         ]);
         Reflect.deleteProperty(navigator, "clipboard");
       }),

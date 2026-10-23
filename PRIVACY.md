@@ -1052,8 +1052,7 @@ their tree, its pages, and its version history with the earlier version you
 are viewing; an Inbox item's body and pictures; the messages in Chat; each coding agent's and
 worker's tab, with its Changes tab, its Terminal tab, message box, menus of
 skills and MCP servers, and the files you attach there; a Browser tab, with
-the still of its page drawn while something covers it, and a cloud Browser
-tab with the live view of its page; code drawn in a
+the live view of its page; code drawn in a
 transcript; the API keys and Plan template pages of Settings; an automation's
 webhook secret, the one time it is shown; the admin page in the app, which
 only our maintainers can open and which names other people's accounts; and the cards
@@ -1071,22 +1070,14 @@ small, downscaled still of a screen you visited, taken by the app as you
 settle on it and as ⌃Tab leaves it. Those stills stay in that window's memory
 while it is open, a few at a time: they are never written to disk and never
 reach our service, a trace, a counted event, or the voice window, and the
-screen recording leaves them out, as it leaves out a Browser tab's still.
+screen recording leaves them out.
 
-**Browser tabs.** With the Browser tab experiment on, a Browser tab opens a
-web page you choose, your own `localhost` included, in a view of its own on
-your Mac. Luke does not see, store, log, or count the page, its address, or
-its title; they reach only the panel that opened the tab, and none of it
-reaches a trace, a counted event, or our service. The screen recording cannot
-see into the page's view, and leaves out the still of the page Luke draws while
-a menu covers it; the tab's title and address appear there as blocks, as every
-word does. The pages keep their own cookies and storage on your
-Mac, apart from Luke's own sign-in, and a sign-in to a site holds across
-launches. Every permission a page asks for, such as the camera, microphone, or
-location, is refused, and downloads are cancelled.
-
-A Browser tab can also be a cloud browser, which an agent drives and you
-watch. It is a Chromium that runs in the agent's own Vercel Sandbox, never on
+**Browser tabs.** With the Browser tab experiment on, a Browser tab shows an
+agent's cloud browser, which the agent drives and you can watch and take over.
+Earlier versions of the Mac app also had a Browser tab that opened pages on
+your Mac; the first launch after you update clears the cookies, storage, and
+cache it kept there. The cloud browser is a Chromium that runs in the agent's
+own Vercel Sandbox, never on
 your Mac, so it reaches that sandbox's own `localhost` and holds none of your
 Mac's cookies or signed-in sites. What the agent does with it reaches the model:
 each page's address and title, a screenshot, and a text snapshot of the page;

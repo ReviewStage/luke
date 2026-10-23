@@ -50,7 +50,7 @@ test("a truncated heading is still named by its whole title", () => {
 });
 
 test("a path cut from its start still holds every part of it", () => {
-  const path = "packages/panel/src/tasks/browser-pane/address-bar-model.ts";
+  const path = "packages/panel/src/tasks/cloud-browser/address-bar-model.ts";
   const container = render(
     createElement(Text, {
       as: TEXT_ELEMENT.SPAN,

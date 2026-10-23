@@ -11,14 +11,6 @@
  */
 
 import { type AvatarGrant, avatarGrantFromWire } from "@luke/features/avatar-grant";
-import {
-  type BrowserFocus,
-  type BrowserKey,
-  type BrowserPage,
-  isBrowserFocus,
-  isBrowserKey,
-  isBrowserPage,
-} from "@luke/features/browser-acts";
 import { isLinkPlace, type ReadLink } from "@luke/features/luke-link";
 import { type VoiceLiveSessionChanged, voiceLiveSessionChangedSchema } from "@luke/gateway";
 import { type AppCommand, isAppCommand } from "@luke/settings/shortcuts";
@@ -49,9 +41,6 @@ export const PUSH = {
   AVATAR_SESSION: "app:avatar-session",
   AVATAR_FEED: "app:avatar-feed",
   AVATAR_VIEW_SIGNAL: "app:avatar-view-signal",
-  BROWSER_STATE: "app:browser-state",
-  BROWSER_KEY: "app:browser-key",
-  BROWSER_FOCUS: "app:browser-focus",
   SHOW_LINK: "app:show-link",
   AGENT_ENDED: "app:agent-ended",
   INBOX_ITEM_OPENED: "app:inbox-item-opened",
@@ -181,24 +170,6 @@ export const PUSH_GUARD = {
     (value) => avatarViewSignalFromWire(value) !== undefined,
   ),
   /**
-   * How one of this panel's Browser tabs' pages stands now, each time it
-   * moves: loading, loaded, titled, sent elsewhere, or failed. An event
-   * rather than a slice of the document, because a page is this window's
-   * alone and nothing of it is kept.
-   */
-  [PUSH.BROWSER_STATE]: result<BrowserPage>(isBrowserPage),
-  /**
-   * A Command chord pressed while a Browser tab's page held the keyboard,
-   * handed back so the panel's keymap answers it as over any tab.
-   */
-  [PUSH.BROWSER_KEY]: result<BrowserKey>(isBrowserKey),
-  /**
-   * A Browser tab's page took the keyboard, which no focus event of the
-   * panel's own page hears, so the panel hands its keys to the column the
-   * page stands in.
-   */
-  [PUSH.BROWSER_FOCUS]: result<BrowserFocus>(isBrowserFocus),
-  /**
    * A Luke link the system handed the app: the panel is to open the place it
    * names, in the workspace it was written under. An event, as a click is,
    * because it is an ask the window answers once.
@@ -319,9 +290,6 @@ export const PUSH_METHOD = {
   onAvatarSession: PUSH.AVATAR_SESSION,
   onAvatarFeed: PUSH.AVATAR_FEED,
   onAvatarViewSignal: PUSH.AVATAR_VIEW_SIGNAL,
-  onBrowserState: PUSH.BROWSER_STATE,
-  onBrowserKey: PUSH.BROWSER_KEY,
-  onBrowserFocus: PUSH.BROWSER_FOCUS,
   onShowLink: PUSH.SHOW_LINK,
   onAgentEnded: PUSH.AGENT_ENDED,
   onInboxItemOpened: PUSH.INBOX_ITEM_OPENED,

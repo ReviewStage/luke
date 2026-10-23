@@ -20,6 +20,7 @@ import {
   Button,
   FILL_ELEMENT,
   Fill,
+  IconButton,
   REMOTE_KEY_ACTION,
   REMOTE_POINTER_ACTION,
   type RemoteKey,
@@ -32,6 +33,7 @@ import {
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
+  Tooltip,
 } from "@luke/ui";
 import { Duration } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
@@ -47,7 +49,6 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { useAct } from "../act.js";
 import { appPlatform } from "../app-platform.js";
 import { rendererRuntime } from "../renderer-runtime.js";
-import { BarStep } from "./browser-pane.js";
 import { CloudBrowserCursor, cursorPlacement } from "./cloud-browser-cursor.js";
 import {
   CLOUD_BROWSER_PHASE,
@@ -65,7 +66,7 @@ import {
 } from "./cloud-browser-tabs.js";
 
 /**
- * cloud-browser-pane.tsx -- one Browser tab in an agent's cloud browser, in the side panel: a bar with back, forward, reload, and the address, as the Mac's Browser tab has, then Take over and Hand back, and the page drawn live on a canvas; or a draft of one, which opens nothing until its bar opens an address.
+ * cloud-browser-pane.tsx -- one Browser tab in an agent's cloud browser, in the side panel: a bar with back, forward, reload, and the address, then Take over and Hand back, and the page drawn live on a canvas; or a draft of one, which opens nothing until its bar opens an address.
  *
  * Whose browser the tab lives in, which it never leaves, its strip tab
  * says with the agent's glyph and its card in words (`side-panel.tsx`), and
@@ -87,7 +88,7 @@ import {
  * offers Watch again. While the member drives the tab, the mouse, the
  * wheel, and the keys pressed on the canvas go to the page, and a paste goes
  * as text; a Command chord the window answers (`chordIsWindows`) stays the
- * window's, as over the Mac's Browser tab, and one the page edits text with
+ * window's, and one the page edits text with
  * is sent as Control, since the page runs on Linux. What the page shows is
  * the agent's and its members', so the pane is left out of the screen
  * recording (`ph-no-capture`), whose canvas recording is off in any case,
@@ -176,7 +177,7 @@ function openFailureWords(failure: BrowserTabOpenFailure, agent: string): string
 /**
  * A cloud Browser tab's bar: back, forward, and reload where `onStep` takes
  * them, and the address,
- * which opens what is typed as the Mac's Browser tab's bar reads it, then
+ * which opens what is typed as a browser's address bar reads it, then
  * whatever the caller hands it. What is typed is put back on a blur, unless
  * `holdTyped`; Escape answers `onEscape` where given, and leaves the bar
  * otherwise.
@@ -215,24 +216,30 @@ function CloudBrowserBar({
   return (
     <header className="file-view-bar browser-view-bar cloud-browser-bar">
       <div className="file-view-history">
-        <BarStep
-          label="Back"
-          icon={<ArrowLeftIcon aria-hidden="true" />}
-          disabled={onStep === undefined}
-          onPress={() => onStep?.(BROWSER_LIVE_HISTORY.BACK)}
-        />
-        <BarStep
-          label="Forward"
-          icon={<ArrowRightIcon aria-hidden="true" />}
-          disabled={onStep === undefined}
-          onPress={() => onStep?.(BROWSER_LIVE_HISTORY.FORWARD)}
-        />
-        <BarStep
-          label="Reload"
-          icon={<RotateCwIcon aria-hidden="true" />}
-          disabled={onStep === undefined}
-          onPress={() => onStep?.(BROWSER_LIVE_HISTORY.RELOAD)}
-        />
+        <Tooltip label="Back">
+          <IconButton
+            icon={<ArrowLeftIcon aria-hidden="true" />}
+            label="Back"
+            disabled={onStep === undefined}
+            onClick={() => onStep?.(BROWSER_LIVE_HISTORY.BACK)}
+          />
+        </Tooltip>
+        <Tooltip label="Forward">
+          <IconButton
+            icon={<ArrowRightIcon aria-hidden="true" />}
+            label="Forward"
+            disabled={onStep === undefined}
+            onClick={() => onStep?.(BROWSER_LIVE_HISTORY.FORWARD)}
+          />
+        </Tooltip>
+        <Tooltip label="Reload">
+          <IconButton
+            icon={<RotateCwIcon aria-hidden="true" />}
+            label="Reload"
+            disabled={onStep === undefined}
+            onClick={() => onStep?.(BROWSER_LIVE_HISTORY.RELOAD)}
+          />
+        </Tooltip>
       </div>
       <AddressField
         ref={field}

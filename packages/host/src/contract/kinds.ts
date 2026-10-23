@@ -212,24 +212,6 @@ export const AVATAR_ACT_KIND = {
 } as const;
 
 /**
- * A Browser tab's view, which main owns over the panel that asked
- * (`browser-views.ts`): opened on an address and answered how its page
- * stands, sent to another, stepped back, forward, reloaded or stopped,
- * placed over the tab's body or put out of sight, caught as a still while
- * something covers it, and closed with its tab. How the page goes on to
- * stand arrives on the panel's `onBrowserState`. Taken from a panel alone,
- * and only while the account has the Browser tab experiment on.
- */
-export const BROWSER_ACT_KIND = {
-  BROWSER_OPEN: "browser.open",
-  BROWSER_NAVIGATE: "browser.navigate",
-  BROWSER_STEP: "browser.step",
-  BROWSER_PLACE: "browser.place",
-  BROWSER_CAPTURE: "browser.capture",
-  BROWSER_CLOSE: "browser.close",
-} as const;
-
-/**
  * A coding agent's Pull request tab's Chapters: a pull request's chapters
  * read as its workspace keeps them, and generated for its head on Luke's own
  * model key when the developer presses Generate, the generation answered
@@ -585,7 +567,6 @@ export const PORT_ACT_KIND = {
   ...AGENT_INBOX_ACT_KIND,
   ...AUTOMATION_ACT_KIND,
   ...AVATAR_ACT_KIND,
-  ...BROWSER_ACT_KIND,
   ...BROWSER_LIVE_ACT_KIND,
   ...CHAPTERS_ACT_KIND,
   ...INSTALLED_SKILL_ACT_KIND,
@@ -610,7 +591,6 @@ export type PortActKind = (typeof PORT_ACT_KIND)[keyof typeof PORT_ACT_KIND];
  */
 export const PLATFORM_PORT_ACT_KIND = {
   ...AVATAR_ACT_KIND,
-  ...BROWSER_ACT_KIND,
   ...BROWSER_LIVE_ACT_KIND,
   ...MAC_TERMINAL_ACT_KIND,
   ...TERMINAL_ACT_KIND,
