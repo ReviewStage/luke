@@ -41,6 +41,7 @@ import {
   Text,
   Tooltip,
 } from "@luke/ui";
+import { LUKE_ACTOR } from "@luke/ui/actor-model";
 import {
   agentOfTab,
   type ChangesStripTab,
@@ -76,6 +77,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { useAct } from "../act.js";
+import { ACTOR_SIZE, ActorMark } from "../actor-ref.js";
 import { useAppCommand } from "../app-commands.js";
 import { appPlatform } from "../app-platform.js";
 import { useCopyLinkItem } from "../copy-link-item.js";
@@ -99,8 +101,18 @@ import {
 import { BrowserPane, browserTitleOf, useBrowserPages } from "../tasks/browser-pane.js";
 import { ChangesCard, peopleOf } from "../tasks/changes-card.js";
 import { TaskChipCard } from "../tasks/chip-cards.js";
-import { CloudBrowserPane } from "../tasks/cloud-browser-pane.js";
-import { useCloudBrowserTabs } from "../tasks/cloud-browser-tabs.js";
+import {
+  CloudBrowserDraftPane,
+  type CloudBrowserOwner,
+  CloudBrowserPane,
+} from "../tasks/cloud-browser-pane.js";
+import {
+  type CloudBrowserDraft,
+  discardCloudDraft,
+  startCloudDraft,
+  useCloudBrowserDrafts,
+  useCloudBrowserTabs,
+} from "../tasks/cloud-browser-tabs.js";
 import { CodePane, centreWithin } from "../tasks/code-pane.js";
 import {
   agentGlyphState,
@@ -116,7 +128,13 @@ import { PageCard } from "../tasks/page-card.js";
 import { PagePane } from "../tasks/page-pane.js";
 import { PlanCommentsTab } from "../tasks/plan-comments.js";
 import { ofPullRequestTab, pullRequestOfTab } from "../tasks/pull-request-number.js";
-import { type KindLook, type PlanStanding, TAB_KIND, tabLook } from "../tasks/tab-look.js";
+import {
+  AgentGlyph,
+  type KindLook,
+  type PlanStanding,
+  TAB_KIND,
+  tabLook,
+} from "../tasks/tab-look.js";
 import { TaskBoard } from "../tasks/task-board.js";
 import { useOpenTerminal } from "../tasks/terminal-commands.js";
 import { TerminalCardFoot, TerminalStanding } from "../tasks/terminal-shells.js";
@@ -358,6 +376,23 @@ export const ADD_SECTION = {
   BROWSER: "Browser",
 } as const;
 
+/** A coding agent whose cloud browser the "+" offers a new tab in: the agent, and whose browser it is as the tab will say. */
+interface CloudBrowserOffer {
+  readonly agentId: string;
+  readonly owner: CloudBrowserOwner;
+}
+
+/** The "+" row's id for a new tab in each agent's cloud browser, made once, which no other row is named by. */
+const cloudRowKeys = new Map<string, string>();
+
+function cloudRowKey(agentId: string): string {
+  const held = cloudRowKeys.get(agentId);
+  if (held !== undefined) return held;
+  const made = crypto.randomUUID();
+  cloudRowKeys.set(agentId, made);
+  return made;
+}
+
 /** An agent's terminal as the "+" offers it: the agent, and whether ⌘J would open its Terminal tab from here. */
 export interface TerminalOffer {
   readonly agent: CodingAgentSummary;
@@ -385,12 +420,15 @@ const NEW_BROWSER_TAB = "New Browser tab";
 /** No Browser tab on the task, the same array every render. */
 const NO_BROWSERS: readonly OpenBrowser[] = [];
 
-/** One of the task's agents' cloud Browser tabs as the panel draws it: the tab the service lists, and whose browser it is in. */
-interface DrawnCloudBrowser {
-  readonly tab: AgentBrowserTab;
-  /** The agent's name, or Luke for the task's own browser. */
-  readonly owner: string;
-}
+/**
+ * One of the task's agents' cloud Browser tabs as the panel draws it, by
+ * the id the strip keeps it under: the tab the service lists, or a draft
+ * this window holds that opens nothing yet; and whose browser it is in.
+ */
+type DrawnCloudBrowser = { readonly id: string; readonly owner: CloudBrowserOwner } & (
+  | { readonly tab: AgentBrowserTab }
+  | { readonly draft: CloudBrowserDraft }
+);
 
 /** No cloud Browser tab on the task, the same array every render. */
 const NO_CLOUD_BROWSERS: readonly DrawnCloudBrowser[] = [];
@@ -398,8 +436,13 @@ const NO_CLOUD_BROWSERS: readonly DrawnCloudBrowser[] = [];
 /** Whose browser a cloud Browser tab of the task's own is in. */
 const LUKE_NAME = "Luke";
 
-/** What a cloud Browser tab is called: its page's title, its address's host until it has one, and the word for a Browser tab before either. */
-function cloudBrowserTitleOf(tab: AgentBrowserTab): string {
+/** What a draft of a tab in an agent's browser is called, until it opens a page. */
+const NEW_CLOUD_TAB = "New tab";
+
+/** What a cloud Browser tab is called: its page's title, its address's host until it has one, and the word for a Browser tab before either; a draft's own words. */
+function cloudBrowserTitleOf(drawn: DrawnCloudBrowser): string {
+  if (!("tab" in drawn)) return NEW_CLOUD_TAB;
+  const { tab } = drawn;
   if (tab.title.length > 0) return tab.title;
   return (URL.canParse(tab.address) ? new URL(tab.address).host : "") || TAB_WORDS.BROWSER;
 }
@@ -550,6 +593,11 @@ export function panelEntries(input: {
   };
   /** The door a new Browser tab opens through, while the Browser tab experiment is on; none where the caller offers none. */
   onNewBrowser?: (() => void) | undefined;
+  /** The task's coding agents whose cloud browsers a new tab may open in, the one viewed first, and the door a row's pick drafts one through; none where the caller offers none. */
+  cloudBrowsers?: {
+    readonly offers: readonly CloudBrowserOffer[];
+    readonly onNew: (agentId: string) => void;
+  };
   /** The task the panel stands beside, whose name and status the Plan's row wears; none where the caller does not know it. */
   plan?: PlanStanding | undefined;
 }): AddEntry[] {
@@ -621,7 +669,27 @@ export function panelEntries(input: {
             onPick: onNewBrowser,
           },
         ];
-  return [...kinds, ...fileRows, ...changesRows, ...pageRows, ...terminalRows, ...browserRows];
+  // A tab in an agent's cloud browser is drafted afresh each time too, one row for each agent, wearing
+  // its glyph, so the row says whose browser the tab will live in.
+  const cloudRows = (input.cloudBrowsers?.offers ?? []).map(({ agentId, owner }) => ({
+    row: {
+      id: cloudRowKey(agentId),
+      icon: owner.icon,
+      label: `New tab in ${owner.name}'s browser`,
+      terms: [owner.name, NEW_BROWSER_TAB],
+      section: ADD_SECTION.BROWSER,
+    },
+    onPick: () => input.cloudBrowsers?.onNew(agentId),
+  }));
+  return [
+    ...kinds,
+    ...fileRows,
+    ...changesRows,
+    ...pageRows,
+    ...terminalRows,
+    ...browserRows,
+    ...cloudRows,
+  ];
 }
 
 /**
@@ -873,19 +941,26 @@ function stripTabs(input: {
       close: () => panel.onClose(tab),
     };
   });
-  // A cloud Browser tab is named by its page's title, beside whose browser it is in, its address on hover.
+  // A cloud Browser tab is named by its page's title, wearing the glyph of whose browser it is in
+  // beside their name, its address on hover; a draft closed is discarded.
   const cloudBrowserTabs = panel.strip.filter(isCloudBrowserTab).flatMap((tab) => {
-    const drawn = cloudBrowsers.find((each) => each.tab.id === tab.cloudBrowser);
+    const drawn = cloudBrowsers.find((each) => each.id === tab.cloudBrowser);
     if (drawn === undefined) return [];
     return [
       {
         tab,
         look: look(tab, {
-          ...tabLook({ kind: TAB_KIND.BROWSER, title: cloudBrowserTitleOf(drawn.tab) }),
-          detail: drawn.owner,
-          tooltip: drawn.tab.address,
+          icon: drawn.owner.icon,
+          label: cloudBrowserTitleOf(drawn),
+          detail: drawn.owner.name,
+          tooltip: "tab" in drawn ? drawn.tab.address : undefined,
         }),
-        close: () => panel.onClose(tab),
+        close: () => {
+          if ("draft" in drawn && input.planId !== undefined) {
+            discardCloudDraft(input.planId, drawn.id);
+          }
+          panel.onClose(tab);
+        },
       },
     ];
   });
@@ -1492,6 +1567,7 @@ function TabContent({
   browsers,
   onBrowserOpened,
   cloudBrowsers,
+  cloudDrafts,
   plan,
   inbox,
   chat,
@@ -1551,6 +1627,11 @@ function TabContent({
   onBrowserOpened: (browserId: string, address: string) => void;
   /** The task's agents' cloud Browser tabs, which a cloud Browser tab reads its tab from. */
   cloudBrowsers: readonly DrawnCloudBrowser[];
+  /** Lands on the tab a draft opened, the draft let go of; or discards a draft. */
+  cloudDrafts: {
+    readonly onOpened: (draftId: string, tab: AgentBrowserTab) => void;
+    readonly onDiscard: (draftId: string) => void;
+  };
   /** The plan's document, drawn by the task's page that holds what it reads (`desktop-tasks.tsx`). */
   plan: React.ReactNode;
   /** The task's Inbox, drawn by the task's page on the same terms. */
@@ -1585,11 +1666,22 @@ function TabContent({
     );
   }
   if (isCloudBrowserTab(tab)) {
-    const drawn = cloudBrowsers.find((each) => each.tab.id === tab.cloudBrowser);
+    const drawn = cloudBrowsers.find((each) => each.id === tab.cloudBrowser);
     // The tab stands for one the service no longer lists only until the panel moves on, a render away.
-    return drawn === undefined ? (
-      <SpinnerRegion delay label="Loading page" />
-    ) : (
+    if (drawn === undefined) return <SpinnerRegion delay label="Loading page" />;
+    if ("draft" in drawn) {
+      return (
+        <CloudBrowserDraftPane
+          key={drawn.id}
+          taskId={taskId}
+          draft={drawn.draft}
+          owner={drawn.owner}
+          onOpened={(opened) => cloudDrafts.onOpened(drawn.id, opened)}
+          onDiscard={() => cloudDrafts.onDiscard(drawn.id)}
+        />
+      );
+    }
+    return (
       <CloudBrowserPane
         key={tab.cloudBrowser}
         taskId={taskId}
@@ -2146,23 +2238,47 @@ export function SidePanel({
   // on every platform, since the page draws them from the service and needs
   // nothing of main's; on a task's own panel alone, never an agent's page's or
   // the Inbox's, which borrows its task's panel.
-  const cloudListed = useCloudBrowserTabs(taskId, browserOn && holder === SIDE_PANEL_HOLDER.TASK);
-  const cloudBrowsers = useMemo(
-    () =>
-      cloudListed === undefined || cloudListed.length === 0
-        ? NO_CLOUD_BROWSERS
-        : cloudListed.map((each) => ({
-            tab: each,
-            owner:
-              each.agentId === null
-                ? LUKE_NAME
-                : agentSubject(agents, each.agentId, drawnTranscripts, false).name,
-          })),
-    [cloudListed, agents, drawnTranscripts],
-  );
+  const cloudListing = browserOn && holder === SIDE_PANEL_HOLDER.TASK;
+  const cloudListed = useCloudBrowserTabs(taskId, cloudListing);
+  // A draft of a tab in an agent's browser stands after the tabs the service lists, until it opens one.
+  const cloudDraftsHeld = useCloudBrowserDrafts(taskId, cloudListing);
+  const cloudBrowsers = useMemo(() => {
+    const ownerOf = (agentId: string | null): CloudBrowserOwner => {
+      if (agentId === null) {
+        return { name: LUKE_NAME, icon: <ActorMark actor={LUKE_ACTOR} size={ACTOR_SIZE.INLINE} /> };
+      }
+      const subject = agentSubject(agents, agentId, drawnTranscripts, false);
+      return { name: subject.name, icon: <AgentGlyph agent={subject.agent} /> };
+    };
+    const drawn: DrawnCloudBrowser[] = [
+      ...(cloudListed ?? []).map((tab) => ({ id: tab.id, tab, owner: ownerOf(tab.agentId) })),
+      ...cloudDraftsHeld.map((draft) => ({ id: draft.id, draft, owner: ownerOf(draft.agentId) })),
+    ];
+    return drawn.length === 0 ? NO_CLOUD_BROWSERS : drawn;
+  }, [cloudListed, cloudDraftsHeld, agents, drawnTranscripts]);
   const cloudBrowserLabel = (id: string) => {
-    const drawn = cloudBrowsers.find((each) => each.tab.id === id);
-    return drawn === undefined ? TAB_WORDS.BROWSER : cloudBrowserTitleOf(drawn.tab);
+    const drawn = cloudBrowsers.find((each) => each.id === id);
+    return drawn === undefined ? TAB_WORDS.BROWSER : cloudBrowserTitleOf(drawn);
+  };
+  // The "+" offers a new tab in each of the task's coding agents' cloud browsers, the one viewed first.
+  const viewedAgent = shownAgent ?? (panel.tab === undefined ? undefined : agentOfTab(panel.tab));
+  const cloudOffers: readonly CloudBrowserOffer[] = !cloudListing
+    ? []
+    : [...(agents.agents ?? [])]
+        .sort((a, b) => Number(b.id === viewedAgent) - Number(a.id === viewedAgent))
+        .map((agent) => {
+          const subject = agentSubject(agents, agent.id, drawnTranscripts, false);
+          return {
+            agentId: agent.id,
+            owner: { name: subject.name, icon: <AgentGlyph agent={subject.agent} /> },
+          };
+        });
+  const cloudDrafts = {
+    onOpened: (draftId: string, opened: AgentBrowserTab) => {
+      discardCloudDraft(taskId, draftId);
+      panel.onChoose({ cloudBrowser: opened.id });
+    },
+    onDiscard: (draftId: string) => discardCloudDraft(taskId, draftId),
   };
   // A page's tab stands while the plan lists the page.
   const taskPages = pages ?? NO_PAGES;
@@ -2226,6 +2342,11 @@ export function SidePanel({
         }),
     onNewBrowser:
       browsing && holder !== SIDE_PANEL_HOLDER.INBOX ? () => panel.onOpenBrowser() : undefined,
+    cloudBrowsers: {
+      offers: cloudOffers,
+      onNew: (agentId: string) =>
+        panel.onChoose({ cloudBrowser: startCloudDraft(taskId, agentId).id }),
+    },
     plan: task,
   });
   // Something on offer past the fixed kinds, which an empty panel offers in place as a closed kind is.
@@ -2366,6 +2487,7 @@ export function SidePanel({
               browsers={browsers}
               onBrowserOpened={panel.onBrowserOpened}
               cloudBrowsers={cloudBrowsers}
+              cloudDrafts={cloudDrafts}
               plan={plan}
               inbox={inbox?.body}
               chat={chat}

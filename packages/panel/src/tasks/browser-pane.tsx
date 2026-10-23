@@ -331,7 +331,7 @@ function pressHere(key: BrowserKey): void {
 }
 
 /** One of the bar's steps: a press of its glyph, which says what it does, drawn as every tab's bar draws its glyphs. */
-function BarStep({
+export function BarStep({
   label,
   icon,
   disabled,

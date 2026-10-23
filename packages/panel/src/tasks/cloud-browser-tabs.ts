@@ -14,11 +14,12 @@
  * drawn and held nowhere past the read: no trace, count, or app state (root
  * `AGENTS.md`'s cloud browser line).
  *
- * A tab the member opened from this window (`cloud-browser-open.tsx`) is
- * listed from the moment the service answered it, until the read or the
- * follow first lists it, so the panel lands on it before Realtime has told
- * it; and its pane takes it over once its view opens (`claimTakeOver`),
- * since the service's takeover is the member's but not yet their view's.
+ * A tab the member asks for from the side panel's "+" stands first as a
+ * draft in this window alone (`startCloudDraft`), bound to the coding agent
+ * whose browser it is to open in, and opens nothing until its bar opens an
+ * address (`cloud-browser-pane.tsx`). The tab the service then answers is
+ * listed from that moment until the read or the follow first lists it, so
+ * the panel lands on it before Realtime has told it.
  */
 
 import { useAtomValue } from "@effect/atom-react";
@@ -85,34 +86,74 @@ const unreadAtom = Atom.make<AsyncResult.AsyncResult<readonly AgentBrowserTab[]>
   AsyncResult.initial(),
 );
 
+/**
+ * A cloud Browser tab the member asked for from the "+" that opens nothing
+ * yet: the id the strip draws it under, and the coding agent whose browser
+ * it is to open in, which it never leaves.
+ */
+export interface CloudBrowserDraft {
+  readonly id: string;
+  readonly agentId: string;
+}
+
+/** A task with no draft, the same array every render. */
+const NO_DRAFTS: readonly CloudBrowserDraft[] = [];
+
 /** The tabs this window opened, by task, that no read has listed yet; a new map at each change. */
 let opened: ReadonlyMap<string, readonly AgentBrowserTab[]> = new Map();
 
-/** The tabs opened here whose view has yet to take them over, by the id the service keeps each under. */
-const takingOver = new Set<string>();
+/** The drafts this window holds, by task, in the order asked for; a new map at each change. */
+let drafts: ReadonlyMap<string, readonly CloudBrowserDraft[]> = new Map();
 
-const openedListeners = new Set<() => void>();
+const listeners = new Set<() => void>();
+
+function told(): void {
+  for (const listener of listeners) listener();
+}
+
+function hear(listener: () => void): () => void {
+  listeners.add(listener);
+  return () => listeners.delete(listener);
+}
 
 function setOpened(next: ReadonlyMap<string, readonly AgentBrowserTab[]>): void {
   opened = next;
-  for (const listener of openedListeners) listener();
+  told();
 }
 
-function hearOpened(listener: () => void): () => void {
-  openedListeners.add(listener);
-  return () => openedListeners.delete(listener);
-}
-
-/** Notes a tab the member opened in an agent's browser on the task, listed until a read lists it, and taken over once its view opens. */
+/** Notes a tab the member opened in an agent's browser on the task, listed until a read lists it. */
 export function noteOpenedCloudTab(taskId: string, tab: AgentBrowserTab): void {
   const standing = (opened.get(taskId) ?? NO_TABS).filter((each) => each.id !== tab.id);
-  takingOver.add(tab.id);
   setOpened(new Map(opened).set(taskId, [...standing, tab]));
 }
 
-/** Whether the tab's view is to take it over now, as one this window opened is once; asking answers it once. */
-export function claimTakeOver(tabId: string): boolean {
-  return takingOver.delete(tabId);
+/** A draft of a tab in the coding agent's browser on the task, held after any the task holds already. */
+export function startCloudDraft(taskId: string, agentId: string): CloudBrowserDraft {
+  const draft = { id: crypto.randomUUID(), agentId };
+  drafts = new Map(drafts).set(taskId, [...(drafts.get(taskId) ?? NO_DRAFTS), draft]);
+  told();
+  return draft;
+}
+
+/** Lets go of a draft: discarded, or opened as a tab of its own. */
+export function discardCloudDraft(taskId: string, draftId: string): void {
+  const held = drafts.get(taskId) ?? NO_DRAFTS;
+  if (!held.some((each) => each.id === draftId)) return;
+  drafts = new Map(drafts).set(
+    taskId,
+    held.filter((each) => each.id !== draftId),
+  );
+  told();
+}
+
+/** The task's drafts in the order asked for; none where `listing` is off, as for the listed tabs. */
+export function useCloudBrowserDrafts(
+  taskId: string | undefined,
+  listing: boolean,
+): readonly CloudBrowserDraft[] {
+  const held = () => (taskId === undefined ? NO_DRAFTS : (drafts.get(taskId) ?? NO_DRAFTS));
+  const read = useSyncExternalStore(hear, held, held);
+  return listing ? read : NO_DRAFTS;
 }
 
 /** The listed tabs, then those opened here that no read has listed yet. */
@@ -136,7 +177,7 @@ export function useCloudBrowserTabs(
 ): readonly AgentBrowserTab[] | undefined {
   const read = useAtomValue(listing && taskId !== undefined ? tabsAtom(taskId) : unreadAtom);
   const openedHere = () => (taskId === undefined ? NO_TABS : (opened.get(taskId) ?? NO_TABS));
-  const mine = useSyncExternalStore(hearOpened, openedHere, openedHere);
+  const mine = useSyncExternalStore(hear, openedHere, openedHere);
   const listed = AsyncResult.isSuccess(read) ? read.value : undefined;
   useEffect(() => {
     if (taskId === undefined || listed === undefined || mine.length === 0) return;

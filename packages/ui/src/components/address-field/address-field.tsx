@@ -1,5 +1,4 @@
 import type { Ref } from "react";
-import type { FieldControl } from "../form-field/form-field.js";
 import { TEXT_FIELD_SIZE, TextField } from "../text-field/text-field.js";
 
 /**
@@ -13,9 +12,7 @@ import { TEXT_FIELD_SIZE, TextField } from "../text-field/text-field.js";
  * caret arrives, so typing replaces the address as a browser's bar does.
  * It stands in a form of its own, so Enter, or a phone keyboard's Go,
  * submits it as the caller's open; Escape is its leaving the bar, and a
- * blur its putting back what the bar showed. Standing alone, as a tab's bar, it is
- * named Address; under a `FormField`, as a dialog asks for an address, the
- * field names it and says what is wrong with what it opened.
+ * blur its putting back what the bar showed.
  */
 
 /** What the field asks for while it is empty. */
@@ -28,7 +25,6 @@ export function AddressField({
   onEscape,
   onBlur,
   autoFocus,
-  field,
   disabled,
   ref,
 }: {
@@ -39,12 +35,9 @@ export function AddressField({
   onEscape?: (() => void) | undefined;
   onBlur?: (() => void) | undefined;
   autoFocus?: boolean | undefined;
-  /** The field's control, where a `FormField` labels it; it names itself Address otherwise. */
-  field?: FieldControl | undefined;
   disabled?: boolean | undefined;
   ref?: Ref<HTMLInputElement> | undefined;
 }): React.JSX.Element {
-  const named = field === undefined ? { label: "Address" } : { field };
   return (
     <form
       className="luke-address-field"
@@ -55,7 +48,7 @@ export function AddressField({
     >
       <TextField
         ref={ref}
-        {...named}
+        label="Address"
         size={TEXT_FIELD_SIZE.COMPACT}
         placeholder={ADDRESS_FIELD_PLACEHOLDER}
         spellCheck={false}

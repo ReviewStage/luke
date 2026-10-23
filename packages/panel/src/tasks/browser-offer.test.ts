@@ -1,13 +1,9 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import type { AgentBrowserTab } from "@luke/features/agent-browser-tab-wire";
 import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import type { Task, TaskSummary } from "@luke/features/task-wire";
-import {
-  BROWSER_TAB_OPEN_FAILURE,
-  type TasksBrowserTabOpenParams,
-} from "@luke/features/tasks-view";
+import { BROWSER_TAB_OPEN_FAILURE } from "@luke/features/tasks-view";
 import { ACT_KIND } from "@luke/host/acts";
 import { EXPERIMENT } from "@luke/settings";
 import { experimentsOn } from "@luke/settings/testing";
@@ -30,10 +26,9 @@ import { NO_LOOKS } from "./use-task-looks.js";
  * under Browser while the account has the Browser tab experiment on, and a
  * pick opens one; with it off, the "+" offers none, as a feature still behind
  * Settings › Experimental stands nowhere. On a task with coding agents it
- * offers New tab in the agent's browser too, which asks for an address and
- * whose browser, opens the tab through the host, and lands on it, already
- * taken over by the member; a refusal stays up in words. A synthetic plan
- * and agents throughout.
+ * offers a new tab in each agent's browser too, the agent viewed first, and
+ * a pick lands on a draft of it, which opens nothing until its bar's Enter
+ * (`cloud-browser-tab.test.ts`). A synthetic plan and agents throughout.
  */
 
 const TASK: Task = {
@@ -74,18 +69,6 @@ const OTHER_AGENT: CodingAgentSummary = {
   createdAt: 4,
 };
 
-/** The tab the service answers an open with, taken over by the member. */
-const OPENED: AgentBrowserTab = {
-  id: "5a0e1f2b-3c4d-4e5f-9a6b-7c8d9e0f1a2b",
-  agentId: AGENT.id,
-  address: "http://localhost:3000/",
-  title: "http://localhost:3000/",
-  openedBy: { kind: "member", userId: "user-ada" },
-  driver: { userId: "user-ada", heldUntil: 62_000 },
-  createdAt: 5,
-  lastActedAt: 5,
-};
-
 const roots: Root[] = [];
 
 beforeEach(() => {
@@ -111,6 +94,7 @@ async function settle(): Promise<void> {
 /** The plan drawn with its side panel open on its Board, answering how many Browser tabs the panel was asked to open, and the tabs it was asked to show. */
 async function mount(
   agents: readonly CodingAgentSummary[] = [],
+  viewed?: string,
 ): Promise<{ readonly opened: () => number; readonly chosen: readonly SidePanelTab[] }> {
   let opened = 0;
   const chosen: SidePanelTab[] = [];
@@ -124,7 +108,11 @@ async function mount(
     tasks: [SUMMARY],
     activeTaskId: TASK.id,
     region: { kind: DOCUMENT_REGION.READY, task: TASK },
-    mainTabs: { ...base.mainTabs, tabs: [], tab: undefined },
+    mainTabs: {
+      ...base.mainTabs,
+      tabs: viewed === undefined ? [] : [{ agent: viewed }],
+      tab: viewed === undefined ? undefined : { agent: viewed },
+    },
     sidePanel: {
       ...base.sidePanel,
       open: true,
@@ -188,93 +176,32 @@ function rowWords(rows: readonly HTMLElement[]): readonly (string | null | undef
   return rows.map((row) => row.querySelector(".luke-combobox-option-label")?.textContent);
 }
 
-/** Types `value` into `field` as the page would hand it to React. */
-function type(field: HTMLInputElement, value: string): void {
-  const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
-  act(() => {
-    setter?.call(field, value);
-    field.dispatchEvent(new Event("input", { bubbles: true }));
-  });
-}
-
-/** The open dialog's address field and its Open tab press. */
-function openDialog(): { readonly field: HTMLInputElement; readonly open: HTMLButtonElement } {
-  const dialog = document.querySelector<HTMLElement>('[role="dialog"]');
-  assert.ok(dialog, "the dialog asking for an address");
-  const field = dialog.querySelector<HTMLInputElement>("input");
-  const open = [...dialog.querySelectorAll<HTMLButtonElement>("button")].find(
-    (button) => button.textContent === "Open tab",
-  );
-  assert.ok(field && open, "its address and its Open tab");
-  return { field, open };
-}
-
-test("on a task with a coding agent, the panel's + offers a new tab in its browser, which opens one at the address typed and lands on it, taken over", async () => {
+test("on a task with coding agents, the panel's + offers a new tab in each agent's browser, the one viewed first, and a pick drafts one in its browser and opens nothing", async () => {
   handState(experimentsOn(EXPERIMENT.BROWSER));
-  const asked: TasksBrowserTabOpenParams[] = [];
+  const asked: unknown[] = [];
   fakeActPort({
     [ACT_KIND.TASKS_BROWSER_TAB_OPEN]: (payload) => {
       asked.push(payload);
-      return Promise.resolve({ tab: OPENED });
+      return Promise.resolve({ failure: BROWSER_TAB_OPEN_FAILURE.UNANSWERED });
     },
   });
-  const task = await mount([AGENT]);
+  const task = await mount([AGENT, OTHER_AGENT], OTHER_AGENT.id);
 
   const rows = await browserRows();
-  assert.deepEqual(rowWords(rows), ["New Browser tab", "New tab in Invite expiry's browser"]);
-  await act(async () => rows[1]?.click());
-  await settle();
-  const { field, open } = openDialog();
-  type(field, "localhost:3000");
-  await act(async () => open.click());
-  await settle();
-
-  assert.deepEqual(asked, [
-    { taskId: TASK.id, agentId: AGENT.id, address: "http://localhost:3000/" },
+  assert.deepEqual(rowWords(rows), [
+    "New Browser tab",
+    "New tab in Invite emails's browser",
+    "New tab in Invite expiry's browser",
   ]);
-  assert.deepEqual(task.chosen, [{ cloudBrowser: OPENED.id }]);
-  assert.equal(document.querySelector('[role="dialog"]'), null, "the dialog is put away");
-});
-
-test("with several agents, the dialog opens in the browser of the agent chosen, and a refusal stays up in words", async () => {
-  handState(experimentsOn(EXPERIMENT.BROWSER));
-  const asked: TasksBrowserTabOpenParams[] = [];
-  fakeActPort({
-    [ACT_KIND.TASKS_BROWSER_TAB_OPEN]: (payload) => {
-      asked.push(payload);
-      return Promise.resolve({ failure: BROWSER_TAB_OPEN_FAILURE.NOT_READY });
-    },
-  });
-  const task = await mount([AGENT, OTHER_AGENT]);
-
-  const rows = await browserRows();
-  assert.deepEqual(rowWords(rows), ["New Browser tab", "New tab in Invite expiry's browser"]);
-  await act(async () => rows[1]?.click());
-  await settle();
-  const agent = document.querySelector<HTMLButtonElement>(
-    '[role="dialog"] button[aria-label^="Agent"]',
-  );
-  assert.equal(agent?.getAttribute("aria-label"), "Agent: Invite expiry", "the agent viewed first");
-  await act(async () => agent?.click());
-  const other = [...document.querySelectorAll<HTMLElement>('[role^="menuitem"]')].find((item) =>
-    item.textContent?.includes("Invite emails"),
-  );
-  assert.ok(other, "the other agent to choose");
-  await act(async () => other.click());
-  await settle();
-  const { field, open } = openDialog();
-  type(field, "https://accounts.test/sign-in");
-  await act(async () => open.click());
+  await act(async () => rows[2]?.click());
   await settle();
 
-  assert.deepEqual(asked, [
-    { taskId: TASK.id, agentId: OTHER_AGENT.id, address: "https://accounts.test/sign-in" },
-  ]);
-  assert.deepEqual(task.chosen, []);
-  assert.match(
-    document.querySelector('[role="dialog"]')?.textContent ?? "",
-    /Invite emails hasn't opened its sandbox yet/,
+  const [drafted] = task.chosen;
+  assert.ok(
+    drafted instanceof Object && "cloudBrowser" in drafted && drafted.cloudBrowser.length > 0,
+    "the panel lands on a draft cloud Browser tab",
   );
+  assert.deepEqual(asked, [], "nothing opens in the agent's sandbox until the draft's Enter");
 });
 
 test("with the experiment off, the panel's + offers no tab in an agent's browser", async () => {
