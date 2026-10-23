@@ -10,7 +10,7 @@ import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import { HOSTED_OPENAI_DEFAULTS } from "../providers/openai.js";
 
 /**
- * transcription.ts -- one dictated clip turned into its words by OpenAI's transcription model, on Luke's key.
+ * transcription.ts -- one dictated clip turned into its words by OpenAI's transcription model, on the caller's own OpenAI API key.
  *
  * One multipart POST to `/audio/transcriptions` with the clip, the model,
  * and the words the clip is likely to say as `keywords`, which is how the
