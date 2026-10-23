@@ -2176,7 +2176,8 @@ function AgentTabView({
     onUnarchive === undefined && continuedNote === undefined && composer.closed === undefined;
   const onEdit = useSteady(boxOpen ? composer.edit : undefined);
   const onRevert = useSteady(boxOpen ? composer.revert : undefined);
-  const points = useMemo(() => rewindPoints(kept), [kept]);
+  const fromStart = !transcript.hasOlder;
+  const points = useMemo(() => rewindPoints(kept, fromStart), [kept, fromStart]);
   const rewind = useMemo(
     () =>
       onEdit === undefined || onRevert === undefined ? undefined : { onEdit, onRevert, ...points },

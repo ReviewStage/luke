@@ -48,7 +48,7 @@ const TRANSCRIPT: readonly CodingAgentMessage[] = [
 ];
 
 test("Edit writes again the lines that opened a turn, and a reply reverts to the next of them", () => {
-  const { editable, revertsAt } = rewindPoints(TRANSCRIPT);
+  const { editable, revertsAt } = rewindPoints(TRANSCRIPT, true);
 
   assert.deepEqual([...editable].toSorted(), ["second-line", "third-line"]);
   assert.deepEqual(
@@ -58,6 +58,12 @@ test("Edit writes again the lines that opened a turn, and a reply reverts to the
       ["second-reply", "third-line"],
     ]),
   );
+});
+
+test("the oldest line held is written again where older pages are still to read, since it is no plan", () => {
+  const { editable } = rewindPoints(TRANSCRIPT.slice(2), false);
+
+  assert.deepEqual([...editable].toSorted(), ["second-line", "third-line"]);
 });
 
 const roots: Root[] = [];
@@ -145,6 +151,18 @@ test("a rewind that did not go sends nothing, and the words stand as the edit ag
   assert.equal(composer().editing, "second-line");
   assert.equal(composer().draft, "second line, again");
   assert.equal(composer().cut, undefined);
+});
+
+test("an edit let go puts back what the box held before it", async () => {
+  const { calls, composer } = await box(REWOUND);
+
+  await act(async () => composer().setDraft("Also update the tests."));
+  await act(async () => composer().edit("second-line", "second-line"));
+  await act(async () => composer().dropEdit());
+
+  assert.equal(composer().draft, "Also update the tests.");
+  assert.equal(composer().editing, undefined);
+  assert.deepEqual(calls, []);
 });
 
 test("a revert hides the line and everything after it until the transcript drops them", async () => {

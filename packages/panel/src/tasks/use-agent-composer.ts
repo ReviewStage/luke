@@ -62,7 +62,8 @@ import {
  *
  * Edit puts one of the developer's lines back in the box, and its send takes
  * the agent back to just before that line first (`rewind.ts` on the service),
- * so the words go in its place; × lets the edit go, and with it the words.
+ * so the words go in its place; × lets the edit go, putting back what the box
+ * held before it.
  * Revert takes the agent back to just before a line without sending. Either
  * hides the messages the rewind drops at once, until the transcript reads
  * back without them, and one that did not go says why under the box, its
@@ -123,6 +124,8 @@ interface Held {
   failed: Failed | undefined;
   /** The developer's line the box's words are written in place of, by its message id; none while the box writes a line after the rest. */
   editing: string | undefined;
+  /** What the box held as the edit began, which letting the edit go puts back. */
+  beforeEdit: Draft;
   /** The messages a rewind under way or just done drops, by their ids, hidden until the transcript reads back without them. */
   cut: ReadonlySet<string> | undefined;
   /** The Revert that did not go, which the note under the box is of and its Retry asks again. */
@@ -138,6 +141,7 @@ function fresh(agentId: string): Held {
     agentId,
     failed: undefined,
     editing: undefined,
+    beforeEdit: EMPTY_DRAFT,
     cut: undefined,
     revertFailed: undefined,
     closed: undefined,
@@ -431,12 +435,20 @@ export function useAgentComposer(input: {
     unsent: { words: kept.draft.text, attachments: kept.draft.attachments },
     editing: held.editing,
     edit: (messageId, words) => {
-      setHeld((was) => ({ ...editLetsGo(was), editing: messageId, revertFailed: undefined }));
+      // Note that the box's own words wait behind an edit begun over them, unless one already was.
+      const beforeEdit = held.editing === undefined ? kept.draft : held.beforeEdit;
+      setHeld((was) => ({
+        ...editLetsGo(was),
+        editing: messageId,
+        beforeEdit,
+        revertFailed: undefined,
+      }));
       kept.update(() => ({ ...EMPTY_DRAFT, text: words }));
     },
     dropEdit: () => {
-      setHeld((was) => ({ ...editLetsGo(was), editing: undefined }));
-      kept.update(() => EMPTY_DRAFT);
+      const { beforeEdit } = held;
+      setHeld((was) => ({ ...editLetsGo(was), editing: undefined, beforeEdit: EMPTY_DRAFT }));
+      kept.update(() => beforeEdit);
     },
     revert,
     cut: held.cut,

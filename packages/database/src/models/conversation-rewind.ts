@@ -198,6 +198,23 @@ const markRewound = SqlSchema.void({
     ),
 });
 
+const retireWorkersFrom = SqlSchema.void({
+  Request: Schema.Struct({ conversationId: Schema.String, from: Schema.Date }),
+  execute: ({ conversationId, from }) =>
+    Database.use((db) =>
+      db
+        .update(conversations)
+        .set({ deletedAt: sql`now()` })
+        .where(
+          and(
+            eq(conversations.parentConversationId, conversationId),
+            gte(conversations.createdAt, from),
+            isNull(conversations.deletedAt),
+          ),
+        ),
+    ),
+});
+
 const clearNativeRewind = SqlSchema.void({
   Request: Schema.Struct({ conversationId: Schema.String, clientId: Schema.String }),
   execute: ({ conversationId, clientId }) =>
@@ -217,7 +234,13 @@ const findRewoundRevision = SqlSchema.findOneOption({
       db
         .select({ rewoundRevision: conversations.rewoundRevision })
         .from(conversations)
-        .where(and(eq(conversations.id, conversationId), eq(conversations.userId, userId))),
+        .where(
+          and(
+            eq(conversations.id, conversationId),
+            eq(conversations.userId, userId),
+            isNull(conversations.deletedAt),
+          ),
+        ),
     ),
 });
 
@@ -233,14 +256,9 @@ const findNativeRewind = SqlSchema.findOneOption({
     ),
 });
 
-/** The cut, under the conversation's dispatch and row locks, answering what it cut or why it could not. */
-const cut = (target: ConversationTarget, messageId: string) =>
+/** Where a cut at the line named starts: its row and the instant the turns it drops were queued from; refused where it stands inside a turn. */
+const cutPoint = (conversationId: string, messageId: string) =>
   Effect.gen(function* () {
-    const { conversationId } = target;
-    // A hand-over under way finishes first, so a line it is writing is cut with the rest or not at all.
-    yield* holdConversationDispatch(conversationId);
-    const held = yield* lockConversation(target);
-    if (Option.isNone(held)) return Result.fail(REWIND_REFUSAL.NOT_FOUND);
     const line = yield* findLine({ conversationId, messageId });
     if (Option.isNone(line)) return Result.fail(REWIND_REFUSAL.NOT_FOUND);
     const { seq, clientId, turnId, takenAfterStep, createdAt } = line.value;
@@ -254,10 +272,26 @@ const cut = (target: ConversationTarget, messageId: string) =>
       const turn = yield* findTurnQueuedAt({ conversationId, turnId });
       if (Option.isSome(turn)) from = turn.value.queuedAt;
     }
+    return Result.succeed({ seq, clientId, heard: turnId !== null, from });
+  });
+
+/** The cut, under the conversation's dispatch and row locks, answering what it cut or why it could not. */
+const cut = (target: ConversationTarget, messageId: string) =>
+  Effect.gen(function* () {
+    const { conversationId } = target;
+    // A hand-over under way finishes first, so a line it is writing is cut with the rest or not at all.
+    yield* holdConversationDispatch(conversationId);
+    const held = yield* lockConversation(target);
+    if (Option.isNone(held)) return Result.fail(REWIND_REFUSAL.NOT_FOUND);
+    const point = yield* cutPoint(conversationId, messageId);
+    if (Result.isFailure(point)) return Result.fail(point.failure);
+    const { seq, clientId, heard, from } = point.success;
     const turnIds = (yield* findTurnsFrom({ conversationId, from })).map((turn) => turn.id);
     yield* deleteMessagesFrom({ conversationId, seq, turnIds });
     if (turnIds.length > 0) yield* deleteTurns({ conversationId, turnIds });
-    yield* markRewound({ conversationId, clientId, heard: turnId !== null, turnIds });
+    // Note that a worker a dropped turn delegated is stamped deleted with it, so it is listed no more.
+    yield* retireWorkersFrom({ conversationId, from });
+    yield* markRewound({ conversationId, clientId, heard, turnIds });
     return Result.succeed<ConversationRewound>({ clientId, turnIds });
   });
 
@@ -305,4 +339,20 @@ export function readRewoundRevision(
       Option.flatMap(row, ({ rewoundRevision }) => Option.fromNullishOr(rewoundRevision)),
     ),
   );
+}
+
+/**
+ * Whether the conversation could be cut back to just before the line named,
+ * read without cutting, so a caller stops nothing for a cut that would be
+ * refused; the cut itself reads it again under its locks.
+ */
+export function readRewindable(
+  target: ConversationTarget,
+  messageId: string,
+): Effect.Effect<Result.Result<void, RewindRefusal>, RewindFailure, DatabaseServices> {
+  return Effect.gen(function* () {
+    const standing = yield* findRewoundRevision(target);
+    if (Option.isNone(standing)) return Result.fail(REWIND_REFUSAL.NOT_FOUND);
+    return Result.map(yield* cutPoint(target.conversationId, messageId), () => undefined);
+  });
 }

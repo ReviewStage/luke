@@ -604,6 +604,18 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
               (rows) => rows.length,
             );
 
+          // A rewind to a line that is not there is refused before anything is stopped.
+          const missing = yield* rewoundAgent(
+            reach,
+            writer,
+            request,
+            owner,
+            onClaudeCode,
+            randomUUID(),
+          ).pipe(Effect.provide(native), Effect.result);
+          assert.deepEqual(missing, Result.fail(HOSTED_REFUSAL.NOT_FOUND));
+          assert.deepEqual(claudeCode.calls, []);
+
           const eveRewound = yield* rewind(onEve);
           const nativeRewound = yield* rewind(onClaudeCode);
           claudeCode.answers.halts = false;
@@ -612,8 +624,10 @@ it.layer(Layer.merge(getTestDB(), GITHUB))(
           assert.ok(Result.isSuccess(eveRewound));
           assert.ok(Result.isSuccess(nativeRewound));
           assert.deepEqual(refused, Result.fail(HOSTED_REFUSAL.UNAVAILABLE));
-          assert.deepEqual(eve.calls, ["reset:wrun_eve"]);
+          // Each is stopped before the cut and again after it, and a runner that could not be ended is not cut.
+          assert.deepEqual(eve.calls, ["reset:wrun_eve", "reset:wrun_eve"]);
           assert.deepEqual(claudeCode.calls, [
+            `halt:${nativeSession}:${onClaudeCode.conversationId}`,
             `halt:${nativeSession}:${onClaudeCode.conversationId}`,
             `halt:${nativeSession}0:${unhalted.conversationId}`,
           ]);

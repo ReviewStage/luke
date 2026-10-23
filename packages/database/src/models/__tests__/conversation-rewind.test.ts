@@ -7,12 +7,14 @@ import { Effect, Option, Result } from "effect";
 import { Database } from "../../core/query.js";
 import { user } from "../../schemas/auth.js";
 import { conversations, messages, turns } from "../../schemas/storage.js";
+import { CONVERSATION_KIND } from "../../storage-vocabulary.js";
 import { getTestDB, startTask } from "../../testing/index.js";
 import { createCodingAgent } from "../coding-agent-store.js";
 import {
   clearNativeRewindHanded,
   REWIND_REFUSAL,
   readNativeRewind,
+  readRewindable,
   rewindConversation,
 } from "../conversation-rewind.js";
 
@@ -196,13 +198,48 @@ it.layer(getTestDB())("rewinding a coding agent's conversation", (it) => {
       const { second, answer } = yield* threeLines(target);
       const steered = yield* rowAt(target, 6, MESSAGE_ROLE.USER, second, 2_002, 1);
 
+      const checked = yield* readRewindable(target, steered);
       const inside = yield* rewindConversation(target, steered);
       const notALine = yield* rewindConversation(target, answer);
 
+      assert.deepEqual(checked, Result.fail(REWIND_REFUSAL.INSIDE_TURN));
       assert.deepEqual(inside, Result.fail(REWIND_REFUSAL.INSIDE_TURN));
       assert.deepEqual(notALine, Result.fail(REWIND_REFUSAL.NOT_FOUND));
       assert.deepEqual((yield* standing(target)).seqs, [1, 2, 3, 4, 5, 6]);
     }),
+  );
+
+  it.effect(
+    "stamps deleted the workers a dropped turn delegated, and keeps those delegated before it",
+    () =>
+      Effect.gen(function* () {
+        const target = yield* openConversation;
+        const { secondLine } = yield* threeLines(target);
+        const db = yield* Database;
+        const worker = (at: number) =>
+          Effect.gen(function* () {
+            const id = randomUUID();
+            yield* db.insert(conversations).values({
+              id,
+              userId: target.userId,
+              kind: CONVERSATION_KIND.CHILD,
+              parentConversationId: target.conversationId,
+              createdAt: new Date(at),
+            });
+            return id;
+          });
+        const kept = yield* worker(1_500);
+        const dropped = yield* worker(2_500);
+
+        yield* rewindConversation(target, secondLine);
+        const rows = yield* db
+          .select({ id: conversations.id, deletedAt: conversations.deletedAt })
+          .from(conversations)
+          .where(eq(conversations.parentConversationId, target.conversationId));
+        const deleted = new Map(rows.map((row) => [row.id, row.deletedAt !== null]));
+
+        assert.deepEqual([deleted.get(kept), deleted.get(dropped)], [false, true]);
+      }),
   );
 
   it.effect("never cuts another account's conversation", () =>

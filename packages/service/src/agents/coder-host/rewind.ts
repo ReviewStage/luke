@@ -1,7 +1,11 @@
 import type { DatabaseServices } from "@luke/database/core/query";
 import { type CodingAgent, readCodingAgentRouting } from "@luke/database/models/coding-agent-store";
 import { replaceCodingAgentWakeups } from "@luke/database/models/coding-agent-wakeups";
-import { REWIND_REFUSAL, rewindConversation } from "@luke/database/models/conversation-rewind";
+import {
+  REWIND_REFUSAL,
+  readRewindable,
+  rewindConversation,
+} from "@luke/database/models/conversation-rewind";
 import { recordedRuntimeSession } from "@luke/database/models/recorded-session";
 import type { StoreWriter } from "@luke/database/models/writer";
 import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
@@ -27,8 +31,10 @@ import { cancelledTurn, type EveReach, eveFor } from "./stop.js";
  * the same line and resumes (`conversation-rewind.ts`'s `nativeRewind`);
  * an eve agent's turn under way is stopped and its session retired, so the
  * next message opens a fresh one seeded with what is left. Then the
- * conversation is cut in one transaction. The agent's checkout is left as
- * it stands: only the conversation goes back.
+ * conversation is cut in one transaction, and whatever a message sent
+ * meanwhile started is stopped again. A cut that would be refused is read
+ * first, so it stops nothing. The agent's checkout is left as it stands:
+ * only the conversation goes back.
  */
 
 /** Why a cut the store refused is refused to its caller. */
@@ -85,8 +91,20 @@ export const rewoundAgent = /* @__PURE__ */ Effect.fn("web/rewoundAgent")(functi
   if (!controlsAgent(account, agent)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
   yield* admitsPlanWriter(account, agent);
   if (agent.archivedAt !== null) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-  yield* stoppedForRewind(reach, writer, request, account, agent);
   const target = { userId: agent.userId, conversationId: agent.conversationId };
+  // A cut that would be refused stops nothing.
+  const rewindable = yield* hostedStoreOrUnavailable(readRewindable(target, messageId));
+  if (Result.isFailure(rewindable)) {
+    return yield* Effect.fail(REFUSAL_OF_REWIND[rewindable.failure]);
+  }
+  yield* stoppedForRewind(reach, writer, request, account, agent);
   const cut = yield* hostedStoreOrUnavailable(rewindConversation(target, messageId));
   if (Result.isFailure(cut)) return yield* Effect.fail(REFUSAL_OF_REWIND[cut.failure]);
+  // Note that a message sent between the stop and the cut may have started the agent again on
+  // what the cut dropped, so whatever runs now is stopped too, and the next message starts clean.
+  yield* stoppedForRewind(reach, writer, request, account, agent).pipe(
+    Effect.catch((refusal) =>
+      Effect.logWarning(`a rewound agent was not stopped again: ${refusal.error}`),
+    ),
+  );
 });
