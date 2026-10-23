@@ -7,9 +7,9 @@ import settings from "@luke/panel/styles/settings.css?raw";
 import shell from "@luke/panel/styles/shell.css?raw";
 import shortcut from "@luke/panel/styles/shortcut.css?raw";
 import tasks from "@luke/panel/styles/tasks.css?raw";
+import utilities from "@luke/panel/testing/tailwind.css?inline";
 import ui from "@luke/ui/styles.css?inline";
 import tokens from "@luke/ui/tokens.css?inline";
-import utilities from "./tailwind.css?inline";
 
 /**
  * container-width.ts -- the panel's stylesheets as containers of given widths, on a given kind of device, read them, for jsdom, which lays nothing out and answers no container, media, or layer rule.
