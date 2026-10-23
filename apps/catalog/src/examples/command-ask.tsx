@@ -1,0 +1,54 @@
+import { BUTTON_VARIANT, Button, CommandAsk, Inline } from "@luke/ui";
+import { useState } from "react";
+import type { Example } from "../examples";
+import { CatalogSection } from "../section";
+
+/**
+ * command-ask.tsx -- a command an agent asks to run on this Mac, put to the
+ * developer over the window: a short one, and a long one that scrolls
+ * inside its card, each opened from its button and put away by any of its
+ * answers, Escape, or a press on the dimmed window.
+ */
+
+const SHORT_COMMAND = "git -C ~/code/app status --short";
+
+const LONG_COMMAND = [
+  "cd ~/code/app && pnpm install --frozen-lockfile",
+  "pnpm exec vitest run packages/host/src/compose-mac-commands.test.ts --reporter=verbose",
+  "git log --oneline -20 && git status --short && pnpm exec tsc --noEmit",
+  'for pkg in packages/*; do echo "$pkg"; (cd "$pkg" && pnpm run typecheck); done',
+  "tail -n 200 ~/Library/Logs/Luke/main.log",
+].join(" && \\\n  ");
+
+/** A button that puts `command` to the developer, whose answers put it away. */
+function Asking({ label, command }: { label: string; command: string }): React.JSX.Element {
+  const [open, setOpen] = useState(false);
+  const close = () => setOpen(false);
+  return (
+    <>
+      <Button variant={BUTTON_VARIANT.OUTLINE} aria-haspopup="dialog" onClick={() => setOpen(true)}>
+        {label}
+      </Button>
+      {open ? (
+        <CommandAsk command={command} onAllowOnce={close} onAllowAlways={close} onDeny={close} />
+      ) : null}
+    </>
+  );
+}
+
+function CommandAsks(): React.JSX.Element {
+  return (
+    <CatalogSection id="command-ask-states" title="A command asked">
+      <Inline>
+        <Asking label="Short command…" command={SHORT_COMMAND} />
+        <Asking label="Long command…" command={LONG_COMMAND} />
+      </Inline>
+    </CatalogSection>
+  );
+}
+
+export const COMMAND_ASK_EXAMPLE: Example = {
+  id: "command-ask",
+  title: "Command ask",
+  Render: CommandAsks,
+};

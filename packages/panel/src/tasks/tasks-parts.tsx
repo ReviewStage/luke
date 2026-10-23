@@ -3,6 +3,7 @@ import {
   BUTTON_SHAPE,
   BUTTON_VARIANT,
   Button,
+  type ButtonShape,
   CloseIcon,
   IconButton,
   MicrophoneIcon,
@@ -115,25 +116,27 @@ function CallStatusLines({
   );
 }
 
-/** A mute the call bar offers: its glyph struck through, and on the danger tint, while it is on. */
-function CallToggle({
+/** A mute the call offers, in the call bar round and in an agent's composer row square: its glyph struck through, and on the danger tint, while it is on. */
+export function CallMute({
   on,
   label,
   command,
   icon,
+  shape,
   onPress,
 }: {
   on: boolean;
   label: string;
   command: typeof APP_COMMAND.TOGGLE_MICROPHONE | typeof APP_COMMAND.TOGGLE_SPEAKER;
   icon: React.JSX.Element;
+  shape: ButtonShape;
   onPress: () => void;
 }): React.JSX.Element {
   return (
     <Tooltip label={label} command={command}>
       <IconButton
         variant={BUTTON_VARIANT.DANGER}
-        shape={BUTTON_SHAPE.ROUND}
+        shape={shape}
         icon={icon}
         label={label}
         pressed={on}
@@ -197,7 +200,8 @@ export function CallBar({
       <CallStatusLines status={status} muted={microphone.muted} titled={titled} />
       <div className="call-controls">
         <div className="call-mutes">
-          <CallToggle
+          <CallMute
+            shape={BUTTON_SHAPE.ROUND}
             on={speaker.muted}
             label={
               speaker.muted ? CALL_CONTROL_LABEL.UNMUTE_SPEAKER : CALL_CONTROL_LABEL.MUTE_SPEAKER
@@ -206,7 +210,8 @@ export function CallBar({
             icon={speaker.muted ? <SpeakerOffIcon /> : <SpeakerIcon />}
             onPress={speaker.onPress}
           />
-          <CallToggle
+          <CallMute
+            shape={BUTTON_SHAPE.ROUND}
             on={microphone.muted}
             label={
               microphone.muted

@@ -102,7 +102,7 @@ fi
 # fixture runs and packaged builds record nothing whatever this exports.
 # A named instance's traces go to a folder of their own.
 if [[ $capture_trace == true && -z ${LUKE_TRACE_DIR:-} ]]; then
-    export LUKE_TRACE_DIR="$LUKE_REPO_ROOT/.build/traces${instance:+/$instance}"
+    export LUKE_TRACE_DIR="$LUKE_BUILD_ROOT/traces${instance:+/$instance}"
 fi
 
 if [[ $replace_running_app == true ]]; then

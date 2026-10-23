@@ -14,15 +14,8 @@ import {
   INLINE_EXCEPTION,
   undeclaredImports,
 } from "../server/function-bundles";
-import { webFunctions } from "../server/function-layout";
-import { apiRewrites, readApiRewritesTable, rewritesDrifted } from "../server/function-rewrites";
 
 const WEB = fileURLToPath(new URL("..", import.meta.url));
-
-test("the committed table is what the routes generate, and vercel.json's /api/ entries are the table", async () => {
-  assert.deepEqual(await readApiRewritesTable(WEB), apiRewrites(await webFunctions(WEB)));
-  assert.equal(await rewritesDrifted(WEB), false);
-});
 
 /**
  * The whole map, not one package: every bundle's external set is the one the

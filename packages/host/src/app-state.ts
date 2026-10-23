@@ -12,6 +12,9 @@ import type { VoiceCallTranscript, VoiceView } from "@luke/voice/voice-view";
 import { EXCESS_KEYS, type UnparsedWireValue } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import { Result, Schema } from "effect";
+import type { MacCommandAsk } from "./mac-command-ask.js";
+
+export type { MacCommandAsk } from "./mac-command-ask.js";
 
 /**
  * The launch profiles a window answers to. A capture run stages a
@@ -186,6 +189,17 @@ export interface AppInboxSlice {
 }
 
 /**
+ * The commands agents asked to run on this Mac that wait on the developer's
+ * answer, the earliest first, as the host holds them while Settings › This
+ * Mac asks every time (`compose-mac-commands.ts`): what the panel's prompt
+ * draws. Main's, because the host holds the command whichever window is
+ * open, and empty wherever this platform runs no commands.
+ */
+export interface AppMacCommandsSlice {
+  asks: readonly MacCommandAsk[];
+}
+
+/**
  * What macOS answered the last notification Luke posted, which is the only
  * word Electron gives of notifications being off for Luke in System Settings:
  * unknown until one is shown or refused, and kept for the launch alone.
@@ -252,6 +266,7 @@ export interface AppState {
   tasks: TasksView;
   codingAgents: AppCodingAgentsSlice;
   inbox: AppInboxSlice;
+  macCommands: AppMacCommandsSlice;
   notifications: AppNotificationsSlice;
   network: AppNetworkSlice;
   sessionReplay: AppSessionReplaySlice;

@@ -82,7 +82,7 @@ function eveSecretApart(
 }
 
 /** A secret an environment record names, under `presentRedacted`'s rule: trimmed, and nothing where it is blank. */
-function namedIn(
+export function namedIn(
   environment: Readonly<Record<string, string | undefined>>,
   name: string,
 ): Redacted.Redacted | undefined {

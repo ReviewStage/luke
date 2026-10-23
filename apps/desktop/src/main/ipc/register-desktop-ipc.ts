@@ -7,6 +7,7 @@ import { BROWSER_LIVE_PORT_CHANNEL } from "@luke/features/browser-live-acts";
 import { MAC_TERMINAL_PORT_CHANNEL } from "@luke/features/mac-terminal-wire";
 import { TERMINAL_PORT_CHANNEL } from "@luke/features/terminal-acts";
 import {
+  browserLiveProcedures,
   createActPortHandler,
   type PlatformActProcedures,
   terminalProcedures,
@@ -29,7 +30,6 @@ import { type ReportHandlers, registerBridgeHost } from "../bridge-host";
 import type { DesktopServices } from "../services/compose-desktop";
 import { windowPushes } from "../window/window-pushes";
 import { avatarProcedures, avatarReports } from "./avatar-acts";
-import { browserLiveProcedures } from "./browser-live-acts";
 import { macTerminalProcedures } from "./mac-terminal-acts";
 import { whenPageGone } from "./page-gone";
 import { clientSettingSideEffects } from "./settings-side-effects";
@@ -120,7 +120,7 @@ export function registerDesktopIpc(services: DesktopServices): void {
   // system's, the ones only it can answer.
   const platformProcedures: PlatformActProcedures<WebContents> = {
     ...avatarProcedures({ avatar }),
-    ...browserLiveProcedures({
+    ...browserLiveProcedures<WebContents>({
       host: operator.host,
       ports: {
         open: (sender, ticket) => {
@@ -267,6 +267,7 @@ export function registerDesktopIpc(services: DesktopServices): void {
         chapters: { host: operator.host },
         installedSkills: { host: operator.host },
         integrations: { host: operator.host },
+        macCommands: { host: operator.host },
         pushes: windowPushes,
         settings: {
           host: operator.host,

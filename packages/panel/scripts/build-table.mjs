@@ -152,7 +152,7 @@ export function lucideWholeModule(file) {
 }
 
 // The worker Pierre's diffs highlights a Files changed list in
-// (`src/diff-view/index.ts`'s `highlightPool`), bundled whole as one classic
+// (`src/diff-view/highlight-pool.ts`, started by `src/diff-view/index.ts`), bundled whole as one classic
 // script and handed to the diff bundle as text (`DIFF_HIGHLIGHT_WORKER`),
 // which starts each worker from a `blob:`, the one place the panel's policy
 // admits a worker from. Shiki's WebAssembly engine is answered with nothing,

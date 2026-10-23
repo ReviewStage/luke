@@ -10,10 +10,8 @@ import {
   integrationProviderParamsSchema,
   integrationRenameParamsSchema,
 } from "@luke/features/integration-view";
-import { carried, GATEWAY_METHOD, type GatewayMethodTable, invalid } from "@luke/gateway";
-import { unparsedWire } from "@luke/wire";
-import { readEither } from "@luke/wire/effect";
-import { Effect, Result, type Scope } from "effect";
+import { carried, GATEWAY_METHOD, type GatewayMethodTable, readParams } from "@luke/gateway";
+import { Effect, type Scope } from "effect";
 import * as HttpClient from "effect/http/HttpClient";
 import type { AccountComposer } from "./compose-account.js";
 import type { Composer } from "./composer.js";
@@ -75,12 +73,12 @@ function composed(
   type Params = Parameters<GatewayMethodTable[keyof GatewayMethodTable] & object>[0];
 
   /** The account the params name (a provider, and the account and an add where named), or the invalid-params refusal. */
-  const targetOf = (params: Params) => {
-    const read = readEither(integrationProviderParamsSchema)(unparsedWire(params));
-    return Result.isFailure(read)
-      ? invalid("the ask names a provider this build knows")
-      : Effect.succeed(read.success);
-  };
+  const targetOf = (params: Params) =>
+    readParams(
+      integrationProviderParamsSchema,
+      params,
+      "the ask names a provider this build knows",
+    );
 
   /** A sign-in begun and its address opened; the window hears whether it was, and the account it signs in, and nothing of the address. */
   const connect = ({
@@ -126,9 +124,12 @@ function composed(
       }),
     [GATEWAY_METHOD.INTEGRATIONS_RENAME]: (params) =>
       Effect.gen(function* () {
-        const read = readEither(integrationRenameParamsSchema)(unparsedWire(params));
-        if (Result.isFailure(read)) return yield* invalid("the ask names an account and a label");
-        const { provider, connection, label } = read.success;
+        const read = yield* readParams(
+          integrationRenameParamsSchema,
+          params,
+          "the ask names an account and a label",
+        );
+        const { provider, connection, label } = read;
         return carried<IntegrationAccountView>(
           yield* asked(client.rename(provider, connection, label)),
         );

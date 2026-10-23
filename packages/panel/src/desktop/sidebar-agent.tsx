@@ -20,7 +20,7 @@ import {
 } from "@luke/ui";
 import { ACTOR_KIND, ACTOR_STATE, type Actor, teammateCreator } from "@luke/ui/actor-model";
 import { agentRow, taskRowName } from "@luke/ui/task-list-model";
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useMemo, useRef } from "react";
 import { useAct } from "../act.js";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref.js";
 import { useDraftedAgents } from "../composer-drafts.js";
@@ -30,6 +30,7 @@ import { AgentCard, tasklessRowSubject } from "../tasks/agent-ref.js";
 import { agentEndMark, TAB_KIND, tabLook } from "../tasks/tab-look.js";
 import { markReadItem } from "../tasks/task-menu-items.js";
 import { type CodingAgentsControl, readAgentById } from "../tasks/use-coding-agents.js";
+import { useRefocusAfterEdit } from "../use-refocus-after-edit.js";
 import { useCallingAgent } from "../use-voice-view.js";
 import { ActionMenu, type MenuAction, type MenuEntry } from "./action-menu.js";
 import { rowDoors, useAgentActions } from "./agent-actions.js";
@@ -178,12 +179,7 @@ export function SidebarAgent({
   const drafted = useDraftedAgents().includes(agent.id) && !current;
   const { rename } = actions;
   const editing = rename?.editing ?? false;
-  const refocus = useRef(false);
-  useEffect(() => {
-    if (editing || !refocus.current) return;
-    refocus.current = false;
-    row.current?.focus();
-  }, [editing]);
+  const endedByKey = useRefocusAfterEdit(editing, row);
   const renameItem: MenuAction | undefined =
     onRename === undefined
       ? undefined
@@ -257,7 +253,7 @@ export function SidebarAgent({
                 maxLength={CODING_AGENT_BOUNDS.MAX_TITLE_CHARS}
                 editing
                 onEnd={(edit) => {
-                  refocus.current = edit.byKey;
+                  endedByKey(edit.byKey);
                   rename.end(edit.value);
                 }}
               />

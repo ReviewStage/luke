@@ -75,8 +75,7 @@ import {
   type TaskIssueRelation,
 } from "@luke/features/task-issue-wire";
 import type { Task, TaskAgentStart, TaskStartAnswer } from "@luke/features/task-wire";
-import { readEither } from "@luke/wire/effect";
-import { Data, Effect, Option, Result } from "effect";
+import { Data, Effect, Option } from "effect";
 import type { HttpClient } from "effect/http";
 import type { EveTypedTurn } from "../agents/brain-host/eve-sessions.js";
 import { type StartReach, startRequestedAgent } from "../agents/coder-host/start.js";
@@ -91,7 +90,7 @@ import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
 import { retiredBeforeDelete, retiringReach } from "../agents/retire-sessions.js";
 import type { SandboxStopReach } from "../agents/session-sandboxes.js";
 import { listTasklessAgents, withTaskAgents } from "../agents/task-agents.js";
-import { TASK_LIST_ARCHIVED, unparsedWire, wireUuidSchema } from "../core.js";
+import { TASK_LIST_ARCHIVED } from "../core.js";
 import { recordServerEvent, SERVER_EVENT, SERVER_TASK_SOURCE } from "../events/server-events.js";
 import type { GitHubApp } from "../github/github-app.js";
 import { refreshRepositoryReads } from "../github/repository-reads.js";
@@ -100,6 +99,7 @@ import {
   HOSTED_REFUSAL,
   type HostedRefusal,
   hostedStoreOrUnavailable,
+  pathUuid,
   type UserIdResolver,
 } from "../http/http-effect.js";
 import { logStoreFailure } from "../http/store-failure.js";
@@ -124,15 +124,6 @@ export interface TasksProcedureSeams extends EveReach, SandboxStopReach {
   /** The plugin's write that makes an account's first workspace, the first time a start needs it. */
   workspaces: WorkspaceSeams;
 }
-
-/** The plan a path names: an id that is no UUID names no row, and answers as none. */
-const taskIdOf = /* @__PURE__ */ Effect.fnUntraced(function* (
-  id: string,
-): Effect.fn.Return<string, HostedRefusal> {
-  const read = readEither(wireUuidSchema)(unparsedWire(id));
-  if (Result.isFailure(read)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-  return read.success;
-});
 
 /**
  * The repository as the row keeps it, with how it was reached: null where
@@ -385,9 +376,6 @@ const startedAgentOn = (
     ),
   );
 
-/** The link a path names: an id that is no UUID names no link, and answers as none. */
-const linkIdOf = taskIdOf;
-
 /** What a restore that saved nothing answers, by why; the store out of reach is any other. */
 const RESTORE_REFUSAL: ReadonlyMap<string, HostedRefusal> = new Map<string, HostedRefusal>([
   [PLAN_SAVE_REFUSAL.NO_TASK, HOSTED_REFUSAL.NOT_FOUND],
@@ -508,7 +496,7 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
 
     /** One plan with its saved document. */
     open: plans.open.effect(function* ({ input, context }) {
-      const taskId = yield* taskIdOf(input.id);
+      const taskId = yield* pathUuid(input.id);
       const opened = yield* hostedStoreOrUnavailable(readTask(context.userId, taskId));
       if (Option.isNone(opened)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
       return { plan: opened.value.task };
@@ -536,7 +524,7 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
      */
     update: plans.update.effect(function* ({ input, context }) {
       const { userId, request } = context;
-      const taskId = yield* taskIdOf(input.params.id);
+      const taskId = yield* pathUuid(input.params.id);
       const changes = input.body;
       const organizationId =
         changes.workspaceId === undefined
@@ -641,7 +629,7 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
      */
     delete: plans.delete.effect(function* ({ input, context }) {
       const { userId, request } = context;
-      const taskId = yield* taskIdOf(input.id);
+      const taskId = yield* pathUuid(input.id);
       const eveAt = yield* retiringReach(seams, request, userId);
       const agents = yield* hostedStoreOrUnavailable(
         listCodingAgents(userId, taskId, { includeArchived: true }),
@@ -667,7 +655,7 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
 
     /** The plan's board, with Luke's latest drawing. */
     readBoard: plans.readBoard.effect(function* ({ input, context }) {
-      const taskId = yield* taskIdOf(input.id);
+      const taskId = yield* pathUuid(input.id);
       const board = yield* hostedStoreOrUnavailable(readBoard(context.userId, taskId));
       if (Option.isNone(board)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
       return { board: board.value };
@@ -675,7 +663,7 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
 
     /** The Mac's scene written whole, the last write winning; with the id of its transaction where the board's live row shows it. */
     saveBoard: plans.saveBoard.effect(function* ({ input, context }) {
-      const taskId = yield* taskIdOf(input.params.id);
+      const taskId = yield* pathUuid(input.params.id);
       const save = input.body;
       const written = yield* hostedStoreOrUnavailable(
         writeScene(context.userId, taskId, save.elements, save.appliedDrawing, save.image),
@@ -690,7 +678,7 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
      * it, or as refused where the plan would be longer than a plan may be.
      */
     edit: plans.edit.effect(function* ({ input, context }) {
-      const taskId = yield* taskIdOf(input.params.id);
+      const taskId = yield* pathUuid(input.params.id);
       const saved = yield* saveDeveloperEdit({ userId: context.userId, taskId }, input.body);
       switch (saved.status) {
         case PLAN_SAVE_STATUS.SAVED:
@@ -711,13 +699,13 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
      * own, which it answers no differently.
      */
     revisions: plans.revisions.effect(function* ({ input, context }) {
-      const taskId = yield* taskIdOf(input.id);
+      const taskId = yield* pathUuid(input.id);
       return yield* hostedStoreOrUnavailable(listRevisions(context.userId, taskId, input.before));
     }),
 
     /** One revision's content and the content before it. */
     revision: plans.revision.effect(function* ({ input, context }) {
-      const taskId = yield* taskIdOf(input.id);
+      const taskId = yield* pathUuid(input.id);
       const revision = yield* hostedStoreOrUnavailable(
         readRevision(context.userId, taskId, input.seq),
       );
@@ -733,7 +721,7 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
      * path's.
      */
     restore: plans.restore.effect(function* ({ input, context }) {
-      const taskId = yield* taskIdOf(input.id);
+      const taskId = yield* pathUuid(input.id);
       const restored = yield* restoreRevision({ userId: context.userId, taskId }, input.seq);
       if (restored.status !== PLAN_SAVE_STATUS.SAVED) {
         return yield* Effect.fail(
@@ -753,7 +741,7 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
      */
     issues: plans.issues.effect(function* ({ input, context }) {
       const { userId } = context;
-      const taskId = yield* taskIdOf(input.id);
+      const taskId = yield* pathUuid(input.id);
       const stored = yield* reachedTask(userId, taskId);
       const links = yield* hostedStoreOrUnavailable(listTaskIssues(userId, taskId));
       const issues = yield* liveTaskIssues(userId, taskId, stored.workspaceId, links);
@@ -768,7 +756,7 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
      */
     linkIssue: plans.linkIssue.effect(function* ({ input, context }) {
       const { userId } = context;
-      const taskId = yield* taskIdOf(input.params.id);
+      const taskId = yield* pathUuid(input.params.id);
       const stored = yield* reachedTask(userId, taskId);
       const read = yield* linkedIssue(userId, stored.workspaceId, input.body);
       const made = yield* linkTaskIssue(userId, taskId, read).pipe(
@@ -788,8 +776,8 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
 
     /** Which keyword the plan's pull requests write of one of its links. */
     relateIssue: plans.relateIssue.effect(function* ({ input, context }) {
-      const taskId = yield* taskIdOf(input.params.id);
-      const linkId = yield* linkIdOf(input.params.link);
+      const taskId = yield* pathUuid(input.params.id);
+      const linkId = yield* pathUuid(input.params.link);
       const related = yield* hostedStoreOrUnavailable(
         relateTaskIssue(context.userId, taskId, linkId, input.body.relation),
       );
@@ -799,8 +787,8 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
 
     /** One of the plan's links let go; the issue itself is the provider's and stands as it was. */
     unlinkIssue: plans.unlinkIssue.effect(function* ({ input, context }) {
-      const taskId = yield* taskIdOf(input.id);
-      const linkId = yield* linkIdOf(input.link);
+      const taskId = yield* pathUuid(input.id);
+      const linkId = yield* pathUuid(input.link);
       const unlinked = yield* hostedStoreOrUnavailable(
         unlinkTaskIssue(context.userId, taskId, linkId),
       );

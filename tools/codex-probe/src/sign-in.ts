@@ -18,6 +18,7 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { CHATGPT_SIGN_IN } from "@luke/credentials";
 import {
   isRecord,
   isWireNumber,
@@ -34,7 +35,6 @@ import {
   type Fetch,
   type PendingAuthorization,
   readCallback,
-  SIGN_IN,
   SIGN_IN_REFUSAL,
   SignInRefused,
   verifyIdToken,
@@ -92,7 +92,7 @@ export async function awaitCallback(
     // SAFETY: Node's http server emits each "request" with exactly these two arguments.
     const [incoming, outgoing] = [request as IncomingMessage, response as ServerResponse];
     const url = new URL(incoming.url ?? "/", "http://127.0.0.1");
-    if (url.pathname !== SIGN_IN.CALLBACK_PATH) {
+    if (url.pathname !== CHATGPT_SIGN_IN.CALLBACK_PATH) {
       outgoing.writeHead(404).end();
       continue;
     }

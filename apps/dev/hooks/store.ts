@@ -15,7 +15,7 @@ import { sandboxIdle } from "@luke/service/agents/agent-runtime/sandbox-idle";
 import { pinnedState } from "@luke/service/agents/brain-host/pinned-state";
 import { EMPTY_RELAY_STATE, type RelayState } from "@luke/service/agents/brain-host/relay";
 import { deepensSandbox } from "@luke/service/agents/coder-host/deepen";
-import type { CheckoutFailure } from "@luke/service/agents/coder-host/host";
+import { describeFailure } from "@luke/service/agents/coder-host/host";
 import { opensSandbox } from "@luke/service/agents/coder-host/tool-set";
 import { handedAfterCompaction } from "@luke/service/agents/coder-host/turn-context";
 import type { RepositorySandbox } from "@luke/service/agents/repository-shell";
@@ -69,11 +69,6 @@ import { sandboxRecord, sessionPrompt, turnHanded } from "../session-prompt.js";
 
 const relayState = defineState<RelayState>("luke.coder.relay", () => EMPTY_RELAY_STATE);
 
-/** A refusal as a log line carries it: the checkout's reason, or a store failure's kind. */
-function describeRefusal(failure: CheckoutFailure): string {
-  return failure._tag === "CheckoutRefused" ? failure.reason : failure._tag;
-}
-
 /** The branch checked out as the turn ends, written on the agent's row; an admission that fails is logged, and the host logs its own failures, so the stop that follows is never skipped. */
 async function recordBranch(ctx: HookContext, sandbox: RepositorySandbox): Promise<void> {
   await runAgent(
@@ -84,7 +79,7 @@ async function recordBranch(ctx: HookContext, sandbox: RepositorySandbox): Promi
     }).pipe(
       Effect.catch((failure) =>
         Effect.logWarning(
-          `The branch of session ${ctx.session.id} was not recorded: ${describeRefusal(failure)}`,
+          `The branch of session ${ctx.session.id} was not recorded: ${describeFailure(failure)}`,
         ),
       ),
     ),
@@ -150,7 +145,7 @@ async function renewCredential(
       Effect.catch((failure) =>
         Effect.as(
           Effect.logWarning(
-            `The repository credential of session ${ctx.session.id} was not renewed: ${describeRefusal(failure)}`,
+            `The repository credential of session ${ctx.session.id} was not renewed: ${describeFailure(failure)}`,
           ),
           undefined,
         ),

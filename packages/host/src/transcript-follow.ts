@@ -24,12 +24,11 @@ import {
   Option,
   RcMap,
   Schedule,
-  Schema,
   type Scope,
   Stream,
   SubscriptionRef,
 } from "effect";
-import { confirmWrite, LiveBroken, type LiveClient, liveRows, type TxWait } from "./live-follow.js";
+import { confirmWrite, decodedLiveRows, type LiveClient, type TxWait } from "./live-follow.js";
 
 /**
  * transcript-follow.ts -- a coding agent's transcript, or one of its workers', followed here on a Neon Realtime subscription for the windows that draw it, each page told as it is read.
@@ -212,7 +211,6 @@ function sealedOf(
 export function transcriptFollows<Key = TranscriptKey>(
   dependencies: TranscriptFollowDependencies<Key>,
 ): Effect.Effect<TranscriptFollows<Key>, never, Scope.Scope> {
-  const decode = Schema.decodeUnknownOption(agentTranscriptLiveRowsSchema);
   return RcMap.make({
     idleTimeToLive: IDLE,
     lookup: (key: Key) =>
@@ -230,7 +228,7 @@ export function transcriptFollows<Key = TranscriptKey>(
         /** One seal followed until its subscription stops, which marks the state broken. */
         const follow = (sealed: AgentTranscriptLiveAnswer) =>
           Stream.runForEach(
-            liveRows(
+            decodedLiveRows(
               {
                 openLive: dependencies.openLive,
                 reseal: () => Effect.map(seal(false), followedAnswer),
@@ -241,16 +239,13 @@ export function transcriptFollows<Key = TranscriptKey>(
                 },
               },
               followedRead(sealed),
+              agentTranscriptLiveRowsSchema,
             ),
-            (read) =>
-              Option.match(decode(read), {
-                onNone: () => Effect.fail(new LiveBroken({ reason: "a row did not decode" })),
-                onSome: (decoded) =>
-                  SubscriptionRef.set(state, {
-                    kind: "standing",
-                    digest: digestOf(decoded),
-                    drawn: drawnOf(decoded),
-                  }),
+            (decoded) =>
+              SubscriptionRef.set(state, {
+                kind: "standing",
+                digest: digestOf(decoded),
+                drawn: drawnOf(decoded),
               }),
           ).pipe(Effect.catch(() => SubscriptionRef.set(state, { kind: "broken" })));
         yield* Effect.forkScoped(

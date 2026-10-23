@@ -132,8 +132,6 @@
   --agent-pointer: rgba(107, 111, 118, 0.9);
   --agent-pointer-on-dark: rgba(206, 209, 214, 0.92);
   --agent-pointer-halo: rgba(0, 0, 0, 0.2);
-  /* How far a label cut short fades out at its end, in place of an ellipsis. */
-  --label-fade: 20px;
 }
 
 /* Pierre's diff and file tree each ask for `color-scheme: light dark` in
@@ -145,6 +143,13 @@
 diffs-container,
 file-tree-container {
   color-scheme: inherit;
+}
+
+/* Every Lucide glyph is drawn a step finer than the library's own stroke,
+   so the window's marks read as pencil rather than marker beside its light
+   headings. The stroke is the glyph's own attribute, which a style outranks. */
+.lucide {
+  stroke-width: 1.5;
 }
 
 .app-stage {

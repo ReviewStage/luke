@@ -19,24 +19,20 @@
  * the function may run, then the panel reconnects to the same shell.
  */
 
-import http, { type IncomingHttpHeaders, type IncomingMessage } from "node:http";
-import type { Duplex } from "node:stream";
+import type { IncomingHttpHeaders } from "node:http";
 import { TERMINAL_RELAY } from "@luke/features/terminal-wire";
 import { readEither } from "@luke/wire/effect";
-import { Effect, FiberSet, Option, Result, Schema, type Scope } from "effect";
-import { type WebSocket, WebSocketServer } from "ws";
+import { Effect, Option, Result, Schema, type Scope } from "effect";
 import { unparsedWire, wireUuidSchema } from "../core.js";
 import {
   RELAY_UPGRADE_STATUS,
   type RelayCredential,
-  refuseUpgrade,
+  type RelayServer,
   relayCredential,
+  relayServer,
+  standRelay,
 } from "../http/relay-upgrade.js";
-import { voiceSocket } from "../voice/socket.js";
 import { type RelayAsk, type RelayDependencies, relayTerminal } from "./relay.js";
-
-/** A plain request to the relay's path: the answer says what the path is for. */
-const UPGRADE_REQUIRED = 426;
 
 /** The most bytes one frame from a panel may carry: a paste is sent in pieces well under it. */
 const MAXIMUM_FRAME_BYTES = 1024 * 1024;
@@ -87,48 +83,13 @@ export function admitRelayUpgrade(
   };
 }
 
-/** What a server hands a service that stands on it, which is what `ws` upgrades on. */
-type RelayUpgradeHandler = (request: IncomingMessage, socket: Duplex, head: Buffer) => void;
-
-export interface TerminalRelayServer {
-  /** The server a function module exports for Vercel to upgrade into. */
-  readonly server: http.Server;
-  /** The one service answering this server's upgrades: none until one stands, and none again once its scope closes. */
-  readonly serve: (handle: RelayUpgradeHandler | undefined) => void;
-}
-
-/**
- * The HTTP face of the relay, built where its function module is evaluated
- * because that module's export is synchronous and the service behind it is
- * an effect the edge's runtime runs. Until a service claims it, every
- * upgrade is refused with 503.
- */
-export function terminalRelayServer(): TerminalRelayServer {
-  let handle: RelayUpgradeHandler | undefined;
-  const server = http.createServer((request, response) => {
-    const path = new URL(request.url ?? "/", "http://localhost").pathname;
-    response
-      .writeHead(path === TERMINAL_RELAY.PATH ? UPGRADE_REQUIRED : RELAY_UPGRADE_STATUS.NOT_FOUND)
-      .end();
-  });
-  server.on("upgrade", (request, socket, head) => {
-    socket.on("error", () => socket.destroy());
-    if (handle === undefined) {
-      refuseUpgrade(socket, RELAY_UPGRADE_STATUS.SERVICE_UNAVAILABLE);
-      return;
-    }
-    handle(request, socket, head);
-  });
-  return {
-    server,
-    serve: (next) => {
-      handle = next;
-    },
-  };
+/** The HTTP face of the terminal relay at its path (`relayServer`). */
+export function terminalRelayServer(): RelayServer {
+  return relayServer(TERMINAL_RELAY.PATH);
 }
 
 export interface TerminalRelayOptions {
-  readonly server: TerminalRelayServer;
+  readonly server: RelayServer;
   /** The origins the deployment's own pages are served from, the only ones a page's upgrade is taken from. */
   readonly ownOrigins: ReadonlySet<string>;
   /** The account a credential answers for, or none. */
@@ -136,75 +97,20 @@ export interface TerminalRelayOptions {
   readonly dependencies: RelayDependencies;
 }
 
-/**
- * The service for one function instance, standing for the scope it is built
- * in: the `ws` server, the set every connection's fiber joins, and the claim
- * on the server. The scope's close gives up the claim, ends every
- * connection, and closes the `ws` server.
- */
+/** The terminal relay's service for one function instance (`standRelay`): one socket per attached shell, under the account its credential resolves to. */
 export function standTerminalRelay(
   options: TerminalRelayOptions,
 ): Effect.Effect<void, never, Scope.Scope> {
-  return Effect.gen(function* () {
-    const fibers = yield* FiberSet.make<void>();
-    const fork = yield* FiberSet.runtime(fibers)();
-    const sockets = yield* Effect.acquireRelease(
-      Effect.sync(() => new WebSocketServer({ noServer: true, maxPayload: MAXIMUM_FRAME_BYTES })),
-      (server) =>
-        Effect.callback<void>((resume) => {
-          server.close(() => resume(Effect.void));
-        }),
-    );
-    /** The socket the upgrade stands, paused until the connection's own reader stands. */
-    const upgraded = (request: IncomingMessage, socket: Duplex, head: Buffer) =>
-      Effect.callback<WebSocket>((resume) => {
-        sockets.handleUpgrade(request, socket, head, (webSocket) => {
-          webSocket.pause();
-          resume(Effect.succeed(webSocket));
-        });
-      });
-    const connection = (
-      decision: Extract<RelayUpgrade, { credential: RelayCredential }>,
-      request: IncomingMessage,
-      socket: Duplex,
-      head: Buffer,
-    ) =>
-      Effect.gen(function* () {
-        const account = yield* options.resolveUserId(decision.credential);
-        if (Option.isNone(account)) {
-          refuseUpgrade(socket, RELAY_UPGRADE_STATUS.UNAUTHORIZED);
-          return;
-        }
-        const webSocket = yield* upgraded(request, socket, head);
-        yield* Effect.scoped(
-          Effect.gen(function* () {
-            const device = yield* voiceSocket(webSocket);
-            yield* Effect.sync(() => webSocket.resume());
-            yield* relayTerminal(
-              device,
-              { ...decision.ask, userId: account.value },
-              options.dependencies,
-            );
-          }),
-        );
-      });
-    yield* Effect.acquireRelease(
-      Effect.sync(() =>
-        options.server.serve((request, socket, head) => {
-          const decision = admitRelayUpgrade(request.url, request.headers, options.ownOrigins);
-          if ("status" in decision) {
-            refuseUpgrade(socket, decision.status);
-            return;
-          }
-          fork(Effect.andThen(Effect.yieldNow, connection(decision, request, socket, head)));
-        }),
+  return standRelay({
+    server: options.server,
+    sockets: { maxPayload: MAXIMUM_FRAME_BYTES },
+    admit: (request) => admitRelayUpgrade(request.url, request.headers, options.ownOrigins),
+    accept: (decision): Effect.Effect<{ readonly status: number } | RelayAsk> =>
+      Effect.map(options.resolveUserId(decision.credential), (account) =>
+        Option.isNone(account)
+          ? { status: RELAY_UPGRADE_STATUS.UNAUTHORIZED }
+          : { ...decision.ask, userId: account.value },
       ),
-      () =>
-        Effect.gen(function* () {
-          options.server.serve(undefined);
-          for (const client of sockets.clients) client.close(1001);
-          yield* FiberSet.awaitEmpty(fibers);
-        }),
-    );
+    relay: (ask, device) => relayTerminal(device, ask, options.dependencies),
   });
 }

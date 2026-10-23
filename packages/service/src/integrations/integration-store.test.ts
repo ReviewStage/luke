@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
+import { INTEGRATION_ROW_STATUS } from "@luke/database/integration-vocabulary";
 import { getTestDB } from "@luke/database/testing";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { noNetwork } from "@luke/wire/testing";
@@ -14,7 +15,6 @@ import {
   endIntegrationSignIn,
   expireIntegrationConnection,
   fillIntegrationLabel,
-  INTEGRATION_ROW_STATUS,
   readIntegrationConnection,
   readIntegrationConnections,
   renameIntegrationConnection,

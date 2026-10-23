@@ -72,6 +72,7 @@
  */
 
 import type { DatabaseServices } from "@luke/database/core/query";
+import { INTEGRATION_ROW_STATUS } from "@luke/database/integration-vocabulary";
 import { HOSTED_SERVICE_PATH } from "@luke/features";
 import type { integrationStatusesReadSchema } from "@luke/features/contract";
 import {
@@ -117,11 +118,7 @@ import {
   type IntegrationConnect,
   revokeIntegrationGrant,
 } from "./integration-connect.js";
-import {
-  INTEGRATION_ROW_STATUS,
-  type IntegrationAccountKey,
-  type IntegrationConnectionRow,
-} from "./integration-store.js";
+import type { IntegrationAccountKey, IntegrationConnectionRow } from "./integration-store.js";
 import { INTEGRATION, type IntegrationDefinition } from "./integrations.js";
 import {
   connectSignInFailure,

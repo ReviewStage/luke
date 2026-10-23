@@ -1,5 +1,6 @@
 import { INSTALLED_SKILLS } from "@luke/agent-runner/protocol";
 import { MENTIONED_HEADING } from "@luke/database/models/attached-file-parts";
+import { type CodingAgent, codingAgentBriefOf } from "@luke/database/models/coding-agent-store";
 import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
 import { CHAT_NOTICE_LEAD } from "@luke/features/chat-wire";
 import {
@@ -10,7 +11,9 @@ import {
   type CodingAgentKind,
   OPERATOR_QUIET_REPLY,
 } from "@luke/features/coding-agent-wire";
+import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
 import { INBOX_ANSWER_LEAD, INBOX_MESSAGE_LEAD } from "@luke/features/inbox-wire";
+import { encodeMention, MENTION_KIND } from "@luke/features/mention-link";
 import { INTEGRATION_NAMES_SAID } from "../../integrations/integrations.js";
 import { COMMAND_DESCRIPTION_INSTRUCTION } from "../command-description.js";
 import { CODER } from "./bounds.js";
@@ -583,7 +586,7 @@ function repositoryWords(
 
 ## The checkout
 
-The repository is checked out at \`${CODER.CHECKOUT_PATH}\`, ${branch.checkout}. Work there. ${tools.checkout} To walk the developer through code, put the lines on their screen with \`${CODER_TOOL.SHOW_CODE}\` and a note on why they matter. GitHub is reachable through \`gh\` and \`git\` from the shell: the credential is set at the sandbox's firewall and never in your environment, so never put a token in a URL or a command, and never try to sign in. \`run_on_mac\` runs a command on the developer's own Mac instead, from their home folder and without asking them, for what only their Mac has: their local checkouts, uncommitted work, installed tools, and running servers.
+The repository is checked out at \`${CODER.CHECKOUT_PATH}\`, ${branch.checkout}. Work there. ${tools.checkout} To walk the developer through code, put the lines on their screen with \`${CODER_TOOL.SHOW_CODE}\` and a note on why they matter. GitHub is reachable through \`gh\` and \`git\` from the shell: the credential is set at the sandbox's firewall and never in your environment, so never put a token in a URL or a command, and never try to sign in. \`run_on_mac\` runs a command on the developer's own Mac instead, from their home folder, where the developer may be asked to allow the command, for what only their Mac has: their local checkouts, uncommitted work, installed tools, and running servers.
 
 ## How to work
 
@@ -621,7 +624,7 @@ ${tools.integrations}`,
 function sandboxSection(tools: ToolWords): string {
   return `## Your sandbox
 
-You have a sandbox of your own, with no repository in it, which opens the first time you use it. ${tools.sandbox} No GitHub credential is set in it, so never try to sign in. \`run_on_mac\` runs a command on the developer's own Mac instead, from their home folder and without asking them, for what only their Mac has: their local checkouts, uncommitted work, installed tools, and running servers.`;
+You have a sandbox of your own, with no repository in it, which opens the first time you use it. ${tools.sandbox} No GitHub credential is set in it, so never try to sign in. \`run_on_mac\` runs a command on the developer's own Mac instead, from their home folder, where the developer may be asked to allow the command, for what only their Mac has: their local checkouts, uncommitted work, installed tools, and running servers.`;
 }
 
 /**
@@ -870,11 +873,56 @@ ${namingWords(repository ?? EXAMPLE_REPOSITORY, taskLink)}
 Never print a credential, a token, or the contents of an environment file, in a message, a commit, or a pull request.`;
 }
 
+/** What an agent's instructions are composed on beyond its row. */
+export interface AgentInstructionsContext {
+  /** Whether its token reads the repository's CI. */
+  readonly ciReadable: boolean;
+  /** The co-author trailer where it writes as its developer. */
+  readonly coAuthor: string | undefined;
+  /** The workspace its links are written under. */
+  readonly workspace: string;
+  readonly chatOn: boolean;
+  readonly memoryOn: boolean;
+  readonly harness: CoderHarness;
+}
+
+/**
+ * The instructions for the agent its row names, on any harness: its brief
+ * (`codingAgentBriefOf`), its task's link, its start branch, its credential,
+ * and its kind read from the row, so an eve session and a native one are
+ * worded alike for the same agent.
+ */
+export function agentCoderInstructions(
+  agent: CodingAgent,
+  context: AgentInstructionsContext,
+): string {
+  const taskLink =
+    agent.taskId === null
+      ? null
+      : encodeMention(
+          { kind: MENTION_KIND.TASK, taskId: agent.taskId },
+          { workspace: context.workspace, repository: null },
+        );
+  return coderInstructions(
+    agent.repository,
+    codingAgentBriefOf(agent),
+    context.ciReadable,
+    taskLink,
+    context.coAuthor,
+    context.chatOn,
+    agent.startBranch,
+    agent.githubAccess === GITHUB_ACCESS.TOKEN,
+    context.harness,
+    agent.kind,
+    context.memoryOn,
+  );
+}
+
 /** The instructions a worker runs under: one slice of the agent's work, read-only, answered whole. */
 export function coderWorkerInstructions(): string {
   return `You do one job for a coding agent, who hands it to you and reads what you return. You never speak to the developer, and you ask nobody anything: if the job is unclear, do the most likely reading and say which one you took.
 
-The agent's repository is checked out at \`${CODER.CHECKOUT_PATH}\`, with the agent's own uncommitted edits in it. Every \`bash\` command starts there, in a fresh shell, so give it paths relative to the checkout and never open a command with a \`cd\` into it. ${COMMAND_DESCRIPTION_INSTRUCTION} \`read_file\`, \`glob\`, and \`grep\` start there too: a relative path is resolved from the checkout, and an absolute path is taken as written. Search the public web with \`${CODER_TOOL.WEB_SEARCH}\` and read a page with \`${CODER_TOOL.READ_WEB_PAGE}\` where the job needs it, and never put the repository's code, names, or paths into a query: the repository is private and a search is public. \`run_on_mac\` runs a command on the developer's own Mac, from their home folder and without asking them, for what only their Mac has. \`${CODER_TOOL.BROWSER}\` drives the agent's own browser, whose tabs the developer can watch and take over: use it only where the job asks for a page in it, take a snapshot for the refs before you click, and while the developer drives a tab, leave it be.
+The agent's repository is checked out at \`${CODER.CHECKOUT_PATH}\`, with the agent's own uncommitted edits in it. Every \`bash\` command starts there, in a fresh shell, so give it paths relative to the checkout and never open a command with a \`cd\` into it. ${COMMAND_DESCRIPTION_INSTRUCTION} \`read_file\`, \`glob\`, and \`grep\` start there too: a relative path is resolved from the checkout, and an absolute path is taken as written. Search the public web with \`${CODER_TOOL.WEB_SEARCH}\` and read a page with \`${CODER_TOOL.READ_WEB_PAGE}\` where the job needs it, and never put the repository's code, names, or paths into a query: the repository is private and a search is public. \`run_on_mac\` runs a command on the developer's own Mac, from their home folder, where the developer may be asked to allow the command, for what only their Mac has. \`${CODER_TOOL.BROWSER}\` drives the agent's own browser, whose tabs the developer can watch and take over: use it only where the job asks for a page in it, take a snapshot for the refs before you click, and while the developer drives a tab, leave it be.
 
 You read and you never write the checkout: run no command that edits a file, stages, commits, pushes, installs, or changes the checkout's state, since the agent and other workers are reading the same tree. Where the developer connected ${INTEGRATION_NAMES_SAID}, you may read it with \`connection_search\` and \`connection_execute\`; change something there only when the job explicitly asks you to, and say exactly what you changed. Stop when you can answer, or when more reading stops turning up anything new.
 
