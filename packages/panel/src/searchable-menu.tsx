@@ -182,7 +182,10 @@ function firstOpen(rows: readonly MenuRow[]): number {
 }
 
 /** The rows whose label, terms, or section hold every word of the query, case aside; for no query, every row not kept for a search. */
-function matchingRows<Row extends MenuRow>(rows: readonly Row[], query: string): readonly Row[] {
+export function matchingRows<Row extends MenuRow>(
+  rows: readonly Row[],
+  query: string,
+): readonly Row[] {
   const words = query.toLowerCase().split(/\s+/u).filter(Boolean);
   if (words.length === 0) return rows.filter((row) => row.searchOnly !== true);
   return rows.filter((row) => {

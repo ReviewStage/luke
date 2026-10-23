@@ -8786,3 +8786,28 @@ test("a word typed in To asks the service for the agents it names, so one past t
     [OLDER.id],
   );
 });
+
+test("an agent of the workspace's newest stays found by every word its row shows, its name and its task, though the service finds nothing for the words", async () => {
+  listedWorkspace = ACME;
+  inboxes = new Map([[BILLING.id, [THRESHOLD]]]);
+  const searched: string[] = [];
+  heldStarts([AGENT], (words) => {
+    searched.push(words);
+    return [];
+  });
+  const { page } = mount();
+  await settle();
+  await openTo(page);
+
+  const search =
+    document.querySelector<HTMLInputElement>('[role="dialog"][aria-label="To"] input') ??
+    assert.fail("To's menu has a search field");
+  const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+  act(() => {
+    setValue?.call(search, "billing alerts");
+    search.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await settle();
+  assert.deepEqual(searched, ["billing alerts"]);
+  assert.deepEqual(toMenuRows(), [`Alerts · ${BILLING.name}`]);
+});

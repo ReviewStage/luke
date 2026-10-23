@@ -33,8 +33,9 @@ import {
 import { useEffect, useRef, useState } from "react";
 import { imageFiles } from "../feedback-images.js";
 import { useIntegrationStatuses } from "../integration-statuses.js";
+import { matchingRows } from "../searchable-menu.js";
 import { PICKER_ALIGN, Picker } from "../settings/picker-row.js";
-import { agentMenuRow, useAgentRowPlace } from "./agent-menu-row.js";
+import { type AgentRowPlace, agentMenuRow, useAgentRowPlace } from "./agent-menu-row.js";
 import { AttachFilesButton } from "./attach-files-button.js";
 import { AttachedFileChips, attachmentChips } from "./attached-file-chips.js";
 import { readFiles, withFiles } from "./attached-files.js";
@@ -103,18 +104,31 @@ function heard(agents: readonly MentionableAgent[]): readonly MentionableAgent[]
 
 /**
  * The agents To lists: the workspace's newest, as read when the pane
- * opened, while nothing is typed; once a word is, those the service found
- * for it, the last answer standing until the next lands, as the `@` menu's
- * do, so an agent past the newest the workspace reads is found too.
+ * opened, while nothing is typed; once a word is, those of the newest
+ * whose rows hold every word, as the menu itself would match them, then
+ * those the service found for it that are not among them already, the last
+ * answer standing until the next lands, as the `@` menu's do. Note that the
+ * newest are matched here too, because the service matches an agent by its
+ * title and its task, not by a name its row takes from its model.
  */
 function listedAgents(
   read: AgentsRead | undefined,
   found: readonly MentionableAgent[] | undefined,
   words: string,
+  place: AgentRowPlace,
 ): readonly MentionableAgent[] {
   const newest = read !== undefined && "agents" in read ? read.agents : [];
   if (words === "") return newest;
-  return found ?? newest;
+  const matched = new Set(
+    matchingRows(
+      newest.map((each) => agentMenuRow(each, place)),
+      words,
+    ).map((row) => row.id),
+  );
+  return [
+    ...newest.filter((each) => matched.has(each.id)),
+    ...(found ?? []).filter((each) => !matched.has(each.id)),
+  ];
 }
 
 /** The words a send is known by, so the same thread sent again goes under the key it went under. */
@@ -242,7 +256,7 @@ export function InboxCompose({
       })
       .finally(() => setReading((count) => count - 1));
   };
-  const listed = listedAgents(read, found, asked);
+  const listed = listedAgents(read, found, asked, place);
   const note = refusal ?? (field.failed ? EDITOR_LOAD_FAILED : undefined);
   return (
     <section className="inbox-view-items" aria-label={NEW_THREAD} hidden={hidden}>
