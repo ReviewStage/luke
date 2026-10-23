@@ -39,6 +39,7 @@ import {
   type InlineEditEnd,
   JUSTIFY,
   LAYOUT_ELEMENT,
+  MENU_DETAIL,
   OneLine,
   ProviderMark,
   SETTINGS_ROW_INDENT,
@@ -90,6 +91,7 @@ import { ActionMenu } from "../desktop/action-menu.js";
 import { sharedWords } from "../desktop/workspace-ref.js";
 import { TILE_SIZE, WorkspaceTile } from "../desktop/workspace-tile.js";
 import { encodeImage } from "../feedback-images.js";
+import { memberRows } from "../member-rows.js";
 import { useOpenPerson } from "../person-door.js";
 import { useWorkspaceMembersRead } from "../tasks/use-workspace-members.js";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast.js";
@@ -666,7 +668,8 @@ function MemberLeave({
 
 /**
  * The admins the owner may hand the workspace to, as the transfer dialog's
- * field chip, each in the shared menu by face, name, and email.
+ * field chip, each in the shared menu as every people menu lists them
+ * (`memberRows`): face, name, email beside it, and card.
  */
 function HeirChip({
   id,
@@ -703,12 +706,14 @@ function HeirChip({
           label="New owner"
           menu={menu.drawn}
           groups={[
-            admins.map((admin) => ({
-              label: admin.name,
-              detail: admin.email,
-              icon: <ActorMark actor={memberActor(admin, undefined)} size={ACTOR_SIZE.ROW} />,
-              checked: admin.userId === chosen.userId,
-              onSelect: () => onChoose(admin),
+            memberRows(admins, undefined).map((row) => ({
+              label: row.label,
+              detail: row.detail,
+              detailPlace: MENU_DETAIL.BESIDE,
+              icon: row.icon,
+              card: row.card,
+              checked: row.member.userId === chosen.userId,
+              onSelect: () => onChoose(row.member),
             })),
           ]}
           onClose={menu.close}
@@ -738,10 +743,13 @@ function OwnerLeave({
   /** Reads the members again keeping the list on screen, so the admins offered are the workspace's now. */
 }): React.JSX.Element {
   const { act } = useAct();
-  const admins =
+  // Note that the admins stand in the order the menu lists them, so the first offered is the first listed.
+  const admins = memberRows(
     members !== undefined && "items" in members
       ? members.items.filter((each) => each.role === WORKSPACE_ROLE.ADMIN)
-      : [];
+      : [],
+    undefined,
+  ).map((row) => row.member);
   const [chosenId, setChosenId] = useState<string>();
   const heir = admins.find((each) => each.userId === chosenId) ?? admins[0];
   const transfer = useConfirmDialog({ subject: heir !== undefined, surfaceOpen: true }, () =>

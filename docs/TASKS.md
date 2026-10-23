@@ -238,7 +238,7 @@ resting page, which leaves the task, and the resting page closes nothing. Escape
 
 One composer card whose words start a coding agent: the repository chip in
 its head row, the Issue chip beside it, and at its foot the model chip on
-the account's default, Dictate, File for later, and Start.
+the account's default, Dictate, and Start.
 
 1. **Repository**, the chip in the head row: the GitHub mark and the
    `owner/name` of the repository the task is about, which the service keeps
@@ -251,8 +251,7 @@ the account's default, Dictate, File for later, and Start.
    Untitled until the agent names it, and the agent on the words, the files,
    and the chosen model, in the one start, then opens the task on the
    agent's tab. ⌘Return on an empty box starts a bare task with no agent,
-   and File for later files it in the backlog with the words as its brief;
-   neither needs a repository. There is no Plan mode: starting a task never
+   which needs no repository. There is no Plan mode: starting a task never
    opens a call, which only an agent's own tab starts.
 
 ### Header

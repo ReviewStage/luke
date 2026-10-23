@@ -43,7 +43,7 @@ const NATIVE_MODEL_RULE: Partial<Record<CodingAgentRuntime, RuntimeModelRule>> =
     provider: MODEL_PROVIDER.ANTHROPIC,
     fast: true,
     contextWindow: false,
-    name: "Claude Code",
+    name: "Claude",
   },
   codex: {
     provider: MODEL_PROVIDER.OPENAI,
@@ -53,10 +53,10 @@ const NATIVE_MODEL_RULE: Partial<Record<CodingAgentRuntime, RuntimeModelRule>> =
   },
 };
 
-/** The harness Settings › Agents names the row of the provider's credentials by: Claude Code for Anthropic's, Codex for OpenAI's. */
+/** The harness Settings › Agents names the row of the provider's credentials by: Claude for Anthropic's, Codex for OpenAI's. */
 export function harnessNameOf(provider: ModelProvider): string {
   return provider === MODEL_PROVIDER.ANTHROPIC
-    ? (NATIVE_MODEL_RULE.claude_code?.name ?? "Claude Code")
+    ? (NATIVE_MODEL_RULE.claude_code?.name ?? "Claude")
     : (NATIVE_MODEL_RULE.codex?.name ?? "Codex");
 }
 

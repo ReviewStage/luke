@@ -151,6 +151,9 @@ export interface SectionLinks {
   readonly reveal: SectionReveal | undefined;
   /** The document showed the section `reveal` asked for, so the ask can be let go. */
   readonly onRevealed?: ((ask: number) => void) | undefined;
+  /** The task's agents and their pull requests as their tabs hang them, which a chip naming one hangs (`MentionDoors`); none where the page knows the task's agents not. */
+  readonly agentOf?: MentionDoors["agentOf"];
+  readonly pullRequestOf?: MentionDoors["pullRequestOf"];
 }
 
 /** One ask to show a section by its anchor, or the plan's top where it names none; each ask is its own, so the same section asked twice scrolls twice. */
@@ -576,6 +579,9 @@ function useMentionChips(
   const latest = useRef(links);
   latest.current = links;
   const opensFiles = links?.onOpenFile !== undefined;
+  // Note that these two are steady doors, the same across draws, so the chips are drawn again only when one comes or goes.
+  const agentOf = links?.agentOf;
+  const pullRequestOf = links?.pullRequestOf;
   const taskId = linked?.taskId;
   const workspace = linked?.place.workspace ?? "";
   const repository = linked?.place.repository ?? null;
@@ -590,9 +596,11 @@ function useMentionChips(
       onOpenFile: opensFiles
         ? (path, lines) => latest.current?.onOpenFile?.(path, lines)
         : undefined,
+      agentOf,
+      pullRequestOf,
     };
     return { link: mentionLinkDrawer(doors), doors };
-  }, [opensFiles, taskId, workspace, repository, anchorKey]);
+  }, [opensFiles, agentOf, pullRequestOf, taskId, workspace, repository, anchorKey]);
 }
 
 /** The door of a document nothing is edited through: every edit answered as unanswered. */

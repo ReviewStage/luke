@@ -43,8 +43,13 @@
     color: var(--luke-color-text);
   }
 
+  /* The place standing open is drawn in the work sheet's ground, lifted
+     by a hairline and a soft shadow. */
   .luke-nav-item:is([aria-current="page"], [aria-current="location"]) {
-    background: var(--luke-color-fill-strong);
+    background: var(--luke-color-ground);
+    box-shadow:
+      0 0 0 1px var(--luke-color-border),
+      0 1px 2px var(--luke-color-shadow-soft);
     color: var(--luke-color-text);
   }
 

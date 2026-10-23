@@ -84,6 +84,15 @@ body,
   background: var(--luke-color-ground);
 }
 
+/* The Mac panel window's page is clear under the shell, whose frame tint and
+   solid sheet paint everything there is, so the window's sidebar material
+   (`panel-manager.ts`) frosts through the frame; the voice and call windows,
+   which hold no shell, keep their ground. */
+:root[data-luke-profile="desktop"]:has(.desktop-shell),
+:root[data-luke-profile="desktop"]:has(.desktop-shell) :is(body, #root) {
+  background: transparent;
+}
+
 /* Scrollbars ---------------------------------------------------------------- */
 
 /* Every scroller in the window draws the one scrollbar a Mac app does: a thin
@@ -403,8 +412,6 @@ body,
   flex: 1;
   padding-left: var(--row-inset);
   color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-caption-size);
-  font-weight: var(--luke-weight-medium);
 }
 
 /* The Tasks page's filter line: a chip for each field filtered and Clear
@@ -1931,22 +1938,24 @@ ul.actor-stack {
   color: var(--luke-color-text);
 }
 
+/* A plan's title is set large in the semibold, and each section is named
+   by a heading with room above it rather than a rule under it. */
 .desktop-document .luke-markdown-heading[data-level="1"] {
   font-size: 1.9em;
-  font-weight: var(--luke-weight-bold);
+  font-weight: var(--luke-weight-semibold);
   letter-spacing: -0.02em;
   line-height: 1.2;
 }
 
 .desktop-document .luke-markdown-heading[data-level="2"] {
-  margin-top: 0.6em;
-  padding-bottom: 0.35em;
-  border-bottom: 1px solid var(--luke-color-border);
+  margin-top: 1.6em;
   font-size: 1.3em;
+  font-weight: var(--luke-weight-semibold);
 }
 
 .desktop-document .luke-markdown-heading[data-level="3"] {
   font-size: 1.05em;
+  font-weight: var(--luke-weight-medium);
 }
 
 /* In a column under 400px the title steps down to a section's size and a
@@ -2247,13 +2256,6 @@ ul.actor-stack {
 .issue-picker-chip[data-side="above"] .searchable-menu {
   top: auto;
   bottom: calc(100% + var(--luke-space-4));
-}
-
-/* A harness's mark keeps its box in a row however tight the row is, drawn
-   as an image (`harness-marks.tsx`) as the traced provider marks
-   (`@luke/ui`'s `ProviderMark`) keep theirs. */
-.harness-mark {
-  flex: 0 0 auto;
 }
 
 /* An integration whose brand publishes its one-colour mark in named inks
@@ -4382,7 +4384,6 @@ ul.actor-stack {
   min-height: 0;
   flex-direction: column;
   padding: 0 var(--column-inset) var(--column-inset);
-  border-right: 1px solid var(--luke-color-border);
   background: var(--luke-color-sidebar);
 }
 
@@ -4392,7 +4393,7 @@ ul.actor-stack {
 .admin-sections-title {
   margin: var(--luke-space-12) var(--row-inset);
   font-size: var(--luke-type-title-size);
-  font-weight: var(--luke-weight-bold);
+  font-weight: var(--luke-weight-semibold);
   letter-spacing: -0.015em;
 }
 
@@ -4543,7 +4544,7 @@ ul.actor-stack {
    title stands. */
 .template-document .task-page-head .luke-markdown-heading[data-level="1"] {
   font-size: var(--luke-type-title-size);
-  font-weight: var(--luke-weight-bold);
+  font-weight: var(--luke-weight-medium);
   letter-spacing: -0.015em;
   line-height: var(--luke-type-title-leading);
 }
@@ -5108,19 +5109,10 @@ ul.actor-stack {
   gap: var(--luke-control-gap);
   min-height: var(--desktop-bar-height);
   padding: var(--luke-space-8) var(--panel-toggle-clearance) var(--luke-space-8) var(--column-inset);
-  border-bottom: 1px solid var(--luke-color-border);
 }
 
 [data-luke-profile="desktop"] .side-panel-bar {
   -webkit-app-region: drag;
-}
-
-/* A bar inside the panel, an Inbox item's, draws its own hairline and no
-   more: the toolbar's hairline running past both sides (shell.css) is the
-   work column's, for a pane sliding in beside it, and from the panel it
-   would run on across the column's transcript at the item bar's height. */
-.side-panel .desktop-toolbar::before {
-  content: none;
 }
 
 /* Full screen with the sidebar folded, the row starts where the plan's
@@ -5431,7 +5423,7 @@ ul.actor-stack {
   border: 1px solid var(--luke-color-border-strong);
   border-radius: var(--luke-dialog-radius);
   background: var(--luke-color-overlay);
-  box-shadow: 0 24px 64px var(--luke-color-shadow-deep);
+  box-shadow: 0 16px 56px var(--luke-color-shadow);
   color: var(--luke-color-text);
   overflow: clip;
   transform: translateX(-50%);
@@ -5606,7 +5598,7 @@ ul.actor-stack {
   border: 1px solid var(--luke-color-border-strong);
   border-radius: var(--luke-dialog-radius);
   background: var(--luke-color-overlay);
-  box-shadow: 0 24px 64px var(--luke-color-shadow-deep);
+  box-shadow: 0 16px 56px var(--luke-color-shadow);
   color: var(--luke-color-text);
   overflow: clip;
   transform: translate(-50%, -50%);
@@ -5961,9 +5953,7 @@ ul.actor-stack {
 }
 
 /* A card too narrow for every press's words, as on a phone, keeps its
-   round Start at the row's end: File for later draws its mark alone
-   (`new-task-composer.tsx`), the model chip's words are
-   what give way, cut short, and the microphone stands in the row in place
+   round Start at the row's end: the model chip's words are what give way, cut short, and the microphone stands in the row in place
    of a ⋯ that would hold it alone. */
 @container composer (max-width: 399px) {
   .new-task-composer .agent-composer-actions .agent-model-chip {

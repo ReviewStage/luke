@@ -8,6 +8,7 @@ import {
   GAP,
   ImageIcon,
   Inline,
+  TableIcon,
   UserIcon,
   writingRow,
 } from "@luke/ui";
@@ -29,6 +30,7 @@ const DIAGRAM: BlockMenuRow = {
   icon: <BoardIcon />,
   markdown: "```mermaid",
 };
+const TABLE: BlockMenuRow = { id: "table", label: "Table", icon: <TableIcon /> };
 const PICTURE: BlockMenuRow = { id: "picture", label: "Picture", icon: <ImageIcon /> };
 const MENTION: BlockMenuRow = {
   id: "mention",
@@ -61,7 +63,7 @@ const EVERY_BLOCK: readonly BlockMenuGroup[] = [
   },
   {
     label: BLOCK_MENU_GROUP.INSERT,
-    rows: [DIAGRAM, writingRow(WRITING_INSERT.DIVIDER), PICTURE, MENTION],
+    rows: [DIAGRAM, TABLE, writingRow(WRITING_INSERT.DIVIDER), PICTURE, MENTION],
   },
 ];
 

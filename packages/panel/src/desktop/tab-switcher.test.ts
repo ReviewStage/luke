@@ -251,6 +251,27 @@ test("a task's card is named as Back's list names the screen: the task, then its
   ]);
 });
 
+test("a person's page card wears their face and name, not a generic icon", async () => {
+  handCapabilities(DESKTOP_CAPABILITIES);
+  const told = asked();
+  const window = await mounted();
+  const person = {
+    ...tasksControl().personView,
+    userId: "user-ada",
+    name: "Ada Lovelace",
+    workspaceId: undefined,
+  };
+  await window.draw(onTask(SIDE_PANEL_TAB.PLAN, told, { personView: person }));
+  press();
+  await window.draw(onTask(SIDE_PANEL_TAB.PLAN, told));
+
+  tab();
+  tab();
+  const card = cards().find((each) => each.textContent?.includes("Ada Lovelace"));
+  assert.ok(card, "the person's page is a card");
+  assert.equal(card.querySelector<HTMLElement>(".actor-mark")?.dataset.kind, "person");
+});
+
 test("a card pressed while the cards show is gone to, a place through its own door", async () => {
   handCapabilities(DESKTOP_CAPABILITIES);
   const told = asked();

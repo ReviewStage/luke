@@ -179,11 +179,8 @@ import { DICTATION_PHASE } from "./use-dictation.js";
  * New task's composer is this same box over a start rather than a message
  * (`new-task-composer.tsx`): its owner names what the box asks for and
  * calls its round button (`wording`), lays its issue over the words
- * (`above`), stands its repository and Issue chips after the "+" (`tools`)
- * and its File for later just before Start (`beforeSend`), told whether the
- * card is too narrow for its words, so on a phone it draws its mark alone,
- * holds Start while
- * it cannot start (`sendable`), hears the keys the field leaves (`onKey`),
+ * (`above`), stands its repository and Issue chips after the "+" (`tools`),
+ * holds Start while it cannot start (`sendable`), hears the keys the field leaves (`onKey`),
  * says what Escape does (`onLeave`), hands its workspace's mentions and
  * the chosen repository's skills to its `@` and `/` lists, and offers no MCP servers'
  * switches, so the box draws no servers' button.
@@ -217,7 +214,7 @@ const BUTTON = {
 /**
  * The card widths below which a press draws its mark alone: the branch's
  * chip first, then the owner's presses that carry words (New task's Plan
- * toggle and File for later, at the step the ⋯ stands), then the model
+ * toggle, at the step the ⋯ stands), then the model
  * chip. Note that they are steps of the same order as the stylesheet's
  * `composer` queries (tasks.css's, and New task's in desktop.css, at 400
  * and 240), because the room each leaves is counted on the steps before it.
@@ -447,7 +444,7 @@ export function AgentComposer({
   tools?: ReactNode;
   /** What stands first among the foot's right-hand presses, before the model chip, handed whether the card is too narrow for their words. */
   actions?: ((narrow: boolean) => ReactNode) | undefined;
-  /** What stands just before the round button, handed whether the card is too narrow for its words, as `actions` is: New task's File for later. */
+  /** What stands just before the round button, handed whether the card is too narrow for its words, as `actions` is. */
   beforeSend?: ((narrow: boolean) => ReactNode) | undefined;
   /** What stands beside Dictate: an agent's Call, or on a call its controls, where the platform takes calls (`agent-call.tsx`). */
   call?: ReactNode;

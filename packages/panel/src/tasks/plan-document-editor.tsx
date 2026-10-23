@@ -35,9 +35,11 @@ import {
   type PlanEditorModule,
   type PlanEditorPlacement,
   type PlanEditorProps,
+  SLASH_INSERT,
 } from "../plan-editor/contract.js";
 import { rendererRuntime } from "../renderer-runtime.js";
 import { RetryButton } from "../retry-button.js";
+import { useBlockPicker } from "./block-picker.js";
 import { useEditorPictures } from "./editor-pictures.js";
 import {
   type MentionDoors,
@@ -79,7 +81,9 @@ import { EDITOR_PLACE, type EditorHost, type PlanEditing } from "./use-plan-edit
  * (`../plan-diagram.tsx`), so the editor's bundle carries no Mermaid. Words
  * selected raise the format toolbar over them (`./selection-toolbar.tsx`),
  * with Turn into and, where the plan takes comments, Comment, in place of the
- * read view's Comment bubble. The editor stands under
+ * read view's Comment bubble; a `/` at a line's start or after a space opens
+ * the block menu under it (`./block-picker.tsx`), which stands aside while
+ * the `@` list stands, as the toolbar stands aside for either. The editor stands under
  * `ph-no-capture`, and its words are document text, which the recording masks.
  */
 
@@ -679,6 +683,13 @@ function MountedPlanEditor({
               onFormat: (format) => latest.current.format?.onFormat(format),
               onLink: () => latest.current.format?.onLink(),
             },
+      blocks:
+        latest.current.blocks === undefined
+          ? undefined
+          : {
+              onTrigger: (trigger) => latest.current.blocks?.onTrigger(trigger),
+              onKey: (event) => latest.current.blocks?.onKey(event) ?? false,
+            },
     });
     handle.current = mounted;
     return () => {
@@ -887,13 +898,24 @@ export function PlanDocumentEditor({
     side: MENTION_MENU_SIDE.BELOW,
     onChoose: (mention) => handle.current?.chooseMention(mention),
   });
-  // The words selected raise the format toolbar over them, which stands aside while the `@` list stands.
+  const mentioning = picker.aria["aria-expanded"] === "true";
+  // A `/` opens the block menu under it, which stands aside while the `@` list stands; its Picture opens the chooser Insert image opens.
+  const blocks = useBlockPicker({
+    room,
+    offers: { pictures: pictures.choose !== undefined, mentions: mentions !== undefined },
+    held: mentioning,
+    onChoose: (block) => {
+      handle.current?.insertBlock(block);
+      if (block === SLASH_INSERT.PICTURE) pictures.choose?.();
+    },
+  });
+  // The words selected raise the format toolbar over them, which stands aside while the `@` list or the block menu stands.
   const toolbar = useSelectionToolbar({
     editor: handle,
     room,
     blocks: true,
     onComment,
-    held: picker.aria["aria-expanded"] === "true",
+    held: mentioning || blocks.open,
   });
   // While the toolbar stands, its Comment's command starts the thread as a press on it does.
   useAppCommand(APP_COMMAND.COMMENT_ON_SELECTION, toolbar.standing ? onComment : undefined);
@@ -937,6 +959,7 @@ export function PlanDocumentEditor({
     drawDiagram: diagrams.draw,
     pictures: pictures.pictures,
     format: toolbar.doors,
+    blocks: { onTrigger: blocks.onTrigger, onKey: blocks.onKey },
   };
   return (
     <section
@@ -950,6 +973,7 @@ export function PlanDocumentEditor({
     >
       <MountedPlanEditor module={module.value} props={props} handle={handle} />
       {toolbar.drawn}
+      {blocks.menu}
       <DocumentNote editor={editor} editing={editing} />
       {pictures.drawn}
       {mentions === undefined ? null : picker.menu}

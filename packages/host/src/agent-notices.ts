@@ -149,6 +149,8 @@ export const NOTICE_KIND = {
   INBOX_ITEM: "inbox-item",
   FAILED_RUN: "failed-run",
   CHAT_MESSAGE: "chat-message",
+  /** A command an agent asked to run on this Mac waits on the developer (`client/client-notices.ts`). */
+  MAC_COMMAND_ASK: "mac-command-ask",
   TEST: "test",
 } as const;
 
@@ -173,6 +175,7 @@ type NoticeSubject =
     }
   | { readonly kind: typeof NOTICE_KIND.FAILED_RUN; readonly runId: string }
   | { readonly kind: typeof NOTICE_KIND.CHAT_MESSAGE; readonly messageId: string }
+  | { readonly kind: typeof NOTICE_KIND.MAC_COMMAND_ASK; readonly askId: string }
   /** Settings' test, one press of it: each press is an event of its own. */
   | { readonly kind: typeof NOTICE_KIND.TEST; readonly pressId: string };
 

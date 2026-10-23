@@ -331,7 +331,7 @@ test("replacing the account's own Anthropic key reads the models again, so Fast 
   const row =
     [...page.querySelectorAll<HTMLButtonElement>("button")].find(
       (each) => each.textContent === "Connected via API key",
-    ) ?? assert.fail("no Claude Code row button");
+    ) ?? assert.fail("no Claude row button");
   act(() => row.click());
   act(() =>
     (

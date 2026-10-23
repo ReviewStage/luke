@@ -26,6 +26,12 @@ import {
   INLINE_DIFF_LABEL,
 } from "./diff-view.js";
 import { EXPERIMENT, experimentOn } from "./experiments.js";
+import {
+  isMacCommandMode,
+  MAC_COMMAND_MODE,
+  MAC_COMMAND_MODE_LABEL,
+  MAC_COMMAND_MODE_LIST,
+} from "./mac-commands.js";
 import { buildToggleSetting, choiceSetting, optional, toggleSetting } from "./schema-builders.js";
 import {
   SETTING_SECTION,
@@ -80,6 +86,17 @@ const DIFF_LIGHT_THEME_LIST = DIFF_THEMES.LIGHT.map((theme) => theme.id);
 /** A syntax theme's own name, by its id among those of its appearance. */
 function themeLabel(themes: readonly { readonly id: string; readonly label: string }[]) {
   return (id: string): string => themes.find((theme) => theme.id === id)?.label ?? id;
+}
+
+/**
+ * The Mac command mode a stored value names. The switch an earlier build
+ * stored is read as a mode: on, which ran every command without asking,
+ * as Ask, and off as Never.
+ */
+function macCommandModeGuard(value: UnparsedWireValue) {
+  if (value === true) return optional(MAC_COMMAND_MODE.ASK, isMacCommandMode);
+  if (value === false) return optional(MAC_COMMAND_MODE.NEVER, isMacCommandMode);
+  return optional(value, isMacCommandMode);
 }
 
 /** Voice available and the microphone granted: the whole of what a control needs. */
@@ -147,17 +164,22 @@ export const APP_SETTING_SCHEMA = {
     visible: desktopAppDrawn,
     sideEffect: SETTING_SIDE_EFFECT.LOGIN_ITEM,
   }),
-  macCommands: toggleSetting({
+  macCommands: choiceSetting({
     field: "macCommands",
     id: APP_SETTING_ID.MAC_COMMANDS,
     label: "Let agents run commands on this Mac",
     detail:
-      "Luke and coding agents run any shell command here without asking, from your home folder, " +
-      "and what it prints goes to the model and is kept with the conversation.",
-    default: true,
+      "Luke and coding agents run shell commands here from your home folder, and what each " +
+      "prints goes to the model and is kept with the conversation. Ask every time shows you " +
+      "each command before it runs.",
+    values: MAC_COMMAND_MODE_LIST,
+    token: (mode) => mode,
+    optionLabel: (mode) => MAC_COMMAND_MODE_LABEL[mode],
+    guard: macCommandModeGuard,
+    default: MAC_COMMAND_MODE.ASK,
     page: SETTINGS_PAGE.THIS_MAC,
     order: 2,
-    // Nothing to run per write: the host reads the setting before each read for commands.
+    // Nothing to run per write: the host reads the setting before each read for commands and as each command is about to run.
     sideEffect: SETTING_SIDE_EFFECT.NONE,
   }),
   agentNotifications: toggleSetting({
