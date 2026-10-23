@@ -22,8 +22,9 @@ import {
   ProviderMark,
   Tooltip,
 } from "@luke/ui";
-import { CircleDotIcon } from "lucide-react";
-import { RELATION_DETAIL } from "./task-issue-links-model.js";
+import { IssueCard } from "./issue-card.js";
+import { IssueMark } from "./issue-mark.js";
+import { RELATION_DETAIL, standingWords } from "./task-issue-links-model.js";
 
 /**
  * new-task-links.tsx -- the issues New task links the task it starts to, GitHub's and Linear's, each a chip over the words with its key, its title, the keyword its pull requests write, and the × that lets it go.
@@ -100,6 +101,35 @@ function flipped(relation: TaskIssueRelation): TaskIssueRelation {
     : TASK_ISSUE_RELATION.CLOSES;
 }
 
+/** The mark a link wears: a GitHub issue's for where it stands, as the task page draws it, or Linear's own. */
+function LinkMark({ link }: { link: NewTaskLink }): React.JSX.Element {
+  if (link.provider === TASK_ISSUE_PROVIDER.LINEAR) {
+    return (
+      <ProviderMark provider={INTEGRATION_PROVIDER.LINEAR} size={PROVIDER_MARK_SIZE.CAPTION} />
+    );
+  }
+  return <IssueMark issue={link.issue} />;
+}
+
+/** A link's card: its issue's, under its key with where it stands, and the keyword its pull requests write of it. */
+function LinkCard({ link }: { link: NewTaskLink }): React.JSX.Element {
+  const github = link.provider === TASK_ISSUE_PROVIDER.GITHUB;
+  const key = github ? `${link.issue.repository}#${link.issue.number}` : link.issue.identifier;
+  const state = github
+    ? standingWords({ provider: link.provider, state: link.issue.state })
+    : link.issue.state;
+  const author = link.provider === TASK_ISSUE_PROVIDER.GITHUB ? link.issue.author : undefined;
+  return (
+    <IssueCard
+      mark={<LinkMark link={link} />}
+      title={link.issue.title}
+      heading={state === undefined ? key : `${key} · ${state}`}
+      opener={author === undefined ? undefined : { login: author, bot: author.endsWith("[bot]") }}
+      note={`${LINK_WORDS[link.relation]}: ${RELATION_DETAIL[link.relation]}`}
+    />
+  );
+}
+
 /** One linked issue over the words: its mark, key, title, Closes / Part of switch, and the × that lets it go. */
 function LinkChip({
   link,
@@ -114,21 +144,17 @@ function LinkChip({
 }): React.JSX.Element {
   const github = link.provider === TASK_ISSUE_PROVIDER.GITHUB;
   return (
-    <Card
-      look={CARD_LOOK.OUTLINE}
-      corner={CARD_CORNER.CONTROL}
-      padding={CARD_PADDING.NONE}
-      className="new-task-issue"
-      data-issue-chip=""
-      data-provider={link.provider}
-    >
-      {github ? (
-        <CircleDotIcon className="new-task-issue-github" />
-      ) : (
-        <ProviderMark provider={INTEGRATION_PROVIDER.LINEAR} size={PROVIDER_MARK_SIZE.CAPTION} />
-      )}
-      {/* Note that the repository is in the tooltip, because the chip reads `#N title` as every chip of an issue does. */}
-      <Tooltip label={github ? `${link.issue.repository}#${link.issue.number}` : undefined}>
+    <Tooltip label={link.issue.title} card={<LinkCard link={link} />}>
+      <Card
+        look={CARD_LOOK.OUTLINE}
+        corner={CARD_CORNER.CONTROL}
+        padding={CARD_PADDING.NONE}
+        className="new-task-issue"
+        data-issue-chip=""
+        data-provider={link.provider}
+      >
+        <LinkMark link={link} />
+        {/* Note that the repository is in the card, because the chip reads `#N title` as every chip of an issue does. */}
         <span className="new-task-issue-name">
           <span className="new-task-issue-key">
             {github ? `#${link.issue.number}` : link.issue.identifier}
@@ -137,31 +163,31 @@ function LinkChip({
             {link.issue.title}
           </OneLine>
         </span>
-      </Tooltip>
-      <span className="new-task-issue-relation">
-        <Tooltip label={RELATION_DETAIL[link.relation]}>
-          <Chip
-            look={CHIP_LOOK.FILTER}
-            size={CHIP_SIZE.COMPACT}
-            aria-label={`${LINK_WORDS[link.relation]}: ${RELATION_DETAIL[link.relation]}`}
-            disabled={disabled}
-            onClick={() => onRelation(flipped(link.relation))}
-          >
-            {LINK_WORDS[link.relation]}
-          </Chip>
-        </Tooltip>
-      </span>
-      <span className="new-task-issue-drop">
-        <Tooltip label={LINK_WORDS.DROP}>
-          <IconButton
-            icon={<CloseIcon />}
-            label={LINK_WORDS.DROP}
-            disabled={disabled}
-            onClick={onDrop}
-          />
-        </Tooltip>
-      </span>
-    </Card>
+        <span className="new-task-issue-relation">
+          <Tooltip label={RELATION_DETAIL[link.relation]}>
+            <Chip
+              look={CHIP_LOOK.FILTER}
+              size={CHIP_SIZE.COMPACT}
+              aria-label={`${LINK_WORDS[link.relation]}: ${RELATION_DETAIL[link.relation]}`}
+              disabled={disabled}
+              onClick={() => onRelation(flipped(link.relation))}
+            >
+              {LINK_WORDS[link.relation]}
+            </Chip>
+          </Tooltip>
+        </span>
+        <span className="new-task-issue-drop">
+          <Tooltip label={LINK_WORDS.DROP}>
+            <IconButton
+              icon={<CloseIcon />}
+              label={LINK_WORDS.DROP}
+              disabled={disabled}
+              onClick={onDrop}
+            />
+          </Tooltip>
+        </span>
+      </Card>
+    </Tooltip>
   );
 }
 

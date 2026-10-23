@@ -93,6 +93,7 @@ import {
   QUIET_PANEL,
 } from "../testing/app-platform.js";
 import { handState, stateWith } from "../testing/app-state.js";
+import { attachmentChipName } from "../testing/attachment-chip.js";
 import {
   composerEditor,
   editorBundleLanded,
@@ -3791,9 +3792,7 @@ function itemPane(page: HTMLElement): HTMLElement {
 
 /** The names of the files attached in `within`, as each chip names its file. */
 function attachedNames(within: Element): (string | null)[] {
-  return [...within.querySelectorAll('[aria-label="Attached files"] > li')].map((chip) =>
-    chip.getAttribute("title"),
-  );
+  return [...within.querySelectorAll('[aria-label="Attached files"] > li')].map(attachmentChipName);
 }
 
 test("an item's box is the agent's message box: it takes no caret as the item opens, so K and J stay the list's; Enter sends its note, Shift+Enter is a new line, and Escape leaves the box but not the item", async () => {
@@ -4751,6 +4750,63 @@ test("an automation's group wears its clock tile and hangs its card, as its crum
   assert.ok(
     stray?.querySelector(".lucide-factory"),
     "it wears the factory glyph, as its group does",
+  );
+});
+
+test("an item's card names the automation that holds it by a chip that hangs the automation's card, read as it is hung where the Inbox has read no automations", async () => {
+  handState(
+    {},
+    {
+      tasks: {
+        ...IDLE_TASKS_VIEW,
+        workspaces: [
+          { id: "workspace-acme", name: "Acme", role: WORKSPACE_ROLE.OWNER, github: null },
+        ],
+      },
+    },
+  );
+  automations = [SWEEP];
+  agentInboxes = new Map([[SWEEP_AGENT, [QUARANTINE]]]);
+  const { page } = mount([{ ...waitingTaskless(QUARANTINE), workspaceId: "workspace-acme" }]);
+  await settle();
+
+  restOn(rowNamed(page, "Quarantine the flaky test?"));
+  const chip =
+    document.querySelector<HTMLElement>(
+      '.luke-tooltip-card [data-inbox-row-card] [data-holder-ref][data-kind="automation"]',
+    ) ?? assert.fail("the card names the automation by its chip");
+  restOn(chip);
+  await settle();
+
+  assert.match(
+    wordsOf(document.querySelector('.luke-tooltip-card [data-actor-card="automation"]')) ?? "",
+    /Nightly flake sweep/u,
+  );
+});
+
+test("an item from a service that names no workspace for it still names its automation by a chip hanging the card the Inbox's own directory holds", async () => {
+  handState({});
+  listedWorkspace = {
+    id: "workspace-acme",
+    name: "Acme",
+    role: WORKSPACE_ROLE.OWNER,
+    github: null,
+  };
+  automations = [SWEEP];
+  agentInboxes = new Map([[SWEEP_AGENT, [QUARANTINE]]]);
+  const { page } = mount([waitingTaskless(QUARANTINE)]);
+  await settle();
+
+  restOn(rowNamed(page, "Quarantine the flaky test?"));
+  restOn(
+    document.querySelector<HTMLElement>(
+      '.luke-tooltip-card [data-inbox-row-card] [data-holder-ref][data-kind="automation"]',
+    ) ?? assert.fail("the card names the automation by its chip"),
+  );
+
+  assert.match(
+    wordsOf(document.querySelector('.luke-tooltip-card [data-actor-card="automation"]')) ?? "",
+    /Nightly flake sweep/u,
   );
 });
 
