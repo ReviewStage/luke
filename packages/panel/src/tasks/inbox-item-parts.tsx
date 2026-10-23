@@ -45,7 +45,7 @@ import {
   SquareIcon,
 } from "lucide-react";
 import type { ReactNode } from "react";
-import { ACTOR_SIZE, ActorMark, automationActor } from "../actor-ref.js";
+import { ACTOR_SIZE, ActorMark, AutomationCard, automationActor } from "../actor-ref.js";
 import { AttentionMark } from "../attention-mark.js";
 import { useAutomation } from "../automation-directory.js";
 import { useInboxItemDraft, useInboxItemDrafted } from "../composer-drafts.js";
@@ -293,6 +293,9 @@ function HolderRef({
   workspaceId: string | undefined;
 }): React.JSX.Element {
   const openPlace = useOpenPlace();
+  const known = useAutomation(
+    holder.kind === INBOX_HOLDER.AUTOMATION ? (holder.automationId ?? undefined) : undefined,
+  );
   const glyph = <HolderGlyph holder={holder} />;
   const name = holderName(holder);
   const fallback = (
@@ -307,7 +310,12 @@ function HolderRef({
         glyph={glyph}
         label={name}
         card={
-          holder.automationId === null || workspaceId === undefined ? undefined : (
+          holder.automationId === null ? undefined : workspaceId === undefined ? (
+            // Note that an older service names no workspace for the item, so only a directory around the card can know the automation.
+            known === undefined ? undefined : (
+              <AutomationCard {...known} />
+            )
+          ) : (
             <AutomationChipCard
               automationId={holder.automationId}
               workspace={workspaceId}

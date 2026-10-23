@@ -4784,6 +4784,32 @@ test("an item's card names the automation that holds it by a chip that hangs the
   );
 });
 
+test("an item from a service that names no workspace for it still names its automation by a chip hanging the card the Inbox's own directory holds", async () => {
+  handState({});
+  listedWorkspace = {
+    id: "workspace-acme",
+    name: "Acme",
+    role: WORKSPACE_ROLE.OWNER,
+    github: null,
+  };
+  automations = [SWEEP];
+  agentInboxes = new Map([[SWEEP_AGENT, [QUARANTINE]]]);
+  const { page } = mount([waitingTaskless(QUARANTINE)]);
+  await settle();
+
+  restOn(rowNamed(page, "Quarantine the flaky test?"));
+  restOn(
+    document.querySelector<HTMLElement>(
+      '.luke-tooltip-card [data-inbox-row-card] [data-holder-ref][data-kind="automation"]',
+    ) ?? assert.fail("the card names the automation by its chip"),
+  );
+
+  assert.match(
+    wordsOf(document.querySelector('.luke-tooltip-card [data-actor-card="automation"]')) ?? "",
+    /Nightly flake sweep/u,
+  );
+});
+
 /** Another agent with no task the same automation started, whose two questions wait. */
 const SECOND_AGENT = "6f708192-a3b4-4c5d-8e6f-708192a3b4c5";
 const SECOND_ASK: InboxItem = {
