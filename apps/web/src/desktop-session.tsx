@@ -25,12 +25,14 @@ import {
   desktopSessionPageQuery,
   desktopSessionReturnUrl,
 } from "@luke/features/desktop-session-wire";
-import { AuthPage, SIGN_IN_FAILURE, SocialSignInChoices } from "@luke/ui";
+import { LANDING_TONE } from "@luke/features/landing-outcome";
+import { AuthMark, AuthPage, SIGN_IN_FAILURE, SocialSignInChoices } from "@luke/ui";
 import { createAuthClient } from "better-auth/react";
 import { Schema } from "effect";
 import { StrictMode, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { completeSiteSignIn, signInCountDeadline, startSiteAnalytics } from "./analytics";
+import { openLukeFromMac } from "./connect-return";
 import { useSocialSignIn } from "./sign-in-choices";
 import "./styles.css";
 
@@ -64,7 +66,7 @@ function said(title: string, body: string): View {
 /** Asks the plugin for the code and sends the browser on to the loopback; answers what to show when it cannot. */
 async function handOff(query: DesktopSessionPageQuery | undefined): Promise<View> {
   if (query === undefined) {
-    return said("This link did not come from Luke", "Return to Luke and sign in again.");
+    return said("This link did not come from Luke", "Sign in again.");
   }
   // Note that the session is read beside the transfer rather than after it,
   // and under a deadline, so counting the sign-in adds little to the
@@ -85,7 +87,7 @@ async function handOff(query: DesktopSessionPageQuery | undefined): Promise<View
           title: "Sign in to finish",
           body: "Sign in with the account you use in Luke.",
         }
-      : said("Luke could not be reached", "Return to Luke and sign in again.");
+      : said("Luke could not be reached", "Sign in again.");
   }
   const code = Schema.decodeUnknownSync(TransferAnswer)(answered.data).electron_authorization_code;
   // Note that the sign-in is counted here, before the page leaves, because
@@ -98,11 +100,11 @@ async function handOff(query: DesktopSessionPageQuery | undefined): Promise<View
 }
 
 /**
- * The page is one AuthPage card with no artwork, as it had none before: the
- * title says where the hand-off stands, the description what to do about
- * it, and the body holds the providers when a sign-in comes first. A
- * sign-in that cannot start is said in the card's alert region rather than
- * under the choices.
+ * The page opens on Luke's mark, badged for attention once the hand-off ended
+ * short of the Mac: the title says where the hand-off stands, the description
+ * what to do about it, the body holds the providers when a sign-in comes
+ * first, and Open Luke goes back where it ended. A sign-in that cannot start
+ * is said in the page's alert region rather than under the choices.
  */
 function DesktopSession(): React.JSX.Element {
   const [view, setView] = useState<View>(WORKING);
@@ -119,9 +121,11 @@ function DesktopSession(): React.JSX.Element {
 
   return (
     <AuthPage
+      mark={<AuthMark tone={view.kind === VIEW.SAID ? LANDING_TONE.ATTENTION : undefined} />}
       title={view.kind === VIEW.WORKING ? "Finishing sign-in…" : view.title}
       description={view.kind === VIEW.WORKING ? undefined : view.body}
       error={view.kind === VIEW.SIGN_IN && signInChoices.failed ? SIGN_IN_FAILURE : undefined}
+      action={view.kind === VIEW.SAID ? openLukeFromMac() : undefined}
     >
       {view.kind === VIEW.SIGN_IN ? (
         <SocialSignInChoices pending={signInChoices.pending} onPress={signInChoices.begin} />

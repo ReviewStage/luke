@@ -1,5 +1,6 @@
+import { LANDING_TONE } from "@luke/features/landing-outcome";
 import {
-  AUTH_STATUS_TONE,
+  AuthMark,
   AuthPage,
   BUTTON_VARIANT,
   Button,
@@ -16,11 +17,15 @@ import type { Example } from "../examples";
 import { CatalogSection } from "../section";
 
 /**
- * auth-page.tsx -- the sign-in card with its provider choices, the consent
- * card in both its states, and a form with an error on a phone's width, each
- * in a frame the size of the screen it stands for. Every name and address is
+ * auth-page.tsx -- the sign-in page with its provider choices, a landing's
+ * ringed mark on its way, settled, and in need of attention, with and
+ * without Open Luke, and a form with an error on a phone's width, each in a
+ * frame the size of the screen it stands for. Every name and address is
  * made up.
  */
+
+/** Open Luke as a page offers it; the catalog goes nowhere. */
+const OPEN_LUKE = { label: "Open Luke", href: "#" } as const;
 
 function Face(): React.JSX.Element {
   return (
@@ -104,22 +109,49 @@ function AuthPages(): React.JSX.Element {
           </div>
         </div>
       </CatalogSection>
-      <CatalogSection id="auth-status" title="Status, settled and failed">
+      <CatalogSection id="auth-landing" title="Landing, on its way, settled, and failed">
         <div className="catalog-screens">
           <div className="catalog-screen catalog-screen-phone">
             <AuthPage
-              mark={<Face />}
-              status={{ tone: AUTH_STATUS_TONE.SETTLED, label: "Confirming" }}
+              mark={<AuthMark provider={MARK_PROVIDER.GITHUB} />}
+              title="Connecting GitHub…"
+            />
+          </div>
+          <div className="catalog-screen catalog-screen-phone">
+            <AuthPage
+              mark={<AuthMark provider={MARK_PROVIDER.GITHUB} tone={LANDING_TONE.SETTLED} />}
+              title="GitHub is connected to your workspace"
+              description="Everyone in the workspace can use it. You can close this tab."
+              action={OPEN_LUKE}
+            />
+          </div>
+          <div className="catalog-screen catalog-screen-phone">
+            <AuthPage
+              mark={<AuthMark provider={MARK_PROVIDER.NOTION} tone={LANDING_TONE.ATTENTION} />}
+              title="Luke could not reach Notion"
+              description="Try again in a moment."
+              action={OPEN_LUKE}
+            />
+          </div>
+        </div>
+      </CatalogSection>
+      <CatalogSection
+        id="auth-luke"
+        title="Luke's own mark, on its way and failed, with no Open Luke"
+      >
+        <div className="catalog-screens">
+          <div className="catalog-screen catalog-screen-phone">
+            <AuthPage
+              mark={<AuthMark />}
               title="Continuing to Luke…"
               description="This window will close soon."
             />
           </div>
           <div className="catalog-screen catalog-screen-phone">
             <AuthPage
-              mark={<Face />}
-              status={{ tone: AUTH_STATUS_TONE.ATTENTION, label: "Not completed" }}
+              mark={<AuthMark tone={LANDING_TONE.ATTENTION} />}
               title="Luke could not continue"
-              description="Return to Luke and start sign-in again."
+              description="Start sign-in again."
             />
           </div>
         </div>

@@ -1,18 +1,19 @@
 import { oauthProviderClient } from "@better-auth/oauth-provider/client";
-import { AUTH_STATUS_TONE, AuthPage } from "@luke/ui";
+import { LANDING_TONE } from "@luke/features/landing-outcome";
+import { AuthMark, AuthPage } from "@luke/ui";
 import { createAuthClient } from "better-auth/react";
 import { StrictMode, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { completeSiteSignIn, signInCountDeadline, startSiteAnalytics } from "./analytics";
-import { LukeMark } from "./SiteChrome";
+import { openLukeFromMac } from "./connect-return";
 import "./styles.css";
 
 const authClient = createAuthClient({ plugins: [oauthProviderClient()] });
 
 /**
- * The card carries the full mark, not a pair of dots: it is the one thing on
- * the page, so it wears the same face the product and the landing page wear.
- * One word says where things stand, in the state palette the product uses.
+ * The page opens on Luke's mark, unbadged while the consent goes through,
+ * badged for attention where it could not, when the title says so and Open
+ * Luke goes back to start again.
  */
 function Consent(): React.JSX.Element {
   const [failure, setFailure] = useState(false);
@@ -34,20 +35,10 @@ function Consent(): React.JSX.Element {
   }, []);
   return (
     <AuthPage
-      mark={
-        <span className="inline-flex w-13">
-          <LukeMark className="h-auto w-full" />
-        </span>
-      }
-      status={
-        failure
-          ? { tone: AUTH_STATUS_TONE.ATTENTION, label: "Not completed" }
-          : { tone: AUTH_STATUS_TONE.SETTLED, label: "Confirming" }
-      }
+      mark={<AuthMark tone={failure ? LANDING_TONE.ATTENTION : undefined} />}
       title={failure ? "Luke could not continue" : "Continuing to Luke…"}
-      description={
-        failure ? "Return to Luke and start sign-in again." : "This window will close soon."
-      }
+      description={failure ? "Start sign-in again." : "This window will close soon."}
+      action={failure ? openLukeFromMac() : undefined}
     />
   );
 }
