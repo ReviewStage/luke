@@ -1748,30 +1748,6 @@ export function useTasksTab(input: {
         : inboxAgents
       : (pageAgents ?? agents.heldIds),
   );
-  // A task whose column shows no tab stands on its plan: the side panel is
-  // shown on its Plan tab, once for each task as it comes to show none, so a
-  // tab chosen in the panel since is left where it was. Note that this waits
-  // on the agents' read, because a task opened on an agent's tab shows none
-  // until its agents are read; and a room that draws the panel only over the
-  // whole window leaves it shut.
-  const planShownFor = useRef<string | undefined>(undefined);
-  const noColumnTab =
-    inboxView === undefined &&
-    pageAgents === undefined &&
-    mainTabs.tab === undefined &&
-    agents.agentIds !== undefined &&
-    region.kind === DOCUMENT_REGION.READY;
-  const plannedTask = noColumnTab ? viewed.activeTaskId : undefined;
-  const { onShow: showSidePanelOn, fullScreenOnly: panelOnlyFull } = sidePanel;
-  useEffect(() => {
-    if (plannedTask === undefined) {
-      planShownFor.current = undefined;
-      return;
-    }
-    if (planShownFor.current === plannedTask || panelOnlyFull) return;
-    planShownFor.current = plannedTask;
-    showSidePanelOn(plannedTask, SIDE_PANEL_TAB.PLAN);
-  }, [plannedTask, panelOnlyFull, showSidePanelOn]);
   // An agent, or its Pull request, pinned to the sidebar is named there as
   // its tab is named now, so a pin made before the agent had its title or its
   // pull request was read, or before a rename, catches up while its task is open.

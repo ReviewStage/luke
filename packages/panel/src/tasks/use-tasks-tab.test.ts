@@ -3492,6 +3492,19 @@ test("a task with no agent opens on a new agent's draft once its agents are read
   assert.deepEqual(payloadsOf(tab, ACT_KIND.CODING_AGENTS_START), []);
 });
 
+test("a task with no agent opens its new agent's draft with a hidden side panel left hidden", async () => {
+  const tab = mount(
+    { shown: true, tasks: OPEN },
+    { [ACT_KIND.CODING_AGENTS_LIST]: () => Promise.resolve({ agents: [] }) },
+  );
+  if (tab.control().sidePanel.open) act(() => tab.control().sidePanel.onToggle());
+  await vi.waitFor(async () => {
+    await settle();
+    assert.ok(tab.control().agents.draft, "the task holds a draft");
+  });
+  assert.equal(tab.control().sidePanel.open, false, "the plan does not open beside the draft");
+});
+
 test("a platform with no voice takes no calls", async () => {
   handCapabilities(DESKTOP_CAPABILITIES.filter((each) => each !== HOST_CAPABILITY.VOICE));
   const web = mount({ shown: true, tasks: OPEN }, {}, AtomRegistryModule.make());
