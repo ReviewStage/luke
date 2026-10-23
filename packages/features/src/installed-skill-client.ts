@@ -9,6 +9,7 @@ import {
   hostedClient,
 } from "./hosted-link.js";
 import type {
+  InstalledSkillContent,
   InstalledSkillFilesRefusal,
   InstalledSkillPreview,
   InstalledSkillSummary,
@@ -120,6 +121,16 @@ export class HostedInstalledSkillClient {
     );
   }
 
+  /** One skill read whole: its `SKILL.md` and every file's path and size. */
+  read(
+    skillId: string,
+  ): Effect.Effect<InstalledSkillCallResult<InstalledSkillContent>, never, HttpClient.HttpClient> {
+    return resultOf(
+      askHosted(this.#hosted.installedSkills.read, { id: skillId }),
+      (answer) => answer,
+    );
+  }
+
   /** What a paste would install, read in the workspace whose GitHub installation reaches its source; nothing is written. */
   preview(
     workspaceId: string,
@@ -190,6 +201,20 @@ export class HostedInstalledSkillClient {
         HOSTED_DEADLINE.START,
       ),
       (answer) => answer,
+    );
+  }
+
+  /** The account's own personal skill moved into the workspace, as it then stands. */
+  share(
+    workspaceId: string,
+    skillId: string,
+  ): Effect.Effect<InstalledSkillCallResult<InstalledSkillSummary>, never, HttpClient.HttpClient> {
+    return resultOf(
+      askHosted(this.#hosted.installedSkills.share, {
+        params: { id: skillId },
+        body: { workspaceId },
+      }),
+      (answer) => answer.skill,
     );
   }
 

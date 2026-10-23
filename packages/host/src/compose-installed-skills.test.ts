@@ -47,6 +47,12 @@ const SKILL: InstalledSkillSummary = {
   updatedAt: 1,
 };
 
+const CONTENT = {
+  id: SKILL_ID,
+  skillFile: "---\nname: release-notes\ndescription: Write release notes.\n---\n",
+  files: [{ path: "SKILL.md", bytes: 58 }],
+};
+
 /** The service as a script: what it answers, and every call it was asked, in order. */
 function fakeService(options: { refuseInstall?: boolean } = {}) {
   const asked: string[] = [];
@@ -55,6 +61,11 @@ function fakeService(options: { refuseInstall?: boolean } = {}) {
       Effect.sync(() => {
         asked.push(`list:${workspaceId}`);
         return { ok: true as const, answer: [SKILL] };
+      }),
+    read: (skillId) =>
+      Effect.sync(() => {
+        asked.push(`read:${skillId}`);
+        return { ok: true as const, answer: CONTENT };
       }),
     preview: (workspaceId) =>
       Effect.sync(() => {
@@ -87,6 +98,11 @@ function fakeService(options: { refuseInstall?: boolean } = {}) {
       Effect.sync(() => {
         asked.push(`update:${skillId}`);
         return { ok: false as const, failure: INSTALLED_SKILL_CALL_FAILURE.GITHUB_UNANSWERED };
+      }),
+    share: (workspaceId, skillId) =>
+      Effect.sync(() => {
+        asked.push(`share:${workspaceId}:${skillId}`);
+        return { ok: true as const, answer: SKILL };
       }),
     remove: (skillId) =>
       Effect.sync(() => {
@@ -156,6 +172,17 @@ it.effect("each ask reaches the service and answers the window its view", () =>
       }),
       { failure: INSTALLED_SKILL_CALL_FAILURE.GITHUB_UNANSWERED },
     );
+    assert.deepEqual(
+      yield* call(GATEWAY_METHOD.INSTALLED_SKILLS_READ, { skillId: SKILL_ID }),
+      CONTENT,
+    );
+    assert.deepEqual(
+      yield* call(GATEWAY_METHOD.INSTALLED_SKILLS_SHARE, {
+        workspaceId: WORKSPACE_ID,
+        skillId: SKILL_ID,
+      }),
+      { skill: SKILL },
+    );
     assert.deepEqual(yield* call(GATEWAY_METHOD.INSTALLED_SKILLS_REMOVE, { skillId: SKILL_ID }), {
       id: SKILL_ID,
     });
@@ -165,6 +192,8 @@ it.effect("each ask reaches the service and answers the window its view", () =>
       `toggle:${SKILL_ID}:false`,
       `check:${SKILL_ID}`,
       `update:${SKILL_ID}`,
+      `read:${SKILL_ID}`,
+      `share:${WORKSPACE_ID}:${SKILL_ID}`,
       `remove:${SKILL_ID}`,
     ]);
   }),
