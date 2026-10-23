@@ -25,6 +25,7 @@ export * from "./components/choice-list/choice-list.js";
 export * from "./components/collection-page/collection-page.js";
 export * from "./components/combobox/combobox.js";
 export * from "./components/combobox/use-combobox-field.js";
+export * from "./components/command-ask/command-ask.js";
 export * from "./components/command-link/command-link.js";
 export * from "./components/composer-frame/composer-frame.js";
 export * from "./components/confirm-dialog/confirm-dialog.js";
