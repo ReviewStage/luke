@@ -322,3 +322,28 @@ test("Comment on the toolbar starts a thread on the words selected", async () =>
     [[PLAN_COMMENT_SCOPE.WORDS, "a teammate", "a teammate"]],
   );
 });
+
+test("⌥⌘M starts a thread on the words selected while the toolbar stands over them, as its Comment does", async () => {
+  const { container, element, editor } = await opened();
+  const pending = () => container.querySelector(`.comment-card[data-thread="pending"]`);
+  const commentKey = () =>
+    act(() => {
+      element.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: "µ",
+          code: "KeyM",
+          metaKey: true,
+          altKey: true,
+          bubbles: true,
+          cancelable: true,
+        }),
+      );
+    });
+
+  commentKey();
+  assert.equal(pending(), null, "with nothing selected, no thread is started");
+
+  select(editor, "a teammate");
+  commentKey();
+  assert.ok(pending(), "the thread is being started");
+});
