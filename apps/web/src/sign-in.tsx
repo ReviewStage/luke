@@ -21,7 +21,7 @@ function providerHint(): SocialProvider | undefined {
 
 /**
  * The page opens on the provider's mark, unbadged while it offers that
- * provider's button, or on Luke's, badged for attention, when the address
+ * provider's button, or on Luke's, badged as failed, when the address
  * names no provider, which is a sign-in that cannot go on and offers Open
  * Luke instead. The closing note is its own line rather than a run-on: with
  * no provider to continue with there is no action block between it and the
@@ -43,7 +43,7 @@ function SignIn(): React.JSX.Element {
 
   return (
     <AuthPage
-      mark={<AuthMark provider={provider} tone={provider ? undefined : LANDING_TONE.ATTENTION} />}
+      mark={<AuthMark provider={provider} tone={provider ? undefined : LANDING_TONE.FAILED} />}
       title="Sign in to Luke"
       description={provider ? undefined : "Luke could not verify which provider you chose."}
       error={failed ? SIGN_IN_FAILURE : undefined}

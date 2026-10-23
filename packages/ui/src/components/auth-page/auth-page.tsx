@@ -2,20 +2,20 @@ import { type MouseEvent, type ReactNode, useId } from "react";
 import { BUTTON_VARIANT, ButtonLink } from "../button/button.js";
 
 /**
- * auth-page.tsx -- the page a sign-in, a consent, or a connection is drawn on: its words alone, centred on the page's own ground, with nothing else on the page.
+ * auth-page.tsx -- the page a sign-in, a consent, or a connection is drawn on: one card, centred in the window, with nothing else on the page.
  *
- * The page holds, one under another, the artwork it opens with, its title,
+ * The card holds, one under another, the artwork it opens with, its title,
  * what the title means, the form or the provider choices the page is for,
- * what went wrong, the one way on it offers, and a closing note. There is no
- * card: the words stand on the ground as a command line's sign-in page does,
- * at one measure that gives way to a narrow window rather than overflowing
- * it, and what the body holds stretches to that measure, so a provider's
- * button or a form's field is never wider than the screen. The way on is a
- * link drawn as an outline button, centred under the words. A caller hands it
- * words and controls, never a class.
+ * what went wrong, the one way on it offers, and a closing note. The page
+ * owns every length between them and the card's own width, which gives way
+ * to a narrow window rather than overflowing it: its inset narrows under a
+ * phone's width, and what it holds stretches to the card's inner width, so a
+ * provider's button or a form's field is never wider than the screen. The way
+ * on is a link drawn as an outline button, centred under the words. A caller
+ * hands it words and controls, never a class.
  *
  * The artwork is decoration, hidden from a reader, since the title says what
- * the page is and how it stands. The error stands in an alert region from the
+ * the card is and how it stands. The error stands in an alert region from the
  * first render, empty until it says something, because a reader announces a
  * region filling more surely than one arriving.
  */
@@ -53,7 +53,7 @@ export function AuthPage({
   action?: AuthAction | undefined;
   /** A closing note under everything else ("You can close this window"). */
   footnote?: ReactNode;
-  /** The form or the provider choices, each stretched to the page's measure. */
+  /** The form or the provider choices, each stretched to the card's width. */
   children?: ReactNode;
 }): React.JSX.Element {
   const titleId = `${useId()}title`;

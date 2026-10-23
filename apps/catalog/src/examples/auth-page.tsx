@@ -18,7 +18,7 @@ import { CatalogSection } from "../section";
 
 /**
  * auth-page.tsx -- the sign-in page with its provider choices, a landing's
- * ringed mark on its way, settled, and in need of attention, with and
+ * ringed mark on its way, settled, and failed, with and
  * without Open Luke, and a form with an error on a phone's width, each in a
  * frame the size of the screen it stands for. Every name and address is
  * made up.
@@ -127,7 +127,7 @@ function AuthPages(): React.JSX.Element {
           </div>
           <div className="catalog-screen catalog-screen-phone">
             <AuthPage
-              mark={<AuthMark provider={MARK_PROVIDER.NOTION} tone={LANDING_TONE.ATTENTION} />}
+              mark={<AuthMark provider={MARK_PROVIDER.NOTION} tone={LANDING_TONE.FAILED} />}
               title="Luke could not reach Notion"
               description="Try again in a moment."
               action={OPEN_LUKE}
@@ -149,7 +149,7 @@ function AuthPages(): React.JSX.Element {
           </div>
           <div className="catalog-screen catalog-screen-phone">
             <AuthPage
-              mark={<AuthMark tone={LANDING_TONE.ATTENTION} />}
+              mark={<AuthMark tone={LANDING_TONE.FAILED} />}
               title="Luke could not continue"
               description="Start sign-in again."
             />

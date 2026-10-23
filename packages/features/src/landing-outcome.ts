@@ -13,10 +13,10 @@ import { INTEGRATION_LANDING_STATUS, type IntegrationLandingStatus } from "./int
  * page that offers the way back draws that as its button rather than as words.
  */
 
-/** Where a flow stands once it has: settled, or in need of attention. A page still on its way has no tone. */
+/** How a flow ended: settled, or failed. A page still on its way has no tone. */
 export const LANDING_TONE = {
   SETTLED: "settled",
-  ATTENTION: "attention",
+  FAILED: "failed",
 } as const;
 
 export type LandingTone = (typeof LANDING_TONE)[keyof typeof LANDING_TONE];
@@ -105,7 +105,7 @@ const LANDING_WORDS = {
     line: undefined,
   }),
   [LANDING_OUTCOME.NOT_CONFIRMED]: (name) => ({
-    tone: LANDING_TONE.ATTENTION,
+    tone: LANDING_TONE.FAILED,
     title:
       name === undefined
         ? "Luke could not confirm the installation"
@@ -113,17 +113,17 @@ const LANDING_WORDS = {
     line: connectAgain(name),
   }),
   [LANDING_OUTCOME.NOT_COMPLETED]: (name) => ({
-    tone: LANDING_TONE.ATTENTION,
+    tone: LANDING_TONE.FAILED,
     title: name === undefined ? "Nothing was connected" : `${name} was not connected`,
     line: connectAgain(name),
   }),
   [LANDING_OUTCOME.UNAVAILABLE]: (name) => ({
-    tone: LANDING_TONE.ATTENTION,
+    tone: LANDING_TONE.FAILED,
     title: name === undefined ? "Luke could not finish connecting" : `Luke could not reach ${name}`,
     line: "Try again in a moment.",
   }),
   [LANDING_OUTCOME.EXPIRED]: (name) => ({
-    tone: LANDING_TONE.ATTENTION,
+    tone: LANDING_TONE.FAILED,
     title:
       name === undefined
         ? "This connection link has expired"
@@ -131,7 +131,7 @@ const LANDING_WORDS = {
     line: connectAgain(name),
   }),
   [LANDING_OUTCOME.ALREADY_CONNECTED]: (name) => ({
-    tone: LANDING_TONE.ATTENTION,
+    tone: LANDING_TONE.FAILED,
     title:
       name === undefined
         ? "That account is connected to another workspace"
@@ -139,12 +139,12 @@ const LANDING_WORDS = {
     line: "Disconnect it there first, or choose another account.",
   }),
   [LANDING_OUTCOME.NOTHING_TO_CONNECT]: (name) => ({
-    tone: LANDING_TONE.ATTENTION,
+    tone: LANDING_TONE.FAILED,
     title: name === undefined ? "Nothing to connect" : `No ${name} connection to finish`,
     line: `Connect ${name ?? "it"} from Luke.`,
   }),
   [LANDING_OUTCOME.LUKE_UNREACHABLE]: () => ({
-    tone: LANDING_TONE.ATTENTION,
+    tone: LANDING_TONE.FAILED,
     title: "Luke could not be reached",
     line: "Reload this page to try again.",
   }),

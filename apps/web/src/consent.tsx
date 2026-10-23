@@ -12,7 +12,7 @@ const authClient = createAuthClient({ plugins: [oauthProviderClient()] });
 
 /**
  * The page opens on Luke's mark, unbadged while the consent goes through,
- * badged for attention where it could not, when the title says so and Open
+ * badged as failed where it could not, when the title says so and Open
  * Luke goes back to start again.
  */
 function Consent(): React.JSX.Element {
@@ -35,7 +35,7 @@ function Consent(): React.JSX.Element {
   }, []);
   return (
     <AuthPage
-      mark={<AuthMark tone={failure ? LANDING_TONE.ATTENTION : undefined} />}
+      mark={<AuthMark tone={failure ? LANDING_TONE.FAILED : undefined} />}
       title={failure ? "Luke could not continue" : "Continuing to Luke…"}
       description={failure ? "Start sign-in again." : "This window will close soon."}
       action={failure ? openLukeFromMac() : undefined}

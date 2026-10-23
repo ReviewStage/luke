@@ -100,7 +100,7 @@ async function handOff(query: DesktopSessionPageQuery | undefined): Promise<View
 }
 
 /**
- * The page opens on Luke's mark, badged for attention once the hand-off ended
+ * The page opens on Luke's mark, badged as failed once the hand-off ended
  * short of the Mac: the title says where the hand-off stands, the description
  * what to do about it, the body holds the providers when a sign-in comes
  * first, and Open Luke goes back where it ended. A sign-in that cannot start
@@ -121,7 +121,7 @@ function DesktopSession(): React.JSX.Element {
 
   return (
     <AuthPage
-      mark={<AuthMark tone={view.kind === VIEW.SAID ? LANDING_TONE.ATTENTION : undefined} />}
+      mark={<AuthMark tone={view.kind === VIEW.SAID ? LANDING_TONE.FAILED : undefined} />}
       title={view.kind === VIEW.WORKING ? "Finishing sign-in…" : view.title}
       description={view.kind === VIEW.WORKING ? undefined : view.body}
       error={view.kind === VIEW.SIGN_IN && signInChoices.failed ? SIGN_IN_FAILURE : undefined}

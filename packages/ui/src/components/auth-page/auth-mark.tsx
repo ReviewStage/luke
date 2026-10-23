@@ -11,8 +11,9 @@ void React;
  * auth-mark.tsx -- the artwork an auth page opens with: one provider's mark, or Luke's, in a ring, with a badge on its corner once the flow has ended.
  *
  * The ring holds the provider the page is about, or Luke's own face where it
- * names none. A page that has settled wears a check, and one that needs
- * attention a cross, each cut out of the ground it stands on; a page still on
+ * names none. A page that has settled wears a check, and one that failed a
+ * cross in the danger red every failure is drawn in, each cut out of the card
+ * it stands on; a page still on
  * its way, or still offering its choices, wears none. The whole is
  * decoration: an AuthPage hides it from a reader, and its title says on its
  * own how the flow stands.
@@ -42,7 +43,7 @@ function LukeFace(): React.JSX.Element {
 /** The glyph each tone's badge carries. */
 const BADGE_GLYPH = {
   [LANDING_TONE.SETTLED]: CheckIcon,
-  [LANDING_TONE.ATTENTION]: CloseIcon,
+  [LANDING_TONE.FAILED]: CloseIcon,
 } as const satisfies Record<LandingTone, () => React.JSX.Element>;
 
 /** `provider`'s mark, or Luke's where it is left out, in a ring, badged where `tone` says how the flow ended. */

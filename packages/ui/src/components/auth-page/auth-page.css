@@ -1,9 +1,9 @@
-/* auth-page.css -- the words of a sign-in, a consent, or a connection
-   centred on the page's own ground, with no card around them, over a body
-   whose controls stretch to the page's measure. The page queries its own
-   width rather than the viewport's, so a page drawn in a narrow frame
-   narrows its inset as it would on a phone; a container query cannot read a
-   custom property, so the width it narrows under is a literal here. */
+/* auth-page.css -- one card centred in the window: the OAuth pages' raised
+   surface, its words centred over a body whose controls stretch to the
+   card's inner width. The page queries its own width rather than the
+   viewport's, so a card drawn in a narrow frame narrows its inset as it
+   would on a phone; a container query cannot read a custom property, so the
+   width it narrows under is a literal here. */
 
 @layer components {
   .luke-auth-page {
@@ -15,7 +15,6 @@
     box-sizing: border-box;
   }
 
-  /* The words stand on the ground: no edge, surface, or shadow of their own. */
   .luke-auth-card {
     display: flex;
     flex-direction: column;
@@ -24,6 +23,10 @@
     max-width: 430px;
     box-sizing: border-box;
     padding: var(--luke-space-40) var(--luke-space-32);
+    border: 1px solid var(--luke-color-border);
+    border-radius: var(--luke-dialog-radius);
+    background: var(--luke-color-surface);
+    box-shadow: 0 24px 80px var(--luke-color-shadow-soft);
     color: var(--luke-color-text);
     font-family: var(--luke-font-sans);
     font-size: var(--luke-type-body-size);
@@ -32,7 +35,7 @@
     overflow-wrap: anywhere;
   }
 
-  /* Under a phone's width the page gives its inset back to what it holds. */
+  /* Under a phone's width the card gives its inset back to what it holds. */
   @container (max-width: 400px) {
     .luke-auth-card {
       padding: var(--luke-space-32) var(--luke-space-20);
@@ -45,7 +48,7 @@
   }
 
   /* The ring an AuthMark draws: the mark at about two thirds of it, on the
-     page's ground inside a hairline edge. */
+     card's surface inside a hairline edge. */
   .luke-auth-ring {
     position: relative;
     display: inline-grid;
@@ -55,7 +58,7 @@
     box-sizing: border-box;
     border: 1px solid var(--luke-color-border);
     border-radius: var(--luke-radius-full);
-    background: var(--luke-color-ground);
+    background: var(--luke-color-surface);
     color: var(--luke-color-text);
   }
 
@@ -65,7 +68,8 @@
   }
 
   /* The badge sits on the ring's lower right, where its edge crosses the
-     diagonal, cut out of the ground by a ring of the ground's own colour. */
+     diagonal, cut out of the card by a ring of the card's own colour. A
+     failure is the danger red every failure is drawn in. */
   .luke-auth-badge {
     position: absolute;
     right: calc(var(--luke-space-2) * -1);
@@ -76,12 +80,13 @@
     height: 20px;
     border-radius: var(--luke-radius-full);
     background: var(--luke-color-complete);
-    box-shadow: 0 0 0 3px var(--luke-color-ground);
+    box-shadow: 0 0 0 3px var(--luke-color-surface);
     color: var(--luke-color-surface);
   }
 
-  .luke-auth-badge[data-tone="attention"] {
-    background: var(--luke-color-attention);
+  .luke-auth-badge[data-tone="failed"] {
+    background: var(--luke-color-danger-fill);
+    color: var(--luke-color-on-danger);
   }
 
   .luke-auth-badge > svg {
@@ -93,13 +98,13 @@
   }
 
   .luke-auth-title {
-    margin: var(--luke-space-20) 0 0;
-    font-size: var(--luke-type-dialog-size);
-    line-height: var(--luke-type-dialog-leading);
-    font-weight: var(--luke-weight-semibold);
+    margin: var(--luke-space-16) 0 0;
+    font-size: var(--luke-type-title-size);
+    line-height: var(--luke-type-title-leading);
+    font-weight: var(--luke-weight-bold);
   }
 
-  /* The page's first child opens it flush, whichever part that is. */
+  /* The card's first child opens it flush, whichever part that is. */
   .luke-auth-card > :first-child {
     margin-top: 0;
   }
@@ -125,7 +130,7 @@
     line-height: var(--luke-type-caption-leading);
   }
 
-  /* The body is as wide as the page's measure, and so is each thing in it,
+  /* The body is as wide as the card's inside, and so is each thing in it,
      so a provider's button fills its line and a form's fields stand on the
      start edge as they do anywhere else. */
   .luke-auth-body {
@@ -152,7 +157,7 @@
 
   .luke-auth-error {
     margin: var(--luke-space-16) 0 0;
-    color: var(--luke-color-attention);
+    color: var(--luke-color-danger-text);
   }
 
   /* Empty, it keeps its place in the tree, so its alert region is standing
