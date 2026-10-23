@@ -48,8 +48,16 @@ export interface CheckedSkill {
   readonly name: string | undefined;
   readonly description: string | undefined;
   readonly userInvocable: boolean;
+  /** Whether its `metadata` marks it internal, which the `skills` tool hides unless it is named. */
+  readonly internal: boolean;
   readonly problems: readonly InstalledSkillProblem[];
 }
+
+/** The key under which a `SKILL.md` keeps the metadata an internal skill is marked in. */
+const METADATA_KEY = "metadata";
+
+/** `internal: true` among the metadata's keys, as the frontmatter reader folds a nested mapping into one line. */
+const INTERNAL_MARK = /(?:^|\s)internal:\s+true(?:\s|$)/u;
 
 /** A file's bytes as text, read leniently: a binary file reads as noise, which no credential shape matches by chance. */
 export function fileText(bytes: Uint8Array): string {
@@ -102,6 +110,7 @@ export function checkSkillFile(text: string, folderName: string): CheckedSkill {
     name: name === "" ? undefined : name,
     description: description === "" ? undefined : description,
     userInvocable: file?.keys.get(SKILL_KEY.USER_INVOCABLE)?.trim() !== "false",
+    internal: INTERNAL_MARK.test(file?.keys.get(METADATA_KEY) ?? ""),
     problems,
   };
 }

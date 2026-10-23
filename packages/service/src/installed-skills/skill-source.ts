@@ -10,12 +10,9 @@
  * are read from one tree, whatever lands on the branch between.
  *
  * Skill folders are found as the `skills` tool finds them in a repository
- * it was not told about: a `SKILL.md` at the root, and each folder of
- * `skills/`, `.agents/skills/`, and `.claude/skills/` that holds one, in
- * that order, every copy of a name kept for its `SKILL.md` to settle which
- * stands (`skill-paste-install.ts`). A source naming a
- * folder looks there alone: at the folder, where it holds a `SKILL.md`, or
- * else at each folder in it that does. The whole tree is listed in one
+ * it was not told about (`skill-discovery.ts`), every copy of a name kept
+ * for its `SKILL.md` to settle which stands (`skill-paste-install.ts`). The
+ * whole tree is listed in one
  * read, which also gives every file's size, so a folder past a skill's
  * bounds is refused before any of its files is read.
  *
@@ -28,7 +25,6 @@ import { INSTALLED_SKILL_MAIN_FILE } from "@luke/features/installed-skill-wire";
 import { TASK_SKILL_BOUNDS } from "@luke/features/task-wire";
 import { Effect, Option, type Redacted, Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
-import { SKILL_ROOT } from "../agents/repository-skills.js";
 import {
   GITHUB_HTTP_STATUS,
   GitHubApp,
@@ -47,6 +43,12 @@ import {
 } from "../github/repository-file.js";
 import { GIT_ENTRY, readRepositoryFolder } from "../github/repository-folder.js";
 import { HOSTED_REFUSAL, type HostedRefusal } from "../http/http-effect.js";
+import {
+  DISCOVERY_FILE,
+  discoverSkillFolders,
+  pathWithin,
+  splitFolder,
+} from "./skill-discovery.js";
 
 /** The most skill folders read: a repository's skills, twice over for a name two roots hold. */
 const MAX_FOLDERS = TASK_SKILL_BOUNDS.MAX_SKILLS * 2;
@@ -56,9 +58,6 @@ const READ_CONCURRENCY = 8;
 
 /** The header GitHub says how many requests are left in its rate limit window with. */
 const RATE_LIMIT_REMAINING_HEADER = "x-ratelimit-remaining";
-
-/** The roots a repository keeps skill folders under, in the order a name is looked for. */
-const SKILL_FOLDER_ROOTS: readonly string[] = ["skills", SKILL_ROOT.AGENTS, SKILL_ROOT.CLAUDE];
 
 /** A repository a skill is read from, and how: on a token, or anonymously (`bearer` null). */
 export interface SkillRepository {
@@ -189,29 +188,22 @@ export const pinnedCommit = /* @__PURE__ */ Effect.fnUntraced(function* (
   return { ref: named, sha };
 });
 
-/** The folder's parent and the folder's own name: `skills/x` is `skills` and `x`. */
-function splitFolder(path: string): { readonly parent: string; readonly name: string } {
-  const at = path.lastIndexOf("/");
-  return at === -1
-    ? { parent: "", name: path }
-    : { parent: path.slice(0, at), name: path.slice(at + 1) };
-}
-
-/** The folders holding a skill, in the order an install looks for them, as the module's header says. */
-function skillFolderPaths(skillFiles: ReadonlySet<string>, within: string | undefined): string[] {
-  const holding = (folder: string) =>
-    skillFiles.has(
-      folder === "" ? INSTALLED_SKILL_MAIN_FILE : `${folder}/${INSTALLED_SKILL_MAIN_FILE}`,
-    );
-  const childrenOf = (parent: string) =>
-    [...skillFiles]
-      .map((file) => splitFolder(file).parent)
-      .filter((folder) => folder !== "" && splitFolder(folder).parent === parent)
-      .sort((a, b) => a.localeCompare(b));
-  if (within !== undefined) return holding(within) ? [within] : childrenOf(within);
-  // Note that a name two roots hold is kept twice here, since which copy stands is its `SKILL.md`'s to say.
-  return [...(holding("") ? [""] : []), ...SKILL_FOLDER_ROOTS.flatMap(childrenOf)];
-}
+/** A file discovery reads beside the tree, as text, where the tree holds it as a blob; nothing where it does not. */
+const discoveryText = /* @__PURE__ */ Effect.fnUntraced(function* (
+  repository: SkillRepository,
+  sha: string,
+  blobs: ReadonlySet<string>,
+  path: string | undefined,
+): Effect.fn.Return<string | undefined, HostedRefusal, HttpClient.HttpClient | DatabaseServices> {
+  if (path === undefined || !blobs.has(path)) return undefined;
+  const file = yield* onRepository(
+    repository,
+    readRepositoryFile(repository.bearer, repository, sha, path),
+  );
+  return file.regular && file.content !== undefined
+    ? new TextDecoder().decode(file.content)
+    : undefined;
+});
 
 /**
  * The skill folders the commit holds, as the module's header says, each
@@ -222,6 +214,7 @@ export const skillFolders = /* @__PURE__ */ Effect.fnUntraced(function* (
   repository: SkillRepository,
   sha: string,
   within: string | undefined,
+  fullDepth: boolean,
 ): Effect.fn.Return<
   readonly SkillFolder[],
   HostedRefusal,
@@ -255,7 +248,20 @@ export const skillFolders = /* @__PURE__ */ Effect.fnUntraced(function* (
       .map((blob) => blob.name)
       .filter((path) => splitFolder(path).name === INSTALLED_SKILL_MAIN_FILE),
   );
-  const folders = skillFolderPaths(skillFiles, within).slice(0, MAX_FOLDERS);
+  const paths = new Set(blobs.map((blob) => blob.name));
+  const [marketplace, plugin, lock] = yield* Effect.all(
+    [
+      discoveryText(repository, sha, paths, pathWithin(within ?? "", DISCOVERY_FILE.MARKETPLACE)),
+      discoveryText(repository, sha, paths, pathWithin(within ?? "", DISCOVERY_FILE.PLUGIN)),
+      discoveryText(repository, sha, paths, DISCOVERY_FILE.LOCK),
+    ],
+    { concurrency: "unbounded" },
+  );
+  const folders = discoverSkillFolders(
+    { skillFiles, marketplace, plugin, lock },
+    within,
+    fullDepth,
+  ).slice(0, MAX_FOLDERS);
   return folders.map((folder) => ({
     path: folder,
     files: blobs.flatMap((blob) => {

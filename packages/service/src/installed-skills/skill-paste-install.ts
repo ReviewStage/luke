@@ -110,6 +110,7 @@ const candidateOf = /* @__PURE__ */ Effect.fnUntraced(function* (
           name: fallback,
           description: undefined,
           userInvocable: true,
+          internal: false,
           problems: [INSTALLED_SKILL_PROBLEM.TOO_LARGE],
         }
       : checkSkillFile(
@@ -130,10 +131,13 @@ const pinnedSource = /* @__PURE__ */ Effect.fnUntraced(function* (
 ): Effect.fn.Return<PinnedSource, HostedRefusal, SourceServices> {
   const repository = yield* reachSkillRepository(workspaceId, paste.owner, paste.repo, userId);
   const { ref, sha } = yield* pinnedCommit(repository, paste.ref);
-  const folders = yield* skillFolders(repository, sha, paste.path);
-  const read = yield* Effect.forEach(folders, (folder) => candidateOf(repository, sha, folder), {
+  const folders = yield* skillFolders(repository, sha, paste.path, paste.fullDepth === true);
+  const all = yield* Effect.forEach(folders, (folder) => candidateOf(repository, sha, folder), {
     concurrency: CANDIDATE_CONCURRENCY,
   });
+  // Note that an internal skill is hidden unless the paste names skills, as the `skills` tool hides one unless asked for by name.
+  const naming = Array.isArray(paste.skills) && paste.skills.length > 0;
+  const read = naming ? all : all.filter((candidate) => !candidate.checked.internal);
   // Note that a name stands once: the first copy that installs, else the first copy, as a session's skills fall back.
   const byName = new Map<string, Candidate>();
   for (const candidate of read) {
@@ -156,12 +160,20 @@ function nameOf(candidate: Candidate): string {
   return candidate.checked.name ?? candidate.folder.path;
 }
 
+/** The names asked for, each as the candidate it names spells it, matched without case as the `skills` tool's `filterSkills` matches; a name no candidate holds stays as asked. */
+function candidateNames(names: readonly string[], candidates: readonly Candidate[]): string[] {
+  return names.map(
+    (name) =>
+      candidates.map(nameOf).find((one) => one.toLowerCase() === name.toLowerCase()) ?? name,
+  );
+}
+
 /** The names the paste asks for, as the module's header says. */
 function askedNames(paste: SkillPasteSource, candidates: readonly Candidate[]): readonly string[] {
   if (paste.skills === ALL_SKILLS || (paste.skills === undefined && paste.path !== undefined)) {
     return candidates.map(nameOf);
   }
-  if (paste.skills !== undefined) return paste.skills;
+  if (paste.skills !== undefined) return candidateNames(paste.skills, candidates);
   const [only, ...rest] = candidates;
   return only !== undefined && rest.length === 0 ? [nameOf(only)] : [];
 }
@@ -222,7 +234,13 @@ const madeFromSource = /* @__PURE__ */ Effect.fnUntraced(function* (
   chosen: readonly string[] | undefined,
 ): Effect.fn.Return<readonly MadeSkill[], HostedRefusal, SourceServices> {
   const source = yield* pinnedSource(userId, workspaceId, paste);
-  const names = [...new Set(chosen ?? askedNames(paste, source.candidates))];
+  const names = [
+    ...new Set(
+      chosen === undefined
+        ? askedNames(paste, source.candidates)
+        : candidateNames(chosen, source.candidates),
+    ),
+  ];
   const picked = names.map((name) => source.candidates.find((one) => nameOf(one) === name));
   if (names.length === 0 || picked.some((one) => one === undefined)) {
     return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
@@ -404,7 +422,7 @@ export const revisionAtRef = /* @__PURE__ */ Effect.fnUntraced(function* (
   HttpClient.HttpClient | DatabaseServices
 > {
   const { sha } = yield* pinnedCommit(repository, source.ref);
-  const folders = yield* skillFolders(repository, sha, source.path);
+  const folders = yield* skillFolders(repository, sha, source.path, false);
   const folder = folders.find((one) => one.path === source.path);
   if (folder === undefined) {
     return yield* Effect.fail(
