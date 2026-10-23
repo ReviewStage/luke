@@ -2157,6 +2157,30 @@ test("a word typed in the Agent picker keeps the newest agents whose rows hold i
   );
 });
 
+test("the agent a same-agent automation was saved with, once the list no longer holds it, is left out of a search's results and offered again once the search is cleared", async () => {
+  const gone = "5b6c7d8e-9f0a-4b1c-8d2e-3f4a5b6c7d8f";
+  const following = automation(11, {
+    name: "Follow-up digest",
+    target: { kind: AUTOMATION_TARGET.SAME_AGENT, agentId: gone },
+  });
+  standing = [following];
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: following.id });
+  await settle();
+  act(() => picker(page, "Agent").click());
+  const names = () => agentRows().map((row) => row.name);
+  assert.deepEqual(names(), ["The agent it goes to now", "CI digest"]);
+
+  const search = () =>
+    document.querySelector<HTMLInputElement>('[role="dialog"][aria-label="Agent"] input');
+  type(search(), "ci");
+  await settle();
+  assert.deepEqual(names(), ["CI digest"]);
+  type(search(), "");
+  await settle();
+
+  assert.deepEqual(names(), ["The agent it goes to now", "CI digest"]);
+});
+
 /** What each row's glyph draws, in order: GitHub's mark, or the lucide icon's name. */
 function glyphs(rows: readonly Element[]): string[] {
   return rows.map((row) => {

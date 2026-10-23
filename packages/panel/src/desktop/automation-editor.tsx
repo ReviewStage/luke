@@ -1604,7 +1604,7 @@ function AgentRow({
       : undefined;
   // Note that a search lists only what it found, so the kept agent stands in the menu while none is typed.
   const rows = [
-    ...(kept === undefined || found !== undefined ? [] : [{ id: kept, label: KEPT_AGENT_LABEL }]),
+    ...(kept === undefined || words !== "" ? [] : [{ id: kept, label: KEPT_AGENT_LABEL }]),
     ...listed.map((agent) => agentMenuRow(agent, drawn)),
   ];
   return (
