@@ -328,7 +328,7 @@
      fades the words themselves, so it reads alike over every fill a tab
      wears, at rest, hovered, chosen, or dragged. */
   .luke-tab-label[data-overflow="true"] {
-    mask-image: linear-gradient(to left, transparent, #000 20px); /* off-scale: a label's fade */
+    mask-image: linear-gradient(to left, transparent, #000 var(--luke-label-fade));
     text-overflow: clip;
   }
 
