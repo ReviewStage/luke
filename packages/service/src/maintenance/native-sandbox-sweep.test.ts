@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
+import { INPUT_LINE } from "@luke/agent-runner/protocol";
 import { Database } from "@luke/database/core/query";
 import { createCodingAgent } from "@luke/database/models/coding-agent-store";
 import { holdSandbox } from "@luke/database/models/sandbox-terminal-lease";
@@ -13,6 +14,7 @@ import { fakeHttpClientLayer } from "@luke/wire/testing";
 import { eq } from "drizzle-orm";
 import { Duration, Effect, Option } from "effect";
 import { afterEach, vi } from "vitest";
+import { CODER } from "../agents/coder-host/bounds.js";
 import { commandRead, type ReadCommand } from "../testing/runner-sandbox-fake.js";
 import { sandboxListRefusal, sandboxStopRefusal } from "../testing/vercel-sandbox-fake.js";
 import { NATIVE_SANDBOX_SWEEP, sweepNativeSandboxes } from "./native-sandbox-sweep.js";
@@ -67,6 +69,8 @@ function vercel(
   const commands = new Map<string, ReadCommand>();
   const stopped: string[] = [];
   const policies: string[] = [];
+  /** What was written to each command's stdin, by its id. */
+  const stdin = new Map<string, string>();
   const pagesListed: { status: string | null; sortBy: string | null; order: string | null }[] = [];
   const respond = async (url: string, init: RequestInit): Promise<Response> => {
     const parsed = new URL(url);
@@ -107,6 +111,16 @@ function vercel(
       }
       return Response.json({ session: { id: sessionId } });
     }
+    const written = /^cmd\/([^/]+)\/stdin$/u.exec(rest);
+    if (written !== null) {
+      const { data } = JSON.parse(String(init.body));
+      const id = written[1] ?? "";
+      // A write with no data is the one that says how far the data went, which adds nothing.
+      if (typeof data === "string") {
+        stdin.set(id, `${stdin.get(id) ?? ""}${Buffer.from(data, "base64").toString()}`);
+      }
+      return Response.json({});
+    }
     const command = /^cmd\/([^/]+)$/u.exec(rest);
     if (command !== null) {
       const found = commands.get(command[1] ?? "");
@@ -124,6 +138,7 @@ function vercel(
     commands,
     stopped,
     policies,
+    stdin,
     pagesListed,
   };
 }
@@ -224,7 +239,14 @@ it.layer(getTestDB())("the native sandbox sweep", (it) => {
 
         const outcome = yield* sweepNativeSandboxes(NOW).pipe(Effect.provide(api.layer));
 
-        assert.deepEqual(outcome, { stopped: 0, held: 0, failed: 0, deferred: 0, lost: 1 });
+        assert.deepEqual(outcome, {
+          stopped: 0,
+          retired: 0,
+          held: 0,
+          failed: 0,
+          deferred: 0,
+          lost: 1,
+        });
         const statusOf = (conversationId: string) =>
           db
             .select({ status: turns.status, failureDetail: turns.failureDetail })
@@ -306,7 +328,14 @@ it.layer(getTestDB())("the native sandbox sweep", (it) => {
 
         const sessionOf = (agentId: string) => sandboxOf.get(agentId)?.currentSessionId;
         const stoppable = [sessionOf(ended.id), sessionOf(codexEnded.id)].sort();
-        assert.deepEqual(outcome, { stopped: 2, held: 1, failed: 0, deferred: 0, lost: 0 });
+        assert.deepEqual(outcome, {
+          stopped: 2,
+          retired: 0,
+          held: 1,
+          failed: 0,
+          deferred: 0,
+          lost: 0,
+        });
         assert.deepEqual([...api.stopped].sort(), stoppable);
         assert.deepEqual([...api.policies].sort(), stoppable, "the credential goes first");
         for (const agent of [held, queued, waiting, justEnded]) {
@@ -343,13 +372,21 @@ it.layer(getTestDB())("the native sandbox sweep", (it) => {
 
         assert.deepEqual(first, {
           stopped: NATIVE_SANDBOX_SWEEP.MAX_STOPS,
+          retired: 0,
           held: 0,
           failed: 0,
           deferred: 2,
           lost: 0,
         });
         assert.equal(stoppedFirst, NATIVE_SANDBOX_SWEEP.MAX_STOPS);
-        assert.deepEqual(second, { stopped: 2, held: 0, failed: 0, deferred: 0, lost: 0 });
+        assert.deepEqual(second, {
+          stopped: 2,
+          retired: 0,
+          held: 0,
+          failed: 0,
+          deferred: 0,
+          lost: 0,
+        });
         assert.ok(api.sandboxes.every((sandbox) => sandbox.status === "stopped"));
       }),
   );
@@ -379,14 +416,28 @@ it.layer(getTestDB())("the native sandbox sweep", (it) => {
         );
 
         assert.equal(pagesAsked, NATIVE_SANDBOX_SWEEP.MAX_PAGES);
-        assert.deepEqual(outcome, { stopped: 0, held: 0, failed: 0, deferred: 0, lost: 0 });
+        assert.deepEqual(outcome, {
+          stopped: 0,
+          retired: 0,
+          held: 0,
+          failed: 0,
+          deferred: 0,
+          lost: 0,
+        });
         assert.equal(runningAfterFirst, "running");
         assert.equal(
           api.pagesListed.at(-1)?.order,
           "desc",
           "the next minute lists from the newest",
         );
-        assert.deepEqual(nextMinute, { stopped: 1, held: 0, failed: 0, deferred: 0, lost: 0 });
+        assert.deepEqual(nextMinute, {
+          stopped: 1,
+          retired: 0,
+          held: 0,
+          failed: 0,
+          deferred: 0,
+          lost: 0,
+        });
         assert.equal(beyond.status, "stopped");
       }),
   );
@@ -452,19 +503,26 @@ it.layer(getTestDB())("the native sandbox sweep", (it) => {
 
       const outcome = yield* sweepNativeSandboxes(NOW).pipe(Effect.provide(api.layer));
 
-      assert.deepEqual(outcome, { stopped: 0, held: 0, failed: 0, deferred: 0, lost: 0 });
+      assert.deepEqual(outcome, {
+        stopped: 0,
+        retired: 0,
+        held: 0,
+        failed: 0,
+        deferred: 0,
+        lost: 0,
+      });
       assert.deepEqual(api.stopped, []);
     }),
   );
   it.effect(
-    "a sandbox whose ended run was followed by a newer runner keeps running, and one whose old runner exited or is gone is stopped",
+    "a sandbox whose runner still runs within the warm window keeps running, and one whose old runner exited or is gone is stopped",
     () =>
       Effect.gen(function* () {
         vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
         const api = vercel();
         const relaunched = yield* openAgent(CONVERSATION_RUNTIME.CLAUDE_CODE, {
           status: TURN_STATUS.SETTLED,
-          at: minutesBefore(10),
+          at: minutesBefore(5),
         });
         const exited = yield* openAgent(CONVERSATION_RUNTIME.CLAUDE_CODE, {
           status: TURN_STATUS.SETTLED,
@@ -484,10 +542,60 @@ it.layer(getTestDB())("the native sandbox sweep", (it) => {
 
         const outcome = yield* sweepNativeSandboxes(NOW).pipe(Effect.provide(api.layer));
 
-        assert.deepEqual(outcome, { stopped: 2, held: 0, failed: 0, deferred: 0, lost: 0 });
+        assert.deepEqual(outcome, {
+          stopped: 2,
+          retired: 0,
+          held: 0,
+          failed: 0,
+          deferred: 0,
+          lost: 0,
+        });
         assert.equal(live.status, "running");
         assert.equal(done.status, "stopped");
         assert.equal(gone.status, "stopped");
+      }),
+  );
+
+  it.effect(
+    "a runner warm past its window is asked to retire, its sandbox left for its END to stop, and one within the window stays warm",
+    () =>
+      Effect.gen(function* () {
+        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+        const api = vercel();
+        const idle = yield* openAgent(CONVERSATION_RUNTIME.CLAUDE_CODE, {
+          status: TURN_STATUS.SETTLED,
+          at: minutesBefore(Duration.toMinutes(CODER.RUNNER_WARM) + 1),
+        });
+        const recent = yield* openAgent(CONVERSATION_RUNTIME.CLAUDE_CODE, {
+          status: TURN_STATUS.SETTLED,
+          at: minutesBefore(Duration.toMinutes(CODER.RUNNER_WARM) - 1),
+        });
+        api.commands.set("cmd_idle", { id: "cmd_idle", exitCode: null });
+        api.commands.set("cmd_recent", { id: "cmd_recent", exitCode: null });
+        const retiring = nativeSandbox(idle.id, "cmd_idle");
+        const warm = nativeSandbox(recent.id, "cmd_recent");
+        api.sandboxes.push(retiring, warm);
+
+        const outcome = yield* sweepNativeSandboxes(NOW).pipe(Effect.provide(api.layer));
+
+        assert.deepEqual(outcome, {
+          stopped: 0,
+          retired: 1,
+          held: 0,
+          failed: 0,
+          deferred: 0,
+          lost: 0,
+        });
+        assert.deepEqual(
+          (api.stdin.get("cmd_idle") ?? "")
+            .split("\n")
+            .filter((each) => each !== "")
+            .map((each) => JSON.parse(each)),
+          [{ type: INPUT_LINE.RETIRE }],
+        );
+        assert.equal(api.stdin.get("cmd_recent"), undefined);
+        assert.deepEqual([retiring.status, warm.status], ["running", "running"]);
+        assert.deepEqual([api.stopped, api.policies], [[], []]);
       }),
   );
 
@@ -506,7 +614,14 @@ it.layer(getTestDB())("the native sandbox sweep", (it) => {
 
         const outcome = yield* sweepNativeSandboxes(NOW).pipe(Effect.provide(api.layer));
 
-        assert.deepEqual(outcome, { stopped: 0, held: 0, failed: 1, deferred: 0, lost: 0 });
+        assert.deepEqual(outcome, {
+          stopped: 0,
+          retired: 0,
+          held: 0,
+          failed: 1,
+          deferred: 0,
+          lost: 0,
+        });
         assert.deepEqual(api.stopped, []);
         assert.equal(sandbox.status, "running");
       }),

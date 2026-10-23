@@ -1464,6 +1464,36 @@ export interface RunnerEnding {
   readonly sequence: number;
 }
 
+/**
+ * A warm runner asked to end, under the agent's runner lease: its sandbox
+ * read again once the lease is held, and the retire line written to the
+ * runner the sandbox runs now, where it still runs in the session given.
+ * The runner ends only where it is still warm, so a message a `send` wrote
+ * ahead of the line, on the same stdin, keeps it (`INPUT_LINE.RETIRE`); its
+ * END then stops the sandbox as any launch's end does. Answers whether the
+ * line was written.
+ */
+export const retireWarmRunner = Effect.fn("web/retireWarmRunner")(function* (
+  api: VercelSandboxApi,
+  retiring: { readonly sessionId: string; readonly agentId: string; readonly running: string },
+) {
+  return yield* holdingRunner(
+    retiring.agentId,
+    Effect.gen(function* () {
+      const found = yield* sandboxOf(api, retiring.sessionId);
+      if (Option.isNone(found)) return false;
+      const live = yield* liveRunner(api, found.value);
+      if (live === undefined || live.sandboxSessionId !== retiring.running) return false;
+      yield* api.writeStdin(
+        live.sandboxSessionId,
+        live.commandId,
+        line({ type: INPUT_LINE.RETIRE }),
+      );
+      return true;
+    }),
+  );
+});
+
 /** How a launch's end left its sandbox. */
 export const RUNNER_ENDED = {
   STOPPED: "stopped",

@@ -26,6 +26,7 @@ const TERMINALS: TerminalLeaseSweepOutcome = { stopped: 2, released: 1, pending:
 /** What the sweep over the running native sandboxes answers. */
 const NATIVE: NativeSandboxSweepOutcome = {
   stopped: 1,
+  retired: 0,
   held: 1,
   failed: 0,
   deferred: 0,
