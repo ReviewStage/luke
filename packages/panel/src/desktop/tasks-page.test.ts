@@ -25,6 +25,7 @@ import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { onRegistry } from "../testing/copy-feedback.js";
+import { restOn } from "../testing/hint-rest.js";
 import { tasksControl } from "../testing/tasks-control.js";
 import { ToastHost } from "../toast.js";
 import { TasksPage } from "./tasks-page.js";
@@ -620,8 +621,8 @@ test("a row whose agents rest keeps the working mark's room before its pull requ
       .map((mark) => mark.className)
       .slice(0, 2);
 
-  assert.deepEqual(lead("ACME-38"), ["state-glyph", "task-work-pull-request"]);
-  assert.deepEqual(lead("ACME-39"), ["state-glyph", "task-work-pull-request"]);
+  assert.deepEqual(lead("ACME-38"), ["task-work-agents", "task-work-pull-request"]);
+  assert.deepEqual(lead("ACME-39"), ["task-work-agents", "task-work-pull-request"]);
   assert.equal(
     rowOf(page, "ACME-39").querySelector("[data-cell='agents'] [data-state='working']"),
     null,
@@ -973,4 +974,43 @@ test("the Filter's Repository leads each repository with its owner's picture, on
   openOptions(page, "Filter");
   choose("Repository");
   assert.deepEqual(offered(), ["https://github.com/acme.png?size=32"]);
+});
+
+test("a row hangs no card for its whole task; its pull request's mark hangs that pull request's card", async () => {
+  const withPullRequest: TaskSummary = {
+    ...task(39, "Rate limit search", TASK_STATUS.TODO, TASK_PRIORITY.HIGH),
+    agents: {
+      total: 1,
+      working: 0,
+      agents: [],
+      pullRequestTotal: 1,
+      pullRequests: [
+        {
+          number: 4222,
+          title: "Rate limit the search endpoint",
+          state: "merged",
+          checks: "passing",
+          additions: 30,
+          deletions: 5,
+          url: "https://github.com/acme/web/pull/4222",
+        },
+      ],
+    },
+  };
+  const page = await mountPage([withPullRequest, ...TASKS.slice(2)]);
+  const row = rowOf(page, "ACME-39");
+
+  restOn(row.querySelector("[data-card-press]") ?? assert.fail("the row has its press"));
+  assert.equal(document.querySelector("[data-task-card]"), null, "the row hangs no task card");
+
+  restOn(
+    row.querySelector("[data-cell='agents'] .task-work-pull-request") ??
+      assert.fail("the row wears its pull request"),
+  );
+  const card = document.querySelector(".luke-tooltip-card [data-pull-request-card]");
+  assert.equal(
+    card?.querySelector(".luke-hover-card-name")?.textContent,
+    "Rate limit the search endpoint",
+  );
+  assert.match(card?.textContent ?? "", /acme\/web#4222 · Merged/u);
 });

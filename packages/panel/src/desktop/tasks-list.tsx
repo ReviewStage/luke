@@ -89,7 +89,7 @@ import {
   UserXIcon,
 } from "lucide-react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
-import { ACTOR_SIZE, ActorMark, UnassignedMark } from "../actor-ref.js";
+import { ACTOR_SIZE, ActorMark, actorCard, UnassignedMark } from "../actor-ref.js";
 import { useAppCommand } from "../app-commands.js";
 import { FIND_SKIP_ATTRIBUTE } from "../find-matches.js";
 import { useMemberDirectory } from "../member-directory.js";
@@ -108,7 +108,6 @@ import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { readKept, writeKept } from "./folded-groups.js";
 import { sectionGlyph } from "./section-icon-picker.js";
 import { useTaskMenu } from "./task-actions.js";
-import { taskCardOf } from "./task-card.js";
 import {
   AssigneeChip,
   PriorityChip,
@@ -149,8 +148,12 @@ import { useRowDrag } from "./use-row-drag.js";
  * (`task-row-parts.tsx`): its priority, status, and assignee are chips
  * dropping the menu that changes them, and its ⋯, shown while the row is in hand, and a
  * right-click drop the task's own menu, whose Rename makes its name its
- * field. A press anywhere else on the row opens the task, and resting on it
- * hangs the task's card beside it, as its sidebar row does (`task-card.tsx`).
+ * field. A press anywhere else on the row opens the task. The row hangs no
+ * card for the whole task, which would say what its columns already do;
+ * its parts hang their own instead (`task-part-cards.tsx`): its assignee's
+ * face and its creator's hang theirs, a pull request's mark the pull
+ * request, the count after it those it counts, and the working mark the
+ * task's agents.
  *
  * A group's head folds it, kept on this Mac (`LIST_FOLDS_KEY`), its count
  * standing beside its name either way. A row is dragged by its press
@@ -562,8 +565,7 @@ function listDrops(
 
 /**
  * One task's row: its press, which reaches every edge of the row under its
- * controls, opens the task, and hangs its card while the pointer rests on
- * it; then, each in its own column where the view draws it, the chips that
+ * controls, opens the task; then, each in its own column where the view draws it, the chips that
  * change its priority and its status, its key, what waits on the reader,
  * its repository, the chip that changes its assignee, empty where its group
  * already says who, its creator's face, its agents' work, when it last
@@ -605,7 +607,6 @@ function TaskListRow({
     drawn: true,
     unread: reads.markedUnread(task.id),
   });
-  const item = useRef<HTMLLIElement | null>(null);
   const press = useRef<HTMLButtonElement | null>(null);
   const refocus = useRef(false);
   useEffect(() => {
@@ -614,6 +615,7 @@ function TaskListRow({
     press.current?.focus();
   }, [rename.editing]);
   const drawn = (property: TaskProperty) => properties.includes(property);
+  const shownBy = maker?.actor ?? creator;
   const key = task.number === undefined ? undefined : taskKey(workspaceName, task.number);
   // Note that the marks before the name are a control and decoration to a screen reader, so the key and status are said in the press, and left out of find, which finds them drawn.
   const spoken = [
@@ -631,7 +633,6 @@ function TaskListRow({
     ) : null;
   return (
     <li
-      ref={item}
       className="tasks-list-row"
       data-task-id={task.id}
       {...motionKey(task.id)}
@@ -653,25 +654,23 @@ function TaskListRow({
             />
           </span>
         ) : (
-          <Tooltip label={task.name} card={taskCardOf(tasks, task, now)} cardRegion={item}>
-            <CardPress
-              ref={press}
-              disabled={actions.deletion.busy}
-              onPress={() => {
-                actions.close(false);
-                onOpen();
-              }}
-              onKeyDown={actions.keyMenu}
-              contextMenu={actions.contextMenu(press)}
-            >
-              <span className="tasks-list-press">
-                <OneLine>{task.name}</OneLine>
-                {spoken === "" ? null : (
-                  <VisuallyHidden {...{ [FIND_SKIP_ATTRIBUTE]: "" }}>{spoken}</VisuallyHidden>
-                )}
-              </span>
-            </CardPress>
-          </Tooltip>
+          <CardPress
+            ref={press}
+            disabled={actions.deletion.busy}
+            onPress={() => {
+              actions.close(false);
+              onOpen();
+            }}
+            onKeyDown={actions.keyMenu}
+            contextMenu={actions.contextMenu(press)}
+          >
+            <span className="tasks-list-press">
+              <OneLine>{task.name}</OneLine>
+              {spoken === "" ? null : (
+                <VisuallyHidden {...{ [FIND_SKIP_ATTRIBUTE]: "" }}>{spoken}</VisuallyHidden>
+              )}
+            </span>
+          </CardPress>
         )}
         {rename.refused ? (
           <span className="tasks-list-note" role="alert">
@@ -730,14 +729,18 @@ function TaskListRow({
               {actorName(maker.actor)}
             </Text>
           )}
-          <ActorMark
-            actor={maker?.actor ?? creator}
-            size={ACTOR_SIZE.MARK}
-            forWhom={maker === undefined ? undefined : creator}
-          />
+          <Tooltip label={actorName(shownBy)} card={actorCard(shownBy)}>
+            <span className="tasks-list-creator">
+              <ActorMark
+                actor={shownBy}
+                size={ACTOR_SIZE.MARK}
+                forWhom={maker === undefined ? undefined : creator}
+              />
+            </span>
+          </Tooltip>
         </>,
       )}
-      {cell(TASK_PROPERTY.AGENTS, <TaskWorkMarks task={task} most={1} steady />)}
+      {cell(TASK_PROPERTY.AGENTS, <TaskWorkMarks task={task} tasks={tasks} most={1} steady />)}
       {cell(
         TASK_PROPERTY.UPDATED,
         <Time at={taskTime(task, TASK_ORDER.UPDATED)} now={now} hint={false} />,

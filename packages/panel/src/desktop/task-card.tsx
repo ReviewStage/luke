@@ -186,7 +186,7 @@ function CreatorDetail({
 }
 
 /** One agent's row, as its tab draws it (`main-tabs.tsx`): its harness's mark wearing where it stands (`AgentGlyph`), its tab's label, and a failure at its end (`agentEndMark`). */
-function AgentLine({
+export function AgentLine({
   agent,
   models,
   onShow,

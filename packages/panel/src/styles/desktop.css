@@ -6453,14 +6453,16 @@ ul.actor-stack {
 }
 
 /* A card: raised off its column's well, lifting under the pointer and while
-   its menu is open (`Card`). Its press covers the whole card, its foot's
-   chips standing over it, so the card opens wherever it is pressed but on a
-   chip. Its transform is a drag's (use-row-drag.ts), timed by the card. */
+   its menu is open (`Card`), drawn as Linear's board draws one: its first
+   line, its status's mark before its name, and a row of pills that wraps.
+   Its press covers the whole card, its chips and pills standing over it, so
+   the card opens wherever it is pressed but on one of them. Its transform
+   is a drag's (use-row-drag.ts), timed by the card. */
 .tasks-board-card {
   display: flex;
   flex-direction: column;
-  gap: var(--luke-space-6);
-  padding: var(--luke-space-8) var(--luke-space-8) var(--luke-space-6) var(--luke-space-12);
+  gap: var(--luke-space-8);
+  padding: var(--luke-space-12) var(--luke-space-8) var(--luke-space-8) var(--luke-space-12);
 }
 
 /* The card holding the keyboard, or whose menu is open, stands over its
@@ -6481,23 +6483,15 @@ ul.actor-stack {
   cursor: grabbing;
 }
 
-/* What a card's press shows, or its field while it is renamed: its first
-   line over its name. The press (`CardPress`) reaches every edge of the
-   card, under its foot's chips. */
-.tasks-board-card-face {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  gap: var(--luke-space-4);
-}
-
 /* A card's first line: its key, and at its end what waits on the reader,
-   when it last moved, and its creator's face. */
+   when it last moved, and its creator's face. It stands under the card's
+   press, so a press on it opens the card. */
 .tasks-board-card-head {
   display: flex;
   min-height: var(--luke-space-20);
   align-items: center;
   gap: var(--luke-space-6);
+  color: var(--luke-color-text-subtle);
 }
 
 .tasks-board-card-marks {
@@ -6524,6 +6518,37 @@ ul.actor-stack {
   min-width: 0;
   align-items: center;
   gap: var(--luke-space-4);
+}
+
+/* The creator's face stands over the card's press, so the pointer resting
+   on it hangs their card. */
+.tasks-board-creator {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+}
+
+/* The status's mark before the name, on the name's first line, standing
+   over the card's press as its pills do; the name wraps beside it. The
+   press holds the name alone, its reach still covering the whole card. */
+.tasks-board-card-title {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  gap: var(--luke-space-4);
+}
+
+.tasks-board-card-title > .luke-chip {
+  position: relative;
+  z-index: 1;
+  /* off-scale: centres the compact chip on the name's first line */
+  margin: calc((var(--luke-type-label-leading) - var(--luke-space-20)) / 2) 0;
+  margin-left: calc(-1 * var(--luke-space-4));
+}
+
+.tasks-board-card-title > :last-child {
+  min-width: 0;
+  flex: 1 1 auto;
 }
 
 /* Who made a card's task where its member did not by hand, Luke or an
@@ -6559,62 +6584,42 @@ ul.actor-stack {
   line-height: var(--luke-type-caption-leading);
 }
 
-/* The issues a card's task links, a tag each, in a row under its name
-   that wraps where the column is too narrow for them. It stands over the
-   card's press as the foot does, which lets the pointer through between
-   the tags. */
-.tasks-board-tags {
-  position: relative;
-  z-index: 1;
-  display: flex;
-  min-width: 0;
-  flex-wrap: wrap;
-  gap: var(--luke-space-4);
-  pointer-events: none;
-}
-
-.tasks-board-tags > * {
-  pointer-events: auto;
-}
-
-/* A card's foot: its priority's and its status's chips, which change them
-   where the card stands, its repository, and the ⋯ at its end, which shows
-   while the card is hovered, holds the keyboard, or has its menu open. It
-   stands over the card's press, which lets the pointer through between
-   them. */
+/* A card's foot: its pills, then the ⋯ at its end, which shows while the
+   card is hovered, holds the keyboard, or has its menu open, and keeps its
+   room meanwhile, so the pills wrap the same either way. It stands over the
+   card's press, which lets the pointer through between them. */
 .tasks-board-card-foot {
   position: relative;
   z-index: 1;
   display: flex;
   min-width: 0;
-  align-items: center;
+  align-items: flex-end;
   gap: var(--luke-space-4);
-  margin-left: calc(-1 * var(--luke-space-4));
   pointer-events: none;
 }
 
-.tasks-board-card-foot > * {
+/* The pills: its priority, its assignee, its repository, its agents at
+   work and their pull requests, and the issues it links, wrapping onto as
+   many lines as they take rather than running past the card's edge, as
+   Linear's do. A pill too long for a line alone, a repository's name, is
+   cut short within it. */
+.tasks-board-card-pills {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--luke-space-6);
+}
+
+.tasks-board-card-pills > *,
+.tasks-board-card-more {
   pointer-events: auto;
-}
-
-.tasks-board-repository {
-  margin-left: var(--luke-space-4);
-  color: var(--luke-color-text-subtle);
-  font-size: var(--luke-type-caption-size);
-  line-height: var(--luke-type-caption-leading);
-  pointer-events: none;
-}
-
-/* What the card's agents are doing and their pull requests stand after its
-   repository, given up last, so a long repository is cut before a mark. */
-.tasks-board-card-foot > .task-work-marks {
-  margin-left: var(--luke-space-4);
-  pointer-events: none;
 }
 
 .tasks-board-card-more {
   display: flex;
-  margin-left: auto;
+  flex: none;
 }
 
 /* With a pointer, the ⋯ comes in while the card is hovered, holds the
@@ -6935,6 +6940,18 @@ ul.actor-stack {
   height: var(--luke-space-16);
 }
 
+/* A row's creator's face, and each of its agents' and pull requests' marks
+   (`task-row-parts.tsx`), stand over the row's press in a cell that lets
+   the pointer through, so resting on one hangs its own card while a press
+   beside it still opens the task. */
+.tasks-list-creator,
+.task-work-marks > [data-carded] {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  pointer-events: auto;
+}
+
 /* Who made a row's task where its member did not by hand, Luke or an
    agent, named before their square, as a Board card names them. */
 .tasks-list-maker {
@@ -6974,6 +6991,7 @@ ul.actor-stack {
   white-space: nowrap;
 }
 
+.task-work-agents,
 .task-work-pull-request {
   display: inline-flex;
   align-items: center;
