@@ -93,6 +93,9 @@ export function MacTerminalTab({ tab }: { tab: MacTerminalStripTab }): React.JSX
   const [standing, setStanding] = useState<Standing>({ kind: "starting" });
   const { act } = useAct();
   const openLink = useOpenLink();
+  // Note that the link opener is read through a ref rather than hung on the run's effect, because it is made anew whenever the listed tasks change, and the effect would tear the terminal down and draw it again each time.
+  const opensLink = useRef(openLink);
+  opensLink.current = openLink;
   const loaded = useAtomValue(useSideBundles().terminal);
   const module = Option.getOrUndefined(AsyncResult.value(loaded));
   const [element, setElement] = useState<HTMLDivElement | null>(null);
@@ -128,7 +131,7 @@ export function MacTerminalTab({ tab }: { tab: MacTerminalStripTab }): React.JSX
       onInput: () => undefined,
       onResize: ({ cols, rows }) =>
         port.current?.postMessage({ type: MAC_TERMINAL_PORT_MESSAGE.RESIZE, cols, rows }),
-      onLink: openLink,
+      onLink: (href) => opensLink.current(href),
     });
     const mounted = handle;
     let live = true;
@@ -172,6 +175,8 @@ export function MacTerminalTab({ tab }: { tab: MacTerminalStripTab }): React.JSX
           repository,
           branch: read.branch,
           pullRequest: read.pullRequest,
+          // Note that a run asked for a pull request by its number runs that pull request's own head, not whatever branch now has its name.
+          pullRequestHead: number !== undefined,
           again,
           cols,
           rows,
@@ -188,7 +193,7 @@ export function MacTerminalTab({ tab }: { tab: MacTerminalStripTab }): React.JSX
       port.current = undefined;
       mounted.unmount();
     };
-  }, [module, element, openLink, act, agentId, repository, asked, number, presses]);
+  }, [module, element, act, agentId, repository, asked, number, presses]);
 
   const running = standing.kind === "running" || standing.kind === "stopping";
   const stop = () => {

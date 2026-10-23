@@ -22,6 +22,7 @@ import {
 import { onRegistry } from "../testing/copy-feedback.js";
 import { bundleLanded, onSideBundles } from "../testing/side-bundles.js";
 import { MacTerminalTab } from "./mac-terminal-tab.js";
+import { OpenHereProvider } from "./use-open-link.js";
 
 /**
  * Run on this Mac's tab as the developer meets it: a press reads the agent's
@@ -276,4 +277,37 @@ test("a run asked from another pull request's tab reads and runs that pull reque
   tab.post();
   await settle();
   assert.match(tab.bar(), /luke\/other-thing · this Mac · Running/u);
+});
+
+test("the tab drawn again with a new link opener keeps its run, starting the terminal over not at all", async () => {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  const registry = AtomRegistry.make();
+  // Note that the window makes its link opener anew whenever the listed tasks change, as an agent at work changes them all the time.
+  const draw = (openHere: (href: string) => boolean) =>
+    act(() =>
+      root.render(
+        onRegistry(
+          registry,
+          onSideBundles(
+            SIDE_BUNDLES,
+            createElement(
+              OpenHereProvider,
+              { value: openHere },
+              createElement(MacTerminalTab, {
+                tab: { macTerminal: AGENT, repository: "acme/app", asked: 8 },
+              }),
+            ),
+          ),
+        ),
+      ),
+    );
+  draw(() => false);
+  await settle();
+  draw(() => false);
+  await settle();
+
+  assert.equal(opens().length, 1);
 });

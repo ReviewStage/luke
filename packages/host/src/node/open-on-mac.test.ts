@@ -364,6 +364,38 @@ test(
 );
 
 test(
+  "a run asked for a pull request by its number opens that pull request's own head, not a later branch reusing its name",
+  async (t) => {
+    const { scratch, origin, push, shell, state } = await fixture(t);
+    const own = push("the pull request's own\n");
+    git(origin, ["update-ref", "refs/pull/3270/head", own]);
+    // Note that the branch is pushed on past the pull request's head, as a later pull request reusing the name would.
+    const later = push("a later pull request's\n");
+    const worktree = worktreeFolder(state, "acme/app", "luke/fix-relay");
+
+    const printed = run(
+      scratch,
+      shell,
+      openOnMacScript({
+        repository: "acme/app",
+        clone: cloneFolder(state, "acme/app"),
+        worktree,
+        branch: "luke/fix-relay",
+        pullRequest: 3270,
+        pullRequestHead: true,
+        command: "touch ran",
+        remotes: { https: origin, ssh: origin },
+      }),
+    );
+
+    assert.match(printed, /Fetching the head of pull request #3270/u);
+    assert.notEqual(later, own);
+    assert.equal(git(worktree, ["rev-parse", "HEAD"]), own);
+  },
+  GIT_DEADLINE,
+);
+
+test(
   "a branch GitHub deleted once its pull request merged opens at the pull request's last head",
   async (t) => {
     const { scratch, origin, push, shell, state } = await fixture(t);

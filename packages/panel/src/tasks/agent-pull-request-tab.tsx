@@ -2528,10 +2528,11 @@ function PullRequestTabBody({
                     )}
                     <div className="pull-request-title-actions">
                       <PreviewControl checks={landed(parts.checks)} shown={shown} />
-                      {/* Note that a fork's pull request offers no Run, because the run fetches its head by branch name from the base repository, where a branch of the same name would be another's. */}
+                      {/* Note that Run waits for the overview to say the head is the base repository's own, and a fork's pull request offers none, because a run makes its worktree on the head's branch name in the base repository's clone, where a fork's name could be another branch's. */}
                       {onRun === undefined ||
                       held === undefined ||
-                      overview?.headOwner !== undefined ? null : (
+                      overview === undefined ||
+                      overview.headOwner !== undefined ? null : (
                         <Button
                           variant={BUTTON_VARIANT.OUTLINE}
                           icon={<PlayIcon />}
