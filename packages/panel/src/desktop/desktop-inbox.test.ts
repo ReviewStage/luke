@@ -6199,40 +6199,39 @@ test("on All, every item settled and read is drawn gray, and what waits or is un
   assert.equal(rowMuted(page, "Expire after 7 days?"), false, "settled, but unread");
 });
 
-test("an answer moves no row while the list is shown, under either sort and every grouping, and the list sorts anew once the Inbox is left and come back to", async () => {
-  const groupings = ["plan", "person", "status", "newest"] as const;
-  const sorts = ["latest", "oldest"] as const;
-  for (const grouping of groupings) {
-    for (const sort of sorts) {
-      window.localStorage.setItem(SHOW_KEY, JSON.stringify("all"));
-      window.localStorage.setItem(GROUPING_KEY, JSON.stringify(grouping));
-      window.localStorage.setItem(SORT_KEY, JSON.stringify(sort));
-      const { page } = mount();
-      await settle();
-      const { answer } = gatedAnswers();
-      act(() => rowNamed(page, "Alert at 80%?").click());
-      await settle();
-      const before = placesOf(page);
+// One test per grouping and sort, each mounting the Inbox once, so a loaded shard times a
+// quarter-second mount rather than the eight of them together.
+const ANSWER_VIEWS = ["plan", "person", "status", "newest"].flatMap((grouping) =>
+  ["latest", "oldest"].map((sort) => ({ grouping, sort })),
+);
 
-      answerWithNote(page, "Use 90%");
-      await settle();
-      assert.deepEqual(placesOf(page), before, `${grouping}, ${sort}: as the answer is sent`);
-      await act(async () => answer({ item: THRESHOLD_ANSWERED, taken: true }));
-      await settle();
-      assert.deepEqual(placesOf(page), before, `${grouping}, ${sort}: once it is taken`);
-      assert.equal(rowMuted(page, "Alert at 80%?"), true);
+test.for(ANSWER_VIEWS)(
+  "an answer moves no row while the list is shown, under $grouping grouping and $sort sort, and the list sorts anew once the Inbox is left and come back to",
+  async ({ grouping, sort }) => {
+    window.localStorage.setItem(SHOW_KEY, JSON.stringify("all"));
+    window.localStorage.setItem(GROUPING_KEY, JSON.stringify(grouping));
+    window.localStorage.setItem(SORT_KEY, JSON.stringify(sort));
+    const { page } = mount();
+    await settle();
+    const { answer } = gatedAnswers();
+    act(() => rowNamed(page, "Alert at 80%?").click());
+    await settle();
+    const before = placesOf(page);
 
-      act(() => setInboxOpen(false));
-      act(() => setInboxOpen(true));
-      await settle();
-      assert.notDeepEqual(placesOf(page), before, `${grouping}, ${sort}: sorted anew`);
+    answerWithNote(page, "Use 90%");
+    await settle();
+    assert.deepEqual(placesOf(page), before, `${grouping}, ${sort}: as the answer is sent`);
+    await act(async () => answer({ item: THRESHOLD_ANSWERED, taken: true }));
+    await settle();
+    assert.deepEqual(placesOf(page), before, `${grouping}, ${sort}: once it is taken`);
+    assert.equal(rowMuted(page, "Alert at 80%?"), true);
 
-      act(() => root?.unmount());
-      root = undefined;
-      document.body.innerHTML = "";
-    }
-  }
-});
+    act(() => setInboxOpen(false));
+    act(() => setInboxOpen(true));
+    await settle();
+    assert.notDeepEqual(placesOf(page), before, `${grouping}, ${sort}: sorted anew`);
+  },
+);
 
 test("an answer the service refuses brings its item back as it was, needing you, with its box's words and why it did not go", async () => {
   const { page } = mount();
