@@ -13,6 +13,7 @@ import {
   type InboxAsk,
   type InboxItem,
   type InboxMessage,
+  type InboxResponse,
 } from "@luke/features/inbox-wire";
 import { LINK_PLACE, linkOf } from "@luke/features/luke-link";
 import { TASK_STATUS, type TaskSummary } from "@luke/features/task-wire";
@@ -21,6 +22,7 @@ import type { AppInboxTasklessItem } from "@luke/host/app-state";
 import { test } from "vitest";
 import {
   ANSWER_TONE,
+  acknowledgedOnOpen,
   awaitsNod,
   CODE_READ,
   codeNotice,
@@ -59,23 +61,17 @@ import {
   inboxSettledStanding,
   inboxSettledWords,
   inboxSteps,
-  inboxThreadOf,
   inboxThreadSend,
   isDone,
   listedItems,
   NO_PLACES,
   nextNeedingYou,
-  numberedPick,
   openItems,
-  proposedOptions,
-  SETTLED_BY,
   sentStamp,
-  settlementOf,
   shownTicks,
   taskHolder,
   tasklessGroups,
   withChoice,
-  withDecision,
   withDoPress,
   withStep,
   withValue,
@@ -84,7 +80,7 @@ import {
 const AGENT = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
 const UNLISTED = "9d2b7b5f-4e3f-4e9c-9c77-7a5d8b3f4c32";
 
-/** An item of the agent's, open and asking words, as the service answers one. */
+/** An item of the agent's, open, as the service answers one. */
 function item(overrides: Partial<InboxItem> & Pick<InboxItem, "id">): InboxItem {
   return {
     agentId: AGENT,
@@ -92,8 +88,6 @@ function item(overrides: Partial<InboxItem> & Pick<InboxItem, "id">): InboxItem 
     revision: 1,
     version: INBOX_WIRE_VERSION,
     title: "What should the email say?",
-    blocks: [],
-    response: { type: INBOX_RESPONSE.TEXT },
     needsReply: true,
     status: INBOX_STATUS.OPEN,
     postedAt: 1_000,
@@ -104,35 +98,37 @@ function item(overrides: Partial<InboxItem> & Pick<InboxItem, "id">): InboxItem 
 
 const DANA = { userId: "user-dana", name: "Dana Reyes" };
 
-const QUEUE = item({
-  id: "a1b2c3d4-0000-4000-8000-000000000001",
-  response: {
-    type: INBOX_RESPONSE.CHOICE,
-    options: [{ label: "Postgres" }, { label: "Redis" }],
-  },
-});
+/** A chat ask's choice of one, as its version 4 response asks it. */
+const QUEUE: InboxResponse = {
+  type: INBOX_RESPONSE.CHOICE,
+  options: [{ label: "Postgres" }, { label: "Redis" }],
+};
 
-const CHANNELS = item({
-  id: "a1b2c3d4-0000-4000-8000-000000000002",
-  response: {
-    type: INBOX_RESPONSE.CHOICE,
-    options: [{ label: "Email" }, { label: "Slack" }, { label: "SMS" }],
-    multiple: true,
-  },
-});
+/** A chat ask's choice of several. */
+const CHANNELS: InboxResponse = {
+  type: INBOX_RESPONSE.CHOICE,
+  options: [{ label: "Email" }, { label: "Slack" }, { label: "SMS" }],
+  multiple: true,
+};
 
-const SMTP = item({
-  id: "a1b2c3d4-0000-4000-8000-000000000003",
-  response: {
-    type: INBOX_RESPONSE.FORM,
-    fields: [
-      { type: INBOX_FIELD.TEXT, label: "Host", required: true },
-      { type: INBOX_FIELD.NUMBER, label: "Port" },
-      { type: INBOX_FIELD.SELECT, label: "Security", options: ["TLS", "STARTTLS"] },
-      { type: INBOX_FIELD.BOOLEAN, label: "Verify certificate" },
-    ],
-  },
-});
+/** A chat ask's form. */
+const SMTP: InboxResponse = {
+  type: INBOX_RESPONSE.FORM,
+  fields: [
+    { type: INBOX_FIELD.TEXT, label: "Host", required: true },
+    { type: INBOX_FIELD.NUMBER, label: "Port" },
+    { type: INBOX_FIELD.SELECT, label: "Security", options: ["TLS", "STARTTLS"] },
+    { type: INBOX_FIELD.BOOLEAN, label: "Verify certificate" },
+  ],
+};
+
+/** A chat ask asking for words. */
+const QUESTION: InboxResponse = { type: INBOX_RESPONSE.TEXT };
+
+/** A draft holding an approval's or a to-do's decision, as its card holds it: its one pick, by the reply's kind. */
+function decided(reply: string): InboxDraft {
+  return { ...EMPTY_INBOX_DRAFT, choices: [reply] };
+}
 
 test("the board holds every item the plan's inbox holds, an agent the window has not listed yet's too: what waits the oldest posted first, what is settled the latest changed first", () => {
   const board = inboxBoard([
@@ -213,13 +209,10 @@ test("a form is answered by its fields in the form's own order whatever order th
     withValue(draft, "Port", undefined).values.map((each) => each.label),
     ["Security", "Host", "Verify certificate"],
   );
-  const consent = item({
-    id: "consent",
-    response: {
-      type: INBOX_RESPONSE.FORM,
-      fields: [{ type: INBOX_FIELD.BOOLEAN, label: "Keep the old route?", required: true }],
-    },
-  });
+  const consent: InboxResponse = {
+    type: INBOX_RESPONSE.FORM,
+    fields: [{ type: INBOX_FIELD.BOOLEAN, label: "Keep the old route?", required: true }],
+  };
   assert.deepEqual(inboxReply(consent, EMPTY_INBOX_DRAFT), {
     reply: INBOX_REPLY.SUBMITTED,
     values: [{ label: "Keep the old route?", value: false }],
@@ -227,17 +220,14 @@ test("a form is answered by its fields in the form's own order whatever order th
 });
 
 test("a form filled in part sends what was filled, a required field left empty absent from its values, as does one given only the developer's words or files; one given nothing, a switch left alone filling nothing, sends nothing", () => {
-  const settings = item({
-    id: "settings",
-    response: {
-      type: INBOX_RESPONSE.FORM,
-      fields: [
-        { type: INBOX_FIELD.TEXT, label: "Host", required: true },
-        { type: INBOX_FIELD.NUMBER, label: "Port", required: true },
-        { type: INBOX_FIELD.BOOLEAN, label: "Verify certificate" },
-      ],
-    },
-  });
+  const settings: InboxResponse = {
+    type: INBOX_RESPONSE.FORM,
+    fields: [
+      { type: INBOX_FIELD.TEXT, label: "Host", required: true },
+      { type: INBOX_FIELD.NUMBER, label: "Port", required: true },
+      { type: INBOX_FIELD.BOOLEAN, label: "Verify certificate" },
+    ],
+  };
   assert.equal(inboxReply(settings, EMPTY_INBOX_DRAFT), undefined);
   assert.equal(inboxReply(settings, withValue(EMPTY_INBOX_DRAFT, "Host", "  ")), undefined);
   assert.deepEqual(inboxReply(settings, withValue(EMPTY_INBOX_DRAFT, "Port", 587)), {
@@ -296,18 +286,15 @@ test("what an answer lacks follows what it asks: a choice its pick, unless the d
   const files = [{ name: "trace.txt", mediaType: "text/plain", data: btoa("boom\n") }] as const;
   assert.equal(inboxMissing(QUEUE, { ...EMPTY_INBOX_DRAFT, attachments: files }), undefined);
 
-  const rollout = item({
-    id: "rollout",
-    response: {
-      type: INBOX_RESPONSE.FORM,
-      fields: [
-        { type: INBOX_FIELD.TEXT, label: "Branch prefix" },
-        { type: INBOX_FIELD.SELECT, label: "Effort", required: true, options: ["high", "xhigh"] },
-        { type: INBOX_FIELD.TEXT, label: "Reviewer", required: true },
-        { type: INBOX_FIELD.BOOLEAN, label: "Post in #eng", required: true },
-      ],
-    },
-  });
+  const rollout: InboxResponse = {
+    type: INBOX_RESPONSE.FORM,
+    fields: [
+      { type: INBOX_FIELD.TEXT, label: "Branch prefix" },
+      { type: INBOX_FIELD.SELECT, label: "Effort", required: true, options: ["high", "xhigh"] },
+      { type: INBOX_FIELD.TEXT, label: "Reviewer", required: true },
+      { type: INBOX_FIELD.BOOLEAN, label: "Post in #eng", required: true },
+    ],
+  };
   assert.deepEqual(inboxMissing(rollout, EMPTY_INBOX_DRAFT), {
     kind: INBOX_MISSING.FIELD,
     label: "Effort",
@@ -329,11 +316,10 @@ test("what an answer lacks follows what it asks: a choice its pick, unless the d
     "a yes-or-no left alone is a no",
   );
 
-  const question = item({ id: "question" });
-  assert.deepEqual(inboxMissing(question, { ...EMPTY_INBOX_DRAFT, note: " " }), {
+  assert.deepEqual(inboxMissing(QUESTION, { ...EMPTY_INBOX_DRAFT, note: " " }), {
     kind: INBOX_MISSING.WORDS,
   });
-  assert.equal(inboxMissing(question, { ...EMPTY_INBOX_DRAFT, note: "Hello" }), undefined);
+  assert.equal(inboxMissing(QUESTION, { ...EMPTY_INBOX_DRAFT, note: "Hello" }), undefined);
 });
 
 test("an option picked by its number is the one pick of a choice of one, picked again it stays; of a choice of several it joins the picks, and picked again it leaves them", () => {
@@ -352,176 +338,59 @@ test("an option picked by its number is the one pick of a choice of one, picked 
 });
 
 test("an approval and a task are answered by the decision the card holds, or a chat ask's press, an item asking nothing by its nod with or without a note, and words by words", () => {
-  const task = item({ id: "task", response: { type: INBOX_RESPONSE.TODO } });
+  const task: InboxResponse = { type: INBOX_RESPONSE.TODO };
   assert.equal(inboxReply(task, { ...EMPTY_INBOX_DRAFT, note: "done it" }), undefined);
-  assert.deepEqual(inboxReply(task, withDecision(EMPTY_INBOX_DRAFT, INBOX_REPLY.NOT_DONE)), {
+  assert.deepEqual(inboxReply(task, decided(INBOX_REPLY.NOT_DONE)), {
     reply: INBOX_REPLY.NOT_DONE,
   });
   assert.deepEqual(inboxReply(task, EMPTY_INBOX_DRAFT, INBOX_REPLY.DONE), {
     reply: INBOX_REPLY.DONE,
   });
   assert.equal(
-    inboxReply(task, withDecision(EMPTY_INBOX_DRAFT, INBOX_REPLY.APPROVED)),
+    inboxReply(task, decided(INBOX_REPLY.APPROVED)),
     undefined,
     "a task takes no approval",
   );
-  const step = item({ id: "step", response: { type: INBOX_RESPONSE.APPROVAL } });
+  const step: InboxResponse = { type: INBOX_RESPONSE.APPROVAL };
   assert.deepEqual(
     inboxReply(step, {
-      ...withDecision(EMPTY_INBOX_DRAFT, INBOX_REPLY.DECLINED),
+      ...decided(INBOX_REPLY.DECLINED),
       note: " Not yet. ",
     }),
     { reply: INBOX_REPLY.DECLINED, note: "Not yet." },
   );
-  const fyi = item({ id: "fyi", response: { type: INBOX_RESPONSE.NONE } });
+  const fyi: InboxResponse = { type: INBOX_RESPONSE.NONE };
   assert.deepEqual(inboxReply(fyi, EMPTY_INBOX_DRAFT), { reply: INBOX_REPLY.ACKNOWLEDGED });
   assert.deepEqual(inboxReply(fyi, { ...EMPTY_INBOX_DRAFT, note: "ok" }), {
     reply: INBOX_REPLY.ACKNOWLEDGED,
     note: "ok",
   });
-  const question = item({ id: "question" });
-  assert.equal(inboxReply(question, { ...EMPTY_INBOX_DRAFT, note: "  " }), undefined);
-  assert.deepEqual(inboxReply(question, { ...EMPTY_INBOX_DRAFT, note: "Hello" }), {
+  assert.equal(inboxReply(QUESTION, { ...EMPTY_INBOX_DRAFT, note: "  " }), undefined);
+  assert.deepEqual(inboxReply(QUESTION, { ...EMPTY_INBOX_DRAFT, note: "Hello" }), {
     reply: INBOX_REPLY.ANSWERED,
     note: "Hello",
   });
 });
 
-test("an approval or a to-do lacks its decision until one is picked, a note lacks nothing, and a number key picks an approval's or a to-do's decision, the one going ahead first, as it picks a choice's option", () => {
-  const step = item({ id: "step", response: { type: INBOX_RESPONSE.APPROVAL } });
-  const task = item({ id: "task", response: { type: INBOX_RESPONSE.TODO } });
+test("an approval or a to-do lacks its decision until one is picked, and a note lacks nothing", () => {
+  const step: InboxResponse = { type: INBOX_RESPONSE.APPROVAL };
+  const task: InboxResponse = { type: INBOX_RESPONSE.TODO };
   assert.deepEqual(inboxMissing(step, EMPTY_INBOX_DRAFT), { kind: INBOX_MISSING.OPTION });
   assert.deepEqual(inboxMissing(task, { ...EMPTY_INBOX_DRAFT, note: "Did half." }), {
     kind: INBOX_MISSING.OPTION,
   });
-  assert.equal(inboxMissing(task, withDecision(EMPTY_INBOX_DRAFT, INBOX_REPLY.DONE)), undefined);
-  const fyi = item({ id: "fyi", response: { type: INBOX_RESPONSE.NONE } });
-  assert.equal(inboxMissing(fyi, EMPTY_INBOX_DRAFT), undefined);
-
-  const decided = (picked: InboxDraft | undefined) =>
-    picked === undefined ? undefined : inboxReply(step, picked)?.reply;
-  assert.equal(decided(numberedPick(step, EMPTY_INBOX_DRAFT, 1)), INBOX_REPLY.APPROVED);
-  assert.equal(decided(numberedPick(step, EMPTY_INBOX_DRAFT, 2)), INBOX_REPLY.DECLINED);
-  assert.equal(numberedPick(step, EMPTY_INBOX_DRAFT, 3), undefined);
-  assert.equal(
-    inboxReply(task, numberedPick(task, EMPTY_INBOX_DRAFT, 2) ?? EMPTY_INBOX_DRAFT)?.reply,
-    INBOX_REPLY.NOT_DONE,
-  );
-  assert.deepEqual(numberedPick(QUEUE, EMPTY_INBOX_DRAFT, 2)?.choices, ["Redis"]);
-  assert.equal(numberedPick(fyi, EMPTY_INBOX_DRAFT, 1), undefined);
+  assert.equal(inboxMissing(task, decided(INBOX_REPLY.DONE)), undefined);
+  assert.equal(inboxMissing({ type: INBOX_RESPONSE.NONE }, EMPTY_INBOX_DRAFT), undefined);
 });
 
 test("files attached alone answer an item in the developer's own words, and travel apart from the answer", () => {
   const files = [{ name: "trace.txt", mediaType: "text/plain", data: btoa("boom\n") }] as const;
-  assert.deepEqual(
-    inboxReply(item({ id: "question" }), { ...EMPTY_INBOX_DRAFT, attachments: files }),
-    {
-      reply: INBOX_REPLY.ANSWERED,
-    },
-  );
+  assert.deepEqual(inboxReply(QUESTION, { ...EMPTY_INBOX_DRAFT, attachments: files }), {
+    reply: INBOX_REPLY.ANSWERED,
+  });
   assert.deepEqual(inboxReply(QUEUE, { ...EMPTY_INBOX_DRAFT, attachments: files }), {
     reply: INBOX_REPLY.ANSWERED,
   });
-});
-
-test("a settled item says what its answerer did: the developer's pick, a form's values a line each, and their note, or the agent taking it back and why; an open one is not settled", () => {
-  assert.equal(settlementOf(QUEUE), undefined);
-  assert.deepEqual(
-    settlementOf(
-      item({
-        id: "a",
-        status: INBOX_STATUS.ANSWERED,
-        answeredBy: DANA,
-        answer: { reply: INBOX_REPLY.CHOSE, choices: ["Redis", "Postgres"], note: "Fine." },
-      }),
-    ),
-    { by: SETTLED_BY.DEVELOPER, did: "chose Redis, Postgres", note: "Fine." },
-  );
-  assert.deepEqual(
-    settlementOf(
-      item({
-        id: "f",
-        status: INBOX_STATUS.ANSWERED,
-        answeredBy: DANA,
-        answer: {
-          reply: INBOX_REPLY.SUBMITTED,
-          values: [
-            { label: "Port", value: 587 },
-            { label: "Verify certificate", value: true },
-          ],
-        },
-      }),
-    ),
-    {
-      by: SETTLED_BY.DEVELOPER,
-      did: "filled it in",
-      values: "Port: 587\nVerify certificate: yes",
-    },
-  );
-  assert.deepEqual(
-    settlementOf(
-      item({
-        id: "n",
-        status: INBOX_STATUS.ANSWERED,
-        answeredBy: DANA,
-        answer: { reply: INBOX_REPLY.ACKNOWLEDGED },
-      }),
-    ),
-    { by: SETTLED_BY.DEVELOPER, did: "acknowledged it" },
-  );
-  assert.deepEqual(
-    settlementOf(item({ id: "b", status: INBOX_STATUS.CLOSED, closedReason: "Found it." })),
-    { by: SETTLED_BY.AGENT, lead: "Withdrawn by the agent", words: "Found it." },
-  );
-});
-
-test("a settled choice keeps every option the agent offered with the developer's pick marked, one answered in their own words marks none, a settled approval keeps both presses with the one pressed marked, and words or a form, or an item still open, offer nothing to mark", () => {
-  const offered = item({
-    id: "q",
-    status: INBOX_STATUS.ANSWERED,
-    response: {
-      type: INBOX_RESPONSE.CHOICE,
-      options: [{ label: "Postgres", detail: "Already deployed." }, { label: "Redis" }],
-      recommended: "Postgres",
-    },
-    answer: { reply: INBOX_REPLY.CHOSE, choices: ["Redis"] },
-  });
-  assert.deepEqual(proposedOptions(offered), [
-    { label: "Postgres", detail: "Already deployed.", recommended: true, picked: false },
-    { label: "Redis", recommended: false, picked: true },
-  ]);
-  assert.deepEqual(
-    proposedOptions({ ...offered, answer: { reply: INBOX_REPLY.ANSWERED, note: "Use SQS." } }).map(
-      (option) => option.picked,
-    ),
-    [false, false],
-  );
-  const approval = item({
-    id: "ship",
-    status: INBOX_STATUS.ANSWERED,
-    response: { type: INBOX_RESPONSE.APPROVAL },
-    answer: { reply: INBOX_REPLY.APPROVED, note: "After 6pm." },
-  });
-  assert.deepEqual(proposedOptions(approval), [
-    { label: "Decline", recommended: false, picked: false },
-    { label: "Approve", recommended: false, picked: true },
-  ]);
-  assert.deepEqual(
-    proposedOptions(
-      item({ id: "withdrawn", status: INBOX_STATUS.CLOSED, response: approval.response }),
-    ).map((option) => option.picked),
-    [false, false],
-    "taken back, nothing was pressed",
-  );
-  assert.deepEqual(proposedOptions({ ...offered, status: INBOX_STATUS.OPEN }), []);
-  assert.deepEqual(
-    proposedOptions({
-      ...SMTP,
-      status: INBOX_STATUS.ANSWERED,
-      answer: { reply: INBOX_REPLY.SUBMITTED },
-    }),
-    [],
-  );
 });
 
 /** A task of the account's, holding inbox items. */
@@ -1132,9 +1001,8 @@ test("grouped by person, a folded person's items are stepped past but for the on
 });
 
 test("a note past the wire's bound is no answer, so the card offers no send for it", () => {
-  const question = item({ id: "question" });
   const long = "x".repeat(INBOX_BOUNDS.MAX_NOTE_CHARS + 1);
-  assert.equal(inboxReply(question, { ...EMPTY_INBOX_DRAFT, note: long }), undefined);
+  assert.equal(inboxReply(QUESTION, { ...EMPTY_INBOX_DRAFT, note: long }), undefined);
   assert.equal(
     inboxReply(QUEUE, { ...EMPTY_INBOX_DRAFT, choices: ["Redis"], note: long }),
     undefined,
@@ -1277,152 +1145,27 @@ function message(
   };
 }
 
-test("an open item nobody has written on previews what it asks: a choice by its options and how many are recommended, a form by its fields, and anything else by its kind and the first words of its context", () => {
-  const context = [
-    { type: INBOX_BLOCK.MARKDOWN, text: "Add the token under **Production**." },
-  ] as const;
-  const previews = [
-    {
-      ...QUEUE,
-      response: {
-        type: INBOX_RESPONSE.CHOICE,
-        options: [{ label: "Postgres" }, { label: "Redis" }, { label: "SQS" }],
-        recommended: "Postgres",
-      },
-    },
-    {
-      ...QUEUE,
-      response: {
-        type: INBOX_RESPONSE.CHOICE,
-        options: [{ label: "Postgres" }, { label: "Redis" }, { label: "SQS" }],
-        multiple: true,
-        recommended: "Postgres",
-        recommendations: ["Postgres", "SQS"],
-      },
-    },
-    QUEUE,
-    {
-      ...QUEUE,
-      response: {
-        type: INBOX_RESPONSE.CHOICE,
-        options: [{ label: "Postgres" }, { label: "Redis" }],
-        recommended: "Kafka",
-      },
-    },
-    SMTP,
-    item({ id: "c1", response: { type: INBOX_RESPONSE.TODO }, blocks: context }),
-    item({ id: "c2", response: { type: INBOX_RESPONSE.APPROVAL } }),
-    item({ id: "c3", response: { type: INBOX_RESPONSE.TEXT }, blocks: context }),
-    item({ id: "c4", response: { type: INBOX_RESPONSE.NONE } }),
-  ].map((each) => inboxPreview(each, previewName));
-  assert.deepEqual(previews, [
-    "Choice · 3 options, one recommended",
-    "Choice · 3 options, 2 recommended",
-    "Choice · 2 options",
-    "Choice · 2 options",
-    "Form · 4 fields",
-    "To-do · Add the token under Production.",
-    "Approval",
-    "Question · Add the token under Production.",
-    "Note",
-  ]);
-});
-
-test("an answered item previews its answer after who gave it: the options picked, their own words, or what they did, each with their note, and files alone where they wrote nothing", () => {
-  const answered = (answer: NonNullable<InboxItem["answer"]>, extra: Partial<InboxItem> = {}) =>
+test("a thread's latest message by a member is its row's preview, led by who wrote it, You for the reader, a message of files alone saying so", () => {
+  const said = message({
+    text: "Backfilled 41,208 rows; staging totals match",
+    createdAt: 1_000,
+    author: INBOX_MESSAGE_AUTHOR.AGENT,
+  });
+  const open = (last: InboxMessage) => item({ id: "g1", thread: [said, last] });
+  assert.equal(
     inboxPreview(
-      item({ id: "d1", status: INBOX_STATUS.ANSWERED, answer, answeredBy: YOU, ...extra }),
+      open(message({ text: "Is 80% too eager?", createdAt: 2_000, member: CHARLES })),
       previewName,
-    );
-  assert.equal(
-    answered({ reply: INBOX_REPLY.CHOSE, choices: ["Per 1,000, rounded up"] }),
-    "You: Per 1,000, rounded up",
-  );
-  assert.equal(
-    answered(
-      { reply: INBOX_REPLY.CHOSE, choices: ["Email", "Slack"], note: "Not **SMS**." },
-      { answeredBy: CHARLES },
     ),
-    "Charles Pan: Email, Slack · Not SMS.",
-  );
-  assert.equal(
-    answered({ reply: INBOX_REPLY.ANSWERED, note: "Admins and\nwhoever sent it" }),
-    "You: Admins and whoever sent it",
-  );
-  assert.equal(answered({ reply: INBOX_REPLY.APPROVED }), "You: Approved");
-  assert.equal(
-    answered({ reply: INBOX_REPLY.DECLINED, note: "Wait for Monday" }),
-    "You: Declined · Wait for Monday",
-  );
-  assert.equal(answered({ reply: INBOX_REPLY.DONE }), "You: Marked it done");
-  const file = {
-    attachmentId: "e1b2c3d4-0000-4000-8000-000000000001",
-    name: "a.png",
-    mediaType: "image/png",
-  };
-  assert.equal(
-    answered({ reply: INBOX_REPLY.ANSWERED }, { answerFiles: [file, file] }),
-    "You: Sent 2 files",
-  );
-  const { answeredBy: _by, ...unnamed } = item({
-    id: "d2",
-    status: INBOX_STATUS.ANSWERED,
-    answer: { reply: INBOX_REPLY.APPROVED },
-    answeredBy: YOU,
-  });
-  assert.equal(inboxPreview(unnamed, previewName), "Someone: Approved");
-});
-
-test("an item its agent took back previews that it was withdrawn and why", () => {
-  const withdrawn = item({
-    id: "f1",
-    status: INBOX_STATUS.CLOSED,
-    closedReason: "the plan settled on 5",
-  });
-  assert.equal(inboxPreview(withdrawn, previewName), "Withdrawn: the plan settled on 5");
-});
-
-test("an item a member closed without an answer previews who closed it, You for the reader, and never reads as withdrawn by its agent", () => {
-  const closed = item({ id: "f2", status: INBOX_STATUS.CLOSED, closedBy: YOU });
-  assert.equal(inboxPreview(closed, previewName), "You: Resolved without an answer");
-  assert.equal(
-    inboxPreview({ ...closed, closedBy: CHARLES }, previewName),
-    "Charles Pan: Resolved without an answer",
-  );
-  const { closedBy: _by, ...unnamed } = closed;
-  assert.equal(
-    inboxPreview(unnamed, previewName),
-    "Someone: Resolved without an answer",
-    "a closed item without the agent's reason is a member's, though their account is gone",
-  );
-});
-
-test("the latest message on an item's thread is its preview, open or settled, led by the agent, You, or the teammate who wrote it, a message of files alone saying so; a settlement after the last message is the preview instead", () => {
-  const thread = [
-    message({ text: "Is 80% too eager?", createdAt: 2_000, member: CHARLES }),
-    message({
-      text: "Backfilled 41,208 rows; staging totals match",
-      createdAt: 3_000,
-      author: INBOX_MESSAGE_AUTHOR.AGENT,
-    }),
-  ];
-  const open = item({ id: "g1", response: { type: INBOX_RESPONSE.APPROVAL }, messages: thread });
-  assert.equal(
-    inboxPreview(open, previewName),
-    "Agent: Backfilled 41,208 rows; staging totals match",
-  );
-  assert.equal(
-    inboxPreview({ ...open, messages: thread.slice(0, 1) }, previewName),
     "Charles Pan: Is 80% too eager?",
   );
-  const mine = message({ text: "Go ahead.", createdAt: 4_000, member: YOU });
   assert.equal(
-    inboxPreview({ ...open, messages: [...thread, mine] }, previewName),
+    inboxPreview(open(message({ text: "Go ahead.", createdAt: 2_000, member: YOU })), previewName),
     "You: Go ahead.",
   );
   const filesOnly = message({
     text: "",
-    createdAt: 4_000,
+    createdAt: 2_000,
     member: CHARLES,
     files: [
       {
@@ -1432,89 +1175,49 @@ test("the latest message on an item's thread is its preview, open or settled, le
       },
     ],
   });
-  assert.equal(
-    inboxPreview({ ...open, messages: [filesOnly] }, previewName),
-    "Charles Pan: Sent a file",
-  );
-  const settledAfter = {
-    ...open,
-    status: INBOX_STATUS.ANSWERED,
-    answer: { reply: INBOX_REPLY.APPROVED },
-    answeredBy: YOU,
-    settledAt: 5_000,
-  };
-  assert.equal(inboxPreview(settledAfter, previewName), "You: Approved");
-  assert.equal(
-    inboxPreview({ ...settledAfter, settledAt: 2_500 }, previewName),
-    "Agent: Backfilled 41,208 rows; staging totals match",
-  );
+  assert.equal(inboxPreview(open(filesOnly), previewName), "Charles Pan: Sent a file");
 });
 
-test("an item's media are its pictures and the pages it names, by any link outside code, in its blocks' order, each page of each task once, then its answer's and its thread's, a file that is no picture left out, and four at most", () => {
+test("an item's media are the pages its thread names, by any link outside code, each page of each task once, then the pictures among a message's files, a file that is no picture left out, and four at most", () => {
   const task = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
-  const pageLink = (pageId: string) =>
-    linkOf({ kind: LINK_PLACE.PAGE, planId: task, pageId }, "acme");
+  const elsewhere = "9d2b7b5a-4e3f-4e9c-9c77-7a5d8b3f4c32";
+  const pageLink = (pageId: string, planId = task) =>
+    linkOf({ kind: LINK_PLACE.PAGE, planId, pageId }, "acme");
   const funnel = "3c4d5e6f-0000-4000-8000-000000000001";
   const pricing = "3c4d5e6f-0000-4000-8000-000000000002";
-  const shot = "5e8d2c1a-7b3f-4a6e-9c2d-1f4b6a8e3c70";
-  const answered = "5e8d2c1a-7b3f-4a6e-9c2d-1f4b6a8e3c71";
+  const hidden = "3c4d5e6f-0000-4000-8000-000000000004";
   const sent = "5e8d2c1a-7b3f-4a6e-9c2d-1f4b6a8e3c72";
-  const carrying = item({
+  const cut = "5e8d2c1a-7b3f-4a6e-9c2d-1f4b6a8e3c73";
+  const threaded = item({
     id: "m1",
-    blocks: [
-      { type: INBOX_BLOCK.MARKDOWN, text: `See [@Invite funnel](${pageLink(funnel)}) first.` },
-      { type: INBOX_BLOCK.IMAGE, attachmentId: shot, alt: "The chart" },
-      { type: INBOX_BLOCK.LINK, url: pageLink(funnel), label: "Invite funnel again" },
-      { type: INBOX_BLOCK.LINK, url: "https://github.com/acme/relay/pull/42", label: "#42" },
-    ],
-    answerFiles: [
-      { attachmentId: answered, name: "notes.pdf", mediaType: "application/pdf" },
-      { attachmentId: answered, name: "after.png", mediaType: "image/png" },
+    thread: [
+      message({
+        text: `See [@Invite funnel](${pageLink(funnel)}) first, not \`${pageLink(hidden)}\`, and [its twin](${pageLink(funnel, elsewhere)}).`,
+        createdAt: 1_000,
+        author: INBOX_MESSAGE_AUTHOR.AGENT,
+      }),
+      message({
+        text: `Priced it on [the pricing page](${pageLink(pricing)}), then ${pageLink(funnel)} again.`,
+        createdAt: 2_000,
+        member: YOU,
+        files: [
+          { attachmentId: sent, name: "notes.pdf", mediaType: "application/pdf" },
+          { attachmentId: sent, name: "before.webp", mediaType: "image/webp" },
+          { attachmentId: cut, name: "after.png", mediaType: "image/png" },
+        ],
+      }),
     ],
   });
-  assert.deepEqual(inboxMedia(carrying), [
-    { kind: INBOX_MEDIA.PAGE, place: { taskId: task }, pageId: funnel },
-    { kind: INBOX_MEDIA.IMAGE, attachmentId: shot },
-    { kind: INBOX_MEDIA.IMAGE, attachmentId: answered },
-  ]);
-  const threaded = {
-    ...carrying,
-    messages: [
-      {
-        id: "n1",
-        author: INBOX_MESSAGE_AUTHOR.AGENT,
-        text: `Priced it on [the pricing page](${pageLink(pricing)}), then ${pageLink(funnel)} again.`,
-        files: [{ attachmentId: sent, name: "before.webp", mediaType: "image/webp" }],
-        createdAt: 2_000,
-      },
-    ],
-  } satisfies InboxItem;
   assert.deepEqual(inboxMedia(threaded), [
     { kind: INBOX_MEDIA.PAGE, place: { taskId: task }, pageId: funnel },
-    { kind: INBOX_MEDIA.IMAGE, attachmentId: shot },
-    { kind: INBOX_MEDIA.IMAGE, attachmentId: answered },
-    { kind: INBOX_MEDIA.PAGE, place: { taskId: task }, pageId: pricing },
-  ]);
-  const elsewhere = "9d2b7b5a-4e3f-4e9c-9c77-7a5d8b3f4c32";
-  const twoTasks = item({
-    id: "m3",
-    blocks: [
-      { type: INBOX_BLOCK.MARKDOWN, text: `${pageLink(funnel)} and \`${pageLink(pricing)}\`` },
-      {
-        type: INBOX_BLOCK.LINK,
-        url: linkOf({ kind: LINK_PLACE.PAGE, planId: elsewhere, pageId: funnel }, "acme"),
-        label: "Its twin",
-      },
-    ],
-  });
-  assert.deepEqual(inboxMedia(twoTasks), [
-    { kind: INBOX_MEDIA.PAGE, place: { taskId: task }, pageId: funnel },
     { kind: INBOX_MEDIA.PAGE, place: { taskId: elsewhere }, pageId: funnel },
+    { kind: INBOX_MEDIA.PAGE, place: { taskId: task }, pageId: pricing },
+    { kind: INBOX_MEDIA.IMAGE, attachmentId: sent },
   ]);
   assert.deepEqual(inboxMedia(item({ id: "m2" })), []);
 });
 
-test("an item's media take the page of an agent with no task as they take a task's, by its place, each page of each place once, in a thread's words too", () => {
+test("an item's media take the page of an agent with no task as they take a task's, by its place, each page of each place once", () => {
   const agent = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
   const task = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
   const ledger = "3c4d5e6f-0000-4000-8000-000000000003";
@@ -1522,28 +1225,18 @@ test("an item's media take the page of an agent with no task as they take a task
   const taskLink = linkOf({ kind: LINK_PLACE.PAGE, planId: task, pageId: ledger }, "acme");
   const carrying = item({
     id: "m4",
-    blocks: [
-      { type: INBOX_BLOCK.MARKDOWN, text: `[@Flake ledger](${agentLink}) and ${taskLink}` },
-      { type: INBOX_BLOCK.LINK, url: agentLink, label: "Ledger again" },
+    thread: [
+      {
+        id: "n2",
+        author: INBOX_MESSAGE_AUTHOR.AGENT,
+        text: `[@Flake ledger](${agentLink}) and ${taskLink}, the ledger again: ${agentLink}`,
+        createdAt: 1_000,
+      },
     ],
   });
   assert.deepEqual(inboxMedia(carrying), [
     { kind: INBOX_MEDIA.PAGE, place: { agentId: agent }, pageId: ledger },
     { kind: INBOX_MEDIA.PAGE, place: { taskId: task }, pageId: ledger },
-  ]);
-  const threaded = {
-    ...item({ id: "m5" }),
-    thread: [
-      {
-        id: "n2",
-        author: INBOX_MESSAGE_AUTHOR.AGENT,
-        text: `Here: ${agentLink} and again ${agentLink}`,
-        createdAt: 1_000,
-      },
-    ],
-  } satisfies InboxItem;
-  assert.deepEqual(inboxMedia(threaded), [
-    { kind: INBOX_MEDIA.PAGE, place: { agentId: agent }, pageId: ledger },
   ]);
 });
 
@@ -1559,26 +1252,6 @@ function asking(ask: InboxAsk, id = "b1b2c3d4-0000-4000-8000-000000000001"): Inb
 }
 
 const ASKING_ID = "b1b2c3d4-0000-4000-8000-000000000001";
-
-test("an item is drawn as its thread where the thread asks, or where the agent's note opens it with nothing in the item's blocks; one from before version 5, its question in its blocks, is drawn as it was", () => {
-  const plain: InboxMessage = {
-    id: "b1b2c3d4-0000-4000-8000-000000000009",
-    author: INBOX_MESSAGE_AUTHOR.MEMBER,
-    member: DANA,
-    text: "Hm.",
-    createdAt: 2_000,
-  };
-  const note: InboxMessage = { ...plain, author: INBOX_MESSAGE_AUTHOR.AGENT, text: "Shipped." };
-  const asked = asking({ type: INBOX_ASK.ANSWER });
-  const words = [{ type: INBOX_BLOCK.MARKDOWN, text: "What should the email say?" }] as const;
-
-  assert.deepEqual(inboxThreadOf(item({ id: QUEUE.id, thread: [asked, plain] })), [asked, plain]);
-  assert.deepEqual(inboxThreadOf(item({ id: QUEUE.id, thread: [note] })), [note]);
-  assert.equal(inboxThreadOf(item({ id: QUEUE.id, blocks: words, thread: [note] })), undefined);
-  assert.equal(inboxThreadOf(item({ id: QUEUE.id, blocks: words, thread: [plain] })), undefined);
-  assert.equal(inboxThreadOf(item({ id: QUEUE.id, thread: [plain] })), undefined);
-  assert.equal(inboxThreadOf(item({ id: QUEUE.id })), undefined);
-});
 
 test("a reply on a thread is plain unless an answer is attached: a pick, a press, a field filled, or, to an ask of words alone, its words or files; an attached answer the ask would refuse sends nothing", () => {
   const pick: InboxAsk = { type: INBOX_ASK.DECIDE, options: [{ label: "A" }, { label: "B" }] };
@@ -1739,14 +1412,7 @@ test("steps ticked with neither press go with the reply as an answer deciding no
   );
 });
 
-test("an older to-do's single item ticked is its Mark done, and let go decides nothing", () => {
-  const task = item({ id: "task", response: { type: INBOX_RESPONSE.TODO } });
-  const ticked = numberedPick(task, EMPTY_INBOX_DRAFT, 1) ?? EMPTY_INBOX_DRAFT;
-  assert.deepEqual(inboxReply(task, ticked), { reply: INBOX_REPLY.DONE });
-  assert.equal(inboxReply(task, { ...ticked, choices: [] }), undefined);
-});
-
-test("a notice, open and asking nothing with no ask open on its thread, waits on the reader's nod, which Got it answers; a thread whose ask is open, or one settled, waits on none", () => {
+test("a notice, open with no ask open on its thread, waits on the reader's nod, which opening it gives where its agent does not wait to hear back; a thread whose ask is open, or one settled, waits on none", () => {
   const said: InboxMessage = {
     id: "b1b2c3d4-0000-4000-8000-000000000010",
     author: INBOX_MESSAGE_AUTHOR.AGENT,
@@ -1755,23 +1421,26 @@ test("a notice, open and asking nothing with no ask open on its thread, waits on
   };
   const notice = item({
     id: "a1b2c3d4-0000-4000-8000-000000000010",
-    response: { type: INBOX_RESPONSE.NONE },
     needsReply: false,
     thread: [said],
   });
 
-  assert.equal(awaitsNod(notice, [said]), true);
-  assert.deepEqual(inboxReply(notice, EMPTY_INBOX_DRAFT, INBOX_REPLY.ACKNOWLEDGED), {
-    reply: INBOX_REPLY.ACKNOWLEDGED,
-  });
-  const asked = asking({ type: INBOX_ASK.ANSWER });
-  assert.equal(awaitsNod({ ...notice, response: { type: INBOX_RESPONSE.TEXT } }, [asked]), false);
+  assert.equal(awaitsNod(notice), true);
+  assert.equal(acknowledgedOnOpen(notice, READER), true);
   assert.equal(
-    awaitsNod(notice, [said, asked]),
+    acknowledgedOnOpen({ ...notice, needsReply: true }, READER),
+    false,
+    "a notice whose agent waits to hear back is not nodded to by a mere open",
+  );
+  assert.equal(acknowledgedOnOpen(notice, undefined), false, "nor before the reader is known");
+  const asked = asking({ type: INBOX_ASK.ANSWER });
+  assert.equal(awaitsNod({ ...notice, thread: [asked] }), false);
+  assert.equal(
+    awaitsNod({ ...notice, thread: [said, asked] }),
     false,
     "an ask open on the thread is answered, not nodded to",
   );
-  assert.equal(awaitsNod({ ...notice, status: INBOX_STATUS.ANSWERED }, [said]), false);
+  assert.equal(awaitsNod({ ...notice, status: INBOX_STATUS.ANSWERED }), false);
 });
 
 test("an answer's stamp names a pair of buttons' pick in the past where it can and which way it goes, any other pick by its options, and a to-do by the steps it ticked", () => {
@@ -1927,7 +1596,6 @@ test("a thread's row media are the pictures its messages' words draw by address 
   const threaded = item({
     id: itemId,
     status: INBOX_STATUS.ANSWERED,
-    blocks: [],
     thread: [standing(asked, INBOX_ASK_STATUS.ANSWERED), answer],
   });
   assert.deepEqual(inboxMedia(threaded), [
@@ -2048,7 +1716,7 @@ function standing(
   return ask === undefined ? message : { ...message, ask: { ...ask, status } };
 }
 
-test("a settled item's card says how it ended whatever its row's glyph: an answer even with words after it, an ask taken back and why, a member's close, and an item before threads as its row said it", () => {
+test("a settled item's card says how it ended whatever its row's glyph: an answer even with words after it, an ask taken back and why, a member's close", () => {
   const asked = asking({
     type: INBOX_ASK.DECIDE,
     options: [{ label: "7 days" }, { label: "14 days" }],
@@ -2140,7 +1808,7 @@ test("a settled item's card names its ending in the word its line says it in: an
   assert.equal(
     inboxSettledStanding(before),
     "Withdrawn",
-    "an agent's close before threads says why",
+    "an agent's close of a thread holding no ask says why",
   );
 });
 
@@ -2154,10 +1822,8 @@ test("a thread a member started reads Sent until its agent writes on it, by a re
   };
   const started = item({
     id: "t1",
-    response: { type: INBOX_RESPONSE.NONE },
     needsReply: false,
     status: INBOX_STATUS.ANSWERED,
-    answer: { reply: INBOX_REPLY.ACKNOWLEDGED },
     thread: [opener],
   });
   assert.equal(inboxSettledStanding(started), "Sent");
