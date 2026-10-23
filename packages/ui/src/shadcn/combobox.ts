@@ -18,8 +18,8 @@
  * rather than Base UI's `data-highlighted`, dimmed by `aria-disabled`, its
  * indicator a slot of its own at the row's end rather than an absolute
  * check; the list is capped by the app's placement hook
- * (`--luke-combobox-list-max`), scrolls only down, and draws no ring, the
- * active option marking it; the label is the subtle caption; and the empty
+ * (`--luke-combobox-list-max`), scrolls only down (its ring is `combobox.css`'s
+ * to leave off, the active option marking it); the label is the subtle caption; and the empty
  * line is a row or two tall, so a list with nothing never falls to a sliver.
  * `@luke/ui`'s `Combobox` (`components/combobox/combobox.tsx`) is what an
  * app draws; these are its inside.
@@ -27,7 +27,7 @@
 
 /** The list box: a column that scrolls down within its cap, and never sideways. */
 export const COMBOBOX_LIST =
-  "relative flex max-h-combobox-list flex-col overflow-x-hidden overflow-y-auto overscroll-contain p-menu-inset outline-none data-[height=fill]:max-h-none data-[height=fill]:min-h-0 data-[height=fill]:flex-auto";
+  "relative flex max-h-combobox-list flex-col overflow-x-hidden overflow-y-auto overscroll-contain p-menu-inset data-[height=fill]:max-h-none data-[height=fill]:min-h-0 data-[height=fill]:flex-auto";
 
 /** The list as the field's foot opens onto it: the field's edge and ground, under a field whose own foot is square. */
 export const COMBOBOX_WELL =
@@ -35,30 +35,30 @@ export const COMBOBOX_WELL =
 
 /** An item: its glyph, its name, then its detail and hint at its end, lit while it is the active option. */
 export const COMBOBOX_ITEM =
-  "group/option flex h-menu-row flex-none cursor-default items-center gap-icon-gap rounded-menu-row px-2 font-sans text-body whitespace-nowrap text-foreground select-none aria-selected:not-aria-disabled:bg-secondary aria-disabled:opacity-40";
+  "group/option flex h-menu-row flex-none cursor-default items-center gap-icon-gap rounded-menu-row px-luke-8 font-sans text-body whitespace-nowrap text-foreground select-none aria-selected:not-aria-disabled:bg-secondary aria-disabled:opacity-40";
 
 /** An item's leading glyph, muted, a glyph's size whatever it is handed. */
 export const COMBOBOX_ITEM_GLYPH =
-  "inline-flex size-4 flex-none items-center justify-center text-muted-foreground [&_:is(svg,img)]:size-4";
+  "inline-flex size-menu-glyph flex-none items-center justify-center text-muted-foreground [&_:is(svg,img)]:size-menu-glyph";
 
 /** An item's name, which gives way only after its detail does. */
 export const COMBOBOX_ITEM_LABEL = "min-w-0 flex-initial overflow-hidden font-medium";
 
 /** An item's detail, quieter, giving way first where the row runs short. */
 export const COMBOBOX_ITEM_DETAIL =
-  "block min-w-0 flex-[0_1000_auto] overflow-hidden pl-3 text-caption text-subtle-foreground";
+  "block min-w-0 flex-[0_1000_auto] overflow-hidden pl-luke-12 text-caption leading-[inherit] text-subtle-foreground";
 
 /** An item's hint at its end, at a menu's distance from what stands before it, as a chord is. */
 export const COMBOBOX_ITEM_HINT =
-  "inline-flex flex-none items-center gap-1 pl-4 text-caption text-subtle-foreground";
+  "inline-flex flex-none items-center gap-luke-4 pl-luke-16 text-caption leading-[inherit] text-subtle-foreground";
 
 /** An item's end slot, one glyph wide: a chevron, or the check of the one chosen now in the text's own ink. */
 export const COMBOBOX_ITEM_END =
-  "inline-flex size-4 flex-none items-center justify-center text-subtle-foreground group-aria-current/option:text-foreground [&_svg]:size-4 [&_svg]:text-inherit";
+  "inline-flex size-menu-glyph flex-none items-center justify-center text-subtle-foreground group-aria-current/option:text-foreground [&_svg]:size-menu-glyph [&_svg]:text-inherit";
 
 /** A group's heading over its run. */
-export const COMBOBOX_LABEL = "px-2 pt-2 pb-1 text-caption font-medium text-subtle-foreground";
+export const COMBOBOX_LABEL = "px-luke-8 pt-luke-8 pb-luke-4 text-caption font-medium text-subtle-foreground";
 
 /** What stands where no option does, or after them: one quiet line, centred, a row or two tall. */
 export const COMBOBOX_EMPTY =
-  "m-0 flex min-h-10 items-center justify-center px-3 py-1 text-center text-caption text-subtle-foreground";
+  "m-0 flex min-h-luke-40 items-center justify-center px-luke-12 py-luke-4 text-center text-caption text-subtle-foreground";

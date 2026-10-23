@@ -381,7 +381,7 @@ export function ComboboxList({
         <p className={cn("luke-combobox-empty", COMBOBOX_EMPTY)}>{empty}</p>
       ) : null}
       {note === undefined || note === null ? null : (
-        <div className={cn("luke-combobox-note", COMBOBOX_EMPTY, "flex-col gap-1")}>{note}</div>
+        <div className={cn("luke-combobox-note", COMBOBOX_EMPTY, "flex-col gap-luke-4")}>{note}</div>
       )}
     </div>
   );

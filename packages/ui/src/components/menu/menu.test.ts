@@ -672,18 +672,27 @@ function lift(target: HTMLElement, pointerType: string, x = 40, y = 20): boolean
   return !touchEnd.defaultPrevented;
 }
 
-/** Where the open menu hangs, as its style places it. */
-function hungAt(): [string, string] | undefined {
+/** Where the open menu hangs, as its positioner places it, once Base UI has placed it. */
+async function hungAt(): Promise<[string, string] | undefined> {
+  await placed();
   const menu = openMenu();
-  return menu === null ? undefined : [menu.style.left, menu.style.top];
+  const at = /translate\((-?[\d.]+px), (-?[\d.]+px)\)/u.exec(menu?.parentElement?.style.transform ?? "");
+  return at === null ? undefined : [at[1] ?? "", at[2] ?? ""];
 }
 
-test("a touch held still opens the menu where it went down, on its first item, and its release presses nothing", () => {
+/** Base UI's placing settled, which it does over a few promises rather than in the render that opened the menu. */
+async function placed(): Promise<void> {
+  await act(async () => {
+    for (let tick = 0; tick < 10; tick += 1) await Promise.resolve();
+  });
+}
+
+test("a touch held still opens the menu where it went down, on its first item, and its release presses nothing", async () => {
   const { row, opened } = heldRow();
   down(row, "touch", 120, 60);
   expect(openMenu()).toBeNull();
   wait(HELD_MS);
-  expect(hungAt()).toEqual(["120px", "60px"]);
+  expect(await hungAt()).toEqual(["120px", "60px"]);
   expect(focused()).toBe("Rename");
   expect(lift(row, "touch", 120, 60)).toBe(false);
   expect(opened).toEqual([]);
@@ -753,7 +762,7 @@ test("a second finger opens nothing: held alone it starts no hold, and laid down
   expect(opened).toEqual([]);
 });
 
-test("the contextmenu Android sends for a hold opens nothing more, whether it comes after the hold's menu or before it", () => {
+test("the contextmenu Android sends for a hold opens nothing more, whether it comes after the hold's menu or before it", async () => {
   const { row, opened } = heldRow();
   const android = (x: number) =>
     new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: x, clientY: 20 });
@@ -765,7 +774,7 @@ test("the contextmenu Android sends for a hold opens nothing more, whether it co
     row.dispatchEvent(after);
   });
   expect(after.defaultPrevented).toBe(true);
-  expect(hungAt()).toEqual(["120px", "60px"]);
+  expect(await hungAt()).toEqual(["120px", "60px"]);
   expect(focused()).toBe("Archive");
   lift(row, "touch", 120, 60);
   key("Escape");
@@ -776,10 +785,10 @@ test("the contextmenu Android sends for a hold opens nothing more, whether it co
   act(() => {
     row.dispatchEvent(android(200));
   });
-  expect(hungAt()).toEqual(["200px", "20px"]);
+  expect(await hungAt()).toEqual(["200px", "20px"]);
   key("ArrowDown");
   wait(HELD_MS);
-  expect(hungAt()).toEqual(["200px", "20px"]);
+  expect(await hungAt()).toEqual(["200px", "20px"]);
   expect(focused()).toBe("Archive");
   lift(row, "touch", 120, 60);
   expect(opened).toEqual([]);
@@ -843,15 +852,30 @@ test("a switch in the row that keeps its menu opens nothing, held or right-click
   expect(openMenu()).not.toBeNull();
 });
 
+/** Whether `element` is a menu or the positioner holding one, which a browser lays out the menu's size. */
+function menuBox(element: HTMLElement): boolean {
+  return (
+    element.getAttribute("role") === "menu" || element.querySelector(':scope > [role="menu"]') !== null
+  );
+}
+
 /** A menu drawn `width` by `height`, as a browser lays it out, though jsdom lays out nothing. */
 function menusMeasure(width: number, height: number): void {
   const measured = HTMLElement.prototype.getBoundingClientRect;
   vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
     this: HTMLElement,
   ) {
-    return this.getAttribute("role") === "menu"
-      ? new DOMRect(0, 0, width, height)
-      : measured.call(this);
+    return menuBox(this) ? new DOMRect(0, 0, width, height) : measured.call(this);
+  });
+  vi.spyOn(HTMLElement.prototype, "offsetWidth", "get").mockImplementation(function (
+    this: HTMLElement,
+  ) {
+    return menuBox(this) ? width : 0;
+  });
+  vi.spyOn(HTMLElement.prototype, "offsetHeight", "get").mockImplementation(function (
+    this: HTMLElement,
+  ) {
+    return menuBox(this) ? height : 0;
   });
 }
 
@@ -873,19 +897,22 @@ function rightClickAt(y: number): HTMLElement {
   return openMenu() ?? expect.fail("the menu is open");
 }
 
-test("with a phone's keyboard up, a menu opened near the foot of what is seen stands wholly above the keyboard", () => {
+test("with a phone's keyboard up, a menu opened near the foot of what is seen stands wholly above the keyboard", async () => {
   vi.stubGlobal("innerHeight", 800);
   menusMeasure(160, 120);
   keyboardUp(400);
-  const menu = rightClickAt(380);
-  const top = Number.parseFloat(menu.style.top);
+  rightClickAt(380);
+  const top = Number.parseFloat((await hungAt())?.[1] ?? "");
   expect(top + 120).toBeLessThanOrEqual(400);
 });
 
-test("with no visual viewport, a menu opened near the window's foot stands where the window's height lets it", () => {
+test("with no visual viewport, a menu opened near the window's foot stands where the window's height lets it", async () => {
   vi.stubGlobal("innerHeight", 800);
   vi.stubGlobal("visualViewport", undefined);
+  // Note that the page's root is the window's height, as a browser lays it out, though jsdom lays out nothing.
+  vi.spyOn(document.documentElement, "clientHeight", "get").mockReturnValue(800);
+  vi.spyOn(document.documentElement, "clientWidth", "get").mockReturnValue(window.innerWidth);
   menusMeasure(160, 120);
-  const menu = rightClickAt(380);
-  expect(menu.style.top).toBe("380px");
+  rightClickAt(380);
+  expect((await hungAt())?.[1]).toBe("380px");
 });

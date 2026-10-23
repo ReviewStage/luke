@@ -35,26 +35,60 @@
      inks, the corners, and the sizes a menu's surface and its rows are drawn
      at, each set per profile. */
   --font-sans: var(--luke-font-sans);
+  --color-secondary: var(--luke-color-fill-strong);
+  --color-danger: var(--luke-color-danger-text);
   --color-border-strong: var(--luke-color-border-strong);
   --color-subtle-foreground: var(--luke-color-text-subtle);
   --color-destructive: var(--luke-color-danger);
   --color-input: var(--luke-color-input);
+  /* A picked day's fill and ink, and the wash of a range between its ends. */
+  --color-accent-fill: var(--luke-color-accent);
+  --color-accent-ink: var(--luke-color-accent-text);
+  --color-on-accent: var(--luke-color-on-accent);
+  --color-fill-selected: var(--luke-color-fill-selected);
   --radius-menu: var(--luke-menu-radius);
   --radius-menu-row: var(--luke-menu-row-radius);
+  /* A toolbar floated on the menu's surface: a row's round, a hair out. */
+  --radius-menu-toolbar: calc(var(--luke-menu-row-radius) + var(--luke-space-2));
   --radius-control: var(--luke-control-radius);
   --shadow-menu: var(--luke-menu-shadow);
   --spacing-menu-row: var(--luke-menu-row-height);
   --spacing-menu-inset: var(--luke-menu-inset);
   --spacing-menu-glyph: var(--luke-menu-glyph);
   --spacing-icon-gap: var(--luke-icon-gap);
+  --spacing-control: var(--luke-control-height);
+  --spacing-control-gap: var(--luke-control-gap);
+  /* The base scale, as `p-luke-8` (`tokens/scale.css`), because the window's
+     root type is 13px and Tailwind's own numbered steps are rems of it. */
+  --spacing-luke-2: var(--luke-space-2);
+  --spacing-luke-4: var(--luke-space-4);
+  --spacing-luke-6: var(--luke-space-6);
+  --spacing-luke-8: var(--luke-space-8);
+  --spacing-luke-12: var(--luke-space-12);
+  --spacing-luke-16: var(--luke-space-16);
+  --spacing-luke-40: var(--luke-space-40);
+  /* off-scale: a menu's least and most width, and a settings chevron in a row's end */
+  --spacing-menu-least: 196px;
+  --spacing-menu-most: 280px;
+  --spacing-menu-chevron: 14px;
+  /* A menu as tall as can be seen, a margin short of either edge, so a long
+     one scrolls above a phone's keyboard (`tokens/viewport.css`). */
+  --spacing-menu-max: calc(var(--luke-stage-height) - 2 * var(--luke-space-8));
   /* A list's cap, an app's placement hook (README's "Placement hooks"). */
   --spacing-combobox-list: var(--luke-combobox-list-max, 280px);
   --text-body: var(--luke-type-body-size);
   --text-body--line-height: var(--luke-type-body-leading);
+  --text-label: var(--luke-type-label-size);
+  --text-label--line-height: var(--luke-type-label-leading);
   --text-caption: var(--luke-type-caption-size);
   --text-caption--line-height: var(--luke-type-caption-leading);
-  /* off-scale: a menu item's second line, a step under a caption */
-  --text-detail: 11.5px;
+  /* A menu's entrance, a fade and a drop from where it hangs, and its exit,
+     a fade, over `menu.css`'s keyframes, which the panel's own surfaces run
+     too. */
+  --animate-menu-arrive:
+    luke-menu-arrive var(--luke-duration-quick) var(--luke-motion-exit) both,
+    luke-menu-drop var(--luke-duration-fast) var(--luke-spring-fast) both;
+  --animate-menu-leave: luke-menu-leave var(--luke-duration-exit) var(--luke-motion-exit) forwards;
   --z-index-menu: var(--luke-z-menu);
   --z-index-menu-over-dialog: calc(var(--luke-z-dialog) + 1);
 

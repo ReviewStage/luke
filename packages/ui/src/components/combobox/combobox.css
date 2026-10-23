@@ -1,0 +1,9 @@
+/* combobox.css -- what of a combobox's look its Tailwind classes cannot say
+   (`combobox.tsx`, drawn in `../../shadcn/combobox.ts`): a list holding the
+   keys draws no ring, the active option marking it. */
+
+@layer components {
+  .luke-combobox-list:focus-visible {
+    outline: none; /* no ring: the active option marks it */
+  }
+}

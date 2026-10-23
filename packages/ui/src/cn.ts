@@ -18,7 +18,7 @@ import { extendTailwindMerge } from "tailwind-merge";
 const merge = extendTailwindMerge({
   extend: {
     theme: {
-      text: ["body", "label", "caption", "title", "touch", "caption-touch", "detail"],
+      text: ["body", "label", "caption", "title", "touch", "caption-touch"],
       spacing: [
         "control",
         "control-inset",
@@ -41,10 +41,21 @@ const merge = extendTailwindMerge({
         "menu-search",
         "inline-edit-reach",
         "menu-row",
+        "luke-2",
+        "luke-4",
+        "luke-6",
+        "luke-8",
+        "luke-12",
+        "luke-16",
+        "luke-40",
+        "menu-least",
+        "menu-most",
+        "menu-chevron",
+        "menu-max",
         "menu-inset",
         "combobox-list",
       ],
-      radius: ["control", "control-compact", "inline-edit", "menu", "menu-row"],
+      radius: ["control", "control-compact", "inline-edit", "menu", "menu-row", "menu-toolbar"],
       shadow: ["menu", "switch-thumb"],
     },
   },
