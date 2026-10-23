@@ -1,6 +1,6 @@
 import type { AvatarGrant } from "@luke/features/avatar-grant";
 import type { RunMode } from "@luke/host";
-import type { PushName, PushPayload } from "@luke/host/contract";
+import type { EventPushName, PushPayload } from "@luke/host/contract";
 import { PanelAvatarRelay } from "@luke/host/panel-avatar";
 import type { AvatarFeed } from "@luke/voice/avatar";
 import type { AvatarViewSignal } from "@luke/voice/avatar-view";
@@ -177,7 +177,7 @@ export class PanelManager {
    * already holds the answer in its reply and must redraw from that rather
    * than race a broadcast.
    */
-  broadcast<Name extends PushName>(
+  broadcast<Name extends EventPushName>(
     push: Name,
     payload: PushPayload<Name>,
     except?: WebContents,

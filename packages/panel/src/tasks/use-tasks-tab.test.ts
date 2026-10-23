@@ -37,6 +37,7 @@ import { ACT_KIND } from "@luke/host/acts";
 import {
   type AppInboxTask,
   type AppInboxTaskHolding,
+  type AppStateDelivery,
   type AppStateSnapshot,
   RUN_PROFILE,
 } from "@luke/host/app-state";
@@ -90,6 +91,7 @@ import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { FAKE_ANSWER, fakeActs, fakeAppBridge, fakeAppBridgeCalls } from "../testing/app-bridge.js";
 import {
   DESKTOP_CAPABILITIES,
+  deliveryOf,
   handCapabilities,
   handState,
   stateWith,
@@ -3500,7 +3502,8 @@ function voiceDelivered(): { stand: (view: VoiceView) => Promise<void> } {
   fakeAppBridge({
     ...fakeAppBridgeCalls(),
     requestAppState: () => Promise.resolve(stateWith({}, {})),
-    onAppState: (listener: (snapshot: AppStateSnapshot) => void) => {
+    onAppState: (heard: (delivery: AppStateDelivery) => void) => {
+      const listener = (snapshot: AppStateSnapshot) => heard(deliveryOf(snapshot));
       listeners.add(listener);
       return () => listeners.delete(listener);
     },

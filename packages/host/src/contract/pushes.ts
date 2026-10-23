@@ -22,7 +22,7 @@ import { readEither } from "@luke/wire/effect";
 import { wireResult as result, type WireGuard, type WireGuardValue } from "@luke/wire/wire-guard";
 import { eventIterator, type } from "@orpc/contract";
 import { Result } from "effect";
-import { type AppStateSnapshot, isAppStateSnapshot } from "../app-state.js";
+import { type AppStateDelivery, isAppStateDelivery } from "../app-state.js";
 import { actProcedure } from "./base.js";
 
 /** Every push main sends a window, by the name it crosses under. */
@@ -51,17 +51,21 @@ export const PUSH = {
 
 export type PushName = (typeof PUSH)[keyof typeof PUSH];
 
+/** Every push but the document's, which a window's stream works out from the document itself rather than carrying as handed. */
+export type EventPushName = Exclude<PushName, typeof PUSH.APP_STATE>;
+
 /** Each push's guard, which the window reads its payload with before any listener hears it. */
 export const PUSH_GUARD = {
   /**
-   * The one way a window learns what main holds. Its first delivery is this
-   * window's bootstrap and every later one carries a version at least as
-   * high, so there is no per-field push channel and no "which arrived first"
-   * for a reader to answer. A delivery whose version repeats the one held is
-   * this window's own facts having moved — its mode, or the display it stands
-   * on — which the document does not number.
+   * The one way a window learns what main holds after its first read: what
+   * moved in the document since the last delivery this stream sent, every
+   * entry of it on the stream's first. Each carries a version at least as
+   * high as the one before, so there is no per-field push channel and no
+   * "which arrived first" for a reader to answer. A delivery whose version
+   * repeats the one held is this window's own facts having moved — its mode,
+   * or the display it stands on — which the document does not number.
    */
-  [PUSH.APP_STATE]: result<AppStateSnapshot>(isAppStateSnapshot),
+  [PUSH.APP_STATE]: result<AppStateDelivery>(isAppStateDelivery),
   [PUSH.LIFECYCLE]: result<string>(isWireString),
   /** A command chosen from the menu bar, for the focused window to run as its shortcut would. */
   [PUSH.MENU_COMMAND]: result<AppCommand>(isAppCommand),

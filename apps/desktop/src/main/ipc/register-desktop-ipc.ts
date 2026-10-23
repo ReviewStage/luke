@@ -308,7 +308,7 @@ export function registerDesktopIpc(services: DesktopServices): void {
     snapshotFor: async (sender): Promise<AppStateSnapshot> => {
       await run(operator.readBootstrap());
       native.refreshMicrophoneStatus();
-      return { ...state.snapshot(), window: windows.windowFactsFor(sender) };
+      return windows.appStateFor(sender);
     },
   });
 }

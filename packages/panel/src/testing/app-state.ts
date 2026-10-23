@@ -4,7 +4,7 @@
 
 import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
 import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
-import type { AppStateSnapshot } from "@luke/host/app-state";
+import type { AppStateDelivery, AppStateSnapshot } from "@luke/host/app-state";
 import { SETTINGS_ACT_KIND } from "@luke/host/contract";
 import { type ExperimentChoices, HOST_CAPABILITY, type HostCapability } from "@luke/settings";
 import { appSettingsWire, settingsView } from "@luke/settings/testing";
@@ -60,6 +60,27 @@ function snapshotWith(experiments: ExperimentChoices): AppStateSnapshot {
   };
 }
 
+/**
+ * A document as main's push delivers it to a window that holds none of it
+ * yet: every entry, and the call transcript as the change from no lines.
+ */
+export function deliveryOf(snapshot: AppStateSnapshot): AppStateDelivery {
+  const { version, callTranscript, ...entries } = snapshot;
+  return {
+    version,
+    entries,
+    ...(callTranscript === undefined
+      ? undefined
+      : {
+          callTranscript: {
+            voiceSessionId: callTranscript.voiceSessionId,
+            from: 0,
+            lines: callTranscript.lines,
+          },
+        }),
+  };
+}
+
 /** Main's document with the account's experiments as given and the slices patched: a call standing, its avatar, the window's facts. */
 export function stateWith(
   experiments: ExperimentChoices,
@@ -107,12 +128,12 @@ export function handCapabilities(capabilities: readonly HostCapability[]): void 
  */
 export function handSettings(settings: Partial<AppSettingsView> = {}): void {
   let view: AppSettingsView = Object.assign(settingsView(), settings);
-  const listeners = new Set<(snapshot: AppStateSnapshot) => void>();
+  const listeners = new Set<(delivery: AppStateDelivery) => void>();
   const snapshot = () => stateWith({}, { settings: appSettingsWire(view) });
   fakeAppBridge({
     ...fakeAppBridgeCalls(),
     requestAppState: () => Promise.resolve(snapshot()),
-    onAppState: (listener: (snapshot: AppStateSnapshot) => void) => {
+    onAppState: (listener: (delivery: AppStateDelivery) => void) => {
       listeners.add(listener);
       return () => listeners.delete(listener);
     },
@@ -121,7 +142,7 @@ export function handSettings(settings: Partial<AppSettingsView> = {}): void {
     ...fakeActPortCalls(),
     [SETTINGS_ACT_KIND.SETTING_UPDATE]: (payload) => {
       view = Object.assign({ ...view }, { [payload.field]: payload.value });
-      const next = snapshot();
+      const next = deliveryOf(snapshot());
       for (const listener of listeners) listener(next);
       return Promise.resolve({
         status: ACTION_RESULT_STATUS.ACCEPTED,

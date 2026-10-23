@@ -5,14 +5,14 @@ import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
 import type { GatewayHost, NodeRegistry } from "@luke/gateway";
 import type { AppSettings } from "@luke/settings/wire";
 import { Effect, Option, type Scope } from "effect";
-import { PUSH, type PushName, type PushPayload } from "../contract/pushes.js";
+import { type EventPushName, PUSH, type PushPayload } from "../contract/pushes.js";
 import type { HostBootstrap, HostOperator } from "../host-operator.js";
 import { type AppStateStore, bootstrapPatch } from "./app-state-store.js";
 import { type GatewayWiringDependencies, wireGateway } from "./gateway-wiring.js";
 
 /** What the host's events reach in the windows that draw them. */
 interface OperatorClientLinks {
-  sendToVoice: <Name extends PushName>(push: Name, payload: PushPayload<Name>) => void;
+  sendToVoice: <Name extends EventPushName>(push: Name, payload: PushPayload<Name>) => void;
 }
 
 export interface OperatorClient {

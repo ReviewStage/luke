@@ -2,7 +2,12 @@
  * in-process-bridge.ts -- the window's bridge for a shell that runs the host in the page it draws: the document straight from the store, and the one-shot events from an emitter the shell drives.
  */
 import { Effect, type Scope } from "effect";
-import type { AppStateSnapshot, AppWindowFacts } from "../app-state.js";
+import {
+  type AppStateDelivery,
+  type AppStateSnapshot,
+  type AppWindowFacts,
+  appStateDelivery,
+} from "../app-state.js";
 import type { AppBridge, PushPayloadFor } from "../bridge.js";
 import type { PushMethod } from "../contract/pushes.js";
 import { type AppStateStore, publishAppStateChanges } from "./app-state-store.js";
@@ -106,7 +111,8 @@ function listeners<Payload>(report: (message: string) => void): Listeners<Payloa
 /**
  * The bridge for a page that runs the host in its own process. The page is
  * always a panel, and no voice or call window stands beside it. The document
- * is the store's, read on request and pushed on every change; the one-shot events are what the shell says through `events`; every
+ * is the store's, read whole on request and pushed as what moved on every
+ * change; the one-shot events are what the shell says through `events`; every
  * subscription ends with the scope; and everything the voice, the avatar, the call window, a
  * Browser tab, the menu bar, or a global key would say is never said, its
  * subscription ending cleanly.
@@ -117,10 +123,20 @@ export function createInProcessBridge(
   const { state, windowFacts, reports, report } = dependencies;
   return Effect.gen(function* () {
     const snapshot = (): AppStateSnapshot => ({ ...state.snapshot(), window: windowFacts() });
-    const appState = listeners<AppStateSnapshot>(report);
+    const appState = listeners<AppStateDelivery>(report);
+    // Note that the page is handed what moved since the document it was last
+    // handed, as a desktop window's stream hands it, which its own read
+    // bootstraps it from.
+    let sent: AppStateSnapshot | undefined;
     yield* publishAppStateChanges(
       state,
-      () => Effect.sync(() => appState.emit(snapshot())),
+      () =>
+        Effect.sync(() => {
+          const next = snapshot();
+          const delivery = appStateDelivery(sent, next);
+          sent = next;
+          if (delivery !== undefined) appState.emit(delivery);
+        }),
       report,
     );
     const said: EventListeners = {
