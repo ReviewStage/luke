@@ -6637,7 +6637,7 @@ ul.actor-stack {
 .tasks-list {
   display: grid;
   grid-template-columns: var(--tasks-list-columns);
-  column-gap: var(--luke-space-8);
+  column-gap: var(--luke-space-12);
   row-gap: var(--luke-space-16);
   padding-bottom: var(--luke-space-24);
 }
@@ -6654,9 +6654,13 @@ ul.actor-stack {
   align-content: start;
 }
 
+/* Note that the rows take the list's column gap back, because the Stack
+   they are drawn as sets its gap to none, and a subgrid's own gap draws its
+   cells over the parent's, so a row's columns would touch. */
 .tasks-list-rows {
   margin: 0;
   padding: 0;
+  column-gap: normal;
   list-style: none;
 }
 
@@ -6776,7 +6780,7 @@ ul.actor-stack {
 
 .tasks-list-row[data-lifted="true"] {
   display: flex;
-  gap: var(--luke-space-8);
+  gap: var(--luke-space-12);
   background: var(--luke-color-surface);
   box-shadow: 0 4px 12px var(--luke-color-shadow-soft);
 }
