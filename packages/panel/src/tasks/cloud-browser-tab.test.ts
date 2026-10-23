@@ -495,7 +495,10 @@ test("a draft opens nothing until its bar's Enter, then opens the tab in its age
   );
   await settle();
   assert.equal(document.activeElement, addressField(), "the bar's address is focused");
-  assert.ok(document.body.textContent?.includes("Invite expiry"), "the badge names the agent");
+  assert.ok(
+    document.body.textContent?.includes("Type an address to open it in Invite expiry's browser."),
+    "the draft says whose browser it opens in",
+  );
 
   typeAddress("localhost:3000");
   await settle();
@@ -580,5 +583,65 @@ test("a live tab's bar opens a typed address and steps back, forward, and reload
   await say({ type: BROWSER_LIVE_SERVER.REFUSED, reason: BROWSER_LIVE_REFUSAL.HELD });
   assert.ok(
     document.body.textContent?.includes("Ada is driving this tab. Wait until they hand it back."),
+  );
+});
+
+test("plain words typed in a cloud tab's bar search the web, in a draft and on a live tab alike", async () => {
+  const asked: TasksBrowserTabOpenParams[] = [];
+  fakeActPort({
+    [ACT_KIND.TASKS_BROWSER_TAB_OPEN]: (payload) => {
+      asked.push(payload);
+      return Promise.resolve({ failure: BROWSER_TAB_OPEN_FAILURE.UNANSWERED });
+    },
+  });
+  const sent: { type: string }[] = [];
+  let listener: BrowserLiveListener | undefined;
+  fakeAppPlatform({
+    openBrowserLive: (_target, heard) => {
+      listener = heard;
+      return { send: (text) => sent.push(JSON.parse(text)), close: () => undefined };
+    },
+  });
+  const search = "https://www.google.com/search?q=acme%20pricing";
+
+  const draft = draw(
+    createElement(CloudBrowserDraftPane, {
+      taskId: TASK,
+      draft: { id: "draft-1", agentId: AGENT_ID },
+      owner: { name: "Invite emails", icon: createElement("span") },
+      onOpened: () => undefined,
+      onDiscard: () => undefined,
+    }),
+  );
+  await settle();
+  assert.ok(
+    document.body.textContent?.includes("Invite emails' browser"),
+    "a name ending in an s takes the apostrophe alone",
+  );
+  typeAddress("acme pricing");
+  await pressEnter();
+  assert.deepEqual(asked, [{ taskId: TASK, agentId: AGENT_ID, address: search }]);
+
+  draft.rerender(
+    createElement(CloudBrowserPane, {
+      taskId: TASK,
+      tab: LISTED,
+      owner: LUKE_OWNER,
+      shown: true,
+      memberName: () => undefined,
+    }),
+  );
+  await settle();
+  await act(async () =>
+    listener?.message(
+      JSON.stringify({ type: BROWSER_LIVE_SERVER.DRIVER, driver: null, yours: false }),
+    ),
+  );
+  await settle();
+  typeAddress("acme pricing");
+  await pressEnter();
+  assert.deepEqual(
+    sent.filter((message) => message.type === BROWSER_LIVE_CLIENT.NAVIGATE),
+    [{ type: BROWSER_LIVE_CLIENT.NAVIGATE, address: search }],
   );
 });

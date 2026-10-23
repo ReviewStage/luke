@@ -22,7 +22,7 @@ import {
   Tooltip,
   useComboboxField,
 } from "@luke/ui";
-import { Fragment, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 
 /**
  * searchable-menu.tsx -- the one picker menu the repository chip, the Start button, and the side panel's "+" drop, and Settings' menus may.
@@ -33,12 +33,15 @@ import { Fragment, useEffect, useId, useLayoutEffect, useRef, useState } from "r
  * same where there is one, and an end slot the check stands in where it is
  * the one chosen; a name or a detail cut short by the menu's width ends
  * in an ellipsis, in a list that scrolls past a bounded height, the rows
- * of a section under its heading; and under the list, pinned where the scrolling cannot
+ * of a section under its heading, a row that opens a submenu ending in a
+ * chevron; and under the list, pinned where the scrolling cannot
  * take them, the rows the owner wants always on screen, such as the page
  * on GitHub or the effort an agent will run at. A pinned row is a press of
  * its own, a switch the press turns without closing anything, or opens a
- * submenu of rows beside itself, anchored to the row and turned to the
- * other side where the window leaves no room. Focus
+ * submenu of rows beside itself, as a listed row may too (a new Browser
+ * tab, and where it opens), anchored to the row and turned to the other
+ * side where the window leaves no room; a search matches a listed row by
+ * its submenu's rows as well. Focus
  * stays in the field the whole time: the arrows move one highlight
  * through the rows that match and on through the pinned rows, past any
  * that cannot be picked now, which are dimmed and say why, Enter picks
@@ -86,6 +89,8 @@ export interface MenuRow {
   disabled?: string | undefined;
   /** The row is listed only once something is searched: a model older than its family's newest. */
   searchOnly?: boolean | undefined;
+  /** Rows the row opens beside itself rather than being picked, as a pinned row's submenu: where a new Browser tab opens. */
+  submenu?: Submenu | undefined;
 }
 
 /** A run of matching rows under one heading, or under none, each with its place among the matches. */
@@ -95,7 +100,7 @@ interface Section<Row extends MenuRow> {
 }
 
 /** Rows a pinned row opens beside itself: the efforts a model lists, its context windows. */
-interface Submenu {
+export interface Submenu {
   /** What the rows are, for assistive technology. */
   label: string;
   rows: readonly MenuRow[];
@@ -179,6 +184,7 @@ function matchingRows<Row extends MenuRow>(rows: readonly Row[], query: string):
       row.label,
       ...(row.terms ?? []),
       ...(row.section === undefined ? [] : [row.section]),
+      ...(row.submenu?.rows.map((each) => each.label) ?? []),
     ];
     const terms = named.map((term) => term.toLowerCase());
     return words.every((word) => terms.some((term) => term.includes(word)));
@@ -229,6 +235,7 @@ function optionGroups(rows: readonly MenuRow[], value: string | undefined): Comb
       detail: row.detail,
       hint: rowHint(row),
       disabled: row.disabled !== undefined,
+      opens: row.submenu !== undefined,
       current: value === undefined ? undefined : row.id === value,
     })),
   }));
@@ -263,11 +270,26 @@ function FootNote({
   );
 }
 
+/** A row's submenu drawn in place, with nowhere to open beside it: a row of each choice, named by the row and the choice after it. */
+function submenuRows(row: MenuRow, submenu: Submenu): React.JSX.Element[] {
+  return submenu.rows.map((choice) => (
+    <ListRow
+      key={choice.id}
+      leading={choice.icon}
+      title={row.label}
+      description={choice.label}
+      disabled={row.disabled !== undefined}
+      onPress={() => submenu.onPick(choice.id)}
+    />
+  ));
+}
+
 /**
  * A menu's rows drawn in place rather than dropped: each a row of its own
  * in the page's order, under its section's heading as the menu heads it,
  * with no search and no highlight of its own, as the side panel's well
- * offers what its "+" offers with every tab closed.
+ * offers what its "+" offers with every tab closed. A row that opens a
+ * submenu stands as a row of each of its choices instead.
  */
 export function MenuRowList({
   label,
@@ -293,17 +315,21 @@ export function MenuRowList({
               </div>
             )}
             <List label={section.heading ?? label} density={LIST_DENSITY.DENSE}>
-              {section.rows.map(({ row }) => (
-                <ListRow
-                  key={row.id}
-                  leading={row.icon}
-                  title={row.label}
-                  description={row.detail}
-                  meta={rowHint(row)}
-                  disabled={row.disabled !== undefined}
-                  onPress={() => onPick(row.id)}
-                />
-              ))}
+              {section.rows.flatMap(({ row }) =>
+                row.submenu === undefined
+                  ? [
+                      <ListRow
+                        key={row.id}
+                        leading={row.icon}
+                        title={row.label}
+                        description={row.detail}
+                        meta={rowHint(row)}
+                        disabled={row.disabled !== undefined}
+                        onPress={() => onPick(row.id)}
+                      />,
+                    ]
+                  : submenuRows(row, row.submenu),
+              )}
             </List>
           </Fragment>
         );
@@ -374,8 +400,8 @@ export function SearchableMenu(props: {
     blocked,
   });
   const footAt = at - matches.length;
-  const branch = footAt >= 0 ? foot[footAt]?.submenu : undefined;
-  // The submenu open under the highlighted pinned row, and the highlight inside it.
+  const branch = footAt >= 0 ? foot[footAt]?.submenu : matches[at]?.submenu;
+  // The submenu open beside the highlighted row, listed or pinned, and the highlight inside it.
   const [submenu, setSubmenu] = useState<{ moved: number | undefined } | undefined>(undefined);
   const [place, setPlace] = useState<SubmenuPlace>(SUBMENU_FIRST_PLACE);
   // Opened again while it was leaving, the menu starts afresh, as one opened anew does.
@@ -403,7 +429,19 @@ export function SearchableMenu(props: {
   const field = useRef<HTMLInputElement>(null);
   const list = useRef<HTMLDivElement>(null);
   const panel = useRef<HTMLDivElement>(null);
+  const surface = useRef<HTMLElement | null>(null);
   const searching = props.placeholder !== undefined;
+  const ownerRef = props.ref;
+  // The menu's element, held here to place a listed row's submenu, and handed on to its owner's hold.
+  const holdSurface = useCallback(
+    (element: HTMLElement | null) => {
+      surface.current = element;
+      ownerRef?.(element);
+    },
+    [ownerRef],
+  );
+  // Where a listed row that opened a submenu stands in the menu, which its submenu stands beside.
+  const [rowBox, setRowBox] = useState<{ top: number; height: number } | undefined>(undefined);
 
   // The field takes focus as the menu opens, and keeps it; with no field, the
   // list does. A menu opened again while it was leaving takes it back too.
@@ -418,7 +456,18 @@ export function SearchableMenu(props: {
   // back over the menu so it never runs past a column; it stands up where
   // the window's bottom would cut it. Measured before it is painted, and
   // again as the pointer moves it to another row, whose submenu may stand taller.
-  const openAt = open === undefined ? undefined : footAt;
+  const openAt = open === undefined ? undefined : at;
+  const listedAt = open !== undefined && footAt < 0 ? at : undefined;
+  // A listed row's submenu stands beside the row as the list has it scrolled now, read before it is painted.
+  useLayoutEffect(() => {
+    if (listedAt === undefined) return setRowBox(undefined);
+    const row = document
+      .getElementById(comboboxOptionId(listId, listedAt))
+      ?.getBoundingClientRect();
+    const menu = surface.current?.getBoundingClientRect();
+    if (row === undefined || menu === undefined) return setRowBox(undefined);
+    setRowBox({ top: row.top - menu.top, height: row.height });
+  }, [listedAt, listId]);
   useLayoutEffect(() => {
     const branch = panel.current?.parentElement;
     if (openAt === undefined || panel.current === null || branch == null) return;
@@ -439,7 +488,7 @@ export function SearchableMenu(props: {
       shift: side === SUBMENU_SIDE.RIGHT ? pastRight : pastLeft,
       stand: bounds.bottom > page.clientHeight ? SUBMENU_STAND.UP : SUBMENU_STAND.DOWN,
     });
-  }, [openAt]);
+  }, [openAt, rowBox]);
 
   const moveTo = (index: number | undefined) => {
     setHighlight(index);
@@ -448,6 +497,13 @@ export function SearchableMenu(props: {
   const openSubmenu = () => {
     setPlace(SUBMENU_FIRST_PLACE);
     setSubmenu({ moved: undefined });
+  };
+  /** A listed row chosen: its submenu opened beside it where it has one, else it is picked. */
+  const chooseRow = (row: MenuRow, index: number) => {
+    if (row.disabled !== undefined) return;
+    if (row.submenu === undefined) return onPick(row.id);
+    setHighlight(index);
+    openSubmenu();
   };
   const pressFoot = (row: FootRow) => {
     if (row.disabled !== undefined) return;
@@ -489,9 +545,8 @@ export function SearchableMenu(props: {
     }
     const row = index >= 0 ? matches[index] : undefined;
     const pinned = index >= matches.length ? foot[index - matches.length] : undefined;
-    if (row !== undefined) {
-      if (row.disabled === undefined) onPick(row.id);
-    } else if (pinned !== undefined) pressFoot(pinned);
+    if (row !== undefined) chooseRow(row, index);
+    else if (pinned !== undefined) pressFoot(pinned);
   };
   const steered = open === undefined ? at : subAt;
   // The list always stands, so the keys always steer it: the submenu's rows
@@ -535,6 +590,15 @@ export function SearchableMenu(props: {
     keys.onKeyDown(event);
   };
 
+  // The pointer over a listed row highlights it, and opens its submenu where
+  // it has one, or closes the one standing beside another row.
+  const hoverRow = (index: number) => {
+    if (index === at && open !== undefined) return;
+    if (matches[index]?.submenu === undefined) return moveTo(index);
+    setHighlight(index);
+    openSubmenu();
+  };
+
   // The pointer over a pinned row highlights it, and opens its submenu, or
   // closes the one standing beside another row.
   const hoverFoot = (row: FootRow, index: number) => {
@@ -544,11 +608,34 @@ export function SearchableMenu(props: {
     else openSubmenu();
   };
 
+  // Note that a press anywhere on the submenu, its note too, keeps the focus in the field.
+  const submenuSurface = (shown: Submenu) => (
+    <MenuSurface
+      ref={panel}
+      className="task-compose-submenu"
+      inset={MENU_SURFACE_INSET.NONE}
+      data-side={place.side}
+      data-stand={place.stand}
+      style={cssCustomProperties({ "--submenu-shift": `${place.shift}px` })}
+      onMouseDown={(event) => event.preventDefault()}
+    >
+      <ComboboxList
+        id={submenuId}
+        label={shown.label}
+        groups={[{ options: submenuOptions(shown) }]}
+        active={subAt}
+        onActiveChange={(moved) => setSubmenu({ moved })}
+        onChoose={(_index, option) => shown.onPick(option.id)}
+      />
+      {shown.note === undefined ? null : <FootNote words={shown.note} />}
+    </MenuSurface>
+  );
+
   const root =
     props.className === undefined ? "searchable-menu" : `searchable-menu ${props.className}`;
   return (
     <MenuSurface
-      ref={props.ref}
+      ref={holdSurface}
       id={props.id}
       className={root}
       inset={MENU_SURFACE_INSET.NONE}
@@ -583,12 +670,23 @@ export function SearchableMenu(props: {
         label={props.label}
         groups={optionGroups(matches, value)}
         active={at}
-        onActiveChange={moveTo}
-        onChoose={(_index, option) => onPick(option.id)}
+        onActiveChange={hoverRow}
+        onChoose={(index) => {
+          const row = matches[index];
+          if (row !== undefined) chooseRow(row, index);
+        }}
         steer={searching ? undefined : keys}
         note={props.note}
         empty={props.note === undefined ? props.noMatch : undefined}
       />
+      {open === undefined || footAt >= 0 || rowBox === undefined ? null : (
+        <div
+          className="task-compose-menu-branch searchable-menu-row-branch"
+          style={{ top: rowBox.top, height: rowBox.height }}
+        >
+          {submenuSurface(open)}
+        </div>
+      )}
       {footed ? (
         <div id={footId} className="task-compose-menu-foot">
           {foot.map((row, index) => {
@@ -616,28 +714,7 @@ export function SearchableMenu(props: {
             const branch = (
               <div className="task-compose-menu-branch">
                 {item}
-                {index === footAt && open !== undefined ? (
-                  // Note that a press anywhere on the submenu, its note too, keeps the focus in the field.
-                  <MenuSurface
-                    ref={panel}
-                    className="task-compose-submenu"
-                    inset={MENU_SURFACE_INSET.NONE}
-                    data-side={place.side}
-                    data-stand={place.stand}
-                    style={cssCustomProperties({ "--submenu-shift": `${place.shift}px` })}
-                    onMouseDown={(event) => event.preventDefault()}
-                  >
-                    <ComboboxList
-                      id={submenuId}
-                      label={open.label}
-                      groups={[{ options: submenuOptions(open) }]}
-                      active={subAt}
-                      onActiveChange={(moved) => setSubmenu({ moved })}
-                      onChoose={(_index, option) => open.onPick(option.id)}
-                    />
-                    {open.note === undefined ? null : <FootNote words={open.note} />}
-                  </MenuSurface>
-                ) : null}
+                {index === footAt && open !== undefined ? submenuSurface(open) : null}
               </div>
             );
             // A row that cannot be pressed says why on hover, from around it,

@@ -1723,19 +1723,13 @@
   border: 0;
 }
 
-/* A cloud Browser tab (cloud-browser-pane.tsx): the badge of whose browser
-   it is, and the steps and the address as a Browser tab's bar has them; who
-   has it under the bar; then the page drawn on a
-   canvas of the page's own shape, centred in the body, with a quiet line
-   over it while no page stands to drive, or while a draft waits on an
-   address. */
+/* A cloud Browser tab (cloud-browser-pane.tsx): the steps and the address
+   as a Browser tab's bar has them; who has it under the bar; then the page
+   drawn on a canvas of the page's own shape, centred in the body, with a
+   quiet line over it while no page stands to drive, or while a draft waits
+   on an address. */
 .cloud-browser-bar {
   gap: var(--luke-space-8);
-}
-
-/* Whose browser it is stays whole; the address gives way first. */
-.cloud-browser-bar > .luke-badge {
-  flex: none;
 }
 
 /* Who has the tab, or why a step was refused, in a quiet line under the

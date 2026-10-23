@@ -15,8 +15,6 @@ import { BROWSER_TAB_OPEN_FAILURE, type BrowserTabOpenFailure } from "@luke/feat
 import { ACT_KIND } from "@luke/host/acts";
 import {
   AddressField,
-  BADGE_TONE,
-  Badge,
   BUTTON_SIZE,
   BUTTON_VARIANT,
   Button,
@@ -27,7 +25,6 @@ import {
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
-  Tooltip,
 } from "@luke/ui";
 import { Duration } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
@@ -71,11 +68,11 @@ import {
 } from "./cloud-browser-tabs.js";
 
 /**
- * cloud-browser-pane.tsx -- one Browser tab in an agent's cloud browser, in the side panel: a bar saying whose browser it is, with back, forward, reload, and the address, as the Mac's Browser tab has, then Take over and Hand back, and the page drawn live on a canvas; or a draft of one, which opens nothing until its bar opens an address.
+ * cloud-browser-pane.tsx -- one Browser tab in an agent's cloud browser, in the side panel: a bar with back, forward, reload, and the address, as the Mac's Browser tab has, then Take over and Hand back, and the page drawn live on a canvas; or a draft of one, which opens nothing until its bar opens an address.
  *
- * The bar's badge names the agent whose browser the tab lives in, with its
- * face, read-only, since a tab never leaves its agent's browser. Its steps
- * and its address steer the page over the live view whoever drives it: the
+ * Whose browser the tab lives in, which it never leaves, its strip tab
+ * says with the agent's glyph and its card in words (`side-panel.tsx`), and
+ * a draft's body says too. The bar's steps and its address steer the page over the live view whoever drives it: the
  * relay takes a tab nobody drives over for the member first, and refuses a
  * step while another member holds it, which the line under the bar says.
  * A draft (`cloud-browser-tabs.ts`'s `startCloudDraft`) draws the same bar
@@ -143,14 +140,16 @@ function fitted(body: CloudBrowserViewport, aspect: number | undefined): CloudBr
   return { width: Math.floor(width), height: Math.floor(width / aspect) };
 }
 
-/** Whose browser a cloud Browser tab lives in: its agent's name, or Luke's, and the glyph its badge and its strip tab wear. */
+/** Whose browser a cloud Browser tab lives in: its agent's name, or Luke's, and the glyph its strip tab and its card wear. */
 export interface CloudBrowserOwner {
   readonly name: string;
   readonly icon: React.JSX.Element;
 }
 
-/** What a browser is called by whose it is. */
-const browserOf = (name: string) => `${name}'s browser`;
+/** What a browser is called by whose it is: "Invite expiry's browser", and "Invite emails' browser" for a name that ends in an s. */
+export function browserOf(name: string): string {
+  return name.endsWith("s") ? `${name}' browser` : `${name}'s browser`;
+}
 
 /** Why a draft did not open, in words, naming the agent where the reason is its. */
 function openFailureWords(failure: BrowserTabOpenFailure, agent: string): string {
@@ -173,15 +172,14 @@ function openFailureWords(failure: BrowserTabOpenFailure, agent: string): string
 }
 
 /**
- * A cloud Browser tab's bar: the badge of the agent whose browser it lives
- * in, back, forward, and reload where `onStep` takes them, and the address,
+ * A cloud Browser tab's bar: back, forward, and reload where `onStep` takes
+ * them, and the address,
  * which opens what is typed as the Mac's Browser tab's bar reads it, then
  * whatever the caller hands it. What is typed is put back on a blur, unless
  * `holdTyped`; Escape answers `onEscape` where given, and leaves the bar
  * otherwise.
  */
 function CloudBrowserBar({
-  owner,
   address,
   onStep,
   onOpen,
@@ -191,7 +189,6 @@ function CloudBrowserBar({
   disabled = false,
   children,
 }: {
-  owner: CloudBrowserOwner;
   address: string;
   onStep: ((step: BrowserLiveHistory) => void) | undefined;
   onOpen: (address: string) => void;
@@ -215,11 +212,6 @@ function CloudBrowserBar({
   };
   return (
     <header className="file-view-bar browser-view-bar cloud-browser-bar">
-      <Tooltip label={`This tab lives in ${browserOf(owner.name)}`}>
-        <Badge tone={BADGE_TONE.NEUTRAL} icon={owner.icon}>
-          {owner.name}
-        </Badge>
-      </Tooltip>
       <div className="file-view-history">
         <BarStep
           label="Back"
@@ -566,7 +558,6 @@ export function CloudBrowserPane({
       aria-label="Browser"
     >
       <CloudBrowserBar
-        owner={owner}
         address={address}
         onStep={isLive ? live.step : undefined}
         onOpen={live.navigate}
@@ -702,7 +693,6 @@ export function CloudBrowserDraftPane({
       aria-label="Browser"
     >
       <CloudBrowserBar
-        owner={owner}
         address=""
         onStep={undefined}
         onOpen={open}

@@ -16,6 +16,7 @@ import { DesktopTasks } from "../desktop/desktop-tasks.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { handState } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
+import { restOn } from "../testing/hint-rest.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { codingAgentsControl, tasksControl, UNPINNED_SUMMARY } from "../testing/tasks-control.js";
 import { SIDE_PANEL_TAB, type SidePanelTab } from "./use-side-panel.js";
@@ -95,6 +96,7 @@ async function settle(): Promise<void> {
 async function mount(
   agents: readonly CodingAgentSummary[] = [],
   viewed?: string,
+  strip?: readonly SidePanelTab[],
 ): Promise<{ readonly opened: () => number; readonly chosen: readonly SidePanelTab[] }> {
   let opened = 0;
   const chosen: SidePanelTab[] = [];
@@ -123,6 +125,7 @@ async function mount(
       onChoose: (tab) => {
         chosen.push(tab);
       },
+      ...(strip === undefined ? undefined : { strip }),
     },
     agents: codingAgentsControl({ agents, agentIds: agents.map((agent) => agent.id) }),
   });
@@ -176,7 +179,12 @@ function rowWords(rows: readonly HTMLElement[]): readonly (string | null | undef
   return rows.map((row) => row.querySelector(".luke-combobox-option-label")?.textContent);
 }
 
-test("on a task with coding agents, the panel's + offers a new tab in each agent's browser, the one viewed first, and a pick drafts one in its browser and opens nothing", async () => {
+/** The choices of the submenu standing open beside a row of the "+". */
+function submenuChoices(): HTMLElement[] {
+  return [...document.querySelectorAll<HTMLElement>('.task-compose-submenu [role="option"]')];
+}
+
+test("on a task with coding agents, the panel's + offers New Browser tab alone, whose submenu lists each agent, the one viewed first, then this Mac; an agent drafts a tab in its browser and opens nothing", async () => {
   handState(experimentsOn(EXPERIMENT.BROWSER));
   const asked: unknown[] = [];
   fakeActPort({
@@ -188,14 +196,18 @@ test("on a task with coding agents, the panel's + offers a new tab in each agent
   const task = await mount([AGENT, OTHER_AGENT], OTHER_AGENT.id);
 
   const rows = await browserRows();
-  assert.deepEqual(rowWords(rows), [
-    "New Browser tab",
-    "New tab in Invite emails's browser",
-    "New tab in Invite expiry's browser",
-  ]);
-  await act(async () => rows[2]?.click());
+  assert.deepEqual(rowWords(rows), ["New Browser tab"]);
+  const [row] = rows;
+  assert.ok(row, "the one row");
+  // Choosing the row opens its submenu rather than a tab.
+  await act(async () => row.click());
   await settle();
+  assert.equal(task.opened(), 0);
+  const choices = submenuChoices();
+  assert.deepEqual(rowWords(choices), ["Invite emails", "Invite expiry", "This Mac"]);
 
+  await act(async () => choices[1]?.click());
+  await settle();
   const [drafted] = task.chosen;
   assert.ok(
     drafted instanceof Object && "cloudBrowser" in drafted && drafted.cloudBrowser.length > 0,
@@ -204,9 +216,69 @@ test("on a task with coding agents, the panel's + offers a new tab in each agent
   assert.deepEqual(asked, [], "nothing opens in the agent's sandbox until the draft's Enter");
 });
 
+test("the submenu's This Mac opens the Mac's own Browser tab", async () => {
+  handState(experimentsOn(EXPERIMENT.BROWSER));
+  const task = await mount([AGENT]);
+
+  const [row] = await browserRows();
+  assert.ok(row, "the one row");
+  await act(async () => row.click());
+  await settle();
+  const local = submenuChoices().find((choice) => choice.textContent?.includes("This Mac"));
+  await act(async () => local?.click());
+  assert.equal(task.opened(), 1);
+  assert.deepEqual(task.chosen, []);
+});
+
 test("with the experiment off, the panel's + offers no tab in an agent's browser", async () => {
   handState({});
   await mount([AGENT]);
 
   assert.deepEqual(await browserRows(), []);
+});
+
+test("a cloud Browser tab wears its agent's glyph in the strip and hangs a card naming the agent's browser and the page's address", async () => {
+  handState(experimentsOn(EXPERIMENT.BROWSER));
+  const tab = {
+    id: "5a0e1f2b-3c4d-4e5f-9a6b-7c8d9e0f1a2b",
+    agentId: OTHER_AGENT.id,
+    address: "https://accounts.test/sign-in",
+    title: "Sign in",
+    openedBy: { kind: "member", userId: "user-ada" },
+    driver: null,
+    createdAt: 5,
+    lastActedAt: 5,
+  } as const;
+  const held = {
+    next: () => new Promise<never>(() => undefined),
+    return: async () => ({ done: true, value: undefined }) as const,
+    [Symbol.asyncIterator]() {
+      return held;
+    },
+    [Symbol.asyncDispose]: async () => undefined,
+  };
+  fakeActPort({
+    [ACT_KIND.TASKS_BROWSER_TABS]: () => Promise.resolve({ tabs: [tab] }),
+    // SAFETY: the window reads oRPC's stream as an async iterator alone, which this is.
+    [ACT_KIND.TASKS_BROWSER_TABS_FOLLOW]: () => Promise.resolve(held as never),
+  });
+  await mount([AGENT, OTHER_AGENT], undefined, [SIDE_PANEL_TAB.BOARD, { cloudBrowser: tab.id }]);
+
+  const drawn = [...document.querySelectorAll<HTMLElement>('.side-panel-tabs [role="tab"]')].find(
+    (each) => each.textContent?.includes("Sign in"),
+  );
+  assert.ok(drawn, "the cloud tab stands in the strip, named by its page");
+  assert.ok(!drawn.textContent?.includes("Invite emails"), "the strip names no agent in words");
+  assert.ok(drawn.querySelector(".harness-mark"), "it wears its agent's glyph");
+  restOn(drawn);
+  const card = document.querySelector(".luke-tooltip-card [data-tab-card]");
+  assert.equal(card?.querySelector(".luke-hover-card-name")?.textContent, "Sign in");
+  assert.equal(
+    card?.querySelector(".luke-hover-card-sub")?.textContent,
+    "In Invite emails' browser",
+  );
+  assert.equal(
+    card?.querySelector(".luke-hover-card-note")?.textContent,
+    "https://accounts.test/sign-in",
+  );
 });

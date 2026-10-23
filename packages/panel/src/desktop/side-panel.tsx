@@ -28,6 +28,7 @@ import {
   FoldingButton,
   HoverCard,
   HoverCardHead,
+  HoverCardNote,
   IconButton,
   LIST_DENSITY,
   List,
@@ -102,6 +103,7 @@ import { BrowserPane, browserTitleOf, useBrowserPages } from "../tasks/browser-p
 import { ChangesCard, peopleOf } from "../tasks/changes-card.js";
 import { TaskChipCard } from "../tasks/chip-cards.js";
 import {
+  browserOf,
   CloudBrowserDraftPane,
   type CloudBrowserOwner,
   CloudBrowserPane,
@@ -382,17 +384,6 @@ interface CloudBrowserOffer {
   readonly owner: CloudBrowserOwner;
 }
 
-/** The "+" row's id for a new tab in each agent's cloud browser, made once, which no other row is named by. */
-const cloudRowKeys = new Map<string, string>();
-
-function cloudRowKey(agentId: string): string {
-  const held = cloudRowKeys.get(agentId);
-  if (held !== undefined) return held;
-  const made = crypto.randomUUID();
-  cloudRowKeys.set(agentId, made);
-  return made;
-}
-
 /** An agent's terminal as the "+" offers it: the agent, and whether ⌘J would open its Terminal tab from here. */
 export interface TerminalOffer {
   readonly agent: CodingAgentSummary;
@@ -445,6 +436,21 @@ function cloudBrowserTitleOf(drawn: DrawnCloudBrowser): string {
   const { tab } = drawn;
   if (tab.title.length > 0) return tab.title;
   return (URL.canParse(tab.address) ? new URL(tab.address).host : "") || TAB_WORDS.BROWSER;
+}
+
+/** A cloud Browser tab's card: its title, under the glyph of whose browser it lives in, which the line under says, then its address once it has one. */
+function CloudBrowserCard({ drawn }: { drawn: DrawnCloudBrowser }): React.JSX.Element {
+  const address = "tab" in drawn ? drawn.tab.address : "";
+  return (
+    <HoverCard data-tab-card="">
+      <HoverCardHead
+        glyph={drawn.owner.icon}
+        name={cloudBrowserTitleOf(drawn)}
+        sub={`In ${browserOf(drawn.owner.name)}`}
+      />
+      {address.length === 0 ? null : <HoverCardNote oneLine>{address}</HoverCardNote>}
+    </HoverCard>
+  );
 }
 
 /** No Changes tab open on the task, the same array every render. */
@@ -557,6 +563,45 @@ export function showPullRequest(
   panel.onPreview(tab);
 }
 
+/** The submenu's choice of this Mac's own Browser tab, which no agent's row is named by. */
+const LOCAL_BROWSER_CHOICE = "this-mac";
+
+/**
+ * The "+" menu's New Browser tab, opened afresh each time, as a browser's
+ * new tab is, so its row names no tab: on a task with coding agents, a
+ * submenu of where it opens, each agent's cloud browser wearing its glyph,
+ * the one viewed first, then this Mac's own where the platform draws one; on
+ * a task with none, this Mac's own at once; and nothing where neither stands.
+ */
+function browserEntries(browsers: Parameters<typeof panelEntries>[0]["browsers"]): AddEntry[] {
+  if (browsers === undefined) return [];
+  const { onLocal, agents, onAgent } = browsers;
+  const look = tabLook({ kind: TAB_KIND.BROWSER, title: NEW_BROWSER_TAB });
+  if (agents.length === 0) {
+    if (onLocal === undefined) return [];
+    return [
+      { row: { id: ADD_SECTION.BROWSER, ...look, section: ADD_SECTION.BROWSER }, onPick: onLocal },
+    ];
+  }
+  const local =
+    onLocal === undefined
+      ? []
+      : [{ id: LOCAL_BROWSER_CHOICE, ...tabLook({ kind: TAB_KIND.MAC_TERMINAL }) }];
+  const rows = [
+    ...agents.map(({ agentId, owner }) => ({ id: agentId, label: owner.name, icon: owner.icon })),
+    ...local,
+  ];
+  const submenu = {
+    label: "Open the tab in",
+    rows,
+    value: undefined,
+    onPick: (choice: string) => (choice === LOCAL_BROWSER_CHOICE ? onLocal?.() : onAgent(choice)),
+  };
+  // Note that a pick of the row itself opens its submenu, so its own press does nothing.
+  const row = { id: ADD_SECTION.BROWSER, ...look, section: ADD_SECTION.BROWSER, submenu };
+  return [{ row, onPick: () => undefined }];
+}
+
 /** The "+" menu's row for a kind: its glyph and its name, whether or not its tab is open, the Plan's the task's own where it is known. */
 function kindRow(tab: FixedSidePanelTab, plan: PlanStanding | undefined): MenuRow {
   return { id: tab, ...tabLook({ kind: TAB_KIND.PANEL, tab, plan }) };
@@ -591,12 +636,16 @@ export function panelEntries(input: {
     readonly offers: readonly TerminalOffer[];
     readonly onNew: (agentId: string) => void;
   };
-  /** The door a new Browser tab opens through, while the Browser tab experiment is on; none where the caller offers none. */
-  onNewBrowser?: (() => void) | undefined;
-  /** The task's coding agents whose cloud browsers a new tab may open in, the one viewed first, and the door a row's pick drafts one through; none where the caller offers none. */
-  cloudBrowsers?: {
-    readonly offers: readonly CloudBrowserOffer[];
-    readonly onNew: (agentId: string) => void;
+  /**
+   * Where a new Browser tab may open, while the Browser tab experiment is
+   * on: this Mac's own, through the door given where the platform draws
+   * one, and each of the task's coding agents' cloud browsers, the one
+   * viewed first, drafted through `onAgent`; none where the caller offers none.
+   */
+  browsers?: {
+    readonly onLocal: (() => void) | undefined;
+    readonly agents: readonly CloudBrowserOffer[];
+    readonly onAgent: (agentId: string) => void;
   };
   /** The task the panel stands beside, whose name and status the Plan's row wears; none where the caller does not know it. */
   plan?: PlanStanding | undefined;
@@ -653,43 +702,8 @@ export function panelEntries(input: {
     },
     onPick: () => input.terminals?.onNew(agent.id),
   }));
-  // A Browser tab is opened afresh each time, as a browser's new tab is, so
-  // its row names no tab and opens one more.
-  const onNewBrowser = input.onNewBrowser;
-  const browserRows =
-    onNewBrowser === undefined
-      ? []
-      : [
-          {
-            row: {
-              id: ADD_SECTION.BROWSER,
-              ...tabLook({ kind: TAB_KIND.BROWSER, title: NEW_BROWSER_TAB }),
-              section: ADD_SECTION.BROWSER,
-            },
-            onPick: onNewBrowser,
-          },
-        ];
-  // A tab in an agent's cloud browser is drafted afresh each time too, one row for each agent, wearing
-  // its glyph, so the row says whose browser the tab will live in.
-  const cloudRows = (input.cloudBrowsers?.offers ?? []).map(({ agentId, owner }) => ({
-    row: {
-      id: cloudRowKey(agentId),
-      icon: owner.icon,
-      label: `New tab in ${owner.name}'s browser`,
-      terms: [owner.name, NEW_BROWSER_TAB],
-      section: ADD_SECTION.BROWSER,
-    },
-    onPick: () => input.cloudBrowsers?.onNew(agentId),
-  }));
-  return [
-    ...kinds,
-    ...fileRows,
-    ...changesRows,
-    ...pageRows,
-    ...terminalRows,
-    ...browserRows,
-    ...cloudRows,
-  ];
+  const browserRows = browserEntries(input.browsers);
+  return [...kinds, ...fileRows, ...changesRows, ...pageRows, ...terminalRows, ...browserRows];
 }
 
 /**
@@ -941,8 +955,8 @@ function stripTabs(input: {
       close: () => panel.onClose(tab),
     };
   });
-  // A cloud Browser tab is named by its page's title, wearing the glyph of whose browser it is in
-  // beside their name, its address on hover; a draft closed is discarded.
+  // A cloud Browser tab is named by its page's title, wearing the glyph of whose browser it is in,
+  // and hangs a card saying whose browser that is, with its address; a draft closed is discarded.
   const cloudBrowserTabs = panel.strip.filter(isCloudBrowserTab).flatMap((tab) => {
     const drawn = cloudBrowsers.find((each) => each.id === tab.cloudBrowser);
     if (drawn === undefined) return [];
@@ -952,8 +966,7 @@ function stripTabs(input: {
         look: look(tab, {
           icon: drawn.owner.icon,
           label: cloudBrowserTitleOf(drawn),
-          detail: drawn.owner.name,
-          tooltip: "tab" in drawn ? drawn.tab.address : undefined,
+          card: <CloudBrowserCard drawn={drawn} />,
         }),
         close: () => {
           if ("draft" in drawn && input.planId !== undefined) {
@@ -2340,11 +2353,11 @@ export function SidePanel({
             onNew: (agentId: string) => openTerminal(agentId, TERMINAL_ASK.NEW),
           },
         }),
-    onNewBrowser:
-      browsing && holder !== SIDE_PANEL_HOLDER.INBOX ? () => panel.onOpenBrowser() : undefined,
-    cloudBrowsers: {
-      offers: cloudOffers,
-      onNew: (agentId: string) =>
+    browsers: {
+      onLocal:
+        browsing && holder !== SIDE_PANEL_HOLDER.INBOX ? () => panel.onOpenBrowser() : undefined,
+      agents: cloudOffers,
+      onAgent: (agentId: string) =>
         panel.onChoose({ cloudBrowser: startCloudDraft(taskId, agentId).id }),
     },
     plan: task,
