@@ -287,7 +287,7 @@ export interface DrawnSection {
 }
 
 /** The tasks among a section's rows, in its order. */
-export function drawnSectionTasks(drawn: DrawnSection): TaskSummary[] {
+function drawnSectionTasks(drawn: DrawnSection): TaskSummary[] {
   return drawn.rows.flatMap((row) => (row.kind === TASK_ROW.TASK ? [row.task] : []));
 }
 

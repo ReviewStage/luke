@@ -8,7 +8,8 @@ import {
   integrationProviderSchema,
 } from "./integration-wire.js";
 import { isLinkHome, LINK_ORIGIN } from "./link-home.js";
-import { LINK_SITE_LIST, type LinkSite, linkSiteName, linkSiteOf } from "./link-site.js";
+import { LINK_SITE_LIST, linkSiteName, linkSiteOf } from "./link-site.js";
+import { parsedUrl } from "./parsed-url.js";
 import { PLAN_SECTION_BOUNDS } from "./task-wire.js";
 
 /**
@@ -392,9 +393,6 @@ export type PersonMention = Extract<Mention, { readonly kind: typeof MENTION_KIN
 /** A mention of an MCP server or one of its tools, or a page of its provider's. */
 export type ServerMention = Extract<Mention, { readonly provider: string }>;
 
-/** A mention of a page of a well-known site no integration stands behind. */
-export type SiteMention = Extract<Mention, { readonly site: LinkSite }>;
-
 /** Whether a tool's name, as an MCP server lists it, is one a mention of the tool can carry. */
 export function isMentionableTool(name: string): boolean {
   return TOOL_NAME.test(name) && !DOT_STEPS.has(name);
@@ -455,20 +453,6 @@ function decodedSteps(steps: readonly string[]): string | undefined {
 /** A target's path read back from its steps, its leading slash and, for a folder, its trailing one taken off. */
 function decodedPath(pathname: string): string | undefined {
   return decodedSteps(pathname.replace(/^\//u, "").replace(/\/$/u, "").split("/"));
-}
-
-/**
- * A target read as an address, or nothing where it is none. Note that it is
- * `new URL` caught rather than `URL.parse`, because the web app
- * reads a link in whatever browser opened it, and Safari before 18 has no
- * `URL.parse`.
- */
-function parsedUrl(target: string): URL | undefined {
-  try {
-    return new URL(target);
-  } catch {
-    return undefined;
-  }
 }
 
 /** A heading's anchor before it is told apart from an earlier heading's: GitHub's spelling of it. */

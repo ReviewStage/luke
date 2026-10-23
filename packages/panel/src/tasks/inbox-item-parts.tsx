@@ -78,7 +78,7 @@ import { cardTitle, plainWords } from "./tool-call-model.js";
 import { useOpenPlace } from "./use-open-link.js";
 
 /** What a teammate's open item says to a reader beside their face, which is drawn for the eye alone: it waits on them, not the reader. */
-export function waitingOn(starter: Actor): string {
+function waitingOn(starter: Actor): string {
   return `Waiting on ${actorName(starter, { sentence: true })}`;
 }
 
@@ -395,7 +395,7 @@ const RECOMMENDED = "Recommended";
  * is read or answered, and none for an agent with no task, nor for a task
  * from a service before statuses.
  */
-export function TaskStatusChip({ holder }: { holder: InboxHolder }): React.JSX.Element | null {
+function TaskStatusChip({ holder }: { holder: InboxHolder }): React.JSX.Element | null {
   if (holder.kind !== INBOX_HOLDER.TASK || holder.task.status === undefined) return null;
   const { status } = holder.task;
   return (
@@ -454,7 +454,7 @@ export function useInboxStanding(listed: InboxListed, readerId: string | undefin
 }
 
 /** An item row's meta, its context, marks, and time in one line at the title's right. */
-export function InboxRowMeta({ children }: { children: ReactNode }): React.JSX.Element {
+function InboxRowMeta({ children }: { children: ReactNode }): React.JSX.Element {
   return <span className="home-row-meta">{children}</span>;
 }
 

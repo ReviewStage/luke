@@ -49,7 +49,7 @@
   }
 
   .luke-chip-name[data-overflow="true"] {
-    mask-image: linear-gradient(to left, transparent, #000 20px); /* off-scale: a label's fade */
+    mask-image: linear-gradient(to left, transparent, #000 var(--luke-label-fade));
   }
 
   /* Words cut in their middle keep their end whole and give way from the

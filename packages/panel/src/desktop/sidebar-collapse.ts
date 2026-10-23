@@ -18,8 +18,9 @@
  * a stage wide enough pins it again.
  */
 
-import { Option, Schema } from "effect";
+import { Schema, SchemaTransformation } from "effect";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { readKept, writeKept } from "../kept-storage.js";
 import { PANE_FLOAT, type PaneFloat } from "./hover-pane.js";
 
 /** The storage keys the choices are kept under. */
@@ -55,15 +56,20 @@ export const SIDEBAR_OVERLAY = PANE_FLOAT;
 
 type SidebarOverlay = PaneFloat;
 
-const decodeWidth = Schema.decodeUnknownOption(Schema.FiniteFromString);
+/** The fold as kept: `true` folded, and anything else open. */
+const storedCollapsed = Schema.Literals(["true", "false"]).pipe(
+  Schema.decodeTo(
+    Schema.Boolean,
+    SchemaTransformation.transform({
+      decode: (kept) => kept === "true",
+      encode: (collapsed) => (collapsed ? "true" : "false"),
+    }),
+  ),
+);
 
 /** The kept choice, or open when there is none or storage refuses the read. */
 function readCollapsed(): boolean {
-  try {
-    return window.localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === "true";
-  } catch {
-    return false;
-  }
+  return readKept(SIDEBAR_COLLAPSED_KEY, storedCollapsed, false);
 }
 
 function clampWidth(width: number): number {
@@ -77,13 +83,7 @@ export function compactStage(width: number, was: boolean): boolean {
 
 /** The kept width, or the default when there is none, it no longer reads, or storage refuses the read. */
 function readWidth(): number {
-  let stored: string | null = null;
-  try {
-    stored = window.localStorage.getItem(SIDEBAR_WIDTH_KEY);
-  } catch {
-    // The default stands.
-  }
-  return clampWidth(Option.getOrElse(decodeWidth(stored), () => SIDEBAR_WIDTH.DEFAULT));
+  return clampWidth(readKept(SIDEBAR_WIDTH_KEY, Schema.FiniteFromString, SIDEBAR_WIDTH.DEFAULT));
 }
 
 export interface SidebarCollapse {
@@ -150,22 +150,12 @@ export function useSidebarCollapse(fixtureMode: boolean, compact: boolean): Side
     if (!collapsed) setOverlay(SIDEBAR_OVERLAY.CLOSED);
   }, [collapsed]);
 
-  // A write that fails costs only the preference, so it is not worth a word
-  // on screen.
   useEffect(() => {
-    try {
-      window.localStorage.setItem(SIDEBAR_COLLAPSED_KEY, String(kept));
-    } catch {
-      // The sidebar keeps working on the state it holds.
-    }
+    writeKept(SIDEBAR_COLLAPSED_KEY, storedCollapsed, kept);
   }, [kept]);
 
   useEffect(() => {
-    try {
-      window.localStorage.setItem(SIDEBAR_WIDTH_KEY, String(keptWidth));
-    } catch {
-      // The sidebar keeps working at the width it holds.
-    }
+    writeKept(SIDEBAR_WIDTH_KEY, Schema.FiniteFromString, keptWidth);
   }, [keptWidth]);
 
   // Note that the fold is handed back steady, so the columns handed it hold while it does.

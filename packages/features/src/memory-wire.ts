@@ -41,7 +41,7 @@ export const MEMORY_QUERY = {
 export const memoryIdSchema = wireUuidSchema;
 
 /** One memory as a member of its workspace sees it. */
-export const memorySummarySchema = EffectSchema.Struct({
+const memorySummarySchema = EffectSchema.Struct({
   id: memoryIdSchema,
   text: EffectSchema.String,
   /** The member whose words it holds: who kept it, or last corrected it; null once that account is gone. */

@@ -41,9 +41,21 @@ afterEach(() => {
 });
 
 const BACK: readonly HistoryStep[] = [
-  { at: 2, title: { label: "Auth refactor", detail: "Fix token refresh · Code" }, page: "plan:a" },
-  { at: 1, title: { label: "Auth refactor", detail: "Fix token refresh · Plan" }, page: "plan:a" },
-  { at: 0, title: { label: "Inbox", detail: "Desktop shell" }, page: "inbox" },
+  {
+    at: 2,
+    title: { label: "Auth refactor", detail: "Fix token refresh · Code" },
+    page: { kind: "plan", of: "a" },
+  },
+  {
+    at: 1,
+    title: { label: "Auth refactor", detail: "Fix token refresh · Plan" },
+    page: { kind: "plan", of: "a" },
+  },
+  {
+    at: 0,
+    title: { label: "Inbox", detail: "Desktop shell" },
+    page: { kind: "inbox", of: undefined },
+  },
 ];
 
 /** Back and Forward over a history standing on the steps given, each step gone to and each press recorded. */
@@ -142,7 +154,7 @@ test("Back held opens its list and its release takes no step, while a quick pres
 });
 
 test("a step named nothing as the window stood on it is listed all the same", () => {
-  const window = mount([{ at: 0, title: undefined, page: "home" }]);
+  const window = mount([{ at: 0, title: undefined, page: { kind: "home", of: undefined } }]);
   act(() => {
     window.back.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true }));
   });

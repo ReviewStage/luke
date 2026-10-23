@@ -5,7 +5,6 @@ import { askRecord } from "@luke/database/models/asks";
 import { readBoard } from "@luke/database/models/board-store";
 import {
   type CodingAgent,
-  codingAgentBriefOf,
   hasRepository,
   readCodingAgentContext,
   readCodingAgentOfConversation,
@@ -29,8 +28,6 @@ import type { ConversationTarget, StoreWriter } from "@luke/database/models/writ
 import { EMPTY_BOARD } from "@luke/features/board-wire";
 import { MEMBER_KIND } from "@luke/features/chat-wire";
 import { CONTEXT_WINDOW } from "@luke/features/coding-agent-wire";
-import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
-import { encodeMention, MENTION_KIND } from "@luke/features/mention-link";
 import type { ModelChoice } from "@luke/features/models-wire";
 import { causeKind } from "@luke/runtime/effect";
 import { Effect, Option, Result, type Schema } from "effect";
@@ -125,7 +122,7 @@ import { type DelegationAsk, delegationChoice, recordDelegation } from "./delega
 import type { InboxToolResult } from "./inbox.js";
 import { type InboxCall, runAgentInbox } from "./inbox-door.js";
 import type { InboxSandboxDoor } from "./inbox-image.js";
-import { CODER_HARNESS, coderInstructions } from "./instructions.js";
+import { agentCoderInstructions, CODER_HARNESS } from "./instructions.js";
 import { type CoderModelSelection, coderModel } from "./model.js";
 import type { PlanEditResult } from "./plan-edit.js";
 import type { CoderHostSeams } from "./production.js";
@@ -445,7 +442,6 @@ export interface CoderHost extends HostAdmission {
    */
   research(
     admitted: AdmittedConversation,
-    tool: typeof CODER_TOOL.READ_WEB_PAGE,
     turn: { readonly sessionId: string; readonly eveTurnId: string },
     input: UnparsedWireValue,
   ): Effect.Effect<ReadWebPageResult, never, HttpClient.HttpClient>;
@@ -541,7 +537,7 @@ const PREVIOUS_TURN_READ = 2;
 const NO_CHAT: ChatSince = { messages: [], more: false };
 
 /** A failure as a log line carries it: the checkout's reason, or a store failure's kind alone, since its message may name a statement. */
-function describeFailure(failure: CheckoutFailure): string {
+export function describeFailure(failure: CheckoutFailure): string {
   return failure._tag === "CheckoutRefused" ? failure.reason : failure._tag;
 }
 
@@ -625,27 +621,14 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
     chatOn: boolean,
     memoryOn: boolean,
   ): CoderSessionPrompt => {
-    const brief = codingAgentBriefOf(agent);
-    const taskLink =
-      agent.taskId === null
-        ? null
-        : encodeMention(
-            { kind: MENTION_KIND.TASK, taskId: agent.taskId },
-            { workspace, repository: null },
-          );
-    const text = coderInstructions(
-      agent.repository,
-      brief,
+    const text = agentCoderInstructions(agent, {
       ciReadable,
-      taskLink,
       coAuthor,
+      workspace,
       chatOn,
-      agent.startBranch,
-      agent.githubAccess === GITHUB_ACCESS.TOKEN,
-      CODER_HARNESS.EVE,
-      agent.kind,
       memoryOn,
-    );
+      harness: CODER_HARNESS.EVE,
+    });
     return { text, hash: promptHashOf(text), ciReadable, coAuthor, workspace, chatOn, memoryOn };
   };
 
@@ -1188,7 +1171,7 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
         yield* titleSubagent(model, admitted.target, childId, task);
       }),
 
-    research: (_admitted, _tool, turn, input) =>
+    research: (_admitted, turn, input) =>
       runReadWebPage(
         { turnId: hostTurnId(turn.sessionId, turn.eveTurnId), budget: research },
         input,

@@ -135,7 +135,7 @@ export type LukeMcpServices =
   | SentryApp;
 
 /** What a tool runs against: the doors' services, and the agent's browser, which the server provides itself (`app.ts`). */
-export type LukeMcpToolServices = LukeMcpServices | AgentBrowser;
+type LukeMcpToolServices = LukeMcpServices | AgentBrowser;
 
 /** What a call carries beside its input: the doors to the agent's sandbox, where a tool reads a file the agent names by its path or `show_code` reads its checkout; a fresh id of its own; and the seams the doors that reach eve or the store's writer read. */
 interface LukeMcpCallContext {

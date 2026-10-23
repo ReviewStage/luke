@@ -16,7 +16,7 @@ import {
 } from "@luke/features/automation-wire";
 import { EXCESS_KEYS, type UnparsedWireValue } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
-import { Clock, Effect, Option, Result, Schema } from "effect";
+import { DateTime, Effect, Option, Result, Schema } from "effect";
 
 /**
  * automation-github.ts -- a GitHub delivery read as an automation's trigger: which events it is, the issue, pull request, or branch it names, and the runs it queues.
@@ -436,7 +436,7 @@ const queueRunsOf = Effect.fnUntraced(function* (deliveryId: string, read: GitHu
     read.event,
     MAXIMUM_AUTOMATIONS,
   )).filter((automation) => triggerMatches(automation.trigger, read));
-  const firedAt = new Date(yield* Clock.currentTimeMillis);
+  const firedAt = yield* DateTime.nowAsDate;
   const recorded = yield* Effect.forEach(listening, (automation) =>
     recordAutomationRun(automation, { dedupeKey: deliveryId, firing: read.firing, firedAt }),
   );

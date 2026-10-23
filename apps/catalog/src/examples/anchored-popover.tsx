@@ -4,6 +4,7 @@ import {
   Button,
   GAP,
   Inline,
+  JUSTIFY,
   POPOVER_ALIGN,
   type PopoverAlign,
   ScrollArea,
@@ -44,7 +45,7 @@ function AnchoredPopoverExample(): React.JSX.Element {
     <>
       <CatalogSection id="anchored-popover-edges" title="From either edge">
         <div className="catalog-popover-stage">
-          <Inline gap={GAP.CONTROL} justify="between">
+          <Inline gap={GAP.CONTROL} justify={JUSTIFY.BETWEEN}>
             <Hung align={POPOVER_ALIGN.START} label="Leading edge" />
             <Hung align={POPOVER_ALIGN.END} label="Trailing edge" />
           </Inline>

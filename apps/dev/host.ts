@@ -24,6 +24,7 @@ import {
   type CoderHost,
   type CoderTurnMessage,
   coderHost,
+  describeFailure,
   type InboxCall,
 } from "@luke/service/agents/coder-host/host";
 import { type InboxToolResult, inboxRejected } from "@luke/service/agents/coder-host/inbox";
@@ -41,7 +42,6 @@ import {
 import { showImageRejected } from "@luke/service/agents/coder-host/show-image";
 import {
   type CallTool,
-  type CODER_TOOL,
   type KindTool,
   kindToolsOf,
   type RepositoryTool,
@@ -509,9 +509,7 @@ export async function deepenCheckout(ctx: ToolContext): Promise<void> {
       yield* host.deepen(admitted.success, sandbox);
     }).pipe(
       // A store failure by its kind alone, since its message may name a statement.
-      Effect.mapError(
-        (failure) => new Error(failure._tag === "CheckoutRefused" ? failure.reason : failure._tag),
-      ),
+      Effect.mapError((failure) => new Error(describeFailure(failure))),
     ),
   );
 }
@@ -544,7 +542,6 @@ export function runDelegatedShowImageTool(
  */
 export function runResearchTool(
   admit: (auth: SessionAuth, sessionId: string) => ReturnType<CoderHost["admit"]>,
-  tool: typeof CODER_TOOL.READ_WEB_PAGE,
   context: { readonly auth: SessionAuth; readonly sessionId: string; readonly turnId: string },
   input: UnparsedWireValue,
 ): Promise<UnparsedWireValue> {
@@ -555,7 +552,7 @@ export function runResearchTool(
         return { status: ACTION_RESULT_STATUS.REJECTED, reason: admitted.failure };
       }
       const turn = { sessionId: context.sessionId, eveTurnId: context.turnId };
-      const answer = yield* host.research(admitted.success, tool, turn, input);
+      const answer = yield* host.research(admitted.success, turn, input);
       return { ...answer };
     }),
   );
