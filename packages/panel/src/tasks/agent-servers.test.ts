@@ -134,7 +134,7 @@ async function opened(standing: IntegrationStatuses = statuses) {
     for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
   });
   const field = () =>
-    container.querySelector<HTMLInputElement>(".agent-servers-menu input") ??
+    container.querySelector<HTMLInputElement>('.agent-servers-menu input[type="text"]') ??
     assert.fail("no field");
   const key = (name: string) =>
     act(() => {
