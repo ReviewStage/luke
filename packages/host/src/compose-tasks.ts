@@ -462,12 +462,13 @@ function isUnsealed<Answer extends object>(sealed: Answer | Unsealed): sealed is
   return "failure" in sealed;
 }
 
-/** The parts of an open task read apart from its document, each laid over the view as it lands, and the document itself. */
+/** The parts of an open task read apart from its document, each laid over the view as it lands, then the document itself and its pin. */
 const OPENED_PART = {
   BOARD: "board",
   CODE: "code",
   PAGES: "pages",
   DOCUMENT: "document",
+  MARKS: "marks",
 } as const;
 
 type OpenedPart = (typeof OPENED_PART)[keyof typeof OPENED_PART];
@@ -1159,6 +1160,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     [OPENED_PART.CODE]: { started: 0, laid: 0 },
     [OPENED_PART.PAGES]: { started: 0, laid: 0 },
     [OPENED_PART.DOCUMENT]: { started: 0, laid: 0 },
+    [OPENED_PART.MARKS]: { started: 0, laid: 0 },
   };
 
   /** Numbers a read of the part as it starts. */
@@ -1177,6 +1179,22 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
   /** Marks a write of the part, which every read that left before it is older than. */
   function partWritten(part: OpenedPart): void {
     laidNow(part, partReadStarted(part));
+  }
+
+  /**
+   * The open task's document as its read `opened` left it, keeping the pin
+   * of the copy held where a pin was answered after the read numbered
+   * `marksRead` left, since the read's is then the older.
+   */
+  function openedDocument(
+    taskId: string,
+    opened: Effect.Success<ReturnType<typeof client.open>>,
+    marksRead: number,
+  ): TasksView["document"] {
+    const held = heldTaskOf(taskId);
+    const pinStands = laidNow(OPENED_PART.MARKS, marksRead);
+    if (!opened.ok || held === undefined || pinStands) return documentAfter(opened, held);
+    return { status: TASKS_READ.READY, task: withMarksOf(opened.answer, held) };
   }
 
   /** The open's part reads still out, one per part, a newer open's taking the place of the last. */
@@ -1206,6 +1224,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
   function readOpened(taskId: string) {
     return Effect.gen(function* () {
       const documentRead = partReadStarted(OPENED_PART.DOCUMENT);
+      const marksRead = partReadStarted(OPENED_PART.MARKS);
       write({
         ...(heldTaskOf(taskId) === undefined
           ? { document: { status: TASKS_READ.READING } }
@@ -1250,7 +1269,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       if (view.activeTaskId !== taskId) return;
       // Note that a document an answer wrote after this read left stands, since it is the newer.
       let read: TasksView = laidNow(OPENED_PART.DOCUMENT, documentRead)
-        ? { ...view, document: documentAfter(opened, heldTaskOf(taskId)) }
+        ? { ...view, document: openedDocument(taskId, opened, marksRead) }
         : view;
       for (const part of early.splice(0)) {
         if (laidNow(part.part, part.read)) read = part.lay(read);
@@ -1543,16 +1562,34 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     const tasks = view.tasks.map((row) =>
       row.id === task.id ? { ...withoutAssignee(row), ...summaryOf(task) } : row,
     );
-    const held = heldTaskOf(task.id);
-    if (held !== undefined) partWritten(OPENED_PART.DOCUMENT);
-    write(
-      held === undefined
-        ? { tasks }
-        : {
-            tasks,
-            document: { status: TASKS_READ.READY, task: { ...withoutAssignee(held), ...task } },
-          },
-    );
+    write({
+      tasks,
+      ...documentTook(task.id, task, (held) => ({ ...withoutAssignee(held), ...task })),
+    });
+  }
+
+  /**
+   * The open document as `answered`, a write's answer about `taskId`, leaves
+   * it, laid over the copy held by `lay`, so no read that left before the
+   * answer lands over it; an open still reading takes the answer whole.
+   * Where another task is open, the copy kept of `taskId` takes it instead,
+   * so opening it again draws the answer rather than what was left.
+   */
+  function documentTook(
+    taskId: string,
+    answered: Task,
+    lay: (held: Task) => Task,
+  ): Pick<TasksView, "document"> | undefined {
+    if (view.activeTaskId !== taskId) {
+      const copy = recentlyOpened.get(taskId);
+      if (copy !== undefined) recentlyOpened.set(taskId, { ...copy, task: lay(copy.task) });
+      return undefined;
+    }
+    partWritten(OPENED_PART.DOCUMENT);
+    const held = heldTaskOf(taskId);
+    return {
+      document: { status: TASKS_READ.READY, task: held === undefined ? answered : lay(held) },
+    };
   }
 
   /**
@@ -1590,6 +1627,12 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     };
   }
 
+  /** `task` with the pin `marked` carries in place of its own. */
+  function withMarksOf(task: Task, marked: Task): Task {
+    const { pinnedAt: _pinned, pinPosition: _position, ...kept } = task;
+    return { ...kept, ...marksOf(marked) };
+  }
+
   /**
    * Draws the pin `task` was answered with on its row of the
    * list, and on the open document where it is the one held. Note that the
@@ -1612,11 +1655,8 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       write({ tasks });
       return;
     }
-    const { pinnedAt: _pinned, pinPosition: _position, ...kept } = held;
-    write({
-      tasks,
-      document: { status: TASKS_READ.READY, task: { ...kept, ...marksOf(task) } },
-    });
+    partWritten(OPENED_PART.MARKS);
+    write({ tasks, document: { status: TASKS_READ.READY, task: withMarksOf(held, task) } });
   }
 
   /** Pins or unpins one task on the service, and draws what it answered. */
@@ -2226,19 +2266,14 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
             const tasks = view.tasks.map((task) =>
               task.id === taskId ? { ...task, name: renamed.name } : task,
             );
-            const held = heldTaskOf(taskId);
-            if (held !== undefined) partWritten(OPENED_PART.DOCUMENT);
-            write(
-              held === undefined
-                ? { tasks }
-                : {
-                    tasks,
-                    document: {
-                      status: TASKS_READ.READY,
-                      task: { ...held, name: renamed.name, document: renamed.document },
-                    },
-                  },
-            );
+            write({
+              tasks,
+              ...documentTook(taskId, renamed, (held) => ({
+                ...held,
+                name: renamed.name,
+                document: renamed.document,
+              })),
+            });
             return [{ renamed: true }, written.txid] as const;
           }),
         );

@@ -1684,7 +1684,7 @@ it.effect(
       // Every read of the task is held from here, as a service that has not answered yet.
       const answered = yield* Deferred.make<void>();
       const held =
-        <A>(read: (taskId: string) => Effect.Effect<A>) =>
+        <A, R>(read: (taskId: string) => Effect.Effect<A, never, R>) =>
         (taskId: string) =>
           Effect.andThen(Deferred.await(answered), read(taskId));
       const { open, readBoard, readCode } = service;
@@ -1785,6 +1785,81 @@ it.effect(
 
       yield* Deferred.succeed(answered, undefined);
       yield* settled;
+      assert.equal(last()?.document.task?.name, "Invitations");
+      assert.equal(last()?.document.task?.document.body, "# Invitations");
+    }),
+);
+
+it.effect(
+  "a rename answered while the task it opened on is still read draws the renamed document, which the read then never lands over",
+  () =>
+    Effect.gen(function* () {
+      const invites = task(INVITES, "Teammate invitations", "# Teammate invitations", 10);
+      const service = fakeService([invites]);
+      const { call, last, settled } = yield* subject(service);
+      // The read takes the task as it stands when asked, and answers only once let go.
+      const answered = yield* Deferred.make<void>();
+      const { open } = service;
+      service.open = (taskId) =>
+        Effect.flatMap(open(taskId), (read) => Effect.as(Deferred.await(answered), read));
+
+      yield* call(GATEWAY_METHOD.TASKS_OPEN, { taskId: INVITES });
+      yield* settled;
+      assert.equal(last()?.document.status, TASKS_READ.READING);
+      yield* call(GATEWAY_METHOD.TASKS_RENAME, { taskId: INVITES, name: "Invitations" });
+      assert.equal(last()?.document.task?.document.body, "# Invitations");
+
+      yield* Deferred.succeed(answered, undefined);
+      yield* settled;
+      assert.equal(last()?.document.task?.name, "Invitations");
+      assert.equal(last()?.document.task?.document.body, "# Invitations");
+    }),
+);
+
+it.effect(
+  "a pin answered while an open's read is out stands over the pin the read took, and the read's document still lands",
+  () =>
+    Effect.gen(function* () {
+      const invites = task(INVITES, "Teammate invitations", "# Teammate invitations", 10);
+      const billing = task(BILLING, "Billing export", "# Billing export", 20);
+      const service = fakeService([billing, invites]);
+      const { call, last, settled, openTask } = yield* subject(service);
+      yield* openTask(INVITES);
+      yield* openTask(BILLING);
+
+      const answered = yield* Deferred.make<void>();
+      const { open } = service;
+      service.open = (taskId) =>
+        Effect.flatMap(open(taskId), (read) => Effect.as(Deferred.await(answered), read));
+      service.tasks = [billing, { ...invites, document: { ...invites.document, body: "# Newer" } }];
+      yield* call(GATEWAY_METHOD.TASKS_OPEN, { taskId: INVITES });
+      yield* settled;
+      yield* call(GATEWAY_METHOD.TASKS_PIN, { taskId: INVITES, pinned: true });
+      assert.equal(last()?.document.task?.pinnedAt, MARKED_AT);
+
+      yield* Deferred.succeed(answered, undefined);
+      yield* settled;
+      assert.equal(last()?.document.task?.pinnedAt, MARKED_AT);
+      assert.equal(last()?.document.task?.document.body, "# Newer");
+    }),
+);
+
+it.effect(
+  "a rename of a task left a moment ago reaches the copy kept of it, which opening it again draws though the read fails",
+  () =>
+    Effect.gen(function* () {
+      const invites = task(INVITES, "Teammate invitations", "# Teammate invitations", 10);
+      const billing = task(BILLING, "Billing export", "# Billing export", 20);
+      const service = fakeService([billing, invites]);
+      const { call, last, openTask } = yield* subject(service);
+      yield* openTask(INVITES);
+      yield* openTask(BILLING);
+
+      yield* call(GATEWAY_METHOD.TASKS_RENAME, { taskId: INVITES, name: "Invitations" });
+      service.open = () => Effect.succeed({ ok: false, failure: TASK_CALL_FAILURE.UNANSWERED });
+      yield* openTask(INVITES);
+
+      assert.equal(last()?.document.status, TASKS_READ.READY);
       assert.equal(last()?.document.task?.name, "Invitations");
       assert.equal(last()?.document.task?.document.body, "# Invitations");
     }),
