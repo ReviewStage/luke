@@ -326,7 +326,9 @@
      a menu's row, lit rather than pressed, so it holds still; an
      unavailable or busy one takes no press, so it gives none. */
   .luke-button-face {
-    transition: transform var(--luke-duration-fast) var(--luke-spring-fast);
+    transition:
+      transform var(--luke-duration-fast) var(--luke-spring-fast),
+      opacity var(--luke-duration-quick) ease-out;
   }
 
   /* Note that the face goes down on the quick exit beat and comes back on
@@ -462,6 +464,10 @@
      stands. */
   .luke-button[data-done="true"] .luke-button-face {
     opacity: 0;
+    /* Note that the words leave at once, because a busy button's words stood
+       hidden under its ring and would show through a fade as the check
+       lands; they come back on the face's own fade as the check goes. */
+    transition: none;
   }
 
   .luke-button-done {
@@ -478,6 +484,38 @@
      line draws it in, because it stands on the act's own fill. */
   .luke-button-done svg {
     color: inherit;
+  }
+
+  /* A busy button's press landing: the check springs in where the ring
+     stood and holds, then goes, and its words fade back (`button.tsx`
+     waits on the hold). The hold is `--luke-confirm-delay`, how long a
+     Saved stands, which reduced motion keeps, so the check is still seen
+     there, only without its spring. */
+  .luke-button-done[data-hold="true"] {
+    animation:
+      luke-button-done-hold var(--luke-confirm-delay) linear,
+      luke-button-done-fade var(--luke-duration-quick) ease-out backwards,
+      luke-button-done-spring var(--luke-duration-fast) var(--luke-spring-fast) backwards;
+  }
+
+  /* Note that the hold moves nothing; it is a beat the check is waited on for. */
+  @keyframes luke-button-done-hold {
+    to {
+      opacity: 1;
+    }
+  }
+
+  /* A button that turns, a refresh's or a retry's, turns its glyph once as
+     a press lands, on the spring, beside its face's pulse (`button.tsx`
+     restarts `data-turn` on each press). */
+  .luke-button[data-turn="true"] .luke-button-face > svg:first-child {
+    animation: luke-button-turn-once var(--luke-duration-shape) var(--luke-spring);
+  }
+
+  @keyframes luke-button-turn-once {
+    to {
+      transform: rotate(1turn);
+    }
   }
 
   @keyframes luke-button-done-fade {

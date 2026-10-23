@@ -14,6 +14,7 @@
 @import "./components/scroll-area/scroll-area.css";
 @import "./components/list-row/list-row.css";
 @import "./components/list-motion/list-motion.css";
+@import "./components/reveal/reveal.css";
 @import "./components/menu/menu.css";
 @import "./components/mark-strip/mark-strip.css";
 @import "./components/nav-item/nav-item.css";
@@ -81,6 +82,7 @@
 @import "./components/text-field/text-field.css";
 @import "./components/address-field/address-field.css";
 @import "./components/toast/toast.css";
+@import "./components/drawer-swipe/drawer-swipe.css";
 @import "./components/tooltip/tooltip.css";
 @import "./components/checkbox/checkbox.css";
 @import "./components/choice-list/choice-list.css";

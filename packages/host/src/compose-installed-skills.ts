@@ -4,6 +4,7 @@ import type {
 } from "@luke/features/installed-skill-client";
 import {
   INSTALLED_SKILL_CALL_FAILURE,
+  type InstalledSkillContentView,
   type InstalledSkillFailedView,
   type InstalledSkillInstallView,
   type InstalledSkillListView,
@@ -18,6 +19,7 @@ import {
   installedSkillListParamsSchema,
   installedSkillPreviewFileParamsSchema,
   installedSkillPreviewParamsSchema,
+  installedSkillShareParamsSchema,
   installedSkillToggleParamsSchema,
   installedSkillUpdateParamsSchema,
 } from "@luke/features/installed-skill-view";
@@ -31,7 +33,7 @@ import type { Composer } from "./composer.js";
 import type { RunMode } from "./run-mode.js";
 
 /**
- * compose-installed-skills.ts -- the skills the account installs into Luke, asked of the service on the window's behalf: listed, a paste previewed and installed, a previewed skill's `SKILL.md` read, one toggled, checked for an update, updated, or removed.
+ * compose-installed-skills.ts -- the skills the account installs into Luke, asked of the service on the window's behalf: listed, one read, a paste previewed and installed, a previewed skill's `SKILL.md` read, one toggled, checked for an update, updated, shared with a workspace, or removed.
  *
  * Nothing is held here. Every ask is one call of the service answered whole,
  * as the window's view of it: the service's answer, or the failure with the
@@ -43,12 +45,14 @@ import type { RunMode } from "./run-mode.js";
 export type InstalledSkillsClient = Pick<
   HostedInstalledSkillClient,
   | "list"
+  | "read"
   | "preview"
   | "previewFile"
   | "install"
   | "setEnabled"
   | "checkUpdate"
   | "update"
+  | "share"
   | "remove"
 >;
 
@@ -122,6 +126,16 @@ function composed(
         const view = yield* asked(client.list(workspaceId), (skills) => ({ skills }));
         return carried<InstalledSkillListView>(view);
       }),
+    [GATEWAY_METHOD.INSTALLED_SKILLS_READ]: (params) =>
+      Effect.gen(function* () {
+        const { skillId } = yield* read(
+          installedSkillIdParamsSchema,
+          params,
+          "a read names a skill",
+        );
+        const view = yield* asked(client.read(skillId), (content) => content);
+        return carried<InstalledSkillContentView>(view);
+      }),
     [GATEWAY_METHOD.INSTALLED_SKILLS_PREVIEW]: (params) =>
       Effect.gen(function* () {
         const { workspaceId, text } = yield* read(
@@ -181,6 +195,16 @@ function composed(
         );
         const view = yield* asked(client.update(workspaceId, skillId), (updated) => updated);
         return carried<InstalledSkillUpdatedView>(view);
+      }),
+    [GATEWAY_METHOD.INSTALLED_SKILLS_SHARE]: (params) =>
+      Effect.gen(function* () {
+        const { workspaceId, skillId } = yield* read(
+          installedSkillShareParamsSchema,
+          params,
+          "a share names a workspace and a skill",
+        );
+        const view = yield* asked(client.share(workspaceId, skillId), (skill) => ({ skill }));
+        return carried<InstalledSkillView>(view);
       }),
     [GATEWAY_METHOD.INSTALLED_SKILLS_REMOVE]: (params) =>
       Effect.gen(function* () {

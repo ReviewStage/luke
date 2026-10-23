@@ -1,5 +1,5 @@
 /**
- * installed-skills.ts -- the skills members install into Luke (`installed-skill-route-wire.ts`), as procedures: list them, preview a paste and read one of its skills' `SKILL.md`, install from it, turn one on or off, check it for an update or update it, and remove it.
+ * installed-skills.ts -- the skills members install into Luke (`installed-skill-route-wire.ts`), as procedures: list them, read one, preview a paste and read one of its skills' `SKILL.md`, install from it, turn one on or off, check it for an update or update it, share a personal one with a workspace, and remove it.
  *
  * Every output is its wire schema flipped, so oRPC's output check encodes
  * the handler's value into the bytes the wire carries. A body refuses a key
@@ -17,6 +17,7 @@ import {
   INSTALLED_SKILL_PASTE_MAX_CHARS,
   INSTALLED_SKILL_UPDATE_QUERY,
   installedSkillAnswerSchema,
+  installedSkillContentSchema,
   installedSkillInstallAnswerSchema,
   installedSkillInstallRequestSchema,
   installedSkillListAnswerSchema,
@@ -25,6 +26,7 @@ import {
   installedSkillPreviewRequestSchema,
   installedSkillPreviewSchema,
   installedSkillRemovedAnswerSchema,
+  installedSkillShareRequestSchema,
   installedSkillToggleRequestSchema,
   installedSkillUpdateCheckSchema,
   installedSkillUpdatedAnswerSchema,
@@ -40,7 +42,7 @@ import { bodyCap, exactBodyInput, exactInput, hostedProcedure } from "./base.js"
  */
 const PASTE_BODY_BYTES = INSTALLED_SKILL_PASTE_MAX_CHARS * 6 + 16_384;
 
-/** A toggle or an update carries a boolean or a workspace's id, so a body past this is neither. */
+/** A toggle, an update, or a share carries a boolean or a workspace's id, so a body past this is none of them. */
 const SMALL_BODY_BYTES = 1_024;
 
 /** A previewed skill's `SKILL.md` read names a repository, a commit, and a folder, so a body past this is none. */
@@ -51,6 +53,9 @@ const INSTALLED_SKILL_PATH = `${HOSTED_SERVICE_PATH.INSTALLED_SKILLS}/{id}` as c
 
 /** One skill's update: whether one is available (GET), or the update itself (POST). */
 const INSTALLED_SKILL_UPDATE_PATH = `${INSTALLED_SKILL_PATH}/update` as const;
+
+/** One personal skill shared with a workspace, which it moves into. */
+const INSTALLED_SKILL_SHARE_PATH = `${INSTALLED_SKILL_PATH}/share` as const;
 
 /** The path's id, as the router reads it from the public path. */
 const pathId = { id: EffectSchema.String };
@@ -67,6 +72,10 @@ export const installedSkillsContract = {
       }),
     )
     .output(EffectSchema.flip(installedSkillListAnswerSchema)),
+  read: hostedProcedure
+    .meta(openapi({ method: HTTP_METHOD.GET, path: INSTALLED_SKILL_PATH }))
+    .input(EffectSchema.Struct(pathId))
+    .output(EffectSchema.flip(installedSkillContentSchema)),
   preview: hostedProcedure
     .meta(bodyCap(PASTE_BODY_BYTES))
     .meta(
@@ -129,6 +138,17 @@ export const installedSkillsContract = {
     )
     .input(exactBodyInput(EffectSchema.Struct(pathId), installedSkillUpdateRequestSchema))
     .output(EffectSchema.flip(installedSkillUpdatedAnswerSchema)),
+  share: hostedProcedure
+    .meta(bodyCap(SMALL_BODY_BYTES))
+    .meta(
+      openapi({
+        method: HTTP_METHOD.POST,
+        path: INSTALLED_SKILL_SHARE_PATH,
+        inputStructure: "detailed",
+      }),
+    )
+    .input(exactBodyInput(EffectSchema.Struct(pathId), installedSkillShareRequestSchema))
+    .output(EffectSchema.flip(installedSkillAnswerSchema)),
   remove: hostedProcedure
     .meta(bodyCap(SMALL_BODY_BYTES))
     .meta(openapi({ method: HTTP_METHOD.DELETE, path: INSTALLED_SKILL_PATH }))

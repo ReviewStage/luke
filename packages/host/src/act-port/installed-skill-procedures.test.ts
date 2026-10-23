@@ -28,6 +28,9 @@ const WORKSPACE_ID = "workspace-stage";
 const LIST_REFUSAL = "Could not read your skills on this system.";
 const INSTALL_REFUSAL = "Could not install the skill on this system.";
 const TOGGLE_REFUSAL = "Could not turn the skill on or off on this system.";
+const SHARE_REFUSAL = "Could not share the skill with the workspace on this system.";
+
+const SKILL_ID = "5d3c2b1a-0f9e-4d8c-b7a6-123456789abc";
 
 const NOTHING: InstalledSkillListView = { skills: [] };
 
@@ -49,6 +52,7 @@ function windowPort(actor: ActSender, options: { trusted?: boolean } = {}) {
             asked.push(`list:${workspaceId}`);
             return NOTHING;
           }),
+        installedSkillsRead: () => Effect.succeed(refused),
         installedSkillsPreview: () => Effect.succeed(refused),
         installedSkillsPreviewFile: () => Effect.succeed(refused),
         installedSkillsInstall: ({ scope }) =>
@@ -63,6 +67,11 @@ function windowPort(actor: ActSender, options: { trusted?: boolean } = {}) {
           }),
         installedSkillsCheckUpdate: () => Effect.succeed(refused),
         installedSkillsUpdate: () => Effect.succeed(refused),
+        installedSkillsShare: ({ workspaceId, skillId }) =>
+          Effect.sync(() => {
+            asked.push(`share:${workspaceId}:${skillId}`);
+            return refused;
+          }),
         installedSkillsRemove: () => Effect.succeed(refused),
       },
     }),
@@ -90,16 +99,30 @@ function windowPort(actor: ActSender, options: { trusted?: boolean } = {}) {
           enabled: true,
         } as never),
       ),
+    share: () =>
+      settledAct(
+        client[INSTALLED_SKILL_ACT_KIND.INSTALLED_SKILLS_SHARE]({
+          workspaceId: WORKSPACE_ID,
+          skillId: SKILL_ID,
+        }),
+      ),
     asked,
   };
 }
 
-it("a panel's list and install reach the host with what the page names, and it hears the answer", async () => {
-  const { list, install, asked } = windowPort(PANEL);
+it("a panel's list, install, and share reach the host with what the page names, and it hears the answer", async () => {
+  const { list, install, share, asked } = windowPort(PANEL);
 
   assert.deepEqual(await list(), { answer: NOTHING });
   assert.deepEqual(await install(), { answer: { skills: [] } });
-  assert.deepEqual(asked, [`list:${WORKSPACE_ID}`, `install:${INSTALLED_SKILL_SCOPE.PERSONAL}`]);
+  assert.deepEqual(await share(), {
+    answer: { failure: INSTALLED_SKILL_CALL_FAILURE.UNANSWERED },
+  });
+  assert.deepEqual(asked, [
+    `list:${WORKSPACE_ID}`,
+    `install:${INSTALLED_SKILL_SCOPE.PERSONAL}`,
+    `share:${WORKSPACE_ID}:${SKILL_ID}`,
+  ]);
 });
 
 it("the voice and call windows, and a frame this build does not trust, are refused in each kind's own words, and the host is not asked", async () => {
@@ -108,9 +131,10 @@ it("the voice and call windows, and a frame this build does not trust, are refus
     { actor: CALL, trusted: true },
     { actor: PANEL, trusted: false },
   ]) {
-    const { list, install, asked } = windowPort(actor, { trusted });
+    const { list, install, share, asked } = windowPort(actor, { trusted });
     assert.deepEqual(await list(), { refused: LIST_REFUSAL });
     assert.deepEqual(await install(), { refused: INSTALL_REFUSAL });
+    assert.deepEqual(await share(), { refused: SHARE_REFUSAL });
     assert.deepEqual(asked, []);
   }
 });

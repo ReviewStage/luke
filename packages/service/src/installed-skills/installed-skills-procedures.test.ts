@@ -11,6 +11,7 @@ import {
   INSTALLED_SKILL_PROBLEM,
   INSTALLED_SKILL_STANDING,
   installedSkillAnswerSchema,
+  installedSkillContentSchema,
   installedSkillInstallAnswerSchema,
   installedSkillListAnswerSchema,
   installedSkillPreviewFileSchema,
@@ -48,7 +49,8 @@ import { installedSkillsProcedures } from "./installed-skills-procedures.js";
  * workspace's installation for a private repository and anonymously for a
  * public one; text made a one-file skill; a skill refused for its bounds,
  * its convention, or a credential; each scope's permissions; and an update
- * offered only when the skill's own folder moved. Synthetic accounts,
+ * offered only when the skill's own folder moved; one skill read whole;
+ * and a personal skill shared into a workspace. Synthetic accounts,
  * repositories, and words throughout.
  */
 
@@ -937,6 +939,145 @@ it.layer(getTestDB())("the installed skills routes", (it) => {
           (yield* ask(installedSkillPath("not-a-uuid"), owner, { method: "DELETE" })).status,
           HOSTED_HTTP_STATUS.NOT_FOUND,
         );
+      }),
+  );
+
+  it.effect(
+    "a read answers a skill's SKILL.md and every file's size to whoever may list it, and nothing to anyone else",
+    () =>
+      Effect.gen(function* () {
+        const kit = fakeRepository("acme", "readable");
+        commitTo(kit, "main", {
+          "skills/review/SKILL.md": skillFile("review", "Review a pull request."),
+          "skills/review/scripts/check.sh": "echo check",
+        });
+        const owner = yield* openGithubUser();
+        const teammate = yield* openGithubUser();
+        const stranger = yield* openGithubUser();
+        const workspace = yield* openWorkspace(owner);
+        yield* joinWorkspace(workspace, teammate, WORKSPACE_ROLE.MEMBER);
+        const ask = yield* routes(githubReaching([], undefined, {}, repositoryScript(kit)));
+        const installedAs = (scope: string, text: string) =>
+          Effect.map(
+            ask(SKILLS, owner, install({ workspaceId: workspace, scope, text })),
+            (answer) => {
+              const [made] = readAnswer(installedSkillInstallAnswerSchema, 201, answer).skills;
+              assert.ok(made);
+              return made.id;
+            },
+          );
+        const own = yield* installedAs(
+          INSTALLED_SKILL_SCOPE.PERSONAL,
+          "npx skills add acme/readable",
+        );
+        const team = yield* installedAs(
+          INSTALLED_SKILL_SCOPE.WORKSPACE,
+          skillFile("team-style", "Shared with everyone."),
+        );
+        const read = (userId: string, id: string) => ask(installedSkillPath(id), userId);
+
+        assert.deepEqual(
+          readAnswer(installedSkillContentSchema, HOSTED_HTTP_STATUS.OK, yield* read(owner, own)),
+          {
+            id: own,
+            skillFile: skillFile("review", "Review a pull request."),
+            files: [
+              {
+                path: "SKILL.md",
+                bytes: Buffer.byteLength(skillFile("review", "Review a pull request.")),
+              },
+              { path: "scripts/check.sh", bytes: Buffer.byteLength("echo check") },
+            ],
+          },
+        );
+        assert.equal(
+          readAnswer(
+            installedSkillContentSchema,
+            HOSTED_HTTP_STATUS.OK,
+            yield* read(teammate, team),
+          ).skillFile.trimEnd(),
+          skillFile("team-style", "Shared with everyone.").trimEnd(),
+          "a member reads a workspace skill they did not install",
+        );
+        assert.equal((yield* read(teammate, own)).status, HOSTED_HTTP_STATUS.NOT_FOUND);
+        assert.equal((yield* read(stranger, team)).status, HOSTED_HTTP_STATUS.NOT_FOUND);
+        assert.equal((yield* read(owner, "not-a-uuid")).status, HOSTED_HTTP_STATUS.NOT_FOUND);
+      }),
+  );
+
+  it.effect(
+    "a share moves the owner's personal skill into their workspace, never into a personal workspace, never someone else's, and never over a name the workspace holds",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* openGithubUser();
+        const teammate = yield* openGithubUser();
+        const stranger = yield* openGithubUser();
+        const workspace = yield* openWorkspace(owner);
+        yield* joinWorkspace(workspace, teammate, WORKSPACE_ROLE.ADMIN);
+        const personal = yield* openWorkspace(owner);
+        yield* Database.use((db) =>
+          db
+            .insert(personalWorkspace)
+            .values({ userId: owner, organizationId: personal, createdAt: new Date(0) }),
+        );
+        const ask = yield* routes(githubReaching([]));
+        const installedAs = (by: string, scope: string, name: string) =>
+          Effect.map(
+            ask(
+              SKILLS,
+              by,
+              install({ workspaceId: workspace, scope, text: skillFile(name, "Does it.") }),
+            ),
+            (answer) => {
+              const [made] = readAnswer(installedSkillInstallAnswerSchema, 201, answer).skills;
+              assert.ok(made);
+              return made.id;
+            },
+          );
+        const own = yield* installedAs(owner, INSTALLED_SKILL_SCOPE.PERSONAL, "grill-me");
+        const clash = yield* installedAs(owner, INSTALLED_SKILL_SCOPE.PERSONAL, "testing");
+        yield* installedAs(teammate, INSTALLED_SKILL_SCOPE.WORKSPACE, "testing");
+        const share = (userId: string, id: string, workspaceId: string) =>
+          ask(`${installedSkillPath(id)}/share`, userId, {
+            method: "POST",
+            body: { workspaceId },
+          });
+
+        assert.equal(
+          (yield* share(owner, own, personal)).status,
+          HOSTED_HTTP_STATUS.BAD_REQUEST,
+          "a personal workspace takes no workspace skill",
+        );
+        assert.equal((yield* share(teammate, own, workspace)).status, HOSTED_HTTP_STATUS.NOT_FOUND);
+        assert.equal((yield* share(stranger, own, workspace)).status, HOSTED_HTTP_STATUS.NOT_FOUND);
+        assert.deepEqual(yield* share(owner, clash, workspace), {
+          status: HOSTED_HTTP_STATUS.CONFLICT,
+          body: { error: HOSTED_API_ERROR.SKILL_NAME_TAKEN, skillName: "testing" },
+        });
+
+        const shared = readAnswer(
+          installedSkillAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* share(owner, own, workspace),
+        ).skill;
+        assert.deepEqual(
+          [shared.id, shared.scope, shared.workspaceId, shared.installedBy, shared.manageable],
+          [own, INSTALLED_SKILL_SCOPE.WORKSPACE, workspace, owner, true],
+        );
+        assert.equal(
+          (yield* share(owner, own, workspace)).status,
+          HOSTED_HTTP_STATUS.FORBIDDEN,
+          "a workspace skill is shared already",
+        );
+        const seen = readAnswer(
+          installedSkillListAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(`${SKILLS}?workspaceId=${workspace}`, teammate),
+        ).skills.map(({ name, scope }) => ({ name, scope }));
+        assert.deepEqual(seen, [
+          { name: "grill-me", scope: INSTALLED_SKILL_SCOPE.WORKSPACE },
+          { name: "testing", scope: INSTALLED_SKILL_SCOPE.WORKSPACE },
+        ]);
       }),
   );
 

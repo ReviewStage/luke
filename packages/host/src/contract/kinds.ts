@@ -233,12 +233,14 @@ export const CHAPTERS_ACT_KIND = {
  */
 export const INSTALLED_SKILL_ACT_KIND = {
   INSTALLED_SKILLS_LIST: "installedSkills.list",
+  INSTALLED_SKILLS_READ: "installedSkills.read",
   INSTALLED_SKILLS_PREVIEW: "installedSkills.preview",
   INSTALLED_SKILLS_PREVIEW_FILE: "installedSkills.previewFile",
   INSTALLED_SKILLS_INSTALL: "installedSkills.install",
   INSTALLED_SKILLS_SET_ENABLED: "installedSkills.setEnabled",
   INSTALLED_SKILLS_CHECK_UPDATE: "installedSkills.checkUpdate",
   INSTALLED_SKILLS_UPDATE: "installedSkills.update",
+  INSTALLED_SKILLS_SHARE: "installedSkills.share",
   INSTALLED_SKILLS_REMOVE: "installedSkills.remove",
 } as const;
 

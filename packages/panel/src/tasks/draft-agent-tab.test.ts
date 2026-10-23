@@ -591,7 +591,14 @@ test("a draft New task handed over after its agent was refused sends nothing by 
   };
   const marks: unknown[] = [];
   const tab = mount([undefined], handed, {
-    start: { available: true, reason: undefined, busy: false, note: undefined, onPress: () => {} },
+    start: {
+      available: true,
+      reason: undefined,
+      busy: false,
+      note: undefined,
+      succeeded: false,
+      onPress: () => {},
+    },
     onDraftChange: (change) => marks.push(change),
   });
   await settle();
