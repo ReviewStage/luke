@@ -49,15 +49,18 @@ export const PRESS_FACE = { [FACE_ATTRIBUTE]: "" } as const;
  * Plays `pulse` on `pressed`, what the press moves: the control itself, or a
  * part of it that stands for it (a switch's thumb, a card around its press).
  * A `FACE` pulse moves the face `pressed` holds, or the whole of a control
- * that holds none. A `FLUSH` pulse moves each element `pressed` holds, its
- * first the one whose end takes the pulse away, or fades a row that holds
- * only words, so its fill never leaves the frame's edges.
+ * that holds none. A `FLUSH` pulse moves each element `pressed` holds, the
+ * first that draws a box the one whose end takes the pulse away, or fades a
+ * row that holds none, so its fill never leaves the frame's edges.
  */
 export function pulsePress(pressed: HTMLElement, pulse: PressPulse = PRESS_PULSE.CONTROL): void {
   if (pulse === PRESS_PULSE.FLUSH) {
-    const first = pressed.firstElementChild;
-    if (first === null) replayMotion(pressed, PULSE_ATTRIBUTE, pressed, PRESS_PULSE.WORDS);
-    else replayMotion(pressed, PULSE_ATTRIBUTE, first, pulse);
+    // Note that a seat drawn as `contents` draws no box, so its end is not the one waited on.
+    const mover = [...pressed.children].find(
+      (child) => getComputedStyle(child).display !== "contents",
+    );
+    if (mover === undefined) replayMotion(pressed, PULSE_ATTRIBUTE, pressed, PRESS_PULSE.WORDS);
+    else replayMotion(pressed, PULSE_ATTRIBUTE, mover, pulse);
     return;
   }
   if (pulse !== PRESS_PULSE.FACE) {
