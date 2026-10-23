@@ -4,8 +4,7 @@ import assert from "node:assert/strict";
 import { INBOX_SCOPE_KIND } from "@luke/features/coding-agent-view";
 import { PULL_REQUEST_STATE } from "@luke/features/coding-agent-wire";
 import {
-  INBOX_BLOCK,
-  INBOX_RESPONSE,
+  INBOX_MESSAGE_AUTHOR,
   INBOX_STATUS,
   INBOX_WIRE_VERSION,
   type InboxItem,
@@ -79,7 +78,7 @@ const TASK: TaskSummary = {
 const TASK_AGENT = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
 const SWEEP_AGENT = "5d7e8f90-1a2b-4c3d-8e4f-5a6b7c8d9e0f";
 
-/** An item an agent posted, asking only an acknowledgement, its one block the words given. */
+/** A notice an agent posted, asking nothing, its thread one message of the words given. */
 function item(id: string, agentId: string, words: string): InboxItem {
   return {
     id,
@@ -88,10 +87,16 @@ function item(id: string, agentId: string, words: string): InboxItem {
     revision: 1,
     version: INBOX_WIRE_VERSION,
     title: "Ready for a look",
-    blocks: [{ type: INBOX_BLOCK.MARKDOWN, text: words }],
-    response: { type: INBOX_RESPONSE.NONE },
     needsReply: false,
     status: INBOX_STATUS.OPEN,
+    thread: [
+      {
+        id: `e${id.slice(1)}`,
+        author: INBOX_MESSAGE_AUTHOR.AGENT,
+        text: words,
+        createdAt: 1_000,
+      },
+    ],
     postedAt: 1_000,
     updatedAt: 2_000,
   };
@@ -217,7 +222,7 @@ async function inbox(options: {
 /** The chips the chosen item's words draw, by the name each says and the state after it. */
 function chips(container: HTMLElement): [string | null, string | null][] {
   return [
-    ...container.querySelectorAll<HTMLElement>("[data-inbox-markdown] [data-mention-ref]"),
+    ...container.querySelectorAll<HTMLElement>("[data-inbox-message-text] [data-mention-ref]"),
   ].map((chip) => [
     chip.querySelector(".luke-inline-ref-label")?.textContent ?? null,
     chip.querySelector(".luke-inline-ref-state")?.textContent ?? null,

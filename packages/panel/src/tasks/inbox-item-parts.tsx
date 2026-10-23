@@ -54,7 +54,7 @@ import { useMemberDirectory } from "../member-directory.js";
 import { GLYPH_STATE, StateGlyph } from "../state-glyph.js";
 import { APP_SLICE, useAppSlice } from "../use-app-state.js";
 import { AgentMarkRef, type AgentSubject, lineSubject, tasklessSubject } from "./agent-ref.js";
-import { TaskChipCard } from "./chip-cards.js";
+import { AutomationChipCard, TaskChipCard } from "./chip-cards.js";
 import { agentStillWriting, providerOf } from "./coding-agent-model.js";
 import {
   holderName,
@@ -67,6 +67,7 @@ import {
   inboxSettledWords,
   inboxShownTicks,
   inboxWaitsOn,
+  itemWorkspaceId,
   NEEDS_YOU,
   needsYou as needsYouOf,
   readersItem,
@@ -206,7 +207,7 @@ export function InboxItemCard({
   const working = line !== undefined && agentStillWriting(line.status);
   return (
     <HoverCard data-inbox-row-card="">
-      <HolderLine holder={holder} />
+      <HolderLine holder={holder} workspaceId={itemWorkspaceId(holder, item.agentId)} />
       <HoverCardHead
         name={cardTitle(item.title)}
         sub={
@@ -254,7 +255,13 @@ const WORKSPACES = Atom.map(APP_SLICE.TASKS, (tasks) => tasks?.workspaces);
  * as its mark, so the card says no status in words; an automation, or the
  * agents no automation names, by their chip alone.
  */
-function HolderLine({ holder }: { holder: InboxHolder }): React.JSX.Element {
+function HolderLine({
+  holder,
+  workspaceId,
+}: {
+  holder: InboxHolder;
+  workspaceId: string | undefined;
+}): React.JSX.Element {
   const workspaces = useAppSlice(WORKSPACES);
   const workspaceName =
     holder.kind === INBOX_HOLDER.TASK
@@ -265,7 +272,7 @@ function HolderLine({ holder }: { holder: InboxHolder }): React.JSX.Element {
       {holder.kind === INBOX_HOLDER.TASK ? (
         <TaskKey workspaceName={workspaceName} number={holder.task.number} />
       ) : null}
-      <HolderRef holder={holder} />
+      <HolderRef holder={holder} workspaceId={workspaceId} />
     </div>
   );
 }
@@ -274,34 +281,55 @@ function HolderLine({ holder }: { holder: InboxHolder }): React.JSX.Element {
  * What holds an item, named as a mention of it is (`mention-chip.tsx`): a
  * pill of its glyph and its name, cut at its end where the card is too
  * narrow for it. A task's hangs the task's card and opens the task, as a
- * mention of the task does; an automation's hangs its card where the window
- * reads it; the agents no automation names hang their name alone.
+ * mention of the task does; an automation's hangs its card, read as the
+ * card is hung where no directory around it knows the automation yet; the agents no automation names hang their name alone.
  */
-function HolderRef({ holder }: { holder: InboxHolder }): React.JSX.Element {
+function HolderRef({
+  holder,
+  workspaceId,
+}: {
+  holder: InboxHolder;
+  /** The workspace the item belongs to, in which an automation the window has not read yet is read as its card is hung. */
+  workspaceId: string | undefined;
+}): React.JSX.Element {
   const openPlace = useOpenPlace();
   const known = useAutomation(
     holder.kind === INBOX_HOLDER.AUTOMATION ? (holder.automationId ?? undefined) : undefined,
   );
   const glyph = <HolderGlyph holder={holder} />;
   const name = holderName(holder);
+  const fallback = (
+    <HoverCard>
+      <HoverCardHead glyph={glyph} name={name} />
+    </HoverCard>
+  );
   if (holder.kind !== INBOX_HOLDER.TASK) {
     return (
       <InlineRef
         look={INLINE_REF_LOOK.PILL}
         glyph={glyph}
         label={name}
-        card={known === undefined ? undefined : <AutomationCard {...known} />}
+        card={
+          holder.automationId === null ? undefined : workspaceId === undefined ? (
+            // Note that an older service names no workspace for the item, so only a directory around the card can know the automation.
+            known === undefined ? undefined : (
+              <AutomationCard {...known} />
+            )
+          ) : (
+            <AutomationChipCard
+              automationId={holder.automationId}
+              workspace={workspaceId}
+              wordsWorkspaceId={workspaceId}
+              fallback={fallback}
+            />
+          )
+        }
         data-holder-ref=""
         data-kind={holder.kind}
       />
     );
   }
   const { task } = holder;
-  const fallback = (
-    <HoverCard>
-      <HoverCardHead glyph={glyph} name={name} />
-    </HoverCard>
-  );
   return (
     <InlineRef
       look={INLINE_REF_LOOK.PILL}

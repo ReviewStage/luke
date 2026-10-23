@@ -23,6 +23,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
 import { useAppKeymap } from "../app-commands.js";
 import { type AnyAct, FAKE_ANSWER, type FakeActAnswer, fakeActs } from "../testing/app-bridge.js";
+import { attachmentChipName } from "../testing/attachment-chip.js";
 import {
   editorBundleLanded,
   installEditorLayout,
@@ -1356,10 +1357,7 @@ test("a reply carries the files picked into its field, and a comment's files are
     container.querySelector(`.comment-card[data-thread="${ID.OPEN}"]`) ?? assert.fail("no card");
 
   const sent = [...card.querySelectorAll('.comment-files [aria-label="Attached files"] > li')];
-  assert.deepEqual(
-    sent.map((chip) => chip.getAttribute("title")),
-    ["expiry.txt"],
-  );
+  assert.deepEqual(sent.map(attachmentChipName), ["expiry.txt"]);
   assert.deepEqual(read, [fileId]);
   const words = card.querySelector(".comment-entry .comment-words");
   assert.ok(sent[0] && words);
@@ -1371,9 +1369,7 @@ test("a reply carries the files picked into its field, and a comment's files are
   const field = card.querySelector(".comment-field") ?? assert.fail("no reply field");
   await pickFiles(field, [new File(["Steps to reproduce\n"], "steps.txt", { type: "text/plain" })]);
   assert.deepEqual(
-    [...field.querySelectorAll('[aria-label="Attached files"] > li')].map((chip) =>
-      chip.getAttribute("title"),
-    ),
+    [...field.querySelectorAll('[aria-label="Attached files"] > li')].map(attachmentChipName),
     ["steps.txt"],
   );
   await post(field.querySelector("textarea") ?? assert.fail("no textarea"), "Repro attached.");
