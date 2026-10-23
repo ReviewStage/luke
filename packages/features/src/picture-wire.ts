@@ -1,6 +1,7 @@
 import { Schema as EffectSchema, Result } from "effect";
 import { Base64 } from "effect/encoding";
 import { sniffImageType } from "./image-signature.js";
+import { INBOX_IMAGE_TYPE, type InboxImageType } from "./inbox-wire.js";
 
 /**
  * picture-wire.ts -- a picture Luke keeps for a reader: the image types it may be, its byte bound, and the one reading of the `data:` URL a picture is sent as.
@@ -13,14 +14,14 @@ import { sniffImageType } from "./image-signature.js";
  * image the label names, because every reader draws them as one.
  */
 
-/** The image types a picture may be: sent as a `data:` URL of one, kept as its bytes, served under it. */
-export const PICTURE_TYPE = {
-  PNG: "image/png",
-  JPEG: "image/jpeg",
-  WEBP: "image/webp",
-} as const;
+/**
+ * The image types a picture may be: sent as a `data:` URL of one, kept as its
+ * bytes, served under it. They are the inbox's image types, the three
+ * `sniffImageType` reads, which a coding agent's attachments name first.
+ */
+export const PICTURE_TYPE = INBOX_IMAGE_TYPE;
 
-export type PictureType = (typeof PICTURE_TYPE)[keyof typeof PICTURE_TYPE];
+export type PictureType = InboxImageType;
 
 /** A picture's media type as the wire carries it. */
 export const pictureTypeSchema = EffectSchema.Literals(Object.values(PICTURE_TYPE));
