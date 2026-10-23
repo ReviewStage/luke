@@ -1,14 +1,7 @@
 import type { AdminDailyUsage, AdminTrend } from "@luke/features/admin-answer-wire";
-import { formatTooltipDay, PARTIAL_DAY_OPACITY } from "@luke/ui/admin-format";
-import {
-  type ChartConfig,
-  ChartContainer,
-  ChartTooltip,
-  ChartTooltipContent,
-} from "@luke/ui/chart";
-import { partialDayKey, seriesHasNoData } from "@luke/ui/daily-series";
-import { formatDayTick } from "@luke/ui/time-format";
-import { Bar, BarChart, CartesianGrid, Cell, XAxis, YAxis } from "recharts";
+import { type ChartConfig } from "@luke/ui/chart";
+import { DailyBars } from "@luke/ui/daily-bars";
+import { seriesHasNoData } from "@luke/ui/daily-series";
 import { barTopRadius } from "./bar-radius.js";
 import { ChartEmpty, ChartFrame, ChartFrameSkeleton, ChartTrend } from "./chart-frame.js";
 
@@ -51,52 +44,18 @@ export function UsageChart({
     );
   }
 
-  const partialDay = partialDayKey(daily, generatedAt);
-  // The clicked label is resolved against the drawn series itself, so only a
-  // day these bars actually state can open; an unset opener leaves recharts'
-  // own `onClick` prop absent rather than assigned `undefined`.
-  const barChartProps: Pick<React.ComponentProps<typeof BarChart>, "onClick"> = {};
-  if (onOpenDay) {
-    barChartProps.onClick = ({ activeLabel }) => {
-      const clicked = daily.find((point) => point.day === activeLabel);
-      if (clicked) onOpenDay(clicked.day);
-    };
-  }
   return (
     <ChartFrame title={label} aside={<ChartTrend trend={trend} />}>
-      <ChartContainer
+      <DailyBars
         config={USAGE_CHART}
-        className={`aspect-auto w-full ${onOpenDay ? "cursor-pointer" : ""}`}
-        style={{ height: USAGE_PLOT_HEIGHT }}
-      >
-        <BarChart data={[...daily]} {...barChartProps}>
-          <CartesianGrid vertical={false} />
-          <XAxis
-            dataKey="day"
-            tickLine={false}
-            axisLine={false}
-            tickMargin={8}
-            minTickGap={32}
-            tickFormatter={formatDayTick}
-          />
-          <YAxis width={36} tickLine={false} axisLine={false} allowDecimals={false} />
-          <ChartTooltip
-            content={
-              <ChartTooltipContent
-                labelFormatter={(value) => formatTooltipDay(String(value), partialDay)}
-              />
-            }
-          />
-          <Bar dataKey="calls" fill="var(--color-calls)" radius={barTopRadius()}>
-            {daily.map((point) => (
-              <Cell
-                key={point.day}
-                fillOpacity={point.day === partialDay ? PARTIAL_DAY_OPACITY : 1}
-              />
-            ))}
-          </Bar>
-        </BarChart>
-      </ChartContainer>
+        data={daily}
+        series={[{ key: "calls", fill: "var(--color-calls)" }]}
+        axis={{ width: 36, allowDecimals: false }}
+        height={USAGE_PLOT_HEIGHT}
+        radius={barTopRadius()}
+        generatedAt={generatedAt}
+        onOpenDay={onOpenDay}
+      />
     </ChartFrame>
   );
 }

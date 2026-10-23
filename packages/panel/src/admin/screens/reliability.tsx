@@ -37,6 +37,7 @@ import { formatShare } from "@luke/ui/admin-format";
 import { formatCount, formatDate } from "@luke/ui/time-format";
 import { AccountCell, AccountCellSkeleton } from "../accounts-table/accounts-table.js";
 import { useAdminDoors } from "../admin-doors.js";
+import { adminReadView } from "../admin-read-view.js";
 import {
   BreakdownChart,
   BreakdownChartSkeleton,
@@ -54,13 +55,12 @@ import {
   StatCards,
   type StatSpec,
 } from "../charts/stat-card.js";
-import { AdminErrorState } from "../chrome/cards.js";
-import { AdminViewOptions, Refreshing, windowWords } from "../chrome/controls.js";
+import { AdminViewOptions, windowWords } from "../chrome/controls.js";
 import { AdminPage, type ViewerAccount } from "../chrome/page-header.js";
 import { PageSkeleton } from "../chrome/page-skeleton.js";
 import { DataTableSkeleton } from "../chrome/table-skeleton.js";
 import { reliabilityWindow, windowedReadQuery } from "../routing.js";
-import { adminReadFailure, useAdminRead } from "../use-admin-read.js";
+import { useAdminRead } from "../use-admin-read.js";
 
 /**
  * reliability.tsx -- the admin Reliability screen: how often the service's
@@ -560,35 +560,29 @@ export function ReliabilityScreen({
     />
   );
 
-  switch (state.status) {
-    case "loading":
-      return frame(
+  return adminReadView({
+    read: { state, refreshing, reload },
+    gate,
+    email: account?.email,
+    onSignOut: signOut,
+    failure: RELIABILITY_ERROR,
+    loading: () =>
+      frame(
         <PageSkeleton title="Reliability" note={windowWords(shownWindow)} controls={controls}>
           <ReliabilityBody reliability={undefined} onOpenAccount={onOpenAccount} />
         </PageSkeleton>,
-      );
-    case "signed-out":
-      return gate.signedOut();
-    case "forbidden":
-      return gate.forbidden({ email: account?.email, onSignOut: signOut });
-    case "missing":
-    case "error":
-      return frame(
+      ),
+    failed: (error) =>
+      frame(
         <AdminPage title="Reliability" note={windowWords(shownWindow)} controls={controls}>
-          <AdminErrorState
-            detail={adminReadFailure(state, RELIABILITY_ERROR)}
-            refreshing={refreshing}
-            onRetry={reload}
-          />
+          {error}
         </AdminPage>,
-      );
-    case "ready":
-      return frame(
+      ),
+    ready: (reliability, refreshed) =>
+      frame(
         <AdminPage title="Reliability" note={windowWords(shownWindow)} controls={controls}>
-          <Refreshing failure={state.refreshFailure} refreshing={refreshing} onRetry={reload}>
-            <ReliabilityBody reliability={state.value} onOpenAccount={onOpenAccount} />
-          </Refreshing>
+          {refreshed(<ReliabilityBody reliability={reliability} onOpenAccount={onOpenAccount} />)}
         </AdminPage>,
-      );
-  }
+      ),
+  });
 }

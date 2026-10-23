@@ -10,16 +10,9 @@
 
 import type { AdminOverview } from "@luke/features/admin-answer-wire";
 import { ACTIVITY_FEATURE, type ActivityFeature } from "@luke/features/admin-overview-vocabulary";
-import { formatTooltipDay, PARTIAL_DAY_OPACITY } from "@luke/ui/admin-format";
-import {
-  type ChartConfig,
-  ChartContainer,
-  ChartTooltip,
-  ChartTooltipContent,
-} from "@luke/ui/chart";
-import { partialDayKey, seriesHasNoData } from "@luke/ui/daily-series";
-import { formatDayTick } from "@luke/ui/time-format";
-import { Bar, BarChart, CartesianGrid, Cell, XAxis, YAxis } from "recharts";
+import { type ChartConfig } from "@luke/ui/chart";
+import { DailyBars } from "@luke/ui/daily-bars";
+import { seriesHasNoData } from "@luke/ui/daily-series";
 import { barTopRadius } from "./bar-radius.js";
 import {
   ChartEmpty,
@@ -107,61 +100,23 @@ export function ActivityChart({
     );
   }
 
-  const partialDay = partialDayKey(daily, generatedAt);
-  const barChartProps: Pick<React.ComponentProps<typeof BarChart>, "onClick"> = {};
-  if (onOpenDay) {
-    barChartProps.onClick = ({ activeLabel }) => {
-      const clicked = daily.find((point) => point.day === activeLabel);
-      if (clicked) onOpenDay(clicked.day);
-    };
-  }
   return (
     <ChartFrame
       title={ACTIVITY_TITLE}
       aside={<ChartTrend trend={trend} />}
       legend={<ActivityLegend />}
     >
-      <ChartContainer
+      <DailyBars
         config={ACTIVITY_CHART}
-        className={`aspect-auto w-full ${onOpenDay ? "cursor-pointer" : ""}`}
-        style={{ height: ACTIVITY_PLOT_HEIGHT }}
-      >
-        <BarChart data={[...daily]} {...barChartProps}>
-          <CartesianGrid vertical={false} />
-          <XAxis
-            dataKey="day"
-            tickLine={false}
-            axisLine={false}
-            tickMargin={8}
-            minTickGap={32}
-            tickFormatter={formatDayTick}
-          />
-          <YAxis width={36} tickLine={false} axisLine={false} allowDecimals={false} />
-          <ChartTooltip
-            content={
-              <ChartTooltipContent
-                labelFormatter={(value) => formatTooltipDay(String(value), partialDay)}
-              />
-            }
-          />
-          {FEATURES.map((feature, index) => (
-            <Bar
-              key={feature}
-              dataKey={feature}
-              stackId="activity"
-              fill={ACTIVITY_CHART[feature].color}
-              radius={index === FEATURES.length - 1 ? barTopRadius() : 0}
-            >
-              {daily.map((point) => (
-                <Cell
-                  key={point.day}
-                  fillOpacity={point.day === partialDay ? PARTIAL_DAY_OPACITY : 1}
-                />
-              ))}
-            </Bar>
-          ))}
-        </BarChart>
-      </ChartContainer>
+        data={daily}
+        series={FEATURES.map((feature) => ({ key: feature, fill: ACTIVITY_CHART[feature].color }))}
+        stack="activity"
+        axis={{ width: 36, allowDecimals: false }}
+        height={ACTIVITY_PLOT_HEIGHT}
+        radius={barTopRadius()}
+        generatedAt={generatedAt}
+        onOpenDay={onOpenDay}
+      />
     </ChartFrame>
   );
 }
