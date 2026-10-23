@@ -47,6 +47,7 @@ import { fakeHttpClientLayer } from "@luke/wire/testing";
 import {
   Clock,
   DateTime,
+  Deferred,
   Duration,
   Effect,
   Fiber,
@@ -155,6 +156,7 @@ function services(
     Layer.succeed(AgentSandboxImage, {
       snapshotId: Effect.succeed(Option.fromNullishOr(snapshot)),
       snapshotGone: () => Effect.void,
+      prepared: Effect.succeed(true),
     }),
     Layer.succeed(RunnerBundle, { contents: Effect.succeed(BUNDLE) }),
   );
@@ -280,15 +282,18 @@ const raceThrough = <A, E>(held: { open: () => void }, fibers: readonly Fiber.Fi
  * times, each after the event loop turned enough for a wait the work armed
  * to stand, and the work joined.
  */
+/** Real turns of the event loop enough for a forked fiber to reach whatever it waits on next. */
+const turnsPass = Effect.promise(async () => {
+  for (let turn = 0; turn < 50; turn += 1) {
+    await new Promise<void>((settle) => setImmediate(settle));
+  }
+});
+
 const across = <A, E>(work: Effect.Effect<A, E>, step: Duration.Duration, times: number) =>
   Effect.gen(function* () {
     const fiber = yield* Effect.forkChild(work);
     for (let move = 0; move < times; move += 1) {
-      yield* Effect.promise(async () => {
-        for (let turn = 0; turn < 50; turn += 1) {
-          await new Promise<void>((settle) => setImmediate(settle));
-        }
-      });
+      yield* turnsPass;
       yield* TestClock.adjust(step);
     }
     return yield* Fiber.join(fiber);
@@ -354,6 +359,7 @@ const repositoryAgent = (
           Layer.succeed(AgentSandboxImage, {
             snapshotId: seams.snapshotId ?? Effect.succeed(Option.some(SNAPSHOT)),
             snapshotGone: () => Effect.void,
+            prepared: Effect.succeed(true),
           }),
           Layer.succeed(RunnerBundle, { contents: Effect.succeed(BUNDLE) }),
         ),
@@ -1159,6 +1165,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
               Layer.succeed(AgentSandboxImage, {
                 snapshotId: Effect.fail(new ImagePreparing()),
                 snapshotGone: () => Effect.void,
+                prepared: Effect.succeed(true),
               }),
             ),
           ),
@@ -1195,6 +1202,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
               handedBack.push(snapshotId);
               current.snapshot = "snap_fixture_image_again";
             }),
+          prepared: Effect.succeed(true),
         });
         const sessions = yield* sessionsFor(userId, { next: 0 }).pipe(
           Effect.provide(Layer.merge(services(api), image)),
@@ -1299,25 +1307,24 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
   );
 
   it.effect(
-    "an open answers at once while the image is still being prepared, opens nothing until it is ready, then launches with no ask again",
+    "an open answers at once while the image is still being prepared, opens nothing until its build ends, then launches at once with no ask again",
     () =>
       Effect.gen(function* () {
         vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
         const api = runnerSandboxApi();
         const { userId, agent } = yield* openAgent;
-        const preparing = { remaining: 2 };
+        const built = yield* Deferred.make<void>();
         const kept = keptAfterResponse();
         const sessions = yield* sessionsFor(userId, { next: 0 }).pipe(
           Effect.provide(
             Layer.merge(
               services(api),
               Layer.succeed(AgentSandboxImage, {
-                snapshotId: Effect.suspend(() => {
-                  if (preparing.remaining === 0) return Effect.succeed(Option.some(SNAPSHOT));
-                  preparing.remaining -= 1;
-                  return Effect.fail(new ImagePreparing());
-                }),
+                snapshotId: Effect.flatMap(Deferred.isDone(built), (done) =>
+                  done ? Effect.succeed(Option.some(SNAPSHOT)) : Effect.fail(new ImagePreparing()),
+                ),
                 snapshotGone: () => Effect.void,
+                prepared: Effect.as(Deferred.await(built), true),
               }),
             ),
           ),
@@ -1326,10 +1333,14 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         const opened = yield* sessions
           .open(message(agent, "Fix the invitations."))
           .pipe(Effect.provide(kept.layer));
+        const launching = yield* Effect.forkChild(kept.run);
+        yield* turnsPass;
 
         assert.equal(opened.outcome, EVE_SEND_OUTCOME.ACCEPTED);
         assert.equal(api.sandboxes.length, 0);
-        yield* across(kept.run, NATIVE_TEMPLATE.POLL, 3);
+        // Note that the clock never moves: the launch asks again on the build's end, not on a tick.
+        yield* Deferred.succeed(built, undefined);
+        yield* Fiber.join(launching);
         assert.equal(api.sandboxes.length, 1);
         assert.equal(api.commands.length, 1);
         assert.equal((yield* newestTurn(agent)).status, undefined);
@@ -1337,12 +1348,13 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
   );
 
   it.effect(
-    "an image still being prepared past the open's wait opens nothing, and the agent's first turn reads failed for its sandbox",
+    "an image still being prepared past the template's wait opens nothing, and the agent's first turn reads failed for its sandbox",
     () =>
       Effect.gen(function* () {
         vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
         const api = runnerSandboxApi();
         const { userId, agent } = yield* openAgent;
+        const kept = keptAfterResponse();
         const sessions = yield* sessionsFor(userId, { next: 0 }).pipe(
           Effect.provide(
             Layer.merge(
@@ -1350,18 +1362,16 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
               Layer.succeed(AgentSandboxImage, {
                 snapshotId: Effect.fail(new ImagePreparing()),
                 snapshotGone: () => Effect.void,
+                prepared: Effect.succeed(false),
               }),
             ),
           ),
         );
-        const polls =
-          Duration.toMillis(NATIVE_TEMPLATE.WAIT) / Duration.toMillis(NATIVE_TEMPLATE.POLL) + 2;
 
-        const opened = yield* across(
-          sessions.open(message(agent, "Fix the invitations.")),
-          NATIVE_TEMPLATE.POLL,
-          polls,
-        );
+        const opened = yield* sessions
+          .open(message(agent, "Fix the invitations."))
+          .pipe(Effect.provide(kept.layer));
+        yield* kept.run;
 
         assert.equal(opened.outcome, EVE_SEND_OUTCOME.ACCEPTED);
         assert.equal(api.sandboxes.length, 0);

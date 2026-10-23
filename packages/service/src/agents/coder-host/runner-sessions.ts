@@ -108,18 +108,7 @@ import { type ConversationTarget, storeWriter } from "@luke/database/models/writ
 import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
 import { causeKind } from "@luke/runtime/effect";
 import type { UserContent } from "ai";
-import {
-  Clock,
-  Context,
-  Data,
-  DateTime,
-  Duration,
-  Effect,
-  Option,
-  Result,
-  Schedule,
-  Stream,
-} from "effect";
+import { Clock, Context, Data, DateTime, Duration, Effect, Option, Result, Stream } from "effect";
 import { TURN_ORIGIN } from "../../core.js";
 import type { HostedEnvironment } from "../../environment.js";
 import { AfterResponse, afterResponse } from "../../http/after-response.js";
@@ -139,7 +128,6 @@ import {
   type PlanRefusal,
 } from "../brain-host/eve-sessions.js";
 import { runnerTokenDigest } from "../luke-mcp/bearer.js";
-import { NATIVE_TEMPLATE } from "../native-sandbox-template.js";
 import { REPOSITORY_REFUSAL, type RepositorySandbox } from "../repository-shell.js";
 import {
   buildRepositorySnapshot,
@@ -349,15 +337,21 @@ const FAILED_STATUS = { UNAVAILABLE: 503, REFUSED: 422 } as const;
 
 /**
  * How an open past its Start's answer waits on an image still being
- * prepared, a template whose snapshot a create found gone among them, on
- * the template's own wait (`NATIVE_TEMPLATE`): an open answers preparing
- * before any sandbox stands, so making it again leaves nothing behind.
+ * prepared, a template whose snapshot a create found gone among them: on the
+ * template's build to its end (`AgentSandboxImage.prepared`), then asked
+ * again at once, and given up where the image is still being prepared after
+ * the template's own wait. An open answers preparing before any sandbox
+ * stands, so making it again leaves nothing behind. `times` only bounds a
+ * template that answers ready yet keeps losing its snapshot.
  */
 const IMAGE_READY = {
-  schedule: Schedule.spaced(NATIVE_TEMPLATE.POLL).pipe(
-    Schedule.upTo({ duration: NATIVE_TEMPLATE.WAIT }),
-  ),
-  while: (failure: { readonly _tag: string }) => failure instanceof ImagePreparing,
+  times: 3,
+  while: (failure: { readonly _tag: string }) =>
+    failure instanceof ImagePreparing
+      ? Effect.flatMap(AgentSandboxImage, (image) =>
+          image.prepared.pipe(Effect.orElseSucceed(() => false)),
+        )
+      : Effect.succeed(false),
 };
 
 /** The image types a message's file may carry to the harness as an image block. */
