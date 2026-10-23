@@ -1778,6 +1778,17 @@ ul.actor-stack {
   padding-inline: max(var(--content-inset), var(--reading-room));
 }
 
+/* A line written again where it stands (`edit-composer.tsx`) is already in the
+   transcript's measure, so its box takes no inset of its own, and opens out of
+   the bubble's corner as a card the window opens in place does. */
+.transcript-message.is-user[data-editing] > .agent-composer {
+  padding: 0;
+  transform-origin: top right;
+  animation:
+    luke-menu-arrive var(--luke-duration-quick) var(--luke-motion-exit) both,
+    luke-card-grow var(--luke-duration-fast) var(--luke-spring-fast) both;
+}
+
 /* Who said or wrote a message on a shared plan, a teammate, Luke, or an
    automation, named by their mark and name in the muted meta voice, the mark
    centred on the words; the reader's own carry no name. A plan card and a

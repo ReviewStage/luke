@@ -875,9 +875,9 @@
   }
 
   /* A line written again where it stands (`edit-composer.tsx`) is the agent's
-     message box, at the column's full measure as the box at the tab's foot is. */
+     message box at the measure a sent line's bubble takes, against the
+     column's right edge as the bubble is. */
   .transcript-message.is-user[data-editing] {
-    max-width: 100%;
     align-items: stretch;
   }
 
