@@ -874,6 +874,13 @@
     justify-content: flex-end;
   }
 
+  /* A line written again where it stands (`edit-composer.tsx`) is the agent's
+     message box, at the column's full measure as the box at the tab's foot is. */
+  .transcript-message.is-user[data-editing] {
+    max-width: 100%;
+    align-items: stretch;
+  }
+
   /* A reply is reading text, so it keeps a reading leading rather than the
      body role's. It clips past the keyboard's ring rather than at its edge,
      so a fold, a tool line, or a chip it holds keeps its ring. */

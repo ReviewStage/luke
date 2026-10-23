@@ -84,7 +84,6 @@ async function settle(): Promise<void> {
 async function box(rewound: CodingAgentAgentAnswer) {
   const calls: string[] = [];
   const held: { composer: HeldComposer | undefined } = { composer: undefined };
-  const answered: CodingAgentAgentAnswer = { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED };
   function Box(): ReactNode {
     held.composer = useAgentComposer({
       agentId: "agent-1",
@@ -92,7 +91,7 @@ async function box(rewound: CodingAgentAgentAnswer) {
       messages: TRANSCRIPT,
       send: (_agentId, text) => {
         calls.push(`send:${text}`);
-        return Promise.resolve(answered);
+        return Promise.resolve(REWOUND);
       },
       rewind: (_agentId, messageId) => {
         calls.push(`rewind:${messageId}`);
@@ -127,37 +126,43 @@ const REWOUND: CodingAgentAgentAnswer = {
   },
 };
 
-test("an edit's send takes the agent back to just before the line, then sends the new words", async () => {
-  const { calls, composer } = await box(REWOUND);
-
-  await act(async () => composer().edit("second-line", "second-line"));
-  await act(async () => composer().setDraft("second line, again"));
-  await act(async () => composer().send());
-  await settle();
-
-  assert.deepEqual(calls, ["rewind:second-line", "send:second line, again"]);
-  assert.equal(composer().editing, undefined);
-});
-
-test("a rewind that did not go sends nothing, and the words stand as the edit again", async () => {
-  const { calls, composer } = await box({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
-
-  await act(async () => composer().edit("second-line", "second-line"));
-  await act(async () => composer().setDraft("second line, again"));
-  await act(async () => composer().send());
-  await settle();
-
-  assert.deepEqual(calls, ["rewind:second-line"]);
-  assert.equal(composer().editing, "second-line");
-  assert.equal(composer().draft, "second line, again");
-  assert.equal(composer().cut, undefined);
-});
-
-test("an edit let go puts back what the box held before it", async () => {
+test("an edit's send takes the agent back to just before the line, then sends the new words, leaving the box as it was", async () => {
   const { calls, composer } = await box(REWOUND);
 
   await act(async () => composer().setDraft("Also update the tests."));
-  await act(async () => composer().edit("second-line", "second-line"));
+  await act(async () => composer().edit("second-line"));
+  await act(async () => composer().sendEdit("second-line", "second line, again", []));
+  const meanwhile = composer().rewinding;
+  await settle();
+
+  assert.equal(meanwhile, true);
+  assert.deepEqual(calls, ["rewind:second-line", "send:second line, again"]);
+  assert.equal(composer().editing, undefined);
+  assert.equal(composer().draft, "Also update the tests.");
+});
+
+test("a rewind that did not go sends nothing, and keeps the edit's line marked as not sent, its Retry rewinding again", async () => {
+  const { calls, composer } = await box({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
+
+  await act(async () => composer().edit("second-line"));
+  await act(async () => composer().sendEdit("second-line", "second line, again", []));
+  await settle();
+  const [line] = composer().sent;
+  await act(async () => composer().retryLine(line?.id ?? ""));
+  await settle();
+
+  assert.deepEqual(calls, ["rewind:second-line", "rewind:second-line"]);
+  assert.equal(line?.text, "second line, again");
+  assert.equal(composer().draft, "");
+  assert.equal(composer().cut, undefined);
+  assert.equal(composer().rewindOut, false);
+});
+
+test("an edit let go sends nothing and leaves the box as it was", async () => {
+  const { calls, composer } = await box(REWOUND);
+
+  await act(async () => composer().setDraft("Also update the tests."));
+  await act(async () => composer().edit("second-line"));
   await act(async () => composer().dropEdit());
 
   assert.equal(composer().draft, "Also update the tests.");

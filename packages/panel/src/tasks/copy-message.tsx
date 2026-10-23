@@ -86,7 +86,7 @@ export function CopyMessageAction({
       {rewind === undefined || messageId === undefined ? null : rewind === REWIND_ACTION.REVERT ? (
         <RevertMessageAction messageId={messageId} />
       ) : (
-        <EditMessageAction messageId={messageId} words={words} />
+        <EditMessageAction messageId={messageId} />
       )}
     </MessageActions>
   );

@@ -6,7 +6,11 @@ import {
   shownPicturesOf,
 } from "@luke/features/agent-pictures-model";
 import type { FileChip } from "@luke/features/attachment-model";
-import type { CodingAgentMessage } from "@luke/features/coding-agent-wire";
+import {
+  CODING_AGENT_ATTACHMENT_TYPE,
+  type CodingAgentAttachment,
+  type CodingAgentMessage,
+} from "@luke/features/coding-agent-wire";
 import { isVideoType, type KeptPicture } from "@luke/features/conversation-picture-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import {
@@ -630,6 +634,39 @@ export function CallPictures({
       {videos}
     </>
   );
+}
+
+/** The media types a message may carry a file of, as the wire takes them. */
+const ATTACHMENT_TYPES: ReadonlySet<string> = new Set(Object.values(CODING_AGENT_ATTACHMENT_TYPE));
+
+/** A file's bytes as a message carries them, read off a `data:` address; none for any other address. */
+function attachmentOfData(name: string, url: string): CodingAgentAttachment | undefined {
+  const read = /^data:([^;,]+);base64,(.+)$/u.exec(url);
+  const mediaType = read?.[1];
+  const data = read?.[2];
+  if (mediaType === undefined || data === undefined || !ATTACHMENT_TYPES.has(mediaType)) {
+    return undefined;
+  }
+  // SAFETY: the type was just found among the wire's own.
+  return { name, mediaType: mediaType as CodingAgentAttachment["mediaType"], data };
+}
+
+/**
+ * A line's files as a message to the agent carries them again, for Edit to
+ * send: each one the line holds inline, and each one kept as a picture whose
+ * bytes the window has read; one it has not read yet is left out.
+ */
+export function useMessageAttachments(
+  message: CodingAgentMessage,
+): readonly CodingAgentAttachment[] {
+  const door = useContext(AgentPicturesContext);
+  return messageFileChips(message).flatMap(({ name, url, pictureId }) => {
+    const state =
+      pictureId === undefined || door === undefined ? undefined : pictureNow(door.owner, pictureId);
+    const read = state?.kind === PICTURE_STATE.READY ? state.url : url;
+    const attachment = attachmentOfData(name, read);
+    return attachment === undefined ? [] : [attachment];
+  });
 }
 
 /**

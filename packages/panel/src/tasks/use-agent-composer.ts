@@ -60,14 +60,15 @@ import {
  * open and come back as the tab does; a message that did not go comes back
  * into the agent's draft even once its tab is closed.
  *
- * Edit puts one of the developer's lines back in the box, and its send takes
- * the agent back to just before that line first (`rewind.ts` on the service),
- * so the words go in its place; × lets the edit go, putting back what the box
- * held before it.
- * Revert takes the agent back to just before a line without sending. Either
- * hides the messages the rewind drops at once, until the transcript reads
- * back without them, and one that did not go says why under the box, its
- * Retry rewinding again.
+ * Edit opens one of the developer's lines for writing again where it stands
+ * (`rewind-action.tsx`), leaving the box as it is, and its send takes the
+ * agent back to just before that line first (`rewind.ts` on the service), so
+ * the words go in its place. Revert takes the agent back to just before a
+ * line without sending. Either hides the messages the rewind drops at once,
+ * until the transcript reads back without them, and says it is rewinding
+ * until the service answers; an edit that did not go stays where it went,
+ * marked as not sent, its Retry rewinding again, and a revert says why under
+ * the box, its Retry asking again.
  */
 
 /** How one message is sent: the agent, the words, the key this send is known by, which Retry carries again, and the files attached, answered as the view hears it. */
@@ -122,10 +123,10 @@ interface Failed {
 interface Held {
   agentId: string;
   failed: Failed | undefined;
-  /** The developer's line the box's words are written in place of, by its message id; none while the box writes a line after the rest. */
+  /** The developer's line open for writing again where it stands, by its message id; none while none is. */
   editing: string | undefined;
-  /** What the box held as the edit began, which letting the edit go puts back. */
-  beforeEdit: Draft;
+  /** The line a rewind under way, an edit's or a revert's, takes the agent back to just before, by its message id; none while none is out. */
+  reverting: string | undefined;
   /** The messages a rewind under way or just done drops, by their ids, hidden until the transcript reads back without them. */
   cut: ReadonlySet<string> | undefined;
   /** The Revert that did not go, which the note under the box is of and its Retry asks again. */
@@ -141,7 +142,7 @@ function fresh(agentId: string): Held {
     agentId,
     failed: undefined,
     editing: undefined,
-    beforeEdit: EMPTY_DRAFT,
+    reverting: undefined,
     cut: undefined,
     revertFailed: undefined,
     closed: undefined,
@@ -199,12 +200,22 @@ export interface HeldComposer extends AgentComposerControl {
   };
   /** Sends a line marked as not sent again under its key, from the line itself. */
   readonly retryLine: (id: string) => void;
-  /** The developer's line the box's words go in place of, by its message id; none while it writes a line after the rest. */
+  /** The developer's line open for writing again where it stands, by its message id; none while none is. */
   readonly editing: string | undefined;
-  /** Puts one of the developer's lines in the box, to go in its place. */
-  readonly edit: (messageId: string, words: string) => void;
-  /** Lets the edit go, and the words with it. */
+  /** Opens one of the developer's lines for writing again where it stands. */
+  readonly edit: (messageId: string) => void;
+  /** Closes the line open for writing again, sending nothing. */
   readonly dropEdit: () => void;
+  /** Sends the words and files in place of the line named, taking the agent back to just before it first. */
+  readonly sendEdit: (
+    messageId: string,
+    words: string,
+    attachments: readonly CodingAgentAttachment[],
+  ) => void;
+  /** Whether a rewind is out, an edit's or a revert's, until the service answers it. */
+  readonly rewindOut: boolean;
+  /** Whether a rewind is out, or the line an edit sent in its place has not been read back yet. */
+  readonly rewinding: boolean;
   /** Takes the agent back to just before one of the developer's lines, sending nothing. */
   readonly revert: (messageId: string) => void;
   /** The messages a rewind drops, hidden from the transcript until it reads back without them; none while none does. */
@@ -279,8 +290,10 @@ export function useAgentComposer(input: {
         return;
       }
       // A line written in place of another takes the agent back to just before that one first.
+      if (line.rewinds !== undefined) ours((was) => ({ ...was, reverting: line.rewinds }));
       const rewound =
         line.rewinds === undefined ? undefined : await rewindTo(agentId, line.rewinds);
+      if (line.rewinds !== undefined) ours((was) => ({ ...was, reverting: undefined }));
       const answer =
         rewound !== undefined && "failure" in rewound
           ? rewound
@@ -289,10 +302,9 @@ export function useAgentComposer(input: {
               .catch((): CodingAgentAgentAnswer => UNANSWERED);
       // An answer to another agent's tab, or to a tab since remounted, is nobody's.
       if (latest.current.agentId !== agentId) return;
-      // A rewind that did not go drops nothing, and its line goes back to being an edit, so Retry rewinds again.
-      if (rewound !== undefined && "failure" in rewound) {
-        ours((was) => ({ ...was, cut: undefined, editing: line.rewinds }));
-      }
+      // A rewind that did not go drops nothing, so the messages it would have dropped are drawn again.
+      if (rewound !== undefined && "failure" in rewound)
+        ours((was) => ({ ...was, cut: undefined }));
       if (!("failure" in answer)) {
         latest.current.onStatus(agentId, answer.agent);
         return;
@@ -322,10 +334,11 @@ export function useAgentComposer(input: {
         return;
       }
       // The words come back into the box only where it holds nothing newer; else the line keeps them.
+      // An edit's line always keeps them, since its Retry must go in the same line's place.
       // Note that the draft store takes a change at once, so the box as the change lands decides.
       let inBox = false;
       update((draft) => {
-        inBox = holdsNothing(draft);
+        inBox = line.rewinds === undefined && holdsNothing(draft);
         return inBox ? { ...EMPTY_DRAFT, text: line.text, attachments: line.attachments } : draft;
       });
       ours((was) => ({
@@ -343,24 +356,43 @@ export function useAgentComposer(input: {
     const text = kept.draft.text.trim();
     const { attachments } = kept.draft;
     if (!hasWordsOrFiles(text, attachments) || held.closed !== undefined) return;
-    const rewinds = held.editing;
+    const line: SentLine = {
+      id: sentLineId(clientKey),
+      clientKey,
+      text,
+      attachments,
+      steers: input.running === true,
+      state: SENT_LINE_STATE.PENDING,
+    };
+    update(() => EMPTY_DRAFT);
+    setHeld((was) => ({ ...was, failed: undefined, sent: [...was.sent, line] }));
+    deliver(line);
+  };
+
+  /** Sends the words and files in place of the line named, the messages from it on hidden at once; the box is left as it is. */
+  const sendEdit = (
+    messageId: string,
+    words: string,
+    attachments: readonly CodingAgentAttachment[],
+  ) => {
+    const text = words.trim();
+    if (!hasWordsOrFiles(text, attachments) || held.closed !== undefined) return;
+    const clientKey = crypto.randomUUID();
     const line: SentLine = {
       id: sentLineId(clientKey),
       clientKey,
       text,
       attachments,
       // Note that a line in place of another stops the turn under way rather than steering it.
-      steers: rewinds === undefined && input.running === true,
+      steers: false,
       state: SENT_LINE_STATE.PENDING,
-      ...(rewinds === undefined ? undefined : { rewinds }),
+      rewinds: messageId,
     };
-    update(() => EMPTY_DRAFT);
     setHeld((was) => ({
       ...was,
-      failed: undefined,
       revertFailed: undefined,
       editing: undefined,
-      cut: rewinds === undefined ? was.cut : cutFrom(messages, rewinds),
+      cut: cutFrom(messages, messageId),
       sent: [...was.sent, line],
     }));
     deliver(line);
@@ -372,6 +404,7 @@ export function useAgentComposer(input: {
       ...was,
       revertFailed: undefined,
       editing: undefined,
+      reverting: messageId,
       cut: cutFrom(messages, messageId),
     }));
     const before = queues.current.get(agentId) ?? Promise.resolve();
@@ -379,11 +412,17 @@ export function useAgentComposer(input: {
       const answer = await rewindTo(agentId, messageId);
       if (latest.current.agentId !== agentId) return;
       if (!("failure" in answer)) {
+        ours((was) => ({ ...was, reverting: undefined }));
         latest.current.onStatus(agentId, answer.agent);
         return;
       }
       const note = messageFailureNote(answer, latest.current.taskId, latest.current.payer);
-      ours((was) => ({ ...was, cut: undefined, revertFailed: { messageId, note } }));
+      ours((was) => ({
+        ...was,
+        cut: undefined,
+        reverting: undefined,
+        revertFailed: { messageId, note },
+      }));
     });
     queues.current.set(agentId, going);
   };
@@ -434,22 +473,15 @@ export function useAgentComposer(input: {
     sent,
     unsent: { words: kept.draft.text, attachments: kept.draft.attachments },
     editing: held.editing,
-    edit: (messageId, words) => {
-      // Note that the box's own words wait behind an edit begun over them, unless one already was.
-      const beforeEdit = held.editing === undefined ? kept.draft : held.beforeEdit;
-      setHeld((was) => ({
-        ...editLetsGo(was),
-        editing: messageId,
-        beforeEdit,
-        revertFailed: undefined,
-      }));
-      kept.update(() => ({ ...EMPTY_DRAFT, text: words }));
-    },
-    dropEdit: () => {
-      const { beforeEdit } = held;
-      setHeld((was) => ({ ...editLetsGo(was), editing: undefined, beforeEdit: EMPTY_DRAFT }));
-      kept.update(() => beforeEdit);
-    },
+    edit: (messageId) => setHeld((was) => ({ ...was, editing: messageId })),
+    dropEdit: () => setHeld((was) => ({ ...was, editing: undefined })),
+    sendEdit,
+    rewindOut: held.reverting !== undefined,
+    rewinding:
+      held.reverting !== undefined ||
+      held.sent.some(
+        (line) => line.rewinds !== undefined && line.state === SENT_LINE_STATE.PENDING,
+      ),
     revert,
     cut: held.cut,
   };

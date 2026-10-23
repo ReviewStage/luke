@@ -1,22 +1,18 @@
-import type { CodingAgentMessage } from "@luke/features/coding-agent-wire";
-import {
-  ConfirmDialog,
-  type DialogQuestion,
-  IconButton,
-  Tooltip,
-  useConfirmDialog,
-} from "@luke/ui";
+import type { CodingAgentAttachment, CodingAgentMessage } from "@luke/features/coding-agent-wire";
+import { ConfirmDialog, type DialogQuestion, useConfirmDialog } from "@luke/ui";
 import { ACTION_RESULT_STATUS, MESSAGE_ROLE } from "@luke/wire";
-import { PencilIcon, RotateCcwIcon, XIcon } from "lucide-react";
+import { PencilIcon, RotateCcwIcon } from "lucide-react";
 import { createContext, type ReactNode, useContext } from "react";
 import { MessageAction } from "../ai-elements/message.js";
+import type { EditComposerDoors } from "./edit-composer.js";
 
 /**
- * rewind-action.tsx -- a coding agent taken back to an earlier point of its transcript: a line of the developer's Edit, which writes it again in the box, a reply's Revert to here, and the box's chip naming the line its words go in place of.
+ * rewind-action.tsx -- a coding agent taken back to an earlier point of its transcript: a line of the developer's Edit, which writes it again where it stands, and a reply's Revert to here.
  *
  * An agent's tab hands its messages what a rewind takes (`RewindProvider`):
- * Edit puts a line back in the box, and the send takes the agent back to
- * just before it, so the new words go in its place; Revert to here, asked
+ * Edit opens a line for writing again in its own place, in the agent's own
+ * message box (`edit-composer.tsx`), leaving the foot's box as it is, and its Send takes the agent
+ * back to just before it, so the new words go in its place; Revert to here, asked
  * first since what it drops is gone, takes the agent back to just after a
  * reply, dropping the developer's next line and everything after it. Only a
  * line that opened a turn is written again, and a reply is reverted to only
@@ -33,12 +29,10 @@ export const REWIND_ACTION = {
 
 export type RewindAction = (typeof REWIND_ACTION)[keyof typeof REWIND_ACTION];
 
-/** What the actions and the chip say. */
+/** What the actions say. */
 export const REWIND_WORDS = {
   EDIT: "Edit",
   REVERT: "Revert to here",
-  EDITING: "Editing your message",
-  DROP_EDIT: "Cancel edit",
 } as const;
 
 /** What Revert to here asks before it drops anything. */
@@ -51,8 +45,20 @@ const REVERT_QUESTION: DialogQuestion = {
 
 /** What an agent's tab hands its messages: Edit of a line, and Revert to here of a reply. */
 interface RewindDoors {
-  /** Puts one of the developer's lines in the box, its words to go in its place. */
-  readonly onEdit: (messageId: string, words: string) => void;
+  /** The line open for writing again where it stands, by its message id; none while none is. */
+  readonly editing: string | undefined;
+  /** Opens one of the developer's lines for writing again where it stands. */
+  readonly onEdit: (messageId: string) => void;
+  /** Closes the line open for writing again, sending nothing. */
+  readonly onCancelEdit: () => void;
+  /** Sends the words and files in place of the line named. */
+  readonly onSendEdit: (
+    messageId: string,
+    words: string,
+    attachments: readonly CodingAgentAttachment[],
+  ) => void;
+  /** What the line's box is drawn with beside the tab's own box. */
+  readonly editor: Omit<EditComposerDoors, "onCancel" | "onSend">;
   /** Takes the agent back to just before the line named, sending nothing. */
   readonly onRevert: (lineId: string) => void;
   /** The line a reply's Revert to here drops from, by the reply's id: the developer's next line that opened a turn; none where none follows it. */
@@ -109,20 +115,14 @@ export function RewindProvider({
 }
 
 /** A line's Edit, after its Copy and Copy link; nothing where its tab offers no rewind, or the line opened no turn. */
-export function EditMessageAction({
-  messageId,
-  words,
-}: {
-  messageId: string;
-  words: string;
-}): ReactNode {
+export function EditMessageAction({ messageId }: { messageId: string }): ReactNode {
   const doors = useContext(RewindContext);
   if (doors === undefined || !doors.editable.has(messageId)) return null;
   return (
     <MessageAction
       label={REWIND_WORDS.EDIT}
       tooltip={REWIND_WORDS.EDIT}
-      onClick={() => doors.onEdit(messageId, words)}
+      onClick={() => doors.onEdit(messageId)}
     >
       <PencilIcon />
     </MessageAction>
@@ -153,19 +153,13 @@ export function RevertMessageAction({ messageId }: { messageId: string }): React
   );
 }
 
-/** The chip over the box while its words go in place of one of the developer's lines, with the × that lets the edit go. */
-export function EditChip({ onDrop }: { onDrop: () => void }): React.JSX.Element {
-  return (
-    <div className="draft-fork-dock">
-      <div className="draft-fork-chip" data-edit-chip="">
-        <PencilIcon className="draft-fork-glyph" aria-hidden="true" />
-        <span className="draft-fork-lead">{REWIND_WORDS.EDITING}</span>
-        <span className="draft-fork-drop">
-          <Tooltip label={REWIND_WORDS.DROP_EDIT}>
-            <IconButton icon={<XIcon />} label={REWIND_WORDS.DROP_EDIT} onClick={onDrop} />
-          </Tooltip>
-        </span>
-      </div>
-    </div>
-  );
+/** What the line named is written again with, where it is open for writing; none while it is not open, or its tab offers no rewind. */
+export function useMessageEdit(messageId: string): EditComposerDoors | undefined {
+  const doors = useContext(RewindContext);
+  if (doors === undefined || doors.editing !== messageId) return undefined;
+  return {
+    ...doors.editor,
+    onCancel: doors.onCancelEdit,
+    onSend: (words, attachments) => doors.onSendEdit(messageId, words, attachments),
+  };
 }
