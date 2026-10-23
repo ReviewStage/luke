@@ -2,7 +2,7 @@ import { type ChildProcess, execFile, spawn } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import path from "node:path";
-import { Effect } from "effect";
+import { Deferred, Effect } from "effect";
 
 /**
  * mac-terminal.ts -- a terminal of this Mac that Luke draws in a tab of its own: a real pseudo-terminal running a script, its output handed out and its input taken in.
@@ -158,7 +158,8 @@ export function startMacTerminal(options: {
     stdio: ["pipe", "pipe", "pipe"],
   });
   let ended = false;
-  let closing = false;
+  /** The close under way, which every later close joins. */
+  let closing: Deferred.Deferred<void> | undefined;
   const tty = (): string | undefined => {
     try {
       return readFileSync(ttyFile, "utf8").trim() || undefined;
@@ -182,62 +183,68 @@ export function startMacTerminal(options: {
       execFile(command, [...resizeArgs], () => undefined);
     },
     close: () =>
-      Effect.gen(function* () {
-        // Note that a close already under way is the one close, so a Stop and its tab's close do not hang the terminal up twice.
-        if (ended || closing) return;
-        closing = true;
-        // Every process on the tty is hung up first, and waited for, so a job in a
-        // process group of its own is reached before the wrapper's end takes the tty away.
-        const device = tty();
-        // Note that what runs on the terminal is noted before the hang-up, since a job that outlives it no longer names the terminal once it is gone.
-        const running = device === undefined ? [] : yield* processesOn(tools, device);
-        // Note that each process is named with when it started, and the terminal's own process group by its id, both before any signal, so the kill after the grace reaches what was running then and nothing the system started since under an id it gave again.
-        // Note that the times are read in one `ps`, so Stop's signals are not held up by a read per process.
-        const started = yield* startTimes(running);
-        const targets = [
-          ...running.flatMap((pid) => {
-            const time = started.get(pid);
-            return time === undefined ? [] : [String(pid), time];
-          }),
-          ...(child.pid === undefined ? [] : [String(-child.pid), "group"]),
-        ];
-        if (device !== undefined) {
-          const [command, hangUpArgs] = tools.hangUp(device);
-          yield* printed(command, hangUpArgs);
-        }
-        try {
-          if (child.pid !== undefined) process.kill(-child.pid, "SIGTERM");
-        } catch {
-          // The terminal ended on its own between the check and the signal.
-        }
-        // Note that a process that ignores the hang-up and the terminate, as a dev server shutting down slowly may, is killed after the grace; the kill is left to a process of its own, so it reaches a job that ignored the hang-up and outlived the `script` around it, and is done even when Luke quits within the grace.
-        spawn(
-          "/bin/sh",
-          [
-            "-c",
-            [
-              'sleep "$1"; shift',
-              'while [ "$#" -ge 2 ]; do',
-              '  target="$1"; was="$2"; shift 2',
-              // Note that a group is killed while any process is still in it, since its id is given to no other while it has one; a process only while it started when it was noted, its time read with spaces folded, as `ps` pads it.
-              '  if [ "$was" = group ]; then',
-              "    ps -A -o pgid= | awk -v g=\"${target#-}\" '$1 == g { found = 1 } END { exit !found }' &&",
-              '      kill -s KILL -- "$target" 2>/dev/null',
-              "  else",
-              '    now="$(echo $(ps -o lstart= -p "$target" 2>/dev/null))"',
-              '    [ "$now" = "$was" ] && kill -s KILL -- "$target" 2>/dev/null',
-              "  fi",
-              "done",
-              "true",
-            ].join("\n"),
-            "sh",
-            String((options.stopGraceMs ?? STOP_GRACE_MS) / 1_000),
-            ...targets,
-          ],
-          { detached: true, stdio: "ignore" },
-        ).unref();
+      Effect.suspend(() => {
+        // Note that a close already under way is the one close, which a later one waits on, so a quit just after Stop waits for Stop's hang-up rather than passing it by.
+        if (closing !== undefined) return Deferred.await(closing);
+        if (ended) return Effect.void;
+        const done = Deferred.makeUnsafe<void>();
+        closing = done;
+        return Effect.ensuring(hungUp, Deferred.succeed(done, undefined));
       }),
   };
+  /** Every process on the terminal hung up, the terminal ended, and what still runs after the grace killed by a process of its own. */
+  const hungUp = Effect.gen(function* () {
+    // Every process on the tty is hung up first, and waited for, so a job in a
+    // process group of its own is reached before the wrapper's end takes the tty away.
+    const device = tty();
+    // Note that what runs on the terminal is noted before the hang-up, since a job that outlives it no longer names the terminal once it is gone.
+    const running = device === undefined ? [] : yield* processesOn(tools, device);
+    // Note that each process is named with when it started, and the terminal's own process group by its id, both before any signal, so the kill after the grace reaches what was running then and nothing the system started since under an id it gave again.
+    // Note that the times are read in one `ps`, so Stop's signals are not held up by a read per process.
+    const started = yield* startTimes(running);
+    const targets = [
+      ...running.flatMap((pid) => {
+        const time = started.get(pid);
+        return time === undefined ? [] : [String(pid), time];
+      }),
+      ...(child.pid === undefined ? [] : [String(-child.pid), "group"]),
+    ];
+    if (device !== undefined) {
+      const [command, hangUpArgs] = tools.hangUp(device);
+      yield* printed(command, hangUpArgs);
+    }
+    try {
+      if (child.pid !== undefined) process.kill(-child.pid, "SIGTERM");
+    } catch {
+      // The terminal ended on its own between the check and the signal.
+    }
+    // Note that a process that ignores the hang-up and the terminate, as a dev server shutting down slowly may, is killed after the grace; the kill is left to a process of its own, so it reaches a job that ignored the hang-up and outlived the `script` around it, and is done even when Luke quits within the grace.
+    spawn(
+      "/bin/sh",
+      [
+        "-c",
+        [
+          'sleep "$1"; shift',
+          'while [ "$#" -ge 2 ]; do',
+          '  target="$1"; was="$2"; shift 2',
+          // Note that a group is killed while any process is still in it, since its id is given to no other while it has one; a process only while it started when it was noted, its time read with spaces folded, as `ps` pads it.
+          '  if [ "$was" = group ]; then',
+          "    ps -A -o pgid= | awk -v g=\"${target#-}\" '$1 == g { found = 1 } END { exit !found }' &&",
+          '      kill -s KILL -- "$target" 2>/dev/null',
+          "  else",
+          '    now="$(echo $(ps -o lstart= -p "$target" 2>/dev/null))"',
+          '    [ "$now" = "$was" ] && kill -s KILL -- "$target" 2>/dev/null',
+          "  fi",
+          "done",
+          "true",
+        ].join("\n"),
+        "sh",
+        String((options.stopGraceMs ?? STOP_GRACE_MS) / 1_000),
+        ...targets,
+      ],
+      { detached: true, stdio: "ignore" },
+    ).unref();
+  });
   standing.add(terminal);
   const finish = (code: number | null) => {
     if (ended) return;

@@ -156,7 +156,13 @@ it.effect(
       yield* Effect.promise(() => until(`tick:${heard + 2}`));
       assert.equal(closing.pollUnsafe(), undefined, "the close still waits on its listing");
 
+      // A quit just after Stop waits on Stop's close rather than taking it for done.
+      const quitting = yield* Effect.forkChild(closeEveryMacTerminal);
+      yield* Effect.promise(() => until(`tick:${ticks() + 1}`));
+      assert.equal(quitting.pollUnsafe(), undefined, "the quit waits on the close under way");
+
       yield* Fiber.join(closing);
+      yield* Fiber.join(quitting);
       yield* Effect.promise(() => ended);
     }),
 );
