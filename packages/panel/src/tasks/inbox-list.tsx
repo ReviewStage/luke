@@ -1034,10 +1034,17 @@ function HolderHeader({
   );
   const shared = { folded, count, noun: NEEDS_YOU.COUNT, steady: true, onToggle };
   if (holder.kind === INBOX_HOLDER.TASK) {
+    const glyph = <PlanGlyph status={holder.task.status} />;
+    const fallback = (
+      <HoverCard>
+        <HoverCardHead glyph={glyph} name={holder.task.name} />
+      </HoverCard>
+    );
     return (
       <SidebarGroupHeader
-        glyph={<PlanGlyph status={holder.task.status} />}
+        glyph={glyph}
         name={holder.task.name}
+        card={<TaskChipCard taskId={holder.task.id} fallback={fallback} />}
         {...shared}
       />
     );

@@ -4622,6 +4622,16 @@ function hoveredCard(control: Element, card: string): string | null {
   return wordsOf(document.querySelector(`.luke-tooltip-card ${card}`));
 }
 
+test("a task's group header hangs the task's card, as the automation's does its own", async () => {
+  const { page } = mount();
+  await settle();
+  const header = headerNamed(page, "Invites");
+  restOn(header);
+  // Note that this window stands no chip cards, so the header hangs the card's fallback: the task's head.
+  const name = document.querySelector(".luke-tooltip-card .luke-hover-card-name");
+  assert.equal(name?.textContent, "Invites", "the header hangs a card named for its task");
+});
+
 test("an automation's group wears its clock tile and hangs its card, as its crumb does, the card's name opening its page since the header's press folds; its agent's row wears the agent's tile and hangs a card naming the agent and the automation that started it; the agents no automation names stand under no actor", async () => {
   handState({});
   listedWorkspace = {
