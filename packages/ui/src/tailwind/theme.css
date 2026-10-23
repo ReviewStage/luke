@@ -50,8 +50,9 @@
   /* A list's cap, an app's placement hook (README's "Placement hooks"). */
   --spacing-combobox-list: var(--luke-combobox-list-max, 280px);
   --text-body: var(--luke-type-body-size);
+  --text-body--line-height: var(--luke-type-body-leading);
   --text-caption: var(--luke-type-caption-size);
-  --leading-caption: var(--luke-type-caption-leading);
+  --text-caption--line-height: var(--luke-type-caption-leading);
   /* off-scale: a menu item's second line, a step under a caption */
   --text-detail: 11.5px;
   --z-index-menu: var(--luke-z-menu);
