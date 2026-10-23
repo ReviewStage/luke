@@ -12,10 +12,12 @@ import {
 } from "@luke/ui";
 import { useMemo } from "react";
 import { TERMINAL_LOAD_FAILED } from "../bundle-loader.js";
+import { useTabActions } from "../desktop/strip-tabs.js";
 import { FIND_STEP, type FindSource, useFindSource } from "../find-in-tab.js";
+import { usePhoneRoom } from "../stage-room.js";
 import { TERMINAL_FIND, type TerminalFind } from "../terminal/contract.js";
 import { AgentRef, agentSubject, NOTHING_HELD } from "./agent-ref.js";
-import { TreeToggle, usePaneRoom } from "./file-view.js";
+import { paneToggleAction, TreeToggle, usePaneRoom } from "./file-view.js";
 import { AgentGlyph } from "./tab-look.js";
 import { TerminalShells } from "./terminal-shells.js";
 import type { CodingAgentsControl } from "./use-coding-agents.js";
@@ -68,6 +70,9 @@ function useScrollbackFind(find: TerminalFind | undefined): FindSource | undefin
     [find],
   );
 }
+
+/** What a phone's ⋯ calls the agent's name in the bar, which opens its tab. */
+const OPEN_AGENT = "Open agent";
 
 /** What the shells list's toggle says. */
 const SHELLS_TOGGLE = { open: "Hide shells", closed: "Show shells" } as const;
@@ -139,29 +144,48 @@ export function TerminalTab({
   useFindSource(useScrollbackFind(session.find));
   const look = terminalLook(session.state);
   const room = usePaneRoom(shells);
+  // A phone draws no bar over the screen: its header's ⋯ opens the agent and the shells, saying where the sandbox stands.
+  const phone = usePhoneRoom();
+  useTabActions(
+    phone
+      ? [
+          [
+            paneToggleAction(room, SHELLS_TOGGLE, `Sandbox · ${look.words}`),
+            {
+              label: OPEN_AGENT,
+              icon: <AgentGlyph agent={subject.agent} />,
+              detail: subject.name,
+              onSelect: onOpenAgent,
+            },
+          ],
+        ]
+      : undefined,
+  );
   return (
     <Fill
       className="terminal-tab file-view ph-no-capture"
       data-state={session.state.kind}
       {...room.root}
     >
-      <header className="file-view-bar">
-        <span className="terminal-tab-title">
-          <AgentRef
-            subject={subject}
-            models={agents.models}
-            onOpen={onOpenAgent}
-            glyph={<AgentGlyph agent={subject.agent} />}
-            label={subject.name}
-          />
-          <span className="terminal-tab-standing">
-            <span className="terminal-tab-sandbox">· sandbox </span>· {look.words}
+      {phone ? null : (
+        <header className="file-view-bar">
+          <span className="terminal-tab-title">
+            <AgentRef
+              subject={subject}
+              models={agents.models}
+              onOpen={onOpenAgent}
+              glyph={<AgentGlyph agent={subject.agent} />}
+              label={subject.name}
+            />
+            <span className="terminal-tab-standing">
+              <span className="terminal-tab-sandbox">· sandbox </span>· {look.words}
+            </span>
           </span>
-        </span>
-        <div className="file-view-actions">
-          <TreeToggle toggles={room.toggles} words={SHELLS_TOGGLE} />
-        </div>
-      </header>
+          <div className="file-view-actions">
+            <TreeToggle toggles={room.toggles} words={SHELLS_TOGGLE} />
+          </div>
+        </header>
+      )}
       <Fill flow={FILL_FLOW.ROW} clip className="terminal-tab-body" {...room.body}>
         <div className="terminal-tab-host">
           {look.bar === undefined ? null : <StateBar bar={look.bar} onAction={session.onAction} />}

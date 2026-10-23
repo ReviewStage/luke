@@ -29,6 +29,7 @@ import {
   useRef,
   useState,
 } from "react";
+import type { MenuAction } from "../desktop/action-menu.js";
 import { FILE_TREE_WIDTH, type FileTreeWidth } from "../desktop/folded-groups.js";
 import {
   type FloatingBox,
@@ -38,9 +39,11 @@ import {
   useHoverPane,
 } from "../desktop/hover-pane.js";
 import { type PaneSlide, usePaneSlide } from "../desktop/pane-motion.js";
+import { useTabActions } from "../desktop/strip-tabs.js";
 import type { ReadFolder } from "../file-tree/contract.js";
+import { usePhoneRoom } from "../stage-room.js";
 import { FileBreadcrumbs } from "./file-breadcrumbs.js";
-import { FileMenu } from "./file-menu.js";
+import { FileMenu, useFileActions } from "./file-menu.js";
 import type { FileNotes } from "./file-note.js";
 import { FileTab, type ReadFileWindow } from "./file-tab.js";
 import {
@@ -56,7 +59,7 @@ import {
 import { FileTreePane } from "./file-tree-pane.js";
 import { keptListings, type ListFolder, listingOf } from "./folder-listings.js";
 import { FILE_HISTORY_STEP, type FileHistoryStep, type OpenFile } from "./use-side-panel.js";
-import { VIEW_SETTINGS_SCOPE, ViewSettingsButton } from "./view-settings.js";
+import { useViewSettingsSheet, VIEW_SETTINGS_SCOPE, ViewSettingsButton } from "./view-settings.js";
 
 /**
  * file-view.tsx -- a File tab with the task's repository beside it: one bar across both, the file under it, and the collapsible tree on its right.
@@ -88,7 +91,10 @@ import { VIEW_SETTINGS_SCOPE, ViewSettingsButton } from "./view-settings.js";
  * In a side panel too narrow for the file and the tree side by side, the
  * tree stands over the file's right edge instead, shut until its toggle
  * opens it for this tab alone (`usePaneRoom`), and the crumbs fold what
- * the bar has no room for (`file-breadcrumbs.tsx`).
+ * the bar has no room for (`file-breadcrumbs.tsx`). On a phone, whose
+ * task's header names the file, the bar is not drawn at all: every control
+ * of it is an item of the header's ⋯ (`phoneFileActions`), the tree
+ * standing for the crumbs, since it browses the same folders.
  *
  * The bar and the tree's slide are an agent's Changes tab's too
  * (`agent-changes-tab.tsx`), so a diff stands under the same bar, led by
@@ -103,6 +109,9 @@ interface ToggleWords {
 }
 
 const FILES_TOGGLE: ToggleWords = { open: "Hide files", closed: "Show files" };
+
+/** The shell in a phone's room, where a pane beside a tab always floats over it (`shell-room.ts`). */
+const NARROW_SHELL = '.desktop-shell[data-room="narrow"]';
 
 /** Where a toggle opens its pane: beside the tab, as the panel holds it, or over the tab, where the panel is too narrow for the two side by side. */
 const PANE_PLACE = { BESIDE: "beside", OVER: "over" } as const;
@@ -258,10 +267,15 @@ function drawnIn(view: Element | null, selector: string): boolean {
 /**
  * Whether the view floats its pane over the tab rather than beside it,
  * which is the stylesheet's to say: its over toggle is drawn, or a strip
- * stands in the closed pane's place.
+ * stands in the closed pane's place; or the room is a phone's, whose
+ * bar, and so its toggle, is not drawn at all.
  */
 function floats(view: Element | null): boolean {
-  return drawnIn(view, OVER_TOGGLE) || drawnIn(view, PANE_STRIP);
+  return (
+    drawnIn(view, OVER_TOGGLE) ||
+    drawnIn(view, PANE_STRIP) ||
+    (view?.closest(NARROW_SHELL) ?? null) !== null
+  );
 }
 
 /** Whether the pane's own view floats it now, a panel widened past its line having docked it. */
@@ -488,6 +502,49 @@ function BarPathWords({ path }: { path: BarPath }): React.JSX.Element {
   );
 }
 
+/** A pane's toggle as an item of a phone's ⋯: Show or Hide, as the pane floating over the tab stands, its press as the toggle's. */
+export function paneToggleAction(
+  room: PaneRoom,
+  words: ToggleWords = FILES_TOGGLE,
+  detail?: string,
+): MenuAction {
+  return {
+    label: room.toggles.over && !room.toggles.peeked ? words.open : words.closed,
+    icon: <SidePanelIcon />,
+    detail,
+    onSelect: room.toggle,
+  };
+}
+
+/** Open on GitHub as an item of a phone's ⋯, dimmed with no page to open yet, as the bar's button is. */
+export function gitHubAction(onGitHub: (() => void) | undefined, detail?: string): MenuAction {
+  return {
+    label: "Open on GitHub",
+    icon: <ProviderMark provider={INTEGRATION_PROVIDER.GITHUB} />,
+    detail,
+    disabled: onGitHub === undefined,
+    onSelect: () => onGitHub?.(),
+  };
+}
+
+/** Back and Forward through the files a File tab showed, as items of a phone's ⋯, dimmed as the bar's buttons are. */
+function historyActions(history: FileHistory): MenuAction[] {
+  return [
+    {
+      label: "Back",
+      icon: <ArrowLeftIcon />,
+      disabled: !history.canGoBack,
+      onSelect: () => history.onStep(FILE_HISTORY_STEP.BACK),
+    },
+    {
+      label: "Forward",
+      icon: <ArrowRightIcon />,
+      disabled: !history.canGoForward,
+      onSelect: () => history.onStep(FILE_HISTORY_STEP.FORWARD),
+    },
+  ];
+}
+
 /**
  * The bar across a File tab and its tree, or a Changes tab and its own:
  * Back and Forward where the tab keeps a history, what leads it (a File
@@ -668,37 +725,57 @@ export function FileView({
     tree.closeOver();
     onBrowse(path, newTab);
   };
+  const ready = read.kind === FILE_READ.READY;
+  const onGitHub = ready ? () => openGitHub(fileUrl(read, file)) : undefined;
+  // A phone draws no bar: the header's ⋯ offers every control of it, in its order.
+  const phone = usePhoneRoom();
+  const fileActions = useFileActions({ path: file.path, ready, readText });
+  const settings = useViewSettingsSheet({ kind: VIEW_SETTINGS_SCOPE.LINES, notes: true });
+  useTabActions(
+    phone
+      ? [
+          historyActions(history),
+          [
+            ...(browsing ? [paneToggleAction(tree, FILES_TOGGLE, file.path)] : []),
+            gitHubAction(
+              onGitHub,
+              commit === undefined ? undefined : `Read at commit ${shortCommit(commit)}`,
+            ),
+            settings.action,
+          ],
+          fileActions,
+        ]
+      : undefined,
+  );
   return (
     <Fill className="file-view" {...tree.root}>
-      <FileViewBar
-        history={history}
-        lead={
-          <>
-            <BarPathWords
-              path={{
-                path: file.path,
-                browse: browsing
-                  ? { repository, listFolder: readFolderListing, onOpen: onBrowse }
-                  : undefined,
-              }}
-            />
-            {commit === undefined ? null : (
-              <Tooltip label={`Read at commit ${commit}`}>
-                <span className="file-view-commit">{shortCommit(commit)}</span>
-              </Tooltip>
-            )}
-          </>
-        }
-        onGitHub={read.kind === FILE_READ.READY ? () => openGitHub(fileUrl(read, file)) : undefined}
-        menu={
-          <FileViewMenu
-            path={file.path}
-            ready={read.kind === FILE_READ.READY}
-            readText={readText}
-          />
-        }
-        tree={browsing ? tree.toggles : undefined}
-      />
+      {phone ? (
+        settings.sheet
+      ) : (
+        <FileViewBar
+          history={history}
+          lead={
+            <>
+              <BarPathWords
+                path={{
+                  path: file.path,
+                  browse: browsing
+                    ? { repository, listFolder: readFolderListing, onOpen: onBrowse }
+                    : undefined,
+                }}
+              />
+              {commit === undefined ? null : (
+                <Tooltip label={`Read at commit ${commit}`}>
+                  <span className="file-view-commit">{shortCommit(commit)}</span>
+                </Tooltip>
+              )}
+            </>
+          }
+          onGitHub={onGitHub}
+          menu={<FileViewMenu path={file.path} ready={ready} readText={readText} />}
+          tree={browsing ? tree.toggles : undefined}
+        />
+      )}
       <Fill flow={FILL_FLOW.ROW} clip className="file-view-body" {...tree.body}>
         {/* Keyed by the file, then by the commit it is read at, so lines read
             at one commit are never laid beside another's. */}

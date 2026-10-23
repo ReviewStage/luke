@@ -9,6 +9,7 @@ import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
+import { ShellRoomContext } from "../stage-room.js";
 import { SIDE_PANEL_TAB, type SidePanelTab } from "../tasks/use-side-panel.js";
 import { NO_LOOKS } from "../tasks/use-task-looks.js";
 import { fakeAppBridge } from "../testing/app-bridge.js";
@@ -102,35 +103,40 @@ function mount(
       root.render(
         onRegistry(
           registry,
-          createElement(DesktopTasks, {
-            summary: UNPINNED_SUMMARY,
-            looks: NO_LOOKS,
-            room,
-            away: { label: "Inbox", onPress: () => told.push("away") },
-            tasks: tasksControl({
-              page: TASKS_PAGE.DOCUMENT,
-              activeTaskId: TASK.id,
-              region: { kind: DOCUMENT_REGION.READY, task: TASK },
-              pages: paged ? [PAGE] : undefined,
-              onRenameTask: (taskId, name) => {
-                told.push(`rename ${taskId} ${name}`);
-                return Promise.resolve(true);
-              },
-              sidePanel: {
-                ...tasksControl().sidePanel,
-                open: shown,
-                fullScreen: shown && narrow,
-                fullScreenOnly: shown && narrow,
-                tabs: [SIDE_PANEL_TAB.PLAN, SIDE_PANEL_TAB.INBOX, SIDE_PANEL_TAB.BOARD],
-                strip: [SIDE_PANEL_TAB.PLAN, SIDE_PANEL_TAB.INBOX, SIDE_PANEL_TAB.BOARD],
-                pages: paged ? [{ page: PAGE.id }] : [],
-                tab: on,
-                onChoose: (chosen) => told.push(`choose ${String(chosen)}`),
-                onToggle: () => told.push("toggle"),
-                onClose: (closed) => told.push(`close ${String(closed)}`),
-              },
+          // Note that the shell hands its room to every tab's body, as the window's root does.
+          createElement(
+            ShellRoomContext.Provider,
+            { value: room },
+            createElement(DesktopTasks, {
+              summary: UNPINNED_SUMMARY,
+              looks: NO_LOOKS,
+              room,
+              away: { label: "Inbox", onPress: () => told.push("away") },
+              tasks: tasksControl({
+                page: TASKS_PAGE.DOCUMENT,
+                activeTaskId: TASK.id,
+                region: { kind: DOCUMENT_REGION.READY, task: TASK },
+                pages: paged ? [PAGE] : undefined,
+                onRenameTask: (taskId, name) => {
+                  told.push(`rename ${taskId} ${name}`);
+                  return Promise.resolve(true);
+                },
+                sidePanel: {
+                  ...tasksControl().sidePanel,
+                  open: shown,
+                  fullScreen: shown && narrow,
+                  fullScreenOnly: shown && narrow,
+                  tabs: [SIDE_PANEL_TAB.PLAN, SIDE_PANEL_TAB.INBOX, SIDE_PANEL_TAB.BOARD],
+                  strip: [SIDE_PANEL_TAB.PLAN, SIDE_PANEL_TAB.INBOX, SIDE_PANEL_TAB.BOARD],
+                  pages: paged ? [{ page: PAGE.id }] : [],
+                  tab: on,
+                  onChoose: (chosen) => told.push(`choose ${String(chosen)}`),
+                  onToggle: () => told.push("toggle"),
+                  onClose: (closed) => told.push(`close ${String(closed)}`),
+                },
+              }),
             }),
-          }),
+          ),
         ),
       ),
     );
@@ -328,4 +334,37 @@ test("on a phone the ⋯'s Rename on a tab opens the task's name in the title's 
     '.task-head input[aria-label="Task name"]',
   );
   assert.equal(field?.value, TASK.name);
+});
+
+test("on a phone a tab draws no bar of its own, and the task's header's ⋯ offers each of its controls by name, a press there acting as the bar's did", async () => {
+  const page = mount(SHELL_ROOM.NARROW, true, { page: PAGE.id }, true);
+  await act(async () => undefined);
+  assert.equal(page.container.querySelector(".page-view .file-view-bar"), null);
+  const menu = page.menu();
+  assert.ok(menu.includes(`View source${PAGE.title}`), "View source, said to act on the page");
+  assert.ok(menu.includes(`Reload page${PAGE.title}`));
+
+  page.choose(`View source${PAGE.title}`);
+  await act(async () => undefined);
+  assert.ok(page.menu().includes(`View page${PAGE.title}`), "the source is shown");
+});
+
+test("on a phone the task's Inbox tab draws no head over its list, its search standing alone: the task's header's ⋯ opens its View options where the ⋯ stood", async () => {
+  const page = mount(SHELL_ROOM.NARROW, true, SIDE_PANEL_TAB.INBOX);
+  await act(async () => undefined);
+  assert.equal(page.container.querySelector(".inbox-tasks-bar"), null);
+  assert.ok(
+    page.container.querySelector('.inbox-search input[aria-label="Search inbox"]'),
+    "the search's field stands over the list",
+  );
+  const menu = page.menu();
+  const options = menu.find((each) => each.startsWith("View options")) ?? assert.fail();
+
+  page.choose(options);
+  assert.ok(
+    [...document.querySelectorAll('[role="menu"]')].some((each) =>
+      each.getAttribute("aria-label")?.startsWith("View options"),
+    ),
+    "the list's own View options menu stands open",
+  );
 });

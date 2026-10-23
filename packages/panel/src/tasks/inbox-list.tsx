@@ -104,8 +104,10 @@ import {
 } from "../desktop/phone-head.js";
 import { SidebarGroupHeader } from "../desktop/sidebar-group-header.js";
 import { SidebarSectionHead } from "../desktop/sidebar-task-view.js";
+import { useTabActions } from "../desktop/strip-tabs.js";
 import { useMemberDirectory } from "../member-directory.js";
 import { PEOPLE_FILTER, PEOPLE_FILTER_WORDS, peopleFilterActions } from "../member-rows.js";
+import { usePhoneRoom } from "../stage-room.js";
 import { TaskChipCard } from "./chip-cards.js";
 import { type InboxCloser, useInboxClose } from "./inbox-close.js";
 import {
@@ -1096,6 +1098,40 @@ function ListHead({
   const title = inboxTitle(show.show);
   const asked = useMenuAsk();
   const search = head.search === undefined ? null : <ListSearch search={head.search} />;
+  // A task's own Inbox tab on a phone hands its View options to the task's header, whose title
+  // already names it; its search field stands over the list as on every page.
+  const phone = usePhoneRoom();
+  const handed = head.tab === true && phone;
+  useTabActions(
+    handed
+      ? [
+          [
+            {
+              label: VIEW_OPTIONS,
+              icon: <SlidersHorizontalIcon />,
+              opens: true,
+              detail: title,
+              onAsk: asked.onAsk,
+            },
+          ],
+        ]
+      : undefined,
+  );
+  if (handed) {
+    return (
+      <>
+        <ViewOptions
+          shown={shown}
+          show={show}
+          choices={view?.choices}
+          readerId={readerId}
+          readAll={head.readAll}
+          asked={{ ask: asked.ask }}
+        />
+        {search}
+      </>
+    );
+  }
   if (head.phone !== undefined && placement === INBOX_LIST_PLACEMENT.PAGE) {
     return (
       <>
@@ -1297,6 +1333,13 @@ export interface InboxListHead {
    * the ⋯ holding New thread and View options, the search standing under it; none elsewhere.
    */
   readonly phone?: { readonly start: React.ReactNode } | undefined;
+  /**
+   * Whether the list stands in a task's own Inbox tab, which a phone heads
+   * with the task's header, whose ⋯ takes the head's View options
+   * (`useTabActions`), so the list draws no head of its own there, only its
+   * search under where the head stood.
+   */
+  readonly tab?: boolean | undefined;
 }
 
 /** The words a list's search holds, and the change that narrows the list to them. */

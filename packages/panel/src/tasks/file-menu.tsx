@@ -86,7 +86,8 @@ export function useSaveText(): (name: string, text: string) => Promise<void> {
       );
 }
 
-export function FileMenu({
+/** What is done with the file shown, as its bar's ⋯ offers it, and a phone's header's ⋯ in its place (`file-view.tsx`). */
+export function useFileActions({
   path,
   ready,
   readText,
@@ -97,7 +98,7 @@ export function FileMenu({
   ready: boolean;
   /** The file's whole text, read a window at a time, or why it is not at hand. */
   readText: () => Promise<WholeText>;
-}): React.JSX.Element {
+}): MenuAction[] {
   const copyWithToast = useCopyToast();
   const show = useToast();
   const saveText = useSaveText();
@@ -112,29 +113,28 @@ export function FileMenu({
       }
     });
 
-  return (
-    <BarMenu
-      label="File actions"
-      actions={[
-        {
-          label: "Copy file name",
-          icon: <CopyIcon />,
-          onSelect: () => copyWithToast(name, "File name copied"),
-        },
-        copyPathAction(path, copyWithToast),
-        {
-          label: "Copy file contents",
-          icon: <ClipboardCopyIcon aria-hidden="true" />,
-          disabled: !ready,
-          onSelect: () => withText((text) => copyWithToast(text, "File contents copied")),
-        },
-        {
-          label: "Download file",
-          icon: <DownloadIcon />,
-          disabled: !ready,
-          onSelect: () => withText((text) => saveText(name, text)),
-        },
-      ]}
-    />
-  );
+  return [
+    {
+      label: "Copy file name",
+      icon: <CopyIcon />,
+      onSelect: () => copyWithToast(name, "File name copied"),
+    },
+    copyPathAction(path, copyWithToast),
+    {
+      label: "Copy file contents",
+      icon: <ClipboardCopyIcon aria-hidden="true" />,
+      disabled: !ready,
+      onSelect: () => withText((text) => copyWithToast(text, "File contents copied")),
+    },
+    {
+      label: "Download file",
+      icon: <DownloadIcon />,
+      disabled: !ready,
+      onSelect: () => withText((text) => saveText(name, text)),
+    },
+  ];
+}
+
+export function FileMenu(props: Parameters<typeof useFileActions>[0]): React.JSX.Element {
+  return <BarMenu label="File actions" actions={useFileActions(props)} />;
 }

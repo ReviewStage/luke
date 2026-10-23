@@ -12,6 +12,8 @@ import { PlayIcon, SquareIcon, TerminalIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useAct } from "../act.js";
 import { TERMINAL_LOAD_FAILED, useSideBundles } from "../bundle-loader.js";
+import { useTabActions } from "../desktop/strip-tabs.js";
+import { usePhoneRoom } from "../stage-room.js";
 import type { TerminalHandle } from "../terminal/contract.js";
 import { onMacTerminalPort } from "./mac-terminal-port.js";
 import { pullRequestAsked } from "./pull-request-number.js";
@@ -210,48 +212,87 @@ export function MacTerminalTab({ tab }: { tab: MacTerminalStripTab }): React.JSX
     );
   };
 
+  const run = () => setPresses((count) => count + 1);
+  // A phone draws no bar over the screen: its header's ⋯ runs, stops, and opens the run in
+  // Terminal, saying where it stands and what it runs.
+  const phone = usePhoneRoom();
+  const where = `${repository}${branch === undefined ? "" : ` · ${branch}`} · this Mac`;
+  useTabActions(
+    phone
+      ? [
+          [
+            running
+              ? {
+                  label: "Stop",
+                  icon: <SquareIcon aria-hidden />,
+                  detail: standingWords(standing),
+                  danger: true,
+                  disabled: standing.kind === "stopping",
+                  onSelect: stop,
+                }
+              : {
+                  label: "Run",
+                  icon: <PlayIcon aria-hidden />,
+                  detail: standingWords(standing),
+                  disabled: standing.kind === "starting",
+                  onSelect: run,
+                },
+            {
+              label: "Open in Terminal",
+              icon: <TerminalIcon aria-hidden />,
+              detail: where,
+              disabled: branch === undefined || standing.kind === "starting",
+              onSelect: openInTerminal,
+            },
+          ],
+        ]
+      : undefined,
+  );
+
   return (
     <Fill className="terminal-tab file-view ph-no-capture">
-      <header className="file-view-bar">
-        <span className="terminal-tab-title">
-          <OneLine className="terminal-tab-agent">{repository}</OneLine>
-          <span className="terminal-tab-standing">
-            {branch === undefined ? "" : ` · ${branch}`} · this Mac · {standingWords(standing)}
+      {phone ? null : (
+        <header className="file-view-bar">
+          <span className="terminal-tab-title">
+            <OneLine className="terminal-tab-agent">{repository}</OneLine>
+            <span className="terminal-tab-standing">
+              {branch === undefined ? "" : ` · ${branch}`} · this Mac · {standingWords(standing)}
+            </span>
           </span>
-        </span>
-        <div className="file-view-actions">
-          <Button
-            icon={<TerminalIcon aria-hidden />}
-            label="Open in Terminal"
-            size={BUTTON_SIZE.COMPACT}
-            disabled={branch === undefined || standing.kind === "starting"}
-            onClick={openInTerminal}
-          >
-            Open in Terminal
-          </Button>
-          {running ? (
+          <div className="file-view-actions">
             <Button
-              icon={<SquareIcon aria-hidden />}
-              variant={BUTTON_VARIANT.DANGER_OUTLINE}
+              icon={<TerminalIcon aria-hidden />}
+              label="Open in Terminal"
               size={BUTTON_SIZE.COMPACT}
-              disabled={standing.kind === "stopping"}
-              onClick={stop}
+              disabled={branch === undefined || standing.kind === "starting"}
+              onClick={openInTerminal}
             >
-              Stop
+              Open in Terminal
             </Button>
-          ) : (
-            <Button
-              icon={<PlayIcon aria-hidden />}
-              variant={BUTTON_VARIANT.PRIMARY}
-              size={BUTTON_SIZE.COMPACT}
-              disabled={standing.kind === "starting"}
-              onClick={() => setPresses((count) => count + 1)}
-            >
-              Run
-            </Button>
-          )}
-        </div>
-      </header>
+            {running ? (
+              <Button
+                icon={<SquareIcon aria-hidden />}
+                variant={BUTTON_VARIANT.DANGER_OUTLINE}
+                size={BUTTON_SIZE.COMPACT}
+                disabled={standing.kind === "stopping"}
+                onClick={stop}
+              >
+                Stop
+              </Button>
+            ) : (
+              <Button
+                icon={<PlayIcon aria-hidden />}
+                variant={BUTTON_VARIANT.PRIMARY}
+                size={BUTTON_SIZE.COMPACT}
+                disabled={standing.kind === "starting"}
+                onClick={run}
+              >
+                Run
+              </Button>
+            )}
+          </div>
+        </header>
+      )}
       <Fill flow={FILL_FLOW.ROW} clip className="terminal-tab-body">
         <div className="terminal-tab-host">
           {AsyncResult.isFailure(loaded) ? (

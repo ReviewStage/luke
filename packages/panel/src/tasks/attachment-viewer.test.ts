@@ -11,6 +11,8 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { runAppCommand } from "../app-commands.js";
 import { FindScope } from "../find-in-tab.js";
+import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
+import { ShellRoomContext } from "../stage-room.js";
 import { fakeAppBridge } from "../testing/app-bridge.js";
 import { fakeAppPlatform } from "../testing/app-platform.js";
 import { onRegistry } from "../testing/copy-feedback.js";
@@ -74,7 +76,7 @@ interface ViewerState {
 }
 
 /** The viewer open on the two screenshots, at `at`, and the ways to reach the picture shown. */
-function opened(opening: ImageOpening = IMAGE_OPENING.FITTED) {
+function opened(opening: ImageOpening = IMAGE_OPENING.FITTED, room: ShellRoom = SHELL_ROOM.WIDE) {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
@@ -87,18 +89,22 @@ function opened(opening: ImageOpening = IMAGE_OPENING.FITTED) {
       root.render(
         onRegistry(
           registry,
-          createElement(AttachmentViewer, {
-            files: state.files,
-            at: state.at,
-            onAt: (at: number) => {
-              state.at = at;
-              draw();
-            },
-            onClose: () => {
-              state.closed = true;
-            },
-            opening,
-          }),
+          createElement(
+            ShellRoomContext.Provider,
+            { value: room },
+            createElement(AttachmentViewer, {
+              files: state.files,
+              at: state.at,
+              onAt: (at: number) => {
+                state.at = at;
+                draw();
+              },
+              onClose: () => {
+                state.closed = true;
+              },
+              opening,
+            }),
+          ),
         ),
       ),
     );
@@ -490,4 +496,27 @@ test("Copy image puts the picture shown on the clipboard as its PNG, and its che
   );
   await act(async () => refused.reject(new Error("refused")));
   assert.equal(glyph(), "failed", "its own answer lands beside it");
+});
+
+test("on a phone the viewer's header is Close alone at its start, the file's name centred over its size, and one ⋯ at its end holding every other button; the arrow keys still walk the files", () => {
+  const viewer = opened(IMAGE_OPENING.FITTED, SHELL_ROOM.NARROW);
+  const head =
+    document.querySelector<HTMLElement>('[role="dialog"] header') ?? assert.fail("a header");
+  const named = (selector: string) =>
+    [...head.querySelectorAll(selector)].map((button) => button.getAttribute("aria-label"));
+  assert.deepEqual(named("button"), ["Close", "More"], "one control in each corner");
+  assert.deepEqual(named(".phone-head-start button"), ["Close"]);
+  assert.equal(head.querySelector("h2")?.textContent, "first.png");
+
+  viewer.press("More");
+  const items = () => [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')];
+  assert.deepEqual(
+    items().map((item) => item.textContent),
+    ["Previous file1 of 2", "Next file1 of 2", "Copy image", "Zoom out", "Zoom in", "Download"],
+  );
+  act(() => items()[1]?.click());
+  assert.equal(viewer.state.at, 1, "Next file shows the next");
+
+  viewer.key("ArrowLeft");
+  assert.equal(viewer.state.at, 0, "the arrows still walk the files");
 });
