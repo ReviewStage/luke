@@ -602,6 +602,18 @@ test("a call that shows a recording between two pictures draws it first, and the
           ),
       );
     assert.deepEqual(shownNow(), ["The flow.webm", "1 of 3"]);
+    act(() =>
+      document
+        .querySelector('[role="dialog"] input[aria-label="Seek"]')
+        ?.dispatchEvent(
+          new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true, cancelable: true }),
+        ),
+    );
+    assert.deepEqual(
+      shownNow(),
+      ["The flow.webm", "1 of 3"],
+      "an arrow on the recording's scrubber seeks it rather than walking on",
+    );
     next();
     assert.deepEqual(shownNow(), ["Before.png", "2 of 3"]);
     next();

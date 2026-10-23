@@ -262,8 +262,9 @@ export function AttachmentViewer({
       return;
     }
     if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
-    // Note that an arrow on the video's own controls seeks it, as the player's keys do, rather than walking away from it.
-    if (event.target instanceof HTMLVideoElement) return;
+    // Note that an arrow on a video or a field, such as a video's scrubber, moves it rather than walking away from it.
+    if (event.target instanceof HTMLVideoElement || event.target instanceof HTMLInputElement)
+      return;
     event.preventDefault();
     walk(event.key === "ArrowLeft" ? -1 : 1);
   };
