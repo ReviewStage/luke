@@ -995,14 +995,19 @@ const CALL_ICON = {
  * pointer and lifts with the row's hover. On a row that folds open what the
  * call sent (`opens`), the chip is the way to the agent: its press opens
  * the agent's tab and its hover hangs the agent's card, and the press stops
- * at the chip, so it never folds the row it stands on.
+ * at the chip, so it never folds the row it stands on. On a row that folds
+ * open the call's own input and answer, the chip hangs the agent's `card`
+ * where the place gives one, and takes no hint where it gives none, since
+ * the pill would only say its name again.
  */
 function AgentCallChip({
   agent,
   opens,
+  card,
 }: {
   agent: Actor;
   opens?: AgentOpening | undefined;
+  card?: ReactNode;
 }): ReactNode {
   if (opens === undefined) {
     return (
@@ -1010,7 +1015,8 @@ function AgentCallChip({
         look={INLINE_REF_LOOK.PILL}
         glyph={<ActorMark actor={agent} size={ACTOR_SIZE.INLINE} />}
         label={actorName(agent)}
-        hint={false}
+        hint={card === undefined ? false : undefined}
+        card={card}
         data-tool-agent-ref=""
       />
     );
@@ -1054,13 +1060,14 @@ function chippedLine(
   description: string | undefined,
   agent: Actor | undefined,
   opens?: AgentOpening,
+  card?: ReactNode,
 ): ChippedLine {
   if (agent === undefined || !isAgentCallKind(kind)) {
     return { line: callLine(kind, subject, description), chip: undefined };
   }
   return {
     line: agentCallLine(kind, subject),
-    chip: <AgentCallChip agent={agent} opens={opens} />,
+    chip: <AgentCallChip agent={agent} opens={opens} card={card} />,
   };
 }
 
@@ -1079,6 +1086,8 @@ export type TranscriptToolProps = Omit<ComponentProps<typeof Tool>, "children"> 
     description?: string | undefined;
     /** For a call about one coding agent, the agent, whose chip the row names it by in the place of "the coding agent"; none where the agent is not known. */
     agent?: Actor | undefined;
+    /** For a call about one coding agent, the agent's card, which its chip hangs; none where the place hangs none. */
+    agentCard?: ReactNode;
     input: ToolBlock;
     /** Nothing while the call has not answered. */
     output: ToolBlock | undefined;
@@ -1101,6 +1110,7 @@ export function TranscriptTool({
   subject,
   description,
   agent,
+  agentCard,
   input,
   output,
   errorText,
@@ -1108,7 +1118,7 @@ export function TranscriptTool({
   ...props
 }: TranscriptToolProps): ReactNode {
   const Icon = CALL_ICON[kind];
-  const { line, chip } = chippedLine(kind, subject, description, agent);
+  const { line, chip } = chippedLine(kind, subject, description, agent, undefined, agentCard);
   const command = isCommandKind(kind);
   const macOwner = useContext(MacOwnerContext);
   return (

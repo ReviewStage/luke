@@ -12,6 +12,7 @@ import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { editorBundleLanded, installEditorLayout, pressInComposer } from "../testing/composer.js";
 import { onRegistry } from "../testing/copy-feedback.js";
+import { restOn } from "../testing/hint-rest.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { tasksControl } from "../testing/tasks-control.js";
 import { MENTION_MENU_SIDE } from "./mention-picker.js";
@@ -137,6 +138,32 @@ test("a repository the picker lists on a member's token, on an owner the workspa
   await settle();
 
   assert.equal(chip.textContent?.includes("octo/tools"), true, chip.textContent ?? "");
+});
+
+test("the repository chip hangs the repository's card while the pointer rests on it: its name, and its owner under it", async () => {
+  const { container } = await mount(TOKEN_LISTING, "octo/tools");
+  restOn(
+    container.querySelector(".luke-chip") ?? assert.fail("the card draws the repository chip"),
+  );
+  const card = document.querySelector("[data-repository-card]");
+
+  assert.equal(card?.querySelector(".luke-hover-card-name")?.textContent, "tools");
+  assert.equal(card?.querySelector(".luke-hover-card-sub")?.textContent, "octo");
+});
+
+test("a repository's row in the picker hangs the same card", async () => {
+  const { container } = await mount(TOKEN_LISTING);
+  act(() => container.querySelector<HTMLButtonElement>(".luke-chip")?.click());
+  await settle();
+  restOn(
+    [...document.querySelectorAll<HTMLElement>('[role="option"]')].find((option) =>
+      option.textContent?.includes("tools"),
+    ) ?? assert.fail("the picker lists the token repository"),
+  );
+  const card = document.querySelector("[data-repository-card]");
+
+  assert.equal(card?.querySelector(".luke-hover-card-name")?.textContent, "tools");
+  assert.equal(card?.querySelector(".luke-hover-card-sub")?.textContent, "octo");
 });
 
 test("a preset on a token repository the picker lists stands chosen once the read lands", async () => {

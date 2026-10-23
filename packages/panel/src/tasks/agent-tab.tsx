@@ -505,6 +505,12 @@ function ToolCallView({
 }): ReactNode {
   const view = toolCallView({ ...part, jobs });
   const known = useKnownNames();
+  // Note that the chip of the agent a call is about hangs the card its tab hangs, which the place hands over by the agent's id.
+  const called = calledAgent(part);
+  const agentCard =
+    called?.id === undefined
+      ? undefined
+      : cards?.target({ kind: TOOL_TARGET.AGENT, agent: called.id }, called.title);
   return (
     <>
       <TranscriptTool
@@ -515,6 +521,7 @@ function ToolCallView({
         subject={view.subject}
         description={view.description}
         agent={calledAgentActor(part, cards, known)}
+        agentCard={agentCard}
         input={view.input}
         output={view.output}
         errorText={part.errorText}

@@ -54,6 +54,7 @@ import { OpenLinkProvider } from "../tasks/use-open-link.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { FAKE_ANSWER, fakeActPort } from "../testing/app-bridge.js";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
+import { attachmentChipName } from "../testing/attachment-chip.js";
 import {
   composerEditor,
   editorBundleLanded,
@@ -1774,9 +1775,7 @@ async function handFiles(box: HTMLElement, files: readonly File[], how: "pick" |
 
 /** The names of the files a box holds, as its chips say them. */
 function chipNames(box: HTMLElement): (string | null)[] {
-  return [...box.querySelectorAll('[aria-label="Attached files"] > li')].map((chip) =>
-    chip.getAttribute("title"),
-  );
+  return [...box.querySelectorAll('[aria-label="Attached files"] > li')].map(attachmentChipName);
 }
 
 test("a channel's box takes pictures picked or dropped as chips, says why a file that is no picture did not come, and posts them with words or alone, each drawn in the channel over the words and opened larger on a press", async () => {

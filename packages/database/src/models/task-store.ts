@@ -1,7 +1,7 @@
 import { AUTOMATION_SCOPE } from "@luke/features/automation-wire";
 import { PULL_REQUEST_STATE } from "@luke/features/coding-agent-wire";
 import { GITHUB_ACCESS, type GitHubAccess } from "@luke/features/github-repositories-wire";
-import { INBOX_RESPONSE, INBOX_STATUS } from "@luke/features/inbox-wire";
+import { INBOX_STATUS } from "@luke/features/inbox-wire";
 import { planAttachmentIdsIn } from "@luke/features/plan-attachment-link";
 import type { PlanSectionWriter } from "@luke/features/plan-document";
 import { DEFAULT_PLAN_TEMPLATE } from "@luke/features/plan-document-template";
@@ -135,12 +135,13 @@ export interface TaskStandingAgent {
 }
 
 /**
- * What a finish of a task's work runs under the task's lock: whether each
- * of its standing agents stands idle, neither starting nor running, read
- * under its conversation's lock.
+ * What a finish of a task's work runs under the task's lock: whether every
+ * one of its standing agents stands idle, neither starting nor running, read
+ * under their conversations' locks, all of them at once, since they share
+ * the transaction's one connection.
  */
 export type TaskFinishGuard<R> = (
-  agent: TaskStandingAgent,
+  agents: readonly TaskStandingAgent[],
 ) => Effect.Effect<boolean, QueryError | Schema.SchemaError, R>;
 
 /** One save a coding agent made, with the agent named as its row names it now. */
@@ -1497,8 +1498,8 @@ const findStandingPullRequestStates = SqlSchema.findAll({
 
 /**
  * One inbox item of the task holding a question open for the developer:
- * open, and asking something, which a notice, a post that asked nothing and
- * waits on their nod alone, never does (the inbox store's own `ASKING`,
+ * open, and holding an ask open, which a notice, a post that asked nothing
+ * and waits on their nod alone, never does (the inbox store's own `ASKING`,
  * `packages/service/src/inbox/inbox-store.ts`).
  */
 const findOpenQuestion = SqlSchema.findOneOption({
@@ -1513,7 +1514,7 @@ const findOpenQuestion = SqlSchema.findOneOption({
           and(
             eq(inboxItem.taskId, taskId),
             eq(inboxItem.status, INBOX_STATUS.OPEN),
-            sql`${inboxItem.response} ->> 'type' <> ${INBOX_RESPONSE.NONE}`,
+            isNotNull(inboxItem.openAskMessageId),
           ),
         )
         .limit(1),
@@ -1566,8 +1567,7 @@ export function finishTaskWork<R = never>(
         if (!pullRequests.some(({ state }) => state === PULL_REQUEST_STATE.MERGED)) return false;
         if (Option.isSome(yield* findOpenQuestion({ taskId }))) return false;
         const agents = yield* lockStandingAgents({ taskId });
-        const standings = yield* Effect.forEach(agents, idle);
-        if (standings.includes(false)) return false;
+        if (!(yield* idle(agents))) return false;
         const now = yield* DateTime.nowAsDate;
         const finished = yield* finishTask({ taskId, now });
         return Option.isSome(finished);

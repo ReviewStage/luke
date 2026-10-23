@@ -13,15 +13,7 @@ import {
 } from "@luke/features/coding-agent-view";
 import type { CodingAgentAttachment } from "@luke/features/coding-agent-wire";
 import { inboxAttachmentIdsIn } from "@luke/features/inbox-attachment-link";
-import {
-  INBOX_BLOCK,
-  INBOX_STATUS,
-  type InboxItem,
-  type InboxReplyKind,
-  inboxAnswerHeard,
-  inboxAnswersReply,
-  knownBlock,
-} from "@luke/features/inbox-wire";
+import { INBOX_REPLY, INBOX_STATUS, type InboxItem } from "@luke/features/inbox-wire";
 import { Equal } from "effect";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -40,11 +32,7 @@ import {
   type InboxBoardView,
   type InboxDraft,
   type InboxNote,
-  type InboxThreadSend,
   inboxBoard,
-  inboxMessageOf,
-  inboxReply,
-  inboxThreadOf,
   inboxThreadSend,
 } from "./inbox-model.js";
 import { useInboxSettler, useSettledItems } from "./inbox-settling.js";
@@ -62,39 +50,37 @@ import { type InboxFollower, useFollowedInboxes } from "./use-followed-inboxes.j
  * reads it again. An inbox that could not be read is let go and says so,
  * with Try again, rather than following it again at once.
  *
- * An answer goes under a key minted here and kept with its words, so the
- * same answer sent again after a lost reply is taken once. It stands over
- * every read the window draws the item from the moment it is sent
+ * A message on an item's thread goes under a key minted here and kept with
+ * its words, open or settled, so the same message sent again after a lost
+ * reply is taken once, and comes back as the item with its thread, which
+ * replaces the one held; once taken it stands over the window's other
+ * reads of the item until they hold it. It reaches the agent as one of the
+ * developer's messages, which may wake it, so the agents are read again.
+ * As the agent's own box does (`use-agent-composer.ts`), a send takes what
+ * the box holds out of it at once, so the box stands empty and open while
+ * the message is out, and a message refused leaves nothing on the thread,
+ * its words and files coming back into the box where it holds nothing
+ * newer, and the box says why. Only one send of an item is out at a time,
+ * so a second Enter before the first lands sends nothing again. A message
+ * may carry the answer to its thread's open ask, which the reader pressed
+ * and attached: such a reply settles the ask, so it stands over every read
+ * the window draws the item from the moment it is sent
  * (`inbox-settling.ts`), so the item leaves what needs the developer at
- * once and no read behind it brings it back; the service answers with the
- * item as it then stands, which replaces the one held, or, where it refused,
- * the item stands again as it was, its draft kept. An
- * answer to an item its agent changed first is not taken, and the card says
- * so above the item as it now stands. An answer the agent was to hear
- * reached it as one of the developer's messages, which may have started
- * its turn again, so the task's agents are read again for where they stand.
+ * once and no read behind it brings it back, and a refusal brings the item
+ * back as it stood, its draft kept.
  *
- * A message on an item's thread goes the same way, open or settled, under
- * a key of its own kept with its words, and comes back as the item with
- * its thread, which replaces the one held; a message never answers the
- * item, nor changes where it stands, and once taken it stands over the
- * window's other reads of the item until they hold it. It reaches the agent as one of the
- * developer's messages, which may wake it, so the agents are read again
- * too. As the agent's own box does (`use-agent-composer.ts`), a send takes
- * what the box holds out of it at once, so the box stands empty and open
- * while the message is out, and a message refused leaves nothing on the
- * thread, its words and files coming back into the box where it holds
- * nothing newer, and the box says why. Only one send of an item is out at
- * a time, so a second Enter before the first lands sends nothing again.
- * On a thread from version 5 the message may carry the answer to its
- * open ask, which the reader pressed and attached: such a reply settles
- * the ask, so it stands over every read from the moment it is sent, as an
- * answer does, and a refusal brings the item back as it stood.
+ * A notice's nod, Got it, goes the same way under a key minted for the
+ * revision it nods to, so a nod sent again after a lost reply is taken
+ * once, and is laid over every read as an answer is. A nod to a notice its
+ * agent posted over first is not taken, and the card says so above the
+ * item as it now stands. A nod the agent waits on (`needsReply`) reaches
+ * it, which may start its turn again, so the task's agents are read again
+ * for where they stand.
  *
- * An image block names an attachment the service keeps, and so does each
- * file an answer carried and each picture of the item's own its Markdown
- * draws, and their bytes are read apart from the inbox, once per attachment while the task is open,
- * as a card first draws the block: the host fetches them under the account
+ * Each file a message carried and each picture of the item's own its
+ * Markdown draws names an attachment the service keeps, and their bytes are
+ * read apart from the inbox, once per attachment while the task is open,
+ * as a card first draws it: the host fetches them under the account
  * and the hook holds them as a `data:` URL the card draws, so a read of
  * the inbox that replaces every item draws the same picture again without
  * asking for it again, and a picture inside a settled card no one opened
@@ -112,15 +98,15 @@ import { type InboxFollower, useFollowedInboxes } from "./use-followed-inboxes.j
  * it waits through a look at another tab, task, or page, the Inbox's and the
  * plan's tab reading the same one, and its words outlast a relaunch; the
  * files attached to it are held in this window's memory alone, as a
- * message's are, and go with the answer apart from it. A settled item's
- * box keeps the message being written the same way. A read of the inbox
+ * message's are. A settled item's box keeps the message being written the
+ * same way. A read of the inbox
  * lets go of the drafts of items it no longer holds at their revision, save
  * that the words and files written on an item the agent posted on again are
- * carried to it as it now stands, and an answer taken or a message written
+ * carried to it as it now stands, and a nod taken or a message written
  * lets go of its own.
  */
 
-/** How one answer is sent: the item, its revision, the answer, and the key the send is known by. */
+/** How one nod is sent: the item, the revision it nods to, and the key the send is known by. */
 export type InboxAnswerer = (
   params: CodingAgentInboxAnswerParams,
 ) => Promise<CodingAgentInboxAnsweredView>;
@@ -135,7 +121,7 @@ export type InboxThreadStarter = (
   params: CodingAgentInboxStartParams,
 ) => Promise<CodingAgentInboxMessagedView>;
 
-/** How one image is read: the item and the attachment its block names, answered as the view hears it. */
+/** How one image is read: the item and the attachment it names, answered as the view hears it. */
 export type InboxImageReader = (
   params: CodingAgentInboxAttachmentParams,
 ) => Promise<CodingAgentInboxAttachmentView>;
@@ -153,9 +139,9 @@ export interface TaskInboxControl {
   /** Whether the last read did not answer, so the tab offers to try again. */
   readonly failed: boolean;
   readonly onRetry: () => void;
-  /** The items whose answer is on its way, by id. */
+  /** The items whose send is on its way, by id. */
   readonly sending: ReadonlySet<string>;
-  /** Why an answer did not go, or was not taken, by item, said on its card until the next send. */
+  /** Why a send did not go, or was not taken, by item, said on its card until the next send. */
   readonly notes: ReadonlyMap<string, InboxNote>;
   /** Lets go of an item's note once what it said no longer stands, as an agent unarchived from it; nothing where a later send has said something else since. */
   readonly onDropNote: (itemId: string, note: InboxNote) => void;
@@ -170,8 +156,8 @@ export interface TaskInboxControl {
     item: InboxItem,
     next: (was: readonly CodingAgentAttachment[]) => readonly CodingAgentAttachment[],
   ) => void;
-  /** Sends the card's answer, with the press where its kind is answered by one; nothing where it holds none or one is out. */
-  readonly onAnswer: (item: InboxItem, draft: InboxDraft, press?: InboxReplyKind) => void;
+  /** Nods to a notice with Got it, settling it at the revision drawn; nothing where a send is out. */
+  readonly onAcknowledge: (item: InboxItem) => void;
   /** Sends the box's words and files as a message on the item's thread, open or settled, with the answer attached to the thread's open ask where one is; nothing where it holds nothing the service takes or a send is out. */
   readonly onMessage: (item: InboxItem, draft: InboxDraft) => void;
   /** The images the cards asked for, by attachment, as each read came back; none while a read is out. */
@@ -182,9 +168,9 @@ export interface TaskInboxControl {
   readonly onRetryImage: (attachmentId: string) => void;
 }
 
-/** What a card says when its answer was not taken, by what had become of the item. */
+/** What a card says when its nod was not taken, by what had become of the item. */
 const INBOX_NOT_TAKEN_NOTE = {
-  /** The agent changed the item before the answer landed. */
+  /** The agent changed the item before the nod landed. */
   CHANGED: "The agent changed this item before your answer landed. Answer it as it stands now.",
   /** The item was answered first, from another window or Mac. */
   ANSWERED: "This item was already answered.",
@@ -194,7 +180,7 @@ const INBOX_NOT_TAKEN_NOTE = {
   CLOSED_BY_MEMBER: "This item was already resolved.",
 } as const;
 
-/** Why an answer was not taken, from the item as the service answered it. */
+/** Why a nod was not taken, from the item as the service answered it. */
 function notTakenNote(item: InboxItem): string {
   switch (item.status) {
     case INBOX_STATUS.ANSWERED:
@@ -208,7 +194,7 @@ function notTakenNote(item: InboxItem): string {
   }
 }
 
-/** An answer's key and words, kept so the same answer sent again goes under the same key. */
+/** A send's key and words, kept so the same send sent again goes under the same key. */
 interface Attempt {
   readonly key: string;
   readonly words: string;
@@ -231,29 +217,18 @@ const UNANSWERED = { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED } as const;
 const FORGET_LET_GO = { forget: true } as const;
 
 /**
- * Every attachment the items name: their blocks' pictures, the files their
- * answers and their threads' messages carried, and the item's own pictures
- * their Markdown draws, in its blocks, its thread's messages, a read before
- * version 5's and its whole thread alike, and its answer's note
+ * Every attachment the items name: the files their threads' messages
+ * carried, and the item's own pictures those messages' Markdown draws
  * (`inbox-attachment-link`).
  */
 function attachmentsNamed(items: readonly InboxItem[]): ReadonlySet<string> {
   const named = new Set<string>();
   for (const item of items) {
-    const drawn = (text: string | undefined) => {
-      if (text === undefined) return;
-      for (const attachmentId of inboxAttachmentIdsIn(text, item.id)) named.add(attachmentId);
-    };
-    for (const block of item.blocks) {
-      if (!knownBlock(block)) continue;
-      if (block.type === INBOX_BLOCK.IMAGE) named.add(block.attachmentId);
-      if (block.type === INBOX_BLOCK.MARKDOWN) drawn(block.text);
-    }
-    for (const file of item.answerFiles ?? []) named.add(file.attachmentId);
-    drawn(item.answer?.note);
-    for (const message of [...(item.messages ?? []), ...(item.thread ?? [])]) {
+    for (const message of item.thread ?? []) {
       for (const file of message.files ?? []) named.add(file.attachmentId);
-      drawn(message.text);
+      for (const attachmentId of inboxAttachmentIdsIn(message.text, item.id)) {
+        named.add(attachmentId);
+      }
     }
   }
   return named;
@@ -269,7 +244,7 @@ function imagesNamed(
 }
 
 /**
- * Where an item's card keeps its draft: the answer while the item is open,
+ * Where an item's card keeps its draft: the reply while the item is open,
  * and a message on its thread once it is settled, apart, so an answer left
  * unsent when another member settles the item never becomes a message.
  */
@@ -468,27 +443,26 @@ export function useTaskInbox(input: {
     [writer, draftsOn],
   );
 
-  const onAnswer = useCallback(
-    (item: InboxItem, draft: InboxDraft, press?: InboxReplyKind) => {
-      const reply = inboxReply(item, draft, press);
-      if (reply === undefined || out.current.has(item.id)) return;
+  // Note that a nod is keyed by the revision it nods to, so a press again after a lost reply is
+  // taken once, and a nod to the notice posted over since goes under a key of its own.
+  const onAcknowledge = useCallback(
+    (item: InboxItem) => {
+      if (out.current.has(item.id)) return;
       out.current.add(item.id);
-      const { attachments } = draft;
-      const words = JSON.stringify([item.revision, reply, attachments]);
+      const words = JSON.stringify([item.revision, INBOX_REPLY.ACKNOWLEDGED]);
       const was = attempts.current.get(item.id);
       const key = was?.words === words ? was.key : crypto.randomUUID();
       attempts.current.set(item.id, { key, words });
       setSending((standing) => new Set(standing).add(item.id));
       note(item.id, undefined);
-      // Note that the answer stands over every read the moment it is sent, so no read the window draws from brings the item back while it lands.
-      const sent = settler.answer(item, reply);
+      // Note that the nod stands over every read the moment it is sent, so no read the window draws from brings the item back while it lands.
+      const sent = settler.acknowledge(item);
       const askedOn = taskId;
       latest.current
         .answerInbox({
           itemId: item.id,
           revision: item.revision,
-          ...reply,
-          ...(attachments.length === 0 ? undefined : { attachments }),
+          reply: INBOX_REPLY.ACKNOWLEDGED,
           clientKey: key,
         })
         .catch((): CodingAgentInboxAnsweredView => UNANSWERED)
@@ -501,11 +475,10 @@ export function useTaskInbox(input: {
           });
           if ("failure" in answer) {
             settler.refuse(sent);
-            reopen(item, { text: draft.note, attachments });
             refused(item.id, answer.failure);
             return;
           }
-          // An answer landing after the window moved to another task is that task's no longer.
+          // A nod landing after the window moved to another task is that task's no longer.
           setHeld((standing) =>
             standing.taskId === askedOn
               ? { ...standing, items: withItem(standing.items, answer.item) }
@@ -517,28 +490,26 @@ export function useTaskInbox(input: {
             return;
           }
           settler.take(sent, answer.item);
-          // Note that a message being written on the item settled meanwhile is kept, since the box takes words while the answer is out.
+          // Note that a message being written on the item settled meanwhile is kept, since the box takes words while the nod is out.
           writer.drop(
             (place) =>
               place.kind === DRAFT_PLACE.INBOX && place.itemId === item.id && place.thread !== true,
           );
-          // Note that an answer the agent hears may open its turn, so the agents are read again.
-          if (inboxAnswerHeard(item, reply, attachments)) latest.current.onRetryList();
+          // Note that a nod the agent waits on reaches it and may open its turn, so the agents are read again.
+          if (item.needsReply) latest.current.onRetryList();
         });
     },
-    [note, refused, taskId, writer, settler, reopen],
+    [note, refused, taskId, writer, settler],
   );
 
   const onMessage = useCallback(
     (item: InboxItem, draft: InboxDraft) => {
-      const thread = inboxThreadOf(item);
-      const message: InboxThreadSend | undefined =
-        thread === undefined ? inboxMessageOf(draft) : inboxThreadSend(thread, draft);
+      const message = inboxThreadSend(item.thread ?? [], draft);
       if (message === undefined || out.current.has(item.id)) return;
       out.current.add(item.id);
       const { text, attachments, answers } = message;
       // Note that a reply on a notice names the revision shown, so it settles that notice and never one posted since.
-      const revision = thread !== undefined && awaitsNod(item, thread) ? item.revision : undefined;
+      const revision = awaitsNod(item) ? item.revision : undefined;
       const words = JSON.stringify([text, attachments, answers, revision]);
       const was = attempts.current.get(item.id);
       const key = was?.words === words ? was.key : crypto.randomUUID();
@@ -551,10 +522,7 @@ export function useTaskInbox(input: {
       const unsent = keptDraft(draft);
       writer.update(place, () => EMPTY_DRAFT);
       // Note that a reply carrying an answer settles the ask, so it stands over every read the moment it is sent, as an answer does.
-      const sent =
-        answers === undefined
-          ? undefined
-          : settler.answer(item, inboxAnswersReply(answers, text), answers);
+      const sent = answers === undefined ? undefined : settler.answer(item, { text, answers });
       const askedOn = taskId;
       latest.current
         .messageInbox({
@@ -742,7 +710,7 @@ export function useTaskInbox(input: {
     sending,
     notes,
     onDropNote,
-    onAnswer,
+    onAcknowledge,
     onMessage,
     images,
     onImage,

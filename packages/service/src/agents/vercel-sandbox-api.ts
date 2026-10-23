@@ -420,10 +420,16 @@ export interface VercelSandboxApi {
     commandId: string,
     text: string,
   ) => Effect.Effect<void, SandboxUnavailable>;
-  /** A command's exit code, null while it runs, or gone where Vercel no longer knows the command or its session. */
+  /**
+   * A command's exit code, null while it runs, or gone where Vercel no longer
+   * knows the command or its session. The read waits for the exit for at most
+   * `within` (`EXIT_WAIT` unless the caller names longer), so a caller that
+   * waits on a command's end names how long rather than reading it again.
+   */
   readonly commandExit: (
     sandboxSessionId: string,
     commandId: string,
+    within?: Duration.Duration,
   ) => Effect.Effect<CommandExit, SandboxUnavailable>;
   /**
    * What a command that exited printed on stderr, the tail kept, every value
@@ -1366,7 +1372,7 @@ export function vercelSandboxApi(
             offset += chunk.byteLength;
           }
         }),
-      commandExit: (sandboxSessionId, commandId) =>
+      commandExit: (sandboxSessionId, commandId, within = SANDBOX_API.EXIT_WAIT) =>
         Effect.gen(function* () {
           const asked = yield* credentials(SANDBOX_CALL.CMD);
           const url = apiUrl(
@@ -1380,7 +1386,7 @@ export function vercelSandboxApi(
             client,
             SANDBOX_CALL.CMD,
             HttpClientRequest.get(url, { headers: asked.headers }),
-          ).pipe(Effect.timeoutOption(SANDBOX_API.EXIT_WAIT));
+          ).pipe(Effect.timeoutOption(within));
           if (Option.isNone(waited)) return null;
           const found = waited.value;
           if (found.status === NOT_FOUND_STATUS) return COMMAND_GONE;

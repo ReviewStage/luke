@@ -39,7 +39,7 @@
  */
 
 import { createHash } from "node:crypto";
-import { Clock, Data, Duration, Effect, Result, Schedule } from "effect";
+import { Clock, Data, Duration, Effect, Result } from "effect";
 import type { SandboxSession } from "eve/sandbox";
 import { prepareImage } from "./agent-runtime/sandbox-image.js";
 import { CODER } from "./coder-host/bounds.js";
@@ -69,7 +69,12 @@ export const NATIVE_TEMPLATE = {
   START_GRACE: Duration.minutes(5),
   /** How long a failed preparation answers failed before it is built again. */
   RETRY_AFTER: Duration.minutes(30),
-  /** How often a launch waiting on a build reads the template again. */
+  /**
+   * How long a launch waiting on a template with no build of its own to wait
+   * on, one another launch is still uploading or one being snapshotted, waits
+   * before it reads the template again; a running build is waited on to its
+   * exit instead.
+   */
   POLL: Duration.seconds(10),
   /** How long a launch waits on a build before it answers that the image is still being prepared. */
   WAIT: Duration.minutes(3),
@@ -113,9 +118,15 @@ export const TEMPLATE_STATE = {
   FAILED: "failed",
 } as const;
 
+/** The build command a template being prepared runs, which a launch waiting on it waits on to its exit. */
+interface RunningBuild {
+  readonly session: string;
+  readonly commandId: string;
+}
+
 type TemplateState =
   | { readonly state: typeof TEMPLATE_STATE.READY; readonly snapshotId: string }
-  | { readonly state: typeof TEMPLATE_STATE.PREPARING }
+  | { readonly state: typeof TEMPLATE_STATE.PREPARING; readonly building?: RunningBuild }
   | { readonly state: typeof TEMPLATE_STATE.FAILED };
 
 const PREPARING: TemplateState = { state: TEMPLATE_STATE.PREPARING };
@@ -210,7 +221,7 @@ const startBuild = (api: VercelSandboxApi, build: ImageBuild): TemplateRead =>
         ),
       );
     if (created === undefined) return PREPARING;
-    yield* Effect.gen(function* () {
+    const building = yield* Effect.gen(function* () {
       const running = created.currentSessionId;
       if (running === undefined) return yield* new SandboxUnavailable({});
       yield* api.writeFiles(
@@ -228,8 +239,9 @@ const startBuild = (api: VercelSandboxApi, build: ImageBuild): TemplateRead =>
         [TEMPLATE_TAG.BUILD]: commandId,
       });
       yield* Effect.logInfo(`the native agents' image ${build.key} is being prepared`);
+      return { session: running, commandId } satisfies RunningBuild;
     }).pipe(Effect.tapError(() => Effect.ignore(api.deleteSandbox(build.name))));
-    return PREPARING;
+    return { state: TEMPLATE_STATE.PREPARING, building } as const;
   });
 
 /** Vercel's refusal of a name already taken. */
@@ -297,7 +309,9 @@ export const advanceTemplate = (api: VercelSandboxApi, build: ImageBuild): Templ
         : yield* rebuild(api, build, found);
     }
     const exit = yield* api.commandExit(session, commandId);
-    if (exit === null) return PREPARING;
+    if (exit === null) {
+      return { state: TEMPLATE_STATE.PREPARING, building: { session, commandId } } as const;
+    }
     if (exit !== 0) {
       yield* Effect.logWarning(
         `the native agents' image ${build.key} failed to prepare (exit ${exit})`,
@@ -356,7 +370,36 @@ const sweepCurrent = (api: VercelSandboxApi, build: ImageBuild): TemplateRead =>
   });
 
 /**
- * The template as a launch waits on it: read every `POLL` while it is
+ * Whether a launch waiting on a template being prepared until `until` reads
+ * it again, once it has waited for what would change it: its build's exit,
+ * where the read named a running build, or `POLL` where it named none. Note
+ * that a read of the exit Vercel answers early with none, which a waiting
+ * read never does unless something between cut it short, waits out `POLL`,
+ * because reading again at once would ask Vercel in a loop.
+ */
+const settled = (
+  api: VercelSandboxApi,
+  read: TemplateState,
+  until: number,
+): Effect.Effect<boolean> =>
+  Effect.gen(function* () {
+    const left = until - (yield* Clock.currentTimeMillis);
+    if (read.state !== TEMPLATE_STATE.PREPARING || left <= 0) return false;
+    const pause = Effect.sleep(Duration.min(NATIVE_TEMPLATE.POLL, Duration.millis(left)));
+    if (read.building === undefined) {
+      yield* pause;
+      return true;
+    }
+    const exit = yield* api
+      .commandExit(read.building.session, read.building.commandId, Duration.millis(left))
+      .pipe(Effect.orElseSucceed(() => null));
+    if (exit === null && (yield* Clock.currentTimeMillis) < until) yield* pause;
+    return true;
+  });
+
+/**
+ * The template as a launch waits on it: read again each time its build
+ * exits or, with no build of its own to wait on, every `POLL`, while it is
  * being prepared, for at most `wait` (`WAIT` unless the caller names less),
  * and answered as it then stands.
  */
@@ -365,10 +408,11 @@ export const awaitTemplate = (
   build: ImageBuild,
   wait: Duration.Duration = NATIVE_TEMPLATE.WAIT,
 ): TemplateRead =>
-  Effect.repeat(advanceTemplate(api, build), {
-    schedule: Schedule.spaced(NATIVE_TEMPLATE.POLL),
-    times: Math.floor(Duration.toMillis(wait) / Duration.toMillis(NATIVE_TEMPLATE.POLL)),
-    while: (read) => read.state === TEMPLATE_STATE.PREPARING,
+  Effect.gen(function* () {
+    const until = (yield* Clock.currentTimeMillis) + Duration.toMillis(wait);
+    return yield* Effect.repeat(advanceTemplate(api, build), {
+      while: (read) => settled(api, read, until),
+    });
   });
 
 /** What one sweep of the templates came to: the current one's state where it was read, and how many others went. */
