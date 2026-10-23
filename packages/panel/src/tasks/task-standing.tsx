@@ -92,7 +92,7 @@ export const NO_ASSIGNEE_WORDS = "No assignee";
 
 /**
  * The assignee's menu: No assignee, then the workspace's members as every
- * people menu lists them (`memberRows`); only No assignee while the members
+ * people menu lists them (`memberRows`), each hanging their card; only No assignee while the members
  * are unread. The Tasks page's compact assignee chip drops the same rows.
  */
 export function assigneeRows(
@@ -111,6 +111,7 @@ export function assigneeRows(
       icon: row.icon,
       detail: row.detail,
       terms: row.terms,
+      card: row.card,
     })),
   ];
 }

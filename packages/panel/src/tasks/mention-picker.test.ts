@@ -8,6 +8,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import type { ComposerTrigger } from "../plan-editor/contract.js";
 import { onRegistry } from "../testing/copy-feedback.js";
+import { restOn } from "../testing/hint-rest.js";
 import { MENTION_MENU_SIDE, type MentionPicker, useMentionPicker } from "./mention-picker.js";
 import { NO_TASK } from "./task-mentions.js";
 
@@ -95,4 +96,14 @@ test("an @ list closed with Escape stays closed in its word, and a # written ove
     picker().onChannelTrigger(word(""));
   });
   assert.deepEqual(rows(page), ["general"]);
+});
+
+test("a person's row in the @ list hangs their card while the pointer rests on it", () => {
+  const { picker, page } = mounted();
+  act(() => picker().onTrigger(word("mar")));
+  const row = page.querySelector<HTMLElement>('[role="option"]');
+  assert.ok(row, "Maria is listed");
+  restOn(row);
+  const card = document.querySelector('.luke-tooltip-card [data-actor-card="person"]');
+  assert.equal(card?.querySelector(".luke-hover-card-name")?.textContent, "Maria Chen");
 });
