@@ -18,6 +18,7 @@ import {
   CODING_AGENT_STATUS,
   PULL_REQUEST_STATE,
 } from "@luke/features/coding-agent-wire";
+import { CONVERSATION_MEDIA_TYPE } from "@luke/features/conversation-picture-wire";
 import { LINK_PLACE, type ReadLink } from "@luke/features/luke-link";
 import { TASK_SECTION_ICON_KIND } from "@luke/features/task-section-wire";
 import {
@@ -1812,6 +1813,45 @@ test("a channel's box takes pictures picked or dropped as chips, says why a file
     document.querySelector('[role="dialog"] img[src^="data:image/png"]'),
     "a press opens the picture over the window",
   );
+});
+
+test("a recording a message carries plays in its own player, left out of the replay, with no press opening it as a picture", async () => {
+  const created: string[] = [];
+  const own = { create: URL.createObjectURL, revoke: URL.revokeObjectURL };
+  // Note that jsdom makes no object URLs, so the window's own are stood in for, and put back after.
+  URL.createObjectURL = (blob: Blob) => {
+    created.push(blob.type);
+    return `blob:video-${String(created.length)}`;
+  };
+  URL.revokeObjectURL = () => undefined;
+  try {
+    const page = mount(
+      (chat) => chat,
+      undefined,
+      () => Promise.resolve({ contentType: CONVERSATION_MEDIA_TYPE.WEBM, base64: "GkXfow==" }),
+    );
+    act(() => railRow(page, "teammate-invitations").click());
+    const box = boxNamed(page, "Message #teammate-invitations");
+    await handFiles(
+      box,
+      [new File([PNG_BYTES], "invite-flow.webm", { type: CHAT_IMAGE_TYPE.PNG })],
+      "pick",
+    );
+    pressInComposer(box, "Enter");
+    await settle();
+
+    const posted = [...page.querySelectorAll(".chat-message")].at(-1);
+    const player = posted?.querySelector("video");
+    assert.ok(player, "the recording is played, not drawn");
+    assert.equal(player.getAttribute("src"), "blob:video-1");
+    assert.equal(player.getAttribute("aria-label"), "Video: invite-flow.webm");
+    assert.ok(player.closest(".ph-no-capture"), "the player is left out of the replay");
+    assert.deepEqual(created, [CONVERSATION_MEDIA_TYPE.WEBM]);
+    assert.equal(posted?.querySelector(".picture-block img, .picture-block button"), null);
+  } finally {
+    URL.createObjectURL = own.create;
+    URL.revokeObjectURL = own.revoke;
+  }
 });
 
 test("in a listed workspace, a person is drawn with their photo from the members read, as everywhere else in the window", async () => {

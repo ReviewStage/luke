@@ -4,6 +4,7 @@ import {
   type CodingAgentCallFailure,
 } from "@luke/features/coding-agent-view";
 import type { CodingAgentAttachment, CodingAgentSummary } from "@luke/features/coding-agent-wire";
+import { CONVERSATION_MEDIA_TYPE } from "@luke/features/conversation-picture-wire";
 import {
   INBOX_PICTURE_IN_WORDS,
   inboxAttachmentOf,
@@ -17,7 +18,6 @@ import {
   INBOX_BLOCK,
   INBOX_BOUNDS,
   INBOX_FIELD,
-  INBOX_IMAGE_TYPE,
   INBOX_MESSAGE_AUTHOR,
   INBOX_REPLY,
   INBOX_RESPONSE,
@@ -170,7 +170,9 @@ export interface InboxCommentFiles {
  * A comment's files as they are drawn after its words, each in the order
  * attached: a picture its words already draw left out, since it stands
  * where they draw it, as an agent's pictures do, then the pictures and
- * every other file apart, as each is drawn in its own way. Note that only
+ * every other file apart, as each is drawn in its own way. A WebM an agent
+ * recorded is drawn as a picture is, played in its place (`inbox-pictures.tsx`),
+ * so one the words draw is not named again as a file. Note that only
  * a picture the words draw as one is left out (`picturesDrawn`): a file
  * they only link to, quote in code, or name as a picture though it is
  * none is still drawn here, so it can still be opened.
@@ -182,7 +184,7 @@ export function inboxCommentFiles(
 ): InboxCommentFiles {
   const picture = (file: InboxFile) =>
     attachmentView({ name: file.name, mediaType: file.mediaType, url: "" }) ===
-    ATTACHMENT_VIEW.IMAGE;
+      ATTACHMENT_VIEW.IMAGE || file.mediaType === CONVERSATION_MEDIA_TYPE.WEBM;
   const drawn = new Set(
     words === undefined ? [] : picturesDrawn(words, itemId).map((each) => each.attachmentId),
   );
@@ -1185,8 +1187,8 @@ export type InboxMedia =
 /** How many of an item's media its row shows at most, so a row stays a row. */
 const MAX_ROW_MEDIA = 4;
 
-/** The picture types a file on the thread may be drawn as, the ones an image block's attachment is kept as. */
-const PICTURE_TYPES: ReadonlySet<string> = new Set(Object.values(INBOX_IMAGE_TYPE));
+/** The types a file on the thread may be drawn as a picture by: the ones an image block's attachment is kept as, or a WebM an agent recorded, played where a picture is drawn. */
+const PICTURE_TYPES: ReadonlySet<string> = new Set(Object.values(CONVERSATION_MEDIA_TYPE));
 
 /** The page a link's place names as media: a task's, or an agent with no task's; none for a place that is no page. */
 function pageMediaOf(place: ReadLink["place"] | undefined): InboxMedia | undefined {

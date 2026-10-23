@@ -15,6 +15,7 @@ import {
   commitShaSchema,
   workspaceIdSchema,
 } from "./task-wire.js";
+import { WEBM_TYPE } from "./video-signature.js";
 
 /**
  * inbox-wire.ts -- the developer's inbox: what a task's coding agents need of the developer, posted by the agents and answered on the desktop.
@@ -140,6 +141,13 @@ export const INBOX_BOUNDS = {
    * one a screenshot at a screen's own scale fits under.
    */
   MAX_IMAGE_BYTES: CODING_AGENT_BOUNDS.MAX_IMAGE_BYTES,
+  /**
+   * The most bytes one video may hold: a WebM the agent recorded of what it
+   * did, held to the bound a transcript keeps one under, which the
+   * recorder in its sandbox fits a recording to and which a function's
+   * answer serves whole.
+   */
+  MAX_VIDEO_BYTES: 4_000_000,
   /** The most characters a label may spell: a link's, an option's, a field's, a select's option, or a box's placeholder. */
   MAX_LABEL_CHARS: 160,
   /** The most options a choice or a select may offer: a choice a person makes at a glance. */
@@ -215,6 +223,18 @@ export type InboxImageType = (typeof INBOX_IMAGE_TYPE)[keyof typeof INBOX_IMAGE_
 
 /** An image's media type as the wire carries it: one of the three the service keeps. */
 export const inboxImageTypeSchema = EffectSchema.Literals(Object.values(INBOX_IMAGE_TYPE));
+
+/**
+ * The types a file of an item's may be kept and served under: any a
+ * message's file travels as, or a WebM the agent recorded of what it did and
+ * drew in its words as it draws a picture.
+ */
+export const INBOX_FILE_TYPE = {
+  ...CODING_AGENT_ATTACHMENT_TYPE,
+  WEBM: WEBM_TYPE,
+} as const;
+
+export type InboxFileType = (typeof INBOX_FILE_TYPE)[keyof typeof INBOX_FILE_TYPE];
 
 /** The responses an item asks for, each answered its own way. */
 export const INBOX_RESPONSE = {
