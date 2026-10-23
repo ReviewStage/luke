@@ -334,6 +334,9 @@ beforeEach(() => {
   // Note that the Inbox opens on All here, so the tests of what an item shows meet settled
   // items too; the tests of the scopes clear it to meet the Inbox as a fresh profile opens it.
   window.localStorage.setItem(SHOW_KEY, JSON.stringify("all"));
+  // Note that it groups by task here too, so the tests of a task's group meet its header; a
+  // fresh profile groups by nothing.
+  window.localStorage.setItem(GROUPING_KEY, JSON.stringify("plan"));
   inboxes = new Map([
     [BILLING.id, [THRESHOLD, RETRY]],
     [INVITES.id, [EXPIRY]],
@@ -2716,30 +2719,32 @@ test("the sidebar's Inbox counts the open items alone, as before, where main car
   );
 });
 
-test("a fresh profile opens the Inbox on To do, grouped by task, its head naming no scope, a settled item left out until All is chosen, which the head then names", async () => {
+test("a fresh profile opens the Inbox on To do, grouped by nothing, None first and checked under Group by, its head naming no scope, a settled item left out until All is chosen, which the head then names", async () => {
   window.localStorage.clear();
   const { page } = mount();
   await settle();
   assert.deepEqual(scopes(page), ["Inbox", "[To do]", "All"]);
-  assert.deepEqual(listed(page), [
-    "# Invites",
-    "▸ *Expire after 7 days?",
-    "# Billing usage alerts",
-    "*Alert at 80%?",
-  ]);
+  assert.deepEqual(listed(page), ["▸ *Expire after 7 days?", "*Alert at 80%?"]);
+  const options = page.querySelector<HTMLButtonElement>('button[aria-label="View options"]');
+  act(() => options?.click());
+  act(() => viewItem("Group by").click());
+  const groupings = [...document.querySelectorAll('[role^="menuitem"]')]
+    .filter((each) => ["None", "Task", "Person", "Status"].includes(each.textContent ?? ""))
+    .map((each) => `${each.textContent}:${each.getAttribute("aria-checked")}`);
+  assert.deepEqual(groupings, ["None:true", "Task:false", "Person:false", "Status:false"]);
+  act(() => options?.click());
   showScope(page, "All");
   assert.equal(headTitle(page), "Inbox · All");
   assert.deepEqual(listed(page), [
-    "# Billing usage alerts",
     "How is a failed email retried?",
-    "*Alert at 80%?",
-    "# Invites",
     "▸ *Expire after 7 days?",
+    "*Alert at 80%?",
   ]);
 });
 
 test("a task done or canceled keeps its items listed and counted as any other's, each row wearing its task's status, its card's task chip wearing it too, and a row of an agent with no task wearing none; no scope offers an archive", async () => {
   window.localStorage.clear();
+  window.localStorage.setItem(GROUPING_KEY, JSON.stringify("plan"));
   agentInboxes = new Map([[SWEEP_AGENT, [QUARANTINE]]]);
   const { page } = mount(
     [
