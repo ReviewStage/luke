@@ -112,5 +112,7 @@
 @import "./components/portal-fence/portal-fence.css";
 @import "./components/editable-block/editable-block.css";
 @import "./components/editable-heading/editable-heading.css";
+/* After the controls it steps back: the choice list, checkbox, field, and button. */
+@import "./components/stepped-back/stepped-back.css";
 /* Last, so a press's pulse plays over every shape's resting look. */
 @import "./press-pulse.css";

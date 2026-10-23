@@ -125,7 +125,7 @@ test("Profile asks where Luke links open, the browser until chosen, and a choice
 
   act(() => choice.click());
   const app =
-    [...document.querySelectorAll<HTMLButtonElement>('[role="menuitemcheckbox"]')].find(
+    [...document.querySelectorAll<HTMLElement>('[role="option"]')].find(
       (item) => item.textContent === "Luke for Mac",
     ) ?? assert.fail("the menu offers Luke for Mac");
   act(() => app.click());

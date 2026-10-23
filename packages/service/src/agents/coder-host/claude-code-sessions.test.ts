@@ -21,6 +21,7 @@ import {
   recordCodingAgentNativeSession,
   updateCodingAgentChoice,
 } from "@luke/database/models/coding-agent-store";
+import { readNativeRewind, rewindConversation } from "@luke/database/models/conversation-rewind";
 import { installSkill } from "@luke/database/models/installed-skill-store";
 import { parseKeyRing, sealProviderKey } from "@luke/database/models/provider-key-seal";
 import {
@@ -31,6 +32,7 @@ import {
 import { holdSandbox } from "@luke/database/models/sandbox-terminal-lease";
 import { storeWriter } from "@luke/database/models/writer";
 import { user } from "@luke/database/schemas/auth";
+import { messages } from "@luke/database/schemas/storage";
 import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
 import { getTestDB, startTask } from "@luke/database/testing";
 import { CODING_AGENT_FAILURE, CODING_AGENT_PAYER } from "@luke/features/coding-agent-wire";
@@ -40,6 +42,7 @@ import {
   PROVIDER_KEY_PROVIDER,
   PROVIDER_KEY_STATUS,
 } from "@luke/features/provider-key-wire";
+import { MESSAGE_ROLE } from "@luke/wire";
 import { fakeHttpClientLayer } from "@luke/wire/testing";
 import {
   Clock,
@@ -961,6 +964,56 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         );
         assert.equal(late, RUNNER_ENDED.STALE);
         assert.equal(api.sandboxes[0]?.status, "running");
+      }),
+  );
+
+  it.effect(
+    "a halt ends the running runner and keeps its sandbox, and the next message relaunches on the CLI's session cut before the line a rewind dropped",
+    () =>
+      Effect.gen(function* () {
+        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+        const api = runnerSandboxApi();
+        const { userId, agent } = yield* openAgent;
+        const sessions = yield* sessionsFor(userId, { next: 0 }).pipe(
+          Effect.provide(services(api)),
+        );
+        const opened = yield* sessions.open(message(agent, "Fix the invitations."));
+        assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+        assert.equal(yield* recordCodingAgentNativeSession(userId, agent.id, CLI_SESSION), true);
+        const target = { userId, conversationId: agent.conversationId };
+        const lineId = randomUUID();
+        yield* (yield* Database).insert(messages).values({
+          id: lineId,
+          ...target,
+          seq: 1,
+          clientId: "dropped-line",
+          role: MESSAGE_ROLE.USER,
+          parts: [{ type: "text", text: "Fix the invitations." }],
+          placedAt: new Date(0),
+        });
+
+        const halted = yield* sessions.halt(opened.sessionId, agent.conversationId);
+        // Note that the sandbox's tags no longer name the ended runner, so no message is written to it.
+        const tagsAfterHalt = { ...api.sandboxes[0]?.tags };
+        yield* rewindConversation(target, lineId);
+        const sent = yield* sessions.send(opened.sessionId, message(agent, "Fix only the emails."));
+
+        assert.equal(halted, true);
+        assert.equal(tagsAfterHalt[RUNNER_TAG.COMMAND], undefined);
+        assert.equal(tagsAfterHalt[RUNNER_TAG.AGENT], agent.id);
+        assert.equal(sent.outcome, EVE_SEND_OUTCOME.ACCEPTED);
+        assert.equal(api.sandboxes.length, 1);
+        assert.equal(api.sandboxes[0]?.deleted, false);
+        assert.deepEqual(linesOf(api.commands[0]).at(-1), { type: INPUT_LINE.STOP, launch: 0 });
+        assert.notEqual(api.commands[0]?.exitCode, null);
+        assert.equal(api.commands.length, 2);
+        const [config, line] = linesOf(api.commands[1]) as [ClaudeCodeConfig, InputLine];
+        assert.equal(config.resume, CLI_SESSION);
+        assert.equal(config.rewindBefore, "dropped-line");
+        assert.ok(line.type === INPUT_LINE.MESSAGE);
+        assert.deepEqual(line.content, [{ type: "text", text: "Fix only the emails." }]);
+        // The cut is handed over once.
+        assert.deepEqual(yield* readNativeRewind(target), Option.none());
       }),
   );
 

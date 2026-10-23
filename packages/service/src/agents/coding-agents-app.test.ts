@@ -51,6 +51,7 @@ import {
   keepConversationPicture,
   readConversationPicture,
 } from "@luke/database/models/conversation-pictures";
+import { rewindConversation } from "@luke/database/models/conversation-rewind";
 import { childConversationId } from "@luke/database/models/ids";
 import { listMessagesPast, sentLineStands } from "@luke/database/models/message-reads";
 import { unreadOperatorNotices } from "@luke/database/models/operator-notices";
@@ -7576,6 +7577,43 @@ it.layer(getTestDB())("an agent's pictures", (it) => {
         assert.deepEqual(worker.messages, []);
         assert.equal(worker.status, CODING_AGENT_STATUS.STARTING);
         assert.equal(worker.before, undefined);
+      }),
+  );
+
+  it.effect(
+    "a rewound transcript says so on every page, and a cursor read before the rewind is answered at once, so its reader reads the newest page afresh",
+    () =>
+      Effect.gen(function* () {
+        const { owner, task, ask } = yield* openTask();
+        const agent = readAnswer(
+          codingAgentAnswerSchema,
+          HOSTED_HTTP_STATUS.CREATED,
+          yield* ask(startAs(owner, task.id, { idempotencyKey: randomUUID() })),
+        ).agent;
+        const stored = Option.getOrThrow(yield* readCodingAgent(owner, agent.id));
+        yield* transcriptRow(stored, 1, MESSAGE_ROLE.USER, [text("Expire invitations.")]);
+        yield* transcriptRow(stored, 2, MESSAGE_ROLE.ASSISTANT, [text("Expired.")]);
+        const dropped = yield* transcriptRow(stored, 3, MESSAGE_ROLE.USER, [text("And emails.")]);
+        yield* transcriptRow(stored, 4, MESSAGE_ROLE.ASSISTANT, [text("Emailed.")]);
+        const newest = () =>
+          Effect.map(ask(request(AGENT_NEWEST, owner, { id: agent.id })), (answered) =>
+            readAnswer(codingAgentNewestAnswerSchema, HOSTED_HTTP_STATUS.OK, answered),
+          );
+        const before = yield* newest();
+
+        yield* rewindConversation(stored, dropped);
+        const after = yield* newest();
+        const past = readAnswer(
+          transcriptNowAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(request(AGENT_MESSAGES, owner, { id: agent.id, after: before.cursor })),
+        );
+
+        assert.equal(before.rewound, undefined);
+        assert.equal(after.messages.length, 2);
+        assert.notEqual(after.rewound, undefined);
+        // Note that the read past the stale cursor asked to be held, and was answered at once all the same.
+        assert.equal(past.rewound, after.rewound);
       }),
   );
 });

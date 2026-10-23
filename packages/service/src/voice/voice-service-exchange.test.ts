@@ -351,6 +351,7 @@ function fakeNative() {
     reset: () => Effect.succeed({ outcome: EVE_RESET_OUTCOME.NO_ACTIVE_SESSION }),
     stream: () => Stream.empty,
     retune: () => Effect.succeed(RUNNER_CHOICE.NOT_LIVE),
+    halt: () => Effect.succeed(true),
   };
   return { opened, sent, sessions };
 }

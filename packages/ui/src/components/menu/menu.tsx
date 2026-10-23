@@ -4,7 +4,9 @@ import { CheckIcon, ChevronRightIcon } from "../../face/glyphs.js";
 import { PRESS_PULSE, pulseOnPress } from "../../press-pulse.js";
 import { useDisclosure } from "../../use-disclosure.js";
 import { type ViewportBox, visibleViewport } from "../../visible-viewport.js";
+import { OneLine } from "../one-line/one-line.js";
 import { SwitchMark } from "../switch/switch.js";
+import { Tooltip } from "../tooltip/hint.js";
 import { MenuGlyph } from "./menu-surface.js";
 import { useTouchHold } from "./touch-hold.js";
 
@@ -29,6 +31,13 @@ import { useTouchHold } from "./touch-hold.js";
  * as the desktop composer's chips hang theirs, is `AnchoredPopover`. A
  * shortcut an item takes is the app's: it hands the words it prints as the
  * item's `hint`.
+ *
+ * A label or a detail wider than the menu fades out over its last few
+ * pixels, as every cut line of the app does. An item may hang its thing's
+ * card beside itself while the pointer rests on it, as a picker's row does
+ * (`card`): the item's description, which the keyboard never enters, so the
+ * focus and the arrows stay the menu's while it stands, and a press on it
+ * is a press on the menu rather than one that closes it.
  *
  * An item stands outside a menu too, among a searchable menu's pinned rows,
  * whose keys stay in the menu's field (`SteeredMenuItem`): a button the
@@ -98,6 +107,8 @@ export interface MenuAction {
   opens?: boolean | undefined;
   /** Whether choosing it leaves the menu standing, as one of several values a filter toggles is. */
   stays?: boolean | undefined;
+  /** The card hung beside the item while the pointer rests on it, as a person's in a people filter; none hangs nothing. */
+  card?: React.ReactNode;
 }
 
 /**
@@ -383,6 +394,21 @@ function itemAfter(key: string, at: number, count: number): number | undefined {
   }
 }
 
+/**
+ * Whether a press landed on the card an item of one of `menus` hangs, which
+ * stands apart from the menu, portalled to the body, and names the item it
+ * describes by the item's `aria-describedby`.
+ */
+function onItemCard(target: Node | null, menus: readonly (HTMLElement | null)[]): boolean {
+  const card = target instanceof Element ? target.closest('[role="tooltip"]') : null;
+  if (card === null || card.id === "") return false;
+  return menus.some((menu) =>
+    [...(menu?.querySelectorAll("[aria-describedby]") ?? [])].some(
+      (item) => item.getAttribute("aria-describedby") === card.id,
+    ),
+  );
+}
+
 /** The items of one menu, its own and not a submenu's within it, that the keys move between now. */
 function itemsOf(menu: HTMLElement): HTMLElement[] {
   return [...menu.querySelectorAll<HTMLElement>(MENU_ITEM)].filter(
@@ -442,6 +468,22 @@ function ItemEnd({ action }: { action: MenuAction }): React.JSX.Element | null {
   return hint;
 }
 
+/** An item's button, with the card its action hangs beside it where it has one. */
+function Carded({
+  action,
+  children,
+}: {
+  action: MenuAction;
+  children: React.JSX.Element;
+}): React.JSX.Element {
+  if (action.card === undefined) return children;
+  return (
+    <Tooltip label={action.label} card={action.card} cardBeside>
+      {children}
+    </Tooltip>
+  );
+}
+
 /**
  * One item, as a menu draws it, reached by the menu's keys (`moveMenuFocus`)
  * rather than by Tab: its glyph's column, its label and any detail under it,
@@ -457,7 +499,7 @@ export function MenuItem({
   /** Where it stands among a field's pinned rows rather than in a menu. */
   steered?: SteeredMenuItem | undefined;
 }): React.JSX.Element {
-  const label = <span className="luke-menu-item-label">{action.label}</span>;
+  const label = <OneLine className="luke-menu-item-label">{action.label}</OneLine>;
   const body = (
     <>
       <MenuGlyph>{action.icon}</MenuGlyph>
@@ -466,7 +508,7 @@ export function MenuItem({
       ) : (
         <span className="luke-menu-item-copy">
           {label}
-          <span className="luke-menu-item-detail">{action.detail}</span>
+          <OneLine className="luke-menu-item-detail">{action.detail}</OneLine>
         </span>
       )}
       <ItemEnd action={action} />
@@ -488,35 +530,39 @@ export function MenuItem({
   // A setting in a menu says whether it is on as a menu's check does.
   if (action.checked !== undefined) {
     return (
+      <Carded action={action}>
+        <button
+          type="button"
+          role="menuitemcheckbox"
+          aria-checked={action.checked}
+          aria-label={heard}
+          tabIndex={-1}
+          className="luke-menu-item"
+          data-detail={action.detail === undefined ? undefined : "true"}
+          disabled={action.disabled}
+          onClick={pulseOnPress(onChoose, PRESS_PULSE.QUIET)}
+        >
+          {body}
+        </button>
+      </Carded>
+    );
+  }
+  return (
+    <Carded action={action}>
       <button
         type="button"
-        role="menuitemcheckbox"
-        aria-checked={action.checked}
+        role="menuitem"
         aria-label={heard}
         tabIndex={-1}
         className="luke-menu-item"
+        data-danger={action.danger ? "true" : undefined}
         data-detail={action.detail === undefined ? undefined : "true"}
         disabled={action.disabled}
         onClick={pulseOnPress(onChoose, PRESS_PULSE.QUIET)}
       >
         {body}
       </button>
-    );
-  }
-  return (
-    <button
-      type="button"
-      role="menuitem"
-      aria-label={heard}
-      tabIndex={-1}
-      className="luke-menu-item"
-      data-danger={action.danger ? "true" : undefined}
-      data-detail={action.detail === undefined ? undefined : "true"}
-      disabled={action.disabled}
-      onClick={pulseOnPress(onChoose, PRESS_PULSE.QUIET)}
-    >
-      {body}
-    </button>
+    </Carded>
   );
 }
 
@@ -559,19 +605,23 @@ function SteeredItem({
   // A setting is a switch for the keyboard and the reader, whatever its end draws.
   if (action.checked !== undefined) {
     return (
-      <button {...shared} role="switch" aria-checked={action.checked}>
-        {body}
-      </button>
+      <Carded action={action}>
+        <button {...shared} role="switch" aria-checked={action.checked}>
+          {body}
+        </button>
+      </Carded>
     );
   }
   return (
-    <button
-      {...shared}
-      aria-haspopup={opens ? "listbox" : undefined}
-      aria-expanded={opens ? steered.expanded === true : undefined}
-    >
-      {body}
-    </button>
+    <Carded action={action}>
+      <button
+        {...shared}
+        aria-haspopup={opens ? "listbox" : undefined}
+        aria-expanded={opens ? steered.expanded === true : undefined}
+      >
+        {body}
+      </button>
+    </Carded>
   );
 }
 
@@ -611,7 +661,7 @@ function SubmenuItem({
       }}
     >
       <MenuGlyph>{entry.icon}</MenuGlyph>
-      <span className="luke-menu-item-label">{entry.label}</span>
+      <OneLine className="luke-menu-item-label">{entry.label}</OneLine>
       <span className="luke-menu-item-end">
         <ChevronRightIcon />
       </span>
@@ -780,13 +830,15 @@ export function Menu({
   }, [placed, leaving, openOnChecked]);
 
   // Note that a press on the opener is left to the opener, because the
-  // button's own press is what closes the menu it opened; and that a menu
-  // leaving hears nothing, since it has closed already.
+  // button's own press is what closes the menu it opened; that a press on
+  // an item's card is the menu's own, the card its item's words to read and
+  // select; and that a menu leaving hears nothing, since it has closed already.
   useEffect(() => {
     if (leaving) return;
     const pressed = (event: PointerEvent) => {
       const target = event.target instanceof Node ? event.target : null;
       if (element.current?.contains(target) || submenuElement.current?.contains(target)) return;
+      if (onItemCard(target, [element.current, submenuElement.current])) return;
       if (opener.contains(target)) return;
       onClose(false);
     };

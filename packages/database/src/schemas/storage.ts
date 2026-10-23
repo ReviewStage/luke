@@ -94,6 +94,10 @@ export const conversations = pgTable(
     nativeSequence: bigint("native_sequence", { mode: "number" }),
     /** What the projection of a native harness's events holds between the runner's batches: the turn under way and its step's words so far; null before the first batch. */
     nativeProjection: jsonb("native_projection"),
+    /** The journal revision the conversation was last rewound to a message at, which a reader holding an older cursor reads the transcript afresh by; null on one never rewound. */
+    rewoundRevision: bigint("rewound_revision", { mode: "number" }),
+    /** The client id of the first line a rewind dropped from a Claude Code or Codex conversation, which the next launch's harness cuts its own session before; null once a launch has handed it over, and on one never rewound. */
+    nativeRewind: text("native_rewind"),
   },
   (table) => [
     // One main stands per account at a time: Clear stamps the old one and opens the next in one
