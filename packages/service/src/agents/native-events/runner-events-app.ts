@@ -54,8 +54,8 @@ import {
 import { providerModelOf } from "../../providers/model-catalog.js";
 import { ANY_METHOD, type WebRoutes } from "../../route.js";
 import { reopenTaskForWork, settleTaskIfFinished } from "../../tasks/task-finish.js";
-import { runnerEnded } from "../coder-host/claude-code-sessions.js";
 import { isNativeRuntime } from "../coder-host/native-runtime.js";
+import { runnerEnded } from "../coder-host/runner-sessions.js";
 import { NativeAgentSessions } from "../coder-host/runtime-sessions.js";
 import { estimatedTokens } from "../coder-host/token-estimate.js";
 import { CODER_TOOL_SET } from "../coder-host/tool-set.js";
