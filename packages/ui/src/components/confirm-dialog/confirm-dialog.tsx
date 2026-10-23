@@ -87,8 +87,8 @@ export function ConfirmDialog({
 }: {
   confirm: DialogConfirm;
   question: DialogQuestion;
-  /** A field the question asks to be filled, which takes focus in Cancel's place; Enter in a one-line field answers, and a text area's Return is its own new line. */
-  field?: React.RefObject<HTMLInputElement | HTMLTextAreaElement | null> | undefined;
+  /** A field the question asks to be filled, which takes focus in Cancel's place; Enter in it answers. */
+  field?: React.RefObject<HTMLInputElement | null> | undefined;
   /** What the card holds under its body: the field, where the question asks one. */
   children?: React.ReactNode;
 }): React.JSX.Element | null {
@@ -108,12 +108,10 @@ export function ConfirmDialog({
     if (confirmWithdrawable(stage)) confirm.keep();
     confirm.clear();
   };
-  // Enter in the question's one-line field answers it, since the field has
-  // no second line to begin; in a text area it begins one, and anywhere else
-  // Enter is the focused button's own.
+  // Enter in the question's field answers it, since the field has no second
+  // line to begin; anywhere else Enter is the focused button's own.
   const fieldKey = (event: React.KeyboardEvent<HTMLDivElement>) => {
-    const answers = event.target === field?.current && event.target instanceof HTMLInputElement;
-    if (event.key !== "Enter" || !answers || acting) return;
+    if (event.key !== "Enter" || event.target !== field?.current || acting) return;
     event.preventDefault();
     confirm.run();
   };

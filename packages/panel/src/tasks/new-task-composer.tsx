@@ -1,4 +1,8 @@
-import { CODING_AGENT_STATUS, hasWordsOrFiles } from "@luke/features/coding-agent-wire";
+import {
+  CODING_AGENT_BOUNDS,
+  CODING_AGENT_STATUS,
+  hasWordsOrFiles,
+} from "@luke/features/coding-agent-wire";
 import { FAILURE_REASON, type Failure } from "@luke/features/failure-remedy";
 import type { GitHubIssuePick } from "@luke/features/github-repositories-wire";
 import type { LinearIssueSummary } from "@luke/features/linear-wire";
@@ -35,6 +39,7 @@ import {
   useDraft,
   useDraftWriter,
 } from "../composer-drafts.js";
+import { automationAgentBrief } from "../desktop/automation-agent-brief.js";
 import { PICKER_ALIGN } from "../settings/picker-row.js";
 import { Tooltip } from "../tooltip.js";
 import { AgentComposer, type ComposerWords } from "./agent-composer.js";
@@ -131,20 +136,51 @@ import type { NewTaskAgent, NewTaskStart, TasksControl } from "./use-tasks-tab.j
  * does. The card holds its own issues, repository, and model, so the owner
  * mounts it afresh to start those over; the workspace it starts in is the
  * owner's.
+ *
+ * The Automations page's Create with an agent is this same card for another
+ * purpose (`NEW_TASK_PURPOSE.AUTOMATION`), so making an automation's helper
+ * looks and works as starting any agent does. Its title says so, its words
+ * are what to automate, kept as a draft of their own, and the agent is handed
+ * the fixed brief with the words fenced after it (`automation-agent-brief.ts`),
+ * refused here where that would pass an agent's first message's bound. It
+ * starts on words alone: it offers no Issue chip and no File for later, a
+ * repository group's + chooses nothing for it, and ⌘Return on an empty box
+ * starts no bare task.
  */
+
+/** What a card starts: a task's coding agent, or the agent that makes an automation. */
+export const NEW_TASK_PURPOSE = {
+  TASK: "task",
+  AUTOMATION: "automation",
+} as const;
+
+export type NewTaskPurpose = (typeof NEW_TASK_PURPOSE)[keyof typeof NEW_TASK_PURPOSE];
 
 /** ⌘Return: a bare task from a box with nothing in it. */
 const BARE_CHORD: ShortcutChord = { key: SHORTCUT_KEY.ENTER };
 
-/** The head row's title, before the repository's chip. */
-const NEW_TASK_HEADING = "New task";
+/** Each purpose's head row title, before the repository's chip. */
+const PURPOSE_HEADING = {
+  [NEW_TASK_PURPOSE.TASK]: "New task",
+  [NEW_TASK_PURPOSE.AUTOMATION]: "Create with an agent",
+} as const satisfies Record<NewTaskPurpose, string>;
 
-/** What the card asks for, calls its field, and calls its round button. */
-const NEW_TASK_WORDS: ComposerWords = {
-  placeholder: "Describe the change for a coding agent…",
-  label: "Task prompt",
-  send: "Start agent",
-};
+/** What each purpose's card asks for, calls its field, and calls its round button. */
+const PURPOSE_WORDS = {
+  [NEW_TASK_PURPOSE.TASK]: {
+    placeholder: "Describe the change for a coding agent…",
+    label: "Task prompt",
+    send: "Start agent",
+  },
+  [NEW_TASK_PURPOSE.AUTOMATION]: {
+    placeholder: "Describe what to automate for a coding agent…",
+    label: "What to automate",
+    send: "Start agent",
+  },
+} as const satisfies Record<NewTaskPurpose, ComposerWords>;
+
+/** Why an automation's helper did not start where the brief and the words pass an agent's first message's bound. */
+const TOO_LONG = "That request is too long.";
 
 /** Why Start is held without a repository, and File for later's words. */
 const COMPOSER_WORDS = {
@@ -208,9 +244,11 @@ function sameAsk(a: AgentAsk, b: AgentAsk): boolean {
   );
 }
 
-/** New task's draft place: its workspace, none before the workspaces are read. */
-function newTaskPlace(workspaceId: string | undefined): DraftPlace {
-  return { kind: DRAFT_PLACE.NEW_TASK, workspaceId: workspaceId ?? null };
+/** A card's draft place: its purpose's, in its workspace, none before the workspaces are read. */
+function newTaskPlace(workspaceId: string | undefined, purpose: NewTaskPurpose): DraftPlace {
+  const kind =
+    purpose === NEW_TASK_PURPOSE.AUTOMATION ? DRAFT_PLACE.NEW_AUTOMATION : DRAFT_PLACE.NEW_TASK;
+  return { kind, workspaceId: workspaceId ?? null };
 }
 
 /** The account's default model as read, and the chip's pick, which runs this one agent and leaves the default as it stands. */
@@ -242,6 +280,7 @@ export function NewTaskComposer({
   focusedByOwner = false,
   titleId,
   listSide,
+  purpose = NEW_TASK_PURPOSE.TASK,
 }: {
   newTask: TasksControl["newTask"];
   /** The workspace the task starts in, the owner's to choose; none before the workspaces are read. */
@@ -256,21 +295,26 @@ export function NewTaskComposer({
   titleId?: string | undefined;
   /** Which side of the caret's line an `@` or `/` list opens: over it in the dialog, under it on the welcome, whose card stands near the page's top, where a list risen over it is cut off under the page's head. */
   listSide: MentionMenuSide;
+  /** What the card starts; a task's agent where none is named. */
+  purpose?: NewTaskPurpose | undefined;
 }): React.JSX.Element {
-  const draft = useDraft(newTaskPlace(workspaceId));
+  const forAutomation = purpose === NEW_TASK_PURPOSE.AUTOMATION;
+  const draft = useDraft(newTaskPlace(workspaceId, purpose));
   const { text: words, attachments } = draft.draft;
   // Words typed before the workspaces were read become the workspace's
   // draft once it is known, over one it kept, as the words written last win.
-  const loose = useDraft(newTaskPlace(undefined)).draft;
+  const loose = useDraft(newTaskPlace(undefined, purpose)).draft;
   const writer = useDraftWriter();
   useEffect(() => {
     if (workspaceId === undefined || !hasWordsOrFiles(loose.text, loose.attachments)) return;
-    writer.update(newTaskPlace(workspaceId), () => loose);
-    writer.update(newTaskPlace(undefined), () => EMPTY_DRAFT);
-  }, [workspaceId, loose, writer]);
+    writer.update(newTaskPlace(workspaceId, purpose), () => loose);
+    writer.update(newTaskPlace(undefined, purpose), () => EMPTY_DRAFT);
+  }, [workspaceId, loose, writer, purpose]);
   // The GitHub and Linear issues picked from the Issue chip, in the order picked.
   const [picks, setLinks] = useState<readonly NewTaskLink[]>([]);
-  const [chosen, setChosen] = useState<string | null | undefined>(newTask.preset?.repository);
+  const [chosen, setChosen] = useState<string | null | undefined>(
+    forAutomation ? undefined : newTask.preset?.repository,
+  );
   const [choice, choose] = useDefaultChoice(newTask);
   const [starting, setStarting] = useState(false);
   const [note, setNote] = useState<Failure | undefined>(undefined);
@@ -280,7 +324,8 @@ export function NewTaskComposer({
   const [issueAsks, setIssueAsks] = useState(0);
   const { linearIssuesIn, githubIssuesIn } = newTask;
   const offersIssues =
-    linearIssuesIn(workspaceId) !== undefined || githubIssuesIn(workspaceId) !== undefined;
+    !forAutomation &&
+    (linearIssuesIn(workspaceId) !== undefined || githubIssuesIn(workspaceId) !== undefined);
   const repositories = newTask.repositoriesIn(workspaceId);
   const workspace = newTask.workspaces.find((each) => each.id === workspaceId);
   // The repositories the chip's last read listed, an App's and a member's token's alike.
@@ -321,7 +366,8 @@ export function NewTaskComposer({
   }
   const links = picks.filter((link) => !linkedElsewhere(link, repository));
   const said = words.trim();
-  const filled = hasWordsOrFiles(said, attachments);
+  // Note that an automation's helper starts on words alone, since the brief fences them as the request.
+  const filled = forAutomation ? said !== "" : hasWordsOrFiles(said, attachments);
   // An agent needs a repository to work in, and something to work on:
   // words, files, or a GitHub or Linear issue.
   const onIssue = links.length > 0;
@@ -393,12 +439,17 @@ export function NewTaskComposer({
     if (!canStart) return;
     filing.current = false;
     const name = issueName ?? "";
+    const prompt = forAutomation ? automationAgentBrief(said) : agentPromptOf(linkedIssues, said);
+    if (forAutomation && prompt.length > CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS) {
+      setNote({ reason: FAILURE_REASON.OTHER, text: TOO_LONG });
+      return;
+    }
     const ask: AgentAsk = {
       name,
       repository,
       workspaceId,
       issues,
-      agent: { prompt: agentPromptOf(linkedIssues, said), attachments, choice },
+      agent: { prompt, attachments, choice },
     };
     const held = pressed.current;
     const key = held !== undefined && sameAsk(held.ask, ask) ? held.key : crypto.randomUUID();
@@ -424,7 +475,7 @@ export function NewTaskComposer({
   const onKey = (event: KeyboardEvent): boolean => {
     if (!shortcutMatches(BARE_CHORD, event)) return false;
     if (filled) start();
-    else bare();
+    else if (!forAutomation) bare();
     return true;
   };
   // ⌘L from the card opens the Issue chip's menu, where the chip stands.
@@ -513,16 +564,16 @@ export function NewTaskComposer({
       <div className="new-task-head">
         <div className="new-task-title">
           <Text variant={TEXT_VARIANT.DIALOG} as={TEXT_ELEMENT.H2} id={titleId}>
-            {NEW_TASK_HEADING}
+            {PURPOSE_HEADING[purpose]}
           </Text>
           {repositoryChip}
         </div>
-        {issueChip}
+        {forAutomation ? null : issueChip}
       </div>
       <AgentComposer
         status={CODING_AGENT_STATUS.STARTING}
         composer={composer}
-        wording={NEW_TASK_WORDS}
+        wording={PURPOSE_WORDS[purpose]}
         sendsEmpty={onIssue}
         sendable={!blocked}
         model={choice === undefined ? undefined : { choice, note: undefined, choose }}
@@ -544,21 +595,25 @@ export function NewTaskComposer({
             <NewTaskLinks links={links} disabled={starting} onChange={setLinks} />
           )
         }
-        beforeSend={(narrow) => (
-          // Note that File for later is a chip, and a card too narrow for its words draws the backlog's mark alone, still named, so Start keeps its room.
-          <Tooltip label={COMPOSER_WORDS.FILE_HINT}>
-            <Chip
-              look={CHIP_LOOK.FILTER}
-              iconOnly={narrow}
-              aria-label={COMPOSER_WORDS.FILE}
-              disabled={starting || !filable}
-              onClick={file}
-            >
-              <TaskStatusMark status={TASK_STATUS.BACKLOG} />
-              <ChipName>{COMPOSER_WORDS.FILE}</ChipName>
-            </Chip>
-          </Tooltip>
-        )}
+        beforeSend={
+          forAutomation
+            ? undefined
+            : (narrow) => (
+                // Note that File for later is a chip, and a card too narrow for its words draws the backlog's mark alone, still named, so Start keeps its room.
+                <Tooltip label={COMPOSER_WORDS.FILE_HINT}>
+                  <Chip
+                    look={CHIP_LOOK.FILTER}
+                    iconOnly={narrow}
+                    aria-label={COMPOSER_WORDS.FILE}
+                    disabled={starting || !filable}
+                    onClick={file}
+                  >
+                    <TaskStatusMark status={TASK_STATUS.BACKLOG} />
+                    <ChipName>{COMPOSER_WORDS.FILE}</ChipName>
+                  </Chip>
+                </Tooltip>
+              )
+        }
       />
       {blocked ? (
         <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>

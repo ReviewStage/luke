@@ -39,14 +39,11 @@ afterEach(() => {
   document.body.replaceChildren();
 });
 
-/** The element a question's field is: one line, or many. */
-type FieldKind = "input" | "textarea";
-
 /** A settings line that asks before deleting a key, with toggles that take the key or the page away. */
-function Owner({ answers, withField }: { answers: Answers; withField: FieldKind | false }) {
+function Owner({ answers, withField }: { answers: Answers; withField: boolean }) {
   const [subject, setSubject] = useState(true);
   const [surfaceOpen, setSurfaceOpen] = useState(true);
-  const field = useRef<HTMLInputElement | HTMLTextAreaElement | null>(null);
+  const field = useRef<HTMLInputElement | null>(null);
   const confirm = useConfirmDialog(
     { subject, surfaceOpen },
     () => new Promise<ActionResult>((answer) => answers.push(answer)),
@@ -65,11 +62,10 @@ function Owner({ answers, withField }: { answers: Answers; withField: FieldKind 
         verb: "Delete",
         running: "Deleting",
       },
-      field: withField === false ? undefined : field,
-      children:
-        withField === false
-          ? undefined
-          : createElement(withField, { ref: field, "aria-label": "Type delete" }),
+      field: withField ? field : undefined,
+      children: withField
+        ? createElement("input", { ref: field, "aria-label": "Type delete" })
+        : undefined,
     }),
   );
 }
@@ -110,7 +106,7 @@ function holds(element: Element | null | undefined): boolean {
 }
 
 /** The owner drawn and its question asked from its button, which keeps focus as a press would give it. */
-function asked(withField: FieldKind | false = false) {
+function asked(withField = false) {
   const answers: Answers = [];
   const container = document.createElement("div");
   document.body.append(container);
@@ -208,20 +204,11 @@ test("an answer already given finishes unseen when its surface goes, and is not 
 });
 
 test("a question that asks for a field lands on it, and Enter there answers", async () => {
-  const { settle } = asked("input");
+  const { settle } = asked(true);
   const field = document.querySelector('input[aria-label="Type delete"]');
   assert.ok(holds(field), "the field takes focus in Cancel's place");
   key("Enter");
   assert.equal(button("Deleting")?.disabled, true, "Enter in the field answers");
   await settle(ACCEPTED);
   assert.equal(question(), null);
-});
-
-test("a question that asks for many lines lands on its text area, and Enter there answers nothing", () => {
-  asked("textarea");
-  const field = document.querySelector('textarea[aria-label="Type delete"]');
-  assert.ok(holds(field), "the text area takes focus in Cancel's place");
-  key("Enter");
-  assert.equal(button("Delete")?.disabled, false, "Enter in a text area begins a line instead");
-  assert.ok(question(), "the question still stands");
 });

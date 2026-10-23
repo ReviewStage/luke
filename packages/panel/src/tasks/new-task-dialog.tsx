@@ -1,7 +1,7 @@
 import { DIALOG_SIZE, Dialog } from "@luke/ui";
 import { type RefObject, useId, useMemo, useRef, useState } from "react";
 import { MENTION_MENU_SIDE } from "./mention-picker.js";
-import { NewTaskComposer } from "./new-task-composer.js";
+import { NEW_TASK_PURPOSE, NewTaskComposer, type NewTaskPurpose } from "./new-task-composer.js";
 import type { TasksControl } from "./use-tasks-tab.js";
 
 /**
@@ -25,6 +25,10 @@ import type { TasksControl } from "./use-tasks-tab.js";
  * holds the card. A refusal keeps the card with the reason under the
  * composer, and Start can be pressed again; a task started closes the card
  * and opens as the host's open task.
+ *
+ * The Automations page's Create with an agent opens this same card for an
+ * automation's helper (`AutomationAgentDialog`), whose composer starts the
+ * agent that makes the automation, so it is asked as New task asks.
  */
 
 /** The composer's words field, the editor's own textbox, which the card hands focus to. */
@@ -38,7 +42,15 @@ const CARD_SELECTOR = '[aria-modal="true"]';
  * start over, and whether a start is under way, which holds the card. Its
  * words are the draft's, which the opening brings back.
  */
-function NewTaskCard({ newTask }: { newTask: TasksControl["newTask"] }): React.JSX.Element {
+function NewTaskCard({
+  newTask,
+  purpose,
+  onClose,
+}: {
+  newTask: TasksControl["newTask"];
+  purpose: NewTaskPurpose;
+  onClose: () => void;
+}): React.JSX.Element {
   const [starting, setStarting] = useState(false);
   const titleId = useId();
   const body = useRef<HTMLDivElement>(null);
@@ -56,7 +68,7 @@ function NewTaskCard({ newTask }: { newTask: TasksControl["newTask"] }): React.J
     [],
   );
   const close = () => {
-    if (!starting) newTask.onClose();
+    if (!starting) onClose();
   };
 
   return (
@@ -75,6 +87,7 @@ function NewTaskCard({ newTask }: { newTask: TasksControl["newTask"] }): React.J
           onLeave={close}
           focusedByOwner
           titleId={titleId}
+          purpose={purpose}
           // Note that the dialog's card is not at a page's top, so a list rises over the line as an agent's box's does.
           listSide={MENTION_MENU_SIDE.ABOVE}
         />
@@ -90,5 +103,21 @@ export function NewTaskDialog({
   newTask: TasksControl["newTask"];
 }): React.JSX.Element | null {
   if (!newTask.open) return null;
-  return <NewTaskCard newTask={newTask} />;
+  return (
+    <NewTaskCard newTask={newTask} purpose={NEW_TASK_PURPOSE.TASK} onClose={newTask.onClose} />
+  );
+}
+
+/** The same card for an automation's helper while `open`, the Automations page's to open and put away; nothing otherwise. */
+export function AutomationAgentDialog({
+  newTask,
+  open,
+  onClose,
+}: {
+  newTask: TasksControl["newTask"];
+  open: boolean;
+  onClose: () => void;
+}): React.JSX.Element | null {
+  if (!open) return null;
+  return <NewTaskCard newTask={newTask} purpose={NEW_TASK_PURPOSE.AUTOMATION} onClose={onClose} />;
 }

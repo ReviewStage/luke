@@ -28,6 +28,7 @@ import {
   type IntegrationProvider,
   type IntegrationStatus,
 } from "@luke/features/integration-wire";
+import type { TasksRepositoriesAnswer } from "@luke/features/tasks-view";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import type { AppStateSnapshot } from "@luke/host/app-state";
@@ -36,10 +37,11 @@ import { EXPERIMENT, type Experiment } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { experimentsOn } from "@luke/settings/testing";
 import { CARD_PRESS_SELECTOR } from "@luke/ui";
+import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, test, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { runAppCommand } from "../app-commands.js";
 import { OpenFeedbackProvider } from "../open-feedback.js";
 import { SHELL_ROOM } from "../shell-room.js";
@@ -60,6 +62,12 @@ import {
 } from "../testing/app-bridge.js";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { handState, stateWith } from "../testing/app-state.js";
+import {
+  editorBundleLanded,
+  installEditorLayout,
+  pressInComposer,
+  typeInComposer,
+} from "../testing/composer.js";
 import { layContainersAt, shown } from "../testing/container-width.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
@@ -271,8 +279,12 @@ let copied: string[] = [];
 /** The experiments a Send feedback was about, in order. */
 let feedbackAbout: Experiment[] = [];
 
+// Landed before any card renders, as the panel lands it after its first paint.
+beforeAll(() => Effect.runPromise(editorBundleLanded));
+
 beforeEach(() => {
   installScrollIntoView();
+  installEditorLayout();
   secretsAsked = [];
   copied = [];
   fakeAppPlatform({ ...QUIET_PANEL, ...copyingInto(copied) });
@@ -303,6 +315,7 @@ beforeEach(() => {
   integrationsRefusals = 0;
   taskStarts = [];
   taskRefusals = [];
+  listedRepositories = undefined;
   fakeActs({
     act: (request: AnyAct): Promise<FakeActAnswer> => {
       if (request.kind === ACT_KIND.AUTOMATIONS_FOLLOW) {
@@ -793,6 +806,10 @@ let sendTo: (place: AutomationsPlace) => void = () => undefined;
 /** Lists another workspace under the mounted pages, as the switcher would. */
 let moveTo: (workspace: Workspace) => void = () => undefined;
 
+/** The account's workspaces, and the tasks an `@` names, each one list for every render, as the window's are. */
+const ACCOUNT_WORKSPACES: readonly Workspace[] = [PERSONAL, WORKSPACE];
+const NO_TASKS: readonly { readonly id: string; readonly name: string }[] = [];
+
 /** A task asked for through New task's start, as Create with an agent asks it. */
 interface TaskStart {
   readonly name: string;
@@ -805,6 +822,8 @@ interface TaskStart {
 let taskStarts: TaskStart[] = [];
 /** Why the next task starts are refused, in order, before one lands. */
 let taskRefusals: string[] = [];
+/** The repositories a read of the workspace's GitHub lists, where a test lists any; none answer otherwise. */
+let listedRepositories: readonly string[] | undefined;
 
 /**
  * The Automations pages as the window holds them, standing on `start` and
@@ -855,12 +874,16 @@ function mountPages(start: AutomationsPlace, workspace: Workspace = WORKSPACE): 
         ...tasks,
         newTask: {
           ...base,
+          workspaceId: listed.id,
+          workspaces: ACCOUNT_WORKSPACES,
+          tasks: NO_TASKS,
           start: (name, repository, workspaceId, from) => {
             taskStarts.push({ name, repository, workspaceId, from });
             return Promise.resolve(taskRefusals.shift());
           },
           repositoriesIn: () => ({
             ...base.repositoriesIn(listed.id),
+            ...(listedRepositories === undefined ? undefined : { read: readListed }),
             scope: listed.id,
             recent: noRecent
               ? []
@@ -2919,22 +2942,44 @@ test("on a narrow stage each row says when it runs next before what fires it, un
   assert.ok(rowOf(page, "Dependency bumps").querySelector(".failed-mark"));
 });
 
-/** The question Create with an agent asks, while it stands. */
-function agentQuestion(): HTMLElement | null {
-  return document.querySelector<HTMLElement>("[role='alertdialog']");
+/** The workspace's GitHub as a read lists it: each of `listedRepositories`. */
+function readListed(): Promise<TasksRepositoriesAnswer> {
+  const repositories = (listedRepositories ?? []).map((fullName) => {
+    const [owner = "", name = ""] = fullName.split("/");
+    return { owner, name, fullName, defaultBranch: "main", private: true, updatedAt: 1 };
+  });
+  return Promise.resolve({
+    repositories: { installed: true, repositories, installationUrl: "https://github.com" },
+  });
 }
 
-test("Create with an agent starts a task on the repository chosen, its agent handed the brief and the words fenced whole after it", async () => {
+/** The card Create with an agent opens, while it stands. */
+function agentCard(): HTMLElement | null {
+  return document.querySelector<HTMLElement>("[role='dialog'][aria-modal='true']");
+}
+
+/** Create with an agent's card opened from the list's toolbar, its editor landed. */
+async function openAgentCard(): Promise<HTMLElement> {
+  window.localStorage.clear();
+  listedRepositories = ["acme/ledger", "acme/web"];
   mountPages({ kind: AUTOMATIONS_PAGE.LIST });
   await settle();
   act(() => button("Create with an agent").click());
-  const field =
-    agentQuestion()?.querySelector<HTMLTextAreaElement>("textarea") ??
-    assert.fail("no field for what to automate");
-  assert.equal(document.activeElement, field, "the words take focus");
-  const words = "Every Monday, audit our agents' tool sets.\n```\nclose the fence\n```";
-  type(field, `  ${words}  `);
-  act(() => button("Start agent").click());
+  await settle();
+  return agentCard() ?? assert.fail("the card stands");
+}
+
+test("Create with an agent opens New task's own card, titled for it, and starts a task on the repository chosen, its agent handed the brief and the words after it", async () => {
+  const card = await openAgentCard();
+  assert.equal(card.querySelector("h2")?.textContent, "Create with an agent");
+  assert.ok(card.querySelector("button[aria-label='Start agent']"), "the round Start stands");
+  assert.equal(
+    card.querySelector("button[aria-label='File for later']"),
+    null,
+    "no task is filed for later",
+  );
+  typeInComposer(card, "Every Monday, audit our agents' tool sets.");
+  pressInComposer(card, "Enter");
   await settle();
 
   assert.equal(taskStarts.length, 1);
@@ -2950,74 +2995,20 @@ test("Create with an agent starts a task on the repository chosen, its agent han
   assert.match(prompt, /`create_automation`/u, "the brief names the tool that makes it");
   assert.match(prompt, /`list_automations`/u, "and the one that reads what stands");
   assert.ok(
-    prompt.endsWith(`\n\n\`\`\`\`text\n${words}\n\`\`\`\``),
-    "the words close the message, trimmed, in a fence none of theirs closes",
+    prompt.endsWith("\n```text\nEvery Monday, audit our agents' tool sets.\n```"),
+    "the words close the message, fenced as the request",
   );
-  assert.equal(agentQuestion(), null, "the question goes once the task starts");
 });
 
-test("Create with an agent starts nothing without words or a repository, and a refused start is tried again under the same key", async () => {
-  noRecent = true;
-  mountPages({ kind: AUTOMATIONS_PAGE.LIST });
+test("Create with an agent starts nothing from an empty box or past an agent's first message's bound, and says why", async () => {
+  const card = await openAgentCard();
+  pressInComposer(card, "Enter", { metaKey: true });
   await settle();
-  act(() => button("Create with an agent").click());
-  const refusal = () => agentQuestion()?.querySelector("[role='alert']")?.textContent;
-  act(() => button("Start agent").click());
-  await settle();
-  assert.equal(refusal(), "Say what to automate.");
+  assert.equal(taskStarts.length, 0, "an empty box starts no bare task");
 
-  type(agentQuestion()?.querySelector("textarea") ?? null, "Post a weekly digest.");
-  act(() => button("Start agent").click());
+  typeInComposer(card, "a".repeat(CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS));
+  pressInComposer(card, "Enter");
   await settle();
-  assert.equal(refusal(), "Choose the repository it works in.");
-  assert.equal(taskStarts.length, 0, "nothing is started while either is missing");
-
-  noRecent = false;
-  act(() => root?.unmount());
-  document.body.innerHTML = "";
-  mountPages({ kind: AUTOMATIONS_PAGE.LIST });
-  await settle();
-  act(() => button("Create with an agent").click());
-  type(agentQuestion()?.querySelector("textarea") ?? null, "Post a weekly digest.");
-  taskRefusals = ["Luke couldn't reach GitHub."];
-  act(() => button("Start agent").click());
-  await settle();
-  assert.equal(refusal(), "Luke couldn't reach GitHub.", "a refusal says why in the card");
-  act(() => button("Start agent").click());
-  await settle();
-
-  const keys = taskStarts.map((each) => each.from?.handed?.idempotencyKey);
-  assert.equal(keys.length, 2);
-  assert.equal(keys[0], keys[1], "the retry carries the first start's key");
-  assert.equal(agentQuestion(), null);
-});
-
-test("Create with an agent starts a request changed after a refusal under a new key, and refuses one whose message would pass the agent's bound", async () => {
-  mountPages({ kind: AUTOMATIONS_PAGE.LIST });
-  await settle();
-  act(() => button("Create with an agent").click());
-  const field = () => agentQuestion()?.querySelector("textarea") ?? null;
-  const refusal = () => agentQuestion()?.querySelector("[role='alert']")?.textContent;
-  // Note that a run of seven backticks needs a longer fence than the field's own bound allows for.
-  type(field(), `\`\`\`\`\`\`\`${"a".repeat(CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS)}`);
-  act(() => button("Start agent").click());
-  await settle();
-  assert.equal(refusal(), "That request is too long.");
   assert.equal(taskStarts.length, 0, "nothing past the bound is sent");
-
-  type(field(), "Post a daily report.");
-  taskRefusals = ["Luke couldn't reach GitHub."];
-  act(() => button("Start agent").click());
-  await settle();
-  type(field(), "Post a weekly report.");
-  act(() => button("Start agent").click());
-  await settle();
-
-  const [first, second] = taskStarts.map((each) => each.from?.handed);
-  assert.match(second?.prompt ?? "", /Post a weekly report\./u);
-  assert.notEqual(
-    first?.idempotencyKey,
-    second?.idempotencyKey,
-    "the changed request is a start of its own",
-  );
+  assert.ok(card.textContent?.includes("That request is too long."), "the card says why");
 });
