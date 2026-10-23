@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { afterEach, test } from "vitest";
+import { afterEach, test, vi } from "vitest";
 import { RECORDING_CURSOR_SOURCE, RECORDING_CURSOR_STOP } from "./sandbox-recorder.js";
 
 /**
@@ -9,7 +9,9 @@ import { RECORDING_CURSOR_SOURCE, RECORDING_CURSOR_STOP } from "./sandbox-record
  * a page: one host on the document's root, hidden from the accessibility
  * tree and taking no pointer events, drawn once however often it is added,
  * and gone with its listeners once the recording stops. What it draws stands
- * in a closed shadow root, which the frames show and the page cannot reach.
+ * in a closed shadow root, which the frames show and the page cannot reach,
+ * so these read what the page can: the host, and whether input brings it
+ * back.
  */
 
 const hosts = () =>
@@ -22,6 +24,7 @@ const run = (source: string) => {
 };
 
 afterEach(() => {
+  vi.restoreAllMocks();
   run(RECORDING_CURSOR_STOP);
 });
 
@@ -50,4 +53,34 @@ test("a page that drops the host has it back at the agent's next move, and a sto
   window.dispatchEvent(new MouseEvent("mousemove", { clientX: 140, clientY: 90 }));
   window.dispatchEvent(new MouseEvent("mousedown", { clientX: 140, clientY: 90 }));
   assert.equal(hosts().length, 0, "nothing listens once the recording stopped");
+});
+
+test("a stop finds the pointer's listeners though the page removed its host first, and nothing draws it back", () => {
+  run(RECORDING_CURSOR_SOURCE);
+  const [host] = [...hosts()];
+  assert.ok(host);
+
+  host.remove();
+  run(RECORDING_CURSOR_STOP);
+  window.dispatchEvent(new MouseEvent("mousemove", { clientX: 60, clientY: 40 }));
+
+  assert.equal(hosts().length, 0);
+  run(RECORDING_CURSOR_SOURCE);
+  assert.equal(hosts().length, 1, "a later recording draws it afresh");
+});
+
+test("typing into a field by ref, which focuses it with no mouse, draws the pointer back in the page", () => {
+  run(RECORDING_CURSOR_SOURCE);
+  const field = document.createElement("input");
+  document.body.append(field);
+  // jsdom lays nothing out, so the field stands where a page would draw it.
+  vi.spyOn(field, "getBoundingClientRect").mockReturnValue(new DOMRect(40, 120, 300, 32));
+  const [host] = [...hosts()];
+  assert.ok(host);
+  host.remove();
+
+  field.focus();
+
+  assert.equal(hosts().length, 1, "the focus moved the pointer, which stands in the page again");
+  field.remove();
 });

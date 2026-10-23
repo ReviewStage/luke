@@ -68,7 +68,10 @@ export const RECORDING_CURSOR_SOURCE = `(function draw() {
   const root = document.documentElement;
   // A new document runs this before it has a root, so the pointer is drawn once it does.
   if (!root) return document.addEventListener("DOMContentLoaded", draw, { once: true });
-  if (root.querySelector(":scope > [data-luke-recording-cursor]")) return;
+  // One pointer a document, however often it is added; the mark stands on the window, so a stop finds it though the page removed the host.
+  const mark = Symbol.for("luke.recordingCursor");
+  if (window[mark]) return;
+  window[mark] = true;
   const svg = "http://www.w3.org/2000/svg";
   const host = document.createElement("div");
   host.setAttribute("data-luke-recording-cursor", "");
@@ -103,33 +106,57 @@ export const RECORDING_CURSOR_SOURCE = `(function draw() {
   root.append(host);
   const stop = new AbortController();
   const on = { capture: true, passive: true, signal: stop.signal };
-  const place = (event) => {
-    if (!host.isConnected) document.documentElement.append(host);
-    arrow.style.transform = "translate(" + (event.clientX - 1) + "px," + (event.clientY - 1) + "px)";
+  let pressedAt = 0;
+  const moveTo = (x, y) => {
+    if (!host.isConnected && document.documentElement) document.documentElement.append(host);
+    arrow.style.transform = "translate(" + (x - 1) + "px," + (y - 1) + "px)";
     arrow.classList.add("on");
   };
+  const ringAt = (x, y) => {
+    const ring = document.createElement("div");
+    ring.className = "r";
+    ring.style.left = x + "px";
+    ring.style.top = y + "px";
+    shadow.append(ring);
+    setTimeout(() => ring.remove(), 600);
+  };
+  const middleOf = (target) => {
+    if (!(target instanceof Element)) return undefined;
+    const box = target.getBoundingClientRect();
+    return box.width > 0 && box.height > 0 ? { x: box.left + box.width / 2, y: box.top + box.height / 2 } : undefined;
+  };
+  const place = (event) => moveTo(event.clientX, event.clientY);
   window.addEventListener("mousemove", place, on);
   window.addEventListener("wheel", place, on);
   window.addEventListener("mousedown", (event) => {
+    pressedAt = Date.now();
     place(event);
     arrow.classList.add("down");
-    const ring = document.createElement("div");
-    ring.className = "r";
-    ring.style.left = event.clientX + "px";
-    ring.style.top = event.clientY + "px";
-    shadow.append(ring);
-    setTimeout(() => ring.remove(), 600);
+    ringAt(event.clientX, event.clientY);
   }, on);
   window.addEventListener("mouseup", () => arrow.classList.remove("down"), on);
-  host.addEventListener("luke-recording-stop", () => {
+  // Typing by ref focuses its field and a choice sets its dropdown, neither with the mouse, so the pointer goes to the field it lands in.
+  window.addEventListener("focusin", (event) => {
+    if (Date.now() - pressedAt < 400) return;
+    const middle = middleOf(event.target);
+    if (middle) moveTo(middle.x, middle.y);
+  }, on);
+  window.addEventListener("change", (event) => {
+    if (!(event.target instanceof HTMLSelectElement)) return;
+    const middle = middleOf(event.target);
+    if (!middle) return;
+    moveTo(middle.x, middle.y);
+    ringAt(middle.x, middle.y);
+  }, on);
+  window.addEventListener("luke-recording-stop", () => {
     stop.abort();
     host.remove();
+    delete window[mark];
   }, { once: true });
 })();`;
 
-/** Takes the pointer out of a page, its listeners with it. */
-export const RECORDING_CURSOR_STOP =
-  '(() => { const host = document.documentElement && document.documentElement.querySelector(":scope > [data-luke-recording-cursor]"); if (host) host.dispatchEvent(new Event("luke-recording-stop")); })();';
+/** Takes the pointer out of a document, its listeners with it, whether or not the page kept its host. */
+export const RECORDING_CURSOR_STOP = 'window.dispatchEvent(new Event("luke-recording-stop"));';
 
 /**
  * The recorder, run by Node with the DevTools port, its directory, its most
@@ -151,6 +178,7 @@ const FPS = 10;
 const TAIL_SECONDS = 0.5;
 const frames = [];
 const casting = new Set();
+const contexts = new Map();
 let ended = false;
 let next = 0;
 const CURSOR_SOURCE = ${JSON.stringify(RECORDING_CURSOR_SOURCE)};
@@ -187,7 +215,10 @@ const finish = async (socket, send) => {
   if (ended) return;
   ended = true;
   for (const sessionId of casting) send("Page.stopScreencast", {}, sessionId);
-  for (const sessionId of casting) send("Runtime.evaluate", { expression: CURSOR_STOP }, sessionId);
+  // Every frame the pointer was drawn into is cleaned, not the main frame alone.
+  for (const [sessionId, ids] of contexts) {
+    for (const contextId of ids) send("Runtime.evaluate", { expression: CURSOR_STOP, contextId }, sessionId);
+  }
   await new Promise((resolve) => setTimeout(resolve, 200));
   try { socket.close(); } catch {}
   if (frames.length === 0) return end({ ok: false, reason: "empty" });
@@ -223,10 +254,20 @@ fetch("http://127.0.0.1:" + port + "/json/version").then((answer) => answer.json
       const sessionId = message.params.sessionId;
       casting.add(sessionId);
       send("Page.enable", {}, sessionId);
+      contexts.set(sessionId, new Set());
+      send("Runtime.enable", {}, sessionId);
       send("Page.addScriptToEvaluateOnNewDocument", { source: CURSOR_SOURCE, runImmediately: true }, sessionId);
       send("Page.startScreencast", { format: "jpeg", quality: 70, maxWidth: width, maxHeight: height }, sessionId);
+    } else if (message.method === "Runtime.executionContextCreated") {
+      const context = message.params.context;
+      if (context.auxData && context.auxData.isDefault) contexts.get(message.sessionId)?.add(context.id);
+    } else if (message.method === "Runtime.executionContextDestroyed") {
+      contexts.get(message.sessionId)?.delete(message.params.executionContextId);
+    } else if (message.method === "Runtime.executionContextsCleared") {
+      contexts.get(message.sessionId)?.clear();
     } else if (message.method === "Target.detachedFromTarget") {
       casting.delete(message.params.sessionId);
+      contexts.delete(message.params.sessionId);
     } else if (message.method === "Page.screencastFrame") {
       send("Page.screencastFrameAck", { sessionId: message.params.sessionId }, message.sessionId);
       if (ended) return;
