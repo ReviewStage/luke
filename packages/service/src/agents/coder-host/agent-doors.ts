@@ -45,6 +45,7 @@ import {
   runLookAtPicture,
 } from "../../tasks/picture-look.js";
 import { SHOW_CODE_REFUSAL, showCodeIn, showCodeRejected } from "../../tasks/show-code.js";
+import type { SentryApp } from "../../triggers/sentry/sentry-app-config.js";
 import {
   runCreateAutomation,
   runDeleteAutomation,
@@ -437,7 +438,12 @@ export function runAgentTools(
 ): Effect.Effect<
   WireRecord,
   never,
-  DatabaseServices | HttpClient.HttpClient | GitHubApp | ModelCatalog | WorkspaceLinearConnect
+  | DatabaseServices
+  | HttpClient.HttpClient
+  | GitHubApp
+  | ModelCatalog
+  | WorkspaceLinearConnect
+  | SentryApp
 > {
   return Effect.gen(function* () {
     const found = yield* agentOfConversation(admitted);

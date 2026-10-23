@@ -27,6 +27,7 @@ import {
   recordCodingAgentPublished,
 } from "@luke/database/models/coding-agent-store";
 import { keepConversationPicture } from "@luke/database/models/conversation-pictures";
+import { linkIntegrationInstallation } from "@luke/database/models/integration-installation-store";
 import { writePage } from "@luke/database/models/plan-pages";
 import { listRevisions } from "@luke/database/models/plan-revisions";
 import {
@@ -124,6 +125,7 @@ import {
 import { integrationConnectOver, NO_WORKSPACE_LINEAR } from "../../testing/integration-connect.js";
 import { nativeRelayFake } from "../../testing/native-relay-fake.js";
 import { sandboxDouble } from "../../testing/repository-sandbox.js";
+import { SentryApp, sentryAppService } from "../../triggers/sentry/sentry-app-config.js";
 import { AUTOMATION_TOOL_REFUSAL } from "../automation-tools.js";
 import { BRAIN_HOST_ATTRIBUTE, BRAIN_HOST_HEADER, BRAIN_HOST_TURN } from "../brain-host/bounds.js";
 import { claimRuntimeSession } from "../brain-host/conversation.js";
@@ -450,13 +452,23 @@ async function issueReadingGitHub(workspaceId: string) {
   return github.layer;
 }
 
-/** A caller of the agent tools from the agent's own session, under the host given, over the suite's catalog unless another is given. */
+/** Luke's Sentry integration as a deployment that configures it holds it. */
+const SENTRY_CONFIGURED = Layer.succeed(
+  SentryApp,
+  sentryAppService(
+    { slug: "luke", clientId: "sentry-client", clientSecret: Redacted.make("sentry-secret") },
+    [],
+  ),
+);
+
+/** A caller of the agent tools from the agent's own session, under the host given, over the suite's catalog and a configured Sentry integration unless others are given. */
 async function peerCaller(
   host: CoderHost,
   agent: StartedAgent,
   services: Awaited<ReturnType<typeof fakeCoderEve>>["services"],
   catalog: Layer.Layer<ModelCatalog> = modelCatalogOf(CATALOG),
   linear: Layer.Layer<WorkspaceLinearConnect> = NO_WORKSPACE_LINEAR,
+  sentry: Layer.Layer<SentryApp> = SENTRY_CONFIGURED,
 ) {
   const admitted = await database.run(host.admit(seat(agent), agent.sessionId));
   if (Result.isFailure(admitted)) return assert.fail(admitted.failure);
@@ -468,7 +480,7 @@ async function peerCaller(
     database.run(
       host
         .agentTools(admitted.success, { tool, input: unparsedWire(input), callId })
-        .pipe(Effect.provide(Layer.mergeAll(services, catalog, ANALYTICS.layer, linear))),
+        .pipe(Effect.provide(Layer.mergeAll(services, catalog, ANALYTICS.layer, linear, sentry))),
     );
 }
 
@@ -4101,5 +4113,100 @@ test("list_automations, create_automation, update_automation, and delete_automat
   assert.deepEqual(
     await call(CODER_TOOL.DELETE_AUTOMATION, { automationId: id }, "delete-again"),
     rejected(AUTOMATION_TOOL_REFUSAL.NO_AUTOMATION),
+  );
+});
+
+test("create_automation and update_automation take a Sentry trigger once the workspace installed Luke's Sentry integration, with its filters and per-issue cooldown, and refuse one where the deployment configures no Sentry integration or the workspace installed none", async () => {
+  const { workspaceId, agents } = await openWorkspaces();
+  const eve = await fakeCoderEve(workspaceId);
+  const call = await peerCaller(hostOf(true), agents.caller, eve.services);
+  const unconfigured = await peerCaller(
+    hostOf(true),
+    agents.caller,
+    eve.services,
+    modelCatalogOf(CATALOG),
+    NO_WORKSPACE_LINEAR,
+    Layer.succeed(SentryApp, sentryAppService(undefined, ["SENTRY_APP_CLIENT_SECRET"])),
+  );
+  const alerts = {
+    kind: "integration",
+    provider: "sentry",
+    event: "alert-triggered",
+    filters: { project: ["web"], level: ["error", "fatal"] },
+  };
+  const made = {
+    name: "Fix Sentry alerts",
+    prompt: "Fix the error the alert names.",
+    trigger: alerts,
+  };
+  const automationOf = (answer: WireRecord) =>
+    isRecord(answer.automation) ? answer.automation : {};
+  const rejected = (reason: string) => ({ status: ACTION_RESULT_STATUS.REJECTED, reason });
+
+  assert.deepEqual(
+    await unconfigured(CODER_TOOL.CREATE_AUTOMATION, made, "unconfigured"),
+    rejected(AUTOMATION_TOOL_REFUSAL.SENTRY_UNCONFIGURED),
+  );
+  assert.deepEqual(
+    await call(CODER_TOOL.CREATE_AUTOMATION, made, "uninstalled"),
+    rejected(AUTOMATION_TOOL_REFUSAL.SENTRY_NOT_INSTALLED),
+  );
+  const weekly = automationOf(
+    await call(
+      CODER_TOOL.CREATE_AUTOMATION,
+      {
+        name: "Weekly audit",
+        prompt: "Audit the errors.",
+        trigger: { kind: "schedule", cron: "0 9 * * 1", timezone: "Europe/London" },
+      },
+      "weekly",
+    ),
+  );
+  assert.ok(isWireString(weekly.id), JSON.stringify(weekly));
+  const toSentry = {
+    automationId: weekly.id,
+    trigger: { kind: "integration", provider: "sentry", event: "issue-created" },
+  };
+  assert.deepEqual(
+    await call(CODER_TOOL.UPDATE_AUTOMATION, toSentry, "switch-uninstalled"),
+    rejected(AUTOMATION_TOOL_REFUSAL.SENTRY_NOT_INSTALLED),
+  );
+
+  await database.run(
+    linkIntegrationInstallation({
+      provider: "sentry",
+      externalId: "sentry-installation",
+      organizationId: workspaceId,
+      userId: agents.caller.userId,
+      accountLabel: "acme",
+    }),
+  );
+  assert.deepEqual(
+    await unconfigured(CODER_TOOL.UPDATE_AUTOMATION, toSentry, "switch-unconfigured"),
+    rejected(AUTOMATION_TOOL_REFUSAL.SENTRY_UNCONFIGURED),
+  );
+  const created = await call(
+    CODER_TOOL.CREATE_AUTOMATION,
+    { ...made, guards: { maxConcurrentRuns: 1, dailyRunCap: 10, subjectCooldownHours: 6 } },
+    "installed",
+  );
+  assert.equal(created.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(created));
+  assert.deepEqual(
+    [automationOf(created).trigger, automationOf(created).guards],
+    [alerts, { maxConcurrentRuns: 1, dailyRunCap: 10, subjectCooldownHours: 6 }],
+  );
+  const switched = await call(CODER_TOOL.UPDATE_AUTOMATION, toSentry, "switch-installed");
+  assert.equal(switched.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(switched));
+  assert.deepEqual(automationOf(switched).trigger, toSentry.trigger);
+  assert.deepEqual(
+    await call(
+      CODER_TOOL.UPDATE_AUTOMATION,
+      {
+        automationId: weekly.id,
+        guards: { maxConcurrentRuns: 1, dailyRunCap: 10, subjectCooldownHours: 169 },
+      },
+      "cooldown-too-long",
+    ),
+    rejected(AUTOMATION_TOOL_REFUSAL.UNREADABLE_UPDATE),
   );
 });
