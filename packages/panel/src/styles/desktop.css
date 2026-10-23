@@ -3833,10 +3833,8 @@ ul.actor-stack {
   margin-bottom: var(--luke-space-6);
 }
 
-/* What fires a suggestion, or an automation in the list, on a tile, so a
-   row and a suggestion read as the same kind of thing. */
-.automation-suggestion-glyph,
-.automation-row-glyph {
+/* What fires a suggestion, on a tile. */
+.automation-suggestion-glyph {
   display: grid;
   width: 32px; /* off-scale */
   height: 32px; /* off-scale */

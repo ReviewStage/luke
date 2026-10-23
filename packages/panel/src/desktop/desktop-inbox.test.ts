@@ -4684,7 +4684,10 @@ test("an automation's group wears its clock tile and hangs its card, as its crum
   await settle();
   const crumb = page.querySelector<HTMLButtonElement>('nav[aria-label="Path"] button');
   assert.ok(crumb, "the automation's crumb is drawn");
-  assert.ok(crumb.querySelector(".lucide-clock"), "the automation's crumb wears its clock");
+  assert.ok(
+    crumb.querySelector('.actor-mark[data-kind="automation"]'),
+    "the automation's crumb wears its clock tile, as its group does",
+  );
   assert.match(hoveredCard(crumb, '[data-actor-card="automation"]') ?? "", /Nightly flake sweep/u);
   assert.equal(
     document.querySelector('.luke-tooltip-card [data-actor-card="automation"] button')?.textContent,

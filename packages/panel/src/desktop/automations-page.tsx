@@ -40,6 +40,8 @@ import {
   ONE_LINE_END,
   OneLine,
   PAGE_FRAME,
+  RowHint,
+  RowHintOptions,
   SETTINGS_SECTION_FRAME,
   SettingsRow,
   SettingsSection,
@@ -58,21 +60,22 @@ import {
 } from "@luke/ui";
 import { momentText } from "@luke/ui/time-format";
 import { BotIcon, ChevronRightIcon, GitPullRequestIcon, PlusIcon, ZapIcon } from "lucide-react";
-import { Fragment, useEffect, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { useAct } from "../act.js";
+import { ACTOR_SIZE, ActorMark, AutomationCard, automationActor } from "../actor-ref.js";
 import { useAppCommand } from "../app-commands.js";
 import { LinkWorkspaceProvider, useCopyLinkItem } from "../copy-link-item.js";
 import { NOT_FOUND_THING, NotFound } from "../not-found.js";
 import { useSentryRead } from "../settings/use-sentry-read.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
-import { GLYPH_STATE, glyphStateWords, StateGlyph, stateEndMark } from "../state-glyph.js";
+import { GLYPH_STATE, glyphStateWords, stateEndMark } from "../state-glyph.js";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast.js";
 import { useExperiment } from "../use-app-state.js";
 import { ActionMenu } from "./action-menu.js";
 import { AutomationEditor, type SentryOffer } from "./automation-editor.js";
 import { OWNER_MARK_SIZE, OwnerMark } from "./automation-owner.js";
-import { AutomationRunsPanel, FiringGlyph, STANDING_GLYPH } from "./automation-runs-panel.js";
+import { AutomationRunsPanel, STANDING_GLYPH } from "./automation-runs-panel.js";
 import {
   automationNarrowLine,
   automationNextText,
@@ -184,10 +187,9 @@ function OwnerCell({
 }
 
 /**
- * One automation's row: the glyph of what fires it on a tile, as a
- * suggestion's is, wearing where its newest run stands, its name over what
- * fires it, its owner, when it runs next with a failure's mark before it,
- * and its switch. The owner and the next run each keep a column of their
+ * One automation's row: its clock tile, wearing where its newest run
+ * stands, its name over what fires it, its owner, when it runs next with a
+ * failure's mark before it, and its switch, hanging the automation's card. The owner and the next run each keep a column of their
  * own, so they line up down the card whatever each row says. Everything but the switch is one press
  * that opens its page, as a sidebar task's row is, so the row opens wherever
  * it is pressed and the switch beside the press only switches. Its
@@ -216,6 +218,12 @@ function AutomationRow({
   const next = automationNext(automation);
   const menu = useMenu(true);
   const press = useRef<HTMLElement | null>(null);
+  // Note that the row's item is its press's parent, which its card counts as its control, as a sidebar task's row does.
+  const item = useRef<HTMLElement | null>(null);
+  const hold = useCallback((node: HTMLElement | null) => {
+    press.current = node;
+    item.current = node?.parentElement ?? null;
+  }, []);
   const copyLink = useCopyLinkItem()({ kind: LINK_PLACE.AUTOMATION, automationId: automation.id });
   // Note that the glyph is the row's decoration, so its working word is said in the row's words instead.
   const working = state === GLYPH_STATE.WORKING ? glyphStateWords(state, false) : undefined;
@@ -223,69 +231,72 @@ function AutomationRow({
   const hiddenWorking = working === undefined ? null : <VisuallyHidden>{working}</VisuallyHidden>;
   return (
     <>
-      <ListRow
-        ref={(node) => {
-          press.current = node;
-        }}
-        leading={
-          <span className="automation-row-glyph">
-            <StateGlyph glyph={<FiringGlyph of={automation.trigger} />} state={state} />
-          </span>
-        }
-        title={
-          <span className="automation-row-name" data-enabled={String(automation.enabled)}>
-            {automation.name}
-          </span>
-        }
-        description={
-          narrow ? (
-            <>
-              {hiddenWorking}
-              {stateEndMark(state, true)}
-              {automationNarrowLine(automation, trigger, now)}
-            </>
-          ) : (
-            trigger
-          )
-        }
-        meta={
-          narrow ? undefined : (
-            <span className="automation-row-meta">
-              {hiddenWorking}
-              <OwnerCell
-                owner={automationOwner(automation)}
-                mine={automation.mine === true}
-                workspace={workspace}
-              />
-              <span className="automation-row-next">
-                {stateEndMark(state, true)}
-                <Tooltip label={next.kind === AUTOMATION_NEXT.AT ? momentText(next.at) : undefined}>
-                  <Text
-                    as={TEXT_ELEMENT.SPAN}
-                    variant={TEXT_VARIANT.INHERIT}
-                    truncate
-                    className="automation-row-when"
-                  >
-                    {automationNextText(automation, now)}
-                  </Text>
-                </Tooltip>
-              </span>
+      <RowHintOptions
+        card={<AutomationCard automation={automation} workspaceName={workspace?.name} />}
+        cardBeside
+        cardRegion={item}
+      >
+        <ListRow
+          ref={hold}
+          leading={<ActorMark actor={automationActor(automation)} size={ACTOR_SIZE.ROW} />}
+          title={
+            <span className="automation-row-name" data-enabled={String(automation.enabled)}>
+              {automation.name}
             </span>
-          )
-        }
-        actions={
-          <Switch
-            checked={automation.enabled}
-            label={
-              automation.enabled ? `Turn off ${automation.name}` : `Turn on ${automation.name}`
-            }
-            onChange={(enabled) => onToggle(enabled)}
-            {...NO_CONTEXT_MENU}
-          />
-        }
-        onPress={onOpen}
-        contextMenu={copyLink === undefined ? undefined : menu.contextMenu(press)}
-      />
+          }
+          description={
+            narrow ? (
+              <>
+                {hiddenWorking}
+                {stateEndMark(state, true)}
+                {automationNarrowLine(automation, trigger, now)}
+              </>
+            ) : (
+              trigger
+            )
+          }
+          meta={
+            narrow ? undefined : (
+              <span className="automation-row-meta">
+                {hiddenWorking}
+                <OwnerCell
+                  owner={automationOwner(automation)}
+                  mine={automation.mine === true}
+                  workspace={workspace}
+                />
+                <span className="automation-row-next">
+                  {stateEndMark(state, true)}
+                  <Tooltip
+                    label={next.kind === AUTOMATION_NEXT.AT ? momentText(next.at) : undefined}
+                  >
+                    <Text
+                      as={TEXT_ELEMENT.SPAN}
+                      variant={TEXT_VARIANT.INHERIT}
+                      truncate
+                      className="automation-row-when"
+                    >
+                      {automationNextText(automation, now)}
+                    </Text>
+                  </Tooltip>
+                </span>
+              </span>
+            )
+          }
+          actions={
+            <Switch
+              checked={automation.enabled}
+              label={
+                automation.enabled ? `Turn off ${automation.name}` : `Turn on ${automation.name}`
+              }
+              onChange={(enabled) => onToggle(enabled)}
+              {...NO_CONTEXT_MENU}
+            />
+          }
+          hint={{ Hint: RowHint, label: automation.name }}
+          onPress={onOpen}
+          contextMenu={copyLink === undefined ? undefined : menu.contextMenu(press)}
+        />
+      </RowHintOptions>
       {menu.drawn === undefined || copyLink === undefined ? null : (
         <ActionMenu
           label={ROW_ACTIONS}
