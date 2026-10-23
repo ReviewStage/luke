@@ -1,5 +1,5 @@
 import { APP_SETTING_SCHEMA, type Theme } from "@luke/settings";
-import { Context, Effect, type Scope } from "effect";
+import { Context, Effect } from "effect";
 
 /**
  * The slice of Electron's `nativeTheme` this process steers: the override it
@@ -36,21 +36,3 @@ export const applyThemePreference = /* @__PURE__ */ Effect.fn("desktop/applyThem
     if (theme.themeSource !== wanted) theme.themeSource = wanted;
   },
 );
-
-/**
- * Hands `repaint` whether the app draws dark now, and again each time that
- * moves — a new preference applied, or the Mac changing under a System
- * preference — until the scope closes, which takes the listener back.
- */
-export const followAppearance = (
-  repaint: (dark: boolean) => void,
-): Effect.Effect<void, never, NativeTheme | Scope.Scope> =>
-  Effect.gen(function* () {
-    const theme = yield* NativeTheme;
-    const updated = (): void => repaint(theme.shouldUseDarkColors);
-    updated();
-    yield* Effect.acquireRelease(
-      Effect.sync(() => theme.on("updated", updated)),
-      () => Effect.sync(() => theme.removeListener("updated", updated)),
-    );
-  });
