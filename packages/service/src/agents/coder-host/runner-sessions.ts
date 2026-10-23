@@ -1139,19 +1139,8 @@ export const runnerSessions = <
         }).pipe(Effect.tapError(() => Effect.ignore(api.deleteSandbox(name))));
       });
 
-    /**
-     * A message to the session, under the agent's runner lease: the sandbox
-     * and the agent read afresh, since a call the lease waited behind may
-     * have relaunched. `waitOnImage` is whether a relaunch on a fresh sandbox
-     * waits on an image still being prepared (`IMAGE_READY`), as it does
-     * once the message's answer has left (`send`).
-     */
-    const sendHolding = (
-      sessionId: string,
-      message: EveMessage<Turn>,
-      sent: RunnerMessage,
-      waitOnImage: boolean,
-    ) =>
+    /** A message to the session, under the agent's runner lease: the sandbox and the agent read afresh, since a call the lease waited behind may have relaunched. */
+    const sendHolding = (sessionId: string, message: EveMessage<Turn>, sent: RunnerMessage) =>
       Effect.gen(function* () {
         // The agent is read beside the sandbox, and its read answers only for a sandbox found.
         const [found, agentRead] = yield* Effect.all(
@@ -1206,7 +1195,7 @@ export const runnerSessions = <
           // that fails (the image still preparing, a clone refused) leaves the session standing
           // for the next message to try again rather than retired; a delete that fails leaves
           // the expired one beside the fresh one, which `listTagged` lists after it as the older.
-          yield* openedSandbox(agent, sessionId, sent, yield* harness.launch(agent), waitOnImage);
+          yield* openedSandbox(agent, sessionId, sent, yield* harness.launch(agent), false);
           yield* api
             .deleteSandbox(found.value.name)
             .pipe(
@@ -1389,27 +1378,30 @@ export const runnerSessions = <
         }),
 
       // A relaunch on a fresh sandbox that finds the image still being prepared takes the message
-      // all the same, and waits on the image's build once the answer has left, under the lease
-      // again, as an open's launch does; the message is sent afresh then, so a sandbox a message
-      // sent meanwhile relaunched is written to rather than opened twice. A caller with no
-      // after-response door is answered that the image is being prepared, as before.
+      // all the same, and waits on the image's build once the answer has left. Note that the wait
+      // holds no runner lease, because a message sent meanwhile waits on the lease no longer than
+      // its own deadline; the lease is taken once the build ended and the message sent afresh, so
+      // a sandbox a message sent meanwhile relaunched is written to rather than opened twice. A
+      // caller with no after-response door is answered that the image is being prepared, as before.
       send: (sessionId, message) =>
         Effect.gen(function* () {
           const after = yield* Effect.serviceOption(AfterResponse);
           return yield* Effect.gen(function* () {
             const agent = yield* agentOf(message.conversationId);
             const sent = messageLine(message);
-            return yield* holdingRunner(
-              agent.id,
-              sendHolding(sessionId, message, sent, false),
-            ).pipe(
+            return yield* holdingRunner(agent.id, sendHolding(sessionId, message, sent)).pipe(
               Effect.catchIf(
                 (failure) => failure instanceof ImagePreparing && Option.isSome(after),
                 () =>
                   Effect.as(
                     afterResponse(
                       `A ${harness.name} relaunch`,
-                      holdingRunner(agent.id, sendHolding(sessionId, message, sent, true)).pipe(
+                      Effect.flatMap(AgentSandboxImage, (image) =>
+                        Effect.ignore(image.prepared),
+                      ).pipe(
+                        Effect.andThen(
+                          holdingRunner(agent.id, sendHolding(sessionId, message, sent)),
+                        ),
                         Effect.catch(launchFailed(agent)),
                       ),
                     ),

@@ -1186,7 +1186,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
   );
 
   it.effect(
-    "a message to an expired sandbox whose image is still being prepared is taken at once, and its relaunch waits on the image's build past the answer, then runs on it",
+    "a message to an expired sandbox whose image is still being prepared is taken at once, its relaunch waiting on the image's build past the answer holding no lease, so a later message is taken too, and both run on the one fresh sandbox",
     () =>
       Effect.gen(function* () {
         vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
@@ -1227,16 +1227,33 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
           .pipe(Effect.provide(kept.layer));
         const relaunching = yield* Effect.forkChild(kept.run);
         yield* turnsPass;
+        // Note that the clock never moves, so a later message waiting on a held lease never answers.
+        const later = yield* preparing
+          .send(opened.sessionId, message(agent, "And the docs."))
+          .pipe(Effect.provide(kept.layer));
+        const laterRelaunch = yield* Effect.forkChild(kept.run);
+        yield* turnsPass;
 
         assert.equal(taken.outcome, EVE_SEND_OUTCOME.ACCEPTED);
+        assert.equal(later.outcome, EVE_SEND_OUTCOME.ACCEPTED);
         assert.equal(api.sandboxes.length, 1);
         assert.equal(expired.deleted, false);
-        // Note that the clock never moves: the relaunch runs on the build's end, not on a tick.
+        // The relaunch runs on the build's end, not on a tick; the later message's then waits its
+        // turn at the lease, which it polls.
         yield* Deferred.succeed(built, undefined);
-        yield* Fiber.join(relaunching);
+        yield* turnsPass;
+        assert.equal(api.sandboxes.length, 2);
+        yield* across(
+          Effect.all([Fiber.join(relaunching), Fiber.join(laterRelaunch)]),
+          CODER.RUNNER_LEASE.POLL,
+          3,
+        );
         assert.equal(expired.deleted, true);
+        assert.equal(api.sandboxes.length, 2);
         assert.equal(api.sandboxes.at(-1)?.status, "running");
-        assert.ok(JSON.stringify(linesOf(api.commands.at(-1))).includes("Now the emails."));
+        const stdin = JSON.stringify(api.commands.slice(1).map(linesOf));
+        assert.ok(stdin.includes("Now the emails."));
+        assert.ok(stdin.includes("And the docs."));
       }),
   );
 
