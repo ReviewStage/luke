@@ -23,6 +23,7 @@ import {
   Tooltip,
   UnpinIcon,
   useMenu,
+  useMinute,
   VisuallyHidden,
 } from "@luke/ui";
 import { isAgentTab, isChangesTab, isFileTab } from "@luke/ui/tab-strip-model";
@@ -42,7 +43,7 @@ import { ActionMenu, type MenuAction } from "./action-menu.js";
 import { agentTranscriptRead } from "./agent-actions.js";
 import { useRowPlace, withRowMoves } from "./row-moves.js";
 import { type TranscriptCopier, useTranscriptCopier } from "./strip-tabs.js";
-import { PullRequestLine, RepositoryDetail } from "./task-card.js";
+import { PullRequestLine, RepositoryDetail, taskCardOf } from "./task-card.js";
 
 /**
  * sidebar-pinned-tab.tsx -- a tab of the task's columns pinned to the sidebar: its row under Pinned, its Unpin, and its menu.
@@ -320,6 +321,7 @@ export function SidebarPinnedTab({
 }): React.JSX.Element {
   const pin = namedPin(kept, task);
   const copied = useTranscriptCopier();
+  const now = useMinute();
   const menu = useMenu(tasks.shown && inSight);
   const place = useRowPlace();
   const row = useRef<HTMLElement | null>(null);
@@ -338,14 +340,18 @@ export function SidebarPinnedTab({
     <>
       <RowHintOptions
         card={
-          <PinnedTabCard
-            pin={pin}
-            task={task}
-            agent={agent}
-            gone={gone}
-            tasks={tasks}
-            onOpenTask={onOpenTask}
-          />
+          pin.tab === SIDE_PANEL_TAB.PLAN ? (
+            taskCardOf(tasks, task, now)
+          ) : (
+            <PinnedTabCard
+              pin={pin}
+              task={task}
+              agent={agent}
+              gone={gone}
+              tasks={tasks}
+              onOpenTask={onOpenTask}
+            />
+          )
         }
         cardBeside
         cardRegion={item}

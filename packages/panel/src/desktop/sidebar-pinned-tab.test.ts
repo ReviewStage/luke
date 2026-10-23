@@ -9,7 +9,7 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
-import type { PinnedTab } from "../tasks/use-side-panel.js";
+import { type PinnedTab, SIDE_PANEL_TAB } from "../tasks/use-side-panel.js";
 import { type AnyAct, FAKE_ANSWER, type FakeActAnswer, fakeActs } from "../testing/app-bridge.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
@@ -81,7 +81,7 @@ afterEach(() => {
 });
 
 /** The pin's row drawn in the sidebar's list, answering its press. */
-function drawPin(): HTMLElement {
+function drawPin(pin: PinnedTab = PIN): HTMLElement {
   const list = document.body.appendChild(document.createElement("ul"));
   root = createRoot(list);
   act(() =>
@@ -90,7 +90,7 @@ function drawPin(): HTMLElement {
         AtomRegistry.make(),
         createElement(SidebarPinnedTab, {
           tasks: tasksControl({ tasks: [TASK] }),
-          pin: PIN,
+          pin,
           task: TASK,
           current: false,
           inSight: true,
@@ -176,4 +176,13 @@ test("a pinned agent's card hung again after its read failed asks again, and sho
   await settled();
   assert.deepEqual(reads, [AGENT, AGENT]);
   assert.match(card()?.textContent ?? "", /Expire invitations/u);
+});
+
+test("a pinned Plan tab hangs its task's own card, an agent's pin its own", async () => {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "performance"] });
+  restOn(drawPin({ task: TASK.id, tab: SIDE_PANEL_TAB.PLAN, label: "Plan", at: 1 }));
+  await settled();
+  const taskCard = document.querySelector(".luke-tooltip-card [data-task-card]");
+  assert.match(taskCard?.textContent ?? "", /Teammate invitations/u);
+  assert.equal(card(), null, "no pin card stands beside it");
 });
