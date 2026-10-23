@@ -77,6 +77,7 @@ export * from "./components/readable-controls/readable-controls.js";
 export * from "./components/remote-surface/remote-surface.js";
 export * from "./components/resize-corner/resize-corner.js";
 export * from "./components/resize-edge/resize-edge.js";
+export * from "./components/reveal/reveal.js";
 export * from "./components/rolling-number/rolling-number.js";
 export * from "./components/saved-tick/saved-tick.js";
 export * from "./components/scroll-area/scroll-area.js";
