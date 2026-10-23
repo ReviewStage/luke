@@ -15,7 +15,7 @@ import {
   TextArea,
   Tooltip,
 } from "@luke/ui";
-import { QUOTE_GAP, quoteOf } from "@luke/ui/reply-quote";
+import { cutReply, QUOTE_GAP, quoteOf } from "@luke/ui/reply-quote";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { type RefObject, useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
@@ -96,7 +96,9 @@ import { useKnownNames } from "./use-known-names.js";
  * always be written. Words selected in the chat and replied to are laid
  * in as a quote block where the caret stands, as the agent box lays them
  * (`reply-to-selection.tsx`), through the door the box hands its place
- * (`replyDoor`); the plain box takes them as a blockquote at its end. What
+ * (`replyDoor`), or handed with the box as it opens (`pendingQuote`) and
+ * laid in once its editor stands; the plain box takes them as a
+ * blockquote at its end, cut to the room the post has left. What
  * is typed is a person's words, so the box is out of a session recording
  * (`ph-no-capture`) as well as masked.
  */
@@ -133,6 +135,12 @@ export interface ChatComposerMentions {
   readonly crowded: (text: string) => boolean;
 }
 
+/** A quote handed to a box before it could take it, and what is told once it is in. */
+export interface PendingQuote {
+  readonly words: string;
+  readonly onQuoted: () => void;
+}
+
 /** What a chat box is handed by the place it stands in. */
 interface ChatComposerProps {
   /** The channel the box posts in, which its draft is kept under. */
@@ -149,6 +157,8 @@ interface ChatComposerProps {
   readonly compact?: boolean;
   /** Where the box hands the chat's Reply the door that lays a quote in, answering whether it did; none where nothing replies. */
   readonly replyDoor?: RefObject<((words: string) => boolean) | undefined> | undefined;
+  /** A quote to lay in once the box can take it, as a Reply that opened the box hands it, `onQuoted` told once it is in. */
+  readonly pendingQuote?: PendingQuote | undefined;
   /**
    * Sends the words and the pictures, either of which may be empty, the box
    * already empty for the next post; where they are refused, hands `takeBack`
@@ -364,10 +374,15 @@ function usePastedMention(doors: MentionDoors): (words: string) => MentionNode |
         );
 }
 
-/** Hands `door` the box's way of laying a quote in, the latest drawn, for as long as the box stands. */
+/**
+ * Hands `door` the box's way of laying a quote in, the latest drawn, for as
+ * long as the box stands, and lays `pending` in once the box is `ready`.
+ */
 function useReplyDoor(
   door: ChatComposerProps["replyDoor"],
   quote: (words: string) => boolean,
+  pending: PendingQuote | undefined,
+  ready: boolean,
 ): void {
   const latest = useRef(quote);
   useLayoutEffect(() => {
@@ -380,6 +395,24 @@ function useReplyDoor(
       door.current = undefined;
     };
   }, [door]);
+  // Note that a quote handed while the editor's bundle still loads waits for it, rather than going nowhere.
+  useEffect(() => {
+    if (ready && pending !== undefined && latest.current(pending.words)) pending.onQuoted();
+  }, [pending, ready]);
+}
+
+/** A quote as the plain box writes it at the end of `draft`, cut to the room the post has left; nothing where no word of it fits. */
+function plainQuoted(draft: string, words: string): string | undefined {
+  const before = draft.trimEnd();
+  const lead = before === "" ? "" : `${before}${QUOTE_GAP}`;
+  const room = CHAT_BOUNDS.MAX_TEXT_CHARS - lead.length - QUOTE_GAP.length;
+  let kept = words;
+  while (kept !== "") {
+    const quoted = quoteOf(kept);
+    if (quoted.length <= room) return `${lead}${quoted}${QUOTE_GAP}`;
+    kept = cutReply(kept, kept.length - (quoted.length - room));
+  }
+  return undefined;
 }
 
 /** The box on the agent box's editor: `@` and `#` open the app's mention list at the word, and the microphone lays a dictation in at the caret. */
@@ -391,6 +424,7 @@ function EditorChatComposer({
   keywords,
   compact,
   replyDoor,
+  pendingQuote,
   onSend,
   module,
 }: ChatComposerProps & { module: PlanEditorModule | undefined }): React.JSX.Element {
@@ -420,7 +454,12 @@ function EditorChatComposer({
   const doors = useMentionDoors();
   const pasted = usePastedMention(doors);
   // The chat's Reply lays its quote in where the caret stands, for as long as the box stands; the editor refuses it while a dictation holds the box.
-  useReplyDoor(replyDoor, (words) => editor.current?.insertQuote(words) === true);
+  useReplyDoor(
+    replyDoor,
+    (words) => editor.current?.insertQuote(words) === true,
+    pendingQuote,
+    module !== undefined,
+  );
 
   // Note that a send made from the box hands the caret back to it at once,
   // as a press of Send takes it, unless the caret went somewhere else
@@ -562,17 +601,24 @@ function PlainChatComposer({
   mentions,
   compact,
   replyDoor,
+  pendingQuote,
   onSend,
 }: ChatComposerProps): React.JSX.Element {
   const field = useRef<HTMLTextAreaElement>(null);
   const { draft, setDraft, empty, note, send } = useChatSend(chatPlace(channelId, replyTo), onSend);
   // Note that the plain box has no quote block, so a reply's quote is written at its end as the Markdown it sends as.
-  useReplyDoor(replyDoor, (words) => {
-    const before = draft.trimEnd();
-    setDraft(`${before === "" ? "" : `${before}${QUOTE_GAP}`}${quoteOf(words)}${QUOTE_GAP}`);
-    field.current?.focus();
-    return true;
-  });
+  useReplyDoor(
+    replyDoor,
+    (words) => {
+      const quoted = plainQuoted(draft, words);
+      if (quoted === undefined) return false;
+      setDraft(quoted);
+      field.current?.focus();
+      return true;
+    },
+    pendingQuote,
+    true,
+  );
   return (
     <div className="agent-composer chat-composer" data-compact={String(compact === true)}>
       <PromptInput onSubmit={send}>

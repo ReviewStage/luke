@@ -33,7 +33,7 @@ import { type ChatPlace, type ChatPost, FOR_YOU } from "@luke/ui/chat-model";
 import type { PictureAnswer } from "@luke/ui/picture-cache";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
-import { act, createElement, useRef, useState } from "react";
+import { act, createElement, type RefObject, useRef, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { sideBundles } from "../bundle-loader.js";
@@ -1058,7 +1058,7 @@ test("until the chat is read, the window's Chat keeps its titled bar with New ch
   assert.ok(tabWait.closest(".luke-spinner-region"), "the wait fills the plan's Chat tab");
 });
 
-test("a direct message between two others reads as theirs, named by both, with no box to post in it and no Reply under its messages", () => {
+test("a direct message between two others reads as theirs, named by both, with no box to post in it and no Reply under its messages or over their words", () => {
   const BETWEEN = "5b6c7d8e-9f0a-4b1c-8d2e-3f4a5b6c7d8e";
   const page = mount((chat) => {
     const agents = chat.answer.members.filter((each) => each.kind === MEMBER_KIND.AGENT);
@@ -1122,6 +1122,15 @@ test("a direct message between two others reads as theirs, named by both, with n
     /Only Add teammate invitations and Invite emails post in this conversation\./u,
   );
   assert.equal(page.querySelector(".chat-message button[aria-expanded]"), null);
+  // Words selected in it have no box to be quoted into, so no Reply stands over them.
+  const said = page.querySelector(".chat-message .chat-words") ?? assert.fail("its words");
+  const first = said.textContent?.trim().split(" ")[0] ?? "";
+  selectWithin(said, first, first, first);
+  assert.equal(
+    [...document.body.querySelectorAll(".reply-to-selection button")].length,
+    0,
+    "no Reply stands where nothing takes a quote",
+  );
   // Its open ask reads as waiting on the other of the two, with nothing to answer it by.
   const ask = page.querySelector('.chat-ask[data-status="open"]');
   assert.equal(
@@ -1315,7 +1324,9 @@ test("a post addressing more members than it tells says under its box that only 
 });
 
 /** Chat's box where the editor's bundle could not be loaded, every post it makes written down. */
-async function plainChat() {
+async function plainChat(
+  replyDoor: RefObject<((words: string) => boolean) | undefined> | undefined = undefined,
+) {
   const sent: string[] = [];
   const container = document.createElement("div");
   document.body.append(container);
@@ -1334,6 +1345,7 @@ async function plainChat() {
             label: "Message #general",
             mentions: NO_MENTIONS,
             keywords: [],
+            replyDoor,
             onSend: (text) => {
               sent.push(text);
               return Promise.resolve(undefined);
@@ -1376,6 +1388,25 @@ test("where the editor's bundle could not be loaded, the box is a plain field th
   assert.deepEqual(sent, ["@tomorrow ship it"]);
   assert.equal(field.getAttribute("enterkeyhint"), "send");
   assert.equal(container.querySelector('button[aria-label="Dictate"]'), null);
+});
+
+test("where the editor's bundle could not be loaded, a reply's quote is written at the plain field's end as a blockquote, cut to the room the post has left", async () => {
+  const door: { current: ((words: string) => boolean) | undefined } = { current: undefined };
+  const { field } = await plainChat(door);
+  const long = "a".repeat(2_000);
+
+  act(() => {
+    door.current?.("Happy to wait");
+  });
+  assert.equal(field.value, "> Happy to wait\n\n");
+  act(() => {
+    door.current?.(long);
+  });
+  act(() => {
+    door.current?.(long);
+  });
+  assert.ok(field.value.length <= CHAT_BOUNDS.MAX_TEXT_CHARS, "the post stays sendable");
+  assert.ok(field.value.trimEnd().endsWith("…"), "the quote that would not fit is cut short");
 });
 
 test("on a coarse pointer the plain field's Enter is a new line, its return key says so, and ⌘+Enter posts", async () => {

@@ -64,7 +64,6 @@ import {
   memo,
   useCallback,
   useContext,
-  useEffect,
   useLayoutEffect,
   useMemo,
   useRef,
@@ -884,9 +883,11 @@ const ThreadRow = memo(function ThreadRow({
     setQuoting(words);
     return true;
   });
-  useEffect(() => {
-    if (quoting !== undefined && threadDoor.current?.(quoting) === true) setQuoting(undefined);
-  }, [quoting]);
+  const pendingQuote = useMemo(
+    () =>
+      quoting === undefined ? undefined : { words: quoting, onQuoted: () => setQuoting(undefined) },
+    [quoting],
+  );
   return (
     <li
       ref={row}
@@ -940,6 +941,7 @@ const ThreadRow = memo(function ThreadRow({
                 keywords={context.keywords}
                 compact
                 replyDoor={threadDoor}
+                pendingQuote={pendingQuote}
                 onSend={(text, attachments, takeBack) =>
                   context.send(
                     { channelId: message.channelId, replyTo: message.seq },
@@ -1422,7 +1424,8 @@ function PlaceView({
           </Text>
         </div>
       )}
-      {reply}
+      {/* Note that a channel the reader cannot post in has no box a quote could go to, so it offers no Reply. */}
+      {postsIn(chat, channel) ? reply : null}
     </section>
   );
 }
