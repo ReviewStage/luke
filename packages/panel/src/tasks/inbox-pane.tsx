@@ -50,6 +50,7 @@ import {
   IconButton,
   LAYOUT_ELEMENT,
   ONE_LINE_END,
+  PageToolbar,
   Stack,
   SteppedBack,
   TEXT_TONE,
@@ -1993,33 +1994,37 @@ export function InboxPane({
       aria-label={cardTitle(item.title)}
       hidden={hidden}
     >
-      <header className="desktop-toolbar">
-        {onBack === undefined ? null : (
-          <FoldingButton label="Inbox" icon={<BackIcon />} onClick={onBack} hint={BackHint} />
-        )}
-        <Crumbs
-          holder={holder}
-          by={by}
-          doors={doors}
-          title={cardTitle(item.title)}
-          titleShown={headingAway}
-        />
-        {/* The bar ends in the pager, where the item stands alone, and the item's ⋯ menu. */}
-        <div className="desktop-toolbar-actions inbox-item-actions">
-          {pager === undefined ||
-          (pager.onPrevious === undefined && pager.onNext === undefined) ? null : (
-            <InboxPagerControls pager={pager} />
-          )}
-          <InboxItemMenu
-            key={item.id}
-            holder={holder}
-            item={item}
-            shown={!hidden}
-            onMark={doors.onMark}
-            onClose={doors.onClose}
-          />
-        </div>
-      </header>
+      <PageToolbar
+        lead={
+          <>
+            {onBack === undefined ? null : (
+              <FoldingButton label="Inbox" icon={<BackIcon />} onClick={onBack} hint={BackHint} />
+            )}
+            <Crumbs
+              holder={holder}
+              by={by}
+              doors={doors}
+              title={cardTitle(item.title)}
+              titleShown={headingAway}
+            />
+            {/* The bar ends in the pager, where the item stands alone, and the item's ⋯ menu. */}
+            <div className="desktop-toolbar-actions inbox-item-actions">
+              {pager === undefined ||
+              (pager.onPrevious === undefined && pager.onNext === undefined) ? null : (
+                <InboxPagerControls pager={pager} />
+              )}
+              <InboxItemMenu
+                key={item.id}
+                holder={holder}
+                item={item}
+                shown={!hidden}
+                onMark={doors.onMark}
+                onClose={doors.onClose}
+              />
+            </div>
+          </>
+        }
+      />
       <Fill className="desktop-inbox">
         {/* The thread is a log as an agent's transcript is: each item opens at its newest message, the box at its end, and keeps to it while the reader is there; scrolled up, the way back floats over its foot. */}
         <Conversation subject={item.id} list={board}>
