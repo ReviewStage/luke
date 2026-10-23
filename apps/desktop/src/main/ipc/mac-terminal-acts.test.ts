@@ -82,6 +82,8 @@ function fixture(
   const opened: ScriptedPort[] = [];
   const started: ScriptedTerminal[] = [];
   const gone = new Map<WebContents, () => void>();
+  /** The closes forked meanwhile, which `drain` runs. */
+  const forked: Effect.Effect<void>[] = [];
   const actPort = testActPort(
     macTerminalProcedures({
       host: {
@@ -128,11 +130,13 @@ function fixture(
         return {
           write: (data) => void terminal.written.push(data),
           resize: (cols, rows) => void terminal.sizes.push(`${cols}x${rows}`),
-          close: () => {
-            terminal.closed = true;
-          },
+          close: () =>
+            Effect.sync(() => {
+              terminal.closed = true;
+            }),
         };
       },
+      fork: (effect) => void forked.push(effect),
     }),
   );
   ports.push(actPort);
@@ -142,6 +146,7 @@ function fixture(
     started,
     terminalOpenedIn,
     pageGone: (sender: WebContents) => gone.get(sender)?.(),
+    drain: Effect.suspend(() => Effect.all(forked.splice(0), { discard: true })),
   };
 }
 
@@ -242,7 +247,7 @@ it.effect(
 
 it.effect("Stop ends the run and keeps its port, so the tab hears it end", () =>
   Effect.gen(function* () {
-    const { actPort, started, opened } = fixture([SET]);
+    const { actPort, started, opened, drain } = fixture([SET]);
     const panel = panelOf();
     yield* actPort.perform({ kind: ACT_KIND.MAC_TERMINAL_OPEN, payload: OPEN }, panel);
 
@@ -250,6 +255,8 @@ it.effect("Stop ends the run and keeps its port, so the tab hears it end", () =>
       { kind: ACT_KIND.MAC_TERMINAL_STOP, payload: { agentId: AGENT_ID } },
       panel,
     );
+    assert.equal(started[0]?.closed, false, "Stop answers before its terminal's close runs");
+    yield* drain;
     started[0]?.exit(143);
 
     assert.equal(started[0]?.closed, true);
@@ -289,18 +296,20 @@ it.effect(
 
 it.effect("a closed tab and a gone page close their terminals; only a panel is answered", () =>
   Effect.gen(function* () {
-    const { actPort, started, opened, pageGone } = fixture([SET]);
+    const { actPort, started, opened, pageGone, drain } = fixture([SET]);
     const panel = panelOf();
     yield* actPort.perform({ kind: ACT_KIND.MAC_TERMINAL_OPEN, payload: OPEN }, panel);
     yield* actPort.perform(
       { kind: ACT_KIND.MAC_TERMINAL_CLOSE, payload: { agentId: AGENT_ID } },
       panel,
     );
+    yield* drain;
     assert.equal(started[0]?.closed, true);
     assert.equal(opened[0]?.closed, true);
 
     yield* actPort.perform({ kind: ACT_KIND.MAC_TERMINAL_OPEN, payload: OPEN }, panel);
     pageGone(panel.sender);
+    yield* drain;
     assert.equal(started[1]?.closed, true);
 
     const voice: ActSender<WebContents> = { ...panelOf(), panel: false, voice: true };
@@ -354,13 +363,14 @@ it.effect(
   "an open of another branch the agent pushed closes the old terminal and starts on the new branch",
   () =>
     Effect.gen(function* () {
-      const { actPort, started, opened } = fixture([SET]);
+      const { actPort, started, opened, drain } = fixture([SET]);
       const panel = panelOf();
       yield* actPort.perform({ kind: ACT_KIND.MAC_TERMINAL_OPEN, payload: OPEN }, panel);
       yield* actPort.perform(
         { kind: ACT_KIND.MAC_TERMINAL_OPEN, payload: { ...OPEN, branch: "luke/next-thing" } },
         panel,
       );
+      yield* drain;
 
       assert.equal(started.length, 2);
       assert.equal(started[0]?.closed, true);

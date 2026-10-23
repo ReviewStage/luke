@@ -2139,6 +2139,55 @@ it.effect(
     }),
 );
 
+it.effect(
+  "a task opens while a section's write still waits on its transaction, which is drawn at once and answered once the followed sidebar carries it",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([
+        task(INVITES, "Teammate invitations", "# Invites", 10),
+        task(BILLING, "Billing export", "# Billing", 20),
+      ]);
+      const { call, last, settled } = yield* subject(service);
+      const launch: TaskSection = {
+        id: SECTION_ID,
+        workspaceId: PERSONAL.id,
+        title: "Launch",
+        createdAt: 5,
+      };
+      service.sections = { sections: [launch], entries: [], agentEntries: [] };
+      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      yield* settled;
+
+      service.sidebarTxid = "51";
+      const placed = { taskId: INVITES, sectionId: SECTION_ID, addedAt: 6 };
+      service.sections = { sections: [launch], entries: [placed], agentEntries: [] };
+      const place = { kind: TASK_SECTION_WRITE.PLACE, taskId: INVITES, sectionId: SECTION_ID };
+      const placing = yield* Effect.forkChild(call(GATEWAY_METHOD.TASKS_WRITE_SECTION, place));
+      yield* settled;
+      assert.deepEqual(service.realtime.awaitingTxids(), ["51"]);
+      assert.deepEqual(
+        last()?.taskSections?.entries,
+        [placed],
+        "the answer is drawn before the wait",
+      );
+
+      const opening = yield* Effect.forkChild(call(GATEWAY_METHOD.TASKS_OPEN, { taskId: BILLING }));
+      yield* settled;
+      yield* TestClock.adjust(Duration.seconds(1));
+      assert.deepEqual(
+        opening.pollUnsafe(),
+        Exit.succeed({ opened: true }),
+        "the open is not held behind the section's wait",
+      );
+      assert.equal(last()?.activeTaskId, BILLING);
+      assert.equal(placing.pollUnsafe(), undefined, "the write still waits for its transaction");
+
+      service.realtime.arrive("51");
+      assert.deepEqual(yield* Fiber.join(placing), { changed: true });
+      assert.deepEqual(service.realtime.awaitingTxids(), []);
+    }),
+);
+
 it.effect("a sign-out drops the view the window drew", () =>
   Effect.gen(function* () {
     const service = fakeService([task(INVITES, "Teammate invitations", "# Draft", 10)]);
