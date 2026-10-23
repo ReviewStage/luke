@@ -154,12 +154,15 @@ function LinkChip({
         data-provider={link.provider}
       >
         <LinkMark link={link} />
-        <span className="new-task-issue-key">
-          {github ? `#${link.issue.number}` : link.issue.identifier}
+        {/* Note that the repository is in the card, because the chip reads `#N title` as every chip of an issue does. */}
+        <span className="new-task-issue-name">
+          <span className="new-task-issue-key">
+            {github ? `#${link.issue.number}` : link.issue.identifier}
+          </span>
+          <OneLine className="new-task-issue-title" words={link.issue.title}>
+            {link.issue.title}
+          </OneLine>
         </span>
-        <OneLine className="new-task-issue-title" words={link.issue.title}>
-          {link.issue.title}
-        </OneLine>
         <span className="new-task-issue-relation">
           <Tooltip label={RELATION_DETAIL[link.relation]}>
             <Chip

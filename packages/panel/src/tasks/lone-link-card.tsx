@@ -17,11 +17,11 @@ import { createContext, type ReactNode, useContext } from "react";
 import { LinesChanged } from "./agent-published.js";
 import { pullRequestStateWord } from "./coding-agent-model.js";
 import { InboxCodeCard, type InboxCodeDoors } from "./inbox-code-card.js";
-import { MentionChipCard } from "./mention-chip.js";
+import { githubName, MentionChipCard } from "./mention-chip.js";
 import { PullRequestMark } from "./pull-request-mark.js";
 import { useMentionDoors } from "./task-mentions.js";
 import { useKnownNames } from "./use-known-names.js";
-import { type LinkStanding, useLinkStanding } from "./use-link-standing.js";
+import { useLinkStanding } from "./use-link-standing.js";
 import { useOpenLink } from "./use-open-link.js";
 
 /**
@@ -95,35 +95,17 @@ function OneRowCard({
   );
 }
 
-/**
- * A pull request's number as its row says it: `#42` where it is of the
- * task's own repository, and its key, `relay#42`, as GitHub answered it or
- * as the address spells it, where it is another's.
- */
-function numberWords(
-  pullRequest: Extract<LoneLink, { kind: typeof LONE_LINK.PULL_REQUEST }>,
-  standing: LinkStanding | undefined,
-  repository: string | null,
-): string {
-  const own =
-    repository !== null && repository.toLowerCase() === pullRequest.repository.toLowerCase();
-  if (own) return `#${pullRequest.number}`;
-  return standing?.key ?? `${pullRequest.repository}#${pullRequest.number}`;
-}
-
 /** A pull request's row: its mark, its number and title, where it stands, and its lines; a press opens it on GitHub. */
 function PullRequestRowCard({
   pullRequest,
   mention,
   target,
   words,
-  repository,
 }: {
   pullRequest: Extract<LoneLink, { kind: typeof LONE_LINK.PULL_REQUEST }>;
   mention: Mention;
   target: string;
   words: string;
-  repository: string | null;
 }): React.JSX.Element {
   const doors = useMentionDoors();
   const openLink = useOpenLink();
@@ -132,10 +114,10 @@ function PullRequestRowCard({
     workspace: doors.place.workspace,
   });
   const known = standing?.pullRequest;
-  const number = numberWords(pullRequest, standing, repository);
-  const title = standing?.title ?? writtenWords(target, words);
+  // Note that the row is named as its chip is, so the two never disagree.
+  const named =
+    githubName(mention, standing) ?? writtenWords(target, words) ?? `#${pullRequest.number}`;
   const state = known === undefined ? undefined : pullRequestStateWord(known);
-  const named = title === undefined ? number : `${number} · ${title}`;
   return (
     <OneRowCard label={CARD_LABEL.PULL_REQUEST} kind={LONE_LINK.PULL_REQUEST}>
       <RowHintOptions
@@ -143,7 +125,7 @@ function PullRequestRowCard({
           <MentionChipCard
             mention={mention}
             target={target}
-            name={writtenWords(target, words) ?? number}
+            name={named}
             doors={doors}
             standing={standing}
           />
@@ -259,13 +241,7 @@ export function LoneLinkCard({
       const mention = decodeMention(target, repository);
       if (mention === undefined) return fallback;
       return (
-        <PullRequestRowCard
-          pullRequest={lone}
-          mention={mention}
-          target={target}
-          words={words}
-          repository={repository}
-        />
+        <PullRequestRowCard pullRequest={lone} mention={mention} target={target} words={words} />
       );
     }
     case LONE_LINK.PAGE:

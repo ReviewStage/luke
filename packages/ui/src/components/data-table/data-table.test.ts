@@ -240,3 +240,11 @@ test("no rows show the empty line in place of the table", () => {
   expect(container.querySelector("table")).toBeNull();
   expect(container.textContent).toBe("No runs yet.");
 });
+
+test("a row a press opens gives only inside its fill, which runs the card's width", () => {
+  const container = draw(createElement(SortedRuns, { heard: [] }));
+  const nightly = container.querySelector("tbody tr");
+  press(nightly?.querySelector("td"));
+
+  expect(nightly?.getAttribute("data-pulse")).toBe("flush");
+});

@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { DIALOG_SIZE, Dialog } from "@luke/ui";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactElement, type ReactNode } from "react";
@@ -220,21 +221,24 @@ test("in a wide room, an open thread keeps the margin card's width", () => {
   assert.equal(pixels(float, getComputedStyle(float).width), 288);
 });
 
-/** New task's dialog card, under the dimmed window that holds it. */
-function composerDialog(): HTMLElement {
-  const backdrop = document.body.appendChild(document.createElement("div"));
-  backdrop.className = "luke-dialog-backdrop";
-  const dialog = backdrop.appendChild(document.createElement("div"));
-  dialog.className = "luke-dialog";
-  dialog.dataset.size = "composer";
-  return dialog;
+/** A composer's dialog card, as New task's stands, under the dimmed window that holds it. */
+async function composerDialog(): Promise<HTMLElement> {
+  await draw(
+    createElement(Dialog, {
+      title: "New task",
+      size: DIALOG_SIZE.COMPOSER,
+      onDismiss: ignore,
+      children: null,
+    }),
+  );
+  return document.querySelector<HTMLElement>(".luke-dialog") ?? assert.fail("the card stands");
 }
 
-test("on a phone, New task's dialog stands 12px from the screen's edges at a card's snug inset", () => {
+test("on a phone, New task's dialog stands 12px from the screen's edges at a card's snug inset", async () => {
   document.documentElement.setAttribute("data-luke-profile", "web");
   document.documentElement.setAttribute("data-luke-room", "narrow");
   layContainersAt({ "luke-dialog-room": PHONE.DIALOG_ROOM }, { touch: true });
-  const dialog = composerDialog();
+  const dialog = await composerDialog();
   const style = getComputedStyle(dialog);
   // The dimmed window keeps 24px either side; the card reaches half of it back.
   assert.equal(24 + pixels(dialog, style.marginLeft), 12);
@@ -243,10 +247,10 @@ test("on a phone, New task's dialog stands 12px from the screen's edges at a car
   assert.equal(pixels(dialog, style.paddingRight), 12);
 });
 
-test("on a desktop, New task's dialog keeps the dimmed window's margins", () => {
+test("on a desktop, New task's dialog keeps the dimmed window's margins", async () => {
   document.documentElement.setAttribute("data-luke-room", "wide");
   layContainersAt({ "luke-dialog-room": DESKTOP.DIALOG_ROOM });
-  const dialog = composerDialog();
+  const dialog = await composerDialog();
   const style = getComputedStyle(dialog);
   assert.equal(pixels(dialog, style.marginLeft), 0, "it stands within the dimmed window's margins");
   assert.equal(pixels(dialog, style.marginRight), 0);
@@ -306,17 +310,17 @@ test("on a touch screen the @ list names no keys at its foot, and with a mouse i
   assert.equal(shown(mentionFoot()), true);
 });
 
-test("a phone on its side, its room narrow though its dimmed window is wide, stands New task's dialog as a phone's", () => {
+test("a phone on its side, its room narrow though its dimmed window is wide, stands New task's dialog as a phone's", async () => {
   document.documentElement.setAttribute("data-luke-profile", "web");
   document.documentElement.setAttribute("data-luke-room", "narrow");
   layContainersAt({ "luke-dialog-room": 702 }, { touch: true });
-  const dialog = composerDialog();
+  const dialog = await composerDialog();
   assert.equal(24 + pixels(dialog, getComputedStyle(dialog).marginLeft), 12);
 });
 
-test("a page that says no room of its own is answered by its dimmed window's width", () => {
+test("a page that says no room of its own is answered by its dimmed window's width", async () => {
   layContainersAt({ "luke-dialog-room": PHONE.DIALOG_ROOM }, { touch: true });
-  const dialog = composerDialog();
+  const dialog = await composerDialog();
   assert.equal(24 + pixels(dialog, getComputedStyle(dialog).marginLeft), 12);
 });
 

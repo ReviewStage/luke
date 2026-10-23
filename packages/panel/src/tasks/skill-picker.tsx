@@ -5,20 +5,13 @@ import {
   GAP,
   MENU_SURFACE_INSET,
   MenuSurface,
-  SkillChip,
   Stack,
   TEXT_ELEMENT,
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
-  Tooltip,
 } from "@luke/ui";
-import {
-  holdsSlashWord,
-  matchingSkills,
-  type SkillOption,
-  skillWord,
-} from "@luke/ui/skill-mention";
+import { holdsSlashWord, matchingSkills, type SkillOption } from "@luke/ui/skill-mention";
 import {
   type ReactNode,
   type RefObject,
@@ -34,7 +27,7 @@ import type {
   ComposerTrigger,
 } from "../plan-editor/contract.js";
 import { MENTION_MENU_SIDE, type MentionMenuSide } from "./mention-picker.js";
-import { opensFile, SkillCard, type SkillWithFile, skillOption } from "./skill-ref.js";
+import { opensFile, SkillRef, type SkillWithFile, skillOption } from "./skill-ref.js";
 
 /**
  * skill-picker.tsx -- the list a `/` in the composer opens, of the skills the task's repository keeps, and the chips the chosen ones are drawn as.
@@ -59,8 +52,8 @@ import { opensFile, SkillCard, type SkillWithFile, skillOption } from "./skill-r
  * the box stands at the foot of its tab. A chosen skill is a chip in the
  * words, an atom one Backspace takes out whole, which reads out as `/name`,
  * so the message sent is the words it always was; the editor draws each
- * through the box (`chip`), as a pill a press on opens the skill's
- * `SKILL.md` in a File tab, as a sent message's chip does (`skill-chip.tsx`).
+ * through the box (`chip`), as the one pill a sent message's chip is (`skill-ref.tsx`), a press on which opens the skill's
+ * `SKILL.md` in a File tab (`skill-chip.tsx`).
  */
 
 /** The skills the composer offers, the repository's and the installed ones, as it reads them: the skills, or why they were not read. */
@@ -187,9 +180,9 @@ function SkillMenu({
 }
 
 /**
- * A chosen skill in the box: its pill (`SkillChip`), which a press opens the
- * skill's `SKILL.md` from where the skill is known and the box stands on a
- * task's page, the pointer turning to a hand over it then.
+ * A chosen skill in the box: the one chip a sent message draws (`SkillRef`),
+ * which a press opens the skill's `SKILL.md` from where the box stands on a
+ * task's page. Note that it hangs the placeholder card until the skill is read.
  */
 function BoxChip({
   name,
@@ -200,27 +193,14 @@ function BoxChip({
   skill: SkillOption | undefined;
   onOpen: ((skill: SkillWithFile) => void) | undefined;
 }): React.JSX.Element {
-  // Note that an installed skill names no file of the repository's, so its pill opens nothing.
+  // Note that an installed skill names no file of the repository's, so its chip opens nothing.
   const file = skill !== undefined && opensFile(skill) ? skill : undefined;
-  const chip = (
-    <SkillChip
-      label={skillWord(name)}
+  return (
+    <SkillRef
+      name={name}
+      skill={skill}
       onOpen={file === undefined || onOpen === undefined ? undefined : () => onOpen(file)}
     />
-  );
-  // A skill the repository holds hangs its card in the box as a sent chip of it does.
-  if (skill === undefined) return chip;
-  return (
-    <Tooltip
-      label={skill.path ?? skillWord(skill.name)}
-      card={
-        <SkillCard
-          subject={{ skill, onOpen: () => (file === undefined ? undefined : onOpen?.(file)) }}
-        />
-      }
-    >
-      {chip}
-    </Tooltip>
   );
 }
 

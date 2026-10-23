@@ -8528,9 +8528,13 @@ function searchList(page: HTMLElement, words: string): void {
   });
 }
 
-/** The magnifier in the list's head that opens its search. */
-function magnifier(page: HTMLElement): HTMLButtonElement | null {
-  return page.querySelector<HTMLButtonElement>('.inbox-tasks button[aria-label="Search inbox"]');
+/** The magnifier in the sidebar's list head that unfolds its search. */
+function sidebarMagnifier(page: HTMLElement): HTMLButtonElement {
+  return (
+    page.querySelector<HTMLButtonElement>(
+      '.desktop-sidebar .sidebar-section-head button[aria-label="Search inbox"]',
+    ) ?? assert.fail("the sidebar's head offers the search")
+  );
 }
 
 /** The title of the item the pane shows. */
@@ -8538,7 +8542,7 @@ function paneTitle(page: HTMLElement): string | null | undefined {
   return page.querySelector(".inbox-view-items .inbox-subject-title")?.textContent;
 }
 
-test("on a phone the Inbox's list is headed by New task and one ⋯, its title centred between them, and the ⋯ opens the search and View options' own menu, so nothing is lost", async () => {
+test("on a phone the Inbox's list is headed by New task and one ⋯, its title centred between them, the ⋯ opening New thread and View options' own menu, and the search standing under the head", async () => {
   const { page, asked } = mount([], { room: SHELL_ROOM.NARROW });
   await settle();
   const head = page.querySelector<HTMLElement>(".inbox-head");
@@ -8548,7 +8552,11 @@ test("on a phone the Inbox's list is headed by New task and one ⋯, its title c
     ["New task", "More"],
   );
   assert.match(head.querySelector("h1")?.textContent ?? "", /^Inbox/);
-  assert.equal(magnifier(page), null, "no magnifier of its own");
+  const field = page.querySelector<HTMLInputElement>(
+    '.inbox-tasks input[aria-label="Search inbox"]',
+  );
+  assert.ok(field, "the search stands under the head");
+  assert.equal(head.contains(field), false, "outside the head, which keeps its title");
 
   const more = () =>
     head.querySelector<HTMLButtonElement>('[aria-label="More"]') ?? assert.fail("the ⋯ stands");
@@ -8565,7 +8573,7 @@ test("on a phone the Inbox's list is headed by New task and one ⋯, its title c
     [...document.querySelectorAll('[role="menu"] .luke-menu-item-label')].map(
       (each) => each.textContent,
     ),
-    ["New thread", "Search inbox", "View options"],
+    ["New thread", "View options"],
     "the ⋯ holds what the wide head draws as buttons",
   );
   act(() => more().click());
@@ -8579,50 +8587,40 @@ test("on a phone the Inbox's list is headed by New task and one ⋯, its title c
       new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }),
     );
   });
-  pick("Search inbox");
-  const field = page.querySelector<HTMLInputElement>(
-    '.inbox-head input[aria-label="Search inbox"]',
-  );
-  assert.ok(field, "the search opens");
-  act(() => {
-    field.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
-  });
-  assert.equal(
-    document.activeElement,
-    more(),
-    "Escape folds it and hands the keyboard back to the ⋯",
-  );
-
   act(() => head.querySelector<HTMLButtonElement>('[aria-label="New task"]')?.click());
   assert.equal(asked.newTasks, 1);
 });
 
-test("the list's magnifier opens a search in the Inbox's name that narrows the list to the items saying every word typed, the item open leaving the list but not the pane; Escape empties and folds it, handing the keyboard back to the magnifier", async () => {
+test("the list's search stands under the Inbox's head, its name and buttons never giving way, and narrows the list to the items saying every word typed, the item open leaving the list but not the pane; Escape empties it", async () => {
   const { page } = mount();
   await settle();
   const title = headTitle(page);
-  const button = magnifier(page);
-  assert.ok(button, "the head offers the search");
-
-  act(() => button.click());
-  assert.equal(document.activeElement?.getAttribute("aria-label"), "Search inbox");
-  assert.equal(headTitle(page), undefined, "the field stands in the name");
+  const buttons = () =>
+    [...(page.querySelector(".inbox-tasks-bar")?.querySelectorAll("button") ?? [])].map((each) =>
+      each.getAttribute("aria-label"),
+    );
+  assert.deepEqual(buttons(), ["New thread", "View options"]);
+  const input = page.querySelector<HTMLInputElement>(
+    '.inbox-tasks input[aria-label="Search inbox"]',
+  );
+  assert.ok(input, "the search stands before anything is pressed");
 
   // Note that the retry question is found by its answer's note, which only its thread holds.
   searchList(page, "on-call");
   assert.deepEqual(listed(page), ["# Billing usage alerts", "How is a failed email retried?"]);
   assert.equal(paneTitle(page), "Alert at 80%?", "the pane keeps the item open");
+  assert.equal(headTitle(page), title, "the name stands while the search is used");
+  assert.deepEqual(buttons(), ["New thread", "View options"], "and so do the buttons");
 
   searchList(page, "zzz");
   assert.deepEqual(listed(page), []);
   assert.ok(page.querySelector(".inbox-tasks")?.textContent?.includes("No items match “zzz”."));
 
-  const input = document.activeElement;
-  assert.ok(input instanceof HTMLInputElement);
+  act(() => input.focus());
   act(() => {
     input.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
   });
-  assert.equal(headTitle(page), title);
+  assert.equal(input.value, "");
   assert.deepEqual(listed(page), [
     "# Billing usage alerts",
     "How is a failed email retried?",
@@ -8630,18 +8628,14 @@ test("the list's magnifier opens a search in the Inbox's name that narrows the l
     "# Invites",
     "*Expire after 7 days?",
   ]);
-  assert.equal(document.activeElement, magnifier(page));
+  assert.equal(document.activeElement, input, "the caret stays in the field");
 });
 
 test("with the inbox-first sidebar, the sidebar's list head offers the same search, which narrows the sidebar's list", async () => {
   const { page } = mount([], { sidebar: true });
   await settle();
-  const button = page.querySelector<HTMLButtonElement>(
-    '.desktop-sidebar .sidebar-section-head button[aria-label="Search inbox"]',
-  );
-  assert.ok(button, "the sidebar's head offers the search");
 
-  act(() => button.click());
+  act(() => sidebarMagnifier(page).click());
   searchList(page, "expire");
 
   assert.deepEqual(listed(page), ["# Invites", "*Expire after 7 days?"]);
@@ -8650,11 +8644,7 @@ test("with the inbox-first sidebar, the sidebar's list head offers the same sear
 test("with the inbox-first sidebar, a press on View options while the search stands empty folds the search and opens the menu at once", async () => {
   const { page } = mount([], { sidebar: true });
   await settle();
-  const button = page.querySelector<HTMLButtonElement>(
-    '.desktop-sidebar .sidebar-section-head button[aria-label="Search inbox"]',
-  );
-  assert.ok(button, "the sidebar's head offers the search");
-  act(() => button.click());
+  act(() => sidebarMagnifier(page).click());
   const options = page.querySelector<HTMLButtonElement>(
     '.desktop-sidebar .sidebar-section-head button[aria-label="View options"]',
   );
@@ -8666,6 +8656,33 @@ test("with the inbox-first sidebar, a press on View options while the search sta
 
   assert.equal(options.isConnected, true, "the button pressed is the one still standing");
   assert.equal(viewItem("To do").getAttribute("role")?.startsWith("menuitem"), true);
+});
+
+test("with the inbox-first sidebar, New thread keeps its place as the search unfolds, and a press on it while the search stands empty folds the search and opens the draft", async () => {
+  listedWorkspace = ACME;
+  inboxes = new Map([[BILLING.id, [THRESHOLD]]]);
+  const { page } = mount([], { sidebar: true });
+  await settle();
+  const head = () =>
+    page.querySelector<HTMLElement>(".desktop-sidebar .sidebar-section-head") ??
+    assert.fail("the sidebar's list head stands");
+  const buttons = () =>
+    [...head().querySelectorAll("button")].map((each) => each.getAttribute("aria-label"));
+  const before = buttons();
+  const compose =
+    head().querySelector<HTMLButtonElement>('button[aria-label="New thread"]') ??
+    assert.fail("the head offers New thread");
+
+  act(() => sidebarMagnifier(page).click());
+  assert.deepEqual(buttons(), before, "every button keeps its place under the open search");
+
+  // Note that the press moves the focus first, which folds the empty search before the click lands.
+  act(() => compose.focus());
+  act(() => compose.click());
+  await settle();
+
+  assert.equal(compose.isConnected, true, "the button pressed is the one still standing");
+  assert.equal(itemPane(page).getAttribute("aria-label"), "New thread");
 });
 
 /** The thread a New thread starts, as the service hands it back: the reader's words its first message, settled on their own nod. */

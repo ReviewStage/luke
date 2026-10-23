@@ -86,6 +86,17 @@ function LinkMark({ link }: { link: TaskIssueLinkView }): React.JSX.Element {
   return <ProviderMark provider={INTEGRATION_PROVIDER.LINEAR} size={PROVIDER_MARK_SIZE.CAPTION} />;
 }
 
+/**
+ * What a link's chip calls its issue's number: `#42` for a GitHub issue, whose
+ * key is `owner/name#42` in the service, and Linear's own key, so the chip
+ * reads as every other chip of an issue does and the repository stays in its
+ * tooltip.
+ */
+function keyWords(link: TaskIssueLinkView): string {
+  const at = link.key.lastIndexOf("#");
+  return link.provider === TASK_ISSUE_PROVIDER.GITHUB && at >= 0 ? link.key.slice(at) : link.key;
+}
+
 /** What a link's chip says of it beyond its key and title: where it stands, where its provider answered, and its keyword. */
 function linkSummary(link: TaskIssueLinkView): string {
   const state = standingWords(link.standing);
@@ -130,7 +141,7 @@ function LinkChip({
   return (
     <li className="task-issue-link" data-provider={link.provider} data-relation={link.relation}>
       <Tooltip
-        label={`${link.title} · ${summary}`}
+        label={`${link.key} ${link.title} · ${summary}`}
         card={
           <IssueCard
             mark={<LinkMark link={link} />}
@@ -148,7 +159,7 @@ function LinkChip({
           {...trigger(dropBelowStart)}
         >
           <LinkMark link={link} />
-          <span className="task-issue-link-key">{link.key}</span>
+          <span className="task-issue-link-key">{keyWords(link)}</span>
           <ChipName>{link.title}</ChipName>
         </Chip>
       </Tooltip>
