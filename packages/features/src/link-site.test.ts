@@ -98,3 +98,70 @@ test("a long name is cut to one short line", () => {
   assert.ok(name.length <= 60, name);
   assert.ok(name.endsWith("…"), name);
 });
+
+test("a page of one of Google's apps is that app's, by its host or, on the Docs host, its editor", () => {
+  for (const [href, expected] of [
+    ["https://docs.google.com/document/d/1AbC/edit", LINK_SITE.GOOGLE_DOCS],
+    ["https://docs.google.com/spreadsheets/d/1AbC/edit#gid=0", LINK_SITE.GOOGLE_SHEETS],
+    ["https://docs.google.com/presentation/d/1AbC/edit", LINK_SITE.GOOGLE_SLIDES],
+    ["https://docs.google.com/forms/d/e/1AbC/viewform", LINK_SITE.GOOGLE_FORMS],
+    ["https://forms.gle/Ab12Cd34", LINK_SITE.GOOGLE_FORMS],
+    ["https://drive.google.com/drive/folders/1AbC", LINK_SITE.GOOGLE_DRIVE],
+    ["https://calendar.google.com/calendar/u/0/r/week", LINK_SITE.GOOGLE_CALENDAR],
+    ["https://calendar.app.google/Ab12Cd34", LINK_SITE.GOOGLE_CALENDAR],
+    ["https://meet.google.com/abc-defg-hij", LINK_SITE.GOOGLE_MEET],
+    ["https://mail.google.com/mail/u/0/#inbox/FMfcg", LINK_SITE.GMAIL],
+  ] as const) {
+    assert.equal(site(href), expected, href);
+  }
+  assert.equal(site("https://docs.google.com/"), undefined);
+  assert.equal(site("https://docs.example.com/document/d/1AbC"), undefined);
+});
+
+test("a Google app's page is called by its app, and a Meet by its code", () => {
+  assert.equal(
+    linkSiteName(LINK_SITE.GOOGLE_DOCS, "https://docs.google.com/document/d/1AbC/edit"),
+    "Google Docs",
+  );
+  assert.equal(
+    linkSiteName(LINK_SITE.GOOGLE_MEET, "https://meet.google.com/abc-defg-hij?authuser=0"),
+    "abc-defg-hij",
+  );
+  assert.equal(
+    linkSiteName(LINK_SITE.GOOGLE_MEET, "https://meet.google.com/landing"),
+    "Google Meet",
+  );
+});
+
+test("a YouTube page, on its own host or a short link, is YouTube's, a channel called by its handle", () => {
+  for (const href of [
+    "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+    "https://youtu.be/dQw4w9WgXcQ?t=42",
+    "https://m.youtube.com/@acme",
+  ]) {
+    assert.equal(site(href), LINK_SITE.YOUTUBE, href);
+  }
+  assert.equal(site("https://notyoutube.com/watch"), undefined);
+  const named = (href: string) => linkSiteName(LINK_SITE.YOUTUBE, href);
+  assert.equal(named("https://www.youtube.com/@acme"), "@acme");
+  assert.equal(named("https://www.youtube.com/@acme/videos"), "@acme");
+  assert.equal(named("https://www.youtube.com/watch?v=dQw4w9WgXcQ"), "YouTube");
+});
+
+test("an X page, under its old name too, is X's, an account called by its handle and a post by its author", () => {
+  for (const href of [
+    "https://x.com/acme/status/1850000000000000000",
+    "https://twitter.com/acme",
+    "https://mobile.twitter.com/acme/status/1",
+  ]) {
+    assert.equal(site(href), LINK_SITE.X, href);
+  }
+  assert.equal(site("https://xx.com/acme"), undefined);
+  const named = (href: string) => linkSiteName(LINK_SITE.X, href);
+  assert.equal(named("https://x.com/acme/status/1850000000000000000"), "Post by @acme");
+  assert.equal(named("https://twitter.com/acme"), "@acme");
+  assert.equal(named("https://x.com/acme/likes"), "X");
+  assert.equal(named("https://x.com/home"), "X");
+  assert.equal(named("https://x.com/search?q=luke"), "X");
+  assert.equal(named("https://x.com/i/spaces/1AbC"), "X");
+});

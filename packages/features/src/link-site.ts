@@ -3,17 +3,28 @@
  *
  * A link to a page of one of the integrations is a mention of it
  * (`mention-link.ts`), drawn with its provider's mark. A few sites are
- * linked as often and their addresses say as much, a place on Google Maps
- * by its name, a route by its stops, so a link to one is drawn the same
- * way: its site's own mark, and the name its address spells rather than
- * the address. Nothing here reads the page, so a site's short link, which
- * spells nothing, is called by its site's name. A site joins the set only
+ * linked as often, Google's own apps, YouTube, and X, so a link to one is
+ * drawn the same way: its site's own mark, and the name its address
+ * spells, a place on Google Maps by its name, a route by its stops, a
+ * Meet by its code, a post by its author, rather than the address.
+ * Nothing here reads the page, so a page whose address spells nothing of
+ * it, a Google Doc's or a short link's, is called by its site's name. A site joins the set only
  * with its brand's own mark beside it (`@luke/ui`'s `provider-mark.tsx`).
  */
 
 /** The well-known sites a link may be a page of. */
 export const LINK_SITE = {
   GOOGLE_MAPS: "google-maps",
+  GOOGLE_DOCS: "google-docs",
+  GOOGLE_SHEETS: "google-sheets",
+  GOOGLE_SLIDES: "google-slides",
+  GOOGLE_FORMS: "google-forms",
+  GOOGLE_DRIVE: "google-drive",
+  GOOGLE_CALENDAR: "google-calendar",
+  GOOGLE_MEET: "google-meet",
+  GMAIL: "gmail",
+  YOUTUBE: "youtube",
+  X: "x",
 } as const;
 
 export type LinkSite = (typeof LINK_SITE)[keyof typeof LINK_SITE];
@@ -23,6 +34,16 @@ export const LINK_SITE_LIST: readonly LinkSite[] = Object.values(LINK_SITE);
 /** Each site's own name, as its brand spells it: what a page of it is called where its address spells nothing better. */
 export const LINK_SITE_NAME = {
   [LINK_SITE.GOOGLE_MAPS]: "Google Maps",
+  [LINK_SITE.GOOGLE_DOCS]: "Google Docs",
+  [LINK_SITE.GOOGLE_SHEETS]: "Google Sheets",
+  [LINK_SITE.GOOGLE_SLIDES]: "Google Slides",
+  [LINK_SITE.GOOGLE_FORMS]: "Google Forms",
+  [LINK_SITE.GOOGLE_DRIVE]: "Google Drive",
+  [LINK_SITE.GOOGLE_CALENDAR]: "Google Calendar",
+  [LINK_SITE.GOOGLE_MEET]: "Google Meet",
+  [LINK_SITE.GMAIL]: "Gmail",
+  [LINK_SITE.YOUTUBE]: "YouTube",
+  [LINK_SITE.X]: "X",
 } as const satisfies Record<LinkSite, string>;
 
 /** The most characters a page's name keeps before it is cut. */
@@ -48,6 +69,64 @@ const MAPS_PAGE = {
 
 /** A step after a Maps page's names that is the view's and no name: its centre and zoom, `@37.8,-122.4,17z`, or its state, `data=…`. */
 const MAPS_VIEW_STEP = /^(?:@|data=)/u;
+
+/** The editors on Google's Docs host, each by the first step of its pages' paths. */
+const DOCS_HOST = "docs.google.com";
+const DOCS_STEP = {
+  DOCUMENT: "document",
+  SPREADSHEETS: "spreadsheets",
+  PRESENTATION: "presentation",
+  FORMS: "forms",
+} as const;
+
+/** A Meet's code, as its address spells it: `abc-defg-hij`. */
+const MEET_CODE = /^[a-z]{3}-[a-z]{4}-[a-z]{3}$/u;
+
+/** YouTube's hosts, its short links' among them. */
+const YOUTUBE_HOSTS: readonly string[] = [
+  "youtube.com",
+  "www.youtube.com",
+  "m.youtube.com",
+  "youtu.be",
+];
+
+/** A YouTube channel's handle as its address spells it: `@name`. */
+const YOUTUBE_HANDLE = /^@[\w.-]{1,100}$/u;
+
+/** X's hosts, under its old name too. */
+const X_HOSTS: readonly string[] = [
+  "x.com",
+  "www.x.com",
+  "twitter.com",
+  "www.twitter.com",
+  "mobile.twitter.com",
+  "mobile.x.com",
+];
+
+/** An X account's name as its address spells it. */
+const X_ACCOUNT = /^\w{1,15}$/u;
+
+/** The step after an account's name that says the next one is a post. */
+const X_POST_STEP = "status";
+
+/** X's own pages, whose first step is spelled as an account's could be but names none. */
+const X_PAGES: ReadonlySet<string> = new Set([
+  "compose",
+  "explore",
+  "hashtag",
+  "home",
+  "i",
+  "intent",
+  "login",
+  "messages",
+  "notifications",
+  "privacy",
+  "search",
+  "settings",
+  "share",
+  "signup",
+  "tos",
+]);
 
 /** What a route's waypoints are parted by in Maps's `?api=1` query. */
 const ROUTE_WAYPOINT_SEPARATOR = "|";
@@ -127,9 +206,75 @@ function googleMapsName(url: URL): string | undefined {
   return named(query.get("q") ?? "");
 }
 
+/** A page's path's steps, without the empty ones. */
+function pathSteps(url: URL): readonly string[] {
+  return url.pathname.split("/").filter((step) => step !== "");
+}
+
+/** Whether a page is on one of `hosts`. */
+function onHost(url: URL, hosts: readonly string[]): boolean {
+  return hosts.includes(url.hostname.toLowerCase());
+}
+
+/** Whether a page is one of the Docs host's editors' `step`, as `/document/d/…` is a Doc. */
+function onDocs(url: URL, step: string): boolean {
+  return url.hostname.toLowerCase() === DOCS_HOST && pathSteps(url)[0] === step;
+}
+
+/** What an address spells nothing of its page by: nothing, so its site's own name is said. */
+function unnamed(): undefined {
+  return undefined;
+}
+
+/** A Meet called by its code, the one thing its address spells. */
+function googleMeetName(url: URL): string | undefined {
+  const code = pathSteps(url)[0]?.toLowerCase();
+  return code !== undefined && MEET_CODE.test(code) ? code : undefined;
+}
+
+/** A YouTube channel called by its handle; any other page of YouTube's spells nothing of itself. */
+function youtubeName(url: URL): string | undefined {
+  const [first, ...rest] = pathSteps(url);
+  return first !== undefined && rest.length <= 1 && YOUTUBE_HANDLE.test(first) ? first : undefined;
+}
+
+/** An X account called by its handle, and one of its posts as its author's; X's own pages spell no one. */
+function xName(url: URL): string | undefined {
+  const [account, step] = pathSteps(url);
+  if (account === undefined || !X_ACCOUNT.test(account)) return undefined;
+  if (X_PAGES.has(account.toLowerCase())) return undefined;
+  if (step === X_POST_STEP) return `Post by @${account}`;
+  return step === undefined ? `@${account}` : undefined;
+}
+
 /** How each site is told by its page's address, and what that address says of the page. */
 const SITE_READ = {
   [LINK_SITE.GOOGLE_MAPS]: { isOf: isGoogleMaps, nameOf: googleMapsName },
+  [LINK_SITE.GOOGLE_DOCS]: { isOf: (url) => onDocs(url, DOCS_STEP.DOCUMENT), nameOf: unnamed },
+  [LINK_SITE.GOOGLE_SHEETS]: {
+    isOf: (url) => onDocs(url, DOCS_STEP.SPREADSHEETS),
+    nameOf: unnamed,
+  },
+  [LINK_SITE.GOOGLE_SLIDES]: {
+    isOf: (url) => onDocs(url, DOCS_STEP.PRESENTATION),
+    nameOf: unnamed,
+  },
+  [LINK_SITE.GOOGLE_FORMS]: {
+    isOf: (url) => onDocs(url, DOCS_STEP.FORMS) || onHost(url, ["forms.gle"]),
+    nameOf: unnamed,
+  },
+  [LINK_SITE.GOOGLE_DRIVE]: { isOf: (url) => onHost(url, ["drive.google.com"]), nameOf: unnamed },
+  [LINK_SITE.GOOGLE_CALENDAR]: {
+    isOf: (url) => onHost(url, ["calendar.google.com", "calendar.app.google"]),
+    nameOf: unnamed,
+  },
+  [LINK_SITE.GOOGLE_MEET]: {
+    isOf: (url) => onHost(url, ["meet.google.com"]),
+    nameOf: googleMeetName,
+  },
+  [LINK_SITE.GMAIL]: { isOf: (url) => onHost(url, ["mail.google.com"]), nameOf: unnamed },
+  [LINK_SITE.YOUTUBE]: { isOf: (url) => onHost(url, YOUTUBE_HOSTS), nameOf: youtubeName },
+  [LINK_SITE.X]: { isOf: (url) => onHost(url, X_HOSTS), nameOf: xName },
 } as const satisfies Record<
   LinkSite,
   { readonly isOf: (url: URL) => boolean; readonly nameOf: (url: URL) => string | undefined }

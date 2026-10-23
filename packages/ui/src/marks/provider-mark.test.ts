@@ -86,6 +86,15 @@ function markBounds(svg: Element): Bounds | undefined {
   for (const path of svg.querySelectorAll("path")) {
     bounds = pathBounds(path.getAttribute("d") ?? "", bounds);
   }
+  for (const polygon of svg.querySelectorAll("polygon")) {
+    const numbers = (polygon.getAttribute("points") ?? "")
+      .trim()
+      .split(/[\s,]+/)
+      .map(Number);
+    for (let at = 0; at + 1 < numbers.length; at += 2) {
+      bounds = grow(bounds, numbers[at] ?? 0, numbers[at + 1] ?? 0);
+    }
+  }
   for (const rect of svg.querySelectorAll("rect")) {
     const x = Number(rect.getAttribute("x") ?? 0);
     const y = Number(rect.getAttribute("y") ?? 0);
