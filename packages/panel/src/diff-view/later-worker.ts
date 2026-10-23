@@ -28,6 +28,12 @@ class LaterWorker extends EventTarget implements Worker {
 
   constructor(script: Promise<string | undefined>, start: (script: string) => Worker) {
     super();
+    // Note that each handler property is heard as a listener added first, as a worker's own are.
+    this.addEventListener("message", (event) => this.onmessage?.call(this, event as MessageEvent));
+    this.addEventListener("messageerror", (event) =>
+      this.onmessageerror?.call(this, event as MessageEvent),
+    );
+    this.addEventListener("error", (event) => this.onerror?.call(this, event as ErrorEvent));
     script.then(
       (text) => this.#start(text, start),
       (error: unknown) => this.#fail(error),

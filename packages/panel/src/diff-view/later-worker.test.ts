@@ -132,6 +132,30 @@ test("what the started worker says is heard from the stand-in", async () => {
   assert.equal(real?.terminated, true);
 });
 
+test("a handler set as a property hears what a listener hears", async () => {
+  let real: StandInWorker | undefined;
+  const worker = laterWorker(Promise.resolve("script"), (text) => {
+    real = new StandInWorker(text);
+    return real;
+  });
+  const heard = new Promise<unknown>((resolve) => {
+    worker.onmessage = (event) => resolve(event.data);
+  });
+  const unread = new Promise<unknown>((resolve) => {
+    worker.onmessageerror = (event) => resolve(event.data);
+  });
+  worker.postMessage({ type: "initialize", id: "1" });
+  assert.equal(((await heard) as { readonly id: string }).id, "1");
+  real?.dispatchEvent(new MessageEvent("messageerror", { data: "unreadable" }));
+  assert.equal(await unread, "unreadable");
+
+  const failed = laterWorker(Promise.resolve(undefined), () => new StandInWorker("never"));
+  const told = await new Promise<ErrorEvent>((resolve) => {
+    failed.onerror = (event) => resolve(event);
+  });
+  assert.match(told.message, /no highlight worker/);
+});
+
 test("a script the build did not carry, one that fails to land, or a start that throws fails as a worker that cannot load", async () => {
   const unstarted = () => {
     throw new Error("No worker is started without a script.");
