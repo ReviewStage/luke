@@ -15,7 +15,10 @@
 
 import type { CodingAgentInboxMessagedView } from "@luke/features/coding-agent-view";
 import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
-import type { CodingAgentAttachment } from "@luke/features/coding-agent-wire";
+import type {
+  CodingAgentAttachment,
+  CodingAgentPullRequest,
+} from "@luke/features/coding-agent-wire";
 import { INBOX_BOUNDS, type InboxItem } from "@luke/features/inbox-wire";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
@@ -37,13 +40,14 @@ import { imageFiles } from "../feedback-images.js";
 import { useIntegrationStatuses } from "../integration-statuses.js";
 import type { MenuRow } from "../searchable-menu.js";
 import { PICKER_ALIGN, Picker } from "../settings/picker-row.js";
-import { AgentHoverCard } from "./agent-ref.js";
+import { AgentCard, AgentHoverCard, agentSubject, NOTHING_HELD } from "./agent-ref.js";
 import { AttachFilesButton } from "./attach-files-button.js";
 import { AttachedFileChips, attachmentChips } from "./attached-file-chips.js";
 import { readFiles, withFiles } from "./attached-files.js";
 import { messageFailureWords } from "./coding-agent-model.js";
 import { AnswerForm, EDITOR_LOAD_FAILED, useAnswerField } from "./inbox-answer-box.js";
 import type { MentionAgentsReader, MentionableAgent } from "./mention-picker.js";
+import { type MentionedAgentsPlace, useMentionedPlace } from "./mentioned-agent-card.js";
 import { TAB_KIND, tabLook } from "./tab-look.js";
 import type { InboxThreadStarter } from "./use-task-inbox.js";
 
@@ -110,25 +114,58 @@ function agentLook(agent: MentionableAgent): {
     : tabLook({ kind: TAB_KIND.AGENT, name: agent.name, agent: agent.summary });
 }
 
+/** The pull requests a To row's card names, none: an agent's own is drawn where its task is open, and the workspace's list carries none. */
+const NO_PULL_REQUESTS = new Map<string, CodingAgentPullRequest>();
+
+/** The line under an agent's card, as a card read for a chip says it: the task the agent works on. */
+function cardFoot(agent: MentionableAgent): string | undefined {
+  if (agent.task === undefined) return "On no task";
+  return agent.task.name === undefined ? undefined : `On ${agent.task.name}`;
+}
+
+/**
+ * An agent's card as ⌘K hangs it, drawn from the summary the workspace's
+ * list already read, so it stands whole the moment it is hung and asks the
+ * service nothing; an agent read without one hangs the card read as it is
+ * hung, as a chip's is.
+ */
+function agentCard(agent: MentionableAgent, place: MentionedAgentsPlace): React.ReactNode {
+  const { actor, summary } = agent;
+  if (summary === undefined) {
+    return actor.kind === ACTOR_KIND.AGENT ? (
+      <AgentHoverCard actor={{ ...actor, taskId: agent.task?.id }} agentId={agent.id} />
+    ) : undefined;
+  }
+  const agents = {
+    ...place,
+    agents: [summary],
+    archived: undefined,
+    pullRequests: NO_PULL_REQUESTS,
+  };
+  return (
+    <AgentCard
+      subject={agentSubject(agents, agent.id, NOTHING_HELD, false)}
+      models={place.models}
+      foot={cardFoot(agent)}
+    />
+  );
+}
+
 /**
  * To's rows: the workspace's agents as one list, newest first as the
  * workspace reads them, each in its tab's look and hanging its own card,
  * as ⌘K's rows do, and found by its task's name too.
  */
-function toRows(agents: readonly MentionableAgent[]): readonly MenuRow[] {
-  return agents.map((each) => {
-    const { actor } = each;
-    const card =
-      actor.kind === ACTOR_KIND.AGENT ? (
-        <AgentHoverCard actor={{ ...actor, taskId: each.task?.id }} agentId={each.id} />
-      ) : undefined;
-    return {
-      id: each.id,
-      ...agentLook(each),
-      terms: [each.name, ...(each.task?.name === undefined ? [] : [each.task.name])],
-      card,
-    };
-  });
+function toRows(
+  agents: readonly MentionableAgent[],
+  place: MentionedAgentsPlace,
+): readonly MenuRow[] {
+  return agents.map((each) => ({
+    id: each.id,
+    ...agentLook(each),
+    terms: [each.name, ...(each.task?.name === undefined ? [] : [each.task.name])],
+    card: agentCard(each, place),
+  }));
 }
 
 /** The words a send is known by, so the same thread sent again goes under the key it went under. */
@@ -166,6 +203,7 @@ export function InboxCompose({
   latest.current = draft;
   const attempt = useRef<{ readonly key: string; readonly words: string } | undefined>(undefined);
   const statuses = useIntegrationStatuses();
+  const place = useMentionedPlace();
   const agent = namedAgent(read, picked);
   const placeholder = agent === undefined ? "Write a message" : `Write to ${agent.name}`;
   const field = useAnswerField({
@@ -262,7 +300,7 @@ export function InboxCompose({
               value={agent?.id}
               valueLabel={agent === undefined ? NO_AGENT : agent.name}
               valueIcon={agent === undefined ? undefined : agentLook(agent).icon}
-              rows={toRows(rows)}
+              rows={toRows(rows, place)}
               placeholder="Search agents"
               noMatch={NO_MATCH}
               note={

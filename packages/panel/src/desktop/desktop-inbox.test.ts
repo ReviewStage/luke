@@ -8555,10 +8555,11 @@ test("To's rows keep no check's room while no agent is chosen, and each hangs it
     "no row keeps a check's room",
   );
   restOn(option);
-  await settle();
-  assert.equal(
-    document.querySelector(".luke-tooltip-card .luke-hover-card-name")?.textContent,
-    "Alerts",
-    "the row hangs its agent's card",
+  const card = document.querySelector(".luke-tooltip-card") ?? assert.fail("the row hangs a card");
+  assert.equal(card.querySelector(".luke-hover-card-name")?.textContent, "Alerts");
+  assert.match(
+    card.textContent ?? "",
+    new RegExp(`On ${BILLING.name}`, "u"),
+    "the card stands whole as it is hung, its task named, as ⌘K's does, with nothing read",
   );
 });

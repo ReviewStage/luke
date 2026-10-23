@@ -265,6 +265,25 @@ test("the list scrolls itself to keep the active option in view as the keys move
   assert.equal(list.scrollTop, 0);
 });
 
+test("an option the pointer makes active is where the pointer is, so the list stands still under it", () => {
+  const { field } = mount();
+  type(field(), "a");
+  const list = document.querySelector<HTMLElement>('[role="listbox"]') ?? assert.fail("the list");
+  layOut(list, { clientHeight: 32 });
+  const options = [...list.querySelectorAll<HTMLElement>('[role="option"]')];
+  for (const [index, option] of options.entries()) {
+    layOut(option, { offsetTop: index * 32, offsetHeight: 32 });
+  }
+  const below = options[1] ?? assert.fail("a second option");
+
+  act(() => {
+    below.dispatchEvent(new MouseEvent("mousemove", { bubbles: true }));
+  });
+
+  assert.equal(below.getAttribute("aria-selected"), "true");
+  assert.equal(list.scrollTop, 0, "the list does not scroll the pointed row away");
+});
+
 /** A list standing alone over `options`, as an editor's caller would hang it, with what it chose. */
 function mountList(options: readonly string[], headed: boolean) {
   const chosen: string[] = [];

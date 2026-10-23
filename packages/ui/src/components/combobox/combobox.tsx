@@ -285,8 +285,15 @@ export function ComboboxList({
   // Note that the active option is scrolled into the list's own view by
   // hand, because the caret stays where the keys are read, which no
   // browser scrolls the list for, and `scrollIntoView` would scroll every
-  // box around it.
+  // box around it; one the pointer made active is where the pointer is, so
+  // the list stands still under it rather than scroll the row away, and
+  // the card the row hangs with it.
+  const pointed = useRef(false);
   useLayoutEffect(() => {
+    if (pointed.current) {
+      pointed.current = false;
+      return;
+    }
     const box = list.current;
     const row = at < 0 ? null : document.getElementById(comboboxOptionId(listId, at));
     if (box === null || row === null) return;
@@ -322,7 +329,10 @@ export function ComboboxList({
             id={comboboxOptionId(listId, start + index)}
             option={option}
             active={start + index === at}
-            onActive={() => onActiveChange(start + index)}
+            onActive={() => {
+              pointed.current = true;
+              onActiveChange(start + index);
+            }}
             onChoose={() => choose(start + index)}
           />
         ));
