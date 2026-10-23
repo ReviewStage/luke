@@ -803,7 +803,7 @@ export const WRITING_MARK = {
   LINK: "writing-link",
 } as const;
 
-type WritingMark = (typeof WRITING_MARK)[keyof typeof WRITING_MARK];
+export type WritingMark = (typeof WRITING_MARK)[keyof typeof WRITING_MARK];
 
 /** A block a line of text is turned into: what Turn into and the `/` menu offer, in their order. */
 export const WRITING_BLOCK = {
@@ -818,14 +818,14 @@ export const WRITING_BLOCK = {
   CODE_BLOCK: "writing-code-block",
 } as const;
 
-type WritingBlock = (typeof WRITING_BLOCK)[keyof typeof WRITING_BLOCK];
+export type WritingBlock = (typeof WRITING_BLOCK)[keyof typeof WRITING_BLOCK];
 
 /** A block laid in between lines rather than one a line is turned into. */
 export const WRITING_INSERT = {
   DIVIDER: "writing-divider",
 } as const;
 
-type WritingInsert = (typeof WRITING_INSERT)[keyof typeof WRITING_INSERT];
+export type WritingInsert = (typeof WRITING_INSERT)[keyof typeof WRITING_INSERT];
 
 /** Anything a writing chord or a Markdown rule does to text. */
 export type WritingAction = WritingMark | WritingBlock | WritingInsert;

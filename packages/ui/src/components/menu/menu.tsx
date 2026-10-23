@@ -470,11 +470,13 @@ function ItemEnd({ action }: { action: MenuAction }): React.JSX.Element | null {
       </>
     );
   }
-  if (action.checked === true) {
+  // Note that a setting with a hint keeps its check's room while it is off, so the hints of a menu of them end in one line down it.
+  if (action.checked === true || (action.checked === false && hint !== null)) {
     return (
-      <span className="luke-menu-item-end">
-        <CheckIcon />
-      </span>
+      <>
+        {hint}
+        <span className="luke-menu-item-end">{action.checked ? <CheckIcon /> : null}</span>
+      </>
     );
   }
   return hint;
