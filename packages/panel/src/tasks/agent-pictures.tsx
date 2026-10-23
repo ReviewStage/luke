@@ -637,8 +637,16 @@ export function CallPictures({
  * row carries, and an image its row names by the picture it was kept as
  * read through the agent's door, so it draws its thumbnail and opens once
  * the read lands, and is its name alone while read or where it is gone.
+ * A line still on its way draws its files going up.
  */
-export function MessageFileChips({ message }: { message: CodingAgentMessage }): ReactNode {
+export function MessageFileChips({
+  message,
+  sending = false,
+}: {
+  message: CodingAgentMessage;
+  /** Whether the line is still on its way, its row not yet read back. */
+  sending?: boolean;
+}): ReactNode {
   const door = useContext(AgentPicturesContext);
   const [, redraw] = useReducer((count: number) => count + 1, 0);
   const files = messageFileChips(message);
@@ -657,7 +665,7 @@ export function MessageFileChips({ message }: { message: CodingAgentMessage }): 
               <PictureWatch key={index} door={door} id={pictureId} onSettled={redraw} />
             ),
           )}
-      <AttachedFileChips files={chips} />
+      <AttachedFileChips files={chips} uploading={sending} />
     </>
   );
 }

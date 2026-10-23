@@ -5065,6 +5065,7 @@ summary button[data-tool-agent-ref]:is(:hover, :focus-visible) {
 .todo-words {
   min-width: 0;
   overflow-wrap: anywhere;
+  transition: color var(--luke-duration-quick) var(--luke-motion-pane);
 }
 
 .todo-item[data-todo-status="done"] > .todo-words {
