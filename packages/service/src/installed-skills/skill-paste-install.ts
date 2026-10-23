@@ -135,9 +135,13 @@ const pinnedSource = /* @__PURE__ */ Effect.fnUntraced(function* (
   const all = yield* Effect.forEach(folders, (folder) => candidateOf(repository, sha, folder), {
     concurrency: CANDIDATE_CONCURRENCY,
   });
-  // Note that an internal skill is hidden unless the paste names skills, as the `skills` tool hides one unless asked for by name.
-  const naming = Array.isArray(paste.skills) && paste.skills.length > 0;
-  const read = naming ? all : all.filter((candidate) => !candidate.checked.internal);
+  // Note that an internal skill is hidden unless the paste names it, as the `skills` tool hides one unless asked for by name.
+  const named = new Set(
+    Array.isArray(paste.skills) ? paste.skills.map((name) => name.toLowerCase()) : [],
+  );
+  const read = all.filter(
+    (candidate) => !candidate.checked.internal || named.has(nameOf(candidate).toLowerCase()),
+  );
   // Note that a name stands once: the first copy that installs, else the first copy, as a session's skills fall back.
   const byName = new Map<string, Candidate>();
   for (const candidate of read) {

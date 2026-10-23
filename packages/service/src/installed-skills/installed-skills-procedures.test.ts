@@ -442,6 +442,8 @@ it.layer(getTestDB())("the installed skills routes", (it) => {
           "top/SKILL.md": skillFile("top", "At the root's own folder."),
           "skills/own/SKILL.md": skillFile("own", "The repository's own."),
           "skills/secret/SKILL.md": internal("secret"),
+          "skills/flow/SKILL.md":
+            "---\nname: flow\ndescription: Hidden.\nmetadata: {internal: true}\n---\n\nBody.\n",
           ".codex/skills/codex/SKILL.md": skillFile("codex", "Under an agent's folder."),
           ".agents/skills/vendored/SKILL.md": skillFile("vendored", "Installed by the tool."),
           "skills-lock.json": JSON.stringify({ version: 1, skills: { vendored: {} } }),
@@ -461,6 +463,8 @@ it.layer(getTestDB())("the installed skills routes", (it) => {
           "single/SKILL.md": skillFile("single", "A folder that is one skill."),
           "single/skills/inner/SKILL.md": skillFile("inner", "Part of single."),
           "deep/one/two/three/SKILL.md": skillFile("three", "Found by the fallback."),
+          "nest/skills/SKILL.md": skillFile("bundle", "A skill at a skills folder."),
+          "nest/skills/examples/demo/SKILL.md": skillFile("demo", "Part of bundle."),
         });
         const owner = yield* openGithubUser();
         const workspace = yield* openWorkspace(owner);
@@ -507,6 +511,11 @@ it.layer(getTestDB())("the installed skills routes", (it) => {
         assert.deepEqual(
           yield* found("npx skills add https://github.com/acme/tools/tree/main/deep"),
           [{ name: "three", selected: true }],
+        );
+        // A skill at `skills/` under the folder searched keeps what is under it as its own files.
+        assert.deepEqual(
+          yield* found("npx skills add https://github.com/acme/tools/tree/main/nest"),
+          [{ name: "bundle", selected: true }],
         );
       }),
   );

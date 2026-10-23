@@ -56,8 +56,8 @@ export interface CheckedSkill {
 /** The key under which a `SKILL.md` keeps the metadata an internal skill is marked in. */
 const METADATA_KEY = "metadata";
 
-/** `internal: true` among the metadata's keys, as the frontmatter reader folds a nested mapping into one line. */
-const INTERNAL_MARK = /(?:^|\s)internal:\s+true(?:\s|$)/u;
+/** `internal: true` among the metadata's keys, as the frontmatter reader folds a nested mapping into one line, block (`internal: true`) or flow (`{internal: true}`). */
+const INTERNAL_MARK = /(?:^|[\s{,])internal:\s*true(?=[\s},]|$)/u;
 
 /** A file's bytes as text, read leniently: a binary file reads as noise, which no credential shape matches by chance. */
 export function fileText(bytes: Uint8Array): string {

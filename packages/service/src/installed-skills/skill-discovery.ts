@@ -14,7 +14,9 @@
  *   agent's project skills folder, down to three folders deep, then under
  *   each folder a plugin manifest names, one folder deep;
  * - a walk never goes below a folder holding a `SKILL.md`, whose subfolders
- *   are its own files, nor through a folder the tool skips;
+ *   are its own files, nor through a folder the tool skips; and, where the
+ *   tool would, no walk starts inside a skill found above it, such as
+ *   under `skills/` where `skills/SKILL.md` is one;
  * - where none is found, every folder holding a `SKILL.md` down to five
  *   folders deep is.
  *
@@ -256,11 +258,21 @@ export function discoverSkillFolders(
       }
     }
   };
+  // Note that a folder at or under a skill below the folder searched is that skill's own files, so no walk starts there.
+  const insideSkill = (folder: string) => {
+    for (let at = folder; at !== search && at !== ""; at = splitFolder(at).parent) {
+      if (holding(at)) return true;
+    }
+    return false;
+  };
   walk(search, 1, 1);
   for (const container of [...SKILL_CONTAINERS, ...AGENT_SKILL_FOLDERS]) {
-    walk(pathWithin(search, container) ?? search, CONTAINER_DEPTH, 1);
+    const folder = pathWithin(search, container) ?? search;
+    if (!insideSkill(folder)) walk(folder, CONTAINER_DEPTH, 1);
   }
-  for (const folder of manifestFolders(search, input)) walk(folder, 1, 1);
+  for (const folder of manifestFolders(search, input)) {
+    if (!insideSkill(folder)) walk(folder, 1, 1);
+  }
   if (found.length > 0 && !fullDepth) return found;
 
   // Note that the fallback looks below a skill too, as `findSkillDirs` does.
