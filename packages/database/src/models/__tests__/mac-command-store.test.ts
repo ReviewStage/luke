@@ -246,8 +246,8 @@ it.layer(getTestDB())("the Mac command store", (it) => {
   );
 });
 
-/** A coding agent's conversation under the account, with the agent itself in the workspace given, answering both ids. */
-const openAgent = (userId: string, organizationId: string) =>
+/** A coding agent's conversation under the account, with the agent itself in the workspace given, started on the prompt given or blank, answering both ids. */
+const openAgent = (userId: string, organizationId: string, prompt: string | null = null) =>
   Effect.gen(function* () {
     const db = yield* Database;
     const [id, conversationId] = [randomUUID(), randomUUID()];
@@ -259,6 +259,7 @@ const openAgent = (userId: string, organizationId: string) =>
       organizationId,
       userId,
       conversationId,
+      prompt,
       model: "anthropic/claude-opus-5.5",
       effort: "high",
       repository: "acme/api",
@@ -377,11 +378,11 @@ it.layer(getTestDB())("who has put words into an agent's conversation", (it) => 
   );
 
   it.effect(
-    "a developer's line kept before senders were counts as another account's, all but the opening prompt",
+    "a developer's line kept before senders were counts as another account's, all but the prompt an agent was started on",
     () =>
       Effect.gen(function* () {
         const { starter, workspace } = yield* people;
-        const agent = yield* openAgent(starter, workspace);
+        const agent = yield* openAgent(starter, workspace, "Find the flakiest test and fix it.");
         const target = { userId: starter, conversationId: agent.conversationId };
         yield* sendLine(starter, agent.conversationId, 1, undefined, MESSAGE_ROLE.ASSISTANT);
         assert.equal(yield* heardFromAnotherAccount(target), false, "the model's own reply");
@@ -394,6 +395,16 @@ it.layer(getTestDB())("who has put words into an agent's conversation", (it) => 
           "a later line nothing says whose it was",
         );
       }),
+  );
+
+  it.effect("a blank agent's first untagged line counts, since it was started on no prompt", () =>
+    Effect.gen(function* () {
+      const { starter, workspace } = yield* people;
+      const blank = yield* openAgent(starter, workspace);
+      yield* sendLine(starter, blank.conversationId, 1);
+      const target = { userId: starter, conversationId: blank.conversationId };
+      assert.equal(yield* heardFromAnotherAccount(target), true);
+    }),
   );
 
   it.effect("a worker's conversation reads the lines of the agent it was delegated from", () =>

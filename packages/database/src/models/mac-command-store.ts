@@ -226,15 +226,19 @@ const sendingAgent = alias(codingAgent, "sending_agent");
 /** The root's developer lines before one of them, read for whether it is the first, the prompt the agent was started on. */
 const earlierLine = alias(messages, "earlier_line");
 
+/** The agent the root conversation is of, read for whether it was started on a prompt or a plan at all. */
+const startedAgent = alias(codingAgent, "started_agent");
+
 /**
  * One line of the conversation's root, or the root's own where it is one,
  * that another account put there: a member other than the owner, a former
  * member, or an agent that is not the owner's own or is gone. A developer's
  * line written before senders were kept, a `user` row with no sender, counts
- * too, because nothing says whose it was; all but the root's first, which is
- * the prompt the agent was started on, written untagged by eve's relay for
- * every agent started before the start wrote it with its sender
- * (`coder-host/start.ts`).
+ * too, because nothing says whose it was; all but the root's first where the
+ * agent was started on a prompt or a plan, which that first line is, written
+ * untagged by eve's relay for every agent started before the start wrote it
+ * with its sender (`coder-host/start.ts`). A blank agent was started on
+ * none, so its first line is whoever's first steer, and counts.
  */
 const findForeignLine = SqlSchema.findOneOption({
   Request: Schema.Struct({ userId: Schema.String, conversationId: Schema.String }),
@@ -250,6 +254,10 @@ const findForeignLine = SqlSchema.findOneOption({
           eq(messages.conversationId, sql`coalesce(${parent.id}, ${conversations.id})`),
         )
         .leftJoin(sendingAgent, eq(sendingAgent.id, messages.senderAgentId))
+        .leftJoin(
+          startedAgent,
+          eq(startedAgent.conversationId, sql`coalesce(${parent.id}, ${conversations.id})`),
+        )
         .where(
           and(
             eq(conversations.id, conversationId),
@@ -266,17 +274,20 @@ const findForeignLine = SqlSchema.findOneOption({
               and(
                 eq(messages.role, MESSAGE_ROLE.USER),
                 isNull(messages.sender),
-                exists(
-                  db
-                    .select({ seq: earlierLine.seq })
-                    .from(earlierLine)
-                    .where(
-                      and(
-                        eq(earlierLine.conversationId, messages.conversationId),
-                        eq(earlierLine.role, MESSAGE_ROLE.USER),
-                        lt(earlierLine.seq, messages.seq),
+                or(
+                  and(isNull(startedAgent.prompt), isNull(startedAgent.planSnapshot)),
+                  exists(
+                    db
+                      .select({ seq: earlierLine.seq })
+                      .from(earlierLine)
+                      .where(
+                        and(
+                          eq(earlierLine.conversationId, messages.conversationId),
+                          eq(earlierLine.role, MESSAGE_ROLE.USER),
+                          lt(earlierLine.seq, messages.seq),
+                        ),
                       ),
-                    ),
+                  ),
                 ),
               ),
             ),
