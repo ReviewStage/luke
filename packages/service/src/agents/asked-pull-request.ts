@@ -64,21 +64,12 @@ const keptPublished = /* @__PURE__ */ Effect.fnUntraced(function* (
   const status = yield* statusOf(agent);
   const ended = status !== CODING_AGENT_STATUS.STARTING && status !== CODING_AGENT_STATUS.RUNNING;
   return yield* Cache.get(published, new PublishedKey({ userId, agentId: agent.id, ended })).pipe(
-    Effect.catch((failure) => {
-      switch (failure._tag) {
-        // The row stood a statement ago; an agent gone between the two is not found, as it would be on the next ask.
-        case "NoSuchAgent":
-          return Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-        case "RepositoryNotReachable":
-          return Effect.fail(HOSTED_REFUSAL.REPOSITORY_NOT_REACHABLE);
-        case "SqlError":
-        case "EffectDrizzleQueryError":
-        case "SchemaError":
-          return hostedStoreOrUnavailable(Effect.fail(failure));
-        default:
-          return githubReadOrRefusal(Effect.fail(failure));
-      }
-    }),
+    // The row stood a statement ago; an agent gone between the two is not found, as it would be on the next ask.
+    Effect.catch((failure) =>
+      failure._tag === "NoSuchAgent"
+        ? Effect.fail(HOSTED_REFUSAL.NOT_FOUND)
+        : githubReadRefusal(Effect.fail(failure)),
+    ),
   );
 });
 
@@ -110,20 +101,7 @@ export const askedPublished = /* @__PURE__ */ Effect.fnUntraced(function* (
   number: number | undefined,
 ) {
   if (number === undefined) return yield* keptPublished(published, userId, agent);
-  return yield* agentPullRequestOfNumber(userId, agent, number).pipe(
-    Effect.catch((failure) => {
-      switch (failure._tag) {
-        case "RepositoryNotReachable":
-          return Effect.fail(HOSTED_REFUSAL.REPOSITORY_NOT_REACHABLE);
-        case "SqlError":
-        case "EffectDrizzleQueryError":
-        case "SchemaError":
-          return hostedStoreOrUnavailable(Effect.fail(failure));
-        default:
-          return githubReadOrRefusal(Effect.fail(failure));
-      }
-    }),
-  );
+  return yield* agentPullRequestOfNumber(userId, agent, number).pipe(githubReadRefusal);
 });
 
 /** The pull request a read or a change of the agent's Pull request tab is about (`askedPublished`), null where there is none. */

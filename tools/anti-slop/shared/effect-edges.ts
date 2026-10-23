@@ -9,8 +9,8 @@ const REPOSITORY_ROOT = path.resolve(PLUGIN_DIRECTORY, "..", "..");
  * The machine-readable twin of root AGENTS.md's "Effect idioms" section.
  * AGENTS.md states each permanent adaptor's reason in prose; this holds the
  * same set as data, so the rules below read one list rather than each
- * re-deriving one, and `scripts/repository-checks.sh` fails a PR that shrinks
- * one side of the pair and not the other.
+ * re-deriving one. Nothing checks that the two agree: a PR that changes one
+ * changes the other.
  */
 const ALLOWLIST_FILE = path.join(PLUGIN_DIRECTORY, "effect-edges.json");
 

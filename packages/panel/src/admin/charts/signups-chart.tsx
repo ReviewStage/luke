@@ -3,16 +3,16 @@ import type {
   AdminSignInMethods,
   AdminTrend,
 } from "@luke/features/admin-answer-wire";
-import { formatTooltipDay, PARTIAL_DAY_OPACITY } from "@luke/ui/admin-format";
 import {
   type ChartConfig,
   ChartContainer,
   ChartTooltip,
   ChartTooltipContent,
 } from "@luke/ui/chart";
-import { partialDayKey, seriesHasNoData } from "@luke/ui/daily-series";
-import { formatCount, formatDayTick } from "@luke/ui/time-format";
-import { Bar, BarChart, CartesianGrid, Cell, LabelList, XAxis, YAxis } from "recharts";
+import { DailyBars } from "@luke/ui/daily-bars";
+import { seriesHasNoData } from "@luke/ui/daily-series";
+import { formatCount } from "@luke/ui/time-format";
+import { Bar, BarChart, LabelList, XAxis, YAxis } from "recharts";
 import { barRadius, barTopRadius } from "./bar-radius.js";
 import { ChartEmpty, ChartFrame, ChartFrameSkeleton, ChartTrend } from "./chart-frame.js";
 
@@ -47,42 +47,17 @@ export function SignupsChart({
     );
   }
 
-  const partialDay = partialDayKey(daily, generatedAt);
   return (
     <ChartFrame title={SIGNUPS_TITLE} aside={<ChartTrend trend={trend} />}>
-      <ChartContainer
+      <DailyBars
         config={SIGNUPS_CHART}
-        className="aspect-auto w-full"
-        style={{ height: SIGNUPS_PLOT_HEIGHT }}
-      >
-        <BarChart data={[...daily]}>
-          <CartesianGrid vertical={false} />
-          <XAxis
-            dataKey="day"
-            tickLine={false}
-            axisLine={false}
-            tickMargin={8}
-            minTickGap={32}
-            tickFormatter={formatDayTick}
-          />
-          <YAxis width={36} tickLine={false} axisLine={false} allowDecimals={false} />
-          <ChartTooltip
-            content={
-              <ChartTooltipContent
-                labelFormatter={(value) => formatTooltipDay(String(value), partialDay)}
-              />
-            }
-          />
-          <Bar dataKey="count" fill="var(--color-count)" radius={barTopRadius()}>
-            {daily.map((point) => (
-              <Cell
-                key={point.day}
-                fillOpacity={point.day === partialDay ? PARTIAL_DAY_OPACITY : 1}
-              />
-            ))}
-          </Bar>
-        </BarChart>
-      </ChartContainer>
+        data={daily}
+        series={[{ key: "count", fill: "var(--color-count)" }]}
+        axis={{ width: 36, allowDecimals: false }}
+        height={SIGNUPS_PLOT_HEIGHT}
+        radius={barTopRadius()}
+        generatedAt={generatedAt}
+      />
     </ChartFrame>
   );
 }

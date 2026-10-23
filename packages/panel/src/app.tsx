@@ -47,6 +47,7 @@ import { useKeyboardModality } from "./keyboard-modality.js";
 import { useLastSignIn } from "./last-sign-in.js";
 import { LinkMenu } from "./link-menu.js";
 import { PageWorkspaceProvider, useCopyLink } from "./links-at-hand.js";
+import { MacCommandAskDialog } from "./mac-command-ask.js";
 import { throughHistory, useHistoryMouseButtons, useWindowHistory } from "./navigation-history.js";
 import { OpenFeedbackProvider } from "./open-feedback.js";
 import { OpenSettingsProvider } from "./open-settings.js";
@@ -841,6 +842,8 @@ function AppWindow(): React.JSX.Element {
                           {/* The window's passing notice: the thank-you after a note lands, what
           came of a change made from a menu, and an update arrived. */}
                           <ToastHost />
+                          {/* A command an agent asks to run on this Mac, while main holds it for an answer. */}
+                          <MacCommandAskDialog />
                           {/* The menu a right-click on any link in the window hangs. */}
                           <LinkMenu />
                           <UpdatedToast />

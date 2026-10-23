@@ -2,7 +2,7 @@ import { type WireValue, WireValueSchema } from "@luke/wire";
 import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import { Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
-import { Database, type DatabaseServices, type QueryError } from "../core/query.js";
+import { Database, type DatabaseServices, type StoreFailure } from "../core/query.js";
 import { codingAgent } from "../schemas/coding-agent.js";
 import { conversations } from "../schemas/storage.js";
 import { waitOutConversationDispatch } from "./dispatch-lock.js";
@@ -29,8 +29,6 @@ export interface NativeProjectionRow {
   /** The projection's state as it was saved; null before the first save. */
   readonly projection: WireValue | null;
 }
-
-type NativeProjectionFailure = QueryError | Schema.SchemaError;
 
 const lockProjectionRow = SqlSchema.findOneOption({
   Request: Schema.Struct({
@@ -136,7 +134,7 @@ export function withNativeProjection<A, E, R>(
   target: ConversationTarget,
   runnerTokenHash: string,
   apply: (held: NativeProjectionRow) => Effect.Effect<NativeProjectionApplied<A>, E, R>,
-): Effect.Effect<Option.Option<A>, E | NativeProjectionFailure, R | DatabaseServices> {
+): Effect.Effect<Option.Option<A>, E | StoreFailure, R | DatabaseServices> {
   const locked = Effect.gen(function* () {
     // A line's hand-over to the runner under way is waited out, so the events it starts take the line in.
     yield* waitOutConversationDispatch(target.conversationId);
@@ -158,7 +156,7 @@ export function withNativeProjection<A, E, R>(
  */
 export function readNativeSequence(
   target: ConversationTarget,
-): Effect.Effect<Option.Option<number>, NativeProjectionFailure, DatabaseServices> {
+): Effect.Effect<Option.Option<number>, StoreFailure, DatabaseServices> {
   return Effect.map(findProjectionSequence(target), (row) =>
     Option.flatMap(row, ({ sequence }) => Option.fromNullishOr(sequence)),
   );
@@ -172,7 +170,7 @@ export function readNativeSequence(
  */
 export function readNativeProjection(
   target: ConversationTarget,
-): Effect.Effect<Option.Option<WireValue>, NativeProjectionFailure, DatabaseServices> {
+): Effect.Effect<Option.Option<WireValue>, StoreFailure, DatabaseServices> {
   return Effect.map(findProjection(target), (row) =>
     Option.flatMap(row, ({ projection }) => Option.fromNullishOr(projection)),
   );
@@ -203,6 +201,6 @@ const dropProjectionTurn = SqlSchema.void({
 export function dropNativeProjectionTurns(
   conversationId: string,
   turnIds: readonly string[],
-): Effect.Effect<void, NativeProjectionFailure, DatabaseServices> {
+): Effect.Effect<void, StoreFailure, DatabaseServices> {
   return turnIds.length === 0 ? Effect.void : dropProjectionTurn({ conversationId, turnIds });
 }

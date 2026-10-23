@@ -1,9 +1,4 @@
-import {
-  HTTP_METHOD,
-  type UnparsedWireValue,
-  unparsedWire,
-  type WireBoundaryInput,
-} from "@luke/wire";
+import { HTTP_METHOD, type UnparsedWireValue, unparsedWire } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import { Effect, Result, Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
@@ -12,6 +7,7 @@ import {
   accountCall,
   type CallCredential,
   callAnswered,
+  jsonOf,
 } from "./account-call.js";
 import type { Board, BoardElement, BoardSaveAnswer } from "./board-wire.js";
 import { startRefusedAs } from "./coding-agent-client.js";
@@ -1100,9 +1096,4 @@ function commentAnswer<Answer>(
         : COMMENT_UNANSWERED,
     ),
   );
-}
-
-/** A response's body as JSON, or nothing where it is not JSON at all. */
-function jsonOf(response: Response): Effect.Effect<WireBoundaryInput> {
-  return Effect.promise((): Promise<WireBoundaryInput> => response.json().catch(() => undefined));
 }

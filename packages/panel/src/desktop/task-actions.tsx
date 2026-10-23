@@ -45,7 +45,7 @@ import {
 } from "@luke/ui/tasks-model";
 import { useInlineRename } from "@luke/ui/use-inline-rename";
 import { FolderInputIcon } from "lucide-react";
-import { memo, useCallback, useEffect, useMemo, useRef } from "react";
+import { memo, useCallback, useMemo, useRef } from "react";
 import { ActorRef, AssigneeFaceHeard, AssigneeFaceMark } from "../actor-ref.js";
 import { useAppCommand } from "../app-commands.js";
 import { usePlanDrafted } from "../composer-drafts.js";
@@ -67,6 +67,7 @@ import { useReadMarks } from "../tasks/use-task-looks.js";
 import { useTaskOrigin } from "../tasks/use-task-origin.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { APP_SLICE, useAppSlice } from "../use-app-state.js";
+import { useRefocusAfterEdit } from "../use-refocus-after-edit.js";
 import { ActionMenu, type MenuAction, type MenuEntry } from "./action-menu.js";
 import { strandedHome, useMoveTaskDialog } from "./move-task-dialog.js";
 import { useRowPlace, withRowMoves } from "./row-moves.js";
@@ -720,12 +721,7 @@ export const SidebarTask = memo(function SidebarTask({
     row.current = press;
     item.current = press?.parentElement ?? null;
   }, []);
-  const refocus = useRef(false);
-  useEffect(() => {
-    if (rename.editing || !refocus.current) return;
-    refocus.current = false;
-    row.current?.focus();
-  }, [rename.editing]);
+  const endedByKey = useRefocusAfterEdit(rename.editing, row);
   // Note that the row is what the menu rings and hands focus back to, even
   // when the right-click lands on Pin or Mark done over its end.
   const showMenu = actions.contextMenu(row);
@@ -750,7 +746,7 @@ export const SidebarTask = memo(function SidebarTask({
                 maxLength={TASK_BOUNDS.MAX_NAME_CHARS}
                 editing
                 onEnd={(edit) => {
-                  refocus.current = edit.byKey;
+                  endedByKey(edit.byKey);
                   rename.end(edit.value);
                 }}
               />

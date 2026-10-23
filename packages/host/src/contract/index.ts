@@ -15,6 +15,7 @@ import { chaptersActsContract } from "./chapters.js";
 import { installedSkillActsContract } from "./installed-skills.js";
 import { integrationActsContract } from "./integrations.js";
 import type { PortActKind } from "./kinds.js";
+import { macCommandActsContract } from "./mac-commands.js";
 import { macTerminalActsContract } from "./mac-terminals.js";
 import { pushesContract } from "./pushes.js";
 import { settingsActsContract } from "./settings.js";
@@ -36,6 +37,12 @@ import { workspaceActsContract } from "./workspaces.js";
  * with no procedure here cannot be called on the port at all.
  */
 
+export {
+  MAC_COMMAND_DECISION,
+  type MacCommandAnswer,
+  type MacCommandAsk,
+  type MacCommandDecision,
+} from "../mac-command-ask.js";
 export type { ChatShown } from "./agents.js";
 export { ACT_ERROR } from "./base.js";
 export {
@@ -49,6 +56,7 @@ export {
   CHAPTERS_ACT_KIND,
   INSTALLED_SKILL_ACT_KIND,
   INTEGRATION_ACT_KIND,
+  MAC_COMMAND_ACT_KIND,
   MAC_TERMINAL_ACT_KIND,
   PLATFORM_PORT_ACT_KIND,
   type PlatformPortActKind,
@@ -87,6 +95,7 @@ export const actContract = {
   ...chaptersActsContract,
   ...installedSkillActsContract,
   ...integrationActsContract,
+  ...macCommandActsContract,
   ...macTerminalActsContract,
   ...settingsActsContract,
   ...tasksActsContract,

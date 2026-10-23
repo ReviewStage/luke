@@ -18,7 +18,7 @@ import { and, desc, eq, inArray, lt, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
-import { Database, type DatabaseServices, type QueryError } from "../core/query.js";
+import { Database, type DatabaseServices, type StoreFailure } from "../core/query.js";
 import { user } from "../schemas/auth.js";
 import { codingAgent } from "../schemas/coding-agent.js";
 import { planRevision } from "../schemas/plan-revision.js";
@@ -94,8 +94,6 @@ export interface PlanSaveRecord {
   /** The plan's last save before this one, where it has been saved; none for a plan never written. */
   readonly savedBefore: Option.Option<Date>;
 }
-
-type RevisionFailure = QueryError | Schema.SchemaError;
 
 const RevisionRowSchema = Schema.Struct({
   seq: Schema.Number,
@@ -434,7 +432,7 @@ function joins(newest: RevisionRow, record: PlanSaveRecord, now: Date): boolean 
  */
 function recordEarlier(
   record: PlanSaveRecord,
-): Effect.Effect<number, RevisionFailure, DatabaseServices> {
+): Effect.Effect<number, StoreFailure, DatabaseServices> {
   return Option.match(record.savedBefore, {
     onNone: () => Effect.succeed(0),
     onSome: (at) =>
@@ -477,7 +475,7 @@ function writerOf(row: SectionRevisionRow): PlanSectionWriterWho {
  */
 export function recordRevision(
   record: PlanSaveRecord,
-): Effect.Effect<string, RevisionFailure, DatabaseServices> {
+): Effect.Effect<string, StoreFailure, DatabaseServices> {
   return Effect.gen(function* () {
     const now = yield* DateTime.nowAsDate;
     const { writer, after } = record;
@@ -517,7 +515,7 @@ export function recordRevision(
  */
 export function readLastEdit(
   taskId: string,
-): Effect.Effect<Option.Option<PlanLastEdit>, RevisionFailure, DatabaseServices> {
+): Effect.Effect<Option.Option<PlanLastEdit>, StoreFailure, DatabaseServices> {
   return Effect.map(findLastEdit(taskId), Option.map(lastEditOf));
 }
 
@@ -532,7 +530,7 @@ export function readLastEdit(
 export function readSectionWriters<E, R>(
   taskId: string,
   started: Effect.Effect<string, E, R>,
-): Effect.Effect<readonly PlanSectionWriter[], RevisionFailure | E, DatabaseServices | R> {
+): Effect.Effect<readonly PlanSectionWriter[], StoreFailure | E, DatabaseServices | R> {
   return Effect.gen(function* () {
     const rows = [...(yield* findSectionRevisions(taskId))].reverse();
     const first = rows[0];
@@ -558,7 +556,7 @@ export function listRevisions(
   userId: string,
   taskId: string,
   before?: number,
-): Effect.Effect<PlanRevisionsAnswer, RevisionFailure, DatabaseServices> {
+): Effect.Effect<PlanRevisionsAnswer, StoreFailure, DatabaseServices> {
   return Effect.map(findRevisionLines({ userId, taskId, before: before ?? null }), (rows) => {
     const page = rows.slice(0, PLAN_HISTORY_BOUNDS.PAGE);
     const revisions = page.map(
@@ -586,7 +584,7 @@ export function readRevisionContent(
   userId: string,
   taskId: string,
   seq: number,
-): Effect.Effect<Option.Option<string>, RevisionFailure, DatabaseServices> {
+): Effect.Effect<Option.Option<string>, StoreFailure, DatabaseServices> {
   return Effect.map(findRevisionContents({ userId, taskId, seqs: [seq] }), (rows) =>
     Option.map(Option.fromNullishOr(rows[0]), (row) => row.document),
   );
@@ -602,7 +600,7 @@ export function readRevision(
   userId: string,
   taskId: string,
   seq: number,
-): Effect.Effect<Option.Option<PlanRevisionAnswer["revision"]>, RevisionFailure, DatabaseServices> {
+): Effect.Effect<Option.Option<PlanRevisionAnswer["revision"]>, StoreFailure, DatabaseServices> {
   return Effect.map(findRevisionContents({ userId, taskId, seqs: [seq - 1, seq] }), (rows) => {
     const documentAt = (at: number): PlanDocument | null => {
       const row = rows.find((each) => each.seq === at);

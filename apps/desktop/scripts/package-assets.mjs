@@ -5,10 +5,10 @@ import { BRAND_ASSETS_DIRECTORY } from "@luke/brand/assets-directory";
 import { DMG_WINDOW } from "@luke/brand/dmg-window";
 import { buildAppIcon } from "./app-icon.mjs";
 import { LICENSE_RESOURCE_NAME, NOTICE_RESOURCE_NAME } from "./package-config.mjs";
-import { NATIVE_HELPERS } from "./package-layout.mjs";
+import { LIQUID_GLASS_ADDON, NATIVE_HELPERS } from "./package-layout.mjs";
 
 export function packageAssetPaths({ appRoot }) {
-  const helperPaths = NATIVE_HELPERS.map((helper) =>
+  const helperPaths = [...NATIVE_HELPERS, LIQUID_GLASS_ADDON].map((helper) =>
     path.join(appRoot, ".build", "native", helper.binary),
   );
   const iconPath = path.join(appRoot, ".build", "Luke.icns");

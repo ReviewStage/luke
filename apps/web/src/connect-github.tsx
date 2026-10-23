@@ -31,11 +31,11 @@ import {
   TextLink,
 } from "@luke/ui";
 import { createAuthClient } from "better-auth/react";
-import { StrictMode, useEffect, useRef, useState } from "react";
-import { createRoot } from "react-dom/client";
+import { useEffect, useRef, useState } from "react";
 import { landingDescription, useConnectReturn } from "./connect-return";
 import { useSocialSignIn } from "./sign-in-choices";
 import "./styles.css";
+import { mountPrerenderedPage } from "./mount-page";
 
 /**
  * connect-github.tsx -- the page that connects the signed-in account's GitHub, on the browser's own session.
@@ -213,11 +213,4 @@ function ConnectGitHub(): React.JSX.Element {
   );
 }
 
-const rootElement = document.getElementById("root");
-if (!rootElement) throw new Error("Root element is missing");
-
-createRoot(rootElement).render(
-  <StrictMode>
-    <ConnectGitHub />
-  </StrictMode>,
-);
+mountPrerenderedPage(<ConnectGitHub />);

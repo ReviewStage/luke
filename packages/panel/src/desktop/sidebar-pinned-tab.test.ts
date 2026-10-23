@@ -2,19 +2,24 @@
 
 import assert from "node:assert/strict";
 import { MOTION_DELAY_MS } from "@luke/brand";
-import { CHECK_SUMMARY, PULL_REQUEST_STATE } from "@luke/features/coding-agent-wire";
+import {
+  CHECK_SUMMARY,
+  CODING_AGENT_STATUS,
+  type CodingAgentSummary,
+  PULL_REQUEST_STATE,
+} from "@luke/features/coding-agent-wire";
 import type { TaskSummary } from "@luke/features/task-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, test, vi } from "vitest";
+import { afterEach, beforeEach, describe, test, vi } from "vitest";
 import { type PinnedTab, SIDE_PANEL_TAB } from "../tasks/use-side-panel.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { type AnyAct, FAKE_ANSWER, type FakeActAnswer, fakeActs } from "../testing/app-bridge.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { restOn } from "../testing/hint-rest.js";
-import { tasksControl } from "../testing/tasks-control.js";
+import { codingAgentsControl, tasksControl } from "../testing/tasks-control.js";
 import { SidebarPinnedTab } from "./sidebar-pinned-tab.js";
 
 /**
@@ -22,7 +27,9 @@ import { SidebarPinnedTab } from "./sidebar-pinned-tab.js";
  * request its agent opened only once its card shows: a pointer crossing the
  * row asks the service nothing, and a card hung again soon after shows what
  * the first read without asking again, while one hung after a read that
- * failed asks again. The service is a script at the act
+ * failed asks again. A Changes pin on the open task hangs the Changes tab's own card
+ * from the pull request the tab reads, asking the service nothing, and keeps the
+ * pin's own card for a pin of another task. The service is a script at the act
  * boundary; synthetic ids throughout.
  */
 
@@ -312,4 +319,66 @@ test("a pinned Changes tab naming a pull request by number keeps its pinned labe
   const row = drawPin(pin, held);
   assert.equal(row.textContent, "#42 Old title");
   assert.equal(row.querySelector("[data-pull-request-mark]"), null);
+});
+
+describe("a pinned Changes tab's card", () => {
+  const pin: PinnedTab = { task: TASK.id, tab: { changes: AGENT }, label: "#42 Old title", at: 1 };
+  const summary: CodingAgentSummary = {
+    id: AGENT,
+    planId: TASK.id,
+    model: "anthropic/claude-opus-5.5",
+    effort: "high",
+    title: "Expiry job",
+    createdAt: 1,
+    status: CODING_AGENT_STATUS.COMPLETED,
+    turnId: null,
+  };
+  const read = {
+    number: 42,
+    title: "Newer title",
+    url: "https://github.com/acme/relay/pull/42",
+    state: PULL_REQUEST_STATE.MERGED,
+    checks: CHECK_SUMMARY.PASSING,
+    additions: 4,
+    deletions: 1,
+    changedFiles: 3,
+  };
+  /** The open task, which has read its agent's pull request. */
+  const openTask = (agents: readonly CodingAgentSummary[]): TasksControl => {
+    const base = tasksControl({ tasks: [TASK] });
+    return {
+      ...base,
+      activeTaskId: TASK.id,
+      agents: codingAgentsControl({ agents, pullRequests: new Map([[AGENT, read]]) }),
+    };
+  };
+
+  test("is the Changes tab's own card where the open task holds its agent, read without asking the service", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "performance"] });
+    restOn(drawPin(pin, TASK, openTask([summary])));
+    await settled();
+    const tabCard = document.querySelector(".luke-tooltip-card [data-tab-card]");
+    assert.match(tabCard?.textContent ?? "", /Newer title/u);
+    assert.match(tabCard?.textContent ?? "", /3 files/u);
+    assert.match(tabCard?.textContent ?? "", /Expiry job/u);
+    assert.equal(card(), null, "no pin card stands beside it");
+    assert.deepEqual(reads, []);
+  });
+
+  test("is the pin's own card, reading the pull request as it shows, where the task is not open", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "performance"] });
+    restOn(drawPin(pin));
+    await settled();
+    assert.ok(card() !== null, "the pin's card stands");
+    assert.equal(document.querySelector(".luke-tooltip-card [data-tab-card]"), null);
+    assert.deepEqual(reads, [AGENT]);
+  });
+
+  test("is the pin's own card where the open task no longer holds the agent", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "performance"] });
+    restOn(drawPin(pin, TASK, openTask([])));
+    await settled();
+    assert.match(card()?.textContent ?? "", /No longer on this task/u);
+    assert.equal(document.querySelector(".luke-tooltip-card [data-tab-card]"), null);
+  });
 });

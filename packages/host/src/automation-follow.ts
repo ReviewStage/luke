@@ -15,12 +15,11 @@ import {
   type AutomationFollowed,
 } from "@luke/features/automation-view";
 import { LIVE_SIGNED_OUT } from "@luke/features/live-wire";
-import { Clock, Duration, Effect, Option, Schema, Stream } from "effect";
+import { Clock, Duration, Effect, type Schema, Stream } from "effect";
 import {
+  decodedLiveRows,
   LIVE_GONE,
-  LiveBroken,
   type LiveClient,
-  liveRows,
   liveShown,
   type SealedRead,
   type TxWait,
@@ -120,7 +119,6 @@ function followed<Part extends string, Rows, View>(
   dependencies: AutomationFollowDependencies,
   kind: FollowKind<Part, Rows, View>,
 ): Effect.Effect<void> {
-  const decode = Schema.decodeUnknownOption(kind.rows);
   const attempt = Effect.gen(function* () {
     const sealed = yield* kind.live(false);
     if ("failure" in sealed) {
@@ -150,22 +148,16 @@ function followed<Part extends string, Rows, View>(
       }
       return goneWhereNotFound(read);
     };
-    const rows = liveRows(
+    const rows = decodedLiveRows(
       {
         openLive: dependencies.openLive,
         reseal: () => Effect.map(kind.live(false), noted),
         poll: (after) => Effect.map(kind.live(true, after), noted),
         now: dependencies.now,
-        ...(dependencies.onTxWait === undefined ? undefined : { onTxWait: dependencies.onTxWait }),
+        onTxWait: dependencies.onTxWait,
       },
       sealed,
-    ).pipe(
-      Stream.mapEffect((read) =>
-        Option.match(decode(read), {
-          onNone: () => Effect.fail(new LiveBroken({ reason: "a row did not decode" })),
-          onSome: Effect.succeed,
-        }),
-      ),
+      kind.rows,
     );
     // A follow the service ended for good, as one whose automation is gone, ends here at once, rather than starting again.
     const gone = yield* Stream.runForEach(

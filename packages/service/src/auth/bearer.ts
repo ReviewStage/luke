@@ -152,7 +152,7 @@ export function resolveHostedUserId(request: Request): Effect.Effect<Option.Opti
  * The bearer alone, against the same store, for a route that acts for the
  * one device that asks rather than for the account, where a browser's
  * session must never stand in: the Mac's held read claims every command its
- * account's agents queued for itself (`agents/mac-commands-app.ts`).
+ * account's agents queued for itself (`agents/mac-commands-procedures.ts`).
  */
 export function resolveHostedBearerUserId(request: Request): Effect.Effect<Option.Option<string>> {
   return hostedUserId(request, hostedUserInfo);

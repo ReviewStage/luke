@@ -39,12 +39,12 @@ contextBridge.exposeInMainWorld("luke", exposedBridge());
 
 // An attached shell's port cannot cross the context bridge, so it is handed
 // into the page as Electron hands a port to an isolated world; the page reads
-// it back by the channel and checks the ticket (`renderer/terminal/terminal-port.ts`).
+// it back by the channel and checks the ticket (`packages/panel/src/terminal/terminal-port.ts`).
 ipcRenderer.on(TERMINAL_PORT_CHANNEL, (event, ticket: UnparsedWireValue) => {
   window.postMessage({ channel: TERMINAL_PORT_CHANNEL, ticket }, "*", [...event.ports]);
 });
 
-// A terminal of this Mac's port is handed in the same way (`renderer/planning/mac-terminal-tab.tsx`).
+// A terminal of this Mac's port is handed in the same way (`packages/panel/src/tasks/mac-terminal-tab.tsx`).
 ipcRenderer.on(MAC_TERMINAL_PORT_CHANNEL, (event, ticket: UnparsedWireValue) => {
   window.postMessage({ channel: MAC_TERMINAL_PORT_CHANNEL, ticket }, "*", [...event.ports]);
 });

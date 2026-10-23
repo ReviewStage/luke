@@ -1,5 +1,5 @@
 /**
- * browser-live-acts.ts -- a cloud Browser tab's live view as main carries it: each view a panel attaches gets a port of its own, its socket opened by the host, from a panel alone and only while the experiment is on.
+ * browser-live-procedures.ts -- a cloud Browser tab's live view as the act port carries it: each view a panel attaches gets a port of its own, its socket opened by the host, from a panel alone and only while the experiment is on.
  *
  * An attach mints a connection for the asking panel and that one view, opens
  * a channel, and posts the channel's other end to that panel alone under
@@ -22,14 +22,13 @@ import {
   type BrowserLivePortTicket,
   browserLivePortInboundSchema,
 } from "@luke/features/browser-live-acts";
-import type { ActSender } from "@luke/host/act-port";
-import { actPortFor, type PlatformActProcedures } from "@luke/host/act-port";
-import { BROWSER_LIVE_ACT_KIND } from "@luke/host/contract";
-import type { HostOperator } from "@luke/host/host-operator";
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import { Effect, Result } from "effect";
-import type { WebContents } from "electron";
+import { BROWSER_LIVE_ACT_KIND } from "../contract/index.js";
+import type { HostOperator } from "../host-operator.js";
+import { type ActSender, actPortFor } from "./base.js";
+import type { PlatformActProcedures } from "./index.js";
 
 type BrowserLiveActKind = (typeof BROWSER_LIVE_ACT_KIND)[keyof typeof BROWSER_LIVE_ACT_KIND];
 
@@ -41,15 +40,15 @@ export interface MainBrowserLivePort {
   close(): void;
 }
 
-/** How main reaches a panel's page for its ports. */
-interface BrowserLivePortSeam {
+/** How main reaches a panel's page for its ports, `Sender` being the platform's own handle on the window. */
+interface BrowserLivePortSeam<Sender> {
   /** A fresh channel: main's end, with the other end already posted to the panel under the ticket. */
-  open(sender: WebContents, ticket: BrowserLivePortTicket): MainBrowserLivePort;
+  open(sender: Sender, ticket: BrowserLivePortTicket): MainBrowserLivePort;
   /** Calls `then` once, when the panel's page is gone. */
-  whenGone(sender: WebContents, then: () => void): void;
+  whenGone(sender: Sender, then: () => void): void;
 }
 
-export interface BrowserLiveActsDependencies {
+export interface BrowserLiveActsDependencies<Sender> {
   host: Pick<
     HostOperator,
     | "browserLiveConnect"
@@ -58,7 +57,7 @@ export interface BrowserLiveActsDependencies {
     | "onBrowserLiveMessage"
     | "onBrowserLiveClosed"
   >;
-  ports: BrowserLivePortSeam;
+  ports: BrowserLivePortSeam<Sender>;
   /** Whether the account has the Browser tab experiment on now. */
   experimentOn: () => boolean;
   /** A fresh connection id. */
@@ -75,14 +74,13 @@ interface Attached {
 
 const readInbound = readEither(browserLivePortInboundSchema);
 
-const browserLivePort = actPortFor<WebContents>();
-
-export function browserLiveProcedures(
-  dependencies: BrowserLiveActsDependencies,
-): Pick<PlatformActProcedures<WebContents>, BrowserLiveActKind> {
+export function browserLiveProcedures<Sender>(
+  dependencies: BrowserLiveActsDependencies<Sender>,
+): Pick<PlatformActProcedures<Sender>, BrowserLiveActKind> {
+  const browserLivePort = actPortFor<Sender>();
   const { host, ports, experimentOn, createId, run } = dependencies;
   /** Each panel's attached views, by the id the panel minted. */
-  const panels = new Map<WebContents, Map<string, Attached>>();
+  const panels = new Map<Sender, Map<string, Attached>>();
   /** Every attached view, by connection, which is how the host names its events. */
   const byConnection = new Map<string, MainBrowserLivePort>();
 
@@ -114,7 +112,7 @@ export function browserLiveProcedures(
   };
 
   /** The panel's attached views, its page's end watched for the first time it attaches any. */
-  const attachedOf = (sender: WebContents) => {
+  const attachedOf = (sender: Sender) => {
     const held = panels.get(sender);
     if (held !== undefined) return held;
     const fresh = new Map<string, Attached>();
@@ -127,7 +125,7 @@ export function browserLiveProcedures(
   };
 
   /** The asking panel's contents, or nothing where it is no panel or the experiment is off. */
-  const panelOf = (actor: ActSender<WebContents>): WebContents | undefined =>
+  const panelOf = (actor: ActSender<Sender>): Sender | undefined =>
     actor.panel && experimentOn() ? actor.sender : undefined;
 
   return {

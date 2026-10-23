@@ -1,6 +1,7 @@
 import {
   AUTOMATION_CALL_FAILURE,
   AUTOMATION_FOLLOW,
+  type AutomationFollow,
   type AutomationListView,
   type AutomationRunsView,
 } from "@luke/features/automation-view";
@@ -22,7 +23,7 @@ const UNANSWERED = { failure: AUTOMATION_CALL_FAILURE.UNANSWERED } as const;
 
 /** What one stream is opened on: its kind, the id of what it follows, and the hearing of each push. */
 function follow<View>(
-  scope: { readonly kind: "workspace" | "runs"; readonly id: string },
+  scope: { readonly kind: AutomationFollow["kind"]; readonly id: string },
   hear: (view: View | typeof UNANSWERED) => void,
 ): () => void {
   let stopped = false;
@@ -50,7 +51,7 @@ function follow<View>(
 
 /** One followed list or history, heard while `id` names one, with Try again, which opens it anew. */
 function useFollowed<View>(
-  kind: "workspace" | "runs",
+  kind: AutomationFollow["kind"],
   id: string | undefined,
   hear: (view: View | typeof UNANSWERED) => void,
 ): () => void {

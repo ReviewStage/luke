@@ -18,7 +18,7 @@ import type { Board } from "@luke/features/board-wire";
  * raises an element's version on every change, so the count and the sum of
  * versions move exactly when the scene does, and not when a selection or the
  * view moves. What it sends is held to the types a board admits on the
- * panel's side (`planning/board-scene.ts`), so a pasted image or embed stays
+ * panel's side (`@luke/features/board-scene`), so a pasted image or embed stays
  * on this Mac and never reaches the service.
  */
 

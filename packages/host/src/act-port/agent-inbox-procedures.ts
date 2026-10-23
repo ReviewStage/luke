@@ -38,7 +38,7 @@ import type { InboxReadAllRequest } from "@luke/features/inbox-wire";
 import { Effect, MutableHashMap, Option, Queue, Semaphore, Stream } from "effect";
 import { AGENT_INBOX_ACT_KIND } from "../contract/index.js";
 import { type ActSender, actPort } from "./base.js";
-import { followedStream, type OpenFollows } from "./followed-stream.js";
+import { followedStream, type OpenFollows, streamed } from "./followed-stream.js";
 
 /** What the Inbox and chat procedures reach: the host's asks of the service. */
 export interface AgentInboxProceduresDependencies {
@@ -86,32 +86,6 @@ export interface AgentInboxProceduresDependencies {
 /** The refusal a window that draws no Inbox hears, or nothing for a panel. */
 function refuseUnlessPanel<E>(actor: ActSender, refused: () => E): Effect.Effect<void, E> {
   return actor.panel ? Effect.void : Effect.fail(refused());
-}
-
-/**
- * An async iterable as the iterator oRPC streams. Note that its end is
- * handed straight to the iterable's own, rather than through an async
- * generator, which would queue the end behind a read still waiting for the
- * next change and so never close the stream.
- */
-function streamed<A>(iterable: AsyncIterable<A>): AsyncIteratorObject<A, undefined, unknown> {
-  const iterator = iterable[Symbol.asyncIterator]();
-  const ended = async (): Promise<IteratorReturnResult<undefined>> => {
-    await iterator.return?.();
-    return { done: true, value: undefined };
-  };
-  const self: AsyncIteratorObject<A, undefined, unknown> = {
-    next: async () => {
-      const read = await iterator.next();
-      return read.done === true ? { done: true, value: undefined } : read;
-    },
-    return: ended,
-    [Symbol.asyncIterator]: () => self,
-    [Symbol.asyncDispose]: async () => {
-      await ended();
-    },
-  };
-  return self;
 }
 
 /**

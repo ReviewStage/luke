@@ -40,7 +40,6 @@ import { Duration, Effect, Option, Result, type Schema } from "effect";
 import type { HttpClient } from "effect/http";
 import { RUNNER_TAG, SANDBOX_NAME, taggedRunner } from "../agents/coder-host/runner-sessions.js";
 import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
-import { OPEN_INTERNET_POLICY } from "../agents/terminal/agent-sandbox.js";
 import {
   deploymentOidcToken,
   type ListedSandbox,
@@ -49,7 +48,13 @@ import {
   type VercelSandboxApi,
   vercelSandboxApi,
 } from "../agents/vercel-sandbox-api.js";
-import { listOrderAt, listRunningSandboxes, windowAt } from "./sandbox-sweep-list.js";
+import {
+  listOrderAt,
+  listRunningSandboxes,
+  type StopBudget,
+  stopWithinBudget,
+  windowAt,
+} from "./sandbox-sweep-list.js";
 
 export const NATIVE_SANDBOX_SWEEP = {
   /** How long after its run's newest turn ended a sandbox waits for the END's own stop before the sweep stops it. */
@@ -151,11 +156,6 @@ const exitedRunner = (api: VercelSandboxApi, sandbox: NativeSandbox) =>
     return exit === null ? undefined : runner.commandId;
   }).pipe(Effect.orElseSucceed(() => undefined));
 
-/** A count of stops taken, shared by the sandboxes one sweep reads at once. */
-interface StopBudget {
-  remaining: number;
-}
-
 /** Whether the run of the sandbox's agent still has a turn queued or running, read from the store. */
 const runGoesOn = (sandbox: NativeSandbox) =>
   Effect.map(readNativeRunStanding(sandbox.agentId), (standing) =>
@@ -206,22 +206,7 @@ const endSandbox = (
     const ended = yield* runEnded(sandbox, now);
     if (Option.isNone(ended)) return SANDBOX_ENDING.LEFT;
     if (yield* sandboxHeld(ended.value, now)) return SANDBOX_ENDING.HELD;
-    if (budget.remaining <= 0) return SANDBOX_ENDING.DEFERRED;
-    budget.remaining -= 1;
-    // The credential comes off first, and a sandbox it would not come off is left up for the next sweep rather than stopped with it.
-    const stopped = yield* Effect.result(
-      Effect.andThen(
-        api.updateNetworkPolicy(sandbox.running, OPEN_INTERNET_POLICY),
-        api.stopSession(sandbox.running),
-      ),
-    );
-    if (Result.isFailure(stopped)) {
-      yield* Effect.logWarning(
-        `an ended native sandbox was not stopped: ${stopped.failure.message}`,
-      );
-      return SANDBOX_ENDING.FAILED;
-    }
-    return SANDBOX_ENDING.STOPPED;
+    return yield* stopWithinBudget(api, sandbox.running, budget, "an ended native sandbox");
   });
 
 /**

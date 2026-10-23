@@ -18,18 +18,17 @@ import { afterAll, test } from "vitest";
  * every query built on it is wrong in a way the compiler approves of. The store suites catch that only where a query covers the
  * column; this catches it whether one does or not.
  *
- * So the comparison runs both ways over the whole public schema, against a
- * database built by `runWebMigrations` through the same door every store test
- * uses — PGlite in process, or the Postgres of `LUKE_STORE_TEST_DATABASE_URL`
- * on CI, where the real `pg` driver reads `information_schema` back. A column
- * the module declares and the database has not fails, and so does a column
- * the database has and no module declares, which is the direction that
- * catches the migration nobody folded in. Better Auth's tables are compared
- * with the rest: `schemas/auth.ts` is in the barrel, and nothing else holds it
- * to the database.
+ * So every column a module declares is compared, over the whole public
+ * schema, against a database built by `runWebMigrations` through the same door
+ * every store test uses — PGlite in process, or the Postgres of
+ * `LUKE_STORE_TEST_DATABASE_URL` on CI, where the real `pg` driver reads
+ * `information_schema` back. Better Auth's tables are compared with the rest:
+ * `schemas/auth.ts` is in the barrel, and nothing else holds it to the
+ * database.
  *
- * What is compared is name, type, nullability, and primary key. Not
- * compared: defaults, indexes, foreign keys, and the `$type<>()` unions,
+ * What is compared is each shared column's type and nullability. Not
+ * compared: a column or table only one side has, primary keys, defaults,
+ * indexes, foreign keys, and the `$type<>()` unions,
  * which name no Postgres type and are the compile-time claim this whole
  * restoration was for.
  */
@@ -204,7 +203,7 @@ test("every declared column carries the type and the nullability the migrated da
     const migrated = MIGRATED.get(table)?.columns;
     for (const [column, declared] of DECLARED.get(table)?.columns ?? []) {
       const actual = migrated?.get(column);
-      if (actual === undefined) continue; // Named by the columns test above.
+      if (actual === undefined) continue; // A column the database lacks is not compared here.
       if (!EXACT_COLUMN_TYPES.has(declared.type)) {
         drift.push(`${table}.${column}: ${declared.type} is no type this test compares exactly`);
         continue;

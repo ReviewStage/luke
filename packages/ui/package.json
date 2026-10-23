@@ -17,6 +17,7 @@
     "./time-format": "./src/time-format.js",
     "./daily-series": "./src/daily-series.js",
     "./chart": "./src/chart/chart.js",
+    "./daily-bars": "./src/chart/daily-bars.js",
     "./markdown": "./src/markdown/markdown.js",
     "./markdown-class": "./src/markdown/markdown-class.js",
     "./markdown-words": "./src/markdown/markdown-words.js",
@@ -59,7 +60,9 @@
     "./diagram-contract": "./src/diagram-contract.js",
     "./avatar-session": "./src/avatar-session.js",
     "./person-page-model": "./src/person-page-model.js",
-    "./chat-model": "./src/chat-model.js"
+    "./chat-model": "./src/chat-model.js",
+    "./tailwind/theme.css": "./src/tailwind/theme.css",
+    "./tailwind/sources.css": "./src/tailwind/sources.css"
   },
   "types": "./src/index.ts",
   "scripts": {
@@ -67,6 +70,7 @@
     "typecheck": "tsc --project tsconfig.json"
   },
   "dependencies": {
+    "@base-ui/react": "1.9.0",
     "@effect/atom-react": "catalog:",
     "@luke/brand": "workspace:*",
     "@luke/features": "workspace:*",
@@ -75,6 +79,7 @@
     "@luke/voice": "workspace:*",
     "@luke/wire": "workspace:*",
     "@tanstack/react-virtual": "3.14.21",
+    "class-variance-authority": "0.7.1",
     "clsx": "2.1.1",
     "effect": "catalog:",
     "mdast-util-from-markdown": "2.0.3",

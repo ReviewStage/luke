@@ -121,7 +121,12 @@ import { useNewTaskDrafted } from "../composer-drafts.js";
 import { LinkWorkspaceProvider } from "../copy-link-item.js";
 import { DraftMark } from "../draft-mark.js";
 import { MemberDirectory, useMemberDirectory } from "../member-directory.js";
-import type { HistoryStep, NavigationHistory } from "../navigation-history.js";
+import {
+  type HistoryPage,
+  type HistoryStep,
+  type NavigationHistory,
+  sameHistoryPage,
+} from "../navigation-history.js";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs.js";
 import { RepositoryPicture } from "../repository-picture.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
@@ -264,14 +269,14 @@ function historyGroups(
   onGoTo: (at: number) => void,
 ): (readonly MenuAction[])[] {
   const groups: MenuAction[][] = [];
-  let page: string | undefined;
+  let page: HistoryPage | undefined;
   for (const step of steps) {
     const item: MenuAction = {
       label: step.title?.label ?? UNNAMED_STEP,
       detail: step.title?.detail,
       onSelect: () => onGoTo(step.at),
     };
-    if (step.page === page) groups.at(-1)?.push(item);
+    if (page !== undefined && sameHistoryPage(step.page, page)) groups.at(-1)?.push(item);
     else groups.push([item]);
     page = step.page;
   }

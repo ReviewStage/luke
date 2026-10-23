@@ -4,17 +4,14 @@ import {
   listAutomations,
   readAutomation,
 } from "@luke/database/models/automation-store";
-import { wireUuidSchema } from "@luke/features";
-import { unparsedWire } from "@luke/wire";
-import { readEither } from "@luke/wire/effect";
-import { Effect, Option, Result } from "effect";
+import { Effect, Option } from "effect";
 import type { EveTypedTurn } from "../agents/brain-host/eve-sessions.js";
 import { type EveReach, eveFor } from "../agents/coder-host/stop.js";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import {
   HOSTED_REFUSAL,
-  type HostedRefusal,
   hostedStoreOrUnavailable,
+  pathUuid,
   type UserIdResolver,
 } from "../http/http-effect.js";
 import { accountMiddleware, hosted } from "../orpc/base.js";
@@ -56,15 +53,6 @@ export interface AutomationsProcedureSeams extends EveReach {
   resolveUserId: UserIdResolver;
 }
 
-/** The path's id; one that is no UUID names no row. */
-const idOf = /* @__PURE__ */ Effect.fnUntraced(function* (
-  id: string,
-): Effect.fn.Return<string, HostedRefusal> {
-  const read = readEither(wireUuidSchema)(unparsedWire(id));
-  if (Result.isFailure(read)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-  return read.success;
-});
-
 /**
  * The automations resource: every procedure to a signed-in caller. The
  * caller is resolved, and a body's length bounded, on the resource rather
@@ -102,7 +90,7 @@ export function automationsProcedures(seams: AutomationsProcedureSeams) {
 
     /** One automation as the account reads it. */
     read: automations.read.effect(function* ({ input, context: { userId } }) {
-      const id = yield* idOf(input.id);
+      const id = yield* pathUuid(input.id);
       const standing = yield* hostedStoreOrUnavailable(readAutomation(userId, id));
       if (Option.isNone(standing)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
       return { automation: yield* summaryOf(userId, standing.value) };
@@ -113,7 +101,7 @@ export function automationsProcedures(seams: AutomationsProcedureSeams) {
       input: { params, body: asked },
       context: { userId },
     }) {
-      const id = yield* idOf(params.id);
+      const id = yield* pathUuid(params.id);
       const standing = yield* hostedStoreOrUnavailable(readAutomation(userId, id));
       if (Option.isNone(standing)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
       const written = yield* changeAutomationAs(userId, standing.value, asked);
@@ -128,7 +116,7 @@ export function automationsProcedures(seams: AutomationsProcedureSeams) {
 
     /** One automation deleted with its history; one the account reads but may not delete is refused as not permitted, not as gone. */
     remove: automations.remove.effect(function* ({ input, context: { userId } }) {
-      const id = yield* idOf(input.id);
+      const id = yield* pathUuid(input.id);
       const standing = yield* hostedStoreOrUnavailable(readAutomation(userId, id));
       if (Option.isNone(standing)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
       return { txid: yield* removeAutomationAs(userId, id) };
@@ -137,7 +125,7 @@ export function automationsProcedures(seams: AutomationsProcedureSeams) {
     /** The automation run now, under the client's key: 201 with the run this call made, 200 with the one the key already made. */
     run: automations.run.effect(function* ({ input, context }) {
       const { userId } = context;
-      const id = yield* idOf(input.params.id);
+      const id = yield* pathUuid(input.params.id);
       const key = input.body.idempotencyKey;
       const automation = yield* hostedStoreOrUnavailable(
         readAutomation(userId, id, AUTOMATION_ACCESS.RUN),
@@ -160,7 +148,7 @@ export function automationsProcedures(seams: AutomationsProcedureSeams) {
 
     /** The automation's runs, newest first. */
     runs: automations.runs.effect(function* ({ input, context: { userId } }) {
-      const id = yield* idOf(input.id);
+      const id = yield* pathUuid(input.id);
       const automation = yield* hostedStoreOrUnavailable(readAutomation(userId, id));
       if (Option.isNone(automation)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
       const runs = yield* hostedStoreOrUnavailable(

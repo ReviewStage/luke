@@ -1,7 +1,7 @@
 import { eq, sql } from "drizzle-orm";
 import { Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
-import { Database, type DatabaseServices, type QueryError } from "../core/query.js";
+import { Database, type DatabaseServices, type StoreFailure } from "../core/query.js";
 import { user } from "../schemas/auth.js";
 import { hostedUsage, voiceSessionUsage } from "../schemas/usage.js";
 
@@ -10,11 +10,8 @@ export function utcDayKey(now: number): string {
   return new Date(now).toISOString().slice(0, 10);
 }
 
-/** How a statement here fails: the driver's own refusal, or a row this build cannot decode. */
-type QuotaFailure = QueryError | Schema.SchemaError;
-
 /** What a meter seam answers: an effect over the ambient client, composed into the request that spent it. */
-export type QuotaEffect<A> = Effect.Effect<A, QuotaFailure, DatabaseServices>;
+export type QuotaEffect<A> = Effect.Effect<A, StoreFailure, DatabaseServices>;
 
 /**
  * A row a statement had to answer. Its absence is this module's own
@@ -63,7 +60,7 @@ const spendHostedUsage = SqlSchema.findOneOption({
 export function spendHostedMeter(input: {
   readonly userId: string;
   readonly now: number;
-}): Effect.Effect<number, QuotaFailure, DatabaseServices> {
+}): Effect.Effect<number, StoreFailure, DatabaseServices> {
   const day = utcDayKey(input.now);
   return spendHostedUsage({ userId: input.userId, day }).pipe(
     Effect.flatMap((row) => required(row, "The usage upsert returned no row.")),
@@ -110,7 +107,7 @@ export function spendDictationMeter(input: {
   readonly userId: string;
   readonly seconds: number;
   readonly now: number;
-}): Effect.Effect<void, QuotaFailure, DatabaseServices> {
+}): Effect.Effect<void, StoreFailure, DatabaseServices> {
   return spendDictationUsage({
     userId: input.userId,
     day: utcDayKey(input.now),
@@ -177,7 +174,7 @@ export function recordVoiceSeconds(input: {
   readonly sessionId: string;
   readonly seconds: number;
   readonly now: number;
-}): Effect.Effect<VoiceSecondsOutcome, QuotaFailure, DatabaseServices> {
+}): Effect.Effect<VoiceSecondsOutcome, StoreFailure, DatabaseServices> {
   return Effect.flatMap(SqlClient.SqlClient, (client) =>
     client.withTransaction(
       Effect.gen(function* () {

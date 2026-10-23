@@ -58,7 +58,7 @@ import {
  * signed-in user's token stays sealed on its row. Every failure carries a
  * kind or a status and never a token.
  *
- * Synthetic keys, secrets, and tokens throughout (`support/github-app-fake.ts`).
+ * Synthetic keys, secrets, and tokens throughout (`../testing/github-app-fake.ts`).
  */
 
 const { APP_ID } = GITHUB_FIXTURE;

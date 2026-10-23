@@ -1,5 +1,6 @@
 import type { KeyboardEvent, ReactNode, Ref } from "react";
 import { useImperativeHandle, useRef } from "react";
+import { isComposingKey } from "../../composing-key.js";
 import { CloseIcon, SearchIcon } from "../../face/glyphs.js";
 import { pulseOnPress } from "../../press-pulse.js";
 import { useDisclosure } from "../../use-disclosure.js";
@@ -71,13 +72,6 @@ function tallyLine(tally: SearchTally): string {
   return tally.at === undefined ? `${count} results` : `${tally.at + 1} of ${count}`;
 }
 
-/** Whether a key went to an input method composing text rather than to the field. */
-function composing(event: KeyboardEvent): boolean {
-  // Note that Safari reports the composition's last key with `isComposing`
-  // already false, and code 229 still, so both are read.
-  return event.nativeEvent.isComposing || event.keyCode === 229;
-}
-
 /** A search named `label`, holding `value`, answering its keys with the callbacks given. */
 export function SearchField({
   label,
@@ -137,7 +131,7 @@ export function SearchField({
       return;
     }
     if (event.key === "Escape" && onEscape !== undefined) event.stopPropagation();
-    if (composing(event)) return;
+    if (isComposingKey(event)) return;
     if (event.key === "Escape") onEscape?.();
     if (event.key !== "Enter") return;
     const answer = event.shiftKey ? onShiftEnter : onEnter;

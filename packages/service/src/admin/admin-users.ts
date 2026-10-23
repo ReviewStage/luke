@@ -14,6 +14,7 @@ import {
 } from "@luke/features/admin-wire";
 import { Clock, Effect } from "effect";
 import type { AdminViewer } from "./admin-access.js";
+import { dayStart } from "./admin-metrics.js";
 import { ADMIN_REFUSAL, type AdminRefusal } from "./http-effect.js";
 import { type AdminSeamEffect, unavailableSeam } from "./seam.js";
 
@@ -64,7 +65,7 @@ export function lastSeenInstant(
   sessionSeenAt: Date | null,
   lastUsageDay: string | null,
 ): number | null {
-  const usageDayStart = lastUsageDay === null ? null : Date.parse(`${lastUsageDay}T00:00:00.000Z`);
+  const usageDayStart = lastUsageDay === null ? null : dayStart(lastUsageDay).getTime();
   if (sessionSeenAt === null) return usageDayStart;
   if (usageDayStart === null) return sessionSeenAt.getTime();
   return Math.max(sessionSeenAt.getTime(), usageDayStart);

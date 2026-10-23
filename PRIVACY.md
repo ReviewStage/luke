@@ -32,7 +32,7 @@ what we collect, who we send it to, and how to turn it off.
 ## What we collect
 
 **On your Mac.** Coding agents can run any shell command on your
-Mac without asking you, and what it prints leaves your Mac (see "Commands
+Mac once you allow it, and what it prints leaves your Mac (see "Commands
 agents run on your Mac"). Apart from that, nothing in Luke reads a coding
 agent session, message history, file contents, or command output from your
 Mac's disk or from any other app, except a file you hand it to attach to a
@@ -71,19 +71,20 @@ Closing the tab, or quitting Luke, hangs up the terminal and everything it
 started on it; the clone and the worktree stay until you delete them.
 
 **Commands agents run on your Mac.** Every coding agent, and the workers a
-coding agent hands work to, can each run any shell command on your Mac, at
-once and without asking you,
-as many at a time as they like. This holds whenever Luke is open on the Mac
-and signed in to your account with Settings › This Mac › "Let agents run
-commands on this Mac" on. The switch is kept on each Mac, not with your
-account, and is on by default on every Mac, as is opening Luke at login. A
+coding agent hands work to, can each run any shell command on your Mac, as
+many at a time as you allow. This holds whenever Luke is open on the Mac and
+signed in to your account, and Settings › This Mac is not on Never. It has
+three modes: Ask every time, the default, where you see a prompt and can deny
+the command; Always allow, which runs it at once; and Never. The mode is kept
+on each Mac, not with your account, and opening Luke at login is on by default
+on every Mac. A
 command runs in your login shell, from your home folder, as your macOS user,
 with Luke's own environment, so it reaches everything you can: your files and
 checkouts, your installed tools, and the network. Nothing is read into it, and
 it is killed after 60 seconds, or after up to eight minutes when the agent
 asks for longer; quitting Luke kills the commands still running, though a
-process a command started apart from itself can outlive both. While the switch
-is on, Luke on your Mac keeps a read open to our service for the commands your
+process a command started apart from itself can outlive both. While the mode
+is not Never, Luke on your Mac keeps a read open to our service for the commands your
 agents queue, and our service records, once for your account, when a Mac of
 yours last read, with nothing about which Mac. A command waits in our database
 until a Mac takes it, and its answer until the agent has read it; both are

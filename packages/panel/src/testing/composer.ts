@@ -9,7 +9,7 @@ import { bundleLanded } from "./side-bundles.js";
  * composer.ts -- an agent's message box under jsdom: the editor bundle there as the panel finds it, and words typed into the box's editor.
  *
  * `editorBundleLanded` imports the editor bundle
- * (`../renderer/plan-editor/index.ts`) as the panel does after its first
+ * (`../plan-editor/index.ts`) as the panel does after its first
  * paint, so a box drawn after it has landed mounts its editor at once.
  * jsdom lays nothing out and gives a range no rectangles, which the editor asks for as it keeps the caret in view, so `installEditorLayout`
  * answers an empty one, as a page with no layout would. And jsdom has no
