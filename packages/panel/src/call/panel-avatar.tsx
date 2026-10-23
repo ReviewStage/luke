@@ -63,15 +63,24 @@ export function panelAvatarOf(
   const unloaded = rendererRuntime.atom((get) =>
     get.streamResult(avatarGrantAtom).pipe(
       Stream.orDie,
-      Stream.filter((grant) => grant !== undefined),
-      Stream.runForEach(() =>
-        Effect.tryPromise(reread).pipe(
-          Effect.match({
-            onFailure: () => tellAct(ACT_KIND.AVATAR_REPORT, UNLOADED_REPORT),
-            onSuccess: () => get.refresh(bundle),
-          }),
-        ),
+      // Main may hand the same grant twice, which is still the one read.
+      Stream.changesWith((held, next) => held?.participantToken === next?.participantToken),
+      // Note that each grant, or its withdrawal, interrupts the read the last
+      // one started, because main applies a report to the grant standing, and
+      // a late failure would end a newer avatar.
+      Stream.switchMap((grant) =>
+        grant === undefined
+          ? Stream.empty
+          : Stream.fromEffect(
+              Effect.tryPromise(reread).pipe(
+                Effect.match({
+                  onFailure: () => tellAct(ACT_KIND.AVATAR_REPORT, UNLOADED_REPORT),
+                  onSuccess: () => get.refresh(bundle),
+                }),
+              ),
+            ),
       ),
+      Stream.runDrain,
     ),
   );
   return Atom.make((get) => {

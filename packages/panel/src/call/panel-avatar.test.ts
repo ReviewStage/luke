@@ -115,3 +115,30 @@ test("where the avatar's code cannot be read each grant is reported ended in err
     payload: { status: AVATAR_STATUS.STARTING },
   });
 });
+
+test("a read of the avatar's code that fails after a newer grant arrived reports nothing against it", async () => {
+  const reads: Array<PromiseWithResolvers<typeof callAvatarAtom>> = [];
+  const reread = () => {
+    const read = Promise.withResolvers<typeof callAvatarAtom>();
+    reads.push(read);
+    return read.promise;
+  };
+  const bundle = rendererRuntime.atom(Effect.fail(new Error("Not landed.")));
+  const root = await mountedRoot(
+    experimentsOn(EXPERIMENT.VIDEO_CALLS),
+    panelAvatarOf(bundle, reread),
+  );
+  await root.hand(GRANT);
+  await root.hand(SECOND_GRANT);
+  reads[0]?.reject(new Error("Not landed."));
+  await settle();
+  assert.deepEqual(root.reports, []);
+  reads[1]?.reject(new Error("Not landed."));
+  await settle();
+  assert.deepEqual(root.reports, [
+    {
+      kind: ACT_KIND.AVATAR_REPORT,
+      payload: { status: AVATAR_STATUS.ENDED, endReason: AVATAR_END_REASON.ERROR },
+    },
+  ]);
+});
