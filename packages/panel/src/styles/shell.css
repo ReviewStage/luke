@@ -100,6 +100,29 @@
    because a menu hung in it may stand past its edge over the next column
    (an AnchoredPopover bounded by the window), and a clip would cut it off;
    what is drawn into a corner rounds that corner itself (the side panel). */
+/* On the Mac the window's own ground is the system's sidebar material
+   (`panel-manager.ts`), so the birch is a tint laid over it rather than a
+   paint: the wallpaper frosts through the frame and the columns that stand
+   on it, while the sheet stays paper. A sidebar floating over the work, and
+   a capture's frame, which must come out the same on every Mac, keep the
+   birch opaque. */
+[data-luke-profile="desktop"] .desktop-shell {
+  --frame-tint: color-mix(in srgb, var(--luke-color-sidebar) 62%, transparent);
+
+  background: var(--frame-tint);
+}
+
+[data-luke-profile="desktop"]
+  .desktop-shell:not([data-sidebar-overlay="peek"], [data-sidebar-overlay="open"])
+  .desktop-sidebar,
+[data-luke-profile="desktop"] .desktop-shell :is(.settings-pages, .version-log, .admin-sections) {
+  background: transparent;
+}
+
+[data-luke-profile="desktop"] .app-stage[data-capture="true"] .desktop-shell {
+  background: var(--luke-color-sidebar);
+}
+
 .desktop-shell:not([data-room="narrow"]) > .desktop-main,
 .desktop-shell:not([data-room="narrow"])
   > :is(.desktop-settings, .desktop-version-history, .desktop-admin)
